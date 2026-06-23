@@ -799,6 +799,28 @@ Module Examples.
     by iApply (IH with "[$Hmem $Hregs]").
   Qed.
 
+  (* Termination-sensitive variant of semWP2_preservation':           *)
+  (* derives world-2's Steps existentially via can_step, rather than  *)
+  (* requiring them as an input hypothesis.                           *)
+  Lemma semWP2_preservation_fwd' `{sailGS2 Σ} n {s11 s21}
+      {γ11 γ12 γ21} {μ11 μ12 μ21} {δ11 δ21} {Q}  :
+      NSteps γ11 μ11 δ11 s11 γ12 μ12 [env] (stm_val ty.unit ()) n ->
+      mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
+        semWP2 δ11 δ21 s11 s21 Q
+      ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=>
+        ∃ (γ22 : RegStore) (μ22 : Memory),
+          ⌜Steps γ21 μ21 δ21 s21 γ22 μ22 [env] (stm_val ty.unit tt)⌝ ∗
+          mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
+          semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
+  (* Proof obligation:
+     - n=0 case: WP2 lock-step forces stm_to_val s21 = Some (inl ()), so
+       s21 = stm_val ty.unit () and step_refl applies; stm_fail never arises
+       in practice since fun_step never fails.
+     - S n case: use can_step for world 2, apply semWP2_step, recurse.
+     - ExitCond: requires PC-synchronisation invariant (both worlds share the
+       same SyncVal pc register, so exitCond fires simultaneously). *)
+  Proof. Admitted.
+
       Lemma adequacy_gen_RiscVNStepsExitCond n exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     (φ : Prop) :
     ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
@@ -856,9 +878,32 @@ Module Examples.
         rewrite (into_sep_lc_add a 1).
         iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
         iMod (lc_fupd_elim_later with "Hcred1 Hwp") as "Hwp".
-        now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".        
+        now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".
   Qed.
 
+  (* Termination-sensitive variant of adequacy_gen_RiscVNStepsExitCond.
+     Takes only world-1's execution; derives world-2's execution and the
+     leakage-trace conclusion simultaneously.
+     The full proof needs:
+       1. semWP2_preservation_fwd' (can_step derivation of world-2's step),
+       2. A PC-synchronisation argument for the ExitCond branch
+          (both worlds have SyncVal pc, so exitCond fires on both at once). *)
+  Lemma adequacy_gen_RiscVNStepsExitCond_strong
+      n exitCond {γ11 γ12 γ21} {μ11 μ12 μ21}
+      (φ : RegStore -> Memory -> Prop) :
+      ⟨γ11, μ11⟩ -(exitCond, n)->* ⟨γ12, μ12⟩ ->
+      (forall `{sailGS2 Σ},
+          mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
+            |={⊤}=> myWP2_loop
+                      (∃ a, pc ↦ᵣ a ∗
+                         ⌜exitCond (ty.projLeft a) ∨
+                          exitCond (ty.projRight a)⌝)
+            ∗ (∀ γ22 μ22, mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ γ22 μ22⌝)
+      )%I ->
+      ∃ γ22 μ22,
+        ⟨γ21, μ21⟩ -(exitCond, n)->* ⟨γ22, μ22⟩ ∧
+        φ γ22 μ22.
+  Proof. Admitted.
 
   Lemma constant_time_from_mem_res2_only_leak `{sailGS2 Σ} `{memGS2 Σ} {μ1 μ2 E} :
     leakage_trace μ1 = leakage_trace μ2 -> mem_res2_only_leak μ1 μ2 ⊢ |={E}=> interp_inv_constant_time.
@@ -1757,6 +1802,70 @@ End AdequacyTools.
         by iFrame "∗ #".
       - iModIntro.
         iIntros "Rmem".
+        iInv "Hinv" as "Hleak".
+        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+        unfold mem_inv_only_leak.
+        iMod "Hleak".
+        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iModIntro. iFrame.
+        iApply fupd_mask_intro; first set_solver.
+        now iIntros "_".
+    Qed.
+
+  (* Termination-sensitive variant: only world-1's execution is given as
+     input; world-2's execution and the leakage conclusion are derived. *)
+    Lemma cfg_instrs_endToEnd_strong
+        {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
+        instrs' exitCond n ws {R} {ι : Valuation R}
+        public_registers
+        (HpubReg : declare_public_registers γ1 γ2 public_registers)
+        (block : @CFGVerifierContract R)
+        (valid_block : ValidCFGVerifierContract block)
+        (blockInstrs : cfg_instrs block = instrs')
+        (blockExitCond : cfg_exitCond block = exitCond)
+        (ImplPre : forall `{sailGS2 Σ},
+            interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+            cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+            interp_inv_constant_time -∗
+            asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+              ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
+        (4 * N.of_nat (length instrs') < lenAddr)%N ->
+        mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
+        mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
+        RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+        RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+        RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+        RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+        ⟨γ1, μ1⟩ -(exitCond, n)->* ⟨γ1', μ1'⟩ ->
+        leakage_trace μ1 = leakage_trace μ2 ->
+        ∃ γ2' μ2',
+          ⟨γ2, μ2⟩ -(exitCond, n)->* ⟨γ2', μ2'⟩ ∧
+          leakage_trace μ1' = leakage_trace μ2'.
+    Proof.
+      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+        steps1 Htrace.
+      apply (@adequacy_gen_RiscVNStepsExitCond_strong
+        n exitCond γ1 γ1' γ2 μ1 μ1' μ2
+        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
+        steps1).
+      iIntros (Σ' H').
+      iIntros "(Hmem & H')".
+      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
+        as "Hinv"; auto.
+      iMod "Hinv" as "#Hinv".
+      iMod (instrsMemory with "Hmem") as "H"; eauto.
+      iSplitR "".
+      - iApply (cfg_instrs_safe γ1 γ2 block).
+        all: eauto.
+        iIntros "(Hregs & Hpriv & #Hinv')".
+        iApply ImplPre.
+        iFrame "∗ #".
+        by iFrame "∗ #".
+      - iModIntro.
+        iIntros (γ22 μ22) "Rmem".
         iInv "Hinv" as "Hleak".
         iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
         unfold mem_inv_only_leak.
