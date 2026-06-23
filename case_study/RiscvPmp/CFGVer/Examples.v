@@ -808,18 +808,57 @@ Module Examples.
       mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
         semWP2 δ11 δ21 s11 s21 Q
       ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=>
-        ∃ (γ22 : RegStore) (μ22 : Memory),
-          ⌜Steps γ21 μ21 δ21 s21 γ22 μ22 [env] (stm_val ty.unit tt)⌝ ∗
+        ∃ (γ22 : RegStore) (μ22 : Memory) (s22 : Stm [ctx] ty.unit),
+          ⌜Steps γ21 μ21 δ21 s21 γ22 μ22 [env] s22⌝ ∗
+          ⌜stm_to_val s22 ≠ None⌝ ∗
           mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
-          semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
-  (* Proof obligation:
-     - n=0 case: WP2 lock-step forces stm_to_val s21 = Some (inl ()), so
-       s21 = stm_val ty.unit () and step_refl applies; stm_fail never arises
-       in practice since fun_step never fails.
-     - S n case: use can_step for world 2, apply semWP2_step, recurse.
-     - ExitCond: requires PC-synchronisation invariant (both worlds share the
-       same SyncVal pc register, so exitCond fires simultaneously). *)
-  Proof. Admitted.
+          semWP2 [env] [env] (stm_val ty.unit ()) s22 Q.
+  (* The conclusion quantifies over the terminal statement s22 for world 2
+     (which may be stm_val or stm_fail for fun_step semantics).  The Q in
+     the adequacy proof rules out stm_fail by its specific shape.
+     - n=0 case: WP2 lock-step forces stm_to_val s21 ≠ None; 0 steps suffice.
+     - S n case: use can_step for world 2 (non-terminal by lock-step), apply
+       semWP2_step, recurse via IH. *)
+  Proof.
+    revert s11 s21 μ11 μ21 γ11 γ21 μ12 γ12 δ11 δ21 Q.
+    induction n as [|n IH]=> s11 s21 μ11 μ21 γ11 γ21 μ12 γ12 δ11 δ21 Q /=.
+    { intros steps1.
+      inversion steps1; subst.
+      iIntros "(Hmem & Hregs) Hwp".
+      rewrite {1}semWP2_unfold. cbn.
+      destruct s21; cbn; iMod "Hwp"; try done.
+      all: iApply fupd_mask_intro; first set_solver.
+      all: iIntros "Hclose"; iMod "Hclose"; iModIntro.
+      all: iExists γ21, μ21, _.
+      all: iSplit; [iPureIntro; env.destroy δ21; apply step_refl|].
+      all: iSplit; [iPureIntro; discriminate|].
+      all: iFrame "Hmem Hregs".
+      all: rewrite semWP2_unfold; cbn.
+      all: iModIntro; env.destroy δ21; iExact "Hwp". }
+    iIntros (steps1) "(Hmem & Hregs) Hwp".
+    inversion steps1 as [| ? γ1mid ? μ1mid ? ? ? ? ? Hstep1 Hevaln1]; subst.
+    destruct (stm_to_val s21) as [v21|] eqn:Evs21.
+    { have Evs11 := stm_val_stuck Hstep1.
+      rewrite {1}semWP2_unfold. cbn. rewrite Evs11. rewrite Evs21. cbn.
+      iMod "Hwp". done. }
+    have Hnonfinal := stm_to_val_not_Final Evs21.
+    destruct (can_step s21 γ21 μ21 δ21 Hnonfinal)
+      as (γ22mid & μ22mid & δ22mid & s22mid & Hstep21).
+    iPoseProof (semWP2_step Hstep1 Hstep21 with "[$Hmem $Hregs $Hwp]") as "Hwp".
+    iMod "Hwp". iModIntro. iMod "Hwp". do 2 iModIntro. do 2 iMod "Hwp".
+    iDestruct "Hwp" as "(Hregs & Hmem & Hwp)".
+    iMod (IH s2 s22mid μ1mid μ22mid γ1mid γ22mid μ12 γ12 δ2 δ22mid Q Hevaln1
+      with "[$Hmem $Hregs] [$Hwp]") as "IHres".
+    iApply (step_fupdN_wand with "IHres").
+    iModIntro.
+    iIntros "IHres".
+    iMod "IHres" as (γ22 μ22 s22) "(%Hsteps & %Hnv & Hmem2 & Hregs2 & Hwp2)".
+    iModIntro.
+    iExists γ22, μ22, s22.
+    iSplit. { iPureIntro; exact (step_trans Hstep21 Hsteps). }
+    iSplit. { iPureIntro; exact Hnv. }
+    iFrame "Hmem2 Hregs2 Hwp2".
+  Qed.
 
       Lemma adequacy_gen_RiscVNStepsExitCond n exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     (φ : Prop) :
