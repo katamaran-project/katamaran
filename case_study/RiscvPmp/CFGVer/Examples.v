@@ -866,9 +866,7 @@ Module Examples.
     ⟨ γ21, μ21 ⟩ -( exitCond , n )->* ⟨ γ22, μ22 ⟩ ->
     (forall `{sailGS2 Σ},
         mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
-          |={⊤}=> myWP2_loop
-                    (∃ a, pc ↦ᵣ a ∗
-                       ⌜ exitCond (ty.projLeft a) ∨ exitCond (ty.projRight a) ⌝)
+          |={⊤}=> myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)
         ∗ (mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
@@ -899,10 +897,10 @@ Module Examples.
       rewrite fixpoint_myWP2_loop_eq.
       unfold myWP2_loop_fix.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
-      + iDestruct "H" as (a') "(Hpc & %ECs)".
+      + iDestruct "H" as (v) "(Hpc & %Hec)".
         unfold reg_pointsTo2.
-        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & %eq2)".
-        rewrite eq1 in nEC1. rewrite eq2 in nEC2. tauto.
+        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)".
+        rewrite eq1 in nEC1. tauto.
       + iPoseProof (semWP2_preservation' Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
         iSpecialize ("Hwp" with "Hwp2").
         iMod "Hwp".
@@ -929,14 +927,13 @@ Module Examples.
           (both worlds have SyncVal pc, so exitCond fires on both at once). *)
   Lemma adequacy_gen_RiscVNStepsExitCond_strong
       n exitCond {γ11 γ12 γ21} {μ11 μ12 μ21}
+      (pc_init_sync : RiscvPmpProgram.read_register γ11 pc =
+                      RiscvPmpProgram.read_register γ21 pc)
       (φ : RegStore -> Memory -> Prop) :
       ⟨γ11, μ11⟩ -(exitCond, n)->* ⟨γ12, μ12⟩ ->
       (forall `{sailGS2 Σ},
           mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
-            |={⊤}=> myWP2_loop
-                      (∃ a, pc ↦ᵣ a ∗
-                         ⌜exitCond (ty.projLeft a) ∨
-                          exitCond (ty.projRight a)⌝)
+            |={⊤}=> myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)
             ∗ (∀ γ22 μ22, mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ γ22 μ22⌝)
       )%I ->
       ∃ γ22 μ22,
@@ -1325,10 +1322,7 @@ Section AdequacyTools.
                            ∨ pcOutOfInstrs (bv.of_N init_addr) instrs (ty.projRight a)⌝)%I.
 
   Definition exitCond_WP2_loop `{sailGS2 Σ} (exitCond : bv xlenbits -> bool) : iProp Σ :=
-    myWP2_loop
-      (∃ a, pc ↦ᵣ a ∗
-              ⌜exitCond (ty.projLeft a)
-             ∨ exitCond (ty.projRight a)⌝)%I.
+    myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)%I.
 
   Definition pcBehindInstrs_WP2_loop `{sailGS2 Σ} start instrs :=
     myWP2_loop
@@ -1511,9 +1505,8 @@ End AdequacyTools.
       + iSplit. { done. }
         iFrame.
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
-      iExists an. iFrame "Hpc". iPureIntro.
       destruct an as [v | v1 v2].
-      + cbn in Hexit. left. cbn. rewrite Hexit. exact I.
+      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. rewrite Hexit. exact I.
       + contradiction.
   Qed.
 
@@ -1587,9 +1580,8 @@ End AdequacyTools.
       + iSplit. { done. }
         iFrame.
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
-      iExists an. iFrame "Hpc". iPureIntro.
       destruct an as [v | v1 v2].
-      + cbn in Hexit. left. cbn. rewrite Hexit. exact I.
+      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. rewrite Hexit. exact I.
       + contradiction.
   Qed.
 
@@ -1887,6 +1879,7 @@ End AdequacyTools.
         steps1 Htrace.
       apply (@adequacy_gen_RiscVNStepsExitCond_strong
         n exitCond γ1 γ1' γ2 μ1 μ1' μ2
+        (eq_trans γ1pc (eq_sym γ2pc))
         (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
         steps1).
       iIntros (Σ' H').
@@ -2091,8 +2084,7 @@ End AdequacyTools.
         iExact "Hinstrs".
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct an as [v | vl vr].
-      + iExists (SyncVal v). iFrame "Hpc".
-        cbn in Hexit. iPureIntro. left. cbn. rewrite Hexit. exact I.
+      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. rewrite Hexit. exact I.
       + contradiction.
   Qed.
 
