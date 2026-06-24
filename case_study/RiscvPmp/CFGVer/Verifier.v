@@ -26,6 +26,27 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ======================================================================== *)
+(* CFGVer/Verifier.v                                                        *)
+(*                                                                           *)
+(* Role: defines the symbolic CFG executor (sexec_cfg_addr / cexec_cfg_addr) *)
+(* and proves its soundness up to semTripleCFG.                             *)
+(*                                                                           *)
+(* Key differences from BlockVer/Verifier.v:                                *)
+(*   - Address-indexed lookup: each step fetches instr at PC/bytes_per_instr *)
+(*     instead of advancing linearly.  Supports backward and forward jumps.  *)
+(*   - exitCond parameter: execution halts when exitCond (current PC) = true *)
+(*     OR when fuel runs out.  The angelic_binary at each step models the    *)
+(*     nondeterministic choice between exiting and executing one more instr.  *)
+(*   - fuel bound: the executor always terminates (no coinduction needed).   *)
+(*                                                                           *)
+(* Import policy (IMPORTANT):                                                *)
+(*   Examples.v does `From Katamaran Require RiscvPmp.CFGVer.Verifier`       *)
+(*   (without Import!) to avoid notation/name clashes with BlockVer.        *)
+(*   All CFGVer lemmas are then used with the qualified prefix               *)
+(*   `Katamaran.RiscvPmp.CFGVer.Verifier.foo`.                              *)
+(* ======================================================================== *)
+
 From Coq Require Import
      Classes.Morphisms_Prop
      ZArith.ZArith
@@ -78,11 +99,25 @@ Open Scope Z_scope.
 
 Import RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
 
+(* ======================================================================== *)
+(* BlockVerificationDerived                                                  *)
+(*                                                                           *)
+(* Despite the name (inherited from BlockVer), this section now hosts the   *)
+(* CFG verifier.  It is structured in four subsections:                     *)
+(*   Symbolic  — sexec_cfg_addr and related definitions                     *)
+(*   Shallow   — cexec_cfg_addr (concrete, propositional)                   *)
+(*   Relational — rexec_cfg_addr (the key soundness bridge via rsolve)      *)
+(*   Soundness — ptsto_instrs, semTripleCFG, sound_sblock_verification_condition *)
+(* ======================================================================== *)
 Section BlockVerificationDerived.
 
   Import RiscvPmpBlockVerifExecutor.
   Import RiscvPmpBlockVerifShalExecutor.
 
+  (* safeE P: the symbolic proposition P is "safe" — i.e., the verification
+     condition holds after erasure of all metadata.  This is the notion of
+     validity used in CFGVerifierContract.ValidCFGVerifierContract.
+     safeE_safe converts to the more basic SymProp.safe form. *)
   Definition safeE {Σ} : 𝕊 Σ -> Prop :=
     fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
 
@@ -93,6 +128,10 @@ Section BlockVerificationDerived.
     now apply Erasure.erase_safe'.
   Qed.
 
+  (* instrAligned v: true iff v is a multiple of bytes_per_instr (= 4).
+     Used in sexec/cexec_cfg_addr to reject misaligned PCs.
+     `simpl never` prevents Rocq from unfolding it during cbn/simpl,
+     keeping proof goals readable.  Use Nat.eqb_eq to convert to Prop. *)
   Definition instrAligned (v : bv xlenbits) : bool :=
     (N.to_nat (bv.bin v) mod bytes_per_instr =? 0)%nat.
   #[global] Arguments instrAligned : simpl never.
@@ -104,6 +143,13 @@ Section BlockVerificationDerived.
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
 
+    (* exec_instruction_prologue i: the Hoare precondition for executing
+       instruction i at address a.  Asserts:
+         pc ↦ a, ptstoinstr a i (instruction ownership), ∃ an, nextpc ↦ an,
+         secLeak a (PC is public → same instruction in both worlds).
+       After execution, exec_instruction_epilogue i holds:
+         pc ↦ an, ptstoinstr a i (unchanged), nextpc ↦ an, secLeak a, secLeak an
+       The two assertions together form the frame for one `step` invocation. *)
     Definition exec_instruction_prologue (i : AST) :
       Assertion ([ctx] ▻ ("a":: ty_xlenbits)) :=
       pc     ↦ term_var "a" ∗
@@ -153,6 +199,24 @@ Section BlockVerificationDerived.
      * because the instruction is looked up by address each step rather than
      * advancing linearly through the list.
      *)
+    (* sexec_cfg_addr b exitCond fuel: the symbolic CFG executor.
+       Inputs:
+         b : list AST   — the program (indexed by address: instr at addr v
+                          is b[v / bytes_per_instr])
+         exitCond : bv xlenbits → bool   — halting criterion
+         fuel : nat     — step bound (error when 0)
+         apc : STerm ty_xlenbits   — current PC (must be a concrete term_val)
+       Behaviour at each step:
+         1. If fuel = 0 → error (stuck)
+         2. If apc is symbolic (not term_val) → error
+         3. If exitCond v = true → angelic_binary offers exit
+         4. If instr is aligned and in bounds → execute one step, recurse
+         5. Otherwise → error
+       angelic_binary models the (existential) choice between exiting and
+       continuing.  A concrete path through angelic_binary corresponds to
+       one concrete execution trace.
+       NOTE: execution can revisit the same address (backward jumps), so
+       this is NOT a linear scan. *)
     Fixpoint sexec_cfg_addr (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat) :
       ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun _ apc =>
@@ -194,6 +258,14 @@ Section BlockVerificationDerived.
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
+    (* sblock_verification_condition req b exitCond fuel ens:
+       The final symbolic VC.  It runs sexec_triple_addr inside SHeapSpec.run,
+       which discards the final heap (no leakcheck).  The result is a 𝕊 wnil
+       proposition that can be checked by `safeE (postprocess ...)`.
+       Call pattern (from Examples.v):
+         sblock_verification_condition (Σ := [ctx]) req b ec fl ens wnil
+       The explicit `Σ := [ctx]` is required because Rocq cannot infer it
+       from the other arguments alone. *)
     Definition sblock_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
@@ -280,6 +352,23 @@ Section BlockVerificationDerived.
 
   End Shallow.
 
+  (* ====================================================================== *)
+  (* Relational layer                                                        *)
+  (*                                                                         *)
+  (* The relational layer connects the concrete (C) and symbolic (S)        *)
+  (* executors via ℛ⟦R⟧, the logical relation used by `rsolve`.             *)
+  (*                                                                         *)
+  (* rexec_cfg_addr: the key lemma.  Proved by iInduction on fuel.           *)
+  (*   At each step, term_get_val_spec is used to case-split on whether apc  *)
+  (*   is a concrete bitvector (term_val v) or symbolic.  In the concrete   *)
+  (*   case, repₚ_antisym_left unifies the relational apc with term_val.    *)
+  (*   Then angelic_binary and nth_error cases are handled by rsolve.        *)
+  (*                                                                         *)
+  (* RefineCompat instances export the relational lemmas for use by rsolve:  *)
+  (*   refine_compat_block_verification_condition — key instance that lets   *)
+  (*   rsolve close goals of the form                                        *)
+  (*   RSat RProp (cblock_vc ...) (sblock_vc ...)                           *)
+  (* ====================================================================== *)
   Section Relational.
 
     Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
@@ -301,6 +390,14 @@ Section BlockVerificationDerived.
         (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
       MkRefineCompat (rexec_instruction i).
 
+    (* rexec_cfg_addr: ℛ⟦RVal → RHeapSpec (RVal)⟧ cexec_cfg_addr sexec_cfg_addr
+       Proof: iInduction on fuel.  Bullet nesting convention (from CLAUDE.md):
+         - top-level bullets from iInduction use -
+         + for angelic_binary sub-goals (two branches)
+         -- for refine_bind sub-goals
+         * for nth_error cases (Some / None)
+       The key non-trivial step is using forgetting_unconditionally_drastic
+       to project the boxed IH to the current world. *)
     Lemma rexec_cfg_addr (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat) {w} :
       ⊢ ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
           (cexec_cfg_addr b exitCond fuel)
@@ -379,6 +476,31 @@ Section BlockVerificationDerived.
 
   End Relational.
 
+  (* ====================================================================== *)
+  (* Soundness: symbolic VC → semTripleCFG                                  *)
+  (*                                                                         *)
+  (* ptsto_instrs a instrs: Iris predicate asserting instruction ownership   *)
+  (*   at consecutive addresses starting at a.  The inductive structure      *)
+  (*   mirrors the list of instructions; the address advances by bv_instrsize *)
+  (*   (= 4 bytes) at each step.                                             *)
+  (*   NOTE: unlike BlockVer, the base address is SyncVal bv.zero (not       *)
+  (*   parameterized), so all programs are assumed loaded at address 0.      *)
+  (*                                                                         *)
+  (* semTripleCFG PRE b exitCond fuel POST:                                  *)
+  (*   Iris semantic triple for a CFG program.  It states:                   *)
+  (*     ∀ a, PRE a ∗ pc ↦ a ∗ ∃ v, nextpc ↦ v ∗ ptsto_instrs 0 b →       *)
+  (*       (∀ an, ⌜exitCond an⌝ ∗ pc ↦ an ∗ ... ∗ POST a an → WP2_loop) → *)
+  (*       WP2_loop                                                          *)
+  (*   WP2_loop here is BlockVer.Verifier.WP2_loop (the plain infinite loop),*)
+  (*   NOT myWP2_loop from Examples.v.  The bridge from semTripleCFG to      *)
+  (*   myWP2_loop is done by sound_sblock_verification_condition_myWP2 in   *)
+  (*   Examples.v.                                                           *)
+  (*                                                                         *)
+  (* sound_sblock_verification_condition:                                    *)
+  (*   safeE (postprocess VC) → semTripleCFG                                *)
+  (*   This is the main output of this section.  Examples.v uses the        *)
+  (*   _myWP2 variant instead, which produces myWP2_loop directly.          *)
+  (* ====================================================================== *)
   Section Soundness.
 
     Import iris.base_logic.lib.iprop iris.proofmode.tactics.
@@ -445,7 +567,11 @@ Section BlockVerificationDerived.
 
     Add Ring BitVectorRing : (bv.ring_theory xlenbits).
 
-    (* Split out instruction k from ptsto_instrs (SyncVal start) b, with a framing wand. *)
+    (* ptsto_instrs_nth: extract instruction k from ptsto_instrs with a
+       framing wand.  Used in sound_exec_cfg_addr to split out the
+       instruction at the current PC address, execute it, then restore
+       the full ptsto_instrs via the wand.
+       Split out instruction k from ptsto_instrs (SyncVal start) b, with a framing wand. *)
     Lemma ptsto_instrs_nth (b : list AST) (k : nat) (i : AST) (start : bv xlenbits) :
       nth_error b k = Some i →
       ptsto_instrs (SyncVal start) b ⊢
@@ -478,6 +604,15 @@ Section BlockVerificationDerived.
           iPoseProof ("Hframe" with "Hk") as "Hrest'". iFrame.
     Qed.
 
+    (* sound_exec_cfg_addr: the soundness theorem for cexec_cfg_addr.
+       Given that cexec_cfg_addr succeeds (producing Φ an h), the Iris
+       precondition (heap + pc + nextpc + instructions) entails semTripleCFG.
+       Proof: induction on fuel.
+         - Exit branch: exitCond holds → apply the continuation Hk.
+         - Execute branch: extract instruction via ptsto_instrs_nth, run
+           sound_exec_instruction, then recurse via IH.
+       This lemma uses WP2_loop (not myWP2_loop); the myWP2_loop version
+       is sound_exec_cfg_addr_myWP2 in Examples.v. *)
     Lemma sound_exec_cfg_addr {b exitCond fuel} (apc : RelVal ty_xlenbits) Φ (h : SCHeap) :
       cexec_cfg_addr b exitCond fuel apc Φ h →
       interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (SyncVal bv.zero) b ⊢
@@ -585,6 +720,17 @@ Section BlockVerificationDerived.
 
 End BlockVerificationDerived.
 
+(* ======================================================================== *)
+(* AnnotatedBlockVerification                                               *)
+(*                                                                          *)
+(* A separate mechanism (from BlockVer) for annotated instruction lists.    *)
+(* An AnnotInstr is either a real instruction, a debug break, or a lemma   *)
+(* invocation.  The verifier executes annotated blocks linearly (no CFG).  *)
+(*                                                                          *)
+(* This section is NOT used by CFGVer end-to-end proofs.  It is included   *)
+(* here as part of the shared Verifier.v infrastructure.  Future work could *)
+(* combine CFG execution with lemma invocations via AnnotInstr.             *)
+(* ======================================================================== *)
 Section AnnotatedBlockVerification.
 
   Inductive AnnotInstr :=

@@ -26,6 +26,35 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ======================================================================== *)
+(* CFGVer/Spec.v                                                             *)
+(*                                                                           *)
+(* Role in the proof chain:                                                  *)
+(*   This file defines the symbolic contracts (CEnv / CEnvEx) for each      *)
+(*   RISC-V primitive function, proves their validity via vm_compute, and   *)
+(*   proves soundness of the contracts in the binary Iris model.             *)
+(*   It is shared between BlockVer and CFGVer.                               *)
+(*                                                                           *)
+(*   Key outputs consumed by Verifier.v:                                     *)
+(*     - contractsSound : ValidContractEnvSem CEnv  (Iris soundness)         *)
+(*     - foreignSemBlockVerif : ForeignSem            (foreign prim sem)      *)
+(*     - lemSemBlockVerif : LemmaSem                  (lemma soundness)       *)
+(*   These three are needed to instantiate the symbolic executor soundness.  *)
+(*                                                                           *)
+(* Noninterference tracking:                                                 *)
+(*   Contracts use `secLeakvar` to mark which values are public (SyncVal).   *)
+(*   E.g., sep_contract_rX requires `secLeakvar "rs"` in the precondition   *)
+(*   (the register index is public) and exposes the register value           *)
+(*   unchanged in the postcondition (no write; value stays in sync).         *)
+(*   sep_contract_fetch_instr requires `secLeakvar "a"` (PC is public) and  *)
+(*   leaks `secLeakvar "encoded_instr"` (the encoding seen on the bus).      *)
+(*                                                                           *)
+(* Design note on PMP:                                                       *)
+(*   PMP entries are currently commented out from all contracts.  The case   *)
+(*   study assumes Machine mode with unrestricted memory access.  The        *)
+(*   pmpCheck / pmpMatchAddr contracts exist as dead code for future use.    *)
+(* ======================================================================== *)
+
 From Coq Require Import
      ZArith.ZArith
      Strings.String
@@ -68,6 +97,9 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 
+(* Convenience instruction synonyms used in Examples.v.  The raw AST        *)
+(* constructors are verbose; these give readable names matching assembly.    *)
+(* RET is JALR x0, x1, 0 (return via link register).                        *)
 Module Assembly.
   (* Instruction synonyms. *)
   Definition ADD (rd rs1 rs2 : RegIdx) : AST :=
@@ -96,6 +128,18 @@ Module Assembly.
     Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
+(* ======================================================================== *)
+(* Symbolic contract environment                                             *)
+(*                                                                           *)
+(* CEnv maps each Fun to its Sep contract.  CEnvEx does the same for FunX   *)
+(* (foreign functions).  LEnv covers lemma calls (open/close_gprs, etc.).   *)
+(*                                                                           *)
+(* The contracts follow the pattern of the IrisInstanceBinary model:         *)
+(*   - PRE / POST are Katamaran assertions over logic variables                *)
+(*     (universally quantified bitvectors introduced by sep_contract_logvars)*)
+(*   - The *_sound lemmas in RiscvPmpIrisInstanceWithContracts turn those    *)
+(*     into Iris propositions via semWP2 / ValidContractForeign.             *)
+(* ======================================================================== *)
 Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
   Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
   Section ContractDefKit.
@@ -242,6 +286,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   (* Local Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])). *)
   Import bv.notations.
 
+    (* rX: read a general-purpose register.
+       PRE:  secLeak rs (register index is public); rs ↦ reg_val
+       POST: result = reg_val; rs ↦ reg_val (unchanged)
+       The secLeak constraint ensures both worlds read the same register,
+       so the returned value is a SyncVal in the binary model. *)
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "reg_val" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
@@ -251,6 +300,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                                        term_var "rs" ↦ᵣ term_var "reg_val";
     |}.
 
+    (* wX: write a general-purpose register.
+       PRE:  secLeak rs; rs ↦ reg_val (we own it)
+       POST: if rs = x0, rs ↦ 0 (x0 is the zero register); else rs ↦ v
+       The write contract does NOT require secLeak on v: the new value may
+       differ between worlds (private write is allowed). *)
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "v" :: ty_xlenbits; "reg_val" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
@@ -262,6 +316,13 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                                        else term_var "rs" ↦ᵣ term_var "v"
     |}.
 
+    (* fetch: fetch and decode the instruction at the current PC.
+       PRE:  secLeak a (PC is public); pc ↦ a; a ↦ᵢ i; within bounds;
+             Machine privilege; inv_leakage (constant-time invariant)
+       POST: result = KF_Base(encoded); secLeak encoded (instruction encoding
+             is a side-channel leak via the timing model)
+       Note: inv_leakage is consumed here and re-established in POST, giving
+       the verifier access to the leakage invariant during fetch. *)
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
@@ -667,6 +728,17 @@ Module RiscvPmpBlockVerifShalExecutor :=
 Module RiscvPmpBlockVerifExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
 
+(* ======================================================================== *)
+(* Contract validity proofs                                                  *)
+(*                                                                           *)
+(* ValidContract f means: the symbolic VC generated by the executor is       *)
+(* decidably True (checked via vm_compute).                                  *)
+(* ValidContractDebug f means: the VC holds but may need hand-tactics        *)
+(* (e.g., within_phys_mem needs a Lia.lia step for bounds arithmetic).       *)
+(*                                                                           *)
+(* ValidContracts is the master lemma: for every function in CEnv, there    *)
+(* exists a fuel bound under which the VC holds.  This feeds contractsSound. *)
+(* ======================================================================== *)
 Module RiscvPmpSpecVerif.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.Symbolic.
@@ -849,6 +921,22 @@ Module RiscvPmpSpecVerif.
   Qed.
 End RiscvPmpSpecVerif.
 
+(* ======================================================================== *)
+(* Iris soundness of contracts                                               *)
+(*                                                                           *)
+(* contractsSound: ⊢ ValidContractEnvSem CEnv                               *)
+(*   Combines foreignSemBlockVerif (FunX soundness) + lemSemBlockVerif       *)
+(*   (lemma soundness) + shallow vcgen soundness (from ValidContracts) into  *)
+(*   the top-level Iris statement that every CEnv contract is sound in the   *)
+(*   binary weakest-precondition model (semWP2).                             *)
+(*                                                                           *)
+(* read_ram_sound / write_ram_sound / decode_sound / leak_sound:             *)
+(*   Each foreign function is proved sound by unfolding the Iris semantics   *)
+(*   of the binary model (mem_inv2 / regs_inv2) and applying the frame rule  *)
+(*   (iFrame).  The leak_sound proof is notable: it updates BOTH trace       *)
+(*   invariants (left and right world) and uses trace.trace_full_frag_eq to  *)
+(*   extract the current trace value.                                        *)
+(* ======================================================================== *)
 Module RiscvPmpIrisInstanceWithContracts.
   Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
     RiscvPmpBlockVerifSpec.
