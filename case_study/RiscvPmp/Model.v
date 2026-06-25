@@ -44,7 +44,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Sig
-     trace.
+     RiscvPmp.trace.
 From Equations Require Import
      Equations.
 

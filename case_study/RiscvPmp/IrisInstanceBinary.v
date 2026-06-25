@@ -33,7 +33,7 @@ From Katamaran Require Import
      Iris.BinaryWeakestPre
      Iris.BinaryAdequacy
      Iris.BinaryInstance
-     trace
+     RiscvPmp.trace
      Syntax.Predicates
      RiscvPmp.Base
      RiscvPmp.Machine
