@@ -33,8 +33,8 @@ From Katamaran Require Import
      Iris.Instance
      Iris.Base
      Syntax.Predicates
-     RiscvPmp.GVT.Base
-     RiscvPmp.GVT.PmpCheck
+     RiscvPmp.Base
+     RiscvPmp.PmpCheck
      RiscvPmp.GVT.Machine
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.trace

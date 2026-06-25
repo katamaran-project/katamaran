@@ -40,7 +40,7 @@ From Katamaran Require Import
      Semantics.Registers
      Syntax.BinOps.
 From Katamaran Require Export
-     RiscvPmp.GVT.Base.
+     RiscvPmp.Base.
 
 From stdpp Require Import decidable finite.
 
@@ -1464,8 +1464,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (@mmio_read width H) [addr] res γ γ' μ μ' :=
       let (μupd,readv) := fun_read_mmio μ width addr in
       (γ' , μ' , res) = (γ , μupd , inr readv);
-    ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
-      (γ' , μ' , res) = (γ , @fun_write_mmio μ width addr data , inr true);
+      ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
+            let (power, μ'') := @fun_handle_write_mmio μ width addr data in
+            let res' := if power then inr true else inl "Shutdown" in
+            (γ' , μ' , res) = (γ , μ'', res');
     ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
@@ -1479,7 +1481,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Local Arguments ForeignCall {_ _} f /.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-  Proof. destruct f; env.destroy args; [| | cbn; destruct fun_read_mmio|..]; repeat econstructor.
+  Proof. destruct f; env.destroy args; [| | cbn; destruct fun_read_mmio | cbn; repeat case_match | ..]; repeat econstructor.
   Qed.
   End ForeignKit.
 

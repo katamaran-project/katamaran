@@ -35,8 +35,8 @@ From Katamaran Require Import
      Notations
      Bitvector
      Symbolic.Solver
-     RiscvPmp.GVT.Base
-     RiscvPmp.GVT.PmpCheck.
+     RiscvPmp.Base
+     RiscvPmp.PmpCheck.
 From Equations Require Import
      Equations.
 From iris.proofmode Require Import string_ident tactics.

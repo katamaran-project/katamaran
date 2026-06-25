@@ -44,7 +44,7 @@ From Katamaran Require Import
      MicroSail.SymbolicExecutor
      MicroSail.RefineExecutor
      MicroSail.Soundness
-     RiscvPmp.GVT.PmpCheck
+     RiscvPmp.PmpCheck
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.GVT.Machine
@@ -301,6 +301,7 @@ sep_contract_result         :=  "result_mem_read";
         sep_contract_precondition    :=
           asn.match_bool (term_var "mmio")
             ( asn_in_mmio bytes (term_var "paddr") ∗
+              term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
               term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
               (asn_mmio_trace_pred bytes) ∗
               (asn_mmio_state_pred bytes (term_var "s")) ∗
@@ -366,6 +367,7 @@ sep_contract_result         :=  "result_mem_read";
         asn.match_bool (term_var "mmio")
           (
            (asn_in_mmio bytes (term_var "paddr")) ∗
+           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
            (asn_mmio_trace_pred bytes) ∗
            (asn_mmio_state_pred bytes (term_var "s")) ∗
@@ -427,6 +429,7 @@ sep_contract_result         :=  "result_mem_read";
         asn.match_bool (term_var "mmio")
           (
             (asn_in_mmio bytes (term_var "paddr")) ∗
+            term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
               (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits)))) ∗
               (asn_mmio_state_pred bytes (term_var "s")) ∗
               (asn_mmio_trace_pred bytes) ∗
@@ -557,6 +560,7 @@ sep_contract_result         :=  "result_mem_read";
        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
        sep_contract_precondition    :=
          asn_in_mmio bytes (term_var "paddr") ∗
+         term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
          asn_mmio_trace_pred bytes ∗
          asn_mmio_state_pred bytes (term_var "s") ∗
          asn_mmio_event bytes (term_var "paddr") (term_var "data") (term_val ty_ioeventType IOWrite) (term_var "s") (term_var "s'");
@@ -999,8 +1003,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ rB) (mmio_write rB).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & #Hinv & Hstf & [%Hstate _])".
-    iApply semTWP_foreign.
+    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & Hstf & [%Hstate _])". iApply semTWP_foreign.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
     iInv "Hinv" as ">(%ss & %t & Htrf & Hsta & %Hpred)" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt". subst.
@@ -1011,12 +1014,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     {(* Instantiate evars *)
       iExists _. iExists _. iNext. iFrame.
       iPureIntro. econstructor; eauto.
-      }
+    }
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     unfold mem_state_interp.
-    iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-    iMod "Hclose" as "_". rewrite semTWP_val.
+    iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
+    unfold fun_handle_write_mmio in Hf.
     destruct bytes; first contradiction.
+    destruct (decide (isShutdownAddr paddr)); first contradiction.
+    simpl in *. subst. inversion Hf; subst.
+    iMod "Hclose" as "_". rewrite semTWP_val.
+    subst.
     iFrame "Hregs Hmem Htra Hstf". iSplitL. iPureIntro. apply Hmap.
     repeat iSplitL; auto.
   Qed.

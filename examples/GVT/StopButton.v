@@ -35,12 +35,12 @@ From Katamaran Require Import
      Notations
      Specification
      SmallStep.Step
+     RiscvPmp.PmpCheck
      RiscvPmp.GVT.Spec
      RiscvPmp.GVT.PartialVerifier
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.GVT.Machine
-     RiscvPmp.GVT.PmpCheck
      RiscvPmp.GVT.trace
      RiscvPmp.GVT.Sig.
 From Katamaran Require
