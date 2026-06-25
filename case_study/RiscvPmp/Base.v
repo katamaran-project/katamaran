@@ -247,6 +247,20 @@ Proof. unfold liveAddrs, mmioAddrs, mmioStartAddr, mmioLenAddr, maxAddr, minAddr
        apply bv.seqBv_no_overlap; cbn; lia.
 Qed.
 
+(* Trace of Events *)
+Inductive EventTy : Set :=
+| IOWrite
+| IORead
+| IOShutdown.
+Record Event : Set :=
+  mkEvent {
+      event_type : EventTy;
+      event_addr : Addr;
+      event_nbbytes : nat;
+      event_contents : bv (event_nbbytes * 8);
+    }.
+Definition Trace : Set := list Event.
+
 Inductive Privilege : Set :=
 | User
 | Machine
@@ -384,6 +398,7 @@ Inductive WordWidth :=
 
 Inductive Enums : Set :=
 | privilege
+| ioeventType
 | interruptType
 | csridx
 | pmpcfgidx
@@ -555,6 +570,7 @@ Section TransparentObligations.
   Derive NoConfusion for Enums.
   Derive NoConfusion for Privilege.
   Derive NoConfusion for CSRIdx.
+  Derive NoConfusion for EventTy.
   Derive NoConfusion for InterruptType.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpCfgPerm.
@@ -619,6 +635,7 @@ Derive EqDec for ExceptionType.
 Derive EqDec for ExceptionTypeConstructor.
 Derive EqDec for FetchResult.
 Derive EqDec for FetchResultConstructor.
+Derive EqDec for EventTy.
 Derive EqDec for InterruptType.
 Derive EqDec for CtlResult.
 Derive EqDec for CtlResultConstructor.
@@ -643,6 +660,9 @@ Section Finite.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
     {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip] |}.
+
+  #[export,program] Instance EventTy_finite : Finite EventTy :=
+    {| enum := [IOWrite; IORead; IOShutdown] |}.
 
   #[export,program] Instance InterruptType_finite : Finite InterruptType :=
     {| enum := [I_U_Software; I_M_Software; I_U_Timer; I_M_Timer; I_U_External; I_M_External] |}.
@@ -757,6 +777,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
   Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
+  Definition ty_ioeventType                    := (ty.enum ioeventType).
   Definition ty_interruptType                  := (ty.enum interruptType).
   Definition ty_priv_level                     := (ty.bvec 2).
   Definition ty_csridx                         := (ty.enum csridx).
@@ -794,6 +815,7 @@ Module Export RiscvPmpBase <: Base.
   Definition enum_denote (e : Enums) : Set :=
     match e with
     | privilege        => Privilege
+    | ioeventType      => EventTy
     | interruptType    => InterruptType
     | csridx           => CSRIdx
     | pmpcfgidx        => PmpCfgIdx
@@ -1447,20 +1469,6 @@ Module Export RiscvPmpBase <: Base.
     Import Bitvector.bv.notations.
 
     Definition RAM : Type := Addr -> Byte.
-
-    (* Trace of Events *)
-    Inductive EventTy : Set :=
-    | IOWrite
-    | IORead
-    | IOShutdown.
-    Record Event : Set :=
-      mkEvent {
-        event_type : EventTy;
-        event_addr : Addr;
-        event_nbbytes : nat;
-        event_contents : bv (event_nbbytes * 8);
-      }.
-    Definition Trace : Set := list Event.
 
     (* Memory *)
     Record MemoryType : Type :=
