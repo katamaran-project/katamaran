@@ -1246,26 +1246,18 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             lemma_postcondition   := ⊤;
           |}.
 
-        Definition lemma_close_mmio_write_mem (immm : Bitvector.bv.bv 12) (widthh : WordWidth): SepLemma (close_mmio_write_mem immm widthh) :=
-          {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w_addr" :: ty_xlenbits];
-             lemma_patterns        := [term_var "paddr"; term_var "w_addr"];
-             lemma_precondition    := ⊤;
-             lemma_postcondition   := ⊤;
-          |}.
-
         Definition LEnv : LemmaEnv :=
           fun Δ l =>
             match l with
-            | open_gprs                        => lemma_open_gprs
-            | close_gprs                       => lemma_close_gprs
-            | open_pmp_entries                 => lemma_open_pmp_entries
-            | close_pmp_entries                => lemma_close_pmp_entries
-            | open_ptsto_instr                 => lemma_open_ptsto_instr
-            | close_ptsto_instr                => lemma_close_ptsto_instr
-            | extract_pmp_ptsto bytes          => lemma_extract_pmp_ptsto bytes
-            | return_pmp_ptsto bytes           => lemma_return_pmp_ptsto bytes
-            | close_mmio_write immm widthh     => lemma_close_mmio_write immm widthh
-            | close_mmio_write_mem immm widthh => lemma_close_mmio_write_mem immm widthh
+            | open_gprs               => lemma_open_gprs
+            | close_gprs              => lemma_close_gprs
+            | open_pmp_entries        => lemma_open_pmp_entries
+            | close_pmp_entries       => lemma_close_pmp_entries
+            | open_ptsto_instr        => lemma_open_ptsto_instr
+            | close_ptsto_instr       => lemma_close_ptsto_instr
+            | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes
+            | return_pmp_ptsto bytes  => lemma_return_pmp_ptsto bytes
+            | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
             end.
 
       End LemDef.
