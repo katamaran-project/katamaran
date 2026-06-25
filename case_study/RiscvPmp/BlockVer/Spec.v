@@ -877,8 +877,8 @@ Module RiscvPmpIrisInstanceWithContracts.
   Lemma mmio_pred_cons {bytes : nat} t e: event_pred bytes e → mmio_pred bytes t → mmio_pred bytes (cons e t).
   Proof. now apply List.Forall_cons. Qed.
 
-  Lemma mmio_read_sound `{!sailGS Σ} (bytes : nat) :
-    TValidContractForeign (RiscvPmpSpecification.sep_contract_mmio_read bytes) (mmio_read bytes).
+  Lemma mmio_read_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
+    TValidContractForeign (RiscvPmpSpecification.sep_contract_mmio_read H) (mmio_read H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
     now iIntros "[%HFalse _]".

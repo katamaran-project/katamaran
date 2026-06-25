@@ -1102,7 +1102,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         (* NOTE: no need for sensible contracts for `mmio_read`/`mmio_write` yet, as we will not grant untrusted code access to `mmio` directly *)
-       Definition sep_contract_mmio_read (bytes : nat) : SepContractFunX (mmio_read bytes) :=
+       Definition sep_contract_mmio_read (bytes : nat) (H : restrict_bytes bytes) : SepContractFunX (mmio_read H) :=
           {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits];
              sep_contract_localstore      := [term_var "paddr"];
              sep_contract_precondition    := ⊥;
