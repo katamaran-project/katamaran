@@ -271,7 +271,7 @@ Module inv := invariants.
     Example femtokernel_handler_secret_write_asm' (data_addr : N) : list ASM :=
       [ UTYPE bv.zero ra RISCV_AUIPC
       ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-      ; AnnotLemmaInvocation (close_mmio_write_mem (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N data_addr)]%env 
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env 
       ; STORE (bv.of_N mmio_write_addr) ra zero WORD (* works because mmio_write_adv fits into 12 bits. *)
       ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
       ].
@@ -636,15 +636,8 @@ Module inv := invariants.
     Proof.
       vm_compute.
       constructor; cbn.
-      intuition bv_solve_Ltac.solveBvManual.
+      intuition bv_solve_Ltac.solveBvManual. eexists _, _. intuition.
       1-4: eapply bv.in_seqBv'; now vm_compute.
-      (* TODO: pull this into lemma: v = sext' v 0, but types are complaining when
-               naively writing this down *)
-      unfold bv.sext'.
-      rewrite bv.ones_O.
-      destruct (bv.view (@bv.zero 0)).
-      rewrite ssrbool.if_same.
-      now rewrite bv.app_nil_r.
     Qed.
 
     Lemma sat__femtohandler_exit : safeE vc__femtohandler_exit.
