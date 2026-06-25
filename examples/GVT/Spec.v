@@ -49,7 +49,8 @@ From Katamaran Require Import
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.GVT.Machine
      RiscvPmp.GVT.Sig
-     RiscvPmp.GVT.trace
+     RiscvPmp.trace
+     RiscvPmp.iostate
      RiscvPmp.GVT.Contracts.
 From Katamaran Require RiscvPmp.GVT.Model.
 
@@ -926,14 +927,14 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
     iInv "Hinv" as ">(%σ & %t & Htrf & Hsta & %Hpred)" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt".
-    iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
+    iDestruct (iostate.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
     destruct (fun_read_mmio μ bytes paddr) as [μupd readv] eqn:Hreadmmio.
     iMod (trace.trace_update _ _ (cons {| event_type := IORead; event_addr := paddr; event_nbbytes := bytes; event_contents := readv |} _) with "[$Htra $Htrf]") as "[Htra Htrf]".
 
     destruct (decide (paddr = mmio_interrupt_addr)).
     (* Case IOR__intr *)
     {
-      iMod (trace.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
+      iMod (iostate.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
       iMod ("Hclose" with "[Htrf Hsta]") as "_".
       {(* Instantiate evars *)
         iExists (mmio_interrupt_w2s readv (bv2s s)).
@@ -973,7 +974,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     (* Case IOR *)
     {
       subst.
-      iMod (trace.state_update _ _ (bv2s s) with "[$Hsta $Hstf]") as "[Hsta Hstf]".
+      iMod (iostate.state_update _ _ (bv2s s) with "[$Hsta $Hstf]") as "[Hsta Hstf]".
       iMod ("Hclose" with "[Htrf Hsta]") as "_".
       {(* Instantiate evars *)
         iFrame. iNext. iPureIntro.
@@ -1007,9 +1008,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     iIntros (? ?) "[Hregs [%a (Hmem & %Hmap & Htra)]]".
     iInv "Hinv" as ">(%ss & %t & Htrf & Hsta & %Hpred)" "Hclose".
     iDestruct (trace.trace_full_frag_eq with "Htra Htrf") as "%Heqt". subst.
-    iDestruct (trace.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
+    iDestruct (iostate.iost_full_frag_eq with "Hsta Hstf") as "%Heqs". subst.
     iMod (trace.trace_update _ _ (cons _ _) with "[$Htra $Htrf]") as "[Htra Htrf]".
-    iMod (trace.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
+    iMod (iostate.state_update _ _ _ with "[$Hsta $Hstf]") as "[Hsta Hstf]".
     iMod ("Hclose" with "[Htrf Hsta]") as "_".
     {(* Instantiate evars *)
       iExists _. iExists _. iNext. iFrame.

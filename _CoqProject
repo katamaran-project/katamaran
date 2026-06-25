@@ -21,6 +21,7 @@ case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/trace.v
+case_study/RiscvPmp/iostate.v
 case_study/RiscvPmp/IrisModel.v
 case_study/RiscvPmp/IrisInstance.v
 case_study/RiscvPmp/Model.v
@@ -41,7 +42,6 @@ case_study/Assumptions.v
 examples/GVT/Machine.v
 examples/GVT/Sig.v
 examples/GVT/Contracts.v
-examples/GVT/trace.v
 examples/GVT/IrisModel.v
 examples/GVT/IrisInstance.v
 examples/GVT/Model.v

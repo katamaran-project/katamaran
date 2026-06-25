@@ -37,7 +37,8 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck
      RiscvPmp.GVT.Machine
      RiscvPmp.GVT.IrisModel
-     RiscvPmp.GVT.trace
+     RiscvPmp.trace
+     RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
