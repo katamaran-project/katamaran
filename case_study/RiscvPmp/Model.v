@@ -191,12 +191,13 @@ Module RiscvPmpModel2.
       iFrame "Hregs Hmem". iApply semTWP_val. auto.
     Qed.
 
-    Lemma mmio_read_sound (bytes : nat) :
-     TValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
+    Lemma mmio_read_sound `(H: restrict_bytes bytes) :
+      TValidContractForeign (sep_contract_mmio_read H) (mmio_read H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       now iIntros "[%HFalse _]".
     Qed.
+
 
     Lemma mmio_write_sound `(H: restrict_bytes bytes) :
      TValidContractForeign (sep_contract_mmio_write H) (mmio_write H).

@@ -203,8 +203,8 @@ Module RiscvPmpModel2.
       - now iApply semWP2_val_1.
     Qed.
 
-    Lemma mmio_read_sound (bytes : nat) :
-     ValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
+    Lemma mmio_read_sound `(H: restrict_bytes bytes) :
+     ValidContractForeign (sep_contract_mmio_read H) (mmio_read H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       now iIntros "[%HFalse _]".
