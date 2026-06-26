@@ -2592,16 +2592,18 @@ End AdequacyTools.
   Proof.
     intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
     assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    eapply (@cfg_instrs_endToEnd_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
+    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
       instrs (pcOutOfInstrs_exitCond instrs) n ws
       ["x"::ty_xlenbits; "y"::ty_xlenbits]
       [env].["x"::ty_xlenbits ↦
         NonSyncVal (read_register γ1 x1) (read_register γ2 x1)].["y"::ty_xlenbits ↦
         NonSyncVal (read_register γ1 x2) (read_register γ2 x2)]
-      [] HpubReg swap_cfg_contract valid_swap_cfg_contract eq_refl eq_refl).
+      [] HpubReg [] HpubMem swap_cfg_contract valid_swap_cfg_contract eq_refl eq_refl).
     all: try eauto.
+    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
+      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
       cbn.
       iFrame "Hpriv Hinv".
       rewrite <- (something_registers HpubReg).
@@ -2627,15 +2629,17 @@ End AdequacyTools.
       leakage_trace μ1' = leakage_trace μ2'.
   Proof.
     intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
-    eapply (@cfg_instrs_endToEnd_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
+    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
       instrs (pcOutOfInstrs_exitCond instrs) n ws
       ["x1"::ty_xlenbits]
       [env].["x1"::ty_xlenbits ↦ SyncVal (read_register γ1 x1)]
-      [existT ty_xlenbits x1] HpubReg jump_if_zero_cfg_contract
+      [existT ty_xlenbits x1] HpubReg [] HpubMem jump_if_zero_cfg_contract
       valid_jump_if_zero_cfg_contract eq_refl eq_refl).
     all: try eauto.
+    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
+      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
       cbn.
       iFrame "Hpriv Hinv".
       assert (Hx1 : read_register γ1 x1 = read_register γ2 x1). {
@@ -2694,14 +2698,16 @@ End AdequacyTools.
       leakage_trace μ1' = leakage_trace μ2'.
   Proof.
     intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
-    eapply (@cfg_instrs_endToEnd_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
+    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
       instrs jmp_fwd_exitCond n ws [ctx] [env]
-      [existT ty_xlenbits x1] HpubReg jmp_fwd_cfg_contract
+      [existT ty_xlenbits x1] HpubReg [] HpubMem jmp_fwd_cfg_contract
       valid_jmp_fwd_cfg_contract eq_refl eq_refl).
     all: try eauto.
+    - intros i spec H. inversion H.
     - intros Σ H.
       cbn.
-      iIntros "(Hregs & Hpriv & #Hinv)".
+      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
       iSplitL "".
       + iPureIntro. split; [reflexivity | done].
       + iFrame "∗ #".
@@ -2724,13 +2730,15 @@ End AdequacyTools.
   Proof.
     intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
     assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    eapply (@cfg_instrs_endToEnd_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
+    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
       instrs jmp_fwd_exitCond n ws [ctx] [env]
-      [] HpubReg jmp_fwd_cfg_contract_gen
+      [] HpubReg [] HpubMem jmp_fwd_cfg_contract_gen
       valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
     all: try eauto.
+    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
+      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
       cbn. iFrame "∗ #".
       iSplit; (iSplit; [iPureIntro | done]).
       all: vm_compute; done.
@@ -2756,13 +2764,15 @@ End AdequacyTools.
       leakage_trace μ1' = leakage_trace μ2'.
   Proof.
     intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
-    eapply (@cfg_instrs_endToEnd_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
+    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
       instrs countdown_exitCond n ws [ctx] [env]
-      [existT ty_xlenbits x1] HpubReg countdown_cfg_contract
+      [existT ty_xlenbits x1] HpubReg [] HpubMem countdown_cfg_contract
       valid_countdown_cfg_contract eq_refl eq_refl).
     all: try eauto.
+    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
+      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
       cbn.
       iFrame "Hpriv Hinv".
       assert (Hx1_eq : read_register γ1 x1 = read_register γ2 x1) by congruence.
