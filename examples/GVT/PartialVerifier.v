@@ -52,7 +52,7 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness
      RiscvPmp.GVT.Spec
-     RiscvPmp.GVT.IrisModel
+     RiscvPmp.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.trace
