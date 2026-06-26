@@ -35,7 +35,7 @@ From Katamaran Require Import
      Syntax.Predicates
      RiscvPmp.Base
      RiscvPmp.PmpCheck
-     RiscvPmp.GVT.Machine
+     RiscvPmp.Machine
      RiscvPmp.GVT.IrisModel
      RiscvPmp.trace
      RiscvPmp.iostate

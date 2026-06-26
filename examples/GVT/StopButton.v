@@ -40,7 +40,7 @@ From Katamaran Require Import
      RiscvPmp.GVT.PartialVerifier
      RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
-     RiscvPmp.GVT.Machine
+     RiscvPmp.Machine
      RiscvPmp.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.

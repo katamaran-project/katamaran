@@ -42,7 +42,7 @@ From Katamaran Require Import
      MicroSail.ShallowExecutor
      MicroSail.SymbolicExecutor
      RiscvPmp.PmpCheck
-     RiscvPmp.GVT.Machine
+     RiscvPmp.Machine
      RiscvPmp.GVT.Sig.
 From Equations Require Import
      Equations.

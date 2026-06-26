@@ -30,7 +30,7 @@ From Katamaran Require Import
      Bitvector
      Environment
      Iris.Base
-     RiscvPmp.GVT.Machine
+     RiscvPmp.Machine
      RiscvPmp.trace
      RiscvPmp.iostate.
 From iris Require Import

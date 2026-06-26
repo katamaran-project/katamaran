@@ -39,7 +39,6 @@ case_study/RiscvPmp/BlockVer/BinaryVerifier.v
 case_study/RiscvPmp/FemtoKernel.v
 case_study/Assumptions.v
 -Q examples/GVT Katamaran.RiscvPmp.GVT
-examples/GVT/Machine.v
 examples/GVT/Sig.v
 examples/GVT/Contracts.v
 examples/GVT/IrisModel.v
