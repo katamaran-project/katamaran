@@ -1,0 +1,23 @@
+TODO:
+- Consolidate everything in CFGVer, so we can delete BlockVer
+- Rename everything in CFGVer to remove mentions to BlockVer
+- Modularity:
+	+ Move away from lists of instructions to maps from adresses to instructions (this is maybe out of scope, discuss with Dominique)
+	+ Change hardcoded start pc at 0 (needed for modularity)
+	+ Add exit resources (the resources you are required to have when reaching the exit condition), feels similar to a post-condition, but it is still different nonetheless.
+	This is probably not trivial, because you need to require that execution stops the first time the exit condition is reached, you cannot reach the exit condition and then keep going because you don't have the desired resources (then they should be part of the exit condition)
+- Remove the sound_sblock_verification_condition in favor of sound_sblock_verification_condition_myWP2_loop. This ties into the larger TODO of cleaning of up these files and putting separate ideas in separate files.
+	+ For example, Examples.v is meant to only define the examples, not do all the logic to prove the endToEnd lemmas.
+	+ Also, all the logic about splitting memory deserves its own file
+- Ask Dominique or Sander whether AnnotInstr is something worth looking at.
+- Remove duplicate gen_contract infrastructure
+- Clean up proof of semWP2_preservation_fwd' and figure out how to tell it to let me do these proofs
+- pc_step_sync is a very strong hypothesis, but the lockstepness of semWP2 should help us fullfill this requirement. This should be a priority.
+- Actually have an endToEnd lemma that works for each generated contract, I don't want the manual work that currently still has to happen after
+- First priority, make a Definition for Non-interference such that the Examples.v become readable
+
+
+Why do we need pc_step_sync and where can we find that information?
+Is this a short-coming of the way myWP2_loop is phrased? Why don't we need this kind of information to go from l to nsteps?
+semWP2 has a lockstepness, but we need a certain post-condition at the end. Is that the problem, did we break the modularity, so now I have to reconstruct it myself basically.
+Would it make sense to have an invariant like the leakage invariant for the pc?

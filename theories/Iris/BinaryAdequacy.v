@@ -498,17 +498,18 @@ Module Type IrisAdequacy2
     iFrame.
   Qed.
 
-  Lemma adequacy_gen {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
+
+
+  Lemma adequacy_gen_n {Γ σ} n (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
     {δ11 δ12 δ21 : CStoreVal Γ} {s12 : Stm Γ σ} {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}
     (φ : Prop) :
-    ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    ⟨ γ11, μ11, δ11, s11 ⟩ -{ n }-> ⟨ γ12, μ12, δ12, s12 ⟩ ->
     (forall `{sailGS2 Σ},
         mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> semWP2 δ11 δ21 s11 s21 Q
                                                              ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
-    intros Heval1 Hwp.
-    destruct (steps_to_nsteps Heval1) as [n Hevaln1].
+    intros Hevaln1 Hwp.
     refine (uPred.pure_soundness _
               (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
     iIntros (Hinv) "".
@@ -542,7 +543,6 @@ Module Type IrisAdequacy2
       iMod ("Hcont" with "Hmem") as "%Hφ".
       cbn. done.
     - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem) Hcred".
-      specialize (IHHevaln1 (nsteps_to_steps Hevaln1)).
       rewrite fixpoint_semWP2_eq; cbn.
       rewrite (stm_val_stuck H).
       repeat case_match;
@@ -561,19 +561,32 @@ Module Type IrisAdequacy2
       iDestruct "Hcred" as "(Hcred1 & Hcredn)".
       iMod "Hwp2" as "([Hregs Hmem] & Hwp2)".
       now iMod (IHHevaln1 with "[$Hmem $Hregs $Hwp2 $Hinv] Hcredn") as "IH".
-  Qed.
+  Qed. 
 
-    Lemma adequacy_gen_withExitCond {Γ σ} exitCond (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
+  Lemma adequacy_gen {Γ σ} (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
     {δ11 δ12 δ21 : CStoreVal Γ} {s12 : Stm Γ σ} {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}
     (φ : Prop) :
-    ⟨ γ11, μ11, δ11, s11 ⟩ -( exitCond )->* ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    ⟨ γ11, μ11, δ11, s11 ⟩ --->* ⟨ γ12, μ12, δ12, s12 ⟩ ->
     (forall `{sailGS2 Σ},
         mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> semWP2 δ11 δ21 s11 s21 Q
-        ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+                                                             ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
     )%I -> φ.
   Proof.
     intros Heval1 Hwp.
-    destruct (stepsWithExitCond_to_nstepsWithExitCond Heval1) as [n Hevaln1].
+    destruct (steps_to_nsteps Heval1) as [n Hevaln1].
+    by apply (@adequacy_gen_n _ _ _ _ s21 _ _ γ21 _ _ μ21 _ _ δ21 _ Q _ Hevaln1).
+  Qed.
+
+  Lemma adequacy_gen_withExitCondn {Γ σ} n exitCond (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
+    {δ11 δ12 δ21 : CStoreVal Γ} {s12 : Stm Γ σ} {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}
+    (φ : Prop) :
+    NStepsWithExitCond exitCond γ11 μ11 δ11 s11 γ12 μ12 δ12 s12 n ->
+    (forall `{sailGS2 Σ},
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> semWP2 δ11 δ21 s11 s21 Q
+                                                             ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
+      Proof.
+    intros Heval1 Hwp.
     refine (uPred.pure_soundness _
               (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc n n _)).
     iIntros (Hinv) "".
@@ -588,7 +601,6 @@ Module Type IrisAdequacy2
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_inv_init2 (mGS := mGS) μ11 μ21) as (memG) "[Hmem Rmem]".
     pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS reg_pre_inG2_left regs1) (SailRegGS reg_pre_inG2_right regs2)) memG).
-    Set Printing Implicit.
     specialize (Hwp _ sG).
     iPoseProof (Hwp with "[$Rmem Hregsinv1 Hregsinv2]") as "Hwp2".
     { iApply own_RegStore_to_map_reg_pointsTos.
@@ -602,13 +614,12 @@ Module Type IrisAdequacy2
     clear Hwp.
     iStopProof.
     revert γ21 μ21 δ21 s21.
-    induction Hevaln1.
+    induction Heval1.
     - iIntros (γ21 μ21 δ21 s21) "(Hmem & Hwp2 & Hregs) Hcred".
       iMod "Hwp2" as "[_ Hcont]".
       iMod ("Hcont" with "Hmem") as "%Hφ".
       cbn. done.
     - iIntros (γ21 μ21 δ21 s21) "(Hregs & Hwp2 & Hmem) Hcred".
-      specialize (IHHevaln1 (nstepsWithExitCond_to_stepsWithExitCond Hevaln1)).
       rewrite fixpoint_semWP2_eq; cbn.
       rewrite (stm_val_stuck H0).
       repeat case_match;
@@ -626,7 +637,21 @@ Module Type IrisAdequacy2
       iMod "Hwp2". iModIntro. iModIntro. iMod "Hwp2".
       iDestruct "Hcred" as "(Hcred1 & Hcredn)".
       iMod "Hwp2" as "([Hregs Hmem] & Hwp2)".
-      now iMod (IHHevaln1 with "[$Hmem $Hregs $Hwp2 $Hinv] Hcredn") as "IH".
+      now iMod (IHHeval1 with "[$Hmem $Hregs $Hwp2 $Hinv] Hcredn") as "IH".
+  Qed.
+
+    Lemma adequacy_gen_withExitCond {Γ σ} exitCond (s11 s21 : Stm Γ σ) {γ11 γ12 γ21} {μ11 μ12 μ21}
+    {δ11 δ12 δ21 : CStoreVal Γ} {s12 : Stm Γ σ} {Q : forall `{sailGS2 Σ}, IVal σ -> CStoreVal Γ -> IVal σ -> CStoreVal Γ -> iProp Σ}
+    (φ : Prop) :
+    ⟨ γ11, μ11, δ11, s11 ⟩ -( exitCond )->* ⟨ γ12, μ12, δ12, s12 ⟩ ->
+    (forall `{sailGS2 Σ},
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢ |={⊤}=> semWP2 δ11 δ21 s11 s21 Q
+        ∗ (∀ μ22, mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
+  Proof.
+    intros Heval1 Hwp.
+    destruct (stepsWithExitCond_to_nstepsWithExitCond Heval1) as [n Hevaln1].
+    by apply (@adequacy_gen_withExitCondn _ _ _ _ _ s21 _ _ γ21 _ _ μ21 _ _ δ21 _ Q _ Hevaln1).
   Qed.
 
   (* Lemma wp2_adequacy' {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) *)

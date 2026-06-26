@@ -143,19 +143,19 @@ Module Examples.
        heap state is unconstrained and any leftover resources are silently dropped. *)
     Definition CFG_VC_triple {Σ}
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (i  : list AST)
+      (instrs  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
       Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := Σ)
-        (extend_to_minimal_pre P) i ec fl
+        (extend_to_minimal_pre P) instrs ec fl
         (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
     Definition Valid_CFG_VC {Σ}
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (i  : list AST)
+      (instrs  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
-      safeE (postprocess (CFG_VC_triple P i ec fl)).
+      safeE (postprocess (CFG_VC_triple P instrs ec fl)).
 
     (* CFGVerifierContract: the top-level contract bundle for CFGVer.
        Fields:
@@ -468,8 +468,6 @@ Module Examples.
   From iris.program_logic Require weakestpre.
   Import iris.algebra.excl.
   Import iris.algebra.gmap.
-
-  Search Assertion.
 
   Definition asn_regs_ptsto_with_registers γ1 γ2 : Assertion ctx.nil :=
     asn_and_regs
@@ -906,8 +904,9 @@ Module Examples.
       Steps γ21 μ21 δ21 s21 γ22 μ22 [env] (stm_val ty.unit ()) ->
     mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
       semWP2 δ11 δ21 s11 s21 Q
-    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=> mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
-                                      semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
+    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=>
+            mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
+              semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
   Proof.
     revert s11 s21 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ21 Q.
     induction n as [|n IH]=> s11 s21 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ21 Q /=.
@@ -1079,6 +1078,63 @@ Module Examples.
         now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".
   Qed.
 
+  (* Attempt at making something analogous to adequacy_gen, so the input is only one reduction, but the conclusion is about 2 reductions *)
+        Lemma adequacy_gen_RiscVNStepsExitCond_attempt n exitCond {γ11 γ12 γ21} {μ11 μ12 μ21}
+    (φ : Prop) :
+    ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
+    (forall `{sailGS2 Σ},
+        mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
+          |={⊤}=> myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)
+        ∗ (∀ μ22, mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)
+    )%I -> φ.
+  Proof.
+    intros Heval1 Hwp.
+    apply nsteps_to_lsteps in Heval1.
+    destruct Heval1 as (l1 & Hl1 & Heval1).
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc (list_sum_plus_one l1) (list_sum_plus_one l1) _)).
+    iIntros (Hinv) "Hcred'".
+    iMod (create_resources Hinv γ11 γ21 μ11 μ21) as (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)".
+    pose (sG := @SailGS2 sailΣ2 Hinv (SailRegGS2 (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1) (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2)) memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2".
+    clear Hwp.
+    iStopProof.
+    revert Heval1.
+    revert γ11 μ11 γ21 μ21 n Hl1.
+    induction l1; iIntros (γ11 μ11 γ21 μ21 n Hl1 Heval1) "(Hcred & Hmem & Hregs & Hwp2)".
+    - inversion Heval1. cbn in Hl1. subst.
+      iMod "Hwp2" as "[_ Hcont]".
+      iMod ("Hcont" with "Hmem") as "%Hφ".
+      cbn. done.
+    - inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1]. clear Heval1. subst.
+      specialize (IHl1 _ _ γ21 μ21 (length l1) eq_refl Hevaln1).
+      rewrite fixpoint_myWP2_loop_eq.
+      unfold myWP2_loop_fix.
+      iMod "Hwp2" as "([H | Hwp2] & Hφ)".
+      + iDestruct "H" as (v) "(Hpc & %Hec)".
+        unfold reg_pointsTo2.
+        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)".
+        rewrite eq1 in nEC1. tauto.
+      + unfold RiscVStepN in Hstep1.
+        iPoseProof (adequacy_gen (FunDef step) φ Hstep1) as "L".
+        iPoseProof (semWP2_preservation' Hstep1 with "[$Hmem $Hregs]") as "Hwp".
+        iSpecialize ("Hwp" with "Hwp2").
+        iMod "Hwp".
+        change (list_sum_plus_one (a :: l1)) with (a + 1 + list_sum_plus_one l1).
+        iAssert (|={∅}▷=>^a |={∅}=>  |={∅}▷=> |={∅}▷=>^(list_sum_plus_one l1) ⌜φ⌝)%I with "[-]" as "H"; last first.
+        { do 2 rewrite step_fupdN_add. destruct a. done. by iApply step_fupdN_S_fupd. }
+        iApply (step_fupdN_wand with "Hwp").
+        iIntros ">(Hmem & Hregs & Hwp)".
+        rewrite semWP2_val.
+        iMod "Hwp" as "Hwp".
+        rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l1)).
+        rewrite (into_sep_lc_add a 1).
+        iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
+        iMod (lc_fupd_elim_later with "Hcred1 Hwp") as "Hwp".
+        now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".
+  Qed.
+
   (* ======================================================================== *)
   (* One-sided adequacy: adequacy_gen_RiscVNStepsExitCond_strong  [ADMITTED] *)
   (*                                                                          *)
@@ -1202,6 +1258,13 @@ Module Examples.
       n exitCond {γ11 γ12 γ21} {μ11 μ12 μ21}
       (pc_init_sync : RiscvPmpProgram.read_register γ11 pc =
                       RiscvPmpProgram.read_register γ21 pc)
+      (pc_step_sync : forall γ1 μ1 γ2 μ2 γ1' μ1' γ2' μ2',
+          RiscvPmpProgram.read_register γ1 pc =
+          RiscvPmpProgram.read_register γ2 pc ->
+          RiscVStep γ1 μ1 γ1' μ1' ->
+          RiscVStep γ2 μ2 γ2' μ2' ->
+          RiscvPmpProgram.read_register γ1' pc =
+          RiscvPmpProgram.read_register γ2' pc)
       (φ : RegStore -> Memory -> Prop) :
       ⟨γ11, μ11⟩ -(exitCond, n)->* ⟨γ12, μ12⟩ ->
       (forall `{sailGS2 Σ},
@@ -1212,7 +1275,97 @@ Module Examples.
       ∃ γ22 μ22,
         ⟨γ21, μ21⟩ -(exitCond, n)->* ⟨γ22, μ22⟩ ∧
         φ γ22 μ22.
-  Proof. Admitted.
+  Proof.
+    intros Heval1 Hwp.
+    apply nsteps_to_lsteps in Heval1.
+    destruct Heval1 as (l1 & Hl1 & Heval1).
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc
+                 (list_sum_plus_one l1) (list_sum_plus_one l1) _)).
+    iIntros (Hinv) "Hcred'".
+    iMod (create_resources Hinv γ11 γ21 μ11 μ21)
+      as (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)".
+    pose (sG := @SailGS2 sailΣ2 Hinv
+      (SailRegGS2
+         (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1)
+         (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2))
+      memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2".
+    clear Hwp.
+    iStopProof.
+    revert Heval1.
+    revert γ11 μ11 γ21 μ21 n Hl1 pc_init_sync.
+    induction l1 as [| a l1 IHl1];
+      iIntros (γ11 μ11 γ21 μ21 n Hl1 pc_sync Heval1)
+              "(Hcred & Hmem & Hregs & Hwp2)".
+    - (* Base case: n = 0, both worlds already at exit *)
+      inversion Heval1. cbn in Hl1. subst.
+      iMod "Hwp2" as "[_ Hcont]".
+      iMod ("Hcont" $! γ21 μ21 with "Hmem") as "%Hφ".
+      cbn. iPureIntro.
+      exists γ21, μ21. split; [apply riscVNStepWithExitCond_refl | exact Hφ].
+    - (* Inductive case: one more outer-loop step *)
+      inversion Heval1 as [| ? ? γ1mid ? μ1mid ? nEC1 Hstep1 Hevaln1].
+      clear Heval1. subst.
+      have nEC2 : ¬ exitCond (read_register γ21 pc).
+      { intro Hex. apply nEC1. rewrite pc_sync. exact Hex. }
+      rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
+      iMod "Hwp2" as "([H | Hwp2] & Hφ)".
+      + (* ExitCond branch: contradiction *)
+        iDestruct "H" as (v) "(Hpc & %Hec)".
+        unfold reg_pointsTo2.
+        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)".
+        rewrite eq1 in nEC1. tauto.
+      + (* semWP2 branch: derive world-2's step existentially *)
+        iPoseProof (semWP2_preservation_fwd' Hstep1 with "[$Hmem $Hregs]")
+          as "Hwp_pres".
+        iSpecialize ("Hwp_pres" with "Hwp2").
+        iMod "Hwp_pres".
+        change (list_sum_plus_one (a :: l1)) with (a + 1 + list_sum_plus_one l1).
+        iAssert (|={∅}▷=>^a |={∅}=> |={∅}▷=>
+                 |={∅}▷=>^(list_sum_plus_one l1)
+                 ⌜∃ γ22 μ22,
+                    ⟨γ21, μ21⟩ -(exitCond, S (length l1))->* ⟨γ22, μ22⟩
+                    ∧ φ γ22 μ22⌝)%I
+          with "[-]" as "H"; last first.
+        { do 2 rewrite step_fupdN_add. destruct a. done.
+          by iApply step_fupdN_S_fupd. }
+        iApply (step_fupdN_wand with "Hwp_pres").
+        iIntros ">(%γ22mid & %μ22mid & %s22mid & %Hsteps &
+                    %Hval & Hmem_new & Hregs_new & Hwp_new)".
+        destruct (stm_to_val s22mid) as [v22|] eqn:Ev22.
+        2: { contradiction. }
+        destruct (stm_to_val_Some_cases Ev22)
+          as [(v' & Hs22 & Hv22) | (m & Hs22 & Hv22)].
+        * (* Success: s22mid = stm_val ty.unit v' *)
+          subst s22mid. subst v22. destruct v'.
+          have pc_sync_next :
+              read_register γ1mid pc = read_register γ22mid pc :=
+            pc_step_sync γ11 μ11 γ21 μ21 γ1mid μ1mid γ22mid μ22mid
+              pc_sync (nsteps_to_steps Hstep1) Hsteps.
+          rewrite semWP2_val. iMod "Hwp_new" as "Hwp_new".
+          specialize (IHl1 γ1mid μ1mid γ22mid μ22mid (length l1) eq_refl
+                        pc_sync_next Hevaln1).
+          rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l1)).
+          rewrite (into_sep_lc_add a 1).
+          iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
+          iMod (lc_fupd_elim_later with "Hcred1 Hwp_new") as "Hwp_new".
+          iMod (IHl1 with "[$Hmem_new $Hcredl $Hregs_new $Hwp_new $Hφ]") as "IHl"; auto.
+          iApply (step_fupdN_wand with "IHl").
+          iModIntro. Search "step" fupd. iApply step_fupd_intro; first set_solver.
+          iModIntro.
+          iIntros "%HIH".
+          destruct HIH as (γ2_final & μ2_final & Hsteps_rest & Hphi).
+          iPureIntro.
+          exact (ex_intro _ γ2_final (ex_intro _ μ2_final
+                   (conj (riscVNStepWithExitCond_trans nEC2 Hsteps Hsteps_rest)
+                         Hphi))).
+        * (* Failure: stm_fail — contradiction *)
+          subst s22mid. subst v22.
+          iEval (rewrite semWP2_unfold; cbn) in "Hwp_new".
+          iMod "Hwp_new" as "[]".
+  Qed.
 
   Lemma constant_time_from_mem_res2_only_leak `{sailGS2 Σ} `{memGS2 Σ} {μ1 μ2 E} :
     leakage_trace μ1 = leakage_trace μ2 -> mem_res2_only_leak μ1 μ2 ⊢ |={E}=> interp_inv_constant_time.
@@ -2242,6 +2395,72 @@ End AdequacyTools.
         now iIntros "_".
     Qed.
 
+    (* Attempt to do it without pc_step_sync as this is quite a hard proof obligation. *)
+    (* Ideally, we can conclude equals steps from semWP2 afterwards. *)
+        Lemma cfg_instrs_endToEnd_strong
+        {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
+        instrs' exitCond n ws {R} {ι : Valuation R}
+        public_registers
+        (HpubReg : declare_public_registers γ1 γ2 public_registers)
+        (block : @CFGVerifierContract R)
+        (valid_block : ValidCFGVerifierContract block)
+        (blockInstrs : cfg_instrs block = instrs')
+        (blockExitCond : cfg_exitCond block = exitCond)
+        (ImplPre : forall `{sailGS2 Σ},
+            interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+            cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+            interp_inv_constant_time -∗
+            asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+              ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
+        (4 * N.of_nat (length instrs') < lenAddr)%N ->
+        mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
+        mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
+        RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
+        RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
+        RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
+        RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
+        ⟨γ1, μ1⟩ -(exitCond, n)->* ⟨γ1', μ1'⟩ ->
+        leakage_trace μ1 = leakage_trace μ2 ->
+        ∃ γ2' μ2',
+          ⟨γ2, μ2⟩ -(exitCond, n)->* ⟨γ2', μ2'⟩ ∧
+          leakage_trace μ1' = leakage_trace μ2'.
+        Proof.
+      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+        steps1 Htrace.
+      apply (@adequacy_gen_RiscVNStepsExitCond_strong
+        n exitCond γ1 γ1' γ2 μ1 μ1' μ2
+        (eq_trans γ1pc (eq_sym γ2pc))
+        pc_step_sync
+        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
+        steps1).
+      iIntros (Σ' H').
+      iIntros "(Hmem & H')".
+      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
+        as "Hinv"; auto.
+      iMod "Hinv" as "#Hinv".
+      iMod (instrsMemory with "Hmem") as "H"; eauto.
+      iSplitR "".
+      - iApply (cfg_instrs_safe γ1 γ2 block).
+        all: eauto.
+        iIntros "(Hregs & Hpriv & #Hinv')".
+        iApply ImplPre.
+        iFrame "∗ #".
+        by iFrame "∗ #".
+      - iModIntro.
+        iIntros (γ22 μ22) "Rmem".
+        iInv "Hinv" as "Hleak".
+        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+        unfold mem_inv_only_leak.
+        iMod "Hleak".
+        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iModIntro. iFrame.
+        iApply fupd_mask_intro; first set_solver.
+        now iIntros "_".
+    Qed.
+
   (* ======================================================================== *)
   (* cfg_instrs_endToEnd_strong: the one-sided end-to-end lemma  [ADMITTED]  *)
   (*                                                                          *)
@@ -2272,6 +2491,13 @@ End AdequacyTools.
         instrs' exitCond n ws {R} {ι : Valuation R}
         public_registers
         (HpubReg : declare_public_registers γ1 γ2 public_registers)
+        (pc_step_sync : forall γ μ γ2 μ2 γ' μ' γ2' μ2',
+            RiscvPmpProgram.read_register γ pc =
+            RiscvPmpProgram.read_register γ2 pc ->
+            RiscVStep γ μ γ' μ' ->
+            RiscVStep γ2 μ2 γ2' μ2' ->
+            RiscvPmpProgram.read_register γ' pc =
+            RiscvPmpProgram.read_register γ2' pc)
         (block : @CFGVerifierContract R)
         (valid_block : ValidCFGVerifierContract block)
         (blockInstrs : cfg_instrs block = instrs')
@@ -2300,6 +2526,7 @@ End AdequacyTools.
       apply (@adequacy_gen_RiscVNStepsExitCond_strong
         n exitCond γ1 γ1' γ2 μ1 μ1' μ2
         (eq_trans γ1pc (eq_sym γ2pc))
+        pc_step_sync
         (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
         steps1).
       iIntros (Σ' H').
@@ -2564,7 +2791,7 @@ End AdequacyTools.
       all: vm_compute; done.
     - cbn. by unfold lenAddr.
   Qed.
-
+  
   Lemma countdown_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
       {μ1 μ2 μ1' μ2' : Memory} n ws
       (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1])
