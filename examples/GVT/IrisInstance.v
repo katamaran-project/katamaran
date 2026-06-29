@@ -155,11 +155,9 @@ Module RiscvPmpIrisInstancePredicates.
           end
     end.
 
-  Definition s__init : IOState := SGo.
-
-  (* Tut: Note, trace is kept in reverse order *)
+  (* Note, trace is kept in reverse order *)
   Inductive mmio_trace_state_pred: Trace -> IOState -> Prop :=
-  | Tnil : mmio_trace_state_pred [] s__init
+  | Tnil : mmio_trace_state_pred [] iostate_init
   | Tcons  : forall e tl s s', impl_mmio_event_prot e s s' ->
                          mmio_trace_state_pred tl s ->
                          mmio_trace_state_pred (e :: tl) s'.

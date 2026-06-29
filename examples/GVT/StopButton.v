@@ -90,6 +90,77 @@ Module inv := invariants.
 
     Open Scope hex_Z_scope.
 
+    (* Instantiate io-protocol *)
+    Inductive IOState : Set :=
+    | SGo
+    | SStop.
+
+    (* Helper definitions for io-protocol state machine transition function. *)
+    Definition mmio_interrupt_addr : Addr := bv.of_N (mmioStartAddr + 4).
+
+    Definition mmio_interrupt_w2s {width : nat} (w : bv (width * byte)) (s : IOState) : IOState :=
+      match (bv.land w (bv.of_N 24)) with
+      | bv.mk 8 _ => SGo
+      | bv.mk 16 _ => SStop
+      | bv.mk 24 _ => SStop
+      | _ => s
+      end.
+
+    (* This is the io-protocol state machine transition function. *)
+    Variant impl_mmio_event_prot: Event -> IOState -> IOState -> Prop :=
+      (* reading outside the interrupt register is allowed but must not change the state *)
+      | IOR : forall e s s',
+          event_type e = IORead ->
+          event_addr e <> mmio_interrupt_addr ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
+      (* writing zero outside interrupt register is allowed but must not change the state *)
+      | IOW0 : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e <> mmio_interrupt_addr ->
+          event_contents e = bv.zero  ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
+      (* writing any value outside interrupt register is only allowed in state SGo and must not change the state *)
+      | IOW : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e <> mmio_interrupt_addr ->
+          event_nbbytes e > 0 ->
+          s = SGo -> s' = SGo ->
+          impl_mmio_event_prot e s s'
+      (* reading a value from the interrupt register changes the state *)
+      | IOR__intr : forall e s s' w,
+          event_type e = IORead ->
+          event_addr e = mmio_interrupt_addr ->
+          event_contents e = w ->
+          s' = mmio_interrupt_w2s w s ->
+          impl_mmio_event_prot e s s'
+      (* writing to the interrupt register is allowed but must not change the state *)
+      | IOW__sme : forall e s s',
+          event_type e = IOWrite ->
+          event_addr e = mmio_interrupt_addr ->
+          s = s' ->
+          impl_mmio_event_prot e s s'
+    .
+
+    #[export] Instance bv_iostate {n : nat} : IO_State_Spec :=
+      {
+        IOState := IOState;
+        iostate_bits := 1;
+        iostate_init := SGo;
+        s2bv := fun  s : IOState =>
+                  match s with
+                  | SGo => bv.of_N 0
+                  | SStop => bv.of_N 1
+                  end;
+        bv2s := fun (b : bv 1)  =>
+                  match b with
+                  | bv.mk 0 _ => SGo
+                  | _         => SStop
+                  end;
+        impl_mmio_event_prot := impl_mmio_event_prot;
+      }.
+
     (* FIXED ADDRESSES *)
     (* The first address that is no longer used by the adversary, and hence the address at which the PMP entries should stop granting permission. Note that this address is currently also the first MMIO address. *)
     Definition adv_addr_end : N := maxAddr. (* Change once adversary gets access to MMIO*)

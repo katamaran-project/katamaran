@@ -51,6 +51,8 @@ Import ListNotations.
 Open Scope string_scope.
 Open Scope Z_scope.
 
+Context {spec : IO_State_Spec}.
+
 Inductive PurePredicate : Set :=
 | gen_pmp_access
 | pmp_access
@@ -109,82 +111,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   Section PredicateKit.
 
-    (* Defines the io-protocol ghost state *)
-
-    Inductive IOState : Set :=
-    | SGo
-    | SStop.
-
-    #[export] Definition iostate_bits := 1%nat.
-    Class bv_rize (A : Set) (n : nat) : Set := {
-        s2bv : A -> bv n;
-        bv2s : bv n -> A ;
-      }.
-
-
-    #[export] Instance bv_iostate {n : nat} : bv_rize IOState n :=
-      {
-        s2bv := fun  s : IOState =>
-                  match s with
-                  | SGo => bv.of_N 0
-                  | SStop => bv.of_N 1
-                  end;
-
-        bv2s := fun (b : bv n)  =>
-                  match n, b with
-                  | _, bv.mk 0 _ => SGo
-                  | _, _         => SStop
-                  end;
-      }.
-
-    Definition ty_iostate                        := (ty.bvec iostate_bits).
-    (* Helper definitions for io-protocol state machine transition function. *)
-    Definition mmio_interrupt_addr : Addr := bv.of_N (mmioStartAddr + 4).
-
-    Definition mmio_interrupt_w2s {width : nat} (w : bv (width * byte)) (s : IOState) : IOState :=
-      match (bv.land w (bv.of_N 24)) with
-      | bv.mk 8 _ => SGo
-      | bv.mk 16 _ => SStop
-      | bv.mk 24 _ => SStop
-      | _ => s
-      end.
-
-    (* This is the io-protocol state machine transition function. *)
-    Variant impl_mmio_event_prot: Event -> IOState -> IOState -> Prop :=
-      (* reading outside the interrupt register is allowed but must not change the state *)
-      | IOR : forall e s s',
-          event_type e = IORead ->
-          event_addr e <> mmio_interrupt_addr ->
-          s = s' ->
-          impl_mmio_event_prot e s s'
-      (* writing zero outside interrupt register is allowed but must not change the state *)
-      | IOW0 : forall e s s',
-          event_type e = IOWrite ->
-          event_addr e <> mmio_interrupt_addr ->
-          event_contents e = bv.zero  ->
-          s = s' ->
-          impl_mmio_event_prot e s s'
-      (* writing any value outside interrupt register is only allowed in state SGo and must not change the state *)
-      | IOW : forall e s s',
-          event_type e = IOWrite ->
-          event_addr e <> mmio_interrupt_addr ->
-          event_nbbytes e > 0 ->
-          s = SGo -> s' = SGo ->
-          impl_mmio_event_prot e s s'
-      (* reading a value from the interrupt register changes the state *)
-      | IOR__intr : forall e s s' w,
-          event_type e = IORead ->
-          event_addr e = mmio_interrupt_addr ->
-          event_contents e = w ->
-          s' = mmio_interrupt_w2s w s ->
-          impl_mmio_event_prot e s s'
-      (* writing to the interrupt register is allowed but must not change the state *)
-      | IOW__sme : forall e s s',
-          event_type e = IOWrite ->
-          event_addr e = mmio_interrupt_addr ->
-          s = s' ->
-          impl_mmio_event_prot e s s'
-    .
 
     Definition Mmio_event_prot {width : nat} (a : Addr) (w: bv (width * byte)) (t : EventTy) (s s' :  bv iostate_bits) : Prop :=
       impl_mmio_event_prot {| event_type := t;  event_addr := a;  event_nbbytes := _ ;  event_contents := w |} (bv2s s) (bv2s s').

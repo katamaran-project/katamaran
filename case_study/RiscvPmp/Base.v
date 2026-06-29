@@ -261,6 +261,16 @@ Record Event : Set :=
     }.
 Definition Trace : Set := list Event.
 
+(* IO State Protocol *)
+Class IO_State_Spec := {
+    IOState : Set;
+    iostate_bits : nat;
+    iostate_init : IOState;
+    s2bv : IOState -> bv iostate_bits;
+    bv2s : bv iostate_bits -> IOState;
+    impl_mmio_event_prot : Event -> IOState -> IOState -> Prop;
+  }.
+
 Inductive Privilege : Set :=
 | User
 | Machine
@@ -774,9 +784,10 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_xlenbits                       := (ty.bvec xlenbits).
   Definition ty_word                           := (ty.bvec word).
   Definition ty_byte                           := (ty.bvec byte).
-  Definition ty_bytes (bytes : nat)            := (ty.bvec (bytes * byte)).
+  Definition ty_bytes (bytes : nat)              := (ty.bvec (bytes * byte)).
   Definition ty_regno                          := (ty.bvec 5).
   Definition ty_privilege                      := (ty.enum privilege).
+  Definition ty_iostate {_ : IO_State_Spec}    := (ty.bvec (iostate_bits )).
   Definition ty_ioeventType                    := (ty.enum ioeventType).
   Definition ty_interruptType                  := (ty.enum interruptType).
   Definition ty_priv_level                     := (ty.bvec 2).
