@@ -721,46 +721,48 @@ Module Examples.
       + econstructor; eauto.
   Qed.
 
-    (* Lemma semWP2_lockstep `{sailGS2 Σ} {s1 s2} *)
-    (*   {γ1 μ1 δ1 γ1' μ1' n1} *)
-    (*   {γ2 μ2 δ2 γ2' μ2' n2} *)
-    (*   {Q} *)
-    (*   (Hsteps1 : NSteps γ1 μ1 δ1 s1 γ1' μ1' [env] (stm_val ty.unit ()) n1) *)
-    (*   (Hsteps2 : NSteps γ2 μ2 δ2 s2 γ2' μ2' [env] (stm_val ty.unit ()) n2) : *)
-    (*   mem_inv2 _ μ1 μ2 ∗ *)
-    (*     regs_inv2 γ1 γ2 ∗ *)
-    (*     semWP2 δ1 δ2 s1 s2 Q ⊢ *)
-    (*     |={⊤,∅}=> |={∅}▷=>^n1 ⌜n1 = n2⌝. *)
-    (* Proof. *)
-    (*   revert n2 s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 γ2' δ2 μ2 μ2' Hsteps1 Hsteps2 Q. *)
-    (*   induction n1. *)
-    (*   - intros n2 s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 γ2' δ2 μ2 μ2' Hsteps1 Hsteps2 Q. *)
-    (*     iIntros "(Hmem & Hregs & Hwp)". *)
-    (*     inversion Hsteps1. subst. *)
-    (*     inversion Hsteps2; subst; auto. *)
-    (*     + cbn. iApply fupd_mask_intro; first set_solver. iIntros "Hclose". by iFrame. *)
-    (*     + rewrite semWP2_unfold. cbn. *)
-    (*       destruct s2; cbn; iMod "Hwp"; auto. *)
-    (*       all: inversion H0. *)
-    (*   - intros n2 s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 γ2' δ2 μ2 μ2' Hsteps1 Hsteps2 Q. *)
-    (*     iIntros "(Hmem & Hregs & Hwp)". *)
-    (*     inversion Hsteps1. subst. inversion Hsteps2; subst. *)
-    (*     { rewrite semWP2_unfold. cbn. *)
-    (*       destruct s1; cbn; iMod "Hwp"; auto. *)
-    (*       all: inversion H1. *)
-    (*     } *)
-    (*     iPoseProof (semWP2_step H1 H0 with "[$Hmem $Hregs $Hwp]") as "Hwp". *)
-    (*     iMod "Hwp". iModIntro. *)
-    (*     replace (S n1) with (1 + n1); auto. *)
-    (*     rewrite step_fupdN_add. *)
-    (*     iMod "Hwp". do 2 iModIntro. iMod "Hwp". iMod "Hwp" as "(Hregs & Hmem & Hwp)". *)
-    (*     replace (1 + n1) with (S n1); auto. *)
-    (*     specialize (IHn1 n s0 s3 γ0 γ1' δ0 μ0 μ1' γ3 γ2' δ3 μ3 μ2' H6 H2 Q). *)
-    (*     iMod (IHn1 with "[$Hmem $Hregs $Hwp]") as "IH". *)
-    (*     iModIntro. iApply (step_fupdN_mono with "IH"). *)
-    (*     iStartProof. *)
-    (*     by iIntros "<-". *)
-    (* Qed. *)
+    Lemma semWP2_lockstep `{sailGS2 Σ} {s1 s2}
+      {γ1 μ1 δ1 γ1' μ1' n}
+      {γ2 μ2 δ2}
+      {Q}
+      (Hsteps1 : NSteps γ1 μ1 δ1 s1 γ1' μ1' [env] (stm_val ty.unit ()) n) :
+      mem_inv2 _ μ1 μ2 ∗
+        regs_inv2 γ1 γ2 ∗
+        semWP2 δ1 δ2 s1 s2 Q ⊢
+        |={⊤,∅}=> |={∅}▷=>^n ⌜ ∃ γ2' μ2', NSteps γ2 μ2 δ2 s2 γ2' μ2' [env] (stm_val ty.unit tt) n ⌝.
+    Proof.
+      revert s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 δ2 μ2 Hsteps1 Q.
+      induction n.
+      - intros s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 δ2 μ2 Hsteps1 Q.
+        iIntros "(Hmem & Hregs & Hwp)".
+        inversion Hsteps1. subst.
+        rewrite semWP2_unfold. cbn.
+          destruct s2; cbn; iMod "Hwp"; auto.
+          iApply fupd_mask_intro; first set_solver. iIntros "Hclose". iPureIntro.
+          do 2 eexists. destruct v. env.destroy δ2. constructor.
+      - intros s1 s2 γ1 γ1' δ1 μ1 μ1' γ2 δ2 μ2 Hsteps1 Q.
+        iIntros "(Hmem & Hregs & Hwp)".
+        inversion Hsteps1. subst.
+        destruct (stm_to_val s2) as [[v2|m2]|] eqn:Hs2.
+        + rewrite semWP2_unfold. rewrite (stm_val_stuck H1). rewrite Hs2. cbn.
+          iMod "Hwp". done.
+        + rewrite semWP2_unfold. rewrite (stm_val_stuck H1). rewrite Hs2. cbn.
+          iMod "Hwp". done.
+        + destruct (progress s2) as [Hfinal2 | Hprog2].
+          * destruct s2; cbn in *; try contradiction; congruence.
+          * specialize (Hprog2 γ2 μ2 δ2) as (γ' & μ' & δ' & s' & Hstep2).
+            iPoseProof (semWP2_step H1 Hstep2 with "[$Hregs $Hmem $Hwp]") as "Hwp".
+            iMod "Hwp". iModIntro. iMod "Hwp". do 2 iModIntro. do 2 iMod "Hwp".
+            iDestruct "Hwp" as "(Hregs & Hmem & Hwp)".
+            iMod (IHn s0 s' γ0 γ1' δ0 μ0 μ1' γ' δ' μ' H6 Q
+                   with "[$Hmem $Hregs $Hwp]") as "IH".
+            iModIntro.
+            iApply (step_fupdN_mono with "IH").
+            iPureIntro.
+            intros (γ2'' & μ2'' & HNSteps).
+            eexists γ2'', μ2''.
+            exact (nstep_trans Hstep2 HNSteps).
+    Qed.
 
     Lemma semWP2_preservation' `{sailGS2 Σ} n {s11 s21} {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     {δ11 δ21}
