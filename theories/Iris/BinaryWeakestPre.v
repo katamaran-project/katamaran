@@ -147,10 +147,12 @@ Module IrisBinaryWP
          (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ)
          (POST : Post2 Γ1 Γ2 τ),
         match stm_to_val s1, stm_to_val s2 with
-        | Some v1, Some v2 => |={⊤}=> POST v1 δ1 v2 δ2
-        | Some v1, None    => |={⊤}=> False
-        | None   , Some v2 => |={⊤}=> False
-        | None   , None    =>
+        | Some (inl v1), Some (inl v2) => |={⊤}=> POST (inl v1) δ1 (inl v2) δ2
+        | Some (inr m1), Some (inr m2) => |={⊤}=> POST (inr m1) δ1 (inr m2) δ2
+        | Some _,        Some _        => |={⊤}=> False
+        | Some _,        None          => |={⊤}=> False
+        | None,          Some _        => |={⊤}=> False
+        | None,          None          =>
             (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
                 (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
                  ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStoreVal Γ1)
@@ -200,10 +202,12 @@ Module IrisBinaryWP
     (Q : Post2 Γ1 Γ2 τ) :
     semWP2 δ1 δ2 s1 s2 Q ⊣⊢
       match stm_to_val s1, stm_to_val s2 with
-      | Some v1, Some v2 => |={⊤}=> Q v1 δ1 v2 δ2
-      | None, Some _ => |={⊤}=> False
-      | Some _, None => |={⊤}=> False
-      | None, None =>
+      | Some (inl v1), Some (inl v2) => |={⊤}=> Q (inl v1) δ1 (inl v2) δ2
+      | Some (inr m1), Some (inr m2) => |={⊤}=> Q (inr m1) δ1 (inr m2) δ2
+      | Some _,        Some _        => |={⊤}=> False
+      | None,          Some _        => |={⊤}=> False
+      | Some _,        None          => |={⊤}=> False
+      | None,          None          =>
           (∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory),
               (regs_inv2 γ1 γ2 ∗ mem_inv2_sail μ1 μ2
                ={⊤,∅}=∗ (∀ (s12 : Stm Γ1 τ) (δ12 : CStoreVal Γ1)
@@ -250,10 +254,14 @@ Module IrisBinaryWP
                           rewrite semWP2_unfold.
                           rewrite semWP2_unfold.
                           destruct (stm_to_val s1) eqn:Es1v;
-                            destruct (stm_to_val s2) eqn:Es2v; auto.
-                          { iMod "H".
-                            iModIntro.
-                            by iApply "HQ". }
+                            destruct (stm_to_val s2) eqn:Es2v.
+                          { destruct i as [v1|m1]; destruct i0 as [v2|m2].
+                            - iMod "H". iModIntro. by iApply "HQ".
+                            - iExact "H".
+                            - iExact "H".
+                            - iMod "H". iModIntro. by iApply "HQ". }
+                          { iExact "H". }
+                          { iExact "H". }
                           iIntros (γ1 γ2 μ1 μ2) "Hresources".
                           iMod ("H" with "Hresources") as "H".
                           iModIntro.
@@ -353,9 +361,13 @@ Module IrisBinaryWP
       do 2 rewrite semWP2_unfold.
       cbn.
       destruct (stm_to_val s1); destruct (stm_to_val s2).
-      - iFrame. auto.
-      - auto.
-      - auto.
+      - destruct i as [v1|m1]; destruct i0 as [v2|m2].
+        + iMod "H". iModIntro. iFrame.
+        + iExact "H".
+        + iExact "H".
+        + iMod "H". iModIntro. iFrame.
+      - iExact "H".
+      - iExact "H".
       - iIntros (γ1 γ2 μ1 μ2) "Hres".
         iSpecialize ("H" with "Hres").
         iMod "H". iModIntro.
@@ -441,7 +453,6 @@ Module IrisBinaryWP
       - destruct s; rewrite semWP2_unfold; cbn.
         { inversion H. }
         all: try solve [do 3 iModIntro; iMod "Hclose"; iMod "WPs"; auto].
-        { inversion H. }
       - rewrite !semWP2_unfold. by iFrame.
       - rewrite <- !semWP2_fail. by iFrame.
       - destruct s0; rewrite semWP2_unfold; cbn.
@@ -451,7 +462,6 @@ Module IrisBinaryWP
       - destruct s; rewrite semWP2_unfold; cbn.
         { inversion H. }
         all: try solve [do 3 iModIntro; iMod "Hclose"; iMod "WPs"; auto].
-        { inversion H. }
       - destruct s; rewrite semWP2_unfold; cbn.
         { inversion H. }
         all: try solve [do 3 iModIntro; iMod "Hclose"; iMod "WPs"; auto].
@@ -555,10 +565,10 @@ Module IrisBinaryWP
       iIntros (s12 δ12 γ12 μ12 s22 δ22 γ22 μ22 (step1 & step2)).
       destruct (smallinvstep step1); destruct (smallinvstep step2); cbn.
       - rewrite !semWP2_val. rewrite !env.drop_cat. by iFrame.
-      - rewrite !semWP2_unfold. cbn. rewrite !env.drop_cat. do 3 iModIntro. iMod "Hclose". iModIntro. by iFrame.
+      - rewrite !semWP2_unfold. cbn. do 3 iModIntro. iMod "Hclose". iMod "WPk". auto.
       - rewrite !semWP2_unfold. cbn. rewrite !env.drop_cat.
         rewrite (stm_val_stuck H). do 3 iModIntro. iMod "Hclose". iMod "WPk". auto.
-      - rewrite !semWP2_unfold. cbn. rewrite !env.drop_cat. do 3 iModIntro. iMod "Hclose". iModIntro. by iFrame.
+      - rewrite !semWP2_unfold. cbn. do 3 iModIntro. iMod "Hclose". iMod "WPk". auto.
       - rewrite <- !semWP2_fail. rewrite env.drop_cat.
         do 3 iModIntro. iMod "Hclose". iMod "WPk". iModIntro. iFrame. iModIntro.
         rewrite !env.drop_cat. iFrame.

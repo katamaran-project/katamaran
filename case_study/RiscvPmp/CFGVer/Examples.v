@@ -778,11 +778,10 @@ Module Examples.
       inversion steps1. inversion steps2; subst; iIntros "(Hmem & Hregs)"; iIntros "Hwp".
       - iFrame.
         by iApply fupd_mask_subseteq.
-      - rewrite {1}semWP2_unfold. cbn. 
+      - rewrite {1}semWP2_unfold. cbn.
         destruct s21; cbn; iMod "Hwp"; auto.
         + iApply fupd_mask_intro; first set_solver. iIntros "Hclose". iMod "Hclose".
           inversion H4.
-        + inversion H4.
     }
     iIntros (steps1 steps2) "(Hmem & Hregs)".
     iIntros " Hwp".

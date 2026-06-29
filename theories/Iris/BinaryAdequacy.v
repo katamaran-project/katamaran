@@ -290,7 +290,8 @@ Module Type IrisAdequacy2
   Definition Result2 {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
     (IVal τ -> IVal τ -> Prop) -> Prop :=
     match stm_to_val s1, stm_to_val s2 with
-    | Some v1 , Some v2 => λ POST, POST v1 v2
+    | Some (inl v1), Some (inl v2) => λ POST, POST (inl v1) (inl v2)
+    | Some (inr m1), Some (inr m2) => λ POST, POST (inr m1) (inr m2)
     | _, _ => λ _, False
     end.
 
@@ -340,26 +341,30 @@ Module Type IrisAdequacy2
       (* TODO: Same thing twice because Final and stm_to_val are actually the same but no way to express this *)
       destruct s1 eqn:?; inversion Hfinal; cbn.
       + case_match.
-        * iMod "Hwp2" as "%HQ".
-          iApply fupd_mask_intro; first by set_solver.
-          iIntros "_ !%".
-          eexists _, _, _, _.
-          split.
-          { apply nstep_refl. }
-          destruct (stm_to_val s21).
-         ++ by inversion H.
-         ++ congruence.
+        * destruct i as [v2|m2].
+          -- iMod "Hwp2" as "%HQ".
+             iApply fupd_mask_intro; first by set_solver.
+             iIntros "_ !%".
+             eexists _, _, _, _.
+             split.
+             { apply nstep_refl. }
+             destruct (stm_to_val s21).
+            ++ by inversion H.
+            ++ congruence.
+          -- by iMod "Hwp2" as "%".
         * by iMod "Hwp2" as "%".
       + case_match.
-        * iMod "Hwp2" as "%HQ".
-          iApply fupd_mask_intro; first by set_solver.
-          iIntros "_ !%".
-          eexists _, _, _, _.
-          split.
-          { apply nstep_refl. }
-          destruct (stm_to_val s21).
-          ++ by inversion H.
-          ++ congruence.
+        * destruct i as [v2|m2].
+          -- by iMod "Hwp2" as "%".
+          -- iMod "Hwp2" as "%HQ".
+             iApply fupd_mask_intro; first by set_solver.
+             iIntros "_ !%".
+             eexists _, _, _, _.
+             split.
+             { apply nstep_refl. }
+             destruct (stm_to_val s21).
+            ++ by inversion H.
+            ++ congruence.
         * by iMod "Hwp2" as "%".
     - iIntros (γ21 μ21 δ21 s21) "(Hcred & Hmem & Hwp2 & Hregs)".
       specialize (IHHeval1 Hfinal).
