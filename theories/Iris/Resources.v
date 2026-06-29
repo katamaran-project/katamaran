@@ -387,6 +387,37 @@ Module Type IrisPrelims
       by dependent elimination H.
     Qed.
 
+    Lemma reg_valid_nd regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
+      regs_inv regstore ∗ reg_pointsTo r v ⊢
+      ⌜read_register regstore r = v⌝ ∗ regs_inv regstore ∗ reg_pointsTo r v.
+    Proof.
+      iIntros "(Hregs_inv & Hreg)".
+      iDestruct "Hregs_inv" as (regsmap) "(Hauth & %HForall)".
+      iCombine "Hauth Hreg" as "Hcomb".
+      iDestruct (own_valid_r with "Hcomb") as "(Hcomb' & %Hvalid)".
+      iEval (rewrite own_op) in "Hcomb'".
+      iDestruct "Hcomb'" as "(Hauth' & Hreg')".
+      apply auth_both_valid in Hvalid.
+      destruct Hvalid as [Hl regsv].
+      iSplit.
+      - iPureIntro.
+        specialize (Hl 0).
+        setoid_rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl.
+        destruct Hl as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
+          auto with typeclass_instances.
+        specialize (regsv (existT _ r)).
+        rewrite eq1 in regsv.
+        destruct y as [y|]; [|inversion regsv].
+        setoid_rewrite Excl_included in eq2.
+        apply leibniz_equiv in eq2. subst.
+        specialize (HForall (existT _ r) (Excl (existT _ v)) eq1); cbn in HForall.
+        Local Set Equations With UIP.
+        by dependent elimination HForall.
+      - iSplitL "Hauth'".
+        + iExists regsmap. iFrame. iPureIntro. exact HForall.
+        + iFrame.
+    Qed.
+
     Lemma regs_inv_update {τ} {r} {v : Val τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
       map_Forall (K := SomeReg) (A := excl SomeVal) (λ r' v', match r' with
                            | existT τ r'' => Excl (existT _ (read_register regstore r'')) = v'

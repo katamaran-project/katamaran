@@ -172,6 +172,19 @@ Module Type IrisResources2
     - iApply (reg_valid with "regs2_inv Hreg2").
   Qed.
 
+  Lemma reg_valid2_nd `{srGS: sailRegGS2 Σ} regstore1 regstore2 {τ} (r : 𝑹𝑬𝑮 τ) (rv : RelVal τ) :
+    regs_inv2 regstore1 regstore2 ∗ reg_pointsTo2 r rv ⊢
+    ⌜read_register regstore1 r = ty.projLeft rv⌝ ∗ ⌜read_register regstore2 r = ty.projRight rv⌝ ∗
+    regs_inv2 regstore1 regstore2 ∗ reg_pointsTo2 r rv.
+  Proof.
+    iIntros "((Hregs1 & Hregs2) & (Hpc1 & Hpc2))".
+    iPoseProof (reg_valid_nd with "[$Hregs1 $Hpc1]") as "(%eq1 & Hregs1' & Hpc1')".
+    iPoseProof (reg_valid_nd with "[$Hregs2 $Hpc2]") as "(%eq2 & Hregs2' & Hpc2')".
+    iSplit. { iPureIntro. exact eq1. }
+    iSplit. { iPureIntro. exact eq2. }
+    iFrame.
+  Qed.
+
   Definition SomeRelVal : Type := sigT RelVal.
 
   Locate "↦ᵣ".

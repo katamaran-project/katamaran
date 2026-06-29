@@ -5,6 +5,24 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 
 ---
 
+## Collaboration style
+
+- **Report before acting.** Before any significant edit, proof attempt, or design
+  decision, state in one sentence what I'm about to try and why — so the user can
+  redirect before I commit.
+
+- **Decision checkpoints.** When I hit a fork (e.g. "option A or B?"), stop and
+  ask explicitly rather than pick one and run with it.
+
+- **Surface intermediate findings.** During deep exploration, report what I've
+  found every few steps rather than one large dump at the end.
+
+- **Come back when stuck.** If I've been working on something for a while without
+  clear progress, stop and report back — don't keep going silently. Say what I've
+  tried, where I'm at, and ask how to proceed.
+
+---
+
 ## Project layout
 
 | Path | Logical name | Purpose |

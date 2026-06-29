@@ -61,39 +61,6 @@ From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
 (* From Katamaran Require Import RiscvPmp.LoopVerification. *)
 
-(* ======================================================================== *)
-(* CFGVer/Examples.v                                                        *)
-(*                                                                           *)
-(* This is the main file for the CFGVer case study.  It has four parts:     *)
-(*                                                                           *)
-(*  1. WithAsnNotations (in Module Examples): contracts and programs.        *)
-(*     Defines CFGVerifierContract, ValidCFGVerifierContract, gen_contract,  *)
-(*     and all concrete program contracts (jmp_fwd, countdown, swap, etc.)  *)
-(*                                                                           *)
-(*  2. Pure infrastructure (after WithAsnNotations):                         *)
-(*     Step relations (RiscVStep, RiscVNStepsWithExitCond, etc.),            *)
-(*     the Iris loop predicate (myWP2_loop), and adequacy lemmas.            *)
-(*                                                                           *)
-(*  3. AdequacyTools section: connects the CFGVer VC checker to Iris.        *)
-(*     Extracts ptsto_instrs from raw memory, proves sound_exec_cfg_addr_myWP2, *)
-(*     sound_sblock_verification_condition_myWP2, etc.                       *)
-(*                                                                           *)
-(*  4. Wiring and end-to-end lemmas:                                         *)
-(*     cfg_instrs_verified → cfg_instrs_safe → cfg_instrs_contract          *)
-(*     → cfg_instrs_endToEnd / _strong / _with_memory                       *)
-(*     Concrete programs: jmp_fwd_endToEnd_cfg, countdown_endToEnd, etc.    *)
-(*                                                                           *)
-(* Security property: constant-time noninterference.                         *)
-(*   Two worlds (γ1, μ1) and (γ2, μ2) start with the same public registers  *)
-(*   and the same program, but may differ on private data.  The end-to-end   *)
-(*   lemmas conclude leakage_trace μ1' = leakage_trace μ2'.                  *)
-(*                                                                           *)
-(* Simplification opportunity:                                               *)
-(*   Both worlds must start at init_addr = 0.  The hard-coded 0 shows up in *)
-(*   ptsto_instrs (SyncVal bv.zero), instrsMemory, and ImplPre.  Generalising *)
-(*   to an arbitrary start address would make cfg_instrs_endToEnd cleaner.   *)
-(* ======================================================================== *)
-
 Module Examples.
   Import RiscvPmpBlockVerifExecutor.
   Import Assembly.
@@ -112,13 +79,6 @@ Module Examples.
   Definition X3 : RegIdx := bv.of_nat 3.
   Definition X4 : RegIdx := bv.of_nat 4.
 
-  (* ======================================================================== *)
-  (* WithAsnNotations: symbolic contracts and program definitions             *)
-  (*                                                                          *)
-  (* Everything in this section is a Katamaran-level (pre-Iris) definition.  *)
-  (* After `End WithAsnNotations`, the infrastructure drops to the Rocq/Iris  *)
-  (* level (RegStore, Memory, iProp).                                          *)
-  (* ======================================================================== *)
   Section WithAsnNotations.
     Import asn.notations.
 
@@ -143,30 +103,20 @@ Module Examples.
        heap state is unconstrained and any leftover resources are silently dropped. *)
     Definition CFG_VC_triple {Σ}
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (instrs  : list AST)
+      (i  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
       Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := Σ)
-        (extend_to_minimal_pre P) instrs ec fl
+        (extend_to_minimal_pre P) i ec fl
         (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
     Definition Valid_CFG_VC {Σ}
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (instrs  : list AST)
+      (i  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
-      safeE (postprocess (CFG_VC_triple P instrs ec fl)).
+      safeE (postprocess (CFG_VC_triple P i ec fl)).
 
-    (* CFGVerifierContract: the top-level contract bundle for CFGVer.
-       Fields:
-         cfg_precondition  — symbolic PRE assertion over Σ ▻ "a" (start PC)
-         cfg_instrs        — the program as a list of decoded instructions
-         cfg_exitCond      — the halting criterion (Boolean function on PC)
-         cfg_fuel          — step bound for sexec_cfg_addr
-       No postcondition field: SHeapSpec has no leakcheck, and any Iris
-       resources left in the heap after the final step are silently dropped
-       (affine Iris).  The only observable output is the leakage trace.
-       Notation: {{ P }} instrs @cfg[ ec, fl ]                               *)
     Record CFGVerifierContract {Σ} :=
       MkCFGVerifierContract
       { cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
@@ -434,22 +384,6 @@ Module Examples.
 
   (* Public registers for a spec list: registers whose is_pub flag is true.
      Defined outside WithAsnNotations to avoid notation-scope interference. *)
-  (* ======================================================================== *)
-  (* Public register and memory infrastructure (outside WithAsnNotations)     *)
-  (*                                                                          *)
-  (* After the symbolic contracts are defined, the infrastructure for the     *)
-  (* binary noninterference proof lives at the Rocq/Iris level.               *)
-  (*                                                                          *)
-  (* Public registers: `declare_public_registers γ1 γ2 list` asserts that    *)
-  (*   both worlds agree on every register in `list`.                         *)
-  (*   `something_registers HpubReg` converts between interp_gprs_with_registers  *)
-  (*   (all registers as NonSyncVal) and interp_gprs_with_public_registers    *)
-  (*   (public as SyncVal, private as NonSyncVal).                            *)
-  (*   This is the key step for applying gen_implpre in ImplPre proofs.       *)
-  (*                                                                          *)
-  (* gen_public_regs: extracts the `is_public = true` entries from a         *)
-  (*   reg_spec list and converts RegIdx to the sigma-typed Reg.              *)
-  (* ======================================================================== *)
   Definition gen_public_regs (specs : list reg_spec) : list {x : Ty & 𝑹𝑬𝑮 x} :=
     base.omap (fun (spec : reg_spec) =>
       let '(r, pub) := spec in
@@ -468,6 +402,8 @@ Module Examples.
   From iris.program_logic Require weakestpre.
   Import iris.algebra.excl.
   Import iris.algebra.gmap.
+
+  Search Assertion.
 
   Definition asn_regs_ptsto_with_registers γ1 γ2 : Assertion ctx.nil :=
     asn_and_regs
@@ -524,32 +460,6 @@ Module Examples.
 
     Definition init_addr     : N := 0.
 
-    (* ====================================================================== *)
-    (* Execution step relations                                               *)
-    (*                                                                        *)
-    (* RiscVStep γ1 μ1 γ2 μ2: one outer loop iteration.                      *)
-    (*   Defined as: ⟨γ1, μ1, [env], fun_step⟩ --->* ⟨γ2, μ2, [env], tt⟩  *)
-    (*   i.e., fun_step runs to completion (fetch → decode → execute → nextpc) *)
-    (*                                                                        *)
-    (* RiscVStepN: same but with an explicit micro-step count (needed for     *)
-    (*   matching the fuel parameter of step_fupdN_soundness_gen).            *)
-    (*                                                                        *)
-    (* RiscVStepsWithExitCond exitCond γ1 μ1 γ2 μ2:                          *)
-    (*   Written ⟨γ1, μ1⟩ -(exitCond)->* ⟨γ2, μ2⟩.                         *)
-    (*   Reflexive-transitive closure of RiscVStep, under the constraint that *)
-    (*   exitCond does NOT hold at the PC of each intermediate state.         *)
-    (*   The halting state (γ2, μ2) satisfies exitCond at its PC.             *)
-    (*                                                                        *)
-    (* RiscVNStepsWithExitCond: as above but with an outer step count n.      *)
-    (*   n = number of outer loop iterations (not micro-steps).               *)
-    (*                                                                        *)
-    (* RiscVlistNStepsWithExitCond: internal variant where step counts are a  *)
-    (*   list of micro-step counts (one per outer iteration).  Used by        *)
-    (*   step_fupdN_soundness_gen which needs the sum list_sum_plus_one l.    *)
-    (*   nsteps_to_lsteps converts NSteps to listNSteps.                      *)
-    (*                                                                        *)
-    (* RiscVNSteps / RiscVlistNSteps: unconditional (no exitCond) versions.   *)
-    (* ====================================================================== *)
     Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=
       fun γ2 μ2 => ⟨ γ1, μ1, [env], fun_step ⟩ --->* ⟨ γ2, μ2, [env], stm_val ty.unit tt ⟩.
@@ -610,42 +520,6 @@ Module Examples.
     Notation "⟨ γ1 , μ1 ⟩ -l( l )->* ⟨ γ2 , μ2 ⟩" := (@RiscVlistNSteps γ1 μ1 γ2 μ2 l)
                                                       (at level 75, only parsing, right associativity).
 
-    (* ====================================================================== *)
-    (* myWP2_loop: the Iris binary weakest-precondition loop fixpoint         *)
-    (*                                                                        *)
-    (* myWp2 is an alias for iProp Σ (the type of binary WP propositions).   *)
-    (*                                                                        *)
-    (* myWP2_loop_fix ExitCond wp: the one-step unfolding of the loop.       *)
-    (*   = ExitCond ∨ semWP2 fun_step fun_step                               *)
-    (*       (λ v1 δ1 v2 δ2 => match v1, v2 with                             *)
-    (*                          | inr _, inr _ => True                        *)
-    (*                          | inl _, inl _ => ▷ wp                        *)
-    (*                          | _, _ => False end)                          *)
-    (*   Left disjunct: both worlds have already exited (ExitCond holds).    *)
-    (*   Right disjunct: run one outer loop step and recurse.  The ▷ guard   *)
-    (*   is the contractiveness witness for the Iris fixpoint.                *)
-    (*   `inr` = stm_fail (abnormal termination), never occurs in practice.  *)
-    (*   `inl` = stm_val (normal return), i.e., one outer step completed.    *)
-    (*                                                                        *)
-    (* myWP2_loop ExitCond = fixpoint (myWP2_loop_fix ExitCond)              *)
-    (*   The fixpoint exists by myWP2_loop_fix_Contractive.                   *)
-    (*                                                                        *)
-    (* Key lemmas:                                                            *)
-    (*   fixpoint_myWP2_loop_eq: myWP2_loop ≡ myWP2_loop_fix (myWP2_loop)   *)
-    (*   exitCondImpliesMyWP2_loop: ExitCond ⊢ myWP2_loop ExitCond          *)
-    (*                                                                        *)
-    (* exitCond_WP2_loop ec := myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜ec v⌝)  *)
-    (*   This is the standard ExitCond for CFGVer programs.  The SyncVal     *)
-    (*   ensures both worlds exit on the same PC value (which is critical     *)
-    (*   for the leakage-trace argument).                                     *)
-    (*                                                                        *)
-    (* Difference from BlockVer.Verifier.WP2_loop:                           *)
-    (*   WP2_loop is the PLAIN infinite loop (no ExitCond).  It is used by   *)
-    (*   semTripleCFG and sound_exec_cfg_addr in Verifier.v.                  *)
-    (*   myWP2_loop ExitCond is the CONDITIONAL loop defined here.            *)
-    (*   The bridge is sound_exec_cfg_addr_myWP2 in AdequacyTools, which     *)
-    (*   proves that cexec_cfg_addr implies myWP2_loop (not WP2_loop).        *)
-    (* ====================================================================== *)
     Definition myWp2 `{sailGS2 Σ} :=
         iProp Σ.
 
@@ -888,15 +762,6 @@ Module Examples.
     (*     by iIntros "<-". *)
     (* Qed. *)
 
-    (* semWP2_preservation': two-sided step preservation for myWP2_loop.
-       Given NSteps for world 1 and Steps for world 2 (both to stm_val tt),
-       and given mem_inv2 + regs_inv2 (resource invariants) and a semWP2
-       hypothesis, yields: after n later-steps, we have the new resource
-       invariants and the continued semWP2.
-       NOTE: Both worlds' execution traces are given as input here (two-sided).
-       The one-sided variant (semWP2_preservation_fwd') derives world-2's trace
-       existentially using can_step.  This two-sided version is used in the
-       proved adequacy_gen_RiscVNStepsExitCond. *)
     Lemma semWP2_preservation' `{sailGS2 Σ} n {s11 s21} {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     {δ11 δ21}
     {Q}  :
@@ -904,9 +769,8 @@ Module Examples.
       Steps γ21 μ21 δ21 s21 γ22 μ22 [env] (stm_val ty.unit ()) ->
     mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
       semWP2 δ11 δ21 s11 s21 Q
-    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=>
-            mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
-              semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
+    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=> mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
+                                      semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q.
   Proof.
     revert s11 s21 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ21 Q.
     induction n as [|n IH]=> s11 s21 μ11 μ21 γ11 γ21 μ12 μ22 γ12 γ22 δ11 δ21 Q /=.
@@ -935,106 +799,6 @@ Module Examples.
     by iApply (IH with "[$Hmem $Hregs]").
   Qed.
 
-  (* Termination-sensitive variant of semWP2_preservation':                   *)
-  (* derives world-2's Steps existentially via can_step, rather than          *)
-  (* requiring them as an input hypothesis.                                   *)
-  (*                                                                          *)
-  (* PC SYNCHRONISATION NOTE                                                  *)
-  (*                                                                          *)
-  (* The lemma carries pc_sync (γ11.pc = γ21.pc) as a Coq hypothesis and    *)
-  (* returns the preserved pc_sync (γ12.pc = γ22.pc) as a pure conjunct in  *)
-  (* the conclusion.  This lets adequacy_gen_RiscVNStepsExitCond_strong      *)
-  (* thread the invariant step-by-step without needing pc_step_sync as an    *)
-  (* external obligation on callers.                                          *)
-  (*                                                                          *)
-  (* ALTERNATIVE DESIGN — Iris invariant for PC sync                         *)
-  (*                                                                          *)
-  (* Instead of threading pc_sync through every step, we could maintain an   *)
-  (* Iris invariant analogous to interp_inv_constant_time:                   *)
-  (*                                                                          *)
-  (*   Definition pc_sync_inv_ns := nroot .@ "pc_sync".                      *)
-  (*   Definition interp_inv_pc_sync `{sailGS2 Σ} : iProp Σ :=               *)
-  (*     inv pc_sync_inv_ns (∃ v : bv xlenbits, reg_pointsTo2 pc (SyncVal v)).*)
-  (*                                                                          *)
-  (* This says: throughout execution the two-world ghost PC is always         *)
-  (* SyncVal v for some v.  Combined with reg_valid2, this gives              *)
-  (* read_register γ1 pc = read_register γ2 pc at any point.                 *)
-  (*                                                                          *)
-  (* The invariant is strictly weaker than interp_inv_constant_time: PC sync *)
-  (* is implied by leakage sync (LeakPc records the fetch address at every   *)
-  (* step, so equal leakage traces imply equal PC sequences).  But relying   *)
-  (* on the leakage invariant here would be architecturally backwards — the  *)
-  (* leakage invariant is something we are trying to prove, not a tool to    *)
-  (* prove it with.  The dedicated PC-sync invariant is independent of the   *)
-  (* leakage model, so it would survive a leakage model change.              *)
-  (*                                                                          *)
-  (* Why we did NOT use this invariant approach:                              *)
-  (* reg_pointsTo2 pc (SyncVal v) is currently held inside regs_inv2, which  *)
-  (* is defined as regs_inv γ1 ∗ regs_inv γ2.  To store it inside an inv,   *)
-  (* regs_inv2 would need to be redefined to exclude pc, splitting it into   *)
-  (* regs_inv2_no_pc ∗ inv (∃ v, reg_pointsTo2 pc (SyncVal v)).  That is    *)
-  (* invasive — it touches every proof that destructures regs_inv2.          *)
-  (*                                                                          *)
-  (* The alternative (a new auth/frag ghost algebra for PC, mirroring how    *)
-  (* traceG supports tr_auth/tr_frag for the leakage invariant) would be     *)
-  (* fully principled but requires new ghost infrastructure.                 *)
-  (*                                                                          *)
-  (* Threading pc_sync through the Coq induction (current approach) is       *)
-  (* equivalent to the invariant approach in information content.  We chose  *)
-  (* it as the simpler option until the regs_inv2 split or a new ghost type  *)
-  (* is deemed worth the effort.                                              *)
-  Lemma semWP2_preservation_fwd' `{sailGS2 Σ} n {s11 s21}
-      {γ11 γ12 γ21} {μ11 μ12 μ21} {δ11 δ21} {Q}
-      (Hpc : RiscvPmpProgram.read_register γ11 pc =
-             RiscvPmpProgram.read_register γ21 pc) :
-      NSteps γ11 μ11 δ11 s11 γ12 μ12 [env] (stm_val ty.unit ()) n ->
-      mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
-        semWP2 δ11 δ21 s11 s21 Q
-      ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=>
-        ∃ (γ22 : RegStore) (μ22 : Memory) (s22 : Stm [ctx] ty.unit),
-          ⌜Steps γ21 μ21 δ21 s21 γ22 μ22 [env] s22⌝ ∗
-          ⌜stm_to_val s22 ≠ None⌝ ∗
-          ⌜RiscvPmpProgram.read_register γ12 pc =
-           RiscvPmpProgram.read_register γ22 pc⌝ ∗
-          mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
-          semWP2 [env] [env] (stm_val ty.unit ()) s22 Q.
-  (* The conclusion quantifies over the terminal statement s22 for world 2
-     (which may be stm_val or stm_fail for fun_step semantics).  The Q in
-     the adequacy proof rules out stm_fail by its specific shape.
-     The pc_sync conjunct is proved from the lock-step semantics: both worlds
-     start at the same PC and execute the same instruction, so their PCs
-     advance identically.
-     - n=0 case: γ12=γ11 and γ22=γ21, so pc_sync is Hpc itself.
-     - S n case: use can_step for world 2 (non-terminal by lock-step), apply
-       semWP2_step, derive pc_sync_mid from one-step PC preservation,
-       recurse via IH. *)
-  Proof.
-  Admitted.
-
-  (* ======================================================================== *)
-  (* Two-sided adequacy: adequacy_gen_RiscVNStepsExitCond                     *)
-  (*                                                                          *)
-  (* Given:                                                                   *)
-  (*   Heval1 : ⟨γ11, μ11⟩ -(exitCond, n)->* ⟨γ12, μ12⟩  (world 1)         *)
-  (*   Heval2 : ⟨γ21, μ21⟩ -(exitCond, n)->* ⟨γ22, μ22⟩  (world 2)         *)
-  (*   Hwp : ∀ Σ, mem_res2 ∗ own_regstore2 ⊢ |={⊤}=>                         *)
-  (*           myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)              *)
-  (*         ∗ (mem_inv2 μ12 μ22 ={⊤,∅}=∗ ⌜φ⌝)                              *)
-  (* Concludes: φ                                                              *)
-  (*                                                                          *)
-  (* Proof strategy:                                                          *)
-  (*   - Convert Heval1 to list form (nsteps_to_lsteps → l1, Hl1, Heval1)   *)
-  (*   - Create ghost resources (create_resources) and instantiate Hwp        *)
-  (*   - iStopProof; induct on l1                                             *)
-  (*   - Base case: n=0, apply Hcont to get ⌜φ⌝                             *)
-  (*   - Inductive case:                                                      *)
-  (*       rewrite fixpoint_myWP2_loop_eq; unfold myWP2_loop_fix             *)
-  (*       + ExitCond branch: contradiction (exitCond fires but nEC1 says no) *)
-  (*       + semWP2 branch: use semWP2_preservation' (both worlds' traces);  *)
-  (*         apply IH after consuming lc credit                               *)
-  (*   This is the PROVED version (uses both Heval1 and Heval2).             *)
-  (*   The one-sided variant is adequacy_gen_RiscVNStepsExitCond_strong.     *)
-  (* ======================================================================== *)
       Lemma adequacy_gen_RiscVNStepsExitCond n exitCond {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     (φ : Prop) :
     ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
@@ -1090,224 +854,9 @@ Module Examples.
         rewrite (into_sep_lc_add a 1).
         iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
         iMod (lc_fupd_elim_later with "Hcred1 Hwp") as "Hwp".
-        now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".
+        now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".        
   Qed.
 
-  (* ======================================================================== *)
-  (* One-sided adequacy: adequacy_gen_RiscVNStepsExitCond_strong  [ADMITTED] *)
-  (*                                                                          *)
-  (* UNLIKE adequacy_gen_RiscVNStepsExitCond, this takes ONLY world-1's      *)
-  (* execution trace.  It derives world-2's trace and the conclusion          *)
-  (* existentially.  This is the STRONG (termination-sensitive) variant.      *)
-  (*                                                                          *)
-  (* PC-synchronisation is threaded via semWP2_preservation_fwd' rather than *)
-  (* requiring pc_step_sync as an external hypothesis.  The updated           *)
-  (* semWP2_preservation_fwd' returns                                         *)
-  (*   ⌜read_register γ12 pc = read_register γ22 pc⌝                         *)
-  (* as a pure conjunct; the inductive case extracts it and passes it to the  *)
-  (* IH as pc_sync_next.                                                       *)
-  (*                                                                          *)
-  (* ============================= PROOF PLAN ============================== *)
-  (*                                                                          *)
-  (* The proof mirrors adequacy_gen_RiscVNStepsExitCond with these changes:  *)
-  (*                                                                          *)
-  (* PREAMBLE (identical to non-strong):                                      *)
-  (*   intros Heval1 Hwp.                                                    *)
-  (*   apply nsteps_to_lsteps in Heval1.                                     *)
-  (*   destruct Heval1 as (l1 & Hl1 & Heval1).                               *)
-  (*   refine (uPred.pure_soundness _                                         *)
-  (*     (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc                    *)
-  (*        (list_sum_plus_one l1) (list_sum_plus_one l1) _)).                *)
-  (*   iIntros (Hinv) "Hcred'".                                              *)
-  (*   iMod (create_resources Hinv γ11 γ21 μ11 μ21)                          *)
-  (*     as (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)".              *)
-  (*   pose sG := ...  (* same as non-strong *)                               *)
-  (*   specialize (Hwp _ sG).                                                *)
-  (*   iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2".                     *)
-  (*   clear Hwp.                                                             *)
-  (*   iStopProof.                                                            *)
-  (*   revert Heval1.                                                         *)
-  (*   revert γ11 μ11 γ21 μ21 n Hl1 pc_init_sync.                           *)
-  (*   induction l1;                                                          *)
-  (*     iIntros (γ11 μ11 γ21 μ21 n Hl1 pc_sync Heval1)                     *)
-  (*             "(Hcred & Hmem & Hregs & Hwp2)".                            *)
-  (*                                                                          *)
-  (* BASE CASE (l1 = []):                                                    *)
-  (*   - inversion Heval1. cbn in Hl1. subst.                                *)
-  (*     iMod "Hwp2" as "[_ Hcont]".                                         *)
-  (*     (* Key difference: Hcont takes ∀ γ22 μ22 *)                        *)
-  (*     iMod ("Hcont" $! γ21 μ21 with "Hmem") as "%Hφ".                    *)
-  (*     cbn. iPureIntro.                                                     *)
-  (*     exact ⟨γ21, μ21, riscVNStepWithExitCond_refl, Hφ⟩.                 *)
-  (*                                                                          *)
-  (* INDUCTIVE CASE (l1 = a :: l1):                                          *)
-  (*   - inversion Heval1 ... (* extract γ1mid, μ1mid, nEC1, Hstep1 *)      *)
-  (*     (* Derive nEC2 from pc_sync: exitCond fires on world-1 pc,         *)
-  (*        so by pc_sync it fires on world-2 pc too. *)                    *)
-  (*     have nEC2 : ¬ exitCond (read_register γ21 pc).                     *)
-  (*     { intro Hex. apply nEC1. rewrite pc_sync. exact Hex. }             *)
-  (*     specialize (IHl1 _ _ _ _ _ eq_refl).                                *)
-  (*     rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.             *)
-  (*     iMod "Hwp2" as "([H | Hwp2] & Hφ)".                                *)
-  (*     + (* ExitCond branch: contradiction via pc_sync *)                  *)
-  (*       iDestruct "H" as (v) "(Hpc & %Hec)".                             *)
-  (*       unfold reg_pointsTo2.                                             *)
-  (*       iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)". *)
-  (*       rewrite eq1 in nEC1. tauto.                                       *)
-  (*     + (* semWP2 branch: use semWP2_preservation_fwd' with pc_sync *)    *)
-  (*       iPoseProof (semWP2_preservation_fwd' pc_sync Hstep1               *)
-  (*         with "[$Hmem $Hregs]") as "Hwp_pres".                           *)
-  (*       iSpecialize ("Hwp_pres" with "Hwp2").                             *)
-  (*       iMod "Hwp_pres".                                                  *)
-  (*       (* fuel arithmetic: a + 1 + list_sum_plus_one l1 *)               *)
-  (*       iApply (step_fupdN_wand with "Hwp_pres").                         *)
-  (*       iIntros ">(%γ22mid & %μ22mid & %s22mid & %Hsteps &                *)
-  (*                   %Hval & %pc_sync_next & Hmem_new & Hregs_new &        *)
-  (*                   Hwp_new)".                                             *)
-  (*       (* pc_sync_next from semWP2_preservation_fwd' output *)            *)
-  (*       (* Case-analyze s22mid: stm_val or stm_fail *)                   *)
-  (*       destruct (stm_to_val s22mid) as [v22|] eqn:Ev22.                 *)
-  (*       2: { contradiction. } (* Hval : stm_to_val s22mid ≠ None *)      *)
-  (*       destruct (stm_to_val_Some_cases Ev22)                             *)
-  (*         as [(v' & Hs22 & Hv22) | (m & Hs22 & Hv22)].                   *)
-  (*       * (* Success: s22mid = stm_val ty.unit v' *)                      *)
-  (*         subst s22mid. subst v22. destruct v'.                           *)
-  (*         rewrite semWP2_val. iMod "Hwp_new" as "Hwp_new".               *)
-  (*         specialize (IHl1 γ1mid μ1mid γ22mid μ22mid (length l1) eq_refl *)
-  (*                       pc_sync_next Hevaln1).                            *)
-  (*         (* credit management: split lc for a + 1 + |l1| *)             *)
-  (*         rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l1)).       *)
-  (*         rewrite (into_sep_lc_add a 1).                                  *)
-  (*         iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".               *)
-  (*         iMod (lc_fupd_elim_later with "Hcred1 Hwp_new") as "Hwp_new".  *)
-  (*         iMod (IHl1 with "[$Hmem_new $Hcredl $Hregs_new $Hwp_new $Hφ]") *)
-  (*           as "IHl".                                                      *)
-  (*         iApply (step_fupdN_wand with "IHl").                            *)
-  (*         iModIntro. iApply step_fupd_intro; first set_solver. iModIntro. *)
-  (*         iIntros "%HIH".                                                  *)
-  (*         destruct HIH as (γ2_final & μ2_final & Hsteps_rest & Hphi).    *)
-  (*         iPureIntro.                                                      *)
-  (*         exact ⟨γ2_final, μ2_final,                                      *)
-  (*                riscVNStepWithExitCond_trans nEC2 Hsteps Hsteps_rest,    *)
-  (*                Hphi⟩.                                                   *)
-  (*       * (* Failure: stm_fail — contradiction via semWP2_unfold *)       *)
-  (*         subst s22mid. subst v22.                                         *)
-  (*         iEval (rewrite semWP2_unfold; cbn) in "Hwp_new".               *)
-  (*         iMod "Hwp_new" as "[]".                                         *)
-  (* Qed.                                                                    *)
-  (*                                                                          *)
-  (* KEY INGREDIENTS:                                                         *)
-  (*   semWP2_preservation_fwd' — existential world-2 step + pc_sync output  *)
-  (*   stm_to_val_Some_cases (theories/Iris/Resources.v) — case-analyze stm  *)
-  (*   nsteps_to_steps (theories/Iris/BinaryAdequacy.v) — NSteps → Steps     *)
-  (*   riscVNStepWithExitCond_trans (line ~621) — prepend one step            *)
-  (*   semWP2_val — unfolds semWP2 on (stm_val, stm_val)                     *)
-  (*   semWP2_unfold + cbn — reveals False for stm_fail                      *)
-  (*   lc_fupd_elim_later / into_sep_lc_add — credit management              *)
-  (*   step_fupdN_wand — map inside step-fupdN modality                      *)
-  (* ======================================================================== *)
-  Lemma adequacy_gen_RiscVNStepsExitCond_strong
-      n exitCond {γ11 γ12 γ21} {μ11 μ12 μ21}
-      (pc_init_sync : RiscvPmpProgram.read_register γ11 pc =
-                      RiscvPmpProgram.read_register γ21 pc)
-      (φ : RegStore -> Memory -> Prop) :
-      ⟨γ11, μ11⟩ -(exitCond, n)->* ⟨γ12, μ12⟩ ->
-      (forall `{sailGS2 Σ},
-          mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
-            |={⊤}=> myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)
-            ∗ (∀ γ22 μ22, mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ γ22 μ22⌝)
-      )%I ->
-      ∃ γ22 μ22,
-        ⟨γ21, μ21⟩ -(exitCond, n)->* ⟨γ22, μ22⟩ ∧
-        φ γ22 μ22.
-  Proof.
-    intros Heval1 Hwp.
-    apply nsteps_to_lsteps in Heval1.
-    destruct Heval1 as (l1 & Hl1 & Heval1).
-    refine (uPred.pure_soundness _
-              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc
-                 (list_sum_plus_one l1) (list_sum_plus_one l1) _)).
-    iIntros (Hinv) "Hcred'".
-    iMod (create_resources Hinv γ11 γ21 μ11 μ21)
-      as (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)".
-    pose (sG := @SailGS2 sailΣ2 Hinv
-      (SailRegGS2
-         (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1)
-         (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2))
-      memG).
-    specialize (Hwp _ sG).
-    iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2".
-    clear Hwp.
-    iStopProof.
-    revert Heval1.
-    revert γ11 μ11 γ21 μ21 n Hl1 pc_init_sync.
-    induction l1 as [| a l1 IHl1];
-      iIntros (γ11 μ11 γ21 μ21 n Hl1 pc_sync Heval1)
-              "(Hcred & Hmem & Hregs & Hwp2)".
-    - (* Base case: n = 0, both worlds already at exit *)
-      inversion Heval1. cbn in Hl1. subst.
-      iMod "Hwp2" as "[_ Hcont]".
-      iMod ("Hcont" $! γ21 μ21 with "Hmem") as "%Hφ".
-      cbn. iPureIntro.
-      exists γ21, μ21. split; [apply riscVNStepWithExitCond_refl | exact Hφ].
-    - (* Inductive case: one more outer-loop step *)
-      inversion Heval1 as [| ? ? γ1mid ? μ1mid ? nEC1 Hstep1 Hevaln1].
-      clear Heval1. subst.
-      have nEC2 : ¬ exitCond (read_register γ21 pc).
-      { intro Hex. apply nEC1. rewrite pc_sync. exact Hex. }
-      rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
-      iMod "Hwp2" as "([H | Hwp2] & Hφ)".
-      + (* ExitCond branch: contradiction *)
-        iDestruct "H" as (v) "(Hpc & %Hec)".
-        unfold reg_pointsTo2.
-        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)".
-        rewrite eq1 in nEC1. tauto.
-      + (* semWP2 branch: derive world-2's step existentially *)
-        iPoseProof (semWP2_preservation_fwd' pc_sync Hstep1
-          with "[$Hmem $Hregs]") as "Hwp_pres".
-        iSpecialize ("Hwp_pres" with "Hwp2").
-        iMod "Hwp_pres".
-        change (list_sum_plus_one (a :: l1)) with (a + 1 + list_sum_plus_one l1).
-        iAssert (|={∅}▷=>^a |={∅}=> |={∅}▷=>
-                 |={∅}▷=>^(list_sum_plus_one l1)
-                 ⌜∃ γ22 μ22,
-                    ⟨γ21, μ21⟩ -(exitCond, S (length l1))->* ⟨γ22, μ22⟩
-                    ∧ φ γ22 μ22⌝)%I
-          with "[-]" as "H"; last first.
-        { do 2 rewrite step_fupdN_add. destruct a. done.
-          by iApply step_fupdN_S_fupd. }
-        iApply (step_fupdN_wand with "Hwp_pres").
-        iIntros ">(%γ22mid & %μ22mid & %s22mid & %Hsteps &
-                    %Hval & %pc_sync_next & Hmem_new & Hregs_new & Hwp_new)".
-        destruct (stm_to_val s22mid) as [v22|] eqn:Ev22.
-        2: { contradiction. }
-        destruct (stm_to_val_Some_cases Ev22)
-          as [(v' & Hs22 & Hv22) | (m & Hs22 & Hv22)].
-        * (* Success: s22mid = stm_val ty.unit v' *)
-          subst s22mid. subst v22. destruct v'.
-          (* pc_sync_next from semWP2_preservation_fwd' output — no pc_step_sync needed *)
-          rewrite semWP2_val. iMod "Hwp_new" as "Hwp_new".
-          specialize (IHl1 γ1mid μ1mid γ22mid μ22mid (length l1) eq_refl
-                        pc_sync_next Hevaln1).
-          rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l1)).
-          rewrite (into_sep_lc_add a 1).
-          iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
-          iMod (lc_fupd_elim_later with "Hcred1 Hwp_new") as "Hwp_new".
-          iMod (IHl1 with "[$Hmem_new $Hcredl $Hregs_new $Hwp_new $Hφ]") as "IHl"; auto.
-          iApply (step_fupdN_wand with "IHl").
-          iModIntro. Search "step" fupd. iApply step_fupd_intro; first set_solver.
-          iModIntro.
-          iIntros "%HIH".
-          destruct HIH as (γ2_final & μ2_final & Hsteps_rest & Hphi).
-          iPureIntro.
-          exact (ex_intro _ γ2_final (ex_intro _ μ2_final
-                   (conj (riscVNStepWithExitCond_trans nEC2 Hsteps Hsteps_rest)
-                         Hphi))).
-        * (* Failure: stm_fail — contradiction *)
-          subst s22mid. subst v22.
-          iEval (rewrite semWP2_unfold; cbn) in "Hwp_new".
-          iMod "Hwp_new" as "[]".
-  Qed.
 
   Lemma constant_time_from_mem_res2_only_leak `{sailGS2 Σ} `{memGS2 Σ} {μ1 μ2 E} :
     leakage_trace μ1 = leakage_trace μ2 -> mem_res2_only_leak μ1 μ2 ⊢ |={E}=> interp_inv_constant_time.
@@ -1321,55 +870,6 @@ Module Examples.
     iFrame.
   Qed.
 
-(* ======================================================================== *)
-(* AdequacyTools: Iris-level machinery connecting VC soundness to myWP2_loop *)
-(*                                                                           *)
-(* This section bridges the gap between:                                     *)
-(*   - The symbolic VC checker output (safeE (postprocess ...))              *)
-(*   - The Iris loop predicate myWP2_loop                                   *)
-(*                                                                           *)
-(* Key definitions / lemmas in order:                                        *)
-(*                                                                           *)
-(*  regPstsTo_sync_is_nonsync: NonSyncVal v v ≡ SyncVal v for registers.    *)
-(*    Used in cfg_instrs_verified when both worlds have the same init PC.    *)
-(*                                                                           *)
-(*  ptstomem_sync_is_nonsync: analogous for memory cells.                   *)
-(*    Used in something_memory for public memory cells.                      *)
-(*                                                                           *)
-(*  intro_ptsto_instr / intro_ptsto_instrs:                                  *)
-(*    Build ptsto_instrs from two-world raw byte ownership.                   *)
-(*    The `SyncVal bv.zero` base address is hard-coded here (init_addr = 0). *)
-(*                                                                           *)
-(*  instrsMemory:                                                            *)
-(*    Extract ptsto_instrs from mem_res2_without_leak (raw memory model).   *)
-(*    Takes mem_has_instrs for both worlds (encoding = memory bytes match).  *)
-(*                                                                           *)
-(*  instrsAndDataMemory:                                                     *)
-(*    Same as instrsMemory but also extracts interp_mem_with_memory for the  *)
-(*    data region immediately following the instruction region.              *)
-(*    (PROVED in commit 04a634c8.)                                           *)
-(*                                                                           *)
-(*  exitCond_WP2_loop: the standard ExitCond for CFGVer programs.           *)
-(*    = myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)                   *)
-(*    SyncVal v is critical: both worlds have the same PC at exit, so the   *)
-(*    leakage-trace invariant can be closed uniformly.                       *)
-(*                                                                           *)
-(*  sound_exec_cfg_addr_myWP2:                                              *)
-(*    The key bridge: given cexec_cfg_addr succeeds (Prop-level), the Iris  *)
-(*    precondition implies myWP2_loop ExitCondIprop.                         *)
-(*    Proof: induction on fuel; exit branch applies exitCondImpliesMyWP2_loop;*)
-(*    execute branch uses ptsto_instrs_nth + sound_exec_instruction + IH.   *)
-(*                                                                           *)
-(*  sound_cexec_triple_addr_myWP2:                                          *)
-(*    Wraps sound_exec_cfg_addr_myWP2 with the produce_sound step that       *)
-(*    converts the precondition assertion to the heap form.                  *)
-(*                                                                           *)
-(*  sound_sblock_verification_condition_myWP2:                              *)
-(*    TOP-LEVEL BRIDGE. Given safeE (postprocess VC), produces myWP2_loop.  *)
-(*    Connects ValidCFGVerifierContract → myWP2_loop (∃ v, pc ↦ᵣ SyncVal v  *)
-(*    ∗ ⌜exitCond v⌝) after consuming the precondition from the Iris state. *)
-(*    This is called by cfg_instrs_verified / cfg_instrs_safe.              *)
-(* ======================================================================== *)
 Section AdequacyTools.
 
   Context {Σ} {GS : sailGS2 Σ}.
@@ -1876,41 +1376,6 @@ Section AdequacyTools.
 
 End AdequacyTools.
 
-  (* ======================================================================== *)
-  (* Iris-level verification chain                                             *)
-  (*                                                                          *)
-  (* cfg_instrs_pre instrs γ1 γ2:                                             *)
-  (*   The Iris precondition for running the program in both worlds.          *)
-  (*   = own_regstore2 γ1 γ2 ∗ ptsto_instrs 0 instrs ∗ interp_inv_constant_time *)
-  (*   This says: we own both register stores and the instruction memory,     *)
-  (*   and the constant-time invariant holds (leakage traces start equal).    *)
-  (*                                                                          *)
-  (* cfg_instrs_contract exitCond instrs γ1 γ2:                               *)
-  (*   = cfg_instrs_pre -∗ exitCond_WP2_loop exitCond                        *)
-  (*   The Iris statement: given preconditions, the loop terminates with      *)
-  (*   exitCond firing on a SyncVal PC.                                       *)
-  (*                                                                          *)
-  (* Proof chain:                                                             *)
-  (*   ValidCFGVerifierContract block                                         *)
-  (*         ↓  [cfg_instrs_verified]                                        *)
-  (*   ⊢ cfg_instrs_contract exitCond instrs γ1 γ2                           *)
-  (*         ↓  [cfg_instrs_safe: uses interp_gprs_with_registers]           *)
-  (*   interp_gprs_with_registers γ1 γ2 ∗ ... ⊢ exitCond_WP2_loop           *)
-  (*         ↓  [cfg_instrs_endToEnd: adequacy + memory boilerplate]         *)
-  (*   leakage_trace μ1' = leakage_trace μ2'                                  *)
-  (*                                                                          *)
-  (* cfg_instrs_verified vs cfg_instrs_safe:                                  *)
-  (*   - cfg_instrs_verified: ImplPre is in the form used inside the proof   *)
-  (*     of cfg_instrs_endToEnd (using interp_gprs_with_registers).          *)
-  (*   - cfg_instrs_safe: ImplPre uses interp_gprs_with_public_registers      *)
-  (*     (public entries as SyncVal), which is the PUBLIC-REGISTER-AWARE form.*)
-  (*     Callers of cfg_instrs_endToEnd use this directly via HpubReg.       *)
-  (*                                                                          *)
-  (* Simplification opportunity:                                              *)
-  (*   cfg_instrs_verified could be merged into cfg_instrs_safe (they differ *)
-  (*   only in the register ownership form) by noting that both sides of      *)
-  (*   something_registers commute.  Currently separate for clarity.          *)
-  (* ======================================================================== *)
   Definition cfg_instrs_pre `{sailGS2 Σ} instrs γ1 γ2 : iProp Σ :=
     own_regstore2 γ1 γ2 ∗
       Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs
@@ -2065,11 +1530,6 @@ End AdequacyTools.
     iApply cfg_instrs_verified_with_mem; eauto.
   Qed.
 
-    (* declare_public_registers γ1 γ2 list: both worlds agree on every
-       register in `list`.  The list elements are sigma-typed: ⟨τ, r⟩ means
-       register r of type τ.  Built from gen_public_regs for gen_contract.
-       Proved by `constructor` for the empty list (not `Forall_nil _` — that
-       is an iff lemma in stdpp, not a constructor). *)
     Definition declare_public_registers γ1 γ2 (public_registers : list {x : Ty & Reg x}) :=
       Forall
         (fun x => match x with
@@ -2244,41 +1704,6 @@ End AdequacyTools.
     apply elem_of_list_to_set, bv.finite.elem_of_enum.
   Qed.
 
-  (* ======================================================================== *)
-  (* cfg_instrs_endToEnd: the generic two-sided end-to-end lemma              *)
-  (*                                                                          *)
-  (* This is the main API for deriving the noninterference property from a    *)
-  (* CFGVerifierContract.  Callers only need to supply ImplPre (the proof    *)
-  (* that the Iris register ownership implies the contract precondition).     *)
-  (*                                                                          *)
-  (* Parameters:                                                              *)
-  (*   HpubReg    : declare_public_registers γ1 γ2 public_registers          *)
-  (*   block      : CFGVerifierContract (the contract)                        *)
-  (*   valid_block: ValidCFGVerifierContract block (VC is true)               *)
-  (*   ImplPre    : interp_gprs_with_public_registers ∗ cur_privilege ∗ inv  *)
-  (*                  ⊢ asn.interpret (extend_to_minimal_pre pre) ι[a ↦ 0]  *)
-  (*   Steps from both worlds (Heval1, Heval2)                               *)
-  (*   Initial equal leakage (Htrace)                                         *)
-  (*                                                                          *)
-  (* Conclusion: leakage_trace μ1' = leakage_trace μ2'                        *)
-  (*                                                                          *)
-  (* Internal proof structure:                                                *)
-  (*   apply (adequacy_gen_RiscVNStepsExitCond steps1 steps2)                *)
-  (*   iMod (instrsMemory ...) to extract ptsto_instrs                       *)
-  (*   iApply (cfg_instrs_safe γ1 γ2 block) — uses ImplPre                  *)
-  (*   Close leakage-trace goal via trace_full_frag_eq                        *)
-  (*                                                                          *)
-  (* Call pattern (use @ to bypass Set Implicit Arguments):                   *)
-  (*   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'            *)
-  (*     instrs exitCond n ws [ctx] [env] public_registers HpubReg block     *)
-  (*     valid_block eq_refl eq_refl).                                        *)
-  (*   all: try eauto.  (* before bullet goals, handles routine subgoals *)  *)
-  (*                                                                          *)
-  (* Potential simplification: the proof body of cfg_instrs_endToEnd_strong  *)
-  (* is nearly identical; a refactored helper lemma could deduplicate them.  *)
-  (*                                                                          *)
-  (* Future work: generalise from init_addr = 0 to arbitrary start address.  *)
-  (* ======================================================================== *)
     Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
       instrs' exitCond n ws {R} {ι : Valuation R}
       public_registers
@@ -2325,85 +1750,6 @@ End AdequacyTools.
         by iFrame "∗ #".
       - iModIntro.
         iIntros "Rmem".
-        iInv "Hinv" as "Hleak".
-        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
-        unfold mem_inv_only_leak.
-        iMod "Hleak".
-        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
-        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
-        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
-        iModIntro. iFrame.
-        iApply fupd_mask_intro; first set_solver.
-        now iIntros "_".
-    Qed.
-
-  (* ======================================================================== *)
-  (* cfg_instrs_endToEnd_strong: the one-sided end-to-end lemma  [ADMITTED]  *)
-  (*                                                                          *)
-  (* Same as cfg_instrs_endToEnd but takes ONLY world-1's execution trace.   *)
-  (* Conclusion: ∃ γ2' μ2', ⟨γ2, μ2⟩ -(exitCond, n)->* ⟨γ2', μ2'⟩         *)
-  (*              ∧ leakage_trace μ1' = leakage_trace μ2'                    *)
-  (*                                                                          *)
-  (* pc_init_sync (eq_trans γ1pc (eq_sym γ2pc)) is derived from the          *)
-  (* hypotheses that both worlds start at bv.of_N init_addr.  No external    *)
-  (* pc_step_sync is needed — PC-sync is threaded through                    *)
-  (* semWP2_preservation_fwd' at each step.                                   *)
-  (*                                                                          *)
-  (* Proof body is complete modulo adequacy_gen_RiscVNStepsExitCond_strong.  *)
-  (* ======================================================================== *)
-  (* Termination-sensitive variant: only world-1's execution is given as
-     input; world-2's execution and the leakage conclusion are derived. *)
-    Lemma cfg_instrs_endToEnd_strong
-        {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
-        instrs' exitCond n ws {R} {ι : Valuation R}
-        public_registers
-        (HpubReg : declare_public_registers γ1 γ2 public_registers)
-        (block : @CFGVerifierContract R)
-        (valid_block : ValidCFGVerifierContract block)
-        (blockInstrs : cfg_instrs block = instrs')
-        (blockExitCond : cfg_exitCond block = exitCond)
-        (ImplPre : forall `{sailGS2 Σ},
-            interp_gprs_with_public_registers γ1 γ2 public_registers ∗
-            cur_privilege ↦ᵣ ty.SyncVal Machine ∗
-            interp_inv_constant_time -∗
-            asn.interpret (extend_to_minimal_pre (cfg_precondition block))
-              ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-        (4 * N.of_nat (length instrs') < lenAddr)%N ->
-        mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
-        mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
-        RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-        RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-        RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-        RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-        ⟨γ1, μ1⟩ -(exitCond, n)->* ⟨γ1', μ1'⟩ ->
-        leakage_trace μ1 = leakage_trace μ2 ->
-        ∃ γ2' μ2',
-          ⟨γ2, μ2⟩ -(exitCond, n)->* ⟨γ2', μ2'⟩ ∧
-          leakage_trace μ1' = leakage_trace μ2'.
-    Proof.
-      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
-        steps1 Htrace.
-      apply (@adequacy_gen_RiscVNStepsExitCond_strong
-        n exitCond γ1 γ1' γ2 μ1 μ1' μ2
-        (eq_trans γ1pc (eq_sym γ2pc))
-        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
-        steps1).
-      iIntros (Σ' H').
-      iIntros "(Hmem & H')".
-      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
-      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
-        as "Hinv"; auto.
-      iMod "Hinv" as "#Hinv".
-      iMod (instrsMemory with "Hmem") as "H"; eauto.
-      iSplitR "".
-      - iApply (cfg_instrs_safe γ1 γ2 block).
-        all: eauto.
-        iIntros "(Hregs & Hpriv & #Hinv')".
-        iApply ImplPre.
-        iFrame "∗ #".
-        by iFrame "∗ #".
-      - iModIntro.
-        iIntros (γ22 μ22) "Rmem".
         iInv "Hinv" as "Hleak".
         iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
         unfold mem_inv_only_leak.
@@ -2494,89 +1840,7 @@ End AdequacyTools.
         now iIntros "_".
     Qed.
 
-  (* ------------------------------------------------------------------ *)
-  (* cfg_instrs_endToEnd_with_memory_strong                              *)
-  (* One-sided (termination-sensitive) variant of                        *)
-  (* cfg_instrs_endToEnd_with_memory.  Takes ONLY world-1's execution    *)
-  (* trace; concludes ∃ γ2' μ2', ⟨γ2,μ2⟩ -(exitCond,n)->* ⟨γ2',μ2'⟩  *)
-  (*   ∧ leakage_trace μ1' = leakage_trace μ2'.                         *)
-  (* ------------------------------------------------------------------ *)
-    Lemma cfg_instrs_endToEnd_with_memory_strong
-        {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
-        instrs' exitCond n ws_instrs {R} {ι : Valuation R}
-        public_registers
-        (HpubReg : declare_public_registers γ1 γ2 public_registers)
-        data_specs
-        (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
-        (block : @CFGVerifierContract R)
-        (valid_block : ValidCFGVerifierContract block)
-        (blockInstrs : cfg_instrs block = instrs')
-        (blockExitCond : cfg_exitCond block = exitCond)
-        (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
-            spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs')
-                               + 4 * N.of_nat i))
-        (ImplPre : forall `{sailGS2 Σ},
-            interp_gprs_with_public_registers γ1 γ2 public_registers ∗
-            interp_mem_with_public_memory μ1 μ2 data_specs ∗
-            cur_privilege ↦ᵣ ty.SyncVal Machine ∗
-            interp_inv_constant_time -∗
-            asn.interpret (extend_to_minimal_pre (cfg_precondition block))
-              ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-        (4 * N.of_nat (length instrs') +
-         4 * N.of_nat (length data_specs) < lenAddr)%N →
-        mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs' →
-        mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs' →
-        RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
-        RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
-        RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
-        RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr →
-        ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ →
-        leakage_trace μ1 = leakage_trace μ2 →
-        ∃ γ2' μ2',
-          ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
-          leakage_trace μ1' = leakage_trace μ2'.
-    Proof.
-      intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
-        steps1 Htrace.
-      apply (@adequacy_gen_RiscVNStepsExitCond_strong
-        n exitCond γ1 γ1' γ2 μ1 μ1' μ2
-        (eq_trans γ1pc (eq_sym γ2pc))
-        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
-        steps1).
-      iIntros (Σ' H').
-      iIntros "(Hmem & H')".
-      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
-      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
-        as "Hinv"; auto.
-      iMod "Hinv" as "#Hinv".
-      (* Extract instruction + data memory from raw byte ownership *)
-      iMod (instrsAndDataMemory ws_instrs data_specs instrs' with "Hmem") as "[H Hmemdata]";
-        [exact Hlen | exact μinit1 | exact μinit2 | exact HDataAddrs |].
-      (* Convert all-NonSyncVal to public form *)
-      rewrite (something_memory data_specs HpubMem).
-      iSplitR "".
-      - iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 block).
-        all: eauto.
-        iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
-        iApply ImplPre.
-        rewrite <- (something_registers HpubReg).
-        iFrame "Hmem ∗ #".
-        by iFrame "∗ #".
-      - iModIntro.
-        iIntros (γ22 μ22) "Rmem".
-        iInv "Hinv" as "Hleak".
-        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
-        unfold mem_inv_only_leak.
-        iMod "Hleak".
-        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
-        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
-        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
-        iModIntro. iFrame.
-        iApply fupd_mask_intro; first set_solver.
-        now iIntros "_".
-    Qed.
-
-  Lemma swap_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory} n ws :
+  Lemma swap_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
     let instrs := [MV X3 X2; MV X2 X1; MV X1 X3] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
@@ -2585,25 +1849,22 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
     RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
     ⟨ γ1, μ1 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
-    ∃ γ2' μ2',
-      ⟨ γ2, μ2 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ2', μ2' ⟩ ∧
-      leakage_trace μ1' = leakage_trace μ2'.
+    leakage_trace μ1' = leakage_trace μ2'.
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
     assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
-    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
       instrs (pcOutOfInstrs_exitCond instrs) n ws
       ["x"::ty_xlenbits; "y"::ty_xlenbits]
       [env].["x"::ty_xlenbits ↦
         NonSyncVal (read_register γ1 x1) (read_register γ2 x1)].["y"::ty_xlenbits ↦
         NonSyncVal (read_register γ1 x2) (read_register γ2 x2)]
-      [] HpubReg [] HpubMem swap_cfg_contract valid_swap_cfg_contract eq_refl eq_refl).
+      [] HpubReg swap_cfg_contract valid_swap_cfg_contract eq_refl eq_refl).
     all: try eauto.
-    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
+      iIntros "(Hregs & Hpriv & #Hinv)".
       cbn.
       iFrame "Hpriv Hinv".
       rewrite <- (something_registers HpubReg).
@@ -2613,7 +1874,7 @@ End AdequacyTools.
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory} n ws
+  Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
     (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :
     let instrs := [BEQ X1 X0 true_offset] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
@@ -2623,23 +1884,20 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
     RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
     ⟨ γ1, μ1 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
-    ∃ γ2' μ2',
-      ⟨ γ2, μ2 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ2', μ2' ⟩ ∧
-      leakage_trace μ1' = leakage_trace μ2'.
+    leakage_trace μ1' = leakage_trace μ2'.
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
-    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
-    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
       instrs (pcOutOfInstrs_exitCond instrs) n ws
       ["x1"::ty_xlenbits]
       [env].["x1"::ty_xlenbits ↦ SyncVal (read_register γ1 x1)]
-      [existT ty_xlenbits x1] HpubReg [] HpubMem jump_if_zero_cfg_contract
+      [existT ty_xlenbits x1] HpubReg jump_if_zero_cfg_contract
       valid_jump_if_zero_cfg_contract eq_refl eq_refl).
     all: try eauto.
-    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
+      iIntros "(Hregs & Hpriv & #Hinv)".
       cbn.
       iFrame "Hpriv Hinv".
       assert (Hx1 : read_register γ1 x1 = read_register γ2 x1). {
@@ -2682,8 +1940,8 @@ End AdequacyTools.
       + contradiction.
   Qed.
 
-  Lemma jmp_fwd_endToEnd_cfg {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory} n ws
-  (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :
+  Lemma jmp_fwd_endToEnd_cfg {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
+  (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :  
     let instrs := [JAL X0 jmp_offset; NOP] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
@@ -2692,29 +1950,26 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
     RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
     ⟨ γ1, μ1 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
-    ∃ γ2' μ2',
-      ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
-      leakage_trace μ1' = leakage_trace μ2'.
+    leakage_trace μ1' = leakage_trace μ2'.
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
-    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
-    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
       instrs jmp_fwd_exitCond n ws [ctx] [env]
-      [existT ty_xlenbits x1] HpubReg [] HpubMem jmp_fwd_cfg_contract
+      [existT ty_xlenbits x1] HpubReg jmp_fwd_cfg_contract
       valid_jmp_fwd_cfg_contract eq_refl eq_refl).
     all: try eauto.
-    - intros i spec H. inversion H.
     - intros Σ H.
       cbn.
-      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
+      iIntros "(Hregs & Hpriv & #Hinv)".
       iSplitL "".
       + iPureIntro. split; [reflexivity | done].
       + iFrame "∗ #".
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma jmp_fwd_endToEnd_cfg_gen {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory} n ws :
+  Lemma jmp_fwd_endToEnd_cfg_gen {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
     let instrs := [JAL X0 jmp_offset; NOP] in
     mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
     mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
@@ -2723,30 +1978,27 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
     RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
     ⟨ γ1, μ1 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
-    ∃ γ2' μ2',
-      ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
-      leakage_trace μ1' = leakage_trace μ2'.
+    leakage_trace μ1' = leakage_trace μ2'.
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
     assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
-    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
       instrs jmp_fwd_exitCond n ws [ctx] [env]
-      [] HpubReg [] HpubMem jmp_fwd_cfg_contract_gen
+      [] HpubReg jmp_fwd_cfg_contract_gen
       valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
     all: try eauto.
-    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
+      iIntros "(Hregs & Hpriv & #Hinv)".
       cbn. iFrame "∗ #".
       iSplit; (iSplit; [iPureIntro | done]).
       all: vm_compute; done.
     - cbn. by unfold lenAddr.
   Qed.
-  
-  Lemma countdown_endToEnd {γ1 γ2 γ1' : RegStore}
-      {μ1 μ2 μ1' : Memory} n ws
+
+  Lemma countdown_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
+      {μ1 μ2 μ1' μ2' : Memory} n ws
       (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1])
       (Hx1_1 : RiscvPmpProgram.read_register γ1 x1 = bv.of_N 2)
       (Hx1_2 : RiscvPmpProgram.read_register γ2 x1 = bv.of_N 2) :
@@ -2758,21 +2010,18 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
     RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
     ⟨ γ1, μ1 ⟩ -(countdown_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(countdown_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
-    ∃ γ2' μ2',
-      ⟨ γ2, μ2 ⟩ -(countdown_exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
-      leakage_trace μ1' = leakage_trace μ2'.
+    leakage_trace μ1' = leakage_trace μ2'.
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
-    assert (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs [])) by constructor.
-    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
       instrs countdown_exitCond n ws [ctx] [env]
-      [existT ty_xlenbits x1] HpubReg [] HpubMem countdown_cfg_contract
+      [existT ty_xlenbits x1] HpubReg countdown_cfg_contract
       valid_countdown_cfg_contract eq_refl eq_refl).
     all: try eauto.
-    - intros i spec H. inversion H.
     - intros Σ H.
-      iIntros "(Hregs & Hmem & Hpriv & #Hinv)". iClear "Hmem".
+      iIntros "(Hregs & Hpriv & #Hinv)".
       cbn.
       iFrame "Hpriv Hinv".
       assert (Hx1_eq : read_register γ1 x1 = read_register γ2 x1) by congruence.
@@ -2785,8 +2034,8 @@ End AdequacyTools.
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma countdown_mem_endToEnd {γ1 γ2 γ1' : RegStore}
-      {μ1 μ2 μ1' : Memory} n ws_instrs
+  Lemma countdown_mem_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
+      {μ1 μ2 μ1' μ2' : Memory} n ws_instrs
       (Hmem1 : get_word μ1 (bv.of_N 16) = bv.of_N 2)
       (Hmem2 : get_word μ2 (bv.of_N 16) = bv.of_N 2) :
     let instrs := countdown_mem_instrs in
@@ -2797,18 +2046,17 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
     RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
     ⟨ γ1, μ1 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
+    ⟨ γ2, μ2 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
     leakage_trace μ1 = leakage_trace μ2 ->
-    ∃ γ2' μ2',
-      ⟨ γ2, μ2 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
-      leakage_trace μ1' = leakage_trace μ2'.
+    leakage_trace μ1' = leakage_trace μ2'.
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 Htrace.
+    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
     assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
     assert (HpubMem : declare_public_memory μ1 μ2
         (gen_public_addrs [(bv.of_N 16, true)])).
     { unfold declare_public_memory, gen_public_addrs. cbn.
       constructor. rewrite Hmem1 Hmem2. reflexivity. constructor. }
-    eapply (@cfg_instrs_endToEnd_with_memory_strong γ1 γ2 γ1' μ1 μ2 μ1'
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
       countdown_mem_instrs countdown_mem_exitCond n ws_instrs
       [ctx] [env]
       [] HpubReg

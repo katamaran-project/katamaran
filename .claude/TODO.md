@@ -5,66 +5,63 @@ This file tracks the approved task list and current starting point.
 
 ---
 
-## Current state: adequacy_gen_RiscVNStepsExitCond_strong
+## Current state (after TS revert)
 
-`adequacy_gen_RiscVNStepsExitCond_strong` and `cfg_instrs_endToEnd_strong` now
-**compile** with `pc_step_sync` as a hypothesis. This was a workaround —
-see the open design question below.
+Examples.v is restored to the state at commit `8762d44c` ("add countdown_mem
+endToEnd"), with one addition: `exitCond_WP2_loop` now uses the SyncVal form
+`∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝` (cleaner than the old disjunctive form).
+
+Kept from the TS branch (independent of TS goal):
+- `reg_valid_nd` in `theories/Iris/Resources.v`
+- `reg_valid2_nd` in `theories/Iris/BinaryResources.v`
+- `adequacy_gen_n` refactoring in `theories/Iris/BinaryAdequacy.v`
+- Documentation comments in `Spec.v` and `Verifier.v`
 
 ---
 
-## Open design question: pc_step_sync and where to get it
+## Abandoned approach: termination-sensitive end-to-end (reverted)
 
-`pc_step_sync` says: if both worlds' PCs agree before a step, they agree after.
-This is needed in the strong (one-sided) adequacy to derive `nEC2` at each step
-and to pass PC-sync through to the IH.
+**What was tried** (commits `41514a00`–`5b8c2df1`):
 
-**Why we needed it here but not in the two-sided adequacy:**
-In `adequacy_gen_RiscVNStepsExitCond` (two-sided), `Heval2` is given as input.
-`nEC2` comes directly from inverting `Heval2` — the world-2 trace carries it.
-No derivation from world-1 needed.
+A `semWP2_preservation_fwd'` lemma was added to bridge from world-1's n-step
+execution to world-2's execution while threading a PC-sync guarantee through
+each step. The idea: if both PCs start equal (`Hpc`), after each synchronized
+step they remain equal, so at exit the exit condition fires in both worlds
+simultaneously. This would strengthen `adequacy_gen_RiscVNStepsExitCond_strong`
+to only require a single-world NSteps hypothesis (world-2 steps are existential).
 
-In the strong (one-sided) version, we only have `Heval1`. We derive world-2's
-step existentially via `semWP2_preservation_fwd'`. The output is
-`∃ γ22mid μ22mid, Steps ...` as a pure Coq existential. At that point:
-- `Hregs_new : regs_inv2 γ1mid γ22mid` IS in the Iris context and encodes
-  PC synchronization (both worlds fetch the same instruction from the same PC),
-  but `read_register γ1mid pc = read_register γ22mid pc` is never extracted.
+**Why it was abandoned:**
 
-**The right fix (not yet done):** Strengthen `semWP2_preservation_fwd'` to
-also return `⌜read_register γ12 pc = read_register γ22 pc⌝` as part of its
-output. This eliminates `pc_step_sync` as an external hypothesis entirely — it
-is a consequence of the semWP2 lock-step property, not an assumption.
-
-Alternatively, add a lemma extracting PC-sync from `regs_inv2`:
-```coq
-Lemma regs_inv2_pc_sync γ1 γ2 :
-  regs_inv2 γ1 γ2 ⊢ ⌜read_register γ1 pc = read_register γ2 pc⌝.
-```
-and use it inside `adequacy_gen_RiscVNStepsExitCond_strong` instead.
+The S n case of `semWP2_preservation_fwd'` requires deriving
+`read_register γ1mid pc = read_register γ2mid pc` after `semWP2_step`. After
+the step, we hold `regs_inv2 γ1mid γ2mid` (the AUTH part of ghost state) but
+NO `reg_pointsTo2 pc` fragment. `regs_inv2` is defined as two separate
+`regs_inv`, one per world — it carries no cross-world PC relationship. Multiple
+repair strategies were considered (ghost invariant, semantic argument, specialized
+postcondition Q) and all ran into the same obstacle. The statement may be
+provable but requires additional semantic lemmas about `RiscVStep` or a structural
+change to the ghost resources.
 
 ---
 
 ## TODO list (from TODOS.txt + session notes)
 
-**Priority 1:**
+**Priority 1 (termination-sensitive noninterference — try from scratch):**
+- The goal: prove that if world-1 terminates in n steps, world-2 also terminates
+  in n steps (same count, same exit condition). The obstacle is PC-sync after
+  `semWP2_step` without a `reg_pointsTo2 pc` fragment.
+- `reg_valid2_nd` is available and returns resources without consuming them.
+  The remaining question: WHERE does the `reg_pointsTo2 pc` fragment come from
+  during the loop body?
+
+**Priority 2:**
 - Make a `Definition` for non-interference such that `Examples.v` becomes
   readable — callers should state "this program is non-interfering" without
   reading the full adequacy chain.
 
-**Priority 2 (pc_step_sync is a strong hypothesis):**
-- Strengthen `semWP2_preservation_fwd'` to return PC-sync as a pure output,
-  OR prove `regs_inv2_pc_sync` to extract it from `regs_inv2`.
-  This eliminates `pc_step_sync` from `cfg_instrs_endToEnd_strong` and
-  `adequacy_gen_RiscVNStepsExitCond_strong`. Must be done before
-  `jmp_fwd_endToEnd_strong` can be proved cleanly.
-
 **Priority 3 (end-to-end automation):**
-- `cfg_instrs_endToEnd_strong` currently still requires manual work. Goal:
-  a lemma that works for *any* `gen_contract`-generated contract without
+- A lemma that works for *any* `gen_contract`-generated contract without
   per-program boilerplate.
-- Remove `semWP2_preservation'` duplicate (replace with `semWP2_preservation_fwd'`
-  where applicable, or prove the two-sided version from the one-sided one).
 
 **Cleanup / refactoring:**
 - Consolidate everything in CFGVer, so BlockVer can be deleted.
@@ -73,7 +70,6 @@ and use it inside `adequacy_gen_RiscVNStepsExitCond_strong` instead.
   `sound_sblock_verification_condition_myWP2_loop`.
 - Remove duplicate `gen_contract` infrastructure.
 - `Examples.v` is too large; split into: logic lemmas, examples, memory helpers.
-- Clean up proof of `semWP2_preservation_fwd'` (currently Admitted).
 
 **Modularity (longer term, discuss with Dominique):**
 - Move from lists of instructions to maps from addresses to instructions.
@@ -84,10 +80,7 @@ and use it inside `adequacy_gen_RiscVNStepsExitCond_strong` instead.
 
 **Known remaining Admits (expected):**
 - `valid_jmp_fwd` (BlockVer): BlockVer cannot handle JAL. Intentional.
-- `semWP2_preservation_fwd'`: proof admitted; statement believed correct.
-- `pc_step_sync` in callers of `cfg_instrs_endToEnd_strong`: currently
-  `Admitted` — provable by `vm_compute` for concrete programs; should be
-  eliminated by strengthening `semWP2_preservation_fwd'` instead.
+- `instrsAndDataMemory`: proof admitted; statement correct.
 
 ---
 
@@ -95,4 +88,3 @@ and use it inside `adequacy_gen_RiscVNStepsExitCond_strong` instead.
 
 - Prove `jmp_bwd` (backward jump / loop) as a second CFGVer example.
 - Close the general `semTripleCFG → myWP2_loop` bridge.
-- Prove `regs_inv2_pc_sync` and use it to remove `pc_step_sync`.
