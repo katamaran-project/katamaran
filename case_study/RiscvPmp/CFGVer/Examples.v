@@ -526,23 +526,28 @@ Module Examples.
     Definition myWP2_loop_fix `{sailGS2 Σ} (ExitCond : iProp Σ) (wp : myWp2) :
       myWp2 :=
       (ExitCond ∨
-        semWP2 env.nil env.nil (FunDef step) (FunDef step)
-          (fun v1 _ v2 _ =>
-             match v1 , v2 with
-             | inr _ , inr _ => True
-             | inl v1 , inl v2 => ▷ wp
-             | _ , _ => False
-             end
-          )%I)%I.
-    (* 4 empty arguments, because the return valueas are unit and the CStoreVals are empty *)
+        ∃ v, pc ↦ᵣ SyncVal v ∗
+        (pc ↦ᵣ SyncVal v -∗
+         semWP2 env.nil env.nil (FunDef step) (FunDef step)
+           (fun v1 _ v2 _ =>
+              match v1 , v2 with
+              | inr _ , inr _ => True
+              | inl v1 , inl v2 => ▷ wp
+              | _ , _ => False
+              end
+           )%I))%I.
+    (* non-exit branch: pc ↦ᵣ SyncVal v witnesses PC sync at loop boundary;
+       wand avoids duplicating the resource for the semWP2 body *)
   
   Global Instance myWP2_loop_fix_Contractive `{sailGS2 Σ} (ExitCond : iProp Σ) :
     Contractive (myWP2_loop_fix ExitCond).
   Proof.
     rewrite /myWP2_loop_fix /= => n wp wp' Hwp.
+    f_equiv.
+    f_equiv => v.
+    f_equiv.
+    f_equiv.
     do 7 (f_contractive || f_equiv).
-    unfold myWp2 in *.
-    destruct a1; auto.
     f_contractive. apply Hwp.
   Qed.
 
@@ -841,7 +846,9 @@ Module Examples.
         unfold reg_pointsTo2.
         iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)".
         rewrite eq1 in nEC1. tauto.
-      + iPoseProof (semWP2_preservation' Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
+      + iDestruct "Hwp2" as "(%v & Hpc & Hwand)".
+        iPoseProof ("Hwand" with "Hpc") as "Hwp2".
+        iPoseProof (semWP2_preservation' Hstep1 Hstep2 with "[$Hmem $Hregs]") as "Hwp".
         iSpecialize ("Hwp" with "Hwp2").
         iMod "Hwp".
         change (list_sum_plus_one (a :: l1)) with (a + 1 + list_sum_plus_one l1).
@@ -1301,8 +1308,10 @@ Section AdequacyTools.
                     with "Hinstrs") as "[Hinstr Hframe]".
                   iEval (rewrite Haddr) in "Hinstr".
                   iEval (rewrite Haddr) in "Hframe".
-                  rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix. iRight.
-                  iApply (semWP2_mono with "[Hh Hnpc Hpc Hinstr]").
+                  rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
+                  iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
+                  iIntros "Hpc_wd".
+                  iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
                   { iApply (Katamaran.RiscvPmp.CFGVer.Verifier.sound_exec_instruction Hexec). iFrame. }
                   iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
                   2-3: iIntros "(%δ' & _ & HF)"; auto.
