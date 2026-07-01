@@ -233,10 +233,13 @@ Module Examples.
       Val ty_xlenbits * bool * option (Val ty_xlenbits).
 
     Definition gen_mem_asn {Σ} (s : mem_full_spec) : Assertion Σ :=
-      let '(a, _, opt_v) := s in
+      let '(a, is_pub, opt_v) := s in
       match opt_v with
       | Some v => term_val ty_xlenbits a ↦ₘ term_val ty_xlenbits v
-      | None => asn.exist "mv" ty_xlenbits (term_val ty_xlenbits a ↦ₘ term_var "mv")
+      | None =>
+        asn.exist "mv" ty_xlenbits
+          (if is_pub then term_val ty_xlenbits a ↦ₘ term_var "mv" ∗ secLeakvar "mv"
+                     else term_val ty_xlenbits a ↦ₘ term_var "mv")
       end.
 
     Definition gen_mem_pre {Σ} (specs : list mem_full_spec) : Assertion Σ :=
