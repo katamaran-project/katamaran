@@ -2013,6 +2013,85 @@ End AdequacyTools.
     apply elem_of_list_to_set, bv.finite.elem_of_enum.
   Qed.
 
+  (* ------------------------------------------------------------------ *)
+  (* gen_implpre_mem: once-and-for-all ImplPre for memory               *)
+  (* Analogous to gen_implpre for registers.                            *)
+  (* ------------------------------------------------------------------ *)
+
+  Lemma declare_init_mem_tail
+      (a : Val ty_xlenbits) is_pub opt_v rest μ :
+    declare_init_memory μ (gen_init_mem ((a, is_pub, opt_v) :: rest)) →
+    declare_init_memory μ (gen_init_mem rest).
+  Proof.
+    unfold declare_init_memory, gen_init_mem. cbn.
+    destruct opt_v as [v|].
+    - rewrite Forall_cons. tauto.
+    - auto.
+  Qed.
+
+  (* Per-entry helper: converts Iris ownership of one entry in
+     interp_mem_with_public_memory into its symbolic gen_mem_asn
+     interpretation.  HInitMem1/2 supply the init value when opt_v = Some. *)
+  Lemma gen_mem_asn_of_ptstomem `{sailGS2 Σ}
+      (a : Val ty_xlenbits) (is_pub : bool)
+      (opt_v : option (Val ty_xlenbits))
+      (μ1 μ2 : Memory)
+      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      (HInitMem1 : ∀ v, opt_v = Some v → get_word μ1 a = v)
+      (HInitMem2 : ∀ v, opt_v = Some v → get_word μ2 a = v) :
+    (if is_pub
+     then interp_ptstomem (width := 4) (SyncVal a) (SyncVal (get_word μ1 a))
+     else interp_ptstomem (width := 4) (SyncVal a)
+            (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
+    ⊢ asn.interpret (gen_mem_asn (a, is_pub, opt_v)) ι.
+  Proof.
+    unfold gen_mem_asn.
+    destruct opt_v as [v|]; destruct is_pub; cbn.
+    - have Hv1 := HInitMem1 v eq_refl. rewrite Hv1.
+      cbn [ty.valToRelVal]. iIntros "H". iExact "H".
+    - have Hv1 := HInitMem1 v eq_refl. have Hv2 := HInitMem2 v eq_refl.
+      rewrite Hv1 Hv2. rewrite ptstomem_sync_is_nonsync.
+      cbn [ty.valToRelVal]. iIntros "H". iExact "H".
+    - cbn [ty.valToRelVal]. iIntros "H".
+      iExists (SyncVal (get_word μ1 a)). iFrame. done.
+    - cbn [ty.valToRelVal]. iIntros "H".
+      iExists (NonSyncVal (get_word μ1 a) (get_word μ2 a)). iExact "H".
+  Qed.
+
+  (* Once-and-for-all ImplPre for the memory portion of gen_contract:
+     converts interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs)
+     into asn.interpret (gen_mem_pre specs) ι. *)
+  Lemma gen_implpre_mem `{sailGS2 Σ}
+      (specs : list mem_full_spec) (μ1 μ2 : Memory)
+      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      (HInitMem1 : declare_init_memory μ1 (gen_init_mem specs))
+      (HInitMem2 : declare_init_memory μ2 (gen_init_mem specs)) :
+    interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs) ⊢
+    asn.interpret (gen_mem_pre specs) ι.
+  Proof.
+    iInduction specs as [|[[a is_pub] opt_v] rest] "IH"
+        forall (μ1 μ2 HInitMem1 HInitMem2).
+    - iIntros "_". done.
+    - cbn [map mem_full_to_spec].
+      unfold interp_mem_with_public_memory. cbn [big_opL].
+      iIntros "[Hhead Hrest]".
+      cbn [gen_mem_pre List.fold_right asn.interpret].
+      iSplitL "Hhead".
+      { iApply gen_mem_asn_of_ptstomem.
+        - intros v Hv.
+          unfold declare_init_memory, gen_init_mem in HInitMem1.
+          cbn in HInitMem1. rewrite Hv in HInitMem1.
+          apply Forall_inv in HInitMem1. exact HInitMem1.
+        - intros v Hv.
+          unfold declare_init_memory, gen_init_mem in HInitMem2.
+          cbn in HInitMem2. rewrite Hv in HInitMem2.
+          apply Forall_inv in HInitMem2. exact HInitMem2.
+        - iExact "Hhead". }
+      iApply ("IH" $! μ1 μ2 with "[%] [%] Hrest").
+      * eapply declare_init_mem_tail. exact HInitMem1.
+      * eapply declare_init_mem_tail. exact HInitMem2.
+  Qed.
+
     (* Note: these lemmas conclude the raw ∃ rather than noninterferent_strong
        because ImplPre closes over γ1/γ2 via the valuation ι, which would
        require abstracting mk_ι : RegStore → RegStore → Valuation R to make
@@ -2158,6 +2237,55 @@ End AdequacyTools.
         iApply fupd_mask_intro; first set_solver.
         now iIntros "_".
     Qed.
+
+  (* ------------------------------------------------------------------ *)
+  (* gen_contract_noninterferent: once-and-for-all noninterference for  *)
+  (* any ValidCFGVerifierContract built with gen_contract.              *)
+  (* HDataAddrs fixes the contiguous-layout assumption from             *)
+  (* instrsAndDataMemory: data words sit at init_addr + 4*|instrs| + … *)
+  (* ------------------------------------------------------------------ *)
+  Lemma gen_contract_noninterferent
+      (reg_specs : list reg_spec)
+      (mem_specs : list mem_full_spec)
+      (instrs : list AST)
+      (exitCond : bv xlenbits -> bool)
+      (fuel : nat)
+      (HND : NoDup (map reg_spec_idx reg_specs))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec mem_specs) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (valid_block : ValidCFGVerifierContract
+          (gen_contract reg_specs mem_specs instrs exitCond fuel)) :
+    noninterferent_strong instrs exitCond reg_specs mem_specs.
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs exitCond n ws
+      [ctx] [env]
+      (gen_public_regs reg_specs) HpubReg
+      (map mem_full_to_spec mem_specs) HpubMem
+      (gen_contract reg_specs mem_specs instrs exitCond fuel)
+      valid_block
+      eq_refl eq_refl HDataAddrs).
+    all: try eauto.
+    - intros Σ H.
+      iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+      cbn.
+      iFrame "Hpriv #".
+      iSplitL "".
+      { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. done. }
+      iSplitL "Hregs".
+      { iApply (gen_implpre reg_specs _ HpubReg HND HInitReg1 HInitReg2).
+        iExact "Hregs". }
+      iApply (gen_implpre_mem mem_specs _ HInitMem1 HInitMem2).
+      iExact "Hmemdata".
+    - rewrite length_map. exact Hlen.
+  Qed.
 
   Lemma swap_noninterferent :
     noninterferent_strong [MV X3 X2; MV X2 X1; MV X1 X3]
