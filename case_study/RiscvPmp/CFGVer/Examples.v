@@ -2013,6 +2013,10 @@ End AdequacyTools.
     apply elem_of_list_to_set, bv.finite.elem_of_enum.
   Qed.
 
+    (* Note: these lemmas conclude the raw ∃ rather than noninterferent_strong
+       because ImplPre closes over γ1/γ2 via the valuation ι, which would
+       require abstracting mk_ι : RegStore → RegStore → Valuation R to make
+       the conclusion universally quantified. *)
     Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
       instrs' exitCond n ws {R} {ι : Valuation R}
       public_registers
