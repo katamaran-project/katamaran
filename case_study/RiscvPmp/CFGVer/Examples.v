@@ -202,31 +202,56 @@ Module Examples.
     (* ------------------------------------------------------------------ *)
     (* Contract generator                                                   *)
     (*                                                                      *)
-    (* reg_spec: (register, is_public)                                      *)
+    (* reg_spec: (register, is_public, optional_init_value)                 *)
     (*   is_public = true  → secLeak assertion added (register is SyncVal) *)
+    (*   optional_init_value = Some v → register holds concrete value v    *)
+    (*                        = None  → register holds an existential       *)
     (*                                                                      *)
-    (* Memory specs are a TODO (no public/private memory in endToEnd yet). *)
+    (* mem_full_spec: (address, is_public, optional_init_value)             *)
+    (*   is_public = true  → memory word at address is same in both worlds  *)
+    (*   optional_init_value = Some v → memory word holds concrete value v  *)
+    (*                        = None  → memory word holds an existential     *)
     (* ------------------------------------------------------------------ *)
 
-    Definition reg_spec : Type := RegIdx * bool.
+    Definition reg_spec : Type := RegIdx * bool * option (Val ty_xlenbits).
 
     Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
-      let '(r, is_pub) := s in
-      asn.exist "v" ty_xlenbits
-        (if is_pub
-         then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
-         else r ↦ᵣ term_var "v").
+      let '(r, is_pub, opt_v) := s in
+      match opt_v with
+      | Some v => r ↦ᵣ term_val ty_xlenbits v
+      | None =>
+        asn.exist "v" ty_xlenbits
+          (if is_pub
+           then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
+           else r ↦ᵣ term_var "v")
+      end.
 
     Definition gen_pre {Σ} (specs : list reg_spec) : Assertion Σ :=
       List.fold_right (fun s acc => gen_reg_asn s ∗ acc) ⊤ specs.
 
+    Definition mem_full_spec : Type :=
+      Val ty_xlenbits * bool * option (Val ty_xlenbits).
+
+    Definition gen_mem_asn {Σ} (s : mem_full_spec) : Assertion Σ :=
+      let '(a, _, opt_v) := s in
+      match opt_v with
+      | Some v => term_val ty_xlenbits a ↦ₘ term_val ty_xlenbits v
+      | None => asn.exist "mv" ty_xlenbits (term_val ty_xlenbits a ↦ₘ term_var "mv")
+      end.
+
+    Definition gen_mem_pre {Σ} (specs : list mem_full_spec) : Assertion Σ :=
+      List.fold_right (fun s acc => gen_mem_asn s ∗ acc) ⊤ specs.
+
     Definition gen_contract
-        (specs : list reg_spec)
+        (reg_specs : list reg_spec)
+        (mem_specs : list mem_full_spec)
         (instrs : list AST)
         (ec : bv xlenbits -> bool)
         (fl : nat)
         : CFGVerifierContract :=
-      @MkCFGVerifierContract [ctx] (asn_init_pc ∗ gen_pre specs) instrs ec fl.
+      @MkCFGVerifierContract [ctx]
+        (asn_init_pc ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
+        instrs ec fl.
 
 
     Definition mv_zero_ex : CFGVerifierContract :=
@@ -313,7 +338,7 @@ Module Examples.
 
     (* gen_contract version: precondition is asn_init_pc ∗ ⊤ (no register specs) *)
     Definition jmp_fwd_cfg_contract_gen : CFGVerifierContract :=
-      gen_contract [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
+      gen_contract [] [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
 
     Lemma valid_jmp_fwd_cfg_contract_gen :
       ValidCFGVerifierContract jmp_fwd_cfg_contract_gen.
@@ -386,9 +411,12 @@ Module Examples.
      Defined outside WithAsnNotations to avoid notation-scope interference. *)
   Definition gen_public_regs (specs : list reg_spec) : list {x : Ty & 𝑹𝑬𝑮 x} :=
     base.omap (fun (spec : reg_spec) =>
-      let '(r, pub) := spec in
+      let '(r, pub, _) := spec in
       if pub then option_map (@existT Ty 𝑹𝑬𝑮 ty_xlenbits) (reg_convert r)
       else None) specs.
+
+  Definition reg_spec_idx (s : reg_spec) : RegIdx :=
+    let '(r, _, _) := s in r.
 
   Import IrisInstanceBinary.
   Import RiscvPmpIrisInstance2.
@@ -471,6 +499,27 @@ Module Examples.
     Definition declare_init_memory (μ : Memory)
         (specs : list mem_init_spec) : Prop :=
       Forall (fun s => get_word μ s.1 = s.2) specs.
+
+    Definition gen_init_regs (specs : list reg_spec) : list reg_init_spec :=
+      base.omap (fun '(r, _, opt_v) =>
+        match opt_v with
+        | Some v => option_map (fun x => (x, v)) (reg_convert r)
+        | None => None
+        end) specs.
+
+    Definition mem_full_to_spec (s : mem_full_spec) : mem_spec :=
+      let '(a, pub, _) := s in (a, pub).
+
+    Definition gen_full_public_addrs (specs : list mem_full_spec) :
+        list (Val ty_word) :=
+      gen_public_addrs (map mem_full_to_spec specs).
+
+    Definition gen_init_mem (specs : list mem_full_spec) : list mem_init_spec :=
+      base.omap (fun '(a, _, opt_v) =>
+        match opt_v with
+        | Some v => Some (a, v)
+        | None => None
+        end) specs.
 
     Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
 
@@ -1731,18 +1780,16 @@ End AdequacyTools.
       (instrs : list AST)
       (exitCond : bv xlenbits -> bool)
       (reg_specs : list reg_spec)
-      (mem_specs : list mem_spec)
-      (init_regs : list reg_init_spec)
-      (init_mem : list mem_init_spec) : Prop :=
+      (mem_specs : list mem_full_spec) : Prop :=
     ∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory) ws,
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs →
       mem_has_instrs μ2 (bv.of_N init_addr) ws instrs →
       declare_public_registers γ1 γ2 (gen_public_regs reg_specs) →
-      declare_public_memory μ1 μ2 (gen_public_addrs mem_specs) →
-      declare_init_registers γ1 init_regs →
-      declare_init_registers γ2 init_regs →
-      declare_init_memory μ1 init_mem →
-      declare_init_memory μ2 init_mem →
+      declare_public_memory μ1 μ2 (gen_full_public_addrs mem_specs) →
+      declare_init_registers γ1 (gen_init_regs reg_specs) →
+      declare_init_registers γ2 (gen_init_regs reg_specs) →
+      declare_init_memory μ1 (gen_init_mem mem_specs) →
+      declare_init_memory μ2 (gen_init_mem mem_specs) →
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
@@ -1818,35 +1865,49 @@ End AdequacyTools.
   (* ------------------------------------------------------------------ *)
 
   Lemma gen_reg_asn_of_ptsreg `{sailGS2 Σ}
-      (r : RegIdx) (pub : bool) (γ1 γ2 : RegStore)
+      (r : RegIdx) (pub : bool) (opt_v : option (Val ty_xlenbits))
+      (γ1 γ2 : RegStore)
       (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
-      (Heq : pub = true →
+      (Heq : pub = true → opt_v = None →
              ∀ x, reg_convert r = Some x →
-               read_register γ1 x = read_register γ2 x) :
+               read_register γ1 x = read_register γ2 x)
+      (HInit : ∀ v x, opt_v = Some v →
+                      reg_convert r = Some x →
+                      read_register γ1 x = v ∧ read_register γ2 x = v) :
     interp_ptsreg_with_registers r γ1 γ2 ⊢
-    asn.interpret (gen_reg_asn (r, pub)) ι.
+    asn.interpret (gen_reg_asn (r, pub, opt_v)) ι.
   Proof.
     unfold interp_ptsreg_with_registers, gen_reg_asn.
-    destruct (reg_convert r) as [x|] eqn:Hrc.
-    - destruct pub.
-      + specialize (Heq eq_refl x eq_refl) as Hval.
-        rewrite <- Hval.
+    destruct opt_v as [v|].
+    - destruct (reg_convert r) as [x|] eqn:Hrc.
+      + specialize (HInit v x eq_refl eq_refl) as [Hv1 Hv2].
+        rewrite Hv1. rewrite Hv2.
         unfold reg_pointsTo21.
         rewrite regPstsTo_sync_is_nonsync.
         iIntros "Hr".
-        iExists (SyncVal (read_register γ1 x)).
-        unfold asn_regidx_pts. rewrite Hrc. cbn. iFrame. done.
-      + iIntros "Hr".
-        iExists (NonSyncVal (read_register γ1 x) (read_register γ2 x)).
         unfold asn_regidx_pts. rewrite Hrc. cbn. iExact "Hr".
-    - iIntros "_". iExists (SyncVal bv.zero).
-      unfold asn_regidx_pts. rewrite Hrc.
-      destruct pub; cbn; done.
+      + iIntros "_".
+        unfold asn_regidx_pts. rewrite Hrc. cbn. done.
+    - destruct (reg_convert r) as [x|] eqn:Hrc.
+      + destruct pub.
+        * specialize (Heq eq_refl eq_refl x eq_refl) as Hval.
+          rewrite <- Hval.
+          unfold reg_pointsTo21.
+          rewrite regPstsTo_sync_is_nonsync.
+          iIntros "Hr".
+          iExists (SyncVal (read_register γ1 x)).
+          unfold asn_regidx_pts. rewrite Hrc. cbn. iFrame. done.
+        * iIntros "Hr".
+          iExists (NonSyncVal (read_register γ1 x) (read_register γ2 x)).
+          unfold asn_regidx_pts. rewrite Hrc. cbn. iExact "Hr".
+      + iIntros "_". iExists (SyncVal bv.zero).
+        unfold asn_regidx_pts. rewrite Hrc.
+        destruct pub; cbn; done.
   Qed.
 
-  Lemma declare_pub_head_true r x rest γ1 γ2 :
+  Lemma declare_pub_head_true r x opt_v rest γ1 γ2 :
     reg_convert r = Some x →
-    declare_public_registers γ1 γ2 (gen_public_regs ((r, true) :: rest)) →
+    declare_public_registers γ1 γ2 (gen_public_regs ((r, true, opt_v) :: rest)) →
     read_register γ1 x = read_register γ2 x.
   Proof.
     intros Hrc Hpub.
@@ -1855,8 +1916,8 @@ End AdequacyTools.
     rewrite Forall_cons in Hpub. exact (proj1 Hpub).
   Qed.
 
-  Lemma declare_pub_tail r pub rest γ1 γ2 :
-    declare_public_registers γ1 γ2 (gen_public_regs ((r, pub) :: rest)) →
+  Lemma declare_pub_tail r pub opt_v rest γ1 γ2 :
+    declare_public_registers γ1 γ2 (gen_public_regs ((r, pub, opt_v) :: rest)) →
     declare_public_registers γ1 γ2 (gen_public_regs rest).
   Proof.
     intros Hpub.
@@ -1868,18 +1929,32 @@ End AdequacyTools.
     - exact Hpub.
   Qed.
 
+  Lemma declare_init_tail_regs r pub opt_v rest γ :
+    declare_init_registers γ (gen_init_regs ((r, pub, opt_v) :: rest)) →
+    declare_init_registers γ (gen_init_regs rest).
+  Proof.
+    unfold declare_init_registers, gen_init_regs. cbn.
+    destruct opt_v as [v|].
+    - destruct (reg_convert r) as [x|]; cbn.
+      + rewrite Forall_cons. tauto.
+      + auto.
+    - auto.
+  Qed.
+
   Lemma gen_implpre_inner `{sailGS2 Σ}
       (specs : list reg_spec) (γ1 γ2 : RegStore)
       (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
       (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
-      (HND : NoDup (map fst specs))
+      (HND : NoDup (map reg_spec_idx specs))
+      (HInitRegs1 : declare_init_registers γ1 (gen_init_regs specs))
+      (HInitRegs2 : declare_init_registers γ2 (gen_init_regs specs))
       (S : gset RegIdx)
-      (HS : ∀ s, s ∈ specs → s.1 ∈ S) :
+      (HS : ∀ s, s ∈ specs → reg_spec_idx s ∈ S) :
     ([∗ set] r ∈ S, interp_ptsreg_with_registers r γ1 γ2) ⊢
     asn.interpret (gen_pre specs) ι.
   Proof.
-    iInduction specs as [|[r pub] rest] "IH"
-        forall (HpubReg HND S HS).
+    iInduction specs as [|[[r pub] opt_v] rest] "IH"
+        forall (HpubReg HND HInitRegs1 HInitRegs2 S HS).
     - simpl. iIntros "_". done.
     - simpl gen_pre. simpl asn.interpret.
       rewrite NoDup_cons in HND. destruct HND as [Hnotin HND].
@@ -1887,18 +1962,30 @@ End AdequacyTools.
       iDestruct (big_sepS_delete with "H") as "[Hr Hrest]".
       { apply HS. apply elem_of_cons. left. done. }
       iSplitL "Hr".
-      + iApply gen_reg_asn_of_ptsreg; [|iExact "Hr"].
-        intros Hpub x Hrc. subst pub.
-        by eapply declare_pub_head_true.
-      + iApply ("IH" $! (declare_pub_tail r pub rest HpubReg)
-                  HND (S ∖ {[r]}) with "[] [Hrest]").
+      + iApply gen_reg_asn_of_ptsreg; [| |iExact "Hr"].
+        * intros Hpub Hnone x Hrc. subst pub.
+          by eapply declare_pub_head_true.
+        * intros v x Hsome Hrc.
+          split.
+          -- unfold declare_init_registers, gen_init_regs in HInitRegs1.
+             cbn in HInitRegs1. rewrite Hsome in HInitRegs1. rewrite Hrc in HInitRegs1. cbn in HInitRegs1.
+             apply Forall_inv in HInitRegs1. exact HInitRegs1.
+          -- unfold declare_init_registers, gen_init_regs in HInitRegs2.
+             cbn in HInitRegs2. rewrite Hsome in HInitRegs2. rewrite Hrc in HInitRegs2. cbn in HInitRegs2.
+             apply Forall_inv in HInitRegs2. exact HInitRegs2.
+      + iApply ("IH" $!
+                  (declare_pub_tail r pub opt_v rest HpubReg)
+                  HND
+                  (declare_init_tail_regs r pub opt_v rest HInitRegs1)
+                  (declare_init_tail_regs r pub opt_v rest HInitRegs2)
+                  (S ∖ {[r]}) with "[] [Hrest]").
         * iPureIntro.
           intros s Hs.
           rewrite elem_of_difference.
           split.
           -- apply HS. rewrite elem_of_cons. by right.
           -- rewrite elem_of_list_In in Hs.
-             apply (in_map fst) in Hs.
+             apply (in_map reg_spec_idx) in Hs.
              rewrite <- elem_of_list_In in Hs.
              intro Hcontr. rewrite elem_of_singleton in Hcontr.
              rewrite Hcontr in Hs. by apply Hnotin in Hs.
@@ -1909,13 +1996,16 @@ End AdequacyTools.
       (specs : list reg_spec) (γ1 γ2 : RegStore)
       (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
       (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
-      (HND : NoDup (map fst specs)) :
+      (HND : NoDup (map reg_spec_idx specs))
+      (HInitRegs1 : declare_init_registers γ1 (gen_init_regs specs))
+      (HInitRegs2 : declare_init_registers γ2 (gen_init_regs specs)) :
     interp_gprs_with_public_registers γ1 γ2 (gen_public_regs specs) ⊢
     asn.interpret (gen_pre specs) ι.
   Proof.
     rewrite <- (something_registers HpubReg).
     unfold interp_gprs_with_registers.
-    apply gen_implpre_inner; [exact HpubReg | exact HND |].
+    apply gen_implpre_inner;
+      [exact HpubReg | exact HND | exact HInitRegs1 | exact HInitRegs2 |].
     intros s _. unfold reg_file.
     apply elem_of_list_to_set, bv.finite.elem_of_enum.
   Qed.
@@ -2064,7 +2154,7 @@ End AdequacyTools.
 
   Lemma swap_noninterferent :
     noninterferent_strong [MV X3 X2; MV X2 X1; MV X1 X3]
-      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3]) [] [] [] [].
+      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3]) [] [].
   Proof.
     intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
@@ -2089,7 +2179,7 @@ End AdequacyTools.
 
   Lemma jumpIfZero_noninterferent :
     noninterferent_strong [BEQ X1 X0 true_offset]
-      (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) [(X1, true)] [] [] [].
+      (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
   Proof.
     intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
@@ -2098,7 +2188,7 @@ End AdequacyTools.
       (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) n ws
       ["x1"::ty_xlenbits]
       [env].["x1"::ty_xlenbits ↦ SyncVal (read_register γ1 x1)]
-      (gen_public_regs [(X1, true)]) HpubReg jump_if_zero_cfg_contract
+      (gen_public_regs [(X1, true, None)]) HpubReg jump_if_zero_cfg_contract
       valid_jump_if_zero_cfg_contract eq_refl eq_refl).
     all: try eauto.
     - intros Σ H.
@@ -2146,13 +2236,13 @@ End AdequacyTools.
 
   Lemma jmp_fwd_noninterferent_cfg :
     noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond
-      [(X1, true)] [] [] [].
+      [(X1, true, None)] [].
   Proof.
     intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
     eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
       [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond n ws [ctx] [env]
-      (gen_public_regs [(X1, true)]) HpubReg jmp_fwd_cfg_contract
+      (gen_public_regs [(X1, true, None)]) HpubReg jmp_fwd_cfg_contract
       valid_jmp_fwd_cfg_contract eq_refl eq_refl).
     all: try eauto.
     - intros Σ H.
@@ -2164,7 +2254,7 @@ End AdequacyTools.
   Qed.
 
   Lemma jmp_fwd_noninterferent_cfg_gen :
-    noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [] [] [].
+    noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
   Proof.
     intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
@@ -2183,21 +2273,23 @@ End AdequacyTools.
 
   Lemma countdown_noninterferent :
     noninterferent_strong [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-      countdown_exitCond [(X1, true)] [] [(x1, bv.of_N 2)] [].
+      countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
   Proof.
     intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _
       HInitReg1 HInitReg2 _ _
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
     assert (HInit1 : read_register γ1 x1 = bv.of_N 2). {
-      unfold declare_init_registers in HInitReg1.
+      unfold declare_init_registers, gen_init_regs in HInitReg1.
+      cbn in HInitReg1.
       apply Forall_inv in HInitReg1. exact HInitReg1. }
     assert (HInit2 : read_register γ2 x1 = bv.of_N 2). {
-      unfold declare_init_registers in HInitReg2.
+      unfold declare_init_registers, gen_init_regs in HInitReg2.
+      cbn in HInitReg2.
       apply Forall_inv in HInitReg2. exact HInitReg2. }
     eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
       [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
       countdown_exitCond n ws [ctx] [env]
-      (gen_public_regs [(X1, true)]) HpubReg countdown_cfg_contract
+      (gen_public_regs [(X1, true, Some (bv.of_N 2))]) HpubReg countdown_cfg_contract
       valid_countdown_cfg_contract eq_refl eq_refl).
     all: try eauto.
     - intros Σ H.
@@ -2217,13 +2309,14 @@ End AdequacyTools.
 
   Lemma countdown_mem_noninterferent :
     noninterferent_strong countdown_mem_instrs countdown_mem_exitCond
-      [] [(bv.of_N 16, true)] [] [(bv.of_N 16, bv.of_N 2)].
+      [] [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
     intros γ1 γ2 μ1 μ2 ws_instrs μinit1 μinit2 HpubReg HpubMem _ _
       HInitMem1 HInitMem2
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
     assert (HInitM1 : get_word μ1 (bv.of_N 16) = bv.of_N 2). {
-      unfold declare_init_memory in HInitMem1.
+      unfold declare_init_memory, gen_init_mem in HInitMem1.
+      cbn in HInitMem1.
       apply Forall_inv in HInitMem1. exact HInitMem1. }
     eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
       countdown_mem_instrs countdown_mem_exitCond n ws_instrs
