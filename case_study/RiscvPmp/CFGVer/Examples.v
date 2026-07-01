@@ -769,6 +769,35 @@ Module Examples.
             exact (nstep_trans Hstep2 HNSteps).
     Qed.
 
+    Lemma strip_step_fupdN_pure `{sailGS2 Σ} (n : nat) (φ : Prop) :
+      £ n -∗ (|={∅}▷=>^n ⌜φ⌝) -∗ |={∅}=> ⌜φ⌝.
+    Proof.
+      induction n as [|k IHk]; simpl.
+      - iIntros "_ H". iModIntro. iExact "H".
+      - iIntros "Hcred H".
+        iDestruct "Hcred" as "[H1 Hk]".
+        iMod "H" as "H".
+        iMod (lc_fupd_elim_later with "H1 H") as "H".
+        iMod "H" as "H".
+        iApply (IHk with "Hk H").
+    Qed.
+
+    Lemma semWP2_lockstep_plain `{sailGS2 Σ} {s1 s2}
+      {γ1 μ1 δ1 γ1' μ1' n}
+      {γ2 μ2 δ2}
+      {Q}
+      (Hsteps1 : NSteps γ1 μ1 δ1 s1 γ1' μ1' [env] (stm_val ty.unit ()) n) :
+      £ n ∗ mem_inv2 _ μ1 μ2 ∗
+        regs_inv2 γ1 γ2 ∗
+        semWP2 δ1 δ2 s1 s2 Q ⊢
+        |={⊤,∅}=> ⌜ ∃ γ2' μ2', NSteps γ2 μ2 δ2 s2 γ2' μ2' [env] (stm_val ty.unit tt) n ⌝.
+    Proof.
+      iIntros "(Hcred & Hmem & Hregs & Hwp)".
+      iPoseProof (semWP2_lockstep Hsteps1 with "[$Hmem $Hregs $Hwp]") as "H".
+      iMod "H" as "H".
+      iApply (strip_step_fupdN_pure with "Hcred H").
+    Qed.
+
     Lemma semWP2_preservation' `{sailGS2 Σ} n {s11 s21} {γ11 γ12 γ21 γ22} {μ11 μ12 μ21 μ22}
     {δ11 δ21}
     {Q}  :
@@ -865,6 +894,137 @@ Module Examples.
         now iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".        
   Qed.
 
+    Lemma semWP2_preservation_strong `{sailGS2 Σ} n {s11 s21} {γ11 γ12 γ21} {μ11 μ12 μ21}
+    {δ11 δ21}
+    {Q}  :
+    NSteps γ11 μ11 δ11 s11 γ12 μ12 [env] (stm_val ty.unit ()) n ->
+    mem_inv2 _ μ11 μ21 ∗ regs_inv2 γ11 γ21 -∗
+      semWP2 δ11 δ21 s11 s21 Q
+    ={⊤,∅}=∗ |={∅}▷=>^(n) |={∅,⊤}=> ∃ γ22 μ22, mem_inv2 _ μ12 μ22 ∗ regs_inv2 γ12 γ22 ∗
+                                      semWP2 [env] [env] (stm_val ty.unit ()) (stm_val ty.unit ()) Q ∗ ⌜ NSteps γ21 μ21 δ21 s21 γ22 μ22 [env] (stm_val ty.unit tt) n ⌝.
+  Proof.
+    revert s11 s21 μ11 μ21 γ11 γ21 μ12 γ12 δ11 δ21 Q.
+    induction n as [|n IH]=> s11 s21 μ11 μ21 γ11 γ21 μ12 γ12 δ11 δ21 Q /=.
+    { intros steps1.
+      inversion steps1; subst. iIntros "(Hmem & Hregs)"; iIntros "Hwp".
+      rewrite {1}semWP2_unfold. cbn.
+        destruct s21; cbn; iMod "Hwp"; auto.
+        + iApply fupd_mask_intro; first set_solver. iIntros "Hclose". iMod "Hclose".
+          iFrame.
+          rewrite semWP2_val. env.destroy δ21.
+          iModIntro. iSplitL; first iModIntro; destruct v; iFrame.
+          iPureIntro. constructor.
+    }
+    iIntros (steps1) "(Hmem & Hregs)".
+    iIntros " Hwp".
+    inversion steps1 as [ | ? γ1 ? μ1 ? ? ? ? ? Hstep1 Hevaln1]. subst.
+    destruct (stm_to_val s21) as [[v2|m2]|] eqn:Hs21.
+    + rewrite semWP2_unfold. rewrite (stm_val_stuck Hstep1). rewrite Hs21. cbn.
+      iMod "Hwp". done.
+    + rewrite semWP2_unfold. rewrite (stm_val_stuck Hstep1). rewrite Hs21. cbn.
+      iMod "Hwp". done.
+    + destruct (progress s21) as [Hfinal21 | Hprog21].
+      * destruct s21; cbn in *; try contradiction; congruence.
+      * specialize (Hprog21 γ21 μ21 δ21) as (γ21' & μ21' & δ21' & s21' & Hstep2).
+        iPoseProof (semWP2_step Hstep1 Hstep2 with "[$Hregs $Hmem $Hwp]") as "Hwp".
+        iMod "Hwp". iModIntro. iMod "Hwp". do 2 iModIntro. do 2 iMod "Hwp".
+        iDestruct "Hwp" as "(Hregs & Hmem & Hwp)".
+        specialize (IH s2 s21' μ1 μ21' γ1 γ21' μ12 γ12 δ2 δ21' Q Hevaln1).
+        iPoseProof (IH with "[$Hmem $Hregs]") as "IH".
+        iMod ("IH" with "Hwp") as "IH".
+        iModIntro.
+        iApply (step_fupdN_mono with "IH").
+        iIntros "H". iMod "H" as (γ22 μ22) "(Hmem & Hregs & Hwp & %HNSteps)".
+        iModIntro. iExists γ22, μ22. iFrame. iPureIntro.
+        exact (nstep_trans Hstep2 HNSteps).
+  Qed.
+
+  Lemma adequacy_gen_RiscVNStepsExitCond_strong n exitCond
+      {γ11 γ12 γ21} {μ11 μ12 μ21}
+      (φ : RegStore → Memory → Prop) :
+      ⟨ γ11, μ11 ⟩ -( exitCond , n )->* ⟨ γ12, μ12 ⟩ ->
+      (forall `{sailGS2 Σ},
+          mem_res2 μ11 μ21 ∗ own_regstore2 γ11 γ21 ⊢
+            |={⊤}=> myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)
+          ∗ (∀ γ22 μ22, mem_inv2 _ μ12 μ22 ={⊤,∅}=∗ ⌜φ γ22 μ22⌝)
+      )%I ->
+      ∃ γ22 μ22, ⟨ γ21, μ21 ⟩ -( exitCond , n )->* ⟨ γ22, μ22 ⟩ ∧ φ γ22 μ22.
+  Proof.
+    intros Heval1 Hwp.
+    apply nsteps_to_lsteps in Heval1.
+    destruct Heval1 as (l1 & Hl1 & Heval1).
+    refine (uPred.pure_soundness _
+              (step_fupdN_soundness_gen (Σ := sailΣ2) _ HasLc
+                 (list_sum_plus_one l1) (list_sum_plus_one l1) _)).
+    iIntros (Hinv) "Hcred'".
+    iMod (create_resources Hinv γ11 γ21 μ11 μ21) as
+      (regs1 regs2 memG) "(Hmem & Rmem & Hregs & Rregs)".
+    pose (sG := @SailGS2 sailΣ2 Hinv
+      (SailRegGS2
+        (SailRegGS (@reg_pre_inG2_left _ (@subG_sailGpreS _ _)) regs1)
+        (SailRegGS (@reg_pre_inG2_right _ (@subG_sailGpreS _ _)) regs2))
+      memG).
+    specialize (Hwp _ sG).
+    iPoseProof (Hwp with "[$Rmem $Rregs]") as "Hwp2".
+    clear Hwp.
+    iStopProof.
+    revert Heval1.
+    revert γ11 μ11 γ21 μ21 n Hl1.
+    induction l1;
+      iIntros (γ11 μ11 γ21 μ21 n Hl1 Heval1)
+              "(Hcred & Hmem & Hregs & Hwp2)".
+    - inversion Heval1. cbn in Hl1. subst.
+      iMod "Hwp2" as "[_ Hcont]".
+      iMod ("Hcont" with "Hmem") as "%Hφ".
+      cbn. iModIntro. iPureIntro. do 2 eexists.
+      split; [by constructor | done].
+    - inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1].
+      clear Heval1. subst.
+      rewrite fixpoint_myWP2_loop_eq.
+      unfold myWP2_loop_fix.
+      iMod "Hwp2" as "([H | Hwp2] & Hφ)".
+      + iDestruct "H" as (v) "(Hpc & %Hec)".
+        unfold reg_pointsTo2.
+        iPoseProof (reg_valid2 with "[$Hregs] [$Hpc]") as "(%eq1 & _)".
+        rewrite eq1 in nEC1. tauto.
+      + iDestruct "Hwp2" as "(%v & Hpc & Hwand)".
+        iPoseProof (reg_valid2_nd with "[$Hregs $Hpc]") as
+          "(%eq1 & %eq2 & Hregs & Hpc)".
+        have nEC2 : ~ exitCond (read_register γ21 pc).
+        { cbn in eq1, eq2. rewrite eq2. rewrite <- eq1. exact nEC1. }
+        iPoseProof ("Hwand" with "Hpc") as "Hwp2".
+        iPoseProof (semWP2_preservation_strong Hstep1
+          with "[$Hmem $Hregs]") as "Hwp".
+        iMod ("Hwp" with "Hwp2") as "Hwp".
+        change (list_sum_plus_one (a :: l1)) with
+          (a + 1 + list_sum_plus_one l1).
+        iAssert (|={∅}▷=>^a |={∅}=>
+                 |={∅}▷=>
+                 |={∅}▷=>^(list_sum_plus_one l1)
+                 ⌜∃ γ22 μ22, RiscVNStepsWithExitCond exitCond
+                    γ21 μ21 γ22 μ22 (length (a :: l1)) ∧ φ γ22 μ22⌝)%I
+          with "[-]" as "H"; last first.
+        { do 2 rewrite step_fupdN_add. destruct a. done.
+          by iApply step_fupdN_S_fupd. }
+        iApply (step_fupdN_wand with "Hwp").
+        iIntros ">H".
+        iDestruct "H" as (γ21' μ21') "(Hmem & Hregs & Hwp & %HNSteps)".
+        rewrite semWP2_val. iMod "Hwp" as "Hwp".
+        rewrite (into_sep_lc_add (a + 1) (list_sum_plus_one l1)).
+        rewrite (into_sep_lc_add a 1).
+        iDestruct "Hcred" as "[[Hcreda Hcred1] Hcredl]".
+        iMod (lc_fupd_elim_later with "Hcred1 Hwp") as "Hwp".
+        specialize (IHl1 γ1 μ1 γ21' μ21' _ eq_refl Hevaln1).
+        iMod (IHl1 with "[$Hmem $Hcredl $Hregs $Hwp $Hφ]") as "IHl".
+        { done. }
+        iModIntro.
+        iApply (step_fupdN_mono with "IHl").
+        iPureIntro.
+        intros (γ22 & μ22 & HNSteps2 & Hφ2).
+        exists γ22, μ22. split; last done.
+        exact (riscVNStepWithExitCond_trans nEC2
+                 (nsteps_to_steps HNSteps) HNSteps2).
+  Qed.
 
   Lemma constant_time_from_mem_res2_only_leak `{sailGS2 Σ} `{memGS2 Σ} {μ1 μ2 E} :
     leakage_trace μ1 = leakage_trace μ2 -> mem_res2_only_leak μ1 μ2 ⊢ |={E}=> interp_inv_constant_time.
