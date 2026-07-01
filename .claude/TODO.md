@@ -80,7 +80,6 @@ change to the ghost resources.
 
 **Known remaining Admits (expected):**
 - `valid_jmp_fwd` (BlockVer): BlockVer cannot handle JAL. Intentional.
-- `instrsAndDataMemory`: proof admitted; statement correct.
 
 ---
 

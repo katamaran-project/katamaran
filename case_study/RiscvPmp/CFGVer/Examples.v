@@ -456,6 +456,22 @@ Module Examples.
       base.omap (fun s : mem_spec => let '(a, pub) := s in
         if pub then Some a else None) specs.
 
+    (* reg_init_spec: a register with its required initial value in both worlds *)
+    Definition reg_init_spec : Type := 𝑹𝑬𝑮 ty_xlenbits * Val ty_xlenbits.
+
+    (* mem_init_spec: a word address with its required initial value in both worlds *)
+    Definition mem_init_spec : Type := Val ty_word * Val ty_word.
+
+    (* Each register r in specs holds value v in γ *)
+    Definition declare_init_registers (γ : RegStore)
+        (specs : list reg_init_spec) : Prop :=
+      Forall (fun s => read_register γ s.1 = s.2) specs.
+
+    (* Each address a in specs holds word value v in μ *)
+    Definition declare_init_memory (μ : Memory)
+        (specs : list mem_init_spec) : Prop :=
+      Forall (fun s => get_word μ s.1 = s.2) specs.
+
     Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
 
     Definition init_addr     : N := 0.
@@ -1708,6 +1724,36 @@ End AdequacyTools.
         public_registers
     .
 
+  (* noninterferent_strong: termination-sensitive non-interference.
+     If world 1 terminates in n steps under exitCond, so does world 2 in
+     exactly n steps, and both worlds produce the same leakage trace. *)
+  Definition noninterferent_strong
+      (instrs : list AST)
+      (exitCond : bv xlenbits -> bool)
+      (reg_specs : list reg_spec)
+      (mem_specs : list mem_spec)
+      (init_regs : list reg_init_spec)
+      (init_mem : list mem_init_spec) : Prop :=
+    ∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory) ws,
+      mem_has_instrs μ1 (bv.of_N init_addr) ws instrs →
+      mem_has_instrs μ2 (bv.of_N init_addr) ws instrs →
+      declare_public_registers γ1 γ2 (gen_public_regs reg_specs) →
+      declare_public_memory μ1 μ2 (gen_public_addrs mem_specs) →
+      declare_init_registers γ1 init_regs →
+      declare_init_registers γ2 init_regs →
+      declare_init_memory μ1 init_mem →
+      declare_init_memory μ2 init_mem →
+      RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
+      RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
+      RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
+      RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr →
+      leakage_trace μ1 = leakage_trace μ2 →
+      ∀ n (γ1' : RegStore) (μ1' : Memory),
+        ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ →
+        ∃ γ2' μ2',
+          ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
+          leakage_trace μ1' = leakage_trace μ2'.
+
     Lemma something_registers `{sailGS2 Σ} {γ1 γ2} {public_registers : list {x : Ty & Reg x}}
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
       : interp_gprs_with_registers γ1 γ2 ⊣⊢ interp_gprs_with_public_registers γ1 γ2 public_registers.
@@ -1874,7 +1920,7 @@ End AdequacyTools.
     apply elem_of_list_to_set, bv.finite.elem_of_enum.
   Qed.
 
-    Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+    Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
       instrs' exitCond n ws {R} {ι : Valuation R}
       public_registers
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
@@ -1896,14 +1942,17 @@ End AdequacyTools.
       RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
       RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
       ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
-      ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
       leakage_trace μ1 = leakage_trace μ2 ->
-      leakage_trace μ1' = leakage_trace μ2'.
+      ∃ γ2' μ2',
+        ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
+        leakage_trace μ1' = leakage_trace μ2'.
     Proof.
       intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
-        steps1 steps2 Htrace.
-      apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2)
-        _ steps1 steps2).
+        steps1 Htrace.
+      apply (adequacy_gen_RiscVNStepsExitCond_strong
+        (μ21 := μ2) (γ21 := γ2)
+        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
+        steps1).
       iIntros (Σ' H').
       iIntros "(Hmem & H')".
       iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
@@ -1919,7 +1968,7 @@ End AdequacyTools.
         iFrame "∗ #".
         by iFrame "∗ #".
       - iModIntro.
-        iIntros "Rmem".
+        iIntros (γ22 μ22) "Rmem".
         iInv "Hinv" as "Hleak".
         iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
         unfold mem_inv_only_leak.
@@ -1940,7 +1989,7 @@ End AdequacyTools.
   (* (contiguous layout immediately after the instruction region).       *)
   (* ------------------------------------------------------------------ *)
     Lemma cfg_instrs_endToEnd_with_memory
-        {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
+        {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
         instrs' exitCond n ws_instrs {R} {ι : Valuation R}
         public_registers
         (HpubReg : declare_public_registers γ1 γ2 public_registers)
@@ -1969,14 +2018,17 @@ End AdequacyTools.
         RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
         RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr →
         ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ →
-        ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ →
         leakage_trace μ1 = leakage_trace μ2 →
-        leakage_trace μ1' = leakage_trace μ2'.
+        ∃ γ2' μ2',
+          ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
+          leakage_trace μ1' = leakage_trace μ2'.
     Proof.
       intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
-        steps1 steps2 Htrace.
-      apply (adequacy_gen_RiscVNStepsExitCond (μ21 := μ2) (γ21 := γ2)
-        _ steps1 steps2).
+        steps1 Htrace.
+      apply (adequacy_gen_RiscVNStepsExitCond_strong
+        (μ21 := μ2) (γ21 := γ2)
+        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
+        steps1).
       iIntros (Σ' H').
       iIntros "(Hmem & H')".
       iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
@@ -1997,7 +2049,7 @@ End AdequacyTools.
         iFrame "Hmem ∗ #".
         by iFrame "∗ #".
       - iModIntro.
-        iIntros "Rmem".
+        iIntros (γ22 μ22) "Rmem".
         iInv "Hinv" as "Hleak".
         iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
         unfold mem_inv_only_leak.
@@ -2010,23 +2062,15 @@ End AdequacyTools.
         now iIntros "_".
     Qed.
 
-  Lemma swap_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
-    let instrs := [MV X3 X2; MV X2 X1; MV X1 X3] in
-    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⟨ γ1, μ1 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ2', μ2' ⟩ ->
-    leakage_trace μ1 = leakage_trace μ2 ->
-    leakage_trace μ1' = leakage_trace μ2'.
+  Lemma swap_noninterferent :
+    noninterferent_strong [MV X3 X2; MV X2 X1; MV X1 X3]
+      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3]) [] [] [] [].
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-      instrs (pcOutOfInstrs_exitCond instrs) n ws
+    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
+      [MV X3 X2; MV X2 X1; MV X1 X3]
+      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3]) n ws
       ["x"::ty_xlenbits; "y"::ty_xlenbits]
       [env].["x"::ty_xlenbits ↦
         NonSyncVal (read_register γ1 x1) (read_register γ2 x1)].["y"::ty_xlenbits ↦
@@ -2035,8 +2079,7 @@ End AdequacyTools.
     all: try eauto.
     - intros Σ H.
       iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn.
-      iFrame "Hpriv Hinv".
+      cbn. iFrame "Hpriv Hinv".
       rewrite <- (something_registers HpubReg).
       rewrite gprs_with_registers_equiv. cbn.
       repeat (iDestruct "Hregs" as "($ & Hregs)").
@@ -2044,34 +2087,25 @@ End AdequacyTools.
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma jumpIfZero_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
-    (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :
-    let instrs := [BEQ X1 X0 true_offset] in
-    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⟨ γ1, μ1 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -(pcOutOfInstrs_exitCond instrs, n)->* ⟨ γ2', μ2' ⟩ ->
-    leakage_trace μ1 = leakage_trace μ2 ->
-    leakage_trace μ1' = leakage_trace μ2'.
+  Lemma jumpIfZero_noninterferent :
+    noninterferent_strong [BEQ X1 X0 true_offset]
+      (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) [(X1, true)] [] [] [].
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-      instrs (pcOutOfInstrs_exitCond instrs) n ws
+    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
+      [BEQ X1 X0 true_offset]
+      (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) n ws
       ["x1"::ty_xlenbits]
       [env].["x1"::ty_xlenbits ↦ SyncVal (read_register γ1 x1)]
-      [existT ty_xlenbits x1] HpubReg jump_if_zero_cfg_contract
+      (gen_public_regs [(X1, true)]) HpubReg jump_if_zero_cfg_contract
       valid_jump_if_zero_cfg_contract eq_refl eq_refl).
     all: try eauto.
     - intros Σ H.
       iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn.
-      iFrame "Hpriv Hinv".
+      cbn. iFrame "Hpriv Hinv".
       assert (Hx1 : read_register γ1 x1 = read_register γ2 x1). {
-        unfold declare_public_registers in HpubReg.
+        unfold declare_public_registers in HpubReg. cbn in HpubReg.
         rewrite Forall_singleton in HpubReg. exact HpubReg. }
       rewrite <- (something_registers HpubReg).
       rewrite gprs_with_registers_equiv. cbn.
@@ -2110,52 +2144,32 @@ End AdequacyTools.
       + contradiction.
   Qed.
 
-  Lemma jmp_fwd_endToEnd_cfg {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws
-  (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1]) :  
-    let instrs := [JAL X0 jmp_offset; NOP] in
-    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⟨ γ1, μ1 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
-    leakage_trace μ1 = leakage_trace μ2 ->
-    leakage_trace μ1' = leakage_trace μ2'.
+  Lemma jmp_fwd_noninterferent_cfg :
+    noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond
+      [(X1, true)] [] [] [].
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-      instrs jmp_fwd_exitCond n ws [ctx] [env]
-      [existT ty_xlenbits x1] HpubReg jmp_fwd_cfg_contract
+    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
+      [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond n ws [ctx] [env]
+      (gen_public_regs [(X1, true)]) HpubReg jmp_fwd_cfg_contract
       valid_jmp_fwd_cfg_contract eq_refl eq_refl).
     all: try eauto.
     - intros Σ H.
-      cbn.
-      iIntros "(Hregs & Hpriv & #Hinv)".
+      cbn. iIntros "(Hregs & Hpriv & #Hinv)".
       iSplitL "".
       + iPureIntro. split; [reflexivity | done].
       + iFrame "∗ #".
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma jmp_fwd_endToEnd_cfg_gen {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory} n ws :
-    let instrs := [JAL X0 jmp_offset; NOP] in
-    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⟨ γ1, μ1 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -(jmp_fwd_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
-    leakage_trace μ1 = leakage_trace μ2 ->
-    leakage_trace μ1' = leakage_trace μ2'.
+  Lemma jmp_fwd_noninterferent_cfg_gen :
+    noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [] [] [].
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-      instrs jmp_fwd_exitCond n ws [ctx] [env]
+    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
+      [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond n ws [ctx] [env]
       [] HpubReg jmp_fwd_cfg_contract_gen
       valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
     all: try eauto.
@@ -2167,66 +2181,51 @@ End AdequacyTools.
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma countdown_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
-      {μ1 μ2 μ1' μ2' : Memory} n ws
-      (HpubReg : declare_public_registers γ1 γ2 [existT ty_xlenbits x1])
-      (Hx1_1 : RiscvPmpProgram.read_register γ1 x1 = bv.of_N 2)
-      (Hx1_2 : RiscvPmpProgram.read_register γ2 x1 = bv.of_N 2) :
-    let instrs := [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] in
-    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⟨ γ1, μ1 ⟩ -(countdown_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -(countdown_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
-    leakage_trace μ1 = leakage_trace μ2 ->
-    leakage_trace μ1' = leakage_trace μ2'.
+  Lemma countdown_noninterferent :
+    noninterferent_strong [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+      countdown_exitCond [(X1, true)] [] [(x1, bv.of_N 2)] [].
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-      instrs countdown_exitCond n ws [ctx] [env]
-      [existT ty_xlenbits x1] HpubReg countdown_cfg_contract
+    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _
+      HInitReg1 HInitReg2 _ _
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HInit1 : read_register γ1 x1 = bv.of_N 2). {
+      unfold declare_init_registers in HInitReg1.
+      apply Forall_inv in HInitReg1. exact HInitReg1. }
+    assert (HInit2 : read_register γ2 x1 = bv.of_N 2). {
+      unfold declare_init_registers in HInitReg2.
+      apply Forall_inv in HInitReg2. exact HInitReg2. }
+    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
+      [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+      countdown_exitCond n ws [ctx] [env]
+      (gen_public_regs [(X1, true)]) HpubReg countdown_cfg_contract
       valid_countdown_cfg_contract eq_refl eq_refl).
     all: try eauto.
     - intros Σ H.
       iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn.
-      iFrame "Hpriv Hinv".
-      assert (Hx1_eq : read_register γ1 x1 = read_register γ2 x1) by congruence.
+      cbn. iFrame "Hpriv Hinv".
+      assert (Hx1_eq : read_register γ1 x1 = read_register γ2 x1). {
+        unfold declare_public_registers in HpubReg. cbn in HpubReg.
+        rewrite Forall_singleton in HpubReg. exact HpubReg. }
       rewrite <- (something_registers HpubReg).
       rewrite gprs_with_registers_equiv. cbn.
-      rewrite Hx1_eq. rewrite regPstsTo_sync_is_nonsync. rewrite Hx1_2.
+      rewrite Hx1_eq. rewrite regPstsTo_sync_is_nonsync. rewrite HInit2.
       iDestruct "Hregs" as "($ & Hregs)".
       iSplit; [iPureIntro | done].
       vm_compute. done.
     - cbn. by unfold lenAddr.
   Qed.
 
-  Lemma countdown_mem_endToEnd {γ1 γ2 γ1' γ2' : RegStore}
-      {μ1 μ2 μ1' μ2' : Memory} n ws_instrs
-      (Hmem1 : get_word μ1 (bv.of_N 16) = bv.of_N 2)
-      (Hmem2 : get_word μ2 (bv.of_N 16) = bv.of_N 2) :
-    let instrs := countdown_mem_instrs in
-    mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs ->
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⟨ γ1, μ1 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
-    ⟨ γ2, μ2 ⟩ -(countdown_mem_exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
-    leakage_trace μ1 = leakage_trace μ2 ->
-    leakage_trace μ1' = leakage_trace μ2'.
+  Lemma countdown_mem_noninterferent :
+    noninterferent_strong countdown_mem_instrs countdown_mem_exitCond
+      [] [(bv.of_N 16, true)] [] [(bv.of_N 16, bv.of_N 2)].
   Proof.
-    intros instrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc steps1 steps2 Htrace.
-    assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
-    assert (HpubMem : declare_public_memory μ1 μ2
-        (gen_public_addrs [(bv.of_N 16, true)])).
-    { unfold declare_public_memory, gen_public_addrs. cbn.
-      constructor. rewrite Hmem1 Hmem2. reflexivity. constructor. }
-    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
+    intros γ1 γ2 μ1 μ2 ws_instrs μinit1 μinit2 HpubReg HpubMem _ _
+      HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HInitM1 : get_word μ1 (bv.of_N 16) = bv.of_N 2). {
+      unfold declare_init_memory in HInitMem1.
+      apply Forall_inv in HInitMem1. exact HInitMem1. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
       countdown_mem_instrs countdown_mem_exitCond n ws_instrs
       [ctx] [env]
       [] HpubReg
@@ -2239,9 +2238,8 @@ End AdequacyTools.
       vm_compute. done.
     - intros Σ H.
       iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
-      cbn.
-      iFrame "Hpriv Hinv".
-      rewrite Hmem1.
+      cbn. iFrame "Hpriv Hinv".
+      rewrite HInitM1.
       iDestruct "Hmemdata" as "[Hmem _]".
       rewrite <- (something_registers HpubReg).
       rewrite gprs_with_registers_equiv. cbn.

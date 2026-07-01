@@ -33,7 +33,7 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 | `theories/` | `Katamaran` | Core framework |
 
 `_CoqProject` defines the `-Q` mappings and the exact compilation order.
-CFGVer compilation order: `Spec.v` → `Verifier.v` → `Examples.v` → `EndToEnd.v`.
+CFGVer compilation order: `Spec.v` → `Verifier.v` → `Examples.v`.
 
 ---
 
@@ -422,12 +422,11 @@ Usage: `rewrite (something_memory data_specs HpubMem)` rewrites `interp_mem_with
 to `interp_mem_with_public_memory` in the current Iris proof state (including hypothesis
 types, since Iris environments are Coq terms).
 
-### `instrsAndDataMemory` (Admitted)
+### `instrsAndDataMemory`
 
 Extracts `ptsto_instrs ∗ interp_mem_with_memory` from the raw `mem_res2_without_leak`.
 Data words must occupy the `4*|data_specs|` bytes immediately following the instruction
-region. The proof is structurally analogous to `instrsMemory` but requires a 3-way
-`bv.seqBv_app` split and induction over `data_specs`.
+region.
 
 ```coq
 Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2} ws_instrs data_specs instrs :
@@ -439,7 +438,6 @@ Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2} ws_instrs data_specs instrs :
   mem_res2_without_leak μ1 μ2 ⊢ |={⊤}=>
     ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
     interp_mem_with_memory μ1 μ2 data_specs.
-Proof. Admitted.
 ```
 
 ### `cfg_instrs_verified_with_mem` / `cfg_instrs_safe_with_mem`
@@ -472,8 +470,33 @@ Extension of `cfg_instrs_endToEnd` for programs with data memory. Requires:
 
 The length bound is `4 * |instrs| + 4 * |data_specs| < lenAddr` (combined).
 
-`instrsAndDataMemory` is Admitted — the statement is correct but the proof needs the
-`bv.seqBv_app` split and an induction over `data_specs` (not yet written).
+`instrsAndDataMemory` is proved.
+
+---
+
+## Binary WP semantics (`semWP2_unfold`)
+
+`IVal τ = Val τ + string` — `inl v` is a success value, `inr m` is a failure string.
+
+`stm_to_val` maps `stm_val _ v ↦ Some(inl v)`, `stm_fail _ m ↦ Some(inr m)`, and all
+non-terminal statements to `None`.
+
+`semWP2_fix` / `semWP2_unfold` distinguish four terminal cases:
+
+| `stm_to_val s1` | `stm_to_val s2` | Result |
+|-----------------|-----------------|--------|
+| `Some(inl v1)` | `Some(inl v2)` | `POST (inl v1) δ1 (inl v2) δ2` |
+| `Some(inr m1)` | `Some(inr m2)` | `POST (inr m1) δ1 (inr m2) δ2` |
+| mixed (inl×inr or inr×inl) | — | `\|={⊤}=> False` |
+| `None` (either side) | — | stepping cases |
+
+Consequence for proofs: when **both** sides are concrete constructors (`stm_val`/`stm_fail`),
+`cbn` after `rewrite semWP2_unfold` immediately reduces to the correct branch — no
+`env.drop_cat` terms appear. When one side is an abstract stepping statement, partial
+match arms with `env.drop` terms are still visible.
+
+`Result2` in `BinaryAdequacy.v` has the same structure: `Some(inl)×Some(inl)` and
+`Some(inr)×Some(inr)` call POST; everything else reduces to `False`.
 
 ---
 
@@ -502,6 +525,9 @@ The length bound is `4 * |instrs| + 4 * |data_specs| < lenAddr` (combined).
 | `all: vm_compute; done.` inside a `-` bullet closes too many goals | It is scoped to the current bullet's sub-goals. If it unexpectedly closes outer goals, ensure `all: try eauto.` runs FIRST (before the `-` bullets) to discharge the routine goals. |
 | `iApply (cfg_instrs_safe_with_mem data_specs μ1 μ2)` — type mismatch (`data_specs` at `RegStore` position) | `Set Implicit Arguments` makes `data_specs, μ1, μ2` implicit (appear in `ImplPre`'s type); first explicit arg is `γ1 : RegStore`. Use `iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 block)`. |
 | `iFrame "Hmemdata ∗ #"` fails with "Hmemdata not found" inside `ImplPre` subgoal | `cfg_instrs_safe`'s `ImplPre` starts with an empty Iris spatial context; outer hypotheses are invisible. Use `cfg_instrs_safe_with_mem` instead — it threads `interp_mem_with_public_memory` through as a conjunct in `ImplPre`'s domain. |
+| `rewrite !env.drop_cat` fails after `rewrite !semWP2_unfold; cbn` for val×fail or fail×val bullets | Both `stm_to_val`s are concrete, so `cbn` collapses the match immediately to `\|={⊤}=> False` — no `env.drop` terms survive. Replace with `do 3 iModIntro. iMod "Hclose". iMod "WPk". auto.` |
+| `iMod "H"` fails with "cannot eliminate modality match i with \| inl … \| inr … end" in adequacy proof | After `case_match` introduces `i : IVal τ` (abstract), `H` has type `match i with …`. Iris `iMod` requires syntactic `\|={E}=> P`. Add `destruct i as [v2\|m2].` before `iMod`. |
+| Second `{ inversion H. }` bullet gives `[Focus] No such goal (1)` in `semWP2_call_frame`-style proof | For val×step or step×val cases, the `stm_fail` sub-case now produces `WPs : \|={⊤}=> False`, which `try solve [… iMod "WPs"; auto]` closes immediately. Remove the trailing `{ inversion H. }` for those cases only (keep it for fail×step and step×fail where `inr×inr` gives POST). |
 
 ---
 
