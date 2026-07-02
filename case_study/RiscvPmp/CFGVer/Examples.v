@@ -79,6 +79,20 @@ Module Examples.
   Definition X3 : RegIdx := bv.of_nat 3.
   Definition X4 : RegIdx := bv.of_nat 4.
 
+  (* RISC-V ABI register names, needed for examples translated straight
+     from compiler-generated assembly (e.g. cmovznz4) instead of
+     hand-picked X0..X4. *)
+  Definition T0 : RegIdx := bv.of_nat 5.
+  Definition T1 : RegIdx := bv.of_nat 6.
+  Definition A0 : RegIdx := bv.of_nat 10.
+  Definition A1 : RegIdx := bv.of_nat 11.
+  Definition A2 : RegIdx := bv.of_nat 12.
+  Definition A3 : RegIdx := bv.of_nat 13.
+  Definition A4 : RegIdx := bv.of_nat 14.
+  Definition A5 : RegIdx := bv.of_nat 15.
+  Definition A6 : RegIdx := bv.of_nat 16.
+  Definition A7 : RegIdx := bv.of_nat 17.
+
   Section WithAsnNotations.
     Import asn.notations.
 
@@ -256,6 +270,93 @@ Module Examples.
         (asn_init_pc ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
         instrs ec fl.
 
+    (* ------------------------------------------------------------------ *)
+    (* cmovznz4 (HACL*'s FStar_UInt64_eq_mask-based conditional move),      *)
+    (* compiled to RV32I by clang -O2 (godbolt, -march=rv32i -mabi=ilp32). *)
+    (* Straight-line block, no branches, no loops. Registers per the       *)
+    (* RISC-V calling convention: A0 = cin, A1 = x, A2 = y, A3 = r;         *)
+    (* A4-A7, T0, T1 are compiler-chosen scratch registers.                *)
+    (*                                                                       *)
+    (* CFGVer currently hardcodes init_addr = 0 (parameterizing the start   *)
+    (* address is a separate, open TODO), so there is no notion yet of an   *)
+    (* arbitrary caller-supplied pointer for x/y/r. Instead of modelling    *)
+    (* them as opaque runtime pointers, A1/A2/A3 are fixed to concrete      *)
+    (* addresses right after the instruction region (116/132/148), exactly *)
+    (* like countdown_mem's loop counter at a fixed address -- this fits    *)
+    (* the existing gen_contract/gen_mem_asn (literal-address) machinery    *)
+    (* unchanged.                                                            *)
+    (*                                                                       *)
+    (* Trailing `ret` (jalr x0, ra, 0) is deliberately NOT included: its     *)
+    (* target is the symbolic link register `ra`, and sexec_cfg_addr needs  *)
+    (* a concrete pc at every step, so it cannot step through a jump to an  *)
+    (* unconstrained destination. The exit condition below instead fires    *)
+    (* once pc has advanced past the last real instruction (the standard    *)
+    (* pcOutOfInstrs_exitCond pattern used by jmp_fwd/countdown/swap).       *)
+    (* ------------------------------------------------------------------ *)
+    Definition cmovznz4_instrs : list AST :=
+      [ RTYPE A0 X0 A4 RISCV_SUB               (* neg     a4, a0 *)
+      ; RTYPE A4 A0 A0 RISCV_OR                (* or      a0, a0, a4 *)
+      ; SHIFTIOP (bv.of_Z 31) A0 A4 RISCV_SRAI (* srai    a4, a0, 31 *)
+      ; LOAD (bv.of_Z 0) A2 A5 false WORD      (* lw      a5, 0(a2) *)
+      ; SHIFTIOP (bv.of_Z 31) A0 A0 RISCV_SRLI (* srli    a0, a0, 31 *)
+      ; LOAD (bv.of_Z 0) A1 A6 false WORD      (* lw      a6, 0(a1) *)
+      ; ITYPE (bv.of_Z (-1)) A0 A0 RISCV_ADDI  (* addi    a0, a0, -1 *)
+      ; RTYPE A4 A5 A7 RISCV_AND               (* and     a7, a5, a4 *)
+      ; LOAD (bv.of_Z 4) A2 T0 false WORD      (* lw      t0, 4(a2) *)
+      ; RTYPE A0 A6 A5 RISCV_AND               (* and     a5, a6, a0 *)
+      ; LOAD (bv.of_Z 4) A1 A6 false WORD      (* lw      a6, 4(a1) *)
+      ; RTYPE A7 A5 A7 RISCV_OR                (* or      a7, a5, a7 *)
+      ; RTYPE A4 T0 T0 RISCV_AND               (* and     t0, t0, a4 *)
+      ; LOAD (bv.of_Z 8) A2 T1 false WORD      (* lw      t1, 8(a2) *)
+      ; RTYPE A0 A6 A5 RISCV_AND               (* and     a5, a6, a0 *)
+      ; RTYPE T0 A5 A6 RISCV_OR                (* or      a6, a5, t0 *)
+      ; LOAD (bv.of_Z 8) A1 A5 false WORD      (* lw      a5, 8(a1) *)
+      ; RTYPE A4 T1 T0 RISCV_AND               (* and     t0, t1, a4 *)
+      ; LOAD (bv.of_Z 12) A2 A2 false WORD     (* lw      a2, 12(a2) *)
+      ; LOAD (bv.of_Z 12) A1 A1 false WORD     (* lw      a1, 12(a1) *)
+      ; RTYPE A0 A5 A5 RISCV_AND               (* and     a5, a5, a0 *)
+      ; RTYPE T0 A5 A5 RISCV_OR                (* or      a5, a5, t0 *)
+      ; RTYPE A4 A2 A2 RISCV_AND               (* and     a2, a2, a4 *)
+      ; RTYPE A1 A0 A0 RISCV_AND               (* and     a0, a0, a1 *)
+      ; RTYPE A2 A0 A0 RISCV_OR                (* or      a0, a0, a2 *)
+      ; STORE (bv.of_Z 0) A7 A3 WORD           (* sw      a7, 0(a3) *)
+      ; STORE (bv.of_Z 4) A6 A3 WORD           (* sw      a6, 4(a3) *)
+      ; STORE (bv.of_Z 8) A5 A3 WORD           (* sw      a5, 8(a3) *)
+      ; STORE (bv.of_Z 12) A0 A3 WORD          (* sw      a0, 12(a3) *)
+      ].
+
+    (* A0 (cin) and the scratch registers only ever influence *values*,
+       never which addresses are touched, so they can stay private
+       (arbitrary, independent per world). A1/A2/A3 (x/y/r) are fixed to
+       concrete addresses right after the 29-instruction code region
+       (4*29 = 116), laid out contiguously as x[0..3], y[0..3], r[0..3]
+       to match the HDataAddrs assumption in gen_contract_noninterferent. *)
+    Definition cmovznz4_reg_specs : list reg_spec :=
+      [(A0, false, None);
+       (A1, false, Some (bv.of_N 116));   (* x base *)
+       (A2, false, Some (bv.of_N 132));   (* y base *)
+       (A3, false, Some (bv.of_N 148));   (* r base *)
+       (A4, false, None); (A5, false, None); (A6, false, None);
+       (A7, false, None); (T0, false, None); (T1, false, None)].
+
+    (* cin (A0) is the only actual secret here -- x and y need not be, and
+       r (derived from cin, x, y) must stay private since it can reveal
+       which of x/y was picked. x[0..3]/y[0..3] public, r[0..3] private. *)
+    Definition cmovznz4_mem_specs : list mem_full_spec :=
+      [(bv.of_N 116, true, None); (bv.of_N 120, true, None);
+       (bv.of_N 124, true, None); (bv.of_N 128, true, None);
+       (bv.of_N 132, true, None); (bv.of_N 136, true, None);
+       (bv.of_N 140, true, None); (bv.of_N 144, true, None);
+       (bv.of_N 148, false, None); (bv.of_N 152, false, None);
+       (bv.of_N 156, false, None); (bv.of_N 160, false, None)].
+
+    Definition cmovznz4_cfg_contract : CFGVerifierContract :=
+      gen_contract cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs
+        (pcOutOfInstrs_exitCond cmovznz4_instrs) 35.
+
+    Lemma valid_cmovznz4_cfg_contract : ValidCFGVerifierContract cmovznz4_cfg_contract.
+    Proof. vm_compute. solve_vc. Qed.
+
 
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
@@ -284,11 +385,11 @@ Module Examples.
     Proof. vm_compute. solve_vc. Qed.
 
     Definition swap_cfg_contract : CFGVerifierContract :=
-      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗
-           ∃ "v", X3 ↦ᵣ term_var "v" }}
+      gen_contract
+        [(X1, false, None); (X2, false, None); (X3, false, None)] []
         [MV X3 X2; MV X2 X1; MV X1 X3]
-      @cfg[ pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3] , 5 ]
-      with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
+        (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3])
+        5.
 
     Lemma valid_swap_cfg_contract : ValidCFGVerifierContract swap_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
@@ -311,11 +412,10 @@ Module Examples.
          default offset allows one instruction between this block and the true
          block. X1 must be a public register (secLeak). *)
     Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
-      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x1" ∗
-           secLeakvar "x1" }}
+      gen_contract [(X1, true, None)] []
         [BEQ X1 X0 true_offset]
-      @cfg[ pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset] , 3 ]
-      with ["x1" :: ty_xlenbits].
+        (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset])
+        3.
 
     Lemma valid_jump_if_zero_cfg_contract :
       ValidCFGVerifierContract jump_if_zero_cfg_contract.
@@ -332,19 +432,9 @@ Module Examples.
       fun v => bv.ugeb v (bv.of_N 8).
 
     Definition jmp_fwd_cfg_contract : CFGVerifierContract :=
-      {{ asn_init_pc }}
-        [JAL X0 jmp_offset; NOP]
-      @cfg[ jmp_fwd_exitCond , 5 ].
-
-    Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
-    (* gen_contract version: precondition is asn_init_pc ∗ ⊤ (no register specs) *)
-    Definition jmp_fwd_cfg_contract_gen : CFGVerifierContract :=
       gen_contract [] [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
 
-    Lemma valid_jmp_fwd_cfg_contract_gen :
-      ValidCFGVerifierContract jmp_fwd_cfg_contract_gen.
+    Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
     (* -4 in 13-bit two's complement: branches jump back 4 bytes (one instruction) *)
@@ -363,18 +453,20 @@ Module Examples.
       fun v => bv.ugeb v (bv.of_N 8).
 
     Definition countdown_cfg_contract : CFGVerifierContract :=
-      {{ asn_init_pc ∗ X1 ↦ᵣ term_val ty_xlenbits (bv.of_N 2) }}
+      gen_contract [(X1, true, Some (bv.of_N 2))] []
         [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-      @cfg[ countdown_exitCond , 5 ].
+        countdown_exitCond
+        5.
 
     Lemma valid_countdown_cfg_contract :
       ValidCFGVerifierContract countdown_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
     Definition set_X2_to_42 : CFGVerifierContract :=
-      {{ asn_init_pc ∗ ∃ "_", X2 ↦ᵣ term_var "_" }}
+      gen_contract [(X2, false, None)] []
         [ADDI X2 X0 (bv.of_N 42)]
-      @cfg[ pcOutOfInstrs_exitCond [ADDI X2 X0 (bv.of_N 42)] , 3 ].
+        (pcOutOfInstrs_exitCond [ADDI X2 X0 (bv.of_N 42)])
+        3.
 
     Lemma valid_set_X2_to_42 : ValidCFGVerifierContract set_X2_to_42.
     Proof. vm_compute. solve_vc. Qed.
@@ -398,11 +490,10 @@ Module Examples.
       ; BNE X1 X0 back_12_offset ].
 
     Definition countdown_mem_cfg_contract : CFGVerifierContract :=
-      {{ asn_init_pc ∗ (∃ "_", X1 ↦ᵣ term_var "_") ∗
-         (term_val ty_xlenbits (bv.of_N 16) ↦ₘ
-          term_val ty_xlenbits (bv.of_N 2)) }}
+      gen_contract [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))]
         countdown_mem_instrs
-      @cfg[ countdown_mem_exitCond , 10 ].
+        countdown_mem_exitCond
+        10.
 
     Lemma valid_countdown_mem_cfg_contract :
       ValidCFGVerifierContract countdown_mem_cfg_contract.
@@ -2289,55 +2380,23 @@ End AdequacyTools.
 
   Lemma swap_noninterferent :
     noninterferent_strong [MV X3 X2; MV X2 X1; MV X1 X3]
-      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3]) [] [].
+      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3])
+      [(X1, false, None); (X2, false, None); (X3, false, None)] [].
   Proof.
-    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
-      [MV X3 X2; MV X2 X1; MV X1 X3]
-      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3]) n ws
-      ["x"::ty_xlenbits; "y"::ty_xlenbits]
-      [env].["x"::ty_xlenbits ↦
-        NonSyncVal (read_register γ1 x1) (read_register γ2 x1)].["y"::ty_xlenbits ↦
-        NonSyncVal (read_register γ1 x2) (read_register γ2 x2)]
-      [] HpubReg swap_cfg_contract valid_swap_cfg_contract eq_refl eq_refl).
-    all: try eauto.
-    - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn. iFrame "Hpriv Hinv".
-      rewrite <- (something_registers HpubReg).
-      rewrite gprs_with_registers_equiv. cbn.
-      repeat (iDestruct "Hregs" as "($ & Hregs)").
-      auto.
-    - cbn. by unfold lenAddr.
+    eapply gen_contract_noninterferent;
+      [apply Prelude.nodup_fixed; reflexivity |
+       intros ? ? H; rewrite lookup_nil in H; discriminate |
+       by cbn; unfold lenAddr | exact valid_swap_cfg_contract].
   Qed.
 
   Lemma jumpIfZero_noninterferent :
     noninterferent_strong [BEQ X1 X0 true_offset]
       (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
   Proof.
-    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
-      [BEQ X1 X0 true_offset]
-      (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) n ws
-      ["x1"::ty_xlenbits]
-      [env].["x1"::ty_xlenbits ↦ SyncVal (read_register γ1 x1)]
-      (gen_public_regs [(X1, true, None)]) HpubReg jump_if_zero_cfg_contract
-      valid_jump_if_zero_cfg_contract eq_refl eq_refl).
-    all: try eauto.
-    - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn. iFrame "Hpriv Hinv".
-      assert (Hx1 : read_register γ1 x1 = read_register γ2 x1). {
-        unfold declare_public_registers in HpubReg. cbn in HpubReg.
-        rewrite Forall_singleton in HpubReg. exact HpubReg. }
-      rewrite <- (something_registers HpubReg).
-      rewrite gprs_with_registers_equiv. cbn.
-      rewrite Hx1. rewrite regPstsTo_sync_is_nonsync.
-      iDestruct "Hregs" as "($ & Hregs)".
-      done.
-    - cbn. by unfold lenAddr.
+    eapply gen_contract_noninterferent;
+      [apply Prelude.nodup_fixed; reflexivity |
+       intros ? ? H; rewrite lookup_nil in H; discriminate |
+       by cbn; unfold lenAddr | exact valid_jump_if_zero_cfg_contract].
   Qed.
 
   Lemma jmp_fwd_safe_cfg `{sailGS2 Σ} γ1 γ2 :
@@ -2359,8 +2418,8 @@ End AdequacyTools.
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv".
-      + cbn. iSplit. { iPureIntro. split; [reflexivity | trivial]. }
-        iFrame "∗ #".
+      + cbn. iSplit. { iPureIntro. split; tauto. }
+        by iFrame "∗ #".
       + iFrame "Hpc". iSplitL "Hnpc". { iExists _. iExact "Hnpc". }
         iExact "Hinstrs".
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & Hpost)".
@@ -2370,114 +2429,43 @@ End AdequacyTools.
   Qed.
 
   Lemma jmp_fwd_noninterferent_cfg :
-    noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond
-      [(X1, true, None)] [].
-  Proof.
-    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
-      [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond n ws [ctx] [env]
-      (gen_public_regs [(X1, true, None)]) HpubReg jmp_fwd_cfg_contract
-      valid_jmp_fwd_cfg_contract eq_refl eq_refl).
-    all: try eauto.
-    - intros Σ H.
-      cbn. iIntros "(Hregs & Hpriv & #Hinv)".
-      iSplitL "".
-      + iPureIntro. split; [reflexivity | done].
-      + iFrame "∗ #".
-    - cbn. by unfold lenAddr.
-  Qed.
-
-  Lemma jmp_fwd_noninterferent_cfg_gen :
     noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
   Proof.
-    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _ _ _ _ _
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
-      [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond n ws [ctx] [env]
-      [] HpubReg jmp_fwd_cfg_contract_gen
-      valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
-    all: try eauto.
-    - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn. iFrame "∗ #".
-      iSplit; (iSplit; [iPureIntro | done]).
-      all: vm_compute; done.
-    - cbn. by unfold lenAddr.
+    eapply gen_contract_noninterferent;
+      [apply Prelude.nodup_fixed; reflexivity |
+       intros ? ? H; rewrite lookup_nil in H; discriminate |
+       by cbn; unfold lenAddr | exact valid_jmp_fwd_cfg_contract].
   Qed.
 
   Lemma countdown_noninterferent :
     noninterferent_strong [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
       countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
   Proof.
-    intros γ1 γ2 μ1 μ2 ws μinit1 μinit2 HpubReg _
-      HInitReg1 HInitReg2 _ _
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    assert (HInit1 : read_register γ1 x1 = bv.of_N 2). {
-      unfold declare_init_registers, gen_init_regs in HInitReg1.
-      cbn in HInitReg1.
-      apply Forall_inv in HInitReg1. exact HInitReg1. }
-    assert (HInit2 : read_register γ2 x1 = bv.of_N 2). {
-      unfold declare_init_registers, gen_init_regs in HInitReg2.
-      cbn in HInitReg2.
-      apply Forall_inv in HInitReg2. exact HInitReg2. }
-    eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
-      [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-      countdown_exitCond n ws [ctx] [env]
-      (gen_public_regs [(X1, true, Some (bv.of_N 2))]) HpubReg countdown_cfg_contract
-      valid_countdown_cfg_contract eq_refl eq_refl).
-    all: try eauto.
-    - intros Σ H.
-      iIntros "(Hregs & Hpriv & #Hinv)".
-      cbn. iFrame "Hpriv Hinv".
-      assert (Hx1_eq : read_register γ1 x1 = read_register γ2 x1). {
-        unfold declare_public_registers in HpubReg. cbn in HpubReg.
-        rewrite Forall_singleton in HpubReg. exact HpubReg. }
-      rewrite <- (something_registers HpubReg).
-      rewrite gprs_with_registers_equiv. cbn.
-      rewrite Hx1_eq. rewrite regPstsTo_sync_is_nonsync. rewrite HInit2.
-      iDestruct "Hregs" as "($ & Hregs)".
-      iSplit; [iPureIntro | done].
-      vm_compute. done.
-    - cbn. by unfold lenAddr.
+    eapply gen_contract_noninterferent;
+      [apply Prelude.nodup_fixed; reflexivity |
+       intros ? ? H; rewrite lookup_nil in H; discriminate |
+       by cbn; unfold lenAddr | exact valid_countdown_cfg_contract].
   Qed.
 
   Lemma countdown_mem_noninterferent :
     noninterferent_strong countdown_mem_instrs countdown_mem_exitCond
-      [] [(bv.of_N 16, true, Some (bv.of_N 2))].
+      [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
-    intros γ1 γ2 μ1 μ2 ws_instrs μinit1 μinit2 HpubReg HpubMem _ _
-      HInitMem1 HInitMem2
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    assert (HInitM1 : get_word μ1 (bv.of_N 16) = bv.of_N 2). {
-      unfold declare_init_memory, gen_init_mem in HInitMem1.
-      cbn in HInitMem1.
-      apply Forall_inv in HInitMem1. exact HInitMem1. }
-    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
-      countdown_mem_instrs countdown_mem_exitCond n ws_instrs
-      [ctx] [env]
-      [] HpubReg
-      [(bv.of_N 16, true)] HpubMem
-      countdown_mem_cfg_contract valid_countdown_mem_cfg_contract
-      eq_refl eq_refl).
-    all: try eauto.
-    - intros i spec Hlook.
-      destruct i; cbn in Hlook; [inversion Hlook; subst | inversion Hlook].
-      vm_compute. done.
-    - intros Σ H.
-      iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
-      cbn. iFrame "Hpriv Hinv".
-      rewrite HInitM1.
-      iDestruct "Hmemdata" as "[Hmem _]".
-      rewrite <- (something_registers HpubReg).
-      rewrite gprs_with_registers_equiv. cbn.
-      iDestruct "Hregs" as "(Hx1 & _)".
-      iSplitL "".
-      { iSplit; [iPureIntro | done]. vm_compute. done. }
-      iSplitL "Hx1".
-      { iExists _. iExact "Hx1". }
-      iExact "Hmem".
-    - cbn. by unfold lenAddr.
+    eapply gen_contract_noninterferent;
+      [apply Prelude.nodup_fixed; reflexivity |
+       intros [|i] ? H; cbn in H; [inversion H; subst; vm_compute; done | discriminate] |
+       by cbn; unfold lenAddr | exact valid_countdown_mem_cfg_contract].
+  Qed.
+
+  Lemma cmovznz4_noninterferent :
+    noninterferent_strong cmovznz4_instrs (pcOutOfInstrs_exitCond cmovznz4_instrs)
+      cmovznz4_reg_specs cmovznz4_mem_specs.
+  Proof.
+    eapply gen_contract_noninterferent;
+      [apply Prelude.nodup_fixed; reflexivity |
+       intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
+         try (inversion H; subst; vm_compute; done); discriminate |
+       by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract].
   Qed.
 
 End Examples.
