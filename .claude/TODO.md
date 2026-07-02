@@ -166,6 +166,48 @@ matches) and set `cmovznz4_mem_specs` all-PRIVATE. Findings:
     `Examples.vo` compile *is* the test (its `Qed` check = the answer); no
     interactive session needed.
 
+*Follow-up (2026-07-03): the constructor fast-path and the true root.* Tried
+the cleaner fix — re-enable the commented-out structural fast-path fixpoint
+in `Symbolic/Monads.v`'s `demonic_pattern_match` wrapper (inspect the term:
+`term_get_union`/`term_get_pair` → read case+payload directly, skip the
+`secLeak` assert; fall back to `demonic_pattern_match'` for opaque terms).
+Results:
+  - **The fixpoint definition typechecks.** Guard checker is fine (recursion
+    `demonic (p K)` is the same shape as `PatternCase`/`EqDec_PatternCase`/
+    `Finite_PatternCase` in `Patterns.v`), and the dependent reassembly
+    `existT (existT K pc) δpc` works because `PatternCaseCtx (existT K pc) ≡
+    PatternCaseCtx pc` definitionally. The *only* gotcha was that inside the
+    `fix` body `σ` is implicit, so the recursive call is `demonic (p K) scr'`
+    — the old commented code's `demonic (unionk_ty U K) (p K) …` (passing σ
+    explicitly) is the bug that likely stalled this before.
+  - **The refinement is NOT a standalone lemma — it is false against the
+    current shallow spec, and the true root is `pattern_match_relval`.** The
+    shallow `CPureSpec.demonic_pattern_match` (Shallow/Monads.v:338) is
+    `assertSecLeak v ;; demonic_pattern_match' pat v`, and its whole
+    characterization goes through `pattern_match_relval` (Patterns.v:425):
+    `option_map … (option_map (pattern_match_val p) (ty.RVToOption rv))`,
+    where `RVToOption` sends `SyncVal v ↦ Some v` and **`NonSyncVal _ _ ↦
+    None`**. So the shallow model matches a `RelVal` by collapsing it to a
+    single `Val` — which only works when it is `SyncVal`; *any* `NonSyncVal`
+    (even `NonSyncVal v v`, even same-constructor) is unmatchable. The
+    symbolic union fast-path skips a `secLeak` that is genuinely not
+    derivable there (a `term_union K tl` interprets to `liftUnOp K (inst tl)`,
+    `NonSyncVal` iff `tl` is), so the refinement cannot hold against this
+    shallow spec.
+  - **This `RVToOption`-at-the-root is the same wall as the earlier
+    semantic-`secLeak` and `SyncVal/NonSyncVal`-at-the-leaves attempts.** All
+    three are really trying to change *how a `RelVal` is pattern-matched*. The
+    real fix: redefine `pattern_match_relval` to match a `NonSyncVal` **per
+    projection with a same-case check** (`pattern_match_val` both sides; if
+    the `PatternCase`s agree, return `Some` with the payloads zipped into
+    `NonSyncVal`; else `None`), then re-establish its tower
+    (`pattern_match_relval_inverse_*`, `wp_demonic/angelic_pattern_match`,
+    drop `assertSecLeak` from the shallow `demonic/angelic_pattern_match`,
+    re-prove `ShallowSoundness`), then the symbolic side + the refinement
+    fall out. This is a foundational change to `Patterns.v` — genuinely
+    "scope with Dominique," not a lemma. The fixpoint wrapper above is ready
+    to drop in once the shallow layer is weakened.
+
 **Gotchas found while proving `cmovznz4_noninterferent`:**
 - `fuel` must exceed the raw instruction count, and it's not obvious by how
   much. Every existing example already had slack (jmp_fwd: 2 instrs/fuel 5,
