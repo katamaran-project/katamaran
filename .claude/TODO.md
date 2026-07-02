@@ -140,6 +140,32 @@ then check that (a) `cmovznz4` with `x`/`y` PRIVATE now closes and (b) all
 existing case studies still compile. If both hold, the fix is "correct in
 shape" and only the honest soundness re-proof remains.
 
+*Spike RAN and CONFIRMED (2026-07-03).* Minimal version: in
+`Symbolic/Monads.v`, replaced the `assertSecLeak` in `demonic_pattern_match'`
+with a `pure` no-op (drops the scrutinee-secLeak obligation for demonic
+matches) and set `cmovznz4_mem_specs` all-PRIVATE. Findings:
+  - **(a) CONFIRMED:** a full `coqc` build of `CFGVer/Examples.vo` succeeded,
+    i.e. `valid_cmovznz4_cfg_contract`'s `vm_compute. solve_vc. Qed.` closed
+    *with x/y secret*, and `cmovznz4_noninterferent` (private mem_specs)
+    closed too. So removing the pattern-match payload-secLeak obligation is
+    exactly what unblocks LOAD-of-secret — root cause verified, not just
+    reasoned.
+  - **(b) blast radius, empirically:** the *only* proof that broke was
+    `theories/Refinement/Monads.v : refine_demonic_pattern_match'` (the
+    shallow-vs-symbolic refinement of `demonic_pattern_match'`) — `iApply
+    refine_assertSecLeak` no longer matches once the symbolic side drops the
+    assert. Admitting that single lemma let the entire theories + RiscvPmp +
+    CFGVer chain rebuild to `.vo` with no further breakage. That admit is
+    exactly the stand-in for the real work (steps 2/3/6: keep shallow +
+    symbolic in sync via `secLeakCase` and re-prove the refinement).
+  - Tooling notes for next time: petanque/Fleche needs real `.vo` deps (not
+    `.vos`) for interactive elaboration, and aggressively caches — testing a
+    core-executor change requires deleting stale `.vo` and doing a full `.vo`
+    rebuild (a `.vos` build is faster but can't be queried interactively and
+    skips the `Qed` that is the actual pass/fail signal). The batch
+    `Examples.vo` compile *is* the test (its `Qed` check = the answer); no
+    interactive session needed.
+
 **Gotchas found while proving `cmovznz4_noninterferent`:**
 - `fuel` must exceed the raw instruction count, and it's not obvious by how
   much. Every existing example already had slack (jmp_fwd: 2 instrs/fuel 5,
