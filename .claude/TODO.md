@@ -208,6 +208,79 @@ Results:
     "scope with Dominique," not a lemma. The fixpoint wrapper above is ready
     to drop in once the shallow layer is weakened.
 
+*Concrete implementation plan for the `pattern_match_relval` rewrite
+(2026-07-03).*
+
+  **New definition.** Keep the `SyncVal` branch exactly as today (so all
+  existing `SyncVal`-path lemmas are untouched); add a `NonSyncVal` branch
+  that matches per-projection with a same-case check:
+```coq
+  Definition relNamedEnv {Δ : NCtx N Ty} (δ1 δ2 : NamedEnv Val Δ)
+    : NamedEnv RelVal Δ :=
+    env.zipWith (fun _ v1 v2 => NonSyncVal v1 v2) δ1 δ2.
+
+  Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ)
+    : option (MatchResultRel p) :=
+    match rv with
+    | SyncVal v => Some (matchResultToMatchResultRel (pattern_match_val p v))
+    | NonSyncVal v1 v2 =>
+        let '(existT pc1 δ1) := pattern_match_val p v1 in
+        let '(existT pc2 δ2) := pattern_match_val p v2 in
+        match eq_dec pc1 pc2 with
+        | left e =>
+            Some (existT pc1
+              (relNamedEnv δ1
+                 (eq_rect_r (fun pc => NamedEnv Val (PatternCaseCtx pc)) δ2 e)))
+        | right _ => None   (* worlds take different branches ⇒ a leak *)
+        end
+    end.
+```
+  `eq_rect_r … e` transports `δ2 : NamedEnv Val (PatternCaseCtx pc2)` to
+  `PatternCaseCtx pc1` so `relNamedEnv` can zip the two payload envs. (Exact
+  `env` combinator name TBD — `env.zipWith`/`env.map2`.)
+
+  **Do NOT add a branching/non-branching classification of PatternCases**
+  (an approach tried before to cut duplication). It is subsumed by the
+  uniform `eq_dec pc1 pc2`: for non-branching patterns (`pat_var`,
+  `pat_pair`, `pat_unit`, `pat_bvec_split`, `pat_tuple`, `pat_record`)
+  `PatternCase = unit`, so `eq_dec tt tt` computes to `left eq_refl`, the
+  `None` branch is dead, and `eq_rect_r … eq_refl` reduces to `δ2`
+  definitionally (no transport). Branching patterns (`pat_bool`, `pat_sum`,
+  `pat_enum`, `pat_bvec_exhaustive`, `pat_union` — the last recursively via
+  `sigma_eqdec` in the existing `EqDec_PatternCase`) genuinely need the
+  check, and `eq_dec` supplies it. The kernel of truth behind the
+  classification — that `PatternCaseCtx` is *constant in the case* for
+  non-branching patterns, so no transport is needed there — is obtained for
+  free (transport along `eq_refl` = identity); a first-class Coq split forces
+  coverage/closure proofs re-threaded through `PatternCaseCtx` and is more
+  work, not less.
+
+  **Tower to re-establish (in order); the `eq_rect` is where it bites:**
+  1. `pattern_match_relval_inverse_right'`/`_left` (`Patterns.v:462`) — today
+     they case-split on `ty.unliftNamedEnv` ("is the whole env sync"); re-prove
+     for the new `NonSyncVal` branch (expect `dependent destruction` on the
+     `eq_dec` result + `eq_rect`-pushing). *Best self-contained starting point.*
+  2. `wp_demonic_pattern_match'`/`wp_angelic_pattern_match'`
+     (`Shallow/Monads.v:825`) — the statement changes: drop `secLeak v`, so it
+     becomes `demonic' pat v Φ ↔ option.wp Φ (pattern_match_relval …)`.
+     Correspondingly delete `assertSecLeak` from the shallow
+     `demonic/angelic_pattern_match` (`Shallow/Monads.v:326,340`).
+  3. `ShallowSoundness` pattern-match case (`ShallowSoundness.v:305`) — re-prove
+     vs `semWP2_pattern_match`; the `None` case lines up with `semWP2`'s
+     mixed-constructor `|={⊤}=> False`.
+  4. Symbolic side + refinement — drop the symbolic `assertSecLeak` (or gate it
+     behind the fast-path fixpoint above), then `refine_demonic_pattern_match'`
+     and the wrapper induction go through, since the shallow spec now permits
+     same-case `NonSyncVal`.
+
+  **Optional refinement (do AFTER the plain tower proves).** Make
+  `relNamedEnv` canonicalize: `if v1 =? v2 then SyncVal v1 else NonSyncVal
+  v1 v2` (needs `EqDec` on the leaf `Val`s — available). Then `NonSyncVal v v`
+  produces `SyncVal` payloads, so downstream `secLeak` recognizes
+  morally-sync values — folding the `NonSyncVal tt tt` frustration into the
+  same fix. Kept optional/deferred because canonicalization complicates the
+  inverse-lemma proofs (step 1), so land the plain version first.
+
 **Gotchas found while proving `cmovznz4_noninterferent`:**
 - `fuel` must exceed the raw instruction count, and it's not obvious by how
   much. Every existing example already had slack (jmp_fwd: 2 instrs/fuel 5,
