@@ -248,19 +248,22 @@ Module Type ShallowExecOn
 
       Lemma demonic_pattern_match_unfold {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
         (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
-        demonic_pattern_match pat v Φ δ h <-> secLeak v /\ demonic_pattern_match' pat v Φ δ h.
+        demonic_pattern_match pat v Φ δ h <->
+          (match pattern_match_relval pat v with Some _ => True | None => False end)
+          /\ demonic_pattern_match' pat (canonRelVal v) Φ δ h.
       Proof.
-        unfold demonic_pattern_match, CPureSpec.demonic_pattern_match, CPureSpec.bind, lift_purespec, CPureSpec.assertSecLeak, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
+        unfold demonic_pattern_match, CPureSpec.demonic_pattern_match, CPureSpec.bind, lift_purespec, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
         intuition.
       Qed.
 
       Lemma wp_demonic_pattern_match' {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
-        (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
-        secLeak v /\ demonic_pattern_match' pat v Φ δ h <->
-          option.wp (fun mr => Φ mr δ h) (pattern_match_relval pat v).
+        (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap)
+        (Hcanon : canonRelVal v = v) :
+        demonic_pattern_match' pat v Φ δ h <->
+          option.wlp (fun mr => Φ mr δ h) (pattern_match_relval pat v).
       Proof.
         unfold demonic_pattern_match', lift_purespec.
-        now rewrite CPureSpec.wp_demonic_pattern_match'.
+        rewrite CPureSpec.wp_demonic_pattern_match'; [ reflexivity | exact Hcanon ].
       Qed.
 
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)

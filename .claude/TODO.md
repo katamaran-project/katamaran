@@ -282,20 +282,52 @@ Results:
          `pattern_match_val_inverse_right` + `inj_pair2_eq_dec`.
        - `eq_dec pc1 pc2` collapse: `destruct e` (J-elim) reduces `eq_rect_r`
          along the case-equality to the identity — cleaner than UIP-rewriting.
-     Next: rename `_new` → the real `pattern_match_relval` and delete the old
-     one, or keep both during migration.
-  2. `wp_demonic_pattern_match'`/`wp_angelic_pattern_match'`
-     (`Shallow/Monads.v:825`) — the statement changes: drop `secLeak v`, so it
-     becomes `demonic' pat v Φ ↔ option.wp Φ (pattern_match_relval …)`.
-     Correspondingly delete `assertSecLeak` from the shallow
-     `demonic/angelic_pattern_match` (`Shallow/Monads.v:326,340`).
-  3. `ShallowSoundness` pattern-match case (`ShallowSoundness.v:305`) — re-prove
-     vs `semWP2_pattern_match`; the `None` case lines up with `semWP2`'s
-     mixed-constructor `|={⊤}=> False`.
-  4. Symbolic side + refinement — drop the symbolic `assertSecLeak` (or gate it
-     behind the fast-path fixpoint above), then `refine_demonic_pattern_match'`
-     and the wrapper induction go through, since the shallow spec now permits
-     same-case `NonSyncVal`.
+     **DONE: renamed `_new` → the real `pattern_match_relval`** (2026-07-03):
+     old def + old 3 inverse lemmas replaced by the canonicalizing def +
+     canonicalizing inverse lemmas. Added support lemmas `canonNamedEnv_diag`,
+     `projLeft/Right_map_canonNamedEnv`, `projLeft/Right_map_valToRelVal`,
+     `canonRelVal_idem`, `pattern_match_relval_canon` (matching sees through
+     top-level contamination: `pattern_match_relval p (NonSyncVal v v) =
+     pattern_match_relval p (SyncVal v)`), `pattern_match_relval_result_canonical`
+     (`= Some r → canonMatchResultRel r = r`). Full `coqc` Qed, `.vo` kept.
+  2. **DONE & verified (2026-07-03): `Shallow/Monads.v` fully compiles.**
+     The design turned out subtler than "drop `secLeak`" — contamination bites
+     at TWO levels and the naive drop is UNSOUND:
+       - **Payload**: `angelic/demonic_ctx` yield raw `vs` (possible
+         `NonSyncVal a a` leaves). So the primed ops must
+         `pure (canonMatchResultRel (existT pc vs))`, NOT `pure (existT pc vs)`
+         — else the biconditional breaks in opposite directions for ∃/∀.
+       - **Scrutinee**: `pattern_match_relval pat (NonSyncVal v1 v1)` returns
+         `Some(canonical)`, but the primed op's `reverse pc vs = v` constraint
+         can never reconstruct a contaminated `NonSyncVal v1 v1` (empty ctx ⇒
+         `reverse` is always `SyncVal`). Fix: canonicalize the scrutinee at the
+         wrapper — `..._pattern_match pat v := … pat (canonRelVal v)`.
+       - **Guard**: dropping the guard entirely makes DEMONIC miss genuine
+         branch-leaks (∀ is vacuously true when the worlds branch, but the spec
+         `option.wp Φ None = False`). Correct guard is the WEAKER
+         `is_Some (pattern_match_relval pat v)` ("branches agree"), encoded as
+         `match … Some ⇒ True | None ⇒ False`, NOT `secLeak v` (fully sync).
+         Angelic needs no guard (∃ self-fails).
+     Final statements: `wp_angelic_pattern_match' … (Hcanon : canonRelVal v = v)
+     : angelic' pat v Φ ↔ option.wp Φ (pattern_match_relval pat v)`;
+     `wp_demonic_pattern_match' … (Hcanon) : demonic' pat v Φ ↔ option.WLP Φ
+     (pattern_match_relval pat v)` (liberal wp — vacuous on branch); the
+     unprimed wrappers use `canonRelVal_idem` + `pattern_match_relval_canon`,
+     and demonic combines `is_Some ∧ wlp ↔ wp`. `ShallowExecutor.v`
+     `demonic_pattern_match_unfold` + `wp_demonic_pattern_match'` updated to
+     match (the latter now `↔ option.wlp`, takes `Hcanon`); `wp_demonic_pattern_match`
+     (→ `option.wp`) unchanged.
+  3. `ShallowSoundness` pattern-match case (`ShallowSoundness.v:268-309`) —
+     IN PROGRESS. Old proof used `assertSecLeak_sound` + old `demonic_pattern_match_unfold`
+     (secLeak form) + old `pattern_match_relval_inverse_right` (unlift Sync/None
+     form). All three changed. Must rework: new unfold gives
+     `(match Some/None) ∧ demonic' pat (canonRelVal v) …`; new inverse_right is
+     `= Some (canonMatchResultRel (existT pc δpc))`.
+  4. Symbolic side + refinement — the symbolic side must mirror the shallow:
+     canonicalize the payload + scrutinee + same-branch guard. This is where the
+     symbolic `canonRelVal`/`canonMatchResultRel` analogs are needed (comparing
+     symbolic terms) — likely the hardest remaining step. `refine_demonic_pattern_match'`
+     and the wrapper induction.
 
   **Optional refinement (do AFTER the plain tower proves).** Make
   `relNamedEnv` canonicalize: `if v1 =? v2 then SyncVal v1 else NonSyncVal

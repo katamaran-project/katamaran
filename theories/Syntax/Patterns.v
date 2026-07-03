@@ -419,11 +419,37 @@ Module Type PatternsOn (Import TY : Types).
 
 
 
-    (* Pattern match on a value. The result is a [PatternCase] that represents
-       the alternative corresponding to the value, together with an environment
-       that maps the variables of the pattern to values. *)
-    Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) : option (MatchResultRel p) :=
-      option_map matchResultToMatchResultRel (option_map (pattern_match_val p) (ty.RVToOption rv)).
+    (* Canonicalizing combine: SyncVal when the two worlds agree, NonSyncVal
+       only when they genuinely differ. Never creates NonSyncVal v v, so no
+       irreversible contamination of sync leaves. *)
+    Definition relValOfVals {σ} (v1 v2 : Val σ) : RelVal σ :=
+      if eq_dec v1 v2 then SyncVal v1 else NonSyncVal v1 v2.
+
+    Definition canonNamedEnv {Δ : NCtx N Ty} (δ1 δ2 : NamedEnv Val Δ) :
+      NamedEnv RelVal Δ :=
+      env.zipWith (fun b v1 v2 => relValOfVals v1 v2) δ1 δ2.
+
+    (* Pattern match on a relational value. The result is a [PatternCase] that
+       represents the alternative corresponding to the value, together with an
+       environment that maps the variables of the pattern to relational values.
+       For a NonSyncVal we match both worlds; if they take different branches the
+       match diverges (None), otherwise we canonicalize the per-leaf payloads so
+       that agreeing leaves stay SyncVal (no irreversible contamination). *)
+    Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) :
+      option (MatchResultRel p) :=
+      match rv with
+      | SyncVal v => Some (matchResultToMatchResultRel (pattern_match_val p v))
+      | NonSyncVal v1 v2 =>
+          let '(existT pc1 δ1) := pattern_match_val p v1 in
+          let '(existT pc2 δ2) := pattern_match_val p v2 in
+          match eq_dec pc1 pc2 with
+          | left e =>
+              Some (existT pc1
+                (canonNamedEnv δ1
+                   (eq_rect_r (fun pc => NamedEnv Val (PatternCaseCtx pc)) δ2 e)))
+          | right _ => None
+          end
+      end.
     #[global] Arguments pattern_match_relval {σ} p !rv.
 
     (* Reverse a pattern match. Given a [PatternCase] and an environment with
@@ -459,117 +485,15 @@ Module Type PatternsOn (Import TY : Types).
         * destruct (ty.unliftNamedEnv E); discriminate H.
     Qed.
       
-    Lemma pattern_match_relval_inverse_right' {σ} (p : Pattern σ) :
-      forall (r : MatchResultRel p),
-        pattern_match_relval p (pattern_match_relval_reverse' p r) =
-          match ty.unliftNamedEnv (projT2 r) with
-          | SyncVal _ => Some r
-          | _ => None
-          end
-    .
-    Proof.
-      intros r.
-      destruct r.
-      unfold pattern_match_relval_reverse'.
-      unfold pattern_match_relval_reverse.
-      unfold pattern_match_relval.
-      cbn.
-      destruct (ty.unliftNamedEnv n) as [|] eqn:H.
-      - cbn in *.
-        change (pattern_match_val_reverse p x n0) with
-          (pattern_match_val_reverse' p (existT x n0)).
-        rewrite pattern_match_val_inverse_right'.
-        apply f_equal.
-        unfold matchResultToMatchResultRel.
-        apply f_equal. cbn.
-        generalize dependent (PatternCaseCtx x).
-        intros.
-        now apply unliftIsSyncValImpliesAllSync.
-      - auto.
-    Qed.
-
-    Lemma pattern_match_relval_inverse_right {σ} (pat : Pattern σ)
-      (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) :
-      pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) =
-        match ty.unliftNamedEnv δpc with
-        | SyncVal _ => Some (existT pc δpc)
-        | _ => None
-        end
-    .
-    Proof.
-      unfold pattern_match_relval_reverse.
-      destruct (ty.unliftNamedEnv δpc) as [|] eqn:H.
-      - cbn. repeat rewrite pattern_match_val_inverse_right.
-        unfold matchResultToMatchResultRel. cbn. f_equal. f_equal.
-        now apply unliftIsSyncValImpliesAllSync.
-      - auto.
-    Qed.
-
-    Lemma unliftNamedEnvOfEnvMapValToRelValIsSyncVal {Γ} {nenv : NamedEnv Val Γ} :
-      ty.unliftNamedEnv (env.map (λ b : N∷Ty, ty.valToRelVal) nenv) = SyncVal nenv.
-    Proof.
-      induction nenv.
-      - auto.
-      - cbn. destruct (ty.unliftNamedEnv (env.map (λ b0 : N∷Ty, ty.valToRelVal) nenv)).
-        + inversion IHnenv. auto.
-        + inversion IHnenv.
-    Qed.
-        
-    Lemma pattern_match_relval_inverse_left {σ} (pat : Pattern σ) :
-      forall rv : RelVal σ,
-        option.map (pattern_match_relval_reverse' pat) (pattern_match_relval pat rv) = option.map SyncVal (ty.RVToOption rv).
-    Proof.
-      destruct rv.
-      - cbn. f_equal. unfold pattern_match_relval_reverse'. unfold pattern_match_relval_reverse. unfold matchResultToMatchResultRel. cbn.
-        rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal.
-        cbn.
-        change (pattern_match_val_reverse pat (projT1 ?x)
-                  (projT2 ?x)) with
-          (pattern_match_val_reverse' pat (pattern_match_val pat v)).
-        rewrite pattern_match_val_inverse_left.
-        auto.
-      - auto.
-    Qed.
-
-    (* === STEP 1 EXPERIMENT (canonicalizing pattern_match_relval) === *)
-    (* Canonicalizing combine: SyncVal when the two worlds agree, NonSyncVal
-       only when they genuinely differ. Never creates NonSyncVal v v, so no
-       irreversible contamination of sync leaves. *)
-    Definition relValOfVals {σ} (v1 v2 : Val σ) : RelVal σ :=
-      if eq_dec v1 v2 then SyncVal v1 else NonSyncVal v1 v2.
-
-    Definition canonNamedEnv {Δ : NCtx N Ty} (δ1 δ2 : NamedEnv Val Δ) :
-      NamedEnv RelVal Δ :=
-      env.zipWith (fun b v1 v2 => relValOfVals v1 v2) δ1 δ2.
-
-    Definition pattern_match_relval_new {σ} (p : Pattern σ) (rv : RelVal σ) :
-      option (MatchResultRel p) :=
-      match rv with
-      | SyncVal v => Some (matchResultToMatchResultRel (pattern_match_val p v))
-      | NonSyncVal v1 v2 =>
-          let '(existT pc1 δ1) := pattern_match_val p v1 in
-          let '(existT pc2 δ2) := pattern_match_val p v2 in
-          match eq_dec pc1 pc2 with
-          | left e =>
-              Some (existT pc1
-                (canonNamedEnv δ1
-                   (eq_rect_r (fun pc => NamedEnv Val (PatternCaseCtx pc)) δ2 e)))
-          | right _ => None
-          end
-      end.
-
-    (* Canonicalization of a MatchResultRel payload: what the reverse+match
-       round-trip actually recovers (sync leaves stay sync; NonSyncVal v v
-       leaves, if any, collapse to SyncVal v). *)
     Definition canonMatchResultRel {σ} {p : Pattern σ}
       (r : MatchResultRel p) : MatchResultRel p :=
       existT (projT1 r)
         (canonNamedEnv (env.map (fun b rv => ty.projLeft (A := type b) rv) (projT2 r))
                        (env.map (fun b rv => ty.projRight (A := type b) rv) (projT2 r))).
 
-    Lemma pattern_match_relval_new_inverse_right' {σ} (p : Pattern σ) :
+    Lemma pattern_match_relval_inverse_right' {σ} (p : Pattern σ) :
       forall (r : MatchResultRel p),
-        pattern_match_relval_new p (pattern_match_relval_reverse' p r) =
+        pattern_match_relval p (pattern_match_relval_reverse' p r) =
           Some (canonMatchResultRel r).
     Proof.
       intros [pc onenv].
@@ -599,6 +523,12 @@ Module Type PatternsOn (Import TY : Types).
           Hunlift; cbn.
         reflexivity.
     Qed.
+
+    Lemma pattern_match_relval_inverse_right {σ} (pat : Pattern σ)
+      (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) :
+      pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) =
+        Some (canonMatchResultRel (existT pc δpc)).
+    Proof. exact (pattern_match_relval_inverse_right' pat (existT pc δpc)). Qed.
 
     (* RelVal-level canonicalization: SyncVal when the two worlds agree. *)
     Definition canonRelVal {σ} (rv : RelVal σ) : RelVal σ :=
@@ -642,9 +572,19 @@ Module Type PatternsOn (Import TY : Types).
           [exfalso; apply Hne, Hinj, Hfe | reflexivity].
     Qed.
 
-    Lemma pattern_match_relval_new_inverse_left {σ} (p : Pattern σ)
+    Lemma unliftNamedEnvOfEnvMapValToRelValIsSyncVal {Γ} {nenv : NamedEnv Val Γ} :
+      ty.unliftNamedEnv (env.map (λ b : N∷Ty, ty.valToRelVal) nenv) = SyncVal nenv.
+    Proof.
+      induction nenv.
+      - auto.
+      - cbn. destruct (ty.unliftNamedEnv (env.map (λ b0 : N∷Ty, ty.valToRelVal) nenv)).
+        + inversion IHnenv. auto.
+        + inversion IHnenv.
+    Qed.
+
+    Lemma pattern_match_relval_inverse_left {σ} (p : Pattern σ)
       (rv : RelVal σ) (r : MatchResultRel p) :
-      pattern_match_relval_new p rv = Some r ->
+      pattern_match_relval p rv = Some r ->
       pattern_match_relval_reverse' p r = canonRelVal rv.
     Proof.
       destruct rv as [v | v1 v2]; cbn.
@@ -677,7 +617,92 @@ Module Type PatternsOn (Import TY : Types).
         rewrite !pattern_match_val_inverse_right in Hab.
         exact (Eqdep_dec.inj_pair2_eq_dec _ (fun x y => eq_dec x y) _ _ _ _ Hab).
     Qed.
-    (* === END STEP 1 EXPERIMENT === *)
+
+    (* --- Canonicalization support for the shallow pattern-match wp lemmas --- *)
+
+    (* canonNamedEnv on a diagonal is the sync embedding. *)
+    Lemma canonNamedEnv_diag {Δ : NCtx N Ty} (δ : NamedEnv Val Δ) :
+      canonNamedEnv δ δ = ty.syncNamedEnv δ.
+    Proof.
+      unfold canonNamedEnv, ty.syncNamedEnv; induction δ; cbn; [reflexivity|].
+      f_equal; [apply IHδ|]; unfold relValOfVals;
+        match goal with |- context[eq_dec ?a ?a] => now destruct (eq_dec a a) end.
+    Qed.
+
+    Lemma projLeft_map_canonNamedEnv {Δ : NCtx N Ty} (a c : NamedEnv Val Δ) :
+      env.map (fun b rv => ty.projLeft (A := type b) rv) (canonNamedEnv a c) = a.
+    Proof.
+      revert c; induction a; intro c; env.destroy c; cbn; [reflexivity|].
+      unfold canonNamedEnv in *; cbn; f_equal; [apply IHa|];
+        unfold relValOfVals;
+        match goal with |- context[eq_dec ?x ?y] => now destruct (eq_dec x y) end.
+    Qed.
+
+    Lemma projRight_map_canonNamedEnv {Δ : NCtx N Ty} (a c : NamedEnv Val Δ) :
+      env.map (fun b rv => ty.projRight (A := type b) rv) (canonNamedEnv a c) = c.
+    Proof.
+      revert c; induction a; intro c; env.destroy c; cbn; [reflexivity|].
+      unfold canonNamedEnv in *; cbn; f_equal; [apply IHa|];
+        unfold relValOfVals;
+        match goal with |- context[eq_dec ?x ?y] => now destruct (eq_dec x y) end.
+    Qed.
+
+    Lemma projLeft_map_valToRelVal {Δ : NCtx N Ty} (δ : NamedEnv Val Δ) :
+      env.map (fun b rv => ty.projLeft (A := type b) rv)
+        (env.map (fun b => ty.valToRelVal) δ) = δ.
+    Proof. induction δ; cbn; [reflexivity | now f_equal]. Qed.
+
+    Lemma projRight_map_valToRelVal {Δ : NCtx N Ty} (δ : NamedEnv Val Δ) :
+      env.map (fun b rv => ty.projRight (A := type b) rv)
+        (env.map (fun b => ty.valToRelVal) δ) = δ.
+    Proof. induction δ; cbn; [reflexivity | now f_equal]. Qed.
+
+    (* canonRelVal is idempotent: its output is always canonical. *)
+    Lemma canonRelVal_idem {σ} (rv : RelVal σ) :
+      canonRelVal (canonRelVal rv) = canonRelVal rv.
+    Proof.
+      unfold canonRelVal, relValOfVals; destruct rv as [v|v1 v2]; cbn.
+      - destruct (eq_dec v v) as [e|n]; [cbn|congruence].
+        destruct (eq_dec v v); congruence.
+      - destruct (eq_dec v1 v2) as [e|n]; cbn.
+        + destruct (eq_dec v1 v1); congruence.
+        + destruct (eq_dec v1 v2); congruence.
+    Qed.
+
+    (* Matching sees through top-level contamination of the scrutinee:
+       NonSyncVal v v behaves exactly like SyncVal v. *)
+    Lemma pattern_match_relval_canon {σ} (p : Pattern σ) (rv : RelVal σ) :
+      pattern_match_relval p (canonRelVal rv) = pattern_match_relval p rv.
+    Proof.
+      unfold canonRelVal, relValOfVals; destruct rv as [v|v1 v2]; cbn.
+      - now destruct (eq_dec v v).
+      - destruct (eq_dec v1 v2) as [->|Hne]; cbn; [|reflexivity].
+        destruct (pattern_match_val p v2) as [pc δ] eqn:E; cbn.
+        destruct (eq_dec pc pc) as [e|C]; [|now contradiction C].
+        rewrite (Eqdep_dec.UIP_dec (fun x y => eq_dec x y) e eq_refl); cbn.
+        unfold matchResultToMatchResultRel; cbn.
+        now rewrite canonNamedEnv_diag.
+    Qed.
+
+    (* The result of a successful match is always canonical. *)
+    Lemma pattern_match_relval_result_canonical {σ} (p : Pattern σ)
+      (rv : RelVal σ) (r : MatchResultRel p) :
+      pattern_match_relval p rv = Some r -> canonMatchResultRel r = r.
+    Proof.
+      destruct rv as [v|v1 v2]; cbn.
+      - intros H; inversion H; subst r; clear H.
+        destruct (pattern_match_val p v) as [pc δ]; cbn.
+        unfold canonMatchResultRel, matchResultToMatchResultRel; cbn.
+        rewrite projLeft_map_valToRelVal, projRight_map_valToRelVal.
+        rewrite canonNamedEnv_diag. reflexivity.
+      - destruct (pattern_match_val p v1) as [pc1 δ1] eqn:E1.
+        destruct (pattern_match_val p v2) as [pc2 δ2] eqn:E2.
+        destruct (eq_dec pc1 pc2) as [e|C]; [|discriminate].
+        destruct e; cbn; intros H; inversion H; subst r; clear H.
+        unfold canonMatchResultRel; cbn.
+        rewrite projLeft_map_canonNamedEnv, projRight_map_canonNamedEnv.
+        reflexivity.
+    Qed.
 
 
     (* The intendend use case of the above definitions is in the declaration of
