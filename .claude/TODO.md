@@ -256,10 +256,34 @@ Results:
   work, not less.
 
   **Tower to re-establish (in order); the `eq_rect` is where it bites:**
-  1. `pattern_match_relval_inverse_right'`/`_left` (`Patterns.v:462`) — today
-     they case-split on `ty.unliftNamedEnv` ("is the whole env sync"); re-prove
-     for the new `NonSyncVal` branch (expect `dependent destruction` on the
-     `eq_dec` result + `eq_rect`-pushing). *Best self-contained starting point.*
+  1. `pattern_match_relval_inverse_right'`/`_left` — **DONE & verified
+     (2026-07-03)**, against the canonicalizing definition, in the
+     `=== STEP 1 EXPERIMENT ===` block in `Patterns.v` (non-destructive:
+     adds `relValOfVals`, `canonNamedEnv`, `pattern_match_relval_new`,
+     `canonMatchResultRel`, `canonRelVal`, and the two inverse lemmas;
+     leaves the old `pattern_match_relval` untouched). Zero admits, full
+     `coqc` Qed. Key points that made it work:
+       - CANONICALIZING zip (`relValOfVals`: `SyncVal` when the two agree,
+         `NonSyncVal` only when they differ) — never creates `NonSyncVal v v`,
+         so no irreversible contamination (this was the crux Dominique hit
+         with the plain `nonsyncNamedEnv`).
+       - The inverse-right statement is `= Some (canonMatchResultRel r)` (NOT
+         `= Some r`): the round-trip recovers `r` *up to canonicalization*,
+         since a pre-existing `NonSyncVal v v` collapses to `SyncVal v` — but
+         that is semantically transparent. inverse-left is the conditional
+         form `pattern_match_relval_new p rv = Some r -> reverse' r =
+         canonRelVal rv`.
+       - Key structural helper: `liftUnOp_unlift_canon` —
+         `liftUnOpRV f (unliftNamedEnv (canonNamedEnv δ1 δ2)) =
+         relValOfVals (f δ1) (f δ2)` for injective `f`; proved via
+         `projLeftRVunliftNamedEnv`/`projRightRVunliftNamedEnv` + a case on
+         whether the unlift is `SyncVal`/`NonSyncVal` (no messy `eq_dec` on
+         whole envs). `reverse`'s injectivity comes from
+         `pattern_match_val_inverse_right` + `inj_pair2_eq_dec`.
+       - `eq_dec pc1 pc2` collapse: `destruct e` (J-elim) reduces `eq_rect_r`
+         along the case-equality to the identity — cleaner than UIP-rewriting.
+     Next: rename `_new` → the real `pattern_match_relval` and delete the old
+     one, or keep both during migration.
   2. `wp_demonic_pattern_match'`/`wp_angelic_pattern_match'`
      (`Shallow/Monads.v:825`) — the statement changes: drop `secLeak v`, so it
      becomes `demonic' pat v Φ ↔ option.wp Φ (pattern_match_relval …)`.
