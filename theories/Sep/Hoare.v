@@ -185,10 +185,11 @@ Module Type ProgramLogicOn
         {σ} (s : Stm Γ σ) (pat : Pattern σ)
         (rhs : forall (pc : PatternCase pat), Stm (Γ ▻▻ PatternCaseCtx pc) τ)
         (P : L) (Q : RelVal σ -> CStore Γ -> L) (R : RelVal τ -> CStore Γ -> L) :
-      ⦃ P ⦄ s ; δ ⦃ fun rv δ =>  ⌜secLeak rv⌝ ∗ Q rv δ ⦄ ->
-                (forall pc δpc δ',
-                    ⦃ Q (pattern_match_relval_reverse pat pc δpc) δ' ⦄ rhs pc ; δ' ►► δpc
-                                                                               ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
+      ⦃ P ⦄ s ; δ ⦃ fun rv δ =>  ⌜is_Some (pattern_match_relval pat rv)⌝ ∗ Q rv δ ⦄ ->
+                (forall pc δpc δ' rv,
+                    pattern_match_relval pat rv = Some (existT pc δpc) ->
+                    ⦃ Q rv δ' ⦄ rhs pc ; δ' ►► δpc
+                                         ⦃ fun v2 δ' => R v2 (env.drop (PatternCaseCtx pc) δ') ⦄) ->
                 ⦃ P ⦄ stm_pattern_match s pat rhs ; δ ⦃ R ⦄
 
       where "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P%I s Q%I).

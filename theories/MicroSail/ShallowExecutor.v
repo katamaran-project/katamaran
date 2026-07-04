@@ -246,25 +246,12 @@ Module Type ShallowExecOn
         lift_purespec (CPureSpec.demonic_pattern_match pat v).
       #[global] Arguments demonic_pattern_match {N Γ σ} pat v.
 
-      Lemma demonic_pattern_match_unfold {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
-        (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :
-        demonic_pattern_match pat v Φ δ h <->
-          (match pattern_match_relval pat v with Some _ => True | None => False end)
-          /\ demonic_pattern_match' pat (canonRelVal v) Φ δ h.
-      Proof.
-        unfold demonic_pattern_match, CPureSpec.demonic_pattern_match, CPureSpec.bind, lift_purespec, CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
-        intuition.
-      Qed.
-
-      Lemma wp_demonic_pattern_match' {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
-        (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap)
-        (Hcanon : canonRelVal v = v) :
-        demonic_pattern_match' pat v Φ δ h <->
-          option.wlp (fun mr => Φ mr δ h) (pattern_match_relval pat v).
-      Proof.
-        unfold demonic_pattern_match', lift_purespec.
-        rewrite CPureSpec.wp_demonic_pattern_match'; [ reflexivity | exact Hcanon ].
-      Qed.
+      (* METHOD Y: the shallow (concrete) pattern match is deterministic, so its
+         wp is exactly [option.wp] of [pattern_match_relval] (see the note in
+         Shallow/Monads.v). The former [demonic_pattern_match_unfold] (in terms of
+         [demonic_pattern_match']) and [wp_demonic_pattern_match'] (option.wlp)
+         were METHOD-X artifacts and are no longer valid — [wp_demonic_pattern_match]
+         below is the characterization to use downstream. *)
 
       Lemma wp_demonic_pattern_match {N : Set} {Γ σ} (pat : Pattern (N:=N) σ) (v : RelVal σ)
         (Φ : MatchResultRel pat -> CStore Γ -> SCHeap -> Prop) (δ : CStore Γ) (h : SCHeap) :

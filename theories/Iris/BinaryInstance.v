@@ -230,7 +230,9 @@ Module IrisInstanceWithContracts2
     - by iApply iris_rule_stm_lemmak.
     (* - by iApply iris_rule_stm_bind. *)
     - by iApply iris_rule_stm_debugk.
-    - by iApply iris_rule_stm_pattern_match.
+    - iApply iris_rule_stm_pattern_match;
+        [ iExact "trips1"
+        | iIntros (pc δpc δΓ1 rv) "%Hpmr"; iApply ("trips" $! pc δpc δΓ1 rv); iPureIntro; exact Hpmr ].
   Qed.
 
   Lemma sound :

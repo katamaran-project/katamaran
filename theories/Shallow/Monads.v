@@ -318,17 +318,21 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         pc <- angelic_finite (PatternCase pat);;
         vs <- angelic_ctx (PatternCaseCtx pc) ;;
         _  <- assert_formula (pattern_match_relval_reverse pat pc vs = v);;
-        pure (canonMatchResultRel (existT pc vs)).
+        pure (existT pc vs).
       #[global] Arguments angelic_pattern_match' {σ} pat v.
 
-      (* Canonicalize the scrutinee first: [canonRelVal] output is always
-         canonical (SyncVal, or NonSyncVal with genuinely distinct sides), so a
-         contaminated [NonSyncVal v1 v1] scrutinee never reaches the primed op,
-         where [reverse pc vs = v] could never reconstruct it. Angelic needs no
-         same-branch guard: its existential self-fails when the worlds branch. *)
+      (* METHOD Y: the shallow pattern match is deterministic on a concrete
+         relational value — it is exactly the (raw) [pattern_match_relval], with
+         [None] (worlds take different branches ⇒ a real leak) mapped to the
+         unprovable [False]. Reduces per-pattern-case, so it lines up with the
+         symbolic fast-path fixpoint in the refinement. Angelic and demonic
+         coincide here (no nondeterminism once [v] is concrete). *)
       Definition angelic_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
-        angelic_pattern_match' pat (canonRelVal v).
+        match pattern_match_relval pat v with
+        | Some r => pure r
+        | None   => error
+        end.
       #[global] Arguments angelic_pattern_match {σ} pat v.
 
       Definition demonic_pattern_match' {σ} (pat : Pattern (N:=N) σ)
@@ -336,21 +340,40 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         pc <- demonic_finite (PatternCase pat);;
         vs <- demonic_ctx (PatternCaseCtx pc) ;;
         _  <- assume_formula (pattern_match_relval_reverse pat pc vs = v);;
-        pure (canonMatchResultRel (existT pc vs)).
+        pure (existT pc vs).
       #[global] Arguments demonic_pattern_match' {σ} pat v.
 
-      (* The guard asserts the two worlds take the *same branch* (branches
-         agree, i.e. [pattern_match_relval] does not diverge) — strictly weaker
-         than the old [secLeak v] (fully sync). This is what unblocks matching on
-         a secret that does not branch (e.g. a LOAD result), while still
-         catching a genuine branch on a secret as a leak (is_Some = False). *)
       Definition demonic_pattern_match {σ} (pat : Pattern (N:=N) σ)
         (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
-        _ <- assert_formula
-               (match pattern_match_relval pat v with
-                | Some _ => True | None => False end);;
-        demonic_pattern_match' pat (canonRelVal v).
+        match pattern_match_relval pat v with
+        | Some r => pure r
+        | None   => error
+        end.
       #[global] Arguments demonic_pattern_match {σ} pat v.
+
+      (* The sync-only variants mirror the current symbolic executor's structure
+         exactly: assert the scrutinee is fully synchronized, then match with a
+         raw (un-canonicalized) payload. They entail the canonicalizing versions
+         above (secLeak forces a SyncVal scrutinee, under which the same-branch
+         guard holds and both canonicalizations are identities) and are used to
+         prove refinement of the (conservative) symbolic pattern match. *)
+      Definition angelic_pattern_match_sync {σ} (pat : Pattern (N:=N) σ)
+        (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
+        _  <- assertSecLeak v;;
+        pc <- angelic_finite (PatternCase pat);;
+        vs <- angelic_ctx (PatternCaseCtx pc) ;;
+        _  <- assert_formula (pattern_match_relval_reverse pat pc vs = v);;
+        pure (existT pc vs).
+      #[global] Arguments angelic_pattern_match_sync {σ} pat v.
+
+      Definition demonic_pattern_match_sync {σ} (pat : Pattern (N:=N) σ)
+        (v : RelVal σ) : CPureSpec (MatchResultRel pat) :=
+        _  <- assertSecLeak v;;
+        pc <- demonic_finite (PatternCase pat);;
+        vs <- demonic_ctx (PatternCaseCtx pc) ;;
+        _  <- assume_formula (pattern_match_relval_reverse pat pc vs = v);;
+        pure (existT pc vs).
+      #[global] Arguments demonic_pattern_match_sync {σ} pat v.
 
       (* Definition new_pattern_match {σ} (pat : Pattern (N:=N) σ) *)
       (*   (v : Val σ) : CPureSpec (MatchResult pat) := *)
@@ -599,10 +622,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
 
     #[export] Instance mon_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@angelic_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+    Proof. unfold angelic_pattern_match. destruct (pattern_match_relval pat v); typeclasses eauto. Qed.
     #[export] Instance mon_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v :
       Monotonic (MPureSpec eq) (@demonic_pattern_match _ _ pat v).
-    Proof. typeclasses eauto. Qed.
+    Proof. unfold demonic_pattern_match. destruct (pattern_match_relval pat v); typeclasses eauto. Qed.
 
     (* #[export] Instance mon_new_pattern_match {N σ} (pat : Pattern (N:=N) σ) v : *)
     (*   Monotonic (MPureSpec eq) (@new_pattern_match _ _ pat v). *)
@@ -780,90 +803,122 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       auto.
     Qed.
 
-    (* For a *canonical* scrutinee, the angelic pattern match refines exactly the
-       (canonicalizing) [pattern_match_relval]. No [secLeak] guard is needed: the
-       existential naturally fails (option.wp None = False) when the worlds branch. *)
-    Lemma wp_angelic_pattern_match' {N σ} (pat : Pattern (N:=N) σ) v
-      (Φ : MatchResultRel pat -> Prop) (Hcanon : canonRelVal v = v) :
-      angelic_pattern_match' pat v Φ <->
-        option.wp Φ (pattern_match_relval pat v).
-    Proof.
-      unfold angelic_pattern_match', angelic_finite. cbn.
-      rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
-      split.
-      - intros (pc & Hin & vs & Heq & Hwp).
-        apply (f_equal (pattern_match_relval pat)) in Heq.
-        change (pattern_match_relval_reverse pat pc vs)
-          with (pattern_match_relval_reverse' pat (existT pc vs)) in Heq.
-        rewrite pattern_match_relval_inverse_right' in Heq.
-        rewrite <- Heq, option.wp_some. exact Hwp.
-      - intros HΦ.
-        destruct (pattern_match_relval pat v) as [r|] eqn:E;
-          [rewrite option.wp_some in HΦ | rewrite option.wp_none in HΦ; contradiction].
-        pose proof (pattern_match_relval_result_canonical pat v r E) as Hc.
-        pose proof (pattern_match_relval_inverse_left pat v r E) as Hrev.
-        destruct r as [pc0 vs0].
-        exists pc0. split.
-        { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
-        exists vs0. split.
-        { change (pattern_match_relval_reverse pat pc0 vs0)
-            with (pattern_match_relval_reverse' pat (existT pc0 vs0)).
-          rewrite Hrev. exact Hcanon. }
-        rewrite Hc. exact HΦ.
-    Qed.
-
+    (* METHOD Y: the shallow pattern match on a *concrete* relational value is
+       deterministic — it IS [option.wp] of the (raw) [pattern_match_relval], by
+       definition (angelic and demonic coincide once v is concrete). NB: the
+       quantifying [angelic_pattern_match']/[demonic_pattern_match'] do NOT admit
+       an [option.wp] characterization (for a multi-leaf pattern the ∃/∀ ranges
+       over semantically-equal-but-contaminated payload representations, which
+       [option.wp] of the single raw result does not see); they only quantify
+       meaningfully at the SYMBOLIC level. *)
     Lemma wp_angelic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
       (Φ : MatchResultRel pat -> Prop) :
       angelic_pattern_match pat v Φ <->
         option.wp Φ (pattern_match_relval pat v).
     Proof.
-      unfold angelic_pattern_match.
-      rewrite wp_angelic_pattern_match'; [ now rewrite pattern_match_relval_canon
-                                         | apply canonRelVal_idem ].
-    Qed.
-
-    (* For a canonical scrutinee, the demonic pattern match refines the *liberal*
-       wp: it vacuously succeeds when the worlds branch (option.wlp None = True).
-       The [demonic_pattern_match] wrapper adds the same-branch guard, upgrading
-       wlp to wp. *)
-    Lemma wp_demonic_pattern_match' {N σ} (pat : Pattern (N:=N) σ) v
-      (Φ : MatchResultRel pat -> Prop) (Hcanon : canonRelVal v = v) :
-      demonic_pattern_match' pat v Φ <-> option.wlp Φ (pattern_match_relval pat v).
-    Proof.
-      unfold demonic_pattern_match', demonic_finite. cbn.
-      rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
-      split.
-      - intros Hall.
-        destruct (pattern_match_relval pat v) as [r|] eqn:E;
-          [rewrite option.wlp_some | rewrite option.wlp_none; exact I].
-        pose proof (pattern_match_relval_result_canonical pat v r E) as Hc.
-        pose proof (pattern_match_relval_inverse_left pat v r E) as Hrev.
-        destruct r as [pc0 vs0].
-        specialize (Hall pc0).
-        rewrite <- base.elem_of_list_In in Hall.
-        specialize (Hall (finite.elem_of_enum _) vs0).
-        assert (Hr : pattern_match_relval_reverse pat pc0 vs0 = v).
-        { change (pattern_match_relval_reverse pat pc0 vs0)
-            with (pattern_match_relval_reverse' pat (existT pc0 vs0)).
-          rewrite Hrev. exact Hcanon. }
-        specialize (Hall Hr). rewrite Hc in Hall. exact Hall.
-      - intros Hwlp pc Hin vs Heq.
-        apply (f_equal (pattern_match_relval pat)) in Heq.
-        change (pattern_match_relval_reverse pat pc vs)
-          with (pattern_match_relval_reverse' pat (existT pc vs)) in Heq.
-        rewrite pattern_match_relval_inverse_right' in Heq.
-        rewrite <- Heq, option.wlp_some in Hwlp. exact Hwlp.
+      unfold angelic_pattern_match. destruct (pattern_match_relval pat v) as [r|];
+        [rewrite option.wp_some | rewrite option.wp_none]; reflexivity.
     Qed.
 
     Lemma wp_demonic_pattern_match {N σ} (pat : Pattern (N:=N) σ) v
       (Φ : MatchResultRel pat -> Prop) :
       demonic_pattern_match pat v Φ <-> option.wp Φ (pattern_match_relval pat v).
     Proof.
-      unfold demonic_pattern_match, bind, assert_formula, assert_pathcondition.
-      rewrite wp_demonic_pattern_match'; [ | apply canonRelVal_idem ].
-      rewrite pattern_match_relval_canon.
-      destruct (pattern_match_relval pat v) as [r|] eqn:E; cbn;
-        [ rewrite option.wlp_some option.wp_some | rewrite option.wp_none ]; intuition.
+      unfold demonic_pattern_match. destruct (pattern_match_relval pat v) as [r|];
+        [rewrite option.wp_some | rewrite option.wp_none]; reflexivity.
+    Qed.
+
+    (* The sync-only variants are characterized by the same wp, strengthened
+       with [secLeak]: on a SyncVal scrutinee the canonicalizing
+       [pattern_match_relval] agrees with the raw one, and the raw payload is
+       all-sync (hence canonicalization-invariant). *)
+    Lemma wp_angelic_pattern_match_sync {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      angelic_pattern_match_sync pat v Φ <->
+        secLeak v /\ option.wp Φ (pattern_match_relval pat v).
+    Proof.
+      unfold angelic_pattern_match_sync, angelic_finite. cbn.
+      rewrite wp_assertSecLeak.
+      rewrite wp_angelic_list. setoid_rewrite wp_angelic_ctx.
+      split.
+      - intros (sLv & (pc & Hin & δpc & <- & Hwp)).
+        split; [exact sLv|].
+        rewrite pattern_match_relval_inverse_right.
+        unfold pattern_match_relval_reverse in sLv.
+        destruct (ty.unliftNamedEnv δpc) as [δ|δ1 δ2] eqn:Hu.
+        + rewrite option.wp_some. exact Hwp.
+        + cbn in sLv. contradiction.
+      - intros (sLv & HΦ).
+        split; [exact sLv|].
+        destruct v as [v0|v1 v2]; [|contradiction sLv].
+        cbn in HΦ. rewrite option.wp_some in HΦ.
+        destruct (pattern_match_val pat v0) as [pc δpc] eqn:Epm.
+        cbn in HΦ.
+        exists pc. split.
+        { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
+        exists (env.map (fun b => ty.valToRelVal) δpc). split.
+        { unfold pattern_match_relval_reverse.
+          rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal. cbn.
+          f_equal.
+          pose proof (pattern_match_val_inverse_left pat v0) as Hinv.
+          rewrite Epm in Hinv. exact Hinv. }
+        exact HΦ.
+    Qed.
+
+    Lemma wp_demonic_pattern_match_sync {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      demonic_pattern_match_sync pat v Φ <->
+        secLeak v /\ option.wp Φ (pattern_match_relval pat v).
+    Proof.
+      unfold demonic_pattern_match_sync, demonic_finite. cbn.
+      rewrite wp_assertSecLeak.
+      rewrite wp_demonic_list. setoid_rewrite wp_demonic_ctx.
+      split.
+      - intros (sLv & HΦ). split; [exact sLv|].
+        destruct v as [v0|v1 v2]; [|contradiction sLv].
+        cbn. rewrite option.wp_some.
+        destruct (pattern_match_val pat v0) as [pc δpc] eqn:Epm. cbn.
+        specialize (HΦ pc).
+        rewrite <- base.elem_of_list_In in HΦ.
+        specialize (HΦ (finite.elem_of_enum _) (env.map (fun b => ty.valToRelVal) δpc)).
+        apply HΦ.
+        unfold pattern_match_relval_reverse.
+        rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal. cbn.
+        f_equal.
+        pose proof (pattern_match_val_inverse_left pat v0) as Hinv.
+        rewrite Epm in Hinv. exact Hinv.
+      - intros (sLv & HΦ). split; [exact sLv|].
+        intros pc HIn δpc Heq.
+        destruct v as [v0|v1 v2]; [|contradiction sLv].
+        cbn in HΦ. rewrite option.wp_some in HΦ.
+        unfold pattern_match_relval_reverse in Heq.
+        destruct (ty.unliftNamedEnv δpc) as [δ|δ1 δ2] eqn:Hu; cbn in Heq;
+          [|discriminate].
+        inversion Heq; clear Heq.
+        rewrite <- H0 in HΦ.
+        rewrite pattern_match_val_inverse_right in HΦ.
+        cbn in HΦ.
+        apply unliftIsSyncValImpliesAllSync in Hu.
+        rewrite <- Hu.
+        exact HΦ.
+    Qed.
+
+    (* The sync-only pattern matches entail the canonicalizing ones: secLeak
+       implies the same-branch guard, and on a SyncVal scrutinee the
+       canonicalizations are invisible. Used to prove refinement of the
+       (conservative, secLeak-asserting) symbolic pattern match. *)
+    Lemma angelic_pattern_match_sync_entails {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      angelic_pattern_match_sync pat v Φ -> angelic_pattern_match pat v Φ.
+    Proof.
+      rewrite wp_angelic_pattern_match_sync wp_angelic_pattern_match. intuition.
+    Qed.
+
+    Lemma demonic_pattern_match_sync_entails {N σ} (pat : Pattern (N:=N) σ) v
+      (Φ : MatchResultRel pat -> Prop) :
+      demonic_pattern_match_sync pat v Φ -> demonic_pattern_match pat v Φ.
+    Proof.
+      rewrite wp_demonic_pattern_match_sync wp_demonic_pattern_match. intuition.
     Qed.
 
     Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env RelVal Δ) :

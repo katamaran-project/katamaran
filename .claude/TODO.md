@@ -329,6 +329,140 @@ Results:
      symbolic terms) — likely the hardest remaining step. `refine_demonic_pattern_match'`
      and the wrapper induction.
 
+  ─────────────────────────────────────────────────────────────────────────────
+  ## METHOD X vs METHOD Y for the pattern-match refinement (decided 2026-07-03)
+
+  While proving the refinement (step 4) we found the canonicalizing design
+  (steps 1–3 above = "METHOD X") does not localize: canonicalization has to be
+  consistent all the way down to the RelVal algebra. **We are switching to
+  METHOD Y.** X is preserved here for a possible future, more-principled pass.
+
+  **The driving case (cmovznz4):** `fun_extend_value` (`RiscvPmp/Machine.v:528`)
+  matches `value : ty_memory_op_result` (a UNION) with `KMemValue (pat_var
+  "result") => …`. `value` is built as `MemValue tmp`, so `term_get_union`
+  statically fixes the constructor; the secret loaded word `tmp` is bound by the
+  inner `pat_var`. No control-flow divergence, only the address leaks ⇒ safe, but
+  the conservative executor asserts `secLeak` on the union scrutinee and fails.
+  NB: keeping `secLeak` on `pat_var` does NOT fix cmovznz4 — the secret is bound
+  by exactly that inner `pat_var`, so `pat_var` must fast-path too.
+
+  **Key structural fact — the real axis is UNIQUE-REVERSIBILITY, not control flow:**
+  - Uniquely reversible ⇒ safe to fast-path (RAW payload, no `secLeak`, no canon,
+    STANDARD `RMatchResult`, no store-propagation problem): `pat_var`, `pat_unit`,
+    statically-known-`K` `pat_union` (recurse). `reverse` pins the payload, so
+    concrete(raw) == symbolic(raw).
+  - Non-unique / branching ⇒ keep `secLeak`: `pat_pair`/`pat_tuple`/`pat_record`
+    (multi-leaf — a coinciding leaf makes `reverse` non-unique: `SyncVal b` and
+    `NonSyncVal b b` both reverse to the same thing) and
+    `pat_bool`/`pat_enum`/`pat_sum`/`pat_list` (real control flow). `secLeak`
+    forces the scrutinee sync ⇒ payload unique/canonical for free.
+
+  ### METHOD Y (CHOSEN) — case-split by unique-reversibility, NO canonicalization
+  - `pattern_match_relval` becomes RAW (`ty.nonsyncNamedEnv`, not `canonNamedEnv`).
+    Same-branch `NonSyncVal` ⇒ `Some (existT pc (nonsyncNamedEnv δ1 δ2))`;
+    different branch ⇒ `None`. (SyncVal branch unchanged.)
+  - Shallow `demonic/angelic_pattern_match pat v := λ Φ, option.wp Φ
+    (pattern_match_relval pat v)` — uniform, but reduces per-pattern-case (via
+    `pattern_match_val`), so it lines up case-by-case with the symbolic fixpoint
+    in the refinement induction. (`_sync` variants + `refine_purespec_mono`,
+    already in-tree, bridge the `secLeak`-fallback cases where symbolic keeps
+    `secLeak`; the `_sync` lemmas only touch the SyncVal branch, so raw=canon
+    there and they are unaffected by the raw switch.)
+  - Emiel added the symbolic fast-path fixpoint (`Symbolic/Monads.v`
+    `angelic/demonic_pattern_match`): var/unit → `pure`; pair → `term_get_pair ?
+    pure : secLeak-primed`; union → `term_get_union ? recurse : secLeak-primed`;
+    default → secLeak-primed.
+  - `refine_{angelic,demonic}_pattern_match` (unprimed): re-prove by INDUCTION on
+    `pat` — fast-path cases with standard `RMatchResult`; default via the
+    primed/`_sync` lemma. Old `apply refine_*_pattern_match'` is stale (symbolic
+    is a fixpoint now, no longer defeq to the primed).
+  - Pros: no RelVal-algebra change, no store-propagation problem, TCB untouched
+    for now. Cons: per-pattern case-split; `secLeak` stays imprecise for the
+    non-fast-pathed shapes (conservative symbolic incompleteness, not unsoundness).
+
+  ### METHOD Y progress (2026-07-03) — compiles with admits
+  DONE & compiling:
+  - `Patterns.v`: `pattern_match_relval` RAW (`ty.nonsyncNamedEnv`); raw
+    `pattern_match_relval_inverse_right` (case-split: SyncVal→`Some (existT pc δpc)`,
+    NonSyncVal→`Some (existT pc (nonsyncNamedEnv δL δR))`). Canon defs kept for X;
+    canon-specific lemmas (`pattern_match_relval_canon`, `_result_canonical`,
+    canon `inverse_left`) removed.
+  - `Shallow/Monads.v`: shallow `angelic/demonic_pattern_match := match
+    pattern_match_relval … with Some r ⇒ pure r | None ⇒ error`; primed ops back to
+    raw `pure (existT pc vs)`; `_sync` forward re-proved via raw `inverse_right`;
+    `mon_*` (`unfold; destruct pattern_match_relval; typeclasses eauto`), `wp_*`
+    (`destruct …; [wp_some|wp_none]; reflexivity`).
+  - `Refinement/Monads.v`:
+    - `refine_purespec_mono` invocation fixed:
+      `iApply (refine_purespec_mono (c := …_sync pat v) (fun Φ H => …_sync_entails H))`.
+    - `refine_{angelic,demonic}_pattern_match'` (primed fallback helpers): PROVED
+      (route S-primed → shallow `_sync` → shallow unprimed).
+    - `refine_demonic_pattern_match` (unprimed, by `induction pat; cbn -[RSat]`):
+      PROVED for pat_var (assert `pattern_match_relval (pat_var x) v = Some (existT tt
+      [x↦v])` by `destruct v; reflexivity`, then `rewrite … option.wp_some`, `iApply
+      ("rΦ" with "[Hv] HSP"); rsolve`), pat_unit (same via `destruct v; cbn`), and all
+      8 default/branching cases (`iApply refine_demonic_pattern_match'`). pat_union
+      SKELETON verified to the core (term_get_union_spec; None→primed; Some→
+      repₚ_inversion_union → `rewrite wp`).
+
+  REMAINING (well-scoped):
+  1. **union CORE — DONE (2026-07-03).** Proved `pattern_match_relval_union` in
+     Patterns.v (`= option.map (wrap K) (pattern_match_relval (p K) t)`; SyncVal via
+     `unionv_unfold_fold`, NonSyncVal via a 4-way `eq_dec`/`sigma_eqdec` split with
+     `Eqdep_dec.UIP_dec`/`inj_pair2_eq_dec`). Union case of
+     `refine_demonic_pattern_match` completed: `rewrite pattern_match_relval_union,
+     option.wp_map, <- wp_demonic_pattern_match; iApply (H K with "Hvt [rΦ] HSP")`;
+     continuation via `iIntros … "!> %mr %smr Hmr"; destruct; subst;
+     rewrite forgetting_unconditionally; iApply ("rΦ" with "[Hmr]"); now iExists eq_refl`.
+     `refine_demonic_pattern_match` now has ONLY `pat_pair` admitted.
+  2. **pat_pair** case (`admit`) — full recipe now in-file (add
+     `pattern_match_relval_pair` to Patterns.v — like `_union` but single-case, no
+     eq_dec — then `term_get_pair_spec` + `repₚ_term_prod` + `option.wp_some` + `rΦ`).
+     Simpler than union; optional (not needed for cmovznz4). (Sonnet.)
+  3. **refine_angelic_pattern_match** (fully `Admitted`) — mirror the demonic
+     induction (angelic uses `RMsg`/`msg`; otherwise identical). (Sonnet.)
+  4. Downstream plumbing broken by the shallow redefinition — `ShallowExecutor.v`
+     (`demonic_pattern_match_unfold`, `wp_demonic_pattern_match'` referenced the
+     removed canon lemmas), then `ShallowSoundness.v` pattern-match case, then the
+     case study. (Sonnet, mostly mechanical; ShallowSoundness may need care.)
+
+  ### METHOD X (DEFERRED) — uniform canonicalization (the principled version)
+  What commit `95e2fd54` + the current WIP tree implement (canonicalizing
+  `pattern_match_relval`; shallow canonicalizes payload `canonMatchResultRel` +
+  scrutinee `canonRelVal`; branches-agree guard; demonic primed ↔ `option.wlp`).
+  Elegant and case-split-free, BUT to make the *refinement* go through it
+  cascades:
+  - Match payloads flow into the store (`δ0 ►► δpc`) ⇒ `RStore`/`RNEnv`/`RVal`
+    must also canonicalize (concrete = `canonRelVal (inst symbolic)`).
+  - Then ordinary computed store values (from `evalRel = liftBinOp (eval op)`,
+    which yields `NonSyncVal c c` for a non-injective op) must be canonical too ⇒
+    the concrete RelVal ALGEBRA (`liftBinOp`/`liftUnOp`/`bop.evalRel`/
+    `uop.evalRel`/`inst_term`) must canonicalize (produce `relValOfVals`, never
+    raw `NonSyncVal v v`).
+  - Payoff: no contaminated `NonSyncVal v v` exists ANYWHERE; `secLeak` becomes
+    EXACT ("worlds genuinely differ"); no per-pattern case-split.
+  - `projLeft`/`projRight` commutation lemmas SURVIVE canonicalization (it
+    preserves projections), so the interface is stable; what breaks is any proof
+    inspecting the raw `NonSyncVal a b` STRUCTURE of a lifted-op result.
+  - Deferred: foundational change to the trusted RelVal base. Revisit if we want
+    the cleaner, case-split-free theory. The step-1/2 canon machinery
+    (`canonNamedEnv`, `canonRelVal`, `canonMatchResultRel`, `canonRelVal_idem`,
+    `pattern_match_relval_canon`, `pattern_match_relval_result_canonical`,
+    `canonMatchResultRel_allsync`) is what X would build on — keep it in
+    `Patterns.v` even after Y switches `pattern_match_relval` to raw.
+
+  ### Also-still-true (END-TO-END, both methods)
+  `secLeak` is baked into the TRUSTED program-logic rule: `Sep/Hoare.v:188`
+  `rule_stm_pattern_match` requires `⌜secLeak rv⌝ ∗ Q rv δ`;
+  `Iris/BinaryWeakestPre.v:1260` `iris_rule_stm_pattern_match` (proven) discharges
+  it via `destruct rv; try contradiction` to collapse `rv` to one `SyncVal`. To
+  let a non-branching secret through end-to-end, weaken these to branches-agree
+  and re-prove the Iris rule vs `semWP2_pattern_match` (handle the same-
+  `PatternCase` `NonSyncVal` case). Under Y the fast-path avoids `stm_pattern_match`'s
+  secLeak at the EXECUTOR level for the safe shapes; check whether the TCB rule
+  also needs weakening when wiring end-to-end.
+  ─────────────────────────────────────────────────────────────────────────────
+
   **Optional refinement (do AFTER the plain tower proves).** Make
   `relNamedEnv` canonicalize: `if v1 =? v2 then SyncVal v1 else NonSyncVal
   v1 v2` (needs `EqDec` on the leaf `Val`s — available). Then `NonSyncVal v v`

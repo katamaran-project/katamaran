@@ -280,33 +280,31 @@ Module Type Soundness
                                            POST a1 (env.drop (PatternCaseCtx pc) δ1))
                                          (δ0 ►► δpc)) Φ)) v δ' h'⌝%I)%I) as Q.
           eapply (rule_stm_pattern_match _ _ _ _ _ Q).
-          + unfold demonic_pattern_match, CPureSpec.demonic_pattern_match in HYP.
-            eapply (rule_consequence_right).
+          + eapply (rule_consequence_right).
             apply IHs.
             apply HYP.
             clear HYP.
             intros v δ.
             iIntros "HYP".
             iDestruct "HYP" as (h') "(interph' & %HYP)".
-            apply assertSecLeak_sound in HYP.
-            destruct HYP as [sLv HYP].
             iSplit.
-            { auto. }
-            rewrite HeqQ.
-            iExists h'. iFrame.
-            iPureIntro.
-            apply demonic_pattern_match_unfold.
-            intuition.
+            * iPureIntro.
+              apply wp_demonic_pattern_match in HYP.
+              destruct (pattern_match_relval pat v) eqn:E; [now eexists|].
+              now apply option.wp_none in HYP.
+            * rewrite HeqQ.
+              iExists h'. iFrame.
+              iPureIntro. exact HYP.
           + clear IHs HYP.
-            intros pc δpc δΓ'. cbn.
+            intros pc δpc δΓ' rv Hpmreq. cbn.
             rewrite HeqQ.
             apply rule_exist. intros h.
             apply rule_pull. intros HYP.
             apply wp_demonic_pattern_match in HYP.
-            rewrite pattern_match_relval_inverse_right in HYP.
-            destruct (ty.unliftNamedEnv δpc).
-            * inversion HYP. now apply H.
-            * inversion HYP.
+            rewrite Hpmreq in HYP.
+            rewrite !option.wp_some in HYP.
+            cbn in HYP.
+            now apply H.
         - (* stm_read_register *)
           destruct HYP as [v HYP].
           eapply rule_consequence_left.

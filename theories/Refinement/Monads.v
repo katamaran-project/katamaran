@@ -122,6 +122,21 @@ Module Type RefinementMonadsOn
         CPureSpec.bind w (SPureSpec.bind (w := w)) emp :=
       MkRefineCompat refine_bind.
 
+    (* The concrete side of a refinement can be weakened pointwise: RProp is
+       "symbolic implies concrete", so any consequence of the refined concrete
+       spec is also refined by the same symbolic spec. *)
+    Lemma refine_purespec_mono `{RA : Rel SA CA} {w} {c c' : CPureSpec CA}
+      {s : SPureSpec SA w} (Hcc' : forall Φ, c Φ -> c' Φ) :
+      ⊢ ℛ⟦RPureSpec RA⟧ c s -∗ ℛ⟦RPureSpec RA⟧ c' s.
+    Proof.
+      iIntros "Hcs %Φ %Φs HΦ".
+      iSpecialize ("Hcs" with "HΦ").
+      unfold RProp; cbn.
+      iIntros "HSP".
+      iDestruct ("Hcs" with "HSP") as "%Hc".
+      iPureIntro. now apply Hcc'.
+    Qed.
+
     Lemma refine_block `{R : Rel AT A} {w} :
       ⊢ ℛ⟦RPureSpec R⟧ CPureSpec.block (@SPureSpec.block AT w).
     Proof. done. Qed.
@@ -529,6 +544,10 @@ Module Type RefinementMonadsOn
       RefineCompat (RVal σ -> RPureSpec RUnit) CPureSpec.assertSecLeak w (SPureSpec.assertSecLeak (w := w) msg) _ :=
       MkRefineCompat refine_assertSecLeak'.
 
+    (* The symbolic pattern match is conservative: it still asserts [secLeak]
+       on the scrutinee and returns a raw payload. It therefore refines the
+       sync-only shallow variant structurally (the old proof), which entails
+       the canonicalizing [CPureSpec.angelic/demonic_pattern_match]. *)
     Lemma refine_angelic_pattern_match' {N : Set} (n : N -> LVar)
       {σ} (pat : Pattern (N:=N) σ) {w} :
       ⊢ ℛ⟦RMsg _ (RVal σ -> RPureSpec (RMatchResult pat))⟧
@@ -536,8 +555,10 @@ Module Type RefinementMonadsOn
         (SPureSpec.angelic_pattern_match' (w := w) n pat).
     Proof.
       iIntros (msg v t) "#Hv".
+      iApply (refine_purespec_mono (c := CPureSpec.angelic_pattern_match_sync pat v)
+                (fun Φ H => CPureSpec.angelic_pattern_match_sync_entails H)).
       unfold SPureSpec.angelic_pattern_match'.
-      unfold CPureSpec.angelic_pattern_match.
+      unfold CPureSpec.angelic_pattern_match_sync.
       iApply (refine_bind (RA := RUnit) (RB := RMatchResult _)).
       { now iApply refine_assertSecLeak. }
       iIntros (w0 r0) "!> %ι0 %sι0 Hι0".
@@ -557,8 +578,10 @@ Module Type RefinementMonadsOn
         (SPureSpec.demonic_pattern_match' (w := w) n pat).
     Proof.
       iIntros (v t) "#Hv".
+      iApply (refine_purespec_mono (c := CPureSpec.demonic_pattern_match_sync pat v)
+                (fun Φ H => CPureSpec.demonic_pattern_match_sync_entails H)).
       unfold SPureSpec.demonic_pattern_match'.
-      unfold CPureSpec.demonic_pattern_match.
+      unfold CPureSpec.demonic_pattern_match_sync.
       iApply (refine_bind (RA := RUnit) (RB := RMatchResult _)).
       { now iApply refine_assertSecLeak. }
       iIntros (w0 r0) "!> %ι0 %sι0 Hι0".
@@ -577,7 +600,44 @@ Module Type RefinementMonadsOn
         (CPureSpec.angelic_pattern_match pat)
         (SPureSpec.angelic_pattern_match (w := w) n pat).
     Proof.
-      apply refine_angelic_pattern_match'.
+      (* METHOD Y: mirror refine_demonic_pattern_match. Fallback (non-unique)
+         cases are closed uniformly; only var/unit/union fast-path. *)
+      induction pat; cbn - [RSat]; try (iApply refine_angelic_pattern_match').
+      - (* pat_var *)
+        iIntros (msg v sv) "#Hv %Φ %sΦ #rΦ HSP".
+        rewrite CPureSpec.wp_angelic_pattern_match.
+        assert (Hvar : pattern_match_relval (pat_var x) v
+                       = Some (existT tt [env].[x∷σ ↦ v])).
+        { destruct v as [w0|v1 v2]; reflexivity. }
+        rewrite Hvar option.wp_some.
+        iApply ("rΦ" with "[Hv] HSP"). rsolve.
+      - (* pat_unit *)
+        iIntros (msg v sv) "#Hv %Φ %sΦ #rΦ HSP".
+        rewrite CPureSpec.wp_angelic_pattern_match.
+        destruct v as [w0|v1 v2]; cbn; rewrite option.wp_some;
+          iApply ("rΦ" with "[Hv] HSP"); iExists eq_refl; cbn; rsolve.
+      - (* pat_union: fast-path when constructor statically known (recurse via H). *)
+        iIntros (msg v sv) "#Hv".
+        destruct (term_get_union_spec sv) as [[K scr'] Heq|]; subst.
+        2: now iApply (refine_angelic_pattern_match' n (pat_union _ _)).
+        iIntros (Φ sΦ) "#rΦ".
+        iPoseProof (eqₚ_triv (vt2 := term_union U K scr' : STerm (ty.union U) w) Heq)
+          as "Heq".
+        iDestruct (repₚ_eqₚ (T := STerm (ty.union U)) with "[$Heq $Hv]") as "Hv'".
+        iDestruct (repₚ_inversion_union with "Hv'") as "(%t & -> & Hvt)".
+        iIntros "HSP".
+        rewrite CPureSpec.wp_angelic_pattern_match.
+        rewrite pattern_match_relval_union.
+        rewrite option.wp_map.
+        rewrite <- CPureSpec.wp_angelic_pattern_match.
+        iApply (H K $! msg with "Hvt [rΦ] HSP").
+        iIntros (w2 ω2) "!> %mr %smr Hmr".
+        destruct mr as [pc' δ'], smr as [spc' sδ'].
+        iDestruct "Hmr" as "(%e & Hmr)".
+        subst spc'.
+        rewrite forgetting_unconditionally.
+        iApply ("rΦ" with "[Hmr]").
+        now iExists eq_refl.
     Qed.
     (* Proof. *)
     (*   induction pat; cbn - [RSat]. *)
@@ -686,7 +746,58 @@ Module Type RefinementMonadsOn
         (CPureSpec.demonic_pattern_match pat)
         (SPureSpec.demonic_pattern_match n pat (w := w)).
     Proof.
-      apply refine_demonic_pattern_match'.
+      induction pat; cbn - [RSat].
+      - (* pat_var: fast-path, always Some (raw payload = the whole scrutinee) *)
+        iIntros (v sv) "#Hv %Φ %sΦ #rΦ HSP".
+        rewrite CPureSpec.wp_demonic_pattern_match.
+        assert (Hvar : pattern_match_relval (pat_var x) v
+                       = Some (existT tt [env].[x∷σ ↦ v])).
+        { destruct v as [w0|v1 v2]; reflexivity. }
+        rewrite Hvar option.wp_some.
+        iApply ("rΦ" with "[Hv] HSP"). rsolve.
+      - (* pat_bool: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_list: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_pair: NON-UNIQUE (a coinciding component contaminates the raw
+           payload, NonSyncVal b b vs SyncVal b), so the symbolic side falls back
+           to the secLeak variant — no fast-path. *)
+        iApply refine_demonic_pattern_match'.
+      - (* pat_sum: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_unit: fast-path, always Some (empty payload) *)
+        iIntros (v sv) "#Hv %Φ %sΦ #rΦ HSP".
+        rewrite CPureSpec.wp_demonic_pattern_match.
+        destruct v as [w0|v1 v2]; cbn; rewrite option.wp_some;
+          iApply ("rΦ" with "[Hv] HSP"); rsolve.
+      - (* pat_enum: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_bvec_split: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_bvec_exhaustive: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_tuple: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_record: fallback *) iApply refine_demonic_pattern_match'.
+      - (* pat_union: fast-path when constructor statically known (recurse via
+           IH H); else fallback. This is the cmovznz4-critical case.
+           Skeleton verified up to the CORE admit below. *)
+        iIntros (v sv) "#Hv".
+        destruct (term_get_union_spec sv) as [[K scr'] Heq|]; subst.
+        2: now iApply (refine_demonic_pattern_match' n (pat_union _ _)).
+        iIntros (Φ sΦ) "#rΦ".
+        iPoseProof (eqₚ_triv (vt2 := term_union U K scr' : STerm (ty.union U) w) Heq)
+          as "Heq".
+        iDestruct (repₚ_eqₚ (T := STerm (ty.union U)) with "[$Heq $Hv]") as "Hv'".
+        iDestruct (repₚ_inversion_union with "Hv'") as "(%t & -> & Hvt)".
+        iIntros "HSP".
+        rewrite CPureSpec.wp_demonic_pattern_match.
+        rewrite pattern_match_relval_union.
+        rewrite option.wp_map.
+        rewrite <- CPureSpec.wp_demonic_pattern_match.
+        (* refolded to demonic_pattern_match (p K) t (fun r => Φ (wrap K r));
+           apply the IH H with the wrapped continuation built from rΦ. *)
+        iApply (H K with "Hvt [rΦ] HSP").
+        iIntros (w2 ω2) "!> %mr %smr Hmr".
+        destruct mr as [pc' δ'], smr as [spc' sδ'].
+        iDestruct "Hmr" as "(%e & Hmr)".
+        subst spc'.
+        rewrite forgetting_unconditionally.
+        iApply ("rΦ" with "[Hmr]").
+        now iExists eq_refl.
     Qed.
     (* Proof. *)
     (*   induction pat; cbn - [RSat]. *)

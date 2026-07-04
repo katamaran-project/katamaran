@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tzachbon/claude-model-router-hook/main/schema/model-router.schema.json",
+  "action": "warn",
+  "opus": {
+    "mode": "extend",
+    "keywords": [
+      "semWP2", "iFrame", "iApply", "iIntros", "iInduction",
+      "refine_compat", "rsolve", "soundness", "adequacy",
+      "gen_contract_noninterferent", "cfg_instrs_endToEnd",
+      "separation logic", "proof repair", "iMod", "iPureIntro",
+      "wp2_loop", "iris", "cbn", "rewrite semWP2"
+    ],
+    "patterns": [
+      "prove.*lemma",
+      "fix.*proof",
+      "Cannot unify",
+      "No such goal",
+      "repair.*tactic",
+      "debug.*proof"
+    ]
+  },
+  "haiku": {
+    "mode": "extend",
+    "keywords": [
+      "TODO", "update CLAUDE.md", "commit message",
+      "rename", "memory", "git", "formatting"
+    ]
+  }
+}

@@ -1257,13 +1257,19 @@ Section Soundness.
   (*     eapply step_trans. apply Hs2. simpl. apply step_refl. *)
   (* Qed. *)
 
+  (* METHOD Y (constant-time relaxation): the scrutinee no longer needs to be
+     fully synchronised ([secLeak]); it suffices that the two worlds take the
+     SAME branch ([is_Some (pattern_match_relval pat rv)]). A non-branching
+     secret (e.g. a loaded value matched on a statically-known union) is then
+     allowed. *)
   Lemma iris_rule_stm_pattern_match {Γ τ σ} (δΓ : CStore Γ)
     (s : Stm Γ σ) (pat : Pattern σ)
     (rhs : ∀ pc : PatternCase pat, Stm (Γ ▻▻ PatternCaseCtx pc) τ)
     (P : iProp Σ) (Q : RelVal σ → CStore Γ → iProp Σ) (R : RelVal τ → CStore Γ → iProp Σ) :
-    ⊢ semTriple δΓ P s (fun rv δ => ⌜secLeak rv⌝ ∗ Q rv δ) -∗
-      (∀ pc δpc δΓ1,
-                semTriple (δΓ1 ►► δpc) (Q (pattern_match_relval_reverse pat pc δpc) δΓ1) (rhs pc)
+    ⊢ semTriple δΓ P s (fun rv δ => ⌜is_Some (pattern_match_relval pat rv)⌝ ∗ Q rv δ) -∗
+      (∀ pc δpc δΓ1 rv,
+                ⌜pattern_match_relval pat rv = Some (existT pc δpc)⌝ →
+                semTriple (δΓ1 ►► δpc) (Q rv δΓ1) (rhs pc)
                   (λ vτ (δ' : CStore (Γ ▻▻ PatternCaseCtx pc)), R vτ (env.drop (PatternCaseCtx pc) δ'))) -∗
       semTriple δΓ P (stm_pattern_match s pat rhs) R.
   Proof.
@@ -1271,22 +1277,24 @@ Section Soundness.
     iApply (semWP2_mono with "Hs").
     iIntros (v1 δ1 v2 δ2) "(%δ & (<- & <-) & Q)".
     destruct v1 as [v1|m1]; destruct v2 as [v2|m2].
-    - iDestruct "Q" as "(%rv & (<- & <-) & %secLeakRv & Q)".
-      unfold secLeak in secLeakRv.
-      destruct rv; try contradiction.
-      cbn in *.
-      destruct (pattern_match_val pat v) as [pc δpc] eqn:Ev.
-      iSpecialize ("Hk" $! pc (env.map (fun _ => SyncVal) δpc) δ with "[Q]").
-      + rewrite pattern_match_relval_reverse_syncNamedEnvIsSync.
-        change (pattern_match_val_reverse pat pc δpc) with (pattern_match_val_reverse' pat (existT pc δpc)).
-        rewrite <- Ev. now rewrite pattern_match_val_inverse_left.
-      + rewrite !projLeftCStoreCatIsCatOfProjLeftCStore !projRightCStoreCatIsCatOfProjRightCStore.
-        rewrite projLeftCStoreEnvMapValToRelValIsId projRightCStoreEnvMapValToRelValIsId.
-        iApply (semWP2_mono with "Hk").
-        iIntros (? ? ? ?) "(%δ' & (<- & <-) & R)".
-        iExists (env.drop (PatternCaseCtx pc) δ').
-        rewrite projLeftCStoreEnvDropIsEnvDropProjLeftCStore projRightCStoreEnvDropIsEnvDropProjRightCStore.
-        now iFrame "R".
+    - iDestruct "Q" as "(%rv & (%Hpl & %Hpr) & %HSome & Q)".
+      destruct HSome as [[pc δpc] Hpmr].
+      (* both worlds take the same case [pc]; the relational payload [δpc]
+         projects to the per-world payloads. Rewriting the per-world matches
+         reduces the two [let]s by conversion. *)
+      pose proof (pattern_match_relval_projLeft pat Hpmr) as HpL.
+      pose proof (pattern_match_relval_projRight pat Hpmr) as HpR.
+      rewrite Hpl in HpL. rewrite Hpr in HpR.
+      rewrite HpL HpR.
+      iSpecialize ("Hk" $! pc δpc δ rv Hpmr with "Q").
+      iEval (rewrite projLeftCStoreCatIsCatOfProjLeftCStore
+                     projRightCStoreCatIsCatOfProjRightCStore) in "Hk".
+      iApply (semWP2_mono with "Hk").
+      iIntros (w1 δw1 w2 δw2) "(%δ' & (<- & <-) & R)".
+      iExists (env.drop (PatternCaseCtx pc) δ').
+      rewrite projLeftCStoreEnvDropIsEnvDropProjLeftCStore
+              projRightCStoreEnvDropIsEnvDropProjRightCStore.
+      now iFrame "R".
     - auto.
     - auto.
     - iApply semWP2_fail.
