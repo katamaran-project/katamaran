@@ -339,14 +339,20 @@ Module Examples.
        (A4, false, None); (A5, false, None); (A6, false, None);
        (A7, false, None); (T0, false, None); (T1, false, None)].
 
-    (* cin (A0) is the only actual secret here -- x and y need not be, and
-       r (derived from cin, x, y) must stay private since it can reveal
-       which of x/y was picked. x[0..3]/y[0..3] public, r[0..3] private. *)
+    (* All of cin (A0), x and y are secret here: this is the genuine
+       LOAD-of-secret case that method-Y unlocks. The loaded secret words
+       (x[i], y[i]) flow through fun_extend_value's union match
+       [KMemValue (pat_var "result")], which takes the same branch in both
+       worlds (the KMemValue constructor is statically determined), so the
+       match succeeds WITHOUT secLeak on the loaded word. Non-interference
+       still holds because the addresses touched (fixed 116/132/148 bases)
+       are data-independent -- only the values are secret. r[0..3] is
+       private as before. x[0..3]/y[0..3]/r[0..3] all private. *)
     Definition cmovznz4_mem_specs : list mem_full_spec :=
-      [(bv.of_N 116, true, None); (bv.of_N 120, true, None);
-       (bv.of_N 124, true, None); (bv.of_N 128, true, None);
-       (bv.of_N 132, true, None); (bv.of_N 136, true, None);
-       (bv.of_N 140, true, None); (bv.of_N 144, true, None);
+      [(bv.of_N 116, false, None); (bv.of_N 120, false, None);
+       (bv.of_N 124, false, None); (bv.of_N 128, false, None);
+       (bv.of_N 132, false, None); (bv.of_N 136, false, None);
+       (bv.of_N 140, false, None); (bv.of_N 144, false, None);
        (bv.of_N 148, false, None); (bv.of_N 152, false, None);
        (bv.of_N 156, false, None); (bv.of_N 160, false, None)].
 
