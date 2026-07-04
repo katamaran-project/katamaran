@@ -886,8 +886,19 @@ Module RiscvPmpIrisInstanceWithContracts.
       rewrite evalValsProjLeftIsProjLeftEvals in Hf. rewrite evalValsProjRightIsProjRightEvals in Hf.
       rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       inversion H0; inversion H1; subst. clear H0 H1 Hf. do 3 iModIntro.
-      iMod "Hclose" as "_". destruct inv.
-      { cbn. destruct v.
+      iMod "Hclose" as "_".
+      (* The precondition interprets [asn.match_bool inv ...] via the raw
+         [pattern_match_relval pat_bool inv]. Under method-Y this succeeds on a
+         [NonSyncVal v v0] scrutinee exactly when [v = v0] (both worlds take the
+         same branch), and fails otherwise. Destructing the match result rather
+         than [inv] itself reduces both [H] and the postcondition uniformly:
+         the [Some] branch collapses to a plain boolean [b] (the [SyncVal] and
+         coinciding-[NonSyncVal] cases are then literally identical), and the
+         [None] branch gives a [False] precondition. *)
+      destruct (pattern_match_relval pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn.
+      2: { iDestruct "H" as "%HF". contradiction. }
+      destruct (env.view δpc).
+      destruct b.
         - (* readonly case *)
         iDestruct "H" as "#H".
          iInv "H" as "Hptsto" "Hclose_ptsto".
@@ -933,8 +944,6 @@ Module RiscvPmpIrisInstanceWithContracts.
           iSplitR; first auto.
           by rewrite eq_fun_read_ramL eq_fun_read_ramR.
           auto.
-      }
-      cbn. iDestruct "H" as "%". contradiction.
   Qed.
 
   Lemma write_ram_sound `{sailGS2 Σ} {bytes} :
