@@ -1590,7 +1590,7 @@ Section AdequacyTools.
     Lemma sound_exec_cfg_addr_myWP2
         {b exitCond fuel} (apc : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr b exitCond fuel apc Φ h →
+      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr bv.zero b exitCond fuel apc Φ h →
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (SyncVal bv.zero) b ⊢
       (∀ an,
@@ -1617,7 +1617,8 @@ Section AdequacyTools.
                iFrame. iPureIntro. exact Hexit.
             -- cbn [CHeapSpec.error] in Hexit. contradiction.
           * destruct (Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned v) eqn:Hmod.
-            -- set (k := N.to_nat (bv.bin v) / bytes_per_instr) in *.
+            -- assert (Hbz : N.to_nat (bv.bin (@bv.zero xlenbits)) = 0%nat) by reflexivity.
+               set (k := (N.to_nat (bv.bin v) - N.to_nat (bv.bin bv.zero)) / bytes_per_instr) in *.
                destruct (List.nth_error b k) as [i|] eqn:Hnth.
                ++ unfold bind, CHeapSpec.bind in Hexec.
                   iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
@@ -1626,7 +1627,7 @@ Section AdequacyTools.
                   have Haddr : bv.add bv.zero (bv.of_N (N.of_nat (k * bytes_per_instr))) = v.
                   { have Hdiv : k * bytes_per_instr = N.to_nat (bv.bin v).
                     { have Hdm := Nat.div_mod (N.to_nat (bv.bin v)) bytes_per_instr.
-                      unfold k, bytes_per_instr in *. lia. }
+                      unfold k, bytes_per_instr in *. rewrite Hbz Nat.sub_0_r. lia. }
                     rewrite Hdiv. rewrite N2Nat.id. rewrite bv.of_N_bin.
                     rewrite bv.add_zero_l. reflexivity. }
                   iPoseProof (Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs_nth b k bv.zero Hnth
