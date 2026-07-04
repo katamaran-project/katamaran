@@ -20,3 +20,6 @@ Makefile.coq.conf
 .vscode/
 _build/
 .#*
+
+# rocq-mcp scratch/cache files
+rocq_mcp_cache_*.v
