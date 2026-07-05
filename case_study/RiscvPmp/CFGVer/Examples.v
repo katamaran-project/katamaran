@@ -376,6 +376,45 @@ Module Examples.
     Lemma valid_cmovznz4_cfg_contract : ValidCFGVerifierContract cmovznz4_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* Step 5 (init_addr parameterization): the SAME cmovznz4 program, loaded at
+       a genuinely nonzero, 4-aligned start address instead of 0. cmovznz4 is a
+       straight-line block (no jumps/branches) and every LOAD/STORE is
+       register-relative, not pc-relative, so the instruction stream itself
+       (cmovznz4_instrs) needs no change at all -- only the register-init
+       values and data addresses (previously hardcoded right after the
+       instruction region at 0+116/132/148) shift by cmovznz4_start. *)
+    Definition cmovznz4_start : N := 256%N.
+
+    Definition cmovznz4_reg_specs_at_start : list reg_spec :=
+      [(A0, false, None);
+       (A1, false, Some (bv.of_N (cmovznz4_start + 116)));   (* x base *)
+       (A2, false, Some (bv.of_N (cmovznz4_start + 132)));   (* y base *)
+       (A3, false, Some (bv.of_N (cmovznz4_start + 148)));   (* r base *)
+       (A4, false, None); (A5, false, None); (A6, false, None);
+       (A7, false, None); (T0, false, None); (T1, false, None)].
+
+    Definition cmovznz4_mem_specs_at_start : list mem_full_spec :=
+      [(bv.of_N (cmovznz4_start + 116), false, None);
+       (bv.of_N (cmovznz4_start + 120), false, None);
+       (bv.of_N (cmovznz4_start + 124), false, None);
+       (bv.of_N (cmovznz4_start + 128), false, None);
+       (bv.of_N (cmovznz4_start + 132), false, None);
+       (bv.of_N (cmovznz4_start + 136), false, None);
+       (bv.of_N (cmovznz4_start + 140), false, None);
+       (bv.of_N (cmovznz4_start + 144), false, None);
+       (bv.of_N (cmovznz4_start + 148), false, None);
+       (bv.of_N (cmovznz4_start + 152), false, None);
+       (bv.of_N (cmovznz4_start + 156), false, None);
+       (bv.of_N (cmovznz4_start + 160), false, None)].
+
+    Definition cmovznz4_cfg_contract_at_start : CFGVerifierContract :=
+      gen_contract cmovznz4_start cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start
+        cmovznz4_instrs (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs) 35.
+
+    Lemma valid_cmovznz4_cfg_contract_at_start :
+      ValidCFGVerifierContract cmovznz4_cfg_contract_at_start.
+    Proof. vm_compute. solve_vc. Qed.
+
 
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
@@ -2583,6 +2622,22 @@ End AdequacyTools.
        intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
          try (inversion H; subst; vm_compute; done); discriminate |
        by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract].
+  Qed.
+
+  (* Step 5 (init_addr parameterization): cmovznz4, fully end-to-end
+     (noninterference + leakage equivalence, not just the contract-level VC),
+     loaded at the genuinely nonzero start address cmovznz4_start = 256. *)
+  Lemma cmovznz4_noninterferent_at_start :
+    noninterferent_strong cmovznz4_start cmovznz4_instrs
+      (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs)
+      cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
+  Proof.
+    eapply gen_contract_noninterferent;
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
+       intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
+         try (inversion H; subst; vm_compute; done); discriminate |
+       by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract_at_start].
   Qed.
 
 End Examples.
