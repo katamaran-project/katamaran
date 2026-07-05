@@ -1426,22 +1426,34 @@ Section AdequacyTools.
           unfold lenAddr in Hrep. lia.
   Qed.
 
-  Lemma instrsMemory `{sailGS2 Σ} {μ1 μ2 : Memory} ws instrs :
-    (4 * N.of_nat (length instrs) < lenAddr)%N ->
-    mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
-    mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
+  Lemma instrsMemory `{sailGS2 Σ} {μ1 μ2 : Memory} (start : N) ws instrs :
+    (start + 4 * N.of_nat (length instrs) < lenAddr)%N ->
+    mem_has_instrs μ1 (bv.of_N start) ws instrs ->
+    mem_has_instrs μ2 (bv.of_N start) ws instrs ->
     @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
-      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs.
+      ptsto_instrs (SyncVal (bv.of_N start)) instrs.
   Proof.
     iIntros (Hrep Hinit1 Hinit2) "Hmem".
     unfold mem_res2_without_leak, IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_without_leak.
     replace liveAddrs with
-      (bv.seqBv (n := 32) (bv.of_N minAddr) (4 * N.of_nat (length instrs)) ++
-         bv.seqBv (n := 32) (bv.of_N minAddr + bv.of_N (4 * N.of_nat (length instrs))) (lenAddr - 4 * N.of_nat (length instrs))).
-    2: { rewrite <- bv.seqBv_app. apply f_equal. lia. }
-    iDestruct "Hmem" as "[[[Hinit1 Hrest1] Htr1] [[Hinit2 Hrest2] Htr2]]".
+      (bv.seqBv (n := 32) (bv.of_N minAddr) start ++
+         bv.seqBv (n := 32) (bv.of_N start) (4 * N.of_nat (length instrs)) ++
+         bv.seqBv (n := 32) (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs)))
+                  (lenAddr - start - 4 * N.of_nat (length instrs))).
+    2: {
+      assert (Heq : (bv.of_N minAddr + bv.of_N start : bv 32)%bv = bv.of_N start).
+      { rewrite bv.of_N_add. f_equal. }
+      rewrite <- Heq.
+      rewrite <- !bv.seqBv_app.
+      apply f_equal. lia.
+    }
+    iDestruct "Hmem" as "[[[Hbefore1 [Hinst1 Hrest1]] Htr1] [[Hbefore2 [Hinst2 Hrest2]] Htr2]]".
     iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
-    { unfold init_addr. cbn. lia. }
+    { match goal with
+      | |- (_ + bv.bin ?a < _)%N =>
+          assert (Hb : (bv.bin a <= start)%N) by apply bv.bin_of_N_decr
+      end.
+      lia. }
     iFrame. auto.
   Qed.
 
@@ -1544,49 +1556,56 @@ Section AdequacyTools.
 
      Uses intro_mem_with_memory (proved by induction over data_specs) for
      the data region, after a two-way bv.seqBv_app split. *)
-  Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2 : Memory} ws_instrs data_specs instrs :
-    (4 * N.of_nat (length instrs) +
+  Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2 : Memory} (start : N) ws_instrs data_specs instrs :
+    (start + 4 * N.of_nat (length instrs) +
      4 * N.of_nat (length data_specs) < lenAddr)%N →
-    mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs →
-    mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs →
-    (* data words are at init_addr + 4*|instrs|, init_addr + 4*|instrs| + 4, … *)
+    mem_has_instrs μ1 (bv.of_N start) ws_instrs instrs →
+    mem_has_instrs μ2 (bv.of_N start) ws_instrs instrs →
+    (* data words are at start + 4*|instrs|, start + 4*|instrs| + 4, … *)
     (∀ i spec, data_specs !! i = Some spec →
-      spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+      spec.1 = bv.of_N (start + 4 * N.of_nat (length instrs)
                          + 4 * N.of_nat i)) →
     @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
-      ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
+      ptsto_instrs (SyncVal (bv.of_N start)) instrs ∗
       interp_mem_with_memory μ1 μ2 data_specs.
   Proof.
     iIntros (Hlen HMem1 HMem2 HDataAddrs) "Hmem".
     unfold mem_res2_without_leak,
       IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_without_leak.
     replace liveAddrs with
-      (bv.seqBv (n := 32) (bv.of_N minAddr) (4 * N.of_nat (length instrs)) ++
-         bv.seqBv (n := 32) (bv.of_N minAddr + bv.of_N (4 * N.of_nat (length instrs)))
-                   (lenAddr - 4 * N.of_nat (length instrs))).
-    2: { rewrite <- bv.seqBv_app. apply f_equal. lia. }
-    iDestruct "Hmem" as "[[[Hinst1 Hrest1] Htr1] [[Hinst2 Hrest2] Htr2]]".
+      (bv.seqBv (n := 32) (bv.of_N minAddr) start ++
+       bv.seqBv (n := 32) (bv.of_N start) (4 * N.of_nat (length instrs)) ++
+       bv.seqBv (n := 32) (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs)))
+                (4 * N.of_nat (length data_specs)) ++
+       bv.seqBv (n := 32)
+                (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs))
+                  + bv.of_N (4 * N.of_nat (length data_specs)))%bv
+                (lenAddr - start - 4 * N.of_nat (length instrs)
+                  - 4 * N.of_nat (length data_specs))).
+    2: {
+      assert (Heq : (bv.of_N minAddr + bv.of_N start : bv 32)%bv = bv.of_N start).
+      { rewrite bv.of_N_add. f_equal. }
+      rewrite <- Heq.
+      rewrite <- !bv.seqBv_app.
+      apply f_equal. lia.
+    }
+    iDestruct "Hmem" as
+      "[[[Hbefore1 [Hinst1 [Hdata1 Hrest1]]] Htr1]
+        [[Hbefore2 [Hinst2 [Hdata2 Hrest2]]] Htr2]]".
     iModIntro.
     iSplitL "Hinst1 Hinst2".
     - iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
-      { unfold init_addr. cbn. lia. }
+      { match goal with
+        | |- (_ + bv.bin ?a < _)%N =>
+            assert (Hb : (bv.bin a <= start)%N) by apply bv.bin_of_N_decr
+        end.
+        lia. }
       iFrame.
-    - have Hrep3 : (lenAddr - 4 * N.of_nat (length instrs) =
-                     4 * N.of_nat (length data_specs) +
-                     (lenAddr - 4 * N.of_nat (length instrs) -
-                      4 * N.of_nat (length data_specs)))%N by lia.
-      rewrite Hrep3.
-      rewrite (bv.seqBv_app (n := 32)
-                 (bv.of_N minAddr + bv.of_N (4 * N.of_nat (length instrs)))
-                 (4 * N.of_nat (length data_specs))).
-      rewrite !big_opL_app.
-      iDestruct "Hrest1" as "[Hdata1 _]".
-      iDestruct "Hrest2" as "[Hdata2 _]".
-      iApply (intro_mem_with_memory
-        (a := (bv.of_N minAddr + bv.of_N (4 * N.of_nat (length instrs)))%bv)).
+    - iApply (intro_mem_with_memory
+        (a := (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs)))%bv)).
       { intros i spec Hlook.
         have HDA := HDataAddrs i spec Hlook. rewrite HDA.
-        unfold minAddr, init_addr. rewrite !bv.of_N_add. f_equal. }
+        rewrite !bv.of_N_add; f_equal; lia. }
       iFrame "Hdata1 Hdata2".
   Qed.
 
@@ -2296,7 +2315,8 @@ End AdequacyTools.
       iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
         as "Hinv"; auto.
       iMod "Hinv" as "#Hinv".
-      iMod (instrsMemory with "Hmem") as "H"; eauto.
+      iMod (instrsMemory init_addr with "Hmem") as "H"; eauto.
+      { unfold init_addr; lia. }
       iSplitR "".
       - iApply (cfg_instrs_safe γ1 γ2 block).
         all: eauto.
@@ -2374,7 +2394,7 @@ End AdequacyTools.
         as "Hinv"; auto.
       iMod "Hinv" as "#Hinv".
       (* Extract instruction + data memory from raw byte ownership *)
-      iMod (instrsAndDataMemory ws_instrs data_specs instrs' with "Hmem") as "[H Hmemdata]";
+      iMod (instrsAndDataMemory init_addr ws_instrs data_specs instrs' with "Hmem") as "[H Hmemdata]";
         [exact Hlen | exact μinit1 | exact μinit2 | exact HDataAddrs |].
       (* Convert all-NonSyncVal to public form *)
       rewrite (something_memory data_specs HpubMem).
