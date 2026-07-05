@@ -222,8 +222,8 @@ Module Examples.
     Import SymProp.notations.
     Import Erasure.notations.
 
-    Definition pcOutOfInstrs_exitCond (instrs : list AST) : bv xlenbits -> bool :=
-      fun v => bv.ugeb v (bv.of_N (4 * N.of_nat (length instrs))).
+    Definition pcOutOfInstrs_exitCond (init_addr : N) (instrs : list AST) : bv xlenbits -> bool :=
+      fun v => bv.ugeb v (bv.of_N (init_addr + 4 * N.of_nat (length instrs))).
 
     (* ------------------------------------------------------------------ *)
     (* Contract generator                                                   *)
@@ -371,7 +371,7 @@ Module Examples.
 
     Definition cmovznz4_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs
-        (pcOutOfInstrs_exitCond cmovznz4_instrs) 35.
+        (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs) 35.
 
     Lemma valid_cmovznz4_cfg_contract : ValidCFGVerifierContract cmovznz4_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
@@ -380,7 +380,7 @@ Module Examples.
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
         [MV X1 X0]
-      @cfg[ pcOutOfInstrs_exitCond [MV X1 X0] , 3 ].
+      @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X0] , 3 ].
 
     Example valid_mv_zero_ex : ValidCFGVerifierContract mv_zero_ex.
     Proof. vm_compute. solve_vc. Qed.
@@ -388,7 +388,7 @@ Module Examples.
     Definition mv_same_reg_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ X1 ↦ᵣ term_var "x" }}
         [MV X1 X1]
-      @cfg[ pcOutOfInstrs_exitCond [MV X1 X1] , 3 ]
+      @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X1] , 3 ]
       with ["x" :: ty_xlenbits].
 
     Example valid_mv_same_reg_ex : ValidCFGVerifierContract mv_same_reg_ex.
@@ -397,7 +397,7 @@ Module Examples.
     Definition mv_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" }}
         [MV X1 X2]
-      @cfg[ pcOutOfInstrs_exitCond [MV X1 X2] , 3 ]
+      @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X2] , 3 ]
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
     Example valid_mv_ex : ValidCFGVerifierContract mv_ex.
@@ -427,7 +427,7 @@ Module Examples.
       gen_contract init_addr
         [(X1, false, None); (X2, false, None); (X3, false, None)] []
         [MV X3 X2; MV X2 X1; MV X1 X3]
-        (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3])
+        (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
         5.
 
     Lemma valid_swap_cfg_contract : ValidCFGVerifierContract swap_cfg_contract.
@@ -453,7 +453,7 @@ Module Examples.
     Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr [(X1, true, None)] []
         [BEQ X1 X0 true_offset]
-        (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset])
+        (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset])
         3.
 
     Lemma valid_jump_if_zero_cfg_contract :
@@ -504,7 +504,7 @@ Module Examples.
     Definition set_X2_to_42 : CFGVerifierContract :=
       gen_contract init_addr [(X2, false, None)] []
         [ADDI X2 X0 (bv.of_N 42)]
-        (pcOutOfInstrs_exitCond [ADDI X2 X0 (bv.of_N 42)])
+        (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
         3.
 
     Lemma valid_set_X2_to_42 : ValidCFGVerifierContract set_X2_to_42.
@@ -1799,6 +1799,8 @@ End AdequacyTools.
   Lemma cfg_instrs_verified `{sailGS2 Σ} instrs' exitCond γ1 γ2 R (ι : Valuation R)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (init_addr : N)
+    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
     (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
@@ -1811,7 +1813,11 @@ End AdequacyTools.
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-    ⊢ cfg_instrs_contract exitCond instrs' γ1 γ2.
+    ⊢ own_regstore2 γ1 γ2 ∗
+      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs
+        (SyncVal (bv.of_N init_addr)) instrs' ∗
+      interp_inv_constant_time
+    -∗ exitCond_WP2_loop exitCond.
   Proof.
     iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "Hpre".
     iDestruct "Hpre" as "(Hregs & Hinstrs & #Hinv)".
@@ -1819,13 +1825,13 @@ End AdequacyTools.
     iDestruct "Hregs" as "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
     rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
     rewrite !regPstsTo_sync_is_nonsync.
-    unfold cfg_instrs_contract, exitCond_WP2_loop.
+    unfold exitCond_WP2_loop.
     destruct block.
     cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, ImplPre.
     subst cfg_init_addr0 cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
     iApply (sound_sblock_verification_condition_myWP2 (base := bv.of_N init_addr)
-              eq_refl valid_block ι _
+              Hbase valid_block ι _
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv Hregs".
@@ -1843,6 +1849,8 @@ End AdequacyTools.
   Lemma cfg_instrs_safe `{sailGS2 Σ} instrs' exitCond γ1 γ2 {R} {ι : Valuation R}
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (init_addr : N)
+    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
     (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
@@ -1870,6 +1878,8 @@ End AdequacyTools.
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (init_addr : N)
+    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
     (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
@@ -1903,7 +1913,7 @@ End AdequacyTools.
     subst cfg_init_addr0 cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
     iApply (sound_sblock_verification_condition_myWP2 (base := bv.of_N init_addr)
-              eq_refl valid_block ι _
+              Hbase valid_block ι _
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").
     - iSplitL "Hpriv Hregs Hmem".
@@ -1923,6 +1933,8 @@ End AdequacyTools.
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (init_addr : N)
+    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
     (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
@@ -1959,6 +1971,7 @@ End AdequacyTools.
      If world 1 terminates in n steps under exitCond, so does world 2 in
      exactly n steps, and both worlds produce the same leakage trace. *)
   Definition noninterferent_strong
+      (init_addr : N)
       (instrs : list AST)
       (exitCond : bv xlenbits -> bool)
       (reg_specs : list reg_spec)
@@ -2281,6 +2294,8 @@ End AdequacyTools.
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
       (block : @CFGVerifierContract R)
       (valid_block : ValidCFGVerifierContract block)
+      (init_addr : N)
+      (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
       (blockInitAddr : cfg_init_addr block = init_addr)
       (blockInstrs : cfg_instrs block = instrs')
       (blockExitCond : cfg_exitCond block = exitCond)
@@ -2290,7 +2305,7 @@ End AdequacyTools.
           interp_inv_constant_time -∗
           asn.interpret (extend_to_minimal_pre (cfg_precondition block))
             ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-      (4 * N.of_nat (length instrs') < lenAddr)%N ->
+      (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N ->
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
       mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
@@ -2316,7 +2331,6 @@ End AdequacyTools.
         as "Hinv"; auto.
       iMod "Hinv" as "#Hinv".
       iMod (instrsMemory init_addr with "Hmem") as "H"; eauto.
-      { unfold init_addr; lia. }
       iSplitR "".
       - iApply (cfg_instrs_safe γ1 γ2 block).
         all: eauto.
@@ -2354,6 +2368,8 @@ End AdequacyTools.
         (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
         (block : @CFGVerifierContract R)
         (valid_block : ValidCFGVerifierContract block)
+        (init_addr : N)
+        (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
         (blockInitAddr : cfg_init_addr block = init_addr)
         (blockInstrs : cfg_instrs block = instrs')
         (blockExitCond : cfg_exitCond block = exitCond)
@@ -2367,7 +2383,7 @@ End AdequacyTools.
             interp_inv_constant_time -∗
             asn.interpret (extend_to_minimal_pre (cfg_precondition block))
               ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-        (4 * N.of_nat (length instrs') +
+        (init_addr + 4 * N.of_nat (length instrs') +
          4 * N.of_nat (length data_specs) < lenAddr)%N →
         mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs' →
         mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs' →
@@ -2432,16 +2448,18 @@ End AdequacyTools.
       (instrs : list AST)
       (exitCond : bv xlenbits -> bool)
       (fuel : nat)
+      (init_addr : N)
+      (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
       (HND : NoDup (map reg_spec_idx reg_specs))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec mem_specs) !! i = Some spec →
           spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
                              + 4 * N.of_nat i))
-      (Hlen : (4 * N.of_nat (length instrs) +
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length mem_specs) < lenAddr)%N)
       (valid_block : ValidCFGVerifierContract
           (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)) :
-    noninterferent_strong instrs exitCond reg_specs mem_specs.
+    noninterferent_strong init_addr instrs exitCond reg_specs mem_specs.
   Proof.
     intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
       HInitReg1 HInitReg2 HInitMem1 HInitMem2
@@ -2453,6 +2471,7 @@ End AdequacyTools.
       (map mem_full_to_spec mem_specs) HpubMem
       (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)
       valid_block
+      init_addr Hbase
       eq_refl eq_refl eq_refl HDataAddrs).
     all: try eauto.
     - intros Σ H.
@@ -2470,22 +2489,24 @@ End AdequacyTools.
   Qed.
 
   Lemma swap_noninterferent :
-    noninterferent_strong [MV X3 X2; MV X2 X1; MV X1 X3]
-      (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3])
+    noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
+      (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
       [(X1, false, None); (X2, false, None); (X3, false, None)] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_swap_cfg_contract].
   Qed.
 
   Lemma jumpIfZero_noninterferent :
-    noninterferent_strong [BEQ X1 X0 true_offset]
-      (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
+    noninterferent_strong init_addr [BEQ X1 X0 true_offset]
+      (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_jump_if_zero_cfg_contract].
   Qed.
@@ -2521,40 +2542,44 @@ End AdequacyTools.
   Qed.
 
   Lemma jmp_fwd_noninterferent_cfg :
-    noninterferent_strong [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
+    noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_jmp_fwd_cfg_contract].
   Qed.
 
   Lemma countdown_noninterferent :
-    noninterferent_strong [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+    noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
       countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_countdown_cfg_contract].
   Qed.
 
   Lemma countdown_mem_noninterferent :
-    noninterferent_strong countdown_mem_instrs countdown_mem_exitCond
+    noninterferent_strong init_addr countdown_mem_instrs countdown_mem_exitCond
       [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
     eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
        intros [|i] ? H; cbn in H; [inversion H; subst; vm_compute; done | discriminate] |
        by cbn; unfold lenAddr | exact valid_countdown_mem_cfg_contract].
   Qed.
 
   Lemma cmovznz4_noninterferent :
-    noninterferent_strong cmovznz4_instrs (pcOutOfInstrs_exitCond cmovznz4_instrs)
+    noninterferent_strong init_addr cmovznz4_instrs (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
       cmovznz4_reg_specs cmovznz4_mem_specs.
   Proof.
     eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
+      [reflexivity |
+       apply Prelude.nodup_fixed; reflexivity |
        intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
          try (inversion H; subst; vm_compute; done); discriminate |
        by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract].
