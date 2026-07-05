@@ -93,6 +93,12 @@ Module Examples.
   Definition A6 : RegIdx := bv.of_nat 16.
   Definition A7 : RegIdx := bv.of_nat 17.
 
+  (* Default load address for examples that don't care about a nonzero
+     start (moved here, ahead of Section WithAsnNotations, so
+     CFGVerifierContract/gen_contract/the {{ }} notations below can use
+     it as their default init_addr). *)
+  Definition init_addr     : N := 0.
+
   Section WithAsnNotations.
     Import asn.notations.
 
@@ -115,53 +121,56 @@ Module Examples.
        Uses Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition.
        Postconditions are not exposed: SHeapSpec has no leakcheck, so the final
        heap state is unconstrained and any leftover resources are silently dropped.
-       Still hardcodes the load base at bv.zero (CFGVerifierContract/gen_contract
-       are not yet parameterized on init_addr -- a separate, larger follow-up;
-       sblock_verification_condition itself already accepts any base). *)
+       The load base is `init_addr : N`, carried by the contract as
+       `cfg_init_addr` and threaded to sblock_verification_condition as
+       `bv.of_N init_addr` (instead of the old hardcoded bv.zero). *)
     Definition CFG_VC_triple {Σ}
+      (init_addr : N)
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
       Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := Σ)
-        bv.zero (extend_to_minimal_pre P) i ec fl
+        (bv.of_N init_addr) (extend_to_minimal_pre P) i ec fl
         (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
     Definition Valid_CFG_VC {Σ}
+      (init_addr : N)
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
-      safeE (postprocess (CFG_VC_triple P i ec fl)).
+      safeE (postprocess (CFG_VC_triple init_addr P i ec fl)).
 
     Record CFGVerifierContract {Σ} :=
       MkCFGVerifierContract
-      { cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
+      { cfg_init_addr     : N
+      ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
       ; cfg_instrs        : list AST
       ; cfg_exitCond      : bv xlenbits -> bool
       ; cfg_fuel          : nat
       }.
 
     Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-      (f : Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
+      (f : N -> Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
            (bv xlenbits -> bool) -> nat -> A) : A :=
       match c with
-      | {| cfg_precondition := pre; cfg_instrs := i;
-           cfg_exitCond := ec; cfg_fuel := fl |} => f pre i ec fl
+      | {| cfg_init_addr := ia; cfg_precondition := pre; cfg_instrs := i;
+           cfg_exitCond := ec; cfg_fuel := fl |} => f ia pre i ec fl
       end.
 
     Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
       cfg_map c Valid_CFG_VC.
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c (fun P i ec fl =>
-        VerificationCondition (postprocess (CFG_VC_triple P i ec fl))).
+      cfg_map c (fun ia P i ec fl =>
+        VerificationCondition (postprocess (CFG_VC_triple ia P i ec fl))).
 
     Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']'" :=
-      (@MkCFGVerifierContract [ctx] P%asn i ec fl)
+      (@MkCFGVerifierContract [ctx] init_addr P%asn i ec fl)
       (at level 90).
     Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
-      (@MkCFGVerifierContract logvars P%asn i ec fl)
+      (@MkCFGVerifierContract logvars init_addr P%asn i ec fl)
       (at level 90).
 
     Local Ltac solve_bv :=
@@ -199,8 +208,8 @@ Module Examples.
       end.
     Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
 
-    Definition asn_init_pc {Σ} : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
-      term_var "a" = term_val ty_xlenbits bv.zero.
+    Definition asn_init_pc {Σ} (start : Val ty_xlenbits) : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
+      term_var "a" = term_val ty_xlenbits start.
 
     Definition asn_pc_eq {Σ} (t : Term (Σ ▻ "a" :: ty_xlenbits) ty_xlenbits) : Assertion (Σ ▻ "a" :: ty_xlenbits) :=
       term_var "a" = t.
@@ -263,14 +272,15 @@ Module Examples.
       List.fold_right (fun s acc => gen_mem_asn s ∗ acc) ⊤ specs.
 
     Definition gen_contract
+        (init_addr : N)
         (reg_specs : list reg_spec)
         (mem_specs : list mem_full_spec)
         (instrs : list AST)
         (ec : bv xlenbits -> bool)
         (fl : nat)
         : CFGVerifierContract :=
-      @MkCFGVerifierContract [ctx]
-        (asn_init_pc ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
+      @MkCFGVerifierContract [ctx] init_addr
+        (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
         instrs ec fl.
 
     (* ------------------------------------------------------------------ *)
@@ -360,7 +370,7 @@ Module Examples.
        (bv.of_N 156, false, None); (bv.of_N 160, false, None)].
 
     Definition cmovznz4_cfg_contract : CFGVerifierContract :=
-      gen_contract cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs
+      gen_contract init_addr cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs
         (pcOutOfInstrs_exitCond cmovznz4_instrs) 35.
 
     Lemma valid_cmovznz4_cfg_contract : ValidCFGVerifierContract cmovznz4_cfg_contract.
@@ -368,7 +378,7 @@ Module Examples.
 
 
     Definition mv_zero_ex : CFGVerifierContract :=
-      {{ asn_init_pc ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
+      {{ asn_init_pc (bv.of_N init_addr) ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
         [MV X1 X0]
       @cfg[ pcOutOfInstrs_exitCond [MV X1 X0] , 3 ].
 
@@ -376,7 +386,7 @@ Module Examples.
     Proof. vm_compute. solve_vc. Qed.
 
     Definition mv_same_reg_ex : CFGVerifierContract :=
-      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" }}
+      {{ asn_init_pc (bv.of_N init_addr) ∗ X1 ↦ᵣ term_var "x" }}
         [MV X1 X1]
       @cfg[ pcOutOfInstrs_exitCond [MV X1 X1] , 3 ]
       with ["x" :: ty_xlenbits].
@@ -385,7 +395,7 @@ Module Examples.
     Proof. vm_compute. solve_vc. Qed.
 
     Definition mv_ex : CFGVerifierContract :=
-      {{ asn_init_pc ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" }}
+      {{ asn_init_pc (bv.of_N init_addr) ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" }}
         [MV X1 X2]
       @cfg[ pcOutOfInstrs_exitCond [MV X1 X2] , 3 ]
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
@@ -393,8 +403,28 @@ Module Examples.
     Example valid_mv_ex : ValidCFGVerifierContract mv_ex.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* Nonzero-start demonstrator for Step 2 (init_addr parameterization):
+       a single MV loaded at address 256 (0x100, 4-byte aligned) instead of
+       the usual 0. Exercises gen_contract's init_addr parameter (building
+       asn_init_pc (bv.of_N 256)), and the executor's base<=pc load guard
+       at a genuinely nonzero base (first fetch index (256-256)/4 = 0).
+       Uses a manually-correct exit condition (pc >= 256+4) rather than
+       pcOutOfInstrs_exitCond, whose threshold is still absolute-zero-
+       relative (4*|instrs|, not init_addr + 4*|instrs|) -- parameterizing
+       it is Step 4, not yet done; using it here at a nonzero start would
+       make the exit condition trivially true from the very first pc,
+       making the contract vacuously (not meaningfully) valid. *)
+    Definition mv_nonzero_start_ex : CFGVerifierContract :=
+      gen_contract (256%N) [(X1, false, None)] []
+        [MV X1 X0]
+        (fun v => bv.ugeb v (bv.of_N 260))
+        3.
+
+    Example valid_mv_nonzero_start_ex : ValidCFGVerifierContract mv_nonzero_start_ex.
+    Proof. vm_compute. solve_vc. Qed.
+
     Definition swap_cfg_contract : CFGVerifierContract :=
-      gen_contract
+      gen_contract init_addr
         [(X1, false, None); (X2, false, None); (X3, false, None)] []
         [MV X3 X2; MV X2 X1; MV X1 X3]
         (pcOutOfInstrs_exitCond [MV X3 X2; MV X2 X1; MV X1 X3])
@@ -421,7 +451,7 @@ Module Examples.
          default offset allows one instruction between this block and the true
          block. X1 must be a public register (secLeak). *)
     Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
-      gen_contract [(X1, true, None)] []
+      gen_contract init_addr [(X1, true, None)] []
         [BEQ X1 X0 true_offset]
         (pcOutOfInstrs_exitCond [BEQ X1 X0 true_offset])
         3.
@@ -441,7 +471,7 @@ Module Examples.
       fun v => bv.ugeb v (bv.of_N 8).
 
     Definition jmp_fwd_cfg_contract : CFGVerifierContract :=
-      gen_contract [] [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
+      gen_contract init_addr [] [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
 
     Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
@@ -462,7 +492,7 @@ Module Examples.
       fun v => bv.ugeb v (bv.of_N 8).
 
     Definition countdown_cfg_contract : CFGVerifierContract :=
-      gen_contract [(X1, true, Some (bv.of_N 2))] []
+      gen_contract init_addr [(X1, true, Some (bv.of_N 2))] []
         [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
         countdown_exitCond
         5.
@@ -472,7 +502,7 @@ Module Examples.
     Proof. vm_compute. solve_vc. Qed.
 
     Definition set_X2_to_42 : CFGVerifierContract :=
-      gen_contract [(X2, false, None)] []
+      gen_contract init_addr [(X2, false, None)] []
         [ADDI X2 X0 (bv.of_N 42)]
         (pcOutOfInstrs_exitCond [ADDI X2 X0 (bv.of_N 42)])
         3.
@@ -499,7 +529,7 @@ Module Examples.
       ; BNE X1 X0 back_12_offset ].
 
     Definition countdown_mem_cfg_contract : CFGVerifierContract :=
-      gen_contract [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))]
+      gen_contract init_addr [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))]
         countdown_mem_instrs
         countdown_mem_exitCond
         10.
@@ -625,8 +655,6 @@ Module Examples.
         end) specs.
 
     Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
-
-    Definition init_addr     : N := 0.
 
     Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=
@@ -1752,6 +1780,7 @@ End AdequacyTools.
   Lemma cfg_instrs_verified `{sailGS2 Σ} instrs' exitCond γ1 γ2 R (ι : Valuation R)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -1773,8 +1802,8 @@ End AdequacyTools.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold cfg_instrs_contract, exitCond_WP2_loop.
     destruct block.
-    cbn in valid_block, blockInstrs, blockExitCond, ImplPre.
-    subst cfg_instrs0 cfg_exitCond0.
+    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, ImplPre.
+    subst cfg_init_addr0 cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
     iApply (sound_sblock_verification_condition_myWP2 (base := bv.of_N init_addr)
               eq_refl valid_block ι _
@@ -1795,6 +1824,7 @@ End AdequacyTools.
   Lemma cfg_instrs_safe `{sailGS2 Σ} instrs' exitCond γ1 γ2 {R} {ι : Valuation R}
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -1821,6 +1851,7 @@ End AdequacyTools.
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -1849,8 +1880,8 @@ End AdequacyTools.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct block.
-    cbn in valid_block, blockInstrs, blockExitCond, ImplPre.
-    subst cfg_instrs0 cfg_exitCond0.
+    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, ImplPre.
+    subst cfg_init_addr0 cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
     iApply (sound_sblock_verification_condition_myWP2 (base := bv.of_N init_addr)
               eq_refl valid_block ι _
@@ -1873,6 +1904,7 @@ End AdequacyTools.
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
+    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -2230,6 +2262,7 @@ End AdequacyTools.
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
       (block : @CFGVerifierContract R)
       (valid_block : ValidCFGVerifierContract block)
+      (blockInitAddr : cfg_init_addr block = init_addr)
       (blockInstrs : cfg_instrs block = instrs')
       (blockExitCond : cfg_exitCond block = exitCond)
       (ImplPre : forall `{sailGS2 Σ},
@@ -2301,6 +2334,7 @@ End AdequacyTools.
         (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
         (block : @CFGVerifierContract R)
         (valid_block : ValidCFGVerifierContract block)
+        (blockInitAddr : cfg_init_addr block = init_addr)
         (blockInstrs : cfg_instrs block = instrs')
         (blockExitCond : cfg_exitCond block = exitCond)
         (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
@@ -2386,7 +2420,7 @@ End AdequacyTools.
       (Hlen : (4 * N.of_nat (length instrs) +
                4 * N.of_nat (length mem_specs) < lenAddr)%N)
       (valid_block : ValidCFGVerifierContract
-          (gen_contract reg_specs mem_specs instrs exitCond fuel)) :
+          (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)) :
     noninterferent_strong instrs exitCond reg_specs mem_specs.
   Proof.
     intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
@@ -2397,9 +2431,9 @@ End AdequacyTools.
       [ctx] [env]
       (gen_public_regs reg_specs) HpubReg
       (map mem_full_to_spec mem_specs) HpubMem
-      (gen_contract reg_specs mem_specs instrs exitCond fuel)
+      (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)
       valid_block
-      eq_refl eq_refl HDataAddrs).
+      eq_refl eq_refl eq_refl HDataAddrs).
     all: try eauto.
     - intros Σ H.
       iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
