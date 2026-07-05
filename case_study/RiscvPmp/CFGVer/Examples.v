@@ -1616,40 +1616,54 @@ Section AdequacyTools.
                iSplit. { iPureIntro. exact Hexit_eq. }
                iFrame. iPureIntro. exact Hexit.
             -- cbn [CHeapSpec.error] in Hexit. contradiction.
-          * destruct (Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned v) eqn:Hmod.
-            -- assert (Hbz : N.to_nat (bv.bin (@bv.zero xlenbits)) = 0%nat) by reflexivity.
-               set (k := (N.to_nat (bv.bin v) - N.to_nat (bv.bin bv.zero)) / bytes_per_instr) in *.
-               destruct (List.nth_error b k) as [i|] eqn:Hnth.
-               ++ unfold bind, CHeapSpec.bind in Hexec.
-                  iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-                  unfold Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned in Hmod.
-                  apply Nat.eqb_eq in Hmod.
-                  have Haddr : bv.add bv.zero (bv.of_N (N.of_nat (k * bytes_per_instr))) = v.
-                  { have Hdiv : k * bytes_per_instr = N.to_nat (bv.bin v).
-                    { have Hdm := Nat.div_mod (N.to_nat (bv.bin v)) bytes_per_instr.
-                      unfold k, bytes_per_instr in *. rewrite Hbz Nat.sub_0_r. lia. }
-                    rewrite Hdiv. rewrite N2Nat.id. rewrite bv.of_N_bin.
-                    rewrite bv.add_zero_l. reflexivity. }
-                  iPoseProof (Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs_nth b k bv.zero Hnth
-                    with "Hinstrs") as "[Hinstr Hframe]".
-                  iEval (rewrite Haddr) in "Hinstr".
-                  iEval (rewrite Haddr) in "Hframe".
-                  rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
-                  iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
-                  iIntros "Hpc_wd".
-                  iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
-                  { iApply (Katamaran.RiscvPmp.CFGVer.Verifier.sound_exec_instruction Hexec). iFrame. }
-                  iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
-                  2-3: iIntros "(%δ' & _ & HF)"; auto.
-                  2: iIntros "_"; done.
-                  iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
-                  iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
-                  iModIntro.
-                  iRevert "Hk".
-                  iApply (IH an h' Hcfg).
-                  iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
-               ++ cbn [CHeapSpec.error] in Hexec. contradiction.
-            -- cbn [CHeapSpec.error] in Hexec. contradiction.
+          * (* cexec_cfg_addr's guard is instrAligned v, then bv.uleb base v
+               (nested ifs) -- extract each guard term FROM Hexec via `match
+               goal` rather than retyping it: a manually-typed `destruct
+               (bv.uleb bv.zero v)` silently fails to substitute here (an
+               elaboration mismatch between the retyped term and the one
+               actually occurring in Hexec) -- `match goal with H :
+               context[...] => ... end` extracts the exact syntactic term,
+               which destruct can then always find. *)
+            match goal with
+            | Hexec : context[if ?G then _ else _] |- _ => destruct G eqn:Hmod
+            end.
+            2:{ cbn [CHeapSpec.error] in Hexec. contradiction. }
+            match goal with
+            | Hexec : context[if ?G then _ else _] |- _ => destruct G eqn:Hle
+            end.
+            2:{ cbn [CHeapSpec.error] in Hexec. contradiction. }
+            assert (Hbz : N.to_nat (bv.bin (@bv.zero xlenbits)) = 0%nat) by reflexivity.
+            set (k := (N.to_nat (bv.bin v) - N.to_nat (bv.bin bv.zero)) / bytes_per_instr) in *.
+            destruct (List.nth_error b k) as [i|] eqn:Hnth.
+            ++ unfold bind, CHeapSpec.bind in Hexec.
+               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+               unfold Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned in Hmod.
+               apply Nat.eqb_eq in Hmod.
+               have Haddr : bv.add bv.zero (bv.of_N (N.of_nat (k * bytes_per_instr))) = v.
+               { have Hdiv : k * bytes_per_instr = N.to_nat (bv.bin v).
+                 { have Hdm := Nat.div_mod (N.to_nat (bv.bin v)) bytes_per_instr.
+                   unfold k, bytes_per_instr in *. rewrite Hbz Nat.sub_0_r. lia. }
+                 rewrite Hdiv. rewrite N2Nat.id. rewrite bv.of_N_bin.
+                 rewrite bv.add_zero_l. reflexivity. }
+               iPoseProof (Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs_nth b k bv.zero Hnth
+                 with "Hinstrs") as "[Hinstr Hframe]".
+               iEval (rewrite Haddr) in "Hinstr".
+               iEval (rewrite Haddr) in "Hframe".
+               rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
+               iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
+               iIntros "Hpc_wd".
+               iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
+               { iApply (Katamaran.RiscvPmp.CFGVer.Verifier.sound_exec_instruction Hexec). iFrame. }
+               iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
+               2-3: iIntros "(%δ' & _ & HF)"; auto.
+               2: iIntros "_"; done.
+               iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
+               iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+               iModIntro.
+               iRevert "Hk".
+               iApply (IH an h' Hcfg).
+               iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
+            ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption
                CHeapSpec.error] in Hexec.
           contradiction.

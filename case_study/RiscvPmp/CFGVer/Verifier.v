@@ -136,6 +136,12 @@ Section BlockVerificationDerived.
     (N.to_nat (bv.bin v) mod bytes_per_instr =? 0)%nat.
   #[global] Arguments instrAligned : simpl never.
 
+  (* Keep the base<=pc load-address guard folded during cbn/simpl (like
+     instrAligned above), so `destruct (instrAligned v && bv.uleb base v)`
+     can abstract the whole boolean out of proof goals. vm_compute (used by
+     solve_vc) ignores `simpl never`, so the VC still reduces the guard. *)
+  #[local] Arguments bv.uleb : simpl never.
+
   Section Symbolic.
 
     Import ModalNotations.
@@ -233,12 +239,14 @@ Section BlockVerificationDerived.
                 angelic_binary
                   (if exitCond v then pure apc else error (fun _ => amsg.empty))
                   (if instrAligned v then
+                    if bv.uleb base v then
                     match List.nth_error b ((N.to_nat (bv.bin v) - N.to_nat (bv.bin base)) / bytes_per_instr)%nat with
                     | None   => error (fun _ => amsg.empty)
                     | Some i =>
                         ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
                         sexec_cfg_addr base b exitCond n' apc'
                     end
+                    else error (fun _ => amsg.empty)
                   else
                     error (fun _ => amsg.empty))
             end
@@ -310,12 +318,14 @@ Section BlockVerificationDerived.
                 angelic_binary
                   (if exitCond v then pure apc else error)
                   (if instrAligned v then
+                    if bv.uleb base v then
                     match List.nth_error b ((N.to_nat (bv.bin v) - N.to_nat (bv.bin base)) / bytes_per_instr)%nat with
                     | None   => error
                     | Some i =>
                         apc' <- cexec_instruction i apc ;;
                         cexec_cfg_addr base b exitCond n' apc'
                     end
+                    else error
                   else
                     error)
             end
@@ -346,12 +356,14 @@ Section BlockVerificationDerived.
     #[export] Instance mono_cexec_cfg_addr {base b exitCond fuel apc} :
       Monotonic (MHeapSpec eq) (cexec_cfg_addr base b exitCond fuel apc).
     Proof.
-      revert apc. induction fuel; cbn; intro apc.
+      revert apc. induction fuel; intro apc.
       - typeclasses eauto.
-      - destruct apc as [v | vl vr]; cbn.
-        + destruct (exitCond v); destruct (instrAligned v);
+      - destruct apc as [v | vl vr].
+        + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
+          destruct (exitCond v); destruct (instrAligned v); try destruct (bv.uleb base v);
+            cbn [CHeapSpec.pure CHeapSpec.error bind];
             try destruct (List.nth_error b _); typeclasses eauto.
-        + typeclasses eauto.
+        + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
     Qed.
 
   End Shallow.
@@ -422,6 +434,10 @@ Section BlockVerificationDerived.
           rsolve.
           + destruct (exitCond v); rsolve.
           + destruct (instrAligned v).
+            2: rsolve.
+            match goal with
+            | |- context[if ?G then _ else _] => destruct G eqn:Hle
+            end.
             2: rsolve.
             destruct (List.nth_error b _) as [i|].
             * iApply (refine_bind (RA := RVal ty_xlenbits)).
@@ -617,11 +633,12 @@ Section BlockVerificationDerived.
            sound_exec_instruction, then recurse via IH.
        This lemma uses WP2_loop (not myWP2_loop); the myWP2_loop version
        is sound_exec_cfg_addr_myWP2 in Examples.v. *)
-    Lemma sound_exec_cfg_addr {b exitCond fuel} (apc : RelVal ty_xlenbits) Φ (h : SCHeap) :
-      cexec_cfg_addr bv.zero b exitCond fuel apc Φ h →
-      interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (SyncVal bv.zero) b ⊢
+    Lemma sound_exec_cfg_addr {base b exitCond fuel} (apc : RelVal ty_xlenbits) Φ (h : SCHeap)
+        (Hbase : instrAligned base = true) :
+      cexec_cfg_addr base b exitCond fuel apc Φ h →
+      interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (SyncVal base) b ⊢
       (∀ an, ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
-             lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (SyncVal bv.zero) b ∗
+             lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (SyncVal base) b ∗
              (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ WP2_loop) -∗ WP2_loop.
     Proof.
       revert apc h.
@@ -638,34 +655,56 @@ Section BlockVerificationDerived.
                iSplit. { iPureIntro. exact Hexit_eq. }
                iFrame. iPureIntro. exact Hexit.
             -- cbn [CHeapSpec.error] in Hexit. contradiction.
-          * (* Execute branch *)
-            destruct (instrAligned v) eqn:Hmod.
-            -- assert (Hbz : N.to_nat (bv.bin (@bv.zero xlenbits)) = 0%nat) by reflexivity.
-               set (k := (N.to_nat (bv.bin v) - N.to_nat (bv.bin bv.zero)) / bytes_per_instr) in *.
-               destruct (List.nth_error b k) as [i|] eqn:Hnth.
-               ++ unfold bind, CHeapSpec.bind in Hexec.
-                  iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-                  unfold instrAligned in Hmod. apply Nat.eqb_eq in Hmod.
-                  have Haddr : bv.add bv.zero (bv.of_N (N.of_nat (k * bytes_per_instr))) = v.
-                  { have Hdiv : k * bytes_per_instr = N.to_nat (bv.bin v).
-                    { have Hdm := Nat.div_mod (N.to_nat (bv.bin v)) bytes_per_instr.
-                      unfold k, bytes_per_instr in *. rewrite Hbz Nat.sub_0_r. lia. }
-                    rewrite Hdiv. rewrite N2Nat.id. rewrite bv.of_N_bin.
-                    rewrite bv.add_zero_l. reflexivity. }
-                  iPoseProof (ptsto_instrs_nth b k bv.zero Hnth with "Hinstrs") as "[Hinstr Hframe]".
-                  iEval (rewrite Haddr) in "Hinstr". iEval (rewrite Haddr) in "Hframe".
-                  iApply semWP2_seq. iApply semWP2_call_inline.
-                  iApply (semWP2_mono with "[Hh Hnpc Hpc Hinstr]").
-                  { iApply (sound_exec_instruction Hexec). iFrame "Hh Hnpc Hpc Hinstr". }
-                  iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn; last (iIntros "_"; now rewrite <- semWP2_fail).
-                  2-3: iIntros "(% & _ & HF)"; auto.
-                  iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & %HsLan))] & Hinstr' & _))".
-                  iApply (semWP2_call_inline loop).
-                  iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
-                  iRevert "Hk". iApply (IH an h' Hcfg).
-                  iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
-               ++ cbn [CHeapSpec.error] in Hexec. contradiction.
-            -- cbn [CHeapSpec.error] in Hexec. contradiction.
+          * (* Execute branch. Guard is instrAligned v, then bv.uleb base v
+               (nested ifs). Extract each guard term FROM Hexec via `match
+               goal` rather than retyping it manually: a manually-typed
+               `destruct (bv.uleb base v)` silently fails to substitute here
+               (confirmed empirically) due to an elaboration mismatch between
+               the retyped term and the one actually occurring in Hexec —
+               `match goal with H : context[...] => ... end` extracts the
+               exact syntactic term, which destruct can then always find.
+               base<=v (Hle) makes the (v - base) index arithmetic exact. *)
+            match goal with
+            | Hexec : context[if ?G then _ else _] |- _ => destruct G eqn:Hmod
+            end.
+            2:{ cbn [CHeapSpec.error] in Hexec. contradiction. }
+            match goal with
+            | Hexec : context[if ?G then _ else _] |- _ => destruct G eqn:Hle
+            end.
+            2:{ cbn [CHeapSpec.error] in Hexec. contradiction. }
+            pose proof (proj2 (reflect_iff _ _ (bv.ule_spec base v)) Hle) as Hule.
+            unfold bv.ule in Hule.
+            set (k := (N.to_nat (bv.bin v) - N.to_nat (bv.bin base)) / bytes_per_instr) in *.
+            destruct (List.nth_error b k) as [i|] eqn:Hnth.
+            ++ unfold bind, CHeapSpec.bind in Hexec.
+               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+               unfold instrAligned in Hmod, Hbase.
+               apply Nat.eqb_eq in Hmod. apply Nat.eqb_eq in Hbase.
+               assert (Hlen : (N.to_nat (bv.bin base) <= N.to_nat (bv.bin v))%nat) by lia.
+               have Haddr : bv.add base (bv.of_N (N.of_nat (k * bytes_per_instr))) = v.
+               { have Hdiv : k * bytes_per_instr = (N.to_nat (bv.bin v) - N.to_nat (bv.bin base))%nat.
+                 { have Hdmd := Nat.div_mod (N.to_nat (bv.bin v) - N.to_nat (bv.bin base)) bytes_per_instr.
+                   have Hub := Nat.mod_upper_bound (N.to_nat (bv.bin v) - N.to_nat (bv.bin base)) bytes_per_instr.
+                   have Hdmv := Nat.div_mod (N.to_nat (bv.bin v)) bytes_per_instr.
+                   have Hdmb := Nat.div_mod (N.to_nat (bv.bin base)) bytes_per_instr.
+                   unfold k, bytes_per_instr in *. lia. }
+                 rewrite Hdiv. rewrite Nat2N.inj_sub. rewrite !N2Nat.id.
+                 rewrite <- (bv.of_N_bin base) at 1. rewrite bv.of_N_add.
+                 replace (bv.bin base + (bv.bin v - bv.bin base))%N with (bv.bin v) by lia.
+                 apply bv.of_N_bin. }
+               iPoseProof (ptsto_instrs_nth b k base Hnth with "Hinstrs") as "[Hinstr Hframe]".
+               iEval (rewrite Haddr) in "Hinstr". iEval (rewrite Haddr) in "Hframe".
+               iApply semWP2_seq. iApply semWP2_call_inline.
+               iApply (semWP2_mono with "[Hh Hnpc Hpc Hinstr]").
+               { iApply (sound_exec_instruction Hexec). iFrame "Hh Hnpc Hpc Hinstr". }
+               iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn; last (iIntros "_"; now rewrite <- semWP2_fail).
+               2-3: iIntros "(% & _ & HF)"; auto.
+               iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & %HsLan))] & Hinstr' & _))".
+               iApply (semWP2_call_inline loop).
+               iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+               iRevert "Hk". iApply (IH an h' Hcfg).
+               iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
+            ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.error] in Hexec.
           contradiction.
     Qed.
@@ -681,7 +720,7 @@ Section BlockVerificationDerived.
       specialize (Htrip ι a).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iPoseProof (sound_exec_cfg_addr a _ _ Hexec) as "Hsound". clear Hexec.
+      iPoseProof (sound_exec_cfg_addr (base := bv.zero) a _ _ ltac:(reflexivity) Hexec) as "Hsound". clear Hexec.
       iApply ("Hsound" with "[$Hpc $Hnpc $Hinstrs $Hh2]").
       iIntros (an2) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
       apply consume_sound in Hconsume.
