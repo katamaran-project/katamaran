@@ -257,7 +257,7 @@ Section BlockVerificationDerived.
      * The postcondition can additionally mention the address an where the pc points after execution.
      *)
     Definition sexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
       ⊢ SHeapSpec Unit :=
       fun w =>
@@ -266,24 +266,27 @@ Section BlockVerificationDerived.
         let δ1 := env.snoc (persist ( A:= Sub Σ) δ θ1) _ a in
         ⟨ θ2 ⟩ _ <- produce req δ1 ;;
         let a2 := persist__term a θ2 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr bv.zero b exitCond fuel a2 ;;
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr base b exitCond fuel a2 ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-    (* sblock_verification_condition req b exitCond fuel ens:
+    (* sblock_verification_condition base req b exitCond fuel ens:
        The final symbolic VC.  It runs sexec_triple_addr inside SHeapSpec.run,
        which discards the final heap (no leakcheck).  The result is a 𝕊 wnil
        proposition that can be checked by `safeE (postprocess ...)`.
        Call pattern (from Examples.v):
-         sblock_verification_condition (Σ := [ctx]) req b ec fl ens wnil
+         sblock_verification_condition (Σ := [ctx]) base req b ec fl ens wnil
        The explicit `Σ := [ctx]` is required because Rocq cannot infer it
-       from the other arguments alone. *)
+       from the other arguments alone. `base` is the concrete address the
+       block is loaded at; `req` is expected to constrain "a" = base (e.g.
+       via asn_init_pc base) so the executor's fetch index lines up with
+       where ptsto_instrs base b actually places the instructions. *)
     Definition sblock_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
         (* SHeapSpec does not perform a leakcheck. We could include one here. *)
-        SHeapSpec.run (sexec_triple_addr req b exitCond fuel ens (w := w)).
+        SHeapSpec.run (sexec_triple_addr base req b exitCond fuel ens (w := w)).
 
   End Symbolic.
 
@@ -332,20 +335,20 @@ Section BlockVerificationDerived.
         end.
 
     Definition cexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
       CHeapSpec unit :=
       lenv <- demonic_ctx Σ ;;
       a    <- demonic _ ;;
       _    <- produce req lenv.["a"∷ty_xlenbits ↦ a]  ;;
-      na   <- cexec_cfg_addr bv.zero b exitCond fuel a ;;
+      na   <- cexec_cfg_addr base b exitCond fuel a ;;
       consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na].
 
     Definition cblock_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
       (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
-      CHeapSpec.run (cexec_triple_addr req b exitCond fuel ens).
+      CHeapSpec.run (cexec_triple_addr base req b exitCond fuel ens).
 
     Import (hints) CStoreSpec.
 
@@ -458,11 +461,11 @@ Section BlockVerificationDerived.
     Import PureSpec.
 
     Lemma rexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
       ⊢ ℛ⟦RHeapSpec RUnit⟧
-          (cexec_triple_addr req b exitCond fuel ens)
-          (sexec_triple_addr req b exitCond fuel ens (w := w)).
+          (cexec_triple_addr base req b exitCond fuel ens)
+          (sexec_triple_addr base req b exitCond fuel ens (w := w)).
     Proof.
       unfold cexec_triple_addr, sexec_triple_addr.
       rsolve.
@@ -470,29 +473,29 @@ Section BlockVerificationDerived.
     Qed.
 
     #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
       RefineCompat (RHeapSpec RUnit)
-        (cexec_triple_addr req b exitCond fuel ens) w (sexec_triple_addr req b exitCond fuel ens (w := w)) _ :=
-      MkRefineCompat (rexec_triple_addr req b exitCond fuel ens).
+        (cexec_triple_addr base req b exitCond fuel ens) w (sexec_triple_addr base req b exitCond fuel ens (w := w)) _ :=
+      MkRefineCompat (rexec_triple_addr base req b exitCond fuel ens).
 
     Lemma rblock_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
-          (cblock_verification_condition req b exitCond fuel ens)
-          (sblock_verification_condition req b exitCond fuel ens w).
+          (cblock_verification_condition base req b exitCond fuel ens)
+          (sblock_verification_condition base req b exitCond fuel ens w).
     Proof.
       unfold cblock_verification_condition, sblock_verification_condition.
       rsolve.
     Qed.
 
     #[export] Instance refine_compat_block_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (base : bv xlenbits) (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
       RefineCompat (LogicalSoundness.RProp)
-        (cblock_verification_condition req b exitCond fuel ens) w (sblock_verification_condition req b exitCond fuel ens w) _ :=
-      MkRefineCompat (rblock_verification_condition req b exitCond fuel ens).
+        (cblock_verification_condition base req b exitCond fuel ens) w (sblock_verification_condition base req b exitCond fuel ens w) _ :=
+      MkRefineCompat (rblock_verification_condition base req b exitCond fuel ens).
 
   End Relational.
 
@@ -543,13 +546,13 @@ Section BlockVerificationDerived.
         (FunDef RiscvPmpProgram.step)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a (SyncVal instr)  ∗ ⌜ secLeak a ⌝)%I.
 
-    Definition semTripleCFG (PRE : RelVal ty_word -> iProp Σ) (instrs : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat) (POST : RelVal ty_word -> RelVal ty_word -> iProp Σ) : iProp Σ :=
+    Definition semTripleCFG (base : bv xlenbits) (PRE : RelVal ty_word -> iProp Σ) (instrs : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat) (POST : RelVal ty_word -> RelVal ty_word -> iProp Σ) : iProp Σ :=
       (∀ a,
-         (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs (SyncVal bv.zero) instrs) -∗
+         (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs (SyncVal base) instrs) -∗
          (∀ an, ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
-                pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs (SyncVal bv.zero) instrs ∗ POST a an -∗ WP2_loop) -∗
+                pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs (SyncVal base) instrs ∗ POST a an -∗ WP2_loop) -∗
          WP2_loop)%I.
-    #[global] Arguments semTripleCFG PRE%_I instrs exitCond fuel POST%_I.
+    #[global] Arguments semTripleCFG base PRE%_I instrs exitCond fuel POST%_I.
 
     Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
       ⦃ PRE ⦄ s; [env] ⦃ POST ⦄ → ⊢ semTriple [env] PRE s POST.
@@ -709,9 +712,10 @@ Section BlockVerificationDerived.
           contradiction.
     Qed.
 
-    Lemma sound_cexec_triple_addr {Γ : LCtx} {pre post b} (exitCond : bv xlenbits -> bool) {fuel} {ι : Valuation Γ} :
-      cexec_triple_addr pre b exitCond fuel post (fun _ _ => True) []%list ->
-      ⊢ semTripleCFG (λ a : RelVal ty_word, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]) ∗ ⌜ secLeak a ⌝) b exitCond fuel
+    Lemma sound_cexec_triple_addr {Γ : LCtx} {base pre post b} (exitCond : bv xlenbits -> bool) {fuel} {ι : Valuation Γ}
+        (Hbase : instrAligned base = true) :
+      cexec_triple_addr base pre b exitCond fuel post (fun _ _ => True) []%list ->
+      ⊢ semTripleCFG base (λ a : RelVal ty_word, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]) ∗ ⌜ secLeak a ⌝) b exitCond fuel
           (λ a na : RelVal ty_word, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
     Proof.
       cbv [cexec_triple_addr bind demonic_ctx demonic CPureSpec.demonic lift_purespec].
@@ -720,7 +724,7 @@ Section BlockVerificationDerived.
       specialize (Htrip ι a).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iPoseProof (sound_exec_cfg_addr (base := bv.zero) a _ _ ltac:(reflexivity) Hexec) as "Hsound". clear Hexec.
+      iPoseProof (sound_exec_cfg_addr (base := base) a _ _ Hbase Hexec) as "Hsound". clear Hexec.
       iApply ("Hsound" with "[$Hpc $Hnpc $Hinstrs $Hh2]").
       iIntros (an2) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
       apply consume_sound in Hconsume.
@@ -730,26 +734,28 @@ Section BlockVerificationDerived.
       iFrame.
     Qed.
 
-    Lemma sound_cblock_verification_condition {Γ pre post b exitCond fuel} :
-      cblock_verification_condition pre b exitCond fuel post ->
+    Lemma sound_cblock_verification_condition {Γ base pre post b exitCond fuel}
+        (Hbase : instrAligned base = true) :
+      cblock_verification_condition base pre b exitCond fuel post ->
       forall ι : Valuation Γ,
-        ⊢ semTripleCFG (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])  ∗ ⌜ secLeak a ⌝)
+        ⊢ semTripleCFG base (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])  ∗ ⌜ secLeak a ⌝)
           b exitCond fuel
           (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
     Proof.
       intros Hverif ι.
-      exact (sound_cexec_triple_addr exitCond Hverif).
+      exact (sound_cexec_triple_addr exitCond Hbase Hverif).
     Qed.
 
-    Lemma sound_sblock_verification_condition {Γ pre post b exitCond fuel} :
-      safeE (postprocess (sblock_verification_condition pre b exitCond fuel post wnil)) ->
+    Lemma sound_sblock_verification_condition {Γ base pre post b exitCond fuel}
+        (Hbase : instrAligned base = true) :
+      safeE (postprocess (sblock_verification_condition base pre b exitCond fuel post wnil)) ->
       forall ι : Valuation Γ,
-        ⊢ semTripleCFG (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])  ∗ ⌜ secLeak a ⌝)
+        ⊢ semTripleCFG base (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])  ∗ ⌜ secLeak a ⌝)
           b exitCond fuel
           (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
     Proof.
       intros Hverif ι.
-      apply (sound_cexec_triple_addr exitCond).
+      apply (sound_cexec_triple_addr exitCond Hbase).
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.
