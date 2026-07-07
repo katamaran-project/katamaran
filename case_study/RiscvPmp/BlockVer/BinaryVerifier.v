@@ -45,7 +45,9 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness
      RiscvPmp.PmpCheck
+     RiscvPmp.IrisModel
      RiscvPmp.IrisModelBinary
+     RiscvPmp.IrisInstance
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Machine
      RiscvPmp.Sig
@@ -55,7 +57,6 @@ From Katamaran Require Import
 From Katamaran Require RiscvPmp.ModelBinary.
 
 Import RiscvPmpProgram.
-Import RiscvPmpIrisInstancePredicates2.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -63,18 +64,29 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 
-Import RiscvPmpIrisBase2.
 
-Module RiscvPmpBlockVerifIrisInstance2 := RiscvPmpIrisInstance2 RiscvPmpBlockVerifFailLogic.
-
-Module Import BinaryBlockVerifierNotations.
-  Notation "a '↦' t" := (reg_pointsTo21 a t) (at level 70).
-  Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
-End BinaryBlockVerifierNotations.
-
-Module BinaryBlockVerifier.
+Module BinaryBlockVerifier
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
+  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl)
+  (RVPCONTRl : RiscvPmpIrisInstanceWithContracts LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl)
+  (RVPTVl : RiscvPmpBlockVerifTotalVerifier LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
+  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr)
+  (RVPCONTRr : RiscvPmpIrisInstanceWithContracts LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr)
+  (RVPTVr : RiscvPmpBlockVerifTotalVerifier LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr RVPCONTRr)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
+  (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
+  (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
+  (Import RVPINST2 : RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
   Import iris.base_logic.lib.iprop iris.proofmode.tactics.
-  Import RiscvPmpBlockVerifIrisInstance2.
+
+  Module Import BinaryBlockVerifierNotations.
+    Notation "a '↦' t" := (reg_pointsTo21 a t) (at level 70).
+    Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
+  End BinaryBlockVerifierNotations.
 
   (* TODO: annoying, but not inj in general (illegal instructions...)
            Decode (at least the Sail one) does seem to be injective
@@ -92,14 +104,14 @@ Module BinaryBlockVerifier.
 
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
-      | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
+      | cons inst insts => (interp_ptsto_instr (mG := sailGS2_memGS) a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
 
     Lemma ptsto_instrs_equiv {a : Val ty_xlenbits} {instrs : list AST} :
       ptsto_instrs a instrs ⊣⊢
-        @TotalVerifier.ptsto_instrs _ sailGS2_sailGS_left a instrs
-        ∗ @TotalVerifier.ptsto_instrs _ sailGS2_sailGS_right a instrs.
+        @RVPTVl.ptsto_instrs _ sailGS2_sailGS_left a instrs
+        ∗ @RVPTVr.ptsto_instrs _ sailGS2_sailGS_right a instrs.
     Proof.
       revert a.
       iInduction instrs as [|instr instrs] "IH";
@@ -135,12 +147,12 @@ Module BinaryBlockVerifier.
       | i :: instrs =>
           let Σ := [env].["a"∷ty_xlenbits ↦ ainstr] in
           ⌜ainstr = apc⌝
-          ∗ (asn.interpret (exec_instruction_prologue i) Σ  -∗
+          ∗ (asn.interpret (RVPTVl.exec_instruction_prologue i) Σ  -∗
                semWP2 [env] [env] fun_step fun_step
                  (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
                      match v1 with
                      | inl v =>
-                         ∃ na, asn.interpret (exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
+                         ∃ na, asn.interpret (RVPTVr.exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
                                ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                      | inr _ =>
                        if RiscvPmpBlockVerifFailLogic.fail_rule_pre
@@ -262,8 +274,8 @@ Module BinaryBlockVerifier.
     Qed.
 
     Lemma step_n_focus (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST1 POST2 POST : Val ty_xlenbits -> iProp Σ) :
-      @TotalVerifier.step_n _ sailGS2_sailGS_left instrs ainstr apc POST1 -∗
-      @TotalVerifier.step_n _ sailGS2_sailGS_right instrs ainstr apc POST2 -∗
+      @RVPTVl.step_n _ sailGS2_sailGS_left instrs ainstr apc POST1 -∗
+      @RVPTVr.step_n _ sailGS2_sailGS_right instrs ainstr apc POST2 -∗
       (∀ na1 na2, POST1 na1 ∗ POST2 na2 -∗ ⌜na1 = na2⌝ ∗ POST na1) -∗
       step_n instrs ainstr apc POST.
     Proof.

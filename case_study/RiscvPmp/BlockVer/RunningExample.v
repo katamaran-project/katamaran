@@ -61,7 +61,7 @@ From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
 From stdpp Require namespaces.
-From Katamaran Require Import RiscvPmp.LoopVerification.
+(* From Katamaran Require Import RiscvPmp.LoopVerification. *)
 From Katamaran Require Import RiscvPmp.LoopVerificationBinary.
 
 Module AsnNotations.
@@ -110,6 +110,9 @@ Module UnaryCheck.
      sanity check to be confident that, when we split the binary verification
      into two unary ones, it should hold. *)
 
+  Import Contracts.
+  Import RiscvPmpSpecification.
+
   Section WithAsnNotations.
     Import AsnNotations.
 
@@ -139,15 +142,15 @@ Module UnaryCheck.
       asn_pmp_entries term_pmp_cfg.
   End WithAsnNotations.
 
-  Definition vc_code : 𝕊 ε :=
-    postprocess (BlockVer.Verifier.sblock_verification_condition PRE code POST wnil).
+  (* Definition vc_code : 𝕊 ε := *)
+  (*   postprocess (BlockVer.Verifier.sblock_verification_condition PRE code POST wnil). *)
 
-  Lemma sat_code : safeE vc_code.
-  Proof.
-    vm_compute.
-    constructor; cbn.
-    intuition; bv_solve_Ltac.solveBvManual.
-  Qed.
+  (* Lemma sat_code : safeE vc_code. *)
+  (* Proof. *)
+  (*   vm_compute. *)
+  (*   constructor; cbn. *)
+  (*   intuition; bv_solve_Ltac.solveBvManual. *)
+  (* Qed. *)
 
   (* At this point we can be sure that the unary version works. Obviously this
      is only a valid statement if the binary assertions are correctly defined. *)

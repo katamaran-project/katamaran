@@ -61,5 +61,5 @@ Module Type IrisTotalPartialWeakestPre
   End WithSailGS.
 End IrisTotalPartialWeakestPre.
 
-Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisPrelims B PROG SEM <+ IrisParameters B <+ IrisResources B PROG SEM <+ IrisWeakestPre B PROG SEM <+ IrisTotalWeakestPre B PROG SEM <+ IrisTotalPartialWeakestPre B PROG SEM.
+Module Type IrisBase (B : Base) (PROG : Program B) (SEM : Semantics B PROG) (IPre : IrisPrelims B PROG SEM) :=
+  IrisParameters B <+ IrisResources B PROG SEM IPre <+ IrisWeakestPre B PROG SEM IPre <+ IrisTotalWeakestPre B PROG SEM IPre <+ IrisTotalPartialWeakestPre B PROG SEM IPre.

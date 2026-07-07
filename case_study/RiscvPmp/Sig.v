@@ -102,6 +102,7 @@ Derive EqDec for Predicate.
 Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
   Section PredicateKit.
+    Import bv.notations.
     Definition 𝑷 := PurePredicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
@@ -163,6 +164,228 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 
     Definition Pmp_access (a : Val ty_xlenbits) (width : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
       Gen_Pmp_access a width bv.zero entries m acc.
+
+    (* Note that the condition on overflow is required: some illegal set-ups are accepted by `pmp_match_addr` as it does not track overflow, and shrinking those might make the output go from match to no match. *)
+    Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
+      forall paddr rng,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_match_addr paddr bytes rng = PMP_Match ->
+        pmp_match_addr paddr w rng = PMP_Match.
+    Proof.
+      destruct rng as [[lo hi]|]; last by simpl.
+      rewrite !pmp_match_addr_match.
+      solve_bv.
+    Qed.
+
+    Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
+      forall paddr rng,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        w <=ᵘ bytes ->
+        pmp_match_addr paddr bytes rng = PMP_NoMatch ->
+        pmp_match_addr paddr w rng = PMP_NoMatch.
+    Proof.
+      intros paddr [[lo hi]|] Hass Hle; last by simpl.
+      rewrite !pmp_match_addr_nomatch.
+      intros [|Hcond]; try discriminate. right. intros ? ? Hinv.
+      specialize (Hcond _ _ Hinv). inversion Hinv.
+      solve_bv.
+    Qed.
+
+    Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
+      forall paddr cfg p hi lo,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
+        pmp_match_entry paddr w p cfg hi lo = PMP_Success.
+    Proof.
+      unfold pmp_match_entry.
+      intros.
+      destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
+      apply pmp_match_addr_reduced_width with (w := w) in E; auto.
+      now rewrite E.
+    Qed.
+
+    Lemma pmp_match_entry_reduced_width_continue (bytes w : Xlenbits) :
+      forall paddr cfg p hi lo,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        w <=ᵘ bytes ->
+        pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
+        pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
+    Proof.
+      unfold pmp_match_entry.
+      intros.
+      destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
+      apply pmp_match_addr_reduced_width_no_match with (w := w) in E; auto.
+      now rewrite E.
+    Qed.
+
+    Lemma pmp_check_aux_access_reduced_width (bytes w : Xlenbits) :
+      forall paddr lo entries p acc,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_check_aux paddr bytes lo entries p acc = true ->
+        pmp_check_aux paddr w lo entries p acc = true.
+    Proof.
+      intros paddr lo entries p acc Hrep H0w Hle H.
+      generalize dependent lo.
+      induction entries as [|[cfg0 hi] es IHentries];
+        intros;
+        first now simpl in *.
+      cbn in *.
+      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E; last done.
+      - apply pmp_match_entry_reduced_width with (w := w) in E; auto.
+        now rewrite E.
+      - apply pmp_match_entry_reduced_width_continue with (w := w) in E; auto.
+        rewrite E.
+        unfold pmp_check_aux in IHentries.
+        now apply IHentries.
+    Qed.
+
+    Lemma pmp_check_access_reduced_width (bytes w : Xlenbits) :
+      forall paddr entries p acc,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero <ᵘ w ->
+        w <=ᵘ bytes ->
+        pmp_check paddr bytes entries p acc = true ->
+        pmp_check paddr w entries p acc = true.
+    Proof.
+      unfold pmp_check; intros;
+        apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
+    Qed.
+
+    Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
+      forall paddr pmp p acc ,
+        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
+        bv.zero <ᵘ w ->
+        w <=ᵘ bytes ->
+        Pmp_access paddr bytes pmp p acc ->
+        Pmp_access paddr w pmp p acc.
+    Proof.
+      unfold Pmp_access, Gen_Pmp_access; intros;
+        apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
+    Qed.
+
+    Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        res = PMP_NoMatch ∨ res = PMP_Match ->
+        pmp_match_addr paddr (bv.of_nat (S bytes)) rng = res ->
+        pmp_match_addr (paddr + bv.one) (bv.of_nat bytes) rng = res.
+    Proof.
+      intros paddr rng res Hb Hrep.
+      destruct rng as [[lo hi]|]; subst; auto.
+      intros [Hres|Hres]; subst.
+      - rewrite !pmp_match_addr_nomatch. intros [|Hcond]; first discriminate. right.
+        intros ? ? Hspec. specialize (Hcond _ _ Hspec). solve_bv.
+      - rewrite !pmp_match_addr_match. solve_bv.
+    Qed.
+
+    Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Success ->
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
+    Proof.
+      intros paddr p cfg lo hi Hb Hrep.
+      unfold pmp_match_entry.
+      intros H.
+      destruct (pmp_match_addr paddr _ _) eqn:E;
+        apply pmp_match_addr_addr_S_width_pred in E;
+        auto;
+        try now rewrite E.
+      discriminate H.
+    Qed.
+
+    Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr p cfg lo hi,
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Continue ->
+        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
+    Proof.
+      intros paddr p cfg lo hi Hb Hrep.
+      unfold pmp_match_entry.
+      intros H.
+      destruct (pmp_match_addr paddr _ _) eqn:E;
+        apply pmp_match_addr_addr_S_width_pred in E;
+        auto;
+        try now rewrite E.
+      discriminate H.
+    Qed.
+
+    Lemma pmp_check_aux_addr_S_width_pred (bytes : nat) : forall paddr lo entries p acc,
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        pmp_check_aux paddr (bv.of_nat (S bytes)) lo entries p acc = true ->
+        pmp_check_aux (paddr + bv.one) (bv.of_nat bytes) lo entries p acc = true.
+    Proof.
+      intros paddr lo entries p acc Hb Hrep.
+      generalize dependent lo.
+      induction entries as [|[cfg0 hi] entries IHentries];
+        intros;
+        first now simpl in *.
+      unfold pmp_check_aux.
+      unfold pmp_check_aux in H.
+      simpl in *.
+      destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
+      apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
+      now rewrite Ecfg0.
+      apply pmp_match_entry_addr_S_width_pred_continue in Ecfg0; auto.
+      rewrite Ecfg0.
+      now apply IHentries.
+    Qed.
+
+    Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr lo entries p acc,
+        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
+        Gen_Pmp_access paddr (bv.of_nat (S bytes)) lo entries p acc ->
+        Gen_Pmp_access (paddr + bv.one) (bv.of_nat bytes) lo entries p acc.
+    Proof.
+      intros paddr lo pmp p acc Hb Hrep.
+      unfold Gen_Pmp_access.
+      now apply pmp_check_aux_addr_S_width_pred.
+    Qed.
+
+    Lemma gen_pmp_access_shift (bytes shift: nat) paddr lo entries p acc:
+      (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+      (bv.bin paddr + N.of_nat (bytes + shift) < bv.exp2 xlenbits)%N ->
+      Gen_Pmp_access paddr (bv.of_nat (bytes + shift)) lo entries p acc ->
+      Gen_Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) lo entries p acc.
+    Proof.
+      intros Hzero. generalize dependent paddr.
+      induction shift; intros paddr Hrep Hacc.
+      - rewrite bv.add_zero_r. rewrite Nat.add_0_r in Hacc. auto.
+      - rewrite Nat.add_succ_r in Hacc,Hrep.
+        rewrite Nat2N.inj_succ in Hrep.
+        apply pmp_access_addr_S_width_pred in Hacc; try solve_bv.
+        apply IHshift in Hacc.
+        + rewrite bv.of_nat_S bv.add_assoc. apply Hacc.
+        + solve_bv.
+    Qed.
+
+    Lemma pmp_access_shift (bytes shift: nat) paddr entries p acc:
+      (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
+      (bv.bin paddr + N.of_nat (bytes + shift) < bv.exp2 xlenbits)%N ->
+      Pmp_access paddr (bv.of_nat (bytes + shift)) entries p acc ->
+      Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) entries p acc.
+    Proof. apply gen_pmp_access_shift. Qed.
+
+    Lemma pmp_seqBv_restrict base width k y entries m p:
+      (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
+      bv.seqBv base (N.of_nat width) !! k = Some y →
+      Pmp_access base (bv.of_nat width) entries m p →
+      Pmp_access y (bv.of_nat 1) entries m p.
+    Proof.
+      intros Hrep Hlkup Hacc.
+      pose proof (bv.seqBv_width_at_least _ _ Hlkup) as [p' ->%Nat2N.inj'].
+      apply bv.seqBv_spec in Hlkup; subst y.
+      apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc; try solve_bv.
+      apply pmp_access_shift in Hacc; solve_bv.
+    Qed.
+
 
     Equations(noeqns) access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
     | Read      | Read      := true;

@@ -22,11 +22,10 @@ Proof. constructor. typeclasses eauto. Defined.
 Proof. solve_inG. Qed.
 
 Section S.
-  Context `{!trace_preG T Σ}.
-  Context (γ : gname). (* To allow using different gnames *)
+  Context `{!traceG T Σ}.
 
-  Definition tr_auth (t: T) : iProp Σ := own γ (● (Some (Excl (t: leibnizO T)))).
-  Definition tr_frag (t: T) : iProp Σ := own γ (◯ (Some (Excl (t: leibnizO T)))).
+  Definition tr_auth (t: T) : iProp Σ := own trace_name (● (Some (Excl (t: leibnizO T)))).
+  Definition tr_frag (t: T) : iProp Σ := own trace_name (◯ (Some (Excl (t: leibnizO T)))).
 
   Lemma trace_full_frag_eq t t':
     tr_auth t -∗ tr_frag t' -∗
@@ -67,31 +66,27 @@ Section S.
   Qed.
 End S.
 
-Notation tr_auth1 := (tr_auth trace_name).
-Notation tr_frag1 := (tr_frag trace_name).
+(* Lemma trace_alloc_names `{!trace_preG T Σ} t : *)
+(*   ⊢ |==> ∃ γ, tr_auth γ t ∗ tr_frag γ t. *)
+(* Proof. *)
+(* iMod (own_alloc (● (Some (Excl (t: leibnizO T))) ⋅ ◯ (Some (Excl (t: leibnizO T))))) as (γ) "[? ?]". *)
+(* { apply auth_both_valid_2; done. } *)
+(* iModIntro. iExists _. iFrame. *)
+(* Qed. *)
 
-Lemma trace_alloc_names `{!trace_preG T Σ} t :
-  ⊢ |==> ∃ γ, tr_auth γ t ∗ tr_frag γ t.
+Lemma trace_alloc `{!trace_preG T Σ} t :
+  ⊢ |==> ∃ tG : traceG T Σ, tr_auth t ∗ tr_frag t.
 Proof.
   iMod (own_alloc (● (Some (Excl (t: leibnizO T))) ⋅ ◯ (Some (Excl (t: leibnizO T))))) as (γ) "[? ?]".
   { apply auth_both_valid_2; done. }
-  iModIntro. iExists _. iFrame.
-Qed.
-
-Lemma trace_alloc `{!trace_preG T Σ} t :
-  ⊢ |==> ∃ tG : traceG T Σ,
-
-      @tr_auth _ _ (@traceG_preG _ _ tG) trace_name t ∗ @tr_frag _ _ (@traceG_preG _ _ tG) trace_name t.
-Proof.
-  iMod (trace_alloc_names t) as (γ) "Hinit".
-  by iExists (TraceG _ _ _ γ).
+  by iExists (TraceG _ _ _ γ); iFrame.
 Qed.
 
 (* Conditional trace fragments *)
-Definition tr_frag1_if `{traceG Σ} (trb : bool) t :=
-  if trb then tr_frag1 t else True%I.
+Definition tr_frag_if `{traceG Σ} (trb : bool) t :=
+  if trb then tr_frag t else True%I.
 
-#[export] Instance tr_frag1_if_Timeless `{traceG Σ} trb t : Timeless (tr_frag1_if trb t).
+#[export] Instance tr_frag_if_Timeless `{traceG Σ} trb t : Timeless (tr_frag_if trb t).
 Proof.
-  intros. rewrite /tr_frag1_if. destruct trb; apply _.
+  intros. rewrite /tr_frag_if. destruct trb; apply _.
 Qed.

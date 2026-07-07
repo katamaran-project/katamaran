@@ -90,15 +90,16 @@ Global Opaque iris_invGS2.
 
 Module Type IrisParameters2
   (Import B    : Base)
-  (Import IB   : IrisParameters B).
+  (IBleft   : IrisParameters B)
+  (IBright   : IrisParameters B).
 
-  Parameter memGS2 : gFunctors -> Set.
+  Parameter Inline memGS2 : gFunctors -> Set.
   Existing Class memGS2.
-  Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
-  Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
+  Parameter memGS2_memGS_left : forall `{memGS2 Σ}, IBleft.memGS Σ.
+  Parameter memGS2_memGS_right : forall `{memGS2 Σ}, IBright.memGS Σ.
   Parameter mem_inv2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
   Parameter mem_inv2_mem_inv : forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
-      mem_inv2 μ1 μ2 ⊣⊢ @mem_inv _ memGS2_memGS_left μ1 ∗ @mem_inv _ memGS2_memGS_right μ2.
+      mem_inv2 μ1 μ2 ⊣⊢ @IBleft.mem_inv _ memGS2_memGS_left μ1 ∗ @IBright.mem_inv _ memGS2_memGS_right μ2.
 End IrisParameters2.
 
 Module Type IrisResources2
@@ -106,9 +107,9 @@ Module Type IrisResources2
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import IPre : IrisPrelims B PROG SEM)
-  (Import IP   : IrisParameters B)
-  (Import IP2  : IrisParameters2 B IP)
-  (Import IR   : IrisResources B PROG SEM IPre IP).
+  (IBleft      : IrisBase B PROG SEM IPre)
+  (IBright     : IrisBase B PROG SEM IPre)
+  (Import IP2  : IrisParameters2 B IBleft IBright).
 
   Class sailRegGS2 Σ := SailRegGS2 {
                             sailRegGS2_sailRegGS_left : sailRegGS Σ;
@@ -132,16 +133,16 @@ Module Type IrisResources2
     fun reg v1 v2 =>
     (@reg_pointsTo _ sailRegGS2_sailRegGS_left _ reg v1 ∗ @reg_pointsTo _ sailRegGS2_sailRegGS_right _ reg v2)%I.
 
-  Definition sailGS2_sailGS_left `{sG2 : sailGS2 Σ} : sailGS Σ :=
-    {| sailGS_invGS     := sailGS2_invGS;
-       sailGS_sailRegGS := sailRegGS2_sailRegGS_left;
-       sailGS_memGS     := memGS2_memGS_left;
+  Definition sailGS2_sailGS_left `{sG2 : sailGS2 Σ} : IBleft.sailGS Σ :=
+    {| IBleft.sailGS_invGS     := sailGS2_invGS;
+       IBleft.sailGS_sailRegGS := sailRegGS2_sailRegGS_left;
+       IBleft.sailGS_memGS     := memGS2_memGS_left;
     |}.
 
-  Definition sailGS2_sailGS_right `{sG2 : sailGS2 Σ} : sailGS Σ :=
-    {| sailGS_invGS     := sailGS2_invGS;
-       sailGS_sailRegGS := sailRegGS2_sailRegGS_right;
-       sailGS_memGS     := memGS2_memGS_right;
+  Definition sailGS2_sailGS_right `{sG2 : sailGS2 Σ} : IBright.sailGS Σ :=
+    {| IBright.sailGS_invGS     := sailGS2_invGS;
+       IBright.sailGS_sailRegGS := sailRegGS2_sailRegGS_right;
+       IBright.sailGS_memGS     := memGS2_memGS_right;
     |}.
 
   #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
@@ -151,15 +152,19 @@ Module Type IrisResources2
       num_laters_per_step2 := fun _ => 0
     |}.
 
+  (* unnecessary? *)
   Lemma sailGS2_sailGS_left_memGS_eq `{sG2 : sailGS2 Σ} :
-    @sailGS_memGS _ (@sailGS2_sailGS_left _ sG2) = @memGS2_memGS_left _ (@sailGS2_memGS _ sG2).
+    @IBleft.sailGS_memGS _ (@sailGS2_sailGS_left _ sG2) = @memGS2_memGS_left _ (@sailGS2_memGS _ sG2).
   Proof. auto. Qed.
 
+  (* unnecessary? *)
   Lemma sailGS2_sailGS_right_memGS_eq `{sG2 : sailGS2 Σ} :
-    @sailGS_memGS _ (@sailGS2_sailGS_right _ sG2) = @memGS2_memGS_right _ (@sailGS2_memGS _ sG2).
+    @IBright.sailGS_memGS _ (@sailGS2_sailGS_right _ sG2) = @memGS2_memGS_right _ (@sailGS2_memGS _ sG2).
   Proof. auto. Qed.
 
 End IrisResources2.
 
-Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG) :=
-  IrisBase B PROG SEM <+ IrisParameters2 B <+ IrisResources2 B PROG SEM.
+Module Type IrisBase2 (B : Base) (PROG : Program B) (SEM : Semantics B PROG)
+  (IPre : IrisPrelims B PROG SEM)
+  (IBleft IBright : IrisBase B PROG SEM IPre) :=
+  IrisParameters2 B IBleft IBright <+ IrisResources2 B PROG SEM IPre IBleft IBright.

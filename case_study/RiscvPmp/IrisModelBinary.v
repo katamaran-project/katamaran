@@ -35,9 +35,11 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance.
-From iris Require Import
-     base_logic.lib.gen_heap
-     proofmode.tactics.
+From iris.base_logic Require Import lib.gen_heap
+  invariants.
+From iris.proofmode Require Import tactics.
+From stdpp Require namespaces.
+Module ns := stdpp.namespaces.
 
 Set Implicit Arguments.
 
@@ -46,52 +48,48 @@ Import RiscvPmpProgram.
 (* Instantiate the Iris framework solely using the operational semantics. At
    this point we do not commit to a set of contracts nor to a set of
    user-defined predicates. *)
-Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-  (* Pull in the definition of the LanguageMixin and register ghost state. *)
-  Include RiscvPmpIrisBase.
-  Import RiscvPmpIrisAdeqParameters.
+Module Type RiscvPmpIrisBase2
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM RVPBASEl RVPBASEr.
 
   (* Defines the memory ghost state. *)
   Section RiscvPmpIrisParams2.
     Import bv.
 
-    Class mcMemGS2 Σ :=
-      McMemGS2 {
-          (* two copies of the unary ghost variables *)
-          mc_ghGS2_left : RiscvPmpIrisBase.mcMemGS Σ
-        ; mc_ghGS2_right : RiscvPmpIrisBase.mcMemGS Σ
-        }.
-
     Definition memGS2 : gFunctors -> Set := mcMemGS2.
     Existing Class memGS2.
-    Definition memGS2_memGS_left : forall `{mG : memGS2 Σ}, memGS Σ := @mc_ghGS2_left.
-    Definition memGS2_memGS_right : forall `{mG : memGS2 Σ}, memGS Σ := @mc_ghGS2_right.
+    Definition memGS_left : forall `{mG : memGS2 Σ}, mcMemGS Σ := @mc_ghGS2_left.
+    Definition memGS_right : forall `{mG : memGS2 Σ}, mcMemGS Σ := @mc_ghGS2_right.
+    Definition memGS2_memGS_left `{mG : memGS2 Σ} : RVPBASEl.memGS Σ := mG.
+    Definition memGS2_memGS_right `{mG : memGS2 Σ} : RVPBASEr.memGS Σ := mG.
     Definition mem_inv2 : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
-        (RiscvPmpIrisBase.mem_inv memGS2_memGS_left μ1 ∗ RiscvPmpIrisBase.mem_inv memGS2_memGS_right μ2
+        (RVPBASEl.mem_inv hG μ1 ∗ RVPBASEr.mem_inv hG μ2
         )%I.
     Lemma mem_inv2_mem_inv :
       forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
-        mem_inv2 mG μ1 μ2 ⊣⊢ mem_inv memGS2_memGS_left μ1 ∗ mem_inv memGS2_memGS_right μ2.
+        mem_inv2 mG μ1 μ2 ⊣⊢ RVPBASEl.mem_inv mG μ1 ∗ RVPBASEr.mem_inv mG μ2.
     Proof. by unfold mem_inv2. Qed.
 
     Definition memGS2_gtGS2_left `{mG : memGS2 Σ} : traceG Trace Σ :=
-      @mc_gtGS _ memGS2_memGS_left.
+      @mc_gtGS _ memGS_left.
     Definition memGS2_gtGS2_right `{mG : memGS2 Σ} : traceG Trace Σ :=
-      @mc_gtGS _ memGS2_memGS_right.
+      @mc_gtGS _ memGS_right.
     Definition memGS2_wpGS2_left `{mG : memGS2 Σ} : writePendingG Σ :=
-      @mc_wpGS _ memGS2_memGS_left.
+      @mc_wpGS _ memGS_left.
     Definition memGS2_wpGS2_right `{mG : memGS2 Σ} : writePendingG Σ :=
-      @mc_wpGS _ memGS2_memGS_right.
+      @mc_wpGS _ memGS_right.
 
-    Lemma written_nothingPending `{memGS2 Σ} e :
-      @written _ memGS2_wpGS2_left e ∗ @written _ memGS2_wpGS2_right e ==∗
-      @nothingPending _ memGS2_wpGS2_left ∗ @nothingPending _ memGS2_wpGS2_right.
-    Proof.
-    Admitted.
+    (* (* DOMI: this lemma needs the two written_auth chunks as additional arguments and return the two nothingPending_auth chunks as additional results, see nothingPending_written in IrisModel.v *) *)
+    (* Lemma written_nothingPending2 `{memGS2 Σ} e : *)
+    (*   @written _ memGS2_wpGS2_left e ∗ @written _ memGS2_wpGS2_right e ==∗ *)
+    (*   @nothingPending _ memGS2_wpGS2_left ∗ @nothingPending _ memGS2_wpGS2_right. *)
+    (* Proof. *)
+    (* Admitted. *)
 
   End RiscvPmpIrisParams2.
 
-  Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM RVPBASEl RVPBASEr.
 End RiscvPmpIrisBase2.
-

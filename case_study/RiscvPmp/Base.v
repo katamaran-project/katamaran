@@ -98,6 +98,24 @@ Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
 Definition all_addrs : list Addr := all_addrs_aux.(unseal).
 Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
 
+Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
+  (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+  exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr (N.of_nat bytes)  ++ l2).
+Proof. intros Hrep. rewrite all_addrs_eq.
+       refine (bv.seqBv_sub_list _ _); first solve_bv.
+       lia.
+Qed.
+
+Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
+Proof.
+  rewrite all_addrs_eq.
+  apply bv.in_seqBv'; unfold bv.ule, bv.ult.
+  - cbn. lia.
+  - pose proof (bv.bv_is_wf a) as Hwf.
+    eapply N.lt_le_trans; [exact|].
+    lia.
+Qed.
+
 (* 2. Definition of MMIO memory *)
 (* For now, we only consider the one femtokernel address to be part of the MMIO-mapped memory. *)
 (* We place the MMIO memory after the RAM memory, and have the PMP entry for the adversary in the FemtoKernel provide access up to but not including the MMIO memory. The lack of an entry for the MMIO memory will ensure that this memory is addressable by the kernel. *)
@@ -122,6 +140,37 @@ Proof. generalize a. induction size.
        - intro a'. cbn. destruct size; first apply _.
          apply decidable.and_dec; [apply _|auto].
 Qed.
+
+Lemma NoDup_liveAddrs : NoDup liveAddrs.
+Proof.
+  apply bv.NoDup_seqbv.
+  pose proof maxAddr_rep as H.
+  unfold maxAddr in H.
+  now rewrite (bv.bin_of_N_small minAddr_rep).
+Qed.
+
+#[global] Arguments liveAddrs : simpl never.
+
+Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
+  bv.add x (bv.of_nat n).
+
+Fixpoint get_byte {width : nat} (offset : nat) : bv (width * byte) -> Byte :=
+  match width with
+  | O   => fun _ => bv.zero
+  | S w =>
+      fun bytes =>
+        let (byte, bytes) := bv.appView byte (w * byte) bytes in
+        match offset with
+        | O        => byte
+        | S offset => get_byte offset bytes
+        end
+  end.
+
+(* The address we will perform all writes to is the first legal MMIO address *)
+Definition write_addr : Addr := bv.of_N maxAddr.
+
+Import bv.notations.
+Definition write_addr_adv : Addr := write_addr + (bv.of_nat bytes_per_word).
 
 Section WithBvNotations.
   Import bv.notations.
@@ -1476,12 +1525,22 @@ Module Export RiscvPmpBase <: Base.
     Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
     Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
 
+    Definition filter_adv_observable (t : Trace) : Trace :=
+      List.filter (λ e, negb (bv.eqb (event_addr e) write_addr))%bv t.
     Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : 
       Val (ty_bytes data_size) :=
       match data_size with
       | O   => bv.zero
       | S n => bv.app ((memory_ram μ) addr) (fun_read_ram μ n (bv.one + addr))
       end.
+
+    Definition event_pred (width : nat) (e : Event) :=
+      (∃ v, e = mkEvent IOWrite write_addr width v) (* We allow any value for MMIO writes by M-mode that are non-observable by others *)
+      ∨ (e = mkEvent IOWrite write_addr_adv width (bv.of_N 42)). (* The only MMIO address accessible to a possible adversary can only ever contain the value 42 *)
+    Definition is_shutdown (e : Event) := ∃ v, e = mkEvent IOShutdown mmioShutdownAddr 1 v.
+    Definition mmio_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
+    Definition mmio_pred_final (width : nat) (t : Trace) : Prop :=
+      ∃ t' e, Forall (event_pred width) t' ∧ is_shutdown e ∧ t = e :: t'.
 
     (* Small test to show that read_ram reads bitvectors in little
        endian order. *)
@@ -1564,6 +1623,7 @@ Module Export RiscvPmpBase <: Base.
       end.
 
   End MemoryModel.
+
 
   Include BaseMixin.
 

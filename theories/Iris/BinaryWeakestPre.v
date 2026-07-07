@@ -82,7 +82,10 @@ Module Type IrisPredicates2
   (Import SIG  : Signature B)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
-  (Import IB   : IrisBase2 B PROG SEM).
+  (Import IPre : IrisPrelims B PROG SEM)
+  (IBleft : IrisBase B PROG SEM IPre)
+  (IBright : IrisBase B PROG SEM IPre)
+  (Import IB   : IrisBase2 B PROG SEM IPre IBleft IBright).
   Parameter luser_inst2 : forall `{sRG : sailRegGS2 Σ} `{invGS Σ} `{mG : memGS2 Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
   Parameter lduplicate_inst2 : forall `{sRG : sailRegGS2 Σ} `{invGS Σ} {mG : memGS2 Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true ->
@@ -95,8 +98,11 @@ Module IrisBinaryWP
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
-  (Import IB2   : IrisBase2 B PROG SEM)
-  (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
+  (Import IPre : IrisPrelims B PROG SEM)
+  (IBleft : IrisBase B PROG SEM IPre)
+  (IBright : IrisBase B PROG SEM IPre)
+  (Import IB2   : IrisBase2 B PROG SEM IPre IBleft IBright)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2).
 
   Section WithSailGS2.
     Context `{sG : sailGS2 Σ}.
@@ -154,12 +160,12 @@ Module IrisBinaryWP
       let mG_right   := memGS2_memGS_right in
       (λ δ1 δ2 s1 s2 Q,
         ∀ γ21 μ21,
-          regs_inv (srGS := srGS_right) γ21 ∗ mem_inv (mG := mG_right) μ21 -∗
-            semWP (sG := sG_left) δ1 s1 (λ v1 δ1',
+          regs_inv (srGS := srGS_right) γ21 ∗ IBright.mem_inv (mG := mG_right) μ21 -∗
+            IBleft.semWP (sG := sG_left) δ1 s1 (λ v1 δ1',
               ∃ γ22 μ22 δ2' s2' v2,
                 ⌜⟨ γ21, μ21, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
                 ∗ ⌜stm_to_val s2' = Some v2⌝
-                ∗ regs_inv (srGS := srGS_right) γ22 ∗ mem_inv (mG := mG_right) μ22
+                ∗ regs_inv (srGS := srGS_right) γ22 ∗ IBright.mem_inv (mG := mG_right) μ22
                 ∗ Q v1 δ1' v2 δ2'
           ))%I.
 
@@ -169,7 +175,7 @@ Module IrisBinaryWP
     Proof.
       iIntros "Hwp H". rewrite /semWP2.
       iIntros (γ21 μ21) "Hres". iSpecialize ("Hwp" with "Hres").
-      iApply (semWP_mono with "Hwp").
+      iApply (IBleft.semWP_mono with "Hwp").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & Hk)".
       iExists γ22, μ22, δ2', s2', v2. iDestruct "Hk" as "($ & $ & $ & $ & HQ1)".
       by iApply ("H" with "HQ1").
@@ -180,7 +186,7 @@ Module IrisBinaryWP
         (|={⊤}=> Q (inl v1) δ1 (inl v2) δ2) ⊢ semWP2 δ1 δ2 (stm_val τ v1) (stm_val τ v2) Q.
     Proof.
       iIntros (δ1 δ2) "HQ". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      rewrite semWP_val. iMod "HQ". iModIntro.
+      rewrite IBleft.semWP_val. iMod "HQ". iModIntro.
       iExists γ21, μ21, δ2, (stm_val _ v2), (inl v2).
       iFrame "HQ Hres". iPureIntro. split. apply step_refl. auto.
     Qed.
@@ -196,7 +202,7 @@ Module IrisBinaryWP
         (|={⊤}=> Q (inr s1) δ1 (inr s2) δ2) ⊢ semWP2 δ1 δ2 (stm_fail _ s1) (stm_fail _ s2) Q. 
     Proof.
       iIntros (δ1 δ2) "HQ".
-      rewrite /semWP2. iIntros (γ21 μ21) "Hres". iApply semWP_fail.
+      rewrite /semWP2. iIntros (γ21 μ21) "Hres". iApply IBleft.semWP_fail.
       iMod "HQ". iModIntro. iExists γ21, μ21, δ2, (stm_fail _ s2), (inr s2).
       iSplitR. iPureIntro. apply step_refl.
       iSplitR. auto. iFrame "HQ Hres".
@@ -207,7 +213,7 @@ Module IrisBinaryWP
       (|={E}=> semWP2 δA δB eA eB Φ) ⊢ semWP2 δA δB eA eB Φ.
     Proof.
       iIntros "WP". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iApply (fupd_semWP E). iMod "WP". iModIntro.
+      iApply (IBleft.fupd_semWP E). iMod "WP". iModIntro.
       by iApply "WP".
     Qed.
 
@@ -218,7 +224,7 @@ Module IrisBinaryWP
       semWP2 δ1 δ2 s1 s2 (λ v1 δ1 v2 δ2, R ∗ POST v1 δ1 v2 δ2).
     Proof.
       iIntros "(HR & H)". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & H)".
       iExists γ22, μ22, δ2', s2', v2. now iDestruct "H" as "($ & $ & $ & $ & $)".
     Qed.
@@ -246,7 +252,7 @@ Module IrisBinaryWP
       Φ (inl (eval eA δA)) δA (inl (eval eB δB)) δB ⊢ semWP2 δA δB (stm_exp eA) (stm_exp eB) Φ.
     Proof.
       iIntros "HΦ". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iApply semWP_exp. iExists γ21, μ21, δB, (stm_val _ (eval eB δB)), (inl (eval eB δB)).
+      iApply IBleft.semWP_exp. iExists γ21, μ21, δB, (stm_val _ (eval eB δB)), (inl (eval eB δB)).
       iFrame "HΦ Hres". iPureIntro. split; auto. eapply step_trans.
       constructor. apply step_refl.
     Qed.
@@ -275,8 +281,8 @@ Module IrisBinaryWP
           semWP2 δΓ1 δΓ2 (stm_call f1 es1) (stm_call f2 es2) Q.
     Proof.
       iIntros (Q δΓ1 δΓ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iApply semWP_call_inline_later. iModIntro. iSpecialize ("H" with "Hres").
-      iApply (semWP_mono with "H").
+      iApply IBleft.semWP_call_inline_later. iModIntro. iSpecialize ("H" with "Hres").
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hf2 & %Hval & H)".
       iExists γ22, μ22, δΓ2, (of_ival v2), v2.
       iFrame "H". iPureIntro. split; last apply stm_to_val_of_ival.
@@ -296,14 +302,14 @@ Module IrisBinaryWP
     Lemma semWP2_bind {Γ1 Γ2 τ σ} (s1 : Stm Γ1 σ) (s2 : Stm Γ2 σ)
       (k1 : Val σ -> Stm Γ1 τ) (k2 : Val σ → Stm Γ2 τ) (Q : Post2 Γ1 Γ2 τ)
       (δ1 : CStore Γ1) (δ2 : CStore Γ2) :
-      semWP2 δ1 δ2 s1 s2 (λ v1 δ12 v2 δ22, semWP2 δ12 δ22 (lift_cnt k1 v1) (lift_cnt k2 v2) Q) ⊢
+      semWP2 δ1 δ2 s1 s2 (λ v1 δ12 v2 δ22, semWP2 δ12 δ22 (IBleft.lift_cnt k1 v1) (IBleft.lift_cnt k2 v2) Q) ⊢
         semWP2 δ1 δ2 (stm_bind s1 k1) (stm_bind s2 k2) Q.
     Proof.
       iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_bind.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_bind.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
-      iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (IBleft.semWP_mono with "H").
       iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & H)".
       iExists γ23, μ23, δ2'', (of_ival v2'), v2'.
       iDestruct "H" as "(%Hsteps' & %Hval' & $ & $ & $)".
@@ -320,8 +326,8 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (stm_block δΔ1 s1) (stm_block δΔ2 s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_block.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_block.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
       iExists γ22, μ22, (env.drop Δ2 δ2'), (of_ival v2), v2.
       iFrame "Hregs Hmem H". iPureIntro. split; last apply stm_to_val_of_ival.
@@ -337,8 +343,8 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (stm_call_frame δ1Δ s1) (stm_call_frame δ2Δ s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "Hk". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("Hk" with "Hres"). iApply semWP_call_frame.
-      iApply (semWP_mono with "Hk").
+      iSpecialize ("Hk" with "Hres"). iApply IBleft.semWP_call_frame.
+      iApply (IBleft.semWP_mono with "Hk").
       iIntros (v1 _) "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
       iExists γ22, μ22, δ2, (of_ival v2), v2.
       iFrame "Hregs Hmem H". iPureIntro. split.
@@ -360,11 +366,11 @@ Module IrisBinaryWP
         semWP2 δ1 δ2 (let: x ∷ σ := s1 in k1)%exp (let: x ∷ σ := s2 in k2)%exp Q.
     Proof.
       iIntros "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_let.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_let.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
       destruct v1 as [v1|m1], v2 as [v2|m2].
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iExists γ23, μ23, (env.tail δ2''), (of_ival v2'), v2'.
         iFrame "Hregs Hmem H". iPureIntro. split; last apply stm_to_val_of_ival.
@@ -383,7 +389,7 @@ Module IrisBinaryWP
           assert (E.[x∷σ ↦ v] = E ►► [env].[x∷σ ↦ v]) as <- by reflexivity.
           cbn. inversion Hv2; subst. eassumption. eapply step_trans.
           constructor. subst. simpl. apply step_refl.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         pose proof (stm_to_val_Some_inr Hval) as Hs2'.
         destruct v2' as [v2'|m2'].
@@ -395,7 +401,7 @@ Module IrisBinaryWP
           iPureIntro. split; auto. eapply step_trans.
           constructor. apply (Steps_trans (Steps_bind Hsteps)).
           eapply step_trans. rewrite Hs2'. constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail. iMod "H".
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?IBleft.semWP_fail. iMod "H".
         iModIntro.
         iDestruct "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         pose proof (stm_to_val_Some_inl Hval) as Hs2'.
@@ -416,7 +422,7 @@ Module IrisBinaryWP
           inversion Hv2; subst. eassumption. eapply step_trans.
           constructor. subst. simpl. apply step_refl.
       - pose proof (stm_to_val_Some_inr Hval) as Hs2'. simpl.
-        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail.
+        iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?IBleft.semWP_fail.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iModIntro. iExists γ23, μ23, δ2'', s2'', v2'. iFrame.
         iPureIntro. split; auto. eapply step_trans. constructor.
@@ -437,17 +443,17 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (s1;;k1)%exp (s2;;k2)%exp Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_seq.
-      iApply (semWP_mono with "H"). iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_seq.
+      iApply (IBleft.semWP_mono with "H"). iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & H)".
       destruct v1 as [v1|m1], v2 as [v2|m2].
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iExists γ23, μ23, δ2'', (of_ival v2'), v2'. iFrame "Hregs Hmem H".
         iPureIntro. split; last apply stm_to_val_of_ival.
         rewrite (stm_to_val_eq Hval') in Hsteps'.
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
         eapply step_trans. rewrite (stm_to_val_Some_inl Hval). constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (semWP_mono with "H").
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iExists γ23, μ23, δ2'', (of_ival v2'), v2'. iFrame "Hregs Hmem H".
         iPureIntro. split; last apply stm_to_val_of_ival.
@@ -455,7 +461,7 @@ Module IrisBinaryWP
         rewrite (stm_to_val_Some_inr Hval) in Hsteps.
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
         eapply step_trans. constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail. iMod "H".
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?IBleft.semWP_fail. iMod "H".
         iModIntro.
         iDestruct "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iExists γ23, μ23, δ2'', (of_ival v2'), v2'. iFrame "Hregs Hmem H".
@@ -464,7 +470,7 @@ Module IrisBinaryWP
         rewrite (stm_to_val_Some_inl Hval) in Hsteps.
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
         eapply step_trans. constructor. auto.
-      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?semWP_fail.
+      - iSpecialize ("H" with "[$Hregs $Hmem]"). rewrite ?IBleft.semWP_fail.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         iModIntro. iExists γ23, μ23, δ2'', s2'', v2'.
         iFrame "Hregs Hmem H". iPureIntro; split; auto.
@@ -486,8 +492,8 @@ Module IrisBinaryWP
       iIntros (γ21 μ21) "Hres". destruct (eval e11 δ1) eqn:Ee11, (eval e21 δ2) eqn:Ee21.
       - iClear "Hft Htf Hff". iSpecialize ("Htt" with "[] []"); auto.
         rewrite /semWP2. iSpecialize ("Htt" with "Hres").
-        iApply (semWP_assertk with "[Htt]").
-        + iIntros (_). iApply (semWP_mono with "Htt").
+        iApply (IBleft.semWP_assertk with "[Htt]").
+        + iIntros (_). iApply (IBleft.semWP_mono with "Htt").
           iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %k2' & %v2 & %Hsteps & %Hk2' & Hregs & Hmem & H)".
           iExists γ22, μ22, δ2', (of_ival v2), v2. iFrame "Hregs Hmem H".
           iPureIntro. split; last apply stm_to_val_of_ival.
@@ -496,8 +502,8 @@ Module IrisBinaryWP
         + iIntros (Hcon). rewrite Hcon in Ee11. discriminate.
       - iClear "Htt Hft Hff". iSpecialize ("Htf" with "[] []"); auto.
         rewrite /semWP2. iSpecialize ("Htf" with "Hres").
-        iApply (semWP_assertk with "[Htf]").
-        + iIntros (_). iApply (semWP_mono with "Htf").
+        iApply (IBleft.semWP_assertk with "[Htf]").
+        + iIntros (_). iApply (IBleft.semWP_mono with "Htf").
           iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %k2' & %v2 & %Hsteps & %Hk2' & Hregs & Hmem & H)".
           iExists γ22, μ22, δ2', (of_ival v2), v2. iFrame "Hregs Hmem H".
           iPureIntro. split; last apply stm_to_val_of_ival.
@@ -506,9 +512,9 @@ Module IrisBinaryWP
         + iIntros (Hcon). rewrite Hcon in Ee11. discriminate.
       - iClear "Htt Htf Hff". iSpecialize ("Hft" with "[] []"); auto.
         rewrite /semWP2. iSpecialize ("Hft" with "Hres").
-        iApply (semWP_assertk with "[] [Hft]").
+        iApply (IBleft.semWP_assertk with "[] [Hft]").
         + iIntros (Hcon). rewrite Hcon in Ee11. discriminate.
-        + iIntros (_). iApply (semWP_mono with "Hft").
+        + iIntros (_). iApply (IBleft.semWP_mono with "Hft").
           iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %k2' & %v2 & %Hsteps & %Hk2' & Hregs & Hmem & H)".
           iExists γ22, μ22, δ2', (of_ival v2), v2. iFrame "Hregs Hmem H".
           iPureIntro. split; last apply stm_to_val_of_ival.
@@ -516,9 +522,9 @@ Module IrisBinaryWP
           rewrite (stm_to_val_eq Hk2') in Hsteps. auto.
       - iClear "Htt Htf Hft". iSpecialize ("Hff" with "[] []"); auto.
         rewrite /semWP2. iSpecialize ("Hff" with "Hres").
-        iApply (semWP_assertk with "[] [Hff]").
+        iApply (IBleft.semWP_assertk with "[] [Hff]").
         + iIntros (Hcon). rewrite Hcon in Ee11. discriminate.
-        + iIntros (_). iApply (semWP_mono with "Hff").
+        + iIntros (_). iApply (IBleft.semWP_mono with "Hff").
           iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %k2' & %v2 & %Hsteps & %Hk2' & Hregs & Hmem & H)".
           iExists γ22, μ22, δ2', (of_ival v2), v2. iFrame "Hregs Hmem H".
           iPureIntro. split; last apply stm_to_val_of_ival.
@@ -532,7 +538,7 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (stm_read_register reg) (stm_read_register reg) Q.
     Proof.
       iIntros (Q δ1 δ2) "(%v1 & %v2 & (Hptsto1 & Hptsto2) & Hk)". rewrite /semWP2.
-      iIntros (γ21 μ21) "(Hreg & Hmem)". iApply semWP_read_register. iExists v1.
+      iIntros (γ21 μ21) "(Hreg & Hmem)". iApply IBleft.semWP_read_register. iExists v1.
       iFrame "Hptsto1". iIntros "Hptsto1".
       iExists γ21, μ21, δ2, (stm_val _ (read_register γ21 reg)), (inl (read_register γ21 reg)).
       iDestruct (reg_valid with "Hreg Hptsto2") as %H. rewrite H.
@@ -547,9 +553,9 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (stm_write_register reg e1) (stm_write_register reg e2) Q.
     Proof.
       iIntros (Q δ1 δ2) "(%v1 & %v2 & (Hptsto1 & Hptsto2) & Hk)". rewrite /semWP2.
-      iIntros (γ21 μ21) "(Hreg & Hmem)". iApply (fupd_semWP ⊤).
+      iIntros (γ21 μ21) "(Hreg & Hmem)". iApply (IBleft.fupd_semWP ⊤).
       iMod (reg_update γ21 reg v2 (eval e2 δ2) with "Hreg Hptsto2") as "[Hreg Hptsto2]".
-      iModIntro. iApply semWP_write_register. iExists v1.
+      iModIntro. iApply IBleft.semWP_write_register. iExists v1.
       iFrame "Hptsto1". iIntros "Hptsto1".
       iExists (write_register γ21 reg (eval e2 δ2)), μ21, δ2, (stm_val _ (eval e2 δ2)), (inl (eval e2 δ2)).
       iSpecialize ("Hk" with "[$Hptsto1 $Hptsto2]"). iFrame "Hk Hmem Hreg".
@@ -570,8 +576,8 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (stm_assign x s1) (stm_assign x s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_assign.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_assign.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hs2' & %Hval & H)".
       destruct v1 as [v1|m1], v2 as [v2|m2]; iExists γ22, μ22.
       - iExists (δ2' ⟪ x ↦ v2 ⟫), s2', (inl v2). iFrame "H".
@@ -619,14 +625,14 @@ Module IrisBinaryWP
           semWP2 δ1 δ2 (stm_pattern_match s1 pat rhs1) (stm_pattern_match s2 pat rhs2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_pattern_match.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_pattern_match.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hs2' & %Hval & Hreg & Hmem & H)".
       destruct v1 as [v1|m1];
         first destruct (pattern_match_val pat v1) eqn:Ev1;
         destruct v2 as [v2|m2];
         try destruct (pattern_match_val pat v2) eqn:Ev2.
-      - iSpecialize ("H" with "[$Hreg $Hmem]"). iApply (semWP_mono with "H").
+      - iSpecialize ("H" with "[$Hreg $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hs2'' & %Hval' & Hreg & Hmem & HQ)".
         iExists γ23, μ23, (env.drop (PatternCaseCtx _) δ2''), (of_ival v2'), v2'.
         iFrame "HQ Hreg Hmem". iPureIntro. destruct (env.catView δ2'').
@@ -640,7 +646,7 @@ Module IrisBinaryWP
         destruct (stm_to_val_Some_cases Hval') as [(? & -> & ->)|(? & -> & ->)];
           simpl; eapply step_trans; try constructor; rewrite env.drop_cat;
           apply step_refl.
-      - iSpecialize ("H" with "[$Hreg $Hmem]"). iApply (semWP_mono with "H").
+      - iSpecialize ("H" with "[$Hreg $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hs2'' & %Hval' & Hreg & Hmem & HQ)".
         iExists γ23, μ23, δ2'', (of_ival v2'), v2'.
         iFrame "HQ Hreg Hmem". iPureIntro.
@@ -648,7 +654,7 @@ Module IrisBinaryWP
         eapply step_trans. constructor. eapply (Steps_trans (Steps_bind Hs2')).
         rewrite (stm_to_val_Some_inr Hval). eapply step_trans. constructor.
         rewrite <- (stm_to_val_eq Hval'). auto.
-      - iSpecialize ("H" with "[$Hreg $Hmem]"). rewrite semWP_fail.
+      - iSpecialize ("H" with "[$Hreg $Hmem]"). rewrite IBleft.semWP_fail.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hs2'' & %Hval' & Hreg & Hmem & HQ)".
         iModIntro.
         iExists γ23, μ23, (env.drop (PatternCaseCtx _) δ2''), (of_ival v2'), v2'.
@@ -661,7 +667,7 @@ Module IrisBinaryWP
         destruct (stm_to_val_Some_cases Hval') as [(? & -> & ->)|(? & -> & ->)];
           simpl; eapply step_trans; try constructor; rewrite env.drop_cat;
           apply step_refl.
-      - iSpecialize ("H" with "[$Hreg $Hmem]"). rewrite semWP_fail.
+      - iSpecialize ("H" with "[$Hreg $Hmem]"). rewrite IBleft.semWP_fail.
         iMod "H" as "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hs2'' & %Hval' & Hreg & Hmem & HQ)".
         iModIntro.
         iExists γ23, μ23, δ2'', (of_ival v2'), v2'.
@@ -679,18 +685,18 @@ Module IrisBinaryWP
       let srGS_right := sailRegGS2_sailRegGS_right in
       let mG_right   := memGS2_memGS_right in
       ⊢ (∀ γ1 μ1,
-            (@regs_inv _ srGS_left γ1 ∗ @mem_inv _ mG_left μ1)
+            (@regs_inv _ srGS_left γ1 ∗ @IBleft.mem_inv _ mG_left μ1)
             ={⊤,∅}=∗
               (∀ res1 γ1' μ1',
                    ⌜ForeignCall f1 (evals es1 δ1) res1 γ1 γ1' μ1 μ1'⌝
                    ={∅}▷=∗
                      |={∅,⊤}=>
-                       (@regs_inv _ srGS_left γ1' ∗ @mem_inv _ mG_left μ1')
+                 (@regs_inv _ srGS_left γ1' ∗ @IBleft.mem_inv _ mG_left μ1')
                        ∗  (∀ γ2 μ2,
-                             (@regs_inv _ srGS_right γ2 ∗ @mem_inv _ mG_right μ2) ={⊤,∅}=∗
+                           (@regs_inv _ srGS_right γ2 ∗ @IBright.mem_inv _ mG_right μ2) ={⊤,∅}=∗
                                (∀ res2 γ2' μ2',
                                  ⌜ForeignCall f2 (evals es2 δ2) res2 γ2 γ2' μ2 μ2'⌝ ={∅,⊤}=∗
-                                   (@regs_inv _ srGS_right γ2' ∗ @mem_inv _ mG_right μ2')
+                                                                                             (@regs_inv _ srGS_right γ2' ∗ @IBright.mem_inv _ mG_right μ2')
                                    ∗ semWP2 δ1 δ2 (match res1 with inr v => stm_val _ v
                                                                  | inl s => stm_fail _ s
                                                    end)
@@ -700,16 +706,16 @@ Module IrisBinaryWP
         semWP2 δ1 δ2 (stm_foreign f1 es1) (stm_foreign f2 es2) Q.
     Proof.
       simpl. iIntros "H". rewrite /semWP2. iIntros (γ2 μ2) "Hres2".
-      iApply semWP_foreign. iIntros (γ1 μ1) "Hres1".
+      iApply IBleft.semWP_foreign. iIntros (γ1 μ1) "Hres1".
       iMod ("H" with "Hres1") as "H". iIntros "!>" (res1 γ1' μ1' Hf1).
       iMod ("H" $! _ _ _ Hf1) as "H". iModIntro. iModIntro. iMod "H".
       iModIntro. iMod "H". iModIntro. iDestruct "H" as "($ & H)".
       destruct res1 as [v1|msg1].
-      - rewrite semWP_fail. iApply (@semTWP_Steps _ sailGS2_sailGS_right with "Hres2").
-        iApply semTWP_foreign. iIntros (γ2' μ2') "Hres2".
+      - rewrite IBleft.semWP_fail. iApply (@IBright.semTWP_Steps _ sailGS2_sailGS_right with "Hres2").
+        iApply IBright.semTWP_foreign. iIntros (γ2' μ2') "Hres2".
         iMod ("H" with "Hres2") as "H". iIntros "!>" (res2 γ2'' μ2'' Hf2).
         iMod ("H" $! _ _ _ Hf2) as "H". iDestruct "H" as "(Hres2 & H)".
-        iSpecialize ("H" with "Hres2"). rewrite semWP_fail. iMod "H". iModIntro.
+        iSpecialize ("H" with "Hres2"). rewrite IBleft.semWP_fail. iMod "H". iModIntro.
         iDestruct "H" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hstep & %Hval & Hreg & Hmem & HQ)".
         destruct res2 as [v2'|msg2];
           inversion Hstep; subst;
@@ -720,13 +726,13 @@ Module IrisBinaryWP
                 inversion H
             end;
           simpl in Hval; inversion Hval; subst.
-        + rewrite semTWP_fail. now iFrame.
-        + rewrite semTWP_val. now iFrame.
-      - rewrite semWP_val. iApply (@semTWP_Steps _ sailGS2_sailGS_right with "Hres2").
-        iApply semTWP_foreign. iIntros (γ2' μ2') "Hres2".
+        + rewrite IBright.semTWP_fail. now iFrame.
+        + rewrite IBright.semTWP_val. now iFrame.
+      - rewrite IBleft.semWP_val. iApply (@IBright.semTWP_Steps _ sailGS2_sailGS_right with "Hres2").
+        iApply IBright.semTWP_foreign. iIntros (γ2' μ2') "Hres2".
         iMod ("H" with "Hres2") as "H". iIntros "!>" (res2 γ2'' μ2'' Hf2).
         iMod ("H" $! _ _ _ Hf2) as "H". iDestruct "H" as "(Hres2 & H)".
-        iSpecialize ("H" with "Hres2"). rewrite semWP_val. iMod "H". iModIntro.
+        iSpecialize ("H" with "Hres2"). rewrite IBleft.semWP_val. iMod "H". iModIntro.
         iDestruct "H" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hstep & %Hval & Hreg & Hmem & HQ)".
         destruct res2 as [v2'|msg2];
           inversion Hstep; subst;
@@ -737,16 +743,16 @@ Module IrisBinaryWP
                 inversion H
             end;
           simpl in Hval; inversion Hval; subst.
-        + rewrite semTWP_fail. now iFrame.
-        + rewrite semTWP_val. now iFrame.
+        + rewrite IBright.semTWP_fail. now iFrame.
+        + rewrite IBright.semTWP_val. now iFrame.
     Qed.
 
     Lemma semWP2_debugk {Γ1 Γ2 τ} (s1 : Stm Γ1 τ) (s2 : Stm Γ2 τ) :
       ⊢ ∀ Q δ1 δ2, semWP2 δ1 δ2 s1 s2 Q -∗ semWP2 δ1 δ2 (stm_debugk s1) (stm_debugk s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_debugk.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_debugk.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hs2' & %Hval & H)".
       iExists γ22, μ22, δ2', s2', v2. iFrame "H". iPureIntro. split; auto.
       eapply step_trans. constructor. assumption.
@@ -757,8 +763,8 @@ Module IrisBinaryWP
       ⊢ ∀ Q δ1 δ2, semWP2 δ1 δ2 s1 s2 Q -∗ semWP2 δ1 δ2 (stm_lemmak l1 es1 s1) (stm_lemmak l2 es2 s2) Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iSpecialize ("H" with "Hres"). iApply semWP_lemmak.
-      iApply (semWP_mono with "H").
+      iSpecialize ("H" with "Hres"). iApply IBleft.semWP_lemmak.
+      iApply (IBleft.semWP_mono with "H").
       iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hs2' & %Hval & H)".
       iExists γ22, μ22, δ2', s2', v2. iFrame "H". iPureIntro. split; auto.
       eapply step_trans. constructor. assumption.
@@ -766,17 +772,17 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q1 Q2 Q δ1 δ2,
-          @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
-          @semTWP _ sailGS2_sailGS_right _ _ δ2 s2 Q2 -∗
+          @IBleft.semTWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
+          @IBright.semTWP _ sailGS2_sailGS_right _ _ δ2 s2 Q2 -∗
           (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
       iIntros (Q1 Q2 Q δ1 δ2) "HTWP1 HTWP2 H". rewrite /semWP2.
-      iIntros (γ21 μ21) "Hres". iApply semWP_fupd.
-      iPoseProof (semTWP_semWP with "HTWP1") as "HWP1".
-      iPoseProof (semTWP_Steps with "[Hres] HTWP2") as "H2".
+      iIntros (γ21 μ21) "Hres". iApply IBleft.semWP_fupd.
+      iPoseProof (IBleft.semTWP_semWP with "HTWP1") as "HWP1".
+      iPoseProof (IBright.semTWP_Steps with "[Hres] HTWP2") as "H2".
       { iDestruct "Hres" as "($ & $)". }
-      iApply (semWP_mono with "HWP1"). iIntros (v1 δ1') "HQ1".
+      iApply (IBleft.semWP_mono with "HWP1"). iIntros (v1 δ1') "HQ1".
       iMod "H2" as "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hstep & %Hs2' & Hreg & Hmem & HQ2)".
       iModIntro. iExists γ22, μ22, δ2', (of_ival v2), v2. iFrame "Hreg Hmem".
       iDestruct ("H" with "[$HQ1 $HQ2]") as "$". iPureIntro.
@@ -786,28 +792,28 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus_seq {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
-          @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
-              @semTWP _ sailGS2_sailGS_right _ _ δ2 s2
+          @IBleft.semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
+              @IBright.semTWP _ sailGS2_sailGS_right _ _ δ2 s2
                 (λ v2 δ2, Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iApply semWP_fupd.
-      iPoseProof (semTWP_semWP with "H") as "H". iApply (semWP_mono with "H").
-      iIntros (v1 δ1') "H". now iApply (semTWP_Steps with "[Hres] H").
+      iApply IBleft.semWP_fupd.
+      iPoseProof (IBleft.semTWP_semWP with "H") as "H". iApply (IBleft.semWP_mono with "H").
+      iIntros (v1 δ1') "H". now iApply (IBright.semTWP_Steps with "[Hres] H").
     Qed.
 
     Lemma semWP2_anaglyph {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
-          @semWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
-              @semTWP _ sailGS2_sailGS_right _ _ δ2 s2
+          @IBleft.semWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
+              @IBright.semTWP _ sailGS2_sailGS_right _ _ δ2 s2
                       (λ v2 δ2, Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
       iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
-      iApply semWP_fupd.
-      iApply (semWP_mono with "H"). iIntros (v1 δ1') "H".
-      now iApply (semTWP_Steps with "[Hres] H").
+      iApply IBleft.semWP_fupd.
+      iApply (IBleft.semWP_mono with "H"). iIntros (v1 δ1') "H".
+      now iApply (IBright.semTWP_Steps with "[Hres] H").
     Qed.
 
     Lemma semWP2_step_left {Γ1 Γ2 τ} {s1 s1' : Stm Γ1 τ} {s2 : Stm Γ2 τ}
@@ -817,17 +823,17 @@ Module IrisBinaryWP
       regs_inv2 γ1 γ2 ∗ mem_inv2 μ1 μ2 -∗
       £ 1 -∗
       semWP2 δ1 δ2 s1 s2 Q ={⊤,∅}=∗
-      ▷ |={∅,⊤}=> (@regs_inv _ sailRegGS2_sailRegGS_left γ1' ∗ @mem_inv _ memGS2_memGS_left μ1')
-                  ∗ @semWP _ sailGS2_sailGS_left _ _ δ1' s1' (λ (v1 : IVal τ) (δ1'0 : CStore Γ1),
+                                    ▷ |={∅,⊤}=> (@regs_inv _ sailRegGS2_sailRegGS_left γ1' ∗ @IBleft.mem_inv _ memGS2_memGS_left μ1')
+                  ∗ @IBleft.semWP _ sailGS2_sailGS_left _ _ δ1' s1' (λ (v1 : IVal τ) (δ1'0 : CStore Γ1),
                     ∃ (γ22 : RegStore) (μ22 : Memory) (δ2' : CStore Γ2) (s2' : Stm Γ2 τ) (v2 : IVal τ),
                       ⌜⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
-                        ∗ ⌜stm_to_val s2' = Some v2⌝ ∗ @regs_inv _ sailRegGS2_sailRegGS_right γ22 ∗ @mem_inv _ memGS2_memGS_right μ22 ∗ Q v1 δ1'0 v2 δ2').
+                        ∗ ⌜stm_to_val s2' = Some v2⌝ ∗ @regs_inv _ sailRegGS2_sailRegGS_right γ22 ∗ @IBright.mem_inv _ memGS2_memGS_right μ22 ∗ Q v1 δ1'0 v2 δ2').
     Proof.
       iIntros (Hstep) "([Hreg1 Hreg2] & Hmem) Hlc Hwp".
       rewrite /semWP2.
       iDestruct (mem_inv2_mem_inv with "Hmem") as "[Hmem1 Hmem2]".
       iSpecialize ("Hwp" with "[$Hreg2 $Hmem2]").
-      iApply (semWP_step Hstep with "[Hreg1 Hmem1] [Hlc] Hwp"); eauto.
+      iApply (IBleft.semWP_step Hstep with "[Hreg1 Hmem1] [Hlc] Hwp"); eauto.
       iFrame "Hreg1 Hmem1".
     Qed.
 
@@ -840,10 +846,13 @@ Module Type IrisSignatureRules2
   (Import PROG  : Program B)
   (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
-  (Import IB2   : IrisBase2 B PROG SEM)
-  (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
+  (Import IPre : IrisPrelims B PROG SEM)
+  (IBleft : IrisBase B PROG SEM IPre)
+  (IBright : IrisBase B PROG SEM IPre)
+  (Import IB2   : IrisBase2 B PROG SEM IPre IBleft IBright)
+  (Import IPred : IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2).
 
-  Module Export IWP := IrisBinaryWP B SIG PROG SEM IB2 IPred.
+  Module Export IWP := IrisBinaryWP B SIG PROG SEM IPre IBleft IBright IB2 IPred.
 
   Section WithSailGS2.
   Context `{sG : sailGS2 Σ}.
@@ -1112,18 +1121,18 @@ Section Soundness.
                  semTriple δ P s Q.
   Proof.
     iIntros (Hnv Hnoop) "HPQ HP". rewrite /semWP2. iIntros (γ21 μ21) "(Hreg2 & Hmem2)".
-    rewrite <-semWP_unfold_nolc. rewrite Hnv. iIntros (γ11 μ11) "Hres1".
+    rewrite <-IBleft.semWP_unfold_nolc. rewrite Hnv. iIntros (γ11 μ11) "Hres1".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iIntros "!>" (s12 δ12 γ12 μ12 Hs).
     destruct (Hnoop _ _ _ _ _ _ Hs) as (-> & -> & -> & Hs2 & [[v ->]|[msg ->]]).
     - do 3 iModIntro. iMod "Hclose" as "_".
-      iFrame. iModIntro. iApply semWP_val.
+      iFrame. iModIntro. iApply IBleft.semWP_val.
       iExists γ21, μ21, δ, (of_ival (inl v)), (inl v).
       iMod ("HPQ" $! v with "HP") as "$". repeat iModIntro.
       iFrame "Hreg2 Hmem2". repeat iSplit; auto. iPureIntro. eapply step_trans.
       apply Hs2. apply step_refl.
     - do 3 iModIntro. iMod "Hclose" as "_". iFrame "Hres1".
-      iModIntro. iApply semWP_fail.
+      iModIntro. iApply IBleft.semWP_fail.
       repeat iModIntro. iExists γ21, μ21, δ, (of_ival (inr msg)), (inr msg).
       iFrame "Hreg2 Hmem2". repeat iSplit; auto. iPureIntro.
       eapply step_trans. apply Hs2. simpl. apply step_refl.

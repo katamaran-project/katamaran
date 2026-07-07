@@ -1746,6 +1746,26 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | _ => Some _
     end.
 
+  Section BlockVerSyntax.
+
+    (* We put this here to ensure there is only one version even if we use multiple instantiations of the Block Verifier. *)
+    Inductive AnnotInstr :=
+    | AnnotAST  (i : AST)
+    | AnnotDebugBreak
+    | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)
+    .
+
+    Definition extract_AST (i : AnnotInstr) : option AST :=
+      match i with
+      | AnnotAST a => Some a
+      | _ => None
+      end.
+
+    Definition filter_AST : list AnnotInstr -> list AST :=
+        base.omap extract_AST.
+
+  End BlockVerSyntax.
+
 End RiscvPmpProgram.
 
 Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=

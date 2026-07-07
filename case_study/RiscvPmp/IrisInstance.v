@@ -48,124 +48,57 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
-Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIrisBase.
-  (* Pull in the definition of the LanguageMixin and register ghost state. *)
-  Import RiscvPmpIrisBase.
+(* Module RiscvPmpIrisAdeqParameters (LOR : LeftOrRight) <: *)
+(*   IrisAdeqParameters RiscvPmpBase. *)
+(*   (* Pull in the definition of the LanguageMixin and register ghost state. *) *)
+(*   Include RiscvPmpIrisBase LOR. *)
+(*   (* Make Rocq automatically pick up the mcMemGS we want (left or right one, depending on LOR) *) *)
+(*   Existing Instance leftOrRightInstance. *)
 
-  Class mcMemPreGS Σ := {
-      mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
-      mc_gtPreGS :: trace_preG Trace Σ;
-      mc_wpPreGS :: writePending_preG Σ;
-      }.
-  #[export] Existing Instance mc_ghPreGS.
-  #[export] Existing Instance mc_gtPreGS.
-  #[export] Existing Instance mc_wpPreGS.
+(*   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ := *)
+(*     fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗ *)
+(*              tr_frag1 (memory_trace μ) ∗ *)
+(*              nothingPending *)
+(*           )%I. *)
 
-  Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; writePendingΣ ].
+(*   Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ). *)
+(*   Proof. *)
+(*     unfold initMemMap. *)
+(*     rewrite map_Forall_to_list. *)
+(*     rewrite Forall_forall. *)
+(*     intros (a , v). *)
+(*     rewrite elem_of_map_to_list. *)
+(*     intros el. *)
+(*     apply elem_of_list_to_map_2 in el. *)
+(*     apply elem_of_list_In in el. *)
+(*     apply in_map_iff in el. *)
+(*     by destruct el as (a' & <- & _). *)
+(*   Qed. *)
 
-  Lemma NoDup_liveAddrs : NoDup liveAddrs.
-  Proof.
-    apply bv.NoDup_seqbv.
-    pose proof maxAddr_rep as H.
-    unfold maxAddr in H.
-    now rewrite (bv.bin_of_N_small minAddr_rep).
-  Qed.
+(*   Lemma big_sepM_list_to_map {Σ} {A B : Type} `{Countable A} {l : list A} {f : A -> B} (F : A -> B -> iProp Σ) : *)
+(*     NoDup l -> *)
+(*     ([∗ map] l↦v ∈ (list_to_map (map (λ a : A, (a, f a)) l)), F l v) *)
+(*       ⊢ *)
+(*       [∗ list] v ∈ l, F v (f v). *)
+(*   Proof. *)
+(*     intros ndl. *)
+(*     induction ndl. *)
+(*     - now iIntros "_". *)
+(*     - cbn. *)
+(*       rewrite big_sepM_insert. *)
+(*       + iIntros "[$ Hrest]". *)
+(*         now iApply IHndl. *)
+(*       + apply not_elem_of_list_to_map_1. *)
+(*         change (fmap fst ?l) with (map fst l). *)
+(*         now rewrite map_map map_id. *)
+(*   Qed. *)
 
-  #[global] Arguments liveAddrs : simpl never.
+(* End RiscvPmpIrisAdeqParameters. *)
 
-  Definition initMemMap μ := (list_to_map (map (fun a => (a , memory_ram μ a)) liveAddrs) : gmap Addr MemVal).
-
-  Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
-  Proof. intros. solve_inG. Defined.
-
-  Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
-    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
-             tr_frag1 (memory_trace μ) ∗
-             nothingPending
-          )%I.
-
-  Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
-  Proof.
-    unfold initMemMap.
-    rewrite map_Forall_to_list.
-    rewrite Forall_forall.
-    intros (a , v).
-    rewrite elem_of_map_to_list.
-    intros el.
-    apply elem_of_list_to_map_2 in el.
-    apply elem_of_list_In in el.
-    apply in_map_iff in el.
-    by destruct el as (a' & <- & _).
-  Qed.
-
-  Lemma big_sepM_list_to_map {Σ} {A B : Type} `{Countable A} {l : list A} {f : A -> B} (F : A -> B -> iProp Σ) :
-    NoDup l ->
-    ([∗ map] l↦v ∈ (list_to_map (map (λ a : A, (a, f a)) l)), F l v)
-      ⊢
-      [∗ list] v ∈ l, F v (f v).
-  Proof.
-    intros ndl.
-    induction ndl.
-    - now iIntros "_".
-    - cbn.
-      rewrite big_sepM_insert.
-      + iIntros "[$ Hrest]".
-        now iApply IHndl.
-      + apply not_elem_of_list_to_map_1.
-        change (fmap fst ?l) with (map fst l).
-        now rewrite map_map map_id.
-  Qed.
-
-  Lemma mem_inv_init `{gHP : !mcMemPreGS Σ} (μ : Memory) :
-    ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res μ)%I.
-  Proof.
-    pose (memmap := initMemMap μ).
-    iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
-    iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
-    iMod writePending_alloc as (gP) "[HauthPend HfragPend]".
-    iModIntro.
-    iExists (McMemGS gH gT gP).
-    iSplitL "Hinv Hauth HauthPend".
-    - iExists memmap.
-      iFrame.
-      iPureIntro.
-      apply initMemMap_works.
-    - unfold mem_res, initMemMap in *. iFrame.
-      iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
-      eapply NoDup_liveAddrs.
-  Qed.
-End RiscvPmpIrisAdeqParameters.
-
-Module RiscvPmpIrisInstancePredicates.
-  Import RiscvPmpIrisBase.
+Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (Import RVPBASE : RiscvPmpIrisBase LOR RVPCOM).
   Import RiscvPmpProgram.
-
-  Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
-    bv.add x (bv.of_nat n).
-
-  Fixpoint get_byte {width : nat} (offset : nat) : bv (width * byte) -> Byte :=
-    match width with
-    | O   => fun _ => bv.zero
-    | S w =>
-        fun bytes =>
-          let (byte, bytes) := bv.appView byte (w * byte) bytes in
-          match offset with
-          | O        => byte
-          | S offset => get_byte offset bytes
-          end
-    end.
-
-  (* The address we will perform all writes to is the first legal MMIO address *)
-  Definition write_addr : Addr := bv.of_N maxAddr.
-  Definition write_addr_adv : Addr := write_addr + (bv.of_nat bytes_per_word).
-  Definition event_pred (width : nat) (e : Event) :=
-    (∃ v, e = mkEvent IOWrite write_addr width v) (* We allow any value for MMIO writes by M-mode that are non-observable by others *)
-    ∨ (e = mkEvent IOWrite write_addr_adv width (bv.of_N 42)). (* The only MMIO address accessible to a possible adversary can only ever contain the value 42 *)
-  Definition is_shutdown (e : Event) := ∃ v, e = mkEvent IOShutdown mmioShutdownAddr 1 v.
-  Definition mmio_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
-  Definition mmio_pred_final (width : nat) (t : Trace) : Prop :=
-    ∃ t' e, Forall (event_pred width) t' ∧ is_shutdown e ∧ t = e :: t'.
 
   Lemma difference_commute_gset {A} `{Countable A} (X Y Z : gset A) :
     (X ∖ Y) ∖ Z = (X ∖ Z) ∖ Y.
@@ -320,8 +253,8 @@ Module RiscvPmpIrisInstancePredicates.
       end%I.
 
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
-    Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝).
+    (* Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ := *)
+    (*   inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝). *)
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
@@ -440,20 +373,26 @@ Module RiscvPmpIrisInstancePredicates.
   End WithSailGS.
 End RiscvPmpIrisInstancePredicates.
 
-Module RiscvPmpIrisInstance (FL : FailLogic) <:
-  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics
-    RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
-  Import RiscvPmpIrisBase.
+Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (Import RVPBASE : RiscvPmpIrisBase LOR RVPCOM)
+  (Import RVPPRED : RiscvPmpIrisInstancePredicates LOR RVPCOM RVPBASE)
+<: IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics RVPCOM RVPBASE.
+
   Import RiscvPmpProgram.
-  Import RiscvPmpIrisInstancePredicates.
 
   #[global] Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
 
   Section RiscvPmpIrisPredicates.
+    Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG2 : memGS Σ}.
+
+    (* why is this not imported? *)
+    Definition mG2Alias := (mG2 : mcMemGS2 Σ).
+    Existing Instance mG2Alias.
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+    Equations(noeqns) luser_inst
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
@@ -462,7 +401,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one _              | [ addr; w ]          => False (* Unary instance has no support for different execution predicates *)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
+    | inv_mmio bytes           | _                    => @interp_inv_mmio _ mG2  _ bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
@@ -473,15 +412,15 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Ltac destruct_pmp_entries :=
       repeat match goal with
-      | x : Val ty_pmpentry |- _ =>
-          destruct x; auto
-      | x : Val (ty.list ty_pmpentry) |- _ =>
-          destruct x; auto
-      | x : list (Val ty_pmpentry) |- _ =>
-          destruct x; auto
-      end.
+        | x : Val ty_pmpentry |- _ =>
+            destruct x; auto
+        | x : Val (ty.list ty_pmpentry) |- _ =>
+            destruct x; auto
+        | x : list (Val ty_pmpentry) |- _ =>
+            destruct x; auto
+        end.
 
-    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
+    Definition lduplicate_inst :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
@@ -493,250 +432,12 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   End RiscvPmpIrisPredicates.
 
   Section RiscVPmpIrisInstanceProofs.
-    Context `{sr : sailRegGS Σ} `{igs : invGS Σ} `{mG : mcMemGS Σ}.
-
-    (* Note that the condition on overflow is required: some illegal set-ups are accepted by `pmp_match_addr` as it does not track overflow, and shrinking those might make the output go from match to no match. *)
-    Lemma pmp_match_addr_reduced_width (bytes w : Xlenbits) :
-      forall paddr rng,
-        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero <ᵘ w ->
-        w <=ᵘ bytes ->
-        pmp_match_addr paddr bytes rng = PMP_Match ->
-        pmp_match_addr paddr w rng = PMP_Match.
-    Proof.
-      destruct rng as [[lo hi]|]; last by simpl.
-      rewrite !pmp_match_addr_match.
-      solve_bv.
-    Qed.
-
-    Lemma pmp_match_addr_reduced_width_no_match (bytes w : Xlenbits) :
-      forall paddr rng,
-      (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-      w <=ᵘ bytes ->
-      pmp_match_addr paddr bytes rng = PMP_NoMatch ->
-      pmp_match_addr paddr w rng = PMP_NoMatch.
-    Proof.
-      intros paddr [[lo hi]|] Hass Hle; last by simpl.
-      rewrite !pmp_match_addr_nomatch.
-      intros [|Hcond]; try discriminate. right. intros ? ? Hinv.
-      specialize (Hcond _ _ Hinv). inversion Hinv.
-      solve_bv.
-    Qed.
-
-    Lemma pmp_match_entry_reduced_width (bytes w : Xlenbits) :
-      forall paddr cfg p hi lo,
-        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero <ᵘ w ->
-        w <=ᵘ bytes ->
-        pmp_match_entry paddr bytes p cfg hi lo = PMP_Success ->
-        pmp_match_entry paddr w p cfg hi lo = PMP_Success.
-    Proof.
-      unfold pmp_match_entry.
-      intros.
-      destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
-      apply pmp_match_addr_reduced_width with (w := w) in E; auto.
-      now rewrite E.
-    Qed.
-
-    Lemma pmp_match_entry_reduced_width_continue (bytes w : Xlenbits) :
-      forall paddr cfg p hi lo,
-        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        w <=ᵘ bytes ->
-        pmp_match_entry paddr bytes p cfg hi lo = PMP_Continue ->
-        pmp_match_entry paddr w p cfg hi lo = PMP_Continue.
-    Proof.
-      unfold pmp_match_entry.
-      intros.
-      destruct (pmp_match_addr paddr bytes _) eqn:E; try discriminate.
-      apply pmp_match_addr_reduced_width_no_match with (w := w) in E; auto.
-      now rewrite E.
-    Qed.
-
-    Lemma pmp_check_aux_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr lo entries p acc,
-        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero <ᵘ w ->
-        w <=ᵘ bytes ->
-        pmp_check_aux paddr bytes lo entries p acc = true ->
-        pmp_check_aux paddr w lo entries p acc = true.
-    Proof.
-      intros paddr lo entries p acc Hrep H0w Hle H.
-      generalize dependent lo.
-      induction entries as [|[cfg0 hi] es IHentries];
-        intros;
-        first now simpl in *.
-      cbn in *.
-      destruct (pmp_match_entry paddr bytes _ _ _ _) eqn:E; last done.
-      - apply pmp_match_entry_reduced_width with (w := w) in E; auto.
-        now rewrite E.
-      - apply pmp_match_entry_reduced_width_continue with (w := w) in E; auto.
-        rewrite E.
-        unfold pmp_check_aux in IHentries.
-        now apply IHentries.
-    Qed.
-
-    Lemma pmp_check_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr entries p acc,
-        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero <ᵘ w ->
-        w <=ᵘ bytes ->
-        pmp_check paddr bytes entries p acc = true ->
-        pmp_check paddr w entries p acc = true.
-    Proof.
-      unfold pmp_check; intros;
-        apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
-    Qed.
-
-    Lemma pmp_access_reduced_width (bytes w : Xlenbits) :
-      forall paddr pmp p acc ,
-        (bv.bin paddr + bv.bin bytes < bv.exp2 xlenbits)%N ->
-        bv.zero <ᵘ w ->
-        w <=ᵘ bytes ->
-        Pmp_access paddr bytes pmp p acc ->
-        Pmp_access paddr w pmp p acc.
-    Proof.
-      unfold Pmp_access, Gen_Pmp_access; intros;
-        apply pmp_check_aux_access_reduced_width with (bytes := bytes); auto.
-    Qed.
-
-    Lemma pmp_match_addr_addr_S_width_pred (bytes : nat) : forall paddr rng res,
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        res = PMP_NoMatch ∨ res = PMP_Match ->
-        pmp_match_addr paddr (bv.of_nat (S bytes)) rng = res ->
-        pmp_match_addr (paddr + bv.one) (bv.of_nat bytes) rng = res.
-    Proof.
-      intros paddr rng res Hb Hrep.
-      destruct rng as [[lo hi]|]; subst; auto.
-      intros [Hres|Hres]; subst.
-      - rewrite !pmp_match_addr_nomatch. intros [|Hcond]; first discriminate. right.
-        intros ? ? Hspec. specialize (Hcond _ _ Hspec). solve_bv.
-      - rewrite !pmp_match_addr_match. solve_bv.
-    Qed.
-
-    Lemma pmp_match_entry_addr_S_width_pred_success (bytes : nat) : forall paddr p cfg lo hi,
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Success ->
-        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Success.
-    Proof.
-      intros paddr p cfg lo hi Hb Hrep.
-      unfold pmp_match_entry.
-      intros H.
-      destruct (pmp_match_addr paddr _ _) eqn:E;
-        apply pmp_match_addr_addr_S_width_pred in E;
-        auto;
-        try now rewrite E.
-      discriminate H.
-    Qed.
-
-    Lemma pmp_match_entry_addr_S_width_pred_continue (bytes : nat) : forall paddr p cfg lo hi,
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        pmp_match_entry paddr (bv.of_nat (S bytes)) p cfg lo hi = PMP_Continue ->
-        pmp_match_entry (paddr + bv.one) (bv.of_nat bytes) p cfg lo hi = PMP_Continue.
-    Proof.
-      intros paddr p cfg lo hi Hb Hrep.
-      unfold pmp_match_entry.
-      intros H.
-      destruct (pmp_match_addr paddr _ _) eqn:E;
-        apply pmp_match_addr_addr_S_width_pred in E;
-        auto;
-        try now rewrite E.
-      discriminate H.
-    Qed.
-
-    Lemma pmp_check_aux_addr_S_width_pred (bytes : nat) : forall paddr lo entries p acc,
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        pmp_check_aux paddr (bv.of_nat (S bytes)) lo entries p acc = true ->
-        pmp_check_aux (paddr + bv.one) (bv.of_nat bytes) lo entries p acc = true.
-    Proof.
-      intros paddr lo entries p acc Hb Hrep.
-      generalize dependent lo.
-      induction entries as [|[cfg0 hi] entries IHentries];
-        intros;
-        first now simpl in *.
-      unfold pmp_check_aux.
-      unfold pmp_check_aux in H.
-      simpl in *.
-      destruct (pmp_match_entry paddr _ _ cfg0 _ _) eqn:Ecfg0; auto.
-      apply pmp_match_entry_addr_S_width_pred_success in Ecfg0; auto.
-      now rewrite Ecfg0.
-      apply pmp_match_entry_addr_S_width_pred_continue in Ecfg0; auto.
-      rewrite Ecfg0.
-      now apply IHentries.
-    Qed.
-
-    Lemma pmp_access_addr_S_width_pred (bytes : nat) : forall paddr lo entries p acc,
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (S bytes) < bv.exp2 xlenbits)%N ->
-        Gen_Pmp_access paddr (bv.of_nat (S bytes)) lo entries p acc ->
-        Gen_Pmp_access (paddr + bv.one) (bv.of_nat bytes) lo entries p acc.
-    Proof.
-      intros paddr lo pmp p acc Hb Hrep.
-      unfold Gen_Pmp_access.
-      now apply pmp_check_aux_addr_S_width_pred.
-    Qed.
-
-    Lemma gen_pmp_access_shift (bytes shift: nat) paddr lo entries p acc:
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (bytes + shift) < bv.exp2 xlenbits)%N ->
-        Gen_Pmp_access paddr (bv.of_nat (bytes + shift)) lo entries p acc ->
-        Gen_Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) lo entries p acc.
-    Proof.
-      intros Hzero. generalize dependent paddr.
-      induction shift; intros paddr Hrep Hacc.
-      - rewrite bv.add_zero_r. rewrite Nat.add_0_r in Hacc. auto.
-      - rewrite Nat.add_succ_r in Hacc,Hrep.
-        rewrite Nat2N.inj_succ in Hrep.
-        apply pmp_access_addr_S_width_pred in Hacc; try solve_bv.
-        apply IHshift in Hacc.
-          + rewrite bv.of_nat_S bv.add_assoc. apply Hacc.
-          + solve_bv.
-    Qed.
-
-    Lemma pmp_access_shift (bytes shift: nat) paddr entries p acc:
-        (0 < @bv.bin xlenbits (bv.of_nat bytes))%N ->
-        (bv.bin paddr + N.of_nat (bytes + shift) < bv.exp2 xlenbits)%N ->
-        Pmp_access paddr (bv.of_nat (bytes + shift)) entries p acc ->
-        Pmp_access (paddr + bv.of_nat shift) (bv.of_nat bytes) entries p acc.
-    Proof. apply gen_pmp_access_shift. Qed.
+    Context `{sr : sailGS Σ}.
 
     (* Use `seqBv` to get rid of conditions on width *)
     (* TODO: intermediate lemma without seqBv that does shift + restrict? *)
-    Lemma pmp_seqBv_restrict base width k y entries m p:
-      (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
-      bv.seqBv base (N.of_nat width) !! k = Some y →
-      Pmp_access base (bv.of_nat width) entries m p →
-      Pmp_access y (bv.of_nat 1) entries m p.
-    Proof.
-      intros Hrep Hlkup Hacc.
-      pose proof (bv.seqBv_width_at_least _ _ Hlkup) as [p' ->%Nat2N.inj'].
-      apply bv.seqBv_spec in Hlkup; subst y.
-      apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc; try solve_bv.
-      apply pmp_access_shift in Hacc; solve_bv.
-    Qed.
-
-    Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
-    Proof.
-      rewrite all_addrs_eq.
-      apply bv.in_seqBv'; unfold bv.ule, bv.ult.
-      - cbn. lia.
-      - pose proof (bv.bv_is_wf a) as Hwf.
-        eapply N.lt_le_trans; [exact|].
-        lia.
-    Qed.
-
     Local Lemma to_nat_mono (a b : N) : (a < b)%N → N.to_nat a < N.to_nat b.
     Proof. lia. Qed.
-    Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
-      (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-      exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr (N.of_nat bytes)  ++ l2).
-    Proof. intros Hrep. rewrite all_addrs_eq.
-           refine (bv.seqBv_sub_list _ _); first solve_bv.
-           lia.
-    Qed.
 
     Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
     Proof. eapply big_sepL_app. Qed.
@@ -744,29 +445,29 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     Lemma ptstomem_bv_app :
       forall {n} (a : Addr) (b : bv byte) (bs : bv (n * byte)),
         @interp_ptstomem _ _ (S n)%nat a (bv.app b bs)
-        ⊣⊢
-        (interp_ptsto a b ∗ interp_ptstomem (bv.one + a) bs).
+          ⊣⊢
+          (interp_ptsto a b ∗ interp_ptstomem (bv.one + a) bs).
     Proof. intros; cbn [interp_ptstomem]; now rewrite bv.appView_app. Qed.
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         interp_pmp_entries entries ⊣⊢
           ∃ (cfg0 : Pmpcfg_ent) (addr0 : Addr) (cfg1 : Pmpcfg_ent) (addr1 : Addr),
             ⌜entries = [(cfg0, addr0); (cfg1, addr1)]⌝ ∗
-            reg_pointsTo pmp0cfg cfg0 ∗ reg_pointsTo pmpaddr0 addr0 ∗
-            reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1.
+                         reg_pointsTo pmp0cfg cfg0 ∗ reg_pointsTo pmpaddr0 addr0 ∗
+                         reg_pointsTo pmp1cfg cfg1 ∗ reg_pointsTo pmpaddr1 addr1.
     Proof.
       intros entries; iSplit; iIntros  "H".
       - unfold interp_pmp_entries.
         destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; try done.
         repeat iExists _.
         now iFrame.
-     -  iDestruct "H" as "(% & % & % & % & -> & ? & ? & ? & ?)"; iFrame.
+      -  iDestruct "H" as "(% & % & % & % & -> & ? & ? & ? & ?)"; iFrame.
     Qed.
 
     Lemma interp_ptstomem_exists_intro (bytes : nat) :
       ⊢ ∀ (paddr : Addr) (w : bv (bytes * byte)),
           interp_ptstomem paddr w -∗
-          ∃ (w : bv (bytes * byte)), interp_ptstomem paddr w.
+                                     ∃ (w : bv (bytes * byte)), interp_ptstomem paddr w.
     Proof. auto. Qed.
 
     Lemma interp_ptstomem_big_sepS (bytes : nat) (paddr : Addr):
@@ -784,17 +485,83 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
            rewrite ptstomem_bv_app.
            iDestruct "H" as "[Hb Hbs]".
            iSplitL "Hb".
-           + cbn. iSplit; [by iExists _ | auto].
-           + iApply "IHL"; by iExists _.
-        * iIntros "[[[%b Hhd] _] Htl]".
-          iDestruct ("IHR" with "Htl") as "[%btl Htl]".
-          iExists (bv.app b btl).
-          rewrite ptstomem_bv_app. iFrame.
+        + cbn. iSplit; [by iExists _ | auto].
+        + iApply "IHL"; by iExists _.
+          * iIntros "[[[%b Hhd] _] Htl]".
+            iDestruct ("IHR" with "Htl") as "[%btl Htl]".
+            iExists (bv.app b btl).
+            rewrite ptstomem_bv_app. iFrame.
+    Qed.
+
+    Lemma fun_read_ram_works {bytes memmap μ paddr} {w : bv (bytes * byte)} :
+      map_Forall (λ (a : Addr) (v : Base.Byte), memory_ram μ a = v) memmap ->
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ⊢
+        ⌜ fun_read_ram μ bytes paddr = w ⌝.
+    Proof.
+      revert paddr.
+      iInduction bytes as [|bytes] "IHbytes";
+        iIntros (paddr Hmap) "[Haddr Hmem]".
+      - now destruct (bv.view w).
+      - destruct (bv.appView byte (bytes * byte) w) as (w0 & w).
+        rewrite ptstomem_bv_app.
+        iDestruct "Haddr" as "([Haddr0 HnotM] & Haddr)".
+        iPoseProof (gen_heap.gen_heap_valid with "Hmem Haddr0") as "%".
+        iPoseProof ("IHbytes" $! w (bv.one + paddr) Hmap with "[$Haddr $Hmem]") as "%eq".
+        iPureIntro.
+        simpl.
+        f_equal; auto.
+    Qed.
+
+    Lemma mem_inv_not_modified `{sailGS Σ} :
+      ∀ (μ : Memory) (memmap : gmap Addr MemVal),
+        ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
+                                                                               gen_heap.gen_heap_interp memmap -∗
+                                                                                                                  trace.tr_auth (memory_trace μ) -∗
+                                                                                                                                                    mem_inv sailGS_memGS μ.
+    Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
+
+    Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
+                                (paddr : Addr) (data : Byte),
+        map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap ->
+        map_Forall (λ (a : Addr) (v : Byte), write_byte (memory_ram μ) paddr data a = v) (<[paddr:=data]> memmap).
+    Proof.
+      intros μ memmap paddr data Hmap.
+      apply map_Forall_lookup.
+      intros i x H0.
+      unfold write_byte.
+      destruct Classes.eq_dec.
+      - subst paddr.
+        now apply (lookup_insert_rev memmap i).
+      - rewrite -> map_Forall_lookup in Hmap.
+        rewrite (lookup_insert_ne _ _ _ _ n) in H0.
+        now apply Hmap.
+    Qed.
+
+    Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
+      map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
+      interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗
+        trace.tr_auth (memory_trace μ) ={⊤}=∗
+      mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
+    Proof.
+      iRevert (data w paddr μ memmap).
+      iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
+        iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
+      - iModIntro. iSplitL; last done.
+        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
+     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
+        destruct (bv.appView byte (bytes * byte) data) as [bd data].
+        destruct (bv.appView byte (bytes * byte) w) as [bw w].
+        iDestruct "Haddr" as "[[H $] Haddr]".
+        iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
+        iApply ("IHbytes" $! data w
+                       (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr]").
+        by apply map_Forall_update.
     Qed.
 
     Lemma interp_addr_access_app base width width':
       interp_addr_access liveAddrs mmioAddrs base (width + width') ⊣⊢
-      interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
+        interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
     Proof.
       unfold interp_addr_access.
       now rewrite Nat2N.inj_add bv.seqBv_app big_sepL_app.
@@ -802,7 +569,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Lemma interp_addr_access_cons base width:
       interp_addr_access liveAddrs mmioAddrs base (S width) ⊣⊢
-      interp_addr_access_byte liveAddrs mmioAddrs base ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat 1) width.
+        interp_addr_access_byte liveAddrs mmioAddrs base ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat 1) width.
     Proof. rewrite <-Nat.add_1_l.
            rewrite interp_addr_access_app.
            unfold interp_addr_access, interp_addr_access_byte.
@@ -811,7 +578,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     Lemma interp_addr_access_single base:
       interp_addr_access liveAddrs mmioAddrs base 1 ⊣⊢
-      interp_addr_access_byte liveAddrs mmioAddrs base.
+        interp_addr_access_byte liveAddrs mmioAddrs base.
     Proof. rewrite interp_addr_access_cons.
            iSplit; iIntros "H"; [iDestruct "H" as "[H _]"|]; iFrame.
            unfold interp_addr_access. now cbn.
@@ -822,7 +589,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
       (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       Pmp_access base (bv.of_nat width) entries m p →
       (interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢
-      (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
+         (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
     Proof.
       intros Hrep Hpmp.
       (* Discharge easy direction *)
@@ -840,13 +607,13 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
       - iIntros "Hia". iFrame.
         iDestruct (big_sepL_mono with "Hia") as "Hia"; last iFrame.
         now iIntros.
-      Qed.
+    Qed.
 
     Lemma interp_pmp_within_mmio_spec {entries m p} (paddr : Addr) bytes :
       (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
-      ⌜bool_decide (withinMMIO paddr bytes) = false%nat⌝.
+                                                              ⌜bool_decide (withinMMIO paddr bytes) = false%nat⌝.
     Proof.
       iIntros (Hrep Hpmp) "Hint".
       destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
@@ -864,8 +631,8 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     (* Bidirectional version of the Iris lemma *)
     Lemma big_sepL_mono_iff {PROP : bi} {A : Type} (Φ Ψ : nat → A → PROP) (l : list A) :
-    (∀ k y, l !! k = Some y → Φ k y ⊣⊢ Ψ k y) →
-    ([∗ list] k ↦ y ∈ l, Φ k y) ⊣⊢ [∗ list] k ↦ y ∈ l, Ψ k y.
+      (∀ k y, l !! k = Some y → Φ k y ⊣⊢ Ψ k y) →
+      ([∗ list] k ↦ y ∈ l, Φ k y) ⊣⊢ [∗ list] k ↦ y ∈ l, Ψ k y.
     Proof.
       intros Hiff.
       iSplit; iApply big_sepL_mono; iIntros; iApply Hiff; auto.
@@ -875,7 +642,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     Lemma interp_addr_access_byte_extr  base :
       base ∈ liveAddrs ->
       (interp_addr_access_byte liveAddrs mmioAddrs base ⊢
-      ptstoSth base).
+         ptstoSth base).
     Proof.
       intros (* Hpmp *) Hlive.
       unfold interp_addr_access_byte, ptstoSth, interp_ptsto.
@@ -884,7 +651,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
     (* Inserting a byte is always possible *)
     Lemma interp_addr_access_byte_inj base :
-       ptstoSth base -∗ interp_addr_access_byte liveAddrs mmioAddrs base.
+      ptstoSth base -∗ interp_addr_access_byte liveAddrs mmioAddrs base.
     Proof.
       unfold interp_addr_access_byte, ptstoSth, interp_ptsto.
       iIntros "HFalse". iDestruct "HFalse" as (?) "[Hmapsto %HFalse]".
@@ -899,7 +666,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
       (bv.bin base + N.of_nat width ≤ maxAddr)%N →
       (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
       interp_addr_access liveAddrs mmioAddrs base width ⊢
-      (∃ (w : bv (width * byte)), interp_ptstomem base w).
+        (∃ (w : bv (width * byte)), interp_ptstomem base w).
     Proof.
       intros HminOK HmaxOK Hrep.
       rewrite interp_ptstomem_big_sepS.
@@ -921,7 +688,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
     (* Inserting a range is always possible *)
     Lemma interp_addr_access_inj base width:
       (∃ (w : bv (width * byte)), interp_ptstomem base w) ⊢
-      interp_addr_access liveAddrs mmioAddrs base width.
+        interp_addr_access liveAddrs mmioAddrs base width.
     Proof.
       iIntros "Hint".
       rewrite interp_ptstomem_big_sepS.
@@ -945,9 +712,9 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RiscvPmpIrisBase.
-  Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+    FL RiscvPmpSemantics RVPCOM RVPBASE.
+  (* Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram *)
+  (*   FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters. *)
 
   Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢
@@ -970,3 +737,16 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
   Qed.
 
 End RiscvPmpIrisInstance.
+
+(* Module Type RiscvPmpIrisInstancesOwner. *)
+(*   Module RiscvPmpIrisInstanceOwnerLeft := RiscvPmpIrisInstanceOwner LeftOrRightLeft. *)
+(*   Module RiscvPmpIrisInstancePredicatesLeft := RiscvPmpIrisInstanceOwnerLeft.RiscvPmpIrisInstancePredicatesLOR. *)
+(*   Module RiscvPmpIrisBaseLeft := RiscvPmpIrisInstanceOwnerLeft.RiscvPmpIrisBaseLOR. *)
+(*   Module RiscvPmpIrisInstanceLeft := RiscvPmpIrisInstanceOwnerLeft.RiscvPmpIrisInstance. *)
+
+(*   Module RiscvPmpIrisInstanceOwnerRight := RiscvPmpIrisInstanceOwner LeftOrRightRight. *)
+(*   Module RiscvPmpIrisInstancePredicatesRight := RiscvPmpIrisInstanceOwnerRight.RiscvPmpIrisInstancePredicatesLOR. *)
+(*   Module RiscvPmpIrisBaseRight := RiscvPmpIrisInstanceOwnerRight.RiscvPmpIrisBaseLOR. *)
+(*   Module RiscvPmpIrisInstanceRight := RiscvPmpIrisInstanceOwnerRight.RiscvPmpIrisInstance. *)
+(* End RiscvPmpIrisInstancesOwner. *)
+

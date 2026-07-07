@@ -41,6 +41,7 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.Contracts
      RiscvPmp.Model
+     RiscvPmp.IrisModel
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstance
      RiscvPmp.IrisInstanceBinary
@@ -61,7 +62,6 @@ Import bv.notations.
 
 Import RiscvPmpProgram.
 Import RiscvPmpSignature.
-Import RiscvPmpIrisInstancePredicates2.
 
 Ltac destruct_syminstance ι :=
   repeat
@@ -76,10 +76,19 @@ Ltac destruct_syminstance ι :=
     | _ => idtac
     end.
 
-Import RiscvPmpIrisBase2.
 
-Module RiscvPmpModel2.
-  Module Import RiscvPmpIrisInstance2 := RiscvPmpIrisInstance2 DefaultFailLogic.
+Module Type RiscvPmpModel2
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
+  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
+  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
+  (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
+  (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
+  (Import RVPINST2 : RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
@@ -87,13 +96,18 @@ Module RiscvPmpModel2.
   Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
     Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
   End RiscvPmpProgramLogic.
-  Include RiscvPmpProgramLogic.
 
   Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic
-    RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase2  RiscvPmpIrisAdeqParams2 RiscvPmpIrisInstance2.
+    RiscvPmpSemantics RVPCOM RVPBASEl RVPBASEr RiscvPmpSpecification RVPBASE2 RVPADEQ2 RVPINST2 RiscvPmpProgramLogic.
 
   Section ForeignProofs.
     Context `{sg : sailGS2 Σ}.
+
+    #[export] Existing Instance sailGS2_invGS.
+    #[export] Existing Instance sailGS2_regGS2.
+    #[export] Existing Instance sailGS2_memGS.
+
+    Local Instance hmemGS2 : memGS2 Σ := sailGS2_memGS.
 
     Ltac eliminate_prim_step Heq :=
       let f := fresh "f" in
@@ -111,15 +125,15 @@ Module RiscvPmpModel2.
 
     Lemma interp_ptstomem_exists_intro (bytes : nat) :
       ⊢ ∀ (paddr : Addr) (w : bv (bytes * byte)),
-          interp_ptstomem paddr w -∗
-          ∃ (w : bv (bytes * byte)), interp_ptstomem paddr w.
+          interp_ptstomem (mG := sailGS2_memGS) paddr w -∗
+                                                           ∃ (w : bv (bytes * byte)), interp_ptstomem (mG := sailGS2_memGS) paddr w.
     Proof. auto. Qed.
 
-    Definition sailGS2_sailGS_left `{sailGS2 Σ} : sailGS Σ :=
-      SailGS sailGS2_invGS sailRegGS2_sailRegGS_left memGS2_memGS_left.
+    Definition sailGS2_sailGS_left `{sailGS2 Σ} : RVPBASEl.sailGS Σ :=
+      RVPBASEl.SailGS sailGS2_invGS sailRegGS2_sailRegGS_left (memGS2_memGS_left (mG := sailGS2_memGS)).
 
-    Definition sailGS2_sailGS_right `{sailGS2 Σ} : sailGS Σ :=
-      SailGS sailGS2_invGS sailRegGS2_sailRegGS_right memGS2_memGS_right.
+    Definition sailGS2_sailGS_right `{sailGS2 Σ} : RVPBASEr.sailGS Σ :=
+      RVPBASEr.SailGS sailGS2_invGS sailRegGS2_sailRegGS_right (memGS2_memGS_right (mG := sailGS2_memGS)).
 
     Lemma pmp_entries_ptsto : ∀ (entries : list PmpEntryCfg),
         ⊢ interp_pmp_entries entries -∗
@@ -136,8 +150,8 @@ Module RiscvPmpModel2.
 
     Lemma interp_pmpentries_dedup : ∀ (entries : list PmpEntryCfg),
         interp_pmp_entries entries ⊣⊢
-          RiscvPmpIrisInstancePredicates.interp_pmp_entries (H := sailRegGS2_sailRegGS_left) entries ∗
-          RiscvPmpIrisInstancePredicates.interp_pmp_entries (H := sailRegGS2_sailRegGS_right) entries.
+          RVPPREDl.interp_pmp_entries (H := sailRegGS2_sailRegGS_left) entries ∗
+          RVPPREDr.interp_pmp_entries (H := sailRegGS2_sailRegGS_right) entries.
     Proof.
       iIntros (entries).
       destruct entries as [|[cfg0 addr0] [|[cfg1 addr1] [|]]] eqn:?; cbn;
@@ -153,13 +167,13 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "(HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
       iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
-      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_left _ _ _ _ _ HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l".
+      iPoseProof (RVPINSTl.fun_read_ram_works (sr := sailGS2_sailGS_left) HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
       inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
       iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
       iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
-      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_right _ _ _ _ _ HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r".
+      iPoseProof (RVPINSTr.fun_read_ram_works (sr := sailGS2_sailGS_right) HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
       inversion Hf2; subst. iMod "Hclose" as "_". iModIntro.
@@ -173,13 +187,13 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "(%v & HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
       iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
-      iMod (@RiscvPmpModel2.fun_write_ram_works _ sailGS2_sailGS_left _ _ _ data _ v HmapL with "[$HmemL $Hmem $Htr]") as "(Hmem & HmemL)".
+      iMod (RVPINSTl.fun_write_ram_works (sr := sailGS2_sailGS_left) with "[$HmemL $Hmem $Htr]") as "(Hmem & HmemL)"; first done.
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
       inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
       iFrame "Hreg Hmem".
       iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
-      iMod (@RiscvPmpModel2.fun_write_ram_works _ sailGS2_sailGS_right _ _ _ data _ v HmapR with "[$HmemR $Hmem $Htr]") as "(Hmem & HmemR)".
+      iMod (RVPINSTr.fun_write_ram_works  (sr := sailGS2_sailGS_right) with "[$HmemR $Hmem $Htr]") as "(Hmem & HmemR)"; first done.
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
       inversion Hf2; subst. iMod "Hclose" as "_". iModIntro. iFrame "Hreg Hmem".
@@ -335,10 +349,10 @@ Module RiscvPmpModel2.
 
     Lemma interp_gprs_split (exclude : gset (Reg ty_xlenbits)) :
       interp_gprs exclude ⊢
-        @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_left exclude
-        ∗ @RiscvPmpIrisInstancePredicates.interp_gprs _ sailRegGS2_sailRegGS_right exclude.
+        @RVPPREDl.interp_gprs _ sailRegGS2_sailRegGS_left exclude
+        ∗ @RVPPREDr.interp_gprs _ sailRegGS2_sailRegGS_right exclude.
     Proof.
-      unfold interp_gprs, RiscvPmpIrisInstancePredicates.interp_gprs.
+      unfold interp_gprs, RVPPREDl.interp_gprs, RVPPREDr.interp_gprs.
       remember (elements (GPRS ∖ exclude)) as l eqn:El.
       assert (Hdup: NoDup l) by (subst; apply NoDup_elements).
       assert (Hl: list_to_set l = GPRS ∖ exclude) by (subst; apply list_to_set_elements_L).
@@ -509,11 +523,11 @@ Module RiscvPmpModel2.
             ⊢ (([∗ list] offset ∈ bv.seqBv paddr (N.of_nat bytes),
                ⌜∃ p0, Pmp_access offset%bv
                         (bv.of_nat 1) entries p p0⌝ -∗
-                        ∃ w : Byte, interp_ptsto offset w)
+                        ∃ w : Byte, interp_ptsto (mG := sailGS2_memGS) offset w)
               ∗-∗
               (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗
                         [∗ list] offset ∈ bv.seqBv paddr (N.of_nat bytes),
-                          ∃ w : Byte, interp_ptsto offset w))%I.
+                 ∃ w : Byte, interp_ptsto (mG := sailGS2_memGS) offset w))%I.
     Proof.
       pose proof xlenbits_pos.
       iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr pmp p p0 Hpmp Hrep Hbytes) "".
@@ -529,10 +543,10 @@ Module RiscvPmpModel2.
         exists acc.
         assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia.
         rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep.
-        refine (RiscvPmpIrisInstance.pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
+        refine (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
         destruct bytes; first by simpl. (* we need to know a bit more about bytes to finish this case *)
         iSimpl in "Hbs".
-        apply RiscvPmpIrisInstance.pmp_access_addr_S_width_pred in Haccess; try lia.
+        apply pmp_access_addr_S_width_pred in Haccess; try lia.
         rewrite bv.add_comm in Haccess.
         iApply ("IHbytes" $! (bv.one + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia.
         rewrite bv.bin_add_small ?bv_bin_one; lia.
@@ -544,7 +558,7 @@ Module RiscvPmpModel2.
         simpl.
         iSplitL "Hw"; auto.
         destruct bytes; first now simpl.
-        apply RiscvPmpIrisInstance.pmp_access_addr_S_width_pred in Hpmp; auto.
+        apply pmp_access_addr_S_width_pred in Hpmp; auto.
         rewrite bv.add_comm in Hpmp.
         iApply ("IHbytes" $! (bv.one + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia.
         rewrite bv.bin_add_small bv_bin_one; lia.
