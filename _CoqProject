@@ -38,6 +38,15 @@ case_study/RiscvPmp/BlockVer/BinaryVerifier.v
 # case_study/RiscvPmp/BlockVer/RunningExample.v
 case_study/RiscvPmp/FemtoKernel.v
 case_study/Assumptions.v
+-Q examples/GVT Katamaran.RiscvPmp.GVT
+examples/GVT/Sig.v
+examples/GVT/Contracts.v
+examples/GVT/IrisInstance.v
+examples/GVT/Model.v
+examples/GVT/LoopVerification.v
+examples/GVT/Spec.v
+examples/GVT/PartialVerifier.v
+examples/GVT/StopButton.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
