@@ -88,61 +88,82 @@ to inspect specific instances.
 
 ## CFGVer key definitions
 
+> **⚠ gmap pivot (2026-07-13, commits `5ea9fba4`/`9b4f16be`/`0c44f2be`).**
+> Instructions are now stored in a **`gmap (bv xlenbits) AST`** keyed by ABSOLUTE
+> pc, NOT a `list AST` with a base+offset. `Verifier.v` has **no `base`**, no
+> `instrAligned` guard, no modulo/index arithmetic — the executor does exact
+> `instrs !! v` lookup. `base` survives only in `Examples.v`, converted at the
+> boundary by `instrs_of_list`. This removed the `init_addr=0` limitation:
+> `valid_cmovznz4_cfg_contract_at_start` (init_addr = 256) is axiom-clean.
+> Sections below reflect the post-pivot API. See memory `project-cfgver-gmap-pivot`.
+
 ### `sexec_cfg_addr` / `cexec_cfg_addr`
 
 Symbolic/concrete CFG executor. Signature:
 
 ```coq
-sexec_cfg_addr (b : list AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
+sexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
   : ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits)
 ```
 
 At each step: `angelic_binary` (existential choice) between exiting and executing
-the next instruction. `angelic_binary m1 m2 Φ h = m1 Φ h \/ m2 Φ h`.
+the instruction at the current pc. `angelic_binary m1 m2 Φ h = m1 Φ h \/ m2 Φ h`.
 
 Stops with `error` when:
 - `fuel = 0`
 - `term_get_val apc = None` (symbolic, non-concrete address)
-- `instrAligned v = false`
-- `nth_error b idx = None` (out of bounds)
+- `instrs !! v = None` (no instruction mapped at this pc)
+
+(No alignment/base guard: the map key IS the absolute pc.)
 
 ### `instrAligned`
 
-```coq
-Definition instrAligned (v : bv xlenbits) : bool :=
-  (N.to_nat (bv.bin v) mod bytes_per_instr =? 0)%nat.
-#[global] Arguments instrAligned : simpl never.
-```
+Still **defined** in `Verifier.v` (`(N.to_nat (bv.bin v) mod bytes_per_instr =? 0)%nat`,
+`Arguments … : simpl never`) but **no longer used** by the executor or any
+soundness lemma after the gmap pivot. Vestigial; candidate for removal.
 
 ### `semTripleCFG`
 
 ```coq
-Definition semTripleCFG PRE instrs exitCond fuel POST : iProp Σ :=
+Definition semTripleCFG PRE (instrs : gmap (bv xlenbits) AST) exitCond fuel POST : iProp Σ :=
   (∀ a,
-     (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs (SyncVal bv.zero) instrs) -∗
+     (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs instrs) -∗
      (∀ an, ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
-            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs (SyncVal bv.zero) instrs ∗ POST a an
+            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs instrs ∗ POST a an
             -∗ WP2_loop) -∗
      WP2_loop)%I.
 ```
 
-`WP2_loop` here is `BlockVer.Verifier.WP2_loop` (plain infinite loop, NOT
-`myWP2_loop ExitCondIprop`). Bridging to `myWP2_loop` is the key open problem.
+`WP2_loop` here is `BlockVer.Verifier.WP2_loop`. As before, the actual soundness
+bridge used by `Examples.v` is `sound_sblock_verification_condition_myWP2`, which
+goes straight to `myWP2_loop`, bypassing `semTripleCFG`. `semTripleCFG` and the
+WP2-based `sound_*` in `Verifier.v` are effectively dead (kept as reference).
+
+### `ptsto_instrs` (gmap)
+
+```coq
+Definition ptsto_instrs (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
+  ([∗ map] a ↦ i ∈ instrs, interp_ptsto_instr (SyncVal a) (SyncVal i))%I.
+```
+
+`ptsto_instrs_lookup instrs v Hlk` (`Hlk : instrs !! v = Some i`, via
+`big_sepM_lookup_acc`) replaces the old `ptsto_instrs_nth`. `i` is implicit.
 
 ### `sblock_verification_condition` (CFGVer)
 
 ```coq
 sblock_verification_condition {Σ : LCtx}
   (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-  (b : list AST)
+  (instrs : gmap (bv xlenbits) AST)
   (exitCond : bv xlenbits -> bool)
   (fuel : nat)
   (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
   (w : World) : 𝕊 w
 ```
 
-Call pattern: `sblock_verification_condition (Σ := [ctx]) req b exitCond fuel ens wnil`.
-`Σ := [ctx]` must be explicit — Coq cannot infer it.
+Call pattern: `sblock_verification_condition (Σ := [ctx]) req instrs exitCond fuel ens wnil`.
+`Σ := [ctx]` must be explicit — Coq cannot infer it. No `base` argument (removed).
+`Examples.v`'s `CFG_VC_triple` builds `instrs` via `instrs_of_list (bv.of_N init_addr) i`.
 
 **Note on postconditions**: `SHeapSpec` has no leakcheck — resources left in the
 heap after consuming `ens` are silently dropped. `CFGVerifierContract` therefore
@@ -174,36 +195,45 @@ instance. Usually the fix is to add one `#[export] Instance`.
 
 `rexec_cfg_addr`: the relational correctness lemma for `sexec_cfg_addr`. Proved by
 `iInduction fuel`. **Bullet nesting rule**: inside `-` bullets from `iInduction`, use
-`+` for angelic_binary sub-goals, `--` for refine_bind sub-goals, `*` for nth_error cases.
+`+` for angelic_binary sub-goals, `--` for refine_bind sub-goals, `*` for the gmap
+lookup Some/None cases.
+
+**gmap gotcha (cost hours):** in the execute branch the goal is
+`ℛ⟦…⟧ (match instrs !! v …) (match instrs !! v …)`. A plain `destruct (instrs !! v)`
+binds the case variable but does **not** reduce the `match` — `instrs !! v` inside
+the `ℛ⟦⟧` relation carries hidden `Lookup`-instance implicits that a freshly-typed
+`instrs !! v` doesn't match (so `destruct`/`remember`/`rewrite` all report "found no
+subterm"). Result: `refine_bind` then diverges unifying `bind` against an unreduced
+`match` (looks like a `Qed` hang). Fix — capture the goal's exact scrutinee:
+`lazymatch goal with |- context[match ?x with Some _ => _ | None => _ end] => destruct x as [i|] end`.
 
 ---
 
 ## Soundness chain (CFGVer)
 
-The `jmp_fwd_endToEnd_cfg` end-to-end proof is **complete** (commit `fe149069`).
-The chain for `jmp_fwd` is:
+End-to-end noninterference is **complete for every example** and axiom-clean,
+post-gmap-pivot. The end lemmas are `<prog>_noninterferent : noninterferent_strong
+init_addr instrs exitCond reg_specs mem_specs`, each proved in one shot by
+`eapply gen_contract_noninterferent; [ … 4 bullets … ]` (NoDup, HDataAddrs, length
+bound, the `valid_<prog>_cfg_contract` VC). The chain:
 
 ```
-valid_jmp_fwd_cfg_vc        (vm_compute. solve_vc.)
-        ↓  safeE (postprocess (sblock_verification_condition ...))
-sound_sblock_verification_condition_myWP2
+valid_<prog>_cfg_contract   (vm_compute. solve_vc.)   — the symbolic VC over
+        ↓  safeE (postprocess (sblock_verification_condition                 the gmap
+             (extend_to_minimal_pre P) (instrs_of_list (bv.of_N init_addr) i) …))
+sound_sblock_verification_condition_myWP2   (gmap; no base/instrAligned)
         ↓  → myWP2_loop ExitCondIprop
-jmp_fwd_safe_cfg / cfg_instrs_contract
-        ↓  → exitCond_WP2_loop jmp_fwd_exitCond
-cfg_instrs_endToEnd
-        ↓  adequacy_gen_RiscVNStepsExitCond + memory boilerplate
+cfg_instrs_verified / cfg_instrs_safe  →  exitCond_WP2_loop
+cfg_instrs_endToEnd(_with_memory)  →  gen_contract_noninterferent
+        ↓  adequacy_gen_RiscVNStepsExitCond + memory (instrsAndDataMemory)
         → concrete leakage equivalence
 ```
 
-`sound_sblock_verification_condition_myWP2` (in `Examples.v`) bridges directly
-from VC soundness to `myWP2_loop`, bypassing the `semTripleCFG → WP2_loop` step.
-
-For other programs, there is still a potential open problem:
-```
-semTripleCFG PRE b exitCond fuel POST  → WP2_loop
-[potentially needed] sound_exec_cfg_addr_myWP2
-        ↓  → myWP2_loop ExitCondIprop
-```
+The gmap pivot **resolved** the old "other programs" open problem: the executor
+loop soundness (`sound_exec_cfg_addr_myWP2`) is proved generically by exact
+`instrs !! v` lookup + `ptsto_instrs_lookup`, with no base/alignment/index side
+conditions. `sound_sblock_verification_condition_myWP2` bridges VC soundness
+straight to `myWP2_loop`.
 
 **BlockVer end-to-end chain** (works, see `swap_endToEnd`):
 ```
@@ -221,6 +251,16 @@ safeE (postprocess (sblock_verification_condition req instrs ens wnil))
 Defined in `Examples.v` inside `WithAsnNotations`. Automates building
 `CFGVerifierContract` from a list of register specs and provides a
 once-and-for-all `ImplPre` lemma.
+
+> **⚠ Stale code blocks below.** The signatures shown here predate both the
+> `init_addr` parameterization and the gmap pivot. Current reality (verify against
+> `Examples.v`): `reg_spec := RegIdx * bool * option (Val ty_xlenbits)`; there is
+> also a `mem_full_spec`; `gen_contract (init_addr : N) (reg_specs) (mem_specs)
+> (instrs : list AST) (ec) (fl)`; the contract precondition is
+> `asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs`.
+> The instruction *list* is converted to a gmap by `CFG_VC_triple` via
+> `instrs_of_list (bv.of_N init_addr) i`. The once-and-for-all end lemma is
+> `gen_contract_noninterferent` (no `Hbase`/`instrAligned` param — removed).
 
 ### Types and definitions
 
@@ -287,6 +327,14 @@ Lemma declare_pub_tail r pub rest γ1 γ2 :
 CFG analog of BlockVer's `instrs_endToEnd`. Bundles adequacy +
 memory splitting + `cfg_instrs_safe` so that program-specific proofs
 only supply `ImplPre`.
+
+> **⚠ Post-pivot deltas** (the block below predates the gmap pivot + `Hbase`
+> removal): the `cfg_instrs_*` chain now carries `ptsto_instrs (instrs_of_list
+> (bv.of_N init_addr) instrs')` (gmap), NOT `ptsto_instrs (SyncVal base) b`; the
+> `Hbase : instrAligned … = true` parameter is **gone** from `cfg_instrs_verified`
+> / `_safe` / `_with_mem` / `cfg_instrs_endToEnd(_with_memory)` /
+> `gen_contract_noninterferent`. Memory is materialized by `instrsMemory` /
+> `instrsAndDataMemory`, which now produce the gmap `ptsto_instrs`.
 
 ```coq
 Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
@@ -375,6 +423,12 @@ all: try eauto.
 ## Public memory infrastructure
 
 Analogous to the public-register machinery, for programs that also access data memory.
+
+> **⚠ gmap pivot note.** `instrsAndDataMemory` and `intro_ptsto_instrs` now yield the
+> gmap `Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (instrs_of_list (bv.of_N start)
+> instrs)` (via `big_sepM_insert`, side condition `instrs_of_list_fresh`), NOT the old
+> list `ptsto_instrs (SyncVal base) instrs`. The `interp_mem_with_*` data-memory
+> machinery is unchanged.
 
 ### Types and definitions (all in `CFGVer/Examples.v`)
 
@@ -528,6 +582,11 @@ match arms with `env.drop` terms are still visible.
 | `rewrite !env.drop_cat` fails after `rewrite !semWP2_unfold; cbn` for val×fail or fail×val bullets | Both `stm_to_val`s are concrete, so `cbn` collapses the match immediately to `\|={⊤}=> False` — no `env.drop` terms survive. Replace with `do 3 iModIntro. iMod "Hclose". iMod "WPk". auto.` |
 | `iMod "H"` fails with "cannot eliminate modality match i with \| inl … \| inr … end" in adequacy proof | After `case_match` introduces `i : IVal τ` (abstract), `H` has type `match i with …`. Iris `iMod` requires syntactic `\|={E}=> P`. Add `destruct i as [v2\|m2].` before `iMod`. |
 | Second `{ inversion H. }` bullet gives `[Focus] No such goal (1)` in `semWP2_call_frame`-style proof | For val×step or step×val cases, the `stm_fail` sub-case now produces `WPs : \|={⊤}=> False`, which `try solve [… iMod "WPs"; auto]` closes immediately. Remove the trailing `{ inversion H. }` for those cases only (keep it for fail×step and step×fail where `inr×inr` gives POST). |
+| `lia` fails "Cannot find witness" on a trivial linear N goal in `Examples.v` | `From stdpp Require Import gmap` activates a Zify rewrite turning `bv.bin (bv.of_N x)` into `x mod 2^word`; the huge modulus breaks lia's certificate search. Make the atom opaque first: `set (B := bv.bin (bv.of_N …)) in *; clearbody B. lia.` (Bare `bv.bin a` is fine — only the `bin∘of_N` composition triggers it.) |
+| `lia` fails on a goal bounded by `bv.exp2 xlenbits` (= 2^32) | lia chokes evaluating the literal `4294967296`. Bound to a small literal then transit (`assert (… < 1024) by lia; eapply N.lt_trans; [exact Hb\|]; reflexivity`), or make exp2 opaque (`set (E := bv.exp2 xlenbits) in *; clearbody E; lia`). |
+| SSReflect `rewrite … in H by tac` fails to parse in `Examples.v` | BlockVer imports SSReflect, whose `rewrite` rejects the Ltac `by` clause. Provide conditional-lemma side conditions as explicit hypotheses (`assert (Hs : …) by (…); rewrite (lem Hs) in H`) instead. |
+| `destruct (instrs !! v)` binds the case var but leaves `match instrs !! v` unreduced (then `refine_bind`/`iApply` hangs) | The lookup inside `ℛ⟦⟧`/relational goals carries hidden `Lookup`-instance implicits. Capture the goal's exact scrutinee: `lazymatch goal with \|- context[match ?x with Some _ => _ \| None => _ end] => destruct x as [i\|] end`. |
+| `rocq_start(theorem=X)` "succeeds" but a prior proof was actually broken | Theorem/position starts load the prefix vos-style (proof bodies SKIPPED). Only `rocq_check` of a body or a `mode=full` compile actually runs proofs. Don't infer a lemma passed just because a later `rocq_start` reached it. |
 
 ---
 
@@ -544,22 +603,20 @@ Do NOT `Require Import` — it causes notation/name conflicts with BlockVer.
 
 ---
 
-## jmp_fwd example status
+## Example status (post-gmap-pivot)
 
-`valid_jmp_fwd` in `Section WithAsnNotations`: **Admitted** — BlockVer cannot handle
-JAL (non-linear control flow).
+All CFGVer examples compile with **zero `Admitted`** in `Examples.v`; each has a
+`valid_<prog>_cfg_contract` VC (`vm_compute. solve_vc.`) and a `<prog>_noninterferent`
+end-to-end lemma (`eapply gen_contract_noninterferent; […]`). Examples: `swap`,
+`jumpIfZero`, `jmp_fwd`, `countdown`, `countdown_mem`, `set_X2_to_42`, `cmovznz4`,
+and **`cmovznz4_at_start`** (init_addr = 256, genuinely nonzero base).
 
-`valid_jmp_fwd_cfg` / `valid_jmp_fwd_cfg_vc`: **Proved** (commit `90f65ba8`).
-Uses CFGVer with `jmp_fwd_exitCond := fun v => bv.ugeb v (bv.of_N 8)`, fuel = 5.
-Proof: `vm_compute. solve_vc.`
+`valid_cmovznz4_cfg_contract_at_start` is **"Closed under the global context"**
+(axiom-clean) — the headline result: cmovznz4 verified at a nonzero base through
+the finite-map executor.
 
-End-to-end (`jmp_fwd_endToEnd_cfg`): **Proved** (commit `fe149069`).
-Manual contract, requires `declare_public_registers γ1 γ2 [existT ty_xlenbits x1]`.
-
-**gen_contract version** (`jmp_fwd_cfg_contract_gen` / `jmp_fwd_endToEnd_cfg_gen`):
-**Proved** (commit `63affd15`). Uses `gen_contract []` (empty specs, precondition
-`asn_init_pc ∗ ⊤`). End-to-end requires no `HpubReg` hypothesis — proved by
-`by constructor` for `declare_public_registers γ1 γ2 []`.
+`valid_jmp_fwd` (BlockVer, `Section WithAsnNotations`) stays **Admitted** — BlockVer
+cannot handle JAL; that's what CFGVer is for.
 
 ---
 
