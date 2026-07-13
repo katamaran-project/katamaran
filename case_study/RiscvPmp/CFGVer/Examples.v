@@ -1871,9 +1871,7 @@ End AdequacyTools.
   Lemma cfg_instrs_verified `{sailGS2 Σ} instrs' exitCond γ1 γ2 R (ι : Valuation R)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)
-    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-    (blockInitAddr : cfg_init_addr block = init_addr)
+    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -1921,9 +1919,7 @@ End AdequacyTools.
   Lemma cfg_instrs_safe `{sailGS2 Σ} instrs' exitCond γ1 γ2 {R} {ι : Valuation R}
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)
-    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-    (blockInitAddr : cfg_init_addr block = init_addr)
+    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -1950,9 +1946,7 @@ End AdequacyTools.
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)
-    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-    (blockInitAddr : cfg_init_addr block = init_addr)
+    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -2005,9 +1999,7 @@ End AdequacyTools.
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (block : @CFGVerifierContract R)
     (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)
-    (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-    (blockInitAddr : cfg_init_addr block = init_addr)
+    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -2366,9 +2358,7 @@ End AdequacyTools.
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
       (block : @CFGVerifierContract R)
       (valid_block : ValidCFGVerifierContract block)
-      (init_addr : N)
-      (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-      (blockInitAddr : cfg_init_addr block = init_addr)
+      (init_addr : N)      (blockInitAddr : cfg_init_addr block = init_addr)
       (blockInstrs : cfg_instrs block = instrs')
       (blockExitCond : cfg_exitCond block = exitCond)
       (ImplPre : forall `{sailGS2 Σ},
@@ -2440,9 +2430,7 @@ End AdequacyTools.
         (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
         (block : @CFGVerifierContract R)
         (valid_block : ValidCFGVerifierContract block)
-        (init_addr : N)
-        (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-        (blockInitAddr : cfg_init_addr block = init_addr)
+        (init_addr : N)        (blockInitAddr : cfg_init_addr block = init_addr)
         (blockInstrs : cfg_instrs block = instrs')
         (blockExitCond : cfg_exitCond block = exitCond)
         (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
@@ -2520,9 +2508,7 @@ End AdequacyTools.
       (instrs : list AST)
       (exitCond : bv xlenbits -> bool)
       (fuel : nat)
-      (init_addr : N)
-      (Hbase : Katamaran.RiscvPmp.CFGVer.Verifier.instrAligned (bv.of_N init_addr) = true)
-      (HND : NoDup (map reg_spec_idx reg_specs))
+      (init_addr : N)      (HND : NoDup (map reg_spec_idx reg_specs))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec mem_specs) !! i = Some spec →
           spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
@@ -2543,7 +2529,7 @@ End AdequacyTools.
       (map mem_full_to_spec mem_specs) HpubMem
       (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)
       valid_block
-      init_addr Hbase
+      init_addr
       eq_refl eq_refl eq_refl HDataAddrs).
     all: try eauto.
     - intros Σ H.
@@ -2566,8 +2552,7 @@ End AdequacyTools.
       [(X1, false, None); (X2, false, None); (X3, false, None)] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_swap_cfg_contract].
   Qed.
@@ -2577,8 +2562,7 @@ End AdequacyTools.
       (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_jump_if_zero_cfg_contract].
   Qed.
@@ -2617,8 +2601,7 @@ End AdequacyTools.
     noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_jmp_fwd_cfg_contract].
   Qed.
@@ -2628,8 +2611,7 @@ End AdequacyTools.
       countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
        by cbn; unfold lenAddr | exact valid_countdown_cfg_contract].
   Qed.
@@ -2639,8 +2621,7 @@ End AdequacyTools.
       [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros [|i] ? H; cbn in H; [inversion H; subst; vm_compute; done | discriminate] |
        by cbn; unfold lenAddr | exact valid_countdown_mem_cfg_contract].
   Qed.
@@ -2650,8 +2631,7 @@ End AdequacyTools.
       cmovznz4_reg_specs cmovznz4_mem_specs.
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
          try (inversion H; subst; vm_compute; done); discriminate |
        by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract].
@@ -2666,8 +2646,7 @@ End AdequacyTools.
       cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
   Proof.
     eapply gen_contract_noninterferent;
-      [reflexivity |
-       apply Prelude.nodup_fixed; reflexivity |
+      [apply Prelude.nodup_fixed; reflexivity |
        intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
          try (inversion H; subst; vm_compute; done); discriminate |
        by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract_at_start].
