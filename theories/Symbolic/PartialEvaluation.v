@@ -433,10 +433,18 @@ Module Type PartialEvaluationOn
     | t1             , t2               => term_binop bop.minus t1 t2.
 
     Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
-    | term_val _ v1          , term_val _ v2          => term_val (ty.bvec n) (bv.add v1 v2)
+    | term_val _ v1          , term_val _ v2          => term_val (ty.bvec _) (bv.add v1 v2)
     | term_val _ (bv.mk 0 _) , t2                     => t2
     | t1                     , term_val _ (bv.mk 0 _) => t1
-    | t1                     , term_val _ v2          => term_binop bop.bvadd (term_val (ty.bvec n) v2) t1
+    (* Fold a constant into a constant-headed sum, so repeated increments of a
+       symbolic base collapse: c2 ⊕ (c1 ⊕ t) and (c1 ⊕ t) ⊕ c2 both become
+       (c1+c2) ⊕ t.  Arguments are already peval-canonical (peval is bottom-up),
+       so t has no constant head and the result stays canonical. *)
+    | term_binop bop.bvadd (term_val _ v1) t' , term_val _ v2 =>
+        term_binop bop.bvadd (term_val (ty.bvec _) (bv.add v1 v2)) t'
+    | term_val _ v1          , term_binop bop.bvadd (term_val _ v2) t' =>
+        term_binop bop.bvadd (term_val (ty.bvec _) (bv.add v1 v2)) t'
+    | t1                     , term_val _ v2          => term_binop bop.bvadd (term_val (ty.bvec _) v2) t1
     | t1                     , t2                     => term_binop bop.bvadd t1 t2.
 
     Definition peval_bvand_val_default {m} (t : Term Σ (ty.bvec m))
@@ -832,6 +840,15 @@ Module Type PartialEvaluationOn
       peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
     Proof.
       funelim (peval_bvadd t1 t2); lsolve; intros ι; cbn; auto.
+      (* New constant-folding clauses: goal is
+         evalRel bvadd (SyncVal (c1+c2)) r = evalRel bvadd (SyncVal c1) (evalRel bvadd (SyncVal c2) r)
+         (or the mirrored (c1 ⊕ t) ⊕ c2 form); close by bv.add associativity/commutativity
+         after splitting the relational value r. *)
+      all: try (match goal with
+          | |- context[bop.evalRel bop.bvadd (SyncVal (bv.add _ _)) ?r] =>
+              destruct r; cbn; f_equal; rewrite <- !bv.add_assoc;
+              (reflexivity || (f_equal; apply bv.add_comm))
+          end).
       all: match goal with
            | |- context[bop.evalRel ?op ?a ?b] =>
                (destruct a; cbn; (apply f_equal; first
