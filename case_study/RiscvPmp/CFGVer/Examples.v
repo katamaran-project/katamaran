@@ -141,6 +141,115 @@ Module Examples.
         rewrite Hdd in Heq. lia.
   Qed.
 
+  (* ------------------------------------------------------------------ *)
+  (* Term-level instruction/exit tables (symbolic placement).            *)
+  (*                                                                     *)
+  (* table_of_list builds the address-term instruction table for the     *)
+  (* table-based symbolic executor (sexec_cfg_addr_tbl): the key for the *)
+  (* k-th instruction is peval_bvadd (term_val (4k+off)) p, constructed  *)
+  (* THROUGH peval_bvadd so keys are born canonical — for a concrete     *)
+  (* placement term p = term_val b they fold to literals, for a symbolic *)
+  (* p they take the constant-first `c ⊕ p` shape the step semantics     *)
+  (* produces (offset 0 collapses to p itself via the zero rule).        *)
+  (*                                                                     *)
+  (* NOTE: `is` is an SSReflect keyword in this file, hence `instrs`.    *)
+  (* ------------------------------------------------------------------ *)
+  Fixpoint table_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (off : N) (instrs : list AST)
+    : list (Term Σ ty_xlenbits * AST) :=
+    match instrs with
+    | []        => []
+    | i :: rest => (peval_bvadd (term_val ty_xlenbits (bv.of_N off)) p, i)
+                     :: table_of_list p (off + 4)%N rest
+    end.
+
+  (* Default exit table: the single fall-through address just past the
+     instruction block. *)
+  Definition exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list AST)
+    : list (Term Σ ty_xlenbits) :=
+    [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p].
+
+  (* itable_faith is monotone in the instruction map: enlarging the map
+     preserves faithfulness of every table entry. *)
+  Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AST)
+      (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) :
+    m ⊆ m' ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith m tbl ι ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith m' tbl ι.
+  Proof.
+    intros Hsub. apply List.Forall_impl. intros [t i] (v & Hv & Hm).
+    exists v. split; [exact Hv|]. eapply lookup_weaken; eauto.
+  Qed.
+
+  (* Once-and-for-all faithfulness of the constructed table w.r.t. the
+     gmap store, at any valuation where the placement term resolves to a
+     concrete base (generalized over the running offset). *)
+  Lemma itable_faith_of_list_aux {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
+      (cbase : bv xlenbits) (instrs : list AST) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
+    forall off : N,
+    (bv.bin cbase + off + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+      (instrs_of_list (bv.add cbase (bv.of_N off)) instrs)
+      (table_of_list p off instrs) ι.
+  Proof.
+    intros Hp.
+    induction instrs as [|i rest IH]; intros off Hbound.
+    - constructor.
+    - cbn [table_of_list instrs_of_list length] in *.
+      constructor.
+      + exists (bv.add cbase (bv.of_N off)). split.
+        * cbn [fst].
+          rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N off)) p ι).
+          cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
+        * cbn [snd]. apply lookup_insert.
+      + rewrite Nat2N.inj_succ in Hbound.
+        assert (Hb1 : (bv.bin (cbase + bv.of_N off)%bv <= bv.bin cbase + off)%N).
+        { rewrite bv.bin_add.
+          etransitivity.
+          { apply N.Div0.mod_le. }
+          apply N.add_le_mono_l. apply bv.bin_of_N_decr. }
+        apply (itable_faith_weaken
+                 (m := instrs_of_list (bv.add (bv.add cbase (bv.of_N off)) (bv.of_N 4)) rest)).
+        { apply insert_subseteq.
+          apply (instrs_of_list_fresh rest (bv.add cbase (bv.of_N off)) (d := 4)); [lia|].
+          set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+        rewrite <- bv.add_assoc, bv.of_N_add.
+        apply IH.
+        set (E := bv.exp2 xlenbits) in *; clearbody E. lia.
+  Qed.
+
+  Lemma itable_faith_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
+      (cbase : bv xlenbits) (instrs : list AST) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
+    (bv.bin cbase + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+      (instrs_of_list cbase instrs) (table_of_list p 0 instrs) ι.
+  Proof.
+    intros Hp Hbound.
+    replace cbase with (bv.add cbase (bv.of_N 0)) at 1
+      by apply bv.add_zero_r.
+    apply itable_faith_of_list_aux; [exact Hp|lia].
+  Qed.
+
+  (* Exit-table analog: the fall-through exit term is faithful to any
+     exit condition that accepts the first address past the block. *)
+  Lemma etable_faith_exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
+      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AST) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
+    exitCond (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))) = true ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+      exitCond (exits_of_list p instrs) ι.
+  Proof.
+    intros Hp Hexit.
+    constructor; [|constructor].
+    exists (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))).
+    split.
+    - rewrite (peval_bvadd_sound
+                 (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p ι).
+      cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
+    - exact Hexit.
+  Qed.
+
   (* Default load address for examples that don't care about a nonzero
      start (moved here, ahead of Section WithAsnNotations, so
      CFGVerifierContract/gen_contract/the {{ }} notations below can use
@@ -452,6 +561,18 @@ Module Examples.
 
     Definition pcOutOfInstrs_exitCond (init_addr : N) (instrs : list AST) : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N (init_addr + 4 * N.of_nat (length instrs))).
+
+    (* The fall-through address (first address past the block) satisfies
+       pcOutOfInstrs_exitCond — the fact etable_faith_exits_of_list needs
+       to discharge the default exit table against this exit condition. *)
+    Lemma pcOutOfInstrs_fallthrough (ia : N) (instrs : list AST) :
+      pcOutOfInstrs_exitCond ia instrs
+        (bv.add (bv.of_N ia) (bv.of_N (4 * N.of_nat (length instrs)))) = true.
+    Proof.
+      unfold pcOutOfInstrs_exitCond.
+      rewrite bv.of_N_add.
+      cbn [bv.ugeb]. apply bv.uleb_ule, bv.ule_refl.
+    Qed.
 
     (* ------------------------------------------------------------------ *)
     (* Contract generator                                                   *)
@@ -2035,6 +2156,78 @@ Section AdequacyTools.
       revert Hverif.
       apply Katamaran.RiscvPmp.CFGVer.Verifier.rexec_triple_addr.
       - easy. - easy. - easy. - constructor.
+    Qed.
+
+    (* ---------------------------------------------------------------- *)
+    (* Table-based (_tbl) soundness bridge.  Same myWP2 conclusion as    *)
+    (* the gmap-based lemmas above, but starting from the table VC       *)
+    (* (sblock_verification_condition_tbl over address-term tables).     *)
+    (* The Option B guard in cexec_triple_addr_tbl surfaces — after      *)
+    (* wp_demonic_ctx and specialization to ι — as an                    *)
+    (* `itable_faith ∧ etable_faith →` premise, discharged here by the   *)
+    (* caller-supplied faithfulness facts at ι.                          *)
+    (* ---------------------------------------------------------------- *)
+    Lemma sound_cexec_triple_addr_myWP2_tbl {Γ : LCtx} {pre post instrs exitCond fuel}
+        {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
+        (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
+        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond exits ι) :
+      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr_tbl pre instrs exitCond fuel post tbl exits (λ _ _, True) [] →
+      ⊢ ∀ a : RelVal ty_xlenbits,
+        asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
+        pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
+        (∀ an,
+           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗ ExitCondIprop) -∗
+        myWP2_loop ExitCondIprop.
+    Proof.
+      cbv [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr_tbl bind demonic_ctx demonic
+           CPureSpec.demonic lift_purespec CPureSpec.assume_formula CPureSpec.assume_pathcondition].
+      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
+      rewrite CPureSpec.wp_demonic_ctx in Htrip.
+      specialize (Htrip ι).
+      specialize (Htrip (conj Hif Hef) a).
+      apply produce_sound in Htrip.
+      iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
+      iApply (sound_exec_cfg_addr_myWP2 a ExitCondIprop _ _ Hexec
+        with "[$Hpc $Hnpc $Hinstrs $Hh2]").
+      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
+      iApply ("Hk" $! an).
+      iSplit. { iPureIntro. exact Hexit. }
+      iFrame.
+    Qed.
+
+    Lemma sound_sblock_verification_condition_myWP2_tbl {Γ pre post instrs exitCond fuel}
+        {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
+        (Hverif : safeE (postprocess (
+            Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition_tbl
+              pre tbl exits fuel post wnil)))
+        (ι : Valuation Γ) (ExitCond : iProp Σ)
+        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond exits ι) :
+      ⊢ ∀ a : RelVal ty_xlenbits,
+          asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
+          pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+          Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
+          (∀ an,
+             ⌜match an with
+               | SyncVal v => exitCond v = true
+               | NonSyncVal _ _ => False
+               end⌝ ∗
+             pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+             Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
+             ExitCond) -∗
+          myWP2_loop ExitCond.
+    Proof.
+      apply (sound_cexec_triple_addr_myWP2_tbl (post := post) (fuel := fuel) (ι := ι) ExitCond Hif Hef).
+      apply (safeE_safe env.nil), postprocess_sound in Hverif.
+      apply LogicalSoundness.psafe_safe in Hverif; [|done].
+      revert Hverif.
+      apply Katamaran.RiscvPmp.CFGVer.Verifier.rblock_verification_condition_tbl.
+      - easy.
+      - constructor.
     Qed.
 
 End AdequacyTools.
