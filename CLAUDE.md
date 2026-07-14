@@ -587,6 +587,8 @@ match arms with `env.drop` terms are still visible.
 | SSReflect `rewrite … in H by tac` fails to parse in `Examples.v` | BlockVer imports SSReflect, whose `rewrite` rejects the Ltac `by` clause. Provide conditional-lemma side conditions as explicit hypotheses (`assert (Hs : …) by (…); rewrite (lem Hs) in H`) instead. |
 | `destruct (instrs !! v)` binds the case var but leaves `match instrs !! v` unreduced (then `refine_bind`/`iApply` hangs) | The lookup inside `ℛ⟦⟧`/relational goals carries hidden `Lookup`-instance implicits. Capture the goal's exact scrutinee: `lazymatch goal with \|- context[match ?x with Some _ => _ \| None => _ end] => destruct x as [i\|] end`. |
 | `rocq_start(theorem=X)` "succeeds" but a prior proof was actually broken | Theorem/position starts load the prefix vos-style (proof bodies SKIPPED). Only `rocq_check` of a body or a `mode=full` compile actually runs proofs. Don't infer a lemma passed just because a later `rocq_start` reached it. |
+| `set`/`rewrite` silently fails to match a bv-indexed lemma after `cbn` | A blanket `cbn` unfolds `xlenbits` (`:= xlenbytes * byte`) into unary Peano `S (S (… O))`; lemmas proved with the folded index then differ syntactically (though convertibly — `apply`/`exact` still work). Use `cbn -[xlenbits]` when the goal will be matched against an external bv-indexed lemma. |
+| `try (eapply L; eauto)` in a tactic leaves stray side-condition goals | `eauto` never fails (it succeeds doing nothing), so the unit is NOT failure-atomic: on a conclusion-matching goal with underivable side conditions it commits to `eapply` and leaves the side goals behind. Wrap as `try (solve [eapply L; eauto])` for discharge-or-revert. |
 
 ---
 

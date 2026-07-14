@@ -229,8 +229,188 @@ Module Examples.
             rewrite bv.add_zero_r
         end.
 
+    (* ===================================================================
+       Phase 0 (PLAN-symbolic-base.md, §1): helper lemmas anticipating the
+       residual VC obligation shapes that the symbolic-base executor
+       (Phase 1-4, not yet implemented) will leave for solve_vc to close.
+
+       Level note (deviation from the plan's phrasing): solve_vc closes
+       goals that come out of safeE/postprocess, i.e. the plain Coq `Prop`
+       built by `safe`/`instprop` (Symbolic/Propositions.v, Syntax/Formulas.v)
+       -- NOT the iProp/UnifLogic `Pred w` layer (`instpred`) that
+       `instpred_formula_secLeak_binop`/`_val` (Solver.v/Worlds.v) live in.
+       That iProp layer is what Phase 2's rsolve/RefineCompat machinery in
+       Verifier.v uses. So instead of composing those two iProp lemmas
+       (as the plan literally suggested), we restate the same compositional
+       fact about `secLeak`/`RelVal` at the `instprop` level below -- probe-
+       confirmed against this file's actual notion of validity
+       (`safeE := VerificationConditionWithErasure` grounds out in
+       `SymProp.safe`, whose `assertk`/`assumek` cases use `instprop`, see
+       Symbolic/Propositions.v:315-348).
+
+       gotcha (new, not yet in CLAUDE.md's pitfall table): a blanket `cbn`
+       silently unfolds `xlenbits` (`:= xlenbytes * byte`) into unary Peano
+       form `S (S (... O))`.  A lemma about `bv xlenbits` proved *before*
+       such a `cbn` and one invoked *after* then have differently-shaped
+       (but convertible) `n` indices on `bv.bin`/`bv.add`/`bv.of_N`, which
+       silently breaks `set`/`rewrite`-based matching (though `apply`/`exact`
+       still work via full conversion). Use `cbn -[xlenbits]` whenever the
+       goal will later be matched against an externally-proved bv-indexed
+       lemma. *)
+    Section Phase0SymbolicBaseHelpers.
+
+      (* --- (1) Compound secLeak discharge ---
+         Probe-confirmed residual shape: `formula_secLeak (c ⊕ t)` asserted
+         under a path-condition assumption `formula_secLeak t` (t a variable
+         term, c a literal), arising from `peval_bvadd`'s constant-first
+         canonicalization of the pc term after k steps from a symbolic base. *)
+
+      (* Prop-level analogs of Solver.v's instpred_formula_secLeak_val/binop,
+         restated at the instprop level solve_vc actually sees. *)
+      Lemma instprop_formula_secLeak_val {Σ} (ι : Valuation Σ) {σ} (v : Val σ) :
+        instprop (formula_secLeak (term_val σ v)) ι.
+      Proof. cbn. auto. Qed.
+
+      Lemma instprop_formula_secLeak_binop {Σ} (ι : Valuation Σ) {σ1 σ2 σ3}
+        (op : BinOp σ1 σ2 σ3) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
+        instprop (formula_secLeak t1) ι ->
+        instprop (formula_secLeak t2) ι ->
+        instprop (formula_secLeak (term_binop op t1 t2)) ι.
+      Proof.
+        cbn. intros H1 H2. destruct (inst t1 ι), (inst t2 ι); cbn in *; auto.
+      Qed.
+
+      (* The compound discharge helper solve_vc will actually reach for:
+         a concrete literal bvadd'ed onto a variable term whose secLeak is
+         already assumed (in the path condition). *)
+      Lemma secLeak_bvadd_val_compat {Σ} (ι : Valuation Σ) (c : Val ty_xlenbits)
+        (t : Term Σ ty_xlenbits) :
+        instprop (formula_secLeak t) ι ->
+        instprop (formula_secLeak (term_binop bop.bvadd (term_val ty_xlenbits c) t)) ι.
+      Proof.
+        intro H. apply instprop_formula_secLeak_binop; auto.
+        apply instprop_formula_secLeak_val.
+      Qed.
+
+      (* --- (2) Fetch-bounds discharge ---
+         Probe-confirmed shapes at step k: `0 <= unsigned pc_k` and
+         `unsigned pc_k + 4 <= 1024`, where `pc_k = bv.add (bv.of_N c) a`
+         (c = 4k the constant offset, a the symbolic base), with `unsigned
+         (c ⊕ a)` NOT distributed by the solver (decision #5: never ask the
+         solver to cancel bvadd). *)
+
+      (* Value-level core, exactly as specified in the plan. *)
+      Lemma fetch_bound_step (a : bv xlenbits) (c X : N) :
+        (bv.bin a + X <= 1024)%N -> (c + 4 <= X)%N ->
+        (bv.bin (bv.add (bv.of_N c) a) + 4 <= 1024)%N.
+      Proof.
+        intros Hbound Hc.
+        assert (Hsum : (c + bv.bin a <= 1020)%N) by lia.
+        assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+        assert (HcE : (c < bv.exp2 xlenbits)%N).
+        { set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+        pose proof (bv.bin_of_N_small HcE) as Heq.
+        assert (Hlt : (bv.bin (@bv.of_N xlenbits c) + bv.bin a < bv.exp2 xlenbits)%N).
+        { rewrite Heq. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+        rewrite (bv.bin_add_small Hlt). rewrite Heq. lia.
+      Qed.
+
+      (* Same fact lifted to Z via bv.unsigned (= Z.of_N ∘ bv.bin), matching
+         the ty.int level the fetch-bound VC obligations are phrased at
+         (term_unsigned = term_unop uop.unsigned, eval = bv.unsigned). *)
+      Lemma fetch_bound_step_Z (a : bv xlenbits) (c X : N) :
+        (bv.bin a + X <= 1024)%N -> (c + 4 <= X)%N ->
+        (bv.unsigned (bv.add (bv.of_N c) a) + 4 <= 1024)%Z.
+      Proof.
+        intros H1 H2. pose proof (@fetch_bound_step a c X H1 H2) as Hn.
+        unfold bv.unsigned. set (B := bv.bin (bv.add (bv.of_N c) a)) in *. lia.
+      Qed.
+
+      (* unsigned is always nonnegative: discharges the lower fetch bound
+         unconditionally, once the base term is known to be in sync (the
+         base is always SyncVal, never a genuine two-execution RelVal --
+         PLAN-symbolic-base.md §0, decision 4: the pc is leaked, so
+         instruction addresses are public in any verifiable contract). *)
+      Lemma instprop_fetch_bound_lower {Σ} (ι : Valuation Σ)
+        (base : Term Σ ty_xlenbits) (a : Val ty_xlenbits) (c : N)
+        (Hsync : inst base ι = SyncVal a) :
+        instprop (formula_relop bop.le (term_val ty.int 0%Z)
+          (term_unop uop.unsigned
+             (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N c)) base))) ι.
+      Proof.
+        cbn -[xlenbits]. rewrite Hsync. cbn -[xlenbits]. unfold bv.unsigned. lia.
+      Qed.
+
+      (* Upper fetch bound: needs the window hypotheses fetch_bound_step_Z
+         requires (Hwin from the contract's length bound, Hc identifying
+         which instruction slot c picks out). *)
+      Lemma instprop_fetch_bound_upper {Σ} (ι : Valuation Σ)
+        (base : Term Σ ty_xlenbits) (a : Val ty_xlenbits) (c X : N)
+        (Hsync : inst base ι = SyncVal a)
+        (Hwin : (bv.bin a + X <= 1024)%N) (Hc : (c + 4 <= X)%N) :
+        instprop (formula_relop bop.le
+          (term_binop bop.plus
+             (term_unop uop.unsigned
+                (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N c)) base))
+             (term_val ty.int 4%Z))
+          (term_val ty.int 1024%Z)) ι.
+      Proof.
+        cbn -[xlenbits]. rewrite Hsync. cbn -[xlenbits].
+        exact (@fetch_bound_step_Z a c X Hwin Hc).
+      Qed.
+
+    End Phase0SymbolicBaseHelpers.
+
+    (* Phase 0 self-tests (regression anchors): replicate the target VC
+       obligation shapes described in PLAN-symbolic-base.md §1 and close
+       them with the helpers above.  These do not exercise a real VC (Phase
+       1's symbolic executor doesn't exist yet); they pin down the exact
+       Prop shape the Phase 1-4 work must eventually produce. *)
+
+    (* (a) compound secLeak, discharged from a bare secLeak assumption. *)
+    Goal forall (Σ : LCtx) (ι : Valuation Σ) (c : Val ty_xlenbits)
+      (t : Term Σ ty_xlenbits),
+      instprop (formula_secLeak t) ι ->
+      instprop (formula_secLeak (term_binop bop.bvadd (term_val ty_xlenbits c) t)) ι.
+    Proof. intros. apply secLeak_bvadd_val_compat; auto. Qed.
+
+    (* (b) fetch bounds, concrete instantiation: a 10-instruction block
+       (X = 4*10 = 40) and the 4th instruction (c = 4*3 = 12). *)
+    Goal forall (Σ : LCtx) (ι : Valuation Σ) (base : Term Σ ty_xlenbits)
+      (a : Val ty_xlenbits),
+      inst base ι = SyncVal a ->
+      (bv.bin a + 40 <= 1024)%N ->
+      instprop (formula_relop bop.le (term_val ty.int 0%Z)
+        (term_unop uop.unsigned
+           (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 12)) base))) ι /\
+      instprop (formula_relop bop.le
+        (term_binop bop.plus
+           (term_unop uop.unsigned
+              (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 12)) base))
+           (term_val ty.int 4%Z))
+        (term_val ty.int 1024%Z)) ι.
+    Proof.
+      intros Σ ι base a Hsync Hwin. split.
+      - eapply instprop_fetch_bound_lower; eauto.
+      - eapply (@instprop_fetch_bound_upper Σ ι base a 12 40 Hsync Hwin); lia.
+    Qed.
+
     Local Ltac solve_vc :=
-      vm_compute; constructor; cbn; intros; repeat split; try solve_bv; auto.
+      vm_compute; constructor; cbn; intros; repeat split; try solve_bv;
+      (* Phase 0 extension (PLAN-symbolic-base.md §1): try the compound
+         secLeak / fetch-bound helpers on any residual goal before falling
+         back to auto.  The `solve [...]` wrapper is required for failure
+         atomicity: `eauto` never fails (it succeeds doing nothing), so a
+         bare `try (eapply L; eauto)` on a conclusion-matching goal whose
+         side conditions eauto cannot close would *leave those side
+         conditions behind* instead of reverting.  With solve, each unit
+         either fully discharges the goal or is a no-op, so this is
+         strictly additive -- existing (non symbolic-base) examples never
+         reach these branches and fall through to `auto` exactly as before. *)
+      try (solve [eapply secLeak_bvadd_val_compat; eauto]);
+      try (solve [eapply instprop_fetch_bound_lower; eauto]);
+      try (solve [eapply instprop_fetch_bound_upper; eauto]);
+      auto.
 
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
     (*   match reg_convert r with *)
