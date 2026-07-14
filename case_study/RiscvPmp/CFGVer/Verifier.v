@@ -255,6 +255,108 @@ Section BlockVerificationDerived.
             end
         end.
 
+    (* ---------------------------------------------------------------- *)
+    (* Phase 1 (PLAN-symbolic-base.md §2): table-based executor variants, *)
+    (* added ADDITIVELY alongside the gmap-based sexec_cfg_addr above.    *)
+    (* Nothing above this comment is touched.  Suffix `_tbl` throughout;  *)
+    (* Phase 3 switches Examples.v to this path and Phase 5 drops the old *)
+    (* path and the suffix.                                               *)
+    (*                                                                     *)
+    (* Locked design (plan §0, decision 1): instruction dispatch is a     *)
+    (* syntactic term-table lookup, `Term_eqb (peval apc) (peval key)`.   *)
+    (* No gmap lookup on terms, no offset arithmetic.  Tables are          *)
+    (* world-indexed (TYPE-level), since their keys are symbolic terms    *)
+    (* that must be persisted across worlds as the executor steps.        *)
+    (* ---------------------------------------------------------------- *)
+
+    (* SITable / SETable: the symbolic analogues of the gmap `instrs` and *)
+    (* function `exitCond` above -- a table of (address term, instruction) *)
+    (* pairs, and a list of address terms marking exits. *)
+    Definition SITable : TYPE :=
+      fun w => list (Term (wctx w) ty_xlenbits * AST).
+    Definition SETable : TYPE :=
+      fun w => list (Term (wctx w) ty_xlenbits).
+
+    Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SITable w1 -> SITable w2 :=
+      List.map (fun '(t,i) => (persist__term t θ, i)).
+    Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SETable w1 -> SETable w2 :=
+      List.map (fun t => persist__term t θ).
+
+    (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
+    (* current pc term against the table keys.  `peval` on BOTH sides is  *)
+    (* required (plan §0): solver substitutions leave keys unnormalized   *)
+    (* (e.g. `8 ⊕ 256`) while the semantics-produced pc is normalized      *)
+    (* (`264`); peval reconciles the two before the syntactic Term_eqb    *)
+    (* comparison.  Do not drop either peval call. *)
+    Definition lookup_instr {w} (tbl : SITable w)
+        (apc : STerm ty_xlenbits w) : option AST :=
+      option_map snd
+        (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) tbl).
+    Definition is_exit {w} (exits : SETable w)
+        (apc : STerm ty_xlenbits w) : bool :=
+      List.existsb (fun t => Term_eqb (peval apc) (peval t)) exits.
+
+    (* --- Phase 1 self-tests (cheap sanity anchors for lookup_instr /    *)
+    (* is_exit / peval; NOT part of the soundness chain). *)
+    Section Phase1SelfTests.
+      Let w1 : World := wlctx ([ctx] ▻ "p"∷ty_xlenbits).
+      Let p1 : Term (wctx w1) ty_xlenbits := term_var "p".
+      Let instrA : AST := RTYPE (bv.of_N 1) (bv.of_N 0) (bv.of_N 2) RISCV_SUB.
+      Let instrB : AST := RTYPE (bv.of_N 2) (bv.of_N 1) (bv.of_N 0) RISCV_SUB.
+      Let tbl1 : SITable w1 :=
+        [ (p1, instrA)
+        ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, instrB)
+        ]%list.
+
+      (* pc = 4 ⊕ p matches the second table entry. *)
+      Example lookup_instr_hit :
+        lookup_instr tbl1 (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1) = Some instrB.
+      Proof. vm_compute. reflexivity. Qed.
+
+      (* pc = 8 ⊕ p matches no key in tbl1. *)
+      Example lookup_instr_miss :
+        lookup_instr tbl1 (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) p1) = None.
+      Proof. vm_compute. reflexivity. Qed.
+
+      (* peval reconciliation: an unnormalized solver-substituted key     *)
+      (* (8 ⊕ 256) and a normalized concrete pc (264) compare equal after *)
+      (* peval on both sides. *)
+      Example peval_reconcile :
+        Term_eqb (peval (term_val ty_xlenbits (bv.of_N 264) : Term (wctx w1) ty_xlenbits))
+                 (peval (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) (term_val ty_xlenbits (bv.of_N 256))))
+        = true.
+      Proof. vm_compute. reflexivity. Qed.
+    End Phase1SelfTests.
+
+    (* sexec_cfg_addr_tbl: table-based variant of sexec_cfg_addr above,   *)
+    (* same shape (fuel guard, angelic_binary between exit/execute), but  *)
+    (* dispatching via lookup_instr/is_exit instead of gmap lookup on a   *)
+    (* concrete literal.  `term_get_val` does not appear: apc may stay    *)
+    (* symbolic, matching happens through peval instead of concretising.  *)
+    (* tbl/exits are threaded as ARGUMENTS through the recursion (they    *)
+    (* are world-dependent, persisted at each step via persist_itable /   *)
+    (* persist_etable), unlike the old `instrs`/`exitCond` which are      *)
+    (* plain (non-world-indexed) Fixpoint parameters. *)
+    Fixpoint sexec_cfg_addr_tbl (fuel : nat) :
+      ⊢ SITable -> SETable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w tbl exits apc =>
+        let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
+          error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                     debug_string_message := s |}) in
+        match fuel with
+        | O    => emsg "sexec_cfg_addr_tbl: out of fuel"
+        | S n' =>
+            angelic_binary
+              (if is_exit exits apc then pure apc
+               else emsg "sexec_cfg_addr_tbl: exit branch chosen but pc matches no declared exit term")
+              (match lookup_instr tbl apc with
+               | None   => emsg "sexec_cfg_addr_tbl: no instruction key matches this pc term"
+               | Some i =>
+                   ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
+                   sexec_cfg_addr_tbl n' (persist_itable θ1 tbl) (persist_etable θ1 exits) apc'
+               end)
+        end.
+
     (* Apply symbolic execution to verify a Hoare triple for a block of instructions.
      * The precondition can mention the address a where the block is loaded.
      * The postcondition can additionally mention the address an where the pc points after execution.
@@ -290,6 +392,46 @@ Section BlockVerificationDerived.
       fun w =>
         (* SHeapSpec does not perform a leakcheck. We could include one here. *)
         SHeapSpec.run (sexec_triple_addr req instrs exitCond fuel ens (w := w)).
+
+    (* sexec_triple_addr_tbl / sblock_verification_condition_tbl: table-  *)
+    (* based variants of sexec_triple_addr / sblock_verification_condition *)
+    (* above.  `tbl`/`exits` are given at the CONTRACT context Σ (plain    *)
+    (* lists of Σ-level terms, like `req`/`ens`), and moved into the       *)
+    (* current world the same way `req` is: by applying the substitution  *)
+    (* `ζ : Sub Σ w` (obtained from `demonic_ctx`'s δ, persisted forward   *)
+    (* to the world where `a` lives) to each key term via `subst`. *)
+    Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
+        (tbl : list (Term Σ ty_xlenbits * AST)) : SITable w :=
+      List.map (fun '(t,i) => (subst t ζ, i)) tbl.
+    Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
+        (exits : list (Term Σ ty_xlenbits)) : SETable w :=
+      List.map (fun t => subst t ζ) exits.
+
+    Definition sexec_triple_addr_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
+      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
+      ⊢ SHeapSpec Unit :=
+      fun w =>
+        ⟨ θ0 ⟩ δ <- demonic_ctx id Σ ;;
+        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
+        let δ1 := env.snoc (persist ( A:= Sub Σ) δ θ1) _ a in
+        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
+        let a2 := persist__term a θ2 in
+        let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ2) in
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr_tbl fuel (subst_itable ζ tbl) (subst_etable ζ exits) a2 ;;
+        let δ3 := persist δ1 (θ2 ∘ θ3) in
+        consume ens δ3.["an"∷ty_xlenbits ↦ na].
+
+    (* sblock_verification_condition_tbl: table-based mirror of           *)
+    (* sblock_verification_condition above; same SHeapSpec.run/wnil shape, *)
+    (* no leakcheck. *)
+    Definition sblock_verification_condition_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
+      fun w =>
+        SHeapSpec.run (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)).
 
   End Symbolic.
 

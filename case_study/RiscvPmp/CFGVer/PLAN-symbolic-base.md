@@ -114,10 +114,15 @@ unaffected.
 ## 2. Phase 1 — Symbolic executor rewrite (`CFGVer/Verifier.v`)
 
 **Model:** Sonnet with this plan; escalate to Opus on friction.
-**Gate:** `Verifier.v` compiles `mode=vos` (statements) — the relational
-section will be broken until Phase 2; comment it out temporarily with a
-`TODO(symbolic-base)` marker if needed, mirroring how the gmap pivot handled
-`AnnotatedBlockVerification`.
+**Strategy (amended after Phase 0): ADDITIVE, not replace.** Add the
+table-based definitions ALONGSIDE the existing gmap-based ones, with a `_tbl`
+suffix (`sexec_cfg_addr_tbl`, `sexec_triple_addr_tbl`,
+`sblock_verification_condition_tbl`). Do not modify or remove any existing
+definition — the old executor, its relational lemmas, and Examples.v keep
+compiling unchanged through Phases 1–2; Phase 3 switches Examples.v to the
+`_tbl` path; Phase 5 deletes the old path and drops the suffix.
+**Gate:** `Verifier.v` compiles `mode=full` with `keep_vo=True`, AND
+`Examples.v` (untouched) still compiles `mode=full` — proving additivity.
 
 1. **World-indexed table types** (tables contain world-dependent terms, so
    they must be TYPE-level and passed through the recursion, not fixpoint
