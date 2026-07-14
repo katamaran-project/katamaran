@@ -603,6 +603,241 @@ Section BlockVerificationDerived.
 
     Import PureSpec.
 
+    (* ------------------------------------------------------------------ *)
+    (* Table faithfulness: bridge between the term-table symbolic executor *)
+    (* (sexec_cfg_addr_tbl) and the gmap-based concrete executor            *)
+    (* (cexec_cfg_addr).  itable_rel/etable_rel are Pred-level premises:    *)
+    (* every key term must instantiate to a SyncVal address that the gmap   *)
+    (* maps to the paired instruction (resp. that satisfies exitCond).      *)
+    (* The ∃-SyncVal form is essential: with an implication form the        *)
+    (* concrete executor errors at RVToOption on NonSyncVal keys while the  *)
+    (* symbolic one proceeds, breaking refinement.                          *)
+    (* ------------------------------------------------------------------ *)
+
+    Definition itable_rel {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w) : Pred w :=
+      fun ι => List.Forall
+        (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
+
+    Definition etable_rel {w} (exitCond : bv xlenbits -> bool) (exits : SETable w) : Pred w :=
+      fun ι => List.Forall
+        (fun t => exists v,
+           inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
+
+    Lemma peval_eqb_inst {Σ : LCtx} {σ} (t1 t2 : Term Σ σ) (ι : Valuation Σ) :
+      Term_eqb (peval t1) (peval t2) = true -> inst t1 ι = inst t2 ι.
+    Proof.
+      intros H.
+      destruct (Term_eqb_spec (peval t1) (peval t2)) as [e|]; [|discriminate].
+      rewrite <- (peval_sound t1 ι), <- (peval_sound t2 ι).
+      now rewrite e.
+    Qed.
+
+    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w)
+        (apc : STerm ty_xlenbits w) (i : AST) (ι : Valuation w) :
+      lookup_instr tbl apc = Some i ->
+      itable_rel instrs tbl ι ->
+      exists v, inst apc ι = ty.SyncVal v /\ instrs !! v = Some i.
+    Proof.
+      unfold lookup_instr, itable_rel.
+      intros Hlk Hrel.
+      destruct (List.find _ tbl) as [[t i']|] eqn:Hfind; cbn in Hlk; [|discriminate].
+      injection Hlk as ->.
+      apply find_some in Hfind as [Hin Heqb].
+      rewrite List.Forall_forall in Hrel.
+      specialize (Hrel _ Hin) as (v & Hv & Hmap).
+      exists v.
+      split; [|exact Hmap].
+      rewrite (peval_eqb_inst apc t ι Heqb).
+      exact Hv.
+    Qed.
+
+    Lemma is_exit_sound {w} (exitCond : bv xlenbits -> bool) (exits : SETable w)
+        (apc : STerm ty_xlenbits w) (ι : Valuation w) :
+      is_exit exits apc = true ->
+      etable_rel exitCond exits ι ->
+      exists v, inst apc ι = ty.SyncVal v /\ exitCond v = true.
+    Proof.
+      unfold is_exit, etable_rel.
+      intros Hex Hrel.
+      apply List.existsb_exists in Hex as (t & Hin & Heqb).
+      rewrite List.Forall_forall in Hrel.
+      specialize (Hrel _ Hin) as (v & Hv & Hcond).
+      exists v.
+      split; [|exact Hcond].
+      rewrite (peval_eqb_inst apc t ι Heqb).
+      exact Hv.
+    Qed.
+
+    Lemma forgetting_itable_rel {w1 w2} (θ : Acc w1 w2)
+        (instrs : gmap (bv xlenbits) AST) (tbl : SITable w1) :
+      (forgetting θ (itable_rel instrs tbl) ⊣⊢ itable_rel instrs (persist_itable θ tbl))%I.
+    Proof.
+      constructor.
+      intros ι.
+      unfold forgetting, itable_rel, persist_itable.
+      rewrite List.Forall_map.
+      cbn.
+      split; apply List.Forall_impl; intros [t i] (v & Hv & Hm);
+        exists v; (split; [|exact Hm]); cbn in *;
+        rewrite inst_persist in Hv + rewrite inst_persist; exact Hv.
+    Qed.
+
+    Lemma forgetting_etable_rel {w1 w2} (θ : Acc w1 w2)
+        (exitCond : bv xlenbits -> bool) (exits : SETable w1) :
+      (forgetting θ (etable_rel exitCond exits) ⊣⊢ etable_rel exitCond (persist_etable θ exits))%I.
+    Proof.
+      constructor.
+      intros ι.
+      unfold forgetting, etable_rel, persist_etable.
+      rewrite List.Forall_map.
+      cbn.
+      split; apply List.Forall_impl; intros t (v & Hv & Hc);
+        exists v; (split; [|exact Hc]); cbn in *;
+        rewrite inst_persist in Hv + rewrite inst_persist; exact Hv.
+    Qed.
+
+    Lemma persist_itable_refl {w} (tbl : SITable w) :
+      persist_itable acc_refl tbl = tbl.
+    Proof.
+      unfold persist_itable.
+      induction tbl as [|[t i] tbl' IH]; cbn; [reflexivity|].
+      cbn in IH.
+      f_equal.
+      exact IH.
+    Qed.
+
+    Lemma persist_etable_refl {w} (exits : SETable w) :
+      persist_etable acc_refl exits = exits.
+    Proof.
+      unfold persist_etable.
+      induction exits as [|t exits' IH]; cbn; [reflexivity|].
+      cbn in IH.
+      f_equal.
+      exact IH.
+    Qed.
+
+    Lemma persist_itable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (tbl : SITable w1) :
+      persist_itable θ23 (persist_itable θ12 tbl) = persist_itable (acc_trans θ12 θ23) tbl.
+    Proof.
+      unfold persist_itable.
+      rewrite List.map_map.
+      apply List.map_ext.
+      intros [t i].
+      now rewrite persist_trans.
+    Qed.
+
+    Lemma persist_etable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (exits : SETable w1) :
+      persist_etable θ23 (persist_etable θ12 exits) = persist_etable (acc_trans θ12 θ23) exits.
+    Proof.
+      unfold persist_etable.
+      rewrite List.map_map.
+      apply List.map_ext.
+      intros t.
+      now rewrite persist_trans.
+    Qed.
+
+    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w)
+        (apc : STerm ty_xlenbits w) (i : AST) (a : RelVal ty_xlenbits) :
+      lookup_instr tbl apc = Some i ->
+      (itable_rel instrs tbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
+       ⌜exists v, a = ty.SyncVal v /\ instrs !! v = Some i⌝)%I.
+    Proof.
+      intros Hlk.
+      constructor.
+      intros ι Hpc H.
+      cbn in H.
+      destruct H as [Hrel Ha].
+      destruct (lookup_instr_sound apc Hlk Hrel) as (v & Hv & Hm).
+      exists v.
+      split; [|exact Hm].
+      now rewrite <- Ha.
+    Qed.
+
+    Lemma is_exit_sound_repₚ {w} (exitCond : bv xlenbits -> bool) (exits : SETable w)
+        (apc : STerm ty_xlenbits w) (a : RelVal ty_xlenbits) :
+      is_exit exits apc = true ->
+      (etable_rel exitCond exits ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
+       ⌜exists v, a = ty.SyncVal v /\ exitCond v = true⌝)%I.
+    Proof.
+      intros Hex.
+      constructor.
+      intros ι Hpc H.
+      cbn in H.
+      destruct H as [Hrel Ha].
+      destruct (is_exit_sound apc Hex Hrel) as (v & Hv & Hc).
+      exists v.
+      split; [|exact Hc].
+      now rewrite <- Ha.
+    Qed.
+
+    (* rexec_cfg_addr_tbl: refinement of the gmap concrete executor by the  *)
+    (* term-table symbolic executor, under table faithfulness.  Mirrors     *)
+    (* rexec_cfg_addr above (iInduction on fuel, boxed IH projected by      *)
+    (* forgetting_unconditionally_drastic); the four subgoals of the        *)
+    (* is_exit/lookup_instr double destruct are discharged sequentially.    *)
+    Lemma rexec_cfg_addr_tbl (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {w} (tbl : SITable w) (exits : SETable w) :
+      (itable_rel instrs tbl ∗ etable_rel exitCond exits ⊢
+       ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
+           (cexec_cfg_addr instrs exitCond fuel)
+           (sexec_cfg_addr_tbl fuel tbl exits))%I.
+    Proof.
+      iIntros "#[Hi He]".
+      iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
+                 (cexec_cfg_addr instrs exitCond fuel)
+                 (fun w' θ => sexec_cfg_addr_tbl fuel (persist_itable θ tbl)
+                                (persist_etable θ exits))) as "H".
+      {
+        iInduction fuel as [|n'] "IHfuel".
+        - rsolve.
+        - cbn [sexec_cfg_addr_tbl cexec_cfg_addr].
+          rsolve.
+          rewrite forgetting_itable_rel forgetting_etable_rel.
+          iRename select (ℛ⟦RVal ty_xlenbits⟧ a ta) into "Ha".
+          destruct (is_exit (persist_etable ω exits) ta) eqn:Hex;
+            destruct (lookup_instr (persist_itable ω tbl) ta) as [i|] eqn:Hlk.
+          (* exit-hit / lookup-hit *)
+          iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
+          destruct Hfact as (v & -> & Hm).
+          iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
+          destruct Hfact2 as (v' & Hveq & Hcond).
+          injection Hveq as <-.
+          cbn [ty.RVToOption].
+          rewrite Hcond Hm.
+          rsolve.
+          rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+          iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+          iApply ("IH" with "[$]").
+          (* exit-hit / lookup-miss *)
+          iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact".
+          destruct Hfact as (v & -> & Hcond).
+          cbn [ty.RVToOption].
+          rewrite Hcond.
+          rsolve.
+          (* exit-miss / lookup-hit *)
+          iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
+          destruct Hfact as (v & -> & Hm).
+          cbn [ty.RVToOption].
+          rewrite Hm.
+          rsolve.
+          rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+          iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+          iApply ("IH" with "[$]").
+          (* exit-miss / lookup-miss: symbolic errors twice; concrete side *)
+          (* must also fail — NonSyncVal pc is rejected, SyncVal pc closed  *)
+          (* by the empty angelic_binary of two errors.                     *)
+          destruct a as [va|va1 va2]; cbn [ty.RVToOption]; rsolve.
+          iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
+          unfold LogicalSoundness.RProp; cbn.
+          iIntros "[%HF|%HF]"; destruct HF.
+      }
+      iPoseProof (unconditionally_T with "H") as "HT".
+      unfold T.
+      cbv beta.
+      rewrite (persist_itable_refl tbl) (persist_etable_refl exits).
+      iApply "HT".
+    Qed.
+
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
