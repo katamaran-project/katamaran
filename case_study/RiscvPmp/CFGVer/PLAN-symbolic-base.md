@@ -217,9 +217,25 @@ live. **Gate:** `Verifier.v` compiles `mode=full`.
    destruct x end` (CLAUDE.md pitfall). `rsolve` failures → `Set Typeclasses
    Debug.` and add the missing `RefineCompat` instance; the new sexec needs
    its own `refine_compat_exec_cfg_addr` carrying the faithfulness premises.
-3. **`rexec_triple_addr` / VC-level refinement**: thread the tables and
-   faithfulness through; `sblock_verification_condition`'s refinement gains
-   the same premises.
+3. **`rexec_triple_addr` / VC-level refinement — AMENDED (2026-07-14, DONE,
+   commit `55796817`).** The originally planned shape (full-VC refinement
+   with faithfulness premises) is UNPROVABLE for parameterized contracts:
+   the concrete VC `demonic_ctx`-quantifies over ALL Σ-valuations, and at
+   ι(p) = SyncVal wrong-base the precondition produces fine but the gmap
+   lookup misses → concrete triple false at that ι. Resolution = **guarded
+   concrete VC (Option B)**: `cexec_triple_addr_tbl` = the gmap triple plus
+   one `assume_formula (itable_faith ∧ etable_faith)` immediately after
+   `demonic_ctx` (bad valuations become vacuous; scaffolding only — the
+   concrete executor/soundness chain is untouched). `refine_guard`
+   (concrete-side-only assume rule; raw 4-line Pred-model proof) makes
+   `rexec_triple_addr_tbl` UNCONDITIONAL, restoring the `RefineCompat`
+   instance flow; `rblock_verification_condition_tbl` closes by
+   `unfold; rsolve.` Faithfulness transport across world morphisms:
+   `itable_rel_of_faith_forget` / `etable_rel_of_faith_forget` /
+   `forgetting_RVal`. WARNING: never let `rsolve` reach the
+   `sexec_cfg_addr_tbl` bind (typeclass search diverges → multi-GB memory
+   blowup) — pair binds manually with `HeapSpec.refine_bind` and dispatch
+   the executor with `rexec_cfg_addr_tbl`.
 
 ---
 
@@ -229,11 +245,18 @@ live. **Gate:** `Verifier.v` compiles `mode=full`.
 **Gate:** Examples.v compiles `mode=full` with existing examples re-verified.
 
 1. `sound_exec_cfg_addr_myWP2`, `sound_cexec_triple_addr_myWP2`: concrete —
-   **unchanged**. `sound_sblock_verification_condition_myWP2`: statement now
-   takes the table VC (`safeE (postprocess (sblock_verification_condition
-   … tbl exits …))`) plus Coq-level faithfulness facts at the given ι, and
-   concludes the same myWP2 statement about `gmap` + `exitCond`. Proof:
-   existing structure, apply the new `rexec_triple_addr` with the premises.
+   **unchanged**. New `sound_sblock_verification_condition_myWP2_tbl`:
+   takes the table VC (`safeE (postprocess (sblock_verification_condition_tbl
+   … tbl exits …))`) plus Coq-level faithfulness facts at the given ι
+   (`itable_faith instrs tbl ι` / `etable_faith exitCond exits ι`), and
+   concludes the same myWP2 statement about `gmap` + `exitCond`. Proof
+   (post-Option-B): safeE→psafe as before, apply
+   `rblock_verification_condition_tbl` (4 trivial bullets) to get
+   `cblock_verification_condition_tbl`; then in the `sound_cexec_…_tbl`
+   analog, `rewrite CPureSpec.wp_demonic_ctx in Htrip; specialize (Htrip ι a)`
+   now surfaces the guard as a `itable_faith … ∧ etable_faith … →` premise
+   (one extra `assume_formula` wp step to unfold) — discharge it with the
+   given faithfulness facts; rest identical to `sound_cexec_triple_addr_myWP2`.
 2. **Table construction:**
    ```coq
    Fixpoint table_of_list {Σ} (p : Term Σ ty_xlenbits) (off : N) (is : list AST)
