@@ -838,6 +838,204 @@ Section BlockVerificationDerived.
       iApply "HT".
     Qed.
 
+    (* ------------------------------------------------------------------ *)
+    (* VC-level refinement for the term-table verifier (guarded form).     *)
+    (* The concrete side cexec_triple_addr_tbl is the gmap triple with an   *)
+    (* extra assumed faithfulness guard tying the Σ-level key terms to the  *)
+    (* concrete gmap at the demonically chosen valuation.  At valuations    *)
+    (* where the table does not match the gmap (e.g. a placement variable   *)
+    (* instantiated to a different base) the triple holds vacuously; the    *)
+    (* end-to-end user discharges the guard at the one valuation where the  *)
+    (* program actually resides.  Scaffolding for refinement only — the     *)
+    (* concrete executor and soundness chain are untouched.                 *)
+    (* ------------------------------------------------------------------ *)
+
+    Definition itable_faith {Σ : LCtx} (instrs : gmap (bv xlenbits) AST)
+        (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) : Prop :=
+      List.Forall
+        (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
+
+    Definition etable_faith {Σ : LCtx} (exitCond : bv xlenbits -> bool)
+        (exits : list (Term Σ ty_xlenbits)) (ι : Valuation Σ) : Prop :=
+      List.Forall
+        (fun t => exists v,
+           inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
+
+    Definition cexec_triple_addr_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : CHeapSpec unit :=
+      CHeapSpec.bind (CHeapSpec.demonic_ctx Σ) (fun lenv =>
+      CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
+          (itable_faith instrs tbl lenv /\ etable_faith exitCond exits lenv))) (fun _ =>
+      CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
+      CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
+      CHeapSpec.bind (cexec_cfg_addr instrs exitCond fuel a) (fun na =>
+      CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na]))))).
+
+    (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
+    (* the concrete side weakens the concrete claim, which is the sound    *)
+    (* direction for RHeapSpec refinement; the symbolic side is unchanged. *)
+    Lemma refine_guard {SA CA} (RA : Rel SA CA) (P : Prop)
+        (c : CHeapSpec CA) {w} (s : SHeapSpec SA w) :
+      ((⌜P⌝ -∗ ℛ⟦RHeapSpec RA⟧ c s) ⊢
+       ℛ⟦RHeapSpec RA⟧
+         (CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula P)) (fun _ => c))
+         s)%I.
+    Proof.
+      constructor.
+      intros ι Hpc H.
+      cbn in H |- *.
+      cbv [RSat RImpl RHeapSpec LogicalSoundness.RProp CHeapSpec.bind CHeapSpec.lift_purespec CPureSpec.assume_formula CPureSpec.assume_pathcondition] in H |- *.
+      cbn in H |- *.
+      intros cΦ sΦ HΦ ch sh Hh Hs HP.
+      exact (H HP cΦ sΦ HΦ ch sh Hh Hs).
+    Qed.
+
+    Lemma itable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
+        (instrs' : gmap (bv xlenbits) AST) (tbl' : list (Term Σ' ty_xlenbits * AST))
+        (ιΣ : NamedEnv RelVal Σ') :
+      itable_faith instrs' tbl' ιΣ ->
+      (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ itable_rel instrs' (subst_itable (persist ζ θ) tbl'))%I.
+    Proof.
+      intros Hfaith.
+      constructor.
+      intros ι Hpc Hrel.
+      unfold forgetting, RNEnv, RInst in Hrel.
+      cbn in Hrel.
+      unfold itable_rel, subst_itable.
+      rewrite List.Forall_map.
+      eapply List.Forall_impl; [|exact Hfaith].
+      intros [t i] (v & Hv & Hm).
+      exists v.
+      split; [|exact Hm].
+      cbn.
+      rewrite inst_subst inst_persist Hrel.
+      exact Hv.
+    Qed.
+
+    Lemma etable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
+        (exitCond' : bv xlenbits -> bool) (exits' : list (Term Σ' ty_xlenbits))
+        (ιΣ : NamedEnv RelVal Σ') :
+      etable_faith exitCond' exits' ιΣ ->
+      (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ etable_rel exitCond' (subst_etable (persist ζ θ) exits'))%I.
+    Proof.
+      intros Hfaith.
+      constructor.
+      intros ι Hpc Hrel.
+      unfold forgetting, RNEnv, RInst in Hrel.
+      cbn in Hrel.
+      unfold etable_rel, subst_etable.
+      rewrite List.Forall_map.
+      eapply List.Forall_impl; [|exact Hfaith].
+      intros t (v & Hv & Hc).
+      exists v.
+      split; [|exact Hc].
+      rewrite inst_subst inst_persist Hrel.
+      exact Hv.
+    Qed.
+
+    Lemma forgetting_RVal {σ} {wa wb : World} (θ : Acc wa wb) (v : RelVal σ) (t : STerm σ wa) :
+      (forgetting θ (ℛ⟦RVal σ⟧ v t) ⊢ ℛ⟦RVal σ⟧ v (persist__term t θ))%I.
+    Proof.
+      constructor.
+      intros ι Hpc H.
+      unfold forgetting in H.
+      cbn in H |- *.
+      unfold RVal, RInst, repₚ in H |- *.
+      cbn in H |- *.
+      rewrite inst_persist.
+      exact H.
+    Qed.
+
+    (* rexec_triple_addr_tbl: unconditional refinement of the guarded      *)
+    (* concrete triple by the table-based symbolic triple.  The guard is   *)
+    (* introduced via refine_guard; the executor bind is dispatched by     *)
+    (* rexec_cfg_addr_tbl with faithfulness transported through the world  *)
+    (* morphisms by the _forget lemmas.  rsolve must NOT be let loose on   *)
+    (* the executor bind (no RefineCompat instance matches the table       *)
+    (* executor's premise-free form; typeclass search diverges).           *)
+    Lemma rexec_triple_addr_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      ⊢ ℛ⟦RHeapSpec RUnit⟧
+          (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits)
+          (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)).
+    Proof.
+      unfold cexec_triple_addr_tbl, sexec_triple_addr_tbl.
+      iApply (HeapSpec.refine_bind (RA := RNEnv LVar Σ) (RB := RUnit)).
+      - rsolve.
+      - iIntros (w1 θ0).
+        iModIntro.
+        iIntros (lenv δ) "#Hδ".
+        iApply refine_guard.
+        iIntros "%Hfaith".
+        destruct Hfaith as [Hif Hef].
+        iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
+        { rsolve. }
+        iIntros (w0 θ1).
+        iModIntro.
+        iIntros (a ta) "#Ha".
+        iApply (HeapSpec.refine_bind (RA := RUnit) (RB := RUnit)).
+        { rsolve. }
+        iIntros (w2 θ2).
+        iModIntro.
+        iIntros (u tu) "#Hu".
+        iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
+        { iPoseProof (itable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hif with "Hδ") as "#Hi".
+          iPoseProof (etable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hef with "Hδ") as "#He".
+          iApply (rexec_cfg_addr_tbl instrs exitCond fuel _ _ with "[$Hi $He]").
+          iApply (forgetting_RVal with "Ha"). }
+        iIntros (w3 θ3).
+        iModIntro.
+        iIntros (na tna) "#Hna".
+        rsolve.
+        repeat (rewrite ?forgetting_trans; try iModIntro; rsolve).
+    Qed.
+
+    #[export] Instance refine_compat_exec_triple_addr_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      RefineCompat (RHeapSpec RUnit)
+        (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits) w
+        (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)) _ :=
+      MkRefineCompat (rexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits).
+
+    Definition cblock_verification_condition_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : Prop :=
+      CHeapSpec.run (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits).
+
+    Lemma rblock_verification_condition_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      ⊢ RSat LogicalSoundness.RProp (w := w)
+          (cblock_verification_condition_tbl req instrs exitCond fuel ens tbl exits)
+          (sblock_verification_condition_tbl req tbl exits fuel ens w).
+    Proof.
+      unfold cblock_verification_condition_tbl, sblock_verification_condition_tbl.
+      rsolve.
+    Qed.
+
+    #[export] Instance refine_compat_block_verification_condition_tbl {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      RefineCompat (LogicalSoundness.RProp)
+        (cblock_verification_condition_tbl req instrs exitCond fuel ens tbl exits) w
+        (sblock_verification_condition_tbl req tbl exits fuel ens w) _ :=
+      MkRefineCompat (rblock_verification_condition_tbl req instrs exitCond fuel ens tbl exits).
+
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
