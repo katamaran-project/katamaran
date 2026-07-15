@@ -168,6 +168,15 @@ Module Examples.
     : list (Term Σ ty_xlenbits) :=
     [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p].
 
+  (* General exit table from base-relative byte offsets.  Programs whose
+     control flow leaves the block anywhere other than the fall-through
+     address (e.g. a branch whose taken target lies past the block) list
+     ALL their exit offsets here; exits_of_list is the [4·len] special
+     case.  Keys go through peval_bvadd like the instruction table. *)
+  Definition exits_of_offs {Σ : LCtx} (p : Term Σ ty_xlenbits) (offs : list N)
+    : list (Term Σ ty_xlenbits) :=
+    List.map (fun o => peval_bvadd (term_val ty_xlenbits (bv.of_N o)) p) offs.
+
   (* itable_faith is monotone in the instruction map: enlarging the map
      preserves faithfulness of every table entry. *)
   Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AST)
@@ -250,6 +259,44 @@ Module Examples.
     - exact Hexit.
   Qed.
 
+  (* Offset-list analog: every listed exit offset is a genuine exit at any
+     valuation resolving the placement term, provided the exit condition
+     accepts each concrete address base + off. *)
+  Lemma etable_faith_exits_of_offs {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
+      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (offs : list N) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
+    List.Forall (fun o => exitCond (bv.add cbase (bv.of_N o)) = true) offs ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+      exitCond (exits_of_offs p offs) ι.
+  Proof.
+    intros Hp Hoffs.
+    unfold exits_of_offs, Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith.
+    rewrite List.Forall_map.
+    eapply List.Forall_impl; [|exact Hoffs].
+    intros o Hex.
+    exists (bv.add cbase (bv.of_N o)).
+    split.
+    - rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N o)) p ι).
+      cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
+    - exact Hex.
+  Qed.
+
+  (* Transit the end-to-end layer's lenAddr bound into the no-wrap bound
+     itable_faith_of_list needs.  lia cannot handle bv.exp2 xlenbits (2^32)
+     directly, so bound below lenAddr = 2^10 first and transit. *)
+  Lemma table_bound_of_lenAddr (ia : N) (len : nat) :
+    (ia + 4 * N.of_nat len < lenAddr)%N ->
+    (bv.bin (@bv.of_N xlenbits ia) + 4 * N.of_nat len < bv.exp2 xlenbits)%N.
+  Proof.
+    intros H.
+    pose proof (@bv.bin_of_N_decr xlenbits ia) as Hdec.
+    set (B := bv.bin (@bv.of_N xlenbits ia)) in *; clearbody B.
+    unfold lenAddr in H.
+    assert (Hsmall : (B + 4 * N.of_nat len < 2 ^ 10)%N) by lia.
+    eapply N.lt_trans; [exact Hsmall|].
+    now vm_compute.
+  Qed.
+
   (* Default load address for examples that don't care about a nonzero
      start (moved here, ahead of Section WithAsnNotations, so
      CFGVerifierContract/gen_contract/the {{ }} notations below can use
@@ -275,33 +322,46 @@ Module Examples.
 
     (* CFG verifier contract: analog of BlockVerifierContract but for the CFG
        verifier, which requires an explicit exit condition and fuel bound.
-       Uses Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition.
        Postconditions are not exposed: SHeapSpec has no leakcheck, so the final
        heap state is unconstrained and any leftover resources are silently dropped.
-       The load base is `init_addr : N`, carried by the contract as
-       `cfg_init_addr` and threaded to sblock_verification_condition as
-       `bv.of_N init_addr` (instead of the old hardcoded bv.zero). *)
+
+       Post table-pivot (PLAN-symbolic-base.md Phase 3): the verifier side is
+       the TABLE VC (sblock_verification_condition_tbl) over address-term
+       tables built from the placement term `cfg_placement` by table_of_list /
+       exits_of_list.  Concrete contracts pass term_val (bv.of_N init_addr)
+       (the keys then fold to literals inside peval_bvadd — same behavior as
+       the old gmap VC); parameterized contracts may pass a variable term.
+       `cfg_init_addr : N` remains the concrete load address used by the
+       memory/end-to-end side; the two are linked in the soundness chain by
+       the hypothesis  inst cfg_placement ι = SyncVal (bv.of_N init_addr). *)
     Definition CFG_VC_triple {Σ}
-      (init_addr : N)
+      (p     : Term Σ ty_xlenbits)
+      (exits : list (Term Σ ty_xlenbits))
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
-      (ec : bv xlenbits -> bool)
       (fl : nat) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition (Σ := Σ)
-        (extend_to_minimal_pre P) (instrs_of_list (bv.of_N init_addr) i) ec fl
+      Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition_tbl (Σ := Σ)
+        (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl
         (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
+    (* init_addr and ec are unused by the symbolic VC (the exit condition
+       lives in the exit TABLE now); they are kept in the signature so
+       Valid_CFG_VC remains a direct cfg_map target. *)
     Definition Valid_CFG_VC {Σ}
       (init_addr : N)
+      (p     : Term Σ ty_xlenbits)
+      (exits : list (Term Σ ty_xlenbits))
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
-      safeE (postprocess (CFG_VC_triple init_addr P i ec fl)).
+      safeE (postprocess (CFG_VC_triple p exits P i fl)).
 
     Record CFGVerifierContract {Σ} :=
       MkCFGVerifierContract
       { cfg_init_addr     : N
+      ; cfg_placement     : Term Σ ty_xlenbits
+      ; cfg_exits         : list (Term Σ ty_xlenbits)
       ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
       ; cfg_instrs        : list AST
       ; cfg_exitCond      : bv xlenbits -> bool
@@ -309,25 +369,33 @@ Module Examples.
       }.
 
     Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-      (f : N -> Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
+      (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
+           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
            (bv xlenbits -> bool) -> nat -> A) : A :=
       match c with
-      | {| cfg_init_addr := ia; cfg_precondition := pre; cfg_instrs := i;
-           cfg_exitCond := ec; cfg_fuel := fl |} => f ia pre i ec fl
+      | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
+           cfg_precondition := pre; cfg_instrs := i;
+           cfg_exitCond := ec; cfg_fuel := fl |} => f ia p exits pre i ec fl
       end.
 
     Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
       cfg_map c Valid_CFG_VC.
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c (fun ia P i ec fl =>
-        VerificationCondition (postprocess (CFG_VC_triple ia P i ec fl))).
+      cfg_map c (fun ia p exits P i ec fl =>
+        VerificationCondition (postprocess (CFG_VC_triple p exits P i fl))).
 
     Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']'" :=
-      (@MkCFGVerifierContract [ctx] init_addr P%asn i ec fl)
+      (@MkCFGVerifierContract [ctx] init_addr
+         (term_val ty_xlenbits (bv.of_N init_addr))
+         (exits_of_list (term_val ty_xlenbits (bv.of_N init_addr)) i)
+         P%asn i ec fl)
       (at level 90).
     Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
-      (@MkCFGVerifierContract logvars init_addr P%asn i ec fl)
+      (@MkCFGVerifierContract logvars init_addr
+         (term_val ty_xlenbits (bv.of_N init_addr))
+         (exits_of_list (term_val ty_xlenbits (bv.of_N init_addr)) i)
+         P%asn i ec fl)
       (at level 90).
 
     Local Ltac solve_bv :=
@@ -620,15 +688,23 @@ Module Examples.
     Definition gen_mem_pre {Σ} (specs : list mem_full_spec) : Assertion Σ :=
       List.fold_right (fun s acc => gen_mem_asn s ∗ acc) ⊤ specs.
 
+    (* extra_exit_offs: base-relative byte offsets of exit addresses BEYOND
+       the fall-through one (which is always included).  Needed when control
+       flow can leave the block other than by falling off the end, e.g. a
+       branch whose taken target lies past the block (jump_if_zero). *)
     Definition gen_contract
         (init_addr : N)
         (reg_specs : list reg_spec)
         (mem_specs : list mem_full_spec)
         (instrs : list AST)
+        (extra_exit_offs : list N)
         (ec : bv xlenbits -> bool)
         (fl : nat)
         : CFGVerifierContract :=
       @MkCFGVerifierContract [ctx] init_addr
+        (term_val ty_xlenbits (bv.of_N init_addr))
+        (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
         (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
         instrs ec fl.
 
@@ -719,7 +795,7 @@ Module Examples.
        (bv.of_N 156, false, None); (bv.of_N 160, false, None)].
 
     Definition cmovznz4_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs
+      gen_contract init_addr cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs []
         (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs) 35.
 
     Lemma valid_cmovznz4_cfg_contract : ValidCFGVerifierContract cmovznz4_cfg_contract.
@@ -758,7 +834,7 @@ Module Examples.
 
     Definition cmovznz4_cfg_contract_at_start : CFGVerifierContract :=
       gen_contract cmovznz4_start cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start
-        cmovznz4_instrs (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs) 35.
+        cmovznz4_instrs [] (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs) 35.
 
     Lemma valid_cmovznz4_cfg_contract_at_start :
       ValidCFGVerifierContract cmovznz4_cfg_contract_at_start.
@@ -804,7 +880,7 @@ Module Examples.
        making the contract vacuously (not meaningfully) valid. *)
     Definition mv_nonzero_start_ex : CFGVerifierContract :=
       gen_contract (256%N) [(X1, false, None)] []
-        [MV X1 X0]
+        [MV X1 X0] []
         (fun v => bv.ugeb v (bv.of_N 260))
         3.
 
@@ -814,7 +890,7 @@ Module Examples.
     Definition swap_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr
         [(X1, false, None); (X2, false, None); (X3, false, None)] []
-        [MV X3 X2; MV X2 X1; MV X1 X3]
+        [MV X3 X2; MV X2 X1; MV X1 X3] []
         (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
         5.
 
@@ -840,7 +916,7 @@ Module Examples.
          block. X1 must be a public register (secLeak). *)
     Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr [(X1, true, None)] []
-        [BEQ X1 X0 true_offset]
+        [BEQ X1 X0 true_offset] [8%N]
         (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset])
         3.
 
@@ -859,7 +935,7 @@ Module Examples.
       fun v => bv.ugeb v (bv.of_N 8).
 
     Definition jmp_fwd_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr [] [] [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond 5.
+      gen_contract init_addr [] [] [JAL X0 jmp_offset; NOP] [] jmp_fwd_exitCond 5.
 
     Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
@@ -881,7 +957,7 @@ Module Examples.
 
     Definition countdown_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr [(X1, true, Some (bv.of_N 2))] []
-        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] []
         countdown_exitCond
         5.
 
@@ -891,12 +967,58 @@ Module Examples.
 
     Definition set_X2_to_42 : CFGVerifierContract :=
       gen_contract init_addr [(X2, false, None)] []
-        [ADDI X2 X0 (bv.of_N 42)]
+        [ADDI X2 X0 (bv.of_N 42)] []
         (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
         3.
 
     Lemma valid_set_X2_to_42 : ValidCFGVerifierContract set_X2_to_42.
     Proof. vm_compute. solve_vc. Qed.
+
+    (* ===== Phase 4.2 proof-of-concept — genuine symbolic placement term_var "p" =====
+       Unlike gen_contract (which hardwires cfg_placement := term_val (bv.of_N
+       init_addr) and Σ := [ctx]), this contract lives at Σ = ["p"∷ty_xlenbits]
+       and uses the *term variable* term_var "p" as the base — the only base
+       formulation the VC can discharge, because it keeps every bv.of_N applied
+       to concrete offsets (a Coq-N base lifted via term_val (bv.of_N n) makes
+       vm_compute diverge on bv.of_N of a symbolic N at width 32; see the
+       divergent gen_contract-based valid_cmovznz4_cfg_contract_at_start).
+
+       Two things a parameterized contract needs that the concrete ones don't:
+       (1) a precondition BOUND on the base — `unsigned p + 4·len ≤ 1024` — so
+           the instruction-fetch upper bound is dischargeable (this is the
+           `(bound)` premise the ∀ init_addr noninterference theorem carries);
+       (2) a manual tail closing the offset-0 fetch LOWER bound: at the first
+           instruction the pc is the bare base p (offset 0 collapses
+           bvadd (of_N 0) p → p), so the Phase-0 fetch-bound helpers — written
+           for the bvadd (of_N c) base shape — don't fire.  Generalizing
+           solve_vc to absorb this tail (and confirming the bvadd-wrapped
+           bounds fire for k>0) is the open work for the full cmovznz4 case. *)
+    Definition set_X2_to_42_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits]
+        init_addr
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length [ADDI X2 X0 (bv.of_N 42)]))%N :: []))
+        (asn_pc_eq (term_var "p")
+           ∗ asn.formula (formula_relop bop.le
+                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                   (term_val ty.int 4%Z))
+                (term_val ty.int 1024%Z))
+           ∗ gen_pre [(X2, false, None)])
+        [ADDI X2 X0 (bv.of_N 42)]
+        (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+        3.
+
+    Lemma valid_set_X2_to_42_param : ValidCFGVerifierContract set_X2_to_42_param.
+    Proof.
+      vm_compute. solve_vc.
+      (* offset-0 bare-base fetch lower bound: base is SyncVal (from secLeak) *)
+      match goal with
+        Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+          destruct x as [? | ? ?]; [ | destruct Hs ]
+      end; cbn; unfold bv.unsigned; lia.
+    Qed.
+    (* ===== end Phase 4.2 proof-of-concept ===== *)
 
     (* Memory countdown: 4 instructions + a data word at address 16.
        addr  0: LOAD  imm=16 rs1=X0 rd=X1  -- X1 := mem[X0+16] = mem[16]
@@ -918,7 +1040,7 @@ Module Examples.
 
     Definition countdown_mem_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))]
-        countdown_mem_instrs
+        countdown_mem_instrs []
         countdown_mem_exitCond
         10.
 
@@ -2247,6 +2369,11 @@ End AdequacyTools.
     (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
+    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+                      = ty.SyncVal (@bv.of_N xlenbits init_addr))
+    (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                     exitCond (cfg_exits block) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
@@ -2270,11 +2397,17 @@ End AdequacyTools.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct block.
-    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, ImplPre.
+    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, blockPlacement,
+      HexitsFaith, ImplPre.
     subst cfg_init_addr0 cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
-    iApply (sound_sblock_verification_condition_myWP2
-              valid_block ι _
+    assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+                    (instrs_of_list (bv.of_N init_addr) instrs')
+                    (table_of_list cfg_placement0 0 instrs') ι).
+    { apply itable_faith_of_list; [exact blockPlacement|].
+      apply table_bound_of_lenAddr, Hleninstrs. }
+    iApply (sound_sblock_verification_condition_myWP2_tbl
+              valid_block _ Hif HexitsFaith
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv Hregs".
@@ -2295,6 +2428,11 @@ End AdequacyTools.
     (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
+    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+                      = ty.SyncVal (@bv.of_N xlenbits init_addr))
+    (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                     exitCond (cfg_exits block) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
@@ -2322,6 +2460,11 @@ End AdequacyTools.
     (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
+    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+                      = ty.SyncVal (@bv.of_N xlenbits init_addr))
+    (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                     exitCond (cfg_exits block) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                interp_mem_with_public_memory μ1 μ2 data_specs ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
@@ -2348,11 +2491,17 @@ End AdequacyTools.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct block.
-    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, ImplPre.
+    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, blockPlacement,
+      HexitsFaith, ImplPre.
     subst cfg_init_addr0 cfg_instrs0 cfg_exitCond0.
     unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
-    iApply (sound_sblock_verification_condition_myWP2
-              valid_block ι _
+    assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+                    (instrs_of_list (bv.of_N init_addr) instrs')
+                    (table_of_list cfg_placement0 0 instrs') ι).
+    { apply itable_faith_of_list; [exact blockPlacement|].
+      apply table_bound_of_lenAddr, Hleninstrs. }
+    iApply (sound_sblock_verification_condition_myWP2_tbl
+              valid_block _ Hif HexitsFaith
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").
     - iSplitL "Hpriv Hregs Hmem".
@@ -2375,6 +2524,11 @@ End AdequacyTools.
     (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
     (blockInstrs : cfg_instrs block = instrs')
     (blockExitCond : cfg_exitCond block = exitCond)
+    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+                      = ty.SyncVal (@bv.of_N xlenbits init_addr))
+    (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                     exitCond (cfg_exits block) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                interp_mem_with_public_memory μ1 μ2 data_specs ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
@@ -2734,6 +2888,10 @@ End AdequacyTools.
       (init_addr : N)      (blockInitAddr : cfg_init_addr block = init_addr)
       (blockInstrs : cfg_instrs block = instrs')
       (blockExitCond : cfg_exitCond block = exitCond)
+      (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+                        = ty.SyncVal (@bv.of_N xlenbits init_addr))
+      (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                       exitCond (cfg_exits block) ι)
       (ImplPre : forall `{sailGS2 Σ},
           interp_gprs_with_public_registers γ1 γ2 public_registers ∗
           cur_privilege ↦ᵣ ty.SyncVal Machine ∗
@@ -2806,6 +2964,10 @@ End AdequacyTools.
         (init_addr : N)        (blockInitAddr : cfg_init_addr block = init_addr)
         (blockInstrs : cfg_instrs block = instrs')
         (blockExitCond : cfg_exitCond block = exitCond)
+        (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+                          = ty.SyncVal (@bv.of_N xlenbits init_addr))
+        (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                         exitCond (cfg_exits block) ι)
         (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
             spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs')
                                + 4 * N.of_nat i))
@@ -2832,6 +2994,8 @@ End AdequacyTools.
     Proof.
       intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
         steps1 Htrace.
+      assert (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+        by (unfold lenAddr in *; lia).
       apply (adequacy_gen_RiscVNStepsExitCond_strong
         (μ21 := μ2) (γ21 := γ2)
         (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
@@ -2879,6 +3043,7 @@ End AdequacyTools.
       (reg_specs : list reg_spec)
       (mem_specs : list mem_full_spec)
       (instrs : list AST)
+      (extra_exit_offs : list N)
       (exitCond : bv xlenbits -> bool)
       (fuel : nat)
       (init_addr : N)      (HND : NoDup (map reg_spec_idx reg_specs))
@@ -2888,22 +3053,32 @@ End AdequacyTools.
                              + 4 * N.of_nat i))
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (HexitOffs : List.Forall
+          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
+          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
       (valid_block : ValidCFGVerifierContract
-          (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)) :
+          (gen_contract init_addr reg_specs mem_specs instrs extra_exit_offs
+             exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond reg_specs mem_specs.
   Proof.
     intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
       HInitReg1 HInitReg2 HInitMem1 HInitMem2
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond
+      (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
+         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs)) [env]).
+    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
+        [reflexivity | exact HexitOffs]. }
     eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
       instrs exitCond n ws
       [ctx] [env]
       (gen_public_regs reg_specs) HpubReg
       (map mem_full_to_spec mem_specs) HpubMem
-      (gen_contract init_addr reg_specs mem_specs instrs exitCond fuel)
+      (gen_contract init_addr reg_specs mem_specs instrs extra_exit_offs
+         exitCond fuel)
       valid_block
       init_addr
-      eq_refl eq_refl eq_refl HDataAddrs).
+      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
     all: try eauto.
     - intros Σ H.
       iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
@@ -2927,17 +3102,19 @@ End AdequacyTools.
     eapply gen_contract_noninterferent;
       [apply Prelude.nodup_fixed; reflexivity |
        intros ? ? H; rewrite lookup_nil in H; discriminate |
-       by cbn; unfold lenAddr | exact valid_swap_cfg_contract].
+       by cbn; unfold lenAddr | repeat constructor | exact valid_swap_cfg_contract].
   Qed.
 
   Lemma jumpIfZero_noninterferent :
     noninterferent_strong init_addr [BEQ X1 X0 true_offset]
       (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros ? ? H; rewrite lookup_nil in H; discriminate |
-       by cbn; unfold lenAddr | exact valid_jump_if_zero_cfg_contract].
+    eapply gen_contract_noninterferent.
+    5: exact valid_jump_if_zero_cfg_contract.
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? H; rewrite lookup_nil in H; discriminate.
+    - by cbn; unfold lenAddr.
+    - repeat constructor.
   Qed.
 
   Lemma jmp_fwd_safe_cfg `{sailGS2 Σ} γ1 γ2 :
@@ -2955,8 +3132,21 @@ End AdequacyTools.
       "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
     rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
     rewrite !regPstsTo_sync_is_nonsync.
-    iApply (sound_sblock_verification_condition_myWP2
-              valid_jmp_fwd_cfg_contract [env] _
+    assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+                    (instrs_of_list (bv.of_N init_addr) [JAL X0 jmp_offset; NOP])
+                    (table_of_list (term_val ty_xlenbits (bv.of_N init_addr)) 0
+                       [JAL X0 jmp_offset; NOP]) [env]).
+    { apply itable_faith_of_list; [reflexivity|].
+      apply table_bound_of_lenAddr. now vm_compute. }
+    assert (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+                    jmp_fwd_exitCond
+                    (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
+                       ((4 * N.of_nat (length [JAL X0 jmp_offset; NOP]))%N :: []))
+                    [env]).
+    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
+        [reflexivity | repeat constructor]. }
+    iApply (sound_sblock_verification_condition_myWP2_tbl
+              valid_jmp_fwd_cfg_contract _ Hif Hef
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv".
@@ -2973,41 +3163,50 @@ End AdequacyTools.
   Lemma jmp_fwd_noninterferent_cfg :
     noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros ? ? H; rewrite lookup_nil in H; discriminate |
-       by cbn; unfold lenAddr | exact valid_jmp_fwd_cfg_contract].
+    eapply gen_contract_noninterferent.
+    5: exact valid_jmp_fwd_cfg_contract. (* To fix wrong unification in step 4 that would make step 5 impossble, we do step 5 first, TODO: we probably need to handle this problem on a higher level. *) 
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? H; rewrite lookup_nil in H; discriminate.
+    - by cbn; unfold lenAddr.
+    - repeat constructor. (* vm_compute was not necessary here. *)
   Qed.
 
   Lemma countdown_noninterferent :
     noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
       countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros ? ? H; rewrite lookup_nil in H; discriminate |
-       by cbn; unfold lenAddr | exact valid_countdown_cfg_contract].
+    eapply gen_contract_noninterferent.
+    5: exact valid_countdown_cfg_contract. (* To fix wrong unification in step 4 that would make step 5 impossble, we do step 5 first, TODO: we probably need to handle this problem on a higher level. *) 
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? H. rewrite lookup_nil in H; discriminate.
+    - by cbn; unfold lenAddr.
+    - repeat constructor. (* vm_compute was not necessary here. *)
   Qed.
 
   Lemma countdown_mem_noninterferent :
     noninterferent_strong init_addr countdown_mem_instrs countdown_mem_exitCond
       [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros [|i] ? H; cbn in H; [inversion H; subst; vm_compute; done | discriminate] |
-       by cbn; unfold lenAddr | exact valid_countdown_mem_cfg_contract].
+    eapply gen_contract_noninterferent.
+    5: exact valid_countdown_mem_cfg_contract. (* To fix wrong unification in step 4 that would make step 5 impossble, we do step 5 first, TODO: we probably need to handle this problem on a higher level. *) 
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H; (* I probably don't need this big of a case-split but it works. TODO: Hide this in a tactic or figure out how to prove it generally. *)
+      try (inversion H; subst; vm_compute; done); discriminate.
+    - by cbn; unfold lenAddr.
+    - repeat constructor. (* vm_compute was not necessary here. *)
   Qed.
 
   Lemma cmovznz4_noninterferent :
     noninterferent_strong init_addr cmovznz4_instrs (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
       cmovznz4_reg_specs cmovznz4_mem_specs.
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
-         try (inversion H; subst; vm_compute; done); discriminate |
-       by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract].
+    eapply gen_contract_noninterferent.
+    5: exact valid_cmovznz4_cfg_contract.
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H; (* I probably don't need this big of a case-split but it works. TODO: Hide this in a tactic or figure out how to prove it generally. *)
+        try (inversion H; subst; vm_compute; done); discriminate.
+    - by cbn; unfold lenAddr.
+    - repeat constructor. (* vm_compute was not necessary here. *)
   Qed.
 
   (* Step 5 (init_addr parameterization): cmovznz4, fully end-to-end
@@ -3018,11 +3217,13 @@ End AdequacyTools.
       (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs)
       cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
-         try (inversion H; subst; vm_compute; done); discriminate |
-       by cbn; unfold lenAddr | exact valid_cmovznz4_cfg_contract_at_start].
+    eapply gen_contract_noninterferent.
+    5: exact valid_cmovznz4_cfg_contract_at_start.
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H; (* I probably don't need this big of a case-split but it works. TODO: Hide this in a tactic or figure out how to prove it generally. *)
+        try (inversion H; subst; vm_compute; done); discriminate.
+    - by cbn; unfold lenAddr.
+    - repeat constructor. (* vm_compute was not necessary here. *)
   Qed.
 
 End Examples.
