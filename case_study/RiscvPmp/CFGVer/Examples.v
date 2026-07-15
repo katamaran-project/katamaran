@@ -745,6 +745,83 @@ Module Examples.
         instrs ec fl.
 
     (* ------------------------------------------------------------------ *)
+    (* Stage 2: base-RELATIVE parametric-value specs.  Unlike reg_spec /   *)
+    (* mem_full_spec (constant Val), the register init value and memory     *)
+    (* address here may depend on the symbolic base p (PVBaseOff k = p+k).  *)
+    (* This is what cmovznz4 needs — data pointers p+116/132/148 and data   *)
+    (* words at p+116..p+160 — and cannot be expressed with gen_contract_   *)
+    (* param's constant term_val values (of_N (init_addr+k) would also make *)
+    (* vm_compute diverge).  A concretize map (below, outside the section)  *)
+    (* sends these to ordinary reg_spec/mem_full_spec at ι=[p↦of_N ia], so  *)
+    (* the noninterference bridge reuses gen_implpre / gen_implpre_mem.     *)
+    Inductive param_val : Type :=
+    | PVExist                          (* existential (private/public per is_pub) *)
+    | PVConst (v : Val ty_xlenbits)    (* base-independent constant *)
+    | PVBaseOff (k : N).               (* base p + k *)
+
+    Definition reg_spec_rel : Type := RegIdx * bool * param_val.
+    Definition mem_spec_rel : Type := N * bool * param_val.   (* address = p + k *)
+
+    Definition gen_reg_asn_rel (s : reg_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      let '(r, is_pub, pv) := s in
+      match pv with
+      | PVExist =>
+          asn.exist "v" ty_xlenbits
+            (if is_pub then r ↦ᵣ term_var "v" ∗ secLeakvar "v" else r ↦ᵣ term_var "v")
+      | PVConst v => r ↦ᵣ term_val ty_xlenbits v
+      | PVBaseOff k =>
+          r ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k))
+      end.
+
+    Definition gen_pre_rel (specs : list reg_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      List.fold_right (fun s acc => gen_reg_asn_rel s ∗ acc) ⊤ specs.
+
+    Definition gen_mem_asn_rel (s : mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      let '(k, is_pub, pv) := s in
+      let addr := term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) in
+      match pv with
+      | PVExist =>
+          asn.exist "mv" ty_xlenbits
+            (if is_pub
+             then term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) ↦ₘ term_var "mv" ∗ secLeakvar "mv"
+             else term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) ↦ₘ term_var "mv")
+      | PVConst v => addr ↦ₘ term_val ty_xlenbits v
+      | PVBaseOff k2 =>
+          addr ↦ₘ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k2))
+      end.
+
+    Definition gen_mem_pre_rel (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      List.fold_right (fun s acc => gen_mem_asn_rel s ∗ acc) ⊤ specs.
+
+    (* bound: an N ≥ (max accessed byte offset)+4, so the fetch/access upper
+       bounds are dischargeable from unsigned p + bound ≤ lenAddr. *)
+    Definition gen_contract_rel
+        (init_addr : N)
+        (reg_specs : list reg_spec_rel)
+        (mem_specs : list mem_spec_rel)
+        (instrs : list AST)
+        (extra_exit_offs : list N)
+        (bound : N)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        ( asn_pc_eq (term_var "p")
+          ∗ asn.formula (formula_relop bop.le
+               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                  (term_val ty.int (Z.of_N bound)))
+               (term_val ty.int (Z.of_N lenAddr)))
+          ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs )
+        instrs ec fl.
+
+    (* ------------------------------------------------------------------ *)
     (* cmovznz4 (HACL*'s FStar_UInt64_eq_mask-based conditional move),      *)
     (* compiled to RV32I by clang -O2 (godbolt, -march=rv32i -mabi=ilp32). *)
     (* Straight-line block, no branches, no loops. Registers per the       *)
@@ -1075,9 +1152,10 @@ Module Examples.
     Proof. vm_compute. solve_vc. Qed.
 
     (* ===== Phase 4.2: base-parametric cmovznz4 VC ========================
-       Hand-written parametric contract (Σ = ["p"]) so the data pointers
-       A1/A2/A3 hold p+116 / p+132 / p+148 and the 12 data words live at
-       p+116 .. p+160 (bop.bvadd terms), NOT constants.  peval DOES fold a
+       Parametric contract (Σ = ["p"]) built with gen_contract_rel from the
+       base-relative specs below, so the data pointers A1/A2/A3 hold
+       p+116 / p+132 / p+148 and the 12 data words live at p+116 .. p+160
+       (bop.bvadd terms), NOT constants.  peval DOES fold a
        load address (p+132)+4 into p+136 to match the mem chunk, so solve_vc
        reduces the whole 29-instruction block to a fixed family of address
        bounds goals.  The tail below closes them uniformly (offset-agnostic):
@@ -1086,48 +1164,27 @@ Module Examples.
        bvadd-wrapped load/store upper bounds go through bv.bin_add_small
        (no-overflow) then lia + an exp2 transit.  See memory
        project-cfgver-symbolic-base-poc. *)
+    Definition cmovznz4_reg_specs_rel : list reg_spec_rel :=
+      [(A0, false, PVExist);
+       (A1, false, PVBaseOff 116);   (* x base *)
+       (A2, false, PVBaseOff 132);   (* y base *)
+       (A3, false, PVBaseOff 148);   (* r base *)
+       (A4, false, PVExist); (A5, false, PVExist); (A6, false, PVExist);
+       (A7, false, PVExist); (T0, false, PVExist); (T1, false, PVExist)].
+
+    Definition cmovznz4_mem_specs_rel : list mem_spec_rel :=
+      [(116%N, false, PVExist); (120%N, false, PVExist);
+       (124%N, false, PVExist); (128%N, false, PVExist);
+       (132%N, false, PVExist); (136%N, false, PVExist);
+       (140%N, false, PVExist); (144%N, false, PVExist);
+       (148%N, false, PVExist); (152%N, false, PVExist);
+       (156%N, false, PVExist); (160%N, false, PVExist)].
+
+    (* Base bound 164 = 160 (last data offset, r[3]) + 4 (word). *)
     Definition cmovznz4_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits] ia
-        (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length cmovznz4_instrs))%N :: []))
-        ( asn_pc_eq (term_var "p")
-          ∗ asn.formula (formula_relop bop.le
-               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
-                  (term_val ty.int (Z.of_N 164)))
-               (term_val ty.int (Z.of_N lenAddr)))
-          ∗ gen_reg_asn (A0, false, None)
-          ∗ (A1 ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 116)))
-          ∗ (A2 ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 132)))
-          ∗ (A3 ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 148)))
-          ∗ gen_reg_asn (A4, false, None) ∗ gen_reg_asn (A5, false, None)
-          ∗ gen_reg_asn (A6, false, None) ∗ gen_reg_asn (A7, false, None)
-          ∗ gen_reg_asn (T0, false, None) ∗ gen_reg_asn (T1, false, None)
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 116)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 120)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 124)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 128)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 132)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 136)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 140)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 144)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 148)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 152)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 156)) ↦ₘ term_var "mv")
-          ∗ asn.exist "mv" ty_xlenbits
-              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 160)) ↦ₘ term_var "mv") )
-        cmovznz4_instrs (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
+      gen_contract_rel ia cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
+        cmovznz4_instrs [] 164
+        (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
 
     Lemma valid_cmovznz4_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (cmovznz4_cfg_contract_param ia).
@@ -3263,6 +3320,137 @@ End AdequacyTools.
     - rewrite length_map. exact Hlen.
   Qed.
 
+  (* ================================================================== *)
+  (* Stage 2: base-RELATIVE noninterference bridge (gen_contract_rel).    *)
+  (* Sends the base-relative param specs to ordinary reg_spec /           *)
+  (* mem_full_spec at the concrete base ia via concretize_*, so the       *)
+  (* interpretation of the symbolic precondition (gen_pre_rel /           *)
+  (* gen_mem_pre_rel) matches gen_pre / gen_mem_pre of the concretized     *)
+  (* specs (concretize lemmas below) — letting us REUSE gen_implpre /      *)
+  (* gen_implpre_mem unchanged.                                            *)
+  (* ================================================================== *)
+
+  Definition concretize_reg (ia : N) (s : reg_spec_rel) : reg_spec :=
+    let '(r, pub, pv) := s in
+    (r, pub, match pv with
+             | PVExist => None
+             | PVConst v => Some v
+             | PVBaseOff k => Some (bv.of_N (ia + k))
+             end).
+
+  Definition concretize_mem (ia : N) (s : mem_spec_rel) : mem_full_spec :=
+    let '(k, pub, pv) := s in
+    (bv.of_N (ia + k), pub,
+     match pv with
+     | PVExist => None
+     | PVConst v => Some v
+     | PVBaseOff k2 => Some (bv.of_N (ia + k2))
+     end).
+
+  Lemma gen_pre_rel_concretize `{sailGS2 Σ}
+      (reg_specs : list reg_spec_rel) (ia : N) (va : RelVal ty_xlenbits) :
+    asn.interpret (gen_pre_rel reg_specs)
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va])
+    = asn.interpret (gen_pre (map (concretize_reg ia) reg_specs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    induction reg_specs as [|[[r pub] pv] rest IH]; [reflexivity|].
+    cbn [gen_pre_rel gen_pre map List.fold_right].
+    cbn [asn.interpret]. f_equal; [|exact IH].
+    destruct pv; cbn.
+    - reflexivity.
+    - reflexivity.
+    - unfold asn_regidx_pts.
+      destruct (reg_convert r) as [reg|]; cbn; [|reflexivity].
+      cbn [ty.valToRelVal]. do 2 f_equal. apply bv.of_N_add.
+  Qed.
+
+  Lemma gen_mem_pre_rel_concretize `{sailGS2 Σ}
+      (mem_specs : list mem_spec_rel) (ia : N) (va : RelVal ty_xlenbits) :
+    asn.interpret (gen_mem_pre_rel mem_specs)
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va])
+    = asn.interpret (gen_mem_pre (map (concretize_mem ia) mem_specs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    induction mem_specs as [|[[k pub] pv] rest IH]; [reflexivity|].
+    cbn [gen_mem_pre_rel gen_mem_pre map List.fold_right].
+    cbn [asn.interpret]. f_equal; [|exact IH].
+    destruct pv; cbn.
+    2: { cbn [ty.valToRelVal]. do 2 f_equal. apply bv.of_N_add. }
+    2: { cbn [ty.valToRelVal]. f_equal; (f_equal; apply bv.of_N_add). }
+    destruct pub; cbn.
+    all: cbn [ty.valToRelVal]; rewrite bv.of_N_add; reflexivity.
+  Qed.
+
+  Lemma gen_contract_noninterferent_rel
+      (reg_specs : list reg_spec_rel)
+      (mem_specs : list mem_spec_rel)
+      (instrs : list AST)
+      (extra_exit_offs : list N)
+      (bound : N)
+      (exitCond : bv xlenbits -> bool)
+      (fuel : nat)
+      (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (HexitOffs : List.Forall
+          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
+          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      (valid_block : ValidCFGVerifierContract
+          (gen_contract_rel init_addr reg_specs mem_specs instrs extra_exit_offs
+             bound exitCond fuel)) :
+    noninterferent_strong init_addr instrs exitCond
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond
+      (exits_of_offs (term_var "p")
+         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
+    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
+        [reflexivity | exact HexitOffs]. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs exitCond n ws
+      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
+      (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
+      (gen_contract_rel init_addr reg_specs mem_specs instrs extra_exit_offs
+         bound exitCond fuel)
+      valid_block
+      init_addr
+      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
+    all: try eauto.
+    2: { rewrite !length_map. exact Hlen. }
+    intros Σ H.
+    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+    cbn.
+    iFrame "Hpriv #".
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
+      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
+      { unfold lenAddr in Hbound. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+      rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
+    iSplitL "Hregs".
+    { rewrite gen_pre_rel_concretize.
+      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
+      iExact "Hregs". }
+    rewrite gen_mem_pre_rel_concretize.
+    iApply (gen_implpre_mem (map (concretize_mem init_addr) mem_specs) _ HInitMem1 HInitMem2).
+    iExact "Hmemdata".
+  Qed.
+
   Lemma swap_noninterferent :
     noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
       (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
@@ -3412,6 +3600,29 @@ End AdequacyTools.
     - cbn. lia.
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
     - exact (valid_set_X2_to_42_param init_addr).
+  Qed.
+
+  (* Phase 4.2 headline #2: cmovznz4 (29 instrs, 12 data words, base-relative
+     data pointers) verified end-to-end for a UNIVERSAL base address, from the
+     single symbolic-base VC valid_cmovznz4_cfg_contract_param via the reusable
+     base-relative bridge gen_contract_noninterferent_rel.  The concrete reg /
+     mem specs are the base-relative specs concretized at init_addr. *)
+  Lemma cmovznz4_noninterferent_param (init_addr : N) :
+    (init_addr + 164 < lenAddr)%N ->
+    noninterferent_strong init_addr cmovznz4_instrs
+      (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
+      (map (concretize_reg init_addr) cmovznz4_reg_specs_rel)
+      (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
+  Proof.
+    intros Hb.
+    eapply gen_contract_noninterferent_rel.
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
+        try (inversion H; subst; cbn; f_equal; lia); try discriminate.
+    - cbn. lia.
+    - exact Hb.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact (valid_cmovznz4_cfg_contract_param init_addr).
   Qed.
 
 End Examples.
