@@ -708,6 +708,47 @@ Module Examples.
         (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
         instrs ec fl.
 
+    (* ================================================================ *)
+    (* PARAMETRIC-BASE SUPPORT — READING GUIDE (Examples.v side).        *)
+    (*                                                                    *)
+    (* Goal: prove noninterference for a program loaded at an ARBITRARY   *)
+    (* base address, from ONE symbolic-base VC (proved once), rather than *)
+    (* re-running vm_compute per concrete base.                           *)
+    (*                                                                    *)
+    (* Two facts make it work:                                            *)
+    (*  - The symbolic VC (Valid_CFG_VC, ~line 350) runs the TERM-TABLE   *)
+    (*    executor (Verifier.sblock_verification_condition_tbl) over       *)
+    (*    `table_of_list p 0 i`, so the base placement term `p` may be a  *)
+    (*    genuine VARIABLE.  The base must be `term_var "p"`, NOT          *)
+    (*    `term_val (bv.of_N n)`: the latter makes vm_compute DIVERGE      *)
+    (*    (bv.of_N of a symbolic N at width 32 does not reduce).           *)
+    (*  - The end-to-end/memory side is tied to the term table by         *)
+    (*    FAITHFULNESS at the concrete valuation ι = [p ↦ of_N init_addr]. *)
+    (*                                                                    *)
+    (* Read in this order:                                                *)
+    (*   • exits_of_offs / asn_pc_eq (above, ~176/619) — build the exit    *)
+    (*     term set `p ⊕ off` and the entry-pc assertion `pc = p`.        *)
+    (*   • itable_faith_of_list / etable_faith_exits_of_offs (~230/265) — *)
+    (*     discharge the Verifier.v faithfulness guards at ι.             *)
+    (*   • gen_contract_param (just below) — parametric contract for       *)
+    (*     CONSTANT-valued specs (base bound added to the precondition).  *)
+    (*   • param_val / reg_spec_rel / mem_spec_rel + gen_*_asn_rel        *)
+    (*     (Stage 2 block below) — base-RELATIVE specs (PVBaseOff k = p+k),*)
+    (*     needed for cmovznz4's data pointers p+116/132/148.             *)
+    (*   • gen_contract_rel — the contract built from _rel specs.          *)
+    (*   • concretize_reg/_mem + gen_pre_rel_concretize /                 *)
+    (*     gen_mem_pre_rel_concretize (outside the section, ~line 3333) — *)
+    (*     THE KEY TRICK: interpreting the symbolic _rel precondition at   *)
+    (*     ι equals interpreting gen_pre/gen_mem_pre of the specs          *)
+    (*     concretized at init_addr, so we REUSE gen_implpre unchanged     *)
+    (*     instead of re-proving a 130-line Iris induction.               *)
+    (*   • gen_contract_noninterferent_rel — the base-relative bridge.     *)
+    (*   • cmovznz4_noninterferent_param — the headline; the base-0 and    *)
+    (*     base-256 concrete lemmas are corollaries of it.                *)
+    (* NOTE (axiom hygiene): the concretize lemmas avoid                  *)
+    (* functional_extensionality (an axiom here) — see their proofs.      *)
+    (* ================================================================ *)
+
     (* Parameterized-base analog of gen_contract (PLAN-symbolic-base.md Phase 4.2).
        The base is a genuine term VARIABLE term_var "p" (Σ = ["p"∷ty_xlenbits]),
        NOT term_val (bv.of_N init_addr) — the latter makes the VC's vm_compute
@@ -3382,6 +3423,14 @@ End AdequacyTools.
     all: cbn [ty.valToRelVal]; rewrite bv.of_N_add; reflexivity.
   Qed.
 
+  (* The base-relative noninterference bridge: given a valid symbolic-base
+     VC over gen_contract_rel (proved once, uniformly in init_addr), conclude
+     concrete noninterference at init_addr over the CONCRETIZED specs.  Mirrors
+     gen_contract_noninterferent_param; the two extra moves are (i) the base
+     bound Hbound discharged via bv.bin_of_N_small, and (ii) rewriting the
+     symbolic precondition to its concretization with gen_pre_rel_concretize /
+     gen_mem_pre_rel_concretize before reusing gen_implpre / gen_implpre_mem.
+     Faithfulness of the exit table at ι is HexitsFaith (etable_faith_exits_of_offs). *)
   Lemma gen_contract_noninterferent_rel
       (reg_specs : list reg_spec_rel)
       (mem_specs : list mem_spec_rel)
