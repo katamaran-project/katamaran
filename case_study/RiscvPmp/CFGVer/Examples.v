@@ -708,6 +708,42 @@ Module Examples.
         (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
         instrs ec fl.
 
+    (* Parameterized-base analog of gen_contract (PLAN-symbolic-base.md Phase 4.2).
+       The base is a genuine term VARIABLE term_var "p" (Σ = ["p"∷ty_xlenbits]),
+       NOT term_val (bv.of_N init_addr) — the latter makes the VC's vm_compute
+       diverge on bv.of_N of a symbolic N at width 32.  cfg_init_addr / cfg_exitCond
+       are still stored (the end-to-end/memory side needs them) but are ignored by
+       Valid_CFG_VC, so the VC is proved ONCE, uniformly in init_addr, and reused
+       for every concrete base via the ι = ["p" ↦ SyncVal (bv.of_N init_addr)]
+       instantiation in gen_contract_noninterferent_param.
+
+       Two deltas from gen_contract's precondition: the entry-pc assertion is
+       asn_pc_eq (term_var "p") (pc starts at the symbolic base) rather than
+       asn_init_pc (bv.of_N init_addr); and a base BOUND
+       unsigned p + 4·len ≤ lenAddr is added so the instruction-fetch upper
+       bounds are dischargeable (the `(bound)` premise the noninterference
+       theorem carries down to it). *)
+    Definition gen_contract_param
+        (init_addr : N)
+        (reg_specs : list reg_spec)
+        (mem_specs : list mem_full_spec)
+        (instrs : list AST)
+        (extra_exit_offs : list N)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        (asn_pc_eq (term_var "p")
+           ∗ asn.formula (formula_relop bop.le
+                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                   (term_val ty.int (Z.of_N (4 * N.of_nat (length instrs)))))
+                (term_val ty.int (Z.of_N lenAddr)))
+           ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
+        instrs ec fl.
+
     (* ------------------------------------------------------------------ *)
     (* cmovznz4 (HACL*'s FStar_UInt64_eq_mask-based conditional move),      *)
     (* compiled to RV32I by clang -O2 (godbolt, -march=rv32i -mabi=ilp32). *)
@@ -993,25 +1029,15 @@ Module Examples.
            for the bvadd (of_N c) base shape — don't fire.  Generalizing
            solve_vc to absorb this tail (and confirming the bvadd-wrapped
            bounds fire for k>0) is the open work for the full cmovznz4 case. *)
-    Definition set_X2_to_42_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits]
-        init_addr
-        (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length [ADDI X2 X0 (bv.of_N 42)]))%N :: []))
-        (asn_pc_eq (term_var "p")
-           ∗ asn.formula (formula_relop bop.le
-                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
-                   (term_val ty.int 4%Z))
-                (term_val ty.int 1024%Z))
-           ∗ gen_pre [(X2, false, None)])
-        [ADDI X2 X0 (bv.of_N 42)]
-        (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
-        3.
+    Definition set_X2_to_42_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param ia [(X2, false, None)] []
+        [ADDI X2 X0 (bv.of_N 42)] []
+        (pcOutOfInstrs_exitCond ia [ADDI X2 X0 (bv.of_N 42)]) 3.
 
-    Lemma valid_set_X2_to_42_param : ValidCFGVerifierContract set_X2_to_42_param.
+    Lemma valid_set_X2_to_42_param (ia : N) :
+      ValidCFGVerifierContract (set_X2_to_42_param ia).
     Proof.
-      vm_compute. solve_vc.
+      intros. vm_compute. solve_vc.
       (* offset-0 bare-base fetch lower bound: base is SyncVal (from secLeak) *)
       match goal with
         Hs : RiscvPmpSignature.secLeak ?x |- _ =>
@@ -2653,7 +2679,7 @@ End AdequacyTools.
   Lemma gen_reg_asn_of_ptsreg `{sailGS2 Σ}
       (r : RegIdx) (pub : bool) (opt_v : option (Val ty_xlenbits))
       (γ1 γ2 : RegStore)
-      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      {Σ0} (ι : Valuation (Σ0 ▻ "a"∷ty_xlenbits))
       (Heq : pub = true → opt_v = None →
              ∀ x, reg_convert r = Some x →
                read_register γ1 x = read_register γ2 x)
@@ -2729,7 +2755,7 @@ End AdequacyTools.
 
   Lemma gen_implpre_inner `{sailGS2 Σ}
       (specs : list reg_spec) (γ1 γ2 : RegStore)
-      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      {Σ0} (ι : Valuation (Σ0 ▻ "a"∷ty_xlenbits))
       (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
       (HND : NoDup (map reg_spec_idx specs))
       (HInitRegs1 : declare_init_registers γ1 (gen_init_regs specs))
@@ -2780,7 +2806,7 @@ End AdequacyTools.
 
   Lemma gen_implpre `{sailGS2 Σ}
       (specs : list reg_spec) (γ1 γ2 : RegStore)
-      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      {Σ0} (ι : Valuation (Σ0 ▻ "a"∷ty_xlenbits))
       (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
       (HND : NoDup (map reg_spec_idx specs))
       (HInitRegs1 : declare_init_registers γ1 (gen_init_regs specs))
@@ -2819,7 +2845,7 @@ End AdequacyTools.
       (a : Val ty_xlenbits) (is_pub : bool)
       (opt_v : option (Val ty_xlenbits))
       (μ1 μ2 : Memory)
-      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      {Σ0} (ι : Valuation (Σ0 ▻ "a"∷ty_xlenbits))
       (HInitMem1 : ∀ v, opt_v = Some v → get_word μ1 a = v)
       (HInitMem2 : ∀ v, opt_v = Some v → get_word μ2 a = v) :
     (if is_pub
@@ -2846,7 +2872,7 @@ End AdequacyTools.
      into asn.interpret (gen_mem_pre specs) ι. *)
   Lemma gen_implpre_mem `{sailGS2 Σ}
       (specs : list mem_full_spec) (μ1 μ2 : Memory)
-      (ι : Valuation ([ctx] ▻ "a"∷ty_xlenbits))
+      {Σ0} (ι : Valuation (Σ0 ▻ "a"∷ty_xlenbits))
       (HInitMem1 : declare_init_memory μ1 (gen_init_mem specs))
       (HInitMem2 : declare_init_memory μ2 (gen_init_mem specs)) :
     interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs) ⊢
@@ -3094,6 +3120,74 @@ End AdequacyTools.
     - rewrite length_map. exact Hlen.
   Qed.
 
+  (* Parameterized-base analog of gen_contract_noninterferent (PLAN Phase 4.2):
+     same premises, but consumes the symbolic-base contract gen_contract_param
+     (Σ = ["p"]) and instantiates the placement valuation ι at the concrete
+     base, ι = ["p" ↦ SyncVal (bv.of_N init_addr)].  The symbolic VC
+     (valid_block) is proved ONCE, uniformly in init_addr, and reused here for
+     every concrete init_addr — no per-address vm_compute. *)
+  Lemma gen_contract_noninterferent_param
+      (reg_specs : list reg_spec)
+      (mem_specs : list mem_full_spec)
+      (instrs : list AST)
+      (extra_exit_offs : list N)
+      (exitCond : bv xlenbits -> bool)
+      (fuel : nat)
+      (init_addr : N)      (HND : NoDup (map reg_spec_idx reg_specs))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec mem_specs) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (HexitOffs : List.Forall
+          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
+          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      (valid_block : ValidCFGVerifierContract
+          (gen_contract_param init_addr reg_specs mem_specs instrs extra_exit_offs
+             exitCond fuel)) :
+    noninterferent_strong init_addr instrs exitCond reg_specs mem_specs.
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond
+      (exits_of_offs (term_var "p")
+         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
+    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
+        [reflexivity | exact HexitOffs]. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs exitCond n ws
+      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (gen_public_regs reg_specs) HpubReg
+      (map mem_full_to_spec mem_specs) HpubMem
+      (gen_contract_param init_addr reg_specs mem_specs instrs extra_exit_offs
+         exitCond fuel)
+      valid_block
+      init_addr
+      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
+    all: try eauto.
+    - intros Σ H.
+      iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+      cbn.
+      iFrame "Hpriv #".
+      iSplitL "".
+      { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
+      iSplitL "".
+      { iSplit; [iPureIntro | done]. unfold bv.unsigned.
+        assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+        assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
+        { unfold lenAddr in Hlen. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+        rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
+      iSplitL "Hregs".
+      { iApply (gen_implpre reg_specs _ HpubReg HND HInitReg1 HInitReg2).
+        iExact "Hregs". }
+      iApply (gen_implpre_mem mem_specs _ HInitMem1 HInitMem2).
+      iExact "Hmemdata".
+    - rewrite length_map. exact Hlen.
+  Qed.
+
   Lemma swap_noninterferent :
     noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
       (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
@@ -3224,6 +3318,25 @@ End AdequacyTools.
         try (inversion H; subst; vm_compute; done); discriminate.
     - by cbn; unfold lenAddr.
     - repeat constructor. (* vm_compute was not necessary here. *)
+  Qed.
+
+  (* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
+     address, from the single symbolic-base VC valid_set_X2_to_42_param — no
+     per-address vm_compute.  The (init_addr + 4 < lenAddr) premise is the base
+     bound the fetch obligations need; it is the `(bound)` the plan anticipated. *)
+  Lemma set_X2_to_42_noninterferent_param (init_addr : N) :
+    (init_addr + 4 < lenAddr)%N ->
+    noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
+      (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+      [(X2, false, None)] [].
+  Proof.
+    intros Hbound.
+    eapply gen_contract_noninterferent_param.
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact (valid_set_X2_to_42_param init_addr).
   Qed.
 
 End Examples.
