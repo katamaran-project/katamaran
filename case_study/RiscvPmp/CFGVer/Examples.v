@@ -1074,6 +1074,81 @@ Module Examples.
       ValidCFGVerifierContract countdown_mem_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* ===== Phase 4.2: base-parametric cmovznz4 VC ========================
+       Hand-written parametric contract (Σ = ["p"]) so the data pointers
+       A1/A2/A3 hold p+116 / p+132 / p+148 and the 12 data words live at
+       p+116 .. p+160 (bop.bvadd terms), NOT constants.  peval DOES fold a
+       load address (p+132)+4 into p+136 to match the mem chunk, so solve_vc
+       reduces the whole 29-instruction block to a fixed family of address
+       bounds goals.  The tail below closes them uniformly (offset-agnostic):
+       every base/instr RelVal is SyncVal via its secLeak; the pc-fetch and
+       lower bounds fall to lia against the precondition base bound; the
+       bvadd-wrapped load/store upper bounds go through bv.bin_add_small
+       (no-overflow) then lia + an exp2 transit.  See memory
+       project-cfgver-symbolic-base-poc. *)
+    Definition cmovznz4_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits] ia
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length cmovznz4_instrs))%N :: []))
+        ( asn_pc_eq (term_var "p")
+          ∗ asn.formula (formula_relop bop.le
+               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                  (term_val ty.int (Z.of_N 164)))
+               (term_val ty.int (Z.of_N lenAddr)))
+          ∗ gen_reg_asn (A0, false, None)
+          ∗ (A1 ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 116)))
+          ∗ (A2 ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 132)))
+          ∗ (A3 ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 148)))
+          ∗ gen_reg_asn (A4, false, None) ∗ gen_reg_asn (A5, false, None)
+          ∗ gen_reg_asn (A6, false, None) ∗ gen_reg_asn (A7, false, None)
+          ∗ gen_reg_asn (T0, false, None) ∗ gen_reg_asn (T1, false, None)
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 116)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 120)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 124)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 128)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 132)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 136)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 140)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 144)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 148)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 152)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 156)) ↦ₘ term_var "mv")
+          ∗ asn.exist "mv" ty_xlenbits
+              (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N 160)) ↦ₘ term_var "mv") )
+        cmovznz4_instrs (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
+
+    Lemma valid_cmovznz4_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (cmovznz4_cfg_contract_param ia).
+    Proof.
+      intros. vm_compute. solve_vc.
+      all: repeat match goal with
+           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
+           end.
+      all: cbn in *; unfold bv.unsigned in *.
+      all: try rewrite bv.bin_add_small.
+      all: repeat match goal with
+           | |- context [bv.bin ?b] =>
+               assert_fails (is_var b);
+               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
+           end.
+      all: try lia.
+      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
+    Qed.
+    (* ===== end Phase 4.2 ===== *)
+
   End WithAsnNotations.
 
   (* Public registers for a spec list: registers whose is_pub flag is true.
