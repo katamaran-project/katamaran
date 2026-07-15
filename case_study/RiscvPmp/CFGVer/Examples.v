@@ -828,14 +828,14 @@ Module Examples.
     (* RISC-V calling convention: A0 = cin, A1 = x, A2 = y, A3 = r;         *)
     (* A4-A7, T0, T1 are compiler-chosen scratch registers.                *)
     (*                                                                       *)
-    (* CFGVer currently hardcodes init_addr = 0 (parameterizing the start   *)
-    (* address is a separate, open TODO), so there is no notion yet of an   *)
-    (* arbitrary caller-supplied pointer for x/y/r. Instead of modelling    *)
-    (* them as opaque runtime pointers, A1/A2/A3 are fixed to concrete      *)
-    (* addresses right after the instruction region (116/132/148), exactly *)
-    (* like countdown_mem's loop counter at a fixed address -- this fits    *)
-    (* the existing gen_contract/gen_mem_asn (literal-address) machinery    *)
-    (* unchanged.                                                            *)
+    (* This concrete contract fixes A1/A2/A3 to concrete addresses right     *)
+    (* after the instruction region (116/132/148), exactly like              *)
+    (* countdown_mem's loop counter at a fixed address -- this fits the      *)
+    (* gen_contract/gen_mem_asn (literal-address) machinery. The start       *)
+    (* address is no longer hardcoded: cmovznz4_noninterferent_param proves  *)
+    (* noninterference for an ARBITRARY base, with base-relative x/y/r       *)
+    (* pointers (see cmovznz4_*_specs_rel), and this base-0 contract is a     *)
+    (* corollary of it.                                                       *)
     (*                                                                       *)
     (* Trailing `ret` (jalr x0, ra, 0) is deliberately NOT included: its     *)
     (* target is the symbolic link register `ra`, and sexec_cfg_addr needs  *)
@@ -3553,36 +3553,6 @@ End AdequacyTools.
     - repeat constructor. (* vm_compute was not necessary here. *)
   Qed.
 
-  Lemma cmovznz4_noninterferent :
-    noninterferent_strong init_addr cmovznz4_instrs (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
-      cmovznz4_reg_specs cmovznz4_mem_specs.
-  Proof.
-    eapply gen_contract_noninterferent.
-    5: exact valid_cmovznz4_cfg_contract.
-    - apply Prelude.nodup_fixed; reflexivity.
-    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H; (* I probably don't need this big of a case-split but it works. TODO: Hide this in a tactic or figure out how to prove it generally. *)
-        try (inversion H; subst; vm_compute; done); discriminate.
-    - by cbn; unfold lenAddr.
-    - repeat constructor. (* vm_compute was not necessary here. *)
-  Qed.
-
-  (* Step 5 (init_addr parameterization): cmovznz4, fully end-to-end
-     (noninterference + leakage equivalence, not just the contract-level VC),
-     loaded at the genuinely nonzero start address cmovznz4_start = 256. *)
-  Lemma cmovznz4_noninterferent_at_start :
-    noninterferent_strong cmovznz4_start cmovznz4_instrs
-      (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs)
-      cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
-  Proof.
-    eapply gen_contract_noninterferent.
-    5: exact valid_cmovznz4_cfg_contract_at_start.
-    - apply Prelude.nodup_fixed; reflexivity.
-    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H; (* I probably don't need this big of a case-split but it works. TODO: Hide this in a tactic or figure out how to prove it generally. *)
-        try (inversion H; subst; vm_compute; done); discriminate.
-    - by cbn; unfold lenAddr.
-    - repeat constructor. (* vm_compute was not necessary here. *)
-  Qed.
-
   (* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
      address, from the single symbolic-base VC valid_set_X2_to_42_param — no
      per-address vm_compute.  The (init_addr + 4 < lenAddr) premise is the base
@@ -3623,6 +3593,40 @@ End AdequacyTools.
     - exact Hb.
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
     - exact (valid_cmovznz4_cfg_contract_param init_addr).
+  Qed.
+
+  (* The two concrete cmovznz4 results are now corollaries of the universal-base
+     theorem above: the single source of truth is valid_cmovznz4_cfg_contract_param.
+     The concrete reg/mem specs are exactly the base-relative specs concretized at
+     the respective base (init_addr = 0, and cmovznz4_start = 256), so the
+     conclusions coincide definitionally (checked by vm_compute). *)
+  Lemma cmovznz4_noninterferent :
+    noninterferent_strong init_addr cmovznz4_instrs (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
+      cmovznz4_reg_specs cmovznz4_mem_specs.
+  Proof.
+    assert (Hr : cmovznz4_reg_specs = map (concretize_reg init_addr) cmovznz4_reg_specs_rel)
+      by (vm_compute; reflexivity).
+    assert (Hm : cmovznz4_mem_specs = map (concretize_mem init_addr) cmovznz4_mem_specs_rel)
+      by (vm_compute; reflexivity).
+    rewrite Hr Hm.
+    apply cmovznz4_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
+  Qed.
+
+  (* Fully end-to-end at the genuinely nonzero start address cmovznz4_start = 256,
+     as a corollary of the universal-base version. *)
+  Lemma cmovznz4_noninterferent_at_start :
+    noninterferent_strong cmovznz4_start cmovznz4_instrs
+      (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs)
+      cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
+  Proof.
+    assert (Hr : cmovznz4_reg_specs_at_start = map (concretize_reg cmovznz4_start) cmovznz4_reg_specs_rel)
+      by (vm_compute; reflexivity).
+    assert (Hm : cmovznz4_mem_specs_at_start = map (concretize_mem cmovznz4_start) cmovznz4_mem_specs_rel)
+      by (vm_compute; reflexivity).
+    rewrite Hr Hm.
+    apply cmovznz4_noninterferent_param.
+    unfold cmovznz4_start, lenAddr; lia.
   Qed.
 
 End Examples.
