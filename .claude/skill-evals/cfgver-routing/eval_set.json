@@ -1,0 +1,126 @@
+{
+  "purpose": "Cross-skill routing eval for the 7 cfgver-* skills. Each query has ONE expected winner among: cfgver, cfgver-executor, cfgver-refinement, cfgver-soundness, cfgver-contracts, cfgver-endtoend, cfgver-memory, rocq (generic plugin skill), rocq:golf, or none. A cfgver-* skill firing on a query expected elsewhere = mis-route.",
+  "notes": "Q16 is a deliberate easy sanity check. Q19 also probes a known body-content gap (_tbl machinery) but routing-wise executor is correct. Q8 expects cfgver-wp2 (soundness/wp2 split). Skill set under test: 11 cfgver-family skills + gmap-pitfalls (2026-07-16 restructure: rsolve craft split from refinement; endtoend-internals added; registers.md is a references file, not a skill). Q1/Q9 expect cfgver-rsolve. Q4/Q10/Q20 expect the contracts USER GUIDE; a query about modifying gen_implpre itself would expect cfgver-contracts-internals (no such query yet — consider adding one).",
+  "evals": [
+    {
+      "id": 1,
+      "query": "rsolve has been spinning for like 5 minutes and then the rocq-mcp pet died with memory_exhausted. I'm in CFGVer/Verifier.v working on the relational lemma near rexec_cfg_addr. how do I get past this?",
+      "expected": "cfgver-rsolve",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 2,
+      "query": "wait, how are instructions stored in CFGVer now? I thought it was a list AST with a base offset but sexec_cfg_addr takes some kind of map. can you explain what happens on lookup when the pc isn't concrete",
+      "expected": "cfgver-executor",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 3,
+      "query": "my new CFGVer example loads two secret words from data memory right after the code. what do I need to set up — data_specs, public addresses, something else — to get the end-to-end noninterference proof through?",
+      "expected": "cfgver-memory",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 4,
+      "query": "I'm writing the precondition for a new Katamaran program: x10 and x11 should be public, x12 private. is there a generator for this or do I hand-write the assertion for each register?",
+      "expected": "cfgver-contracts",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 5,
+      "query": "can you walk me through how we get from valid_countdown_cfg_contract all the way down to the leakage_trace equality? I want to understand each hop in the chain and which lemma does what",
+      "expected": "cfgver-soundness",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 6,
+      "query": "register-only program in CFGVer/Examples.v; after eapply cfg_instrs_endToEnd my ImplPre goal is a pile of pure-prop-and-emp fragments and the second iFrame leaves a residual I can't close",
+      "expected": "cfgver-endtoend",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 7,
+      "query": "I'm picking up the CFGVer case study for the first time next week. where should I start reading and what are the moving parts?",
+      "expected": "cfgver",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 8,
+      "query": "in my adequacy proof, rewrite semWP2_unfold; cbn left me staring at a match on stm_to_val with env.drop_cat terms in the val-cross-fail bullet. what's the right move here?",
+      "expected": "cfgver-wp2",
+      "kind": "should-trigger (library skill, direct hit)"
+    },
+    {
+      "id": 9,
+      "query": "I added a new symbolic operation to the CFGVer executor and now rsolve can't close the relational goal for it. I think I need a RefineCompat instance — what's the template and where do these live?",
+      "expected": "cfgver-rsolve",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 10,
+      "query": "how do I mark x11 as public in my CFGVer contract so its value is allowed to leak? is that the secLeakvar thing in the precondition?",
+      "expected": "cfgver-contracts",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 11,
+      "query": "which lemma splits mem_res2_without_leak into the instruction part and the data words? I keep conflating it with instrs_of_list and grabbing the wrong one",
+      "expected": "cfgver-memory",
+      "kind": "near-miss (executor keywords)"
+    },
+    {
+      "id": 12,
+      "query": "getting 'failed to unify' in theories/SmallStep/Step.v on a plain list append lemma, nothing to do with the case study. can you take a look",
+      "expected": "rocq",
+      "kind": "should-NOT-trigger cfgver-*"
+    },
+    {
+      "id": 13,
+      "query": "is there a stdlib or stdpp lemma like N.mod_le already? search for me before I prove it myself",
+      "expected": "rocq",
+      "kind": "should-NOT-trigger cfgver-*"
+    },
+    {
+      "id": 14,
+      "query": "this proof of swap_endToEnd is like 40 lines of iFrame and eauto spaghetti, can you golf it down",
+      "expected": "rocq:golf",
+      "kind": "should-NOT-trigger cfgver-* (competition: CFGVer lemma name, golfing intent)"
+    },
+    {
+      "id": 15,
+      "query": "run Print Assumptions on cmovznz4_noninterferent and tell me whether anything besides pure_decode and mmioenv shows up",
+      "expected": "rocq",
+      "kind": "should-NOT-trigger cfgver-* (CFGVer lemma name, generic axiom check)"
+    },
+    {
+      "id": 16,
+      "query": "when am I allowed to rewrite interp_mem_with_memory into interp_mem_with_public_memory — what's the side condition on the public addresses?",
+      "expected": "cfgver-memory",
+      "kind": "sanity check (verbatim keywords)"
+    },
+    {
+      "id": 17,
+      "query": "what's the actual difference between WP2_loop and myWP2_loop, and why does the adequacy proof need the my-variant? I'm trying to reuse exitCond_WP2_loop for a new example and it won't apply",
+      "expected": "cfgver-soundness",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 18,
+      "query": "for the final noninterference theorem I have premises like read_register gamma1 pc = of_N init_addr and cur_privilege = Machine on both sides — where do these actually get discharged, does eauto pick them up or do I prove them by hand?",
+      "expected": "cfgver-endtoend",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 19,
+      "query": "why does the CFGVer executor error out when term_get_val on the pc returns None? my pc is the symbolic term p+8 in the parametric-base example and the whole VC dies there",
+      "expected": "cfgver-executor",
+      "kind": "should-trigger (also probes known _tbl body gap)"
+    },
+    {
+      "id": 20,
+      "query": "I want my contract's precondition to also own the four data words at base+116 as private values — is that the gen_mem_pre thing in the contract, or do I need the interp_mem ownership from the memory side?",
+      "expected": "cfgver-contracts",
+      "kind": "near-miss (contracts/memory seam; requires description fix #3)"
+    }
+  ]
+}

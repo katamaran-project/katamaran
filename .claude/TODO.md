@@ -1,6 +1,7 @@
 # Next session briefing
 
-CLAUDE.md and the `/katamaran` skill are auto-loaded — read them for full context.
+CLAUDE.md is auto-loaded; the detailed CFGVer reference lives in the modular
+`.claude/skills/cfgver*` skills (see CLAUDE.md header for the map).
 This file tracks the approved task list and current starting point.
 
 ---
@@ -55,6 +56,10 @@ use it for future examples instead of hand-transcribing.
   that actually needs real pointer arguments.
 
 **Cleanup / refactoring:**
+- **[approved 2026-07-16, own session] Remove dead code from `CFGVer/Verifier.v`:**
+  `semTripleCFG`, `instrAligned`, and the dead WP2-based `sound_*` lemmas (the
+  skills already describe them as "pending cleanup"). Grep for usages first,
+  then recompile `Verifier.v` (keep_vo) + full `Examples.v` to confirm.
 - Consolidate everything in CFGVer, so BlockVer can be deleted.
 - Rename everything in CFGVer to remove mentions to BlockVer.
 - Remove `sound_sblock_verification_condition` in favor of
