@@ -1,6 +1,6 @@
 # Two-world register machinery (reference)
 
-Loaded on demand from parent skills (cfgver-contracts-internals,
+Loaded on demand from parent skills (cfgver-gen-contract-internals,
 cfgver-endtoend-internals) — never self-triggers. The two-world (γ1/γ2) register
 ownership predicates used across the contract generator and the end-to-end wiring.
 

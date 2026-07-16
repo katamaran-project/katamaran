@@ -1,91 +1,96 @@
 ---
 name: cfgver-contracts
 description: >
-  How to SPECIFY a program for Katamaran CFGVer verification — the gen_contract user
-  guide. Use when declaring which registers or memory words are public, private, or
-  pinned to a concrete value: reg_spec (RegIdx * is_public * option value),
-  mem_full_spec (address * is_public * option value), extra_exit_offs for
-  non-fall-through exits, the gen_contract call itself, secLeakvar, and the five side
-  premises of gen_contract_noninterferent (NoDup, data-address layout, length bound,
-  exit offsets, the VC). NOT for the generator's internal machinery (gen_reg_asn /
-  gen_implpre — cfgver-contracts-internals) and NOT for the Iris memory resources
-  supplied at proof time (interp_mem_* — cfgver-memory).
+  Katamaran CFGVer contracts in general — what a CFGVerifierContract IS and how to
+  write one by hand. Use when asking about the contract record and its fields
+  (cfg_init_addr, cfg_placement, cfg_exits, cfg_precondition, cfg_instrs,
+  cfg_exitCond, cfg_fuel), choosing the logical context Σ ([ctx] concrete vs
+  ["p"∷ty_xlenbits] parametric base), why the symbolic VC ignores cfg_init_addr and
+  cfg_exitCond, ValidCFGVerifierContract / Valid_CFG_VC / DebugCFGVerifierContract,
+  or hand-writing a contract without the generator (as for
+  cmovznz4_cfg_contract_param) — including the assertion vocabulary: ↦ᵣ / ↦ₘ
+  points-to, asn.exist, secLeakvar (leak permission for public values),
+  asn_init_pc, and base-bound formulas. NOT for the gen_contract generator's spec
+  lists (cfgver-gen-contract) and NOT for discharging VC residuals (cfgver-solve-vc).
 ---
 
-# Specifying a program: the `gen_contract` user guide
+# CFGVer contracts in general
 
-Everything you *write* to put a new program through the verifier. How the generator
-works inside is **cfgver-contracts-internals**; the Iris resources you supply when
-*proving* are **cfgver-memory** (data) and **cfgver-endtoend** (wiring).
+What a contract *is* — independent of the `gen_contract` generator
+(→ **cfgver-gen-contract**). Definitions in `Examples.v` (~line 360).
 
-## Register specs
-
-```coq
-Definition reg_spec : Type := RegIdx * bool * option (Val ty_xlenbits).
-```
-
-Per register `(r, is_public, opt_v)`:
-- `opt_v = Some v` — the register is **pinned**: precondition asserts it holds
-  exactly `v` (no existential, no leak permission).
-- `opt_v = None, is_public = true` — **public**: existentially quantified value
-  with `secLeakvar`, i.e. attacker-visible / allowed to influence leakage.
-- `opt_v = None, is_public = false` — **private**: existentially quantified secret;
-  must NOT influence leakage — that is what the verifier checks.
-
-## Memory-word specs (contract side)
+## The record
 
 ```coq
-Definition mem_full_spec : Type :=
-  Val ty_xlenbits * bool * option (Val ty_xlenbits).
+Record CFGVerifierContract {Σ} :=
+  MkCFGVerifierContract
+  { cfg_init_addr     : N
+  ; cfg_placement     : Term Σ ty_xlenbits
+  ; cfg_exits         : list (Term Σ ty_xlenbits)
+  ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
+  ; cfg_instrs        : list AST
+  ; cfg_exitCond      : bv xlenbits -> bool
+  ; cfg_fuel          : nat
+  }.
 ```
 
-Same triple semantics for a data word at the given address (`↦ₘ` instead of `↦ᵣ`).
-These generate the `gen_mem_pre` conjunct of the precondition. Data words must sit
-**contiguously right after the instruction region** (see the `HDataAddrs` premise
-below and **cfgver-memory** for the proof-time counterpart).
+| Field | Meaning |
+|---|---|
+| `Σ` | logical context: `[ctx]` for a concrete contract; `["p"∷ty_xlenbits]` for a parametric base (the base is then `term_var "p"`) |
+| `cfg_placement` | where the code sits, as a **term**: `term_val … (bv.of_N ia)` concrete, `term_var "p"` parametric |
+| `cfg_exits` | exit addresses as **terms** (built by `exits_of_offs` from base-relative offsets) — this is what the symbolic executor's exit choice checks against |
+| `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
+| `cfg_instrs` | the program, a `list AST` placed at `cfg_placement` |
+| `cfg_init_addr`, `cfg_exitCond` | **NOT used by the symbolic VC** (source comment, `Examples.v:347`) — carried for the end-to-end statement |
 
-## The contract
+**The ignored-fields subtlety:** the VC dispatches exits against the *term table*
+`cfg_exits`, not against `cfg_exitCond`. The two are reconnected only at the
+end-to-end stage, by the `HexitOffs` premise of `gen_contract_noninterferent`
+(via `etable_faith_exits_of_offs`): every exit term must satisfy `exitCond`. A
+hand-written contract whose `cfg_exits` and `cfg_exitCond` disagree will pass the
+VC and fail there.
+
+## Validity
 
 ```coq
-gen_contract (init_addr : N)
-             (reg_specs : list reg_spec)
-             (mem_specs : list mem_full_spec)
-             (instrs : list AST)
-             (extra_exit_offs : list N)
-             (ec : bv xlenbits -> bool)
-             (fl : nat) : CFGVerifierContract
+Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
+  cfg_map c Valid_CFG_VC.
+(* Valid_CFG_VC … := safeE (postprocess (CFG_VC_triple p exits P i fl)). *)
 ```
 
-- `extra_exit_offs`: base-relative byte offsets of exit addresses **beyond** the
-  fall-through one (always included automatically). Needed when control flow can
-  leave the block other than by falling off the end — e.g. a branch whose taken
-  target lies past the block (`jump_if_zero`). Register-straight-line programs
-  pass `[]`.
-- `fl` (fuel) must exceed the number of instruction steps actually executed.
-- Precondition assembled: `asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗
-  gen_mem_pre mem_specs`.
+Discharge pattern: `Proof. vm_compute. solve_vc. Qed.` — residual patterns and
+failure modes in **cfgver-solve-vc**.
 
-## Discharging the VC and the end lemma
+**Debugging a failing VC:** `DebugCFGVerifierContract c` is the same VC wrapped as
+a `VerificationCondition` instead of `safeE` — state it as a `Lemma`, `vm_compute`,
+and read the residual instead of guessing.
 
-The VC is one line: `Proof. vm_compute. solve_vc. Qed.`
-(residual patterns → the **cfgver** hub).
+## Hand-writing a contract: the assertion vocabulary
 
-The end lemma is `eapply gen_contract_noninterferent` with **five** side premises:
+A hand-written precondition is built from exactly what the generator would emit
+(cf. `gen_reg_asn`/`gen_mem_asn` in **cfgver-gen-contract-internals**):
 
-| Premise | What it demands | Typical discharge |
-|---|---|---|
-| `HND` | `NoDup (map reg_spec_idx reg_specs)` | `vm_compute`-style / `repeat constructor` |
-| `HDataAddrs` | data word i sits at `init_addr + 4*|instrs| + 4*i` | case split per entry; `f_equal; lia` if base symbolic |
-| `Hlen` | `init_addr + 4*|instrs| + 4*|mem_specs| < lenAddr` | `unfold lenAddr; lia` |
-| `HexitOffs` | `exitCond` true at fall-through + every extra exit offset | `Forall` constructors + `vm_compute` |
-| `valid_block` | the `ValidCFGVerifierContract` VC | the one-line VC lemma |
+| Assertion | Meaning |
+|---|---|
+| `r ↦ᵣ t` / `t_addr ↦ₘ t_val` | register / memory-word points-to (terms) |
+| `asn.exist "v" ty_xlenbits (…)` | existentially quantified value ("some value") |
+| `secLeakvar "v"` | **leak permission**: the value of `"v"` is public — allowed to influence leakage. Its *absence* is what makes a value secret |
+| `asn_init_pc t` | the start pc `"a"` equals `t` |
+| `asn.formula (formula_relop …)` | pure side conditions — e.g. the parametric base bound `unsigned p + size ≤ lenAddr` |
 
-Conclusion: `noninterferent_strong init_addr instrs exitCond reg_specs mem_specs`.
+So: public register = `asn.exist "v" … (r ↦ᵣ term_var "v" ∗ secLeakvar "v")`;
+private = the same without `secLeakvar`; pinned = `r ↦ᵣ term_val … v` directly.
 
-## Parametric base
+Exemplar: `cmovznz4_cfg_contract_param` (`Examples.v`) — `Σ = ["p"∷ty_xlenbits]`,
+placement `term_var "p"`, exits at `bvadd p (of_N off)` terms, precondition with
+the base bound plus register/memory assertions. Two rules of thumb:
 
-For a contract over a *symbolic* base address (`term_var "p"`), the `_rel` variants
-exist (`gen_contract_rel`, `reg_spec_rel` with `PVBaseOff` offsets,
-`gen_contract_noninterferent_rel`) — not yet covered by a skill; see the
-"PARAMETRIC-BASE SUPPORT — READING GUIDE" blocks in `Examples.v` and memory
-`project-cfgver-symbolic-base-poc`.
+- Build addresses as `bop.bvadd (term_var "p") (term_val … (bv.of_N off))` — only
+  concrete offsets under `bv.of_N`; a symbolic argument to `bv.of_N` makes
+  `vm_compute` diverge.
+- There is also a local notation `{{ P }} i @cfg[ ec , fl ]` for concrete
+  contracts at `init_addr` (see `Examples.v:388`).
+
+**Consuming a contract:** the once-and-for-all route is
+`gen_contract_noninterferent` (generator contracts, → **cfgver-gen-contract**);
+hand-written contracts wire through `cfg_instrs_endToEnd` (→ **cfgver-endtoend**).

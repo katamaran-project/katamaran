@@ -21,6 +21,39 @@ symbolic VC  --(refinement: rexec, this skill)---------->  concrete execution
              --(Iris soundness: cfgver-soundness)-------->  myWP2_loop / leakage
 ```
 
+## What cexec mirrors from sexec — and what it doesn't
+
+Side by side (`Verifier.v:234` vs `:491`), the executors share their entire
+monadic skeleton:
+
+| Decision point | `sexec_cfg_addr` (symbolic) | `cexec_cfg_addr` (concrete) |
+|---|---|---|
+| fuel | `match fuel` → `error` / step | identical |
+| pc probe | `term_get_val apc` — *is the term a literal?* | `ty.RVToOption apc` — *do both worlds agree (SyncVal)?* |
+| choice | `angelic_binary` exit / execute | identical |
+| exit branch | `if exitCond v then pure apc else error` | identical |
+| dispatch | `instrs !! v` → `error` / instruction | identical |
+| step | `⟨θ1⟩ apc' <- sexec_instruction i apc ;; recurse` | `apc' <- cexec_instruction i apc ;; recurse` |
+
+**MIRROR (mandatory):** every bind, case split, and angelic choice, in the same
+order. `rexec_cfg_addr` and `rsolve` pair the two programs *structurally* — one
+`refine_bind` per bind, one instance per choice point. A skewed skeleton (fused
+binds, reordered branches, an extra case on one side) makes instance search
+diverge — the `memory_exhausted` failure in **cfgver-rsolve**.
+
+**TRANSLATE (same shape, shifted meaning):** the pc probe. Symbolic
+"term is a concrete literal" becomes concrete "the two-world `RelVal` is a
+`SyncVal`". Keep the decision point; translate its predicate.
+
+**DON'T MIRROR (symbolic-only bookkeeping):** world-indexed binds (`⟨θ1⟩`
+substitutions), path conditions, and error-message payloads (`amsg` with
+`debug_string_pathcondition`; concrete errors are a bare `error`). These have no
+concrete counterpart and adding analogues would only break the pairing.
+
+Above the executors sit `cexec_triple_addr` (demonic Σ/pc intro → `produce req` →
+run → `consume ens`) and `cblock_verification_condition = CHeapSpec.run …` — note
+the source comment: `run` performs **no leakcheck**.
+
 ## `RefineCompat` — the relation structure
 
 Relational goals between symbolic and concrete programs are closed instance-by-

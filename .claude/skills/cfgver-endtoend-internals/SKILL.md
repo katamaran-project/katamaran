@@ -66,6 +66,14 @@ argument is `γ1 : RegStore`) but **explicit** in `cfg_instrs_safe_with_mem`
 (explicit: `γ1, γ2, data_specs, μ1, μ2, block`). Passing `data_specs` where a
 `RegStore` is expected is the tell.
 
+## What the wiring proofs carry and materialize
+
+The chain threads the gmap instruction ownership
+`ptsto_instrs (instrs_of_list (bv.of_N init_addr) instrs')`, materialized from raw
+memory by `instrsMemory` (code only) / `instrsAndDataMemory` (code + data words) /
+`intro_ptsto_instrs` — internally via `big_sepM_insert` with side condition
+`instrs_of_list_fresh`.
+
 ## Register-machinery reference
 
 The two-world register ownership predicates these proofs manipulate

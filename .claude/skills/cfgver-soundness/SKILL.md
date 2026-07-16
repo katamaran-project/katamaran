@@ -24,7 +24,7 @@ semWP2 proof mechanics behind the adequacy layer are in **cfgver-wp2**.
 Every example's end lemma is
 `<prog>_noninterferent : noninterferent_strong init_addr instrs exitCond reg_specs mem_specs`,
 proved in one shot by `eapply gen_contract_noninterferent` plus its side premises
-(→ **cfgver-contracts** for the premise list). Underneath:
+(→ **cfgver-gen-contract** for the premise list). Underneath:
 
 ```
 valid_<prog>_cfg_contract   (vm_compute. solve_vc.)   — the symbolic VC over

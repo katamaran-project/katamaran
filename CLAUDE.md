@@ -4,16 +4,18 @@ Katamaran is a Rocq/Coq framework for formal security verification of RISC-V PMP
 The active development area is `case_study/RiscvPmp/CFGVer/`.
 
 > **Detailed CFGVer reference lives in modular skills under `.claude/skills/`.**
-> Start at the **`cfgver`** hub (routing map + the new-example recipe + `solve_vc`
-> residuals + importing + example status), which routes to dependency-layered
-> sub-skills that auto-load only when relevant:
+> Start at the **`cfgver`** hub (routing map + importing idiom + example status),
+> which routes to dependency-layered sub-skills that auto-load only when relevant:
+> - **`cfgver-new-example`** — the 6-step recipe for verifying a new program (most common task)
 > - **`cfgver-executor`** — symbolic executor `sexec_cfg_addr` + VC (gmap store)
-> - **`cfgver-refinement`** — concrete mirror `cexec_cfg_addr`, `RefineCompat`, `rexec_cfg_addr`
+> - **`cfgver-refinement`** — concrete mirror `cexec_cfg_addr` (what to mirror), `RefineCompat`, `rexec_cfg_addr`
 > - **`cfgver-rsolve`** — driving/debugging the `rsolve` tactic (library skill)
 > - **`cfgver-soundness`** — the soundness chain (VC → myWP2_loop → leakage)
 > - **`cfgver-wp2`** — binary WP2 proof mechanics (`semWP2_unfold`; library skill)
-> - **`cfgver-contracts`** — specifying programs with `gen_contract` (user guide)
-> - **`cfgver-contracts-internals`** — the generator machinery (`gen_implpre` etc.; library skill)
+> - **`cfgver-contracts`** — the `CFGVerifierContract` record + hand-written contracts
+> - **`cfgver-gen-contract`** — the generator user guide (spec triples, 5 premises)
+> - **`cfgver-gen-contract-internals`** — the generator machinery (`gen_implpre` etc.; library skill)
+> - **`cfgver-solve-vc`** — VC discharge: residuals, `DebugCFGVerifierContract`, tight-fuel `False`
 > - **`cfgver-endtoend`** — `cfg_instrs_endToEnd` wiring + `ImplPre` (register path)
 > - **`cfgver-endtoend-internals`** — the wiring lemmas' proof bodies (library skill)
 > - **`cfgver-memory`** — public-memory infra + data-memory end-to-end (`_with_mem` variants)
@@ -118,6 +120,12 @@ every removed row: `.claude/archive/claude-md-prune-2026-07-16.md`):
 
 Keep `CLAUDE.md` lean — it loads every session. It holds only always-relevant facts;
 everything else lives in the skills.
+
+**Abstraction-level rule:** document each concept ONLY at the level where its
+audience touches it (e.g. `secLeakvar` is assertion-level: it belongs to
+hand-written contracts, not to the gen_contract spec-list guide). In user-facing
+skills, lower-level mechanisms may appear only as a NOT-clause or a one-line
+"under the hood" pointer; the mechanism itself goes in the `-internals` skill.
 
 **Where a new piece of knowledge goes:**
 - Symptom→fix → the matching pitfalls skill (`rocq-`/`bv-`/`gmap-pitfalls`,

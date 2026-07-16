@@ -1,6 +1,6 @@
 {
-  "purpose": "Cross-skill routing eval for the 7 cfgver-* skills. Each query has ONE expected winner among: cfgver, cfgver-executor, cfgver-refinement, cfgver-soundness, cfgver-contracts, cfgver-endtoend, cfgver-memory, rocq (generic plugin skill), rocq:golf, or none. A cfgver-* skill firing on a query expected elsewhere = mis-route.",
-  "notes": "Q16 is a deliberate easy sanity check. Q19 also probes a known body-content gap (_tbl machinery) but routing-wise executor is correct. Q8 expects cfgver-wp2 (soundness/wp2 split). Skill set under test: 11 cfgver-family skills + gmap-pitfalls (2026-07-16 restructure: rsolve craft split from refinement; endtoend-internals added; registers.md is a references file, not a skill). Q1/Q9 expect cfgver-rsolve. Q4/Q10/Q20 expect the contracts USER GUIDE; a query about modifying gen_implpre itself would expect cfgver-contracts-internals (no such query yet — consider adding one).",
+  "purpose": "Cross-skill routing eval for the cfgver-* skill family. Each query has ONE expected winner among the cfgver skills, the generic pitfall skills (rocq-/bv-/gmap-pitfalls, iris-proofmode), the rocq plugin skills, or none. A skill firing on a query expected elsewhere = mis-route.",
+  "notes": "Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3.",
   "evals": [
     {
       "id": 1,
@@ -23,7 +23,7 @@
     {
       "id": 4,
       "query": "I'm writing the precondition for a new Katamaran program: x10 and x11 should be public, x12 private. is there a generator for this or do I hand-write the assertion for each register?",
-      "expected": "cfgver-contracts",
+      "expected": "cfgver-gen-contract",
       "kind": "should-trigger"
     },
     {
@@ -60,7 +60,10 @@
       "id": 10,
       "query": "how do I mark x11 as public in my CFGVer contract so its value is allowed to leak? is that the secLeakvar thing in the precondition?",
       "expected": "cfgver-contracts",
-      "kind": "should-trigger"
+      "kind": "seam probe: mixed-level query (intent=generator, keyword=secLeakvar); either contracts or gen-contract acceptable",
+      "accept_also": [
+        "cfgver-gen-contract"
+      ]
     },
     {
       "id": 11,
@@ -119,8 +122,80 @@
     {
       "id": 20,
       "query": "I want my contract's precondition to also own the four data words at base+116 as private values — is that the gen_mem_pre thing in the contract, or do I need the interp_mem ownership from the memory side?",
-      "expected": "cfgver-contracts",
+      "expected": "cfgver-gen-contract",
       "kind": "near-miss (contracts/memory seam; requires description fix #3)"
+    },
+    {
+      "id": 21,
+      "query": "iApply keeps failing with 'cannot apply' even though the lemma literally matches my goal — it's a Definition that unfolds to a wand. what's going on?",
+      "expected": "iris-proofmode",
+      "kind": "should-trigger (new skill)"
+    },
+    {
+      "id": 22,
+      "query": "in BinaryAdequacy.v my iMod fails with 'cannot eliminate modality match i with inl/inr' right after a case_match in the adequacy proof",
+      "expected": "cfgver-wp2",
+      "kind": "seam: iris-proofmode also lists this symptom; adequacy/BinaryAdequacy context should route to wp2"
+    },
+    {
+      "id": 23,
+      "query": "why does iFrame sometimes just close the whole goal, and then my trailing done. errors with No such goal?",
+      "expected": "iris-proofmode",
+      "kind": "should-trigger (new skill)"
+    },
+    {
+      "id": 24,
+      "query": "getting 'Wrong bullet -: Current bullet - is not finished' in the middle of my induction even though the structure looks right to me",
+      "expected": "rocq-pitfalls",
+      "kind": "should-trigger; competes with rocq:rocq (build debugging)"
+    },
+    {
+      "id": 25,
+      "query": "my tactic try (eapply lemma_foo; eauto) sometimes leaves weird side-condition goals behind instead of just failing cleanly — why?",
+      "expected": "rocq-pitfalls",
+      "kind": "should-trigger (new skill)"
+    },
+    {
+      "id": 26,
+      "query": "lia says Cannot find witness on a tiny bound below bv.exp2 xlenbits — the numbers involved are small, this should be trivial",
+      "expected": "bv-pitfalls",
+      "kind": "seam: 'Cannot find witness' appears in gmap-pitfalls desc; bv.exp2 should route to bv-pitfalls"
+    },
+    {
+      "id": 27,
+      "query": "destruct (m !! k) binds the option but the match in the goal doesn't reduce, and rewrite says found no subterm",
+      "expected": "gmap-pitfalls",
+      "kind": "should-trigger (new skill)"
+    },
+    {
+      "id": 28,
+      "query": "I want to extend gen_implpre to handle a new kind of register spec — where's the induction and what do I need to touch?",
+      "expected": "cfgver-gen-contract-internals",
+      "kind": "internals routing"
+    },
+    {
+      "id": 29,
+      "query": "I'm adding an extra premise to cfg_instrs_endToEnd_with_memory and need to redo its proof body — how does that double iFrame ending work there?",
+      "expected": "cfgver-endtoend-internals",
+      "kind": "internals routing; iris-proofmode competes on double-iFrame"
+    },
+    {
+      "id": 30,
+      "query": "here's a fresh RV32I routine from Compiler Explorer — I want to prove it noninterferent end-to-end like we did for cmovznz4",
+      "expected": "cfgver-new-example",
+      "kind": "should-trigger (new skill)"
+    },
+    {
+      "id": 31,
+      "query": "vm_compute on my valid_foo_cfg_contract goal leaves VerificationConditionWithErasure False — how do I see what's actually wrong?",
+      "expected": "cfgver-solve-vc",
+      "kind": "should-trigger (new skill)"
+    },
+    {
+      "id": 32,
+      "query": "what are the fields of CFGVerifierContract exactly, and how do I write one by hand with a symbolic base register?",
+      "expected": "cfgver-contracts",
+      "kind": "should-trigger (contracts general)"
     }
   ]
 }

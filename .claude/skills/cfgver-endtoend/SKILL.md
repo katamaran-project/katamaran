@@ -7,7 +7,7 @@ description: >
   length bound), the eapply call pattern with its implicit-argument traps, and the
   ImplPre proof obligation with its gen_contract patterns (including empty specs).
   Programs built with gen_contract normally use gen_contract_noninterferent instead
-  (cfgver-contracts); reach for this when wiring a hand-written contract or debugging
+  (cfgver-gen-contract); reach for this when wiring a hand-written contract or debugging
   the ImplPre goal. For programs that read/write DATA MEMORY see cfgver-memory
   (the _with_mem / _with_memory variants).
 ---
@@ -19,7 +19,7 @@ for a program that touches only registers.
 
 **Shortcut for generated contracts:** if the contract came from `gen_contract`, you
 normally never call this directly — `gen_contract_noninterferent`
-(→ **cfgver-contracts**) wraps the whole wiring. This skill matters for hand-written
+(→ **cfgver-gen-contract**) wraps the whole wiring. This skill matters for hand-written
 contracts and for understanding/debugging the `ImplPre` obligation.
 
 > **Data memory?** For programs that read/write data memory use the
@@ -34,9 +34,7 @@ contracts and for understanding/debugging the `ImplPre` obligation.
 ## `cfg_instrs_endToEnd`
 
 Bundles adequacy + memory splitting + `cfg_instrs_safe` so that program-specific
-proofs only supply `ImplPre`. The chain carries the gmap
-`ptsto_instrs (instrs_of_list (bv.of_N init_addr) instrs')`, materialized by
-`instrsMemory`.
+proofs only supply `ImplPre`.
 
 ```coq
 Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
@@ -86,7 +84,7 @@ all: try eauto.
 
 ## The `ImplPre` obligation for `gen_contract` contracts
 
-When `block = gen_contract …` (→ **cfgver-contracts**), the goal after `cbn` is a
+When `block = gen_contract …` (→ **cfgver-gen-contract**), the goal after `cbn` is a
 pair of `⌜P⌝ ∧ emp` fragments (one per precondition conjunct) followed by
 `cur_privilege` and `interp_inv_constant_time`.
 

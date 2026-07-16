@@ -1,20 +1,20 @@
 ---
-name: cfgver-contracts-internals
+name: cfgver-gen-contract-internals
 description: >
   Internal machinery of the Katamaran CFGVer contract generator — library skill,
-  normally reached from cfgver-contracts. Consult when MODIFYING or extending the
+  normally reached from cfgver-gen-contract. Consult when MODIFYING or extending the
   generator itself, not when merely specifying a program: the gen_reg_asn / gen_pre /
   gen_mem_asn / gen_mem_pre assertion builders, gen_public_regs and reg_convert, the
   once-and-for-all gen_implpre lemma (Iris register ownership entails the interpreted
   gen_pre), declare_public_registers, and the declare_pub_head_true /
   declare_pub_tail helpers with their implicit-argument and Forall_nil pitfalls.
-  For USING gen_contract see cfgver-contracts.
+  For USING gen_contract see cfgver-gen-contract.
 ---
 
 # Contract-generator internals
 
 How `gen_contract`'s pieces are built and proved. Users specifying a program need
-only **cfgver-contracts**; this skill is for changing the machinery (new spec forms,
+only **cfgver-gen-contract**; this skill is for changing the machinery (new spec forms,
 new assertion shapes, extending `gen_implpre`).
 
 All definitions live in `Examples.v` inside `WithAsnNotations`.

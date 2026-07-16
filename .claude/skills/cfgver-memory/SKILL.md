@@ -9,18 +9,18 @@ description: >
   equivalence, and instrsAndDataMemory (splitting raw memory into ptsto_instrs +
   data words). Extends the register-only cfgver-endtoend skill. NOT for the
   memory-word preconditions written INSIDE the contract itself (gen_mem_pre /
-  mem_full_spec — use cfgver-contracts).
+  mem_full_spec — use cfgver-gen-contract).
 ---
 
 # CFGVer public-memory infrastructure
 
 Data-memory extension of the end-to-end wiring. This is the register-machinery
-(→ **cfgver-contracts** / **cfgver-endtoend**) mirrored for programs that also access
+(→ **cfgver-gen-contract** / **cfgver-endtoend**) mirrored for programs that also access
 data memory. Read **cfgver-endtoend** first for the register-only base lemma.
 
-`instrsAndDataMemory` and `intro_ptsto_instrs` yield the gmap
-`Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (instrs_of_list (bv.of_N start)
-instrs)` (via `big_sepM_insert`, side condition `instrs_of_list_fresh`).
+`instrsAndDataMemory` / `intro_ptsto_instrs` produce the instruction-memory
+ownership (`ptsto_instrs`) plus the data-word ownership for you (their proof
+mechanics: → **cfgver-endtoend-internals**).
 
 ## Types and definitions (all in `CFGVer/Examples.v`)
 
