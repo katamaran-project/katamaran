@@ -1111,14 +1111,14 @@ Section AdequacyTools.
     (* through the table VC, and has been removed, 2026-07-17.)           *)
     (* The Option B guard in cexec_triple_addr_tbl surfaces — after      *)
     (* wp_demonic_ctx and specialization to ι — as an                    *)
-    (* `itable_faith ∧ etable_faith →` premise, discharged here by the   *)
+    (* `itable_rel ∧ etable_rel →` premise, discharged here by the   *)
     (* caller-supplied faithfulness facts at ι.                          *)
     (* ---------------------------------------------------------------- *)
     Lemma sound_cexec_triple_addr_myWP2_tbl {Γ : LCtx} {pre post instrs exitCond fuel}
         {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
-        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond exits ι) :
+        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Γ) exitCond exits ι) :
       Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr_tbl pre instrs exitCond fuel post tbl exits (λ _ _, True) [] →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
@@ -1152,8 +1152,8 @@ Section AdequacyTools.
             Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition_tbl
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
-        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith exitCond exits ι) :
+        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Γ) exitCond exits ι) :
       ⊢ ∀ a : RelVal ty_xlenbits,
           asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗

@@ -33,8 +33,8 @@
 (* Register aliases (X0–A7), assembler macros (JAL/NOP/LW/SW), the gmap      *)
 (* instruction store builder instrs_of_list, the symbolic term-table         *)
 (* builders table_of_list / exits_of_list / exits_of_offs, and the           *)
-(* faithfulness lemmas linking them to Verifier.v's itable_faith /           *)
-(* etable_faith guards.                                                      *)
+(* faithfulness lemmas linking them to Verifier.v's itable_rel /           *)
+(* etable_rel guards.                                                      *)
 (* ========================================================================= *)
 
 From Coq Require Import
@@ -172,13 +172,13 @@ Import iris.proofmode.tactics.
     : list (Term Σ ty_xlenbits) :=
     List.map (fun o => peval_bvadd (term_val ty_xlenbits (bv.of_N o)) p) offs.
 
-  (* itable_faith is monotone in the instruction map: enlarging the map
+  (* itable_rel is monotone in the instruction map: enlarging the map
      preserves faithfulness of every table entry. *)
   Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AST)
       (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) :
     m ⊆ m' ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith m tbl ι ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith m' tbl ι.
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ) m tbl ι ->
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ) m' tbl ι.
   Proof.
     intros Hsub. apply List.Forall_impl. intros [t i] (v & Hv & Hm).
     exists v. split; [exact Hv|]. eapply lookup_weaken; eauto.
@@ -192,7 +192,7 @@ Import iris.proofmode.tactics.
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     forall off : N,
     (bv.bin cbase + off + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ)
       (instrs_of_list (bv.add cbase (bv.of_N off)) instrs)
       (table_of_list p off instrs) ι.
   Proof.
@@ -226,7 +226,7 @@ Import iris.proofmode.tactics.
       (cbase : bv xlenbits) (instrs : list AST) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     (bv.bin cbase + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ)
       (instrs_of_list cbase instrs) (table_of_list p 0 instrs) ι.
   Proof.
     intros Hp Hbound.
@@ -241,7 +241,7 @@ Import iris.proofmode.tactics.
       (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AST) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     exitCond (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))) = true ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+    Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Σ)
       exitCond (exits_of_list p instrs) ι.
   Proof.
     intros Hp Hexit.
@@ -261,11 +261,11 @@ Import iris.proofmode.tactics.
       (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (offs : list N) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     List.Forall (fun o => exitCond (bv.add cbase (bv.of_N o)) = true) offs ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+    Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Σ)
       exitCond (exits_of_offs p offs) ι.
   Proof.
     intros Hp Hoffs.
-    unfold exits_of_offs, Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith.
+    unfold exits_of_offs, Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel.
     rewrite List.Forall_map.
     eapply List.Forall_impl; [|exact Hoffs].
     intros o Hex.

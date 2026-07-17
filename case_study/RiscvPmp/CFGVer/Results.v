@@ -135,13 +135,13 @@ Import iris.algebra.gmap.
       "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
     rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
     rewrite !regPstsTo_sync_is_nonsync.
-    assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
+    assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx [ctx])
                     (instrs_of_list (bv.of_N init_addr) [JAL X0 jmp_offset; NOP])
                     (table_of_list (term_val ty_xlenbits (bv.of_N init_addr)) 0
                        [JAL X0 jmp_offset; NOP]) [env]).
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. now vm_compute. }
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
+    assert (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx [ctx])
                     jmp_fwd_exitCond
                     (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
                        ((4 * N.of_nat (length [JAL X0 jmp_offset; NOP]))%N :: []))

@@ -197,9 +197,10 @@ Section CFGVerificationDerived.
     (*      and peval-modulo matching (below).                            *)
     (*   2. sexec_cfg_addr_tbl / scfg_verification_condition_tbl —      *)
     (*      the symbolic executor + VC.                                   *)
-    (*   3. itable_faith / etable_faith  — "the term table faithfully     *)
-    (*      mirrors the concrete gmap / exitCond at valuation ι".  This   *)
-    (*      is the semantic bridge between the two worlds.                *)
+    (*   3. itable_rel / etable_rel (applied at w := wlctx Σ)  — "the term *)
+    (*      table faithfully mirrors the concrete gmap / exitCond at       *)
+    (*      valuation ι".  This is the semantic bridge between the two     *)
+    (*      worlds.                                                        *)
     (*   4. rexec_cfg_addr_tbl  — the gmap concrete executor is refined   *)
     (*      by the term-table symbolic executor UNDER faithfulness.       *)
     (*   5. cexec_triple_addr_tbl + refine_guard + rexec_triple_addr_tbl  *)
@@ -334,18 +335,20 @@ Section CFGVerificationDerived.
     (* current world the same way `req` is: by applying the substitution  *)
     (* `ζ : Sub Σ w` (obtained from `demonic_ctx`'s δ, persisted forward   *)
     (* to the world where `a` lives) to each key term via `subst`. *)
-    (* TODO: It doesn't make sense for the tbl and exit arguments to not be SITable and SETable respectively. *)
+    (* tbl/exits here are SITable/SETable at the world wlctx Σ (empty path
+       condition over the contract context) -- definitionally the same
+       lists (Term Σ ty_xlenbits * AST) / (Term Σ ty_xlenbits) they used to
+       be typed as, since wctx (wlctx Σ) reduces to Σ by record projection. *)
     Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
-        (tbl : list (Term Σ ty_xlenbits * AST)) : SITable w :=
+        (tbl : SITable (wlctx Σ)) : SITable w :=
       List.map (fun '(t,i) => (subst t ζ, i)) tbl.
     Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
-        (exits : list (Term Σ ty_xlenbits)) : SETable w :=
+        (exits : SETable (wlctx Σ)) : SETable w :=
       List.map (fun t => subst t ζ) exits.
 
-    (* TODO: Why are tbl and exits not SITable and SETable's? *)
     Definition sexec_triple_addr_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
+      (tbl : SITable (wlctx Σ)) (exits : SETable (wlctx Σ)) (fuel : nat)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
       ⊢ SHeapSpec Unit :=
       fun w =>
@@ -721,34 +724,30 @@ Section CFGVerificationDerived.
     (* program actually resides.  Scaffolding for refinement only — the     *)
     (* concrete executor and soundness chain are untouched.                 *)
     (* ------------------------------------------------------------------ *)
-    (* TODO: This is a duplicate of itable_rel. Except itable_rel is on SITable instead of list (Term Σ ty_xlenbits * AST), which should be the same. This is a clear target for simplification. *)
-    Definition itable_faith {Σ : LCtx} (instrs : gmap (bv xlenbits) AST)
-        (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) : Prop :=
-      List.Forall
-        (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
-
-    Definition etable_faith {Σ : LCtx} (exitCond : bv xlenbits -> bool)
-        (exits : list (Term Σ ty_xlenbits)) (ι : Valuation Σ) : Prop :=
-      List.Forall
-        (fun t => exists v,
-           inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
+    (* itable_faith/etable_faith used to duplicate itable_rel/etable_rel's  *)
+    (* List.Forall body verbatim, differing only in the tbl/exits parameter *)
+    (* type (a plain list vs SITable/SETable) -- but those are the same     *)
+    (* type at w := wlctx Σ (wctx (wlctx Σ) reduces to Σ).  Deduped         *)
+    (* 2026-07-17: itable_faith/etable_faith removed entirely; every call   *)
+    (* site (here, Tables.v, Results.v, EndToEnd.v, Adequacy.v) now calls    *)
+    (* itable_rel/etable_rel directly at w := wlctx Σ. *)
 
     (* cexec_triple_addr_tbl: the concrete triple — right after picking the *)
-    (* demonic valuation lenv, ASSUME itable_faith/etable_faith at lenv     *)
-    (* before producing req and running the (still gmap-based)             *)
-    (* cexec_cfg_addr.  This is the concrete side of the guarded VC         *)
-    (* refinement from the reading guide above (step 5): the guard makes   *)
-    (* the triple hold vacuously at valuations where the table doesn't     *)
-    (* match the gmap, and meaningfully only at the one valuation the      *)
-    (* end-to-end proof discharges it at. *)
+    (* demonic valuation lenv, ASSUME itable_rel/etable_rel at lenv (i.e.,  *)
+    (* table faithfulness w.r.t. the gmap, at w := wlctx Σ) before producing *)
+    (* req and running the (still gmap-based) cexec_cfg_addr.  This is the  *)
+    (* concrete side of the guarded VC refinement from the reading guide    *)
+    (* above (step 5): the guard makes the triple hold vacuously at         *)
+    (* valuations where the table doesn't match the gmap, and meaningfully  *)
+    (* only at the one valuation the end-to-end proof discharges it at. *)
     Definition cexec_triple_addr_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : CHeapSpec unit :=
+      (tbl : SITable (wlctx Σ)) (exits : SETable (wlctx Σ)) : CHeapSpec unit :=
       CHeapSpec.bind (CHeapSpec.demonic_ctx Σ) (fun lenv =>
       CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
-          (itable_faith instrs tbl lenv /\ etable_faith exitCond exits lenv))) (fun _ =>
+          (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv))) (fun _ =>
       CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
       CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
       CHeapSpec.bind (cexec_cfg_addr instrs exitCond fuel a) (fun na =>
@@ -780,15 +779,15 @@ Section CFGVerificationDerived.
 
     (* Not a duplicate of forgetting_itable_rel above, despite the similar *)
     (* proof shape: that lemma commutes forgetting with persist_itable     *)
-    (* given an EXISTING itable_rel hypothesis (SITable on both sides);    *)
-    (* this one instead DERIVES itable_rel from the Prop-level itable_faith *)
-    (* fact via a substitution ζ, over the raw list table representation.  *)
-    (* Both are needed (used together at the rexec_triple_addr_tbl call    *)
-    (* site below). *)
+    (* given an EXISTING itable_rel hypothesis at the SAME world (SITable  *)
+    (* on both sides); this one instead DERIVES itable_rel at world wb     *)
+    (* from an itable_rel fact given at the contract context Σ' (i.e., at  *)
+    (* w := wlctx Σ') via a substitution ζ.  Both are needed (used         *)
+    (* together at the rexec_triple_addr_tbl call site below). *)
     Lemma itable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (instrs' : gmap (bv xlenbits) AST) (tbl' : list (Term Σ' ty_xlenbits * AST))
+        (instrs' : gmap (bv xlenbits) AST) (tbl' : SITable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') :
-      itable_faith instrs' tbl' ιΣ ->
+      itable_rel instrs' tbl' ιΣ ->
       (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ itable_rel instrs' (subst_itable (persist ζ θ) tbl'))%I.
     Proof.
       intros Hfaith.
@@ -808,9 +807,9 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma etable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (exitCond' : bv xlenbits -> bool) (exits' : list (Term Σ' ty_xlenbits))
+        (exitCond' : bv xlenbits -> bool) (exits' : SETable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') :
-      etable_faith exitCond' exits' ιΣ ->
+      etable_rel exitCond' exits' ιΣ ->
       (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ etable_rel exitCond' (subst_etable (persist ζ θ) exits'))%I.
     Proof.
       intros Hfaith.

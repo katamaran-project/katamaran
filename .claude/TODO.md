@@ -198,7 +198,53 @@ use it for future examples instead of hand-transcribing.
      not what it doesn't) while in there. Full chain (`Spec.v` → `Results.v`)
      recompiled clean afterward — see "Consolidate everything in CFGVer"
      entry above.
-   - **Deferred to a follow-up pass** (wider blast radius — spans
+   - **[DONE 2026-07-17, PARTIALLY VERIFIED BY COMPILE]** Retyped
+     `subst_itable`/`subst_etable`'s and `sexec_triple_addr_tbl`'s `tbl`/
+     `exits` params from raw lists to `SITable (wlctx Σ)`/`SETable (wlctx Σ)`
+     (definitionally the same list, since `wctx (wlctx Σ)` reduces to `Σ` by
+     record projection — purely a readability change, no behavior change).
+   - **[DONE 2026-07-17, PARTIALLY VERIFIED BY COMPILE]** Genuinely deduped
+     `itable_faith`/`etable_faith` vs `itable_rel`/`etable_rel` — these had
+     IDENTICAL `List.Forall` bodies, differing only in the tbl/exits param
+     type (raw list vs `SITable`), which are the same type at `w := wlctx Σ`.
+     Deleted `itable_faith`/`etable_faith` entirely (not aliased) and
+     rewrote every call site to use `itable_rel`/`etable_rel` directly: 2 in
+     `Verifier.v` itself (`cexec_triple_addr_tbl`, `itable_rel_of_faith_forget`/
+     `etable_rel_of_faith_forget`'s premises), ~5 in `Tables.v` (kept the
+     lemma names — `itable_faith_weaken`/`itable_faith_of_list(_aux)`/
+     `etable_faith_exits_of_list`/`etable_faith_exits_of_offs` — only their
+     statements/proofs changed), 2 in `Results.v`, 11 in `EndToEnd.v`, 4 in
+     `Adequacy.v`. Because `itable_rel`/`etable_rel` are `Pred w` (world-
+     indexed) rather than flat-`Σ`-indexed like `itable_faith`/`etable_faith`
+     were, Coq can't infer the implicit `w` from a bare list argument (it
+     would need to invert a record projection, `wctx ?w = Σ`, which has
+     infinitely many solutions) — every one of those ~20 call sites needed an
+     explicit `(w := wlctx <ctx>)` annotation added by hand. Mechanical, no
+     logic changed, but a wide diff for that reason.
+     Checked whether `itable_rel_of_faith_forget`/`etable_rel_of_faith_forget`
+     are ALSO duplicates of `forgetting_itable_rel`/`forgetting_etable_rel`
+     (similar shape) — confirmed NOT: the latter is an unconditional `⊣⊢`
+     identity over an *existing* Pred-level fact; the former derives a Pred-
+     level fact from a *ground fact at one fixed valuation* via the `ζ`/
+     `RNEnv` relational bridge, which can't collapse into the same statement.
+     There IS a smaller golf opportunity (route `itable_rel_of_faith_forget`'s
+     proof through `forgetting_itable_rel` as an ingredient instead of
+     re-deriving by hand) — folded into item 5's golf target below, not done.
+     **Verification status:** `Verifier.v` → `Tables.v` → `Noninterference.v`
+     → `Contracts.v` → `GenContract.v` → `Adequacy.v` → `EndToEnd.v` →
+     `Example/{MvSwap,Jumps,Countdown,SetX2}.v` → all full-compile clean.
+     `Example/Cmovznz4.v` did NOT verify this pass — its
+     `valid_cmovznz4_cfg_contract_param` (`vm_compute. solve_vc.`, fuel 35,
+     parametric base) stalled/crashed identically across three timeouts
+     (300s/400s/600s) and `rocq_start` crashed pet twice just loading up to
+     it. `Cmovznz4.v` itself has zero diff this session and its only changed
+     dependencies changed in definitionally-transparent ways (`vm_compute`
+     reduces the same terms either way), and this same file compiled clean
+     earlier in this very session — the likely cause is system memory
+     pressure (8.4GB RAM + 13/15GB swap in use at the time), not a real
+     regression, but this is NOT re-verified — do that before trusting it,
+     and re-run `Results.v` too (untested downstream of `Cmovznz4.v`).
+   - **Still deferred to a follow-up pass** (wider blast radius — spans
      `GenContract.v`/`Contracts.v`/`EndToEnd.v`/`Results.v`, not just
      `Verifier.v`): rename the `_tbl` versions to canonical names and drop
      all remaining `tbl`/`Tbl` references. Bundle in while touching this
@@ -207,12 +253,8 @@ use it for future examples instead of hand-transcribing.
        of the Block→CFG rename above (now `CFGVerificationDerived`).
      - Give `SITable`/`SETable` clearer names (flagged as unclear on first
        read).
-     - Type `subst_itable`'s and `sexec_triple_addr_tbl`'s `tbl`/`exits`
-       parameters as `SITable`/`SETable` instead of raw lists (flagged twice).
      - Rename the `Phase1SelfTests` section to drop the process reference,
        keep the lemmas/tests themselves.
-     - Dedupe `itable_faith` vs `itable_rel` (flagged as near-duplicate, one
-       over a raw list where the other is over `SITable`).
 4. Once consolidated: split the `SITable`/gmap/`SETable` machinery out into
    its own section, module, or file (explicitly flagged as deserving one).
 5. Proof engineering (standalone, can happen last): `rexec_cfg_addr_tbl` was
