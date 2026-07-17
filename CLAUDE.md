@@ -150,7 +150,11 @@ skills, lower-level mechanisms may appear only as a NOT-clause or a one-line
 **Hygiene rules:** update the skill in the SAME commit as the code change it
 documents (docs travel with code); skills are git-tracked — review their diffs like
 code; after changing any skill *description*, re-check routing against
-`.claude/skill-evals/cfgver-routing/eval_set.json`; at the end of a working session,
-ask Claude to fold what was learned back into the skills.
+`.claude/skill-evals/cfgver-routing/eval_set.json`; when a skill misfires or fails
+to fire in a live session, log the query into that eval_set.json with the correct
+expected winner before moving on (`.claude/skill-evals/mine_skill_fires.py` lists
+recent user-message → skill-fired pairs for post-hoc review; silent non-fires it
+cannot see); at the end of a working session, ask Claude to fold what was learned
+back into the skills.
 
 Previous Claude sessions: commits tagged `WIP (LLM):` are primarily LLM-generated.
