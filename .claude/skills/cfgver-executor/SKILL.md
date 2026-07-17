@@ -21,7 +21,7 @@ relating the two live in **cfgver-refinement**.
 ## Instruction store
 
 Instructions live in a **`gmap (bv xlenbits) AST` keyed by absolute pc**. The map is
-built at the `Examples.v` boundary by `instrs_of_list (bv.of_N init_addr) i` from a
+built outside the verifier by `instrs_of_list (bv.of_N init_addr) i` (`Tables.v`) from a
 plain `list AST`; `Verifier.v` itself knows nothing about a base address, alignment,
 or index arithmetic — lookup is exact: `instrs !! v`.
 
@@ -83,7 +83,7 @@ if archaeology is needed.
 > by `Term_eqb ∘ peval` on term-table keys so a symbolic pc like `p+8` works) plus
 > `sblock_verification_condition_tbl` and `gen_contract_rel`. Until a skill covers it,
 > consult the "PARAMETRIC-BASE SUPPORT — READING GUIDE" comment blocks in
-> `CFGVer/Verifier.v` / `CFGVer/Examples.v` and memory `project-cfgver-symbolic-base-poc`.
+> `CFGVer/Verifier.v` / `CFGVer/GenContract.v` and memory `project-cfgver-symbolic-base-poc`.
 
 **Next layer up:** the concrete mirror and the relational proofs are in
 **cfgver-refinement**; the VC→`myWP2_loop`→leakage bridge is in **cfgver-soundness**.

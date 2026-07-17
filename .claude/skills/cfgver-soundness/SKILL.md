@@ -45,7 +45,7 @@ discharge per program. `sound_sblock_verification_condition_myWP2` then takes VC
 soundness straight to `myWP2_loop`.
 
 **Extending the chain:** copy the closest existing example's `<prog>_noninterferent`
-in `Examples.v` as the analogue rather than deriving from scratch.
+in `Results.v` as the analogue rather than deriving from scratch.
 
 ## WP2_loop vs myWP2_loop (design distinction)
 

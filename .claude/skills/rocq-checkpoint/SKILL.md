@@ -23,5 +23,5 @@ Project-specific overrides (these WIN over the plugin's defaults):
 - Branch: work happens on `KatamaranRel`; never commit to `main`.
 - Leave the user's untracked personal files out of the commit
   (`REFACTORING_NOTES.md`, `case_study/RiscvPmp/CFGVer/Remarks6juli2026`).
-- Full-project verification is expensive here (Examples.v is heavy); per-file
-  verification of the files actually touched is the sensible default.
+- Full-project verification is expensive here (the example VCs vm_compute);
+  per-file verification of the files actually touched is the sensible default.

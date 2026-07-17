@@ -22,5 +22,5 @@ Key facts before you start:
   lemma-replacement pass.
 - Scoring order: correctness → directness → clarity/inference burden →
   performance/determinism → length.
-- In this repo, prefer golfing via `rocq_compile_file` iteration; pet OOMs on the
-  full `Examples.v` (see CLAUDE.md).
+- In this repo, prefer golfing via `rocq_compile_file` iteration; pet OOMs on
+  very large files (the pre-split `Examples.v`; see CLAUDE.md).

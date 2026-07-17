@@ -55,7 +55,13 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 | `theories/` | `Katamaran` | Core framework |
 
 `_CoqProject` defines the `-Q` mappings and the exact compilation order.
-CFGVer compilation order: `Spec.v` → `Verifier.v` → `Examples.v`.
+CFGVer compilation order (post 2026-07-17 split of the old `Examples.v`):
+`Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`} → `Contracts.v` →
+`GenContract.v` → `Adequacy.v` → `EndToEnd.v` → `Example/*.v` (independent) →
+`Results.v` (aggregator holding the concrete end-to-end theorems).
+`Noninterference.v` + `Results.v` + the `*_instrs`/`*_specs` data blocks in
+`Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
+what is being proved changed.
 
 ---
 
@@ -84,9 +90,10 @@ s = rocq_start(file=..., theorem="my_lemma")
 s = rocq_check(from_state=s["state_id"], body="intros. iIntros ...")
 ```
 
-**Dependency rule**: if `Examples.v` does `Require RiscvPmp.CFGVer.Verifier`, compile
-`Verifier.v` with `keep_vo=True` first — otherwise `Cannot find a physical path
-bound to …CFGVer.Verifier`.
+**Dependency rule**: before compiling a CFGVer file, its Required CFGVer
+dependencies need `.vo`s — compile them with `keep_vo=True` first (or build the
+target's closure via `make -f Makefile.coq <file>.vo`) — otherwise `Cannot find
+a physical path bound to …CFGVer.<Dep>`.
 
 **VOS vs full**: use `vos` to catch statement errors cheaply; use `full` only when
 the proof body matters. VOS does NOT check `Proof.…Qed.`.
@@ -98,8 +105,10 @@ the proof body matters. VOS does NOT check `Proof.…Qed.`.
 - Nested Proofs are allowed in this codebase: a missing `Qed.` does NOT error —
   the next `Lemma` silently opens a nested proof and the previous name never enters
   the environment. Verify the `feedback` field shows "X is defined" after every `Qed.`.
-- pet (interactive rocq-mcp) OOMs on the full `Examples.v` (>7.6 GB); iterate heavy
-  proofs via `rocq_compile_file` (coqc) or a truncated mirror file.
+- pet (interactive rocq-mcp) OOMs on very large files (the pre-split monolithic
+  `Examples.v` needed >7.6 GB). The 2026-07-17 split keeps CFGVer files small
+  enough for interactive work; if a file grows heavy again, iterate via
+  `rocq_compile_file` (coqc) or a truncated mirror file.
 
 **rocq plugin commands (LLM4Rocq):** six have auto-trigger wrapper skills
 (`rocq-golf`, `rocq-review`, `rocq-refactor`, `rocq-doctor`, `rocq-checkpoint`,

@@ -96,5 +96,5 @@ the contract's exit-term table — see **cfgver-contracts** for that design subt
 For a contract over a *symbolic* base address, the `_rel` variants exist
 (`gen_contract_rel`, `reg_spec_rel` with `PVBaseOff` offsets,
 `gen_contract_noninterferent_rel`) — not yet covered by a skill; see the
-"PARAMETRIC-BASE SUPPORT — READING GUIDE" blocks in `Examples.v` and memory
+"PARAMETRIC-BASE SUPPORT — READING GUIDE" blocks in `GenContract.v` and memory
 `project-cfgver-symbolic-base-poc`.

@@ -20,8 +20,9 @@ Lemma valid_<prog>_cfg_contract : ValidCFGVerifierContract <prog>_cfg_contract.
 Proof. vm_compute. solve_vc. Qed.
 ```
 
-`solve_vc` comes from `RiscvPmpBlockVerifExecutor` (imported globally in
-`Examples.v`).
+`solve_vc` is the exported Ltac defined in `CFGVer/Contracts.v` (on top of
+`RiscvPmpBlockVerifExecutor` helpers); `Require Import …CFGVer.Contracts`
+brings it in.
 
 ## Residual patterns after `vm_compute`
 

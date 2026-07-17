@@ -19,8 +19,26 @@ description: >
 Entry point for the CFG verifier (`case_study/RiscvPmp/CFGVer/`). The reference is
 split into focused skills so only the relevant one loads.
 
-Compilation order: `Spec.v` → `Verifier.v` → `Examples.v`. When modifying
-`Verifier.v`, recompile it with `keep_vo=True` before compiling `Examples.v`.
+File layout (post 2026-07-17 split of the old monolithic `Examples.v`) and
+compilation order: `Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`}
+→ `Contracts.v` → `GenContract.v` → `Adequacy.v` → `EndToEnd.v` →
+`Example/{MvSwap,Jumps,Countdown,SetX2,Cmovznz4}.v` (mutually independent) →
+`Results.v` (aggregator: the concrete `*_noninterferent` theorems the merge
+gate checks). `Noninterference.v` is the trusted statement layer (step
+relations, `declare_*`, `noninterferent_strong`, spec types) and deliberately
+does not depend on the verifier. When modifying a file, recompile it with
+`keep_vo=True` before compiling files downstream of it.
+
+| File | Contents | Matching skill |
+|------|----------|----------------|
+| `Noninterference.v` | trusted statement defs | cfgver-endtoend |
+| `Tables.v` | reg aliases, `instrs_of_list`, `table_of_list`/`exits_of_*`, faith lemmas | cfgver-executor |
+| `Contracts.v` | `CFGVerifierContract`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc` | cfgver-contracts, cfgver-solve-vc |
+| `GenContract.v` | `gen_contract(_param/_rel)`, `param_val`, concretize maps | cfgver-gen-contract(-internals) |
+| `Adequacy.v` | `myWP2_loop`, `create_resources`, `semWP2_*`, `sound_*_myWP2` | cfgver-soundness, cfgver-wp2 |
+| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` | cfgver-endtoend(-internals), cfgver-memory |
+| `Example/*.v` | per-program instrs+specs (statement-relevant), contract, `valid_*` VC | cfgver-new-example |
+| `Results.v` | concrete end-to-end theorems | cfgver-endtoend |
 For generic Rocq workflow (compile-first iteration, lemma search, proof repair)
 use the **rocq** plugin skill; generic pitfalls live in **rocq-pitfalls**,
 **bv-pitfalls**, **gmap-pitfalls**, **iris-proofmode**.
@@ -50,7 +68,7 @@ Library skills (loaded from parents, rarely self-firing): `cfgver-rsolve`,
 References files (zero listing cost, reachable only via parent bodies):
 `cfgver/references/registers.md` (two-world register machinery).
 
-## Importing CFGVer.Verifier into Examples.v
+## Importing CFGVer.Verifier downstream
 
 ```coq
 (* At top level, after the main Require Import block: *)
@@ -60,10 +78,12 @@ From Katamaran Require
 
 Then use qualified names (`Katamaran.RiscvPmp.CFGVer.Verifier.foo`). Do NOT
 `Require Import` — it clashes with BlockVer's identically-named definitions.
+The other CFGVer files (`Noninterference`, `Tables`, `Contracts`, …) are safe
+to plain `Require Import`.
 
 > **BlockVer-contingent.** This idiom exists only because BlockVer shares names
 > with CFGVer. Once BlockVer is consolidated away (see TODO.md cleanup items),
-> switch `Examples.v` to a plain `Require Import` and delete this note.
+> switch the downstream files to a plain `Require Import` and delete this note.
 
 ## Example status (2026-07-16)
 

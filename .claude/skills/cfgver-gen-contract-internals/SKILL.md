@@ -17,7 +17,8 @@ How `gen_contract`'s pieces are built and proved. Users specifying a program nee
 only **cfgver-gen-contract**; this skill is for changing the machinery (new spec forms,
 new assertion shapes, extending `gen_implpre`).
 
-All definitions live in `Examples.v` inside `WithAsnNotations`.
+Assertion builders and `gen_contract*` live in `GenContract.v`; the
+`gen_implpre*` bridge lemmas live in `EndToEnd.v`.
 
 ## Assertion builders
 

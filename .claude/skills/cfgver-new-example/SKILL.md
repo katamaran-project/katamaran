@@ -15,7 +15,11 @@ description: >
 # Recipe: verifying a new example program end-to-end
 
 Every existing example (`swap`, `countdown_mem`, `cmovznz4`, …) follows this shape —
-**copy the closest analogue** in `Examples.v` rather than starting from scratch.
+**copy the closest analogue** in `Example/*.v` + `Results.v` rather than starting
+from scratch. A new example gets its own `Example/<Prog>.v` (instrs + specs +
+contract + `valid_*` VC), is added to `_CoqProject` before `Results.v`, and its
+end theorem goes in `Results.v` (plus the gate's `AXIOM_CLEAN_THMS` list in
+`scripts/gate.sh`).
 
 1. **Instructions.** Translate the RV32I assembly (e.g. Compiler Explorer output of
    `clang -O2 -march=rv32i`) into a `list AST` with

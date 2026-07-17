@@ -23,5 +23,5 @@ Key facts:
 - Complements: `rocq-golf` = tactic-level, this = strategy-level,
   `rocq-review` = read-only.
 - Repo caveat: in CFGVer, refactoring shared lemmas means recompiling downstream
-  (`Verifier.v` keep_vo → `Examples.v`); axiom hygiene must stay pure_decode +
-  mmioenv only.
+  in `_CoqProject` order (each dep with keep_vo, or `make -f Makefile.coq
+  …/Results.vo`); axiom hygiene must stay pure_decode + mmioenv only.

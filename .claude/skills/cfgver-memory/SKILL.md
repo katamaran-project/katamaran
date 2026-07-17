@@ -22,7 +22,7 @@ data memory. Read **cfgver-endtoend** first for the register-only base lemma.
 ownership (`ptsto_instrs`) plus the data-word ownership for you (their proof
 mechanics: → **cfgver-endtoend-internals**).
 
-## Types and definitions (all in `CFGVer/Examples.v`)
+## Types and definitions (statement-level in `Noninterference.v`; Iris-level in `Adequacy.v`/`EndToEnd.v`)
 
 ```coq
 (* mem_spec: (word-address, is_public) *)

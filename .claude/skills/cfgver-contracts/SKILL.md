@@ -17,7 +17,7 @@ description: >
 # CFGVer contracts in general
 
 What a contract *is* — independent of the `gen_contract` generator
-(→ **cfgver-gen-contract**). Definitions in `Examples.v` (~line 360).
+(→ **cfgver-gen-contract**). Definitions in `CFGVer/Contracts.v`.
 
 ## The record
 
@@ -41,7 +41,7 @@ Record CFGVerifierContract {Σ} :=
 | `cfg_exits` | exit addresses as **terms** (built by `exits_of_offs` from base-relative offsets) — this is what the symbolic executor's exit choice checks against |
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
 | `cfg_instrs` | the program, a `list AST` placed at `cfg_placement` |
-| `cfg_init_addr`, `cfg_exitCond` | **NOT used by the symbolic VC** (source comment, `Examples.v:347`) — carried for the end-to-end statement |
+| `cfg_init_addr`, `cfg_exitCond` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
 
 **The ignored-fields subtlety:** the VC dispatches exits against the *term table*
 `cfg_exits`, not against `cfg_exitCond`. The two are reconnected only at the
@@ -81,15 +81,16 @@ A hand-written precondition is built from exactly what the generator would emit
 So: public register = `asn.exist "v" … (r ↦ᵣ term_var "v" ∗ secLeakvar "v")`;
 private = the same without `secLeakvar`; pinned = `r ↦ᵣ term_val … v` directly.
 
-Exemplar: `cmovznz4_cfg_contract_param` (`Examples.v`) — `Σ = ["p"∷ty_xlenbits]`,
+Exemplar: `cmovznz4_cfg_contract_param` (`Example/Cmovznz4.v`) — `Σ = ["p"∷ty_xlenbits]`,
 placement `term_var "p"`, exits at `bvadd p (of_N off)` terms, precondition with
 the base bound plus register/memory assertions. Two rules of thumb:
 
 - Build addresses as `bop.bvadd (term_var "p") (term_val … (bv.of_N off))` — only
   concrete offsets under `bv.of_N`; a symbolic argument to `bv.of_N` makes
   `vm_compute` diverge.
-- There is also a local notation `{{ P }} i @cfg[ ec , fl ]` for concrete
-  contracts at `init_addr` (see `Examples.v:388`).
+- There is also a notation `{{ P }} i @cfg[ ec , fl ]` for concrete contracts
+  at `init_addr`, kept `Local` in `Example/MvSwap.v` (its only user) because it
+  turns `{{`/`}}` into lexer keywords that break any other `}}` occurrence.
 
 **Consuming a contract:** the once-and-for-all route is
 `gen_contract_noninterferent` (generator contracts, → **cfgver-gen-contract**);
