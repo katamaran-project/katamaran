@@ -9,12 +9,18 @@ correct expected winner, then re-run the Haiku-judge matrix.
 Silent NON-fires (a skill that should have fired but didn't) are invisible to
 this script — those still need a human noticing in the moment.
 
+Token cost: the script makes NO API calls — mining is free. The only token
+cost is its OUTPUT entering a Claude context when Claude runs it, so before
+printing it shows an order-of-magnitude output-token estimate and asks for
+confirmation (pass --yes to skip, e.g. when run non-interactively).
+
 Usage:
   python3 mine_skill_fires.py            # sessions touched in the last 7 days
   python3 mine_skill_fires.py --days 30
   python3 mine_skill_fires.py --all
   python3 mine_skill_fires.py --session <path/to/session.jsonl>
   python3 mine_skill_fires.py --skill cfgver-rsolve   # filter by skill name
+  python3 mine_skill_fires.py --yes      # skip the confirmation prompt
 """
 
 import argparse
@@ -118,6 +124,8 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--session", type=Path)
     ap.add_argument("--skill", help="substring filter on the skill name")
+    ap.add_argument("--yes", action="store_true",
+                    help="print without the confirmation prompt")
     a = ap.parse_args()
 
     files = [a.session] if a.session else sorted(
@@ -136,15 +144,32 @@ def main():
                 seen.add(key)
                 all_recs.append((ts, how, skill, args, user))
     all_recs.sort()
+    lines = []
     for ts, how, skill, args, user in all_recs:
-        print(f"[{ts[:16]}] {skill}  ({how})")
+        lines.append(f"[{ts[:16]}] {skill}  ({how})")
         if user:
-            print(f"    user: {clip(user, 220)}")
+            lines.append(f"    user: {clip(user, 220)}")
         if args:
-            print(f"    args: {clip(args, 120)}")
+            lines.append(f"    args: {clip(args, 120)}")
+    output = "\n".join(lines)
     total = len(all_recs)
-    print(f"\n{total} skill invocation(s) across {len(files)} session file(s).",
+
+    # pre-flight: the script itself costs 0 API tokens; the output costs
+    # roughly chars/4 input tokens if it lands in a Claude context
+    scanned_mb = sum(p.stat().st_size for p in files) / 1e6
+    est = max(1, len(output) // 4)
+    mag = f"~{est}" if est < 1000 else f"~{round(est / 1000)}k"
+    print(f"[mine_skill_fires] scanned {len(files)} session file(s) "
+          f"({scanned_mb:.0f} MB, free — no API calls); {total} invocation(s) "
+          f"found; printing them ≈ {mag} tokens if read by Claude.",
           file=sys.stderr)
+    if not a.yes:
+        if sys.stdin.isatty():
+            if input("Print? [y/N] ").strip().lower() not in ("y", "yes"):
+                sys.exit("aborted — nothing printed.")
+        else:
+            sys.exit("non-interactive run: pass --yes to print the results.")
+    print(output)
     if total == 0:
         print("(model-invoked Skill calls only appear in sessions run with a "
               "harness that routes skills through the Skill tool)", file=sys.stderr)
