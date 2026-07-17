@@ -101,6 +101,14 @@ the proof body matters. VOS does NOT check `Proof.…Qed.`.
 - pet (interactive rocq-mcp) OOMs on the full `Examples.v` (>7.6 GB); iterate heavy
   proofs via `rocq_compile_file` (coqc) or a truncated mirror file.
 
+**rocq plugin commands (LLM4Rocq):** six have auto-trigger wrapper skills
+(`rocq-golf`, `rocq-review`, `rocq-refactor`, `rocq-doctor`, `rocq-checkpoint`,
+`rocq-formalize`). The rest are **suggest-only** — propose them at the right
+moment, never run them uninvited: `/rocq:autoprove` and `/rocq:autoformalize`
+(unbounded autonomous loops — need an explicit go-ahead PLUS a scope bound),
+`/rocq:prove` (guided Admitted-filling session), `/rocq:draft` (statement
+skeletons only), `/rocq:learn` (interactive tutorial).
+
 ---
 
 ## Pitfalls — where to look

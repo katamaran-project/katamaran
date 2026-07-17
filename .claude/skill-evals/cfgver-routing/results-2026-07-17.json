@@ -1,0 +1,17 @@
+{
+  "date": "2026-07-17",
+  "eval_set_version": "v4 (rocq command wrappers)",
+  "method": "independent Haiku judges, one per query, shown only the name+description listing (25 skills incl. rocq plugin skill); targeted subset — only queries affected by the v4 change (Q14 expected-change, Q30 seam re-check, Q33-39 new). Q1-13/Q15-29/Q31-32 unchanged from the 32/32 run of 2026-07-16 (results-2026-07-16.json).",
+  "score": "9/9",
+  "verdicts": [
+    { "id": 14, "verdict": "rocq-golf", "expected": "rocq-golf", "pass": true },
+    { "id": 30, "verdict": "cfgver-new-example", "expected": "cfgver-new-example", "pass": true },
+    { "id": 33, "verdict": "rocq-review", "expected": "rocq-review", "pass": true },
+    { "id": 34, "verdict": "rocq-refactor", "expected": "rocq-refactor", "pass": true },
+    { "id": 35, "verdict": "rocq-doctor", "expected": "rocq-doctor", "pass": true },
+    { "id": 36, "verdict": "rocq-checkpoint", "expected": "rocq-checkpoint", "pass": true },
+    { "id": 37, "verdict": "rocq-formalize", "expected": "rocq-formalize", "pass": true },
+    { "id": 38, "verdict": "cfgver-new-example", "expected": "cfgver-new-example", "pass": true, "note": "adversarial: 'formalize' keyword did NOT pull rocq-formalize" },
+    { "id": 39, "verdict": "rocq", "expected": "rocq", "pass": true, "note": "guard: no wrapper auto-fired on a batch-Admitted request; autoprove stays suggest-only" }
+  ]
+}

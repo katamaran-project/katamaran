@@ -1,6 +1,6 @@
 {
   "purpose": "Cross-skill routing eval for the cfgver-* skill family. Each query has ONE expected winner among the cfgver skills, the generic pitfall skills (rocq-/bv-/gmap-pitfalls, iris-proofmode), the rocq plugin skills, or none. A skill firing on a query expected elsewhere = mis-route.",
-  "notes": "Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3.",
+  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3.",
   "evals": [
     {
       "id": 1,
@@ -86,8 +86,8 @@
     {
       "id": 14,
       "query": "this proof of swap_endToEnd is like 40 lines of iFrame and eauto spaghetti, can you golf it down",
-      "expected": "rocq:golf",
-      "kind": "should-NOT-trigger cfgver-* (competition: CFGVer lemma name, golfing intent)"
+      "expected": "rocq-golf",
+      "kind": "should-NOT-trigger cfgver-* (competition: CFGVer lemma name, golfing intent); wrapper skill since v4"
     },
     {
       "id": 15,
@@ -196,6 +196,48 @@
       "query": "what are the fields of CFGVerifierContract exactly, and how do I write one by hand with a symbolic base register?",
       "expected": "cfgver-contracts",
       "kind": "should-trigger (contracts general)"
+    },
+    {
+      "id": 33,
+      "query": "can you look over the proofs I changed today and tell me what's smelly — don't change anything, I just want a second opinion before I save",
+      "expected": "rocq-review",
+      "kind": "wrapper: read-only review; seam with rocq-golf/rocq-checkpoint"
+    },
+    {
+      "id": 34,
+      "query": "I hand-rolled 30 lines proving this fact about folds over lists — surely stdpp or the stdlib has this, can you find a better approach and extract a helper?",
+      "expected": "rocq-refactor",
+      "kind": "wrapper: strategy-level; seam with rocq-golf (tactic-level) and rocq (lemma search)"
+    },
+    {
+      "id": 35,
+      "query": "Examples.v still errors on a lemma I renamed yesterday even after recompiling Verifier.v — I think there are stale .vo files lying around, can you clean this up?",
+      "expected": "rocq-doctor",
+      "kind": "wrapper: environment/stale artifacts; competes with rocq (build debugging) and CLAUDE.md dependency rule"
+    },
+    {
+      "id": 36,
+      "query": "cmovznz4_param is green end-to-end now — let's lock this in",
+      "expected": "rocq-checkpoint",
+      "kind": "wrapper: milestone commit; commit-without-asking allowed since 2026-07-17"
+    },
+    {
+      "id": 37,
+      "query": "here's an informal statement of strong induction over binary trees from my lecture notes — can you turn it into Rocq and prove it?",
+      "expected": "rocq-formalize",
+      "kind": "wrapper: informal-claim formalization"
+    },
+    {
+      "id": 38,
+      "query": "formalize this RISC-V routine I got from Compiler Explorer and prove it leaks nothing",
+      "expected": "cfgver-new-example",
+      "kind": "adversarial: 'formalize' keyword vs CFGVer program-verification intent; rocq-formalize must NOT win"
+    },
+    {
+      "id": 39,
+      "query": "fill in all the Admitted proofs across theories/ overnight, don't ask me at each step",
+      "expected": "rocq",
+      "kind": "guard: must NOT auto-trigger any wrapper; correct behavior is rocq skill + SUGGESTING /rocq:autoprove with a scope bound"
     }
   ]
 }
