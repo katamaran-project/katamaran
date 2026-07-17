@@ -46,14 +46,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables.
 
@@ -68,7 +66,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -94,13 +92,13 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
       P ∗ minimal_pre.
 
-    (* CFG verifier contract: analog of BlockVerifierContract but for the CFG
-       verifier, which requires an explicit exit condition and fuel bound.
+    (* CFGVerifierContract: unlike a plain Hoare-triple contract, the CFG
+       verifier requires an explicit exit condition and fuel bound.
        Postconditions are not exposed: SHeapSpec has no leakcheck, so the final
        heap state is unconstrained and any leftover resources are silently dropped.
 
        Post table-pivot (PLAN-symbolic-base.md Phase 3): the verifier side is
-       the TABLE VC (sblock_verification_condition_tbl) over address-term
+       the TABLE VC (scfg_verification_condition_tbl) over address-term
        tables built from the placement term `cfg_placement` by table_of_list /
        exits_of_list.  Concrete contracts pass term_val (bv.of_N init_addr)
        (the keys then fold to literals inside peval_bvadd — same behavior as
@@ -114,7 +112,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (fl : nat) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition_tbl (Σ := Σ)
+      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition_tbl (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl
         (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
@@ -319,7 +317,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       instprop (formula_secLeak (term_binop bop.bvadd (term_val ty_xlenbits c) t)) ι.
     Proof. intros. apply secLeak_bvadd_val_compat; auto. Qed.
 
-    (* (b) fetch bounds, concrete instantiation: a 10-instruction block
+    (* (b) fetch bounds, concrete instantiation: a 10-instruction program
        (X = 4*10 = 40) and the 4th instruction (c = 4*3 = 12). *)
     Goal forall (Σ : LCtx) (ι : Valuation Σ) (base : Term Σ ty_xlenbits)
       (a : Val ty_xlenbits),

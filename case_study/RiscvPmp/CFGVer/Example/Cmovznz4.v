@@ -44,14 +44,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
@@ -68,7 +66,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -78,7 +76,7 @@ Import TermNotations.
     (* ------------------------------------------------------------------ *)
     (* cmovznz4 (HACL*'s FStar_UInt64_eq_mask-based conditional move),      *)
     (* compiled to RV32I by clang -O2 (godbolt, -march=rv32i -mabi=ilp32). *)
-    (* Straight-line block, no branches, no loops. Registers per the       *)
+    (* Straight-line program, no branches, no loops. Registers per the     *)
     (* RISC-V calling convention: A0 = cin, A1 = x, A2 = y, A3 = r;         *)
     (* A4-A7, T0, T1 are compiler-chosen scratch registers.                *)
     (*                                                                       *)
@@ -92,10 +90,11 @@ Import TermNotations.
     (* corollary of it.                                                       *)
     (*                                                                       *)
     (* Trailing `ret` (jalr x0, ra, 0) is deliberately NOT included: its     *)
-    (* target is the symbolic link register `ra`, and sexec_cfg_addr needs  *)
-    (* a concrete pc at every step, so it cannot step through a jump to an  *)
-    (* unconstrained destination. The exit condition below instead fires    *)
-    (* once pc has advanced past the last real instruction (the standard    *)
+    (* target is the symbolic link register `ra`, and the executor's table *)
+    (* lookup needs a pc that matches a known table key at every step, so  *)
+    (* it cannot step through a jump to an unconstrained destination. The  *)
+    (* exit condition below instead fires once pc has advanced past the    *)
+    (* last real instruction (the standard                                 *)
     (* pcOutOfInstrs_exitCond pattern used by jmp_fwd/countdown/swap).       *)
     (* ------------------------------------------------------------------ *)
     Definition cmovznz4_instrs : list AST :=
@@ -170,7 +169,7 @@ Import TermNotations.
 
     (* Step 5 (init_addr parameterization): the SAME cmovznz4 program, loaded at
        a genuinely nonzero, 4-aligned start address instead of 0. cmovznz4 is a
-       straight-line block (no jumps/branches) and every LOAD/STORE is
+       straight-line program (no jumps/branches) and every LOAD/STORE is
        register-relative, not pc-relative, so the instruction stream itself
        (cmovznz4_instrs) needs no change at all -- only the register-init
        values and data addresses (previously hardcoded right after the
@@ -214,7 +213,7 @@ Import TermNotations.
        p+116 / p+132 / p+148 and the 12 data words live at p+116 .. p+160
        (bop.bvadd terms), NOT constants.  peval DOES fold a
        load address (p+132)+4 into p+136 to match the mem chunk, so solve_vc
-       reduces the whole 29-instruction block to a fixed family of address
+       reduces the whole 29-instruction program to a fixed family of address
        bounds goals.  The tail below closes them uniformly (offset-agnostic):
        every base/instr RelVal is SyncVal via its secLeak; the pc-fetch and
        lower bounds fall to lia against the precondition base bound; the

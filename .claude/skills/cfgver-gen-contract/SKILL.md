@@ -65,8 +65,8 @@ gen_contract (init_addr : N)
 
 - `extra_exit_offs`: base-relative byte offsets of exit addresses **beyond** the
   fall-through one (always included automatically). Needed when control flow can
-  leave the block other than by falling off the end — e.g. a branch whose taken
-  target lies past the block (`jump_if_zero`). Straight-line programs pass `[]`.
+  leave the program other than by falling off the end — e.g. a branch whose taken
+  target lies past the program (`jump_if_zero`). Straight-line programs pass `[]`.
 - `fl` (fuel) must exceed the number of instruction steps actually executed —
   with slack (→ **cfgver-solve-vc** for the tight-fuel failure mode).
 
@@ -84,7 +84,7 @@ The end lemma is `eapply gen_contract_noninterferent` with **five** side premise
 | `HDataAddrs` | data word i sits at `init_addr + 4*|instrs| + 4*i` | case split per entry; `f_equal; lia` if base symbolic |
 | `Hlen` | `init_addr + 4*|instrs| + 4*|mem_specs| < lenAddr` | `unfold lenAddr; lia` |
 | `HexitOffs` | `exitCond` true at fall-through + every extra exit offset | `Forall` constructors + `vm_compute` |
-| `valid_block` | the `ValidCFGVerifierContract` VC | the one-line VC lemma |
+| `valid_contract` | the `ValidCFGVerifierContract` VC | the one-line VC lemma |
 
 Conclusion: `noninterferent_strong init_addr instrs exitCond reg_specs mem_specs`.
 

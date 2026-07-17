@@ -48,14 +48,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts.
@@ -71,7 +69,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -120,8 +118,8 @@ Import asn.notations.
 
     (* extra_exit_offs: base-relative byte offsets of exit addresses BEYOND
        the fall-through one (which is always included).  Needed when control
-       flow can leave the block other than by falling off the end, e.g. a
-       branch whose taken target lies past the block (jump_if_zero). *)
+       flow can leave the program other than by falling off the end, e.g. a
+       branch whose taken target lies past the program (jump_if_zero). *)
     Definition gen_contract
         (init_addr : N)
         (reg_specs : list reg_spec)
@@ -147,7 +145,7 @@ Import asn.notations.
     (*                                                                    *)
     (* Two facts make it work:                                            *)
     (*  - The symbolic VC (Valid_CFG_VC, ~line 350) runs the TERM-TABLE   *)
-    (*    executor (Verifier.sblock_verification_condition_tbl) over       *)
+    (*    executor (Verifier.scfg_verification_condition_tbl) over       *)
     (*    `table_of_list p 0 i`, so the base placement term `p` may be a  *)
     (*    genuine VARIABLE.  The base must be `term_var "p"`, NOT          *)
     (*    `term_val (bv.of_N n)`: the latter makes vm_compute DIVERGE      *)
@@ -163,7 +161,7 @@ Import asn.notations.
     (*   • gen_contract_param (just below) — parametric contract for       *)
     (*     CONSTANT-valued specs (base bound added to the precondition).  *)
     (*   • param_val / reg_spec_rel / mem_spec_rel + gen_*_asn_rel        *)
-    (*     (Stage 2 block below) — base-RELATIVE specs (PVBaseOff k = p+k),*)
+    (*     (Stage 2 section below) — base-RELATIVE specs (PVBaseOff k = p+k),*)
     (*     needed for cmovznz4's data pointers p+116/132/148.             *)
     (*   • gen_contract_rel — the contract built from _rel specs.          *)
     (*   • concretize_reg/_mem + gen_pre_rel_concretize /                 *)

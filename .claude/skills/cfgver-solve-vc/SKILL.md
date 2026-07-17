@@ -21,7 +21,7 @@ Proof. vm_compute. solve_vc. Qed.
 ```
 
 `solve_vc` is the exported Ltac defined in `CFGVer/Contracts.v` (on top of
-`RiscvPmpBlockVerifExecutor` helpers); `Require Import …CFGVer.Contracts`
+`RiscvPmpCFGVerifExecutor` helpers); `Require Import …CFGVer.Contracts`
 brings it in.
 
 ## Residual patterns after `vm_compute`

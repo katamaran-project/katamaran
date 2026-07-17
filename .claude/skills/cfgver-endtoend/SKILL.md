@@ -41,15 +41,15 @@ Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Me
   instrs' exitCond n ws {R} {ι : Valuation R}
   public_registers
   (HpubReg : declare_public_registers γ1 γ2 public_registers)
-  (block : @CFGVerifierContract R)
-  (valid_block : ValidCFGVerifierContract block)
-  (blockInstrs : cfg_instrs block = instrs')
-  (blockExitCond : cfg_exitCond block = exitCond)
+  (contract : @CFGVerifierContract R)
+  (valid_contract : ValidCFGVerifierContract contract)
+  (contractInstrs : cfg_instrs contract = instrs')
+  (contractExitCond : cfg_exitCond contract = exitCond)
   (ImplPre : forall `{sailGS2 Σ},
       interp_gprs_with_public_registers γ1 γ2 public_registers ∗
       cur_privilege ↦ᵣ ty.SyncVal Machine ∗
       interp_inv_constant_time -∗
-      asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+      asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
         ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
   (4 * N.of_nat (length instrs') < lenAddr)%N ->
   mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
@@ -77,14 +77,14 @@ all: try eauto.
 ```
 
 - `@` is required: `Set Implicit Arguments.` makes `instrs'` and `exitCond` implicit
-  (they appear in the types of `blockInstrs`/`blockExitCond`).
+  (they appear in the types of `contractInstrs`/`contractExitCond`).
 - **`all: try eauto.` must come BEFORE the `-` bullets** — it discharges the routine
   goals (memory, register reads, execution steps) first, leaving only `ImplPre` and
   the length bound for the focused bullets.
 
 ## The `ImplPre` obligation for `gen_contract` contracts
 
-When `block = gen_contract …` (→ **cfgver-gen-contract**), the goal after `cbn` is a
+When `contract = gen_contract …` (→ **cfgver-gen-contract**), the goal after `cbn` is a
 pair of `⌜P⌝ ∧ emp` fragments (one per precondition conjunct) followed by
 `cur_privilege` and `interp_inv_constant_time`.
 

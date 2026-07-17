@@ -19,7 +19,7 @@ them (as was done for the memory variant), not when calling them.
 ## Register-path proof body (`cfg_instrs_endToEnd`)
 
 ```coq
-iApply (cfg_instrs_safe γ1 γ2 block).
+iApply (cfg_instrs_safe γ1 γ2 contract).
 all: eauto.
 iIntros "(Hregs & Hpriv & #Hinv')".
 iApply ImplPre.          (* NOT iApply (ImplPre Σ') — Σ is implicit, inferred *)
@@ -37,7 +37,7 @@ by iFrame "∗ #".         (* second iFrame closes the residual after the first 
 ## Memory-path proof body (`cfg_instrs_endToEnd_with_memory`)
 
 ```coq
-iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 block).
+iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 contract).
 all: eauto.
 iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
 iApply ImplPre.
@@ -63,7 +63,7 @@ threads `interp_mem_with_public_memory μ1 μ2 data_specs` through as a conjunct
 `Set Implicit Arguments` makes `data_specs, μ1, μ2` implicit in
 `cfg_instrs_verified_with_mem` (they appear in `ImplPre`'s type; first explicit
 argument is `γ1 : RegStore`) but **explicit** in `cfg_instrs_safe_with_mem`
-(explicit: `γ1, γ2, data_specs, μ1, μ2, block`). Passing `data_specs` where a
+(explicit: `γ1, γ2, data_specs, μ1, μ2, contract`). Passing `data_specs` where a
 `RegStore` is expected is the tell.
 
 ## What the wiring proofs carry and materialize

@@ -47,12 +47,11 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
+From Katamaran Require Import
      RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Export
      RiscvPmp.CFGVer.Noninterference
@@ -83,7 +82,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -149,7 +148,7 @@ Import iris.algebra.gmap.
                     [env]).
     { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
         [reflexivity | repeat constructor]. }
-    iApply (sound_sblock_verification_condition_myWP2_tbl
+    iApply (sound_scfg_verification_condition_myWP2_tbl
               valid_jmp_fwd_cfg_contract _ Hif Hef
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").

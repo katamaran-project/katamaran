@@ -44,14 +44,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
@@ -68,7 +66,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -81,8 +79,8 @@ Import TermNotations.
 
     (* TODO: would rather write jump_if_zero (true_offset : bv 13) ... *)
     (* Jumps to `true_offset` when the value of X1 is equal to zero. The
-         default offset allows one instruction between this block and the true
-         block. X1 must be a public register (secLeak). *)
+         default offset allows one instruction between the fall-through path
+         and the branch target. X1 must be a public register (secLeak). *)
     Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
       gen_contract init_addr [(X1, true, None)] []
         [BEQ X1 X0 true_offset] [8%N]
@@ -99,7 +97,7 @@ Import TermNotations.
 
     (* CFGVer verification of jmp_fwd: the CFG verifier follows the actual PC
        after each instruction, so it correctly handles the forward jump that
-       BlockVer cannot. Exit condition: PC ≥ 8 (execution left the block). *)
+       BlockVer cannot. Exit condition: PC ≥ 8 (execution left the program). *)
     Definition jmp_fwd_exitCond : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N 8).
 

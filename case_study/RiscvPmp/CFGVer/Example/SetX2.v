@@ -44,14 +44,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
@@ -68,7 +66,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.

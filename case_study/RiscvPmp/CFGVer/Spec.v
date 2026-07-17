@@ -26,35 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-(* ======================================================================== *)
-(* CFGVer/Spec.v                                                             *)
-(*                                                                           *)
-(* Role in the proof chain:                                                  *)
-(*   This file defines the symbolic contracts (CEnv / CEnvEx) for each      *)
-(*   RISC-V primitive function, proves their validity via vm_compute, and   *)
-(*   proves soundness of the contracts in the binary Iris model.             *)
-(*   It is shared between BlockVer and CFGVer.                               *)
-(*                                                                           *)
-(*   Key outputs consumed by Verifier.v:                                     *)
-(*     - contractsSound : ValidContractEnvSem CEnv  (Iris soundness)         *)
-(*     - foreignSemBlockVerif : ForeignSem            (foreign prim sem)      *)
-(*     - lemSemBlockVerif : LemmaSem                  (lemma soundness)       *)
-(*   These three are needed to instantiate the symbolic executor soundness.  *)
-(*                                                                           *)
-(* Noninterference tracking:                                                 *)
-(*   Contracts use `secLeakvar` to mark which values are public (SyncVal).   *)
-(*   E.g., sep_contract_rX requires `secLeakvar "rs"` in the precondition   *)
-(*   (the register index is public) and exposes the register value           *)
-(*   unchanged in the postcondition (no write; value stays in sync).         *)
-(*   sep_contract_fetch_instr requires `secLeakvar "a"` (PC is public) and  *)
-(*   leaks `secLeakvar "encoded_instr"` (the encoding seen on the bus).      *)
-(*                                                                           *)
-(* Design note on PMP:                                                       *)
-(*   PMP entries are currently commented out from all contracts.  The case   *)
-(*   study assumes Machine mode with unrestricted memory access.  The        *)
-(*   pmpCheck / pmpMatchAddr contracts exist as dead code for future use.    *)
-(* ======================================================================== *)
-
 From Coq Require Import
      ZArith.ZArith
      Strings.String
@@ -97,9 +68,6 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 
-(* Convenience instruction synonyms used in Examples.v.  The raw AST        *)
-(* constructors are verbose; these give readable names matching assembly.    *)
-(* RET is JALR x0, x1, 0 (return via link register).                        *)
 Module Assembly.
   (* Instruction synonyms. *)
   Definition ADD (rd rs1 rs2 : RegIdx) : AST :=
@@ -128,19 +96,7 @@ Module Assembly.
     Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
-(* ======================================================================== *)
-(* Symbolic contract environment                                             *)
-(*                                                                           *)
-(* CEnv maps each Fun to its Sep contract.  CEnvEx does the same for FunX   *)
-(* (foreign functions).  LEnv covers lemma calls (open/close_gprs, etc.).   *)
-(*                                                                           *)
-(* The contracts follow the pattern of the IrisInstanceBinary model:         *)
-(*   - PRE / POST are Katamaran assertions over logic variables                *)
-(*     (universally quantified bitvectors introduced by sep_contract_logvars)*)
-(*   - The *_sound lemmas in RiscvPmpIrisInstanceWithContracts turn those    *)
-(*     into Iris propositions via semWP2 / ValidContractForeign.             *)
-(* ======================================================================== *)
-Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
   Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
   Section ContractDefKit.
 
@@ -286,11 +242,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   (* Local Notation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])). *)
   Import bv.notations.
 
-    (* rX: read a general-purpose register.
-       PRE:  secLeak rs (register index is public); rs ↦ reg_val
-       POST: result = reg_val; rs ↦ reg_val (unchanged)
-       The secLeak constraint ensures both worlds read the same register,
-       so the returned value is a SyncVal in the binary model. *)
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "reg_val" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
@@ -300,11 +251,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                                        term_var "rs" ↦ᵣ term_var "reg_val";
     |}.
 
-    (* wX: write a general-purpose register.
-       PRE:  secLeak rs; rs ↦ reg_val (we own it)
-       POST: if rs = x0, rs ↦ 0 (x0 is the zero register); else rs ↦ v
-       The write contract does NOT require secLeak on v: the new value may
-       differ between worlds (private write is allowed). *)
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "v" :: ty_xlenbits; "reg_val" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
@@ -316,13 +262,6 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
                                        else term_var "rs" ↦ᵣ term_var "v"
     |}.
 
-    (* fetch: fetch and decode the instruction at the current PC.
-       PRE:  secLeak a (PC is public); pc ↦ a; a ↦ᵢ i; within bounds;
-             Machine privilege; inv_leakage (constant-time invariant)
-       POST: result = KF_Base(encoded); secLeak encoded (instruction encoding
-             is a side-channel leak via the timing model)
-       Note: inv_leakage is consumed here and re-established in POST, giving
-       the verifier access to the leakage invariant during fetch. *)
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
@@ -721,27 +660,16 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        (* | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes *)
        (* | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh *)
       end.
-End RiscvPmpBlockVerifSpec.
+End RiscvPmpCFGVerifSpec.
 
-Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
-Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifSpec.
+Module RiscvPmpCFGVerifShalExecutor :=
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpCFGVerifSpec.
+Module RiscvPmpCFGVerifExecutor :=
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpCFGVerifSpec.
 
-(* ======================================================================== *)
-(* Contract validity proofs                                                  *)
-(*                                                                           *)
-(* ValidContract f means: the symbolic VC generated by the executor is       *)
-(* decidably True (checked via vm_compute).                                  *)
-(* ValidContractDebug f means: the VC holds but may need hand-tactics        *)
-(* (e.g., within_phys_mem needs a Lia.lia step for bounds arithmetic).       *)
-(*                                                                           *)
-(* ValidContracts is the master lemma: for every function in CEnv, there    *)
-(* exists a fuel bound under which the VC holds.  This feeds contractsSound. *)
-(* ======================================================================== *)
 Module RiscvPmpSpecVerif.
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.Symbolic.
+  Import RiscvPmpCFGVerifSpec.
+  Import RiscvPmpCFGVerifExecutor.Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -787,7 +715,7 @@ Module RiscvPmpSpecVerif.
 
   (* Import SymProp.notations. *)
   (* Set Printing Depth 200. *)
-  (* Eval vm_compute in (postprocess (RiscvPmpBlockVerifExecutor.SHeapSpecM.vcgen RiscvPmpBlockVerifExecutor.default_config 1 *)
+  (* Eval vm_compute in (postprocess (RiscvPmpCFGVerifExecutor.SHeapSpecM.vcgen RiscvPmpCFGVerifExecutor.default_config 1 *)
   (*            sep_contract_fetch_instr (FunDef fetch))). *)
 
   Lemma valid_execute_fetch : ValidContract fetch.
@@ -800,11 +728,11 @@ Module RiscvPmpSpecVerif.
   Proof. now vm_compute. Qed.
 
 
-  Import RiscvPmpBlockVerifExecutor.
+  Import RiscvPmpCFGVerifExecutor.
 
   (* Definition test := (postprocess *)
   (*                       (SPureSpec.replay *)
-  (*                          (postprocess (RiscvPmpBlockVerifExecutor.vcgen RiscvPmpBlockVerifExecutor.default_config 1 sep_contract_read fun_checked_read wnil)))). *)
+  (*                          (postprocess (RiscvPmpCFGVerifExecutor.vcgen RiscvPmpCFGVerifExecutor.default_config 1 sep_contract_read fun_checked_read wnil)))). *)
   Import SymProp.notations.
   (* Eval vm_compute in test. *)
 
@@ -867,7 +795,7 @@ Module RiscvPmpSpecVerif.
   Proof. now symbolic_simpl. Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
-      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      RiscvPmpCFGVerifSpec.CEnv f = Some c ->
       ValidContract f ->
       Symbolic.ValidContract c (FunDef f).
   Proof.
@@ -879,7 +807,7 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_contract_with_fuel_debug : forall {Δ τ} (fuel : nat) (f : Fun Δ τ) (c : SepContract Δ τ),
-      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      RiscvPmpCFGVerifSpec.CEnv f = Some c ->
       ValidContractWithFuelDebug fuel f ->
       Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
@@ -921,34 +849,18 @@ Module RiscvPmpSpecVerif.
   Qed.
 End RiscvPmpSpecVerif.
 
-(* ======================================================================== *)
-(* Iris soundness of contracts                                               *)
-(*                                                                           *)
-(* contractsSound: ⊢ ValidContractEnvSem CEnv                               *)
-(*   Combines foreignSemBlockVerif (FunX soundness) + lemSemBlockVerif       *)
-(*   (lemma soundness) + shallow vcgen soundness (from ValidContracts) into  *)
-(*   the top-level Iris statement that every CEnv contract is sound in the   *)
-(*   binary weakest-precondition model (semWP2).                             *)
-(*                                                                           *)
-(* read_ram_sound / write_ram_sound / decode_sound / leak_sound:             *)
-(*   Each foreign function is proved sound by unfolding the Iris semantics   *)
-(*   of the binary model (mem_inv2 / regs_inv2) and applying the frame rule  *)
-(*   (iFrame).  The leak_sound proof is notable: it updates BOTH trace       *)
-(*   invariants (left and right world) and uses trace.trace_full_frag_eq to  *)
-(*   extract the current trace value.                                        *)
-(* ======================================================================== *)
 Module RiscvPmpIrisInstanceWithContracts.
   Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpBlockVerifSpec.
+    RiscvPmpCFGVerifSpec.
   Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase2
+    RiscvPmpProgram RiscvPmpSemantics RiscvPmpCFGVerifSpec RiscvPmpIrisBase2
     (* RiscvPmpIrisAdeqParameters *) RiscvPmpIrisAdeqParams2
     RiscvPmpIrisInstance2.
   Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
+    RiscvPmpProgram RiscvPmpCFGVerifSpec RiscvPmpCFGVerifShalExecutor.
   Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
-    RiscvPmpBlockVerifExecutor.
+    RiscvPmpProgram RiscvPmpCFGVerifSpec RiscvPmpCFGVerifShalExecutor
+    RiscvPmpCFGVerifExecutor.
 
   Import RiscvPmpIrisBase2.
   Import RiscvPmpIrisInstance2.
@@ -964,7 +876,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.proofmode.tactics.
 
   Lemma read_ram_sound `{sailGS2 Σ} {bytes} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
+    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_read_ram (read_ram bytes).
   Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
       iIntros "H". cbn in *. iApply semWP2_foreign. unfold mem_inv2.
@@ -974,8 +886,19 @@ Module RiscvPmpIrisInstanceWithContracts.
       rewrite evalValsProjLeftIsProjLeftEvals in Hf. rewrite evalValsProjRightIsProjRightEvals in Hf.
       rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       inversion H0; inversion H1; subst. clear H0 H1 Hf. do 3 iModIntro.
-      iMod "Hclose" as "_". destruct inv.
-      { cbn. destruct v.
+      iMod "Hclose" as "_".
+      (* The precondition interprets [asn.match_bool inv ...] via the raw
+         [pattern_match_relval pat_bool inv]. Under method-Y this succeeds on a
+         [NonSyncVal v v0] scrutinee exactly when [v = v0] (both worlds take the
+         same branch), and fails otherwise. Destructing the match result rather
+         than [inv] itself reduces both [H] and the postcondition uniformly:
+         the [Some] branch collapses to a plain boolean [b] (the [SyncVal] and
+         coinciding-[NonSyncVal] cases are then literally identical), and the
+         [None] branch gives a [False] precondition. *)
+      destruct (pattern_match_relval pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn.
+      2: { iDestruct "H" as "%HF". contradiction. }
+      destruct (env.view δpc).
+      destruct b.
         - (* readonly case *)
         iDestruct "H" as "#H".
          iInv "H" as "Hptsto" "Hclose_ptsto".
@@ -1021,12 +944,10 @@ Module RiscvPmpIrisInstanceWithContracts.
           iSplitR; first auto.
           by rewrite eq_fun_read_ramL eq_fun_read_ramR.
           auto.
-      }
-      cbn. iDestruct "H" as "%". contradiction.
   Qed.
 
   Lemma write_ram_sound `{sailGS2 Σ} {bytes} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_write_ram (write_ram bytes).
+    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_write_ram (write_ram bytes).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "[%w (HL & HR)]". iApply semWP2_foreign.
@@ -1049,7 +970,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof. now apply List.Forall_cons. Qed.
 
   (* Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) : *)
-  (*   TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H). *)
+  (*   TValidContractForeign (@RiscvPmpCFGVerifSpec.sep_contract_mmio_write _ H) (mmio_write H). *)
   (* Proof. *)
   (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *. *)
   (*   iIntros "([%Hmmio _] & #Hinv & [-> ->])". iApply semTWP_foreign. *)
@@ -1071,7 +992,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   (* Qed. *)
 
   Lemma decode_sound `{sailGS2 Σ} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
+    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "%Hdecode". iApply semWP2_foreign.
@@ -1095,7 +1016,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   (* Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes): *)
-  (*   TValidContractForeign (RiscvPmpBlockVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H). *)
+  (*   TValidContractForeign (RiscvPmpCFGVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H). *)
   (* Proof. *)
   (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *. *)
   (*   iIntros "Hpre". iApply semTWP_foreign. *)
@@ -1128,7 +1049,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   (* Qed. *)
 
     Lemma leak_sound `{sailGS2 Σ} :
-    ValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_leak RiscvPmpProgram.leak.
+    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_leak RiscvPmpProgram.leak.
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "(Hinv & %HsL & _)". iApply semWP2_foreign.
@@ -1156,13 +1077,13 @@ Module RiscvPmpIrisInstanceWithContracts.
     iExists δ. iSplitR; first auto. iExists (SyncVal tt). auto.
   Qed.
 
-  Lemma foreignSemBlockVerif `{sailGS2 Σ} : ForeignSem.
+  Lemma foreignSemCFGVerif `{sailGS2 Σ} : ForeignSem.
     intros Δ τ f; destruct f;
         eauto using read_ram_sound, write_ram_sound, (* RiscvPmpModel2.mmio_read_sound, mmio_write_sound, within_mmio_sound, *) decode_sound, leak_sound.
   Qed.
 
-  (* Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem. *)
-  (* Proof. apply (TForeignSem_ForeignSem TforeignSemBlockVerif). Qed. *)
+  (* Lemma foreignSemCFGVerif `{sailGS Σ} : ForeignSem. *)
+  (* Proof. apply (TForeignSem_ForeignSem TforeignSemCFGVerif). Qed. *)
 
   Ltac destruct_syminstance ι :=
     repeat
@@ -1178,7 +1099,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       end.
 
   Lemma open_ptsto_instr_sound `{sailGS2 Σ} :
-    ValidLemma RiscvPmpBlockVerifSpec.lemma_open_ptsto_instr.
+    ValidLemma RiscvPmpCFGVerifSpec.lemma_open_ptsto_instr.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     iIntros "[%op (Hptsto & Henc & HsL )]".
@@ -1187,7 +1108,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma close_ptsto_instr_sound `{sailGS2 Σ} :
-    ValidLemma RiscvPmpBlockVerifSpec.lemma_close_ptsto_instr.
+    ValidLemma RiscvPmpCFGVerifSpec.lemma_close_ptsto_instr.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     iIntros "(Hptsto & Henc & HsL & _)".
@@ -1196,7 +1117,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   (* Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth): *)
-  (*   ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width). *)
+  (*   ValidLemma (RiscvPmpCFGVerifSpec.lemma_close_mmio_write imm width). *)
   (* Proof. *)
   (*   intros ι; destruct_syminstance ι; cbn. *)
   (*   iIntros "([<- _] & [-> _])". *)
@@ -1206,7 +1127,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   (*   destruct width; now compute. *)
   (* Qed. *)
 
-  Lemma lemSemBlockVerif `{sailGS2 Σ} : LemmaSem.
+  Lemma lemSemCFGVerif `{sailGS2 Σ} : LemmaSem.
   Proof.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
     (* - apply Model.RiscvPmpModel2.open_pmp_entries_sound. *)
@@ -1216,12 +1137,12 @@ Module RiscvPmpIrisInstanceWithContracts.
     (* - apply close_mmio_write_sound. *)
   Qed.
 
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.Symbolic.
+  Import RiscvPmpCFGVerifSpec.
+  Import RiscvPmpCFGVerifExecutor.Symbolic.
 
-  (* Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv. *)
+  (* Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem RiscvPmpCFGVerifSpec.CEnv. *)
   (* Proof. *)
-  (*   apply (tsound TforeignSemBlockVerif lemSemBlockVerif). *)
+  (*   apply (tsound TforeignSemCFGVerif lemSemCFGVerif). *)
   (*   intros Γ τ f c Heq. *)
   (*   pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc]. *)
   (*   eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness. *)
@@ -1229,9 +1150,9 @@ Module RiscvPmpIrisInstanceWithContracts.
   (* Qed. *)
 
   (* TODO: prove this lemma as: apply (TValidContractEnvSem_ValidContractEnvSem TcontractsSound). *)
-  Lemma contractsSound `{sailGS2 Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma contractsSound `{sailGS2 Σ} : ⊢ ValidContractEnvSem RiscvPmpCFGVerifSpec.CEnv.
   Proof.
-    apply (sound foreignSemBlockVerif lemSemBlockVerif).
+    apply (sound foreignSemCFGVerif lemSemCFGVerif).
     intros Γ τ f c Heq.
     pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
     eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.

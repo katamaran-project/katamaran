@@ -46,14 +46,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
@@ -73,7 +71,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -1102,65 +1100,15 @@ Section AdequacyTools.
           contradiction.
     Qed.
 
-    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
-        (ι : Valuation Γ) (ExitCondIprop : iProp Σ) :
-      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr pre instrs exitCond fuel post (λ _ _, True) [] →
-      ⊢ ∀ a : RelVal ty_xlenbits,
-        asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
-        pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
-        (∀ an,
-           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
-           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗ ExitCondIprop) -∗
-        myWP2_loop ExitCondIprop.
-    Proof.
-      cbv [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr bind demonic_ctx demonic
-           CPureSpec.demonic lift_purespec].
-      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
-      rewrite CPureSpec.wp_demonic_ctx in Htrip.
-      specialize (Htrip ι a).
-      apply produce_sound in Htrip.
-      iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iApply (sound_exec_cfg_addr_myWP2 a ExitCondIprop _ _ Hexec
-        with "[$Hpc $Hnpc $Hinstrs $Hh2]").
-      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
-      iApply ("Hk" $! an).
-      iSplit. { iPureIntro. exact Hexit. }
-      iFrame.
-    Qed.
-
-    Lemma sound_sblock_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
-        (Hverif : safeE (postprocess (
-            Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition
-              pre instrs exitCond fuel post wnil)))
-        (ι : Valuation Γ) (ExitCond : iProp Σ) :
-      ⊢ ∀ a : RelVal ty_xlenbits,
-          asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
-          pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-          Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
-          (∀ an,
-             ⌜match an with
-               | SyncVal v => exitCond v = true
-               | NonSyncVal _ _ => False
-               end⌝ ∗
-             pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-             Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
-             ExitCond) -∗
-          myWP2_loop ExitCond.
-    Proof.
-      apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel) ι ExitCond).
-      apply (safeE_safe env.nil), postprocess_sound in Hverif.
-      apply LogicalSoundness.psafe_safe in Hverif; [|done].
-      revert Hverif.
-      apply Katamaran.RiscvPmp.CFGVer.Verifier.rexec_triple_addr.
-      - easy. - easy. - easy. - constructor.
-    Qed.
-
     (* ---------------------------------------------------------------- *)
-    (* Table-based (_tbl) soundness bridge.  Same myWP2 conclusion as    *)
-    (* the gmap-based lemmas above, but starting from the table VC       *)
-    (* (sblock_verification_condition_tbl over address-term tables).     *)
+    (* Table-based (_tbl) soundness bridge, built on sound_exec_cfg_addr_myWP2 *)
+    (* above (the shared gmap-based executor-loop soundness step) but      *)
+    (* starting from the table VC (scfg_verification_condition_tbl over   *)
+    (* address-term tables) — the only VC any CFGVer example builds, via  *)
+    (* Contracts.v's CFG_VC_triple.  (An earlier gmap-only, non-table      *)
+    (* bridge — sound_cexec_triple_addr_myWP2 / sound_scfg_verification_  *)
+    (* condition_myWP2 — was dead, since even fixed-address examples go   *)
+    (* through the table VC, and has been removed, 2026-07-17.)           *)
     (* The Option B guard in cexec_triple_addr_tbl surfaces — after      *)
     (* wp_demonic_ctx and specialization to ι — as an                    *)
     (* `itable_faith ∧ etable_faith →` premise, discharged here by the   *)
@@ -1198,10 +1146,10 @@ Section AdequacyTools.
       iFrame.
     Qed.
 
-    Lemma sound_sblock_verification_condition_myWP2_tbl {Γ pre post instrs exitCond fuel}
+    Lemma sound_scfg_verification_condition_myWP2_tbl {Γ pre post instrs exitCond fuel}
         {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
         (Hverif : safeE (postprocess (
-            Katamaran.RiscvPmp.CFGVer.Verifier.sblock_verification_condition_tbl
+            Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition_tbl
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith instrs tbl ι)
@@ -1224,7 +1172,7 @@ Section AdequacyTools.
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.
-      apply Katamaran.RiscvPmp.CFGVer.Verifier.rblock_verification_condition_tbl.
+      apply Katamaran.RiscvPmp.CFGVer.Verifier.rcfg_verification_condition_tbl.
       - easy.
       - constructor.
     Qed.

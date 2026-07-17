@@ -47,14 +47,12 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
 From Katamaran Require Import
+     RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
@@ -77,7 +75,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -102,20 +100,20 @@ Import IrisModel.RiscvPmpIrisBase.
     (cfg_instrs_pre instrs γ1 γ2 -∗ exitCond_WP2_loop exitCond)%I.
 
   Lemma cfg_instrs_verified `{sailGS2 Σ} instrs' exitCond γ1 γ2 R (ι : Valuation R)
-    (block : @CFGVerifierContract R)
-    (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
-    (blockInstrs : cfg_instrs block = instrs')
-    (blockExitCond : cfg_exitCond block = exitCond)
-    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+    (contract : @CFGVerifierContract R)
+    (valid_contract : ValidCFGVerifierContract contract)
+    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (contractInstrs : cfg_instrs contract = instrs')
+    (contractExitCond : cfg_exitCond contract = exitCond)
+    (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
-                     exitCond (cfg_exits block) ι)
+                     exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
-               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+               asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
                  ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
     RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
@@ -134,18 +132,18 @@ Import IrisModel.RiscvPmpIrisBase.
     rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
-    destruct block.
-    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, blockPlacement,
+    destruct contract.
+    cbn in valid_contract, contractInitAddr, contractInstrs, contractExitCond, contractPlacement,
       HexitsFaith, ImplPre.
     subst cfg_init_addr cfg_instrs cfg_exitCond.
-    unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
+    unfold Valid_CFG_VC, CFG_VC_triple in valid_contract.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
                     (instrs_of_list (bv.of_N init_addr) instrs')
                     (table_of_list cfg_placement 0 instrs') ι).
-    { apply itable_faith_of_list; [exact blockPlacement|].
+    { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    iApply (sound_sblock_verification_condition_myWP2_tbl
-              valid_block _ Hif HexitsFaith
+    iApply (sound_scfg_verification_condition_myWP2_tbl
+              valid_contract _ Hif HexitsFaith
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv Hregs".
@@ -161,20 +159,20 @@ Import IrisModel.RiscvPmpIrisBase.
   Qed.
 
   Lemma cfg_instrs_safe `{sailGS2 Σ} instrs' exitCond γ1 γ2 {R} {ι : Valuation R}
-    (block : @CFGVerifierContract R)
-    (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
-    (blockInstrs : cfg_instrs block = instrs')
-    (blockExitCond : cfg_exitCond block = exitCond)
-    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+    (contract : @CFGVerifierContract R)
+    (valid_contract : ValidCFGVerifierContract contract)
+    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (contractInstrs : cfg_instrs contract = instrs')
+    (contractExitCond : cfg_exitCond contract = exitCond)
+    (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
-                     exitCond (cfg_exits block) ι)
+                     exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
-               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+               asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
                  ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
     RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
@@ -193,21 +191,21 @@ Import IrisModel.RiscvPmpIrisBase.
   Lemma cfg_instrs_verified_with_mem `{sailGS2 Σ} instrs' exitCond γ1 γ2
     {R} {ι : Valuation R}
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
-    (block : @CFGVerifierContract R)
-    (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
-    (blockInstrs : cfg_instrs block = instrs')
-    (blockExitCond : cfg_exitCond block = exitCond)
-    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+    (contract : @CFGVerifierContract R)
+    (valid_contract : ValidCFGVerifierContract contract)
+    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (contractInstrs : cfg_instrs contract = instrs')
+    (contractExitCond : cfg_exitCond contract = exitCond)
+    (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
-                     exitCond (cfg_exits block) ι)
+                     exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                interp_mem_with_public_memory μ1 μ2 data_specs ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
-               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+               asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
                  ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
     RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
@@ -228,18 +226,18 @@ Import IrisModel.RiscvPmpIrisBase.
     rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
-    destruct block.
-    cbn in valid_block, blockInitAddr, blockInstrs, blockExitCond, blockPlacement,
+    destruct contract.
+    cbn in valid_contract, contractInitAddr, contractInstrs, contractExitCond, contractPlacement,
       HexitsFaith, ImplPre.
     subst cfg_init_addr cfg_instrs cfg_exitCond.
-    unfold Valid_CFG_VC, CFG_VC_triple in valid_block.
+    unfold Valid_CFG_VC, CFG_VC_triple in valid_contract.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_faith
                     (instrs_of_list (bv.of_N init_addr) instrs')
                     (table_of_list cfg_placement 0 instrs') ι).
-    { apply itable_faith_of_list; [exact blockPlacement|].
+    { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    iApply (sound_sblock_verification_condition_myWP2_tbl
-              valid_block _ Hif HexitsFaith
+    iApply (sound_scfg_verification_condition_myWP2_tbl
+              valid_contract _ Hif HexitsFaith
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").
     - iSplitL "Hpriv Hregs Hmem".
@@ -257,21 +255,21 @@ Import IrisModel.RiscvPmpIrisBase.
   Lemma cfg_instrs_safe_with_mem `{sailGS2 Σ} instrs' exitCond γ1 γ2
     {R} {ι : Valuation R}
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
-    (block : @CFGVerifierContract R)
-    (valid_block : ValidCFGVerifierContract block)
-    (init_addr : N)    (blockInitAddr : cfg_init_addr block = init_addr)
-    (blockInstrs : cfg_instrs block = instrs')
-    (blockExitCond : cfg_exitCond block = exitCond)
-    (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+    (contract : @CFGVerifierContract R)
+    (valid_contract : ValidCFGVerifierContract contract)
+    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (contractInstrs : cfg_instrs contract = instrs')
+    (contractExitCond : cfg_exitCond contract = exitCond)
+    (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
-                     exitCond (cfg_exits block) ι)
+                     exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                interp_mem_with_public_memory μ1 μ2 data_specs ∗
                cur_privilege ↦ᵣ ty.SyncVal Machine ∗
                interp_inv_constant_time -∗
-               asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+               asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
                  ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
     RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
     RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
@@ -584,20 +582,20 @@ Import IrisModel.RiscvPmpIrisBase.
       instrs' exitCond n ws {R} {ι : Valuation R}
       public_registers
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
-      (block : @CFGVerifierContract R)
-      (valid_block : ValidCFGVerifierContract block)
-      (init_addr : N)      (blockInitAddr : cfg_init_addr block = init_addr)
-      (blockInstrs : cfg_instrs block = instrs')
-      (blockExitCond : cfg_exitCond block = exitCond)
-      (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+      (contract : @CFGVerifierContract R)
+      (valid_contract : ValidCFGVerifierContract contract)
+      (init_addr : N)      (contractInitAddr : cfg_init_addr contract = init_addr)
+      (contractInstrs : cfg_instrs contract = instrs')
+      (contractExitCond : cfg_exitCond contract = exitCond)
+      (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                         = ty.SyncVal (@bv.of_N xlenbits init_addr))
       (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
-                       exitCond (cfg_exits block) ι)
+                       exitCond (cfg_exits contract) ι)
       (ImplPre : forall `{sailGS2 Σ},
           interp_gprs_with_public_registers γ1 γ2 public_registers ∗
           cur_privilege ↦ᵣ ty.SyncVal Machine ∗
           interp_inv_constant_time -∗
-          asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+          asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
             ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
       (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N ->
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
@@ -626,7 +624,7 @@ Import IrisModel.RiscvPmpIrisBase.
       iMod "Hinv" as "#Hinv".
       iMod (instrsMemory init_addr with "Hmem") as "H"; eauto.
       iSplitR "".
-      - iApply (cfg_instrs_safe γ1 γ2 block).
+      - iApply (cfg_instrs_safe γ1 γ2 contract).
         all: eauto.
         iIntros "(Hregs & Hpriv & #Hinv')".
         iApply ImplPre.
@@ -660,15 +658,15 @@ Import IrisModel.RiscvPmpIrisBase.
         (HpubReg : declare_public_registers γ1 γ2 public_registers)
         data_specs
         (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
-        (block : @CFGVerifierContract R)
-        (valid_block : ValidCFGVerifierContract block)
-        (init_addr : N)        (blockInitAddr : cfg_init_addr block = init_addr)
-        (blockInstrs : cfg_instrs block = instrs')
-        (blockExitCond : cfg_exitCond block = exitCond)
-        (blockPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement block) ι
+        (contract : @CFGVerifierContract R)
+        (valid_contract : ValidCFGVerifierContract contract)
+        (init_addr : N)        (contractInitAddr : cfg_init_addr contract = init_addr)
+        (contractInstrs : cfg_instrs contract = instrs')
+        (contractExitCond : cfg_exitCond contract = exitCond)
+        (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                           = ty.SyncVal (@bv.of_N xlenbits init_addr))
         (HexitsFaith : Katamaran.RiscvPmp.CFGVer.Verifier.etable_faith
-                         exitCond (cfg_exits block) ι)
+                         exitCond (cfg_exits contract) ι)
         (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
             spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs')
                                + 4 * N.of_nat i))
@@ -677,7 +675,7 @@ Import IrisModel.RiscvPmpIrisBase.
             interp_mem_with_public_memory μ1 μ2 data_specs ∗
             cur_privilege ↦ᵣ ty.SyncVal Machine ∗
             interp_inv_constant_time -∗
-            asn.interpret (extend_to_minimal_pre (cfg_precondition block))
+            asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
               ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
         (init_addr + 4 * N.of_nat (length instrs') +
          4 * N.of_nat (length data_specs) < lenAddr)%N →
@@ -713,7 +711,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (* Convert all-NonSyncVal to public form *)
       rewrite (something_memory data_specs HpubMem).
       iSplitR "".
-      - iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 block).
+      - iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 contract).
         all: eauto.
         iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
         iApply ImplPre.
@@ -757,7 +755,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_block : ValidCFGVerifierContract
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract init_addr reg_specs mem_specs instrs extra_exit_offs
              exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond reg_specs mem_specs.
@@ -777,7 +775,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (map mem_full_to_spec mem_specs) HpubMem
       (gen_contract init_addr reg_specs mem_specs instrs extra_exit_offs
          exitCond fuel)
-      valid_block
+      valid_contract
       init_addr
       eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
     all: try eauto.
@@ -799,7 +797,7 @@ Import IrisModel.RiscvPmpIrisBase.
      same premises, but consumes the symbolic-base contract gen_contract_param
      (Σ = ["p"]) and instantiates the placement valuation ι at the concrete
      base, ι = ["p" ↦ SyncVal (bv.of_N init_addr)].  The symbolic VC
-     (valid_block) is proved ONCE, uniformly in init_addr, and reused here for
+     (valid_contract) is proved ONCE, uniformly in init_addr, and reused here for
      every concrete init_addr — no per-address vm_compute. *)
   Lemma gen_contract_noninterferent_param
       (reg_specs : list reg_spec)
@@ -818,7 +816,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_block : ValidCFGVerifierContract
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs mem_specs instrs extra_exit_offs
              exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond reg_specs mem_specs.
@@ -839,7 +837,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (map mem_full_to_spec mem_specs) HpubMem
       (gen_contract_param init_addr reg_specs mem_specs instrs extra_exit_offs
          exitCond fuel)
-      valid_block
+      valid_contract
       init_addr
       eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
     all: try eauto.
@@ -926,7 +924,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_block : ValidCFGVerifierContract
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel init_addr reg_specs mem_specs instrs extra_exit_offs
              bound exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond
@@ -949,7 +947,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
       (gen_contract_rel init_addr reg_specs mem_specs instrs extra_exit_offs
          bound exitCond fuel)
-      valid_block
+      valid_contract
       init_addr
       eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
     all: try eauto.

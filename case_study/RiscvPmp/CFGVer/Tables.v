@@ -46,12 +46,11 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
-From Katamaran Require
+From Katamaran Require Import
      RiscvPmp.CFGVer.Verifier.
 
 From iris.proofmode Require string_ident tactics.
@@ -65,7 +64,7 @@ Import bv.notations.
 Import env.notations.
 Import ListNotations.
 
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 Import iris.proofmode.tactics.
@@ -104,8 +103,8 @@ Import iris.proofmode.tactics.
     end.
 
   (* An instruction address never collides with a later one, provided the
-     whole block fits below 2^xlenbits (no wraparound).  This is the side
-     condition [big_sepM_insert] needs to peel the head of a block off the
+     whole program fits below 2^xlenbits (no wraparound).  This is the side
+     condition [big_sepM_insert] needs to peel the head instruction off the
      gmap. *)
   Lemma instrs_of_list_fresh (b : list AST) (base : bv xlenbits) (d : N) :
     (0 < d)%N ->
@@ -159,14 +158,14 @@ Import iris.proofmode.tactics.
     end.
 
   (* Default exit table: the single fall-through address just past the
-     instruction block. *)
+     program's instructions. *)
   Definition exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list AST)
     : list (Term Σ ty_xlenbits) :=
     [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p].
 
   (* General exit table from base-relative byte offsets.  Programs whose
-     control flow leaves the block anywhere other than the fall-through
-     address (e.g. a branch whose taken target lies past the block) list
+     control flow leaves anywhere other than the fall-through
+     address (e.g. a branch whose taken target lies past the program) list
      ALL their exit offsets here; exits_of_list is the [4·len] special
      case.  Keys go through peval_bvadd like the instruction table. *)
   Definition exits_of_offs {Σ : LCtx} (p : Term Σ ty_xlenbits) (offs : list N)
@@ -237,7 +236,7 @@ Import iris.proofmode.tactics.
   Qed.
 
   (* Exit-table analog: the fall-through exit term is faithful to any
-     exit condition that accepts the first address past the block. *)
+     exit condition that accepts the first address past the program. *)
   Lemma etable_faith_exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
       (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AST) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->

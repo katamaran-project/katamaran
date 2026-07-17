@@ -29,7 +29,7 @@ end theorem goes in `Results.v` (plus the gate's `AXIOM_CLEAN_THMS` list in
    fuel must exceed the number of instruction steps actually executed, **with
    slack** (tight fuel shows up as a bare `False` deep in the VC —
    → **cfgver-solve-vc**). If control flow can exit other than by falling off the
-   end (e.g. a forward branch past the block), collect those offsets as
+   end (e.g. a forward branch past the program), collect those offsets as
    `extra_exit_offs`.
 3. **Contract.** `gen_contract init_addr reg_specs mem_specs instrs extra_exit_offs
    ec fl` — spec-triple formats and public/private/pinned semantics in

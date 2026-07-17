@@ -2,12 +2,12 @@
 name: cfgver-executor
 description: >
   Katamaran CFGVer symbolic executor & verification condition — the decision layer.
-  Use when reading or writing the symbolic side of the CFG verifier: sexec_cfg_addr
-  (symbolic executor over a gmap of instructions keyed by absolute pc), the angelic
-  exit/execute choice at each step, why execution errors on a symbolic pc
-  (term_get_val = None) or an unmapped address, ptsto_instrs / ptsto_instrs_lookup
-  (instruction-memory ownership), and sblock_verification_condition (how the VC is
-  built and called). NOT for the concrete mirror executor cexec_cfg_addr or
+  Use when reading or writing the symbolic side of the CFG verifier: sexec_cfg_addr_tbl
+  (symbolic executor over a term-keyed instruction table), the angelic exit/execute
+  choice at each step, why execution errors on a pc that matches no table key
+  (lookup_instr/is_exit fail), ptsto_instrs / ptsto_instrs_lookup (instruction-memory
+  ownership, still gmap-based on the concrete side), and scfg_verification_condition_tbl
+  (how the VC is built and called). NOT for the concrete mirror executor cexec_cfg_addr or
   rsolve/relational proofs (cfgver-refinement), and NOT for the VC-to-leakage chain
   (cfgver-soundness).
 ---
@@ -20,26 +20,38 @@ relating the two live in **cfgver-refinement**.
 
 ## Instruction store
 
-Instructions live in a **`gmap (bv xlenbits) AST` keyed by absolute pc**. The map is
-built outside the verifier by `instrs_of_list (bv.of_N init_addr) i` (`Tables.v`) from a
-plain `list AST`; `Verifier.v` itself knows nothing about a base address, alignment,
-or index arithmetic — lookup is exact: `instrs !! v`.
+Two representations, one per side. The **concrete** executor (`cexec_cfg_addr`,
+**cfgver-refinement**) still keys off a **`gmap (bv xlenbits) AST` by absolute pc**,
+built by `instrs_of_list (bv.of_N init_addr) i` (`Tables.v`) from a plain `list AST` —
+lookup is exact, `instrs !! v`. The **symbolic** executor (`sexec_cfg_addr_tbl`, below)
+instead keys off a **term-indexed table** (`SITable`/`SETable`, a `list (Term _
+ty_xlenbits * AST)` resp. `list (Term _ ty_xlenbits)`) so that a symbolic pc like
+`p + 8` can still be dispatched: matching is syntactic (`Term_eqb` modulo `peval`),
+not a concrete lookup. `itable_faith`/`etable_faith` (`Verifier.v`) are the Prop-level
+facts tying a given table to the gmap at a valuation; the refinement proof
+(`rexec_cfg_addr_tbl`, **cfgver-refinement**) is what lets the two sides' VCs
+correspond.
 
-## `sexec_cfg_addr`
+## `sexec_cfg_addr_tbl`
 
 ```coq
-sexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-  : ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits)
+sexec_cfg_addr_tbl (fuel : nat)
+  : ⊢ SITable -> SETable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits)
 ```
 
 At each step it takes an `angelic_binary` (existential choice) between **exiting**
 and **executing** the instruction at the current pc
-(`angelic_binary m1 m2 Φ h = m1 Φ h \/ m2 Φ h`).
+(`angelic_binary m1 m2 Φ h = m1 Φ h \/ m2 Φ h`). Unlike a gmap lookup, `apc` never
+needs to be concrete: `lookup_instr`/`is_exit` match it against the table's key terms
+via `Term_eqb (peval apc) (peval key)`, so a literal base (`256+8` folds to `264`) and
+a symbolic one (`p+8` matches the key term `p+8`) both work. `tbl`/`exits` are
+threaded as recursion ARGUMENTS (not fixed `Fixpoint` params, since they're
+world-dependent) and persisted across each step via `persist_itable`/`persist_etable`.
 
 It stops with `error` when:
 - `fuel = 0`
-- `term_get_val apc = None` — the pc is symbolic, not a concrete value
-- `instrs !! v = None` — no instruction mapped at this pc
+- `lookup_instr tbl apc = None` — the pc matches no table key (no instruction there)
+- `is_exit exits apc = false` on the exit branch (chosen but no exit key matches)
 
 ## `ptsto_instrs`
 
@@ -51,20 +63,23 @@ Definition ptsto_instrs (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
 Access one instruction with `ptsto_instrs_lookup instrs v Hlk`
 (`Hlk : instrs !! v = Some i`, via `big_sepM_lookup_acc`; `i` is implicit).
 
-## `sblock_verification_condition`
+## `scfg_verification_condition_tbl`
 
 ```coq
-sblock_verification_condition {Σ : LCtx}
+scfg_verification_condition_tbl {Σ : LCtx}
   (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-  (instrs : gmap (bv xlenbits) AST)
-  (exitCond : bv xlenbits -> bool)
+  (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits))
   (fuel : nat)
   (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
   (w : World) : 𝕊 w
 ```
 
-Call pattern: `sblock_verification_condition (Σ := [ctx]) req instrs exitCond fuel ens wnil`.
-`Σ := [ctx]` must be explicit — Coq cannot infer it.
+Call pattern: `scfg_verification_condition_tbl (Σ := [ctx]) req tbl exits fuel ens wnil`.
+`Σ := [ctx]` must be explicit — Coq cannot infer it. `tbl`/`exits` are given at the
+CONTRACT context Σ (like `req`/`ens`) and substituted into the current world via
+`subst_itable`/`subst_etable`. This is the VC every `CFGVerifierContract` actually
+builds (`Contracts.v`'s `CFG_VC_triple`) — including fixed-address examples, whose
+table entries are just literal-term keys.
 
 **Postconditions are trivial by design**: `SHeapSpec` has no leakcheck — resources
 left in the heap after consuming `ens` are silently dropped (affinely, in Iris).
@@ -73,17 +88,24 @@ the trivially-true assertion as `ens`, and the soundness lemmas discard the fina
 
 ## Dead code & history
 
-`semTripleCFG` and `instrAligned` still exist in `Verifier.v` but nothing uses them
-(pending cleanup). Before 2026-07-13 instructions were a `list AST` with a base
-address and alignment guard; see git history or memory `project-cfgver-gmap-pivot`
-if archaeology is needed.
+`semTripleCFG` and `instrAligned` were dead (nothing used them) and have been
+removed from `Verifier.v` (2026-07-17). Before 2026-07-13 instructions were a
+`list AST` with a base address and alignment guard; see git history or memory
+`project-cfgver-gmap-pivot` if archaeology is needed.
 
-> **⚠ Known gap — parametric-base table executor not yet covered by any skill.**
-> The symbolic-base work added a second executor path (`sexec_cfg_addr_tbl`, dispatch
-> by `Term_eqb ∘ peval` on term-table keys so a symbolic pc like `p+8` works) plus
-> `sblock_verification_condition_tbl` and `gen_contract_rel`. Until a skill covers it,
-> consult the "PARAMETRIC-BASE SUPPORT — READING GUIDE" comment blocks in
-> `CFGVer/Verifier.v` / `CFGVer/GenContract.v` and memory `project-cfgver-symbolic-base-poc`.
+The gmap-based, non-table symbolic executor/VC (`sexec_cfg_addr`, `sexec_triple_addr`,
+`scfg_verification_condition`) and their relational lemmas (`rexec_cfg_addr`,
+`rexec_triple_addr`, `rcfg_verification_condition`) were also dead — every example,
+including fixed-address ones, builds its contract via the table-based VC above — and
+were removed 2026-07-17, along with the two dead non-table `_myWP2` bridge lemmas in
+`Adequacy.v` that referenced them. `sexec_cfg_addr_tbl`/`scfg_verification_condition_tbl`
+are now the only symbolic executor/VC; dropping the `_tbl` suffix (now redundant) is
+tracked as follow-up cleanup in `.claude/TODO.md`.
+
+For the parametric-base story specifically (why a *term*-keyed table rather than a
+gmap in the first place), consult the "PARAMETRIC-BASE SUPPORT — READING GUIDE"
+comment blocks in `CFGVer/Verifier.v` / `CFGVer/GenContract.v` and memory
+`project-cfgver-symbolic-base-poc`.
 
 **Next layer up:** the concrete mirror and the relational proofs are in
 **cfgver-refinement**; the VC→`myWP2_loop`→leakage bridge is in **cfgver-soundness**.

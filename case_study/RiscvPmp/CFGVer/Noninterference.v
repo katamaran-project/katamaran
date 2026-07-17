@@ -49,14 +49,13 @@ From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVer.Verifier
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
 
 Import RiscvPmpProgram.
-Import RiscvPmpBlockVerifExecutor.
+Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
 
@@ -85,7 +84,7 @@ Import SmallStepNotations.
     Definition pcOutOfInstrs_exitCond (init_addr : N) (instrs : list AST) : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N (init_addr + 4 * N.of_nat (length instrs))).
 
-    (* The fall-through address (first address past the block) satisfies
+    (* The fall-through address (first address past the program) satisfies
        pcOutOfInstrs_exitCond — the fact etable_faith_exits_of_list needs
        to discharge the default exit table against this exit condition. *)
     Lemma pcOutOfInstrs_fallthrough (ia : N) (instrs : list AST) :
@@ -179,8 +178,6 @@ Import SmallStepNotations.
         | Some v => Some (a, v)
         | None => None
         end) specs.
-
-    Definition filter_AnnotInstr_AST (l : list AnnotInstr) := base.omap extract_AST l.
 
     Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=

@@ -48,8 +48,8 @@ use the **rocq** plugin skill; generic pitfalls live in **rocq-pitfalls**,
 | Skill | Covers | Read when |
 |-------|--------|-----------|
 | **cfgver-new-example** | the 6-step recipe: asm → contract → VC → end lemma → axiom check | verifying/adding a new program (most common task) |
-| **cfgver-executor** | symbolic executor `sexec_cfg_addr`, gmap instruction store, `ptsto_instrs`, `sblock_verification_condition` | how the verifier decides/executes; VC construction; symbolic-pc errors |
-| **cfgver-refinement** | concrete mirror `cexec_cfg_addr`, the mirroring discipline, `RefineCompat`, `rexec_cfg_addr` | reading/extending the relational layer; proving a new relational (ℛ⟦⟧) lemma |
+| **cfgver-executor** | symbolic executor `sexec_cfg_addr_tbl`, term-table instruction store, `ptsto_instrs`, `scfg_verification_condition_tbl` | how the verifier decides/executes; VC construction; symbolic-pc errors |
+| **cfgver-refinement** | concrete mirror `cexec_cfg_addr`, the mirroring discipline, `RefineCompat`, `rexec_cfg_addr_tbl` | reading/extending the relational layer; proving a new relational (ℛ⟦⟧) lemma |
 | **cfgver-rsolve** | driving `rsolve`: debug workflow, instance template, divergence/OOM, manual bind pairing | an `rsolve` failure/hang/OOM; writing a `RefineCompat` instance |
 | **cfgver-soundness** | the VC → `myWP2_loop` → leakage chain; `WP2_loop` vs `myWP2_loop` | understanding/extending the theorem architecture |
 | **cfgver-wp2** | binary WP2 proof mechanics: `semWP2_unfold`, `stm_to_val`, `IVal`, `Result2` (library skill) | a semWP2/adequacy proof is stuck |

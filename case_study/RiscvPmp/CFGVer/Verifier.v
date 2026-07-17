@@ -29,8 +29,9 @@
 (* ======================================================================== *)
 (* CFGVer/Verifier.v                                                        *)
 (*                                                                           *)
-(* Role: defines the symbolic CFG executor (sexec_cfg_addr / cexec_cfg_addr) *)
-(* and proves its soundness up to semTripleCFG.                             *)
+(* Role: defines the symbolic CFG executor (sexec_cfg_addr_tbl) and the     *)
+(* concrete mirror (cexec_cfg_addr), and proves its soundness up to the     *)
+(* myWP2_loop chain in Adequacy.v.                                          *)
 (*                                                                           *)
 (* Key differences from BlockVer/Verifier.v:                                *)
 (*   - Address-indexed lookup: each step fetches instr at PC/bytes_per_instr *)
@@ -40,11 +41,6 @@
 (*     nondeterministic choice between exiting and executing one more instr.  *)
 (*   - fuel bound: the executor always terminates (no coinduction needed).   *)
 (*                                                                           *)
-(* Import policy (IMPORTANT):                                                *)
-(*   Examples.v does `From Katamaran Require RiscvPmp.CFGVer.Verifier`       *)
-(*   (without Import!) to avoid notation/name clashes with BlockVer.        *)
-(*   All CFGVer lemmas are then used with the qualified prefix               *)
-(*   `Katamaran.RiscvPmp.CFGVer.Verifier.foo`.                              *)
 (* ======================================================================== *)
 
 From Coq Require Import
@@ -72,7 +68,7 @@ From Katamaran Require Import
      MicroSail.SymbolicExecutor
      MicroSail.RefineExecutor
      MicroSail.Soundness
-     RiscvPmp.BlockVer.Spec
+     RiscvPmp.CFGVer.Spec
      RiscvPmp.IrisModel
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstance
@@ -101,19 +97,19 @@ Open Scope Z_scope.
 Import RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
 
 (* ======================================================================== *)
-(* BlockVerificationDerived                                                  *)
+(* CFGVerificationDerived                                                  *)
 (*                                                                           *)
-(* Despite the name (inherited from BlockVer), this section now hosts the   *)
-(* CFG verifier.  It is structured in four subsections:                     *)
-(*   Symbolic  — sexec_cfg_addr and related definitions                     *)
+(* The CFG verifier, structured in four subsections:                        *)
+(*   Symbolic  — sexec_cfg_addr_tbl and related definitions                 *)
 (*   Shallow   — cexec_cfg_addr (concrete, propositional)                   *)
-(*   Relational — rexec_cfg_addr (the key soundness bridge via rsolve)      *)
-(*   Soundness — ptsto_instrs, semTripleCFG, sound_sblock_verification_condition *)
+(*   Relational — rexec_cfg_addr_tbl (the key soundness bridge via rsolve)  *)
+(*   Soundness — ptsto_instrs + the pieces reused by Adequacy.v's myWP2    *)
+(*     soundness chain (sound_exec_instruction, ptsto_instrs_lookup)       *)
 (* ======================================================================== *)
-Section BlockVerificationDerived.
+Section CFGVerificationDerived.
 
-  Import RiscvPmpBlockVerifExecutor.
-  Import RiscvPmpBlockVerifShalExecutor.
+  Import RiscvPmpCFGVerifExecutor.
+  Import RiscvPmpCFGVerifShalExecutor.
 
   (* safeE P: the symbolic proposition P is "safe" — i.e., the verification
      condition holds after erasure of all metadata.  This is the notion of
@@ -128,20 +124,6 @@ Section BlockVerificationDerived.
     destruct 1 as [H].
     now apply Erasure.erase_safe'.
   Qed.
-
-  (* instrAligned v: true iff v is a multiple of bytes_per_instr (= 4).
-     Used in sexec/cexec_cfg_addr to reject misaligned PCs.
-     `simpl never` prevents Rocq from unfolding it during cbn/simpl,
-     keeping proof goals readable.  Use Nat.eqb_eq to convert to Prop. *)
-  Definition instrAligned (v : bv xlenbits) : bool :=
-    (N.to_nat (bv.bin v) mod bytes_per_instr =? 0)%nat.
-  #[global] Arguments instrAligned : simpl never.
-
-  (* Keep the base<=pc load-address guard folded during cbn/simpl (like
-     instrAligned above), so `destruct (instrAligned v && bv.uleb base v)`
-     can abstract the whole boolean out of proof goals. vm_compute (used by
-     solve_vc) ignores `simpl never`, so the VC still reduces the guard. *)
-  #[local] Arguments bv.uleb : simpl never.
 
   Section Symbolic.
 
@@ -194,94 +176,37 @@ Section BlockVerificationDerived.
                        [env].["a"∷_ ↦ a3].["an"∷_ ↦ na] ;;
         pure (persist__term na θ4).
 
-    (* inputs:
-     * - b : list of instructions (indexed by address / bytes_per_instr)
-     * - fuel: maximum number of steps to execute
-     * - apc: term representing the current pc value
-     * output: term representing the pc value after executing up to fuel steps.
-     *
-     * apc must be a concrete bitvector (term_val) for execution to proceed;
-     * if it is symbolic, or if the index apc/bytes_per_instr falls outside b,
-     * execution halts and returns apc.  Backward and forward jumps are supported
-     * because the instruction is looked up by address each step rather than
-     * advancing linearly through the list.
-     *)
-    (* sexec_cfg_addr b exitCond fuel: the symbolic CFG executor.
-       Inputs:
-         b : list AST   — the program (indexed by address: instr at addr v
-                          is b[v / bytes_per_instr])
-         exitCond : bv xlenbits → bool   — halting criterion
-         fuel : nat     — step bound (error when 0)
-         apc : STerm ty_xlenbits   — current PC (must be a concrete term_val)
-       Behaviour at each step:
-         1. If fuel = 0 → error (stuck)
-         2. If apc is symbolic (not term_val) → error
-         3. If exitCond v = true → angelic_binary offers exit
-         4. If instr is aligned and in bounds → execute one step, recurse
-         5. Otherwise → error
-       angelic_binary models the (existential) choice between exiting and
-       continuing.  A concrete path through angelic_binary corresponds to
-       one concrete execution trace.
-       NOTE: execution can revisit the same address (backward jumps), so
-       this is NOT a linear scan. *)
-    (* instrs is a finite map from absolute address to instruction.  The
-       instruction executed at pc = v is simply instrs !! v (exact match) --
-       no base, no alignment check, no (pc - base)/bytes_per_instr arithmetic.
-       Keying on the absolute pc keeps the pc a single concrete value all the
-       way through: sexec_instruction returns the absolute next pc (constrained
-       by the isolated nextpc = <val>, which the solver substitutes), so the
-       next lookup instrs !! nextpc concretises cleanly even at nonzero base. *)
-    Fixpoint sexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat) :
-      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w apc =>
-        let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
-          error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
-                                     debug_string_message := s |}) in
-        match fuel with
-        | O    => emsg "sexec_cfg_addr: out of fuel"
-        | S n' =>
-            match term_get_val apc with
-            | None   => emsg "sexec_cfg_addr: pc is not a concrete literal (term_get_val apc = None)"
-            | Some v =>
-                angelic_binary
-                  (if exitCond v then pure apc
-                   else emsg "sexec_cfg_addr: exit branch chosen but exitCond is false at this pc")
-                  (match instrs !! v with
-                   | None   => emsg "sexec_cfg_addr: no instruction at this address (instrs !! pc = None)"
-                   | Some i =>
-                       ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
-                       sexec_cfg_addr instrs exitCond n' apc'
-                   end)
-            end
-        end.
-
     (* ================================================================ *)
     (* PARAMETRIC-BASE SUPPORT — READING GUIDE (Verifier.v side).        *)
     (*                                                                    *)
-    (* WHY a new executor at all:  the gmap executor (sexec_cfg_addr)     *)
-    (* dispatches by `instrs !! v`, which needs a CONCRETE address v.     *)
-    (* With a symbolic base `p : term_var`, the pc is a term like `p+8`   *)
-    (* with no concrete value, so gmap lookup cannot fire.  The `_tbl`    *)
-    (* executor instead keys instructions/exits by TERMS and dispatches   *)
-    (* by syntactic term-matching (`Term_eqb (peval apc) (peval key)`) —  *)
-    (* which works whether the base is a literal (`256+8` folds to `264`) *)
-    (* or a variable (`p+8` matches the key term `p+8`).                  *)
+    (* WHY a term-table executor at all:  a gmap executor dispatching by  *)
+    (* `instrs !! v` needs a CONCRETE address v.  With a symbolic base    *)
+    (* `p : term_var`, the pc is a term like `p+8` with no concrete       *)
+    (* value, so gmap lookup cannot fire.  The `_tbl` executor instead    *)
+    (* keys instructions/exits by TERMS and dispatches by syntactic       *)
+    (* term-matching (`Term_eqb (peval apc) (peval key)`) — which works   *)
+    (* whether the base is a literal (`256+8` folds to `264`) or a        *)
+    (* variable (`p+8` matches the key term `p+8`).  It is the only       *)
+    (* symbolic executor (the earlier gmap-based `sexec_cfg_addr` was     *)
+    (* dead — nothing else used it, since even the fixed-address          *)
+    (* examples build their contract via the term-table VC — and was      *)
+    (* removed, 2026-07-17).                                              *)
     (*                                                                    *)
     (* Follow the chain in this order:                                    *)
     (*   1. SITable/SETable, lookup_instr/is_exit  — term-keyed tables    *)
     (*      and peval-modulo matching (below).                            *)
-    (*   2. sexec_cfg_addr_tbl / sblock_verification_condition_tbl —      *)
-    (*      the symbolic executor + VC, mirror of the gmap ones.          *)
+    (*   2. sexec_cfg_addr_tbl / scfg_verification_condition_tbl —      *)
+    (*      the symbolic executor + VC.                                   *)
     (*   3. itable_faith / etable_faith  — "the term table faithfully     *)
     (*      mirrors the concrete gmap / exitCond at valuation ι".  This   *)
     (*      is the semantic bridge between the two worlds.                *)
     (*   4. rexec_cfg_addr_tbl  — the gmap concrete executor is refined   *)
     (*      by the term-table symbolic executor UNDER faithfulness.       *)
     (*   5. cexec_triple_addr_tbl + refine_guard + rexec_triple_addr_tbl  *)
-    (*      — the "Option B" guarded VC refinement: faithfulness is an    *)
-    (*      ASSUMED guard on the concrete side, discharged end-to-end at  *)
-    (*      the one valuation ι = [p ↦ of_N init_addr].                   *)
-    (*   6. rblock_verification_condition_tbl  — VC-level refinement,     *)
+    (*      — the guarded VC refinement: faithfulness is an ASSUMED guard *)
+    (*      on the concrete side, discharged end-to-end at the one        *)
+    (*      valuation ι = [p ↦ of_N init_addr].                           *)
+    (*   6. rcfg_verification_condition_tbl  — VC-level refinement,     *)
     (*      the entry point the soundness chain uses.                     *)
     (* The Examples.v side (exits_of_offs, itable_faith_of_list,          *)
     (* etable_faith_exits_of_offs, gen_contract_param/_rel, concretize_*, *)
@@ -290,24 +215,23 @@ Section BlockVerificationDerived.
     (* ================================================================ *)
 
     (* ---------------------------------------------------------------- *)
-    (* Phase 1 (PLAN-symbolic-base.md §2): table-based executor variants, *)
-    (* added ADDITIVELY alongside the gmap-based sexec_cfg_addr above.    *)
-    (* Nothing above this comment is touched.  Suffix `_tbl` throughout;  *)
-    (* Phase 3 switches Examples.v to this path and Phase 5 drops the old *)
-    (* path and the suffix.                                               *)
-    (*                                                                     *)
-    (* Locked design (plan §0, decision 1): instruction dispatch is a     *)
-    (* syntactic term-table lookup, `Term_eqb (peval apc) (peval key)`.   *)
-    (* No gmap lookup on terms, no offset arithmetic.  Tables are          *)
-    (* world-indexed (TYPE-level), since their keys are symbolic terms    *)
-    (* that must be persisted across worlds as the executor steps.        *)
+    (* Table-based executor variants (suffix `_tbl` throughout).  Design:  *)
+    (* instruction dispatch is a syntactic term-table lookup,             *)
+    (* `Term_eqb (peval apc) (peval key)`.  No gmap lookup on terms, no    *)
+    (* offset arithmetic.  Tables are world-indexed (TYPE-level), since    *)
+    (* their keys are symbolic terms that must be persisted across worlds *)
+    (* as the executor steps.  Dropping the `_tbl` suffix (now that it's  *)
+    (* the only executor) is tracked as cleanup in .claude/TODO.md.        *)
     (* ---------------------------------------------------------------- *)
 
+
+    (* TODO: We need more insightful names, than SITable and SETable, it was very unclear to me what they meant at first. *)
     (* SITable / SETable: the symbolic analogues of the gmap `instrs` and *)
     (* function `exitCond` above -- a table of (address term, instruction) *)
     (* pairs, and a list of address terms marking exits. *)
     Definition SITable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits * AST).
+
     Definition SETable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits).
 
@@ -318,7 +242,7 @@ Section BlockVerificationDerived.
 
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
     (* current pc term against the table keys.  `peval` on BOTH sides is  *)
-    (* required (plan §0): solver substitutions leave keys unnormalized   *)
+    (* required: solver substitutions leave keys unnormalized             *)
     (* (e.g. `8 ⊕ 256`) while the semantics-produced pc is normalized      *)
     (* (`264`); peval reconciles the two before the syntactic Term_eqb    *)
     (* comparison.  Do not drop either peval call. *)
@@ -330,6 +254,7 @@ Section BlockVerificationDerived.
         (apc : STerm ty_xlenbits w) : bool :=
       List.existsb (fun t => Term_eqb (peval apc) (peval t)) exits.
 
+    (* TODO: Rename this as to not reference the process, keep these lemmas and tests though. *)
     (* --- Phase 1 self-tests (cheap sanity anchors for lookup_instr /    *)
     (* is_exit / peval; NOT part of the soundness chain). *)
     Section Phase1SelfTests.
@@ -356,21 +281,22 @@ Section BlockVerificationDerived.
       (* (8 ⊕ 256) and a normalized concrete pc (264) compare equal after *)
       (* peval on both sides. *)
       Example peval_reconcile :
-        Term_eqb (peval (term_val ty_xlenbits (bv.of_N 264) : Term (wctx w1) ty_xlenbits))
-                 (peval (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) (term_val ty_xlenbits (bv.of_N 256))))
+        Term_eqb (peval (term_val ty_xlenbits (bv.of_N 260) : Term (wctx w1) ty_xlenbits))
+          (peval (term_bvsub (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) (term_val ty_xlenbits (bv.of_N 256)))  (term_val ty_xlenbits (bv.of_N 4))))
         = true.
       Proof. vm_compute. reflexivity. Qed.
     End Phase1SelfTests.
 
-    (* sexec_cfg_addr_tbl: table-based variant of sexec_cfg_addr above,   *)
-    (* same shape (fuel guard, angelic_binary between exit/execute), but  *)
-    (* dispatching via lookup_instr/is_exit instead of gmap lookup on a   *)
-    (* concrete literal.  `term_get_val` does not appear: apc may stay    *)
-    (* symbolic, matching happens through peval instead of concretising.  *)
-    (* tbl/exits are threaded as ARGUMENTS through the recursion (they    *)
-    (* are world-dependent, persisted at each step via persist_itable /   *)
-    (* persist_etable), unlike the old `instrs`/`exitCond` which are      *)
-    (* plain (non-world-indexed) Fixpoint parameters. *)
+    (* TODO: rename sexec_cfg_addr_tbl to sexec_cfg_addr and drop all other *)
+    (* _tbl references, now that the gmap-based sexec_cfg_addr it used to  *)
+    (* be contrasted with has been removed (2026-07-17). *)
+    (* sexec_cfg_addr_tbl: the symbolic CFG executor.  Fuel-guarded,       *)
+    (* angelic_binary between exit/execute at each step, dispatching via   *)
+    (* lookup_instr/is_exit — a syntactic term-table match modulo peval —  *)
+    (* instead of a concrete-literal gmap lookup, so apc may stay symbolic  *)
+    (* (`term_get_val` does not appear).  tbl/exits are threaded as        *)
+    (* ARGUMENTS through the recursion since they are world-dependent,     *)
+    (* persisted at each step via persist_itable / persist_etable. *)
     Fixpoint sexec_cfg_addr_tbl (fuel : nat) :
       ⊢ SITable -> SETable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w tbl exits apc =>
@@ -391,49 +317,24 @@ Section BlockVerificationDerived.
                end)
         end.
 
-    (* Apply symbolic execution to verify a Hoare triple for a block of instructions.
-     * The precondition can mention the address a where the block is loaded.
-     * The postcondition can additionally mention the address an where the pc points after execution.
-     *)
-    Definition sexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-      ⊢ SHeapSpec Unit :=
-      fun w =>
-        ⟨ θ0 ⟩ δ <- demonic_ctx id Σ ;;
-        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
-        let δ1 := env.snoc (persist ( A:= Sub Σ) δ θ1) _ a in
-        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
-        let a2 := persist__term a θ2 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr instrs exitCond fuel a2 ;;
-        let δ3 := persist δ1 (θ2 ∘ θ3) in
-        consume ens δ3.["an"∷ty_xlenbits ↦ na].
-
-    (* sblock_verification_condition base req b exitCond fuel ens:
-       The final symbolic VC.  It runs sexec_triple_addr inside SHeapSpec.run,
-       which discards the final heap (no leakcheck).  The result is a 𝕊 wnil
-       proposition that can be checked by `safeE (postprocess ...)`.
-       Call pattern (from Examples.v):
-         sblock_verification_condition (Σ := [ctx]) base req b ec fl ens wnil
-       The explicit `Σ := [ctx]` is required because Rocq cannot infer it
-       from the other arguments alone. `base` is the concrete address the
-       block is loaded at; `req` is expected to constrain "a" = base (e.g.
-       via asn_init_pc base) so the executor's fetch index lines up with
-       where ptsto_instrs base b actually places the instructions. *)
-    Definition sblock_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
-      fun w =>
-        (* SHeapSpec does not perform a leakcheck. We could include one here. *)
-        SHeapSpec.run (sexec_triple_addr req instrs exitCond fuel ens (w := w)).
-
-    (* sexec_triple_addr_tbl / sblock_verification_condition_tbl: table-  *)
-    (* based variants of sexec_triple_addr / sblock_verification_condition *)
-    (* above.  `tbl`/`exits` are given at the CONTRACT context Σ (plain    *)
+    (* TODO: rename to drop the _tbl suffix, now that this is the only    *)
+    (* symbolic triple/VC (the gmap-based sexec_triple_addr /              *)
+    (* scfg_verification_condition were dead — nothing used them, since    *)
+    (* even the fixed-address examples build their contract via this       *)
+    (* table-based VC — and were removed, 2026-07-17). *)
+    (* sexec_triple_addr_tbl / scfg_verification_condition_tbl: apply     *)
+    (* symbolic execution to verify a Hoare triple for a program.  The     *)
+    (* precondition can mention the address a where the program is loaded; *)
+    (* the postcondition can additionally mention the address an where the *)
+    (* pc points after execution.  scfg_verification_condition_tbl runs   *)
+    (* sexec_triple_addr_tbl inside SHeapSpec.run (no leakcheck), giving a *)
+    (* 𝕊 wnil proposition checked by `safeE (postprocess ...)`.  `tbl`/    *)
+    (* `exits` are given at the CONTRACT context Σ (plain    *)
     (* lists of Σ-level terms, like `req`/`ens`), and moved into the       *)
     (* current world the same way `req` is: by applying the substitution  *)
     (* `ζ : Sub Σ w` (obtained from `demonic_ctx`'s δ, persisted forward   *)
     (* to the world where `a` lives) to each key term via `subst`. *)
+    (* TODO: It doesn't make sense for the tbl and exit arguments to not be SITable and SETable respectively. *)
     Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (tbl : list (Term Σ ty_xlenbits * AST)) : SITable w :=
       List.map (fun '(t,i) => (subst t ζ, i)) tbl.
@@ -441,6 +342,7 @@ Section BlockVerificationDerived.
         (exits : list (Term Σ ty_xlenbits)) : SETable w :=
       List.map (fun t => subst t ζ) exits.
 
+    (* TODO: Why are tbl and exits not SITable and SETable's? *)
     Definition sexec_triple_addr_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
@@ -457,10 +359,9 @@ Section BlockVerificationDerived.
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-    (* sblock_verification_condition_tbl: table-based mirror of           *)
-    (* sblock_verification_condition above; same SHeapSpec.run/wnil shape, *)
-    (* no leakcheck. *)
-    Definition sblock_verification_condition_tbl {Σ : LCtx}
+    (* scfg_verification_condition_tbl: runs sexec_triple_addr_tbl inside *)
+    (* SHeapSpec.run; same wnil shape, no leakcheck. *)
+    Definition scfg_verification_condition_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
@@ -508,22 +409,6 @@ Section BlockVerificationDerived.
             end
         end.
 
-    Definition cexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-      CHeapSpec unit :=
-      lenv <- demonic_ctx Σ ;;
-      a    <- demonic _ ;;
-      _    <- produce req lenv.["a"∷ty_xlenbits ↦ a]  ;;
-      na   <- cexec_cfg_addr instrs exitCond fuel a ;;
-      consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na].
-
-    Definition cblock_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : Prop :=
-      (* CHeapSpec.run does not perform a leakcheck. We could include one here. *)
-      CHeapSpec.run (cexec_triple_addr req instrs exitCond fuel ens).
-
     Import (hints) CStoreSpec.
 
     #[export] Instance mono_cexec_instruction {i a} :
@@ -551,16 +436,15 @@ Section BlockVerificationDerived.
   (* The relational layer connects the concrete (C) and symbolic (S)        *)
   (* executors via ℛ⟦R⟧, the logical relation used by `rsolve`.             *)
   (*                                                                         *)
-  (* rexec_cfg_addr: the key lemma.  Proved by iInduction on fuel.           *)
-  (*   At each step, term_get_val_spec is used to case-split on whether apc  *)
-  (*   is a concrete bitvector (term_val v) or symbolic.  In the concrete   *)
-  (*   case, repₚ_antisym_left unifies the relational apc with term_val.    *)
-  (*   Then angelic_binary and nth_error cases are handled by rsolve.        *)
+  (* rexec_cfg_addr_tbl: the key lemma, refining the gmap concrete executor  *)
+  (*   by the term-table symbolic executor under table faithfulness.        *)
+  (*   Proved by iInduction on fuel; the is_exit/lookup_instr double         *)
+  (*   destruct is discharged sequentially across its four subgoals.        *)
   (*                                                                         *)
   (* RefineCompat instances export the relational lemmas for use by rsolve:  *)
-  (*   refine_compat_block_verification_condition — key instance that lets   *)
-  (*   rsolve close goals of the form                                        *)
-  (*   RSat RProp (cblock_vc ...) (sblock_vc ...)                           *)
+  (*   refine_compat_cfg_verification_condition_tbl — key instance that    *)
+  (*   lets rsolve close goals of the form                                  *)
+  (*   RSat RProp (ccfg_vc_tbl ...) (scfg_vc_tbl ...)                     *)
   (* ====================================================================== *)
   Section Relational.
 
@@ -583,58 +467,6 @@ Section BlockVerificationDerived.
         (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
       MkRefineCompat (rexec_instruction i).
 
-    (* rexec_cfg_addr: ℛ⟦RVal → RHeapSpec (RVal)⟧ cexec_cfg_addr sexec_cfg_addr
-       Proof: iInduction on fuel.  Bullet nesting convention (from CLAUDE.md):
-         - top-level bullets from iInduction use -
-         + for angelic_binary sub-goals (two branches)
-         -- for refine_bind sub-goals
-         * for nth_error cases (Some / None)
-       The key non-trivial step is using forgetting_unconditionally_drastic
-       to project the boxed IH to the current world. *)
-    Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat) {w} :
-      ⊢ ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
-          (cexec_cfg_addr instrs exitCond fuel)
-          (sexec_cfg_addr instrs exitCond fuel (w := w)).
-    Proof.
-      iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
-                 (cexec_cfg_addr instrs exitCond fuel)
-                 (fun w' θ => sexec_cfg_addr instrs exitCond fuel (w := w'))) as "H".
-      {
-        iInduction fuel as [|n'] "IHfuel"; cbn.
-        - rsolve.
-        - rsolve.
-          destruct (term_get_val_spec ta) as [v ->|]; cbn.
-          2: rsolve.
-          iRename select (ℛ⟦RVal ty_xlenbits⟧ a (term_val ty_xlenbits v)) into "Ha".
-          iPoseProof (refine_term_val (v := v)) as "Hv".
-          iDestruct (repₚ_antisym_left with "Ha Hv") as "->"; cbn.
-          rsolve.
-          + destruct (exitCond v); rsolve.
-          + (* [instrs !! v] inside the ℛ⟦⟧ relation arguments is not
-               syntactically matched by a freshly-elaborated [instrs !! v]
-               (hidden implicit/instance mismatch), so [destruct (instrs !! v)]
-               binds the case variable but fails to reduce the [match] — which
-               makes [refine_bind] diverge on the unreduced match.  Capture the
-               goal's *exact* scrutinee with [lazymatch] and destruct that. *)
-            lazymatch goal with
-            | |- context[match ?x with Some _ => _ | None => _ end] =>
-                destruct x as [i|]
-            end.
-            * iApply (refine_bind (RA := RVal ty_xlenbits)).
-              -- now iApply (rexec_instruction i with "Ha").
-              -- rsolve.
-                 iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-                 iApply ("IH" with "[$]").
-            * rsolve.
-      }
-      iApply (unconditionally_T with "H").
-    Qed.
-
-    #[export] Instance refine_compat_exec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat) {w} :
-      RefineCompat (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
-        (cexec_cfg_addr instrs exitCond fuel) w (sexec_cfg_addr instrs exitCond fuel (w := w)) _ :=
-      MkRefineCompat (rexec_cfg_addr instrs exitCond fuel).
-
     Import PureSpec.
 
     (* ------------------------------------------------------------------ *)
@@ -648,6 +480,7 @@ Section BlockVerificationDerived.
     (* symbolic one proceeds, breaking refinement.                          *)
     (* ------------------------------------------------------------------ *)
 
+    (* TODO: All this machinery surrounding SITable and gmap and SETable deserves its own section, module or even file. *)
     Definition itable_rel {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w) : Pred w :=
       fun ι => List.Forall
         (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
@@ -657,6 +490,7 @@ Section BlockVerificationDerived.
         (fun t => exists v,
            inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
 
+    (* TODO: It feels like this does not belong here. Maybe in PartialEvalution or in instantiation. *)
     Lemma peval_eqb_inst {Σ : LCtx} {σ} (t1 t2 : Term Σ σ) (ι : Valuation Σ) :
       Term_eqb (peval t1) (peval t2) = true -> inst t1 ι = inst t2 ι.
     Proof.
@@ -805,10 +639,14 @@ Section BlockVerificationDerived.
     Qed.
 
     (* rexec_cfg_addr_tbl: refinement of the gmap concrete executor by the  *)
-    (* term-table symbolic executor, under table faithfulness.  Mirrors     *)
-    (* rexec_cfg_addr above (iInduction on fuel, boxed IH projected by      *)
-    (* forgetting_unconditionally_drastic); the four subgoals of the        *)
+    (* term-table symbolic executor, under table faithfulness.  Proved by   *)
+    (* iInduction on fuel, boxed IH projected by                            *)
+    (* forgetting_unconditionally_drastic; the four subgoals of the         *)
     (* is_exit/lookup_instr double destruct are discharged sequentially.    *)
+    (* TODO: This proof was not written in the phylosophy of rsolve. *)
+    (* It should be relatively easy with most of the complexity handled by rsolve. *)
+    (* I suspect there are a few missing RefineCompat instances for tables. *)
+    (* This is maybe a good proof golf target. *)
     Lemma rexec_cfg_addr_tbl (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool)
         (fuel : nat) {w} (tbl : SITable w) (exits : SETable w) :
       (itable_rel instrs tbl ∗ etable_rel exitCond exits ⊢
@@ -883,7 +721,7 @@ Section BlockVerificationDerived.
     (* program actually resides.  Scaffolding for refinement only — the     *)
     (* concrete executor and soundness chain are untouched.                 *)
     (* ------------------------------------------------------------------ *)
-
+    (* TODO: This is a duplicate of itable_rel. Except itable_rel is on SITable instead of list (Term Σ ty_xlenbits * AST), which should be the same. This is a clear target for simplification. *)
     Definition itable_faith {Σ : LCtx} (instrs : gmap (bv xlenbits) AST)
         (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) : Prop :=
       List.Forall
@@ -895,6 +733,14 @@ Section BlockVerificationDerived.
         (fun t => exists v,
            inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
 
+    (* cexec_triple_addr_tbl: the concrete triple — right after picking the *)
+    (* demonic valuation lenv, ASSUME itable_faith/etable_faith at lenv     *)
+    (* before producing req and running the (still gmap-based)             *)
+    (* cexec_cfg_addr.  This is the concrete side of the guarded VC         *)
+    (* refinement from the reading guide above (step 5): the guard makes   *)
+    (* the triple hold vacuously at valuations where the table doesn't     *)
+    (* match the gmap, and meaningfully only at the one valuation the      *)
+    (* end-to-end proof discharges it at. *)
     Definition cexec_triple_addr_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
@@ -911,6 +757,11 @@ Section BlockVerificationDerived.
     (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
     (* the concrete side weakens the concrete claim, which is the sound    *)
     (* direction for RHeapSpec refinement; the symbolic side is unchanged. *)
+    (* Checked Solver.v and Refinement/Monads.v: no existing lemma covers  *)
+    (* this one-sided (concrete-only) assume; `refine_assume_formula`      *)
+    (* there assumes on BOTH sides.  Generic over RA/SA/CA — a candidate   *)
+    (* to promote to Refinement/Monads.v if a second use site appears, but *)
+    (* not moved now (core-theories churn is out of scope for this pass). *)
     Lemma refine_guard {SA CA} (RA : Rel SA CA) (P : Prop)
         (c : CHeapSpec CA) {w} (s : SHeapSpec SA w) :
       ((⌜P⌝ -∗ ℛ⟦RHeapSpec RA⟧ c s) ⊢
@@ -927,6 +778,13 @@ Section BlockVerificationDerived.
       exact (H HP cΦ sΦ HΦ ch sh Hh Hs).
     Qed.
 
+    (* Not a duplicate of forgetting_itable_rel above, despite the similar *)
+    (* proof shape: that lemma commutes forgetting with persist_itable     *)
+    (* given an EXISTING itable_rel hypothesis (SITable on both sides);    *)
+    (* this one instead DERIVES itable_rel from the Prop-level itable_faith *)
+    (* fact via a substitution ζ, over the raw list table representation.  *)
+    (* Both are needed (used together at the rexec_triple_addr_tbl call    *)
+    (* site below). *)
     Lemma itable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
         (instrs' : gmap (bv xlenbits) AST) (tbl' : list (Term Σ' ty_xlenbits * AST))
         (ιΣ : NamedEnv RelVal Σ') :
@@ -970,19 +828,6 @@ Section BlockVerificationDerived.
       exact Hv.
     Qed.
 
-    Lemma forgetting_RVal {σ} {wa wb : World} (θ : Acc wa wb) (v : RelVal σ) (t : STerm σ wa) :
-      (forgetting θ (ℛ⟦RVal σ⟧ v t) ⊢ ℛ⟦RVal σ⟧ v (persist__term t θ))%I.
-    Proof.
-      constructor.
-      intros ι Hpc H.
-      unfold forgetting in H.
-      cbn in H |- *.
-      unfold RVal, RInst, repₚ in H |- *.
-      cbn in H |- *.
-      rewrite inst_persist.
-      exact H.
-    Qed.
-
     (* rexec_triple_addr_tbl: unconditional refinement of the guarded      *)
     (* concrete triple by the table-based symbolic triple.  The guard is   *)
     (* introduced via refine_guard; the executor bind is dispatched by     *)
@@ -1019,10 +864,11 @@ Section BlockVerificationDerived.
         iModIntro.
         iIntros (u tu) "#Hu".
         iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
-        { iPoseProof (itable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hif with "Hδ") as "#Hi".
+        { (* TODO: It feels like rsolve should be able to handle this, if you have the right RefineCompat instances. *)
+          iPoseProof (itable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hif with "Hδ") as "#Hi".
           iPoseProof (etable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hef with "Hδ") as "#He".
           iApply (rexec_cfg_addr_tbl instrs exitCond fuel _ _ with "[$Hi $He]").
-          iApply (forgetting_RVal with "Ha"). }
+          iApply (refine_inst_persist with "Ha"). }
         iIntros (w3 θ3).
         iModIntro.
         iIntros (na tna) "#Hna".
@@ -1040,99 +886,54 @@ Section BlockVerificationDerived.
         (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)) _ :=
       MkRefineCompat (rexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits).
 
-    Definition cblock_verification_condition_tbl {Σ : LCtx}
+    Definition ccfg_verification_condition_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : Prop :=
       CHeapSpec.run (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits).
 
-    Lemma rblock_verification_condition_tbl {Σ : LCtx}
+    Lemma rcfg_verification_condition_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
-          (cblock_verification_condition_tbl req instrs exitCond fuel ens tbl exits)
-          (sblock_verification_condition_tbl req tbl exits fuel ens w).
+          (ccfg_verification_condition_tbl req instrs exitCond fuel ens tbl exits)
+          (scfg_verification_condition_tbl req tbl exits fuel ens w).
     Proof.
-      unfold cblock_verification_condition_tbl, sblock_verification_condition_tbl.
+      unfold ccfg_verification_condition_tbl, scfg_verification_condition_tbl.
       rsolve.
     Qed.
 
-    #[export] Instance refine_compat_block_verification_condition_tbl {Σ : LCtx}
+    #[export] Instance refine_compat_cfg_verification_condition_tbl {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       RefineCompat (LogicalSoundness.RProp)
-        (cblock_verification_condition_tbl req instrs exitCond fuel ens tbl exits) w
-        (sblock_verification_condition_tbl req tbl exits fuel ens w) _ :=
-      MkRefineCompat (rblock_verification_condition_tbl req instrs exitCond fuel ens tbl exits).
-
-    Lemma rexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
-      ⊢ ℛ⟦RHeapSpec RUnit⟧
-          (cexec_triple_addr req instrs exitCond fuel ens)
-          (sexec_triple_addr req instrs exitCond fuel ens (w := w)).
-    Proof.
-      unfold cexec_triple_addr, sexec_triple_addr.
-      rsolve.
-      all: repeat (rewrite ?forgetting_trans; try iModIntro; rsolve).
-    Qed.
-
-    #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
-      RefineCompat (RHeapSpec RUnit)
-        (cexec_triple_addr req instrs exitCond fuel ens) w (sexec_triple_addr req instrs exitCond fuel ens (w := w)) _ :=
-      MkRefineCompat (rexec_triple_addr req instrs exitCond fuel ens).
-
-    Lemma rblock_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
-      ⊢ RSat LogicalSoundness.RProp (w := w)
-          (cblock_verification_condition req instrs exitCond fuel ens)
-          (sblock_verification_condition req instrs exitCond fuel ens w).
-    Proof.
-      unfold cblock_verification_condition, sblock_verification_condition.
-      rsolve.
-    Qed.
-
-    #[export] Instance refine_compat_block_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) {w} :
-      RefineCompat (LogicalSoundness.RProp)
-        (cblock_verification_condition req instrs exitCond fuel ens) w (sblock_verification_condition req instrs exitCond fuel ens w) _ :=
-      MkRefineCompat (rblock_verification_condition req instrs exitCond fuel ens).
+        (ccfg_verification_condition_tbl req instrs exitCond fuel ens tbl exits) w
+        (scfg_verification_condition_tbl req tbl exits fuel ens w) _ :=
+      MkRefineCompat (rcfg_verification_condition_tbl req instrs exitCond fuel ens tbl exits).
 
   End Relational.
 
   (* ====================================================================== *)
-  (* Soundness: symbolic VC → semTripleCFG                                  *)
+  (* Soundness scaffolding shared with the myWP2_loop chain in Adequacy.v.  *)
   (*                                                                         *)
-  (* ptsto_instrs a instrs: Iris predicate asserting instruction ownership   *)
-  (*   at consecutive addresses starting at a.  The inductive structure      *)
-  (*   mirrors the list of instructions; the address advances by bv_instrsize *)
-  (*   (= 4 bytes) at each step.                                             *)
+  (* ptsto_instrs instrs: Iris predicate asserting instruction ownership     *)
+  (*   for a finite map from absolute address to instruction (SyncVal: the   *)
+  (*   same instruction lives at the same address in both worlds).           *)
   (*   NOTE: unlike BlockVer, the base address is SyncVal bv.zero (not       *)
   (*   parameterized), so all programs are assumed loaded at address 0.      *)
   (*                                                                         *)
-  (* semTripleCFG PRE b exitCond fuel POST:                                  *)
-  (*   Iris semantic triple for a CFG program.  It states:                   *)
-  (*     ∀ a, PRE a ∗ pc ↦ a ∗ ∃ v, nextpc ↦ v ∗ ptsto_instrs 0 b →       *)
-  (*       (∀ an, ⌜exitCond an⌝ ∗ pc ↦ an ∗ ... ∗ POST a an → WP2_loop) → *)
-  (*       WP2_loop                                                          *)
-  (*   WP2_loop here is BlockVer.Verifier.WP2_loop (the plain infinite loop),*)
-  (*   NOT myWP2_loop from Examples.v.  The bridge from semTripleCFG to      *)
-  (*   myWP2_loop is done by sound_sblock_verification_condition_myWP2 in   *)
-  (*   Examples.v.                                                           *)
-  (*                                                                         *)
-  (* sound_sblock_verification_condition:                                    *)
-  (*   safeE (postprocess VC) → semTripleCFG                                *)
-  (*   This is the main output of this section.  Examples.v uses the        *)
-  (*   _myWP2 variant instead, which produces myWP2_loop directly.          *)
+  (* sound_exec_instruction / ptsto_instrs_lookup below are the two pieces   *)
+  (* Adequacy.v reuses (qualified) to build sound_exec_cfg_addr_myWP2 and    *)
+  (* the rest of the myWP2_loop soundness chain.  The WP2_loop-based chain   *)
+  (* that used to live here (semTripleCFG, sound_exec_cfg_addr,              *)
+  (* sound_cexec_triple_addr, sound_ccfg/scfg_verification_condition) was    *)
+  (* dead — nothing required it — and has been removed; use the _myWP2      *)
+  (* variants in Adequacy.v instead.                                         *)
   (* ====================================================================== *)
   Section Soundness.
 
@@ -1156,22 +957,6 @@ Section BlockVerificationDerived.
         (FunDef RiscvPmpProgram.step)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a (SyncVal instr)  ∗ ⌜ secLeak a ⌝)%I.
 
-    Definition semTripleCFG (PRE : RelVal ty_word -> iProp Σ) (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat) (POST : RelVal ty_word -> RelVal ty_word -> iProp Σ) : iProp Σ :=
-      (∀ a,
-         (PRE a ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs instrs) -∗
-         (∀ an, ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
-                pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs instrs ∗ POST a an -∗ WP2_loop) -∗
-         WP2_loop)%I.
-    #[global] Arguments semTripleCFG PRE%_I instrs exitCond fuel POST%_I.
-
-    Lemma sound_stm_aux {τ} {PRE} {s : Stm [ctx] τ} {POST} :
-      ⦃ PRE ⦄ s; [env] ⦃ POST ⦄ → ⊢ semTriple [env] PRE s POST.
-    Proof.
-      iIntros (Htrip) "PRE".
-      iApply sound_stm; eauto using foreignSemBlockVerif, lemSemBlockVerif.
-      iApply contractsSound.
-    Qed.
-
     Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
       cexec_instruction instr a Φ h ->
       ⊢ semTripleOneInstrStep (interpret_scheap h) instr
@@ -1184,7 +969,7 @@ Section BlockVerificationDerived.
       iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs & %HsL)".
       specialize (Hverif npc). apply sound_cexec in Hverif.
       iApply (semWP2_mono with "[-]").
-      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif Hverif with "[] [$]").
+      iApply (sound_stm foreignSemCFGVerif lemSemCFGVerif Hverif with "[] [$]").
       iApply contractsSound.
       iIntros ([v1|m1] δ1 [v2|m2] δ2); last done.
       2-3: iIntros "(%δ' & H & HF)"; auto.
@@ -1202,10 +987,11 @@ Section BlockVerificationDerived.
 
     (* ptsto_instrs_lookup: extract the instruction stored at address v from
        ptsto_instrs, with a framing wand to restore it.  Used in
-       sound_exec_cfg_addr to split out the instruction at the current PC,
-       execute it, then restore the full map.  This is now a direct
-       big_sepM_lookup_acc — the address arithmetic of the old list version
-       (base + k*bytes_per_instr = v) is gone: the map key IS the address. *)
+       sound_exec_cfg_addr_myWP2 (Adequacy.v) to split out the instruction at
+       the current PC, execute it, then restore the full map.  This is a
+       direct big_sepM_lookup_acc — the address arithmetic of the old list
+       version (base + k*bytes_per_instr = v) is gone: the map key IS the
+       address. *)
     Lemma ptsto_instrs_lookup (instrs : gmap (bv xlenbits) AST) (v : bv xlenbits) (i : AST) :
       instrs !! v = Some i →
       ptsto_instrs instrs ⊢
@@ -1216,109 +1002,6 @@ Section BlockVerificationDerived.
       by apply (big_sepM_lookup_acc (fun a j => interp_ptsto_instr (SyncVal a) (SyncVal j)) instrs v i).
     Qed.
 
-    (* sound_exec_cfg_addr: the soundness theorem for cexec_cfg_addr.
-       Given that cexec_cfg_addr succeeds (producing Φ an h), the Iris
-       precondition (heap + pc + nextpc + instructions) entails semTripleCFG.
-       Proof: induction on fuel.
-         - Exit branch: exitCond holds → apply the continuation Hk.
-         - Execute branch: extract instruction via ptsto_instrs_nth, run
-           sound_exec_instruction, then recurse via IH.
-       This lemma uses WP2_loop (not myWP2_loop); the myWP2_loop version
-       is sound_exec_cfg_addr_myWP2 in Examples.v. *)
-    Lemma sound_exec_cfg_addr {instrs exitCond fuel} (apc : RelVal ty_xlenbits) Φ (h : SCHeap) :
-      cexec_cfg_addr instrs exitCond fuel apc Φ h →
-      interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs instrs ⊢
-      (∀ an, ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => True end⌝ ∗
-             lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs instrs ∗
-             (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ WP2_loop) -∗ WP2_loop.
-    Proof.
-      revert apc h.
-      induction fuel as [|n' IH]; intros apc h Hexec.
-      - cbn [cexec_cfg_addr CHeapSpec.error] in Hexec. contradiction.
-      - destruct apc as [v|v1 v2].
-        + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary] in Hexec.
-          destruct Hexec as [Hexit | Hexec].
-          * (* Exit condition branch *)
-            destruct (exitCond v) eqn:Hexit_eq.
-            -- cbn [CHeapSpec.pure] in Hexit.
-               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-               iApply ("Hk" $! (SyncVal v)).
-               iSplit. { iPureIntro. exact Hexit_eq. }
-               iFrame. iPureIntro. exact Hexit.
-            -- cbn [CHeapSpec.error] in Hexit. contradiction.
-          * (* Execute branch: the instruction is looked up at address v
-               directly (instrs !! v).  No alignment / base guard / index
-               arithmetic: the map key IS the current PC. *)
-            destruct (instrs !! v) as [i|] eqn:Hlk.
-            ++ unfold bind, CHeapSpec.bind in Hexec.
-               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-               iPoseProof (ptsto_instrs_lookup instrs v Hlk with "Hinstrs") as "[Hinstr Hframe]".
-               iApply semWP2_seq. iApply semWP2_call_inline.
-               iApply (semWP2_mono with "[Hh Hnpc Hpc Hinstr]").
-               { iApply (sound_exec_instruction Hexec). iFrame "Hh Hnpc Hpc Hinstr". }
-               iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn; last (iIntros "_"; now rewrite <- semWP2_fail).
-               2-3: iIntros "(% & _ & HF)"; auto.
-               iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & %HsLan))] & Hinstr' & _))".
-               iApply (semWP2_call_inline loop).
-               iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
-               iRevert "Hk". iApply (IH an h' Hcfg).
-               iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
-            ++ cbn [CHeapSpec.error] in Hexec. contradiction.
-        + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.error] in Hexec.
-          contradiction.
-    Qed.
-
-    Lemma sound_cexec_triple_addr {Γ : LCtx} {pre post instrs} (exitCond : bv xlenbits -> bool) {fuel} {ι : Valuation Γ} :
-      cexec_triple_addr pre instrs exitCond fuel post (fun _ _ => True) []%list ->
-      ⊢ semTripleCFG (λ a : RelVal ty_word, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]) ∗ ⌜ secLeak a ⌝) instrs exitCond fuel
-          (λ a na : RelVal ty_word, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
-    Proof.
-      cbv [cexec_triple_addr bind demonic_ctx demonic CPureSpec.demonic lift_purespec].
-      iIntros (Htrip a) "((Hpre & %HsLa) & Hpc & Hnpc & Hinstrs) Hk".
-      rewrite CPureSpec.wp_demonic_ctx in Htrip.
-      specialize (Htrip ι a).
-      apply produce_sound in Htrip.
-      iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iPoseProof (sound_exec_cfg_addr a _ _ Hexec) as "Hsound". clear Hexec.
-      iApply ("Hsound" with "[$Hpc $Hnpc $Hinstrs $Hh2]").
-      iIntros (an2) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
-      apply consume_sound in Hconsume.
-      iPoseProof (Hconsume with "Hh3") as "[HPOST Hheap]".
-      iApply ("Hk" $! an2).
-      iSplit. { iPureIntro. exact Hexit. }
-      iFrame.
-    Qed.
-
-    Lemma sound_cblock_verification_condition {Γ pre post instrs exitCond fuel} :
-      cblock_verification_condition pre instrs exitCond fuel post ->
-      forall ι : Valuation Γ,
-        ⊢ semTripleCFG (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])  ∗ ⌜ secLeak a ⌝)
-          instrs exitCond fuel
-          (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
-    Proof.
-      intros Hverif ι.
-      exact (sound_cexec_triple_addr exitCond Hverif).
-    Qed.
-
-    Lemma sound_sblock_verification_condition {Γ pre post instrs exitCond fuel} :
-      safeE (postprocess (sblock_verification_condition pre instrs exitCond fuel post wnil)) ->
-      forall ι : Valuation Γ,
-        ⊢ semTripleCFG (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])  ∗ ⌜ secLeak a ⌝)
-          instrs exitCond fuel
-          (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
-    Proof.
-      intros Hverif ι.
-      apply (sound_cexec_triple_addr exitCond).
-      apply (safeE_safe env.nil), postprocess_sound in Hverif.
-      apply LogicalSoundness.psafe_safe in Hverif; [|done].
-      revert Hverif.
-      apply rexec_triple_addr.
-      - easy.
-      - easy.
-      - easy.
-      - constructor.
-    Qed.
-
   End Soundness.
 
-End BlockVerificationDerived.
+End CFGVerificationDerived.
