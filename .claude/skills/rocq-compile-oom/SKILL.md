@@ -15,7 +15,14 @@ description: >
   unless/until it comes back dead or the user reports it's been stuck far
   longer than expected. NOT for actual Coq compile errors or stale .vo/.vos
   artifacts (rocq-doctor), and NOT for tactic-level failures that DO produce a
-  Coq error message (rocq-pitfalls).
+  Coq error message (rocq-pitfalls). NOT for a hang that reproduces at the
+  IDENTICAL position regardless of timeout (e.g. same last_completed sentence at
+  120s and 580s) once process/memory health is ALREADY confirmed clean — that
+  signature points to a genuine proof-term bug, not resource exhaustion (in
+  CFGVer specifically: gen_contract_noninterferent(_param/_rel)'s
+  discharge-order gotcha, see cfgver-gen-contract). Check health once; if clean
+  and the hang still reproduces bit-for-bit, hand off instead of re-suspecting
+  memory.
 ---
 
 # Rocq compile OOM / silent-kill diagnosis

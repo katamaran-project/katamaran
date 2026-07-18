@@ -26,6 +26,10 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > (a heavy compile gets silently killed/stalls with no Coq error — check for
 > memory pressure/orphaned processes before assuming a regression). Zero-cost
 > references files live under `skills/cfgver/references/` (e.g. `registers.md`).
+> Meta-skill for the skill system itself: **`skill-routing-maintenance`** —
+> check/tune which skill fires for a query (read-only Haiku-judge eval, see
+> Maintenance protocol below); distinct from drafting a brand-new skill
+> (`skill-creator` plugin).
 
 ---
 
@@ -159,13 +163,21 @@ skills, lower-level mechanisms may appear only as a NOT-clause or a one-line
 - Removed content → append verbatim to the dated archive under `.claude/archive/`.
 
 **Hygiene rules:** update the skill in the SAME commit as the code change it
-documents (docs travel with code); skills are git-tracked — review their diffs like
-code; after changing any skill *description*, re-check routing against
-`.claude/skill-evals/cfgver-routing/eval_set.json`; when a skill misfires or fails
-to fire in a live session, log the query into that eval_set.json with the correct
-expected winner before moving on (`.claude/skill-evals/mine_skill_fires.py` lists
-recent user-message → skill-fired pairs for post-hoc review; silent non-fires it
-cannot see); at the end of a working session, ask Claude to fold what was learned
-back into the skills.
+documents (docs travel with code) — concretely, before committing, grep the
+skills for every lemma/definition/file name your commit renames, removes, or
+moves and fix or delete the stale reference rather than leaving it for a
+future session to trip over (a memory or skill naming something that no
+longer exists is worse than one that says nothing); skills are git-tracked —
+review their diffs like code; after changing any skill *description* or
+noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
+skill (read-only Haiku-judge
+validation against `.claude/skill-evals/cfgver-routing/eval_set.json` — do
+**not** reach for the `skill-creator` plugin's `run_loop.py`/`run_eval.py` for
+this, which write real temporary command files into the live
+`.claude/commands/` directory and left exactly that kind of debris loaded
+into every turn's context after a crashed background run on 2026-07-18,
+burning a full session's token budget; reach for `skill-creator` only when
+drafting a genuinely *new* skill from scratch); at the end of a working
+session, ask Claude to fold what was learned back into the skills.
 
 Previous Claude sessions: commits tagged `WIP (LLM):` are primarily LLM-generated.

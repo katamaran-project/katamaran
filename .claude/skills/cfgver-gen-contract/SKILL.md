@@ -9,10 +9,16 @@ description: >
   base+k), public/private/pinned semantics, extra_exit_offs for non-fall-through
   exits, the 7-argument gen_contract call, and the five-or-six side premises of
   gen_contract_noninterferent(_param/_rel) (NoDup, data-address layout, length
-  bound, exit offsets, base bound, the VC) — INCLUDING the "discharge
-  valid_contract FIRST, not last" bullet-ordering gotcha (a wrong-unification bug
-  that manifests as a hanging or import-set-dependent Qed, easily mistaken for an
-  environment/memory problem — see rocq-compile-oom for that angle). The
+  bound, exit offsets, base bound, the VC). ALSO use when MIGRATING an existing
+  concrete-base example/contract to a parametric (∀ init_addr) base, or planning
+  that migration across several examples — this is the gen_contract_param/_rel
+  recipe, not a from-scratch design question. Trigger on the "discharge
+  valid_contract FIRST, not last" bullet-ordering gotcha too: a
+  gen_contract_noninterferent(_param/_rel) proof whose Qed hangs, fails with
+  "Attempt to save an incomplete proof (there are remaining open goals)", or
+  behaves differently depending on which imports are in scope — a wrong-
+  unification bug easily mistaken for an environment/memory problem (see
+  rocq-compile-oom for that angle, but this skill has the actual fix). The
   interface is spec lists only — no assertions. NOT for hand-writing contract
   assertions or secLeakvar (cfgver-contracts), the generator's internal machinery
   (cfgver-gen-contract-internals), or proof-time Iris memory resources

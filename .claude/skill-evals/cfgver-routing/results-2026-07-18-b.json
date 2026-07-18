@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-18",
+  "eval_set_version": "v7 (Q46-49 added, live-session retrospective)",
+  "method": "independent Haiku judges, one per query, shown only the name+description listing (26 project skills). Targeted subset: the 4 new gaps (Q46-49) plus a regression check on rocq-compile-oom's genuine-hit cases (Q40-41) after its new NOT-clause.",
+  "score": "6/6",
+  "verdicts": [
+    { "id": 46, "verdict": "cfgver-gen-contract", "expected": "cfgver-gen-contract", "pass": true },
+    { "id": 47, "verdict": "cfgver-gen-contract", "expected": "cfgver-gen-contract", "pass": true },
+    { "id": 48, "verdict": "bv-pitfalls", "expected": "bv-pitfalls", "pass": true },
+    { "id": 49, "verdict": "cfgver-gen-contract", "expected": "cfgver-gen-contract", "pass": true, "note": "correctly did NOT pick rocq-compile-oom given health already confirmed clean" },
+    { "id": 40, "verdict": "rocq-compile-oom", "expected": "rocq-compile-oom", "pass": true, "note": "regression check: new NOT-clause on rocq-compile-oom didn't break its own genuine-hit case" },
+    { "id": 41, "verdict": "rocq-compile-oom", "expected": "rocq-compile-oom", "pass": true, "note": "regression check" }
+  ],
+  "note": "First attempt at validating these used the skill-creator plugin's run_loop.py, which writes live command files into .claude/commands/ to test triggering. Run against the actual project directory (not an isolated copy), two of the three background runs errored (report-path bug) and cleanup never ran, leaving dozens of duplicate skill entries loaded into every subsequent turn's context -- burned the session's token budget. Cleaned up (rm .claude/commands/*-skill-*.md, confirmed via git status the directory was untracked/empty before). Correct methodology for THIS project is the lightweight one already established in this directory (see results-2026-07-16/17/18.json): read-only Haiku judges over the skill listing, no live tooling. Used that instead here."
+}

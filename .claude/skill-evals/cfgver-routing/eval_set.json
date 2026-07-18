@@ -1,6 +1,6 @@
 {
   "purpose": "Cross-skill routing eval for the cfgver-* skill family. Each query has ONE expected winner among the cfgver skills, the generic pitfall skills (rocq-/bv-/gmap-pitfalls, iris-proofmode), the rocq plugin skills, or none. A skill firing on a query expected elsewhere = mis-route.",
-  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits). v6 (2026-07-18, later): cfgver-gen-contract description expanded to cover the parametric-base recipe (gen_contract_param/_rel) and the 'discharge valid_contract FIRST' bullet-ordering gotcha, discovered live when migrating all CFGVer examples to parametric base — added Q45 (adversarial: sounds exactly like rocq-compile-oom's territory but the real fix is cfgver-gen-contract's).",
+  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits). v6 (2026-07-18, later): cfgver-gen-contract description expanded to cover the parametric-base recipe (gen_contract_param/_rel) and the 'discharge valid_contract FIRST' bullet-ordering gotcha, discovered live when migrating all CFGVer examples to parametric base — added Q45 (adversarial: sounds exactly like rocq-compile-oom's territory but the real fix is cfgver-gen-contract's). v7 (2026-07-18, retrospective on the same live session): user asked to mine the session itself for misfires/silent-misses rather than hypothetical queries. Added Q46 (silent-miss: the session's OWN opening query went completely unrouted — zero Skill calls before source exploration), Q47 (silent-miss: an incomplete-proof error in gen_contract_noninterferent_param territory was debugged blind instead of re-triggering a skill already loaded earlier that session), Q48 (silent-miss: a new bv monotonicity proof was hand-written reactively instead of loading bv-pitfalls proactively), Q49 (adversarial companion to Q45: after resource health is EXPLICITLY confirmed clean and the hang still reproduces identically, rocq-compile-oom must hand off to cfgver-gen-contract rather than being re-suspected). Net lesson across Q46-49: loading a skill once for one symptom in a session does not cover a later, different symptom in the same skill's territory — re-triggering on each new symptom matters as much as triggering at all. v8 (2026-07-18, later still): added the new skill-routing-maintenance skill (formalizing this project's read-only Haiku-judge routing method, distinct from the bundled skill-creator plugin) — Q50-55 probe the boundary between the two: Q50/Q53 anchor skill-creator's territory (a genuinely new skill, including its own first-draft test-triggering loop), Q51/Q54/Q55 anchor skill-routing-maintenance's (fixing/checking an EXISTING skill's triggering, the exact 'check routing' phrase, misfire logging), and Q52 is the sharpest adversarial case — it echoes skill-creator's own bundled description almost verbatim ('optimize a skill's description for better triggering accuracy') and specifically tests whether this project's convention (routing work on existing skills goes through skill-routing-maintenance, never skill-creator's run_loop.py/run_eval.py against the live repo) wins.",
   "evals": [
     {
       "id": 1,
@@ -274,6 +274,66 @@
       "query": "my gen_contract_noninterferent_param end-to-end lemma's Qed just hangs forever with our normal imports, but if I strip the Iris/Equations imports it fails instantly instead with a weird lookup_nil mismatch — is this an OOM/memory thing?",
       "expected": "cfgver-gen-contract",
       "kind": "adversarial: sounds exactly like rocq-compile-oom's territory (hang, import-sensitive, 'is this OOM' framing) but the actual known cause is CFGVer's discharge-valid_contract-first bullet-ordering gotcha, not memory — rocq-compile-oom must NOT win outright (it's a reasonable first stop for the health check, but the fix lives in cfgver-gen-contract)"
+    },
+    {
+      "id": 46,
+      "query": "Let's migrate all the CFGVer examples to a parametric base — only cmovznz4 and set_X2 are parametric right now. What would it take to migrate swap, jump_if_zero, jmp_fwd, countdown, and countdown_mem too?",
+      "expected": "cfgver-gen-contract",
+      "kind": "silent-miss (live session, 2026-07-18): the agent went straight to Read/Bash source exploration with ZERO Skill calls for this exact question, despite it being squarely the parametric-base recipe cfgver-gen-contract now documents — should trigger cfgver-gen-contract (or the cfgver hub, given the multi-example breadth) before any code exploration"
+    },
+    {
+      "id": 47,
+      "query": "after eapply gen_contract_noninterferent_param and my usual bullets, Qed fails with 'Attempt to save an incomplete proof (there are remaining open goals)' — what am I missing?",
+      "expected": "cfgver-gen-contract",
+      "kind": "silent-miss (live session, 2026-07-18): the agent debugged blind for several turns (wrong add_ule_mono application, misread bv.of_N_add's orientation) instead of re-checking cfgver-gen-contract's 'discharge valid_contract FIRST' + multi-element HexitOffs notes — loading a skill once earlier in a session does not mean it gets re-consulted for a later, different symptom in its own territory"
+    },
+    {
+      "id": 48,
+      "query": "I need to prove that a second exit offset (not the fall-through one) also satisfies pcOutOfInstrs_exitCond — some bv.ule/bv.uleb/bv.bin_add_small monotonicity argument. Where do I even start?",
+      "expected": "bv-pitfalls",
+      "kind": "silent-miss (live session, 2026-07-18): the agent hand-wrote several failed attempts before loading bv-pitfalls (reactively, only once it hit the specific blanket-cbn-unfolds-xlenbits symptom) — should trigger PROACTIVELY the moment a new bv inequality/monotonicity proof is about to be composed, not only after a matching error appears"
+    },
+    {
+      "id": 49,
+      "query": "I checked memory and killed the stuck pet process, free -h looks totally healthy now, load average is normal — but rocq_compile_file on my gen_contract_noninterferent_param proof still hangs at the exact same line whether I give it 120s or 580s. What now?",
+      "expected": "cfgver-gen-contract",
+      "kind": "adversarial, companion to Q45/Q40-41: resource health is EXPLICITLY already confirmed clean here — rocq-compile-oom must NOT win a second time on the same incident; the identical-position-regardless-of-timeout signal (documented in rocq-compile-oom's own 'probably NOT this skill' section) should hand off to cfgver-gen-contract's discharge-order gotcha instead of prompting more resource diagnosis"
+    },
+    {
+      "id": 50,
+      "query": "I want to build a brand new skill for auto-generating changelogs from our commit messages — nothing like it exists yet, help me draft it from scratch.",
+      "expected": "skill-creator",
+      "kind": "should-trigger, boundary vs skill-routing-maintenance: a genuinely new skill with no existing analog is squarely skill-creator's job"
+    },
+    {
+      "id": 51,
+      "query": "The cfgver-memory skill isn't firing for a query about the _with_mem variants, can you check why and fix its trigger?",
+      "expected": "skill-routing-maintenance",
+      "kind": "should-trigger, boundary vs skill-creator: fixing an EXISTING skill's triggering is routing maintenance, not creation"
+    },
+    {
+      "id": 52,
+      "query": "I want to iterate on an existing skill's description with an eval loop to improve its trigger accuracy — run some test prompts, benchmark it, and tighten the wording.",
+      "expected": "skill-routing-maintenance",
+      "kind": "adversarial: this phrasing almost verbatim matches skill-creator's own bundled description ('optimize a skill's description for better triggering accuracy') — tests whether the project convention (this project's routing work goes through skill-routing-maintenance, not skill-creator's run_loop.py/run_eval.py against the live repo) wins over the plugin's own stated capability"
+    },
+    {
+      "id": 53,
+      "query": "I just wrote a first draft SKILL.md for a new 'docker-compose-helper' skill and want to draft a few test prompts and check if it triggers before I refine it further.",
+      "expected": "skill-creator",
+      "kind": "adversarial, opposite direction from Q52: 'check if it triggers' could tempt skill-routing-maintenance, but this is still inside skill-creator's own first-draft iteration loop for a BRAND NEW skill, not one of the existing ones"
+    },
+    {
+      "id": 54,
+      "query": "Can you check routing for the skills after this change?",
+      "expected": "skill-routing-maintenance",
+      "kind": "should-trigger, exact trigger-phrase sanity check ('check routing')"
+    },
+    {
+      "id": 55,
+      "query": "The bv-pitfalls skill fired on a query that should have gone to gmap-pitfalls instead — can you log that and see if the description needs fixing?",
+      "expected": "skill-routing-maintenance",
+      "kind": "should-trigger, misfire-logging scenario (wrong existing skill fired, needs an eval entry + possible description fix)"
     }
   ]
 }

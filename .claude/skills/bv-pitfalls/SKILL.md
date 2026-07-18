@@ -3,11 +3,16 @@ name: bv-pitfalls
 description: >
   Bitvector (bv) proof gotchas in Katamaran: lia choking on 2^32-sized literals
   (goals bounded by bv.exp2 xlenbits), finding enum-membership lemmas
-  (bv.finite.elem_of_enum, not "all_spec"), and a blanket cbn unfolding the width
+  (bv.finite.elem_of_enum, not "all_spec"), a blanket cbn unfolding the width
   index xlenbits into unary Peano numerals so bv-indexed lemmas stop matching
-  syntactically. Use when a lia / rewrite / set / apply involving bv terms fails
-  mysteriously. For the gmap-import Zify rewrite that breaks lia on bv.bin
-  (bv.of_N x), see gmap-pitfalls.
+  syntactically, and bv.of_N_add's orientation (collapses add-of-two-of_Ns into
+  one of_N-of-sum, not the reverse — easy to rewrite the wrong direction). Use
+  reactively when a lia / rewrite / set / apply involving bv terms fails
+  mysteriously — but ALSO PROACTIVELY, before hand-writing any new bv
+  inequality/monotonicity proof (bv.ule, bv.uleb, bv.ugeb, bv.bin_add_small,
+  bv.bin_of_N_small, bv.of_N_add), not only after a failure already happened.
+  For the gmap-import Zify rewrite that breaks lia on bv.bin (bv.of_N x), see
+  gmap-pitfalls.
 ---
 
 # Bitvector (bv) pitfalls

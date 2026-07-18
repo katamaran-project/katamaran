@@ -1,0 +1,28 @@
+{
+  "date": "2026-07-18",
+  "eval_set_version": "v8 (Q50-55 added: skill-creator vs. skill-routing-maintenance boundary)",
+  "method": "independent Haiku judges, one per query, shown only the two competing skills' name+description (other 26 project skills omitted as implausible matches for this specific boundary). Two rounds: an initial pass exposed a real gap on Q52, followed by a targeted description fix and a full re-validation of all 6 queries together.",
+  "round_1_initial": {
+    "score": "5/6",
+    "verdicts": [
+      { "id": 50, "verdict": "skill-creator", "expected": "skill-creator", "pass": true },
+      { "id": 51, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true },
+      { "id": 52, "verdict": "skill-creator", "expected": "skill-routing-maintenance", "pass": false, "note": "genuine miss: skill-creator's bundled description explicitly claims 'optimize a skill's description for better triggering accuracy', which out-competed skill-routing-maintenance's more general phrasing for this near-verbatim-matching query" },
+      { "id": 53, "verdict": "skill-creator", "expected": "skill-creator", "pass": true },
+      { "id": 54, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true },
+      { "id": 55, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true }
+    ]
+  },
+  "fix_applied": "Two description edits made together, per user instruction to fix both sides of the boundary rather than only one: (1) skill-routing-maintenance/SKILL.md — added explicit ownership of the 'run an eval loop / benchmark trigger accuracy / iterate on the description' vocabulary WHEN THE SKILL ALREADY EXISTS, framing the decision rule as 'does this skill already exist' rather than which words are used, plus a carve-out that a brand-new skill's own first-draft eval loop still belongs to skill-creator. (2) skill-creator's own bundled SKILL.md (cached plugin copy at ~/.claude/plugins/cache/claude-plugins-official/skill-creator/) — added a NOT-clause: before running an eval loop on an EXISTING already-shipped skill, check whether the project has its own routing/triggering-validation skill and prefer that; reserve run_loop.py/run_eval.py for drafting a brand-new skill or when no such project alternative exists. This second edit is generic (no hardcoded skill name) so it holds up in projects without a skill like skill-routing-maintenance, but only patches this machine's cached copy -- a plugin update would overwrite it.",
+  "round_2_after_fix": {
+    "score": "6/6",
+    "verdicts": [
+      { "id": 50, "verdict": "skill-creator", "expected": "skill-creator", "pass": true, "note": "regression check: unaffected by either edit" },
+      { "id": 51, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true, "note": "regression check" },
+      { "id": 52, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true, "note": "FIXED -- flips correctly once skill-routing-maintenance explicitly claims the 'eval loop / benchmark / iterate' vocabulary for existing skills" },
+      { "id": 53, "verdict": "skill-creator", "expected": "skill-creator", "pass": true, "note": "regression check: skill-creator's new NOT-clause (prefer a project's own routing skill) did not accidentally divert first-draft new-skill test-triggering away from skill-creator" },
+      { "id": 54, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true, "note": "regression check" },
+      { "id": 55, "verdict": "skill-routing-maintenance", "expected": "skill-routing-maintenance", "pass": true, "note": "regression check" }
+    ]
+  }
+}
