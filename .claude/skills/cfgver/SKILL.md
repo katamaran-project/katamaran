@@ -22,7 +22,7 @@ split into focused skills so only the relevant one loads.
 File layout (post 2026-07-17 split of the old monolithic `Examples.v`) and
 compilation order: `Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`}
 → `Contracts.v` → `GenContract.v` → `Adequacy.v` → `EndToEnd.v` →
-`Example/{MvSwap,Jumps,Countdown,SetX2,Cmovznz4}.v` (mutually independent) →
+`Example/{MvSwap,Jumps,Countdown,SetX2,Cmovznz4,Precompute}.v` (mutually independent) →
 `Results.v` (aggregator: the concrete `*_noninterferent` theorems the merge
 gate checks). `Noninterference.v` is the trusted statement layer (step
 relations, `declare_*`, `noninterferent_strong`, spec types) and deliberately
@@ -85,14 +85,14 @@ to plain `Require Import`.
 > with CFGVer. Once BlockVer is consolidated away (see TODO.md cleanup items),
 > switch the downstream files to a plain `Require Import` and delete this note.
 
-## Example status (2026-07-18)
+## Example status (2026-07-19)
 
 All CFGVer examples compile with **zero `Admitted`**, each with a
 `valid_<prog>_cfg_contract` VC and a `<prog>_noninterferent` end lemma, axiom-clean
 (`pure_decode` + `mmioenv` only): `swap`, `jumpIfZero`, `jmp_fwd`, `countdown`,
-`countdown_mem`, `set_X2_to_42`, `cmovznz4`.
+`countdown_mem`, `set_X2_to_42`, `cmovznz4`, `precompute`.
 
-**All seven now have a parametric-base (∀ `init_addr`) headline**
+**All eight now have a parametric-base (∀ `init_addr`) headline**
 (`<prog>_noninterferent_param`, via `gen_contract_param` for base-independent
 specs or `gen_contract_rel` for base-relative ones — see **cfgver-gen-contract**);
 every concrete `<prog>_noninterferent` is a free corollary of its `_param`
@@ -105,3 +105,12 @@ in `countdown`/`countdown_mem` (a previously untested case for the parametric-
 base machinery) turned out to need zero special handling.
 `valid_jmp_fwd` (BlockVer) stays `Admitted` — BlockVer cannot handle JAL;
 intentional.
+
+`precompute` (second "Breaking Bad" example, a 32-bit-word analogue of
+Botan's real, currently-shipping `GHASH::key_schedule` masking step) is the
+first example whose real (`uint64_t`) form does NOT verify with today's
+executor: comparisons (`sltu`, from 64-bit-subtraction-on-32-bit borrow
+detection) used as a pure VALUE on private data need `secLeak` on their
+operand, which `solve_vc` has no way to discharge when the operand is
+genuinely secret — see `TODO.md`'s "Botan CT::Mask / 64-bit-subtraction gap"
+for the full trace and the open executor-extension task.

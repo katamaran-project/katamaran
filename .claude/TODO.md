@@ -14,7 +14,59 @@ All contracts are defined using `gen_contract`. See commit history for details.
 First realistic example (from the "Breaking Bad" paper discussion) is done:
 `cmovznz4` (HACL*'s constant-time conditional move), hand-translated from
 `clang -O2 -march=rv32i` output into a `list AST`, proved noninterferent
-end-to-end (`cmovznz4_noninterferent` in `CFGVer/Examples.v`).
+end-to-end (`cmovznz4_noninterferent` in `CFGVer/Example/Cmovznz4.v`).
+
+**Second "Breaking Bad" example done (2026-07-19):** `precompute`
+(`CFGVer/Example/Precompute.v`) — a 32-bit-word analogue of Botan's
+`GHASH::key_schedule` masking step (the real, currently-shipping
+`CT::Mask`-based carry computation in `src/lib/utils/ghash/ghash.cpp`, fixed
+in commit `53b0cfde58` which cites this exact case study's arXiv preprint;
+the pre-fix code was `carry = R * (H1 & 1)`, byte-identical to the paper's
+own Listing 3a). Compiled with clang 15.0.0 `-O2 -march=rv32i -mabi=ilp32`
+(the SAME compiler/flags that still miscompile the pre-fix code into a
+`beqz` branch): branch-free, 10 instructions, no memory. Proved
+axiom-clean, both concrete and `_param` (universal base). See
+"Botan CT::Mask / 64-bit-subtraction gap" below for why this is scaled to
+`uint32_t` rather than the real `uint64_t`, and for the still-open full
+`GHASH::key_schedule` loop.
+
+## Botan CT::Mask / 64-bit-subtraction gap (2026-07-19)
+
+While hunting the next "Breaking Bad" example, the REAL Botan
+`GHASH::key_schedule` (`src/lib/utils/ghash/ghash.cpp`, current master)
+turned out to already be fixed — commit `53b0cfde58` replaced the
+paper's exact vulnerable line (`carry = R * (H1 & 1)`) with
+`CT::Mask<uint64_t>::expand(H1 & 1).if_set_return(R)`, an inline-asm
+value-barrier idiom (`value_barrier.h`: `asm("" : "+r"(x) :)`) that
+empirically defeats the miscompilation on every clang/gcc version tried
+(including the exact clang 15.0.0 that still breaks the raw-multiply form).
+
+**The catch:** the real function operates on `uint64_t` (Botan's GHASH state
+is two 64-bit words, `H0`/`H1`, living in register PAIRS under the RV32
+ILP32 ABI). `CT::Mask`'s `ct_is_zero` needs a 64-bit `x - 1`, and RV32I has
+no carry/borrow flag, so ANY compiler lowers a 64-bit subtract to: low-word
+subtract, then an `sltu`-based borrow check, then high-word subtract-minus-
+borrow. That `sltu`'s operands are secret-derived (from `H1`), and CFGVer's
+`solve_vc` automation can only derive `secLeak (f t1 t2)` compositionally
+*from* `secLeak t1`/`secLeak t2` already holding (`instprop_formula_secLeak_binop`,
+`Contracts.v`) — there is no rule for "this comparison's two worlds may
+legitimately disagree and that's fine, nothing downstream depends on which
+way it went." Every existing CFGVer example either has no comparison at all,
+or only uses one as an actual (public) branch predicate — none needed a
+comparison used as a pure VALUE on private data, so this had never been
+exercised. `precompute` sidesteps this by scaling `H` down to a native
+`uint32_t`: a single-word `x - 1` is one plain RV32I `sub`, no borrow-chain
+comparison at all, so no `sltu`-on-secret ever appears. Real Godbolt
+investigation, both directions, is in this session's transcript.
+
+**STILL OPEN:** verifying the genuine `uint64_t` version (and by extension
+any real 64-bit-emulated-on-32-bit arithmetic on secret data) needs the
+executor/`solve_vc` to support relops whose result may differ between the
+two worlds without requiring `secLeak` — i.e., a rule for "case-split on a
+comparison, then show non-interference holds no matter which branch,"
+distinct from the current "prove the comparison is public first" rule. Not
+attempted; likely a real (if modest) extension to the relop/`secLeak`
+model in `Contracts.v`, not just a new example.
 
 **MILESTONE (2026-07-04): genuine LOAD-of-secret verified.** `cin`, scratch
 registers, AND the `x`/`y` data are now all **private** (`r` private too);
@@ -230,8 +282,25 @@ memory note.
 
 ## Potential next tasks (not yet approved)
 
-- Prove `jmp_bwd` (backward jump / loop) as a second CFGVer example.
+- ~~Prove `jmp_bwd` (backward jump / loop) as a second CFGVer example.~~
+  STALE: `countdown`/`countdown_mem` already exercise a backward `BNE` branch
+  (see the cfgver hub skill's "Example status") — turned out to need zero
+  special handling once the parametric-base machinery was in place.
+- The full real `GHASH::key_schedule` loop (128 iterations building the
+  256-entry `m_HM` table, not just the single masking step `precompute`
+  verifies) is its own open item, separate from the `sltu`/64-bit gap above:
+  fully unrolling it (`#pragma clang loop unroll(full)`) produces 4,573
+  branch-free instructions (confirmed on Godbolt) — almost certainly too
+  large to hand-translate/symbolically-execute in practice. Verifying it as
+  a genuine loop instead needs a contract/spec shape for a *symbolic
+  iteration count* (CFGVer's existing backward-branch examples all have a
+  fixed/concrete trip count baked into the contract, e.g. `countdown`'s
+  literal counter value) — a bigger step than reusing the `countdown`
+  pattern as-is. Not attempted.
 - Continue with more "Breaking Bad"-style realistic examples now that
-  `cmovznz4` established the pattern (register/memory reg_specs split into
-  public/private, `asm_to_ast.py` for translation). Next ones will likely
-  want real pointer arguments -- see the Priority 1 note above.
+  `cmovznz4`/`precompute` established the pattern (register/memory
+  reg_specs split into public/private, `asm_to_ast.py` for translation).
+  Real pointer arguments are still open -- see the Priority 1 note above --
+  but NOTE: that gap is about genuinely caller-chosen, mutually-independent
+  addresses; it does not gate examples that (like both existing ones) either
+  have no memory at all or hardcode literal/base-relative addresses.

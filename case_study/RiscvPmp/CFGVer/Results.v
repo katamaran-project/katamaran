@@ -64,7 +64,8 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Example.Jumps
      RiscvPmp.CFGVer.Example.Countdown
      RiscvPmp.CFGVer.Example.SetX2
-     RiscvPmp.CFGVer.Example.Cmovznz4.
+     RiscvPmp.CFGVer.Example.Cmovznz4
+     RiscvPmp.CFGVer.Example.Precompute.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
@@ -335,6 +336,34 @@ Import iris.algebra.gmap.
       by (vm_compute; reflexivity).
     rewrite Hr Hm.
     apply cmovznz4_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
+  Qed.
+
+  (* Phase 4.2 headline #3: precompute (Botan's GHASH::key_schedule masking
+     step, 32-bit-word analogue, 10 instrs, no memory) verified end-to-end
+     for a UNIVERSAL base address, from the single symbolic-base VC
+     valid_precompute_cfg_contract_param -- no per-address vm_compute. *)
+  Lemma precompute_noninterferent_param (init_addr : N) :
+    (init_addr + 40 < lenAddr)%N ->
+    noninterferent_strong init_addr precompute_instrs
+      (pcOutOfInstrs_exitCond init_addr precompute_instrs)
+      precompute_reg_specs [].
+  Proof.
+    intros Hbound.
+    eapply gen_contract_noninterferent_param.
+    5: exact (valid_precompute_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* The concrete result at init_addr = 0, as a corollary. *)
+  Lemma precompute_noninterferent :
+    noninterferent_strong init_addr precompute_instrs
+      (pcOutOfInstrs_exitCond init_addr precompute_instrs) precompute_reg_specs [].
+  Proof.
+    apply precompute_noninterferent_param.
     unfold init_addr, lenAddr; lia.
   Qed.
 
