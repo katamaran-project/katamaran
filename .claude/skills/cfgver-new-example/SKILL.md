@@ -7,7 +7,10 @@ description: >
   list AST via asm_to_ast.py, choosing exitCond / fuel / extra_exit_offs, building
   the contract with gen_contract, discharging the VC, and the
   gen_contract_noninterferent end lemma. Trigger on "verify this program", "add a
-  new example", "prove X noninterferent". NOT for the individual layers' details
+  new example", "prove X noninterferent" — including terse follow-ups that refer
+  back to code discussed/compiled earlier in the conversation rather than
+  restating it ("prove non-interference for this version"), even when bundled
+  with an unrelated side-task (e.g. "...and update the TODO"). NOT for the individual layers' details
   (each step links its skill) and NOT for merely inspecting an already-proven
   lemma (e.g. running Print Assumptions on it — no skill needed).
 ---

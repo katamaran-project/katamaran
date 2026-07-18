@@ -5,9 +5,11 @@ description: >
   pattern, its residuals, and its failure modes. Use when proving a
   valid_<prog>_cfg_contract / ValidCFGVerifierContract goal, when solve_vc leaves a
   residual (VerificationConditionWithErasure …), when the VC reduces to a bare False,
-  or when vm_compute on a VC hangs/diverges. Covers the residual→tactic table,
-  DebugCFGVerifierContract for inspecting a failing VC, the tight-fuel False, and
-  the symbolic-bv.of_N divergence. NOT for building the contract itself
+  when vm_compute on a VC hangs/diverges, or when a `secLeak` GOAL (not hypothesis)
+  is left open after an sltu/comparison instruction on private data (e.g. a
+  borrow-chain subtraction). Covers the residual→tactic table,
+  DebugCFGVerifierContract for inspecting a failing VC, the tight-fuel False, the
+  symbolic-bv.of_N divergence, and the comparison-on-private-data gap. NOT for building the contract itself
   (cfgver-contracts / cfgver-gen-contract).
 ---
 
@@ -31,6 +33,40 @@ brings it in.
 | `VerificationConditionWithErasure (Erasure.eformula_secLeak [bv 0x0] ∧ ⊤)` | `solve_vc.` |
 | `VerificationConditionWithErasure ⊤` | `constructor.` |
 | `VerificationConditionWithErasure False` | wrong VC — see below |
+| `secLeak ?x` left as an open GOAL after `vm_compute. solve_vc.` (not a hypothesis `Hs : secLeak ?x` to `destruct`) | comparison-on-private-data gap — see below, likely not closable per-proof |
+
+## `secLeak` left as a GOAL, not a hypothesis (comparison/relop on private data)
+
+Distinguish this from the destructible-hypothesis pattern (`Hs : secLeak ?x |- _`,
+closed via `destruct x as [?|??]; [|destruct Hs]`, used in every `_param`
+contract's tail): here the residual is `|- RiscvPmpSignature.secLeak v` for some
+free `v : RelVal _` that has NO existing hypothesis about it at all — an
+obligation to *prove* `v` is public, not a case to eliminate.
+
+**Root cause:** `solve_vc`'s automation only derives `secLeak (f t1 t2)`
+*compositionally*, from `secLeak t1`/`secLeak t2` already holding
+(`instprop_formula_secLeak_binop`, `Contracts.v`). There is no rule for "this
+relop's two worlds may legitimately disagree, and nothing downstream needs it
+to be public" — i.e. no support (yet) for a comparison used as a pure VALUE on
+genuinely private operands. Concretely this fires on `SLTU`/`SLT`-family
+instructions (RV32's only carry/borrow-detection primitive, e.g. the standard
+`sltu`-based borrow chain a compiler emits for any multi-word/64-bit-on-32-bit
+subtraction) when their operands are private register/memory values — every
+comparison in every other CFGVer example is instead used as an actual (public)
+branch predicate, which is a different, already-supported code path.
+
+**What to do:** if the compared value can legitimately be marked public in the
+`reg_spec`/`mem_full_spec`, do that — the residual disappears. If it genuinely
+must stay private (the whole point of the proof), this is **not** closable by
+any known tactic combination; it needs the executor/`solve_vc` model extended
+with a rule for "case-split on the relop, then show non-interference holds
+either way" (tracked in `TODO.md`'s "Botan CT::Mask / 64-bit-subtraction gap",
+hit by `precompute`'s real `uint64_t` form — worked around there by scaling the
+data to a native 32-bit word so the subtraction never needs a borrow-chain
+comparison at all). Diagnostic path: `rocq_start` at the failing lemma,
+`rocq_check` with `vm_compute. solve_vc.`, and read the remaining `Goal N`s'
+hypothesis lists — a bare `secLeak v` with `v` unmentioned anywhere above it is
+the tell.
 
 ## When the VC is `False` (or `solve_vc` can't close it)
 

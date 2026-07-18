@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-19",
+  "eval_set_version": "v9 (Q56 added: cfgver-new-example silent-miss on a terse, bundled follow-up)",
+  "method": "Live misfire caught mid-session: the user's request to prove non-interference for a just-discussed program (bundled with an unrelated TODO.md note) produced zero Skill calls -- the agent went straight to Read-ing Example/Cmovznz4.v and asm_to_ast.py source until the user said 'Use the appropriate skill.' Logged as Q56, then cfgver-new-example's description was given a targeted clause covering terse contextual follow-ups bundled with a side-task. Validated with 3 independent Haiku judges (one per query, full 27-skill name+description listing, no shared context): the fixed query plus two regression checks already in the eval set (Q30 same-skill explicit phrasing, Q38 adversarial vs. rocq-formalize).",
+  "verdicts": [
+    { "id": 56, "verdict": "cfgver-new-example", "expected": "cfgver-new-example", "pass": true, "note": "FIXED -- the exact live-session query that silently failed to trigger now routes correctly with the added clause" },
+    { "id": 30, "verdict": "cfgver-new-example", "expected": "cfgver-new-example", "pass": true, "note": "regression check: explicit-phrasing query unaffected by the added clause" },
+    { "id": 38, "verdict": "cfgver-new-example", "expected": "cfgver-new-example", "pass": true, "note": "regression check: adversarial 'formalize' keyword still does not divert to rocq-formalize" }
+  ],
+  "score": "3/3",
+  "second_fix_same_session": {
+    "eval_set_version": "v9 (Q57 also added: cfgver-solve-vc silent-miss on the secLeak-as-goal residual)",
+    "method": "Same live session, immediately after Q56: debugging the sltu-on-private-data solve_vc failure was done by hand-tracing Contracts.v/Formulas.v/TypeDecl.v instead of loading cfgver-solve-vc, because its description only covered the destructible-hypothesis secLeak pattern. Description extended with the secLeak-as-GOAL residual shape plus a new body section. Validated with 2 independent Haiku judges (one per query, the 6 plausibly-competing skills shown, not the full 27 -- this is a single description edit per the eval's own scoping guidance): the new symptom query (Q57) and a regression check (Q31, the existing bare-False residual query).",
+    "verdicts": [
+      { "id": 57, "verdict": "cfgver-solve-vc", "expected": "cfgver-solve-vc", "pass": true, "note": "FIXED -- the secLeak-as-goal symptom now routes correctly with the added clause" },
+      { "id": 31, "verdict": "cfgver-solve-vc", "expected": "cfgver-solve-vc", "pass": true, "note": "regression check: existing bare-False residual query unaffected" }
+    ],
+    "score": "2/2"
+  }
+}
