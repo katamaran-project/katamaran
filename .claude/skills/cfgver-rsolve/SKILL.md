@@ -39,7 +39,7 @@ where `rmy_thing` is the relational-correctness lemma proved separately. The
 ## Divergence / `memory_exhausted`
 
 If `rsolve` eats multi-GB RAM or the rocq-mcp pet dies: it reached a goal pairing
-heads with **no matching instance** (e.g. `cexec_cfg_addr` vs `sexec_cfg_addr_tbl`,
+heads with **no matching instance** (e.g. `cexec_cfg_addr` vs `sexec_cfg_addr`,
 or two monadic programs whose bind structures are misaligned) and the search
 diverged instead of failing. It can also present as an apparent `Qed` hang.
 
@@ -50,7 +50,7 @@ iApply (HeapSpec.refine_bind (RA := ...)).
 ```
 
 — and run `rsolve` only on the aligned atomic subgoals. Dispatch the table executor
-with `rexec_cfg_addr_tbl` rather than hoping search aligns it.
+with `rexec_cfg_addr` rather than hoping search aligns it.
 
 ## Name-shadowing trap
 

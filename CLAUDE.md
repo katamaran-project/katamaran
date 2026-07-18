@@ -22,7 +22,9 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >
 > Standalone pitfall skills (generic, not CFGVer-specific): **`rocq-pitfalls`**
 > (bullets, eauto atomicity, SSReflect rewrite, goal-print debugging),
-> **`bv-pitfalls`**, **`gmap-pitfalls`**, **`iris-proofmode`**. Zero-cost
+> **`bv-pitfalls`**, **`gmap-pitfalls`**, **`iris-proofmode`**, **`rocq-compile-oom`**
+> (a heavy compile gets silently killed/stalls with no Coq error — check for
+> memory pressure/orphaned processes before assuming a regression). Zero-cost
 > references files live under `skills/cfgver/references/` (e.g. `registers.md`).
 
 ---

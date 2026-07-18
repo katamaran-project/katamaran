@@ -145,7 +145,7 @@ Import asn.notations.
     (*                                                                    *)
     (* Two facts make it work:                                            *)
     (*  - The symbolic VC (Valid_CFG_VC, ~line 350) runs the TERM-TABLE   *)
-    (*    executor (Verifier.scfg_verification_condition_tbl) over       *)
+    (*    executor (Verifier.scfg_verification_condition) over       *)
     (*    `table_of_list p 0 i`, so the base placement term `p` may be a  *)
     (*    genuine VARIABLE.  The base must be `term_var "p"`, NOT          *)
     (*    `term_val (bv.of_N n)`: the latter makes vm_compute DIVERGE      *)

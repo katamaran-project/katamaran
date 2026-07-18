@@ -98,7 +98,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        heap state is unconstrained and any leftover resources are silently dropped.
 
        Post table-pivot (PLAN-symbolic-base.md Phase 3): the verifier side is
-       the TABLE VC (scfg_verification_condition_tbl) over address-term
+       the TABLE VC (scfg_verification_condition) over address-term
        tables built from the placement term `cfg_placement` by table_of_list /
        exits_of_list.  Concrete contracts pass term_val (bv.of_N init_addr)
        (the keys then fold to literals inside peval_bvadd — same behavior as
@@ -112,7 +112,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AST)
       (fl : nat) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition_tbl (Σ := Σ)
+      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl
         (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 

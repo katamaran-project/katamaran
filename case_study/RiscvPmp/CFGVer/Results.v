@@ -148,7 +148,7 @@ Import iris.algebra.gmap.
                     [env]).
     { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
         [reflexivity | repeat constructor]. }
-    iApply (sound_scfg_verification_condition_myWP2_tbl
+    iApply (sound_scfg_verification_condition_myWP2
               valid_jmp_fwd_cfg_contract _ Hif Hef
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").

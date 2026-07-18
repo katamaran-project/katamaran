@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-18",
+  "eval_set_version": "v5 (rocq-compile-oom added)",
+  "method": "independent Haiku judges, one per query, shown only the name+description listing (28 skills incl. rocq plugin skill); targeted subset -- only Q40-44 (new skill + adversarial near-misses). Q1-39 unchanged from prior runs (results-2026-07-17.json).",
+  "score": "5/5 (after one description fix)",
+  "note": "First pass was 4/5: Q44 (routine 'still running after 120s, moved to background' async status) incorrectly fired rocq-compile-oom. Tightened the description to require the compile has actually died or is confirmed stuck far longer than its own history, and explicitly excluded the 'still running / moved to background' pattern as normal async behavior. Re-ran Q44 and re-checked Q40 for regression: both correct after the fix.",
+  "verdicts": [
+    { "id": 40, "verdict": "rocq-compile-oom", "expected": "rocq-compile-oom", "pass": true },
+    { "id": 41, "verdict": "rocq-compile-oom", "expected": "rocq-compile-oom", "pass": true },
+    { "id": 42, "verdict": "rocq-doctor", "expected": "rocq-doctor", "pass": true },
+    { "id": 43, "verdict": "rocq-pitfalls", "expected": "rocq-pitfalls", "pass": true },
+    { "id": 44, "verdict": "none", "expected": "none", "pass": true, "note": "failed on first description (verdict was rocq-compile-oom); passed after tightening" }
+  ]
+}

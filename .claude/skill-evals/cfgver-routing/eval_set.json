@@ -1,6 +1,6 @@
 {
   "purpose": "Cross-skill routing eval for the cfgver-* skill family. Each query has ONE expected winner among the cfgver skills, the generic pitfall skills (rocq-/bv-/gmap-pitfalls, iris-proofmode), the rocq plugin skills, or none. A skill firing on a query expected elsewhere = mis-route.",
-  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3.",
+  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits).",
   "evals": [
     {
       "id": 1,
@@ -238,6 +238,36 @@
       "query": "fill in all the Admitted proofs across theories/ overnight, don't ask me at each step",
       "expected": "rocq",
       "kind": "guard: must NOT auto-trigger any wrapper; correct behavior is rocq skill + SUGGESTING /rocq:autoprove with a scope bound"
+    },
+    {
+      "id": 40,
+      "query": "I'm trying to recompile Example/Cmovznz4.v after some unrelated renames elsewhere in Verifier.v and it just says 'Terminated' and 'Error 143' — no Coq error, no error position, nothing. The file itself has zero diff. Did my renames break something?",
+      "expected": "rocq-compile-oom",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 41,
+      "query": "why does my heavy vm_compute proof keep getting SIGTERM'd halfway through — is my system just out of memory or ram?",
+      "expected": "rocq-compile-oom",
+      "kind": "should-trigger"
+    },
+    {
+      "id": 42,
+      "query": "coqc is throwing 'Cannot find a physical path bound to logical path RiscvPmp.CFGVer.Verifier with prefix Katamaran' when I try to compile Adequacy.v, right after a keep_vo compile of Verifier.v",
+      "expected": "rocq-doctor",
+      "kind": "adversarial: real Coq error message present (stale/missing .vo) vs rocq-compile-oom's 'zero diagnostic' signature — rocq-compile-oom must NOT win"
+    },
+    {
+      "id": 43,
+      "query": "getting 'Wrong bullet -: Current bullet - is not finished' three levels deep in an iInduction, right after a proof that used to compile fine",
+      "expected": "rocq-pitfalls",
+      "kind": "adversarial: 'used to compile fine' phrasing overlaps rocq-compile-oom's framing, but there IS a concrete Coq tactic error — rocq-compile-oom must NOT win"
+    },
+    {
+      "id": 44,
+      "query": "rocq_compile_file on Cmovznz4.v says 'still running after 120s, moved to background as task X' — is that normal or should I be worried?",
+      "expected": "none",
+      "kind": "guard: routine async tool behavior, not yet a failure — rocq-compile-oom must NOT fire prematurely on a compile that's merely slow, only on one that actually died/stalled unexplained"
     }
   ]
 }

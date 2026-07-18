@@ -142,7 +142,7 @@ Import IrisModel.RiscvPmpIrisBase.
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    iApply (sound_scfg_verification_condition_myWP2_tbl
+    iApply (sound_scfg_verification_condition_myWP2
               valid_contract _ Hif HexitsFaith
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
@@ -236,7 +236,7 @@ Import IrisModel.RiscvPmpIrisBase.
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    iApply (sound_scfg_verification_condition_myWP2_tbl
+    iApply (sound_scfg_verification_condition_myWP2
               valid_contract _ Hif HexitsFaith
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").

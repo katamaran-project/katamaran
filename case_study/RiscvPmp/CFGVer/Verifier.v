@@ -29,7 +29,7 @@
 (* ======================================================================== *)
 (* CFGVer/Verifier.v                                                        *)
 (*                                                                           *)
-(* Role: defines the symbolic CFG executor (sexec_cfg_addr_tbl) and the     *)
+(* Role: defines the symbolic CFG executor (sexec_cfg_addr) and the     *)
 (* concrete mirror (cexec_cfg_addr), and proves its soundness up to the     *)
 (* myWP2_loop chain in Adequacy.v.                                          *)
 (*                                                                           *)
@@ -100,9 +100,9 @@ Import RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
 (* CFGVerificationDerived                                                  *)
 (*                                                                           *)
 (* The CFG verifier, structured in four subsections:                        *)
-(*   Symbolic  — sexec_cfg_addr_tbl and related definitions                 *)
+(*   Symbolic  — sexec_cfg_addr and related definitions                 *)
 (*   Shallow   — cexec_cfg_addr (concrete, propositional)                   *)
-(*   Relational — rexec_cfg_addr_tbl (the key soundness bridge via rsolve)  *)
+(*   Relational — rexec_cfg_addr (the key soundness bridge via rsolve)  *)
 (*   Soundness — ptsto_instrs + the pieces reused by Adequacy.v's myWP2    *)
 (*     soundness chain (sound_exec_instruction, ptsto_instrs_lookup)       *)
 (* ======================================================================== *)
@@ -182,32 +182,29 @@ Section CFGVerificationDerived.
     (* WHY a term-table executor at all:  a gmap executor dispatching by  *)
     (* `instrs !! v` needs a CONCRETE address v.  With a symbolic base    *)
     (* `p : term_var`, the pc is a term like `p+8` with no concrete       *)
-    (* value, so gmap lookup cannot fire.  The `_tbl` executor instead    *)
-    (* keys instructions/exits by TERMS and dispatches by syntactic       *)
-    (* term-matching (`Term_eqb (peval apc) (peval key)`) — which works   *)
-    (* whether the base is a literal (`256+8` folds to `264`) or a        *)
-    (* variable (`p+8` matches the key term `p+8`).  It is the only       *)
-    (* symbolic executor (the earlier gmap-based `sexec_cfg_addr` was     *)
-    (* dead — nothing else used it, since even the fixed-address          *)
-    (* examples build their contract via the term-table VC — and was      *)
-    (* removed, 2026-07-17).                                              *)
+    (* value, so gmap lookup cannot fire.  This term-table executor      *)
+    (* instead keys instructions/exits by TERMS and dispatches by         *)
+    (* syntactic term-matching (`Term_eqb (peval apc) (peval key)`) —     *)
+    (* which works whether the base is a literal (`256+8` folds to        *)
+    (* `264`) or a variable (`p+8` matches the key term `p+8`).  It is     *)
+    (* the only symbolic executor.                                        *)
     (*                                                                    *)
     (* Follow the chain in this order:                                    *)
-    (*   1. SITable/SETable, lookup_instr/is_exit  — term-keyed tables    *)
+    (*   1. SInstrTable/SExitTable, lookup_instr/is_exit — term-keyed tables *)
     (*      and peval-modulo matching (below).                            *)
-    (*   2. sexec_cfg_addr_tbl / scfg_verification_condition_tbl —      *)
+    (*   2. sexec_cfg_addr / scfg_verification_condition —      *)
     (*      the symbolic executor + VC.                                   *)
     (*   3. itable_rel / etable_rel (applied at w := wlctx Σ)  — "the term *)
     (*      table faithfully mirrors the concrete gmap / exitCond at       *)
     (*      valuation ι".  This is the semantic bridge between the two     *)
     (*      worlds.                                                        *)
-    (*   4. rexec_cfg_addr_tbl  — the gmap concrete executor is refined   *)
+    (*   4. rexec_cfg_addr  — the gmap concrete executor is refined   *)
     (*      by the term-table symbolic executor UNDER faithfulness.       *)
-    (*   5. cexec_triple_addr_tbl + refine_guard + rexec_triple_addr_tbl  *)
+    (*   5. cexec_triple_addr + refine_guard + rexec_triple_addr  *)
     (*      — the guarded VC refinement: faithfulness is an ASSUMED guard *)
     (*      on the concrete side, discharged end-to-end at the one        *)
     (*      valuation ι = [p ↦ of_N init_addr].                           *)
-    (*   6. rcfg_verification_condition_tbl  — VC-level refinement,     *)
+    (*   6. rcfg_verification_condition  — VC-level refinement,     *)
     (*      the entry point the soundness chain uses.                     *)
     (* The Examples.v side (exits_of_offs, itable_faith_of_list,          *)
     (* etable_faith_exits_of_offs, gen_contract_param/_rel, concretize_*, *)
@@ -216,29 +213,26 @@ Section CFGVerificationDerived.
     (* ================================================================ *)
 
     (* ---------------------------------------------------------------- *)
-    (* Table-based executor variants (suffix `_tbl` throughout).  Design:  *)
-    (* instruction dispatch is a syntactic term-table lookup,             *)
-    (* `Term_eqb (peval apc) (peval key)`.  No gmap lookup on terms, no    *)
-    (* offset arithmetic.  Tables are world-indexed (TYPE-level), since    *)
-    (* their keys are symbolic terms that must be persisted across worlds *)
-    (* as the executor steps.  Dropping the `_tbl` suffix (now that it's  *)
-    (* the only executor) is tracked as cleanup in .claude/TODO.md.        *)
+    (* Table-based executor variants.  Design: instruction dispatch is a  *)
+    (* syntactic term-table lookup, `Term_eqb (peval apc) (peval key)`.   *)
+    (* No gmap lookup on terms, no offset arithmetic.  Tables are          *)
+    (* world-indexed (TYPE-level), since their keys are symbolic terms     *)
+    (* that must be persisted across worlds as the executor steps.        *)
     (* ---------------------------------------------------------------- *)
 
 
-    (* TODO: We need more insightful names, than SITable and SETable, it was very unclear to me what they meant at first. *)
-    (* SITable / SETable: the symbolic analogues of the gmap `instrs` and *)
+    (* SInstrTable / SExitTable: the symbolic analogues of the gmap `instrs` and *)
     (* function `exitCond` above -- a table of (address term, instruction) *)
     (* pairs, and a list of address terms marking exits. *)
-    Definition SITable : TYPE :=
+    Definition SInstrTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits * AST).
 
-    Definition SETable : TYPE :=
+    Definition SExitTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits).
 
-    Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SITable w1 -> SITable w2 :=
+    Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SInstrTable w1 -> SInstrTable w2 :=
       List.map (fun '(t,i) => (persist__term t θ, i)).
-    Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SETable w1 -> SETable w2 :=
+    Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SExitTable w1 -> SExitTable w2 :=
       List.map (fun t => persist__term t θ).
 
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
@@ -247,23 +241,22 @@ Section CFGVerificationDerived.
     (* (e.g. `8 ⊕ 256`) while the semantics-produced pc is normalized      *)
     (* (`264`); peval reconciles the two before the syntactic Term_eqb    *)
     (* comparison.  Do not drop either peval call. *)
-    Definition lookup_instr {w} (tbl : SITable w)
+    Definition lookup_instr {w} (tbl : SInstrTable w)
         (apc : STerm ty_xlenbits w) : option AST :=
       option_map snd
         (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) tbl).
-    Definition is_exit {w} (exits : SETable w)
+    Definition is_exit {w} (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) : bool :=
       List.existsb (fun t => Term_eqb (peval apc) (peval t)) exits.
 
-    (* TODO: Rename this as to not reference the process, keep these lemmas and tests though. *)
-    (* --- Phase 1 self-tests (cheap sanity anchors for lookup_instr /    *)
-    (* is_exit / peval; NOT part of the soundness chain). *)
-    Section Phase1SelfTests.
+    (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
+    (* peval; NOT part of the soundness chain). *)
+    Section TableLookupSelfTests.
       Let w1 : World := wlctx ([ctx] ▻ "p"∷ty_xlenbits).
       Let p1 : Term (wctx w1) ty_xlenbits := term_var "p".
       Let instrA : AST := RTYPE (bv.of_N 1) (bv.of_N 0) (bv.of_N 2) RISCV_SUB.
       Let instrB : AST := RTYPE (bv.of_N 2) (bv.of_N 1) (bv.of_N 0) RISCV_SUB.
-      Let tbl1 : SITable w1 :=
+      Let tbl1 : SInstrTable w1 :=
         [ (p1, instrA)
         ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, instrB)
         ]%list.
@@ -286,69 +279,61 @@ Section CFGVerificationDerived.
           (peval (term_bvsub (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) (term_val ty_xlenbits (bv.of_N 256)))  (term_val ty_xlenbits (bv.of_N 4))))
         = true.
       Proof. vm_compute. reflexivity. Qed.
-    End Phase1SelfTests.
+    End TableLookupSelfTests.
 
-    (* TODO: rename sexec_cfg_addr_tbl to sexec_cfg_addr and drop all other *)
-    (* _tbl references, now that the gmap-based sexec_cfg_addr it used to  *)
-    (* be contrasted with has been removed (2026-07-17). *)
-    (* sexec_cfg_addr_tbl: the symbolic CFG executor.  Fuel-guarded,       *)
+    (* sexec_cfg_addr: the symbolic CFG executor.  Fuel-guarded,       *)
     (* angelic_binary between exit/execute at each step, dispatching via   *)
     (* lookup_instr/is_exit — a syntactic term-table match modulo peval —  *)
     (* instead of a concrete-literal gmap lookup, so apc may stay symbolic  *)
     (* (`term_get_val` does not appear).  tbl/exits are threaded as        *)
     (* ARGUMENTS through the recursion since they are world-dependent,     *)
     (* persisted at each step via persist_itable / persist_etable. *)
-    Fixpoint sexec_cfg_addr_tbl (fuel : nat) :
-      ⊢ SITable -> SETable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+    Fixpoint sexec_cfg_addr (fuel : nat) :
+      ⊢ SInstrTable -> SExitTable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w tbl exits apc =>
         let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
           error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
                                      debug_string_message := s |}) in
         match fuel with
-        | O    => emsg "sexec_cfg_addr_tbl: out of fuel"
+        | O    => emsg "sexec_cfg_addr: out of fuel"
         | S n' =>
             angelic_binary
               (if is_exit exits apc then pure apc
-               else emsg "sexec_cfg_addr_tbl: exit branch chosen but pc matches no declared exit term")
+               else emsg "sexec_cfg_addr: exit branch chosen but pc matches no declared exit term")
               (match lookup_instr tbl apc with
-               | None   => emsg "sexec_cfg_addr_tbl: no instruction key matches this pc term"
+               | None   => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some i =>
                    ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
-                   sexec_cfg_addr_tbl n' (persist_itable θ1 tbl) (persist_etable θ1 exits) apc'
+                   sexec_cfg_addr n' (persist_itable θ1 tbl) (persist_etable θ1 exits) apc'
                end)
         end.
 
-    (* TODO: rename to drop the _tbl suffix, now that this is the only    *)
-    (* symbolic triple/VC (the gmap-based sexec_triple_addr /              *)
-    (* scfg_verification_condition were dead — nothing used them, since    *)
-    (* even the fixed-address examples build their contract via this       *)
-    (* table-based VC — and were removed, 2026-07-17). *)
-    (* sexec_triple_addr_tbl / scfg_verification_condition_tbl: apply     *)
+    (* sexec_triple_addr / scfg_verification_condition: apply     *)
     (* symbolic execution to verify a Hoare triple for a program.  The     *)
     (* precondition can mention the address a where the program is loaded; *)
     (* the postcondition can additionally mention the address an where the *)
-    (* pc points after execution.  scfg_verification_condition_tbl runs   *)
-    (* sexec_triple_addr_tbl inside SHeapSpec.run (no leakcheck), giving a *)
+    (* pc points after execution.  scfg_verification_condition runs   *)
+    (* sexec_triple_addr inside SHeapSpec.run (no leakcheck), giving a *)
     (* 𝕊 wnil proposition checked by `safeE (postprocess ...)`.  `tbl`/    *)
     (* `exits` are given at the CONTRACT context Σ (plain    *)
     (* lists of Σ-level terms, like `req`/`ens`), and moved into the       *)
     (* current world the same way `req` is: by applying the substitution  *)
     (* `ζ : Sub Σ w` (obtained from `demonic_ctx`'s δ, persisted forward   *)
     (* to the world where `a` lives) to each key term via `subst`. *)
-    (* tbl/exits here are SITable/SETable at the world wlctx Σ (empty path
+    (* tbl/exits here are SInstrTable/SExitTable at the world wlctx Σ (empty path
        condition over the contract context) -- definitionally the same
-       lists (Term Σ ty_xlenbits * AST) / (Term Σ ty_xlenbits) they used to
-       be typed as, since wctx (wlctx Σ) reduces to Σ by record projection. *)
+       as `list (Term Σ ty_xlenbits * AST)` / `list (Term Σ ty_xlenbits)`,
+       since wctx (wlctx Σ) reduces to Σ by record projection. *)
     Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
-        (tbl : SITable (wlctx Σ)) : SITable w :=
+        (tbl : SInstrTable (wlctx Σ)) : SInstrTable w :=
       List.map (fun '(t,i) => (subst t ζ, i)) tbl.
     Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
-        (exits : SETable (wlctx Σ)) : SETable w :=
+        (exits : SExitTable (wlctx Σ)) : SExitTable w :=
       List.map (fun t => subst t ζ) exits.
 
-    Definition sexec_triple_addr_tbl {Σ : LCtx}
+    Definition sexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (tbl : SITable (wlctx Σ)) (exits : SETable (wlctx Σ)) (fuel : nat)
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) (fuel : nat)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
       ⊢ SHeapSpec Unit :=
       fun w =>
@@ -358,18 +343,18 @@ Section CFGVerificationDerived.
         ⟨ θ2 ⟩ _ <- produce req δ1 ;;
         let a2 := persist__term a θ2 in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ2) in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr_tbl fuel (subst_itable ζ tbl) (subst_etable ζ exits) a2 ;;
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (subst_itable ζ tbl) (subst_etable ζ exits) a2 ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-    (* scfg_verification_condition_tbl: runs sexec_triple_addr_tbl inside *)
+    (* scfg_verification_condition: runs sexec_triple_addr inside *)
     (* SHeapSpec.run; same wnil shape, no leakcheck. *)
-    Definition scfg_verification_condition_tbl {Σ : LCtx}
+    Definition scfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
-        SHeapSpec.run (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)).
+        SHeapSpec.run (sexec_triple_addr req tbl exits fuel ens (w := w)).
 
   End Symbolic.
 
@@ -439,15 +424,15 @@ Section CFGVerificationDerived.
   (* The relational layer connects the concrete (C) and symbolic (S)        *)
   (* executors via ℛ⟦R⟧, the logical relation used by `rsolve`.             *)
   (*                                                                         *)
-  (* rexec_cfg_addr_tbl: the key lemma, refining the gmap concrete executor  *)
+  (* rexec_cfg_addr: the key lemma, refining the gmap concrete executor  *)
   (*   by the term-table symbolic executor under table faithfulness.        *)
   (*   Proved by iInduction on fuel; the is_exit/lookup_instr double         *)
   (*   destruct is discharged sequentially across its four subgoals.        *)
   (*                                                                         *)
   (* RefineCompat instances export the relational lemmas for use by rsolve:  *)
-  (*   refine_compat_cfg_verification_condition_tbl — key instance that    *)
+  (*   refine_compat_cfg_verification_condition — key instance that    *)
   (*   lets rsolve close goals of the form                                  *)
-  (*   RSat RProp (ccfg_vc_tbl ...) (scfg_vc_tbl ...)                     *)
+  (*   RSat RProp (ccfg_vc ...) (scfg_vc ...)                     *)
   (* ====================================================================== *)
   Section Relational.
 
@@ -474,7 +459,7 @@ Section CFGVerificationDerived.
 
     (* ------------------------------------------------------------------ *)
     (* Table faithfulness: bridge between the term-table symbolic executor *)
-    (* (sexec_cfg_addr_tbl) and the gmap-based concrete executor            *)
+    (* (sexec_cfg_addr) and the gmap-based concrete executor            *)
     (* (cexec_cfg_addr).  itable_rel/etable_rel are Pred-level premises:    *)
     (* every key term must instantiate to a SyncVal address that the gmap   *)
     (* maps to the paired instruction (resp. that satisfies exitCond).      *)
@@ -483,12 +468,12 @@ Section CFGVerificationDerived.
     (* symbolic one proceeds, breaking refinement.                          *)
     (* ------------------------------------------------------------------ *)
 
-    (* TODO: All this machinery surrounding SITable and gmap and SETable deserves its own section, module or even file. *)
-    Definition itable_rel {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w) : Pred w :=
+    (* TODO: All this machinery surrounding SInstrTable and gmap and SExitTable deserves its own section, module or even file. *)
+    Definition itable_rel {w} (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w) : Pred w :=
       fun ι => List.Forall
         (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
 
-    Definition etable_rel {w} (exitCond : bv xlenbits -> bool) (exits : SETable w) : Pred w :=
+    Definition etable_rel {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w) : Pred w :=
       fun ι => List.Forall
         (fun t => exists v,
            inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
@@ -503,7 +488,7 @@ Section CFGVerificationDerived.
       now rewrite e.
     Qed.
 
-    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w)
+    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w)
         (apc : STerm ty_xlenbits w) (i : AST) (ι : Valuation w) :
       lookup_instr tbl apc = Some i ->
       itable_rel instrs tbl ι ->
@@ -522,7 +507,7 @@ Section CFGVerificationDerived.
       exact Hv.
     Qed.
 
-    Lemma is_exit_sound {w} (exitCond : bv xlenbits -> bool) (exits : SETable w)
+    Lemma is_exit_sound {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) (ι : Valuation w) :
       is_exit exits apc = true ->
       etable_rel exitCond exits ι ->
@@ -540,7 +525,7 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma forgetting_itable_rel {w1 w2} (θ : Acc w1 w2)
-        (instrs : gmap (bv xlenbits) AST) (tbl : SITable w1) :
+        (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w1) :
       (forgetting θ (itable_rel instrs tbl) ⊣⊢ itable_rel instrs (persist_itable θ tbl))%I.
     Proof.
       constructor.
@@ -554,7 +539,7 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma forgetting_etable_rel {w1 w2} (θ : Acc w1 w2)
-        (exitCond : bv xlenbits -> bool) (exits : SETable w1) :
+        (exitCond : bv xlenbits -> bool) (exits : SExitTable w1) :
       (forgetting θ (etable_rel exitCond exits) ⊣⊢ etable_rel exitCond (persist_etable θ exits))%I.
     Proof.
       constructor.
@@ -567,7 +552,7 @@ Section CFGVerificationDerived.
         rewrite inst_persist in Hv + rewrite inst_persist; exact Hv.
     Qed.
 
-    Lemma persist_itable_refl {w} (tbl : SITable w) :
+    Lemma persist_itable_refl {w} (tbl : SInstrTable w) :
       persist_itable acc_refl tbl = tbl.
     Proof.
       unfold persist_itable.
@@ -577,7 +562,7 @@ Section CFGVerificationDerived.
       exact IH.
     Qed.
 
-    Lemma persist_etable_refl {w} (exits : SETable w) :
+    Lemma persist_etable_refl {w} (exits : SExitTable w) :
       persist_etable acc_refl exits = exits.
     Proof.
       unfold persist_etable.
@@ -587,7 +572,7 @@ Section CFGVerificationDerived.
       exact IH.
     Qed.
 
-    Lemma persist_itable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (tbl : SITable w1) :
+    Lemma persist_itable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (tbl : SInstrTable w1) :
       persist_itable θ23 (persist_itable θ12 tbl) = persist_itable (acc_trans θ12 θ23) tbl.
     Proof.
       unfold persist_itable.
@@ -597,7 +582,7 @@ Section CFGVerificationDerived.
       now rewrite persist_trans.
     Qed.
 
-    Lemma persist_etable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (exits : SETable w1) :
+    Lemma persist_etable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (exits : SExitTable w1) :
       persist_etable θ23 (persist_etable θ12 exits) = persist_etable (acc_trans θ12 θ23) exits.
     Proof.
       unfold persist_etable.
@@ -607,7 +592,7 @@ Section CFGVerificationDerived.
       now rewrite persist_trans.
     Qed.
 
-    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST) (tbl : SITable w)
+    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w)
         (apc : STerm ty_xlenbits w) (i : AST) (a : RelVal ty_xlenbits) :
       lookup_instr tbl apc = Some i ->
       (itable_rel instrs tbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
@@ -624,7 +609,7 @@ Section CFGVerificationDerived.
       now rewrite <- Ha.
     Qed.
 
-    Lemma is_exit_sound_repₚ {w} (exitCond : bv xlenbits -> bool) (exits : SETable w)
+    Lemma is_exit_sound_repₚ {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) (a : RelVal ty_xlenbits) :
       is_exit exits apc = true ->
       (etable_rel exitCond exits ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
@@ -641,7 +626,7 @@ Section CFGVerificationDerived.
       now rewrite <- Ha.
     Qed.
 
-    (* rexec_cfg_addr_tbl: refinement of the gmap concrete executor by the  *)
+    (* rexec_cfg_addr: refinement of the gmap concrete executor by the  *)
     (* term-table symbolic executor, under table faithfulness.  Proved by   *)
     (* iInduction on fuel, boxed IH projected by                            *)
     (* forgetting_unconditionally_drastic; the four subgoals of the         *)
@@ -650,22 +635,22 @@ Section CFGVerificationDerived.
     (* It should be relatively easy with most of the complexity handled by rsolve. *)
     (* I suspect there are a few missing RefineCompat instances for tables. *)
     (* This is maybe a good proof golf target. *)
-    Lemma rexec_cfg_addr_tbl (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool)
-        (fuel : nat) {w} (tbl : SITable w) (exits : SETable w) :
+    Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {w} (tbl : SInstrTable w) (exits : SExitTable w) :
       (itable_rel instrs tbl ∗ etable_rel exitCond exits ⊢
        ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
            (cexec_cfg_addr instrs exitCond fuel)
-           (sexec_cfg_addr_tbl fuel tbl exits))%I.
+           (sexec_cfg_addr fuel tbl exits))%I.
     Proof.
       iIntros "#[Hi He]".
       iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
                  (cexec_cfg_addr instrs exitCond fuel)
-                 (fun w' θ => sexec_cfg_addr_tbl fuel (persist_itable θ tbl)
+                 (fun w' θ => sexec_cfg_addr fuel (persist_itable θ tbl)
                                 (persist_etable θ exits))) as "H".
       {
         iInduction fuel as [|n'] "IHfuel".
         - rsolve.
-        - cbn [sexec_cfg_addr_tbl cexec_cfg_addr].
+        - cbn [sexec_cfg_addr cexec_cfg_addr].
           rsolve.
           rewrite forgetting_itable_rel forgetting_etable_rel.
           iRename select (ℛ⟦RVal ty_xlenbits⟧ a ta) into "Ha".
@@ -715,7 +700,7 @@ Section CFGVerificationDerived.
 
     (* ------------------------------------------------------------------ *)
     (* VC-level refinement for the term-table verifier (guarded form).     *)
-    (* The concrete side cexec_triple_addr_tbl is the gmap triple with an   *)
+    (* The concrete side cexec_triple_addr is the gmap triple with an   *)
     (* extra assumed faithfulness guard tying the Σ-level key terms to the  *)
     (* concrete gmap at the demonically chosen valuation.  At valuations    *)
     (* where the table does not match the gmap (e.g. a placement variable   *)
@@ -724,15 +709,8 @@ Section CFGVerificationDerived.
     (* program actually resides.  Scaffolding for refinement only — the     *)
     (* concrete executor and soundness chain are untouched.                 *)
     (* ------------------------------------------------------------------ *)
-    (* itable_faith/etable_faith used to duplicate itable_rel/etable_rel's  *)
-    (* List.Forall body verbatim, differing only in the tbl/exits parameter *)
-    (* type (a plain list vs SITable/SETable) -- but those are the same     *)
-    (* type at w := wlctx Σ (wctx (wlctx Σ) reduces to Σ).  Deduped         *)
-    (* 2026-07-17: itable_faith/etable_faith removed entirely; every call   *)
-    (* site (here, Tables.v, Results.v, EndToEnd.v, Adequacy.v) now calls    *)
-    (* itable_rel/etable_rel directly at w := wlctx Σ. *)
 
-    (* cexec_triple_addr_tbl: the concrete triple — right after picking the *)
+    (* cexec_triple_addr: the concrete triple — right after picking the *)
     (* demonic valuation lenv, ASSUME itable_rel/etable_rel at lenv (i.e.,  *)
     (* table faithfulness w.r.t. the gmap, at w := wlctx Σ) before producing *)
     (* req and running the (still gmap-based) cexec_cfg_addr.  This is the  *)
@@ -740,11 +718,11 @@ Section CFGVerificationDerived.
     (* above (step 5): the guard makes the triple hold vacuously at         *)
     (* valuations where the table doesn't match the gmap, and meaningfully  *)
     (* only at the one valuation the end-to-end proof discharges it at. *)
-    Definition cexec_triple_addr_tbl {Σ : LCtx}
+    Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : SITable (wlctx Σ)) (exits : SETable (wlctx Σ)) : CHeapSpec unit :=
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
       CHeapSpec.bind (CHeapSpec.demonic_ctx Σ) (fun lenv =>
       CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
           (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv))) (fun _ =>
@@ -779,13 +757,13 @@ Section CFGVerificationDerived.
 
     (* Not a duplicate of forgetting_itable_rel above, despite the similar *)
     (* proof shape: that lemma commutes forgetting with persist_itable     *)
-    (* given an EXISTING itable_rel hypothesis at the SAME world (SITable  *)
+    (* given an EXISTING itable_rel hypothesis at the SAME world (SInstrTable  *)
     (* on both sides); this one instead DERIVES itable_rel at world wb     *)
     (* from an itable_rel fact given at the contract context Σ' (i.e., at  *)
     (* w := wlctx Σ') via a substitution ζ.  Both are needed (used         *)
-    (* together at the rexec_triple_addr_tbl call site below). *)
+    (* together at the rexec_triple_addr call site below). *)
     Lemma itable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (instrs' : gmap (bv xlenbits) AST) (tbl' : SITable (wlctx Σ'))
+        (instrs' : gmap (bv xlenbits) AST) (tbl' : SInstrTable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') :
       itable_rel instrs' tbl' ιΣ ->
       (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ itable_rel instrs' (subst_itable (persist ζ θ) tbl'))%I.
@@ -807,7 +785,7 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma etable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (exitCond' : bv xlenbits -> bool) (exits' : SETable (wlctx Σ'))
+        (exitCond' : bv xlenbits -> bool) (exits' : SExitTable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') :
       etable_rel exitCond' exits' ιΣ ->
       (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ etable_rel exitCond' (subst_etable (persist ζ θ) exits'))%I.
@@ -827,23 +805,23 @@ Section CFGVerificationDerived.
       exact Hv.
     Qed.
 
-    (* rexec_triple_addr_tbl: unconditional refinement of the guarded      *)
+    (* rexec_triple_addr: unconditional refinement of the guarded      *)
     (* concrete triple by the table-based symbolic triple.  The guard is   *)
     (* introduced via refine_guard; the executor bind is dispatched by     *)
-    (* rexec_cfg_addr_tbl with faithfulness transported through the world  *)
+    (* rexec_cfg_addr with faithfulness transported through the world  *)
     (* morphisms by the _forget lemmas.  rsolve must NOT be let loose on   *)
     (* the executor bind (no RefineCompat instance matches the table       *)
     (* executor's premise-free form; typeclass search diverges).           *)
-    Lemma rexec_triple_addr_tbl {Σ : LCtx}
+    Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       ⊢ ℛ⟦RHeapSpec RUnit⟧
-          (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits)
-          (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)).
+          (cexec_triple_addr req instrs exitCond fuel ens tbl exits)
+          (sexec_triple_addr req tbl exits fuel ens (w := w)).
     Proof.
-      unfold cexec_triple_addr_tbl, sexec_triple_addr_tbl.
+      unfold cexec_triple_addr, sexec_triple_addr.
       iApply (HeapSpec.refine_bind (RA := RNEnv LVar Σ) (RB := RUnit)).
       - rsolve.
       - iIntros (w1 θ0).
@@ -866,7 +844,7 @@ Section CFGVerificationDerived.
         { (* TODO: It feels like rsolve should be able to handle this, if you have the right RefineCompat instances. *)
           iPoseProof (itable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hif with "Hδ") as "#Hi".
           iPoseProof (etable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hef with "Hδ") as "#He".
-          iApply (rexec_cfg_addr_tbl instrs exitCond fuel _ _ with "[$Hi $He]").
+          iApply (rexec_cfg_addr instrs exitCond fuel _ _ with "[$Hi $He]").
           iApply (refine_inst_persist with "Ha"). }
         iIntros (w3 θ3).
         iModIntro.
@@ -875,45 +853,45 @@ Section CFGVerificationDerived.
         repeat (rewrite ?forgetting_trans; try iModIntro; rsolve).
     Qed.
 
-    #[export] Instance refine_compat_exec_triple_addr_tbl {Σ : LCtx}
+    #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       RefineCompat (RHeapSpec RUnit)
-        (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits) w
-        (sexec_triple_addr_tbl req tbl exits fuel ens (w := w)) _ :=
-      MkRefineCompat (rexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits).
+        (cexec_triple_addr req instrs exitCond fuel ens tbl exits) w
+        (sexec_triple_addr req tbl exits fuel ens (w := w)) _ :=
+      MkRefineCompat (rexec_triple_addr req instrs exitCond fuel ens tbl exits).
 
-    Definition ccfg_verification_condition_tbl {Σ : LCtx}
+    Definition ccfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : Prop :=
-      CHeapSpec.run (cexec_triple_addr_tbl req instrs exitCond fuel ens tbl exits).
+      CHeapSpec.run (cexec_triple_addr req instrs exitCond fuel ens tbl exits).
 
-    Lemma rcfg_verification_condition_tbl {Σ : LCtx}
+    Lemma rcfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
-          (ccfg_verification_condition_tbl req instrs exitCond fuel ens tbl exits)
-          (scfg_verification_condition_tbl req tbl exits fuel ens w).
+          (ccfg_verification_condition req instrs exitCond fuel ens tbl exits)
+          (scfg_verification_condition req tbl exits fuel ens w).
     Proof.
-      unfold ccfg_verification_condition_tbl, scfg_verification_condition_tbl.
+      unfold ccfg_verification_condition, scfg_verification_condition.
       rsolve.
     Qed.
 
-    #[export] Instance refine_compat_cfg_verification_condition_tbl {Σ : LCtx}
+    #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       RefineCompat (LogicalSoundness.RProp)
-        (ccfg_verification_condition_tbl req instrs exitCond fuel ens tbl exits) w
-        (scfg_verification_condition_tbl req tbl exits fuel ens w) _ :=
-      MkRefineCompat (rcfg_verification_condition_tbl req instrs exitCond fuel ens tbl exits).
+        (ccfg_verification_condition req instrs exitCond fuel ens tbl exits) w
+        (scfg_verification_condition req tbl exits fuel ens w) _ :=
+      MkRefineCompat (rcfg_verification_condition req instrs exitCond fuel ens tbl exits).
 
   End Relational.
 
@@ -923,16 +901,10 @@ Section CFGVerificationDerived.
   (* ptsto_instrs instrs: Iris predicate asserting instruction ownership     *)
   (*   for a finite map from absolute address to instruction (SyncVal: the   *)
   (*   same instruction lives at the same address in both worlds).           *)
-  (*   NOTE: unlike BlockVer, the base address is SyncVal bv.zero (not       *)
-  (*   parameterized), so all programs are assumed loaded at address 0.      *)
   (*                                                                         *)
   (* sound_exec_instruction / ptsto_instrs_lookup below are the two pieces   *)
   (* Adequacy.v reuses (qualified) to build sound_exec_cfg_addr_myWP2 and    *)
-  (* the rest of the myWP2_loop soundness chain.  The WP2_loop-based chain   *)
-  (* that used to live here (semTripleCFG, sound_exec_cfg_addr,              *)
-  (* sound_cexec_triple_addr, sound_ccfg/scfg_verification_condition) was    *)
-  (* dead — nothing required it — and has been removed; use the _myWP2      *)
-  (* variants in Adequacy.v instead.                                         *)
+  (* the rest of the myWP2_loop soundness chain.                            *)
   (* ====================================================================== *)
   Section Soundness.
 

@@ -140,7 +140,7 @@ Import iris.proofmode.tactics.
   (* Term-level instruction/exit tables (symbolic placement).            *)
   (*                                                                     *)
   (* table_of_list builds the address-term instruction table for the     *)
-  (* table-based symbolic executor (sexec_cfg_addr_tbl): the key for the *)
+  (* table-based symbolic executor (sexec_cfg_addr): the key for the *)
   (* k-th instruction is peval_bvadd (term_val (4k+off)) p, constructed  *)
   (* THROUGH peval_bvadd so keys are born canonical — for a concrete     *)
   (* placement term p = term_val b they fold to literals, for a symbolic *)

@@ -37,242 +37,119 @@ use it for future examples instead of hand-transcribing.
 
 ## TODO list
 
-**Priority 1 (hardcoded start PC):**
-- `init_addr = 0` is hardcoded throughout CFGVer. This needs to be a parameter
-  so that programs can be placed at arbitrary addresses.
-- Note: we will NOT move from instruction lists to address maps; lists are fine.
-- Concrete motivating case from `cmovznz4`: real pointer-argument functions
-  (x/y/r passed in registers, addresses only known at call time) can't be
-  verified as such yet -- `gen_mem_asn`/`gen_contract` only support memory at
-  a *literal* address fixed at contract-authoring time. Current workaround is
-  to hardcode the pointer registers to concrete addresses right after the
-  code (`countdown_mem`'s pattern), which sidesteps needing arbitrary-start
-  support but doesn't reflect real calling-convention pointer arguments.
-  Revisit once init_addr is parameterized; may also need a genuinely new
-  "pointer-relative" memory-ownership generator (symbolic base register +
-  literal offset) plus a matching two-world memory-extraction lemma for
-  `gen_contract_noninterferent` -- sketched and then abandoned as out of
-  scope for `cmovznz4` (see commit history), still open for a future example
-  that actually needs real pointer arguments.
+**Priority 1 — pointer-argument memory ownership (init_addr parameterization**
+**itself is done; see `project-init-addr-param`/`project-cfgver-symbolic-base-poc`**
+**memory — this is a separate, still-open problem):**
+- Note: we did NOT move from instruction lists to address maps; lists are
+  fine — the table-of-terms design (`table_of_list`, **cfgver-executor**)
+  handles the symbolic-base dispatch instead.
+- **STILL OPEN — pointer-argument memory ownership is a DIFFERENT, narrower**
+  **problem than the base parameterization above, and `cmovznz4_param` does**
+  **NOT demonstrate it.** `cmovznz4_param` generalizes the CODE's own load
+  address to a free variable `p`, but its data words (x/y/r) still sit at
+  `p+116`/`p+132`/`p+148` — a `PVBaseOff k` spec, where `k` is a LITERAL
+  offset baked into the contract at authoring time, i.e. still just a term
+  built from the same single free variable `p`. That models "data statically
+  co-located with the code at a fixed displacement" (position-independent
+  code with an adjoining data segment) — it does NOT model a genuine
+  calling-convention pointer argument, where a CALLER passes x/y/r addresses
+  that live anywhere in memory, with no fixed relationship to where
+  `cmovznz4`'s own code happens to be loaded. Verifying that case needs:
+  (a) a FRESH per-pointer-argument symbolic variable (e.g. `Σ = ["p"; "q"]`,
+  `q` unrelated to `p` by any literal offset) — every existing generator
+  (`gen_contract`/`gen_contract_param`/`gen_contract_rel`) only anchors
+  memory specs at a literal address or at `p+k`, never at an independent
+  second free variable; (b) a new memory-ownership assertion builder keyed
+  off that register's OWN value (`q ↦ₘ v`, both `v` and `q` existential)
+  rather than off the code-placement term; (c) a matching TWO-WORLD
+  memory-extraction lemma for `gen_contract_noninterferent`, since the
+  concrete end-to-end bridge currently only knows how to instantiate ONE
+  symbolic quantity (`p ↦ SyncVal (bv.of_N init_addr)`) — a genuine pointer
+  argument would need `q` instantiated too (to a caller-chosen address) plus
+  a disjointness argument against the code/data region. Sketched and then
+  abandoned as out of scope for `cmovznz4` (see commit history around the
+  parametric-base work) — still open for a future example that actually
+  needs real pointer arguments.
 
 **Cleanup / refactoring:**
-- **[DONE 2026-07-17, NOT YET COMPILED] Removed dead code from `CFGVer/Verifier.v`:**
-  grepped the whole tree first to confirm each was unused outside `Verifier.v`
-  itself, then removed: `instrAligned` (+ the stale `bv.uleb : simpl never`
-  comment that only existed to justify it, itself unused elsewhere); the whole
-  dead WP2-based (as opposed to `myWP2_loop`-based) soundness chain —
-  `semTripleCFG`, `sound_stm_aux`, `sound_exec_cfg_addr`,
-  `sound_cexec_triple_addr`, `sound_ccfg_verification_condition`,
-  `sound_scfg_verification_condition` — none of which anything outside
-  `Verifier.v` referenced; Adequacy.v has its own complete parallel chain
-  (`sound_exec_cfg_addr_myWP2`, `sound_cexec_triple_addr_myWP2`,
-  `sound_scfg_verification_condition_myWP2`, ...) targeting `myWP2_loop`
-  instead, and only reuses `ptsto_instrs`, `ptsto_instrs_lookup`, and
-  `sound_exec_instruction` from `Verifier.v` — all three kept. This also
-  satisfies the separate "remove `sound_scfg_verification_condition`" bullet
-  below (folded in, bullet removed). Reworded the section-header/file-header
-  comments that described the removed chain. Covered by the same pending
-  full-chain compile as the item below (not yet compiled).
-- **[IN PROGRESS 2026-07-17] Consolidate everything in CFGVer, so BlockVer can
-  be deleted / rename everything in CFGVer to remove mentions of BlockVer —
-  broadened to remove mentions of "Block" generally, since CFGVer covers full
-  CFGs now, not just straight-line blocks.**
-  Turned out `RiscvPmp.BlockVer.Spec` was a REAL load-bearing dependency (not
-  a leftover) — `CFGVer/Spec.v` existed as an orphaned, ~93%-identical, never-
-  `Require`d copy (nothing in the repo required it), and it didn't even
-  compile (an abandoned method-Y rewrite of `read_ram_sound` failed under
-  `mode=full`). Fixes applied so far (mechanical, via `sed` — see below for
-  verification status):
-  - Overwrote `CFGVer/Spec.v` with `BlockVer/Spec.v`'s (working) content
-    verbatim, discarding the broken rewrite.
-  - Switched all 13 CFGVer files (8 core + 5 `Example/*.v`) from
-    `Require Import RiscvPmp.BlockVer.Spec` (+ the empirically-unused
-    `RiscvPmp.BlockVer.Verifier`) to `Require Import RiscvPmp.CFGVer.Spec`;
-    dropped one genuinely-dead definition this surfaced
-    (`filter_AnnotInstr_AST` in `Noninterference.v`, copy-pasted from
-    `BlockVer/Examples.v`/`FemtoKernel.v`, never called in CFGVer).
-  - Switched the bare `Require RiscvPmp.CFGVer.Verifier` (qualified-only, to
-    dodge the old BlockVer-name clash) to a full `Require Import` now that
-    the clash source is gone.
-  - Renamed the `RiscvPmpBlockVerif{Spec,ShalExecutor,Executor}` modules and
-    `{foreignSem,lemSem,TforeignSem}BlockVerif` lemmas to
-    `RiscvPmpCFGVerif{Spec,ShalExecutor,Executor}` /
-    `{foreignSem,lemSem,TforeignSem}CFGVerif` (13 files).
-  - Renamed `Section BlockVerificationDerived` → `CFGVerificationDerived` in
-    `Verifier.v`; dropped its now-satisfied "despite the name" caveat and the
-    now-stale "Import policy" comment block above it (nobody keeps
-    `CFGVer.Verifier` bare-required anymore, so there's no more clash to
-    document).
-  - Renamed the `*block_verification_condition*`/`*block_vc*` identifier
-    family (symbolic/concrete/relational VC + `refine_compat_*`/`sound_*`
-    variants) to `*cfg_verification_condition*`/`*cfg_vc*`, matching the
-    `CFG_VC_triple`/`Valid_CFG_VC` naming already used in `Contracts.v`.
-  - Renamed the `block`/`valid_block`/`blockInitAddr`/`blockInstrs`/
-    `blockExitCond`/`blockPlacement` local binders in `EndToEnd.v` (6 repeated
-    lemma signatures) to `contract`/`valid_contract`/`contractInitAddr`/etc.
-  - Reworded prose across `Tables.v`, `GenContract.v`, `Noninterference.v`,
-    `Contracts.v`, `Example/Jumps.v`, `Example/Cmovznz4.v` that described
-    CFGVer's own program as "a block"/"the block" → "a program"/"the
-    program" (kept the handful of comments in `Verifier.v` that factually
-    reference the real, still-existing `BlockVer/Verifier.v` file/module —
-    those aren't a naming-legacy issue).
-  - Updated the 9 skills docs that named the old identifiers
-    (`cfgver`, `cfgver-executor`, `cfgver-refinement`, `cfgver-soundness`,
-    `cfgver-solve-vc`, `cfgver-gen-contract`, `cfgver-endtoend`,
-    `cfgver-endtoend-internals`, `cfgver-new-example`) to match.
-  - Fixed one incidental bug the sed introduced: a `Contracts.v` comment
-    comparing to BlockVer's own (differently-named) contract type read
-    circularly after the blind rename; reworded by hand.
-  **FULLY VERIFIED BY COMPILE (2026-07-17): the entire chain, `Spec.v` through**
-  **`Results.v`, is full-compile clean.** (`Spec.v`'s `.vo` had briefly gone
-  stale relative to its own source and needed a refresh first — a `Require`d
-  `.vo` is loaded as-is, not rebuilt-on-demand.) This covers the
-  `*block_verification_condition*`/`*block_vc*` family rename, the `Section`
-  rename, `forgetting_RVal`'s removal, all of `Verifier.v`'s comment
-  rewording, AND the item-3 dead-code deletion below (which additionally
-  touched `Adequacy.v`).
-  Next: revisit whether `RiscvPmp/BlockVer/` itself can finally be deleted
-  (still used by `FemtoKernel.v` directly — check that first).
+- **DONE (BlockVer→CFGVer consolidation):** `CFGVer` no longer shares any
+  identifiers, module names, or "block" terminology with `BlockVer` — full
+  chain (`Spec.v` → `Results.v`) compiles clean. **Still open:** revisit
+  whether `RiscvPmp/BlockVer/` itself can finally be deleted (still used by
+  `FemtoKernel.v` directly — check that first).
 
-**From `Verifier.v` inline TODOs (2026-07-17), in the order I'd tackle them
-(duplicate mentions of the same issue at different call sites are merged):**
-1. **[DONE 2026-07-17]** Quick, independent doc fixes — no proof risk:
-   - Stale-comment sweep: the import-policy note at the top of the file
-     (`Examples.v` renamed to the actual post-split file list); the
-     "apc must be concrete" + `sexec_cfg_addr` description paragraphs
-     (consolidated into one accurate gmap-based description); the
-     `rexec_cfg_addr` intro comment (`nth_error` → gmap-lookup);
-     `lookup_instr`/`is_exit`'s "plan §0" reference (dropped);
-     the Phase-1-plan paragraph before `SITable` (rewritten present-tense,
-     points at this TODO.md instead of PLAN-symbolic-base.md phases);
-     the "Option B" jargon in the relational-layer overview (dropped).
-   - Added an inline explainer to `cexec_triple_addr_tbl`.
-   - `peval_eqb_inst` relocation: left as-is for now (an actual file move,
-     not a comment fix — folds into step 4 below instead).
-   - Verified `case_study/RiscvPmp/CFGVer/Verifier.v` still compiles
-     (`rocq_compile_file`, mode=vos) after the edits.
-2. **[DONE 2026-07-17, NOT YET COMPILED]** Checked all three dedupe questions
-   before touching step 3, so it doesn't rename code that should just be
-   deleted:
-   - `forgetting_RVal` — genuine duplicate. `theories/Symbolic/UnifLogic.v`'s
-     `refine_inst_persist` (generic over any `RInst AT A`, proved via
-     `forgetting_repₚ`) is exactly `forgetting_RVal` specialized to
-     `RVal σ = RInst (Term Σ σ) (RelVal σ)`. Deleted `forgetting_RVal`;
-     rewired its one call site (`rexec_triple_addr_tbl`) to
-     `refine_inst_persist`.
-   - `refine_guard` — NOT a duplicate. Checked `Solver.v` and
-     `Refinement/Monads.v`: the closest existing lemma is
-     `refine_assume_formula`, which assumes on *both* sides, whereas
-     `refine_guard` assumes only on the concrete side (the symbolic side is
-     untouched) — a different, one-sided combinator with no existing
-     equivalent. It's generic enough to promote to `Refinement/Monads.v` if a
-     second use site ever appears, but that's a core-theories change out of
-     scope for this CFGVer-only pass; left in place with an updated comment
-     recording the finding.
-   - `itable_rel_of_faith_forget` vs `forgetting_itable_rel` — NOT a
-     duplicate, despite similar proof shape. `forgetting_itable_rel` commutes
-     `forgetting`/`persist_itable` given an *existing* `itable_rel` hypothesis
-     (`SITable` on both sides); `itable_rel_of_faith_forget` instead *derives*
-     `itable_rel` from the Prop-level `itable_faith` fact via a substitution
-     `ζ`, over the raw-list table representation. Both are genuinely used
-     together at the single `rexec_triple_addr_tbl` call site. Kept both;
-     updated the stale comment.
-3. Main consolidation refactor (the biggest cluster — most inline TODOs point
-   here). Split into a done part and a deferred part (2026-07-17):
-   - **[DONE 2026-07-17, VERIFIED BY COMPILE]** Deleted the old non-table
-     chain, confirmed dead by grepping the whole tree both directions before
-     removing anything: symbolic `sexec_cfg_addr`/`sexec_triple_addr`/
-     `scfg_verification_condition`; shallow `cexec_triple_addr`/
-     `ccfg_verification_condition` (NOT `cexec_cfg_addr` itself — it's the
-     still-live concrete executor, called directly by `Adequacy.v`'s
-     `sound_exec_cfg_addr_myWP2`, which both the tbl and non-tbl bridges
-     route through); relational `rexec_cfg_addr`/`rexec_triple_addr`/
-     `rcfg_verification_condition` + their 3 `RefineCompat` instances. This
-     surfaced two more dead lemmas in `Adequacy.v` (not just `Verifier.v`):
-     `sound_cexec_triple_addr_myWP2` / `sound_scfg_verification_condition_myWP2`
-     had zero callers — `Results.v`/`EndToEnd.v` only ever call the `_tbl`
-     bridge — so those were removed too. Confirms `Contracts.v`'s
-     `CFG_VC_triple` already exclusively builds the `_tbl` VC: it's what
-     every example runs on today, not just the parametric-base ones.
-     Reworded `sexec_cfg_addr_tbl`'s doc comment positively (what it does,
-     not what it doesn't) while in there. Full chain (`Spec.v` → `Results.v`)
-     recompiled clean afterward — see "Consolidate everything in CFGVer"
-     entry above.
-   - **[DONE 2026-07-17, PARTIALLY VERIFIED BY COMPILE]** Retyped
-     `subst_itable`/`subst_etable`'s and `sexec_triple_addr_tbl`'s `tbl`/
-     `exits` params from raw lists to `SITable (wlctx Σ)`/`SETable (wlctx Σ)`
-     (definitionally the same list, since `wctx (wlctx Σ)` reduces to `Σ` by
-     record projection — purely a readability change, no behavior change).
-   - **[DONE 2026-07-17, PARTIALLY VERIFIED BY COMPILE]** Genuinely deduped
-     `itable_faith`/`etable_faith` vs `itable_rel`/`etable_rel` — these had
-     IDENTICAL `List.Forall` bodies, differing only in the tbl/exits param
-     type (raw list vs `SITable`), which are the same type at `w := wlctx Σ`.
-     Deleted `itable_faith`/`etable_faith` entirely (not aliased) and
-     rewrote every call site to use `itable_rel`/`etable_rel` directly: 2 in
-     `Verifier.v` itself (`cexec_triple_addr_tbl`, `itable_rel_of_faith_forget`/
-     `etable_rel_of_faith_forget`'s premises), ~5 in `Tables.v` (kept the
-     lemma names — `itable_faith_weaken`/`itable_faith_of_list(_aux)`/
-     `etable_faith_exits_of_list`/`etable_faith_exits_of_offs` — only their
-     statements/proofs changed), 2 in `Results.v`, 11 in `EndToEnd.v`, 4 in
-     `Adequacy.v`. Because `itable_rel`/`etable_rel` are `Pred w` (world-
-     indexed) rather than flat-`Σ`-indexed like `itable_faith`/`etable_faith`
-     were, Coq can't infer the implicit `w` from a bare list argument (it
-     would need to invert a record projection, `wctx ?w = Σ`, which has
-     infinitely many solutions) — every one of those ~20 call sites needed an
-     explicit `(w := wlctx <ctx>)` annotation added by hand. Mechanical, no
-     logic changed, but a wide diff for that reason.
-     Checked whether `itable_rel_of_faith_forget`/`etable_rel_of_faith_forget`
-     are ALSO duplicates of `forgetting_itable_rel`/`forgetting_etable_rel`
-     (similar shape) — confirmed NOT: the latter is an unconditional `⊣⊢`
-     identity over an *existing* Pred-level fact; the former derives a Pred-
-     level fact from a *ground fact at one fixed valuation* via the `ζ`/
-     `RNEnv` relational bridge, which can't collapse into the same statement.
-     There IS a smaller golf opportunity (route `itable_rel_of_faith_forget`'s
-     proof through `forgetting_itable_rel` as an ingredient instead of
-     re-deriving by hand) — folded into item 5's golf target below, not done.
-     **Verification status:** `Verifier.v` → `Tables.v` → `Noninterference.v`
-     → `Contracts.v` → `GenContract.v` → `Adequacy.v` → `EndToEnd.v` →
-     `Example/{MvSwap,Jumps,Countdown,SetX2}.v` → all full-compile clean.
-     `Example/Cmovznz4.v` did NOT verify this pass — its
-     `valid_cmovznz4_cfg_contract_param` (`vm_compute. solve_vc.`, fuel 35,
-     parametric base) stalled/crashed identically across three timeouts
-     (300s/400s/600s) and `rocq_start` crashed pet twice just loading up to
-     it. `Cmovznz4.v` itself has zero diff this session and its only changed
-     dependencies changed in definitionally-transparent ways (`vm_compute`
-     reduces the same terms either way), and this same file compiled clean
-     earlier in this very session — the likely cause is system memory
-     pressure (8.4GB RAM + 13/15GB swap in use at the time), not a real
-     regression, but this is NOT re-verified — do that before trusting it,
-     and re-run `Results.v` too (untested downstream of `Cmovznz4.v`).
-   - **Still deferred to a follow-up pass** (wider blast radius — spans
-     `GenContract.v`/`Contracts.v`/`EndToEnd.v`/`Results.v`, not just
-     `Verifier.v`): rename the `_tbl` versions to canonical names and drop
-     all remaining `tbl`/`Tbl` references. Bundle in while touching this
-     region:
-     - ~~Rename `Section BlockVerificationDerived`~~ — already done as part
-       of the Block→CFG rename above (now `CFGVerificationDerived`).
-     - Give `SITable`/`SETable` clearer names (flagged as unclear on first
-       read).
-     - Rename the `Phase1SelfTests` section to drop the process reference,
-       keep the lemmas/tests themselves.
-4. Once consolidated: split the `SITable`/gmap/`SETable` machinery out into
-   its own section, module, or file (explicitly flagged as deserving one).
-5. Proof engineering (standalone, can happen last): `rexec_cfg_addr_tbl` was
-   not written in rsolve style and is suspected to be missing `RefineCompat`
+**From `Verifier.v` inline TODOs — remaining open items** (doc fixes, the
+`_tbl`/`SITable`/`SETable`/`Phase1SelfTests` rename work, and the dedupe/
+dead-code removal are all DONE and full-compile verified; see git history
+if archaeology is needed):
+1. Split the `SInstrTable`/gmap/`SExitTable` machinery out into its own
+   section, module, or file (explicitly flagged as deserving one).
+2. Proof engineering (standalone, can happen last): `rexec_cfg_addr` was not
+   written in rsolve style and is suspected to be missing `RefineCompat`
    instances for tables — investigate the gap, then use it as a golf target;
    same root cause is flagged at the `itable_rel_of_faith_forget` call site
-   inside the `rexec_cfg_addr_tbl_2`-ish proof.
-   - (The `instrAligned`-outdated note reinforces the already-approved
-     2026-07-16 dead-code removal above — no new action needed.)
+   inside that proof.
 
 **Modularity (longer term, discuss with Dominique):**
-- Parameterize hardcoded start PC at 0 (see Priority 1).
+- ~~Parameterize hardcoded start PC at 0~~ — done for the universal-base case,
+  see Priority 1 (the pointer-argument generator there is still open).
 - Add exit resources (resources required when reaching the exit condition).
   Subtle: execution must stop *first time* exit condition is reached.
 - Ask Dominique or Sander whether `AnnotInstr` is worth looking at.
 
 **Known remaining Admits (expected):**
 - `valid_jmp_fwd` (BlockVer): BlockVer cannot handle JAL. Intentional.
+
+**Scattered inline code TODOs (not tracked here before 2026-07-17; low**
+**priority, mostly stylistic/organizational — logged per the CLAUDE.md**
+**"Where a new piece of knowledge goes" hygiene rule):**
+- `Spec.v:205-206` — the commented-out `pmp_entries` definition should
+  abstract away its concrete type (look into unions) and enforce a
+  length-16-no-duplicates invariant on the list; currently unused/dead.
+- `Spec.v:217-219` — the (commented-out) `'*↦ₘ['` notation collides in
+  meaning with an existing notation of the same name in `asn.notations`;
+  needs resolving before it can be uncommented.
+- `Spec.v:237` — several mostly-commented-out `Local Notation`s
+  (`asn_pmp_entries`/`asn_pmp_addr_access`/`asn_pmp_access`/etc.) are dead
+  weight now that `asn_cur_privilege` is the one actually used; clean up so
+  the TODO asking to do this can go away with them.
+- `Spec.v:919` — a `read_ram_sound`-adjacent proof dispatches an `emp` goal
+  via bare `auto`, with a comment flagging it as unclear *how* it discharges
+  (works, but the "several admits for this below" phrasing suggests it dates
+  from an admit-filling pass and deserves a cleaner tactic).
+- `Spec.v:1039` — inside a commented-out (dead) proof alternative: `solve_bv`
+  can't discharge a `bv.ult`-shaped goal needing concrete `minAddr`/`lenAddr`
+  facts; flagged as "add simplifying `xlenbits` to `solve_bv`" (a
+  `bv-pitfalls`-adjacent tactic gap). Not blocking — the live proof path
+  doesn't use this branch.
+- `Spec.v:1152` — `contractsSound` is proved by re-deriving through `sound`
+  directly; TODO suggests it could instead reuse
+  `TValidContractEnvSem_ValidContractEnvSem TcontractsSound` for a possibly
+  shorter/more principled proof — golf candidate, unverified whether it
+  actually applies.
+- `Tables.v:295` — the `JAL`/`NOP`/`LW` AST-builder helpers are defined here
+  but flagged to move into `Spec.v` (structural/organizational only).
+- `Verifier.v:495` — `peval_eqb_inst` (used by `itable_rel`/`etable_rel`
+  faithfulness proofs) is flagged as possibly belonging in
+  `Symbolic/PartialEvaluation.v` or an instantiation-lemmas file instead of
+  `Verifier.v` — a relocation, not a correctness issue.
+- `Results.v:170,182,194` — `jmp_fwd_noninterferent_cfg`/
+  `countdown_noninterferent`/`countdown_mem_noninterferent` all discharge
+  the `valid_<prog>_cfg_contract` bullet of `eapply gen_contract_noninterferent`
+  as step 5 *before* step 4, to dodge a wrong unification that would
+  otherwise make step 5 impossible; flagged 3× as something that "probably
+  needs handling on a higher level" (i.e. in `gen_contract_noninterferent`'s
+  own premise/unification order) rather than worked around per call site.
+- `Results.v:196` — `countdown_mem_noninterferent`'s `HDataAddrs` bullet
+  hand-case-splits `i` through all 12 indices even though, per its own
+  comment, a smaller case-split might suffice; flagged to hide behind a
+  tactic or prove generally instead of the copy-pasted N-way pattern (the
+  general form of this pattern is already documented under the "gotchas"
+  heading elsewhere in this file).
+- `Example/Jumps.v:80` — `jump_if_zero_cfg_contract` hardcodes
+  `true_offset : bv 13` inside the definition; TODO wants it as an explicit
+  parameter (`jump_if_zero (true_offset : bv 13) ...`) for reuse across
+  different branch offsets.
 
 ## Pattern-match `secLeak` — RESOLVED (2026-07-04, method Y)
 
