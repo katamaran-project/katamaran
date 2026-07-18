@@ -38,3 +38,12 @@ numeral `S (S (… O))`. Lemmas proved with the *folded* index then differ
 **syntactically** (though convertibly): `set`/`rewrite` silently fail to match,
 while `apply`/`exact` still work. When the goal must match an external bv-indexed
 lemma, use `cbn -[xlenbits]`.
+
+## `bv.of_N_add`'s orientation (easy to assume backwards)
+
+`bv.of_N_add : bv.add (bv.of_N x) (bv.of_N y) = bv.of_N (x + y)` — it COLLAPSES a
+sum of two `bv.of_N`s into one, not the reverse. `rewrite bv.of_N_add` only fires
+on a `bv.add (bv.of_N _) (bv.of_N _)` subterm, turning it INTO `bv.of_N (_ + _)`
+form — it will NOT expand an existing `bv.of_N (_ + _)` into a `bv.add`. If you
+need that direction, `rewrite <- bv.of_N_add` — don't guess the lemma runs the
+way its name suggests; check which side is `bv.add` before picking a direction.

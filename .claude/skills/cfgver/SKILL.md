@@ -85,13 +85,23 @@ to plain `Require Import`.
 > with CFGVer. Once BlockVer is consolidated away (see TODO.md cleanup items),
 > switch the downstream files to a plain `Require Import` and delete this note.
 
-## Example status (2026-07-16)
+## Example status (2026-07-18)
 
 All CFGVer examples compile with **zero `Admitted`**, each with a
 `valid_<prog>_cfg_contract` VC and a `<prog>_noninterferent` end lemma, axiom-clean
 (`pure_decode` + `mmioenv` only): `swap`, `jumpIfZero`, `jmp_fwd`, `countdown`,
-`countdown_mem`, `set_X2_to_42`, `cmovznz4`. Parametric base:
-`set_X2_to_42_noninterferent_param` and `cmovznz4_noninterferent_param`
-(∀ init_addr); the concrete cmovznz4 lemmas (base 0 and 256) are corollaries of
-the parametric one. `valid_jmp_fwd` (BlockVer) stays `Admitted` — BlockVer cannot
-handle JAL; intentional.
+`countdown_mem`, `set_X2_to_42`, `cmovznz4`.
+
+**All seven now have a parametric-base (∀ `init_addr`) headline**
+(`<prog>_noninterferent_param`, via `gen_contract_param` for base-independent
+specs or `gen_contract_rel` for base-relative ones — see **cfgver-gen-contract**);
+every concrete `<prog>_noninterferent` is a free corollary of its `_param`
+version (no per-address `vm_compute`). `cmovznz4` additionally has a genuinely
+nonzero-base corollary (`cmovznz4_noninterferent_at_start`, base 256).
+`countdown_mem`'s instruction stream was changed (`X0` → a dedicated `X2` holding
+the base) to make its data word base-relative — see **cfgver-gen-contract**'s
+"register choice for base-relative memory addressing" note; the backward branch
+in `countdown`/`countdown_mem` (a previously untested case for the parametric-
+base machinery) turned out to need zero special handling.
+`valid_jmp_fwd` (BlockVer) stays `Admitted` — BlockVer cannot handle JAL;
+intentional.

@@ -98,27 +98,79 @@ Import TermNotations.
       ValidCFGVerifierContract countdown_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* ===== Phase 4.2: base-parametric countdown VC (backward branch) =========
+       countdown_exitCond is definitionally `pcOutOfInstrs_exitCond 0 instrs`
+       (both reduce to `fun v => bv.ugeb v (bv.of_N 8)`), so the parametric
+       contract reuses pcOutOfInstrs_exitCond directly -- no hand-rolled
+       exitCond needed, matching the cmovznz4/set_X2 style. This was the
+       untested case flagged before starting: the BNE back_offset (-4 in
+       13-bit two's complement) jumps BACKWARD to the first instruction. The
+       open question was whether the term-table executor's constant folding
+       (peval_bvadd) still collapses the backward jump's next-pc term down to
+       the canonical offset-0 key `p` the same way it collapses forward jumps
+       to `c ⊕ p` -- CONFIRMED: the existing offset-agnostic tail closes the
+       VC with zero changes. *)
+    Definition countdown_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param ia [(X1, true, Some (bv.of_N 2))] []
+        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] []
+        (pcOutOfInstrs_exitCond ia [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]) 5.
+
+    Lemma valid_countdown_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (countdown_cfg_contract_param ia).
+    Proof.
+      intros. vm_compute. solve_vc.
+      all: repeat match goal with
+           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
+           end.
+      all: cbn in *; unfold bv.unsigned in *.
+      all: try rewrite bv.bin_add_small.
+      all: repeat match goal with
+           | |- context [bv.bin ?b] =>
+               assert_fails (is_var b);
+               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
+           end.
+      all: try lia.
+      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
+    Qed.
+    (* ===== end Phase 4.2 spike ===== *)
+
 
     (* Memory countdown: 4 instructions + a data word at address 16.
-       addr  0: LOAD  imm=16 rs1=X0 rd=X1  -- X1 := mem[X0+16] = mem[16]
+       addr  0: LOAD  imm=16 rs1=X2 rd=X1  -- X1 := mem[X2+16]
        addr  4: ADDI  X1 X1 (-1)            -- X1 := X1 - 1
-       addr  8: STORE imm=16 rs2=X1 rs1=X0  -- mem[16] := X1
+       addr  8: STORE imm=16 rs2=X1 rs1=X2  -- mem[X2+16] := X1
        addr 12: BNE   X1 X0 (-12)           -- if X1 ≠ 0, jump back to addr 0
-       Data:    mem[16] = 2 initially.
-       Two iterations: 2→1 (branch), 1→0 (fall-through); exit at pc=16. *)
+       Data:    mem[X2+16] = 2 initially.
+       Two iterations: 2→1 (branch), 1→0 (fall-through); exit at pc=16.
+
+       X2 is a dedicated base-holding register (pre-initialized to the
+       program's own load address, see countdown_mem_reg_specs_rel's
+       PVBaseOff 0 below), NOT X0 (RISC-V's architecturally hardwired-zero
+       register, per Machine.v's rX/wX special-casing of index 0). The
+       original version used X0 + imm=16, giving an ABSOLUTE address 16
+       regardless of where the code is loaded -- that cannot be made
+       base-relative without changing which register the address is
+       computed from, since X0 can only ever hold 0. Using X2 instead makes
+       the counter word live at base+16 (contiguous right after the 4
+       instructions, matching every other example's data layout), enabling
+       a genuine parametric-base version. At base 0, X2 = 0, so this is
+       behaviorally identical to the old X0-based program. *)
     Definition back_12_offset : bv 13 := bv.of_N 8180.
 
     Definition countdown_mem_exitCond : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N 16).
 
     Definition countdown_mem_instrs : list AST :=
-      [ LOAD (bv.of_N 16) X0 X1 false WORD
+      [ LOAD (bv.of_N 16) X2 X1 false WORD
       ; ADDI X1 X1 neg_one_12
-      ; STORE (bv.of_N 16) X1 X0 WORD
+      ; STORE (bv.of_N 16) X1 X2 WORD
       ; BNE X1 X0 back_12_offset ].
 
     Definition countdown_mem_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))]
+      gen_contract init_addr
+        [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
+        [(bv.of_N 16, true, Some (bv.of_N 2))]
         countdown_mem_instrs []
         countdown_mem_exitCond
         10.
@@ -126,3 +178,40 @@ Import TermNotations.
     Lemma valid_countdown_mem_cfg_contract :
       ValidCFGVerifierContract countdown_mem_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
+
+    (* ===== Phase 4.2: base-parametric countdown_mem VC ======================
+       X2 holds the base (PVBaseOff 0 = p+0 = p), so the counter word's
+       address (via LOAD/STORE off X2, imm 16) is genuinely p+16 --
+       base-RELATIVE, needing gen_contract_rel/mem_spec_rel like cmovznz4's
+       data pointers, not the constant-only gen_contract_param. Bound = 20
+       (last accessed byte offset 16 + 4 = the data word's own width). *)
+    Definition countdown_mem_reg_specs_rel : list reg_spec_rel :=
+      [(X1, false, PVExist); (X2, false, PVBaseOff 0)].
+
+    Definition countdown_mem_mem_specs_rel : list mem_spec_rel :=
+      [(16%N, true, PVConst (bv.of_N 2))].
+
+    Definition countdown_mem_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_rel ia countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
+        countdown_mem_instrs [] 20
+        (pcOutOfInstrs_exitCond ia countdown_mem_instrs) 10.
+
+    Lemma valid_countdown_mem_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (countdown_mem_cfg_contract_param ia).
+    Proof.
+      intros. vm_compute. solve_vc.
+      all: repeat match goal with
+           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
+           end.
+      all: cbn in *; unfold bv.unsigned in *.
+      all: try rewrite bv.bin_add_small.
+      all: repeat match goal with
+           | |- context [bv.bin ?b] =>
+               assert_fails (is_var b);
+               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
+           end.
+      all: try lia.
+      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
+    Qed.
+    (* ===== end Phase 4.2 ===== *)

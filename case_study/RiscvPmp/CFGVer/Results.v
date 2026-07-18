@@ -97,106 +97,174 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 
 
+  (* Phase 4.2: swap verified end-to-end for a UNIVERSAL base address, from
+     the single symbolic-base VC valid_swap_cfg_contract_param. *)
+  Lemma swap_noninterferent_param (init_addr : N) :
+    (init_addr + 12 < lenAddr)%N ->
+    noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
+      (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
+      [(X1, false, None); (X2, false, None); (X3, false, None)] [].
+  Proof.
+    intros Hbound.
+    eapply gen_contract_noninterferent_param.
+    5: exact (valid_swap_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
   Lemma swap_noninterferent :
     noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
       (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
       [(X1, false, None); (X2, false, None); (X3, false, None)] [].
   Proof.
-    eapply gen_contract_noninterferent;
-      [apply Prelude.nodup_fixed; reflexivity |
-       intros ? ? H; rewrite lookup_nil in H; discriminate |
-       by cbn; unfold lenAddr | repeat constructor | exact valid_swap_cfg_contract].
+    apply swap_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
+  Qed.
+
+  (* Phase 4.2: jump_if_zero verified end-to-end for a UNIVERSAL base
+     address, from the single symbolic-base VC
+     valid_jump_if_zero_cfg_contract_param. *)
+  Lemma jumpIfZero_noninterferent_param (init_addr : N) :
+    (init_addr + 4 < lenAddr)%N ->
+    noninterferent_strong init_addr [BEQ X1 X0 true_offset]
+      (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
+  Proof.
+    intros Hbound.
+    eapply gen_contract_noninterferent_param.
+    5: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
+    - cbn. lia.
+    - (* extra_exit_offs = [8%N] here (unlike every other example, whose
+         extra_exit_offs = []), so HexitOffs is a 2-element Forall: the
+         fall-through offset (4) plus the branch target (8). *)
+      constructor.
+      + apply pcOutOfInstrs_fallthrough.
+      + constructor; [ | constructor ].
+        unfold pcOutOfInstrs_exitCond, bv.ugeb, bv.uleb.
+        apply N.leb_le.
+        rewrite bv.of_N_add.
+        assert (Hlen1 : N.of_nat (length [BEQ X1 X0 true_offset]) = 1%N) by reflexivity.
+        rewrite Hlen1.
+        unfold lenAddr in Hbound.
+        assert (Hs4 : (init_addr + 4 * 1 < bv.exp2 xlenbits)%N)
+          by (apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity]).
+        assert (Hs8 : (init_addr + 8 < bv.exp2 xlenbits)%N)
+          by (apply N.le_lt_trans with (m := 1028%N); [lia | vm_compute; reflexivity]).
+        rewrite (bv.bin_of_N_small Hs4) (bv.bin_of_N_small Hs8).
+        lia.
   Qed.
 
   Lemma jumpIfZero_noninterferent :
     noninterferent_strong init_addr [BEQ X1 X0 true_offset]
       (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
   Proof.
-    eapply gen_contract_noninterferent.
-    5: exact valid_jump_if_zero_cfg_contract.
-    - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? H; rewrite lookup_nil in H; discriminate.
-    - by cbn; unfold lenAddr.
-    - repeat constructor.
+    apply jumpIfZero_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
   Qed.
 
-  Lemma jmp_fwd_safe_cfg `{sailGS2 Σ} γ1 γ2 :
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-    RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-    ⊢ cfg_instrs_contract jmp_fwd_exitCond [JAL X0 jmp_offset; NOP] γ1 γ2.
+  (* Phase 4.2: jmp_fwd verified end-to-end for a UNIVERSAL base address,
+     from the single symbolic-base VC valid_jmp_fwd_cfg_contract_param --
+     confirms the JAL forward-jump case. *)
+  Lemma jmp_fwd_noninterferent_param (init_addr : N) :
+    (init_addr + 8 < lenAddr)%N ->
+    noninterferent_strong init_addr [JAL X0 jmp_offset; NOP]
+      (pcOutOfInstrs_exitCond init_addr [JAL X0 jmp_offset; NOP]) [] [].
   Proof.
-    intros γ1curpriv γ2curpriv γ1pc γ2pc.
-    unfold cfg_instrs_contract, cfg_instrs_pre, exitCond_WP2_loop.
-    iIntros "(Hregs & Hinstrs & #Hinv)".
-    cbn.
-    iDestruct "Hregs" as
-      "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
-    rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
-    rewrite !regPstsTo_sync_is_nonsync.
-    assert (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx [ctx])
-                    (instrs_of_list (bv.of_N init_addr) [JAL X0 jmp_offset; NOP])
-                    (table_of_list (term_val ty_xlenbits (bv.of_N init_addr)) 0
-                       [JAL X0 jmp_offset; NOP]) [env]).
-    { apply itable_faith_of_list; [reflexivity|].
-      apply table_bound_of_lenAddr. now vm_compute. }
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx [ctx])
-                    jmp_fwd_exitCond
-                    (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
-                       ((4 * N.of_nat (length [JAL X0 jmp_offset; NOP]))%N :: []))
-                    [env]).
-    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
-        [reflexivity | repeat constructor]. }
-    iApply (sound_scfg_verification_condition_myWP2
-              valid_jmp_fwd_cfg_contract _ Hif Hef
-              $! (SyncVal (bv.of_N init_addr))
-              with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
-    - iSplitL "Hpriv".
-      + cbn. iSplit. { iPureIntro. split; tauto. }
-        by iFrame "∗ #".
-      + iFrame "Hpc". iSplitL "Hnpc". { iExists _. iExact "Hnpc". }
-        iExact "Hinstrs".
-    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
-      destruct an as [v | vl vr].
-      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. rewrite Hexit. exact I.
-      + contradiction.
+    intros Hbound.
+    eapply gen_contract_noninterferent_param.
+    5: exact (valid_jmp_fwd_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
   Qed.
 
+  (* jmp_fwd_exitCond is definitionally pcOutOfInstrs_exitCond 0 [JAL...; NOP]
+     (both reduce to fun v => bv.ugeb v (bv.of_N 8)), so this is a corollary
+     with no rewrite needed, same as countdown_noninterferent. *)
   Lemma jmp_fwd_noninterferent_cfg :
     noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
   Proof.
-    eapply gen_contract_noninterferent.
-    5: exact valid_jmp_fwd_cfg_contract. (* To fix wrong unification in step 4 that would make step 5 impossble, we do step 5 first, TODO: we probably need to handle this problem on a higher level. *) 
-    - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? H; rewrite lookup_nil in H; discriminate.
-    - by cbn; unfold lenAddr.
-    - repeat constructor. (* vm_compute was not necessary here. *)
+    apply jmp_fwd_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
   Qed.
 
+  (* Phase 4.2: countdown verified end-to-end for a UNIVERSAL base address,
+     from the single symbolic-base VC valid_countdown_cfg_contract_param --
+     confirms the BACKWARD branch (BNE back_offset) case works with the exact
+     same offset-agnostic tail as the forward-only programs (cmovznz4/set_X2). *)
+  Lemma countdown_noninterferent_param (init_addr : N) :
+    (init_addr + 8 < lenAddr)%N ->
+    noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+      (pcOutOfInstrs_exitCond init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset])
+      [(X1, true, Some (bv.of_N 2))] [].
+  Proof.
+    intros Hbound.
+    eapply gen_contract_noninterferent_param.
+    5: exact (valid_countdown_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* The concrete result is now a corollary of the universal-base theorem
+     above: countdown_exitCond is definitionally pcOutOfInstrs_exitCond at
+     init_addr = 0, so no vm_compute/rewrite is needed here at all. *)
   Lemma countdown_noninterferent :
     noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
       countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
   Proof.
-    eapply gen_contract_noninterferent.
-    5: exact valid_countdown_cfg_contract. (* To fix wrong unification in step 4 that would make step 5 impossble, we do step 5 first, TODO: we probably need to handle this problem on a higher level. *) 
-    - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? H. rewrite lookup_nil in H; discriminate.
-    - by cbn; unfold lenAddr.
-    - repeat constructor. (* vm_compute was not necessary here. *)
+    apply countdown_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
   Qed.
 
+  (* Phase 4.2: countdown_mem verified end-to-end for a UNIVERSAL base
+     address, from the single symbolic-base VC
+     valid_countdown_mem_cfg_contract_param -- confirms a BACKWARD branch
+     combined with base-RELATIVE memory (via the X0->X2 register rewrite,
+     see the comment in Countdown.v) works with the same reusable bridge and
+     offset-agnostic tail as every other example. *)
+  Lemma countdown_mem_noninterferent_param (init_addr : N) :
+    (init_addr + 20 < lenAddr)%N ->
+    noninterferent_strong init_addr countdown_mem_instrs
+      (pcOutOfInstrs_exitCond init_addr countdown_mem_instrs)
+      (map (concretize_reg init_addr) countdown_mem_reg_specs_rel)
+      (map (concretize_mem init_addr) countdown_mem_mem_specs_rel).
+  Proof.
+    intros Hb.
+    eapply gen_contract_noninterferent_rel.
+    6: exact (valid_countdown_mem_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros [|i] spec H; cbn in H;
+        try (inversion H; subst; cbn; f_equal; lia); discriminate.
+    - cbn. lia.
+    - exact Hb.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* The concrete result is now a corollary of the universal-base theorem
+     above. The reg_specs literal gains an X2 entry compared to before the
+     X0->X2 rewrite (X2 = base = 0 here, so this is the same program
+     behaviorally, just with the base held in an explicit register instead
+     of the hardwired-zero one). *)
   Lemma countdown_mem_noninterferent :
     noninterferent_strong init_addr countdown_mem_instrs countdown_mem_exitCond
-      [(X1, false, None)] [(bv.of_N 16, true, Some (bv.of_N 2))].
+      [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
+      [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
-    eapply gen_contract_noninterferent.
-    5: exact valid_countdown_mem_cfg_contract. (* To fix wrong unification in step 4 that would make step 5 impossble, we do step 5 first, TODO: we probably need to handle this problem on a higher level. *) 
-    - apply Prelude.nodup_fixed; reflexivity.
-    - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H; (* I probably don't need this big of a case-split but it works. TODO: Hide this in a tactic or figure out how to prove it generally. *)
-      try (inversion H; subst; vm_compute; done); discriminate.
-    - by cbn; unfold lenAddr.
-    - repeat constructor. (* vm_compute was not necessary here. *)
+    assert (Hr : [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
+                 = map (concretize_reg init_addr) countdown_mem_reg_specs_rel)
+      by (vm_compute; reflexivity).
+    assert (Hm : [(bv.of_N 16, true, Some (bv.of_N 2))]
+                 = map (concretize_mem init_addr) countdown_mem_mem_specs_rel)
+      by (vm_compute; reflexivity).
+    rewrite Hr Hm.
+    apply countdown_mem_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
   Qed.
 
   (* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
@@ -211,11 +279,22 @@ Import iris.algebra.gmap.
   Proof.
     intros Hbound.
     eapply gen_contract_noninterferent_param.
+    5: exact (valid_set_X2_to_42_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
     - apply Prelude.nodup_fixed; reflexivity.
     - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
     - cbn. lia.
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-    - exact (valid_set_X2_to_42_param init_addr).
+  Qed.
+
+  (* The concrete result at init_addr = 0, as a corollary -- this was
+     missing before (set_X2 had only the parametric headline). *)
+  Lemma set_X2_to_42_noninterferent :
+    noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
+      (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+      [(X2, false, None)] [].
+  Proof.
+    apply set_X2_to_42_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
   Qed.
 
   (* Phase 4.2 headline #2: cmovznz4 (29 instrs, 12 data words, base-relative
@@ -232,13 +311,13 @@ Import iris.algebra.gmap.
   Proof.
     intros Hb.
     eapply gen_contract_noninterferent_rel.
+    6: exact (valid_cmovznz4_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
     - apply Prelude.nodup_fixed; reflexivity.
     - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
         try (inversion H; subst; cbn; f_equal; lia); try discriminate.
     - cbn. lia.
     - exact Hb.
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-    - exact (valid_cmovznz4_cfg_contract_param init_addr).
   Qed.
 
   (* The two concrete cmovznz4 results are now corollaries of the universal-base

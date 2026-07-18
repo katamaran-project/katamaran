@@ -143,3 +143,31 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
 
     Lemma valid_swap_cfg_contract : ValidCFGVerifierContract swap_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
+
+    (* ===== Phase 4.2: base-parametric swap VC ===== *)
+    Definition swap_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param ia
+        [(X1, false, None); (X2, false, None); (X3, false, None)] []
+        [MV X3 X2; MV X2 X1; MV X1 X3] []
+        (pcOutOfInstrs_exitCond ia [MV X3 X2; MV X2 X1; MV X1 X3])
+        5.
+
+    Lemma valid_swap_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (swap_cfg_contract_param ia).
+    Proof.
+      intros. vm_compute. solve_vc.
+      all: repeat match goal with
+           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
+           end.
+      all: cbn in *; unfold bv.unsigned in *.
+      all: try rewrite bv.bin_add_small.
+      all: repeat match goal with
+           | |- context [bv.bin ?b] =>
+               assert_fails (is_var b);
+               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
+           end.
+      all: try lia.
+      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
+    Qed.
+    (* ===== end Phase 4.2 ===== *)

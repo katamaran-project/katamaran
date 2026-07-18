@@ -1,6 +1,6 @@
 {
   "purpose": "Cross-skill routing eval for the cfgver-* skill family. Each query has ONE expected winner among the cfgver skills, the generic pitfall skills (rocq-/bv-/gmap-pitfalls, iris-proofmode), the rocq plugin skills, or none. A skill firing on a query expected elsewhere = mis-route.",
-  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits).",
+  "notes": "v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits). v6 (2026-07-18, later): cfgver-gen-contract description expanded to cover the parametric-base recipe (gen_contract_param/_rel) and the 'discharge valid_contract FIRST' bullet-ordering gotcha, discovered live when migrating all CFGVer examples to parametric base — added Q45 (adversarial: sounds exactly like rocq-compile-oom's territory but the real fix is cfgver-gen-contract's).",
   "evals": [
     {
       "id": 1,
@@ -268,6 +268,12 @@
       "query": "rocq_compile_file on Cmovznz4.v says 'still running after 120s, moved to background as task X' — is that normal or should I be worried?",
       "expected": "none",
       "kind": "guard: routine async tool behavior, not yet a failure — rocq-compile-oom must NOT fire prematurely on a compile that's merely slow, only on one that actually died/stalled unexplained"
+    },
+    {
+      "id": 45,
+      "query": "my gen_contract_noninterferent_param end-to-end lemma's Qed just hangs forever with our normal imports, but if I strip the Iris/Equations imports it fails instantly instead with a weird lookup_nil mismatch — is this an OOM/memory thing?",
+      "expected": "cfgver-gen-contract",
+      "kind": "adversarial: sounds exactly like rocq-compile-oom's territory (hang, import-sensitive, 'is this OOM' framing) but the actual known cause is CFGVer's discharge-valid_contract-first bullet-ordering gotcha, not memory — rocq-compile-oom must NOT win outright (it's a reasonable first stop for the health check, but the fix lives in cfgver-gen-contract)"
     }
   ]
 }

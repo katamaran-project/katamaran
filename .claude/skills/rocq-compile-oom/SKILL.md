@@ -61,3 +61,45 @@ pressure, not a code regression.
 
 For the specific incident this generalizes (`token-optimizer-mcp`,
 2026-07-17/18), see the `reference-removed-config` memory note.
+
+## Hang that reproduces IDENTICALLY regardless of timeout: probably NOT this skill
+
+If a compile hangs at the exact same spot whether given 120s or 580s — check
+`rocq_compile_file(..., timing=True)`'s `last_completed` field across two
+attempts at different timeouts — that is genuine non-termination, not "needs
+more patience." Check process health first (as above) to rule out contention,
+but if memory/CPU come back clean AND the hang reproduces bit-for-bit, look for
+a real bug in the PROOF TERM itself before assuming environment/OOM.
+
+Concrete instance (CFGVer, 2026-07-18): `eapply gen_contract_noninterferent_param`
+followed by its side-premise bullets in natural order (instead of discharging
+the LAST premise — `valid_contract` — first) produced a `Qed` that hung
+indefinitely with the project's full Iris/Equations import set in scope, but
+failed FAST and cleanly (a normal "no subterm found" error) without those
+imports — the transitively-imported SSReflect `rewrite`'s more powerful/
+backtracking matching engine apparently gets stuck exactly where plain Coq's
+`rewrite` fails fast on the same malformed proof term. See
+**cfgver-gen-contract**'s "discharge `valid_contract` FIRST" section for the
+actual fix — this diagnostic dead-end is exactly why that section exists.
+
+## Isolating a suspected hang: minimal standalone scratch file
+
+To tell apart "this lemma is broken" from "something about the whole file's
+accumulated state", write a throwaway `.v` file INSIDE the repo (not `/tmp` —
+`Require` needs `_CoqProject`/`_RocqProject` resolution), with only the
+`Require`s the ONE suspect lemma needs, and that lemma copy-pasted in. Batch-
+`coqc` it in isolation:
+- Hangs the same way standalone → the lemma + import combination is the bug,
+  independent of everything else in the original file.
+- Fails fast (even with a different, "wrong" error) → rules out a genuine
+  infinite loop entirely; go looking elsewhere.
+
+Narrow further by replacing the tail of the proof with `Show. Admitted.` right
+before the suspect tactic — `Show.`'s printed goal (captured in the compile's
+`output` on success, since `Admitted.` lets the file "compile") tells you
+exactly what's left unproved, without needing a slow interactive `pet` session.
+Prefer batch `rocq_compile_file` + `Show.`/`Admitted.` cycles over interactive
+`rocq_start`/`rocq_check` for iterating on a heavy file — `pet`'s full IDE-style
+elaboration is often far slower to even LOAD such a file than a batch `coqc`
+run is to fully check it. Delete the scratch file once done; it is not meant to
+be committed.

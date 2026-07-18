@@ -91,6 +91,33 @@ Import TermNotations.
       ValidCFGVerifierContract jump_if_zero_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
 
+    (* ===== Phase 4.2: base-parametric jump_if_zero VC ===== *)
+    Definition jump_if_zero_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param ia [(X1, true, None)] []
+        [BEQ X1 X0 true_offset] [8%N]
+        (pcOutOfInstrs_exitCond ia [BEQ X1 X0 true_offset])
+        3.
+
+    Lemma valid_jump_if_zero_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (jump_if_zero_cfg_contract_param ia).
+    Proof.
+      intros. vm_compute. solve_vc.
+      all: repeat match goal with
+           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
+           end.
+      all: cbn in *; unfold bv.unsigned in *.
+      all: try rewrite bv.bin_add_small.
+      all: repeat match goal with
+           | |- context [bv.bin ?b] =>
+               assert_fails (is_var b);
+               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
+           end.
+      all: try lia.
+      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
+    Qed.
+    (* ===== end Phase 4.2 ===== *)
+
     (* Unconditional forward jump: jumps 8 bytes ahead (2 instruction widths).
        The CFG verifier handles this correctly by following the actual PC. *)
     Definition jmp_offset : bv 21 := bv.of_N 8.
@@ -106,4 +133,31 @@ Import TermNotations.
 
     Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
     Proof. vm_compute. solve_vc. Qed.
+
+    (* ===== Phase 4.2: base-parametric jmp_fwd VC ===== *)
+    Definition jmp_fwd_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param ia [] []
+        [JAL X0 jmp_offset; NOP] []
+        (pcOutOfInstrs_exitCond ia [JAL X0 jmp_offset; NOP])
+        5.
+
+    Lemma valid_jmp_fwd_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (jmp_fwd_cfg_contract_param ia).
+    Proof.
+      intros. vm_compute. solve_vc.
+      all: repeat match goal with
+           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
+               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
+           end.
+      all: cbn in *; unfold bv.unsigned in *.
+      all: try rewrite bv.bin_add_small.
+      all: repeat match goal with
+           | |- context [bv.bin ?b] =>
+               assert_fails (is_var b);
+               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
+           end.
+      all: try lia.
+      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
+    Qed.
+    (* ===== end Phase 4.2 ===== *)
 
