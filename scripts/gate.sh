@@ -37,12 +37,18 @@ SCOPE_DIRS=("case_study/RiscvPmp/CFGVer")
 # baseline; if a theorem here legitimately depends on an axiom, remove it from
 # this list (and note why) rather than weakening the check.
 AXIOM_CLEAN_THMS=(
+  "swap_noninterferent_param"
   "swap_noninterferent"
+  "jumpIfZero_noninterferent_param"
   "jumpIfZero_noninterferent"
+  "jmp_fwd_noninterferent_param"
   "jmp_fwd_noninterferent_cfg"
+  "countdown_noninterferent_param"
   "countdown_noninterferent"
+  "countdown_mem_noninterferent_param"
   "countdown_mem_noninterferent"
   "set_X2_to_42_noninterferent_param"
+  "set_X2_to_42_noninterferent"
   "cmovznz4_noninterferent_param"
   "cmovznz4_noninterferent"
   "cmovznz4_noninterferent_at_start"
