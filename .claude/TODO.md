@@ -315,7 +315,11 @@ memory note.
   (and all downstream peval/solver/vm_compute work) grows ~3^trips. Minimal
   pair: `A0 := A0>>1` is flat at 10 trips; `A0 := (A0>>1)^(A0&1)` grows
   ~1.7x/trip. Corrected write-ups: **cfgver-executor** "Backward-branch
-  loops" + **core-executor-internals**. Consequences: (a) full unrolling
+  loops" + **core-executor-internals**. A follow-up probe also REFUTED the
+  cheap "let-representation" fix (Coq's physical value-sharing saves memory,
+  not traversal cost — opacity is what's needed). **Fix plan drafted (not
+  started): `CFGVer/PLAN-term-sharing.md`** — selective opaque naming at
+  register writes, E1/E2 de-risk experiments first, hash-consing as Plan B. Consequences: (a) full unrolling
   does NOT dodge this — term growth is a property of the instruction
   sequence, not the loop encoding (3^128 either way), so the *symbolic
   iteration count* / loop-invariant redesign above is the only
