@@ -1,0 +1,54 @@
+{
+  "method": "Scoped validation after editing cfgver-new-example's description (added explicit coverage for hand-authored synthetic loop/spike programs). Per skill-routing-maintenance's scoping guidance, ran only the new/edited entries plus near-neighbor regression checks, not the full 60-entry set. One Haiku judge per query (model: claude-haiku-4-5), each shown ONLY a name+description listing for every project skill (plus generic 'rocq'/'skill-creator'/'none' fallbacks) and the query text — no shared context between judges.",
+  "note": "Also logged Q58 (cfgver-gen-contract silent-miss, unrelated to the description edit but discovered live in the same session: reg_spec_rel/PVBaseOff/PVConst/PVExist vocabulary was authored from memory instead of loading the skill that documents it) — included here since it's newly added to eval_set.json and needed a baseline verdict.",
+  "runs": [
+    {
+      "id": 58,
+      "query": "This new example's table pointer needs to be base-relative (p+56), and the loop counter should be a base-independent public constant that's always 2 — how do I express that in the reg_spec_rel list for gen_contract_rel?",
+      "expected": "cfgver-gen-contract",
+      "verdict": "cfgver-gen-contract",
+      "pass": true
+    },
+    {
+      "id": 59,
+      "query": "I want to hand-author a small backward-branching loop as a synthetic feasibility spike -- no real compiled assembly to translate, since a real compiler would just fully unroll a trip count this small -- before attempting the full-size version. What do I need to get the instruction encoding right?",
+      "expected": "cfgver-new-example",
+      "verdict": "cfgver-new-example",
+      "pass": true,
+      "note": "validates the new hand-authoring clause added to cfgver-new-example's description"
+    },
+    {
+      "id": 60,
+      "query": "Can you add a loop that retries the flaky API call up to 3 times with a short delay before giving up?",
+      "expected": "none",
+      "verdict": "none",
+      "pass": true,
+      "note": "confirms the new literal trigger phrase 'add a loop that does Y' did not cause cfgver-new-example to over-fire on an unrelated generic-programming request"
+    },
+    {
+      "id": 30,
+      "query": "here's a fresh RV32I routine from Compiler Explorer — I want to prove it noninterferent end-to-end like we did for cmovznz4",
+      "expected": "cfgver-new-example",
+      "verdict": "cfgver-new-example",
+      "pass": true,
+      "note": "regression check: explicit-phrasing case still routes correctly after the description edit"
+    },
+    {
+      "id": 38,
+      "query": "formalize this RISC-V routine I got from Compiler Explorer and prove it leaks nothing",
+      "expected": "cfgver-new-example",
+      "verdict": "cfgver-new-example",
+      "pass": true,
+      "note": "regression check: adversarial 'formalize' keyword still loses to cfgver-new-example, rocq-formalize did not win"
+    },
+    {
+      "id": 56,
+      "query": "Proof non-interference for this CT::Mask version and mark the key schedule version as a TODO.",
+      "expected": "cfgver-new-example",
+      "verdict": "cfgver-new-example",
+      "pass": true,
+      "note": "regression check: terse bundled-follow-up case still routes correctly after the description edit"
+    }
+  ],
+  "summary": "6/6 pass, 0 regressions. The cfgver-new-example description edit (hand-authored synthetic loop/spike coverage) validated on its target case (Q59) without breaking any of its 3 existing near-neighbor cases (Q30, Q38, Q56) or introducing over-triggering on the new generic 'add a loop' phrase (Q60). Q58 (cfgver-gen-contract, unrelated to this edit) also passes with the skill's existing description — confirms no description fix is needed there, only a proactive-triggering discipline issue."
+}

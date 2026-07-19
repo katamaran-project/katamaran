@@ -2,17 +2,21 @@
 name: cfgver-new-example
 description: >
   The step-by-step recipe for verifying a NEW example program end-to-end in
-  Katamaran CFGVer — the most common CFGVer task. Use whenever the user wants to add,
-  translate, or verify a new RV32I program/routine for noninterference: assembly →
-  list AST via asm_to_ast.py, choosing exitCond / fuel / extra_exit_offs, building
-  the contract with gen_contract, discharging the VC, and the
-  gen_contract_noninterferent end lemma. Trigger on "verify this program", "add a
-  new example", "prove X noninterferent" — including terse follow-ups that refer
-  back to code discussed/compiled earlier in the conversation rather than
-  restating it ("prove non-interference for this version"), even when bundled
-  with an unrelated side-task (e.g. "...and update the TODO"). NOT for the individual layers' details
-  (each step links its skill) and NOT for merely inspecting an already-proven
-  lemma (e.g. running Print Assumptions on it — no skill needed).
+  Katamaran CFGVer — the most common CFGVer task. Covers BOTH translating real
+  compiled assembly into a list AST via asm_to_ast.py AND hand-authoring a
+  synthetic program/loop from scratch when there's no real source to translate
+  (e.g. a small-N feasibility spike toward a bigger not-yet-attempted example,
+  such as a loop a real compiler would just fully unroll at that trip count) —
+  choosing exitCond / fuel / extra_exit_offs, building the contract with
+  gen_contract, discharging the VC, and the gen_contract_noninterferent end
+  lemma. Trigger on "verify this program", "add a new example", "prove X
+  noninterferent", "write/design a small-N or synthetic version of X first",
+  "add a loop that does Y" — including terse follow-ups that refer back to code
+  discussed/compiled earlier in the conversation rather than restating it
+  ("prove non-interference for this version"), even when bundled with an
+  unrelated side-task (e.g. "...and update the TODO"). NOT for the individual
+  layers' details (each step links its skill) and NOT for merely inspecting an
+  already-proven lemma (e.g. running Print Assumptions on it — no skill needed).
 ---
 
 # Recipe: verifying a new example program end-to-end
@@ -27,7 +31,15 @@ end theorem goes in `Results.v` (plus the gate's `AXIOM_CLEAN_THMS` list in
 1. **Instructions.** Translate the RV32I assembly (e.g. Compiler Explorer output of
    `clang -O2 -march=rv32i`) into a `list AST` with
    `case_study/RiscvPmp/CFGVer/tools/asm_to_ast.py` — it tags each entry with its
-   source line for auditability. Don't hand-transcribe.
+   source line for auditability. Don't hand-transcribe real compiled code.
+   **Hand-authoring a synthetic program/loop instead** (no real source to
+   translate — e.g. a small-N feasibility spike like `countdown`/
+   `countdown_mem`/`key_schedule_loop2`, where a real compiler would just fully
+   unroll a small trip count): the script's automatic label resolution is
+   exactly what's missing, so this needs manual care — AST constructor field
+   order, register aliases, and (the sharpest edge, wrong exactly once already)
+   the backward-branch-immediate convention are all in
+   **`cfgver/references/asm-vocabulary.md`**.
 2. **Exit condition + fuel.** Typically `pcOutOfInstrs_exitCond init_addr instrs`;
    fuel must exceed the number of instruction steps actually executed, **with
    slack** (tight fuel shows up as a bare `False` deep in the VC —

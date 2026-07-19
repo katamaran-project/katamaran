@@ -77,10 +77,19 @@ the tell.
    it must exceed the executed step count *with slack* (`cmovznz4` needed 35 for
    29 instructions; exactly 29 produced a misleading `False` that looked like a
    missing `secLeak` fact).
-3. **Exit mismatch:** the exit choice checks the contract's exit-*term* table; a
+3. **Wrong backward-branch offset, if the program has a hand-authored loop:**
+   the exact same misleading-`False` symptom, but with fuel already generous —
+   a `BNE`/`BEQ` immediate is relative to *that instruction's own address*, not
+   the loop body's total length (`key_schedule_loop2` hit this: `-(N*4)` instead
+   of the correct `-((N-1)*4)` sent the taken branch to an unmapped address).
+   Not an issue for programs translated via `asm_to_ast.py` (it resolves labels
+   automatically) — only for loops hand-authored like `countdown`/
+   `countdown_mem`/`key_schedule_loop2`. Full convention + worked examples:
+   **`cfgver/references/asm-vocabulary.md`**.
+4. **Exit mismatch:** the exit choice checks the contract's exit-*term* table; a
    pc that should exit but matches no exit term fails the branch. Check
    `extra_exit_offs` / `cfg_exits`.
-4. **Wrong postcondition/exitCond wiring** in hand-written contracts —
+5. **Wrong postcondition/exitCond wiring** in hand-written contracts —
    → **cfgver-contracts** (the ignored-fields subtlety).
 
 ## When `vm_compute` itself hangs

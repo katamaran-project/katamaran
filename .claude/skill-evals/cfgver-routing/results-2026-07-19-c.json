@@ -1,0 +1,37 @@
+{
+  "method": "Scoped validation for a brand-new skill (skill-usage-audit) plus a NOT-clause added to skill-routing-maintenance's description. Per skill-routing-maintenance's own scoping guidance, ran only the new entries plus the near-neighbors most likely to now compete (skill-routing-maintenance, skill-creator). One Haiku judge per query (model: claude-haiku-4-5), each shown ONLY a name+description listing for the meta-skill family plus generic fallbacks and the query text — no shared context between judges.",
+  "runs": [
+    {
+      "id": 61,
+      "query": "We just spent this whole session adding a new CFGVer example -- can you check whether we used the right skills throughout, and whether anything we looked up by hand along the way should really have been documented in a skill instead?",
+      "expected": "skill-usage-audit",
+      "verdict": "skill-usage-audit",
+      "pass": true
+    },
+    {
+      "id": 64,
+      "query": "Were all the skills triggered when needed? Did you have to look up any information that should have been available upon triggering a skill?",
+      "expected": "skill-usage-audit",
+      "verdict": "skill-usage-audit",
+      "pass": true,
+      "note": "anchors the skill's own core trigger phrase (the literal query that prompted its creation)"
+    },
+    {
+      "id": 62,
+      "query": "The cfgver-memory skill isn't firing for a query about the _with_mem variants, can you check why and fix its trigger?",
+      "expected": "skill-routing-maintenance",
+      "verdict": "skill-routing-maintenance",
+      "pass": true,
+      "note": "regression check (was Q51): a single, already-identified misfire still stays skill-routing-maintenance's territory with skill-usage-audit now in the family"
+    },
+    {
+      "id": 63,
+      "query": "I want to build a brand new skill for auto-generating changelogs from our commit messages -- nothing like it exists yet, help me draft it from scratch.",
+      "expected": "skill-creator",
+      "verdict": "skill-creator",
+      "pass": true,
+      "note": "regression check (was Q50): drafting a genuinely new skill from scratch still stays skill-creator's territory"
+    }
+  ],
+  "summary": "4/4 pass, 0 regressions. skill-usage-audit fires correctly on both its target should-trigger cases (Q61, Q64) without stealing skill-routing-maintenance's or skill-creator's existing territory (Q62, Q63 both unchanged from their prior verdicts)."
+}

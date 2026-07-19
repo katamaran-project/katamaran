@@ -65,7 +65,8 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Example.Countdown
      RiscvPmp.CFGVer.Example.SetX2
      RiscvPmp.CFGVer.Example.Cmovznz4
-     RiscvPmp.CFGVer.Example.Precompute.
+     RiscvPmp.CFGVer.Example.Precompute
+     RiscvPmp.CFGVer.Example.KeyScheduleLoop.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
@@ -364,6 +365,47 @@ Import iris.algebra.gmap.
       (pcOutOfInstrs_exitCond init_addr precompute_instrs) precompute_reg_specs [].
   Proof.
     apply precompute_noninterferent_param.
+    unfold init_addr, lenAddr; lia.
+  Qed.
+
+  (* Phase 4.2 headline #4: key_schedule_loop2 (small-N=2 feasibility spike
+     toward the full Botan GHASH::key_schedule loop -- see the header comment
+     in Example/KeyScheduleLoop.v) verified end-to-end for a UNIVERSAL base
+     address, from the single symbolic-base VC
+     valid_key_schedule_loop2_cfg_contract_param -- confirms a backward
+     branch whose body both re-runs secret arithmetic AND stores to an
+     advancing (base-relative) table address works with the same reusable
+     bridge and offset-agnostic tail as every other example. *)
+  Lemma key_schedule_loop2_noninterferent_param (init_addr : N) :
+    (init_addr + 64 < lenAddr)%N ->
+    noninterferent_strong init_addr key_schedule_loop2_instrs
+      (pcOutOfInstrs_exitCond init_addr key_schedule_loop2_instrs)
+      (map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
+      (map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel).
+  Proof.
+    intros Hb.
+    eapply gen_contract_noninterferent_rel.
+    6: exact (valid_key_schedule_loop2_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    - apply Prelude.nodup_fixed; reflexivity.
+    - intros [|[|i]] spec H; cbn in H;
+        try (inversion H; subst; cbn; f_equal; lia); try discriminate.
+    - cbn. lia.
+    - exact Hb.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* The concrete result is now a corollary of the universal-base theorem
+     above. *)
+  Lemma key_schedule_loop2_noninterferent :
+    noninterferent_strong init_addr key_schedule_loop2_instrs key_schedule_loop2_exitCond
+      key_schedule_loop2_reg_specs key_schedule_loop2_mem_specs.
+  Proof.
+    assert (Hr : key_schedule_loop2_reg_specs = map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
+      by (vm_compute; reflexivity).
+    assert (Hm : key_schedule_loop2_mem_specs = map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel)
+      by (vm_compute; reflexivity).
+    rewrite Hr Hm.
+    apply key_schedule_loop2_noninterferent_param.
     unfold init_addr, lenAddr; lia.
   Qed.
 

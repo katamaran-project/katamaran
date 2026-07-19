@@ -30,7 +30,12 @@ description: >
   `.claude/commands/` to make a candidate description "visible" for testing,
   and a background run that crashes before its own cleanup leaves that debris
   loaded into every future turn's context (happened 2026-07-18, burned a full
-  session's token budget).
+  session's token budget). NOT for a full retrospective sweep of a whole
+  conversation looking for silent misses/misfires/content gaps across
+  multiple skills at once (that's `skill-usage-audit`, which calls into this
+  skill for the actual routing-fix step once a candidate is identified) — use
+  this skill directly only when the misfire/query is ALREADY identified and
+  isolated.
 ---
 
 # Skill routing maintenance

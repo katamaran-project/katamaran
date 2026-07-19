@@ -26,10 +26,13 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > (a heavy compile gets silently killed/stalls with no Coq error — check for
 > memory pressure/orphaned processes before assuming a regression). Zero-cost
 > references files live under `skills/cfgver/references/` (e.g. `registers.md`).
-> Meta-skill for the skill system itself: **`skill-routing-maintenance`** —
+> Meta-skills for the skill system itself: **`skill-routing-maintenance`** —
 > check/tune which skill fires for a query (read-only Haiku-judge eval, see
-> Maintenance protocol below); distinct from drafting a brand-new skill
-> (`skill-creator` plugin).
+> Maintenance protocol below); **`skill-usage-audit`** — retrospective sweep
+> of a whole conversation for silent misses, misfires, and content gaps,
+> which then calls into `skill-routing-maintenance` (routing fixes) or
+> `skill-creator` (a genuinely new skill). Distinct from drafting a
+> brand-new skill from scratch (`skill-creator` plugin).
 
 ---
 

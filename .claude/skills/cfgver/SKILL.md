@@ -66,7 +66,11 @@ with `gen-contract` on top of `contracts` and `new-example` orchestrating all of
 Library skills (loaded from parents, rarely self-firing): `cfgver-rsolve`,
 `cfgver-wp2`, `cfgver-gen-contract-internals`, `cfgver-endtoend-internals`.
 References files (zero listing cost, reachable only via parent bodies):
-`cfgver/references/registers.md` (two-world register machinery).
+`cfgver/references/registers.md` (two-world register machinery, from
+cfgver-gen-contract-internals/cfgver-endtoend-internals); `cfgver/references/
+asm-vocabulary.md` (AST constructor field order, register aliases, and the
+backward-branch-immediate convention for hand-authored programs, from
+cfgver-new-example).
 
 ## Importing CFGVer.Verifier downstream
 
@@ -90,9 +94,9 @@ to plain `Require Import`.
 All CFGVer examples compile with **zero `Admitted`**, each with a
 `valid_<prog>_cfg_contract` VC and a `<prog>_noninterferent` end lemma, axiom-clean
 (`pure_decode` + `mmioenv` only): `swap`, `jumpIfZero`, `jmp_fwd`, `countdown`,
-`countdown_mem`, `set_X2_to_42`, `cmovznz4`, `precompute`.
+`countdown_mem`, `set_X2_to_42`, `cmovznz4`, `precompute`, `key_schedule_loop2`.
 
-**All eight now have a parametric-base (∀ `init_addr`) headline**
+**All nine now have a parametric-base (∀ `init_addr`) headline**
 (`<prog>_noninterferent_param`, via `gen_contract_param` for base-independent
 specs or `gen_contract_rel` for base-relative ones — see **cfgver-gen-contract**);
 every concrete `<prog>_noninterferent` is a free corollary of its `_param`
@@ -114,3 +118,18 @@ detection) used as a pure VALUE on private data need `secLeak` on their
 operand, which `solve_vc` has no way to discharge when the operand is
 genuinely secret — see `TODO.md`'s "Botan CT::Mask / 64-bit-subtraction gap"
 for the full trace and the open executor-extension task.
+
+`key_schedule_loop2` (small-N=2 feasibility spike toward the full Botan
+`GHASH::key_schedule` loop — the real function loops 128 times, wrapping
+`precompute`'s masking step in a table-building backward branch; see
+`TODO.md`) confirms that combination — secret arithmetic re-executed across
+loop iterations, plus a per-iteration STORE to an advancing base-relative
+table address, inside a genuine backward branch — needs no new `solve_vc`
+machinery: the existing `countdown_mem`-style bridge and boilerplate `_param`
+tail close it unchanged. Hand-authored (not `asm_to_ast.py`-translated, since
+a real compiler would just fully unroll a 2-trip loop) — see
+**cfgver-new-example**'s hand-authoring note and
+`cfgver/references/asm-vocabulary.md` for the backward-branch-immediate
+convention a first draft of this example got wrong. Bumping toward the real
+trip count (128, in two nested 64-iteration passes per the actual source) is
+a separate, not-yet-attempted step.
