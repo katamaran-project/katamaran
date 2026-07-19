@@ -115,22 +115,22 @@ tweaks.
 - **E3 (acceptance preview).** With the guard settled by E2, sweep
   `key_schedule_loop2` to N=16/32/64 (contract fuel and table
   words scaled accordingly). Record the curve; N=64 discharging in
-  seconds-to-minutes is the success signal to bring to
-  Dominique/Steven.
+  seconds-to-minutes is the success signal.
 
 ### Decision tree
 
 | Outcome | Meaning | Action |
 |---|---|---|
 | E1(a) fails: still exponential | Second duplication site (δ locals / mem-write results / pathcondition), same as old plan's E2 concern | Bisect with the minimal-pair probes (1-copy vs 3-copy bodies) to locate it; havoc the same way at that site; only if the site is un-havocable (e.g. inside the pathcondition itself) reconsider Plan B |
-| E1(b) fails: VC now false | Something in THIS loop needs the precise secret value — would falsify the core completeness claim | Inspect the residual (`DebugCFGVerifierContract`); if it's a `secLeak` on a havoc'd var, the guard misfired (fix guard); if it's a genuine value-dependence, havoc is the wrong tool → escalate to Dominique/Steven with findings, Plan B back on the table |
+| E1(b) fails: VC now false | Something in THIS loop needs the precise secret value — would falsify the core completeness claim | Inspect the residual (`DebugCFGVerifierContract`); if it's a `secLeak` on a havoc'd var, the guard misfired (fix guard); if it's a genuine value-dependence, havoc is the wrong tool → stop and report findings, Plan B back on the table |
 | E1 passes, E2 clean | Guard 1 (concreteness+threshold) suffices | Proceed to E3 then Phase 1 with guard 1 — smallest possible core change |
 | E1 passes, E2 has class-(i) failures | Need secrecy info, not just size | Design guard 2 (taint set) in Phase 1; scope grows by the taint plumbing but the approach stands |
 | E3 stalls before N=64 despite flat E1 | Linear-but-large constant (VC has ~14·N demonic binders + N stores) | Profile: if it's `solve_vc`/`postprocess` walking binders, that's Phase 3 work (discharge shape), not a refutation |
 
 ## Phase 1 — Design checkpoint (BEFORE any proofs)
 
-Bring E1–E3 numbers to Dominique/Steven. Decisions to settle with them:
+Review the E1–E3 numbers and settle the design decisions before committing
+to proofs:
 
 - **Hook placement**: (a) core `SPureSpec.write_register` guarded havoc
   (smallest diff, but core-owned and affects every case study), vs (b) a
