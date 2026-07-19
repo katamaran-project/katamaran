@@ -1,9 +1,71 @@
 # PLAN-havoc-secrets — forget secret register values at writes
 
-Status: DRAFT (2026-07-19). Successor to PLAN-term-sharing.md after its
-Phase 1 refuted Plan A (opaque naming) — see that file's status header and
-memory note `project-key-schedule-loop-scaling` for the full root-cause and
-refutation record.
+Status: REFUTED (2026-07-19, same day as drafting). Phase 0's E1 experiment
+and its follow-up bisection found unconditional havoc does NOT flatten the
+scaling curve, and a size-threshold guard (the planned "guard 1") makes no
+measurable difference for this instruction mix — see the outcome block
+below for the full record. User decision (2026-07-19): stop here, document
+the failure, and pivot to a narrower, targeted fix — a `Solver.v`/`peval`
+rule that algebraically folds two applications of the masking operation
+into one, rather than a general executor-level mechanism. New plan:
+`PLAN-solver-fold.md` (once drafted). Superseded successor chain:
+`PLAN-term-sharing.md` (Plan A, refuted) → this file (havoc, refuted) →
+`PLAN-solver-fold.md` (targeted fold, current).
+
+> **Phase 0 outcome (throwaway branch `havoc-secrets-probe`, commit
+> a9cc2ae4, branched off `e2-term-naming-probe`):**
+> - **E1 (unconditional havoc, no guard) FAILS to flatten.** Isolated
+>   `Time vm_compute` on `ValidCFGVerifierContract`, masking loop: N=2→9.45s,
+>   N=4→24.9s, N=6→115.8s. Growth ratio *increases* with N (2.64× then
+>   4.65× per +2 trips) rather than settling into a fixed exponential base —
+>   worse than simply "still exponential." N=6 lands almost exactly where
+>   the ORIGINAL unpatched ~2.5×/trip curve extrapolates to; at N=4, havoc
+>   is even slower than the unpatched baseline (24.9s vs ~17.6s documented).
+>   VC still discharges at every N tested (completeness argument itself
+>   holds) — the failure is purely a performance/scaling one.
+> - **Bisection: growth lives in the register-arithmetic path, not
+>   memory/STORE.** An ALU-only reduction (same 10 masking instructions,
+>   no STORE/pointer/memory at all) tracks the full loop closely (17.1s/
+>   61.5s at N=4/6 vs 24.9s/115.8s full) — memory adds a modest constant,
+>   not the compounding.
+> - **Growth tracks havoc CALL COUNT per iteration, not term size.** A
+>   minimal 2-copy pair (`A0 := (A0>>1)^(A0&1)`, 3 writes/iteration)
+>   improved over its pre-havoc rate (~1.7×/trip → ~1.32×/trip) but the
+>   real masking chain (~9 writes/iteration, since A1/A2 get rewritten
+>   repeatedly as scratch) grows much faster (~1.9-2.16×/trip) — worse
+>   than the minimal case despite every individual havoc'd value being
+>   equally tiny. Points at demonic-var/context bookkeeping cost scaling
+>   with total variables introduced, not at the original term-duplication
+>   mechanism (which havoc genuinely does eliminate).
+> - **Size-threshold guard (`term_weight`-based, threshold=12) made NO
+>   measurable difference.** Reintroduced the plan's original "guard 1"
+>   (concreteness + size) to test whether leaving small intra-iteration
+>   scratch writes (A1/A2) transparent — while still havocing the larger
+>   per-iteration A0 result — would cut call count and recover flat
+>   scaling. Every rerun (minimal pair, ALU-only N=4/N=6, full loop N=4)
+>   came back statistically identical to the no-threshold baseline. Cause:
+>   traced by hand through the 10-instruction sequence — intra-iteration
+>   scratch chains (A1 rewritten from itself 3-4 times before its last use)
+>   build up to similar node counts (~3-13) as the final per-iteration A0
+>   result within the SAME pass, so no single size cutoff separates
+>   "disposable scratch" from "the value that must be forgotten" for this
+>   instruction mix. A register-identity-based guard (always havoc A0
+>   specifically, never A1/A2) was identified as the cleaner test of the
+>   call-count hypothesis but not built — the pivot decision landed first.
+> - **Collateral, expected and reverted:** two generic ISA contracts (`wX`,
+>   `tick_pc`) and the CFGVer `refine_write_register` lemma needed
+>   `Admitted` on the throwaway branch to unblock measurement, since their
+>   postconditions assert the written register holds *exactly* the input
+>   value — structurally incompatible with unconditional havoc. None of
+>   this touched `KatamaranRel`; the probe branch is a preserved record
+>   only.
+> - **Why not chase further (register-identity guard, or reading the core
+>   context/persist bookkeeping to confirm the compounding mechanism):**
+>   user judgment call — the triggering pattern (a secret rebuilt from
+>   k≥1 copies of itself within a short loop body) is narrow enough that a
+>   general executor-level mechanism is disproportionate. A targeted
+>   algebraic fold at the solver/peval level, recognizing this specific
+>   masking pattern, is preferred. See `PLAN-solver-fold.md`.
 
 **Problem (recap).** The symbolic register store holds raw `Term`s; a loop
 body rebuilding a secret register from k ≥ 2 copies of itself grows the term
