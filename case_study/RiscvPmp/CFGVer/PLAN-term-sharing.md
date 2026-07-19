@@ -1,10 +1,29 @@
 # PLAN-term-sharing — selective opaque naming at register writes
 
-Status: DRAFT (2026-07-19). Nothing implemented; no preparatory diagnostics
-run. Root-cause context: memory note `project-key-schedule-loop-scaling`,
+Status: PHASE 1 DONE — Plan A REFUTED, pivoting to Plan B (2026-07-19).
+Root-cause context: memory note `project-key-schedule-loop-scaling`,
 archive `.claude/archive/term-explosion-diagnosis-correction-2026-07-19.md`,
 skills **cfgver-executor** ("Backward-branch loops") and
 **core-executor-internals**.
+
+> **Phase 1 outcome (throwaway branch `e2-term-naming-probe`, commit a81aab71):**
+> - **E1 gate: PASSES by inspection.** No `combined_solver` stage re-substitutes
+>   a `wco` equation into a later formula (RiscvPmp user solver = `tri_id`; the
+>   generic solver never re-processes `wco`; `formula_simplifies` is syntactic-
+>   eqb only). Write-time no-solver assume keeps `v=t` opaque *through the solver*.
+> - **E2: Plan A INSUFFICIENT.** Prototyped `write_register` opaque naming;
+>   naming provably fires, but `ValidCFGVerifierContract` stays at the baseline
+>   exponential (~2.5×/trip, 17.6s @ N=4). Cause: `ValidCFGVerifierContract =
+>   safeE (postprocess …)`, and `postprocess`'s `solve_uvars` eliminates the
+>   named demonic vars **by substitution** (`uctx_subst`), re-inlining every
+>   `v=t` inside the vm_compute (the E3 concern, biting early). The opaque name
+>   must survive *every* elimination pass (`solve_uvars`/`solve_evars`/`solve_vc`),
+>   not just the solver — pervasive.
+> - **DECISION: go Plan B** (sharing-aware/memoized traversals) — attacks the
+>   traversals directly, immune to re-inlining. Checkpoint with Dominique/Steven
+>   before core implementation. Full detail in memory `project-key-schedule-loop-scaling`.
+
+## Original Plan A draft (below) — kept for reference; superseded by the pivot above.
 
 **Problem.** The symbolic executor's register store keeps raw unshared
 `Term`s; an instruction sequence that rebuilds a register from k ≥ 2 copies
