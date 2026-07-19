@@ -1,0 +1,12 @@
+{
+  "method": "Independent Haiku judges, one per query, shown only the current name+description listing for the cfgver-* family plus close neighbors (rocq-compile-oom). Scoped run: only the queries plausibly affected by cfgver-executor's new 'backward-branch loop exponential blowup' clause (added 2026-07-19, key_schedule_loop scaling-wall investigation), not a full 49+ sweep.",
+  "note": "First pass (round 1) surfaced a real regression: Q66 (adversarial, tight-fuel bare-False residual) was won by cfgver-executor instead of cfgver-solve-vc -- the initial wording ('vm_compute/solve_vc takes way longer than expected', 'not a fuel/timeout problem to tune around') overlapped too much with the tight-fuel-False phrasing. Tightened the clause to require 'genuinely never terminates (no residual ever appears)' plus an explicit contrast sentence carving out the finishes-with-a-residual case for cfgver-solve-vc. Round 2 re-tested Q66 and the should-trigger Q65 and both passed; Q30/Q31/Q67 (regression checks from round 1) already passed round 1 and were not re-run.",
+  "results": [
+    {"id": 65, "query": "loop trip count bumped, vm_compute doesn't finish after 10 min, is this fuel or structural", "expected": "cfgver-executor", "round1": "cfgver-executor", "round2": "cfgver-executor", "pass": true},
+    {"id": 66, "query": "vm_compute takes way longer than expected, solve_vc then leaves bare False, bumping fuel didn't help", "expected": "cfgver-solve-vc", "round1": "cfgver-executor", "round1_pass": false, "round2": "cfgver-solve-vc", "round2_pass": true, "note": "regression found and fixed this run -- see note above"},
+    {"id": 67, "query": "verify a brand new RV32I program with a backward branch, never attempted before", "expected": "cfgver-new-example", "round1": "cfgver-new-example", "pass": true},
+    {"id": 31, "query": "vm_compute leaves VerificationConditionWithErasure False (regression check)", "expected": "cfgver-solve-vc", "round1": "cfgver-solve-vc", "pass": true},
+    {"id": 30, "query": "fresh RV32I routine from Compiler Explorer, prove noninterferent (regression check)", "expected": "cfgver-new-example", "round1": "cfgver-new-example", "pass": true}
+  ],
+  "summary": "5/5 pass after round-2 fix (1 regression found and resolved in round 1). cfgver-executor's new clause fires correctly on genuine never-terminates-after-trip-count-bump queries without stealing cfgver-solve-vc's tight-fuel-False territory or cfgver-new-example's new-program-authoring territory."
+}

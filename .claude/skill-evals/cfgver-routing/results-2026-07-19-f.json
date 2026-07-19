@@ -1,0 +1,13 @@
+{
+  "method": "Independent Haiku judges, one per query, shown only the current name+description listing for the affected skills. Validates the two new skills drafted via skill-creator (core-executor-internals, rocq-timeout-triage) plus rocq-compile-oom's narrowed (OOM-specific) scope, all from the same skill-usage-audit retrospective.",
+  "results": [
+    {"id": 73, "query": "where do the core SPureSpec/SHeapSpec refinement lemmas live", "expected": "core-executor-internals", "actual": "core-executor-internals", "pass": true},
+    {"id": 74, "query": "adversarial: CFGVer's own sexec_cfg_addr angelic exit/execute choice", "expected": "cfgver-executor", "actual": "cfgver-executor", "pass": true},
+    {"id": 75, "query": "adversarial: CFGVer's own RefineCompat/rsolve instance for sexec_cfg_addr/cexec_cfg_addr", "expected": "cfgver-rsolve", "actual": "cfgver-rsolve", "pass": true},
+    {"id": 76, "query": "vm_compute running way longer than usual, cause not yet known", "expected": "rocq-timeout-triage", "actual": "rocq-timeout-triage", "pass": true},
+    {"id": 77, "query": "adversarial: already-reported Terminated/Error 143 killed-process signature", "expected": "rocq-compile-oom", "actual": "rocq-compile-oom", "pass": true},
+    {"id": 78, "query": "regression (was Q44): routine still-running-in-background, not yet exceeded history", "expected": "none", "actual": "none", "pass": true},
+    {"id": 79, "query": "regression (was Q65): already-diagnosed loop-trip-count-bumped scenario stays cfgver-executor, not stolen by the new general triage skill", "expected": "cfgver-executor", "actual": "cfgver-executor", "pass": true}
+  ],
+  "summary": "7/7 pass, no regressions, no rewording needed this round. Both new skills (core-executor-internals, rocq-timeout-triage) trigger correctly on their own territory without stealing from cfgver-executor/cfgver-rsolve/cfgver-refinement, and rocq-compile-oom's narrowed OOM-specific scope still wins its own direct-hit case (Q77/Q40) while correctly deferring the general case to rocq-timeout-triage."
+}

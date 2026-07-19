@@ -2,27 +2,30 @@
 name: rocq-compile-oom
 description: >
   A heavy Rocq/Coq compile (vm_compute-heavy VC proofs — e.g. a fuel-30+
-  solve_vc in CFGVer) gets silently KILLED (`Terminated` / `Error 143`, no Coq
-  error at all) or hangs well past how long it normally takes, with nothing in
-  the output to explain why. Use ONLY once a compile has actually died
-  unexplained or is confirmed stuck far longer than its own history — before
-  concluding it's a real proof or code regression, check system memory/swap
-  pressure and leftover orphaned MCP-server node processes (removing an MCP
-  server from Claude Code's config does not kill its already-running
-  process). Do NOT use this for a compile that is simply still in progress —
-  a tool reporting "still running after Ns, moved to background" is normal,
-  routine async behavior, not a failure, and is not this skill's concern
-  unless/until it comes back dead or the user reports it's been stuck far
-  longer than expected. NOT for actual Coq compile errors or stale .vo/.vos
-  artifacts (rocq-doctor), and NOT for tactic-level failures that DO produce a
-  Coq error message (rocq-pitfalls). NOT for a hang that reproduces at the
-  IDENTICAL position regardless of timeout (e.g. same last_completed sentence at
-  120s and 580s) once process/memory health is ALREADY confirmed clean — that
-  signature points to a genuine proof-term bug, not resource exhaustion (in
-  CFGVer specifically: gen_contract_noninterferent(_param/_rel)'s
-  discharge-order gotcha, see cfgver-gen-contract). Check health once; if clean
-  and the hang still reproduces bit-for-bit, hand off instead of re-suspecting
-  memory.
+  solve_vc in CFGVer) gets silently KILLED — `Terminated` / `Error 143`, no Coq
+  error at all. This is the OUT-OF-MEMORY / orphaned-process diagnosis
+  specifically (system memory/swap pressure, leftover orphaned MCP-server node
+  processes — removing an MCP server from Claude Code's config does not kill
+  its already-running process), not a general "my compile is slow" symptom.
+  Use when a compile has actually died with no diagnostic, or once
+  **rocq-timeout-triage** (the general entry point for "way slower than
+  expected"/timeout symptoms) has already pointed here because the hang looks
+  memory-related. Do NOT use this for a compile that is simply still in
+  progress — a tool reporting "still running after Ns, moved to background" is
+  normal, routine async behavior, not a failure. NOT for actual Coq compile
+  errors or stale .vo/.vos artifacts (rocq-doctor), and NOT for tactic-level
+  failures that DO produce a Coq error message (rocq-pitfalls). NOT for a hang
+  that reproduces at the IDENTICAL position regardless of timeout (e.g. same
+  last_completed sentence at 120s and 580s) once process/memory health is
+  ALREADY confirmed clean — that signature points to a genuine proof-term bug,
+  not resource exhaustion (in CFGVer specifically:
+  gen_contract_noninterferent(_param/_rel)'s discharge-order gotcha, see
+  cfgver-gen-contract). NOT for a hang that scales with a specific parameter
+  you just changed (N, fuel, table size) — that's a capacity/complexity
+  question, triage it via **rocq-timeout-triage** first (it may turn out to be
+  the known CFGVer backward-branch-loop exponential blowup — see
+  cfgver-executor/core-executor-internals — which this skill's memory checks
+  won't explain or fix).
 ---
 
 # Rocq compile OOM / silent-kill diagnosis

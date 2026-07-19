@@ -8,6 +8,8 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > which routes to dependency-layered sub-skills that auto-load only when relevant:
 > - **`cfgver-new-example`** — the 6-step recipe for verifying a new program (most common task)
 > - **`cfgver-executor`** — symbolic executor `sexec_cfg_addr` + VC (gmap store)
+> - **`core-executor-internals`** — the CORE generic `SPureSpec`/`SHeapSpec` monad
+>   underneath every case study's own executor (not CFGVer-specific; library skill)
 > - **`cfgver-refinement`** — concrete mirror `cexec_cfg_addr` (what to mirror), `RefineCompat`, `rexec_cfg_addr`
 > - **`cfgver-rsolve`** — driving/debugging the `rsolve` tactic (library skill)
 > - **`cfgver-soundness`** — the soundness chain (VC → myWP2_loop → leakage)
@@ -21,11 +23,14 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-memory`** — public-memory infra + data-memory end-to-end (`_with_mem` variants)
 >
 > Standalone pitfall skills (generic, not CFGVer-specific): **`rocq-pitfalls`**
-> (bullets, eauto atomicity, SSReflect rewrite, goal-print debugging),
-> **`bv-pitfalls`**, **`gmap-pitfalls`**, **`iris-proofmode`**, **`rocq-compile-oom`**
-> (a heavy compile gets silently killed/stalls with no Coq error — check for
-> memory pressure/orphaned processes before assuming a regression). Zero-cost
-> references files live under `skills/cfgver/references/` (e.g. `registers.md`).
+> (bullets, eauto atomicity, SSReflect rewrite, goal-print debugging, notation-
+> scope hijacks, `injection ... as ->` direction), **`bv-pitfalls`**,
+> **`gmap-pitfalls`**, **`iris-proofmode`**. For a compile/proof step running
+> way longer than expected: start at **`rocq-timeout-triage`** (the general
+> "figure out why before waiting longer" entry point), which routes to
+> **`rocq-compile-oom`** specifically for the silently-killed/OOM signature.
+> Zero-cost references files live under `skills/cfgver/references/`
+> (e.g. `registers.md`).
 > Meta-skills for the skill system itself: **`skill-routing-maintenance`** —
 > check/tune which skill fires for a query (read-only Haiku-judge eval, see
 > Maintenance protocol below); **`skill-usage-audit`** — retrospective sweep

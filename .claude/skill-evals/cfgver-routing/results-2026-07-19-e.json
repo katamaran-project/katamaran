@@ -1,0 +1,13 @@
+{
+  "method": "Independent Haiku judges, one per query, shown only the current name+description listing for the affected skills (rocq-pitfalls, gmap-pitfalls, bv-pitfalls, rocq-compile-oom, cfgver-executor, cfgver-solve-vc, cfgver-contracts, cfgver-gen-contract, rocq-doctor, iris-proofmode as relevant near-neighbors). Scoped run: validates rocq-pitfalls' two new bullets (notation-scope hijack, injection-direction confusion) added during a skill-usage-audit retrospective, plus a Q68 silent-miss entry logged from the same retrospective.",
+  "note": "Q68's first draft accidentally overlapped with cfgver-executor's own (already-fixed, same-session) blowup clause -- round 1 judged it cfgver-executor, which is actually the CORRECT and more specific answer given that clause now exists, not a miss. Reworded the query to withhold the loop/scaling framing (matching what was actually known at the moment of the real miss) and re-tested; round 2 passed.",
+  "results": [
+    {"id": 69, "query": "helper lemma N arithmetic type-errors against Term ty.int in a CFGVer file", "expected": "rocq-pitfalls", "actual": "rocq-pitfalls", "pass": true},
+    {"id": 70, "query": "adversarial: same symptom, query explicitly mentions CFGVer/contract", "expected": "rocq-pitfalls", "actual": "rocq-pitfalls", "pass": true},
+    {"id": 71, "query": "injection H as -> gives Found no subterm matching", "expected": "rocq-pitfalls", "actual": "rocq-pitfalls", "pass": true},
+    {"id": 72, "query": "adversarial: genuine gmap lookup 'found no subterm', not injection", "expected": "gmap-pitfalls", "actual": "gmap-pitfalls", "pass": true},
+    {"id": 27, "query": "regression check: destruct (m !! k) match doesn't reduce (original Q27 wording)", "expected": "gmap-pitfalls", "actual": "gmap-pitfalls", "pass": true},
+    {"id": 68, "query": "rocq_compile_file 590s timeout on vm_compute, way longer than this file's own history (round 1: loop-framed, round 2: reworded generic)", "expected": "rocq-compile-oom", "round1_actual": "cfgver-executor", "round1_pass": "not a real miss -- query accidentally matched cfgver-executor's own new clause; reworded", "round2_actual": "rocq-compile-oom", "round2_pass": true}
+  ],
+  "summary": "6/6 pass (5 clean, 1 required a query rewording after round 1 surfaced test-design overlap rather than a real routing bug). rocq-pitfalls' two new bullets fire correctly without stealing gmap-pitfalls' or the cfgver-* family's territory."
+}

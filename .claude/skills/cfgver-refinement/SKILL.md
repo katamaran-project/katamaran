@@ -76,6 +76,13 @@ Key instances in `CFGVer/Verifier.v`: `refine_compat_angelic_binary` and
 drives the instance search is `rsolve` — using and debugging it effectively is the
 **cfgver-rsolve** skill.
 
+Don't confuse this `RefineCompat`/`ℛ⟦⟧` machinery (CFGVer's OWN
+`sexec_cfg_addr`-vs-`cexec_cfg_addr` pair) with the SAME-LOOKING `refine_*`
+lemma naming and `ℛ⟦⟧` notation one layer further down, in the CORE generic
+`SPureSpec`-vs-`CPureSpec` monad every case study is built on
+(`theories/Refinement/Monads.v`) — that's **core-executor-internals**, not
+this skill.
+
 ## `rexec_cfg_addr`
 
 The relational-correctness lemma refining `cexec_cfg_addr` by `sexec_cfg_addr`,
