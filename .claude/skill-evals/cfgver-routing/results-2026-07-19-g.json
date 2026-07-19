@@ -1,0 +1,73 @@
+{
+  "method": "scoped Haiku-judge run (one independent judge per query, name+description listing only) after the 2026-07-19 diagnosis-correction description edits to cfgver-executor and core-executor-internals (mechanism wording changed from demonic_finite fork-blowup to symbolic term duplication/no-sharing; trigger symptoms kept)",
+  "note": "Regression checks (Q2, Q19, Q65/79, Q73, Q74, Q76, Q77) all still pass after the edit -- no collateral damage to routing that predates the correction. New entries Q80 (new term-duplication vocabulary, cfgver-executor), Q81 (non-CFGVer core-monad angle, core-executor-internals), Q82 (adversarial: query framed in the OLD disproved fork-blowup vocabulary, must still route to core-executor-internals rather than being orphaned) all pass. 11/11 pass, 0 fail.",
+  "results": [
+    {
+      "id": 2,
+      "expected": "cfgver-executor",
+      "verdict": "cfgver-executor",
+      "pass": true
+    },
+    {
+      "id": 19,
+      "expected": "cfgver-executor",
+      "verdict": "cfgver-executor",
+      "pass": true
+    },
+    {
+      "id": 65,
+      "expected": "cfgver-executor",
+      "verdict": "cfgver-executor",
+      "pass": true
+    },
+    {
+      "id": 79,
+      "expected": "cfgver-executor",
+      "verdict": "cfgver-executor",
+      "pass": true,
+      "note": "same query string as Q65, one judge covers both"
+    },
+    {
+      "id": 73,
+      "expected": "core-executor-internals",
+      "verdict": "core-executor-internals",
+      "pass": true
+    },
+    {
+      "id": 74,
+      "expected": "cfgver-executor",
+      "verdict": "cfgver-executor",
+      "pass": true
+    },
+    {
+      "id": 76,
+      "expected": "rocq-timeout-triage",
+      "verdict": "rocq-timeout-triage",
+      "pass": true
+    },
+    {
+      "id": 77,
+      "expected": "rocq-compile-oom",
+      "verdict": "rocq-compile-oom",
+      "pass": true
+    },
+    {
+      "id": 80,
+      "expected": "cfgver-executor",
+      "verdict": "cfgver-executor",
+      "pass": true
+    },
+    {
+      "id": 81,
+      "expected": "core-executor-internals",
+      "verdict": "core-executor-internals",
+      "pass": true
+    },
+    {
+      "id": 82,
+      "expected": "core-executor-internals",
+      "verdict": "core-executor-internals",
+      "pass": true
+    }
+  ]
+}

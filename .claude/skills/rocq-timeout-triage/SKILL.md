@@ -89,8 +89,9 @@ turn, rather than assuming the combined symptom means both are guilty.
 ## Step 4: once you know the shape, hand off
 
 - Confirmed real killed/OOM process → **rocq-compile-oom**.
-- Confirmed exponential in a repeated branch/pattern-match, CFGVer loop
-  specifically → **cfgver-executor**'s "Backward-branch loops" section.
+- Confirmed exponential scaling with a loop's trip count, CFGVer
+  specifically → **cfgver-executor**'s "Backward-branch loops" section
+  (term duplication of a re-referenced register, not branch forking).
   Same shape but NOT CFGVer, or you need the underlying mechanism → **core-executor-internals**.
 - Confirmed polynomial/just genuinely large → this is a real capacity
   question (bigger timeout, more fuel, or accept the current size as the

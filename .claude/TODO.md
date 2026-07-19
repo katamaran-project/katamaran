@@ -297,70 +297,49 @@ memory note.
   fixed/concrete trip count baked into the contract, e.g. `countdown`'s
   literal counter value) — a bigger step than reusing the `countdown`
   pattern as-is. Not attempted.
-  **Now confirmed WHY the concrete-trip-count pattern can't just be scaled up
-  instead (2026-07-19):** tried bumping the `key_schedule_loop2` (N=2) spike
-  to N=64 via `gen_contract_rel`, unchanged otherwise. `vm_compute` alone
-  (before `solve_vc`) didn't finish in 590s; a timing probe (trip counts
-  1..8, `vm_compute` only) showed a clean ~2–2.5× blowup per +1 trip
-  (4→5→6→7 trips: 25.5s→52.2s→112.4s→285.5s) — genuine O(2^trip-count), and
-  an isolating probe ruled out the memory-table size (`gen_mem_pre_rel`) as a
-  factor (an 8-entry table with only a 2-trip loop was just as fast as the
-  N=2 baseline). Root cause is in Katamaran's CORE generic executor, not
-  CFGVer: `BNE`'s `if`-semantics desugars to `demonic_pattern_match`
-  (`theories/Symbolic/Monads.v`), whose fallback calls `demonic_finite F :=
-  demonic_list (finite.enum F)` — this unconditionally enumerates every
-  pattern case with no `peval`/decidability short-circuit on the scrutinee,
-  and since `sexec_cfg_addr` continues the full remaining fuel budget from
-  BOTH forks independently, every branch the loop revisits doubles the term.
-  Full trace: **`cfgver-executor`** skill's "Backward-branch loops" section;
-  session detail in memory `project-key-schedule-loop-scaling`. This means
-  the *symbolic iteration count* redesign above isn't just a nicer API — it's
-  the only way to avoid inline unrolling's exponential cost, short of a
-  core-executor change to `demonic_finite`/`demonic_pattern_match` (which
-  would be framework-wide, not CFGVer-local).
+  **Why the concrete-trip-count pattern can't just be scaled up instead —
+  CORRECTED DIAGNOSIS (2026-07-19, probe session):** bumping the
+  `key_schedule_loop2` (N=2) spike to N=64 via `gen_contract_rel` hits
+  `vm_compute` >590s, with ~2-2.5x cost per +1 trip. An earlier same-day
+  analysis blamed the core executor's `demonic_finite`/`demonic_pattern_match`
+  forking on every BNE revisit — that was WRONG (superseded write-up archived
+  in `.claude/archive/term-explosion-diagnosis-correction-2026-07-19.md`).
+  A probe chain (memory `project-key-schedule-loop-scaling`) showed:
+  concrete-counter backward-branch loops scale fine to 10+ trips in EVERY
+  generator (dead forks are pruned at construction — `assume_formula` runs
+  `combined_solver` and collapses refuted branches to `SymProp.block`), and
+  the store-at-advancing-pointer shape is ~linear. The real mechanism is
+  **symbolic term duplication**: the masking body rebuilds the secret `A0`
+  from THREE copies of its own previous value each iteration, and the
+  executor's register store keeps raw terms with no sharing, so term size
+  (and all downstream peval/solver/vm_compute work) grows ~3^trips. Minimal
+  pair: `A0 := A0>>1` is flat at 10 trips; `A0 := (A0>>1)^(A0&1)` grows
+  ~1.7x/trip. Corrected write-ups: **cfgver-executor** "Backward-branch
+  loops" + **core-executor-internals**. Consequences: (a) full unrolling
+  does NOT dodge this — term growth is a property of the instruction
+  sequence, not the loop encoding (3^128 either way), so the *symbolic
+  iteration count* / loop-invariant redesign above is the only
+  contract-level route for the real key_schedule; (b) the framework-level
+  alternative is value naming/sharing at register writes (fresh symbolic
+  name + defining equation per write, SSA-style — nontrivial because
+  `unify_pathcondition` would substitute the definition straight back in
+  unless handled), or hash-consing.
 - **TODO: tell Dominique (Devriese) and Steven (Keuchel) about the
-  `demonic_finite`/`demonic_pattern_match` exponential-blowup finding above.**
-  This is a core-framework issue (`theories/Symbolic/Monads.v`), not a CFGVer
-  bug: NONE of the generic forking combinators (`demonic_finite`,
-  `angelic_binary`, `angelic_finite`, and anywhere else a disjunction gets
-  built) check the accumulated path condition before constructing a branch —
-  every fork is built blind, and pruning only happens afterward, on tactics'
-  own time, once the (already exponentially large) term already exists. This
-  is a well-known symbolic-execution pattern ("eager"/"on-the-fly" path
-  pruning, smart constructors on the choice combinators) that's currently
-  missing across the board, not just for CFGVer's loops — worth their
-  attention as a possible systematic fix, since it would need re-verifying
-  the refinement/soundness lemmas for whichever combinators are touched, and
-  affects every case study (MinimalCaps etc.), not just RiscvPmp. A narrower,
-  single-combinator version of the same idea was scoped out (next bullet) but
-  NOT attempted this session — worth mentioning to them too, as a possible
-  smaller first step.
-- **Proposed limited/local fix (2026-07-19, write-up only — NOT attempted):**
-  add a decidability fast path to `demonic_pattern_match'`
-  (`theories/Symbolic/Monads.v`, ~line 574-590) specifically — that's the one
-  call site that actually has the scrutinee term in scope (`demonic_finite`
-  itself doesn't; it just enumerates a finite type with no notion of "which
-  value is real"). Concretely: before the existing `demonic_finite
-  (PatternCase pat) ;; demonic_ctx ... ;; assume_formula ...` sequence, check
-  `term_get_val (peval t)` on the scrutinee `t` — the same `peval`-then-
-  `term_get_val` idiom `lookup_instr`/`is_exit` already use for table
-  dispatch (`Verifier.v`). If that's `Some v` (already concrete), skip the
-  whole demonic-choice/assume machinery entirely and call the CONCRETE
-  `pattern_match_val pat v` (`theories/Syntax/Patterns.v:251`) directly to
-  get `(pc, δpc)`, then `pure (existT pc (term_val <$> δpc))` — no fork ever
-  gets built in that case. Falls back to today's fully general behavior when
-  `t` isn't concrete (nothing changes for genuinely symbolic conditions).
-  **Why this turned out not to be a quick patch, on inspection:**
-  `demonic_pattern_match'` already has a refinement/soundness lemma
-  (`refine_demonic_pattern_match'`, `theories/Refinement/Monads.v:574-595`)
-  tying it to `CPureSpec.demonic_pattern_match` (the concrete-side semantics)
-  via Iris `ℛ⟦⟧`. Adding a new code path means that lemma needs a new case
-  *proved*, not just the function edited — and since this is the SAME
-  generic combinator every case study's `stm_pattern_match` goes through
-  (not just RiscvPmp/CFGVer — MinimalCaps too), a real "no regression" check
-  means recompiling more than just CFGVer. Scoped out but deliberately not
-  attempted this session; left for a dedicated pass, either by us or by
-  Dominique/Steven directly given it's their combinator.
+  term-duplication finding above.** This is a core-framework property
+  (`theories/`, the generic executor's symbolic register store), not a
+  CFGVer bug: register writes store raw terms with no value naming/sharing,
+  so straight-line code that re-references a register k >= 2 times per step
+  grows terms geometrically — a classic symbolic-execution engineering
+  issue, usually solved SSA-style (fresh symbolic name per write + a
+  defining equation) or by hash-consing, either of which means re-verifying
+  refinement/soundness for whatever is touched and affects every case
+  study. Do NOT report the earlier draft of this message (blind-forking
+  choice combinators / missing eager path pruning): probes showed branch
+  construction is already effectively pruned (assume/assert run
+  `combined_solver` at construction and `block`/`error` refuted branches),
+  and the `peval` fast path for `demonic_pattern_match'` floated alongside
+  it would be a no-op for this problem. Both superseded write-ups:
+  `.claude/archive/term-explosion-diagnosis-correction-2026-07-19.md`.
 - Continue with more "Breaking Bad"-style realistic examples now that
   `cmovznz4`/`precompute` established the pattern (register/memory
   reg_specs split into public/private, `asm_to_ast.py` for translation).

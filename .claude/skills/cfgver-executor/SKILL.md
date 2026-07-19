@@ -10,9 +10,11 @@ description: >
   (how the VC is built and called). ALSO use when vm_compute on a backward-branch
   loop example genuinely never terminates (not just slow — no residual ever appears
   to even inspect) after its trip count was raised, especially if a SMALLER trip count
-  on the same loop shape compiled fine — a known exponential (O(2^trip-count)) blowup
-  from the core executor's demonic_finite/demonic_pattern_match unconditionally forking
-  on every branch, not a fuel/timeout/spec-size problem to tune around. Contrast: a
+  on the same loop shape compiled fine — a known exponential (~k^trip-count) blowup
+  from symbolic TERM DUPLICATION (the loop body rebuilding a secret register from
+  k ≥ 2 copies of its own previous value; no term sharing in the executor's register
+  store), NOT branch forking and not a fuel/timeout/spec-size problem to tune around.
+  Contrast: a
   SINGLE vm_compute call that DOES finish and solve_vc then leaves a bare False (fuel
   merely too tight, not an exponential trip-count blowup) stays cfgver-solve-vc's
   territory, not this. NOT for the concrete mirror executor cexec_cfg_addr or
@@ -61,54 +63,50 @@ It stops with `error` when:
 - `lookup_instr tbl apc = None` — the pc matches no table key (no instruction there)
 - `is_exit exits apc = false` on the exit branch (chosen but no exit key matches)
 
-## Backward-branch loops: exponential blowup, not a fuel/spec-tuning problem
+## Backward-branch loops: exponential blowup = term duplication, not forking
 
-A concrete-pinned-trip-count loop (`countdown`, `countdown_mem`,
-`key_schedule_loop2`) does **not** scale past a small trip count by just raising
-`fuel`/timeout — confirmed (2026-07-19) by trying to bump `key_schedule_loop2`
-(N=2) to N=64: `vm_compute` alone (before `solve_vc` even runs) didn't finish in
-590s. A finer timing probe (trip counts 1..8, `vm_compute` only, `Abort` before
-`solve_vc`) showed a clean ~2–2.5× blowup per +1 trip (4→5→6→7 trips:
-25.5s→52.2s→112.4s→285.5s — doubling, not polynomial), and a follow-up probe
-ruled out `gen_mem_pre_rel`'s memory-precondition size as a factor (an 8-entry
-table with a 2-trip loop was just as fast as the N=2 baseline; only the trip
-count matters).
+A loop example does **not** scale past a small trip count by raising
+`fuel`/timeout when its BODY rebuilds a (secret) register from k ≥ 2 copies of
+that register's own previous value — cost grows ~k^trip-count. First hit on
+`key_schedule_loop2` bumped to N=64 (2026-07-19: `vm_compute` alone >590s,
+~2-2.5× per +1 trip); re-diagnosed by a probe chain the same day (scratch
+methodology: `Lemma _ : ValidCFGVerifierContract (...). Proof. Time
+vm_compute. Abort.` at trip counts 2..10 — an earlier fork-blowup diagnosis
+was disproved and is archived in
+`.claude/archive/term-explosion-diagnosis-correction-2026-07-19.md`):
 
-**Root cause is in Katamaran's CORE generic executor, not CFGVer.** A backward
-branch like `BNE` has ordinary `if: taken then … else …` semantics
-(`RiscvPmp/Machine.v`'s `fun_execute_BTYPE`), which desugars to
-`stm_pattern_match` on a bool. The generic executor's handler for that
-(`theories/MicroSail/SymbolicExecutor.v`'s `stm_pattern_match` case) calls
-`demonic_pattern_match` (`theories/Symbolic/Monads.v`), whose fallback case
-(`demonic_pattern_match'`) calls `demonic_finite (PatternCase pat)`, and
-`demonic_finite F := demonic_list (finite.enum F)` — this **unconditionally
-enumerates every pattern case** (both `true`/`false`), with no `peval`/
-decidability check on the scrutinee first, even when it is already a concrete
-`term_val`. The `assume_formula` that later constrains which fork is actually
-consistent runs *after* the fork, so it prunes the resulting *proof
-obligation*, not the *term being built*. Since `sexec_cfg_addr` continues the
-full remaining fuel budget from **both** forks independently (its
-`sexec_instruction i apc ;; sexec_cfg_addr n' ...` bind), every backward branch
-the loop revisits doubles the term: O(2^(branch instructions within the fuel
-budget)), i.e. O(2^trip-count) for a loop. For the underlying core-framework
-mechanism itself (`demonic_finite`/`demonic_pattern_match`, their refinement
-lemmas, why this affects any case study, not just CFGVer) see
-**core-executor-internals**; for the general "my compile/proof is way slower
-than expected" triage workflow that led here, see **rocq-timeout-triage**.
+- countdown (`X1 := X1 - 1`, ONE copy per iteration, backward BNE): flat to
+  quadratic up to 10 trips in ALL generators — concrete, `_param`, `_rel`.
+  Backward branches per se are fine; so is a store at an advancing pointer
+  with private data (~linear).
+- the full key_schedule masking body at CONCRETE base: ~2.5×/trip
+  (2.4s→44s over n=2..5) — no rel/param machinery needed to reproduce.
+- minimal pair: `A0 := A0>>1` flat at n=10; `A0 := (A0>>1) ^ (A0&1)` (TWO
+  copies of A0) ~1.7×/trip at n=6..9. The real masking chain makes THREE
+  copies of A0 per iteration.
 
-This is a property of the generic executor (any `if`/pattern-match on a
-not-yet-reduced-but-decidable condition forks unconditionally) — `countdown`/
-`countdown_mem` simply were never pushed past a tiny trip count before to
-expose it. Two real (nontrivial) ways forward if a bigger concrete-trip-count
-loop is ever needed: (a) teach `demonic_finite`/`demonic_pattern_match` (or a
-specialized call site) to `peval` the scrutinee first and skip dead cases when
-already concrete — a change to core `theories/Symbolic/Monads.v`, framework-
-wide, needs real scrutiny before touching it; or (b) a genuinely different VC
-shape for concrete-trip-count loops (induction/loop-invariant style, not
-inline step-by-step unrolling) — the not-yet-designed *symbolic iteration
-count* approach `TODO.md`'s `GHASH::key_schedule` entry already flags as open.
-Session detail (the two isolating probes, exact timings): memory
-`project-key-schedule-loop-scaling`.
+**Mechanism (core framework, not CFGVer):** the generic executor's register
+store holds raw `Term`s; each write stores the full expression, so a body
+that references a register k times per iteration multiplies its term size by
+k — no sharing/let-binding/hash-consing — and every later peval/solver pass
+plus the final vm_compute pays linearly in that size. Path forking is NOT
+involved: `demonic_pattern_match` does enumerate both BNE cases, but each
+fork's `assume_formula` runs `combined_solver` at construction time, and a
+refuted fork collapses to `SymProp.block` before its continuation is built
+(details: **core-executor-internals**). Unrolling the loop does NOT dodge the
+wall — term growth is a property of the instruction sequence, not the loop
+encoding (3^128 for the real GHASH::key_schedule either way).
+
+Diagnosis checklist: exponential-looking vm_compute scaling with trip count ⇒
+count how many times the loop body reads registers holding growing symbolic
+terms (secret/existential values; pinned public values fold to literals and
+stay size-1). Fix directions (all nontrivial, tracked in TODO.md's
+GHASH::key_schedule section): value naming/sharing at register writes (beware
+`unify_pathcondition` substituting definitions back in), a loop-invariant /
+symbolic-iteration-count contract shape (fresh symbolic register value per
+iteration — also the only route to symbolic trip counts), or a sharing-aware
+term representation. Probe data: memory `project-key-schedule-loop-scaling`;
+general triage entry point: **rocq-timeout-triage**.
 
 ## `ptsto_instrs`
 
