@@ -1,6 +1,8 @@
 # PLAN-term-sharing — selective opaque naming at register writes
 
-Status: PHASE 1 DONE — Plan A REFUTED, pivoting to Plan B (2026-07-19).
+Status: PHASE 1 DONE — Plan A REFUTED (2026-07-19). SUPERSEDED: the chosen
+successor is havoc-the-secret, NOT Plan B — see PLAN-havoc-secrets.md
+(user decision, 2026-07-19; Plan B remains the fallback).
 Root-cause context: memory note `project-key-schedule-loop-scaling`,
 archive `.claude/archive/term-explosion-diagnosis-correction-2026-07-19.md`,
 skills **cfgver-executor** ("Backward-branch loops") and
