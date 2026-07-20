@@ -210,6 +210,35 @@ Structure it **compositionally from day one** so the ladder is nearly free:
 
 ## Phase 1 — recognize the pattern in `peval` (experiment, throwaway-able)
 
+> **Status (2026-07-20): gate PASSED as a cost proxy — proceed to graft.**
+> - **Term shape confirmed** (throwaway `Example/ZZProbeRoundShape.v`): peval's
+>   real per-round output is `bvxor (mask_chain(Z&1)) (Z>>1)` with `Z` appearing
+>   3×, mask chain NOT collapsed. Retires the "peval shape differs from assumed"
+>   risk.
+> - **Fold cost payoff measured** (isolated simulation: reflected accumulator
+>   `Acc = A-shift term + list (Y_i,C_i)`, stepped by O(1)+map; cost via
+>   `Term_eqb` self-compare = the size/traversal blowup mechanism):
+>
+>   | N | unfolded (3^N) | folded |
+>   |---|---|---|
+>   | 8 | 0.42s | 0.007s |
+>   | 12 | 19.8s | — |
+>   | 16 | ~1300s (extrap) | 0.028s |
+>   | 32 | astronomical | 0.098s |
+>   | 64 | unreachable | 0.411s |
+>   | 128 | unreachable | 1.83s |
+>
+>   Folded is O(n^2) (nested-shift A-part; single-shift form would be O(n),
+>   not needed). N=64 in 0.4s clears the gate.
+> - **Still UNTESTED (the real graft risk):** (a) the Term→Acc parse actually
+>   fires inside `peval_binop`; (b) **multi-round firing under real peval** —
+>   whether peval re-normalizes the constructed `V_n` so round n+1's mask still
+>   `Term_eqb`-matches `mask_chain_tm(V_n)`. These need the graft + full
+>   recompile. The `Equations`/GADT coverage was the friction that pushed the
+>   prototype to the reflected simulation; the graft must solve the Term match
+>   (shallow 1-2 level matches + `Term_eqb` mask verification is the plan —
+>   NOT the 8-level nested `Equations` pattern, which fails coverage).
+
 - Print/inspect the ACTUAL `peval`'d term shape for one round applied to a
   fresh symbolic register (`Eval cbn in` or a `Set Printing Depth` probe on
   a tiny standalone example) to get the real, exact nested-constructor
