@@ -206,6 +206,82 @@ Proof.
 Qed.
 
 (* ---------------------------------------------------------------- *)
+(* mulx is GF(2)-linear — the load-bearing fact for the per-bit       *)
+(* incremental form (PLAN-solver-fold.md 2026-07-20 LOCKED block).    *)
+(* Everything about the incremental representation V_n and its        *)
+(* one-round recurrence follows from this + shiftr_lxor.              *)
+(* ---------------------------------------------------------------- *)
+
+Lemma lxor_zero_r (x : bv 32) : bv.lxor x bv.zero = x.
+Proof.
+  apply bv_bits_inj. intros i Hi.
+  rewrite bit_lxor, bit_zero. apply Bool.xorb_false_r.
+Qed.
+
+Lemma lxor_comm (x y : bv 32) : bv.lxor x y = bv.lxor y x.
+Proof.
+  apply bv_bits_inj. intros i Hi. rewrite !bit_lxor. apply Bool.xorb_comm.
+Qed.
+
+Lemma lxor_nilpotent (x : bv 32) : bv.lxor x x = bv.zero.
+Proof.
+  apply bv_bits_inj. intros i Hi.
+  rewrite bit_lxor, bit_zero. apply Bool.xorb_nilpotent.
+Qed.
+
+(* The bit-select distributes over XOR: this is exactly the algebraic
+   identity that makes the round GF(2)-linear despite the branch. *)
+Lemma sel_xor (bx cy : bool) :
+  (if xorb bx cy then R32 else bv.zero)
+  = bv.lxor (if bx then R32 else bv.zero) (if cy then R32 else bv.zero).
+Proof.
+  destruct bx, cy; cbn.
+  - now rewrite lxor_nilpotent.
+  - now rewrite lxor_zero_r.
+  - now rewrite lxor_zero_l.
+  - now rewrite lxor_zero_l.
+Qed.
+
+(* A pure four-way XOR rearrangement (associativity + commutativity). *)
+Lemma lxor_middle_swap (a b c d : bv 32) :
+  bv.lxor (bv.lxor a b) (bv.lxor c d)
+  = bv.lxor (bv.lxor a c) (bv.lxor b d).
+Proof.
+  apply bv_bits_inj. intros i Hi. rewrite !bit_lxor.
+  now destruct (bit a i), (bit b i), (bit c i), (bit d i).
+Qed.
+
+Theorem mulx_linear (x y : bv 32) :
+  mulx (bv.lxor x y) = bv.lxor (mulx x) (mulx y).
+Proof.
+  rewrite !mulx_spec.
+  rewrite bit_lxor, shiftr_lxor, sel_xor.
+  apply lxor_middle_swap.
+Qed.
+
+(* The one-round incremental recurrence.  A per-bit value is carried as
+     V = (A >> k) ^ S      -- S an XOR of masked constants (the accumulator)
+   and applying one masking round yields
+     mulx V = (bit_k(A) ? R : 0) ^ ( (A >> k >> 1) ^ mulx S ).
+   Reading the RHS as the next value: the A-part shifts once more
+   (A>>k>>1, folded to A>>(k+1) by a generic shiftr-composition rule),
+   a fresh summand (bit_k(A)?R:0) is appended, and every old constant in S
+   advances by one mulx (mulx S, pushed through the XOR-list by
+   mulx_linear + the concrete constant folds).  No copy of A is
+   duplicated: A occurs exactly in the shift and in the one new bit-test.
+   This is the identity the peval fold rule realizes; only mulx_linear
+   and mulx_spec are load-bearing here. *)
+Theorem mulx_incremental (A S : bv 32) (k : bv 5) :
+  mulx (bv.lxor (bv.shiftr A k) S)
+  = bv.lxor (if bit A (bv.bin k) then R32 else bv.zero)
+            (bv.lxor (bv.shiftr (bv.shiftr A k) sh1) (mulx S)).
+Proof.
+  rewrite mulx_linear, (mulx_spec (bv.shiftr A k)).
+  rewrite bit_shiftr, N.add_0_l.
+  apply lxor_assoc.
+Qed.
+
+(* ---------------------------------------------------------------- *)
 (* The k=2 fold                                                      *)
 (* ---------------------------------------------------------------- *)
 

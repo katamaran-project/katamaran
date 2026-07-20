@@ -22,9 +22,10 @@ around them is pending (representation still being pinned down with proofs).
   `formula_relop`/`secLeak` position collapses to `False`. A pure-`bv` form never
   produces a `bool`, so it is *structurally immune* to that trap. `term_eq` on a
   secret is safe only as a value and thin-margin fragile — we avoid it entirely.
-  See the **`relval-semantics`** skill for the full model (SyncVal/NonSyncVal,
-  the three `NonSyncVal ⇒ False` walls, and why pure-`bv` identities are
-  auto-sound over secrets). This means the is-zero output is a `bv` "0/1" form
+  See the **`relval-model`** / **`secret-data-walls`** /
+  **`relval-rewrite-over-secrets`** skills for the full model
+  (SyncVal/NonSyncVal, the three `NonSyncVal ⇒ False` walls, and why pure-`bv`
+  identities are auto-sound over secrets). This means the is-zero output is a `bv` "0/1" form
   (e.g. via `bvcons`/`bvand`), NOT `bvcons (term_eq x 0) …`.
 - **DIRECTION (not yet proof-locked) — representation is the per-bit incremental
   form** `V_n = (A >> n) ^ XOR_{i<n} (bit_i(A) ? C_i : 0)`, one summand appended
@@ -155,6 +156,23 @@ This is evaluated against the **original, non-havoc executor** (`peval` as
 it exists today) — havoc is fully abandoned, not combined with this idea.
 
 ## Phase 0 — nail the algebra in isolation (cheap, do first)
+
+> **Status (2026-07-20):** the per-bit direction's crux is proven standalone in
+> `Example/ProbeFoldAlgebra.v` (axiom-free, compiles in seconds):
+> - `mulx_spec` — the 8-op mask chain = `(A>>1) ^ (bit0(A)?R:0)`.
+> - `mulx_linear` — **`mulx (X ^ Y) = mulx X ^ mulx Y`** (mulx is GF(2)-linear;
+>   the bit-select distributes via `sel_xor`). This is the load-bearing fact.
+> - `mulx_incremental` — the one-round recurrence
+>   `mulx ((A>>k) ^ S) = (bit_k(A)?R:0) ^ ((A>>k>>1) ^ mulx S)`: the A-part
+>   shifts once more, one fresh summand appends, old constants advance by one
+>   mulx. No copy of A is duplicated.
+>
+> The old doubling-ladder lemmas (`T2`/`g2`/`mulx_mulx_fold`) remain in the file
+> as a sanity relic but are SUPERSEDED — the sub-bullets below about doubling
+> tables (k=2→4, k=4→8 enumeration) are no longer the plan. Still open in
+> Phase 0: (a) `shiftr`-composition `A>>k>>1 = A>>(k+1)` generic in `k`, and
+> (b) the concrete constant folds `mulx (mulx^j R)` — both mechanical, needed
+> only to feed the peval rule.
 
 Before touching the executor: state and prove the identity above as a
 **standalone bitvector lemma**, decoupled from any executor machinery,
