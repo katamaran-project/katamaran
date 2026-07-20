@@ -10,6 +10,12 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-executor`** — symbolic executor `sexec_cfg_addr` + VC (gmap store)
 > - **`core-executor-internals`** — the CORE generic `SPureSpec`/`SHeapSpec` monad
 >   underneath every case study's own executor (not CFGVer-specific; library skill)
+> - **`relval-model`** — the `SyncVal`/`NonSyncVal` relational value representation
+>   (`RelVal = RV (Val σ)`, homomorphic lifting) (not CFGVer-specific; library skill)
+> - **`relval-rewrite-over-secrets`** — why a pure `bv`/`Val`-identity rewrite is
+>   auto-sound over secrets, no `NonSyncVal` case-split (library skill)
+> - **`secret-data-walls`** — the three `NonSyncVal ⇒ False` walls (`formula_bool`/
+>   `formula_relop`/`secLeak`), `term_eq` danger, prefer pure-`bv` forms (library skill)
 > - **`cfgver-refinement`** — concrete mirror `cexec_cfg_addr` (what to mirror), `RefineCompat`, `rexec_cfg_addr`
 > - **`cfgver-rsolve`** — driving/debugging the `rsolve` tactic (library skill)
 > - **`cfgver-soundness`** — the soundness chain (VC → myWP2_loop → leakage)
@@ -176,7 +182,15 @@ skills for every lemma/definition/file name your commit renames, removes, or
 moves and fix or delete the stale reference rather than leaving it for a
 future session to trip over (a memory or skill naming something that no
 longer exists is worse than one that says nothing); skills are git-tracked —
-review their diffs like code; after changing any skill *description* or
+review their diffs like code; **any time you are about to `Write` a new
+`.claude/skills/**/SKILL.md`, or `Edit` a skill's `description:` or the
+skill-map at the top of this file, route through the meta-skills FIRST —
+`skill-creator` to author/split a genuinely new skill, `skill-routing-
+maintenance` to re-validate cross-family routing after any description/map
+change — rather than hand-authoring or hand-editing skills ad-hoc (this
+mechanical file-operation cue exists because a 2026-07-20 session created,
+split, and re-described skills directly, bypassing both meta-skills);**
+after changing any skill *description* or
 noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
 skill (read-only Haiku-judge
 validation against `.claude/skill-evals/cfgver-routing/eval_set.json` — do

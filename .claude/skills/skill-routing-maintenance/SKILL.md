@@ -11,7 +11,13 @@ description: >
   or re-validate routing after ANY skill description edit — a wording change
   to one skill can silently steal queries from, or stop competing with,
   another. Trigger PROACTIVELY right after changing any skill's
-  `description:` field, and whenever a skill misfires (wrong skill fired) or
+  `description:` field OR after adding / renaming / removing a skill
+  (Writing a new `.claude/skills/**/SKILL.md`, deleting a skill dir, or
+  editing the CLAUDE.md skill-map — each reshapes routing for the whole
+  family, so a from-scratch draft still done via `skill-creator` gets its
+  CROSS-FAMILY re-validation here afterward): having just Written or Edited
+  any skill file or the skill map IS the cue to run this even if no one
+  asked. Also trigger whenever a skill misfires (wrong skill fired) or
   silently fails to fire (the right skill never fired) is noticed in a live
   session — even without being asked to "check" anything. This is ALSO the
   right tool — not `skill-creator` — for "run an eval loop", "benchmark

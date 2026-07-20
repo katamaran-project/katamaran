@@ -9,8 +9,12 @@ description: >
   is left open after an sltu/comparison instruction on private data (e.g. a
   borrow-chain subtraction). Covers the residual→tactic table,
   DebugCFGVerifierContract for inspecting a failing VC, the tight-fuel False, the
-  symbolic-bv.of_N divergence, and the comparison-on-private-data gap. NOT for building the contract itself
-  (cfgver-contracts / cfgver-gen-contract).
+  symbolic-bv.of_N divergence, and the comparison-on-private-data gap. This skill
+  is the CFGVer OPERATIONAL side (discharging / inspecting / debugging the resulting
+  VC); for the framework-level REASON a comparison on secret (NonSyncVal) data forces
+  the goal to False or leaves a secLeak open in the first place — the noninterference
+  value-model wall, not a fuel/residual issue — see `secret-data-walls`. NOT for
+  building the contract itself (cfgver-contracts / cfgver-gen-contract).
 ---
 
 # Discharging CFGVer VCs (`vm_compute. solve_vc.`)

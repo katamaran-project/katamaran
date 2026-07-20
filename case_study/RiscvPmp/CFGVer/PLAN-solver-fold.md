@@ -1,5 +1,40 @@
 # PLAN-solver-fold — fold two masking rounds into one closed form
 
+## Design decisions this session (2026-07-20) — supersede parts of the sections below
+
+These were settled with the user after the DRAFT below was written; where they
+conflict with a later section, these win. A full rewrite of the Phase sections
+around them is pending (representation still being pinned down with proofs).
+
+- **LOCKED — recognition is factored into reusable ct-idiom rules, not one
+  monolithic `mask_of` recognizer.** The single idiom-specific unit is the
+  **constant-time is-zero test** `((x-1) & ~x) >> (n-1)` — ubiquitous in crypto
+  (comparisons, ct-select, ct-swap), so recognizing it once pays off across the
+  corpus. `mask_of` then emerges as: is-zero ∘ (subtract-1 broadcast) ∘
+  (and-with-constant select). The generic GF(2) rules (shift-over-xor,
+  shift-composition, const-fold, select distribution, xor AC-normalize) do the
+  rest.
+- **LOCKED — the is-zero rule is polymorphic in the bitvector width `n`** (shift
+  amount `n-1`, `ones` = `bv.ones n`). One soundness lemma, generic in `n`.
+- **LOCKED — all canonical forms stay in pure `bv` arithmetic; NO `relop`/
+  `term_eq`, NO `bool`-typed sub-terms.** Reason: this loop's values are all
+  secret (`NonSyncVal`), and any `bool` that reaches a `formula_bool`/
+  `formula_relop`/`secLeak` position collapses to `False`. A pure-`bv` form never
+  produces a `bool`, so it is *structurally immune* to that trap. `term_eq` on a
+  secret is safe only as a value and thin-margin fragile — we avoid it entirely.
+  See the **`relval-semantics`** skill for the full model (SyncVal/NonSyncVal,
+  the three `NonSyncVal ⇒ False` walls, and why pure-`bv` identities are
+  auto-sound over secrets). This means the is-zero output is a `bv` "0/1" form
+  (e.g. via `bvcons`/`bvand`), NOT `bvcons (term_eq x 0) …`.
+- **DIRECTION (not yet proof-locked) — representation is the per-bit incremental
+  form** `V_n = (A >> n) ^ XOR_{i<n} (bit_i(A) ? C_i : 0)`, one summand appended
+  per round, `C_i = mulx^{(n-1-i)}(R)` — NOT the 2^k doubling ladder (Phase 0's
+  "doubling" sub-lemmas below). O(n) term size, no tables, capped at ~33 terms
+  since `A>>n = 0` for `n ≥ 32`. The `? C : 0` selects are pure-`bv` sugar per the
+  all-bvec decision, not `bool` selects.
+
+---
+
 Status: DRAFT (2026-07-19). Third attempt at the `key_schedule_loop` scaling
 wall, after Plan A (opaque naming, refuted) and havoc-the-secret (refuted) —
 see `PLAN-term-sharing.md` and `PLAN-havoc-secrets.md` status headers, and

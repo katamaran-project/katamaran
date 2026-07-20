@@ -11,7 +11,10 @@ description: >
   correctly", "audit this session/conversation for skill gaps", "did we look
   something up that should've been in a skill", "should skill X have fired
   here", or after a live correction like "the X skill should have triggered"
-  once the immediate task is handled and it's worth asking why. Drives the
+  (or "you should have invoked the skill-creator / maintainer skill" —
+  having authored or edited a SKILL.md by hand, or done skill work, without
+  routing through `skill-creator` / `skill-routing-maintenance` is itself the
+  cue) once the immediate task is handled and it's worth asking why. Drives the
   fix, not just the diagnosis: routing problems get logged as eval entries
   and validated via **skill-routing-maintenance**; content gaps in an
   existing skill get a direct body/reference-file edit; a domain with no

@@ -1,0 +1,86 @@
+{
+  "date": "2026-07-20",
+  "method": "Independent Haiku judges (general-purpose subagent, model=haiku), one per query, each shown ONLY the 33-skill name+description listing + the single query, asked for the one winning skill. Read-only; no run_loop.py/run_eval.py.",
+  "note": "Validation after splitting relval-semantics into relval-model / relval-rewrite-over-secrets / secret-data-walls, and editing skill-routing-maintenance + skill-usage-audit descriptions (mechanical file-op trigger cue). Q83-93 new; Q88 initially mis-routed to cfgver-solve-vc, fixed with a division-of-labor clause on cfgver-solve-vc (operational side) handing the framework WHY to secret-data-walls; Q94 added as regression guard for plain non-secret VC-False. Final re-run of Q88+Q94 below reflects post-edit state.",
+  "results": [
+    {
+      "id": 83,
+      "expected": "relval-model",
+      "verdict": "relval-model",
+      "pass": true
+    },
+    {
+      "id": 84,
+      "expected": "relval-model",
+      "verdict": "relval-model",
+      "pass": true
+    },
+    {
+      "id": 85,
+      "expected": "relval-model",
+      "verdict": "relval-model",
+      "pass": true
+    },
+    {
+      "id": 86,
+      "expected": "relval-rewrite-over-secrets",
+      "verdict": "relval-rewrite-over-secrets",
+      "pass": true
+    },
+    {
+      "id": 87,
+      "expected": "relval-rewrite-over-secrets",
+      "verdict": "relval-rewrite-over-secrets",
+      "pass": true
+    },
+    {
+      "id": 88,
+      "expected": "secret-data-walls",
+      "verdict": "secret-data-walls",
+      "pass": true,
+      "note": "pre-edit routed to cfgver-solve-vc; passes after boundary clause"
+    },
+    {
+      "id": 89,
+      "expected": "secret-data-walls",
+      "verdict": "secret-data-walls",
+      "pass": true
+    },
+    {
+      "id": 90,
+      "expected": "secret-data-walls",
+      "verdict": "secret-data-walls",
+      "pass": true
+    },
+    {
+      "id": 91,
+      "expected": "cfgver-contracts",
+      "verdict": "cfgver-contracts",
+      "pass": true
+    },
+    {
+      "id": 92,
+      "expected": "cfgver-soundness",
+      "verdict": "cfgver-soundness",
+      "pass": true
+    },
+    {
+      "id": 93,
+      "expected": "bv-pitfalls",
+      "verdict": "bv-pitfalls",
+      "pass": true
+    },
+    {
+      "id": 94,
+      "expected": "cfgver-solve-vc",
+      "verdict": "cfgver-solve-vc",
+      "pass": true,
+      "note": "regression guard: plain non-secret VC-False stays with cfgver-solve-vc after the edit"
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  }
+}
