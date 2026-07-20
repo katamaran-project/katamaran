@@ -844,7 +844,6 @@ Module Type PartialEvaluationOn
       | None => None
       end.
 
-
     (* Top-level recognizer: t1 = mask value, t2 = shift value. Fires iff
        t2 = shiftr Z 1 AND t1 equals the mask chain of that same Z
        (verified via Term_eqb, not by pattern-matching its internal
@@ -1342,21 +1341,8 @@ Module Type PartialEvaluationOn
           subst t1.
           generalize (bvxor_fold_try_match_folded Z); intro match_folded.
           destruct match_folded as [[k V] | ].
-          - (* Folded case: Z matches as shiftr(V, k) XOR select_last_k(k)(V) *)
-            (* The result is term_binop bop.bvxor (bvxor_fold_shiftr_k V (S k)) (select_last_k (S k) V)
-               We need to show this equals the bumped mask_chain and shiftr Z 1 *)
-            cbn [peval_bvxor_fold32].
-            (* At this point, the goals become complex term equalities involving the bumped form.
-               The core of what needs to be proven is captured by select_last_k_bump at the Val level.
-               This requires:
-               1. Extracting from the pattern match that Z has the folded structure
-               2. Applying select_last_k_bump via inst to show the equivalence
-               3. Simplifying the mask_chain and shiftr compositions *)
-            admit. (* Step 2.5: select_last_k_bump master lemma needed here *)
-          - (* Unfolded case: Z is not recognized as folded, generate base form *)
-            cbn [peval_bvxor_fold32].
-            (* Similar to folded case but with k=0, base case of the fold *)
-            admit. (* Step 2.5: base case of select_last_k_bump *)
+          - admit. (* Step 2.5: select_last_k_bump - folded case *)
+          - admit. (* Step 2.5: select_last_k_bump - unfolded case *)
         * (* Subcase: t1 ≠ bvxor_fold_mask_chain Z, return as-is *)
           cbn [peval_bvxor_fold32].
           reflexivity.
