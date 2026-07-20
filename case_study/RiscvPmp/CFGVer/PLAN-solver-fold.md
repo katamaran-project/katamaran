@@ -487,3 +487,177 @@ from scratch.
 - Phase 1's gate now REQUIRES demonstrating N=64 on the throwaway rule
   before the soundness proof is funded — the proof cost is only sunk
   against a measured win, per the lesson of the two refuted plans.
+
+## Update (2026-07-20, continued): `select_last_k` built and named; selector bug found+fixed; N=8/N=16 measured; Phase 2 plan below
+
+**Supersedes the `ghash_tbl_k` naming/open-question above** — built, named, and
+landed as `uop.select_last_k`, not a lookup table:
+
+- Named `select_last_k` (not `ghash_tbl_k`): "select" always reads the *last*
+  (low) bits of its argument, matching the name to the actual semantics.
+- `R = 0xE1000000` **hardcoded directly in `eval`**, not parameterized — the
+  user's explicit call: this primitive only behaves like a real "select" for
+  this specific `R`; for any other constant its output would be unrelated to a
+  select, so genericity here would be false generality, not a real abstraction.
+- Type is `UnOp (bvec 32) (bvec 32)`, `k : nat` a plain metadata argument with
+  no type-level role (the underlying secret is always a fixed 32-bit
+  register) — corrects an earlier, wrong `UnOp (bvec k) (bvec 32)` draft.
+- Real exhaustive-match scope was **5 sites, not 2** as originally scoped here:
+  `Term_bvec_case`'s 2 call sites in `PartialEvaluation.v`
+  (`peval_bvdrop_eq`/`peval_bvtake_eq`) PLUS 2 more `Term_bvec_case` call sites
+  in `Solver.v` (`simplify_eq_binop_bvapp'`/`bvcons'`) PLUS 3 direct exhaustive
+  `match op with` sites in `Solver.v` not routed through `Term_bvec_case` at
+  all (`simplify_eq_unop_val`, `simplify_eq_unop`, `simplify_propeq_unop`). All
+  5 treat the new constructor as opaque/default, matching how every other
+  "simple" `UnOp` is already handled at each site.
+
+**A genuine latent correctness bug was found and fixed** in
+`select_last_k_eval` (`theories/Syntax/UnOps.v`) while working out Phase 2's
+proof obligation by hand. The recursion ages the accumulated correction term
+`Correction_k` one `mulx` round per step; the *true* per-step selector bit is
+`bit_k(V) xor bit0(Correction_k)` — not `bit_k(V)` alone. The first
+implementation used `bit_k(V)` alone; this is invisible whenever
+`bit0(Correction_k) = 0`, which holds only for `k < 24` (`R`'s own 24 trailing
+zero bits delay the drift), so every N tested so far (2/3/4/8, all well under
+24) could not have caught it, and the lemma this session set out to prove
+would have been **false as stated** past k≈24 — exactly the N=32/64 range this
+plan targets. Fixed by folding `bit0(Correction_k)` into the selector; the
+recursion is now an exact, unconditional replay of `mulx`'s own step for any
+`k`. Recompiled `UnOps.v` clean; **N=3 and N=4 regression-checked clean against
+the fix** (`rocq_compile_file`, mode=full: 26.5s / 43.9s total, consistent with
+pre-fix baselines — the fix doesn't disturb small-`k` behavior, as expected
+since it only changes anything once `bit0(Correction_k) ≠ 0`).
+
+**Timing, N=8 and N=16** (`ZZProbeKSLN{8,16}Only.v`, throwaway, fuel scaled
+per-N as usual): N=8 with the new fold: vm_compute 99.2s, solve_vc 32.7s, Qed
+108.8s, total ~249s — vs. the old per-bit-accumulator fold's ~282s at the same
+N, a modest ~12% improvement only. **This confirms the term-size fix alone
+does NOT resolve the separately-diagnosed `O(steps²)` wall-clock driver**
+documented in the Phase 1 update above — negative but useful confirmation of
+what was already suspected, not a new problem. N=16 (`vm_compute` alone,
+20-minute cap per explicit user instruction not to wait longer): did not
+finish — `last_completed` showed execution never got past `Proof.` into
+`vm_compute` itself. Establishes a hard practical ceiling for N-sweeping right
+now; further scaling should wait on root-causing the quadratic driver, not
+more blind probing at higher N.
+
+**Admitted audit**: exactly one `Admitted` across all 4 touched files
+(`UnOps.v`, `Terms.v`, `Solver.v`, `PartialEvaluation.v`) —
+`peval_bvxor_sound` (`PartialEvaluation.v`, in the `Hint Resolve` list feeding
+`peval_binop_sound`). No other `Admitted`/`admit`/`Axiom` was introduced by
+this work.
+
+### Phase 2 plan — closing `peval_bvxor_sound` (concrete, grounded against the live file)
+
+Target:
+```coq
+Lemma peval_bvxor_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+  peval_bvxor t1 t2 ≡ term_binop bop.bvxor t1 t2.
+```
+
+**2.1 — width dispatch (trivial).** `peval_bvxor` (`PartialEvaluation.v:875`)
+is an `eq_rect`-cast to `peval_bvxor_fold32` only at `n = 32`; away from 32 it
+reduces definitionally to `term_binop bop.bvxor t1 t2`. So the only real
+content is `peval_bvxor_fold32_sound (t1 t2 : Term Σ (ty.bvec 32)) :
+peval_bvxor_fold32 t1 t2 ≡ term_binop bop.bvxor t1 t2`; lifting it through the
+`eq_rect` back to `peval_bvxor_sound` is mechanical `eq_rect`/`Nat.eq_dec`
+bookkeeping, no new math.
+
+**2.2 — case split, mirroring the recognizer's own control flow.**
+`peval_bvxor_fold32` (`:854`) is a **plain `Definition`**, not an `Equations`
+function (unlike `peval_bvadd`, whose soundness proof at `:977` opens with
+`funelim` — that tactic does *not* apply directly here). The proof instead
+manually destructs the three nested lookups in the order they appear:
+`bvxor_fold_try_match_shiftr_amt 1 t2` (`None`/`Some Z`), then (inside `Some`)
+`Term_eqb t1 (bvxor_fold_mask_chain Z)` (`false`/`true`), then (inside `true`)
+`bvxor_fold_try_match_folded Z` (`None`/`Some (k, V)`). Every `None`/`false`
+leaf returns `term_binop bop.bvxor t1 t2` verbatim — closed by `reflexivity`,
+no work. All real content is in the two `Some`/`true` leaves.
+
+**2.3 — recognizer inversion lemmas.** `bvxor_fold_try_split`,
+`bvxor_fold_try_match_select_last_k`, `bvxor_fold_try_match_shiftr_amt` (`:800`,
+`:810`, `:823`) *are* `Equations` definitions, so `funelim`/`simp` DOES apply
+to invert each individually — e.g.
+`bvxor_fold_try_match_shiftr_amt k t = Some Z → t = term_binop bop.shiftr Z (term_val (ty.bvec 6) (bv.of_N (N.of_nat k)))`,
+using `N.eqb_eq` to discharge the `if N.eqb (bv.bin vs) (N.of_nat k)` guard.
+These are short, single-constructor inversions — no surprises expected. For
+`Term_eqb t1 (bvxor_fold_mask_chain Z) = true`, `Term_eqb_spec` (already used
+this way at `PartialEvaluation.v:222`) gives `t1 = bvxor_fold_mask_chain Z`
+directly.
+
+**2.4 — the mask-chain semantic fact.** Need
+`⟦bvxor_fold_mask_chain Z⟧ ι = if N.testbit (bv.bin (⟦Z⟧ ι)) 0 then bvxor_fold_R else bv.zero`
+(the `bv`-level identity for the 8-op ANDI/XORI/ADDI/AND/SRLI/ADDI/LUI/AND
+mask chain) — this is Phase 0's already-proven `mulx_spec`
+(`Example/ProbeFoldAlgebra.v`), restated at the `Term`-valuation level.
+**Check first whether `bvxor_fold_mask_chain` already has a `Term`-level
+soundness lemma** proven when the k=2-fold-era design used this same function
+(it's unchanged from that design) — if so this step is a re-use, not new work;
+if not, this is where `mulx_spec` gets lifted for the first time, via the
+`relval-rewrite-over-secrets` homomorphism (mask_chain is pure `bv`
+arithmetic, no `relop`/`bool`, so the lift is free once the `Val`-level fact
+is in hand).
+
+**2.5 — the master algebraic lemma (the one genuinely new proof, and why it's
+now de-risked).** State first as a plain `bv 32` fact, no `Term`s, matching
+Phase 0's own style:
+```coq
+Lemma select_last_k_bump (V : bv 32) (k : nat) :
+  mulx (bv.shiftr V (bv.of_N (N.of_nat k) : bv 6)
+          `bv.lxor` select_last_k_eval k V)
+  = bv.shiftr V (bv.of_N (N.of_nat (S k)) : bv 6)
+      `bv.lxor` select_last_k_eval (S k) V
+where mulx a := bv.shiftr a (bv.of_N 1 : bv 5)
+                  `bv.lxor` (if N.testbit (bv.bin a) 0 then bvxor_fold_R else bv.zero).
+```
+This is exactly the fact whose truth motivated this session's selector fix —
+already derived by hand: writing `A_k := shiftr(V,k) xor Correction_k`,
+unfolding `mulx(A_k)` gives `shiftr(V,k+1) xor shiftr(Correction_k,1) xor
+(bit0(A_k) ? R : 0)`, and `bit0(A_k) = bit_k(V) xor bit0(Correction_k)` by the
+bit-of-xor law — which is now *exactly* `select_last_k_eval_rec`'s `S k'`
+case, definitionally. **Checked against the live library: `Bitvector.v` has
+`shiftr`/`lxor` only as bare definitions (`shiftr x y := of_Z (Z.shiftr
+(unsigned x) (unsigned y))`, `lxor x y := of_N (N.lxor (bin x) (bin y))`) —
+zero existing algebra lemmas about either, let alone their interaction.** So
+three small supporting facts need proving from scratch (standard `N`
+bitwise reasoning, not deep, but not free either — grep found nothing to
+reuse):
+  1. `bv.shiftr (bv.shiftr V k) 1 = bv.shiftr V (S k)` (shift composition).
+  2. `bv.shiftr (bv.lxor a b) 1 = bv.lxor (bv.shiftr a 1) (bv.shiftr b 1)`
+     (shiftr distributes over lxor — logical shift is linear over XOR).
+  3. `N.testbit (bv.bin (bv.lxor a b)) 0 = xorb (N.testbit (bv.bin a) 0) (N.testbit (bv.bin b) 0)`
+     and `N.testbit (bv.bin (bv.shiftr V k)) 0 = N.testbit (bv.bin V) k`
+     (bit-of-xor and bit-after-shift), both from `N.lxor_spec`/`N.shiftr_spec'`
+     composed with the `of_N`/`of_Z`/`bin`/`unsigned` roundtrip identities
+     that must already exist somewhere in `Bitvector.v` for `of_N`/`bin` (used
+     to build `select_last_k_eval` itself) — reuse those, don't re-derive.
+  Given 1–3, `select_last_k_bump` unfolds to a `reflexivity` on
+  `select_last_k_eval_rec`'s own `S k'` clause — **no induction on `k`
+  needed**, the statement is per-`k`, not accumulated; the fixpoint's shape
+  already *is* this equation once 1–3 are in hand.
+
+**2.6 — assemble.** Combine 2.3+2.4+2.5 into the two `Some` branches:
+- **Base case** (`bvxor_fold_try_match_folded Z = None`): treat `Z` itself as
+  `A_0` — `bv.shiftr _ 0 = id` and `select_last_k_eval 0 _ = bv.zero`
+  (the `Fixpoint`'s own `0%nat` clause) collapse `A_0` to `Z`; apply
+  `select_last_k_bump` at `k = 0`.
+- **Inductive case** (`Some (k, V)`): 2.3's structural facts give `Z`'s
+  denotation is *exactly* `A_k` for `V`'s denotation (no induction at the
+  `Term` level — bottom-up `peval'` recursion (`:1686-1696` per the earlier
+  Phase 1 note) guarantees `Z` was already normalized, i.e. already bumped up
+  to `k`, by the time this call runs); apply `select_last_k_bump` at that `k`.
+
+**2.7 — risk/effort, revised down from the original Phase 2 caveat.** Steps
+2.1–2.4 and 2.6 are mechanical bookkeeping matching this file's existing
+`peval_*_sound` idiom (width dispatch, `Equations` inversion, `Term_eqb_spec`)
+— low risk. Step 2.5 is the one real mathematical content, but it is now
+**known true** (derived by hand, and `select_last_k_eval` was specifically
+corrected this session to make it hold unconditionally for every `k`) rather
+than merely conjectured, which is why this Phase 2 is meaningfully lower-risk
+than the "likely the single biggest time cost in the whole plan" warning
+written when this section was first drafted. Remaining uncertainty is Rocq
+bookkeeping (exact `N`-library lemma names, `Equations`-generated obligation
+shapes), not proof risk. **Recommended starting point**: prove
+`select_last_k_bump` standalone in a throwaway file (`bv`-level only, no
+`Term`/`peval` machinery) before touching `PartialEvaluation.v` — same
+"cheapest possible failure point" discipline as the original Phase 0 gate.

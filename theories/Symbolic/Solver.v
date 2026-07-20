@@ -452,6 +452,7 @@ Module Type GenericSolverOn
           | uop.bvdrop m => simplify_eq_unop_default_val (uop.bvdrop m)
           | uop.bvtake m => simplify_eq_unop_default_val (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default_val uop.negate
+          | uop.select_last_k k => simplify_eq_unop_default_val (uop.select_last_k k)
           end.
 
         Definition simplify_eq_tuple_val {σs} (ts : Env (Term Σ) σs)
@@ -710,6 +711,7 @@ Module Type GenericSolverOn
             (fun (*vector_subrange*) _ _ _ _ _ => default)
             (fun (*bvdrop*) _ _ _ => default)
             (fun (*bvtake*) _ _ _ => default)
+            (fun (*select_last_k*) _ _ => default)
             t e.
 
         Definition simplify_eq_binop_bvapp {m n} (t1 : Term Σ (ty.bvec m))
@@ -754,6 +756,7 @@ Module Type GenericSolverOn
             (fun (*vector_subrange*) _ _ _ _ _ => default)
             (fun (*bvdrop*) _ _ _ => default)
             (fun (*bvtake*) _ _ _ => default)
+            (fun (*select_last_k*) _ _ => default)
             t e.
 
         Definition simplify_eq_binop_bvcons {m} (t1 : Term Σ ty.bool)
@@ -900,6 +903,7 @@ Module Type GenericSolverOn
           | uop.bvdrop m => simplify_eq_unop_default (uop.bvdrop m)
           | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default uop.negate
+          | uop.select_last_k k => simplify_eq_unop_default (uop.select_last_k k)
           end.
 
         Definition simplify_propeq_unop {σ1 σ2} (op : UnOp σ1 σ2) :
@@ -921,6 +925,7 @@ Module Type GenericSolverOn
           | uop.bvdrop m => simplify_eq_unop_default (uop.bvdrop m)
           | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default uop.negate
+          | uop.select_last_k k => simplify_eq_unop_default (uop.select_last_k k)
           end.
 
         Equations(noeqns) formula_eqs_ctx {Δ}

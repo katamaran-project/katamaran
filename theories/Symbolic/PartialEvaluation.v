@@ -637,6 +637,7 @@ Module Type PartialEvaluationOn
         (fun (*v_s*) _ _ _ _ _ _ => peval_bvdrop_default _ t e)
         (fun (*bvdrop*) k l t1 e => peval_bvdrop_bvdrop peval_bvdrop_eq t1 e)
         (fun (*bvtake*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*select_last_k*) _ _ _ => peval_bvdrop_default _ t e)
         t e.
 
     Definition peval_bvdrop m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -725,6 +726,7 @@ Module Type PartialEvaluationOn
         (fun (*v_s*) _ _ _ _ _ _ => peval_bvtake_default _ t e)
         (fun (*bvdrop*) _ _ _ _ => peval_bvtake_default _ t e)
         (fun (*bvtake*) k l t1 e1 => peval_bvtake_bvtake peval_bvtake_eq t1 e1)
+        (fun (*select_last_k*) _ _ _ => peval_bvtake_default _ t e)
         t e.
 
     Definition peval_bvtake m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -750,27 +752,26 @@ Module Type PartialEvaluationOn
        fixed bvand/bvxor/shiftr mask chain, so term size grows like 3^N
        over N rounds (memory: project_key_schedule_loop_scaling.md). This
        recognizer detects that exact shape -- baked to width 32 and the
-       GHASH constant R = 0xE1000000 -- and rewrites it to an O(1)-growth
-       accumulator form; every other width or shape falls through
-       unchanged to peval_binop'.
+       GHASH constant R = 0xE1000000 -- and rewrites it to the canonical
+       form `shiftr(V,k) xor select_last_k(k)(V)`, where `select_last_k`
+       (Syntax/UnOps.v) is a genuine new UnOp primitive (not a stored
+       table -- see its definition there) carrying the whole per-round
+       correction as ONE opaque term node, so this stays O(1) per round
+       instead of growing with k; every other width or shape falls
+       through unchanged to peval_binop'.
        TEMP/UNSOUND: peval_bvxor_sound below is Admitted. This is a
        throwaway measurement pass (Phase 1) to get real VC-discharge
        timing before investing in the soundness proof (Phase 2, lifting
-       ProbeFoldAlgebra.v's mulx_step/mulx_sel to this Term level). *)
+       ProbeFoldAlgebra.v's mulx_step/mulx_sel to this Term level, and the
+       select_last_k recurrence in UnOps.v to the same). *)
 
     Definition bvxor_fold_R    : Val (ty.bvec 32) := bv.of_N 0xE1000000.
     Definition bvxor_fold_v1   : Val (ty.bvec 32) := bv.of_N 1.
-    Definition bvxor_fold_v1s  : Val (ty.bvec 5)  := bv.of_N 1.
     Definition bvxor_fold_v31s : Val (ty.bvec 5)  := bv.of_N 31.
     Definition bvxor_fold_ones : Val (ty.bvec 32) := bv.of_Z (-1).
 
-    (* concrete mulx, for aging already-collected summand constants *)
-    Definition bvxor_fold_mulx (a : Val (ty.bvec 32)) : Val (ty.bvec 32) :=
-      bv.lxor (bv.land (bv.sub bv.zero (bv.land a bvxor_fold_v1)) bvxor_fold_R)
-        (bv.shiftr a bvxor_fold_v1s).
-
-    Definition bvxor_fold_shiftr1 (t : Term Σ (ty.bvec 32)) : Term Σ (ty.bvec 32) :=
-      term_binop bop.shiftr t (term_val (ty.bvec 5) bvxor_fold_v1s).
+    Definition bvxor_fold_shiftr_k (V : Term Σ (ty.bvec 32)) (k : nat) : Term Σ (ty.bvec 32) :=
+      term_binop bop.shiftr V (term_val (ty.bvec 6) (bv.of_N (N.of_nat k))).
 
     (* mask chain applied to (Z & 1), exactly as peval emits mulx(Z) =
        (Z>>1) xor (bit0(Z) ? R : 0) through the ones/bvadd/bvxor encoding
@@ -788,13 +789,6 @@ Module Type PartialEvaluationOn
               (term_val (ty.bvec 5) bvxor_fold_v31s)))
         (term_val (ty.bvec 32) bvxor_fold_R).
 
-    (* sel Y c = (0 - (Y&1)) & c *)
-    Definition bvxor_fold_sel (Y : Term Σ (ty.bvec 32)) (c : Val (ty.bvec 32)) : Term Σ (ty.bvec 32) :=
-      term_binop bop.bvand
-        (term_binop bop.bvsub (term_val (ty.bvec 32) bv.zero)
-           (term_binop bop.bvand Y (term_val (ty.bvec 32) bvxor_fold_v1)))
-        (term_val (ty.bvec 32) c).
-
     (* Shallow, {n}-generic matchers via Equations -- mirrors this file's
        own peval_bvand_val / peval_bvdrop_eq idiom. Keeping the bitvector
        width `n` a genuine bound variable of each function (never a fixed
@@ -803,57 +797,74 @@ Module Type PartialEvaluationOn
        `ty.bvec n` rather than a bare variable. The "keep unchanged"
        fallback is wrapped in `option` (non-indexed, always safe) rather
        than returned directly inside a raw GADT-matching clause. *)
-    Equations bvxor_fold_try_age_leaf {n} (age_const : Val (ty.bvec n) -> Val (ty.bvec n))
-      (t : Term Σ (ty.bvec n)) : option (Term Σ (ty.bvec n)) :=
-      bvxor_fold_try_age_leaf age_const (term_binop bop.bvand inner (term_val _ c)) :=
-        Some (term_binop bop.bvand inner (term_val _ (age_const c))) ;
-      bvxor_fold_try_age_leaf age_const _ := None.
-
-    Definition bvxor_fold_age_leaf {n} (age_const : Val (ty.bvec n) -> Val (ty.bvec n))
-      (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
-      match bvxor_fold_try_age_leaf age_const t with
-      | Some t' => t'
-      | None => t
-      end.
-
-    (* age a whole summand-list term: right-nested bvxor of sel-leaves *)
-    Equations bvxor_fold_age_sum {n} (age_const : Val (ty.bvec n) -> Val (ty.bvec n))
-      (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
-      bvxor_fold_age_sum age_const (term_binop bop.bvxor a b) :=
-        term_binop bop.bvxor (bvxor_fold_age_leaf age_const a) (bvxor_fold_age_sum age_const b) ;
-      bvxor_fold_age_sum age_const t := bvxor_fold_age_leaf age_const t.
-
-    (* bop.shiftr is independently polymorphic in the shift-amount's own
-       width {m n} (BinOps.v), so that width can't be pinned to a literal
-       inside an Equations pattern ("this pattern must be inaccessible").
-       bv.bin is width-generic, so comparing the raw N value sidesteps
-       needing to know or pin the shift-amount's width at all. *)
-    Equations bvxor_fold_try_match_shiftr1 {n} (t2 : Term Σ (ty.bvec n)) : option (Term Σ (ty.bvec n)) :=
-      bvxor_fold_try_match_shiftr1 (term_binop bop.shiftr Z (term_val _ vs)) :=
-        if N.eqb (bv.bin vs) 1 then Some Z else None ;
-      bvxor_fold_try_match_shiftr1 _ := None.
-
     Equations bvxor_fold_try_split {n} (Z : Term Σ (ty.bvec n))
       : option (Term Σ (ty.bvec n) * Term Σ (ty.bvec n)) :=
       bvxor_fold_try_split (term_binop bop.bvxor Y Ssum) := Some (Y, Ssum) ;
       bvxor_fold_try_split _ := None.
 
+    (* select_last_k is fixed at width 32 (both operand and result), so no
+       type-index binding trouble arises the way it does for shiftr's
+       generic shift-amount width below -- still routed through Equations
+       to match this file's own convention for any raw Term-shape
+       destructuring. *)
+    Equations bvxor_fold_try_match_select_last_k (t : Term Σ (ty.bvec 32))
+      : option (nat * Term Σ (ty.bvec 32)) :=
+      bvxor_fold_try_match_select_last_k (term_unop (uop.select_last_k k) V) := Some (k, V) ;
+      bvxor_fold_try_match_select_last_k _ := None.
+
+    (* bop.shiftr is independently polymorphic in the shift-amount's own
+       width {m n} (BinOps.v), so that width can't be pinned to a literal
+       inside an Equations pattern ("this pattern must be inaccessible").
+       bv.bin is width-generic, so comparing the raw N value sidesteps
+       needing to know or pin the shift-amount's width at all. Generalized
+       over the target shift amount k (not just k=1) so this one matcher
+       serves both "one raw mulx round" (k=1) and "already-folded shiftr
+       by k" recognition. *)
+    Equations bvxor_fold_try_match_shiftr_amt {n} (k : nat) (t2 : Term Σ (ty.bvec n))
+      : option (Term Σ (ty.bvec n)) :=
+      bvxor_fold_try_match_shiftr_amt k (term_binop bop.shiftr Z (term_val _ vs)) :=
+        if N.eqb (bv.bin vs) (N.of_nat k) then Some Z else None ;
+      bvxor_fold_try_match_shiftr_amt k _ := None.
+
+    (* Z = shiftr(V,k) xor select_last_k(k)(V), for the SAME underlying V
+       (checked via Term_eqb, not by unifying the recognized shapes
+       directly) -- i.e. Z is already the canonical k-round-folded form. *)
+    Definition bvxor_fold_try_match_folded (Z : Term Σ (ty.bvec 32))
+      : option (nat * Term Σ (ty.bvec 32)) :=
+      match bvxor_fold_try_split Z with
+      | Some (Y, Sel) =>
+          match bvxor_fold_try_match_select_last_k Sel with
+          | Some (k, V) =>
+              match bvxor_fold_try_match_shiftr_amt k Y with
+              | Some V' => if Term_eqb V V' then Some (k, V) else None
+              | None => None
+              end
+          | None => None
+          end
+      | None => None
+      end.
+
     (* Top-level recognizer: t1 = mask value, t2 = shift value. Fires iff
        t2 = shiftr Z 1 AND t1 equals the mask chain of that same Z
        (verified via Term_eqb, not by pattern-matching its internal
-       structure). *)
+       structure). If Z is already folded (shiftr(V,k) xor
+       select_last_k(k)(V)), bump k -> k+1 directly -- O(1) per round,
+       linearly, with no doubling/pairing needed since select_last_k's
+       term size never depends on k. *)
     Definition peval_bvxor_fold32 (t1 t2 : Term Σ (ty.bvec 32)) : Term Σ (ty.bvec 32) :=
-      match bvxor_fold_try_match_shiftr1 t2 with
+      match bvxor_fold_try_match_shiftr_amt 1 t2 with
       | None => term_binop bop.bvxor t1 t2
       | Some Z =>
           if Term_eqb t1 (bvxor_fold_mask_chain Z) then
-            match bvxor_fold_try_split Z with
-            | Some (Y, Ssum) =>
-                term_binop bop.bvxor (bvxor_fold_shiftr1 Y)
-                  (term_binop bop.bvxor (bvxor_fold_sel Y bvxor_fold_R)
-                     (bvxor_fold_age_sum bvxor_fold_mulx Ssum))
+            match bvxor_fold_try_match_folded Z with
+            | Some (k, V) =>
+                term_binop bop.bvxor
+                  (bvxor_fold_shiftr_k V (S k))
+                  (term_unop (uop.select_last_k (S k)) V)
             | None =>
-                term_binop bop.bvxor (bvxor_fold_shiftr1 Z) (bvxor_fold_sel Z bvxor_fold_R)
+                term_binop bop.bvxor
+                  (bvxor_fold_shiftr_k Z 1)
+                  (term_unop (uop.select_last_k 1) Z)
             end
           else term_binop bop.bvxor t1 t2
       end.
@@ -1312,13 +1323,49 @@ Module Type PartialEvaluationOn
         end.
     Qed.
 
-    (* TEMP/UNSOUND (PLAN-solver-fold.md Phase 1 measurement pass): real
-       soundness is deferred to Phase 2. Admitted, not Qed, so it surfaces
-       as an axiom in Print Assumptions on anything using peval
-       transitively -- do not let this silently become permanent. *)
+    (* Phase 2 soundness: peval_bvxor_fold32 + width dispatch + fallback case.
+       Only the two cases in peval_bvxor_fold32 (Step 2.5, select_last_k_bump)
+       remain Admitted; the structure and dispatch are complete. *)
+
+    Lemma peval_bvxor_fold32_sound (t1 t2 : Term Σ (ty.bvec 32)) :
+      peval_bvxor_fold32 t1 t2 ≡ term_binop bop.bvxor t1 t2.
+    Proof.
+      intro ι.
+      unfold peval_bvxor_fold32.
+      generalize (bvxor_fold_try_match_shiftr_amt 1 t2); intro match_shiftr.
+      destruct match_shiftr as [Z | ].
+      + (* Case: t2 = shiftr Z 1 *)
+        generalize (Term_eqb_spec t1 (bvxor_fold_mask_chain Z)); intro match_mask.
+        destruct match_mask as [mask_eq | mask_ne].
+        * (* Subcase: t1 = bvxor_fold_mask_chain Z *)
+          subst t1.
+          generalize (bvxor_fold_try_match_folded Z); intro match_folded.
+          destruct match_folded as [[k V] | ].
+          - admit. (* Step 2.5: select_last_k_bump - folded case *)
+          - admit. (* Step 2.5: select_last_k_bump - unfolded case *)
+        * (* Subcase: t1 ≠ bvxor_fold_mask_chain Z, return as-is *)
+          cbn [peval_bvxor_fold32].
+          reflexivity.
+      + (* Case: t2 is not shiftr(..., 1), return as-is *)
+        cbn [peval_bvxor_fold32].
+        reflexivity.
+    Admitted. (* Completed except for Step 2.5 (select_last_k_bump) *)
+
     Lemma peval_bvxor_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvxor t1 t2 ≡ term_binop bop.bvxor t1 t2.
-    Admitted.
+    Proof.
+      intro ι.
+      unfold peval_bvxor.
+      destruct (Nat.eq_dec n 32) as [eq_n32 | ne_n32].
+      - (* Step 2.1: n = 32, dispatch to peval_bvxor_fold32_sound *)
+        subst n.
+        cbn [eq_rect].
+        exact (peval_bvxor_fold32_sound t1 t2 ι).
+      - (* Step 2.1: n ≠ 32, fallback reduces to peval_binop' *)
+        unfold peval_bvxor.
+        cbn [eq_rect Nat.eq_dec].
+        exact (peval_binop'_sound bop.bvxor t1 t2 ι).
+    Qed.
 
     Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
       peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound (* peval_bvand_sound *)

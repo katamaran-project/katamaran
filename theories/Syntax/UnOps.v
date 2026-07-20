@@ -28,6 +28,7 @@
 
 From Coq Require Import
   Arith.PeanoNat
+  NArith.BinNat
   ZArith.BinInt.
 From Equations Require Import
   Equations.
@@ -65,7 +66,15 @@ Module uop.
     | bvnot {n}         : UnOp (bvec n) (bvec n)
     | bvdrop m {n}      : UnOp (bvec (m + n)) (bvec n)
     | bvtake m {n}      : UnOp (bvec (m + n)) (bvec m)
-    | negate {n}        : UnOp (bvec n) (bvec n).
+    | negate {n}        : UnOp (bvec n) (bvec n)
+    (* select_last_k x = XOR over i=0..k-1 of (bit_i(x) ? (R >> i) : 0),
+       specialized to the fixed constant R = 0xE1000000 (RiscvPmp's
+       "mulx"/key-schedule masking constant). NOT a generic multi-bit
+       select: R's 24 trailing zero bits are exactly what make this
+       collapse to a clean per-bit selection with no carry/wraparound; a
+       different constant would need a genuine GF(2) reduction instead.
+       See PLAN-solver-fold.md and skill project_key_schedule_loop_scaling. *)
+    | select_last_k (k : nat) : UnOp (bvec 32) (bvec 32).
     Set Transparent Obligations.
     Derive Signature for UnOp.
     Derive NoConfusion for UnOp.
@@ -144,6 +153,10 @@ Module uop.
       | right _ => right _
       }
     | negate                           | negate => left eq_refl
+    | select_last_k k1                 | select_last_k k2 with eq_dec k1 k2 => {
+      | left _ => left _
+      | right _ => right _
+      }
     | _                                | _ => right _.
 
     #[local] Instance eq_dec_unop [σ1 σ2] : EqDec (UnOp σ1 σ2) :=
@@ -154,6 +167,49 @@ Module uop.
                       (inj_right_sigma _ _ _ e)
         | right b => right (fun e => b (f_equal _ e))
         end.
+
+    (* select_last_k x = the correction term that k applications of "mulx"
+       (mulx a = shiftr(a,1) xor (bit0(a) ? R : 0)) accumulate from x's low
+       k bits, i.e. select_last_k k x = Correction_k(x) where the
+       accumulator A_k := shiftr(x,k) xor Correction_k(x) must satisfy
+       mulx(A_k) = A_(k+1). Unfolding mulx(A_k), its selector bit is
+       bit0(A_k) = bit_k(x) xor bit0(Correction_k(x)) -- NOT bit_k(x)
+       alone: the freshly-exposed bit and the low bit of whatever
+       correction has already accumulated both flip mulx's conditional.
+       So the recursion has to fold that xor back in each step:
+         Correction_0(x)     = 0
+         Correction_(k+1)(x) = shiftr(Correction_k(x), 1)
+                                 xor ((bit_k(x) xor bit0(Correction_k(x)))
+                                      ? R : 0).
+       Dropping the "xor bit0(Correction_k(x))" term (i.e. just gating on
+       bit_k(x)) LOOKS right and even compiles/verifies fine up to k=24 --
+       it silently diverges from the true mulx^k(x) starting at k=25,
+       exactly where R's own bit 24 (0xE1000000's lowest set bit) first
+       surfaces into bit0 of the accumulated correction and starts
+       affecting the selector. (An earlier version of this function had
+       exactly that bug -- caught only by hand-deriving the k+1 step
+       proof for PLAN-solver-fold.md's Phase 2, never by any test run so
+       far, since every N validated to date is well under 25.) With the
+       xor folded back in, this is an exact, unconditional replay of
+       mulx's own per-round update, valid for any k. Only ever invoked
+       concretely (runs once, in Gallina, when a concrete x is finally
+       plugged in -- never unfolded into a Term), so its cost doesn't
+       reintroduce the term-size blowup this primitive exists to avoid.
+       See PLAN-solver-fold.md and project_key_schedule_loop_scaling. *)
+    Definition select_last_k_R : bv 32 := bv.of_N 0xE1000000.
+
+    Fixpoint select_last_k_eval_rec (bits : N) (k : nat) : bv 32 :=
+      match k with
+      | 0%nat => bv.zero
+      | S k' =>
+          let prev := select_last_k_eval_rec bits k' in
+          let aged := bv.shiftr prev (@bv.of_N 5 1) in
+          let sel  := xorb (N.testbit bits (N.of_nat k')) (N.testbit (bv.bin prev) 0) in
+          if sel then bv.lxor aged select_last_k_R else aged
+      end.
+
+    Definition select_last_k_eval (k : nat) (x : bv 32) : bv 32 :=
+      select_last_k_eval_rec (bv.bin x) k.
 
     Definition eval {σ1 σ2 : Ty} (op : UnOp σ1 σ2) : Val σ1 -> Val σ2 :=
       match op in UnOp σ1 σ2 return Val σ1 -> Val σ2 with
@@ -173,6 +229,7 @@ Module uop.
       | bvdrop m            => bv.drop m
       | bvtake m            => bv.take m
       | negate              => bv.negate
+      | select_last_k k     => select_last_k_eval k
       end.
     Global Arguments eval {σ1} {σ2} !op v.    
 
