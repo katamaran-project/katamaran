@@ -282,6 +282,52 @@ Proof.
 Qed.
 
 (* ---------------------------------------------------------------- *)
+(* Accumulator representation V = Y ^ S (per-bit incremental form).   *)
+(* sel x C = (0 - (x&1)) & C = bit0(x)?C:0 : the single-input pure-bv *)
+(* broadcast-and-mask (the raw-round collapse target). One round      *)
+(* steps the accumulator by O(1): Y->Y>>1, append sel Y R, age every  *)
+(* constant C_i -> mulx C_i. All Y_i/a-references preserved => O(n).   *)
+(* ---------------------------------------------------------------- *)
+
+Lemma shiftr_zero (k : bv 5) : bv.shiftr (@bv.zero 32) k = bv.zero.
+Proof.
+  apply bv_bits_inj. intros i Hi. rewrite bit_shiftr, !bit_zero. reflexivity.
+Qed.
+
+Definition sel (x C : bv 32) : bv 32 :=
+  bv.land (bv.sub bv.zero (bv.land x (bv.of_N 1))) C.
+
+Lemma sel_spec (x C : bv 32) : sel x C = if bit x 0 then C else bv.zero.
+Proof.
+  unfold sel. rewrite land1_bit0. destruct (bit x 0).
+  - replace (bv.sub bv.zero (bv.of_N 1)) with ones32 by (vm_compute; reflexivity).
+    apply bv.land_ones_l.
+  - replace (bv.sub bv.zero (@bv.zero 32)) with (@bv.zero 32) by (vm_compute; reflexivity).
+    apply bv.land_zero_l.
+Qed.
+
+Lemma mulx_zero : mulx bv.zero = bv.zero.
+Proof.
+  rewrite mulx_spec. rewrite bit_zero, shiftr_zero. apply lxor_zero_r.
+Qed.
+
+Lemma mulx_sel (x C : bv 32) : mulx (sel x C) = sel x (mulx C).
+Proof.
+  rewrite !sel_spec. destruct (bit x 0); [reflexivity| apply mulx_zero].
+Qed.
+
+(* The top-level one-round recurrence in accumulator form. *)
+Lemma mulx_step (Y S : bv 32) :
+  mulx (bv.lxor Y S)
+  = bv.lxor (bv.shiftr Y sh1) (bv.lxor (sel Y R32) (mulx S)).
+Proof.
+  rewrite mulx_linear, (mulx_spec Y), <- sel_spec.
+  (* lxor (lxor (sel Y R) (Y>>1)) (mulx S) = lxor (Y>>1) (lxor (sel Y R) (mulx S)) *)
+  apply bv_bits_inj. intros i Hi. rewrite !bit_lxor.
+  now destruct (bit (sel Y R32) i), (bit (bv.shiftr Y sh1) i), (bit (mulx S) i).
+Qed.
+
+(* ---------------------------------------------------------------- *)
 (* The k=2 fold                                                      *)
 (* ---------------------------------------------------------------- *)
 
