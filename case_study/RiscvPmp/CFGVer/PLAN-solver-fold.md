@@ -272,6 +272,97 @@ Structure it **compositionally from day one** so the ladder is nearly free:
 >   `theories/Symbolic/PartialEvaluation.v`'s `peval_binop` (`bvxor` case),
 >   full framework recompile, then the real `ValidCFGVerifierContract`
 >   N-sweep on `key_schedule_loop2`.
+>
+> **UPDATE (2026-07-20, later same day): graft landed, real N-sweep run,
+> fold's own correctness CONFIRMED, but a separate quadratic cost found.**
+> - The recognizer is now grafted into `PartialEvaluation.v` for real: a new
+>   `peval_bvxor {n}` dispatches to a width-32-fixed `peval_bvxor_fold32`
+>   (identical design to the probe, functions prefixed `bvxor_fold_*`) and
+>   falls back to `peval_binop' bop.bvxor` at every other width; wired into
+>   `peval_binop`'s `bop.bvxor` case (previously absent — no simplification
+>   fired there before today). `peval_bvxor_sound` is **`Admitted`** on
+>   purpose (measurement-first, per the user's explicit choice), added to
+>   the `Hint Resolve` list feeding `peval_binop_sound` — the existing
+>   `Qed` on `peval_binop_sound` survives unchanged (`auto` picks up the
+>   admitted hint), confirming the staged "unsound-first" plan works
+>   mechanically without breaking anything already proved.
+> - **Real N-sweep** (`Example/ZZProbeKeyScheduleTiming.v` + split
+>   single-lemma files, throwaway, not in `_CoqProject`): had to ALSO patch
+>   `key_schedule_loop2`'s `mem_full_spec` to scale with N (it only ever
+>   covered N=2's 2 table words; sweeping trip count without this produces
+>   a **spurious, unrelated** `∀v, secLeak v → False` residual that looks
+>   identical regardless of N or the fold — cost about an hour of
+>   misdiagnosis chasing a fold-soundness theory before the A/B test
+>   (fold disabled, bug still there at N=3) ruled that out. Lesson: always
+>   scale ALL of {loop-count register, fuel, **table/mem_specs**} together
+>   — this exact trio is called out in prior-session memory
+>   (`project_key_schedule_loop_scaling.md`) and was under-applied here.
+>   With the mem-spec fix, real (coqc, isolated) timings, fold ON:
+>   | N | vm_compute | solve_vc | Qed | total |
+>   |---|---|---|---|---|
+>   | 2 | 9.8s | 2.4s | 2.5s | ~14.8s |
+>   | 3 | 14.3s | 5.1s | 7.1s | ~26.5s |
+>   | 4 | 21.5s | 8.5s | 14.0s | ~43.9s |
+>   | 8 | 104s | 35.8s | 142.4s | ~282s |
+>   N4→N8 (2x N) costs ~6.4x — clearly superlinear, roughly quadratic in
+>   step count (14·N); N=16/32/64 not run (would cost tens of minutes to
+>   hours) per explicit user direction not to chase them blind.
+> - **Fold correctness independently verified from the RAW VC**, not
+>   inferred: dumped `DebugCFGVerifierContract (ksl_contract 3/4 ...)` via
+>   plain `coqc` + `Eval vm_compute in` (NOT the `Redirect` command — the
+>   rocq-mcp tool blocks it as a file-write hazard; redirect coqc's own
+>   stdout instead) and grepped the final `chunk_ptsreg x10` (register
+>   A0/H) entry directly. At N=3 it is EXACTLY
+>   `bvxor(shiftr³(v), bvxor(sel(shiftr²(v),0xe1000000), bvxor(sel(shiftr(v),0x70800000), sel(v,0x38400000))))`
+>   — `v` occurs exactly 4 = N+1 times (5 at N=4), constants correctly aged
+>   one extra `mulx` per round (`0x70800000 = mulx(R)`, `0x38400000 =
+>   mulx²(R)`, since `R`'s 24 trailing zero bits make `mulx^k(R) = R>>k`
+>   for `k<24` — no XOR correction term fires). **This is the intended
+>   O(N) accumulator shape exactly, confirmed at two data points with no
+>   degradation** — the fold is not the cause of the quadratic wall-clock
+>   growth above.
+> - **Root cause of the quadratic growth is separate from the fold**: total
+>   `DebugCFGVerifierContract` dump size went 1,087,207 bytes (N=3, 42
+>   steps) → 1,940,531 bytes (N=4, 56 steps), a 1.79x size jump for a
+>   1.33x step-count jump (growth exponent ≈2.0) — consistent with each of
+>   the 14·N steps' `debug_assert_formula_pathcondition`/heap snapshot
+>   growing and being reprinted/reprocessed at every subsequent step
+>   (`O(steps²)` total), independent of how compact the register VALUE
+>   term itself is. NOT yet root-caused further (which specific
+>   solve_vc/executor bookkeeping structure is quadratic) — flagged as a
+>   separate, lower-priority, non-exponential (hence much less urgent)
+>   follow-up if real N≥32 is ever needed.
+> - **A cleaner reduction than the doubling-ladder tables, found via user
+>   questioning (2026-07-20): a new `UnOp` constructor, not a lookup
+>   table.** The per-bit accumulator's summands (`sel(shiftr^i(v), C_i)`
+>   for `i=0..N-1`) are a genuine GF(2)/carry-less-multiply correlation —
+>   NOT expressible as a single `(0-mask)&constant` trick the way one bit
+>   is (that trick is only a binary yes/no gate; N bits each selecting a
+>   *different* constant is inherently multiply-shaped). A literal `clmul`
+>   `BinOp` would give the cleanest O(1)/2-occurrence term but is a big,
+>   invasive change (many exhaustive `BinOp` matches across the codebase,
+>   e.g. `Term_bvec_case`'s full constructor list). A **`ghash_tbl_k {k} :
+>   UnOp (bvec k) (bvec 32)`** (fixed table baked into `eval`, one
+>   constructor per batch width `k` of interest) is much cheaper: both
+>   `peval_binop`/`peval_unop`'s dispatch AND `tel_eq_dec` use wildcard
+>   fallbacks (confirmed by grep — no manually-exhaustive site breaks), and
+>   the `RelVal`/secret-soundness lifting (`evalRel = liftUnOp eval`,
+>   `comProjLeftRVEvalRel` etc.) is already proved GENERICALLY over any
+>   `UnOp`, so a new constructor needs no per-op secret-soundness case
+>   (matches `relval-rewrite-over-secrets`'s homomorphism argument exactly).
+>   The ONLY genuinely exhaustive site is `Term_bvec_case` (used by
+>   `peval_bvdrop_eq`/`peval_bvtake_eq`, 2 call sites) — needs one trivial
+>   "treat as opaque" clause each, matching what every other simple unop
+>   already does there. Total scope: 1 new `Variant` case + 1 `tel_eq_dec`
+>   clause + 1 `eval` clause + 2 trivial `Term_bvec_case` clauses + 1 new
+>   `peval_unop` dispatch case (the actual new rewrite logic) + 1
+>   `Admitted` soundness lemma (staged, same pattern as `peval_bvxor_sound`
+>   above) — no bigger in kind than this session's `bvxor` graft. This
+>   directly gives the batched, O(1)-per-`k`-bits select the doubling
+>   ladder wanted, without table-driven term EXPANSION (the table lives
+>   only in `eval`'s Gallina definition, never unfolded into the `Term`).
+>   **NOT YET STARTED**: before building it, user wants to check whether
+>   an EXISTING `UnOp` already covers this (open, next step).
 
 - Print/inspect the ACTUAL `peval`'d term shape for one round applied to a
   fresh symbolic register (`Eval cbn in` or a `Set Printing Depth` probe on
