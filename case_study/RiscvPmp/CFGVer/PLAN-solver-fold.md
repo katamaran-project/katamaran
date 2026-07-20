@@ -230,14 +230,48 @@ Structure it **compositionally from day one** so the ladder is nearly free:
 >
 >   Folded is O(n^2) (nested-shift A-part; single-shift form would be O(n),
 >   not needed). N=64 in 0.4s clears the gate.
-> - **Still UNTESTED (the real graft risk):** (a) the Term→Acc parse actually
->   fires inside `peval_binop`; (b) **multi-round firing under real peval** —
->   whether peval re-normalizes the constructed `V_n` so round n+1's mask still
->   `Term_eqb`-matches `mask_chain_tm(V_n)`. These need the graft + full
->   recompile. The `Equations`/GADT coverage was the friction that pushed the
->   prototype to the reflected simulation; the graft must solve the Term match
->   (shallow 1-2 level matches + `Term_eqb` mask verification is the plan —
->   NOT the 8-level nested `Equations` pattern, which fails coverage).
+> - **UPDATE: the real term-level recognizer is now WRITTEN AND WORKING**
+>   (`Example/ZZProbeRoundShape.v`, functions `try_age_leaf`/`age_sum`/
+>   `try_match_shiftr1`/`try_split_bvxor`/`try_fold_round`/`peval_bvxor_fold`
+>   — no reflected `Acc` datatype, direct `Term Sig (ty.bvec n)` matching).
+>   `check_Zr_1/2/5 = true`: matches the proven accumulator algebra exactly.
+>   Scales polynomially for real (`Term_eqb (Zr 64) (Zr 64)` = 2.4s), and
+>   `peval` is confirmed idempotent on its output at each step (0.02s checks).
+>   **The GADT-matching wall is SOLVED — write-up for the graft:**
+>   1. Every raw match on a `Term Σ σ` value must keep `σ` (here, the
+>      bitvector width `n`) a GENUINE BOUND VARIABLE of the enclosing
+>      function, exactly like this codebase's own `peval_bvand_bvapp_val`
+>      (`{m1 m2}`) — never a literal plugged in ahead of time. Fixing the
+>      width to a literal before matching makes any wildcard arm (which
+>      implicitly covers `term_var`, existentially typed by an arbitrary
+>      `Ty` from a context-membership proof) force Coq to build one motive
+>      case-splitting over EVERY `Ty` constructor, and a branch returning
+>      the fixed-literal-width type fails to unify with that generic motive.
+>   2. Use `Equations` (not vanilla `match`) for the actual pattern —
+>      Equations' dependent-elimination compiler handles the GADT motive
+>      correctly where vanilla `match` doesn't, even once the width is a
+>      genuine bound variable, once the index is a *compound* expression
+>      (`ty.bvec n`) rather than a bare variable.
+>   3. A branch that returns the SCRUTINEE ITSELF unchanged (the "keep
+>      as-is" fallback) must live in an outer, non-GADT `option`-match —
+>      `option` is a uniform (non-indexed) type, so matching `Some`/`None`
+>      is always safe regardless of what's inside. Wrap the raw GADT
+>      recognizer as `Term Σ σ -> option (Term Σ σ)` (`None` in the
+>      wildcard, mirroring `term_get_val` exactly) and do the "or leave
+>      unchanged" `Some`/`None` dispatch one level up.
+>   4. A polymorphic-width binop's OTHER operand (e.g. `bop.shiftr`'s
+>      shift-amount, independently polymorphic per `BinOps.v:74`) can't
+>      have its width pinned to a literal inside an Equations pattern
+>      ("this pattern must be inaccessible"). Sidestep by comparing the
+>      width-generic raw value (`bv.bin vs =? 1`) instead of the
+>      width-specific `bv.eqb vs v_1s` — never need the width itself.
+>   5. Avoid `S`/`O` etc. as *pattern variable names* — they shadow `nat`'s
+>      own constructors and produce a baffling "constructor applied to
+>      too few arguments".
+>   **Remaining before Phase 2**: graft this exact working design into
+>   `theories/Symbolic/PartialEvaluation.v`'s `peval_binop` (`bvxor` case),
+>   full framework recompile, then the real `ValidCFGVerifierContract`
+>   N-sweep on `key_schedule_loop2`.
 
 - Print/inspect the ACTUAL `peval`'d term shape for one round applied to a
   fresh symbolic register (`Eval cbn in` or a `Set Printing Depth` probe on
