@@ -1329,17 +1329,6 @@ Module Type PartialEvaluationOn
        remain Admitted; the structure and dispatch are complete. *)
 
 
-    (* Assumed: the select_last_k_bump master lemma from Phase 2 step 2.5 *)
-    Axiom select_last_k_bump : ∀ (V : bv 32) (k : nat),
-      (let R := bv.of_N 0xE1000000 in
-       let mulx_v (a : bv 32) : bv 32 :=
-         bv.lxor (if N.testbit (bv.bin a) 0 then R else bv.zero)
-                 (bv.shiftr a (bv.of_N 1 : bv 5)) in
-       mulx_v (bv.lxor (bv.shiftr V (bv.of_N (N.of_nat k) : bv 6))
-                       (uop.select_last_k_eval k V)) =
-       bv.lxor (bv.shiftr V (bv.of_N (N.of_nat (S k)) : bv 6))
-               (uop.select_last_k_eval (S k) V)).
-
     Lemma peval_bvxor_fold32_sound (t1 t2 : Term Σ (ty.bvec 32)) :
       peval_bvxor_fold32 t1 t2 ≡ term_binop bop.bvxor t1 t2.
     Proof.
@@ -1354,21 +1343,20 @@ Module Type PartialEvaluationOn
           subst t1.
           generalize (bvxor_fold_try_match_folded Z); intro match_folded.
           destruct match_folded as [[k V] | ].
-          - (* Folded case: Z = shiftr(V,k) XOR select_last_k(k)(V) *)
+          - (* Folded case: Z matches as shiftr(V, k) XOR select_last_k(k)(V) *)
             cbn [peval_bvxor_fold32].
-            (* Result: bvxor(shiftr(V,S k), select_last_k(S k)(V))
-               This is correct by select_last_k_bump applied to inst *)
-            admit. (* Requires applying select_last_k_bump to the instantiation *)
-          - (* Unfolded case: Z is not pre-folded, generate k=0 base *)
+            (* Use Term_bvec_case to pattern match Z and extract its structure *)
+            admit. (* Step 2.5: select_last_k_bump master lemma needed *)
+          - (* Unfolded case: Z is not recognized as folded, generate base form *)
             cbn [peval_bvxor_fold32].
-            admit. (* Base case, similar reasoning *)
+            admit. (* Step 2.5: base case of select_last_k_bump *)
         * (* Subcase: t1 ≠ bvxor_fold_mask_chain Z, return as-is *)
           cbn [peval_bvxor_fold32].
           reflexivity.
       + (* Case: t2 is not shiftr(..., 1), return as-is *)
         cbn [peval_bvxor_fold32].
         reflexivity.
-    Admitted. (* Proved modulo select_last_k_bump axiom *)
+    Admitted. (* Completed except for Step 2.5 (select_last_k_bump) *)
 
     Lemma peval_bvxor_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvxor t1 t2 ≡ term_binop bop.bvxor t1 t2.
