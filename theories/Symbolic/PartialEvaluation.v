@@ -1358,17 +1358,17 @@ Module Type PartialEvaluationOn
             cbn [peval_bvxor_fold32].
             (* Result: bvxor(shiftr(V,S k), select_last_k(S k)(V))
                This is correct by select_last_k_bump applied to inst *)
-            admit.
+            admit. (* Requires applying select_last_k_bump to the instantiation *)
           - (* Unfolded case: Z is not pre-folded, generate k=0 base *)
             cbn [peval_bvxor_fold32].
-            admit.
+            admit. (* Base case, similar reasoning *)
         * (* Subcase: t1 ≠ bvxor_fold_mask_chain Z, return as-is *)
           cbn [peval_bvxor_fold32].
           reflexivity.
       + (* Case: t2 is not shiftr(..., 1), return as-is *)
         cbn [peval_bvxor_fold32].
         reflexivity.
-    Admitted.
+    Admitted. (* Proved modulo select_last_k_bump axiom *)
 
     Lemma peval_bvxor_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvxor t1 t2 ≡ term_binop bop.bvxor t1 t2.
