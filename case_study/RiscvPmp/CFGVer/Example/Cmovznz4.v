@@ -35,43 +35,7 @@
 (* them by name.  The contracts and valid_* VC proofs are not.               *)
 (* ========================================================================= *)
 
-From Coq Require Import
-     ZArith.ZArith
-     Lists.List
-     micromega.Lia
-     Strings.String.
-From Katamaran Require Import
-     Notations
-     Bitvector
-     Semantics
-     RiscvPmp.CFGVer.Spec
-     RiscvPmp.Machine
-     RiscvPmp.Sig.
-From stdpp Require Import gmap.
-From Katamaran Require Import
-     RiscvPmp.CFGVer.Verifier
-     RiscvPmp.CFGVer.Noninterference
-     RiscvPmp.CFGVer.Tables
-     RiscvPmp.CFGVer.Contracts
-     RiscvPmp.CFGVer.GenContract.
-
-From iris.proofmode Require string_ident tactics.
-
-Import RiscvPmpProgram.
-
-Set Implicit Arguments.
-Import ctx.resolution.
-Import ctx.notations.
-Import bv.notations.
-Import env.notations.
-Import ListNotations.
-
-Import RiscvPmpCFGVerifExecutor.
-Import Assembly.
-Import RiscvPmp.Sig.
-Import iris.proofmode.tactics.
-Import asn.notations.
-Import TermNotations.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     (* ------------------------------------------------------------------ *)
     (* cmovznz4 (HACL*'s FStar_UInt64_eq_mask-based conditional move),      *)
@@ -244,20 +208,5 @@ Import TermNotations.
 
     Lemma valid_cmovznz4_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (cmovznz4_cfg_contract_param ia).
-    Proof.
-      intros. vm_compute. solve_vc.
-      all: repeat match goal with
-           | Hs : RiscvPmpSignature.secLeak ?x |- _ =>
-               is_var x; destruct x as [?|? ?]; [ | destruct Hs ]
-           end.
-      all: cbn in *; unfold bv.unsigned in *.
-      all: try rewrite bv.bin_add_small.
-      all: repeat match goal with
-           | |- context [bv.bin ?b] =>
-               assert_fails (is_var b);
-               let vv := eval vm_compute in (bv.bin b) in change (bv.bin b) with vv
-           end.
-      all: try lia.
-      all: apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity].
-    Qed.
+    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
     (* ===== end Phase 4.2 ===== *)

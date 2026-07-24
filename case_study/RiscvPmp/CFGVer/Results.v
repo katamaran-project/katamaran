@@ -108,12 +108,10 @@ Import iris.algebra.gmap.
       [(X1, false, None); (X2, false, None); (X3, false, None)] [].
   Proof.
     intros Hbound.
-    eapply gen_contract_noninterferent_param.
-    5: exact (valid_swap_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_param_simple.
     - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
-    - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - cbn; lia.
+    - exact (valid_swap_cfg_contract_param init_addr).
   Qed.
 
   Lemma swap_noninterferent :
@@ -176,12 +174,10 @@ Import iris.algebra.gmap.
       (pcOutOfInstrs_exitCond init_addr [JAL X0 jmp_offset; NOP]) [] [].
   Proof.
     intros Hbound.
-    eapply gen_contract_noninterferent_param.
-    5: exact (valid_jmp_fwd_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_param_simple.
     - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
-    - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - cbn; lia.
+    - exact (valid_jmp_fwd_cfg_contract_param init_addr).
   Qed.
 
   (* jmp_fwd_exitCond is definitionally pcOutOfInstrs_exitCond 0 [JAL...; NOP]
@@ -205,12 +201,10 @@ Import iris.algebra.gmap.
       [(X1, true, Some (bv.of_N 2))] [].
   Proof.
     intros Hbound.
-    eapply gen_contract_noninterferent_param.
-    5: exact (valid_countdown_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_param_simple.
     - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
-    - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - cbn; lia.
+    - exact (valid_countdown_cfg_contract_param init_addr).
   Qed.
 
   (* The concrete result is now a corollary of the universal-base theorem
@@ -238,14 +232,13 @@ Import iris.algebra.gmap.
       (map (concretize_mem init_addr) countdown_mem_mem_specs_rel).
   Proof.
     intros Hb.
-    eapply gen_contract_noninterferent_rel.
-    6: exact (valid_countdown_mem_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_rel_simple.
     - apply Prelude.nodup_fixed; reflexivity.
     - intros [|i] spec H; cbn in H;
         try (inversion H; subst; cbn; f_equal; lia); discriminate.
     - cbn. lia.
     - exact Hb.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact (valid_countdown_mem_cfg_contract_param init_addr).
   Qed.
 
   (* The concrete result is now a corollary of the universal-base theorem
@@ -258,15 +251,8 @@ Import iris.algebra.gmap.
       [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
       [(bv.of_N 16, true, Some (bv.of_N 2))].
   Proof.
-    assert (Hr : [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
-                 = map (concretize_reg init_addr) countdown_mem_reg_specs_rel)
-      by (vm_compute; reflexivity).
-    assert (Hm : [(bv.of_N 16, true, Some (bv.of_N 2))]
-                 = map (concretize_mem init_addr) countdown_mem_mem_specs_rel)
-      by (vm_compute; reflexivity).
-    rewrite Hr Hm.
-    apply countdown_mem_noninterferent_param.
-    unfold init_addr, lenAddr; lia.
+    ni_rel_corollary countdown_mem_noninterferent_param
+      countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel init_addr.
   Qed.
 
   (* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
@@ -280,12 +266,10 @@ Import iris.algebra.gmap.
       [(X2, false, None)] [].
   Proof.
     intros Hbound.
-    eapply gen_contract_noninterferent_param.
-    5: exact (valid_set_X2_to_42_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_param_simple.
     - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
-    - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - cbn; lia.
+    - exact (valid_set_X2_to_42_param init_addr).
   Qed.
 
   (* The concrete result at init_addr = 0, as a corollary -- this was
@@ -312,14 +296,13 @@ Import iris.algebra.gmap.
       (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
   Proof.
     intros Hb.
-    eapply gen_contract_noninterferent_rel.
-    6: exact (valid_cmovznz4_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_rel_simple.
     - apply Prelude.nodup_fixed; reflexivity.
     - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
         try (inversion H; subst; cbn; f_equal; lia); try discriminate.
     - cbn. lia.
     - exact Hb.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact (valid_cmovznz4_cfg_contract_param init_addr).
   Qed.
 
   (* The two concrete cmovznz4 results are now corollaries of the universal-base
@@ -331,13 +314,8 @@ Import iris.algebra.gmap.
     noninterferent_strong init_addr cmovznz4_instrs (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
       cmovznz4_reg_specs cmovznz4_mem_specs.
   Proof.
-    assert (Hr : cmovznz4_reg_specs = map (concretize_reg init_addr) cmovznz4_reg_specs_rel)
-      by (vm_compute; reflexivity).
-    assert (Hm : cmovznz4_mem_specs = map (concretize_mem init_addr) cmovznz4_mem_specs_rel)
-      by (vm_compute; reflexivity).
-    rewrite Hr Hm.
-    apply cmovznz4_noninterferent_param.
-    unfold init_addr, lenAddr; lia.
+    ni_rel_corollary cmovznz4_noninterferent_param
+      cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel init_addr.
   Qed.
 
   (* Phase 4.2 headline #3: precompute (Botan's GHASH::key_schedule masking
@@ -351,12 +329,10 @@ Import iris.algebra.gmap.
       precompute_reg_specs [].
   Proof.
     intros Hbound.
-    eapply gen_contract_noninterferent_param.
-    5: exact (valid_precompute_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_param_simple.
     - apply Prelude.nodup_fixed; reflexivity.
-    - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
-    - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - cbn; lia.
+    - exact (valid_precompute_cfg_contract_param init_addr).
   Qed.
 
   (* The concrete result at init_addr = 0, as a corollary. *)
@@ -384,14 +360,13 @@ Import iris.algebra.gmap.
       (map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel).
   Proof.
     intros Hb.
-    eapply gen_contract_noninterferent_rel.
-    6: exact (valid_key_schedule_loop2_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+    eapply gen_contract_noninterferent_rel_simple.
     - apply Prelude.nodup_fixed; reflexivity.
     - intros [|[|i]] spec H; cbn in H;
         try (inversion H; subst; cbn; f_equal; lia); try discriminate.
     - cbn. lia.
     - exact Hb.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact (valid_key_schedule_loop2_cfg_contract_param init_addr).
   Qed.
 
   (* The concrete result is now a corollary of the universal-base theorem
@@ -400,13 +375,8 @@ Import iris.algebra.gmap.
     noninterferent_strong init_addr key_schedule_loop2_instrs key_schedule_loop2_exitCond
       key_schedule_loop2_reg_specs key_schedule_loop2_mem_specs.
   Proof.
-    assert (Hr : key_schedule_loop2_reg_specs = map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
-      by (vm_compute; reflexivity).
-    assert (Hm : key_schedule_loop2_mem_specs = map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel)
-      by (vm_compute; reflexivity).
-    rewrite Hr Hm.
-    apply key_schedule_loop2_noninterferent_param.
-    unfold init_addr, lenAddr; lia.
+    ni_rel_corollary key_schedule_loop2_noninterferent_param
+      key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel init_addr.
   Qed.
 
   (* Fully end-to-end at the genuinely nonzero start address cmovznz4_start = 256,
@@ -416,12 +386,7 @@ Import iris.algebra.gmap.
       (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs)
       cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
   Proof.
-    assert (Hr : cmovznz4_reg_specs_at_start = map (concretize_reg cmovznz4_start) cmovznz4_reg_specs_rel)
-      by (vm_compute; reflexivity).
-    assert (Hm : cmovznz4_mem_specs_at_start = map (concretize_mem cmovznz4_start) cmovznz4_mem_specs_rel)
-      by (vm_compute; reflexivity).
-    rewrite Hr Hm.
-    apply cmovznz4_noninterferent_param.
-    unfold cmovznz4_start, lenAddr; lia.
+    ni_rel_corollary cmovznz4_noninterferent_param
+      cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel cmovznz4_start.
   Qed.
 

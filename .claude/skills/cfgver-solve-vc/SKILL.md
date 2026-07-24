@@ -30,6 +30,31 @@ Proof. vm_compute. solve_vc. Qed.
 `RiscvPmpCFGVerifExecutor` helpers); `Require Import …CFGVer.Contracts`
 brings it in.
 
+**Parametric-base VCs need one more tactic.** A `gen_contract_param`/`_rel`
+contract (base `term_var "p"`) leaves `solve_vc` with per-instruction
+fetch-bound residuals it cannot close (the base register value is a free
+`secLeak` `RelVal`, so nothing computes). These are closed by a SEPARATE
+tactic, `solve_symbase_fetch` (also in `Contracts.v`), run right after — the
+full one-liner for every parametric VC is:
+
+```coq
+Lemma valid_<prog>_cfg_contract_param (ia : N) :
+  ValidCFGVerifierContract (<prog>_cfg_contract_param ia).
+Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+```
+
+`solve_vc` is deliberately NOT specialised for this — it stays a general VC
+solver; `solve_symbase_fetch` is the add-on. It applies four evalRel-level
+lemmas (`relval_secLeak_bvadd`, `relval_fetch_lower`, `relval_fetch_upper_bare`,
+`relval_fetch_upper_add`) covering the three residual shapes (secLeak of a
+constant-offset pc; the fetch lower bound; the fetch upper bound, bare and
+`base + c`). The upper-bound-with-offset numeric side is discharged via
+`Z.leb_le; vm_compute; reflexivity` rather than `lia`, because with stdpp's
+gmap Zify instances in scope `lia` mis-handles `bv.bin` of a literal (see
+`gmap-pitfalls`). This replaces the old hand-copied 15-line
+`destruct secLeak … / bv.bin_add_small / lia` tail that used to sit in every
+`_param` proof.
+
 ## Residual patterns after `vm_compute`
 
 | Residual | Solution |
@@ -42,8 +67,9 @@ brings it in.
 ## `secLeak` left as a GOAL, not a hypothesis (comparison/relop on private data)
 
 Distinguish this from the destructible-hypothesis pattern (`Hs : secLeak ?x |- _`,
-closed via `destruct x as [?|??]; [|destruct Hs]`, used in every `_param`
-contract's tail): here the residual is `|- RiscvPmpSignature.secLeak v` for some
+closed via `destruct x as [?|??]; [|destruct Hs]`, the mechanism now packaged
+inside `solve_symbase_fetch`'s `relval_fetch_*` lemmas — see above): here the
+residual is `|- RiscvPmpSignature.secLeak v` for some
 free `v : RelVal _` that has NO existing hypothesis about it at all — an
 obligation to *prove* `v` is public, not a case to eliminate.
 

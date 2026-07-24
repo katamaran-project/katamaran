@@ -11,10 +11,11 @@ which layer) stays in the `cfgver` hub skill and its sub-skills.
 Post 2026-07-17 split of the old monolithic `Examples.v`:
 
 `Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`} → `Contracts.v` →
-`GenContract.v` → `Adequacy.v` → `EndToEnd.v` →
+`GenContract.v` → `Adequacy.v` → `EndToEnd.v` → `Example/Prelude.v` →
 `Example/{MvSwap,Jumps,Countdown,SetX2,Cmovznz4,Precompute,KeyScheduleLoop}.v`
-(mutually independent) → `Results.v` (aggregator: the concrete
-`*_noninterferent` theorems the merge gate checks).
+(mutually independent, each just `Require Import …Example.Prelude`) →
+`Results.v` (aggregator: the concrete `*_noninterferent` theorems the merge
+gate checks).
 
 `Noninterference.v` is the trusted statement layer (step relations,
 `declare_*`, `noninterferent_strong`, spec types) and deliberately does not
@@ -32,7 +33,8 @@ errors on the dependents.
 | `Contracts.v` | `CFGVerifierContract`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc` | cfgver-contracts, cfgver-solve-vc |
 | `GenContract.v` | `gen_contract(_param/_rel)`, `param_val`, concretize maps | cfgver-gen-contract(-internals) |
 | `Adequacy.v` | `myWP2_loop`, `create_resources`, `semWP2_*`, `sound_*_myWP2` | cfgver-soundness, cfgver-wp2 |
-| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` | cfgver-endtoend(-internals), cfgver-memory |
+| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` (incl. the `_simple`/`_rel_simple` common-case bridges + the `ni_rel_corollary` tactic notation that folds the `_rel` concrete-corollary ritual) | cfgver-endtoend(-internals), cfgver-memory |
+| `Example/Prelude.v` | shared `Require Export`/`Import` preamble every example re-imports (no defs) | cfgver-new-example |
 | `Example/*.v` | per-program instrs+specs (statement-relevant), contract, `valid_*` VC | cfgver-new-example |
 | `Results.v` | concrete end-to-end theorems | cfgver-endtoend |
 
