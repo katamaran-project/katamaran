@@ -27,6 +27,20 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Program.v — the `Program` module type, `FunDeclKit <+ FunDeclMixin <+     *)
+(* FunDefKit <+ ProgramMixin <+ WellFoundedKit`, that a case study           *)
+(* instantiates (e.g. `RiscvPmpProgram <: Program RiscvPmpBase` in           *)
+(* case_study/RiscvPmp/Machine.v) to supply its function                    *)
+(* declarations/definitions on top of a `Base`.                             *)
+(*                                                                           *)
+(* It is not the `Stm`/`Exp` AST itself (that lives in                       *)
+(* Syntax.Statements/Syntax.Expressions, re-exported here); this file's own  *)
+(* content is the call-graph/termination-metric machinery — `CallGraph`,     *)
+(* `StmWellFormed`, `Accessible` — used to justify total-weakest-            *)
+(* precondition reasoning about (mutually) recursive functions.             *)
+(* ========================================================================= *)
+
 From stdpp Require Import base finite list.
 From Katamaran Require Export
      Syntax.FunDecl

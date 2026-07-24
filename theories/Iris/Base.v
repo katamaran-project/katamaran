@@ -26,6 +26,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Iris/Base.v — the `IrisBase` module type, `IrisPrelims <+ IrisParameters  *)
+(* <+ IrisResources <+ IrisWeakestPre <+ IrisTotalWeakestPre <+              *)
+(* IrisTotalPartialWeakestPre`, i.e. the abstract ghost-state/resource       *)
+(* requirements and the `semWP`/`semTWP` weakest-precondition definitions a  *)
+(* case study's Iris model must supply (e.g. `RiscvPmpIrisBase` in           *)
+(* case_study/RiscvPmp/IrisModel.v).                                        *)
+(*                                                                           *)
+(* This is the interface layer only: Iris/Instance.v is the next layer up,   *)
+(* taking a concrete `IrisBase` instance and proving the Sep/Hoare.v Hoare-  *)
+(* triple rules sound against it.                                           *)
+(* ========================================================================= *)
+
 From Katamaran Require Import
      Prelude
      Semantics.

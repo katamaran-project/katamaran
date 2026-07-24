@@ -27,6 +27,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Specification.v — the module-type interface for supplying separation-     *)
+(* logic CONTRACTS to a case study's program (46 importers).  Parametrized   *)
+(* over `Base`/`Signature`/`Program`, it declares `CEnv : SepContractEnv`    *)
+(* (per-function `SepContract` pre/postconditions), `CEnvEx` (external       *)
+(* functions), and `LEnv` (lemma statements).  Each case study instantiates  *)
+(* `Specification` (e.g. `RiscvPmpCFGVerifSpec <: Specification ...`) to      *)
+(* plug its hand-written contracts into the generic executor/soundness       *)
+(* machinery; it does not itself define the assertion language (Signature).  *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Classes.Morphisms
      Classes.RelationClasses

@@ -26,6 +26,18 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Bitvector.v — the `bv n` sized-bitvector type and its operation library.  *)
+(*                                                                           *)
+(* Representation: `bv n` is a subset type wrapping a `N` (binary natural)   *)
+(* value together with a proof that it fits in `n` bits (little-endian bit  *)
+(* string under the hood).  Operation families, each in its own `Section`:   *)
+(* conversion (`of_N`/`of_Z`/`unsigned`/`signed`), extension/extraction/      *)
+(* update (slicing), shifts, arithmetic (`add`/`sub`/`mul`), logical         *)
+(* (`land`/`lor`/`lxor`/`not`), comparison, and `finite`/`countable`         *)
+(* instances.  Imported by nearly every other file in the codebase.          *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Arith.PeanoNat
      Bool.Bool

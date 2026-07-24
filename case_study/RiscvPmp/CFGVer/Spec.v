@@ -26,6 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* CFGVer/Spec.v — first file in the CFGVer compilation order (Spec.v →      *)
+(* Verifier.v → ...).  Defines Assembly (instruction-builder synonyms: ADD,  *)
+(* SUB, BEQ, ADDI, JALR/RET, MUL family, ...) and CFGVer's OWN leakage-aware  *)
+(* `Specification` instance (RiscvPmpCFGVerifSpec, independent of the plain  *)
+(* one in ../Contracts.v): secLeakvar/inv_leakage-annotated SepContracts for  *)
+(* the same primitive functions (rX, wX, fetch, mem_read/write, decode,      *)
+(* leak, ...), the executors and ValidContract proofs built from it, and     *)
+(* the Iris wiring (RiscvPmpIrisInstanceWithContracts).  15 importers.       *)
+(* ========================================================================= *)
+
 From Coq Require Import
      ZArith.ZArith
      Strings.String

@@ -26,6 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Prelude.v — foundational, language-agnostic utilities used almost         *)
+(* everywhere (49 importers).  Provides `EqDec`/`Finite`/`Countable` glue     *)
+(* over stdpp, the `IsTrue` typeclass wrapping `Is_true` for automatic       *)
+(* boolean-proof inference, the `option` module (`wp`/`wlp`/`spec` weakest-   *)
+(* precondition combinators, monadic bind notations), small list/eq lemmas,  *)
+(* and the shared notation scopes (`term_scope`, `asn_scope`, ...) opened     *)
+(* throughout.  Base.v builds Katamaran's actual object language             *)
+(* (`Ty`/`Val`/`Exp`/`Term`) on top of this layer.                            *)
+(* ========================================================================= *)
+
 From Coq Require Export
      Numbers.BinNums.
 From Coq Require Import

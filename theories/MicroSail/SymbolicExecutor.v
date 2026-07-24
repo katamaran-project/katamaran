@@ -27,6 +27,20 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* MicroSail/SymbolicExecutor.v — the generic symbolic executor for the      *)
+(* Stm statement language, shared by every case study (CFGVer, BlockVer,     *)
+(* MinimalCaps, ...). Module Type SymbolicExecOn builds the debug-info       *)
+(* records, the SStoreSpec-valued exec_aux fixpoint dispatching over Stm     *)
+(* constructors (stm_val/stm_let/stm_call/stm_pattern_match/...), and the    *)
+(* top-level sexec wrapper (with an inline_fuel bound) used to compute a     *)
+(* contract's verification condition. It runs on the CORE SPureSpec/         *)
+(* SHeapSpec monad from Symbolic/Monads.v, not described here — see the      *)
+(* `core-executor-internals` skill for the choice-combinator mechanics       *)
+(* (demonic_finite, demonic_pattern_match, ...) and the exponential-blowup   *)
+(* diagnosis for symbolic loops.                                             *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Arith.PeanoNat
      Bool.Bool

@@ -27,6 +27,20 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Syntax/Predicates.v — the abstract separation-logic predicate vocabulary  *)
+(* every case study instantiates: PurePredicateKit (pure proposition names   *)
+(* 𝑷, their argument types 𝑷_Ty, their Prop-valued interpretation 𝑷_inst) and *)
+(* HeapPredicateKit (heap chunk names 𝑯, their argument types 𝑯_Ty, and       *)
+(* whether a chunk is duplicable/precise). PredicateMixin then ties both to  *)
+(* a concrete separation logic HProp via PredicateDef: lptsreg (register     *)
+(* points-to) and luser (interpretation of a user-defined 𝑯 chunk, with its  *)
+(* duplication law lduplicate). Combined into PredicateKit, this is what     *)
+(* Signature.v, the symbolic/shallow monads, and the solver all parameterize *)
+(* over; DefaultPredicateKit (both name sets Empty_set) is the trivial       *)
+(* instance for case studies that need no custom predicates.                 *)
+(* ========================================================================= *)
+
 From iris Require Import
      bi.interface.
 From Katamaran Require Import

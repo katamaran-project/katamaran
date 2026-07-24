@@ -26,6 +26,18 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Context.v -- the generic snoc-list-of-bindings data structure underlying  *)
+(* every variable-indexed construct in Katamaran.  `Ctx B` is a snoc-list of *)
+(* elements of type `B`; membership `In b Γ` is a de Bruijn index packaged   *)
+(* with a proof (`in_at`/`in_valid`) rather than a plain inductive relation,  *)
+(* for efficient computation, with `cat`/▻▻ concatenation and backwards      *)
+(* lookup (`nth_is`) alongside it.  `Binding N T` pairs a name with a type,   *)
+(* and `NCtx N T := Ctx (Binding N T)` instantiates this to name-annotated   *)
+(* contexts; `PCtx` (program variables) and `LCtx` (logic/symbolic           *)
+(* variables, see `Symbolic/Worlds.v`) are both `NCtx` notations in `Base.v`.*)
+(* ========================================================================= *)
+
 From Coq Require Import
      Arith.PeanoNat
      Bool.Bool

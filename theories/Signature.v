@@ -27,6 +27,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Signature.v -- the single combined module type a case study instantiates  *)
+(* to plug into the symbolic-execution framework.  `Signature` bundles       *)
+(* `PredicateKit` (heap predicates), `WorldsMixin` (logic-variable worlds,   *)
+(* formulas, chunks) and `SolverKit` (the pluggable per-case-study solver)   *)
+(* with `SignatureMixin`, which re-exports the generic symbolic             *)
+(* propositions, unification logic, assertions, the generic solver, and the *)
+(* shallow/symbolic/refinement monads built on top of them.  Every case      *)
+(* study's own `Sig.v` instantiates `Signature` once; most of `theories/     *)
+(* Iris` and `theories/MicroSail` then abstract over an arbitrary           *)
+(* `Signature B`.                                                            *)
+(* ========================================================================= *)
+
 From Katamaran Require Export
   Base
   Refinement.Monads

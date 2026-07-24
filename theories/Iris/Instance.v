@@ -26,6 +26,20 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Iris/Instance.v — the generic Iris model layer built on top of an         *)
+(* `IrisBase` instance (Iris/Base.v). Defines `IrisPredicates` (interpreting *)
+(* a case study's user predicates `𝑯` as Iris resources),                    *)
+(* `IrisSignatureRules` (proving the Sep/Hoare.v triples —                   *)
+(* `Triple`/`CTriple`/`LTriple` — sound w.r.t. `semWP`/`semTWP`), and        *)
+(* `IrisAdequacy`, combined into the `IrisInstance` module type and the      *)
+(* `IrisInstanceWithContracts` functor.                                      *)
+(*                                                                           *)
+(* Each case study instantiates this once, e.g. RiscvPmp/IrisInstance.v's    *)
+(* `RiscvPmpIrisInstance`, to obtain a sound Hoare logic for its own         *)
+(* language instance.                                                       *)
+(* ========================================================================= *)
+
 From Equations Require Import
      Equations Signature.
 Require Import Equations.Prop.EqDec.

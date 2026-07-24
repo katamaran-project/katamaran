@@ -27,6 +27,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Worlds.v -- the `World`/logic-variable-context machinery underlying all   *)
+(* symbolic execution.  A `World` pairs a logic-variable context `wctx :     *)
+(* LCtx` with a path condition `wco` over it; `wsnoc`/`wcat`/`wformula`/      *)
+(* `wsubst`/`wmatch` extend a world by allocating variables, adding          *)
+(* constraints, or substituting a solved unification variable away, while    *)
+(* `TYPE := World -> Type` plus `Valid`/`Impl`/`Forall` give the modal        *)
+(* vocabulary every symbolic type former is stated in, and `Tri` defines     *)
+(* triangular substitutions between worlds.  The file also declares the      *)
+(* `SolverKit` module type: the per-case-study pluggable-solver interface    *)
+(* that `Symbolic/Solver.v`'s generic solver implements and composes with.   *)
+(* ========================================================================= *)
+
 From Katamaran Require Import
      Prelude
      Notations

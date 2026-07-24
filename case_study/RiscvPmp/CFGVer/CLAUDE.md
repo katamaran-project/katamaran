@@ -26,6 +26,7 @@ errors on the dependents.
 
 | File | Contents | Matching skill |
 |------|----------|----------------|
+| `Spec.v` | `Assembly` instruction-builder synonyms; CFGVer's own leakage-aware `Specification` instance (`secLeakvar`/`inv_leakage`-annotated contracts, distinct from `../Contracts.v`) | cfgver-contracts |
 | `Noninterference.v` | trusted statement defs | cfgver-endtoend |
 | `Tables.v` | reg aliases, `instrs_of_list`, `table_of_list`/`exits_of_*`, faith lemmas | cfgver-executor |
 | `Contracts.v` | `CFGVerifierContract`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc` | cfgver-contracts, cfgver-solve-vc |

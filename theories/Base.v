@@ -26,6 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Base.v — the module-type interface each case study instantiates to fix    *)
+(* its object language and machine model (26 importers).  Defines            *)
+(* `Base := Types <+ RegDeclKit <+ OperationalModel <+ BaseMixin`: `Types`    *)
+(* fixes `Ty`/`Val` (TypeDeclKit/TypeDenoteKit), `RegDeclKit` declares the    *)
+(* machine registers, `OperationalModel` fixes the `Memory` type, and        *)
+(* `BaseMixin` assembles expressions/terms/patterns (`Exp`/`Term`) plus       *)
+(* occurs-check/instantiation/partial-evaluation support.  `DefaultBase` is  *)
+(* the trivial instance used by generic tests.  Builds on Prelude.v.         *)
+(* ========================================================================= *)
+
 From Coq Require Export
      Numbers.BinNums.
 From Coq Require Import

@@ -26,6 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Machine.v — RISC-V PMP instantiation of Katamaran's generic `Program`     *)
+(* typeclass: the `Fun`/`FunX`/`Lem` signatures (rX/wX, fetch, decode, the    *)
+(* execute_* family, step/loop, trap/CSR handling, PMP-entry encode/decode)  *)
+(* and their statement-level bodies (`fun_*`), i.e. the machine's            *)
+(* operational semantics.  Exports `RiscvNotations`.  The single             *)
+(* most-imported file in the case study (42 importers); SHARED between      *)
+(* BlockVer/ and CFGVer/, each layering its own Signature/Specification/     *)
+(* executor on top of it.                                                   *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Bool.Bool
      Strings.String

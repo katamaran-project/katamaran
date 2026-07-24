@@ -26,6 +26,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Environment.v — heterogeneous, context-indexed environments (Env). An     *)
+(* `Env D Γ` holds one `D b` value per binding `b` in a `Ctx B` (Context.v); *)
+(* core operations are nil/snoc, cat/take/drop, and lookup/update via de     *)
+(* Bruijn indices `b ∈ Γ` (notations `e.[i]` / `e⟪i↦v⟫` in `env.notations`), *)
+(* plus tabulate and map.                                                    *)
+(*                                                                           *)
+(* `CStore` (variable stores), `Valuation` (Σ-substitutions), and the        *)
+(* symbolic `SStore`/`Sub` families are all instances of `Env`, which is why *)
+(* nearly every other layer of the framework, symbolic and concrete alike,   *)
+(* imports this file.                                                       *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Bool.Bool.
 From Equations Require Import Equations.

@@ -26,6 +26,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Syntax/TypeDecl.v — the core Ty/Val type-denotation machinery every       *)
+(* other syntax layer (Expressions, Terms, BinOps, ...) is built over.       *)
+(* Module ty declares the Ty inductive (int/bool/list/prod/enum/bvec/union/  *)
+(* record/...) parameterized by a case study's TypeDeclKit (its enum/union/  *)
+(* record name sets), the TypeDenoteKit mapping those names to concrete Set  *)
+(* families, the Val fixpoint interpreting a Ty as a Coq type, and the       *)
+(* relational value wrapper RV/RelVal (SyncVal/NonSyncVal) used by the       *)
+(* binary noninterference executor. Module Type Types packages a case       *)
+(* study's concrete kit instances. See the `relval-model` skill for the      *)
+(* RelVal/SyncVal/NonSyncVal semantics and homomorphic lifting in depth.     *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Bool.Bool
      Strings.String

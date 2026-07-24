@@ -26,6 +26,16 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Semantics.v — packages the generic small-step operational semantics of    *)
+(* the statement language (44 importers).  Combines `SmallStep.Step`'s       *)
+(* `Step` relation (the `⟨γ,μ,δ,s⟩ ---> ⟨γ',μ',δ',s'⟩` judgment on           *)
+(* `RegStore`/`Memory`/`CStoreVal`/`Stm`) with `SmallStep.Progress`'s         *)
+(* progress theorem into a single `Semantics` module type over `Base` and    *)
+(* `Program`.  Does not define the step relation itself (that lives in       *)
+(* SmallStep/Step.v) — this file is only the composition point.              *)
+(* ========================================================================= *)
+
 From Katamaran Require Export
      Base
      Program

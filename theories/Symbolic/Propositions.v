@@ -26,6 +26,20 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Symbolic/Propositions.v — the SymProp proposition language that a         *)
+(* verification condition is built out of (angelic/demonic_binary, error,    *)
+(* assertk/assumek, angelicv/demonicv variable binders, assert/assume_vareq, *)
+(* debug) plus its semantics: safe/wsafe interpret a SymProp into a plain    *)
+(* Prop given a valuation. Module Type SymPropOn provides the postprocessing *)
+(* simplification passes used before solving a VC — prune (drop dead        *)
+(* branches), solve_evars/solve_uvars (existential/universal variable        *)
+(* elimination) — each with a safe-preserving soundness lemma. LogSymPropOn  *)
+(* lifts safe to psafe, the Iris-Pred-valued version used by the solver's    *)
+(* logical-relation proofs. Sits directly below Symbolic/Monads.v and        *)
+(* Symbolic/Solver.v in the dependency order.                                *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Arith.PeanoNat
      Bool.Bool

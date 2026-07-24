@@ -26,6 +26,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Sep/Hoare.v — the language-generic axiomatic Hoare-triple layer,          *)
+(* parameterized by an abstract separation logic `bi` `L` and a              *)
+(* `PredicateDef L` (via the `ProgramLogicOn` functor). Defines              *)
+(* `CTriple`/`LTriple` for `SepContract`/`Lemma` (Specification.v) and the   *)
+(* statement triple `Triple`, written `⦃P⦄ s ; δ ⦃Q⦄`, with one deduction    *)
+(* rule per `Stm` constructor (Program.v/Syntax.Statements).                 *)
+(*                                                                           *)
+(* These rules are proof-theoretic only: `Iris/Instance.v`'s                 *)
+(* `IrisSignatureRules` proves them sound against the concrete Iris weakest  *)
+(* precondition (`semWP`) once a case study instantiates `IrisBase`.         *)
+(* ========================================================================= *)
+
 From Coq Require Import
   Classes.Morphisms.
 

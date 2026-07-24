@@ -26,6 +26,15 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* IrisModel.v — RISC-V PMP instantiation of Katamaran's `IrisBase` mixin    *)
+(* (Module RiscvPmpIrisBase): register/RAM ghost state derived purely from   *)
+(* the operational semantics in Machine.v (gen_heapGS for RAM, traceG for    *)
+(* the execution and leakage traces), plus mem_inv and its leakage/no-leak   *)
+(* splits.  Deliberately commits to NO contracts or user-defined predicates  *)
+(* yet — that wiring is IrisInstance.v's job.  18 importers.                 *)
+(* ========================================================================= *)
+
 From Katamaran Require Import
      Bitvector
      Environment

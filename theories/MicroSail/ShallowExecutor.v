@@ -26,6 +26,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* ShallowExecutor.v -- the concrete, directly-executable reference          *)
+(* semantics for the generic statement language, used as the correctness    *)
+(* baseline for the symbolic executor.  `ShallowExecOn` defines              *)
+(* `CStoreSpec`/`MStoreSpec`, continuation-passing predicate transformers    *)
+(* over the concrete program store and heap (built on `CPureSpec`/          *)
+(* `CHeapSpec`), parameterized by case-study-supplied interpretations of    *)
+(* function calls and lemmas (`ExecCall`/`ExecCallForeign`/`ExecLemma`).      *)
+(* `ShallowSoundness.v` relates it to the Iris weakest-precondition          *)
+(* semantics, and `RefineExecutor.v` relates it to the symbolic executor in  *)
+(* `MicroSail/SymbolicExecutor.v`.                                           *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Bool.Bool
      Classes.Morphisms

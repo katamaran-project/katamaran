@@ -26,6 +26,16 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Sig.v — RISC-V PMP instantiation of Katamaran's generic `Signature`       *)
+(* typeclass (Module RiscvPmpSignature <: Signature RiscvPmpBase): the pure  *)
+(* predicate index 𝑷 and the spatial predicate index 𝑯 (gprs, ptsto,         *)
+(* ptstomem(_readonly), ptstoinstr, encodes_instr, inv_leakage) with their   *)
+(* typing/precision/duplicability, plus PMP-range Formula helpers            *)
+(* (is_off/is_on/is_TOR, fml_pmp_match(_nomatch)_conditions) consumed by     *)
+(* the symbolic solver.  40 importers; SHARED between BlockVer/ and CFGVer/. *)
+(* ========================================================================= *)
+
 From Coq Require Import
      ZArith.ZArith
      Lists.List

@@ -27,6 +27,19 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Solver.v -- the generic, framework-provided constraint solver used by     *)
+(* every symbolic executor at each `assume`/`assert` to simplify and prune   *)
+(* path conditions.  `simplify_bool`/`simplify_bool_neg` normalize boolean    *)
+(* formulas into simpler equivalent formula lists; `solver_generic`          *)
+(* discharges/simplifies the framework-level formulas (equalities, relops,   *)
+(* `secLeak`, ...), and `solver_compose` sequences it with a case-study-     *)
+(* supplied external `Solver` (from the `SolverKit` module type in          *)
+(* `Symbolic/Worlds.v`) into `combined_solver`, the solver each case study   *)
+(* actually installs.  See the `secret-data-walls` skill for the narrower    *)
+(* `secLeak`-specific recognizer logic further down this file.               *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Bool.Bool
      Classes.Morphisms

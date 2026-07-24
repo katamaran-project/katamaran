@@ -26,6 +26,16 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* IrisInstance.v — interprets Sig.v's predicate vocabulary (𝑷/𝑯) into       *)
+(* concrete Iris resources over the ghost state IrisModel.v defines:         *)
+(* `luser_inst`/`lduplicate_inst` (interp_ptsto, interp_gprs,                *)
+(* interp_pmp_entries, interp_addr_access/interp_pmp_addr_access for the     *)
+(* adversary universal-access contract, interp_ptsto_instr), plus the        *)
+(* pre-ghost-state adequacy parameters (RiscvPmpIrisAdeqParameters) and a    *)
+(* battery of PMP width/shift arithmetic lemmas.  17 importers.              *)
+(* ========================================================================= *)
+
 From Katamaran Require Import
      Base
      Bitvector

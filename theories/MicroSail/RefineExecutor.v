@@ -26,6 +26,20 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* MicroSail/RefineExecutor.v — refinement/soundness proof connecting the    *)
+(* generic symbolic statement executor (SymbolicExecOn, sexec/exec_aux) to   *)
+(* its concrete/shallow counterpart (ShallowExecOn, cexec). RefineExecOn     *)
+(* defines RefineExec/RefineExecCall/RefineExecLemma (the ℛ⟦⟧-relatedness    *)
+(* obligations at the Stm-executor level, one layer above the core           *)
+(* SPureSpec/SHeapSpec combinator refinements in Refinement/Monads.v) and    *)
+(* proves the refine_* lemmas discharging them, culminating in                *)
+(* symbolic_vcgen_soundness: a symbolically Valid contract is concretely      *)
+(* Valid. This is the lemma every case study's own soundness chain           *)
+(* (e.g. CFGVer's sound_scfg_verification_condition_myWP2) ultimately        *)
+(* bottoms out in.                                                            *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Bool.Bool
      Program.Tactics

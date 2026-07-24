@@ -26,6 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* ========================================================================= *)
+(* Contracts.v — RISC-V PMP instantiation of Katamaran's `Specification`     *)
+(* typeclass (Module RiscvPmpSpecification): hand-written SepContracts for   *)
+(* the primitive/leaf functions common to every verifier (rX, wX, fetch,     *)
+(* checked_mem_read/write, mem_read, mem_write_value, tick_pc, decode, leak, *)
+(* open/close_gprs, open/close_ptsto_instr), plus the resulting executors    *)
+(* and ValidContract proofs.  13 importers, shared by BOTH BlockVer/ and     *)
+(* CFGVer/ (and Binary variants).  NOT CFGVer/Contracts.v's unrelated        *)
+(* `CFGVerifierContract` record for whole-program CFG contracts.            *)
+(* ========================================================================= *)
+
 From Coq Require Import
      Lists.List
      Strings.String
