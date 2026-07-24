@@ -35,43 +35,7 @@
 (* them by name.  The contracts and valid_* VC proofs are not.               *)
 (* ========================================================================= *)
 
-From Coq Require Import
-     ZArith.ZArith
-     Lists.List
-     micromega.Lia
-     Strings.String.
-From Katamaran Require Import
-     Notations
-     Bitvector
-     Semantics
-     RiscvPmp.CFGVer.Spec
-     RiscvPmp.Machine
-     RiscvPmp.Sig.
-From stdpp Require Import gmap.
-From Katamaran Require Import
-     RiscvPmp.CFGVer.Verifier
-     RiscvPmp.CFGVer.Noninterference
-     RiscvPmp.CFGVer.Tables
-     RiscvPmp.CFGVer.Contracts
-     RiscvPmp.CFGVer.GenContract.
-
-From iris.proofmode Require string_ident tactics.
-
-Import RiscvPmpProgram.
-
-Set Implicit Arguments.
-Import ctx.resolution.
-Import ctx.notations.
-Import bv.notations.
-Import env.notations.
-Import ListNotations.
-
-Import RiscvPmpCFGVerifExecutor.
-Import Assembly.
-Import RiscvPmp.Sig.
-Import iris.proofmode.tactics.
-Import asn.notations.
-Import TermNotations.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Definition set_X2_to_42 : CFGVerifierContract :=
       gen_contract init_addr [(X2, false, None)] []
@@ -95,12 +59,13 @@ Import TermNotations.
        (1) a precondition BOUND on the base — `unsigned p + 4·len ≤ 1024` — so
            the instruction-fetch upper bound is dischargeable (this is the
            `(bound)` premise the ∀ init_addr noninterference theorem carries);
-       (2) a manual tail closing the offset-0 fetch LOWER bound: at the first
-           instruction the pc is the bare base p (offset 0 collapses
-           bvadd (of_N 0) p → p), so the Phase-0 fetch-bound helpers — written
-           for the bvadd (of_N c) base shape — don't fire.  Generalizing
-           solve_vc to absorb this tail (and confirming the bvadd-wrapped
-           bounds fire for k>0) is the open work for the full cmovznz4 case. *)
+       (2) the fetch-bound residuals that `solve_vc` leaves behind for a
+           symbolic base (the bare-base offset-0 pc `p`, and the bvadd-wrapped
+           `p + c` pc for k>0).  These are now closed uniformly by the separate
+           `solve_symbase_fetch` tactic (Contracts.v, the relval_fetch_* lemmas)
+           run after `solve_vc` — solve_vc itself stays a general VC solver, so
+           every parametric VC in every example is just
+           `intros; vm_compute; solve_vc; solve_symbase_fetch`. *)
     Definition set_X2_to_42_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [(X2, false, None)] []
         [ADDI X2 X0 (bv.of_N 42)] []
@@ -108,12 +73,5 @@ Import TermNotations.
 
     Lemma valid_set_X2_to_42_param (ia : N) :
       ValidCFGVerifierContract (set_X2_to_42_param ia).
-    Proof.
-      intros. vm_compute. solve_vc.
-      (* offset-0 bare-base fetch lower bound: base is SyncVal (from secLeak) *)
-      match goal with
-        Hs : RiscvPmpSignature.secLeak ?x |- _ =>
-          destruct x as [? | ? ?]; [ | destruct Hs ]
-      end; cbn; unfold bv.unsigned; lia.
-    Qed.
+    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
     (* ===== end Phase 4.2 proof-of-concept ===== *)

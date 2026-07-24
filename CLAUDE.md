@@ -77,7 +77,8 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 `_CoqProject` defines the `-Q` mappings and the exact compilation order.
 CFGVer compilation order (post 2026-07-17 split of the old `Examples.v`):
 `Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`} → `Contracts.v` →
-`GenContract.v` → `Adequacy.v` → `EndToEnd.v` → `Example/*.v` (independent) →
+`GenContract.v` → `Adequacy.v` → `EndToEnd.v` → `Example/Prelude.v` (shared
+import preamble) → `Example/*.v` (independent) →
 `Results.v` (aggregator holding the concrete end-to-end theorems).
 `Noninterference.v` + `Results.v` + the `*_instrs`/`*_specs` data blocks in
 `Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether

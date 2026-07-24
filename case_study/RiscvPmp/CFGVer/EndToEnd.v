@@ -972,3 +972,104 @@ Import IrisModel.RiscvPmpIrisBase.
     iApply (gen_implpre_mem (map (concretize_mem init_addr) mem_specs) _ HInitMem1 HInitMem2).
     iExact "Hmemdata".
   Qed.
+
+  (* ---------------------------------------------------------------------- *)
+  (* Common-case bridges.                                                   *)
+  (*                                                                        *)
+  (* gen_contract_noninterferent_param / _rel take five (resp. six) side    *)
+  (* premises, three of which are mechanical for the overwhelmingly common  *)
+  (* program shape: NO data memory (param), NO exit other than falling off  *)
+  (* the end, and the standard pcOutOfInstrs_exitCond.  The two bridges     *)
+  (* below specialise to that shape and discharge the mechanical premises   *)
+  (* (the vacuous/empty HDataAddrs for _param, the single fall-through      *)
+  (* HexitOffs, the +0 in Hlen) internally, so a caller supplies only the   *)
+  (* genuinely program-specific facts and the VC.                           *)
+  (*                                                                        *)
+  (* A subtle side benefit: in the GENERAL bridges, mem_specs /             *)
+  (* extra_exit_offs / exitCond are unification metavariables shared across *)
+  (* every side goal, which is what makes the "discharge valid_contract     *)
+  (* FIRST or unification picks the wrong goal" hazard bite.  Here those    *)
+  (* three are FIXED by the statement, so only `fuel` floats and it appears *)
+  (* solely in the VC premise -- the ordering hazard simply cannot arise,   *)
+  (* and callers may discharge the remaining premises in any order.         *)
+
+  (* Register-only, straight-line (fall-through exit) programs. *)
+  Lemma gen_contract_noninterferent_param_simple
+      (reg_specs : list reg_spec) (instrs : list AST) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx reg_specs))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_param init_addr reg_specs [] instrs []
+             (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs) reg_specs [].
+  Proof.
+    eapply gen_contract_noninterferent_param.
+    5: exact valid_contract.
+    - exact HND.
+    - intros i spec Hlk; cbn in Hlk; discriminate.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* Base-relative programs (possibly with data memory), straight-line exit.
+     HDataAddrs / Hlen / Hbound stay caller obligations -- they depend on the
+     actual data layout and base bound -- but HexitOffs and the ordering hazard
+     are handled here. *)
+  Lemma gen_contract_noninterferent_rel_simple
+      (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel init_addr reg_specs mem_specs instrs []
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    eapply gen_contract_noninterferent_rel.
+    6: exact valid_contract.
+    - exact HND.
+    - exact HDataAddrs.
+    - exact Hlen.
+    - exact Hbound.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* --------------------------------------------------------------------- *)
+  (* Concrete corollary of a `_rel` parametric theorem.                     *)
+  (*                                                                        *)
+  (* A `gen_contract_rel` example proves its noninterference ONCE for a     *)
+  (* symbolic base (`<prog>_noninterferent_param`), concluding over         *)
+  (* `map (concretize_reg base) specs_rel` / `map (concretize_mem base) …`. *)
+  (* The concrete end theorem in Results.v is stated over literal spec      *)
+  (* lists, so deriving it is a fixed ritual: prove the literal lists equal *)
+  (* the concretized ones (a `vm_compute`-decidable equality), rewrite, and *)
+  (* apply the parametric lemma, discharging its base bound.  This tactic   *)
+  (* folds that ritual.  The concrete base is read from the goal, so the    *)
+  (* SAME invocation serves both the init_addr = 0 corollary and a nonzero  *)
+  (* one (e.g. cmovznz4_start = 256) -- only the base-definition to unfold  *)
+  (* for the final `lia` differs, hence the `base_def` argument.            *)
+  Tactic Notation "ni_rel_corollary"
+      constr(param_lemma) constr(reg_specs_rel) constr(mem_specs_rel)
+      reference(base_def) :=
+    match goal with
+    | |- noninterferent_strong ?base _ _ ?rs ?ms =>
+        let Hr := fresh "Hr" in
+        let Hm := fresh "Hm" in
+        assert (Hr : rs = map (concretize_reg base) reg_specs_rel)
+          by (vm_compute; reflexivity);
+        assert (Hm : ms = map (concretize_mem base) mem_specs_rel)
+          by (vm_compute; reflexivity);
+        rewrite Hr Hm;
+        apply param_lemma;
+        unfold base_def, lenAddr; lia
+    end.

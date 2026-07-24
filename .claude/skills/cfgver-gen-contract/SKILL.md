@@ -85,9 +85,43 @@ gen_contract (init_addr : N)
 The full contract record (placement, exit terms, precondition assertion) is
 assembled for you; to inspect or understand it, see **cfgver-contracts**.
 
-## The end lemma: five premises (six for `_rel`)
+## The end lemma
 
-The VC is one line (`vm_compute. solve_vc.` — residuals in **cfgver-solve-vc**).
+The VC is one line (`vm_compute. solve_vc.` for a concrete base, or
+`intros; vm_compute; solve_vc; solve_symbase_fetch.` for a parametric base —
+residuals in **cfgver-solve-vc**).
+
+### Common case: the `_simple` bridges (prefer these)
+
+For the overwhelmingly common program shape — **no extra exit offsets** and the
+standard `pcOutOfInstrs_exitCond` — use the specialised bridges in `EndToEnd.v`:
+
+- **`gen_contract_noninterferent_param_simple`** (register-only, `mem_specs = []`):
+  premises are just `HND` (`apply Prelude.nodup_fixed; reflexivity`), a
+  simplified `Hlen` (`cbn; lia`), and the VC.
+- **`gen_contract_noninterferent_rel_simple`** (base-relative, possibly with data
+  memory): premises `HND`, `HDataAddrs`, `Hlen`, `Hbound`, and the VC.
+
+Both fix `extra_exit_offs = []` and the exit condition internally, so `HexitOffs`
+is discharged for you **and the "discharge valid_contract FIRST" ordering hazard
+below cannot arise** (only `fuel` floats, and it appears only in the VC premise —
+so premises may be discharged in any order). Typical proof:
+
+```coq
+Proof.
+  intros Hbound.
+  eapply gen_contract_noninterferent_param_simple.
+  - apply Prelude.nodup_fixed; reflexivity.
+  - cbn; lia.
+  - exact (valid_<prog>_cfg_contract_param init_addr).
+Qed.
+```
+
+Only fall back to the general bridges below when `extra_exit_offs` is non-empty
+(e.g. `jump_if_zero`), where `_simple` does not apply.
+
+### General bridges: five premises (six for `_rel`)
+
 The end lemma is `eapply gen_contract_noninterferent` (or `_param`/`_rel` for a
 parametric base) with **five** side premises (`_rel` adds a sixth, `Hbound`,
 right before `valid_contract`):
@@ -189,16 +223,19 @@ unfold init_addr, lenAddr; lia.
 ```
 `gen_contract_rel` case (concrete specs need proving equal to the concretized
 `_rel` specs first, via a `vm_compute`-computable equality — e.g.
-`cmovznz4_noninterferent`/`countdown_mem_noninterferent`):
+`cmovznz4_noninterferent`/`countdown_mem_noninterferent`): use the
+**`ni_rel_corollary`** tactic notation (in `EndToEnd.v`), which folds the whole
+prove-equal / rewrite / apply / discharge-bound ritual:
 ```coq
-assert (Hr : concrete_reg_specs = map (concretize_reg init_addr) specs_rel)
-  by (vm_compute; reflexivity).
-assert (Hm : concrete_mem_specs = map (concretize_mem init_addr) mem_specs_rel)
-  by (vm_compute; reflexivity).
-rewrite Hr Hm.
-apply <x>_noninterferent_param.
-unfold init_addr, lenAddr; lia.
+ni_rel_corollary <x>_noninterferent_param <x>_reg_specs_rel <x>_mem_specs_rel init_addr.
 ```
+It reads the concrete base from the goal, so the LAST argument is just the
+base-*definition* to unfold for the final `lia` — pass `init_addr` for the
+`= 0` corollary or a nonzero base def (e.g. `cmovznz4_start`) for a
+fixed-address one (`cmovznz4_noninterferent_at_start`); the parametric lemma is
+the same. Under the hood it still does the two `vm_compute; reflexivity`
+spec-equalities, `rewrite`, `apply <x>_noninterferent_param`, then
+`unfold <base_def>, lenAddr; lia`.
 
 **Register choice for base-relative memory addressing.** RISC-V's `X0` is
 architecturally hardwired to the constant `0` (`Machine.v`'s `rX`/`wX` special-

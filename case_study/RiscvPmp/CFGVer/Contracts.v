@@ -338,6 +338,68 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       - eapply (@instprop_fetch_bound_upper Σ ι base a 12 40 Hsync Hwin); lia.
     Qed.
 
+    (* --- (3) evalRel-level fetch-bound residuals of a SYMBOLIC-base VC ---
+       After `vm_compute; solve_vc`, a parametric-base (term_var "p") VC leaves
+       the fetch obligations for each instruction slot fully reduced to the
+       `bop.evalRel` / `match _ with SyncVal p => p | NonSyncVal _ _ => False end`
+       level -- one layer BELOW the `instprop (formula_relop ...)` shape the
+       Phase-0 helpers (1)-(2) above are phrased at, so those never fire here.
+       The base register value `v` is always `secLeak` (public: instruction
+       addresses are leaked in any verifiable contract), hence a `SyncVal`.
+       These four lemmas discharge the three residual shapes -- secLeak of a
+       constant-offset pc, the fetch lower bound, and the fetch upper bound
+       (bare pc = base, and pc = base + constant) -- and are applied by the
+       `solve_symbase_fetch` tactic below.  solve_vc itself is deliberately
+       left untouched: it stays a general VC solver, and these symbolic-base
+       residuals are closed by a separate tactic run after it. *)
+
+    Lemma relval_secLeak_bvadd (c : Val ty_xlenbits) (v : RelVal ty_xlenbits) :
+      RiscvPmpSignature.secLeak v ->
+      RiscvPmpSignature.secLeak (bop.evalRel bop.bvadd (SyncVal c) v).
+    Proof. intros H; destruct v as [a|a b]; [exact I | destruct H]. Qed.
+
+    Lemma relval_fetch_lower (X : RelVal ty_xlenbits) :
+      RiscvPmpSignature.secLeak X ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z) (uop.evalRel uop.unsigned X) with
+      | SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof. intros H; destruct X as [a|a b]; [cbn; unfold bv.unsigned; lia | destruct H]. Qed.
+
+    Lemma relval_fetch_upper_bare (v : RelVal ty_xlenbits) (B : Z) :
+      RiscvPmpSignature.secLeak v ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal 1024%Z)
+           (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
+      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      (4 <= B)%Z ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal 1024%Z)
+           (bop.evalRel bop.plus (SyncVal 4%Z) (uop.evalRel uop.unsigned v)))
+      with SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros H Hb Hle; destruct v as [a|a b];
+        [cbn in *; unfold bv.unsigned in *; lia | destruct H].
+    Qed.
+
+    Lemma relval_fetch_upper_add (v : RelVal ty_xlenbits) (cbv : bv xlenbits) (B : Z) :
+      RiscvPmpSignature.secLeak v ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal 1024%Z)
+           (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
+      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      (Z.of_N (bv.bin cbv) + 4 <= B)%Z ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal 1024%Z)
+           (bop.evalRel bop.plus (SyncVal 4%Z)
+              (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
+      with SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros H Hb Hle; destruct v as [a|a b]; [| destruct H].
+      cbn in *; unfold bv.unsigned in *.
+      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      assert (Hlt : (bv.bin cbv + bv.bin a < bv.exp2 xlenbits)%N) by lia.
+      rewrite (bv.bin_add_small Hlt). lia.
+    Qed.
+
     Ltac solve_vc :=
       vm_compute; constructor; cbn; intros; repeat split; try solve_bv;
       (* Phase 0 extension (PLAN-symbolic-base.md §1): try the compound
@@ -354,6 +416,25 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       try (solve [eapply instprop_fetch_bound_lower; eauto]);
       try (solve [eapply instprop_fetch_bound_upper; eauto]);
       auto.
+
+    (* Closes the symbolic-base fetch residuals a parametric VC leaves behind
+       (see the relval_fetch_* lemmas above).  Kept SEPARATE from solve_vc so
+       solve_vc remains a general-purpose VC solver; a parametric-base VC is
+       discharged with `vm_compute; solve_vc; solve_symbase_fetch`, the `;`
+       distributing this per-goal closer over every residual (a no-op when
+       solve_vc already closed everything, as for concrete-base VCs).  The
+       upper-bound-with-offset numeric side (`Z.of_N (bv.bin cbv) + 4 <= B`)
+       is discharged via Z.leb_le rather than lia: with stdpp's gmap Zify
+       instances in scope, lia mis-handles `bv.bin` of a literal (see
+       gmap-pitfalls), whereas the boolean form vm_computes to `true`. *)
+    Ltac solve_symbase_fetch :=
+      solve
+        [ apply relval_secLeak_bvadd; assumption
+        | apply relval_fetch_lower;
+            solve [ assumption | apply relval_secLeak_bvadd; assumption ]
+        | eapply relval_fetch_upper_add;
+            [ eassumption | eassumption | apply Z.leb_le; vm_compute; reflexivity ]
+        | eapply relval_fetch_upper_bare; [ eassumption | eassumption | lia ] ].
 
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
     (*   match reg_convert r with *)

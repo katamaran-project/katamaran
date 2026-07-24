@@ -55,13 +55,23 @@ end theorem goes in `Results.v` (plus the gate's `AXIOM_CLEAN_THMS` list in
    ec fl` — spec-triple formats and public/private/pinned semantics in
    **cfgver-gen-contract**. (Hand-written contracts instead: **cfgver-contracts**.)
 4. **VC.** `Lemma valid_<prog>_cfg_contract : ValidCFGVerifierContract ….
-   Proof. vm_compute. solve_vc. Qed.` Residuals and debugging:
-   **cfgver-solve-vc**.
-5. **End lemma.** `<prog>_noninterferent : noninterferent_strong …` by
-   `eapply gen_contract_noninterferent;` discharging its **five** premises (NoDup,
-   `HDataAddrs`, length bound, `HexitOffs`, the VC) — the premise-by-premise table
-   is in **cfgver-gen-contract**. Gotcha: `HDataAddrs` needs a case split on
-   *every* index of `mem_specs`, not just index 0.
+   Proof. vm_compute. solve_vc. Qed.` — for a PARAMETRIC-base contract
+   (`gen_contract_param`/`_rel`, the usual choice for a new example) add the
+   symbolic-base fetch-residual closer:
+   `Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.` Residuals
+   and debugging: **cfgver-solve-vc**.
+5. **End lemma.** `<prog>_noninterferent : noninterferent_strong …`. Common case
+   (register-only or straight-line, standard `pcOutOfInstrs` exit): use the
+   specialised bridge **`gen_contract_noninterferent_param_simple`** (or
+   `_rel_simple` when there is data memory) — it bakes in the mechanical
+   premises AND removes the ordering hazard below, leaving only NoDup +
+   length-bound (+ `HDataAddrs`/`Hbound` for `_rel`) + the VC. Only reach for
+   the general `eapply gen_contract_noninterferent(_param/_rel);` (its **five**
+   premises: NoDup, `HDataAddrs`, length bound, `HexitOffs`, the VC — and the
+   "discharge the VC FIRST" gotcha) when there are extra exit offsets
+   (`jump_if_zero`) so `_simple` does not apply. Premise-by-premise table +
+   both patterns: **cfgver-gen-contract**. Gotcha: `HDataAddrs` needs a case
+   split on *every* index of `mem_specs`, not just index 0.
 6. **Axiom hygiene.** `Print Assumptions <prog>_noninterferent.` must show only
    `pure_decode` and `mmioenv` (the model's inherent parameters). Anything else —
    especially `functional_extensionality` — means a proof took a shortcut; fix it.
