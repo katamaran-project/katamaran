@@ -81,7 +81,10 @@ CFGVer compilation order (post 2026-07-17 split of the old `Examples.v`):
 `Results.v` (aggregator holding the concrete end-to-end theorems).
 `Noninterference.v` + `Results.v` + the `*_instrs`/`*_specs` data blocks in
 `Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
-what is being proved changed.
+what is being proved changed. Fuller detail (per-file skill pointers, the
+`Require`-vs-`Require Import Verifier` landmine) lives in
+`case_study/RiscvPmp/CFGVer/CLAUDE.md`, loaded automatically when touching
+that subtree.
 
 ---
 
