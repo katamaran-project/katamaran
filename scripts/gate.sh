@@ -71,7 +71,23 @@ fail() { red "✗ GATE FAILED: $*"; exit 1; }
 
 grn "▶ [1/3] Build (target closure, incremental)…"
 make Makefile.coq >/dev/null || fail "coq_makefile could not regenerate Makefile.coq"
-make -j"$(nproc)" -f Makefile.coq "${BUILD_TARGETS[@]}" \
+
+# Parallelism is bounded by MEMORY, not cores. Every coqc process loads the full
+# Require closure (~3.6 GB floor) and the heaviest VC (Cmovznz4) peaks near 6 GB,
+# so a naive `-j$(nproc)` (e.g. -j16 on a 14 GiB box) demands tens of GB of
+# baseline and OOM-kills mid-build (SIGTERM / make Error 143). Budget ~6 GB per
+# job against total RAM, clamp to [1, nproc]. Override explicitly with GATE_JOBS.
+if [ -n "${GATE_JOBS:-}" ]; then
+  jobs="$GATE_JOBS"
+else
+  mem_gb="$(free -g | awk '/^Mem:/ {print $2}')"
+  jobs=$(( mem_gb / 6 ))
+  [ "$jobs" -lt 1 ] && jobs=1
+  cores="$(nproc)"
+  [ "$jobs" -gt "$cores" ] && jobs="$cores"
+fi
+grn "  (building with -j$jobs; override with GATE_JOBS=N)"
+make -j"$jobs" -f Makefile.coq "${BUILD_TARGETS[@]}" \
   || fail "target closure does not compile: ${BUILD_TARGETS[*]}"
 
 # ---- (2) proof holes -------------------------------------------------------
