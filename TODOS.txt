@@ -15,6 +15,28 @@ TODO:
 - pc_step_sync is a very strong hypothesis, but the lockstepness of semWP2 should help us fullfill this requirement. This should be a priority.
 - Actually have an endToEnd lemma that works for each generated contract, I don't want the manual work that currently still has to happen after
 - First priority, make a Definition for Non-interference such that the Examples.v become readable
+- FRAMEWORK (theories/) — split the assertion language from the solver in Signature.
+	Every coqc process in CFGVer pays a ~3.6 GB peak-RSS floor. Measured decomposition
+	(2026-07-27, incremental Require probes):
+	    Semantics + RiscvPmp.Machine ......... 1.12 GB  (31%)
+	    + Sig ................................ +0.94 GB (26%)
+	    + all executors (Symbolic, Shallow,
+	      ShallowSoundness, Refine, Soundness)  +0.56 GB (16%)
+	    + binary Iris model .................. +0.98 GB (27%)
+	The Iris and executor layers are separable per-file and that is being done in
+	CFGVer (Spec/Verifier/Tables splits). The Sig layer is NOT, and it is the one
+	with no case-study-side fix: of its 0.94 GB, generic `Katamaran.Signature`
+	accounts for 0.92 and RiscvPmp's own 1062-line Sig.v for only 0.02.
+	The problem is that `theories/Signature.v` bundles the ASSERTION LANGUAGE
+	(Assertion, chunk, sep_contract_*, interpret — what every contract-writing file
+	actually uses) with `Symbolic.Solver` (RiscvPmp/Sig.v requires it directly).
+	A file that only needs to STATE a contract must therefore load the solver too.
+	Proposed: separate Syntax.Assertions + the Signature predicate/contract
+	vocabulary from Symbolic.Solver, so `Signature` can be instantiated without the
+	solver and only the executor path pulls it in. Would lower the floor for every
+	case study, not just CFGVer. Sizeable framework surgery — not attempted.
+	(Reference point for what the split buys: Noninterference.v, which needs no
+	assertions at all, went 3.63 -> 1.15 GB once it stopped requiring Sig.)
 
 
 Why do we need pc_step_sync and where can we find that information?
