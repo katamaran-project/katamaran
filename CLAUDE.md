@@ -77,13 +77,16 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 `_CoqProject` defines the `-Q` mappings and the exact compilation order.
 CFGVer compilation order (post 2026-07-17 split of the old `Examples.v`):
 `Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`} → `Contracts.v` →
-`GenContract.v` → `Adequacy.v` → `EndToEnd.v` → `Example/Prelude.v` (shared
-import preamble) → `Example/*.v` (independent) →
-`Results.v` (aggregator holding the concrete end-to-end theorems).
-`Noninterference.v` + `Results.v` + the `*_instrs`/`*_specs` data blocks in
-`Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
-what is being proved changed. Fuller detail (per-file skill pointers, the
-`Require`-vs-`Require Import Verifier` landmine) lives in
+`GenContract.v` → then two independent branches — `Example/Prelude.v` (shared
+import preamble) → `Example/*.v`, and `Adequacy.v` → `EndToEnd.v` — rejoining at
+`Example/<Prog>Result.v` (the per-program end-to-end theorems) →
+`Results.v` (re-export shell, the merge gate's build target).
+`Noninterference.v` + `Example/*Result.v` + the `*_instrs`/`*_specs` data blocks
+in `Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
+what is being proved changed. Keep `Example/Prelude.v` free of `EndToEnd`:
+requiring it from an example serializes the 85 s `Adequacy`→`EndToEnd` chain
+ahead of every example instead of alongside them. Fuller detail (per-file skill
+pointers, the `Require`-vs-`Require Import Verifier` landmine) lives in
 `case_study/RiscvPmp/CFGVer/CLAUDE.md`, loaded automatically when touching
 that subtree.
 

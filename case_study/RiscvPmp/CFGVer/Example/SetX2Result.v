@@ -28,43 +28,51 @@
 
 
 (* ========================================================================= *)
-(* Results.v — aggregator for the concrete end-to-end noninterference        *)
-(* theorems.                                                                 *)
+(* Example/SetX2Result.v — end-to-end noninterference theorem(s) for        *)
+(* set_X2_to_42.                                               *)
 (*                                                                           *)
-(* The theorems themselves live one per program in Example/<Prog>Result.v;   *)
-(* this file only re-exports them, so the merge gate keeps a single build     *)
-(* target whose closure is every result (scripts/gate.sh runs Print          *)
-(* Assumptions on each theorem after requiring this file).                   *)
+(* TRUSTED STATEMENT SURFACE: what these theorems assert can be audited       *)
+(* without reading the verifier or any proof.  The merge gate checks each of  *)
+(* them with Print Assumptions; Results.v re-exports them so the gate's       *)
+(* single build target still pulls in every result.                          *)
 (*                                                                           *)
-(* Why the theorems are NOT in Example/<Prog>.v: a result file requires      *)
-(* EndToEnd (and so Adequacy), an 85 s chain. Keeping it out of the examples  *)
-(* lets that chain build in PARALLEL with them rather than ahead of all of    *)
-(* them — worth ~40 s of wall time on a -j2 gate build.                      *)
-(*                                                                           *)
-(* Together with Noninterference.v and the per-example instruction/spec       *)
-(* definitions, these statements are the trusted surface of CFGVer: what they *)
-(* assert can be audited without reading the verifier or the proofs.         *)
+(* Each theorem instantiates a generic bridge from EndToEnd.v with the VC     *)
+(* proved in Example/SetX2.v.  This file is deliberately SEPARATE from      *)
+(* Example/SetX2.v: requiring EndToEnd (and so Adequacy) here keeps the     *)
+(* example itself EndToEnd-free, so the 85 s Adequacy->EndToEnd chain goes on *)
+(* building in parallel with the examples instead of ahead of all of them.    *)
 (* ========================================================================= *)
 
-(* Verifier is deliberately a bare `Require` (no Import): Importing it clashes
-   with BlockVer's identically-named definitions. See CFGVer/CLAUDE.md. *)
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
+From Katamaran Require Import
+     RiscvPmp.CFGVer.Example.Prelude
+     RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.Example.SetX2.
 
-From Katamaran Require Export
-     RiscvPmp.CFGVer.Noninterference
-     RiscvPmp.CFGVer.Tables
-     RiscvPmp.CFGVer.Contracts
-     RiscvPmp.CFGVer.GenContract
-     RiscvPmp.CFGVer.Adequacy
-     RiscvPmp.CFGVer.EndToEnd.
+(* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
+   address, from the single symbolic-base VC valid_set_X2_to_42_param — no
+   per-address vm_compute.  The (init_addr + 4 < lenAddr) premise is the base
+   bound the fetch obligations need; it is the `(bound)` the plan anticipated. *)
+Lemma set_X2_to_42_noninterferent_param (init_addr : N) :
+  (init_addr + 4 < lenAddr)%N ->
+  noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
+    (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+    [(X2, false, None)] [].
+Proof.
+  intros Hbound.
+  eapply gen_contract_noninterferent_param_simple.
+  - apply Prelude.nodup_fixed; reflexivity.
+  - cbn; lia.
+  - exact (valid_set_X2_to_42_param init_addr).
+Qed.
 
-(* The 19 end-to-end theorems, one file per program. *)
-From Katamaran Require Export
-     RiscvPmp.CFGVer.Example.MvSwapResult
-     RiscvPmp.CFGVer.Example.JumpsResult
-     RiscvPmp.CFGVer.Example.CountdownResult
-     RiscvPmp.CFGVer.Example.SetX2Result
-     RiscvPmp.CFGVer.Example.Cmovznz4Result
-     RiscvPmp.CFGVer.Example.PrecomputeResult
-     RiscvPmp.CFGVer.Example.KeyScheduleLoopResult.
+(* The concrete result at init_addr = 0, as a corollary -- this was
+   missing before (set_X2 had only the parametric headline). *)
+Lemma set_X2_to_42_noninterferent :
+  noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
+    (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+    [(X2, false, None)] [].
+Proof.
+  apply set_X2_to_42_noninterferent_param.
+  unfold init_addr, lenAddr; lia.
+Qed.
+

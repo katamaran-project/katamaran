@@ -46,7 +46,8 @@ VC soundness straight to `myWP2_loop`, given the `itable_faith`/`etable_faith`
 facts tying the term table to that gmap at the relevant valuation.
 
 **Extending the chain:** copy the closest existing example's `<prog>_noninterferent`
-in `Results.v` as the analogue rather than deriving from scratch.
+in `Example/<Prog>Result.v` as the analogue rather than deriving from scratch
+(`Results.v` itself is only a re-export shell over those files).
 
 ## WP2_loop vs myWP2_loop (design distinction)
 
