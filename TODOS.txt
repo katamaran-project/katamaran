@@ -16,6 +16,35 @@ TODO:
 - Actually have an endToEnd lemma that works for each generated contract, I don't want the manual work that currently still has to happen after
 - First priority, make a Definition for Non-interference such that the Examples.v become readable
 - FRAMEWORK (theories/) — split the assertion language from the solver in Signature.
+	*** MEASURED 2026-07-27 AND NOT WORTH DOING. Kept as a record so nobody re-derives
+	*** the hypothesis. The premise below conflates "the Sig LAYER costs 0.94 GB" with
+	*** "the SOLVER costs 0.94 GB". Peak-RSS probes (marginal over Semantics+Machine
+	*** = 1.07 GB) actually decompose that layer as:
+	***     + Syntax.Chunks, Syntax.Predicates ............ +0.41 GB  (48%)
+	***     + Symbolic.Worlds, Syntax.Assertions .......... +0.09 GB
+	***     + Symbolic.UnifLogic .......................... +0.03 GB
+	***     + Symbolic.Propositions ....................... +0.08 GB
+	***     + Shallow.Monads .............................. +0.04 GB
+	***     + Symbolic.Solver, Symbolic.Monads,
+	***       Refinement.Monads  <-- ALL the split removes   +0.20 GB  (22%)
+	***   = 1.92 GB total floor, of which the solver is ~10%.
+	*** The structural half of the hypothesis IS correct: the mixins separate cleanly,
+	*** and Shallow.Monads is solver-free too, so only 3 of the 8 in SignatureMixin
+	*** take SolverKit (GenericSolverOn, SymbolicMonadsOn, RefinementMonadsOn). But:
+	***   (1) the payoff is 0.20 GB, not 0.94;
+	***   (2) it benefits nobody in CFGVer — Contracts.v, GenContract.v and every
+	***       Example/*.v run `vm_compute; solve_vc`, which REDUCES the symbolic
+	***       executor and so needs the solver regardless of whether it names it
+	***       (syntactic non-reference != droppable). Noninterference.v, the one
+	***       state-without-verify file, already escaped by needing no assertions;
+	***   (3) the cost is splitting the module type every downstream functor is
+	***       parameterised by (Specification, ProgramLogicOn, all three executors,
+	***       both case studies' Sig.v).
+	*** The remaining floor is ~56% Semantics+Machine, which is transparent fun_* ASTs
+	*** that vm_compute must keep transparent. Conclusion: the 1.92 GB floor is
+	*** essentially irreducible given the reflective executor; the only real lever on
+	*** the OOM is bounding -j by RAM, which scripts/gate.sh already does.
+	*** ORIGINAL HYPOTHESIS BELOW (superseded):
 	Every coqc process in CFGVer pays a ~3.6 GB peak-RSS floor. Measured decomposition
 	(2026-07-27, incremental Require probes):
 	    Semantics + RiscvPmp.Machine ......... 1.12 GB  (31%)
