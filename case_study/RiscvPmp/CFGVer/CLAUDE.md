@@ -94,6 +94,20 @@ measurement; see the RSS caveat above before quoting any second count.) That is
 exactly why the end theorems live in separate
 `<Prog>Result.v` files rather than in the examples themselves.
 
+**The one-file-per-program `Result` layout is a DELIBERATE trade — don't merge it
+back.** Measured (2026-07-27): each `Example/<Prog>Result.v` is ~5-8 s and 3.26 GB
+of which essentially 100% is `Require` load — the proofs are two `apply`s and a
+`cbn; lia`. So on a *full* rebuild the 7 files cost ~35 s more CPU than a single
+merged `Results.v` would, and merging was considered on those grounds. It was
+rejected because the split is what makes a PER-PROGRAM BUILD TARGET possible:
+`make Example/Cmovznz4Result.vo` pulls in only Cmovznz4 plus the heavy chain,
+whereas a merged `Results.v` requires all seven examples, so checking any single
+end theorem would mean building ~224 s of unrelated example VCs. Iteration on one
+program beats full-rebuild CPU here. (The 0.80 GB of Iris each Result file carries
+but never mentions is real waste — it is inherited transitively through
+`EndToEnd` — but it is not recoverable by rearranging files; see the dead-ends
+section and `theories/CLAUDE.md` on why `Require` transitivity bounds this.)
+
 ### Dead ends — do not retry (2026-07-27)
 
 - **Splitting `SpecIris.v`'s four `Include`s into separate files.** Three
