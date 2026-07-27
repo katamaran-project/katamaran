@@ -36,26 +36,28 @@ SCOPE_DIRS=("case_study/RiscvPmp/CFGVer")
 # case_study/RiscvPmp/CFGVer/Results.v. Run the gate once to establish the
 # baseline; if a theorem here legitimately depends on an axiom, remove it from
 # this list (and note why) rather than weakening the check.
+#
+# ONLY THE `_param` THEOREMS ARE LISTED, deliberately. Each program also has a
+# concrete-base corollary (`X_noninterferent`, plus `jmp_fwd_noninterferent_cfg`
+# and `cmovznz4_noninterferent_at_start`) whose entire proof is
+# `apply X_noninterferent_param; unfold init_addr, lenAddr; lia` — its axiom set
+# is the `_param`'s plus whatever `lia` uses, and `lia` is axiom-free. So the
+# `_param` theorems carry all the content, and checking 12 instead of 25 halves
+# a probe that is genuinely expensive (see the batching note in step 3).
+#
+# What this stops catching: a concrete corollary that someone later RE-PROVES
+# directly (with an axiom or an Admitted lemma) instead of via its `_param`. If
+# you do that, add it back to this list.
 AXIOM_CLEAN_THMS=(
   "swap_noninterferent_param"
-  "swap_noninterferent"
   "jumpIfZero_noninterferent_param"
-  "jumpIfZero_noninterferent"
   "jmp_fwd_noninterferent_param"
-  "jmp_fwd_noninterferent_cfg"
   "countdown_noninterferent_param"
-  "countdown_noninterferent"
   "countdown_mem_noninterferent_param"
-  "countdown_mem_noninterferent"
   "set_X2_to_42_noninterferent_param"
-  "set_X2_to_42_noninterferent"
   "cmovznz4_noninterferent_param"
-  "cmovznz4_noninterferent"
-  "cmovznz4_noninterferent_at_start"
   "precompute_noninterferent_param"
-  "precompute_noninterferent"
   "key_schedule_loop2_noninterferent_param"
-  "key_schedule_loop2_noninterferent"
 )
 
 COQC="${COQC:-coqc}"
@@ -153,17 +155,71 @@ done < <(grep -E '^[[:space:]]*(-Q|-R|-arg)' _CoqProject)
 # The probe basename must be a valid Coq module name (no dots), so mktemp's
 # tmp.XXXXXX pattern is unusable directly — use a fresh directory instead.
 probedir="$(mktemp -d)"
-probe="$probedir/AxiomProbe.v"
 trap 'rm -rf "$probedir"' EXIT
-{
-  echo "From Katamaran.RiscvPmp.CFGVer Require Import Results."
-  for t in "${AXIOM_CLEAN_THMS[@]}"; do echo "Print Assumptions $t."; done
-} > "$probe"
 
-if ! out="$("$COQC" "${COQFLAGS[@]}" "$probe" 2>&1)"; then
-  ylw "$out"
-  fail "axiom probe failed to compile (a listed theorem may be renamed/removed)"
+# The probe is BATCHED, and must stay that way.
+#
+# `Print Assumptions` fetches opaque proof bodies out of the .vo files and does
+# NOT release them, so one process checking the whole list grows without bound
+# and gets OOM-killed. The kill arrives as SIGTERM (exit 143) with NO Coq error
+# text at all, which the previous single-process version mis-reported as "a
+# listed theorem may be renamed/removed" — a misdiagnosis that cost a session's
+# debugging. See the exit-code handling below.
+#
+# Measured on this box 2026-07-27 (peak RSS — deterministic, tune on this and
+# NOT on wall time, same caveat as the -j budget above):
+#   Require Import Results, 0 theorems : 3.40 GB  <- fixed baseline, PER PROCESS
+#   + 1 Print Assumptions              : 3.79 GB  (+0.39, one-off opaque warm-up)
+#   + each further theorem             : +0.255 GB, never released
+# i.e. peak(N) ≈ 3790 + (N-1)*255 MB, and ~9 s per theorem after the first.
+# At N=12 that predicts 6.6 GB — and it did die at 11/12 on a box with ~6.4 GB
+# available. N=25 would need ~9.9 GB. Batching trades a repeated 3.4 GB / ~9 s
+# `Require` for a bounded peak.
+PROBE_BASE_MB="${GATE_PROBE_BASE_MB:-3790}"
+PROBE_PER_THM_MB="${GATE_PROBE_PER_THM_MB:-255}"
+PROBE_HEADROOM_MB="${GATE_PROBE_HEADROOM_MB:-1000}"
+
+if [ -n "${GATE_PROBE_BATCH:-}" ]; then
+  batch="$GATE_PROBE_BATCH"
+else
+  # AVAILABLE, not total: the probe runs after the build, on whatever is left.
+  avail_mb="$(free -m | awk '/^Mem:/ {print $7}')"
+  batch=$(( (avail_mb - PROBE_HEADROOM_MB - PROBE_BASE_MB) / PROBE_PER_THM_MB + 1 ))
+  [ "$batch" -lt 1 ] && batch=1
+  # Cap: beyond ~8 the linear model above is extrapolation, not measurement.
+  [ "$batch" -gt 8 ] && batch=8
 fi
+grn "  (${#AXIOM_CLEAN_THMS[@]} theorems in batches of $batch; override with GATE_PROBE_BATCH=N)"
+
+out=""
+i=0
+b=0
+while [ "$i" -lt "${#AXIOM_CLEAN_THMS[@]}" ]; do
+  b=$((b + 1))
+  probe="$probedir/AxiomProbe$b.v"
+  {
+    echo "From Katamaran.RiscvPmp.CFGVer Require Import Results."
+    for t in "${AXIOM_CLEAN_THMS[@]:$i:$batch}"; do echo "Print Assumptions $t."; done
+  } > "$probe"
+
+  set +e
+  bout="$("$COQC" "${COQFLAGS[@]}" "$probe" 2>&1)"
+  rc=$?
+  set -e
+
+  if [ "$rc" -ne 0 ]; then
+    ylw "$bout"
+    case "$rc" in
+      137|143)
+        red "batch $b (${AXIOM_CLEAN_THMS[*]:$i:$batch}) was KILLED — exit $rc, no Coq error."
+        fail "axiom probe ran OUT OF MEMORY, this is not a proof failure: retry with GATE_PROBE_BATCH=$(( batch > 1 ? batch - 1 : 1 )), or free memory (see the peak-RSS model above)" ;;
+      *)
+        fail "axiom probe batch $b failed to compile (a listed theorem may be renamed/removed)" ;;
+    esac
+  fi
+  out="$out$bout"$'\n'
+  i=$((i + batch))
+done
 
 # Baseline: every end theorem depends on exactly the two standard axioms
 # (the axiomatized instruction decoder and the MMIO environment) and nothing
