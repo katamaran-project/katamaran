@@ -52,17 +52,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition countdown_exitCond : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N 8).
 
-    Definition countdown_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr [(X1, true, Some (bv.of_N 2))] []
-        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] []
-        countdown_exitCond
-        5.
-
-    Lemma valid_countdown_cfg_contract :
-      ValidCFGVerifierContract countdown_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
     (* ===== Phase 4.2: base-parametric countdown VC (backward branch) =========
+       Supersedes the removed concrete-base pair countdown_cfg_contract /
+       valid_countdown_cfg_contract (see MvSwap.v for the rationale).
        countdown_exitCond is definitionally `pcOutOfInstrs_exitCond 0 instrs`
        (both reduce to `fun v => bv.ugeb v (bv.of_N 8)`), so the parametric
        contract reuses pcOutOfInstrs_exitCond directly -- no hand-rolled
@@ -116,19 +108,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       ; STORE (bv.of_N 16) X1 X2 WORD
       ; BNE X1 X0 back_12_offset ].
 
-    Definition countdown_mem_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr
-        [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
-        [(bv.of_N 16, true, Some (bv.of_N 2))]
-        countdown_mem_instrs []
-        countdown_mem_exitCond
-        10.
-
-    Lemma valid_countdown_mem_cfg_contract :
-      ValidCFGVerifierContract countdown_mem_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
     (* ===== Phase 4.2: base-parametric countdown_mem VC ======================
+       Supersedes the removed concrete-base pair countdown_mem_cfg_contract /
+       valid_countdown_mem_cfg_contract (see MvSwap.v for the rationale).
        X2 holds the base (PVBaseOff 0 = p+0 = p), so the counter word's
        address (via LOAD/STORE off X2, imm 16) is genuinely p+16 --
        base-RELATIVE, needing gen_contract_rel/mem_spec_rel like cmovznz4's

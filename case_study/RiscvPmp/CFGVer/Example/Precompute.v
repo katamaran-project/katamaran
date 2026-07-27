@@ -83,16 +83,11 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition precompute_reg_specs : list reg_spec :=
       [(A0, false, None); (A1, false, None); (A2, false, None)].
 
-    Definition precompute_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr precompute_reg_specs [] precompute_instrs []
-        (pcOutOfInstrs_exitCond init_addr precompute_instrs) 16.
-
-    Lemma valid_precompute_cfg_contract : ValidCFGVerifierContract precompute_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
     (* Parametric-base headline (∀ init_addr), same shape as set_X2_to_42_param:
        no memory in this program, so gen_contract_param (not _rel) suffices --
-       there is nothing base-relative to concretize. *)
+       there is nothing base-relative to concretize.
+       Supersedes the removed concrete-base pair precompute_cfg_contract /
+       valid_precompute_cfg_contract (see MvSwap.v for the rationale). *)
     Definition precompute_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia precompute_reg_specs [] precompute_instrs []
         (pcOutOfInstrs_exitCond ia precompute_instrs) 16.

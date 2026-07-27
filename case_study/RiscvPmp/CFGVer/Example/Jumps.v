@@ -45,17 +45,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* Jumps to `true_offset` when the value of X1 is equal to zero. The
          default offset allows one instruction between the fall-through path
          and the branch target. X1 must be a public register (secLeak). *)
-    Definition jump_if_zero_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr [(X1, true, None)] []
-        [BEQ X1 X0 true_offset] [8%N]
-        (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset])
-        3.
-
-    Lemma valid_jump_if_zero_cfg_contract :
-      ValidCFGVerifierContract jump_if_zero_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
-    (* ===== Phase 4.2: base-parametric jump_if_zero VC ===== *)
+    (* ===== Phase 4.2: base-parametric jump_if_zero VC =====
+       Supersedes the removed concrete-base pair jump_if_zero_cfg_contract /
+       valid_jump_if_zero_cfg_contract (see MvSwap.v for the rationale). *)
     Definition jump_if_zero_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [(X1, true, None)] []
         [BEQ X1 X0 true_offset] [8%N]
@@ -77,13 +69,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition jmp_fwd_exitCond : bv xlenbits -> bool :=
       fun v => bv.ugeb v (bv.of_N 8).
 
-    Definition jmp_fwd_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr [] [] [JAL X0 jmp_offset; NOP] [] jmp_fwd_exitCond 5.
-
-    Lemma valid_jmp_fwd_cfg_contract : ValidCFGVerifierContract jmp_fwd_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
-    (* ===== Phase 4.2: base-parametric jmp_fwd VC ===== *)
+    (* ===== Phase 4.2: base-parametric jmp_fwd VC =====
+       Supersedes the removed concrete-base pair jmp_fwd_cfg_contract /
+       valid_jmp_fwd_cfg_contract (see MvSwap.v for the rationale). *)
     Definition jmp_fwd_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [] []
         [JAL X0 jmp_offset; NOP] []

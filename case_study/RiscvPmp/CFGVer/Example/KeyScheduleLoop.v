@@ -111,17 +111,12 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition key_schedule_loop2_mem_specs : list mem_full_spec :=
       [(bv.of_N 56, false, None); (bv.of_N 60, false, None)].
 
-    Definition key_schedule_loop2_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr key_schedule_loop2_reg_specs key_schedule_loop2_mem_specs
-        key_schedule_loop2_instrs [] key_schedule_loop2_exitCond 40.
-
-    Lemma valid_key_schedule_loop2_cfg_contract :
-      ValidCFGVerifierContract key_schedule_loop2_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
     (* Parametric-base version: the table is base-relative (p+56/p+60), so
        this needs gen_contract_rel (like cmovznz4_param/countdown_mem_param),
-       not the memory-less gen_contract_param. *)
+       not the memory-less gen_contract_param.
+       Supersedes the removed concrete-base pair key_schedule_loop2_cfg_contract
+       / valid_key_schedule_loop2_cfg_contract (see MvSwap.v for the
+       rationale). *)
     Definition key_schedule_loop2_reg_specs_rel : list reg_spec_rel :=
       [(A0, false, PVExist); (A1, false, PVExist); (A2, false, PVExist);
        (A3, false, PVBaseOff 56);

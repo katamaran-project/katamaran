@@ -98,17 +98,12 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
     Example valid_mv_nonzero_start_ex : ValidCFGVerifierContract mv_nonzero_start_ex.
     Proof. vm_compute. solve_vc. Qed.
 
-    Definition swap_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr
-        [(X1, false, None); (X2, false, None); (X3, false, None)] []
-        [MV X3 X2; MV X2 X1; MV X1 X3] []
-        (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
-        5.
-
-    Lemma valid_swap_cfg_contract : ValidCFGVerifierContract swap_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
-    (* ===== Phase 4.2: base-parametric swap VC ===== *)
+    (* ===== Phase 4.2: base-parametric swap VC =====
+       This supersedes the old concrete-base contract/VC pair
+       (swap_cfg_contract / valid_swap_cfg_contract, removed): the concrete
+       result swap_noninterferent is a corollary of the parametric theorem
+       at init_addr = 0, so proving the concrete VC separately was dead
+       compile time. Same for every other example. *)
     Definition swap_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia
         [(X1, false, None); (X2, false, None); (X3, false, None)] []

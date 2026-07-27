@@ -70,11 +70,18 @@ There is no `ImplPost` parameter — `CFGVerifierContract` has no postcondition 
 
 ```coq
 eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-  instrs jmp_fwd_exitCond n ws [ctx] [env]
-  [existT ty_xlenbits x1] HpubReg jmp_fwd_cfg_contract
-  valid_jmp_fwd_cfg_contract eq_refl eq_refl).
+  instrs my_exitCond n ws [ctx] [env]
+  [existT ty_xlenbits x1] HpubReg my_cfg_contract
+  valid_my_cfg_contract eq_refl eq_refl).
 all: try eauto.
 ```
+
+`my_cfg_contract` / `valid_my_cfg_contract` are placeholders for a **hand-written**
+concrete-base (`Σ = [ctx]`) contract. None of CFGVer's own examples supply one any
+more: since the Phase 4.2 parametric migration each `Example/*.v` proves only a
+`valid_*_cfg_contract_param` VC and reaches its concrete result as a corollary of the
+parametric theorem, so the concrete-base contracts and their VCs were removed as dead
+compile time.
 
 - `@` is required: `Set Implicit Arguments.` makes `instrs'` and `exitCond` implicit
   (they appear in the types of `contractInstrs`/`contractExitCond`).
