@@ -72,6 +72,30 @@ pressure, not a code regression.
 For the specific incident this generalizes (`token-optimizer-mcp`,
 2026-07-17/18), see the `reference-removed-config` memory note.
 
+## Other OOM cause: a PARALLEL build (`make -jN`) on a term-heavy closure
+
+Same `Terminated` / `Error 143` signature, but the machine has NO orphans and a
+SERIAL build succeeds — it dies ONLY under `make -jN`. Cause: every `coqc`
+process loading the CFGVer/µSail closure carries a large INHERENT memory floor
+(~3.6 GB — the RISC-V model's transparent `fun_*`/`FunDef` terms dominate;
+full breakdown in the `project-compile-cost` memory), so `-jN` demands
+`N × ~3.6 GB` of baseline at once. On a 14 GiB box `make -j$(nproc)` (= -j16) is
+tens of GB → the kernel OOM-kills the heaviest file mid-build (e.g. Cmovznz4,
+which peaks ~5.7 GB). Classic trigger: a `git checkout`/merge bumps `.vo`
+mtimes, forcing a full rebuild that had been quietly incremental — so it strikes
+right after a branch switch or merge, not during normal editing.
+
+**Tell it apart from the orphan cause:** it dies under `-jN` but a `-j1`/`-j2`
+rebuild of the SAME target is clean, and `free -h` shows no pre-existing
+pressure → it's parallelism, not orphans and not a code regression.
+
+**Fix — bound `-j` by RAM, not cores.** Budget ~6 GB per job against total RAM
+(`jobs = mem_gb / 6`, clamped to `[1, nproc]`); `scripts/gate.sh` computes this
+and honours a `GATE_JOBS=N` override. The floor is NOT reducible: it is
+transparent µSail terms that `solve_vc`'s `vm_compute` must keep reducible, and
+`vos`-load == `vo`-load (so it is not opaque-proof bloat that a lighter load
+could drop). Don't chase it in the model — cap parallelism instead.
+
 ## Hang that reproduces IDENTICALLY regardless of timeout: probably NOT this skill
 
 If a compile hangs at the exact same spot whether given 120s or 580s — check

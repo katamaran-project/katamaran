@@ -34,8 +34,9 @@ and hoping.
 ## Step 0: was it actually killed, or is it just running?
 
 - **Silently killed** (`Terminated`, `Error 143`, no Coq diagnostic at all) →
-  this is **rocq-compile-oom**'s territory (memory/swap pressure, orphaned
-  processes), not this skill. Check that first.
+  this is **rocq-compile-oom**'s territory (memory/swap pressure — orphaned
+  processes, OR an over-parallel `make -jN` whose per-process floor × N exceeds
+  RAM, common right after a git checkout/merge), not this skill. Check that first.
 - **Still running, no crash, just past its own history** (e.g.
   `rocq_compile_file` returns `"reason": "timeout"` after the full timeout
   budget, or a background task has been running far longer than this exact
