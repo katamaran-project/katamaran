@@ -99,6 +99,13 @@ make Makefile.coq >/dev/null || fail "coq_makefile could not regenerate Makefile
 # -j3 is only ~7% faster and both run hot, because the baseline dominates. If
 # you have a browser open or the box has less free RAM, force GATE_JOBS=2 (or 1).
 #
+# Tune this budget on the peak-RSS numbers, NOT the wall times. Multi-GB coqc
+# processes evict each other's .vo page cache, so a file's wall time depends on
+# what ran before it: TablesRel.v (unchanged) measured 22 s / 43 s / 32 s on
+# three consecutive runs, the 43 s one being immediately after SpecIris (4.0 GB)
+# and VerifierRel (3.75 GB). Differences under ~2x in the timings above are not
+# resolvable on this box; peak RSS is deterministic and is what bounds -j anyway.
+#
 # NOTE: PER_JOB_MB assumes the light/heavy layering in CFGVer/CLAUDE.md holds.
 # Re-adding an Iris/ShallowExecutor require to a light file puts ~1.2 GB back on
 # all seven examples and invalidates this budget.
