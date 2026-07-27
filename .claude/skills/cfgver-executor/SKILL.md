@@ -37,8 +37,9 @@ lookup is exact, `instrs !! v`. The **symbolic** executor (`sexec_cfg_addr`, bel
 instead keys off a **term-indexed table** (`SInstrTable`/`SExitTable`, a `list (Term _
 ty_xlenbits * AST)` resp. `list (Term _ ty_xlenbits)`) so that a symbolic pc like
 `p + 8` can still be dispatched: matching is syntactic (`Term_eqb` modulo `peval`),
-not a concrete lookup. `itable_faith`/`etable_faith` (`Verifier.v`) are the Prop-level
-facts tying a given table to the gmap at a valuation; the refinement proof
+not a concrete lookup. `itable_rel`/`etable_rel` (`VerifierRel.v`) are the guards
+tying a given table to the gmap at a valuation, and the faith lemmas proving them
+for the list builders live in `TablesRel.v`; the refinement proof
 (`rexec_cfg_addr`, **cfgver-refinement**) is what lets the two sides' VCs
 correspond.
 

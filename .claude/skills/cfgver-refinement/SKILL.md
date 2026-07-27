@@ -28,8 +28,9 @@ symbolic VC  --(refinement: rexec_cfg_addr, this skill)-->  concrete execution
 
 ## What cexec_cfg_addr and sexec_cfg_addr share — and where they diverge
 
-`cexec_cfg_addr` (`Verifier.v`, Shallow section) and `sexec_cfg_addr` (Symbolic
-section) share the outer shape but differ at the dispatch step:
+`cexec_cfg_addr` (`VerifierRel.v`, Shallow section) and `sexec_cfg_addr`
+(`Verifier.v`, Symbolic section — the two live in different files since the
+2026-07-27 Iris split) share the outer shape but differ at the dispatch step:
 
 | Decision point | `sexec_cfg_addr` (symbolic) | `cexec_cfg_addr` (concrete) |
 |---|---|---|
@@ -45,7 +46,7 @@ counterpart** — it's not a mirrored decision point but a genuine requirement o
 two-world model (the pc must already agree across worlds to read one), which
 `rexec_cfg_addr` discharges by case analysis inside the proof rather than by a
 paired `refine_bind`. This is why `rexec_cfg_addr`'s proof is NOT written in
-`rsolve` style (per its own TODO in `Verifier.v`) and is flagged as a golf target —
+`rsolve` style (per its own TODO in `VerifierRel.v`) and is flagged as a golf target —
 unlike a clean structural mirror, matching the two sides here needs explicit
 `itable_rel`/`etable_rel` faithfulness facts (below), not just instance search.
 
@@ -59,7 +60,7 @@ Above the executors sits `cexec_triple_addr` (demonic Σ/pc intro → ASSUME
 `itable_faith`/`etable_faith` at the chosen valuation → `produce req` → run →
 `consume ens`) — note the source comment: `run` performs **no leakcheck**. The
 guard makes the triple hold vacuously except at the one valuation the end-to-end
-proof discharges it at (`refine_guard`, `Verifier.v`).
+proof discharges it at (`refine_guard`, `VerifierRel.v`).
 
 ## `RefineCompat` — the relation structure
 
@@ -71,7 +72,7 @@ Class RefineCompat (R : 𝕊 w -> C -> Prop) (c : C) (w : World) (s : 𝕊 w) ..
   MkRefineCompat { refine_compat : R s c }.
 ```
 
-Key instances in `CFGVer/Verifier.v`: `refine_compat_angelic_binary` and
+Key instances in `CFGVer/VerifierRel.v`: `refine_compat_angelic_binary` and
 `refine_compat_cfg_verification_condition` (the full VC). The tactic that
 drives the instance search is `rsolve` — using and debugging it effectively is the
 **cfgver-rsolve** skill.

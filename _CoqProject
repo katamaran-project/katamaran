@@ -33,9 +33,12 @@ case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
 case_study/RiscvPmp/BlockVer/Verifier.v
 case_study/RiscvPmp/CFGVer/Spec.v
+case_study/RiscvPmp/CFGVer/SpecIris.v
 case_study/RiscvPmp/CFGVer/Verifier.v
+case_study/RiscvPmp/CFGVer/VerifierRel.v
 case_study/RiscvPmp/CFGVer/Noninterference.v
 case_study/RiscvPmp/CFGVer/Tables.v
+case_study/RiscvPmp/CFGVer/TablesRel.v
 case_study/RiscvPmp/CFGVer/Contracts.v
 case_study/RiscvPmp/CFGVer/GenContract.v
 case_study/RiscvPmp/CFGVer/Adequacy.v

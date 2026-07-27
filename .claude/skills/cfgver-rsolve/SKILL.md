@@ -54,6 +54,6 @@ with `rexec_cfg_addr` rather than hoping search aligns it.
 
 ## Name-shadowing trap
 
-`Import PureSpec.` (Verifier.v, Relational section) shadows the HeapSpec names for
+`Import PureSpec.` (VerifierRel.v, Relational section) shadows the HeapSpec names for
 everything below it: a bare `refine_bind` resolves to the **PureSpec** variant and
 `iApply` fails on a CHeapSpec/SHeapSpec goal. Qualify: `HeapSpec.refine_bind`.

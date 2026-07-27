@@ -76,17 +76,24 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 
 `_CoqProject` defines the `-Q` mappings and the exact compilation order.
 CFGVer compilation order (post 2026-07-17 split of the old `Examples.v`):
-`Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`} → `Contracts.v` →
-`GenContract.v` → then two independent branches — `Example/Prelude.v` (shared
-import preamble) → `Example/*.v`, and `Adequacy.v` → `EndToEnd.v` — rejoining at
+`Spec.v` → `Verifier.v` → `Tables.v` → `Contracts.v` → `GenContract.v` → then two
+independent branches — the LIGHT example branch `Example/Prelude.v` (shared
+import preamble) → `Example/*.v`, and the HEAVY adequacy branch `SpecIris.v` →
+`VerifierRel.v` → `TablesRel.v` → `Adequacy.v` → `EndToEnd.v` — rejoining at
 `Example/<Prog>Result.v` (the per-program end-to-end theorems) →
 `Results.v` (re-export shell, the merge gate's build target).
 `Noninterference.v` + `Example/*Result.v` + the `*_instrs`/`*_specs` data blocks
 in `Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
-what is being proved changed. Keep `Example/Prelude.v` free of `EndToEnd`:
-requiring it from an example serializes the 85 s `Adequacy`→`EndToEnd` chain
-ahead of every example instead of alongside them. Fuller detail (per-file skill
-pointers, the `Require`-vs-`Require Import Verifier` landmine) lives in
+what is being proved changed.
+**Two layering invariants, each worth >1 GB or ~40 s and each easy to undo by
+accident:** (1) the light files (`Spec`, `Verifier`, `Tables`, `Contracts`,
+`GenContract`, `Example/*`) must stay free of Iris / `ShallowExecutor` /
+`MicroSail.Soundness` requires — adding one puts ~1.2 GB back on all seven
+examples; (2) `Example/Prelude.v` must stay free of `EndToEnd`, or the 85 s
+`Adequacy`→`EndToEnd` chain serializes ahead of every example instead of
+alongside them. Fuller detail (per-file skill pointers, the light/heavy split
+table, the `Tables.v` `Open Scope list_scope` trap, the
+`Require`-vs-`Require Import Verifier` landmine) lives in
 `case_study/RiscvPmp/CFGVer/CLAUDE.md`, loaded automatically when touching
 that subtree.
 
