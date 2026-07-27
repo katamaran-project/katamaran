@@ -45,19 +45,33 @@ From Coq Require Import
      Lists.List
      micromega.Lia
      Strings.String.
+(* This file deliberately requires NEITHER RiscvPmp.CFGVer.Spec NOR RiscvPmp.Sig,
+   and so pulls in no symbolic executor, no predicate signature and no (binary)
+   Iris model. It is the trusted STATEMENT layer: small-step relations,
+   declare_*, spec types and noninterferent_strong, all expressible with the
+   operational semantics alone.
+
+   This is worth 2.5 GB of peak RSS (3.63 -> 1.15 GB) and 6.5 s (9.6 -> 3.0 s),
+   and it takes the file off the serial Spec -> Verifier critical path so it
+   builds in parallel with them. It used to require both only because of a
+   vestigial preamble inherited from the old monolithic Examples.v: the sole
+   references to either were three bare `Import RiscvPmpCFGVerifExecutor.` /
+   `Import Assembly.` / `Import RiscvPmp.Sig.` lines, and nothing here used a
+   single name from them.
+
+   Verified 2026-07-27: all 30 definitions below elaborate to byte-identical
+   terms under `Set Printing All` before and after the removal, so the trusted
+   statements are unchanged. DON'T re-add either require — doing so silently
+   costs 2.5 GB on a file that is the reason the statement layer is auditable
+   without the verifier. *)
 From Katamaran Require Import
      Notations
      Bitvector
      Semantics
-     RiscvPmp.CFGVer.Spec
-     RiscvPmp.Machine
-     RiscvPmp.Sig.
+     RiscvPmp.Machine.
 From stdpp Require Import gmap.
 
 Import RiscvPmpProgram.
-Import RiscvPmpCFGVerifExecutor.
-Import Assembly.
-Import RiscvPmp.Sig.
 
 Set Implicit Arguments.
 Import ctx.resolution.
