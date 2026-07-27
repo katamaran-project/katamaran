@@ -28,11 +28,28 @@ target, so its closure is every result).
 
 ### The light/heavy split (2026-07-27) — DON'T UNDO IT
 
-Every `coqc` process pays a peak-RSS floor. Measured layer costs: `Semantics` +
-`Machine` 1.12 GB, `+ Sig` +0.94, `+ all executors` +0.56, `+ binary Iris model`
-+0.98. Three files were split so that the Iris model and the shallow/refine/
-soundness stack stay OFF the example path — the examples only need to
-`vm_compute` the SYMBOLIC executor:
+Every `coqc` process pays a peak-RSS floor. Measured layer costs (bare-`Require`
+probes, peak RSS — the only metric worth tuning on here, see below):
+
+| layer | RSS | marginal |
+|---|---|---|
+| `Semantics` + `Machine` + `Sig` | 1.96 GB | — (55%, irreducible) |
+| `+ CFGVer.Spec` (executor instantiation) | 2.32 | **+0.36** |
+| `+ Verifier` | 2.32 | +0.00 |
+| `+ Contracts` + `GenContract` | 2.32 | +0.00 |
+| `+ EndToEnd` (Iris chain) | 3.56 | **+1.24** |
+
+**`Iris` is 3.4x heavier than the whole symbolic verifier layer** — the recurring
+intuition that the symbolic executor is the expensive part is measured false.
+**`Verifier`/`Contracts`/`GenContract` cost +0.00 on top of `Spec`**, so no split
+among those three can move the number. And the executor cannot be dropped by any
+file except `Noninterference.v`: every other file names `ValidCFGVerifierContract`
+or `gen_contract_param` in a *statement*, whose type must typecheck, so its
+closure is mandatory whether or not `vm_compute` reduces it.
+
+Hence the split below targets Iris, not the executor — three files were split so
+that the Iris model and the shallow/refine/soundness stack stay OFF the example
+path:
 
 | light (no Iris) | heavy (Iris) | boundary |
 |---|---|---|
