@@ -45,6 +45,15 @@ Result: `Contracts.v`, `GenContract.v`, `Example/Prelude.v` and every
 / `MicroSail.Soundness`) require to any light file silently puts ~1.2 GB back on
 all seven examples**, which is what bounds the gate's `-j`.
 
+**Judge changes here on peak RSS, not wall time.** A full rebuild appeared to
+regress ~11% after this split (404 s → 448 s), which prompted a hunt for a DAG
+fix. That hunt came up empty and the premise did not survive checking: wall
+times on this box swing with `.vo` page-cache state (an *unchanged*
+`TablesRel.v` measured 22/43/32 s on three consecutive runs — see
+**rocq-timeout-triage** Step 1b). The split was KEPT, on the strength of the RSS
+numbers above, which are deterministic. Don't re-open the wall-time question
+without user-CPU or back-to-back measurements.
+
 Two traps this created:
 - `Tables.v` needs an explicit `Open Scope list_scope.` after its imports.
   `RiscvPmp.Sig` re-imports `ctx.notations`, whose `_ :: _` Binding notation
@@ -62,9 +71,29 @@ Two traps this created:
 `GenContract` and must NOT Export `EndToEnd`: the `Adequacy`→`EndToEnd` chain
 costs ~85 s, and today it builds in the parallel shadow of the examples. Making
 any `Example/*.v` require `EndToEnd` — e.g. to host its own end-to-end theorem —
-serializes those 85 s ahead of every example and costs ~40 s of wall time on a
--j2 gate build. That is exactly why the end theorems live in separate
+serializes those 85 s ahead of every example instead of alongside them. (The
+argument here is structural — it lengthens the critical path — not a wall-time
+measurement; see the RSS caveat above before quoting any second count.) That is
+exactly why the end theorems live in separate
 `<Prog>Result.v` files rather than in the examples themselves.
+
+### Dead ends — do not retry (2026-07-27)
+
+- **Splitting `SpecIris.v`'s four `Include`s into separate files.** Three
+  reasons, any one fatal: (1) `ShallowSoundness.Soundness` takes an
+  `(Import HOAR : ProgramLogicOn …)` parameter that `SpecIris.v` never passes —
+  the preceding `Include` makes the *ambient* module satisfy it, which is
+  precisely why all four live in one module; (2) `VerifierRel` needs both halves
+  anyway (`Section Relational` uses the Iris instance, `Section Soundness` uses
+  `sound_cexec`/`sound_stm`/`contractsSound`), so the files would stay serial;
+  (3) the four `Include`s are only **~4 s of `SpecIris`'s 62 s** — the cost is
+  the eight Iris body lemmas (`read_ram_sound`'s `Qed.` alone is 11.7 s).
+- **Merging the heavy files to save file-load tax.** `TablesRel` and `Adequacy`
+  are siblings (neither requires the other), so `TablesRel` already builds in
+  `Adequacy`'s shadow at `-j≥2`. The real heavy path is
+  `Spec → SpecIris → VerifierRel → Adequacy → EndToEnd`, and its cost is genuine
+  proof work — `rsolve` at `VerifierRel:198` (9.4 s), `consume_sound` at
+  `VerifierRel:706` (6.4 s) — that no file arrangement touches.
 
 `Noninterference.v` is the trusted statement layer (step relations,
 `declare_*`, `noninterferent_strong`, spec types) and genuinely does not depend

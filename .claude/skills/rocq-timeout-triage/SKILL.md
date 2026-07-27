@@ -54,6 +54,42 @@ sentence was running when time ran out, and how long every OTHER completed
 sentence took. Don't guess "the file" is slow — one specific `vm_compute` or
 `Qed` almost always is.
 
+## Step 1b: wall-clock is NOT a reliable comparison across runs
+
+`timing.top_slowest` is trustworthy for finding *which sentence* dominates
+inside one run. It is NOT trustworthy for comparing one run against another,
+and neither is any wall time you measure around `rocq_compile_file` — on a
+memory-pressured box the two runs did not see the same machine.
+
+Multi-GB `coqc` processes evict each other's `.vo` page cache, so a file's wall
+time depends on **what ran just before it**. Measured 2026-07-27 on the CFGVer
+tree: `TablesRel.v` — unchanged, 100 lines, ~3 s of actual proof work —
+came in at **22 s → 43 s → 32 s** on three consecutive runs. Run 1 had a warm
+cache; run 2 followed `SpecIris` (4.0 GB peak) and `VerifierRel` (3.75 GB),
+which had flushed it; run 3 recovered partway as it re-warmed. Nothing about
+the file changed. `free -m` showed buff/cache down to 2.3 GB.
+
+This silently poisons exactly the question people use timings for — "did my
+restructuring make things faster?" Two same-sized files split out of one will
+appear to cost +20 s or +30 s purely because they now run under different cache
+conditions than the single file did.
+
+So, when the question is a COMPARISON rather than "which sentence is hot":
+
+- **Prefer peak RSS.** It is deterministic and unaffected by cache state, and
+  for build-layout decisions it is usually the binding constraint anyway (it is
+  what bounds `make -jN`; see rocq-compile-oom).
+- **If you need time, use user CPU, not wall.** `coqc -time` reports
+  `(Xu,Ys)` per sentence; summed user time is far more robust than wall clock.
+- **Run the variants back-to-back** in the same session and same cache state,
+  never against a number recorded on another day.
+- **Treat anything under ~2x as noise** unless you have controlled for the
+  above. Do not restructure code on the strength of a 10–20% wall-time delta.
+
+The general lesson: before attributing a timing difference to your change,
+re-run the *unchanged* baseline and check it still reproduces its old number.
+If it doesn't, you are measuring the box, not the code.
+
 ## Step 2: isolate construction cost from proof-search cost
 
 If the slow step is `vm_compute` followed by a tactic script (`solve_vc`, a
