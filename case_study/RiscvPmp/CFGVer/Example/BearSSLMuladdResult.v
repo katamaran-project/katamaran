@@ -26,48 +26,51 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-
 (* ========================================================================= *)
-(* Results.v — aggregator for the concrete end-to-end noninterference        *)
-(* theorems.                                                                 *)
+(* Example/BearSSLMuladdResult.v — end-to-end noninterference for the        *)
+(* BearSSL `br_i31_muladd_small` quotient-estimate step.                     *)
 (*                                                                           *)
-(* The theorems themselves live one per program in Example/<Prog>Result.v;   *)
-(* this file only re-exports them, so the merge gate keeps a single build     *)
-(* target whose closure is every result (scripts/gate.sh runs Print          *)
-(* Assumptions on each theorem after requiring this file).                   *)
+(* TRUSTED STATEMENT SURFACE: what these theorems assert can be audited       *)
+(* without reading the verifier or any proof.  The merge gate checks each of  *)
+(* them with Print Assumptions; Results.v re-exports them so the gate's       *)
+(* single build target still pulls in every result.                          *)
 (*                                                                           *)
-(* Why the theorems are NOT in Example/<Prog>.v: a result file requires      *)
-(* EndToEnd (and so Adequacy), an 85 s chain. Keeping it out of the examples  *)
-(* lets that chain build in PARALLEL with them rather than ahead of all of    *)
-(* them — worth ~40 s of wall time on a -j2 gate build.                      *)
-(*                                                                           *)
-(* Together with Noninterference.v and the per-example instruction/spec       *)
-(* definitions, these statements are the trusted surface of CFGVer: what they *)
-(* assert can be audited without reading the verifier or the proofs.         *)
+(* Kept SEPARATE from Example/BearSSLMuladd.v on purpose: requiring EndToEnd  *)
+(* (and so Adequacy) here keeps the example itself EndToEnd-free, so the 85 s *)
+(* Adequacy->EndToEnd chain builds in parallel with the examples rather than  *)
+(* ahead of all of them.                                                     *)
 (* ========================================================================= *)
 
-(* Verifier is deliberately a bare `Require` (no Import): Importing it clashes
-   with BlockVer's identically-named definitions. See CFGVer/CLAUDE.md. *)
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
+From Katamaran Require Import
+     RiscvPmp.CFGVer.Example.Prelude
+     RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.Example.BearSSLMuladd.
 
-From Katamaran Require Export
-     RiscvPmp.CFGVer.Noninterference
-     RiscvPmp.CFGVer.Tables
-     RiscvPmp.CFGVer.Contracts
-     RiscvPmp.CFGVer.GenContract
-     RiscvPmp.CFGVer.Adequacy
-     RiscvPmp.CFGVer.EndToEnd.
+(* The 12-instruction branch-free RV32I body of BearSSL's quotient-estimate
+   step is noninterferent for an ARBITRARY 4-aligned load address, with ALL
+   THREE inputs (a0, b0, g) secret: the leakage trace is identical however the
+   two worlds' inputs differ.
 
-(* The 25 end-to-end theorems, one file per program. *)
-From Katamaran Require Export
-     RiscvPmp.CFGVer.Example.MvSwapResult
-     RiscvPmp.CFGVer.Example.JumpsResult
-     RiscvPmp.CFGVer.Example.CountdownResult
-     RiscvPmp.CFGVer.Example.SetX2Result
-     RiscvPmp.CFGVer.Example.Cmovznz4Result
-     RiscvPmp.CFGVer.Example.PrecomputeResult
-     RiscvPmp.CFGVer.Example.KeyScheduleLoopResult
-     RiscvPmp.CFGVer.Example.BearSSLMuladdResult
-     RiscvPmp.CFGVer.Example.BearSSLModpowResult
-     RiscvPmp.CFGVer.Example.BearSSLCheckScalarResult.
+   Bound: 12 instructions * 4 bytes = 48. *)
+Lemma muladd_q_noninterferent_param (init_addr : N) :
+  (init_addr + 48 < lenAddr)%N ->
+  noninterferent_strong init_addr muladd_q_instrs
+    (pcOutOfInstrs_exitCond init_addr muladd_q_instrs)
+    muladd_q_reg_specs [].
+Proof.
+  intros Hbound.
+  eapply gen_contract_noninterferent_param_simple.
+  - apply Prelude.nodup_fixed; reflexivity.
+  - cbn; lia.
+  - exact (valid_muladd_q_cfg_contract_param init_addr).
+Qed.
+
+(* Concrete-base corollary at the default init_addr. *)
+Lemma muladd_q_noninterferent :
+  noninterferent_strong init_addr muladd_q_instrs
+    (pcOutOfInstrs_exitCond init_addr muladd_q_instrs)
+    muladd_q_reg_specs [].
+Proof.
+  apply muladd_q_noninterferent_param.
+  unfold init_addr, lenAddr; lia.
+Qed.

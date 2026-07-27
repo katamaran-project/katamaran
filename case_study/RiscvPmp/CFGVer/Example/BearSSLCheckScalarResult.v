@@ -7,7 +7,7 @@
 (* met:                                                                       *)
 (*                                                                            *)
 (* 1. Redistributions of source code must retain the above copyright notice,  *)
-(*    this list of conditions and the following disclaimer.                   *)
+(*    this list of conditions and this disclaimer.                            *)
 (*                                                                            *)
 (* 2. Redistributions in binary form must reproduce the above copyright       *)
 (*    notice, this list of conditions and the following disclaimer in the     *)
@@ -26,48 +26,38 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-
 (* ========================================================================= *)
-(* Results.v — aggregator for the concrete end-to-end noninterference        *)
-(* theorems.                                                                 *)
+(* Example/BearSSLCheckScalarResult.v — end-to-end noninterference for the   *)
+(* BearSSL P-256 `check_scalar` comparison step.                             *)
 (*                                                                           *)
-(* The theorems themselves live one per program in Example/<Prog>Result.v;   *)
-(* this file only re-exports them, so the merge gate keeps a single build     *)
-(* target whose closure is every result (scripts/gate.sh runs Print          *)
-(* Assumptions on each theorem after requiring this file).                   *)
-(*                                                                           *)
-(* Why the theorems are NOT in Example/<Prog>.v: a result file requires      *)
-(* EndToEnd (and so Adequacy), an 85 s chain. Keeping it out of the examples  *)
-(* lets that chain build in PARALLEL with them rather than ahead of all of    *)
-(* them — worth ~40 s of wall time on a -j2 gate build.                      *)
-(*                                                                           *)
-(* Together with Noninterference.v and the per-example instruction/spec       *)
-(* definitions, these statements are the trusted surface of CFGVer: what they *)
-(* assert can be audited without reading the verifier or the proofs.         *)
+(* TRUSTED STATEMENT SURFACE — see BearSSLMuladdResult.v for the rationale   *)
+(* behind the Example/<Prog>Result.v split.                                  *)
 (* ========================================================================= *)
 
-(* Verifier is deliberately a bare `Require` (no Import): Importing it clashes
-   with BlockVer's identically-named definitions. See CFGVer/CLAUDE.md. *)
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
+From Katamaran Require Import
+     RiscvPmp.CFGVer.Example.Prelude
+     RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.Example.BearSSLCheckScalar.
 
-From Katamaran Require Export
-     RiscvPmp.CFGVer.Noninterference
-     RiscvPmp.CFGVer.Tables
-     RiscvPmp.CFGVer.Contracts
-     RiscvPmp.CFGVer.GenContract
-     RiscvPmp.CFGVer.Adequacy
-     RiscvPmp.CFGVer.EndToEnd.
+(* Bound: 16 instructions * 4 bytes = 64. *)
+Lemma check_scalar_noninterferent_param (init_addr : N) :
+  (init_addr + 64 < lenAddr)%N ->
+  noninterferent_strong init_addr check_scalar_instrs
+    (pcOutOfInstrs_exitCond init_addr check_scalar_instrs)
+    check_scalar_reg_specs [].
+Proof.
+  intros Hbound.
+  eapply gen_contract_noninterferent_param_simple.
+  - apply Prelude.nodup_fixed; reflexivity.
+  - cbn; lia.
+  - exact (valid_check_scalar_cfg_contract_param init_addr).
+Qed.
 
-(* The 25 end-to-end theorems, one file per program. *)
-From Katamaran Require Export
-     RiscvPmp.CFGVer.Example.MvSwapResult
-     RiscvPmp.CFGVer.Example.JumpsResult
-     RiscvPmp.CFGVer.Example.CountdownResult
-     RiscvPmp.CFGVer.Example.SetX2Result
-     RiscvPmp.CFGVer.Example.Cmovznz4Result
-     RiscvPmp.CFGVer.Example.PrecomputeResult
-     RiscvPmp.CFGVer.Example.KeyScheduleLoopResult
-     RiscvPmp.CFGVer.Example.BearSSLMuladdResult
-     RiscvPmp.CFGVer.Example.BearSSLModpowResult
-     RiscvPmp.CFGVer.Example.BearSSLCheckScalarResult.
+Lemma check_scalar_noninterferent :
+  noninterferent_strong init_addr check_scalar_instrs
+    (pcOutOfInstrs_exitCond init_addr check_scalar_instrs)
+    check_scalar_reg_specs [].
+Proof.
+  apply check_scalar_noninterferent_param.
+  unfold init_addr, lenAddr; lia.
+Qed.

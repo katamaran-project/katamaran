@@ -58,6 +58,9 @@ AXIOM_CLEAN_THMS=(
   "cmovznz4_noninterferent_param"
   "precompute_noninterferent_param"
   "key_schedule_loop2_noninterferent_param"
+  "muladd_q_noninterferent_param"
+  "modpow_win_noninterferent_param"
+  "check_scalar_noninterferent_param"
 )
 
 COQC="${COQC:-coqc}"
