@@ -72,16 +72,43 @@ fail() { red "✗ GATE FAILED: $*"; exit 1; }
 grn "▶ [1/3] Build (target closure, incremental)…"
 make Makefile.coq >/dev/null || fail "coq_makefile could not regenerate Makefile.coq"
 
-# Parallelism is bounded by MEMORY, not cores. Every coqc process loads the full
-# Require closure (~3.6 GB floor) and the heaviest VC (Cmovznz4) peaks near 6 GB,
-# so a naive `-j$(nproc)` (e.g. -j16 on a 14 GiB box) demands tens of GB of
-# baseline and OOM-kills mid-build (SIGTERM / make Error 143). Budget ~6 GB per
-# job against total RAM, clamp to [1, nproc]. Override explicitly with GATE_JOBS.
+# Parallelism is bounded by MEMORY, not cores: every coqc process loads its full
+# Require closure, so a naive `-j$(nproc)` (e.g. -j16 on a 15 GiB box) demands
+# tens of GB of baseline and OOM-kills mid-build (SIGTERM / make Error 143 —
+# looks like a compile failure but is a kill). Budget per job against total RAM,
+# clamp to [1, nproc]. Override explicitly with GATE_JOBS.
+#
+# Retuned 2026-07-27 after the Iris split of Spec/Verifier/Tables (00ac87a3) cut
+# the peaks. Measured peak RSS per file now:
+#
+#   SpecIris 4.06, Adequacy 3.91, EndToEnd 3.84, VerifierRel 3.75,
+#   TablesRel 3.63  -- these five are a SERIAL chain, so at most one is ever
+#                      resident at a time
+#   Cmovznz4 3.52 (was 5.72), KeyScheduleLoop 2.91, everything else ~2.5
+#
+# The old formula divided TOTAL RAM, which is wrong: this box idles at ~6.5 GB
+# used (desktop, editors, agent sessions), so only ~8.8 GB is actually available
+# to the build. Budgeting against total is how you get a number that looks safe
+# and then runs at 98% — a measured full rebuild at -j3 peaked at 15085 MB of
+# 15312 MB, i.e. ~227 MB of real headroom. So: subtract a reserve for whatever
+# else is running, THEN divide.
+#
+# Measured full CFGVer rebuilds on this 15.3 GB box:
+#   -j3  448 s, peak 15085 MB (98.5%)
+#   -j2  480 s, peak 14582 MB (95.2%)
+# -j3 is only ~7% faster and both run hot, because the baseline dominates. If
+# you have a browser open or the box has less free RAM, force GATE_JOBS=2 (or 1).
+#
+# NOTE: PER_JOB_MB assumes the light/heavy layering in CFGVer/CLAUDE.md holds.
+# Re-adding an Iris/ShallowExecutor require to a light file puts ~1.2 GB back on
+# all seven examples and invalidates this budget.
 if [ -n "${GATE_JOBS:-}" ]; then
   jobs="$GATE_JOBS"
 else
-  mem_gb="$(free -g | awk '/^Mem:/ {print $2}')"
-  jobs=$(( mem_gb / 6 ))
+  RESERVE_MB="${GATE_RESERVE_MB:-6000}"   # measured idle baseline on this box
+  PER_JOB_MB="${GATE_PER_JOB_MB:-3000}"   # median post-split peak (~2.5-3.5 GB)
+  mem_mb="$(free -m | awk '/^Mem:/ {print $2}')"
+  jobs=$(( (mem_mb - RESERVE_MB) / PER_JOB_MB ))
   [ "$jobs" -lt 1 ] && jobs=1
   cores="$(nproc)"
   [ "$jobs" -gt "$cores" ] && jobs="$cores"
