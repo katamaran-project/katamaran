@@ -66,6 +66,84 @@ TODO:
 	case study, not just CFGVer. Sizeable framework surgery — not attempted.
 	(Reference point for what the split buys: Noninterference.v, which needs no
 	assertions at all, went 3.63 -> 1.15 GB once it stopped requiring Sig.)
+- BEARSSL / "Breaking Bad" benchmark — what is NOT yet covered.
+	Context: branch bearssl-breaking-bad (2026-07-27) verified the three
+	compiler-induced BearSSL targets from Schneider et al., arXiv:2410.13489
+	appendix A.5 / Tables 10-12, at SNIPPET granularity (the small triggering
+	body, which is the scope Lesly-Ann's mail proposed). Gate green, axiom-clean.
+	The gaps below are what a reviewer would reasonably ask about next; they are
+	ordered by (my estimate of) value-per-effort.
+	+ [a] muladd_small: the GT-based lines are NOT covered, and they are part of
+	  the paper's own finding. A.5.3 says the compiler "understands the bitwise
+	  arithmetic operations of MUX, EQ, and GT" — but `GT` appears only in
+	    tb    = MUX(EQ(nxw, mw), tb, GT(nxw, mw));   /* inside the u-loop */
+	    over  = GT(cc, hi);
+	    under = ~over & (tb | LT(cc, hi));
+	  none of which is in the verified `q = MUX(EQ(a0,b0), ...)` line. So we
+	  covered the MUX/EQ half of that finding only. These are straight-line and
+	  register-only — cheapest real gap to close, do this first.
+	+ [b] modpow_opt: we verified a register-only VALUE version
+	    modpow_win_step(t2v, basev, u, bits) = t2v | (-EQ(u,bits) & basev)
+	  passing t2[v]/base[v] as values. But the paper's modpow issue is a
+	  secret-dependent MEMORY ACCESS: LLVM turns the mask into a cmov/csel that
+	  computes an ADDRESS, so which of y[i]/z[i] is read is what leaks. We
+	  therefore checked the arithmetic and NOT the mechanism the paper reports.
+	  Needs a pointer-taking version so the address computation is modelled
+	  (cfgver-memory / the _with_mem wiring).
+	+ [c] check_scalar full 32-iteration loop — NOT attempted, and expected to
+	  fail. Body is `c |= -EQ0(c) & CMP(k[u], P256_N[u])`; in the -O2 assembly a6
+	  (= c) is read TWICE per iteration and both reads feed the new a6, i.e. the
+	  k=2 term-duplication pattern of the key_schedule wall (~1.7x/trip measured
+	  there => 1.7^32 unreachable), PLUS ~416 steps against the separate
+	  O(steps^2) driver. Unrolling does NOT help (term growth is independent of
+	  how the loop is expressed). Do NOT re-try havoc-the-secret — already
+	  refuted 2026-07-19. Cheap useful substitute: a small-N sweep (N=2..5,
+	  scaling trip register + fuel + mem_specs TOGETHER) to report a concrete
+	  growth factor for a real crypto function — that is exactly the "report
+	  scalability issues" the mail invites. Not run yet.
+	+ [d] Gaps common to all three: no memory addressing (all verified as
+	  register-only functions over already-loaded values, while the real code
+	  indexes arrays); no loops (single iteration / straight line only); no
+	  calling context (br_div, br_i31_montymul, CCOPY, br_i31_add/sub, the
+	  enclosing control flow); trailing `ret` dropped as in every CFGVer example.
+	  Also unchecked but benign: the `m_bitlen` and `klen` early-return branches
+	  (they branch on public lengths, and BearSSL documents the modulus bit
+	  length as deliberately leakable), check_scalar's `z |= k[u]` loop, and its
+	  final `NEQ(z,0) & LT0(c)`.
+	+ [e] Only ONE of the three actually breaks on RV32I. clang 18.1.3
+	  --target=riscv32 -march=rv32i -O2 miscompiles muladd_small's q line into
+	  `bne a0, a1` (reproducing Table 11 on a current LLVM; the paper tested
+	  13-15), and what we verify is the barrier-fixed version. modpow_win and
+	  check_scalar compile branch-free at every -O level tried — their findings
+	  are riscv64/x86-64/x86-i386/aarch64. So for those two we verify binaries
+	  that were ALREADY correct and Katamaran catches nothing. State this
+	  plainly in any writeup rather than implying three catches.
+- FRAMEWORK (theories/) — retire the formula_bool/formula_relop escape hatch for
+  observation-free secret branches.
+	Motivation: fun_bool_to_bits (RiscvPmp/Machine.v) had to be made branch-free
+	via bop.bvcons before ANY constant-time comparison idiom could verify,
+	because a muSail `if:` on a secret becomes formula_bool/formula_relop, which
+	is False on NonSyncVal (Formulas.v:142/147) — so SLT/SLTU/SLTI/SLTIU demanded
+	secLeak on their operands. That fix is per-instruction; the next `if:` on
+	secret data anywhere in any Sail model hits the same wall.
+	The principled fix: at a NonSyncVal bool, have the relational executor split
+	into the four world-pair cases (TT/TF/FT/FF) and require the MIXED ones to be
+	observationally equal, instead of demanding SyncVal outright. bool_to_bits'
+	mixed cases produce different values but no observation (fine); a real branch
+	produces different pc sequences (still caught).
+	NOT sound to shortcut: weakening formula_relop's NonSyncVal case to `p1 /\ p2`
+	alone leaves disagreeing world-pairs covered by NO path while the executor
+	still claims exhaustive demonic coverage.
+- Re-check the fun_bool_to_bits model change if anyone revives BlockVer.
+	+ Only the two-case VALUE equality was proved (bv.cons true bv.nil = bv.one,
+	  bv.cons false bv.nil = bv.zero, by reflexivity — exhaustive for bool). No
+	  bisimulation between the old stm_if and the new pure expression.
+	+ The residual assumption is the one already baked into LeakEvent
+	  (Base.v:329, only LeakPc/LeakMemRead/LeakMemWrite): that slt/sltu/slti/sltiu
+	  leak nothing microarchitecturally. It is STRUCTURAL and does not appear in
+	  Print Assumptions.
+	+ _CoqProject no longer builds BlockVer, so Machine.v changes are not checked
+	  against it. Re-enable its lines and rebuild if it is revived.
 
 
 Why do we need pc_step_sync and where can we find that information?
