@@ -79,6 +79,51 @@ concrete-counter BNE loop shows no growth). Scrutinees arrive already
 `peval`'d (`eval_exp`, SymbolicExecutor.v ~403; `peval_binop'` folds val-val
 binops including relational comparisons).
 
+## How an `assert` is discharged against the path condition (`Symbolic/Solver.v`)
+
+The other half of what `combined_solver` does: not just refuting forks, but
+*discharging* an asserted formula that already follows from `wco`. Worth knowing
+because a failure here leaks one residual node per step into the VC.
+
+`solver_generic w C` (`Solver.v` ~3007) is three stages, in this order:
+
+1. `simplify_pathcondition C` — per-formula rewriting (`simplify_formula`).
+   Structural: `simplify_secLeak` decomposes `secLeak` through
+   binop/unop/union down to variable leaves, `term_val ⇒ true`. It does **not**
+   consult `wco`.
+2. `assumption_pathcondition (wco w) C1` → `assumption_formula`, which walks
+   `wco` and calls `formula_simplifies F F'` per entry. Its first line is
+   `if formula_eqb hyp fact then Some formula_true`, and `formula_eqb` **does**
+   cover `formula_secLeak` — so `assume F ;; assert F` needs nothing
+   type-specific.
+3. `unify_pathcondition`.
+
+`combined_solver` (~3053) runs `solver_generic` several times, which is why a
+leftover `formula_true` from stage 2 clears on a later pass (one pass leaves
+`[formula_true]`, the composite leaves `[ctx]`).
+
+**Both `assume` and `assert` extend the world with their residual** —
+`wpathcondition w C = MkWorld (wctx w) (wco w ++ C)` (`Worlds.v:104`), used by
+`assume_pathcondition` *and* `assert_pathcondition` (`Monads.v` ~334-372). So an
+un-discharged assert permanently enlarges `wco` with a redundant copy, and every
+later `wco` walk pays for it — a term-size-independent quadratic if it happens
+per step.
+
+### Known bug: `formula_simplifies` burns a path-condition entry
+
+`assumption_formula` consumes exactly one `wco` entry per recursion step and
+never revisits it. The `formula_relop bop.eq` case (`Solver.v` ~2834) returns
+`Some (propeq t1 t2 ∧ secLeak t1 ∧ secLeak t2)` **ignoring its `fact`
+argument** — an unconditional rewrite in a function whose contract is "simplify
+`hyp` given `fact`". The entry is therefore spent without being used, and a
+`secLeak t1` sitting exactly there is left undischarged. Measured 2026-07-28
+with `wco = [secLeak p]` and goal `p = p+p`: `secLeak p` survives, and adding
+**any** unrelated newer entry makes it discharge. Usually masked by
+`combined_solver`'s repeated passes. Fix = apply `fact` to the two spawned
+conjuncts; needs a `formula_simplifies_spec` update, recorded as a TODO at the
+site. For the `secLeak`-specific semantics these formulas carry, see
+**secret-data-walls**.
+
 ## Generic statement executor (`theories/MicroSail/SymbolicExecutor.v`)
 
 `sexec (inline_fuel : nat) : Exec` (~line 609) is the top-level `Fixpoint`

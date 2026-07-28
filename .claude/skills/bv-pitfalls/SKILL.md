@@ -30,6 +30,29 @@ description: >
 Zify-rewritten to `x mod 2^word` and breaks lia differently — that one is in the
 **gmap-pitfalls** skill.)
 
+### `Cannot find witness` with the right bound already in context
+
+Third distinct mechanism behind the same message (the other two: the `bv.exp2`
+literals above, and gmap's Zify rewrite). `cbn` unfolds `bv.unsigned` in the
+GOAL to `Z.of_N (bv.bin a)`, while `bv.unsigned_bounds` states it FOLDED as
+`bv.unsigned a` — so `lia` sees two unrelated atoms and cannot connect the
+hypothesis to the goal, even though the hypothesis is exactly the bound needed.
+
+```coq
+(* fails: goal has Z.of_N (bv.bin a), hypothesis has bv.unsigned a *)
+pose proof (bv.unsigned_bounds a). lia.
+(* works: one atom on both sides *)
+pose proof (bv.unsigned_bounds a); unfold bv.unsigned in *; lia.
+```
+
+`unfold bv.unsigned in *` (note `in *`, not just in the goal) is the fix; after
+it, `lia` closes `0 <= Z.of_N (bv.bin a)` from `Z.of_N`'s non-negativity without
+needing the bound at all. Pre-existing instance of the same idiom:
+`relval_fetch_lower` in `RiscvPmp/CFGVer/Contracts.v` (`cbn; unfold bv.unsigned;
+lia`). Cost of not knowing this, measured 2026-07-28: two full 5-minute
+`Symbolic/Solver.v` compiles. Iterate such tactic fixes in rocq-mcp **preamble
+mode** instead (~30 ms) — see the Tooling-gotchas block in the root `CLAUDE.md`.
+
 ## Enum membership: the lemma is `elem_of_enum`
 
 `bv.finite.all_spec` does not exist. The lemma is

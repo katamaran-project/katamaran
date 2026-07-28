@@ -2333,6 +2333,35 @@ Module Type GenericSolverOn
     #[local] Opaque simplify_relopb.
     #[export] Hint Rewrite @simplify_relopb_spec : uniflogic.
 
+    (* [0 <= unsigned rv] is NOT unconditionally true at the RelVal level:
+       instpred_formula_relop sends a NonSyncVal operand to False, so the bound
+       only holds when the operand is public.  It is however exactly
+       EQUIVALENT to [secLeak rv] -- SyncVal makes both sides True (unsigned is
+       non-negative), NonSyncVal makes both sides False.  That equivalence is
+       what lets peval_formula_le' below rewrite [0 <= unsigned t] to
+       [secLeak t] instead of leaving it as an opaque residual: the rewritten
+       form is then discharged by the ordinary assumption machinery against an
+       assumed [secLeak t], which is what a verified contract always provides
+       for an instruction address.  (An earlier attempt rewrote to
+       [formula_true] instead; that is unsound for NonSyncVal, which is why the
+       case was left as [default] with the proof commented out.) *)
+    Lemma secLeak_iff_unsigned_nonneg {n} (rv : RelVal (ty.bvec n)) :
+      secLeak rv <->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+              (uop.evalRel uop.unsigned rv) with
+      | SyncVal p => p
+      | NonSyncVal _ _ => False
+      end.
+    Proof.
+      destruct rv as [a|a b]; cbn.
+      (* unfold bv.unsigned in * so lia sees a single atom rather than both
+         [bv.unsigned a] and [Z.of_N (bv.bin a)] -- otherwise it fails with
+         "Cannot find witness". *)
+      - pose proof (bv.unsigned_bounds a); try unfold bv.unsigned in *;
+          split; intros; first [ exact I | lia ].
+      - split; intros; first [ exact I | tauto | contradiction ].
+    Qed.
+
     Definition peval_formula_le' {Σ} (t : Term Σ ty.int) : Formula Σ :=
       let default := formula_le (term_val ty.int 0%Z) t in
       Term_int_case (fun _ => Formula Σ)
@@ -2345,7 +2374,13 @@ Module Type GenericSolverOn
         (fun (*land*) _ _ => default)
         (fun (*neg*) _ => default)
         (fun (*signed*) _ _ => default)
-        (fun (*unsigned*) _ _ => default (* formula_true *))
+        (* [0 <= unsigned t] is NOT [formula_true]: instpred_formula_relop sends
+           a NonSyncVal operand to False, so the bound only holds when [t] is
+           public.  It is however exactly EQUIVALENT to [secLeak t] -- SyncVal
+           makes both sides True (bv.unsigned_bounds), NonSyncVal makes both
+           sides False -- so rewriting to secLeak is sound and discharges the
+           per-fetch lower-bound obligation against an assumed [secLeak t]. *)
+        (fun (*unsigned*) _ t' => formula_secLeak t')
         t.
 
     Definition peval_formula_le {Σ} (t1 t2 : Term Σ ty.int) : Formula Σ :=
@@ -2375,10 +2410,13 @@ Module Type GenericSolverOn
       - constructor; intros ι _; cbn.
         destruct (Z.leb_spec 0 i);
           intuition; try easy; lia.
-      (* - constructor; intros ι _; cbn. *)
-      (*   intuition. *)
-      (*   unfold instpred_formula_relop. *)
-      (*   apply bv.unsigned_bounds. constructor. *)
+      (* [0 <= unsigned t] <-> [secLeak t]: SyncVal makes both sides True
+         (bv.unsigned_bounds), NonSyncVal makes both sides False. *)
+      (* the [unsigned] case now rewrites to [secLeak]; see
+         secLeak_iff_unsigned_nonneg above. *)
+      - constructor; intros ι _; cbn.
+        unfold instpred_formula_relop, instpred_formula_secLeak; cbn.
+        apply secLeak_iff_unsigned_nonneg.
     Qed.
 
     Lemma peval_formula_le_spec [w : World] (t1 t2 : Term w ty.int) :
@@ -2834,6 +2872,15 @@ Module Type GenericSolverOn
       | @formula_relop _ σ' op t1 t2 =>
           match op with
           | bop.eq =>
+              (* TODO (fact-burning bug, diagnosed 2026-07-28): this rewrite
+                 does not depend on [fact], yet assumption_formula SPENDS one
+                 path-condition entry per recursion step and never revisits it
+                 -- so returning [Some _] here burns [fact].  A [secLeak t1]
+                 sitting exactly at that entry is then left undischarged
+                 (adding any unrelated newer entry "fixes" it, which is how
+                 this was found).  Fix = apply [fact] to the two secLeak
+                 conjuncts spawned here; needs a formula_simplifies_spec
+                 update, not yet done. *)
               Some (formula_and (formula_propeq t1 t2)
                       (formula_and (formula_secLeak t1) (formula_secLeak t2)))
           | _ => None

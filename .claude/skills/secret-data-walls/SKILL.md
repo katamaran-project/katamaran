@@ -106,6 +106,37 @@ observation (fine), whereas a real branch differs in pc sequence (still caught).
 That would retire this escape hatch for the whole class rather than
 per-instruction. Open — see `TODOS.txt`.
 
+### The wall cuts BOTH ways: a SyncVal-always-true relop ≡ `secLeak`
+
+Corollary of the same `NonSyncVal ⇒ False` semantics, and the sound way to
+simplify such a formula. If a relop is *unconditionally true whenever its
+operands are public*, then as a `Formula` it is **exactly equivalent to
+`secLeak`** of the operand — not to `formula_true`:
+
+| operand | the relop | `secLeak` |
+|---|---|---|
+| `SyncVal v` | True (the arithmetic fact) | True |
+| `NonSyncVal a b` | **False** (this wall) | **False** |
+
+So `formula_relop` may be rewritten to `formula_secLeak`, which the ordinary
+`assumption_formula` machinery then discharges against an assumed `secLeak t`.
+Rewriting to `formula_true` instead is **unsound** — it silently drops the
+publicness requirement.
+
+Worked instance (`Symbolic/Solver.v`, `peval_formula_le'`, 2026-07-28):
+`0 <= unsigned t` is *not* `formula_true`, because `unsigned` on a
+`NonSyncVal` sends the relop to `False`; it *is* `formula_secLeak t`
+(`secLeak_iff_unsigned_nonneg`). An earlier attempt had tried `formula_true`,
+failed to prove it, and left the case as `default` with the proof commented
+out — the `secLeak` form is what makes it go through. Discovering this by
+hand cost a session; the pre-existing hand lemma `relval_fetch_lower`
+(`CFGVer/Contracts.v`), which takes `secLeak X` as an explicit hypothesis, was
+already evidence that the bound needs publicness.
+
+**Practical test** before rewriting any relop over possibly-secret operands:
+ask what it means on `NonSyncVal`. If the answer is "False, because of this
+wall", the target is `secLeak`, never `True`.
+
 ## Practical rules for term-rewrite / peval / solver work on secret data
 
 1. **Prefer pure-`bv` arithmetic canonical forms.** A form built only from
