@@ -1,12 +1,13 @@
 {
   "purpose": "Cross-skill routing eval for the cfgver-* skill family. Each query has ONE expected winner among the cfgver skills, the generic pitfall skills (rocq-/bv-/gmap-pitfalls, iris-proofmode), the rocq plugin skills, or none. A skill firing on a query expected elsewhere = mis-route.",
-  "notes": "v14 (2026-07-19, same skill-usage-audit retrospective, after user feedback): two genuinely new skills drafted via skill-creator, per the audit's own protocol (missing-skill candidates get surfaced, not drafted inline) -- (1) core-executor-internals: the core Katamaran SPureSpec/SHeapSpec generic monad (demonic_finite/demonic_pattern_match, the generic sexec statement executor, and their refine_*/ℛ⟦⟧ lemmas in theories/Symbolic+MicroSail+Refinement/*.v) -- the shared layer underneath every case study's own executor, distinct from cfgver-executor (CFGVer's OWN sexec_cfg_addr) and cfgver-refinement/cfgver-rsolve (CFGVer's OWN RefineCompat/rsolve pair, which happens to reuse the same refine_*/ℛ⟦⟧ naming one layer up). (2) rocq-timeout-triage: the user pointed out rocq-compile-oom should be OOM-specific, not a catch-all for 'my compile is slow' -- this new skill is the general entry point (killed? -> rocq-compile-oom; still running and slow? -> triage via timing=true, Abort-after-vm_compute to isolate construction cost, bisecting a changed parameter's growth ratio) that rocq-compile-oom's description was narrowed to hand off TO rather than try to cover itself. Cross-referenced both directions (cfgver-executor/cfgver-refinement -> core-executor-internals; rocq-compile-oom <-> rocq-timeout-triage) and updated CLAUDE.md's skill map. Added Q73 (should-trigger, core-executor-internals), Q74/Q75 (adversarial: CFGVer's OWN executor/rsolve territory must not get stolen by the same-named core-layer concepts), Q76 (should-trigger, rocq-timeout-triage, cause not yet known), Q77 (adversarial: an ALREADY-reported killed-process signature stays rocq-compile-oom's direct hit, not the more general triage skill), Q78 (regression, was Q44: routine still-running must stay 'none' even with the new triage skill's overlapping 'way slower than expected' language), Q79 (regression, was Q65: an already-diagnosed loop-trip-count-bumped query stays cfgver-executor directly, not stolen by the new general triage skill). All 7 passed clean on round 1, no rewording needed (results-2026-07-19-f.json). v13 (2026-07-19, skill-usage-audit retrospective on the same scaling-wall session): rocq-pitfalls' description extended with two generic gotchas hit live while authoring the offsets_from_lookup helper lemma: (1) TermNotations/asn.notations silently hijacking +/-/*/= for plain N/Z/nat arithmetic in a CFGVer file (fix: explicit %N/%Z scope), (2) injection H as ->/<- picking the wrong rewrite direction ('Found no subterm matching'). Added Q69 (should-trigger, gotcha 1), Q70 (adversarial: mentioning 'CFGVer'/'contract' must not pull this to cfgver-contracts/cfgver-gen-contract -- it's a generic notation-scope issue), Q71 (should-trigger, gotcha 2), Q72 (adversarial, reverse direction: a genuine gmap-lookup 'found no subterm' must stay gmap-pitfalls' even though the new injection bullet's wording overlaps almost verbatim). Also logged Q68, a silent miss from the SAME session: the first 590s vm_compute timeout (key_schedule_loop2 bumped to N=64) matched rocq-compile-oom's own trigger ('confirmed stuck far longer than its own history') almost exactly, but the agent went straight into isolating probes instead of first checking memory/swap per that skill's documented first step -- the eventual conclusion (genuine exponential compute) turned out right, but via task-specific probing rather than the skill's own protocol; no description fix, logged as a proactive-triggering regression guard (same shape as Q46-49/Q58). Q68's first-draft wording ('scaled-up loop example') accidentally also matched cfgver-executor's own new clause (added earlier the SAME session) -- round 1 judged cfgver-executor, which is actually correct/more-specific now that clause exists, not a real miss; reworded to withhold the loop-framing (matching what was actually known at the moment of the real miss) and round 2 passed clean (results-2026-07-19-e.json). Also added a cross-reference from cfgver-new-example's fuel/exitCond step to cfgver-executor's new blowup section (no eval entry needed -- pure content addition, no description change on that side). v12 (2026-07-19, key_schedule_loop scaling-wall session): cfgver-executor's description extended with a clause covering an existing loop example's vm_compute/solve_vc blowing up exponentially when its trip count is bumped (root cause: demonic_finite/demonic_pattern_match forking unconditionally on every branch, no peval short-circuit -- traced while investigating why key_schedule_loop2 doesn't scale past N~6-7). Added Q65 (should-trigger, anchors the new clause), Q66 (adversarial: a single vm_compute call ending in a tight-fuel bare-False residual must still route to cfgver-solve-vc, not get stolen by the new clause's 'vm_compute takes long'/'solve_vc' wording), Q67 (adversarial: authoring/verifying a brand-new loop example stays cfgver-new-example's territory even though it contains a backward branch -- the new clause is about an EXISTING example's scaling symptom, not new-program authoring). Q66 round-1 validation caught a REAL regression (first-draft wording 'takes way longer than expected... not a fuel/timeout problem to tune around' stole Q66 from cfgver-solve-vc) -- fixed by requiring 'genuinely never terminates (no residual ever appears)' plus an explicit contrast sentence carving out the finishes-with-a-residual case; round 2 confirmed the fix with no new regressions (results-2026-07-19-d.json). v11 (2026-07-19, same session): added skill-usage-audit, a new meta-skill for retrospectively sweeping a whole conversation for silent misses/misfires/content gaps (formalizing the review just done for Q58-60 above) that delegates to skill-routing-maintenance for routing fixes and skill-creator for genuinely new skills. Added a NOT-clause to skill-routing-maintenance's description pointing at it. Added Q61/Q64 (should-trigger, Q64 anchored on the literal query that started this session's review), and re-ran Q50/Q51/Q54 (renumbered here as Q63/Q62/regression) as regression checks against skill-creator/skill-routing-maintenance now that a third skill competes in this territory. v10 (2026-07-19, key_schedule_loop2 session): added Q58 (silent-miss: the agent hand-authored reg_spec_rel/mem_spec_rel entries with PVBaseOff/PVConst/PVExist from memory of a past example's source, then grepped GenContract.v's `Inductive param_val` to confirm PVConst existed, instead of loading cfgver-gen-contract which already documents this exact vocabulary — no description fix needed, logged as a proactive-triggering regression guard like Q46/Q47). Also tightened cfgver-new-example's description to explicitly cover hand-authored synthetic loop/spike programs (no real compiled source to translate via asm_to_ast.py) after a live branch-immediate-offset bug in exactly that scenario (key_schedule_loop2: used -(N*4), the total code length, instead of -((N-1)*4), the offset from the branch instruction's own address) — added Q59 (should-trigger, validates the new hand-authoring clause) and Q60 (adversarial regression guard: the new literal trigger phrase 'add a loop that does Y' is generic enough to risk firing on a completely unrelated, non-RV32I/non-CFGVer loop request; cfgver-new-example must NOT win there). v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits). v6 (2026-07-18, later): cfgver-gen-contract description expanded to cover the parametric-base recipe (gen_contract_param/_rel) and the 'discharge valid_contract FIRST' bullet-ordering gotcha, discovered live when migrating all CFGVer examples to parametric base — added Q45 (adversarial: sounds exactly like rocq-compile-oom's territory but the real fix is cfgver-gen-contract's). v7 (2026-07-18, retrospective on the same live session): user asked to mine the session itself for misfires/silent-misses rather than hypothetical queries. Added Q46 (silent-miss: the session's OWN opening query went completely unrouted — zero Skill calls before source exploration), Q47 (silent-miss: an incomplete-proof error in gen_contract_noninterferent_param territory was debugged blind instead of re-triggering a skill already loaded earlier that session), Q48 (silent-miss: a new bv monotonicity proof was hand-written reactively instead of loading bv-pitfalls proactively), Q49 (adversarial companion to Q45: after resource health is EXPLICITLY confirmed clean and the hang still reproduces identically, rocq-compile-oom must hand off to cfgver-gen-contract rather than being re-suspected). Net lesson across Q46-49: loading a skill once for one symptom in a session does not cover a later, different symptom in the same skill's territory — re-triggering on each new symptom matters as much as triggering at all. v8 (2026-07-18, later still): added the new skill-routing-maintenance skill (formalizing this project's read-only Haiku-judge routing method, distinct from the bundled skill-creator plugin) — Q50-55 probe the boundary between the two: Q50/Q53 anchor skill-creator's territory (a genuinely new skill, including its own first-draft test-triggering loop), Q51/Q54/Q55 anchor skill-routing-maintenance's (fixing/checking an EXISTING skill's triggering, the exact 'check routing' phrase, misfire logging), and Q52 is the sharpest adversarial case — it echoes skill-creator's own bundled description almost verbatim ('optimize a skill's description for better triggering accuracy') and specifically tests whether this project's convention (routing work on existing skills goes through skill-routing-maintenance, never skill-creator's run_loop.py/run_eval.py against the live repo) wins. v9 (2026-07-19): added Q56, another silent-miss in cfgver-new-example's own territory (same family as Q46-49's lesson, now specifically for THIS skill rather than cfgver-gen-contract) — a terse follow-up ('prove non-interference for this [thing]', referring back to code discussed earlier, bundled with an unrelated TODO-list action) failed to fire even though Q30/Q38 already cover the explicit phrasing; cfgver-new-example's description was tightened with a clause covering terse/bundled follow-ups. Also added Q57 in the same live session: while debugging the resulting solve_vc failure (an sltu-on-private-data comparison), the agent hand-traced Contracts.v/Formulas.v/TypeDecl.v internals instead of loading cfgver-solve-vc, because that skill's description only documented the destructible-hypothesis secLeak pattern (Hs : secLeak x |- _) and not the unprovable-goal shape (|- secLeak v, no hypothesis) that a comparison on private data actually produces — description extended with this residual, plus a body section explaining the root cause (solve_vc's secLeak derivation is compositional-only, Contracts.v's instprop_formula_secLeak_binop) and pointing at TODO.md's tracked follow-up. 2026-07-19 (later session): Q80-82 added after CORRECTING the key_schedule scaling-wall diagnosis (probes disproved the demonic_finite fork-blowup mechanism recorded that morning; real cause is secret-register term duplication, no sharing in the register store). cfgver-executor and core-executor-internals descriptions reworded accordingly (trigger symptoms kept, mechanism clause swapped); Q80/Q81 cover the new vocabulary, Q82 guards that old-vocabulary queries still route to core-executor-internals. 2026-07-20: Q83-93 added after splitting relval-semantics into three skills (relval-model / relval-rewrite-over-secrets / secret-data-walls). Q83-85 cover the value model, Q86-87 rewrite-soundness-over-secrets, Q88-90 the secret-data walls; Q91-93 are adversarial near-misses guarding the boundaries against cfgver-contracts (secLeakvar permission), cfgver-soundness (leakage chain), and bv-pitfalls (lia-vs-2^32). 2026-07-20 (b): Q88 mis-routed to cfgver-solve-vc (its description already claims 'VC reduces to bare False' + 'comparison on private data'); added a division-of-labor clause to cfgver-solve-vc handing the framework-level WHY to secret-data-walls, plus Q94 as a regression guard that plain (non-secret) VC-False still routes to cfgver-solve-vc.",
+  "notes": "v15 (2026-07-28, skill-usage-audit retrospective on the Solver.v secLeak-residual session, which made ZERO Skill calls): added Q95-97. Two proactive-triggering silent misses (cfgver-solve-vc's per-fetch residual lemmas, secret-data-walls' formula_relop NonSyncVal=>False in the solver-AUTHORING direction) plus a third-mechanism seam probe for 'Cannot find witness'. No description fields were edited, so no cross-family routing re-validation was required. v14 (2026-07-19, same skill-usage-audit retrospective, after user feedback): two genuinely new skills drafted via skill-creator, per the audit's own protocol (missing-skill candidates get surfaced, not drafted inline) -- (1) core-executor-internals: the core Katamaran SPureSpec/SHeapSpec generic monad (demonic_finite/demonic_pattern_match, the generic sexec statement executor, and their refine_*/ℛ⟦⟧ lemmas in theories/Symbolic+MicroSail+Refinement/*.v) -- the shared layer underneath every case study's own executor, distinct from cfgver-executor (CFGVer's OWN sexec_cfg_addr) and cfgver-refinement/cfgver-rsolve (CFGVer's OWN RefineCompat/rsolve pair, which happens to reuse the same refine_*/ℛ⟦⟧ naming one layer up). (2) rocq-timeout-triage: the user pointed out rocq-compile-oom should be OOM-specific, not a catch-all for 'my compile is slow' -- this new skill is the general entry point (killed? -> rocq-compile-oom; still running and slow? -> triage via timing=true, Abort-after-vm_compute to isolate construction cost, bisecting a changed parameter's growth ratio) that rocq-compile-oom's description was narrowed to hand off TO rather than try to cover itself. Cross-referenced both directions (cfgver-executor/cfgver-refinement -> core-executor-internals; rocq-compile-oom <-> rocq-timeout-triage) and updated CLAUDE.md's skill map. Added Q73 (should-trigger, core-executor-internals), Q74/Q75 (adversarial: CFGVer's OWN executor/rsolve territory must not get stolen by the same-named core-layer concepts), Q76 (should-trigger, rocq-timeout-triage, cause not yet known), Q77 (adversarial: an ALREADY-reported killed-process signature stays rocq-compile-oom's direct hit, not the more general triage skill), Q78 (regression, was Q44: routine still-running must stay 'none' even with the new triage skill's overlapping 'way slower than expected' language), Q79 (regression, was Q65: an already-diagnosed loop-trip-count-bumped query stays cfgver-executor directly, not stolen by the new general triage skill). All 7 passed clean on round 1, no rewording needed (results-2026-07-19-f.json). v13 (2026-07-19, skill-usage-audit retrospective on the same scaling-wall session): rocq-pitfalls' description extended with two generic gotchas hit live while authoring the offsets_from_lookup helper lemma: (1) TermNotations/asn.notations silently hijacking +/-/*/= for plain N/Z/nat arithmetic in a CFGVer file (fix: explicit %N/%Z scope), (2) injection H as ->/<- picking the wrong rewrite direction ('Found no subterm matching'). Added Q69 (should-trigger, gotcha 1), Q70 (adversarial: mentioning 'CFGVer'/'contract' must not pull this to cfgver-contracts/cfgver-gen-contract -- it's a generic notation-scope issue), Q71 (should-trigger, gotcha 2), Q72 (adversarial, reverse direction: a genuine gmap-lookup 'found no subterm' must stay gmap-pitfalls' even though the new injection bullet's wording overlaps almost verbatim). Also logged Q68, a silent miss from the SAME session: the first 590s vm_compute timeout (key_schedule_loop2 bumped to N=64) matched rocq-compile-oom's own trigger ('confirmed stuck far longer than its own history') almost exactly, but the agent went straight into isolating probes instead of first checking memory/swap per that skill's documented first step -- the eventual conclusion (genuine exponential compute) turned out right, but via task-specific probing rather than the skill's own protocol; no description fix, logged as a proactive-triggering regression guard (same shape as Q46-49/Q58). Q68's first-draft wording ('scaled-up loop example') accidentally also matched cfgver-executor's own new clause (added earlier the SAME session) -- round 1 judged cfgver-executor, which is actually correct/more-specific now that clause exists, not a real miss; reworded to withhold the loop-framing (matching what was actually known at the moment of the real miss) and round 2 passed clean (results-2026-07-19-e.json). Also added a cross-reference from cfgver-new-example's fuel/exitCond step to cfgver-executor's new blowup section (no eval entry needed -- pure content addition, no description change on that side). v12 (2026-07-19, key_schedule_loop scaling-wall session): cfgver-executor's description extended with a clause covering an existing loop example's vm_compute/solve_vc blowing up exponentially when its trip count is bumped (root cause: demonic_finite/demonic_pattern_match forking unconditionally on every branch, no peval short-circuit -- traced while investigating why key_schedule_loop2 doesn't scale past N~6-7). Added Q65 (should-trigger, anchors the new clause), Q66 (adversarial: a single vm_compute call ending in a tight-fuel bare-False residual must still route to cfgver-solve-vc, not get stolen by the new clause's 'vm_compute takes long'/'solve_vc' wording), Q67 (adversarial: authoring/verifying a brand-new loop example stays cfgver-new-example's territory even though it contains a backward branch -- the new clause is about an EXISTING example's scaling symptom, not new-program authoring). Q66 round-1 validation caught a REAL regression (first-draft wording 'takes way longer than expected... not a fuel/timeout problem to tune around' stole Q66 from cfgver-solve-vc) -- fixed by requiring 'genuinely never terminates (no residual ever appears)' plus an explicit contrast sentence carving out the finishes-with-a-residual case; round 2 confirmed the fix with no new regressions (results-2026-07-19-d.json). v11 (2026-07-19, same session): added skill-usage-audit, a new meta-skill for retrospectively sweeping a whole conversation for silent misses/misfires/content gaps (formalizing the review just done for Q58-60 above) that delegates to skill-routing-maintenance for routing fixes and skill-creator for genuinely new skills. Added a NOT-clause to skill-routing-maintenance's description pointing at it. Added Q61/Q64 (should-trigger, Q64 anchored on the literal query that started this session's review), and re-ran Q50/Q51/Q54 (renumbered here as Q63/Q62/regression) as regression checks against skill-creator/skill-routing-maintenance now that a third skill competes in this territory. v10 (2026-07-19, key_schedule_loop2 session): added Q58 (silent-miss: the agent hand-authored reg_spec_rel/mem_spec_rel entries with PVBaseOff/PVConst/PVExist from memory of a past example's source, then grepped GenContract.v's `Inductive param_val` to confirm PVConst existed, instead of loading cfgver-gen-contract which already documents this exact vocabulary — no description fix needed, logged as a proactive-triggering regression guard like Q46/Q47). Also tightened cfgver-new-example's description to explicitly cover hand-authored synthetic loop/spike programs (no real compiled source to translate via asm_to_ast.py) after a live branch-immediate-offset bug in exactly that scenario (key_schedule_loop2: used -(N*4), the total code length, instead of -((N-1)*4), the offset from the branch instruction's own address) — added Q59 (should-trigger, validates the new hand-authoring clause) and Q60 (adversarial regression guard: the new literal trigger phrase 'add a loop that does Y' is generic enough to risk firing on a completely unrelated, non-RV32I/non-CFGVer loop request; cfgver-new-example must NOT win there). v4 (2026-07-17): six rocq-command wrapper skills added (rocq-golf/review/refactor/doctor/checkpoint/formalize); Q14 expected changed rocq:golf -> rocq-golf; Q33-39 added (wrapper triggers + formalize-vs-new-example adversarial Q38 + autoprove guard Q39). v3 notes: Architecture v3 (2026-07-16 evening): contracts factored into cfgver-contracts (general/record) + cfgver-gen-contract (generator user guide) + cfgver-gen-contract-internals; recipe extracted to cfgver-new-example; solve_vc to cfgver-solve-vc; Q4/Q10/Q20 now expect cfgver-gen-contract. Q6 note: iris-proofmode also plausible (double-iFrame symptom) — endtoend should win on context. Q16 easy sanity check. Q19 probes the _tbl body gap. 18 cfgver-family skills + 4 generic pitfall skills under test. NOT yet re-run since v3. v5 (2026-07-18): added rocq-compile-oom (new skill for silent-kill/OOM diagnosis during heavy compiles) + Q40-44 (2 should-trigger, 2 adversarial near-misses against rocq-doctor/rocq-pitfalls, 1 guard against premature firing on routine async-tool waits). v6 (2026-07-18, later): cfgver-gen-contract description expanded to cover the parametric-base recipe (gen_contract_param/_rel) and the 'discharge valid_contract FIRST' bullet-ordering gotcha, discovered live when migrating all CFGVer examples to parametric base — added Q45 (adversarial: sounds exactly like rocq-compile-oom's territory but the real fix is cfgver-gen-contract's). v7 (2026-07-18, retrospective on the same live session): user asked to mine the session itself for misfires/silent-misses rather than hypothetical queries. Added Q46 (silent-miss: the session's OWN opening query went completely unrouted — zero Skill calls before source exploration), Q47 (silent-miss: an incomplete-proof error in gen_contract_noninterferent_param territory was debugged blind instead of re-triggering a skill already loaded earlier that session), Q48 (silent-miss: a new bv monotonicity proof was hand-written reactively instead of loading bv-pitfalls proactively), Q49 (adversarial companion to Q45: after resource health is EXPLICITLY confirmed clean and the hang still reproduces identically, rocq-compile-oom must hand off to cfgver-gen-contract rather than being re-suspected). Net lesson across Q46-49: loading a skill once for one symptom in a session does not cover a later, different symptom in the same skill's territory — re-triggering on each new symptom matters as much as triggering at all. v8 (2026-07-18, later still): added the new skill-routing-maintenance skill (formalizing this project's read-only Haiku-judge routing method, distinct from the bundled skill-creator plugin) — Q50-55 probe the boundary between the two: Q50/Q53 anchor skill-creator's territory (a genuinely new skill, including its own first-draft test-triggering loop), Q51/Q54/Q55 anchor skill-routing-maintenance's (fixing/checking an EXISTING skill's triggering, the exact 'check routing' phrase, misfire logging), and Q52 is the sharpest adversarial case — it echoes skill-creator's own bundled description almost verbatim ('optimize a skill's description for better triggering accuracy') and specifically tests whether this project's convention (routing work on existing skills goes through skill-routing-maintenance, never skill-creator's run_loop.py/run_eval.py against the live repo) wins. v9 (2026-07-19): added Q56, another silent-miss in cfgver-new-example's own territory (same family as Q46-49's lesson, now specifically for THIS skill rather than cfgver-gen-contract) — a terse follow-up ('prove non-interference for this [thing]', referring back to code discussed earlier, bundled with an unrelated TODO-list action) failed to fire even though Q30/Q38 already cover the explicit phrasing; cfgver-new-example's description was tightened with a clause covering terse/bundled follow-ups. Also added Q57 in the same live session: while debugging the resulting solve_vc failure (an sltu-on-private-data comparison), the agent hand-traced Contracts.v/Formulas.v/TypeDecl.v internals instead of loading cfgver-solve-vc, because that skill's description only documented the destructible-hypothesis secLeak pattern (Hs : secLeak x |- _) and not the unprovable-goal shape (|- secLeak v, no hypothesis) that a comparison on private data actually produces — description extended with this residual, plus a body section explaining the root cause (solve_vc's secLeak derivation is compositional-only, Contracts.v's instprop_formula_secLeak_binop) and pointing at TODO.md's tracked follow-up. 2026-07-19 (later session): Q80-82 added after CORRECTING the key_schedule scaling-wall diagnosis (probes disproved the demonic_finite fork-blowup mechanism recorded that morning; real cause is secret-register term duplication, no sharing in the register store). cfgver-executor and core-executor-internals descriptions reworded accordingly (trigger symptoms kept, mechanism clause swapped); Q80/Q81 cover the new vocabulary, Q82 guards that old-vocabulary queries still route to core-executor-internals. 2026-07-20: Q83-93 added after splitting relval-semantics into three skills (relval-model / relval-rewrite-over-secrets / secret-data-walls). Q83-85 cover the value model, Q86-87 rewrite-soundness-over-secrets, Q88-90 the secret-data walls; Q91-93 are adversarial near-misses guarding the boundaries against cfgver-contracts (secLeakvar permission), cfgver-soundness (leakage chain), and bv-pitfalls (lia-vs-2^32). 2026-07-20 (b): Q88 mis-routed to cfgver-solve-vc (its description already claims 'VC reduces to bare False' + 'comparison on private data'); added a division-of-labor clause to cfgver-solve-vc handing the framework-level WHY to secret-data-walls, plus Q94 as a regression guard that plain (non-secret) VC-False still routes to cfgver-solve-vc.\n\nv16 (2026-07-28, two-tier routing): 10 skills demoted to `name-only` via `skillOverrides` in .claude/settings.json (bv-pitfalls, rocq-pitfalls, iris-proofmode, core-executor-internals, relval-model, relval-rewrite-over-secrets, cfgver-rsolve, cfgver-wp2, cfgver-gen-contract-internals, cfgver-endtoend-internals) and a new tier-1 parent `rocq-implementation` created to own their entry trigger. Rationale: a session on 2026-07-28 made ZERO Skill calls because ~10 overlapping symptom-keyword descriptions all competed for the same routing decision and none won. 27 entries whose `expected` was a demoted skill now expect `rocq-implementation`, with the original destination preserved in the new `expected_tier2` field (what the parent's routing table must then do — checked by reading the parent's body, NOT by the judge, which only ever sees name+description). IMPORTANT METHODOLOGY CHANGE: the name+description listing handed to each judge MUST now be built with skillOverrides applied, i.e. demoted skills appear as a bare name with no description — otherwise the eval validates a listing that no longer exists. Seam entries affected: Q22/Q75 became dead seams (both sides demoted); Q26/Q97 became HARDER (bv-pitfalls demoted while gmap-pitfalls, which claims the same 'Cannot find witness' message, stays tier-1).",
   "evals": [
     {
       "id": 1,
       "query": "rsolve has been spinning for like 5 minutes and then the rocq-mcp pet died with memory_exhausted. I'm in CFGVer/Verifier.v working on the relational lemma near rexec_cfg_addr. how do I get past this?",
-      "expected": "cfgver-rsolve",
-      "kind": "should-trigger"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger [MIGRATED 2026-07-28 tiering: expected was `cfgver-rsolve`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "cfgver-rsolve"
     },
     {
       "id": 2,
@@ -47,14 +48,16 @@
     {
       "id": 8,
       "query": "in my adequacy proof, rewrite semWP2_unfold; cbn left me staring at a match on stm_to_val with env.drop_cat terms in the val-cross-fail bullet. what's the right move here?",
-      "expected": "cfgver-wp2",
-      "kind": "should-trigger (library skill, direct hit)"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger (library skill, direct hit) [MIGRATED 2026-07-28 tiering: expected was `cfgver-wp2`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "cfgver-wp2"
     },
     {
       "id": 9,
       "query": "I added a new symbolic operation to the CFGVer executor and now rsolve can't close the relational goal for it. I think I need a RefineCompat instance — what's the template and where do these live?",
-      "expected": "cfgver-rsolve",
-      "kind": "should-trigger"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger [MIGRATED 2026-07-28 tiering: expected was `cfgver-rsolve`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "cfgver-rsolve"
     },
     {
       "id": 10,
@@ -128,38 +131,44 @@
     {
       "id": 21,
       "query": "iApply keeps failing with 'cannot apply' even though the lemma literally matches my goal — it's a Definition that unfolds to a wand. what's going on?",
-      "expected": "iris-proofmode",
-      "kind": "should-trigger (new skill)"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger (new skill) [MIGRATED 2026-07-28 tiering: expected was `iris-proofmode`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "iris-proofmode"
     },
     {
       "id": 22,
       "query": "in BinaryAdequacy.v my iMod fails with 'cannot eliminate modality match i with inl/inr' right after a case_match in the adequacy proof",
-      "expected": "cfgver-wp2",
-      "kind": "seam: iris-proofmode also lists this symptom; adequacy/BinaryAdequacy context should route to wp2"
+      "expected": "rocq-implementation",
+      "kind": "DEAD SEAM under 2026-07-28 tiering: cfgver-wp2 and iris-proofmode are BOTH now name-only, so they no longer compete with each other for routing. Retained as a should-trigger entry for the parent: an adequacy/BinaryAdequacy iMod failure must reach rocq-implementation, whose table then routes to cfgver-wp2 (adequacy context) rather than iris-proofmode.",
+      "expected_tier2": "cfgver-wp2"
     },
     {
       "id": 23,
       "query": "why does iFrame sometimes just close the whole goal, and then my trailing done. errors with No such goal?",
-      "expected": "iris-proofmode",
-      "kind": "should-trigger (new skill)"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger (new skill) [MIGRATED 2026-07-28 tiering: expected was `iris-proofmode`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "iris-proofmode"
     },
     {
       "id": 24,
       "query": "getting 'Wrong bullet -: Current bullet - is not finished' in the middle of my induction even though the structure looks right to me",
-      "expected": "rocq-pitfalls",
-      "kind": "should-trigger; competes with rocq:rocq (build debugging)"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger; competes with rocq:rocq (build debugging) [MIGRATED 2026-07-28 tiering: expected was `rocq-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "rocq-pitfalls"
     },
     {
       "id": 25,
       "query": "my tactic try (eapply lemma_foo; eauto) sometimes leaves weird side-condition goals behind instead of just failing cleanly — why?",
-      "expected": "rocq-pitfalls",
-      "kind": "should-trigger (new skill)"
+      "expected": "rocq-implementation",
+      "kind": "should-trigger (new skill) [MIGRATED 2026-07-28 tiering: expected was `rocq-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "rocq-pitfalls"
     },
     {
       "id": 26,
       "query": "lia says Cannot find witness on a tiny bound below bv.exp2 xlenbits — the numbers involved are small, this should be trivial",
-      "expected": "bv-pitfalls",
-      "kind": "seam: 'Cannot find witness' appears in gmap-pitfalls desc; bv.exp2 should route to bv-pitfalls"
+      "expected": "rocq-implementation",
+      "kind": "SEAM, now HARDER under 2026-07-28 tiering: bv-pitfalls is name-only but gmap-pitfalls remains tier-1 and its description still claims 'Cannot find witness'. So the parent rocq-implementation must beat a still-competing gmap-pitfalls on a bv.exp2-flavoured query. A gmap-pitfalls verdict is a real failure, not a near-miss.",
+      "expected_tier2": "bv-pitfalls"
     },
     {
       "id": 27,
@@ -170,14 +179,16 @@
     {
       "id": 28,
       "query": "I want to extend gen_implpre to handle a new kind of register spec — where's the induction and what do I need to touch?",
-      "expected": "cfgver-gen-contract-internals",
-      "kind": "internals routing"
+      "expected": "rocq-implementation",
+      "kind": "internals routing [MIGRATED 2026-07-28 tiering: expected was `cfgver-gen-contract-internals`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "cfgver-gen-contract-internals"
     },
     {
       "id": 29,
       "query": "I'm adding an extra premise to cfg_instrs_endToEnd_with_memory and need to redo its proof body — how does that double iFrame ending work there?",
-      "expected": "cfgver-endtoend-internals",
-      "kind": "internals routing; iris-proofmode competes on double-iFrame"
+      "expected": "rocq-implementation",
+      "kind": "Internals routing under 2026-07-28 tiering: cfgver-endtoend-internals and the iris-proofmode skill that competed on 'double-iFrame' are BOTH name-only now. Must reach rocq-implementation, which routes on the 'modifying the wiring lemmas themselves' trigger.",
+      "expected_tier2": "cfgver-endtoend-internals"
     },
     {
       "id": 30,
@@ -260,8 +271,9 @@
     {
       "id": 43,
       "query": "getting 'Wrong bullet -: Current bullet - is not finished' three levels deep in an iInduction, right after a proof that used to compile fine",
-      "expected": "rocq-pitfalls",
-      "kind": "adversarial: 'used to compile fine' phrasing overlaps rocq-compile-oom's framing, but there IS a concrete Coq tactic error — rocq-compile-oom must NOT win"
+      "expected": "rocq-implementation",
+      "kind": "adversarial: 'used to compile fine' phrasing overlaps rocq-compile-oom's framing, but there IS a concrete Coq tactic error — rocq-compile-oom must NOT win [MIGRATED 2026-07-28 tiering: expected was `rocq-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "rocq-pitfalls"
     },
     {
       "id": 44,
@@ -290,8 +302,9 @@
     {
       "id": 48,
       "query": "I need to prove that a second exit offset (not the fall-through one) also satisfies pcOutOfInstrs_exitCond — some bv.ule/bv.uleb/bv.bin_add_small monotonicity argument. Where do I even start?",
-      "expected": "bv-pitfalls",
-      "kind": "silent-miss (live session, 2026-07-18): the agent hand-wrote several failed attempts before loading bv-pitfalls (reactively, only once it hit the specific blanket-cbn-unfolds-xlenbits symptom) — should trigger PROACTIVELY the moment a new bv inequality/monotonicity proof is about to be composed, not only after a matching error appears"
+      "expected": "rocq-implementation",
+      "kind": "silent-miss (live session, 2026-07-18): the agent hand-wrote several failed attempts before loading bv-pitfalls (reactively, only once it hit the specific blanket-cbn-unfolds-xlenbits symptom) — should trigger PROACTIVELY the moment a new bv inequality/monotonicity proof is about to be composed, not only after a matching error appears [MIGRATED 2026-07-28 tiering: expected was `bv-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "bv-pitfalls"
     },
     {
       "id": 49,
@@ -416,20 +429,23 @@
     {
       "id": 69,
       "query": "I added a small helper Lemma to my CFGVer Example file that does plain N arithmetic, and I'm getting 'The term \"x\" has type \"N\" while it is expected to have type \"Term ?Sigma ty.int\"' at a totally ordinary + -- the expression looks completely fine to me.",
-      "expected": "rocq-pitfalls",
-      "kind": "should-trigger, validates the 2026-07-19 description update: added coverage for TermNotations/asn.notations silently hijacking +/-/*/= on plain N/Z/nat arithmetic, discovered live while adding a helper lemma to KeyScheduleLoop.v."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger, validates the 2026-07-19 description update: added coverage for TermNotations/asn.notations silently hijacking +/-/*/= on plain N/Z/nat arithmetic, discovered live while adding a helper lemma to KeyScheduleLoop.v. [MIGRATED 2026-07-28 tiering: expected was `rocq-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "rocq-pitfalls"
     },
     {
       "id": 70,
       "query": "In my CFGVer contract file, some totally ordinary nat/N arithmetic in a helper lemma is failing to typecheck against Term ty.int -- is this a CFGVer-specific gotcha with the contract machinery, or something more generic?",
-      "expected": "rocq-pitfalls",
-      "kind": "adversarial companion to Q69: mentioning 'CFGVer'/'contract' alongside the type error must NOT pull this toward a cfgver-* skill (cfgver-contracts/cfgver-gen-contract) -- the actual mechanism is generic Rocq notation-scope shadowing from an open Import, unrelated to the contract generator or record itself."
+      "expected": "rocq-implementation",
+      "kind": "adversarial companion to Q69: mentioning 'CFGVer'/'contract' alongside the type error must NOT pull this toward a cfgver-* skill (cfgver-contracts/cfgver-gen-contract) -- the actual mechanism is generic Rocq notation-scope shadowing from an open Import, unrelated to the contract generator or record itself. [MIGRATED 2026-07-28 tiering: expected was `rocq-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "rocq-pitfalls"
     },
     {
       "id": 71,
       "query": "injection H as -> right after a Some-equality gives me 'Found no subterm matching' even though H looks perfectly usable -- what am I doing wrong?",
-      "expected": "rocq-pitfalls",
-      "kind": "should-trigger, validates the 2026-07-19 description update: added coverage for injection ... as ->/<- picking the wrong rewrite direction, discovered live while writing a generic list-lookup helper lemma in KeyScheduleLoop.v."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger, validates the 2026-07-19 description update: added coverage for injection ... as ->/<- picking the wrong rewrite direction, discovered live while writing a generic list-lookup helper lemma in KeyScheduleLoop.v. [MIGRATED 2026-07-28 tiering: expected was `rocq-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "rocq-pitfalls"
     },
     {
       "id": 72,
@@ -440,8 +456,9 @@
     {
       "id": 73,
       "query": "I want to understand where the refinement lemmas for the core SPureSpec/SHeapSpec monad's choice combinators actually live -- like demonic_finite or demonic_pattern_match -- and what the naming convention is, since I might need to add a new one.",
-      "expected": "core-executor-internals",
-      "kind": "should-trigger, new skill: anchors the core-executor-internals skill drafted after the skill-usage-audit retrospective identified this as a genuine gap (the demonic_finite/demonic_pattern_match investigation went into theories/Symbolic/Monads.v, theories/MicroSail/SymbolicExecutor.v, and theories/Refinement/Monads.v, none of which any existing skill covered)."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger, new skill: anchors the core-executor-internals skill drafted after the skill-usage-audit retrospective identified this as a genuine gap (the demonic_finite/demonic_pattern_match investigation went into theories/Symbolic/Monads.v, theories/MicroSail/SymbolicExecutor.v, and theories/Refinement/Monads.v, none of which any existing skill covered). [MIGRATED 2026-07-28 tiering: expected was `core-executor-internals`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "core-executor-internals"
     },
     {
       "id": 74,
@@ -452,8 +469,9 @@
     {
       "id": 75,
       "query": "I need to write a new RefineCompat instance so rsolve can close a relational goal between sexec_cfg_addr and cexec_cfg_addr for an operation I just added to the CFGVer executor.",
-      "expected": "cfgver-rsolve",
-      "kind": "adversarial companion to Q73/Q9: CFGVer's OWN RefineCompat/rsolve relational proof territory must stay cfgver-rsolve (or cfgver-refinement for what the relation IS) even though core-executor-internals ALSO documents a same-named ℛ⟦⟧/refine_* convention one layer further down -- the query is squarely about CFGVer's executor pair, not the core monad."
+      "expected": "rocq-implementation",
+      "kind": "DEAD SEAM under 2026-07-28 tiering: cfgver-rsolve and core-executor-internals are BOTH name-only, so the layer-arbitration they tested is no longer decided by descriptions at all — it moved into rocq-implementation's routing table. Retained to guard that the parent wins over cfgver-refinement/cfgver-executor, which are still tier-1.",
+      "expected_tier2": "cfgver-rsolve"
     },
     {
       "id": 76,
@@ -488,44 +506,51 @@
     {
       "id": 81,
       "query": "Symbolic execution of a MinimalCaps function gets drastically slower the more its straight-line code re-uses previously computed symbolic values -- it looks like the terms in the register store just keep growing with no sharing. Where in the core executor monad does this live and what would a fix touch?",
-      "expected": "core-executor-internals",
-      "kind": "should-trigger, validates the 2026-07-19 description correction on core-executor-internals: non-CFGVer case study, term-size/no-sharing vocabulary, asks about the core monad layer -- must route to core-executor-internals, not cfgver-executor."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger, validates the 2026-07-19 description correction on core-executor-internals: non-CFGVer case study, term-size/no-sharing vocabulary, asks about the core monad layer -- must route to core-executor-internals, not cfgver-executor. [MIGRATED 2026-07-28 tiering: expected was `core-executor-internals`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "core-executor-internals"
     },
     {
       "id": 82,
       "query": "I'm pretty sure demonic_finite is forking exponentially on my loop's BNE and I want to add a peval short-circuit to the choice combinators in theories/Symbolic/Monads.v -- where are they defined and what refinement lemmas would I have to re-prove?",
-      "expected": "core-executor-internals",
-      "kind": "adversarial regression guard for the 2026-07-19 correction: a query framed in the OLD (disproved) fork-blowup vocabulary, explicitly about reading/modifying the generic choice combinators and their refine_* lemmas -- still core-executor-internals territory (whose corrected body will debunk the premise), and must not be orphaned by the descriptions no longer claiming fork-blowup as the mechanism."
+      "expected": "rocq-implementation",
+      "kind": "adversarial regression guard for the 2026-07-19 correction: a query framed in the OLD (disproved) fork-blowup vocabulary, explicitly about reading/modifying the generic choice combinators and their refine_* lemmas -- still core-executor-internals territory (whose corrected body will debunk the premise), and must not be orphaned by the descriptions no longer claiming fork-blowup as the mechanism. [MIGRATED 2026-07-28 tiering: expected was `core-executor-internals`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "core-executor-internals"
     },
     {
       "id": 83,
       "query": "I'm reading a proof state in the binary/relational executor and there's a `NonSyncVal vl vr` sitting in a hypothesis. What does that actually represent — is vl the left run and vr the right run?",
-      "expected": "relval-model",
-      "kind": "should-trigger: the value model (what SyncVal/NonSyncVal MEAN), core relval-model territory."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger: the value model (what SyncVal/NonSyncVal MEAN), core relval-model territory. [MIGRATED 2026-07-28 tiering: expected was `relval-model`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "relval-model"
     },
     {
       "id": 84,
       "query": "there seem to be two different RelVal definitions in the codebase with the same SyncVal/NonSyncVal constructors, one in TypeDecl.v and one in ShallowExecutorRel.v. Which one does the term denotation `inst` actually use?",
-      "expected": "relval-model",
-      "kind": "should-trigger: the two-defs disambiguation is explicitly a relval-model note."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger: the two-defs disambiguation is explicitly a relval-model note. [MIGRATED 2026-07-28 tiering: expected was `relval-model`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "relval-model"
     },
     {
       "id": 85,
       "query": "what does liftBinOpRV produce when one operand is a SyncVal and the other is a NonSyncVal? does the result stay synced or become non-sync?",
-      "expected": "relval-model",
-      "kind": "should-trigger: mechanics of homomorphic lifting = relval-model."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger: mechanics of homomorphic lifting = relval-model. [MIGRATED 2026-07-28 tiering: expected was `relval-model`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "relval-model"
     },
     {
       "id": 86,
       "query": "I'm adding a new peval case that rewrites `bvxor x (bvxor x y)` to `y`. Do I have to prove it separately for SyncVal and NonSyncVal inputs, or is the plain bitvector identity enough to make it sound relationally?",
-      "expected": "relval-rewrite-over-secrets",
-      "kind": "should-trigger: rewrite soundness over secrets, the 'no case-split needed for pure terms' insight."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger: rewrite soundness over secrets, the 'no case-split needed for pure terms' insight. [MIGRATED 2026-07-28 tiering: expected was `relval-rewrite-over-secrets`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "relval-rewrite-over-secrets"
     },
     {
       "id": 87,
       "query": "does my solver fold rule need special handling when the register operand is genuinely secret, or does proving the Val-level equation automatically cover the relational (NonSyncVal) case?",
-      "expected": "relval-rewrite-over-secrets",
-      "kind": "should-trigger: same rewrite-soundness-over-secrets context, solver phrasing."
+      "expected": "rocq-implementation",
+      "kind": "should-trigger: same rewrite-soundness-over-secrets context, solver phrasing. [MIGRATED 2026-07-28 tiering: expected was `relval-rewrite-over-secrets`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "relval-rewrite-over-secrets"
     },
     {
       "id": 88,
@@ -560,14 +585,34 @@
     {
       "id": 93,
       "query": "lia is choking on the 2^32 literal while I try to prove the plain bitvector identity my new rewrite rule needs. how do I get past that?",
-      "expected": "bv-pitfalls",
-      "kind": "adversarial near-miss: a rewrite rule's bv identity, but the actual ask is the lia-vs-2^32 PITFALL (bv-pitfalls), not rewrite-soundness-over-secrets."
+      "expected": "rocq-implementation",
+      "kind": "adversarial near-miss: a rewrite rule's bv identity, but the actual ask is the lia-vs-2^32 PITFALL (bv-pitfalls), not rewrite-soundness-over-secrets. [MIGRATED 2026-07-28 tiering: expected was `bv-pitfalls`, now name-only via skillOverrides and unreachable by description; parent must win and route on.]",
+      "expected_tier2": "bv-pitfalls"
     },
     {
       "id": 94,
       "query": "solve_vc leaves a VerificationConditionWithErasure residual on my valid_countdown_cfg_contract, and with tight fuel the whole VC collapses to a bare False. How do I find which instruction is stuck?",
       "expected": "cfgver-solve-vc",
       "kind": "regression guard (added 2026-07-20 with the cfgver-solve-vc boundary edit): a GENERIC VC-reduces-to-False with residuals+tight-fuel and NO secret/comparison angle — must stay cfgver-solve-vc after the secret-data-walls handoff clause was added, i.e. the clause must not over-steer plain VC-False queries away."
+    },
+    {
+      "id": 95,
+      "query": "After vm_compute my parametric-base VC still has an assert of secLeak on the pc and a 0 <= unsigned p bound left over. Where do these per-fetch residuals come from and what closes them?",
+      "expected": "cfgver-solve-vc",
+      "kind": "silent-miss (live session, 2026-07-28, Solver.v secLeak-residual investigation): the agent ran the WHOLE session with ZERO Skill calls, and rediscovered solve_symbase_fetch plus relval_fetch_lower / relval_fetch_upper_bare / relval_fetch_upper_add / relval_secLeak_bvadd by grepping CFGVer/Contracts.v mid-session -- all four are already named in cfgver-solve-vc's body along with 'the three residual shapes' and the residual->tactic table. Description already covers this ('when solve_vc leaves a residual', 'when a secLeak GOAL is left open'); no description fix, logged as a proactive-triggering regression guard. Same lesson as Q46/Q47/Q58: a symbolic-base fetch residual is cfgver-solve-vc's territory even when the framing is 'why does the solver not discharge this' rather than 'my solve_vc failed'."
+    },
+    {
+      "id": 96,
+      "query": "Can I simplify the formula 0 <= unsigned t to formula_true in the solver, or does the relational value model stop me?",
+      "expected": "secret-data-walls",
+      "kind": "silent-miss (live session, 2026-07-28): the agent re-derived secret-data-walls' central fact (formula_relop maps NonSyncVal => False, Formulas.v:147) by reading theories/Syntax/Formulas.v directly, then used it to conclude that formula_true is unsound here but formula_secLeak is an exact equivalent. Both the fact and a 'Do NOT weaken formula_relop' section are already in the skill body. Description already covers it ('choosing between relop/bool and pure-bv forms', 'when a VC over secret data unexpectedly reduces to False'); logged as a proactive-triggering guard for the SOLVER-AUTHORING direction (am I allowed to rewrite this relop?) rather than the debugging direction."
+    },
+    {
+      "id": 97,
+      "query": "lia fails with Cannot find witness on a goal about bv.unsigned even though I have bv.unsigned_bounds in context.",
+      "expected": "rocq-implementation",
+      "kind": "SEAM, now HARDER under 2026-07-28 tiering (entry originally added 2026-07-28 earlier the same day): the third 'Cannot find witness' mechanism (cbn unfolds bv.unsigned to Z.of_N (bv.bin _) while bv.unsigned_bounds stays folded ⇒ two lia atoms; fix `unfold bv.unsigned in *`). bv-pitfalls is name-only now, so the test is that rocq-implementation beats the still-tier-1 gmap-pitfalls, whose description also claims this exact message.",
+      "expected_tier2": "bv-pitfalls"
     }
   ]
 }

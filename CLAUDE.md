@@ -28,13 +28,35 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-endtoend-internals`** — the wiring lemmas' proof bodies (library skill)
 > - **`cfgver-memory`** — public-memory infra + data-memory end-to-end (`_with_mem` variants)
 >
-> Standalone pitfall skills (generic, not CFGVer-specific): **`rocq-pitfalls`**
-> (bullets, eauto atomicity, SSReflect rewrite, goal-print debugging, notation-
-> scope hijacks, `injection ... as ->` direction), **`bv-pitfalls`**,
-> **`gmap-pitfalls`**, **`iris-proofmode`**. For a compile/proof step running
-> way longer than expected: start at **`rocq-timeout-triage`** (the general
-> "figure out why before waiting longer" entry point), which routes to
-> **`rocq-compile-oom`** specifically for the silently-killed/OOM signature.
+> **Skill routing is TWO-TIERED (since 2026-07-28).** Ten pitfall/library skills
+> are set to `name-only` in `.claude/settings.json`'s `skillOverrides`: they are
+> listed WITHOUT their description, so they no longer compete for the initial
+> routing decision, and are reached from a tier-1 parent's routing table instead
+> (still invokable by name). Rationale: a session made ZERO Skill calls because
+> ~10 overlapping symptom-keyword descriptions all competed and none won.
+> - **`rocq-implementation`** is the tier-1 entry point for WRITING, REPAIRING or
+>   UNDERSTANDING an actual proof script — tactic errors, bv/gmap/Iris/relational
+>   goals, adding a `peval`/solver case, plus "what does this value mean" and
+>   "where does this lemma live". It carries the mandatory rocq-mcp preamble-mode
+>   workflow and routes to the tier-2 set below.
+> - **Tier-2 (`name-only`, reached via `rocq-implementation`):** `bv-pitfalls`,
+>   `rocq-pitfalls`, `iris-proofmode`, `core-executor-internals`, `relval-model`,
+>   `relval-rewrite-over-secrets`, `cfgver-rsolve`, `cfgver-wp2`,
+>   `cfgver-gen-contract-internals`, `cfgver-endtoend-internals`. Several are
+>   labelled "library skill" in the list above; that label now also means
+>   name-only. **Note `secret-data-walls` is labelled a library skill but is
+>   deliberately TIER-1** — it keeps its description.
+> - **Tier-1 peers that must fire on their own** (do NOT route them through the
+>   parent): `cfgver` (hub), `cfgver-new-example`, `cfgver-solve-vc`,
+>   `secret-data-walls`, `gmap-pitfalls`, and for a step running way longer than
+>   expected **`rocq-timeout-triage`** (the general "figure out why before
+>   waiting longer" entry point), which routes to **`rocq-compile-oom`** for the
+>   silently-killed/OOM signature.
+>
+> Caveat measured the same day: `name-only` *de-weights* competition, it does not
+> remove it — a bare NAME can still win on an exact jargon match (`iApply` →
+> `iris-proofmode`). That is benign (it lands on the right child), but do not
+> assume the tiering is airtight.
 > Zero-cost references files live under `skills/cfgver/references/`
 > (e.g. `registers.md`).
 > Meta-skills for the skill system itself: **`skill-routing-maintenance`** —
@@ -141,8 +163,23 @@ the proof body matters. VOS does NOT check `Proof.…Qed.`.
   the environment. Verify the `feedback` field shows "X is defined" after every `Qed.`.
 - pet (interactive rocq-mcp) OOMs on very large files (the pre-split monolithic
   `Examples.v` needed >7.6 GB). The 2026-07-17 split keeps CFGVer files small
-  enough for interactive work; if a file grows heavy again, iterate via
-  `rocq_compile_file` (coqc) or a truncated mirror file.
+  enough for interactive work; if a file grows heavy again, use **preamble mode**
+  (below) — NOT a `coqc` loop, which is 100-1000x slower per iteration.
+- **`rocq_start` failing on a file is NOT "interactive mode is unavailable".**
+  `rocq_start(theorem=X)` must replay the whole file prefix, so it times out at
+  the 300 s `ROCQ_QUERY_TIMEOUT_CAP` on deep positions in big `theories/` files
+  (measured 2026-07-28: ~line 2380 of `Symbolic/Solver.v` times out at the cap,
+  twice). The fix is `rocq_start(preamble="From Katamaran Require Import …")` +
+  `rocq_check` — imports are content-hash-cached and stay warm across
+  iterations, so a tactic check costs ~30 ms. Because the preamble carries no
+  file context, restate the goal as a STANDALONE lemma; get its exact shape by
+  temporarily replacing the proof with
+  `match goal with |- ?G => idtac "ZZ:" G end. admit.` + `Admitted.`, running
+  `coqc` in the background, and killing it once `ZZ:` appears. Then port the
+  verified tactic back and pay ONE full compile to confirm. Measured the same
+  day: three full `Solver.v` compiles (~15 min) spent on two tactic errors that
+  preamble mode found in 28 ms each — a `lia` atom mismatch and a `destruct`
+  that failed to abstract, both listed in **bv-pitfalls** / **rocq-pitfalls**.
 
 **rocq plugin commands (LLM4Rocq):** six have auto-trigger wrapper skills
 (`rocq-golf`, `rocq-review`, `rocq-refactor`, `rocq-doctor`, `rocq-checkpoint`,
@@ -204,6 +241,18 @@ maintenance` to re-validate cross-family routing after any description/map
 change — rather than hand-authoring or hand-editing skills ad-hoc (this
 mechanical file-operation cue exists because a 2026-07-20 session created,
 split, and re-described skills directly, bypassing both meta-skills);**
+**this rule is now HOOK-ENFORCED, not advisory** — `.claude/hooks/skill-edit-
+guard.sh` (a blocking `PreToolUse` hook) *denies* a `Write` of a new `SKILL.md`
+without a `skill-creator` consult, and denies an `Edit` whose diff touches a
+`description:` without a `skill-routing-maintenance` consult; skill *body* edits
+stay ungated. If you hit that denial, do the consult rather than looking for a
+way around it — the override (`CLAUDE_SKILL_GUARD_OFF=1`) is only settable in
+the environment Claude Code was launched with, i.e. by the user, not from a
+session. A sibling hook `.claude/hooks/agent-guard.sh` denies routing-judge
+subagents that are not `subagent_type: routing-judge`, and denies more than 6
+subagent spawns per 120 s (both added after a 2026-07-28 eval run cost ~850k
+tokens). Note `git checkout .claude/settings.json` silently removes every hook
+if that file is ever uncommitted.
 after changing any skill *description* or
 noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
 skill (read-only Haiku-judge

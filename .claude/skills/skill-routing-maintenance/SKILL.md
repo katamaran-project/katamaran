@@ -98,18 +98,67 @@ future edits get regression-checked against.
 **2. Validating.** Extract the current name+description listing for every
 skill under `.claude/skills/` (one read pass over each `SKILL.md`'s
 frontmatter — cheap, no tool needed beyond `Read`/`grep`). For each query
-under test, spawn one Haiku judge (`Agent` tool, `model: "haiku"` or the
-project's default judge model) whose ENTIRE input is that listing plus the
-query, asked to name the single skill that should fire (or `"none"`) —
-nothing else. This mirrors real triggering, which is decided on name+
-description alone, never the body. Keep judges independent (one per query,
-no shared context) so a wrong verdict on one query can't bias another.
+under test, spawn one judge via the `Agent` tool with
+`subagent_type: "routing-judge"` (`.claude/agents/routing-judge.md`) whose
+ENTIRE input is that listing plus the query. This mirrors real triggering,
+which is decided on name+description alone, never the body. Keep judges
+independent (one per query, no shared context) so a wrong verdict on one query
+can't bias another.
 
-Scope the run to what changed: a single description edit only needs the
-handful of queries that plausibly compete for that skill's territory (the
-new/edited entries plus 1-2 known near-neighbors as a regression check) — you
-don't need to re-run all 49+ entries every time. A fuller sweep (the whole
-eval set) is worth doing after a batch of changes, or periodically.
+**Apply `skillOverrides` when building the listing.** A skill set to
+`name-only` in `.claude/settings.json` must appear as a bare name with no
+description, because that is what the real routing decision sees. Handing
+judges a full-description listing validates a world that no longer exists.
+As of 2026-07-28 ten skills are `name-only` (tier-2 children of
+`rocq-implementation`); a listing built without the overrides is ~32k chars
+instead of ~24k and silently tests the pre-tiering arrangement.
+
+### Inline the listing — never pass a file path
+
+Put the listing text in the judge's prompt. Do NOT hand the judge a path and
+let it `Read` the file: a judge that *can* skip the read sometimes *will*, and
+then answers from guesswork. Measured 2026-07-28: 8 of 17 judges came back with
+`tool_uses: 0`, and 5 of those produced real, exactly-spelled skill names —
+because kebab-case names in this family are highly guessable (`iApply` →
+`iris-proofmode`, `semWP2` → `cfgver-wp2`). Those verdicts were
+indistinguishable from genuine ones in the results file and cost ~330k tokens
+in control judges and re-runs to unmask. Hence the `routing-judge` agent's
+mandatory `TOTAL=<entry count>` checksum line: **discard any verdict whose
+`TOTAL` is missing or wrong.** Record discarded verdicts explicitly rather than
+silently dropping them, so a later reader can't mistake a partial run for a
+clean one.
+
+### Cost: judges are expensive, so scope before you spend
+
+A judge emits one word but costs far more than that. Measured 2026-07-28 with a
+`general-purpose` subagent: **~30k tokens each** (~21k of that is the agent's
+own system prompt and tool schemas — several tools ship multi-thousand-token
+prose manuals — plus ~8k for a file-based listing read). The `routing-judge`
+agent above exists to cut that floor: minimal tool set, no listing read.
+
+Do the arithmetic *before* launching, and put it in front of the user rather
+than proceeding on your own authority:
+
+| queries | at ~30k each |
+|---|---|
+| 6 (one edit + near-neighbors) | ~180k |
+| 27 | ~800k |
+| the full 97-entry set | **~3M — do not** |
+
+Scope the run to what changed: a single description edit only needs the handful
+of queries that plausibly compete for that skill's territory (the new/edited
+entries plus 1-2 known near-neighbors as a regression check). This scoping rule
+matters MOST when a change is broad and a sweep looks tempting — a 2026-07-28
+session inverted it, reasoning "every description changed, so a fuller sweep is
+justified", and spent ~850k on 28 judges. The correct response to a broad change
+is a *representative sample* plus the peer-regression queries, not a sweep: the
+migrated entries usually all test the same one decision, so a couple per
+affected skill is as informative as all of them.
+
+If a sweep genuinely seems necessary, batch several queries into one judge
+(accepting some cross-query bias) rather than paying the per-judge floor
+dozens of times — and say so in the results file's `method`, since it departs
+from the one-judge-per-query independence rule above.
 
 **3. Recording.** Write a new `results-<date>[-suffix].json` with each
 query's verdict vs. `expected` and a pass/fail, plus a one-line `method` and

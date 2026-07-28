@@ -8,5 +8,72 @@
       }
     }
   },
+  "_skillOverridesNote": "Two-tier skill routing, 2026-07-28. These are tier-2 children of `rocq-implementation`: `name-only` lists them WITHOUT their description, so they no longer compete for the initial routing decision, but stay invokable by name from the parent's routing table. Added after a session made ZERO Skill calls because ~10 overlapping symptom-keyword descriptions all competed and none won. If you re-enable one, remove it from rocq-implementation's tier-2 table too, or the table will lie. Tier-1 peers deliberately NOT listed here: cfgver, cfgver-new-example, cfgver-solve-vc, secret-data-walls, gmap-pitfalls, rocq-timeout-triage, rocq-compile-oom.",
+  "skillOverrides": {
+    "bv-pitfalls": "name-only",
+    "rocq-pitfalls": "name-only",
+    "iris-proofmode": "name-only",
+    "core-executor-internals": "name-only",
+    "relval-model": "name-only",
+    "relval-rewrite-over-secrets": "name-only",
+    "cfgver-rsolve": "name-only",
+    "cfgver-wp2": "name-only",
+    "cfgver-gen-contract-internals": "name-only",
+    "cfgver-endtoend-internals": "name-only"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/coqc-guard.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/skill-nudge.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/meta-skill-marker.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/skill-edit-guard.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "compactionPrompt": "This is a Katamaran/Rocq formal verification session. Compact to preserve:\n\n1. ROCQ-MCP STATE: Any active state IDs from rocq_start (file + theorem + state_id). These cannot be recovered — if lost, the session must be restarted.\n\n2. COMPILE STATUS: For each .v file touched this session, record the last compile outcome: file path, mode used (vos/full), and whether it succeeded or what the first error was. Drop verbose coqc output — just keep the status line and error message.\n\n3. CURRENT PROOF: The lemma name being proved, the last goal state shown by rocq_check, and which tactics have been tried (succeeded or ruled out). Drop superseded rocq_check calls — only keep the most recent goal.\n\n4. KEY DECISIONS: Any proof approach confirmed working (e.g. 'use swap_endToEnd as analogue') or ruled out (e.g. 'instrs_endToEnd is BlockVer only'). One sentence per decision.\n\n5. OPEN ERRORS: Any error message that is the current debugging target. Full text.\n\nDROP: Full text of successful compile output; file reads of definitions documented in CLAUDE.md or the cfgver-* skills; intermediate exploration reads whose conclusions are already captured; assistant narration that restates tool results."
 }
