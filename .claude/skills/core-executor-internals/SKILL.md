@@ -144,6 +144,46 @@ a case analysis on the `formula_eqb` tests.
 Note this was *usually* masked by `combined_solver`'s repeated passes. For the
 `secLeak`-specific semantics these formulas carry, see **secret-data-walls**.
 
+### An assert is discharged against what was known WHEN IT RAN, not when you read it
+
+The corollary of the above that costs the most time. `consume` walks `∗`
+left-to-right (`Monads.v:1067`) and `call_contract` (`Monads.v:1085`) hands a
+contract's logic variables over as unconstrained ANGELIC evars — only those in
+`sep_contract_localstore` are pinned first, by `assert_eq_nenv`. So a pure
+conjunct sitting ahead of the chunk that unifies its variable is offered to
+`combined_solver` as `assert (P ?x)` with *nothing* known about `?x`. No amount
+of solver power helps: equation rewriting / congruence closure would not either,
+because at that moment no equation about `?x` exists yet. It is an ordering
+problem.
+
+What makes it hard to see is that `postprocess`'s `solve_evars`/`solve_uvars`
+then substitute `?x` throughout the tree, so the surviving residual **prints in
+its instantiated form** — typically as something an `assumek` directly above it
+discharges outright. Diagnosed 2026-07-29 in CFGVer, where
+`assumek (secLeak p)` / `assertk (secLeak p)` sat adjacent and undischarged;
+feeding `combined_solver` that exact world and path condition returns residual
+`[ctx]` in 22 ms, proving the solver never saw that form.
+
+Two consequences worth internalising:
+- **Never conclude "the solver is broken" from a printed residual.** Rebuild the
+  world by hand and call `combined_solver` on it (preamble mode, ~20 ms). If it
+  discharges, the printed formula is not the one it was given.
+- `consume`'s order-sensitivity is a real wart, not a fact of life: `∗` is
+  commutative so the assertion's *meaning* is order-independent, yet the VC is
+  not. The principled fix is to have `consume` discharge pure `asn.formula`
+  obligations *after* the spatial chunks (sound by ∗-commutativity, and monotone
+  — a pure obligation checked later is checked with strictly more in `wco`).
+  Cost is the refinement burden: `refine_consume` must be re-proved and every
+  case study recompiled. A more general alternative is `replay` (`Monads.v:765`),
+  which re-runs a finished `SymProp` tree back through the solver-backed monad so
+  every assert is re-offered in its substituted form; caveats are that its
+  `pattern_match` cases are commented out as NOT IMPLEMENTED and it costs another
+  full traversal. Neither has been attempted.
+
+The authoring-side rule, and the one case where reordering is UNSOUND (crossing a
+pattern match on the same variable eliminates it, weakening the precondition),
+are in **cfgver-contracts**.
+
 **What this fix did NOT do — measured, do not re-run it.** It has *zero* effect
 on `key_schedule_loop2`'s VC: `assertk (formula_le)` 16, `assertk`/`assumek
 (formula_secLeak)` 28/28, `debug` 132 — every count identical before and after.

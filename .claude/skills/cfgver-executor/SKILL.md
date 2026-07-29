@@ -66,6 +66,21 @@ It stops with `error` when:
 
 ## Backward-branch loops: exponential blowup = term duplication, not forking
 
+> **Read this caveat before acting on the section below (measured 2026-07-29).**
+> The k^trip-count term-duplication mechanism described here is real and
+> correctly diagnosed, but it is **not the dominant cost at practical trip
+> counts**, so do not reach for term sharing / hash-consing / SSA naming on the
+> strength of it. A/B with the program shape held identical to
+> `key_schedule_loop2` and only the 10-instruction ALU chain swapped: a loop in
+> which NO register's symbolic term ever grows (`addi a0,a1,1` ×10, A0 never
+> written) costs the SAME as — marginally more than — the real masking chain
+> (N=4: 20.5 s vs 23.2 s `vm_compute`), and still grows ~5.6× per doubling of
+> trip count (N=8: 114.5 s). Per-step cost itself triples from N=4 to N=8. So
+> the operative driver is a per-step cost independent of term content, and the
+> cheap reproducer for diagnosing it is a 14-instruction loop of trivial
+> `addi`s, not the masking chain. Details and the memory-pressure confound on
+> the N=8 figures: the `project-solver-secleak-residuals` memory note.
+
 A loop example does **not** scale past a small trip count by raising
 `fuel`/timeout when its BODY rebuilds a (secret) register from k ≥ 2 copies of
 that register's own previous value — cost grows ~k^trip-count. First hit on
