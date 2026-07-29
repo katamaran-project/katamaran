@@ -2854,6 +2854,14 @@ Module Type GenericSolverOn
     Qed.
     #[export] Hint Rewrite @smart_or_spec : uniflogic.
 
+    (* [formula_simplifies hyp fact] for a [hyp] with no structure to recurse
+       into: such a [hyp] is discharged exactly when it *is* [fact].  Spelled out
+       separately because [formula_simplifies] recurses structurally on [hyp], so
+       it cannot call itself on formulas it *builds* -- which is precisely what
+       the [bop.eq] case below needs. *)
+    Definition formula_discharge {Σ} (hyp fact : Formula Σ) : Formula Σ :=
+      if formula_eqb hyp fact then formula_true else hyp.
+
     Fixpoint formula_simplifies {Σ} (hyp : Formula Σ) (fact : Formula Σ) : option (Formula Σ) :=
       if formula_eqb hyp fact then Some formula_true else
       match hyp with
@@ -2872,17 +2880,28 @@ Module Type GenericSolverOn
       | @formula_relop _ σ' op t1 t2 =>
           match op with
           | bop.eq =>
-              (* TODO (fact-burning bug, diagnosed 2026-07-28): this rewrite
-                 does not depend on [fact], yet assumption_formula SPENDS one
-                 path-condition entry per recursion step and never revisits it
-                 -- so returning [Some _] here burns [fact].  A [secLeak t1]
-                 sitting exactly at that entry is then left undischarged
-                 (adding any unrelated newer entry "fixes" it, which is how
-                 this was found).  Fix = apply [fact] to the two secLeak
-                 conjuncts spawned here; needs a formula_simplifies_spec
-                 update, not yet done. *)
-              Some (formula_and (formula_propeq t1 t2)
-                      (formula_and (formula_secLeak t1) (formula_secLeak t2)))
+              (* An equality relop is false as soon as either side is a
+                 [NonSyncVal], so it splits into "the values agree" plus a
+                 publicness obligation per side.  The split itself does not
+                 depend on [fact].
+
+                 But [assumption_formula] walks [wco] newest-to-oldest and only
+                 ever offers a formula the entries *after* the current one, so it
+                 relies on "whatever arrives at step [F'] has already been tested
+                 against every entry newer than [F']".  Manufacturing conjuncts
+                 mid-walk breaks that: they have been tested against nothing.  And
+                 because this rewrite ignores [fact] it fires at the *first* step,
+                 so the one entry that can never discharge them is the newest one
+                 -- which is exactly why, with [wco = [secLeak p]] and hypothesis
+                 [p = p + p], [secLeak p] survived, while adding any unrelated
+                 newer entry made it discharge (diagnosed 2026-07-28).
+
+                 Testing each conjunct against [fact] here closes that single
+                 gap.  [smart_and] then drops a discharged conjunct rather than
+                 leaving a [formula_true] node behind. *)
+              Some (smart_and (formula_discharge (formula_propeq t1 t2) fact)
+                      (smart_and (formula_discharge (formula_secLeak t1) fact)
+                         (formula_discharge (formula_secLeak t2) fact)))
           | _ => None
           end
 
@@ -2949,6 +2968,47 @@ Module Type GenericSolverOn
 
     (* #[local] Hint Rewrite instpred_peval_formula_relop_neg : uniflogic. *)
 
+    (* The [fact]-independent content of [formula_simplifies]' [bop.eq] case: an
+       equality relop is equivalent to value agreement plus publicness of both
+       sides.  Stated pointwise so the four [formula_discharge] cases below can
+       be closed by propositional reasoning against whichever conjuncts [fact]
+       already supplies. *)
+    Lemma inst_relop_eq_split {w : World} {σ} (t1 t2 : Term w σ) (ι : Valuation w) :
+      instpred (formula_relop bop.eq t1 t2) ι <->
+      instpred (formula_propeq t1 t2) ι /\
+        (instpred (formula_secLeak t1) ι /\ instpred (formula_secLeak t2) ι).
+    Proof.
+      cbn.
+      unfold instpred_formula_relop, instpred_formula_secLeak, instpred_formula_propeq.
+      split; intros H.
+      - constructor. destruct inst, inst; try contradiction. cbn in *. by subst.
+        constructor; destruct inst, inst; try contradiction; cbn; auto.
+      - destruct H. destruct H0. destruct inst, inst; cbn in *; try contradiction.
+        by inversion H.
+    Qed.
+
+    Lemma instpred_relop_eq_split {w : World} {σ} (t1 t2 : Term w σ) :
+      ⊢ instpred (formula_relop bop.eq t1 t2) ∗-∗
+        instpred (formula_and (formula_propeq t1 t2)
+                    (formula_and (formula_secLeak t1) (formula_secLeak t2))).
+    Proof. constructor. intros ι Hwco _. apply inst_relop_eq_split. Qed.
+
+    (* [instpred_formula] sends [formula_and] to [∗] definitionally (Worlds.v);
+       naming it lets the congruence step below rewrite without [cbn], which would
+       also unfold the constructor-headed conjuncts and break [iApply]. *)
+    Lemma instpred_formula_and' {w : World} (F1 F2 : Formula w) :
+      instpred (formula_and F1 F2) ⊣⊢ instpred F1 ∗ instpred F2.
+    Proof. reflexivity. Qed.
+
+    Lemma formula_discharge_spec {w : World} (hyp fact : Formula w) :
+      ⊢ instpred fact -∗ (instpred hyp ∗-∗ instpred (formula_discharge hyp fact)).
+    Proof.
+      unfold formula_discharge.
+      destruct (formula_eqb_spec hyp fact); subst; cbn.
+      - now iApply bi_wand_iff_true.
+      - iIntros "_". now iApply bi.wand_iff_refl.
+    Qed.
+
     Lemma formula_simplifies_spec {w : World} (hyp fact : Formula w) :
       option.wlp (fun hyp' => ⊢ instpred fact -∗ (instpred hyp ∗-∗ instpred hyp'))
         (formula_simplifies hyp fact).
@@ -2963,15 +3023,28 @@ Module Type GenericSolverOn
         eapply option.wlp_some.
         destruct rop; try now eapply option.wlp_none.
         eapply option.wlp_some.
-        constructor. intros ι Hwco _; cbn.
         clear H.
-        unfold instpred_formula_relop, instpred_formula_secLeak, instpred_formula_propeq.
-        intros Heq. split; intros H.
-        - constructor. destruct inst, inst; try contradiction. cbn in *. by subst.
-          constructor; destruct inst, inst; try contradiction; cbn; auto.
-        - destruct H. destruct H0. destruct inst, inst; cbn in *; try contradiction.
-          + by inversion H.
-          
+        (* Split off the [fact]-independent equivalence, then discharge each of the
+           three conjuncts against [fact] pointwise.  Uniform in the number of
+           conjuncts, so no case analysis on the [formula_eqb] tests. *)
+        iIntros "#Hfact".
+        iApply bi.wand_iff_trans; iSplit.
+        - iApply instpred_relop_eq_split.
+        - (* The two rewrites must INTERLEAVE, not run in sequence: [smart_and_spec]
+             only matches [smart_and] sitting directly under [instpred], so once the
+             outer one becomes a [formula_and] the inner one is buried and no longer
+             matches.  [rewrite !smart_and_spec !instpred_formula_and'] therefore
+             leaves the right-hand side as [instpred DP ∗ instpred (smart_and ..)],
+             the inner leaf goal gets an evar for its right side, and
+             [formula_discharge_spec] cannot apply.
+             [iSplitL] rather than [iSplit] because these are [∗], not [∧]; and
+             [hyp] is passed explicitly at each leaf. *)
+          repeat (rewrite smart_and_spec || rewrite instpred_formula_and').
+          iApply bi_wand_iff_sep; iSplitL "".
+          + iApply (formula_discharge_spec (formula_propeq t1 t2) fact with "Hfact").
+          + iApply bi_wand_iff_sep; iSplitL "".
+            * iApply (formula_discharge_spec (formula_secLeak t1) fact with "Hfact").
+            * iApply (formula_discharge_spec (formula_secLeak t2) fact with "Hfact").
 
             (* eapply option.wlp_some. *)
         (* destruct rop; try now eapply option.wlp_none. *)

@@ -109,20 +109,59 @@ un-discharged assert permanently enlarges `wco` with a redundant copy, and every
 later `wco` walk pays for it — a term-size-independent quadratic if it happens
 per step.
 
-### Known bug: `formula_simplifies` burns a path-condition entry
+### Fixed 2026-07-28: `formula_simplifies` manufactured untested conjuncts
 
-`assumption_formula` consumes exactly one `wco` entry per recursion step and
-never revisits it. The `formula_relop bop.eq` case (`Solver.v` ~2834) returns
+An **ordering** bug, not a resource one — the earlier write-up of this called it
+"burning a path-condition entry", which is wrong and actively misleading:
+`assumption_formula` recurses on the tail in *both* the `Some` and `None`
+branches, so returning `Some` consumes nothing extra.
+
+The real invariant is *"the formula arriving at step `F'` has already been tested
+against every entry newer than `F'`"* — the walk only ever offers a formula the
+entries **older** than the current one. The `formula_relop bop.eq` case broke it
+by *manufacturing* conjuncts mid-walk: it returned
 `Some (propeq t1 t2 ∧ secLeak t1 ∧ secLeak t2)` **ignoring its `fact`
-argument** — an unconditional rewrite in a function whose contract is "simplify
-`hyp` given `fact`". The entry is therefore spent without being used, and a
-`secLeak t1` sitting exactly there is left undischarged. Measured 2026-07-28
-with `wco = [secLeak p]` and goal `p = p+p`: `secLeak p` survives, and adding
-**any** unrelated newer entry makes it discharge. Usually masked by
-`combined_solver`'s repeated passes. Fix = apply `fact` to the two spawned
-conjuncts; needs a `formula_simplifies_spec` update, recorded as a TODO at the
-site. For the `secLeak`-specific semantics these formulas carry, see
-**secret-data-walls**.
+argument**, so those conjuncts had been tested against nothing at all.
+
+And because the rewrite ignored `fact`, it fired at the **first** step of the
+walk — against the newest `wco` entry. So the conjuncts did get tested against
+entries 2…n as the walk continued, and the *only* entry that could never
+discharge them was the newest one. Hence the otherwise baffling measurement
+(`wco = [secLeak p]`, hypothesis `p = p+p`): `secLeak p` is entry 1, the one
+entry that can't help, and adding **any** unrelated newer entry shifts it to
+position 2 where it does discharge.
+
+Fixed by testing each manufactured conjunct against `fact` at the moment of
+creation (`formula_discharge`, a non-recursive helper because
+`formula_simplifies` recurses structurally on `hyp` and so cannot call itself on
+a formula it just built). Since the rewrite always fires at step 1, closing the
+step-1 gap closes it completely. `smart_and` then drops a discharged conjunct
+instead of leaving a `formula_true` node. `formula_simplifies_spec`'s relop case
+is now a uniform congruence proof (`instpred_relop_eq_split` for the
+`fact`-independent split, then `formula_discharge_spec` per conjunct) rather than
+a case analysis on the `formula_eqb` tests.
+
+Note this was *usually* masked by `combined_solver`'s repeated passes. For the
+`secLeak`-specific semantics these formulas carry, see **secret-data-walls**.
+
+**What this fix did NOT do — measured, do not re-run it.** It has *zero* effect
+on `key_schedule_loop2`'s VC: `assertk (formula_le)` 16, `assertk`/`assumek
+(formula_secLeak)` 28/28, `debug` 132 — every count identical before and after.
+The reason is structural: that VC contains **no** `formula_relop` and **no**
+`formula_propeq` node at all, so the `bop.eq` case never shapes its residuals.
+The gate passes and all 9 examples still discharge, so the fix is worth keeping —
+but it is not the cause of the `key_schedule_loop` blowup, and that lead is
+**refuted**, not merely unconfirmed. See `project-solver-secleak-residuals` for
+where the investigation actually stands.
+
+Two traps if you touch this proof: `instpred_formula (formula_and F1 F2)` is
+definitionally `∗` (`Worlds.v:924`) but `Arguments instpred_formula [w] !fml`
+means `cbn` unfolds it whenever the formula is **constructor-headed** — so `cbn`
+reduces concrete conjuncts like `formula_secLeak t1` and then `iApply` no longer
+matches a lemma stated over `instpred hyp`. Rewrite with
+`instpred_formula_and'`/`smart_and_spec` instead. And `tauto` cannot see through
+`∗` (cf. the explicit `change` at `Worlds.v:1850`); `exact`/`apply` work, since
+they use conversion.
 
 ## Generic statement executor (`theories/MicroSail/SymbolicExecutor.v`)
 

@@ -48,6 +48,25 @@ rocq_compile_file(file, mode="full", keep_vo=True) # so downstream files can Req
 `vos` catches statement errors cheaply and does **not** check `Proof. … Qed.`,
 so a green `vos` says nothing about whether your tactics work.
 
+### Exception: `rocq_compile_file` cannot compile `theories/Symbolic/Solver.v`
+
+It drops `_CoqProject`'s `-arg` lines, and this project passes `-arg "-w all"`.
+Verified 2026-07-28 on a three-line probe: `#[export] Notation` is an **Error**
+under bare `coqc` and a **Warning** under `coqc -w all` (Coq 8.20.1). So the
+pre-existing `#[export] Notation dlist_secLeak` at `Solver.v:2230` fails as a hard
+error, in **both** `vos` and `full` mode, with a message pointing at code you did
+not touch:
+
+```
+Error: This command does not support this attribute: export.
+[unsupported-attributes,parsing,default]
+```
+
+Build it with `make -f Makefile.coq theories/Symbolic/Solver.vo` instead — the
+project's own path, and what the gate uses. Budget ~5m45s for that file. Suspect
+this whenever `rocq_compile_file` reports an error on a line your diff never
+went near; check `_CoqProject` for `-arg` before believing it.
+
 ### A `rocq_start(theorem=…)` timeout does NOT mean interactive mode is unavailable
 
 This is the single most expensive misreading available here, so it is worth
@@ -69,6 +88,19 @@ rocq_check(from_state=…, body="…")
 Imports are content-hash-cached and stay warm across iterations, so each tactic
 check costs ~30 ms. The catch is that a preamble carries no file context, so you
 must restate your goal as a **standalone lemma**.
+
+**"It's inside a module functor" is not an exemption.** Most of `theories/` lives
+in functors (`SolverOn`, `SignatureMixin`, …), so a preamble genuinely cannot
+`Require` the definitions — and a stale `.vo` makes requiring a case study's
+instantiation fail on digest mismatch anyway. Rebuilding the chain to get a warm
+instantiation costs ~15 min. But you usually do not need the real types: if the
+failure is about **shape** — a tactic that will not apply, an evar that will not
+resolve, a bullet or context problem — restate it over abstract parameters
+(`Context (Formula : Type) (G : Formula -> PROP) …`) and the failure reproduces in
+~100 ms. Worked example, plus the two `Persistent`/`BiAffine` side conditions you
+must supply or you get spurious failures: **iris-proofmode**, "Debugging an IPM
+failure inside a module functor". Measured 2026-07-28: this found in 100 ms what
+two 5m45s blind compiles of `Solver.v` had failed to localise.
 
 To get the goal's exact shape without guessing it, temporarily replace the proof
 body with:
