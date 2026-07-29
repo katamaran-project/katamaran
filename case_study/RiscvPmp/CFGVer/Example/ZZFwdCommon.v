@@ -62,6 +62,23 @@ Section FwdProbe.
      each name.  Match on the base instead. *)
   Definition base (b : LVar ∷ Ty) : string := fst (ctx.split_at_dot (name b)).
 
+  (* The chunk GC.  encodes_instr is duplicable (Sig.v:332) and
+     heap_extractions KEEPS duplicable chunks on consume (Chunks.v:58), so
+     decode matches its chunk but never removes it and each fetch's fresh
+     existential is pinned forever.  Dropping the chunk between steps is an
+     INCOMPLETENESS risk only, never unsoundness -- and it does not even cost
+     completeness here: the chunk is needed only by its own step's decode,
+     which has already run by the time we reach the recursion point, and the
+     next step's fetch mints a fresh one from `a ↦ᵢ i` (retained). *)
+  Definition is_encodes_instr {Σ} (c : Chunk Σ) : bool :=
+    match c with
+    | chunk_user encodes_instr _ => true
+    | _                          => false
+    end.
+
+  Definition gc_heap {Σ} (gc : bool) (h : SHeap Σ) : SHeap Σ :=
+    if gc then List.filter (fun c => negb (is_encodes_instr c)) h else h.
+
   Fixpoint repeat_debug {Σ} (n : nat) (P : 𝕊 Σ) : 𝕊 Σ :=
     match n with
     | O    => P
@@ -77,10 +94,13 @@ Section FwdProbe.
   (* NOTE: the `⊢` TYPE-quantifier notation is NOT usable in an Example file --
      Prelude exports iris.proofmode.tactics, so `⊢` parses as bi entailment.
      Spell the world quantification out instead. *)
-  Definition gc_probe (mode : nat) :
+  Definition gc_probe (gc : bool) (mode : nat) :
     forall w, SInstrTable w -> SExitTable w -> STerm ty_xlenbits w ->
               SHeapSpec Unit w :=
-    fun w tbl exits apc POST h =>
+    fun w tbl exits apc POST h0 =>
+      (* count against the POST-GC heap -- that is the state the continuation
+         can actually still read. *)
+      let h : SHeap (wctx w) := gc_heap gc h0 in
       let keys : list (Term (wctx w) ty_xlenbits) :=
         List.app (List.map fst tbl) exits in
       let k :=
@@ -112,7 +132,7 @@ Section FwdProbe.
       repeat_debug (N.to_nat k) (POST w acc_refl tt h).
 
   (* Verbatim copy of Verifier.v:275-292 with one extra ADDITIVE line. *)
-  Fixpoint sexec_cfg_addr_probe (mode : nat) (fuel : nat) :
+  Fixpoint sexec_cfg_addr_probe (gc : bool) (mode : nat) (fuel : nat) :
     forall w, SInstrTable w -> SExitTable w -> STerm ty_xlenbits w ->
               SHeapSpec (STerm ty_xlenbits) w :=
     fun w tbl exits apc =>
@@ -129,16 +149,16 @@ Section FwdProbe.
              | None   => emsg "sexec_cfg_addr_probe: no instruction key matches this pc term"
              | Some i =>
                  ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
-                 ⟨ θ2 ⟩ _    <- gc_probe mode (persist_itable θ1 tbl)
+                 ⟨ θ2 ⟩ _    <- gc_probe gc mode (persist_itable θ1 tbl)
                                   (persist_etable θ1 exits) apc' ;;
-                 sexec_cfg_addr_probe mode n'
+                 sexec_cfg_addr_probe gc mode n'
                    (persist_itable (θ1 ∘ θ2) tbl) (persist_etable (θ1 ∘ θ2) exits)
                    (persist__term apc' θ2)
              end)
       end.
 
   (* Verbatim copies of Verifier.v:318-338, retargeted at the probe. *)
-  Definition sexec_triple_addr_probe {Σ : LCtx} (mode : nat)
+  Definition sexec_triple_addr_probe {Σ : LCtx} (gc : bool) (mode : nat)
     (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
     (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) (fuel : nat)
     (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
@@ -150,33 +170,39 @@ Section FwdProbe.
       ⟨ θ2 ⟩ _ <- produce req δ1 ;;
       let a2 := persist__term a θ2 in
       let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ2) in
-      ⟨ θ3 ⟩ na <- sexec_cfg_addr_probe mode fuel
+      ⟨ θ3 ⟩ na <- sexec_cfg_addr_probe gc mode fuel
                      (subst_itable ζ tbl) (subst_etable ζ exits) a2 ;;
       let δ3 := persist δ1 (θ2 ∘ θ3) in
       consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-  Definition scfg_verification_condition_probe {Σ : LCtx} (mode : nat)
+  Definition scfg_verification_condition_probe {Σ : LCtx} (gc : bool) (mode : nat)
     (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits))
     (fuel : nat)
     (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
     forall w : World, 𝕊 w :=
     fun w =>
-      SHeapSpec.run (sexec_triple_addr_probe mode req tbl exits fuel ens (w := w)).
+      SHeapSpec.run (sexec_triple_addr_probe gc mode req tbl exits fuel ens (w := w)).
 
 End FwdProbe.
 
 (* Mirror of Contracts.v:109's CFG_VC_triple. *)
-Definition CFG_VC_triple_probe {Σ} (mode : nat)
+Definition CFG_VC_triple_probe {Σ} (gc : bool) (mode : nat)
   (p     : Term Σ ty_xlenbits)
   (exits : list (Term Σ ty_xlenbits))
   (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
   (i  : list AST)
   (fl : nat) :=
-  scfg_verification_condition_probe (Σ := Σ) mode
+  scfg_verification_condition_probe (Σ := Σ) gc mode
     (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl
     (asn.formula (formula_bool (term_val ty.bool true))) wnil.
 
+(* baseline: no GC (the sixth arm's numbers) *)
 Definition zzn_fwd_nc (mode : nat) (n : nat) : NC :=
   cfg_map (zzn_contract n) (fun ia p exits P i ec fl =>
-    ncount (CFG_VC_triple_probe mode p exits P i fl)).
+    ncount (CFG_VC_triple_probe false mode p exits P i fl)).
+
+(* with the encodes_instr chunk GC at the recursion point *)
+Definition zzn_fwdgc_nc (mode : nat) (n : nat) : NC :=
+  cfg_map (zzn_contract n) (fun ia p exits P i ec fl =>
+    ncount (CFG_VC_triple_probe true mode p exits P i fl)).
