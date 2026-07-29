@@ -66,6 +66,55 @@ postprocess+unquantify. Peak RSS at N=4 is 3333/3336/3336 MB. The port itself
 perturbed nothing — raw generation matches the pre-port REMOVAL row (1.25/6.55/
 16.52) within the run-to-run spread this harness's own header documents.
 
+## forward-liveness probe (sixth arm, 2026-07-29) — PARTIAL, ~half is droppable
+
+Phase 0 of `../PLAN-unquantify-forward.md`. Harness `ZZFwdCommon.v` +
+`ZZFwdRun{1,2,4}m{0,1,2}.v`: a copy of the `sexec_cfg_addr` → `sexec_triple_addr`
+→ `scfg_verification_condition` chain with a purely ADDITIVE counter at the
+recursion point (`Verifier.v:291`). It never shrinks a world and hands the
+continuation `acc_refl`. Counts ride out on `nc_debug` — the probe emits exactly
+k dummy `SymProp.debug` nodes, so ZZCommon's existing `ncount` sums them with no
+new extraction code (`nc_debug` is 0 in the real executor, a clean channel).
+
+A variable is FORWARD-dead iff absent from everything the continuation can still
+read. Three modes: 0 = `|wctx w|` (denominator), 1 = dead against
+heap+apc+tbl+exits, 2 = mode 1 **plus** `wco w`.
+
+| N | steps | mode 0 (total) | mode 1 (no wco) | mode 2 (with wco) |
+|---|---|---|---|---|
+| 1 | 14 | 280  | 123  | 123  |
+| 2 | 28 | 980  | 456  | 456  |
+| 4 | 56 | 3640 | 1752 | 1752 |
+
+CONTROL: `nc_error` 344/687/1373, `nc_assertk` 15/16/18, `nc_demonicv`
+161/317/629 — identical to the raw `ZZRun` figures and identical across all three
+modes. Nothing but `nc_debug` moved.
+
+Sums are over all steps, so fit `Σ_{j=1..S}(a+b·j)` against S=14/28/56:
+- **mode 0**: `total_j = 3.93 + 2.143·j` → **30 live vars per trip**. This
+  independently reproduces the "29 net live wctx/trip" measured by a completely
+  different method in the four arms above — good evidence the probe is sound.
+- **mode 2**: `dead_j = 0.75 + 1.071·j` → **15 dead per trip**. Both fits are
+  exact to three digits.
+
+**Two findings:**
+1. **`wco` pins nothing** — mode 1 == mode 2 exactly at every N. Not a surprise
+   in hindsight: this is the REMOVAL tree, where `wco` grows only 1 per trip, so
+   there is almost nothing there to pin anything. The worry recorded in the plan
+   (that `an` would be forward-live via a fetch equality in the path condition)
+   is refuted — the solver substitutes those away at `assume_pathcondition`.
+2. **Exactly half the per-trip growth is droppable — 15 of 30.** Since the two
+   un-eliminable demonic vars per instruction step are `an` and `encoded_instr`,
+   this reads as "one of the two is forward-dead, the other is not".
+
+**Verdict against the plan's §2 gate: PARTIAL** (gate: ≥20/trip GO, 5-19 PARTIAL,
+<5 STOP). A forward GC would halve the RATE of |wctx| growth (15/trip instead of
+30/trip); it would not stop the growth. Extrapolating from the WCTX arm above
+(|wctx| ×1.97 → time ×2.19), halving |wctx| buys roughly a **2.2x constant
+factor at every N, with the scaling exponent unchanged**. That is real but it
+does not unlock N=128, and it is not obviously worth re-proving `rexec_cfg_addr`
+and its `RefineCompat` instances. Owner decision.
+
 Reading: the 113 binders dropped at N=4 were PAID FOR during `vm_compute` —
 every intermediate world carried them and every `persist`/`subst`/solver call
 ranged over them. Deleting them from the finished tree refunds none of that.
