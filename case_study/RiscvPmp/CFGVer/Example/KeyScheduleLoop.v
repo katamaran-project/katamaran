@@ -130,6 +130,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         key_schedule_loop2_instrs [] 64
         (pcOutOfInstrs_exitCond ia key_schedule_loop2_instrs) 40.
 
-    Lemma valid_key_schedule_loop2_cfg_contract_param (* (ia : N) *) :
-      ValidCFGVerifierContract (key_schedule_loop2_cfg_contract_param 0).
-    Proof. intros; vm_compute. Set Printing Depth 500. solve_vc; solve_symbase_fetch. Qed.
+    Lemma valid_key_schedule_loop2_cfg_contract_param (ia : N) :
+      ValidCFGVerifierContract (key_schedule_loop2_cfg_contract_param ia).
+    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
