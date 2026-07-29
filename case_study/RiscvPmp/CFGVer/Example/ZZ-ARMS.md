@@ -25,6 +25,54 @@ so only WCTX is a clean single-variable arm. Reproduce by applying one diff
 below to `CFGVer/Spec.v`, rebuilding `make -f Makefile.coq -j2
 case_study/RiscvPmp/CFGVer/Example/Prelude.vo` (~42 s), then `coqc` each ZZRun.
 
+## unquantify (fifth arm, 2026-07-29) — POST-HOC PRUNE, NOT A FIX
+
+Branch `unquantify-gate` (off `bearssl-breaking-bad`), commits d301d482..bcecaaea:
+`main`'s `unquantify` pass (`theories/Symbolic/GenOccursCheck.v` +
+`Propositions.v`'s `Section Unquantify`) ported over, definitions only, all
+soundness `Admitted` — a measurement, not a verification. Harness:
+`ZZUnqCommon.v` + `ZZUnqRun{1,2,4}{base,pp}.v` + `ZZUnqRun1raw.v`.
+
+Note this arm was measured on the REMOVAL tree (the `secLeakvar "encoded_instr"`
+drop is permanent as of ceb86848), so compare against REMOVAL, not BASELINE.
+
+Dead-binder census, `nc_demonicv` (every OTHER counter identical between the two
+columns at every N — the required control: nothing but binders moved):
+
+| N | postprocess only | postprocess + unquantify |
+|---|---|---|
+| 1 | 32  | **1** |
+| 2 | 56  | **1** |
+| 4 | 114 | **1** |
+
+The residual is a CONSTANT 1 regardless of N — the contract's own top-level
+base-address existential `"p"`, genuinely used in every fetch-bound formula.
+So ~all of `|wctx|`'s demonicv-driven growth is occurrence-dead by the end.
+Unquantify applied to the RAW pre-postprocess tree is far weaker (residual 146
+at N=1): `postprocess`-first is the composition that matters, because
+`solve_uvars`' substitutions are what expose the redundancy to the occurs check.
+
+Timing, same nine runs, one `Eval` per `coqc` process:
+
+| N | raw VC gen | + postprocess | + postprocess + unquantify | unq marginal |
+|---|---|---|---|---|
+| 1 | 1.031 s  | 1.066 s  | 1.070 s  | +0.4% |
+| 2 | 6.654 s  | 6.715 s  | 6.794 s  | +1.2% |
+| 4 | 16.551 s | 16.761 s | 16.935 s | +1.0% |
+
+**Unquantify costs time, it does not save it, and the scaling exponent is
+untouched**: N=1->N=4 growth is 16.0x raw, 15.7x postprocess, 15.8x
+postprocess+unquantify. Peak RSS at N=4 is 3333/3336/3336 MB. The port itself
+perturbed nothing — raw generation matches the pre-port REMOVAL row (1.25/6.55/
+16.52) within the run-to-run spread this harness's own header documents.
+
+Reading: the 113 binders dropped at N=4 were PAID FOR during `vm_compute` —
+every intermediate world carried them and every `persist`/`subst`/solver call
+ranged over them. Deleting them from the finished tree refunds none of that.
+This arm is therefore a FEASIBILITY result only: it says a forward world-GC
+would find ~29 dead variables per trip and would be correct to drop them. See
+`../PLAN-unquantify-forward.md` for the plan that acts on it.
+
 ## removal
 
 (Recovered from the working tree, where this intervention was present at the
