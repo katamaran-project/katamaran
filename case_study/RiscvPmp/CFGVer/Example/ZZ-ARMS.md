@@ -122,6 +122,57 @@ This arm is therefore a FEASIBILITY result only: it says a forward world-GC
 would find ~29 dead variables per trip and would be correct to drop them. See
 `../PLAN-unquantify-forward.md` for the plan that acts on it.
 
+## encodes_instr chunk GC (seventh arm, 2026-07-29) — 15x smaller growth slope
+
+Same harness plus a `gc : bool` that filters `encodes_instr` chunks out of the
+heap at the recursion point (`gc_heap` / `is_encodes_instr` in `ZZFwdCommon.v`),
+driven by `zzn_fwdgc_nc` + `ZZFwdGcRun{1,2,4}m{0,2,4}.v`. The count is taken
+against the POST-GC heap, i.e. the state the continuation can actually read.
+
+WHY the chunk accumulates: `encodes_instr` is duplicable (`Sig.v:332`) and
+`heap_extractions` KEEPS duplicable chunks on consume (`Chunks.v:58`), so
+`decode` matches its chunk but never removes it. Each fetch's fresh existential
+is pinned by its own retained chunk, forever.
+
+WHY dropping it is safe: incompleteness-only by construction (never
+unsoundness), and it does not even cost completeness here — the chunk is needed
+only by its own step's `decode`, which has already run by the time we reach the
+recursion point, and the next step's fetch mints a fresh one from `a ↦ᵢ i`
+(`ptstoinstr`, non-duplicable, properly consumed by the epilogue).
+
+| N | steps | mode 0 (total) | mode 2 (dead) | mode 4 (encoded_instr live) | live = 0-2 |
+|---|---|---|---|---|---|
+| 1 | 14 | 280  | 228  | -   | 52  |
+| 2 | 28 | 980  | 862  | -   | 118 |
+| 4 | 56 | 3640 | 3348 | **0** (was 1596) | 292 |
+
+CONTROL: at N=4 every non-`nc_debug` counter is byte-identical to the baseline
+sixth arm — `nc_error` 1373, `nc_assertk` 18, `nc_demonicv` 629, `nc_angbin`
+1373, `nc_dembin` 1640, `nc_block` 1641, `nc_angelicv` 676, `nc_asserteq` 676,
+`nc_assumeeq` 509. The VC is structurally unchanged; only the pinning moved.
+
+Fit `Σ_{j=1..S}(a+b·j)` against S=14/28/56, all three points exact to 3 digits:
+- **baseline**: `live_j = 3.18 + 1.072·j`
+- **with GC**:  `live_j = 3.18 + 0.0714·j`
+
+Same constant term, **growth slope 15x smaller** — about one new live variable
+per 14 steps (per loop TRIP) instead of per instruction step.
+
+**Two corrections this arm forces:**
+1. The sixth arm's "everything else is a flat 292" is WRONG. It was inferred
+   from a single N=4 point, which cannot distinguish flat from slowly growing.
+   Three N values show it is `3.18 + 0.0714·j` — there is still a residual
+   per-trip accumulator, so far unnamed.
+2. This does NOT take the growth to zero. The residual is still
+   linear-per-step / quadratic-in-sum, with a 15x smaller coefficient. It moves
+   the wall; it does not remove it. Projected `|wctx|` at the final step of
+   N=128 (S=1792): 1924 baseline vs 131 with GC.
+
+NO WALL-CLOCK CLAIM. The probe never shrinks a world — every binder is still
+present (`nc_demonicv` unchanged at 629). This arm says the variables are
+COLLECTABLE, not that anything got faster. Realising it needs the forward
+world-GC (`../PLAN-unquantify-forward.md` Option A).
+
 ## removal
 
 (Recovered from the working tree, where this intervention was present at the
