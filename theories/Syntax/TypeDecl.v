@@ -952,6 +952,29 @@ Module ty.
     Lemma K (σ : Ty) (p : σ = σ) : p = eq_refl.
     Proof. apply uip. Qed.
 
+    (* Ported from main:theories/Syntax/TypeDecl.v (aaabac4a) — needed by the
+       unquantify port in Symbolic/Propositions.v (uq_angelicv/uq_demonicv
+       use it to decide whether dropping a binder for an uninhabited type
+       would be unsound). Semi-decides inhabitedness of a type. *)
+    Import option.notations.
+    Fixpoint inhabit (σ : Ty) : Datatypes.option (Val σ) :=
+      match σ with
+        int => Some 0%Z
+      | bool => Some true
+      | string => Some EmptyString
+      | list _ => Some nil
+      | prod τ1 τ2 => v1 <- inhabit τ1 ;;
+                      v2 <- inhabit τ2 ;;
+                      Some (v1 , v2)
+      | sum τ1 τ2 => base.union (inl <$> inhabit τ1) (inr <$> inhabit τ2)
+      | unit => Some tt
+      | enum E => None (* TODO *)
+      | bvec n => Some bv.zero
+      | tuple T => None (* TODO *)
+      | union U => None (* TODO *)
+      | record R => None (* TODO *)
+      end.
+
   End WithTypeDef.
   #[global] Arguments int {TK}.
   #[global] Arguments bool {TK}.
