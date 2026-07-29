@@ -57,6 +57,11 @@ Section FwdProbe.
            + (if f b ctx.in_zero then 1 else 0))%N
     end.
 
+  (* ctx.fresh renames duplicate binders to `base "." number` (Context.v:707),
+     so an equality test on the raw name only ever matches the FIRST binder of
+     each name.  Match on the base instead. *)
+  Definition base (b : LVar ∷ Ty) : string := fst (ctx.split_at_dot (name b)).
+
   Fixpoint repeat_debug {Σ} (n : nat) (P : 𝕊 Σ) : 𝕊 Σ :=
     match n with
     | O    => P
@@ -65,7 +70,10 @@ Section FwdProbe.
 
   (* mode 0 : |wctx w|            -- total live context, the denominator
      mode 1 : dead ignoring wco   -- upper bound on what any forward GC sees
-     mode 2 : dead including wco  -- what a forward GC can SOUNDLY drop *)
+     mode 2 : dead including wco  -- what a forward GC can SOUNDLY drop
+     mode 3 : LIVE named "an"             -- name-resolved breakdown of the
+     mode 4 : LIVE named "encoded_instr"     stubborn half.  Modes 3+4+5 must
+     mode 5 : LIVE named neither             sum to (mode 0 - mode 2). *)
   (* NOTE: the `⊢` TYPE-quantifier notation is NOT usable in an Example file --
      Prelude exports iris.proofmode.tactics, so `⊢` parses as bi entailment.
      Spell the world quantification out instead. *)
@@ -78,6 +86,14 @@ Section FwdProbe.
       let k :=
         @count_ctx (wctx w)
           (fun b bIn =>
+             let dead : bool :=
+               match occurs_check bIn h, occurs_check bIn apc,
+                     occurs_check bIn keys, occurs_check bIn (wco w) with
+               | Some _, Some _, Some _, Some _ => true
+               | _, _, _, _                     => false
+               end in
+             (* live-and-named-p *)
+             let lnm : bool -> bool := fun p => if dead then false else p in
              match mode with
              | O    => true
              | S O  =>
@@ -86,12 +102,12 @@ Section FwdProbe.
                  | Some _, Some _, Some _ => true
                  | _, _, _                => false
                  end
-             | _    =>
-                 match occurs_check bIn h, occurs_check bIn apc,
-                       occurs_check bIn keys, occurs_check bIn (wco w) with
-                 | Some _, Some _, Some _, Some _ => true
-                 | _, _, _, _                     => false
-                 end
+             | S (S O)             => dead
+             | S (S (S O))         => lnm (String.eqb (base b) "an")
+             | S (S (S (S O)))     => lnm (String.eqb (base b) "encoded_instr")
+             | _                   =>
+                 lnm (negb (orb (String.eqb (base b) "an")
+                                (String.eqb (base b) "encoded_instr")))
              end) in
       repeat_debug (N.to_nat k) (POST w acc_refl tt h).
 
