@@ -7,16 +7,19 @@ description: >
   choice at each step, why execution errors on a pc that matches no table key
   (lookup_instr/is_exit fail), ptsto_instrs / ptsto_instrs_lookup (instruction-memory
   ownership, still gmap-based on the concrete side), and scfg_verification_condition
-  (how the VC is built and called). ALSO use when vm_compute on a backward-branch
-  loop example genuinely never terminates (not just slow — no residual ever appears
-  to even inspect) after its trip count was raised, especially if a SMALLER trip count
-  on the same loop shape compiled fine — a known exponential (~k^trip-count) blowup
-  from symbolic TERM DUPLICATION (the loop body rebuilding a secret register from
-  k ≥ 2 copies of its own previous value; no term sharing in the executor's register
-  store), NOT branch forking and not a fuel/timeout/spec-size problem to tune around.
-  Contrast: a
+  (how the VC is built and called). ALSO use when a backward-branch loop example's
+  vm_compute cost scales badly as its trip count is raised — it never terminates, or
+  a SMALLER trip count on the same loop shape compiled fine. Two mechanisms, and the
+  skill covers both: symbolic TERM DUPLICATION (the loop body rebuilding a register
+  from k ≥ 2 copies of its own previous value; no term sharing in the executor's
+  register store) is real but was measured NOT to be dominant at practical trip
+  counts; the measured-dominant driver is the LIVE LOGIC-VARIABLE CONTEXT — two
+  demonic variables per instruction step that are never unified away, so a loop whose
+  every symbolic term is held O(1) by construction scales just as badly. Either way
+  this is a structural scaling property of the executor, NOT branch forking and not a
+  fuel/timeout/spec-size problem to tune around. Contrast: a
   SINGLE vm_compute call that DOES finish and solve_vc then leaves a bare False (fuel
-  merely too tight, not an exponential trip-count blowup) stays cfgver-solve-vc's
+  merely too tight, not a trip-count scaling blowup) stays cfgver-solve-vc's
   territory, not this. NOT for the concrete mirror executor cexec_cfg_addr or
   rsolve/relational proofs (cfgver-refinement), and NOT for the VC-to-leakage chain
   (cfgver-soundness).
@@ -66,20 +69,56 @@ It stops with `error` when:
 
 ## Backward-branch loops: exponential blowup = term duplication, not forking
 
-> **Read this caveat before acting on the section below (measured 2026-07-29).**
+> **ROOT-CAUSED 2026-07-29 — read this before acting on the section below.**
 > The k^trip-count term-duplication mechanism described here is real and
 > correctly diagnosed, but it is **not the dominant cost at practical trip
 > counts**, so do not reach for term sharing / hash-consing / SSA naming on the
 > strength of it. A/B with the program shape held identical to
 > `key_schedule_loop2` and only the 10-instruction ALU chain swapped: a loop in
 > which NO register's symbolic term ever grows (`addi a0,a1,1` ×10, A0 never
-> written) costs the SAME as — marginally more than — the real masking chain
-> (N=4: 20.5 s vs 23.2 s `vm_compute`), and still grows ~5.6× per doubling of
-> trip count (N=8: 114.5 s). Per-step cost itself triples from N=4 to N=8. So
-> the operative driver is a per-step cost independent of term content, and the
-> cheap reproducer for diagnosing it is a 14-instruction loop of trivial
-> `addi`s, not the masking chain. Details and the memory-pressure confound on
-> the N=8 figures: the `project-solver-secleak-residuals` memory note.
+> written) costs the SAME as the real masking chain.
+>
+> **The measured driver is the live logic-variable context `|wctx|`.** Exactly
+> two demonic variables per instruction step are introduced and never unified
+> away, so `|wctx|` grows linearly in steps and per-emission cost grows with it:
+>
+> - `an` — `Verifier.v`'s own `exec_instruction_prologue`,
+>   `asn.exist "an" ty_xlenbits (nextpc ↦ term_var "an")`.
+>   *Measured:* introduced once per step, eliminated zero times.
+>   *Inferred, NOT verified — check before building a fix on it:* the epilogue
+>   consumes `pc ↦ an ∗ nextpc ↦ an`, which does relate `an` to the real pc, but
+>   consumption yields an **angelic** equation (`assert_vareq`) while `an` is
+>   **demonic**, and a demonic variable cannot be eliminated by an angelic
+>   equation. The counts are consistent with that story (`angelicv` 169 ==
+>   `assert_vareq` 169 per trip, i.e. angelic variables *are* all eliminated),
+>   but the asymmetry itself was never directly confirmed.
+> - `encoded_instr` — `Spec.v`'s `sep_contract_fetch_instr` postcondition.
+>   Unification of `result_fetch = term_union … (term_var "encoded_instr")`
+>   eliminates `result_fetch` *in favour of* `encoded_instr`, leaving it live.
+>
+> Every other variable the executor introduces IS eliminated cleanly
+> (`result_decode`, `imm`, `rs`, `rd`, `op`, `result_rX`/`wX`/`tick_pc`, `a`,
+> `w`: introduced == eliminated). Contract-entry existentials (`p`, `v*`, `mv*`)
+> add a constant, not a per-step, amount.
+>
+> Evidence (single-variable interventions on the fetch postcondition, each
+> controlled by a 12-counter node census; flat reproducer, N=4): `|wco|` ÷15 →
+> **0.82×**; `|wctx|` ×1.97 → **2.19×**. Measured NOT to be the cause: node
+> count (raw grows exactly +1389/trip while time grows superlinearly),
+> `postprocess`/`erase_symprop`/`safeE` (free — the whole pipeline costs the same
+> as raw construction alone), heap size (0.95× at N=4), `SymProp.debug` payloads
+> (there are none — count is 0), and path-condition length (above).
+>
+> Also note: ~96.5% of built nodes are discarded (2801 raw → 99 final at N=2),
+> and every `block` node is a solver-killed fork under a binary node (~410/trip).
+> Discarding is free, so that waste is not worth optimising — but it does mean
+> any ablation that weakens the solver causes path explosion; see
+> **rocq-timeout-triage** Step 3b for how to control an ablation, and Steps
+> 1c/1d for the measurement rules (one heavy `Eval` per process; force a stage
+> with a cheap consumer rather than printing it). The earlier
+> "N^2.6 with rising exponent" figure did NOT survive clean re-measurement and
+> should not be quoted. Full record: the `project-key-schedule-loop-scaling`
+> memory note.
 
 A loop example does **not** scale past a small trip count by raising
 `fuel`/timeout when its BODY rebuilds a (secret) register from k ≥ 2 copies of
