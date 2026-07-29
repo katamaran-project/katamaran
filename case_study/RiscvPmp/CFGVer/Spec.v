@@ -272,8 +272,31 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
        sep_contract_precondition    :=
-        secLeakvar "a" ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
+        (* ORDER IS LOAD-BEARING: a pure `secLeakvar`/formula conjunct must come
+           AFTER whatever chunk pins its logic variable.  `call_contract`
+           (Symbolic/Monads.v) instantiates a contract's logic variables
+           ANGELICALLY, and `consume` walks ∗ left-to-right, so a conjunct
+           placed before the chunk that unifies its variable is asserted while
+           that variable is still an unconstrained evar — unprovable, and the
+           obligation survives into the VC as a residual.  `postprocess`'s
+           solve_evars then substitutes the variable, so the leftover *prints*
+           as the trivially-true `secLeak p` and looks like a solver bug; it
+           isn't, the solver never saw it in that form (diagnosed 2026-07-29).
+           Here `sep_contract_localstore` is [], so nothing pins "a" until the
+           pc chunk below.  Reordering these two conjuncts removes all 28
+           secLeak asserts from key_schedule_loop2's VC (3.17 MB -> 524 KB).
+           Same invariant, same reason: the trailing secLeakvar "paddr" in
+           mem_write_value / checked_mem_write.
+
+           LIMIT OF THE REWRITE: this only works when the conjunct crosses a
+           CHUNK, which merely adds an equation.  It must NOT be applied across
+           a PATTERN MATCH on the same variable — that eliminates the variable,
+           so the moved conjunct degrades to a statement about a literal and the
+           precondition genuinely weakens.  See the note on
+           sep_contract_checked_mem_read, where trying it makes the contract
+           unprovable against its own body. *)
         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
+        secLeakvar "a" ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
           term_var "a" ↦ᵢ term_var "i" ∗
           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "a"))%asn ∗
           (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_N maxAddr) ∗
@@ -297,6 +320,18 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
      {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "cmem_val" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
+        (* "inv" STAYS IN FRONT — do not "fix" this the way
+           sep_contract_fetch_instr was fixed.  The only thing that would pin
+           "inv" is the match_bool below, and that is a pattern match, which
+           ELIMINATES the variable rather than merely constraining it: after it,
+           secLeakvar "inv" degrades to "this literal is public" and the
+           precondition no longer states that the caller's `inv` was public.
+           Measured 2026-07-29: moving it makes this contract unprovable against
+           its own body (all three restrict_bytes cases reduce to false = true).
+           Crossing a CHUNK is information-preserving; crossing a pattern match
+           on the same variable is not.  The residual this leaves at call sites
+           is `secLeak <literal>`, which solve_vc closes trivially — unlike the
+           fetch case, where it was `secLeak (p + c)`. *)
          secLeakvar "inv" ∗
            secLeakvar "paddr" ∗
         asn.match_bool (term_var "inv")
@@ -329,6 +364,9 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)(* ) *) ∗
                                                                                                             asn.chunk (chunk_user inv_leakage [env]) ∗
+    (* Deliberately LAST — do not move to the front.  See the ordering note on
+       sep_contract_fetch_instr: a secLeakvar consumed before the chunk that
+       pins its variable becomes an undischargeable VC residual. *)
     secLeakvar "paddr";
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
@@ -397,6 +435,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; (* "entries" :: ty.list ty_pmpentry; *) "mem_val" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
+        (* "inv" stays in front — see the note on sep_contract_checked_mem_read. *)
         secLeakvar "inv" ∗
           secLeakvar "paddr" ∗
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "mem_val") (term_var "paddr" ↦ₘ[ bytes ] term_var "mem_val") ∗
@@ -434,6 +473,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
         (* asn_pmp_entries (term_var "entries") ∗ *)
         (* asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write) *) ∗
         asn.chunk (chunk_user inv_leakage [env]) ∗
+    (* Deliberately LAST — do not move to the front; see sep_contract_fetch_instr. *)
     secLeakvar "paddr";
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
