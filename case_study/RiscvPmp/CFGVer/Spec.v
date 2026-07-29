@@ -310,8 +310,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
          asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
          asn.exist "encoded_instr" _
          (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "encoded_instr") ∗
-                                      asn.chunk (chunk_user encodes_instr [term_var "encoded_instr"; term_var "i"])
-         ∗ secLeakvar "encoded_instr") ∗
+                                      asn.chunk (chunk_user encodes_instr [term_var "encoded_instr"; term_var "i"])) ∗
            asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
            (* asn_pmp_entries (term_var "entries") *);
     |}.
