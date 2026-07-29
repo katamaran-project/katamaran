@@ -173,6 +173,66 @@ present (`nc_demonicv` unchanged at 629). This arm says the variables are
 COLLECTABLE, not that anything got faster. Realising it needs the forward
 world-GC (`../PLAN-unquantify-forward.md` Option A).
 
+## forward world-GC, Option A (eighth arm, 2026-07-29) — 10.7x at N=8, GO
+
+`Example/ZZGcCommon.v` implements PLAN-unquantify-forward.md Option A in the
+THROWAWAY probe chain rather than in `Verifier.v` (changing the real
+`sexec_cfg_addr` drags in `rexec_cfg_addr` + `RefineCompat`, and the plan warned
+Option A might come out SLOWER since `wsubst` re-traverses `wco` once per
+dropped variable). `find_dead` + `gc_tri` (chained `acc_subst_right`, witness
+from `ty.inhabit`) + `gc_dead_roots` (SHeapSpec level — liveness depends on the
+heap; tbl/exits are explicit extra roots). NO new core machinery was needed,
+exactly as the plan predicted. Chunk GC and world GC are independently
+switchable via `zzn_gc_nc gc wgc n`.
+
+| N | steps | baseline | chunk only | world only | BOTH | speedup |
+|---|---|---|---|---|---|---|
+| 1 | 14  | 1.030  | 1.024  | 0.730  | **0.459** | 2.24x  |
+| 2 | 28  | 6.571  | -      | -      | **0.884** | 7.43x  |
+| 4 | 56  | 16.279 | 15.277 | 11.296 | **3.327** | 4.89x  |
+| 8 | 112 | 81.454 | -      | -      | **7.632** | 10.67x |
+
+CONTROL: `nc_error` is IDENTICAL between the two arms at every N
+(344/687/1373/2745), as is every other counter at N=4 (`nc_angbin` 1373,
+`nc_dembin` 1640, `nc_block` 1641, `nc_assertk` 18, `nc_angelicv` 676,
+`nc_demonicv` 629, `nc_asserteq` 676). Same VC, same errors — nothing live was
+dropped. `nc_assumeeq` RISES (509→570→626 at N=4; 255→314 at N=2;
+1017→1250 at N=8), which is what proves the GC fired rather than silently
+no-oping. `nc_demonicv` is EXPECTED to stay put: the GC does not delete the
+binder nodes upstream, it makes the DOWNSTREAM worlds smaller.
+
+**Strongly superadditive at N=4: -6% (chunk only), -31% (world only), -80%
+(both).** The chunk GC is a PRECONDITION for `encoded_instr` being droppable by
+the world GC, so neither alone does much — the seventh arm's mechanism showing
+up directly in the clock.
+
+**The speedup GROWS with N** (2.24 → 7.43 → 4.89 → 10.67). This is the cleanest
+claim available and it does not depend on a fitting window: a pure
+constant-factor win would show CONSTANT speedup.
+
+Exponent (time ∝ steps^e) is window-dependent — quote the range, not one number:
+
+| window | baseline | both GCs |
+|---|---|---|
+| N=1→8 | 2.10 | 1.35 |
+| N=2→8 | 1.82 | 1.55 |
+| N=4→8 | 2.32 | 1.20 |
+
+Every window has the GC exponent lower and the most asymptotic window shows the
+largest gap, but the spread means this is "roughly quadratic → roughly
+N^1.2-1.5", NOT a precise figure. Note the raw curves are irregular in both
+arms (baseline per-doubling 6.38 / 2.48 / 5.00), so single-window fits — in
+particular anything anchored on the overhead-dominated N=1 — are unreliable.
+
+Projection to N=128 (4 doublings past N=8), N=4→8 ratios: baseline ~50,900 s
+(~14 h) vs GC ~210 s (~3.5 min). On the most conservative window (N=2→8),
+~3.5 h vs ~10 min. Either way N=128 moves from infeasible to routine.
+
+**Verdict: GO.** This is the first intervention in eight arms that moves the
+wall rather than the constant. NOT YET ON ANY TRUSTED PATH — it lives in the
+throwaway probe chain; landing it means porting to `Verifier.v` and re-proving
+`rexec_cfg_addr` + its `RefineCompat` instances.
+
 ## removal
 
 (Recovered from the working tree, where this intervention was present at the
