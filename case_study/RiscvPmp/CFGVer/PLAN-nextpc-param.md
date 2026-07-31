@@ -261,6 +261,48 @@ verifiable without it.
 
 ---
 
+## §5-RESULTS. DONE 2026-07-31 — commit `05a4ba00`, gate GREEN
+
+All of §5 below was run. Outcome, with the honest reading:
+
+**Correctness: complete.** `Verifier.v`, `VerifierRel.v`, `Adequacy.v` compile;
+`rexec_cfg_addr` is PROVED (it needed the four `is_exit`/`lookup_instr` cases
+bulleted, plus a second `"[$]"` per IH application since the recursive call
+passes `apc'` as both pc and incoming nextpc); the gate passes all three checks —
+build clean, no holes, 12 end theorems axiom-clean with only `Machine.pure_decode`
+and `Base.mmioenv`.
+
+**Mechanism: confirmed exactly.** Census on the flat `zzn` reproducer
+(`Example/ZZRun{1,2,4}.v`): demonicv introduced **156 → 142 per trip** (exactly
+one per instruction step gone), `assume_vareq` eliminations **unchanged at
+127/trip**, net survivors **29 → 15 per trip**.
+
+**Per-name survivor census (new probe `Example/ZZSurv.v`) — the decisive datum:**
+
+| | survivors | composition |
+|---|---|---|
+| N=1 | 20 | `p`, `np`, `v`, `v.1`, `v.2`, `mv` + **`encoded_instr` ×14** |
+| N=2 | 35 | those + `mv.1` + **`encoded_instr` ×28** |
+
+`an` is ABSENT; `np` appears exactly once at every N. `encoded_instr` is exactly
+14/trip — one per instruction step — and the ONLY execution-driven survivor.
+`mv` grows only because this reproducer's `zzn_mem_specs n` declares n cells.
+**So removing `encoded_instr` takes execution-driven `|wctx|` growth to zero.**
+
+Reusable tell: a survivor must be alpha-renamed when the next step reintroduces
+its base name, so fresh-name suffixes (`.1`, `.2`, …) mark exactly the
+un-eliminated variables; names that cycle unsuffixed are dying.
+
+**Timing: a ~1.5-1.6× CONSTANT factor, exponent unchanged — NOT a scaling win.**
+After: 0.736 / 3.754 / 10.197 s at N=1/2/4. Before (`ZZCommon.v`'s header, same
+reproducer, different session): N=1 0.68/1.09/1.13, N=4 15.9/16.2/20.8. That is
+~1.5× at N=1, ~1.6× at N=4, and 4^1.90 vs 4^1.95 at the before-medians. The
+curve does not bend because `|wctx|` still grows linearly via `encoded_instr`.
+Caveat: the before figures are cross-session and that file's own spread is
+already 1.31× at N=4, so only the node census is solid evidence.
+
+---
+
 ## §5. Validation
 
 1. **Shape gate.** `Verifier.v` and `VerifierRel.v` compile (`vos`, then `full`).
@@ -287,3 +329,23 @@ options differ enough in cost that the measurement should inform the choice:
 - steer the solver's unification direction, which currently eliminates
   `result_fetch` in favour of `encoded_instr` (the losing direction) rather than
   the other way round.
+
+> **SUPERSEDED 2026-07-31 by measurement — see PLAN-encoded-instr.md.** Both
+> options above are dead, and a third was raised and ruled out:
+> - **"Steer the unification" was never a fix.** `result_fetch` (angelic) and
+>   `encoded_instr` (demonic) are joined by ONE equation, so exactly one of the
+>   pair survives per step whichever way you unify. It is a rename.
+> - **A function symbol is impossible AND unnecessary.** `Machine.v:147` is
+>   `Axiom pure_decode : bv 32 -> string + AST`, uninterpreted, so there is
+>   nothing to compute with (dead end 3 in the
+>   `project-key-schedule-loop-scaling` memory note).
+> - **Making `encodes_instr` non-duplicable is heap-side, so it cannot help.**
+>   The variable stays DECLARED in `wctx` regardless, and heap size is measured
+>   at 0.95×. It also breaks `valid_execute_fetch` unless the chunk is
+>   re-produced at the second use inside `fun_fetch` (memory note, dead end 1).
+>
+> **What survives:** move the word from fetch's POSTcondition to its
+> PRECONDITION, supplied as a per-instruction-ADDRESS variable introduced once at
+> contract entry — the same shape as the `an` fix (replace an ∃ by a parameter
+> supplied from outside), justified by the `op`/`encoded_instr` asymmetry
+> recorded in §5-RESULTS.
