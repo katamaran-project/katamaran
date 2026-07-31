@@ -1,7 +1,8 @@
 # PLAN — remove `encoded_instr`, the last per-step logical variable
 
-Status: drafted 2026-07-31, not started. Branch `nextpc-param` (tip `05a4ba00`).
-Sequel to `PLAN-nextpc-param.md`, which removed `an` the same way.
+Status: **DONE 2026-08-01** — see §7-RESULTS at the bottom for the outcome and
+the measured numbers. Branch `nextpc-param`. Sequel to `PLAN-nextpc-param.md`,
+which removed `an` the same way but did NOT bend the curve; this one does.
 
 ## §0. Why this is worth doing, and what "done" looks like
 
@@ -124,8 +125,19 @@ exactly as they are**; only the predicate's shape changes.
   per-step demonic variable.** Open gives `ptstomem a w`, the read returns
   exactly `w`, close restores.
 - `exec_instruction_prologue` (`Verifier.v:126`): owns `ptstoinstr a w i`, with
-  `w` supplied from the parallel word table (decided: parallel, not an extended
-  `SInstrTable`, to leave `itable_rel` and `TablesRel.v`'s faith lemmas alone).
+  `w` supplied from the word table.
+  > **REVERSED 2026-08-01.** This bullet originally read "supplied from the
+  > PARALLEL word table (decided: parallel, not an extended `SInstrTable`, to
+  > leave `itable_rel` and `TablesRel.v`'s faith lemmas alone)". Both shapes were
+  > implemented; the parallel one was dropped. Its stated benefit did not
+  > materialise — `itable_rel` and the faith lemmas end up untouched EITHER way,
+  > because the word column lives on `SInstrTableW` (the executor's type), not on
+  > the Σ-level `SInstrTable` the faith lemmas talk about. Meanwhile parallel
+  > cost a second lookup per step that could disagree with the first, an
+  > unreachable-but-carried error case in `sexec_cfg_addr`, and a full duplicate
+  > `wtable_rel` family (persist / forgetting / lookup / faith) threaded through
+  > the fuel induction. Fused: one lookup, one loop-carried relation. See
+  > §7-RESULTS.
 
 Rejected alternatives, for the record: (a) removing the open/close pair from
 `fun_fetch` and giving fetch the pre-opened form — sound (`st_lemmak`,
@@ -273,3 +285,111 @@ unknown without committing to a trusted-surface change.
   identical code is 1.31× at N=4. Prefer the deterministic census.
 - Bound `-j` by RAM (~6 GB/job); `GATE_JOBS=1` when a browser is open, per
   `scripts/gate.sh`'s own comment. `Error 143` is earlyoom, not a code defect.
+
+---
+
+## §7-RESULTS. DONE 2026-08-01 — the curve bends
+
+### The decisive datum: execution-driven `|wctx|` growth is ZERO
+
+`Example/ZZSurv.v`, same flat `zzn` reproducer as §0:
+
+| N | survivors BEFORE | survivors AFTER |
+|---|---|---|
+| 1 | 20 — `p, np, v, v.1, v.2, mv` + **`encoded_instr` ×14** | 20 — `p`, **`w`…`w.13`**, `np, v, v.1, v.2, mv` |
+| 2 | 35 — those + `mv.1` + **`encoded_instr` ×28** | **21** — those + `mv.1` |
+| 4 | (would be 49) | **23** |
+| 8 | (would be 105) | **27** |
+
+Growth per trip: **+15 → +1**, and that +1 is `mv`, which this reproducer's own
+`zzn_mem_specs n` declares. That is exactly §0's success criterion. The 14
+survivors that remain are the program's 14 word variables — bound to PROGRAM
+SIZE, not trip count, which is the whole point of introducing them once at
+contract entry.
+
+`encoded_instr` no longer appears in the demonicv census at all.
+
+### Timing: a real exponent change, unlike the `an` fix
+
+| N | before (s) | after (s) |
+|---|---|---|
+| 1 | 0.736 | 1.003 |
+| 2 | 3.754 | 3.644 |
+| 4 | 10.197 | 7.568 |
+| 8 | — | 14.146 |
+
+Exponent per doubling on the SAME range (N=2→4): **1.44 → 1.05**. At N=4→8 it is
+**0.90**. Compare `PLAN-nextpc-param.md` §5-RESULTS, which had to report "the
+curve does not bend because `|wctx|` still grows linearly via `encoded_instr`" —
+it now does bend, and for exactly the predicted reason.
+
+N=1 is slightly SLOWER (1.00 vs 0.74): the 14 word variables are introduced even
+for a single trip, and there is no reuse to amortise them. Crossover is ~N=2.
+
+**Corroboration that does not depend on wall-clock** (this box's spread on
+identical code is 1.31× at N=4, so treat the seconds as weak evidence): node
+counts are exactly linear in N (`nc_angbin` 344 / 687 / 1373 / 2745), and time
+now tracks them. Previously time grew superlinearly while nodes grew linearly —
+that mismatch WAS the anomaly, and it is gone.
+
+### What the change actually was
+
+Three decisions, in the order they were taken:
+
+1. **Fused, not parallel** (user call). The word is a COLUMN of the executor's
+   table (`SInstrTableW`), not a parallel address→word table. One lookup, so the
+   two can never disagree; and only ONE relation (`itable_relW`) has to survive
+   the induction on fuel. The parallel shape needed a duplicate
+   `wtable_rel`/persist/forgetting/lookup family alongside `itable_rel`'s.
+2. **Words supplied through the EXISTING `demonic_ctx`**, by extending its
+   context from `Σ` to `Σ ▻▻ words_ctx (length tbl)` and splitting with
+   `env.drop`/`env.take`. The alternative — declaring them in the contract's own
+   Σ — would have made `CFGVerifierContract`'s type depend on the program and
+   rippled through `gen_contract*`, `concretize_*`, and every example.
+   Consequence, verified by compiling them unchanged: **`Contracts.v`,
+   `GenContract.v`, `TablesRel.v`, `EndToEnd.v` and all seven examples needed NO
+   source changes.** Only `Tables.v` gained definitions (it lost nothing).
+3. **Word supply is a TOTAL FUNCTION** `bv xlenbits -> bv word`, not a gmap. A
+   partial map carried no information (the word list is exactly as long as the
+   instruction list) but forced a "no word here" case into `cexec_cfg_addr`, a
+   domain side condition into `ptsto_instrs_w`, and a matching branch into every
+   proof below it.
+
+`ptsto_instrs instrs` is now `∃ words, ptsto_instrs_w words instrs`, which keeps
+its old MEANING ("some word that decodes to `i` at each address") and hence its
+old role in `ImplPre`. **The trusted statement surface did not change**, as
+§4-SPIKE predicted and §4 feared it could not.
+
+### The risk in §4 did not materialise
+
+§4 worried that pinning a chosen word per address would force `ImplPre` to name
+instruction *words*. It does not: `intro_ptsto_instrs` (`Adequacy.v`) **already
+receives the word list `ws`**, so the words are in hand exactly where instruction
+ownership is introduced. No gmap-construction induction, no new hypothesis
+travelling down from the end theorems. Likewise the word guard is free —
+`wtable_rel_cws_of` holds by construction from `itable_rel`, because `cws_of` is
+built from `words` at the table's own addresses.
+
+### `valid_execute_fetch` — the obligation no `vos` pass could judge
+
+Verifies unchanged. `Sig.v`'s precision annotation
+`MkPrecise [ty_xlenbits] [ty_word; ty_ast]` means consuming the chunk FROM THE
+ADDRESS determines both the word and the AST, so `use lemma open_ptsto_instr
+[tmp]` still resolves with its single argument and **`Machine.v` is untouched**.
+
+### Methodology correction worth keeping
+
+**`-vos` does NOT skip proof bodies inside a `Section` with a `Context`** — Coq
+must run the proof to compute which section variables to generalize over.
+Verified both ways on scratch files (unsectioned false lemma → exit 0; sectioned
+false lemma → error). Every CFGVer file wraps its content in
+`Section CFGVerificationDerived`, so these `vos` sweeps DO check tactics, and
+they caught two real errors (`congruence` chokes on `bv`'s proof field;
+SSReflect rejects `rewrite H1, H2 in H`).
+
+The exceptions are what bit: code at file top level (`Tables.v`) or in a plain
+`Module` (`Spec.v`'s `valid_execute_fetch`) IS skipped. `Tables.v`'s two new
+`bv.eqb` lemmas were both wrong and only `full` mode found them — a bare `cbn`
+unfolds `bv.eqb` into `N.eqb (bv.bin _) (bv.bin _)` so the rewrite stops
+matching, and `destruct (bv.eqb_spec …)` will not abstract a closed scrutinee
+sitting inside an `if`.

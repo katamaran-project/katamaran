@@ -131,22 +131,27 @@ Open Scope list_scope.
                               else words_of_list (bv.add base (bv.of_N 4)) rest k
     end.
 
+  (* bv.eqb reflected both ways.  Destructing bv.eqb_spec directly inside
+     words_of_list's `if` does NOT work — the scrutinee is a closed term there,
+     so Coq will not abstract it and the `if` survives; decide the boolean
+     first and rewrite. *)
+  Lemma bv_eqb_refl {n} (x : bv n) : bv.eqb x x = true.
+  Proof. unfold bv.eqb. apply N.eqb_refl. Qed.
+
+  Lemma bv_eqb_neq {n} (x y : bv n) : x <> y -> bv.eqb x y = false.
+  Proof.
+    intros Hne.
+    destruct (bv.eqb_spec x y) as [Heq|_]; [contradiction|reflexivity].
+  Qed.
+
   Lemma words_of_list_here (base : bv xlenbits) (x : bv word) (ws : list (bv word)) :
     words_of_list base (x :: ws) base = x.
-  Proof.
-    cbn.
-    destruct (bv.eqb_spec base base) as [_|Hne]; [reflexivity|].
-    exfalso. exact (Hne eq_refl).
-  Qed.
+  Proof. cbn [words_of_list]. rewrite bv_eqb_refl. reflexivity. Qed.
 
   Lemma words_of_list_there (base k : bv xlenbits) (x : bv word) (ws : list (bv word)) :
     k <> base ->
     words_of_list base (x :: ws) k = words_of_list (bv.add base (bv.of_N 4)) ws k.
-  Proof.
-    intros Hne.
-    cbn.
-    destruct (bv.eqb_spec k base) as [Heq|_]; [contradiction|reflexivity].
-  Qed.
+  Proof. intros Hne. cbn [words_of_list]. rewrite (bv_eqb_neq Hne). reflexivity. Qed.
 
   (* An instruction address never collides with a later one, provided the
      whole program fits below 2^xlenbits (no wraparound).  This is the side
