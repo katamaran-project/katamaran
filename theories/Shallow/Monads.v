@@ -72,6 +72,17 @@ End Monotonic.
   destruct p : typeclass_instances.
 #[export] Hint Extern 1 (Monotonic _ (match ?p with left _ => _ | right _ => _ end)) =>
   destruct p : typeclass_instances.
+(* bool and option complete the set above: an `if` and an `option` match are at
+   least as common in monadic definitions as a sumbool one, and without these
+   two a single `if` in a monad body stops proof search dead — the enclosing
+   `Monotonic` goal then has to be case-split by hand.  Safe to add: when
+   `destruct p` cannot abstract over p the hint just fails and search
+   backtracks, so these can only make goals reachable, never break existing
+   ones. *)
+#[export] Hint Extern 1 (Monotonic _ (match ?p with true => _ | false => _ end)) =>
+  destruct p : typeclass_instances.
+#[export] Hint Extern 1 (Monotonic _ (match ?p with Some _ => _ | None => _ end)) =>
+  destruct p : typeclass_instances.
 
 #[export] Instance monotonic_eq_elim {A B} {MB : relation B} {f : A -> B} :
   (forall a, Monotonic MB (f a)) -> Monotonic (eq ==> MB) f.
