@@ -244,8 +244,13 @@ Module RiscvPmpIrisInstance (* <: *)
     End WithAddrs.
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
-    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+    (* The word is now a PARAMETER, not existentially hidden here.  That ∃ was
+       the reason every fetch learned a fresh unknown word and left a demonic
+       variable behind for good; naming it is what makes |wctx| flat in the trip
+       count.  No generality lost — the old form is `∃ w, interp_ptsto_instr
+       addr w instr`.  See CFGVer/PLAN-encoded-instr.md. *)
+    Definition interp_ptsto_instr (addr : Addr) (w : Word) (instr : AST) : iProp Σ :=
+      (@interp_ptstomem 4 addr w ∗ ⌜ pure_decode w = inr instr ⌝)%I.
   End WithMemory.
 
   Section WithSailGS.
@@ -294,7 +299,7 @@ Module RiscvPmpIrisInstance (* <: *)
     (* | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w *)
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | interp_inv_constant_time | _                    => False (* Unary instance has no support for different execution predicates *)
     .
 

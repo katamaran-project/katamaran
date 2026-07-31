@@ -111,7 +111,9 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
-  Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
+  (* 3-ary since 2026-07-31: the middle argument is the raw instruction WORD.
+     Reads "address a holds word w, which encodes instruction t". *)
+  Notation "a '↦ᵢ[' w ']' t" := (asn.chunk (chunk_user ptstoinstr [a; w; t])) (at level 70).
   Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
@@ -229,7 +231,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   #[global] Notation "r '↦ᵣ' val" := (asn_reg_ptsto r val) (at level 70) : asn_scope.
   #[global] Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70) : asn_scope.
   #[global] Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70) : asn_scope.
-  Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
+  Local Notation "a '↦ᵢ[' w ']' t" := (asn.chunk (chunk_user ptstoinstr [a; w; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
@@ -269,7 +271,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     |}.
 
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty_word; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
        sep_contract_precondition    :=
         (* ORDER IS LOAD-BEARING: a pure `secLeakvar`/formula conjunct must come
@@ -297,7 +299,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
            unprovable against its own body. *)
         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
         secLeakvar "a" ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
-          term_var "a" ↦ᵢ term_var "i" ∗
+          term_var "a" ↦ᵢ[term_var "w"] term_var "i" ∗
           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "a"))%asn ∗
           (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_N maxAddr) ∗
                                                                                                                  asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
@@ -307,10 +309,14 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
         secLeakvar "a" ∗
-         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
-         asn.exist "encoded_instr" _
-         (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "encoded_instr") ∗
-                                      asn.chunk (chunk_user encodes_instr [term_var "encoded_instr"; term_var "i"])) ∗
+         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ[term_var "w"] term_var "i" ∗
+         (* NO `asn.exist "encoded_instr"` any more.  That existential was
+            PRODUCED into the caller, so it minted a fresh demonic variable in
+            wctx on every step and was the last per-step |wctx| leak after `an`
+            was fixed.  The word is now pinned by the precondition's ptstoinstr
+            chunk, so fetch can simply name it.  PLAN-encoded-instr.md. *)
+         (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w") ∗
+                                      asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"])) ∗
            asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
            (* asn_pmp_entries (term_var "entries") *);
     |}.
@@ -637,13 +643,17 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     |}.
 
   Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
-    {| lemma_logic_variables := ["paddr" :: ty_word; "i" :: ty_ast];
+    (* "w" is NOT a pattern argument and does not need to be: ptstoinstr is
+       precise on the address (Sig.v), so consuming the chunk determines both the
+       word and the AST.  That is what keeps `use lemma open_ptsto_instr [tmp]`
+       (Machine.v) working unchanged with its single argument — and it is why the
+       postcondition can now NAME the word instead of re-existentialising it. *)
+    {| lemma_logic_variables := ["paddr" :: ty_word; "w" :: ty_word; "i" :: ty_ast];
        lemma_patterns        := [term_var "paddr"];
-       lemma_precondition    := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
-      lemma_postcondition   := ∃ "op", (asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "op"]) ∗
-                                          asn.chunk (chunk_user encodes_instr [term_var "op"; term_var "i"]) ∗
-                                          secLeakvar "op"
-                                       )
+       lemma_precondition    := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "w"; term_var "i"]);
+      lemma_postcondition   := asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "w"]) ∗
+                                 asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]) ∗
+                                 secLeakvar "w"
     |}.
 
   Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
@@ -652,7 +662,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
        lemma_precondition    := asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "cl"]) ∗
                                   asn.chunk (chunk_user encodes_instr [term_var "cl"; term_var "i"]) ∗
                                   secLeakvar "cl";
-       lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
+       lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "cl"; term_var "i"]);
     |}.
 
   (* Definition lemma_extract_pmp_ptsto bytes : SepLemma (extract_pmp_ptsto bytes) := *)

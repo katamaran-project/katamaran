@@ -98,7 +98,59 @@ scalar.
 `sexec_cfg_addr` already threads a **term-keyed table** from pc-term to `AST`
 (`SInstrTable`), so it can carry pc-term → word-term by the same mechanism.
 
-## §3. Sketch of the changes
+## §3-CHOSEN. Thread the word through `ptstoinstr` — decided 2026-07-31
+
+Chosen over two alternatives on the user's instruction to keep as much existing
+structure as possible. **`fun_fetch`'s body and BOTH lemma invocations stay
+exactly as they are**; only the predicate's shape changes.
+
+    ptstoinstr : [ty_xlenbits; ty_ast]  ->  [ty_xlenbits; ty_word; ty_ast]
+
+- `Sig.v:317` arg list; `:356` precision becomes
+  `MkPrecise [ty_xlenbits] [ty_word; ty_ast]` — consuming the chunk FROM THE
+  ADDRESS determines both the word and the AST, which is exactly why
+  `use lemma open_ptsto_instr [tmp]` still works with its single argument.
+  `:335` duplicability stays `false` (it is exclusive memory ownership).
+- `IrisInstance.v:248` / `IrisInstanceBinary.v:187`: `interp_ptsto_instr` gains
+  the word and **loses its `∃ v`**. That loss IS the word-parameterized
+  `ptsto_instrs` of §4-SPIKE, hence a restatement, not a weakening.
+- `open_ptsto_instr` (`Spec.v:644`): pre `ptstoinstr paddr w i`, post
+  `ptstomem paddr w ∗ encodes_instr(w,i) ∗ secLeak w` — **mentions the word, no
+  `∃`**. `close_ptsto_instr` (`:653`): post `ptstoinstr paddr cl i`; its `Lem`
+  signature ALREADY carries the word (`Machine.v:257`) and `fun_fetch` already
+  passes `exp_var "result"` for it (`Machine.v:880`).
+- `sep_contract_fetch_instr` (`Spec.v:271`): pre takes `ptstoinstr a w i` with
+  `w` a logic variable; post becomes `result_fetch = KF_Base w` — **no `∃`, so no
+  per-step demonic variable.** Open gives `ptstomem a w`, the read returns
+  exactly `w`, close restores.
+- `exec_instruction_prologue` (`Verifier.v:126`): owns `ptstoinstr a w i`, with
+  `w` supplied from the parallel word table (decided: parallel, not an extended
+  `SInstrTable`, to leave `itable_rel` and `TablesRel.v`'s faith lemmas alone).
+
+Rejected alternatives, for the record: (a) removing the open/close pair from
+`fun_fetch` and giving fetch the pre-opened form — sound (`st_lemmak`,
+`SmallStep/Step.v:101`, proves `use lemma` is operationally a no-op) but changes
+the shared ISA model; (b) adding a NEW word-carrying predicate alongside
+`ptstoinstr` — no program change, but a new constructor in the shared
+`PredicateKit` with exhaustive matches in both Iris instance files. Changing the
+existing predicate's shape is smaller than either.
+
+Note `ty_word` and `ty_xlenbits` are both `4 * 8` and already interoperate in
+this code (`close_ptsto_instr` uses `ty_xlenbits`, `encodes_instr` uses
+`ty_word`), so the mixed usage is a non-issue.
+
+**Scope: 52 sites in 8 built files** — `Adequacy.v` 19, `VerifierRel.v` 11,
+`EndToEnd.v` 5, `Sig.v` 4, `Verifier.v` 4, `Spec.v` 4, `IrisInstanceBinary.v` 3,
+`IrisInstance.v` 2. Not built, so unaffected in practice but noted: BlockVer,
+BinaryBlockVer, FemtoKernel, test/ (`_CoqProject` lines 53-55/89 and its note at
+line 16 — re-enable and fix if ever revived).
+
+**Tactic:** `Sig.v` is near the bottom of the chain, so a `full` compile per
+iteration costs ~15 min at `-j1` here. An arity change breaks STATEMENTS, so
+drive the sweep with `mode="vos"` (statements only, no proof bodies) and pay
+`full` only once the shapes settle.
+
+## §3. Sketch of the changes (superseded by §3-CHOSEN)
 
 1. **`Spec.v` — `sep_contract_fetch_instr`** (`:311`): as §2. The `encodes_instr`
    chunk moves from post to pre; `∃ "encoded_instr"` disappears.

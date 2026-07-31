@@ -109,20 +109,26 @@ Section CFGVerificationDerived.
     Import CHeapSpec CHeapSpec.notations.
 
     Definition cexec_instruction (i : AST) :
-      RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
+      RelVal ty_xlenbits -> RelVal ty_xlenbits -> RelVal ty_word ->
+      CHeapSpec (RelVal ty_xlenbits) :=
       let inline_fuel := 10%nat in
-      fun a np =>
+      fun a np w =>
         _ <- produce
                (exec_instruction_prologue i)
-               [env].["a"∷_ ↦ a].["np"∷_ ↦ np] ;;
+               [env].["a"∷_ ↦ a].["np"∷_ ↦ np].["w"∷_ ↦ w] ;;
         _ <- evalStoreSpec (cexec inline_fuel (FunDef step)) [env] ;;
         na <- angelic _ ;;
         _ <- consume
                (exec_instruction_epilogue i)
-               [env].["a"∷ty_xlenbits ↦ a].["an"∷_ ↦ na] ;;
+               [env].["a"∷ty_xlenbits ↦ a].["an"∷_ ↦ na].["w"∷_ ↦ w] ;;
         pure na.
 
-    Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat) :
+    (* `words` is the concrete mirror of the symbolic SWordTable (Verifier.v):
+       the raw instruction word at each address.  Parallel to `instrs` rather
+       than fused with it, for the same reason — it keeps itable_rel and the
+       existing faith lemmas untouched. *)
+    Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word)) (exitCond : bv xlenbits -> bool) (fuel : nat) :
       RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
       fun apc anp =>
         match fuel with
@@ -136,20 +142,24 @@ Section CFGVerificationDerived.
                   (match instrs !! v with
                    | None   => error
                    | Some i =>
-                       apc' <- cexec_instruction i apc anp ;;
-                       cexec_cfg_addr instrs exitCond n' apc' apc'
+                       match words !! v with
+                       | None    => error
+                       | Some wd =>
+                           apc' <- cexec_instruction i apc anp (ty.SyncVal wd) ;;
+                           cexec_cfg_addr instrs words exitCond n' apc' apc'
+                       end
                    end)
             end
         end.
 
     Import (hints) CStoreSpec.
 
-    #[export] Instance mono_cexec_instruction {i a np} :
-      Monotonic (MHeapSpec eq) (cexec_instruction i a np).
+    #[export] Instance mono_cexec_instruction {i a np w} :
+      Monotonic (MHeapSpec eq) (cexec_instruction i a np w).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mono_cexec_cfg_addr {instrs exitCond fuel apc anp} :
-      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs exitCond fuel apc anp).
+    #[export] Instance mono_cexec_cfg_addr {instrs words exitCond fuel apc anp} :
+      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs words exitCond fuel apc anp).
     Proof.
       revert apc anp. induction fuel; intros apc anp.
       - typeclasses eauto.
@@ -157,7 +167,7 @@ Section CFGVerificationDerived.
         + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
           destruct (exitCond v);
             cbn [CHeapSpec.pure CHeapSpec.error bind];
-            try destruct (instrs !! v); typeclasses eauto.
+            try destruct (instrs !! v); try destruct (words !! v); typeclasses eauto.
         + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
     Qed.
 
@@ -193,7 +203,8 @@ Section CFGVerificationDerived.
     (* extra arrow — the prologue's demonic/refine_demonic pairing is gone,  *)
     (* replaced by an env entry rsolve discharges from the new hypothesis.   *)
     Lemma rexec_instruction (i : AST) {w} :
-      ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
+      ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RVal ty_word ->
+           RHeapSpec (RVal ty_xlenbits)⟧
           (cexec_instruction i)
           (sexec_instruction (w := w) i).
     Proof.
@@ -201,7 +212,8 @@ Section CFGVerificationDerived.
     Qed.
 
     #[export] Instance refine_compat_exec_instruction {i : AST} {w} :
-      RefineCompat (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
+      RefineCompat (RVal ty_xlenbits -> RVal ty_xlenbits -> RVal ty_word ->
+                    RHeapSpec (RVal ty_xlenbits))
         (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
       MkRefineCompat (rexec_instruction i).
 

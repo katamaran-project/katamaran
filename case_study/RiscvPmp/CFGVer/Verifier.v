@@ -147,17 +147,19 @@ Section CFGVerificationDerived.
        Full rationale, including why the world-GC that this replaces could not
        be proved sound: PLAN-nextpc-param.md. *)
     Definition exec_instruction_prologue (i : AST) :
-      Assertion ([ctx] ▻ ("a":: ty_xlenbits) ▻ ("np":: ty_xlenbits)) :=
+      Assertion ([ctx] ▻ ("a":: ty_xlenbits) ▻ ("np":: ty_xlenbits)
+                      ▻ ("w":: ty_word)) :=
       pc     ↦ term_var "a" ∗
-      asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
+      asn.chunk (chunk_user ptstoinstr [term_var "a"; term_var "w"; term_val ty_ast i]) ∗
       nextpc ↦ term_var "np" ∗
       asn.formula (formula_secLeak (term_var "a"))
     .
 
     Definition exec_instruction_epilogue (i : AST) :
-      Assertion ([ctx] ▻ ("a":: ty_xlenbits) ▻ ("an":: ty_xlenbits)) :=
+      Assertion ([ctx] ▻ ("a":: ty_xlenbits) ▻ ("an":: ty_xlenbits)
+                      ▻ ("w":: ty_word)) :=
       pc     ↦ term_var "an" ∗
-      asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
+      asn.chunk (chunk_user ptstoinstr [term_var "a"; term_var "w"; term_val ty_ast i]) ∗
       nextpc ↦ term_var "an" ∗
       asn.formula (formula_secLeak (term_var "a")) ∗
       asn.formula (formula_secLeak (term_var "an"))
@@ -171,18 +173,20 @@ Section CFGVerificationDerived.
      * output: term representing nextpc value after executing the instruction.
      *)
     Definition sexec_instruction (i : AST) :
-      ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> STerm ty_word ->
+        SHeapSpec (STerm ty_xlenbits) :=
       let inline_fuel := 10%nat in
-      fun _ a np =>
+      fun _ a np w =>
         ⟨ θ1 ⟩ _  <- produce
                        (exec_instruction_prologue i)
-                       [env].["a"∷_ ↦ a].["np"∷_ ↦ np] ;;
+                       [env].["a"∷_ ↦ a].["np"∷_ ↦ np].["w"∷_ ↦ w] ;;
         ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef step) _) [env] ;;
         ⟨ θ3 ⟩ na <- angelic None _ ;;
         let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
+        let w3 := persist__term w (θ1 ∘ θ2 ∘ θ3) in
         ⟨ θ4 ⟩ _  <- consume
                        (exec_instruction_epilogue i)
-                       [env].["a"∷_ ↦ a3].["an"∷_ ↦ na] ;;
+                       [env].["a"∷_ ↦ a3].["an"∷_ ↦ na].["w"∷_ ↦ w3] ;;
         pure (persist__term na θ4).
 
     (* ================================================================ *)
@@ -239,8 +243,20 @@ Section CFGVerificationDerived.
     Definition SExitTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits).
 
+    (* SWordTable: the PARALLEL table mapping an address term to the raw
+       instruction WORD term at that address.  Deliberately parallel rather than
+       an extra column on SInstrTable, so itable_rel and TablesRel.v's faith
+       lemmas are untouched.  The words are introduced ONCE at contract entry —
+       one per instruction address, not one per execution step — which is what
+       stops |wctx| growing with the trip count: a loop re-executing the same
+       addresses reuses the same word variables.  PLAN-encoded-instr.md. *)
+    Definition SWordTable : TYPE :=
+      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word).
+
     Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SInstrTable w1 -> SInstrTable w2 :=
       List.map (fun '(t,i) => (persist__term t θ, i)).
+    Definition persist_wtable {w1 w2} (θ : w1 ⊒ w2) : SWordTable w1 -> SWordTable w2 :=
+      List.map (fun '(t,x) => (persist__term t θ, persist__term x θ)).
     Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SExitTable w1 -> SExitTable w2 :=
       List.map (fun t => persist__term t θ).
 
@@ -257,6 +273,12 @@ Section CFGVerificationDerived.
     Definition is_exit {w} (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) : bool :=
       List.existsb (fun t => Term_eqb (peval apc) (peval t)) exits.
+    (* Same syntactic-modulo-peval matching as lookup_instr, so a symbolic base
+       (`p+8` against the key term `p+8`) dispatches identically. *)
+    Definition lookup_word {w} (wtbl : SWordTable w)
+        (apc : STerm ty_xlenbits w) : option (Term (wctx w) ty_word) :=
+      option_map snd
+        (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) wtbl).
 
     (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
     (* peval; NOT part of the soundness chain). *)
@@ -304,9 +326,9 @@ Section CFGVerificationDerived.
     (* separate parameters only so the FIRST step, which genuinely does not *)
     (* know nextpc, can differ. *)
     Fixpoint sexec_cfg_addr (fuel : nat) :
-      ⊢ SInstrTable -> SExitTable -> STerm ty_xlenbits -> STerm ty_xlenbits ->
-        SHeapSpec (STerm ty_xlenbits) :=
-      fun w tbl exits apc anp =>
+      ⊢ SInstrTable -> SExitTable -> SWordTable -> STerm ty_xlenbits ->
+        STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w tbl exits wtbl apc anp =>
         let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
           error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
                                      debug_string_message := s |}) in
@@ -319,9 +341,17 @@ Section CFGVerificationDerived.
               (match lookup_instr tbl apc with
                | None   => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some i =>
-                   ⟨ θ1 ⟩ apc' <- sexec_instruction i apc anp ;;
-                   sexec_cfg_addr n' (persist_itable θ1 tbl) (persist_etable θ1 exits)
-                     apc' apc'
+                   (* The word table is keyed the same way as the instruction
+                      table, so a pc that dispatches to an instruction always
+                      has a word too — but the lookup is still total, and a
+                      missing entry errors rather than being assumed away. *)
+                   match lookup_word wtbl apc with
+                   | None    => emsg "sexec_cfg_addr: no word key matches this pc term"
+                   | Some wd =>
+                       ⟨ θ1 ⟩ apc' <- sexec_instruction i apc anp wd ;;
+                       sexec_cfg_addr n' (persist_itable θ1 tbl) (persist_etable θ1 exits)
+                         (persist_wtable θ1 wtbl) apc' apc'
+                   end
                end)
         end.
 
@@ -347,10 +377,19 @@ Section CFGVerificationDerived.
     Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (exits : SExitTable (wlctx Σ)) : SExitTable w :=
       List.map (fun t => subst t ζ) exits.
+    Definition subst_wtable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
+        (wtbl : SWordTable (wlctx Σ)) : SWordTable w :=
+      List.map (fun '(t,x) => (subst t ζ, subst x ζ)) wtbl.
 
+    (* wtbl is given at the CONTRACT context Σ, exactly like tbl/exits: the per
+       address word variables are declared ONCE among the contract's own logic
+       variables (GenContract.v), NOT introduced per step here.  That is the
+       whole point — a loop re-executing the same addresses reuses them, so
+       |wctx| stops growing with the trip count. *)
     Definition sexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) (fuel : nat)
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
+      (wtbl : SWordTable (wlctx Σ)) (fuel : nat)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
       ⊢ SHeapSpec Unit :=
       fun w =>
@@ -367,7 +406,7 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (subst_itable ζ tbl) (subst_etable ζ exits)
-                       a2 (persist__term np θ2) ;;
+                       (subst_wtable ζ wtbl) a2 (persist__term np θ2) ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
@@ -375,10 +414,11 @@ Section CFGVerificationDerived.
     (* SHeapSpec.run; same wnil shape, no leakcheck. *)
     Definition scfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
+      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits))
+      (wtbl : list (Term Σ ty_xlenbits * Term Σ ty_word)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
-        SHeapSpec.run (sexec_triple_addr req tbl exits fuel ens (w := w)).
+        SHeapSpec.run (sexec_triple_addr req tbl exits wtbl fuel ens (w := w)).
 
   End Symbolic.
 
