@@ -768,13 +768,15 @@ Section AdequacyTools.
       @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ1 a')) ∗
       ([∗ list] a' ∈ bv.seqBv a 4,
         @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ2 a'))
-      ⊢ interp_ptsto_instr (SyncVal a) (SyncVal instr).
+      ⊢ interp_ptsto_instr (SyncVal a) (SyncVal w) (SyncVal instr).
   Proof.
     iIntros ((Hmhw1 & Heq1) (Hmhw2 & Heq2)) "[Hmem1 Hmem2]".
-    iExists (SyncVal w).
+    (* No `iExists (SyncVal w)` any more: interp_ptsto_instr no longer hides the
+       word behind an ∃, it takes it as an argument.  The third conjunct
+       (secLeak w) is immediate — a SyncVal word is the same in both worlds. *)
     iSplitL.
     { iApply (intro_ptstomem_word2 Hmhw1 Hmhw2). iFrame. }
-    cbn. by rewrite Heq1.
+    iSplit; cbn; [by rewrite Heq1|done].
   Qed.
 
   Lemma intro_ptsto_instrs `{sailGS2 Σ} {μ1 μ2 : Memory} {a : Val ty_word} ws {instrs : list AST} :
@@ -785,20 +787,22 @@ Section AdequacyTools.
         @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ1 a')) ∗
         ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length instrs)),
           @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ2 a'))
-        ⊢ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (instrs_of_list a instrs).
+        ⊢ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w
+            (words_of_list a ws) (instrs_of_list a instrs).
   Proof.
     assert (word > 0) by now compute; Lia.lia.
     iIntros (Hrep Hmeminstrs1 Hmeminstrs2) "[Hmem1 Hmem2]".
     iInduction instrs as [|instr instrs] "IH" forall (a ws Hrep Hmeminstrs1 Hmeminstrs2).
-    - (* instrs_of_list a [] = ∅, so ptsto_instrs is emp. *)
-      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
+    - (* instrs_of_list a [] = ∅, so ptsto_instrs_w is emp. *)
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w.
       cbn [instrs_of_list]. rewrite big_sepM_empty. done.
     - rewrite Nat2N.inj_succ in Hrep.
       fold (length instrs) in Hrep.
       replace (4 * N.of_nat (length (instr :: instrs)))%N with (4 + 4 * N.of_nat (length instrs))%N by (cbn; lia).
       rewrite bv.seqBv_app; try (cbn -[N.of_nat N.mul] in *; Lia.lia).
       rewrite big_opL_app.
-      destruct ws.
+      (* Name the head word explicitly: it is now needed by the word map. *)
+      destruct ws as [|wd ws'].
       { inversion Hmeminstrs1; inversion Hmeminstrs2. }
       destruct Hmeminstrs1 as [Hinstr1 Hmeminstrs1].
       destruct Hmeminstrs2 as [Hinstr2 Hmeminstrs2].
@@ -817,14 +821,28 @@ Section AdequacyTools.
         (* lia chokes on the 2^32 literal, so bound to <1024 then transit. *)
         assert (Hb : (bv.bin a + 4 + 4 * N.of_nat (length instrs) < 1024)%N) by lia.
         eapply N.lt_trans; [exact Hb|]. reflexivity. }
-      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
-      cbn [instrs_of_list].
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w.
+      cbn [instrs_of_list words_of_list].
       rewrite (big_sepM_insert
-                 (fun a0 i0 => interp_ptsto_instr (SyncVal a0) (SyncVal i0))
+                 (fun a0 i0 => interp_ptsto_instr (SyncVal a0)
+                                 (SyncVal (words_of_list a (wd :: ws') a0)) (SyncVal i0))
                  (instrs_of_list (bv.add a (bv.of_N 4)) instrs) a instr Hfresh).
       iSplitL "Hmem1a Hmem2a".
-      + iApply (intro_ptsto_instr with "[$Hmem1a $Hmem2a]"); eauto.
-      + iApply ("IH" with "[%] [% //] [% //] [$Hmem1a4] [$Hmem2a4]").
+      + rewrite words_of_list_here.
+        iApply (intro_ptsto_instr with "[$Hmem1a $Hmem2a]"); eauto.
+      + (* The tail's word function is the head's, which differs only at the head
+           address — and that address is fresh for the tail's instruction map. *)
+        assert (Hagree : forall a0 i0,
+                   instrs_of_list (bv.add a (bv.of_N 4)) instrs !! a0 = Some i0 ->
+                   words_of_list (bv.add a (bv.of_N 4)) ws' a0
+                   = words_of_list a (wd :: ws') a0).
+        { intros a0 i0 Hlk0.
+          symmetry.
+          apply words_of_list_there.
+          intros Heq. subst a0. rewrite Hfresh in Hlk0. discriminate. }
+        iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w_agree
+                  _ _ _ Hagree).
+        iApply ("IH" with "[%] [% //] [% //] [$Hmem1a4] [$Hmem2a4]").
         rewrite bv.bin_add_small;
           cbn -[N.mul] in *.
         now Lia.lia.
@@ -853,6 +871,10 @@ Section AdequacyTools.
       apply f_equal. lia.
     }
     iDestruct "Hmem" as "[[[Hbefore1 [Hinst1 Hrest1]] Htr1] [[Hbefore2 [Hinst2 Hrest2]] Htr2]]".
+    iModIntro.
+    (* ptsto_instrs is now ∃ words over the word-indexed form; the witness is
+       the word list mem_has_instrs already supplies. *)
+    iExists (words_of_list (bv.of_N start) ws).
     iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
     { match goal with
       | |- (_ + bv.bin ?a < _)%N =>
@@ -862,7 +884,9 @@ Section AdequacyTools.
          _ mod 2^word; the huge modulus makes lia's certificate search fail,
          so make the atom opaque first. *)
       set (B := bv.bin (bv.of_N start)) in *; clearbody B. lia. }
-    iFrame. auto.
+    (* `all:` rather than a bare `auto`: the explicit iModIntro above leaves one
+       fewer goal than the implicit modality handling did. *)
+    iFrame. all: auto.
   Qed.
 
   (* ------------------------------------------------------------------ *)
@@ -1002,7 +1026,8 @@ Section AdequacyTools.
         [[Hbefore2 [Hinst2 [Hdata2 Hrest2]]] Htr2]]".
     iModIntro.
     iSplitL "Hinst1 Hinst2".
-    - iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
+    - iExists (words_of_list (bv.of_N start) ws_instrs).
+      iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
       { match goal with
         | |- (_ + bv.bin ?a < _)%N =>
             assert (Hb : (bv.bin a <= start)%N) by apply bv.bin_of_N_decr
@@ -1051,16 +1076,21 @@ Section AdequacyTools.
        passes `an an` — so the specific value has to match.  The POST below
        keeps its `∃ v`: that side is the shared continuation Hk, identical in
        the IH and in the goal, so it needs no change. *)
+    (* words: the per-address instruction words, FIXED for the whole loop.  The
+       loop invariant carries the word-INDEXED ownership ptsto_instrs_w, not the
+       ∃-form ptsto_instrs, because cexec_cfg_addr looks the word up in this
+       specific gmap at every step.  The caller destructs the ∃ once, before
+       entering the loop. *)
     Lemma sound_exec_cfg_addr_myWP2
-        {instrs exitCond fuel} (apc anp : RelVal ty_xlenbits)
+        {instrs} {words : bv xlenbits -> bv word} {exitCond fuel} (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs exitCond fuel apc anp Φ h →
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words exitCond fuel apc anp Φ h →
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
-        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs ⊢
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words instrs ⊢
       (∀ an,
          ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words instrs ∗
          (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
       myWP2_loop ExitCondIprop.
     Proof.
@@ -1086,7 +1116,8 @@ Section AdequacyTools.
             destruct (instrs !! v) as [i|] eqn:Hlk.
             ++ unfold bind, CHeapSpec.bind in Hexec.
                iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-               iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup instrs v Hlk
+               iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
+                             words instrs v Hlk
                  with "Hinstrs") as "[Hinstr Hframe]".
                rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
                iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
@@ -1128,7 +1159,11 @@ Section AdequacyTools.
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
         (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs exitCond fuel post tbl exits (λ _ _, True) [] →
+      (* ∀ words: the VC is UNIFORM in the instruction words, because on the
+         symbolic side they are demonic.  So the caller proves it once and this
+         lemma instantiates it with the actual words carried by ptsto_instrs. *)
+      (forall words : bv xlenbits -> bv word,
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
@@ -1148,9 +1183,27 @@ Section AdequacyTools.
          sound_exec_cfg_addr_myWP2.  That is why threading the value inward
          costs no change to the trusted surface. *)
       iIntros (Htrip a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
+      (* Name the words the memory actually holds; they instantiate both the
+         uniform VC and the word half of cexec_triple_addr's demonic_ctx. *)
+      iDestruct "Hinstrs" as (words) "Hinstrs".
+      specialize (Htrip words).
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
-      specialize (Htrip ι).
-      specialize (Htrip (conj Hif Hef) a npc).
+      specialize (Htrip (env.cat ι (Katamaran.RiscvPmp.CFGVer.VerifierRel.env_of_words
+                                      (length tbl) (ty.SyncVal bv.zero)
+                                      (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of
+                                         (w := wlctx Γ) words tbl ι)))).
+      (* Split the supplied valuation back into its two halves, exactly as
+         cexec_triple_addr does. *)
+      rewrite env.drop_cat in Htrip.
+      rewrite Katamaran.RiscvPmp.CFGVer.VerifierRel.env_take_cat in Htrip.
+      (* `d` is explicit (it cannot be inferred), the length proof follows it. *)
+      rewrite (Katamaran.RiscvPmp.CFGVer.VerifierRel.words_of_env_of_words
+                 (ty.SyncVal (bv.zero : bv word)) _
+                 (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_length (w := wlctx Γ) words tbl ι)) in Htrip.
+      (* The word guard is free: cws_of is BUILT from `words` at the table's
+         addresses, so wtable_rel holds by construction given itable_rel. *)
+      specialize (Htrip (conj Hif (conj Hef
+                    (Katamaran.RiscvPmp.CFGVer.VerifierRel.wtable_rel_cws_of words Hif))) a npc).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
       iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
@@ -1158,7 +1211,10 @@ Section AdequacyTools.
       iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
       iApply ("Hk" $! an).
       iSplit. { iPureIntro. exact Hexit. }
-      iFrame.
+      iFrame "Hpc Hnpc".
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
+      iExists words.
+      iFrame "Hinstrs".
     Qed.
 
     Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
@@ -1184,6 +1240,7 @@ Section AdequacyTools.
           myWP2_loop ExitCond.
     Proof.
       apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel) (ι := ι) ExitCond Hif Hef).
+      intros words.
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.

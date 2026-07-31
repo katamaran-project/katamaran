@@ -114,6 +114,40 @@ Open Scope list_scope.
     | i :: rest   => <[ base := i ]> (instrs_of_list (bv.add base (bv.of_N 4)) rest)
     end.
 
+  (* words_of_list: the raw instruction WORD at each absolute address, keyed by
+     the same addresses instrs_of_list uses.  A TOTAL FUNCTION rather than a
+     gmap, deliberately: a partial word map would add a "no word at this
+     address" case to the concrete executor, a domain side condition to
+     ptsto_instrs_w, and a matching case to every proof downstream — none of
+     which carry information, since the word list is exactly as long as the
+     instruction list.  Off the program it reads bv.zero, which is never
+     observed.  The word list is the `ws` that mem_has_instrs already carries,
+     so nothing new has to be invented to supply it. *)
+  Fixpoint words_of_list (base : bv xlenbits) (ws : list (bv word))
+    : bv xlenbits -> bv word :=
+    match ws with
+    | []          => fun _ => bv.zero
+    | x :: rest   => fun k => if bv.eqb k base then x
+                              else words_of_list (bv.add base (bv.of_N 4)) rest k
+    end.
+
+  Lemma words_of_list_here (base : bv xlenbits) (x : bv word) (ws : list (bv word)) :
+    words_of_list base (x :: ws) base = x.
+  Proof.
+    cbn.
+    destruct (bv.eqb_spec base base) as [_|Hne]; [reflexivity|].
+    exfalso. exact (Hne eq_refl).
+  Qed.
+
+  Lemma words_of_list_there (base k : bv xlenbits) (x : bv word) (ws : list (bv word)) :
+    k <> base ->
+    words_of_list base (x :: ws) k = words_of_list (bv.add base (bv.of_N 4)) ws k.
+  Proof.
+    intros Hne.
+    cbn.
+    destruct (bv.eqb_spec k base) as [Heq|_]; [contradiction|reflexivity].
+  Qed.
+
   (* An instruction address never collides with a later one, provided the
      whole program fits below 2^xlenbits (no wraparound).  This is the side
      condition [big_sepM_insert] needs to peel the head instruction off the

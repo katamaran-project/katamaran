@@ -126,14 +126,13 @@ Section CFGVerificationDerived.
     (* `words` gives the raw instruction word at each address — the concrete
        counterpart of the word column of the symbolic SInstrTableW
        (Verifier.v).  It stays a SEPARATE gmap from `instrs` (rather than
-       fusing to `gmap _ (bv word * AST)`) because `instrs` is what the
-       trusted statement surface and TablesRel.v's faith lemmas talk about,
-       whereas `words` is supplied by Adequacy.v out of the `∃ v` inside
-       interp_ptsto_instr.  The `words !! v = None` branch below is therefore
-       reachable in the DEFINITION but excluded in every refinement proof by
-       itable_relW, which pairs the two lookups. *)
+       fusing it into `instrs`) because `instrs` is what the trusted statement
+       surface and TablesRel.v's faith lemmas talk about, whereas `words` is
+       supplied by Adequacy.v out of the `∃ v` inside interp_ptsto_instr.  It
+       is a total FUNCTION, not a gmap, so the lookup is
+       total, so there is no "no word here" case to carry. *)
     Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word)) (exitCond : bv xlenbits -> bool) (fuel : nat) :
+      (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool) (fuel : nat) :
       RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
       fun apc anp =>
         match fuel with
@@ -147,12 +146,8 @@ Section CFGVerificationDerived.
                   (match instrs !! v with
                    | None   => error
                    | Some i =>
-                       match words !! v with
-                       | None    => error
-                       | Some wd =>
-                           apc' <- cexec_instruction i apc anp (ty.SyncVal wd) ;;
-                           cexec_cfg_addr instrs words exitCond n' apc' apc'
-                       end
+                       apc' <- cexec_instruction i apc anp (ty.SyncVal (words v)) ;;
+                       cexec_cfg_addr instrs words exitCond n' apc' apc'
                    end)
             end
         end.
@@ -172,7 +167,7 @@ Section CFGVerificationDerived.
         + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
           destruct (exitCond v);
             cbn [CHeapSpec.pure CHeapSpec.error bind];
-            try destruct (instrs !! v); try destruct (words !! v); typeclasses eauto.
+            try destruct (instrs !! v); typeclasses eauto.
         + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
     Qed.
 
@@ -251,13 +246,12 @@ Section CFGVerificationDerived.
        EndToEnd.v are untouched), and itable_relW_zip below builds this from it
        plus the refinement of the per-address word variables. *)
     Definition itable_relW {w} (instrs : gmap (bv xlenbits) AST)
-        (words : gmap (bv xlenbits) (bv word)) (tbl : SInstrTableW w) : Pred w :=
+        (words : bv xlenbits -> bv word) (tbl : SInstrTableW w) : Pred w :=
       fun ι => List.Forall
-        (fun '(t,x,i) => exists v y,
+        (fun '(t,x,i) => exists v,
            inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v
            /\ instrs !! v = Some i
-           /\ inst (T := fun Σ => Term Σ ty_word) x ι = ty.SyncVal y
-           /\ words !! v = Some y) tbl.
+           /\ inst (T := fun Σ => Term Σ ty_word) x ι = ty.SyncVal (words v)) tbl.
 
     (* wtable_rel: the boundary bookkeeping for the per-address words.  The n
        demonically chosen word values must be exactly the ones `words` holds at
@@ -271,12 +265,12 @@ Section CFGVerificationDerived.
        into the table instead of keeping a parallel word table.  Only ONE
        relation has to survive the induction on fuel, and it needs no
        persist/forgetting/lookup family of its own. *)
-    Definition wtable_rel {w} (words : gmap (bv xlenbits) (bv word))
+    Definition wtable_rel {w} (words : bv xlenbits -> bv word)
         (tbl : SInstrTable w) (cws : list (RelVal ty_word)) : Pred w :=
       fun ι => List.Forall2
-        (fun p cx => exists v y,
+        (fun p cx => exists v,
            inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι = ty.SyncVal v
-           /\ cx = ty.SyncVal y /\ words !! v = Some y) tbl cws.
+           /\ cx = ty.SyncVal (words v)) tbl cws.
 
     Definition etable_rel {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w) : Pred w :=
       fun ι => List.Forall
@@ -296,14 +290,13 @@ Section CFGVerificationDerived.
     (* One lookup yields BOTH the word term and the instruction, so this
        returns the gmap facts for both columns at once. *)
     Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST)
-        (words : gmap (bv xlenbits) (bv word)) (tbl : SInstrTableW w)
+        (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
         (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AST)
         (ι : Valuation w) :
       lookup_instr tbl apc = Some (x, i) ->
       itable_relW instrs words tbl ι ->
-      exists v y, inst apc ι = ty.SyncVal v /\ instrs !! v = Some i
-                  /\ inst (T := fun Σ => Term Σ ty_word) x ι = ty.SyncVal y
-                  /\ words !! v = Some y.
+      exists v, inst apc ι = ty.SyncVal v /\ instrs !! v = Some i
+                /\ inst (T := fun Σ => Term Σ ty_word) x ι = ty.SyncVal (words v).
     Proof.
       unfold lookup_instr, itable_relW.
       intros Hlk Hrel.
@@ -311,9 +304,9 @@ Section CFGVerificationDerived.
       injection Hlk as -> ->.
       apply find_some in Hfind as [Hin Heqb].
       rewrite List.Forall_forall in Hrel.
-      specialize (Hrel _ Hin) as (v & y & Hv & Hmap & Hx & Hw).
-      exists v, y.
-      split; [|split; [exact Hmap|split; [exact Hx|exact Hw]]].
+      specialize (Hrel _ Hin) as (v & Hv & Hmap & Hx).
+      exists v.
+      split; [|split; [exact Hmap|exact Hx]].
       rewrite (peval_eqb_inst apc t ι Heqb).
       exact Hv.
     Qed.
@@ -350,7 +343,7 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma forgetting_itable_relW {w1 w2} (θ : Acc w1 w2)
-        (instrs : gmap (bv xlenbits) AST) (words : gmap (bv xlenbits) (bv word))
+        (instrs : gmap (bv xlenbits) AST) (words : bv xlenbits -> bv word)
         (tbl : SInstrTableW w1) :
       (forgetting θ (itable_relW instrs words tbl)
        ⊣⊢ itable_relW instrs words (persist_itableW θ tbl))%I.
@@ -360,10 +353,10 @@ Section CFGVerificationDerived.
       unfold forgetting, itable_relW, persist_itableW.
       rewrite List.Forall_map.
       cbn.
-      split; apply List.Forall_impl; intros [[t x] i] (v & y & Hv & Hm & Hx & Hw);
-        exists v, y; cbn in *;
+      split; apply List.Forall_impl; intros [[t x] i] (v & Hv & Hm & Hx);
+        exists v; cbn in *;
         rewrite ?inst_persist in Hv, Hx |- *;
-        (split; [exact Hv|split; [exact Hm|split; [exact Hx|exact Hw]]]).
+        (split; [exact Hv|split; [exact Hm|exact Hx]]).
     Qed.
 
     Lemma persist_itableW_refl {w} (tbl : SInstrTableW w) :
@@ -445,22 +438,22 @@ Section CFGVerificationDerived.
        refinement of the recursive call needs ℛ⟦RVal ty_word⟧ (SyncVal y) x,
        which is exactly repₚ (SyncVal y) x. *)
     Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST)
-        (words : gmap (bv xlenbits) (bv word)) (tbl : SInstrTableW w)
+        (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
         (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AST)
         (a : RelVal ty_xlenbits) :
       lookup_instr tbl apc = Some (x, i) ->
       (itable_relW instrs words tbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
-       ∃ v y, ⌜a = ty.SyncVal v /\ instrs !! v = Some i /\ words !! v = Some y⌝ ∗
-              repₚ (T := fun Σ => Term Σ ty_word) (ty.SyncVal y) x)%I.
+       ∃ v, ⌜a = ty.SyncVal v /\ instrs !! v = Some i⌝ ∗
+            repₚ (T := fun Σ => Term Σ ty_word) (ty.SyncVal (words v)) x)%I.
     Proof.
       intros Hlk.
       constructor.
       intros ι Hpc H.
       cbn in H.
       destruct H as [Hrel Ha].
-      destruct (lookup_instr_sound apc Hlk Hrel) as (v & y & Hv & Hm & Hx & Hw).
-      exists v, y.
-      split; [split; [|split; [exact Hm|exact Hw]]|exact Hx].
+      destruct (lookup_instr_sound apc Hlk Hrel) as (v & Hv & Hm & Hx).
+      exists v.
+      split; [split; [|exact Hm]|exact Hx].
       now rewrite <- Ha.
     Qed.
 
@@ -491,7 +484,7 @@ Section CFGVerificationDerived.
     (* I suspect there are a few missing RefineCompat instances for tables. *)
     (* This is maybe a good proof golf target. *)
     Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
-        (words : gmap (bv xlenbits) (bv word)) (exitCond : bv xlenbits -> bool)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
         (fuel : nat) {w} (tbl : SInstrTableW w) (exits : SExitTable w) :
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
@@ -522,13 +515,13 @@ Section CFGVerificationDerived.
              locally instead. *)
           + (* exit-hit / lookup-hit *)
             iDestruct (lookup_instr_sound_repₚ instrs words _ _ _ _ a Hlk with "[$Hi $Ha]")
-              as (v y) "[%Hfact #Hx]".
-            destruct Hfact as (-> & Hm & Hw).
+              as (v) "[%Hfact #Hx]".
+            destruct Hfact as (-> & Hm).
             iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
             destruct Hfact2 as (v' & Hveq & Hcond).
             injection Hveq as <-.
             cbn [ty.RVToOption].
-            rewrite Hcond Hm Hw.
+            rewrite Hcond Hm.
             rsolve.
             rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
             iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
@@ -544,10 +537,10 @@ Section CFGVerificationDerived.
             rsolve.
           + (* exit-miss / lookup-hit *)
             iDestruct (lookup_instr_sound_repₚ instrs words _ _ _ _ a Hlk with "[$Hi $Ha]")
-              as (v y) "[%Hfact #Hx]".
-            destruct Hfact as (-> & Hm & Hw).
+              as (v) "[%Hfact #Hx]".
+            destruct Hfact as (-> & Hm).
             cbn [ty.RVToOption].
-            rewrite Hm Hw.
+            rewrite Hm.
             rsolve.
             rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
             iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
@@ -589,7 +582,7 @@ Section CFGVerificationDerived.
     (* only at the one valuation the end-to-end proof discharges it at. *)
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word))
+      (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
@@ -782,7 +775,7 @@ Section CFGVerificationDerived.
        same table entry — the SyncVal address is shared, so the two gmap
        lookups are at the same key by construction. *)
     Lemma itable_relW_zip {w} (instrs : gmap (bv xlenbits) AST)
-        (words : gmap (bv xlenbits) (bv word)) (T : SInstrTable w)
+        (words : bv xlenbits -> bv word) (T : SInstrTable w)
         (ws : list (Term (wctx w) ty_word)) (cws : list (RelVal ty_word))
         (ι : Valuation w) :
       itable_rel instrs T ι ->
@@ -800,19 +793,92 @@ Section CFGVerificationDerived.
         inversion Hi as [|p T'' Hihd Hitl]; subst.
         cbn.
         constructor.
-        + destruct Hhd as (v & y & Hv & -> & Hwm).
+        + destruct Hhd as (v & Hv & ->).
           destruct Hihd as (v' & Hv' & Him).
           cbn in Hv, Hv', Him.
           assert (v' = v) as -> by (rewrite Hv in Hv'; now injection Hv').
-          exists v, y.
-          split; [exact Hv|split; [exact Him|split; [exact Hx|exact Hwm]]].
+          exists v.
+          split; [exact Hv|split; [exact Him|exact Hx]].
         + apply IH; assumption.
+    Qed.
+
+    (* ---- Supplying the word half of the demonic valuation (used by the
+       soundness chain in Adequacy.v, which has to INSTANTIATE the demonic
+       choice with the real words rather than merely relate to it). ---- *)
+
+    (* env.take's counterpart to env.drop_cat.  Also absent from
+       theories/Environment.v. *)
+    Lemma env_take_cat {B : Set} {D : B -> Set} {Γ Δ : Ctx B}
+        (EΓ : env.Env D Γ) (EΔ : env.Env D Δ) :
+      env.take Δ (env.cat EΓ EΔ) = EΔ.
+    Proof.
+      induction EΔ; cbn; [reflexivity|].
+      f_equal.
+      apply IHEΔ.
+    Qed.
+
+    (* The inverse of words_of_env: package a list of word values back into the
+       env shape demonic_ctx quantifies over. *)
+    Fixpoint env_of_words {D : Ty -> Set} (n : nat) (d : D ty_word)
+        (l : list (D ty_word)) : NamedEnv D (words_ctx n) :=
+      match n with
+      | O    => env.nil
+      | S n' => env.snoc (env_of_words n' d (List.tl l)) _ (List.hd d l)
+      end.
+
+    Lemma words_of_env_of_words {D : Ty -> Set} (n : nat) (d : D ty_word)
+        (l : list (D ty_word)) :
+      length l = n -> words_of_env n (env_of_words n d l) = l.
+    Proof.
+      revert l.
+      induction n; intros l Hl; cbn.
+      - destruct l; [reflexivity|discriminate].
+      - destruct l as [|x l']; [discriminate|].
+        cbn.
+        f_equal.
+        apply IHn.
+        cbn in Hl.
+        now injection Hl.
+    Qed.
+
+    (* The concrete word values at the table's addresses.  Total because `words`
+       is a function, so no address needs a fallback justification. *)
+    Definition cws_of (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w)
+        (ι : Valuation w) : list (RelVal ty_word) :=
+      List.map (fun p =>
+         match ty.RVToOption (inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι) with
+         | Some v => ty.SyncVal (words v)
+         | None   => ty.SyncVal bv.zero
+         end) tbl.
+
+    Lemma cws_of_length (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w)
+        (ι : Valuation w) :
+      length (cws_of words tbl ι) = length tbl.
+    Proof. apply List.map_length. Qed.
+
+    (* wtable_rel holds for cws_of BY CONSTRUCTION, given only that the table's
+       keys instantiate to SyncVal addresses — which itable_rel already says.
+       This is what lets Adequacy.v discharge the word guard without any extra
+       hypothesis travelling down from the end theorems. *)
+    Lemma wtable_rel_cws_of (instrs : gmap (bv xlenbits) AST)
+        (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w) (ι : Valuation w) :
+      itable_rel instrs tbl ι -> wtable_rel words tbl (cws_of words tbl ι) ι.
+    Proof.
+      unfold itable_rel, wtable_rel, cws_of.
+      intros H.
+      induction H as [|p tbl' Hp Htl IH]; cbn; [constructor|].
+      destruct Hp as (v & Hv & Hm).
+      constructor; [|exact IH].
+      exists v.
+      rewrite Hv.
+      cbn.
+      split; reflexivity.
     Qed.
 
     (* Transport of wtable_rel from the contract context Σ' to the executor's
        world, exactly mirroring itable_rel_of_faith_forget above. *)
     Lemma wtable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (words' : gmap (bv xlenbits) (bv word)) (tbl' : SInstrTable (wlctx Σ'))
+        (words' : bv xlenbits -> bv word) (tbl' : SInstrTable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') (cws : list (RelVal ty_word)) :
       wtable_rel words' tbl' cws ιΣ ->
       (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢
@@ -825,11 +891,11 @@ Section CFGVerificationDerived.
       cbn in Hrel.
       unfold wtable_rel, subst_itable.
       eapply forall2_map_impl; [|exact Hfaith].
-      intros [t i] cx (v & y & Hv & Hy & Hwm).
-      exists v, y.
+      intros [t i] cx (v & Hv & Hy).
+      exists v.
       cbn.
       rewrite inst_subst inst_persist Hrel.
-      split; [exact Hv|split; [exact Hy|exact Hwm]].
+      split; [exact Hv|exact Hy].
     Qed.
 
     (* The word half at the executor's world: the persisted symbolic word terms
@@ -863,7 +929,7 @@ Section CFGVerificationDerived.
     (* executor's premise-free form; typeclass search diverges).           *)
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word))
+      (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
@@ -943,7 +1009,7 @@ Section CFGVerificationDerived.
 
     #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word))
+      (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
@@ -954,7 +1020,7 @@ Section CFGVerificationDerived.
 
     Definition ccfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word))
+      (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : Prop :=
@@ -962,7 +1028,7 @@ Section CFGVerificationDerived.
 
     Lemma rcfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word))
+      (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
@@ -976,7 +1042,7 @@ Section CFGVerificationDerived.
 
     #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
-      (words : gmap (bv xlenbits) (bv word))
+      (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
@@ -1015,11 +1081,10 @@ Section CFGVerificationDerived.
     (* ptsto_instrs_w: the WORD-INDEXED form — ownership of a specific raw
        instruction word at each address, as the concrete executor's `words`
        gmap names them.  This is what the soundness chain threads. *)
-    Definition ptsto_instrs_w (words : gmap (bv xlenbits) (bv word))
+    Definition ptsto_instrs_w (words : bv xlenbits -> bv word)
         (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
       ([∗ map] a ↦ i ∈ instrs,
-         ∃ y, ⌜ words !! a = Some y ⌝ ∗
-              interp_ptsto_instr (SyncVal a) (SyncVal y) (SyncVal i))%I.
+         interp_ptsto_instr (SyncVal a) (SyncVal (words a)) (SyncVal i))%I.
 
     (* ptsto_instrs keeps its old MEANING — "some word that decodes to i lives
        at each address" — and hence its old role in ImplPre / the end theorems,
@@ -1030,7 +1095,27 @@ Section CFGVerificationDerived.
        intro_ptsto_instrs in the other — it already receives the word list `ws`.
        PLAN-encoded-instr.md §4-SPIKE. *)
     Definition ptsto_instrs (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
-      (∃ words, ptsto_instrs_w words instrs)%I.
+      (∃ words : bv xlenbits -> bv word, ptsto_instrs_w words instrs)%I.
+
+    (* Extending the word map at an address the instruction map does not
+       mention leaves ownership unchanged.  Needed by intro_ptsto_instrs, whose
+       induction peels one instruction off `instrs` while the word map grows by
+       one insert: the tail's entries must be unaffected by the head's key. *)
+    (* Two word functions that AGREE on the program's addresses give the same
+       ownership.  Needed by intro_ptsto_instrs, whose induction peels one
+       instruction off `instrs` while the word function gains one case: the
+       tail's addresses must be unaffected by the head's. *)
+    Lemma ptsto_instrs_w_agree (w1 w2 : bv xlenbits -> bv word)
+        (instrs : gmap (bv xlenbits) AST) :
+      (forall a i, instrs !! a = Some i -> w1 a = w2 a) ->
+      ptsto_instrs_w w1 instrs ⊢ ptsto_instrs_w w2 instrs.
+    Proof.
+      intros Hagree.
+      unfold ptsto_instrs_w.
+      apply big_sepM_mono.
+      intros a i Hlk.
+      by rewrite (Hagree a i Hlk).
+    Qed.
 
     (* np: the incoming nextpc value, a PARAMETER here rather than the `∃ v`
        this used to hold, mirroring exec_instruction_prologue (Verifier.v).
@@ -1082,27 +1167,18 @@ Section CFGVerificationDerived.
        direct big_sepM_lookup_acc — the address arithmetic of the old list
        version (base + k*bytes_per_instr = v) is gone: the map key IS the
        address. *)
-    Lemma ptsto_instrs_lookup (words : gmap (bv xlenbits) (bv word))
-        (instrs : gmap (bv xlenbits) AST) (v : bv xlenbits) (i : AST) (y : bv word) :
+    Lemma ptsto_instrs_lookup (words : bv xlenbits -> bv word)
+        (instrs : gmap (bv xlenbits) AST) (v : bv xlenbits) (i : AST) :
       instrs !! v = Some i →
-      words !! v = Some y →
       ptsto_instrs_w words instrs ⊢
-        interp_ptsto_instr (SyncVal v) (SyncVal y) (SyncVal i) ∗
-        (interp_ptsto_instr (SyncVal v) (SyncVal y) (SyncVal i) -∗ ptsto_instrs_w words instrs).
+        interp_ptsto_instr (SyncVal v) (SyncVal (words v)) (SyncVal i) ∗
+        (interp_ptsto_instr (SyncVal v) (SyncVal (words v)) (SyncVal i) -∗
+           ptsto_instrs_w words instrs).
     Proof.
-      intros Hlk Hwlk. unfold ptsto_instrs_w.
-      iIntros "Hm".
-      iPoseProof (big_sepM_lookup_acc
-                    (fun a j => ∃ y, ⌜ words !! a = Some y ⌝ ∗
-                                interp_ptsto_instr (SyncVal a) (SyncVal y) (SyncVal j))%I
-                    instrs v i Hlk with "Hm") as "[(%y' & %Hy' & Hi) Hclose]".
-      rewrite Hwlk in Hy'.
-      injection Hy' as <-.
-      iFrame "Hi".
-      iIntros "Hi".
-      iApply "Hclose".
-      iExists y.
-      by iFrame "Hi".
+      intros Hlk. unfold ptsto_instrs_w.
+      by apply (big_sepM_lookup_acc
+                  (fun a j => interp_ptsto_instr (SyncVal a) (SyncVal (words a)) (SyncVal j))
+                  instrs v i).
     Qed.
 
   End Soundness.
