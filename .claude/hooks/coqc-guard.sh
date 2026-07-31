@@ -35,7 +35,7 @@ Because the preamble carries no file context, restate the goal as a STANDALONE l
     match goal with |- ?G => idtac "ZZ:" G end. admit.
 plus Admitted., run coqc in the BACKGROUND, and kill it as soon as ZZ: appears. Then port the verified tactic back and pay ONE full compile to confirm.
 
-See the "Tooling gotchas" block in CLAUDE.md.
+Full detail: the rocq-implementation skill, section 1 ("Iterate with rocq-mcp, not with coqc").
 
 STILL LEGITIMATE uses of coqc, ignore this reminder for them: dumping a large term to a file via stdout redirect (rocq-mcp blocks Redirect), and a single final full-file confirmation compile.'
 
