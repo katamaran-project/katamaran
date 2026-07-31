@@ -72,6 +72,45 @@ WRONG notation, producing a confusing type error like `The term "x" has type
 completely innocent. Fix: annotate the whole expression with the intended
 scope, e.g. `(a + b)%N`, rather than trying to figure out which `+` Coq picked.
 
+## `rewrite` matches keyed on the head symbol — beta-reduced occurrences don't fire
+
+`rewrite L in H` fails with **"The LHS of L … does not match any subterm of the
+goal"** even when the two sides are *definitionally equal*, if `L`'s LHS is
+stated with a head symbol that the occurrence in `H` no longer has. The usual
+cause in this codebase is a monadic lemma stated via `bind`:
+
+```coq
+Lemma L … : (_ <- m ;; k) Φ h = k Φ (f h).   (* LHS head: CHeapSpec.bind *)
+```
+
+against a hypothesis a continuation already beta-reduced past the `bind`:
+
+```coq
+H : m (fun _ h1 => k Φ h1) h                  (* head: m — no bind left *)
+```
+
+`rewrite` does keyed matching on the head, so there is nothing to key on and it
+refuses, no matter how many `unfold`/`cbn`s you try on the lemma side. **Fix:
+state (or derive) the forward implication and use `apply … in`, which unifies up
+to full conversion:**
+
+```coq
+Lemma L_fwd … : (_ <- m ;; k) Φ h -> k Φ (f h).
+Proof. now rewrite L. Qed.                    (* the goal-side rewrite is fine *)
+…
+apply L_fwd in H.                              (* succeeds where rewrite failed *)
+```
+
+Note the asymmetry: `rewrite L` works fine *inside* `L_fwd`, because there the
+LHS is the literal statement, still `bind`-headed. It is only the beta-reduced
+*occurrence* that defeats it. Real instance: `cgc_binds_heap` /
+`cgc_binds_heap_fwd` in `CFGVer/VerifierRel.v`, consumed by `Adequacy.v`.
+
+Generalisation worth remembering: when a `rewrite` "obviously should" apply and
+doesn't, check whether the occurrence's head symbol is the same as the lemma
+LHS's — not whether the terms are equal. If they differ, switch to a
+conversion-based tactic (`apply … in`, `change`, `exact`) rather than fighting it.
+
 ## `injection H as ->`/`<-` picks a rewrite direction — the wrong one silently fails
 
 `injection H as ->` (or `<-`) doesn't just extract the equality from `H : Some x

@@ -161,6 +161,16 @@ the proof body matters. VOS does NOT check `Proof.…Qed.`.
 - Nested Proofs are allowed in this codebase: a missing `Qed.` does NOT error —
   the next `Lemma` silently opens a nested proof and the previous name never enters
   the environment. Verify the `feedback` field shows "X is defined" after every `Qed.`.
+- **pet caches loaded libraries; a rebuilt `.vo` is NOT picked up.** Coq will not
+  reload a library already loaded into the process, so after you recompile a
+  `.vo` that an open pet session has already `Require`d, a lemma you just added
+  to it reports `Locate` → "No object of basename X" / "The reference … was not
+  found", *with a `.vo` on disk minutes newer than the source*. This looks
+  exactly like a name-resolution or module-path error and will send you hunting
+  for a qualification bug that isn't there. Fix:
+  `rocq_start(…, force_restart=True)`. Rule of thumb: **edit a file, rebuild its
+  `.vo`, restart pet** — in that order, every time. (Measured 2026-07-31; cost
+  more time than the proof step it interrupted.)
 - pet (interactive rocq-mcp) OOMs on very large files (the pre-split monolithic
   `Examples.v` needed >7.6 GB). The 2026-07-17 split keeps CFGVer files small
   enough for interactive work; if a file grows heavy again, use **preamble mode**
