@@ -235,29 +235,46 @@ Section CFGVerificationDerived.
 
 
     (* SInstrTable / SExitTable: the symbolic analogues of the gmap `instrs` and *)
-    (* function `exitCond` above -- a table of (address term, WORD term,   *)
-    (* instruction) triples, and a list of address terms marking exits. *)
-    (*                                                                    *)
-    (* WHY the word term is a COLUMN here rather than a parallel table:    *)
-    (* one dispatch point.  A parallel address→word table would make every *)
-    (* step do two lookups that must agree, forcing a "tables disagree"    *)
-    (* error case the executor cannot rule out and the refinement proof    *)
-    (* must carry, plus a duplicate wtable_rel/persist/subst/faith family  *)
-    (* alongside itable_rel's.  Fusing makes disagreement impossible by    *)
-    (* construction.  (Both shapes were implemented; fused is smaller.)    *)
-    (*                                                                    *)
-    (* The word terms are supplied per ADDRESS, once, from outside the     *)
-    (* execution loop — one per instruction in the program, not one per    *)
-    (* execution step.  That is what stops |wctx| growing with the trip    *)
-    (* count: a loop re-executing the same addresses reuses the same word  *)
-    (* variables every trip.  PLAN-encoded-instr.md. *)
+    (* function `exitCond` above -- a table of (address term, instruction) *)
+    (* pairs, and a list of address terms marking exits.  This is the      *)
+    (* CONTRACT-LEVEL shape: what table_of_list builds, what itable_rel    *)
+    (* relates to the gmap, and what TablesRel.v's faith lemmas discharge. *)
     Definition SInstrTable : TYPE :=
-      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * AST).
+      fun w => list (Term (wctx w) ty_xlenbits * AST).
 
     Definition SExitTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits).
 
+    (* SInstrTableW: the EXECUTOR's shape — SInstrTable with a raw instruction
+       WORD term added as a middle column.  sexec_cfg_addr runs on this; nothing
+       outside this file's Section Symbolic and VerifierRel.v's mirror of it ever
+       sees it, which is why table_of_list / Contracts.v / GenContract.v / the
+       examples are all untouched by the word threading.
+
+       WHY the word is a COLUMN rather than a parallel address→word table:
+       one dispatch point.  A parallel table makes every step do two lookups
+       that must agree, forcing a "tables disagree" error case the executor
+       cannot rule out and the refinement proof must carry, plus a duplicate
+       wtable_rel / persist / subst / faith family alongside itable_rel's.
+       Fusing makes disagreement impossible by construction.  (Both shapes were
+       implemented; fused is smaller.)
+
+       WHY the word must be carried at all: `encoded_instr` used to be a
+       per-step existential in fetch's postcondition, hence a fresh DEMONIC
+       variable in wctx on every step, and |wctx| growth is the measured
+       dominant cost of loop examples.  It cannot be eliminated in place —
+       pure_decode is an uninterpreted Axiom (Machine.v:147) with no
+       injectivity, so the word is genuinely not determined by the
+       instruction and must be supplied from outside.  The words are
+       introduced ONCE per instruction ADDRESS (sexec_triple_addr below), not
+       once per execution step, so a loop re-executing the same addresses
+       reuses the same word variables every trip.  PLAN-encoded-instr.md. *)
+    Definition SInstrTableW : TYPE :=
+      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * AST).
+
     Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SInstrTable w1 -> SInstrTable w2 :=
+      List.map (fun '(t,i) => (persist__term t θ, i)).
+    Definition persist_itableW {w1 w2} (θ : w1 ⊒ w2) : SInstrTableW w1 -> SInstrTableW w2 :=
       List.map (fun '(t,x,i) => (persist__term t θ, persist__term x θ, i)).
     Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SExitTable w1 -> SExitTable w2 :=
       List.map (fun t => persist__term t θ).
@@ -272,7 +289,7 @@ Section CFGVerificationDerived.
     (* can never disagree. *)
     (* NB an entry is ((addr, word), ast), so the key projection needs the   *)
     (* three-place pattern `'(t,_,_)`, not `'(t,_)`. *)
-    Definition lookup_instr {w} (tbl : SInstrTable w)
+    Definition lookup_instr {w} (tbl : SInstrTableW w)
         (apc : STerm ty_xlenbits w) : option (Term (wctx w) ty_word * AST) :=
       option_map (fun '(_,x,i) => (x,i))
         (List.find (fun '(t,_,_) => Term_eqb (peval apc) (peval t)) tbl).
@@ -289,7 +306,7 @@ Section CFGVerificationDerived.
       Let instrB : AST := RTYPE (bv.of_N 2) (bv.of_N 1) (bv.of_N 0) RISCV_SUB.
       Let wA : Term (wctx w1) ty_word := term_val ty_word (bv.of_N 11).
       Let wB : Term (wctx w1) ty_word := term_val ty_word (bv.of_N 22).
-      Let tbl1 : SInstrTable w1 :=
+      Let tbl1 : SInstrTableW w1 :=
         [ (p1, wA, instrA)
         ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, wB, instrB)
         ]%list.
@@ -329,7 +346,7 @@ Section CFGVerificationDerived.
     (* separate parameters only so the FIRST step, which genuinely does not *)
     (* know nextpc, can differ. *)
     Fixpoint sexec_cfg_addr (fuel : nat) :
-      ⊢ SInstrTable -> SExitTable -> STerm ty_xlenbits ->
+      ⊢ SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w tbl exits apc anp =>
         let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
@@ -345,7 +362,7 @@ Section CFGVerificationDerived.
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, i) =>
                    ⟨ θ1 ⟩ apc' <- sexec_instruction i apc anp wd ;;
-                   sexec_cfg_addr n' (persist_itable θ1 tbl) (persist_etable θ1 exits)
+                   sexec_cfg_addr n' (persist_itableW θ1 tbl) (persist_etable θ1 exits)
                      apc' apc'
                end)
         end.
@@ -368,16 +385,60 @@ Section CFGVerificationDerived.
        since wctx (wlctx Σ) reduces to Σ by record projection. *)
     Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (tbl : SInstrTable (wlctx Σ)) : SInstrTable w :=
-      List.map (fun '(t,x,i) => (subst t ζ, subst x ζ, i)) tbl.
+      List.map (fun '(t,i) => (subst t ζ, i)) tbl.
     Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (exits : SExitTable (wlctx Σ)) : SExitTable w :=
       List.map (fun t => subst t ζ) exits.
 
-    (* tbl's word column is given at the CONTRACT context Σ, exactly like its
-       address keys: the per-address word variables are declared ONCE among the
-       contract's own logic variables, NOT introduced per step here.  That is
-       the whole point — a loop re-executing the same addresses reuses them, so
-       |wctx| stops growing with the trip count. *)
+    (* ---------------------------------------------------------------- *)
+    (* The word supplier.  One logic variable per instruction ADDRESS,   *)
+    (* introduced once at contract entry — see SInstrTableW's comment    *)
+    (* for why the words have to come from outside at all.               *)
+    (*                                                                   *)
+    (* They are introduced by EXTENDING the context that sexec_triple_addr *)
+    (* already hands to demonic_ctx, from Σ to Σ ▻▻ words_ctx n, rather   *)
+    (* than by a fresh fold or by declaring them in the contract's own Σ. *)
+    (* Both alternatives were considered; this one is why Tables.v,       *)
+    (* Contracts.v, GenContract.v, TablesRel.v and all seven examples are *)
+    (* untouched by the word threading, and it reuses the already-proved  *)
+    (* refine_demonic_ctx instead of needing a new refinement lemma.      *)
+    (*                                                                   *)
+    (* All n bindings are named "w"; duplicate names in an LCtx are fine  *)
+    (* here because the terms are read POSITIONALLY (words_of_env), never *)
+    (* resolved by name — demonic_ctx alpha-renames them to w, w.1, ...   *)
+    (* ---------------------------------------------------------------- *)
+    Fixpoint words_ctx (n : nat) : LCtx :=
+      match n with
+      | O    => [ctx]
+      | S n' => words_ctx n' ▻ ("w"∷ty_word)
+      end.
+
+    (* Read the n word entries off as a plain list.  Generic in the value
+       functor D so the concrete mirror (VerifierRel.v, D := Val) and the
+       symbolic side (D := Term w) share one definition, hence one induction
+       when relating them. *)
+    Fixpoint words_of_env {D : Ty -> Set} (n : nat) :
+      NamedEnv D (words_ctx n) -> list (D ty_word) :=
+      match n with
+      | O    => fun _ => nil
+      | S n' => fun E => cons (env.head E) (words_of_env n' (env.tail E))
+      end.
+
+    (* Attach the word column.  Lengths always agree at the one call site
+       (n := length tbl), so the []-fallback is never taken; if it ever were,
+       the table would be short and the executor would fail with "no
+       instruction key matches this pc term" — a failed VC, not unsoundness. *)
+    Fixpoint zip_words {w} (tbl : SInstrTable w)
+        (ws : list (Term (wctx w) ty_word)) : SInstrTableW w :=
+      match tbl , ws with
+      | cons (t,i) tbl' , cons x ws' => cons (t, x, i) (zip_words tbl' ws')
+      | _ , _ => nil
+      end.
+
+    (* The one demonic_ctx call now covers Σ AND the n = length tbl word
+       variables; δw is split back apart with env.drop / env.take.  Note the
+       words are introduced HERE, before the execution loop, so their count is
+       the PROGRAM's instruction count and is independent of the trip count. *)
     Definition sexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
@@ -385,7 +446,10 @@ Section CFGVerificationDerived.
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
       ⊢ SHeapSpec Unit :=
       fun w =>
-        ⟨ θ0 ⟩ δ <- demonic_ctx id Σ ;;
+        let n := length tbl in
+        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
+        let δ   := env.drop (words_ctx n) δw in
+        let ws0 := words_of_env n (env.take (words_ctx n) δw) in
         ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
         (* The ONLY nextpc variable in the whole run.  The first step cannot
            know the incoming nextpc value, so it is quantified here — ONCE,
@@ -397,8 +461,9 @@ Section CFGVerificationDerived.
         ⟨ θ2 ⟩ _ <- produce req δ1 ;;
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (subst_itable ζ tbl) (subst_etable ζ exits)
-                       a2 (persist__term np θ2) ;;
+        let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (zip_words (subst_itable ζ tbl) ws)
+                       (subst_etable ζ exits) a2 (persist__term np θ2) ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
@@ -406,7 +471,7 @@ Section CFGVerificationDerived.
     (* SHeapSpec.run; same wnil shape, no leakcheck. *)
     Definition scfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * Term Σ ty_word * AST))
+      (tbl : list (Term Σ ty_xlenbits * AST))
       (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>

@@ -123,10 +123,15 @@ Section CFGVerificationDerived.
                [env].["a"∷ty_xlenbits ↦ a].["an"∷_ ↦ na].["w"∷_ ↦ w] ;;
         pure na.
 
-    (* `words` is the concrete mirror of the symbolic SWordTable (Verifier.v):
-       the raw instruction word at each address.  Parallel to `instrs` rather
-       than fused with it, for the same reason — it keeps itable_rel and the
-       existing faith lemmas untouched. *)
+    (* `words` gives the raw instruction word at each address — the concrete
+       counterpart of the word column of the symbolic SInstrTableW
+       (Verifier.v).  It stays a SEPARATE gmap from `instrs` (rather than
+       fusing to `gmap _ (bv word * AST)`) because `instrs` is what the
+       trusted statement surface and TablesRel.v's faith lemmas talk about,
+       whereas `words` is supplied by Adequacy.v out of the `∃ v` inside
+       interp_ptsto_instr.  The `words !! v = None` branch below is therefore
+       reachable in the DEFINITION but excluded in every refinement proof by
+       itable_relW, which pairs the two lookups. *)
     Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
       (words : gmap (bv xlenbits) (bv word)) (exitCond : bv xlenbits -> bool) (fuel : nat) :
       RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
@@ -235,6 +240,44 @@ Section CFGVerificationDerived.
       fun ι => List.Forall
         (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
 
+    (* itable_relW: the same faithfulness statement for the EXECUTOR's table
+       (SInstrTableW), i.e. with the word column.  Because one table entry
+       carries both, the two gmap lookups the concrete executor performs are
+       tied together here — which is what makes cexec_cfg_addr's
+       `words !! v = None` branch unreachable under this relation.
+
+       This is DERIVED, not assumed: the assumed guard stays the word-free
+       itable_rel at the contract context Σ (so TablesRel.v's faith lemmas and
+       EndToEnd.v are untouched), and itable_relW_zip below builds this from it
+       plus the refinement of the per-address word variables. *)
+    Definition itable_relW {w} (instrs : gmap (bv xlenbits) AST)
+        (words : gmap (bv xlenbits) (bv word)) (tbl : SInstrTableW w) : Pred w :=
+      fun ι => List.Forall
+        (fun '(t,x,i) => exists v y,
+           inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v
+           /\ instrs !! v = Some i
+           /\ inst (T := fun Σ => Term Σ ty_word) x ι = ty.SyncVal y
+           /\ words !! v = Some y) tbl.
+
+    (* wtable_rel: the boundary bookkeeping for the per-address words.  The n
+       demonically chosen word values must be exactly the ones `words` holds at
+       the table's addresses.  Used at TWO worlds: as the concrete-side assumed
+       guard at the contract context Σ (cexec_triple_addr, alongside
+       itable_rel), and as the transported fact at the executor's world
+       (wtable_rel_of_faith_forget) that itable_relW_zip then consumes.
+
+       Note what this is NOT: loop-carried.  It is consumed once, at the entry
+       point, to build itable_relW — which is the payoff of fusing the word
+       into the table instead of keeping a parallel word table.  Only ONE
+       relation has to survive the induction on fuel, and it needs no
+       persist/forgetting/lookup family of its own. *)
+    Definition wtable_rel {w} (words : gmap (bv xlenbits) (bv word))
+        (tbl : SInstrTable w) (cws : list (RelVal ty_word)) : Pred w :=
+      fun ι => List.Forall2
+        (fun p cx => exists v y,
+           inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι = ty.SyncVal v
+           /\ cx = ty.SyncVal y /\ words !! v = Some y) tbl cws.
+
     Definition etable_rel {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w) : Pred w :=
       fun ι => List.Forall
         (fun t => exists v,
@@ -250,21 +293,27 @@ Section CFGVerificationDerived.
       now rewrite e.
     Qed.
 
-    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w)
-        (apc : STerm ty_xlenbits w) (i : AST) (ι : Valuation w) :
-      lookup_instr tbl apc = Some i ->
-      itable_rel instrs tbl ι ->
-      exists v, inst apc ι = ty.SyncVal v /\ instrs !! v = Some i.
+    (* One lookup yields BOTH the word term and the instruction, so this
+       returns the gmap facts for both columns at once. *)
+    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST)
+        (words : gmap (bv xlenbits) (bv word)) (tbl : SInstrTableW w)
+        (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AST)
+        (ι : Valuation w) :
+      lookup_instr tbl apc = Some (x, i) ->
+      itable_relW instrs words tbl ι ->
+      exists v y, inst apc ι = ty.SyncVal v /\ instrs !! v = Some i
+                  /\ inst (T := fun Σ => Term Σ ty_word) x ι = ty.SyncVal y
+                  /\ words !! v = Some y.
     Proof.
-      unfold lookup_instr, itable_rel.
+      unfold lookup_instr, itable_relW.
       intros Hlk Hrel.
-      destruct (List.find _ tbl) as [[t i']|] eqn:Hfind; cbn in Hlk; [|discriminate].
-      injection Hlk as ->.
+      destruct (List.find _ tbl) as [[[t x'] i']|] eqn:Hfind; cbn in Hlk; [|discriminate].
+      injection Hlk as -> ->.
       apply find_some in Hfind as [Hin Heqb].
       rewrite List.Forall_forall in Hrel.
-      specialize (Hrel _ Hin) as (v & Hv & Hmap).
-      exists v.
-      split; [|exact Hmap].
+      specialize (Hrel _ Hin) as (v & y & Hv & Hmap & Hx & Hw).
+      exists v, y.
+      split; [|split; [exact Hmap|split; [exact Hx|exact Hw]]].
       rewrite (peval_eqb_inst apc t ι Heqb).
       exact Hv.
     Qed.
@@ -298,6 +347,44 @@ Section CFGVerificationDerived.
       split; apply List.Forall_impl; intros [t i] (v & Hv & Hm);
         exists v; (split; [|exact Hm]); cbn in *;
         rewrite inst_persist in Hv + rewrite inst_persist; exact Hv.
+    Qed.
+
+    Lemma forgetting_itable_relW {w1 w2} (θ : Acc w1 w2)
+        (instrs : gmap (bv xlenbits) AST) (words : gmap (bv xlenbits) (bv word))
+        (tbl : SInstrTableW w1) :
+      (forgetting θ (itable_relW instrs words tbl)
+       ⊣⊢ itable_relW instrs words (persist_itableW θ tbl))%I.
+    Proof.
+      constructor.
+      intros ι.
+      unfold forgetting, itable_relW, persist_itableW.
+      rewrite List.Forall_map.
+      cbn.
+      split; apply List.Forall_impl; intros [[t x] i] (v & y & Hv & Hm & Hx & Hw);
+        exists v, y; cbn in *;
+        rewrite ?inst_persist in Hv, Hx |- *;
+        (split; [exact Hv|split; [exact Hm|split; [exact Hx|exact Hw]]]).
+    Qed.
+
+    Lemma persist_itableW_refl {w} (tbl : SInstrTableW w) :
+      persist_itableW acc_refl tbl = tbl.
+    Proof.
+      unfold persist_itableW.
+      induction tbl as [|[[t x] i] tbl' IH]; cbn; [reflexivity|].
+      cbn in IH.
+      f_equal.
+      exact IH.
+    Qed.
+
+    Lemma persist_itableW_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3)
+        (tbl : SInstrTableW w1) :
+      persist_itableW θ23 (persist_itableW θ12 tbl) = persist_itableW (acc_trans θ12 θ23) tbl.
+    Proof.
+      unfold persist_itableW.
+      rewrite List.map_map.
+      apply List.map_ext.
+      intros [[t x] i].
+      now rewrite !persist_trans.
     Qed.
 
     Lemma forgetting_etable_rel {w1 w2} (θ : Acc w1 w2)
@@ -354,20 +441,26 @@ Section CFGVerificationDerived.
       now rewrite persist_trans.
     Qed.
 
-    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w)
-        (apc : STerm ty_xlenbits w) (i : AST) (a : RelVal ty_xlenbits) :
-      lookup_instr tbl apc = Some i ->
-      (itable_rel instrs tbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
-       ⌜exists v, a = ty.SyncVal v /\ instrs !! v = Some i⌝)%I.
+    (* The word column comes out as a repₚ rather than a pure fact: the
+       refinement of the recursive call needs ℛ⟦RVal ty_word⟧ (SyncVal y) x,
+       which is exactly repₚ (SyncVal y) x. *)
+    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST)
+        (words : gmap (bv xlenbits) (bv word)) (tbl : SInstrTableW w)
+        (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AST)
+        (a : RelVal ty_xlenbits) :
+      lookup_instr tbl apc = Some (x, i) ->
+      (itable_relW instrs words tbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
+       ∃ v y, ⌜a = ty.SyncVal v /\ instrs !! v = Some i /\ words !! v = Some y⌝ ∗
+              repₚ (T := fun Σ => Term Σ ty_word) (ty.SyncVal y) x)%I.
     Proof.
       intros Hlk.
       constructor.
       intros ι Hpc H.
       cbn in H.
       destruct H as [Hrel Ha].
-      destruct (lookup_instr_sound apc Hlk Hrel) as (v & Hv & Hm).
-      exists v.
-      split; [|exact Hm].
+      destruct (lookup_instr_sound apc Hlk Hrel) as (v & y & Hv & Hm & Hx & Hw).
+      exists v, y.
+      split; [split; [|split; [exact Hm|exact Hw]]|exact Hx].
       now rewrite <- Ha.
     Qed.
 
@@ -397,27 +490,28 @@ Section CFGVerificationDerived.
     (* It should be relatively easy with most of the complexity handled by rsolve. *)
     (* I suspect there are a few missing RefineCompat instances for tables. *)
     (* This is maybe a good proof golf target. *)
-    Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool)
-        (fuel : nat) {w} (tbl : SInstrTable w) (exits : SExitTable w) :
-      (itable_rel instrs tbl ∗ etable_rel exitCond exits ⊢
+    Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
+        (words : gmap (bv xlenbits) (bv word)) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {w} (tbl : SInstrTableW w) (exits : SExitTable w) :
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
-           (cexec_cfg_addr instrs exitCond fuel)
+           (cexec_cfg_addr instrs words exitCond fuel)
            (sexec_cfg_addr fuel tbl exits))%I.
     Proof.
       iIntros "#[Hi He]".
       iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
-                 (cexec_cfg_addr instrs exitCond fuel)
-                 (fun w' θ => sexec_cfg_addr fuel (persist_itable θ tbl)
+                 (cexec_cfg_addr instrs words exitCond fuel)
+                 (fun w' θ => sexec_cfg_addr fuel (persist_itableW θ tbl)
                                 (persist_etable θ exits))) as "H".
       {
         iInduction fuel as [|n'] "IHfuel".
         - rsolve.
         - cbn [sexec_cfg_addr cexec_cfg_addr].
           rsolve.
-          rewrite forgetting_itable_rel forgetting_etable_rel.
+          rewrite forgetting_itable_relW forgetting_etable_rel.
           iRename select (ℛ⟦RVal ty_xlenbits⟧ a ta) into "Ha".
           destruct (is_exit (persist_etable ω exits) ta) eqn:Hex;
-            destruct (lookup_instr (persist_itable ω tbl) ta) as [i|] eqn:Hlk.
+            destruct (lookup_instr (persist_itableW ω tbl) ta) as [[x i]|] eqn:Hlk.
           (* The four cases are BULLETED deliberately.  This script used to be
              positional, and when sexec_cfg_addr gained the anp argument the
              first case stopped closing its goal (the IH now takes TWO RVal
@@ -427,15 +521,16 @@ Section CFGVerificationDerived.
              pin each block to its own goal so the next such change fails
              locally instead. *)
           + (* exit-hit / lookup-hit *)
-            iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
-            destruct Hfact as (v & -> & Hm).
+            iDestruct (lookup_instr_sound_repₚ instrs words _ _ _ _ a Hlk with "[$Hi $Ha]")
+              as (v y) "[%Hfact #Hx]".
+            destruct Hfact as (-> & Hm & Hw).
             iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
             destruct Hfact2 as (v' & Hveq & Hcond).
             injection Hveq as <-.
             cbn [ty.RVToOption].
-            rewrite Hcond Hm.
+            rewrite Hcond Hm Hw.
             rsolve.
-            rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+            rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
             iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
             (* TWO "[$]", one per RVal argument: the recursive call passes apc'
                as both the pc and the incoming nextpc.  Both premises are the
@@ -448,12 +543,13 @@ Section CFGVerificationDerived.
             rewrite Hcond.
             rsolve.
           + (* exit-miss / lookup-hit *)
-            iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
-            destruct Hfact as (v & -> & Hm).
+            iDestruct (lookup_instr_sound_repₚ instrs words _ _ _ _ a Hlk with "[$Hi $Ha]")
+              as (v y) "[%Hfact #Hx]".
+            destruct Hfact as (-> & Hm & Hw).
             cbn [ty.RVToOption].
-            rewrite Hm.
+            rewrite Hm Hw.
             rsolve.
-            rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+            rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
             iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
             iApply ("IH" with "[$] [$]").
           + (* exit-miss / lookup-miss: symbolic errors twice; concrete side *)
@@ -467,7 +563,7 @@ Section CFGVerificationDerived.
       iPoseProof (unconditionally_T with "H") as "HT".
       unfold T.
       cbv beta.
-      rewrite (persist_itable_refl tbl) (persist_etable_refl exits).
+      rewrite (persist_itableW_refl tbl) (persist_etable_refl exits).
       iApply "HT".
     Qed.
 
@@ -493,19 +589,26 @@ Section CFGVerificationDerived.
     (* only at the one valuation the end-to-end proof discharges it at. *)
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word))
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
-      CHeapSpec.bind (CHeapSpec.demonic_ctx Σ) (fun lenv =>
+      (* Mirrors sexec_triple_addr's demonic_ctx over Σ ▻▻ words_ctx (length tbl):
+         the per-address instruction words are demonically chosen here, ONCE,
+         and split back out with env.drop / env.take. *)
+      CHeapSpec.bind (CHeapSpec.demonic_ctx (Σ ▻▻ words_ctx (length tbl))) (fun lenvw =>
+      let lenv := env.drop (words_ctx (length tbl)) lenvw in
+      let cws  := words_of_env (length tbl) (env.take (words_ctx (length tbl)) lenvw) in
       CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
-          (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv))) (fun _ =>
+          (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv
+           /\ wtable_rel words tbl cws lenv))) (fun _ =>
       CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
       (* Mirrors sexec_triple_addr's single `demonic (Some "np")`: the initial
          nextpc value, quantified ONCE for the whole run rather than once per
          step.  See exec_instruction_prologue (Verifier.v). *)
       CHeapSpec.bind (CHeapSpec.demonic _) (fun np =>
       CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
-      CHeapSpec.bind (cexec_cfg_addr instrs exitCond fuel a np) (fun na =>
+      CHeapSpec.bind (cexec_cfg_addr instrs words exitCond fuel a np) (fun na =>
       CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])))))).
 
     (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
@@ -582,6 +685,175 @@ Section CFGVerificationDerived.
       exact Hv.
     Qed.
 
+    (* ------------------------------------------------------------------ *)
+    (* Word-column boundary lemmas.  These are what replace a full parallel *)
+    (* wtable_rel family: three lemmas used ONCE each, at the entry point,  *)
+    (* rather than a relation threaded through the fuel induction.          *)
+    (* ------------------------------------------------------------------ *)
+
+    (* Forall2 transported along a map on the left, weakening the predicate at
+       the same time — the shape both _of_faith_forget lemmas below need
+       (their tables are literally `List.map … tbl'`). *)
+    Lemma forall2_map_impl {A B C : Type} (f : A -> C) (P : A -> B -> Prop)
+        (Q : C -> B -> Prop) (l1 : list A) (l2 : list B) :
+      (forall a b, P a b -> Q (f a) b) ->
+      List.Forall2 P l1 l2 -> List.Forall2 Q (List.map f l1) l2.
+    Proof.
+      intros Himp H.
+      induction H; cbn; constructor; auto.
+    Qed.
+
+    (* env.take's counterpart to the existing env.map_drop.  Not in
+       theories/Environment.v (which has map_drop but no map_take); kept local
+       rather than adding core churn for two uses. *)
+    Lemma env_map_take {B : Set} {D1 D2 : B -> Set} (f : forall b, D1 b -> D2 b)
+        {Γ Δ : Ctx B} (E : env.Env D1 (Γ ▻▻ Δ)) :
+      env.map f (env.take Δ E) = env.take Δ (env.map f E).
+    Proof.
+      induction Δ; cbn; [reflexivity|].
+      destruct (env.view E) as [E' v].
+      cbn.
+      f_equal.
+      apply IHΔ.
+    Qed.
+
+    (* inst commutes with both halves of the split.  Needed because the
+       demonic_ctx now covers Σ ▻▻ words_ctx n and the two halves are consumed
+       by different lemmas. *)
+    Lemma inst_env_take {Σ' Δ : LCtx} {w : World} (E : Sub (Σ' ▻▻ Δ) w) (ι : Valuation w) :
+      inst (env.take Δ E) ι = env.take Δ (inst E ι).
+    Proof. unfold inst, inst_env. apply env_map_take. Qed.
+
+    Lemma inst_env_drop {Σ' Δ : LCtx} {w : World} (E : Sub (Σ' ▻▻ Δ) w) (ι : Valuation w) :
+      inst (env.drop Δ E) ι = env.drop Δ (inst E ι).
+    Proof. unfold inst, inst_env. apply env.map_drop. Qed.
+
+    (* The Σ half of the extended demonic env, as an ℛ⟦RNEnv⟧ fact, so the
+       existing itable_rel_of_faith_forget / etable_rel_of_faith_forget apply
+       unchanged. *)
+    Lemma refine_env_drop {Σ' Δ : LCtx} {w : World}
+        (lenv : NamedEnv RelVal (Σ' ▻▻ Δ)) (δ : Sub (Σ' ▻▻ Δ) w) :
+      (ℛ⟦RNEnv LVar (Σ' ▻▻ Δ)⟧ lenv δ ⊢ ℛ⟦RNEnv LVar Σ'⟧ (env.drop Δ lenv) (env.drop Δ δ))%I.
+    Proof.
+      constructor.
+      intros ι Hpc Hrel.
+      unfold RNEnv, RInst in Hrel |- *.
+      cbn in Hrel |- *.
+      rewrite inst_env_drop Hrel.
+      reflexivity.
+    Qed.
+
+    (* Reading the word column off a symbolic env and off its instantiation
+       gives pointwise-related lists.  This is the ONLY place the positional
+       (rather than by-name) reading of the word variables has to be justified,
+       and it is justified by using the very same words_of_env on both sides. *)
+    Lemma words_of_env_inst {n : nat} {w : World}
+        (E : Sub (words_ctx n) w) (ι : Valuation w) :
+      List.Forall2 (fun (x : Term (wctx w) ty_word) (cx : RelVal ty_word) =>
+                      inst (T := fun Σ => Term Σ ty_word) x ι = cx)
+        (words_of_env n E) (words_of_env n (inst E ι)).
+    Proof.
+      induction n; cbn; [constructor|].
+      destruct (env.view E) as [E' v].
+      cbn.
+      constructor; [reflexivity|].
+      apply IHn.
+    Qed.
+
+    (* The word half of the extended demonic env: the symbolic word terms and
+       the demonically chosen concrete word values are pointwise related. *)
+    Lemma words_of_env_take_inst {Σ' : LCtx} {n : nat} {w : World}
+        (lenv : NamedEnv RelVal (Σ' ▻▻ words_ctx n)) (δ : Sub (Σ' ▻▻ words_ctx n) w)
+        (ι : Valuation w) :
+      inst δ ι = lenv ->
+      List.Forall2 (fun (x : Term (wctx w) ty_word) (cx : RelVal ty_word) =>
+                      inst (T := fun Σ => Term Σ ty_word) x ι = cx)
+        (words_of_env n (env.take (words_ctx n) δ))
+        (words_of_env n (env.take (words_ctx n) lenv)).
+    Proof.
+      intros <-.
+      rewrite <- inst_env_take.
+      apply words_of_env_inst.
+    Qed.
+
+    (* itable_relW_zip: build the loop-carried fused relation out of the two
+       assumed guards.  The address column comes from itable_rel, the word
+       column from wtable_rel, and they agree because both are indexed by the
+       same table entry — the SyncVal address is shared, so the two gmap
+       lookups are at the same key by construction. *)
+    Lemma itable_relW_zip {w} (instrs : gmap (bv xlenbits) AST)
+        (words : gmap (bv xlenbits) (bv word)) (T : SInstrTable w)
+        (ws : list (Term (wctx w) ty_word)) (cws : list (RelVal ty_word))
+        (ι : Valuation w) :
+      itable_rel instrs T ι ->
+      List.Forall2 (fun x cx => inst (T := fun Σ => Term Σ ty_word) x ι = cx) ws cws ->
+      wtable_rel words T cws ι ->
+      itable_relW instrs words (zip_words T ws) ι.
+    Proof.
+      unfold itable_rel, itable_relW, wtable_rel.
+      intros Hi Hw Hg.
+      revert ws Hw Hi.
+      induction Hg as [|[t i] cx T' cws' Hhd Htl IH]; intros ws Hw Hi.
+      - destruct ws; cbn; constructor.
+      - destruct ws as [|x ws']; [inversion Hw|].
+        inversion Hw as [|x' cx' ws'' cws'' Hx Hws]; subst.
+        inversion Hi as [|p T'' Hihd Hitl]; subst.
+        cbn.
+        constructor.
+        + destruct Hhd as (v & y & Hv & -> & Hwm).
+          destruct Hihd as (v' & Hv' & Him).
+          cbn in Hv, Hv', Him.
+          assert (v' = v) as -> by (rewrite Hv in Hv'; now injection Hv').
+          exists v, y.
+          split; [exact Hv|split; [exact Him|split; [exact Hx|exact Hwm]]].
+        + apply IH; assumption.
+    Qed.
+
+    (* Transport of wtable_rel from the contract context Σ' to the executor's
+       world, exactly mirroring itable_rel_of_faith_forget above. *)
+    Lemma wtable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
+        (words' : gmap (bv xlenbits) (bv word)) (tbl' : SInstrTable (wlctx Σ'))
+        (ιΣ : NamedEnv RelVal Σ') (cws : list (RelVal ty_word)) :
+      wtable_rel words' tbl' cws ιΣ ->
+      (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢
+       wtable_rel words' (subst_itable (persist ζ θ) tbl') cws)%I.
+    Proof.
+      intros Hfaith.
+      constructor.
+      intros ι Hpc Hrel.
+      unfold forgetting, RNEnv, RInst in Hrel.
+      cbn in Hrel.
+      unfold wtable_rel, subst_itable.
+      eapply forall2_map_impl; [|exact Hfaith].
+      intros [t i] cx (v & y & Hv & Hy & Hwm).
+      exists v, y.
+      cbn.
+      rewrite inst_subst inst_persist Hrel.
+      split; [exact Hv|split; [exact Hy|exact Hwm]].
+    Qed.
+
+    (* The word half at the executor's world: the persisted symbolic word terms
+       are pointwise related to the demonically chosen concrete words. *)
+    Lemma words_rel_of_faith_forget {Σ' : LCtx} {n : nat} {wa wb : World} (θ : Acc wa wb)
+        (δw : Sub (Σ' ▻▻ words_ctx n) wa) (lenvw : NamedEnv RelVal (Σ' ▻▻ words_ctx n)) :
+      (forgetting θ (ℛ⟦RNEnv LVar (Σ' ▻▻ words_ctx n)⟧ lenvw δw) ⊢
+       (fun ι => List.Forall2
+          (fun (x : Term (wctx wb) ty_word) (cx : RelVal ty_word) =>
+             inst (T := fun Σ => Term Σ ty_word) x ι = cx)
+          (List.map (fun x => persist__term x θ)
+             (words_of_env n (env.take (words_ctx n) δw)))
+          (words_of_env n (env.take (words_ctx n) lenvw))) : Pred wb)%I.
+    Proof.
+      constructor.
+      intros ι Hpc Hrel.
+      unfold forgetting, RNEnv, RInst in Hrel.
+      cbn in Hrel.
+      eapply forall2_map_impl; [|exact (words_of_env_take_inst _ _ _ Hrel)].
+      intros x cx Hx.
+      rewrite inst_persist.
+      exact Hx.
+    Qed.
+
     (* rexec_triple_addr: unconditional refinement of the guarded      *)
     (* concrete triple by the table-based symbolic triple.  The guard is   *)
     (* introduced via refine_guard; the executor bind is dispatched by     *)
@@ -591,22 +863,28 @@ Section CFGVerificationDerived.
     (* executor's premise-free form; typeclass search diverges).           *)
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word))
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       ⊢ ℛ⟦RHeapSpec RUnit⟧
-          (cexec_triple_addr req instrs exitCond fuel ens tbl exits)
+          (cexec_triple_addr req instrs words exitCond fuel ens tbl exits)
           (sexec_triple_addr req tbl exits fuel ens (w := w)).
     Proof.
       unfold cexec_triple_addr, sexec_triple_addr.
-      iApply (HeapSpec.refine_bind (RA := RNEnv LVar Σ) (RB := RUnit)).
+      iApply (HeapSpec.refine_bind (RA := RNEnv LVar (Σ ▻▻ words_ctx (length tbl)))
+                (RB := RUnit)).
       - rsolve.
       - iIntros (w1 θ0).
         iModIntro.
-        iIntros (lenv δ) "#Hδ".
+        iIntros (lenvw δw) "#Hδw".
         iApply refine_guard.
         iIntros "%Hfaith".
-        destruct Hfaith as [Hif Hef].
+        destruct Hfaith as [Hif [Hef Hwg]].
+        (* Split the extended demonic env: the Σ half feeds the existing
+           itable_rel/etable_rel transport, the word half feeds
+           words_of_env_take_inst. *)
+        iPoseProof (refine_env_drop with "Hδw") as "#Hδ".
         iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
         { rsolve. }
         iIntros (w0 θ1).
@@ -628,9 +906,28 @@ Section CFGVerificationDerived.
         iIntros (u tu) "#Hu".
         iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
         { (* TODO: It feels like rsolve should be able to handle this, if you have the right RefineCompat instances. *)
-          iPoseProof (itable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2) δ Hif with "Hδ") as "#Hi".
-          iPoseProof (etable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2) δ Hef with "Hδ") as "#He".
-          iApply (rexec_cfg_addr instrs exitCond fuel _ _ with "[$Hi $He]").
+          iPoseProof (itable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
+                        (env.drop (words_ctx (length tbl)) δw) Hif with "Hδ") as "#Hi0".
+          iPoseProof (etable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
+                        (env.drop (words_ctx (length tbl)) δw) Hef with "Hδ") as "#He".
+          (* Build the loop-carried itable_relW out of the two guards: address
+             column from Hi0, word column from Hwg + the demonic refinement. *)
+          iPoseProof (wtable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
+                        (env.drop (words_ctx (length tbl)) δw) Hwg with "Hδ") as "#Hw0".
+          iPoseProof (words_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
+                        δw lenvw with "Hδw") as "#Hws".
+          iAssert (itable_relW instrs words
+                     (zip_words
+                        (subst_itable (persist (env.drop (words_ctx (length tbl)) δw)
+                                         (acc_trans (acc_trans θ1 θ1') θ2)) tbl)
+                        (List.map (fun x => persist__term x (acc_trans (acc_trans θ1 θ1') θ2))
+                           (words_of_env (length tbl)
+                              (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
+          { iStopProof.
+            constructor.
+            intros ι Hpc (((Hi0 & Hw0) & Hws)).
+            now apply itable_relW_zip. }
+          iApply (rexec_cfg_addr instrs words exitCond fuel _ _ with "[$Hi $He]").
           (* TWO RVal premises now: the pc, persisted across θ1' ∘ θ2, and the
              initial nextpc, persisted across θ2.  Bulleted rather than
              sequenced — a positional script here is what turned a missing
@@ -646,28 +943,31 @@ Section CFGVerificationDerived.
 
     #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word))
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       RefineCompat (RHeapSpec RUnit)
-        (cexec_triple_addr req instrs exitCond fuel ens tbl exits) w
+        (cexec_triple_addr req instrs words exitCond fuel ens tbl exits) w
         (sexec_triple_addr req tbl exits fuel ens (w := w)) _ :=
-      MkRefineCompat (rexec_triple_addr req instrs exitCond fuel ens tbl exits).
+      MkRefineCompat (rexec_triple_addr req instrs words exitCond fuel ens tbl exits).
 
     Definition ccfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word))
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : Prop :=
-      CHeapSpec.run (cexec_triple_addr req instrs exitCond fuel ens tbl exits).
+      CHeapSpec.run (cexec_triple_addr req instrs words exitCond fuel ens tbl exits).
 
     Lemma rcfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word))
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
-          (ccfg_verification_condition req instrs exitCond fuel ens tbl exits)
+          (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits)
           (scfg_verification_condition req tbl exits fuel ens w).
     Proof.
       unfold ccfg_verification_condition, scfg_verification_condition.
@@ -676,13 +976,14 @@ Section CFGVerificationDerived.
 
     #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (words : gmap (bv xlenbits) (bv word))
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
       RefineCompat (LogicalSoundness.RProp)
-        (ccfg_verification_condition req instrs exitCond fuel ens tbl exits) w
+        (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits) w
         (scfg_verification_condition req tbl exits fuel ens w) _ :=
-      MkRefineCompat (rcfg_verification_condition req instrs exitCond fuel ens tbl exits).
+      MkRefineCompat (rcfg_verification_condition req instrs words exitCond fuel ens tbl exits).
 
   End Relational.
 
@@ -711,22 +1012,42 @@ Section CFGVerificationDerived.
        of instruction i at address a (SyncVal: the same instruction lives at
        the same address in both worlds).  Keying by absolute address makes the
        address arithmetic of the old list-based version unnecessary. *)
+    (* ptsto_instrs_w: the WORD-INDEXED form — ownership of a specific raw
+       instruction word at each address, as the concrete executor's `words`
+       gmap names them.  This is what the soundness chain threads. *)
+    Definition ptsto_instrs_w (words : gmap (bv xlenbits) (bv word))
+        (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
+      ([∗ map] a ↦ i ∈ instrs,
+         ∃ y, ⌜ words !! a = Some y ⌝ ∗
+              interp_ptsto_instr (SyncVal a) (SyncVal y) (SyncVal i))%I.
+
+    (* ptsto_instrs keeps its old MEANING — "some word that decodes to i lives
+       at each address" — and hence its old role in ImplPre / the end theorems,
+       which is why the trusted statement surface does not change.  The word is
+       merely named: ∃-over-a-gmap-of-words is equivalent to the old
+       ∃-inside-each-entry (interp_ptsto_instr used to carry `∃ v` itself), and
+       here that equivalence is DEFINITIONAL in one direction and discharged by
+       intro_ptsto_instrs in the other — it already receives the word list `ws`.
+       PLAN-encoded-instr.md §4-SPIKE. *)
     Definition ptsto_instrs (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
-      ([∗ map] a ↦ i ∈ instrs, interp_ptsto_instr (SyncVal a) (SyncVal i))%I.
+      (∃ words, ptsto_instrs_w words instrs)%I.
 
     (* np: the incoming nextpc value, a PARAMETER here rather than the `∃ v`
        this used to hold, mirroring exec_instruction_prologue (Verifier.v).
        The POSTcondition's `∃ an` stays — that one is real, it is the step's
        output (tick_pc leaves pc = nextpc = an). *)
-    Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : RelVal ty_word -> iProp Σ) (a np : RelVal ty_word) : iProp Σ :=
-      semTriple [env] (PRE ∗ lptsreg nextpc np ∗ lptsreg pc a ∗ interp_ptsto_instr a (SyncVal instr) ∗ ⌜ secLeak a ⌝)
+    (* w: the raw instruction word at address a, a PARAMETER for the same
+       reason np is — the prologue owns ptstoinstr a w i, so the word is
+       supplied rather than re-quantified per step. *)
+    Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : RelVal ty_word -> iProp Σ) (a np w : RelVal ty_word) : iProp Σ :=
+      semTriple [env] (PRE ∗ lptsreg nextpc np ∗ lptsreg pc a ∗ interp_ptsto_instr a w (SyncVal instr) ∗ ⌜ secLeak a ⌝)
         (FunDef RiscvPmpProgram.step)
-        (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a (SyncVal instr)  ∗ ⌜ secLeak a ⌝)%I.
+        (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a w (SyncVal instr)  ∗ ⌜ secLeak a ⌝)%I.
 
-    Lemma sound_exec_instruction {instr} a np Φ (h : SCHeap) :
-      cexec_instruction instr a np Φ h ->
+    Lemma sound_exec_instruction {instr} a np w Φ (h : SCHeap) :
+      cexec_instruction instr a np w Φ h ->
       ⊢ semTripleOneInstrStep (interpret_scheap h) instr
-          (fun an => ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝ ∧ ⌜ secLeak an ⌝) a np.
+          (fun an => ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝ ∧ ⌜ secLeak an ⌝) a np w.
     Proof.
       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
@@ -761,14 +1082,27 @@ Section CFGVerificationDerived.
        direct big_sepM_lookup_acc — the address arithmetic of the old list
        version (base + k*bytes_per_instr = v) is gone: the map key IS the
        address. *)
-    Lemma ptsto_instrs_lookup (instrs : gmap (bv xlenbits) AST) (v : bv xlenbits) (i : AST) :
+    Lemma ptsto_instrs_lookup (words : gmap (bv xlenbits) (bv word))
+        (instrs : gmap (bv xlenbits) AST) (v : bv xlenbits) (i : AST) (y : bv word) :
       instrs !! v = Some i →
-      ptsto_instrs instrs ⊢
-        interp_ptsto_instr (SyncVal v) (SyncVal i) ∗
-        (interp_ptsto_instr (SyncVal v) (SyncVal i) -∗ ptsto_instrs instrs).
+      words !! v = Some y →
+      ptsto_instrs_w words instrs ⊢
+        interp_ptsto_instr (SyncVal v) (SyncVal y) (SyncVal i) ∗
+        (interp_ptsto_instr (SyncVal v) (SyncVal y) (SyncVal i) -∗ ptsto_instrs_w words instrs).
     Proof.
-      intros Hlk. unfold ptsto_instrs.
-      by apply (big_sepM_lookup_acc (fun a j => interp_ptsto_instr (SyncVal a) (SyncVal j)) instrs v i).
+      intros Hlk Hwlk. unfold ptsto_instrs_w.
+      iIntros "Hm".
+      iPoseProof (big_sepM_lookup_acc
+                    (fun a j => ∃ y, ⌜ words !! a = Some y ⌝ ∗
+                                interp_ptsto_instr (SyncVal a) (SyncVal y) (SyncVal j))%I
+                    instrs v i Hlk with "Hm") as "[(%y' & %Hy' & Hi) Hclose]".
+      rewrite Hwlk in Hy'.
+      injection Hy' as <-.
+      iFrame "Hi".
+      iIntros "Hi".
+      iApply "Hclose".
+      iExists y.
+      by iFrame "Hi".
     Qed.
 
   End Soundness.
