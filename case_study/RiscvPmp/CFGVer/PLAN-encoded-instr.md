@@ -48,11 +48,28 @@ for reproducer-declared `mv`. Then time at N=4/8, then the full gate.
 
 ## §2. The idea, and the evidence it is the right one
 
-**Why `encoded_instr` survives while `op` — also `∃`-produced, also demonic,
-also once per step — does not.** `lemma_close_ptsto_instr` takes `cl` as a
-**lemma pattern argument** (`Spec.v:653`), so the *program* supplies a concrete
-term for the word, and `op` is unified against it and dies. `encoded_instr` has
-no supplier: its only equation relates it to another variable.
+**Why `encoded_instr` survives while the other per-step variables do not.**
+
+> **CORRECTED 2026-07-31.** An earlier draft of this section claimed the
+> per-step `op` came from `lemma_open_ptsto_instr`'s `∃ "op"` and died because
+> `lemma_close_ptsto_instr` supplies `cl` as a lemma pattern argument
+> (`Spec.v:653`). **That was wrong.** `fetch` has a CONTRACT
+> (`SepContractFun fetch`, registered `Spec.v:517`), so the CFG executor uses
+> the contract and never the body; `open_ptsto_instr`/`close_ptsto_instr` are
+> invoked only inside `fun_fetch` (`Machine.v:875/880`), i.e. in
+> `valid_execute_fetch`, never once per step. The per-step `op` in the census is
+> the ITYPE **operation field**, a pattern variable from matching the decoded
+> AST.
+
+The real asymmetry: `result_decode`, `imm`, `rs1`, `rd`, `op` all die because the
+**AST is a literal**. The prologue owns `chunk_user ptstoinstr [a; term_val ty_ast i]`
+with `i` a literal, `decode`'s postcondition pins `result_decode = instr`, and
+matching a literal AST resolves its fields to literal components — so each is
+unified away.
+
+`encoded_instr` has no literal available, and by §4-SPIKE fact 1 it can never
+acquire one: the word is not determined by the instruction. That is precisely why
+it must be supplied as a variable from outside, per address, at contract entry.
 
 So give it a supplier. Concretely, move the word from fetch's **postcondition**
 to its **precondition**:
@@ -109,7 +126,47 @@ scalar.
 9. **`GenContract.v`**: declare the per-address word variables in the generated
    contract.
 
-## §4. The risk, stated plainly
+## §4-SPIKE. RESULT 2026-07-31: the cheap variant is IMPOSSIBLE, and the
+## trusted-surface change is a RESTATEMENT, not a weakening
+
+Two source facts, and they settle both questions without writing any code.
+
+**1. `encodes_instr(w, i)` can never pin `w`.** `pure_decode` is an uninterpreted
+`Axiom` (`Machine.v:147`) and there is NO injectivity lemma anywhere in the tree.
+So from `encodes_instr(op, i)` and `encodes_instr(w, i)` you get
+`pure_decode op = inr i = pure_decode w` and **not** `op = w`. Any scheme that
+tries to identify the fetched word from the known instruction dies here — this
+is why dead end 3 in the memory note is far more far-reaching than "no encoder".
+
+**2. The word is existentially hidden inside the resource itself.**
+`interp_ptsto_instr` (`IrisInstance.v:248`) is
+`∃ v, @interp_ptstomem 4 addr v ∗ ⌜pure_decode v = inr instr⌝`. `ptsto_instrs` is
+a `big_sepM` of exactly that. So the verifier genuinely does not know the word;
+it learns a FRESH unknown one on every fetch, because the resource only ever
+promised "SOME word that decodes to `i`". **The per-step existential is not a
+contract-style accident — it mirrors the `∃` in the resource.**
+
+Hence the §4 "cheaper variant" below is struck: there is nothing to unify the
+table's word against while `ptsto_instrs` keeps that `∃`. Owning the word per
+address is FORCED, not a design preference.
+
+**But it costs no generality, and need not change the end theorems at all.**
+Since
+
+    interp_ptsto_instr a i  ⊣⊢  ∃ v, ptstomem a v ∗ ⌜pure_decode v = inr i⌝
+
+we have `ptsto_instrs instrs ⊣⊢ ∃ words, ptsto_instrs_w words instrs`. So a
+word-PARAMETERIZED end theorem (∀ words, memory holds them ∧ they decode to the
+program → noninterferent) **implies** the current one: destruct the `∃` and
+apply. This is the same `∀`-parameter ≡ `∃` argument that justified the nextpc
+fix, one level up.
+
+**Consequence for the plan:** keep every existing `*_noninterferent` statement
+byte-identical and derive it as a corollary of a word-parameterized lemma. The
+trusted statement surface does NOT change; only an internal lemma is added.
+That retires §5 decision 1 — the answer is "no trusted-surface change needed".
+
+## §4. The risk, stated plainly — SUPERSEDED by §4-SPIKE above
 
 The Iris side is the part I cannot predict. Today `ptsto_instrs` (`VerifierRel.v`)
 is a `big_sepM` of `interp_ptsto_instr`, and `ptsto_instrs_lookup` extracts one
