@@ -89,6 +89,12 @@ Imports are content-hash-cached and stay warm across iterations, so each tactic
 check costs ~30 ms. The catch is that a preamble carries no file context, so you
 must restate your goal as a **standalone lemma**.
 
+This is also the answer when pet runs out of memory rather than time: it OOMs on
+very large files (the pre-split monolithic `CFGVer/Examples.v` needed >7.6 GB).
+The 2026-07-17 split keeps CFGVer files small enough for interactive work, but if
+a file grows heavy again, reach for preamble mode — **not** a `coqc` loop, which
+is 100–1000× slower per iteration.
+
 **"It's inside a module functor" is not an exemption.** Most of `theories/` lives
 in functors (`SolverOn`, `SignatureMixin`, …), so a preamble genuinely cannot
 `Require` the definitions — and a stale `.vo` makes requiring a case study's
@@ -126,6 +132,37 @@ success.
 Save the `state_id` from `rocq_start`. `ROCQ_MAX_STATES` is not raised here, so
 sessions can expire; a `state not found` error means restart, not that anything
 is broken.
+
+### Reaching a lemma with `rocq_start` does not mean the lemma compiles
+
+`rocq_start(theorem=X)` replays the file prefix **vos-style — proof bodies are
+skipped**. So a successful `rocq_start` at a later position tells you the file
+*parses and typechecks* up to there, and nothing whatsoever about whether the
+proofs before it work. Only a `rocq_check` of an actual body, or a `mode="full"`
+compile, runs a proof. Do not read "`rocq_start` got to line 900" as "everything
+before line 900 is proved" — the file may be full of `Admitted`s and broken
+tactics and it will still succeed.
+
+### A rebuilt `.vo` is invisible until you restart pet
+
+Coq will not reload a library already loaded into the process, and pet is a
+long-lived process. So after you recompile a `.vo` that an open session has
+already `Require`d, a lemma you just added to it is **not there**:
+
+```
+Locate cgc_binds_heap.   ->   No object of basename cgc_binds_heap
+rewrite cgc_binds_heap.  ->   The reference ... was not found
+```
+
+…with a `.vo` on disk minutes *newer* than the source. This reads exactly like a
+module-path or qualification bug, and you will go looking for one. Fix:
+`rocq_start(…, force_restart=True)`. Rule of thumb: **edit → rebuild the `.vo` →
+restart pet**, in that order, every time. (Measured 2026-07-31: cost more time
+than the proof step it interrupted.)
+
+Note `rocq_compile_file` now warns about this itself — "N interactive session(s)
+in this workspace may be holding stale dependency state" — so treat that line as
+an instruction, not noise.
 
 ## 2. Route to the skill that already knows the trap
 

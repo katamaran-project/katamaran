@@ -123,26 +123,14 @@ that subtree.
 
 ## rocq-mcp workflow
 
-Always prefer rocq-mcp tools over spawning `coqc` manually.
-
-`ROCQ_MAX_STATES` is **not** overridden — the server uses its default limit.
-Consequence: interactive sessions (`rocq_start`) may expire if idle or if many
-states accumulate. Always save the `state_id` from `rocq_start` and check for
-`state not found` errors before assuming a session is still live; restart with
-`rocq_start` if needed.
+Always prefer rocq-mcp tools over spawning `coqc` manually — the gap is ~3 orders
+of magnitude per iteration.
 
 ```
-# 1. Fast type-check (skips proof bodies) — use first
-rocq_compile_file(file, mode="vos")
-
-# 2. Full compile — use to validate proofs
-rocq_compile_file(file, mode="full")
-
-# 3. Keep .vo so downstream files can Require it
-rocq_compile_file(file, mode="full", keep_vo=True)
-
-# 4. Interactive proof development
-s = rocq_start(file=..., theorem="my_lemma")
+rocq_compile_file(file, mode="vos")                # fast type-check, STATEMENTS ONLY
+rocq_compile_file(file, mode="full")               # validates proof bodies
+rocq_compile_file(file, mode="full", keep_vo=True) # so downstream files can Require it
+s = rocq_start(file=..., theorem="my_lemma")       # interactive
 s = rocq_check(from_state=s["state_id"], body="intros. iIntros ...")
 ```
 
@@ -151,45 +139,16 @@ dependencies need `.vo`s — compile them with `keep_vo=True` first (or build th
 target's closure via `make -f Makefile.coq <file>.vo`) — otherwise `Cannot find
 a physical path bound to …CFGVer.<Dep>`.
 
-**VOS vs full**: use `vos` to catch statement errors cheaply; use `full` only when
-the proof body matters. VOS does NOT check `Proof.…Qed.`.
-
-**Tooling gotchas:**
-- `rocq_start(theorem=X)` loads the file prefix vos-style — proof bodies SKIPPED.
-  Only `rocq_check` of a body or a `mode=full` compile actually runs proofs; don't
-  infer a lemma passed just because a later `rocq_start` reached it.
-- Nested Proofs are allowed in this codebase: a missing `Qed.` does NOT error —
-  the next `Lemma` silently opens a nested proof and the previous name never enters
-  the environment. Verify the `feedback` field shows "X is defined" after every `Qed.`.
-- **pet caches loaded libraries; a rebuilt `.vo` is NOT picked up.** Coq will not
-  reload a library already loaded into the process, so after you recompile a
-  `.vo` that an open pet session has already `Require`d, a lemma you just added
-  to it reports `Locate` → "No object of basename X" / "The reference … was not
-  found", *with a `.vo` on disk minutes newer than the source*. This looks
-  exactly like a name-resolution or module-path error and will send you hunting
-  for a qualification bug that isn't there. Fix:
-  `rocq_start(…, force_restart=True)`. Rule of thumb: **edit a file, rebuild its
-  `.vo`, restart pet** — in that order, every time. (Measured 2026-07-31; cost
-  more time than the proof step it interrupted.)
-- pet (interactive rocq-mcp) OOMs on very large files (the pre-split monolithic
-  `Examples.v` needed >7.6 GB). The 2026-07-17 split keeps CFGVer files small
-  enough for interactive work; if a file grows heavy again, use **preamble mode**
-  (below) — NOT a `coqc` loop, which is 100-1000x slower per iteration.
-- **`rocq_start` failing on a file is NOT "interactive mode is unavailable".**
-  `rocq_start(theorem=X)` must replay the whole file prefix, so it times out at
-  the 300 s `ROCQ_QUERY_TIMEOUT_CAP` on deep positions in big `theories/` files
-  (measured 2026-07-28: ~line 2380 of `Symbolic/Solver.v` times out at the cap,
-  twice). The fix is `rocq_start(preamble="From Katamaran Require Import …")` +
-  `rocq_check` — imports are content-hash-cached and stay warm across
-  iterations, so a tactic check costs ~30 ms. Because the preamble carries no
-  file context, restate the goal as a STANDALONE lemma; get its exact shape by
-  temporarily replacing the proof with
-  `match goal with |- ?G => idtac "ZZ:" G end. admit.` + `Admitted.`, running
-  `coqc` in the background, and killing it once `ZZ:` appears. Then port the
-  verified tactic back and pay ONE full compile to confirm. Measured the same
-  day: three full `Solver.v` compiles (~15 min) spent on two tactic errors that
-  preamble mode found in 28 ms each — a `lia` atom mismatch and a `destruct`
-  that failed to abstract, both listed in **bv-pitfalls** / **rocq-pitfalls**.
+> **The rocq-mcp gotchas live in the `rocq-implementation` skill, §1** — not
+> here, so they stay in one place and can be as long as they need to be. It
+> covers: why a green `vos` says nothing about your tactics; why
+> `rocq_compile_file` cannot build `theories/Symbolic/Solver.v`; why a
+> `rocq_start(theorem=…)` timeout does NOT mean interactive mode is unavailable,
+> and preamble mode as the way out (including inside module functors, and when
+> pet OOMs); why reaching a lemma with `rocq_start` does not mean it compiles;
+> why a missing `Qed.` silently swallows a lemma instead of erroring; and why a
+> rebuilt `.vo` is invisible to an open session until `force_restart=True`.
+> Load it before hand-writing or repairing any proof body.
 
 **rocq plugin commands (LLM4Rocq):** six have auto-trigger wrapper skills
 (`rocq-golf`, `rocq-review`, `rocq-refactor`, `rocq-doctor`, `rocq-checkpoint`,
