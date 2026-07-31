@@ -109,12 +109,12 @@ Section CFGVerificationDerived.
     Import CHeapSpec CHeapSpec.notations.
 
     Definition cexec_instruction (i : AST) :
-      RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
+      RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
       let inline_fuel := 10%nat in
-      fun a =>
+      fun a np =>
         _ <- produce
                (exec_instruction_prologue i)
-               [env].["a"∷_ ↦ a] ;;
+               [env].["a"∷_ ↦ a].["np"∷_ ↦ np] ;;
         _ <- evalStoreSpec (cexec inline_fuel (FunDef step)) [env] ;;
         na <- angelic _ ;;
         _ <- consume
@@ -123,8 +123,8 @@ Section CFGVerificationDerived.
         pure na.
 
     Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool) (fuel : nat) :
-      RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
-      fun apc =>
+      RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
+      fun apc anp =>
         match fuel with
         | O    => error
         | S n' =>
@@ -136,22 +136,22 @@ Section CFGVerificationDerived.
                   (match instrs !! v with
                    | None   => error
                    | Some i =>
-                       apc' <- cexec_instruction i apc ;;
-                       cexec_cfg_addr instrs exitCond n' apc'
+                       apc' <- cexec_instruction i apc anp ;;
+                       cexec_cfg_addr instrs exitCond n' apc' apc'
                    end)
             end
         end.
 
     Import (hints) CStoreSpec.
 
-    #[export] Instance mono_cexec_instruction {i a} :
-      Monotonic (MHeapSpec eq) (cexec_instruction i a).
+    #[export] Instance mono_cexec_instruction {i a np} :
+      Monotonic (MHeapSpec eq) (cexec_instruction i a np).
     Proof. typeclasses eauto. Qed.
 
-    #[export] Instance mono_cexec_cfg_addr {instrs exitCond fuel apc} :
-      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs exitCond fuel apc).
+    #[export] Instance mono_cexec_cfg_addr {instrs exitCond fuel apc anp} :
+      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs exitCond fuel apc anp).
     Proof.
-      revert apc. induction fuel; intro apc.
+      revert apc anp. induction fuel; intros apc anp.
       - typeclasses eauto.
       - destruct apc as [v | vl vr].
         + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
@@ -187,8 +187,13 @@ Section CFGVerificationDerived.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
 
+    (* Second RVal argument: the incoming nextpc value, a PARAMETER rather   *)
+    (* than a per-step existential (exec_instruction_prologue, Verifier.v).  *)
+    (* Note this is CHEAPER than the pre-2026-07-31 version despite the      *)
+    (* extra arrow — the prologue's demonic/refine_demonic pairing is gone,  *)
+    (* replaced by an env entry rsolve discharges from the new hypothesis.   *)
     Lemma rexec_instruction (i : AST) {w} :
-      ⊢ ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
+      ⊢ ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
           (cexec_instruction i)
           (sexec_instruction (w := w) i).
     Proof.
@@ -196,7 +201,7 @@ Section CFGVerificationDerived.
     Qed.
 
     #[export] Instance refine_compat_exec_instruction {i : AST} {w} :
-      RefineCompat (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
+      RefineCompat (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))
         (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
       MkRefineCompat (rexec_instruction i).
 
@@ -383,12 +388,12 @@ Section CFGVerificationDerived.
     Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST) (exitCond : bv xlenbits -> bool)
         (fuel : nat) {w} (tbl : SInstrTable w) (exits : SExitTable w) :
       (itable_rel instrs tbl ∗ etable_rel exitCond exits ⊢
-       ℛ⟦RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
+       ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
            (cexec_cfg_addr instrs exitCond fuel)
            (sexec_cfg_addr fuel tbl exits))%I.
     Proof.
       iIntros "#[Hi He]".
-      iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
+      iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
                  (cexec_cfg_addr instrs exitCond fuel)
                  (fun w' θ => sexec_cfg_addr fuel (persist_itable θ tbl)
                                 (persist_etable θ exits))) as "H".
@@ -401,40 +406,51 @@ Section CFGVerificationDerived.
           iRename select (ℛ⟦RVal ty_xlenbits⟧ a ta) into "Ha".
           destruct (is_exit (persist_etable ω exits) ta) eqn:Hex;
             destruct (lookup_instr (persist_itable ω tbl) ta) as [i|] eqn:Hlk.
-          (* exit-hit / lookup-hit *)
-          iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
-          destruct Hfact as (v & -> & Hm).
-          iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
-          destruct Hfact2 as (v' & Hveq & Hcond).
-          injection Hveq as <-.
-          cbn [ty.RVToOption].
-          rewrite Hcond Hm.
-          rsolve.
-          rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
-          iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-          iApply ("IH" with "[$]").
-          (* exit-hit / lookup-miss *)
-          iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact".
-          destruct Hfact as (v & -> & Hcond).
-          cbn [ty.RVToOption].
-          rewrite Hcond.
-          rsolve.
-          (* exit-miss / lookup-hit *)
-          iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
-          destruct Hfact as (v & -> & Hm).
-          cbn [ty.RVToOption].
-          rewrite Hm.
-          rsolve.
-          rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
-          iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-          iApply ("IH" with "[$]").
-          (* exit-miss / lookup-miss: symbolic errors twice; concrete side *)
-          (* must also fail — NonSyncVal pc is rejected, SyncVal pc closed  *)
-          (* by the empty angelic_binary of two errors.                     *)
-          destruct a as [va|va1 va2]; cbn [ty.RVToOption]; rsolve.
-          iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
-          unfold LogicalSoundness.RProp; cbn.
-          iIntros "[%HF|%HF]"; destruct HF.
+          (* The four cases are BULLETED deliberately.  This script used to be
+             positional, and when sexec_cfg_addr gained the anp argument the
+             first case stopped closing its goal (the IH now takes TWO RVal
+             premises, see below) — which silently shifted every later block by
+             one goal and surfaced as an unresolvable evar in case 2's
+             is_exit_sound_repₚ, i.e. nowhere near the actual cause.  Bullets
+             pin each block to its own goal so the next such change fails
+             locally instead. *)
+          + (* exit-hit / lookup-hit *)
+            iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
+            destruct Hfact as (v & -> & Hm).
+            iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
+            destruct Hfact2 as (v' & Hveq & Hcond).
+            injection Hveq as <-.
+            cbn [ty.RVToOption].
+            rewrite Hcond Hm.
+            rsolve.
+            rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+            iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+            (* TWO "[$]", one per RVal argument: the recursive call passes apc'
+               as both the pc and the incoming nextpc.  Both premises are the
+               same persistent ℛ⟦RVal⟧ fact, so it frames twice over. *)
+            iApply ("IH" with "[$] [$]").
+          + (* exit-hit / lookup-miss *)
+            iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact".
+            destruct Hfact as (v & -> & Hcond).
+            cbn [ty.RVToOption].
+            rewrite Hcond.
+            rsolve.
+          + (* exit-miss / lookup-hit *)
+            iPoseProof (lookup_instr_sound_repₚ instrs _ _ a Hlk with "[$Hi $Ha]") as "%Hfact".
+            destruct Hfact as (v & -> & Hm).
+            cbn [ty.RVToOption].
+            rewrite Hm.
+            rsolve.
+            rewrite (persist_itable_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+            iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+            iApply ("IH" with "[$] [$]").
+          + (* exit-miss / lookup-miss: symbolic errors twice; concrete side *)
+            (* must also fail — NonSyncVal pc is rejected, SyncVal pc closed  *)
+            (* by the empty angelic_binary of two errors.                     *)
+            destruct a as [va|va1 va2]; cbn [ty.RVToOption]; rsolve.
+            iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
+            unfold LogicalSoundness.RProp; cbn.
+            iIntros "[%HF|%HF]"; destruct HF.
       }
       iPoseProof (unconditionally_T with "H") as "HT".
       unfold T.
@@ -472,9 +488,13 @@ Section CFGVerificationDerived.
       CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
           (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv))) (fun _ =>
       CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
+      (* Mirrors sexec_triple_addr's single `demonic (Some "np")`: the initial
+         nextpc value, quantified ONCE for the whole run rather than once per
+         step.  See exec_instruction_prologue (Verifier.v). *)
+      CHeapSpec.bind (CHeapSpec.demonic _) (fun np =>
       CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
-      CHeapSpec.bind (cexec_cfg_addr instrs exitCond fuel a) (fun na =>
-      CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na]))))).
+      CHeapSpec.bind (cexec_cfg_addr instrs exitCond fuel a np) (fun na =>
+      CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])))))).
 
     (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
     (* the concrete side weakens the concrete claim, which is the sound    *)
@@ -580,6 +600,15 @@ Section CFGVerificationDerived.
         iIntros (w0 θ1).
         iModIntro.
         iIntros (a ta) "#Ha".
+        (* The initial-nextpc demonic, paired here.  Both executors introduce it
+           ONCE, right after `a` and before `produce req` — see
+           exec_instruction_prologue (Verifier.v) for why it is a parameter
+           threaded inward rather than an existential minted per step. *)
+        iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
+        { rsolve. }
+        iIntros (w1' θ1').
+        iModIntro.
+        iIntros (np tnp) "#Hnp".
         iApply (HeapSpec.refine_bind (RA := RUnit) (RB := RUnit)).
         { rsolve. }
         iIntros (w2 θ2).
@@ -587,10 +616,15 @@ Section CFGVerificationDerived.
         iIntros (u tu) "#Hu".
         iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
         { (* TODO: It feels like rsolve should be able to handle this, if you have the right RefineCompat instances. *)
-          iPoseProof (itable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hif with "Hδ") as "#Hi".
-          iPoseProof (etable_rel_of_faith_forget (acc_trans θ1 θ2) δ Hef with "Hδ") as "#He".
+          iPoseProof (itable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2) δ Hif with "Hδ") as "#Hi".
+          iPoseProof (etable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2) δ Hef with "Hδ") as "#He".
           iApply (rexec_cfg_addr instrs exitCond fuel _ _ with "[$Hi $He]").
-          iApply (refine_inst_persist with "Ha"). }
+          (* TWO RVal premises now: the pc, persisted across θ1' ∘ θ2, and the
+             initial nextpc, persisted across θ2.  Bulleted rather than
+             sequenced — a positional script here is what turned a missing
+             premise into a type error 12 lines away in rexec_cfg_addr. *)
+          - iApply (refine_inst_persist with "Ha").
+          - iApply (refine_inst_persist with "Hnp"). }
         iIntros (w3 θ3).
         iModIntro.
         iIntros (na tna) "#Hna".
@@ -668,22 +702,29 @@ Section CFGVerificationDerived.
     Definition ptsto_instrs (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
       ([∗ map] a ↦ i ∈ instrs, interp_ptsto_instr (SyncVal a) (SyncVal i))%I.
 
-    Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : RelVal ty_word -> iProp Σ) (a : RelVal ty_word) : iProp Σ :=
-      semTriple [env] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a (SyncVal instr) ∗ ⌜ secLeak a ⌝)
+    (* np: the incoming nextpc value, a PARAMETER here rather than the `∃ v`
+       this used to hold, mirroring exec_instruction_prologue (Verifier.v).
+       The POSTcondition's `∃ an` stays — that one is real, it is the step's
+       output (tick_pc leaves pc = nextpc = an). *)
+    Definition semTripleOneInstrStep (PRE : iProp Σ) (instr : AST) (POST : RelVal ty_word -> iProp Σ) (a np : RelVal ty_word) : iProp Σ :=
+      semTriple [env] (PRE ∗ lptsreg nextpc np ∗ lptsreg pc a ∗ interp_ptsto_instr a (SyncVal instr) ∗ ⌜ secLeak a ⌝)
         (FunDef RiscvPmpProgram.step)
         (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a (SyncVal instr)  ∗ ⌜ secLeak a ⌝)%I.
 
-    Lemma sound_exec_instruction {instr} a Φ (h : SCHeap) :
-      cexec_instruction instr a Φ h ->
+    Lemma sound_exec_instruction {instr} a np Φ (h : SCHeap) :
+      cexec_instruction instr a np Φ h ->
       ⊢ semTripleOneInstrStep (interpret_scheap h) instr
-          (fun an => ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝ ∧ ⌜ secLeak an ⌝) a.
+          (fun an => ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ an h'⌝ ∧ ⌜ secLeak an ⌝) a np.
     Proof.
       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
              CPureSpec.demonic CStoreSpec.evalStoreSpec].
       cbn - [consume].
-      iIntros (Hverif) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs & %HsL)".
-      specialize (Hverif npc). apply sound_cexec in Hverif.
+      (* No `[%npc Hnpc]` destruct and no `specialize (Hverif npc)` any more:
+         the prologue no longer produces a demonic variable for nextpc, so the
+         value arrives as the parameter np instead of being quantified here. *)
+      iIntros (Hverif) "(Hheap & Hnpc & Hpc & Hinstrs & %HsL)".
+      apply sound_cexec in Hverif.
       iApply (semWP2_mono with "[-]").
       iApply (sound_stm foreignSemCFGVerif lemSemCFGVerif Hverif with "[] [$]").
       iApply contractsSound.

@@ -117,17 +117,40 @@ Section CFGVerificationDerived.
     Import asn.notations.
 
     (* exec_instruction_prologue i: the Hoare precondition for executing
-       instruction i at address a.  Asserts:
-         pc ↦ a, ptstoinstr a i (instruction ownership), ∃ an, nextpc ↦ an,
+       instruction i at address a, with np the INCOMING nextpc value.  Asserts:
+         pc ↦ a, ptstoinstr a i (instruction ownership), nextpc ↦ np,
          secLeak a (PC is public → same instruction in both worlds).
        After execution, exec_instruction_epilogue i holds:
          pc ↦ an, ptstoinstr a i (unchanged), nextpc ↦ an, secLeak a, secLeak an
-       The two assertions together form the frame for one `step` invocation. *)
+       The two assertions together form the frame for one `step` invocation.
+
+       WHY np is a PARAMETER and not `asn.exist "an" ...` (which is what this
+       was until 2026-07-31): the prologue is PRODUCED (sexec_instruction
+       below), so an existential here becomes a fresh DEMONIC variable in wctx
+       on EVERY step, and demonic variables are never unified away.  That
+       linear growth of |wctx| is the measured dominant cost driver of loop
+       examples — not term size, not branch forking.
+
+       A ∀-parameter is exactly as general as an existential (∀n.{nextpc ↦ n}c{Q}
+       and {∃n.nextpc ↦ n}c{Q} are the same statement), so this costs no
+       generality, and it is NOT the same as assuming nextpc = pc — which would
+       be a real strengthening and was rejected.  The caller supplies a term it
+       already holds: after any step the epilogue below gives pc = nextpc = an,
+       so from step two onward it is just apc'.  Only the first step needs a
+       fresh variable, introduced ONCE in sexec_triple_addr.
+
+       The incoming value is genuinely dead, for the record: fun_step
+       (Machine.v) writes `nextpc := pc +ᵇ 4` BEFORE `call execute`.  nextpc IS
+       read afterwards — execute_RISCV_JAL/JALR for the link register, and
+       tick_pc — but always after that write.
+
+       Full rationale, including why the world-GC that this replaces could not
+       be proved sound: PLAN-nextpc-param.md. *)
     Definition exec_instruction_prologue (i : AST) :
-      Assertion ([ctx] ▻ ("a":: ty_xlenbits)) :=
+      Assertion ([ctx] ▻ ("a":: ty_xlenbits) ▻ ("np":: ty_xlenbits)) :=
       pc     ↦ term_var "a" ∗
       asn.chunk (chunk_user ptstoinstr [term_var "a"; term_val ty_ast i]) ∗
-      asn.exist "an" ty_xlenbits (nextpc ↦ term_var "an") ∗
+      nextpc ↦ term_var "np" ∗
       asn.formula (formula_secLeak (term_var "a"))
     .
 
@@ -143,15 +166,17 @@ Section CFGVerificationDerived.
     (* inputs:
      * - i: instruction to be executed
      * - a: term representing current pc value.
+     * - np: term representing the INCOMING nextpc value (see the prologue's
+     *   comment for why this is a parameter rather than an existential).
      * output: term representing nextpc value after executing the instruction.
      *)
     Definition sexec_instruction (i : AST) :
-      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       let inline_fuel := 10%nat in
-      fun _ a =>
+      fun _ a np =>
         ⟨ θ1 ⟩ _  <- produce
                        (exec_instruction_prologue i)
-                       [env].["a"∷_ ↦ a] ;;
+                       [env].["a"∷_ ↦ a].["np"∷_ ↦ np] ;;
         ⟨ θ2 ⟩ _  <- evalStoreSpec (sexec default_config inline_fuel (FunDef step) _) [env] ;;
         ⟨ θ3 ⟩ na <- angelic None _ ;;
         let a3 := persist__term a (θ1 ∘ θ2 ∘ θ3) in
@@ -271,10 +296,17 @@ Section CFGVerificationDerived.
     (* instead of a concrete-literal gmap lookup, so apc may stay symbolic  *)
     (* (`term_get_val` does not appear).  tbl/exits are threaded as        *)
     (* ARGUMENTS through the recursion since they are world-dependent,     *)
-    (* persisted at each step via persist_itable / persist_etable. *)
+    (* persisted at each step via persist_itable / persist_etable.          *)
+    (* anp: the current nextpc value, threaded rather than re-quantified    *)
+    (* per step (exec_instruction_prologue's comment says why).  In every   *)
+    (* recursive call it and the pc are the SAME term apc', because the     *)
+    (* epilogue establishes pc = nextpc = an after each step; they are      *)
+    (* separate parameters only so the FIRST step, which genuinely does not *)
+    (* know nextpc, can differ. *)
     Fixpoint sexec_cfg_addr (fuel : nat) :
-      ⊢ SInstrTable -> SExitTable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w tbl exits apc =>
+      ⊢ SInstrTable -> SExitTable -> STerm ty_xlenbits -> STerm ty_xlenbits ->
+        SHeapSpec (STerm ty_xlenbits) :=
+      fun w tbl exits apc anp =>
         let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
           error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
                                      debug_string_message := s |}) in
@@ -287,8 +319,9 @@ Section CFGVerificationDerived.
               (match lookup_instr tbl apc with
                | None   => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some i =>
-                   ⟨ θ1 ⟩ apc' <- sexec_instruction i apc ;;
-                   sexec_cfg_addr n' (persist_itable θ1 tbl) (persist_etable θ1 exits) apc'
+                   ⟨ θ1 ⟩ apc' <- sexec_instruction i apc anp ;;
+                   sexec_cfg_addr n' (persist_itable θ1 tbl) (persist_etable θ1 exits)
+                     apc' apc'
                end)
         end.
 
@@ -323,11 +356,18 @@ Section CFGVerificationDerived.
       fun w =>
         ⟨ θ0 ⟩ δ <- demonic_ctx id Σ ;;
         ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
-        let δ1 := env.snoc (persist ( A:= Sub Σ) δ θ1) _ a in
+        (* The ONLY nextpc variable in the whole run.  The first step cannot
+           know the incoming nextpc value, so it is quantified here — ONCE,
+           rather than once per step as exec_instruction_prologue used to do.
+           create_resources (Adequacy.v) already provides the matching
+           `∃ v, nextpc ↦ᵣ v`, so ImplPre does not change. *)
+        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
+        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
         ⟨ θ2 ⟩ _ <- produce req δ1 ;;
-        let a2 := persist__term a θ2 in
-        let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ2) in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (subst_itable ζ tbl) (subst_etable ζ exits) a2 ;;
+        let a2 := persist__term a (θ1' ∘ θ2) in
+        let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (subst_itable ζ tbl) (subst_etable ζ exits)
+                       a2 (persist__term np θ2) ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 

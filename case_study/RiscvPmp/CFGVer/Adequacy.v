@@ -1045,11 +1045,17 @@ Section AdequacyTools.
 
 
 
+    (* anp: the current nextpc value.  The PRE holds it exactly (it used to be
+       `∃ v, nextpc ↦ᵣ v`, discarding what the epilogue had just established),
+       because cexec_cfg_addr now takes it as an argument and the recursive call
+       passes `an an` — so the specific value has to match.  The POST below
+       keeps its `∃ v`: that side is the shared continuation Hk, identical in
+       the IH and in the goal, so it needs no change. *)
     Lemma sound_exec_cfg_addr_myWP2
-        {instrs exitCond fuel} (apc : RelVal ty_xlenbits)
+        {instrs exitCond fuel} (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs exitCond fuel apc Φ h →
-      interpret_scheap h ∗ pc ↦ᵣ apc ∗ (∃ v, nextpc ↦ᵣ v) ∗
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs exitCond fuel apc anp Φ h →
+      interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs ⊢
       (∀ an,
          ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
@@ -1058,8 +1064,8 @@ Section AdequacyTools.
          (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
       myWP2_loop ExitCondIprop.
     Proof.
-      revert apc h.
-      induction fuel as [|n' IH]; intros apc h Hexec.
+      revert apc anp h.
+      induction fuel as [|n' IH]; intros apc anp h Hexec.
       - cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr CHeapSpec.error] in Hexec.
         contradiction.
       - destruct apc as [v|v1 v2].
@@ -1094,8 +1100,12 @@ Section AdequacyTools.
                iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
                iModIntro.
                iRevert "Hk".
-               iApply (IH an h' Hcfg).
-               iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
+               (* `an an`: the recursive call passes the new pc as both the pc
+                  and the incoming nextpc, which is exactly what the epilogue
+                  established (pc = nextpc = an).  Hnpc' is framed directly —
+                  no `iExists`, since the PRE now names the value. *)
+               iApply (IH an an h' Hcfg).
+               iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
                CHeapSpec.error] in Hexec.
@@ -1131,13 +1141,19 @@ Section AdequacyTools.
     Proof.
       cbv [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr bind demonic_ctx demonic
            CPureSpec.demonic lift_purespec CPureSpec.assume_formula CPureSpec.assume_pathcondition].
-      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
+      (* The `∃ v, nextpc ↦ᵣ v` STAYS existential in this lemma's PRE — this is
+         the outer entry point, and that existential is exactly what
+         create_resources / ImplPre provides.  It is destructed HERE and the
+         witness npc handed to cexec_triple_addr's single nextpc demonic and to
+         sound_exec_cfg_addr_myWP2.  That is why threading the value inward
+         costs no change to the trusted surface. *)
+      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
       specialize (Htrip ι).
-      specialize (Htrip (conj Hif Hef) a).
+      specialize (Htrip (conj Hif Hef) a npc).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iApply (sound_exec_cfg_addr_myWP2 a ExitCondIprop _ _ Hexec
+      iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
         with "[$Hpc $Hnpc $Hinstrs $Hh2]").
       iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
       iApply ("Hk" $! an).
