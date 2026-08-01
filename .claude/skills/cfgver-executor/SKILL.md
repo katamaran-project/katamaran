@@ -155,11 +155,20 @@ It stops with `error` when:
 > and **`|wctx|`** again, now positively — live variables per node are a flat 20.6
 > at every trip count and the cost is quadratic anyway.
 >
-> Leading candidate mechanism, consistent with every arm but **not** yet confirmed
-> against the code: the heap is persisted forward at each step through a world
-> chain whose length grows with steps taken, so each chunk pays O(steps so far).
-> Full method, the three factorial arms and the probe files: `PLAN-encoded-instr.md`
-> §9.
+> **Mechanism: the persist-per-step story was TESTED and REFUTED.**
+> `sexec_cfg_addr` does re-persist both tables every step and `is_exit` pevals
+> every exit entry every step — so exit-table size is a per-step knob that moves
+> no steps, no heap and no tree. Measured: per-entry-per-step cost is FLAT
+> (2401/2339/2304/**2288** words at N=1/2/4/8) and the total is exactly LINEAR
+> (1.948/1.970/**1.986**). Per-step copying explains the LINEAR term only.
+> A heap chunk by contrast costs ~320× more per step and RISES
+> (749k→**1085k**) — so heap cost is consume/produce unification and solver work,
+> not copying. But inert heap chunks are ruled out as the quadratic's carrier
+> too: theirs grows only 1.45× over N=1→8 where a quadratic needs ~8×.
+> **What carries the quadratic is still unidentified** — it lives in the ACTIVE
+> consume/produce path inside `sexec_instruction`, not in anything reachable from
+> a contract. Full method, all four arms and the probe files:
+> `PLAN-encoded-instr.md` §9.
 >
 > **Trap:** `zzn` grows the heap AND the trip count together (`zzn_mem_specs n` is
 > n cells), worth 1.60× of allocation at N=8. Pin A3 (`addi a3,a3,0`) to isolate.

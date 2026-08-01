@@ -788,11 +788,51 @@ Putting it together: **per-step cost ≈ H·(α + β·k)** for heap size H and k
 already taken, hence total ≈ H·(α·S + β·S²). Leading term at large N is
 O(L·(L·N)²).
 
-The leading candidate mechanism — consistent with every arm but NOT yet confirmed
-against the code — is that the symbolic heap is persisted forward at each step
-through a world chain whose length grows with steps taken, so each of the H chunks
-pays O(k). Confirming that means instrumenting `persist`/`Sub` composition on the
-`sexec_cfg_addr` step path (`Verifier.v`), which nothing here did.
+### That mechanism was tested and is REFUTED — 2026-08-01
+
+The candidate was: the heap is persisted forward at each step through a world
+chain whose length grows with steps taken, so each chunk pays O(k).
+
+`sexec_cfg_addr` (`Verifier.v:369`) really does re-persist BOTH tables every step
+
+    sexec_cfg_addr n' (persist_itableW θ1 tbl) (persist_etable θ1 exits) ...
+
+and `is_exit` `peval`-compares the pc against every exit entry every step. So the
+**exit table is a per-step cost knob that changes no steps, no heap, no
+instruction table and no tree** — the ideal single-variable test
+(`Example/ZZDiagE.v`, 24 extra exit offsets at 100..192, none of which can ever
+match a pc). Control: the census is byte-identical to the 0-extra arm at N=1/2/4/8.
+
+| | per entry/chunk per step | total, ratio per doubling |
+|---|---|---|
+| 24 extra EXIT entries | 2401 / 2339 / 2304 / **2288** — flat, slightly falling | 1.948 / 1.970 / **1.986** — exactly LINEAR |
+| 7 extra HEAP chunks | 749k / 846k / 942k / **1085k** — rising | 2.259 / 2.227 / **2.302** — superlinear |
+
+**Verdict: per-step persisting/copying is NOT the growth.** Exit entries undergo
+exactly the persist-and-peval treatment the hypothesis blamed, and their per-step
+cost does not grow at all. What that mechanism DOES explain is the linear term —
+`b ∝ L²` is per-step table copying, O(table × steps) — which is the larger term
+below N≈25 but never the scaling wall.
+
+Two further things the same table says:
+
+- A heap chunk costs **~320× more per step** than an exit entry (750k vs 2.3k
+  words). So the heap cost is not copying either; it is consume/produce
+  unification and solver work per chunk.
+- **The heap story is also incomplete as an explanation of the quadratic.** The
+  7 added chunks are INERT (declared, never written, since A3 is pinned), and
+  their per-chunk-per-step cost grows only **1.45× from N=1 to N=8** — far too
+  slow to generate a quadratic on its own, which would need ~8×. So inert
+  heap-chunk scanning is ruled out as the main carrier too, even though heap SIZE
+  does scale the quadratic coefficient (1.457× for 7 extra cells, §9 arm H).
+
+**Still unidentified**, therefore, is what carries the quadratic. It is not
+per-step copying, not the exit table, not inert heap chunks, and not any of §9's
+earlier exclusions. It is associated with the ACTIVE part of the step — the
+instruction chunks, registers and written cell that consume/produce actually
+unify against — and with the solver work those generate. The next instrument
+would have to be inside `sexec_instruction`'s consume/produce path rather than
+anywhere reachable from the contract.
 
 ### What this rules OUT, with evidence
 
