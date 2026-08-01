@@ -90,23 +90,43 @@ It stops with `error` when:
 
 ## Backward-branch loops: exponential blowup = term duplication, not forking
 
-> **SOLVED 2026-08-01 — the `|wctx|` half of this is FIXED; read this first.**
-> Both per-step demonic variables are gone, and execution-driven `|wctx|` growth
-> is now ZERO. `an` became a threaded contract parameter
+> **`|wctx|` IS FIXED 2026-08-01, BUT IT WAS NOT THE SCALING DRIVER; read this
+> first.** Both per-step demonic variables are gone and execution-driven
+> `|wctx|` growth is now ZERO. `an` became a threaded contract parameter
 > (`exec_instruction_prologue`); `encoded_instr` became a per-ADDRESS word
 > supplied once via `SInstrTableW` (see the table-types section above).
 > Measured on the flat `zzn` reproducer: survivors per trip **+15 → +1**, and
-> that +1 is the reproducer's own `mv`. Exponent per doubling, same N=2→4
-> range: **1.44 → 1.05**; 0.90 at N=4→8. Node counts were always exactly linear
-> in N, and time now TRACKS them — the superlinear-time-vs-linear-nodes mismatch
-> that this whole section is about is gone. Full record:
-> `CFGVer/PLAN-encoded-instr.md` §7-RESULTS and `PLAN-nextpc-param.md`.
+> that +1 is the reproducer's own `mv`. So do NOT re-diagnose `|wctx|` growth on
+> a loop example — those per-step survivors no longer exist.
 >
-> So: do NOT re-diagnose `|wctx|` growth on a loop example without first
-> checking `Example/ZZSurv.v` — the per-step survivors it describes below no
-> longer exist. What remains unfixed is the term-duplication mechanism, which
-> was measured NOT to dominate at practical trip counts. If a loop still scales
-> badly, that is a NEW finding, not this one.
+> **What this did NOT buy is a slope change.** An earlier version of this banner
+> claimed "exponent 1.44 → 1.05, the curve bends". **Retracted:** that figure is
+> `zzn_raw_nc`, i.e. VC construction plus a node census, excluding `solve_vc`,
+> `solve_symbase_fetch` and `Qed`. Measured end to end with a real `Qed` on the
+> same reproducer, the exponent at N=8→16 is **1.48 and rising**.
+>
+> Where the time actually goes (N=1/8/16, parametric base): `vm_compute`
+> 1.01/14.28/39.77 (exp 1.48); **`solve_vc` 7.90/6.42/10.50 — FLAT, a fixed toll,
+> never a scaling term**; `solve_symbase_fetch` over all goals <1 s; **`Qed`
+> —/~10.4/35.12 (exp 1.76, 41% of the N=16 run)**. The driver is proof-term size
+> — `vm_compute` plus KERNEL RE-CHECKING at `Qed`, which no probe in this whole
+> investigation had measured.
+>
+> A **concrete** base (`gen_contract`) makes `solve_vc` 0.00 s with 0 goals left
+> and is ~1.8× faster at N=16, but its exponent is **1.63, steeper**. So the
+> symbolic base is a shrinking constant-factor penalty, not the driver — don't
+> chase it expecting a slope change. `solve_vc`'s residuals under a symbolic base
+> are all `0 ≤ 1024 - (4 + unsigned (p ⊕ off))`, one per instruction address plus
+> the exit (15/22/30 at N=1/8/16, +1/trip for each iteration's store address);
+> the `SyncVal p => p | NonSyncVal _ _ => False` wrapper is just how
+> `formula_relop` prints and is NOT a secret-data wall.
+>
+> Ceiling on the dev box: N=16 completes, N=32 is earlyoom-SIGTERMed at 5.80 GB.
+> Full record: `CFGVer/PLAN-encoded-instr.md` **§8-FOLLOWUP** (which supersedes
+> §7-RESULTS' timing table) and `PLAN-nextpc-param.md`.
+>
+> The term-duplication mechanism below also remains unfixed, and was measured NOT
+> to dominate at practical trip counts.
 >
 > **ROOT-CAUSED 2026-07-29 — historical, kept for the methodology.**
 > The k^trip-count term-duplication mechanism described here is real and
