@@ -1,8 +1,16 @@
 # PLAN — remove `encoded_instr`, the last per-step logical variable
 
-Status: **DONE 2026-08-01** — see §7-RESULTS at the bottom for the outcome and
-the measured numbers. Branch `nextpc-param`. Sequel to `PLAN-nextpc-param.md`,
-which removed `an` the same way but did NOT bend the curve; this one does.
+Status: **DONE 2026-08-01** (gate green, axiom-clean) — §7-RESULTS has the
+outcome, **§8-FOLLOWUP corrects its scaling claim and supersedes it**. Branch
+`nextpc-param`. Sequel to `PLAN-nextpc-param.md`, which removed `an` the same
+way.
+
+The change did what it set out to do — execution-driven `|wctx|` growth is zero,
+survivors +15/trip → +1/trip — but §8 shows that was **not** the binding
+constraint on end-to-end cost: measured with a real `Qed`, the exponent is 1.48
+at N=8→16 and rising, the growth lives in `vm_compute` and `Qed` rather than in
+the solver, and a concrete base does not flatten it either. Read §8 before
+quoting any timing from §7.
 
 ## §0. Why this is worth doing, and what "done" looks like
 
@@ -315,6 +323,14 @@ contract entry.
 
 ### Timing: a real exponent change, unlike the `an` fix
 
+> **SCOPE-CORRECTED 2026-08-01 — read §8 before quoting any number below.**
+> Every figure in this subsection is `zzn_raw_nc`, i.e. VC **construction plus a
+> node census**. It does NOT include `solve_vc`, `solve_symbase_fetch`, or `Qed`.
+> Measured end-to-end on the SAME reproducer with a real `Qed`, the exponent at
+> N=8→16 is **1.48**, not 1.05, and it is RISING. The survivor result below
+> stands and is re-confirmed; the claim that it "bends the curve" of end-to-end
+> verification cost does not. §8 has the stage breakdown and the actual driver.
+
 | N | before (s) | after (s) |
 |---|---|---|
 | 1 | 0.736 | 1.003 |
@@ -427,3 +443,115 @@ And one design lesson: prefer an **Iris-level wrapper lemma** (`itable_relW_zip_
 over `iStopProof` at a call site. `iStopProof` folds the WHOLE persistent context
 into a single conjunction, so its intro pattern breaks whenever an unrelated
 hypothesis is introduced earlier in the proof.
+
+## §8-FOLLOWUP. What the §7 numbers do and do not show — 2026-08-01
+
+Prompted by the question "does `zzn` work at N=64?". It does not, but not for a
+code reason; and answering it properly invalidated §7's headline scaling claim.
+
+### The scope error
+
+§7's timing table measures `zzn_raw_nc` — build the VC, walk it, count nodes.
+The full job is `intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.`
+Re-measured end to end on the same reproducer, with a real `Qed`:
+
+| N | wall (s) | net of ~5.8 s imports | ratio | exponent |
+|---|---|---|---|---|
+| 1 | 14.60 | 8.8 | — | — |
+| 2 | 17.39 | 11.6 | 1.32 | 0.40 |
+| 4 | 21.49 | 15.7 | 1.35 | 0.43 |
+| 8 | 36.99 | 31.2 | 1.99 | 0.99 |
+| 16 | 92.42 | 86.6 | **2.78** | **1.48** |
+
+The low-N ratios are constant-dominated; 1.48 is the only trustworthy figure and
+the exponent is RISING, not settling. So the `encoded_instr` fix did not flatten
+end-to-end cost. **What it did do is exactly what §7 claims for it** — survivor
+growth +15/trip → +1/trip, re-confirmed — which means `|wctx|` was simply not the
+binding constraint at these trip counts.
+
+### Stage breakdown, and the real driver
+
+Parametric base (`gen_contract_rel`, `term_var "p"`):
+
+| stage | N=1 | N=8 | N=16 | 8→16 exponent |
+|---|---|---|---|---|
+| `vm_compute` | 1.01 | 14.28 | 39.77 | 1.48 |
+| `solve_vc` | 7.90 | 6.42 | 10.50 | **~0.7 (flat)** |
+| `solve_symbase_fetch` (all goals) | — | — | <1 s | negligible |
+| `Qed` | — | ~10.4* | 35.12 | **1.76** |
+
+\* by subtraction. **`solve_vc` is a fixed toll, not a scaling term.** The growth
+is in `vm_compute` and — fastest of all — in `Qed`, i.e. kernel re-checking of
+the proof term, which is 41% of the N=16 run. Neither the node census nor any
+earlier probe in this investigation measured `Qed` at all.
+
+### Concrete vs parametric base
+
+`gen_contract` (literal base, `Σ = [ctx]`, no base-bound precondition) decides
+the fetch bounds inside `vm_compute`, so `solve_vc` has nothing to do:
+
+| N | base | `vm_compute` | `solve_vc` | goals left | `Qed` | net |
+|---|---|---|---|---|---|---|
+| 1 | concrete | 0.49 | **0.00** | **0** | 0.53 | 1.0 |
+| 8 | concrete | 9.68 | **0.00** | **0** | 5.64 | 15.3 |
+| 16 | concrete | 25.97 | **0.00** | **0** | 21.55 | 47.5 |
+| 16 | parametric | 39.77 | 10.50 | 30 | 35.12 | 86.6 |
+
+Concrete is ~1.8× faster at N=16 and 8.9× at N=1 — but its 8→16 exponent is
+**1.63**, if anything STEEPER than parametric's 1.48. **The symbolic base is a
+shrinking constant-factor penalty, not the scaling driver.** Do not spend effort
+on symbolic-base handling expecting a slope change.
+
+### What `solve_vc` leaves behind
+
+All of it is one shape, one per instruction address:
+
+```
+0 ≤ 1024 - (4 + unsigned (p ⊕ off))     off ∈ {0x0, 0x4, …, 0x34, 0x38}
+```
+
+— the 14 instructions plus the exit address. The `SyncVal p => p | NonSyncVal _ _
+=> False` wrapper is just how `formula_relop` prints; it is NOT a secret-data
+wall. Counts: **15 / 22 / 30** at N=1/8/16, i.e. **+1 per trip** (each iteration's
+store address `p ⊕ (56+4i)` needs its own bound). Linear, and cheap — all 30 cost
+under a second. With a concrete base there are none.
+
+### Ceiling on this box
+
+N=16 is the highest rung that completes. N=32 was killed by earlyoom
+(`signal 15`, no Coq diagnostic) 100 s into `vm_compute` at 5.80 GB RSS against
+4.6 GiB available — a MEMORY limit, not a code result. RSS grows 2.77 / 3.66 /
+5.60 GB (param) and 2.78 / 3.35 / 4.84 GB (concrete) at N=1/8/16. N=32 is
+plausibly reachable on a quieter box; N=64 was never attempted.
+
+### Measurement traps that produced three wrong answers here
+
+Recorded because each one produced a confident, wrong, reported result:
+
+- **`all: idtac "X"` prints exactly ONCE regardless of the goal count, including
+  at ZERO goals.** It is useless as a goal counter — it only says "the tactic
+  ran". This produced a fictitious "1 residual goal at every N". The working form
+  is `all: (let n := numgoals in idtac "count:" n)`, verified against known
+  0/2/3-goal states. A BARE `numgoals` sentence reports **1** whatever the true
+  count, because a plain tactic focuses one goal. For dumping, `all: (match goal
+  with |- ?G => idtac G end)` does iterate per goal.
+- **`solve_vc. solve_symbase_fetch.` is NOT `solve_vc; solve_symbase_fetch`.**
+  The period form runs the fetch tactic on the FIRST of 15–30 goals; the gate's
+  semicolon form runs it on all. The period form is what made `zzn` look like it
+  had a permanent discharge gap and a leftover `NonSyncVal` wall. `zzn`
+  discharges fully with a real `Qed` at N=1/2/4/8/16, and its reg/mem specs are
+  identical to `key_schedule_loop2`'s.
+- **`Time (all: tac)` is a syntax error** — `all:` is a sentence-level selector,
+  and an `Ltac` body cannot contain one either. Time `(t1; t2)` together, or take
+  the stage cost as a residual against the wall clock.
+
+### Not measured
+
+`key_schedule_loop2` itself at any N above 2. Everything here is the flat `zzn`
+reproducer, whose 10-instruction chain (`addi a0,a1,1` ×10) deliberately keeps
+every register term O(1). The k^trip-count TERM-DUPLICATION mechanism — three
+copies of A0 per iteration in the real masking chain — is untouched by this work
+and remains the expected wall for the real program. Probe files:
+`Example/ZZProveRun*.v`, `Example/ZZStg{P,C}*.v`, `Example/ZZQ.v` (concrete-base
+twin), `Example/ZZCtl{Ksl,Zzn}.v` (the n=2 ksl-vs-zzn control pair),
+`Example/ZZGoalsP1.v` (the goal dump).
