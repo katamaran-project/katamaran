@@ -298,8 +298,8 @@ unknown without committing to a trusted-surface change.
 |---|---|---|
 | 1 | 20 — `p, np, v, v.1, v.2, mv` + **`encoded_instr` ×14** | 20 — `p`, **`w`…`w.13`**, `np, v, v.1, v.2, mv` |
 | 2 | 35 — those + `mv.1` + **`encoded_instr` ×28** | **21** — those + `mv.1` |
-| 4 | (would be 49) | **23** |
-| 8 | (would be 105) | **27** |
+| 4 | (would be 65) | **23** |
+| 8 | (would be 125) | **27** |
 
 Growth per trip: **+15 → +1**, and that +1 is `mv`, which this reproducer's own
 `zzn_mem_specs n` declares. That is exactly §0's success criterion. The 14

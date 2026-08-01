@@ -514,7 +514,7 @@ Section CFGVerificationDerived.
              pin each block to its own goal so the next such change fails
              locally instead. *)
           + (* exit-hit / lookup-hit *)
-            iDestruct (lookup_instr_sound_repₚ instrs words _ _ _ _ a Hlk with "[$Hi $Ha]")
+            iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
               as (v) "[%Hfact #Hx]".
             destruct Hfact as (-> & Hm).
             iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
@@ -536,7 +536,7 @@ Section CFGVerificationDerived.
             rewrite Hcond.
             rsolve.
           + (* exit-miss / lookup-hit *)
-            iDestruct (lookup_instr_sound_repₚ instrs words _ _ _ _ a Hlk with "[$Hi $Ha]")
+            iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
               as (v) "[%Hfact #Hx]".
             destruct Hfact as (-> & Hm).
             cbn [ty.RVToOption].
@@ -765,7 +765,16 @@ Section CFGVerificationDerived.
         (words_of_env n (env.take (words_ctx n) lenv)).
     Proof.
       intros <-.
-      rewrite <- inst_env_take.
+      (* `rewrite <- inst_env_take` does NOT fire here even fully instantiated —
+         the goal contains `env.take (words_ctx n) (inst δ ι)` textually, but
+         inst's resolved instance arguments differ from the lemma's.  `replace`
+         matches the terms as written, which sidesteps it. *)
+      (* An explicit assert, not `replace ... by ...`: with SSReflect loaded the
+         `by` clause does not run `symmetry` before `apply`. *)
+      assert (Hcomm : env.take (words_ctx n) (inst δ ι)
+                      = inst (env.take (words_ctx n) δ) ι).
+      { symmetry. apply inst_env_take. }
+      rewrite Hcomm.
       apply words_of_env_inst.
     Qed.
 
@@ -793,12 +802,16 @@ Section CFGVerificationDerived.
         inversion Hi as [|p T'' Hihd Hitl]; subst.
         cbn.
         constructor.
-        + destruct Hhd as (v & Hv & ->).
+        + (* NB no `->` intro pattern for the word component: the `subst` above
+             already eliminated cx via Hx, so Hhd's third conjunct arrives as
+             `inst x ι = SyncVal (words v)` — exactly the goal — and a rewrite
+             would find nothing left to act on. *)
+          destruct Hhd as (v & Hv & Hcx).
           destruct Hihd as (v' & Hv' & Him).
-          cbn in Hv, Hv', Him.
+          cbn in Hv, Hv', Him, Hcx.
           assert (v' = v) as -> by (rewrite Hv in Hv'; now injection Hv').
           exists v.
-          split; [exact Hv|split; [exact Him|exact Hx]].
+          split; [exact Hv|split; [exact Him|exact Hcx]].
         + apply IH; assumption.
     Qed.
 
@@ -875,6 +888,28 @@ Section CFGVerificationDerived.
       split; reflexivity.
     Qed.
 
+    (* Iris-level form of itable_relW_zip, so the call site can `iApply` it with
+       a framing pattern naming exactly the three hypotheses it needs.  Going
+       through iStopProof instead is fragile: it folds the WHOLE persistent
+       context into one conjunction, so the intro pattern has to be adjusted
+       every time an unrelated hypothesis appears earlier in the proof. *)
+    Lemma itable_relW_zip_pred {w} (instrs : gmap (bv xlenbits) AST)
+        (words : bv xlenbits -> bv word) (T : SInstrTable w)
+        (ws : list (Term (wctx w) ty_word)) (cws : list (RelVal ty_word)) :
+      (itable_rel instrs T ∗
+       ((fun ι => List.Forall2
+           (fun (x : Term (wctx w) ty_word) (cx : RelVal ty_word) =>
+              inst (T := fun Σ => Term Σ ty_word) x ι = cx) ws cws) : Pred w) ∗
+       wtable_rel words T cws
+       ⊢ itable_relW instrs words (zip_words T ws))%I.
+    Proof.
+      constructor.
+      intros ι Hpc (Hi & Hw & Hg).
+      (* eapply, not apply: cws does not occur in the conclusion, so it stays an
+         evar until the Forall2 premise pins it from Hw. *)
+      eapply itable_relW_zip; eassumption.
+    Qed.
+
     (* Transport of wtable_rel from the contract context Σ' to the executor's
        world, exactly mirroring itable_rel_of_faith_forget above. *)
     Lemma wtable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
@@ -914,7 +949,7 @@ Section CFGVerificationDerived.
       intros ι Hpc Hrel.
       unfold forgetting, RNEnv, RInst in Hrel.
       cbn in Hrel.
-      eapply forall2_map_impl; [|exact (words_of_env_take_inst _ _ _ Hrel)].
+      eapply forall2_map_impl; [|exact (words_of_env_take_inst _ _ Hrel)].
       intros x cx Hx.
       rewrite inst_persist.
       exact Hx.
@@ -989,10 +1024,7 @@ Section CFGVerificationDerived.
                         (List.map (fun x => persist__term x (acc_trans (acc_trans θ1 θ1') θ2))
                            (words_of_env (length tbl)
                               (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
-          { iStopProof.
-            constructor.
-            intros ι Hpc (((Hi0 & Hw0) & Hws)).
-            now apply itable_relW_zip. }
+          { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
           iApply (rexec_cfg_addr instrs words exitCond fuel _ _ with "[$Hi $He]").
           (* TWO RVal premises now: the pc, persisted across θ1' ∘ θ2, and the
              initial nextpc, persisted across θ2.  Bulleted rather than

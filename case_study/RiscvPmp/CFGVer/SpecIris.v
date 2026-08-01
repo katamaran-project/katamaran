@@ -330,12 +330,15 @@ Module RiscvPmpIrisInstanceWithContracts.
       | _ => idtac
       end.
 
+  (* Both directions are now essentially the identity: interp_ptsto_instr NAMES
+     the word (Sig.v's ptstoinstr gained a ty_word argument), so there is no `∃ v`
+     left to introduce or eliminate.  The old scripts opened it with
+     `iIntros "[%op ...]"` / closed it with `iExists cl`; both are gone. *)
   Lemma open_ptsto_instr_sound `{sailGS2 Σ} :
     ValidLemma RiscvPmpCFGVerifSpec.lemma_open_ptsto_instr.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
-    iIntros "[%op (Hptsto & Henc & HsL )]".
-    iExists op.
+    iIntros "(Hptsto & Henc & HsL)".
     now iFrame.
   Qed.
 
@@ -344,7 +347,6 @@ Module RiscvPmpIrisInstanceWithContracts.
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     iIntros "(Hptsto & Henc & HsL & _)".
-    iExists cl.
     now iFrame.
   Qed.
 
