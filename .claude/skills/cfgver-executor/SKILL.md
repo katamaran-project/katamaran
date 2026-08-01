@@ -130,11 +130,39 @@ It stops with `error` when:
 > its own arm — the identical artifact as "the curve bends". Its real edge is a
 > constant 1.85× at N=8, shrinking from 2.3× at N=4.
 >
-> **Still open: what makes `vm_compute` superlinear.** Ruled out: residual bounds
-> goals, final tree size, `postprocess`, `solve_vc`, `|wctx|`, symbolic-base
-> handling. Remaining suspect is raw-tree TERM size, which every node census here
-> is blind to — `solve_uvars` substitutes definitions back in, shrinking node
-> counts while expanding terms.
+> **ANSWERED 2026-08-01 — the cost law.** Measured in `allocated_words` (OCaml GC
+> stats via `OCAMLRUNPARAM='v=0x400' coqc`, deterministic to 0.0002% where wall
+> clock on this box varied 2.3× on identical code):
+>
+>     work  ≈  (symbolic heap size) × (α·S + β·S²),   S = instruction steps executed
+>
+> On the fixed-heap reproducer this is `alloc(N) = −38.6M + 165.9M·N + 6.754M·N²`,
+> fit on N=1,2,8 and **correct to 0.001% at a held-out N=4**. The quadratic term
+> only overtakes the linear one at **N ≈ 25**, which is exactly why the exponent
+> RISES with N (1.23 / 1.34 / 1.49 / 1.65 predicted at N=8/16/32/64) — that is the
+> whole explanation for the "1.48 and rising" above.
+>
+> **The tree is EXACTLY affine in N** (nodes, path-condition sum, live-variable
+> sum, term size, depth — all `a+b·N` to 0.0000%), so the quadratic work leaves
+> **no trace at all** in the tree. Both factors matter and program length L enters
+> BOTH — the heap holds one `ptstoinstr` chunk per instruction and S = L·N — so
+> long programs hurt worse than trip counts.
+>
+> **Term size is REFUTED as the suspect** (it was the previous entry here):
+> sublinear at `159 + 491·N`, largest single term pinned at **10** for every N,
+> and the measure is exact (no unmeasured tuple/record leaves). Also newly ruled
+> out: **fuel** (4.4× the fuel = +0.04% allocation, every counter byte-identical)
+> and **`|wctx|`** again, now positively — live variables per node are a flat 20.6
+> at every trip count and the cost is quadratic anyway.
+>
+> Leading candidate mechanism, consistent with every arm but **not** yet confirmed
+> against the code: the heap is persisted forward at each step through a world
+> chain whose length grows with steps taken, so each chunk pays O(steps so far).
+> Full method, the three factorial arms and the probe files: `PLAN-encoded-instr.md`
+> §9.
+>
+> **Trap:** `zzn` grows the heap AND the trip count together (`zzn_mem_specs n` is
+> n cells), worth 1.60× of allocation at N=8. Pin A3 (`addi a3,a3,0`) to isolate.
 >
 > A **concrete** base (`gen_contract`) makes `solve_vc` 0.00 s with 0 goals left
 > and is ~1.8× faster at N=16, but its exponent is **1.63, steeper**. So the

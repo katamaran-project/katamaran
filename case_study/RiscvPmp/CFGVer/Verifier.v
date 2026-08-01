@@ -127,9 +127,13 @@ Section CFGVerificationDerived.
        WHY np is a PARAMETER and not `asn.exist "an" ...` (which is what this
        was until 2026-07-31): the prologue is PRODUCED (sexec_instruction
        below), so an existential here becomes a fresh DEMONIC variable in wctx
-       on EVERY step, and demonic variables are never unified away.  That
-       linear growth of |wctx| is the measured dominant cost driver of loop
-       examples — not term size, not branch forking.
+       on EVERY step, and demonic variables are never unified away, so |wctx|
+       grows linearly in steps.  Keeping it flat is worth doing on its own
+       merits, but do NOT read this as the cost driver of loop examples: with
+       both this and `encoded_instr` fixed at source, |wctx| is measured flat
+       (a constant 20.6 live variables per node at every trip count) and
+       `vm_compute` is STILL an exact quadratic.  The measured law is
+       `work ~ (heap size) x (steps + steps^2)`; see PLAN-encoded-instr.md §9.
 
        A ∀-parameter is exactly as general as an existential (∀n.{nextpc ↦ n}c{Q}
        and {∃n.nextpc ↦ n}c{Q} are the same statement), so this costs no

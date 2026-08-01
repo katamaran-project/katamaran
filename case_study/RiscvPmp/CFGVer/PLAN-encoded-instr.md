@@ -643,6 +643,13 @@ Recorded because each one produced a confident, wrong, reported result:
 
 ### Still open: WHAT makes `vm_compute` superlinear
 
+> **ANSWERED 2026-08-01 — see §9.** The cost law is
+> `work ≈ (heap size) × (α·S + β·S²)` with `S` the number of instruction steps
+> executed. It is an exact quadratic, the crossover is N≈25, and the quadratic
+> term is invisible in the tree: every structural counter is *exactly* affine in
+> N. The "remaining suspect" below (term size) is **refuted** — measured
+> sublinear, `tmax` pinned at 10. Read §9 instead of the paragraph below.
+
 Unanswered, and now the only question that matters. What is ruled OUT:
 
 - **Not the residual bounds goals** — the concrete base has zero of them and the
@@ -684,3 +691,142 @@ twin), `Example/ZZCtl{Ksl,Zzn}.v` (the n=2 ksl-vs-zzn control pair),
 `Example/ZZGoalsP1.v` (the goal dump), `Example/ZZSize.v` + `ZZSz{P,C}*.v` (the
 postprocessed node census), `Example/ZZTSize.v` (the unfinished term-size
 measure).
+
+## §9-DIAGNOSIS. The cost law, measured — 2026-08-01
+
+§8 closed with "what makes `vm_compute` superlinear" open, and named term size as
+the last suspect. It is not term size. The answer is a **quadratic in the number
+of instruction steps, multiplied by the symbolic heap size**, and none of it is
+visible in the tree.
+
+### Method: allocated words, not wall clock
+
+`OCAMLRUNPARAM='v=0x400' coqc …` prints OCaml GC stats at exit. **`allocated_words`
+is the metric this investigation should have been using all along:**
+
+- **Deterministic.** Two runs of the same probe differed by 1.1k words in 527M
+  (0.0002%). Wall clock on this box differed by **2.3×** between two runs of the
+  identical probe set on the same day (B1/B2/B4 = 1.055/3.567/7.107 s in one run,
+  0.679/1.527/3.491 s in the next). Every wall-clock exponent in §7 and §8 was
+  measured through that noise.
+- **Immune to page-cache state and to memory pressure**, which §8's N=16 runs
+  (5.6 GB RSS on a 15 GB box) were not.
+- Subtract an imports-only baseline probe (same `Require`, no `Eval`); it is
+  ~393.3 M words here.
+
+Time tracks allocation closely (ratios 2.25/2.29/2.50 against 2.39/2.29/2.35), so
+allocation is a faithful proxy for cost, just a much quieter one.
+
+### The tree is EXACTLY affine; only the work is quadratic
+
+`Example/ZZDiagCommon.v` censuses the RAW tree for what accumulates along a path
+(path-condition length, live-context size, term size, depth) rather than nodes
+alone. On the fixed-heap reproducer `zzf` at N=1/2/4/8, **every counter fits
+`a + b·N` with 0.0000% error**:
+
+| counter | model |
+|---|---|
+| nodes | 42 + 2126·N |
+| path-condition sum | −15311 + 36142·N |
+| live-variable sum | 619 + 43902·N |
+| term size | 159 + 491·N |
+| depth | 41 + 1322·N |
+
+Allocation is the only thing that is not:
+
+    alloc(N) = −38.6M + 165.9M·N + 6.754M·N²      (fit on N=1,2,8)
+
+Held out at N=4 it predicts within **0.001%**. This is a clean quadratic, not a
+fitted curve.
+
+It also explains §8's central puzzle — why the exponent *rises* with N. The
+quadratic term only overtakes the linear one at **N = 24.6**:
+
+| N | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|
+| predicted exponent per doubling | 1.23 | 1.34 | 1.49 | 1.65 |
+
+§8 measured 1.48 for wall time at 8→16 against 1.34 here for allocation; the gap
+is the memory pressure of its N=16 run, not algorithmics.
+
+### The law: work ≈ (heap size) × (α·S + β·S²), S = instruction steps
+
+Three factorial arms, each fitting a quadratic to <0.005% held-out error:
+
+- **Body length L ∈ {9, 14, 24}** at N=1/2/4/8 (`Example/ZZDiagL.v`). The linear
+  coefficient `b` scales as ~L² (b/L = 7.26 / 11.85 / 23.93 M) and the quadratic
+  `c` as ~L^2.3 (c/L² = 0.0291 / 0.0345 / 0.0454 M). Both are consistent with
+  per-step cost ∝ heap size, since the heap holds ONE `ptstoinstr` chunk per
+  instruction, and with steps S = L·N.
+- **Heap size at fixed trip count** (`zzm_contract`, 1 trip, k ∈ {1,2,4,8} cells).
+  Each extra chunk costs ~10 M words over 14 steps (9.45 / 9.97 / 11.01 per cell,
+  i.e. ~0.71 M per chunk per step) while nodes move 2168→2175 and **term size is
+  identical at 650**. Per-step cost is linear in heap size.
+- **Heap large but CONSTANT while trips grow** (`Example/ZZDiagH.v`, 8 cells).
+  Against the 1-cell arm, the linear term scales 1.501× and the quadratic 1.457×
+  — the SAME factor, so the crossover barely moves (24.6 → 25.3). The quadratic
+  is therefore not a second, independent mechanism: it is the same per-step
+  heap work, with a factor that itself grows linearly in steps taken.
+
+Putting it together: **per-step cost ≈ H·(α + β·k)** for heap size H and k steps
+already taken, hence total ≈ H·(α·S + β·S²). Leading term at large N is
+O(L·(L·N)²).
+
+The leading candidate mechanism — consistent with every arm but NOT yet confirmed
+against the code — is that the symbolic heap is persisted forward at each step
+through a world chain whose length grows with steps taken, so each of the H chunks
+pays O(k). Confirming that means instrumenting `persist`/`Sub` composition on the
+`sexec_cfg_addr` step path (`Verifier.v`), which nothing here did.
+
+### What this rules OUT, with evidence
+
+- **Term size.** Sublinear (159 + 491·N), and `dc_tmax` is pinned at **10** for
+  every N and every arm. `dc_nest = 0`, so the measure is exact rather than an
+  approximation — the §8 worry that `term_tuple`/`term_record` might hide size
+  does not apply to `zzn`. §8's last suspect is dead.
+- **Fuel.** 4.4× the fuel (68 → 300 at N=4) costs **+0.04%** allocation and leaves
+  every structural counter byte-identical. Excess fuel is free; do not tune it.
+- **`|wctx|` growth.** Live-variable sum is exactly affine and the per-node average
+  is a flat 20.6 at every N. The `an` + `encoded_instr` fixes did what §7 claims,
+  and the cost stayed quadratic anyway — so `|wctx|` was never the driver.
+  **`Verifier.v`'s prologue comment claiming it is has been corrected.**
+- **The measuring instrument.** A control using only `SymProp.Statistics.size`
+  allocates within **0.3%** of the full census at every N, so the quadratic is in
+  tree CONSTRUCTION.
+
+### A confound in `zzn` that §7/§8 did not isolate
+
+`zzn_mem_specs n` declares **n** memory cells, so the reproducer grows the heap
+AND the trip count together. Holding A3 still (`zzf_instrs`, `addi a3,a3,0`) pins
+the heap at one cell for every N. With the confound removed the live-variable sum
+goes from mildly superlinear (2.08, 2.18 per doubling) to **exactly linear**
+(1.99, 1.99) — the residual growth §7 attributed to `mv` was entirely this. It is
+also worth 1.60× of allocation at N=8 (2757.8 M vs 1721.2 M), so any `zzn` number
+quoted from §7/§8 carries it.
+
+### Measurement traps added to §8's list
+
+- **A probe that FAILS TO COMPILE reports the baseline allocation**, which reads
+  as "this variant is free". Always gate on `Finished transaction` before
+  believing an `allocated_words` figure.
+- `SymProp.Statistics.size` already returns `N`, not `nat`.
+
+### Consequences
+
+- **`vm_compute` is the only worthwhile target** (§8 established `Qed` re-runs it
+  via the VM cast, `solve_vc` is flat, `postprocess` is free). Within it, the
+  lever is (a) the number of instruction steps and (b) the symbolic heap size —
+  and note L enters BOTH, which is why long programs hurt more than trip counts.
+- **Shrinking `|wctx|` further is not worth doing for speed.** That avenue is now
+  measured out; the two source fixes were correct but the slope lives elsewhere.
+- **Predicted ceiling.** At N=32 the model gives 12.2 G words (~2.8× N=16) and at
+  N=64 38.2 G (~3.1×). N=32 was already killed by earlyoom at N=32 in §8; nothing
+  here changes that verdict, and the model says N=64 is ~22× N=16 in work.
+
+### Probe files
+
+`Example/ZZDiagCommon.v` (census + `zzf`/`zzm` isolation arms), `ZZDiagL.v`
+(body-length factorial), `ZZDiagH.v` (constant large heap), runners
+`ZZDg{A,B,C,S,F,H}*.v` and `ZZDgL{9,24}_*.v`. All THROWAWAY, none in
+`_CoqProject`; compile via `rocq_compile_file`, or via `coqc` directly when the
+`OCAMLRUNPARAM` GC stats are wanted.
