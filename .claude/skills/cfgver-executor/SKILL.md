@@ -100,17 +100,41 @@ It stops with `error` when:
 > a loop example — those per-step survivors no longer exist.
 >
 > **What this did NOT buy is a slope change.** An earlier version of this banner
-> claimed "exponent 1.44 → 1.05, the curve bends". **Retracted:** that figure is
-> `zzn_raw_nc`, i.e. VC construction plus a node census, excluding `solve_vc`,
-> `solve_symbase_fetch` and `Qed`. Measured end to end with a real `Qed` on the
-> same reproducer, the exponent at N=8→16 is **1.48 and rising**.
+> claimed "exponent 1.44 → 1.05, the curve bends". **Retracted:** end to end with
+> a real `Qed`, the exponent at N=8→16 is **1.48 and rising**. The error was the
+> **N range**, not measurement scope — raw census, postprocess census and
+> `vm_compute` on the real goal all agree to within noise (`postprocess` is
+> free), but the exponent is not constant: 1.86 / 1.05 / 0.90 / **1.52** at
+> 1→2 / 2→4 / 4→8 / 8→16. The old figure was the two favourable middle windows.
+> **Never quote an exponent from one doubling, or from a series ending at N=8.**
 >
 > Where the time actually goes (N=1/8/16, parametric base): `vm_compute`
-> 1.01/14.28/39.77 (exp 1.48); **`solve_vc` 7.90/6.42/10.50 — FLAT, a fixed toll,
-> never a scaling term**; `solve_symbase_fetch` over all goals <1 s; **`Qed`
-> —/~10.4/35.12 (exp 1.76, 41% of the N=16 run)**. The driver is proof-term size
-> — `vm_compute` plus KERNEL RE-CHECKING at `Qed`, which no probe in this whole
-> investigation had measured.
+> 1.01/14.28/39.77; **`solve_vc` 7.90/6.42/10.50 — FLAT, a fixed toll, never a
+> scaling term**; `solve_symbase_fetch` over all goals <1 s; **`Qed`
+> —/~10.4/35.12, 41% of the N=16 run**.
+>
+> **`Qed` is not checking a big proof term — it re-runs the executor.** The
+> postprocessed tree (what `safeE` unfolds) is **1 node** at N=16 with a concrete
+> base: the obligation is EMPTY and `Qed` still costs 21.55 s. Cause is the **VM
+> cast** — the `vm_compute` tactic emits a `VMcast` and the kernel re-executes
+> the same normalization, so `Qed ≈ vm_compute` (0.58–1.06× across both bases,
+> every N) and **the symbolic execution is paid for twice**. Total ≈ 1.7–1.9×
+> `vm_compute`. Consequence for anyone optimising here: attack `vm_compute`,
+> since a win there carries through to `Qed`; do NOT attack the final tree
+> (unquantify, post-hoc pruning, fewer residual goals) — it already costs ~nothing.
+>
+> **The archived world-GC was not better.** Same footing, N=1→8 exponents:
+> GC-era baseline **2.10**, world+chunk GC **1.35**, both source fixes **1.27**.
+> Both interventions take ~2.1 to ~1.3; the GC's famous "speedup grows with N
+> (2.24× → 10.67×)" is a ratio against a superlinear BASELINE, not flatness in
+> its own arm — the identical artifact as "the curve bends". Its real edge is a
+> constant 1.85× at N=8, shrinking from 2.3× at N=4.
+>
+> **Still open: what makes `vm_compute` superlinear.** Ruled out: residual bounds
+> goals, final tree size, `postprocess`, `solve_vc`, `|wctx|`, symbolic-base
+> handling. Remaining suspect is raw-tree TERM size, which every node census here
+> is blind to — `solve_uvars` substitutes definitions back in, shrinking node
+> counts while expanding terms.
 >
 > A **concrete** base (`gen_contract`) makes `solve_vc` 0.00 s with 0 goals left
 > and is ~1.8× faster at N=16, but its exponent is **1.63, steeper**. So the

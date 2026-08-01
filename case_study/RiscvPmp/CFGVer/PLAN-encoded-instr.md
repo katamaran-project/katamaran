@@ -449,11 +449,32 @@ hypothesis is introduced earlier in the proof.
 Prompted by the question "does `zzn` work at N=64?". It does not, but not for a
 code reason; and answering it properly invalidated §7's headline scaling claim.
 
-### The scope error
+### The error is the N RANGE, not the measurement scope
 
-§7's timing table measures `zzn_raw_nc` — build the VC, walk it, count nodes.
-The full job is `intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.`
-Re-measured end to end on the same reproducer, with a real `Qed`:
+> **This subsection was itself rewritten once.** A first version blamed §7's
+> figure on measuring only VC CONSTRUCTION (`zzn_raw_nc`) and excluding
+> `solve_vc`/`solve_symbase_fetch`/`Qed`. **That diagnosis is wrong** and is kept
+> here only so nobody re-derives it. The stages agree to within noise:
+>
+> | N | raw census (§7's metric) | postprocess census | `vm_compute` on the real goal |
+> |---|---|---|---|
+> | 1 | 1.003 | 1.009 | 1.01 |
+> | 8 | 14.146 | 14.291 | 14.28 |
+> | 16 | — | 40.985 | 39.77 |
+>
+> `postprocess` is FREE (re-confirming the 2026-07-29 finding), and `Qed ≈
+> vm_compute` (next subsection). So the raw census is a perfectly good proxy for
+> the RATIO, and §7 was not measuring the wrong thing.
+
+§7 was measuring the right thing over **too short an N range**, and quoted the
+two most favourable windows. The exponent per doubling is not constant:
+
+| window | 1→2 | 2→4 | 4→8 | **8→16** |
+|---|---|---|---|---|
+| exponent | 1.86 | **1.05** | **0.90** | **1.52** |
+
+§7 quoted the middle two and concluded "the curve bends". End to end with a real
+`Qed`, the same series reads:
 
 | N | wall (s) | net of ~5.8 s imports | ratio | exponent |
 |---|---|---|---|---|
@@ -463,11 +484,55 @@ Re-measured end to end on the same reproducer, with a real `Qed`:
 | 8 | 36.99 | 31.2 | 1.99 | 0.99 |
 | 16 | 92.42 | 86.6 | **2.78** | **1.48** |
 
-The low-N ratios are constant-dominated; 1.48 is the only trustworthy figure and
-the exponent is RISING, not settling. So the `encoded_instr` fix did not flatten
+The low-N ratios are constant-dominated; **1.48 is the only trustworthy figure,
+and the exponent is RISING.** So the `encoded_instr` fix did not flatten
 end-to-end cost. **What it did do is exactly what §7 claims for it** — survivor
 growth +15/trip → +1/trip, re-confirmed — which means `|wctx|` was simply not the
 binding constraint at these trip counts.
+
+**Rule this establishes: never quote an exponent from a single doubling, and
+never from a series that stops at N=8.** Both mistakes in this file's history
+(and the world-GC's, below) come from exactly that.
+
+### Why the world-GC "worked" and this "didn't" — it didn't either
+
+The obvious objection: the archived world-GC (`PLAN-unquantify-forward.md`,
+tag `archive/gc-attempt-2026-07`) removed the same per-step variables and was
+reported at **10.7× with the speedup GROWING in N** (2.24× at N=1 → 10.67× at
+N=8). Fixing them at source instead gives no slope change. Same intervention,
+opposite verdict — so one of the two verdicts is an artifact.
+
+It is the GC's. Put all three arms on the same footing (all `Eval vm_compute` on
+the census, same reproducer):
+
+| N | GC-era baseline | world+chunk GC | both source fixes |
+|---|---|---|---|
+| 1 | 1.030 | 0.459 | 1.003 |
+| 2 | 6.571 | 0.884 | 3.644 |
+| 4 | 16.279 | 3.327 | 7.568 |
+| 8 | 81.454 | 7.632 | 14.146 |
+| **exponent N=1→8** | **2.10** | **1.35** | **1.27** |
+
+**The GC arm's own slope is ~1.35; the source fixes' is ~1.27.** Both take a
+~2.10 baseline down to ~1.3. They had the SAME effect on the exponent, which is
+what the shared mechanism predicts. The GC's "speedup grows with N" headline is a
+ratio against a steeply superlinear baseline — the baseline's 2.10 is what grows,
+not the GC arm's flatness. §7's "the curve bends" is the identical artifact,
+measured a different way, two sessions apart.
+
+Where the GC IS genuinely ahead is the CONSTANT: 7.632 vs 14.146 s at N=8, a
+1.85× edge — and shrinking (2.3× at N=4 → 1.85× at N=8), as expected if both
+remove the same asymptotic term and the GC additionally collects residue the
+source fix leaves live. Two candidates for that residue, neither confirmed: the
+14 word variables, introduced once at contract entry but live in EVERY world
+thereafter; and `mv`, of which this reproducer's own `zzn_mem_specs n` declares
+n, each live until its cell is written.
+
+**Caveats.** The GC arm was never measured past N=8, so it may well rise to ~1.5
+at 8→16 as the source fix does — its 1.35 and the source fix's 1.27 are NOT
+distinguishable given this box's 1.31× spread on identical code. Only the
+~2.10 → ~1.3 shift is real. And the GC is unsound and unprovable (see the memory
+note), so it was never an available lever regardless.
 
 ### Stage breakdown, and the real driver
 
@@ -481,9 +546,40 @@ Parametric base (`gen_contract_rel`, `term_var "p"`):
 | `Qed` | — | ~10.4* | 35.12 | **1.76** |
 
 \* by subtraction. **`solve_vc` is a fixed toll, not a scaling term.** The growth
-is in `vm_compute` and — fastest of all — in `Qed`, i.e. kernel re-checking of
-the proof term, which is 41% of the N=16 run. Neither the node census nor any
+is in `vm_compute` and in `Qed`, which is 41% of the N=16 run. No node census or
 earlier probe in this investigation measured `Qed` at all.
+
+### `Qed` is not checking a big proof term — it is re-running the executor
+
+The natural reading of "`Qed` is 41% of the run" is that the proof term is huge.
+**It is not.** Node census of the POSTPROCESSED tree — the thing `safeE` unfolds
+and the kernel checks (`safeE P := VerificationConditionWithErasure
+(erase_symprop P)`):
+
+| N=16 | postprocessed tree | `vm_compute` | `Qed` |
+|---|---|---|---|
+| concrete base | **1 node** (`nc_block := 1`, every other counter 0) | 25.97 s | 21.55 s |
+| parametric base | 67 nodes (30 `assertk`, 35 `demonicv`, 2 `assumek`) | 39.77 s | 35.12 s |
+
+With a concrete base the obligation is **empty** — the whole VC collapses to
+`block`, there is nothing to prove — and `Qed` still costs 21.55 s. So the cost
+cannot be the proof term.
+
+It is the **VM cast**. The `vm_compute` tactic emits a `VMcast` into the proof
+term, and the kernel re-executes that same normalization at `Qed`. Hence
+`Qed ≈ vm_compute`, which holds across both bases and every N:
+
+| `Qed` / `vm_compute` | N=1 | N=8 | N=16 |
+|---|---|---|---|
+| concrete | 1.06 | 0.58 | 0.83 |
+| parametric | — | 0.73 | 0.88 |
+
+**Consequence: you pay for the symbolic execution TWICE — once in the tactic,
+once in the kernel — and essentially nothing for the obligation.** Total ≈
+1.7–1.9× `vm_compute`, so `vm_compute` is the only worthwhile target, and any
+speedup there carries through to `Qed` proportionally. Conversely, work aimed at
+shrinking the FINAL tree (unquantify, post-hoc pruning, fewer residual goals) is
+attacking something that already costs ~nothing.
 
 ### Concrete vs parametric base
 
@@ -545,6 +641,37 @@ Recorded because each one produced a confident, wrong, reported result:
   and an `Ltac` body cannot contain one either. Time `(t1; t2)` together, or take
   the stage cost as a residual against the wall clock.
 
+### Still open: WHAT makes `vm_compute` superlinear
+
+Unanswered, and now the only question that matters. What is ruled OUT:
+
+- **Not the residual bounds goals** — the concrete base has zero of them and the
+  steepest `Qed` growth of anything measured.
+- **Not the proof term / final tree size** — 1 node at N=16, concrete.
+- **Not `postprocess`** — free, to within noise (table at the top of §8).
+- **Not `solve_vc`** — flat.
+- **Not `|wctx|` growth** — that is what this whole plan removed.
+- **Not symbolic-base handling** — concrete is steeper (1.63 vs 1.48).
+
+The remaining suspect is the size of the TERMS the raw tree carries, which no
+instrument here can see: every census counts NODES, and `postprocess`'s
+`solve_uvars` eliminates variables **by substitution** (`uctx_subst`), re-inlining
+each `v = t` definition — which shrinks the node count while EXPANDING the
+surviving terms. This is the same mechanism that defeated the SSA-naming attempt
+(see the memory note).
+
+A term-size measure was started (`Example/ZZTSize.v`: `tsize`/`fsize`/`sptsize`,
+summing every `Term` in a `SymProp`, reported raw-vs-postprocessed as a pair) and
+is NOT finished: the mutual fixpoint over `Term` and `Env (Term Σ)` is rejected by
+the guard checker, because `Env` is a separate inductive parameterized by
+`Term Σ` rather than mutually inductive with it, so the recursive call on a field
+is not seen as structural. Two ways out, neither tried: treat `term_tuple`/
+`term_record` as leaves and separately count them (exact if the count is zero —
+worth checking first, it may well be for `zzn`), or find the idiom `Terms.v`'s own
+`Fixpoint`s (`subst`, `peval`, `occurs_check`) use for the same nesting.
+Note the pattern arity trap already hit: `env.snoc` needs THREE pattern arguments
+(`env.snoc ts' b t`) because `b` is a constructor argument, not a parameter.
+
 ### Not measured
 
 `key_schedule_loop2` itself at any N above 2. Everything here is the flat `zzn`
@@ -554,4 +681,6 @@ copies of A0 per iteration in the real masking chain — is untouched by this wo
 and remains the expected wall for the real program. Probe files:
 `Example/ZZProveRun*.v`, `Example/ZZStg{P,C}*.v`, `Example/ZZQ.v` (concrete-base
 twin), `Example/ZZCtl{Ksl,Zzn}.v` (the n=2 ksl-vs-zzn control pair),
-`Example/ZZGoalsP1.v` (the goal dump).
+`Example/ZZGoalsP1.v` (the goal dump), `Example/ZZSize.v` + `ZZSz{P,C}*.v` (the
+postprocessed node census), `Example/ZZTSize.v` (the unfinished term-size
+measure).
