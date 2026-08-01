@@ -377,19 +377,49 @@ Verifies unchanged. `Sig.v`'s precision annotation
 ADDRESS determines both the word and the AST, so `use lemma open_ptsto_instr
 [tmp]` still resolves with its single argument and **`Machine.v` is untouched**.
 
-### Methodology correction worth keeping
+### Methodology: exactly when `-vos` checks a proof
 
-**`-vos` does NOT skip proof bodies inside a `Section` with a `Context`** — Coq
-must run the proof to compute which section variables to generalize over.
-Verified both ways on scratch files (unsectioned false lemma → exit 0; sectioned
-false lemma → error). Every CFGVer file wraps its content in
-`Section CFGVerificationDerived`, so these `vos` sweeps DO check tactics, and
-they caught two real errors (`congruence` chokes on `bv`'s proof field;
-SSReflect rejects `rewrite H1, H2 in H`).
+**`-vos` skips a proof body UNLESS the enclosing section has section VARIABLES
+whose usage must be read off the proof term** (no `Proof using` annotation). A
+bare `Section` is NOT enough — it needs `Context`/`Variable`. Verified both ways
+on scratch files: an unsectioned false lemma compiles under `-vos` (exit 0); the
+same lemma inside `Section S. Context (X : Type).` fails.
 
-The exceptions are what bit: code at file top level (`Tables.v`) or in a plain
-`Module` (`Spec.v`'s `valid_execute_fetch`) IS skipped. `Tables.v`'s two new
-`bv.eqb` lemmas were both wrong and only `full` mode found them — a bare `cbn`
-unfolds `bv.eqb` into `N.eqb (bv.bin _) (bv.bin _)` so the rewrite stops
-matching, and `destruct (bv.eqb_spec …)` will not abstract a closed scrutinee
-sitting inside an `if`.
+Concretely in this tree — worth knowing before trusting any `vos` sweep here:
+
+| where | section variables? | `vos` checks proofs? |
+|---|---|---|
+| `VerifierRel.v` `Section Soundness` | `Context {Σ} {GS}` | **yes** |
+| `VerifierRel.v` `Section Shallow` / `Section Relational` | none | **no** |
+| `Adequacy.v` | `Context {Σ} {GS}` | **yes** |
+| `Tables.v` (file top level) | n/a | **no** |
+| `Spec.v` / `SpecIris.v` (plain `Module`) | n/a | **no** |
+
+An earlier note in this session over-claimed that the sweeps validated
+`rexec_cfg_addr` — they did not; it lives in `Section Relational`. ALL FIVE
+proof errors that survived to `full` mode were in the "no" rows:
+
+- `Tables.v`'s two new `bv.eqb` lemmas. A bare `cbn` unfolds `bv.eqb` into
+  `N.eqb (bv.bin _) (bv.bin _)` so the rewrite stops matching (use
+  `cbn [words_of_list]`), and `destruct (bv.eqb_spec …)` will NOT abstract a
+  closed scrutinee sitting inside an `if` — decide the boolean first.
+- `SpecIris.v`'s `open`/`close_ptsto_instr_sound`: `interp_ptsto_instr` no longer
+  hides the word behind an `∃`, so the destructuring intro pattern and the
+  matching `iExists` both had to go.
+- `itable_relW_zip`'s `->` intro pattern for the word conjunct: the preceding
+  `subst` already eliminates `cx` via `Hx`, so the equation arrives in exactly
+  the form the goal wants and a rewrite finds nothing to act on.
+- `words_of_env_take_inst`: `rewrite <- inst_env_take` does not fire even fully
+  instantiated — `inst`'s resolved instance arguments differ from the goal's,
+  although the goal contains the term textually. An explicit `assert` + `rewrite`
+  works. Note `replace X with Y by (symmetry; apply …)` ALSO fails: with
+  SSReflect loaded the `by` clause does not run `symmetry` before `apply`.
+
+Two further tactic traps found while the sweeps were still useful: `congruence`
+chokes on `bv`'s proof field (go through `discriminate`), and SSReflect rejects
+the comma form `rewrite H1, H2 in H`.
+
+And one design lesson: prefer an **Iris-level wrapper lemma** (`itable_relW_zip_pred`)
+over `iStopProof` at a call site. `iStopProof` folds the WHOLE persistent context
+into a single conjunction, so its intro pattern breaks whenever an unrelated
+hypothesis is introduced earlier in the proof.
