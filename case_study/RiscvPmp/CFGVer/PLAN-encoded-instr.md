@@ -288,7 +288,11 @@ unknown without committing to a trusted-surface change.
 
 ---
 
-## §7-RESULTS. DONE 2026-08-01 — the curve bends
+## §7-RESULTS. DONE 2026-08-01 — the curve bends, gate GREEN
+
+**Gate:** `✓ GATE PASSED — build clean, no holes, 12 end theorems axiom-clean
+(only: Machine.pure_decode Base.mmioenv).` Same axiom set as the pre-change
+baseline at `30c9517a` / `05a4ba00`, so the word threading added nothing.
 
 ### The decisive datum: execution-driven `|wctx|` growth is ZERO
 
