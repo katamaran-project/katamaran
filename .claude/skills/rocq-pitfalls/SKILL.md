@@ -124,3 +124,33 @@ matching", even though the equation is perfectly usable the other direction.
 When in doubt, use `injection H as H` (keep the raw equation) and follow with
 `subst` (which finds the right direction automatically since it just needs one
 side to be a bare variable) instead of guessing `->` vs `<-`.
+
+## SSReflect's `by` does not run the tactic you wrote (2026-08-01)
+
+With SSReflect in scope (anything importing Iris), `replace X with Y by (tac1;
+tac2)` can apply `tac2` to the UNCHANGED goal — the classic symptom is
+
+```coq
+replace (f a) with (g a) by (symmetry; apply my_lemma).
+(* Unable to unify "g ?x = f ?x" with "f a = g a"  — symmetry never ran *)
+```
+
+Use an explicit `assert` + `rewrite` instead, which is unambiguous:
+
+```coq
+assert (Hcomm : f a = g a) by ... .   (* or: assert (...). { symmetry. apply my_lemma. } *)
+rewrite Hcomm.
+```
+
+Related, same cause: SSReflect rejects the comma form `rewrite H1, H2 in H` —
+write one rewrite per step, `rewrite H1 in H. rewrite H2 in H.`
+
+## A `rewrite` that will not fire on a term you can SEE in the goal
+
+If `rewrite <- some_lemma` reports *"Found no subterm matching …"* but dumping
+the goal (`match goal with |- ?G => idtac "ZZ:" G end`) shows the term verbatim,
+the mismatch is in **implicit instance arguments**, not shape — typeclass-driven
+functions like `inst` resolve differently in the lemma's statement than in the
+goal. Fully instantiating the lemma's explicit arguments does NOT help. Fix:
+`assert` the equation you want in the exact form the goal uses, prove it by
+`apply`ing the lemma, then `rewrite` the assertion.

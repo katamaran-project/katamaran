@@ -143,3 +143,27 @@ affine with everything persistent, and an abstract bi is neither by default.
 What this does *not* model: whether a `rewrite` actually produced the shape you
 assumed. Confirm that from the real error's position — if the reported failure is
 *downstream* of the rewrite, the rewrite worked.
+
+## `iStopProof` folds the WHOLE persistent context — prefer a wrapper lemma
+
+`iStopProof` turns the entire spatial+persistent context into a single nested
+conjunction, so the intro pattern that follows it (`intros ι Hpc ((H1 & H2) &
+H3)`) encodes how many hypotheses happened to be in scope. Introduce one
+unrelated hypothesis earlier in the proof and it breaks with *"Expects a
+conjunctive pattern made of 2 patterns"*, far from the edit that caused it.
+
+When you need to drop to the model to apply a pure/Pred-level lemma, give that
+lemma an Iris-level statement instead and `iApply` it with a framing pattern
+naming exactly the hypotheses it needs:
+
+```coq
+Lemma my_lemma_pred {w} … : (P ∗ Q ∗ R ⊢ S)%I.
+Proof. constructor. intros ι Hpc (HP & HQ & HR). now apply my_lemma. Qed.
+
+(* call site — stable against unrelated context changes *)
+iApply (my_lemma_pred with "[$HP $HQ $HR]").
+```
+
+If the underlying lemma has a variable that does not occur in its conclusion,
+`apply` will leave it as an unresolved evar (*"Unable to find an instance for the
+variable …"*); use `eapply my_lemma; eassumption` so a premise pins it.

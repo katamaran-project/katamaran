@@ -48,6 +48,29 @@ rocq_compile_file(file, mode="full", keep_vo=True) # so downstream files can Req
 `vos` catches statement errors cheaply and does **not** check `Proof. … Qed.`,
 so a green `vos` says nothing about whether your tactics work.
 
+**Except when it does — and knowing which is worth real time.** `-vos` skips a
+proof body UNLESS the enclosing section has section **variables** (`Context` /
+`Variable`) whose usage must be read off the proof term, and no `Proof using`
+annotation says otherwise. A bare `Section` is not enough. Verified both ways on
+scratch files: an unsectioned `Lemma zz : 1 = 2. Proof. congruence. Qed.`
+compiles clean under `-vos`; the same lemma inside
+`Section S. Context (X : Type).` fails.
+
+Practical consequence in this repo (measured 2026-08-01):
+
+| where | section variables? | `vos` runs proofs? |
+|---|---|---|
+| `VerifierRel.v` `Section Soundness`, `Adequacy.v` | `Context {Σ} {GS}` | **yes** |
+| `VerifierRel.v` `Section Shallow` / `Section Relational` | none | **no** |
+| file top level (`Tables.v`) | n/a | **no** |
+| inside a plain `Module` (`Spec.v`, `SpecIris.v`) | n/a | **no** |
+
+So DO still treat a green `vos` as "statements only" when planning. But when a
+`vos` sweep surprises you by reporting a *tactic* failure, that is not a bug —
+it is a sectioned file — and conversely, do not conclude from a long run of
+green `vos` sweeps that the proofs in `Section Relational` or in a `Module` have
+been checked. They have not.
+
 ### Exception: `rocq_compile_file` cannot compile `theories/Symbolic/Solver.v`
 
 It drops `_CoqProject`'s `-arg` lines, and this project passes `-arg "-w all"`.

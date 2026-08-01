@@ -75,3 +75,36 @@ on a `bv.add (bv.of_N _) (bv.of_N _)` subterm, turning it INTO `bv.of_N (_ + _)`
 form — it will NOT expand an existing `bv.of_N (_ + _)` into a `bv.add`. If you
 need that direction, `rewrite <- bv.of_N_add` — don't guess the lemma runs the
 way its name suggests; check which side is `bv.add` before picking a direction.
+
+## `bv.eqb` reflection: `cbn` and `destruct` both bite (2026-08-01)
+
+Deciding a `bv` equality inside an `if` — e.g. a lookup function
+`fun k => if bv.eqb k base then x else …` — fails two obvious ways:
+
+- **A bare `cbn` unfolds `bv.eqb` itself** into `N.eqb (bv.bin _) (bv.bin _)`,
+  after which a `rewrite` of any `bv.eqb`-stated lemma reports
+  *"Found no subterm matching …"*. Restrict it: `cbn [words_of_list]` (name the
+  function you actually want unfolded). Same family as the `cbn -[xlenbits]`
+  trap above.
+- **`destruct (bv.eqb_spec x y)` does NOT abstract a closed scrutinee.** When
+  `bv.eqb x y` sits inside an `if` in the goal rather than being the goal's own
+  index, `destruct` on the `reflect` leaves the `if` untouched and you get
+  *"Unable to unify x with (if bv.eqb base base then x else …)"*. Decide the
+  boolean FIRST and rewrite:
+
+```coq
+Lemma bv_eqb_refl {n} (x : bv n) : bv.eqb x x = true.
+Proof. unfold bv.eqb. apply N.eqb_refl. Qed.
+
+Lemma bv_eqb_neq {n} (x y : bv n) : x <> y -> bv.eqb x y = false.
+Proof. intros Hne. destruct (bv.eqb_spec x y) as [Heq|_]; [contradiction|reflexivity]. Qed.
+```
+
+(Those two DO work by `destruct`, because there the `bv.eqb` application IS the
+goal's index rather than a subterm of an `if`.)
+
+**`congruence` chokes on `bv`.** `bv` is a record carrying a proof field, and
+`congruence` fails on goals that look immediate — e.g. deriving `False` from
+`m !! a = Some i` and `m !! a = None` after substituting a `bv` equality. Go
+through `discriminate` instead: `intros Heq. subst a0. rewrite Hfresh in Hlk.
+discriminate.`
