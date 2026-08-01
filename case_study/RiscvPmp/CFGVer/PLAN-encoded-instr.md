@@ -739,6 +739,22 @@ Allocation is the only thing that is not:
 Held out at N=4 it predicts within **0.001%**. This is a clean quadratic, not a
 fitted curve.
 
+**Validated out of range at N=16** (run after freeing memory; the model above
+never saw any N>8):
+
+| quantity | predicted | measured | error |
+|---|---|---|---|
+| net allocated words | 4,345,191,846 | 4,345,812,186 | **−0.014%** |
+| nodes | 34058 | 34058 | 0.0000% |
+| path-condition sum | 562961 | 562961 | 0.0000% |
+| live-variable sum | 703051 | 703051 | 0.0000% |
+| term size | 8015 | 8015 | 0.0000% |
+| depth | 21193 | 21193 | 0.0000% |
+
+`dc_tmax` is still **10** at N=16, and `dc_nest` still 0. N=16 cost 24.7 s of
+`vm_compute` at 3.46 GB RSS with the box quiet — well under §8's 5.6 GB, which
+was measured under memory pressure.
+
 It also explains §8's central puzzle — why the exponent *rises* with N. The
 quadratic term only overtakes the linear one at **N = 24.6**:
 
