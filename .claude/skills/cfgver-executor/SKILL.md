@@ -37,20 +37,39 @@ Two representations, one per side. The **concrete** executor (`cexec_cfg_addr`,
 **cfgver-refinement**) still keys off a **`gmap (bv xlenbits) AST` by absolute pc**,
 built by `instrs_of_list (bv.of_N init_addr) i` (`Tables.v`) from a plain `list AST` —
 lookup is exact, `instrs !! v`. The **symbolic** executor (`sexec_cfg_addr`, below)
-instead keys off a **term-indexed table** (`SInstrTable`/`SExitTable`, a `list (Term _
-ty_xlenbits * AST)` resp. `list (Term _ ty_xlenbits)`) so that a symbolic pc like
-`p + 8` can still be dispatched: matching is syntactic (`Term_eqb` modulo `peval`),
-not a concrete lookup. `itable_rel`/`etable_rel` (`VerifierRel.v`) are the guards
-tying a given table to the gmap at a valuation, and the faith lemmas proving them
-for the list builders live in `TablesRel.v`; the refinement proof
-(`rexec_cfg_addr`, **cfgver-refinement**) is what lets the two sides' VCs
-correspond.
+instead keys off a **term-indexed table** so that a symbolic pc like `p + 8` can
+still be dispatched: matching is syntactic (`Term_eqb` modulo `peval`), not a
+concrete lookup.
+
+**Two table types, and the distinction matters** (2026-08-01):
+
+| type | shape | who sees it |
+|---|---|---|
+| `SInstrTable` | `list (Term _ ty_xlenbits * AST)` | CONTRACT level — what `table_of_list` builds, what `itable_rel` relates to the gmap, what `TablesRel.v`'s faith lemmas discharge |
+| `SInstrTableW` | `list (Term _ ty_xlenbits * Term _ ty_word * AST)` | EXECUTOR only — `sexec_cfg_addr` runs on this |
+
+The extra column is the raw instruction WORD. It exists because
+`sep_contract_fetch_instr` used to hide the word behind an `∃`, minting a fresh
+demonic variable on EVERY step; the word cannot be derived (`pure_decode` is an
+uninterpreted `Axiom` with no injectivity), so it must be supplied per address.
+`sexec_triple_addr` introduces the words ONCE by extending the context it already
+hands to `demonic_ctx`, from `Σ` to `Σ ▻▻ words_ctx (length tbl)`, then
+`zip_words` attaches them. Because the column lives on `SInstrTableW` and not on
+the Σ-level `SInstrTable`, **`itable_rel`, the faith lemmas, `Contracts.v`,
+`GenContract.v` and every example were untouched by the change.**
+
+`itable_rel`/`etable_rel` (`VerifierRel.v`) are the guards tying a Σ-level table
+to the gmap at a valuation; `itable_relW` is the fused, loop-carried relation the
+executor's induction uses, DERIVED from them at the entry point (see
+**cfgver-refinement**). The refinement proof (`rexec_cfg_addr`) is what lets the
+two sides' VCs correspond.
 
 ## `sexec_cfg_addr`
 
 ```coq
 sexec_cfg_addr (fuel : nat)
-  : ⊢ SInstrTable -> SExitTable -> STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits)
+  : ⊢ SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+      STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits)
 ```
 
 At each step it takes an `angelic_binary` (existential choice) between **exiting**
@@ -64,12 +83,32 @@ world-dependent) and persisted across each step via `persist_itable`/`persist_et
 
 It stops with `error` when:
 - `fuel = 0`
-- `lookup_instr tbl apc = None` — the pc matches no table key (no instruction there)
+- `lookup_instr tbl apc = None` — the pc matches no table key (no instruction there).
+  Note `lookup_instr` returns `option (Term _ ty_word * AST)`: the raw instruction
+  WORD and the instruction come from ONE lookup, so they cannot disagree.
 - `is_exit exits apc = false` on the exit branch (chosen but no exit key matches)
 
 ## Backward-branch loops: exponential blowup = term duplication, not forking
 
-> **ROOT-CAUSED 2026-07-29 — read this before acting on the section below.**
+> **SOLVED 2026-08-01 — the `|wctx|` half of this is FIXED; read this first.**
+> Both per-step demonic variables are gone, and execution-driven `|wctx|` growth
+> is now ZERO. `an` became a threaded contract parameter
+> (`exec_instruction_prologue`); `encoded_instr` became a per-ADDRESS word
+> supplied once via `SInstrTableW` (see the table-types section above).
+> Measured on the flat `zzn` reproducer: survivors per trip **+15 → +1**, and
+> that +1 is the reproducer's own `mv`. Exponent per doubling, same N=2→4
+> range: **1.44 → 1.05**; 0.90 at N=4→8. Node counts were always exactly linear
+> in N, and time now TRACKS them — the superlinear-time-vs-linear-nodes mismatch
+> that this whole section is about is gone. Full record:
+> `CFGVer/PLAN-encoded-instr.md` §7-RESULTS and `PLAN-nextpc-param.md`.
+>
+> So: do NOT re-diagnose `|wctx|` growth on a loop example without first
+> checking `Example/ZZSurv.v` — the per-step survivors it describes below no
+> longer exist. What remains unfixed is the term-duplication mechanism, which
+> was measured NOT to dominate at practical trip counts. If a loop still scales
+> badly, that is a NEW finding, not this one.
+>
+> **ROOT-CAUSED 2026-07-29 — historical, kept for the methodology.**
 > The k^trip-count term-duplication mechanism described here is real and
 > correctly diagnosed, but it is **not the dominant cost at practical trip
 > counts**, so do not reach for term sharing / hash-consing / SSA naming on the
@@ -166,11 +205,21 @@ general triage entry point: **rocq-timeout-triage**.
 ## `ptsto_instrs`
 
 ```coq
+(* ptsto_instrs_w names the word at each address; ptsto_instrs keeps the old
+   MEANING by existentially quantifying it, which is why ImplPre and the end
+   theorems did not change when the word was threaded (2026-08-01). *)
+Definition ptsto_instrs_w (words : bv xlenbits -> bv word)
+    (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
+  ([∗ map] a ↦ i ∈ instrs,
+     interp_ptsto_instr (SyncVal a) (SyncVal (words a)) (SyncVal i))%I.
+
 Definition ptsto_instrs (instrs : gmap (bv xlenbits) AST) : iProp Σ :=
   ([∗ map] a ↦ i ∈ instrs, interp_ptsto_instr (SyncVal a) (SyncVal i))%I.
 ```
 
-Access one instruction with `ptsto_instrs_lookup instrs v Hlk`
+The soundness chain threads `ptsto_instrs_w words instrs` for a FIXED `words`
+and re-packs to `ptsto_instrs` only at the outer boundary.
+Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 (`Hlk : instrs !! v = Some i`, via `big_sepM_lookup_acc`; `i` is implicit).
 
 ## `scfg_verification_condition`
