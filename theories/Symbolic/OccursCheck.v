@@ -56,6 +56,11 @@ Module Type OccursCheckOn
   Class OccursCheck (T : LCtx -> Type) : Type :=
     occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)).
 
+  (* Ported from main:theories/Symbolic/OccursCheck.v (aaabac4a) — unrelated
+     to our GenOccursCheck patches, main added it in the same commit. *)
+  #[export] Instance OccursCheck_Const {A} : OccursCheck (Const A) :=
+    fun Σ x xIn v => Some v.
+
   #[export] Instance occurs_check_env {I : Set} {T : LCtx -> I -> Set}
          {OCT : forall i, OccursCheck (fun Σ => T Σ i)} :
     forall {Γ : Ctx I}, OccursCheck (fun Σ => Env (T Σ) Γ) :=

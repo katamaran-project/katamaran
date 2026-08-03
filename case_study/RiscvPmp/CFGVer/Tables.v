@@ -31,10 +31,15 @@
 (* Tables.v — assembly vocabulary and list→table builders.                   *)
 (*                                                                           *)
 (* Register aliases (X0–A7), assembler macros (JAL/NOP/LW/SW), the gmap      *)
-(* instruction store builder instrs_of_list, the symbolic term-table         *)
-(* builders table_of_list / exits_of_list / exits_of_offs, and the           *)
-(* faithfulness lemmas linking them to Verifier.v's itable_rel /           *)
-(* etable_rel guards.                                                      *)
+(* instruction store builder instrs_of_list, and the symbolic term-table     *)
+(* builders table_of_list / exits_of_list / exits_of_offs.                   *)
+(*                                                                           *)
+(* DELIBERATELY Iris-free. The faithfulness lemmas linking these builders to *)
+(* itable_rel / etable_rel live in TablesRel.v, because those guards are     *)
+(* `Pred w` (Iris) and now sit in VerifierRel.v. That split matters: this    *)
+(* file is required by Contracts.v, hence transitively by every             *)
+(* Example/*.v, so keeping it Iris-free is what keeps the example chain off  *)
+(* the ~0.98 GB binary Iris model. DON'T re-add an Iris require here.        *)
 (* ========================================================================= *)
 
 From Coq Require Import
@@ -53,8 +58,6 @@ From stdpp Require Import gmap.
 From Katamaran Require Import
      RiscvPmp.CFGVer.Verifier.
 
-From iris.proofmode Require string_ident tactics.
-
 Import RiscvPmpProgram.
 
 Set Implicit Arguments.
@@ -67,7 +70,16 @@ Import ListNotations.
 Import RiscvPmpCFGVerifExecutor.
 Import Assembly.
 Import RiscvPmp.Sig.
-Import iris.proofmode.tactics.
+Import ListNotations.
+(* REQUIRED, and must stay after the imports above: ctx.notations (re-imported
+   by RiscvPmp.Sig) declares `_ :: _` for Binding, which otherwise hijacks list
+   cons — instrs_of_list / table_of_list then fail with "Found a constructor of
+   inductive type Binding while a constructor of list is expected". This file
+   used to get list cons back by accident, because `Import
+   iris.proofmode.tactics.` came last; that import is gone now that the
+   Iris-using faith lemmas live in TablesRel.v. Opening the scope explicitly is
+   order-independent, unlike relying on which Import happens to come last. *)
+Open Scope list_scope.
 
   Definition X0 : RegIdx := bv.zero.
   Definition X1 : RegIdx := bv.one.
@@ -101,6 +113,45 @@ Import iris.proofmode.tactics.
     | []          => ∅
     | i :: rest   => <[ base := i ]> (instrs_of_list (bv.add base (bv.of_N 4)) rest)
     end.
+
+  (* words_of_list: the raw instruction WORD at each absolute address, keyed by
+     the same addresses instrs_of_list uses.  A TOTAL FUNCTION rather than a
+     gmap, deliberately: a partial word map would add a "no word at this
+     address" case to the concrete executor, a domain side condition to
+     ptsto_instrs_w, and a matching case to every proof downstream — none of
+     which carry information, since the word list is exactly as long as the
+     instruction list.  Off the program it reads bv.zero, which is never
+     observed.  The word list is the `ws` that mem_has_instrs already carries,
+     so nothing new has to be invented to supply it. *)
+  Fixpoint words_of_list (base : bv xlenbits) (ws : list (bv word))
+    : bv xlenbits -> bv word :=
+    match ws with
+    | []          => fun _ => bv.zero
+    | x :: rest   => fun k => if bv.eqb k base then x
+                              else words_of_list (bv.add base (bv.of_N 4)) rest k
+    end.
+
+  (* bv.eqb reflected both ways.  Destructing bv.eqb_spec directly inside
+     words_of_list's `if` does NOT work — the scrutinee is a closed term there,
+     so Coq will not abstract it and the `if` survives; decide the boolean
+     first and rewrite. *)
+  Lemma bv_eqb_refl {n} (x : bv n) : bv.eqb x x = true.
+  Proof. unfold bv.eqb. apply N.eqb_refl. Qed.
+
+  Lemma bv_eqb_neq {n} (x y : bv n) : x <> y -> bv.eqb x y = false.
+  Proof.
+    intros Hne.
+    destruct (bv.eqb_spec x y) as [Heq|_]; [contradiction|reflexivity].
+  Qed.
+
+  Lemma words_of_list_here (base : bv xlenbits) (x : bv word) (ws : list (bv word)) :
+    words_of_list base (x :: ws) base = x.
+  Proof. cbn [words_of_list]. rewrite bv_eqb_refl. reflexivity. Qed.
+
+  Lemma words_of_list_there (base k : bv xlenbits) (x : bv word) (ws : list (bv word)) :
+    k <> base ->
+    words_of_list base (x :: ws) k = words_of_list (bv.add base (bv.of_N 4)) ws k.
+  Proof. intros Hne. cbn [words_of_list]. rewrite (bv_eqb_neq Hne). reflexivity. Qed.
 
   (* An instruction address never collides with a later one, provided the
      whole program fits below 2^xlenbits (no wraparound).  This is the side
@@ -172,109 +223,6 @@ Import iris.proofmode.tactics.
     : list (Term Σ ty_xlenbits) :=
     List.map (fun o => peval_bvadd (term_val ty_xlenbits (bv.of_N o)) p) offs.
 
-  (* itable_rel is monotone in the instruction map: enlarging the map
-     preserves faithfulness of every table entry. *)
-  Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AST)
-      (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) :
-    m ⊆ m' ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ) m tbl ι ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ) m' tbl ι.
-  Proof.
-    intros Hsub. apply List.Forall_impl. intros [t i] (v & Hv & Hm).
-    exists v. split; [exact Hv|]. eapply lookup_weaken; eauto.
-  Qed.
-
-  (* Once-and-for-all faithfulness of the constructed table w.r.t. the
-     gmap store, at any valuation where the placement term resolves to a
-     concrete base (generalized over the running offset). *)
-  Lemma itable_faith_of_list_aux {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (instrs : list AST) :
-    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    forall off : N,
-    (bv.bin cbase + off + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ)
-      (instrs_of_list (bv.add cbase (bv.of_N off)) instrs)
-      (table_of_list p off instrs) ι.
-  Proof.
-    intros Hp.
-    induction instrs as [|i rest IH]; intros off Hbound.
-    - constructor.
-    - cbn [table_of_list instrs_of_list length] in *.
-      constructor.
-      + exists (bv.add cbase (bv.of_N off)). split.
-        * cbn [fst].
-          rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N off)) p ι).
-          cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
-        * cbn [snd]. apply lookup_insert.
-      + rewrite Nat2N.inj_succ in Hbound.
-        assert (Hb1 : (bv.bin (cbase + bv.of_N off)%bv <= bv.bin cbase + off)%N).
-        { rewrite bv.bin_add.
-          etransitivity.
-          { apply N.Div0.mod_le. }
-          apply N.add_le_mono_l. apply bv.bin_of_N_decr. }
-        apply (itable_faith_weaken
-                 (m := instrs_of_list (bv.add (bv.add cbase (bv.of_N off)) (bv.of_N 4)) rest)).
-        { apply insert_subseteq.
-          apply (instrs_of_list_fresh rest (bv.add cbase (bv.of_N off)) (d := 4)); [lia|].
-          set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
-        rewrite <- bv.add_assoc, bv.of_N_add.
-        apply IH.
-        set (E := bv.exp2 xlenbits) in *; clearbody E. lia.
-  Qed.
-
-  Lemma itable_faith_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (instrs : list AST) :
-    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    (bv.bin cbase + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Σ)
-      (instrs_of_list cbase instrs) (table_of_list p 0 instrs) ι.
-  Proof.
-    intros Hp Hbound.
-    replace cbase with (bv.add cbase (bv.of_N 0)) at 1
-      by apply bv.add_zero_r.
-    apply itable_faith_of_list_aux; [exact Hp|lia].
-  Qed.
-
-  (* Exit-table analog: the fall-through exit term is faithful to any
-     exit condition that accepts the first address past the program. *)
-  Lemma etable_faith_exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AST) :
-    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    exitCond (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))) = true ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Σ)
-      exitCond (exits_of_list p instrs) ι.
-  Proof.
-    intros Hp Hexit.
-    constructor; [|constructor].
-    exists (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))).
-    split.
-    - rewrite (peval_bvadd_sound
-                 (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p ι).
-      cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
-    - exact Hexit.
-  Qed.
-
-  (* Offset-list analog: every listed exit offset is a genuine exit at any
-     valuation resolving the placement term, provided the exit condition
-     accepts each concrete address base + off. *)
-  Lemma etable_faith_exits_of_offs {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (offs : list N) :
-    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    List.Forall (fun o => exitCond (bv.add cbase (bv.of_N o)) = true) offs ->
-    Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Σ)
-      exitCond (exits_of_offs p offs) ι.
-  Proof.
-    intros Hp Hoffs.
-    unfold exits_of_offs, Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel.
-    rewrite List.Forall_map.
-    eapply List.Forall_impl; [|exact Hoffs].
-    intros o Hex.
-    exists (bv.add cbase (bv.of_N o)).
-    split.
-    - rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N o)) p ι).
-      cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
-    - exact Hex.
-  Qed.
 
   (* Transit the end-to-end layer's lenAddr bound into the no-wrap bound
      itable_faith_of_list needs.  lia cannot handle bv.exp2 xlenbits (2^32)

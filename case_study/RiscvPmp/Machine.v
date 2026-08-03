@@ -526,10 +526,90 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end ;;
     use lemma close_gprs.
 
+  (* ======================================================================
+     !! DELIBERATE MODEL CHANGE — READ BEFORE TRUSTING ANY SLT*/SLTU* RESULT !!
+     ======================================================================
+
+     This definition was CHANGED (2026-07-27).  It used to read:
+
+         Definition fun_bool_to_bits : Stm ["x" :: ty.bool] (ty.bvec 1) :=
+           if: exp_var "x"
+           then exp_val (ty.bvec 1) Bitvector.bv.one
+           else exp_val (ty.bvec 1) Bitvector.bv.zero.
+
+     i.e. a muSail-level `stm_if`.  It is now a pure expression built from
+     `bop.bvcons`.  This is a change to the TRUSTED MACHINE MODEL shared by
+     BlockVer and CFGVer, and it deviates from the official Sail RISC-V spec,
+     which does write this conversion as a conditional.  Anyone auditing a
+     noninterference theorem about a program containing SLT / SLTU / SLTI /
+     SLTIU is relying on this change being sound.  The case for it:
+
+     (1) WHAT IS PRESERVED — the concrete Val-level result, exactly.
+         `bv.cons b xs` prepends b as the LEAST significant bit:
+         `bv.cons b (mk bs _) = mk (if b then N.succ_double bs else N.double bs)`,
+         i.e. numerically `2*bs + (b ? 1 : 0)` (Bitvector.v:377).  With
+         `xs = bv.nil` (the width-0 vector, value 0, Bitvector.v:375) this is
+         `bv.cons b bv.nil = (b ? 1 : 0) : bv 1` — precisely bool_to_bits.
+         Checked mechanically, and since `bool` has exactly two inhabitants
+         this is an EXHAUSTIVE check, not a spot check:
+             bv.cons true  bv.nil = bv.one     (by reflexivity)
+             bv.cons false bv.nil = bv.zero    (by reflexivity)
+         So no concrete execution of any program observes any difference.
+
+     (2) WHAT IS ACTUALLY DIFFERENT — the statement STRUCTURE, and hence the
+         relational (two-world) reading.  The old form put the comparison bit
+         into a `formula_bool` / `formula_relop`, which collapses to False on a
+         NonSyncVal (Formulas.v:142/147).  The executor therefore demanded
+         `secLeak` on BOTH comparison operands, i.e. it REJECTED any program
+         applying SLT* to secret data.  The new form never produces a formula:
+         `bop.evalRel op = liftBinOp (eval op)` (BinOps.v:411), so a
+         `NonSyncVal true false` comparison bit simply becomes
+         `NonSyncVal bv.one bv.zero` — a value that differs between the two
+         worlds, which is harmless because nothing observes it.
+         Note the `if b` inside `bv.cons` is a COQ-level match on a concrete
+         boolean inside a pure function, NOT a muSail `stm_if`; the symbolic
+         executor never has to decide it.
+
+     (3) THIS IS A LOOSENING.  Programs that were previously rejected are now
+         accepted.  That is the point of the change, but it means the change
+         cannot be justified by "no proof broke" — nothing breaks when you
+         accept more.  It must be justified by the leakage model, (4).
+
+     (4) WHY IT IS DEFENSIBLE.  The leakage model already says ALU operations
+         are unobservable: `LeakEvent := LeakPc | LeakMemRead | LeakMemWrite`
+         (Base.v:329-333), emitted at exactly three sites in this file (the
+         memory read at ~614, the memory write at ~640, the pc at ~816).
+         `bool_to_bits` emits none of them, in EITHER version.  So the old
+         definition was already inconsistent with the intended leakage model:
+         it made an ALU instruction behave, for the verifier, like a branch,
+         even though the model records no observation for it.  On that reading
+         this change makes the model MORE faithful, not less — the old `if:`
+         was an artifact of transcribing Sail, and the executor's blanket
+         "secret-dependent control flow is fatal" rule is a sound but
+         INCOMPLETE over-approximation of the real leakage model.
+
+     (5) WHAT IS NOT CLAIMED.  We have NOT proved a bisimulation between the
+         old and new statements, only the two-case value equality in (1).  The
+         residual assumption a reader must accept is the one already baked
+         into `LeakEvent`: that slt/sltu/slti/sltiu leak nothing — no
+         data-dependent latency, no microarchitectural side effect.  That
+         assumption is structural and does NOT show up in Print Assumptions.
+
+     (6) THE GENERAL FIX this side-steps: teach the relational executor to
+         handle an observation-free secret-dependent branch by splitting into
+         the four world-pair cases (TT/TF/FT/FF) and requiring the mixed ones
+         to be observationally equal, instead of demanding SyncVal outright.
+         That would retire the `formula_bool`/`formula_relop` escape hatch for
+         this whole class rather than for SLT* alone.  Until then, any OTHER
+         `if:` on secret data in this model will hit the same wall.
+
+     Motivation: without this, no constant-time comparison idiom verifies —
+     BearSSL's EQ/NEQ/GT, and clang's seqz/snez/sltu, all land here.  See the
+     `secret-data-walls` skill, whose rule 2 already prescribes exactly this
+     "keep it a bvcons argument" idiom.
+     ====================================================================== *)
   Definition fun_bool_to_bits : Stm ["x" :: ty.bool] (ty.bvec 1) :=
-    if: exp_var "x"
-    then exp_val (ty.bvec 1) Bitvector.bv.one
-    else exp_val (ty.bvec 1) Bitvector.bv.zero.
+    exp_binop bop.bvcons (exp_var "x") (exp_val (ty.bvec 0) Bitvector.bv.nil).
 
   Definition fun_shift_right_arith32 : Stm [v :: ty.bvec 32; "shift" :: ty.bvec 5] (ty.bvec 32) :=
     let: "v64" :: ty.bvec 64 := exp_sext v in

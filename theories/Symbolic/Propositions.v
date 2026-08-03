@@ -1800,6 +1800,150 @@ Module Type SymPropOn
 
   End PostProcess.
 
+  Section Unquantify.
+    (* THROWAWAY PORT (unquantify-gate branch, PLAN-unquantify-gate.md Phase
+       B.3): ported from main:theories/Symbolic/Propositions.v (final state,
+       commit aaabac4a + follow-ups b8cee590/6709bb58/ff772598/00c5d773), by
+       hand since this file has diverged ~951 lines from main. Measurement
+       only: soundness (SubstSULaws_SymProp, and everything unquantify_sound
+       would need) is Admitted throughout, never to be merged as-is.
+
+       Two deliberate adaptations from main:
+       - No `Import iris.bi.interface iris.proofmode.tactics.`: main's copy
+         only needs it inside SubstSULaws_SymProp's proof script (an `done`
+         call), which we Admit instead — keeping this file Iris-free matters,
+         see CLAUDE.md's light/heavy split (this file sits on the light
+         chain every CFGVer example pulls in).
+       - Every `amsg.boxMsg msg` becomes `amsg.empty`: main's AMessage box
+         carries an Erase instance that lets boxMsg erase a message to a
+         context-independent value; ours doesn't (see the Messages.v port
+         note), so we always substitute the same placeholder, matching our
+         genoccurscheck_amessage stub exactly (which already reports every
+         message as occurrence-free regardless of content).
+       - pattern_match/pattern_match_var arms dropped: those two SymProp
+         constructors are commented out on this branch (Propositions.v:157-
+         159), so weaken_symprop/to_uqSymProp simply have no case for them. *)
+
+    Import SymProp.
+
+    Fixpoint weaken_symprop {Σ1} (P : 𝕊 Σ1) {Σ2} (ζ : WeakensTo Σ1 Σ2) {struct P} : 𝕊 Σ2 :=
+      match P with
+      | angelic_binary P1 P2 =>
+          angelic_binary (weaken_symprop P1 ζ) (weaken_symprop P2 ζ)
+      | demonic_binary P1 P2 =>
+          demonic_binary (weaken_symprop P1 ζ) (weaken_symprop P2 ζ)
+      | error msg => error (substSU msg ζ)
+      | SymProp.block => SymProp.block
+      | assertk fml msg P => assertk (substSU fml ζ) (substSU msg ζ) (weaken_symprop P ζ)
+      | assumek fml P => assumek (substSU fml ζ) (weaken_symprop P ζ)
+      | angelicv b P => angelicv b (weaken_symprop P (upSU ζ))
+      | demonicv b P => demonicv b (weaken_symprop P (upSU ζ))
+      | @assert_vareq _ x σ xIn t msg P =>
+          let xIn' : ((x∷σ) ∈ Σ2)%katamaran := weakenIn ζ xIn in
+          let ζ' : WeakensTo (Σ1 - (x∷σ)) (Σ2 - (x∷σ)) := weakenRemovePres ζ xIn in
+          let t' : Term (Σ2 - (x∷σ)) σ := substSU (T := fun Σ => Term Σ σ) t ζ' in
+          assert_vareq x t' (substSU msg ζ') (weaken_symprop P ζ')
+      | @assume_vareq _ x σ xIn t P =>
+          let xIn' : ((x∷σ) ∈ Σ2)%katamaran := weakenIn ζ xIn in
+          let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x::σ)%ctx) := weakenRemovePres ζ xIn in
+          assume_vareq x (substSU (T := fun Σ => Term Σ σ) t ζ') (weaken_symprop P ζ')
+      | debug msg P => debug (substSU (T := AMessage) msg ζ) (weaken_symprop P ζ)
+      end.
+    #[export] Instance SubstSU_SymProp : SubstSU WeakensTo 𝕊 :=
+      (fun _ _ P σ => weaken_symprop P σ).
+
+    #[export] Instance SubstSULaws_SymProp : SubstSULaws WeakensTo 𝕊.
+    Admitted.
+
+    Definition UQSymProp Σ : Type := Weakened WeakensTo 𝕊 Σ.
+
+    Definition from_uqSymProp {Σ} : UQSymProp Σ -> 𝕊 Σ := unWeaken.
+
+    Definition uq_angelic_binary {Σ} : UQSymProp Σ -> UQSymProp Σ -> UQSymProp Σ :=
+      liftBinOp (fun _ P1' P2' => angelic_binary P1' P2') (fun _ _ _ _ _ => eq_refl).
+
+    Definition uq_demonic_binary {Σ} : UQSymProp Σ -> UQSymProp Σ -> UQSymProp Σ :=
+      liftBinOp (fun _ P1' P2' => demonic_binary P1' P2') (fun _ _ _ _ _ => eq_refl).
+
+    Definition uq_error {Σ} (msg : AMessage Σ) : UQSymProp Σ :=
+      weakenInit (error amsg.empty).
+
+    Definition uq_block {Σ} : UQSymProp Σ :=
+      weakenInit SymProp.block.
+
+    Program Definition uq_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) :
+      UQSymProp Σ -> UQSymProp Σ :=
+      liftBinOp (fun _ fml' kP' => assertk fml' amsg.empty kP') _ (gen_occurs_check fml).
+    Admit Obligations.
+
+    Definition uq_assumek {Σ} (fml : Formula Σ) : UQSymProp Σ -> UQSymProp Σ :=
+      liftBinOp (fun _ fml' kP' => assumek fml' kP') (fun _ _ _ _ _ => eq_refl) (gen_occurs_check fml).
+
+    Program Definition uq_angelicv {Σ : LCtx} b
+      (kP : UQSymProp (Σ ▻ b)) : UQSymProp Σ
+        :=
+        elimWeakenedVarZero (T := 𝕊)
+        (fun Σ kP' =>
+           match ty.inhabit (type b) with
+             Some _ => kP'
+           | None =>
+               angelicv (Σ := Σ) b (substSU kP' (wkRemove ctx.in_zero))
+           end)
+        _
+        (fun _ => angelicv b)
+        kP.
+    Admit Obligations.
+
+    Program Definition uq_demonicv {Σ} b
+      (kP : UQSymProp (Σ ▻ b)) : UQSymProp Σ :=
+      elimWeakenedVarZero
+        (fun Σ kP' => match ty.inhabit (type b) with
+                        Some _ => kP'
+                      | None =>
+                          demonicv (Σ := Σ) b (substSU kP' (wkRemove ctx.in_zero))
+                      end)
+        _
+        (fun _ => demonicv b) kP.
+    Admit Obligations.
+
+    Definition uq_assert_vareq x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran} (t : Term (Σ - (x::σ)%ctx) σ)
+      (msg : AMessage (Σ - (x::σ)%ctx)) (P : UQSymProp (Σ - (x::σ)%ctx)) : UQSymProp Σ :=
+      elimWeakenedVar (T1 := Pair (STerm σ) 𝕊)
+        (fun Σ xIn' '(t' , kP') => assert_vareq (xIn := xIn') x t' amsg.empty kP')
+        (liftBinOp (fun _ => pair) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check t) P).
+    Arguments uq_assert_vareq x {σ Σ xIn} t msg P.
+
+    Definition uq_assume_vareq x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran} (t : Term (Σ - (x::σ)%ctx) σ)
+      (P : UQSymProp (Σ - (x::σ)%ctx)) : UQSymProp Σ :=
+      elimWeakenedVar (T1 := Pair (STerm σ) 𝕊)
+        (fun Σ xIn' '(t' , kP') => assume_vareq (xIn := xIn') x t' kP')
+        (liftBinOp (fun _ => pair) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check t) P).
+    Arguments uq_assume_vareq x {σ Σ xIn} t P.
+
+    Program Definition uq_debug {Σ : LCtx} (msg : AMessage Σ) : UQSymProp Σ -> UQSymProp Σ :=
+      liftUnOp (fun _ P' => debug amsg.empty P') _.
+    Admit Obligations.
+
+    Fixpoint to_uqSymProp {Σ} (P : 𝕊 Σ) : UQSymProp Σ :=
+      match P with
+      | angelic_binary P1 P2 => uq_angelic_binary (to_uqSymProp P1) (to_uqSymProp P2)
+      | demonic_binary P1 P2 => uq_demonic_binary (to_uqSymProp P1) (to_uqSymProp P2)
+      | error msg => uq_error msg
+      | SymProp.block => uq_block
+      | assertk fml msg kP => uq_assertk fml msg (to_uqSymProp kP)
+      | assumek fml kP => uq_assumek fml (to_uqSymProp kP)
+      | angelicv b P => uq_angelicv (to_uqSymProp P)
+      | demonicv b P => uq_demonicv (to_uqSymProp P)
+      | assert_vareq x t msg P => uq_assert_vareq x t msg (to_uqSymProp P)
+      | assume_vareq x t P => uq_assume_vareq x t (to_uqSymProp P)
+      | debug msg P => uq_debug msg (to_uqSymProp P)
+      end.
+
+    Definition unquantify {Σ} (P : 𝕊 Σ) : 𝕊 Σ :=
+      from_uqSymProp (to_uqSymProp P).
+
+  End Unquantify.
+
   Module Erasure.
 
     Import SymProp.

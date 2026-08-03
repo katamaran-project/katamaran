@@ -28,13 +28,35 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-endtoend-internals`** — the wiring lemmas' proof bodies (library skill)
 > - **`cfgver-memory`** — public-memory infra + data-memory end-to-end (`_with_mem` variants)
 >
-> Standalone pitfall skills (generic, not CFGVer-specific): **`rocq-pitfalls`**
-> (bullets, eauto atomicity, SSReflect rewrite, goal-print debugging, notation-
-> scope hijacks, `injection ... as ->` direction), **`bv-pitfalls`**,
-> **`gmap-pitfalls`**, **`iris-proofmode`**. For a compile/proof step running
-> way longer than expected: start at **`rocq-timeout-triage`** (the general
-> "figure out why before waiting longer" entry point), which routes to
-> **`rocq-compile-oom`** specifically for the silently-killed/OOM signature.
+> **Skill routing is TWO-TIERED (since 2026-07-28).** Ten pitfall/library skills
+> are set to `name-only` in `.claude/settings.json`'s `skillOverrides`: they are
+> listed WITHOUT their description, so they no longer compete for the initial
+> routing decision, and are reached from a tier-1 parent's routing table instead
+> (still invokable by name). Rationale: a session made ZERO Skill calls because
+> ~10 overlapping symptom-keyword descriptions all competed and none won.
+> - **`rocq-implementation`** is the tier-1 entry point for WRITING, REPAIRING or
+>   UNDERSTANDING an actual proof script — tactic errors, bv/gmap/Iris/relational
+>   goals, adding a `peval`/solver case, plus "what does this value mean" and
+>   "where does this lemma live". It carries the mandatory rocq-mcp preamble-mode
+>   workflow and routes to the tier-2 set below.
+> - **Tier-2 (`name-only`, reached via `rocq-implementation`):** `bv-pitfalls`,
+>   `rocq-pitfalls`, `iris-proofmode`, `core-executor-internals`, `relval-model`,
+>   `relval-rewrite-over-secrets`, `cfgver-rsolve`, `cfgver-wp2`,
+>   `cfgver-gen-contract-internals`, `cfgver-endtoend-internals`. Several are
+>   labelled "library skill" in the list above; that label now also means
+>   name-only. **Note `secret-data-walls` is labelled a library skill but is
+>   deliberately TIER-1** — it keeps its description.
+> - **Tier-1 peers that must fire on their own** (do NOT route them through the
+>   parent): `cfgver` (hub), `cfgver-new-example`, `cfgver-solve-vc`,
+>   `secret-data-walls`, `gmap-pitfalls`, and for a step running way longer than
+>   expected **`rocq-timeout-triage`** (the general "figure out why before
+>   waiting longer" entry point), which routes to **`rocq-compile-oom`** for the
+>   silently-killed/OOM signature.
+>
+> Caveat measured the same day: `name-only` *de-weights* competition, it does not
+> remove it — a bare NAME can still win on an exact jargon match (`iApply` →
+> `iris-proofmode`). That is benign (it lands on the right child), but do not
+> assume the tiering is airtight.
 > Zero-cost references files live under `skills/cfgver/references/`
 > (e.g. `registers.md`).
 > Meta-skills for the skill system itself: **`skill-routing-maintenance`** —
@@ -76,13 +98,23 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 
 `_CoqProject` defines the `-Q` mappings and the exact compilation order.
 CFGVer compilation order (post 2026-07-17 split of the old `Examples.v`):
-`Spec.v` → `Verifier.v` → {`Noninterference.v`, `Tables.v`} → `Contracts.v` →
-`GenContract.v` → `Adequacy.v` → `EndToEnd.v` → `Example/Prelude.v` (shared
-import preamble) → `Example/*.v` (independent) →
-`Results.v` (aggregator holding the concrete end-to-end theorems).
-`Noninterference.v` + `Results.v` + the `*_instrs`/`*_specs` data blocks in
-`Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
-what is being proved changed. Fuller detail (per-file skill pointers, the
+`Spec.v` → `Verifier.v` → `Tables.v` → `Contracts.v` → `GenContract.v` → then two
+independent branches — the LIGHT example branch `Example/Prelude.v` (shared
+import preamble) → `Example/*.v`, and the HEAVY adequacy branch `SpecIris.v` →
+`VerifierRel.v` → `TablesRel.v` → `Adequacy.v` → `EndToEnd.v` — rejoining at
+`Example/<Prog>Result.v` (the per-program end-to-end theorems) →
+`Results.v` (re-export shell, the merge gate's build target).
+`Noninterference.v` + `Example/*Result.v` + the `*_instrs`/`*_specs` data blocks
+in `Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
+what is being proved changed.
+**Two layering invariants, each worth >1 GB or ~40 s and each easy to undo by
+accident:** (1) the light files (`Spec`, `Verifier`, `Tables`, `Contracts`,
+`GenContract`, `Example/*`) must stay free of Iris / `ShallowExecutor` /
+`MicroSail.Soundness` requires — adding one puts ~1.2 GB back on all seven
+examples; (2) `Example/Prelude.v` must stay free of `EndToEnd`, or the 85 s
+`Adequacy`→`EndToEnd` chain serializes ahead of every example instead of
+alongside them. Fuller detail (per-file skill pointers, the light/heavy split
+table, the `Tables.v` `Open Scope list_scope` trap, the
 `Require`-vs-`Require Import Verifier` landmine) lives in
 `case_study/RiscvPmp/CFGVer/CLAUDE.md`, loaded automatically when touching
 that subtree.
@@ -91,26 +123,14 @@ that subtree.
 
 ## rocq-mcp workflow
 
-Always prefer rocq-mcp tools over spawning `coqc` manually.
-
-`ROCQ_MAX_STATES` is **not** overridden — the server uses its default limit.
-Consequence: interactive sessions (`rocq_start`) may expire if idle or if many
-states accumulate. Always save the `state_id` from `rocq_start` and check for
-`state not found` errors before assuming a session is still live; restart with
-`rocq_start` if needed.
+Always prefer rocq-mcp tools over spawning `coqc` manually — the gap is ~3 orders
+of magnitude per iteration.
 
 ```
-# 1. Fast type-check (skips proof bodies) — use first
-rocq_compile_file(file, mode="vos")
-
-# 2. Full compile — use to validate proofs
-rocq_compile_file(file, mode="full")
-
-# 3. Keep .vo so downstream files can Require it
-rocq_compile_file(file, mode="full", keep_vo=True)
-
-# 4. Interactive proof development
-s = rocq_start(file=..., theorem="my_lemma")
+rocq_compile_file(file, mode="vos")                # fast type-check, STATEMENTS ONLY
+rocq_compile_file(file, mode="full")               # validates proof bodies
+rocq_compile_file(file, mode="full", keep_vo=True) # so downstream files can Require it
+s = rocq_start(file=..., theorem="my_lemma")       # interactive
 s = rocq_check(from_state=s["state_id"], body="intros. iIntros ...")
 ```
 
@@ -119,20 +139,16 @@ dependencies need `.vo`s — compile them with `keep_vo=True` first (or build th
 target's closure via `make -f Makefile.coq <file>.vo`) — otherwise `Cannot find
 a physical path bound to …CFGVer.<Dep>`.
 
-**VOS vs full**: use `vos` to catch statement errors cheaply; use `full` only when
-the proof body matters. VOS does NOT check `Proof.…Qed.`.
-
-**Tooling gotchas:**
-- `rocq_start(theorem=X)` loads the file prefix vos-style — proof bodies SKIPPED.
-  Only `rocq_check` of a body or a `mode=full` compile actually runs proofs; don't
-  infer a lemma passed just because a later `rocq_start` reached it.
-- Nested Proofs are allowed in this codebase: a missing `Qed.` does NOT error —
-  the next `Lemma` silently opens a nested proof and the previous name never enters
-  the environment. Verify the `feedback` field shows "X is defined" after every `Qed.`.
-- pet (interactive rocq-mcp) OOMs on very large files (the pre-split monolithic
-  `Examples.v` needed >7.6 GB). The 2026-07-17 split keeps CFGVer files small
-  enough for interactive work; if a file grows heavy again, iterate via
-  `rocq_compile_file` (coqc) or a truncated mirror file.
+> **The rocq-mcp gotchas live in the `rocq-implementation` skill, §1** — not
+> here, so they stay in one place and can be as long as they need to be. It
+> covers: why a green `vos` says nothing about your tactics; why
+> `rocq_compile_file` cannot build `theories/Symbolic/Solver.v`; why a
+> `rocq_start(theorem=…)` timeout does NOT mean interactive mode is unavailable,
+> and preamble mode as the way out (including inside module functors, and when
+> pet OOMs); why reaching a lemma with `rocq_start` does not mean it compiles;
+> why a missing `Qed.` silently swallows a lemma instead of erroring; and why a
+> rebuilt `.vo` is invisible to an open session until `force_restart=True`.
+> Load it before hand-writing or repairing any proof body.
 
 **rocq plugin commands (LLM4Rocq):** six have auto-trigger wrapper skills
 (`rocq-golf`, `rocq-review`, `rocq-refactor`, `rocq-doctor`, `rocq-checkpoint`,
@@ -194,6 +210,18 @@ maintenance` to re-validate cross-family routing after any description/map
 change — rather than hand-authoring or hand-editing skills ad-hoc (this
 mechanical file-operation cue exists because a 2026-07-20 session created,
 split, and re-described skills directly, bypassing both meta-skills);**
+**this rule is now HOOK-ENFORCED, not advisory** — `.claude/hooks/skill-edit-
+guard.sh` (a blocking `PreToolUse` hook) *denies* a `Write` of a new `SKILL.md`
+without a `skill-creator` consult, and denies an `Edit` whose diff touches a
+`description:` without a `skill-routing-maintenance` consult; skill *body* edits
+stay ungated. If you hit that denial, do the consult rather than looking for a
+way around it — the override (`CLAUDE_SKILL_GUARD_OFF=1`) is only settable in
+the environment Claude Code was launched with, i.e. by the user, not from a
+session. A sibling hook `.claude/hooks/agent-guard.sh` denies routing-judge
+subagents that are not `subagent_type: routing-judge`, and denies more than 6
+subagent spawns per 120 s (both added after a 2026-07-28 eval run cost ~850k
+tokens). Note `git checkout .claude/settings.json` silently removes every hook
+if that file is ever uncommitted.
 after changing any skill *description* or
 noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
 skill (read-only Haiku-judge

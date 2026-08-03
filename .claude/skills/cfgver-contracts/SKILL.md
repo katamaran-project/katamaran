@@ -81,6 +81,37 @@ A hand-written precondition is built from exactly what the generator would emit
 So: public register = `asn.exist "v" … (r ↦ᵣ term_var "v" ∗ secLeakvar "v")`;
 private = the same without `secLeakvar`; pinned = `r ↦ᵣ term_val … v` directly.
 
+### `∗` ORDER MATTERS in a consumed assertion — put pure conjuncts LAST
+
+`∗` is commutative, so the order of conjuncts does not change what a
+precondition *means* — but it does change the VC you get, so it is not a free
+choice. `consume` walks `∗` strictly left-to-right, and a `SepContract`'s logic
+variables arrive as unconstrained ANGELIC evars (`call_contract`; only the ones
+appearing in `sep_contract_localstore` are pinned up front, by `assert_eq_nenv`).
+A pure conjunct — `secLeakvar "x"`, `asn.formula …` — placed **before** the
+chunk that pins `"x"` is therefore asserted about an evar nothing is known
+about, cannot be discharged, and leaks one residual per call into the VC. Worse,
+`postprocess`'s `solve_evars` substitutes the variable afterwards, so the
+leftover *prints* as something trivially true and reads as a solver bug.
+
+So: **a pure conjunct goes after whatever chunk pins its variable.** Measured
+2026-07-29 (commit `55421905`) on `sep_contract_fetch_instr`, whose localstore is
+`[]`: moving `secLeakvar "a"` after `asn.chunk (chunk_ptsreg pc (term_var "a"))`
+removed all 28 `secLeak` asserts from `key_schedule_loop2`'s VC and shrank it
+3.17 MB → 524 KB. `checked_mem_write` / `mem_write_value` already followed the
+rule.
+
+**The exception — do NOT move a conjunct past a PATTERN MATCH on its own
+variable.** Crossing a chunk only adds an equation, so it is information-
+preserving. `asn.match_bool (term_var "inv")` instead *eliminates* `inv`: after
+it, `secLeakvar "inv"` says only "this literal is public", and the precondition
+genuinely weakens. `checked_mem_read` / `mem_read` therefore keep their
+`secLeakvar "inv"` in front — moving it makes `valid_checked_mem_read`
+unprovable against its own body (all three `restrict_bytes` cases reduce to
+`false = true`). Their leftover is `secLeak <literal>`, which `solve_vc` closes
+trivially, so it costs nothing. Mechanism: **core-executor-internals**;
+diagnosing such a residual: **cfgver-solve-vc**.
+
 Exemplar: `cmovznz4_cfg_contract_param` (`Example/Cmovznz4.v`) — `Σ = ["p"∷ty_xlenbits]`,
 placement `term_var "p"`, exits at `bvadd p (of_N off)` terms, precondition with
 the base bound plus register/memory assertions. Two rules of thumb:

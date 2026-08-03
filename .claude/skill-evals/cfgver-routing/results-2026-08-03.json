@@ -1,0 +1,10 @@
+{
+  "method": "Scoped validation after v17 description edit (cfgver-executor: retired the '|wctx| is dominant' claim in favor of the landed chunk-GC finding). Per skill-routing-maintenance's cost-scoping guidance, ran only the new entry plus its two nearest-neighbor regression checks (not a full sweep) — one routing-judge agent (haiku) per query, listing inlined in the prompt.",
+  "note": "Q102 was run twice: the first pass (pre-user-interrupt) returned TOTAL=34/cfgver-executor; the caller mistakenly believed TOTAL should equal the query count (1) and flagged it as a bad checksum. Re-reading .claude/agents/routing-judge.md clarified TOTAL=<number of '-' entries in the listing> (a proof the judge read the whole listing), and the 34-skill listing used here makes TOTAL=34 correct. Re-ran Q102 anyway for a clean second confirmation before proceeding to Q79/Q98.",
+  "results": [
+    {"id": 102, "query_summary": "already ruled out wctx flatness AND term-duplication, cost still quadratic, what's driving it / is there a fix", "expected": "cfgver-executor", "verdict": "cfgver-executor", "total_checksum": 34, "pass": true, "note": "run twice (pre- and post-clarification), same verdict both times"},
+    {"id": 79, "query_summary": "countdown-style loop, trip count bumped, vm_compute >10min, fuel/timeout vs structural (regression vs rocq-timeout-triage)", "expected": "cfgver-executor", "verdict": "cfgver-executor", "total_checksum": 34, "pass": true},
+    {"id": 98, "query_summary": "old |wctx|-vocabulary query (term-duplication ruled out, O(1) terms, still slow) must still land on cfgver-executor despite the description's mechanism wording moving on", "expected": "cfgver-executor", "verdict": "cfgver-executor", "total_checksum": 34, "pass": true}
+  ],
+  "summary": "3/3 pass, no regressions. cfgver-executor's re-worded description (chunk-GC landed, |wctx| claim retired) still wins the new gap query and both nearest-neighbor regression checks."
+}

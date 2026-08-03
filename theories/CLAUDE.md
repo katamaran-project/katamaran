@@ -38,3 +38,45 @@ instantiates the module types at each layer.
 | `Symbolic/Propositions.v` | the `SymProp` verification-condition language and its postprocessing (`prune`/`solve_evars`/`solve_uvars`) |
 | `Syntax/TypeDecl.v` | core `Ty`/`Val`/`RelVal` type-denotation machinery — see **relval-model** for `SyncVal`/`NonSyncVal` semantics |
 | `MicroSail/RefineExecutor.v` | refinement/soundness proof connecting the symbolic executor to the shallow one (`symbolic_vcgen_soundness`) |
+
+---
+
+## Compile-cost floor — measured, and there is no hot spot
+
+Every `coqc` process in a case study pays ~1.96 GB of peak RSS before any of its
+own content. Bisected 2026-07-27 (bare-`Require` probes; peak RSS, which is
+deterministic — wall times on a memory-pressured box are not, see the
+**rocq-timeout-triage** skill):
+
+| layer | GB | |
+|---|---|---|
+| `coqc` startup | 0.06 | |
+| stdpp + Iris (via a case study's `Base`) | 0.37 | 19% |
+| `Base` itself | 0.18 | |
+| `Syntax/Statements.v` (the `Stm`/`Exp` AST) | 0.10 | |
+| `Program.v` (adds `Syntax/FunDecl`, `Syntax/FunDef`) | 0.20 | |
+| `Semantics.v` | 0.17 | |
+| `Syntax/Chunks.v` + `Syntax/Predicates.v` | **0.41** | **21%** |
+| `Symbolic/Worlds.v` + `Syntax/Assertions.v` | 0.09 | |
+| `Symbolic/UnifLogic` + `Propositions` + `Shallow/Monads` | 0.15 | |
+| `Symbolic/Solver` + `Symbolic/Monads` + `Refinement/Monads` | 0.20 | |
+
+**Ten layers at 0.1–0.4 GB each — no single pathology.** That is why no
+restructuring has ever reduced it; there is breadth, not a hot spot. The largest
+single entry, and the only lead not yet probed, is `Chunks`+`Predicates` (0.41).
+
+Things already measured and found NOT to be the cause — don't re-derive these:
+
+- **A case study's own content is ~free.** A copy of `RiscvPmp/Machine.v` with all
+  58 `fun_*` `Stm` ASTs deleted and `FunDef` stubbed to `stm_fail` measures
+  *identically* to the real thing; so does a file holding only `Machine.v`'s
+  header with zero content. The cost is the `Require` closure.
+- **`.vo` size does not predict RAM.** `Machine.vo` is 0.77 MB and `Base.vo` is
+  10.6 MB, yet `Machine`'s layer costs 2.7x `Base`'s. Ratios like "600x
+  expansion" are an attribution error — RAM tracks the transitive closure.
+- **`Equations` and stdpp `decidable`/`finite` are free** (+0.00 GB each).
+- **OCaml GC tuning is a dead end.** `OCAMLRUNPARAM=o=80` cuts a small probe
+  1.96 → 1.77 GB but a real heavy file only 3.26 → 3.22 (1.2%), at +33% time.
+  It is live heap, not GC headroom.
+- **Splitting `Symbolic/Solver` out of `Signature.v`** buys 0.20 GB, not the
+  ~0.9 GB once hoped — see the FRAMEWORK entry in `TODOS.txt`.

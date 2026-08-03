@@ -27,14 +27,25 @@
 (******************************************************************************)
 
 (* ========================================================================= *)
-(* CFGVer/Spec.v — first file in the CFGVer compilation order (Spec.v →      *)
-(* Verifier.v → ...).  Defines Assembly (instruction-builder synonyms: ADD,  *)
-(* SUB, BEQ, ADDI, JALR/RET, MUL family, ...) and CFGVer's OWN leakage-aware  *)
-(* `Specification` instance (RiscvPmpCFGVerifSpec, independent of the plain  *)
-(* one in ../Contracts.v): secLeakvar/inv_leakage-annotated SepContracts for  *)
-(* the same primitive functions (rX, wX, fetch, mem_read/write, decode,      *)
-(* leak, ...), the executors and ValidContract proofs built from it, and     *)
-(* the Iris wiring (RiscvPmpIrisInstanceWithContracts).  15 importers.       *)
+(* CFGVer/Spec.v — first file in the CFGVer compilation order.               *)
+(*                                                                           *)
+(* Defines Assembly (instruction-builder synonyms: ADD, SUB, BEQ, ADDI,      *)
+(* JALR/RET, MUL family, ...) and CFGVer's OWN leakage-aware `Specification` *)
+(* instance (RiscvPmpCFGVerifSpec, independent of the plain one in           *)
+(* ../Contracts.v): secLeakvar/inv_leakage-annotated SepContracts for the    *)
+(* primitive functions (rX, wX, fetch, mem_read/write, decode, leak, ...),   *)
+(* the SYMBOLIC executor built from it, and the ValidContract proofs.        *)
+(*                                                                           *)
+(* DELIBERATELY Iris-free, and free of the shallow/refine/soundness stack.   *)
+(* The Iris wiring (RiscvPmpIrisInstanceWithContracts) and the shallow       *)
+(* executor live in SpecIris.v instead. That split is what lets Contracts.v, *)
+(* GenContract.v and every Example/*.v avoid loading the binary Iris model   *)
+(* (~0.98 GB) and the shallow/refine/soundness stack (~0.31 GB) — they need  *)
+(* only to vm_compute the symbolic executor. Only the soundness chain        *)
+(* (Adequacy.v, EndToEnd.v) needs SpecIris.v.                                *)
+(*                                                                           *)
+(* DON'T re-add an Iris or ShallowExecutor require here — it silently puts   *)
+(* ~1.3 GB back onto every example file.                                     *)
 (* ========================================================================= *)
 
 From Coq Require Import
@@ -44,32 +55,16 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Iris.Instance
-     Iris.BinaryInstance
-     Iris.BinaryWeakestPre
-     Iris.Base
      Notations
      Bitvector
      Sep.Hoare
      Specification
-     MicroSail.ShallowExecutor
-     MicroSail.ShallowSoundness
      MicroSail.SymbolicExecutor.
 From Katamaran Require Import
-     MicroSail.RefineExecutor.
-From Katamaran Require Import
-     MicroSail.Soundness
      RiscvPmp.PmpCheck
-     RiscvPmp.IrisModel
-     RiscvPmp.IrisModelBinary
-     RiscvPmp.IrisInstance
-     RiscvPmp.IrisInstanceBinary
      RiscvPmp.Machine
      RiscvPmp.Sig
      RiscvPmp.Contracts.
-From Katamaran Require RiscvPmp.ModelBinary.
-
-From iris.program_logic Require Import total_lifting.
 
 Import RiscvPmpProgram.
 Import ListNotations.
@@ -116,7 +111,9 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
-  Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
+  (* 3-ary since 2026-07-31: the middle argument is the raw instruction WORD.
+     Reads "address a holds word w, which encodes instruction t". *)
+  Notation "a '↦ᵢ[' w ']' t" := (asn.chunk (chunk_user ptstoinstr [a; w; t])) (at level 70).
   Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
@@ -234,7 +231,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   #[global] Notation "r '↦ᵣ' val" := (asn_reg_ptsto r val) (at level 70) : asn_scope.
   #[global] Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70) : asn_scope.
   #[global] Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70) : asn_scope.
-  Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
+  Local Notation "a '↦ᵢ[' w ']' t" := (asn.chunk (chunk_user ptstoinstr [a; w; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
@@ -274,12 +271,35 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     |}.
 
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty_word; "i" :: ty_ast(* ; "entries" :: ty.list ty_pmpentry *)];
        sep_contract_localstore      := [];
        sep_contract_precondition    :=
-        secLeakvar "a" ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
+        (* ORDER IS LOAD-BEARING: a pure `secLeakvar`/formula conjunct must come
+           AFTER whatever chunk pins its logic variable.  `call_contract`
+           (Symbolic/Monads.v) instantiates a contract's logic variables
+           ANGELICALLY, and `consume` walks ∗ left-to-right, so a conjunct
+           placed before the chunk that unifies its variable is asserted while
+           that variable is still an unconstrained evar — unprovable, and the
+           obligation survives into the VC as a residual.  `postprocess`'s
+           solve_evars then substitutes the variable, so the leftover *prints*
+           as the trivially-true `secLeak p` and looks like a solver bug; it
+           isn't, the solver never saw it in that form (diagnosed 2026-07-29).
+           Here `sep_contract_localstore` is [], so nothing pins "a" until the
+           pc chunk below.  Reordering these two conjuncts removes all 28
+           secLeak asserts from key_schedule_loop2's VC (3.17 MB -> 524 KB).
+           Same invariant, same reason: the trailing secLeakvar "paddr" in
+           mem_write_value / checked_mem_write.
+
+           LIMIT OF THE REWRITE: this only works when the conjunct crosses a
+           CHUNK, which merely adds an equation.  It must NOT be applied across
+           a PATTERN MATCH on the same variable — that eliminates the variable,
+           so the moved conjunct degrades to a statement about a literal and the
+           precondition genuinely weakens.  See the note on
+           sep_contract_checked_mem_read, where trying it makes the contract
+           unprovable against its own body. *)
         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
-          term_var "a" ↦ᵢ term_var "i" ∗
+        secLeakvar "a" ∗ (* Technically this can be concluded from the formula_le, but I think it is better explicit *)
+          term_var "a" ↦ᵢ[term_var "w"] term_var "i" ∗
           (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "a"))%asn ∗
           (term_binop bop.plus (term_unsigned (term_var "a")) (term_val ty.int (Z.of_nat bytes_per_instr))) <= term_val ty.int (Z.of_N maxAddr) ∗
                                                                                                                  asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
@@ -289,11 +309,14 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
         secLeakvar "a" ∗
-         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
-         asn.exist "encoded_instr" _
-         (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "encoded_instr") ∗
-                                      asn.chunk (chunk_user encodes_instr [term_var "encoded_instr"; term_var "i"])
-         ∗ secLeakvar "encoded_instr") ∗
+         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ[term_var "w"] term_var "i" ∗
+         (* NO `asn.exist "encoded_instr"` any more.  That existential was
+            PRODUCED into the caller, so it minted a fresh demonic variable in
+            wctx on every step and was the last per-step |wctx| leak after `an`
+            was fixed.  The word is now pinned by the precondition's ptstoinstr
+            chunk, so fetch can simply name it.  PLAN-encoded-instr.md. *)
+         (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w") ∗
+                                      asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"])) ∗
            asn_cur_privilege (term_val ty_privilege Machine) (* ∗ *)
            (* asn_pmp_entries (term_var "entries") *);
     |}.
@@ -302,6 +325,18 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
      {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "cmem_val" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
+        (* "inv" STAYS IN FRONT — do not "fix" this the way
+           sep_contract_fetch_instr was fixed.  The only thing that would pin
+           "inv" is the match_bool below, and that is a pattern match, which
+           ELIMINATES the variable rather than merely constraining it: after it,
+           secLeakvar "inv" degrades to "this literal is public" and the
+           precondition no longer states that the caller's `inv` was public.
+           Measured 2026-07-29: moving it makes this contract unprovable against
+           its own body (all three restrict_bytes cases reduce to false = true).
+           Crossing a CHUNK is information-preserving; crossing a pattern match
+           on the same variable is not.  The residual this leaves at call sites
+           is `secLeak <literal>`, which solve_vc closes trivially — unlike the
+           fetch case, where it was `secLeak (p + c)`. *)
          secLeakvar "inv" ∗
            secLeakvar "paddr" ∗
         asn.match_bool (term_var "inv")
@@ -334,6 +369,9 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)(* ) *) ∗
                                                                                                             asn.chunk (chunk_user inv_leakage [env]) ∗
+    (* Deliberately LAST — do not move to the front.  See the ordering note on
+       sep_contract_fetch_instr: a secLeakvar consumed before the chunk that
+       pins its variable becomes an undischargeable VC residual. *)
     secLeakvar "paddr";
       sep_contract_result          := "result_checked_mem_write";
       sep_contract_postcondition   :=
@@ -402,6 +440,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; (* "entries" :: ty.list ty_pmpentry; *) "mem_val" :: ty_bytes bytes];
       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
       sep_contract_precondition    :=
+        (* "inv" stays in front — see the note on sep_contract_checked_mem_read. *)
         secLeakvar "inv" ∗
           secLeakvar "paddr" ∗
         asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ[ bytes ] term_var "mem_val") (term_var "paddr" ↦ₘ[ bytes ] term_var "mem_val") ∗
@@ -439,6 +478,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
         (* asn_pmp_entries (term_var "entries") ∗ *)
         (* asn_pmp_access (term_var "paddr") (term_get_slice_int (term_val ty.int (Z.of_nat bytes))) (term_var "entries") (term_val ty_privilege Machine) (term_val ty_access_type Write) *) ∗
         asn.chunk (chunk_user inv_leakage [env]) ∗
+    (* Deliberately LAST — do not move to the front; see sep_contract_fetch_instr. *)
     secLeakvar "paddr";
       sep_contract_result          := "result_mem_write";
       sep_contract_postcondition   :=
@@ -603,13 +643,17 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
     |}.
 
   Definition lemma_open_ptsto_instr : SepLemma open_ptsto_instr :=
-    {| lemma_logic_variables := ["paddr" :: ty_word; "i" :: ty_ast];
+    (* "w" is NOT a pattern argument and does not need to be: ptstoinstr is
+       precise on the address (Sig.v), so consuming the chunk determines both the
+       word and the AST.  That is what keeps `use lemma open_ptsto_instr [tmp]`
+       (Machine.v) working unchanged with its single argument — and it is why the
+       postcondition can now NAME the word instead of re-existentialising it. *)
+    {| lemma_logic_variables := ["paddr" :: ty_word; "w" :: ty_word; "i" :: ty_ast];
        lemma_patterns        := [term_var "paddr"];
-       lemma_precondition    := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
-      lemma_postcondition   := ∃ "op", (asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "op"]) ∗
-                                          asn.chunk (chunk_user encodes_instr [term_var "op"; term_var "i"]) ∗
-                                          secLeakvar "op"
-                                       )
+       lemma_precondition    := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "w"; term_var "i"]);
+      lemma_postcondition   := asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "w"]) ∗
+                                 asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]) ∗
+                                 secLeakvar "w"
     |}.
 
   Definition lemma_close_ptsto_instr : SepLemma close_ptsto_instr :=
@@ -618,7 +662,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
        lemma_precondition    := asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "paddr"; term_var "cl"]) ∗
                                   asn.chunk (chunk_user encodes_instr [term_var "cl"; term_var "i"]) ∗
                                   secLeakvar "cl";
-       lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "i"]);
+       lemma_postcondition   := asn.chunk (chunk_user ptstoinstr [term_var "paddr"; term_var "cl"; term_var "i"]);
     |}.
 
   (* Definition lemma_extract_pmp_ptsto bytes : SepLemma (extract_pmp_ptsto bytes) := *)
@@ -673,8 +717,6 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
       end.
 End RiscvPmpCFGVerifSpec.
 
-Module RiscvPmpCFGVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpCFGVerifSpec.
 Module RiscvPmpCFGVerifExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpCFGVerifSpec.
 
@@ -859,315 +901,3 @@ Module RiscvPmpSpecVerif.
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
   Qed.
 End RiscvPmpSpecVerif.
-
-Module RiscvPmpIrisInstanceWithContracts.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpCFGVerifSpec.
-  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpSemantics RiscvPmpCFGVerifSpec RiscvPmpIrisBase2
-    (* RiscvPmpIrisAdeqParameters *) RiscvPmpIrisAdeqParams2
-    RiscvPmpIrisInstance2.
-  Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpCFGVerifSpec RiscvPmpCFGVerifShalExecutor.
-  Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpCFGVerifSpec RiscvPmpCFGVerifShalExecutor
-    RiscvPmpCFGVerifExecutor.
-
-  Import RiscvPmpIrisBase2.
-  Import RiscvPmpIrisInstance2.
-  Import RiscvPmp.Model.
-
-  Import iris.bi.interface.
-  Import iris.bi.big_op.
-  Import iris.base_logic.lib.iprop.
-  Import iris.program_logic.weakestpre.
-  Import iris.program_logic.total_weakestpre.
-  Import iris.base_logic.lib.gen_heap.
-  Import iris.proofmode.string_ident.
-  Import iris.proofmode.tactics.
-
-  Lemma read_ram_sound `{sailGS2 Σ} {bytes} :
-    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_read_ram (read_ram bytes).
-  Proof.
-      intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
-      iIntros "H". cbn in *. iApply semWP2_foreign. unfold mem_inv2.
-      iIntros (? ? ? ?) "((Hregs1 & Hregs2) & ((%memmapL & HmemL & %HmapL & HtrL & HltrL) & (%memmapR & HmemR & %HmapR & HtrR & HltrR)))".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (resL ? ? resR ? ? Hf).
-      rewrite evalValsProjLeftIsProjLeftEvals in Hf. rewrite evalValsProjRightIsProjRightEvals in Hf.
-      rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      inversion H0; inversion H1; subst. clear H0 H1 Hf. do 3 iModIntro.
-      iMod "Hclose" as "_".
-      (* The precondition interprets [asn.match_bool inv ...] via the raw
-         [pattern_match_relval pat_bool inv]. Under method-Y this succeeds on a
-         [NonSyncVal v v0] scrutinee exactly when [v = v0] (both worlds take the
-         same branch), and fails otherwise. Destructing the match result rather
-         than [inv] itself reduces both [H] and the postcondition uniformly:
-         the [Some] branch collapses to a plain boolean [b] (the [SyncVal] and
-         coinciding-[NonSyncVal] cases are then literally identical), and the
-         [None] branch gives a [False] precondition. *)
-      destruct (pattern_match_relval pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn.
-      2: { iDestruct "H" as "%HF". contradiction. }
-      destruct (env.view δpc).
-      destruct b.
-        - (* readonly case *)
-        iDestruct "H" as "#H".
-         iInv "H" as "Hptsto" "Hclose_ptsto".
-        iDestruct "Hptsto" as "(HptstoL & HptstoR)".
-        iDestruct (bi.later_mono _ _ (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_left) HmapL) with "[$HptstoL $HmemL]") as "#>%eq_fun_read_ramL".
-        iDestruct (bi.later_mono _ _ (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_right) HmapR) with "[$HptstoR $HmemR]") as "#>%eq_fun_read_ramR".
-        iMod ("Hclose_ptsto" with "[$HptstoL $HptstoR]") as "_".
-        iFrame "Hregs1 Hregs2 HmemL HmemR HtrL HltrL HtrR HltrR".
-        iSplitR; first auto.
-        iApply semWP2_val. do 2 iModIntro.
-        iExists δ. iSplitR; first auto.
-        destruct ram_val.
-        + iExists (SyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iFrame "H".
-          iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL.
-          auto. (* TODO: How to dispatch emp goal, also several admits for this below *)
-        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iFrame "H".
-          iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL eq_fun_read_ramR.
-          auto.
-      - (* old case *)
-        iModIntro.
-        iDestruct "H" as "(HL & HR)".
-        iPoseProof (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_left) HmapL with "[$HL $HmemL]") as "%eq_fun_read_ramL".
-        iPoseProof (RiscvPmpModel2.fun_read_ram_works (sg := sailGS2_sailGS_right) HmapR with "[$HR $HmemR]") as "%eq_fun_read_ramR".
-        iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_left) $! HmapL with "HmemL HtrL HltrL") as "HmemL".
-        iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) $! HmapR with "HmemR HtrR HltrR") as "HmemR".
-        iFrame "Hregs1 Hregs2 HmemL HmemR". iApply semWP2_val.
-        iFrame "HL". iFrame "HR".
-        iExists δ. iModIntro. iSplitR; first auto.
-        destruct ram_val.
-        + iExists (SyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr))).
-          iSplitR; first by rewrite eq_fun_read_ramR.
-          iSplitR; try auto.
-          iSplitR; first by rewrite eq_fun_read_ramL.
-          auto.
-        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL eq_fun_read_ramR.
-          auto.
-  Qed.
-
-  Lemma write_ram_sound `{sailGS2 Σ} {bytes} :
-    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_write_ram (write_ram bytes).
-  Proof.
-    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "[%w (HL & HR)]". iApply semWP2_foreign.
-    iIntros (? ? ? ?) "((Hregs1 & Hregs2) & ((%memmapL & HmemL & %HmapL & HtrL) & (%memmapR & HmemR & %HmapR & HtrR)))".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-    iIntros (res1 ? ? res2 ? ? Hf).
-    rewrite evalValsProjLeftIsProjLeftEvals in Hf. rewrite evalValsProjRightIsProjRightEvals in Hf.
-    rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-    inversion H0; inversion H1; subst. clear H0 H1 Hf. do 3 iModIntro.
-    iMod "Hclose" as "_".
-    iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_left) with "[$HL $HmemL $HtrL]") as "[$ HL]"; auto.
-    iMod (RiscvPmpModel2.fun_write_ram_works (sg := sailGS2_sailGS_right) with "[$HR $HmemR $HtrR]") as "[$ HR]"; auto.
-    rewrite semWP2_val. iFrame "Hregs1 Hregs2".
-    iExists δ. iSplitR; first auto.
-    iExists (SyncVal true). iSplitR; first auto. by iFrame "HL HR".
- Qed.
-
-  (* Important sanity condition on mmio predicates - NOTE: could be in typeclass, together with the condition that reads are either all accepted, or none of them are *)
-  Lemma mmio_pred_cons {bytes : nat} t e: event_pred bytes e → mmio_pred bytes t → mmio_pred bytes (cons e t).
-  Proof. now apply List.Forall_cons. Qed.
-
-  (* Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) : *)
-  (*   TValidContractForeign (@RiscvPmpCFGVerifSpec.sep_contract_mmio_write _ H) (mmio_write H). *)
-  (* Proof. *)
-  (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *. *)
-  (*   iIntros "([%Hmmio _] & #Hinv & [-> ->])". iApply semTWP_foreign. *)
-  (*   iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]". *)
-  (*   iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose". *)
-  (*   iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t. *)
-  (*   iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]". *)
-  (*   iMod ("Hclose" with "[Htrf]") as "_". *)
-  (*   {(* Instantiate evars *) *)
-  (*     iExists _; iFrame. iPureIntro. *)
-  (*     apply mmio_pred_cons; [|eauto]. *)
-  (*     constructor. } *)
-  (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
-  (*   iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst. *)
-  (*   iMod "Hclose" as "_". rewrite semTWP_val. *)
-  (*   destruct bytes; first contradiction. *)
-  (*   unfold mem_inv, fun_write_mmio; cbn. *)
-  (*   now iFrame "Hregs Hmem Htr". *)
-  (* Qed. *)
-
-  Lemma decode_sound `{sailGS2 Σ} :
-    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
-  Proof.
-    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "%Hdecode". iApply semWP2_foreign.
-    iIntros (? ? ? ?) "((Hregs1 & Hregs2) & ((%memmapL & HmemL & %HmapL & HtrL & HltrL) & (%memmapR & HmemR & %HmapR & HtrR & HltrR)))".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-    iIntros (res1 ? ? res2 ? ? Hf).
-    rewrite evalValsProjLeftIsProjLeftEvals in Hf. rewrite evalValsProjRightIsProjRightEvals in Hf.
-    rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-    inversion H0; inversion H1; subst. clear H0 H1 Hf. do 3 iModIntro.
-    iMod "Hclose" as "_".
-    iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_left) $! HmapL with "HmemL HtrL HltrL") as "HmemL".
-    iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) $! HmapR with "HmemR HtrR HltrR") as "HmemR".
-    iFrame "Hregs1 Hregs2 HmemL HmemR".
-    destruct code; destruct instr; cbn in *;
-    destruct (pure_decode _); inversion Hdecode.
-    + rewrite semWP2_val.
-      iExists δ. iSplitR; first auto. iExists (SyncVal v0). auto.
-    + destruct (pure_decode); inversion Hdecode.
-      rewrite semWP2_val.
-      iExists δ. iSplitR; first auto. iExists (NonSyncVal v1 v2). auto.
-  Qed.
-
-  (* Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes): *)
-  (*   TValidContractForeign (RiscvPmpCFGVerifSpec.sep_contract_within_mmio H) (RiscvPmpProgram.within_mmio H). *)
-  (* Proof. *)
-  (*   intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *. *)
-  (*   iIntros "Hpre". iApply semTWP_foreign. *)
-  (*   iIntros (? ?) "(Hregs & Hmem)". *)
-  (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
-  (*   iIntros (? ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst. *)
-  (*   rewrite semTWP_val. iMod "Hclose" as "_". iFrame "Hregs Hmem". *)
-  (*   repeat iModIntro. *)
-  (*   rewrite /fun_within_mmio bool_decide_and. *)
-  (*   destruct inv; cbn; iDestruct "Hpre" as "([%Hlft _] & [%Hrght _])". *)
-  (*   - iPureIntro; repeat split; auto. *)
-  (*     rewrite -bool_decide_and bool_decide_true //. *)
-  (*     split; [auto| solve_bv]. *)
-  (*   - iPureIntro; repeat split; auto. *)
-  (*     assert (bool_decide (withinMMIO paddr bytes) = false) as ->. *)
-  (*     { rewrite bool_decide_eq_false. *)
-  (*       destruct bytes; first easy. *)
-  (*       assert (paddr ∈ liveAddrs)%stdpp. *)
-  (*       { apply bv.in_seqBv. *)
-  (*         - change (bv.of_N minAddr) with (@bv.zero xlenbits); cbn. (* TODO: add simplifying `xlenbits` to solve_bv *) solve_bv. *)
-  (*         - rewrite N2Z.inj_add in Hrght. *)
-  (*           change minAddr with 0%N in *; cbn in *. *)
-  (*           assert (bv.unsigned paddr < Z.of_N lenAddr)%Z by Lia.lia. cbn. *)
-  (*           cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)} *)
-  (*       intros HFalse; cbn in HFalse. *)
-  (*       assert (paddr ∈ mmioAddrs)%stdpp by (destruct bytes; intuition). *)
-  (*       eapply mmio_ram_False; eauto. *)
-  (*     } *)
-  (*     auto. *)
-  (* Qed. *)
-
-    Lemma leak_sound `{sailGS2 Σ} :
-    ValidContractForeign RiscvPmpCFGVerifSpec.sep_contract_leak RiscvPmpProgram.leak.
-  Proof.
-    intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "(Hinv & %HsL & _)". iApply semWP2_foreign.
-    iIntros (? ? ? ?) "((Hregs1 & Hregs2) & ((%memmapL & HmemL & %HmapL & HtrL & HltrL) & (%memmapR & HmemR & %HmapR & HtrR & HltrR)))".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-    iIntros (res1 ? ? res2 ? ? Hf).
-    rewrite evalValsProjLeftIsProjLeftEvals in Hf. rewrite evalValsProjRightIsProjRightEvals in Hf.
-    rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-    inversion H0; inversion H1; subst. clear H0 H1 Hf. do 3 iModIntro.
-    iMod "Hclose" as "_".
-    iInv "Hinv" as (t) " [>HltrfL >HltrfR]" "Hclose".
-    iPoseProof (trace.trace_full_frag_eq with "HltrL HltrfL") as "%eqL".
-    iPoseProof (trace.trace_full_frag_eq with "HltrR HltrfR") as "%eqR".
-    cbn. subst t.
-    rewrite eqR.
-    iMod (trace.trace_update _ _ (cons _ _) with "[$HltrL $HltrfL]") as "[HltrL HltrfL]".
-    iMod (trace.trace_update _ _ (cons _ _) with "[$HltrR $HltrfR]") as "[HltrR HltrfR]".
-    iMod ("Hclose" with "[$HltrfL $HltrfR]") as "_".
-    iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_left) (fun_leak μ1 (ty.projLeft leak0)) $! HmapL with "HmemL HtrL HltrL") as "HmemL".
-    rewrite <- eqR.
-    iPoseProof (RiscvPmpModel2.mem_inv_not_modified (sg := sailGS2_sailGS_right) (fun_leak μ2 (ty.projLeft leak0)) $! HmapR with "HmemR HtrR HltrR") as "HmemR".
-    apply secLeakOtherDef in HsL. rewrite HsL. cbn.
-    iFrame "Hregs1 Hregs2 HmemL HmemR".
-    rewrite semWP2_val.
-    iExists δ. iSplitR; first auto. iExists (SyncVal tt). auto.
-  Qed.
-
-  Lemma foreignSemCFGVerif `{sailGS2 Σ} : ForeignSem.
-    intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, (* RiscvPmpModel2.mmio_read_sound, mmio_write_sound, within_mmio_sound, *) decode_sound, leak_sound.
-  Qed.
-
-  (* Lemma foreignSemCFGVerif `{sailGS Σ} : ForeignSem. *)
-  (* Proof. apply (TForeignSem_ForeignSem TforeignSemCFGVerif). Qed. *)
-
-  Ltac destruct_syminstance ι :=
-    repeat
-      match type of ι with
-      | Env _ (ctx.snoc _ (MkB ?s _)) =>
-          string_to_ident_cps s
-            ltac:(fun id =>
-                    let fr := fresh id in
-                    destruct (env.view ι) as [ι fr];
-                    destruct_syminstance ι)
-      | Env _ ctx.nil => destruct (env.view ι)
-      | _ => idtac
-      end.
-
-  Lemma open_ptsto_instr_sound `{sailGS2 Σ} :
-    ValidLemma RiscvPmpCFGVerifSpec.lemma_open_ptsto_instr.
-  Proof.
-    intros ι; destruct_syminstance ι; cbn.
-    iIntros "[%op (Hptsto & Henc & HsL )]".
-    iExists op.
-    now iFrame.
-  Qed.
-
-  Lemma close_ptsto_instr_sound `{sailGS2 Σ} :
-    ValidLemma RiscvPmpCFGVerifSpec.lemma_close_ptsto_instr.
-  Proof.
-    intros ι; destruct_syminstance ι; cbn.
-    iIntros "(Hptsto & Henc & HsL & _)".
-    iExists cl.
-    now iFrame.
-  Qed.
-
-  (* Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth): *)
-  (*   ValidLemma (RiscvPmpCFGVerifSpec.lemma_close_mmio_write imm width). *)
-  (* Proof. *)
-  (*   intros ι; destruct_syminstance ι; cbn. *)
-  (*   iIntros "([<- _] & [-> _])". *)
-  (*   unfold interp_mmio_checked_write. *)
-  (*   iPureIntro. *)
-  (*   split; auto. *)
-  (*   destruct width; now compute. *)
-  (* Qed. *)
-
-  Lemma lemSemCFGVerif `{sailGS2 Σ} : LemmaSem.
-  Proof.
-    intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
-    (* - apply Model.RiscvPmpModel2.open_pmp_entries_sound. *)
-    (* - apply Model.RiscvPmpModel2.close_pmp_entries_sound. *)
-    - apply open_ptsto_instr_sound.
-    - apply close_ptsto_instr_sound.
-    (* - apply close_mmio_write_sound. *)
-  Qed.
-
-  Import RiscvPmpCFGVerifSpec.
-  Import RiscvPmpCFGVerifExecutor.Symbolic.
-
-  (* Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem RiscvPmpCFGVerifSpec.CEnv. *)
-  (* Proof. *)
-  (*   apply (tsound TforeignSemCFGVerif lemSemCFGVerif). *)
-  (*   intros Γ τ f c Heq. *)
-  (*   pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc]. *)
-  (*   eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness. *)
-  (*   eauto. *)
-  (* Qed. *)
-
-  (* TODO: prove this lemma as: apply (TValidContractEnvSem_ValidContractEnvSem TcontractsSound). *)
-  Lemma contractsSound `{sailGS2 Σ} : ⊢ ValidContractEnvSem RiscvPmpCFGVerifSpec.CEnv.
-  Proof.
-    apply (sound foreignSemCFGVerif lemSemCFGVerif).
-    intros Γ τ f c Heq.
-    pose proof (RiscvPmpSpecVerif.ValidContracts f Heq) as [fuel Hvc].
-    eapply shallow_vcgen_fuel_soundness, symbolic_vcgen_fuel_soundness.
-    eauto.
-  Qed.
-
-End RiscvPmpIrisInstanceWithContracts.

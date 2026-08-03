@@ -95,3 +95,75 @@ big-op is needed again (in an affine logic dropping is silent, not an error).
 
 Inside `iInduction`'s `-` bullets, deeper case splits need different bullet symbols
 (`+`, `--`, `*`) — Rocq bullet discipline applies to IPM proofs unchanged.
+
+Two traps around that table, both cost a 5m45s compile on 2026-07-28:
+
+**`try iSplit` hides the `∗` mistake.** `iSplit` on a `∗` goal fails with
+"not a conjunction", but `theories/Symbolic/Solver.v` writes `try iSplit` in its
+`formula_simplifies_spec` / `simplify_*_spec` scripts, so there the failure is
+swallowed and a later tactic happens to cover for it. Copy that idiom into a
+proof of your own and you inherit a no-op. Write `iSplitL ""` / `iSplitR ""` —
+with an empty spatial context they need no hypothesis names, and `FromSep` holds
+in every bi, so they are strictly safer than `iSplit`.
+
+**`iApply (lem with "H")` will not always infer an argument that appears only
+under a function in the conclusion.** For
+`lem : ⊢ instpred fact -∗ (instpred hyp ∗-∗ instpred (f hyp fact))`, `iApply`
+reports an unsolved evar in both slots —
+`cannot apply (instpred ?Goal8 ∗-∗ instpred (formula_discharge ?Goal8 fact))` —
+even when the goal is a perfect instance. Pass the argument positionally
+(`iApply (lem (formula_propeq t1 t2) fact with "H")`); that turns unification
+into a plain conversion check, which succeeds.
+
+## Debugging an IPM failure inside a module functor — model it abstractly
+
+Katamaran's `Pred w` lemmas live inside `SolverOn` and friends, so
+`rocq_start(preamble=…)` cannot reach them and `rocq_start(theorem=…)` blows the
+300 s cap on a large file. That is *not* a reason to iterate at full-compile
+price: an IPM failure is almost always about **shape**, not about the concrete
+types, so reproduce it over an abstract bi with abstract propositions.
+
+```coq
+(* preamble: From iris.proofmode Require Import proofmode. *)
+Section S.
+Context {PROP : bi} {AF : BiAffine PROP} {PF : Persistent F}.
+Context (Formula : Type) (G : Formula -> PROP) (d : Formula -> Formula -> Formula).
+Context (fact : Formula) (F : PROP).
+Hypothesis dspec : forall hyp, ⊢ F -∗ (G hyp ∗-∗ G (d hyp fact)).
+Lemma test (P S1 S2 : Formula) :
+  ⊢ F -∗ (G P ∗ (G S1 ∗ G S2) ∗-∗ G (d P fact) ∗ (G (d S1 fact) ∗ G (d S2 fact))).
+```
+
+`G` stands in for `instpred`, `d` for the helper being applied. Both traps above
+reproduce here in ~100 ms, versus 5m45s per attempt against the real file. Add
+`{!BiAffine PROP}` and `{!Persistent F}` or you will get spurious
+"`iIntro: F not intuitionistic`" failures — `Pred w = Valuation w -> Prop` is
+affine with everything persistent, and an abstract bi is neither by default.
+
+What this does *not* model: whether a `rewrite` actually produced the shape you
+assumed. Confirm that from the real error's position — if the reported failure is
+*downstream* of the rewrite, the rewrite worked.
+
+## `iStopProof` folds the WHOLE persistent context — prefer a wrapper lemma
+
+`iStopProof` turns the entire spatial+persistent context into a single nested
+conjunction, so the intro pattern that follows it (`intros ι Hpc ((H1 & H2) &
+H3)`) encodes how many hypotheses happened to be in scope. Introduce one
+unrelated hypothesis earlier in the proof and it breaks with *"Expects a
+conjunctive pattern made of 2 patterns"*, far from the edit that caused it.
+
+When you need to drop to the model to apply a pure/Pred-level lemma, give that
+lemma an Iris-level statement instead and `iApply` it with a framing pattern
+naming exactly the hypotheses it needs:
+
+```coq
+Lemma my_lemma_pred {w} … : (P ∗ Q ∗ R ⊢ S)%I.
+Proof. constructor. intros ι Hpc (HP & HQ & HR). now apply my_lemma. Qed.
+
+(* call site — stable against unrelated context changes *)
+iApply (my_lemma_pred with "[$HP $HQ $HR]").
+```
+
+If the underlying lemma has a variable that does not occur in its conclusion,
+`apply` will leave it as an unresolved evar (*"Unable to find an instance for the
+variable …"*); use `eapply my_lemma; eassumption` so a premise pins it.

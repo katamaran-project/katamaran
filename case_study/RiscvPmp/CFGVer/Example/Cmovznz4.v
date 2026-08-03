@@ -124,13 +124,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        (bv.of_N 148, false, None); (bv.of_N 152, false, None);
        (bv.of_N 156, false, None); (bv.of_N 160, false, None)].
 
-    Definition cmovznz4_cfg_contract : CFGVerifierContract :=
-      gen_contract init_addr cmovznz4_reg_specs cmovznz4_mem_specs cmovznz4_instrs []
-        (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs) 35.
-
-    Lemma valid_cmovznz4_cfg_contract : ValidCFGVerifierContract cmovznz4_cfg_contract.
-    Proof. vm_compute. solve_vc. Qed.
-
     (* Step 5 (init_addr parameterization): the SAME cmovznz4 program, loaded at
        a genuinely nonzero, 4-aligned start address instead of 0. cmovznz4 is a
        straight-line program (no jumps/branches) and every LOAD/STORE is
@@ -162,16 +155,13 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        (bv.of_N (cmovznz4_start + 156), false, None);
        (bv.of_N (cmovznz4_start + 160), false, None)].
 
-    Definition cmovznz4_cfg_contract_at_start : CFGVerifierContract :=
-      gen_contract cmovznz4_start cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start
-        cmovznz4_instrs [] (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs) 35.
-
-    Lemma valid_cmovznz4_cfg_contract_at_start :
-      ValidCFGVerifierContract cmovznz4_cfg_contract_at_start.
-    Proof. vm_compute. solve_vc. Qed.
-
-
     (* ===== Phase 4.2: base-parametric cmovznz4 VC ========================
+       This supersedes BOTH removed concrete-base contract/VC pairs
+       (cmovznz4_cfg_contract / valid_cmovznz4_cfg_contract at base 0, and
+       cmovznz4_cfg_contract_at_start / valid_cmovznz4_cfg_contract_at_start at
+       base 256): cmovznz4_noninterferent and cmovznz4_noninterferent_at_start
+       are both corollaries of the parametric theorem, so re-proving those two
+       VCs cost 31 s of the file's compile time for nothing.
        Parametric contract (Σ = ["p"]) built with gen_contract_rel from the
        base-relative specs below, so the data pointers A1/A2/A3 hold
        p+116 / p+132 / p+148 and the 12 data words live at p+116 .. p+160

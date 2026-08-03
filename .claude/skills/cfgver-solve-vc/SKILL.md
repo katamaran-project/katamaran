@@ -46,14 +46,46 @@ Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
 `solve_vc` is deliberately NOT specialised for this — it stays a general VC
 solver; `solve_symbase_fetch` is the add-on. It applies four evalRel-level
 lemmas (`relval_secLeak_bvadd`, `relval_fetch_lower`, `relval_fetch_upper_bare`,
-`relval_fetch_upper_add`) covering the three residual shapes (secLeak of a
-constant-offset pc; the fetch lower bound; the fetch upper bound, bare and
-`base + c`). The upper-bound-with-offset numeric side is discharged via
+`relval_fetch_upper_add`) covering the fetch lower bound and the fetch upper
+bound (bare and `base + c`). The upper-bound-with-offset numeric side is discharged via
 `Z.leb_le; vm_compute; reflexivity` rather than `lia`, because with stdpp's
 gmap Zify instances in scope `lia` mis-handles `bv.bin` of a literal (see
 `gmap-pitfalls`). This replaces the old hand-copied 15-line
 `destruct secLeak … / bv.bin_add_small / lia` tail that used to sit in every
 `_param` proof.
+
+**A fourth residual shape used to be listed here and is GONE (2026-07-29,
+commit `55421905`): `secLeak` of a constant-offset pc.** It was never "by
+design" — it came from a conjunct-ORDER bug in `sep_contract_fetch_instr`
+(`CFGVer/Spec.v`), fixed by moving `secLeakvar "a"` after the
+`chunk_ptsreg pc (term_var "a")` chunk. `relval_secLeak_bvadd` and the
+`relval_fetch_lower` branch that calls it are now believed dead as top-level
+`solve_symbase_fetch` alternatives; they were left in place (a dead `solve[…]`
+alternative is harmless) and NOT verified dead. Do not re-derive per-proof
+workarounds for a leftover `secLeak (c +ᵇ p)` — if one reappears, a contract's
+precondition has the ordering bug. See **cfgver-contracts** for the authoring
+rule and **core-executor-internals** for the mechanism.
+
+### A residual that looks trivially provable may be post-`solve_evars`
+
+The single most expensive trap in reading a VC. `ValidCFGVerifierContract` is
+`safeE (postprocess …)`, and `postprocess` runs `solve_evars`/`solve_uvars`,
+which SUBSTITUTE angelic/demonic variables throughout the tree. So the formula
+you read in a residual is not necessarily the formula the solver was given. The
+tell is a residual that is obviously discharged by an `assumek` sitting directly
+above it — as `assumek (secLeak p)` / `assertk (secLeak p)` did for a year.
+Before concluding the solver is broken:
+
+1. Reproduce on the SMALLEST example with the same shape, not on the big one.
+   For any parametric-base residual that is `SetX2` — one instruction, whole VC
+   is a handful of nodes.
+2. Reconstruct the world by hand and call the solver on it directly, in
+   rocq-mcp preamble mode (`MkWorld <ctx> <pathcondition>` + `Eval vm_compute in
+   (combined_solver w C)`). ~20 ms per iteration. If it returns residual
+   `[ctx]`, the solver is fine and the printed formula is not what it saw.
+3. Only then look at construction order — the pre-`postprocess` form is what
+   matters. (`vm_compute` on a RAW `CFG_VC_triple` is pathological, >10 min even
+   for one instruction; do not try to dump it.)
 
 ## Residual patterns after `vm_compute`
 

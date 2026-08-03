@@ -29,6 +29,7 @@
 From Katamaran Require Import
      Context
      Prelude
+     Symbolic.GenOccursCheck
      Symbolic.Instantiation
      Symbolic.OccursCheck
      Syntax.Terms
@@ -42,7 +43,8 @@ Module Type MessagesOn
   (Import TY : Types)
   (Import TM : TermsOn TY)
   (Import IN : InstantiationOn TY TM)
-  (Import OC : OccursCheckOn TY TM).
+  (Import OC : OccursCheckOn TY TM)
+  (Import GOC : GenOccursCheckOn TY TM).
 
   #[local] Notation LCtx := (NCtx LVar Ty).
 
@@ -111,6 +113,31 @@ Module Type MessagesOn
         match m with
         | mk msg    => mk <$> occurs_check xIn msg
         end.
+
+    (* THROWAWAY PORT (unquantify-gate branch, PLAN-unquantify-gate.md Phase
+       B). main erases a message's payload via an `Erase`/`ETerm` typeclass
+       hierarchy (Symbolic/Instantiation.v) that does not exist at all on this
+       branch — porting it properly means auditing every AMessage.mk call
+       site across the ~10.8k diverged lines (Monads.v, SymbolicExecutor.v,
+       every case study's Debug records), well past a measurement-only spike.
+
+       Shortcut: main's genoccurscheck_amessage is
+       `fun _ m => weakenInit (boxMsg m)`, and weakenInit's support context is
+       ALWAYS [ctx] regardless of the value it wraps — so main already treats
+       every message as contributing zero occurrences, unconditionally, no
+       matter what Erase reconstructs. We get the identical answer for
+       node-counting by skipping erasure entirely and always reporting the
+       message as amsg.empty. This changes what a post-unquantify tree could
+       be *printed* as (real message content vs. a dummy) but not any
+       structural node count, which is all Phase B measures. *)
+    #[export] Instance substSU_amessage : SubstSU WeakensTo AMessage :=
+      fun _ _ _ _ => empty.
+
+    #[export] Instance substSULaws_amessage : SubstSULaws WeakensTo AMessage :=
+      fun _ _ _ _ _ _ => eq_refl.
+
+    #[export] Instance genoccurscheck_amessage : GenOccursCheck (Sb := WeakensTo) AMessage :=
+      fun _ _ => weakenInit empty.
 
     #[export] Instance instprop_amessage : InstProp AMessage :=
       fun _ _ _ => True.

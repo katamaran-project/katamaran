@@ -202,6 +202,37 @@ Module Type ChunksOn
           Some (chunk_wand c1' c2')
       end.
 
+  (* THROWAWAY PORT (unquantify-gate branch, PLAN-unquantify-gate.md Phase B):
+     ported verbatim from main:theories/Syntax/Chunks.v — Chunk is identical
+     (4 constructors) on both branches, no divergence to patch. *)
+  #[export] Instance SubstSUChunk `{SubstUniv Sb} : SubstSU Sb Chunk :=
+    fix subSU_chunk {Σ1 Σ2} (c : Chunk Σ1) (ζ : Sb Σ1 Σ2) {struct c} : Chunk Σ2 :=
+      match c with
+      | chunk_user p ts => chunk_user p (substSU ts ζ)
+      | chunk_ptsreg r t => chunk_ptsreg r (substSU (T := fun Σ => Term Σ _) t ζ)
+      | chunk_conj c1 c2 =>
+        chunk_conj (subSU_chunk c1 ζ) (subSU_chunk c2 ζ)
+      | chunk_wand c1 c2 =>
+        chunk_wand (subSU_chunk c1 ζ) (subSU_chunk c2 ζ)
+      end.
+
+  #[export] Instance substsulaws_chunk `{SubstUnivLaws Sb} :
+    SubstSULaws Sb Chunk.
+  Proof.
+    intros Σ1 Σ2 Σ3 ζ1 ζ2 t.
+    induction t; cbn; f_equal; auto; now rewrite substSU_trans.
+  Qed.
+
+  #[export] Instance GenOccursCheckChunk : GenOccursCheck (Sb := WeakensTo) Chunk :=
+    fun Σ =>
+      fix gen_occurs_check_chunk (c : Chunk Σ) : Weakened WeakensTo Chunk Σ :=
+      match c with
+      | chunk_user p ts => liftUnOp (fun _ => chunk_user p) (fun _ _ _ _ => eq_refl) (gen_occurs_check ts)
+      | chunk_ptsreg r t => liftUnOp (fun _ => chunk_ptsreg r) (fun _ _ _ _ => eq_refl) (gen_occurs_check t)
+      | chunk_conj c1 c2 => liftBinOp (fun _ c1' c2' => chunk_conj c1' c2') (fun _ _ _ _ _ => eq_refl) (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
+      | chunk_wand c1 c2 => liftBinOp (fun _ c1' c2' => chunk_wand c1' c2') (fun _ _ _ _ _ => eq_refl) (gen_occurs_check_chunk c1) (gen_occurs_check_chunk c2)
+      end.
+
   Definition SCHeap : Type := list SCChunk.
   Definition SHeap : LCtx -> Type := fun Σ => list (Chunk Σ).
 

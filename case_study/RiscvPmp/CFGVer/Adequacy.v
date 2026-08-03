@@ -52,6 +52,8 @@ From Katamaran Require Import
 From stdpp Require Import gmap.
 From Katamaran Require Import
      RiscvPmp.CFGVer.Verifier
+     RiscvPmp.CFGVer.VerifierRel
+     RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
@@ -766,13 +768,15 @@ Section AdequacyTools.
       @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ1 a')) ∗
       ([∗ list] a' ∈ bv.seqBv a 4,
         @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ2 a'))
-      ⊢ interp_ptsto_instr (SyncVal a) (SyncVal instr).
+      ⊢ interp_ptsto_instr (SyncVal a) (SyncVal w) (SyncVal instr).
   Proof.
     iIntros ((Hmhw1 & Heq1) (Hmhw2 & Heq2)) "[Hmem1 Hmem2]".
-    iExists (SyncVal w).
+    (* No `iExists (SyncVal w)` any more: interp_ptsto_instr no longer hides the
+       word behind an ∃, it takes it as an argument.  The third conjunct
+       (secLeak w) is immediate — a SyncVal word is the same in both worlds. *)
     iSplitL.
     { iApply (intro_ptstomem_word2 Hmhw1 Hmhw2). iFrame. }
-    cbn. by rewrite Heq1.
+    iSplit; cbn; [by rewrite Heq1|done].
   Qed.
 
   Lemma intro_ptsto_instrs `{sailGS2 Σ} {μ1 μ2 : Memory} {a : Val ty_word} ws {instrs : list AST} :
@@ -783,20 +787,22 @@ Section AdequacyTools.
         @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ1 a')) ∗
         ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length instrs)),
           @pointsto _ _ _ _ _ (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H))) a' (DfracOwn 1) (memory_ram μ2 a'))
-        ⊢ Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (instrs_of_list a instrs).
+        ⊢ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w
+            (words_of_list a ws) (instrs_of_list a instrs).
   Proof.
     assert (word > 0) by now compute; Lia.lia.
     iIntros (Hrep Hmeminstrs1 Hmeminstrs2) "[Hmem1 Hmem2]".
     iInduction instrs as [|instr instrs] "IH" forall (a ws Hrep Hmeminstrs1 Hmeminstrs2).
-    - (* instrs_of_list a [] = ∅, so ptsto_instrs is emp. *)
-      unfold Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs.
+    - (* instrs_of_list a [] = ∅, so ptsto_instrs_w is emp. *)
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w.
       cbn [instrs_of_list]. rewrite big_sepM_empty. done.
     - rewrite Nat2N.inj_succ in Hrep.
       fold (length instrs) in Hrep.
       replace (4 * N.of_nat (length (instr :: instrs)))%N with (4 + 4 * N.of_nat (length instrs))%N by (cbn; lia).
       rewrite bv.seqBv_app; try (cbn -[N.of_nat N.mul] in *; Lia.lia).
       rewrite big_opL_app.
-      destruct ws.
+      (* Name the head word explicitly: it is now needed by the word map. *)
+      destruct ws as [|wd ws'].
       { inversion Hmeminstrs1; inversion Hmeminstrs2. }
       destruct Hmeminstrs1 as [Hinstr1 Hmeminstrs1].
       destruct Hmeminstrs2 as [Hinstr2 Hmeminstrs2].
@@ -815,14 +821,28 @@ Section AdequacyTools.
         (* lia chokes on the 2^32 literal, so bound to <1024 then transit. *)
         assert (Hb : (bv.bin a + 4 + 4 * N.of_nat (length instrs) < 1024)%N) by lia.
         eapply N.lt_trans; [exact Hb|]. reflexivity. }
-      unfold Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs.
-      cbn [instrs_of_list].
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w.
+      cbn [instrs_of_list words_of_list].
       rewrite (big_sepM_insert
-                 (fun a0 i0 => interp_ptsto_instr (SyncVal a0) (SyncVal i0))
+                 (fun a0 i0 => interp_ptsto_instr (SyncVal a0)
+                                 (SyncVal (words_of_list a (wd :: ws') a0)) (SyncVal i0))
                  (instrs_of_list (bv.add a (bv.of_N 4)) instrs) a instr Hfresh).
       iSplitL "Hmem1a Hmem2a".
-      + iApply (intro_ptsto_instr with "[$Hmem1a $Hmem2a]"); eauto.
-      + iApply ("IH" with "[%] [% //] [% //] [$Hmem1a4] [$Hmem2a4]").
+      + rewrite words_of_list_here.
+        iApply (intro_ptsto_instr with "[$Hmem1a $Hmem2a]"); eauto.
+      + (* The tail's word function is the head's, which differs only at the head
+           address — and that address is fresh for the tail's instruction map. *)
+        assert (Hagree : forall a0 i0,
+                   instrs_of_list (bv.add a (bv.of_N 4)) instrs !! a0 = Some i0 ->
+                   words_of_list (bv.add a (bv.of_N 4)) ws' a0
+                   = words_of_list a (wd :: ws') a0).
+        { intros a0 i0 Hlk0.
+          symmetry.
+          apply words_of_list_there.
+          intros Heq. subst a0. rewrite Hfresh in Hlk0. discriminate. }
+        iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w_agree
+                  _ _ _ Hagree).
+        iApply ("IH" with "[%] [% //] [% //] [$Hmem1a4] [$Hmem2a4]").
         rewrite bv.bin_add_small;
           cbn -[N.mul] in *.
         now Lia.lia.
@@ -834,7 +854,7 @@ Section AdequacyTools.
     mem_has_instrs μ1 (bv.of_N start) ws instrs ->
     mem_has_instrs μ2 (bv.of_N start) ws instrs ->
     @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
-      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (instrs_of_list (bv.of_N start) instrs).
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (instrs_of_list (bv.of_N start) instrs).
   Proof.
     iIntros (Hrep Hinit1 Hinit2) "Hmem".
     unfold mem_res2_without_leak, IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_without_leak.
@@ -851,6 +871,10 @@ Section AdequacyTools.
       apply f_equal. lia.
     }
     iDestruct "Hmem" as "[[[Hbefore1 [Hinst1 Hrest1]] Htr1] [[Hbefore2 [Hinst2 Hrest2]] Htr2]]".
+    iModIntro.
+    (* ptsto_instrs is now ∃ words over the word-indexed form; the witness is
+       the word list mem_has_instrs already supplies. *)
+    iExists (words_of_list (bv.of_N start) ws).
     iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
     { match goal with
       | |- (_ + bv.bin ?a < _)%N =>
@@ -860,7 +884,9 @@ Section AdequacyTools.
          _ mod 2^word; the huge modulus makes lia's certificate search fail,
          so make the atom opaque first. *)
       set (B := bv.bin (bv.of_N start)) in *; clearbody B. lia. }
-    iFrame. auto.
+    (* `all:` rather than a bare `auto`: the explicit iModIntro above leaves one
+       fewer goal than the implicit modality handling did. *)
+    iFrame. all: auto.
   Qed.
 
   (* ------------------------------------------------------------------ *)
@@ -972,7 +998,7 @@ Section AdequacyTools.
       spec.1 = bv.of_N (start + 4 * N.of_nat (length instrs)
                          + 4 * N.of_nat i)) →
     @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
-      Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs (instrs_of_list (bv.of_N start) instrs) ∗
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (instrs_of_list (bv.of_N start) instrs) ∗
       interp_mem_with_memory μ1 μ2 data_specs.
   Proof.
     iIntros (Hlen HMem1 HMem2 HDataAddrs) "Hmem".
@@ -1000,7 +1026,8 @@ Section AdequacyTools.
         [[Hbefore2 [Hinst2 [Hdata2 Hrest2]]] Htr2]]".
     iModIntro.
     iSplitL "Hinst1 Hinst2".
-    - iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
+    - iExists (words_of_list (bv.of_N start) ws_instrs).
+      iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
       { match goal with
         | |- (_ + bv.bin ?a < _)%N =>
             assert (Hb : (bv.bin a <= start)%N) by apply bv.bin_of_N_decr
@@ -1043,25 +1070,56 @@ Section AdequacyTools.
 
 
 
+    (* anp: the current nextpc value.  The PRE holds it exactly (it used to be
+       `∃ v, nextpc ↦ᵣ v`, discarding what the epilogue had just established),
+       because cexec_cfg_addr now takes it as an argument and the recursive call
+       passes `an an` — so the specific value has to match.  The POST below
+       keeps its `∃ v`: that side is the shared continuation Hk, identical in
+       the IH and in the goal, so it needs no change. *)
+    (* words: the per-address instruction words, FIXED for the whole loop.  The
+       loop invariant carries the word-INDEXED ownership ptsto_instrs_w, not the
+       ∃-form ptsto_instrs, because cexec_cfg_addr looks the word up in this
+       specific gmap at every step.  The caller destructs the ∃ once, before
+       entering the loop. *)
+
+    (* Chunk GC weakening: sound_exec_cfg_addr_myWP2 to account for the cchunk_gc bind
+       introduced in Phase B of the GC refinement.
+
+       interpret_scheap is a fold_right of (_ ∗ _) over the chunk list
+       (Chunks.v), so the kept case frames the head and recurses, and the
+       dropped case simply DISCARDS the head conjunct — the `_` in
+       `iIntros "[_ H]"`.  That step needs the ambient BI to be AFFINE,
+       which iProp Σ is but Chunks.v's abstract HProp is not; that is why
+       this lemma has to live here and cannot be pushed down next to
+       interpret_scheap itself. *)
+    Lemma interpret_scheap_gc_heap (h : SCHeap) :
+      interpret_scheap h ⊢ interpret_scheap (Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_heap h).
+    Proof.
+      induction h as [|c h IH]; cbn; [done|].
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_heap in IH; cbn in IH.
+      destruct (is_encodes_instr c); cbn;
+        [iIntros "[_ H]" | iIntros "[Hc H]"; iFrame "Hc"]; iApply IH; iExact "H".
+    Qed.
+
     Lemma sound_exec_cfg_addr_myWP2
-        {instrs exitCond fuel} (apc : RelVal ty_xlenbits)
+        {instrs} {words : bv xlenbits -> bv word} {exitCond fuel} (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr instrs exitCond fuel apc Φ h →
-      interpret_scheap h ∗ pc ↦ᵣ apc ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs ⊢
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words exitCond fuel apc anp Φ h →
+      interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words instrs ⊢
       (∀ an,
          ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words instrs ∗
          (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
       myWP2_loop ExitCondIprop.
     Proof.
-      revert apc h.
-      induction fuel as [|n' IH]; intros apc h Hexec.
-      - cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr CHeapSpec.error] in Hexec.
+      revert apc anp h.
+      induction fuel as [|n' IH]; intros apc anp h Hexec.
+      - cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr CHeapSpec.error] in Hexec.
         contradiction.
       - destruct apc as [v|v1 v2].
-        + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption
+        + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
                CHeapSpec.angelic_binary] in Hexec.
           destruct Hexec as [Hexit | Hexec].
           * destruct (exitCond v) eqn:Hexit_eq.
@@ -1077,14 +1135,23 @@ Section AdequacyTools.
                arithmetic: the gmap key IS the current PC. *)
             destruct (instrs !! v) as [i|] eqn:Hlk.
             ++ unfold bind, CHeapSpec.bind in Hexec.
+               (* Phase 4 (chunk GC): Hexec now carries the extra cchunk_gc
+                  bind cexec_cfg_addr's step inserts before cexec_instruction.
+                  Absorb it first — cgc_binds_heap_fwd rewrites Hexec down
+                  to the cexec_instruction call over cgc_heap h — then weaken
+                  Hh to match via interpret_scheap_gc_heap (§4: sound because
+                  iProp Σ is affine). *)
+               apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
                iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-               iPoseProof (Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs_lookup instrs v Hlk
+               iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
+               iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
+                             words instrs v Hlk
                  with "Hinstrs") as "[Hinstr Hframe]".
                rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
                iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
-               { iApply (Katamaran.RiscvPmp.CFGVer.Verifier.sound_exec_instruction Hexec). iFrame. }
+               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec). iFrame. }
                iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
                2-3: iIntros "(%δ' & _ & HF)"; auto.
                2: iIntros "_"; done.
@@ -1092,10 +1159,14 @@ Section AdequacyTools.
                iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
                iModIntro.
                iRevert "Hk".
-               iApply (IH an h' Hcfg).
-               iFrame "Hh' Hpc' Hinstrs'". iExists an. iExact "Hnpc'".
+               (* `an an`: the recursive call passes the new pc as both the pc
+                  and the incoming nextpc, which is exactly what the epilogue
+                  established (pc = nextpc = an).  Hnpc' is framed directly —
+                  no `iExists`, since the PRE now names the value. *)
+               iApply (IH an an h' Hcfg).
+               iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
-        + cbn [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_cfg_addr ty.RVToOption
+        + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
                CHeapSpec.error] in Hexec.
           contradiction.
     Qed.
@@ -1114,33 +1185,64 @@ Section AdequacyTools.
     Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
         {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
-        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Γ) exitCond exits ι) :
-      Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr pre instrs exitCond fuel post tbl exits (λ _ _, True) [] →
+        (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+      (* ∀ words: the VC is UNIFORM in the instruction words, because on the
+         symbolic side they are demonic.  So the caller proves it once and this
+         lemma instantiates it with the actual words carried by ptsto_instrs. *)
+      (forall words : bv xlenbits -> bv word,
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗
         (∀ an,
            ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗ ExitCondIprop) -∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗ ExitCondIprop) -∗
         myWP2_loop ExitCondIprop.
     Proof.
-      cbv [Katamaran.RiscvPmp.CFGVer.Verifier.cexec_triple_addr bind demonic_ctx demonic
+      cbv [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr bind demonic_ctx demonic
            CPureSpec.demonic lift_purespec CPureSpec.assume_formula CPureSpec.assume_pathcondition].
-      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
+      (* The `∃ v, nextpc ↦ᵣ v` STAYS existential in this lemma's PRE — this is
+         the outer entry point, and that existential is exactly what
+         create_resources / ImplPre provides.  It is destructed HERE and the
+         witness npc handed to cexec_triple_addr's single nextpc demonic and to
+         sound_exec_cfg_addr_myWP2.  That is why threading the value inward
+         costs no change to the trusted surface. *)
+      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
+      (* Name the words the memory actually holds; they instantiate both the
+         uniform VC and the word half of cexec_triple_addr's demonic_ctx. *)
+      iDestruct "Hinstrs" as (words) "Hinstrs".
+      specialize (Htrip words).
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
-      specialize (Htrip ι).
-      specialize (Htrip (conj Hif Hef) a).
+      specialize (Htrip (env.cat ι (Katamaran.RiscvPmp.CFGVer.VerifierRel.env_of_words
+                                      (length tbl) (ty.SyncVal bv.zero)
+                                      (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of
+                                         (w := wlctx Γ) words tbl ι)))).
+      (* Split the supplied valuation back into its two halves, exactly as
+         cexec_triple_addr does. *)
+      rewrite env.drop_cat in Htrip.
+      rewrite Katamaran.RiscvPmp.CFGVer.VerifierRel.env_take_cat in Htrip.
+      (* `d` is explicit (it cannot be inferred), the length proof follows it. *)
+      rewrite (Katamaran.RiscvPmp.CFGVer.VerifierRel.words_of_env_of_words
+                 (ty.SyncVal (bv.zero : bv word)) _
+                 (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_length (w := wlctx Γ) words tbl ι)) in Htrip.
+      (* The word guard is free: cws_of is BUILT from `words` at the table's
+         addresses, so wtable_rel holds by construction given itable_rel. *)
+      specialize (Htrip (conj Hif (conj Hef
+                    (Katamaran.RiscvPmp.CFGVer.VerifierRel.wtable_rel_cws_of words Hif))) a npc).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iApply (sound_exec_cfg_addr_myWP2 a ExitCondIprop _ _ Hexec
+      iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
         with "[$Hpc $Hnpc $Hinstrs $Hh2]").
       iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
       iApply ("Hk" $! an).
       iSplit. { iPureIntro. exact Hexit. }
-      iFrame.
+      iFrame "Hpc Hnpc".
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
+      iExists words.
+      iFrame "Hinstrs".
     Qed.
 
     Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
@@ -1149,27 +1251,28 @@ Section AdequacyTools.
             Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
-        (Hif : Katamaran.RiscvPmp.CFGVer.Verifier.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.Verifier.etable_rel (w := wlctx Γ) exitCond exits ι) :
+        (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
       ⊢ ∀ a : RelVal ty_xlenbits,
           asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-          Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
+          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗
           (∀ an,
              ⌜match an with
                | SyncVal v => exitCond v = true
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-             Katamaran.RiscvPmp.CFGVer.Verifier.ptsto_instrs instrs -∗
+             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.
       apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel) (ι := ι) ExitCond Hif Hef).
+      intros words.
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
       revert Hverif.
-      apply Katamaran.RiscvPmp.CFGVer.Verifier.rcfg_verification_condition.
+      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
       - easy.
       - constructor.
     Qed.

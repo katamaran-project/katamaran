@@ -183,9 +183,12 @@ Module RiscvPmpIrisInstance2 <:
 
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
-    Definition interp_ptsto_instr (addr : RVAddr) (instr : RV AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ ty.liftUnOpRV pure_decode v = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak v ⌝)%I.
-    Arguments interp_ptsto_instr addr instr : simpl never.
+    (* Word as a PARAMETER — see the unary IrisInstance.v for why the ∃ had to
+       go.  `secLeak w` is kept: instruction words are public, and the open
+       lemma already asserted it of the existential witness. *)
+    Definition interp_ptsto_instr (addr : RVAddr) (w : RelVal ty_word) (instr : RV AST) : iProp Σ :=
+      (@interp_ptstomem 4 addr w ∗ ⌜ ty.liftUnOpRV pure_decode w = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak w ⌝)%I.
+    Arguments interp_ptsto_instr addr w instr : simpl never.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.
@@ -256,7 +259,7 @@ Module RiscvPmpIrisInstance2 <:
     (* | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write_rel addr w *)
     | encodes_instr            | [ code; instr ]      => ⌜ ty.liftUnOpRV pure_decode code = ty.liftUnOpRV inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | inv_leakage              | _                    => interp_inv_constant_time
     .
 

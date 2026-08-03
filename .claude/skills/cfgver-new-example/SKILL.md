@@ -22,11 +22,24 @@ description: >
 # Recipe: verifying a new example program end-to-end
 
 Every existing example (`swap`, `countdown_mem`, `cmovznz4`, …) follows this shape —
-**copy the closest analogue** in `Example/*.v` + `Results.v` rather than starting
-from scratch. A new example gets its own `Example/<Prog>.v` (instrs + specs +
-contract + `valid_*` VC), is added to `_CoqProject` before `Results.v`, and its
-end theorem goes in `Results.v` (plus the gate's `AXIOM_CLEAN_THMS` list in
-`scripts/gate.sh`).
+**copy the closest analogue** in `Example/<Prog>.v` + `Example/<Prog>Result.v`
+rather than starting from scratch. A new example gets **two** files:
+
+| File | Holds | Requires |
+|---|---|---|
+| `Example/<Prog>.v` | instrs + specs (statement-relevant), parametric contract, `valid_<prog>_cfg_contract_param` VC | just `Example.Prelude` |
+| `Example/<Prog>Result.v` | the end theorem(s) `<prog>_noninterferent[_param]` | `Example.Prelude` + `EndToEnd` + `Example.<Prog>` |
+
+Both go in `_CoqProject` before `Results.v`, the `Result` file is added to
+`Results.v`'s re-export list, and the end theorem names are added to the gate's
+`AXIOM_CLEAN_THMS` list in `scripts/gate.sh`.
+
+**Do not put the end theorem in `Example/<Prog>.v`.** It would drag `EndToEnd`
+(and so `Adequacy`) into the example, serializing that ~85 s chain ahead of every
+example instead of letting it build in their parallel shadow — ~40 s of wall time
+per -j2 gate build. Only write a `_param` contract/VC; the concrete-base result
+is a corollary (`gen_contract_noninterferent_*_simple` / `ni_rel_corollary`), so
+a concrete-base VC is dead compile time.
 
 1. **Instructions.** Translate the RV32I assembly (e.g. Compiler Explorer output of
    `clang -O2 -march=rv32i`) into a `list AST` with

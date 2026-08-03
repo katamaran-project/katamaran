@@ -185,9 +185,11 @@ Qed.
 ```
 (`6: exact (...)` for `_rel`, since it has the extra `Hbound` premise.) This is
 not a new invention — the non-parametric `gen_contract_noninterferent` call
-sites in `Results.v` already used this exact "do the last one first" ordering
-(with a TODO comment); it was simply missed when writing the new parametric
-lemmas.
+sites already used this exact "do the last one first" ordering (with a TODO
+comment); it was simply missed when writing the new parametric lemmas. The
+surviving instance is `jumpIfZero_noninterferent_param` in
+`Example/JumpsResult.v` (the end theorems moved out of `Results.v`, which is now
+just a re-export shell).
 
 ## Parametric base
 

@@ -37,23 +37,16 @@
 
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
-    Definition set_X2_to_42 : CFGVerifierContract :=
-      gen_contract init_addr [(X2, false, None)] []
-        [ADDI X2 X0 (bv.of_N 42)] []
-        (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
-        3.
-
-    Lemma valid_set_X2_to_42 : ValidCFGVerifierContract set_X2_to_42.
-    Proof. vm_compute. solve_vc. Qed.
-
     (* ===== Phase 4.2 proof-of-concept — genuine symbolic placement term_var "p" =====
        Unlike gen_contract (which hardwires cfg_placement := term_val (bv.of_N
        init_addr) and Σ := [ctx]), this contract lives at Σ = ["p"∷ty_xlenbits]
        and uses the *term variable* term_var "p" as the base — the only base
        formulation the VC can discharge, because it keeps every bv.of_N applied
        to concrete offsets (a Coq-N base lifted via term_val (bv.of_N n) makes
-       vm_compute diverge on bv.of_N of a symbolic N at width 32; see the
-       divergent gen_contract-based valid_cmovznz4_cfg_contract_at_start).
+       vm_compute diverge on bv.of_N of a symbolic N at width 32 — this is why
+       a gen_contract-based VC at a *symbolic* base is not an option; the old
+       concrete-base-256 VC valid_cmovznz4_cfg_contract_at_start worked only
+       because 256 was a literal, and has since been removed as dead).
 
        Two things a parameterized contract needs that the concrete ones don't:
        (1) a precondition BOUND on the base — `unsigned p + 4·len ≤ 1024` — so

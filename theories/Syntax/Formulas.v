@@ -301,6 +301,57 @@ Module Type FormulasOn
   #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
   Proof. occurs_check_derive. Qed.
 
+  (* THROWAWAY PORT (unquantify-gate branch, PLAN-unquantify-gate.md Phase B):
+     ported from main:theories/Syntax/Formulas.v, extended with arms for our
+     formula_propeq/formula_secLeak (main lacks them). formula_propeq is
+     shaped like formula_relop (binary over terms); formula_secLeak like
+     formula_bool (unary over a term). *)
+  #[export] Instance subSU_formula `{SubstUniv Sb} : SubstSU Sb Formula :=
+    fix subSU_formula {Σ1 Σ2} fml ζ {struct fml} :=
+      match fml with
+      | formula_user p ts      => formula_user p (substSU ts ζ)
+      | formula_bool t         => formula_bool (substSU t ζ)
+      | formula_prop ζ' P      => formula_prop (substSU ζ' ζ) P
+      | formula_relop op t1 t2 => formula_relop op (substSU t1 ζ) (substSU t2 ζ)
+      | formula_true           => formula_true
+      | formula_false          => formula_false
+      | formula_and F1 F2      => formula_and (subSU_formula F1 ζ) (subSU_formula F2 ζ)
+      | formula_or F1 F2       => formula_or (subSU_formula F1 ζ) (subSU_formula F2 ζ)
+      | formula_propeq t1 t2   => formula_propeq (substSU t1 ζ) (substSU t2 ζ)
+      | formula_secLeak t      => formula_secLeak (substSU t ζ)
+      end.
+
+  #[export] Instance substSULaws_formula `{SubstUnivLaws Sb} :
+    SubstSULaws Sb Formula.
+  Proof.
+    intros Σ1 Σ2 Σ3 ζ1 ζ2 fml.
+    now induction fml; cbn; f_equal;
+      try apply substSU_trans.
+  Qed.
+
+  #[export] Instance GenOccursCheckFormula `{SubstUniv Sb} {_ : SubstUnivVar Sb} {_ : SubstUnivMeet Sb} {_ : SubstUnivLaws Sb} :
+    GenOccursCheck (Sb := Sb) Formula :=
+    fix oc {Σ} fml {struct fml} :=
+      match fml with
+      | formula_user p ts      => liftUnOp (fun _ => formula_user p) (fun _ _ _ _ => eq_refl) (gen_occurs_check ts)
+      | formula_bool t         => liftUnOp (fun _ => formula_bool) (fun _ _ _ _ => eq_refl) (gen_occurs_check t)
+      | formula_prop ζ P       => liftUnOp (fun _ ζ => formula_prop ζ P) (fun _ _ _ _ => eq_refl) (gen_occurs_check ζ)
+      | formula_relop op t1 t2 => liftBinOp (fun _ => formula_relop op) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check t1) (gen_occurs_check  t2)
+      | formula_true           => weakenInit formula_true
+      | formula_false          => weakenInit formula_false
+      | formula_and F1 F2      => liftBinOp (fun _ F1' F2' => formula_and F1' F2') (fun _ _ _ _ _ => eq_refl) (oc F1) (oc F2)
+      | formula_or F1 F2       => liftBinOp (fun _ F1' F2' => formula_or F1' F2') (fun _ _ _ _ _ => eq_refl) (oc F1) (oc F2)
+      | @formula_propeq _ σ0 t1 t2 => liftBinOp (fun _ => @formula_propeq _ σ0) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check t1) (gen_occurs_check t2)
+      | @formula_secLeak _ σ0 t    => liftUnOp (fun _ => @formula_secLeak _ σ0) (fun _ _ _ _ => eq_refl) (gen_occurs_check t)
+      end.
+
+  (* Soundness Admitted — measurement-only port, see plan. Our extra
+     constructors shift main's bullet-script; not worth re-deriving. *)
+  #[export] Instance GenOccursCheckLawsFormula `{SubstUniv Sb} {_ : SubstUnivMeet Sb} {_ : SubstUnivVar Sb}
+    {_ : SubstUnivLaws Sb} {_ : SubstUnivVarLaws Sb} {_ : SubstUnivMeetLaws Sb} :
+      GenOccursCheckLaws (Sb := Sb) Formula (fun _ => eq).
+  Admitted.
+
   Section PathCondition.
     Import Entailment.
 

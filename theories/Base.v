@@ -56,6 +56,7 @@ From Katamaran Require Import
      Syntax.Messages
      Syntax.Patterns
      Syntax.Terms
+     Symbolic.GenOccursCheck
      Symbolic.Instantiation
      Symbolic.OccursCheck
      Symbolic.PartialEvaluation.
@@ -64,7 +65,7 @@ Module Type BaseMixin (Import TY : Types).
   Include
     ExpressionsOn TY <+
     TermsOn TY <+ PatternsOn TY <+
-    OccursCheckOn TY <+ InstantiationOn TY <+
+    OccursCheckOn TY <+ GenOccursCheckOn TY <+ InstantiationOn TY <+
     MessagesOn TY <+ PartialEvaluationOn TY.
 
   Notation Ty := (@ty.Ty typedeclkit).

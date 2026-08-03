@@ -314,7 +314,17 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       (* | mmio_checked_write width      => [ty_xlenbits; ty.bvec (width * byte)] *)
       | encodes_instr                 => [ty_word; ty_ast]
       | ptstomem width                => [ty_xlenbits; ty.bvec (width * byte)]
-      | ptstoinstr                    => [ty_xlenbits; ty_ast]
+      (* The WORD argument (added 2026-07-31) is what stops |wctx| growing with
+         the step count.  interp_ptsto_instr used to hide it under an ∃, so every
+         fetch learned a FRESH unknown word and left a demonic variable behind
+         forever — one per instruction step, the last such leak after `an` was
+         fixed.  Naming it here lets fetch's postcondition say
+         `result_fetch = KF_Base w` with no existential, and the words are
+         introduced once per instruction ADDRESS at contract entry, so a loop
+         re-executing the same addresses reuses them.  Costs no generality:
+         `ptstoinstr a i` is recovered as `∃ w, ptstoinstr a w i`.
+         Full rationale: CFGVer/PLAN-encoded-instr.md. *)
+      | ptstoinstr                    => [ty_xlenbits; ty_word; ty_ast]
       | inv_leakage                   => ctx.nil
       end.
 
@@ -353,7 +363,10 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       (* | inv_mmio bytes            => Some (MkPrecise ε ε eq_refl) *)
       (* | mmio_checked_write width  => Some (MkPrecise ε [ty_xlenbits; ty.bvec (width * byte)] eq_refl) (* There will only be one of these simultaneously; always precise! *) *)
       | ptstomem width            => Some (MkPrecise [ty_xlenbits] [ty.bvec (width * byte)] eq_refl)
-      | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
+      (* Precise on the ADDRESS alone, so consuming the chunk determines BOTH
+         the word and the AST.  That is what keeps `use lemma open_ptsto_instr
+         [tmp]` working unchanged with its single argument. *)
+      | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_word; ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
       | inv_leakage               => Some (MkPrecise ε ε eq_refl)
       end.
