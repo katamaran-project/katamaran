@@ -462,3 +462,75 @@ constant).
   (new eval entry Q102, regression checks Q79/Q98, all `cfgver-executor`,
   all correct `TOTAL=34` checksums).
 - This memory note: see `project_chunk_gc_landed` (auto-memory).
+
+---
+
+## §13. N=32/64 verification, and a confound that nearly hid the result — 2026-08-03
+
+Follow-up to §12, same day: the natural next question after landing the fix
+is whether it holds at the N=32/N=64 rungs the plan's own §9 flagged as the
+payoff ("earlyoom-killed at 5.80 GB" pre-fix; N=64 never attempted). The first
+attempt at this gave a **misleading negative** — worth recording so it is not
+re-run.
+
+### First attempt: `zzn_contract 32` still balloons post-fix
+
+Ran the pre-existing `Example/ZZProveRun32.v` (`zzn_contract 32`) under a
+memory-safety monitor. It did NOT complete: killed at **8.55 GB RSS / 236 s**
+when system `MemAvailable` hit a preset floor — well past the old 5.80 GB
+earlyoom point, so *something* improved, but the rung still didn't fit
+comfortably, which looked like the fix not generalizing past small N.
+
+### Root cause: `zzn` conflates trip count with mem-cell count
+
+`ZZCommon.v`:
+```coq
+Definition zzn_mem_specs (n : nat) : list mem_spec_rel :=
+  List.map (fun k => ((56 + 4 * N.of_nat k)%N, false, PVExist)) (List.seq 0 n).
+Definition zzn_contract (n : nat) := gen_contract_rel 0 (zzn_reg_specs n) (zzn_mem_specs n)
+  zzn_instrs [] (56 + 4 * N.of_nat n)%N (pcOutOfInstrs_exitCond 0 zzn_instrs) (14 * n + 12).
+```
+Bumping `n` doubles the trip count **and** the number of separately-owned
+memory cells asserted in the precondition. Those `n` cells sit in the heap for
+the whole execution and are **never touched by `chunk_gc`**, which filters
+only `is_encodes_instr` chunks. By the identical heap-size × step-count
+mechanism that caused the original leak, `n` persistent cells across `n` steps
+is its own `O(n²)` term — this was already flagged as a known confound
+(`PLAN-encoded-instr.md`'s "A confound in zzn that §7/§8 did not isolate") and
+is exactly why `ZZDiagCommon.v` built `zzf_contract` (trip count varies,
+**mem cells pinned at 1** — "the heap and the mem-spec list stay size 1 for
+all N") as an isolated Arm B. **Use `zzf_contract`, not `zzn_contract`, for any
+future trip-count-only scaling check** — this is a second, independent trap
+from the encodes_instr leak, not a re-run of it.
+
+### Isolated result: clean affine growth, N=8 through N=64
+
+`Example/ZZProveRunZf{08,16,32,64}.v` (`zzf_contract`), `allocated_words`:
+
+| N | allocated_words | wall (s) | peak RSS (GB) |
+|---|---|---|---|
+| 8 | 4,462,560,346 | 26.51 | 3.42 |
+| 16 | 7,158,303,103 | 40.60 | 3.94 |
+| 32 | 12,549,778,473 | 85.92 | 4.86 |
+| 64 | 23,332,716,671 | 213.78 | 7.29 |
+
+Affine fit on N=8,32 — `alloc(N) = 1,766,820,970 + 336,967,422·N` — predicts
+the held-out N=16 and N=64 points to **0.0001%**, an 8× span in N. The
+quadratic term is gone, not just at the small N Phase 5 originally checked.
+`zzn_contract 32`'s own peak RSS (8.55 GB, killed before completion) versus
+`zzf_contract 32`'s (4.86 GB, completed) is the size of the cell-count
+confound at N=32 alone.
+
+Wall clock is noisier (ratios per doubling: 1.53× / 2.12× / 2.49×, creeping
+up) — consistent with the project's standing finding that `Qed` re-runs the
+executor and wall time carries machine-load noise (see §11's traps checklist).
+`allocated_words` is what to trust here.
+
+**N=64 was never attempted before this investigation; N=32 previously died to
+earlyoom under the pre-fix regime.** Both now complete comfortably once the
+`zzn`-specific memory-cell confound is isolated out — this is the payoff §9
+predicted, confirmed at the rungs that were previously unreachable.
+
+The four `ZZProveRunZf*.v` files and the two `zzn`-based ones (headers updated
+with the outcome and a pointer to this section) are kept as reproducible
+rungs, matching the existing convention for this probe family.

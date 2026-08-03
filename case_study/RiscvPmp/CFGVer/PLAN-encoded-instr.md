@@ -621,13 +621,22 @@ wall. Counts: **15 / 22 / 30** at N=1/8/16, i.e. **+1 per trip** (each iteration
 store address `p ⊕ (56+4i)` needs its own bound). Linear, and cheap — all 30 cost
 under a second. With a concrete base there are none.
 
-### Ceiling on this box
+### Ceiling on this box — SUPERSEDED 2026-08-03 by the chunk GC, see `PLAN-chunk-gc.md` §13
 
-N=16 is the highest rung that completes. N=32 was killed by earlyoom
-(`signal 15`, no Coq diagnostic) 100 s into `vm_compute` at 5.80 GB RSS against
-4.6 GiB available — a MEMORY limit, not a code result. RSS grows 2.77 / 3.66 /
-5.60 GB (param) and 2.78 / 3.35 / 4.84 GB (concrete) at N=1/8/16. N=32 is
-plausibly reachable on a quieter box; N=64 was never attempted.
+At the time this was written: N=16 is the highest rung that completes. N=32
+was killed by earlyoom (`signal 15`, no Coq diagnostic) 100 s into
+`vm_compute` at 5.80 GB RSS against 4.6 GiB available — a MEMORY limit, not a
+code result. RSS grows 2.77 / 3.66 / 5.60 GB (param) and 2.78 / 3.35 / 4.84 GB
+(concrete) at N=1/8/16. N=32 is plausibly reachable on a quieter box; N=64 was
+never attempted.
+
+**Both now complete once the chunk GC has landed and the `zzn` reproducer's
+own memory-cell confound (§ below, "A confound in `zzn`") is isolated out**:
+`zzf_contract 32`/`64` (`Example/ZZProveRunZf{32,64}.v`) finish at 4.86 GB/86 s
+and 7.29 GB/214 s respectively, with `allocated_words` staying affine to
+0.0001% across N=8..64. `zzn_contract 32`/`64` themselves still balloon post-fix
+(killed at 8.55 GB/236 s at N=32) — that is the confound below reasserting
+itself, not a failure of the chunk GC. Full record: `PLAN-chunk-gc.md` §13.
 
 ### Measurement traps that produced three wrong answers here
 
