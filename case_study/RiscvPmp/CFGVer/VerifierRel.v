@@ -270,6 +270,47 @@ Section CFGVerificationDerived.
         (cexec_instruction i) w (sexec_instruction (w := w) i) _ :=
       MkRefineCompat (rexec_instruction i).
 
+    (* refine_chunk_gc: the GC step is sound relationally for any chunk,
+       not just encodes_instr — its whole content is inst_gc_heap
+       (Shallow section above), lifted from the inst/valuation level to the
+       Iris/Pred level via RHeap = RInst SHeap SCHeap.  chunk_gc uses
+       acc_refl (no world motion), which is why refine_T (not refine_four)
+       is enough to discharge the □ᵣ box. *)
+    Lemma refine_chunk_gc {w} :
+      ⊢ ℛ⟦RHeapSpec RUnit⟧ cchunk_gc (chunk_gc (w := w)).
+    Proof.
+      unfold cchunk_gc, chunk_gc.
+      iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
+      iPoseProof (refine_T with "rΦ") as "rΦ'".
+      iApply ("rΦ'" $! tt tt with "[] [rh]").
+      - done.
+      - iStopProof.
+        unfold RHeap, RInst; crushPredEntails3.
+        rewrite inst_gc_heap H2.
+        reflexivity.
+    Qed.
+
+    #[export] Instance refine_compat_chunk_gc {w} :
+      RefineCompat (RHeapSpec RUnit) cchunk_gc w (chunk_gc (w := w)) _ :=
+      MkRefineCompat refine_chunk_gc.
+
+    (* Heap-only companion to refine_chunk_gc, for bullets that need to
+       transport an ALREADY-INTRODUCED heap fact (rh : ℛ⟦RHeap⟧ ch sh) across
+       the GC filter directly — i.e. after iIntros'ing ch/sh but BEFORE
+       calling rsolve on the next bind in the sequence.  Going through
+       refine_chunk_gc's generic RefineCompat/rsolve pairing instead would
+       introduce a spurious extra world for chunk_gc's step (rsolve cannot
+       see that chunk_gc's own acc_refl makes that step's world motion
+       trivial), and Acc composition doesn't associate definitionally, so
+       that extra world's accessibility gets stuck later in the proof. *)
+    Lemma refine_gc_heap {w : World} (ch : SCHeap) (sh : SHeap w) :
+      (ℛ⟦RHeap⟧ ch sh ⊢ ℛ⟦RHeap⟧ (cgc_heap ch) (gc_heap sh))%I.
+    Proof.
+      constructor. intros ι Hpc Hrel.
+      unfold RHeap, RInst, repₚ in *. cbn in *.
+      now rewrite inst_gc_heap Hrel.
+    Qed.
+
     Import PureSpec.
 
     (* ------------------------------------------------------------------ *)
@@ -575,13 +616,47 @@ Section CFGVerificationDerived.
             injection Hveq as <-.
             cbn [ty.RVToOption].
             rewrite Hcond Hm.
-            rsolve.
-            rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
-            iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-            (* TWO "[$]", one per RVal argument: the recursive call passes apc'
-               as both the pc and the incoming nextpc.  Both premises are the
-               same persistent ℛ⟦RVal⟧ fact, so it frames twice over. *)
-            iApply ("IH" with "[$] [$]").
+            (* The step now binds chunk_gc THEN sexec_instruction (Phase 2), so
+               a bare rsolve here would dispatch chunk_gc's bind through the
+               generic RefineCompat/refine_bind machinery — which doesn't know
+               chunk_gc's own acc_refl makes that step's world motion trivial,
+               so it introduces a SPURIOUS extra world whose accessibility then
+               fails to re-associate with ω/ω0 (Acc composition isn't
+               definitionally associative). Fix: split angelic_binary
+               manually, introduce ch/sh ourselves, collapse the acc_refl
+               residue via one reflexivity-provable rewrite (gc_binds_heap /
+               cgc_binds_heap eliminate the bind head first, keeping the
+               REMAINING sexec_instruction bind intact so rsolve can still
+               dispatch it — introducing exactly ONE new world, as before
+               Phase 2), then transport rh across the filter via
+               refine_gc_heap and hand off to rsolve/IHfuel as usual. *)
+            iApply HeapSpec.refine_angelic_binary.
+            * rsolve.
+            * iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
+              rewrite cgc_binds_heap gc_binds_heap.
+              unfold T; cbv beta.
+              assert (Heq :
+                SHeapSpec.bind
+                  (sexec_instruction i (persist__term ta acc_refl) (persist__term ta0 acc_refl) (persist__term x acc_refl))
+                  (fun (w1 : World) (θ1 : Acc w2 w1) (apc' : Term w1 ty_xlenbits) =>
+                     sexec_cfg_addr n' (persist_itableW (acc_trans acc_refl θ1) (persist_itableW ω tbl))
+                       (persist_etable (acc_trans acc_refl θ1) (persist_etable ω exits)) apc' apc')
+                = SHeapSpec.bind (sexec_instruction i ta ta0 x)
+                  (fun w1 θ1 apc' => sexec_cfg_addr n' (persist_itableW θ1 (persist_itableW ω tbl))
+                       (persist_etable θ1 (persist_etable ω exits)) apc' apc'))
+                by reflexivity.
+              rewrite Heq.
+              iPoseProof (refine_gc_heap with "rh") as "rh'".
+              iClear "rh".
+              rsolve.
+              { rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+                iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+                (* TWO "[$]", one per RVal argument: the recursive call passes
+                   apc' as both the pc and the incoming nextpc.  Both premises
+                   are the same persistent ℛ⟦RVal⟧ fact, so it frames twice over. *)
+                iApply ("IH" with "[$] [$]"). }
+              { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
+                iApply ("rΦ2" with "[$] [$]"). }
           + (* exit-hit / lookup-miss *)
             iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact".
             destruct Hfact as (v & -> & Hcond).
@@ -594,10 +669,32 @@ Section CFGVerificationDerived.
             destruct Hfact as (-> & Hm).
             cbn [ty.RVToOption].
             rewrite Hm.
-            rsolve.
-            rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
-            iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-            iApply ("IH" with "[$] [$]").
+            (* Same chunk_gc-bind trap and fix as the exit-hit/lookup-hit case
+               above — see the comment there. *)
+            iApply HeapSpec.refine_angelic_binary.
+            * rsolve.
+            * iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
+              rewrite cgc_binds_heap gc_binds_heap.
+              unfold T; cbv beta.
+              assert (Heq :
+                SHeapSpec.bind
+                  (sexec_instruction i (persist__term ta acc_refl) (persist__term ta0 acc_refl) (persist__term x acc_refl))
+                  (fun (w1 : World) (θ1 : Acc w2 w1) (apc' : Term w1 ty_xlenbits) =>
+                     sexec_cfg_addr n' (persist_itableW (acc_trans acc_refl θ1) (persist_itableW ω tbl))
+                       (persist_etable (acc_trans acc_refl θ1) (persist_etable ω exits)) apc' apc')
+                = SHeapSpec.bind (sexec_instruction i ta ta0 x)
+                  (fun w1 θ1 apc' => sexec_cfg_addr n' (persist_itableW θ1 (persist_itableW ω tbl))
+                       (persist_etable θ1 (persist_etable ω exits)) apc' apc'))
+                by reflexivity.
+              rewrite Heq.
+              iPoseProof (refine_gc_heap with "rh") as "rh'".
+              iClear "rh".
+              rsolve.
+              { rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+                iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+                iApply ("IH" with "[$] [$]"). }
+              { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
+                iApply ("rΦ2" with "[$] [$]"). }
           + (* exit-miss / lookup-miss: symbolic errors twice; concrete side *)
             (* must also fail — NonSyncVal pc is rejected, SyncVal pc closed  *)
             (* by the empty angelic_binary of two errors.                     *)

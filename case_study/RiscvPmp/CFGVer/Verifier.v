@@ -310,6 +310,22 @@ Section CFGVerificationDerived.
     Definition chunk_gc {w : World} : SHeapSpec Unit w :=
       fun POST h => POST w acc_refl tt (gc_heap h).
 
+    (* Symbolic mirror of VerifierRel.v's cgc_binds_heap: chunk_gc's bind    *)
+    (* rewrites the heap and never moves the world (acc_refl), so binding   *)
+    (* it just applies the continuation box unconditionally (T) to the      *)
+    (* filtered heap.  Reflexivity because chunk_gc's own acc_refl already  *)
+    (* makes SHeapSpec.bind's world bookkeeping collapse away definitionally. *)
+    (* USE THIS to eliminate chunk_gc's bind BEFORE letting rsolve near the *)
+    (* NEXT bind in the sequence — otherwise the generic RefineCompat/      *)
+    (* rsolve machinery treats chunk_gc as if it could move to an arbitrary *)
+    (* fresh world, and the resulting (spurious) extra world's accessibility *)
+    (* doesn't associate with the rest on the nose (Acc composition isn't   *)
+    (* definitionally associative), stalling the proof. *)
+    Lemma gc_binds_heap {A w} (f : Box (Impl Unit (SHeapSpec A)) w)
+        (Φ : Box (Impl A (Impl (fun w' => SHeap w') (fun w' => 𝕊 w'))) w) (h : SHeap w) :
+      SHeapSpec.bind chunk_gc f Φ h = T f tt Φ (gc_heap h).
+    Proof. reflexivity. Qed.
+
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
     (* current pc term against the table keys.  `peval` on BOTH sides is  *)
     (* required: solver substitutions leave keys unnormalized             *)
