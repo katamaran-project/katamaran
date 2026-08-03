@@ -392,8 +392,9 @@ Section CFGVerificationDerived.
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, i) =>
-                   ⟨ θ1 ⟩ apc' <- sexec_instruction i apc anp wd ;;
-                   sexec_cfg_addr n' (persist_itableW θ1 tbl) (persist_etable θ1 exits)
+                   ⟨ θ0 ⟩ _    <- chunk_gc ;;
+                   ⟨ θ1 ⟩ apc' <- sexec_instruction i (persist__term apc θ0) (persist__term anp θ0) (persist__term wd θ0) ;;
+                   sexec_cfg_addr n' (persist_itableW (θ0 ∘ θ1) tbl) (persist_etable (θ0 ∘ θ1) exits)
                      apc' apc'
                end)
         end.
