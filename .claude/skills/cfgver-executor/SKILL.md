@@ -9,14 +9,15 @@ description: >
   ownership, still gmap-based on the concrete side), and scfg_verification_condition
   (how the VC is built and called). ALSO use when a backward-branch loop example's
   vm_compute cost scales badly as its trip count is raised — it never terminates, or
-  a SMALLER trip count on the same loop shape compiled fine. Two mechanisms, and the
-  skill covers both: symbolic TERM DUPLICATION (the loop body rebuilding a register
-  from k ≥ 2 copies of its own previous value; no term sharing in the executor's
-  register store) is real but was measured NOT to be dominant at practical trip
-  counts; the measured-dominant driver is the LIVE LOGIC-VARIABLE CONTEXT — two
-  demonic variables per instruction step that are never unified away, so a loop whose
-  every symbolic term is held O(1) by construction scales just as badly. Either way
-  this is a structural scaling property of the executor, NOT branch forking and not a
+  a SMALLER trip count on the same loop shape compiled fine. Two suspects were ruled
+  out in turn: symbolic TERM DUPLICATION (the loop body rebuilding a register from
+  k ≥ 2 copies of its own previous value) is real but measured NOT dominant, and the
+  LIVE LOGIC-VARIABLE CONTEXT (two demonic variables per instruction step) was fixed
+  to zero growth without changing the slope. The actual driver was a LEAKED HEAP
+  CHUNK (encodes_instr, duplicable and never removed on consume, so the heap grows
+  one chunk per step) — now fixed by the landed chunk GC (PLAN-chunk-gc.md), which
+  collapses the quadratic term to ≈0. This is a structural scaling property of the
+  executor, NOT branch forking and not a
   fuel/timeout/spec-size problem to tune around. Contrast: a
   SINGLE vm_compute call that DOES finish and solve_vc then leaves a bare False (fuel
   merely too tight, not a trip-count scaling blowup) stays cfgver-solve-vc's
@@ -154,6 +155,16 @@ It stops with `error` when:
 > out: **fuel** (4.4× the fuel = +0.04% allocation, every counter byte-identical)
 > and **`|wctx|`** again, now positively — live variables per node are a flat 20.6
 > at every trip count and the cost is quadratic anyway.
+>
+> **LANDED 2026-08-03.** The chunk GC below is no longer a diagnosis — it is
+> shipped. `chunk_gc`/`cchunk_gc` run every step in both `sexec_cfg_addr` and
+> `cexec_cfg_addr` (no `gc`/`wgc` flag, always-on — see `PLAN-chunk-gc.md` §2 for
+> why a flag was deliberately rejected), `rexec_cfg_addr` re-paired, and
+> `sound_exec_cfg_addr_myWP2` absorbs the bind. `scripts/gate.sh` is green, no
+> trusted statement changed, and the quadratic allocation term this section
+> measures collapses to ≈0 (1.32× measured speedup at N=8, matching the
+> prediction below exactly). Full recipe and final numbers:
+> `PLAN-chunk-gc.md` §12.
 >
 > **ROOT CAUSE 2026-08-03: a LEAKED HEAP CHUNK.** `encodes_instr` is
 > `is_duplicable := true` (`Sig.v:343`) and `heap_extractions` KEEPS duplicable

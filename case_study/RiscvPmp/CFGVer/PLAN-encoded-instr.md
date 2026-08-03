@@ -1043,6 +1043,13 @@ rebuilt green (30 files, 0 errors) — nothing in the tree is instrumented.
 
 ## §11-AUDIT. The archived chunk-GC IS complete — but not at the tag tip — 2026-08-03
 
+> **LANDED 2026-08-03 — see `PLAN-chunk-gc.md` §12.** The recovery plan this
+> section and §10 recommend was carried out in full: all six phases complete,
+> gate green, no trusted statement changed. Measured speedup 1.32× at N=8
+> (matching the prediction below exactly), quadratic allocation term collapsed
+> to ≈0. Do not re-derive the recovery steps from scratch — `PLAN-chunk-gc.md`
+> has the executed recipe and the final numbers.
+
 §10 recommended recovering the chunk GC from `archive/gc-attempt-2026-07` on the
 strength of the memory note's claim that it is "sound and proved". **Verified, and
 the claim holds — but the recovery pointer in that note is wrong.**

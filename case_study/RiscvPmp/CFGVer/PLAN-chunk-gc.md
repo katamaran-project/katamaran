@@ -1,8 +1,9 @@
 # PLAN — land the chunk GC: stop leaking `encodes_instr` into the symbolic heap
 
-Status: **NOT STARTED.** Branch off `nextpc-param` (tip `1083bd75`).
+Status: **LANDED 2026-08-03.** Branch `nextpc-param`. All six phases complete;
+`scripts/gate.sh` green, no trusted statement changed. See §12 for the outcome.
 Prerequisite reading: `PLAN-encoded-instr.md` **§10** (the root cause) and **§11**
-(the audit of the archived proofs). This plan is the "recommended next step" those
+(the audit of the archived proofs). This plan was the "recommended next step" those
 two sections end on.
 
 ## §0. What and why, in five lines
@@ -381,3 +382,83 @@ earlyoom-killed at 5.80 GB. The model predicts N=32 becomes reachable.
 - `Tables.v` needs `Open Scope list_scope` after its imports; don't let a new
   require reorder that.
 - Keep `Verifier.v` Iris-free and `Example/Prelude.v` free of `EndToEnd`.
+
+---
+
+## §12. LANDED 2026-08-03 — Phase 5/6 results
+
+Phases 1-4 (commits `7a364744`..`05d909f8`) inserted `chunk_gc`/`cchunk_gc` on
+both sides, re-paired `rexec_cfg_addr`, and absorbed the bind in
+`sound_exec_cfg_addr_myWP2`. This section closes out Phase 5 (measurement) and
+Phase 6 (gate + trusted-surface review).
+
+### Phase 5 — measurement gate: GREEN
+
+Measured on the `zzf` flat reproducer, N=1/2/4/8 (probe files were scratch,
+since deleted — see below).
+
+**Gate 1, tree census (completeness control) — byte-identical to the
+pre-change baseline in §6's table:**
+
+| N | nodes | pcsum | wsum | tsize | depth |
+|---|---|---|---|---|---|
+| 1 | 2168 | 20831 | 44521 | 650 | 1363 |
+| 2 | 4294 | 56973 | 129257 | 1141 | 2685 |
+| 4 | 8546 | 129257 | 176227 | 2123 | 5329 |
+| 8 | 17050 | 273825 | 351835 | 4087 | 10617 |
+
+No tree structure changed — the GC does not truncate a live path.
+
+**Gate 2, allocation model — quadratic term collapses, pure affine fit:**
+
+```
+alloc(N) = -38,531,897 + 167,351,070.9·N        (fit on N=1,8)
+```
+
+Held-out verification: N=2 predicted vs actual 0.006% error, N=4 0.004% error.
+Compare the pre-change arm A model (`PLAN-encoded-instr.md` §10):
+`-38.6M + 165.9M·N + 6.75M·N²` — the quadratic coefficient goes from 6.75M to
+effectively 0.
+
+**Gate 3, speedup — matches the plan's prediction exactly:** 1.32× at N=8
+(1.04× at N=1, growing with N since the term removed is quadratic, not a
+constant).
+
+### Phase 6 — gate + trusted-surface review: GREEN
+
+- `git diff 1083bd75..HEAD` (the whole chunk-GC investigation-to-landing span)
+  touches only `Adequacy.v`, `Verifier.v`, `VerifierRel.v` and the two `PLAN-*.md`
+  docs. **Zero changes** to `Noninterference.v` or any `Example/*.v` /
+  `Example/*Result.v` file — the trusted statement surface is untouched, as §4
+  requires for an internal executor optimisation.
+- `GATE_JOBS=1 scripts/gate.sh`:
+  ```
+  ✓ GATE PASSED — build clean, no holes, 12 end theorems axiom-clean
+    (only: Machine.pure_decode Base.mmioenv).
+  ```
+  Axiom set is exactly the pre-existing allowlist — unchanged by this work.
+- **One pre-existing, unrelated gate-blocker found and removed in the same
+  commit:** three scratch diagnostic files (`Example/ZZCtlKsl.v`,
+  `Example/ZZGoalsP1.v`, `Example/ZZCtlZzn.v`, added in `ab3503e6`, well before
+  this plan started) were goal-count/`idtac` printers that were deliberately
+  `Admitted` — never meant to be real proofs, not referenced by `_CoqProject`
+  or anything else, and orthogonal to the chunk GC. They tripped the gate's
+  hole-scan (which is unconditional over the whole `CFGVer` tree, not just
+  build targets), so they were deleted rather than left to block every future
+  gate run.
+- The Phase 5 probe files (`Phase5CensusZzf.v`, `Phase5Zzf{1,2,4,8}.v`,
+  `Phase5ZzfBaseline.v`) and the standalone `PHASE5-RESULTS.md` were scratch —
+  not in `_CoqProject`, one-shot measurement harnesses whose result is now
+  folded into this section — and were deleted after folding, matching how
+  every earlier probe batch in this investigation (`ZZDg*`, `ZZFwd*`, `ZZGc*`,
+  etc.) was scratch rather than a permanent addition.
+
+### Skill/doc updates (same commit)
+
+- `PLAN-encoded-instr.md` §11 gets a LANDED pointer back to this section.
+- `cfgver-executor`'s body gets a LANDED banner; its `description:` is
+  reworded to retire the "|wctx| is the dominant driver" claim (superseded by
+  the leaked-chunk finding) — validated via `skill-routing-maintenance`
+  (new eval entry Q102, regression checks Q79/Q98, all `cfgver-executor`,
+  all correct `TOTAL=34` checksums).
+- This memory note: see `project_chunk_gc_landed` (auto-memory).
