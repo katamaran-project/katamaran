@@ -60,6 +60,7 @@ AXIOM_CLEAN_THMS=(
   "key_schedule_loop2_noninterferent_param"
   "muladd_q_noninterferent_param"
   "modpow_win_noninterferent_param"
+  "modpow_win_full_noninterferent_param"
   "check_scalar_noninterferent_param"
 )
 

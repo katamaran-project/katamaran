@@ -45,6 +45,19 @@ a concrete-base VC is dead compile time.
    `clang -O2 -march=rv32i`) into a `list AST` with
    `case_study/RiscvPmp/CFGVer/tools/asm_to_ast.py` — it tags each entry with its
    source line for auditability. Don't hand-transcribe real compiled code.
+   **Label resolution works only since 2026-08-03** (`modpow_win_full`, the first
+   example translated from real compiled control flow): the directive regex was
+   tested before the label regex, so every clang local label (`.LBB0_2:`) was
+   eaten as a directive and every branch failed with "undefined label". If a
+   listing's last label sits on the dropped `ret`, translate WITHOUT `--drop-ret`
+   (so the label still resolves, to one-past-the-end) and delete the trailing
+   `RISCV_JALR` entry by hand — a branch to one-past-the-end is covered by
+   `pcOutOfInstrs_exitCond` with no `extra_exit_offs`.
+   **Watch for full unrolling:** clang unrolls a loop whose bounds are
+   compile-time constants, so a program compiled with its sizes baked in
+   verifies nothing about loop control flow. Keep the bounds as runtime
+   parameters (as the real source has them) and pin them to public constants in
+   the CONTRACT instead.
    **Hand-authoring a synthetic program/loop instead** (no real source to
    translate — e.g. a small-N feasibility spike like `countdown`/
    `countdown_mem`/`key_schedule_loop2`, where a real compiler would just fully

@@ -92,6 +92,7 @@ Open Scope list_scope.
      hand-picked X0..X4. *)
   Definition T0 : RegIdx := bv.of_nat 5.
   Definition T1 : RegIdx := bv.of_nat 6.
+  Definition T2 : RegIdx := bv.of_nat 7.
   Definition A0 : RegIdx := bv.of_nat 10.
   Definition A1 : RegIdx := bv.of_nat 11.
   Definition A2 : RegIdx := bv.of_nat 12.
@@ -100,6 +101,10 @@ Open Scope list_scope.
   Definition A5 : RegIdx := bv.of_nat 15.
   Definition A6 : RegIdx := bv.of_nat 16.
   Definition A7 : RegIdx := bv.of_nat 17.
+  Definition T3 : RegIdx := bv.of_nat 28.
+  Definition T4 : RegIdx := bv.of_nat 29.
+  Definition T5 : RegIdx := bv.of_nat 30.
+  Definition T6 : RegIdx := bv.of_nat 31.
 
   (* Convert a contiguous instruction list into the finite map the CFG
      verifier now consumes.  Instruction k of the list is placed at the
