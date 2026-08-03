@@ -123,6 +123,41 @@ Section CFGVerificationDerived.
                [env].["a"∷ty_xlenbits ↦ a].["an"∷_ ↦ na].["w"∷_ ↦ w] ;;
         pure na.
 
+    Definition cgc_heap (h : SCHeap) : SCHeap :=
+      List.filter (fun c => negb (is_encodes_instr c)) h.
+
+    Definition cchunk_gc : CHeapSpec unit :=
+      fun POST h => POST tt (cgc_heap h).
+
+    (* The whole content of refine_chunk_gc (plan step 2d): instantiation      *)
+    (* commutes with the chunk filter.  Nearly free because `inst` preserves   *)
+    (* chunk_user's PREDICATE HEAD (Chunks.v: inst (chunk_user p ts) ι =       *)
+    (* chunk_user p (inst ts ι)) and is_encodes_instr inspects only that head, *)
+    (* so the filter predicate is invariant under `inst` and List.filter       *)
+    (* commutes with List.map.                                                 *)
+    (* Generic; belongs in a list library (theories/Prelude.v) rather than    *)
+    (* here.  Kept local for now to avoid a framework-wide rebuild — move it  *)
+    (* together with Verifier.v's find_map/ctx_len when those go up.          *)
+    Lemma filter_map_comm {A B : Type} (f : A -> B) (p : A -> bool) (q : B -> bool) :
+      (forall a, q (f a) = p a) ->
+      forall l, List.filter q (List.map f l) = List.map f (List.filter p l).
+    Proof.
+      intros Hpq l. induction l as [|a l IHl]; cbn; [reflexivity|].
+      rewrite Hpq. destruct (p a); cbn; [f_equal|]; exact IHl.
+    Qed.
+
+    Lemma inst_gc_heap {Σ} (sh : SHeap Σ) (ι : Valuation Σ) :
+      inst (gc_heap sh) ι = cgc_heap (inst sh ι).
+    Proof.
+      unfold gc_heap, cgc_heap.
+      symmetry. apply filter_map_comm.
+      intros c. destruct c; reflexivity.
+    Qed.
+
+    #[export] Instance mono_cchunk_gc :
+      Monotonic (MHeapSpec eq) cchunk_gc.
+    Proof. firstorder. Qed.
+
     (* `words` gives the raw instruction word at each address — the concrete
        counterpart of the word column of the symbolic SInstrTableW
        (Verifier.v).  It stays a SEPARATE gmap from `instrs` (rather than

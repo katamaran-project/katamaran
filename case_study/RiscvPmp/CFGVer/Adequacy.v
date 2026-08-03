@@ -1081,6 +1081,26 @@ Section AdequacyTools.
        ∃-form ptsto_instrs, because cexec_cfg_addr looks the word up in this
        specific gmap at every step.  The caller destructs the ∃ once, before
        entering the loop. *)
+
+    (* Chunk GC weakening: sound_exec_cfg_addr_myWP2 to account for the cchunk_gc bind
+       introduced in Phase B of the GC refinement.
+
+       interpret_scheap is a fold_right of (_ ∗ _) over the chunk list
+       (Chunks.v), so the kept case frames the head and recurses, and the
+       dropped case simply DISCARDS the head conjunct — the `_` in
+       `iIntros "[_ H]"`.  That step needs the ambient BI to be AFFINE,
+       which iProp Σ is but Chunks.v's abstract HProp is not; that is why
+       this lemma has to live here and cannot be pushed down next to
+       interpret_scheap itself. *)
+    Lemma interpret_scheap_gc_heap (h : SCHeap) :
+      interpret_scheap h ⊢ interpret_scheap (Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_heap h).
+    Proof.
+      induction h as [|c h IH]; cbn; [done|].
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_heap in IH; cbn in IH.
+      destruct (is_encodes_instr c); cbn;
+        [iIntros "[_ H]" | iIntros "[Hc H]"; iFrame "Hc"]; iApply IH; iExact "H".
+    Qed.
+
     Lemma sound_exec_cfg_addr_myWP2
         {instrs} {words : bv xlenbits -> bv word} {exitCond fuel} (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :

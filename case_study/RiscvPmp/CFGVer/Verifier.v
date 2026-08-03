@@ -283,6 +283,33 @@ Section CFGVerificationDerived.
     Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SExitTable w1 -> SExitTable w2 :=
       List.map (fun t => persist__term t θ).
 
+    (* Chunk GC.  Note there is NO justification test of any kind here:    *)
+    (* this unconditionally drops every encodes_instr chunk.  That is safe *)
+    (* because it fails in the SAFE DIRECTION — dropping leaves the        *)
+    (* executor with strictly less, so if a later step needs the chunk its *)
+    (* consume_chunk fails and the VC becomes unprovable.  An unjustified  *)
+    (* drop costs completeness, never soundness.                          *)
+    (*                                                                    *)
+    (* Why encodes_instr specifically, and why this is NEEDED rather than  *)
+    (* merely nice: encodes_instr is DUPLICABLE (Sig.v), and consuming a   *)
+    (* duplicable chunk leaves it in the heap (Chunks.v,                   *)
+    (* try_consume_chunk_exact).  So one accumulates per step and never    *)
+    (* leaves, each keeping its own "encoded_instr" variable alive in the  *)
+    (* heap root — which is exactly what blocks gc_dead_roots below.  The  *)
+    (* two GCs are therefore superadditive, not independent wins: this one *)
+    (* is what makes "encoded_instr" pass the occurs check at all.         *)
+    Definition is_encodes_instr {V : Ty -> Set} (c : GChunk V) : bool :=
+      match c with
+      | chunk_user encodes_instr _ => true
+      | _                          => false
+      end.
+
+    Definition gc_heap {Σ} (h : SHeap Σ) : SHeap Σ :=
+      List.filter (fun c => negb (is_encodes_instr c)) h.
+
+    Definition chunk_gc : forall w : World, SHeapSpec Unit w :=
+      fun w POST h => POST w acc_refl tt (gc_heap h).
+
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
     (* current pc term against the table keys.  `peval` on BOTH sides is  *)
     (* required: solver substitutions leave keys unnormalized             *)
