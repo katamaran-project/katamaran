@@ -1135,7 +1135,15 @@ Section AdequacyTools.
                arithmetic: the gmap key IS the current PC. *)
             destruct (instrs !! v) as [i|] eqn:Hlk.
             ++ unfold bind, CHeapSpec.bind in Hexec.
+               (* Phase 4 (chunk GC): Hexec now carries the extra cchunk_gc
+                  bind cexec_cfg_addr's step inserts before cexec_instruction.
+                  Absorb it first — cgc_binds_heap_fwd rewrites Hexec down
+                  to the cexec_instruction call over cgc_heap h — then weaken
+                  Hh to match via interpret_scheap_gc_heap (§4: sound because
+                  iProp Σ is affine). *)
+               apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
                iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+               iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
                iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
                              words instrs v Hlk
                  with "Hinstrs") as "[Hinstr Hframe]".
