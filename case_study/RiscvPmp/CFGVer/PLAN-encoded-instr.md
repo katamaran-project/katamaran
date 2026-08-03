@@ -967,16 +967,16 @@ Definition zz_probe {A} : ⊢ SHeapSpec A -> SHeapSpec A :=
 N=1/2/4/8 (nodes 2168/4294/8546/17050, pcsum 20831/56973/129257/273825, wsum,
 tsize, depth). No completeness lost; the VC is structurally unchanged.
 
-| | constant | linear/N | **quadratic/N²** |
+| arm | constant | linear/N | **quadratic/N²** |
 |---|---|---|---|
-| leak present | −38,557,049 | 165,936,467 | **6,754,351** |
-| `encodes_instr` GC'd | −38,555,325 | 167,376,080 | **−2,902** |
+| **A. unmodified executor** — what the tree does today | −38,557,049 | 165,936,467 | **6,754,351** |
+| **B. throwaway probe filtering the chunk** — code no longer exists | −38,555,325 | 167,376,080 | **−2,902** |
 
 **The quadratic coefficient collapses to −0.043% of itself, i.e. zero.** The
 constant is untouched and the linear term rises 0.87% — the filter's own per-step
 cost. Both quadratic fits hold their N=4 held-out point to 0.002%.
 
-Independently: a **pure affine** model fits the GC arm on N=1,8 and predicts the
+Independently: a **pure affine** model fits arm B on N=1,8 and predicts the
 two held-out points to **−0.006%** and **−0.004%** (`alloc = −38.5M +
 167.3M·N`), with ratios per doubling 2.299 / 2.130 / 2.061 → 2. With the leak
 plugged, allocation is affine in N.
@@ -985,11 +985,17 @@ Projected, using the two fitted models:
 
 | N | 8 | 16 | 32 | 64 | 128 |
 |---|---|---|---|---|---|
-| leak present (G words) | 1.72 | 4.35 | 12.19 | 38.25 | 131.86 |
-| GC'd (G words) | 1.30 | 2.64 | 5.32 | 10.67 | 21.38 |
-| **speedup** | 1.32× | 1.65× | 2.29× | **3.58×** | **6.17×** |
+| arm A, leak present (G words) | 1.72 | 4.35 | 12.19 | 38.25 | 131.86 |
+| arm B, chunk filtered (G words) | 1.30 | 2.64 | 5.32 | 10.67 | 21.38 |
+| **speedup IF a sound fix lands** | 1.32× | 1.65× | 2.29× | **3.58×** | **6.17×** |
 
 Unbounded growth, as expected when a quadratic term is removed rather than scaled.
+
+> **NOTHING HAS ACTUALLY GOT FASTER.** Arm B was a temporary `Verifier.v` edit,
+> measured and then reverted; the tree behaves as arm A. These are the numbers a
+> sound chunk GC would buy, not a change anyone has landed. Beware the terminology
+> collision while reading this file: "GC arm" in §8 means the ARCHIVED WORLD-GC, a
+> different and unprovable thing.
 
 ### Why three sessions missed this, and it is NOT the fix this plan landed
 

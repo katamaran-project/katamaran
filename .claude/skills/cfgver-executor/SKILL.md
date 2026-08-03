@@ -175,8 +175,10 @@ It stops with `error` when:
 > **Causal test:** filtering those chunks each step collapses the quadratic
 > coefficient from 6,754,351 to **−2,902 (−0.043%)** with a **byte-identical
 > census** — nothing lost. Allocation becomes affine (pure affine fit holds
-> held-out points to 0.006%). Projected speedup 1.32× / 1.65× / 2.29× / 3.58× /
-> 6.17× at N=8/16/32/64/128 — unbounded, as removing a quadratic term should be.
+> held-out points to 0.006%). Speedup a sound fix WOULD buy: 1.32× / 1.65× /
+> 2.29× / 3.58× / 6.17× at N=8/16/32/64/128 — unbounded, as removing a quadratic
+> term should be. **The filter was a temporary `Verifier.v` edit, measured then
+> REVERTED — nothing in the tree is faster and no fix has landed.**
 >
 > **THE NAME COLLISION THAT HID THIS FOR THREE SESSIONS:** the `encoded_instr`
 > VARIABLE (removed from `wctx` by `PLAN-encoded-instr.md`) and the
