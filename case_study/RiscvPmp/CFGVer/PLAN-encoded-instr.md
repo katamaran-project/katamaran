@@ -1026,7 +1026,8 @@ vacuously safe at disagreeing valuations), and because heap size was believed no
 to matter. Both reasons are now gone.
 
 **Recommended next step:** recover `refine_chunk_gc` and friends from the archive
-and land the chunk GC ALONE, without any world GC. Unlike the archived bundle this
+and land the chunk GC ALONE, without any world GC. **The phased plan, with model
+assignments and gates, is `PLAN-chunk-gc.md`.** Unlike the archived bundle this
 needs no new core machinery and no trusted-surface change — it filters a
 duplicable chunk whose Iris interpretation is a pure proposition
 (`⌜pure_decode code = inr instr⌝`, `IrisInstance.v:295`), which is why dropping it
