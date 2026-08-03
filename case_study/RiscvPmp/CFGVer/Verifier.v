@@ -307,8 +307,8 @@ Section CFGVerificationDerived.
     Definition gc_heap {Σ} (h : SHeap Σ) : SHeap Σ :=
       List.filter (fun c => negb (is_encodes_instr c)) h.
 
-    Definition chunk_gc : forall w : World, SHeapSpec Unit w :=
-      fun w POST h => POST w acc_refl tt (gc_heap h).
+    Definition chunk_gc {w : World} : SHeapSpec Unit w :=
+      fun POST h => POST w acc_refl tt (gc_heap h).
 
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
     (* current pc term against the table keys.  `peval` on BOTH sides is  *)

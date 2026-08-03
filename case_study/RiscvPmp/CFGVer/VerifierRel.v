@@ -158,6 +158,23 @@ Section CFGVerificationDerived.
       Monotonic (MHeapSpec eq) cchunk_gc.
     Proof. firstorder. Qed.
 
+    (* The GC bind inserted into cexec_cfg_addr's step rewrites the heap and never inspects
+       the postcondition, so the equation holds definitionally. *)
+    Lemma cgc_binds_heap {A} (k : CHeapSpec A) (Φ : A -> SCHeap -> Prop) (h : SCHeap) :
+      (_ <- cchunk_gc ;; k) Φ h = k Φ (cgc_heap h).
+    Proof. reflexivity. Qed.
+
+    (* USE THIS ONE, not the equality above, to discharge a hypothesis. *)
+    (* `rewrite cgc_binds_heap in H` FAILS: rewrite matches keyed on the LHS *)
+    (* head symbol (CHeapSpec.bind), whereas the occurrence actually *)
+    (* produced by cexec_instruction's postcondition is already beta-reduced *)
+    (* to `cchunk_gc (fun _ h1 => ...) h`.  `apply … in H` unifies up to *)
+    (* full conversion instead, so it goes through. *)
+    Lemma cgc_binds_heap_fwd {A} (k : CHeapSpec A) (Φ : A -> SCHeap -> Prop) (h : SCHeap) :
+      (_ <- cchunk_gc ;; k) Φ h ->
+      k Φ (cgc_heap h).
+    Proof. now rewrite cgc_binds_heap. Qed.
+
     (* `words` gives the raw instruction word at each address — the concrete
        counterpart of the word column of the symbolic SInstrTableW
        (Verifier.v).  It stays a SEPARATE gmap from `instrs` (rather than
@@ -181,6 +198,7 @@ Section CFGVerificationDerived.
                   (match instrs !! v with
                    | None   => error
                    | Some i =>
+                       _ <- cchunk_gc ;;
                        apc' <- cexec_instruction i apc anp (ty.SyncVal (words v)) ;;
                        cexec_cfg_addr instrs words exitCond n' apc' apc'
                    end)
