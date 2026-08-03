@@ -189,10 +189,21 @@ It stops with `error` when:
 > driver (0.95×)" — **that figure is REFUTED, do not requote it**; so is
 > "chunk-only GC = −6% at N=4" (measured here: 14% at N=4, growing without bound).
 >
-> A sound chunk-GC may already exist: `refine_chunk_gc`, `inst_gc_heap`,
-> `interpret_scheap_gc_heap` at tag `archive/gc-attempt-2026-07`, discarded only
-> because it was bundled with the unprovable WORLD-GC and because heap size was
-> believed not to matter. Both reasons are gone. Land the chunk GC ALONE.
+> **A sound chunk-GC exists and was AUDITED 2026-08-03 — recover it from
+> `b24d0d15`, NOT from the tag tip.** `archive/gc-attempt-2026-07` points at
+> `48c651f0`, which by its own commit message "does not compile"; `7d93fe9d`
+> predates `refine_chunk_gc`. Built `Adequacy.vo` at `b24d0d15` (exit 0, 76
+> files) and `Print Assumptions` says `refine_chunk_gc` / `inst_gc_heap` /
+> `cgc_binds_heap` are **Closed under the global context**, with
+> `interpret_scheap_gc_heap` needing only the allowlisted `Machine.pure_decode`.
+> Control: the `Admitted` `rexec_cfg_addr` does report as an axiom, so those
+> results are real. Soundness comes from `iProp Σ` being **AFFINE** (a `fold_right`
+> of `∗` can discard a conjunct) — NOT from `encodes_instr` being pure; that holds
+> for any chunk, and only COMPLETENESS is `encodes_instr`-specific.
+> **Not a cherry-pick:** the current `sexec_cfg_addr` has no `gc`/`wgc` flags and
+> uses `SInstrTableW`, and today's `rexec_cfg_addr` is a real hole-free proof, so
+> inserting the bind means re-pairing it there plus absorbing it in
+> `sound_exec_cfg_addr_myWP2`. Full audit: `PLAN-encoded-instr.md` §11.
 >
 > Below: how the persist-per-step hypothesis was refuted on the way here.
 >

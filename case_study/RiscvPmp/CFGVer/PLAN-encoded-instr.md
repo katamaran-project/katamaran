@@ -1039,3 +1039,94 @@ filter, which is fine for attribution and not fine for the trusted path.
 over `ZZCommon`'s `NC`, which is the record that carries `nc_debug`). The
 `Verifier.v` instrumentation was REVERTED and the full `Results.vo` closure
 rebuilt green (30 files, 0 errors) — nothing in the tree is instrumented.
+
+## §11-AUDIT. The archived chunk-GC IS complete — but not at the tag tip — 2026-08-03
+
+§10 recommended recovering the chunk GC from `archive/gc-attempt-2026-07` on the
+strength of the memory note's claim that it is "sound and proved". **Verified, and
+the claim holds — but the recovery pointer in that note is wrong.**
+
+### The tag tip does not compile; use `b24d0d15`
+
+`archive/gc-attempt-2026-07` points at **`48c651f0`**, whose own commit message is
+*"partial nextpc-param edits on the GC base — SUPERSEDED, does not compile."* So
+the lemmas as they appear at the tag were never checked in that state.
+
+| commit | has `refine_chunk_gc` / `inst_gc_heap`? |
+|---|---|
+| `7d93fe9d` (Phase 2c) | **no** — only `cgc_heap`/`cchunk_gc` exist yet |
+| **`b24d0d15`** ("PLAN step 2d — Phase B complete (refine_chunk_gc)") | **yes** |
+| `48c651f0` (tag tip) | yes, but the tree does not build |
+
+Only two doc/tooling commits (`b8049db0`, `275d133f`) separate `b24d0d15` from the
+broken tip. **`b24d0d15` is the recovery point.** Anyone following the memory
+note's "tip `48c651f0`" would have started from a tree that does not compile.
+
+### Verified by building it and asking the kernel
+
+Built `case_study/RiscvPmp/CFGVer/Adequacy.vo` at `b24d0d15` in a throwaway
+worktree: **exit 0, 76 files, no errors.** So Coq did accept these `Qed`s. Then
+`Print Assumptions`:
+
+| lemma | axiom dependencies |
+|---|---|
+| `refine_chunk_gc` | **Closed under the global context** |
+| `inst_gc_heap` | **Closed under the global context** |
+| `cgc_binds_heap` | **Closed under the global context** |
+| `interpret_scheap_gc_heap` | only `Machine.pure_decode` — a pre-existing project axiom, already on the gate's allowlist |
+| *control:* `rexec_cfg_addr` | correctly reported AS an axiom |
+
+The control matters: it proves `Print Assumptions` detects the `Admitted` in this
+tree, so "Closed" is a real result and not a probe that cannot see anything.
+`refine_chunk_gc` being closed also covers `filter_map_comm` and `inst_gc_heap`
+transitively. The single `Admitted` in the archived `VerifierRel.v` is
+`rexec_cfg_addr` at line 551 — **after** every chunk-GC lemma, so none of them can
+depend on it.
+
+### Correction to §10's soundness argument
+
+§10 said dropping the chunk is safe because `encodes_instr`'s Iris interpretation
+is a pure proposition. True, but **not the operative reason.**
+`interpret_scheap` is a `fold_right` of separating conjunction, so the dropped
+case simply discards a conjunct — sound because the ambient BI is **AFFINE**
+(`iProp Σ` is; `Chunks.v`'s abstract `HProp` is not, which is exactly why
+`interpret_scheap_gc_heap` has to live in `Adequacy.v` and cannot be pushed down
+next to `interpret_scheap`). That argument works for ANY chunk. What is specific
+to `encodes_instr` is only COMPLETENESS: `chunk_gc` performs an unjustified drop,
+which in the archive's own words "costs completeness, never soundness", and the
+census is what shows nothing was actually lost.
+
+### The archive's own rationale is now obsolete — in our favour
+
+`Verifier.v`'s comment there says the two GCs are "superadditive, not independent
+wins: this one is what makes `encoded_instr` pass the occurs check at all." That
+was true when the chunk GC existed to UNBLOCK the world GC. `encoded_instr` the
+variable is now gone at source (§7), so the chunk GC no longer needs the world GC
+for anything — it stands alone as a pure heap-size reduction, which is precisely
+the case §10 makes for it.
+
+### What the port actually costs
+
+Executor-independent, should move nearly verbatim (none mention the instruction
+table): `is_encodes_instr`, `gc_heap`, `chunk_gc` (`Verifier.v`); `cgc_heap`,
+`cchunk_gc`, `mono_cchunk_gc`, `filter_map_comm`, `inst_gc_heap`,
+`refine_chunk_gc`, `refine_compat_chunk_gc` (`VerifierRel.v`);
+`interpret_scheap_gc_heap` (`Adequacy.v`).
+
+Needs real work:
+
+- `cgc_binds_heap` / `cgc_binds_heap_fwd` mention `cgc_dead_roots` and an
+  `if wgc` branch. For a chunk-GC-only landing these SIMPLIFY (one bind, not two).
+- **Signature drift.** Archived:
+  `sexec_cfg_addr (gc wgc : bool) (fuel : nat) : ⊢ SInstrTable -> …`. Current:
+  `sexec_cfg_addr (fuel : nat) : ⊢ SInstrTableW -> …` — no flags, and the word
+  column. Whether to reintroduce a `gc` flag at all is a design call; pinning the
+  GC always-on removes the flag bookkeeping the archive needed.
+- **`rexec_cfg_addr` is a REAL PROOF in the current tree with zero holes**
+  (`VerifierRel.v:486`). Inserting one bind into the step means re-pairing that
+  bind inside it (`HeapSpec.refine_bind`), and `sound_exec_cfg_addr_myWP2` in
+  `Adequacy.v` absorbing it. This is the whole cost, and it is why this must not
+  be described as a cherry-pick.
+
+`encodes_instr` is still `is_duplicable := true` in the live `Sig.v:343`, so the
+leak is present exactly as §10 measured it.
