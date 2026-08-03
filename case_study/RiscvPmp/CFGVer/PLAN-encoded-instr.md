@@ -12,6 +12,15 @@ at N=8→16 and rising, the growth lives in `vm_compute` and `Qed` rather than i
 the solver, and a concrete base does not flatten it either. Read §8 before
 quoting any timing from §7.
 
+> **§9 measures the cost law and §10 ROOT-CAUSES it. Read §10 first.** The
+> quadratic is a LEAKED HEAP CHUNK: `encodes_instr` is duplicable, so
+> `heap_extractions` never removes it and the symbolic heap grows by exactly one
+> chunk per instruction step. Filtering it collapses the quadratic coefficient to
+> −0.043% of itself with a byte-identical census. **Note the name collision that
+> hid this for three sessions: the `encoded_instr` VARIABLE that this plan removed
+> and the `encodes_instr` CHUNK that leaks are different objects.** A sound
+> chunk-GC may already exist at tag `archive/gc-attempt-2026-07`.
+
 ## §0. Why this is worth doing, and what "done" looks like
 
 Measured on the flat `zzn` reproducer (`PLAN-nextpc-param.md` §5-RESULTS, probe
@@ -826,13 +835,12 @@ Two further things the same table says:
   heap-chunk scanning is ruled out as the main carrier too, even though heap SIZE
   does scale the quadratic coefficient (1.457× for 7 extra cells, §9 arm H).
 
-**Still unidentified**, therefore, is what carries the quadratic. It is not
-per-step copying, not the exit table, not inert heap chunks, and not any of §9's
-earlier exclusions. It is associated with the ACTIVE part of the step — the
-instruction chunks, registers and written cell that consume/produce actually
-unify against — and with the solver work those generate. The next instrument
-would have to be inside `sexec_instruction`'s consume/produce path rather than
-anywhere reachable from the contract.
+What carries the quadratic was therefore not reachable from any contract knob —
+correctly predicting that the next instrument had to go INSIDE the executor.
+**§10 does that and identifies it: a leaked duplicable `encodes_instr` chunk, one
+per instruction step.** The reasoning above still holds and is why §10 looked
+where it did: not per-step copying, not the exit table, not inert heap chunks,
+but the ACTIVE consume/produce path.
 
 ### What this rules OUT, with evidence
 
@@ -886,3 +894,142 @@ quoted from §7/§8 carries it.
 `ZZDg{A,B,C,S,F,H}*.v` and `ZZDgL{9,24}_*.v`. All THROWAWAY, none in
 `_CoqProject`; compile via `rocq_compile_file`, or via `coqc` directly when the
 `OCAMLRUNPARAM` GC stats are wanted.
+
+## §10-ROOTCAUSE. The quadratic is a LEAKED HEAP CHUNK — 2026-08-03
+
+§9 established the cost law and refuted every contract-reachable explanation. The
+carrier turned out to be inside the executor, and it is simple:
+
+> **`encodes_instr` is `is_duplicable := true` (`Sig.v:343`), and
+> `heap_extractions` KEEPS duplicable chunks on consume (`Chunks.v:106`). So every
+> fetch adds an `encodes_instr` chunk to the symbolic heap and nothing ever removes
+> it. The heap grows by exactly ONE chunk per instruction step. Per-step cost is
+> linear in heap size (§9 arm C), so the total is quadratic.**
+
+### How it was measured: instrument the executor, read out via `nc_debug`
+
+`SHeapSpec A := □(A -> SHeap -> 𝕊) -> SHeap -> 𝕊` hands the heap to any
+combinator, and `nc_debug` is **0** in the uninstrumented executor, so *k*
+`SymProp.debug` nodes are a clean channel for smuggling a number out per step
+(technique inherited from the archived `ZZFwdCommon.v`). Added temporarily to
+`Verifier.v`, wrapping the step at `:369`:
+
+```coq
+Definition zz_probe {A} : ⊢ SHeapSpec A -> SHeapSpec A :=
+  fun w m Φ h => zz_debugs (zz_measure h) (m Φ h).
+...
+⟨ θ1 ⟩ apc' <- zz_probe (sexec_instruction i apc anp wd) ;;
+```
+
+The census then reports **Σ over steps** of `zz_measure`. Controls unchanged in
+every arm: `nc_angbin` 344/687/1373/2745 (identical to §7's figures),
+`nc_demonicv` affine, `nc_assertk` pinned at 15. Only `Verifier.v` and the LIGHT
+chain need rebuilding — `VerifierRel.v` is not on the probe path — which is what
+made this affordable. Recipe generalised in
+`.claude/skills/rocq-timeout-triage/references/allocation-probes.md`.
+
+### The numbers (fits on N=1,2,8; N=4 held out)
+
+| `zz_measure` | Σ over steps | held-out N=4 |
+|---|---|---|
+| whole heap (`List.length h`) | `105·N + 98·N²` | 1988 predicted = 1988 measured, **EXACT** |
+| only `chunk_user encodes_instr` | `98·N² − 7·N` | 1540 = 1540, **EXACT** |
+| difference (real heap) | `112·N`, **zero N² term** | — |
+
+Three things fall straight out:
+
+1. **The entire N² term is `encodes_instr`** — 98N² in both rows.
+2. **The real heap is a constant 8 chunks** (112N / 14N steps): registers, pc, the
+   memory cell, the current `ptstoinstr`. Nothing else leaks.
+3. **It is exactly one chunk per step, and the probe sits before the produce.**
+   With S = 14N steps, one chunk accumulating per step and the heap read *before*
+   each step's produce gives Σ(k=0..S−1) k = S(S−1)/2 = **14N(14N−1)/2 = 98N² −
+   7N** — the fitted model, linear term and sign included. Verified at N=1/2/4/8:
+   91/378/1540/6216 against measured 91/378/1540/6216.
+
+Average heap size runs 14.5 / 21.5 / 35.5 / 63.5 at N=1/2/4/8 = `7.5 + 7N`.
+
+### Causal confirmation: filtering the chunk kills the quadratic
+
+Same probe point, one line changed — pass a filtered heap onward instead of
+counting it:
+
+```coq
+Definition zz_gc {w} (h : SHeap w) : SHeap w :=
+  List.filter (fun c => match c with
+                        | chunk_user encodes_instr _ => false
+                        | _ => true end) h.
+Definition zz_probe {A} : ⊢ SHeapSpec A -> SHeapSpec A :=
+  fun w m Φ h => m Φ (zz_gc h).
+```
+
+**Control: every census counter byte-identical to the uninstrumented arm** at
+N=1/2/4/8 (nodes 2168/4294/8546/17050, pcsum 20831/56973/129257/273825, wsum,
+tsize, depth). No completeness lost; the VC is structurally unchanged.
+
+| | constant | linear/N | **quadratic/N²** |
+|---|---|---|---|
+| leak present | −38,557,049 | 165,936,467 | **6,754,351** |
+| `encodes_instr` GC'd | −38,555,325 | 167,376,080 | **−2,902** |
+
+**The quadratic coefficient collapses to −0.043% of itself, i.e. zero.** The
+constant is untouched and the linear term rises 0.87% — the filter's own per-step
+cost. Both quadratic fits hold their N=4 held-out point to 0.002%.
+
+Independently: a **pure affine** model fits the GC arm on N=1,8 and predicts the
+two held-out points to **−0.006%** and **−0.004%** (`alloc = −38.5M +
+167.3M·N`), with ratios per doubling 2.299 / 2.130 / 2.061 → 2. With the leak
+plugged, allocation is affine in N.
+
+Projected, using the two fitted models:
+
+| N | 8 | 16 | 32 | 64 | 128 |
+|---|---|---|---|---|---|
+| leak present (G words) | 1.72 | 4.35 | 12.19 | 38.25 | 131.86 |
+| GC'd (G words) | 1.30 | 2.64 | 5.32 | 10.67 | 21.38 |
+| **speedup** | 1.32× | 1.65× | 2.29× | **3.58×** | **6.17×** |
+
+Unbounded growth, as expected when a quadratic term is removed rather than scaled.
+
+### Why three sessions missed this, and it is NOT the fix this plan landed
+
+**The `encoded_instr` VARIABLE and the `encodes_instr` CHUNK are different objects
+with nearly identical names.** This plan removed the variable from `wctx` (§7,
+confirmed: survivors +15/trip → +1/trip). The chunk is still produced and retained
+on every step. That is precisely why a successful `|wctx|` fix changed no slope —
+and it is the answer to §8's "why did the world-GC look better": the GC arm was
+collecting the chunk too.
+
+The accumulation was in fact **already known** — the 2026-07-29 chunk-GC session
+found it, named the exact mechanism (duplicable + `heap_extractions`), and measured
+1596 retained at N=4. It was set aside on the strength of "heap size is measured
+NOT to be a driver (0.95×)". **That measurement is hereby refuted**: heap size is
+the driver, and the 0.95× figure (a "constant-heap variant" of a since-replaced
+executor, in wall clock) should not be requoted. The historical "chunk-only GC =
+−6% at N=4" is likewise superseded — measured here, GCing the chunk saves 14% at
+N=4 and the saving grows without bound.
+
+### The fix may already be proved
+
+Per the memory note, the chunk-GC half of the archived attempt is **sound and
+proved** — `refine_chunk_gc`, `inst_gc_heap`, `interpret_scheap_gc_heap` at tag
+`archive/gc-attempt-2026-07` (tip `48c651f0`, branch `unquantify-gate`). It was
+discarded only because it was bundled with the *world*-GC, which is unprovable
+(`gc_dead_roots` pins a dead variable to an arbitrary value, so the tree is
+vacuously safe at disagreeing valuations), and because heap size was believed not
+to matter. Both reasons are now gone.
+
+**Recommended next step:** recover `refine_chunk_gc` and friends from the archive
+and land the chunk GC ALONE, without any world GC. Unlike the archived bundle this
+needs no new core machinery and no trusted-surface change — it filters a
+duplicable chunk whose Iris interpretation is a pure proposition
+(`⌜pure_decode code = inr instr⌝`, `IrisInstance.v:295`), which is why dropping it
+loses nothing. NOT ATTEMPTED HERE; the numbers above come from an unsound probe
+filter, which is fine for attribution and not fine for the trusted path.
+
+### Probe files and state
+
+`Example/ZZDgP{1,2,4,8}.v` are the readout runners (they define `zzf_nc` inline
+over `ZZCommon`'s `NC`, which is the record that carries `nc_debug`). The
+`Verifier.v` instrumentation was REVERTED and the full `Results.vo` closure
+rebuilt green (30 files, 0 errors) — nothing in the tree is instrumented.

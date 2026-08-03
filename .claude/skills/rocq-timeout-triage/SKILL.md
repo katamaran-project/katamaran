@@ -61,6 +61,14 @@ sentence was running when time ran out, and how long every OTHER completed
 sentence took. Don't guess "the file" is slow — one specific `vm_compute` or
 `Qed` almost always is.
 
+> **Writing the probe: `references/allocation-probes.md`.** End-to-end recipe for
+> measuring `allocated_words` (OCaml GC stats — deterministic to 0.0002% where
+> wall clock varied 2.3× on identical input), peak RSS and user CPU: the `coqc`
+> invocation, the definitions-file + one-runner-per-N + baseline layout, how to
+> write a raw-tree census (including the `Env` guard-checker workaround for term
+> size), how to instrument inside the executor via the `nc_debug` channel, and
+> how to fit with a held-out point. Read it before hand-rolling a cost probe.
+
 ## Step 1b: wall-clock is NOT a reliable comparison across runs
 
 `timing.top_slowest` is trustworthy for finding *which sentence* dominates

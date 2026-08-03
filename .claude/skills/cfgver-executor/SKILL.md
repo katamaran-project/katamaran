@@ -155,6 +155,45 @@ It stops with `error` when:
 > and **`|wctx|`** again, now positively — live variables per node are a flat 20.6
 > at every trip count and the cost is quadratic anyway.
 >
+> **ROOT CAUSE 2026-08-03: a LEAKED HEAP CHUNK.** `encodes_instr` is
+> `is_duplicable := true` (`Sig.v:343`) and `heap_extractions` KEEPS duplicable
+> chunks on consume (`Chunks.v:106`), so every fetch adds one and nothing removes
+> it: **the symbolic heap grows by exactly one chunk per instruction step.**
+> Per-step cost is linear in heap size, hence the quadratic. Measured by
+> instrumenting `sexec_cfg_addr` and reading Σ-over-steps out through the
+> `nc_debug` channel (0 in the uninstrumented executor):
+>
+> | Σ over steps of | fit | held-out N=4 |
+> |---|---|---|
+> | whole heap | `105·N + 98·N²` | EXACT |
+> | `encodes_instr` chunks only | `98·N² − 7·N` | EXACT |
+> | the difference — real heap | `112·N`, **no N² term** = a constant 8 chunks | — |
+>
+> Exactly one per step, confirmed independently: S=14N steps read before each
+> produce gives Σ(k=0..S−1)k = 14N(14N−1)/2 = 98N² − 7N, matching at all four N.
+>
+> **Causal test:** filtering those chunks each step collapses the quadratic
+> coefficient from 6,754,351 to **−2,902 (−0.043%)** with a **byte-identical
+> census** — nothing lost. Allocation becomes affine (pure affine fit holds
+> held-out points to 0.006%). Projected speedup 1.32× / 1.65× / 2.29× / 3.58× /
+> 6.17× at N=8/16/32/64/128 — unbounded, as removing a quadratic term should be.
+>
+> **THE NAME COLLISION THAT HID THIS FOR THREE SESSIONS:** the `encoded_instr`
+> VARIABLE (removed from `wctx` by `PLAN-encoded-instr.md`) and the
+> `encodes_instr` CHUNK (still leaking) are DIFFERENT OBJECTS. That is why a
+> successful `|wctx|` fix changed no slope, and why the archived world-GC looked
+> better — it collected the chunk too. The leak was already known (2026-07-29,
+> 1596 retained at N=4) but dismissed on "heap size is measured NOT to be a
+> driver (0.95×)" — **that figure is REFUTED, do not requote it**; so is
+> "chunk-only GC = −6% at N=4" (measured here: 14% at N=4, growing without bound).
+>
+> A sound chunk-GC may already exist: `refine_chunk_gc`, `inst_gc_heap`,
+> `interpret_scheap_gc_heap` at tag `archive/gc-attempt-2026-07`, discarded only
+> because it was bundled with the unprovable WORLD-GC and because heap size was
+> believed not to matter. Both reasons are gone. Land the chunk GC ALONE.
+>
+> Below: how the persist-per-step hypothesis was refuted on the way here.
+>
 > **Mechanism: the persist-per-step story was TESTED and REFUTED.**
 > `sexec_cfg_addr` does re-persist both tables every step and `is_exit` pevals
 > every exit entry every step — so exit-table size is a per-step knob that moves
