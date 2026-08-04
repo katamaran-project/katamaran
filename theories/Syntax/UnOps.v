@@ -65,7 +65,29 @@ Module uop.
     | bvnot {n}         : UnOp (bvec n) (bvec n)
     | bvdrop m {n}      : UnOp (bvec (m + n)) (bvec n)
     | bvtake m {n}      : UnOp (bvec (m + n)) (bvec m)
-    | negate {n}        : UnOp (bvec n) (bvec n).
+    | negate {n}        : UnOp (bvec n) (bvec n)
+    (* expand b = if b then all-ones else 0 — the constant-time "expand a
+       predicate to a full-word mask" primitive: Botan's CT::Mask<T>::expand,
+       and the `-(...)` in BearSSL's EQ/NEQ/GT/LT/EQ0.  Constant-time code
+       replaces control flow with data flow, and this is the only adapter
+       between the two: `expand(b) & y` is "y if b else 0", and because the
+       zeroed arm can then be merged in with |/^/+ (disjoint support), ONE
+       mask suffices for any two-way branchless choice.  Unlike the removed
+       `select_last_k` it bakes in no constant and no width, so it also
+       applies to the 64-bit-emulated-on-RV32 cases.
+
+       The argument is the PREDICATE (a `bool` term, typically a `bop.relop`
+       result), not a bitvector.  Two consequences: every clang spelling of
+       the same predicate (`snez` = `sltu rd,x0,rs`, `seqz` = `sltiu rd,rs,1`,
+       or any other comparison) folds through the SAME peval rule, and no
+       width matching between the compared operands and the mask is needed.
+       It stays a pure term, so a relop over secret data is fine here — a
+       NonSyncVal bool is only fatal in a formula/secLeak position (see the
+       `secret-data-walls` skill), never as a value.
+
+       Recognized by peval_bvadd (PartialEvaluation.v), which turns clang's
+       `<compare>; addi -1` mask chain into `bvnot (expand b)`. *)
+    | expand {n}        : UnOp bool (bvec n).
     Set Transparent Obligations.
     Derive Signature for UnOp.
     Derive NoConfusion for UnOp.
@@ -144,6 +166,7 @@ Module uop.
       | right _ => right _
       }
     | negate                           | negate => left eq_refl
+    | expand                           | expand => left eq_refl
     | _                                | _ => right _.
 
     #[local] Instance eq_dec_unop [σ1 σ2] : EqDec (UnOp σ1 σ2) :=
@@ -173,6 +196,7 @@ Module uop.
       | bvdrop m            => bv.drop m
       | bvtake m            => bv.take m
       | negate              => bv.negate
+      | @expand _ n         => fun b => if b then bv.ones n else bv.zero
       end.
     Global Arguments eval {σ1} {σ2} !op v.    
 

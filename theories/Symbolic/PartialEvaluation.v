@@ -432,6 +432,67 @@ Module Type PartialEvaluationOn
     | t1             , term_val _ v2    => term_binop bop.minus t1 (term_val ty.int v2)
     | t1             , t2               => term_binop bop.minus t1 t2.
 
+    (* ---- branchless-mask recognition (uop.expand) --------------------------
+       Constant-time code turns a predicate into a full-word 0/~0 mask and
+       ANDs it into an arithmetic expression instead of branching.  Every
+       compiler spelling of that ends the same way: put the comparison's 0/1
+       result in a register, then `addi -1`, since [b] - 1 = -[¬b].  Folding
+       the resulting 3-node chain into one `uop.expand` node is the point of
+       this recognizer.
+
+       GROUND TRUTH, dumped from the executor (Example/ZZExpandDump.v) for
+       `snez a2,a0; addi a2,a2,-1`:
+
+         bvadd (val 0xffffffff) (zext (bvcons (bvult (val 0) C) (val nil)))
+
+       — the immediate is already folded to all-ones and the constant has been
+       normalized to the LEFT of the sum by the `t1, term_val v2` clause
+       below.  A peval rule whose pattern never fires is INVISIBLE (everything
+       still compiles, there is simply no effect), so re-dump that probe
+       before touching the pattern.
+
+       The recognizer deliberately stops at the comparison BIT and does not
+       look at what is compared: `uop.expand` takes the predicate itself, so
+       `snez` (= sltu rd,x0,rs), `seqz` (= sltiu rd,rs,1) and any other
+       comparison all fold through this one rule, and no width relation
+       between the compared operands and the mask has to be decided.  The
+       predicate stays a pure term, so a comparison over secret data is fine
+       here — a NonSyncVal bool is only fatal in a formula/secLeak position.
+
+       NOT covered (needs its own rule): the arithmetic bit-extraction form
+       `ones ⊕ ((((Z&1) - 1) & ~(Z&1)) >> 31)` = `-(Z & 1)`, which is how the
+       GHASH/`mulx` round selects on a single bit rather than on a bool. *)
+
+    (* Recognize the widened comparison bit `zext (bvcons b w)` with w's VALUE
+       zero, i.e. the 0/1 term [b], and return b.  Requiring `bin w = 0`
+       rather than w's WIDTH to be 0 is both the condition the identity
+       actually needs and a way to avoid pinning that width inside a pattern. *)
+    Equations bvmask_indicator {n} (t : Term Σ (ty.bvec n)) : option (Term Σ ty.bool) :=
+    | term_unop uop.zext (term_binop bop.bvcons b (term_val _ w)) =>
+        if N.eqb (bv.bin w) 0%N then Some b else None ;
+    | _ => None.
+
+    Definition peval_bvadd_val_default {n} (t : Term Σ (ty.bvec n))
+      (v : Val (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      term_binop bop.bvadd (term_val (ty.bvec n) v) t.
+
+    (* all-ones ⊕ [b] = [b] - 1 = -[¬b] = bvnot (expand b).
+       Soundness is bv.add_zext_cons_ones, a plain `bv` identity — which is all
+       that is needed even though the predicate `b` may be a comparison over
+       SECRET data: both sides are pure terms, so the relational obligation
+       follows from the Val-level one by homomorphism of `inst`/liftBinOp (see
+       the `relval-rewrite-over-secrets` skill).  No NonSyncVal case analysis
+       enters the *statement*; the two constructors show up in the proof only
+       because `cbn` exposes liftUnOp. *)
+    Definition peval_bvadd_mask {n} (t : Term Σ (ty.bvec n))
+      (v : Val (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      if eq_dec v (bv.ones n) then
+        match bvmask_indicator t with
+        | Some b => term_unop uop.bvnot (term_unop uop.expand b)
+        | None   => peval_bvadd_val_default t v
+        end
+      else peval_bvadd_val_default t v.
+
     Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
     | term_val _ v1          , term_val _ v2          => term_val (ty.bvec _) (bv.add v1 v2)
     | term_val _ (bv.mk 0 _) , t2                     => t2
@@ -444,7 +505,7 @@ Module Type PartialEvaluationOn
         term_binop bop.bvadd (term_val (ty.bvec _) (bv.add v1 v2)) t'
     | term_val _ v1          , term_binop bop.bvadd (term_val _ v2) t' =>
         term_binop bop.bvadd (term_val (ty.bvec _) (bv.add v1 v2)) t'
-    | t1                     , term_val _ v2          => term_binop bop.bvadd (term_val (ty.bvec _) v2) t1
+    | t1                     , term_val _ v2          => peval_bvadd_mask t1 v2
     | t1                     , t2                     => term_binop bop.bvadd t1 t2.
 
     Definition peval_bvand_val_default {m} (t : Term Σ (ty.bvec m))
@@ -637,6 +698,7 @@ Module Type PartialEvaluationOn
         (fun (*v_s*) _ _ _ _ _ _ => peval_bvdrop_default _ t e)
         (fun (*bvdrop*) k l t1 e => peval_bvdrop_bvdrop peval_bvdrop_eq t1 e)
         (fun (*bvtake*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*expand*) _ _ _ => peval_bvdrop_default _ t e)
         t e.
 
     Definition peval_bvdrop m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -725,6 +787,7 @@ Module Type PartialEvaluationOn
         (fun (*v_s*) _ _ _ _ _ _ => peval_bvtake_default _ t e)
         (fun (*bvdrop*) _ _ _ _ => peval_bvtake_default _ t e)
         (fun (*bvtake*) k l t1 e1 => peval_bvtake_bvtake peval_bvtake_eq t1 e1)
+        (fun (*expand*) _ _ _ => peval_bvtake_default _ t e)
         t e.
 
     Definition peval_bvtake m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -836,10 +899,57 @@ Module Type PartialEvaluationOn
              end.
     Qed.
 
+    (* Inversion for the mask recognizer.  NOTE the shape of this statement:
+       it returns the EQUATION linking t to the recognized shape.  The removed
+       select_last_k fold got this wrong by using `generalize` on its matcher,
+       which discards exactly that equation and leaves the Some-branch
+       unprovable as posed (PLAN-ksl64.md §2).  Use `destruct … eqn:` plus this
+       lemma, never `generalize`. *)
+    Lemma bvmask_indicator_inv {n} (t : Term Σ (ty.bvec n)) (b : Term Σ ty.bool) :
+      bvmask_indicator t = Some b ->
+      exists m (pf : IsTrue (S m <=? n)) (w : Val (ty.bvec m)),
+        bv.bin w = 0%N /\
+        t = term_unop (uop.zext (m := S m) (n := n) (p := pf))
+              (term_binop bop.bvcons b (term_val (ty.bvec m) w)).
+    Proof.
+      funelim (bvmask_indicator t); intros Heq; try discriminate.
+      destruct (N.eqb (bv.bin w) 0%N) eqn:Hw; [|discriminate].
+      injection Heq as <-. apply N.eqb_eq in Hw.
+      do 3 eexists. split; [eassumption|reflexivity].
+    Qed.
+
+    Lemma peval_bvadd_val_default_sound {n} (t : Term Σ (ty.bvec n)) (v : Val (ty.bvec n)) :
+      peval_bvadd_val_default t v ≡ term_binop bop.bvadd t (term_val (ty.bvec n) v).
+    Proof.
+      unfold peval_bvadd_val_default. intros ι; cbn.
+      match goal with
+      | |- context[bop.evalRel bop.bvadd _ ?r] =>
+          destruct r; cbn; (apply f_equal; now apply bv.add_comm)
+                           || (apply f_equal2; now apply bv.add_comm)
+      end.
+    Qed.
+
+    Lemma peval_bvadd_mask_sound {n} (t : Term Σ (ty.bvec n)) (v : Val (ty.bvec n)) :
+      peval_bvadd_mask t v ≡ term_binop bop.bvadd t (term_val (ty.bvec n) v).
+    Proof.
+      unfold peval_bvadd_mask.
+      destruct (eq_dec v (bv.ones n)) as [->|]; [|apply peval_bvadd_val_default_sound].
+      destruct (bvmask_indicator t) as [b|] eqn:Hb; [|apply peval_bvadd_val_default_sound].
+      apply bvmask_indicator_inv in Hb as (m & pf & w & Hw & ->).
+      intros ι; cbn.
+      match goal with
+      | |- context[uop.evalRel uop.expand ?r] =>
+          destruct r; cbn;
+            (apply f_equal; symmetry; now apply bv.add_zext_cons_ones)
+            || (apply f_equal2; symmetry; now apply bv.add_zext_cons_ones)
+      end.
+    Qed.
+
     Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
     Proof.
-      funelim (peval_bvadd t1 t2); lsolve; intros ι; cbn; auto.
+      funelim (peval_bvadd t1 t2); try apply peval_bvadd_mask_sound;
+        lsolve; intros ι; cbn; auto.
       (* New constant-folding clauses: goal is
          evalRel bvadd (SyncVal (c1+c2)) r = evalRel bvadd (SyncVal c1) (evalRel bvadd (SyncVal c2) r)
          (or the mirrored (c1 ⊕ t) ⊕ c2 form); close by bv.add associativity/commutativity

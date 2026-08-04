@@ -649,6 +649,14 @@ Module bv.
     Definition ones (n : nat) : bv n :=
       mk (onesn n) (wf_onesn n).
 
+    Lemma onesn_S j : onesn (S j) = (2 * onesn j + 1)%N.
+    Proof. destruct j; cbn; Lia.lia. Qed.
+
+    (* all-ones is one below the modulus — the fact behind `x + ~0 = x - 1`,
+       which is how constant-time code turns a 0/1 predicate into a mask. *)
+    Lemma onesn_exp2 n : (onesn n + 1)%N = exp2 n.
+    Proof. induction n; [reflexivity|]. rewrite onesn_S, exp2_S, <- IHn. Lia.lia. Qed.
+
     Lemma zero_S n : @zero (S n) = cons false (@zero n).
     Proof. reflexivity. Qed.
 
@@ -1787,6 +1795,35 @@ Module bv.
     Proof.
       induction n; cbn; [easy|].
       now rewrite ones_S, not_cons, IHn.
+    Qed.
+
+    Lemma not_zero {n} :
+      not (@zero n) = ones n.
+    Proof.
+      induction n; [reflexivity|].
+      now rewrite zero_S, not_cons, ones_S, IHn.
+    Qed.
+
+    (* `x + ~0 = x - 1`, specialised to x = the zero-extension of a single bit:
+       [b] - 1 = -[¬b], the complement of b's full-word mask.  This is the
+       identity behind every constant-time `<compare> ; addi -1` mask idiom —
+       see uop.expand (Syntax/UnOps.v) and its recognizer in
+       Symbolic/PartialEvaluation.v.  The hypothesis is on w's VALUE, not its
+       width, so it also covers a widened tail. *)
+    Lemma add_zext_cons_ones {n m} (p : IsTrue (S m <=? n)) (b : bool) (w : bv m) :
+      bin w = 0%N ->
+      add (@zext (S m) (cons b w) n p) (ones n) = not (if b then ones n else zero).
+    Proof.
+      intros Hw.
+      assert (Hw0 : w = zero) by (apply bin_inj; rewrite Hw; reflexivity).
+      subst w. unfold zext. destruct (leview (S m) n).
+      unfold zext'. rewrite app_cons, app_zero_zero.
+      destruct b.
+      - rewrite not_ones. apply bin_inj. rewrite bin_add. cbn.
+        replace (1 + N.pos (onesp (m + k)))%N with (exp2 (S (m + k)))
+          by (rewrite <- onesn_exp2; cbn; Lia.lia).
+        apply N.Div0.mod_same.
+      - rewrite <- zero_S, add_zero_l. symmetry. apply not_zero.
     Qed.
 
     Lemma land_cons {m} (x1 x2 : bool) (y1 y2 : bv m) :

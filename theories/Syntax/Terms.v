@@ -418,6 +418,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (psubrange : ∀ s l m (pf : IsTrue (s + l <=? m)) (t : Term Σ (ty.bvec m)), P (term_unop (uop.vector_subrange s l) t)).
     Hypothesis (pbvdrop : ∀ m n (t : Term Σ (ty.bvec (m + n))), P (term_unop (uop.bvdrop m) t)).
     Hypothesis (pbvtake : ∀ m n (t : Term Σ (ty.bvec (m + n))), P (term_unop (uop.bvtake m) t)).
+    Hypothesis (pexpand : ∀ n (t : Term Σ ty.bool), P (term_unop (uop.expand (n := n)) t)).
 
     Equations(noeqns) Term_bvec_case [n] (t : Term Σ (ty.bvec n)) : P t :=
     | term_var_in lIn                                   => pvar lIn
@@ -436,6 +437,7 @@ Module Type TermsOn (Import TY : Types).
     | term_binop (bop.update_vector_subrange _ _) t1 t2 => pupdate_subrange t1 t2
     | term_unop uop.bvnot t                             => pbvnot t
     | term_unop uop.negate t                            => pnegate t
+    | term_unop uop.expand t                            => pexpand _ t
     | term_unop uop.sext t                              => psext _ _ t
     | term_unop uop.zext t                              => pzext _ _ t
     | term_unop uop.get_slice_int t                     => pgetslice _ _
@@ -477,6 +479,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (psubrange : ∀ s l m (pf : IsTrue (s + l <=? m)) (t : Term Σ (ty.bvec m)), P t → P (term_unop (uop.vector_subrange s l) t)).
     Hypothesis (pbvdrop : ∀ m n (t : Term Σ (ty.bvec (m + n))), P t → P (term_unop (uop.bvdrop m) t)).
     Hypothesis (pbvtake : ∀ m n (t : Term Σ (ty.bvec (m + n))), P t → P (term_unop (uop.bvtake m) t)).
+    Hypothesis (pexpand : ∀ n (t : Term Σ ty.bool), P (term_unop (uop.expand (n := n)) t)).
 
     Fixpoint Term_bvec_rect [n : nat] (t : Term Σ (ty.bvec n)) {struct t} : P t :=
       Term_bvec_case P
@@ -503,6 +506,7 @@ Module Type TermsOn (Import TY : Types).
         (ltac:(intros; apply psubrange; auto))
         (ltac:(intros; apply pbvdrop; auto))
         (ltac:(intros; apply pbvtake; auto))
+        (ltac:(intros; apply pexpand; auto))
         t.
 
   End Term_bvec_rect.
