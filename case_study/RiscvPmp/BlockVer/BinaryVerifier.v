@@ -141,18 +141,28 @@ Module BinaryBlockVerifier
       ptsto_instrs a l ∗
       ∃ v, nextpc ↦ v.
 
+    (* The pro- and epilogue in the binary verifier can be defined using the
+       unary definitions. These just define an Assertion, which we can
+       interpret in the binary program logic when using asn.interpret.
+       It doesn't matter if we use the RVPTVl one or RVPTVr, as they are
+       the same assertions. *)
+    Definition exec_instruction_prologue : AST -> Assertion ["a" ∷ ty_xlenbits] :=
+      RVPTVl.exec_instruction_prologue.
+    Definition exec_instruction_epilogue : AST -> Assertion ["a" ∷ ty_xlenbits; "an" ∷ ty_xlenbits] :=
+      RVPTVl.exec_instruction_epilogue.
+
     Fixpoint step_n (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST : Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       match instrs with
       | []   => POST apc
       | i :: instrs =>
           let Σ := [env].["a"∷ty_xlenbits ↦ ainstr] in
           ⌜ainstr = apc⌝
-          ∗ (asn.interpret (RVPTVl.exec_instruction_prologue i) Σ  -∗
+          ∗ (asn.interpret (exec_instruction_prologue i) Σ  -∗
                semWP2 [env] [env] fun_step fun_step
                  (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
                      match v1 with
                      | inl v =>
-                         ∃ na, asn.interpret (RVPTVr.exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
+                         ∃ na, asn.interpret (exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
                                ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                      | inr _ =>
                        if RiscvPmpBlockVerifFailLogic.fail_rule_pre
