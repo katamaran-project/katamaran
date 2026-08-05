@@ -744,6 +744,7 @@ Module Type PartialEvaluationOn
         (fun (*bvdrop*) k l t1 e => peval_bvdrop_bvdrop peval_bvdrop_eq t1 e)
         (fun (*bvtake*) _ _ _ _ => peval_bvdrop_default _ t e)
         (fun (*expand*) _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*coalesce*) _ _ _ _ => peval_bvdrop_default _ t e)
         t e.
 
     Definition peval_bvdrop m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -833,6 +834,7 @@ Module Type PartialEvaluationOn
         (fun (*bvdrop*) _ _ _ _ => peval_bvtake_default _ t e)
         (fun (*bvtake*) k l t1 e1 => peval_bvtake_bvtake peval_bvtake_eq t1 e1)
         (fun (*expand*) _ _ _ => peval_bvtake_default _ t e)
+        (fun (*coalesce*) _ _ _ _ => peval_bvtake_default _ t e)
         t e.
 
     Definition peval_bvtake m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -886,10 +888,96 @@ Module Type PartialEvaluationOn
       | _ , _             => peval_binop' bop.bvand t1 t2
       end.
 
+    (* ---- coalesce recognition ----------------------------------------------
+       The sticky accumulator `c |= -EQ0(c) & CMP(...)` of a constant-time
+       lexicographic compare (BearSSL check_scalar, ec_p256_m62.c:1610).  clang
+       compiles the step to `snez; addi -1; and; or`, which the mask rules above
+       have already reduced to
+
+         bvor (bvand (expand (C ≤ᵘ 0)) S) C
+
+       — one mask node over one POSITIVE relop (see
+       selftest_bvnot_expand_negates_relop for why the relop comes out as
+       `C ≤ᵘ 0` rather than `¬(0 <ᵘ C)`).
+
+       WHY THIS RULE EXISTS AT ALL.  `C` occurs TWICE above, so an accumulator
+       fed by this step satisfies count(k+1) = 2·count(k) + 1 and the raw term
+       doubles every trip: 2^N − 1 nodes, measured 1 → 3 `expand` nodes and
+       9k → 44k printed chars from one unrolled copy to two
+       (Example/ZZCsUnroll.v).  At P-256's mandated N = 32 that is ~4.3e9 nodes.
+       `bop.coalesce C S` mentions `C` ONCE — the zero test lives inside the
+       op's eval instead of as a second subterm — so the accumulator becomes a
+       chain of N nodes.  Term SHARING cannot substitute for this: peval and
+       Term_eqb still traverse the structure, so what is needed is opacity, and
+       an op provides it by fiat (PLAN-term-sharing.md).
+
+       Grafted AFTER the rule-3 mask homomorphism, which cannot conflict: rule 3
+       needs both operands to be masks, and operand 1 here is a `bvand`, so
+       bvmask_try_expand returns None on it and control reaches this rule. *)
+
+    (* The zero test as peval canonicalizes it.  Built at the OUTER width and
+       compared with the homogeneous Term_eqb at ty.bool, rather than
+       destructuring the relop and transporting its operand: the inner relop's
+       width is not forced by typing to equal n, and comparing whole bool terms
+       makes any width mismatch simply return false instead of needing an
+       eq_rect. *)
+    Definition bvzero_pred {n} (c : Term Σ (ty.bvec n)) : Term Σ ty.bool :=
+      term_binop (bop.relop bop.bvule) c (term_val (ty.bvec n) bv.zero).
+
+    (* Is `t` the mask `expand (c ≤ᵘ 0)`, i.e. -[c = 0]? *)
+    Definition bvmask_is_zero_test {n} (c t : Term Σ (ty.bvec n)) : bool :=
+      match bvmask_try_expand t with
+      | Some b => Term_eqb b (bvzero_pred c)
+      | None   => false
+      end.
+
+    (* Split a `bvand`.  A separate one-clause matcher (rather than pattern
+       matching inline inside bvcoalesce_arg) so that its inversion lemma
+       returns the EQUATION linking t to the split — the `generalize`-style
+       matcher that discards it leaves the Some branch unprovable as posed
+       (PLAN-ksl64.md §2). *)
+    Equations bvand_split {n} (t : Term Σ (ty.bvec n)) :
+      option (Term Σ (ty.bvec n) * Term Σ (ty.bvec n)) :=
+    | term_binop bop.bvand t1 t2 => Some (t1, t2) ;
+    | _ => None.
+
+    (* Recognize `bvand MASK S` for the given c's zero-test mask and hand back
+       S.  BOTH operand orders: clang emits `and a1,a2,a1` = `bvand MASK S`, and
+       nothing in peval normalizes bvand's commutative arguments, so a compiler
+       emitting the other order must still be caught. *)
+    Definition bvcoalesce_arg {n} (c t : Term Σ (ty.bvec n)) :
+      option (Term Σ (ty.bvec n)) :=
+      match bvand_split t with
+      | Some (u1, u2) =>
+          if bvmask_is_zero_test c u1 then Some u2
+          else if bvmask_is_zero_test c u2 then Some u1
+               else None
+      | None => None
+      end.
+
+    (* `bvor t1 t2` is a coalesce step?  Try both outer orders too. *)
+    Definition bvcoalesce_try {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      option (Term Σ (ty.bvec n)) :=
+      match bvcoalesce_arg t2 t1 with
+      | Some s => Some (term_binop bop.coalesce t2 s)
+      | None   =>
+          match bvcoalesce_arg t1 t2 with
+          | Some s => Some (term_binop bop.coalesce t1 s)
+          | None   => None
+          end
+      end.
+
+    Definition peval_bvor_coalesce {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      Term Σ (ty.bvec n) :=
+      match bvcoalesce_try t1 t2 with
+      | Some t => t
+      | None   => peval_binop' bop.bvor t1 t2
+      end.
+
     Definition peval_bvor_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
       | Some b1 , Some b2 => term_unop uop.expand (peval_or b1 b2)
-      | _ , _             => peval_binop' bop.bvor t1 t2
+      | _ , _             => peval_bvor_coalesce t1 t2
       end.
 
     Definition peval_bvxor_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
@@ -940,6 +1028,70 @@ Module Type PartialEvaluationOn
     Lemma selftest_bvand_mask_needs_both {n} (b : Term Σ ty.bool) (v : Val (ty.bvec n)) :
       peval_bvand_mask (term_unop (uop.expand (n := n)) b) (term_val (ty.bvec n) v)
       = term_binop bop.bvand (term_unop uop.expand b) (term_val (ty.bvec n) v).
+    Proof. reflexivity. Qed.
+
+    (* ---- SELF-TESTS for the coalesce recognizer ---------------------------
+       Both operands are CONCRETE here, unavoidably: the recognizer decides
+       "same C on both sides" with Term_eqb and asks bvmask_try_expand about the
+       other bvand operand, and neither can reduce on an opaque term variable.
+       So these are conversion tests of the PATTERN only — that the rule fires
+       on a real term_var-headed VC is what Example/ZZCsRun1.v measures.
+       (`selftest_bvor_mask_fires` above doubles as the pin that the rule-3 mask
+       homomorphism still wins when BOTH operands are masks: the coalesce
+       attempt is grafted after it, not in front of it.) *)
+    #[local] Notation zzC := (term_val (ty.bvec 32) (bv.ones 32)).
+    #[local] Notation zzS := (term_val (ty.bvec 32) bv.one).
+    #[local] Notation zzMask :=
+      (term_unop uop.expand
+         (term_binop (bop.relop bop.bvule) zzC (term_val (ty.bvec 32) bv.zero))).
+
+    (* FIRES on the shape the executor actually dumps for clang's
+       `snez; addi -1; and; or` (PLAN-coalesce.md §3): the mask is ONE node over
+       ONE POSITIVE relop, `C ≤ᵘ 0`, because peval_bvnot negates the relop
+       rather than leaving a bvnot — see selftest_bvnot_expand_negates_relop. *)
+    Lemma selftest_coalesce_fires :
+      peval_bvor_mask (term_binop bop.bvand zzMask zzS) zzC
+      = term_binop bop.coalesce zzC zzS.
+    Proof. reflexivity. Qed.
+
+    (* All three commuted spellings, since bvand/bvor are commutative and
+       nothing upstream normalizes their operand order. *)
+    Lemma selftest_coalesce_fires_andr :
+      peval_bvor_mask (term_binop bop.bvand zzS zzMask) zzC
+      = term_binop bop.coalesce zzC zzS.
+    Proof. reflexivity. Qed.
+
+    Lemma selftest_coalesce_fires_orl :
+      peval_bvor_mask zzC (term_binop bop.bvand zzMask zzS)
+      = term_binop bop.coalesce zzC zzS.
+    Proof. reflexivity. Qed.
+
+    Lemma selftest_coalesce_fires_orl_andr :
+      peval_bvor_mask zzC (term_binop bop.bvand zzS zzMask)
+      = term_binop bop.coalesce zzC zzS.
+    Proof. reflexivity. Qed.
+
+    (* INERT when the mask tests a DIFFERENT term than the one being OR'd in.
+       This is the guard that makes the rule sound rather than merely plausible:
+       `c | (m & s)` is NOT a select in general — with c = 1, m = ~0, s = 0 the
+       OR gives 1 while coalesce would give 0.  It is only equal because the
+       mask is derived from c itself. *)
+    Lemma selftest_coalesce_needs_same_operand :
+      peval_bvor_mask (term_binop bop.bvand zzMask zzS) (term_val (ty.bvec 32) bv.zero)
+      = term_binop bop.bvor (term_binop bop.bvand zzMask zzS)
+          (term_val (ty.bvec 32) bv.zero).
+    Proof. reflexivity. Qed.
+
+    (* INERT when the predicate is not the zero test — here `C ≤ᵘ C`. *)
+    Lemma selftest_coalesce_needs_zero_test :
+      peval_bvor_mask
+        (term_binop bop.bvand
+           (term_unop uop.expand (term_binop (bop.relop bop.bvule) zzC zzC)) zzS)
+        zzC
+      = term_binop bop.bvor
+          (term_binop bop.bvand
+             (term_unop uop.expand (term_binop (bop.relop bop.bvule) zzC zzC)) zzS)
+          zzC.
     Proof. reflexivity. Qed.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
@@ -1449,12 +1601,95 @@ Module Type PartialEvaluationOn
         f_equal; now rewrite bv.land_if_ones.
     Qed.
 
+    (* ---- coalesce soundness -------------------------------------------------
+       Both sides are pure terms, so the obligation is a plain `bv` identity and
+       it covers NonSyncVal (secret) inputs with NO two-world case split — the
+       homomorphism argument of the `relval-rewrite-over-secrets` skill.  The
+       SyncVal/NonSyncVal constructors show up in the proofs below only because
+       `cbn` exposes liftBinOp, never in a statement. *)
+
+    Lemma bvand_split_inv {n} (t t1 t2 : Term Σ (ty.bvec n)) :
+      bvand_split t = Some (t1, t2) -> t = term_binop bop.bvand t1 t2.
+    Proof.
+      funelim (bvand_split t); intros Heq; try discriminate.
+      now injection Heq as <- <-.
+    Qed.
+
+    Lemma bvmask_is_zero_test_inv {n} (c t : Term Σ (ty.bvec n)) :
+      bvmask_is_zero_test c t = true ->
+      t = term_unop uop.expand (bvzero_pred c).
+    Proof.
+      unfold bvmask_is_zero_test. intros H.
+      destruct (bvmask_try_expand t) as [b|] eqn:Hb; [|discriminate].
+      apply bvmask_try_expand_inv in Hb as ->. f_equal.
+      destruct (Term_eqb_spec b (bvzero_pred c)) as [Heq|_];
+        [exact Heq|discriminate].
+    Qed.
+
+    Lemma bvcoalesce_arg_inv {n} (c t s : Term Σ (ty.bvec n)) :
+      bvcoalesce_arg c t = Some s ->
+      t = term_binop bop.bvand (term_unop uop.expand (bvzero_pred c)) s \/
+      t = term_binop bop.bvand s (term_unop uop.expand (bvzero_pred c)).
+    Proof.
+      unfold bvcoalesce_arg. intros H.
+      destruct (bvand_split t) as [[u1 u2]|] eqn:Ht; [|discriminate].
+      apply bvand_split_inv in Ht as ->.
+      destruct (bvmask_is_zero_test c u1) eqn:H1.
+      - apply bvmask_is_zero_test_inv in H1 as ->.
+        injection H as <-. now left.
+      - destruct (bvmask_is_zero_test c u2) eqn:H2; [|discriminate].
+        apply bvmask_is_zero_test_inv in H2 as ->.
+        injection H as <-. now right.
+    Qed.
+
+    (* `≤ᵘ 0` IS the zero test — there is nothing below 0 to be strictly less
+       than.  Kept folded through `cbn - [bop.eval_relop_val]` because cbn
+       reduces eval_relop_val away for a concrete relop and then no bridging
+       lemma matches the shape. *)
+    Lemma eval_relop_bvule_zero {n} (x : Val (ty.bvec n)) :
+      bop.eval_relop_val (bop.bvule (n := n)) x bv.zero = bv.eqb x bv.zero.
+    Proof. apply bv.uleb_zero. Qed.
+
+    (* The four operand orders the recognizer accepts collapse onto the four
+       bv.coalesce_mask* corollaries; the patterns are mutually exclusive, so
+       exactly one of the four rewrites fires per goal. *)
+    #[local] Ltac coalesce_bv :=
+      rewrite ?eval_relop_bvule_zero;
+      now rewrite ?bv.coalesce_mask, ?bv.coalesce_mask_andr,
+        ?bv.coalesce_mask_orl, ?bv.coalesce_mask_orl_andr.
+
+    Lemma bvcoalesce_try_inv {n} (t1 t2 t : Term Σ (ty.bvec n)) :
+      bvcoalesce_try t1 t2 = Some t -> t ≡ term_binop bop.bvor t1 t2.
+    Proof.
+      unfold bvcoalesce_try. intros H.
+      destruct (bvcoalesce_arg t2 t1) as [s|] eqn:H1.
+      - injection H as <-.
+        apply bvcoalesce_arg_inv in H1 as [-> | ->]; intros ι;
+          cbn - [bop.eval_relop_val];
+          destruct (inst t2 ι), (inst s ι);
+          cbn - [bop.eval_relop_val]; f_equal; coalesce_bv.
+      - destruct (bvcoalesce_arg t1 t2) as [s|] eqn:H2; [|discriminate].
+        injection H as <-.
+        apply bvcoalesce_arg_inv in H2 as [-> | ->]; intros ι;
+          cbn - [bop.eval_relop_val];
+          destruct (inst t1 ι), (inst s ι);
+          cbn - [bop.eval_relop_val]; f_equal; coalesce_bv.
+    Qed.
+
+    Lemma peval_bvor_coalesce_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvor_coalesce t1 t2 ≡ term_binop bop.bvor t1 t2.
+    Proof.
+      unfold peval_bvor_coalesce.
+      destruct (bvcoalesce_try t1 t2) as [t|] eqn:Ht; [|apply peval_binop'_sound].
+      now apply bvcoalesce_try_inv.
+    Qed.
+
     Lemma peval_bvor_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvor_mask t1 t2 ≡ term_binop bop.bvor t1 t2.
     Proof.
       unfold peval_bvor_mask.
-      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_binop'_sound].
-      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_binop'_sound].
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_bvor_coalesce_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_bvor_coalesce_sound].
       apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
       intros ι; cbn. rewrite (peval_or_sound b1 b2 ι); cbn.
       destruct (inst b1 ι), (inst b2 ι); cbn;

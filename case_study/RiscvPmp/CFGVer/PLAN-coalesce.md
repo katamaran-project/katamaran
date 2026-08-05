@@ -1,8 +1,41 @@
 # PLAN-coalesce — collapse check_scalar's accumulator from 2^N to O(N)
 
-Status: **NOT STARTED.** Everything it depends on has landed and is verified;
-this document is the handoff. Branch `solver-expand-mask`, commits
-`fcccba5e` → `42c73ee5`.
+Status: **DONE 2026-08-05.** `bop.coalesce` + the recognizer landed on branch
+`solver-expand-mask`; §5's acceptance criterion is met on the nose. Measured on
+the real `check_scalar_instrs` unrolled 1–4× (`ZZCsRun1..4.v`):
+
+| copies | `uop.expand` | `bop.coalesce` | `srl/sra by 31` | chars | wall |
+|---|---|---|---|---|---|
+| 1 | **0** (was 1) | 1 | **2** | 8,750 | 19 s |
+| 2 | **0** (was 3) | 2 | **4** (was 6) | 38,673 | 32 s |
+| 3 | **0** | 3 | **6** | 77,871 | 57 s |
+| 4 | **0** | 4 | **8** | 108,474 | 87 s |
+
+The old law was `2^N − 1` (`expand` 1, 3, 7, 15; `sra31` 2, 6, 14, 30). All
+three counters are now exactly linear, and the char increments (29.9k / 39.2k /
+30.6k) are constant, so nothing else in this probe doubles. Note the 1→2 char
+ratio alone is 4.4× and looks superlinear — that is the affine offset being
+small at one copy, not a residual driver; three points are needed to see it.
+
+`valid_check_scalar_cfg_contract_param` still discharges on its unchanged
+one-liner. Two deviations from the plan as written, both simplifications:
+
+- **§4.2's width transport was avoidable.** Rather than destructuring the relop
+  and `eq_rect`-ing its operand to the outer width, the recognizer *builds* the
+  expected predicate at the known outer width (`bvzero_pred`) and compares whole
+  bool terms with the homogeneous `Term_eqb`. A width mismatch simply returns
+  `false`. No `Nat.eq_dec`, no `eq_rect`, and `peval_bvxor_fold32`'s deleted
+  width dispatch did not need recovering.
+- **§4.3's identity is stated on `bv.eqb`, not `bv.uleb`**, matching
+  `bop.eval coalesce`'s own definition; `bv.uleb_zero` bridges the relop
+  spelling in `PartialEvaluation.v` instead. Three commuted corollaries were
+  needed (`_andr`/`_orl`/`_orl_andr`) because the recognizer accepts all four
+  `bvand`/`bvor` operand orders, not just the one clang emits.
+
+Everything below is the original handoff, kept for the reasoning and for §7–§9,
+whose open items and refutations still stand.
+
+Branch `solver-expand-mask`, commits `fcccba5e` → `42c73ee5`.
 
 Read this first, then `secret-data-walls` and `relval-rewrite-over-secrets`
 (both short). The `cfgver-executor` skill's "Backward-branch loops" banner is

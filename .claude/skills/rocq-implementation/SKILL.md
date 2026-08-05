@@ -202,6 +202,12 @@ announce themselves as a confusing failure ten minutes later.
 | **iris-proofmode** | Separation-logic proof mode: `iApply`/`iExact`/`iFrame`/`iMod`/`iDestruct`/`iIntros` failures, wands and separating conjunction, fancy updates, persistent vs spatial hypotheses, `big_sepM`/`big_sepL`. |
 | **relval-model** | `SyncVal` or `NonSyncVal` appears in your goal or definition and you need to know what it denotes — the relational value model and its homomorphic lifting. |
 | **relval-rewrite-over-secrets** | **Before** proving any `peval` case, solver rule, or `Term` rewrite that could touch secret data. If both sides are pure terms the rewrite is automatically sound relationally with **no** `NonSyncVal` case analysis — worth knowing before you build one. |
+
+Not a skill but the same reflex: **`references/peval-mask-algebra.md`** (in this
+skill's directory) before adding a `peval` rule or a new `BinOp`/`UnOp`
+constructor. It holds the branchless-mask canonical forms (`uop.expand`,
+`bop.coalesce`) and, more importantly, the five-file plumbing table for a new
+constructor plus the traps that make a `peval` rule silently do nothing.
 | **core-executor-internals** | The generic `SPureSpec`/`SHeapSpec` monad and its refinement lemmas. Also the section on **how an `assert` is discharged against the path condition**: `solver_generic`'s three stages, `combined_solver`'s repeated passes, the `wpathcondition` world-extension quadratic, and the known `formula_simplifies` fact-burning bug. |
 | **cfgver-rsolve** | `rsolve` fails, hangs, dies in a `Qed`, or eats multiple GB; a `RefineCompat` instance is missing and must be written. |
 | **cfgver-wp2** | `semWP2_unfold`/`semWP2_fix` and binary adequacy mechanics — an unreduced match after `rewrite semWP2_unfold`, `env.drop_cat` terms, an `iMod` that cannot eliminate an `inl`/`inr` modality. |

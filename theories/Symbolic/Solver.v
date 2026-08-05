@@ -410,6 +410,7 @@ Module Type GenericSolverOn
           | bop.bvand => simplify_eq_binop_default_val bop.bvand
           | bop.bvor => simplify_eq_binop_default_val bop.bvor
           | bop.bvxor => simplify_eq_binop_default_val bop.bvxor
+          | bop.coalesce => simplify_eq_binop_default_val bop.coalesce
           | bop.bvapp => simplify_eq_binop_bvapp_val
           | bop.bvcons => simplify_eq_binop_bvcons_val
           | bop.update_vector_subrange s l =>
@@ -725,6 +726,7 @@ Module Type GenericSolverOn
             (fun (*bvdrop*) _ _ _ => default)
             (fun (*bvtake*) _ _ _ => default)
             (fun (*expand*) _ _ => default)
+            (fun (*coalesce*) _ _ _ => default)
             t e.
 
         Definition simplify_eq_binop_bvapp {m n} (t1 : Term Σ (ty.bvec m))
@@ -770,6 +772,7 @@ Module Type GenericSolverOn
             (fun (*bvdrop*) _ _ _ => default)
             (fun (*bvtake*) _ _ _ => default)
             (fun (*expand*) _ _ => default)
+            (fun (*coalesce*) _ _ _ => default)
             t e.
 
         Definition simplify_eq_binop_bvcons {m} (t1 : Term Σ ty.bool)
@@ -822,6 +825,7 @@ Module Type GenericSolverOn
           | bop.bvand => simplify_eq_binop_default bop.bvand
           | bop.bvor => simplify_eq_binop_default bop.bvor
           | bop.bvxor => simplify_eq_binop_default bop.bvxor
+          | bop.coalesce => simplify_eq_binop_default bop.coalesce
           | bop.bvapp => simplify_eq_binop_bvapp
           | bop.bvcons => simplify_eq_binop_bvcons
           | bop.update_vector_subrange s l =>

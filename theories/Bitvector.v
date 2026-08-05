@@ -2045,6 +2045,54 @@ Module bv.
       not (if b then ones n else zero) = if negb b then ones n else @zero n.
     Proof. destruct b; cbn; [apply not_ones | apply not_zero]. Qed.
 
+    (* Unsigned `≤ 0` IS the zero test — nothing below 0 to be strictly less
+       than.  This is what makes the mask `expand (x ≤ᵘ 0)` that peval builds
+       for clang's `snez; addi -1` (see Symbolic/PartialEvaluation.v) the mask
+       of "x is zero", and it is the only nontrivial step of coalesce_mask
+       below. *)
+    Lemma uleb_zero {n} (x : bv n) : uleb x zero = eqb x zero.
+    Proof.
+      unfold uleb, eqb. cbn.
+      destruct (N.eqb_spec (bin x) 0) as [->|H]; cbn; [reflexivity|].
+      apply N.leb_gt. Lia.lia.
+    Qed.
+
+    (* The first-nonzero ("sticky") combinator and the branchless spelling
+       clang emits for it: `x | (-[x = 0] & y)`.  Val-level fact behind the
+       bop.coalesce recognizer in Symbolic/PartialEvaluation.v; the point of
+       having the op at all is that the left-hand side mentions `x` ONCE,
+       whereas the right-hand side mentions it twice and so doubles the term
+       on every loop iteration. *)
+    Lemma coalesce_mask {n} (x y : bv n) :
+      lor (land (if eqb x zero then ones n else zero) y) x
+      = if eqb x zero then y else x.
+    Proof.
+      destruct (eqb_spec x zero) as [->|_].
+      - now rewrite land_ones_l, lor_zero_r.
+      - now rewrite land_zero_l, lor_zero_l.
+    Qed.
+
+    (* The three commuted spellings.  `lor`/`land` are commutative and nothing
+       in peval normalizes their argument order, so the recognizer accepts all
+       four and each needs its own rewrite target.  They cannot be collapsed
+       into one `?`-guarded rewrite of coalesce_mask alone: the four left-hand
+       sides are syntactically distinct and mutually exclusive (the mask
+       mentions `x`, so no pattern matches another's shape). *)
+    Lemma coalesce_mask_andr {n} (x y : bv n) :
+      lor (land y (if eqb x zero then ones n else zero)) x
+      = if eqb x zero then y else x.
+    Proof. rewrite land_comm. apply coalesce_mask. Qed.
+
+    Lemma coalesce_mask_orl {n} (x y : bv n) :
+      lor x (land (if eqb x zero then ones n else zero) y)
+      = if eqb x zero then y else x.
+    Proof. rewrite lor_comm. apply coalesce_mask. Qed.
+
+    Lemma coalesce_mask_orl_andr {n} (x y : bv n) :
+      lor x (land y (if eqb x zero then ones n else zero))
+      = if eqb x zero then y else x.
+    Proof. rewrite lor_comm, land_comm. apply coalesce_mask. Qed.
+
   End Logical.
 
   Module finite.
