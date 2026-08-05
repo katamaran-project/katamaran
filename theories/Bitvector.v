@@ -1940,6 +1940,33 @@ Module bv.
       rewrite !lor_cons, orb_comm. now f_equal.
     Qed.
 
+    (* The mask algebra.  `if b then ones else zero` — the eval of uop.expand
+       (Syntax/UnOps.v) — is a homomorphism from the boolean algebra on bools
+       to the bitwise algebra on 0/~0 masks.  These three are the Val-level
+       facts behind the corresponding peval rules in
+       Symbolic/PartialEvaluation.v.  No bvxor twin: there is no bool-level xor
+       BinOp for it to land in.  Placed here, after land/lor's own lemmas,
+       because that is what they are proved from. *)
+    Lemma land_if_ones (b1 b2 : bool) {n} :
+      land (if b1 then ones n else zero) (if b2 then ones n else zero)
+      = if andb b1 b2 then ones n else zero.
+    Proof.
+      destruct b1, b2; cbn.
+      all: rewrite ?land_ones_l, ?land_zero_l, ?land_zero_r; reflexivity.
+    Qed.
+
+    Lemma lor_if_ones (b1 b2 : bool) {n} :
+      lor (if b1 then ones n else zero) (if b2 then ones n else zero)
+      = if orb b1 b2 then ones n else zero.
+    Proof.
+      destruct b1, b2; cbn.
+      all: rewrite ?lor_ones_l, ?lor_zero_l, ?lor_zero_r; reflexivity.
+    Qed.
+
+    Lemma not_if_ones (b : bool) {n} :
+      not (if b then ones n else zero) = if negb b then ones n else @zero n.
+    Proof. destruct b; cbn; [apply not_ones | apply not_zero]. Qed.
+
   End Logical.
 
   Module finite.

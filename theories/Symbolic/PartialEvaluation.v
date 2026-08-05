@@ -472,6 +472,11 @@ Module Type PartialEvaluationOn
         if N.eqb (bv.bin w) 0%N then Some b else None ;
     | _ => None.
 
+    (* Recognize a MASK, i.e. `expand b`, and hand back its predicate. *)
+    Equations bvmask_try_expand {n} (t : Term Σ (ty.bvec n)) : option (Term Σ ty.bool) :=
+    | term_unop uop.expand b => Some b ;
+    | _ => None.
+
     Definition peval_bvadd_val_default {n} (t : Term Σ (ty.bvec n))
       (v : Val (ty.bvec n)) : Term Σ (ty.bvec n) :=
       term_binop bop.bvadd (term_val (ty.bvec n) v) t.
@@ -488,7 +493,13 @@ Module Type PartialEvaluationOn
       (v : Val (ty.bvec n)) : Term Σ (ty.bvec n) :=
       if eq_dec v (bv.ones n) then
         match bvmask_indicator t with
-        | Some b => term_unop uop.bvnot (term_unop uop.expand b)
+        (* `expand (not b)`, NOT `bvnot (expand b)`: peval is bottom-up, so a
+           bvnot node built here would never be revisited by peval_bvnot and the
+           complement would stay stuck in the bitvector layer.  Emitting it on
+           the bool side puts the term in canonical shape immediately.  The
+           `not` is left unsimplified because peval_not is defined further down
+           this file; anything that later pevals the predicate absorbs it. *)
+        | Some b => term_unop uop.expand (term_unop uop.not b)
         | None   => peval_bvadd_val_default t v
         end
       else peval_bvadd_val_default t v.
@@ -808,6 +819,41 @@ Module Type PartialEvaluationOn
     | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
+    (* ---- expand is a homomorphism ------------------------------------------
+       `uop.expand` maps the boolean algebra on `bool` TERMS to the bitwise
+       algebra on 0/~0 masks:
+
+         expand b & expand b'  =  expand (b && b')
+         expand b | expand b'  =  expand (b || b')
+         bvnot (expand b)      =  expand (not b)          [see peval_bvnot]
+
+       Collapsing mask-only subexpressions this way pushes the logic down into
+       the bool layer, where peval_and / peval_or / peval_not (which already
+       does De Morgan and negates relops via term_relop_neg) can work on it,
+       and leaves standing only the genuine mask-times-DATA `bvand` — the one
+       that cannot collapse and shouldn't.
+
+       Grafted as NARROW dispatches that fall through to peval_binop', rather
+       than by enabling peval_bvand / peval_bvor: those are commented out of
+       peval_binop below because their soundness lemmas were never proved, and
+       this keeps the bill to just the new rules.
+
+       NOT here: the bvxor twin `expand b ^ expand b' = expand (xorb b b')`.
+       There is no bool-level xor BinOp (BinOps.v has only `and`/`or`), and
+       encoding xorb through and/or/not costs 5-6 nodes against a 3-node input
+       — a pessimization, not a canonicalization.  It needs `bop.xor` first. *)
+
+    Definition peval_bvand_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match bvmask_try_expand t1 , bvmask_try_expand t2 with
+      | Some b1 , Some b2 => term_unop uop.expand (peval_and b1 b2)
+      | _ , _             => peval_binop' bop.bvand t1 t2
+      end.
+
+    Definition peval_bvor_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match bvmask_try_expand t1 , bvmask_try_expand t2 with
+      | Some b1 , Some b2 => term_unop uop.expand (peval_or b1 b2)
+      | _ , _             => peval_binop' bop.bvor t1 t2
+      end.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
@@ -819,6 +865,8 @@ Module Type PartialEvaluationOn
       | bop.plus   => peval_plus
       | bop.minus  => peval_minus
       | bop.bvadd  => peval_bvadd
+      | bop.bvand  => peval_bvand_mask
+      | bop.bvor   => peval_bvor_mask
       (* | bop.bvand  => peval_bvand *)
       (* | bop.bvor   => peval_bvor *)
       (* | bop.bvapp  => peval_bvapp *)
@@ -937,12 +985,11 @@ Module Type PartialEvaluationOn
       destruct (bvmask_indicator t) as [b|] eqn:Hb; [|apply peval_bvadd_val_default_sound].
       apply bvmask_indicator_inv in Hb as (m & pf & w & Hw & ->).
       intros ι; cbn.
-      match goal with
-      | |- context[uop.evalRel uop.expand ?r] =>
-          destruct r; cbn;
-            (apply f_equal; symmetry; now apply bv.add_zext_cons_ones)
-            || (apply f_equal2; symmetry; now apply bv.add_zext_cons_ones)
-      end.
+      (* [b] - 1 = ~(b ? ~0 : 0) = (~b ? ~0 : 0): add_zext_cons_ones then
+         not_if_ones, both in Bitvector.v's mask-algebra block. *)
+      destruct (inst b ι); cbn;
+        f_equal; rewrite bv.add_zext_cons_ones by assumption;
+        now rewrite bv.not_if_ones.
     Qed.
 
     Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
@@ -1295,8 +1342,40 @@ Module Type PartialEvaluationOn
         end.
     Qed.
 
+    Lemma bvmask_try_expand_inv {n} (t : Term Σ (ty.bvec n)) (b : Term Σ ty.bool) :
+      bvmask_try_expand t = Some b -> t = term_unop uop.expand b.
+    Proof.
+      funelim (bvmask_try_expand t); intros Heq; try discriminate.
+      now injection Heq as <-.
+    Qed.
+
+    Lemma peval_bvand_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvand_mask t1 t2 ≡ term_binop bop.bvand t1 t2.
+    Proof.
+      unfold peval_bvand_mask.
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_binop'_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_binop'_sound].
+      apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
+      intros ι; cbn. rewrite (peval_and_sound b1 b2 ι); cbn.
+      destruct (inst b1 ι), (inst b2 ι); cbn;
+        f_equal; now rewrite bv.land_if_ones.
+    Qed.
+
+    Lemma peval_bvor_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvor_mask t1 t2 ≡ term_binop bop.bvor t1 t2.
+    Proof.
+      unfold peval_bvor_mask.
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_binop'_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_binop'_sound].
+      apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
+      intros ι; cbn. rewrite (peval_or_sound b1 b2 ι); cbn.
+      destruct (inst b1 ι), (inst b2 ι); cbn;
+        f_equal; now rewrite bv.lor_if_ones.
+    Qed.
+
     Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
-      peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound (* peval_bvand_sound *)
+      peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound
+      peval_bvand_mask_sound peval_bvor_mask_sound (* peval_bvand_sound *)
       (* peval_bvor_sound *) (* peval_bvapp_sound *) (* peval_update_vector_subrange_sound *)
       : core.
 
@@ -1336,9 +1415,23 @@ Module Type PartialEvaluationOn
       | None   => term_unop op t
       end.
 
+    (* Complement of a mask is the mask of the complemented predicate:
+       ~(b ? ~0 : 0) = (~b ? ~0 : 0).  This moves negation out of the bitvector
+       layer into the bool layer, where peval_not immediately absorbs it — for a
+       relop predicate it becomes the negated relop (term_relop_neg), so no
+       `not` node survives at all.  Concretely it turns the mask peval_bvadd
+       builds for clang's `snez; addi -1` from `bvnot (expand (0 <ᵘ C))` into
+       `expand (C ≤ᵘ 0)`, i.e. literally "the mask of C being zero". *)
+    Definition peval_bvnot {n} (t : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match bvmask_try_expand t with
+      | Some b => term_unop uop.expand (peval_not b)
+      | None   => peval_unop' uop.bvnot t
+      end.
+
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
+      | uop.bvnot                     => peval_bvnot
       (* | uop.unsigned                  => peval_unsigned *)
       (* | uop.vector_subrange start len => peval_vector_subrange start len *)
       (* | uop.bvdrop m                  => peval_bvdrop m *)
@@ -1413,11 +1506,22 @@ Module Type PartialEvaluationOn
     (*   now destruct bv.leview. *)
     (* Qed. *)
 
+    Lemma peval_bvnot_sound {n} (t : Term Σ (ty.bvec n)) :
+      peval_bvnot t ≡ term_unop uop.bvnot t.
+    Proof.
+      unfold peval_bvnot.
+      destruct (bvmask_try_expand t) as [b|] eqn:Hb; [|apply peval_unop'_sound].
+      apply bvmask_try_expand_inv in Hb as ->.
+      intros ι; cbn. rewrite (peval_not_sound b ι); cbn.
+      destruct (inst b ι); cbn;
+        f_equal; now rewrite bv.not_if_ones.
+    Qed.
+
     Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
-        auto using peval_unop'_sound, peval_not_sound(* , peval_unsigned_sound, *)
+        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound(* , peval_unsigned_sound, *)
                  (* peval_bvdrop_sound, peval_bvtake_sound, *)
                  (*   peval_vector_subrange_sound *).
     Qed.
