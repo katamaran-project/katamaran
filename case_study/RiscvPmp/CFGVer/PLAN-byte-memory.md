@@ -1,8 +1,14 @@
 # PLAN-byte-memory — opt-in byte-granular data cells, for `lbu`/`sb` programs
 
-Status: **NOT STARTED.** This document is the handoff. Every "VERIFIED" fact
-below was checked against the code on 2026-08-05 with the file:line given; every
-"DESIGN" claim is a proposal that has not been compiled.
+Status: **§5.1/§5.2/§5.4 LANDED and §6 steps 1–2 GREEN; §5.3 (the Iris wiring)
+NOT STARTED.** The go/no-go passed and BearSSL `check_scalar` loop 1 verifies at
+real clang output. **Read §10 before anything else** — it records what was
+actually measured, the two residual shapes the plan did not anticipate, and the
+one design correction. The original text below is left intact as the rationale
+record; where §10 contradicts it, §10 wins.
+
+Every "VERIFIED" fact below was checked against the code on 2026-08-05 with the
+file:line given; every "DESIGN" claim is a proposal that has not been compiled.
 
 Read this first, then **`cfgver-gen-contract`** (the spec-list vocabulary) and
 **`cfgver-memory`** (the public-memory / data-memory wiring). Both are short.
@@ -302,3 +308,121 @@ and the gate must stay green at 13 axiom-clean end theorems (14 if a
 - **Rewrite the program to use word loads.** Rejected: `*_instrs` is trusted
   statement surface, so changing it changes what is verified — and clang emits
   `lbu` for a byte array.
+
+---
+
+## §10. What actually happened (2026-08-05)
+
+### Landed
+
+| § | What | Where |
+|---|---|---|
+| 5.4 | `LBU rd rs imm := LOAD imm rs rd true BYTE` | `Tables.v` |
+| 5.1 | `word_byte`, `term_word_byte`, `byte_chunks`, `byte_addr_val`, `byte_addr_rel`, `gen_mem_asn{,_rel}_bytes`, `gen_mem_pre{,_rel}_bytes` | `GenContract.v` |
+| 5.2 | `gen_contract_rel_bytes` | `GenContract.v` |
+| — | `relval_neq_irrefl`; `relval_fetch_upper_{bare,add}` generalised | `Contracts.v` |
+| 6.1 | minimal one-`lbu` probe, VC green in 1.0 s | `Example/ZZByteProbe.v` |
+| 6.2 | `check_scalar` loop 1 from real clang output, N = 4/8/16/32 all green | `Example/ZZByteLoop1{Common,N4,N8,N16,N32}.v` |
+
+`§5.3` (the `EndToEnd.v` Iris wiring) is **NOT done** — see "Next" below. So there
+is a verified VC but no noninterference *end theorem* for a byte program yet, and
+the gate is still at 13 axiom-clean end theorems. The `ZZ*` files are throwaway
+probes, deliberately not in `_CoqProject`.
+
+Regression requirement of §6 MET: `Cmovznz4`, `KeyScheduleLoop` and
+`BearSSLCheckScalar` still discharge on their unchanged one-liners.
+
+### The go/no-go passed on the first try, and §1's worry was unfounded
+
+`mem_read 1` needed **no** fixes: `fun_execute_LOAD`'s `BYTE` branch,
+`process_load 1` and `extend_value`'s `uop.zext 8→32` all worked as written.
+§3's "one real gap" (width is part of the predicate index, so no chunk split
+rule) is real, and handing out four `ptstomem 1` chunks does route around it
+exactly as §4 predicted. No `secLeak`/`NonSyncVal` wall appeared on the byte path.
+
+### Two residual shapes the plan did not anticipate
+
+Both are in `solve_symbase_fetch`, both now fixed, both would have looked like
+"the byte design doesn't work" to someone who did not read the goal.
+
+1. **A byte access leaves an access bound with offset 1, not 4.**
+   `sep_contract_mem_read`'s bound is `unsigned paddr + bytes ≤ maxAddr`
+   (width-generic), but every `relval_fetch_upper_*` lemma hardcoded the word
+   width 4. Fixed by making the GOAL-side offset a parameter `A`
+   (`relval_fetch_upper_bare (v) (A B)`, `relval_fetch_upper_add (v) (cbv) (A B)`),
+   which covers HALF (offset 2) for free. `_add` additionally needs `0 ≤ A`:
+   its no-wrap step bounds `bin cbv + bin a` via `1024 - A`.
+2. **A pointer-compare loop exit leaves `p+k ≠ p+k → False`.**
+   clang's loop 1 exits on `bne a0, a1` with BOTH operands base-relative — not
+   the counter-vs-zero shape `Example/KeyScheduleLoop.v` uses, which is why this
+   never appeared before. New lemma `relval_neq_irrefl`; both `RelVal` cases are
+   immediate. **Any future pointer-walking loop will hit this.**
+
+Note what did NOT go wrong: the executor handled the base-relative pointer
+compare fine, keeping `p+0x11 ≠ p+0x14` … as path-condition hypotheses per taken
+iteration and discharging the byte load at each of `p+0x10 … p+0x13`.
+
+### One design correction to §5.1
+
+`byte_chunks` must emit each address in the executor's CANONICAL form —
+`term_val <literal>` at a concrete base, `p + <single literal>` at a symbolic one.
+The first version built `(p+k)+j`, which the load's computed address (folding to
+`p+(k+j)`) need not match, so **only the `j = 0` chunk would ever have been
+consumable**. The minimal probe passed anyway because it loads exactly one byte —
+a reminder that §6.1 alone does not exercise the offsets. Hence `byte_chunks`
+takes an `addr_of : N -> Term Σ ty_xlenbits` function, not a base term.
+
+### Byte order: VERIFIED, not assumed
+
+§5.1/§7 flagged this as the thing that would silently break §5.3. It is now
+pinned by computational anchors next to `word_byte` in `GenContract.v`:
+`word_byte 0 0xAABBCCDD = 0xDD` … `word_byte 3 = 0xAA`, plus reassembly
+`app 0xDD (app 0xCC (app 0xBB (app 0xAA nil))) = 0xAABBCCDD`. Little-endian,
+lowest address first, agreeing with `get_word` and `interp_ptstomem`.
+
+### Measured cost — loop 1 FITS at the real N = 32
+
+Separate file per N (so `-time` figures cannot contaminate each other), `coqc`
+`/usr/bin/time`, this box. Chunk count = N (N/4 word entries × 4 bytes).
+
+| N | chunks | `vm_compute; solve_vc` | `Qed` | wall | peak RSS |
+|---|---|---|---|---|---|
+| 4  | 4  | 7.30 s   | 0.54 s  | 13.8 s  | 3.06 GB |
+| 8  | 8  | 11.45 s  | 1.73 s  | 19.1 s  | 3.17 GB |
+| 16 | 16 | 30.07 s  | 6.99 s  | 43.3 s  | 3.59 GB |
+| 32 | 32 | 143.40 s | 38.89 s | 189.1 s | 4.75 GB |
+
+**N = 32 is the real `check_scalar` klen, and it lands in 189 s / 4.75 GB** —
+lighter on RAM than `Cmovznz4` (126 s / 5.7 GB), so loop 1 is comfortably
+affordable as a real example.
+
+But the growth is **worse than quadratic and the exponent is RISING**, so do not
+trust an extrapolation from these four points. Marginal cost per iteration
+(`ΔVC/ΔN`) is 1.04 → 2.33 → 7.08 s, i.e. the per-step cost itself grows
+super-linearly in N. Doubling-exponents `log2` of the VC ratio are 0.65 → 1.39 →
+2.25. Two things grow together here — the resident chunk count (§8's driver 2)
+AND the path condition, which gains one `bne` hypothesis per taken iteration —
+which is the likely reason this is steeper than the pure `cells × steps` model.
+
+### Next, in order
+
+1. **§5.3, the `EndToEnd.v` Iris wiring** — the only thing between this and a
+   14th axiom-clean end theorem. Scoping note that shortens it: for
+   `PVExist` entries (all of loop 1's) you do **not** need `word_byte` at all.
+   `get_word` (`Noninterference.v:139`) is *already* a nested `bv.app` of four
+   `memory_ram` bytes, so `ptstomem_bv_app` (`IrisInstanceBinary.v:315`, proved,
+   relational) applies three times directly to
+   `interp_ptstomem (width := 4) (SyncVal a) (get_word μ a)` and yields the four
+   `interp_ptsto` chunks with no subrange reasoning. `word_byte` is needed only
+   for PINNED (`PVConst`) entries, where ImplPre must show
+   `ram μ (a+j) = word_byte j v` from `get_word μ a = v` — provable via
+   `bv.take_app` / `bv.drop_app` (`Bitvector.v:947,974`). Beware the address
+   forms: `interp_ptstomem` peels with `bv.one + addr`, giving `1+(1+a)`, whereas
+   the assertion says `bv.add a (bv.of_N j)` — commuting/associating those is the
+   fiddly part. Do NOT try to prove the `vector_subrange`-reassembly lemma by
+   `cbn`; it explodes into a multi-thousand-line `bv.view` match.
+2. **§8's `chunk_gc` widening** (drop consumed data cells) is now the indicated
+   cost lever, and it matters MORE for loop 2 than this measurement suggests:
+   loop 2 needs 64 chunks (k *and* P256_N) against loop 1's 32, so the cells
+   factor doubles on top of ~3× the steps.
+3. Only then loop 2, and re-measure rather than extrapolating.

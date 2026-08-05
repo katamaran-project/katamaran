@@ -63,6 +63,46 @@ contract's memory precondition (assembled for you). Data words must sit
 **contiguously right after the instruction region** (see the `HDataAddrs` premise
 below and **cfgver-memory** for the proof-time counterpart).
 
+### Byte-granular cells, for `lbu` programs (`gen_contract_rel_bytes`)
+
+A byte load calls `mem_read 1` and so consumes a `ptstomem 1` chunk. Width is part
+of the predicate index (`Sig.v`), so `ptstomem 1` and `ptstomem 4` are DIFFERENT
+predicates and a resident word chunk cannot discharge a byte consume — the chunk
+matcher has no split rule. Use `gen_contract_rel_bytes`, which takes a THIRD
+data list whose entries are read byte-wise:
+
+```coq
+gen_contract_rel_bytes (init_addr) (reg_specs) (mem_specs)
+                       (byte_mem_specs)      (* <-- these get 4 x ptstomem 1 each *)
+                       (instrs) (extra_exit_offs) (bound) (ec) (fl)
+```
+
+Both data lists are `list mem_spec_rel` — same type, same `PVExist`/`PVConst`/
+`PVBaseOff` vocabulary. **Byte expansion is opt-in PER ENTRY** so the 4× chunk
+multiplier is paid only where a byte access needs it, and **the declaration unit
+stays a WORD**: a byte-expanded entry still describes the 4 bytes at a word-aligned
+address, so stride stays 4, `HDataAddrs` is unchanged, and the trusted statement
+layer (`mem_full_spec`, `gen_init_mem`, `declare_*`) is untouched — on that side
+the two lists are just concatenated, `mem_specs ++ byte_mem_specs` (keep
+`mem_specs` first and both blocks contiguous). So 32 secret bytes are **8 spec
+entries**, not 32.
+
+Leave PUBLIC EXISTENTIAL entries to the word builder. A public unpinned word gives
+`secLeakvar` on the word; byte-expanded it gives `secLeakvar` per byte. Those ought
+to be equivalent but nobody has proved it, and `check_scalar` does not need the
+case (its `k` is private, `P256_N` pinned).
+
+`gen_contract_rel` itself is deliberately NOT refactored to delegate to the bytes
+variant — nine `vm_compute` VC proofs reduce through it, so the duplication is
+cheaper than the perturbation.
+
+`Tables.v` supplies `LBU rd rs imm` (= `LOAD imm rs rd true BYTE`; the `true` is
+the zero-extend flag, and `LW` passes `false`). Status: the VC side works —
+`check_scalar` loop 1 verifies at N = 32 — but the `EndToEnd.v` Iris wiring that
+would give a byte program a noninterference END theorem is **not written yet**
+(`PLAN-byte-memory.md` §5.3, §10). Residual shapes a byte program leaves →
+**cfgver-solve-vc**.
+
 ## The generator call
 
 ```coq

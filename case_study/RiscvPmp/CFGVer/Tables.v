@@ -253,3 +253,12 @@ Open Scope list_scope.
       LOAD imm rs rd false WORD.
     Definition SW (rs2 rs1 : RegIdx) (imm : bv 12) : AST :=
       STORE imm rs2 rs1 WORD.
+
+    (* Byte load, zero-extended: rd := zext(mem[rs + imm]).  Field order is
+       LOAD imm rs1 rd is_unsigned width (Base.v:287); is_unsigned = true
+       makes fun_execute_LOAD's process_load/extend_value take the
+       uop.zext 8 -> 32 branch (Machine.v:619).  LW above passes false, which
+       is immaterial at WORD but decisive here.  This is the first BYTE-width
+       memory access in the case study -- see PLAN-byte-memory.md. *)
+    Definition LBU (rd rs : RegIdx) (imm : bv 12) : AST :=
+      LOAD imm rs rd true BYTE.

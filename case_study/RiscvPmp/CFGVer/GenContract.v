@@ -116,6 +116,131 @@ Import asn.notations.
     Definition gen_mem_pre {Σ} (specs : list mem_full_spec) : Assertion Σ :=
       List.fold_right (fun s acc => gen_mem_asn s ∗ acc) ⊤ specs.
 
+    (* ------------------------------------------------------------------ *)
+    (* BYTE-GRANULAR data cells (PLAN-byte-memory.md).                     *)
+    (*                                                                      *)
+    (* A `lbu`/`sb` program consumes `ptstomem 1` chunks, but the width is  *)
+    (* part of the predicate INDEX (Sig.v:365), so a resident `ptstomem 4`  *)
+    (* chunk cannot discharge a consume of `ptstomem 1` -- the symbolic     *)
+    (* chunk matcher has no split rule.  The builders below hand out FOUR   *)
+    (* one-byte chunks per spec entry instead of one word chunk.            *)
+    (*                                                                      *)
+    (* The DECLARATION UNIT STAYS A WORD: a byte-expanded entry still       *)
+    (* describes the 4 bytes at a word-aligned address, so stride stays 4   *)
+    (* and the trusted statement layer (mem_full_spec, gen_init_mem,        *)
+    (* gen_public_addrs, declare_*, HDataAddrs) is untouched.  Only the     *)
+    (* chunk count changes (1 -> 4 per entry).                              *)
+    (*                                                                      *)
+    (* BYTE ORDER is little-endian, lowest address first, and all three of  *)
+    (* these must agree:                                                    *)
+    (*   get_word         (Noninterference.v:139) = app b(a) (app b(a+1) ...) *)
+    (*   interp_ptstomem  (IrisInstance.v:206)    peels bv.appView byte _,   *)
+    (*                                            putting the LOW part at addr *)
+    (*   word_byte j      (below)                 = vector_subrange (8*j) 8   *)
+    (* and `bv.app xs ys` places `xs` in the LOW bits (Bitvector.v:443,535), *)
+    (* while `vector_subrange s l = drop s (take (s+l) _)` (Bitvector.v:1001) *)
+    (* -- so j = 0 is the byte at the LOWEST address.  Get this wrong and the *)
+    (* Iris wiring in EndToEnd.v will not close.                             *)
+    (* ------------------------------------------------------------------ *)
+
+    (* Byte j of a 32-bit VALUE, j = 0 being the byte at the lowest address.
+       The four offsets are spelled out as LITERALS rather than computed as
+       8*j: vector_subrange's size side-condition is an IsTrue whose Hint
+       Extern only fires once the boolean is convertible to `true`
+       (Prelude.v:296), which a symbolic j never is. *)
+    Definition word_byte (j : nat) (v : Val ty_xlenbits) : Val (ty_bytes 1) :=
+      match j with
+      | 0   => bv.vector_subrange 0 8 v
+      | 1   => bv.vector_subrange 8 8 v
+      | 2   => bv.vector_subrange 16 8 v
+      | _   => bv.vector_subrange 24 8 v
+      end.
+
+    (* BYTE-ORDER REGRESSION ANCHOR.  These pin the convention down by
+       computation, because a silent flip here would not surface until the
+       Iris wiring in EndToEnd.v (PLAN-byte-memory.md §5.3) failed to close,
+       far from the cause.  0xAABBCCDD: byte 0 is the LOW byte 0xDD, and it is
+       the one at the LOWEST address -- because get_word
+       (Noninterference.v:139) puts `ram a` FIRST in the bv.app nest and
+       bv.app's first argument is the low half (Bitvector.v:443,535). *)
+    Goal word_byte 0 (bv.of_N 0xAABBCCDD) = bv.of_N 0xDD. vm_compute. reflexivity. Qed.
+    Goal word_byte 1 (bv.of_N 0xAABBCCDD) = bv.of_N 0xCC. vm_compute. reflexivity. Qed.
+    Goal word_byte 2 (bv.of_N 0xAABBCCDD) = bv.of_N 0xBB. vm_compute. reflexivity. Qed.
+    Goal word_byte 3 (bv.of_N 0xAABBCCDD) = bv.of_N 0xAA. vm_compute. reflexivity. Qed.
+    (* ... and that they reassemble in ADDRESS order under bv.app, i.e. in
+       exactly the shape get_word produces. *)
+    Goal bv.app (@bv.of_N 8 0xDD) (bv.app (@bv.of_N 8 0xCC)
+           (bv.app (@bv.of_N 8 0xBB) (bv.app (@bv.of_N 8 0xAA) bv.nil)))
+         = @bv.of_N 32 0xAABBCCDD.
+    Proof. vm_compute. reflexivity. Qed.
+
+    (* Byte j of a 32-bit TERM, same convention and same literal-offset
+       reason.  Used for PVBaseOff, where the word is symbolic (p + k) and
+       cannot be split at definition time. *)
+    Definition term_word_byte {Σ} (j : nat) (t : Term Σ ty_xlenbits)
+        : Term Σ (ty_bytes 1) :=
+      match j with
+      | 0   => term_unop (uop.vector_subrange 0 8) t
+      | 1   => term_unop (uop.vector_subrange 8 8) t
+      | 2   => term_unop (uop.vector_subrange 16 8) t
+      | _   => term_unop (uop.vector_subrange 24 8) t
+      end.
+
+    (* The four one-byte chunks of a word, given a function from byte offset to
+       the chunk's ADDRESS TERM and the four byte terms.
+       Written with chunk_user directly rather than a notation: the
+       width-parameterised `↦ₘ[ bytes ]` is Local to Spec.v:229, and the
+       ambient `↦ₘ` (Contracts.v:461) is hardcoded to bytes_per_word -- using
+       it here would silently reintroduce a word-width chunk.
+
+       `addr_of` is a FUNCTION rather than a base term plus an added offset so
+       each caller can emit the address in the executor's CANONICAL form:
+       `term_val <literal>` at a concrete base, `p + <literal>` at a symbolic
+       one.  Building `(p + k) + j` instead would leave a nested bvadd that
+       the load's computed address (`p + (k+j)` after peval folding) need not
+       match, and only the j = 0 chunk -- where the offset folds away -- would
+       ever be consumable. *)
+    Definition byte_chunks {Σ} (addr_of : N -> Term Σ ty_xlenbits)
+        (b0 b1 b2 b3 : Term Σ (ty_bytes 1)) : Assertion Σ :=
+      asn.chunk (chunk_user (@ptstomem 1) [addr_of 0%N; b0]) ∗
+      asn.chunk (chunk_user (@ptstomem 1) [addr_of 1%N; b1]) ∗
+      asn.chunk (chunk_user (@ptstomem 1) [addr_of 2%N; b2]) ∗
+      asn.chunk (chunk_user (@ptstomem 1) [addr_of 3%N; b3]).
+
+    (* Concrete-base byte address: a single literal, folded at definition time. *)
+    Definition byte_addr_val {Σ} (a : Val ty_xlenbits) (j : N)
+        : Term Σ ty_xlenbits :=
+      term_val ty_xlenbits (bv.add a (bv.of_N j)).
+
+    (* Byte-expanded reading of ONE mem_full_spec (concrete-base family). *)
+    Definition gen_mem_asn_bytes {Σ} (s : mem_full_spec) : Assertion Σ :=
+      let '(a, is_pub, opt_v) := s in
+      match opt_v with
+      | Some v =>
+          (* pinned: split the literal word into four literal bytes *)
+          byte_chunks (byte_addr_val a)
+            (term_val (ty_bytes 1) (word_byte 0 v))
+            (term_val (ty_bytes 1) (word_byte 1 v))
+            (term_val (ty_bytes 1) (word_byte 2 v))
+            (term_val (ty_bytes 1) (word_byte 3 v))
+      | None =>
+          (* existential: four INDEPENDENT byte variables.  Independent rather
+             than four subranges of one word variable because the bare
+             variables are the smallest terms the executor can carry, and
+             nothing here ever needs the word they compose to. *)
+          asn.exist "mb0" (ty_bytes 1) (asn.exist "mb1" (ty_bytes 1)
+          (asn.exist "mb2" (ty_bytes 1) (asn.exist "mb3" (ty_bytes 1)
+            (byte_chunks (byte_addr_val a)
+               (term_var "mb0") (term_var "mb1") (term_var "mb2") (term_var "mb3")
+             ∗ (if is_pub
+                then secLeakvar "mb0" ∗ secLeakvar "mb1"
+                     ∗ secLeakvar "mb2" ∗ secLeakvar "mb3"
+                else ⊤)))))
+      end.
+
+    Definition gen_mem_pre_bytes {Σ} (specs : list mem_full_spec) : Assertion Σ :=
+      List.fold_right (fun s acc => gen_mem_asn_bytes s ∗ acc) ⊤ specs.
+
     (* extra_exit_offs: base-relative byte offsets of exit addresses BEYOND
        the fall-through one (which is always included).  Needed when control
        flow can leave the program other than by falling off the end, e.g. a
@@ -266,6 +391,54 @@ Import asn.notations.
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
       List.fold_right (fun s acc => gen_mem_asn_rel s ∗ acc) ⊤ specs.
 
+    (* Base-relative byte address, in the canonical `p + <literal>` form: the
+       offset k+j is folded into ONE literal rather than left as (p+k)+j.
+       `pterm` is passed in rather than written as term_var "p" here because the
+       caller's Σ differs between the outer level and the inside of the four
+       asn.exist binders below. *)
+    Definition byte_addr_rel {Σ} (pterm : Term Σ ty_xlenbits) (k : N) (j : N)
+        : Term Σ ty_xlenbits :=
+      term_binop bop.bvadd pterm (term_val ty_xlenbits (bv.of_N (k + j))).
+
+    (* Byte-expanded reading of ONE mem_spec_rel (base-relative family).
+       Same contract as gen_mem_asn_rel -- address p+k, declaration unit a
+       word -- but hands out four ptstomem 1 chunks at p+k .. p+k+3.
+       See the byte-order note at gen_mem_asn_bytes above. *)
+    Definition gen_mem_asn_rel_bytes (s : mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      let '(k, is_pub, pv) := s in
+      match pv with
+      | PVConst v =>
+          byte_chunks (byte_addr_rel (term_var "p") k)
+            (term_val (ty_bytes 1) (word_byte 0 v))
+            (term_val (ty_bytes 1) (word_byte 1 v))
+            (term_val (ty_bytes 1) (word_byte 2 v))
+            (term_val (ty_bytes 1) (word_byte 3 v))
+      | PVBaseOff k2 =>
+          (* UNTESTED path: the stored word is the symbolic address p+k2, so
+             its bytes stay symbolic subranges.  check_scalar does not need
+             this (its arrays are PVExist/PVConst); kept only for uniformity.
+             A wrong reading here can never be unsound -- it can only make the
+             VC or the ImplPre unprovable. *)
+          let w := term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k2)) in
+          byte_chunks (byte_addr_rel (term_var "p") k)
+            (term_word_byte 0 w) (term_word_byte 1 w)
+            (term_word_byte 2 w) (term_word_byte 3 w)
+      | PVExist =>
+          asn.exist "mb0" (ty_bytes 1) (asn.exist "mb1" (ty_bytes 1)
+          (asn.exist "mb2" (ty_bytes 1) (asn.exist "mb3" (ty_bytes 1)
+            (byte_chunks (byte_addr_rel (term_var "p") k)
+               (term_var "mb0") (term_var "mb1") (term_var "mb2") (term_var "mb3")
+             ∗ (if is_pub
+                then secLeakvar "mb0" ∗ secLeakvar "mb1"
+                     ∗ secLeakvar "mb2" ∗ secLeakvar "mb3"
+                else ⊤)))))
+      end.
+
+    Definition gen_mem_pre_rel_bytes (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      List.fold_right (fun s acc => gen_mem_asn_rel_bytes s ∗ acc) ⊤ specs.
+
     (* bound: an N ≥ (max accessed byte offset)+4, so the fetch/access upper
        bounds are dischargeable from unsigned p + bound ≤ lenAddr. *)
     Definition gen_contract_rel
@@ -288,6 +461,44 @@ Import asn.notations.
                   (term_val ty.int (Z.of_N bound)))
                (term_val ty.int (Z.of_N lenAddr)))
           ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs )
+        instrs ec fl.
+
+    (* gen_contract_rel with an ADDITIONAL, byte-expanded data list
+       (PLAN-byte-memory.md §5.2).  Byte expansion is opt-in PER SPEC ENTRY so
+       the 4x chunk multiplier is paid only where a `lbu`/`sb` actually needs
+       it: `mem_specs` entries get one ptstomem 4 chunk as before,
+       `byte_mem_specs` entries get four ptstomem 1 chunks.
+
+       On the trusted side the two lists are simply CONCATENATED
+       (mem_specs ++ byte_mem_specs) -- same type, stride still 4 -- so
+       HDataAddrs's contiguous layout is unchanged.  Keep mem_specs first and
+       both blocks contiguous.
+
+       gen_contract_rel itself is deliberately left byte-identical rather than
+       refactored to delegate here: nine vm_compute VC proofs reduce through
+       it, so the duplication is cheaper than the perturbation. *)
+    Definition gen_contract_rel_bytes
+        (init_addr : N)
+        (reg_specs : list reg_spec_rel)
+        (mem_specs : list mem_spec_rel)
+        (byte_mem_specs : list mem_spec_rel)
+        (instrs : list AST)
+        (extra_exit_offs : list N)
+        (bound : N)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        ( asn_pc_eq (term_var "p")
+          ∗ asn.formula (formula_relop bop.le
+               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                  (term_val ty.int (Z.of_N bound)))
+               (term_val ty.int (Z.of_N lenAddr)))
+          ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs
+          ∗ gen_mem_pre_rel_bytes byte_mem_specs )
         instrs ec fl.
 
   (* ================================================================== *)
