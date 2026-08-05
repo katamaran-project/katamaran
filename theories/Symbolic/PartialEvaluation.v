@@ -504,6 +504,40 @@ Module Type PartialEvaluationOn
         end
       else peval_bvadd_val_default t v.
 
+    (* ---- SELF-TESTS for the mask rules ------------------------------------
+       A peval rule whose pattern never matches is INVISIBLE: the file still
+       compiles and the rule silently does nothing.  These are conversion
+       checks (`reflexivity`, no proof search) pinning each rule's firing AND
+       non-firing shapes, so that a later edit to a pattern — or to what
+       peval_bvadd normalizes its arguments to — breaks the build instead of
+       quietly disabling the rule.  Written after the corresponding rule 1-4
+       were each found, by dumping a real VC, to fire on executor output;
+       these keep that true.  See Example/ZZExpandDump.v and
+       Example/ZZMaskAlgebra.v for the dumps themselves. *)
+
+    (* FIRES: `<compare> ; addi -1` over a widened 1-bit comparison result. *)
+    Lemma selftest_bvadd_mask_fires (b : Term Σ ty.bool) :
+      peval_bvadd_mask
+        (term_unop (uop.zext (m := 1) (n := 32))
+           (term_binop bop.bvcons b (term_val (ty.bvec 0) bv.nil)))
+        (bv.ones 32)
+      = term_unop uop.expand (term_unop uop.not b).
+    Proof. reflexivity. Qed.
+
+    (* INERT unless the constant is all-ones (guard 1).  `t` is never inspected
+       here, which is exactly the point: the constant is checked first. *)
+    Lemma selftest_bvadd_mask_needs_ones (t : Term Σ (ty.bvec 32)) :
+      peval_bvadd_mask t bv.zero
+      = term_binop bop.bvadd (term_val (ty.bvec 32) bv.zero) t.
+    Proof. reflexivity. Qed.
+
+    (* INERT unless the operand is the indicator shape (guard 2). *)
+    Lemma selftest_bvadd_mask_needs_indicator (t : Term Σ (ty.bvec 32)) :
+      peval_bvadd_mask (term_unop uop.bvnot t) (bv.ones 32)
+      = term_binop bop.bvadd (term_val (ty.bvec 32) (bv.ones 32))
+          (term_unop uop.bvnot t).
+    Proof. reflexivity. Qed.
+
     Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
     | term_val _ v1          , term_val _ v2          => term_val (ty.bvec _) (bv.add v1 v2)
     | term_val _ (bv.mk 0 _) , t2                     => t2
@@ -864,6 +898,49 @@ Module Type PartialEvaluationOn
           term_unop uop.expand (term_binop (bop.relop bop.neq) b1 b2)
       | _ , _             => peval_binop' bop.bvxor t1 t2
       end.
+
+    (* SELF-TESTS (see the block above peval_bvadd for why these exist).  These
+       three rules have no customer in any current example — nothing in the
+       corpus composes two masks — so without them the patterns are entirely
+       unexercised by the build. *)
+    Lemma selftest_bvand_mask_fires {n} (b1 b2 : Term Σ ty.bool) :
+      peval_bvand_mask (term_unop (uop.expand (n := n)) b1) (term_unop uop.expand b2)
+      = term_unop uop.expand (peval_and b1 b2).
+    Proof. reflexivity. Qed.
+
+    Lemma selftest_bvor_mask_fires {n} (b1 b2 : Term Σ ty.bool) :
+      peval_bvor_mask (term_unop (uop.expand (n := n)) b1) (term_unop uop.expand b2)
+      = term_unop uop.expand (peval_or b1 b2).
+    Proof. reflexivity. Qed.
+
+    (* bop.relop bop.neq at sigma = ty.bool is xor; a positive relop, not an
+       and/or/not encoding. *)
+    Lemma selftest_bvxor_mask_fires {n} (b1 b2 : Term Σ ty.bool) :
+      peval_bvxor_mask (term_unop (uop.expand (n := n)) b1) (term_unop uop.expand b2)
+      = term_unop uop.expand (term_binop (bop.relop bop.neq) b1 b2).
+    Proof. reflexivity. Qed.
+
+    (* INERT on non-masks: constant folding still reaches peval_binop'. *)
+    Lemma selftest_bvand_mask_inert {n} (v1 v2 : Val (ty.bvec n)) :
+      peval_bvand_mask (term_val (ty.bvec n) v1) (term_val (ty.bvec n) v2)
+      = term_val (ty.bvec n) (bv.land v1 v2).
+    Proof. reflexivity. Qed.
+
+    Lemma selftest_bvor_mask_inert {n} (v1 v2 : Val (ty.bvec n)) :
+      peval_bvor_mask (term_val (ty.bvec n) v1) (term_val (ty.bvec n) v2)
+      = term_val (ty.bvec n) (bv.lor v1 v2).
+    Proof. reflexivity. Qed.
+
+    Lemma selftest_bvxor_mask_inert {n} (v1 v2 : Val (ty.bvec n)) :
+      peval_bvxor_mask (term_val (ty.bvec n) v1) (term_val (ty.bvec n) v2)
+      = term_val (ty.bvec n) (bv.lxor v1 v2).
+    Proof. reflexivity. Qed.
+
+    (* Only ONE side being a mask must not fire. *)
+    Lemma selftest_bvand_mask_needs_both {n} (b : Term Σ ty.bool) (v : Val (ty.bvec n)) :
+      peval_bvand_mask (term_unop (uop.expand (n := n)) b) (term_val (ty.bvec n) v)
+      = term_binop bop.bvand (term_unop uop.expand b) (term_val (ty.bvec n) v).
+    Proof. reflexivity. Qed.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
@@ -1456,6 +1533,31 @@ Module Type PartialEvaluationOn
       | Some b => term_unop uop.expand (peval_not b)
       | None   => peval_unop' uop.bvnot t
       end.
+
+    (* SELF-TESTS (see the block above peval_bvadd for why these exist). *)
+    Lemma selftest_bvnot_expand_fires {n} (b : Term Σ ty.bool) :
+      peval_bvnot (term_unop (uop.expand (n := n)) b)
+      = term_unop uop.expand (peval_not b).
+    Proof. reflexivity. Qed.
+
+    (* The composition that matters, and the one I initially predicted WRONG:
+       for a relop predicate, peval_not does not leave a `not` node — it negates
+       the relop (term_relop_neg).  So clang's `snez ; addi -1` mask ends up as
+       `expand (C <=u 0)`, one node over one POSITIVE relop, which is what
+       Example/ZZExpandDump.v dumps.  If this test ever fails, that dump has
+       changed shape and any recognizer written against it (e.g. coalesce) needs
+       re-checking. *)
+    Lemma selftest_bvnot_expand_negates_relop {n} (t : Term Σ (ty.bvec n)) :
+      peval_bvnot
+        (term_unop (uop.expand (n := n))
+           (term_binop (bop.relop bop.bvult) (term_val (ty.bvec n) bv.zero) t))
+      = term_unop (uop.expand (n := n))
+          (term_relop_neg bop.bvult (term_val (ty.bvec n) bv.zero) t).
+    Proof. reflexivity. Qed.
+
+    Lemma selftest_bvnot_inert {n} (v : Val (ty.bvec n)) :
+      peval_bvnot (term_val (ty.bvec n) v) = term_val (ty.bvec n) (bv.not v).
+    Proof. reflexivity. Qed.
 
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
