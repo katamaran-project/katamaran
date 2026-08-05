@@ -733,6 +733,30 @@ Lemma N_lor_double_double x y :
   N.double (N.lor x y).
 Proof. now destruct x, y. Qed.
 
+(* The lxor twins of the N_land_* / N_lor_* families above.  Note the polarity
+   flip in the first one: two set low bits xor to a CLEAR low bit, so this is
+   the only member of the three families whose succ_double/succ_double case
+   produces `double`. *)
+Lemma N_lxor_succ_double x y :
+  N.lxor (N.succ_double x) (N.succ_double y) =
+  N.double (N.lxor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lxor_succ_double_double x y :
+  N.lxor (N.succ_double x) (N.double y) =
+  N.succ_double (N.lxor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lxor_double_succ_double x y :
+  N.lxor (N.double x) (N.succ_double y) =
+  N.succ_double (N.lxor x y).
+Proof. now destruct x, y. Qed.
+
+Lemma N_lxor_double_double x y :
+  N.lxor (N.double x) (N.double y) =
+  N.double (N.lxor x y).
+Proof. now destruct x, y. Qed.
+
 Declare Scope alt_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.

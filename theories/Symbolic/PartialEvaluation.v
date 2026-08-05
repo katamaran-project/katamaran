@@ -838,10 +838,13 @@ Module Type PartialEvaluationOn
        peval_binop below because their soundness lemmas were never proved, and
        this keeps the bill to just the new rules.
 
-       NOT here: the bvxor twin `expand b ^ expand b' = expand (xorb b b')`.
-       There is no bool-level xor BinOp (BinOps.v has only `and`/`or`), and
-       encoding xorb through and/or/not costs 5-6 nodes against a 3-node input
-       — a pessimization, not a canonicalization.  It needs `bop.xor` first. *)
+       The bvxor twin needs no new bool operation, contrary to an earlier note
+       here: RelOp is sigma-POLYMORPHIC, so `bop.relop bop.neq` instantiated at
+       sigma = ty.bool IS xor (`neq true true = false`, `neq true false =
+       true`).  Its result is a positive relop, which is exactly the canonical
+       form wanted — where encoding xorb through and/or/not would have cost 5-6
+       nodes against a 3-node input.  (`bop.eq` at bool is the xnor twin, if a
+       use ever appears.) *)
 
     Definition peval_bvand_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
@@ -853,6 +856,13 @@ Module Type PartialEvaluationOn
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
       | Some b1 , Some b2 => term_unop uop.expand (peval_or b1 b2)
       | _ , _             => peval_binop' bop.bvor t1 t2
+      end.
+
+    Definition peval_bvxor_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match bvmask_try_expand t1 , bvmask_try_expand t2 with
+      | Some b1 , Some b2 =>
+          term_unop uop.expand (term_binop (bop.relop bop.neq) b1 b2)
+      | _ , _             => peval_binop' bop.bvxor t1 t2
       end.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
@@ -867,6 +877,7 @@ Module Type PartialEvaluationOn
       | bop.bvadd  => peval_bvadd
       | bop.bvand  => peval_bvand_mask
       | bop.bvor   => peval_bvor_mask
+      | bop.bvxor  => peval_bvxor_mask
       (* | bop.bvand  => peval_bvand *)
       (* | bop.bvor   => peval_bvor *)
       (* | bop.bvapp  => peval_bvapp *)
@@ -1373,9 +1384,27 @@ Module Type PartialEvaluationOn
         f_equal; now rewrite bv.lor_if_ones.
     Qed.
 
+    (* `bop.relop bop.neq` at sigma = ty.bool is xor. *)
+    Lemma eval_relop_neq_bool (b1 b2 : bool) :
+      bop.eval_relop_val (bop.neq (σ := ty.bool)) b1 b2 = xorb b1 b2.
+    Proof. now destruct b1, b2. Qed.
+
+    Lemma peval_bvxor_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvxor_mask t1 t2 ≡ term_binop bop.bvxor t1 t2.
+    Proof.
+      unfold peval_bvxor_mask.
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_binop'_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_binop'_sound].
+      apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
+      intros ι; cbn - [bop.eval_relop_val].
+      destruct (inst b1 ι), (inst b2 ι); cbn - [bop.eval_relop_val];
+        f_equal; rewrite eval_relop_neq_bool; now rewrite bv.lxor_if_ones.
+    Qed.
+
     Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
       peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound
-      peval_bvand_mask_sound peval_bvor_mask_sound (* peval_bvand_sound *)
+      peval_bvand_mask_sound peval_bvor_mask_sound peval_bvxor_mask_sound
+      (* peval_bvand_sound *)
       (* peval_bvor_sound *) (* peval_bvapp_sound *) (* peval_update_vector_subrange_sound *)
       : core.
 

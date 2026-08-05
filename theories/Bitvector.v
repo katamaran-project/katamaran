@@ -1940,6 +1940,76 @@ Module bv.
       rewrite !lor_cons, orb_comm. now f_equal.
     Qed.
 
+    (* The lxor lemma family, mirroring land's and lor's above.  bv.lxor had
+       NO lemmas at all before this; `not` is what its ones cases produce,
+       which is why lxor_ones_l/r are stated against `not` rather than against
+       a constant. *)
+    Lemma lxor_cons {m} (x1 x2 : bool) (y1 y2 : bv m) :
+      lxor (cons x1 y1) (cons x2 y2) =
+      cons (xorb x1 x2) (lxor y1 y2).
+    Proof.
+      destruct y1 as [y1 wf_y1], y2 as [y2 wf_y2].
+      apply bin_inj. destruct x1, x2; cbn.
+      - now rewrite N_lxor_succ_double, truncn_double.
+      - now rewrite N_lxor_succ_double_double, truncn_succ_double.
+      - now rewrite N_lxor_double_succ_double, truncn_succ_double.
+      - now rewrite N_lxor_double_double, truncn_double.
+    Qed.
+
+    Lemma lxor_app {m n} (x1 x2 : bv m) (y1 y2 : bv n) :
+      lxor (app x1 y1) (app x2 y2) =
+      app (lxor x1 x2) (lxor y1 y2).
+    Proof.
+      induction m.
+      - destruct (view x1), (view x2). now rewrite !app_nil.
+      - destruct (view x1) as [b1 x1], (view x2) as [b2 x2].
+        now rewrite lxor_cons, !app_cons, <- IHm, <- lxor_cons.
+    Qed.
+
+    Lemma lxor_zero_l {m} (x : bv m) :
+      lxor zero x = x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite zero_S, lxor_cons, IHx. now destruct b.
+    Qed.
+
+    Lemma lxor_zero_r {m} (x : bv m) :
+      lxor x zero = x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite zero_S, lxor_cons, IHx. now destruct b.
+    Qed.
+
+    Lemma lxor_ones_l {m} (x : bv m) :
+      lxor (ones m) x = not x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite ones_S, lxor_cons, not_cons, IHx. now destruct b.
+    Qed.
+
+    Lemma lxor_ones_r {m} (x : bv m) :
+      lxor x (ones m) = not x.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite ones_S, lxor_cons, not_cons, IHx. now destruct b.
+    Qed.
+
+    Lemma lxor_nilpotent {m} (x : bv m) :
+      lxor x x = zero.
+    Proof.
+      induction x using bv_rect; cbn; [easy|].
+      rewrite lxor_cons, IHx.
+      replace (xorb b b) with false by (now destruct b).
+      now rewrite <- zero_S.
+    Qed.
+
+    Lemma lxor_comm {m} (x y : bv m) :
+      lxor x y = lxor y x.
+    Proof.
+      induction x using bv_rect; destruct (view y); [easy|].
+      rewrite !lxor_cons, IHx. now destruct b, b0.
+    Qed.
+
     (* The mask algebra.  `if b then ones else zero` — the eval of uop.expand
        (Syntax/UnOps.v) — is a homomorphism from the boolean algebra on bools
        to the bitwise algebra on 0/~0 masks.  These three are the Val-level
@@ -1961,6 +2031,14 @@ Module bv.
     Proof.
       destruct b1, b2; cbn.
       all: rewrite ?lor_ones_l, ?lor_zero_l, ?lor_zero_r; reflexivity.
+    Qed.
+
+    Lemma lxor_if_ones (b1 b2 : bool) {n} :
+      lxor (if b1 then ones n else zero) (if b2 then ones n else zero)
+      = if xorb b1 b2 then ones n else zero.
+    Proof.
+      destruct b1, b2; cbn.
+      all: rewrite ?lxor_nilpotent, ?lxor_zero_l, ?lxor_zero_r; reflexivity.
     Qed.
 
     Lemma not_if_ones (b : bool) {n} :
