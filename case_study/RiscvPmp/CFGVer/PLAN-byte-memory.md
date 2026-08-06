@@ -490,6 +490,57 @@ steps (13 vs 4 instr/iter) and 2x the cells (64 chunks vs 32) puts it at roughly
 6.5x of ~45 s ≈ 290 s of `vm_compute` under a stable steps x cells model.
 Affordable. Off the pointer column it is both far worse and not extrapolatable.
 
+### RULED OUT: indexing the symbolic heap (a map instead of a linear scan)
+
+The obvious reading of driver (A) is "consume does a linear scan, so replace the
+list with a map". MEASURED DEAD END — worth at most ~7%, for a large invasive
+change. Do not re-derive this.
+
+The enabling fact is real: `try_consume_chunk_user_precise` (`Chunks.v:316`)
+matches the predicate with `eq_dec` and the INPUT arguments with
+`env.eqb_hom Term_eqb` — purely SYNTACTIC term equality, exactly what a map key
+needs. Only the output arguments become unification formulas, and only for the
+one chunk that matched. So a map is *possible*.
+
+But the scan is not where the time goes. `Example/ZZByteRev*.v` brackets the
+best and worst case for a linear scan: `gen_mem_pre_rel_bytes` folds right and
+`produce_chunk` conses (`Monads.v`: `pure (cons (peval_chunk c) h)`), so
+ascending specs put cell 0 at the BACK of the heap and reversing puts it at the
+FRONT. With ascending loads, and each load re-consing its cell to the front,
+those layouts cost ~N^2 and ~N^2/2 scan steps — so the gap between them IS the
+whole scan cost of the faster one.
+
+| N = 32, user CPU | counter (ascending = back) | reversed (descending = front) |
+|---|---|---|
+| VC  | 42.78 / 45.75 s | 40.90 s |
+| Qed | 27.12 / 27.43 s | 25.60 s |
+
+Gap: 1.9–4.9 s of ~41 s, i.e. the scan is only ~5–12% of VC and sits near the
+7% noise floor. VC is ~62% of the compile, so a PERFECT O(1) lookup saves
+**at most ~7% overall**. `Qed` is untouched, as it must be.
+
+Mechanism, and the reason order barely matters: `SHeap Σ := list (Chunk Σ)` is
+INDEXED BY THE WORLD and has `Subst` via `subst_list` (`Chunks.v:237,241`), so
+every world extension transports the ENTIRE heap, substituting every chunk's
+terms; `produce_chunk` also `peval_chunk`s. That work is proportional to heap
+SIZE and independent of indexing. A `gmap` would make lookup fast and still map
+over every entry on each substitution — optimising the 7% and leaving the rest.
+
+Cost of doing it anyway, for the record: `gmap` needs `Countable` for a
+dependent `Term Σ σ` (only `EqDec`/`Term_eqb` exist today), every search
+function's `_spec` lemma is a list induction feeding the soundness chain and
+would need re-proving over `gmap` (see **gmap-pitfalls**), and first-match
+semantics would need a multimap with insertion order retained.
+
+**Conclusion: (A) is a SIZE problem, not a LOOKUP problem.** Reduce the number
+of resident chunks (dead-cell GC); do not index them. Caveat: this bound is for
+this shape — heap ~N, one access per cell, ~N world extensions. A program with
+a big heap and rare heap operations could shift the balance back.
+
+Free crumb: the reversed (descending-offset) declaration order was consistently
+the faster of the two in both runs. It is within noise, so no number is claimed,
+but it costs nothing to declare byte specs descending.
+
 ### Next, in order
 
 1. **§5.3, the `EndToEnd.v` Iris wiring** — the only thing between this and a
