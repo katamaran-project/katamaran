@@ -224,18 +224,27 @@ Import asn.notations.
             (term_val (ty_bytes 1) (word_byte 2 v))
             (term_val (ty_bytes 1) (word_byte 3 v))
       | None =>
-          (* existential: four INDEPENDENT byte variables.  Independent rather
-             than four subranges of one word variable because the bare
-             variables are the smallest terms the executor can carry, and
-             nothing here ever needs the word they compose to. *)
-          asn.exist "mb0" (ty_bytes 1) (asn.exist "mb1" (ty_bytes 1)
-          (asn.exist "mb2" (ty_bytes 1) (asn.exist "mb3" (ty_bytes 1)
+          (* existential: ONE word variable, each chunk a byte projection of it.
+             Equally general (word <-> its four bytes is a bijection) but it
+             costs ONE logic variable per entry instead of four.  MEASURED: at
+             N = 32, four-independent-byte-variables costs +43% vm_compute and
+             +56% Qed, and turns a VC doubling-slope of 1.02 into 1.39 --
+             |Σ| feeds the Sub/Valuation transported at every world extension,
+             so variable count is a first-order cost, not a rounding error.
+             An earlier version of this used four bare byte variables on the
+             theory that bare variables are the smallest terms the executor can
+             carry; that optimises chunk-value size while inflating Σ, and Σ is
+             what gets transported.  See PLAN-byte-memory.md §10.
+             Bonus: `secLeakvar` on the WORD is exactly what the Iris side
+             offers for a public entry (interp_mem_with_public_memory hands out
+             a SyncVal word), removing §7's public-existential caveat. *)
+          asn.exist "mw" ty_xlenbits
             (byte_chunks (byte_addr_val a)
-               (term_var "mb0") (term_var "mb1") (term_var "mb2") (term_var "mb3")
-             ∗ (if is_pub
-                then secLeakvar "mb0" ∗ secLeakvar "mb1"
-                     ∗ secLeakvar "mb2" ∗ secLeakvar "mb3"
-                else ⊤)))))
+               (term_word_byte 0 (term_var "mw"))
+               (term_word_byte 1 (term_var "mw"))
+               (term_word_byte 2 (term_var "mw"))
+               (term_word_byte 3 (term_var "mw"))
+             ∗ (if is_pub then secLeakvar "mw" else ⊤))
       end.
 
     Definition gen_mem_pre_bytes {Σ} (specs : list mem_full_spec) : Assertion Σ :=
@@ -425,14 +434,15 @@ Import asn.notations.
             (term_word_byte 0 w) (term_word_byte 1 w)
             (term_word_byte 2 w) (term_word_byte 3 w)
       | PVExist =>
-          asn.exist "mb0" (ty_bytes 1) (asn.exist "mb1" (ty_bytes 1)
-          (asn.exist "mb2" (ty_bytes 1) (asn.exist "mb3" (ty_bytes 1)
+          (* ONE word variable per entry, not four byte ones — see the measured
+             justification at gen_mem_asn_bytes above. *)
+          asn.exist "mw" ty_xlenbits
             (byte_chunks (byte_addr_rel (term_var "p") k)
-               (term_var "mb0") (term_var "mb1") (term_var "mb2") (term_var "mb3")
-             ∗ (if is_pub
-                then secLeakvar "mb0" ∗ secLeakvar "mb1"
-                     ∗ secLeakvar "mb2" ∗ secLeakvar "mb3"
-                else ⊤)))))
+               (term_word_byte 0 (term_var "mw"))
+               (term_word_byte 1 (term_var "mw"))
+               (term_word_byte 2 (term_var "mw"))
+               (term_word_byte 3 (term_var "mw"))
+             ∗ (if is_pub then secLeakvar "mw" else ⊤))
       end.
 
     Definition gen_mem_pre_rel_bytes (specs : list mem_spec_rel)

@@ -87,10 +87,19 @@ the two lists are just concatenated, `mem_specs ++ byte_mem_specs` (keep
 `mem_specs` first and both blocks contiguous). So 32 secret bytes are **8 spec
 entries**, not 32.
 
-Leave PUBLIC EXISTENTIAL entries to the word builder. A public unpinned word gives
-`secLeakvar` on the word; byte-expanded it gives `secLeakvar` per byte. Those ought
-to be equivalent but nobody has proved it, and `check_scalar` does not need the
-case (its `k` is private, `P256_N` pinned).
+An existential (`PVExist`) entry costs **one** logic variable, not four: the entry
+declares one `ty_xlenbits` variable and the four chunks are byte projections
+(`term_word_byte j`) of it. This is a performance decision, measured — four
+independent byte variables cost +43% `vm_compute` and +56% `Qed` at 32 bytes, and
+turn a VC doubling-slope of 1.02 into 1.39. The general rule behind it: cost tracks
+the size of state TRANSPORTED PER WORLD EXTENSION, and `|Σ|` feeds the
+`Sub`/`Valuation` rebuilt at every extension — so prefer fewer, larger symbolic
+objects even when the small ones have smaller individual terms. The same rule is
+why speeding up heap LOOKUP is a dead end (≤7%) while shrinking the heap is not.
+
+Public existential entries are fine to byte-expand: the precondition asks for
+`secLeakvar` on the *word* variable, which is exactly the SyncVal word
+`interp_mem_with_public_memory` provides.
 
 `gen_contract_rel` itself is deliberately NOT refactored to delegate to the bytes
 variant — nine `vm_compute` VC proofs reduce through it, so the duplication is

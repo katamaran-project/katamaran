@@ -9,10 +9,21 @@ next: the cost driver is NOT either of the two growth sources already eliminated
 in this project (chunk-GC's `encodes_instr` leak, coalesce's 2^N mask term).
 It is the SYMBOLIC POINTER COMPARE in clang's loop-exit test, which pushes one
 undecidable path-condition formula per iteration. An ablation measures it at
-**~3× of VC cost at N = 32** (2.3× end-to-end wall), and — more importantly —
-removing it turns an ACCELERATING exponent into a roughly constant one (≈N^1.9).
-The fix is a `bvadd` cancellation rule in the solver, which is unconditionally
-sound because `bvadd` is injective.
+**~3× of VC cost at N = 32**, and — more importantly — removing it turns an
+ACCELERATING exponent into a roughly constant one. The fix is a `bvadd`
+cancellation rule in the solver, unconditionally sound because `bvadd` is
+injective. NOT YET WRITTEN.
+
+Second finding, already FIXED in the tree: the byte builder was emitting four
+logic variables per word entry where ONE suffices (N secret bytes do not need N
+variables). Correcting that is worth −21% VC / −54% `Qed` on real loop 1 by
+itself, and with the pointer-compare fix as well the VC becomes essentially
+LINEAR in N (doubling-slope 2.25 → 1.02, N = 32 wall 189 s → 43.6 s).
+
+Both follow one rule: **cost tracks the size of state transported per world
+extension.** That is also why making heap LOOKUP faster is a measured dead end
+(≤7%) while making the heap SMALLER is not.
+
 §10 also records the two residual shapes the plan did not anticipate and one
 design correction.
 
@@ -264,12 +275,15 @@ and the gate must stay green at 13 axiom-clean end theorems (14 if a
   a `Qed` that **hangs** or fails with an import-dependent error, not a clean
   tactic failure. Cost a multi-hour session once. See `cfgver-gen-contract`
   ("CRITICAL") and `rocq-compile-oom` for the misdiagnosis.
-- **Public *existential* word vs 4 public existential bytes.** A public unpinned
-  word gives `secLeakvar` on the word; byte-expanded it gives `secLeakvar` on
-  each byte. These ought to be equivalent (a word is Sync iff all its bytes are)
-  but that needs a lemma. `check_scalar` does not need this case — `k` is
-  private, `P256_N` is pinned — so **leave public-existential entries to the
-  word builder** and only byte-expand private/pinned ones until someone proves it.
+- ~~**Public *existential* word vs 4 public existential bytes.**~~ **OBSOLETE —
+  this trap no longer exists**, see §10 driver (C). It assumed the byte builder
+  would emit four independent byte existentials, so a public entry would need
+  `secLeakvar` on each byte and a lemma relating that to `secLeakvar` on the
+  word. The builder now emits ONE word variable per entry with the four chunks
+  as byte projections of it, so a public entry asks for `secLeakvar "mw"` — a
+  word — which is exactly what `interp_mem_with_public_memory` hands out for a
+  public entry (`interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))`). No
+  lemma, no restriction: public existential entries may be byte-expanded.
 - **Byte order** — see §5.1. Little-endian, lowest address first, and both
   `get_word` and `interp_ptstomem` must agree with your split.
 - `bv` traps (`lia` vs `2^32`, `cbn` unfolding `xlenbits`) → **bv-pitfalls** via
@@ -408,6 +422,12 @@ Separate file per N (so `-time` figures cannot contaminate each other), `coqc`
 lighter on RAM than `Cmovznz4` (126 s / 5.7 GB), so loop 1 is comfortably
 affordable as a real example.
 
+> **SUPERSEDED.** This table measures the ORIGINAL four-byte-variables-per-entry
+> encoding. The builder now emits one word variable per entry (driver (C)
+> below), which brings the same N = 32 point to **136 s** (VC 112 s, Qed 16 s).
+> The rising-exponent analysis below still describes the shape correctly, and
+> the drivers behind it are diagnosed in the ablation sections that follow.
+
 But the growth is **worse than quadratic and the exponent is RISING**, so do not
 trust an extrapolation from these four points. Marginal cost per iteration
 (`ΔVC/ΔN`) is 1.04 → 2.33 → 7.08 s, i.e. the per-step cost itself grows
@@ -489,6 +509,88 @@ Calibrating loop 2 off the counter column instead of the pointer one: ~3.25x the
 steps (13 vs 4 instr/iter) and 2x the cells (64 chunks vs 32) puts it at roughly
 6.5x of ~45 s ≈ 290 s of `vm_compute` under a stable steps x cells model.
 Affordable. Off the pointer column it is both far worse and not extrapolatable.
+
+### DRIVER (C): LOGIC-VARIABLE COUNT — found late, fixed, biggest single win
+
+N secret bytes do NOT need N logic variables. One `bv (8N)` existential with
+byte projections is equally general — the valuations are in bijection. The first
+version of `gen_mem_asn{,_rel}_bytes` emitted FOUR INDEPENDENT byte variables per
+word entry anyway, with this comment:
+
+> bare variables are the smallest terms the executor can carry, and nothing here
+> ever needs the word they compose to
+
+That reasoning is wrong, and the trade was asserted rather than measured. It
+minimises CHUNK-VALUE size while inflating Σ — and Σ is what gets transported:
+`|Σ|` feeds the `Sub`/`Valuation` built at every world extension, of which there
+are O(N). `Example/ZZByteVar*.v` measures the difference (counter-exit base, so
+driver (B) is already absent; 4 vars/entry vs 1 var/entry, i.e. 32 vs 8 variables
+at N = 32):
+
+| user CPU | 4 vars/entry | 1 var/entry | |
+|---|---|---|---|
+| N = 16 VC  | 16.33 s | **12.38 s** | −24% |
+| N = 16 Qed | 5.78 s  | **3.22 s**  | −44% |
+| N = 32 VC  | 42.78 / 45.75 s | **25.13 s** | −43% |
+| N = 32 Qed | 27.12 / 27.43 s | **11.98 s** | −56% |
+| N = 32 wall | 81 s | **43.6 s** | 1.9x |
+| N = 32 peak RSS | 5.19 GB | **4.33 GB** | −0.86 GB |
+
+And it changes the SHAPE, not just the constant. VC doubling-slope N=16→32:
+**1.39 with four variables, 1.02 with one** — i.e. essentially LINEAR. So `|Σ|`
+was a first-order contributor to the super-linearity, not a rounding error.
+
+`GenContract.v` now emits one word variable per entry
+(`term_word_byte j (term_var "mw")`). Two consequences:
+
+- **A cost moved into §5.3.** With four independent byte existentials the Iris
+  wiring instantiates them with whatever the `ptstomem_bv_app` peels are, and
+  never has to say WHICH byte is which. With one word variable the chunk values
+  are `vector_subrange (8j) 8 mw`, so ImplPre must prove
+  `subrange j w = appView-peel j w` — the general lemma pinned only
+  computationally by the anchors in `GenContract.v`. Route: `bv.take_app` /
+  `bv.drop_app` (`Bitvector.v:947,974`). Do NOT attempt it with `cbn`, which
+  explodes into a multi-thousand-line `bv.view` match. One-time cost against a
+  recurring ~2x per example.
+- **§7's public-existential caveat DISSOLVES.** That trap said a public unpinned
+  entry must stay word-granular because `secLeakvar` on a word vs on four bytes
+  "needs a lemma". With one word variable the precondition asks for
+  `secLeakvar "mw"` — and `interp_mem_with_public_memory` hands out exactly a
+  SyncVal WORD for a public entry. The shapes now match directly.
+
+Generalising: this is the same lesson as the heap (driver A). Cost tracks the
+SIZE OF STATE TRANSPORTED PER WORLD EXTENSION — heap chunks and logic variables
+alike. Prefer fewer, larger symbolic objects over many small ones, even when the
+small ones have smaller individual terms.
+
+### CONSOLIDATED: all four combinations at N = 32 (user CPU)
+
+The two fixes are largely INDEPENDENT and STACK. (B) is the pointer-compare /
+path-condition driver, fixed by a solver rule (NOT yet written — the counter
+rows are the proxy). (C) is the variable-count driver, fixed in `GenContract.v`
+and LIVE in the tree today.
+
+| exit test | vars/entry | VC | Qed | wall | peak RSS |
+|---|---|---|---|---|---|
+| pointer (real clang) | 4 | 142.37 | 35.13 | 189.1 s | 4.75 GB |
+| pointer (real clang) | **1** | **112.13** | **16.31** | **136.2 s** | 4.86 GB |
+| counter (proxy for fixing B) | 4 | 42.78 / 45.75 | 27.12 / 27.43 | 81.2 s | 5.19 GB |
+| counter (proxy) | **1** | **25.13** | **11.98** | **43.6 s** | 4.33 GB |
+
+- **Available TODAY, generator change only, no solver work: 189 → 136 s (1.39x).**
+  Modest on VC (−21%) because (B) still dominates that phase; but Qed halves.
+- **Both fixes: 189 → 43.6 s (4.3x)**, and the VC doubling-slope goes from an
+  ACCELERATING 2.25 to ~1.02, i.e. essentially linear in N.
+
+Caveat, recorded rather than smoothed over: the (C) fix is NOT a uniform RSS win.
+It cut 0.86 GB off the counter variant but ADDED 0.11 GB to the pointer variant.
+Peak RSS here is not tracking the same thing as CPU; do not quote a memory
+benefit for (C).
+
+**Recalibrating loop 2** off the bottom row: ~3.25x the steps and 2x the cells
+gives ~6.5 x 25 s ≈ 165 s of `vm_compute`, plus loop 2's own mask terms (which
+`PLAN-coalesce.md` made linear). That is comfortably affordable — but it assumes
+BOTH fixes, and the (B) half is still a proxy.
 
 ### RULED OUT: indexing the symbolic heap (a map instead of a linear scan)
 
