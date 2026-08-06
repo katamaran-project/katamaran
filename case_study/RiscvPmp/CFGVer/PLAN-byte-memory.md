@@ -1,11 +1,23 @@
 # PLAN-byte-memory — opt-in byte-granular data cells, for `lbu`/`sb` programs
 
-Status: **§5.1/§5.2/§5.4 LANDED and §6 steps 1–2 GREEN; §5.3 (the Iris wiring)
+Status: **§5.1/§5.2/§5.4 LANDED and §6 steps 1–3 GREEN; §5.3 (the Iris wiring)
 NOT STARTED.** The go/no-go passed and BearSSL `check_scalar` loop 1 verifies at
-real clang output. **Read §10 before anything else** — it records what was
-actually measured, the two residual shapes the plan did not anticipate, and the
-one design correction. The original text below is left intact as the rationale
-record; where §10 contradicts it, §10 wins.
+real clang output, axiom-clean, at the real klen N = 32.
+
+**Read §10 before anything else.** Headline finding, which changes what to do
+next: the cost driver is NOT either of the two growth sources already eliminated
+in this project (chunk-GC's `encodes_instr` leak, coalesce's 2^N mask term).
+It is the SYMBOLIC POINTER COMPARE in clang's loop-exit test, which pushes one
+undecidable path-condition formula per iteration. An ablation measures it at
+**~3× of VC cost at N = 32** (2.3× end-to-end wall), and — more importantly —
+removing it turns an ACCELERATING exponent into a roughly constant one (≈N^1.9).
+The fix is a `bvadd` cancellation rule in the solver, which is unconditionally
+sound because `bvadd` is injective.
+§10 also records the two residual shapes the plan did not anticipate and one
+design correction.
+
+The original text below is left intact as the rationale record; where §10
+contradicts it, §10 wins.
 
 Every "VERIFIED" fact below was checked against the code on 2026-08-05 with the
 file:line given; every "DESIGN" claim is a proposal that has not been compiled.
@@ -403,6 +415,80 @@ super-linearly in N. Doubling-exponents `log2` of the VC ratio are 0.65 → 1.39
 2.25. Two things grow together here — the resident chunk count (§8's driver 2)
 AND the path condition, which gains one `bne` hypothesis per taken iteration —
 which is the likely reason this is steeper than the pure `cells × steps` model.
+
+### ABLATION: the dominant driver is the SYMBOLIC POINTER COMPARE, and it is removable
+
+The rising exponent above is NOT explained by the two growth sources already
+eliminated in this project. Neither covers it:
+
+- **chunk-GC (2026-08-03)** reclaims ONLY `encodes_instr` — `gc_heap`
+  (`Verifier.v:307`) is literally
+  `filter (fun c => negb (is_encodes_instr c))`, and `is_encodes_instr` matches
+  `chunk_user encodes_instr _` and nothing else. Declared data cells are never
+  reclaimed. (This is §8, restated.)
+- **coalesce/expand** killed the 2^N *term-size* blowup in the mask accumulator.
+  Loop 1 has no mask accumulator — `z` occurs once per iteration — so coalesce
+  is not load-bearing here at all.
+
+Two candidate drivers were left. `Example/ZZByteCtr*.v` isolates them: identical
+byte-chunk count per N and identical byte loads at an advancing symbolic address,
+but the loop exits on a PINNED CONCRETE counter (`addi a4,a4,-1; bne a4,x0`, the
+`KeyScheduleLoop` shape) instead of clang's pointer compare. That removes (B) and
+keeps (A). The ablation body is 5 instructions to loop 1's 4, so it runs 25% MORE
+steps — it is handicapped, not flattered.
+
+**USER-CPU seconds** (the wall clock of one run was destroyed by a machine
+suspend — 70 698 s wall against 27.1 s user — so CPU is the only trustworthy
+column here; `CFGVer/CLAUDE.md` already says to judge on CPU/RSS, not wall):
+
+| N | ptr VC | **ctr VC** | ptr Qed | **ctr Qed** | ptr peak RSS | ctr peak RSS |
+|---|---|---|---|---|---|---|
+| 4  | 7.25   | 7.25  | 0.54  | 0.57  | 3.06 GB | — |
+| 8  | 11.38  | 9.23  | 1.70  | 1.61  | 3.17 GB | 3.18 GB |
+| 16 | 29.87  | 16.33 | 6.80  | 5.78  | 3.59 GB | 3.57 GB |
+| 32 | 142.37 | **42.78 / 45.75** | 35.13 | 27.12 / 27.43 | 4.75 GB | 5.19 GB |
+
+N = 32 counter was measured TWICE (42.78u and 45.75u; Qed 27.12u and 27.43u) —
+the first run's WALL clock was destroyed by the suspend, so it was repeated. The
+~7% CPU spread between them is this box's ordinary run-to-run variance and is the
+reason the shape claim below is stated as a range. Clean wall for the re-run:
+81 s total, against the pointer variant's 189 s — 2.3x end to end.
+
+Read the SHAPE, not the ~3x. Marginal VC cost per iteration:
+
+- pointer: 1.03 → 2.31 → 7.03 s — ratios **2.24, 3.04**, clearly ACCELERATING
+- counter: 0.50 → 0.89 → 1.65/1.84 s — ratios **1.79, 1.86–2.07**, roughly CONSTANT
+
+So with (B) removed the cost is close to a fixed power law, total ≈ **N^1.9**;
+with (B) present the exponent itself accelerates. That difference — not the 3x —
+is why §6 step 3's "extrapolate before attempting loop 2" could not be answered
+honestly from the pointer-variant numbers. Do not over-read the counter
+exponent's precision: two points at 7% noise cannot distinguish N^1.85 from N^2.
+
+`Qed` is nearly unaffected (35.1 → 27.1 s). **The two drivers hit different
+phases**: (B) is a `vm_compute`/solver cost, (A) is a term-size/`Qed` cost.
+
+**The fix for (B).** `bop.bvadd` currently gets `simplify_eq_binop_default`
+(`Solver.v:822`) — no cancellation — so `bvadd p c1` vs `bvadd p c2` cannot be
+decided and one formula per taken iteration enters the path condition. But
+`bvadd` is INJECTIVE in each argument, so `p + c1 = p + c2 <-> c1 = c2` holds
+UNCONDITIONALLY in Z/2^32 — no no-wrap side condition, unlike most bv rules.
+With such a rule every iteration's branch decides on literals and (B) collapses.
+Precedent for a cancellation rule on a bv operation already exists next door:
+`simplify_eq_binop_bvapp'` cancels via `transparent.nat_add_cancel_l`
+(`Solver.v:701-709`). Note the residual arrives as `formula_relop bop.neq`, and
+`simplify_eq_relop` routes `neq`/`eq` through each other (`Solver.v:795-796`), so
+check which of the two entry points to extend.
+
+CAVEAT: the counter variant is a PROXY. It shows the headroom exists; it does not
+prove the solver rule delivers it. And clang will almost certainly emit a pointer
+compare for loop 2 as well, so this is not optional for loop 2 — it is what makes
+loop 2's cost predictable.
+
+Calibrating loop 2 off the counter column instead of the pointer one: ~3.25x the
+steps (13 vs 4 instr/iter) and 2x the cells (64 chunks vs 32) puts it at roughly
+6.5x of ~45 s ≈ 290 s of `vm_compute` under a stable steps x cells model.
+Affordable. Off the pointer column it is both far worse and not extrapolatable.
 
 ### Next, in order
 
