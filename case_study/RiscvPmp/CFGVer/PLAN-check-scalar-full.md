@@ -3,9 +3,9 @@
 Status: **DRAFT / HANDOFF, written 2026-08-07.** Nothing in this plan has been
 started. Phase 1's subject exists as uncommitted work in the tree (see §2).
 
-Audience: a later session (Sonnet or Haiku) executing one phase at a time. Each
-phase has an explicit GATE — reach it, report, and stop. Do not run two phases
-in one session.
+Audience: a later session executing one phase at a time. Each phase has an
+explicit GATE — reach it, report, and stop. Do not run two phases in one session.
+**Model routing is in §0.5 — check it before starting a phase.**
 
 **Read before starting, in this order:**
 1. `PLAN-byte-memory.md` **§10** — the measurement record this plan builds on.
@@ -52,6 +52,50 @@ not something to improvise around.
 operands already in registers and no memory at all. VERIFIED via
 `Example/ZZCsUnroll.v`'s header, which imports it and describes it as "the REAL
 check_scalar body". There is no loop and no memory in the landed theorem.
+
+---
+
+## §0.5. Model routing — which phase goes to which model
+
+**The split is by DELIVERABLE TYPE, not by phase difficulty.**
+
+- **A proof obligation** (the deliverable is a `Qed`) → **Sonnet**.
+- **Mechanical replication from an existing template, plus recorded
+  measurements** → **Haiku** is fine.
+- **Anything that changes a soundness statement, the trusted surface, or core
+  `theories/` machinery** → neither, unattended. Escalate.
+
+| Phase | Model | Why |
+|---|---|---|
+| §2 — `try_bvadd_cancel_spec` | **Sonnet**, high effort | Dependent `Equations` (`funelim`), `Term_eqb_spec`, RelVal case analysis, `⊣⊢` in both directions — and `Solver.v` cannot be built with `rocq_compile_file`, so it is preamble mode throughout. The hardest single item here |
+| §3 — §5.3 Iris wiring | **Sonnet** | Iris proof mode plus address-form reconciliation, with a documented `cbn` landmine |
+| §4a — build loop 2's file set, run the compiles, record CPU/RSS | **Haiku** | `asm_to_ast.py`, replicate the `ZZByteLoop1N*` layout, run `/usr/bin/time`. Genuinely mechanical |
+| §4b — diagnose whatever residual shapes appear | **Sonnet** | Loop 1 turned up two unanticipated shapes; reading a goal and inventing the right small lemma is not mechanical |
+| §5 — whole-function decision | **Owner decision**, then Sonnet to execute | A judgement call on architecture from measured numbers |
+| §6 — region chunks | **Neither, unattended** | Touches `try_consume_chunk_user_precise_spec` and the refinement chain. Its cheap probe (§6, last paragraph) IS Haiku-suitable; the change itself is not |
+
+### Three failure modes recorded on THIS repo — the reason for the split above
+
+All three are documented incidents, not hypotheticals (see the
+`project-key-schedule-loop-scaling` memory note):
+
+1. **Fabricated measurements.** "N=16: 6.1 s / N=64: 6.8 s" was never plausible
+   (6.8 s at N=64 would beat the measured N=8) and came from uncommitted local
+   edits, so it was unreproducible by construction. REFUTED — never requote.
+   → **Rule for §4a: paste the raw `/usr/bin/time` output into the report. Never
+   type a number from memory, and never report a figure from a run whose
+   `Finished transaction` line you did not see.**
+2. **Axiomatized the goal.** Two chunk-GC obligations were stated as `Axiom`s and
+   the refinement derived from them — i.e. the result was assumed. Those commits
+   are deliberately not in any branch.
+   → **Rule for §2/§3: if the `Qed` cannot be reached, the correct outcome is to
+   report WHY. Never weaken the statement, add a hypothesis, `Admit` a sub-goal,
+   or introduce an axiom to get a green build.**
+3. **A two-site consistency error.** `Adequacy.v` was left at `false false`
+   while `Contracts.v` emitted `true true`, so the fast VC could not reach the
+   adequacy chain at all. Cost a build.
+   → **Rule generally: when a value is set in two places, grep for every site
+   before reporting done.** `scripts/gate.sh` is the check that catches this.
 
 ---
 
