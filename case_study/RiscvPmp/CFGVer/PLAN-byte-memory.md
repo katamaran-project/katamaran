@@ -645,21 +645,22 @@ but it costs nothing to declare byte specs descending.
 
 ### Next, in order
 
-1. **§5.3, the `EndToEnd.v` Iris wiring** — the only thing between this and a
-   14th axiom-clean end theorem. Scoping note that shortens it: for
-   `PVExist` entries (all of loop 1's) you do **not** need `word_byte` at all.
-   `get_word` (`Noninterference.v:139`) is *already* a nested `bv.app` of four
-   `memory_ram` bytes, so `ptstomem_bv_app` (`IrisInstanceBinary.v:315`, proved,
-   relational) applies three times directly to
-   `interp_ptstomem (width := 4) (SyncVal a) (get_word μ a)` and yields the four
-   `interp_ptsto` chunks with no subrange reasoning. `word_byte` is needed only
-   for PINNED (`PVConst`) entries, where ImplPre must show
-   `ram μ (a+j) = word_byte j v` from `get_word μ a = v` — provable via
-   `bv.take_app` / `bv.drop_app` (`Bitvector.v:947,974`). Beware the address
-   forms: `interp_ptstomem` peels with `bv.one + addr`, giving `1+(1+a)`, whereas
-   the assertion says `bv.add a (bv.of_N j)` — commuting/associating those is the
-   fiddly part. Do NOT try to prove the `vector_subrange`-reassembly lemma by
-   `cbn`; it explodes into a multi-thousand-line `bv.view` match.
+1. ~~**§5.3, the `EndToEnd.v` Iris wiring**~~ **DONE, 2026-08-10 — see
+   PLAN-check-scalar-full.md §3 "Outcome".** The scoping note originally here
+   was WRONG and is corrected in place: it claimed `PVExist` entries would not
+   need `word_byte`/subrange reasoning at all, because `get_word` is already a
+   nested `bv.app`. That was true before driver (C) (the one-word-variable
+   optimization, `GenContract.v:~240`) landed. Once each byte chunk's value
+   became `vector_subrange j "mw"` (a projection of ONE word variable) rather
+   than a bare byte existential, the subrange/address reconciliation this note
+   said only `PVConst` needed became unavoidable for `PVExist` too. The address
+   form mismatch flagged here (`interp_ptstomem`'s `1+(1+a)` peeling vs the
+   assertion's `bv.add a (bv.of_N j)`) was real and is exactly what
+   `EndToEnd.v`'s `gen_mem_asn_of_ptstomem_bytes` now closes, via
+   `bv.add_assoc`/`bv.of_N_add`/`bv.add_comm`, not `bv.take_app`/`bv.drop_app`
+   (those don't apply cleanly to an opaque existential's subrange; the general
+   `Bitvector.v` lemmas `vector_subrange_app_shift`/`vector_subrange_0_app`
+   do). The `cbn`-explosion warning stands — still don't.
 2. **§8's `chunk_gc` widening** (drop consumed data cells) is now the indicated
    cost lever, and it matters MORE for loop 2 than this measurement suggests:
    loop 2 needs 64 chunks (k *and* P256_N) against loop 1's 32, so the cells

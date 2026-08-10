@@ -543,6 +543,251 @@ Import IrisModel.RiscvPmpIrisBase.
       iExists (NonSyncVal (get_word μ1 a) (get_word μ2 a)). iExact "H".
   Qed.
 
+  (* ------------------------------------------------------------------ *)
+  (* Byte-granular counterpart of gen_mem_asn_of_ptstomem
+     (PLAN-byte-memory.md §5.3 / PLAN-check-scalar-full.md §3): the
+     byte-expanded contract (gen_mem_asn_bytes) asks for four ptstomem 1
+     chunks per data-memory entry, but Iris only ever hands out the
+     WORD-granular interp_mem_with_public_memory.  Bridge by peeling
+     get_word's own four-byte bv.app nest with ptstomem_bv_app and
+     re-deriving each byte's value from vector_subrange via
+     vector_subrange_app_shift / vector_subrange_0_app (Bitvector.v)
+     rather than reassociating bv.app under an eq_rect. *)
+
+  Lemma bv_one_eq_of_N {n} : @bv.one n = bv.of_N 1.
+  Proof. destruct n; vm_compute; reflexivity. Qed.
+
+  Lemma bv_zero_eq_of_N {n} : @bv.zero n = bv.of_N 0.
+  Proof. destruct n; vm_compute; reflexivity. Qed.
+
+  (* get_word's own nested bv.app, restated as a RelVal identity so
+     ptstomem_bv_app applies directly -- holds by REFLEXIVITY in both the
+     SyncVal and NonSyncVal case, since liftBinOpRV's (SyncVal,SyncVal)
+     and catch-all branches both unfold to the same nested bv.app that
+     get_word's own definition builds. *)
+  Lemma get_word_sync_app μ a :
+    SyncVal (get_word μ a) =
+    ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (3*byte)) (σ3 := ty.bvec word) bv.app
+      (SyncVal (memory_ram μ a))
+     (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (2*byte)) (σ3 := ty.bvec (3*byte)) bv.app
+       (SyncVal (memory_ram μ (bv.add bv.one a)))
+       (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec byte) (σ3 := ty.bvec (2*byte)) bv.app
+         (SyncVal (memory_ram μ (bv.add (bv.of_N 2) a)))
+         (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec 0) (σ3 := ty.bvec byte) bv.app
+           (SyncVal (memory_ram μ (bv.add (bv.of_N 3) a))) (SyncVal bv.nil)))).
+  Proof. unfold get_word. reflexivity. Qed.
+
+  Lemma get_word_nonsync_app μ1 μ2 a :
+    NonSyncVal (get_word μ1 a) (get_word μ2 a) =
+    ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (3*byte)) (σ3 := ty.bvec word) bv.app
+      (NonSyncVal (memory_ram μ1 a) (memory_ram μ2 a))
+     (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (2*byte)) (σ3 := ty.bvec (3*byte)) bv.app
+       (NonSyncVal (memory_ram μ1 (bv.add bv.one a)) (memory_ram μ2 (bv.add bv.one a)))
+       (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec byte) (σ3 := ty.bvec (2*byte)) bv.app
+         (NonSyncVal (memory_ram μ1 (bv.add (bv.of_N 2) a)) (memory_ram μ2 (bv.add (bv.of_N 2) a)))
+         (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec 0) (σ3 := ty.bvec byte) bv.app
+           (NonSyncVal (memory_ram μ1 (bv.add (bv.of_N 3) a)) (memory_ram μ2 (bv.add (bv.of_N 3) a)))
+           (SyncVal bv.nil)))).
+  Proof. unfold get_word. reflexivity. Qed.
+
+  (* app with an empty tail is the identity, at the RelVal level. *)
+  Lemma relval_app_nil (b : RelVal (ty.bvec byte)) :
+    ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec 0) (σ3 := ty.bvec byte) bv.app b (SyncVal bv.nil) = b.
+  Proof. destruct b as [v|v1 v2]; cbn; rewrite ?bv.app_nil_r; reflexivity. Qed.
+
+  (* A single byte is (up to the trivial width-0 True remainder)
+     the same ownership as a width-1 ptstomem. *)
+  Lemma interp_ptsto_ptstomem1 `{sailGS2 Σ} (addr : RVAddr) (b : RelVal (ty.bvec byte)) :
+    interp_ptsto addr b ⊢ interp_ptstomem (width := 1) addr b.
+  Proof.
+    rewrite <- (relval_app_nil b) at 2.
+    rewrite ptstomem_bv_app.
+    iIntros "$". done.
+  Qed.
+
+  (* Byte j of get_word, at get_word's own canonical address form
+     (of_N j + a, matching get_word's own definition) and at the
+     commuted form (a + of_N j, matching byte_addr_val/byte_addr_rel's
+     canonical output). *)
+  Lemma get_word_byte0 μ a : bv.vector_subrange 0 8 (get_word μ a) = memory_ram μ (bv.add (bv.of_N 0) a).
+  Proof.
+    unfold get_word. rewrite <- bv_zero_eq_of_N. rewrite bv.add_zero_l.
+    apply (@bv.vector_subrange_0_app 8 24).
+  Qed.
+
+  Lemma get_word_byte1 μ a : bv.vector_subrange 8 8 (get_word μ a) = memory_ram μ (bv.add (bv.of_N 1) a).
+  Proof.
+    unfold get_word. rewrite bv_one_eq_of_N.
+    rewrite (@bv.vector_subrange_app_shift 8 24 0 8).
+    apply (@bv.vector_subrange_0_app 8 16).
+  Qed.
+
+  Lemma get_word_byte2 μ a : bv.vector_subrange 16 8 (get_word μ a) = memory_ram μ (bv.add (bv.of_N 2) a).
+  Proof.
+    unfold get_word. rewrite bv_one_eq_of_N.
+    rewrite (@bv.vector_subrange_app_shift 8 24 8 8).
+    rewrite (@bv.vector_subrange_app_shift 8 16 0 8).
+    apply (@bv.vector_subrange_0_app 8 8).
+  Qed.
+
+  Lemma get_word_byte3 μ a : bv.vector_subrange 24 8 (get_word μ a) = memory_ram μ (bv.add (bv.of_N 3) a).
+  Proof.
+    unfold get_word. rewrite bv_one_eq_of_N.
+    rewrite (@bv.vector_subrange_app_shift 8 24 16 8).
+    rewrite (@bv.vector_subrange_app_shift 8 16 8 8).
+    rewrite (@bv.vector_subrange_app_shift 8 8 0 8).
+    apply (@bv.vector_subrange_0_app 8 0).
+  Qed.
+
+  Lemma get_word_byte0' μ a : bv.vector_subrange 0 8 (get_word μ a) = memory_ram μ a.
+  Proof. rewrite get_word_byte0. rewrite <- bv_zero_eq_of_N. rewrite bv.add_zero_l. reflexivity. Qed.
+
+  Lemma get_word_byte1c μ a : bv.vector_subrange 8 8 (get_word μ a) = memory_ram μ (bv.add a (bv.of_N 1)).
+  Proof. rewrite bv.add_comm. apply get_word_byte1. Qed.
+
+  Lemma get_word_byte3c μ a : bv.vector_subrange 24 8 (get_word μ a) = memory_ram μ (bv.add a (bv.of_N 3)).
+  Proof. rewrite bv.add_comm. apply get_word_byte3. Qed.
+
+  (* Width-generic analog of ptstomem_sync_is_nonsync (Adequacy.v:638,
+     there only stated at width 4): a NonSyncVal of the SAME value on both
+     sides is the same ownership as a SyncVal, at any width. *)
+  Lemma ptstomem_sync_is_nonsync_gen `{sailGS2 Σ} {width} (a : Val ty_word) (w : Val (ty.bvec (width*byte))) :
+    interp_ptstomem (width := width) (SyncVal a) (NonSyncVal w w) ⊣⊢
+    interp_ptstomem (width := width) (SyncVal a) (SyncVal w).
+  Proof. unfold interp_ptstomem. auto. Qed.
+
+  (* The byte-granular per-entry bridge itself. Mirrors
+     gen_mem_asn_of_ptstomem above but targets gen_mem_asn_bytes
+     (GenContract.v), whose PVExist branch is now a WORD existential
+     ("mw") with byte projections -- so the address arithmetic here (not
+     needed for gen_mem_asn_of_ptstomem, whose entries stay word-shaped)
+     is the one genuinely new piece. *)
+  Lemma gen_mem_asn_of_ptstomem_bytes `{sailGS2 Σ}
+      (a : Val ty_xlenbits) (is_pub : bool) (opt_v : option (Val ty_xlenbits))
+      (μ1 μ2 : Memory)
+      {Σ0} (ι : Valuation Σ0)
+      (HInitMem1 : ∀ v, opt_v = Some v → get_word μ1 a = v)
+      (HInitMem2 : ∀ v, opt_v = Some v → get_word μ2 a = v) :
+    (if is_pub
+     then interp_ptstomem (width := 4) (SyncVal a) (SyncVal (get_word μ1 a))
+     else interp_ptstomem (width := 4) (SyncVal a)
+            (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
+    ⊢ asn.interpret (gen_mem_asn_bytes (a, is_pub, opt_v)) ι.
+  Proof.
+    destruct opt_v as [v|]; destruct is_pub; cbn.
+    - (* PVConst, is_pub = true *)
+      have Hv1 := HInitMem1 v eq_refl. rewrite <- Hv1.
+      rewrite get_word_sync_app.
+      rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
+      cbn [ty.liftUnOp ty.liftUnOpRV].
+      rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
+      change (1+2)%N with 3%N.
+      rewrite bv.add_assoc. rewrite bv.of_N_add.
+      change (1+2)%N with 3%N.
+      rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
+      rewrite <- bv_zero_eq_of_N.
+      rewrite (bv.add_comm (x:=a) (y:=bv.zero)).
+      rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+      rewrite get_word_byte0. rewrite get_word_byte1.
+      rewrite get_word_byte2. rewrite get_word_byte3.
+      rewrite (bv.add_comm (x:=bv.of_N 0) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+      rewrite <- bv_zero_eq_of_N.
+      rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1.
+      rewrite relval_app_nil.
+      iIntros "($&$&$&$)".
+    - (* PVConst, is_pub = false *)
+      have Hv1 := HInitMem1 v eq_refl. have Hv2 := HInitMem2 v eq_refl.
+      rewrite get_word_nonsync_app.
+      rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
+      cbn [ty.liftUnOp ty.liftUnOpRV].
+      rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
+      change (1+2)%N with 3%N.
+      rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
+      rewrite <- bv_zero_eq_of_N.
+      rewrite (bv.add_comm (x:=a) (y:=bv.zero)).
+      rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+      rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+      rewrite (bv.add_comm (x:=a) (y:=bv.of_N 2)).
+      rewrite bv.add_assoc. rewrite bv.of_N_add.
+      change (1+2)%N with 3%N.
+      rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+      rewrite <- get_word_byte0. rewrite <- get_word_byte1c.
+      rewrite <- get_word_byte2. rewrite <- get_word_byte3c.
+      rewrite Hv1.
+      rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+      rewrite <- get_word_byte2. rewrite <- get_word_byte3c.
+      rewrite Hv2.
+      rewrite relval_app_nil.
+      rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1.
+      rewrite ptstomem_sync_is_nonsync_gen. rewrite ptstomem_sync_is_nonsync_gen.
+      rewrite ptstomem_sync_is_nonsync_gen. rewrite ptstomem_sync_is_nonsync_gen.
+      iIntros "($&$&$&$)".
+    - (* PVExist, is_pub = true *)
+      iIntros "H".
+      iExists (SyncVal (get_word μ1 a)).
+      unfold uop.evalRel. cbn [ty.liftUnOp ty.liftUnOpRV uop.eval].
+      iSplitL "H".
+      { iRevert "H".
+        rewrite get_word_sync_app.
+        rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
+        cbn [ty.liftUnOp ty.liftUnOpRV].
+        rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
+        change (1+2)%N with 3%N.
+        rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
+        rewrite <- bv_zero_eq_of_N.
+        rewrite (bv.add_comm (x:=a) (y:=bv.zero)).
+        rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+        rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+        rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+        rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1.
+        rewrite relval_app_nil.
+        rewrite (bv.add_comm (x:=a) (y:=bv.of_N 2)).
+        rewrite bv.add_assoc. rewrite bv.of_N_add.
+        change (1+2)%N with 3%N.
+        rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+        rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+        rewrite <- get_word_byte2. rewrite <- get_word_byte3c.
+        rewrite bv.add_zero_l.
+        iIntros "($&$&$&$)". }
+      iSplit; [done|done].
+    - (* PVExist, is_pub = false *)
+      iIntros "H".
+      iExists (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
+      unfold uop.evalRel. cbn [ty.liftUnOp ty.liftUnOpRV uop.eval].
+      iSplitL "H".
+      { iRevert "H".
+        rewrite get_word_nonsync_app.
+        rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
+        cbn [ty.liftUnOp ty.liftUnOpRV].
+        rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
+        change (1+2)%N with 3%N.
+        rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
+        rewrite <- bv_zero_eq_of_N.
+        rewrite (bv.add_comm (x:=a) (y:=bv.zero)).
+        rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+        rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+        rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+        rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1.
+        rewrite relval_app_nil.
+        rewrite (bv.add_comm (x:=a) (y:=bv.of_N 2)).
+        rewrite bv.add_assoc. rewrite bv.of_N_add.
+        change (1+2)%N with 3%N.
+        rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+        rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+        rewrite <- get_word_byte2. rewrite <- get_word_byte3c.
+        rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+        rewrite <- get_word_byte2. rewrite <- get_word_byte3c.
+        rewrite bv.add_zero_l.
+        iIntros "($&$&$&$)". }
+      iSplit; [done|done].
+  Qed.
+
   (* Once-and-for-all ImplPre for the memory portion of gen_contract:
      converts interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs)
      into asn.interpret (gen_mem_pre specs) ι. *)
@@ -1039,6 +1284,179 @@ Import IrisModel.RiscvPmpIrisBase.
       (map (concretize_mem init_addr) mem_specs).
   Proof.
     eapply gen_contract_noninterferent_rel.
+    6: exact valid_contract.
+    - exact HND.
+    - exact HDataAddrs.
+    - exact Hlen.
+    - exact Hbound.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* ------------------------------------------------------------------ *)
+  (* Byte-granular counterpart of gen_mem_pre_rel_concretize
+     (PLAN-check-scalar-full.md §3): pure asn.interpret equality, no Iris.
+     Each entry now needs FOUR address reconciliations (one per byte
+     offset j = 0..3) instead of one. *)
+  Lemma addr_reconcile (ia k j : N) :
+    @bv.add xlenbits (bv.of_N ia) (bv.of_N (k+j)) = @bv.add xlenbits (bv.of_N (ia+k)) (bv.of_N j).
+  Proof. rewrite bv.of_N_add. rewrite bv.of_N_add. f_equal. lia. Qed.
+
+  Lemma gen_mem_pre_rel_bytes_concretize `{sailGS2 Σ}
+      (mem_specs : list mem_spec_rel) (ia : N) (va : RelVal ty_xlenbits) :
+    asn.interpret (gen_mem_pre_rel_bytes mem_specs)
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va])
+    = asn.interpret (gen_mem_pre_bytes (map (concretize_mem ia) mem_specs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    induction mem_specs as [|[[k pub] pv] rest IH]; [reflexivity|].
+    cbn [gen_mem_pre_rel_bytes gen_mem_pre_bytes map List.fold_right].
+    cbn [asn.interpret]. f_equal; [|exact IH].
+    destruct pv; cbn.
+    - rewrite (addr_reconcile ia k 0). rewrite (addr_reconcile ia k 1).
+      rewrite (addr_reconcile ia k 2). rewrite (addr_reconcile ia k 3).
+      reflexivity.
+    - rewrite (addr_reconcile ia k 0). rewrite (addr_reconcile ia k 1).
+      rewrite (addr_reconcile ia k 2). rewrite (addr_reconcile ia k 3).
+      reflexivity.
+    - rewrite (addr_reconcile ia k 0). rewrite (addr_reconcile ia k 1).
+      rewrite (addr_reconcile ia k 2). rewrite (addr_reconcile ia k 3).
+      rewrite bv.of_N_add. rewrite bv.of_N_add.
+      reflexivity.
+  Qed.
+
+  (* Byte-granular counterpart of gen_implpre_mem: list-level induction over
+     gen_implpre_mem_bytes's per-entry bridge gen_mem_asn_of_ptstomem_bytes. *)
+  Lemma gen_implpre_mem_bytes `{sailGS2 Σ}
+      (specs : list mem_full_spec) (μ1 μ2 : Memory)
+      {Σ0} (ι : Valuation Σ0)
+      (HInitMem1 : declare_init_memory μ1 (gen_init_mem specs))
+      (HInitMem2 : declare_init_memory μ2 (gen_init_mem specs)) :
+    interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs) ⊢
+    asn.interpret (gen_mem_pre_bytes specs) ι.
+  Proof.
+    iInduction specs as [|[[a is_pub] opt_v] rest] "IH"
+        forall (μ1 μ2 HInitMem1 HInitMem2).
+    - iIntros "_". done.
+    - cbn [map mem_full_to_spec].
+      unfold interp_mem_with_public_memory. cbn [big_opL].
+      iIntros "[Hhead Hrest]".
+      cbn [gen_mem_pre_bytes List.fold_right asn.interpret].
+      iSplitL "Hhead".
+      { iApply gen_mem_asn_of_ptstomem_bytes.
+        - intros v Hv.
+          unfold declare_init_memory, gen_init_mem in HInitMem1.
+          cbn in HInitMem1. rewrite Hv in HInitMem1.
+          apply Forall_inv in HInitMem1. exact HInitMem1.
+        - intros v Hv.
+          unfold declare_init_memory, gen_init_mem in HInitMem2.
+          cbn in HInitMem2. rewrite Hv in HInitMem2.
+          apply Forall_inv in HInitMem2. exact HInitMem2.
+        - iExact "Hhead". }
+      iApply ("IH" $! μ1 μ2 with "[%] [%] Hrest").
+      * eapply declare_init_mem_tail. exact HInitMem1.
+      * eapply declare_init_mem_tail. exact HInitMem2.
+  Qed.
+
+  (* The byte-granular noninterference bridge (PLAN-check-scalar-full.md §3,
+     PLAN-byte-memory.md §5.3): mirrors gen_contract_noninterferent_rel, but
+     calls gen_contract_rel_bytes with the word-level mem_specs fixed to []
+     -- no CFGVer program has needed BOTH word- and byte-granular data memory
+     at once, and fixing it avoids threading a big_sepL_app list-append split
+     through the ImplPre proof for a case nothing exercises.  Generalise to a
+     combined mem_specs++byte_mem_specs if that need ever arises. *)
+  Lemma gen_contract_noninterferent_rel_bytes
+      (reg_specs : list reg_spec_rel)
+      (byte_mem_specs : list mem_spec_rel)
+      (instrs : list AST)
+      (extra_exit_offs : list N)
+      (bound : N)
+      (exitCond : bv xlenbits -> bool)
+      (fuel : nat)
+      (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length byte_mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (HexitOffs : List.Forall
+          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
+          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs extra_exit_offs
+             bound exitCond fuel)) :
+    noninterferent_strong init_addr instrs exitCond
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) byte_mem_specs).
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits]) exitCond
+      (exits_of_offs (term_var "p")
+         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
+    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
+        [reflexivity | exact HexitOffs]. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs exitCond n ws
+      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
+      (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) HpubMem
+      (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs extra_exit_offs
+         bound exitCond fuel)
+      valid_contract
+      init_addr
+      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
+    all: try eauto.
+    2: { rewrite !length_map. exact Hlen. }
+    intros Σ H.
+    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+    cbn.
+    iFrame "Hpriv #".
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
+      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
+      { unfold lenAddr in Hbound. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+      rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
+    iSplitL "Hregs".
+    { rewrite gen_pre_rel_concretize.
+      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
+      iExact "Hregs". }
+    iSplitL "".
+    { done. }
+    rewrite gen_mem_pre_rel_bytes_concretize.
+    iApply (gen_implpre_mem_bytes (map (concretize_mem init_addr) byte_mem_specs) _ HInitMem1 HInitMem2).
+    iExact "Hmemdata".
+  Qed.
+
+  (* Common-case specialisation: no extra exits, standard fall-through exit
+     -- mirrors gen_contract_noninterferent_rel_simple. *)
+  Lemma gen_contract_noninterferent_rel_bytes_simple
+      (reg_specs : list reg_spec_rel) (byte_mem_specs : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length byte_mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs []
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) byte_mem_specs).
+  Proof.
+    eapply gen_contract_noninterferent_rel_bytes.
     6: exact valid_contract.
     - exact HND.
     - exact HDataAddrs.

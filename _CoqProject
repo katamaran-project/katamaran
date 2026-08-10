@@ -76,6 +76,7 @@ case_study/RiscvPmp/CFGVer/Example/BearSSLMuladd.v
 case_study/RiscvPmp/CFGVer/Example/BearSSLModpow.v
 case_study/RiscvPmp/CFGVer/Example/BearSSLModpowFull.v
 case_study/RiscvPmp/CFGVer/Example/BearSSLCheckScalar.v
+case_study/RiscvPmp/CFGVer/Example/BearSSLCheckScalarLoop1.v
 case_study/RiscvPmp/CFGVer/Example/MvSwapResult.v
 case_study/RiscvPmp/CFGVer/Example/JumpsResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownResult.v
@@ -87,6 +88,7 @@ case_study/RiscvPmp/CFGVer/Example/BearSSLMuladdResult.v
 case_study/RiscvPmp/CFGVer/Example/BearSSLModpowResult.v
 case_study/RiscvPmp/CFGVer/Example/BearSSLModpowFullResult.v
 case_study/RiscvPmp/CFGVer/Example/BearSSLCheckScalarResult.v
+case_study/RiscvPmp/CFGVer/Example/BearSSLCheckScalarLoop1Result.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v
 # case_study/RiscvPmp/BinaryBlockVer/Verifier.v

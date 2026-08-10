@@ -1,9 +1,11 @@
 # PLAN-check-scalar-full — BearSSL `check_scalar` to a whole-function end theorem
 
 Status: **IN PROGRESS, written 2026-08-07, updated 2026-08-10.**
-**Phase 1 (§2) is DONE and committed (`0eb02b36`).** Phases 2–4 not started.
-The measured Phase-1 payoff RE-ANCHORS the loop-2 projection in §4 — read §2's
-"Outcome" before quoting any number from §4 or §5.
+**Phase 1 (§2) is DONE and committed (`0eb02b36`).**
+**Phase 2 (§3) is DONE, gate green, 14th axiom-clean end theorem
+`check_scalar_loop1_noninterferent_param` — see §3's Outcome.**
+Phases 3–4 not started. The measured Phase-1 payoff RE-ANCHORS the loop-2
+projection in §4 — read §2's "Outcome" before quoting any number from §4 or §5.
 
 Audience: a later session executing one phase at a time. Each phase has an
 explicit GATE — reach it, report, and stop. Do not run two phases in one session.
@@ -269,6 +271,39 @@ gate green, **14** end theorems. The instruction list and specs move out of the
 
 This is a publishable result on its own — the first byte-granular example in the
 repo. **Commit and stop.**
+
+### Outcome — GATE 2 PASSED, 2026-08-10
+
+Landed in `EndToEnd.v`: `gen_mem_asn_of_ptstomem_bytes` (the per-entry Iris
+bridge — the hard part, see the "Address forms disagree" note above),
+`gen_implpre_mem_bytes` (list induction over it), `gen_mem_pre_rel_bytes_concretize`
+(the pure `_rel`→concrete syntactic bridge), and `gen_contract_noninterferent_rel_bytes`
++ `_simple` (the top-level bridge, mirroring `gen_contract_noninterferent_rel`).
+
+**Scope call worth recording:** the general bridge fixes the WORD-level
+`mem_specs` argument of `gen_contract_rel_bytes` to `[]` rather than threading
+a combined `mem_specs ++ byte_mem_specs` through `HDataAddrs`/`Hlen`/a
+`big_sepL_app` split. No CFGVer program has ever needed both word- and
+byte-granular data memory at once, so the general case would have been unused
+complexity. Generalise if that need arises.
+
+Promoted `ZZByteLoop1Common.v`/`ZZByteLoop1N32.v` into real
+`Example/BearSSLCheckScalarLoop1.v` (klen fixed at 32, not left parametric —
+the VC re-measured at 36.93 s user CPU, matching the probe exactly) +
+`Example/BearSSLCheckScalarLoop1Result.v` (`check_scalar_loop1_noninterferent_param`
++ a concrete corollary at `init_addr`), wired into `_CoqProject` and
+`Results.v`, `check_scalar_loop1_noninterferent_param` added to
+`scripts/gate.sh`'s `AXIOM_CLEAN_THMS`. Gate green: 14 end theorems,
+axiom-clean at the unchanged allowlist (`Machine.pure_decode`, `Base.mmioenv`).
+
+**One infrastructure trap hit along the way, worth restating:**
+`rocq_compile_file`/`rocq_start` reported a clean pass on a version of
+`gen_mem_asn_of_ptstomem_bytes` that was actually broken (missing one
+`bv.add_assoc`/`bv.of_N_add` fold on the PVConst/is_pub=true branch's 4th
+address) — a stale pet-cache false positive, not a real check. Only an
+independent `make -f Makefile.coq` caught it. **Trust `make`, not
+`rocq_compile_file`, for the final confirmation of anything touching a file
+with many accumulated interactive sessions.**
 
 ---
 

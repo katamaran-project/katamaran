@@ -1028,6 +1028,51 @@ Module bv.
       now rewrite take_cons.
     Qed.
 
+    (* Subranges of an [app]: the two facts needed to read a fixed-width field
+       out of a concatenation without ever reassociating the concatenation.
+
+       Motivation (Katamaran's CFGVer byte-granular memory): a 32-bit word held
+       as [app b0 (app b1 (app b2 (app b3 nil)))] must be shown to have
+       [vector_subrange (8*j) 8] equal to [bj].  Doing that via [app_app] drags
+       in an [eq_rect] over [nat_add_assoc]; peeling one block at a time with
+       the two lemmas below does not, because each step only ever needs
+       [app_cons] and the [cons] lemmas above.  Both are proved by induction on
+       the BITS of the peeled block, so no width transport arises at all.
+
+       Deliberately NOT proved by [unfold vector_subrange; cbn]: for a
+       non-literal width that leaves an unreduced [leview] match which
+       [destruct] cannot abstract over, and for a literal one [cbn] tends to
+       unfold [take]/[drop] into a [bv.view] match thousands of lines wide. *)
+
+    (* Skipping a whole leading block shifts [start] down by that block's
+       width.  [p] and [q] are separate because their statements differ by
+       [Nat.add] reductions; they are related by proof irrelevance. *)
+    Lemma vector_subrange_app_shift {m n} (start len : nat)
+      (p : IsTrue (m + start + len <=? m + n)) (q : IsTrue (start + len <=? n))
+      (x : bv m) (y : bv n) :
+      @vector_subrange (m + n) (m + start) len p (app x y)
+      = @vector_subrange n start len q y.
+    Proof.
+      revert p. induction x using bv_rect; intros p.
+      - rewrite (IsTrue.proof_irrelevance p q). reflexivity.
+      - change (S n0 + start) with (S (n0 + start)) in *.
+        change (S n0 + n) with (S (n0 + n)) in *.
+        rewrite app_cons, vector_subrange_S_cons. apply IHx.
+    Qed.
+
+    (* A subrange at offset 0 whose length is exactly the first block's width
+       is that block. *)
+    Lemma vector_subrange_0_app {m n} (p : IsTrue (0 + m <=? m + n))
+      (x : bv m) (y : bv n) :
+      @vector_subrange (m + n) 0 m p (app x y) = x.
+    Proof.
+      revert p. induction x using bv_rect; intros p.
+      - destruct (view (vector_subrange 0 0 (app nil y))). reflexivity.
+      - change (S n0 + n) with (S (n0 + n)) in *.
+        rewrite app_cons, vector_subrange_0_S_cons.
+        f_equal. apply IHx.
+    Qed.
+
   End Extract.
 
   Section Update.

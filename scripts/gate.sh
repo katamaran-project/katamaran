@@ -62,6 +62,7 @@ AXIOM_CLEAN_THMS=(
   "modpow_win_noninterferent_param"
   "modpow_win_full_noninterferent_param"
   "check_scalar_noninterferent_param"
+  "check_scalar_loop1_noninterferent_param"
 )
 
 COQC="${COQC:-coqc}"
