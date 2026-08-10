@@ -131,6 +131,40 @@ must supply or you get spurious failures: **iris-proofmode**, "Debugging an IPM
 failure inside a module functor". Measured 2026-07-28: this found in 100 ms what
 two 5m45s blind compiles of `Solver.v` had failed to localise.
 
+**A "does this stay transparent through the module boundary" question is ALSO a
+shape question** — test it the same way, in a two-line throwaway snippet, before
+ever blaming the real file. Worked incident (`Symbolic/Solver.v`,
+`try_bvadd_cancel_spec`, 2026-08-07): a hypothesis obtained from a lemma whose
+conclusion was `instpred (formula_secLeak t)` refused to reduce past that folded
+form under `cbn`/`unfold instpred_formula_secLeak`, even though
+`instpred_formula_secLeak t` is definitionally *exactly* that term one
+`InstPred`-dispatch layer down. Four consecutive ~6-minute `make` recompiles of
+the real file were burned narrowing this down — all of it avoidable, because the
+actual question ("does `Module Type X := ConcreteModule` preserve
+`Definition`-transparency for a functor parameterized over `X`?") has nothing to
+do with Katamaran and reproduces in a preamble in under 100 ms:
+
+```coq
+Module Concrete. Definition foo (n : nat) : nat := n + 1. End Concrete.
+Module Type Empty. End Empty.
+Module Type Sig := Empty <+ Concrete.
+Module Functor (Import X : Sig).
+  Lemma test (n : nat) : foo n = n + 1. Proof. reflexivity. Qed. (* succeeds *)
+End Functor.
+```
+
+It succeeds — the definition IS transparent generically. So the real bug wasn't
+module opacity; it was that `cbn` (and plain `unfold`) sometimes will not fire
+through a class-method-then-Fixpoint dispatch chain (`instpred`'s `InstPred`
+projection, then `instpred_formula`'s match) even when the target is fully
+convertible. `change OLD with NEW in H` (full conversion, not `cbn`'s
+unfolding heuristics) does — same snippet, `change foo with (fun x => x + 1) in
+H` closes it instantly, under a binder too. **Lesson: when `cbn`/`unfold`
+stalls on something you can independently prove equal by `reflexivity`, reach for
+`change ... with ... in H` instead of adding more `cbn`/`unfold` calls** — and
+prototype the module-boundary question itself in a scratch snippet before
+touching the real file, exactly like any other shape question.
+
 To get the goal's exact shape without guessing it, temporarily replace the proof
 body with:
 
