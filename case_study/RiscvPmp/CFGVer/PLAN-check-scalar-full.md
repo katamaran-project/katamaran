@@ -359,6 +359,51 @@ lands comfortably" line, so on the current anchor loop 2 is expected to come in
 original plan assumed. Do not pre-emptively build it — measure first — but do not
 be surprised into thinking something broke.
 
+### Progress so far (2026-08-10, IN PROGRESS — not GATE 3 yet)
+
+Compiled standalone from real clang output (`loop2.c`, GT/CMP/EQ0 exactly as
+`BearSSLCheckScalar.v`'s header): `Example/ZZByteLoop2Common.v` (parametric
+over the byte count `n`, mirrors `ZZByteLoop1Common.v`) +
+`Example/ZZByteLoop2N{4,8,16,32}.v`. Both `k[]` and `n[]` (P256_N) are tried
+as **public-but-unpinned `PVExist`** per this section's own advice — n[] is
+`is_pub := true`, NOT `PVConst` — deferring the `PVConst`/subrange cost this
+section flagged as due here. Not yet known whether that holds at N=32; if the
+VC ends up demanding `n[]`'s literal bytes, fall back to `PVConst` per this
+section's fallback clause.
+
+Loop 2's compiled comparison idiom differs from `check_scalar_step`'s 16-instr
+body: standalone, clang picked a SHORTER branch-free sequence (two `sltu` +
+`neg`/`or`, 13 instructions total per iteration) rather than the XOR-based `GT`
+formula `check_scalar_instrs` uses when compiled as part of the larger
+function. Both are branch-free; this is a codegen-context difference, not a
+semantic one — noted in `ZZByteLoop2Common.v`'s header so it isn't mistaken
+for a translation error later.
+
+| N | user CPU | system | wall | peak RSS | notes |
+|---|---|---|---|---|---|
+| 4  | 23.08 s | 3.44 s | 26.54 s | 3.52 GB | passed first try, axiom-clean |
+| 8  | 38.58 s | 3.71 s | 42.31 s | 4.24 GB | passed first try, axiom-clean |
+| 16 | — | — | — | — | not yet run — file written, ready |
+| 32 | — | — | — | — | not yet run — file written, ready (the GATE 3 point) |
+
+**N=4→8 doubling ratio: 1.67×** (38.58/23.08) — i.e. `log2` doubling-slope
+0.74, sub-linear so far. Two points is not enough to trust an exponent (this
+file's own §8 hygiene rule) — N=16 could easily accelerate. **Do NOT
+extrapolate to N=32 from this.**
+
+**N = 16, 32: files written (`Example/ZZByteLoop2N{16,32}.v`), not yet run.**
+Each is, from the repo root:
+```
+coqc -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+  case_study/RiscvPmp/CFGVer/Example/ZZByteLoop2N<N>.v
+```
+under `/usr/bin/time -v`, one process per N (`ZZByteLoop2Common.vo` is
+already built). **Watch the shell CWD** — it drifted to
+`case_study/RiscvPmp/CFGVer` twice during N=4/8 and caused two spurious
+"Can't find file" failures with near-zero CPU time (a dead giveaway it's a
+path problem, not a real compile failure) — always `cd` to the repo root
+explicitly first, don't rely on a persistent shell.
+
 ### Expect first-use surprises
 
 Loop 1's first compile turned up **two** residual shapes nobody predicted (a
