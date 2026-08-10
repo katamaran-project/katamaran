@@ -1,7 +1,9 @@
 # PLAN-check-scalar-full — BearSSL `check_scalar` to a whole-function end theorem
 
-Status: **DRAFT / HANDOFF, written 2026-08-07.** Nothing in this plan has been
-started. Phase 1's subject exists as uncommitted work in the tree (see §2).
+Status: **IN PROGRESS, written 2026-08-07, updated 2026-08-10.**
+**Phase 1 (§2) is DONE and committed (`0eb02b36`).** Phases 2–4 not started.
+The measured Phase-1 payoff RE-ANCHORS the loop-2 projection in §4 — read §2's
+"Outcome" before quoting any number from §4 or §5.
 
 Audience: a later session executing one phase at a time. Each phase has an
 explicit GATE — reach it, report, and stop. Do not run two phases in one session.
@@ -40,7 +42,7 @@ is now down — that is the whole reason this plan exists:
 | 2^N accumulator in loop 2's mask chain | **down** | `PLAN-coalesce.md` §1: `uop.expand` / `bop.coalesce` / `srl-sra by 31` counts exactly linear over 1–4 unrolled copies, measured on the REAL body (`Example/ZZCsUnroll.v`) |
 | no byte-granular memory for `lbu` | **down** | `byte_chunks` (`GenContract.v:203`); loop 1 VC green at the real N=32 (`Example/ZZByteLoop1N32.v`) |
 | `\|Σ\|` growth from per-byte variables | **down** | one word variable per entry (`GenContract.v:~240`); −43% VC, −56% `Qed`, doubling-slope 1.39 → 1.02 |
-| pointer-compare exponent (driver B) | **rule written, one lemma open** | §2 below |
+| pointer-compare exponent (driver B) | **down** (2026-08-10, `0eb02b36`) | §2 "Outcome": loop-1 N=32 VC 112 s → **36.93 s** user CPU |
 
 What is left is plumbing plus one never-attempted compile. No new mathematics is
 believed necessary — if a phase turns up some, that is a STOP-and-report event,
@@ -67,7 +69,7 @@ check_scalar body". There is no loop and no memory in the landed theorem.
 
 | Phase | Model | Why |
 |---|---|---|
-| §2 — `try_bvadd_cancel_spec` | **Sonnet**, high effort | Dependent `Equations` (`funelim`), `Term_eqb_spec`, RelVal case analysis, `⊣⊢` in both directions — and `Solver.v` cannot be built with `rocq_compile_file`, so it is preamble mode throughout. The hardest single item here |
+| ~~§2 — `try_bvadd_cancel_spec`~~ | **DONE** `0eb02b36` | Was: dependent `Equations`, `Term_eqb_spec`, RelVal case analysis, `⊣⊢` both directions, preamble mode throughout. Landed on Sonnet as routed |
 | §3 — §5.3 Iris wiring | **Sonnet** | Iris proof mode plus address-form reconciliation, with a documented `cbn` landmine |
 | §4a — build loop 2's file set, run the compiles, record CPU/RSS | **Haiku** | `asm_to_ast.py`, replicate the `ZZByteLoop1N*` layout, run `/usr/bin/time`. Genuinely mechanical |
 | §4b — diagnose whatever residual shapes appear | **Sonnet** | Loop 1 turned up two unanticipated shapes; reading a goal and inventing the right small lemma is not mechanical |
@@ -205,6 +207,28 @@ lands nowhere near, that is information Phase 3 needs.
 
 **Commit and stop.**
 
+### Outcome — GATE 1 PASSED, 2026-08-10, commit `0eb02b36`
+
+`try_bvadd_cancel_spec` and its `Equations` inversion lemma
+`bvadd_cancel_pair_spec` are proved (`Solver.v:2589`, `Qed`). Gate green, 13 end
+theorems, allowlist unchanged.
+
+**Measured: `Example/ZZByteLoop1N32.v` VC 112.13 s → 36.93 s user CPU, 3.0x.**
+
+Two corrections to the plan as written, both worth carrying forward:
+
+1. **The counter proxy over-promised by ~1.5x.** It predicted 25.13 s; the real
+   solver rule delivers 36.93 s. Driver (B) is genuinely down, but the proxy was
+   an optimistic bound, not an estimate. **Every §4/§5 projection below that was
+   calibrated on 25 s is re-anchored on 36.93 s.**
+2. **The rule as first written was UNSOUND and the plan did not catch it.**
+   `try_bvadd_cancel` was restricted by *type* (`ty.bvec n`) but not by
+   *operator*, so the stated spec was false for ordering relops — exactly the
+   wrap-around trap the "Traps" bullet above warns about, present in the code the
+   plan described as merely needing a proof. Now restricted to `eq`/`neq`.
+   Lesson: a "single hole" in an uncommitted rule is not evidence the rule around
+   it is right.
+
 ---
 
 ## §3. Phase 2 — §5.3 Iris wiring, loop 1 as the 14th end theorem
@@ -255,8 +279,25 @@ measurement, not a proof effort.
 
 ### What is new relative to loop 1
 
-- **64 resident cells**, not 32 — both `k` (secret) and `P256_N` (public, pinned)
-  are 32 bytes.
+- **64 resident cells**, not 32 — both `k` (secret) and `P256_N` (public) are
+  32 bytes.
+- **A `P256_N` representation choice that Phase 2 lets you dodge and Phase 3 does
+  not.** §3's shortening insight — "all of loop 1's entries are `PVExist`, so you
+  do not need `word_byte` at all" — is what makes Phase 2 cheap. It does **not**
+  carry here if `P256_N` is pinned: `PVConst` is exactly the case where `ImplPre`
+  must prove `ram μ (a+j) = word_byte j v`, i.e. the `bv.take_app`/`bv.drop_app`
+  subrange work, with the `cbn` landmine. So that cost is DEFERRED by Phase 2,
+  not avoided.
+  **But pinning may not be necessary.** `param_val`'s `PVExist`
+  (`GenContract.v:361`) carries `is_pub` separately, so a public-but-unpinned
+  entry is expressible, and per `PLAN-byte-memory.md`'s driver-(C) note the
+  shapes then match directly (`secLeakvar "mw"` against the `SyncVal` word
+  `interp_mem_with_public_memory` hands out) — no subrange lemma. The VC should
+  not need `P256_N`'s concrete bytes: loop 2's chain is branch-free, so nothing
+  branches on the comparison, and publicness is all noninterference needs.
+  **Try public-`PVExist` FIRST; fall back to `PVConst` only if the VC actually
+  demands the literals.** If it does, that is the one place the deferred
+  `word_byte` work comes due.
 - **~16 instructions per iteration** against loop 1's 4.
 - The mask/accumulator chain, which `coalesce` has made linear on the real body
   but which has never been run *inside a loop with memory loads*.
@@ -271,9 +312,17 @@ measurement, not a proof effort.
 3. **Re-measure; do NOT extrapolate.** `PLAN-byte-memory.md` says this explicitly
    and it has been right every previous time.
 
-Projection for calibration only, from `PLAN-byte-memory.md` §10: ~165 s of
-`vm_compute` at N=32 assuming both driver (B) and driver (C) fixes. Treat a
-result within 2× of that as success.
+Projection for calibration only, **re-anchored 2026-08-10 on Phase 1's measured
+36.93 s** (not the 25 s proxy `PLAN-byte-memory.md` §10 used): same crude
+`steps × cells` model, ~3.25x the steps and 2x the cells, so
+**6.5 × 36.93 ≈ 240 s** of `vm_compute` at N=32. Treat a result within 2× as
+success.
+
+Note what this does to §5's decision threshold: 240 s is ABOVE the "under ~200 s
+lands comfortably" line, so on the current anchor loop 2 is expected to come in
+*tight*, and the `chunk_gc` widening lever is more likely to be needed than the
+original plan assumed. Do not pre-emptively build it — measure first — but do not
+be surprised into thinking something broke.
 
 ### Expect first-use surprises
 
