@@ -504,13 +504,34 @@ crossover is N≈25; loop 1's 4-instruction body pushes that crossover much
 further out, which is exactly why it stays near-flat through N=16 (and only
 starts to move at N=16→32: 2.11× per the existing Phase-2 number).
 
-**This directly validates §5's fallback lever.** `chunk_gc` widening (dropping
-consumed byte chunks) shrinks the `heap_size` factor as N grows — the same
-lever that already fixed this exact law's `encodes_instr` instance. Loop 2 is
-an ascending single-pass walk over `k[]`/`n[]` (never re-reads an earlier
-byte), which is precisely the case §5 flagged as safe for that GC. Widening
-`chunk_gc` is not a speculative fallback here — it targets the diagnosed
-mechanism directly.
+**Correction (same day, before §5 was acted on): `chunk_gc` widening is NOT
+the right lever here, and the paragraph that used to sit here claiming it was
+is wrong.** `ptstomem` chunks are `is_duplicable := false` (`Sig.v:344`) —
+unlike `encodes_instr`, they are already removed by ordinary, non-leaking
+`consume_chunk` the moment `lbu` reads them. There is no leak for a GC to
+fix; "widening chunk_gc to drop consumed cells" cannot remove anything
+earlier than immediate consumption already does. The actual mechanism is
+that `gen_contract_rel_bytes` asserts **all** `2N` byte chunks in the
+precondition up front (not incrementally), so even with perfectly clean
+consumption the heap averages `Θ(N)` resident chunks over the `Θ(N)`-length
+run, and per-step cost scales with current heap size regardless of how
+promptly chunks are removed (`SHeap Σ`'s `Subst`-transport cost, per the
+"indexing the heap is a SIZE problem, not a LOOKUP problem" dead-end note in
+`cfgver-executor`). Two levers that DO target this correctly, in increasing
+order of how much of the mechanism they fix:
+- **Region chunks** (§6 below) — collapse `N` separate byte chunks per array
+  into ONE, cutting the resident-chunk contribution from `O(N)` to `O(1)`.
+  Real payoff, narrower/more invasive than it looks (needs a new
+  `PredicateKit` offset-projection hook).
+- **Per-iteration loop contracts** (`PLAN-loop-invariant.md`, new plan,
+  2026-08-10) — give the loop body its own small contract so the executor
+  never carries more than one iteration's footprint at a time, fixing the
+  root cause (heap size DURING each step) rather than the chunk
+  representation. Larger scope, but every piece it needs already exists and
+  works elsewhere in this codebase (`Adequacy.v`'s `myWP2_loop`,
+  `MinimalCaps/LoopVerification.v`'s composed-contract precedent) — see that
+  plan's §0 for why this is judged more promising than either lever here,
+  and its own phases/gates for the work involved.
 
 ---
 
