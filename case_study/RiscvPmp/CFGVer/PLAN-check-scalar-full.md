@@ -467,6 +467,51 @@ the `ZZByteLoop2*` files stay throwaway probes exactly as §4's method
 prescribed; promoting loop 2 into a real `Example/` file (mirroring Phase 2's
 `BearSSLCheckScalarLoop1.v`) was not part of GATE 3's scope and was not done.
 
+### Follow-up diagnosis (2026-08-10) — why loop 2 accelerates, loop 1 doesn't
+
+Requested after GATE 3: loop 1 (single memory read/iteration, 4-instruction
+body) barely accelerates through N=16 (1.13×, 1.41× doubling ratios on freshly
+re-measured, post-Phase-1-fix numbers — `Example/ZZByteLoop1N{4,8,16}.v`, not
+previously timed at these N), while loop 2 (two reads, 13-instruction body)
+accelerates sharply (1.67×, 2.21×). Two ablations, both throwaway probes
+(`Example/ZZByteLoop2Abl{,2}{Common,N4,N8,N16}.v`, not wired into
+`_CoqProject`):
+
+1. **Ablation 1 — accumulator `A3` read once instead of twice per iteration**
+   (the `snez a5,a3` operand changed to `a4`, everything else identical).
+   Prior expectation was that this self-referential read (also feeding the
+   next iteration's own `A3`) might reproduce the old `key_schedule_loop`
+   "k≥2 copies of a register's own value ⇒ super-linear growth" mechanism.
+   **Null result**: 21.45/36.44/84.36 s at N=4/8/16 — statistically identical
+   to the real body (23.08/38.58/85.21 s), same acceleration (1.70×/2.32× vs
+   1.67×/2.21×). Term duplication in the accumulator is NOT the driver.
+2. **Ablation 2 — one memory read instead of two** (`lbu a5,0(a1)` replaced by
+   a non-memory `mv a5,a0`, `n[]` dropped from the byte specs; instruction
+   count held at 13, same as the real body). Result: 19.03/29.77/60.18 s —
+   a real ~30% reduction at N=16 and a mildly gentler ratio (1.56×/2.02× vs
+   1.67×/2.21×), but **still far steeper than loop 1's own 1.13×/1.41×**
+   despite now matching loop 1's read count exactly. The only thing ablation 2
+   still shares with loop 2 (not loop 1) is the 13-instruction body.
+
+**Conclusion: body length (steps/iteration), not chunk count or term
+duplication, is the primary driver — chunk count is a secondary multiplier.**
+This is the SAME cost law already characterized for this executor
+(`work ≈ heap_size × (α·S + β·S²)`, S = steps = instructions/iteration × N;
+see **cfgver-executor**'s "Backward-branch loops" section) — not a new bug in
+the Phase-2 byte-memory machinery. Loop 2's 13-instruction body is close to
+`key_schedule_loop`'s ~14-instruction body, whose documented quadratic
+crossover is N≈25; loop 1's 4-instruction body pushes that crossover much
+further out, which is exactly why it stays near-flat through N=16 (and only
+starts to move at N=16→32: 2.11× per the existing Phase-2 number).
+
+**This directly validates §5's fallback lever.** `chunk_gc` widening (dropping
+consumed byte chunks) shrinks the `heap_size` factor as N grows — the same
+lever that already fixed this exact law's `encodes_instr` instance. Loop 2 is
+an ascending single-pass walk over `k[]`/`n[]` (never re-reads an earlier
+byte), which is precisely the case §5 flagged as safe for that GC. Widening
+`chunk_gc` is not a speculative fallback here — it targets the diagnosed
+mechanism directly.
+
 ---
 
 ## §5. Phase 4 — the whole-function decision
