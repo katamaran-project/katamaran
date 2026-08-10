@@ -4,8 +4,11 @@ Status: **IN PROGRESS, written 2026-08-07, updated 2026-08-10.**
 **Phase 1 (§2) is DONE and committed (`0eb02b36`).**
 **Phase 2 (§3) is DONE, gate green, 14th axiom-clean end theorem
 `check_scalar_loop1_noninterferent_param` — see §3's Outcome.**
-Phases 3–4 not started. The measured Phase-1 payoff RE-ANCHORS the loop-2
-projection in §4 — read §2's "Outcome" before quoting any number from §4 or §5.
+**Phase 3 (§4) is DONE — GATE 3 passed: loop 2 standalone at N=32 compiles
+axiom-clean, 278.30 s user CPU / 10.62 GB peak RSS. See §4's Outcome, and its
+memory note before re-running N=32 unattended.**
+Phase 4 (§5, the whole-function decision) is next and is an OWNER decision,
+not something to pick unattended — read §5 before starting.
 
 Audience: a later session executing one phase at a time. Each phase has an
 explicit GATE — reach it, report, and stop. Do not run two phases in one session.
@@ -383,21 +386,46 @@ for a translation error later.
 |---|---|---|---|---|---|
 | 4  | 23.08 s | 3.44 s | 26.54 s | 3.52 GB | passed first try, axiom-clean |
 | 8  | 38.58 s | 3.71 s | 42.31 s | 4.24 GB | passed first try, axiom-clean |
-| 16 | — | — | — | — | not yet run — file written, ready |
-| 32 | — | — | — | — | not yet run — file written, ready (the GATE 3 point) |
+| 16 | 85.21 s | 5.13 s | 90.44 s | 6.47 GB | passed first try, axiom-clean |
+| 32 | 278.30 s | 21.07 s | 306.89 s | 10.62 GB | **GATE 3 — passed on the 4th `coqc` attempt; first 3 were killed by a memory-pressure watchdog, not a Coq error — see note below**, axiom-clean |
 
-**N=4→8 doubling ratio: 1.67×** (38.58/23.08) — i.e. `log2` doubling-slope
-0.74, sub-linear so far. Two points is not enough to trust an exponent (this
-file's own §8 hygiene rule) — N=16 could easily accelerate. **Do NOT
-extrapolate to N=32 from this.**
+Doubling ratios (user CPU): N4→8 **1.67×**, N8→16 **2.21×**, N16→32 **3.27×**
+(278.30/85.21). The exponent is accelerating each doubling, not settling —
+confirms this file's own §8 rule against trusting an early exponent. On peak
+RSS the ratios are gentler: 1.20×, 1.53×, 1.64×.
 
-**N = 16, 32: files written (`Example/ZZByteLoop2N{16,32}.v`), not yet run.**
-Each is, from the repo root:
+**GATE 3 memory note (new finding, 2026-08-10).** N=32 needs ~10.6 GB peak
+RSS, and on this machine (15.3 GB RAM, both `systemd-oomd` and
+`earlyoom -r 3600` active) that is close enough to the ceiling that it is
+NOT reliably reproducible without care:
+
+- Attempt 1 and 2: killed by `SIGTERM` (`/usr/bin/time` reports "Command
+  terminated by signal 15") at ~290–302 s user CPU / ~9.4–9.8 GB RSS — i.e.
+  BEFORE reaching the eventual 10.62 GB peak, with `Closed under the global
+  context` never printed. Exit code was reported as the misleading `0` by the
+  shell wrapper's `echo DONE_EXIT_$?` in one case — **trust the presence of
+  `Closed under the global context` in the log, not the wrapper's exit code,
+  when a watchdog may have intervened.**
+- Between attempts, closing Thunderbird (and, by the successful attempt,
+  most of Firefox) was enough to clear it. No swap growth during the two
+  failed attempts pointed at a leak; system-wide `available` memory simply
+  ran out because ~1.6 GB was already committed to other GUI apps that had
+  nothing to do with the compile.
+- This is a MACHINE-CAPACITY finding, not a Coq or proof-content finding —
+  record it so a later session doesn't mistake a `SIGTERM` here for a real
+  compile failure and start debugging the `.v` file. If N=32 (or the
+  eventual whole-function compile, §5) needs to run unattended or on CI,
+  either budget ≥12 GB free RAM for the one process, or use
+  `systemd-run --scope -p MemoryHigh=... nice ...` bookkeeping is not needed —
+  just close memory-hungry GUI apps first and check `free -m` shows
+  ≥12 GB `available` before starting.
+
+Each N was run, from the repo root:
 ```
 coqc -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
   case_study/RiscvPmp/CFGVer/Example/ZZByteLoop2N<N>.v
 ```
-under `/usr/bin/time -v`, one process per N (`ZZByteLoop2Common.vo` is
+under `/usr/bin/time -v`, one process per N (`ZZByteLoop2Common.vo` was
 already built). **Watch the shell CWD** — it drifted to
 `case_study/RiscvPmp/CFGVer` twice during N=4/8 and caused two spurious
 "Can't find file" failures with near-zero CPU time (a dead giveaway it's a
@@ -417,6 +445,27 @@ same here and read the actual residual before concluding anything.
 Loop 2 verifies standalone at the real N=32 with a real `Qed`, and the four-point
 cost curve is recorded in this file. **Report the curve and stop** — the
 whole-function decision in §5 depends on it.
+
+### Outcome — GATE 3 PASSED, 2026-08-10
+
+Full curve above: N=4/8/16/32 all compile with a real `Qed`, axiom-clean
+(`Closed under the global context`), still as public-but-unpinned `PVExist`
+for both `k[]` and `n[]` — the `PVConst`/subrange fallback was never needed.
+N=32: **278.30 s user CPU, 10.62 GB peak RSS**. Against the plan's
+re-anchored crude projection (~240 s), that is 1.16× — within the "2× is
+success" bound, landing on the "tight" side exactly as §4's own note
+anticipated (240 s is above the "under ~200 s lands comfortably" line).
+
+**§5 read on this:** per §5's decision rule, "tight" (not "comfortably under
+~200 s") means the whole-function attempt is not a free "attempt directly"
+case — the `chunk_gc` widening lever is the indicated next lever if the
+combined 64-cell/~640-step whole function misses. This is an owner decision
+(§0.5 model-routing table), not something to pick unattended.
+
+Nothing in `_CoqProject`/`Results.v`/`scripts/gate.sh` changed this phase —
+the `ZZByteLoop2*` files stay throwaway probes exactly as §4's method
+prescribed; promoting loop 2 into a real `Example/` file (mirroring Phase 2's
+`BearSSLCheckScalarLoop1.v`) was not part of GATE 3's scope and was not done.
 
 ---
 
