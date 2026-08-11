@@ -568,6 +568,74 @@ where resident-chunk count is expected to be a first-order cost.
 `check_scalar_noninterferent` covering the whole function, axiom-clean, gate
 green.
 
+### Outcome — Phase 4 attempted 2026-08-11, PARKED (not GATE 4, no Qed at N=32)
+
+Built the real combined instruction list (guards + `auipc`/`addi`-relocated
+`P256_N` address + both loop bodies, all 35 instructions of the real
+`-mcmodel=medany` clang output, dead early-return block included) as
+`Example/ZZCheckScalarFull.v` (throwaway probe). First N=32 attempt ran 21+
+minutes, climbed past 9 GB RSS into severe swap thrashing, and was killed —
+**this turned out to be genuine accelerating cost, not a hang or a bug; the
+file itself had no defect.**
+
+Built small-N probes to isolate the cause cheaply (`ZZCheckScalarFixN{2,4,8}.v`,
+throwaway). These DID have a bug on first pass — a trip-count literal
+(`addi a4,a1,32`, loop 2's own end-pointer offset, living in a register that
+had already been repurposed away from `klen` by that point) got missed when
+patching `32 -> M`, and separately the declared memory footprint wasn't sized
+to `⌈M/4⌉` word-groups for M=8. Both are test-rig bugs (now fixed), not design
+flaws — same class of mistake as `PLAN-loop-invariant.md`'s own trap list
+would predict for hand-patched literals, worth remembering next time a
+trip-count gets hand-varied instead of recompiled.
+
+**Corrected N=2/4/8 all get a real `Qed`:**
+
+| N | user CPU | peak RSS |
+|---|---|---|
+| 2 | 70.5 s | 4.56 GB |
+| 4 | 198.2 s | 8.48 GB |
+| 8 | 749.6 s | 11.60 GB |
+
+Doubling ratios (time): **2.81×, 3.78×** — accelerating, and already steeper
+at N=2→4 than loop 2 ALONE's own first doubling (1.67× at N=4→8). So the
+combined whole-function's cost is not merely "loop 1 + loop 2 side by side" —
+it is worse than either loop's own curve, on top of already being the largest
+cells×steps target in the corpus.
+
+**Conclusion: the mechanism is fully validated (guards refute their dead arm
+exactly as `cfgver-executor`'s "collapses to `SymProp.block` before its
+continuation is built" predicts; the manual `auipc` relocation is sound; both
+loops compose in one instruction list with no new soundness issue) — this is
+now purely a cost problem, not a correctness one.** Real N=32 was NOT
+re-attempted after the fix; extrapolating the accelerating ratio puts it at
+on the order of an hour-plus CPU and tens of GB, a much bigger commitment
+than this section's original ~240 s projection. **Parked as an explicit TODO
+by owner decision, 2026-08-11** — not attempted further this session.
+
+Neither of this section's two levers (`chunk_gc` widening, region chunks) was
+tried or needed to reach the N=2/4/8 Qeds — they were never the blocker here,
+the "Follow-up diagnosis" after §4's GATE 3 already established that
+(`chunk_gc` doesn't apply to non-duplicable `ptstomem` chunks; region chunks
+targets resident-chunk count, not the accelerating-steps driver actually
+measured). **`PLAN-loop-invariant.md` remains the indicated next lever** if
+this is picked back up — nothing here changes that recommendation, it just
+adds a second, independent confirmation that brute-forcing the flat VC
+doesn't scale, this time on the actual combined program rather than loop 2
+alone.
+
+A cheap, unexplored idea surfaced but deliberately NOT pursued (would trade
+away the parametric base, which the owner explicitly wants kept): a
+CONCRETE-base version of this same probe would very likely close the "tight
+fuel"-adjacent `solve_symbase_fetch` work entirely (per `cfgver-executor`'s
+own ~1.8× figure for a different reproducer) — but no `gen_contract_bytes`
+(concrete + byte-granular) generator exists yet in `GenContract.v`, only the
+`_rel_bytes` parametric form, so this would need new (if modest) plumbing to
+even test. Not attempted; recorded so a future session doesn't have to
+re-discover that the building blocks (`gen_pre`, `gen_mem_pre_bytes`,
+`MkCFGVerifierContract`) already exist generically and a hand-written
+concrete contract is feasible without touching `GenContract.v` at all, should
+this ever become worth revisiting.
+
 ---
 
 ## §6. Region chunks — the idea, and why it is deliberately last
