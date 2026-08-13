@@ -73,7 +73,7 @@ value-dependent (`bnez a0` on an operand), so if the loop operand is the secret
 fold does NOT help it: `select_last_k` hardcodes `R = 0xE1000000`, so the
 `EQ0`/`CMP` idiom would need its own recognizer and its own soundness proof.
 Its trip count is fixed at 32 by P-256, so it cannot be scaled down either.
-See `CFGVer/PLAN-ksl64.md` §3 for the two-driver analysis this came out of.
+See `CFGVer/plans/PLAN-ksl64.md` §3 for the two-driver analysis this came out of.
 
 ## Botan CT::Mask / 64-bit-subtraction gap (2026-07-19)
 
@@ -363,7 +363,7 @@ memory note.
   loops" + **core-executor-internals**. A follow-up probe also REFUTED the
   cheap "let-representation" fix (Coq's physical value-sharing saves memory,
   not traversal cost — opacity is what's needed). **Fix plan drafted (not
-  started): `CFGVer/PLAN-term-sharing.md`** — selective opaque naming at
+  started): `CFGVer/plans/PLAN-term-sharing.md`** — selective opaque naming at
   register writes, E1/E2 de-risk experiments first, hash-consing as Plan B. Consequences: (a) full unrolling
   does NOT dodge this — term growth is a property of the instruction
   sequence, not the loop encoding (3^128 either way), so the *symbolic
