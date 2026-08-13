@@ -1,11 +1,18 @@
 # PLAN-muladd-full — BearSSL `br_i31_muladd_small` to a whole-function end theorem
 
-Status: **DESIGN, not started. Written 2026-08-11.** No code exists yet for any
-phase below. This corrects a previous conclusion (`project-bearssl-breaking-bad`
-memory, 2026-08-03) that the whole function was **out** on rv32i — that
-conclusion was too hasty and is superseded by §1 below. Written while parking
-`PLAN-check-scalar-full.md`'s N=32 attempt as a TODO; this is separate, new
-scope, not a phase of that plan.
+Status: **Phases 0–2 DONE, Phase 3 BLOCKED (2026-08-11 same day).** GATE 1 and
+GATE 2 passed, but not as originally stated — see their sections below for
+what actually needed fixing. GATE 3 is NOT reached: the whole function's
+`vm_compute` times out at 300s even at the smallest synthetic size, and an
+isolated diagnostic (`ZZDivremProbe2.v`) shows `br_divrem`'s own loop is
+almost certainly the dominant cost (67.5s for just 2 trips of that loop
+alone). This corrects a previous conclusion (`project-bearssl-breaking-bad`
+memory, 2026-08-03) that the whole function was **out** on rv32i for a
+DIFFERENT reason (a `__muldi3` libcall) — that specific conclusion was too
+hasty and is superseded by §1 below, but the function turns out to be
+blocked anyway, on a genuinely different, cost-scaling axis. Written while
+parking `PLAN-check-scalar-full.md`'s N=32 attempt as a TODO; this is
+separate, new scope, not a phase of that plan.
 
 Audience: a later session executing one phase at a time, same convention as
 `PLAN-loop-invariant.md`. Each phase ends in an explicit GATE — reach it,
@@ -150,53 +157,142 @@ STOP — do not improvise a fix in the same sitting (same discipline as
 `PLAN-check-scalar-full.md`'s own "report WHY, don't weaken the statement"
 rule).
 
-GATE 1: the real compiled listing, annotated against (1)–(3), committed as a
-throwaway `.s`/comment record (mirror how other plans keep the real assembly
-in a header comment).
+GATE 1: **PASSED, 2026-08-11, but not as originally stated — all three checks
+needed a real fix, not just confirmation.** Real source fetched from
+`bearssl.org/gitweb` (official, confirmed IDENTICAL to the paper's pinned
+commit 79c060e for `i31_muladd.c` and `inner.h`'s MUX/EQ/GT — checked the
+file histories: neither has had a substantive commit since 2016/2017, and
+the repo's real HEAD, April 2026, only touched unrelated record-handling
+code. So there is no newer, hardened upstream to switch to — this IS the
+current state of the library).
+
+1. **PASSES as stated.** `mul`/`mulhu`, no `__muldi3`.
+2. **FAILED as stated, fixed differently than assumed.** `br_div`/`br_devrem`
+   is NOT `static inline` — it is a real function in a separate file
+   (`i32_div32.c`) and compiles to a genuine `call br_divrem` under a plain
+   per-file compile. Fix: `-flto` (a standard flag, no source change) DOES
+   fully inline it — confirmed two ways, a single-TU compile and a real
+   `-flto` compile-then-`ld.lld`-link of the four separate objects, whose
+   "undefined symbol" list omits `br_divrem` while still naming
+   `memmove`/`br_i31_add`/`br_i31_sub` (until those are supplied too — see
+   below). `br_i31_add`/`br_i31_sub` (whose own source was ALSO not on hand —
+   Phase 0's gap silently extended past `i31_muladd.c` itself — fetched the
+   same way) inline the same way.
+3. **FAILED, and reappeared in a NEW, unanticipated place.** The already-known
+   `EQ(a0,b0)` reformation (`muladd_q`'s own finding) reproduces verbatim in
+   the whole-function build. But a SECOND, previously-unseen instance showed
+   up only once `br_i31_add` is inlined: its own `MUX(ctl, naw & 0x7FFFFFFF,
+   aw)` per-word select is branch-free when `br_i31_add.c` is compiled
+   standalone, but reforms into a real per-iteration branch once inlined into
+   this specific caller — same InstCombine behaviour, a different trigger.
+   Fixed with the SAME barrier `muladd_q` already uses (`opaque(v) {
+   __asm__("":"+r"(v)); return v; }`), applied at every sub-MUX site
+   (`q`'s two `EQ`s, `tb`'s `EQ`, `over`/`under` at the `br_i31_add`/`_sub`
+   call sites, PLUS `ctl = opaque(ctl);` added inside `br_i31_add`/`_sub`
+   themselves as defense-in-depth, since that is exactly where the new leak
+   was). Re-verified branch-free and call-free after hardening, both ways.
+
+**A fourth thing Phase 1 never anticipated at all:** the array-shift
+`memmove(x+2, x+1, (mlen-1)*sizeof *x)` compiles to two real `call memmove`
+sites — a libc dependency, since this pipeline has no libc. Fixed by
+supplying a local `static inline __attribute__((always_inline))` replacement,
+written as a WORD-copy loop (not the byte-copy a general memmove needs) —
+sound specifically because the one call site always passes 4-byte-aligned
+`uint32_t*` pointers and an exact-multiple-of-4 size, the same guarantee a
+real optimised memmove's aligned fast path checks. This is what keeps §2
+below's "word-granular, no `_rel_bytes` needed" claim true — it was only
+true BECAUSE of this choice, not for free.
+
+Full real compiled listing, the exact `opaque()` diff, and the standalone-
+vs-inlined `br_i31_add` comparison are session transcript only, not yet
+committed as a header-comment record the way GATE 1 originally asked —
+TODO for whoever picks this up: transcribe into a `.s`/comment block here
+before trusting this account of GATE 1 a second time.
 
 ### Phase 2 — translate + contract shape
 
-Mechanical if Phase 1 holds. `asm_to_ast.py` already supports the needed
-opcodes (§1). One simplification versus `check_scalar`: `x[]`/`m[]` are 31-bit
-values in whole 32-bit words, read via `lw` — **word-granular, not
-byte-granular**, so this needs only the plain `gen_contract_rel` (see
-**cfgver-gen-contract**), not the `_rel_bytes`/`byte_chunks` machinery
-`check_scalar` needed for its `lbu` accesses. Follow **cfgver-new-example**'s
-recipe; watch for full unrolling if `mlen` is baked in as a small compile-time
-constant (keep it a genuine runtime parameter, pin small values in the
-CONTRACT instead — the same trap `cfgver-new-example` already documents, and
-the exact trap `check_scalar_full`'s guard branches needed the same discipline
-for this session).
+**GATE 2: PASSED, 2026-08-11.** `asm_to_ast.py` needed ONE unforeseen fix:
+its `MUL_OPS` table emits the RAW 6-argument `Base.MUL rs2 rs1 rd high
+signed1 signed2` form, but `Spec.v`'s `Assembly` module (which
+`Example.Prelude` pulls in) shadows `MUL` with 3-argument, per-opcode smart
+constructors (`MUL`/`MULH`/`MULHSU`/`MULHU`, args `rd rs1 rs2`, no booleans).
+This was never hit before because **no existing example used a multiply
+instruction at all** — `zzmuladdfulln{2,4}_instrs` are the first. Fixed by
+hand-editing the two `MUL ...` lines to the matching named constructor after
+translation (`MULHU T3 T2 T0` / `MUL T4 T2 T0`); `asm_to_ast.py` itself is
+unpatched — a future session translating another `mul`/`mulh*` program will
+hit this again and should fix the tool, not re-discover this.
 
-GATE 2: instrs list translated, contract built, `vm_compute` at least runs
-(statement typechecks; VC need not close yet).
+§2's original "word-granular, plain `gen_contract_rel`" claim holds, given
+Phase 1's memmove-replacement choice above. New wrinkle §2 didn't
+anticipate: `br_i31_add`/`br_i31_sub` read `a[0]` for THEIR OWN loop bound
+(`m = (a[0]+63)>>5`), so `x[0]` needs the SAME pinned bit-length as `m[0]`,
+not left unconstrained — confirmed the two loop-bound formulas
+((`bitlen+31)>>5` for `mlen`, `(bitlen+63)>>5 − 1` trips for add/sub) agree
+at bitlen=63 (mlen=2) and bitlen=127 (mlen=4). Also unanticipated: this
+whole-function build spills 4 registers to ITS OWN stack frame
+(`addi sp,sp,-16` + 4 `sw`/`lw`) — no existing example needed this either;
+mechanically it is just a THIRD `PVBaseOff` pointer register (`X2`/`sp`)
+with its own small memory region, same shape as `A0`/`A2`, not a structural
+blocker.
 
-### Phase 3 — measure small before committing to real size
+Landed as throwaway probes: `Example/ZZMuladdFullN2.v` (mlen=2, bitlen 63)
+and `Example/ZZMuladdFullN4.v` (mlen=4, bitlen 127) — full deviation
+disclosure (hardening, memmove, the post-compile division-loop trip-count
+patch — see Phase 3) in each file's own header comment. `vos` mode
+(statement-only typecheck) passes on both. Neither is in `_CoqProject`
+(matching every other `ZZ*.v` probe) — no gate impact.
 
-Apply this session's own hard-won lesson directly: get a real `Qed` at a small
-limb count (`mlen` = 2, then 4) before anything realistic. BearSSL P-256 needs
-roughly 9 31-bit limbs for a 256-bit value (256/31 ≈ 8.26 → 9; **approximate,
-confirm against the real source's own size constant in Phase 0**, don't just
-trust this arithmetic). Record the doubling ratio exactly as
-`PLAN-check-scalar-full.md` §4 did — do not extrapolate past two points, and
-budget for the same class of scaling surprise this project has hit repeatedly
-(`cfgver-executor`'s `heap_size × (α·S + β·S²)` law).
+### Phase 3 — measure small before committing to real size — **BLOCKED, 2026-08-11**
 
-**Trap already paid for once this session, don't re-pay it:** when hand-patching
-a trip-count literal across multiple registers/instructions for a small-N
-probe, **grep for every occurrence of the magic constant**, not just the ones
-in the obvious loop-counter spot. `check_scalar_full`'s own small-N probes
-silently mis-scaled TWICE from missed literals that had been dataflow-relocated
-into a different register after the value was reused for something else
-(P256_N's end-pointer offset, then the declared memory footprint) — both
-produced a bare `False` residual that looked structural but was purely a test-rig
-bug. Expect the analogous risk here: `mlen` likely feeds more than one
-instruction (loop bound, some address computation, possibly a limb-count-derived
-mask), and small-N memory declarations must be sized to the SAME `mlen`, not
-copy-pasted from a bigger version.
+**The `mlen`-doubling plan does not apply as written, because `br_divrem`'s
+own loop trip count (fixed at 31 by the division algorithm) does not scale
+with `mlen` at all** — unlike every prior small-N probe in this project,
+shrinking `mlen` does not shrink the dominant cost. Since CORRECTNESS of the
+quotient is irrelevant to a noninterference proof (only branch-freedom and
+public loop bounds matter), the loop count was patched to match `mlen` AFTER
+compilation — a pure numeral edit to the already-compiled `li <reg>, 32`
+trip-count immediates (2 sites: the dead small-modulus path's own copy, and
+the live main path), verified NOT to touch the branch structure the
+optimiser already committed to (re-scanned the patched region: no stray
+branches). Kept as a genuine loop, not compile-time-unrolled, to preserve
+loop control-flow shape per `cfgver-new-example`'s unrolling warning.
 
-GATE 3: real `Qed` at mlen=2 and mlen=4, cost curve recorded, no residual left
-open.
+**Result: `ZZMuladdFullN2.v`'s `vm_compute` TIMED OUT at 300s**, never
+reaching `solve_vc`. Isolated the suspect with a second throwaway probe,
+`Example/ZZDivremProbe2.v` — JUST `br_divrem`'s loop, patched to 2 trips (44
+instructions), all register/memory values left maximally unconstrained
+(`PVExist`), no attempt at a real noninterference story. **`vm_compute` +
+`solve_vc` together took 67.5s** before failing on an unrelated
+`solve_symbase_fetch` residual (an incomplete-contract issue in this
+minimal probe, not the point of the measurement). 67.5s for 2 trips of a
+44-instruction loop, IN ISOLATION, with everything else in the real function
+stripped away, is already most of a 300s budget — strong evidence the
+division loop is the genuine, dominant cost driver (not a bug in the
+surrounding contract), consistent with `cfgver-executor`'s documented
+`heap_size × (α·S + β·S²)` law: this loop's body is unusually dense (28
+instructions/iteration of chained XOR/AND/OR/SLL/SRL, building large
+symbolic terms since nothing is pinned) compared to the flat reproducer that
+law was measured on.
+
+**Not yet done, left for whoever picks this up next:**
+- A real growth curve for `br_divrem` alone (1, 2, 3, 4 trips) — only the
+  N=2 point exists. Do this BEFORE re-attempting the whole function at any
+  size; it is far cheaper to iterate on `ZZDivremProbe2.v` alone.
+- Fixing `ZZDivremProbe2.v`'s own `solve_symbase_fetch` residual (probably
+  just a missing/miscounted memory or register spec in that minimal probe —
+  not investigated since the timing question was answered before this
+  mattered).
+- Deciding whether to pursue the reverted, audited chunk-GC fix
+  (`cfgver-executor`'s "LANDED 2026-08-03" note — wait, check current
+  status before trusting that word; the fix for the LEAKED HEAP CHUNK
+  driving the quadratic term is real and recoverable at commit `b24d0d15`)
+  as a prerequisite, since it is specifically diagnosed as turning this
+  class of cost from quadratic to linear in step count.
+
+GATE 3: NOT REACHED. No `Qed` at any `mlen`, real or synthetic. This is a
+genuine blocking finding for a future session/decision, not a mistake to
+fix in the same sitting.
 
 ### Phase 4 — decide on real size / promote
 
@@ -230,6 +326,15 @@ green, allowlist unchanged.
 - **Do not fold this into `PLAN-check-scalar-full.md`'s phase numbering.**
   Cross-reference, don't merge — different function, different paper table,
   independent of that plan's N=32 TODO.
+- **Do not assume shrinking `mlen` shrinks the dominant cost.** `br_divrem`'s
+  loop trip count is fixed at 31 by the division algorithm, independent of
+  `mlen` — confirmed 2026-08-11 that it (not the `mlen`-sized loops) is the
+  likely dominant cost even at a synthetically-patched 2 trips. A future
+  `mlen`=2-vs-4 comparison alone will NOT reveal this; measure `br_divrem`'s
+  OWN trip-count curve separately (`ZZDivremProbe2.v` is the started point).
+- **Do not re-attempt the whole function at a bigger size before getting
+  `br_divrem`'s own growth curve.** It is far cheaper to iterate on the
+  isolated loop than to re-run the ~280-instruction whole function each time.
 
 ---
 
@@ -237,6 +342,10 @@ green, allowlist unchanged.
 
 - `Example/BearSSLMuladd.v` / `…Result.v` — the already-landed snippet this
   plan extends.
+- `Example/ZZMuladdFullN2.v` / `ZZMuladdFullN4.v` — this session's throwaway
+  whole-function probes (GATE 2, `vos`-clean, `full` mode times out — see
+  Phase 3). `Example/ZZDivremProbe2.v` — the isolated `br_divrem`-loop-only
+  diagnostic that produced the 67.5s/2-trips number.
 - `project-bearssl-breaking-bad` memory — **now superseded by this plan's §1**
   on the "muladd is out" point specifically; the rest of that memory (the
   three targets, the `fun_bool_to_bits`/`SLT*` unlock, `modpow_win_full`'s

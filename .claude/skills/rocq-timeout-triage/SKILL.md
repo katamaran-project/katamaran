@@ -238,3 +238,8 @@ confirming that something does.
 - Confirmed polynomial/just genuinely large → this is a real capacity
   question (bigger timeout, more fuel, or accept the current size as the
   practical ceiling and report back) — not a bug to keep digging into.
+- Writing the finding up as a durable record (not just enough to get
+  unblocked right now), or the symptom involves more than one candidate
+  driver that need separating cleanly → **cfgver-scaling-diagnostics**, the
+  fuller treatment of this section's Step 3 one-factor-at-a-time principle,
+  plus the `diagnostics/` file convention and the known cost-driver catalog.

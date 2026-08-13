@@ -27,6 +27,8 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-endtoend`** — `cfg_instrs_endToEnd` wiring + `ImplPre` (register path)
 > - **`cfgver-endtoend-internals`** — the wiring lemmas' proof bodies (library skill)
 > - **`cfgver-memory`** — public-memory infra + data-memory end-to-end (`_with_mem` variants)
+> - **`cfgver-scaling-diagnostics`** — running/writing up a cost-driver investigation
+>   (`diagnostics/` convention, cost-driver catalog, one-axis-at-a-time ablation discipline)
 >
 > **Skill routing is TWO-TIERED (since 2026-07-28).** Ten pitfall/library skills
 > are set to `name-only` in `.claude/settings.json`'s `skillOverrides`: they are
@@ -51,7 +53,9 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   `secret-data-walls`, `gmap-pitfalls`, and for a step running way longer than
 >   expected **`rocq-timeout-triage`** (the general "figure out why before
 >   waiting longer" entry point), which routes to **`rocq-compile-oom`** for the
->   silently-killed/OOM signature.
+>   silently-killed/OOM signature, and **`cfgver-scaling-diagnostics`** for
+>   running/writing up a scaling-driver investigation as a durable record (the
+>   fuller treatment of `rocq-timeout-triage`'s own one-factor-at-a-time step).
 >
 > Caveat measured the same day: `name-only` *de-weights* competition, it does not
 > remove it — a bare NAME can still win on an exact jargon match (`iApply` →
