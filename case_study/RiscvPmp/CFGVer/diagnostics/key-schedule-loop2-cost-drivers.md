@@ -4,6 +4,13 @@ Status: **Diagnostic record. Originally 2026-08-13; fully re-measured
 2026-08-14 after `bop.mulx` landed (commit `3215b219`).** Not a phased plan —
 a completed causal investigation. Lives in `diagnostics/`, not `plans/`.
 
+**Follow-on finding, same day:** the surviving chunk-count cost is
+**carrying, not searching** — `H × S` (all declared chunks threaded through
+all steps), measured by removing every memory access (penalty unchanged) and
+by moving the accessed cell to the far end of the heap (no effect). See
+"§Is the chunk cost SEARCHING or CARRYING?". Only shrinking the declared set
+can fix it; cheaper lookups cannot.
+
 **One-sentence finding (2026-08-14):** of the two independent axes this
 experiment was built to separate — declared-chunk **usage** (1 vs. N
 genuinely-touched memory cells) and the masking step's self-referential
@@ -209,6 +216,88 @@ July figure was right and this file's was wrong. Two modelling errors in
 
 `ZZTermSim.v` is kept for the record; `ZZTermSim2.v` supersedes it.
 
+## Is the chunk cost SEARCHING or CARRYING? — carrying, `H × S`
+
+Asked 2026-08-14, immediately after the above. Two independent ablations,
+both on the flat-term body so the term axis is out of the picture.
+
+**Stage split first** (free, from the runners' own two `Time` lines).
+Seconds at N=16, flat-term rows:
+
+| variant | `vm_compute` | `solve_vc` |
+|---|---|---|
+| 1 chunk | 15.97 | 4.38 |
+| N declared, 1 used | 33.31 | 5.13 |
+| N used | 41.84 | 9.58 |
+
+Declaring N cells costs **×2.09 in `vm_compute` but only ×1.17 in
+`solve_vc`** (+17.3 s vs. +0.75 s). `solve_vc` is essentially flat in N for
+both 1-chunk and N-declared-1-used (4.4 / 5.1 / 5.0 at N=4/8/16) and grows
+only when the pointer genuinely advances — that growth is a separate,
+smaller mechanism, matching commit `404ac0d1`'s finding that the byte loop's
+driver was the symbolic pointer compare. So the dominant penalty is paid
+building the VC, in a stage that never decides anything about those chunks.
+
+**Probe (a) — position of the accessed cell** (`ZZKslPadLastCommon.v`).
+Same declared set, same order; only `A3` changes, from the first declared
+cell to the last. `SHeap` is a list and `try_consume_chunk_user_precise`
+scans it, so a scan cost must show a best/worst-case gap (this is
+`ZZByteRev*.v`'s bracketing, reused):
+
+| N | accessed first | accessed last | ratio |
+|---|---|---|---|
+| 4 | 2,332,817,765 | 2,333,493,902 | 1.0003 |
+| 8 | 3,783,276,413 | 3,786,715,619 | 1.0009 |
+| 16 | 8,253,199,842 | 8,268,587,100 | 1.0019 |
+
+No gap. Position is irrelevant.
+
+**Probe (b) — zero memory accesses** (`ZZKslNoMemCommon.v`). The `STORE` is
+*replaced* by a no-op `addi a1,a1,0`, so instruction count, branch offset
+and fuel are unchanged — a genuine one-knob change. The declared cells are
+then never consumed and never re-produced: search cost is zero, carrying
+cost untouched. Both arms (1 declared / N declared) live in one file so the
+control shares the body exactly.
+
+| N | surcharge WITH an access (`CP`/`1-used,flat`) | surcharge with ZERO accesses (`NMN`/`NM1`) |
+|---|---|---|
+| 4 | 1.1260 | 1.1281 |
+| 8 | 1.3537 | 1.3608 |
+| 16 | 1.9461 | **1.9681** |
+
+Unchanged — marginally *larger* with no access at all. Removing every
+memory access moves the absolute figures by only 5.3–5.8%, so the whole
+access machinery is a rounding error next to the cost of carrying the
+declarations. The superlinearity is in carrying too: the no-access
+N-declared arm misses a linear fit by **+24.0%** (vs. +23.5% with the
+access), while the no-access 1-declared arm is linear to −0.00%.
+
+**The excess is exactly quadratic.** Subtracting the 1-declared arm from
+the N-declared arm isolates the cost attributable purely to declarations:
+
+| | N=4 | N=8 | N=16 | per-doubling |
+|---|---|---|---|---|
+| no access | 250,158,200 | 952,801,210 | 3,889,739,984 | 3.81, **4.08** |
+| with access | 261,064,980 | 988,437,508 | 4,012,300,356 | 3.79, **4.06** |
+
+Quadrupling per doubling of N is `H × S` with `H ∝ N` and `S = 14N + c` —
+the executor threads all H chunks through all S steps. A held-out `c·N²`
+fit from N=8 alone predicts N=16 to within 2% on both arms. This is the
+`heap_size × (α·S + β·S²)` cost law's *first* term with `heap_size` growing
+in N, not a search cost.
+
+**Consequence for fix design.** Making lookups cheaper cannot address this,
+and that is not a prediction — commit `450d1118` already measured the
+map-backed-`SHeap` version of exactly this idea at **≤7%**, establishing
+that the scan matches syntactically (so a map key is viable) but that the
+scan is not where the time goes. These two probes explain why that result
+was ≤7% rather than contradicting it. Indices, sorting and better key
+matching are dead for this driver. The only lever is shrinking the
+**declared set**, which is what `plans/PLAN-loop-invariant.md`'s
+per-iteration contract does by construction; region chunks likewise. Since
+carrying is `H × S`, the win scales directly with how few cells the
+invariant has to name.
+
 ## What this means
 
 `KeyScheduleLoop.v` sits at `N-used + growing-term`. Post-`bop.mulx` only
@@ -234,7 +323,11 @@ mentions only the O(1) resource one iteration touches, or region chunks.
 The declared-vs-used breakdown above is a useful constraint on that design:
 since ~two-thirds of the penalty is incurred by *declaration* alone, a fix
 that keeps declaring N cells while touching them more cheaply captures at
-most the remaining ~1.40×. The win is in not declaring them.
+most the remaining ~1.40×. The win is in not declaring them — and per the
+search-vs-carry section above, that is now measured rather than inferred:
+the penalty is `H × S` carrying cost, unchanged by removing every memory
+access and unaffected by where the touched cell sits, so only shrinking `H`
+moves it.
 
 Amdahl caveat, per this skill's own checklist: with the term axis at 1.00×,
 the chunk axis is essentially 100% of the N-dependent cost, so a complete
@@ -251,6 +344,11 @@ instruction count a real GF(2^128) step on RV32 would need.
 `ZZKslNUsedFlatCommon.v` + `ZZKslNUF_N{4,8,16}.v` (N-used+flat) ·
 `ZZKslChunkPaddedCommon.v` + `ZZKslCP_N{4,8,16}.v` (N-declared-1-used+flat) ·
 `ZZKslPaddedGrowCommon.v` + `ZZKslPG_N{4,8,16}.v` (N-declared-1-used+growing).
+
+Search-vs-carry probes:
+`ZZKslPadLastCommon.v` + `ZZKslPL_N{4,8,16}.v` (accessed cell = LAST declared) ·
+`ZZKslNoMemCommon.v` + `ZZKslNM1_N{4,8,16}.v` / `ZZKslNMN_N{4,8,16}.v`
+(no memory access at all; 1-declared and N-declared arms sharing one body).
 
 ```
 coqc -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran <Common>.v

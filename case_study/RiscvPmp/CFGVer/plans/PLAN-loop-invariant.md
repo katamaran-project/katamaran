@@ -6,6 +6,22 @@ written at the request of the plan's owner after `PLAN-check-scalar-full.md`
 §4's follow-up diagnosis pointed at a scaling mechanism neither of that
 plan's two levers (`chunk_gc` widening, region chunks) cleanly fixes.
 
+> **Evidence update (2026-08-14) — the premise is now measured, and the
+> competing hypothesis is dead.** §0's `heap size × steps` mechanism was
+> confirmed directly on `key_schedule_loop2`, and specifically distinguished
+> from the "heap lookup is slow" reading it is easy to confuse with
+> (`diagnostics/key-schedule-loop2-cost-drivers.md`, "Is the chunk cost
+> SEARCHING or CARRYING?"). Removing **every** memory access from the loop
+> body leaves the declared-chunk penalty unchanged (1.97× vs. 1.95× at
+> N=16), moving the accessed cell to the opposite end of the heap changes
+> nothing (1.002×), and the excess attributable to declarations quadruples
+> per doubling of N (3.81→4.08), i.e. exactly `H × S`. So the payoff claim
+> below — asymptotic, `O(L·N²)` → `O(L·N)` — rests on measurement rather
+> than inference, and it comes specifically from **naming fewer resources**,
+> not from touching them more efficiently. Corollary: a map-backed `SHeap`
+> or any indexing scheme cannot substitute for this plan; that was measured
+> at ≤7% in commit `450d1118`, and these probes explain why.
+
 Audience: a later session executing one phase at a time, same convention as
 `PLAN-chunk-gc.md`. Each phase ends in an explicit GATE — reach it, report,
 commit, stop. Do not run two phases in one sitting; this spans the soundness
