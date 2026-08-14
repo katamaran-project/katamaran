@@ -636,6 +636,24 @@ re-discover that the building blocks (`gen_pre`, `gen_mem_pre_bytes`,
 concrete contract is feasible without touching `GenContract.v` at all, should
 this ever become worth revisiting.
 
+> **DONE 2026-08-14, and it is far more than "the `solve_symbase_fetch` work"**
+> — see `diagnostics/check-scalar-combined-cost-drivers.md` §4/§5. The
+> hand-assembly this paragraph predicted works exactly as described
+> (`ZZCombConcCommon.v`, `ZZLoopsConcCommon.v`; specs obtained by pushing the
+> existing `_rel` lists through `concretize_reg`/`concretize_mem`, so the base
+> is the only thing that changes). Measured on the synthetic two-loop rig, a
+> concrete base is **18–59× less allocation and 14–41× less time**, with
+> `solve_vc` collapsing 125–358× to a fraction of a second. Crucially the win
+> is NOT confined to discharge: `vm_compute` itself drops 8.6–25×, and the
+> symbolic base accounts for a **2.8–7.2× amplification of the two-loop
+> composition penalty** (superadditivity 5.5–18.6× parametric vs 1.6–2.6×
+> concrete). So the ~1.8× figure quoted above understates this case by an
+> order of magnitude. Peak RSS above the import floor drops 3.5–12.6×, which
+> makes the N the whole-function target needs plausibly reachable — untested,
+> and `cfgver-executor`'s *steeper* concrete exponent (1.63) means it must be
+> measured rather than extrapolated. The parametric base is still the owner's
+> choice; this is a statement about where the cost lives.
+
 ---
 
 ## §6. Region chunks — the idea, and why it is deliberately last

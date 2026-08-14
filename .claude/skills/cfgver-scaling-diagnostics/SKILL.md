@@ -44,7 +44,7 @@ to a fresh one until you compare.
 | `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×) and declared-chunk count is the sole remaining driver (2.72× at N=16). The worked example for this whole skill, and for retraction discipline. |
 | `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
 | `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
-| `check-scalar-combined-cost-drivers.md` | growing one loop with the other pinned costs only ~8–12% over its standalone rate — far below the 2.81×/3.78× seen when both grow together. |
+| `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
 
 Note what the two `check-scalar-loop*` records have in common: a mechanism
 that is genuinely dominant in one example was measured near-zero in
@@ -255,6 +255,29 @@ finding.
   or quadratic.
 - Comparing two variants without first listing every way they differ (the
   core discipline above).
+- **Comparing across TACTIC PROTOCOLS.** `Proof. … vm_compute; solve_vc;
+  solve_symbase_fetch. Qed.` and `Proof. … Time vm_compute. Time solve_vc.
+  Admitted.` do not measure the same thing — a real `Qed` re-runs the whole
+  executor through the VM cast (≈ a second `vm_compute`, see
+  `cfgver-executor`), and `solve_symbase_fetch` is extra work. On 2026-08-14
+  a sum-of-parts denominator taken from pre-existing `Qed` probes against an
+  `Admitted` numerator invalidated two published tables and *understated* a
+  superadditivity by ~1.4×. Copy an existing probe's `Proof.` line verbatim,
+  and state the protocol in the write-up.
+- **Trusting `top_heap_words` at the low end.** It is the high-water mark of
+  heap SIZE, quantized to OCaml's ~15% growth steps, and the multi-GB import
+  closure means anything whose live set fits in the existing slack reads as
+  byte-identical to the floor. That produced a confident "this variant is
+  free at every N" for a variant whose allocation demonstrably grew 3×. Use
+  `allocated_words` for cost; reserve peak footprint metrics for feasibility.
+- **Trusting OS peak RSS for a ratio.** It saturates near the machine
+  ceiling, compressing exactly the largest effects — it reported 3.5× where
+  `allocated_words` reported 18.6× on the same pair.
+- **Assuming an added EXIT prunes execution.** The exit/execute choice is
+  `angelic_binary`, so an extra exit only grants permission to stop; the
+  execute branch is still constructed and `vm_compute` still pays for it. An
+  "exit early to skip the second half" probe measured 92–96% of the
+  unmodified cost. To shorten a loop, minimise its trip count instead.
 
 ## Writing the diagnostic file
 
