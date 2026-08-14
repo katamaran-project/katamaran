@@ -41,7 +41,7 @@ to a fresh one until you compare.
 
 | file (all in `diagnostics/`) | what it concluded |
 |---|---|
-| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. The worked example for this whole skill. |
+| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×) and declared-chunk count is the sole remaining driver (2.72× at N=16). The worked example for this whole skill, and for retraction discipline. |
 | `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
 | `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
 | `check-scalar-combined-cost-drivers.md` | growing one loop with the other pinned costs only ~8–12% over its standalone rate — far below the 2.81×/3.78× seen when both grow together. |
@@ -207,7 +207,15 @@ for a correct diagnosis that led to a fix which barely moved anything:
   correct, genuinely killed the `3^N` term-size wall it targeted. It bought
   **~12% at N=8**, and N=16 still did not finish, because the dominant cost
   at those N was a *separate* `O(steps²)` driver (a leaked duplicable heap
-  chunk). Real proof engineering was spent, then reverted.
+  chunk). Real proof engineering was spent, then reverted. **Sequel worth
+  knowing (2026-08-14):** once that quadratic was fixed, the same wall *was*
+  worth removing — a different rule (`bop.mulx`) took the term axis from
+  3.7–4.7× to 0.98×, i.e. no measurable cost. So the lesson is about
+  ORDERING, not about the diagnosis or the fix being wrong: fix the dominant
+  driver first, then re-measure before funding the secondary one. Note also
+  that the axis only read as fully closed once the *control* variants were
+  re-measured on the same footing — a fix compared against its own stale
+  pre-fix row could show "now linear" while the truth was "now free."
 - **The world-GC** — reported as "2.24× → 10.67×, and the speedup GROWS
   with N". That growth was an artifact of dividing by a steeply superlinear
   baseline; measured on equal footing its real edge was a **constant**

@@ -19,6 +19,27 @@ right, or if a second GHASH-shaped idiom appears. §1's recovery instructions
 were verified against HEAD and should still apply; re-check the `git apply -R`
 before trusting them.
 
+> **§0 and Phase A are SUPERSEDED (2026-08-14).** This plan's premise is that
+> the `select_last_k` fold's own contribution — collapsing the register term
+> from `3^N` to `O(N)` — "has never been measured in that regime" and that
+> this plan should re-measure it. That question is now answered, by a
+> different rule: **`bop.mulx` (commit `3215b219`) removed the term wall**,
+> with a closed `Qed` soundness chain, and the axis was re-measured the same
+> day against fresh flat controls at **0.98×, i.e. no measurable cost at any
+> N tested** (`diagnostics/key-schedule-loop2-cost-drivers.md`). Term size on
+> the real shape is now exactly `2n+1`. So **do not restore `select_last_k`**
+> — §1's recovery instructions and §2/C2's `select_last_k_bump` proof
+> obligation are both moot for this purpose.
+>
+> §3's two-driver analysis survives intact and is now *confirmed*: driver 1
+> (term explosion) is closed; **driver 2 (`cells × steps`) is the sole
+> remaining driver**, measured at 2.72× for N-used-vs-1-used at N=16 and
+> still climbing, with ~two-thirds of it coming from merely *declaring* the
+> cells. Note §0's "3^N" figure is right — an intervening diagnostic revision
+> that reported `2^N` and cast doubt on it was itself the error.
+> Un-parking this plan now means funding driver 2 only
+> (`PLAN-loop-invariant.md`, or region chunks).
+
 Successor campaign to `PLAN-chunk-gc.md` (LANDED same day). Recovers and
 completes the work removed in `027d7c27`.
 
