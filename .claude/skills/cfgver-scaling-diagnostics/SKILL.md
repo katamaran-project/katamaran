@@ -32,6 +32,25 @@ to `plans/`. See `case_study/RiscvPmp/CFGVer/diagnostics/
 key-schedule-loop2-cost-drivers.md` for a complete worked example of
 everything below.
 
+## Read these before measuring anything
+
+Half of a new investigation is often already on disk. Check here first —
+re-deriving a conclusion someone already established is the most expensive
+possible way to start, and a *recurrence* of a known driver looks identical
+to a fresh one until you compare.
+
+| file (all in `diagnostics/`) | what it concluded |
+|---|---|
+| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. The worked example for this whole skill. |
+| `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
+| `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
+| `check-scalar-combined-cost-drivers.md` | growing one loop with the other pinned costs only ~8–12% over its standalone rate — far below the 2.81×/3.78× seen when both grow together. |
+
+Note what the two `check-scalar-loop*` records have in common: a mechanism
+that is genuinely dominant in one example was measured near-zero in
+another with the *same shape*. Cost-driver names transfer between examples;
+their magnitudes do not.
+
 ## The core discipline: one axis at a time
 
 The single most common way a cost diagnostic goes wrong is comparing two
@@ -146,6 +165,71 @@ question; it answers a different question from `allocated_words` (peak
 simultaneous resident heap vs. total work ever done) and the two can
 disagree in informative ways.
 
+### Reading goal state during a diagnostic
+
+Half of diagnosing a cost driver is dumping intermediate state, and Rocq's
+goal-selection defaults quietly lie to you when there is more than one goal.
+Each of these has produced a confidently WRONG reported result in this
+project:
+
+- **A period-terminated tactic acts on the FIRST goal only.** `tac1. tac2.`
+  is not `tac1; tac2`. A `Show`/`idtac` dump written with periods inspects
+  goal #1 and silently ignores the other fourteen — which on 2026-08-14 was
+  read as "these are the goals my tactic failed on" when they were simply
+  the untouched raw output, sending the session down a dead end. Same trap
+  recorded earlier for `solve_vc. solve_symbase_fetch.`, which made an
+  example look like it had a permanent discharge gap it did not have.
+  Use `all:` when you mean all goals.
+- **`all: idtac "X"` prints exactly ONCE regardless of goal count, including
+  at zero goals.** It tells you the tactic ran, nothing more; as a goal
+  counter it is pure noise and has manufactured a fictitious "1 residual
+  goal at every N". For a count use
+  `all: (let n := numgoals in idtac "count:" n)` — and note a BARE
+  `numgoals` sentence reports 1 whatever the truth, because a plain tactic
+  focuses one goal. For per-goal dumps,
+  `all: (match goal with |- ?G => idtac G end)` does iterate correctly.
+- **`Time (all: tac)` is a syntax error** — `all:` is sentence-level and an
+  `Ltac` body cannot contain one. Time `(t1; t2)` jointly, or take a stage
+  cost as a residual against the wall clock.
+
+Corollary worth internalising: if a dump shows N goals and your tactic
+"fails", confirm which goals it was actually applied to before theorising
+about why. Cheapest check is `all: try tac.` followed by a per-goal dump of
+whatever survives.
+
+## Before proposing a fix
+
+Finding the dominant mechanism does NOT establish that fixing it is worth
+building. Close that loop explicitly, because this project has twice paid
+for a correct diagnosis that led to a fix which barely moved anything:
+
+- **`select_last_k` (July 2026)** — an accumulator fold, algebraically
+  correct, genuinely killed the `3^N` term-size wall it targeted. It bought
+  **~12% at N=8**, and N=16 still did not finish, because the dominant cost
+  at those N was a *separate* `O(steps²)` driver (a leaked duplicable heap
+  chunk). Real proof engineering was spent, then reverted.
+- **The world-GC** — reported as "2.24× → 10.67×, and the speedup GROWS
+  with N". That growth was an artifact of dividing by a steeply superlinear
+  baseline; measured on equal footing its real edge was a **constant**
+  ~1.85× at N=8, shrinking as N fell.
+
+So before writing a plan, state three things:
+
+1. **Predicted end-to-end speedup**, from the fitted model, at the N you
+   actually care about — not the N that was convenient to measure.
+2. **Constant factor or exponent change?** A constant factor moves the wall;
+   only an exponent change removes it. Say which, in those words. If a
+   fix's own arm is only measured against a superlinear baseline, a "growing
+   speedup" says nothing — compare arms on equal footing.
+3. **Is this mechanism still dominant after the fix?** If it accounts for
+   40% of cost, the ceiling is a 1.7× win and the other 60% becomes the new
+   wall. Amdahl applies and is routinely forgotten.
+
+If the honest answer is "a constant factor on a mechanism that is not
+dominant", that is a legitimate result and belongs in the diagnostic — it
+saves the next person the same detour. It is not a reason to inflate the
+finding.
+
 ## Common mistakes checklist
 
 - Trusting wall-clock, or OS RSS, across separate `coqc` processes.
@@ -174,8 +258,10 @@ that's worked well:
 2. **The experiment** — the axes, named explicitly, and a table mapping
    each variant's short name to exactly what it changed and which file
    implements it.
-3. **Results** — the raw measurements, plus doubling ratios and any
-   held-out-point fit checks.
+3. **Results** — the raw measurements, plus doubling ratios and the
+   held-out-point fit check. Not optional: fit on the points you have minus
+   one, then report the prediction error at the point you withheld. A fit
+   quoted without one is a curve drawn through its own data.
 4. **Reading the axes apart** — same-N, one-knob-changed ratios for each
    axis, isolated. This is the section that actually answers "which driver,
    how much," not the raw table.
@@ -189,3 +275,29 @@ that's worked well:
 Keep it information-dense rather than narrating the investigation's
 history — the reader wants the causal picture and how to reproduce it, not
 a blow-by-blow of what was tried in what order.
+
+### When a later measurement overturns an earlier one
+
+It will. Several headline figures in this project's record have been
+refuted by a subsequent, better-controlled run — "the curve bends /
+exponent 1.05" (an artifact of stopping the series at N=8), and "heap size
+is measured NOT to be a driver (0.95×)", which was wrong and had already
+been used once to dismiss the leak that turned out to BE the driver.
+
+**Mark the old claim retracted in place; never silently delete or edit it.**
+A reader who remembers the old number needs to find out it was wrong, and a
+figure that merely vanishes looks like it is still true somewhere else. In
+practice:
+
+- Leave the original text, prefixed `RETRACTED <date>:`, with one line on
+  *what specifically* was wrong — the N range, the confound, the baseline.
+  Distinguish "the numbers were real but the conclusion doesn't follow"
+  from "the measurement itself was bad"; they have different lessons.
+- If a figure is quotable-but-wrong, say **"never requote"** explicitly.
+  This is what stops it being cited from the old section by a future
+  session that skimmed.
+- Retract the *conclusion*, keep the *measurements* — later work often
+  reuses the raw numbers on a corrected footing.
+- Correct the memory note and any `plans/` doc that cites the figure in the
+  same commit, per this repo's "docs travel with code" rule. A retraction
+  that lives in only one of three places is how the bad figure survives.
