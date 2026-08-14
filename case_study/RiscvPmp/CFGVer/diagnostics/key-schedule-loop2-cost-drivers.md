@@ -4,12 +4,16 @@ Status: **Diagnostic record. Originally 2026-08-13; fully re-measured
 2026-08-14 after `bop.mulx` landed (commit `3215b219`).** Not a phased plan —
 a completed causal investigation. Lives in `diagnostics/`, not `plans/`.
 
-**Follow-on finding, same day:** the surviving chunk-count cost is
-**carrying, not searching** — `H × S` (all declared chunks threaded through
-all steps), measured by removing every memory access (penalty unchanged) and
-by moving the accessed cell to the far end of the heap (no effect). See
-"§Is the chunk cost SEARCHING or CARRYING?". Only shrinking the declared set
-can fix it; cheaper lookups cannot.
+**Follow-on finding, same day:** the surviving chunk-count cost is a heap
+**SIZE** cost, not a lookup cost — `H × S`, paid by `subst_list` transporting
+the whole heap across every world extension (mechanism already identified in
+`plans/PLAN-byte-memory.md` §10, 2026-08-05). Established here by the
+access-count series (0/1/2 data accesses per trip move the excess by 3.2%)
+and by the fact that the declared cells' predicate index (`ptstomem 4`) is
+never matched by ANY consume in the zero-access arm, yet they still carry 97%
+of the excess. See "§Is the chunk cost SEARCHING or CARRYING?" — including a
+retraction of the first, invalid argument for the same conclusion. Only
+shrinking the declared set can fix it; cheaper lookups cannot.
 
 **One-sentence finding (2026-08-14):** of the two independent axes this
 experiment was built to separate — declared-chunk **usage** (1 vs. N
@@ -252,12 +256,20 @@ scans it, so a scan cost must show a best/worst-case gap (this is
 
 No gap. Position is irrelevant.
 
-**Probe (b) — zero memory accesses** (`ZZKslNoMemCommon.v`). The `STORE` is
+**Probe (b) — zero DATA accesses** (`ZZKslNoMemCommon.v`). The `STORE` is
 *replaced* by a no-op `addi a1,a1,0`, so instruction count, branch offset
-and fuel are unchanged — a genuine one-knob change. The declared cells are
-then never consumed and never re-produced: search cost is zero, carrying
-cost untouched. Both arms (1 declared / N declared) live in one file so the
-control shares the body exactly.
+and fuel are unchanged — a genuine one-knob change. Both arms (1 declared /
+N declared) live in one file so the control shares the body exactly.
+
+> **Correction — this probe does NOT by itself rule out search cost, as
+> first claimed.** Removing the `STORE` removes only the DATA access. Every
+> one of the S steps still FETCHES an instruction, and the symbolic heap
+> holds one `ptstoinstr` chunk per instruction (`cfgver-executor`), so each
+> step still performs consumes that walk the heap — now carrying N extra
+> chunks. Search cost alone therefore predicts `H × S` too, and the original
+> "carrying, not searching" conclusion did not follow from this probe. What
+> does establish it is the predicate argument plus the access-count series,
+> both below. The measurements were fine; the inference was not.
 
 | N | surcharge WITH an access (`CP`/`1-used,flat`) | surcharge with ZERO accesses (`NMN`/`NM1`) |
 |---|---|---|
@@ -286,17 +298,70 @@ fit from N=8 alone predicts N=16 to within 2% on both arms. This is the
 `heap_size × (α·S + β·S²)` cost law's *first* term with `heap_size` growing
 in N, not a search cost.
 
-**Consequence for fix design.** Making lookups cheaper cannot address this,
-and that is not a prediction — commit `450d1118` already measured the
-map-backed-`SHeap` version of exactly this idea at **≤7%**, establishing
-that the scan matches syntactically (so a map key is viable) but that the
-scan is not where the time goes. These two probes explain why that result
-was ≤7% rather than contradicting it. Indices, sorting and better key
-matching are dead for this driver. The only lever is shrinking the
-**declared set**, which is what `plans/PLAN-loop-invariant.md`'s
-per-iteration contract does by construction; region chunks likewise. Since
-carrying is `H × S`, the win scales directly with how few cells the
-invariant has to name.
+**Probe (c) — the access-count series, and the predicate argument.** With
+probe (b)'s inference retracted, two things do settle it.
+
+*The series.* Vary data accesses per trip 0 → 1 → 2 at fixed H and fixed S,
+each arm swapping exactly one no-op ALU instruction for one `STORE`
+(`ZZKslNoMemCommon.v` / `ZZKslChunkPaddedCommon.v` /
+`ZZKslTwoAccCommon.v`). The declared-chunk excess (N-declared minus
+1-declared) barely moves:
+
+| accesses/trip | N=4 | N=8 | N=16 |
+|---|---|---|---|
+| 0 | 250,158,200 | 952,801,210 | 3,889,739,984 |
+| 1 | 261,064,980 | 988,437,508 | 4,012,300,356 |
+| 2 | 261,535,848 | 990,842,642 | 4,023,371,305 |
+
+Adding the first data lookup per trip adds **3.2%** to the excess at N=16
+(122.6 M of 3,890 M); the second adds 0.3%. The surcharge ratio itself is
+flat across the series (1.968 / 1.946 / 1.946 at N=16). So data lookups are
+not what the declared cells cost.
+
+(The 0→1 and 1→2 increments differ ~11×, which is expected rather than
+noise: `produce_chunk` conses, so the first `STORE` leaves its cell at the
+FRONT of the heap and the second trip's second `STORE` finds it
+immediately. Read the marginal lookup cost off 0→1, not 1→2.)
+
+*The predicate argument — this is the decisive one.* `gen_mem_pre_rel`
+emits `chunk_user (ptstomem 4)` chunks (`GenContract.v`); the fetch consumes
+`ptstoinstr` and register operations use `chunk_ptsreg` — different
+predicate indices, and `try_consume_chunk_user_precise` rejects on the
+predicate before touching arguments (`Chunks.v:316`). So in the zero-access
+arm **no consume in the entire run ever candidate-matches the N declared
+cells**: they are never unified against, never generate a formula, never
+reach the solver. They still account for 97% of the excess. Lookup work
+cannot be what they cost.
+
+**Mechanism — already identified 2026-08-05, and this should have been read
+first.** Commit `450d1118` / `plans/PLAN-byte-memory.md` §10 names the
+carrier: `SHeap` is indexed by the WORLD and has `Subst` via `subst_list`
+(`Chunks.v:237,241`), so **every world extension transports the whole heap,
+re-substituting every chunk's terms**, and `produce_chunk` additionally
+`peval_chunks`. That is proportional to heap SIZE and independent of
+indexing — world extensions happen per step, giving `H × S` exactly. Its
+verdict was already the right one: *"(A) is a SIZE problem, not a LOOKUP
+problem: cut the number of resident chunks, do not index them."* The probes
+here re-derive that conclusion for `key_schedule_loop2` and add the
+predicate argument, but they did not discover it. (This is precisely the
+failure mode this skill's "Read these before measuring anything" section
+exists to prevent.)
+
+**On the ≤7% figure — scope it correctly.** That number bounds LOOKUP cost:
+it was obtained by bracketing best-case against worst-case *position of the
+matching chunk* (`ZZByteRev*.v`). It is not, and was never claimed to be, a
+bound on the size cost measured here — the original commit says so
+explicitly. Do not cite it as "indexing was tried and the heap cost is
+irreducible"; cite it as "making lookup O(1) is worth ≤7%, because lookup
+is not the cost." Probe (a) above independently agrees, at 1.002×.
+
+**Consequence for fix design.** Unchanged in direction, now with a named
+carrier: indices, sorting and better key matching do not touch this driver,
+because the cost is paid transporting the heap across world extensions, not
+finding things in it. The only lever is shrinking the **declared set** —
+`plans/PLAN-loop-invariant.md`'s per-iteration contract by construction, or
+region chunks. Since the cost is `H × S`, the win scales directly with how
+few cells the invariant has to name.
 
 ## What this means
 
@@ -345,10 +410,19 @@ instruction count a real GF(2^128) step on RV32 would need.
 `ZZKslChunkPaddedCommon.v` + `ZZKslCP_N{4,8,16}.v` (N-declared-1-used+flat) ·
 `ZZKslPaddedGrowCommon.v` + `ZZKslPG_N{4,8,16}.v` (N-declared-1-used+growing).
 
-Search-vs-carry probes:
+Search-vs-size probes (each with 1-declared and N-declared arms in one body,
+so the surcharge is read within a single instruction sequence):
 `ZZKslPadLastCommon.v` + `ZZKslPL_N{4,8,16}.v` (accessed cell = LAST declared) ·
 `ZZKslNoMemCommon.v` + `ZZKslNM1_N{4,8,16}.v` / `ZZKslNMN_N{4,8,16}.v`
-(no memory access at all; 1-declared and N-declared arms sharing one body).
+(0 data accesses per trip) ·
+`ZZKslTwoAccCommon.v` + `ZZKslTA1_N{4,8,16}.v` / `ZZKslTAN_N{4,8,16}.v`
+(2 data accesses per trip; the 1-access arm is `ZZKslChunkPadded`/`CSNF`).
+
+**Gate on `Error` as well as on `Finished transaction`.** A first run of the
+2-access arm was launched with a `cd` that did not reach the backgrounded
+subshell; every `coqc` failed with "Can't find file" and each reported
+`allocated_words: 1447863` — i.e. a failed variant reads as *nearly free*,
+exactly the trap in this skill's checklist.
 
 ```
 coqc -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran <Common>.v

@@ -6,21 +6,29 @@ written at the request of the plan's owner after `PLAN-check-scalar-full.md`
 §4's follow-up diagnosis pointed at a scaling mechanism neither of that
 plan's two levers (`chunk_gc` widening, region chunks) cleanly fixes.
 
-> **Evidence update (2026-08-14) — the premise is now measured, and the
-> competing hypothesis is dead.** §0's `heap size × steps` mechanism was
-> confirmed directly on `key_schedule_loop2`, and specifically distinguished
-> from the "heap lookup is slow" reading it is easy to confuse with
-> (`diagnostics/key-schedule-loop2-cost-drivers.md`, "Is the chunk cost
-> SEARCHING or CARRYING?"). Removing **every** memory access from the loop
-> body leaves the declared-chunk penalty unchanged (1.97× vs. 1.95× at
-> N=16), moving the accessed cell to the opposite end of the heap changes
-> nothing (1.002×), and the excess attributable to declarations quadruples
-> per doubling of N (3.81→4.08), i.e. exactly `H × S`. So the payoff claim
-> below — asymptotic, `O(L·N²)` → `O(L·N)` — rests on measurement rather
-> than inference, and it comes specifically from **naming fewer resources**,
-> not from touching them more efficiently. Corollary: a map-backed `SHeap`
-> or any indexing scheme cannot substitute for this plan; that was measured
-> at ≤7% in commit `450d1118`, and these probes explain why.
+> **Evidence update (2026-08-14) — the premise is now measured on
+> `key_schedule_loop2` too.** §0's `heap size × steps` mechanism was
+> confirmed there, and separated from the "heap lookup is slow" reading it
+> is easy to confuse with (`diagnostics/key-schedule-loop2-cost-drivers.md`,
+> "Is the chunk cost SEARCHING or CARRYING?"). Varying data accesses per
+> trip 0→1→2 at fixed heap size and fixed step count moves the
+> declared-chunk excess by only 3.2%; moving the accessed cell to the
+> opposite end of the heap changes nothing (1.002×); and the declared cells'
+> predicate index (`ptstomem 4`) is matched by NO consume at all in the
+> zero-access arm — never unified, never reaching the solver — yet they still
+> carry 97% of the excess. The excess quadruples per doubling of N
+> (3.81→4.08), i.e. exactly `H × S`. So the payoff claim below — asymptotic,
+> `O(L·N²)` → `O(L·N)` — rests on measurement, and it comes specifically from
+> **naming fewer resources**, not from touching them more efficiently.
+>
+> The carrier itself was already identified in `PLAN-byte-memory.md` §10
+> (2026-08-05): `SHeap` is world-indexed with `Subst` via `subst_list`, so
+> every world extension re-substitutes every chunk. Corollary for this plan:
+> a map-backed `SHeap` or any indexing scheme cannot substitute for it —
+> *not* because indexing was measured and found irrelevant to heap size, but
+> because indexing addresses lookup, and lookup is not the cost. Commit
+> `450d1118`'s ≤7% figure bounds LOOKUP only (it brackets the position of the
+> matching chunk); do not cite it as a bound on the size cost.
 
 Audience: a later session executing one phase at a time, same convention as
 `PLAN-chunk-gc.md`. Each phase ends in an explicit GATE — reach it, report,
