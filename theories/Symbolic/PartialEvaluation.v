@@ -745,6 +745,7 @@ Module Type PartialEvaluationOn
         (fun (*bvtake*) _ _ _ _ => peval_bvdrop_default _ t e)
         (fun (*expand*) _ _ _ => peval_bvdrop_default _ t e)
         (fun (*coalesce*) _ _ _ _ => peval_bvdrop_default _ t e)
+        (fun (*mulx*) _ _ _ _ => peval_bvdrop_default _ t e)
         t e.
 
     Definition peval_bvdrop m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -835,6 +836,7 @@ Module Type PartialEvaluationOn
         (fun (*bvtake*) k l t1 e1 => peval_bvtake_bvtake peval_bvtake_eq t1 e1)
         (fun (*expand*) _ _ _ => peval_bvtake_default _ t e)
         (fun (*coalesce*) _ _ _ _ => peval_bvtake_default _ t e)
+        (fun (*mulx*) _ _ _ _ => peval_bvtake_default _ t e)
         t e.
 
     Definition peval_bvtake m {n} (t : Term Σ (ty.bvec (m + n))) :
@@ -974,6 +976,103 @@ Module Type PartialEvaluationOn
       | None   => peval_binop' bop.bvor t1 t2
       end.
 
+    (* ---- mulx recognition ---------------------------------------------
+       H's GF(2) "multiply by x" step (GHASH-style key schedule, see
+       Example/KeyScheduleLoop.v): `H := (H >> 1) ^ (H&1 ? R : 0)`, which the
+       real compiled body leaves (after clang's bit-trick for the mask) as
+
+         bvxor (shiftr H one) (bvand (negate (bvand H one)) R)
+
+       -- `uop.expand`'s own recognizer (bvmask_indicator, above) explicitly
+       stops at widened COMPARISON bits and flags this raw arithmetic
+       `-(Z&1)` shape as its own not-yet-covered case, so this is matched
+       directly rather than through bvmask_try_expand.  `H` occurs TWICE
+       (once in the shift, once inside the mask), so an accumulator built
+       from this doubles every trip (measured genuinely O(2^n),
+       Example/ZZTermSim.v, diagnostics/key-schedule-loop2-cost-drivers.md)
+       -- same mechanism bop.coalesce already fixes for check_scalar's `c`,
+       which this cannot reach: mulx's outer op is XOR over a SHIFT and an
+       AND, not coalesce's OR over an AND and a plain operand. *)
+
+    (* Recognize `shiftr h s` where s's own value is literally 1
+       (width-independent, exactly like bvmask_indicator's zero test).
+       Hands back h. *)
+    Equations bvmulx_shiftr1 {n} (t : Term Σ (ty.bvec n)) : option (Term Σ (ty.bvec n)) :=
+    | term_binop bop.shiftr h (term_val _ s) => if N.eqb (bv.bin s) 1 then Some h else None ;
+    | _ => None.
+
+    (* Recognize `negate (bvand h (val v))`, v's value literally 1 -- H's
+       own bit-0 test in the raw, un-collapsed arithmetic form.  Hands back
+       h.
+
+       SECOND clause: the REAL compiled shape (Example/ZZMulxDump.v, dumped
+       2026-08-13, from key_schedule_loop2's actual masking prefix) is NOT
+       this simple 2-node form -- clang's sign-extraction bit-trick is
+
+         ones + shiftr(land(ones + bvand(h,1), bvxor(bvand(h,1), ones)), shamt)
+
+       (shamt's value = n-1), six nodes with `h` referenced twice already
+       INSIDE the mask alone. bv.mulx_realmask_sound (Bitvector.v) proves
+       this collapses to the SAME `if bit0(h)=0 then zero else ones n`
+       predicate the simple clause's identity (negate_land_bit1_mask) does
+       -- so both clauses hand back the same `h`, and bvmulx_mask_arg_inv
+       below closes both against their own bv identity. *)
+    Equations bvmulx_mask_arg {n} (t : Term Σ (ty.bvec n)) : option (Term Σ (ty.bvec n)) :=
+    | term_unop uop.negate (term_binop bop.bvand h (term_val _ v)) =>
+        if N.eqb (bv.bin v) 1 then Some h else None ;
+    | term_binop bop.bvadd (term_val _ o1)
+        (term_binop bop.shiftr
+           (term_binop bop.bvand
+              (term_binop bop.bvadd (term_val _ o2) (term_binop bop.bvand h (term_val _ v1)))
+              (term_binop bop.bvxor (term_binop bop.bvand h' (term_val _ v2)) (term_val _ o3)))
+           (term_val _ sh)) =>
+        if bv.eqb o1 (bv.ones n) && bv.eqb o2 (bv.ones n) && bv.eqb o3 (bv.ones n)
+           && N.eqb (bv.bin v1) 1 && N.eqb (bv.bin v2) 1 && Term_eqb h h'
+           && (match n with 0%nat => false | S n0 => N.eqb (bv.bin sh) (N.of_nat n0) end)
+        then Some h else None ;
+    | _ => None.
+
+    (* `bvand mask r` or `bvand r mask` where mask tests the SAME h --
+       same same-operand discipline as bvcoalesce_arg. *)
+    Definition bvmulx_arg {n} (h t : Term Σ (ty.bvec n)) : option (Term Σ (ty.bvec n)) :=
+      match bvand_split t with
+      | Some (u1, u2) =>
+          match bvmulx_mask_arg u1 with
+          | Some h' => if Term_eqb h h' then Some u2 else None
+          | None =>
+              match bvmulx_mask_arg u2 with
+              | Some h' => if Term_eqb h h' then Some u1 else None
+              | None => None
+              end
+          end
+      | None => None
+      end.
+
+    (* `bvxor t1 t2` is a mulx step?  Try both outer orders too. *)
+    Definition bvmulx_try {n} (t1 t2 : Term Σ (ty.bvec n)) : option (Term Σ (ty.bvec n)) :=
+      match bvmulx_shiftr1 t1 with
+      | Some h =>
+          match bvmulx_arg h t2 with
+          | Some r => Some (term_binop bop.mulx h r)
+          | None   => None
+          end
+      | None =>
+          match bvmulx_shiftr1 t2 with
+          | Some h =>
+              match bvmulx_arg h t1 with
+              | Some r => Some (term_binop bop.mulx h r)
+              | None   => None
+              end
+          | None => None
+          end
+      end.
+
+    Definition peval_bvxor_mulx {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match bvmulx_try t1 t2 with
+      | Some t => t
+      | None   => peval_binop' bop.bvxor t1 t2
+      end.
+
     Definition peval_bvor_mask {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
       | Some b1 , Some b2 => term_unop uop.expand (peval_or b1 b2)
@@ -984,7 +1083,7 @@ Module Type PartialEvaluationOn
       match bvmask_try_expand t1 , bvmask_try_expand t2 with
       | Some b1 , Some b2 =>
           term_unop uop.expand (term_binop (bop.relop bop.neq) b1 b2)
-      | _ , _             => peval_binop' bop.bvxor t1 t2
+      | _ , _             => peval_bvxor_mulx t1 t2
       end.
 
     (* SELF-TESTS (see the block above peval_bvadd for why these exist).  These
@@ -1092,6 +1191,103 @@ Module Type PartialEvaluationOn
           (term_binop bop.bvand
              (term_unop uop.expand (term_binop (bop.relop bop.bvule) zzC zzC)) zzS)
           zzC.
+    Proof. reflexivity. Qed.
+
+    (* ---- SELF-TESTS for the mulx recognizer -------------------------------
+       FIRES on the raw shape a real `andi;xori;addi;and;srli;addi;srli;xor`
+       key-schedule step reduces to, given concrete operands (Term_eqb can't
+       reduce on an opaque term_var -- same caveat as the coalesce
+       self-tests above; that this reaches a real term_var-headed VC is
+       what a genuine key_schedule_loop2 dump would measure, not pinned
+       here). *)
+    Lemma selftest_mulx_fires :
+      peval_bvxor_mulx
+        (term_binop bop.shiftr zzC (term_val (ty.bvec 32) bv.one))
+        (term_binop bop.bvand
+           (term_unop uop.negate (term_binop bop.bvand zzC (term_val (ty.bvec 32) bv.one)))
+           zzS)
+      = term_binop bop.mulx zzC zzS.
+    Proof. reflexivity. Qed.
+
+    (* Commuted outer xor order and commuted inner bvand order both fire too --
+       neither the outer bvxor nor the mask's bvand is normalized upstream. *)
+    Lemma selftest_mulx_fires_xor_comm :
+      peval_bvxor_mulx
+        (term_binop bop.bvand
+           (term_unop uop.negate (term_binop bop.bvand zzC (term_val (ty.bvec 32) bv.one)))
+           zzS)
+        (term_binop bop.shiftr zzC (term_val (ty.bvec 32) bv.one))
+      = term_binop bop.mulx zzC zzS.
+    Proof. reflexivity. Qed.
+
+    (* INERT when the two `bvand h one` occurrences reference DIFFERENT h's --
+       the same-operand discipline that makes the rule sound rather than
+       merely plausible. *)
+    Lemma selftest_mulx_needs_same_operand :
+      peval_bvxor_mulx
+        (term_binop bop.shiftr zzC (term_val (ty.bvec 32) bv.one))
+        (term_binop bop.bvand
+           (term_unop uop.negate (term_binop bop.bvand zzS (term_val (ty.bvec 32) bv.one)))
+           zzS)
+      = term_binop bop.bvxor
+          (term_binop bop.shiftr zzC (term_val (ty.bvec 32) bv.one))
+          (term_binop bop.bvand
+             (term_unop uop.negate (term_binop bop.bvand zzS (term_val (ty.bvec 32) bv.one)))
+             zzS).
+    Proof. reflexivity. Qed.
+
+    (* ---- REAL-SHAPE self-tests --------------------------------------------
+       Everything above tests the SIMPLE `negate (bvand h one)` mask.  A dump
+       of the actual executor against the real key_schedule_loop2 instruction
+       sequence (Example/ZZMulxDump.v) showed the compiler does NOT emit that:
+       it emits a SIX-node sign-extraction idiom referencing `h` THREE times,
+
+         mask := ones + ((ones + (h & 1)) & ((h & 1) ^ ones)) >> 31
+         step := (mask & r) ^ (h >> 1)
+
+       which is the whole reason bvmulx_mask_arg has a second clause.  Without
+       these two lemmas that clause is entirely unexercised by the build --
+       the same gap the coalesce/mask self-tests above exist to close for
+       their own rules, and the more important one here, since this is the
+       shape the corpus actually contains.
+
+       Note the operand order: the real dump puts the masked-r term FIRST and
+       `h >> 1` second, i.e. this exercises bvmulx_try's t2-shift branch,
+       whereas selftest_mulx_fires above exercises t1-shift.
+
+       `zzH` is deliberately NOT zzC (= ones 32): the recognizer's guard
+       checks o1/o2/o3 against `bv.ones n`, so reusing an all-ones value for
+       `h` would let a positional mix-up pass unnoticed. `bv.zero` cannot
+       satisfy that guard, so the test discriminates. *)
+    #[local] Notation zzH     := (term_val (ty.bvec 32) bv.zero).
+    #[local] Notation zzOnes  := (term_val (ty.bvec 32) (bv.ones 32)).
+    #[local] Notation zzOne   := (term_val (ty.bvec 32) bv.one).
+    #[local] Notation zzSh31  := (term_val (ty.bvec 32) (bv.of_N (N.of_nat 31))).
+
+    #[local] Notation zzRealMask h :=
+      (term_binop bop.bvadd zzOnes
+         (term_binop bop.shiftr
+            (term_binop bop.bvand
+               (term_binop bop.bvadd zzOnes (term_binop bop.bvand h zzOne))
+               (term_binop bop.bvxor (term_binop bop.bvand h zzOne) zzOnes))
+            zzSh31)).
+
+    Lemma selftest_mulx_fires_real_shape :
+      peval_bvxor_mulx
+        (term_binop bop.bvand (zzRealMask zzH) zzS)
+        (term_binop bop.shiftr zzH zzOne)
+      = term_binop bop.mulx zzH zzS.
+    Proof. reflexivity. Qed.
+
+    (* Same same-operand discipline as the simple shape: the mask's two
+       `bvand h one` occurrences must reference the SAME h as the shift. *)
+    Lemma selftest_mulx_real_shape_needs_same_operand :
+      peval_bvxor_mulx
+        (term_binop bop.bvand (zzRealMask zzS) zzS)
+        (term_binop bop.shiftr zzH zzOne)
+      = term_binop bop.bvxor
+          (term_binop bop.bvand (zzRealMask zzS) zzS)
+          (term_binop bop.shiftr zzH zzOne).
     Proof. reflexivity. Qed.
 
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
@@ -1684,6 +1880,197 @@ Module Type PartialEvaluationOn
       now apply bvcoalesce_try_inv.
     Qed.
 
+    (* ---- mulx soundness ------------------------------------------------
+       Both sides are pure terms, so (relval-rewrite-over-secrets) the
+       obligation is a plain `bv` identity with no NonSyncVal case split;
+       `mulx_raw_sound_gen` (Bitvector.v) is exactly that identity. *)
+
+    Lemma bv_bin_one {m} (v : Val (ty.bvec m)) (H : bv.bin v = 1%N) : v = bv.of_N 1.
+    Proof. rewrite <- H. now rewrite bv.of_N_bin. Qed.
+
+    Lemma bvmulx_shiftr1_inv {n} (t h : Term Σ (ty.bvec n)) :
+      bvmulx_shiftr1 t = Some h ->
+      exists m (v : Val (ty.bvec m)),
+        bv.bin v = 1%N /\ t = term_binop bop.shiftr h (term_val (ty.bvec m) v).
+    Proof.
+      funelim (bvmulx_shiftr1 t); intros Heq; try discriminate.
+      destruct (N.eqb (bv.bin s) 1) eqn:Hcond; [|discriminate].
+      injection Heq as <-. exists n0, s. split; [now apply N.eqb_eq | reflexivity].
+    Qed.
+
+    (* Two possible shapes now (simple negate(bvand h one), or the real
+       compiled 6-node sign-extraction idiom) -- a disjunction, with the
+       second disjunct's witnesses left at the AMBIENT width n (not S n0)
+       to avoid transporting h/o1/o2/o3/v1/v2 along a dependent match on n;
+       `n0` and the equation `n = S n0` are carried as plain data instead. *)
+    Lemma bvmulx_mask_arg_inv {n} (t h : Term Σ (ty.bvec n)) :
+      bvmulx_mask_arg t = Some h ->
+      (exists (v : Val (ty.bvec n)),
+         bv.bin v = 1%N /\
+         t = term_unop uop.negate (term_binop bop.bvand h (term_val (ty.bvec n) v)))
+      \/ (exists n0 (_ : n = S n0) (o1 o2 o3 v1 v2 : Val (ty.bvec n)) k (sh : Val (ty.bvec k)),
+            bv.eqb o1 (bv.ones n) = true /\ bv.eqb o2 (bv.ones n) = true /\
+            bv.eqb o3 (bv.ones n) = true /\
+            bv.bin v1 = 1%N /\ bv.bin v2 = 1%N /\ bv.bin sh = N.of_nat n0 /\
+            t = term_binop bop.bvadd (term_val (ty.bvec n) o1)
+                  (term_binop bop.shiftr
+                     (term_binop bop.bvand
+                        (term_binop bop.bvadd (term_val (ty.bvec n) o2)
+                           (term_binop bop.bvand h (term_val (ty.bvec n) v1)))
+                        (term_binop bop.bvxor
+                           (term_binop bop.bvand h (term_val (ty.bvec n) v2))
+                           (term_val (ty.bvec n) o3)))
+                     (term_val (ty.bvec k) sh))).
+    Proof.
+      funelim (bvmulx_mask_arg t); intros Heq; try discriminate.
+      - destruct (bv.eqb o1 (bv.ones n) && bv.eqb o2 (bv.ones n) && bv.eqb o3 (bv.ones n)
+                  && N.eqb (bv.bin v1) 1 && N.eqb (bv.bin v2) 1 && Term_eqb h h'
+                  && match n with 0%nat => false | S n0 => N.eqb (bv.bin sh) (N.of_nat n0) end)
+          eqn:Hcond; [|discriminate].
+        injection Heq as <-.
+        apply Bool.andb_true_iff in Hcond as [Hcond Hn0].
+        apply Bool.andb_true_iff in Hcond as [Hcond Hh].
+        apply Bool.andb_true_iff in Hcond as [Hcond Hv2].
+        apply Bool.andb_true_iff in Hcond as [Hcond Hv1].
+        apply Bool.andb_true_iff in Hcond as [Hcond Ho3].
+        apply Bool.andb_true_iff in Hcond as [Ho1 Ho2].
+        destruct (Term_eqb_spec h h') as [<-|]; [|discriminate].
+        destruct n as [|nS]; [discriminate|].
+        right. exists nS, eq_refl, o1, o2, o3, v1, v2, n0, sh.
+        repeat split; try assumption; now apply N.eqb_eq.
+      - destruct (N.eqb (bv.bin v) 1) eqn:Hcond; [|discriminate].
+        injection Heq as <-. left. exists v. split; [now apply N.eqb_eq | reflexivity].
+    Qed.
+
+    (* Carries the "recognized" fact ABSTRACTLY (bvmulx_mask_arg mask_term =
+       Some h) rather than re-exposing its witnesses here -- the final
+       consumer (bvmulx_try_inv) invokes bvmulx_mask_arg_inv itself when it
+       needs to case on which of the two shapes actually matched. Keeps this
+       lemma, and its proof, unchanged by the second shape entirely. *)
+    Lemma bvmulx_arg_inv {n} (h t r : Term Σ (ty.bvec n)) :
+      bvmulx_arg h t = Some r ->
+      exists mask_term, bvmulx_mask_arg mask_term = Some h /\
+        (t = term_binop bop.bvand mask_term r \/
+         t = term_binop bop.bvand r mask_term).
+    Proof.
+      unfold bvmulx_arg. intros H.
+      destruct (bvand_split t) as [[u1 u2]|] eqn:Ht; [|discriminate].
+      apply bvand_split_inv in Ht as ->.
+      destruct (bvmulx_mask_arg u1) as [h1|] eqn:H1.
+      - destruct (Term_eqb_spec h h1) as [<-|]; [|discriminate].
+        injection H as <-.
+        exists u1. split; [exact H1 | now left].
+      - destruct (bvmulx_mask_arg u2) as [h2|] eqn:H2; [|discriminate].
+        destruct (Term_eqb_spec h h2) as [<-|]; [|discriminate].
+        injection H as <-.
+        exists u2. split; [exact H2 | now right].
+    Qed.
+
+    (* Both mask shapes close the SAME four (order x commutation)
+       combinations; factored into one tactic since bvmulx_try_inv needs it
+       at all four call sites (t1-shift/t2-shift x mask-left/mask-right). *)
+    Ltac bvmulx_close_simple v Hv :=
+      first
+        [ symmetry; apply bv.mulx_raw_sound_gen
+        | symmetry; rewrite bv.land_comm; apply bv.mulx_raw_sound_gen
+        | rewrite bv.lxor_comm; symmetry; apply bv.mulx_raw_sound_gen
+        | rewrite bv.lxor_comm; symmetry; rewrite bv.land_comm;
+          apply bv.mulx_raw_sound_gen ].
+
+    (* T2-shift's simple-shape closer: mask-and-r comes BEFORE the shift
+       (the reverse outer-lxor order from T1-shift), so this needs the
+       "_swap" family instead -- via four NAMED lemmas, never a blind
+       `rewrite lxor_comm`/`land_comm` (which matches the goal's own
+       unresolved `if ... else lxor (shiftr h _) r` first and leaves the
+       intended outer occurrence untouched; confirmed empirically, see
+       Bitvector.v's mulx_raw_sound_gen_swap header comment). *)
+    Ltac bvmulx_close_simple_swapped :=
+      first
+        [ symmetry; apply bv.mulx_raw_sound_gen_swap
+        | symmetry; apply bv.mulx_raw_sound_gen_landswap_swap ].
+
+    (* Same shape as bvmulx_close_simple, now that bv.mulx_realmask_full_sound
+       states the WHOLE goal equation (not just the mask sub-term): a single
+       `apply` per commutativity/direction alternative, closing every
+       SyncVal/NonSyncVal instance uniformly instead of a `rewrite` followed
+       by a `match goal`/`destruct` finishing step (the latter doesn't
+       survive being run via `;` across the many goals a relational
+       peval-soundness proof produces -- see bv.mulx_realmask_full_sound's
+       header comment). NOTE the direction here is the OPPOSITE of
+       bvmulx_close_simple's `mulx_raw_sound_gen`: this lemma states
+       `mulx-eval = verbose-shape`, matching the ≡ goal's own orientation
+       (`inst t = inst (bvxor t1 t2)`, `t` on the left) directly, so no
+       `symmetry` is needed here (`mulx_raw_sound_gen` happens to be stated
+       the other way around). All four outer-operand-order combinations
+       (`lxor`'s and `land`'s) are tried via FOUR NAMED lemmas, never via a
+       blind `rewrite lxor_comm`/`land_comm` -- the goal's other side
+       (`bop.mulx`'s `eval`) contains its own unresolved
+       `if ... else lxor (shiftr h _) r`, itself built from a `land h _`
+       guard, and an unqualified `lxor_comm`/`land_comm` rewrite matches
+       and flips those inner occurrences first (confirmed: both silently
+       "succeed" while leaving the intended outer occurrence completely
+       untouched, so the subsequent `apply` fails on every one of the many
+       relational goals -- see the four lemmas' header comments in
+       Bitvector.v). *)
+    Ltac bvmulx_close_real :=
+      first
+        [ apply bv.mulx_realmask_full_sound; assumption
+        | apply bv.mulx_realmask_full_sound_swap; assumption
+        | apply bv.mulx_realmask_full_sound_landswap; assumption
+        | apply bv.mulx_realmask_full_sound_landswap_lxorswap; assumption ].
+
+    Lemma bvmulx_try_inv {n} (t1 t2 t : Term Σ (ty.bvec n)) :
+      bvmulx_try t1 t2 = Some t -> t ≡ term_binop bop.bvxor t1 t2.
+    Proof.
+      unfold bvmulx_try. intros H.
+      destruct (bvmulx_shiftr1 t1) as [h|] eqn:Hs1.
+      - apply bvmulx_shiftr1_inv in Hs1 as (m1 & vsh & Hvsh & ->).
+        destruct (bvmulx_arg h t2) as [r|] eqn:Ha; [|discriminate].
+        injection H as <-.
+        apply bvmulx_arg_inv in Ha as (mask_term & Hmask & Hord).
+        apply bvmulx_mask_arg_inv in Hmask
+          as [(v & Hv & ->)
+             |(n0 & -> & o1 & o2 & o3 & v1 & v2 & k & sh
+               & Ho1 & Ho2 & Ho3 & Hv1 & Hv2 & Hsh & ->)].
+        + destruct Hord as [-> | ->];
+            intros ι; cbn;
+            destruct (inst h ι), (inst r ι); cbn; f_equal;
+            rewrite (bv.shiftr_bin_eq _ vsh v (eq_trans Hvsh (eq_sym Hv)));
+            rewrite (bv_bin_one v Hv);
+            bvmulx_close_simple v Hv.
+        + destruct Hord as [-> | ->];
+            intros ι; cbn;
+            destruct (inst h ι), (inst r ι); cbn; f_equal;
+            bvmulx_close_real.
+      - destruct (bvmulx_shiftr1 t2) as [h|] eqn:Hs2; [|discriminate].
+        apply bvmulx_shiftr1_inv in Hs2 as (m1 & vsh & Hvsh & ->).
+        destruct (bvmulx_arg h t1) as [r|] eqn:Ha; [|discriminate].
+        injection H as <-.
+        apply bvmulx_arg_inv in Ha as (mask_term & Hmask & Hord).
+        apply bvmulx_mask_arg_inv in Hmask
+          as [(v & Hv & ->)
+             |(n0 & -> & o1 & o2 & o3 & v1 & v2 & k & sh
+               & Ho1 & Ho2 & Ho3 & Hv1 & Hv2 & Hsh & ->)].
+        + destruct Hord as [-> | ->];
+            intros ι; cbn;
+            destruct (inst h ι), (inst r ι); cbn; f_equal;
+            rewrite (bv.shiftr_bin_eq _ vsh v (eq_trans Hvsh (eq_sym Hv)));
+            rewrite (bv_bin_one v Hv);
+            bvmulx_close_simple_swapped.
+        + destruct Hord as [-> | ->];
+            intros ι; cbn;
+            destruct (inst h ι), (inst r ι); cbn; f_equal;
+            bvmulx_close_real.
+    Qed.
+
+    Lemma peval_bvxor_mulx_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvxor_mulx t1 t2 ≡ term_binop bop.bvxor t1 t2.
+    Proof.
+      unfold peval_bvxor_mulx.
+      destruct (bvmulx_try t1 t2) as [t|] eqn:Ht; [|apply peval_binop'_sound].
+      now apply bvmulx_try_inv.
+    Qed.
+
     Lemma peval_bvor_mask_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvor_mask t1 t2 ≡ term_binop bop.bvor t1 t2.
     Proof.
@@ -1705,8 +2092,8 @@ Module Type PartialEvaluationOn
       peval_bvxor_mask t1 t2 ≡ term_binop bop.bvxor t1 t2.
     Proof.
       unfold peval_bvxor_mask.
-      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_binop'_sound].
-      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_binop'_sound].
+      destruct (bvmask_try_expand t1) as [b1|] eqn:H1; [|apply peval_bvxor_mulx_sound].
+      destruct (bvmask_try_expand t2) as [b2|] eqn:H2; [|apply peval_bvxor_mulx_sound].
       apply bvmask_try_expand_inv in H1 as ->; apply bvmask_try_expand_inv in H2 as ->.
       intros ι; cbn - [bop.eval_relop_val].
       destruct (inst b1 ι), (inst b2 ι); cbn - [bop.eval_relop_val];

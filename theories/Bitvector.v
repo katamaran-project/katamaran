@@ -2138,6 +2138,182 @@ Module bv.
       = if eqb x zero then y else x.
     Proof. rewrite lor_comm, land_comm. apply coalesce_mask. Qed.
 
+    (* GF(2) "multiply by x" -- the GHASH/CRC-style LFSR step
+       `H := (H >> 1) ^ (H&1 ? R : 0)` -- and the branchless spelling clang
+       compiles Botan/BearSSL's CT::Mask-based bit-0 select to: `(h >> 1) ^
+       (mask & r)` where `mask` is all-ones/all-zero on `h`'s bit 0.  Val-level
+       fact behind the bop.mulx recognizer in Symbolic/PartialEvaluation.v: the
+       right-hand side mentions `h` TWICE (once in the shift, once in the
+       bit-0 test feeding the mask), so a chained recurrence `H := mulx(H,R)`
+       built from this shape doubles every trip in Coq's term representation
+       (no sharing) -- the same duplication `coalesce_mask` above avoids for
+       its own accumulator shape. `bop.mulx h r` mentions `h` ONCE: the bit-0
+       test lives inside the op's semantics instead of as a second subterm.
+       `one` is left as a plain parameter rather than pinned to `of_N 1`
+       here: the identity holds for whatever fixed operand the shift and the
+       mask test both consistently use, and the caller (`eval` below, and the
+       recognizer's `bop.shiftr` match) is what actually fixes it to the
+       shift-by-one constant. *)
+    Lemma mulx_mask {n} (h r one : bv n) :
+      lxor (shiftr h one)
+        (land (if eqb (land h one) zero then zero else ones n) r)
+      = if eqb (land h one) zero
+        then shiftr h one
+        else lxor (shiftr h one) r.
+    Proof.
+      destruct (eqb_spec (land h one) zero) as [Heq|Hneq].
+      - now rewrite land_zero_l, lxor_zero_r.
+      - now rewrite land_ones_l.
+    Qed.
+
+    (* Bridges the RAW compiled shape (what `andi h,1; ...; and mask,r`
+       actually leaves, `negate (land h one)`) to `mulx_mask`'s clean
+       conditional above -- the part `coalesce` never needed, since ANDing
+       with the single-bit constant `one` genuinely only ever produces
+       `zero` or `one` (not an arbitrary mask), which `coalesce`'s own
+       `expand`-built masks get for free but a raw `-(h&1)` doesn't. *)
+    Lemma of_N_1_cons {n} : of_N (n := S n) (N.of_nat 1) = cons true (zero (n := n)).
+    Proof. vm_compute. reflexivity. Qed.
+
+    Lemma bin_of_N_1 {n} : bin (of_N (n := S n) (N.of_nat 1)) = 1%N.
+    Proof. vm_compute. reflexivity. Qed.
+
+    Lemma land_bit1 {n} (h : bv (S n)) :
+      land h (of_N (N.of_nat 1)) = zero \/ land h (of_N (N.of_nat 1)) = of_N (N.of_nat 1).
+    Proof.
+      rewrite of_N_1_cons.
+      destruct (view h) as [b bs].
+      rewrite land_cons, land_zero_r.
+      destruct b; [right | left]; reflexivity.
+    Qed.
+
+    Lemma negate_zero {n} : negate (zero (n := n)) = zero.
+    Proof.
+      transitivity (add (zero (n := n)) (negate zero)).
+      - symmetry. apply add_zero_l.
+      - apply add_negate2.
+    Qed.
+
+    Lemma negate_one {n} : negate (of_N (n := S n) (N.of_nat 1)) = ones (S n).
+    Proof.
+      unfold negate. rewrite bin_of_N_1.
+      rewrite <- (of_N_bin (ones (S n))). f_equal.
+      change (bin (ones (S n))) with (onesn (S n)).
+      unfold onesn. pose proof (onesn_exp2 (S n)) as H. unfold onesn in H.
+      Lia.lia.
+    Qed.
+
+    Lemma negate_land_bit1_mask {n} (h : bv (S n)) :
+      negate (land h (of_N (N.of_nat 1)))
+      = if eqb (land h (of_N (N.of_nat 1))) zero then zero else ones (S n).
+    Proof.
+      destruct (land_bit1 h) as [Heq|Heq]; rewrite Heq.
+      - rewrite negate_zero.
+        destruct (eqb_spec (zero (n := S n)) zero) as [_|[]]; reflexivity.
+      - rewrite negate_one.
+        destruct (eqb_spec (of_N (n := S n) (N.of_nat 1)) zero) as [Hc|_]; [|reflexivity].
+        exfalso. rewrite of_N_1_cons in Hc. rewrite zero_S in Hc. discriminate.
+    Qed.
+
+    (* The full bridge: the RAW compiled shape for `mulx`'s mask equals its
+       clean `eval` conditional (BinOps.v), for `one := of_N 1` specifically.
+       Soundness lemma for the bop.mulx recognizer in
+       Symbolic/PartialEvaluation.v. *)
+    Lemma mulx_raw_sound {n} (h r : bv (S n)) :
+      lxor (shiftr h (of_N (n := S n) (N.of_nat 1)))
+        (land (negate (land h (of_N (N.of_nat 1)))) r)
+      = if eqb (land h (of_N (N.of_nat 1))) zero
+        then shiftr h (of_N (n := S n) (N.of_nat 1))
+        else lxor (shiftr h (of_N (n := S n) (N.of_nat 1))) r.
+    Proof. rewrite negate_land_bit1_mask. apply mulx_mask. Qed.
+
+    (* `shiftr` only consults the shift-amount's underlying VALUE
+       (`unsigned`/`bin`), never its own width -- so a recognizer matching
+       `shiftr h s` need not pin `s`'s width to match `h`'s to conclude
+       `s`'s shift is the one this lemma is about. *)
+    Lemma shiftr_bin_eq {m n1 n2} (h : bv m) (v1 : bv n1) (v2 : bv n2) :
+      bin v1 = bin v2 -> shiftr h v1 = shiftr h v2.
+    Proof. intros H. unfold shiftr, unsigned. now rewrite H. Qed.
+
+    (* Width-generic wrapper: `bv 0` has exactly one inhabitant (`nil`), so
+       the identity is trivial there without needing mulx_raw_sound's own
+       `S n` framing -- lets the peval recognizer's soundness proof
+       (Symbolic/PartialEvaluation.v) stay ambient-width-generic instead of
+       case-splitting on n itself. *)
+    Lemma mulx_raw_sound_gen {n} (h r : bv n) :
+      lxor (shiftr h (of_N (n := n) (N.of_nat 1)))
+        (land (negate (land h (of_N (N.of_nat 1)))) r)
+      = if eqb (land h (of_N (N.of_nat 1))) zero
+        then shiftr h (of_N (n := n) (N.of_nat 1))
+        else lxor (shiftr h (of_N (n := n) (N.of_nat 1))) r.
+    Proof.
+      destruct n as [|n'].
+      - destruct (view h). destruct (view r). reflexivity.
+      - apply mulx_raw_sound.
+    Qed.
+
+    (* Same identity with the shift-amount and the mask's AND-constant as
+       two SEPARATE, independently-widthed parameters -- exactly what a
+       peval recognizer matching the raw compiled shape actually has (its
+       shift-amount's width is unconstrained; only its VALUE is checked).
+       `one2` (the AND-constant) is forced to width `n` by `land h one2`'s
+       own typing, same as `h`/`r`; `one1` (the shift-amount) is not. *)
+    Lemma mulx_raw_sound_gen2 {n m} (h r : bv n) (one1 : bv m) (one2 : bv n)
+      (Hone1 : bin one1 = 1%N) (Hone2 : bin one2 = 1%N) :
+      lxor (shiftr h one1) (land (negate (land h one2)) r)
+      = if eqb (land h one2) zero then shiftr h one1 else lxor (shiftr h one1) r.
+    Proof.
+      rewrite (shiftr_bin_eq h one1 one2 (eq_trans Hone1 (eq_sym Hone2))).
+      assert (one2 = of_N 1%N) as ->.
+      { rewrite <- Hone2. now rewrite of_N_bin. }
+      apply mulx_raw_sound_gen.
+    Qed.
+
+    (* Three more orderings of mulx_raw_sound_gen's outer lxor/land operands
+       -- needed by the peval recognizer's T2-shift branch (mask-and-r comes
+       BEFORE the shift in the recognized bvxor, the reverse of T1-shift),
+       each reached via a single named `apply`, never a blind
+       `rewrite lxor_comm`/`land_comm`: this identity's RHS is itself an
+       unresolved `if ... else lxor (shiftr h _) r` built from a
+       `land h _` guard, and an unqualified commutativity rewrite matches
+       and flips those inner occurrences first, leaving the intended outer
+       one untouched (confirmed empirically -- see
+       mulx_realmask_full_sound's header comment for the same trap on the
+       other recognizer clause). *)
+    Lemma mulx_raw_sound_gen_swap {n} (h r : bv n) :
+      lxor (land (negate (land h (of_N (n := n) (N.of_nat 1)))) r)
+        (shiftr h (of_N (n := n) (N.of_nat 1)))
+      = if eqb (land h (of_N (N.of_nat 1))) zero
+        then shiftr h (of_N (n := n) (N.of_nat 1))
+        else lxor (shiftr h (of_N (n := n) (N.of_nat 1))) r.
+    Proof.
+      rewrite (lxor_comm (land (negate (land h (of_N (n:=n) (N.of_nat 1)))) r)
+                 (shiftr h (of_N (n:=n) (N.of_nat 1)))).
+      apply mulx_raw_sound_gen.
+    Qed.
+
+    Lemma mulx_raw_sound_gen_landswap {n} (h r : bv n) :
+      lxor (shiftr h (of_N (n := n) (N.of_nat 1)))
+        (land r (negate (land h (of_N (n := n) (N.of_nat 1)))))
+      = if eqb (land h (of_N (N.of_nat 1))) zero
+        then shiftr h (of_N (n := n) (N.of_nat 1))
+        else lxor (shiftr h (of_N (n := n) (N.of_nat 1))) r.
+    Proof.
+      rewrite (land_comm r (negate (land h (of_N (n:=n) (N.of_nat 1))))).
+      apply mulx_raw_sound_gen.
+    Qed.
+
+    Lemma mulx_raw_sound_gen_landswap_swap {n} (h r : bv n) :
+      lxor (land r (negate (land h (of_N (n := n) (N.of_nat 1)))))
+        (shiftr h (of_N (n := n) (N.of_nat 1)))
+      = if eqb (land h (of_N (N.of_nat 1))) zero
+        then shiftr h (of_N (n := n) (N.of_nat 1))
+        else lxor (shiftr h (of_N (n := n) (N.of_nat 1))) r.
+    Proof.
+      rewrite (land_comm r (negate (land h (of_N (n:=n) (N.of_nat 1))))).
+      apply mulx_raw_sound_gen_swap.
+    Qed.
+
   End Logical.
 
   Module finite.
@@ -2473,6 +2649,248 @@ Module bv.
     Lemma bin_of_N_small {n x} : (x < exp2 n)%N -> @bin n (of_N x) = x.
     Proof.
       now apply truncn_small.
+    Qed.
+
+    (* ---- the REAL compiled mask idiom --------------------------------------
+       clang's actual spelling of `expand(bit0 h)` for key_schedule_loop2
+       (Example/ZZMulxDump.v, dumped 2026-08-13) is NOT the simple
+       `negate(bvand(h,one))` mulx_raw_sound is stated for -- it is this
+       6-node sign-extraction dance:
+
+         ones + shiftr(land(ones + land(h,one), lxor(land(h,one), ones)), shamt)
+
+       (shamt's value = n-1). This section proves it collapses to the SAME
+       `if bit0(h)=0 then zero else ones n` predicate mulx_mask/mulx_raw_sound
+       already build on, so the mulx recognizer in
+       Symbolic/PartialEvaluation.v can accept EITHER raw spelling and
+       produce the SAME bop.mulx. Placed here (Section DropTruncs, not
+       Logical) because it needs bin_of_N_small, defined only from this
+       point on -- Logical's own lemmas (land_bit1, negate_one, ...) stay
+       reachable regardless, since ending a Section only closes off its
+       own section VARIABLES, not the lemmas proved inside it. *)
+
+    Lemma shiftr_zero {m n} (shamt : bv n) : shiftr (zero : bv m) shamt = zero.
+    Proof.
+      unfold shiftr, unsigned. cbn.
+      rewrite BinInt.Z.shiftr_0_l. reflexivity.
+    Qed.
+
+    Lemma n_lt_exp2 (n : nat) : (N.of_nat n < exp2 n)%N.
+    Proof.
+      induction n as [|n IH].
+      - reflexivity.
+      - rewrite Nnat.Nat2N.inj_succ, N.pow_succ_r; Lia.lia.
+    Qed.
+
+    (* `shiftr (ones (S n)) shamt = 1` when shamt's value is n -- the
+       all-ones word's top bit, shifted down to bit 0. Needs the SHIFT
+       AMOUNT pinned to width n specifically (unlike shiftr_bin_eq's own
+       generic bridging) only to state the Z-level division cleanly; the
+       _gen wrapper below removes that restriction the same way
+       mulx_raw_sound_gen2 does for the simple mask's shift. *)
+    Lemma shiftr_ones {n} (shamt : bv n) (Hshamt : bin shamt = N.of_nat n) :
+      shiftr (ones (S n)) shamt = of_N 1.
+    Proof.
+      unfold shiftr, unsigned.
+      rewrite Hshamt.
+      change (bin (ones (S n))) with (onesn (S n)).
+      rewrite <- (of_N_bin (of_N 1 : bv (S n))). f_equal.
+      pose proof (BinInt.Z.shiftr_div_pow2 (BinInt.Z.of_N (onesn (S n)))
+                    (BinInt.Z.of_N (N.of_nat n)) ltac:(Lia.lia)) as Hshiftr.
+      rewrite Hshiftr.
+      assert (Hexp2 : @eq Z (BinInt.Z.of_N (onesn (S n)))
+                        (BinInt.Z.sub (BinInt.Z.of_N (exp2 (S n))) (Zpos xH)))
+        by (pose proof (onesn_exp2 (S n)); Lia.lia).
+      rewrite Hexp2.
+      assert (Hexp2S : BinInt.Z.of_N (exp2 (S n))
+                        = BinInt.Z.mul (Zpos (xO xH))
+                            (BinInt.Z.pow (Zpos (xO xH)) (BinInt.Z.of_N (N.of_nat n)))).
+      { rewrite exp2_S, Znat.N2Z.inj_mul, Znat.N2Z.inj_pow. reflexivity. }
+      rewrite Hexp2S.
+      set (P := BinInt.Z.pow (Zpos (xO xH)) (BinInt.Z.of_N (N.of_nat n))) in *.
+      assert (HP : BinInt.Z.le (Zpos xH) P).
+      { subst P. transitivity (BinInt.Z.pow (Zpos (xO xH)) Z0).
+        - reflexivity.
+        - apply BinInt.Z.pow_le_mono_r; Lia.lia. }
+      assert (Hdiv : BinInt.Z.div (BinInt.Z.sub (BinInt.Z.mul (Zpos (xO xH)) P) (Zpos xH)) P
+                     = Zpos xH).
+      { symmetry. apply (BinInt.Z.div_unique_pos _ _ _ (BinInt.Z.sub P (Zpos xH))); Lia.lia. }
+      rewrite Hdiv, of_N_bin.
+      change (Zpos xH) with (BinInt.Z.of_N (Npos xH)).
+      rewrite of_Z_N. f_equal.
+    Qed.
+
+    (* Width-generic wrapper (shiftr_bin_eq bridges the shift-amount's own
+       width, exactly as mulx_raw_sound_gen2 does for the simple shape). *)
+    Lemma shiftr_ones_gen {n k} (shamt : bv k) (Hshamt : bin shamt = N.of_nat n) :
+      shiftr (ones (S n)) shamt = of_N 1.
+    Proof.
+      rewrite (shiftr_bin_eq (ones (S n)) shamt (of_N (n:=n) (N.of_nat n))
+                 (eq_trans Hshamt (eq_sym (bin_of_N_small (n_lt_exp2 n))))).
+      apply shiftr_ones, bin_of_N_small, n_lt_exp2.
+    Qed.
+
+    Lemma mulx_realmask_sound {n0 k} (h r one : bv (S n0)) (shamt : bv k)
+      (Hone : bin one = 1%N) (Hshamt : bin shamt = N.of_nat n0) :
+      land
+        (add (ones (S n0))
+           (shiftr
+              (land (add (ones (S n0)) (land h one)) (lxor (land h one) (ones (S n0))))
+              shamt))
+        r
+      = if eqb (land h one) zero then zero else r.
+    Proof.
+      assert (Hone1 : one = of_N (N.of_nat 1)).
+      { assert (Heq1 : N.of_nat 1 = 1%N) by reflexivity.
+        rewrite Heq1, <- Hone. now rewrite of_N_bin. }
+      destruct (land_bit1 h) as [Hb|Hb]; rewrite Hone1 in *; rewrite Hb.
+      - rewrite add_zero_r, lxor_zero_l, land_ones_l.
+        rewrite (shiftr_ones_gen shamt Hshamt).
+        rewrite <- negate_one, add_negate, land_zero_l.
+        destruct (eqb_spec (zero : bv (S n0)) zero) as [_|[]]; reflexivity.
+      - assert (Hinner : land (ones (S n0) + of_N (N.of_nat 1))
+                           (lxor (of_N (N.of_nat 1)) (ones (S n0))) = zero).
+        { rewrite <- negate_one, add_negate, land_zero_l. reflexivity. }
+        rewrite Hinner, shiftr_zero, add_zero_r, land_ones_l.
+        destruct (eqb_spec (of_N (n:=S n0) (N.of_nat 1)) zero) as [Hc|_]; [|reflexivity].
+        exfalso. rewrite of_N_1_cons in Hc. rewrite zero_S in Hc. discriminate.
+    Qed.
+
+    (* Whole-goal form of `mulx_realmask_sound`, matching the peval
+       recognizer's actual proof obligation exactly: `bop.mulx`'s OWN `eval`
+       (BinOps.v) hard-codes its shift/mask constant as the LITERAL
+       `of_N 1`, with NO knowledge of the recognizer's own witnesses -- so
+       the mulx-eval side of the equation is fixed at that literal, while
+       the raw-compiled-shape side genuinely uses independent witnesses
+       (`vsh`/`v1`/`v2`/`o1`/`o2`/`o3`/`shamt`, each only PROVEN equal to 1
+       or to `ones`, never syntactically tied to the literal or to each
+       other). Stating the LHS abstractly over one shared parameter (as an
+       earlier version of this lemma did) does not unify against the real
+       goal for exactly that reason. Lets the peval recognizer's soundness
+       proof close by a single `apply` (`mulx_raw_sound_gen`'s technique),
+       instead of a `rewrite` followed by a `match goal`/`destruct`
+       finishing step: the latter does not survive being run via `;` across
+       the many SyncVal/NonSyncVal goals a relational peval-soundness proof
+       produces, since `match goal` demands its exact pattern be present in
+       literally every goal, whereas `apply` degrades gracefully per-goal
+       (see relval-rewrite-over-secrets: each such goal is a plain instance
+       of this same identity, so a whole-equation `apply` closes every one
+       of them uniformly). *)
+    Lemma mulx_realmask_full_sound {n0 k1 k2}
+        (h r o1 o2 o3 v1 v2 : bv (S n0)) (vsh : bv k1) (shamt : bv k2)
+        (Ho1 : eqb o1 (ones (S n0)) = true) (Ho2 : eqb o2 (ones (S n0)) = true)
+        (Ho3 : eqb o3 (ones (S n0)) = true)
+        (Hvsh : bin vsh = 1%N) (Hv1 : bin v1 = 1%N) (Hv2 : bin v2 = 1%N)
+        (Hshamt : bin shamt = N.of_nat n0) :
+      (if eqb (land h (of_N (n := S n0) (N.of_nat 1))) zero
+       then shiftr h (of_N (n := S n0) (N.of_nat 1))
+       else lxor (shiftr h (of_N (n := S n0) (N.of_nat 1))) r)
+      = lxor (shiftr h vsh)
+          (land
+             (add o1
+                (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt))
+             r).
+    Proof.
+      assert (o1 = ones (S n0)) as -> by (destruct (eqb_spec o1 (ones (S n0))); congruence).
+      assert (o2 = ones (S n0)) as -> by (destruct (eqb_spec o2 (ones (S n0))); congruence).
+      assert (o3 = ones (S n0)) as -> by (destruct (eqb_spec o3 (ones (S n0))); congruence).
+      assert (Hv1' : v1 = of_N (N.of_nat 1)).
+      { assert (Heq1 : N.of_nat 1 = 1%N) by reflexivity.
+        rewrite Heq1, <- Hv1. now rewrite of_N_bin. }
+      assert (Hv2' : v2 = of_N (N.of_nat 1)).
+      { assert (Heq1 : N.of_nat 1 = 1%N) by reflexivity.
+        rewrite Heq1, <- Hv2. now rewrite of_N_bin. }
+      rewrite Hv1', Hv2'.
+      rewrite (shiftr_bin_eq h vsh (of_N (n:=S n0) (N.of_nat 1))
+                 (eq_trans Hvsh (eq_sym bin_of_N_1))).
+      rewrite (mulx_realmask_sound h r (of_N (N.of_nat 1)) shamt bin_of_N_1 Hshamt).
+      destruct (eqb_spec (land h (of_N (n:=S n0) (N.of_nat 1))) zero).
+      - now rewrite lxor_zero_r.
+      - reflexivity.
+    Qed.
+
+    (* Same as mulx_realmask_full_sound with the outer `lxor`'s two operands
+       swapped -- kept as a SEPARATE lemma (rather than reached for via a
+       blind `rewrite lxor_comm` at the call site) because the goal's other
+       side (`bop.mulx`'s own `eval`) also contains an unresolved `if ...
+       else lxor (shiftr h _) r`, which an unqualified `rewrite lxor_comm`
+       could just as easily match and flip instead of the intended outer
+       occurrence. Two named `apply` targets remove that ambiguity. *)
+    Lemma mulx_realmask_full_sound_swap {n0 k1 k2}
+        (h r o1 o2 o3 v1 v2 : bv (S n0)) (vsh : bv k1) (shamt : bv k2)
+        (Ho1 : eqb o1 (ones (S n0)) = true) (Ho2 : eqb o2 (ones (S n0)) = true)
+        (Ho3 : eqb o3 (ones (S n0)) = true)
+        (Hvsh : bin vsh = 1%N) (Hv1 : bin v1 = 1%N) (Hv2 : bin v2 = 1%N)
+        (Hshamt : bin shamt = N.of_nat n0) :
+      (if eqb (land h (of_N (n := S n0) (N.of_nat 1))) zero
+       then shiftr h (of_N (n := S n0) (N.of_nat 1))
+       else lxor (shiftr h (of_N (n := S n0) (N.of_nat 1))) r)
+      = lxor
+          (land
+             (add o1
+                (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt))
+             r)
+          (shiftr h vsh).
+    Proof.
+      rewrite (lxor_comm
+                 (land
+                    (add o1
+                       (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt))
+                    r)
+                 (shiftr h vsh)).
+      apply mulx_realmask_full_sound; assumption.
+    Qed.
+
+    (* Same as mulx_realmask_full_sound with the outer `land`'s two operands
+       swapped (`land r mask` instead of `land mask r`) -- again a SEPARATE
+       named lemma rather than a blind `rewrite land_comm`: the goal's other
+       side has its own `land h (of_N 1)` guard inside the unresolved `if`,
+       which an unqualified `land_comm` rewrite hits first (confirmed: it
+       silently flips that guard to `land (of_N 1) h` and leaves the
+       intended outer `land` completely untouched, `apply` then fails on
+       every remaining goal). *)
+    Lemma mulx_realmask_full_sound_landswap {n0 k1 k2}
+        (h r o1 o2 o3 v1 v2 : bv (S n0)) (vsh : bv k1) (shamt : bv k2)
+        (Ho1 : eqb o1 (ones (S n0)) = true) (Ho2 : eqb o2 (ones (S n0)) = true)
+        (Ho3 : eqb o3 (ones (S n0)) = true)
+        (Hvsh : bin vsh = 1%N) (Hv1 : bin v1 = 1%N) (Hv2 : bin v2 = 1%N)
+        (Hshamt : bin shamt = N.of_nat n0) :
+      (if eqb (land h (of_N (n := S n0) (N.of_nat 1))) zero
+       then shiftr h (of_N (n := S n0) (N.of_nat 1))
+       else lxor (shiftr h (of_N (n := S n0) (N.of_nat 1))) r)
+      = lxor (shiftr h vsh)
+          (land r
+             (add o1
+                (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt))).
+    Proof.
+      rewrite (land_comm
+                 r
+                 (add o1
+                    (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt))).
+      apply mulx_realmask_full_sound; assumption.
+    Qed.
+
+    (* Both swaps at once (outer `land` AND outer `lxor` operands). *)
+    Lemma mulx_realmask_full_sound_landswap_lxorswap {n0 k1 k2}
+        (h r o1 o2 o3 v1 v2 : bv (S n0)) (vsh : bv k1) (shamt : bv k2)
+        (Ho1 : eqb o1 (ones (S n0)) = true) (Ho2 : eqb o2 (ones (S n0)) = true)
+        (Ho3 : eqb o3 (ones (S n0)) = true)
+        (Hvsh : bin vsh = 1%N) (Hv1 : bin v1 = 1%N) (Hv2 : bin v2 = 1%N)
+        (Hshamt : bin shamt = N.of_nat n0) :
+      (if eqb (land h (of_N (n := S n0) (N.of_nat 1))) zero
+       then shiftr h (of_N (n := S n0) (N.of_nat 1))
+       else lxor (shiftr h (of_N (n := S n0) (N.of_nat 1))) r)
+      = lxor
+          (land r
+             (add o1
+                (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt)))
+          (shiftr h vsh).
+    Proof.
+      rewrite (land_comm
+                 r
+                 (add o1
+                    (shiftr (land (add o2 (land h v1)) (lxor (land h v2) o3)) shamt))).
+      apply mulx_realmask_full_sound_swap; assumption.
     Qed.
 
     Lemma of_N_one {n} : of_N 1 = @one n.

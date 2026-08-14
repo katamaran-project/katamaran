@@ -99,6 +99,7 @@ Module Type TermsOn (Import TY : Types).
   Notation term_bvor := (term_binop bop.bvor).
   Notation term_bvxor := (term_binop bop.bvxor).
   Notation term_coalesce := (term_binop bop.coalesce).
+  Notation term_mulx := (term_binop bop.mulx).
   Notation term_bvapp := (term_binop bop.bvapp).
   Notation term_bvcons := (term_binop bop.bvcons).
 
@@ -425,6 +426,7 @@ Module Type TermsOn (Import TY : Types).
        its tail.  See Symbolic/{Solver,PartialEvaluation}.v for those four
        callers; they label each slot with a `(*opname*)` comment. *)
     Hypothesis (pcoalesce : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.coalesce t1 t2)).
+    Hypothesis (pmulx : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P (term_binop bop.mulx t1 t2)).
 
     Equations(noeqns) Term_bvec_case [n] (t : Term Σ (ty.bvec n)) : P t :=
     | term_var_in lIn                                   => pvar lIn
@@ -437,6 +439,7 @@ Module Type TermsOn (Import TY : Types).
     | term_binop bop.bvor t1 t2                         => pbvor t1 t2
     | term_binop bop.bvxor t1 t2                        => pbvxor t1 t2
     | term_binop bop.coalesce t1 t2                     => pcoalesce t1 t2
+    | term_binop bop.mulx t1 t2                         => pmulx t1 t2
     | term_binop bop.shiftr t1 t2                       => pshiftr t1 t2
     | term_binop bop.shiftl t1 t2                       => pshiftl t1 t2
     | term_binop bop.bvapp t1 t2                        => pbvapp t1 t2
@@ -488,6 +491,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (pbvtake : ∀ m n (t : Term Σ (ty.bvec (m + n))), P t → P (term_unop (uop.bvtake m) t)).
     Hypothesis (pexpand : ∀ n (t : Term Σ ty.bool), P (term_unop (uop.expand (n := n)) t)).
     Hypothesis (pcoalesce : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.coalesce t1 t2)).
+    Hypothesis (pmulx : ∀ n (t1 t2 : Term Σ (ty.bvec n)), P t1 → P t2 → P (term_binop bop.mulx t1 t2)).
 
     Fixpoint Term_bvec_rect [n : nat] (t : Term Σ (ty.bvec n)) {struct t} : P t :=
       Term_bvec_case P
@@ -516,6 +520,7 @@ Module Type TermsOn (Import TY : Types).
         (ltac:(intros; apply pbvtake; auto))
         (ltac:(intros; apply pexpand; auto))
         (ltac:(intros; apply pcoalesce; auto))
+        (ltac:(intros; apply pmulx; auto))
         t.
 
   End Term_bvec_rect.
