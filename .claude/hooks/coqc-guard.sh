@@ -154,6 +154,13 @@ state="$state_dir/claude-coqc-guard-$(id -u)-$key"
 #
 # Deliberately NOT blocked: the first build of a target (nothing to verify
 # against yet), and any build preceded by interactive work.
+#
+# Per-target records are keyed by SESSION, like the marker.  They must be:
+# the marker resets each session, so a project-keyed record made a NEW
+# session's first build of a previously-built file deny -- last_check=0 vs a
+# stale prev -- which is a false denial on work that has not looped at all.
+# (Caught by testing a two-session sequence; it is not reachable within one
+# session, which is why the single-session tests all passed.)
 # ---------------------------------------------------------------------------
 sid=$(printf '%s' "$input" | jq -r '.session_id // "nosession"' 2>/dev/null) || sid=nosession
 sid=${sid//[^A-Za-z0-9_-]/}
@@ -179,7 +186,7 @@ if [ -n "$targets" ] && [ "${CLAUDE_COQC_GUARD_SAMETARGET:-1}" = "1" ]; then
   while IFS= read -r tgt; do
     [ -n "$tgt" ] || continue
     tkey=$(printf '%s' "$tgt" | cksum | cut -d' ' -f1)
-    tstate="$state_dir/claude-coqc-guard-$(id -u)-$key-t$tkey"
+    tstate="$state_dir/claude-coqc-guard-$(id -u)-$key-s${sid:-nosession}-t$tkey"
     [ -f "$tstate" ] || continue
     prev=$(cat "$tstate" 2>/dev/null || echo 0)
     case $prev in ''|*[!0-9]*) prev=0 ;; esac
@@ -257,7 +264,7 @@ if [ -n "$targets" ]; then
     [ -n "$tgt" ] || continue
     tkey=$(printf '%s' "$tgt" | cksum | cut -d' ' -f1)
     # nanoseconds, to match the interactive marker's resolution
-    printf '%s\n' "$(date +%s%N)" > "$state_dir/claude-coqc-guard-$(id -u)-$key-t$tkey" 2>/dev/null || true
+    printf '%s\n' "$(date +%s%N)" > "$state_dir/claude-coqc-guard-$(id -u)-$key-s${sid:-nosession}-t$tkey" 2>/dev/null || true
   done <<EOF
 $targets
 EOF
