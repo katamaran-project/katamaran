@@ -107,8 +107,9 @@ byte-spec word entry yields four `ptstomem 1` chunks). Steps `S = 4m + 13n`.
 | 16 | 4 | 116 | 92.300 | 190.0 s | 134.6 s | 9.85 GB |
 | 4 | 16 | 224 | 85.024 | 361.5 s | 82.1 s | 10.29 GB |
 
-`m = n = 16` was not attempted: `m = n = 8` already peaks at ~11 GB
-(`top_heap`) on a 14 GB box. Every pre-existing point reproduced its
+`m = n = 16` was not attempted AT THE TIME: `m = n = 8` already peaked at
+~11 GB (`top_heap`) on a 14 GB box. **Superseded 2026-08-16** — after the
+§5.5 fix both run comfortably; see §5.6. Every pre-existing point reproduced its
 2026-08-13 value to ≤0.0004%, so `bop.mulx` does not touch check_scalar and
 the old grid figures remain valid on their own footing.
 
@@ -393,6 +394,41 @@ genuinely unsound for the ordering relops because bv addition wraps
 **Not verified:** that the real `check_scalar` — whose loop 2 re-reads loop
 1's array, the aliasing this rig removes (§1.1) — duplicates the same way.
 
+### 5.6. The diagonal m = n — the barrier is gone (2026-08-16)
+
+`m = n` is the real function's coupling (`m = n = klen`) and the case that
+could not be run at all before: `m=n=8` peaked ~11 GB and `m=n=16` was
+projected 15–17 GB total. Post-fix, both bases:
+
+| N | base | allocation | time | peak RSS | ×prev N |
+|---|---|---|---|---|---|
+| 4 | parametric | 5.32 G | 18.9 s | 5.12 GB | — |
+| 4 | concrete | 0.80 G | 3.9 s | 4.32 GB | — |
+| 8 | parametric | 11.10 G | 45.2 s | 6.19 GB | 2.09× |
+| 8 | concrete | 2.05 G | 11.6 s | 4.80 GB | 2.57× |
+| **16** | **parametric** | **30.87 G** | **159 s** | **9.51 GB** | 2.78× |
+| **16** | **concrete** | **6.67 G** | **43.9 s** | **6.30 GB** | 3.25× |
+
+**`m=n=16` now completes at the PARAMETRIC base** — 159 s, 9.5 GB — which is
+the configuration on the roadmap, not just the concrete-base diagnostic one.
+
+Two things to carry forward rather than over-read:
+
+- **Growth is superlinear and accelerating on both bases.** Held-out linear
+  fits on N=4/8 under-predict N=16 by **+36% parametric** and **+46.5%
+  concrete**; per-doubling ratios rise (2.09→2.78 and 2.57→3.25). That is
+  the `H·S` chunk-inventory law of §6 — on the diagonal BOTH factors grow
+  with N — now unmasked by the removal of the goal multiplication. So the
+  fix moved the wall out by roughly two doublings; it did not remove it.
+  Extrapolating the shape, N=32 parametric lands near ~90 G / ~8 min with
+  RSS plausibly past this box's ceiling, while N=32 concrete looks
+  reachable. **Both are extrapolations — measure before planning on them.**
+- **The base penalty SHRINKS with N**: parametric/concrete is 6.7× / 5.4× /
+  4.6× at N=4/8/16. The concrete base has the steeper exponent, exactly as
+  `cfgver-executor` records for a different reproducer, so a concrete-base
+  measurement flatters itself more at small N. Do not quote the small-N
+  ratio as the general saving.
+
 ## 6. The residual 1.6–2.6× is chunk inventory
 
 **Padding probe** (`ZZPadVCCommon.v`) — loop 2 alone at *fixed* n=4, with `P`
@@ -542,10 +578,13 @@ a goal selector takes a tactic and `Show` is a command.
 0. ~~Add `bvadd` cancellation to the `formula_propeq` path.~~ **DONE
    2026-08-16, gate green** — see §5.5. 92 → 29 goals, 9.8× at m16/n4,
    superadditivity 18.60× → 1.90×.
-1. **Concrete base at `m=n=8` and `m=n=16`** — the payoff test. `m16/n4`
-   concrete runs in ~8 s, so this is cheap, and it settles both whether the
-   original "cannot run at all" barrier is gone and whether the concrete
-   base's exponent really steepens.
+1. ~~Concrete base at `m=n=8` and `m=n=16`~~ **DONE 2026-08-16** — §5.6. Both
+   bases now reach `m=n=16`; the concrete exponent does steepen (its
+   held-out linear fit misses by +46.5% vs parametric's +36%). Next rung is
+   **N=32**, where the extrapolations disagree about feasibility
+   (parametric likely over this box's ceiling, concrete likely reachable) —
+   worth measuring rather than projecting, since this file's own history is
+   mostly of projections being wrong.
 2. **The aliasing question** (§1.1): the rig gives loop 2 a private `k2[]`
    where the real function re-reads loop 1's `k[]`. Untested; could be an
    additional driver the rig is blind to by construction.
