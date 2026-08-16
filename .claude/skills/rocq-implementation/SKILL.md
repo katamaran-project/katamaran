@@ -39,6 +39,34 @@ is expensive.
 Always prefer rocq-mcp tools over spawning `coqc` manually. The gap is not
 stylistic — it is roughly three orders of magnitude per iteration.
 
+### The rule, stated as a checkable condition
+
+> **Never run `coqc`/`make` on a file you just edited unless the immediately
+> preceding action interactively verified the part you changed.**
+
+This is the trigger condition, and it is here because "prefer rocq-mcp" was
+not enough on its own. On 2026-08-16 a session used preamble mode correctly
+for the hard part of a `Solver.v` lemma, then fell straight back to full
+rebuilds for the *wiring* — six ~6-minute compiles to fix two tactic names
+and a binder name. The failure mode is filing "verify the assembled file" as
+a different activity from "iterate on a tactic", then sliding from the first
+into the second. Both relapses happened at the wiring step, which feels like
+plumbing rather than proving. It is not: a wrong binder name is a tactic
+error like any other.
+
+Before every build, ask the question literally: *did my last action check
+this change interactively?* If no, there is almost always a shape question
+you can extract and check in ~100 ms first (see the module-functor note
+below). One confirming compile at the end is the sanctioned use; the second
+consecutive one is the smell.
+
+This is now enforced, not just advised: `.claude/hooks/coqc-guard.sh` denies
+a build whose target's own source is newer than its `.vo` unless a
+`rocq_check` / `rocq_start` / `rocq_step_multi` has happened since that
+change. A prerequisite-only change does not trip it, so dependency rebuilds
+are unaffected. If you hit that denial, do the interactive check — the
+override exists but is the user's to set.
+
 ```
 rocq_compile_file(file, mode="vos")               # fast type-check, statements only
 rocq_compile_file(file, mode="full")              # validates proof bodies

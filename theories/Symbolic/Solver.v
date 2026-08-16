@@ -2686,6 +2686,115 @@ Module Type GenericSolverOn
           | solve [exact HH] ].
     Qed.
 
+    (* ---- bvadd cancellation for formula_propeq --------------------------
+       The SAME cancellation as `try_bvadd_cancel` above, for the
+       PROPOSITIONAL equality constructor -- and, unlike that one, with NO
+       [secLeakT] guard, in either direction.
+
+       Why the guard is needed there and not here: [formula_relop]'s
+       interpretation (Formulas.v:138) goes through
+       [bop.eval_relop_relprop] and maps a [NonSyncVal] result to [False],
+       so for a secret shared operand the formula is False no matter what
+       the constants are -- which makes the "it holds" direction unsound
+       without [secLeakT].  [formula_propeq]'s interpretation is
+       [inst t1 ι = inst t2 ι], a STRUCTURAL equality on [RelVal] with no
+       such wall, so both directions are unconditional:
+
+         inst s ι = SyncVal c        -> SyncVal (add v1 c) = SyncVal (add v2 c)
+                                        <-> v1 = v2                (bv.add_cancel_r)
+         inst s ι = NonSyncVal l r   -> NonSyncVal (add v1 l) (add v1 r)
+                                      = NonSyncVal (add v2 l) (add v2 r)
+                                        <-> v1 = v2   (injectivity, then cancel
+                                                       in each component)
+
+       WHY THIS EXISTS AT ALL.  A loop whose exit compares two base-relative
+       pointers emits `formula_propeq (bvadd c1 p) (bvadd c2 p)` -- NOT
+       [formula_relop bop.eq], which is what `try_bvadd_cancel` is wired
+       into (`simplify_relop`, below).  With c1 <> c2 that is impossible, but
+       unrefuted it leaves one live dead path per trip and the whole rest of
+       the program is re-verified under each: residual goals grow as
+       `A_first + A_second * T_first`.  Measured on check_scalar's two-loop
+       rig: 92 goals where 29 addresses are touched
+       (case_study/RiscvPmp/CFGVer/diagnostics/
+        check-scalar-combined-cost-drivers.md, §5.5).
+
+       Note [formula_eq] is NOTATION for [formula_relop bop.eq]
+       (Formulas.v:409) -- do not confuse it with [formula_propeq]. *)
+    Definition try_bvadd_cancel_propeq {w : World} {σ} (t1 t2 : STerm σ w)
+      : option (DList w) :=
+      match σ return STerm σ w -> STerm σ w -> option (DList w) with
+      | ty.bvec n =>
+          fun t1 t2 =>
+            match bvadd_cancel_pair t1 t2 with
+            | Some (v1, v2, _) =>
+                Some (if bop.eval_relop_val bop.eq v1 v2 then empty else error)
+            | None => None
+            end
+      | _ => fun _ _ => None
+      end t1 t2.
+
+    Lemma try_bvadd_cancel_propeq_spec {w : World} {σ} (t1 t2 : STerm σ w)
+      (d : DList w) :
+      try_bvadd_cancel_propeq t1 t2 = Some d ->
+      instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      (* [cbn] only in the HYPOTHESIS: cbn on the goal unfolds
+         [instpred (formula_propeq _ _)] into [instpred_formula_propeq _ _],
+         after which [instpred_formula_propeqₚ] no longer matches (its
+         primed twin does -- but keeping the goal folded is simpler). *)
+      unfold try_bvadd_cancel_propeq. intros Hc.
+      destruct σ; cbn in Hc; try discriminate.
+      destruct (bvadd_cancel_pair t1 t2) as [[[v1 v2] s]|] eqn:Hpair;
+        try discriminate.
+      injection Hc as <-.
+      apply bvadd_cancel_pair_spec in Hpair as [-> ->].
+      rewrite instpred_formula_propeqₚ.
+      (* Read [v1 = v2] / [v1 <> v2] off the boolean test via its reflect
+         lemma rather than by syntactically destructing the underlying
+         decidable -- the [if] shape that `try_bvadd_cancel_spec` matches on
+         is only exposed there by an earlier [depelim op; cbn]. *)
+      match goal with |- instpred (if ?b then _ else _) ⊣⊢ _ => destruct b eqn:Hev end;
+        pose proof (bop.eval_relop_val_spec bop.eq v1 v2) as Hrefl;
+        (* [cbn in Hrefl] FIRST: destructing the goal's boolean already
+           exposed it in reduced form ([eq_dec v1 v2 ||| false]), so [Hev]
+           and [Hrefl] must be brought to the same normal form before the
+           rewrite can see a match. *)
+        cbn in Hrefl; rewrite Hev in Hrefl;
+        [ rewrite instpred_dlist_empty | rewrite instpred_dlist_error ];
+        constructor; intros ι Hwco; cbn;
+        unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn;
+        (* the ONE case split: sync vs non-sync shared operand.  Both give
+           the same answer -- that is the whole point of doing this on
+           [formula_propeq], which has no NonSyncVal-to-False wall, rather
+           than on [formula_relop]. *)
+        destruct (inst s ι) as [c|l r] eqn:Hs; cbn;
+        inversion Hrefl as [Heqv|Hne]; subst;
+        split; intro HH;
+        first
+          [ solve [exact I]
+          | solve [destruct HH]
+          | solve [reflexivity]
+          (* NEITHER [injection] NOR [inversion] here: both dig THROUGH
+             [bv.add] into its [bv.truncn (bv.bin _ + bv.bin _)]
+             representation, so the equation they hand back is not in
+             [bv.add_cancel_r]'s shape and [exact] fails.  [congruence] on
+             the constructor arguments -- grabbed from the hypothesis by
+             pattern, since the shared operand is bound by the [destruct]
+             above and is named differently per branch -- keeps [bv.add]
+             folded.  (Verified in preamble mode before touching this file;
+             see the rocq-implementation skill.) *)
+          | solve [exfalso; apply Hne;
+                   match goal with
+                   | H : SyncVal ?a = SyncVal ?b |- _ =>
+                       assert (Hc : a = b) by congruence;
+                       exact (bv.add_cancel_r Hc)
+                   | H : NonSyncVal ?a _ = NonSyncVal ?b _ |- _ =>
+                       assert (Hc : a = b) by congruence;
+                       exact (bv.add_cancel_r Hc)
+                   end]
+          | solve [assumption] ].
+    Qed.
+
     Lemma simplify_relop_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) :
       instpred (simplify_relop op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
     Proof.
@@ -2781,7 +2890,16 @@ Module Type GenericSolverOn
                                                 | Some F2' => singleton (formula_or (PathCondition_to_Formula F1') (PathCondition_to_Formula F2'))
                                          end
                                   end
-      | formula_propeq t1 t2   => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) t1 t2
+      (* bvadd cancellation FIRST: a base-relative pointer-compare loop exit
+         emits `formula_propeq (bvadd c1 p) (bvadd c2 p)`, which with
+         c1 <> c2 is impossible but which `simplify_propeq` (syntactic
+         equality + structural decomposition) cannot refute -- leaving one
+         live dead path per trip.  See `try_bvadd_cancel_propeq` above. *)
+      | formula_propeq t1 t2   =>
+          match try_bvadd_cancel_propeq (peval t1) (peval t2) with
+          | Some d => d
+          | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) t1 t2
+          end
       | formula_secLeak t      => simplify_secLeak t (* TODO *)
       end.
 
@@ -2828,7 +2946,21 @@ Module Type GenericSolverOn
         + change (instpred_formula F1) with (instpred F1).
           rewrite -IHF1 -HrF1; cbn.
           now rewrite bi.False_or.
-      - rewrite simplify_propeq_spec. arw.
+      (* [match goal] rather than naming the two terms: [induction F]'s
+         auto-generated names for [formula_propeq]'s arguments are not
+         [t]/[t0] here. *)
+      - match goal with
+        | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
+            destruct scrut as [d|] eqn:Hc
+        end.
+        (* Endgame copied verbatim from `simplify_relop_spec`'s peval bridge
+           just above: the cancellation ran on the PEVAL'd terms, and
+           [peval_sound] is stated PER-VALUATION, so it cannot be rewritten
+           under a still-unapplied [⊣⊢] -- ι must be introduced first. *)
+        + apply try_bvadd_cancel_propeq_spec in Hc; rewrite Hc.
+          constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+          now rewrite !peval_sound.
+        + rewrite simplify_propeq_spec. arw.
       - apply simplify_secLeak_spec.
     Qed.
     #[export] Hint Rewrite @simplify_formula_spec : uniflogic.

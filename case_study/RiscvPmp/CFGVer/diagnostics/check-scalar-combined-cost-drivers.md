@@ -4,16 +4,19 @@ Status: **Diagnostic record. Originally 2026-08-13; substantially re-measured
 and re-concluded 2026-08-14.** The 2026-08-13 reading is kept, marked
 superseded, at the bottom.
 
-**One-sentence finding (2026-08-15, ROOT-CAUSED):** combining check_scalar's
-two loops into one flat VC costs **5.5–18.6× the sum of the two loops measured
-separately**, and the dominant part of that is now traced to a specific,
-fixable defect — **the solver does not refute `bvadd c₁ p = bvadd c₂ p` for
-distinct literals `c₁ ≠ c₂`**, so a base-relative pointer-compare loop exit
-leaves one provably-dead fall-through path per trip, and **everything
-sequenced after the loop is re-verified under every one of them**. The
-residual-goal count obeys exactly `A_first + A_second × T_first` (verified to
-the goal on three configurations). A secondary, independent **1.6–2.6×
-chunk-inventory** effect survives at a concrete base (§6).
+**One-sentence finding (2026-08-15, ROOT-CAUSED; FIXED 2026-08-16):**
+combining check_scalar's two loops into one flat VC cost **5.5–18.6× the sum
+of the two loops measured separately**, and the dominant part was a specific,
+fixable defect — **the solver did not refute `bvadd c₁ p = bvadd c₂ p` for
+distinct literals `c₁ ≠ c₂` on the `formula_propeq` path**, so a
+base-relative pointer-compare loop exit left one provably-dead fall-through
+path per trip and **everything sequenced after the loop was re-verified under
+every one of them**. The residual-goal count obeyed exactly
+`A_first + A_second × T_first` (verified to the goal on three
+configurations). **Fixed** by adding cancellation to that path: 92 → 29
+goals, up to 9.8× cheaper, superadditivity 18.60× → 1.90×, gate green. What
+remains is the independent **1.5–1.9× chunk-inventory** effect of §6, which
+is what a concrete base leaves too.
 
 **Prior framing, superseded 2026-08-15:** the 2026-08-14 version of this line
 attributed the dominant factor to a diffuse "symbolic-base amplification of
@@ -296,15 +299,99 @@ Four consequences worth stating plainly:
   a literal and IS decided in place — so it has no duplication at all, and
   its symbolic-base cost is only the per-address bounds.
 
-**The fix this indicates.** A solver rule refuting `bvadd c₁ p = bvadd c₂ p`
-for distinct literals collapses `A_second × T_first` back to `A_second` —
-turning the composition penalty from multiplicative into additive, which is
-the naive expectation. Before building anything, check
-`PLAN-check-scalar-full.md` Phase 1's `try_bvadd_cancel_spec`: cancellation
-machinery may already exist and simply not match this shape. **Not verified:**
-that the rule is genuinely absent rather than merely not firing here, and that
-the real `check_scalar` (whose loop 2 re-reads loop 1's array — the aliasing
-this rig removes, §1.1) duplicates the same way.
+### Exactly why it is not refuted: the WRONG FORMULA CONSTRUCTOR
+
+Localised 2026-08-16. Three facts, in order:
+
+1. **A cancellation rule exists and is correct.** `try_bvadd_cancel`
+   (`Solver.v:2550`) is wired into `simplify_relop`'s `eq` and `neq` arms
+   (2577/2584), and `bvadd_cancel_pair` (2525) matches exactly
+   `bvadd (val v₁) s` vs `bvadd (val v₂) s`. It is gated on `secLeakT s`
+   (2559).
+2. **That gate is NOT the blocker.** Adding `secLeakvar "p"` to the
+   precondition — so the base is explicitly leakable — changes the residual
+   count by **nothing**: 92 → 92 at m4/n4 and 180 → 180 at m8/n4, allocation
+   within 0.006% (`ZZLeakBaseCommon.v`, `ZZLeakBase_M{4,8}_N4.v`). A
+   plausible-looking hypothesis, measured dead. Don't re-run it.
+3. **The loop exit produces a DIFFERENT formula constructor.** `Formula`
+   (`Formulas.v:62-71`) has both `formula_relop` and `formula_propeq`, with
+   different interpretations (`Formulas.v:138`):
+
+   | constructor | `instprop` |
+   |---|---|
+   | `formula_relop op t1 t2` | `match eval_relop_relprop … with SyncVal p => p \| NonSyncVal _ _ => False end` |
+   | `formula_propeq t1 t2` | `inst t1 ι = inst t2 ι` — a bare Coq equality on RelVals |
+
+   The dumped hypothesis is the **bare** form
+   (`bvadd (SyncVal [bv 0x47]) v = bvadd (SyncVal [bv 0x48]) v`), so the exit
+   emits `formula_propeq`. Its simplifier arm (`Solver.v:2784`) is
+   `simplify_propeq Term_eqb …`, which does syntactic comparison and
+   structural decomposition and **never calls `try_bvadd_cancel`**. The rule
+   is fine; it is simply not on this path. (Note `formula_eq` is *notation*
+   for `formula_relop bop.eq`, `Formulas.v:409` — easy to mistake for the
+   propositional one.)
+
+### The fix — LANDED 2026-08-16, gate green
+
+`try_bvadd_cancel_propeq` + `try_bvadd_cancel_propeq_spec` (`Solver.v`,
+next to the relop original), wired into `simplify_formula`'s
+`formula_propeq` arm ahead of `simplify_propeq`. Closed `Qed`, no new
+axioms.
+
+**Residual goals — exactly the predicted collapse:**
+
+| | before | after |
+|---|---|---|
+| loop 1 alone N=4 | 8 | 8 (unchanged) |
+| loop 2 alone N=4 | 21 | 21 (unchanged) |
+| combined m4/n4 | **92** | **29** = 8+21 |
+| combined m8/n4 | **180** | **33** = 12+21 |
+
+The `A_second × T_first` term is gone and the single-loop counts are
+untouched, so the rule fires only where it should.
+
+**Cost, parametric base:**
+
+| config | allocation | time | peak RSS | superadditivity |
+|---|---|---|---|---|
+| m4 n4 | 19.09 → 5.32 G (3.6×) | 64 → 19 s | 7.70 → 5.12 GB | 5.45× → **1.52×** |
+| m16 n4 | 92.30 → 9.42 G (**9.8×**) | 325 → 36 s (8.9×) | 9.85 → 5.87 GB | 18.60× → **1.90×** |
+| m4 n16 | 85.02 → 21.61 G (3.9×) | 444 → 111 s | 10.29 → 8.39 GB | 5.94× → **1.51×** |
+
+The gain scales with the multiplier removed — largest where `T_first` was
+largest — exactly as the law predicts. What remains (~1.5–1.9×) is the
+chunk-inventory effect of §6, i.e. the parametric base now costs
+essentially nothing extra *for composition*. `m16/n4` at 5.87 GB is well
+under the ceiling that made larger configurations infeasible.
+
+`./scripts/gate.sh` passes: build clean, no holes, 14 end theorems
+axiom-clean. That run was also the first full rebuild of the heavy Iris
+branch since `bop.mulx`, so both changes are covered.
+
+**Why it needs no guard.** For this constructor cancellation is sound
+**unconditionally**, in both directions — no `secLeakT`:
+
+`inst (bvadd (val c) s) ι = liftBinOp bvadd (SyncVal c) (inst s ι)`, so
+
+| `⟦s⟧ ι` | the two sides | equal iff |
+|---|---|---|
+| `SyncVal sv` | `SyncVal (c₁+sv)` vs `SyncVal (c₂+sv)` | `c₁ = c₂` (bv cancellation) |
+| `NonSyncVal sl sr` | `NonSyncVal (c₁+sl) (c₁+sr)` vs `NonSyncVal (c₂+sl) (c₂+sr)` | `c₁ = c₂` (constructor injectivity, then cancellation componentwise) |
+
+The `secLeakT` guard on `try_bvadd_cancel` exists only because
+`formula_relop`'s interpretation has the `NonSyncVal ⇒ False` wall, which
+makes the *hold* direction unsound for a secret operand — and even there the
+*refute* direction needs no guard. `formula_propeq` has no wall, so both
+directions are unconditional. `liftBinOpRV` (`TypeDecl.v:268`) is what pins
+this down: it returns `SyncVal` only when both inputs are sync and never
+collapses `NonSyncVal b b`.
+
+Keep the `op ∈ {eq, neq}` restriction on the *relop* rule: cancellation is
+genuinely unsound for the ordering relops because bv addition wraps
+(`Solver.v:2543`).
+
+**Not verified:** that the real `check_scalar` — whose loop 2 re-reads loop
+1's array, the aliasing this rig removes (§1.1) — duplicates the same way.
 
 ## 6. The residual 1.6–2.6× is chunk inventory
 
@@ -374,14 +461,12 @@ keeping the full inventory resident.
 
 Ranked, for `check_scalar`'s whole-function target:
 
-1. **Fix the unrefuted pointer equality (§5.5).** This is the dominant cost
-   and, unlike everything else here, it is a *defect* rather than a design
-   trade-off: three of four paths through a 4-trip loop are provably dead and
-   are being fully verified anyway. A `bvadd`-cancellation rule turns the
-   composition penalty from `A_second × T_first` into `A_second + …`. It
-   also needs no change to the parametric base, which the owner wants kept.
-   Cheapest first step: determine whether `try_bvadd_cancel_spec` already
-   exists and merely fails to match this shape.
+1. ~~Fix the unrefuted pointer equality (§5.5).~~ **DONE** — this was the
+   dominant cost and, unlike everything else here, a *defect* rather than a
+   design trade-off: three of four paths through a 4-trip loop were provably
+   dead and fully verified anyway. Cancellation on the `formula_propeq` path
+   turned `A_second × T_first` into `A_second`, worth up to 9.8×, with no
+   change to the parametric base.
 2. **The residual composition penalty is chunk inventory, ~1.6–2.6×**, driven
    by total resident chunks × steps, dominated by instruction chunks. Same
    mechanism as `key-schedule-loop2-cost-drivers.md`'s driver, so
@@ -454,12 +539,9 @@ a goal selector takes a tactic and `Show` is a command.
 
 **Not done, in priority order:**
 
-0. **Check whether `try_bvadd_cancel_spec` (or any `bvadd`-cancellation rule)
-   exists and why it does not refute `bvadd c₁ p = bvadd c₂ p` here** (§5.5).
-   This is now the highest-value item in the file: it is a bug fix, not a
-   design change, and it targets the dominant cost. Confirm first on the
-   goal-count law — if the rule fires, m4/n4 must drop from 92 residual goals
-   to 29.
+0. ~~Add `bvadd` cancellation to the `formula_propeq` path.~~ **DONE
+   2026-08-16, gate green** — see §5.5. 92 → 29 goals, 9.8× at m16/n4,
+   superadditivity 18.60× → 1.90×.
 1. **Concrete base at `m=n=8` and `m=n=16`** — the payoff test. `m16/n4`
    concrete runs in ~8 s, so this is cheap, and it settles both whether the
    original "cannot run at all" barrier is gone and whether the concrete
