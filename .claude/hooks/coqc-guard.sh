@@ -24,14 +24,32 @@
 #     build nothing.
 # So: gate on frequency, and only for commands that actually INVOKE a build.
 #
-# THE RULE. At most $MAX real build invocations per $WINDOW seconds. A
-# one-off build, or a final check after real work, is never blocked. A
-# rebuild-per-tweak loop hits the cap almost immediately and is told to use
-# preamble mode. No path allowlist, so no hook edit is ever needed to build
+# AMENDED 2026-08-16: frequency ALONE was not enough -- see the second rule.
+#
+# RULE 1 (rate limit). At most $MAX real build invocations per $WINDOW
+# seconds. A one-off build, or a final check after real work, is never
+# blocked. No path allowlist, so no hook edit is ever needed to build
 # something new -- including theories/Bitvector.v and theories/Symbolic/
 # Solver.v, which rocq_compile_file genuinely cannot build (a `Load`
 # statement and a dropped `-arg "-w all"` respectively) and which previously
 # needed named exemptions.
+#
+# RULE 2 (same target, no interactive check in between). Rule 1 has a blind
+# spot that is worst exactly where the cost is highest: a ~6-minute
+# Solver.v build means only 2-3 fit in the 15-minute window, so the cap is
+# never reached. THE SLOWER THE FILE, THE MORE INVISIBLE THE LOOP. On
+# 2026-08-16 six consecutive full Solver.v rebuilds were burned fixing two
+# tactic names, with this hook silent throughout -- the very pattern it was
+# written to stop, one file slower than it could see.
+#
+# The condition that actually separates a tweak loop from legitimate
+# verification is not "how often" but "was the change checked INTERACTIVELY
+# first". So a second build of the same target is denied unless a
+# rocq_check / rocq_start / rocq_step_multi happened since the previous one.
+# Requires .claude/hooks/rocq-interactive-marker.sh (PreToolUse on those MCP
+# tools) to be registered -- if you delete one, delete both, or repeat
+# builds can never be unblocked. Disable with CLAUDE_COQC_GUARD_SAMETARGET=0.
+# `make X.vo` and `coqc X.v` normalise to the same target.
 #
 # NOT COUNTED (allowed freely):
 #   - Anything that does not actually invoke make/coqc as a command (see
@@ -117,15 +135,83 @@ case $cmd in
   *CFGVer/Example/ZZ*) exit 0 ;;
 esac
 
+state_dir=${XDG_RUNTIME_DIR:-/tmp}
+key=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$PWD}" | cksum | cut -d' ' -f1)
+state="$state_dir/claude-coqc-guard-$(id -u)-$key"
+
+# ---------------------------------------------------------------------------
+# SAME-TARGET rule (added 2026-08-16).  The rate limit below cannot see a
+# slow tweak loop: a ~6-minute Solver.v build never fills a 15-minute window,
+# so the slower the file the safer the loop looks.  Six consecutive full
+# Solver.v rebuilds were burned that way in one session, fixing two tactic
+# names, with this guard silent throughout.
+#
+# The real condition is not frequency, it is: was the change checked
+# INTERACTIVELY before compiling the whole file?  So: rebuilding a target
+# this session is fine, but rebuilding the SAME target again with no
+# rocq_check / rocq_start / rocq_step_multi in between is the loop, at any
+# spacing.  The marker is written by .claude/hooks/rocq-interactive-marker.sh.
+#
+# Deliberately NOT blocked: the first build of a target (nothing to verify
+# against yet), and any build preceded by interactive work.
+# ---------------------------------------------------------------------------
+sid=$(printf '%s' "$input" | jq -r '.session_id // "nosession"' 2>/dev/null) || sid=nosession
+sid=${sid//[^A-Za-z0-9_-]/}
+marker="${TMPDIR:-/tmp}/claude-rocq-interactive-${sid:-nosession}"
+
+# Every .v path the command names; the same command may build several.
+# Take the WHOLE whitespace-separated token that ends in .v -- do NOT try to
+# carve the path out with `s/.*\(...\.v\)$/\1/`: the leading `.*` is greedy,
+# so the capture group collapses to just ".v" and every target then shares
+# one state key (caught by the hook's own test: an unrelated first build was
+# denied because it inherited Solver.v's record).  Leading "./" is stripped
+# so `./theories/X.v` and `theories/X.v` are the same target.
+# `make X.vo` is the same loop as `coqc X.v`, so normalise .vo -> .v and let
+# both spellings share one key.
+targets=$(printf '%s' "$cmd" | tr ' \t' '\n\n' \
+          | sed -n -e '/\.v$/{s#^\./##;p;}' -e '/\.vo$/{s#^\./##;s#o$##;p;}')
+
+if [ -n "$targets" ] && [ "${CLAUDE_COQC_GUARD_SAMETARGET:-1}" = "1" ]; then
+  last_check=0
+  [ -f "$marker" ] && last_check=$(cat "$marker" 2>/dev/null || echo 0)
+  case $last_check in ''|*[!0-9]*) last_check=0 ;; esac
+
+  while IFS= read -r tgt; do
+    [ -n "$tgt" ] || continue
+    tkey=$(printf '%s' "$tgt" | cksum | cut -d' ' -f1)
+    tstate="$state_dir/claude-coqc-guard-$(id -u)-$key-t$tkey"
+    [ -f "$tstate" ] || continue
+    prev=$(cat "$tstate" 2>/dev/null || echo 0)
+    case $prev in ''|*[!0-9]*) prev=0 ;; esac
+    [ "$prev" -gt 0 ] || continue
+    if [ "$last_check" -le "$prev" ]; then
+      msg="BLOCKED by coqc-guard: you already built ${tgt} in this session, and there has been no interactive check since.
+
+That is the tweak-loop signature, and it is invisible to the rate limit below when the file is slow to build (a ~6-minute Solver.v build never fills the 15-minute window -- the slower the file, the safer the loop looks). Six consecutive Solver.v rebuilds were burned this way in one session, to fix two tactic names.
+
+The rule: check the change interactively FIRST, then compile the whole file once to confirm.
+
+  - rocq_start(preamble=\"From Katamaran Require Import ...\") + rocq_check -- ~10-30ms per attempt, imports content-hash-cached.
+  - Cannot reach the real definitions (module functor, or rocq_start cannot index that far into a big file)? Restate the goal SHAPE over abstract Context params -- tactic failures reproduce that way in ~100ms. See the rocq-implementation skill.
+  - Need an exact mid-proof goal? \`match goal with |- ?G => idtac G end\`, with \`all:\` if there may be more than one goal.
+
+Any rocq_check / rocq_start / rocq_step_multi call clears this block for ${tgt}.
+
+Genuinely need to rebuild without that (e.g. confirming an unrelated dependency rebuild)? Ask the user; they can set CLAUDE_COQC_GUARD_SAMETARGET=0."
+      jq -n --arg r "$msg" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+      exit 0
+    fi
+  done <<EOF
+$targets
+EOF
+fi
+
 # ---------------------------------------------------------------------------
 # Rate limit.
 # ---------------------------------------------------------------------------
 WINDOW=${CLAUDE_COQC_GUARD_WINDOW:-900}
 MAX=${CLAUDE_COQC_GUARD_MAX:-3}
-
-state_dir=${XDG_RUNTIME_DIR:-/tmp}
-key=$(printf '%s' "${CLAUDE_PROJECT_DIR:-$PWD}" | cksum | cut -d' ' -f1)
-state="$state_dir/claude-coqc-guard-$(id -u)-$key"
 
 now=$(date +%s)
 recent=""
@@ -164,4 +250,17 @@ Genuinely need a different budget for a legitimate batch (e.g. a measurement swe
 fi
 
 printf '%s%s\n' "$recent" "$now" > "$state" 2>/dev/null || true
+
+# Record this build per target, for the SAME-TARGET rule above.
+if [ -n "$targets" ]; then
+  while IFS= read -r tgt; do
+    [ -n "$tgt" ] || continue
+    tkey=$(printf '%s' "$tgt" | cksum | cut -d' ' -f1)
+    # nanoseconds, to match the interactive marker's resolution
+    printf '%s\n' "$(date +%s%N)" > "$state_dir/claude-coqc-guard-$(id -u)-$key-t$tkey" 2>/dev/null || true
+  done <<EOF
+$targets
+EOF
+fi
+
 exit 0
