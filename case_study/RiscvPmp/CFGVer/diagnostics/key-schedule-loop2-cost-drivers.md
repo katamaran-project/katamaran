@@ -400,6 +400,30 @@ fix to it is not bounded by some other mechanism taking over — but nothing
 here measures what the residual per-step density costs at the ~4×
 instruction count a real GF(2^128) step on RV32 would need.
 
+## Note: why this file's costs are modest compared with check_scalar's
+
+Added 2026-08-15. A concrete-base ablation of this whole grid (five variants ×
+N=4/8/16, `ZZKslConcCommon.v` + `ZZKslC_*.v`, built with the sanctioned
+`gen_contract` since these contracts are word-granular) shows the chunk axis
+**survives essentially unchanged**: 2.718 → 2.565 (term flat) and 2.720 →
+2.742 (term growing) at N=16, with the term axis still closed (1.02–1.03).
+So this file's headline is confirmed and is *not* a symbolic-base artifact.
+Held-out linearity is even sharper at a concrete base — the 1-chunk rows fit
+to +0.00% / +0.41% and the N-chunk rows miss by 40–45% (vs 23–28%
+parametric): removing the base's roughly-linear overhead *exposes* the
+chunk-driven quadratic.
+
+The concrete base is worth only **3.4–4.9×** here, against 18–59× on
+check_scalar's combined rig. The reason is now known and is not about size:
+`key_schedule_loop2` exits on a **public pinned counter** (`A4, true,
+PVConst`), which folds to a literal so the branch is decided in place, whereas
+check_scalar's loops exit on **base-relative pointer compares**, which the
+solver fails to refute and which therefore leak one dead path per trip into
+everything downstream (`check-scalar-combined-cost-drivers.md` §5.5). This
+example pays only the per-address fetch bounds; it has no path duplication.
+**Do not generalise a symbolic-base cost factor across examples** — it depends
+on the loop-exit idiom, not just on program size.
+
 ## Files (throwaway, not in `_CoqProject`)
 
 `ZZKslBaseline.v` (baseline) ·
@@ -408,7 +432,9 @@ instruction count a real GF(2^128) step on RV32 would need.
 `ZZKslChunkSharedNoFbCommon.v` + `ZZKslCSNF_N{4,8,16}.v` (1-used+flat) ·
 `ZZKslNUsedFlatCommon.v` + `ZZKslNUF_N{4,8,16}.v` (N-used+flat) ·
 `ZZKslChunkPaddedCommon.v` + `ZZKslCP_N{4,8,16}.v` (N-declared-1-used+flat) ·
-`ZZKslPaddedGrowCommon.v` + `ZZKslPG_N{4,8,16}.v` (N-declared-1-used+growing).
+`ZZKslPaddedGrowCommon.v` + `ZZKslPG_N{4,8,16}.v` (N-declared-1-used+growing) ·
+`ZZKslConcCommon.v` + `ZZKslC_{csnf,nuf,cp,cs,cd}_N{4,8,16}.v` (concrete-base
+twins of all five variants, via `gen_contract` + `concretize_reg`/`_mem`).
 
 Search-vs-size probes (each with 1-declared and N-declared arms in one body,
 so the surcharge is read within a single instruction sequence):

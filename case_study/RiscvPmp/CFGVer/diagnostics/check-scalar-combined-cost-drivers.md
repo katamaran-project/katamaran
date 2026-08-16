@@ -4,15 +4,22 @@ Status: **Diagnostic record. Originally 2026-08-13; substantially re-measured
 and re-concluded 2026-08-14.** The 2026-08-13 reading is kept, marked
 superseded, at the bottom.
 
-**One-sentence finding (2026-08-14):** combining check_scalar's two loops into
-one flat VC costs **5.5–18.6× the sum of the two loops measured separately**,
-and that penalty decomposes into two independent factors — a **symbolic-base
-amplification of 2.8–7.2×**, which a concrete base removes entirely, and a
-residual **1.6–2.6× that is chunk-inventory cost**: each loop's steps must
-transport the *other* loop's resident chunks at every world extension, an
-effect dominated by instruction and register chunks rather than data cells.
-Neither factor is a cross-loop *semantic* interaction, and neither is
-"more residual goals".
+**One-sentence finding (2026-08-15, ROOT-CAUSED):** combining check_scalar's
+two loops into one flat VC costs **5.5–18.6× the sum of the two loops measured
+separately**, and the dominant part of that is now traced to a specific,
+fixable defect — **the solver does not refute `bvadd c₁ p = bvadd c₂ p` for
+distinct literals `c₁ ≠ c₂`**, so a base-relative pointer-compare loop exit
+leaves one provably-dead fall-through path per trip, and **everything
+sequenced after the loop is re-verified under every one of them**. The
+residual-goal count obeys exactly `A_first + A_second × T_first` (verified to
+the goal on three configurations). A secondary, independent **1.6–2.6×
+chunk-inventory** effect survives at a concrete base (§6).
+
+**Prior framing, superseded 2026-08-15:** the 2026-08-14 version of this line
+attributed the dominant factor to a diffuse "symbolic-base amplification of
+2.8–7.2×" and asserted it was "not more residual goals". The magnitudes were
+right; the causal claim was wrong on both counts — it *is* more residual
+goals, multiplicatively so, and it has a single named cause.
 
 ---
 
@@ -141,10 +148,13 @@ Within each order, the **first** loop's trip count is always the steeper axis:
 | loop 2 first | 2.61× | **5.44×** | n — the first loop |
 
 So "loop 1's trips are intrinsically expensive" is **refuted**: what makes a
-loop's trips expensive is running *before* another loop. No simple functional
-form fits, though — `(first-loop trips) × (second-loop steps)` predicts a
-uniform 3.25× gain from swapping, against measured 1.92 / 3.56 / 1.57.
-Position-dependence is solid; the law is not.
+loop's trips expensive is running *before* another loop.
+
+> **Superseded 2026-08-15.** This section originally closed with "no simple
+> functional form fits — position-dependence is solid; the law is not." There
+> IS an exact law; it is on *residual goals*, not on allocation, which is why
+> fitting allocation missed it. See §5.5. The swap ratios above remain the
+> measured allocation figures and are unchanged.
 
 Note the *feasibility* gain is much smaller than the throughput gain: at
 m16/n4 swapping wins 3.56× in allocation but only 1.42× in peak RSS.
@@ -206,6 +216,95 @@ stage: `vm_compute` **26.4×** parametric vs 2.84× concrete; `solve_vc` 11.4×
 vs 2.0×. The *executor* is the more superadditive stage. Corroborated
 independently in §6: dead declarations add `vm_compute` cost and **zero**
 `solve_vc` cost.
+
+## 5.5. ROOT CAUSE: an unrefuted pointer equality multiplies the VC
+
+Dumping the residual goals themselves (`ZZVCDump_*.v`) turns the whole
+symbolic-base story from a magnitude into a mechanism.
+
+**Every residual has one shape** — an access upper bound
+`0 ≤ 1024 − (K + unsigned (offset ⊕ v))`, `K=4` for a 4-byte instruction
+fetch, `K=1` for an `LBU`. Nothing else survives `solve_vc`. A concrete base
+never produces them (`unsigned` of a literal just computes), which is why
+`solve_vc` measures 0.000 s there.
+
+**One loop: exactly one goal per distinct address.**
+
+| | residual goals | distinct (K, offset) | addresses touched |
+|---|---|---|---|
+| loop 1 alone, N=4 | 8 | 8 | 4 instr + 4 bytes |
+| loop 2 alone, N=4 | 21 | 21 | 13 instr + 8 bytes |
+
+No duplicates. Note this is per *address*, not per step: loop 1 executes 16
+steps but its 4 instruction addresses recur across trips and collapse.
+
+**Two loops: the second loop's whole block, duplicated `T_first` times.**
+
+| | goals | distinct | structure |
+|---|---|---|---|
+| combined m4/n4 | **92** | 29 | 8 (loop 1, 1×) + **4 × 21** (loop 2) |
+| combined m8/n4 | **180** | 33 | 12 (loop 1, 1×) + **8 × 21** (loop 2) |
+| swapped m4/n4 | **53** | 29 | 21 (loop 2, 1×) + **4 × 8** (loop 1) |
+
+The copies sit at stride 21 (goals 9, 30, 51, 72) — four consecutive complete
+copies of loop 2's block. The law is
+
+```
+residual goals  =  A_first  +  A_second × T_first
+```
+
+with `A` the addresses a loop owns and `T_first` the FIRST loop's trip count.
+Zero fitted parameters, exact on all three configurations, including the
+swapped rig where the multiplied group is the one that moved to the end.
+
+**Why.** Loop 1 walks `A0` from `p+0x44` to `A1 = p+0x48` and exits on
+`BNE A0 A1`. At the end of *every* trip the executor forks, and the
+fall-through arm assumes a pointer equality. Diffing the four copies'
+contexts (they are otherwise identical) shows exactly one extra hypothesis
+each:
+
+| copy | assumed on that path | true? |
+|---|---|---|
+| goal 9 | *(none)* | the real exit, after trip 4 |
+| goal 30 | `p+0x47 = p+0x48` | **impossible** |
+| goal 51 | `p+0x46 = p+0x48` | **impossible** |
+| goal 72 | `p+0x45 = p+0x48` | **impossible** |
+
+Three of the four are `bvadd c₁ p = bvadd c₂ p` with `c₁ ≠ c₂` — decidable
+arithmetic, provably false. **The solver does not refute them**, so instead of
+collapsing to `SymProp.block` (as `cfgver-executor` describes for a refuted
+fork) each dead branch stays live and the entire remainder of the program is
+symbolically executed and verified underneath it.
+
+Four consequences worth stating plainly:
+
+- **It is linear, not exponential.** Each trip contributes one dead path and
+  they do not compound: `T_first` paths, not `2^T_first`. The blow-up is
+  multiplicative only on what *follows* the loop.
+- **It is positional by construction**, which is what §3's order swap was
+  seeing: swapping decides which loop gets multiplied by the other's trip
+  count. Predicted goal ratio at m16/n4 is 336/80 = 4.2 against the measured
+  3.56× allocation saving.
+- **A single loop hides it.** Loop 1 alone shows no duplication *in the goal
+  count* because its dead paths reach the program end immediately — but they
+  are still built, which is part of why even a single loop pays a 4.4–14.2×
+  parametric penalty (§5).
+- **It explains why the base penalty is program-dependent** (§4's 18–59× for
+  check_scalar vs §"KSL" 3.4–4.9%). check_scalar's loops exit on
+  *base-relative pointer compares*, so they duplicate. `key_schedule_loop2`
+  exits on a **public pinned counter** (`A4, true, PVConst`), which folds to
+  a literal and IS decided in place — so it has no duplication at all, and
+  its symbolic-base cost is only the per-address bounds.
+
+**The fix this indicates.** A solver rule refuting `bvadd c₁ p = bvadd c₂ p`
+for distinct literals collapses `A_second × T_first` back to `A_second` —
+turning the composition penalty from multiplicative into additive, which is
+the naive expectation. Before building anything, check
+`PLAN-check-scalar-full.md` Phase 1's `try_bvadd_cancel_spec`: cancellation
+machinery may already exist and simply not match this shape. **Not verified:**
+that the rule is genuinely absent rather than merely not firing here, and that
+the real `check_scalar` (whose loop 2 re-reads loop 1's array — the aliasing
+this rig removes, §1.1) duplicates the same way.
 
 ## 6. The residual 1.6–2.6× is chunk inventory
 
@@ -275,20 +374,34 @@ keeping the full inventory resident.
 
 Ranked, for `check_scalar`'s whole-function target:
 
-1. **The symbolic base is the dominant cost**, 2.8–7.2× amplification of the
-   combination penalty and 18–59× of absolute allocation, acting mainly
-   through `vm_compute`. Anything that reduces it (a concrete-base rung, or
-   cheaper per-address fetch bounds) dwarfs every other lever measured here.
+1. **Fix the unrefuted pointer equality (§5.5).** This is the dominant cost
+   and, unlike everything else here, it is a *defect* rather than a design
+   trade-off: three of four paths through a 4-trip loop are provably dead and
+   are being fully verified anyway. A `bvadd`-cancellation rule turns the
+   composition penalty from `A_second × T_first` into `A_second + …`. It
+   also needs no change to the parametric base, which the owner wants kept.
+   Cheapest first step: determine whether `try_bvadd_cancel_spec` already
+   exists and merely fails to match this shape.
 2. **The residual composition penalty is chunk inventory, ~1.6–2.6×**, driven
-   by total resident chunks × steps, dominated by instruction chunks. This is
-   the same mechanism as `key-schedule-loop2-cost-drivers.md`'s driver, so
+   by total resident chunks × steps, dominated by instruction chunks. Same
+   mechanism as `key-schedule-loop2-cost-drivers.md`'s driver, so
    `plans/PLAN-loop-invariant.md`'s per-iteration contract addresses both:
    it would stop each loop's steps from carrying the other loop's chunks at
-   all.
-3. **No cross-loop semantic interaction has been demonstrated.** Order matters
-   (§3) and that is unexplained by any fitted law, but §6 shows inventory
-   alone accounts for the concrete-base residual, so there may be nothing
-   left to explain once the base and the inventory are accounted for.
+   all. This is what remains after (1), and it is a design change, not a bug
+   fix.
+3. **No cross-loop semantic interaction exists.** §5.5 gives an exact law for
+   the goal multiplication and §6 accounts for the concrete-base residual
+   with inventory alone. The two loops do not interact; the first one
+   multiplies the second.
+
+**A design rule that falls out of this**, worth applying to any future
+example: **prefer a public pinned counter over a base-relative pointer
+compare as a loop exit.** The counter folds to a literal and the branch is
+decided in place; the pointer compare is not refuted and leaks one dead path
+per trip into everything downstream. `key_schedule_loop2` uses a counter and
+pays no duplication; both check_scalar loops use pointer compares and pay it.
+That single difference is why the symbolic-base penalty is 3.4–4.9× on one
+and 18–59× on the other.
 
 ### Retractions from the 2026-08-14 session
 
@@ -328,9 +441,25 @@ Subtract 593,774,593. One heavy proof per process; run sequentially.
 | parametric, each loop alone, matched protocol | `ZZL1ParamA_N{4,16}.v`, `ZZL2ParamA_N{4,16}.v` |
 | dead-declaration padding | `ZZPadVCCommon.v` + `ZZPadC_PW{0,1,4,8,16}.v`, `ZZPadP_PW{0,4}.v` |
 | inventory swap / failed skip | `ZZSkipCommon.v` + `ZZSkipL1_*.v` (works), `ZZSkipL2_*.v` (does not skip) |
+| residual-goal dumps (§5.5) | `ZZVCDump_L1.v`, `ZZVCDump_L2.v`, `ZZVCDump_Comb.v`, `ZZVCDump_Comb84.v`, `ZZVCDump_Swap.v`, `ZZVCDump_Ctx.v` |
+
+Goal-inspection idioms used in the dumps, each of which silently lies if got
+wrong (see `cfgver-scaling-diagnostics`): count with
+`all: (let k := numgoals in idtac "n:" k)` — a BARE `numgoals` reports 1
+whatever the truth, and `all: idtac "x"` prints exactly ONCE regardless of
+goal count; dump per goal with
+`all: (match goal with |- ?G => idtac "GOAL||" G end)`; and inspect one goal's
+full context with the VERNACULAR `Show n.` — `n: Show.` does not parse, since
+a goal selector takes a tactic and `Show` is a command.
 
 **Not done, in priority order:**
 
+0. **Check whether `try_bvadd_cancel_spec` (or any `bvadd`-cancellation rule)
+   exists and why it does not refute `bvadd c₁ p = bvadd c₂ p` here** (§5.5).
+   This is now the highest-value item in the file: it is a bug fix, not a
+   design change, and it targets the dominant cost. Confirm first on the
+   goal-count law — if the rule fires, m4/n4 must drop from 92 residual goals
+   to 29.
 1. **Concrete base at `m=n=8` and `m=n=16`** — the payoff test. `m16/n4`
    concrete runs in ~8 s, so this is cheap, and it settles both whether the
    original "cannot run at all" barrier is gone and whether the concrete

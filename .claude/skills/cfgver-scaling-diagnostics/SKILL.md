@@ -124,6 +124,25 @@ those terms grows with the trip count `N`:
   fixed trip count, simply because each step's own symbolic term is large.
   Distinguish this from the self-reference axis above — a dense body can be
   expensive without any value feeding into its own next iteration at all.
+- **Unrefuted pointer equality at a loop exit — one DEAD PATH PER TRIP,
+  multiplying everything downstream.** A loop whose exit compares two
+  base-relative pointers (`bne A0, A1` with `A0 = p+c₁`, `A1 = p+c₂`) forks at
+  every trip, and the fall-through arm assumes `bvadd c₁ p = bvadd c₂ p`.
+  For `c₁ ≠ c₂` that is provably false, but the solver does not refute it, so
+  the dead branch is NOT collapsed to `SymProp.block` and **the entire
+  remainder of the program is symbolically executed and verified underneath
+  it**. Residual goals then obey exactly
+  `A_first + A_second × T_first` (addresses owned by each loop; trip count of
+  the FIRST one) — measured to the goal on three configurations in
+  `check-scalar-combined-cost-drivers.md` §5.5. Linear, not exponential: one
+  dead path per trip, no compounding. Three tells: cost is *positional*
+  (reordering two loops changes which is multiplied), a single loop hides it
+  (its dead paths hit the program end immediately, so the goal count looks
+  clean while the paths are still built), and it vanishes at a concrete base
+  (the equality computes to `false` on the spot). **Design rule: prefer a
+  public pinned counter over a base-relative pointer compare as a loop exit.**
+  `key_schedule_loop2` uses a counter and pays nothing; check_scalar uses
+  pointer compares and pays 18–59× where KSL pays 3.4–4.9×.
 - **Leaked duplicable chunks (historical, now fixed).** `encodes_instr`
   (`Sig.v`) was marked `is_duplicable := true`, and `heap_extractions` keeps
   duplicable chunks on consume rather than removing them — so a fresh
@@ -191,6 +210,12 @@ project:
 - **`Time (all: tac)` is a syntax error** — `all:` is sentence-level and an
   `Ltac` body cannot contain one. Time `(t1; t2)` jointly, or take a stage
   cost as a residual against the wall clock.
+- **`n: Show.` does not parse**, because a goal selector takes a TACTIC and
+  `Show` is a vernacular command. To inspect one goal's full context —
+  hypotheses included, which is what distinguishes duplicated goals from
+  genuinely different ones — use the vernacular `Show n.` on its own line.
+  Diffing two goals' contexts this way is what identified the dead-path
+  mechanism above; the conclusions alone were identical and said nothing.
 
 Corollary worth internalising: if a dump shows N goals and your tactic
 "fails", confirm which goals it was actually applied to before theorising
