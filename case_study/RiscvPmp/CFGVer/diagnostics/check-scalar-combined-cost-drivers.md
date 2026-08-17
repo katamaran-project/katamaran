@@ -552,6 +552,75 @@ genuine both-loops-executed interaction. To fix it, *minimise* loop 2 rather
 than skip it — set `T0 = T1` at entry so it falls through after one trip,
 keeping the full inventory resident.
 
+## 6.5. The cost law, decomposed (2026-08-17)
+
+With the goal multiplication gone, what remains was tested against the
+`H · S` law directly. Three readings, and the answer is "mostly `H·S`, with a
+superlinear chunk exponent":
+
+**`cost / (H·S)` is flat across the mid-range, then drifts.** Post-fix
+parametric, with `H = m + 2n + 28` and `S = 4m + 13n`:
+
+| config | H | S | `cost/(H·S)` ×1e-4 |
+|---|---|---|---|
+| m4 n4 | 40 | 68 | 19.56 |
+| m16 n4 | 52 | 116 | 15.62 |
+| m8 n8 | 52 | 136 | 15.70 |
+| m4 n16 | 64 | 224 | 15.07 |
+| m16 n16 | 76 | 272 | 14.93 |
+| m32 n32 | 124 | 544 | **17.23** |
+
+Flat to ±3% over a 1.5× range of `H` and 2.3× of `S` — a genuinely good
+account — with the small point high (constant overhead) and **m32n32 +15%**.
+Same on the concrete arm, more sharply: 2.94 / 2.90 / 3.23 / **4.27**, flat to
+N=8 then +47% by N=32.
+
+**Chunks and steps are BOTH live factors.** Pin chunks at one cell (the KSL
+`1-used` rows, pointer never advancing) and cost is *exactly* linear in steps
+— held-out fit **+0.00%** at N=16. So halving executed steps halves cost
+independently of chunk count. Chunks are what make it superlinear; steps are
+what make it grow at all. On the diagonal both scale with N, hence the
+apparent quadratic.
+
+**The chunk dependence is SUPERLINEAR** — the padding probe is the clean test,
+since it moves `H` at constant `S` (loop 2 alone, n=4 fixed, `P` dead cells,
+`H = 28+P`, `S = 52`):
+
+| H | cost | marginal per chunk |
+|---|---|---|
+| 28 | 0.370 | — |
+| 44 | 0.540 | 0.0109 |
+| 60 | 0.744 | 0.0127 |
+| 92 | 1.256 | **0.0160** |
+
+**+64% marginal cost per chunk** as `H` grows 3.3× at fixed `S`. Each added
+chunk raises the cost of carrying every other one — exactly what `subst_list`
+re-transporting the whole heap per world extension predicts. So the law is
+nearer `H^(1+ε)·S`, which is why both arms under-account at N=32 and why the
+diagonal's local exponent climbs past 2 instead of settling there.
+
+**Failed attempt, recorded so it is not repeated:** fitting `c·H^a·S^b` on the
+three corner points (m4n4, m16n4, m4n16) returns **a = −1.09**, physically
+impossible. Those points are nearly collinear in log-space, so `a` and `b` are
+not separable there. Separating them needs a point that moves `H` a lot at
+fixed `S` *on the two-loop rig* — pad the combined rig at fixed m,n. The
+single-loop padding probe above does it for one loop only.
+
+### Ranking, as of 2026-08-17
+
+| driver | status |
+|---|---|
+| **chunks × steps**, superlinear in chunks | the ONLY thing making cost grow with N |
+| **symbolic base** | 4.0–6.7× constant factor, shrinking with N; not a scaling term. Largest remaining multiplier |
+| access count | negligible — measured three ways (§5.5, §6) |
+| term growth | closed by `peval` RECOGNIZERS (`mulx`/`coalesce`/`expand`); `ZZTermSim2.v` shows the unrecognized shape is `3^n`, so a new idiom reopens it |
+| dead-path VC multiplication | closed by the `formula_propeq` cancellation (§5.5) |
+
+Note the asymmetry in how the two closed items are closed: the dead-path fix
+is structural (a sound rule, applies to any program), whereas term growth is
+closed only for the SHAPES a recognizer matches. The latter is the one a new
+example is most likely to reopen.
+
 ## 7. What this means
 
 Ranked, for `check_scalar`'s whole-function target:

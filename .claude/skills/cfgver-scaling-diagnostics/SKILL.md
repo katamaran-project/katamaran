@@ -101,7 +101,22 @@ general executor cost law `heap_size × (α·S + β·S²)` (`S` = steps executed
 full history in `cfgver-executor`'s description) as a specific way one of
 those terms grows with the trip count `N`:
 
-- **Declared-chunk-count scaling with N.** The precondition's resource list
+- **Declared-chunk-count scaling with N — and it is SUPERLINEAR in the chunk
+  count, not linear.** Measured by moving chunk count at CONSTANT step count
+  (pad a precondition with never-touched cells): marginal cost per chunk rose
+  **+64%** as the count grew 3.3× (`check-scalar-combined-cost-drivers.md`
+  §6.5). Each added chunk raises the cost of carrying every other one, which
+  is what `subst_list` re-transporting the whole heap per world extension
+  predicts. So the law is nearer `H^(1+ε)·S` than `H·S`; `H·S` fits a
+  mid-range to ±3% and then under-accounts by 15–47% at the top end.
+  **Steps are an independent co-factor**: pin the chunk count and cost is
+  exactly linear in steps (held-out fit +0.00%), so halving executed steps
+  halves cost regardless of chunks. On a diagonal where both scale with N this
+  reads as quadratic — do not attribute it to either factor alone. Separating
+  the two exponents needs a point that moves `H` at fixed `S`; fitting
+  `c·H^a·S^b` on corner points of a grid where both grow together is
+  ill-conditioned and returns nonsense (it gave a NEGATIVE chunk exponent).
+  The precondition's resource list
   (`reg_specs`/`mem_specs`) is asserted once, up front, for the whole run —
   `gen_contract_rel` does not prune unused entries and does not grow the
   list incrementally as the loop executes. If a program's real data
