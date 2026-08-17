@@ -235,15 +235,32 @@ decoration. `skill-nudge.sh` fired in the second case, was read, and changed
 nothing. Three tiers of intervention now exist, and only the last two work:
 
 - **advisory** — `skill-nudge.sh` (Read/Grep). Kept; assume it does nothing.
-- **deny** — `.claude/hooks/v-write-guard.sh` (PreToolUse Write|Edit): **any
-  `*.v` write requires `rocq-implementation`**, session-scoped so it costs one
-  denial per session and every later `.v` write passes; and
-  `theories/Symbolic/{Solver,Monads}.v` + `MicroSail/SymbolicExecutor.v`
-  *additionally* require `core-executor-internals`. Backed by
-  `skill-load-marker.sh` (PreToolUse Skill), which records every skill
-  invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` — deliberately
-  separate from `meta-skill-marker.sh`, which is load-bearing for
-  `skill-edit-guard.sh`. Override is the user's: `CLAUDE_V_GUARD_OFF=1`.
+- **deny** — `.claude/hooks/skill-path-guard.sh` (PreToolUse Write|Edit), a
+  TABLE of path → required-skill rules. Any `*.v` write requires
+  `rocq-implementation`; on top of that each documented file demands its own
+  skill (`Solver.v`/`Monads.v`/`SymbolicExecutor.v` →
+  `core-executor-internals`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
+  `cfgver-refinement`; `Adequacy.v`/`SpecIris.v` → `cfgver-soundness`;
+  `GenContract.v` → `cfgver-gen-contract-internals`; `EndToEnd.v` →
+  `cfgver-endtoend-internals`; `Example/*Result.v` + `Noninterference.v` →
+  `cfgver-endtoend`; other `Example/*.v` → `cfgver-new-example`;
+  `diagnostics/*.md` → `cfgver-scaling-diagnostics`). **That mapping is
+  transcribed from `CFGVer/CLAUDE.md`'s file table and is meant to track it** —
+  if one changes, change both. `ZZ*.v` probes are exempt from the CFGVer rules
+  but not the blanket one; `plans/*.md` is deliberately ungated (no skill
+  governs "what we intend to build"). All missing skills are reported in ONE
+  denial, and each fires at most once per session. Override:
+  `CLAUDE_V_GUARD_OFF=1`.
+- **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash):
+  `git merge` / `git push` / `checkout -b` / `switch -c` require
+  `branch-workflow`. Commit, status, log, diff and path-checkout are NOT gated
+  (milestone commits are `rocq-checkpoint`'s business). Override:
+  `CLAUDE_GIT_GUARD_OFF=1`.
+
+  Both are backed by `skill-load-marker.sh` (PreToolUse Skill), which records
+  every skill invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` —
+  deliberately separate from `meta-skill-marker.sh`, which is load-bearing for
+  `skill-edit-guard.sh` and would block all skill authoring if broken.
 - **inject** — `.claude/hooks/rocq-error-injector.sh` (PostToolUse): names the
   right pitfalls skill when a known error string appears in tool output
   (`Cannot find witness` → bv- vs gmap-pitfalls, disambiguated by whether the
@@ -258,8 +275,14 @@ Two traps when testing a Write/Edit hook: **`Edit` validates `old_string` BEFORE
 `PreToolUse` runs**, so a deliberately-bogus-string "harmless test" never
 reaches the hook and reads as "my hook is broken" (it is not) — use a real edit;
 and a guard whose pattern matches text that merely *mentions* its trigger will
-misfire, three instances of that in one day including a case-insensitive
-`Error:` grep matching the printed lemma name `instpred_dlist_error:`.
+misfire — **four** instances in one day: a case-insensitive `Error:` grep
+matching the printed lemma name `instpred_dlist_error:`; a `pgrep -f` wait loop
+matching its own command line and so reporting a running build as finished; and
+the rocq plugin's `guardrails.sh` twice blocking read-only commands because a
+quoted string contained "restore" and later "git push". Match against the
+specific field (`.tool_input.command`, not the whole payload) and anchor on the
+token as a *command word* — `git-workflow-guard.sh` does this, and correctly
+allows `echo 'remember to git push later'`.
 after changing any skill *description* or
 noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
 skill (read-only Haiku-judge
