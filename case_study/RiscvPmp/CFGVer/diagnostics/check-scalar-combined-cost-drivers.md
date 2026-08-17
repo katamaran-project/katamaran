@@ -61,6 +61,13 @@ Three further metric hazards, all hit live:
 - **Peak RSS saturates near the machine ceiling**, compressing exactly the
   largest effects: at M16/N4 it reported 3.49× superadditivity where
   allocation reported 18.60×.
+- **Peak RSS also PLATEAUS with N, so it must not be extrapolated to project
+  feasibility.** On the m=n diagonal it is 9.51 GB at N=16 and 9.50 GB at
+  N=32 — flat — while allocation grows 3.8×. Every "N is infeasible, it would
+  need X GB" claim in this file's history came from extrapolating RSS, and
+  each was wrong: `m=n=16` was called infeasible and now runs, and `m=n=32`
+  was projected over the ceiling and runs at 9.50 GB. Project from
+  allocation and time; quote RSS only for configurations actually run.
 - **A failed compile reports ~baseline allocation, i.e. reads as nearly
   free.** A mis-set `cd` in a backgrounded subshell produced six such
   "measurements" at 1,447,863 words. Gate on `Error` as well as on
@@ -154,11 +161,24 @@ Within each order, the **first** loop's trip count is always the steeper axis:
 So "loop 1's trips are intrinsically expensive" is **refuted**: what makes a
 loop's trips expensive is running *before* another loop.
 
-> **Superseded 2026-08-15.** This section originally closed with "no simple
-> functional form fits — position-dependence is solid; the law is not." There
-> IS an exact law; it is on *residual goals*, not on allocation, which is why
-> fitting allocation missed it. See §5.5. The swap ratios above remain the
-> measured allocation figures and are unchanged.
+> **Superseded twice.** (1) 2026-08-15: this section originally closed with
+> "no simple functional form fits — position-dependence is solid; the law is
+> not." There IS an exact law; it is on *residual goals*, not allocation,
+> which is why fitting allocation missed it (§5.5).
+>
+> (2) **OBSOLETE as of the 2026-08-16 fix — the effect itself is gone, not
+> just its explanation.** Position-dependence WAS the dead-path
+> multiplication, so removing that removes it. Re-measured post-fix:
+>
+> | config | loop 1 first | loop 2 first | swap gain |
+> |---|---|---|---|
+> | m16 n4 | 9.42 G | 9.45 G | **1.00×** (was 3.56×) |
+> | m4 n16 | 21.61 G | 20.72 G | **1.04×** (was 1.57×) |
+>
+> Loop order no longer affects cost. The tables below are kept because they
+> are what identified the mechanism, and because the ratio going to 1.00× is
+> the cleanest available confirmation that the diagnosis was right — but
+> **never quote 1.92×/3.56×/1.57× as current behaviour.**
 
 Note the *feasibility* gain is much smaller than the throughput gain: at
 m16/n4 swapping wins 3.56× in allocation but only 1.42× in peak RSS.
@@ -406,28 +426,67 @@ projected 15–17 GB total. Post-fix, both bases:
 | 4 | concrete | 0.80 G | 3.9 s | 4.32 GB | — |
 | 8 | parametric | 11.10 G | 45.2 s | 6.19 GB | 2.09× |
 | 8 | concrete | 2.05 G | 11.6 s | 4.80 GB | 2.57× |
-| **16** | **parametric** | **30.87 G** | **159 s** | **9.51 GB** | 2.78× |
-| **16** | **concrete** | **6.67 G** | **43.9 s** | **6.30 GB** | 3.25× |
+| 16 | parametric | 30.87 G | 159 s | 9.51 GB | 2.78× |
+| 16 | concrete | 6.67 G | 43.9 s | 6.30 GB | 3.25× |
+| **32** | **parametric** | **116.21 G** | **948 s** | **9.50 GB** | 3.76× |
+| **32** | **concrete** | **28.82 G** | **268 s** | **9.00 GB** | 4.32× |
 
-**`m=n=16` now completes at the PARAMETRIC base** — 159 s, 9.5 GB — which is
-the configuration on the roadmap, not just the concrete-base diagnostic one.
+**`m=n=32` completes at the PARAMETRIC base** — the real function's own
+`klen`, on the base the project wants to keep. Before the fix `m=n=8` was the
+ceiling and `m=n=16` was projected infeasible.
 
 Two things to carry forward rather than over-read:
 
-- **Growth is superlinear and accelerating on both bases.** Held-out linear
-  fits on N=4/8 under-predict N=16 by **+36% parametric** and **+46.5%
-  concrete**; per-doubling ratios rise (2.09→2.78 and 2.57→3.25). That is
-  the `H·S` chunk-inventory law of §6 — on the diagonal BOTH factors grow
-  with N — now unmasked by the removal of the goal multiplication. So the
-  fix moved the wall out by roughly two doublings; it did not remove it.
-  Extrapolating the shape, N=32 parametric lands near ~90 G / ~8 min with
-  RSS plausibly past this box's ceiling, while N=32 concrete looks
-  reachable. **Both are extrapolations — measure before planning on them.**
+- **Growth is superlinear and still accelerating at every doubling** —
+  parametric 2.09 → 2.78 → 3.76×, concrete 2.57 → 3.25 → 4.32×. There is no
+  settled exponent to quote. This is the `H·S` chunk-inventory law of §6
+  (on the diagonal BOTH factors grow with N), now unmasked by the removal of
+  the goal multiplication: the fix moved the wall out ~three doublings
+  without removing it.
+- **PEAK RSS PLATEAUS — and this invalidates how feasibility was projected
+  here.** Parametric RSS is 9.51 GB at N=16 and **9.50 GB at N=32**, flat,
+  while allocation grew 3.8×. Peak *live set* is not what scales; the run
+  churns rather than accumulates, which is also why N=32 survived with the
+  machine fully committed. Every earlier "N is infeasible because it needs
+  11–13 GB above floor" projection in this file extrapolated the wrong
+  quantity. Project feasibility from allocation and time; treat RSS as a
+  measured fact about a configuration that has actually been run.
 - **The base penalty SHRINKS with N**: parametric/concrete is 6.7× / 5.4× /
-  4.6× at N=4/8/16. The concrete base has the steeper exponent, exactly as
+  4.6× / 4.0× at N=4/8/16/32. The concrete base has the steeper exponent, as
   `cfgver-executor` records for a different reproducer, so a concrete-base
-  measurement flatters itself more at small N. Do not quote the small-N
-  ratio as the general saving.
+  measurement flatters itself most at small N. Extrapolating the trend the
+  two converge somewhere past N=128 — worth knowing before trading the
+  parametric base away for speed.
+- **The projections in this section's earlier revision were wrong in the
+  usual direction.** N=32 was projected at ~22 G / ~2.4 min (concrete) and
+  ~90 G / ~8 min / over-ceiling (parametric); measured 28.8 G / 5.2 min and
+  116.2 G / 21.8 min / comfortably under. Allocation +31%/+29%, time 2.2×/
+  2.7×, and the feasibility call outright wrong. Four of this session's own
+  projections erred optimistically; assume the same of the next one.
+
+### 5.7. WHICH NUMBERS IN THIS FILE ARE POST-FIX — read before quoting any
+
+The 2026-08-16 solver fix (§5.5) changed the cost model, and **the file was
+NOT re-measured wholesale.** Status of every measurement block:
+
+| section | measured | post-fix? |
+|---|---|---|
+| §5.5 goal counts (92→29, 180→33) | 2026-08-16 | **yes** |
+| §5.6 the m=n diagonal, N=4..32, both bases | 2026-08-16/17 | **yes** |
+| §5.5 cost table (m4n4, m16n4, m4n16) | 2026-08-16 | **yes** |
+| §3 order swap | 2026-08-14 | **OBSOLETE** — effect measured gone (1.00×) |
+| §2 the 6-point grid | 2026-08-14 | **no** — pre-fix; m4n4/m16n4/m4n16 superseded by §5.5's table |
+| §4 concrete-vs-parametric (18–59×) | 2026-08-14 | **no** — pre-fix, and it conflated the goal multiplication with the base; §5.6's 4.0–6.7× is the post-fix figure |
+| §5 the two-factor split (5.45/18.60/5.94×) | 2026-08-16 | pre-fix *by construction* — it is what the fix was measured against |
+| §6 chunk-inventory probes (padding, inventory swap, H·S) | 2026-08-14 | **no** — but these were taken at a CONCRETE base, where no dead paths existed, so the fix should not move them. Argued, not measured. |
+
+Sibling diagnostics **not** revisited after the fix:
+`check-scalar-loop1-cost-drivers.md` and `check-scalar-loop2-cost-drivers.md`
+(both single loops with base-relative pointer-compare exits, so their dead
+paths existed but died at the program end — the fix plausibly makes them
+cheaper, unmeasured), and `key-schedule-loop2-cost-drivers.md` (exits on a
+public pinned counter, so it never had dead paths; unaffected by argument,
+not by measurement).
 
 ## 6. The residual 1.6–2.6× is chunk inventory
 
