@@ -400,6 +400,103 @@ Import asn.notations.
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
       List.fold_right (fun s acc => gen_mem_asn_rel s ∗ acc) ⊤ specs.
 
+    (* ------------------------------------------------------------------ *)
+    (* ONE EXISTENTIAL PER PUBLICNESS CLASS (2026-08-18).                   *)
+    (*                                                                      *)
+    (* gen_mem_pre_rel emits one `asn.exist` per PVExist entry, so |Sigma|  *)
+    (* grows with the declared cell count.  That is the dominant cost       *)
+    (* driver: measured QUADRATIC in |Sigma| and ~30-46x more expensive per *)
+    (* unit than a chunk, against a chunk axis that is exactly linear       *)
+    (* (diagnostics/check-scalar-combined-cost-drivers.md §6.6,             *)
+    (* key-schedule-loop2-cost-drivers.md final sections).                  *)
+    (*                                                                      *)
+    (* This builder emits ONE existential per publicness class instead: an  *)
+    (* N-cell class becomes a single `bv (xlenbits * N)` variable whose      *)
+    (* cells are successive `bvtake`/`bvdrop` slices.  EQUIVALENT, not       *)
+    (* weaker -- N independent words are in bijection with one N-word       *)
+    (* vector -- so unlike PVConst-pinning it costs nothing in generality.  *)
+    (* Measured 3.49x at N=32 on key_schedule_loop's shape, within 0.16% of *)
+    (* the (weaker) shared-variable arm.                                    *)
+    (*                                                                      *)
+    (* Same trick gen_mem_asn_bytes already uses for the four bytes of one  *)
+    (* word (PLAN-byte-memory.md §10 driver (C)), one level up.             *)
+    (*                                                                      *)
+    (* WHY THE WIDTH IS COMPUTED FROM THE LIST: uop.vector_subrange carries *)
+    (* an implicit `IsTrue (s + l <=? n)` that Prelude.v:297's Hint Extern   *)
+    (* discharges only for LITERAL offsets, so a fold over a runtime list    *)
+    (* cannot use it.  uop.bvtake/bvdrop have NO side condition -- they are *)
+    (* typed on `m + n` -- and `mem_class_width (cons s r)` is              *)
+    (* DEFINITIONALLY `xlenbits + mem_class_width r`, so the slices          *)
+    (* typecheck with zero proof obligations.                               *)
+    (* ------------------------------------------------------------------ *)
+    Fixpoint mem_class_width (specs : list mem_spec_rel) : nat :=
+      match specs with
+      | nil      => 0
+      | cons _ r => xlenbits + mem_class_width r
+      end.
+
+    (* Cells of ONE class, peeling xlenbits bits off the class variable per
+       entry.  `addr_of` is a function for the same reason byte_chunks takes
+       one: the caller's Σ differs inside the asn.exist binder. *)
+    Fixpoint gen_mem_cells_class {Σ} (specs : list mem_spec_rel)
+        (addr_of : N -> Term Σ ty_xlenbits)
+        (mw : Term Σ (ty.bvec (mem_class_width specs))) : Assertion Σ :=
+      match specs return Term Σ (ty.bvec (mem_class_width specs)) -> Assertion Σ with
+      | nil      => fun _ => ⊤
+      | cons s r => fun mw =>
+          let '(k, _, _) := s in
+          (addr_of k ↦ₘ term_unop (uop.bvtake xlenbits) mw)
+          ∗ gen_mem_cells_class r addr_of (term_unop (uop.bvdrop xlenbits) mw)
+      end mw.
+
+    Definition mem_spec_is_exist (s : mem_spec_rel) : bool :=
+      let '(_, _, pv) := s in match pv with PVExist => true | _ => false end.
+    Definition mem_spec_is_pub (s : mem_spec_rel) : bool :=
+      let '(_, b, _) := s in b.
+
+    (* Empty classes emit NOTHING -- an `asn.exist` of width 0 would cost a
+       logic variable for no cells, which is exactly what this builder exists
+       to avoid.  The two classes are separate definitions rather than one
+       parameterized by a name because `secLeakvar` needs a literal. *)
+    Definition gen_mem_pub_class (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      match specs with
+      | nil => ⊤
+      | _   =>
+          asn.exist "mwpub" (ty.bvec (mem_class_width specs))
+            (gen_mem_cells_class specs
+               (fun k => term_binop bop.bvadd (term_var "p")
+                           (term_val ty_xlenbits (bv.of_N k)))
+               (term_var "mwpub")
+             ∗ secLeakvar "mwpub")
+      end.
+
+    Definition gen_mem_priv_class (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      match specs with
+      | nil => ⊤
+      | _   =>
+          asn.exist "mwpriv" (ty.bvec (mem_class_width specs))
+            (gen_mem_cells_class specs
+               (fun k => term_binop bop.bvadd (term_var "p")
+                           (term_val ty_xlenbits (bv.of_N k)))
+               (term_var "mwpriv"))
+      end.
+
+    (* PVConst / PVBaseOff entries mint no variable already, so they keep
+       gen_mem_asn_rel's treatment verbatim and only PVExist entries are
+       grouped.  NOTE the resulting HEAP ORDER differs from gen_mem_pre_rel's
+       (pinned entries first, then public, then private) -- sound, since ∗ is
+       commutative, but it can move consume-scan positions and hence residual
+       shapes, which matters when migrating an existing example. *)
+    Definition gen_mem_pre_rel_classed (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      gen_mem_pre_rel (List.filter (fun s => negb (mem_spec_is_exist s)) specs)
+      ∗ gen_mem_pub_class
+          (List.filter (fun s => andb (mem_spec_is_exist s) (mem_spec_is_pub s)) specs)
+      ∗ gen_mem_priv_class
+          (List.filter (fun s => andb (mem_spec_is_exist s) (negb (mem_spec_is_pub s))) specs).
+
     (* Base-relative byte address, in the canonical `p + <literal>` form: the
        offset k+j is folded into ONE literal rather than left as (p+k)+j.
        `pterm` is passed in rather than written as term_var "p" here because the
@@ -471,6 +568,34 @@ Import asn.notations.
                   (term_val ty.int (Z.of_N bound)))
                (term_val ty.int (Z.of_N lenAddr)))
           ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs )
+        instrs ec fl.
+
+    (* gen_contract_rel with the data block grouped into ONE existential per
+       publicness class (see gen_mem_pre_rel_classed above).  Same statement
+       strength as gen_contract_rel -- the two preconditions are equivalent,
+       not merely comparable -- but |Sigma| no longer grows with the declared
+       cell count, which is the dominant cost driver.  Byte-identical to
+       gen_contract_rel except for the final conjunct. *)
+    Definition gen_contract_rel_classed
+        (init_addr : N)
+        (reg_specs : list reg_spec_rel)
+        (mem_specs : list mem_spec_rel)
+        (instrs : list AST)
+        (extra_exit_offs : list N)
+        (bound : N)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        ( asn_pc_eq (term_var "p")
+          ∗ asn.formula (formula_relop bop.le
+               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                  (term_val ty.int (Z.of_N bound)))
+               (term_val ty.int (Z.of_N lenAddr)))
+          ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel_classed mem_specs )
         instrs ec fl.
 
     (* gen_contract_rel with an ADDITIONAL, byte-expanded data list
