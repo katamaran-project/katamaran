@@ -801,3 +801,81 @@ exponent changes, and quadratic remains after pinning — only removing the
 declared cells entirely (`plans/PLAN-loop-invariant.md`) reaches the linear floor.
 
 Files: `ZZKslCS_N32.v`, `ZZKslPG_N32.v`, `ZZKslSHP_N32.v` (throwaway).
+
+### The whole `|Σ|` win is available with NO weakening (2026-08-18)
+
+**One-sentence finding: one `bv (32·N)` existential with `vector_subrange`-projected
+cell values — which is logically EQUIVALENT to N independent existentials, not
+weaker — costs within 0.16% of the shared-variable arm at every N, so the entire
+3.49× is reachable without changing the statement at all.**
+
+Both arms measured earlier weaken the theorem: the shared existential says "all N
+cells start equal", `PVConst` says "all N cells start zero". This arm does not.
+N independent 32-bit words are in bijection with one 32N-bit vector, so
+
+```
+∃ mw : bv (32N),  ⋀ᵢ (p+56+4i ↦ₘ vector_subrange (32i) 32 mw)
+```
+
+is *equivalent* to `⋀ᵢ ∃ vᵢ, (p+56+4i ↦ₘ vᵢ)`. Same trick `gen_mem_asn_bytes`
+already uses at 4-byte scale (`PLAN-byte-memory.md` §10 driver (C)), generalised
+from bytes-in-a-word to words-in-an-array. Identical body, reg specs, bound, fuel
+and exits to the `PG`/`SHP` arms — only the mem block differs.
+
+| N | floor (1 cell) | today (N vars) | shared (weaker) | **general (`bv 32N`)** |
+|---|---|---|---|---|
+| 4 | 0.3350 | 0.4292 | 0.3561 | **0.3562** |
+| 8 | 0.6675 | 1.1477 | 0.7662 | **0.7666** |
+| 16 | 1.3365 | 3.7432 | 1.7596 | **1.7613** |
+| 32 | 2.6904 | 15.5256 | 4.4393 | **4.4464** |
+
+- **The projections are free.** General vs shared: 1.0002 / 1.0005 / 1.0010 /
+  **1.0016**. Two term nodes per cell value instead of one costs 0.16% at N=32.
+- **Win over today, with the statement untouched: 1.205 / 1.497 / 2.125 /
+  3.492×** — indistinguishable from the weakening arms' 1.205 / 1.498 / 2.127 /
+  3.497×.
+- **Same law, same shape.** Residual over the linear floor fits `1 + k(N−1)` with
+  `k` = 0.02115 / 0.02122 / 0.02119 / **0.02105**, i.e. the shared arm's 0.0210
+  to within 0.4%; doubling ratios 2.152 / 2.298 / **2.524** against the shared
+  arm's 2.152 / 2.297 / 2.523; held-out quadratic **−0.25%**.
+- **Peak heap identical too**: 731,787,776 words at N=32, the same as the shared
+  arm and marginally *below* the floor arm's 732,670,464 (quantisation), against
+  968,957,440 unpinned. So it recovers the feasibility headroom as well.
+
+**A prediction of mine that was WRONG, recorded so the reasoning is not
+reused:** I estimated the projection values would roughly double the per-chunk
+cost (`k` 0.021 → 0.042, ~2.3× over the floor at N=32), extrapolating from
+`check-scalar-combined-cost-drivers.md` §6.6's arm B vs arm C, where
+projection-shaped values cost 2× literal ones per pad word. That transfer does
+not hold: measured `k` is unchanged at 0.0210. The §6.6 pair differs in
+granularity (four `ptstomem 1` chunks whose value is most of the chunk, at a
+concrete base with one-node literal addresses) from this pair (one `ptstomem 4`
+chunk with a three-node base-relative address), so per-chunk cost there is far
+more sensitive to value size than here. Do not infer a per-chunk term-size
+coefficient across granularities or base kinds.
+
+### What this changes
+
+`PVConst` pinning is **no longer the recommended lever** — it buys the same
+factor while weakening the statement, so it is strictly dominated. The landable
+change is a `gen_contract_rel` variant that emits ONE existential per publicness
+class for the whole data block, with cells as `vector_subrange` projections.
+Scope:
+
+- **VC side: measured, free** (this section). Nothing to discover.
+- **`ImplPre` side: NOT exercised here** — this rig measures only the VC. That is
+  the one real cost, and it is the same obligation `PLAN-byte-memory.md` §5.3/§10
+  already paid at 4-byte scale: prove `subrange i w = appView-peel i w`, route
+  via `bv.take_app` / `bv.drop_app` (`Bitvector.v:947,974`), and **do NOT attempt
+  it with `cbn`**, which explodes into a multi-thousand-line `bv.view` match. At
+  N words it is more instances of the same lemma.
+- **Publicness:** cells of differing `is_pub` cannot share a variable, since
+  `secLeakvar` is per variable — so one existential per class, still O(1) in N.
+- Still only an exponent step, not the floor: quadratic remains (`1.65×` at
+  N=32, growing as `1 + 0.021(N−1)`). `plans/PLAN-loop-invariant.md` is what
+  reaches linear, and now has a cheaper predecessor that does not compete with it.
+
+Files: `Example/ZZKslBigCommon.v` (generated — `uop.vector_subrange`'s implicit
+`IsTrue (s + l <=? n)` is discharged by `Prelude.v:297`'s Hint Extern only for
+LITERAL offsets, so a `fold_right` over `seq` leaves `i` abstract and cannot be
+written) + `ZZKslBIG_N{4,8,16,32}.v`, baseline `ZZKslBigBase.v`.
