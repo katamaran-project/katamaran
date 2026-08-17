@@ -2566,6 +2566,119 @@ Module Type GenericSolverOn
       | _ => fun _ _ _ => None
       end op t1 t2.
 
+    (* ---- per-address access bounds, discharged against the base bound ----
+       A parametric-base program asserts one access bound per distinct address
+       it touches -- `unsigned a + K <= maxAddr`, K=4 for an instruction fetch,
+       K=bytes for a load.  `simplify_le` normalises each to
+       `0 <= L - (K + unsigned a)` (peval_formula_le, above), and at a SYMBOLIC
+       base nothing decides them: they survive into the VC, one per address,
+       and were 76-90% of the whole symbolic-base cost penalty
+       (case_study/RiscvPmp/CFGVer/diagnostics/
+        check-scalar-combined-cost-drivers.md, section 5.8; plans/
+        PLAN-fetch-bound-vcs.md).  A concrete base emits none, since `unsigned`
+       of a literal just computes.
+
+       They are all implied by ONE hypothesis the contract already assumes --
+       the base bound `unsigned p + B <= lenAddr`, which `gen_contract_rel`
+       puts in the precondition and which therefore sits in `wco` in the SAME
+       normalised shape `0 <= L - (B + unsigned p)`.  So this is a
+       path-condition lookup, in the style of
+       `pathconditions_contains_secLeakT` above, not new arithmetic: the
+       reasoning is what `relval_fetch_upper_add` (CFGVer/Contracts.v) already
+       proves per-goal, moved to where the goals are still cheap to kill.
+
+       NO PUBLICNESS GUARD IS NEEDED, and for a stronger reason than
+       `try_bvadd_cancel_propeq`'s.  `instpred_formula_relop` does send a
+       NonSyncVal operand to False -- but it does so on the HYPOTHESIS too:
+       if the base is secret then the base bound in `wco` is itself False and
+       the entailment is vacuous.  So the `secLeakT` check that
+       `try_bvadd_cancel` needs is here discharged by the very formula we
+       reason from.  (`relval_fetch_upper_add` takes `secLeak v` as a separate
+       premise only because it is stated without that hypothesis in scope.)
+
+       NEVER `error` FROM HERE.  Failing to find the base bound means "cannot
+       decide", not "false"; returning `error` would refute satisfiable paths.
+       Every failure path below falls through to `simplify_le` untouched.
+
+       COST: the `wco` scan is gated behind `int_bound_shape` on the goal, so
+       only an already-bound-shaped `<=` pays for it -- that is exactly the
+       #addresses obligations, not every formula the solver sees. *)
+
+    (* `L - (K + u)`, with L and K literals; `u` is handed back uninspected. *)
+    Equations int_bound_shape {Σ} (t : Term Σ ty.int)
+      : option (Z * Z * Term Σ ty.int) :=
+      int_bound_shape (term_binop bop.minus (term_val _ L)
+                         (term_binop bop.plus (term_val _ K) u)) := Some (L, K, u);
+      int_bound_shape _ := None.
+
+    (* `unsigned (c (+) s)`  ->  (unsigned c, `unsigned s`, the width).
+       EVERYTHING RETURNED IS NON-DEPENDENT -- a Z, a `Term Σ ty.int`, and a
+       plain nat -- which is the whole point.  Two earlier shapes both failed
+       with "The pattern _ should be equal to _, it is forced by typing":
+       binding a width from each of TWO term patterns in one clause, and
+       taking the width as a parameter to compare a `Term Σ (ty.bvec n)`
+       against a pattern-bound one.  Equations will not let two widths meet,
+       so the fix is to never compare across widths: rebuild `unsigned s` here
+       and let the caller compare it to the path condition's own `unsigned s`
+       at type `Term Σ ty.int`, where `Term_eqb` is homogeneous.  (Each of
+       those dead ends cost a ~6-minute Solver.v build, since definitions
+       inside this functor cannot be reached interactively -- see the
+       rocq-implementation skill on restating shape questions.) *)
+    Equations unsigned_bvadd_split {Σ} (u : Term Σ ty.int)
+      : option (Z * Term Σ ty.int * nat) :=
+      unsigned_bvadd_split
+        (term_unop (@uop.unsigned n)
+           (term_binop bop.bvadd (term_val _ c) s)) :=
+        Some (Z.of_N (bv.bin c), term_unop uop.unsigned s, n);
+      unsigned_bvadd_split _ := None.
+
+    (* Does `B + unsigned s <= L1` imply `K + unsigned a <= L2`?  Sufficient
+       when `unsigned a` IS `unsigned s` (offset 0, the bare base -- and then
+       no no-wrap side condition is needed at all), or when it is
+       `unsigned (c (+) s)` with `c + K <= B`, which needs `c + unsigned s`
+       not to wrap: that follows from `c <= B` and `B + unsigned s <= L1`
+       provided `L1 < 2^n`.  No term pattern-matching here, hence a plain
+       Definition. *)
+    Definition fetch_bound_entails {Σ} (L2 K L1 B : Z)
+      (ug uw : Term Σ ty.int) : bool :=
+      (L1 <=? L2)%Z && (0 <=? K)%Z &&
+      (if Term_eqb ug uw then (K <=? B)%Z
+       else match unsigned_bvadd_split ug with
+            | Some (c, uw', n) =>
+                Term_eqb uw' uw && (c + K <=? B)%Z &&
+                (L1 <? Z.of_N (bv.exp2 n))%Z
+            | None => false
+            end).
+
+    Equations formula_entails_fetch_bound {Σ} (f : Formula Σ)
+      (L2 K : Z) (ug : Term Σ ty.int) : bool :=
+      formula_entails_fetch_bound
+        (formula_relop bop.le (term_val _ z) tw) L2 K ug :=
+        (z =? 0)%Z &&
+        (match int_bound_shape tw with
+         | Some (L1, B, uw) => fetch_bound_entails L2 K L1 B ug uw
+         | None => false
+         end);
+      formula_entails_fetch_bound _ _ _ _ := false.
+
+    Fixpoint pathcondition_entails_fetch_bound {Σ} (C : PathCondition Σ)
+      (L2 K : Z) (ug : Term Σ ty.int) : bool :=
+      match C with
+      | [ctx]  => false
+      | (C ▻ f) => formula_entails_fetch_bound f L2 K ug
+                   || pathcondition_entails_fetch_bound C L2 K ug
+      end.
+
+    Definition try_fetch_bound {w : World} (t1 t2 : STerm ty.int w)
+      : option (DList w) :=
+      match int_bound_shape (peval (term_minus t2 t1)) with
+      | Some (L2, K, ug) =>
+          if pathcondition_entails_fetch_bound (wco w) L2 K ug
+          then Some empty
+          else None
+      | None => None
+      end.
+
     Definition simplify_relop {w : World} {σ} (op : RelOp σ) :
       forall (t1 t2 : STerm σ w), DList w :=
       match op in RelOp σ return forall (t1 t2 : STerm σ w), DList w with
@@ -2585,7 +2698,14 @@ Module Type GenericSolverOn
           | Some d => d
           | None => simplify_relopb bop.neq (peval t1) (peval t2)
           end
-      | bop.le => simplify_le
+      (* Dispatch through try_fetch_bound exactly as the eq/neq arms dispatch
+         through try_bvadd_cancel; None falls straight through to the
+         pre-existing simplify_le. *)
+      | bop.le => fun t1 t2 =>
+          match try_fetch_bound t1 t2 with
+          | Some d => d
+          | None => simplify_le t1 t2
+          end
       | bop.lt => simplify_lt
       | op     => fun t1 t2 => simplify_relopb op (peval t1) (peval t2)
       end.
@@ -2795,6 +2915,161 @@ Module Type GenericSolverOn
           | solve [assumption] ].
     Qed.
 
+    (* ---- soundness of the fetch-bound discharge --------------------------
+       Everything below stays at the `instprop` (plain Prop) level and is
+       lifted to `Pred w` exactly once, in `try_fetch_bound_spec`.  That is
+       deliberate: `instprop_formula`'s `formula_relop` case is literally the
+       shape `relval_fetch_upper_add` (CFGVer/Contracts.v) reasons about, so
+       the Prop level is where the argument is short. *)
+
+    Lemma int_bound_shape_spec {Σ} (t : Term Σ ty.int) L K u :
+      int_bound_shape t = Some (L, K, u) ->
+      t = term_binop bop.minus (term_val ty.int L)
+            (term_binop bop.plus (term_val ty.int K) u).
+    Proof.
+      funelim (int_bound_shape t); intros Heq; try discriminate.
+      now inversion Heq.
+    Qed.
+
+    Lemma unsigned_bvadd_split_spec {Σ} (u : Term Σ ty.int)
+      (c : Z) (u' : Term Σ ty.int) (n : nat) :
+      unsigned_bvadd_split u = Some (c, u', n) ->
+      exists (cbv : bv n) (s : Term Σ (ty.bvec n)),
+        u = term_unop uop.unsigned
+              (term_binop bop.bvadd (term_val (ty.bvec n) cbv) s) /\
+        u' = term_unop uop.unsigned s /\
+        c = Z.of_N (bv.bin cbv).
+    Proof.
+      funelim (unsigned_bvadd_split u); intros Heq; try discriminate.
+      inversion Heq; subst; clear Heq.
+      exists c, s; repeat split; auto.
+    Qed.
+
+    (* The whole semantic content.  Both RelVal cases were verified in
+       isolation over `ty.liftBinOpRV`/`liftUnOpRV` (which is what
+       `bop.evalRel`/`uop.evalRel` reduce to) before this file was compiled:
+       the SyncVal case is `bv.bin_add_small` plus linear arithmetic, and the
+       NonSyncVal case needs NO publicness guard because the HYPOTHESIS is
+       itself `False` there -- `instprop_formula` sends a NonSyncVal operand to
+       False on the path-condition side too. *)
+    Lemma fetch_bound_entails_sound {Σ} (L2 K L1 B : Z)
+      (ug uw : Term Σ ty.int) (ι : Valuation Σ) :
+      fetch_bound_entails L2 K L1 B ug uw = true ->
+      instprop (formula_relop bop.le (term_val ty.int 0%Z)
+                  (term_binop bop.minus (term_val ty.int L1)
+                     (term_binop bop.plus (term_val ty.int B) uw))) ι ->
+      instprop (formula_relop bop.le (term_val ty.int 0%Z)
+                  (term_binop bop.minus (term_val ty.int L2)
+                     (term_binop bop.plus (term_val ty.int K) ug))) ι.
+    Proof.
+      unfold fetch_bound_entails. intros Hb Hpc.
+      apply andb_prop in Hb as [Hb0 Hb1].
+      apply andb_prop in Hb0 as [Hl12 HK0].
+      apply Z.leb_le in Hl12. apply Z.leb_le in HK0.
+      destruct (Term_eqb ug uw) eqn:Heqb.
+      - (* offset 0 -- the bare base; no no-wrap side condition needed *)
+        pose proof (Term_eqb_spec ug uw) as Hsp; rewrite Heqb in Hsp.
+        inversion Hsp; subst.
+        apply Z.leb_le in Hb1.
+        revert Hpc. cbn.
+        destruct (inst uw ι) as [a|a b]; cbn.
+        + unfold bv.unsigned in *. lia.
+        + tauto.
+      - destruct (unsigned_bvadd_split ug) as [[[c uw'] n]|] eqn:Hsplit;
+          [| discriminate].
+        apply andb_prop in Hb1 as [Hb2 Hexp].
+        apply andb_prop in Hb2 as [Heqw Hcb].
+        apply Z.ltb_lt in Hexp. apply Z.leb_le in Hcb.
+        apply unsigned_bvadd_split_spec in Hsplit as (cbv & s & Hug & Huw' & Hc).
+        pose proof (Term_eqb_spec uw' uw) as Hsp; rewrite Heqw in Hsp.
+        inversion Hsp; subst.
+        revert Hpc. cbn.
+        destruct (inst s ι) as [a|a b]; cbn; [| tauto].
+        unfold bv.unsigned in *. intros Hpc.
+        assert (Hlt : (bv.bin cbv + bv.bin a < bv.exp2 n)%N) by lia.
+        rewrite (bv.bin_add_small Hlt). lia.
+    Qed.
+
+    Lemma formula_entails_fetch_bound_sound {Σ} (f : Formula Σ)
+      (L2 K : Z) (ug : Term Σ ty.int) (ι : Valuation Σ) :
+      formula_entails_fetch_bound f L2 K ug = true ->
+      instprop f ι ->
+      instprop (formula_relop bop.le (term_val ty.int 0%Z)
+                  (term_binop bop.minus (term_val ty.int L2)
+                     (term_binop bop.plus (term_val ty.int K) ug))) ι.
+    Proof.
+      funelim (formula_entails_fetch_bound f L2 K ug); intros Hb Hpc;
+        try discriminate.
+      apply andb_prop in Hb as [Hz Hsh].
+      apply Z.eqb_eq in Hz; subst.
+      destruct (int_bound_shape tw) as [[[L1 B] uw]|] eqn:Hshape;
+        [| discriminate].
+      apply int_bound_shape_spec in Hshape; subst tw.
+      eapply fetch_bound_entails_sound; eauto.
+    Qed.
+
+    Lemma pathcondition_entails_fetch_bound_sound {Σ} (C : PathCondition Σ)
+      (L2 K : Z) (ug : Term Σ ty.int) (ι : Valuation Σ) :
+      pathcondition_entails_fetch_bound C L2 K ug = true ->
+      instprop C ι ->
+      instprop (formula_relop bop.le (term_val ty.int 0%Z)
+                  (term_binop bop.minus (term_val ty.int L2)
+                     (term_binop bop.plus (term_val ty.int K) ug))) ι.
+    Proof.
+      induction C as [|C IHC f]; cbn; intros Hb Hpc; try discriminate.
+      destruct Hpc as [HC Hf].
+      apply orb_true_iff in Hb as [Hb|Hb].
+      - eapply formula_entails_fetch_bound_sound; eauto.
+      - eapply IHC; eauto.
+    Qed.
+
+    (* `t1 <= t2` and `0 <= t2 - t1` are interchangeable at the RelVal level in
+       BOTH RelVal cases, which is what lets the recognizer work on
+       `peval_formula_le`'s normalised form while the spec is stated about the
+       original relop. *)
+    Lemma instprop_le_sub {Σ} (t1 t2 : Term Σ ty.int) (ι : Valuation Σ) :
+      instprop (formula_relop bop.le t1 t2) ι <->
+      instprop (formula_relop bop.le (term_val ty.int 0%Z)
+                  (term_binop bop.minus t2 t1)) ι.
+    Proof.
+      cbn. destruct (inst t1 ι) as [x|x y], (inst t2 ι) as [u|u v]; cbn;
+        split; intros; first [ lia | tauto | contradiction ].
+    Qed.
+
+    (* `empty`, not a weaker formula: `instpred` at world `w` is already
+       relative to `wco w` (cf. pathconditions_contains_secLeakT_spec, which
+       derives a formula from the path condition alone), so an entailment from
+       `wco w` legitimately proves the `⊣⊢`. *)
+    Lemma try_fetch_bound_spec {w : World} (t1 t2 : STerm ty.int w) (d : DList w) :
+      try_fetch_bound t1 t2 = Some d ->
+      instpred d ⊣⊢ instpred (formula_relop bop.le t1 t2).
+    Proof.
+      unfold try_fetch_bound.
+      destruct (int_bound_shape (peval (term_minus t2 t1)))
+        as [[[L2 K] ug]|] eqn:Hshape; [| discriminate].
+      destruct (pathcondition_entails_fetch_bound (wco w) L2 K ug) eqn:Hpc;
+        [| discriminate].
+      intros [= <-].
+      apply int_bound_shape_spec in Hshape.
+      (* `MkBientails { fromBientails : forall ι, instprop (wco w) ι ->
+         P ι <-> Q ι }` (Worlds.v:594) -- so TWO intros, then an iff. *)
+      constructor. intros ι Hwco.
+      destruct (@instpred_dlist_empty w) as [Hemp].
+      split; intros _.
+      - (* the relop holds at ι, from the path condition alone *)
+        apply (proj2 (instpred_prop ι _)).
+        apply (proj2 (instprop_le_sub t1 t2 ι)).
+        pose proof (pathcondition_entails_fetch_bound_sound
+                      (wco w) L2 K ug ι Hpc Hwco) as Hgoal.
+        (* peval is sound PER-VALUATION, so the recognizer's view of `t2 - t1`
+           and the real one agree at ι. *)
+        pose proof (peval_sound (term_minus t2 t1) ι) as Hpev.
+        rewrite Hshape in Hpev.
+        cbn in Hgoal, Hpev |- *.
+        rewrite <- Hpev. exact Hgoal.
+      - apply (proj2 (Hemp ι Hwco)). exact I.
+    Qed.
+
     Lemma simplify_relop_spec {w : World} {σ} (op : RelOp σ) (t1 t2 : STerm σ w) :
       instpred (simplify_relop op t1 t2) ⊣⊢ instpred (formula_relop op t1 t2).
     Proof.
@@ -2810,7 +3085,12 @@ Module Type GenericSolverOn
         [ apply try_bvadd_cancel_spec in Hc; rewrite Hc | ]
       | destruct (try_bvadd_cancel bop.neq (peval t1) (peval t2)) as [d|] eqn:Hc;
         [ apply try_bvadd_cancel_spec in Hc; rewrite Hc | ]
-      | idtac | idtac | idtac | idtac | idtac | idtac ];
+      (* le now dispatches through try_fetch_bound as well -- same shape as the
+         eq/neq arms above.  Five idtacs follow, not six: RelOp has 8
+         constructors (eq neq le lt bvsle bvslt bvule bvult) and le is 3rd. *)
+      | destruct (try_fetch_bound t1 t2) as [d|] eqn:Hf;
+        [ apply try_fetch_bound_spec in Hf; rewrite Hf | ]
+      | idtac | idtac | idtac | idtac | idtac ];
       arw;
       rewrite ?simplify_eq_spec ?simplify_relopb_spec ?formula_relop_term' ?peval_sound;
       arw; arw_slow;
