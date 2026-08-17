@@ -23,3 +23,11 @@ _build/
 
 # rocq-mcp scratch/cache files
 rocq_mcp_cache_*.v
+
+# Throwaway diagnostic probes (cfgver-scaling-diagnostics convention).
+# These are measurement scaffolding: never in _CoqProject, and they contain
+# `Admitted.` because they measure a VC's cost rather than proving it. They
+# must stay UNTRACKED -- scripts/gate.sh's hole scan reads the filesystem, so
+# committing them blocks the merge gate outright. That happened twice
+# (2026-08-13's ZZKsl* set, and once before), hence this rule.
+case_study/RiscvPmp/CFGVer/Example/ZZ*

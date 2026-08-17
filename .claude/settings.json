@@ -2,7 +2,11 @@
   "mcpServers": {
     "rocq-mcp": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/LLM4Rocq/rocq-mcp", "rocq-mcp"],
+      "args": [
+        "--from",
+        "git+https://github.com/LLM4Rocq/rocq-mcp",
+        "rocq-mcp"
+      ],
       "env": {
         "ROCQ_WORKSPACE": "/home/emiel/Documents/katamaran"
       }
@@ -30,6 +34,11 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/coqc-guard.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/git-workflow-guard.sh",
+            "timeout": 10
           }
         ]
       },
@@ -50,6 +59,11 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/meta-skill-marker.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/skill-load-marker.sh",
+            "timeout": 10
           }
         ]
       },
@@ -59,6 +73,11 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/skill-edit-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/skill-path-guard.sh",
             "timeout": 10
           }
         ]
@@ -72,8 +91,31 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "mcp__rocq-mcp__rocq_check|mcp__rocq-mcp__rocq_start|mcp__rocq-mcp__rocq_step_multi",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/rocq-interactive-marker.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "_postToolUseNote": "rocq-error-injector.sh is INJECTION, not a gate: the pitfalls skills are symptom-keyed and the symptom is a deterministic string in tool output, so naming the right skill needs no cooperation from the assistant. Added 2026-08-17 after an advisory nudge hook was read and still ignored. It never blocks and stays silent unless a pattern matches.",
+    "PostToolUse": [
+      {
+        "matcher": "Bash|mcp__rocq-mcp__rocq_check|mcp__rocq-mcp__rocq_compile_file|mcp__rocq-mcp__rocq_compile",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/rocq-error-injector.sh",
+            "timeout": 10
+          }
+        ]
       }
     ]
   },
-  "compactionPrompt": "This is a Katamaran/Rocq formal verification session. Compact to preserve:\n\n1. ROCQ-MCP STATE: Any active state IDs from rocq_start (file + theorem + state_id). These cannot be recovered — if lost, the session must be restarted.\n\n2. COMPILE STATUS: For each .v file touched this session, record the last compile outcome: file path, mode used (vos/full), and whether it succeeded or what the first error was. Drop verbose coqc output — just keep the status line and error message.\n\n3. CURRENT PROOF: The lemma name being proved, the last goal state shown by rocq_check, and which tactics have been tried (succeeded or ruled out). Drop superseded rocq_check calls — only keep the most recent goal.\n\n4. KEY DECISIONS: Any proof approach confirmed working (e.g. 'use swap_endToEnd as analogue') or ruled out (e.g. 'instrs_endToEnd is BlockVer only'). One sentence per decision.\n\n5. OPEN ERRORS: Any error message that is the current debugging target. Full text.\n\nDROP: Full text of successful compile output; file reads of definitions documented in CLAUDE.md or the cfgver-* skills; intermediate exploration reads whose conclusions are already captured; assistant narration that restates tool results."
+  "compactionPrompt": "This is a Katamaran/Rocq formal verification session. Compact to preserve:\n\n1. ROCQ-MCP STATE: Any active state IDs from rocq_start (file + theorem + state_id). These cannot be recovered \u2014 if lost, the session must be restarted.\n\n2. COMPILE STATUS: For each .v file touched this session, record the last compile outcome: file path, mode used (vos/full), and whether it succeeded or what the first error was. Drop verbose coqc output \u2014 just keep the status line and error message.\n\n3. CURRENT PROOF: The lemma name being proved, the last goal state shown by rocq_check, and which tactics have been tried (succeeded or ruled out). Drop superseded rocq_check calls \u2014 only keep the most recent goal.\n\n4. KEY DECISIONS: Any proof approach confirmed working (e.g. 'use swap_endToEnd as analogue') or ruled out (e.g. 'instrs_endToEnd is BlockVer only'). One sentence per decision.\n\n5. OPEN ERRORS: Any error message that is the current debugging target. Full text.\n\nDROP: Full text of successful compile output; file reads of definitions documented in CLAUDE.md or the cfgver-* skills; intermediate exploration reads whose conclusions are already captured; assistant narration that restates tool results."
 }

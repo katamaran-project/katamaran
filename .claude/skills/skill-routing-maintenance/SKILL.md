@@ -165,9 +165,73 @@ query's verdict vs. `expected` and a pass/fail, plus a one-line `method` and
 `note` explaining what prompted this run. Never overwrite an existing dated
 file.
 
-**4. If there's a real gap.** Tighten ONLY the specific skill's `description`
-— add a clause covering the missed case, or a NOT-clause excluding the false
-positive — rather than a broad rewrite. Small, targeted edits are easier to
+### FIRST: is this even a routing problem? (added 2026-08-17)
+
+**What a judge measures is not what you usually want to know.** A judge is shown
+the name+blurb listing and asked which skill *should* fire. That measures the
+quality of the listing. It does **not** measure whether a live session actually
+loads the skill — and those come apart badly:
+
+- On 2026-08-17 a session missed `core-executor-internals` while editing
+  `Symbolic/Solver.v`. `rocq-implementation` had been loaded, its tier-2 table
+  named the child, the table had just been read — and the child still never
+  fired. **No eval entry and no wording change would have caught or prevented
+  this**, because identification worked perfectly. The failure was
+  follow-through.
+- Worse, `core-executor-internals` is `name-only` in `settings.json`'s
+  `skillOverrides` — its blurb is not shown at all. **You cannot fix a
+  name-only skill's triggering by editing its blurb, and an eval query about it
+  measures nothing about it** (it measures whether the parent wins). The only
+  real levers for a name-only skill are the parent's routing table (a body edit)
+  and a gate.
+
+So before spending judges, classify:
+
+| symptom | is it routing? | fix |
+|---|---|---|
+| Wrong skill won, or nothing matched, and the listing plausibly explains why | **yes** — but see "prefer a gate" below before assuming words are the deliverable | eval entry always; then a **gate** if the task has a gateable proxy, and a targeted blurb clause (step 4) only if it does not |
+| Right skill was identified — a loaded parent named it, or the match was obvious — and it still wasn't loaded | **no, follow-through** | a HOOK. See CLAUDE.md's three tiers: advisory (`skill-nudge.sh`, assume it does nothing), **deny** (`skill-path-guard.sh` — path/command → required skill, session-scoped markers), **inject** (`rocq-error-injector.sh` — error string → skill name, needs no cooperation at all and is the strongest available) |
+| The skill is `name-only` | **no** | parent's routing table, or a gate. Judges cannot see its blurb |
+
+Two data points now say advisory routing alone under-delivers: the 2026-07-28
+zero-Skill-calls session (which produced the two-tier arrangement) and
+2026-08-17 (which produced the gates). Treat "tune the wording" as the fix of
+last resort for a *follow-through* failure, not the first move.
+
+### PREFER A GATE, even for a genuine routing gap
+
+The table above sends only follow-through failures to a hook. That is too weak.
+**Wherever an action reliably proxies the task, a gate beats a wording change
+even when the diagnosis is honestly "the listing lost".** Three reasons, and the
+third is this skill's own arithmetic:
+
+1. **A gate is deterministic; a blurb is a probabilistic match against competing
+   prose.** A wording change that wins today's query has no guarantee of winning
+   tomorrow's paraphrase, or of surviving the next skill added nearby.
+2. **Wording surgery has already visibly failed to hold.** The 2026-07-28 fix
+   *was* a listing-level fix — the whole two-tier re-description of ten skills —
+   and 2026-08-17 missed a skill anyway. One more careful clause is the same move
+   that did not hold the first time.
+3. **The cost asymmetry is enormous, and it runs the other way from intuition.**
+   Per "Cost" above, a scoped 6-query validation is **~180k tokens** and a sweep
+   is millions. A gate is ~80 lines of shell, tested offline in seconds, then
+   free and exact forever. If both fixes are available, the cheap deterministic
+   one should not be the fallback.
+
+So the ordering is: **gate first if the task has a gateable proxy; words only if
+it does not.** Add the eval entry either way — it is the cheap regression record
+— but do not assume a wording change is the deliverable.
+
+**When words really are the only lever** (and this is a real category, not a
+concession): skills triggered by *intent* rather than by an action. The `cfgver`
+hub, "what should I verify next", "explain how X works", anything answered before
+a file is touched or a command is run. Nothing precedes those to hook onto, so
+the listing is genuinely all there is — spend the judges there.
+
+**4. If there's a real gap** — and step 0 says it IS a routing gap, and the
+"prefer a gate" test above says words are the right lever here. Tighten ONLY
+the specific skill's blurb field — add a clause covering the missed case, or a
+NOT-clause excluding the false positive — rather than a broad rewrite. Small, targeted edits are easier to
 regression-check and less likely to introduce a new competing false-positive
 elsewhere. Re-run the directly affected query plus any near-neighbor queries
 from step 2 to confirm no regression, then fold the result into a new dated

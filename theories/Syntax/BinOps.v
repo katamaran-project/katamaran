@@ -79,6 +79,28 @@ Module bop.
     | bvand {n}         : BinOp (bvec n) (bvec n) (bvec n)
     | bvor {n}          : BinOp (bvec n) (bvec n) (bvec n)
     | bvxor {n}         : BinOp (bvec n) (bvec n) (bvec n)
+    (* First-nonzero ("sticky") accumulation: `coalesce x y = if x = 0 then y
+       else x`.  Not a machine instruction — it is the CANONICAL FORM for the
+       branchless idiom `x | (-[x = 0] & y)` that constant-time C compiles to
+       (BearSSL's `c |= -EQ0(c) & CMP(...)`).  The point of having it as an op
+       is that it mentions `x` ONCE: the zero test lives inside the op's
+       semantics instead of appearing as a second subterm, so an accumulator
+       built from it grows LINEARLY in the trip count rather than doubling.
+       Recognized by peval_bvor_mask (Symbolic/PartialEvaluation.v); the
+       identity is bv.coalesce_mask.  Opaque to the solver, like bvand/bvor. *)
+    | coalesce {n}      : BinOp (bvec n) (bvec n) (bvec n)
+    (* GF(2) "multiply by x" (LFSR/CRC/GHASH key-schedule step):
+       `mulx h r = if bit0(h) then (h >> 1) ^ r else (h >> 1)`.  Not a
+       machine instruction — canonical form for the branchless idiom
+       `(h >> 1) ^ (mask(bit0 h) & r)` clang compiles Botan/BearSSL's
+       CT::Mask-based GF(2) polynomial step to.  Same trick as `coalesce`
+       just above: `h` occurs ONCE, so a chained recurrence `H :=
+       mulx(H,R)` grows linearly in the trip count instead of doubling
+       every step (case_study/RiscvPmp/CFGVer/diagnostics/
+       key-schedule-loop2-cost-drivers.md). Recognized by peval_bvxor_mulx
+       (Symbolic/PartialEvaluation.v); the identity is bv.mulx_mask.
+       Opaque to the solver, like coalesce/bvand/bvor. *)
+    | mulx {n}          : BinOp (bvec n) (bvec n) (bvec n)
     | bvapp {m n}       : BinOp (bvec m) (bvec n) (bvec (m + n))
     | bvcons {m}        : BinOp (bool) (bvec m) (bvec (S m))
     | update_vector_subrange {n} (s l : nat) {p : IsTrue (s + l <=? n)} : BinOp (bvec n) (bvec l) (bvec n)
@@ -215,6 +237,14 @@ Module bop.
       | @bvxor m , @bvxor n =>
         f_equal_dec
           (fun n => ((bvec n, bvec n, bvec n), bvxor))
+          (ninv _ _) (eq_dec m n)
+      | @coalesce m , @coalesce n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bvec n), coalesce))
+          (ninv _ _) (eq_dec m n)
+      | @mulx m , @mulx n =>
+        f_equal_dec
+          (fun n => ((bvec n, bvec n, bvec n), mulx))
           (ninv _ _) (eq_dec m n)
       | @bvapp m1 m2 , @bvapp n1 n2 =>
         f_equal2_dec
@@ -401,6 +431,13 @@ Module bop.
       | bvand                      => fun v1 v2 => bv.land v1 v2
       | bvor                       => fun v1 v2 => bv.lor v1 v2
       | bvxor                      => fun v1 v2 => bv.lxor v1 v2
+      | coalesce                   => fun v1 v2 => if bv.eqb v1 bv.zero then v2 else v1
+      | @mulx n                    =>
+          fun h r =>
+            let one : bv.bv n := bv.of_N (Npos xH) in
+            if bv.eqb (bv.land h one) bv.zero
+            then bv.shiftr h one
+            else bv.lxor (bv.shiftr h one) r
       | bvapp                      => fun v1 v2 => bv.app v1 v2
       | bvcons                     => fun b bs => bv.cons b bs
       | update_vector_subrange s l => fun v1 v2 => bv.update_vector_subrange s l v1 v2

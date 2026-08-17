@@ -46,6 +46,7 @@ use the **rocq** plugin skill; generic pitfalls live in **rocq-pitfalls**,
 | **cfgver-endtoend** | `cfg_instrs_endToEnd`, its call pattern, the `ImplPre` obligation | wiring a hand-written contract; debugging `ImplPre` |
 | **cfgver-endtoend-internals** | proof bodies of the wiring lemmas, `_with_mem` proof patterns (library skill) | modifying/extending the wiring lemmas themselves |
 | **cfgver-memory** | data-memory infra: `interp_mem_with_*`, `instrsAndDataMemory`, `_with_mem` variants | the program reads/writes data memory |
+| **cfgver-scaling-diagnostics** | isolating and writing up WHICH mechanism drives a scaling wall (chunk-count-vs-N, self-referential term growth, per-step density), the `diagnostics/` file convention | asked to diagnose/investigate/write up why an example's cost blows up with N, before proposing a fix |
 
 Dependency order: `executor ← refinement ← soundness ← contracts ← endtoend ← memory`,
 with `gen-contract` on top of `contracts` and `new-example` orchestrating all of them.

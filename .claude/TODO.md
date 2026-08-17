@@ -30,6 +30,51 @@ axiom-clean, both concrete and `_param` (universal base). See
 `uint32_t` rather than the real `uint64_t`, and for the still-open full
 `GHASH::key_schedule` loop.
 
+**First WHOLE-FUNCTION example done (2026-08-03):** `modpow_win_full`
+(`CFGVer/Example/BearSSLModpowFull.v` + `…FullResult.v`) — BearSSL's
+`modpow_opt` window lookup as the COMPLETE nested loop, not the 5-instruction
+body `BearSSLModpow.v` covers. 28 instructions, two levels of loop nesting, a
+backward `JAL`, 122 executed steps, 16 data words, real loads/stores. Proved
+axiom-clean end-to-end at an arbitrary base; gate green at 13 theorems.
+Verified with the STANDARD one-liner tail
+(`intros; vm_compute; solve_vc; solve_symbase_fetch`) on the first attempt —
+63 s tactic + 38 s `Qed`. None of the three things expected to need work did:
+backward `JAL` (only forward was exercised, in `Jumps.v`), two-level nesting
+(every prior loop example is single-level), and base-relative addressing with a
+pointer advanced by a REGISTER (`add a1, a1, a7`) rather than a constant.
+
+Why the bounds are runtime arguments: with `mwlen`/`num_win` as compile-time
+constants clang fully unrolls into ~50 straight-line instructions, which would
+verify nothing about the loop control flow. The real code has them as runtime
+values, so the C takes them as parameters and the CONTRACT pins them to public
+constants (4 and 4). Cost matched the pre-build estimate from the `zzf` model
+(~60 s `vm_compute` predicted), its first real test outside the `zz` probes.
+
+**Two repo bugs fixed on the way:**
+- `tools/asm_to_ast.py` could not translate ANY real loop: `DIRECTIVE_RE = ^\s*\.`
+  was tested BEFORE the label pattern, so every clang local label (`.LBB0_2:`)
+  was swallowed as a directive and every branch came back "undefined label".
+  Never exercised before — `cmovznz4`/`precompute`/the three BearSSL snippets
+  are branch-free, and `countdown`/`key_schedule_loop2` were hand-authored.
+  Fixed by matching labels first (real directives never end in `:`).
+- `Tables.v` was missing `T2`–`T6` (x7, x28–x31). The model has all 32 GPRs.
+
+**`br_i31_muladd_small` (full) is OUT on rv32i — for a reason unrelated to any
+scaling wall.** `MUL31` is a 32×32→64 multiply and rv32i has no `mul`, so
+clang 18.1.3 `-O2` emits `call __muldi3` inside the word loop (verified locally,
+not from memory). Two consequences: the function is not a self-contained
+instruction sequence, so verifying it means translating compiler-rt's multiply
+too; and that routine's conditional add is branch-free but its TRIP COUNT is
+value-dependent (`bnez a0` on an operand), so if the loop operand is the secret
+`q` it is a genuine secret-dependent branch. Neither `modpow_win` nor
+`check_scalar` contains a multiply, so this affects only `muladd`.
+
+**Full `check_scalar` is still blocked by the term wall**, and the GHASH solver
+fold does NOT help it: `select_last_k` hardcodes `R = 0xE1000000`, so the
+`EQ0`/`CMP` idiom would need its own recognizer and its own soundness proof.
+Its trip count is fixed at 32 by P-256, so it cannot be scaled down either.
+See `CFGVer/plans/PLAN-ksl64.md` §3 for the two-driver analysis this came out of.
+
 ## Botan CT::Mask / 64-bit-subtraction gap (2026-07-19)
 
 While hunting the next "Breaking Bad" example, the REAL Botan
@@ -318,7 +363,7 @@ memory note.
   loops" + **core-executor-internals**. A follow-up probe also REFUTED the
   cheap "let-representation" fix (Coq's physical value-sharing saves memory,
   not traversal cost — opacity is what's needed). **Fix plan drafted (not
-  started): `CFGVer/PLAN-term-sharing.md`** — selective opaque naming at
+  started): `CFGVer/plans/PLAN-term-sharing.md`** — selective opaque naming at
   register writes, E1/E2 de-risk experiments first, hash-consing as Plan B. Consequences: (a) full unrolling
   does NOT dodge this — term growth is a property of the instruction
   sequence, not the loop encoding (3^128 either way), so the *symbolic

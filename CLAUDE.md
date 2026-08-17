@@ -27,6 +27,8 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-endtoend`** — `cfg_instrs_endToEnd` wiring + `ImplPre` (register path)
 > - **`cfgver-endtoend-internals`** — the wiring lemmas' proof bodies (library skill)
 > - **`cfgver-memory`** — public-memory infra + data-memory end-to-end (`_with_mem` variants)
+> - **`cfgver-scaling-diagnostics`** — running/writing up a cost-driver investigation
+>   (`diagnostics/` convention, cost-driver catalog, one-axis-at-a-time ablation discipline)
 >
 > **Skill routing is TWO-TIERED (since 2026-07-28).** Ten pitfall/library skills
 > are set to `name-only` in `.claude/settings.json`'s `skillOverrides`: they are
@@ -51,7 +53,9 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   `secret-data-walls`, `gmap-pitfalls`, and for a step running way longer than
 >   expected **`rocq-timeout-triage`** (the general "figure out why before
 >   waiting longer" entry point), which routes to **`rocq-compile-oom`** for the
->   silently-killed/OOM signature.
+>   silently-killed/OOM signature, and **`cfgver-scaling-diagnostics`** for
+>   running/writing up a scaling-driver investigation as a durable record (the
+>   fuller treatment of `rocq-timeout-triage`'s own one-factor-at-a-time step).
 >
 > Caveat measured the same day: `name-only` *de-weights* competition, it does not
 > remove it — a bare NAME can still win on an exact jargon match (`iApply` →
@@ -222,6 +226,75 @@ subagents that are not `subagent_type: routing-judge`, and denies more than 6
 subagent spawns per 120 s (both added after a 2026-07-28 eval run cost ~850k
 tokens). Note `git checkout .claude/settings.json` silently removes every hook
 if that file is ever uncommitted.
+
+**Skills do not reliably load unless a hook makes them load (2026-08-17).** Two
+data points — the 2026-07-28 zero-Skill-calls session, and a 2026-08-17 session
+that edited `Symbolic/Solver.v` without `core-executor-internals` *while the
+skill was named in a routing table it had just read* — say advisory nudges are
+decoration. `skill-nudge.sh` fired in the second case, was read, and changed
+nothing. Three tiers of intervention now exist, and only the last two work:
+
+- **advisory** — `skill-nudge.sh` (Read/Grep). Kept; assume it does nothing.
+- **deny** — `.claude/hooks/skill-path-guard.sh` (PreToolUse Write|Edit), a
+  TABLE of path → required-skill rules. Any `*.v` write requires
+  `rocq-implementation`; on top of that each documented file demands its own
+  skill (`Solver.v`/`Monads.v`/`SymbolicExecutor.v` →
+  `core-executor-internals`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
+  `cfgver-refinement`; `Adequacy.v`/`SpecIris.v` → `cfgver-soundness`;
+  `GenContract.v` → `cfgver-gen-contract-internals`; `EndToEnd.v` →
+  `cfgver-endtoend-internals`; `Example/*Result.v` + `Noninterference.v` →
+  `cfgver-endtoend`; other `Example/*.v` → `cfgver-new-example`;
+  `diagnostics/*.md` → `cfgver-scaling-diagnostics`). **That mapping is
+  transcribed from `CFGVer/CLAUDE.md`'s file table and is meant to track it** —
+  if one changes, change both. `ZZ*.v` probes are exempt from the CFGVer rules
+  but not the blanket one; `plans/*.md` is deliberately ungated (no skill
+  governs "what we intend to build"). All missing skills are reported in ONE
+  denial, and each fires at most once per session. Override:
+  `CLAUDE_V_GUARD_OFF=1`.
+- **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash):
+  `git merge` / `git push` / `checkout -b` / `switch -c` require
+  `branch-workflow`. Commit, status, log, diff and path-checkout are NOT gated
+  (milestone commits are `rocq-checkpoint`'s business). Override:
+  `CLAUDE_GIT_GUARD_OFF=1`.
+
+  Both are backed by `skill-load-marker.sh` (PreToolUse Skill), which records
+  every skill invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` —
+  deliberately separate from `meta-skill-marker.sh`, which is load-bearing for
+  `skill-edit-guard.sh` and would block all skill authoring if broken.
+- **inject** — `.claude/hooks/rocq-error-injector.sh` (PostToolUse): names the
+  right pitfalls skill when a known error string appears in tool output
+  (`Cannot find witness` → bv- vs gmap-pitfalls, disambiguated by whether the
+  file imports gmap; `Wrong bullet`/`found no subterm` → rocq-pitfalls; Iris
+  tactic failures → iris-proofmode; `Terminated`/`Error 143` → rocq-compile-oom;
+  `VerificationConditionWithErasure` → cfgver-solve-vc). **The strongest
+  mechanism available**, because it needs no cooperation — the content arrives
+  whether or not anyone thinks to ask. Prefer it for symptom-keyed skills, where
+  the symptom is a deterministic string rather than a prose match.
+
+**Consequence for authoring: a new skill needs a GATE decided at the same time
+as its content.** When `skill-creator` drafts one, finish the job by answering
+"what action, if taken without this skill, should be denied — or what tool-output
+string should inject it?" A skill with neither should be assumed not to fire; the
+wording of its blurb is the weakest of the three levers and, for a `name-only`
+tier-2 skill, is not shown at all. `skill-creator` lives in the plugin cache
+(`~/.claude/plugins/cache/…`), so this note lives here rather than in it —
+editing a plugin would be overwritten on update and would leak into unrelated
+projects. The corresponding "is this even a routing problem?" triage is in
+**skill-routing-maintenance**, and the gate-vs-words classification in
+**skill-usage-audit**.
+
+Two traps when testing a Write/Edit hook: **`Edit` validates `old_string` BEFORE
+`PreToolUse` runs**, so a deliberately-bogus-string "harmless test" never
+reaches the hook and reads as "my hook is broken" (it is not) — use a real edit;
+and a guard whose pattern matches text that merely *mentions* its trigger will
+misfire — **four** instances in one day: a case-insensitive `Error:` grep
+matching the printed lemma name `instpred_dlist_error:`; a `pgrep -f` wait loop
+matching its own command line and so reporting a running build as finished; and
+the rocq plugin's `guardrails.sh` twice blocking read-only commands because a
+quoted string contained "restore" and later "git push". Match against the
+specific field (`.tool_input.command`, not the whole payload) and anchor on the
+token as a *command word* — `git-workflow-guard.sh` does this, and correctly
+allows `echo 'remember to git push later'`.
 after changing any skill *description* or
 noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
 skill (read-only Haiku-judge

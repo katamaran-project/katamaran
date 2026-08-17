@@ -284,11 +284,17 @@ def parse(text):
 
     for raw in text.splitlines():
         line = raw.split('#', 1)[0].strip()
-        if not line or DIRECTIVE_RE.match(line):
+        if not line:
             continue
+        # Labels MUST be matched before directives: clang's local labels
+        # (".LBB0_2:") start with a dot, so DIRECTIVE_RE swallows them and
+        # every branch target silently becomes "undefined label". Real
+        # directives never end in ':', so this ordering is unambiguous.
         mlabel = LABEL_DEF_RE.match(line)
         if mlabel:
             labels[mlabel.group(1)] = len(canon)
+            continue
+        if DIRECTIVE_RE.match(line):
             continue
         parts = line.split(None, 1)
         mnemonic = parts[0]

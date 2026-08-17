@@ -44,15 +44,36 @@ Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
 ```
 
 `solve_vc` is deliberately NOT specialised for this — it stays a general VC
-solver; `solve_symbase_fetch` is the add-on. It applies four evalRel-level
+solver; `solve_symbase_fetch` is the add-on. It applies five evalRel-level
 lemmas (`relval_secLeak_bvadd`, `relval_fetch_lower`, `relval_fetch_upper_bare`,
-`relval_fetch_upper_add`) covering the fetch lower bound and the fetch upper
-bound (bare and `base + c`). The upper-bound-with-offset numeric side is discharged via
-`Z.leb_le; vm_compute; reflexivity` rather than `lia`, because with stdpp's
-gmap Zify instances in scope `lia` mis-handles `bv.bin` of a literal (see
-`gmap-pitfalls`). This replaces the old hand-copied 15-line
-`destruct secLeak … / bv.bin_add_small / lia` tail that used to sit in every
-`_param` proof.
+`relval_fetch_upper_add`, `relval_neq_irrefl`). The upper-bound-with-offset
+numeric sides are discharged via `Z.leb_le; vm_compute; reflexivity` rather than
+`lia`, because with stdpp's gmap Zify instances in scope `lia` mis-handles
+`bv.bin` of a literal (see `gmap-pitfalls`). This replaces the old hand-copied
+15-line `destruct secLeak … / bv.bin_add_small / lia` tail that used to sit in
+every `_param` proof.
+
+Despite the tactic's name, two of those shapes are NOT about instruction fetch —
+worth knowing before concluding "the residual is unrelated, the tactic can't
+help":
+
+- **Data-access bounds are WIDTH-GENERIC, not always offset 4** (2026-08-05).
+  `sep_contract_mem_read`'s bound is `unsigned paddr + bytes ≤ maxAddr`, so an
+  `lbu` (`mem_read 1`) leaves an upper bound with goal-side offset **1** and an
+  `lh` would leave **2**, where fetch and word accesses leave 4.
+  `relval_fetch_upper_bare`/`_add` therefore take the goal-side offset as a
+  PARAMETER `A` (`… (v) (A B : Z)` / `… (v) (cbv) (A B : Z)`) rather than
+  hardcoding 4 — do not "fix" a width-1 residual by adding a duplicate lemma.
+  `_add` carries an extra `0 ≤ A` premise because its no-wrap step bounds
+  `bin cbv + bin a` via `1024 - A`.
+- **`relval_neq_irrefl` closes a loop-EXIT residual, not a bound.** A loop whose
+  exit test is a POINTER COMPARE — `bne a0, a1` with both operands
+  base-relative, which is what clang emits for BearSSL `check_scalar`'s byte
+  loops — leaves, on the final not-taken iteration, `p+k ≠ p+k → False`. A
+  counter-vs-zero loop (`Example/KeyScheduleLoop.v`) never produces this shape,
+  which is why it appeared only when the first pointer-walking loop was
+  verified. Both `RelVal` cases are immediate (`SyncVal` gives `x <> x`;
+  `NonSyncVal` collapses the match to `False`).
 
 **A fourth residual shape used to be listed here and is GONE (2026-07-29,
 commit `55421905`): `secLeak` of a constant-offset pc.** It was never "by

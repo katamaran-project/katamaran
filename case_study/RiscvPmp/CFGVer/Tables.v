@@ -92,6 +92,7 @@ Open Scope list_scope.
      hand-picked X0..X4. *)
   Definition T0 : RegIdx := bv.of_nat 5.
   Definition T1 : RegIdx := bv.of_nat 6.
+  Definition T2 : RegIdx := bv.of_nat 7.
   Definition A0 : RegIdx := bv.of_nat 10.
   Definition A1 : RegIdx := bv.of_nat 11.
   Definition A2 : RegIdx := bv.of_nat 12.
@@ -100,6 +101,10 @@ Open Scope list_scope.
   Definition A5 : RegIdx := bv.of_nat 15.
   Definition A6 : RegIdx := bv.of_nat 16.
   Definition A7 : RegIdx := bv.of_nat 17.
+  Definition T3 : RegIdx := bv.of_nat 28.
+  Definition T4 : RegIdx := bv.of_nat 29.
+  Definition T5 : RegIdx := bv.of_nat 30.
+  Definition T6 : RegIdx := bv.of_nat 31.
 
   (* Convert a contiguous instruction list into the finite map the CFG
      verifier now consumes.  Instruction k of the list is placed at the
@@ -248,3 +253,12 @@ Open Scope list_scope.
       LOAD imm rs rd false WORD.
     Definition SW (rs2 rs1 : RegIdx) (imm : bv 12) : AST :=
       STORE imm rs2 rs1 WORD.
+
+    (* Byte load, zero-extended: rd := zext(mem[rs + imm]).  Field order is
+       LOAD imm rs1 rd is_unsigned width (Base.v:287); is_unsigned = true
+       makes fun_execute_LOAD's process_load/extend_value take the
+       uop.zext 8 -> 32 branch (Machine.v:619).  LW above passes false, which
+       is immaterial at WORD but decisive here.  This is the first BYTE-width
+       memory access in the case study -- see PLAN-byte-memory.md. *)
+    Definition LBU (rd rs : RegIdx) (imm : bv 12) : AST :=
+      LOAD imm rs rd true BYTE.

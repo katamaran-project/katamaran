@@ -364,41 +364,64 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       | SyncVal p => p | NonSyncVal _ _ => False end.
     Proof. intros H; destruct X as [a|a b]; [cbn; unfold bv.unsigned; lia | destruct H]. Qed.
 
-    Lemma relval_fetch_upper_bare (v : RelVal ty_xlenbits) (B : Z) :
+    (* The GOAL-side offset `A` is a parameter rather than the hardcoded word
+       width 4.  Instruction fetch and word accesses instantiate it at 4, but
+       a BYTE access (`lbu`, via mem_read 1) leaves an upper bound with offset
+       1, and HALF would leave 2: sep_contract_mem_read's bound is
+       `unsigned paddr + bytes <= maxAddr`, width-generic (Spec.v:439).  See
+       PLAN-byte-memory.md. *)
+    Lemma relval_fetch_upper_bare (v : RelVal ty_xlenbits) (A B : Z) :
       RiscvPmpSignature.secLeak v ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal 1024%Z)
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end ->
-      (4 <= B)%Z ->
+      (A <= B)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal 1024%Z)
-           (bop.evalRel bop.plus (SyncVal 4%Z) (uop.evalRel uop.unsigned v)))
+           (bop.evalRel bop.plus (SyncVal A) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end.
     Proof.
       intros H Hb Hle; destruct v as [a|a b];
         [cbn in *; unfold bv.unsigned in *; lia | destruct H].
     Qed.
 
-    Lemma relval_fetch_upper_add (v : RelVal ty_xlenbits) (cbv : bv xlenbits) (B : Z) :
+    (* Same generalisation, plus the `0 <= A` the no-wrap step needs: bounding
+       `bin cbv + bin a` below exp2 goes through `1024 - A`, which only stays
+       under 2^32 for a non-negative A. *)
+    Lemma relval_fetch_upper_add (v : RelVal ty_xlenbits) (cbv : bv xlenbits) (A B : Z) :
       RiscvPmpSignature.secLeak v ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal 1024%Z)
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end ->
-      (Z.of_N (bv.bin cbv) + 4 <= B)%Z ->
+      (Z.of_N (bv.bin cbv) + A <= B)%Z ->
+      (0 <= A)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
         (bop.evalRel bop.minus (SyncVal 1024%Z)
-           (bop.evalRel bop.plus (SyncVal 4%Z)
+           (bop.evalRel bop.plus (SyncVal A)
               (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
       with SyncVal p => p | NonSyncVal _ _ => False end.
     Proof.
-      intros H Hb Hle; destruct v as [a|a b]; [| destruct H].
+      intros H Hb Hle HA; destruct v as [a|a b]; [| destruct H].
       cbn in *; unfold bv.unsigned in *.
       assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
       assert (Hlt : (bv.bin cbv + bv.bin a < bv.exp2 xlenbits)%N) by lia.
       rewrite (bv.bin_add_small Hlt). lia.
     Qed.
+
+    (* Loop-EXIT residual, not a fetch bound.  A loop whose exit test is a
+       POINTER COMPARE (`bne a0, a1` with a0/a1 both base-relative, as clang
+       emits for BearSSL check_scalar's byte loops) leaves, on the final
+       not-taken iteration, the obligation that the two now-equal pointers
+       being unequal is absurd.  A counter-vs-zero loop (Example/
+       KeyScheduleLoop.v) never produces this shape, which is why it appears
+       only now.  Both RelVal cases are immediate: SyncVal gives `x <> x`,
+       NonSyncVal collapses the match to False outright. *)
+    Lemma relval_neq_irrefl (X : RelVal ty_xlenbits) :
+      match bop.eval_relop_relprop bop.neq X X with
+      | SyncVal p => p | NonSyncVal _ _ => False end -> False.
+    Proof. destruct X as [a|a b]; cbn; [intros H; now apply H | exact (fun H => H)]. Qed.
 
     Ltac solve_vc :=
       vm_compute; constructor; cbn; intros; repeat split; try solve_bv;
@@ -433,8 +456,11 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
         | apply relval_fetch_lower;
             solve [ assumption | apply relval_secLeak_bvadd; assumption ]
         | eapply relval_fetch_upper_add;
-            [ eassumption | eassumption | apply Z.leb_le; vm_compute; reflexivity ]
-        | eapply relval_fetch_upper_bare; [ eassumption | eassumption | lia ] ].
+            [ eassumption | eassumption
+            | apply Z.leb_le; vm_compute; reflexivity
+            | apply Z.leb_le; vm_compute; reflexivity ]
+        | eapply relval_fetch_upper_bare; [ eassumption | eassumption | lia ]
+        | apply relval_neq_irrefl ].
 
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
     (*   match reg_convert r with *)

@@ -60,7 +60,9 @@ AXIOM_CLEAN_THMS=(
   "key_schedule_loop2_noninterferent_param"
   "muladd_q_noninterferent_param"
   "modpow_win_noninterferent_param"
+  "modpow_win_full_noninterferent_param"
   "check_scalar_noninterferent_param"
+  "check_scalar_loop1_noninterferent_param"
 )
 
 COQC="${COQC:-coqc}"
@@ -134,8 +136,20 @@ make -j"$jobs" -f Makefile.coq "${BUILD_TARGETS[@]}" \
 grn "▶ [2/3] Scanning for proof holes…"
 # Fast heuristic; the Print Assumptions pass below is authoritative for reachable
 # holes. Drop matches where the keyword sits inside a single-line (* … *) comment.
+#
+# ZZ*.v are EXCLUDED. They are throwaway measurement probes (the
+# cfgver-scaling-diagnostics convention): never in _CoqProject, so nothing in
+# BUILD_TARGETS' closure can reach them, and they legitimately end in
+# `Admitted.` because they measure what a VC COSTS rather than proving it.
+# This scan reads the filesystem, not the index, so without this exclusion a
+# probe sitting in the working tree fails the gate outright -- and, worse, a
+# probe that gets committed by accident blocks it permanently. That happened
+# twice (2026-08-13's ZZKsl* set and once before) despite the convention being
+# written down in three places; the probes are now also .gitignore'd. Skipping
+# them costs no safety: they are unreachable from the end theorems, and step
+# (3) follows the real dependency graph regardless.
 holes="$(grep -rnE 'Admitted\.|^[[:space:]]*(Axiom|Conjecture|Parameter)[[:space:]]' \
-           "${SCOPE_DIRS[@]}" --include='*.v' \
+           "${SCOPE_DIRS[@]}" --include='*.v' --exclude='ZZ*' \
          | grep -vE '\(\*.*(Admitted|Axiom|Conjecture|Parameter)' || true)"
 if [ -n "$holes" ]; then
   red "$holes"

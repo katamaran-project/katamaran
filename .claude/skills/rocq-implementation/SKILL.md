@@ -39,6 +39,34 @@ is expensive.
 Always prefer rocq-mcp tools over spawning `coqc` manually. The gap is not
 stylistic — it is roughly three orders of magnitude per iteration.
 
+### The rule, stated as a checkable condition
+
+> **Never run `coqc`/`make` on a file you just edited unless the immediately
+> preceding action interactively verified the part you changed.**
+
+This is the trigger condition, and it is here because "prefer rocq-mcp" was
+not enough on its own. On 2026-08-16 a session used preamble mode correctly
+for the hard part of a `Solver.v` lemma, then fell straight back to full
+rebuilds for the *wiring* — six ~6-minute compiles to fix two tactic names
+and a binder name. The failure mode is filing "verify the assembled file" as
+a different activity from "iterate on a tactic", then sliding from the first
+into the second. Both relapses happened at the wiring step, which feels like
+plumbing rather than proving. It is not: a wrong binder name is a tactic
+error like any other.
+
+Before every build, ask the question literally: *did my last action check
+this change interactively?* If no, there is almost always a shape question
+you can extract and check in ~100 ms first (see the module-functor note
+below). One confirming compile at the end is the sanctioned use; the second
+consecutive one is the smell.
+
+This is now enforced, not just advised: `.claude/hooks/coqc-guard.sh` denies
+a build whose target's own source is newer than its `.vo` unless a
+`rocq_check` / `rocq_start` / `rocq_step_multi` has happened since that
+change. A prerequisite-only change does not trip it, so dependency rebuilds
+are unaffected. If you hit that denial, do the interactive check — the
+override exists but is the user's to set.
+
 ```
 rocq_compile_file(file, mode="vos")               # fast type-check, statements only
 rocq_compile_file(file, mode="full")              # validates proof bodies
@@ -131,6 +159,40 @@ must supply or you get spurious failures: **iris-proofmode**, "Debugging an IPM
 failure inside a module functor". Measured 2026-07-28: this found in 100 ms what
 two 5m45s blind compiles of `Solver.v` had failed to localise.
 
+**A "does this stay transparent through the module boundary" question is ALSO a
+shape question** — test it the same way, in a two-line throwaway snippet, before
+ever blaming the real file. Worked incident (`Symbolic/Solver.v`,
+`try_bvadd_cancel_spec`, 2026-08-07): a hypothesis obtained from a lemma whose
+conclusion was `instpred (formula_secLeak t)` refused to reduce past that folded
+form under `cbn`/`unfold instpred_formula_secLeak`, even though
+`instpred_formula_secLeak t` is definitionally *exactly* that term one
+`InstPred`-dispatch layer down. Four consecutive ~6-minute `make` recompiles of
+the real file were burned narrowing this down — all of it avoidable, because the
+actual question ("does `Module Type X := ConcreteModule` preserve
+`Definition`-transparency for a functor parameterized over `X`?") has nothing to
+do with Katamaran and reproduces in a preamble in under 100 ms:
+
+```coq
+Module Concrete. Definition foo (n : nat) : nat := n + 1. End Concrete.
+Module Type Empty. End Empty.
+Module Type Sig := Empty <+ Concrete.
+Module Functor (Import X : Sig).
+  Lemma test (n : nat) : foo n = n + 1. Proof. reflexivity. Qed. (* succeeds *)
+End Functor.
+```
+
+It succeeds — the definition IS transparent generically. So the real bug wasn't
+module opacity; it was that `cbn` (and plain `unfold`) sometimes will not fire
+through a class-method-then-Fixpoint dispatch chain (`instpred`'s `InstPred`
+projection, then `instpred_formula`'s match) even when the target is fully
+convertible. `change OLD with NEW in H` (full conversion, not `cbn`'s
+unfolding heuristics) does — same snippet, `change foo with (fun x => x + 1) in
+H` closes it instantly, under a binder too. **Lesson: when `cbn`/`unfold`
+stalls on something you can independently prove equal by `reflexivity`, reach for
+`change ... with ... in H` instead of adding more `cbn`/`unfold` calls** — and
+prototype the module-boundary question itself in a scratch snippet before
+touching the real file, exactly like any other shape question.
+
 To get the goal's exact shape without guessing it, temporarily replace the proof
 body with:
 
@@ -202,11 +264,21 @@ announce themselves as a confusing failure ten minutes later.
 | **iris-proofmode** | Separation-logic proof mode: `iApply`/`iExact`/`iFrame`/`iMod`/`iDestruct`/`iIntros` failures, wands and separating conjunction, fancy updates, persistent vs spatial hypotheses, `big_sepM`/`big_sepL`. |
 | **relval-model** | `SyncVal` or `NonSyncVal` appears in your goal or definition and you need to know what it denotes — the relational value model and its homomorphic lifting. |
 | **relval-rewrite-over-secrets** | **Before** proving any `peval` case, solver rule, or `Term` rewrite that could touch secret data. If both sides are pure terms the rewrite is automatically sound relationally with **no** `NonSyncVal` case analysis — worth knowing before you build one. |
-| **core-executor-internals** | The generic `SPureSpec`/`SHeapSpec` monad and its refinement lemmas. Also the section on **how an `assert` is discharged against the path condition**: `solver_generic`'s three stages, `combined_solver`'s repeated passes, the `wpathcondition` world-extension quadratic, and the known `formula_simplifies` fact-burning bug. |
+| **core-executor-internals** | The generic `SPureSpec`/`SHeapSpec` monad and its refinement lemmas. Also the section on **how an `assert` is discharged against the path condition**: `solver_generic`'s three stages, `combined_solver`'s repeated passes, the `wpathcondition` world-extension quadratic, and the known `formula_simplifies` fact-burning bug. **AND the recipe for AUTHORING A NEW SOLVER RULE** — load it before your first edit to `Symbolic/Solver.v`: where to hook, why `Some error` for "cannot decide" is unsoundness, whether your rule needs a `secLeakT` guard, the `Equations` two-type-index refusal, and the iteration order that keeps you off ~6-minute rebuilds (prove the semantics in preamble mode over `Syntax.TypeDecl`; unit-test firing; one real `Qed`; then `gate.sh` at `GATE_JOBS=1`). |
 | **cfgver-rsolve** | `rsolve` fails, hangs, dies in a `Qed`, or eats multiple GB; a `RefineCompat` instance is missing and must be written. |
 | **cfgver-wp2** | `semWP2_unfold`/`semWP2_fix` and binary adequacy mechanics — an unreduced match after `rewrite semWP2_unfold`, `env.drop_cat` terms, an `iMod` that cannot eliminate an `inl`/`inr` modality. |
 | **cfgver-gen-contract-internals** | Only when **modifying or extending the contract generator itself** (`gen_reg_asn`, `gen_pre`, `gen_implpre`, `declare_public_registers`). Merely *using* `gen_contract` is `cfgver-gen-contract`, tier 1. |
 | **cfgver-endtoend-internals** | Only when **modifying the wiring lemmas themselves** (`cfg_instrs_endToEnd`, `cfg_instrs_verified`/`_safe`, the `_with_mem` variants). Merely *using* the wiring is `cfgver-endtoend`, tier 1. |
+
+Not a skill but the same reflex: **`references/peval-mask-algebra.md`** (in this
+skill's directory) before adding a `peval` rule or a new `BinOp`/`UnOp`
+constructor. It holds the branchless-mask canonical forms (`uop.expand`,
+`bop.coalesce`) and, more importantly, the five-file plumbing table for a new
+constructor plus the traps that make a `peval` rule silently do nothing.
+(Moved below the table 2026-08-17 — it used to sit BETWEEN two rows, which split
+the routing table in half so everything from `core-executor-internals` down
+rendered as a separate table. A routing table that does not render as one table
+is exactly the failure this skill exists to prevent.)
 
 ### These are tier 1 — do not wait for this skill
 

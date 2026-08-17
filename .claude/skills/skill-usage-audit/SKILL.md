@@ -91,7 +91,8 @@ light problem or vice versa:
 
 | Finding shape | Bucket | Fix |
 |---|---|---|
-| Skill exists, description already covers it, just wasn't invoked | pure routing / proactive-triggering | Log an eval entry (`kind: silent-miss`), no description change needed — the entry itself is the regression guard. |
+| Skill exists, its blurb already covers it, and NOTHING identified it — no parent named it, no listing surfaced it | pure routing / proactive-triggering | Log an eval entry (`kind: silent-miss`) — but the entry guards against a *judge* picking wrong, which is NOT the same as guarding against a live session not loading it. So **also gate it if the task has a gateable proxy**: skill-routing-maintenance's "prefer a gate" section argues a hook beats a wording change even for a genuine routing gap, since a scoped validation run costs ~180k tokens and a gate costs ~80 lines and is exact forever. Words are the right lever only for *intent*-triggered skills, where no action precedes the task. |
+| Skill exists, was correctly IDENTIFIED (a loaded parent's routing table named it, or the task obviously matched), and still wasn't loaded | **follow-through failure — NOT a routing problem** | An eval entry and a wording change are both no-ops here: the identification worked. **Gate it.** See "When tuning the blurb is the wrong fix" in skill-routing-maintenance, and CLAUDE.md's three-tier list (advisory / deny / inject). Concretely: a `PreToolUse` deny keyed on the file or command that IS the task, or — for symptom-keyed skills — a `PostToolUse` injection keyed on the error string. |
 | Skill exists, description is too narrow to have caught this | routing + content | Tighten the description (small, targeted clause — not a rewrite), then **must** run skill-routing-maintenance per the project's Maintenance protocol before considering it done. |
 | Skill's domain matches, but the specific fact/convention isn't in its body or a `references/*.md` file | content gap, existing skill | Direct edit — add the missing content to the body, or a new reference file if it's rarely-needed detail (per the project's reference-file convention: zero listing cost, cataloged in the parent's body). No routing re-check needed unless the description also changed. |
 | No skill's description plausibly covers this domain at all | missing skill | Do NOT draft it here. Hand off to **skill-creator** for the first-draft/interview step — this skill's job stops at "here's the gap and why it's not just an extension of an existing skill." |
@@ -111,6 +112,22 @@ light problem or vice versa:
   gotcha (e.g. skill A's residual table gets a pointer to skill B's fuller
   explanation, and skill B gets a pointer back) — a one-directional link is
   half the fix.
+- **A follow-through failure gets a HOOK, not words.** Adding a gate is a
+  standing change to how every future session behaves, so surface it to the
+  user first, like a new skill. Then: mirror `.claude/hooks/skill-path-guard.sh`
+  (a table of path → required-skill, backed by `skill-load-marker.sh`'s
+  session-scoped markers) or `rocq-error-injector.sh` (error string → skill
+  name). Two things to get right, both learned the hard way on 2026-08-17:
+  make each requirement fire **at most once per session** or a long editing run
+  becomes unusable; and **test with a REAL operation** — `Edit` validates its
+  `old_string` before `PreToolUse` runs, so a deliberately-bogus-string "safe
+  test" never reaches the hook and reads as a broken hook.
+- **Don't let gates accumulate unexamined.** A denial that gets ritually
+  satisfied rather than acted on is worse than no gate: on 2026-08-17 the
+  `coqc-guard` denied a build that genuinely could not be checked
+  interactively, and the session satisfied it with a token call that told it
+  nothing, then built anyway. If an audit finds that pattern, the finding is
+  "thin the gates", not "add another".
 
 ### 5. Report
 

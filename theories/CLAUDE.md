@@ -32,12 +32,39 @@ instantiates the module types at each layer.
 | `Context.v` | the `Ctx B` snoc-list context structure (typed variable contexts, e.g. `LCtx`) |
 | `MicroSail/ShallowExecutor.v` | the concrete, directly-executable reference semantics (correctness baseline for the symbolic executor) |
 | `Symbolic/Worlds.v` | the `World` record and logic-variable-world extension operators underlying symbolic execution; also declares the `SolverKit` module type |
-| `Symbolic/Solver.v` | formula/path-condition simplification (`solver_generic`, `combined_solver`) — see **secret-data-walls** for its `secLeak` logic |
+| `Symbolic/Solver.v` | formula/path-condition simplification (`solver_generic`, `combined_solver`) — see **secret-data-walls** for its `secLeak` logic, and **core-executor-internals** for both how an `assert` is discharged and the recipe for adding a new rule (read it BEFORE the first edit; see the box below) |
 | `Syntax/Predicates.v` | abstract separation-logic predicate vocabulary (`PurePredicateKit`/`HeapPredicateKit`) a case study instantiates |
 | `MicroSail/SymbolicExecutor.v` | the generic symbolic executor for `Stm` — see **core-executor-internals** for the choice-combinator mechanics |
 | `Symbolic/Propositions.v` | the `SymProp` verification-condition language and its postprocessing (`prune`/`solve_evars`/`solve_uvars`) |
 | `Syntax/TypeDecl.v` | core `Ty`/`Val`/`RelVal` type-denotation machinery — see **relval-model** for `SyncVal`/`NonSyncVal` semantics |
 | `MicroSail/RefineExecutor.v` | refinement/soundness proof connecting the symbolic executor to the shallow one (`symbolic_vcgen_soundness`) |
+
+---
+
+## Editing `Symbolic/Solver.v` — four facts that bound every iteration
+
+Read **core-executor-internals** ("Adding a NEW solver rule") before the first
+edit; these four are here because they apply to *any* change to that file.
+
+1. **`rocq_compile_file` cannot build it.** It drops `_CoqProject`'s
+   `-arg "-w all"`, under which the pre-existing `#[export] Notation` at
+   ~`Solver.v:2230` is a hard error pointing at code you did not touch. Use
+   `make -f Makefile.coq theories/Symbolic/Solver.vo` — budget **~5m45s**, and
+   it invalidates every downstream `.vo` (i.e. the whole case study).
+2. **Its definitions cannot be checked interactively.** They sit in
+   `Module Import GenericSolver` inside `Module Type GenericSolverOn`, so that
+   inner `Import` does not escape: from a position-mode `rocq_start` even
+   *pre-existing* siblings are unreachable, and past ~line 2400 the replay
+   exceeds the 300 s cap anyway. Externally the names are
+   `RiscvPmpSignature.GenericSolver.<name>`.
+3. **So prove the semantics in preamble mode first.** `Bitvector` and
+   `Syntax.TypeDecl` load standalone, and `ty.liftBinOpRV`/`liftUnOpRV` are what
+   `bop.evalRel`/`uop.evalRel` reduce to — the real RelVal argument restates
+   there in ~100 ms. `RiscvPmp.Sig` does **not** load in a preamble.
+4. **A wrong rule does not fail loudly.** A rule that discharges to `empty`
+   claims a formula holds; only `./scripts/gate.sh`'s `Print Assumptions` pass
+   catches it, via the end theorems. Run the gate at **`GATE_JOBS=1`** on a
+   ≤16 GB box — the default `-j3` runs three ~3 GB `coqc` processes at once.
 
 ---
 
