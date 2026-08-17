@@ -773,35 +773,185 @@ independently of chunk count. Chunks are what make it superlinear; steps are
 what make it grow at all. On the diagonal both scale with N, hence the
 apparent quadratic.
 
-**The chunk dependence is SUPERLINEAR** — the padding probe is the clean test,
-since it moves `H` at constant `S` (loop 2 alone, n=4 fixed, `P` dead cells,
-`H = 28+P`, `S = 52`):
+**RETRACTED 2026-08-17 (same day, later): the CONCLUSION below is wrong — the
+chunk exponent is 1.0, exactly linear.** The measurements are real and were
+reproduced to ≤0.4% (§6.6), but the probe moves TWO axes at once: each
+`PVExist` pad word adds four chunks **and one logic variable**, and the
+variable is the superlinear factor. **Never requote "+64% marginal cost per
+chunk" or `H^(1+ε)`** — the correct law is `H·S` linear in `H`, with a separate
+`|Σ|²` term. §6.6 has the isolating grid. Original text kept:
 
-| H | cost | marginal per chunk |
-|---|---|---|
-| 28 | 0.370 | — |
-| 44 | 0.540 | 0.0109 |
-| 60 | 0.744 | 0.0127 |
-| 92 | 1.256 | **0.0160** |
+> **The chunk dependence is SUPERLINEAR** — the padding probe is the clean test,
+> since it moves `H` at constant `S` (loop 2 alone, n=4 fixed, `P` dead cells,
+> `H = 28+P`, `S = 52`):
+>
+> | H | cost | marginal per chunk |
+> |---|---|---|
+> | 28 | 0.370 | — |
+> | 44 | 0.540 | 0.0109 |
+> | 60 | 0.744 | 0.0127 |
+> | 92 | 1.256 | **0.0160** |
+>
+> **+64% marginal cost per chunk** as `H` grows 3.3× at fixed `S`. Each added
+> chunk raises the cost of carrying every other one — exactly what `subst_list`
+> re-transporting the whole heap per world extension predicts. So the law is
+> nearer `H^(1+ε)·S`, which is why both arms under-account at N=32 and why the
+> diagonal's local exponent climbs past 2 instead of settling there.
 
-**+64% marginal cost per chunk** as `H` grows 3.3× at fixed `S`. Each added
-chunk raises the cost of carrying every other one — exactly what `subst_list`
-re-transporting the whole heap per world extension predicts. So the law is
-nearer `H^(1+ε)·S`, which is why both arms under-account at N=32 and why the
-diagonal's local exponent climbs past 2 instead of settling there.
+What survives: the padding probe still shows declared-but-untouched resources
+costing at execution time, and it is still true that the two arms under-account
+at N=32. The *cause* of that drift is `|Σ|`, not a chunk exponent.
 
 **Failed attempt, recorded so it is not repeated:** fitting `c·H^a·S^b` on the
 three corner points (m4n4, m16n4, m4n16) returns **a = −1.09**, physically
-impossible. Those points are nearly collinear in log-space, so `a` and `b` are
+impossible. (Read with §6.6: no `H^a` fit was ever going to work, because the
+missing factor is `|Σ|`, not a power of `H`.) Those points are nearly collinear in log-space, so `a` and `b` are
 not separable there. Separating them needs a point that moves `H` a lot at
 fixed `S` *on the two-loop rig* — pad the combined rig at fixed m,n. The
 single-loop padding probe above does it for one loop only.
+
+## 6.6. It was never the chunk count: `|Σ|` is the superlinear factor (2026-08-17)
+
+**One-sentence finding: heap size is EXACTLY linear in cost; the superlinearity
+attributed to chunks in §6.5 is entirely the logic-variable count, which enters
+quadratically.**
+
+### The experiment
+
+§6.5's padding probe pads with `PVExist` word entries. `gen_mem_asn_bytes`'s
+`None` branch emits four `ptstomem 1` chunks **and one `asn.exist "mw"`** per
+entry (`GenContract.v:226`), so `H` and `|Σ|` grow in lockstep — 4 chunks per
+variable. Every §6.5 reading is that mixture. Axes, named before measuring:
+
+| axis | states |
+|---|---|
+| `chunks` | `4·pw` — identical in all three arms |
+| `lvars` | `pw` (arm A) \| `1` (arm B) \| `0` (arm C) |
+| `value-term shape` | `word_byte j (var)` (A, B) \| literal byte (C) |
+
+| arm | pad entry | chunks | lvars | file |
+|---|---|---|---|---|
+| **A** `chunks+lvars` | `PVExist` (pre-existing probe) | 4·pw | pw | `ZZPadVCCommon.v` + `ZZPadC_PW{0,4,8,16}.v` |
+| **B** `chunks only` | ONE shared existential word; every pad cell a byte projection of it | 4·pw | **1** | `ZZPadShrCommon.v` + `ZZPadShrB_PW{0,4,8,16}.v` |
+| **C** `chunks only, literal` | `PVConst 0` | 4·pw | **0** | `ZZPadShrCommon.v` + `ZZPadShrC_PW{0,4,8,16}.v` |
+
+Arm B is the decisive one: same chunk count *and* same per-chunk term shape as
+A, differing only in whether the pad mints one variable or `pw` of them. Arm C
+is a sanity arm — it drops the variable but also shrinks the value terms, so it
+alone cannot separate the two. Everything else held: concrete base, `n = 4`
+(so `S` constant), private (`is_pub = false`) pad cells, pad placed at
+`52+2n` onward, protocol `intros. Time vm_compute. Time solve_vc. Admitted.`
+copied verbatim from arm A.
+
+### Results
+
+`allocated_words` minus an imports-only baseline of **604,220,071** (measured
+today per arm; **the published 593,774,593 is stale** — it predates §5.9's
+solver rule). Net G words:
+
+| pw | chunks | A (pw lvars) | B (1 lvar) | C (0 lvars) |
+|---|---|---|---|---|
+| 0 | 0 | 0.3713 | 0.4055 | 0.3713 |
+| 4 | 16 | 0.5413 | 0.4261 | 0.3817 |
+| 8 | 32 | 0.7453 | 0.4467 | 0.3921 |
+| 16 | 64 | 1.2578 | 0.4880 | 0.4129 |
+
+Marginal M words per pad word (per 4 chunks):
+
+| step | A | B | C |
+|---|---|---|---|
+| 0→4 | 42.49 | 5.1554 | 2.6008 |
+| 4→8 | 51.00 | 5.1554 | 2.6002 |
+| 8→16 | **64.06** | **5.1551** | **2.6003** |
+
+Held-out fits (fit on pw ∈ {0,4,8}, predict pw = 16):
+
+| arm | model | prediction error at pw=16 |
+|---|---|---|
+| B | linear | **0.00%** |
+| C | linear | **−0.002%** |
+| A | quadratic `371.3 + 38.25·pw + 1.0625·pw²` | **+0.20%** |
+
+Arm A also reproduces the 2026-08-14 figures (0.371/0.541/0.745/1.258 vs
+published 0.370/0.540/0.744/1.256, ≤0.4%), so the arms share footing with the
+older table despite the changed baseline.
+
+### Reading the axes apart
+
+- **Chunk count: exactly linear.** Arm B's marginal cost is constant to four
+  significant figures over a 4× range of `H`, and arm C independently agrees.
+  A held-out linear fit is exact. There is no chunk exponent.
+- **Variable count: quadratic.** Arm A's `pw²` coefficient is 1.06 M words,
+  contributing 22% of cost at pw = 16. This is what `|Σ|` predicts and a chunk
+  count does not: `env.lookup` is a linear walk (`Environment.v:154`), so
+  substituting one variable occurrence costs `O(|Σ|)`, and `persist` of the heap
+  at every world extension is `O(H · T · |Σ|)`. Growing `|Σ|` therefore both
+  adds transported state *and* makes every other transport more expensive.
+- **A variable costs ~29–46× a chunk.** Per pad word, 5.16 M for four chunks
+  sharing a variable versus 42–64 M for four chunks with a fresh one. Confirmed
+  independently at pw = 0, where arm B's lone unused existential with **zero**
+  chunks costs +34.1 M by itself (0.4055 vs 0.3713).
+- **Per-chunk cost tracks the chunk's term size, linearly.** B (5.16 M/word,
+  values `word_byte j (var "mw")`) vs C (2.60 M/word, literal bytes) — same
+  count, 2× the slope, both dead linear.
+- **Sharing beats splitting by 2.58×** at 64 dead cells (0.488 vs 1.258 G);
+  3.05× against literals.
+
+Consistent with `PLAN-byte-memory.md` §10 driver (C), which moved `|Σ|` at
+FIXED chunk count (4 vars/entry vs 1) and found a VC doubling-slope of 1.39 vs
+1.02. That measured the same factor from the other side; together the two say
+`|Σ|` is the whole superlinearity and `H` is a pure linear multiplier.
+
+**Not isolated, stated rather than smoothed over:** this grid moves "number of
+variables", which is `|Σ|` length *and* the number of distinct value terms
+resident in the heap. Separating those needs an arm with `pw` distinct variables
+whose chunk values are all projections of a single one — not obviously
+constructible, and §10's independent agreement makes it low-priority.
+
+### What this means
+
+The cost law is `H · S · |Σ|`, linear in each, and on any diagonal where a
+program's data size drives all three it reads as cubic-ish. Practical
+consequences, in order:
+
+1. **`H·S` under-accounting at N=32 (§6.5) is the `|Σ|` term**, not a chunk
+   exponent. Re-fit with `|Σ|` before quoting any cost model.
+2. **Minimising declared logic variables is worth ~30–46× minimising declared
+   chunks.** The generator already applies this once (one word variable per
+   byte-expanded entry rather than four). The remaining lever is *pinning*:
+   every `PVConst` entry costs 2.60 M/word against 42–64 M for `PVExist`, so a
+   spec entry whose value the proof does not actually need existentially
+   quantified is being paid for at ~16–25×.
+3. **`PLAN-loop-invariant.md` gets stronger, for a new reason.** A per-iteration
+   contract shrinks `|Σ|` as well as `H` — and `|Σ|` is the quadratic factor.
+4. Chunk-side work (heap indexing) stays a dead end, now with a second reason:
+   `RULED OUT` below measured ~7%, and the axis it targets is the linear one.
+
+### Files
+
+`Example/ZZPadShrCommon.v` (arms B and C, throwaway, not in `_CoqProject`) +
+`ZZPadShrB_PW{0,4,8,16}.v`, `ZZPadShrC_PW{0,4,8,16}.v`; arm A reuses the
+pre-existing `ZZPadVCCommon.v` + `ZZPadC_PW{0,4,8,16}.v`. Baseline files
+`ZZPadShrBase.v` / `ZZPadVCBase.v` are bare `Require`s. Rebuild
+`ZZByteLoop2Common.vo`, `ZZPadVCCommon.vo` and `ZZPadShrCommon.vo` first — the
+pre-existing ones were stale against the post-§5.9 `Prelude.vo` and failed with
+"makes inconsistent assumptions over library". Then per point:
+
+```
+OCAMLRUNPARAM='v=0x400' coqc -w none \
+  -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+  case_study/RiscvPmp/CFGVer/Example/<Runner>.v 2>&1 \
+  | grep -E 'allocated_words|Finished transaction|Error'
+```
+
+One process per point, sequentially; require two `Finished transaction` lines
+before trusting a number.
 
 ### Ranking, as of 2026-08-17
 
 | driver | status |
 |---|---|
-| **chunks × steps**, superlinear in chunks | the ONLY thing making cost grow with N |
+| **chunks × steps × lvars** — linear in chunks and in steps, QUADRATIC in `\|Σ\|` | the ONLY thing making cost grow with N. ~~superlinear in chunks~~ corrected §6.6: the chunk axis is exactly linear (held-out 0.00%); the superlinearity is the logic-variable count, and one variable costs ~30–46× one chunk |
 | **symbolic base** | ~~4.0–6.7×~~ **now 1.55–1.73×, FIXED 2026-08-17 (§5.9)** — the per-address bound VCs were 76–90% of it and are now discharged in the solver, at 99.5% of the measured ceiling. What remains is chunk-inventory residue that RISES slowly with N. No longer a major multiplier. |
 | access count | negligible — measured three ways (§5.5, §6) |
 | term growth | closed by `peval` RECOGNIZERS (`mulx`/`coalesce`/`expand`); `ZZTermSim2.v` shows the unrecognized shape is `3^n`, so a new idiom reopens it |

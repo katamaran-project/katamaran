@@ -563,6 +563,14 @@ SIZE OF STATE TRANSPORTED PER WORLD EXTENSION — heap chunks and logic variable
 alike. Prefer fewer, larger symbolic objects over many small ones, even when the
 small ones have smaller individual terms.
 
+**Sharpened 2026-08-17** by the complementary ablation in
+`diagnostics/check-scalar-combined-cost-drivers.md` §6.6, which moved CHUNKS at
+fixed variable count (this section moved variables at fixed chunk count). The
+two are not symmetric: chunk count is **exactly linear** (held-out 0.00%) while
+variable count is **quadratic** (held-out +0.20%), and one variable costs
+**~30–46× one chunk**. So "chunks and logic variables alike" understates it —
+prefer fewer variables *first*, and read §6.6 before quoting a cost law.
+
 ### CONSOLIDATED: all four combinations at N = 32 (user CPU)
 
 The two fixes are largely INDEPENDENT and STACK. (B) is the pointer-compare /

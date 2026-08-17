@@ -33,6 +33,23 @@ still climbing.
 > a different route (`bop.mulx`, not `select_last_k`), and `select_last_k`
 > would not have touched the axis that actually remains.
 
+> **OPEN — SUSPECTED MIS-ATTRIBUTION of the remaining axis (2026-08-17).** The
+> headline above says "declared-chunk count". That label is probably wrong in
+> the same way §6.5 of `check-scalar-combined-cost-drivers.md` was: this file's
+> chunk axis is built from `PVExist` mem specs
+> (`zzkcd_mem_specs_rel`, `ZZKslChunkDistinctCommon.v:36`), and each such entry
+> mints ONE `asn.exist` as well as its chunk — so `N-used` and
+> `N-declared-1-used` grow `H` **and** `|Σ|` together, exactly the confound that
+> §6.6 resolved. There, isolating the two showed chunk count is *exactly linear*
+> and the logic-variable count is the quadratic factor, worth ~30–46× per unit.
+> **The numbers in this file stand; the attribution of the 2.72× to chunks does
+> not, and the superlinearity in particular is more likely `|Σ|`.** Not yet
+> measured here. The isolating arm to add: keep the N declared cells but have
+> all their values project from ONE shared existential word (as
+> `Example/ZZPadShrCommon.v` does for the check_scalar rig), holding chunk count
+> and per-chunk term shape fixed while `|Σ|` stays at 1. Until that runs, do
+> not quote this file's remaining driver as "chunks".
+
 ---
 
 ## The experiment

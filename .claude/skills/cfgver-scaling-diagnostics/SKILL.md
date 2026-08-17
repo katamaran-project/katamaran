@@ -44,7 +44,7 @@ to a fresh one until you compare.
 | `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×) and declared-chunk count is the sole remaining driver (2.72× at N=16). The worked example for this whole skill, and for retraction discipline. |
 | `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
 | `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
-| `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
+| `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
 
 Note what the two `check-scalar-loop*` records have in common: a mechanism
 that is genuinely dominant in one example was measured near-zero in
@@ -101,21 +101,22 @@ general executor cost law `heap_size × (α·S + β·S²)` (`S` = steps executed
 full history in `cfgver-executor`'s description) as a specific way one of
 those terms grows with the trip count `N`:
 
-- **Declared-chunk-count scaling with N — and it is SUPERLINEAR in the chunk
-  count, not linear.** Measured by moving chunk count at CONSTANT step count
-  (pad a precondition with never-touched cells): marginal cost per chunk rose
-  **+64%** as the count grew 3.3× (`check-scalar-combined-cost-drivers.md`
-  §6.5). Each added chunk raises the cost of carrying every other one, which
-  is what `subst_list` re-transporting the whole heap per world extension
-  predicts. So the law is nearer `H^(1+ε)·S` than `H·S`; `H·S` fits a
-  mid-range to ±3% and then under-accounts by 15–47% at the top end.
+- **Declared-chunk-count scaling with N — LINEAR, and cheap per chunk.**
+  Isolated by moving chunk count at CONSTANT step count AND constant variable
+  count (`check-scalar-combined-cost-drivers.md` §6.6): marginal cost per chunk
+  is constant to four significant figures over a 4× range, held-out linear fit
+  **0.00%**. **A previous version of this bullet said SUPERLINEAR (+64%
+  marginal, `H^(1+ε)·S`) — that is RETRACTED**; the probe behind it grew chunks
+  and logic variables together (four `ptstomem` chunks plus one `asn.exist` per
+  padded word), and the variable was the whole effect. Never requote the +64%.
   **Steps are an independent co-factor**: pin the chunk count and cost is
   exactly linear in steps (held-out fit +0.00%), so halving executed steps
-  halves cost regardless of chunks. On a diagonal where both scale with N this
-  reads as quadratic — do not attribute it to either factor alone. Separating
-  the two exponents needs a point that moves `H` at fixed `S`; fitting
-  `c·H^a·S^b` on corner points of a grid where both grow together is
-  ill-conditioned and returns nonsense (it gave a NEGATIVE chunk exponent).
+  halves cost regardless of chunks. On a diagonal where several factors scale
+  with N this reads as super-quadratic — do not attribute it to any one alone.
+  Fitting `c·H^a·S^b` on corner points of a grid where both grow together is
+  ill-conditioned and returns nonsense (it gave a NEGATIVE chunk exponent); no
+  `H^a` fit can work anyway, because the missing factor is `|Σ|` rather than a
+  power of `H`.
   The precondition's resource list
   (`reg_specs`/`mem_specs`) is asserted once, up front, for the whole run —
   `gen_contract_rel` does not prune unused entries and does not grow the
@@ -124,6 +125,25 @@ those terms grows with the trip count `N`:
   `heap_size` is `N` for the entire run, not amortized. Isolate this axis
   by holding the instruction body fixed and varying only whether the
   precondition/addressing genuinely touches `N` distinct chunks or 1.
+- **LOGIC-VARIABLE COUNT (`|Σ|`) — QUADRATIC, and the biggest per-unit cost
+  in the catalog.** One declared logic variable costs **~30–46× one declared
+  chunk**, and unlike a chunk it makes every *other* transport more expensive:
+  `env.lookup` is a linear walk (`Environment.v:154`), so substituting one
+  variable occurrence is `O(|Σ|)` and `persist` of the heap at each world
+  extension is `O(H · T · |Σ|)`. Measured from both sides — moving `|Σ|` at
+  fixed chunk count turns a VC doubling-slope of 1.39 into 1.02
+  (`plans/PLAN-byte-memory.md` §10, driver (C)), and moving both together is a
+  clean quadratic in `|Σ|` with held-out error +0.20%
+  (`check-scalar-combined-cost-drivers.md` §6.6). This is where the apparent
+  "chunk superlinearity" actually lived. Sources of `|Σ|` growth: one
+  `asn.exist` per unpinned (`PVExist`) spec entry, and per-step demonic
+  variables. Cheapest levers, in order: pin what does not need to be
+  existential (`PVConst` costs ~16–25× less than `PVExist` per entry), share
+  one variable across several chunks where the values are genuinely related,
+  and prefer FEWER LARGER symbolic objects over many small ones even when the
+  small ones have smaller individual terms. **Isolate this axis** by holding
+  chunk count and per-chunk term shape fixed and varying only how many distinct
+  variables the chunk values project from.
 - **Self-referential symbolic term growth.** A register whose new value is
   computed from its *own* previous value every iteration (`H := f(H)`, not
   merely read twice within one iteration's formula) accumulates a nested
