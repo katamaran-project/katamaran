@@ -684,3 +684,71 @@ OCAMLRUNPARAM='v=0x400' coqc -w none \
 ```
 
 Gate on two `Finished transaction` lines before trusting a number.
+
+### What `PVConst` pinning actually buys, on the committed example (2026-08-17)
+
+Closing the loop the way this skill's "before proposing a fix" step demands,
+rather than inferring a win from the rigs. Measured on
+`Example/KeyScheduleLoop.v` **as committed** — N=2, and with its real proof line
+`intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.` copied verbatim into
+every arm, so the VM cast is paid in all of them.
+
+**What is pinnable here.** Of the five `PVExist` entries, `A0` is the secret `H`
+and is not pinnable at all — pinning it makes the theorem about one key. The
+other four have provably DEAD initial values: `A1`/`A2` are masking scratch
+written before ever being read (instrs 1–2), and the two table cells `p+56`,
+`p+60` are `sw` targets in a body containing no load. Pinning them still
+*weakens* the statement (a pinned precondition is strictly stronger than an
+existential one) and nothing here recovers the general theorem from the pinned
+one — so these are CEILINGS, not a landable change.
+
+| arm | existentials | net G words | vs committed |
+|---|---|---|---|
+| `base` (committed) | 5 | 0.3651 | — |
+| `pin-scratch` (A1, A2) | 3 | 0.3200 | **1.141×** |
+| `pin-mem` (p+56, p+60) | 3 | 0.3193 | **1.144×** |
+| `pin-all` | 1 (`A0` only) | 0.2769 | **1.319×** |
+
+Baseline 604,237,731, measured today. **Wall/user CPU is useless at this size** —
+imports are 6.75 s of the 7.03–7.25 s total, leaving a ~0.3–0.5 s proof against
+~0.1 s noise. Allocation only.
+
+- **~22 M words per variable removed**, remarkably flat: 22.5 and 22.9 M for the
+  two 2-variable arms, 22.1 M averaged over all four. Each variable is ~6% of
+  this example's cost.
+- **The two groups are 97% additive** (45.1 + 45.8 = 90.9 M predicted vs 88.2 M
+  measured), slightly sub-additive exactly as a quadratic in `|Σ|` predicts —
+  removing a variable from an already-smaller context saves a little less.
+
+**Constant factor, or exponent?** This is the distinction that decides whether
+it is worth building, and the answer differs by group:
+
+- **Pinning the scratch registers is a CONSTANT factor.** There are two of them
+  at any N, so this is ~1.14× and stays ~1.14×.
+- **Pinning the table cells removes a factor of N from `|Σ|`, i.e. an EXPONENT
+  change** — the cell count grows with the trip count, so `|Σ|` goes from
+  `~N + c` to `~c`. At the committed N=2 that is worth only 1.14× because there
+  are just two cells, but the section above measures the same group at N=16 as
+  **2.13×** (3.7432 → 1.7596), with the variable share of the penalty *rising*
+  with N (77.5 → 82.4% at N=4 → 16). This is the lever that scales.
+- **Amdahl, stated:** at the committed N=2 the whole `|Σ|` axis is only 24% of
+  cost, so 1.32× is the hard ceiling here no matter what. The example is too
+  small for its own dominant driver to be visible — do not generalise this
+  example's 1.32× to the real 128-round schedule.
+
+**Consequence for the real target.** A genuine key schedule declares one table
+cell per round, all of them store targets with dead initial values — precisely
+the group whose pinning is an exponent change AND whose weakening is vacuous.
+That makes `PVConst`-pinning the cheapest available attack on the dominant
+driver for this program shape: a spec-list edit, no new machinery, no refinement
+burden. What it does NOT do is recover generality — if the initial contents must
+stay arbitrary, the sound version of the same saving is
+`plans/PLAN-loop-invariant.md`'s per-iteration contract, and this measurement is
+its lower bound.
+
+Files: `Example/ZZKslPinCommon.v` + `ZZKslPin_{base,scratch,mem,all}.v`,
+baseline `ZZKslPinBase.v`. Throwaway. Note `ZZKslPinCommon.v` must
+`Require Export ...Example.Prelude` explicitly BEFORE requiring
+`KeyScheduleLoop` — that file `Require Import`s Prelude rather than Exporting
+it, so requiring it alone leaves the list/assertion notations out of scope and
+the spec lists fail to parse with `Syntax error: [reduce] expected after ':='`.
