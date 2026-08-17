@@ -264,17 +264,21 @@ announce themselves as a confusing failure ten minutes later.
 | **iris-proofmode** | Separation-logic proof mode: `iApply`/`iExact`/`iFrame`/`iMod`/`iDestruct`/`iIntros` failures, wands and separating conjunction, fancy updates, persistent vs spatial hypotheses, `big_sepM`/`big_sepL`. |
 | **relval-model** | `SyncVal` or `NonSyncVal` appears in your goal or definition and you need to know what it denotes — the relational value model and its homomorphic lifting. |
 | **relval-rewrite-over-secrets** | **Before** proving any `peval` case, solver rule, or `Term` rewrite that could touch secret data. If both sides are pure terms the rewrite is automatically sound relationally with **no** `NonSyncVal` case analysis — worth knowing before you build one. |
+| **core-executor-internals** | The generic `SPureSpec`/`SHeapSpec` monad and its refinement lemmas. Also the section on **how an `assert` is discharged against the path condition**: `solver_generic`'s three stages, `combined_solver`'s repeated passes, the `wpathcondition` world-extension quadratic, and the known `formula_simplifies` fact-burning bug. **AND the recipe for AUTHORING A NEW SOLVER RULE** — load it before your first edit to `Symbolic/Solver.v`: where to hook, why `Some error` for "cannot decide" is unsoundness, whether your rule needs a `secLeakT` guard, the `Equations` two-type-index refusal, and the iteration order that keeps you off ~6-minute rebuilds (prove the semantics in preamble mode over `Syntax.TypeDecl`; unit-test firing; one real `Qed`; then `gate.sh` at `GATE_JOBS=1`). |
+| **cfgver-rsolve** | `rsolve` fails, hangs, dies in a `Qed`, or eats multiple GB; a `RefineCompat` instance is missing and must be written. |
+| **cfgver-wp2** | `semWP2_unfold`/`semWP2_fix` and binary adequacy mechanics — an unreduced match after `rewrite semWP2_unfold`, `env.drop_cat` terms, an `iMod` that cannot eliminate an `inl`/`inr` modality. |
+| **cfgver-gen-contract-internals** | Only when **modifying or extending the contract generator itself** (`gen_reg_asn`, `gen_pre`, `gen_implpre`, `declare_public_registers`). Merely *using* `gen_contract` is `cfgver-gen-contract`, tier 1. |
+| **cfgver-endtoend-internals** | Only when **modifying the wiring lemmas themselves** (`cfg_instrs_endToEnd`, `cfg_instrs_verified`/`_safe`, the `_with_mem` variants). Merely *using* the wiring is `cfgver-endtoend`, tier 1. |
 
 Not a skill but the same reflex: **`references/peval-mask-algebra.md`** (in this
 skill's directory) before adding a `peval` rule or a new `BinOp`/`UnOp`
 constructor. It holds the branchless-mask canonical forms (`uop.expand`,
 `bop.coalesce`) and, more importantly, the five-file plumbing table for a new
 constructor plus the traps that make a `peval` rule silently do nothing.
-| **core-executor-internals** | The generic `SPureSpec`/`SHeapSpec` monad and its refinement lemmas. Also the section on **how an `assert` is discharged against the path condition**: `solver_generic`'s three stages, `combined_solver`'s repeated passes, the `wpathcondition` world-extension quadratic, and the known `formula_simplifies` fact-burning bug. **AND the recipe for AUTHORING A NEW SOLVER RULE** — load it before your first edit to `Symbolic/Solver.v`: where to hook, why `Some error` for "cannot decide" is unsoundness, whether your rule needs a `secLeakT` guard, the `Equations` two-type-index refusal, and the iteration order that keeps you off ~6-minute rebuilds (prove the semantics in preamble mode over `Syntax.TypeDecl`; unit-test firing; one real `Qed`; then `gate.sh` at `GATE_JOBS=1`). |
-| **cfgver-rsolve** | `rsolve` fails, hangs, dies in a `Qed`, or eats multiple GB; a `RefineCompat` instance is missing and must be written. |
-| **cfgver-wp2** | `semWP2_unfold`/`semWP2_fix` and binary adequacy mechanics — an unreduced match after `rewrite semWP2_unfold`, `env.drop_cat` terms, an `iMod` that cannot eliminate an `inl`/`inr` modality. |
-| **cfgver-gen-contract-internals** | Only when **modifying or extending the contract generator itself** (`gen_reg_asn`, `gen_pre`, `gen_implpre`, `declare_public_registers`). Merely *using* `gen_contract` is `cfgver-gen-contract`, tier 1. |
-| **cfgver-endtoend-internals** | Only when **modifying the wiring lemmas themselves** (`cfg_instrs_endToEnd`, `cfg_instrs_verified`/`_safe`, the `_with_mem` variants). Merely *using* the wiring is `cfgver-endtoend`, tier 1. |
+(Moved below the table 2026-08-17 — it used to sit BETWEEN two rows, which split
+the routing table in half so everything from `core-executor-internals` down
+rendered as a separate table. A routing table that does not render as one table
+is exactly the failure this skill exists to prevent.)
 
 ### These are tier 1 — do not wait for this skill
 
