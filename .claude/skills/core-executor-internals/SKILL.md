@@ -203,6 +203,119 @@ matches a lemma stated over `instpred hyp`. Rewrite with
 `∗` (cf. the explicit `change` at `Worlds.v:1850`); `exact`/`apply` work, since
 they use conversion.
 
+## Adding a NEW solver rule — the recipe
+
+Three rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
+`try_bvadd_cancel_propeq` (propeq, unguarded), `try_fetch_bound` (relop le,
+discharges against `wco`). Ordered by what costs time if you get it wrong.
+
+**1. Dump the real shapes before writing anything.** The formula you must match
+is *not* what the residual goal prints as after `solve_vc`, and it is not what
+the contract wrote either. Get the truth from the smallest program that shows
+the shape (1–2 instructions is enough):
+
+```coq
+Eval vm_compute in (cfg_map <contract>
+  (fun ia p exits P i ec fl => postprocess (CFG_VC_triple p exits P i fl))).
+```
+
+That prints assumptions (i.e. `wco`) and goals *together*, which is the only way
+to see whether the hypothesis you plan to use is even in the path condition, and
+in what form. Doing this cost 30 s and settled three open questions at once.
+
+**2. Know the normal form.** `simplify_relop`'s `le` arm is
+`simplify_le t1 t2 = singleton (peval_formula_le t1 t2)` and
+`peval_formula_le t1 t2 = peval_formula_le' (peval (term_minus t2 t1))` — so a
+`t1 <= t2` obligation reaches you as `0 <= t2 - t1`, and an assumption put in by
+a contract is stored in `wco` in *that same* normalised form. Match one shape,
+not two.
+
+**3. Hook at a `{w : World}` level.** You need `wco`, and the `{Σ}`-generic
+helpers (`peval_formula_le'`, `simplify_le`) cannot see it. `simplify_relop` is
+World-indexed: add your dispatch to its arm for your relop, mirroring how
+`eq`/`neq` dispatch through `try_bvadd_cancel`, with `None` falling through to
+the pre-existing behaviour. Then extend `simplify_relop_spec`'s `destruct op`
+(it has one branch per RelOp constructor — `eq neq le lt bvsle bvslt bvule
+bvult`, so miscounting the `idtac`s is a loud error, not a silent fallthrough).
+
+**4. NEVER return `error` for "cannot decide".** `Some error` means *refuted*.
+Returning it because you failed to find your hypothesis makes the solver refute
+satisfiable paths — unsoundness in the dangerous direction, and it will not show
+up as a failed build. Every failure path falls through untouched.
+
+**5. Cheap outermost guard.** Your rule runs on every formula of that relop, so
+gate anything expensive (a `wco` scan is O(|wco|)) behind a cheap syntactic
+match on the goal. Measured with such a guard: a program with no matching
+obligations is unchanged to four significant figures.
+
+**6. `Equations` will not let two type indices meet.** Matching two arguments
+that each bind a width — or taking one width as a parameter and binding the
+other from a pattern — fails with *"The pattern n2 should be equal to n1, it is
+forced by typing"*. Two ~6-minute builds went to learning this twice. The fix is
+not a cleverer pattern: **return NON-dependent data** (a `Z`, a
+`Term Σ ty.int`, a plain `nat`) and rebuild the wrapped subterm so the caller
+compares at a fixed type where `Term_eqb` is homogeneous. A rule that needs no
+term pattern-matching at all should be a plain `Definition`. Use plain
+`Equations` (not `(noind)`/`(noeqns)`) for anything you will `funelim`.
+
+**7. The spec is `instpred d ⊣⊢ instpred F`, and `instpred` at world `w` is
+ALREADY relative to `wco w`.** So `Some empty` is legitimate for a formula that
+merely *follows from* the path condition — you are not claiming a tautology.
+This is exactly how `secLeakT` / `pathconditions_contains_secLeakT_spec` work.
+`MkBientails { fromBientails : forall ι, instprop (wco w) ι -> P ι <-> Q ι }`
+(`Worlds.v:594`): `constructor`, **two** intros, then an iff. `instpred empty`
+needs `instpred_dlist_empty`'s `fromBientails` (idiom at `Solver.v` ~2232).
+
+**8. Prove at `instprop` (plain Prop) level, lift ONCE.** `instpred_prop`
+(`Worlds.v:790`) bridges them; there is no need for any Iris reasoning.
+`instprop_formula`'s relop case is
+`match bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) with SyncVal p => p | _ => False end`.
+Working structure: inversion lemmas for each recognizer (`funelim`, cf.
+`bvadd_cancel_pair_spec`) → per-formula soundness → induction over the
+`PathCondition` → one lift.
+
+**9. Decide the publicness guard deliberately.** `formula_relop` has the
+`NonSyncVal ⇒ False` wall (`secret-data-walls`), so a rule that must *hold* for
+a secret operand needs `secLeakT` — that is why `try_bvadd_cancel` has one.
+Two ways to legitimately not need it: `formula_propeq` has no wall at all
+(`try_bvadd_cancel_propeq`), and if you *derive from a hypothesis that mentions
+the operand under the same wall*, the secret case is vacuous because the
+hypothesis is itself `False` (`try_fetch_bound`). Check which case you are in
+rather than copying a guard.
+
+**10. Iteration order, because `Solver.v` is expensive and semi-opaque.**
+`rocq_compile_file` cannot build it (`-arg -w all`, see `rocq-implementation`
+§1); `make -f Makefile.coq theories/Symbolic/Solver.vo`, ~5m45s, and it
+invalidates every downstream `.vo`. Position-mode `rocq_start` past ~line 2400
+times out, and even where it succeeds you cannot `Check` the definitions —
+they live in `Module Import GenericSolver` inside `Module Type GenericSolverOn`,
+so that inner `Import` does not escape and even *pre-existing* siblings are
+unreachable from a position state. Consequences:
+
+- **Prove the semantic core in preamble mode first.** `Bitvector` and
+  `Syntax.TypeDecl` both load standalone, and `ty.liftBinOpRV`/`liftUnOpRV` are
+  what `bop.evalRel`/`uop.evalRel` reduce to — so the real RelVal argument,
+  including the `SyncVal`/`NonSyncVal` split, restates faithfully there and runs
+  in ~100 ms. `RiscvPmp.Sig` does **not** load in a preamble.
+- The definitions' own elaboration genuinely cannot be pre-checked. Accept one
+  build for that, and keep them as non-dependent as possible (see 6) so there is
+  little left to fail.
+- **After the build, unit-test FIRING before anything big.** A file requiring
+  only `RiscvPmp.Sig` plus `Import GenericSolver`, with
+  `Eval vm_compute in <your recognizer> <term transcribed from the step-1 dump>`
+  — and **negative cases**, since a rule returning `empty` fails unsoundly, not
+  loudly. This localises "which function did not match" instead of leaving you
+  to bisect a residual count, and it costs ~60 s rather than a full chain.
+- **Then one real example with a real `Qed`.** Residual counts taken under the
+  `Admitted` protocol do *not* show the VC still closes, and a downstream closer
+  like CFGVer's `solve_symbase_fetch` is `solve [...]`, which fails if reached
+  with a goal it cannot handle.
+- **Then `./scripts/gate.sh`** — this is the only check that catches an unsound
+  `empty`, via `Print Assumptions` on the end theorems. Use `GATE_JOBS=1` on a
+  ≤16 GB box; the default `-j3` runs three ~3 GB `coqc` processes.
+
+Externally your definitions are `RiscvPmpSignature.GenericSolver.<name>`.
+
 ## Generic statement executor (`theories/MicroSail/SymbolicExecutor.v`)
 
 `sexec (inline_fuel : nat) : Exec` (~line 609) is the top-level `Fixpoint`
