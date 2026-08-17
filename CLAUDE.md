@@ -226,6 +226,40 @@ subagents that are not `subagent_type: routing-judge`, and denies more than 6
 subagent spawns per 120 s (both added after a 2026-07-28 eval run cost ~850k
 tokens). Note `git checkout .claude/settings.json` silently removes every hook
 if that file is ever uncommitted.
+
+**Skills do not reliably load unless a hook makes them load (2026-08-17).** Two
+data points — the 2026-07-28 zero-Skill-calls session, and a 2026-08-17 session
+that edited `Symbolic/Solver.v` without `core-executor-internals` *while the
+skill was named in a routing table it had just read* — say advisory nudges are
+decoration. `skill-nudge.sh` fired in the second case, was read, and changed
+nothing. Three tiers of intervention now exist, and only the last two work:
+
+- **advisory** — `skill-nudge.sh` (Read/Grep). Kept; assume it does nothing.
+- **deny** — `.claude/hooks/v-write-guard.sh` (PreToolUse Write|Edit): **any
+  `*.v` write requires `rocq-implementation`**, session-scoped so it costs one
+  denial per session and every later `.v` write passes; and
+  `theories/Symbolic/{Solver,Monads}.v` + `MicroSail/SymbolicExecutor.v`
+  *additionally* require `core-executor-internals`. Backed by
+  `skill-load-marker.sh` (PreToolUse Skill), which records every skill
+  invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` — deliberately
+  separate from `meta-skill-marker.sh`, which is load-bearing for
+  `skill-edit-guard.sh`. Override is the user's: `CLAUDE_V_GUARD_OFF=1`.
+- **inject** — `.claude/hooks/rocq-error-injector.sh` (PostToolUse): names the
+  right pitfalls skill when a known error string appears in tool output
+  (`Cannot find witness` → bv- vs gmap-pitfalls, disambiguated by whether the
+  file imports gmap; `Wrong bullet`/`found no subterm` → rocq-pitfalls; Iris
+  tactic failures → iris-proofmode; `Terminated`/`Error 143` → rocq-compile-oom;
+  `VerificationConditionWithErasure` → cfgver-solve-vc). **The strongest
+  mechanism available**, because it needs no cooperation — the content arrives
+  whether or not anyone thinks to ask. Prefer it for symptom-keyed skills, where
+  the symptom is a deterministic string rather than a prose match.
+
+Two traps when testing a Write/Edit hook: **`Edit` validates `old_string` BEFORE
+`PreToolUse` runs**, so a deliberately-bogus-string "harmless test" never
+reaches the hook and reads as "my hook is broken" (it is not) — use a real edit;
+and a guard whose pattern matches text that merely *mentions* its trigger will
+misfire, three instances of that in one day including a case-insensitive
+`Error:` grep matching the printed lemma name `instpred_dlist_error:`.
 after changing any skill *description* or
 noticing a misfire/silent non-fire, use the **`skill-routing-maintenance`**
 skill (read-only Haiku-judge
