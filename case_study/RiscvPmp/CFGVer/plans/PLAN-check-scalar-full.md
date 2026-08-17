@@ -588,6 +588,42 @@ flaws — same class of mistake as `PLAN-loop-invariant.md`'s own trap list
 would predict for hand-patched literals, worth remembering next time a
 trip-count gets hand-varied instead of recompiled.
 
+> **UNPARKED AND SUPERSEDED 2026-08-17.** The `N=32` TODO below was parked
+> because the cost curve made it unreachable. That curve was dominated by a
+> solver defect since fixed (unrefuted `bvadd c1 p = bvadd c2 p` on the
+> `formula_propeq` path, leaving one dead path per trip and re-verifying
+> everything after the loop under each — see
+> `diagnostics/check-scalar-combined-cost-drivers.md` §5.5). Post-fix, the
+> REAL whole function with a real `Qed`:
+>
+> | N | user CPU | peak RSS | era |
+> |---|---|---|---|
+> | 2 | 70.5 s | 4.56 GB | pre-fix |
+> | 4 | 198.2 s | 8.48 GB | pre-fix |
+> | 8 | 749.6 s | 11.60 GB | pre-fix |
+> | **16** | **368.8 s** | **9.31 GB** | **post-fix** |
+> | 32 | (running at time of writing) | | post-fix |
+>
+> **N=16 post-fix costs HALF of what N=8 cost pre-fix**, and about 9× less
+> than the pre-fix ratios (2.81×, 3.78×) projected for it (~3400 s). Peak RSS
+> went DOWN as N doubled (11.60 → 9.31 GB) — consistent with the RSS-plateau
+> hazard now recorded in the diagnostic's §0: peak live set is not what
+> scales here, so the memory-based infeasibility projections that led to
+> parking this were extrapolating the wrong quantity.
+>
+> This also retires part of the synthetic rig's caveat: the real loop 2
+> re-reads loop 1's `k[]` (the aliasing `ZZCombinedCommon.v` designs away),
+> and the fix delivers on the real program too.
+>
+> Probes: `Example/ZZCheckScalarFixN{16,32}.v`, generated from
+> `ZZCheckScalarFixN8b.v` (the CORRECTED N=8 file — plain `N8` has the
+> undersized memory footprint) by rewriting all five N-carrying sites:
+> the three instruction literals (`li a2,N`, `li a4,N`, and loop 2's own
+> `addi a4,a1,N` — the one missed the first time), the `A1` klen `PVConst`,
+> and both spec lists at ⌈N/4⌉ word-groups (`k[]` from 140, `n[]` from 172).
+> Generated programmatically and verified by grep, precisely because §5's own
+> history is of hand-patched trip-count literals going wrong.
+
 **Corrected N=2/4/8 all get a real `Qed`:**
 
 | N | user CPU | peak RSS |
