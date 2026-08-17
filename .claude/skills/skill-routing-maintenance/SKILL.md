@@ -165,9 +165,42 @@ query's verdict vs. `expected` and a pass/fail, plus a one-line `method` and
 `note` explaining what prompted this run. Never overwrite an existing dated
 file.
 
-**4. If there's a real gap.** Tighten ONLY the specific skill's `description`
-— add a clause covering the missed case, or a NOT-clause excluding the false
-positive — rather than a broad rewrite. Small, targeted edits are easier to
+### FIRST: is this even a routing problem? (added 2026-08-17)
+
+**What a judge measures is not what you usually want to know.** A judge is shown
+the name+blurb listing and asked which skill *should* fire. That measures the
+quality of the listing. It does **not** measure whether a live session actually
+loads the skill — and those come apart badly:
+
+- On 2026-08-17 a session missed `core-executor-internals` while editing
+  `Symbolic/Solver.v`. `rocq-implementation` had been loaded, its tier-2 table
+  named the child, the table had just been read — and the child still never
+  fired. **No eval entry and no wording change would have caught or prevented
+  this**, because identification worked perfectly. The failure was
+  follow-through.
+- Worse, `core-executor-internals` is `name-only` in `settings.json`'s
+  `skillOverrides` — its blurb is not shown at all. **You cannot fix a
+  name-only skill's triggering by editing its blurb, and an eval query about it
+  measures nothing about it** (it measures whether the parent wins). The only
+  real levers for a name-only skill are the parent's routing table (a body edit)
+  and a gate.
+
+So before spending judges, classify:
+
+| symptom | is it routing? | fix |
+|---|---|---|
+| Wrong skill won, or nothing matched, and the listing plausibly explains why | **yes** | this skill: eval entry, then a targeted blurb clause (step 4) |
+| Right skill was identified — a loaded parent named it, or the match was obvious — and it still wasn't loaded | **no, follow-through** | a HOOK. See CLAUDE.md's three tiers: advisory (`skill-nudge.sh`, assume it does nothing), **deny** (`skill-path-guard.sh` — path/command → required skill, session-scoped markers), **inject** (`rocq-error-injector.sh` — error string → skill name, needs no cooperation at all and is the strongest available) |
+| The skill is `name-only` | **no** | parent's routing table, or a gate. Judges cannot see its blurb |
+
+Two data points now say advisory routing alone under-delivers: the 2026-07-28
+zero-Skill-calls session (which produced the two-tier arrangement) and
+2026-08-17 (which produced the gates). Treat "tune the wording" as the fix of
+last resort for a *follow-through* failure, not the first move.
+
+**4. If there's a real gap** — and step 0 says it IS a routing gap. Tighten ONLY
+the specific skill's blurb field — add a clause covering the missed case, or a
+NOT-clause excluding the false positive — rather than a broad rewrite. Small, targeted edits are easier to
 regression-check and less likely to introduce a new competing false-positive
 elsewhere. Re-run the directly affected query plus any near-neighbor queries
 from step 2 to confirm no regression, then fold the result into a new dated

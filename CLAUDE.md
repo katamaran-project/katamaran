@@ -271,6 +271,18 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   whether or not anyone thinks to ask. Prefer it for symptom-keyed skills, where
   the symptom is a deterministic string rather than a prose match.
 
+**Consequence for authoring: a new skill needs a GATE decided at the same time
+as its content.** When `skill-creator` drafts one, finish the job by answering
+"what action, if taken without this skill, should be denied — or what tool-output
+string should inject it?" A skill with neither should be assumed not to fire; the
+wording of its blurb is the weakest of the three levers and, for a `name-only`
+tier-2 skill, is not shown at all. `skill-creator` lives in the plugin cache
+(`~/.claude/plugins/cache/…`), so this note lives here rather than in it —
+editing a plugin would be overwritten on update and would leak into unrelated
+projects. The corresponding "is this even a routing problem?" triage is in
+**skill-routing-maintenance**, and the gate-vs-words classification in
+**skill-usage-audit**.
+
 Two traps when testing a Write/Edit hook: **`Edit` validates `old_string` BEFORE
 `PreToolUse` runs**, so a deliberately-bogus-string "harmless test" never
 reaches the hook and reads as "my hook is broken" (it is not) — use a real edit;
