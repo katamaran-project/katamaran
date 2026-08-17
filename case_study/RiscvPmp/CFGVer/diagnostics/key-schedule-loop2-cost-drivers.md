@@ -21,9 +21,14 @@ genuinely-touched memory cells) and the masking step's self-referential
 **term growth** (`H := (H>>1) ^ mask(H)`) — the term-growth axis is now
 **gone**, measuring 0.98–0.99× (i.e. the growing variant is marginally
 *cheaper* than its flat control) where it measured 3.7–4.7× before
-`bop.mulx`; **declared-chunk count is the sole remaining driver** and the
+`bop.mulx`; ~~**declared-chunk count is the sole remaining driver** and the
 only source of superlinearity, at 2.72× for N-used-vs-1-used at N=16 and
-still climbing.
+still climbing.~~ **CORRECTED 2026-08-17 — see §The remaining axis is
+`|Σ|`, not chunks: 82% of that 2.72× is the LOGIC-VARIABLE count that each
+`PVExist` cell mints alongside its chunk. Share one variable across the N
+cells and the ratio falls to 1.32×. The chunk half is real but bilinear
+(chunks × steps, exactly); the variable half is what makes it
+super-quadratic.**
 
 > **Retraction notice.** The original 2026-08-13 conclusion — that term
 > growth was the *dominant* axis and that reviving `select_last_k` was the
@@ -33,22 +38,17 @@ still climbing.
 > a different route (`bop.mulx`, not `select_last_k`), and `select_last_k`
 > would not have touched the axis that actually remains.
 
-> **OPEN — SUSPECTED MIS-ATTRIBUTION of the remaining axis (2026-08-17).** The
-> headline above says "declared-chunk count". That label is probably wrong in
-> the same way §6.5 of `check-scalar-combined-cost-drivers.md` was: this file's
-> chunk axis is built from `PVExist` mem specs
-> (`zzkcd_mem_specs_rel`, `ZZKslChunkDistinctCommon.v:36`), and each such entry
-> mints ONE `asn.exist` as well as its chunk — so `N-used` and
-> `N-declared-1-used` grow `H` **and** `|Σ|` together, exactly the confound that
-> §6.6 resolved. There, isolating the two showed chunk count is *exactly linear*
-> and the logic-variable count is the quadratic factor, worth ~30–46× per unit.
-> **The numbers in this file stand; the attribution of the 2.72× to chunks does
-> not, and the superlinearity in particular is more likely `|Σ|`.** Not yet
-> measured here. The isolating arm to add: keep the N declared cells but have
-> all their values project from ONE shared existential word (as
-> `Example/ZZPadShrCommon.v` does for the check_scalar rig), holding chunk count
-> and per-chunk term shape fixed while `|Σ|` stays at 1. Until that runs, do
-> not quote this file's remaining driver as "chunks".
+> **MIS-ATTRIBUTION CONFIRMED AND MEASURED, 2026-08-17** — suspected from
+> `check-scalar-combined-cost-drivers.md` §6.6, then run here. This file's chunk
+> axis is built from `PVExist` mem specs (`zzkcd_mem_specs_rel`,
+> `ZZKslChunkDistinctCommon.v:36`), and `gen_mem_asn_rel`'s `PVExist` branch
+> mints one `asn.exist "mv"` per entry — so `N-used` and `N-declared-1-used`
+> grow `H` **and** `|Σ|` together. Isolating them (new arms with one SHARED
+> existential across all N cells) shows **82% of the remaining driver is `|Σ|`,
+> not chunks**. Full data in the new section at the end. Everything measured
+> before 2026-08-17 in this file is also **~3–6× too high in absolute terms**
+> (§5.9's fetch-bound solver rule, which postdates it) — the ratios mostly
+> survive, the absolute `allocated_words` figures do not.
 
 ---
 
@@ -550,3 +550,137 @@ same register, `A3`, so the same-operand check passes), it just has no
 accumulated term to collapse there. Re-measured on 2026-08-14 they moved by
 only −1% to −6%, which is why they remain usable as controls — but only in
 their re-measured form, in the current table.
+
+---
+
+## The remaining axis is `|Σ|`, not chunks (2026-08-17)
+
+**One-sentence finding: of the 2.80× that declaring N memory cells instead of 1
+costs at N=16, only 18% is the chunks — 82% is the N logic variables that
+`gen_mem_asn_rel`'s `PVExist` branch mints alongside them; share ONE variable
+across all N cells and the penalty falls from 2.80× to 1.32×.**
+
+Prompted by `check-scalar-combined-cost-drivers.md` §6.6, which found the same
+confound on the check_scalar rig and resolved it there. This rig is the cleaner
+test of the two: it is WORD-granular, so `gen_mem_asn_rel` gives each cell a
+BARE VARIABLE value and the shared arm does too — the per-chunk term shape is
+*identical* between arms, not merely comparable.
+
+### The experiment
+
+Two new arms, each reusing its control's own `instrs`, `reg_specs`, fuel, exits
+and bound verbatim, with `gen_mem_pre_rel` swapped for one `asn.exist "mv"`
+wrapping N `p+56+4i ↦ₘ term_var "mv"` chunks. The generator mints one
+existential per entry by construction, so the preconditions are hand-built
+copies of `gen_contract_rel` (`GenContract.v:454`).
+
+| arm | chunks | lvars | cells used | file |
+|---|---|---|---|---|
+| `1-used` (control) | 1 | 1 | 1 | `ZZKslChunkSharedCommon.v` + `ZZKslCS_N*.v` |
+| `N-decl-1-used` (control) | N | **N** | 1 | `ZZKslPaddedGrowCommon.v` + `ZZKslPG_N*.v` |
+| `N-decl-1-used-SHARED` | N | **1** | 1 | `ZZKslShrCommon.v` + `ZZKslSHP_N*.v` |
+| `N-used` (control) | N | **N** | N | `ZZKslChunkDistinctCommon.v` + `ZZKslCD_N*.v` |
+| `N-used-SHARED` | N | **1** | N | `ZZKslShrCommon.v` + `ZZKslSHD_N*.v` |
+
+All growing-term (the committed body). **The three controls were re-measured on
+the same footing**, which was mandatory rather than tidy: §5.9's fetch-bound
+solver rule landed after the 2026-08-14 table and these are parametric-base
+rigs, so every figure above is **3.0–6.1× too high** now.
+
+### Results
+
+`allocated_words` minus an imports-only baseline measured today —
+**604,209,361** (controls) / **604,238,754** (shared arms); the 593,774,593 in
+the table above is stale. Net G words:
+
+| N | 1-used | N-decl (N vars) | N-decl (1 var) | N-used (N vars) | N-used (1 var) |
+|---|---|---|---|---|---|
+| 4 | 0.3350 | 0.4292 | 0.3561 | 0.4304 | 0.3570 |
+| 8 | 0.6675 | 1.1477 | 0.7662 | 1.1573 | 0.7717 |
+| 16 | 1.3365 | 3.7432 | 1.7596 | 3.8129 | 1.7902 |
+
+Doubling ratios, and held-out fits (fit N=4,8 → predict N=16):
+
+| variant | 4→8 | 8→16 | best held-out fit |
+|---|---|---|---|
+| 1-used | 1.993 | 2.002 | **linear −0.30%** |
+| N-decl-1-used-SHARED | 2.152 | 2.297 | **quadratic −0.64%** |
+| N-used-SHARED | 2.162 | 2.320 | **quadratic −0.86%** |
+| N-decl-1-used | 2.674 | 3.262 | quadratic −7.77% (genuinely steeper) |
+| N-used | 2.689 | 3.295 | quadratic −8.18% (genuinely steeper) |
+
+### Reading the axes apart
+
+**Splitting the declaration penalty** (`N-decl` minus `1-used`, then splitting
+at the shared arm):
+
+| N | total excess | chunks | vars |
+|---|---|---|---|
+| 4 | 0.0942 | 0.0212 (22.5%) | 0.0730 (**77.5%**) |
+| 8 | 0.4802 | 0.0988 (20.6%) | 0.3814 (**79.4%**) |
+| 16 | 2.4068 | 0.4232 (17.6%) | 1.9836 (**82.4%**) |
+
+Identical for the `N-used` pair (23.1 / 21.3 / 18.3% chunks). The variable share
+*rises* with N, as a factor that itself grows with N must.
+
+- **The chunk half is exactly bilinear — chunks × steps, no exponent.** The
+  shared arm's excess over `1-used` is `N−1` extra chunks carried across
+  `S = 14N` steps, so it should go as `(N−1)·N`: predicted ratios 4.67 and 20.0
+  against **measured 4.66 and 19.96**, with ONE normalisation and no fitted
+  parameters. That is §6.6's linear-in-`H` result reproduced in a rig where
+  steps move too — and it is why the shared arms fit a clean quadratic.
+- **The variable half is steeper than bilinear.** Measured ratios 5.22 and 27.2
+  against `(N−1)·N`'s 4.67 and 20.0 — 12% and 36% steeper, i.e. an extra factor
+  growing with N. This rig cannot pin its exponent because `H`, `S` and `|Σ|` all
+  move together here; §6.6's fixed-`S` grid is where the quadratic-in-`|Σ|`
+  reading comes from, and it is consistent with this.
+- **Per unit at N=16: a variable costs 132.2 M words, a chunk 28.2 M — 4.7×.**
+  (Lower than §6.6's 30–46× because that probe held `S` fixed at 52 while this
+  one carries every chunk across 224 steps, which inflates the chunk term.)
+- **The usage axis is NIL, in both variable regimes.** `N-used` / `N-decl-1-used`
+  is 1.003 / 1.008 / **1.019** at N=4/8/16 with N variables, and 1.002 / 1.007 /
+  1.017 with one. Whether the pointer actually advances and touches N distinct
+  cells is worth under 2%; *declaring* the cells is the whole cost. Note this
+  gap was 25.8% at N=8 in the 2026-08-14 table (4.699 vs 3.736) and is now
+  0.8% — another thing §5.9 closed, and a second reason not to quote the old
+  numbers.
+
+### What this means
+
+1. **`plans/PLAN-loop-invariant.md` is even better motivated than §6.6 implied,
+   but its target should be stated as `|Σ|` first.** A per-iteration contract
+   that declares one cell instead of N removes the 82% share directly; the
+   remaining 18% is bilinear and shrinks with it.
+2. **A cheaper partial win exists and needs no new machinery**: for any spec
+   entry whose value the proof does not genuinely need existentially
+   quantified, `PVConst` avoids minting a variable at all. Unlike the
+   loop-invariant work this is a spec-list edit.
+3. **"Shrink the declared set" (this file's original conclusion) was right for
+   the wrong reason** — it works, but because it shrinks `|Σ|`, so any
+   alternative that shrinks the chunk set while keeping N variables would have
+   recovered under a fifth of the cost.
+4. Chunk-side work (heap indexing) remains a dead end; see `RULED OUT` above,
+   now with the second reason that it targets the bilinear 18%.
+
+**Not isolated, stated rather than smoothed over:** the shared arm moves
+"number of distinct variables", which is `|Σ|` length *and* the number of
+distinct value terms resident in the heap. Same caveat as §6.6, same reason for
+not pursuing it — two independent rigs now agree.
+
+### Files
+
+`Example/ZZKslShrCommon.v` (both new arms) + `ZZKslSHP_N{4,8,16}.v`,
+`ZZKslSHD_N{4,8,16}.v`; controls are the pre-existing `ZZKslCS_N*.v`,
+`ZZKslPG_N*.v`, `ZZKslCD_N*.v`. Baselines `ZZKslShrBase.v` / `ZZKslCtrlBase.v`.
+Throwaway, not in `_CoqProject`. **Rebuild the control commons first** — the
+pre-existing `.vo`s were stale against the post-§5.9 `Prelude.vo` and fail with
+"makes inconsistent assumptions over library". Then one process per point:
+
+```
+OCAMLRUNPARAM='v=0x400' coqc -w none \
+  -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+  case_study/RiscvPmp/CFGVer/Example/<Runner>.v 2>&1 \
+  | grep -E 'allocated_words|Finished transaction|Error'
+```
+
+Gate on two `Finished transaction` lines before trusting a number.

@@ -902,6 +902,18 @@ FIXED chunk count (4 vars/entry vs 1) and found a VC doubling-slope of 1.39 vs
 1.02. That measured the same factor from the other side; together the two say
 `|Σ|` is the whole superlinearity and `H` is a pure linear multiplier.
 
+**Confirmed on a second, independent rig the same day.**
+`key-schedule-loop2-cost-drivers.md`'s final section runs the matching arms on
+the KSL loop, whose specs are word-granular (so both arms' chunk values are bare
+variables — identical term shape, not merely comparable): **82% of that file's
+"declared-chunk count" driver is `|Σ|`**, its penalty falls 2.80× → 1.32× when
+the N cells share one variable, and the chunk half comes out *exactly* bilinear
+in chunks × steps (predicted ratios 4.67/20.0 vs measured 4.66/19.96, zero
+fitted parameters) — this section's linear-in-`H` result reproduced in a rig
+where steps move too. It also found the *usage* axis (pointer advancing, N
+distinct cells genuinely touched) is worth under 2%: declaring the cells is the
+whole cost.
+
 **Not isolated, stated rather than smoothed over:** this grid moves "number of
 variables", which is `|Σ|` length *and* the number of distinct value terms
 resident in the heap. Separating those needs an arm with `pw` distinct variables

@@ -41,7 +41,7 @@ to a fresh one until you compare.
 
 | file (all in `diagnostics/`) | what it concluded |
 |---|---|
-| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×) and declared-chunk count is the sole remaining driver (2.72× at N=16). The worked example for this whole skill, and for retraction discipline. |
+| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×). ~~declared-chunk count is the sole remaining driver (2.72× at N=16)~~ **corrected 2026-08-17: 82% of that is the LOGIC-VARIABLE count each `PVExist` cell mints, 2.80× → 1.32× with one shared variable; the chunk half is exactly bilinear in chunks × steps, and the *usage* axis is worth under 2%.** Also: every absolute figure predating 2026-08-17 in that file is 3–6× too high (§5.9's solver rule postdates it) — ratios mostly survive, `allocated_words` does not. The worked example for this whole skill, and for retraction discipline — twice over now. |
 | `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
 | `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
 | `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
@@ -134,7 +134,13 @@ those terms grows with the trip count `N`:
   fixed chunk count turns a VC doubling-slope of 1.39 into 1.02
   (`plans/PLAN-byte-memory.md` §10, driver (C)), and moving both together is a
   clean quadratic in `|Σ|` with held-out error +0.20%
-  (`check-scalar-combined-cost-drivers.md` §6.6). This is where the apparent
+  (`check-scalar-combined-cost-drivers.md` §6.6), confirmed on a second
+  independent rig where it is **82% of the whole declared-resource penalty**
+  (2.80× → 1.32× at N=16 when N cells share one variable —
+  `key-schedule-loop2-cost-drivers.md`, final section; that rig also shows the
+  chunk half is *exactly* bilinear in chunks × steps, and that whether the cells
+  are genuinely TOUCHED is worth under 2% — declaring them is the whole cost).
+  This is where the apparent
   "chunk superlinearity" actually lived. Sources of `|Σ|` growth: one
   `asn.exist` per unpinned (`PVExist`) spec entry, and per-step demonic
   variables. Cheapest levers, in order: pin what does not need to be
