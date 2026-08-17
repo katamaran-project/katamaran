@@ -473,6 +473,7 @@ NOT re-measured wholesale.** Status of every measurement block:
 |---|---|---|
 | §5.5 goal counts (92→29, 180→33) | 2026-08-16 | **yes** |
 | §5.6 the m=n diagonal, N=4..32, both bases | 2026-08-16/17 | **yes** |
+| §5.8 the three-arm bound-VC ablation (P/A/C) | 2026-08-17 | **yes** — arms P and C at m4n4/m8n4/m4n8/m8n8 re-measured from scratch that day; the m16n16 and m32n32 P/C values are §5.6's, reused after reproducing three of them to ≤0.1% |
 | §5.5 cost table (m4n4, m16n4, m4n16) | 2026-08-16 | **yes** |
 | §3 order swap | 2026-08-14 | **OBSOLETE** — effect measured gone (1.00×) |
 | §2 the 6-point grid | 2026-08-14 | **no** — pre-fix; m4n4/m16n4/m4n16 superseded by §5.5's table |
@@ -487,6 +488,109 @@ paths existed but died at the program end — the fix plausibly makes them
 cheaper, unmeasured), and `key-schedule-loop2-cost-drivers.md` (exits on a
 public pinned counter, so it never had dead paths; unaffected by argument,
 not by measurement).
+
+### 5.8. Splitting the symbolic base itself: the per-address bound VCs are 76–90% of it (2026-08-17)
+
+`PLAN-fetch-bound-vcs.md` Phase 1. §5.6 leaves the symbolic base as a 4.0–6.7×
+constant factor without saying *what inside it* costs. Two candidate
+mechanisms, and they need different fixes:
+
+- **bound obligations** — one `0 ≤ lenAddr − (K + unsigned (off ⊕ p))` per
+  distinct address touched, emitted by `Spec.v`'s `sep_contract_fetch_instr`
+  (upper bound, `K = 4`), `sep_contract_mem_read` and
+  `sep_contract_checked_mem_read` (`K = bytes`). Removable in principle by
+  discharging them in the solver against the precondition's single base bound.
+- **symbolic address terms** — every address is `bvadd (val off) p` rather than
+  a literal, everywhere, all the way through. NOT removable by any VC work.
+
+**Three arms, one knob each.** The discriminator is an ABLATION, not the
+`PVConst`-pinned base the plan originally sketched: a `PVConst` base *is* a
+concrete base, so it moves both axes at once and merely reproduces arm C.
+Instead the three upper-bound conjuncts were deleted from `Spec.v` (arm A),
+leaving every address term symbolic and byte-identical while the obligations
+are never emitted:
+
+| arm | base | bound obligations | reads as |
+|---|---|---|---|
+| **P** | symbolic | emitted | today's parametric cost |
+| **A** | symbolic | **deleted at source** | ceiling of the proposed fix |
+| **C** | concrete | never emitted (`unsigned` of a literal computes) | §5.6's concrete arm |
+
+Arm A is deliberately **unsound** — it also forces `valid_checked_mem_read` to
+`Admitted`, since the body can no longer justify the access. It is a cost
+probe, nothing else; the tree was reverted and rebuilt after measuring.
+
+**Control, and it is the reason to believe the ablation is on-target:**
+residual goals go **29 → 0** at m4n4 and **37 → 0** at m4n8. Exactly the
+obligations disappeared and nothing else was left behind.
+
+**Allocation, G words net of baseline** (P/C at m4n4, m8n4, m4n8, m8n8
+measured 2026-08-17; P/C at m16n16 and m32n32 are §5.6's, which this session
+reproduced at m4n4 to 0.03%, m8n8 to 0.04% and C-m8n8 to 0.1%):
+
+| shape | S | addrs | **P** | **A** | **C** | P/A = ceiling | (P−A)/(P−C) | A/C |
+|---|---|---|---|---|---|---|---|---|
+| m4 n4 | 68 | 29 | 5.325 | 1.229 | 0.798 | 4.33× | **90.5%** | 1.54× |
+| m8 n4 | 84 | 33 | 6.541 | 1.609 | 1.025 | 4.07× | 89.4% | 1.57× |
+| m4 n8 | 120 | 37 | 9.407 | 2.732 | 1.721 | 3.44× | 86.8% | 1.59× |
+| m8 n8 | 136 | 41 | 11.105 | 3.308 | 2.048 | 3.36× | 86.1% | 1.62× |
+| m16 n16 | 272 | 65 | 30.87 | 11.274 | 6.67 | 2.74× | 81.0% | 1.69× |
+| **m32 n32** | 544 | 113 | **116.21** | **49.758** | **28.82** | **2.34×** | **76.0%** | 1.73× |
+
+**The `vm_compute` stage is where this had to be settled**, because roughly
+half the parametric penalty is spent before `solve_vc` starts, so a faster
+*tactic* could never recover it. User CPU:
+
+| shape | `vm_compute` P → A → C | obligation share of the vm gap | `solve_vc` P → A → C |
+|---|---|---|---|
+| m4 n4 | 10.09 → 5.37 → 3.86 s | 75.8% | 9.91 → 0.31 → 0.23 s |
+| m8 n4 | 13.28 → 7.07 → 5.17 s | 76.6% | 12.32 → 0.34 → 0.28 s |
+| m8 n8 | 32.46 → 16.44 → 11.52 s | 76.5% | 13.98 → 0.50 → 0.49 s |
+
+So **~76% of the parametric `vm_compute` penalty is obligation cost**, stable
+to ±0.4 points across three shapes, and `solve_vc` collapses to the concrete
+arm's value (97%+ of it was obligations). The mechanism is real and it is the
+dominant part of the base penalty at every size measured.
+
+**But the share DECAYS with N, and that is the finding that matters.**
+90.5 → 86.1 → 81.0 → 76.0% on the diagonal, ≈ −4.8 points per doubling, so
+the achievable ceiling falls 4.33× → **2.34× at the real `klen = 32`**. The
+obligations are per-ADDRESS (`17 + m + 2n`, §5.5) while total cost is
+`H^(1+ε)·S` (§6.5) — addresses grow linearly, cost grows superlinearly, so
+this mechanism is a *shrinking* fraction of the whole by construction. Any
+figure quoted for it must name its N.
+
+**Held-out fit check** (required by `cfgver-scaling-diagnostics`, and this
+file's history is mostly of projections erring optimistically): fitting the
+share linearly in `log₂N` on the diagonal N=4 and N=8 ONLY predicts 81.7% at
+N=16 (measured 81.0, **error 0.7 pts**) and 77.3% at N=32 (measured 76.0,
+**error 1.3 pts**), i.e. a ceiling of 2.39× against the measured 2.34×. Two
+doublings out, 2% optimistic on the ceiling — the smallest projection error
+recorded in this file, and still in the usual direction.
+
+**What the ceiling is worth, stated as headroom rather than a ratio.**
+Diagonal cost grows 3.76× per doubling at N=16→32, so a 2.34× saving buys
+`ln 2.34 / ln 3.76` = **0.64 of a doubling** in reachable N. The real fix
+lands strictly below that ceiling: the ablation removes the obligation's
+*construction* too, whereas a solver rule still builds `unsigned (off ⊕ p)`
+before simplifying it away, and pays a recognizer on every formula it sees.
+
+**Peak RSS, for feasibility only** (P / A / C): m4n4 5.12 / 4.35 / 4.32 GB;
+m8n8 6.19 / 4.88 / 4.80; m16n16 9.51 / 6.54 / 6.30; m32n32 9.50 / **9.07** /
+9.00. The N=32 plateau of §5.6 shows up in arm A as well, so the ablation is
+not a feasibility lever either — it buys throughput, not headroom on this box.
+
+**Third shape for the §5.5 residual law, while the rig was up.** Both
+previously-measured points held n=4, so only the `m` coefficient of
+`residuals = A_first + A_second` had ever been exercised. Moving `n` instead:
+
+| shape | predicted `17 + m + 2n` | measured |
+|---|---|---|
+| m4 n4 | 29 | 29 (re-measured 2026-08-17) |
+| m8 n4 | 33 | 33 (2026-08-16) |
+| **m4 n8** | **37** | **37** |
+
+Still zero fitted parameters, now with both coefficients tested.
 
 ## 6. The residual 1.6–2.6× is chunk inventory
 
@@ -611,7 +715,7 @@ single-loop padding probe above does it for one loop only.
 | driver | status |
 |---|---|
 | **chunks × steps**, superlinear in chunks | the ONLY thing making cost grow with N |
-| **symbolic base** | 4.0–6.7× constant factor, shrinking with N; not a scaling term. Largest remaining multiplier |
+| **symbolic base** | 4.0–6.7× constant factor, shrinking with N; not a scaling term. Largest remaining multiplier. **Decomposed 2026-08-17 (§5.8):** 76–90% of it is the per-address bound VCs (removable in principle, ceiling **2.34× at N=32** and falling with N), the rest is symbolic address terms (not removable). |
 | access count | negligible — measured three ways (§5.5, §6) |
 | term growth | closed by `peval` RECOGNIZERS (`mulx`/`coalesce`/`expand`); `ZZTermSim2.v` shows the unrecognized shape is `3^n`, so a new idiom reopens it |
 | dead-path VC multiplication | closed by the `formula_propeq` cancellation (§5.5) |
@@ -691,6 +795,7 @@ Subtract 593,774,593. One heavy proof per process; run sequentially.
 | dead-declaration padding | `ZZPadVCCommon.v` + `ZZPadC_PW{0,1,4,8,16}.v`, `ZZPadP_PW{0,4}.v` |
 | inventory swap / failed skip | `ZZSkipCommon.v` + `ZZSkipL1_*.v` (works), `ZZSkipL2_*.v` (does not skip) |
 | residual-goal dumps (§5.5) | `ZZVCDump_L1.v`, `ZZVCDump_L2.v`, `ZZVCDump_Comb.v`, `ZZVCDump_Comb84.v`, `ZZVCDump_Swap.v`, `ZZVCDump_Ctx.v` |
+| bound-VC ablation (§5.8) | baselines `ZZFbBase.v` / `ZZFbBaseC.v`; residual counts `ZZFbCount_M4_N{4,8}.v`; arms P and A both reuse `ZZComb_M*_N*.v` (the ablation lives in `Spec.v`, not in the probe); arm C adds `ZZCombConc_M{8_N4,4_N8}.v`. **Arm A requires editing `Spec.v`** — comment out the upper-bound conjunct in `sep_contract_fetch_instr`, `sep_contract_checked_mem_read` and `sep_contract_mem_read`, `Admitted` the then-unprovable `valid_checked_mem_read`, rebuild `Spec → Verifier → Tables → Contracts → GenContract → Example/Prelude → ZZCombinedCommon`, and **revert plus rebuild afterwards** so no ablated `.vo` is left in the tree. |
 
 Goal-inspection idioms used in the dumps, each of which silently lies if got
 wrong (see `cfgver-scaling-diagnostics`): count with

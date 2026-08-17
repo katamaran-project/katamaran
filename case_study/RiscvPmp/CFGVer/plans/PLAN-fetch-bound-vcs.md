@@ -1,9 +1,17 @@
 # PLAN-fetch-bound-vcs — stop emitting the per-address access-bound VCs
 
-Status: **DESIGN, not started. Written 2026-08-17.** No code exists for any
-phase. Successor to the `formula_propeq` cancellation that landed 2026-08-16
-(`diagnostics/check-scalar-combined-cost-drivers.md` §5.5) — same shape of
-fix, next target down the ranking.
+Status: **Phase 1 COMPLETE 2026-08-17 (GATE 1 reached, see §2). Phases 2–3 not
+started.** Written 2026-08-17. Successor to the `formula_propeq` cancellation
+that landed 2026-08-16 (`diagnostics/check-scalar-combined-cost-drivers.md`
+§5.5) — same shape of fix, next target down the ranking.
+
+**Phase 1 verdict in one line:** the mechanism is confirmed dominant (76–90%
+of the symbolic-base penalty, so the plan's stop condition does NOT trigger),
+but the achievable ceiling at the real `klen = 32` is **2.34×, not the ~4×
+§0.1 predicted**, and it keeps falling with N. Full numbers in
+`diagnostics/check-scalar-combined-cost-drivers.md` §5.8. **Whether 2.34× —
+0.64 of a doubling in reachable N — is worth Phase 2 is an open decision, not
+a settled go.**
 
 Audience: a later session doing ONE phase at a time. Each phase ends at an
 explicit GATE — reach it, report, commit, stop.
@@ -21,12 +29,27 @@ than invents).
 The `cfgver-scaling-diagnostics` skill requires three statements before a fix
 gets funded. Here they are, and the third is the one to keep in view.
 
-1. **Predicted end-to-end win.** Up to **~4×** at N=32 on the parametric base
+1. **Predicted end-to-end win.** ~~Up to **~4×** at N=32 on the parametric base
    if the per-address obligations are eliminated entirely. Derived, not
    guessed: at m=n=32 parametric costs 116.21 G and the same program at a
    concrete base — which emits none of these obligations — costs 28.82 G. The
    whole gap is 4.0×, and these VCs are the bulk of what differs. At smaller N
-   the gap is larger (6.7× at N=4), so the win shrinks as N grows.
+   the gap is larger (6.7× at N=4), so the win shrinks as N grows.~~
+
+   **RETRACTED 2026-08-17 by Phase 1's own measurement — never requote the 4×.**
+   The reasoning above assumed the base's ENTIRE cost is these VCs, which §2
+   was written to test and which is false: at N=32 only **76%** of the
+   parametric penalty is the obligations, the other 24% being symbolic address
+   terms that no VC work touches. Measured ceiling, by deleting the obligations
+   at source (`diagnostics/…` §5.8): **2.34× at m=n=32**, 2.74× at N=16, 3.36×
+   at N=8, 4.33× at N=4. The share itself decays ≈4.8 points per doubling,
+   because the obligations are per-ADDRESS (linear in N) while cost is
+   `H^(1+ε)·S` (superlinear) — so this mechanism is a shrinking fraction of the
+   whole *by construction*, and any figure for it must name its N. In headroom
+   terms: at 3.76× cost per doubling, 2.34× buys **0.64 of a doubling** in
+   reachable N. A real solver rule lands strictly below that ceiling, since it
+   still builds `unsigned (off ⊕ p)` before simplifying it away and pays a
+   recognizer on every formula.
 2. **Constant factor or exponent change?** A **CONSTANT FACTOR.** It does not
    touch `H^(1+ε)·S`. After this lands, chunks × steps is 100% of the growth
    and the curve's shape is unchanged. Anyone hoping this makes the wall go
@@ -101,6 +124,31 @@ it — the goals must not be emitted.
 ---
 
 ## §2. Phase 1 — measure the ceiling before building anything
+
+**GATE 1 REACHED 2026-08-17. Numbers and method:
+`diagnostics/check-scalar-combined-cost-drivers.md` §5.8. Do not re-run this
+phase; read that section instead.** Summary of what it settled:
+
+- §2.1 **residual law confirmed on a third shape.** `residuals = 17 + m + 2n`
+  predicted 37 at m4n8, measured 37. Both earlier points held n=4, so this is
+  the first test of the `2n` coefficient. Still zero fitted parameters.
+- §2.2/§2.3 **the `vm_compute` half is NOT mostly symbolic-term cost**, which
+  was this phase's stop condition. It is **76%** obligation cost (±0.4 pts over
+  three shapes), and `solve_vc` collapses to the concrete arm's value. Across
+  both stages the obligations are 76–90% of the whole parametric penalty. So
+  the plan is not re-scoped or dropped on those grounds.
+- **The probe was NOT the `PVConst` pinning sketched below** — that doesn't
+  isolate anything, since a `PVConst` base *is* a concrete base and moves both
+  axes at once. What worked: delete the three upper-bound conjuncts from
+  `Spec.v` (`sep_contract_fetch_instr`, `sep_contract_mem_read`,
+  `sep_contract_checked_mem_read`), leaving every address term symbolic and
+  identical. Control: residuals go 29 → 0 at m4n4 and 37 → 0 at m4n8, so the
+  ablation hits exactly the intended goals. That tree state is unsound (it also
+  forces `valid_checked_mem_read` to `Admitted`) and was reverted and rebuilt.
+- **What changed the decision:** not the share, but its N-dependence. §0.1's
+  ~4× is retracted; the measured ceiling at the real `klen = 32` is 2.34×.
+
+Original text of the phase follows, for the record.
 
 **GATE 1: a number for "what fraction of the parametric penalty is these
 obligations", and a decision to proceed or stop.**
