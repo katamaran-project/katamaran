@@ -602,7 +602,7 @@ trip-count gets hand-varied instead of recompiled.
 > | 4 | 198.2 s | 8.48 GB | pre-fix |
 > | 8 | 749.6 s | 11.60 GB | pre-fix |
 > | **16** | **368.8 s** | **9.31 GB** | **post-fix** |
-> | 32 | (running at time of writing) | | post-fix |
+> | 32 | **not established** — see below | | post-fix |
 >
 > **N=16 post-fix costs HALF of what N=8 cost pre-fix**, and about 9× less
 > than the pre-fix ratios (2.81×, 3.78×) projected for it (~3400 s). Peak RSS
@@ -614,6 +614,32 @@ trip-count gets hand-varied instead of recompiled.
 > This also retires part of the synthetic rig's caveat: the real loop 2
 > re-reads loop 1's `k[]` (the aliasing `ZZCombinedCommon.v` designs away),
 > and the fix delivers on the real program too.
+>
+> **N=32 was ATTEMPTED and ABANDONED, not measured.** It ran ~22 min wall and
+> was killed by owner decision before finishing, so this is NO result rather
+> than a negative one — do not cite it either way. Conditions and reading at
+> the time of the kill, for whoever retries:
+>
+> - RSS was churning steadily in a 6.8–8.3 GB band with no monotone climb,
+>   i.e. it looked like genuine work rather than the runaway growth that
+>   precedes an OOM. The pre-fix attempt at this same configuration died at
+>   21+ min from thrashing, so it had just reached where the old one failed.
+> - Projected **23–27 min of user CPU**, from the synthetic diagonal's
+>   post-fix exponent (3.76×/4.32× per doubling) applied to N=16's 368.8 s.
+>   The real function has only ONE post-fix point, so no fit from its own
+>   data is possible. Note every projection made on 2026-08-16/17 erred
+>   OPTIMISTICALLY, the last by 2.2–2.7× on time — treat that range as a
+>   floor.
+> - Two things would make a serious attempt cheaper: a quieter machine (only
+>   ~8 GB of the 14 was free, the rest being unrelated resident apps — see
+>   §4's GATE 3 memory note, which records the same trap), and `Admitted`
+>   instead of `Qed` if only the VC cost is wanted, since `Qed` re-runs the
+>   executor through the VM cast and roughly doubles the work.
+> - Growth is ~quadratic and the local exponent is still RISING (1.36 → 1.70
+>   → 2.11 concrete, 1.06 → 1.48 → 1.91 parametric on the synthetic
+>   diagonal), i.e. it has passed 2 rather than settling there. This matters
+>   less than usual because **klen = 32 IS the real target** — there is no
+>   N=64 rung to reach.
 >
 > Probes: `Example/ZZCheckScalarFixN{16,32}.v`, generated from
 > `ZZCheckScalarFixN8b.v` (the CORRECTED N=8 file — plain `N8` has the
