@@ -752,3 +752,52 @@ baseline `ZZKslPinBase.v`. Throwaway. Note `ZZKslPinCommon.v` must
 `KeyScheduleLoop` — that file `Require Import`s Prelude rather than Exporting
 it, so requiring it alone leaves the list/assertion notations out of scope and
 the spec lists fail to parse with `Syntax error: [reduce] expected after ':='`.
+
+### N=32 confirms both laws, and pinning is worth MORE than projected (2026-08-18)
+
+The N=4/8/16 series above supported three claims; N=32 was measured to check
+them, with the predictions written down first. Two were derived from clean laws
+and land inside 1%; the third was a bare extrapolation and undershot by 8.5%.
+
+| arm | N=4 | N=8 | N=16 | **N=32** | predicted N=32 | error |
+|---|---|---|---|---|---|---|
+| 1-used (floor) | 0.3350 | 0.6675 | 1.3365 | **2.6904** | 2.675 (linear) | **−0.6%** |
+| N cells, 1 var | 0.3561 | 0.7662 | 1.7596 | **4.4393** | 4.428 (quadratic) | **−0.3%** |
+| N cells, N vars | 0.4292 | 1.1477 | 3.7432 | **15.5256** | ~14.2 (extrapolated) | −8.5% |
+
+- **The linear floor is confirmed**: doubling ratios 1.993 / 2.002 / **2.013**.
+  With chunks and variables both pinned, cost is linear in N over an 8× range.
+- **The chunk residual law is confirmed to 0.7% over an 8× range of N.** Fitting
+  `SHP/CS = 1 + k(N−1)` gives `k` = 0.02107 / 0.02114 / 0.02111 / **0.02097** at
+  N=4/8/16/32 — the residual is 1.0632 / 1.1480 / 1.3166 / **1.6501**. Quadratic
+  over linear, exactly as the bilinear chunks × steps reading predicts.
+- **The pinning gain is 3.497× at N=32**, against a projected ~3.2×: 1.205 /
+  1.498 / 2.127 / **3.497**. The extrapolation undershot because it had no fitted
+  law behind it — which is precisely why it was flagged as a projection. Lesson
+  worth keeping: the two arms with a mechanism-derived law predicted to <1%, the
+  one without a law was 8.5% off in the direction that mattered.
+- **The variable share keeps rising**: 77.5 / 79.4 / 82.4 / **86.4%** of the
+  excess at N=4/8/16/32. Chunks are down to 13.6%.
+- **Total penalty over the floor** (`N vars` vs `1 cell`): 1.281 / 1.719 / 2.801
+  / **5.771×**.
+- **Local exponents** (log₂ of successive ratios): floor 1.00 flat; `1 var`
+  1.105 → 1.199 → **1.335** (rising toward 2, as `cN² + dN` with `d` still
+  significant does); `N vars` 1.419 → 1.706 → **2.052**, now past 2 and still
+  climbing — the extra `|Σ|` factor.
+
+**Peak footprint, which is the actual feasibility wall on a 14 GB box.**
+`top_heap_words` at N=32: floor 732 M, `1 var` 731 M, `N vars` **969 M** words
+(≈ 5.9 / 5.9 / **7.8 GB**). The pinned arm peaks *at the floor*; the unpinned one
+is +32% and already close to the ceiling. Extrapolating one doubling, N=64
+unpinned is unlikely to fit in this box while the pinned arm plausibly does — so
+pinning buys reachable N, not just wall-clock. (One rig OOM'd nothing here, but
+`pet` was holding 1.65 GB and had to be force-restarted first to leave room —
+see `rocq-compile-oom`.)
+
+**Revised bottom line at N=32:** pinning takes 15.53 → 4.44 G words (**3.50×**)
+and leaves a 1.65× chunk residual. It captures ~72% of the total available win in
+log terms, a share that is roughly stable in N (73% at N=16). Both factors are
+exponent changes, and quadratic remains after pinning — only removing the
+declared cells entirely (`plans/PLAN-loop-invariant.md`) reaches the linear floor.
+
+Files: `ZZKslCS_N32.v`, `ZZKslPG_N32.v`, `ZZKslSHP_N32.v` (throwaway).
