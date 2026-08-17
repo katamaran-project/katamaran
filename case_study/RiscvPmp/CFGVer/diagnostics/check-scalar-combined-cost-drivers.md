@@ -474,6 +474,7 @@ NOT re-measured wholesale.** Status of every measurement block:
 | §5.5 goal counts (92→29, 180→33) | 2026-08-16 | **yes** |
 | §5.6 the m=n diagonal, N=4..32, both bases | 2026-08-16/17 | **yes** |
 | §5.8 the three-arm bound-VC ablation (P/A/C) | 2026-08-17 | **yes** — arms P and C at m4n4/m8n4/m4n8/m8n8 re-measured from scratch that day; the m16n16 and m32n32 P/C values are §5.6's, reused after reproducing three of them to ≤0.1% |
+| §5.9 the LANDED fix (residuals 0, diagonal, no-regression) | 2026-08-17 | **yes** — and it supersedes every "parametric base" cost figure above for the CURRENT tree; §5.6/§5.8's pristine column is now the PRE-fix baseline. The N=32 post-fix figure is INFERRED, not measured. |
 | §5.5 cost table (m4n4, m16n4, m4n16) | 2026-08-16 | **yes** |
 | §3 order swap | 2026-08-14 | **OBSOLETE** — effect measured gone (1.00×) |
 | §2 the 6-point grid | 2026-08-14 | **no** — pre-fix; m4n4/m16n4/m4n16 superseded by §5.5's table |
@@ -591,6 +592,92 @@ previously-measured points held n=4, so only the `m` coefficient of
 | **m4 n8** | **37** | **37** |
 
 Still zero fitted parameters, now with both coefficients tested.
+
+### 5.9. The fix LANDED 2026-08-17, and it reaches 99.5% of §5.8's ceiling
+
+`PLAN-fetch-bound-vcs.md` Phase 2, commit `aa4ccdf4`. `try_fetch_bound` in
+`Solver.v` recognises the bound shape, looks the base bound up in `wco` (in the
+style of `pathconditions_contains_secLeakT`), and discharges to `empty` when
+`off + K ≤ B`; it falls through to `simplify_le` otherwise and **never returns
+`error`** (failing to find the bound means "cannot decide", not "false" —
+`error` there would refute satisfiable paths). Wired into `simplify_relop`'s
+`bop.le` arm exactly as eq/neq dispatch through `try_bvadd_cancel`. Fully
+proved, no new axioms.
+
+**No publicness guard, and for a stronger reason than the `formula_propeq`
+rule's.** `instprop_formula` sends a NonSyncVal operand to False on the
+*hypothesis* too, so over a secret base the base bound in `wco` is itself False
+and the entailment is vacuous. The `secLeakT` check `try_bvadd_cancel` needs is
+here discharged by the very formula the rule reasons from.
+
+**Residual goals: 29 → 0 at m4n4 and 37 → 0 at m4n8** — the whole class is gone.
+
+**Diagonal, allocation G words** (pristine and ceiling from §5.8; "fix" measured
+2026-08-17 against a re-measured baseline of 604.22 M words — the import closure
+grew 1.7% because `Solver.vo` did, and that is netted out):
+
+| N | pristine | **fix** | §5.8 ceiling | achieved | ceiling | % of ceiling |
+|---|---|---|---|---|---|---|
+| 4 | 5.325 | **1.234** | 1.229 | **4.32×** | 4.33× | 99.6% |
+| 8 | 11.105 | **3.321** | 3.308 | **3.34×** | 3.36× | 99.6% |
+| 16 | 30.87 | **11.330** | 11.274 | **2.73×** | 2.74× | 99.5% |
+| 32 | 116.21 | *not measured* | 49.758 | *~2.33×* | 2.34× | — |
+
+N=16 also drops 159 → 77.6 s and 9.51 → 6.61 GB peak RSS. **The N=32 row's
+"fix" figure is INFERRED** from the thrice-confirmed 99.5–99.6% ratio, not
+measured (that point costs ~400 s at ~9 GB on a 14 GB box); it is an
+interpolation of a tight ratio rather than an extrapolation of a curve, but do
+not quote it as measured.
+
+**The recognizer's own cost is ~0.4%, not the meaningful shortfall predicted.**
+§5.8 argued the real rule must land "strictly below" the ablation ceiling
+because it still builds `unsigned (off ⊕ p)` before simplifying it away and
+pays a recognizer on every formula. Both are true and together they cost 0.4%.
+The reason is the outermost `int_bound_shape` guard: only an already
+bound-shaped `≤` triggers the `wco` scan.
+
+**No regression where the rule cannot fire** — the §5's stated risk. Concrete
+base, same probes: m4n4 0.7983 → 0.7984 G (**+0.007%**), m8n8 2.0482 → 2.0483 G
+(**+0.004%**), identical to four significant figures.
+
+**Post-fix the base penalty is 1.55–1.73×**, down from 4.0–6.7× (parametric ÷
+concrete: 1.55 / 1.62 / 1.70 / ~1.73 at N=4/8/16/32) — i.e. what remains is
+essentially §6's chunk-inventory residue, and the base is no longer a major
+multiplier. It still *rises* with N, so it is not vanishing either.
+
+**Verified beyond the rig**: all 12 `Example/*.v` files compile with real `Qed`s
+(`Cmovznz4` 22.6 s, `BearSSLCheckScalarLoop1` 25.1 s), and `./scripts/gate.sh`
+passes — build clean, no holes, 14 end theorems axiom-clean (only the
+whitelisted `Machine.pure_decode` / `Base.mmioenv`). That last check is the one
+that matters for a solver rule: `empty` is unconditionally true, so a wrong
+entailment would silently weaken every end theorem instead of failing to
+compile. `solve_symbase_fetch` is now a no-op on these examples (zero residuals
+means it never runs) and was deliberately LEFT IN PLACE as the fallback for
+shapes the rule does not match.
+
+**Two `Equations` dead ends, recorded so they are not repeated** (each cost a
+~6-minute `Solver.v` build, because definitions inside `GenericSolverOn` cannot
+be reached interactively): it will not let two width indices meet — "the pattern
+n2 should be equal to n1, it is forced by typing" — neither from two
+pattern-bound widths nor from a parameter/pattern pair. The fix is to never
+compare across widths: `unsigned_bvadd_split` returns only NON-dependent data (a
+`Z`, a `Term Σ ty.int`, a plain `nat`) and rebuilds `unsigned s` so the caller
+compares at `Term Σ ty.int`, where `Term_eqb` is homogeneous. Related: the
+solver's definitions are reachable from outside only as
+`RiscvPmpSignature.GenericSolver.*`, since `Module Import GenericSolver` sits
+inside `Module Type GenericSolverOn` and that inner `Import` does not escape.
+
+**Method note that saved the phase.** The semantic core was proved in ~100 ms in
+preamble mode *before* compiling, by restating it over `ty.liftBinOpRV` /
+`liftUnOpRV` (what `bop.evalRel` / `uop.evalRel` reduce to) from
+`Syntax.TypeDecl`, which loads standalone — `RiscvPmp.Sig` does not. Firing was
+then unit-tested on the terms transcribed from `ZZFbShape.v`'s dump, which
+caught the module-path problem in a 60-second compile instead of inside a
+15-minute chain. Two GUARD bugs to avoid when scripting this: a
+case-insensitive `Error:` grep matches the printed lemma name
+`instpred_dlist_error:` and falsely reports a failed build (gate on
+case-sensitive `^Error`), and a `pgrep`-based wait loop that also matches its
+own command line exits immediately, reporting a still-running build as finished.
 
 ## 6. The residual 1.6–2.6× is chunk inventory
 
@@ -715,7 +802,7 @@ single-loop padding probe above does it for one loop only.
 | driver | status |
 |---|---|
 | **chunks × steps**, superlinear in chunks | the ONLY thing making cost grow with N |
-| **symbolic base** | 4.0–6.7× constant factor, shrinking with N; not a scaling term. Largest remaining multiplier. **Decomposed 2026-08-17 (§5.8):** 76–90% of it is the per-address bound VCs (removable in principle, ceiling **2.34× at N=32** and falling with N), the rest is symbolic address terms (not removable). |
+| **symbolic base** | ~~4.0–6.7×~~ **now 1.55–1.73×, FIXED 2026-08-17 (§5.9)** — the per-address bound VCs were 76–90% of it and are now discharged in the solver, at 99.5% of the measured ceiling. What remains is chunk-inventory residue that RISES slowly with N. No longer a major multiplier. |
 | access count | negligible — measured three ways (§5.5, §6) |
 | term growth | closed by `peval` RECOGNIZERS (`mulx`/`coalesce`/`expand`); `ZZTermSim2.v` shows the unrecognized shape is `3^n`, so a new idiom reopens it |
 | dead-path VC multiplication | closed by the `formula_propeq` cancellation (§5.5) |

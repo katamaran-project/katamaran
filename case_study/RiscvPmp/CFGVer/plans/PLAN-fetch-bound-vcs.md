@@ -1,17 +1,23 @@
 # PLAN-fetch-bound-vcs — stop emitting the per-address access-bound VCs
 
-Status: **Phase 1 COMPLETE 2026-08-17 (GATE 1 reached, see §2). Phases 2–3 not
-started.** Written 2026-08-17. Successor to the `formula_propeq` cancellation
-that landed 2026-08-16 (`diagnostics/check-scalar-combined-cost-drivers.md`
-§5.5) — same shape of fix, next target down the ranking.
+Status: **DONE 2026-08-17. Phases 1–3 complete; GATE 1, GATE 2 and GATE 3 all
+reached.** Landed in commit `aa4ccdf4`. Written 2026-08-17. Successor to the
+`formula_propeq` cancellation that landed 2026-08-16
+(`diagnostics/check-scalar-combined-cost-drivers.md` §5.5) — same shape of fix,
+next target down the ranking.
 
-**Phase 1 verdict in one line:** the mechanism is confirmed dominant (76–90%
-of the symbolic-base penalty, so the plan's stop condition does NOT trigger),
-but the achievable ceiling at the real `klen = 32` is **2.34×, not the ~4×
-§0.1 predicted**, and it keeps falling with N. Full numbers in
-`diagnostics/check-scalar-combined-cost-drivers.md` §5.8. **Whether 2.34× —
-0.64 of a doubling in reachable N — is worth Phase 2 is an open decision, not
-a settled go.**
+**Outcome in one line:** the per-address bound VCs are gone (residuals 29 → 0
+at m4n4, 37 → 0 at m4n8), the fix reaches **99.5% of Phase 1's measured
+ceiling** — 4.32× / 3.34× / 2.73× at diagonal N=4/8/16 — and `./scripts/gate.sh`
+passes with the 14 end theorems still axiom-clean. Full record:
+`diagnostics/check-scalar-combined-cost-drivers.md` §5.8 (the ceiling) and
+**§5.9** (the landed fix). Post-fix the symbolic-base penalty is 1.55–1.73×,
+down from 4.0–6.7×, so the base is no longer a major multiplier and
+**`chunks × steps` is now the sole driver** — which is `PLAN-loop-invariant.md`.
+
+**Read §0.1 before quoting any speedup**: the headline is a CONSTANT factor
+that shrinks with N (2.34× at the real `klen = 32`, ~0.64 of a doubling in
+reachable N), not an exponent change. The wall is moved, not removed.
 
 Audience: a later session doing ONE phase at a time. Each phase ends at an
 explicit GATE — reach it, report, commit, stop.
@@ -50,6 +56,15 @@ gets funded. Here they are, and the third is the one to keep in view.
    reachable N. A real solver rule lands strictly below that ceiling, since it
    still builds `unsigned (off ⊕ p)` before simplifying it away and pays a
    recognizer on every formula.
+
+   **CORRECTED 2026-08-17 after Phase 2 landed.** The last sentence was wrong
+   in practice: the real rule lands at **99.5–99.6% of the ceiling** at every
+   size measured, i.e. the recognizer plus the discarded term-building cost
+   together are ~0.4%, not a meaningful shortfall. The reason is the outermost
+   `int_bound_shape` guard — only an already bound-shaped `≤` pays for the
+   `wco` scan, so the rule costs nothing on the formulas it cannot serve
+   (measured: a concrete-base program is unchanged to four significant
+   figures). The ceiling figures themselves stand.
 2. **Constant factor or exponent change?** A **CONSTANT FACTOR.** It does not
    touch `H^(1+ε)·S`. After this lands, chunks × steps is 100% of the growth
    and the curve's shape is unchanged. Anyone hoping this makes the wall go
@@ -181,6 +196,25 @@ number from memory (that plan records a fabricated-measurement incident).
 
 ## §3. Phase 2 — discharge the bound in the SOLVER, not in a tactic
 
+**GATE 2 REACHED 2026-08-17 — residuals 29 → 0 (m4n4) and 37 → 0 (m4n8), no
+new axioms, `Solver.v` fully proved. Landed as written below, with two
+corrections worth knowing before touching this code again:**
+
+- **The recognizer must NOT compare two `unsigned` operands across widths.**
+  `Equations` refuses ("the pattern n2 should be equal to n1, it is forced by
+  typing"), both for two pattern-bound widths and for a parameter/pattern pair.
+  Land the data in NON-dependent form instead — `unsigned_bvadd_split` returns a
+  `Z`, a `Term Σ ty.int` and a plain `nat`, rebuilding `unsigned s` so the
+  caller compares at `Term Σ ty.int` where `Term_eqb` is homogeneous. Two
+  ~6-minute builds were spent learning this; definitions inside
+  `GenericSolverOn` cannot be reached interactively.
+- **§3.3's soundness obligation needed no `secLeakT` guard at all.**
+  `instprop_formula` sends a NonSyncVal operand to False on the HYPOTHESIS too,
+  so over a secret base the base bound in `wco` is itself False and the
+  entailment is vacuous. Stronger than the `formula_propeq` rule's argument.
+
+**Original text of the phase follows.**
+
 **GATE 2: m4n4's residual count drops from 29 to ~0, with the same VC
 otherwise, and no new axioms.**
 
@@ -213,6 +247,19 @@ that lemma rather than reprove it.
 ---
 
 ## §4. Phase 3 — end-to-end and gate
+
+**GATE 3 REACHED 2026-08-17.** `./scripts/gate.sh` passes — build clean, no
+holes, 14 end theorems axiom-clean (only the whitelisted `Machine.pure_decode`
+/ `Base.mmioenv`). Diagonal re-measured at N=4/8/16 (**4.32× / 3.34× / 2.73×**,
+99.5–99.6% of the ceiling); **N=32 post-fix was NOT measured** — that point
+costs ~400 s at ~9 GB and the machine was RAM-constrained, so §5.9's N=32 row
+is inferred from the thrice-confirmed ratio and marked as such. All 12
+`Example/*.v` compile with real `Qed`s. `solve_symbase_fetch` is now a no-op on
+these examples and was LEFT IN PLACE per §4.2. Run the gate at `GATE_JOBS=1` on
+a 14 GB box: the default `-j3` puts three ~3 GB `coqc` processes up at once and
+makes the machine unusable.
+
+**Original text of the phase follows.**
 
 **GATE 3: `./scripts/gate.sh` green, and the cost numbers.**
 
