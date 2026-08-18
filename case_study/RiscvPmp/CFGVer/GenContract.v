@@ -730,7 +730,7 @@ Import asn.notations.
                (term_val ty.int (Z.of_N lenAddr)))
           ∗ gen_pre_rel reg_specs
           ∗ gen_mem_pre_rel_classed word_data
-          ∗ gen_mem_pre_rel_bytes byte_data )
+          ∗ gen_mem_pre_rel_bytes_classed byte_data )
         instrs ec fl.
 
     (* gen_contract_rel with the data block grouped into ONE existential per

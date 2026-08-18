@@ -1728,6 +1728,52 @@ Import IrisModel.RiscvPmpIrisBase.
       * eapply declare_init_mem_tail. exact HInitMem2.
   Qed.
 
+  (* Three-way-partition ImplPre for the BYTE-granular classed block
+     (PLAN-unify-generators.md stage 2).  Byte twin of gen_implpre_mem_class:
+     same partition, same pinned-group treatment, but the two grouped classes go
+     through the _bytes class intros and the pinned group through
+     gen_mem_pre_rel_bytes_concretize + gen_implpre_mem_bytes.
+
+     Note gen_mem_pre_rel_bytes_classed names gen_mem_{pub,priv}_class_ks_bytes
+     with mem_rel_keys inline, so unlike the word case there is no
+     gen_mem_*_class_rel wrapper to unfold first. *)
+  Lemma gen_implpre_mem_bytes_class `{sailGS2 Σ}
+      (specs : list mem_spec_rel) (ia : N) (μ1 μ2 : Memory)
+      (va : RelVal ty_xlenbits)
+      (HInitMem1 : declare_init_memory μ1 (gen_init_mem (map (concretize_mem ia) specs)))
+      (HInitMem2 : declare_init_memory μ2 (gen_init_mem (map (concretize_mem ia) specs))) :
+    interp_mem_with_public_memory μ1 μ2
+      (map mem_full_to_spec (map (concretize_mem ia) specs))
+    ⊢ asn.interpret (gen_mem_pre_rel_bytes_classed specs)
+        ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    assert (Hpin1 : declare_init_memory μ1 (gen_init_mem (map (concretize_mem ia)
+              (List.filter (fun s => negb (mem_spec_is_exist s)) specs)))).
+    { rewrite gen_init_mem_filter_pinned. exact HInitMem1. }
+    assert (Hpin2 : declare_init_memory μ2 (gen_init_mem (map (concretize_mem ia)
+              (List.filter (fun s => negb (mem_spec_is_exist s)) specs)))).
+    { rewrite gen_init_mem_filter_pinned. exact HInitMem2. }
+    iIntros "H".
+    iDestruct (interp_mem_partition_rel with "H") as "(Hpin & Hpub & Hpriv)".
+    unfold gen_mem_pre_rel_bytes_classed. cbn [asn.interpret].
+    iSplitL "Hpin".
+    { rewrite gen_mem_pre_rel_bytes_concretize.
+      iApply (gen_implpre_mem_bytes (map (concretize_mem ia)
+                (List.filter (fun s => negb (mem_spec_is_exist s)) specs)) _ Hpin1 Hpin2).
+      iExact "Hpin". }
+    iSplitL "Hpub".
+    { iApply (gen_mem_pub_class_ks_bytes_intro _ (bv.of_N ia) va μ1).
+      iApply (interp_mem_group_pub μ1 μ2 ia _).
+      - intros s Hs. apply filter_In in Hs. destruct Hs as [_ Hf].
+        destruct (andb_prop _ _ Hf) as [_ Hb]. exact Hb.
+      - iExact "Hpub". }
+    iApply (gen_mem_priv_class_ks_bytes_intro _ (bv.of_N ia) va μ1 μ2).
+    iApply (interp_mem_group_priv μ1 μ2 ia _).
+    - intros s Hs. apply filter_In in Hs. destruct Hs as [_ Hf].
+      destruct (andb_prop _ _ Hf) as [_ Hb]. apply negb_true_iff. exact Hb.
+    - iExact "Hpriv".
+  Qed.
+
   (* ===================================================================== *)
   (* THE UNIFIED BRIDGE (PLAN-unify-generators.md stage 3b).                *)
   (*                                                                        *)
@@ -1866,8 +1912,11 @@ Import IrisModel.RiscvPmpIrisBase.
     iSplitL "Hword".
     { iApply (gen_implpre_mem_class word_data init_addr _ HInitMem1w HInitMem2w).
       iExact "Hword". }
-    rewrite gen_mem_pre_rel_bytes_concretize.
-    iApply (gen_implpre_mem_bytes (map (concretize_mem init_addr) byte_data) _
+    (* Byte half now goes through the CLASSED ImplPre (stage 2), symmetrically
+       with the word half above -- no concretize rewrite is needed, because
+       gen_implpre_mem_bytes_class attacks the rel assertion directly for the same
+       width-index reason gen_implpre_mem_class does. *)
+    iApply (gen_implpre_mem_bytes_class byte_data init_addr _
               HInitMem1b HInitMem2b).
     iExact "Hbyte".
   Qed.
