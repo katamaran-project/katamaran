@@ -937,6 +937,64 @@ Import IrisModel.RiscvPmpIrisBase.
         iPureIntro. cbn. first [exact I | done].
   Qed.
 
+  (* ---------------------------------------------------------------------- *)
+  (* Splitting the resource list by class -- the last structural piece of the *)
+  (* classed bridge.  gen_mem_pre_rel_classed groups its cells by publicness  *)
+  (* while interp_mem_with_public_memory is a big_opL in SPEC order, so the   *)
+  (* resources must be re-associated into pinned ++ public ++ private.        *)
+  (*                                                                        *)
+  (* This is provable only because that big_opL's body does NOT depend on the *)
+  (* index: Iris's big_opL_permutation applies to `λ _ : nat, f` exactly.      *)
+  (* ---------------------------------------------------------------------- *)
+  Lemma three_way_perm {A} (p q : A -> bool) (l : list A) :
+    l ≡ₚ List.filter (fun x => negb (p x)) l
+      ++ List.filter (fun x => andb (p x) (q x)) l
+      ++ List.filter (fun x => andb (p x) (negb (q x))) l.
+  Proof.
+    induction l as [|a l IH]; [reflexivity|].
+    cbn. destruct (p a) eqn:Hp; destruct (q a) eqn:Hq; cbn.
+    (* Permutation_cons_app is the exact shape here; `rewrite
+       Permutation_middle` matches an UNINTENDED instance and leaves an
+       unprovable goal. *)
+    - now apply Permutation_cons_app.
+    - rewrite app_assoc. apply Permutation_cons_app. rewrite <- app_assoc. exact IH.
+    - now apply perm_skip.
+    - now apply perm_skip.
+  Qed.
+
+  (* Generic and reusable: split a big_sepL three ways by two booleans. *)
+  Lemma big_sepL_three_way {PROP : bi} {A} (p q : A -> bool) (Φ : A -> PROP)
+      (l : list A) :
+    ([∗ list] x ∈ l, Φ x)
+    ⊢ ([∗ list] x ∈ List.filter (fun x => negb (p x)) l, Φ x)
+      ∗ ([∗ list] x ∈ List.filter (fun x => andb (p x) (q x)) l, Φ x)
+      ∗ ([∗ list] x ∈ List.filter (fun x => andb (p x) (negb (q x))) l, Φ x).
+  Proof.
+    rewrite (big_opL_permutation Φ l _ (three_way_perm p q l)).
+    rewrite !big_sepL_app. done.
+  Qed.
+
+  (* The resource-level instance.  big_sepL_fmap moves the map inside so the
+     filters stay on the ORIGINAL spec list -- doing it the other way round
+     would additionally require filter/map commutation. *)
+  Lemma interp_mem_partition `{sailGS2 Σ} (μ1 μ2 : Memory)
+      (specs : list mem_full_spec) :
+    interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs)
+    ⊢ interp_mem_with_public_memory μ1 μ2
+        (map mem_full_to_spec
+           (List.filter (fun s => negb (mem_full_is_exist s)) specs))
+      ∗ interp_mem_with_public_memory μ1 μ2
+        (map mem_full_to_spec
+           (List.filter (fun s => andb (mem_full_is_exist s) (mem_full_is_pub s)) specs))
+      ∗ interp_mem_with_public_memory μ1 μ2
+        (map mem_full_to_spec
+           (List.filter (fun s => andb (mem_full_is_exist s) (negb (mem_full_is_pub s))) specs)).
+  Proof.
+    unfold interp_mem_with_public_memory.
+    rewrite !(big_sepL_fmap mem_full_to_spec).
+    apply (big_sepL_three_way mem_full_is_exist mem_full_is_pub).
+  Qed.
+
   (* Once-and-for-all ImplPre for the memory portion of gen_contract:
      converts interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs)
      into asn.interpret (gen_mem_pre specs) ι. *)
