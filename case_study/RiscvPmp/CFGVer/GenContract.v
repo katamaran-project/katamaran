@@ -311,41 +311,8 @@ Import asn.notations.
     (* functional_extensionality (an axiom here) — see their proofs.      *)
     (* ================================================================ *)
 
-    (* Parameterized-base analog of gen_contract (PLAN-symbolic-base.md Phase 4.2).
-       The base is a genuine term VARIABLE term_var "p" (Σ = ["p"∷ty_xlenbits]),
-       NOT term_val (bv.of_N init_addr) — the latter makes the VC's vm_compute
-       diverge on bv.of_N of a symbolic N at width 32.  cfg_init_addr / cfg_exitCond
-       are still stored (the end-to-end/memory side needs them) but are ignored by
-       Valid_CFG_VC, so the VC is proved ONCE, uniformly in init_addr, and reused
-       for every concrete base via the ι = ["p" ↦ SyncVal (bv.of_N init_addr)]
-       instantiation in gen_contract_noninterferent_param.
-
-       Two deltas from gen_contract's precondition: the entry-pc assertion is
-       asn_pc_eq (term_var "p") (pc starts at the symbolic base) rather than
-       asn_init_pc (bv.of_N init_addr); and a base BOUND
-       unsigned p + 4·len ≤ lenAddr is added so the instruction-fetch upper
-       bounds are dischargeable (the `(bound)` premise the noninterference
-       theorem carries down to it). *)
-    Definition gen_contract_param
-        (init_addr : N)
-        (reg_specs : list reg_spec)
-        (mem_specs : list mem_full_spec)
-        (instrs : list AST)
-        (extra_exit_offs : list N)
-        (ec : bv xlenbits -> bool)
-        (fl : nat)
-        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
-        (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-        (asn_pc_eq (term_var "p")
-           ∗ asn.formula (formula_relop bop.le
-                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
-                   (term_val ty.int (Z.of_N (4 * N.of_nat (length instrs)))))
-                (term_val ty.int (Z.of_N lenAddr)))
-           ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
-        instrs ec fl.
+    (* gen_contract_param is defined further down, after the base-relative
+       builders it now delegates to (PLAN-unify-generators.md stage 1). *)
 
     (* ------------------------------------------------------------------ *)
     (* Stage 2: base-RELATIVE parametric-value specs.  Unlike reg_spec /   *)
@@ -364,6 +331,21 @@ Import asn.notations.
 
     Definition reg_spec_rel : Type := RegIdx * bool * param_val.
     Definition mem_spec_rel : Type := N * bool * param_val.   (* address = p + k *)
+
+    (* A constant-value register spec is exactly the base-INDEPENDENT special
+       case of a base-relative one: an absent value is the existential class, a
+       present one a base-independent constant.  Nothing maps to PVBaseOff, which
+       is the whole point -- reg_spec cannot express a base-dependent value.
+       This is what lets gen_contract_param delegate to gen_contract_rel_classed
+       (PLAN-unify-generators.md stage 1); it is a bijection onto the
+       PVBaseOff-free subset, inverted by concretize_reg at any base
+       (concretize_reg_to_rel below). *)
+    Definition reg_spec_to_rel (s : reg_spec) : reg_spec_rel :=
+      let '(r, is_pub, ov) := s in
+      (r, is_pub, match ov with
+                  | None => PVExist
+                  | Some v => PVConst v
+                  end).
 
     Definition gen_reg_asn_rel (s : reg_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
@@ -648,6 +630,49 @@ Import asn.notations.
           ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel_classed mem_specs )
         instrs ec fl.
 
+    (* Parameterized-base contract for a REGISTER-ONLY program
+       (PLAN-symbolic-base.md Phase 4.2).  The base is a genuine term VARIABLE
+       term_var "p" (Σ = ["p"∷ty_xlenbits]), NOT term_val (bv.of_N init_addr) --
+       the latter makes the VC's vm_compute diverge on bv.of_N of a symbolic N at
+       width 32.  cfg_init_addr / cfg_exitCond are still stored (the
+       end-to-end/memory side needs them) but are ignored by Valid_CFG_VC, so the
+       VC is proved ONCE, uniformly in init_addr, and reused for every concrete
+       base via the ι = ["p" ↦ SyncVal (bv.of_N init_addr)] instantiation in
+       gen_contract_noninterferent_param.
+
+       DELEGATES to gen_contract_rel_classed since 2026-08-18
+       (PLAN-unify-generators.md stage 1), which is sound because a constant-value
+       reg_spec is the base-independent special case of a reg_spec_rel
+       (reg_spec_to_rel) and because bound = 4*|instrs| is what this builder always
+       hardcoded.  Three consequences worth knowing:
+
+       - There is NO mem_specs parameter any more.  It was a
+         list mem_full_spec -- ABSOLUTE addresses -- which cannot be translated to
+         the base-relative mem_spec_rel the classed block needs without knowing the
+         base.  Every one of its 15 call sites passed [], so nothing was lost; a
+         register-only program is the only shape this builder ever served.  For
+         data memory use gen_contract_rel_classed directly.
+       - The data slot is therefore gen_mem_pre_rel_classed [], which is
+         Top * Top * Top rather than gen_mem_pre []'s single Top.  Not
+         syntactically equal, so delegation is NOT free by inspection; it was
+         validated by probe (Example/ZZUnifyProbe.v) and then by all 9 example VCs
+         closing with unmodified tactic lines.
+       - The bridge gen_contract_noninterferent_param consumes that shape and so
+         changed with it; see its ImplPre. *)
+    Definition gen_contract_param
+        (init_addr : N)
+        (reg_specs : list reg_spec)
+        (instrs : list AST)
+        (extra_exit_offs : list N)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_rel_classed init_addr
+        (List.map reg_spec_to_rel reg_specs) []
+        instrs extra_exit_offs
+        (4 * N.of_nat (length instrs))%N
+        ec fl.
+
     (* gen_contract_rel with an ADDITIONAL, byte-expanded data list
        (PLAN-byte-memory.md §5.2).  Byte expansion is opt-in PER SPEC ENTRY so
        the 4x chunk multiplier is paid only where a `lbu`/`sb` actually needs
@@ -712,3 +737,24 @@ Import asn.notations.
      | PVConst v => Some v
      | PVBaseOff k2 => Some (bv.of_N (ia + k2))
      end).
+
+  (* reg_spec_to_rel lands in the PVBaseOff-free subset of param_val, and there
+     concretize_reg inverts it AT EVERY BASE -- note `ia` does not occur on the
+     right, precisely because no constant-value reg_spec can be base-dependent.
+     This is what lets gen_contract_noninterferent_param recover gen_pre over the
+     ORIGINAL reg_specs after routing through gen_pre_rel_concretize, and so reuse
+     gen_implpre unchanged rather than re-proving a ~130-line Iris induction
+     (PLAN-unify-generators.md stage 1). *)
+  Lemma concretize_reg_to_rel (ia : N) (s : reg_spec) :
+    concretize_reg ia (reg_spec_to_rel s) = s.
+  Proof. destruct s as [[r pub] ov]; destruct ov; reflexivity. Qed.
+
+  Lemma map_concretize_reg_to_rel (ia : N) (specs : list reg_spec) :
+    List.map (concretize_reg ia) (List.map reg_spec_to_rel specs) = specs.
+  Proof.
+    induction specs as [|s rest IH]; [reflexivity|].
+    cbn [List.map].
+    rewrite concretize_reg_to_rel.
+    rewrite IH.
+    reflexivity.
+  Qed.

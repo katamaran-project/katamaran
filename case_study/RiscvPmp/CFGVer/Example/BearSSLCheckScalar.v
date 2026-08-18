@@ -139,7 +139,7 @@ Definition check_scalar_reg_specs : list reg_spec :=
 (* Base-parametric contract (Σ = ["p"]): arbitrary 4-aligned load address.
    Fuel 24 comfortably exceeds the 16 instruction steps plus the exit step. *)
 Definition check_scalar_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_param ia check_scalar_reg_specs [] check_scalar_instrs []
+  gen_contract_param ia check_scalar_reg_specs check_scalar_instrs []
     (pcOutOfInstrs_exitCond ia check_scalar_instrs) 24.
 
 Lemma valid_check_scalar_cfg_contract_param (ia : N) :

@@ -107,7 +107,7 @@ Definition modpow_win_reg_specs : list reg_spec :=
 (* Base-parametric contract (Σ = ["p"]): arbitrary 4-aligned load address.
    Fuel 12 comfortably exceeds the 5 instruction steps plus the exit step. *)
 Definition modpow_win_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_param ia modpow_win_reg_specs [] modpow_win_instrs []
+  gen_contract_param ia modpow_win_reg_specs modpow_win_instrs []
     (pcOutOfInstrs_exitCond ia modpow_win_instrs) 12.
 
 Lemma valid_modpow_win_cfg_contract_param (ia : N) :

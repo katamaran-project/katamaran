@@ -89,7 +89,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        Supersedes the removed concrete-base pair precompute_cfg_contract /
        valid_precompute_cfg_contract (see MvSwap.v for the rationale). *)
     Definition precompute_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia precompute_reg_specs [] precompute_instrs []
+      gen_contract_param ia precompute_reg_specs precompute_instrs []
         (pcOutOfInstrs_exitCond ia precompute_instrs) 16.
 
     Lemma valid_precompute_cfg_contract_param (ia : N) :

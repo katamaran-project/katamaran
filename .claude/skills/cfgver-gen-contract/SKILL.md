@@ -260,10 +260,15 @@ Two generator variants build a contract over a *symbolic* placement term
 `term_val (bv.of_N init_addr)` — the base stays a genuine variable, so the VC is
 proved ONCE for `∀ init_addr`, not per concrete address:
 
-- **`gen_contract_param`** — for reg/mem specs whose values are
-  BASE-INDEPENDENT (constants or existentials; same `reg_spec`/`mem_full_spec`
-  vocabulary as `gen_contract`). Adds a base-bound precondition conjunct
+- **`gen_contract_param`** — for a **register-only** program whose register values
+  are BASE-INDEPENDENT (constants or existentials; the plain `reg_spec`
+  vocabulary). Adds a base-bound precondition conjunct
   (`unsigned p + 4*len ≤ lenAddr`) that the fetch upper-bound needs.
+  **Takes SIX arguments since 2026-08-18** — `init_addr reg_specs instrs
+  extra_exit_offs ec fl`. The `mem_full_spec` list it used to accept was removed
+  (all 15 call sites passed `[]`), and the builder is now a thin wrapper over
+  `gen_contract_rel_classed` — `PLAN-unify-generators.md` stage 1. If your program
+  touches data memory, use `gen_contract_rel_classed` directly.
 - **`gen_contract_rel`** — for reg/mem specs whose values are BASE-RELATIVE:
   `param_val = PVExist | PVConst v | PVBaseOff k` (meaning `p+k`), needed when a
   register holds a base-relative address (e.g. cmovznz4's `A1 = p+116`) or a
@@ -289,13 +294,19 @@ proved ONCE for `∀ init_addr`, not per concrete address:
   which makes the reordering the identity. Expect to have to look only when a
   data block genuinely MIXES pinned/public/private cells.
 
-  There is deliberately **no classed counterpart of `gen_contract_param`** (the
-  concrete `mem_full_spec` family) and none of `gen_contract_rel_bytes`. For
-  `gen_contract_param` it is not an oversight but impossible as stated: the two
-  sides' existential widths are `mem_class_width (mem_rel_keys L)` and
+  There is deliberately **no classed counterpart of `gen_contract_rel_bytes`**.
+  For `gen_contract_param` the situation CHANGED on 2026-08-18: it is now itself a
+  classed builder, delegating to `gen_contract_rel_classed` at `mem_specs = []`
+  (`PLAN-unify-generators.md` stage 1). What stays impossible is classing a
+  **non-empty concrete `mem_full_spec` block** — the two sides' existential widths
+  are `mem_class_width (mem_rel_keys L)` and
   `mem_class_width (mem_full_keys (map (concretize_mem ia) L))`, equal only
   propositionally, so the bridge would need a dependent transport across a type
-  index (`core-executor-internals` §6). See the note at `GenContract.v:536`.
+  index (`core-executor-internals` §6; note at `GenContract.v:536`). That case is
+  now *unrepresentable* rather than merely unimplemented, since the parameter is
+  gone. The deeper reason it could never have worked: `mem_full_spec` carries
+  ABSOLUTE addresses and the classed block needs base-relative `mem_spec_rel`
+  offsets, and you cannot translate one to the other without knowing the base.
 
 **Bridges**: `gen_contract_noninterferent_param`/`_rel` (in `EndToEnd.v`) take the
 premises in the table above and instantiate the

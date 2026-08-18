@@ -130,7 +130,7 @@ Definition muladd_q_reg_specs : list reg_spec :=
    load address, following the Phase 4.2 pattern used by every other example.
    Fuel 20 comfortably exceeds the 12 instruction steps plus the exit step. *)
 Definition muladd_q_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_param ia muladd_q_reg_specs [] muladd_q_instrs []
+  gen_contract_param ia muladd_q_reg_specs muladd_q_instrs []
     (pcOutOfInstrs_exitCond ia muladd_q_instrs) 20.
 
 Lemma valid_muladd_q_cfg_contract_param (ia : N) :

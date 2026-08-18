@@ -1,9 +1,16 @@
 # PLAN-unify-generators — collapse the contract-generator family
 
-Status: **STAGE 0 DONE 2026-08-18** (bridges 9 → 7; builders unchanged at 5 — see
-the retraction below, the builder deletion was based on a false premise and is
-cancelled). Stages 1–3 NOT STARTED. Stages 1–2 are de-risked by a probe that
-already ran; stage 3 is deliberately optional and carries almost all of the risk.
+Status: **STAGES 0 AND 1 DONE 2026-08-18** (bridges 9 → 7; builders unchanged at 5
+— see the retraction below, the builder deletion was based on a false premise and
+is cancelled). Stages 2–3 NOT STARTED. Stage 2 is independent of stage 1; stage 3
+is deliberately optional and carries almost all of the risk.
+
+**Read this before starting stage 3:** stage 1 was billed here as "Low risk" and a
+line-count win. Both were wrong, in opposite directions. It required narrowing a
+BRIDGE's statement (not just a builder's) and it GREW total lines. What it actually
+bought was maintenance value — two duplicated implementations collapsed into
+delegations — which is a real but different currency from the one G2 counts. Price
+stage 3 in that currency, not in lines.
 
 Written 2026-08-18 after the classed-existential work
 (`PLAN-classed-existentials.md`) added a fifth contract builder and a ninth
@@ -33,6 +40,74 @@ because the replacement keeps `gen_contract_noninterferent` as a substring). So
 "delete the genuinely dead" is free on the Rocq side and NOT free on the docs side.
 Weigh that before treating stage 3's bridge collapse (9 → 2) as merely structural:
 its doc footprint will be several times this one's.
+
+### Stage 1 outcome, measured
+
+| metric | after stage 0 | after stage 1 | note |
+|---|---|---|---|
+| `GenContract.v` total lines | 714 | **760** (+46) | grew |
+| `EndToEnd.v` total lines | 1955 | **1959** (+4) | grew |
+| `GenContract.v` CODE lines (comments stripped) | 350 | **361** (+11) | new reusable machinery |
+| `EndToEnd.v` CODE lines (comments stripped) | 1561 | **1526** (−35) | the deleted ritual |
+| contract builders | 5 | **5** | `gen_contract_param` survives, now a wrapper |
+| noninterference bridges | 7 | **7** | `_param` survives, now a delegation |
+
+**Net: code −24 lines, totals +50** — the growth is ~74 lines of comment recording
+the two traps below. Duplicated *logic* did shrink: `gen_contract_param` shed ~12
+lines of copied contract-record boilerplate, and `gen_contract_noninterferent_param`
+shed a ~40-line copy of the `cfg_instrs_endToEnd_with_memory` + `ImplPre` ritual.
+Neither builder nor bridge COUNT moved, and by design cannot until stage 3 deletes
+the wrappers.
+
+**The bridge could delegate too — this was not in the plan.** Stage 1 as written
+only said "`gen_contract_param` delegates", and the obvious reading was that the
+bridge's `ImplPre` would have to be RE-PROVED against the new
+`gen_mem_pre_rel_classed []` shape. It does not: at `mem_specs = []`,
+`gen_contract_noninterferent_rel_classed`'s conclusion collapses to
+`_param`'s, so `_param` delegates to it and the ~40-line copy is simply deleted.
+That is the bridge-side mirror of the builder-side delegation and is where most of
+stage 1's actual value sits. Knock-ons: `_param` lost its `HDataAddrs` premise
+(vacuous at `[]`) and the `4*|mem_specs|` term in `Hlen`, so `_param_simple` and
+`Example/JumpsResult.v` each lost a bullet and their VC moved from position 5 to 4.
+
+**Trusted surface did not move**, which is worth recording because this stage
+narrows a lemma: `_param_simple`'s statement already read `… reg_specs []` with
+exactly the `Hlen` the new `_param` requires, so it is byte-identical and the 8
+`Result` files that use it needed NO edits. `JumpsResult.v`'s theorem statement is
+likewise unchanged — only its proof bullets moved.
+
+`mem_specs` was dropped from `gen_contract_param` rather than kept as a stub. It was
+a `list mem_full_spec` — ABSOLUTE addresses — and the classed block needs
+base-relative `mem_spec_rel` offsets; there is no translation without knowing the
+base. All 15 call sites passed `[]` (9 committed contracts + 6 rigs), so nothing was
+lost. This also *supersedes* the "no classed counterpart of `gen_contract_param`"
+note at `GenContract.v:536`: the width-index obstruction is real for a NON-EMPTY
+concrete block, but that case is now unrepresentable rather than unimplemented.
+
+#### Two traps, both of which cost a build or would have
+
+1. **Every data argument of the `_rel*` bridges is IMPLICIT** (each occurs in some
+   premise's type, under `Set Implicit Arguments`), so the first *explicit*
+   argument is `HND`. Passing them positionally fails with
+   `"map reg_spec_to_rel reg_specs" has type "list reg_spec_rel" while it is
+   expected to have type "NoDup (...)"` — which reads like a statement bug. Use
+   `(name := v)`. Folded into `cfgver-endtoend-internals` §Implicit-argument
+   asymmetry.
+2. **Unification will not solve `map f ?l ≡ []`.** So a bare
+   `eapply gen_contract_noninterferent_rel_classed` can never pin `?mem_specs := []`
+   from the conclusion's `map (concretize_mem ia) ?mem_specs` slot. Naming the
+   implicit works because it goes through CONVERSION (`map f [] ≡ []`) instead.
+   Caught in 9 ms by a scratch preamble probe, *before* paying for a build — the
+   one time in this stage that the interactive-first rule paid off directly.
+   Also note `bound`, `fuel` and `extra_exit_offs` are likewise undetermined by the
+   conclusion; pin all four by name and the "discharge `valid_contract` FIRST"
+   ordering hazard cannot arise at all.
+
+Process note: `rocq_start` position mode on `EndToEnd.v` **OOMed pet at >7.6 GB**,
+so the new bridge proof could not be checked in-file at all — the plan's own
+"develop in `Example/ZZClassBridge.v`" advice does not help either, because that
+file `Require`s the very `EndToEnd.vo` being changed and would test the stale one.
+Abstract preamble probes plus one confirming build was the working loop.
 
 ## Why
 

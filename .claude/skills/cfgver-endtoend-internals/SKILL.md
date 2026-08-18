@@ -66,6 +66,39 @@ argument is `γ1 : RegStore`) but **explicit** in `cfg_instrs_safe_with_mem`
 (explicit: `γ1, γ2, data_specs, μ1, μ2, contract`). Passing `data_specs` where a
 `RegStore` is expected is the tell.
 
+The same applies to the `gen_contract_noninterferent_rel*` **bridges**, and it
+bites when one bridge delegates to another (as `_param` does to `_rel_classed`
+since 2026-08-18). **Every** data argument — `reg_specs`, `mem_specs`, `instrs`,
+`extra_exit_offs`, `bound`, `exitCond`, `fuel`, `init_addr` — is implicit, because
+each occurs in some premise's type, so the first *explicit* argument is `HND`. The
+tell is a type error naming `NoDup`:
+
+```
+The term "map reg_spec_to_rel reg_specs" has type "list reg_spec_rel"
+while it is expected to have type "NoDup (map reg_spec_idx (map (concretize_reg ?init_addr) ?reg_specs))"
+```
+
+Use the `(name := v)` form (implicits accept it; explicit arguments do not).
+**Which ones you must name:** anything the *conclusion* does not mention.
+`noninterferent_strong` mentions only `init_addr`, `instrs`, `exitCond` and the two
+spec lists, so `bound`, `fuel` and `extra_exit_offs` all float — and so does
+`mem_specs` when you are instantiating it at `[]`, for a reason worth knowing:
+
+> **Unification will not solve `map f ?l ≡ []`.** Verified in 9 ms on a scratch
+> probe — `eapply` on a `map S ?l = map S ?l` lemma against `[] = []` fails with
+> *"Unable to unify `map S ?M = map S ?M` with `[] = []`"*. The conclusion's data
+> slot is `map (concretize_mem init_addr) ?mem_specs`, so a bare `eapply` can never
+> pin `?mem_specs := []`. Supplying it by **name** succeeds instead, because that
+> route goes through *conversion* (`map f [] ≡ []` definitionally) rather than
+> unification.
+
+Pin all four by name and nothing floats, which also means the "discharge
+`valid_contract` FIRST" ordering hazard cannot arise and premises may be
+discharged in order. Conversely, the goal-determined arguments (`reg_specs` here)
+should be left to unification — but only after the goal has been rewritten into
+the concretized form, since `map (concretize_reg ia) (map reg_spec_to_rel rs) = rs`
+(`map_concretize_reg_to_rel`) is **not** definitional for a variable list.
+
 ## What the wiring proofs carry and materialize
 
 The chain threads the gmap instruction ownership

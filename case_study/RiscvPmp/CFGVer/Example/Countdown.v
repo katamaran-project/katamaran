@@ -67,7 +67,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        to `c ⊕ p` -- CONFIRMED: the existing offset-agnostic tail closes the
        VC with zero changes. *)
     Definition countdown_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia [(X1, true, Some (bv.of_N 2))] []
+      gen_contract_param ia [(X1, true, Some (bv.of_N 2))]
         [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] []
         (pcOutOfInstrs_exitCond ia [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]) 5.
 

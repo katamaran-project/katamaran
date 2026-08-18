@@ -106,7 +106,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
        compile time. Same for every other example. *)
     Definition swap_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia
-        [(X1, false, None); (X2, false, None); (X3, false, None)] []
+        [(X1, false, None); (X2, false, None); (X3, false, None)]
         [MV X3 X2; MV X2 X1; MV X1 X3] []
         (pcOutOfInstrs_exitCond ia [MV X3 X2; MV X2 X1; MV X1 X3])
         5.

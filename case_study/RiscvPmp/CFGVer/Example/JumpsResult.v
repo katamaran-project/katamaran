@@ -58,9 +58,11 @@ Lemma jumpIfZero_noninterferent_param (init_addr : N) :
 Proof.
   intros Hbound.
   eapply gen_contract_noninterferent_param.
-  5: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+  4: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+  (* Position 4, not 5, and no vacuous-lookup bullet: stage 1 of
+     PLAN-unify-generators.md dropped _param's mem_specs and with it the
+     HDataAddrs premise. *)
   - apply Prelude.nodup_fixed; reflexivity.
-  - intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.
   - cbn. lia.
   - (* extra_exit_offs = [8%N] here (unlike every other example, whose
        extra_exit_offs = []), so HexitOffs is a 2-element Forall: the
