@@ -1,8 +1,9 @@
 # PLAN-classed-existentials — one existential per publicness class
 
 Status: **Phase 1 LANDED green (`bfdf7ec2`, `3eefda6f`). Phase 2 measured.
-Phase 3 core + wrappers PROVED and IN `EndToEnd.v` (`e802bd3b`) — one lemma left
-(the `big_sepL` partition). Phases 4–5 NOT STARTED.** Additive throughout — every
+Phase 3: core + wrappers + THE PARTITION OBSTACLE all PROVED and in
+`EndToEnd.v` (`e802bd3b`, `53569cff`); what is left is routine plumbing, no
+unknowns. Phases 4–5 NOT STARTED.** Additive throughout — every
 existing example and `gen_contract_rel` itself are untouched, no `Admitted`
 anywhere, and the tree is green (`KeyScheduleLoopResult.vo` rebuilt).
 
@@ -87,7 +88,7 @@ byte-identical to `zzkcd_cfg_contract_param` except the generator call.
   in RAM", and its wall-clock is therefore not a performance figure.
 - N=128 was queued behind the killed baseline run and never started.
 
-## Phase 3 — the `ImplPre` bridge (CORE + WRAPPERS PROVED; partition lemma remains)
+## Phase 3 — the `ImplPre` bridge (ALL HARD PARTS PROVED)
 
 **The core lemma and both class wrappers are PROVED with real `Qed`s and now
 live in `EndToEnd.v`** (see "Steps 1–2 DONE" below). The bv half of the bridge is
@@ -178,15 +179,44 @@ the real lemmas; it is kept purely as the iteration harness for step 3.
 
 ### What remains in Phase 3
 
-1. **THE REMAINING OBSTACLE, unchanged: a `big_sepL` partition/permutation.**
-   `interp_mem_with_public_memory` is a `big_opL` in SPEC order while
-   `gen_mem_pre_rel_classed` groups by class, so the resource list must be
-   re-associated into `pinned ++ public ++ private`. True since `∗` is
-   commutative; needs a permutation lemma or a partition-and-recombine argument.
-   The body of that `big_opL` does NOT depend on the index, which is what makes
-   it provable at all.
-2. Then `gen_implpre_mem_class` assembling the wrappers with (1), and a
-   `gen_contract_noninterferent_rel_classed`.
+### The partition obstacle: SOLVED (2026-08-18, commit `53569cff`)
+
+Five lines, once the right existing lemma was found. Three lemmas, all in
+`EndToEnd.v` with real `Qed`s:
+
+| lemma | role |
+|---|---|
+| `three_way_perm` | `l` is a permutation of its three-way filter partition |
+| `big_sepL_three_way` | generic: split a `big_sepL` three ways by two booleans |
+| `interp_mem_partition` | the instance for `interp_mem_with_public_memory` |
+
+**Why it is provable at all:** Iris's `big_opL_permutation` applies to bodies of
+the form `λ _ : nat, f` — index-INDEPENDENT ones — and
+`interp_mem_with_public_memory`'s body ignores the index. So the resource list can
+be re-associated into `pinned ++ public ++ private` even though the classed
+precondition groups by publicness while the resources arrive in spec order.
+
+Two things not to re-derive:
+
+- **`rewrite Permutation_middle` matches an UNINTENDED instance** in the partition
+  proof and leaves an unprovable goal. `Permutation_cons_app` is the exact shape:
+  `l ≡ₚ l1 ++ l2 → a :: l ≡ₚ l1 ++ a :: l2`.
+- **Use `big_sepL_fmap` to move the `map` INSIDE**, so the filters stay on the
+  original spec list. The other order additionally requires filter/map
+  commutation.
+
+### What remains in Phase 3 — routine, no unknowns
+
+1. **Per-group resource conversion.** For each class, turn
+   `interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec (filter … specs))`
+   into the `[∗ list] k ∈ mem_rel_keys …` form the wrappers consume. Two
+   ingredients: the filter's `In` facts (via `filter_In`) pick the `if pub`
+   branch, and `bv.of_N_add` relates `concretize_mem`'s `of_N (ia + k)` to the
+   wrappers' `bv.add (of_N ia) (of_N k)` — the same rewrite
+   `gen_mem_pre_rel_concretize` already uses.
+2. **`gen_implpre_mem_class`** assembling `interp_mem_partition` + (1) + the two
+   class wrappers + the existing `gen_implpre_mem` for the pinned group.
+3. **`gen_contract_noninterferent_rel_classed`**, mirroring the `_rel` bridge.
 
 ## Phase 3 — original scoping notes (kept)
 
