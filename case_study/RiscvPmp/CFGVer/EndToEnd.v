@@ -1602,8 +1602,13 @@ Import IrisModel.RiscvPmpIrisBase.
        fully-named form fails with "Wrong argument name HInitMem2 (possible
        names: Σ H μ1 μ2)".  Positional, μ-free, `_` for va, is the form that
        works; μ1/μ2 come from HInitMem1/HInitMem2. *)
-    iApply (gen_implpre_mem_class mem_specs init_addr _ HInitMem1 HInitMem2).
-    iExact "Hmemdata".
+    iSplitL "Hmemdata".
+    { iApply (gen_implpre_mem_class mem_specs init_addr _ HInitMem1 HInitMem2).
+      iExact "Hmemdata". }
+    (* Trailing `gen_mem_pre_rel_bytes []` (= Top), introduced when this builder
+       started delegating to gen_contract_u (stage 3).  Same shape the _bytes
+       bridge already discharges for its empty WORD block. *)
+    done.
   Qed.
 
   (* Parameterized-base noninterference bridge for a REGISTER-ONLY program

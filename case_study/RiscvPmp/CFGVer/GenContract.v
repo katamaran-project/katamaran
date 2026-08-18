@@ -602,6 +602,58 @@ Import asn.notations.
           ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs )
         instrs ec fl.
 
+    (* ================================================================== *)
+    (* THE UNIFIED BUILDER (PLAN-unify-generators.md stage 3).             *)
+    (*                                                                     *)
+    (* One contract builder over the base-relative param_val vocabulary,   *)
+    (* classing by default, with granularity carried by WHICH LIST an entry *)
+    (* is in.  There is deliberately no `gran` field on the entries: a      *)
+    (* class's grouped existential width must be computable from a list you *)
+    (* are inducting on DIRECTLY, and a filtered-and-projected list is      *)
+    (* exactly the configuration that only typechecks with a dependent      *)
+    (* transport across a type index (core-executor-internals §6, the       *)
+    (* width-index trap this project has hit three times).  Two homogeneous *)
+    (* lists keep each width a function of one list, the way                *)
+    (* mem_class_width (mem_rel_keys L) already is.                         *)
+    (*                                                                     *)
+    (* Move to per-entry granularity only if a real example needs the two   *)
+    (* granularities INTERLEAVED at one address range.  None does, and the  *)
+    (* trusted-side concatenation (mem_specs ++ byte_mem_specs) already     *)
+    (* assumes they are contiguous blocks.                                 *)
+    (*                                                                     *)
+    (* Data thus partitions into at most SIX classes -- {word,bytes} x      *)
+    (* {pinned,public,private} -- each emitting one grouped existential,    *)
+    (* empty classes emitting nothing (gen_mem_pub_class_ks nil = Top).     *)
+    (* Verified 2026-08-18 across every live example: no data block MIXES   *)
+    (* publicness, and no call site has both lists non-empty, so this       *)
+    (* partitioning is the IDENTITY on all current code -- the heap-order   *)
+    (* hazard (consume is order-sensitive) has no live instance.  It becomes *)
+    (* real the first time one block genuinely mixes pinned/public/private. *)
+    Definition gen_contract_u
+        (init_addr : N)
+        (reg_specs : list reg_spec_rel)
+        (word_data : list mem_spec_rel)   (* word-granular class *)
+        (byte_data : list mem_spec_rel)   (* byte-granular class *)
+        (instrs : list AST)
+        (extra_exit_offs : list N)
+        (bound : N)
+        (ec : bv xlenbits -> bool)
+        (fl : nat)
+        : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+        (term_var "p")
+        (exits_of_offs (term_var "p")
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        ( asn_pc_eq (term_var "p")
+          ∗ asn.formula (formula_relop bop.le
+               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
+                  (term_val ty.int (Z.of_N bound)))
+               (term_val ty.int (Z.of_N lenAddr)))
+          ∗ gen_pre_rel reg_specs
+          ∗ gen_mem_pre_rel_classed word_data
+          ∗ gen_mem_pre_rel_bytes byte_data )
+        instrs ec fl.
+
     (* gen_contract_rel with the data block grouped into ONE existential per
        publicness class (see gen_mem_pre_rel_classed above).  Same statement
        strength as gen_contract_rel -- the two preconditions are equivalent,
@@ -618,17 +670,13 @@ Import asn.notations.
         (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
-        (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-        ( asn_pc_eq (term_var "p")
-          ∗ asn.formula (formula_relop bop.le
-               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
-                  (term_val ty.int (Z.of_N bound)))
-               (term_val ty.int (Z.of_N lenAddr)))
-          ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel_classed mem_specs )
-        instrs ec fl.
+      (* Delegates to gen_contract_u since 2026-08-18 (stage 3).  The only
+         difference this makes to the precondition is a trailing
+         `gen_mem_pre_rel_bytes []` (= Top) conjunct; verified absorbed by the
+         standard `vm_compute; solve_vc; solve_symbase_fetch` line on Countdown's
+         real blocks before wiring (Example/ZZUProbe3.v). *)
+      gen_contract_u init_addr reg_specs mem_specs []
+        instrs extra_exit_offs bound ec fl.
 
     (* Parameterized-base contract for a REGISTER-ONLY program
        (PLAN-symbolic-base.md Phase 4.2).  The base is a genuine term VARIABLE
@@ -667,8 +715,8 @@ Import asn.notations.
         (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel_classed init_addr
-        (List.map reg_spec_to_rel reg_specs) []
+      gen_contract_u init_addr
+        (List.map reg_spec_to_rel reg_specs) [] []
         instrs extra_exit_offs
         (4 * N.of_nat (length instrs))%N
         ec fl.
@@ -698,18 +746,16 @@ Import asn.notations.
         (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
-        (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-        ( asn_pc_eq (term_var "p")
-          ∗ asn.formula (formula_relop bop.le
-               (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
-                  (term_val ty.int (Z.of_N bound)))
-               (term_val ty.int (Z.of_N lenAddr)))
-          ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs
-          ∗ gen_mem_pre_rel_bytes byte_mem_specs )
-        instrs ec fl.
+      (* Delegates to gen_contract_u since 2026-08-18 (stage 3) -- a pure rename,
+         the argument order already matches.  ONE semantic change: the word block
+         is now CLASSED (gen_mem_pre_rel_classed) rather than one existential per
+         entry (gen_mem_pre_rel).  That is equivalent-but-cheaper, and no caller
+         is affected either way because EVERY call site of this builder -- the
+         committed BearSSLCheckScalarLoop1 and all 28 rigs -- passes [] for the
+         word list, so the slot was always Top.  Verified on Loop1's real byte
+         block before wiring (Example/ZZUProbe3.v). *)
+      gen_contract_u init_addr reg_specs mem_specs byte_mem_specs
+        instrs extra_exit_offs bound ec fl.
 
   (* ================================================================== *)
   (* Stage 2: base-RELATIVE noninterference bridge (gen_contract_rel).    *)
