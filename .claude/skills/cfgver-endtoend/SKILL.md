@@ -6,7 +6,8 @@ description: >
   register-only program: its premises (pc/privilege register reads, mem_has_instrs,
   length bound), the eapply call pattern with its implicit-argument traps, and the
   ImplPre proof obligation with its gen_contract patterns (including empty specs).
-  Programs built with gen_contract normally use gen_contract_noninterferent instead
+  Programs built with gen_contract_param / gen_contract_rel* normally use the
+  matching gen_contract_noninterferent_param / _rel* bridge instead
   (cfgver-gen-contract); reach for this when wiring a hand-written contract or debugging
   the ImplPre goal. For programs that read/write DATA MEMORY see cfgver-memory
   (the _with_mem / _with_memory variants).
@@ -17,10 +18,15 @@ description: >
 Wires a verified `CFGVerifierContract` to a concrete leakage-equivalence statement
 for a program that touches only registers.
 
-**Shortcut for generated contracts:** if the contract came from `gen_contract`, you
-normally never call this directly — `gen_contract_noninterferent`
-(→ **cfgver-gen-contract**) wraps the whole wiring. This skill matters for hand-written
-contracts and for understanding/debugging the `ImplPre` obligation.
+**Shortcut for generated contracts:** if the contract came from `gen_contract_param`
+or one of the `gen_contract_rel*` builders, you normally never call this directly —
+the matching `gen_contract_noninterferent_param` / `_rel*` bridge
+(→ **cfgver-gen-contract**) wraps the whole wiring. This skill matters for
+hand-written contracts, for understanding/debugging the `ImplPre` obligation, and
+for a literal-base `gen_contract` contract: that builder is still live (it has
+example and rig users) but its bridge `gen_contract_noninterferent` was **deleted
+2026-08-18** as dead, so a concrete-base end theorem must either wire through
+`cfg_instrs_endToEnd` here or recover that lemma from git history.
 
 > **Data memory?** For programs that read/write data memory use the
 > **cfgver-memory** skill — `cfg_instrs_endToEnd_with_memory` and the `_with_mem`

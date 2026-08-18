@@ -5,7 +5,7 @@ description: >
   concrete leakage-equivalence. Use when tracing, explaining, or extending the chain
   valid_<prog>_cfg_contract → (refinement to the concrete executor) →
   sound_scfg_verification_condition_myWP2 → myWP2_loop → cfg_instrs_verified/safe →
-  gen_contract_noninterferent → adequacy_gen_RiscVNStepsExitCond → leakage_trace
+  gen_contract_noninterferent_param → adequacy_gen_RiscVNStepsExitCond → leakage_trace
   equality, or the WP2_loop vs myWP2_loop design distinction. NOT for the step-level
   mechanics of semWP2 proofs (semWP2_unfold, stm_to_val, env.drop_cat — use
   cfgver-wp2) and NOT for wiring one specific program's end lemma (use
@@ -23,7 +23,9 @@ semWP2 proof mechanics behind the adequacy layer are in **cfgver-wp2**.
 
 Every example's end lemma is
 `<prog>_noninterferent : noninterferent_strong init_addr instrs exitCond reg_specs mem_specs`,
-proved in one shot by `eapply gen_contract_noninterferent` plus its side premises
+proved in one shot by `eapply gen_contract_noninterferent_param` (or the matching
+`_rel` / `_rel_classed` / `_rel_bytes` variant, in practice its `_simple`
+specialisation) plus its side premises
 (→ **cfgver-gen-contract** for the premise list). Underneath:
 
 ```
@@ -33,7 +35,7 @@ valid_<prog>_cfg_contract   (vm_compute. solve_vc.)   — the symbolic VC over t
 sound_scfg_verification_condition_myWP2  — bridges via itable_faith/etable_faith
         ↓  → myWP2_loop ExitCondIprop
 cfg_instrs_verified / cfg_instrs_safe  →  exitCond_WP2_loop
-cfg_instrs_endToEnd(_with_memory)  →  gen_contract_noninterferent
+cfg_instrs_endToEnd(_with_memory)  →  gen_contract_noninterferent_{param,rel,…}
         ↓  adequacy_gen_RiscVNStepsExitCond + memory (instrsAndDataMemory)
         → concrete leakage equivalence
 ```

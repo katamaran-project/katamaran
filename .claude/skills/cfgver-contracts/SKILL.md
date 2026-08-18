@@ -45,7 +45,8 @@ Record CFGVerifierContract {Σ} :=
 
 **The ignored-fields subtlety:** the VC dispatches exits against the *term table*
 `cfg_exits`, not against `cfg_exitCond`. The two are reconnected only at the
-end-to-end stage, by the `HexitOffs` premise of `gen_contract_noninterferent`
+end-to-end stage, by the `HexitOffs` premise of the `gen_contract_noninterferent_*`
+bridges
 (via `etable_faith_exits_of_offs`): every exit term must satisfy `exitCond`. A
 hand-written contract whose `cfg_exits` and `cfg_exitCond` disagree will pass the
 VC and fail there.
@@ -124,5 +125,6 @@ the base bound plus register/memory assertions. Two rules of thumb:
   turns `{{`/`}}` into lexer keywords that break any other `}}` occurrence.
 
 **Consuming a contract:** the once-and-for-all route is
-`gen_contract_noninterferent` (generator contracts, → **cfgver-gen-contract**);
+`gen_contract_noninterferent_param` / `_rel*` (generator contracts,
+→ **cfgver-gen-contract**);
 hand-written contracts wire through `cfg_instrs_endToEnd` (→ **cfgver-endtoend**).

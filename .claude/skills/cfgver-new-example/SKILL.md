@@ -8,7 +8,7 @@ description: >
   (e.g. a small-N feasibility spike toward a bigger not-yet-attempted example,
   such as a loop a real compiler would just fully unroll at that trip count) —
   choosing exitCond / fuel / extra_exit_offs, building the contract with
-  gen_contract, discharging the VC, and the gen_contract_noninterferent end
+  gen_contract, discharging the VC, and the gen_contract_noninterferent_param end
   lemma. Trigger on "verify this program", "add a new example", "prove X
   noninterferent", "write/design a small-N or synthetic version of X first",
   "add a loop that does Y" — including terse follow-ups that refer back to code
@@ -93,7 +93,7 @@ a concrete-base VC is dead compile time.
    `gen_contract_rel_classed`, which is the default builder there) — it bakes in the mechanical
    premises AND removes the ordering hazard below, leaving only NoDup +
    length-bound (+ `HDataAddrs`/`Hbound` for `_rel`) + the VC. Only reach for
-   the general `eapply gen_contract_noninterferent(_param/_rel);` (its **five**
+   the general `eapply gen_contract_noninterferent_param` / `_rel*` (its **five**
    premises: NoDup, `HDataAddrs`, length bound, `HexitOffs`, the VC — and the
    "discharge the VC FIRST" gotcha) when there are extra exit offsets
    (`jump_if_zero`) so `_simple` does not apply. Premise-by-premise table +

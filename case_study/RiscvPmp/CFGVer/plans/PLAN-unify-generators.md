@@ -1,10 +1,38 @@
 # PLAN-unify-generators — collapse the contract-generator family
 
-Status: **NOT STARTED. Written 2026-08-18 after the classed-existential work
+Status: **STAGE 0 DONE 2026-08-18** (bridges 9 → 7; builders unchanged at 5 — see
+the retraction below, the builder deletion was based on a false premise and is
+cancelled). Stages 1–3 NOT STARTED. Stages 1–2 are de-risked by a probe that
+already ran; stage 3 is deliberately optional and carries almost all of the risk.
+
+Written 2026-08-18 after the classed-existential work
 (`PLAN-classed-existentials.md`) added a fifth contract builder and a ninth
-noninterference bridge.** Stage 0 is free; stages 1–2 are de-risked by a probe
-that already ran; stage 3 is deliberately optional and carries almost all of the
-risk.
+noninterference bridge.
+
+### Stage 0 outcome, measured
+
+| metric | baseline (`c68a0890`) | after stage 0 | plan's stage-0 target |
+|---|---|---|---|
+| `GenContract.v` lines | 714 | **714** (untouched) | — |
+| `EndToEnd.v` lines | 2038 | **1955** (−83) | ≤ 1880 — **NOT MET** |
+| contract builders | 5 | **5** | 4 — **CANCELLED, premise false** |
+| noninterference bridges | 9 | **7** | 7 ✓ |
+
+Deleted: `gen_contract_noninterferent` and `gen_contract_noninterferent_rel_simple`
+(both bridges, both zero-user). `EndToEnd.vo` rebuilt with `make -f Makefile.coq`
+(the authority, exit 0) and the deletions confirmed absent from the artifact via
+`strings`. The `≤ 1880` target was missed because it had been sized assuming a
+builder deletion that turned out to be impossible; the two dead bridges are only
+83 lines between them.
+
+**Cost of the deletion, for the record:** 12 stale references across 6 skills had
+to be repaired in the same commit, 3 of them in `description:` frontmatter (so the
+`skill-edit-guard` hook required a `skill-routing-maintenance` consult; recorded as
+`results-2026-08-18.json`, no judges run — the edit was classified routing-neutral
+because the replacement keeps `gen_contract_noninterferent` as a substring). So
+"delete the genuinely dead" is free on the Rocq side and NOT free on the docs side.
+Weigh that before treating stage 3's bridge collapse (9 → 2) as merely structural:
+its doc footprint will be several times this one's.
 
 ## Why
 
@@ -35,9 +63,22 @@ been written. Unifying the family is the natural place to add one.
 That was correct when written and must not be dismissed. Three things weakened it
 since, and if any of them stops being true this plan should be reconsidered:
 
-1. `gen_contract` dropped to **zero users** — including its bridge
+1. ~~`gen_contract` dropped to **zero users** — including its bridge
    `gen_contract_noninterferent`, whose only two remaining mentions are prose in
-   comments.
+   comments.~~ **RETRACTED 2026-08-18.** The bridge half was right (zero users,
+   deleted in stage 0). The builder half was **wrong**: `gen_contract` has three
+   live users — `Example/MvSwap.v:93` (`mv_nonzero_start_ex`, a committed example
+   with a live VC proof, inside the gate's build closure) and five uses in
+   `ZZKslConcCommon.v`, which is explicitly the **concrete-base control arm** for
+   the KSL cost measurements. That is the same argument this document uses to
+   rescue `gen_contract_rel` one section below, so the error was
+   self-inconsistent: it failed this plan's own rule *"dead-for-experiments is not
+   dead-for-examples; check rig users before calling any builder unused"*. The
+   check that catches it is `grep` over `Example/ZZ*.v`, which are gitignored and
+   so invisible to a `git ls-files`-based sweep. `gen_contract` is a KEEP, and
+   with it the `5 → 2` builder target in G2 is unreachable as stated — the floor
+   is **3** (unified + `gen_contract_rel` + `gen_contract`), unless the two
+   control arms are first re-expressed over the unified builder.
 2. **All nine `gen_contract_param` call sites pass `mem_specs = []`** — its
    concrete `mem_full_spec` data block, the one thing that genuinely cannot be
    classed, has no users at all.
@@ -78,13 +119,15 @@ Baseline, measured 2026-08-18 at commit `5afab603`:
 |---|---|---|
 | `GenContract.v` | 714 lines | ≤ 650 |
 | `EndToEnd.v` | 2038 lines | ≤ 1750 |
-| contract builders | 5 | **2** — the unified one plus `gen_contract_rel`, retained as the unclassed measurement control |
+| contract builders | 5 | ~~**2**~~ → **3** (revised 2026-08-18) — the unified one, plus TWO measurement controls that must survive: `gen_contract_rel` (unclassed arm) and `gen_contract` (concrete-base arm, see the retraction in §Why) |
 | data/reg block builders | 7 | ≤ 4 |
 | noninterference bridges | 9 | **2** (`_u` + `_u_simple`) |
 
-Stage-0-only targets (achievable with zero risk): builders 5 → **4**, bridges
-9 → 7, `EndToEnd.v` ≤ 1880. (`gen_contract_rel` stays — it is a measurement
-control, see stage 0.)
+~~Stage-0-only targets (achievable with zero risk): builders 5 → **4**, bridges
+9 → 7, `EndToEnd.v` ≤ 1880.~~ **Superseded 2026-08-18 by what stage 0 actually
+achieved:** builders 5 → 5, bridges 9 → 7, `EndToEnd.v` 2038 → 1955. The builder
+and line targets both assumed the retracted zero-users claim. (Both
+`gen_contract_rel` and `gen_contract` stay — they are measurement controls.)
 
 Record the actual numbers at each stage. **A stage that reduces duplication but
 grows total lines is a legitimate outcome** — a `gran`-indexed builder may need
@@ -175,17 +218,31 @@ Subsumption:
 | `gen_contract_param` | `word_data = byte_data = []`, `None ↦ PVExist`, `Some v ↦ PVConst v`, `bound = 4·(length instrs)` |
 | `gen_contract_rel_classed` | `byte_data = []` |
 | `gen_contract_rel_bytes` | both lists, **and byte entries now classed** (the G3 win) |
-| `gen_contract` | deleted (0 users) |
+| `gen_contract` | ~~deleted (0 users)~~ **KEPT** — 3 live users, incl. the concrete-base control arm (retraction, §Why) |
 | `gen_contract_rel` | **KEPT — see below. Not dead.** |
 
 ## Stages
 
-### Stage 0 — delete the genuinely dead. No risk. Smaller than it first looked.
+### Stage 0 — DONE 2026-08-18. Smaller again than "smaller than it first looked".
 
-**Delete:** `gen_contract` (0 users) and `gen_contract_noninterferent` (its only
-two remaining mentions are prose in comments — checked), plus
+**Deleted, both bridges:** `gen_contract_noninterferent` (definition only; every
+other mention was prose, and the `_param` bridge does not reuse it — it calls
+`cfg_instrs_endToEnd_with_memory` directly) and
 `gen_contract_noninterferent_rel_simple` (0 users anywhere outside `EndToEnd.v`,
 including 0 across all 254 `ZZ*.v` rigs).
+
+**NOT deleted: `gen_contract`.** It has live users — see the retraction in §Why.
+No builder was deleted, so `GenContract.v` is byte-identical and stage 0 never
+touched the example path at all: `Example/*.v` does not require `EndToEnd.v`
+(`Prelude.v` stops at `GenContract.v`), so not one of the 16 `valid_*_param` VCs
+was re-elaborated. That is also why the acceptance criterion this plan flags as
+"most likely to be forgotten" — all 34 `ZZ*Common.v` rigs still compiling — is
+satisfied *by construction* here rather than by testing: no builder signature
+moved. It becomes a genuine risk at stage 2, which does change a builder.
+
+Verified before editing: all 12 `Example/*Result.v` files use only the surviving
+bridges (`_param`, `_param_simple`, `_rel_classed_simple`, `_rel_bytes_simple`) —
+neither deleted bridge was reachable from any example.
 
 **KEEP `gen_contract_rel` and `gen_contract_noninterferent_rel`.** This is a
 correction to the first draft of this plan, which listed them as dead on the
@@ -206,9 +263,10 @@ group (`GenContract.v:530`).
 form): `Example/JumpsResult.v:60` uses it, because Jumps has extra exit offsets
 so `_simple` does not apply.
 
-Revised stage-0 reach: builders 5 → 4, bridges 9 → 7.
+Actual stage-0 reach: builders 5 → **5**, bridges 9 → **7**, `EndToEnd.v` −83 lines.
 
-Acceptance: gate green, all 34 `ZZ*Common.v` rigs compile, line counts recorded.
+Acceptance: gate green, line counts recorded (see the table at the top); the rig
+criterion is vacuous here for the reason given above.
 
 ### Stage 1 — `gen_contract_param` delegates. Low risk.
 

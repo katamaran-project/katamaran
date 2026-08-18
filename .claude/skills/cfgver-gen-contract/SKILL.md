@@ -148,15 +148,22 @@ standard `pcOutOfInstrs_exitCond` — use the specialised bridges in `EndToEnd.v
 - **`gen_contract_noninterferent_param_simple`** (register-only, `mem_specs = []`):
   premises are just `HND` (`apply Prelude.nodup_fixed; reflexivity`), a
   simplified `Hlen` (`cbn; lia`), and the VC.
-- **`gen_contract_noninterferent_rel_simple`** (base-relative, possibly with data
-  memory): premises `HND`, `HDataAddrs`, `Hlen`, `Hbound`, and the VC.
-- **`gen_contract_noninterferent_rel_classed_simple`** — the twin of the above for
-  a contract built with `gen_contract_rel_classed` (see below). Identical
-  premises AND an identical conclusion; only the contract the VC is taken over
-  differs, so switching an example between them is a one-identifier change in
-  each of its two files and does not touch the trusted statement surface.
+- **`gen_contract_noninterferent_rel_classed_simple`** (base-relative, possibly
+  with data memory, data block in CLASSED form — the default for new work): for a
+  contract built with `gen_contract_rel_classed` (see below). Premises `HND`,
+  `HDataAddrs`, `Hlen`, `Hbound`, and the VC.
+- **`gen_contract_noninterferent_rel_bytes_simple`** — the same premises for a
+  BYTE-granular data block (`gen_contract_rel_bytes`).
 
-Both fix `extra_exit_offs = []` and the exit condition internally, so `HexitOffs`
+The classed bridge's unclassed predecessor `gen_contract_noninterferent_rel_simple`
+(over `gen_contract_rel`) was **deleted 2026-08-18** as dead — stage 0 of
+`plans/PLAN-unify-generators.md`. Its conclusion was byte-identical to the classed
+one's, which is why switching an example between them was a one-identifier change
+in each of its two files and never touched the trusted statement surface. Note the
+builder `gen_contract_rel` itself was KEPT: it has no example users but 26 rig
+users, and is the unclassed control arm for the `|Σ|` cost measurements.
+
+All three fix `extra_exit_offs = []` and the exit condition internally, so `HexitOffs`
 is discharged for you **and the "discharge valid_contract FIRST" ordering hazard
 below cannot arise** (only `fuel` floats, and it appears only in the VC premise —
 so premises may be discharged in any order). Typical proof:
@@ -176,9 +183,9 @@ Only fall back to the general bridges below when `extra_exit_offs` is non-empty
 
 ### General bridges: five premises (six for `_rel`)
 
-The end lemma is `eapply gen_contract_noninterferent` (or `_param`/`_rel` for a
-parametric base) with **five** side premises (`_rel` adds a sixth, `Hbound`,
-right before `valid_contract`):
+The end lemma is `eapply gen_contract_noninterferent_param` (or `_rel` /
+`_rel_classed` / `_rel_bytes` for a base-relative data block) with **five** side
+premises (the `_rel*` forms add a sixth, `Hbound`, right before `valid_contract`):
 
 | Premise | What it demands | Typical discharge |
 |---|---|---|
@@ -238,8 +245,9 @@ eapply gen_contract_noninterferent_param.
 Qed.
 ```
 (`6: exact (...)` for `_rel`, since it has the extra `Hbound` premise.) This is
-not a new invention — the non-parametric `gen_contract_noninterferent` call
-sites already used this exact "do the last one first" ordering (with a TODO
+not a new invention — the call sites of the old non-parametric
+`gen_contract_noninterferent` (that bridge was deleted 2026-08-18 as dead)
+already used this exact "do the last one first" ordering (with a TODO
 comment); it was simply missed when writing the new parametric lemmas. The
 surviving instance is `jumpIfZero_noninterferent_param` in
 `Example/JumpsResult.v` (the end theorems moved out of `Results.v`, which is now
@@ -289,8 +297,8 @@ proved ONCE for `∀ init_addr`, not per concrete address:
   propositionally, so the bridge would need a dependent transport across a type
   index (`core-executor-internals` §6). See the note at `GenContract.v:536`.
 
-**Bridges**: `gen_contract_noninterferent_param`/`_rel` (in `EndToEnd.v`) mirror
-`gen_contract_noninterferent`'s premises (see table above) and instantiate the
+**Bridges**: `gen_contract_noninterferent_param`/`_rel` (in `EndToEnd.v`) take the
+premises in the table above and instantiate the
 placement valuation at `ι = ["p" ↦ SyncVal (bv.of_N init_addr)]`. For `_rel`, the
 conclusion is stated over `map (concretize_reg/concretize_mem init_addr)
 specs_rel` (`concretize_reg`/`concretize_mem` send a `PVBaseOff k` to
