@@ -1,9 +1,10 @@
 # PLAN-classed-existentials — one existential per publicness class
 
-Status: **Phase 1 LANDED and green (2026-08-18, commits `bfdf7ec2`, `3eefda6f`).
-Phase 2 measured. Phases 3–5 NOT STARTED.** Additive throughout so far — every
-existing example and `gen_contract_rel` itself are untouched, and the tree is
-green.
+Status: **Phase 1 LANDED green (`bfdf7ec2`, `3eefda6f`). Phase 2 measured.
+Phase 3 core + wrappers PROVED and IN `EndToEnd.v` (`e802bd3b`) — one lemma left
+(the `big_sepL` partition). Phases 4–5 NOT STARTED.** Additive throughout — every
+existing example and `gen_contract_rel` itself are untouched, no `Admitted`
+anywhere, and the tree is green (`KeyScheduleLoopResult.vo` rebuilt).
 
 ## Why
 
@@ -88,12 +89,11 @@ byte-identical to `zzkcd_cfg_contract_param` except the generator call.
 
 ## Phase 3 — the `ImplPre` bridge (CORE + WRAPPERS PROVED; partition lemma remains)
 
-**`gen_mem_cells_class_intro` is PROVED with a real `Qed`** — in
-`Example/ZZClassBridge.v`, not yet moved into `EndToEnd.v`. The bv half of the
-bridge is therefore done and the estimate below (which called it the easy half)
-held.
+**The core lemma and both class wrappers are PROVED with real `Qed`s and now
+live in `EndToEnd.v`** (see "Steps 1–2 DONE" below). The bv half of the bridge is
+done, and the estimate below — which called it the easy half — held.
 
-### Where it lives, and why not in `EndToEnd.v` yet
+### How it was developed, and why a separate harness was needed
 
 `ZZClassBridge.v` is a throwaway file carrying `EndToEnd.v`'s import block
 verbatim plus `Require Import EndToEnd`. Reasons, all load-bearing:
