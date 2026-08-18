@@ -86,7 +86,7 @@ byte-identical to `zzkcd_cfg_contract_param` except the generator call.
   in RAM", and its wall-clock is therefore not a performance figure.
 - N=128 was queued behind the killed baseline run and never started.
 
-## Phase 3 — the `ImplPre` bridge (CORE LEMMA PROVED, wrappers remain)
+## Phase 3 — the `ImplPre` bridge (CORE + WRAPPERS PROVED; partition lemma remains)
 
 **`gen_mem_cells_class_intro` is PROVED with a real `Qed`** — in
 `Example/ZZClassBridge.v`, not yet moved into `EndToEnd.v`. The bv half of the
@@ -142,22 +142,51 @@ tail with an `assert` discharged by `rewrite !bv.drop_app` then `iApply (IH _ Hd
 Note plain `cbn` is what exposes the `evalRel` form — `cbn [inst inst_env]`
 leaves `luser` folded, and `rewrite !bv.take_app` then finds no subterm.
 
+### Steps 1–2 DONE (2026-08-18, commit `e802bd3b`)
+
+All four lemmas are now **in `EndToEnd.v`, proved with real `Qed`s**, no
+`Admitted` anywhere in the file, and `KeyScheduleLoopResult.vo` rebuilds green:
+
+| lemma | role |
+|---|---|
+| `words_app` | the concatenation witness |
+| `gen_mem_cells_class_intro` | core bridge, `NonSyncVal` (private class) |
+| `gen_mem_cells_class_intro_sync` | `SyncVal` twin (public class) |
+| `gen_mem_priv_class_ks_intro` | class wrapper, supplies the `iExists` |
+| `gen_mem_pub_class_ks_intro` | ditto, plus discharges `secLeakvar` |
+
+Two structural findings from doing it:
+
+- **`GenContract.v` now splits `gen_mem_{pub,priv}_class_ks` out at the KEYS
+  level**, with the specs-level definitions as thin wrappers. Required, not
+  cosmetic: the wrapper proofs must `destruct` the key list to handle the empty
+  class, and `destruct (mem_rel_keys specs)` fails with *"Conclusion depends on
+  the bodies of ..."* because the existential's type mentions
+  `mem_class_width` of it. With keys as a plain variable the destruct is trivial.
+- **The public class genuinely needs its own `SyncVal` cells lemma.** `secLeak`
+  matches on the CONSTRUCTOR (`Formulas.v:117`), so `secLeak (NonSyncVal v v)`
+  is `False` however equal the sides are — a `NonSyncVal` witness makes
+  `secLeakvar` on the grouped variable unprovable. The proof script is otherwise
+  character-identical between the two.
+
+Third mechanical trap, on top of the two above: the `secLeak` goal arrives as
+`instprop (formula_secLeak …) ι`, so a bare `exact I` fails with *"The term I has
+type True while it is expected to have type instprop …"* — `cbn` first.
+
+`ZZClassBridge.v` is now trimmed to its import block only, so it cannot shadow
+the real lemmas; it is kept purely as the iteration harness for step 3.
+
 ### What remains in Phase 3
 
-1. **Move `words_app` + `gen_mem_cells_class_intro` into `EndToEnd.v`** and pay
-   one full compile (~50 s).
-2. **The class wrappers**: lift the cells lemma to `gen_mem_pub_class_rel` /
-   `gen_mem_priv_class_rel`, i.e. supply the `iExists` witness and, for the
-   public class, discharge `secLeakvar "mwpub"` from the N per-cell public facts
-   (composition direction only — `SyncVal` is closed under construction).
-3. **THE REMAINING OBSTACLE, unchanged: a `big_sepL` partition/permutation.**
+1. **THE REMAINING OBSTACLE, unchanged: a `big_sepL` partition/permutation.**
    `interp_mem_with_public_memory` is a `big_opL` in SPEC order while
    `gen_mem_pre_rel_classed` groups by class, so the resource list must be
    re-associated into `pinned ++ public ++ private`. True since `∗` is
    commutative; needs a permutation lemma or a partition-and-recombine argument.
    The body of that `big_opL` does NOT depend on the index, which is what makes
    it provable at all.
-4. Then `gen_implpre_mem_class` assembling 1–3, and a `gen_contract_noninterferent_rel_classed`.
+2. Then `gen_implpre_mem_class` assembling the wrappers with (1), and a
+   `gen_contract_noninterferent_rel_classed`.
 
 ## Phase 3 — original scoping notes (kept)
 
