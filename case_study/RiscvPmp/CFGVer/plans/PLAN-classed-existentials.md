@@ -207,13 +207,29 @@ Two things not to re-derive:
 
 ### What remains in Phase 3 — routine, no unknowns
 
+0. **Bridge the two filter LEVELS.** `interp_mem_partition` filters at the
+   `mem_full_spec` level, on `map (concretize_mem ia) specs`; the precondition
+   filters at the `mem_spec_rel` level, on `specs`. Two small lemmas connect
+   them, both by `induction specs` + `destruct pv`:
+   - `mem_full_is_exist (concretize_mem ia s) = mem_spec_is_exist s` and the
+     same for `_is_pub` (immediate: `concretize_mem` sends `PVExist` to `None`,
+     `PVConst`/`PVBaseOff` to `Some _`, and copies the bool).
+   - filter/map commutation, `map (concretize_mem ia) (List.filter P_rel specs)
+     = List.filter P_full (map (concretize_mem ia) specs)`, given the above.
+   (Note `interp_mem_partition` itself dodges filter/map commutation via
+   `big_sepL_fmap`; it reappears here, at the *spec-level* boundary, and is
+   unavoidable. It is 5 lines, not a difficulty.)
 1. **Per-group resource conversion.** For each class, turn
-   `interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec (filter … specs))`
-   into the `[∗ list] k ∈ mem_rel_keys …` form the wrappers consume. Two
-   ingredients: the filter's `In` facts (via `filter_In`) pick the `if pub`
-   branch, and `bv.of_N_add` relates `concretize_mem`'s `of_N (ia + k)` to the
-   wrappers' `bv.add (of_N ia) (of_N k)` — the same rewrite
-   `gen_mem_pre_rel_concretize` already uses.
+   `interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec G)` — where `G` is
+   one group — into the `[∗ list] k ∈ mem_rel_keys G` form the wrappers consume.
+   State it for an arbitrary `G` with hypotheses `∀ s, In s G → mem_spec_is_pub
+   s = false` (resp. `= true`) and `mem_spec_is_exist s = true`, then instantiate
+   at the filters and discharge the hypotheses with `filter_In`. Two
+   ingredients: those `In` facts pick the `if pub` branch of
+   `interp_mem_with_public_memory`, and `bv.of_N_add` relates `concretize_mem`'s
+   `of_N (ia + k)` to the wrappers' `bv.add (of_N ia) (of_N k)` — the same
+   rewrite `gen_mem_pre_rel_concretize` already uses. Model the induction on
+   `gen_implpre_mem` (`EndToEnd.v`), which has the identical shape.
 2. **`gen_implpre_mem_class`** assembling `interp_mem_partition` + (1) + the two
    class wrappers + the existing `gen_implpre_mem` for the pinned group.
 3. **`gen_contract_noninterferent_rel_classed`**, mirroring the `_rel` bridge.
@@ -273,3 +289,68 @@ Generator: `GenContract.v`. Rigs (throwaway, not in `_CoqProject`):
 `Example/ZZKslClassCommon.v`, `ZZKslCLS_N{32,64,128}.v`, `ZZKslClassBase.v`;
 plus the earlier measurement rigs `ZZKslShrCommon.v`, `ZZKslBigCommon.v`,
 `ZZKslPinCommon.v`, `ZZPadShrCommon.v` and their runners.
+
+---
+
+## Hand-off notes (2026-08-18)
+
+### Environment traps that will cost hours if rediscovered
+
+These are not about the proofs; they are about being able to iterate at all.
+
+1. **`pet` OOMs replaying `EndToEnd.v` in position mode** (>7.6 GB), so
+   `rocq_start(file=EndToEnd.v, theorem=…)` is unavailable. Iterate against
+   `Example/ZZClassBridge.v` instead — it carries `EndToEnd.v`'s import block and
+   `Require Import EndToEnd`, giving all Iris names at ~11–900 ms per
+   `rocq_check`. It deliberately defines nothing.
+2. **That import block must be copied through line 94, not 90.** Stopping early
+   leaves `memGS2` / `PredicateDef` unresolved and *every* statement fails with
+   `UNDEFINED EVARS`. `Import IrisModelBinary.RiscvPmpIrisBase2` is the one that
+   matters.
+3. **`rocq_compile_file` defaults to `keep_vo=false` and DELETES the `.vo`.** A
+   `mode="vos"` check on `EndToEnd.v` silently removed `EndToEnd.vo`, after which
+   sibling files failed with "Cannot find a physical path bound to logical path".
+   Pass `keep_vo=true` whenever anything downstream will require the result.
+4. **Hooks will block builds**, by design: `coqc-guard.sh` denies a build whose
+   target changed with no interactive check since (any `rocq_check` clears it),
+   and rate-limits to 3 builds / 15 min. `rocq_compile_file` is the sanctioned
+   alternative. `skill-path-guard.sh` denies edits to `GenContract.v` /
+   `EndToEnd.v` without the matching skill loaded once per session.
+5. A `git checkout` of a file changes its mtime and trips the build guard even
+   though the content is identical.
+
+### Proof idioms specific to this work
+
+- Plain `cbn` is what exposes the `evalRel` form; `cbn [inst inst_env]` leaves
+  `luser` folded and a subsequent `rewrite bv.take_app` finds no subterm.
+- Any `inst mwt ι = NonSyncVal …` hypothesis needs the
+  `: RelVal (ty.bvec …)` ascription or elaboration fails to find
+  `Inst ?T (RV (bv …))`.
+- `secLeak` goals arrive as `instprop (formula_secLeak …) ι`; `cbn` before
+  `exact I`.
+- Dependent-width traps have bitten three times (concrete builder, `remember`
+  in the wrappers, term-list indexing). The reflex: keep ONE width index, derive
+  it from the list you are inducting on, and never state an equation whose two
+  sides carry different-but-equal-length index expressions.
+
+### Phase 4 is the risky one — read before starting
+
+Migrating the 9 committed examples is NOT mechanical, for one specific reason:
+`gen_mem_pre_rel_classed` changes the HEAP ORDER (pinned, then public, then
+private, rather than spec order). `consume` is order-sensitive
+(`core-executor-internals`), so residual shapes can move and a given example's
+`solve_vc`/`solve_symbase_fetch` line may stop closing. Expect per-example
+debugging, not a sweep.
+
+Two rules for that phase:
+
+- **All-or-nothing behind a green `./scripts/gate.sh`** (`GATE_JOBS=1` on a
+  ≤16 GB box). Do not land a partial migration.
+- **Never "fix" a failing VC by weakening a spec entry or admitting a lemma.**
+  The gate's `Print Assumptions` on end theorems is the only thing that catches
+  it, and it runs last. If an example will not close, leave it unmigrated and say
+  so — the expected benefit is near zero anyway (these examples declare 2–16
+  cells; the measured win at that size is ~1.1–1.2×, not the 3.5× seen at N=32).
+
+The cost/benefit of Phase 4 is genuinely poor and was flagged before it was
+requested; it is worth re-confirming with the user before spending a day on it.
