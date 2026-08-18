@@ -86,7 +86,80 @@ byte-identical to `zzkcd_cfg_contract_param` except the generator call.
   in RAM", and its wall-clock is therefore not a performance figure.
 - N=128 was queued behind the killed baseline run and never started.
 
-## Phase 3 — the `ImplPre` bridge (NOT STARTED)
+## Phase 3 — the `ImplPre` bridge (CORE LEMMA PROVED, wrappers remain)
+
+**`gen_mem_cells_class_intro` is PROVED with a real `Qed`** — in
+`Example/ZZClassBridge.v`, not yet moved into `EndToEnd.v`. The bv half of the
+bridge is therefore done and the estimate below (which called it the easy half)
+held.
+
+### Where it lives, and why not in `EndToEnd.v` yet
+
+`ZZClassBridge.v` is a throwaway file carrying `EndToEnd.v`'s import block
+verbatim plus `Require Import EndToEnd`. Reasons, all load-bearing:
+
+- An in-progress `Admitted` inside `EndToEnd.v` would put an axiom in the
+  trusted chain and fail the gate. Develop outside, move in when proved.
+- **`pet` OOMs replaying `EndToEnd.v` in position mode** (RSS > 7.6 GB), so
+  `rocq_start(file=EndToEnd.v, theorem=…)` is not available. Iterating against
+  this small file instead costs ~11–900 ms per `rocq_check`.
+- The import block must be copied through **line 94**, not 90. Stopping early
+  leaves `memGS2` / `PredicateDef` instances unresolved and *every* statement
+  fails with `UNDEFINED EVARS`. `Import IrisModelBinary.RiscvPmpIrisBase2` is
+  the one that matters.
+
+### The proof, and the two statement choices that make it work
+
+```coq
+Lemma gen_mem_cells_class_intro `{sailGS2 Σ}
+    (ks : list N) {Σ0} (ι : Valuation Σ0)
+    (pterm : Term Σ0 ty_xlenbits) (pv : Val ty_xlenbits)
+    (mwt : Term Σ0 (ty.bvec (mem_class_width ks))) (μ1 μ2 : Memory)
+    (Hp : inst pterm ι = SyncVal pv)
+    (Hmw : inst mwt ι = (NonSyncVal (words_app μ1 pv ks) (words_app μ2 pv ks)
+                         : RelVal (ty.bvec (mem_class_width ks)))) :
+  ([∗ list] k ∈ ks, interp_ptstomem (width := 4) …) ⊢ asn.interpret (gen_mem_cells_class ks … mwt) ι.
+```
+
+- **`mwt` must be a PARAMETER, not `term_var "mw"`.** `gen_mem_cells_class`'s
+  cons branch applies itself to `term_unop (uop.bvdrop xlenbits) mwt` — a
+  non-variable term at the *same* logical context. A statement that fixed the
+  third argument to a variable puts the IH at a different context and it will
+  not apply. This was the one real design insight.
+- `pterm` is a parameter too (cf. `byte_addr_rel`), so one lemma serves the
+  base-relative and concrete address forms.
+- The `: RelVal (ty.bvec …)` ascription on `Hmw` is REQUIRED: without it
+  elaboration reads the RHS as `RV (bv _)` and fails with
+  `Could not find an instance for "Inst ?T (RV (bv …))"`.
+- `words_app` (the concatenation of a class's cell values) is the witness and
+  must be defined before the lemma can be stated.
+
+Proof shape, for reference: `generalize dependent mwt; induction ks`, then in
+the cons case `rewrite big_sepL_cons`, `cbn [gen_mem_cells_class asn.interpret]`,
+`iSplitL`; head closes with
+`unfold bop.evalRel, uop.evalRel; cbn; rewrite !bv.take_app; iApply "Hhead"`,
+tail with an `assert` discharged by `rewrite !bv.drop_app` then `iApply (IH _ Hd)`.
+Note plain `cbn` is what exposes the `evalRel` form — `cbn [inst inst_env]`
+leaves `luser` folded, and `rewrite !bv.take_app` then finds no subterm.
+
+### What remains in Phase 3
+
+1. **Move `words_app` + `gen_mem_cells_class_intro` into `EndToEnd.v`** and pay
+   one full compile (~50 s).
+2. **The class wrappers**: lift the cells lemma to `gen_mem_pub_class_rel` /
+   `gen_mem_priv_class_rel`, i.e. supply the `iExists` witness and, for the
+   public class, discharge `secLeakvar "mwpub"` from the N per-cell public facts
+   (composition direction only — `SyncVal` is closed under construction).
+3. **THE REMAINING OBSTACLE, unchanged: a `big_sepL` partition/permutation.**
+   `interp_mem_with_public_memory` is a `big_opL` in SPEC order while
+   `gen_mem_pre_rel_classed` groups by class, so the resource list must be
+   re-associated into `pinned ++ public ++ private`. True since `∗` is
+   commutative; needs a permutation lemma or a partition-and-recombine argument.
+   The body of that `big_opL` does NOT depend on the index, which is what makes
+   it provable at all.
+4. Then `gen_implpre_mem_class` assembling 1–3, and a `gen_contract_noninterferent_rel_classed`.
+
+## Phase 3 — original scoping notes (kept)
 
 Target:
 
