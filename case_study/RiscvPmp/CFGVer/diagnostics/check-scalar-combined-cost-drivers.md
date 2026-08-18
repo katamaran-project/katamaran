@@ -9,14 +9,26 @@ NOT apply to check_scalar.** §6.6 below concludes that the only thing making co
 grow with N is `chunks × steps × lvars`, quadratic in `|Σ|`.
 `gen_contract_rel_classed` (`plans/PLAN-classed-existentials.md`) removes the
 declared-cell source of `|Σ|` — measured on `key_schedule_loop2`'s rig as an
-EXPONENT reduction, 1.72 → 1.22 at N=8→16, at full statement strength. But it is
-the classed counterpart of `gen_contract_rel` only, and **check_scalar uses
-`gen_contract_param` and `gen_contract_rel_bytes`, neither of which has (or, for
-`gen_contract_param`, can have) a classed variant** — the width-index trap, see
-the note at `GenContract.v:536`. So for this example the `|Σ|` factor stands
-exactly as measured here, and every number below remains current. Nothing in the
-2026-08-18 work touched check_scalar; these figures were NOT re-run, because no
-input to them changed.
+EXPONENT reduction, 1.72 → 1.22 at N=8→16, at full statement strength. It does not
+reach check_scalar today, but **the reason differs between the two contracts, and
+neither reason is "impossible"** (an earlier version of this note said the
+width-index trap blocked both — that was wrong, and is corrected here):
+
+- **whole-function `check_scalar`** (`gen_contract_param`) declares **NO data
+  cells at all** (`mem_specs = []`, as do all nine `gen_contract_param` call
+  sites). There is no per-cell `|Σ|` here to remove, so the classed builder is
+  *irrelevant* rather than blocked. The width-index trap does block a classed
+  variant of `gen_contract_param`'s concrete `mem_full_spec` block — but nothing
+  uses that block, so it costs nothing.
+- **`check_scalar_loop1`** (`gen_contract_rel_bytes`) declares 8 byte entries,
+  and `gen_mem_pre_rel_bytes` mints **one word variable per entry**, so this one
+  does have per-cell `|Σ|` growth. It is **not** blocked by the width-index trap:
+  `loop1_byte_specs_rel` is already a `list mem_spec_rel`, the same vocabulary the
+  classed builder handles. What is missing is simply a byte-granular classed data
+  block, which has not been written. This is the concrete open item.
+
+Every number below remains current — nothing in the 2026-08-18 work touched
+check_scalar, so these figures were deliberately NOT re-run.
 
 **One-sentence finding (2026-08-15, ROOT-CAUSED; FIXED 2026-08-16):**
 combining check_scalar's two loops into one flat VC cost **5.5–18.6× the sum

@@ -148,11 +148,15 @@ those terms grows with the trip count `N`:
   publicness class instead of per cell, which is EQUIVALENT rather than weaker,
   and re-measured on the KSL rig it is an exponent reduction (1.72 → 1.22 at
   N=8→16), landing on the shared-variable arm's cost to within 0.6%. Use it by
-  default there.** Two scope limits that matter: it is the counterpart of
-  `gen_contract_rel` ONLY — `gen_contract_param` cannot have one (width-index
-  trap, `GenContract.v:536`) and `gen_contract_rel_bytes` does not, so
-  check_scalar still pays this factor in full; and it does nothing about the
-  per-step-demonic-variable source. Cheapest levers, in order: use the classed
+  default there.** Two scope limits that matter, neither of them
+  "impossible": there is no BYTE-granular classed block yet, so
+  `gen_contract_rel_bytes` users (check_scalar loop 1, 8 entries × 1 variable
+  each) still pay per-cell `|Σ|` — a missing feature, not a blocked one, since
+  those specs are already `mem_spec_rel`; and it does nothing about the
+  per-step-demonic-variable source. (`gen_contract_param`'s concrete
+  `mem_full_spec` block genuinely cannot be classed — width-index trap,
+  `GenContract.v:536` — but all nine of its call sites pass `mem_specs = []`, so
+  that block has no users and the limitation costs nothing.) Cheapest levers, in order: use the classed
   builder where it applies, pin what does not need to be
   existential (`PVConst` costs ~16–25× less than `PVExist` per entry), share
   one variable across several chunks where the values are genuinely related,

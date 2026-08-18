@@ -4,10 +4,11 @@ Status: **Diagnostic record, 2026-08-13.**
 
 **Follow-on (2026-08-18).** Unaffected, same reasoning as
 `check-scalar-loop1-cost-drivers.md`: the landed `|Σ|` fix
-(`gen_contract_rel_classed`, `plans/PLAN-classed-existentials.md`) covers the
-`gen_contract_rel` family only, not this example's byte specs, and in any case
-this record's subject — per-iteration density vs. `c`'s accumulation — is a
-different axis. Figures below not re-run; no input to them changed.
+(`gen_contract_rel_classed`, `plans/PLAN-classed-existentials.md`) has no
+byte-granular counterpart yet, so this example's byte specs still mint one
+variable per entry — a missing feature rather than a blocked one. In any case this
+record's subject, per-iteration density vs. `c`'s accumulation, is a different
+axis. Figures below not re-run; no input to them changed.
 
 **One-sentence finding:** loop 2's cross-iteration accumulation of `c`
 contributes only a small effect (~3.2% at N=16) — not because
