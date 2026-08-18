@@ -1,11 +1,11 @@
 # PLAN-classed-existentials — one existential per publicness class
 
 Status: **Phase 1 LANDED green (`bfdf7ec2`, `3eefda6f`). Phase 2 measured.
-Phase 3: core + wrappers + THE PARTITION OBSTACLE all PROVED and in
-`EndToEnd.v` (`e802bd3b`, `53569cff`); what is left is routine plumbing, no
-unknowns. Phases 4–5 NOT STARTED.** Additive throughout — every
-existing example and `gen_contract_rel` itself are untouched, no `Admitted`
-anywhere, and the tree is green (`KeyScheduleLoopResult.vo` rebuilt).
+Phase 3 COMPLETE — every lemma including the end bridge
+`gen_contract_noninterferent_rel_classed` is in `EndToEnd.v` with a real
+`Qed`, file compiles green. Phase 4 NOT STARTED (needs a user decision, see
+below). Phase 5 pending.** Additive throughout — every existing example and
+`gen_contract_rel` itself are untouched, and no `Admitted` anywhere.
 
 ## Why
 
@@ -205,34 +205,45 @@ Two things not to re-derive:
   original spec list. The other order additionally requires filter/map
   commutation.
 
-### What remains in Phase 3 — routine, no unknowns
+### Phase 3 steps 0–3: DONE (2026-08-18)
 
-0. **Bridge the two filter LEVELS.** `interp_mem_partition` filters at the
-   `mem_full_spec` level, on `map (concretize_mem ia) specs`; the precondition
-   filters at the `mem_spec_rel` level, on `specs`. Two small lemmas connect
-   them, both by `induction specs` + `destruct pv`:
-   - `mem_full_is_exist (concretize_mem ia s) = mem_spec_is_exist s` and the
-     same for `_is_pub` (immediate: `concretize_mem` sends `PVExist` to `None`,
-     `PVConst`/`PVBaseOff` to `Some _`, and copies the bool).
-   - filter/map commutation, `map (concretize_mem ia) (List.filter P_rel specs)
-     = List.filter P_full (map (concretize_mem ia) specs)`, given the above.
-   (Note `interp_mem_partition` itself dodges filter/map commutation via
-   `big_sepL_fmap`; it reappears here, at the *spec-level* boundary, and is
-   unavoidable. It is 5 lines, not a difficulty.)
-1. **Per-group resource conversion.** For each class, turn
-   `interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec G)` — where `G` is
-   one group — into the `[∗ list] k ∈ mem_rel_keys G` form the wrappers consume.
-   State it for an arbitrary `G` with hypotheses `∀ s, In s G → mem_spec_is_pub
-   s = false` (resp. `= true`) and `mem_spec_is_exist s = true`, then instantiate
-   at the filters and discharge the hypotheses with `filter_In`. Two
-   ingredients: those `In` facts pick the `if pub` branch of
-   `interp_mem_with_public_memory`, and `bv.of_N_add` relates `concretize_mem`'s
-   `of_N (ia + k)` to the wrappers' `bv.add (of_N ia) (of_N k)` — the same
-   rewrite `gen_mem_pre_rel_concretize` already uses. Model the induction on
-   `gen_implpre_mem` (`EndToEnd.v`), which has the identical shape.
-2. **`gen_implpre_mem_class`** assembling `interp_mem_partition` + (1) + the two
-   class wrappers + the existing `gen_implpre_mem` for the pinned group.
-3. **`gen_contract_noninterferent_rel_classed`**, mirroring the `_rel` bridge.
+All in `EndToEnd.v`, real `Qed`s, file compiles green. Nine further lemmas:
+
+| lemma | role |
+|---|---|
+| `concretize_mem_is_exist` / `_is_pub` | the two classifications agree under `concretize_mem` |
+| `filter_map_concretize_mem` | filter/map commutation, generic in the predicate pair |
+| `filter_{pinned,pub,priv}_concretize` | its three instances |
+| `gen_init_mem_filter_pinned` | restricting to the pinned class leaves `gen_init_mem` unchanged |
+| `interp_mem_group_{priv,pub}` | per-group resource conversion |
+| `interp_mem_partition_rel` | `interp_mem_partition` with the filters at the `mem_spec_rel` level |
+| `gen_implpre_mem_class` | the classed memory `ImplPre` |
+| `gen_contract_noninterferent_rel_classed` | the end bridge |
+
+The scoping estimate held — nothing here needed more than one attempt. Four
+things worth not re-deriving:
+
+- **The per-group lemmas need only the `is_pub` hypothesis, not `is_exist`.**
+  `interp_mem_with_public_memory` branches on the publicness bit and ignores the
+  value slot entirely, so the group conversion never has to know the group is
+  `PVExist`. The plan above expected both hypotheses; one suffices, and dropping
+  the other removes the only place `filter_In` would have needed two projections.
+- **`gen_init_mem_filter_pinned` is why the caller's unfiltered
+  `declare_init_memory` hypotheses are enough.** `gen_init_mem` is an `omap` that
+  already drops `None` entries and `concretize_mem` sends exactly the non-pinned
+  entries to `None`, so filtering to the pinned class is a no-op on it. Its proof
+  needs `unfold gen_init_mem in *` — unfolding only in the goal leaves the IH
+  folded and `rewrite IH` finds no subterm.
+- **`μ1`/`μ2` are strict-implicit in `gen_implpre_mem_class`** (they occur in
+  `HInitMem1`'s type), and this differs from the same statement at a file's top
+  level. A positional call reports `"μ1 has type Memory while RelVal
+  ty_xlenbits was expected"`, which reads like a statement bug. The call site
+  uses named arguments.
+- Two parser traps in this file's notation environment, both pure noise but both
+  cost a round trip: `rewrite A, B` (comma form) is a **syntax error** — use two
+  `rewrite`s; and a one-element delta flag `cbn [map]` is a syntax error
+  (`[smart_global] expected after '['`) while `cbn [map List.filter]` parses —
+  qualify it as `cbn [List.map]`.
 
 ## Phase 3 — original scoping notes (kept)
 

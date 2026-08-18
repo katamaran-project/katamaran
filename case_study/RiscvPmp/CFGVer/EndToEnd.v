@@ -995,6 +995,173 @@ Import IrisModel.RiscvPmpIrisBase.
     apply (big_sepL_three_way mem_full_is_exist mem_full_is_pub).
   Qed.
 
+  (* ---------------------------------------------------------------------- *)
+  (* Bridging the two FILTER LEVELS.  interp_mem_partition filters at the    *)
+  (* mem_full_spec level, on `map (concretize_mem ia) specs`; the classed     *)
+  (* precondition filters at the mem_spec_rel level, on `specs`.  The two     *)
+  (* classifications agree under concretize_mem (it sends PVExist to None,    *)
+  (* PVConst/PVBaseOff to Some _, and copies the publicness bit), so the      *)
+  (* filters commute with the map.                                           *)
+  (*                                                                        *)
+  (* interp_mem_partition itself dodges filter/map commutation via            *)
+  (* big_sepL_fmap; it is unavoidable here, at the spec-level boundary.       *)
+  (* ---------------------------------------------------------------------- *)
+  Lemma concretize_mem_is_exist (ia : N) (s : mem_spec_rel) :
+    mem_full_is_exist (concretize_mem ia s) = mem_spec_is_exist s.
+  Proof. destruct s as [[k pub] pv]; destruct pv; reflexivity. Qed.
+
+  Lemma concretize_mem_is_pub (ia : N) (s : mem_spec_rel) :
+    mem_full_is_pub (concretize_mem ia s) = mem_spec_is_pub s.
+  Proof. destruct s as [[k pub] pv]; destruct pv; reflexivity. Qed.
+
+  (* Generic in the predicate pair, so the three class filters below are one
+     line each.  NOTE `cbn [List.map]` rather than `cbn [map]`: the bare name
+     is ambiguous here (Ltac2's List.map is in scope) and a one-element delta
+     flag `[map]` is a PARSE error, "[smart_global] expected after '['" --
+     while `[map List.filter]` happens to parse.  Qualify it. *)
+  Lemma filter_map_concretize_mem (ia : N)
+      (P : mem_spec_rel -> bool) (Q : mem_full_spec -> bool)
+      (HPQ : forall s, Q (concretize_mem ia s) = P s)
+      (specs : list mem_spec_rel) :
+    map (concretize_mem ia) (List.filter P specs)
+    = List.filter Q (map (concretize_mem ia) specs).
+  Proof.
+    induction specs as [|s r IH]; [reflexivity|].
+    cbn [map List.filter]. rewrite HPQ. destruct (P s).
+    - cbn [List.map]. f_equal. exact IH.
+    - exact IH.
+  Qed.
+
+  (* The three instances, one per class of gen_mem_pre_rel_classed.  Two
+     separate `rewrite`s rather than `rewrite A, B` -- the comma form is a
+     parse error in this file's notation environment. *)
+  Lemma filter_pinned_concretize (ia : N) (specs : list mem_spec_rel) :
+    map (concretize_mem ia) (List.filter (fun s => negb (mem_spec_is_exist s)) specs)
+    = List.filter (fun s => negb (mem_full_is_exist s)) (map (concretize_mem ia) specs).
+  Proof.
+    apply filter_map_concretize_mem. intros s. now rewrite concretize_mem_is_exist.
+  Qed.
+
+  Lemma filter_pub_concretize (ia : N) (specs : list mem_spec_rel) :
+    map (concretize_mem ia)
+      (List.filter (fun s => andb (mem_spec_is_exist s) (mem_spec_is_pub s)) specs)
+    = List.filter (fun s => andb (mem_full_is_exist s) (mem_full_is_pub s))
+        (map (concretize_mem ia) specs).
+  Proof.
+    apply filter_map_concretize_mem. intros s.
+    rewrite concretize_mem_is_exist. rewrite concretize_mem_is_pub. reflexivity.
+  Qed.
+
+  Lemma filter_priv_concretize (ia : N) (specs : list mem_spec_rel) :
+    map (concretize_mem ia)
+      (List.filter (fun s => andb (mem_spec_is_exist s) (negb (mem_spec_is_pub s))) specs)
+    = List.filter (fun s => andb (mem_full_is_exist s) (negb (mem_full_is_pub s)))
+        (map (concretize_mem ia) specs).
+  Proof.
+    apply filter_map_concretize_mem. intros s.
+    rewrite concretize_mem_is_exist. rewrite concretize_mem_is_pub. reflexivity.
+  Qed.
+
+  (* Restricting to the PINNED class does not change the required initial
+     memory: gen_init_mem is an omap that already drops every None entry, and
+     concretize_mem sends exactly the PVExist (i.e. non-pinned) entries to
+     None.  This is what lets gen_implpre_mem be reused for the pinned group
+     with the caller's unfiltered declare_init_memory hypotheses. *)
+  Lemma gen_init_mem_filter_pinned (ia : N) (specs : list mem_spec_rel) :
+    gen_init_mem (map (concretize_mem ia)
+      (List.filter (fun s => negb (mem_spec_is_exist s)) specs))
+    = gen_init_mem (map (concretize_mem ia) specs).
+  Proof.
+    induction specs as [|[[k pub] pv] r IH]; [reflexivity|].
+    (* gen_init_mem must be unfolded in the IH too, or `rewrite IH` finds no
+       subterm once the goal's copy has been reduced to its omap. *)
+    unfold gen_init_mem in *.
+    destruct pv;
+      cbn [List.map List.filter mem_spec_is_exist negb concretize_mem omap list_omap];
+      rewrite IH; reflexivity.
+  Qed.
+
+  (* ---------------------------------------------------------------------- *)
+  (* Per-group resource conversion: one class's slice of                     *)
+  (* interp_mem_with_public_memory, in the [∗ list] over KEYS form that       *)
+  (* gen_mem_{pub,priv}_class_ks_intro consume.                              *)
+  (*                                                                        *)
+  (* Only the publicness hypothesis is needed -- interp_mem_with_public_memory *)
+  (* branches on the pub bit and ignores the value slot entirely, so nothing   *)
+  (* here has to know the group is PVExist.  bv.of_N_add relates              *)
+  (* concretize_mem's `of_N (ia + k)` to the wrappers' `add (of_N ia)          *)
+  (* (of_N k)`, exactly as in gen_mem_pre_rel_concretize.                     *)
+  (* ---------------------------------------------------------------------- *)
+  Lemma interp_mem_group_priv `{sailGS2 Σ} (μ1 μ2 : Memory) (ia : N)
+      (G : list mem_spec_rel)
+      (Hpriv : forall s, In s G -> mem_spec_is_pub s = false) :
+    interp_mem_with_public_memory μ1 μ2
+      (map mem_full_to_spec (map (concretize_mem ia) G))
+    ⊢ [∗ list] k ∈ mem_rel_keys G,
+        interp_ptstomem (width := 4)
+          (SyncVal (bv.add (bv.of_N ia) (bv.of_N k)))
+          (NonSyncVal (get_word μ1 (bv.add (bv.of_N ia) (bv.of_N k)))
+                      (get_word μ2 (bv.add (bv.of_N ia) (bv.of_N k)))).
+  Proof.
+    revert Hpriv. induction G as [|s G' IH]; intros Hpriv.
+    - done.
+    - destruct s as [[k pub] pv].
+      assert (Hp : pub = false) by (apply (Hpriv (k, pub, pv)); now left).
+      subst pub.
+      cbn [List.map mem_rel_keys mem_full_to_spec concretize_mem].
+      unfold interp_mem_with_public_memory. cbn [big_opL].
+      iIntros "[Hh Ht]". iSplitL "Hh".
+      + rewrite bv.of_N_add. iExact "Hh".
+      + iApply IH; [ intros s Hs; apply Hpriv; now right | iExact "Ht" ].
+  Qed.
+
+  (* Public twin.  Note the value is get_word μ1 on BOTH sides -- that is what
+     interp_mem_with_public_memory's public branch hands out, and it is why the
+     SyncVal cells lemma (and hence a provable secLeakvar) is available here. *)
+  Lemma interp_mem_group_pub `{sailGS2 Σ} (μ1 μ2 : Memory) (ia : N)
+      (G : list mem_spec_rel)
+      (Hpub : forall s, In s G -> mem_spec_is_pub s = true) :
+    interp_mem_with_public_memory μ1 μ2
+      (map mem_full_to_spec (map (concretize_mem ia) G))
+    ⊢ [∗ list] k ∈ mem_rel_keys G,
+        interp_ptstomem (width := 4)
+          (SyncVal (bv.add (bv.of_N ia) (bv.of_N k)))
+          (SyncVal (get_word μ1 (bv.add (bv.of_N ia) (bv.of_N k)))).
+  Proof.
+    revert Hpub. induction G as [|s G' IH]; intros Hpub.
+    - done.
+    - destruct s as [[k pub] pv].
+      assert (Hp : pub = true) by (apply (Hpub (k, pub, pv)); now left).
+      subst pub.
+      cbn [List.map mem_rel_keys mem_full_to_spec concretize_mem].
+      unfold interp_mem_with_public_memory. cbn [big_opL].
+      iIntros "[Hh Ht]". iSplitL "Hh".
+      + rewrite bv.of_N_add. iExact "Hh".
+      + iApply IH; [ intros s Hs; apply Hpub; now right | iExact "Ht" ].
+  Qed.
+
+  (* interp_mem_partition restated with the filters at the mem_spec_rel level,
+     which is where gen_mem_pre_rel_classed puts them. *)
+  Lemma interp_mem_partition_rel `{sailGS2 Σ} (μ1 μ2 : Memory) (ia : N)
+      (specs : list mem_spec_rel) :
+    interp_mem_with_public_memory μ1 μ2
+      (map mem_full_to_spec (map (concretize_mem ia) specs))
+    ⊢ interp_mem_with_public_memory μ1 μ2
+        (map mem_full_to_spec (map (concretize_mem ia)
+           (List.filter (fun s => negb (mem_spec_is_exist s)) specs)))
+      ∗ interp_mem_with_public_memory μ1 μ2
+        (map mem_full_to_spec (map (concretize_mem ia)
+           (List.filter (fun s => andb (mem_spec_is_exist s) (mem_spec_is_pub s)) specs)))
+      ∗ interp_mem_with_public_memory μ1 μ2
+        (map mem_full_to_spec (map (concretize_mem ia)
+           (List.filter (fun s => andb (mem_spec_is_exist s) (negb (mem_spec_is_pub s))) specs))).
+  Proof.
+    rewrite filter_pinned_concretize.
+    rewrite filter_pub_concretize.
+    rewrite filter_priv_concretize.
+    apply interp_mem_partition.
+  Qed.
+
   (* Once-and-for-all ImplPre for the memory portion of gen_contract:
      converts interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs)
      into asn.interpret (gen_mem_pre specs) ι. *)
@@ -1425,6 +1592,138 @@ Import IrisModel.RiscvPmpIrisBase.
       iExact "Hregs". }
     rewrite gen_mem_pre_rel_concretize.
     iApply (gen_implpre_mem (map (concretize_mem init_addr) mem_specs) _ HInitMem1 HInitMem2).
+    iExact "Hmemdata".
+  Qed.
+
+  (* ---------------------------------------------------------------------- *)
+  (* CLASSED memory ImplPre (PLAN-classed-existentials.md Phase 3, step 2).   *)
+  (*                                                                        *)
+  (* The counterpart of gen_implpre_mem for gen_mem_pre_rel_classed.  Unlike   *)
+  (* the _rel path there is NO concretize rewrite to lean on -- see the note   *)
+  (* at gen_mem_pre_rel_classed in GenContract.v on why no concrete classed    *)
+  (* builder can exist (the two sides' existential widths agree only           *)
+  (* propositionally) -- so this attacks the rel assertion directly:            *)
+  (*                                                                        *)
+  (*   interp_mem_partition_rel  splits the resources three ways,              *)
+  (*   gen_implpre_mem           handles the PINNED group (via the concretize   *)
+  (*                             rewrite, which IS available for that group),  *)
+  (*   interp_mem_group_{pub,priv} + gen_mem_{pub,priv}_class_ks_intro          *)
+  (*                             handle the two grouped-existential classes.   *)
+  (* ---------------------------------------------------------------------- *)
+  Lemma gen_implpre_mem_class `{sailGS2 Σ}
+      (specs : list mem_spec_rel) (ia : N) (μ1 μ2 : Memory)
+      (va : RelVal ty_xlenbits)
+      (HInitMem1 : declare_init_memory μ1 (gen_init_mem (map (concretize_mem ia) specs)))
+      (HInitMem2 : declare_init_memory μ2 (gen_init_mem (map (concretize_mem ia) specs))) :
+    interp_mem_with_public_memory μ1 μ2
+      (map mem_full_to_spec (map (concretize_mem ia) specs))
+    ⊢ asn.interpret (gen_mem_pre_rel_classed specs)
+        ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    assert (Hpin1 : declare_init_memory μ1 (gen_init_mem (map (concretize_mem ia)
+              (List.filter (fun s => negb (mem_spec_is_exist s)) specs)))).
+    { rewrite gen_init_mem_filter_pinned. exact HInitMem1. }
+    assert (Hpin2 : declare_init_memory μ2 (gen_init_mem (map (concretize_mem ia)
+              (List.filter (fun s => negb (mem_spec_is_exist s)) specs)))).
+    { rewrite gen_init_mem_filter_pinned. exact HInitMem2. }
+    iIntros "H".
+    iDestruct (interp_mem_partition_rel with "H") as "(Hpin & Hpub & Hpriv)".
+    unfold gen_mem_pre_rel_classed. cbn [asn.interpret].
+    iSplitL "Hpin".
+    { rewrite gen_mem_pre_rel_concretize.
+      iApply (gen_implpre_mem (map (concretize_mem ia)
+                (List.filter (fun s => negb (mem_spec_is_exist s)) specs)) _ Hpin1 Hpin2).
+      iExact "Hpin". }
+    iSplitL "Hpub".
+    { unfold gen_mem_pub_class_rel.
+      iApply (gen_mem_pub_class_ks_intro _ (bv.of_N ia) va μ1).
+      iApply (interp_mem_group_pub μ1 μ2 ia _).
+      - intros s Hs. apply filter_In in Hs. destruct Hs as [_ Hf].
+        destruct (andb_prop _ _ Hf) as [_ Hb]. exact Hb.
+      - iExact "Hpub". }
+    unfold gen_mem_priv_class_rel.
+    iApply (gen_mem_priv_class_ks_intro _ (bv.of_N ia) va μ1 μ2).
+    iApply (interp_mem_group_priv μ1 μ2 ia _).
+    - intros s Hs. apply filter_In in Hs. destruct Hs as [_ Hf].
+      destruct (andb_prop _ _ Hf) as [_ Hb]. apply negb_true_iff. exact Hb.
+    - iExact "Hpriv".
+  Qed.
+
+  (* The classed noninterference bridge.  Statement is byte-identical to
+     gen_contract_noninterferent_rel except that valid_contract is over
+     gen_contract_rel_classed; the proof differs only in its last two lines,
+     where gen_implpre_mem_class replaces the
+     gen_mem_pre_rel_concretize + gen_implpre_mem pair. *)
+  Lemma gen_contract_noninterferent_rel_classed
+      (reg_specs : list reg_spec_rel)
+      (mem_specs : list mem_spec_rel)
+      (instrs : list AST)
+      (extra_exit_offs : list N)
+      (bound : N)
+      (exitCond : bv xlenbits -> bool)
+      (fuel : nat)
+      (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (HexitOffs : List.Forall
+          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
+          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel_classed init_addr reg_specs mem_specs instrs extra_exit_offs
+             bound exitCond fuel)) :
+    noninterferent_strong init_addr instrs exitCond
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits]) exitCond
+      (exits_of_offs (term_var "p")
+         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
+    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
+        [reflexivity | exact HexitOffs]. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs exitCond n ws
+      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
+      (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
+      (gen_contract_rel_classed init_addr reg_specs mem_specs instrs extra_exit_offs
+         bound exitCond fuel)
+      valid_contract
+      init_addr
+      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
+    all: try eauto.
+    2: { rewrite !length_map. exact Hlen. }
+    intros Σ H.
+    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+    cbn.
+    iFrame "Hpriv #".
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
+      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
+      { unfold lenAddr in Hbound. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+      rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
+    iSplitL "Hregs".
+    { rewrite gen_pre_rel_concretize.
+      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
+      iExact "Hregs". }
+    (* Named arguments deliberately: μ1/μ2 are strict-implicit here (they occur
+       in HInitMem1's type), so a positional call silently shifts and reports
+       "μ1 has type Memory while RelVal ty_xlenbits was expected". *)
+    iApply (gen_implpre_mem_class (specs := mem_specs) (ia := init_addr)
+              (μ1 := μ1) (μ2 := μ2)
+              (HInitMem1 := HInitMem1) (HInitMem2 := HInitMem2)).
     iExact "Hmemdata".
   Qed.
 
