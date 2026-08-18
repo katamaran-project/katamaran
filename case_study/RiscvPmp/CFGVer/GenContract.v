@@ -578,6 +578,85 @@ Import asn.notations.
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
       List.fold_right (fun s acc => gen_mem_asn_rel_bytes s ∗ acc) ⊤ specs.
 
+    (* ================================================================== *)
+    (* BYTE-GRANULAR CLASSED BLOCK (PLAN-unify-generators.md stage 2).      *)
+    (*                                                                     *)
+    (* The byte twin of gen_mem_cells_class: ONE grouped variable per        *)
+    (* publicness class -- so |Sigma| stops growing with the declared cell   *)
+    (* count, which is the dominant VC cost driver -- but each cell's word   *)
+    (* is additionally sliced into its four bytes, giving four ptstomem 1    *)
+    (* chunks at k..k+3 instead of one ptstomem 4 at k.                      *)
+    (*                                                                     *)
+    (* This is NOT new slicing machinery: it stacks the two slicings that    *)
+    (* already exist.  bvtake/bvdrop peel a cell word off the group exactly  *)
+    (* as gen_mem_cells_class does, then term_word_byte peels the bytes off  *)
+    (* that cell exactly as gen_mem_asn_rel_bytes does.  So the chunk        *)
+    (* inventory is identical to gen_mem_pre_rel_bytes' and only the         *)
+    (* variable count changes -- 1 per class instead of 1 per entry.         *)
+    (*                                                                     *)
+    (* Byte order is term_word_byte's: j = 0 is the byte at the LOWEST       *)
+    (* address.  The regression anchors at word_byte pin that convention by  *)
+    (* computation; getting it wrong surfaces only much later, as an Iris    *)
+    (* wiring failure in EndToEnd.v.                                        *)
+    (* ================================================================== *)
+    Fixpoint gen_mem_cells_class_bytes {Σ} {K} (ks : list K)
+        (addr_of : K -> N -> Term Σ ty_xlenbits)
+        (mw : Term Σ (ty.bvec (mem_class_width ks))) : Assertion Σ :=
+      match ks return Term Σ (ty.bvec (mem_class_width ks)) -> Assertion Σ with
+      | nil      => fun _ => ⊤
+      | cons k r => fun mw =>
+          byte_chunks (addr_of k)
+            (term_word_byte 0 (term_unop (uop.bvtake xlenbits) mw))
+            (term_word_byte 1 (term_unop (uop.bvtake xlenbits) mw))
+            (term_word_byte 2 (term_unop (uop.bvtake xlenbits) mw))
+            (term_word_byte 3 (term_unop (uop.bvtake xlenbits) mw))
+          ∗ gen_mem_cells_class_bytes r addr_of
+              (term_unop (uop.bvdrop xlenbits) mw)
+      end mw.
+
+    (* Distinct binder names from the word classes' "mwpub"/"mwpriv": a contract
+       may carry BOTH a word block and a byte block, and distinguishable names
+       keep a VC dump readable.  Empty classes emit nothing, for the same reason
+       as in the word case -- a width-0 asn.exist would cost a logic variable for
+       no cells, which is the whole point of classing. *)
+    Definition gen_mem_pub_class_ks_bytes (ks : list N)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      match ks with
+      | nil => ⊤
+      | _   =>
+          asn.exist "mwpubb" (ty.bvec (mem_class_width ks))
+            (gen_mem_cells_class_bytes ks
+               (fun k j => byte_addr_rel (term_var "p") k j)
+               (term_var "mwpubb")
+             ∗ secLeakvar "mwpubb")
+      end.
+
+    Definition gen_mem_priv_class_ks_bytes (ks : list N)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      match ks with
+      | nil => ⊤
+      | _   =>
+          asn.exist "mwprivb" (ty.bvec (mem_class_width ks))
+            (gen_mem_cells_class_bytes ks
+               (fun k j => byte_addr_rel (term_var "p") k j)
+               (term_var "mwprivb"))
+      end.
+
+    (* Same three-way partition as gen_mem_pre_rel_classed, and the same heap
+       ORDER consequence: pinned first, then public, then private, rather than
+       spec order.  Sound (∗ commutes) but it can move consume-scan positions,
+       so a migrating example's VC residual shape can in principle change. *)
+    Definition gen_mem_pre_rel_bytes_classed (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      gen_mem_pre_rel_bytes
+        (List.filter (fun s => negb (mem_spec_is_exist s)) specs)
+      ∗ gen_mem_pub_class_ks_bytes
+          (mem_rel_keys
+             (List.filter (fun s => andb (mem_spec_is_exist s) (mem_spec_is_pub s)) specs))
+      ∗ gen_mem_priv_class_ks_bytes
+          (mem_rel_keys
+             (List.filter (fun s => andb (mem_spec_is_exist s) (negb (mem_spec_is_pub s))) specs)).
+
     (* bound: an N ≥ (max accessed byte offset)+4, so the fetch/access upper
        bounds are dischargeable from unsigned p + bound ≤ lenAddr. *)
     Definition gen_contract_rel
