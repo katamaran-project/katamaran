@@ -370,6 +370,16 @@ contract the VC is taken over changed.
 they are still the right builders for a mixed-publicness data block, and
 `gen_contract_rel_bytes` has no classed variant.
 
+**But note the consequence: those three now have ZERO callers in the tree.** They
+are still *proved* (they are `Lemma`s with `Qed`s in `EndToEnd.v`, so the gate
+keeps validating them), but no VC reduces through them any more, so the
+combination — a real symbolic VC taken over `gen_contract_rel` — is no longer
+exercised by anything. If you later need that path (a mixed-publicness block),
+expect to be its first user since 2026-08-18 and budget accordingly.
+`Example/ZZClassBase.v` is the cheapest way to smoke-test it. By contrast
+`gen_mem_pre_rel` IS still load-bearing — `gen_mem_pre_rel_classed` uses it for
+the pinned group (`GenContract.v:530`).
+
 ## Phase 5 — gate (DONE 2026-08-18, PASSED TWICE)
 
 `GATE_JOBS=1 ./scripts/gate.sh` on this 14 GB box, run twice: once on Phase 3
