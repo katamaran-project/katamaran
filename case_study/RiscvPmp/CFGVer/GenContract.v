@@ -429,8 +429,15 @@ Import asn.notations.
     (* DEFINITIONALLY `xlenbits + mem_class_width r`, so the slices          *)
     (* typecheck with zero proof obligations.                               *)
     (* ------------------------------------------------------------------ *)
-    Fixpoint mem_class_width (specs : list mem_spec_rel) : nat :=
-      match specs with
+    (* Generic in the KEY type so ONE cells builder -- and hence ONE ImplPre
+       induction -- serves both the base-relative family (keys are offsets `k`,
+       addresses `p + k`) and the concrete family (keys are literal addresses).
+       Indexing the width by the KEY LIST rather than by a list of address
+       TERMS is deliberate: `length (map f specs) = length specs` is only
+       propositional, so a term-list index does not typecheck against a width
+       computed from the spec list. *)
+    Fixpoint mem_class_width {K} (ks : list K) : nat :=
+      match ks with
       | nil      => 0
       | cons _ r => xlenbits + mem_class_width r
       end.
@@ -438,46 +445,63 @@ Import asn.notations.
     (* Cells of ONE class, peeling xlenbits bits off the class variable per
        entry.  `addr_of` is a function for the same reason byte_chunks takes
        one: the caller's Σ differs inside the asn.exist binder. *)
-    Fixpoint gen_mem_cells_class {Σ} (specs : list mem_spec_rel)
-        (addr_of : N -> Term Σ ty_xlenbits)
-        (mw : Term Σ (ty.bvec (mem_class_width specs))) : Assertion Σ :=
-      match specs return Term Σ (ty.bvec (mem_class_width specs)) -> Assertion Σ with
+    Fixpoint gen_mem_cells_class {Σ} {K} (ks : list K)
+        (addr_of : K -> Term Σ ty_xlenbits)
+        (mw : Term Σ (ty.bvec (mem_class_width ks))) : Assertion Σ :=
+      match ks return Term Σ (ty.bvec (mem_class_width ks)) -> Assertion Σ with
       | nil      => fun _ => ⊤
-      | cons s r => fun mw =>
-          let '(k, _, _) := s in
+      | cons k r => fun mw =>
           (addr_of k ↦ₘ term_unop (uop.bvtake xlenbits) mw)
           ∗ gen_mem_cells_class r addr_of (term_unop (uop.bvdrop xlenbits) mw)
       end mw.
 
+    (* Classification, on both spec forms.  concretize_mem maps PVExist to
+       None and preserves the publicness bit, so these two agree under it --
+       which is what lets the classed concretize lemma commute the filters
+       with the map. *)
     Definition mem_spec_is_exist (s : mem_spec_rel) : bool :=
       let '(_, _, pv) := s in match pv with PVExist => true | _ => false end.
     Definition mem_spec_is_pub (s : mem_spec_rel) : bool :=
       let '(_, b, _) := s in b.
+    (* The mem_full_spec classifiers are for the ImplPre bridge, which has to
+       partition the CONCRETE resource list by the same classes; nothing in the
+       symbolic precondition uses them. *)
+    Definition mem_full_is_exist (s : mem_full_spec) : bool :=
+      let '(_, _, ov) := s in match ov with None => true | _ => false end.
+    Definition mem_full_is_pub (s : mem_full_spec) : bool :=
+      let '(_, b, _) := s in b.
+
+    Definition mem_rel_keys (specs : list mem_spec_rel) : list N :=
+      List.map (fun s => let '(k, _, _) := s in k) specs.
+    Definition mem_full_keys (specs : list mem_full_spec) : list (Val ty_xlenbits) :=
+      List.map (fun s => let '(a, _, _) := s in a) specs.
 
     (* Empty classes emit NOTHING -- an `asn.exist` of width 0 would cost a
        logic variable for no cells, which is exactly what this builder exists
-       to avoid.  The two classes are separate definitions rather than one
+       to avoid.  The classes are separate definitions rather than one
        parameterized by a name because `secLeakvar` needs a literal. *)
-    Definition gen_mem_pub_class (specs : list mem_spec_rel)
+    Definition gen_mem_pub_class_rel (specs : list mem_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      match specs with
+      let ks := mem_rel_keys specs in
+      match ks with
       | nil => ⊤
       | _   =>
-          asn.exist "mwpub" (ty.bvec (mem_class_width specs))
-            (gen_mem_cells_class specs
+          asn.exist "mwpub" (ty.bvec (mem_class_width ks))
+            (gen_mem_cells_class ks
                (fun k => term_binop bop.bvadd (term_var "p")
                            (term_val ty_xlenbits (bv.of_N k)))
                (term_var "mwpub")
              ∗ secLeakvar "mwpub")
       end.
 
-    Definition gen_mem_priv_class (specs : list mem_spec_rel)
+    Definition gen_mem_priv_class_rel (specs : list mem_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      match specs with
+      let ks := mem_rel_keys specs in
+      match ks with
       | nil => ⊤
       | _   =>
-          asn.exist "mwpriv" (ty.bvec (mem_class_width specs))
-            (gen_mem_cells_class specs
+          asn.exist "mwpriv" (ty.bvec (mem_class_width ks))
+            (gen_mem_cells_class ks
                (fun k => term_binop bop.bvadd (term_var "p")
                            (term_val ty_xlenbits (bv.of_N k)))
                (term_var "mwpriv"))
@@ -492,10 +516,24 @@ Import asn.notations.
     Definition gen_mem_pre_rel_classed (specs : list mem_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
       gen_mem_pre_rel (List.filter (fun s => negb (mem_spec_is_exist s)) specs)
-      ∗ gen_mem_pub_class
+      ∗ gen_mem_pub_class_rel
           (List.filter (fun s => andb (mem_spec_is_exist s) (mem_spec_is_pub s)) specs)
-      ∗ gen_mem_priv_class
+      ∗ gen_mem_priv_class_rel
           (List.filter (fun s => andb (mem_spec_is_exist s) (negb (mem_spec_is_pub s))) specs).
+
+    (* NO concrete (mem_full_spec) counterpart is defined, deliberately.  The
+       obvious architecture -- mirror gen_mem_pre_rel_concretize, i.e. rewrite
+       the rel assertion into a concrete classed one and then bridge -- does
+       NOT typecheck: the two sides' existential widths are
+       `mem_class_width (mem_rel_keys L)` and
+       `mem_class_width (mem_full_keys (map (concretize_mem ia) L))`, which are
+       equal only PROPOSITIONALLY (both are xlenbits * length L, but `length
+       (map f L) = length L` is not definitional), so stating the bridge as an
+       assertion equality would need a dependent transport across a type index
+       -- the width-index trap in core-executor-internals §6.
+       The ImplPre bridge therefore attacks `gen_mem_pre_rel_classed` DIRECTLY,
+       keeping one width index throughout and handling the `p + of_N k` vs
+       literal-address mismatch inside the induction with bv.of_N_add. *)
 
     (* Base-relative byte address, in the canonical `p + <literal>` form: the
        offset k+j is folded into ONE literal rather than left as (p+k)+j.
