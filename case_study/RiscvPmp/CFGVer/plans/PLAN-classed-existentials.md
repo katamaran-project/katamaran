@@ -89,11 +89,11 @@ byte-identical to `zzkcd_cfg_contract_param` except the generator call.
   in RAM", and its wall-clock is therefore not a performance figure.
 - N=128 was queued behind the killed baseline run and never started.
 
-## Phase 3 — the `ImplPre` bridge (ALL HARD PARTS PROVED)
+## Phase 3 — the `ImplPre` bridge (COMPLETE)
 
-**The core lemma and both class wrappers are PROVED with real `Qed`s and now
-live in `EndToEnd.v`** (see "Steps 1–2 DONE" below). The bv half of the bridge is
-done, and the estimate below — which called it the easy half — held.
+**Every lemma is in `EndToEnd.v` with a real `Qed`**, from the bv cells core up
+to `gen_contract_noninterferent_rel_classed`. The sections below are in the order
+they were developed; the estimate that the bv half was the easy half held.
 
 ### How it was developed, and why a separate harness was needed
 
@@ -175,10 +175,8 @@ Third mechanical trap, on top of the two above: the `secLeak` goal arrives as
 `instprop (formula_secLeak …) ι`, so a bare `exact I` fails with *"The term I has
 type True while it is expected to have type instprop …"* — `cbn` first.
 
-`ZZClassBridge.v` is now trimmed to its import block only, so it cannot shadow
-the real lemmas; it is kept purely as the iteration harness for step 3.
-
-### What remains in Phase 3
+`ZZClassBridge.v` is trimmed to its import block only, so it cannot shadow the
+real lemmas; it is kept as the iteration harness for any further work here.
 
 ### The partition obstacle: SOLVED (2026-08-18, commit `53569cff`)
 
@@ -393,10 +391,21 @@ arrives as a bare exit 143 — set `GATE_PROBE_BATCH=4`.
 
 ## Files
 
-Generator: `GenContract.v`. Rigs (throwaway, not in `_CoqProject`):
-`Example/ZZKslClassCommon.v`, `ZZKslCLS_N{32,64,128}.v`, `ZZKslClassBase.v`;
-plus the earlier measurement rigs `ZZKslShrCommon.v`, `ZZKslBigCommon.v`,
-`ZZKslPinCommon.v`, `ZZPadShrCommon.v` and their runners.
+Generator: `GenContract.v`. Bridge + end theorem: `EndToEnd.v`. Migrated
+contracts: `Example/{Cmovznz4,Countdown,KeyScheduleLoop,BearSSLModpowFull}.v`
+and their four `*Result.v` files.
+
+Rigs (throwaway, not in `_CoqProject`, so they are NOT kept green by the gate —
+expect them to rot):
+- `Example/ZZClassBridge.v` — Phase 3 iteration harness (import block only).
+- `Example/ZZClassSmoke.v` / `ZZClassBase.v` — the Phase 3 smoke test and its
+  matched unclassed baseline, on Cmovznz4's specs. Rebuild these two if you ever
+  need to re-measure the classed-vs-unclassed delta at a given cell count; they
+  are the cheapest matched comparison available (~30–45 s each).
+- Phase 2 feasibility: `Example/ZZKslClassCommon.v`, `ZZKslCLS_N{32,64,128}.v`,
+  `ZZKslClassBase.v`.
+- Earlier measurement rigs: `ZZKslShrCommon.v`, `ZZKslBigCommon.v`,
+  `ZZKslPinCommon.v`, `ZZPadShrCommon.v` and their runners.
 
 ---
 
@@ -449,24 +458,32 @@ These are not about the proofs; they are about being able to iterate at all.
   it from the list you are inducting on, and never state an equation whose two
   sides carry different-but-equal-length index expressions.
 
-### Phase 4 is the risky one — read before starting
+### Phase 4 turned out NOT to be the risky one — what the fear was, and why it missed
 
-Migrating the 9 committed examples is NOT mechanical, for one specific reason:
-`gen_mem_pre_rel_classed` changes the HEAP ORDER (pinned, then public, then
-private, rather than spec order). `consume` is order-sensitive
-(`core-executor-internals`), so residual shapes can move and a given example's
-`solve_vc`/`solve_symbase_fetch` line may stop closing. Expect per-example
-debugging, not a sweep.
+This section predicted that migrating the committed examples would need
+per-example debugging, because `gen_mem_pre_rel_classed` changes the HEAP ORDER
+(pinned, then public, then private, rather than spec order) and `consume` is
+order-sensitive (`core-executor-internals`), so a residual shape could move and a
+`solve_vc`/`solve_symbase_fetch` line could stop closing.
 
-Two rules for that phase:
+**It did not happen — all four VCs closed with unchanged tactic lines, first
+try.** The reasoning was sound but the premise was not checked: reordering by
+class is the IDENTITY on a homogeneous data block, and every committed example's
+block is all-private `PVExist`. The lesson generalises — before budgeting for a
+reordering risk, check whether the reordering is even non-trivial on the actual
+data.
+
+The two rules written for that phase were followed and remain right for any
+future migration:
 
 - **All-or-nothing behind a green `./scripts/gate.sh`** (`GATE_JOBS=1` on a
-  ≤16 GB box). Do not land a partial migration.
+  ≤16 GB box).
 - **Never "fix" a failing VC by weakening a spec entry or admitting a lemma.**
   The gate's `Print Assumptions` on end theorems is the only thing that catches
   it, and it runs last. If an example will not close, leave it unmigrated and say
-  so — the expected benefit is near zero anyway (these examples declare 2–16
-  cells; the measured win at that size is ~1.1–1.2×, not the 3.5× seen at N=32).
+  so — the expected benefit at 2–16 cells is only ~1.1–1.2× (measured 1.19× at
+  12), not the 3.31× seen at 32.
 
-The cost/benefit of Phase 4 is genuinely poor and was flagged before it was
-requested; it is worth re-confirming with the user before spending a day on it.
+The cost/benefit of Phase 4 was genuinely poor and was flagged before it was
+requested; it was re-confirmed with the user, with the smoke-test numbers in
+hand, before being carried out.
