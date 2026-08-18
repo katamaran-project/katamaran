@@ -280,6 +280,34 @@ under construction), and `simplify_secLeak` already decomposes `secLeak` through
 unops down to variable leaves, so the symbolic side is fine; this is the Iris
 side.
 
+### Phase 3 smoke test — the classed path EXERCISED (2026-08-18)
+
+Nothing in the tree used `gen_contract_rel_classed`, so the end bridge was
+unexercised. `Example/ZZClassSmoke.v` (throwaway) reuses **Cmovznz4's instrs and
+specs verbatim** — 12 declared cells, all `PVExist`, all private, the largest
+declared-cell count among the nine committed examples — changing only the
+generator call. `Example/ZZClassBase.v` is the same file with
+`gen_contract_rel`, as a matched baseline. Both compile clean.
+
+| | classed | unclassed baseline |
+|---|---|---|
+| `vm_compute; solve_vc; solve_symbase_fetch` | 10.14 s | 11.38 s |
+| its `Qed.` | 2.70 s | 3.95 s |
+| **VC total** | **12.84 s** | **15.33 s** (→ **1.19×**) |
+| peak RSS (whole file) | 7.43 GB | 7.48 GB |
+| `Print Assumptions` on the end theorem | `pure_decode`, `mmioenv` | *identical* |
+
+Three things this settles:
+
+1. **The heap-order change did NOT move cmovznz4's residuals.** The VC closes
+   with the *byte-identical* tactic line. That was the headline Phase 4 risk, and
+   on the hardest of the nine examples it did not materialise. It is evidence, not
+   a proof, for the other eight.
+2. **The classed chain is axiom-clean** — the same two framework parameters as
+   the baseline, no new assumptions.
+3. **The win at 12 cells is 1.19×**, confirming the ~1.1–1.2× estimate below
+   rather than the 3.31× measured at N=32. Phase 4's benefit really is small.
+
 ## Phase 4 — migrate the 9 examples (NOT STARTED, gated on Phase 3)
 
 Requested explicitly. Recorded risk, stated at the time: the committed examples
@@ -327,6 +355,14 @@ These are not about the proofs; they are about being able to iterate at all.
    and rate-limits to 3 builds / 15 min. `rocq_compile_file` is the sanctioned
    alternative. `skill-path-guard.sh` denies edits to `GenContract.v` /
    `EndToEnd.v` without the matching skill loaded once per session.
+4b. **`rocq_compile_file` reported SUCCESS on an `EndToEnd.v` that `coqc`
+   rejects** (2026-08-18) — a hard `Wrong argument name` error, and the `.vo` it
+   left behind lacked the new lemmas entirely (`strings EndToEnd.vo | grep
+   <lemma>` → 0) while the source's mtime came out *newer* than the `.vo` it had
+   supposedly just produced. Two consequences: **treat `make -f Makefile.coq
+   <file>.vo` as the authority for this file**, and after any `rocq_compile_file`
+   on it, verify with `strings … | grep` that the names you added are actually
+   in the artifact. A commit was made on the strength of the false green.
 5. A `git checkout` of a file changes its mtime and trips the build guard even
    though the content is identical.
 

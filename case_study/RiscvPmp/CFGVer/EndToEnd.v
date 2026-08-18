@@ -1718,12 +1718,15 @@ Import IrisModel.RiscvPmpIrisBase.
     { rewrite gen_pre_rel_concretize.
       iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
       iExact "Hregs". }
-    (* Named arguments deliberately: μ1/μ2 are strict-implicit here (they occur
-       in HInitMem1's type), so a positional call silently shifts and reports
-       "μ1 has type Memory while RelVal ty_xlenbits was expected". *)
-    iApply (gen_implpre_mem_class (specs := mem_specs) (ia := init_addr)
-              (μ1 := μ1) (μ2 := μ2)
-              (HInitMem1 := HInitMem1) (HInitMem2 := HInitMem2)).
+    (* μ1/μ2 are IMPLICIT here (they occur in HInitMem1's type, and this section
+       is under Set Implicit Arguments), so they must NOT be passed positionally
+       -- doing so reports "μ1 has type Memory while RelVal ty_xlenbits was
+       expected".  Nor can they be passed by name together with the explicit
+       arguments: Coq's `(x := v)` syntax accepts implicit names only, and the
+       fully-named form fails with "Wrong argument name HInitMem2 (possible
+       names: Σ H μ1 μ2)".  Positional, μ-free, `_` for va, is the form that
+       works; μ1/μ2 come from HInitMem1/HInitMem2. *)
+    iApply (gen_implpre_mem_class mem_specs init_addr _ HInitMem1 HInitMem2).
     iExact "Hmemdata".
   Qed.
 
