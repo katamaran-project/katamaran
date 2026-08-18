@@ -304,15 +304,17 @@ Three things this settles:
    a proof, for the other eight.
 2. **The classed chain is axiom-clean** — the same two framework parameters as
    the baseline, no new assumptions.
-3. **The win at 12 cells is 1.19×**, confirming the ~1.1–1.2× estimate below
-   rather than the 3.31× measured at N=32. Phase 4's benefit really is small.
+3. **The win at 12 cells is 1.19×.** Do NOT generalise this to the migration as
+   a whole — this plan did, wrongly, until the per-example sweep below was run.
 
 ## Phase 4 — migrate the examples (DONE 2026-08-18)
 
 Requested explicitly, re-confirmed with the user after Phase 3's smoke test put
 numbers on it. Recorded risk, stated at the time: the committed examples declare
-FEW cells (`key_schedule_loop` has 2), so they save almost nothing, while the
-heap-order change may move VC residual shapes. All-or-nothing behind a green gate.
+FEW cells (`key_schedule_loop` has 2), so they save little, while the heap-order
+change may move VC residual shapes. All-or-nothing behind a green gate.
+(The "save little" half turned out to be right for the 1- and 2-cell examples and
+WRONG for the 16-cell one — see the per-example sweep below.)
 
 ### The scope was 4 contracts, not 9
 
@@ -352,6 +354,38 @@ four examples' data blocks are *homogeneous* — every cell is private `PVExist`
 public classes are empty, so `gen_mem_pre_rel_classed`'s reordering is the
 identity on these lists. **Expect the risk to be real only for an example that
 mixes pinned/public/private cells**, which none of the committed nine do.
+
+### Per-example cost sweep (2026-08-18) — measured, all four
+
+The single cmovznz4 number was being quoted as if it characterised the migration.
+It does not. Rigs `Example/ZZVC{Cd,Ksl,Cmv,Mpf}{Cls,Base}.v`: contract + VC only
+(deliberately NO `EndToEnd` require, so this measures the VC and not the Iris
+load), ONE heavy sentence per `coqc` process so they cannot contaminate each
+other, and the two files of a pair differ in exactly one token — the generator
+call. User CPU from `-time`, peak RSS from `/usr/bin/time`.
+
+| example | cells | classed VC+`Qed` | unclassed | win | peak RSS cls/base |
+|---|---|---|---|---|---|
+| `countdown_mem` | 1 | 1.509 + 0.06 = **1.569 s** | 1.516 + 0.06 = 1.576 s | **1.004×** | 4.332 / 4.333 GB |
+| `key_schedule_loop2` | 2 | 3.473 + 3.523 = **6.996 s** | 3.579 + 3.541 = 7.120 s | **1.018×** | 4.406 / 4.417 GB |
+| `cmovznz4` | 12 | 8.540 + 2.403 = **10.943 s** | 9.702 + 3.405 = 13.107 s | **1.198×** | 4.629 / 4.732 GB |
+| `modpow_win_full` | 16 | 19.985 + 14.325 = **34.310 s** | 26.974 + 21.301 = 48.275 s | **1.407×** | 6.275 / 6.916 GB |
+
+Reading it:
+
+- **1 → 2 → 12 → 16 cells gives 1.00 → 1.02 → 1.20 → 1.41**, a coherent
+  superlinear curve consistent with the `|Σ|` cost the diagnostics identified, and
+  extrapolating sensibly toward the 3.31× at 32 cells. Four points, one curve.
+- **At 1–2 cells the win is nil** (inside noise). At 1 cell it *must* be — one cell
+  is one existential under either builder — so that row doubles as a check that the
+  two arms really are matched; it comes out as the identity to 0.4%.
+- **At 16 cells it is 1.41×**, appreciably better than the ~1.1–1.2× this plan
+  previously asserted for the whole 2–16 range.
+- These numbers are NOT comparable to the `ZZClassSmoke`/`ZZClassBase` pair above,
+  which loaded `EndToEnd`. But cmovznz4's 1.198× here independently replicates that
+  rig's 1.19×, which is a useful cross-check on both.
+
+Whole sweep is ~4 min to re-run.
 
 ### What the migration touched
 
@@ -407,6 +441,10 @@ and their four `*Result.v` files.
 
 Rigs (throwaway, not in `_CoqProject`, so they are NOT kept green by the gate —
 expect them to rot):
+- `Example/ZZVC{Cd,Ksl,Cmv,Mpf}{Cls,Base}.v` — the per-example matched cost sweep
+  (8 files, ~4 min for the whole set). The right rig to re-run if the classed
+  builder or the `|Σ|` cost model changes; better isolated than
+  ZZClassSmoke/ZZClassBase because they omit `EndToEnd`.
 - `Example/ZZClassBridge.v` — Phase 3 iteration harness (import block only).
 - `Example/ZZClassSmoke.v` / `ZZClassBase.v` — the Phase 3 smoke test and its
   matched unclassed baseline, on Cmovznz4's specs. Rebuild these two if you ever
@@ -491,8 +529,8 @@ future migration:
 - **Never "fix" a failing VC by weakening a spec entry or admitting a lemma.**
   The gate's `Print Assumptions` on end theorems is the only thing that catches
   it, and it runs last. If an example will not close, leave it unmigrated and say
-  so — the expected benefit at 2–16 cells is only ~1.1–1.2× (measured 1.19× at
-  12), not the 3.31× seen at 32.
+  so — but note the benefit is strongly cell-count dependent: nil at 1–2 cells,
+  1.20× at 12, 1.41× at 16 (measured; see the per-example sweep).
 
 The cost/benefit of Phase 4 was genuinely poor and was flagged before it was
 requested; it was re-confirmed with the user, with the smoke-test numbers in
