@@ -162,7 +162,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        base 256): cmovznz4_noninterferent and cmovznz4_noninterferent_at_start
        are both corollaries of the parametric theorem, so re-proving those two
        VCs cost 31 s of the file's compile time for nothing.
-       Parametric contract (Σ = ["p"]) built with gen_contract_rel from the
+       Parametric contract (Σ = ["p"]) built with gen_contract_rel_classed
+       (the classed-existential builder: the 12 data words become ONE grouped
+       existential rather than 12 -- PLAN-classed-existentials.md) from the
        base-relative specs below, so the data pointers A1/A2/A3 hold
        p+116 / p+132 / p+148 and the 12 data words live at p+116 .. p+160
        (bop.bvadd terms), NOT constants.  peval DOES fold a
@@ -192,7 +194,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     (* Base bound 164 = 160 (last data offset, r[3]) + 4 (word). *)
     Definition cmovznz4_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel ia cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
+      gen_contract_rel_classed ia cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
         cmovznz4_instrs [] 164
         (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
 

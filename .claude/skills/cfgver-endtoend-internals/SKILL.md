@@ -74,6 +74,46 @@ memory by `instrsMemory` (code only) / `instrsAndDataMemory` (code + data words)
 `intro_ptsto_instrs` — internally via `big_sepM_insert` with side condition
 `instrs_of_list_fresh`.
 
+## The CLASSED memory `ImplPre` (`gen_implpre_mem_class`)
+
+For a contract built with `gen_contract_rel_classed` (→ **cfgver-gen-contract**),
+the data block's `ImplPre` cannot reuse the `gen_mem_pre_rel_concretize` +
+`gen_implpre_mem` pair, because no concrete classed builder exists to rewrite
+into (the width-index trap, `GenContract.v:536`). `gen_implpre_mem_class` attacks
+the rel assertion directly, in four moves:
+
+| step | lemma |
+|---|---|
+| split the resource list three ways | `interp_mem_partition_rel` (→ `interp_mem_partition` + the `filter_*_concretize` commutations) |
+| pinned group | `gen_mem_pre_rel_concretize` + `gen_implpre_mem` — the concretize rewrite IS available for that group |
+| public class | `interp_mem_group_pub` + `gen_mem_pub_class_ks_intro` |
+| private class | `interp_mem_group_priv` + `gen_mem_priv_class_ks_intro` |
+
+`interp_mem_partition_rel` is provable at all only because Iris's
+`big_opL_permutation` applies to index-INDEPENDENT bodies (`λ _ : nat, f`), and
+`interp_mem_with_public_memory`'s body ignores the index.
+
+Four traps, each of which cost a round trip:
+
+- **The per-group lemmas need only the `is_pub` hypothesis, not `is_exist`.**
+  `interp_mem_with_public_memory` branches on the publicness bit and ignores the
+  value slot entirely, so the group conversion never has to know the group is
+  `PVExist`.
+- **`μ1`/`μ2` are IMPLICIT in `gen_implpre_mem_class`** (they occur in
+  `HInitMem1`'s type, under `Set Implicit Arguments`) — and this differs from the
+  same statement at a file's top level. Passing them positionally reports
+  `"μ1 has type Memory while RelVal ty_xlenbits was expected"`, which reads like a
+  statement bug. Passing the whole call by name instead fails too: Coq's
+  `(x := v)` accepts implicit names only (`Wrong argument name HInitMem2 (possible
+  names: Σ H μ1 μ2)`). The working form is positional and μ-free.
+- **`gen_init_mem_filter_pinned`** is why the caller's *unfiltered*
+  `declare_init_memory` hypotheses suffice for the pinned group. Its proof needs
+  `unfold gen_init_mem in *` — unfolding in the goal only leaves the IH folded and
+  `rewrite IH` finds no subterm.
+- In this file's notation environment `rewrite A, B` (comma form) is a **syntax
+  error**, and so is a one-element delta flag `cbn [map]` (while
+  `cbn [map List.filter]` parses) — write two `rewrite`s and `cbn [List.map]`.
+
 ## Register-machinery reference
 
 The two-world register ownership predicates these proofs manipulate

@@ -112,7 +112,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       [(bv.of_N 56, false, None); (bv.of_N 60, false, None)].
 
     (* Parametric-base version: the table is base-relative (p+56/p+60), so
-       this needs gen_contract_rel (like cmovznz4_param/countdown_mem_param),
+       this needs gen_contract_rel_classed (like cmovznz4_param /
+       countdown_mem_param),
        not the memory-less gen_contract_param.
        Supersedes the removed concrete-base pair key_schedule_loop2_cfg_contract
        / valid_key_schedule_loop2_cfg_contract (see MvSwap.v for the
@@ -126,7 +127,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       [(56%N, false, PVExist); (60%N, false, PVExist)].
 
     Definition key_schedule_loop2_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel ia key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel
+      gen_contract_rel_classed ia key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel
         key_schedule_loop2_instrs [] 64
         (pcOutOfInstrs_exitCond ia key_schedule_loop2_instrs) 40.
 

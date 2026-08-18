@@ -150,6 +150,11 @@ standard `pcOutOfInstrs_exitCond` — use the specialised bridges in `EndToEnd.v
   simplified `Hlen` (`cbn; lia`), and the VC.
 - **`gen_contract_noninterferent_rel_simple`** (base-relative, possibly with data
   memory): premises `HND`, `HDataAddrs`, `Hlen`, `Hbound`, and the VC.
+- **`gen_contract_noninterferent_rel_classed_simple`** — the twin of the above for
+  a contract built with `gen_contract_rel_classed` (see below). Identical
+  premises AND an identical conclusion; only the contract the VC is taken over
+  differs, so switching an example between them is a one-identifier change in
+  each of its two files and does not touch the trusted statement surface.
 
 Both fix `extra_exit_offs = []` and the exit condition internally, so `HexitOffs`
 is discharged for you **and the "discharge valid_contract FIRST" ordering hazard
@@ -257,6 +262,32 @@ proved ONCE for `∀ init_addr`, not per concrete address:
   data word's OWN address shifts with the base (e.g. countdown_mem's counter at
   `p+16`). Takes an extra `bound : N` param (≥ max accessed byte offset + 4) and
   builds `reg_spec_rel`/`mem_spec_rel` lists instead of the plain ones.
+- **`gen_contract_rel_classed`** — same signature and same statement strength as
+  `gen_contract_rel`, but the data block emits **one existential per publicness
+  class** instead of one per `PVExist` entry: an N-cell class becomes a single
+  `bv (xlenbits * N)` variable whose cells are `bvtake`/`bvdrop` slices. This is
+  *equivalent*, not weaker (N independent words are in bijection with one N-word
+  vector), and it exists because `|Σ|` is the dominant VC cost driver — measured
+  quadratic, and ~30–46× more expensive per unit than a chunk. **This is the
+  default choice for a new base-relative example with data memory.** Its
+  bridge is `gen_contract_noninterferent_rel_classed_simple` (above).
+
+  Two things to know. **The win scales with declared cell count**: 3.31× at 32
+  cells, but only ~1.19× at 12 — so for a handful of cells it is close to a
+  wash. And **the heap order changes** to pinned, then public, then private,
+  rather than spec order; `consume` is order-sensitive, so a VC residual shape
+  can in principle move. In practice it did not for any of the four migrated
+  examples, because their data blocks are homogeneous (all-private `PVExist`),
+  which makes the reordering the identity. Expect to have to look only when a
+  data block genuinely MIXES pinned/public/private cells.
+
+  There is deliberately **no classed counterpart of `gen_contract_param`** (the
+  concrete `mem_full_spec` family) and none of `gen_contract_rel_bytes`. For
+  `gen_contract_param` it is not an oversight but impossible as stated: the two
+  sides' existential widths are `mem_class_width (mem_rel_keys L)` and
+  `mem_class_width (mem_full_keys (map (concretize_mem ia) L))`, equal only
+  propositionally, so the bridge would need a dependent transport across a type
+  index (`core-executor-internals` §6). See the note at `GenContract.v:536`.
 
 **Bridges**: `gen_contract_noninterferent_param`/`_rel` (in `EndToEnd.v`) mirror
 `gen_contract_noninterferent`'s premises (see table above) and instantiate the

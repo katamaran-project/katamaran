@@ -89,7 +89,8 @@ a concrete-base VC is dead compile time.
 5. **End lemma.** `<prog>_noninterferent : noninterferent_strong …`. Common case
    (register-only or straight-line, standard `pcOutOfInstrs` exit): use the
    specialised bridge **`gen_contract_noninterferent_param_simple`** (or
-   `_rel_simple` when there is data memory) — it bakes in the mechanical
+   `_rel_classed_simple` when there is data memory — see step 3's note on
+   `gen_contract_rel_classed`, which is the default builder there) — it bakes in the mechanical
    premises AND removes the ordering hazard below, leaving only NoDup +
    length-bound (+ `HDataAddrs`/`Hbound` for `_rel`) + the VC. Only reach for
    the general `eapply gen_contract_noninterferent(_param/_rel);` (its **five**

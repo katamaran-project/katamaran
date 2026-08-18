@@ -142,7 +142,7 @@ Definition modpow_win_full_mem_specs_rel : list mem_spec_rel :=
    38 (1 header + 6 setup + 3 x 9 inner + 1 j + 3 latch) = 122.  Fuel 150
    leaves slack — tight fuel surfaces as a bare False deep in the VC. *)
 Definition modpow_win_full_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_rel ia modpow_win_full_reg_specs_rel modpow_win_full_mem_specs_rel
+  gen_contract_rel_classed ia modpow_win_full_reg_specs_rel modpow_win_full_mem_specs_rel
     modpow_win_full_instrs [] 176
     (pcOutOfInstrs_exitCond ia modpow_win_full_instrs) 150.
 

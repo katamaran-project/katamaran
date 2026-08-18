@@ -1,11 +1,12 @@
 # PLAN-classed-existentials — one existential per publicness class
 
-Status: **Phase 1 LANDED green (`bfdf7ec2`, `3eefda6f`). Phase 2 measured.
-Phase 3 COMPLETE — every lemma including the end bridge
-`gen_contract_noninterferent_rel_classed` is in `EndToEnd.v` with a real
-`Qed`, file compiles green. Phase 4 NOT STARTED (needs a user decision, see
-below). Phase 5 pending.** Additive throughout — every existing example and
-`gen_contract_rel` itself are untouched, and no `Admitted` anywhere.
+Status: **ALL FIVE PHASES COMPLETE (2026-08-18).** Gate PASSED twice — on Phase 3
+alone and again after the Phase 4 migration. `gen_contract_rel_classed` exists,
+its `ImplPre` bridge is proved with real `Qed`s, and the four committed contracts
+that CAN use it do (see Phase 4 for why it is four, not nine).
+`gen_contract_rel` and `gen_contract_noninterferent_rel(_simple)` are kept — they
+remain correct for a mixed-publicness data block. No `Admitted` anywhere, and no
+end theorem's statement changed.
 
 ## Why
 
@@ -308,19 +309,87 @@ Three things this settles:
 3. **The win at 12 cells is 1.19×**, confirming the ~1.1–1.2× estimate below
    rather than the 3.31× measured at N=32. Phase 4's benefit really is small.
 
-## Phase 4 — migrate the 9 examples (NOT STARTED, gated on Phase 3)
+## Phase 4 — migrate the examples (DONE 2026-08-18)
 
-Requested explicitly. Recorded risk, stated at the time: the committed examples
-declare FEW cells (`key_schedule_loop` has 2), so they save almost nothing, while
-the migration touches the trusted statement surface and the heap-order change may
-move VC residual shapes. Must be all-or-nothing behind a green gate — do NOT land
-a partial migration.
+Requested explicitly, re-confirmed with the user after Phase 3's smoke test put
+numbers on it. Recorded risk, stated at the time: the committed examples declare
+FEW cells (`key_schedule_loop` has 2), so they save almost nothing, while the
+heap-order change may move VC residual shapes. All-or-nothing behind a green gate.
 
-## Phase 5 — gate (NOT STARTED)
+### The scope was 4 contracts, not 9
 
-`./scripts/gate.sh` with `GATE_JOBS=1` on this ≤16 GB box. The only check that
-catches an unsound `empty` in the new builder, via `Print Assumptions` on the end
-theorems.
+`gen_contract_rel_classed` is the classed counterpart of `gen_contract_rel`, and
+only four committed contracts use that builder:
+
+| contract | declared cells |
+|---|---|
+| `modpow_win_full_cfg_contract_param` | 16, all private `PVExist` |
+| `cmovznz4_cfg_contract_param` | 12, all private `PVExist` |
+| `key_schedule_loop2_cfg_contract_param` | 2 |
+| `countdown_mem_cfg_contract_param` | 1 |
+
+The other ten committed contracts are **not migratable and have nothing to
+gain**: eight use `gen_contract_param` (concrete `mem_full_spec`), for which a
+classed builder cannot be written at all — the width-index trap documented at
+`GenContract.v:536` — and seven of those eight pass `[]` for memory, so there are
+no cells to group. One (`BearSSLCheckScalarLoop1`) uses
+`gen_contract_rel_bytes`, whose data block already groups per word.
+
+### The heap-order risk did NOT materialise — on any of the four
+
+This was the whole reason the phase was expected to be per-example debugging
+rather than a sweep. **Every one of the four VCs closed with its tactic line
+completely unchanged**, first try:
+
+| example | VC file rebuild |
+|---|---|
+| `Countdown.v` | 10.15 s / 4.33 GB |
+| `KeyScheduleLoop.v` | 15.14 s / 4.40 GB |
+| `Cmovznz4.v` | 19.45 s / 4.64 GB |
+| `BearSSLModpowFull.v` | 42.97 s / 6.27 GB |
+
+Why the fear was overstated, in hindsight: `consume` is order-sensitive, but all
+four examples' data blocks are *homogeneous* — every cell is private `PVExist`
+(or, for the 1- and 2-cell cases, too small for order to matter). The pinned and
+public classes are empty, so `gen_mem_pre_rel_classed`'s reordering is the
+identity on these lists. **Expect the risk to be real only for an example that
+mixes pinned/public/private cells**, which none of the committed nine do.
+
+### What the migration touched
+
+One new lemma plus eight one-line swaps — and the **trusted statement surface did
+not move**: every `*_noninterferent_param` conclusion is byte-identical, only the
+contract the VC is taken over changed.
+
+- `EndToEnd.v`: `gen_contract_noninterferent_rel_classed_simple` added, the
+  classed twin of `_rel_simple`, so a Result file changes by one identifier.
+- 4 × `Example/<Prog>.v`: `gen_contract_rel` → `gen_contract_rel_classed`.
+- 4 × `Example/<Prog>Result.v`: `gen_contract_noninterferent_rel_simple` →
+  `..._rel_classed_simple`.
+- Stale prose references to the old builder fixed in the same commit.
+
+`gen_contract_rel` and `gen_contract_noninterferent_rel(_simple)` are all KEPT —
+they are still the right builders for a mixed-publicness data block, and
+`gen_contract_rel_bytes` has no classed variant.
+
+## Phase 5 — gate (DONE 2026-08-18, PASSED TWICE)
+
+`GATE_JOBS=1 ./scripts/gate.sh` on this 14 GB box, run twice: once on Phase 3
+alone (pre-migration baseline) and once after the Phase 4 migration. Both:
+
+```
+✓ GATE PASSED — build clean, no holes, 14 end theorems axiom-clean
+  (only: Machine.pure_decode Base.mmioenv).
+```
+
+So the classed builder introduces **no new assumptions** — that pair is the
+project's accepted baseline, and it is exactly what the Phase 3 smoke test
+reported, which retroactively validates that reading.
+
+One operational note: the axiom probe chose batches of 8 and peaked at ~8 GB,
+which on this box means swapping (0 GB available at the peak) and a noticeably
+slower second batch. It completed. If it ever gets OOM-killed instead, that
+arrives as a bare exit 143 — set `GATE_PROBE_BATCH=4`.
 
 ## Files
 

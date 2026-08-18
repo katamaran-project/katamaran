@@ -55,6 +55,12 @@ Definition interp_mem_with_public_memory `{sailGS2 Σ} (μ1 μ2 : Memory)
            (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
 ```
 
+Note this body **ignores the list index** (and, in the public branch, `μ2`). Both
+facts are load-bearing for the classed-existential path: index-independence is what
+lets `big_opL_permutation` re-associate the resource list by publicness class, and
+publicness-only dependence is why a per-group conversion needs no hypothesis about
+the value slot. See `gen_implpre_mem_class` in **cfgver-endtoend-internals**.
+
 ## `something_memory` equivalence
 
 ```coq

@@ -51,7 +51,8 @@ From Katamaran Require Import
 (* Phase 4.2 headline #2: cmovznz4 (29 instrs, 12 data words, base-relative
    data pointers) verified end-to-end for a UNIVERSAL base address, from the
    single symbolic-base VC valid_cmovznz4_cfg_contract_param via the reusable
-   base-relative bridge gen_contract_noninterferent_rel.  The concrete reg /
+   base-relative bridge gen_contract_noninterferent_rel_classed_simple.  The
+   concrete reg /
    mem specs are the base-relative specs concretized at init_addr. *)
 Lemma cmovznz4_noninterferent_param (init_addr : N) :
   (init_addr + 164 < lenAddr)%N ->
@@ -61,7 +62,7 @@ Lemma cmovznz4_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
 Proof.
   intros Hb.
-  eapply gen_contract_noninterferent_rel_simple.
+  eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
       try (inversion H; subst; cbn; f_equal; lia); try discriminate.

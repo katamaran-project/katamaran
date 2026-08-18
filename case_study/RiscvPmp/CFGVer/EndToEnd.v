@@ -1801,6 +1801,39 @@ Import IrisModel.RiscvPmpIrisBase.
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
   Qed.
 
+  (* CLASSED twin of the above, so migrating an example to
+     gen_contract_rel_classed is a one-identifier change in its Result file.
+     Conclusion is byte-identical to gen_contract_noninterferent_rel_simple's --
+     the trusted statement surface does not move -- only the contract the VC is
+     taken over differs. *)
+  Lemma gen_contract_noninterferent_rel_classed_simple
+      (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    eapply gen_contract_noninterferent_rel_classed.
+    6: exact valid_contract.
+    - exact HND.
+    - exact HDataAddrs.
+    - exact Hlen.
+    - exact Hbound.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
   (* ------------------------------------------------------------------ *)
   (* Byte-granular counterpart of gen_mem_pre_rel_concretize
      (PLAN-check-scalar-full.md §3): pure asn.interpret equality, no Iris.

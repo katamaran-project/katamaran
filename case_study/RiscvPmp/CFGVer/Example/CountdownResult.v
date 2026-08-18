@@ -90,7 +90,7 @@ Lemma countdown_mem_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) countdown_mem_mem_specs_rel).
 Proof.
   intros Hb.
-  eapply gen_contract_noninterferent_rel_simple.
+  eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|i] spec H; cbn in H;
       try (inversion H; subst; cbn; f_equal; lia); discriminate.

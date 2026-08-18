@@ -113,7 +113,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        valid_countdown_mem_cfg_contract (see MvSwap.v for the rationale).
        X2 holds the base (PVBaseOff 0 = p+0 = p), so the counter word's
        address (via LOAD/STORE off X2, imm 16) is genuinely p+16 --
-       base-RELATIVE, needing gen_contract_rel/mem_spec_rel like cmovznz4's
+       base-RELATIVE, needing gen_contract_rel_classed/mem_spec_rel like
+       cmovznz4's
        data pointers, not the constant-only gen_contract_param. Bound = 20
        (last accessed byte offset 16 + 4 = the data word's own width). *)
     Definition countdown_mem_reg_specs_rel : list reg_spec_rel :=
@@ -123,7 +124,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       [(16%N, true, PVConst (bv.of_N 2))].
 
     Definition countdown_mem_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel ia countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
+      gen_contract_rel_classed ia countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
         countdown_mem_instrs [] 20
         (pcOutOfInstrs_exitCond ia countdown_mem_instrs) 10.
 
