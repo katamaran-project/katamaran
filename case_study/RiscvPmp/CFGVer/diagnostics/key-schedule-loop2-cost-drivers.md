@@ -15,6 +15,15 @@ of the excess. See "§Is the chunk cost SEARCHING or CARRYING?" — including a
 retraction of the first, invalid argument for the same conclusion. Only
 shrinking the declared set can fix it; cheaper lookups cannot.
 
+**Follow-on finding (2026-08-18) — the `|Σ|` axis this record identified is now
+CLOSED for declared data cells, and it was an EXPONENT, not a constant.**
+`gen_contract_rel_classed` (`plans/PLAN-classed-existentials.md`) groups a
+publicness class into ONE existential, and re-measured on this rig's own arms it
+lands on the weaker shared-variable arm's cost to within 0.07–0.59% while keeping
+full statement strength. The remaining growth is NOT flat, though — see
+"§Re-measurement 2026-08-18" at the bottom for the numbers, the held-out check,
+and what is still unidentified.
+
 **One-sentence finding (2026-08-14):** of the two independent axes this
 experiment was built to separate — declared-chunk **usage** (1 vs. N
 genuinely-touched memory cells) and the masking step's self-referential
@@ -879,3 +888,110 @@ Files: `Example/ZZKslBigCommon.v` (generated — `uop.vector_subrange`'s implici
 `IsTrue (s + l <=? n)` is discharged by `Prelude.v:297`'s Hint Extern only for
 LITERAL offsets, so a `fold_right` over `seq` leaves `i` abstract and cannot be
 written) + `ZZKslBIG_N{4,8,16,32}.v`, baseline `ZZKslBigBase.v`.
+
+
+## §Re-measurement 2026-08-18 — the `|Σ|` axis after `gen_contract_rel_classed`
+
+**Finding: grouping the N declared cells into one existential removes the `|Σ|`
+axis at FULL statement strength, and it is an exponent reduction rather than a
+constant factor — but the residual is still superlinear and its mechanism is not
+yet isolated.**
+
+### The three arms
+
+All three share `zzkcd_instrs`, `zzkcd_reg_specs_rel`, the same bound, the same
+exits and the same fuel, and all use the identical probe protocol
+(`Time vm_compute. Time solve_vc. Admitted.`), so they are comparable.
+
+| arm | cells | logic variables | statement strength | file |
+|---|---|---|---|---|
+| **CD** | N | **N** (one `PVExist` each) | full | `ZZKslChunkDistinctCommon.v` + `ZZKslCD_N{4,8,16}.v` |
+| **SHD** | N | 1 (all cells share `"mv"`) | **WEAKER** — forces every cell equal | `ZZKslShrCommon.v` + `ZZKslSHD_N{4,8,16}.v` |
+| **CLS** | N | 1 (one grouped `bv (32·N)`) | full | `ZZKslClassCommon.v` + `ZZKslCLS_N{4,8,16}.v` |
+
+CD→CLS moves exactly one axis (CLS reuses CD's own spec lists; only the generator
+call differs). SHD→CLS is NOT a single-axis move — it changes the builder *and*
+the statement — and is included for a different purpose: to ask whether the
+equivalent-strength builder can match the price of the weaker hand-written one.
+
+### Results
+
+`allocated_words`, baseline-subtracted (imports-only baselines
+`ZZKslB{CD,SHD,CLS}.v`, all three within 0.005% of 604.3 M). Every run gated on
+`finished=2` and `errors=0`.
+
+| N | CD | SHD | CLS | **CD/CLS** | CLS/SHD |
+|---|---|---|---|---|---|
+| 4 | 0.4304 G | 0.3570 G | 0.3572 G | **1.205×** | 1.0007 |
+| 8 | 1.1573 G | 0.7717 G | 0.7732 G | **1.497×** | 1.0019 |
+| 16 | 3.8129 G | 1.7902 G | 1.8007 G | **2.117×** | 1.0059 |
+
+Per-doubling growth, with the exponent `log₂`:
+
+| arm | 4→8 | 8→16 |
+|---|---|---|
+| CD | 2.689× (exp **1.427**) | 3.295× (exp **1.720**) |
+| SHD | 2.162× (exp 1.112) | 2.320× (exp 1.214) |
+| CLS | 2.165× (exp **1.114**) | 2.329× (exp **1.220**) |
+
+Held-out check — fit the power law on N=4,8 only and predict N=16:
+
+| arm | exponent from 4,8 | predicted | actual | error |
+|---|---|---|---|---|
+| CD | 1.427 | 3.1122 G | 3.8129 G | **−18.4%** |
+| SHD | 1.112 | 1.6685 G | 1.7902 G | −6.8% |
+| CLS | 1.114 | 1.6736 G | 1.8007 G | −7.1% |
+
+### Reading it
+
+1. **The classed builder buys the weaker arm's price at full generality.** CLS
+   tracks SHD to 0.07% / 0.19% / 0.59%. That is the central result: the
+   shared-variable trick was a genuine cost win but bought with a weakened
+   precondition (all cells forced equal); the grouped existential gives the same
+   cost with no weakening. Phase 2's single-point "within 0.16%" claim replicates
+   across three N. The drift with N (0.07 → 0.59%) is small but monotone — worth
+   a look if it is ever measured at N ≥ 64.
+2. **This is an exponent change, not a constant factor** — the distinction this
+   project's own checklist insists on stating. CD's exponent RISES with N
+   (1.427 → 1.720) while CLS's rises far more slowly (1.114 → 1.220), so the
+   win grows: 1.205× → 1.497× → 2.117×. Extrapolating is not safe (see 4), but
+   the earlier 3.31× at N=32 on the same builder pair is consistent with this
+   trend rather than an outlier.
+3. **`|Σ|` from declared cells is closed. `|Σ|` in general is NOT.** The classed
+   builder removes only the one-existential-per-`PVExist` source. The other
+   catalogued source — per-step demonic variables — is untouched by it.
+4. **The residual is still superlinear and this record does NOT identify it.**
+   CLS sits at exponent ~1.22 and rising, and its held-out error is −7.1%, i.e.
+   a two-point fit still underpredicts. Candidates from the catalog, none
+   isolated here: the bilinear chunks × steps term (both scale with N in this
+   rig, so it alone would give exponent 2 — the observed 1.22 is well under
+   that, so it cannot be the whole story either), and residual per-step
+   variables. **Isolating this needs another sweep** — pin the chunk count while
+   varying steps, and vice versa — which was not run. Treat "exp ≈ 1.22" as
+   provisional: it rests on three points, and the one thing this project's
+   record is most consistently wrong about is calling a growth law from too few.
+
+### What this means
+
+For a base-relative word-granular example, declared data cells are no longer a
+reason to expect superlinear VC cost, and `gen_contract_rel_classed` should be
+the default. The next scaling question for this rig is no longer "how many cells"
+but "what is the ~1.22 exponent made of" — and that is an open question, not a
+solved one.
+
+### Reproduction
+
+```
+# rebuild the Common .vo chain first (stale ones fail with
+# "makes inconsistent assumptions over library")
+for f in ZZKslChunkDistinctCommon ZZKslPaddedGrowCommon ZZKslShrCommon ZZKslClassCommon; do
+  coqc -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+    case_study/RiscvPmp/CFGVer/Example/$f.v
+done
+# then one process per point, gating on BOTH markers
+OCAMLRUNPARAM='v=0x400' coqc -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+  -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/<Runner>.v 2>&1 \
+  | grep -E 'allocated_words|Finished transaction|Error'
+```
+
+Whole 12-process sweep is ~25 min on this box.

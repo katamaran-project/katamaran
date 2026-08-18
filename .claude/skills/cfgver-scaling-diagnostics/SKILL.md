@@ -41,7 +41,7 @@ to a fresh one until you compare.
 
 | file (all in `diagnostics/`) | what it concluded |
 |---|---|
-| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×). ~~declared-chunk count is the sole remaining driver (2.72× at N=16)~~ **corrected 2026-08-17: 82% of that is the LOGIC-VARIABLE count each `PVExist` cell mints, 2.80× → 1.32× with one shared variable; the chunk half is exactly bilinear in chunks × steps, and the *usage* axis is worth under 2%.** Also: every absolute figure predating 2026-08-17 in that file is 3–6× too high (§5.9's solver rule postdates it) — ratios mostly survive, `allocated_words` does not. The worked example for this whole skill, and for retraction discipline — twice over now. |
+| `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×). ~~declared-chunk count is the sole remaining driver (2.72× at N=16)~~ **corrected 2026-08-17: 82% of that is the LOGIC-VARIABLE count each `PVExist` cell mints, 2.80× → 1.32× with one shared variable; the chunk half is exactly bilinear in chunks × steps, and the *usage* axis is worth under 2%.** Also: every absolute figure predating 2026-08-17 in that file is 3–6× too high (§5.9's solver rule postdates it) — ratios mostly survive, `allocated_words` does not. **Re-measured 2026-08-18: the `|Σ|` axis is now CLOSED for declared cells** — `gen_contract_rel_classed` matches the weaker shared-variable arm to 0.07–0.59% at full statement strength, and it is an EXPONENT reduction (CD 1.43→1.72 vs CLS 1.11→1.22 over N=4→8→16), not a constant. What remains grows at exp ≈1.22 and RISING, and is **not identified** — that sweep was not run. The worked example for this whole skill, and for retraction discipline — twice over now. |
 | `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
 | `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
 | `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
@@ -143,7 +143,17 @@ those terms grows with the trip count `N`:
   This is where the apparent
   "chunk superlinearity" actually lived. Sources of `|Σ|` growth: one
   `asn.exist` per unpinned (`PVExist`) spec entry, and per-step demonic
-  variables. Cheapest levers, in order: pin what does not need to be
+  variables. **The FIRST source is now fixed for the base-relative word-granular
+  family: `gen_contract_rel_classed` (2026-08-18) emits one existential per
+  publicness class instead of per cell, which is EQUIVALENT rather than weaker,
+  and re-measured on the KSL rig it is an exponent reduction (1.72 → 1.22 at
+  N=8→16), landing on the shared-variable arm's cost to within 0.6%. Use it by
+  default there.** Two scope limits that matter: it is the counterpart of
+  `gen_contract_rel` ONLY — `gen_contract_param` cannot have one (width-index
+  trap, `GenContract.v:536`) and `gen_contract_rel_bytes` does not, so
+  check_scalar still pays this factor in full; and it does nothing about the
+  per-step-demonic-variable source. Cheapest levers, in order: use the classed
+  builder where it applies, pin what does not need to be
   existential (`PVConst` costs ~16–25× less than `PVExist` per entry), share
   one variable across several chunks where the values are genuinely related,
   and prefer FEWER LARGER symbolic objects over many small ones even when the

@@ -4,6 +4,20 @@ Status: **Diagnostic record. Originally 2026-08-13; substantially re-measured
 and re-concluded 2026-08-14.** The 2026-08-13 reading is kept, marked
 superseded, at the bottom.
 
+**Follow-on (2026-08-18) — a fix for the `|Σ|` factor has landed, and it does
+NOT apply to check_scalar.** §6.6 below concludes that the only thing making cost
+grow with N is `chunks × steps × lvars`, quadratic in `|Σ|`.
+`gen_contract_rel_classed` (`plans/PLAN-classed-existentials.md`) removes the
+declared-cell source of `|Σ|` — measured on `key_schedule_loop2`'s rig as an
+EXPONENT reduction, 1.72 → 1.22 at N=8→16, at full statement strength. But it is
+the classed counterpart of `gen_contract_rel` only, and **check_scalar uses
+`gen_contract_param` and `gen_contract_rel_bytes`, neither of which has (or, for
+`gen_contract_param`, can have) a classed variant** — the width-index trap, see
+the note at `GenContract.v:536`. So for this example the `|Σ|` factor stands
+exactly as measured here, and every number below remains current. Nothing in the
+2026-08-18 work touched check_scalar; these figures were NOT re-run, because no
+input to them changed.
+
 **One-sentence finding (2026-08-15, ROOT-CAUSED; FIXED 2026-08-16):**
 combining check_scalar's two loops into one flat VC cost **5.5–18.6× the sum
 of the two loops measured separately**, and the dominant part was a specific,

@@ -2,6 +2,13 @@
 
 Status: **Diagnostic record, 2026-08-13.**
 
+**Follow-on (2026-08-18).** Unaffected. The `|Σ|` (logic-variable) driver named
+in the sibling `check-scalar-combined-cost-drivers.md` now has a landed fix
+(`gen_contract_rel_classed`, `plans/PLAN-classed-existentials.md`), but it applies
+only to the base-relative word-granular `gen_contract_rel` family — not to this
+example's byte specs. This record's conclusion about the accumulator is about a
+different axis entirely and is untouched either way.
+
 **One-sentence finding:** loop 1's accumulator (`z |= k[u]`, i.e. `or
 a2,a2,a3` reading its own previous value every iteration) contributes
 essentially nothing to cost (<1.4% at N=32) because `z` is referenced only
