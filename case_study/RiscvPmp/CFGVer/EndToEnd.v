@@ -938,6 +938,221 @@ Import IrisModel.RiscvPmpIrisBase.
         iPureIntro. cbn. first [exact I | done].
   Qed.
 
+  (* ====================================================================== *)
+  (* BYTE-GRANULAR CLASSED ImplPre (PLAN-unify-generators.md stage 2).        *)
+  (*                                                                        *)
+  (* Byte twins of the four lemmas above.  The structure is NOT a new         *)
+  (* bv-slicing induction, which is what the plan expected: the per-cell      *)
+  (* obligation turns out to be exactly the PVExist branch of                 *)
+  (* gen_mem_asn_of_ptstomem_bytes MINUS its `iExists` -- there the witness   *)
+  (* had to be supplied per entry, here it is already fixed by the group      *)
+  (* hypothesis.  So that branch is factored out below as an ABSTRACT-address *)
+  (* split and reused on both sides, and the group peel is just               *)
+  (* bv.take_app / bv.drop_app, identical to the word case.                   *)
+  (* ====================================================================== *)
+
+  (* Split ONE word chunk into its four byte chunks, at an abstract address. *)
+  Lemma ptstomem4_split_bytes `{sailGS2 Σ} (a : Val ty_xlenbits) (μ1 μ2 : Memory) :
+    interp_ptstomem (width := 4) (SyncVal a)
+      (NonSyncVal (get_word μ1 a) (get_word μ2 a))
+    ⊢ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 0)))
+        (NonSyncVal (bv.vector_subrange 0 8 (get_word μ1 a))
+                    (bv.vector_subrange 0 8 (get_word μ2 a)))
+      ∗ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 1)))
+          (NonSyncVal (bv.vector_subrange 8 8 (get_word μ1 a))
+                      (bv.vector_subrange 8 8 (get_word μ2 a)))
+      ∗ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 2)))
+          (NonSyncVal (bv.vector_subrange 16 8 (get_word μ1 a))
+                      (bv.vector_subrange 16 8 (get_word μ2 a)))
+      ∗ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 3)))
+          (NonSyncVal (bv.vector_subrange 24 8 (get_word μ1 a))
+                      (bv.vector_subrange 24 8 (get_word μ2 a))).
+  Proof.
+    rewrite get_word_nonsync_app.
+    rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
+    cbn [ty.liftUnOp ty.liftUnOpRV].
+    rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
+    change (1+2)%N with 3%N.
+    rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
+    rewrite <- bv_zero_eq_of_N.
+    rewrite (bv.add_comm (x:=a) (y:=bv.zero)).
+    rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+    rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+    rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+    rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1.
+    rewrite interp_ptsto_ptstomem1.
+    rewrite relval_app_nil.
+    (* Byte 3's address arrives as `of_N 1 + (a + of_N 2)`; fold it to
+       `a + of_N 3`.  bv.add_assoc is stated LEFT-to-right, so the forward
+       direction re-associates; bv.of_N_add COLLAPSES a sum of two of_N's (it
+       does not expand one), so of_N 1 + of_N 2 |-> of_N 3. *)
+    rewrite (bv.add_assoc (x:=bv.of_N 1) (y:=a) (z:=bv.of_N 2)).
+    rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+    rewrite <- (bv.add_assoc (x:=a) (y:=bv.of_N 1) (z:=bv.of_N 2)).
+    rewrite bv.of_N_add.
+    change (1+2)%N with 3%N.
+    rewrite bv.add_zero_l.
+    (* get_word_byte2 is stated with the OFFSET FIRST (`of_N 2 + a`), unlike the
+       `c` variants which take the address first -- hence the add_comm before it
+       and not before bytes 1 or 3.  Each block of four converts one side. *)
+    rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+    rewrite (bv.add_comm (x:=a) (y:=bv.of_N 2)).
+    rewrite <- get_word_byte2.
+    rewrite <- get_word_byte3c.
+    rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+    rewrite <- get_word_byte2.
+    rewrite <- get_word_byte3c.
+    done.
+  Qed.
+
+  (* SyncVal twin, for the public class. *)
+  Lemma ptstomem4_split_bytes_sync `{sailGS2 Σ} (a : Val ty_xlenbits) (μ : Memory) :
+    interp_ptstomem (width := 4) (SyncVal a) (SyncVal (get_word μ a))
+    ⊢ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 0)))
+        (SyncVal (bv.vector_subrange 0 8 (get_word μ a)))
+      ∗ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 1)))
+          (SyncVal (bv.vector_subrange 8 8 (get_word μ a)))
+      ∗ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 2)))
+          (SyncVal (bv.vector_subrange 16 8 (get_word μ a)))
+      ∗ interp_ptstomem (width := 1) (SyncVal (bv.add a (bv.of_N 3)))
+          (SyncVal (bv.vector_subrange 24 8 (get_word μ a))).
+  Proof.
+    (* Identical chain, with get_word_sync_app for get_word_nonsync_app and ONE
+       block of four byte rewrites rather than two -- one side to convert. *)
+    rewrite get_word_sync_app.
+    rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
+    cbn [ty.liftUnOp ty.liftUnOpRV].
+    rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
+    change (1+2)%N with 3%N.
+    rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
+    rewrite <- bv_zero_eq_of_N.
+    rewrite (bv.add_comm (x:=a) (y:=bv.zero)).
+    rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+    rewrite (bv.add_comm (x:=bv.of_N 2) (y:=a)).
+    rewrite (bv.add_comm (x:=bv.of_N 3) (y:=a)).
+    rewrite interp_ptsto_ptstomem1. rewrite interp_ptsto_ptstomem1.
+    rewrite interp_ptsto_ptstomem1.
+    rewrite relval_app_nil.
+    rewrite (bv.add_assoc (x:=bv.of_N 1) (y:=a) (z:=bv.of_N 2)).
+    rewrite (bv.add_comm (x:=bv.of_N 1) (y:=a)).
+    rewrite <- (bv.add_assoc (x:=a) (y:=bv.of_N 1) (z:=bv.of_N 2)).
+    rewrite bv.of_N_add.
+    change (1+2)%N with 3%N.
+    rewrite bv.add_zero_l.
+    rewrite <- get_word_byte0'. rewrite <- get_word_byte1c.
+    rewrite (bv.add_comm (x:=a) (y:=bv.of_N 2)).
+    rewrite <- get_word_byte2.
+    rewrite <- get_word_byte3c.
+    done.
+  Qed.
+
+  Lemma gen_mem_cells_class_bytes_intro `{sailGS2 Σ}
+      (ks : list N) {Σ0} (ι : Valuation Σ0)
+      (pterm : Term Σ0 ty_xlenbits) (pv : Val ty_xlenbits)
+      (mwt : Term Σ0 (ty.bvec (mem_class_width ks)))
+      (μ1 μ2 : Memory)
+      (Hp : inst pterm ι = SyncVal pv)
+      (Hmw : inst mwt ι =
+               (NonSyncVal (words_app μ1 pv ks) (words_app μ2 pv ks)
+                : RelVal (ty.bvec (mem_class_width ks)))) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (NonSyncVal (get_word μ1 (bv.add pv (bv.of_N k)))
+                     (get_word μ2 (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret
+        (gen_mem_cells_class_bytes ks (fun k j => byte_addr_rel pterm k j) mwt) ι.
+  Proof.
+    generalize dependent mwt. induction ks as [|k r IH]; intros mwt Hmw.
+    - iIntros "_". done.
+    - rewrite big_sepL_cons. iIntros "[Hhead Hrest]".
+      cbn [gen_mem_cells_class_bytes asn.interpret]. iSplitL "Hhead".
+      + (* Group peel, then re-associate `pv + of_N (k+j)` into
+           `(pv + of_N k) + of_N j` so the abstract split applies. *)
+        cbn. rewrite Hp. cbn [words_app] in Hmw. rewrite Hmw.
+        unfold bop.evalRel, uop.evalRel; cbn.
+        rewrite !bv.take_app.
+        rewrite <- !bv.of_N_add.
+        rewrite !bv.add_assoc.
+        iApply ptstomem4_split_bytes. iExact "Hhead".
+      + assert (Hd : inst (term_unop (uop.bvdrop xlenbits) mwt) ι
+                     = (NonSyncVal (words_app μ1 pv r) (words_app μ2 pv r)
+                        : RelVal (ty.bvec (mem_class_width r)))).
+        { cbn. rewrite Hmw. cbn [words_app].
+          unfold uop.evalRel; cbn. rewrite !bv.drop_app. reflexivity. }
+        iApply (IH _ Hd). iExact "Hrest".
+  Qed.
+
+  (* SyncVal twin.  Needed for the same reason as the word case: secLeak matches
+     on the CONSTRUCTOR, so secLeak (NonSyncVal v v) is False however equal the
+     sides are, and secLeakvar on the grouped variable would be unprovable. *)
+  Lemma gen_mem_cells_class_bytes_intro_sync `{sailGS2 Σ}
+      (ks : list N) {Σ0} (ι : Valuation Σ0)
+      (pterm : Term Σ0 ty_xlenbits) (pv : Val ty_xlenbits)
+      (mwt : Term Σ0 (ty.bvec (mem_class_width ks)))
+      (μ : Memory)
+      (Hp : inst pterm ι = SyncVal pv)
+      (Hmw : inst mwt ι =
+               (SyncVal (words_app μ pv ks)
+                : RelVal (ty.bvec (mem_class_width ks)))) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (SyncVal (get_word μ (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret
+        (gen_mem_cells_class_bytes ks (fun k j => byte_addr_rel pterm k j) mwt) ι.
+  Proof.
+    generalize dependent mwt. induction ks as [|k r IH]; intros mwt Hmw.
+    - iIntros "_". done.
+    - rewrite big_sepL_cons. iIntros "[Hhead Hrest]".
+      cbn [gen_mem_cells_class_bytes asn.interpret]. iSplitL "Hhead".
+      + cbn. rewrite Hp. cbn [words_app] in Hmw. rewrite Hmw.
+        unfold bop.evalRel, uop.evalRel; cbn.
+        rewrite !bv.take_app.
+        rewrite <- !bv.of_N_add.
+        rewrite !bv.add_assoc.
+        iApply ptstomem4_split_bytes_sync. iExact "Hhead".
+      + assert (Hd : inst (term_unop (uop.bvdrop xlenbits) mwt) ι
+                     = (SyncVal (words_app μ pv r)
+                        : RelVal (ty.bvec (mem_class_width r)))).
+        { cbn. rewrite Hmw. cbn [words_app].
+          unfold uop.evalRel; cbn. rewrite bv.drop_app. reflexivity. }
+        iApply (IH _ Hd). iExact "Hrest".
+  Qed.
+
+  (* Class wrappers, mirroring gen_mem_{priv,pub}_class_ks_intro above. *)
+  Lemma gen_mem_priv_class_ks_bytes_intro `{sailGS2 Σ} (ks : list N)
+      (pv : Val ty_xlenbits) (va : RelVal ty_xlenbits) (μ1 μ2 : Memory) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (NonSyncVal (get_word μ1 (bv.add pv (bv.of_N k)))
+                     (get_word μ2 (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret (gen_mem_priv_class_ks_bytes ks)
+        ([env].["p"∷ty_xlenbits ↦ SyncVal pv].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    destruct ks as [|k r].
+    - iIntros "_". done.
+    - cbn [gen_mem_priv_class_ks_bytes asn.interpret]. iIntros "H".
+      iExists (NonSyncVal (words_app μ1 pv (cons k r)) (words_app μ2 pv (cons k r))).
+      iApply gen_mem_cells_class_bytes_intro; [reflexivity|reflexivity|iExact "H"].
+  Qed.
+
+  Lemma gen_mem_pub_class_ks_bytes_intro `{sailGS2 Σ} (ks : list N)
+      (pv : Val ty_xlenbits) (va : RelVal ty_xlenbits) (μ : Memory) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (SyncVal (get_word μ (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret (gen_mem_pub_class_ks_bytes ks)
+        ([env].["p"∷ty_xlenbits ↦ SyncVal pv].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    destruct ks as [|k r].
+    - iIntros "_". done.
+    - cbn [gen_mem_pub_class_ks_bytes asn.interpret]. iIntros "H".
+      iExists (SyncVal (words_app μ pv (cons k r))).
+      iSplitL "H".
+      + iApply gen_mem_cells_class_bytes_intro_sync;
+          [reflexivity|reflexivity|iExact "H"].
+      + iPureIntro. cbn. first [exact I | done].
+  Qed.
+
   (* ---------------------------------------------------------------------- *)
   (* Splitting the resource list by class -- the last structural piece of the *)
   (* classed bridge.  gen_mem_pre_rel_classed groups its cells by publicness  *)
