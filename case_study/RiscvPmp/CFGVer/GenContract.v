@@ -480,9 +480,14 @@ Import asn.notations.
        logic variable for no cells, which is exactly what this builder exists
        to avoid.  The classes are separate definitions rather than one
        parameterized by a name because `secLeakvar` needs a literal. *)
-    Definition gen_mem_pub_class_rel (specs : list mem_spec_rel)
+    (* Stated at the KEYS level, with a thin specs-level wrapper below.  This
+       split is not cosmetic: the ImplPre bridge must `destruct` the key list to
+       handle the empty class, and `destruct (mem_rel_keys specs)` fails with
+       "Conclusion depends on the bodies of ..." because the existential's type
+       mentions `mem_class_width (mem_rel_keys specs)`.  With the keys as a
+       plain variable the destruct is trivial. *)
+    Definition gen_mem_pub_class_ks (ks : list N)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      let ks := mem_rel_keys specs in
       match ks with
       | nil => ⊤
       | _   =>
@@ -494,9 +499,8 @@ Import asn.notations.
              ∗ secLeakvar "mwpub")
       end.
 
-    Definition gen_mem_priv_class_rel (specs : list mem_spec_rel)
+    Definition gen_mem_priv_class_ks (ks : list N)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      let ks := mem_rel_keys specs in
       match ks with
       | nil => ⊤
       | _   =>
@@ -506,6 +510,14 @@ Import asn.notations.
                            (term_val ty_xlenbits (bv.of_N k)))
                (term_var "mwpriv"))
       end.
+
+    Definition gen_mem_pub_class_rel (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      gen_mem_pub_class_ks (mem_rel_keys specs).
+
+    Definition gen_mem_priv_class_rel (specs : list mem_spec_rel)
+        : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
+      gen_mem_priv_class_ks (mem_rel_keys specs).
 
     (* PVConst / PVBaseOff entries mint no variable already, so they keep
        gen_mem_asn_rel's treatment verbatim and only PVExist entries are

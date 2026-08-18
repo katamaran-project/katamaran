@@ -788,6 +788,155 @@ Import IrisModel.RiscvPmpIrisBase.
       iSplit; [done|done].
   Qed.
 
+  (* ------------------------------------------------------------------ *)
+  (* CLASSED data block: ImplPre side of gen_mem_pre_rel_classed          *)
+  (* (GenContract.v; PLAN-classed-existentials.md Phase 3).               *)
+  (*                                                                      *)
+  (* The witness for a class's single existential is the CONCATENATION of  *)
+  (* its cell values, so it needs a name before anything can be stated.    *)
+  (* mem_class_width (cons k r) is DEFINITIONALLY xlenbits +               *)
+  (* mem_class_width r, which is what lets bv.app typecheck with no        *)
+  (* transport.                                                           *)
+  Fixpoint words_app (μ : Memory) (pv : Val ty_xlenbits) (ks : list N)
+      : bv (mem_class_width ks) :=
+    match ks return bv (mem_class_width ks) with
+    | nil      => bv.nil
+    | cons k r => bv.app (get_word μ (bv.add pv (bv.of_N k))) (words_app μ pv r)
+    end.
+
+  (* Core of the bridge.  Two statement choices make the induction work, both
+     found the hard way:
+
+     - `mwt`, the class variable's TERM, is a PARAMETER rather than fixed to
+       `term_var "mw"`.  gen_mem_cells_class's cons branch applies itself to
+       `term_unop (uop.bvdrop xlenbits) mwt`, a NON-variable term at the SAME
+       logical context; fixing the third argument to a variable puts the IH at a
+       different context and it does not apply.
+     - `pterm` is a parameter too (cf. byte_addr_rel), so one lemma serves the
+       base-relative and concrete address forms.
+
+     Each step is then just bv.take_app / bv.drop_app.  This is the payoff of
+     using uop.bvtake/bvdrop rather than uop.vector_subrange in the generator:
+     PLAN-byte-memory.md §10 had to bridge subrange against appView by hand.
+
+     The `: RelVal (ty.bvec _)` ascription on Hmw is REQUIRED -- without it
+     elaboration reads the RHS as `RV (bv _)` and fails to find
+     `Inst ?T (RV (bv _))`.  Note also that plain `cbn` is what exposes the
+     `evalRel` form; `cbn [inst inst_env]` leaves `luser` folded and the
+     subsequent `rewrite bv.take_app` then finds no subterm. *)
+  Lemma gen_mem_cells_class_intro `{sailGS2 Σ}
+      (ks : list N) {Σ0} (ι : Valuation Σ0)
+      (pterm : Term Σ0 ty_xlenbits) (pv : Val ty_xlenbits)
+      (mwt : Term Σ0 (ty.bvec (mem_class_width ks)))
+      (μ1 μ2 : Memory)
+      (Hp : inst pterm ι = SyncVal pv)
+      (Hmw : inst mwt ι =
+               (NonSyncVal (words_app μ1 pv ks) (words_app μ2 pv ks)
+                : RelVal (ty.bvec (mem_class_width ks)))) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (NonSyncVal (get_word μ1 (bv.add pv (bv.of_N k)))
+                     (get_word μ2 (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret
+        (gen_mem_cells_class ks
+           (fun k => term_binop bop.bvadd pterm (term_val ty_xlenbits (bv.of_N k)))
+           mwt) ι.
+  Proof.
+    generalize dependent mwt. induction ks as [|k r IH]; intros mwt Hmw.
+    - iIntros "_". done.
+    - rewrite big_sepL_cons. iIntros "[Hhead Hrest]".
+      cbn [gen_mem_cells_class asn.interpret]. iSplitL "Hhead".
+      + cbn. rewrite Hp. cbn [words_app] in Hmw. rewrite Hmw.
+        unfold bop.evalRel, uop.evalRel; cbn; rewrite !bv.take_app; iApply "Hhead".
+      + assert (Hd : inst (term_unop (uop.bvdrop xlenbits) mwt) ι
+                     = (NonSyncVal (words_app μ1 pv r) (words_app μ2 pv r)
+                        : RelVal (ty.bvec (mem_class_width r)))).
+        { cbn. rewrite Hmw. cbn [words_app].
+          unfold uop.evalRel; cbn. rewrite !bv.drop_app. reflexivity. }
+        iApply (IH _ Hd). iExact "Hrest".
+  Qed.
+
+  (* SyncVal twin, for the PUBLIC class.  A NonSyncVal v v witness would not do:
+     secLeak is defined by a match on the CONSTRUCTOR (Formulas.v:117), so
+     secLeak (NonSyncVal v v) is False however equal the sides are, and
+     secLeakvar on the grouped variable would be unprovable.  Proof script is
+     identical to the NonSyncVal case. *)
+  Lemma gen_mem_cells_class_intro_sync `{sailGS2 Σ}
+      (ks : list N) {Σ0} (ι : Valuation Σ0)
+      (pterm : Term Σ0 ty_xlenbits) (pv : Val ty_xlenbits)
+      (mwt : Term Σ0 (ty.bvec (mem_class_width ks)))
+      (μ : Memory)
+      (Hp : inst pterm ι = SyncVal pv)
+      (Hmw : inst mwt ι = (SyncVal (words_app μ pv ks)
+                           : RelVal (ty.bvec (mem_class_width ks)))) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (SyncVal (get_word μ (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret
+        (gen_mem_cells_class ks
+           (fun k => term_binop bop.bvadd pterm (term_val ty_xlenbits (bv.of_N k)))
+           mwt) ι.
+  Proof.
+    generalize dependent mwt. induction ks as [|k r IH]; intros mwt Hmw.
+    - iIntros "_". done.
+    - rewrite big_sepL_cons. iIntros "[Hhead Hrest]".
+      cbn [gen_mem_cells_class asn.interpret]. iSplitL "Hhead".
+      + cbn. rewrite Hp. cbn [words_app] in Hmw. rewrite Hmw.
+        unfold bop.evalRel, uop.evalRel; cbn; rewrite !bv.take_app; iApply "Hhead".
+      + assert (Hd : inst (term_unop (uop.bvdrop xlenbits) mwt) ι
+                     = (SyncVal (words_app μ pv r)
+                        : RelVal (ty.bvec (mem_class_width r)))).
+        { cbn. rewrite Hmw. cbn [words_app].
+          unfold uop.evalRel; cbn. rewrite !bv.drop_app. reflexivity. }
+        iApply (IH _ Hd). iExact "Hrest".
+  Qed.
+
+  (* The two class wrappers: supply the iExists witness, and for the public
+     class discharge secLeakvar on the grouped variable (secLeak (SyncVal _) is
+     True by definition).  These are stated at the KEYS level, which is why
+     GenContract.v splits gen_mem_*_class_ks out: `destruct (mem_rel_keys
+     specs)` fails with "Conclusion depends on the bodies of ..." since the
+     existential's type mentions mem_class_width of it. *)
+  Lemma gen_mem_priv_class_ks_intro `{sailGS2 Σ} (ks : list N)
+      (pv : Val ty_xlenbits) (va : RelVal ty_xlenbits) (μ1 μ2 : Memory) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (NonSyncVal (get_word μ1 (bv.add pv (bv.of_N k)))
+                     (get_word μ2 (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret (gen_mem_priv_class_ks ks)
+        ([env].["p"∷ty_xlenbits ↦ SyncVal pv].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    destruct ks as [|k r].
+    - iIntros "_". done.
+    - cbn [gen_mem_priv_class_ks asn.interpret]. iIntros "H".
+      iExists (NonSyncVal (words_app μ1 pv (cons k r)) (words_app μ2 pv (cons k r))).
+      iApply gen_mem_cells_class_intro; [reflexivity|reflexivity|iExact "H"].
+  Qed.
+
+  Lemma gen_mem_pub_class_ks_intro `{sailGS2 Σ} (ks : list N)
+      (pv : Val ty_xlenbits) (va : RelVal ty_xlenbits) (μ : Memory) :
+    ([∗ list] k ∈ ks,
+       interp_ptstomem (width := 4) (SyncVal (bv.add pv (bv.of_N k)))
+         (SyncVal (get_word μ (bv.add pv (bv.of_N k)))))
+    ⊢ asn.interpret (gen_mem_pub_class_ks ks)
+        ([env].["p"∷ty_xlenbits ↦ SyncVal pv].["a"∷ty_xlenbits ↦ va]).
+  Proof.
+    destruct ks as [|k r].
+    - iIntros "_". done.
+    - cbn [gen_mem_pub_class_ks asn.interpret]. iIntros "H".
+      iExists (SyncVal (words_app μ pv (cons k r))).
+      iSplitL "H".
+      + iApply gen_mem_cells_class_intro_sync; [reflexivity|reflexivity|iExact "H"].
+      + (* secLeakvar "mwpub": secLeak (SyncVal _) is True by the match in
+           Formulas.v:117, but the goal arrives as `instprop (formula_secLeak
+           ...) ι`, so it must be reduced first -- a bare `exact I` fails with
+           "The term I has type True while it is expected to have type
+           instprop (formula_secLeak ...)".  This is also exactly why the public
+           class needs the SyncVal cells lemma: with a NonSyncVal witness this
+           goal would be False. *)
+        iPureIntro. cbn. first [exact I | done].
+  Qed.
+
   (* Once-and-for-all ImplPre for the memory portion of gen_contract:
      converts interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec specs)
      into asn.interpret (gen_mem_pre specs) ι. *)
