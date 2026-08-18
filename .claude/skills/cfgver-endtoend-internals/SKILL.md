@@ -99,6 +99,45 @@ should be left to unification — but only after the goal has been rewritten int
 the concretized form, since `map (concretize_reg ia) (map reg_spec_to_rel rs) = rs`
 (`map_concretize_reg_to_rel`) is **not** definitional for a variable list.
 
+## The unified bridge (`gen_contract_noninterferent_u`)
+
+Since 2026-08-18 there are only **two** real bridge implementations —
+`gen_contract_noninterferent_u` (general) and `_u_simple` — over
+`gen_contract_u`'s two data lists. `_param`, `_param_simple`,
+`_rel_classed_simple` and `_rel_bytes_simple` survive as *thin delegations*, which
+is deliberate: calling `_u` directly costs a goal rewrite, two mandatory named
+implicits, an ordering line and two extra bullets **at every call site**, so the
+wrappers exist to absorb that instead of exporting it to 13 `Result` files. The
+three general bridges (`_rel`, `_rel_classed`, `_rel_bytes`) were deleted.
+
+`_u` concludes over the CONCATENATION `word_data ++ byte_data`, matching the
+concatenation the trusted side already assumed. Its `ImplPre` therefore splits
+both the resource and the hypotheses, via three small lemmas added for it:
+`interp_mem_app` (just `map_app` + `big_sepL_app`, since
+`interp_mem_with_public_memory` is a `big_sepL`), `gen_init_mem_app`, and
+`declare_init_mem_app`. This is the generalisation the old `_bytes` bridge's
+header comment explicitly asked for, having fixed its word list to `[]` to avoid
+exactly this split.
+
+Three traps when delegating to it, each of which is a *different* answer for the
+two granularities:
+
+- **`[] ++ B` reduces definitionally; `A ++ []` does not** (for a variable `A`).
+  So the byte-only case needs no goal rewrite, while the word-only case must open
+  with `rewrite <- (app_nil_r mem_specs)` and then `rewrite app_nil_r` in the
+  `HDataAddrs` and `Hlen` premises.
+- **`word_data`/`byte_data` must still be named even when `[]`**, for the
+  `map f ?l ≡ []` reason above.
+- **`gen_init_mem_app` is `omap_app` — do not hand-roll the induction.** `cbn`
+  rewrites `omap` to `list_omap` while the IH keeps it folded, so `rewrite IH`
+  fails with "found no subterm". stdpp already has `omap_app`; `unfold
+  gen_init_mem. apply omap_app.` is the whole proof.
+
+Ordering constraint worth knowing before moving anything: `_u` depends on
+`gen_implpre_mem_bytes`, so **nothing above that lemma can reference `_u`** —
+which is why the thin delegations live at the END of `EndToEnd.v`, below the
+unified pair, rather than where their predecessors sat.
+
 ## What the wiring proofs carry and materialize
 
 The chain threads the gmap instruction ownership

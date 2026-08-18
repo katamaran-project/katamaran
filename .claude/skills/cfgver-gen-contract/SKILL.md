@@ -255,20 +255,33 @@ just a re-export shell).
 
 ## Parametric base
 
-Two generator variants build a contract over a *symbolic* placement term
+These variants build a contract over a *symbolic* placement term
 `term_var "p"` (`Σ = ["p"∷ty_xlenbits]`) instead of a concrete
 `term_val (bv.of_N init_addr)` — the base stays a genuine variable, so the VC is
-proved ONCE for `∀ init_addr`, not per concrete address:
+proved ONCE for `∀ init_addr`, not per concrete address.
 
-- **`gen_contract_param`** — for a **register-only** program whose register values
-  are BASE-INDEPENDENT (constants or existentials; the plain `reg_spec`
-  vocabulary). Adds a base-bound precondition conjunct
-  (`unsigned p + 4*len ≤ lenAddr`) that the fetch upper-bound needs.
-  **Takes SIX arguments since 2026-08-18** — `init_addr reg_specs instrs
-  extra_exit_offs ec fl`. The `mem_full_spec` list it used to accept was removed
-  (all 15 call sites passed `[]`), and the builder is now a thin wrapper over
-  `gen_contract_rel_classed` — `PLAN-unify-generators.md` stage 1. If your program
-  touches data memory, use `gen_contract_rel_classed` directly.
+**Since 2026-08-18 there is only ONE real implementation, `gen_contract_u`**
+(`PLAN-unify-generators.md` stage 3); everything below it is a one-line wrapper.
+Which name you *call* is an ergonomics choice, but a change to the contract record
+now touches `gen_contract_u` alone.
+
+- **`gen_contract_u`** — the unified builder:
+  `init_addr reg_specs word_data byte_data instrs extra_exit_offs bound ec fl`,
+  all over the base-relative `param_val` vocabulary, classing by default.
+  **Granularity is carried by WHICH LIST an entry is in** — `word_data` gets one
+  `ptstomem 4` chunk per key, `byte_data` gets four `ptstomem 1`. There is
+  deliberately no `gran` field on entries: a class's grouped existential width
+  must be computable from a list you induct on directly, and a
+  filtered-and-projected list needs a dependent transport across a type index (the
+  width-index trap, `core-executor-internals` §6). Keep word cells first; the
+  trusted side sees `word_data ++ byte_data`.
+- **`gen_contract_param`** — wrapper for a **register-only** program whose register
+  values are BASE-INDEPENDENT, keeping the plain `reg_spec` (`None` / `Some v`)
+  vocabulary rather than making you write `PVExist` / `PVConst v`. It absorbs the
+  `reg_spec_to_rel` translation *and* fixes `bound = 4·|instrs|`, which is why it
+  is worth keeping. **Six arguments since 2026-08-18** — `init_addr reg_specs
+  instrs extra_exit_offs ec fl`; the `mem_full_spec` list it used to accept was
+  removed (all 15 call sites passed `[]`). Data memory → call `gen_contract_u`.
 - **`gen_contract_rel`** — for reg/mem specs whose values are BASE-RELATIVE:
   `param_val = PVExist | PVConst v | PVBaseOff k` (meaning `p+k`), needed when a
   register holds a base-relative address (e.g. cmovznz4's `A1 = p+116`) or a

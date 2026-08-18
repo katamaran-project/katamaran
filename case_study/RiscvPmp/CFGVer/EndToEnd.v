@@ -1355,9 +1355,9 @@ Import IrisModel.RiscvPmpIrisBase.
         now iIntros "_".
     Qed.
 
-  (* gen_contract_noninterferent_param is defined further down, after
-     gen_contract_noninterferent_rel_classed, which it now delegates to
-     (PLAN-unify-generators.md stage 1). *)
+  (* gen_contract_noninterferent_param is defined further down, with the other
+     thin delegations, after the unified pair gen_contract_noninterferent_u /
+     _u_simple that they all delegate to (PLAN-unify-generators.md stage 3b). *)
 
   Lemma gen_pre_rel_concretize `{sailGS2 Σ}
       (reg_specs : list reg_spec_rel) (ia : N) (va : RelVal ty_xlenbits) :
@@ -1392,83 +1392,6 @@ Import IrisModel.RiscvPmpIrisBase.
     2: { cbn [ty.valToRelVal]. f_equal; (f_equal; apply bv.of_N_add). }
     destruct pub; cbn.
     all: cbn [ty.valToRelVal]; rewrite bv.of_N_add; reflexivity.
-  Qed.
-
-  (* The base-relative noninterference bridge: given a valid symbolic-base
-     VC over gen_contract_rel (proved once, uniformly in init_addr), conclude
-     concrete noninterference at init_addr over the CONCRETIZED specs.  Mirrors
-     gen_contract_noninterferent_param; the two extra moves are (i) the base
-     bound Hbound discharged via bv.bin_of_N_small, and (ii) rewriting the
-     symbolic precondition to its concretization with gen_pre_rel_concretize /
-     gen_mem_pre_rel_concretize before reusing gen_implpre / gen_implpre_mem.
-     Faithfulness of the exit table at ι is HexitsFaith (etable_faith_exits_of_offs). *)
-  Lemma gen_contract_noninterferent_rel
-      (reg_specs : list reg_spec_rel)
-      (mem_specs : list mem_spec_rel)
-      (instrs : list AST)
-      (extra_exit_offs : list N)
-      (bound : N)
-      (exitCond : bv xlenbits -> bool)
-      (fuel : nat)
-      (init_addr : N)
-      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
-      (HDataAddrs : ∀ i spec,
-          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
-          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
-                             + 4 * N.of_nat i))
-      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
-               4 * N.of_nat (length mem_specs) < lenAddr)%N)
-      (Hbound : (init_addr + bound < lenAddr)%N)
-      (HexitOffs : List.Forall
-          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
-          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_contract : ValidCFGVerifierContract
-          (gen_contract_rel init_addr reg_specs mem_specs instrs extra_exit_offs
-             bound exitCond fuel)) :
-    noninterferent_strong init_addr instrs exitCond
-      (map (concretize_reg init_addr) reg_specs)
-      (map (concretize_mem init_addr) mem_specs).
-  Proof.
-    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
-      HInitReg1 HInitReg2 HInitMem1 HInitMem2
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits]) exitCond
-      (exits_of_offs (term_var "p")
-         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
-    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
-        [reflexivity | exact HexitOffs]. }
-    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
-      instrs exitCond n ws
-      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
-      (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
-      (gen_contract_rel init_addr reg_specs mem_specs instrs extra_exit_offs
-         bound exitCond fuel)
-      valid_contract
-      init_addr
-      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
-    all: try eauto.
-    2: { rewrite !length_map. exact Hlen. }
-    intros Σ H.
-    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
-    cbn.
-    iFrame "Hpriv #".
-    iSplitL "".
-    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
-    iSplitL "".
-    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
-      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
-      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
-      { unfold lenAddr in Hbound. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
-      rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
-    iSplitL "Hregs".
-    { rewrite gen_pre_rel_concretize.
-      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
-      iExact "Hregs". }
-    rewrite gen_mem_pre_rel_concretize.
-    iApply (gen_implpre_mem (map (concretize_mem init_addr) mem_specs) _ HInitMem1 HInitMem2).
-    iExact "Hmemdata".
   Qed.
 
   (* ---------------------------------------------------------------------- *)
@@ -1523,241 +1446,6 @@ Import IrisModel.RiscvPmpIrisBase.
     - intros s Hs. apply filter_In in Hs. destruct Hs as [_ Hf].
       destruct (andb_prop _ _ Hf) as [_ Hb]. apply negb_true_iff. exact Hb.
     - iExact "Hpriv".
-  Qed.
-
-  (* The classed noninterference bridge.  Statement is byte-identical to
-     gen_contract_noninterferent_rel except that valid_contract is over
-     gen_contract_rel_classed; the proof differs only in its last two lines,
-     where gen_implpre_mem_class replaces the
-     gen_mem_pre_rel_concretize + gen_implpre_mem pair. *)
-  Lemma gen_contract_noninterferent_rel_classed
-      (reg_specs : list reg_spec_rel)
-      (mem_specs : list mem_spec_rel)
-      (instrs : list AST)
-      (extra_exit_offs : list N)
-      (bound : N)
-      (exitCond : bv xlenbits -> bool)
-      (fuel : nat)
-      (init_addr : N)
-      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
-      (HDataAddrs : ∀ i spec,
-          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
-          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
-                             + 4 * N.of_nat i))
-      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
-               4 * N.of_nat (length mem_specs) < lenAddr)%N)
-      (Hbound : (init_addr + bound < lenAddr)%N)
-      (HexitOffs : List.Forall
-          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
-          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_contract : ValidCFGVerifierContract
-          (gen_contract_rel_classed init_addr reg_specs mem_specs instrs extra_exit_offs
-             bound exitCond fuel)) :
-    noninterferent_strong init_addr instrs exitCond
-      (map (concretize_reg init_addr) reg_specs)
-      (map (concretize_mem init_addr) mem_specs).
-  Proof.
-    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
-      HInitReg1 HInitReg2 HInitMem1 HInitMem2
-      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    assert (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits]) exitCond
-      (exits_of_offs (term_var "p")
-         ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
-    { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
-        [reflexivity | exact HexitOffs]. }
-    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
-      instrs exitCond n ws
-      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
-      (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
-      (gen_contract_rel_classed init_addr reg_specs mem_specs instrs extra_exit_offs
-         bound exitCond fuel)
-      valid_contract
-      init_addr
-      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
-    all: try eauto.
-    2: { rewrite !length_map. exact Hlen. }
-    intros Σ H.
-    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
-    cbn.
-    iFrame "Hpriv #".
-    iSplitL "".
-    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
-    iSplitL "".
-    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
-      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
-      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
-      { unfold lenAddr in Hbound. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
-      rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
-    iSplitL "Hregs".
-    { rewrite gen_pre_rel_concretize.
-      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
-      iExact "Hregs". }
-    (* μ1/μ2 are IMPLICIT here (they occur in HInitMem1's type, and this section
-       is under Set Implicit Arguments), so they must NOT be passed positionally
-       -- doing so reports "μ1 has type Memory while RelVal ty_xlenbits was
-       expected".  Nor can they be passed by name together with the explicit
-       arguments: Coq's `(x := v)` syntax accepts implicit names only, and the
-       fully-named form fails with "Wrong argument name HInitMem2 (possible
-       names: Σ H μ1 μ2)".  Positional, μ-free, `_` for va, is the form that
-       works; μ1/μ2 come from HInitMem1/HInitMem2. *)
-    iSplitL "Hmemdata".
-    { iApply (gen_implpre_mem_class mem_specs init_addr _ HInitMem1 HInitMem2).
-      iExact "Hmemdata". }
-    (* Trailing `gen_mem_pre_rel_bytes []` (= Top), introduced when this builder
-       started delegating to gen_contract_u (stage 3).  Same shape the _bytes
-       bridge already discharges for its empty WORD block. *)
-    done.
-  Qed.
-
-  (* Parameterized-base noninterference bridge for a REGISTER-ONLY program
-     (PLAN Phase 4.2).  Consumes the symbolic-base contract gen_contract_param
-     (Σ = ["p"]); the symbolic VC is proved ONCE, uniformly in init_addr, and
-     reused here for every concrete init_addr -- no per-address vm_compute.
-
-     Two ancestors are gone, both 2026-08-18 (PLAN-unify-generators.md):
-     stage 0 deleted the non-parametric gen_contract_noninterferent (over
-     gen_contract at a literal base) as dead -- recover it from git history if a
-     concrete-base end theorem is ever wanted.  Stage 1 replaced this lemma's own
-     ~40-line copy of the cfg_instrs_endToEnd_with_memory + ImplPre ritual with a
-     DELEGATION to gen_contract_noninterferent_rel_classed, which is exactly the
-     bridge-side counterpart of gen_contract_param's delegation to
-     gen_contract_rel_classed.  It type-checks because, at mem_specs = [],
-     _rel_classed's conclusion
-       noninterferent_strong .. (map (concretize_reg ia) rs_rel)
-                                (map (concretize_mem ia) [])
-     collapses to this one's: the memory list is [] definitionally, and the
-     register list is reg_specs by map_concretize_reg_to_rel -- concretize_reg
-     inverts reg_spec_to_rel at EVERY base, since a constant-value reg_spec is by
-     construction base-independent.  That equation is not definitional for a
-     variable list, which is why the proof opens by rewriting the goal into the
-     concretized form rather than applying directly.
-
-     Note there is no HDataAddrs premise any more (it quantified over the deleted
-     mem_specs, and is vacuous at []), and Hlen lost its 4*|mem_specs| term. *)
-  Lemma gen_contract_noninterferent_param
-      (reg_specs : list reg_spec)
-      (instrs : list AST)
-      (extra_exit_offs : list N)
-      (exitCond : bv xlenbits -> bool)
-      (fuel : nat)
-      (init_addr : N)      (HND : NoDup (map reg_spec_idx reg_specs))
-      (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-      (HexitOffs : List.Forall
-          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
-          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_contract : ValidCFGVerifierContract
-          (gen_contract_param init_addr reg_specs instrs extra_exit_offs
-             exitCond fuel)) :
-    noninterferent_strong init_addr instrs exitCond reg_specs [].
-  Proof.
-    rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
-    (* Every data argument of _rel_classed is IMPLICIT (each occurs in some
-       premise's type, under Set Implicit Arguments), so none may be passed
-       POSITIONALLY -- doing so reports `"map reg_spec_to_rel reg_specs" has type
-       "list reg_spec_rel" while it is expected to have type "NoDup (...)"`, i.e.
-       the first argument is read as HND.  The `(name := v)` form is exactly what
-       implicits accept.
-
-       Four of them are NOT determined by the conclusion -- mem_specs and
-       extra_exit_offs, fuel and bound -- so they are pinned here by name.  Pinning
-       mem_specs is not optional: the conclusion's data slot is
-       `map (concretize_mem init_addr) ?mem_specs` against our `[]`, and
-       unification will NOT solve `map f ?l == []` (verified: it fails with
-       "Unable to unify map S ?M = map S ?M with [] = []").  Given by name it goes
-       through by CONVERSION instead, since `map f [] == []` definitionally.
-       With all four pinned nothing floats, so the usual
-       "discharge valid_contract FIRST" ordering hazard cannot arise and the
-       premises may be discharged in order. *)
-    eapply (gen_contract_noninterferent_rel_classed
-              (mem_specs := []) (extra_exit_offs := extra_exit_offs)
-              (bound := (4 * N.of_nat (length instrs))%N) (fuel := fuel)).
-    - rewrite map_concretize_reg_to_rel. exact HND.
-    - intros i spec Hlk; cbn in Hlk; discriminate.
-    - cbn. lia.
-    - exact Hlen.
-    - exact HexitOffs.
-    - exact valid_contract.
-  Qed.
-
-  (* ---------------------------------------------------------------------- *)
-  (* Common-case bridges.                                                   *)
-  (*                                                                        *)
-  (* gen_contract_noninterferent_param / _rel take five (resp. six) side    *)
-  (* premises, three of which are mechanical for the overwhelmingly common  *)
-  (* program shape: NO data memory (param), NO exit other than falling off  *)
-  (* the end, and the standard pcOutOfInstrs_exitCond.  The two bridges     *)
-  (* below specialise to that shape and discharge the mechanical premises   *)
-  (* (the vacuous/empty HDataAddrs for _param, the single fall-through      *)
-  (* HexitOffs, the +0 in Hlen) internally, so a caller supplies only the   *)
-  (* genuinely program-specific facts and the VC.                           *)
-  (*                                                                        *)
-  (* A subtle side benefit: in the GENERAL bridges, mem_specs /             *)
-  (* extra_exit_offs / exitCond are unification metavariables shared across *)
-  (* every side goal, which is what makes the "discharge valid_contract     *)
-  (* FIRST or unification picks the wrong goal" hazard bite.  Here those    *)
-  (* three are FIXED by the statement, so only `fuel` floats and it appears *)
-  (* solely in the VC premise -- the ordering hazard simply cannot arise,   *)
-  (* and callers may discharge the remaining premises in any order.         *)
-
-  (* Register-only, straight-line (fall-through exit) programs. *)
-  Lemma gen_contract_noninterferent_param_simple
-      (reg_specs : list reg_spec) (instrs : list AST) (fuel : nat) (init_addr : N)
-      (HND : NoDup (map reg_spec_idx reg_specs))
-      (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-      (valid_contract : ValidCFGVerifierContract
-          (gen_contract_param init_addr reg_specs instrs []
-             (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
-    noninterferent_strong init_addr instrs
-      (pcOutOfInstrs_exitCond init_addr instrs) reg_specs [].
-  Proof.
-    (* one premise fewer since stage 1: _param's HDataAddrs quantified over the
-       deleted mem_specs, so the vacuous-lookup bullet is gone and the VC moved
-       from position 5 to 4. *)
-    eapply gen_contract_noninterferent_param.
-    4: exact valid_contract.
-    - exact HND.
-    - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-  Qed.
-
-  (* Base-relative programs (possibly with data memory), straight-line exit, data
-     block in CLASSED form.  HDataAddrs / Hlen / Hbound stay caller obligations --
-     they depend on the actual data layout and base bound -- but HexitOffs and the
-     ordering hazard are handled here.
-     The unclassed twin (gen_contract_noninterferent_rel_simple, over
-     gen_contract_rel) was deleted 2026-08-18 as dead -- stage 0 of
-     PLAN-unify-generators.md.  Its conclusion was byte-identical to this
-     lemma's, which is why migrating an example to gen_contract_rel_classed was a
-     one-identifier change in its Result file and did not move the trusted
-     statement surface. *)
-  Lemma gen_contract_noninterferent_rel_classed_simple
-      (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
-      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
-      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
-      (HDataAddrs : ∀ i spec,
-          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
-          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
-                             + 4 * N.of_nat i))
-      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
-               4 * N.of_nat (length mem_specs) < lenAddr)%N)
-      (Hbound : (init_addr + bound < lenAddr)%N)
-      (valid_contract : ValidCFGVerifierContract
-          (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
-    noninterferent_strong init_addr instrs
-      (pcOutOfInstrs_exitCond init_addr instrs)
-      (map (concretize_reg init_addr) reg_specs)
-      (map (concretize_mem init_addr) mem_specs).
-  Proof.
-    eapply gen_contract_noninterferent_rel_classed.
-    6: exact valid_contract.
-    - exact HND.
-    - exact HDataAddrs.
-    - exact Hlen.
-    - exact Hbound.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
   Qed.
 
   (* ------------------------------------------------------------------ *)
@@ -1825,16 +1513,63 @@ Import IrisModel.RiscvPmpIrisBase.
       * eapply declare_init_mem_tail. exact HInitMem2.
   Qed.
 
-  (* The byte-granular noninterference bridge (PLAN-check-scalar-full.md §3,
-     PLAN-byte-memory.md §5.3): mirrors gen_contract_noninterferent_rel, but
-     calls gen_contract_rel_bytes with the word-level mem_specs fixed to []
-     -- no CFGVer program has needed BOTH word- and byte-granular data memory
-     at once, and fixing it avoids threading a big_sepL_app list-append split
-     through the ImplPre proof for a case nothing exercises.  Generalise to a
-     combined mem_specs++byte_mem_specs if that need ever arises. *)
-  Lemma gen_contract_noninterferent_rel_bytes
+  (* ===================================================================== *)
+  (* THE UNIFIED BRIDGE (PLAN-unify-generators.md stage 3b).                *)
+  (*                                                                        *)
+  (* One noninterference bridge over gen_contract_u, carrying BOTH a         *)
+  (* word-granular classed block and a byte-granular block.  This is the     *)
+  (* generalisation the (now-deleted) gen_contract_noninterferent_rel_bytes'  *)
+  (* own header comment asked for -- it fixed its word list to [] "to avoid   *)
+  (* threading a big_sepL_app list-append split through the ImplPre proof    *)
+  (* for a case nothing exercises", and said to generalise "if that need     *)
+  (* ever arises".  Unifying the family is that need, so the split is done   *)
+  (* here once, in interp_mem_app / gen_init_mem_app below.                  *)
+  (*                                                                        *)
+  (* The trusted side sees ONE data list, word_data ++ byte_data, matching   *)
+  (* the concatenation gen_contract_rel_bytes already assumed on that side   *)
+  (* (GenContract.v) -- so HDataAddrs' contiguous layout is unchanged, and    *)
+  (* callers keep word cells first.                                          *)
+  (* ===================================================================== *)
+
+  (* Append split for the data resource.  interp_mem_with_public_memory is a
+     big_sepL over the mapped list, so this is just map_app + big_sepL_app --
+     the same shape big_sepL_three_way / interp_mem_partition already exploit
+     for the three-way publicness split. *)
+  Lemma interp_mem_app `{sailGS2 Σ} (μ1 μ2 : Memory) (A B : list mem_full_spec) :
+    interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec (A ++ B))
+    ⊢ interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec A)
+      ∗ interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec B).
+  Proof.
+    unfold interp_mem_with_public_memory.
+    rewrite map_app.
+    rewrite big_sepL_app.
+    done.
+  Qed.
+
+  (* gen_init_mem is a base.omap, which distributes over append; so the
+     caller's single declare_init_memory hypothesis splits into one per block. *)
+  (* stdpp already has omap_app; do NOT hand-roll the induction -- `cbn` rewrites
+     `omap` to `list_omap` while the IH keeps it folded, so `rewrite IH` then fails
+     with "found no subterm" (verified on a scratch probe). *)
+  Lemma gen_init_mem_app (A B : list mem_full_spec) :
+    gen_init_mem (A ++ B) = gen_init_mem A ++ gen_init_mem B.
+  Proof. unfold gen_init_mem. apply omap_app. Qed.
+
+  Lemma declare_init_mem_app (μ : Memory) (A B : list mem_full_spec) :
+    declare_init_memory μ (gen_init_mem (A ++ B)) ->
+    declare_init_memory μ (gen_init_mem A) /\ declare_init_memory μ (gen_init_mem B).
+  Proof.
+    unfold declare_init_memory.
+    rewrite gen_init_mem_app.
+    intros HF.
+    apply Forall_app in HF.
+    exact HF.
+  Qed.
+
+  Lemma gen_contract_noninterferent_u
       (reg_specs : list reg_spec_rel)
-      (byte_mem_specs : list mem_spec_rel)
+      (word_data : list mem_spec_rel)
+      (byte_data : list mem_spec_rel)
       (instrs : list AST)
       (extra_exit_offs : list N)
       (bound : N)
@@ -1843,21 +1578,22 @@ Import IrisModel.RiscvPmpIrisBase.
       (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
-          (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) !! i = Some spec →
+          (map mem_full_to_spec
+             (map (concretize_mem init_addr) (word_data ++ byte_data))) !! i = Some spec →
           spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
                              + 4 * N.of_nat i))
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
-               4 * N.of_nat (length byte_mem_specs) < lenAddr)%N)
+               4 * N.of_nat (length (word_data ++ byte_data)) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs extra_exit_offs
-             bound exitCond fuel)) :
+          (gen_contract_u init_addr reg_specs word_data byte_data instrs
+             extra_exit_offs bound exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond
       (map (concretize_reg init_addr) reg_specs)
-      (map (concretize_mem init_addr) byte_mem_specs).
+      (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
     intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
       HInitReg1 HInitReg2 HInitMem1 HInitMem2
@@ -1868,12 +1604,19 @@ Import IrisModel.RiscvPmpIrisBase.
       ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
     { apply etable_faith_exits_of_offs with (cbase := bv.of_N init_addr);
         [reflexivity | exact HexitOffs]. }
+    (* Split the caller's single declare_init_memory pair, one per block. *)
+    rewrite map_app in HInitMem1.
+    rewrite map_app in HInitMem2.
+    apply declare_init_mem_app in HInitMem1.
+    apply declare_init_mem_app in HInitMem2.
+    destruct HInitMem1 as [HInitMem1w HInitMem1b].
+    destruct HInitMem2 as [HInitMem2w HInitMem2b].
     eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
       instrs exitCond n ws
       ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
       (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
-      (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) HpubMem
-      (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs extra_exit_offs
+      (map mem_full_to_spec (map (concretize_mem init_addr) (word_data ++ byte_data))) HpubMem
+      (gen_contract_u init_addr reg_specs word_data byte_data instrs extra_exit_offs
          bound exitCond fuel)
       valid_contract
       init_addr
@@ -1896,12 +1639,230 @@ Import IrisModel.RiscvPmpIrisBase.
     { rewrite gen_pre_rel_concretize.
       iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
       iExact "Hregs". }
-    iSplitL "".
-    { done. }
+    (* Now the two data blocks.  Split the resource the same way the
+       hypotheses were split above, then hand each half to its own ImplPre.
+       μ1/μ2 stay IMPLICIT in both gen_implpre_mem_* lemmas -- positional and
+       μ-free is the only form that elaborates; passing them positionally reports
+       "μ1 has type Memory while RelVal ty_xlenbits was expected", and the fully
+       named form fails too (Coq's `(x := v)` accepts implicit names only).  See
+       cfgver-endtoend-internals, "the CLASSED memory ImplPre". *)
+    rewrite map_app.
+    iDestruct (interp_mem_app with "Hmemdata") as "(Hword & Hbyte)".
+    iSplitL "Hword".
+    { iApply (gen_implpre_mem_class word_data init_addr _ HInitMem1w HInitMem2w).
+      iExact "Hword". }
     rewrite gen_mem_pre_rel_bytes_concretize.
-    iApply (gen_implpre_mem_bytes (map (concretize_mem init_addr) byte_mem_specs) _ HInitMem1 HInitMem2).
-    iExact "Hmemdata".
+    iApply (gen_implpre_mem_bytes (map (concretize_mem init_addr) byte_data) _
+              HInitMem1b HInitMem2b).
+    iExact "Hbyte".
   Qed.
+
+  (* Common-case specialisation: no extra exits, standard fall-through exit.
+     The single bridge every example should use. *)
+  Lemma gen_contract_noninterferent_u_simple
+      (reg_specs : list reg_spec_rel)
+      (word_data : list mem_spec_rel)
+      (byte_data : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec
+             (map (concretize_mem init_addr) (word_data ++ byte_data))) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length (word_data ++ byte_data)) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_u init_addr reg_specs word_data byte_data instrs []
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) (word_data ++ byte_data)).
+  Proof.
+    eapply gen_contract_noninterferent_u.
+    6: exact valid_contract.
+    - exact HND.
+    - exact HDataAddrs.
+    - exact Hlen.
+    - exact Hbound.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+  (* ------------------------------------------------------------------- *)
+  (* Thin delegations onto the unified pair above (stage 3b).  These keep    *)
+  (* their callers unchanged -- all 13 Example/*Result.v proofs and every     *)
+  (* end-theorem STATEMENT are byte-identical across this refactor -- and     *)
+  (* they absorb the append/naming ritual that calling _u directly would     *)
+  (* otherwise export to each call site.  Only TWO real implementations       *)
+  (* remain: gen_contract_noninterferent_u and _u_simple.                     *)
+  (* The three GENERAL bridges these replaced (_rel over gen_contract_rel,    *)
+  (* _rel_classed, _rel_bytes) were deleted 2026-08-18 -- they had no callers *)
+  (* once the _simple forms were re-pointed here.                             *)
+  (* ------------------------------------------------------------------- *)
+
+
+  (* Parameterized-base noninterference bridge for a REGISTER-ONLY program
+     (PLAN Phase 4.2).  Consumes the symbolic-base contract gen_contract_param
+     (Σ = ["p"]); the symbolic VC is proved ONCE, uniformly in init_addr, and
+     reused here for every concrete init_addr -- no per-address vm_compute.
+
+     Two ancestors are gone, both 2026-08-18 (PLAN-unify-generators.md):
+     stage 0 deleted the non-parametric gen_contract_noninterferent (over
+     gen_contract at a literal base) as dead -- recover it from git history if a
+     concrete-base end theorem is ever wanted.  Stage 1 replaced this lemma's own
+     ~40-line copy of the cfg_instrs_endToEnd_with_memory + ImplPre ritual with a
+     DELEGATION -- then to gen_contract_noninterferent_rel_classed, and since
+     stage 3b straight to gen_contract_noninterferent_u (that intermediate bridge
+     is now deleted).  It type-checks because, at word_data = byte_data = [],
+     _rel_classed's conclusion
+       noninterferent_strong .. (map (concretize_reg ia) rs_rel)
+                                (map (concretize_mem ia) [])
+     collapses to this one's: the memory list is [] definitionally, and the
+     register list is reg_specs by map_concretize_reg_to_rel -- concretize_reg
+     inverts reg_spec_to_rel at EVERY base, since a constant-value reg_spec is by
+     construction base-independent.  That equation is not definitional for a
+     variable list, which is why the proof opens by rewriting the goal into the
+     concretized form rather than applying directly.
+
+     Note there is no HDataAddrs premise any more (it quantified over the deleted
+     mem_specs, and is vacuous at []), and Hlen lost its 4*|mem_specs| term. *)
+  Lemma gen_contract_noninterferent_param
+      (reg_specs : list reg_spec)
+      (instrs : list AST)
+      (extra_exit_offs : list N)
+      (exitCond : bv xlenbits -> bool)
+      (fuel : nat)
+      (init_addr : N)      (HND : NoDup (map reg_spec_idx reg_specs))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
+      (HexitOffs : List.Forall
+          (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
+          ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_param init_addr reg_specs instrs extra_exit_offs
+             exitCond fuel)) :
+    noninterferent_strong init_addr instrs exitCond reg_specs [].
+  Proof.
+    rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
+    (* Every data argument of _rel_classed is IMPLICIT (each occurs in some
+       premise's type, under Set Implicit Arguments), so none may be passed
+       POSITIONALLY -- doing so reports `"map reg_spec_to_rel reg_specs" has type
+       "list reg_spec_rel" while it is expected to have type "NoDup (...)"`, i.e.
+       the first argument is read as HND.  The `(name := v)` form is exactly what
+       implicits accept.
+
+       Four of them are NOT determined by the conclusion -- mem_specs and
+       extra_exit_offs, fuel and bound -- so they are pinned here by name.  Pinning
+       mem_specs is not optional: the conclusion's data slot is
+       `map (concretize_mem init_addr) ?mem_specs` against our `[]`, and
+       unification will NOT solve `map f ?l == []` (verified: it fails with
+       "Unable to unify map S ?M = map S ?M with [] = []").  Given by name it goes
+       through by CONVERSION instead, since `map f [] == []` definitionally.
+       With all four pinned nothing floats, so the usual
+       "discharge valid_contract FIRST" ordering hazard cannot arise and the
+       premises may be discharged in order. *)
+    eapply (gen_contract_noninterferent_u
+              (word_data := []) (byte_data := [])
+              (extra_exit_offs := extra_exit_offs)
+              (bound := (4 * N.of_nat (length instrs))%N) (fuel := fuel)).
+    - rewrite map_concretize_reg_to_rel. exact HND.
+    - intros i spec Hlk; cbn in Hlk; discriminate.
+    - cbn. lia.
+    - exact Hlen.
+    - exact HexitOffs.
+    - exact valid_contract.
+  Qed.
+
+
+  (* ---------------------------------------------------------------------- *)
+  (* Common-case bridges.                                                   *)
+  (*                                                                        *)
+  (* gen_contract_noninterferent_param / _rel take five (resp. six) side    *)
+  (* premises, three of which are mechanical for the overwhelmingly common  *)
+  (* program shape: NO data memory (param), NO exit other than falling off  *)
+  (* the end, and the standard pcOutOfInstrs_exitCond.  The two bridges     *)
+  (* below specialise to that shape and discharge the mechanical premises   *)
+  (* (the vacuous/empty HDataAddrs for _param, the single fall-through      *)
+  (* HexitOffs, the +0 in Hlen) internally, so a caller supplies only the   *)
+  (* genuinely program-specific facts and the VC.                           *)
+  (*                                                                        *)
+  (* A subtle side benefit: in the GENERAL bridges, mem_specs /             *)
+  (* extra_exit_offs / exitCond are unification metavariables shared across *)
+  (* every side goal, which is what makes the "discharge valid_contract     *)
+  (* FIRST or unification picks the wrong goal" hazard bite.  Here those    *)
+  (* three are FIXED by the statement, so only `fuel` floats and it appears *)
+  (* solely in the VC premise -- the ordering hazard simply cannot arise,   *)
+  (* and callers may discharge the remaining premises in any order.         *)
+
+  (* Register-only, straight-line (fall-through exit) programs. *)
+  Lemma gen_contract_noninterferent_param_simple
+      (reg_specs : list reg_spec) (instrs : list AST) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx reg_specs))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_param init_addr reg_specs instrs []
+             (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs) reg_specs [].
+  Proof.
+    (* one premise fewer since stage 1: _param's HDataAddrs quantified over the
+       deleted mem_specs, so the vacuous-lookup bullet is gone and the VC moved
+       from position 5 to 4. *)
+    eapply gen_contract_noninterferent_param.
+    4: exact valid_contract.
+    - exact HND.
+    - cbn. lia.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+  Qed.
+
+
+  (* Base-relative programs (possibly with data memory), straight-line exit, data
+     block in CLASSED form.  HDataAddrs / Hlen / Hbound stay caller obligations --
+     they depend on the actual data layout and base bound -- but HexitOffs and the
+     ordering hazard are handled here.
+     The unclassed twin (gen_contract_noninterferent_rel_simple, over
+     gen_contract_rel) was deleted 2026-08-18 as dead -- stage 0 of
+     PLAN-unify-generators.md.  Its conclusion was byte-identical to this
+     lemma's, which is why migrating an example to gen_contract_rel_classed was a
+     one-identifier change in its Result file and did not move the trusted
+     statement surface. *)
+  Lemma gen_contract_noninterferent_rel_classed_simple
+      (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    (* Re-pointed at the unified bridge (stage 3b).  `A ++ [] = A` is NOT
+       definitional for a variable list, so the goal is first rewritten into the
+       append form _u concludes over; the premises then need the same rewrite
+       back.  byte_data is named because unification cannot solve
+       `map f ?l == []` (see the note in gen_contract_noninterferent_param). *)
+    rewrite <- (app_nil_r mem_specs).
+    eapply (gen_contract_noninterferent_u
+              (byte_data := []) (extra_exit_offs := [])
+              (bound := bound) (fuel := fuel)).
+    - exact HND.
+    - rewrite app_nil_r. exact HDataAddrs.
+    - rewrite app_nil_r. exact Hlen.
+    - exact Hbound.
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact valid_contract.
+  Qed.
+
 
   (* Common-case specialisation: no extra exits, standard fall-through exit
      -- mirrors gen_contract_noninterferent_rel_classed_simple. *)
@@ -1924,13 +1885,18 @@ Import IrisModel.RiscvPmpIrisBase.
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) byte_mem_specs).
   Proof.
-    eapply gen_contract_noninterferent_rel_bytes.
-    6: exact valid_contract.
+    (* Re-pointed at the unified bridge (stage 3b).  Here word_data := [] and
+       `[] ++ B` DOES reduce to B, so no goal rewrite is needed -- only the naming
+       of word_data, since unification cannot solve `map f ?l == []`. *)
+    eapply (gen_contract_noninterferent_u
+              (word_data := []) (extra_exit_offs := [])
+              (bound := bound) (fuel := fuel)).
     - exact HND.
     - exact HDataAddrs.
     - exact Hlen.
     - exact Hbound.
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact valid_contract.
   Qed.
 
   (* --------------------------------------------------------------------- *)
