@@ -13,6 +13,7 @@
     }
   },
   "_skillOverridesNote": "Two-tier skill routing, 2026-07-28. These are tier-2 children of `rocq-implementation`: `name-only` lists them WITHOUT their description, so they no longer compete for the initial routing decision, but stay invokable by name from the parent's routing table. Added after a session made ZERO Skill calls because ~10 overlapping symptom-keyword descriptions all competed and none won. If you re-enable one, remove it from rocq-implementation's tier-2 table too, or the table will lie. Tier-1 peers deliberately NOT listed here: cfgver, cfgver-new-example, cfgver-solve-vc, secret-data-walls, gmap-pitfalls, rocq-timeout-triage, rocq-compile-oom.",
+  "_postToolUseNote": "rocq-error-injector.sh is INJECTION, not a gate: the pitfalls skills are symptom-keyed and the symptom is a deterministic string in tool output, so naming the right skill needs no cooperation from the assistant. Added 2026-08-17 after an advisory nudge hook was read and still ignored. It never blocks and stays silent unless a pattern matches.",
   "skillOverrides": {
     "bv-pitfalls": "name-only",
     "rocq-pitfalls": "name-only",
@@ -103,7 +104,6 @@
         ]
       }
     ],
-    "_postToolUseNote": "rocq-error-injector.sh is INJECTION, not a gate: the pitfalls skills are symptom-keyed and the symptom is a deterministic string in tool output, so naming the right skill needs no cooperation from the assistant. Added 2026-08-17 after an advisory nudge hook was read and still ignored. It never blocks and stays silent unless a pattern matches.",
     "PostToolUse": [
       {
         "matcher": "Bash|mcp__rocq-mcp__rocq_check|mcp__rocq-mcp__rocq_compile_file|mcp__rocq-mcp__rocq_compile",
