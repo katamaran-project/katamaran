@@ -45,7 +45,8 @@ to a fresh one until you compare.
 | `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared** — verdict confirmed at ~4–6% on a matched pair 2026-08-19, but **its own tables are RETRACTED as cross-protocol** (`Qed`+`solve_symbase_fetch` baseline vs `Admitted` no-feedback); never requote the 1.0038×/1.0136×. Absolutes superseded, and the imports baseline it tells you to subtract moved 434.8M → 604.3M. |
 | `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. **Its ~3.2% figure is RETRACTED 2026-08-19 as cross-protocol** (same `Admitted` no-feedback rig as loop1) and **re-measured at 1.0726× (7.3%)** on a matched pair — conclusion unchanged, but the real magnitude is 2.3× what it reported, so never requote ~3%. |
 | `byte-classed-block-payoff.md` | the BYTE-granular classed block (`gen_mem_pre_rel_bytes_classed`, 2026-08-19) closes the last declared-cell `|Σ|` gap: **1.10× at 2 cells, 1.32× at 4, 1.77× at 8**, growing with cell count so more than a constant — but a held-out fit fails on BOTH arms (−14%/−23%), so **not** established as an exponent fix. Also the record that found the `Qed`/`Admitted` protocol trap recurring in the two loop records above. |
-| `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
+| `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit (**that ratio is NOT a constant — `lvar-lookup-cost-drivers.md` §5.3 measures 19.5× at `|Σ|`=25, 65× at 89, 111× at 153, because the variable cost is quadratic and the chunk cost linear; never quote it without an `|Σ|`**) — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
+| `lvar-lookup-cost-drivers.md` | 2026-08-19, answers Dominique's "is it variable LOOKUP?" hypothesis. **Chunk count spawns ZERO logic variables** (every structural count byte-identical over a 4× chunk range) and carrying one costs a flat **1.289 M words**; but the SAME chunk costs **16.1× more** when its variables sit 64 binders deeper, and the depth surcharge is `0.627 + 0.0195·chunks` G words (held-out **−0.0005%**). So chunks and lookup are NOT competing drivers — the dominant chunk-related cost IS a lookup cost, and they multiply exactly linearly. Pure lookup DEPTH at identical `|Σ|` is **1.16×–1.47×**; declared-variable COUNT is **quadratic** (held-out **+0.17%** at 4× beyond the fit range). Also: peak `|Σ|` is only 25 because the solver eliminates 1281 of 1293 mints, so the `|Σ|` quadratic is about DECLARED entries only, never per-step ones. |
 
 Note what the two `check-scalar-loop*` records have in common: a mechanism
 that is genuinely dominant in one example was measured near-zero in
@@ -102,7 +103,16 @@ general executor cost law `heap_size × (α·S + β·S²)` (`S` = steps executed
 full history in `cfgver-executor`'s description) as a specific way one of
 those terms grows with the trip count `N`:
 
-- **Declared-chunk-count scaling with N — LINEAR, and cheap per chunk.**
+- **Declared-chunk-count scaling with N — LINEAR, cheap to CARRY, expensive to
+  LOOK THROUGH.** Carrying one chunk is **1.289 M words, flat**
+  (`lvar-lookup-cost-drivers.md` §2), and a chunk spawns **zero** logic variables —
+  measured structurally, every binder/vareq/`|Σ|`/lookup-weight count is
+  byte-identical over chunks 0→16→32→64. But the same chunk costs **16.1× more**
+  when the variables inside it sit 64 binders deeper (§5.2), because `persist`
+  re-looks-up every occurrence at every world extension. At 64 chunks the carrying
+  cost is 82 M words while the contribution to the depth penalty is 1.248 G —
+  **15× larger**. **Design consequence: reduce the DEPTH, not the chunk count.**
+  The rest of this bullet is the earlier, still-correct reading of the linearity:
   Isolated by moving chunk count at CONSTANT step count AND constant variable
   count (`check-scalar-combined-cost-drivers.md` §6.6): marginal cost per chunk
   is constant to four significant figures over a 4× range, held-out linear fit
@@ -142,7 +152,18 @@ those terms grows with the trip count `N`:
   chunk half is *exactly* bilinear in chunks × steps, and that whether the cells
   are genuinely TOUCHED is worth under 2% — declaring them is the whole cost).
   This is where the apparent
-  "chunk superlinearity" actually lived. Sources of `|Σ|` growth: one
+  "chunk superlinearity" actually lived. **Split into DEPTH vs BREADTH 2026-08-19**
+  (`lvar-lookup-cost-drivers.md` §4–5): at *identical* `|Σ|`, moving only the de
+  Bruijn indices of the hot variables — K dead existentials placed before vs after
+  the real precondition — costs **1.16×–1.47×**, linear in the shift (held-out
+  +0.10%). That is the `env.lookup` walk alone. The remaining ~74% is breadth
+  (`env.tabulate` per mint, `ctx.fresh`'s name scan, pc re-substitution) and is
+  **entirely chunk-independent** (constant to 0.0003% across a 4× chunk range).
+  Candidate for the quadratic specifically, from code and not yet isolated:
+  `sub_comp` maps `subst` over an `Env` of `|Σ|` terms each doing an `O(|Σ|)`
+  lookup, so composing two substitutions is `O(|Σ|²)` and the executor composes
+  one per world extension — per-mint `tabulate`/`ctx.fresh` are only `O(|Σ|)` and
+  cannot produce the quadratic. Sources of `|Σ|` growth: one
   `asn.exist` per unpinned (`PVExist`) spec entry, and per-step demonic
   variables. **The FIRST source is now fixed for the base-relative word-granular
   family: `gen_contract_rel_classed` (2026-08-18) emits one existential per
@@ -166,6 +187,17 @@ those terms grows with the trip count `N`:
   small ones have smaller individual terms. **Isolate this axis** by holding
   chunk count and per-chunk term shape fixed and varying only how many distinct
   variables the chunk values project from.
+- **FRESH-NAME GENERATION (`ctx.fresh`) — not yet isolated, cheapest possible
+  fix.** Every mint builds the full name list of `Σ` and `List.find`s it; on a
+  base-name collision it then runs `max_with_base`, a second full scan with
+  `split_at_dot` string parsing per element (`Context.v:707–714`). Per-step mints
+  ALWAYS collide (`"a"`, `"np"`, `"na"` — `Verifier.v:188,501,507`), so they always
+  take the expensive branch: `O(mints × |Σ| × string work)`, chunk-free. It sits
+  undifferentiated inside the 74% "breadth" block of
+  `lvar-lookup-cost-drivers.md` §5.4. If it is a large share of that, the fix —
+  name by a counter — changes nothing observable anywhere. **Named as the
+  recommended next experiment; do not quote a magnitude, none was measured.**
+
 - **Self-referential symbolic term growth.** A register whose new value is
   computed from its *own* previous value every iteration (`H := f(H)`, not
   merely read twice within one iteration's formula) accumulates a nested

@@ -961,6 +961,15 @@ Held-out check — fit the power law on N=4,8 only and predict N=16:
    builder removes only the one-existential-per-`PVExist` source. The other
    catalogued source — per-step demonic variables — is untouched by it.
 4. **The residual is still superlinear and this record does NOT identify it.**
+   **Narrowed 2026-08-19 (`lvar-lookup-cost-drivers.md` §3): it is NOT a variable
+   effect.** Instrumenting this exact rig shows every variable-related count is
+   *exactly* linear in N — binders 1281/2541/5061 (+315 per trip, flat), lookup
+   weight 7814/15582/31118 (×1.994, ×1.997), nodes ×1.997/×1.998 — and peak `|Σ|`
+   is **24 at every N**. The 1.114/1.221 exponents reproduced to three digits on a
+   different protocol. So variable count, lookup depth, mint count and output size
+   are all ruled out, and the remaining candidate is the bilinear
+   `chunks × steps` carrying term. The chunk-pinned / step-pinned sweep below is
+   still the thing to run.
    CLS sits at exponent ~1.22 and rising, and its held-out error is −7.1%, i.e.
    a two-point fit still underpredicts. Candidates from the catalog, none
    isolated here: the bilinear chunks × steps term (both scale with N in this

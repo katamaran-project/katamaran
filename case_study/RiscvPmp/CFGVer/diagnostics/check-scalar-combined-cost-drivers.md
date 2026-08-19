@@ -928,7 +928,14 @@ older table despite the changed baseline.
   substituting one variable occurrence costs `O(|Σ|)`, and `persist` of the heap
   at every world extension is `O(H · T · |Σ|)`. Growing `|Σ|` therefore both
   adds transported state *and* makes every other transport more expensive.
-- **A variable costs ~29–46× a chunk.** Per pad word, 5.16 M for four chunks
+- **A variable costs ~29–46× a chunk.** **Refined 2026-08-19
+  (`lvar-lookup-cost-drivers.md` §5.3): that ratio is NOT a constant.** Because the
+  variable cost is quadratic and the chunk cost linear, the ratio grows linearly
+  with `|Σ|` — measured 19.5× at `|Σ|`=25, 65× at 89, 111× at 153. The 29–46×
+  quoted here is this rig's `|Σ|` range, not a universal figure; never quote it
+  without saying at which `|Σ|`. The quadratic itself is independently reproduced
+  there with dead existentials that no chunk, formula or instruction references
+  (held-out +0.17% at K=128, four doublings beyond the fit range). Per pad word, 5.16 M for four chunks
   sharing a variable versus 42–64 M for four chunks with a fresh one. Confirmed
   independently at pw = 0, where arm B's lone unused existential with **zero**
   chunks costs +34.1 M by itself (0.4055 vs 0.3713).
