@@ -1,6 +1,7 @@
 # Logical-variable lookup vs chunk count — which is the driver?
 
-Status: **Diagnostic record, 2026-08-19.** Designed against
+Status: **Diagnostic record, 2026-08-19; §2 and the headline PARTLY RETRACTED
+the same day — see §8 before quoting anything about chunks.** Designed against
 `plans/PLAN-lvar-lookup.md`, whose axes were committed to disk before any
 measurement. Prompted by Dominique's hypothesis that the way logical variables
 are *looked up* is a main driver, and by the question of whether some internal
@@ -8,12 +9,23 @@ process spawns variables in proportion to chunk count.
 
 ## One-sentence finding
 
-**Chunk count spawns exactly zero logical variables and costs a flat 1.29 M
-words each to carry, but a chunk whose variables sit 64 binders deeper costs
-16.1× more — so chunk count is not an independent driver, it is a multiplier on
-logical-variable lookup, and lookup depth at *identical* `|Σ|` is worth
-1.16×–1.47× on its own while declared-variable *count* enters quadratically
-(held-out +0.17% at 4× beyond the fit range).**
+**READ §8 FIRST — this headline was partly retracted the same day.** Current
+statement: chunk count spawns exactly zero logical variables and is exactly
+linear, but cost is `steps × heap` so the heap term is nonetheless **24% of cost
+at 16 declared cells and 55% at 64**; declared-variable *count* enters
+quadratically (held-out +0.17% at 4× beyond the fit range) and is the top driver
+for *growth* (15 extra existentials = 2.12× at identical chunks and steps);
+lookup depth at identical `|Σ|` is worth 1.16×–1.47×; and the apparent quadratic
+in heap size is **not** the heap — it is `gen_contract_rel_classed`'s grouped
+`bv (32·P)` existential, whose P `vector_subrange` projections each carry the
+width index.
+
+> ~~Chunk count spawns exactly zero logical variables and costs a flat 1.29 M
+> words each to carry, but a chunk whose variables sit 64 binders deeper costs
+> 16.1× more — so chunk count is not an independent driver, it is a multiplier on
+> logical-variable lookup.~~ **RETRACTED 2026-08-19 in §8**: the per-chunk figure
+> omitted its step count, and "not an independent driver" is wrong on magnitude.
+> The zero-variables result and the 16.1× depth multiplier both stand.
 
 ## 0. Protocol
 
@@ -86,6 +98,17 @@ plus `demonic result` (`Monads.v:1091,1102`) and `produce`/`consume` of
 **So the hypothesis that chunk count drives variable creation is refuted
 structurally, not statistically.** Chunk count is a pure carrying cost of
 **1.289 M words per chunk**, exactly linear.
+
+> **PARTLY RETRACTED 2026-08-19 (same day), see §8.** The *shape* survives —
+> chunk count is exactly linear, now confirmed on a second rig with a held-out
+> linear fit at **+0.00%**. Two things here are wrong. (1) The coefficient is
+> quoted **at one step count** (`n=4`): cost is exactly linear in steps too, so
+> a per-chunk figure is meaningless without its step count — the prior records'
+> `chunks × steps` bilinear law is correct and this section contradicted it on
+> weaker evidence. (2) The conclusion drawn elsewhere in this file that chunks
+> are therefore **not a driver is wrong on magnitude**: the heap-dependent term
+> is **24% of cost at 16 declared cells and 55% at 64**, linear or not.
+> Never quote 1.289 M/chunk without "at 52 steps".
 
 ### The other half of that table: `|Σ|` does not accumulate
 
@@ -351,3 +374,77 @@ arguments), `env.Env` needs `B : Set` not `Type`, and there is no `env` fold in
 `Environment.v` — `env_sum` supplies one. A recursive call under `env_sum`'s
 functional argument passes the guard checker for `Env`-of-`Term` arguments,
 which is the same shape `sub_term` uses (`Terms.v:747`).
+
+
+## 8. Retraction and correction, 2026-08-19 (same day)
+
+**Prompted by Emiel pointing out that this file contradicts
+`key-schedule-loop2-cost-drivers.md`'s bilinear `chunks × steps` finding.
+It did, and this file was wrong.**
+
+### What was wrong
+
+§2's chunk sweep pinned steps at `n=4` and ran on ONE rig (concrete base,
+byte-granular chunks, pad cells sharing a plain variable). From it this file
+concluded chunk count is linear *and cheap enough not to matter*. The first half
+is right; the second does not follow from a single-step-count sweep, and the
+prior records had already measured the steps interaction directly.
+
+### The experiment that settles it
+
+`ZZKslHeapCommon.v` — the KSL rig with **trips `t` and declared cells `P` as
+independent parameters** (`ZZKslChunkPaddedCommon.v` ties trips, cells and fuel
+to one `n`, which is why it could not answer this). |Σ| pinned by
+`gen_contract_rel_classed`, usage pinned at one touched cell, term shape pinned
+flat. Instrument verified |Σ| flat rather than assuming it: `maxsig` 24,
+`sigint` 26230, `lw` 11599, `occ` 663, `nodes` 9211 — byte-identical at
+P = 1/16/64.
+
+| axis | result |
+|---|---|
+| steps at fixed heap | **exactly linear** — ratios 1.9877/1.9939 at P=1, 1.9909/1.9954 at P=32 |
+| heap at fixed steps, **classed** cells | **quadratic**: `0.348016 + 0.0071343·P + 1.4533e-5·P²`, held out −0.0001% (P=32) and −0.0019% (P=64); a linear fit misses P=64 by −5.94% |
+| heap at fixed steps, **`PVConst`** cells | **exactly linear**: marginal 6.308 M/cell constant to 4 s.f. over 64×; held-out linear fit **+0.00%** at P=64 |
+| the two axes together | multiply — `t=8,P=64` is +0.21% off `2 ×` the `t=4,P=64` cell |
+
+So the law on this rig is **cost = steps × (a + b·H + c·H²)**, and the `c·H²`
+term is **not a property of heap size**.
+
+### The mechanism, isolated
+
+`gen_contract_rel_classed` groups the P private cells into ONE existential of
+type `bv (32·P)` and projects each cell with `uop.vector_subrange`. Every one of
+the P projections carries the width index `32·P`, so per-chunk term cost grows
+with P: `H × O(P) = O(P²)`, with |Σ| flat. The `PVConst` arm has no grouped
+variable and no projections — identical chunk count, steps, usage and
+instructions — and its heap axis is exactly linear. **The classed builder, i.e.
+the fix that removed the |Σ| quadratic, introduces a smaller quadratic of its
+own.**
+
+Ranking of the three cell representations, all measured:
+
+| representation | heap axis | vs alternatives |
+|---|---|---|
+| one existential per cell (`CD`) | quadratic in `\|Σ\|` | worst — 2.12× the classed arm at N=16 |
+| grouped existential (classed) | **quadratic in P** (width index) | 1.18× the pinned arm at P=64, worsening |
+| `PVConst` pinned | **exactly linear** | best, but a strictly weaker precondition |
+
+The quadratic was **moved and shrunk, not eliminated**. Fix candidate, not
+attempted: make the classed block a per-class `NamedEnv` of `bv 32` components
+rather than one wide `bv (32·P)`, so no projection carries the total width.
+
+### Corrected driver ranking
+
+1. **Declared existential variables** — still first for *growth*: 15 extra
+   existentials cost 2.12× at identical chunk count and identical steps
+   (CD vs CLS, N=16). |Σ| stays small (24–39); the cost is ~316 world extensions
+   per trip each paying `O(|Σ|²)`.
+2. **`steps × heap`** — both factors exactly linear once the classed
+   representation's width-index term is separated out. Not negligible: the
+   heap-dependent share is 24% at 16 cells and 55% at 64.
+3. **The classed representation's width index** — new, above; quadratic in cells.
+
+Files: `Example/ZZKslHeapCommon.v`, `ZZKslHeapCstCommon.v`,
+`ZZKH_t{2,4,8}_P{1,8,16,32,64}.v`, `ZZKHC_t4_P{1,8,16,32,64}.v`,
+instrument `ZZKHI_*.v` / `ZZKHCI_*.v`, baselines `ZZKHBase.v` / `ZZKHCBase.v`
+(604,331,890 / 604,354,981).
