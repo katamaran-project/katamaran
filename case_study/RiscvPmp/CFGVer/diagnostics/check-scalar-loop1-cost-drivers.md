@@ -2,7 +2,37 @@
 
 Status: **Diagnostic record, 2026-08-13.**
 
-**Follow-on (2026-08-18).** Unaffected. The `|Σ|` (logic-variable) driver named
+**Follow-on (2026-08-19) — the CONCLUSION stands, the EVIDENCE below does not,
+and the absolutes are superseded.** Three corrections, from
+`byte-classed-block-payoff.md`:
+
+1. **RETRACTED 2026-08-19: the Results table is a CROSS-PROTOCOL comparison.**
+   The baseline rigs (`ZZByteLoop1N16`/`N32`) run
+   `vm_compute; solve_vc; solve_symbase_fetch.` **`Qed`**, while the no-feedback
+   rigs (`ZZByteLoop1NF_N16`/`NF_N32`) run `Time vm_compute. Time solve_vc.`
+   **`Admitted`** — strictly less work, skipping `solve_symbase_fetch` and the
+   `Qed` VM cast. So the 1.0038× / 1.0136× figures are not measurements of the
+   self-reference axis; the two arms were never doing the same work. This is the
+   same trap `check-scalar-combined-cost-drivers.md` documents. **Never requote
+   them as evidence.** Read at the current commit the same mismatch yields a
+   spurious **2.098×** for this axis.
+2. **The conclusion is nevertheless CONFIRMED.** Re-measured on a properly
+   matched pair (both arms `Qed` + `solve_symbase_fetch`, N=32): **1.0411×**
+   classed / **1.0613×** unclassed, i.e. self-reference costs ~4–6% — the same
+   "cleared" verdict this record reached. To cite a *measurement*, the
+   no-feedback rigs must first be re-run under the baseline protocol.
+3. **Absolutes superseded, and the baseline moved.** The N=16/32 figures predate
+   `bop.mulx`, the fetch-bound solver rule, the classed word block and the
+   classed byte block; re-measured they are 3.7–8.3× lower, but that is a
+   COMPOUND of all of those and is not attributable to any one. Worse, the
+   **434,833,198 imports-only baseline this record instructs you to subtract is
+   now 604,283,692** (+39%) — re-using the old figure corrupts derived numbers by
+   ~170M.
+
+**Follow-on (2026-08-18) — SUPERSEDED by the note above as regards the missing
+byte block; `gen_mem_pre_rel_bytes_classed` landed 2026-08-19
+(`plans/PLAN-unify-generators.md` stage 2), and this example now mints ONE
+variable for its 8 byte cells rather than 8.** Unaffected. The `|Σ|` (logic-variable) driver named
 in the sibling `check-scalar-combined-cost-drivers.md` now has a landed fix
 (`gen_contract_rel_classed`, `plans/PLAN-classed-existentials.md`), but it currently covers
 only the word-granular data block; no byte-granular classed block exists yet, so

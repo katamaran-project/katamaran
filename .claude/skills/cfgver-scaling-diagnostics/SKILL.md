@@ -42,8 +42,9 @@ to a fresh one until you compare.
 | file (all in `diagnostics/`) | what it concluded |
 |---|---|
 | `key-schedule-loop2-cost-drivers.md` | TWO independent axes — declared-chunk **usage** (1 vs N genuinely-touched cells) and self-referential term growth — which is why any single-variant comparison here is a mix. As of the 2026-08-14 re-measurement the term axis is **closed** (`bop.mulx`, 0.98×). ~~declared-chunk count is the sole remaining driver (2.72× at N=16)~~ **corrected 2026-08-17: 82% of that is the LOGIC-VARIABLE count each `PVExist` cell mints, 2.80× → 1.32× with one shared variable; the chunk half is exactly bilinear in chunks × steps, and the *usage* axis is worth under 2%.** Also: every absolute figure predating 2026-08-17 in that file is 3–6× too high (§5.9's solver rule postdates it) — ratios mostly survive, `allocated_words` does not. **Re-measured 2026-08-18: the `|Σ|` axis is now CLOSED for declared cells** — `gen_contract_rel_classed` matches the weaker shared-variable arm to 0.07–0.59% at full statement strength, and it is an EXPONENT reduction (CD 1.43→1.72 vs CLS 1.11→1.22 over N=4→8→16), not a constant. What remains grows at exp ≈1.22 and RISING, and is **not identified** — that sweep was not run. The worked example for this whole skill, and for retraction discipline — twice over now. |
-| `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared**: <1.4% at N=32, because `z` is read only ONCE per iteration so its term grows linearly. |
-| `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small (~3.2% at N=16) — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. |
+| `check-scalar-loop1-cost-drivers.md` | loop 1's accumulator is **cleared** — verdict confirmed at ~4–6% on a matched pair 2026-08-19, but **its own tables are RETRACTED as cross-protocol** (`Qed`+`solve_symbase_fetch` baseline vs `Admitted` no-feedback); never requote the 1.0038×/1.0136×. Absolutes superseded, and the imports baseline it tells you to subtract moved 434.8M → 604.3M. |
+| `check-scalar-loop2-cost-drivers.md` | loop 2's `c` accumulation also small — but NOT because double-referenced accumulators are safe in general (`key_schedule_loop2`'s identically-shaped `H` genuinely is exponential). Per-iteration density is the primary driver here. **Its ~3.2% figure is RETRACTED 2026-08-19 as cross-protocol** (same `Admitted` no-feedback rig as loop1); the conclusion is unchallenged but loop 2's magnitude is currently unquantified. |
+| `byte-classed-block-payoff.md` | the BYTE-granular classed block (`gen_mem_pre_rel_bytes_classed`, 2026-08-19) closes the last declared-cell `|Σ|` gap: **1.10× at 2 cells, 1.32× at 4, 1.77× at 8**, growing with cell count so more than a constant — but a held-out fit fails on BOTH arms (−14%/−23%), so **not** established as an exponent fix. Also the record that found the `Qed`/`Admitted` protocol trap recurring in the two loop records above. |
 | `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
 
 Note what the two `check-scalar-loop*` records have in common: a mechanism
@@ -148,12 +149,13 @@ those terms grows with the trip count `N`:
   publicness class instead of per cell, which is EQUIVALENT rather than weaker,
   and re-measured on the KSL rig it is an exponent reduction (1.72 → 1.22 at
   N=8→16), landing on the shared-variable arm's cost to within 0.6%. Use it by
-  default there.** Two scope limits that matter, neither of them
-  "impossible": there is no BYTE-granular classed block yet, so
-  `gen_contract_rel_bytes` users (check_scalar loop 1, 8 entries × 1 variable
-  each) still pay per-cell `|Σ|` — a missing feature, not a blocked one, since
-  those specs are already `mem_spec_rel`; and it does nothing about the
-  per-step-demonic-variable source. (`gen_contract_param`'s concrete
+  default there.** **The BYTE-granular
+  block landed too (2026-08-19, `gen_mem_pre_rel_bytes_classed`,
+  `byte-classed-block-payoff.md`), so declared-cell `|Σ|` is now closed in BOTH
+  granularities — 1.10×/1.32×/1.77× at 2/4/8 declared byte cells, growing with
+  cell count, though a held-out fit fails so it is NOT established as an exponent
+  fix.** The one scope limit left: it does nothing about the
+  per-step-demonic-variable source of `|Σ|`. (`gen_contract_param`'s concrete
   `mem_full_spec` block genuinely cannot be classed — width-index trap,
   `GenContract.v:536` — but all nine of its call sites pass `mem_specs = []`, so
   that block has no users and the limitation costs nothing.) Cheapest levers, in order: use the classed

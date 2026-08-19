@@ -2,7 +2,25 @@
 
 Status: **Diagnostic record, 2026-08-13.**
 
-**Follow-on (2026-08-18).** Unaffected, same reasoning as
+**Follow-on (2026-08-19) — RETRACTED: the Results table is a CROSS-PROTOCOL
+comparison.** Exactly as in `check-scalar-loop1-cost-drivers.md`: the baseline
+rigs (`ZZByteLoop2N16`/`N32`) run
+`vm_compute; solve_vc; solve_symbase_fetch.` **`Qed`**, the no-feedback rigs
+(`ZZByteLoop2NF_N16`/`NF_N32`) run `Time vm_compute. Time solve_vc.`
+**`Admitted`**. The no-feedback arm does strictly less work, so the **1.032×**
+same-N figure is not a measurement of the self-reference axis. **Never requote it
+as evidence.** The *conclusion* — that `c`'s accumulation is small and density is
+the primary driver — is not challenged, and its loop1 analogue was independently
+confirmed at ~4–6% on a matched pair (`byte-classed-block-payoff.md`); but loop 2's
+own arms were NOT re-measured, so its magnitude here is currently unquantified.
+The N=32 no-feedback point was already "not measured" in this record, so the
+doubling comparison was single-arm anyway. Also note the imports-only baseline has
+moved from 434,833,198 to 604,283,692 (+39%), and this record's absolutes predate
+several landed cost fixes.
+
+**Follow-on (2026-08-18) — the "no byte-granular counterpart yet" claim is
+SUPERSEDED: `gen_mem_pre_rel_bytes_classed` landed 2026-08-19
+(`plans/PLAN-unify-generators.md` stage 2).** Unaffected, same reasoning as
 `check-scalar-loop1-cost-drivers.md`: the landed `|Σ|` fix
 (`gen_contract_rel_classed`, `plans/PLAN-classed-existentials.md`) has no
 byte-granular counterpart yet, so this example's byte specs still mint one

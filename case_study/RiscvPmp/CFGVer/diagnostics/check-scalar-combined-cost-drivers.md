@@ -4,8 +4,23 @@ Status: **Diagnostic record. Originally 2026-08-13; substantially re-measured
 and re-concluded 2026-08-14.** The 2026-08-13 reading is kept, marked
 superseded, at the bottom.
 
+**Follow-on (2026-08-19) — the open item named below is CLOSED.** The
+byte-granular classed data block this note calls "the concrete open item" was
+written and landed (`gen_mem_pre_rel_bytes_classed`,
+`plans/PLAN-unify-generators.md` stage 2), so the `|Σ|` fix now DOES reach
+`check_scalar_loop1`: its 8 byte entries mint **one** logic variable instead of
+8. Measured payoff, one axis, matched protocol: **1.10× at 2 declared cells,
+1.32× at 4, 1.77× at 8** — more than a constant factor, but a held-out fit fails
+on both arms so it is **not** established as an exponent fix. Full record:
+`byte-classed-block-payoff.md`. The other half of this note stands unchanged:
+whole-function `check_scalar` declares no data cells, so classing remains
+*irrelevant* rather than blocked there. Note also that record found the
+`Qed`-vs-`Admitted` protocol trap documented below recurring in BOTH
+`check-scalar-loop1-cost-drivers.md` and `check-scalar-loop2-cost-drivers.md`.
+
 **Follow-on (2026-08-18) — a fix for the `|Σ|` factor has landed, and it does
-NOT apply to check_scalar.** §6.6 below concludes that the only thing making cost
+NOT apply to check_scalar** (as regards `loop1`, SUPERSEDED by the 2026-08-19
+note above)**.** §6.6 below concludes that the only thing making cost
 grow with N is `chunks × steps × lvars`, quadratic in `|Σ|`.
 `gen_contract_rel_classed` (`plans/PLAN-classed-existentials.md`) removes the
 declared-cell source of `|Σ|` — measured on `key_schedule_loop2`'s rig as an

@@ -1,9 +1,24 @@
 # PLAN-unify-generators — collapse the contract-generator family
 
-Status: **STAGES 0 AND 1 DONE 2026-08-18** (bridges 9 → 7; builders unchanged at 5
-— see the retraction below, the builder deletion was based on a false premise and
-is cancelled). Stages 2–3 NOT STARTED. Stage 2 is independent of stage 1; stage 3
-is deliberately optional and carries almost all of the risk.
+Status: **ALL STAGES DONE. 0 and 1 on 2026-08-18; 3a, 3b and 2 on 2026-08-18/19.**
+Gate green at every stage (7 runs), 14 end theorems axiom-clean throughout, all 29
+end-theorem statements byte-identical.
+
+### Where it landed, against the goals
+
+| goal | outcome |
+|---|---|
+| **G1** nothing becomes unproved | **MET.** 7 green gates; no `Result` file modified after stage 1's bullet adjustments; statements byte-identical. |
+| **G2** fewer lines | **MISSED on the numbers, met on the intent.** Builder *implementations* 5 → **1**, bridge *implementations* 9 → **2**; but NAMES are 6 and 6 (wrappers survive deliberately), `GenContract.v` GREW 714 → 885, `EndToEnd.v` 2038 → 1930. See §G2 note. |
+| **G3** byte payoff measured | **MET, and it beat the prediction.** 8 entries mint **1** variable not 8 (measured); cost **1.10×/1.32×/1.77×** at 2/4/8 cells vs a predicted ~1.1× at 8. NOT an established exponent fix — held-out fit fails. `diagnostics/byte-classed-block-payoff.md`. |
+| **G4** diagnostics stay valid | **MET, and it found a defect.** check_scalar loop1 re-run; its conclusion confirmed, its *tables* retracted as cross-protocol, same defect found in loop2. Imports baseline moved 434.8M → 604.3M. |
+| **G5** non-goals | Respected — per-step demonic `|Σ|` untouched, residual growth still unidentified, no example's proof obligation changed. |
+
+**The single most useful thing learned:** the wrappers are the point, not a
+shortfall. Collapsing them would have exported ~50 lines of ritual into 13
+trusted-surface `Result` files (measured on a worked example, §stage 3b), which is
+a net maintainability *loss* by the criterion this plan exists to serve. G2 counts
+names; the thing worth counting is implementations.
 
 **Read this before starting stage 3:** stage 1 was billed here as "Low risk" and a
 line-count win. Both were wrong, in opposite directions. It required narrowing a
@@ -353,7 +368,41 @@ Acceptance: the 9 `valid_*_param` VCs close **with unmodified tactic lines** —
 any needs a tactic change, stop and report rather than editing the script, since
 that would mean the delegation is not transparent after all.
 
-### Stage 2 — byte-granular classed block. The payoff.
+### Stage 2 — DONE 2026-08-19. The payoff, larger than predicted.
+
+Landed in four commits: `de708143` (definitions), `1ee11cfc` (Iris lemmas, moved
+out of the gitignored harness into tracked `EndToEnd.v`), `4a67326c` (wiring —
+`loop1` migrates automatically), plus the diagnostics write-up.
+
+**The plan's expectation of "a new bv-slicing induction" was wrong in a useful
+way.** No new slicing machinery was needed: the definition stacks the two
+slicings that already existed (`bvtake`/`bvdrop` peels a cell off the group as in
+`gen_mem_cells_class`; `term_word_byte` peels bytes off the cell as in
+`gen_mem_asn_rel_bytes`), so the chunk inventory is unchanged and only the
+variable count moves. On the proof side the per-cell obligation turned out to be
+*exactly* the `PVExist` branch of the existing `gen_mem_asn_of_ptstomem_bytes`
+minus its `iExists` — the classed witness is fixed by the group hypothesis rather
+than supplied per entry — so that branch was factored out as an abstract-address
+lemma (`ptstomem4_split_bytes`) and reused by both inductions.
+
+**VC transparency held**: `Example/BearSSLCheckScalarLoop1.v` is untouched and its
+VC closes with its unmodified tactic line.
+
+Measured (G3): **1.10× / 1.32× / 1.77×** at 2 / 4 / 8 declared cells — the ratio
+GROWS with cell count, so more than a constant factor, but the held-out fit fails
+on both arms (−14% / −23%) so **no exponent law may be quoted**. The plan
+predicted ~1.1× at 8 cells by extrapolating the WORD curve; that understates the
+byte case, plausibly because each byte cell projects four chunks from the variable
+where a word cell projects one (hypothesis, not measured).
+
+Three traps, all found interactively in `ZZClassBridge.v` at ~200 ms rather than by
+~2-minute `EndToEnd.v` builds — position mode works on that small file and OOMs
+`pet` on `EndToEnd.v`, which is exactly why the plan says to develop there:
+`bv.of_N_add` must be used BACKWARDS (it collapses a sum) while `bv.add_assoc`
+goes FORWARDS; `get_word_byte2` takes the offset first unlike the `c` variants;
+and byte 3's address arrives as `of_N 1 + (a + of_N 2)`.
+
+#### original stage-2 text
 
 New: a `gen_mem_cells_class`-analogue that emits four `ptstomem 1` chunks per key
 via `term_word_byte` slices of the grouped variable, plus the matching
