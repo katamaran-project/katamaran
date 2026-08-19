@@ -229,6 +229,24 @@ recipe (`OCAMLRUNPARAM='v=0x400'`, subtracting an imports-only baseline, one
 heavy proof/Eval per process, gating on `Finished transaction`). Don't
 re-derive that mechanics here; read it before hand-rolling a probe.
 
+**The metric is not where the errors come from.** Measured 2026-08-19: the same
+probe run twice differs by **0.0008%** (9,226 words on 1.155e9). So one run per
+point suffices, and a 1.06× ratio is ~7,500× the noise floor. The practical
+consequence is worth internalising — **a wrong cost number here is essentially
+never noise, it is a comparison-design error**: wrong denominator (protocol
+mismatch, 1.81×), wrong baseline (stale imports figure, compresses ratios ~4%), or
+wrong axis (two things moved). Every published-then-retracted figure in this
+directory has that shape. So when a number looks surprising, re-examine the
+comparison before re-running anything; repetition cannot fix a design error and
+will just launder it.
+
+**Re-measure the imports-only baseline on the commit you are measuring.** It is
+example-independent — three sibling `Common` chains agreed within **313 words** —
+but NOT commit-stable: it moved **434,833,198 → 604,283,692 (+39%)** in ~6 days.
+The existing records instruct you to re-use their figure and are half right; the
+half they omit costs 3.7–4.5% of any ratio you derive, in the *under*-claiming
+direction.
+
 Two things not yet in that reference, learned since: wall-clock is
 unreliable not just from cache/scheduling noise but can be **actively
 contaminated** by something as simple as the conversation itself pausing
@@ -337,15 +355,28 @@ finding.
   or quadratic.
 - Comparing two variants without first listing every way they differ (the
   core discipline above).
-- **Comparing across TACTIC PROTOCOLS.** `Proof. … vm_compute; solve_vc;
-  solve_symbase_fetch. Qed.` and `Proof. … Time vm_compute. Time solve_vc.
-  Admitted.` do not measure the same thing — a real `Qed` re-runs the whole
-  executor through the VM cast (≈ a second `vm_compute`, see
-  `cfgver-executor`), and `solve_symbase_fetch` is extra work. On 2026-08-14
-  a sum-of-parts denominator taken from pre-existing `Qed` probes against an
-  `Admitted` numerator invalidated two published tables and *understated* a
-  superadditivity by ~1.4×. Copy an existing probe's `Proof.` line verbatim,
-  and state the protocol in the write-up.
+- **Comparing across TACTIC PROTOCOLS — MEASURED AT 1.81×, and it is entirely
+  the `Qed`.** Priced 2026-08-19 on one contract with only the `Proof.` script
+  varying (`references/allocation-probes.md` §6b): `Qed` vs `Admitted` is
+  **1.8096×**, while `solve_symbase_fetch` plus the period-vs-semicolon
+  goal-selection difference is **0.99996× — free**. So the older phrasing of this
+  rule ("a real `Qed` re-runs the executor *and* `solve_symbase_fetch` is extra
+  work") bundled a 1.81× factor with a 0.004% one, and reads as a style note
+  because of it. **1.81× exceeds most genuine findings** — the byte-classing win
+  at 8 declared cells is 1.77× — so a protocol mismatch can impersonate the
+  largest real effect in a study outright.
+  History: it invalidated two tables on 2026-08-14 (understating a
+  superadditivity ~1.4×), and **recurred on 2026-08-19** in
+  `check-scalar-loop1`/`loop2`, whose no-feedback rigs are `Admitted` while their
+  baselines are `Qed`; read as-is that yields a spurious **2.098×** for an axis
+  whose true value is ~1.04–1.07×, and it was briefly mistaken for a regression.
+  Copy an existing probe's `Proof.` line **verbatim** — better, generate the
+  second probe from the first by `sed` so only the intended token can differ.
+  **And put a PROTOCOL COLUMN in every results table.** That is the actual root
+  cause of the 2026-08-19 recurrence: the numbers lived in a markdown table that
+  did not record its protocol, while the protocol lived in `ZZ*.v` source, so
+  comparing two rows *looked* complete. A figure recorded without its protocol is
+  not a measurement.
 - **Trusting `top_heap_words` at the low end.** It is the high-water mark of
   heap SIZE, quantized to OCaml's ~15% growth steps, and the multi-GB import
   closure means anything whose live set fits in the existing slack reads as

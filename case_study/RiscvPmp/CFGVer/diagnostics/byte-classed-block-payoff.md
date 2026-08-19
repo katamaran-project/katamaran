@@ -54,11 +54,17 @@ both arms use `Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.`
 `allocated_words`, one process per point, minus the **re-measured**
 imports-only baseline of **604,283,692** (`Example/ZZImportsBase.v`).
 
-| N | declared cells | `uncl` | `cls` | ratio |
-|---|---|---|---|---|
-| 8  | 2 | 263,462,071 | 240,151,632 | 1.097× |
-| 16 | 4 | 725,805,940 | 551,053,032 | 1.317× |
-| 32 | 8 | 2,586,832,030 | 1,465,402,340 | **1.765×** |
+| N | declared cells | protocol | `uncl` | `cls` | ratio |
+|---|---|---|---|---|---|
+| 8  | 2 | `…solve_symbase_fetch. Qed.` | 263,462,071 | 240,151,632 | 1.097× |
+| 16 | 4 | `…solve_symbase_fetch. Qed.` | 725,805,940 | 551,053,032 | 1.317× |
+| 32 | 8 | `…solve_symbase_fetch. Qed.` | 2,586,832,030 | 1,465,402,340 | **1.765×** |
+
+The protocol column is not decoration. Measured 2026-08-19, `Qed` vs `Admitted`
+on the same contract is **1.8096×** while `solve_symbase_fetch` is free
+(0.99996×) — so protocol alone exceeds the largest genuine effect in this table,
+and a number recorded without it is not a measurement. That omission is exactly
+what made the defect in §Protocol defect invisible from the records' own tables.
 
 Doubling ratios:
 

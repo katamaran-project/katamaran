@@ -253,11 +253,56 @@ Useful derived quantities: `b/c` is the **crossover N** where the quadratic
 overtakes the linear term (24.6 in the CFGVer case — which is precisely why the
 measured exponent kept rising and why series stopping at N=8 misled).
 
+## 6b. Three things that were MEASURED on 2026-08-19 — use the numbers
+
+These were priced deliberately, because each had previously been stated as a
+qualitative caution and each had been under-weighted as a result.
+
+**(a) The tactic protocol is worth 1.81×, and it is ENTIRELY the `Qed`.** Same
+contract (`loop1_cfg_contract_param 16`), only the `Proof.` script varying,
+baseline-subtracted:
+
+| script | allocated words | |
+|---|---|---|
+| `intros; vm_compute; solve_vc; solve_symbase_fetch.` **`Qed.`** | 548,225,615 | |
+| same tactics, **`Admitted.`** | 302,956,516 | |
+| `intros. vm_compute. solve_vc.` **`Admitted.`** | 302,967,712 | |
+
+- `Qed` alone: **1.8096×** — it re-runs the whole executor through the VM cast.
+- `solve_symbase_fetch` **plus** the period-vs-semicolon goal-selection
+  difference: **0.99996×**, i.e. free to four decimals.
+
+So the usual phrasing of this rule — "a real `Qed` re-runs the executor *and*
+`solve_symbase_fetch` is extra work" — bundles a 1.81× factor with a 0.004% one.
+Only the `Qed` matters. **1.81× is larger than most genuine findings** (the
+byte-classing win at 8 declared cells is 1.77×), so a protocol mismatch can
+fully impersonate the biggest real effect in a study. That is the concrete reason
+to treat it as a landmine and not a style note.
+
+**(b) `allocated_words` is deterministic to 0.0008%.** Same probe run twice:
+1,155,336,724 vs 1,155,345,950 — 9,226 words apart. Consequences worth drawing:
+one run per point genuinely suffices, and a 1.06× ratio sits ~7,500× above the
+noise floor. **It also means a wrong cost number is essentially never noise** —
+it is a comparison-design error (wrong baseline, wrong denominator, wrong
+protocol). Reach for a checklist, not more repetitions.
+
+**(c) A stale imports baseline COMPRESSES ratios**, by 3.7% at N=8 and 4.5% at
+N=32 in the measured case (true 1.097×/1.765× read as 1.057×/1.686× when a
+baseline 28% too small was used). Direction matters: baseline error biases toward
+*under*-claiming a gain, while a protocol mismatch inflates. Both directions are
+available, so neither can be waved off as conservative.
+
 ## 7. Checklist / traps
 
 - **Gate on `Finished transaction`.** A probe that fails to compile reports the
   *baseline* allocation, which reads as "this variant is free". This actually
   happened twice.
+- **RE-MEASURE the imports-only baseline for the commit you are measuring on.**
+  It is example-independent — three sibling `Common` chains measured within 313
+  words (0.00005%) of each other — but it is **not stable across commits**: it
+  moved 434,833,198 → 604,283,692 (**+39%**) over ~6 days of unrelated landings.
+  A record that says "same figure re-used, deterministic" is telling you the
+  first fact and not the second. Cost: see 6b(c).
 - **Subtract an imports-only baseline.**
 - **ONE heavy `Eval` per process.**
 - **`rocq_compile_file` deletes `.vo` by default.** Running it on a committed
@@ -273,3 +318,21 @@ measured exponent kept rising and why series stopping at N=8 misled).
   Time `(t1; t2)` jointly.
 - **`all: idtac "x"` prints once regardless of goal count**, including at zero
   goals. To count goals: `all: (let n := numgoals in idtac "count:" n)`.
+- **A `tail`-terminated pipeline reports `tail`'s exit code, not the build's.**
+  `make ... | grep ... | tail` returned 0 for a `make` that exited 2, and the
+  failure was reported as a success. Use `set -o pipefail`, or capture to a log
+  and check `$?` before filtering. Corollary: piping a long build through `tail`
+  also destroys interim visibility, since the pipe buffers until it closes —
+  redirect to a file and `tail` the file separately.
+- **`strings X.vo | grep -x name` reports nothing for names that ARE present.**
+  `-x` demands a whole-line match and `.vo` strings embed names in longer blobs.
+  This produced "absent" for two lemmas that certainly existed, on top of reading
+  a `.vo` that the failed build had left stale. Drop `-x`, and check the artifact's
+  mtime before believing either answer.
+- **`keep_vo=True` is a NO-OP in a dune project.** The artifact goes to
+  `_build/default`, never the source tree, and the tool says so only in a
+  `dune_build_warning` field. So after changing any file, every *downstream* file
+  stays unbuildable by `rocq_compile_file` until a real `make` has run — it fails
+  with "makes inconsistent assumptions over library", which reads like a genuine
+  inconsistency and is not. **`make` is the authority for anything a sibling will
+  `Require`**, not just for the one heavy file.
