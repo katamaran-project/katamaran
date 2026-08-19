@@ -132,19 +132,30 @@ executor. This is exactly the trap
 denominator against an `Admitted` numerator invalidated two tables"), recurring
 in two more records.
 
-**The conclusions survive.** Measured on a properly matched pair at one commit
-(both arms `Qed` + `solve_symbase_fetch`, N=32):
+**The conclusions survive, and both loops are now re-measured on a matched
+footing** (identical `Qed` + `solve_symbase_fetch` script on both arms, each arm's
+imports baseline measured separately):
 
-| arm pair | same-N ratio (baseline / no-feedback) |
-|---|---|
-| unclassed | 1.0613× |
-| classed | 1.0411× |
+| example | N | recorded (cross-protocol) | re-measured (matched) |
+|---|---|---|---|
+| loop 1, classed | 32 | 1.0136× | **1.0411×** |
+| loop 1, unclassed | 32 | — | **1.0613×** |
+| loop 2 | 16 | 1.032× | **1.0726×** |
 
-So self-reference costs ~4–6% here, in the same "negligible" territory the
-records concluded (0.4–1.4% at 2026-08-13), and stage 2 does not change that.
-**Never requote the cross-protocol numbers as evidence** — and note that reading
-the rigs as-is at the current commit yields a spurious **2.098×** for this axis,
-which is the protocol gap, not a regression.
+So self-reference costs ~4–7%, in the same "negligible / not the primary driver"
+territory both records concluded — but **loop 2's real magnitude is 2.3× larger
+than it reported**, so the old ~3% figure should not be quoted even though the
+verdict stands. **Never requote the cross-protocol numbers as evidence.** Note
+also that reading loop 1's rigs as-is at the current commit yields a spurious
+**2.098×** for this axis — that is the protocol gap, not a regression, and it was
+briefly mistaken for one while producing this record.
+
+Loop 2's re-measurement also confirmed the *shared-baseline* assumption both
+records rely on: its two arms' imports-only figures differ by **313 words**
+(0.00005%), and agree with the loop 1 chain to within ~12k. Only the baseline's
+value drifted (434.8M → 604.3M), not its independence from which example
+references it. Full table in `check-scalar-loop2-cost-drivers.md`
+§Re-measurement.
 
 ## What this means
 

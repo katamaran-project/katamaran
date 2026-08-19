@@ -10,13 +10,15 @@ rigs (`ZZByteLoop2N16`/`N32`) run
 **`Admitted`**. The no-feedback arm does strictly less work, so the **1.032×**
 same-N figure is not a measurement of the self-reference axis. **Never requote it
 as evidence.** The *conclusion* — that `c`'s accumulation is small and density is
-the primary driver — is not challenged, and its loop1 analogue was independently
-confirmed at ~4–6% on a matched pair (`byte-classed-block-payoff.md`); but loop 2's
-own arms were NOT re-measured, so its magnitude here is currently unquantified.
+the primary driver — is **not challenged, and is now RE-MEASURED**: on a matched
+pair (both arms `Qed` + `solve_symbase_fetch`, N=16) the axis costs **1.0726×
+(7.3%)**, versus the retracted cross-protocol 1.032× (3.2%). So the real magnitude
+is **2.3× larger than this record reported** — still small, still not the primary
+driver, but no longer to be quoted as ~3%. See §Re-measurement (2026-08-19) below.
 The N=32 no-feedback point was already "not measured" in this record, so the
 doubling comparison was single-arm anyway. Also note the imports-only baseline has
-moved from 434,833,198 to 604,283,692 (+39%), and this record's absolutes predate
-several landed cost fixes.
+moved from 434,833,198 to 604,296,185 (+39%), and this record's absolutes predate
+several landed cost fixes (re-measured, the N=16 baseline is 2.36× lower).
 
 **Follow-on (2026-08-18) — the "no byte-granular counterpart yet" claim is
 SUPERSEDED: `gen_mem_pre_rel_bytes_classed` landed 2026-08-19
@@ -88,7 +90,44 @@ a result worth forcing).
 | 16 | 14,160,887,483 | 13,718,046,454 |
 | 32 | 46,665,901,621 | not measured (>7 min, abandoned rather than extended) |
 
-Same-N ratio at N=16: **1.032×** (3.2%).
+Same-N ratio at N=16: ~~**1.032×** (3.2%)~~ — **RETRACTED 2026-08-19, never
+requote: the two arms ran different tactic protocols** (see the header note). The
+numbers in the table above are real, but the no-feedback one was produced by
+`Admitted` without `solve_symbase_fetch`, so their ratio prices the protocol gap
+as much as the axis. Superseded by §Re-measurement below.
+
+## Re-measurement (2026-08-19), matched protocol
+
+Both arms rebuilt with the **identical** proof script
+`intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.` — generated from one
+another so only the required `Common` and the contract name differ. N=16.
+Each arm's imports-only baseline measured **separately**
+(`ZZL2ImpBase.v` / `ZZL2ImpNf.v`) rather than assuming a shared figure.
+
+| arm | raw | imports baseline | minus baseline |
+|---|---|---|---|
+| baseline (`ZZL2MatchBase16.v`) | 6,604,628,304 | 604,296,185 | **6,000,332,119** |
+| no-feedback (`ZZL2MatchNf16.v`) | 6,198,297,674 | 604,296,498 | **5,594,001,176** |
+
+**Same-N ratio at N=16: 1.0726× (7.3%).**
+
+Two incidental confirmations:
+
+- **The shared-baseline assumption is sound.** The two arms' imports-only figures
+  differ by **313 words** (0.00005%), and both agree with the `ByteLoop1` chain's
+  604,283,692 to within ~12k. This record's original claim that the baseline is
+  "unaffected by which example references it" holds; only its *value* drifted.
+- **Absolutes are 2.36× lower** than the 2026-08-13 figure (6.00e9 vs 1.42e10),
+  a compound of every cost fix landed since — `bop.mulx`, the fetch-bound solver
+  rule, and the classed word *and* byte blocks (loop 2 declares byte cells too, so
+  `plans/PLAN-unify-generators.md` stage 2 reaches it as well). Not attributable to
+  any one of them from this comparison.
+
+Cross-example: loop 1's same axis measures 1.0411×/1.0613% on the same footing
+(`byte-classed-block-payoff.md`). Loop 2's 7.3% being the larger of the two is the
+expected direction — loop 2's `c` is read **twice** per iteration where loop 1's
+`z` is read once — but the two examples' bodies differ in more than that, so this
+is consistency, not an isolated reading of the double-read.
 
 Baseline's own doubling ratio N16→32: **3.30×** — cross-checks closely
 against the plan doc's independently-measured wall-clock figure for the
