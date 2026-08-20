@@ -118,6 +118,30 @@ project's own path, and what the gate uses. Budget ~5m45s for that file. Suspect
 this whenever `rocq_compile_file` reports an error on a line your diff never
 went near; check `_CoqProject` for `-arg` before believing it.
 
+### `rocq_compile_file`'s dune-fallback can silently fail to resolve a sibling `.vo` in `case_study/RiscvPmp/CFGVer/`
+
+There is no `dune` file anywhere under `case_study/RiscvPmp` — this whole
+subtree (and probably other `case_study/` trees) is `make -f Makefile.coq`
+territory only, matching what CLAUDE.md already says. When `rocq_compile_file`
+hits a file here it reports `"dune could not build '<f>.vo' (the file is not
+part of a dune stanza); compiled it directly with coqc into _build/default
+instead"` and usually that fallback is fine (see the AnnotInstr migration
+session, 2026-08-20, where it worked for several single-file checks). But it
+can ALSO fail on a file that `Require`s a SIBLING CFGVer file that was itself
+edited that session: `Contracts.v` reported `"Cannot find a physical path bound
+to logical path RiscvPmp.CFGVer.Noninterference with prefix Katamaran"` even
+immediately after a successful `rocq_compile_file(Noninterference.v,
+keep_vo=True)` — the fallback coqc invocation isn't given a load path that
+reliably includes whatever `_build/default` state (or lack of it) a PRIOR
+`rocq_compile_file`/`dune build` call left behind, and a plain `rocq_start(...,
+force_restart=True)` does not fix it either (it's a build-artifact problem, not
+a stale pet session). **Fix: `make -f Makefile.coq <target>.vo` directly**
+(optionally `-j2`/`-jN` for a batch of independent targets, e.g. a dozen
+`Example/*.v` files) — it reliably rebuilds the whole dependency closure in the
+source tree and every subsequent `rocq_compile_file` call against files that
+only need those `.vo`s on disk (not more `Require`d-and-recently-edited
+siblings) then works normally again.
+
 ### A `rocq_start(theorem=…)` timeout does NOT mean interactive mode is unavailable
 
 This is the single most expensive misreading available here, so it is worth

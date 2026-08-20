@@ -46,8 +46,12 @@ concrete lookup.
 
 | type | shape | who sees it |
 |---|---|---|
-| `SInstrTable` | `list (Term _ ty_xlenbits * AST)` | CONTRACT level — what `table_of_list` builds, what `itable_rel` relates to the gmap, what `TablesRel.v`'s faith lemmas discharge |
-| `SInstrTableW` | `list (Term _ ty_xlenbits * Term _ ty_word * AST)` | EXECUTOR only — `sexec_cfg_addr` runs on this |
+| `SInstrTable` | `list (Term _ ty_xlenbits * list Annot * AST)` | CONTRACT level — what `table_of_list` builds, what `itable_rel` relates to the gmap, what `TablesRel.v`'s faith lemmas discharge |
+| `SInstrTableW` | `list (Term _ ty_xlenbits * Term _ ty_word * list Annot * AST)` | EXECUTOR only — `sexec_cfg_addr` runs on this |
+
+Both gained a third `list Annot` column in the AnnotInstr migration
+(PLAN-annotinstr.md, landed through Phase 1 — commits 2274a22b/323db24c). See
+"Ghost annotations" below before touching either type.
 
 The extra column is the raw instruction WORD. It exists because
 `sep_contract_fetch_instr` used to hide the word behind an `∃`, minting a fresh
@@ -64,6 +68,73 @@ to the gmap at a valuation; `itable_relW` is the fused, loop-carried relation th
 executor's induction uses, DERIVED from them at the entry point (see
 **cfgver-refinement**). The refinement proof (`rexec_cfg_addr`) is what lets the
 two sides' VCs correspond.
+
+## Ghost annotations (AnnotInstr)
+
+`Verifier.v`:
+```coq
+Inductive Annot :=
+| AnnotDebugBreak
+| AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
+Inductive AnnotInstr := AnnotAST (i : AST) | AnnotGhost (a : Annot).
+```
+Ghosts are a prefix attached to the AnnotAST that follows them; `table_of_list`
+(`Tables.v`) groups them and only advances the address offset on `AnnotAST` — a
+trailing ghost run (nothing follows it) is a hard error in v1, silently dropped,
+not fixed. `strip : list AnnotInstr -> list AST` is the trusted-layer projection:
+`Noninterference.v` and every `length`-of-program computation
+(`exits_of_offs`/the exit-offset math in four of `GenContract.v`'s six builders)
+use `length (strip instrs)`, since ghosts occupy no address.
+
+**Only `AnnotDebugBreak` is interpreted so far** (Phase 1). `sexec_ghost`/
+`sexec_ghosts` run the ghost prefix before `sexec_instruction`; `AnnotDebugBreak`
+is a transparent `debug` node carrying a `DebugAnnot` payload (pathcondition +
+heap at that position — the mechanism BlockVer's `DebugBlockver` already has,
+`BlockVer/Verifier.v:499`; also live and compiling on `main`'s
+`BlockVer/PartialVerifier.v:458`, useful as a working reference for the eventual
+`AnnotLemmaInvocation` relational proof). `AnnotLemmaInvocation` currently
+errors `"not yet supported"` — giving it real semantics (a fresh-logical-variable
+abstraction lemma, to beat term-duplication blowups like `muladd`'s) is Phase 4,
+a *separate* effort tied to a genuine loop-invariant design
+(PLAN-loop-invariant.md), not a mechanical extension of this plumbing.
+
+**Two coercions make every existing `_instrs : list AST` program keep
+typechecking as `list AnnotInstr` unedited** (`Verifier.v`, both declared
+`Coercion`, deliberately NOT `Local` — `Local` would never reach `Example/*.v`,
+which only `Require Export`s `Verifier.v` via `Prelude.v`; this exact mistake
+was made and caught before landing):
+- `AST_AnnotAST : AST -> AnnotInstr`, per-element, for a **fresh** `[...]`
+  literal — only fires inside a bracket literal thanks to a companion
+  `Local Arguments List.cons {_} & _ _.` (FemtoKernel.v:160 precedent); without
+  it Coq elaborates the literal as `list AST` first and the whole-list
+  comparison against `list AnnotInstr` just fails.
+- `list_AST_AnnotInstr : list AST -> list AnnotInstr := List.map AST_AnnotAST`,
+  whole-list, for reusing an **already-elaborated** `list AST` value (e.g.
+  `cmovznz4_instrs`) — the per-element coercion above does NOT fire for this
+  case; a value already has a type, there is no bracket-literal elaboration site
+  for Coq to insert the per-element coercion into. Both are needed together;
+  neither alone covers both authoring styles. (Not in the original plan
+  write-up — found by the Phase 0 probe, `Example/ZZAnnotProbe0.v`.)
+
+**`sexec_ghost`/`sexec_ghosts` are declared with an implicit `{w : World}`, NOT
+`⊢`/`Valid`.** A niladic `⊢`-typed action (no world-indexed value argument) does
+not get its world auto-supplied when used bare as a bind action in either
+position of `⟨θ⟩ x <- ma ;; mb` — probed and confirmed to fail both ways
+("cannot unify ... World" / "expected type SHeapSpec ?A ?w"). Contrast
+`sexec_instruction`, also `⊢`-typed, which works fine bare because its three
+explicit `STerm` arguments already carry a concrete world, so unification pins
+`w` from THEM, not from `⊢` itself. `chunk_gc`'s existing `{w : World}` shape was
+the working precedent to copy. Full write-up (why, and the failed attempts):
+**core-executor-internals**.
+
+Migration status: Phase 0 (probe) and Phase 1 (symbolic side — this section) are
+done and GATE 1 (`Tables.v`/`Contracts.v`/`GenContract.v` + all 12
+`Example/*.v` compile, `strip_id_*` reflexivity, no cost regression) is green.
+Phase 2 (`VerifierRel.v`/`TablesRel.v` — the concrete mirror and the relational
+`itable_rel`/`rexec_cfg_addr` proofs) is **not started and those two files
+currently fail to compile** — they still assume the pre-migration 2-/3-tuple
+table shape. That is expected, not a regression to chase; see
+PLAN-annotinstr.md.
 
 ## `sexec_cfg_addr`
 

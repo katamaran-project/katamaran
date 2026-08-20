@@ -42,6 +42,38 @@ Both sides expose the SAME named combinators (choice, pattern-matching, assume/
 assert). Every symbolic combinator has a matching `refine_<name>` lemma in
 `theories/Refinement/Monads.v` proving it agrees with its concrete counterpart.
 
+### `⊢`/`Valid` vs an implicit `{w}` — a niladic monadic action needs the latter
+
+`⊢ A` is `Valid A := forall w, A w` — a genuine EXPLICIT Pi type, not an
+implicit-argument sugar. A function like `sexec_instruction : ⊢ STerm ty_xlenbits
+-> STerm ty_xlenbits -> STerm ty_word -> SHeapSpec (STerm ty_xlenbits)` can still
+be called bare inside a `⟨θ⟩ x <- ma ;; mb` bind chain with only its three
+`STerm` VALUE arguments (no explicit world) — because those arguments are
+themselves world-indexed, and ordinary unification against them pins `w`
+without ever needing `⊢`'s own leading `forall w` filled in explicitly.
+
+A NILADIC `⊢`-typed action — no world-indexed value argument at all, e.g. a
+helper like `sexec_ghost : Annot -> ⊢ SHeapSpec Unit` (CFGVer's AnnotInstr
+migration, `PLAN-annotinstr.md`) — has nothing for that unification to hook
+onto, and probing this confirmed it fails in BOTH positions of the bind
+notation:
+```
+Check (fun (w0 : World) (a : Annot) => (sexec_ghost a) : SHeapSpec Unit w0).
+(* Error: cannot unify "(□(Unit -> SHeap -> 𝕊)) w0" and "World" *)
+```
+(`SHeapSpec Unit w0` unfolds to a CPS function type itself, so Coq tries to
+match `sexec_ghost a`'s `forall w, ...` against it AS a Pi comparison — domain
+`World` vs domain `□(...) w0` — and fails; it does not "auto-apply" the missing
+world argument the way it happens to for an argument-value-pinned case.)
+
+**Fix: declare the niladic helper with an implicit `{w : World}`, not `⊢`** —
+exactly `chunk_gc`'s existing shape (`Definition chunk_gc {w : World} :
+SHeapSpec Unit w := ...`). An implicit argument DOES get filled from the
+expected type when the term is used bare; an explicit Pi does not. This is easy
+to get wrong by analogy with a same-file neighbor that happens to have value
+arguments — check whether the neighbor's `⊢` is actually being exercised
+argument-free before copying its shape.
+
 ## Choice combinators (`theories/Symbolic/Monads.v`)
 
 - `demonic_finite F := demonic_list (finite.enum F)` (~line 431) —

@@ -118,11 +118,21 @@ would give a byte program a noninterference END theorem is **not written yet**
 gen_contract (init_addr : N)
              (reg_specs : list reg_spec)
              (mem_specs : list mem_full_spec)
-             (instrs : list AST)
+             (instrs : list AnnotInstr)
              (extra_exit_offs : list N)
              (ec : bv xlenbits -> bool)
              (fl : nat) : CFGVerifierContract
 ```
+
+`instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
+migration (PLAN-annotinstr.md, Phase 1). This is invisible to every existing
+caller: a plain `_instrs : list AST` value (e.g. `cmovznz4_instrs`) still passes
+straight in, via a non-Local `Coercion` in `Verifier.v` (`AST -> AnnotInstr`
+per-element, plus a second `list AST -> list AnnotInstr` coercion for reusing an
+already-typed list wholesale — both needed, see **cfgver-executor**). All six
+builders (`gen_contract(_param/_rel/_u/_rel_classed/_rel_bytes)`) took the same
+change; the four that compute an exit offset or bound from `length instrs`
+switched to `length (strip instrs)`, since ghost entries occupy no address.
 
 - `extra_exit_offs`: base-relative byte offsets of exit addresses **beyond** the
   fall-through one (always included automatically). Needed when control flow can

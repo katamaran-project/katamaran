@@ -1,6 +1,100 @@
 # PLAN — migrate CFGVer's instruction surface from `AST` to `AnnotInstr`
 
-Status: **DESIGN, not started. Written 2026-08-19.** No code exists yet.
+Status: **Phase 0 and Phase 1 DONE, GATE 1 green, as of 2026-08-20 (commits
+2274a22b, 323db24c on `KatamaranRel`).** Phase 2 (`VerifierRel.v`/`TablesRel.v`)
+is next and genuinely not started — those two files currently fail to compile,
+expected, see their own GATE 2 note below. Detail on what actually landed and
+what deviated from this write-up: **cfgver-executor** skill (the "Ghost
+annotations" section) is now the maintained reference for the mechanism itself;
+this log is the historical/decision record.
+
+## Log
+
+**2026-08-20, Phase 0.** GATE 0 passed in a throwaway probe
+(`Example/ZZAnnotProbe0.v`, gitignored, still on disk). Two things this
+write-up's "Authoring ergonomics come free" section understated, found by the
+probe:
+1. The `AST -> AnnotInstr` coercion only fires inside a FRESH `[...]` literal
+   if a companion `Local Arguments List.cons {_} & _ _.` is also in scope
+   (FemtoKernel.v:160 has this line too, silently doing the real work).
+2. A SECOND coercion (`list AST -> list AnnotInstr := List.map`) is needed to
+   reuse an EXISTING `_instrs : list AST` `Definition` (e.g. `cmovznz4_instrs`)
+   unedited — the per-element coercion does not fire on an already-elaborated
+   value, only while elaborating a fresh literal. Both are required together;
+   this is why "all 12 examples keep parsing unchanged" needed two coercions,
+   not the one FemtoKernel precedent alone suggested.
+
+**2026-08-20, Phase 1a (`Verifier.v` only, commit 2274a22b).** `Annot`/
+`AnnotInstr`/`strip`, the `DebugAnnot` record (mirrors `BlockVer`'s
+`DebugBlockver`; a currently-compiling reference implementation for the whole
+mechanism, including a WORKING relational refinement proof for it, lives on
+`main`'s `BlockVer/PartialVerifier.v` — `KatamaranRel`'s own `BlockVer/` copy is
+disabled and does not compile, don't use it as the reference), the ghost column
+on `SInstrTable`/`SInstrTableW`, `sexec_ghost`/`sexec_ghosts` (only
+`AnnotDebugBreak` interpreted; `AnnotLemmaInvocation` errors), and
+`sexec_cfg_addr` running the ghost prefix. `rocq_compile_file mode=full`: clean.
+
+One design-time bug caught and fixed BEFORE it could break anything downstream:
+the two coercions were first written `Local Coercion`, which never survives
+export. Fixed to plain `Coercion` (Prelude.v `Require Export`s `Verifier.v`, so
+a non-Local coercion there reaches every `Example/*.v`) — see
+**cfgver-executor**'s "Ghost annotations" section for why this matters and
+exactly which two coercions are needed.
+
+A real, generic Rocq/Katamaran gotcha surfaced and is now written up in
+**core-executor-internals**: `sexec_ghost`/`sexec_ghosts` (niladic — no
+world-indexed value argument) had to be declared with an implicit `{w : World}`
+(`chunk_gc`'s shape), not `⊢`/`Valid` — a bare `⊢`-typed action with nothing to
+pin its world from unification fails in a bind chain in ways that read like
+notation bugs but aren't.
+
+**2026-08-20, Phase 1b (`Tables.v`/`Contracts.v`/`GenContract.v`, commit
+323db24c, done by a delegated Haiku session).** `table_of_list` groups ghosts
+and only advances the address on `AnnotAST`; `CFGVerifierContract.cfg_instrs`
+and all six `gen_contract*` builders take `list AnnotInstr`; the four builders
+that compute an exit offset/bound from `length instrs` switched to
+`length (strip instrs)`. GATE 1 verified green (by me, after the delegated
+session stopped short of running it): `Tables.v`/`Contracts.v`/`GenContract.v`
+compile, all 12 `Example/*.v` compile unchanged, 9 of them have a
+separately-named `_instrs` list and all 9 pass a `strip_id_<prog>` reflexivity
+check (the other 3 — `Jumps`/`MvSwap`/`SetX2` — build their list inline inside
+the contract literal, so there is no named object to state the lemma about;
+their unchanged compilation is the only evidence for those three); a timing
+spot-check on `Cmovznz4`/`KeyScheduleLoop` showed nothing looking like a
+regression.
+
+**Two real gotchas from this step, both written up more fully elsewhere:**
+- `rocq_compile_file`'s dune-fallback path (this subtree has no `dune` file at
+  all, so every compile here goes through a `coqc`-into-`_build/default`
+  fallback) can fail to resolve a SIBLING file's freshly-rebuilt `.vo` even
+  right after that sibling compiled clean — read as a real error, it looks
+  exactly like a missing/misnamed module. **`make -f Makefile.coq <target>.vo`
+  is the reliable path**; full account in **rocq-implementation**'s tooling
+  section.
+- The delegated session, hitting that same confusion, took a shortcut: it
+  switched `Tables.v`/`Contracts.v`/`GenContract.v`'s `Require` of `Verifier.v`
+  from bare (qualified-name-only, the documented convention — see
+  `CFGVer/CLAUDE.md`'s "Importing CFGVer.Verifier downstream") to
+  `Require Import` (unqualified). This works today ONLY because BlockVer is
+  disabled in `_CoqProject` on this branch, and is flagged as a latent,
+  not-yet-reverted deviation in `CFGVer/CLAUDE.md` — read that note before
+  touching these three files' imports again, and before ever re-enabling
+  BlockVer alongside CFGVer.
+
+**GATE 2 status (not started):** `VerifierRel.v` and `TablesRel.v` still assume
+the pre-migration table shapes and fail to compile — confirmed, expected, not a
+regression. This is genuinely the risky phase the original write-up below
+warned about; nothing about Phase 1 landing easily should be read as evidence
+Phase 2 will too. `main`'s `BlockVer/PartialVerifier.v` (see Phase 1a above) is
+now known to have a short, currently-compiling `rexec_annotated_block_addr`
+proof (`iInduction b; cbn; rsolve; destruct instr; cbn; rsolve` — a few lines)
+worth reading before starting Phase 2's `rexec_cfg_addr` update, as real
+precedent rather than just the disabled `KatamaranRel` copy's text.
+
+---
+
+Original design write-up follows, unedited except where a numbered Log entry
+above says otherwise.
 
 ## Why
 

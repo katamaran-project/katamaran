@@ -28,11 +28,21 @@ Record CFGVerifierContract {Σ} :=
   ; cfg_placement     : Term Σ ty_xlenbits
   ; cfg_exits         : list (Term Σ ty_xlenbits)
   ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-  ; cfg_instrs        : list AST
+  ; cfg_instrs        : list AnnotInstr
   ; cfg_exitCond      : bv xlenbits -> bool
   ; cfg_fuel          : nat
   }.
 ```
+
+`cfg_instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
+migration (PLAN-annotinstr.md Phase 1) — `AnnotInstr := AnnotAST (i : AST) |
+AnnotGhost (a : Annot)`, a ghost prefix (currently `AnnotDebugBreak`, a
+transparent per-position heap/pathcondition dump) attached to the AnnotAST that
+follows it. `Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so
+every existing hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs`
+(a plain `list AST`) still typechecks unedited — see **cfgver-executor** for the
+coercion mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer
+projection every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 
 | Field | Meaning |
 |---|---|
@@ -40,7 +50,7 @@ Record CFGVerifierContract {Σ} :=
 | `cfg_placement` | where the code sits, as a **term**: `term_val … (bv.of_N ia)` concrete, `term_var "p"` parametric |
 | `cfg_exits` | exit addresses as **terms** (built by `exits_of_offs` from base-relative offsets) — this is what the symbolic executor's exit choice checks against |
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
-| `cfg_instrs` | the program, a `list AST` placed at `cfg_placement` |
+| `cfg_instrs` | the program, a `list AnnotInstr` placed at `cfg_placement` (coerces transparently from a plain `list AST` — see above) |
 | `cfg_init_addr`, `cfg_exitCond` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
 
 **The ignored-fields subtlety:** the VC dispatches exits against the *term table*
