@@ -95,6 +95,62 @@ Section CFGVerificationDerived.
 
   Import RiscvPmpCFGVerifExecutor.
 
+  (* ================================================================== *)
+  (* Ghost annotations (PLAN-annotinstr.md).  Annotations are GHOST: they *)
+  (* occupy no address, have no encoding, and never reach the machine    *)
+  (* semantics -- `strip` is the only thing the trusted layer            *)
+  (* (Noninterference.v) and GenContract.v's exit-offset arithmetic ever *)
+  (* see.  `AnnotLemmaInvocation`'s `es` lives at Σ = [ctx] (no term      *)
+  (* variables), so Annot is NOT world-indexed and needs no persist.     *)
+  (*                                                                     *)
+  (* Two coercions, both needed (Phase 0 probe, ZZAnnotProbe0.v):         *)
+  (*  - AST_AnnotAST + the bidirectional List.cons Arguments: lets a      *)
+  (*    FRESH `[...]` literal typecheck as `list AnnotInstr` per element  *)
+  (*    (FemtoKernel.v:160 precedent) -- for authoring a NEW mixed        *)
+  (*    program.                                                          *)
+  (*  - list_AST_AnnotInstr: lets an EXISTING `list AST` Definition (all   *)
+  (*    12 current *_instrs) be reused UNEDITED wherever `list AnnotInstr` *)
+  (*    is expected -- the per-element coercion alone does NOT fire for   *)
+  (*    an already-elaborated value, only for a fresh literal.            *)
+  (* ================================================================== *)
+  Inductive Annot :=
+  | AnnotDebugBreak
+  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
+
+  Inductive AnnotInstr := AnnotAST (i : AST) | AnnotGhost (a : Annot).
+
+  (* NOT Local: Prelude.v `Require Export`s this file (CFGVer/CLAUDE.md --
+     examples deliberately Import/Export Verifier, only Results.v needs the
+     bare-Require BlockVer-name-clash dodge), and every Example/<Prog>.v
+     needs THIS coercion active to pass its existing `_instrs : list AST`
+     value where `gen_contract(_param/_rel/_u)`/`MkCFGVerifierContract` now
+     expect `list AnnotInstr`. A `Local Coercion` here would never leave
+     this file and GATE 1 would fail at the first example. *)
+  Coercion AST_AnnotAST (a : AST) := AnnotAST a.
+  Local Arguments List.cons {_} & _ _.
+  Coercion list_AST_AnnotInstr (l : list AST) : list AnnotInstr :=
+    List.map AST_AnnotAST l.
+
+  (* REQUIRED: RiscvPmp.Sig re-imports ctx.notations, whose `_ :: _`        *)
+  (* Binding notation hijacks list cons (same trap as Tables.v,             *)
+  (* CFGVer/CLAUDE.md) -- without this, `strip`'s `AnnotAST i :: rest`      *)
+  (* pattern fails with "Found a constructor of inductive type Term while   *)
+  (* a constructor of list is expected" (Phase 0 probe). *)
+  Open Scope list_scope.
+
+  (* strip: the trusted-layer projection.  A trailing ghost run (an        *)
+  (* annotation with no following AnnotAST) is a HARD ERROR in v1: it is   *)
+  (* not that the annotation is invalid, it is that there is no address to *)
+  (* attach it to (table_of_list, Tables.v, only ever assigns an address   *)
+  (* on AnnotAST); such a program is simply not something this Fixpoint    *)
+  (* can produce a table entry for, so it never reaches sexec_cfg_addr.    *)
+  Fixpoint strip (l : list AnnotInstr) : list AST :=
+    match l with
+    | []                    => []
+    | AnnotAST i :: rest    => i :: strip rest
+    | AnnotGhost _ :: rest  => strip rest
+    end.
+
   (* safeE P: the symbolic proposition P is "safe" — i.e., the verification
      condition holds after erasure of all metadata.  This is the notion of
      validity used in CFGVerifierContract.ValidCFGVerifierContract.
@@ -115,6 +171,43 @@ Section CFGVerificationDerived.
     Import SStoreSpec (evalStoreSpec).
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
+
+    (* DebugAnnot: the AnnotDebugBreak payload -- a per-position snapshot of
+       (pathcondition, heap), exactly BlockVer's DebugBlockver
+       (BlockVer/Verifier.v:499, and main's PartialVerifier.v:458 for a
+       currently-compiling copy). This is what makes AnnotDebugBreak useful
+       at all: today the only place the symbolic heap is observable is the
+       precondition boundary (it is an SHeapSpec accumulator, gone once the
+       VC is built), and a fuel-truncation error carries no state either
+       (`error msg => False` in both `safe` and `safe_debug`). *)
+    Import option.notations.
+
+    Record DebugAnnot (Σ : LCtx) : Type :=
+      MkDebugAnnot
+        { debug_annot_pathcondition : PathCondition Σ
+        ; debug_annot_heap          : SHeap Σ
+        }.
+    #[export] Instance SubstDebugAnnot : Subst DebugAnnot :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugAnnot pc1 h => MkDebugAnnot (subst pc1 ζ01) (subst h ζ01)
+        end.
+
+    #[export] Instance SubstLawsDebugAnnot : SubstLaws DebugAnnot.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    #[export] Instance OccursCheckDebugAnnot : OccursCheck DebugAnnot :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugAnnot pc1 h =>
+            pc' <- occurs_check xIn pc1 ;;
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugAnnot pc' h')
+        end.
 
     (* exec_instruction_prologue i: the Hoare precondition for executing
        instruction i at address a, with np the INCOMING nextpc value.  Asserts:
@@ -243,8 +336,14 @@ Section CFGVerificationDerived.
     (* pairs, and a list of address terms marking exits.  This is the      *)
     (* CONTRACT-LEVEL shape: what table_of_list builds, what itable_rel    *)
     (* relates to the gmap, and what TablesRel.v's faith lemmas discharge. *)
+    (* Ghost column: SInstrTable/SInstrTableW carry a `list Annot` PREFIX
+       per entry (table_of_list, Tables.v, groups a ghost run onto the
+       AnnotAST that follows it). Annot is not world-indexed, so the
+       column is carried unchanged by persist_itable(W)/subst_itable
+       below -- no new persist/subst family, unlike the word column's
+       own precedent (see that column's WHY comment below). *)
     Definition SInstrTable : TYPE :=
-      fun w => list (Term (wctx w) ty_xlenbits * AST).
+      fun w => list (Term (wctx w) ty_xlenbits * list Annot * AST).
 
     Definition SExitTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits).
@@ -274,12 +373,12 @@ Section CFGVerificationDerived.
        once per execution step, so a loop re-executing the same addresses
        reuses the same word variables every trip.  PLAN-encoded-instr.md. *)
     Definition SInstrTableW : TYPE :=
-      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * AST).
+      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * list Annot * AST).
 
     Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SInstrTable w1 -> SInstrTable w2 :=
-      List.map (fun '(t,i) => (persist__term t θ, i)).
+      List.map (fun '(t,g,i) => (persist__term t θ, g, i)).
     Definition persist_itableW {w1 w2} (θ : w1 ⊒ w2) : SInstrTableW w1 -> SInstrTableW w2 :=
-      List.map (fun '(t,x,i) => (persist__term t θ, persist__term x θ, i)).
+      List.map (fun '(t,x,g,i) => (persist__term t θ, persist__term x θ, g, i)).
     Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SExitTable w1 -> SExitTable w2 :=
       List.map (fun t => persist__term t θ).
 
@@ -337,9 +436,9 @@ Section CFGVerificationDerived.
     (* NB an entry is ((addr, word), ast), so the key projection needs the   *)
     (* three-place pattern `'(t,_,_)`, not `'(t,_)`. *)
     Definition lookup_instr {w} (tbl : SInstrTableW w)
-        (apc : STerm ty_xlenbits w) : option (Term (wctx w) ty_word * AST) :=
-      option_map (fun '(_,x,i) => (x,i))
-        (List.find (fun '(t,_,_) => Term_eqb (peval apc) (peval t)) tbl).
+        (apc : STerm ty_xlenbits w) : option (Term (wctx w) ty_word * list Annot * AST) :=
+      option_map (fun '(_,x,g,i) => (x,g,i))
+        (List.find (fun '(t,_,_,_) => Term_eqb (peval apc) (peval t)) tbl).
     Definition is_exit {w} (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) : bool :=
       List.existsb (fun t => Term_eqb (peval apc) (peval t)) exits.
@@ -354,14 +453,14 @@ Section CFGVerificationDerived.
       Let wA : Term (wctx w1) ty_word := term_val ty_word (bv.of_N 11).
       Let wB : Term (wctx w1) ty_word := term_val ty_word (bv.of_N 22).
       Let tbl1 : SInstrTableW w1 :=
-        [ (p1, wA, instrA)
-        ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, wB, instrB)
+        [ (p1, wA, [], instrA)
+        ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, wB, [], instrB)
         ]%list.
 
       (* pc = 4 ⊕ p matches the second table entry, yielding ITS word too. *)
       Example lookup_instr_hit :
         lookup_instr tbl1 (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1)
-        = Some (wB, instrB).
+        = Some (wB, [], instrB).
       Proof. vm_compute. reflexivity. Qed.
 
       (* pc = 8 ⊕ p matches no key in tbl1. *)
@@ -378,6 +477,48 @@ Section CFGVerificationDerived.
         = true.
       Proof. vm_compute. reflexivity. Qed.
     End TableLookupSelfTests.
+
+    (* sexec_ghost/sexec_ghosts: interpret one ADDRESS's ghost prefix before
+       its instruction runs. Only AnnotDebugBreak is interpreted in Phase 1
+       -- AnnotLemmaInvocation errors "not yet supported" so the constructor
+       exists without soundness debt (Phase 4, PLAN-annotinstr.md, is a
+       separate effort: an abstraction lemma over a genuine loop invariant,
+       not a mechanical extension of this case).  AnnotDebugBreak is
+       SEMANTICALLY TRANSPARENT (safe (debug d k) = safe k,
+       Propositions.v:361), so this phase's ghost interpretation costs
+       nothing on the trusted VC and, for every existing example (whose
+       ghost column is always []), sexec_ghosts reduces to `pure tt`
+       immediately -- no behavior change, GATE 1's cost-neutrality claim.
+
+       Declared with an IMPLICIT {w} (chunk_gc's shape), NOT `⊢`: a niladic
+       action with no world-indexed value argument to pin `w` via ordinary
+       application does not get its Valid-quantified world auto-supplied
+       when used bare as a bind action (confirmed by probe -- `⊢`-typed
+       sexec_ghost/sexec_ghosts failed to elaborate as a bind action in
+       EITHER position, "cannot unify ... World" / "expected type SHeapSpec
+       ?A ?w", where sexec_instruction's OWN `⊢` avoids this only because
+       its three explicit STerm arguments already carry a concrete world). *)
+    Definition sexec_ghost (a : Annot) {w : World} : SHeapSpec Unit w :=
+      match a with
+      | AnnotDebugBreak =>
+          debug
+            (fun (h0 : SHeap w) =>
+               amsg.mk
+                 {| debug_annot_pathcondition := wco w;
+                    debug_annot_heap := h0
+                 |})
+            (pure tt)
+      | AnnotLemmaInvocation l es =>
+          error
+            (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                 debug_string_message := "AnnotLemmaInvocation: not yet supported" |})
+      end.
+
+    Fixpoint sexec_ghosts (ghosts : list Annot) {w : World} : SHeapSpec Unit w :=
+      match ghosts with
+      | []       => pure tt
+      | a :: gs' => ⟨ θ ⟩ _ <- sexec_ghost a ;; sexec_ghosts gs'
+      end.
 
     (* sexec_cfg_addr: the symbolic CFG executor.  Fuel-guarded,       *)
     (* angelic_binary between exit/execute at each step, dispatching via   *)
@@ -407,10 +548,14 @@ Section CFGVerificationDerived.
                else emsg "sexec_cfg_addr: exit branch chosen but pc matches no declared exit term")
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
-               | Some (wd, i) =>
+               | Some (wd, ghosts, i) =>
                    ⟨ θ0 ⟩ _    <- chunk_gc ;;
-                   ⟨ θ1 ⟩ apc' <- sexec_instruction i (persist__term apc θ0) (persist__term anp θ0) (persist__term wd θ0) ;;
-                   sexec_cfg_addr n' (persist_itableW (θ0 ∘ θ1) tbl) (persist_etable (θ0 ∘ θ1) exits)
+                   ⟨ θ0'⟩ _    <- sexec_ghosts ghosts ;;
+                   ⟨ θ1 ⟩ apc' <- sexec_instruction i
+                                    (persist__term apc (θ0 ∘ θ0'))
+                                    (persist__term anp (θ0 ∘ θ0'))
+                                    (persist__term wd (θ0 ∘ θ0')) ;;
+                   sexec_cfg_addr n' (persist_itableW (θ0 ∘ θ0' ∘ θ1) tbl) (persist_etable (θ0 ∘ θ0' ∘ θ1) exits)
                      apc' apc'
                end)
         end.
@@ -433,7 +578,7 @@ Section CFGVerificationDerived.
        since wctx (wlctx Σ) reduces to Σ by record projection. *)
     Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (tbl : SInstrTable (wlctx Σ)) : SInstrTable w :=
-      List.map (fun '(t,i) => (subst t ζ, i)) tbl.
+      List.map (fun '(t,g,i) => (subst t ζ, g, i)) tbl.
     Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (exits : SExitTable (wlctx Σ)) : SExitTable w :=
       List.map (fun t => subst t ζ) exits.
@@ -479,7 +624,7 @@ Section CFGVerificationDerived.
     Fixpoint zip_words {w} (tbl : SInstrTable w)
         (ws : list (Term (wctx w) ty_word)) : SInstrTableW w :=
       match tbl , ws with
-      | cons (t,i) tbl' , cons x ws' => cons (t, x, i) (zip_words tbl' ws')
+      | cons (t,g,i) tbl' , cons x ws' => cons (t, x, g, i) (zip_words tbl' ws')
       | _ , _ => nil
       end.
 
@@ -519,7 +664,7 @@ Section CFGVerificationDerived.
     (* SHeapSpec.run; same wnil shape, no leakcheck. *)
     Definition scfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST))
+      (tbl : list (Term Σ ty_xlenbits * list Annot * AST))
       (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
