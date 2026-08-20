@@ -205,19 +205,30 @@ Open Scope list_scope.
   (*                                                                     *)
   (* NOTE: `is` is an SSReflect keyword in this file, hence `instrs`.    *)
   (* ------------------------------------------------------------------ *)
-  Fixpoint table_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (off : N) (instrs : list AST)
-    : list (Term Σ ty_xlenbits * AST) :=
+
+  Fixpoint table_of_list' {Σ : LCtx} (p : Term Σ ty_xlenbits) (off : N)
+      (pending : list Annot)
+      (instrs : list AnnotInstr)
+    : list (Term Σ ty_xlenbits * list Annot * AST) :=
     match instrs with
-    | []        => []
-    | i :: rest => (peval_bvadd (term_val ty_xlenbits (bv.of_N off)) p, i)
-                     :: table_of_list p (off + 4)%N rest
+    | []               => []
+    | AnnotGhost a :: rest =>
+        table_of_list' p off (pending ++ [a]) rest
+    | AnnotAST i :: rest =>
+        (peval_bvadd (term_val ty_xlenbits (bv.of_N off)) p, pending, i)
+          :: table_of_list' p (off + 4)%N [] rest
     end.
+
+  Definition table_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (off : N)
+      (instrs : list AnnotInstr)
+    : list (Term Σ ty_xlenbits * list Annot * AST) :=
+    table_of_list' p off [] instrs.
 
   (* Default exit table: the single fall-through address just past the
      program's instructions. *)
-  Definition exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list AST)
+  Definition exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list AnnotInstr)
     : list (Term Σ ty_xlenbits) :=
-    [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p].
+    [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length (strip instrs))))) p].
 
   (* General exit table from base-relative byte offsets.  Programs whose
      control flow leaves anywhere other than the fall-through
