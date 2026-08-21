@@ -75,12 +75,14 @@ two sides' VCs correspond.
 
 `Verifier.v`:
 ```coq
-Inductive Annot := AnnotDebugBreak.
+Inductive Annot :=
+| AnnotDebugBreak
+| AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
 
 Record AnnotInstr := MkAnnotInstr
-  { ai_ghost_before : option Annot
+  { ai_ghost_before : list Annot
   ; ai_instr        : AST
-  ; ai_ghost_after  : option Annot
+  ; ai_ghost_after  : list Annot
   }.
 
 Definition strip (instrs : list AnnotInstr) : list AST :=
@@ -105,47 +107,94 @@ of which was a whole mechanism under the sum:
   `lookup_instr`'s `List.find` return the ghost forever, so the executor could
   never reach the real instruction: a correctness bug, not a style problem.
 
-**No ghost is interpreted yet.** `sexec_cfg_addr` projects `ai_instr` and
-ignores both ghost slots; the executor is semantically identical to the
-pre-migration one, which is what makes GATE 1 cost-neutrality exact rather than
-approximate. `AnnotLemmaInvocation` was deliberately **removed** from `Annot`
-until Phase 4 implements it — it was a `SymProp.error "not yet supported"` stub
-with no soundness content, and its dependent constructor
-(`{Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)`) is the leading suspect for the
-`rexec_ghost` compile hang described below. Phase 4 is a *separate* effort tied
-to a genuine loop-invariant design (PLAN-loop-invariant.md), not a mechanical
-extension of this plumbing.
+**`list Annot`, not `option Annot`.** The `option` (landed 0c8fd8cf, removed
+2026-08-21) was justified as dropping the `sexec_ghosts` recursion, on the
+grounds that "no current use case wants two ghosts stacked on one instruction".
+Both halves were wrong: more than one annotation per instruction is a real case
+(dump the heap AND abstract a term at one pc), and there was no recursion cost
+to avoid, because ghosts are interpreted by folding TRANSFORMERS, not by
+building a bind chain. Those are independent — see the next two sections.
 
-**Interpret a ghost as a `debug` WRAPPER, never as a bound step.** This is the
-single most expensive thing learned in this migration. The reverted attempt made
-ghost execution a bound niladic action —
-`⟨θ0'⟩ _ <- sexec_ghosts ghosts ;;` where `sexec_ghost AnnotDebugBreak =
-debug msg (pure tt)` — and that shape:
-- does not match `refine_debug` / `refine_compat_debug`
-  (`theories/Refinement/Monads.v:1683,1693`), which state `debug` as a **function
-  on computations** (`RHeapSpec RA -> RHeapSpec RA`). `bind (debug msg (pure tt)) f`
-  is not `debug msg (f …)`, so the ready-made instance cannot fire and a
-  hand-written bridge lemma is forced. That lemma (`rexec_ghost`) hung at compile
-  for 300 s+ under every tactic tried and its root cause was never found;
-- adds a THIRD world to the persist chain (`θ0 ∘ θ0' ∘ θ1`), i.e. a second copy
-  of exactly the `chunk_gc` problem that `rexec_cfg_addr` already needs ~30 lines
-  of `gc_binds_heap`/`refine_gc_heap` handling to survive;
-- is not cost-neutral even for an unannotated program: `bind (pure tt) f` is not
-  `f`, so all 12 examples' VCs would be perturbed and GATE 1's own cost check
-  would fail.
+**The interpreter: `sexec_ghost` for one annotation, `sexec_ghosts` folding it.**
 
-The wrapper shape has none of those problems. `CHeapSpec.debug := fun m => m`
-(`theories/Shallow/Monads.v:1112`) is the **identity**, so a symbolic
-`debug msg s` refines against an *unchanged* concrete `c` — meaning
-`cexec_cfg_addr` keeps its `gmap … AST` and needs no ghosts at all. `main`'s
-`BlockVer/PartialVerifier.v` is the working precedent on both sides
-(`sexec_annotated_block_addr:541` wraps; `cexec_annotated_block_addr:597`
-mirrors with the identity `debug`), and its `rexec_annotated_block_addr:641`
-closes the `AnnotDebugBreak` case on the bare `destruct instr; cbn; rsolve`
-line with no bullet. **The 2026-08-20 session ported that tactic without
-porting that shape**, which is why the idiom "that works on main" failed. If you
-are about to write a ghost-refinement lemma, check first whether you have
-accidentally built a bound step.
+```coq
+Definition sexec_ghost {A} (a : Annot) {w : World}
+    (k : Box (SHeapSpec A) w) : Box (SHeapSpec A) w := …
+Definition sexec_ghosts {A} (gs : list Annot) {w : World}
+    (k : Box (SHeapSpec A) w) : SHeapSpec A w :=
+  T (List.fold_right (fun a k' => sexec_ghost a k') k gs).
+```
+
+`Box -> Box`, **not** `Box -> SHeapSpec`: a transformer of world-polymorphic
+computations composes with itself, so the list case is a plain `fold_right` with
+`T` applied exactly once at the end. With the un-boxed result type the two could
+not be chained (one returns `SHeapSpec`, the next needs `Box (SHeapSpec …)`) and
+`sexec_ghosts` would need its own `Fixpoint` duplicating the match. `fold_right`
+puts the FIRST annotation outermost, so list order is execution order; `nil`
+gives `T k` with no residue, which is what makes cost-neutrality for
+unannotated programs exact rather than approximate. Declared `{w : World}`
+(`chunk_gc`'s shape) rather than `⊢`.
+
+**The two kinds have DIFFERENT shapes and the asymmetry is the design.**
+`AnnotDebugBreak` wraps (leaves the world alone); `AnnotLemmaInvocation` binds
+(`call_lemma` consumes and produces heap, so it moves the world, and hands `k`
+the composite `θ ∘ θ'`). The rule behind it:
+
+> **A bound step is fine exactly when the CONCRETE side binds too.**
+
+- `call_lemma` HAS a concrete counterpart, so both sides bind and `rsolve`
+  dispatches it through ordinary `refine_bind`. `main`'s
+  `BlockVer/PartialVerifier.v` does this and closes the case with
+  `iApply "IHb"; rsolve`.
+- `debug` has NO concrete content — `CHeapSpec.debug := fun m => m`, the
+  **identity** (`theories/Shallow/Monads.v:1112`). Binding it moves the symbolic
+  world with nothing concrete to match, and `refine_debug` /
+  `refine_compat_debug` (`theories/Refinement/Monads.v:1683,1693`) are stated
+  for `debug` AS A TRANSFORMER (`RHeapSpec RA -> RHeapSpec RA`), so they would
+  not apply.
+
+**So do NOT "simplify" `AnnotDebugBreak` into an `SHeapSpec Unit` action bound
+with `⟨θ⟩ _ <- `.** That was the reverted attempt (2274a22b): it forced a
+hand-written `rexec_ghost` bridge, which hung at compile for 300 s+ under every
+tactic tried with root cause never found; it adds a THIRD world to the persist
+chain (a second copy of the `chunk_gc` problem `rexec_cfg_addr` already needs
+~30 lines of `gc_binds_heap`/`refine_gc_heap` to survive); and it breaks
+cost-neutrality, since `bind (pure tt) f` is not `f`. **The 2026-08-20 session
+ported `main`'s TACTIC without porting `main`'s SHAPE** — which fully explains
+"the exact idiom that works on main failed here", with no need for the
+dependent-constructor hypothesis that entry also floated.
+
+`AnnotDebugBreak`'s payload is the framework's `DebugAsn`
+(`theories/Symbolic/Monads.v:71-101`) reached through a
+`Notation DebugAnnot := DebugAsn` alias — field-identical with all three
+`amsg.mk` instances already exported, so a CFGVer record would be a fourth
+clone of it (2274a22b had one, BlockVer's `DebugBlockver` is another). The alias
+exists because the two are conceptually distinct — `DebugAsn` fires inside an
+ASSERTION (`Monads.v:1028`, `:1075`), a ghost break at an INSTRUCTION boundary —
+and expected to diverge. Caveat: an alias does not change what a dump PRINTS.
+
+`main`'s `BlockVer/PartialVerifier.v` is the working precedent for both shapes:
+`sexec_annotated_block_addr:541` wraps the debug case,
+`cexec_annotated_block_addr:597` mirrors it with the identity `debug`, the lemma
+case binds on both sides, and `rexec_annotated_block_addr:641` closes debug on
+the bare `destruct instr; cbn; rsolve` line with **no bullet** while the two
+bullets it does have are the recursive cases. Read it before writing any
+ghost-refinement lemma — and check first whether you have accidentally built a
+bound step where a wrapper belongs.
+
+**Concrete side (Phase 2, not yet written): FUSE, do not split.**
+`cexec_cfg_addr` takes `gmap (bv xlenbits) AnnotInstr` and `instrs_of_list`
+becomes `AnnotInstr`-valued; the MEMORY predicates keep speaking `AST`
+(`ptsto_instrs (ai_instr <$> instrs)`, `mem_has_instrs … (strip instrs')`)
+because memory holds instructions, not annotations, which is what keeps
+`Noninterference.v` untouched. **Do not give ghosts their own concrete channel
+by analogy with `words`.** `words` is a separate total function because it has a
+separate ORIGIN — `VerifierRel.v:179-186`, "supplied by Adequacy.v out of the
+`∃ v` inside interp_ptsto_instr" — and that split costs a whole second
+bookkeeping family (`wtable_rel`, `itable_relW_zip`,
+`wtable_rel_of_faith_forget`). Ghosts share the AST's origin: the
+`list AnnotInstr` the author wrote. Splitting one source in two and then proving
+the halves agree is the sum type's disease in a new costume.
 
 **Two coercions make every existing `_instrs : list AST` program keep
 typechecking as `list AnnotInstr` unedited** (`Verifier.v`, both declared
@@ -178,6 +227,18 @@ spelled-out tuple.** Two signatures have been caught with a literal
 open) — and *both* silently failed to track *both* columns added since (the word
 column and then `AnnotInstr`). The type error surfaces far from the cause.
 
+**`LEnv` must be QUALIFIED as `RiscvPmpCFGVerifSpec.LEnv` in `Verifier.v`.**
+`Verifier.v` imports `RiscvPmpCFGVerifExecutor`, but that is `MakeExecutor …
+RiscvPmpCFGVerifSpec` (`Spec.v:720`) and the functor does NOT re-export its
+`Specification` argument — which is why `RiscvPmpSpecVerif` (`Spec.v:723`)
+imports *both*, and why `SpecIris.v` names spec members qualified. **And
+`rocq_compile_file` ACCEPTS the bare `LEnv`** — its dune fallback resolves names
+the real build cannot, so its false greens are not limited to missing sibling
+`.vo`s. Only `make` catches this. Position-mode `rocq_start(file=…, line=…)`
+also catches it, replays through the project's real load path, works inside
+module functors where preamble mode cannot reach, and costs seconds — use it
+before every build here.
+
 **A niladic ghost action would need an implicit `{w : World}`, NOT `⊢`/`Valid`** —
 relevant only if you reintroduce one against the advice above. A niladic
 `⊢`-typed action (no world-indexed value argument) does not get its world
@@ -197,8 +258,11 @@ compile with **no edit to any example**, and all 9 `strip_id_*` lemmas close by
 `reflexivity` (`Example/ZZAnnotStripIdProbe.v`; `Jumps`/`MvSwap`/`SetX2` build
 their list inline in the contract literal so there is no named object to state
 the lemma about — their unchanged compilation is the only evidence for those
-three). Still to do on this side: `ghost_wrap`, i.e. actually interpreting
-`ai_ghost_before`/`ai_ghost_after`. The relational phase
+three). `sexec_ghost`/`sexec_ghosts` exist and interpret both `Annot` kinds.
+**Still to do on this side: `sexec_cfg_addr` does not CALL them yet** — it
+projects `ai_instr` and ignores both slots, so no example's VC has changed and
+cost-neutrality holds by construction rather than by measurement. The
+relational phase
 (`VerifierRel.v`/`TablesRel.v` — the concrete mirror and the
 `itable_rel`/`rexec_cfg_addr` proofs) is **not started and those two files
 currently fail to compile** — they still assume the pre-migration 2-/3-tuple

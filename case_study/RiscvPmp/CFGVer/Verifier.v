@@ -84,13 +84,36 @@ Open Scope Z_scope.
 (* Ghost annotations for CFGVer instructions.                               *)
 (* ========================================================================= *)
 
-Inductive Annot :=
-  | AnnotDebugBreak.
+(* Ghost annotation kinds.  Both are interpreted (sexec_ghost, below);
+   neither is used by any example yet, so no VC changes.
 
+   AnnotLemmaInvocation's `es` lives at the EMPTY program context [ctx]
+   (no program variables in scope at an instruction boundary), which is
+   also why Annot is not world-indexed and needs no persist. *)
+Inductive Annot :=
+  | AnnotDebugBreak
+  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
+
+(* One instruction together with the ghost annotations attached to it.
+   A PRODUCT, not a sum (`AnnotAST i | AnnotGhost a` was reverted at
+   13eb91e0): a sum can represent a ghost with no instruction to attach
+   to, which forced a grouping fold in table_of_list, a "trailing ghost
+   is an error" case, and — if a ghost were given its own table entry —
+   a lookup_instr that returns the ghost forever and can never reach the
+   instruction at that address.
+
+   `list Annot`, not `option Annot` (which is what 0c8fd8cf landed):
+   more than one annotation per instruction is a real case — dump the
+   heap AND abstract a term at the same pc, once AnnotLemmaInvocation
+   returns in Phase 4 — and the recursion `option` was chosen to avoid
+   costs nothing, because ghosts are interpreted by folding TRANSFORMERS
+   over the list (see sexec_ghosts), not by building a bind chain.
+   Those are different things; conflating them is what motivated the
+   `option`. *)
 Record AnnotInstr := MkAnnotInstr
-  { ai_ghost_before : option Annot
+  { ai_ghost_before : list Annot
   ; ai_instr        : AST
-  ; ai_ghost_after  : option Annot
+  ; ai_ghost_after  : list Annot
   }.
 
 Definition strip (instrs : list AnnotInstr) : list AST :=
@@ -103,8 +126,11 @@ Definition strip (instrs : list AnnotInstr) : list AST :=
    NOT Local: Prelude.v exports this file (CFGVer/CLAUDE.md) and every
    Example/*.v needs these coercions active. A Local Coercion would never
    reach the examples. *)
+(* `nil` spelled out rather than `[]`: list_scope is not opened until
+   further down this file (and ctx.notations, re-imported via RiscvPmp.Sig,
+   hijacks list notation until it is). *)
 Coercion AST_AnnotInstr (a : AST) : AnnotInstr :=
-  {| ai_ghost_before := None; ai_instr := a; ai_ghost_after := None |}.
+  {| ai_ghost_before := nil; ai_instr := a; ai_ghost_after := nil |}.
 
 Local Arguments List.cons {_} & _ _.
 
@@ -151,6 +177,45 @@ Section CFGVerificationDerived.
     Import SStoreSpec (evalStoreSpec).
     Import SHeapSpec SHeapSpec.notations.
     Import asn.notations.
+    (* ================================================================== *)
+    (* DebugAnnot: AnnotDebugBreak's payload — a (pathcondition, heap)     *)
+    (* snapshot at one program point.                                     *)
+    (*                                                                     *)
+    (* WHY a payload is needed at all: the symbolic heap is an SHeapSpec   *)
+    (* ACCUMULATOR, not part of the VC, so the only position it can        *)
+    (* otherwise be observed at is the precondition boundary — and a fuel  *)
+    (* truncation carries no state either (`error msg => False` in both    *)
+    (* `safe` and `safe_debug`).  A debug node planted mid-run is the only *)
+    (* way to ask "what does the heap look like HERE".                     *)
+    (*                                                                     *)
+    (* WHY AN ALIAS AND NOT A RECORD.  The framework's DebugAsn            *)
+    (* (theories/Symbolic/Monads.v:71-101) already has exactly these two   *)
+    (* fields WITH Subst/SubstLaws/OccursCheck #[export]ed — the three     *)
+    (* instances `amsg.mk` requires — so a CFGVer record would be pure     *)
+    (* duplication.  It has been written as one three times already (the   *)
+    (* reverted sum-type attempt 2274a22b, BlockVer's DebugBlockver, and   *)
+    (* once more here on 2026-08-21 before this was noticed).  Do not add  *)
+    (* a fourth.                                                          *)
+    (*                                                                     *)
+    (* But the two are CONCEPTUALLY DISTINCT and expected to diverge, so   *)
+    (* ghost code names the payload through this alias rather than saying  *)
+    (* DebugAsn directly.  DebugAsn fires when the executor produces or    *)
+    (* consumes an `asn.debug` node inside an ASSERTION (Monads.v:1028,    *)
+    (* :1075) — its commented-out fields (program context, localstore) are *)
+    (* what assertion debugging wants.  A ghost break fires at an          *)
+    (* INSTRUCTION BOUNDARY chosen by whoever wrote the program, and would *)
+    (* plausibly want the pc or which annotation fired.  Neither field set *)
+    (* belongs in the other.  Fork here if that day comes.                 *)
+    (*                                                                     *)
+    (* `Notation` and not `Definition` so instance resolution needs no     *)
+    (* unfolding: `Subst DebugAnnot` IS `Subst DebugAsn`, syntactically.   *)
+    (* Caveat: an alias does not change what a dump PRINTS — the           *)
+    (* constructor stays MkDebugAsn and the fields stay debug_asn_*, so in *)
+    (* a vc_debug output an assertion debug and a ghost break are still    *)
+    (* told apart only by position in the tree.  If Phase 3 finds that     *)
+    (* ambiguous, THEN a distinct record earns its 25 lines.               *)
+    (* ================================================================== *)
+    Notation DebugAnnot := DebugAsn.
 
     (* exec_instruction_prologue i: the Hoare precondition for executing
        instruction i at address a, with np the INCOMING nextpc value.  Asserts:
@@ -361,6 +426,85 @@ Section CFGVerificationDerived.
         (Φ : Box (Impl A (Impl (fun w' => SHeap w') (fun w' => 𝕊 w'))) w) (h : SHeap w) :
       SHeapSpec.bind chunk_gc f Φ h = T f tt Φ (gc_heap h).
     Proof. reflexivity. Qed.
+
+    (* ================================================================== *)
+    (* Ghost annotations: sexec_ghost interprets ONE annotation,           *)
+    (* sexec_ghosts folds it over an instruction's ghost list.             *)
+    (*                                                                     *)
+    (* WHY □ -> □ AND NOT □ -> SHeapSpec.  A TRANSFORMER of                *)
+    (* world-polymorphic computations composes with itself, so the list    *)
+    (* case is a plain fold_right and `T` is applied exactly once, at the  *)
+    (* end.  With the un-boxed result type the two could not be chained    *)
+    (* (one returns SHeapSpec, the next needs □ SHeapSpec) and sexec_ghosts *)
+    (* would have to be its own Fixpoint duplicating the match.  The box   *)
+    (* also means each annotation's message is built at the world where    *)
+    (* ITS node lands, not at the outer world.                             *)
+    (*                                                                     *)
+    (* THE TWO KINDS HAVE DIFFERENT SHAPES, AND THE ASYMMETRY IS CORRECT.  *)
+    (* AnnotDebugBreak WRAPS (leaves the world alone); AnnotLemmaInvocation *)
+    (* BINDS (call_lemma consumes and produces heap, so it moves the        *)
+    (* world).  The Box -> Box signature accommodates both, which is why    *)
+    (* it is worth writing now rather than discovering at Phase 4 that the  *)
+    (* shape has to change in the middle of the relational proofs.         *)
+    (*                                                                     *)
+    (* The rule behind the asymmetry — a BOUND step is fine exactly when    *)
+    (* the CONCRETE side binds too:                                        *)
+    (*  - call_lemma HAS a concrete counterpart (CHeapSpec.call_lemma), so  *)
+    (*    both sides bind, and rsolve dispatches it through the ordinary    *)
+    (*    refine_bind machinery.  main's BlockVer/PartialVerifier.v does    *)
+    (*    exactly this and closes the case with `iApply "IHb"; rsolve`.     *)
+    (*  - debug has NO concrete content: CHeapSpec.debug = fun m => m, the  *)
+    (*    IDENTITY (theories/Shallow/Monads.v:1112).  Binding it would move *)
+    (*    the world on the symbolic side with nothing on the concrete side  *)
+    (*    to match, and the framework's refine_debug /                      *)
+    (*    refine_compat_debug (theories/Refinement/Monads.v:1683,1693) are  *)
+    (*    stated for debug AS A TRANSFORMER, so they would not apply.       *)
+    (*                                                                     *)
+    (* DO NOT "simplify" AnnotDebugBreak into an SHeapSpec Unit action      *)
+    (* bound with ⟨θ⟩ _ <- .  That was tried (2274a22b): it forced a        *)
+    (* hand-written rexec_ghost bridge lemma, which hung at compile for     *)
+    (* 300 s+ with no root cause found; it adds a third world to the        *)
+    (* persist chain (a second copy of the chunk_gc problem above); and it  *)
+    (* breaks cost-neutrality for unannotated programs, since               *)
+    (* `bind (pure tt) f` is not `f` whereas `fold_right … nil` IS `T k`.   *)
+    (*                                                                     *)
+    (* PHASE 2 OBLIGATION: cexec_cfg_addr must mirror the LEMMA case (not   *)
+    (* the debug one).  Nothing needs a new LEnv entry — these invoke       *)
+    (* EXISTING lemmas — so there is no soundness debt here, only mirroring. *)
+    (* ================================================================== *)
+    Definition sexec_ghost {A} (a : Annot) {w : World}
+        (k : Box (SHeapSpec A) w) : Box (SHeapSpec A) w :=
+      match a with
+      | AnnotDebugBreak =>
+          fun w2 θ =>
+            debug
+              (fun (h0 : SHeap w2) =>
+                 amsg.mk {| debug_asn_pathcondition := wco w2
+                          ; debug_asn_heap          := h0 |})
+              (k w2 θ)
+      | AnnotLemmaInvocation l es =>
+          fun w2 θ =>
+            (* LEnv is QUALIFIED: Verifier.v imports
+               RiscvPmpCFGVerifExecutor, but that is `MakeExecutor …
+               RiscvPmpCFGVerifSpec` (Spec.v:720) and the functor does NOT
+               re-export its Specification argument — which is why
+               RiscvPmpSpecVerif (Spec.v:723) imports BOTH.  SpecIris.v names
+               spec members the same qualified way.  A bare `LEnv` fails with
+               "The reference LEnv was not found", and note rocq_compile_file's
+               dune-fallback ACCEPTS the bare form — only `make` catches it. *)
+            ⟨ θ' ⟩ _ <- call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
+                          (seval_exps [env] es) ;;
+            k _ (θ ∘ θ')
+      end.
+
+    (* fold_right, so the FIRST annotation in the list is the OUTERMOST
+       wrapper and therefore the first node encountered — list order is
+       execution order.  `nil` gives `T k` with no residue: ghosts are
+       cost-free for every program that has none, which is what makes the
+       migration's cost-neutrality exact rather than approximate. *)
+    Definition sexec_ghosts {A} (gs : list Annot) {w : World}
+        (k : Box (SHeapSpec A) w) : SHeapSpec A w :=
+      T (List.fold_right (fun a k' => sexec_ghost a k') k gs).
 
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
     (* current pc term against the table keys.  `peval` on BOTH sides is  *)

@@ -85,36 +85,98 @@ shape mistake, and the product type plus `option Annot` removes the mistake:
   the `AnnotDebugBreak` case on the bare `destruct instr; cbn; rsolve` line with
   no bullet. **The 2026-08-20 session ported that tactic without porting that
   shape** — which fully explains "the exact idiom that works on main failed
-  here", with no need for the dependent-constructor hypothesis. (That hypothesis
-  is moot anyway: `AnnotLemmaInvocation` has been removed from `Annot` until
-  Phase 4, as this document's own rethink entry recommended.)
+  here", with no need for the dependent-constructor hypothesis.
 
-*Therefore the remaining Phase 1 work is `ghost_wrap`, not `sexec_ghost`:*
+**CORRECTION, same day, prompted by review — the paragraph above overstates
+the case, and two of its conclusions were wrong.**
+
+*(1) "Bound steps are the problem" is too broad.* The correct rule is:
+
+> **A bound step is fine exactly when the CONCRETE side binds too.**
+
+`main`'s `rexec_annotated_block_addr:641` proves it — three constructors, only
+TWO bullets. The bullet-free case is `AnnotDebugBreak` (a wrapper); the two
+bulleted ones are `AnnotAST` and `AnnotLemmaInvocation`, and the latter **binds**
+`call_lemma` on both sides and is dispatched by plain `rsolve` plus the IH. So
+binding is not the defect. The defect is binding something with no concrete
+counterpart: `CHeapSpec.debug = fun m => m` is the identity, so a bound `debug`
+moves the symbolic world with nothing to match, and `refine_debug` is stated for
+`debug` as a transformer.
+
+*(2) `option Annot` was wrong, and "drops the recursion" was never a win.*
+Recursing over a list of ghosts and building a bind chain are INDEPENDENT: a
+`fold_right` over transformers is one term with no binds. The Phase 0 `option`
+was chosen to avoid a cost that did not exist, while ruling out a real case —
+two annotations at one pc (dump the heap AND abstract a term), which is exactly
+what Phase 3 and Phase 4 together want. Both slots are now `list Annot`.
+
+*(3) `AnnotLemmaInvocation` is reinstated NOW, overriding this document's own
+"defer to Phase 4" recommendation.* That advice rested on it being a
+soundness-free `error` stub and on its dependent constructor being the hang
+suspect; the first no longer applies (it has real `call_lemma` semantics) and
+the second is refuted by (1). Having it present is what makes the
+world-threading COMPILER-CHECKED instead of asserted in a comment — and it
+immediately paid for itself by exposing the `LEnv` qualification bug below.
+No soundness debt: it invokes existing `LEnv` entries, adds none.
+
+*What actually landed (symbolic side, all gated green):*
 
 ```coq
-Definition ghost_wrap {A w} (g : option Annot) : SHeapSpec A w -> SHeapSpec A w :=
-  match g with
-  | None                 => fun k => k
-  | Some AnnotDebugBreak => debug (fun h0 => amsg.mk {| … wco w … h0 |})
+Definition sexec_ghost {A} (a : Annot) {w : World}
+    (k : Box (SHeapSpec A) w) : Box (SHeapSpec A) w :=
+  match a with
+  | AnnotDebugBreak => fun w2 θ => debug (fun h0 => amsg.mk {| … wco w2 … h0 |})
+                                         (k w2 θ)
+  | AnnotLemmaInvocation l es =>
+      fun w2 θ => ⟨θ'⟩ _ <- call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
+                              (seval_exps [env] es) ;;
+                  k _ (θ ∘ θ')
   end.
+
+Definition sexec_ghosts {A} (gs : list Annot) {w : World}
+    (k : Box (SHeapSpec A) w) : SHeapSpec A w :=
+  T (List.fold_right (fun a k' => sexec_ghost a k') k gs).
 ```
 
-placed INSIDE the `chunk_gc` bind (so the dump shows the post-GC heap the
-executor actually carries forward, which given the chunk-GC history is the heap
-worth looking at), wrapping the instruction step for `ai_ghost_before` and the
-recursive call for `ai_ghost_after`. `ghost_wrap None k` reduces to `k` by iota,
-so cost-neutrality becomes exact rather than approximate; `ai_ghost_after` is
-free under this encoding (same one `destruct` in the proof either way), so
-implement it rather than erroring on it; and the `{w}`-vs-`⊢` gotcha does not
-arise, because the `SHeapSpec A w` argument pins `w` by ordinary application.
+`Box -> Box` and not `Box -> SHeapSpec`, so the two compose and the list case is
+a plain `fold_right` with `T` applied once at the end; `nil` gives `T k` with no
+residue, which is what makes cost-neutrality exact. `fold_right` puts the first
+annotation outermost, so list order is execution order. Declared `{w : World}`
+(`chunk_gc`'s shape) rather than `⊢`.
 
-*Recommended ordering for what is left.* Land the `ai_instr`-only state first
-(done, and gated), then add `ghost_wrap` as a separate diff, then Phase 2. The
-claim that `refine_debug` fires inside `rexec_cfg_addr` specifically is
-UNVERIFIED — `main`'s precedent is a far simpler proof, and `rexec_cfg_addr`
-already needs bespoke handling for `chunk_gc`'s trivial world motion. Splitting
-means that question arrives against a green baseline as a small diff instead of
-tangled with the `itable_rel` projection work.
+*Two traps hit while landing this:*
+- **`LEnv` needs qualifying** as `RiscvPmpCFGVerifSpec.LEnv`. `Verifier.v`
+  imports `RiscvPmpCFGVerifExecutor`, which is `MakeExecutor … RiscvPmpCFGVerifSpec`
+  (`Spec.v:720`) and does not re-export its `Specification` argument — hence
+  `RiscvPmpSpecVerif` (`Spec.v:723`) importing both, and `SpecIris.v` naming spec
+  members qualified.
+- **`rocq_compile_file` ACCEPTED the bare `LEnv`.** Its dune fallback resolves
+  names the real build cannot, so its false greens are NOT limited to missing
+  sibling `.vo`s — it is unreliable for anything touching module qualification.
+  Only `make` caught it. Position-mode `rocq_start(file=…, line=…)` also catches
+  it, replays through the project's real load path, works inside module functors
+  where preamble mode cannot reach, and costs seconds.
+
+*The concrete side — FUSE, do not split (correcting a wrong turn).* An earlier
+version of this entry proposed giving ghosts their own concrete channel,
+`ghosts : bv xlenbits -> list Annot`, by analogy with the instruction `words`.
+**That analogy is wrong.** `words` is a separate total function because it has a
+separate ORIGIN (`VerifierRel.v:179-186`: "supplied by Adequacy.v out of the
+`∃ v` inside interp_ptsto_instr"), and that split costs a second bookkeeping
+family — `wtable_rel`, `itable_relW_zip`, `wtable_rel_of_faith_forget`. Ghosts
+share the AST's origin: the `list AnnotInstr` the author wrote. Splitting one
+source in two and proving the halves agree is the sum type's disease in a new
+costume. So: `cexec_cfg_addr` takes `gmap … AnnotInstr`, `instrs_of_list`
+becomes `AnnotInstr`-valued, and the MEMORY predicates keep speaking `AST`
+(`ptsto_instrs (ai_instr <$> instrs)`, `mem_has_instrs … (strip instrs')`),
+which is where this document's Files table always put the boundary.
+
+*Recommended ordering for what is left.* `sexec_cfg_addr` does not yet CALL
+`sexec_ghosts` — that is the next diff, and it is where the persist chain gets
+threaded. Then Phase 2. The claim that `refine_debug` fires inside
+`rexec_cfg_addr` specifically is still UNVERIFIED — `main`'s precedent is a far
+simpler proof, and `rexec_cfg_addr` already needs bespoke handling for
+`chunk_gc`'s trivial world motion.
 
 *Also noted, not acted on.* The whole-list coercion is a `list >-> list`
 coercion, so it warns `does not respect the uniform inheritance condition` and
