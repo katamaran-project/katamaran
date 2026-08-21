@@ -80,6 +80,21 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
+(* ========================================================================= *)
+(* Ghost annotations for CFGVer instructions.                               *)
+(* ========================================================================= *)
+
+Inductive Annot :=
+  | AnnotDebugBreak.
+
+Record AnnotInstr := MkAnnotInstr
+  { ai_ghost_before : option Annot
+  ; ai_instr        : AST
+  ; ai_ghost_after  : option Annot
+  }.
+
+Definition strip (instrs : list AnnotInstr) : list AST :=
+  List.map (fun ai => ai_instr ai) instrs.
 
 (* ======================================================================== *)
 (* CFGVerificationDerived                                                  *)
