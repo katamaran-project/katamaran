@@ -110,7 +110,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (p     : Term Σ ty_xlenbits)
       (exits : list (Term Σ ty_xlenbits))
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (i  : list AST)
+      (i  : list AnnotInstr)
       (fl : nat) :=
       Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl
@@ -124,7 +124,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (p     : Term Σ ty_xlenbits)
       (exits : list (Term Σ ty_xlenbits))
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (i  : list AST)
+      (i  : list AnnotInstr)
       (ec : bv xlenbits -> bool)
       (fl : nat) :=
       safeE (postprocess (CFG_VC_triple p exits P i fl)).
@@ -135,14 +135,14 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       ; cfg_placement     : Term Σ ty_xlenbits
       ; cfg_exits         : list (Term Σ ty_xlenbits)
       ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-      ; cfg_instrs        : list AST
+      ; cfg_instrs        : list AnnotInstr
       ; cfg_exitCond      : bv xlenbits -> bool
       ; cfg_fuel          : nat
       }.
 
     Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
       (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
+           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AnnotInstr ->
            (bv xlenbits -> bool) -> nat -> A) : A :=
       match c with
       | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
