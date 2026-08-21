@@ -96,6 +96,27 @@ Record AnnotInstr := MkAnnotInstr
 Definition strip (instrs : list AnnotInstr) : list AST :=
   List.map (fun ai => ai_instr ai) instrs.
 
+(* Coercions: wrap plain AST values in AnnotInstr with no ghosts, so that
+   existing programs like cmovznz4_instrs : list AST still typecheck as
+   list AnnotInstr without modification.
+
+   NOT Local: Prelude.v exports this file (CFGVer/CLAUDE.md) and every
+   Example/*.v needs these coercions active. A Local Coercion would never
+   reach the examples. *)
+Coercion AST_AnnotInstr (a : AST) : AnnotInstr :=
+  {| ai_ghost_before := None; ai_instr := a; ai_ghost_after := None |}.
+
+Local Arguments List.cons {_} & _ _.
+
+Coercion list_AST_AnnotInstr (l : list AST) : list AnnotInstr :=
+  List.map AST_AnnotInstr l.
+
+(* REQUIRED (same trap as Tables.v): RiscvPmp.Sig re-imports ctx.notations,
+   whose `_ :: _` Binding notation hijacks list cons. Without this, pattern
+   matches on AnnotInstr lists fail with "Found a constructor of inductive
+   type Term while a constructor of list is expected". *)
+Open Scope list_scope.
+
 (* ======================================================================== *)
 (* CFGVerificationDerived                                                  *)
 (*                                                                           *)
