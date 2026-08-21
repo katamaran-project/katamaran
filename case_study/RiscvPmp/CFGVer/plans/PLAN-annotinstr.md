@@ -1,12 +1,19 @@
 # PLAN — migrate CFGVer's instruction surface from `AST` to `AnnotInstr`
 
-Status: **Phase 0 and Phase 1 DONE, GATE 1 green, as of 2026-08-20 (commits
-2274a22b, 323db24c on `KatamaranRel`).** Phase 2 (`VerifierRel.v`/`TablesRel.v`)
-is next and genuinely not started — those two files currently fail to compile,
-expected, see their own GATE 2 note below. Detail on what actually landed and
-what deviated from this write-up: **cfgver-executor** skill (the "Ghost
-annotations" section) is now the maintained reference for the mechanism itself;
-this log is the historical/decision record.
+Status: **SUPERSEDED, 2026-08-20 — `AnnotInstr` as committed (2274a22b,
+323db24c) has a foundational shape bug and needs to be redesigned before
+Phase 2 is attempted again.** See the 2026-08-20 "Foundational rethink" Log
+entry below before touching this again: `AnnotInstr := AnnotAST i | AnnotGhost
+a` is a SUM (either a bare instruction or a bare annotation), not a PRODUCT
+(an instruction together with its annotations) — that's the root cause of
+`table_of_list`'s grouping-fold complexity, the "trailing ghost is a hard
+error" special case, and is suspected (not confirmed) to be involved in
+Phase 2's `rexec_ghost` compile hang. Phase 0/1's commits stay in git history
+as reference for the coercion/import mechanics, but `Annot`/`AnnotInstr`/
+`table_of_list`'s core shape needs reworking, not incremental patching.
+**cfgver-executor**'s "Ghost annotations" section still describes the
+committed (pre-rethink) Phase 1 code accurately — it has not been touched to
+match this entry, since the code it documents hasn't changed yet.
 
 ## Log
 
@@ -90,6 +97,111 @@ now known to have a short, currently-compiling `rexec_annotated_block_addr`
 proof (`iInduction b; cbn; rsolve; destruct instr; cbn; rsolve` — a few lines)
 worth reading before starting Phase 2's `rexec_cfg_addr` update, as real
 precedent rather than just the disabled `KatamaranRel` copy's text.
+
+**2026-08-20, Phase 2 attempt and foundational rethink.** A session attempted
+Phase 2 on `VerifierRel.v`/`TablesRel.v`. The mechanical tuple-shape fixes
+(propagating the ghost column through `itable_rel`/`itable_relW`/`wtable_rel`/
+the `persist`/`forgetting` lemmas/`rexec_cfg_addr`'s `lookup_instr`
+destructuring) went fine and are worth redoing verbatim once the type below
+lands — that part of the diff is in `git stash` (`"AnnotInstr Phase 2 WIP
+..."`) on `KatamaranRel`, not committed, not applied. One incidental find
+worth keeping regardless of the redesign: `rexec_triple_addr`'s own signature
+had a hardcoded literal table type (`list (Term Σ ty_xlenbits * AST)`)
+instead of the `SInstrTable (wlctx Σ)` alias, so it silently didn't pick up
+the word-column change either, historically — always use the alias, never
+spell out the tuple.
+
+The actual blocker: a new `rexec_ghost` lemma (bridging the new
+`sexec_ghosts` step to a concrete no-op) hung at compile (300s+, `Set
+Typeclasses Debug.` didn't help, `rocq_start` OOMs pet on this file
+regardless of position/theorem mode) on its `AnnotDebugBreak` case, under
+*every* tactic tried — including the exact idiom that compiles fine for the
+equivalent case in `main`'s `rexec_annotated_block_addr` (`destruct; cbn;
+rsolve.`). Root cause NOT found. Leading (unconfirmed) hypothesis: unfolding
+`sexec_ghost`'s `match` forces the kernel to carry motive/type information
+for the `AnnotLemmaInvocation` branch too — a dependently-typed constructor
+(`AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)`) — even
+while computing the unrelated `AnnotDebugBreak` branch, since the hang
+reproduced identically with that branch fully `admit`ted. Not proven; worth
+checking first if this resurfaces.
+
+Digging into *why* this needed a lemma BlockVer never needed (BlockVer has no
+`sexec_ghost`/`sexec_ghosts` split at all — its `sexec_annotated_block_addr`
+recurses on the `list AnnotInstr` itself and handles ghosts inline) surfaced
+a foundational problem with `AnnotInstr` itself, not just with this one
+proof:
+
+- `AnnotInstr := AnnotAST (i : AST) | AnnotGhost (a : Annot)` is a **sum
+  type** — a value is either a bare instruction or a bare annotation, never
+  both. `table_of_list`'s `pending`-accumulator grouping fold exists purely
+  to repair that after the fact (walk the list, collect ghosts, attach them
+  to the next `AnnotAST`), and the "a trailing ghost run is a hard error"
+  rule (Phase 0's GATE 0 decision, item 3) exists because the sum type can
+  represent a state (a dangling ghost with nothing to attach to) that should
+  never have been representable in the first place.
+- A tempting-looking simplification — store raw `AnnotInstr` in the table,
+  one entry per original list element, letting a ghost share its following
+  instruction's address rather than getting its own — was checked concretely
+  and rejected: `lookup_instr` is one `List.find` (first match wins), so if
+  a ghost entry and its instruction entry share an address, `lookup_instr`
+  returns the ghost forever and the executor can never reach the real
+  instruction at that address, on any visit, ever. Not a style problem, a
+  correctness bug.
+- **The fix: make `AnnotInstr` a product, not a sum** —
+  ```coq
+  Record AnnotInstr := MkAnnotInstr
+    { ai_ghost_before : option Annot
+    ; ai_instr        : AST
+    ; ai_ghost_after  : option Annot  (* see below; may start absent *)
+    }.
+  ```
+  With this, `table_of_list` becomes a straight `mapi` (one address per
+  record, no grouping fold, no `pending`), "trailing ghost with nothing to
+  attach to" becomes unrepresentable rather than an error case to declare,
+  and "what happens if you jump to this pc" has one unambiguous answer
+  everywhere (a whole record, always). `option Annot` rather than `list
+  Annot` additionally drops `sexec_ghosts`/`rexec_ghosts` entirely (no
+  current use case wants two ghosts stacked on one instruction) — under this
+  shape only `sexec_ghost`/`rexec_ghost` need to exist, non-recursive.
+  `itable_rel`/`itable_relW`/`cexec_cfg_addr` need no change beyond widening
+  the wildcard pattern — they already ignore the ghost column(s) entirely.
+- **Ghosts run BEFORE their instruction** (matches the current, already-
+  implemented order — this doesn't need to change, only how it's
+  represented). Both current/planned annotation kinds need it: a per-trip
+  `AnnotDebugBreak` dump should show the state as the trip *begins* (Phase
+  3's own goal), and Phase 4's `AnnotLemmaInvocation` (replace a term with a
+  fresh logical variable) is useless if it runs after the instruction that
+  would otherwise consume the huge term — the abstraction has to happen
+  before that instruction executes.
+- **An `ai_ghost_after` slot is easy to add later, not merely for symmetry.**
+  Once branching exists, "after instruction `i`" and "before `i`'s successor
+  `j`" are NOT the same thing — the latter only fires if the branch that
+  reaches `j` is actually taken, the former fires every time `i` executes
+  regardless of where control goes next. Adding it later is mechanical: one
+  more `option Annot` field, one more bind in `sexec_cfg_addr`'s chain
+  (threading its world-substitution through, same move already made three
+  times for `chunk_gc`/ghost-before/the instruction itself), and reusing the
+  *same* `rexec_ghost` lemma a second time in `rexec_cfg_addr`'s proof — it's
+  generic over "one `Annot`, refined by a concrete no-op" and doesn't care
+  where it's invoked. `itable_rel`/`cexec_cfg_addr` still need nothing.
+- Also recommended, independent of the product-vs-sum fix: defer
+  `AnnotLemmaInvocation`'s dependent constructor out of `Annot` until Phase 4
+  actually implements it (right now it's a stub `error "not yet supported"`
+  case with no soundness content) — matches the plan's own "Phase 4 is a
+  separate effort, do NOT bundle" instruction below, keeps the type flat
+  (`AnnotInstr := AnnotAST i | AnnotDebugBreak`-shaped for now, no `Annot`
+  wrapper needed until there's a second ghost kind), and removes exactly the
+  dependently-typed constructor the hang hypothesis above points at.
+
+**Net effect: Phase 0 and Phase 1 need to be redone against the corrected
+type**, not just Phase 2. The 2274a22b/323db24c commits stay as reference for
+the coercion mechanics (`AST_AnnotAST`/`list_AST_AnnotInstr`, the `Local
+Coercion` pitfall, the `{w}`-vs-`⊢` gotcha) — those don't depend on
+sum-vs-product and should still apply — but `Annot`/`AnnotInstr`/
+`table_of_list`/`SInstrTable`/`SInstrTableW` all need to be rebuilt against
+the record shape above before Phase 1's GATE 1 can be re-claimed, let alone
+Phase 2 attempted again. Nothing has been committed reflecting any of this;
+`KatamaranRel` currently sits exactly at 323db24c.
 
 ---
 

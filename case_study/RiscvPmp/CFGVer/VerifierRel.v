@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 (* ======================================================================== *)
+
 (* CFGVer/VerifierRel.v — concrete mirror, relational bridge, soundness.    *)
 (*                                                                          *)
 (* Split out of Verifier.v (2026-07-27): everything in the verifier that    *)
