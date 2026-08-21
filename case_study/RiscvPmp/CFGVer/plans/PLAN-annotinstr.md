@@ -1,21 +1,131 @@
 # PLAN — migrate CFGVer's instruction surface from `AST` to `AnnotInstr`
 
-Status: **SUPERSEDED, 2026-08-20 — `AnnotInstr` as committed (2274a22b,
-323db24c) has a foundational shape bug and needs to be redesigned before
-Phase 2 is attempted again.** See the 2026-08-20 "Foundational rethink" Log
-entry below before touching this again: `AnnotInstr := AnnotAST i | AnnotGhost
-a` is a SUM (either a bare instruction or a bare annotation), not a PRODUCT
-(an instruction together with its annotations) — that's the root cause of
-`table_of_list`'s grouping-fold complexity, the "trailing ghost is a hard
-error" special case, and is suspected (not confirmed) to be involved in
-Phase 2's `rexec_ghost` compile hang. Phase 0/1's commits stay in git history
-as reference for the coercion/import mechanics, but `Annot`/`AnnotInstr`/
-`table_of_list`'s core shape needs reworking, not incremental patching.
-**cfgver-executor**'s "Ghost annotations" section still describes the
-committed (pre-rethink) Phase 1 code accurately — it has not been touched to
-match this entry, since the code it documents hasn't changed yet.
+Status: **ACTIVE, 2026-08-21 — redesigned against the product type and the
+symbolic side is GREEN.** The sum-type version (2274a22b, 323db24c) was
+reverted (13eb91e0) and rebuilt as a record (0c8fd8cf..5647fe12, then
+2026-08-21); `Verifier.v`/`Tables.v`/`Contracts.v`/`GenContract.v` and all 12
+`Example/*.v` now compile with no edit to any example, and the 9 `strip_id_*`
+lemmas close by `reflexivity`. Read the 2026-08-21 Log entry first — it
+supersedes the phase numbering used below, records the `rexec_ghost`
+reevaluation (short version: **do not port it**), and lists what is left.
+**cfgver-executor**'s "Ghost annotations" section has been rewritten to match
+the code as it now stands.
 
 ## Log
+
+**2026-08-21, product-type Phase 0 finished + the `rexec_ghost` reevaluation.**
+
+*Numbering warning.* The Phase 0 checkpoint commit (5647fe12) renumbered the
+phases against this document — it calls `VerifierRel.v`/`TablesRel.v` "Phase 1"
+where this write-up calls them Phase 2. **This document's numbering stands**:
+Phase 1 is the symbolic side (`Verifier`/`Tables`/`Contracts`/`GenContract`),
+Phase 2 is the relational side. A later session took the commit message at face
+value and had to be corrected.
+
+*Phase 0 did not actually compile when it was checkpointed as complete.*
+`lookup_instr` had been retyped to return `AnnotInstr` but `sexec_cfg_addr` still
+passed the result straight to `sexec_instruction`, which takes `AST`. The
+checkpoint's "light-branch files compile individually (verified via
+`rocq_compile_file`)" was a false green — the documented `rocq_compile_file`
+dune-fallback trap for this subtree (see **rocq-implementation**). **Verify a
+CFGVer build with `make -f Makefile.coq`, and do not record a gate as passed on
+the strength of a `rocq_compile_file` result.**
+
+Two fixes made it green, and the second is a repeat offender:
+1. `sexec_cfg_addr` now projects `ai_instr ai`. Projecting at the use site
+   (rather than destructuring `MkAnnotInstr` in the `lookup_instr` pattern) is
+   deliberate: it keeps `ai` a variable, so `rexec_cfg_addr`'s existing
+   `destruct (lookup_instr …) as [[x i]|] eqn:Hlk` needs no extra `destruct`,
+   and `lookup_instr_sound` will hand the concrete side the syntactically
+   identical `ai_instr ai`.
+2. `scfg_verification_condition`'s signature spelled out
+   `list (Term Σ ty_xlenbits * AST)` instead of `SInstrTable (wlctx Σ)`. This is
+   the SAME bug already flagged for `rexec_triple_addr` (2026-08-20 entry
+   below), in a second function — and it had silently failed to track *both*
+   columns added since: the word column and now `AnnotInstr`. `rexec_triple_addr`
+   is still unfixed. **Always name a table type by its alias.**
+
+*GATE 1 result.* `Tables.v`/`Contracts.v`/`GenContract.v` needed **no change at
+all** — the product type makes `length instrs = length (strip instrs)`
+definitionally, so the exit-offset arithmetic never needs `strip` (four builders
+would have needed it under the sum type). All 12 examples compile unedited; all 9
+`strip_id_*` lemmas are `reflexivity` (`Example/ZZAnnotStripIdProbe.v`;
+`Jumps`/`MvSwap`/`SetX2` build their lists inline, so unchanged compilation is
+the only evidence there). Cost-neutrality is currently true *by construction*
+rather than measured — no ghost is interpreted yet, so the executor term is
+unchanged — and the real cost check belongs with `ghost_wrap` below.
+
+*The `rexec_ghost` reevaluation — the main finding.* The question was whether the
+`rexec_ghost` lemma from the reverted Phase 2 attempt should be ported to the
+product type. **It should not; it should be deleted.** It existed to paper over a
+shape mistake, and the product type plus `option Annot` removes the mistake:
+
+- The framework already refines `debug`. `theories/Refinement/Monads.v:1683,1693`
+  give `refine_debug` and a `RefineCompat` instance, and
+  `CHeapSpec.debug := fun m => m` (`theories/Shallow/Monads.v:1112`) is the
+  IDENTITY. So a symbolic `debug msg s` refines against an **unchanged** concrete
+  `c`. Consequence: `cexec_cfg_addr` keeps its `gmap … AST` and needs no ghost
+  column — this contradicts nothing, but it is stronger than the 2026-08-20
+  entry's "needs no change beyond widening the wildcard pattern".
+- Those lemmas state `debug` as a **function on computations**
+  (`RHeapSpec RA -> RHeapSpec RA`). The reverted design instead bound a niladic
+  action into the chain — `⟨θ0'⟩ _ <- sexec_ghosts ghosts ;;` with
+  `sexec_ghost AnnotDebugBreak = debug msg (pure tt)` — and
+  `bind (debug msg (pure tt)) f` is not `debug msg (f …)`, so the ready-made
+  instance cannot fire. **That is why a hand-written bridge was needed, and that
+  bridge is the lemma that hung for 300 s+.**
+- The bound step also added a third world to the persist chain
+  (`θ0 ∘ θ0' ∘ θ1`), i.e. a second instance of exactly the `chunk_gc` problem
+  `rexec_cfg_addr` already spends ~30 lines of `gc_binds_heap`/`refine_gc_heap`
+  surviving; and it was not even cost-neutral for an unannotated program, since
+  `bind (pure tt) f` is not `f` — GATE 1's own cost check would have failed.
+- `main`'s `BlockVer/PartialVerifier.v` is the working precedent on BOTH sides:
+  `sexec_annotated_block_addr:541` wraps, `cexec_annotated_block_addr:597`
+  mirrors with the identity `debug`, and `rexec_annotated_block_addr:641` closes
+  the `AnnotDebugBreak` case on the bare `destruct instr; cbn; rsolve` line with
+  no bullet. **The 2026-08-20 session ported that tactic without porting that
+  shape** — which fully explains "the exact idiom that works on main failed
+  here", with no need for the dependent-constructor hypothesis. (That hypothesis
+  is moot anyway: `AnnotLemmaInvocation` has been removed from `Annot` until
+  Phase 4, as this document's own rethink entry recommended.)
+
+*Therefore the remaining Phase 1 work is `ghost_wrap`, not `sexec_ghost`:*
+
+```coq
+Definition ghost_wrap {A w} (g : option Annot) : SHeapSpec A w -> SHeapSpec A w :=
+  match g with
+  | None                 => fun k => k
+  | Some AnnotDebugBreak => debug (fun h0 => amsg.mk {| … wco w … h0 |})
+  end.
+```
+
+placed INSIDE the `chunk_gc` bind (so the dump shows the post-GC heap the
+executor actually carries forward, which given the chunk-GC history is the heap
+worth looking at), wrapping the instruction step for `ai_ghost_before` and the
+recursive call for `ai_ghost_after`. `ghost_wrap None k` reduces to `k` by iota,
+so cost-neutrality becomes exact rather than approximate; `ai_ghost_after` is
+free under this encoding (same one `destruct` in the proof either way), so
+implement it rather than erroring on it; and the `{w}`-vs-`⊢` gotcha does not
+arise, because the `SHeapSpec A w` argument pins `w` by ordinary application.
+
+*Recommended ordering for what is left.* Land the `ai_instr`-only state first
+(done, and gated), then add `ghost_wrap` as a separate diff, then Phase 2. The
+claim that `refine_debug` fires inside `rexec_cfg_addr` specifically is
+UNVERIFIED — `main`'s precedent is a far simpler proof, and `rexec_cfg_addr`
+already needs bespoke handling for `chunk_gc`'s trivial world motion. Splitting
+means that question arrives against a green baseline as a small diff instead of
+tangled with the `itable_rel` projection work.
+
+*Also noted, not acted on.* The whole-list coercion is a `list >-> list`
+coercion, so it warns `does not respect the uniform inheritance condition` and
+`New coercion path … is not definitionally an identity function
+[ambiguous-paths]`. Benign under `-arg "-w all"`, but Coq can insert such a
+coercion where you did not intend it, and the Phase 0 write-up did not record
+it. Separately, the `strip_id_*` lemmas still live only in the gitignored
+`Example/ZZAnnotStripIdProbe.v`; this document's "Files" table wants one per
+example as a permanent trusted-surface anchor, and that has not been done.
+
+## Log (earlier)
 
 **2026-08-20, Phase 0.** GATE 0 passed in a throwaway probe
 (`Example/ZZAnnotProbe0.v`, gitignored, still on disk). Two things this

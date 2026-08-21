@@ -443,9 +443,9 @@ Section CFGVerificationDerived.
                else emsg "sexec_cfg_addr: exit branch chosen but pc matches no declared exit term")
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
-               | Some (wd, i) =>
+               | Some (wd, ai) =>
                    ⟨ θ0 ⟩ _    <- chunk_gc ;;
-                   ⟨ θ1 ⟩ apc' <- sexec_instruction i (persist__term apc θ0) (persist__term anp θ0) (persist__term wd θ0) ;;
+                   ⟨ θ1 ⟩ apc' <- sexec_instruction (ai_instr ai) (persist__term apc θ0) (persist__term anp θ0) (persist__term wd θ0) ;;
                    sexec_cfg_addr n' (persist_itableW (θ0 ∘ θ1) tbl) (persist_etable (θ0 ∘ θ1) exits)
                      apc' apc'
                end)
@@ -465,7 +465,7 @@ Section CFGVerificationDerived.
     (* to the world where `a` lives) to each key term via `subst`. *)
     (* tbl/exits here are SInstrTable/SExitTable at the world wlctx Σ (empty path
        condition over the contract context) -- definitionally the same
-       as `list (Term Σ ty_xlenbits * AST)` / `list (Term Σ ty_xlenbits)`,
+       as `list (Term Σ ty_xlenbits * AnnotInstr)` / `list (Term Σ ty_xlenbits)`,
        since wctx (wlctx Σ) reduces to Σ by record projection. *)
     Definition subst_itable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (tbl : SInstrTable (wlctx Σ)) : SInstrTable w :=
@@ -555,8 +555,11 @@ Section CFGVerificationDerived.
     (* SHeapSpec.run; same wnil shape, no leakcheck. *)
     Definition scfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST))
-      (exits : list (Term Σ ty_xlenbits)) (fuel : nat)
+      (* Use the ALIASES, never a spelled-out tuple: a literal type here
+         silently fails to track a new table column (this signature missed
+         both the word column and the AnnotInstr migration that way). *)
+      (tbl : SInstrTable (wlctx Σ))
+      (exits : SExitTable (wlctx Σ)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
         SHeapSpec.run (sexec_triple_addr req tbl exits fuel ens (w := w)).

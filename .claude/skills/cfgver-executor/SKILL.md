@@ -46,12 +46,14 @@ concrete lookup.
 
 | type | shape | who sees it |
 |---|---|---|
-| `SInstrTable` | `list (Term _ ty_xlenbits * list Annot * AST)` | CONTRACT level — what `table_of_list` builds, what `itable_rel` relates to the gmap, what `TablesRel.v`'s faith lemmas discharge |
-| `SInstrTableW` | `list (Term _ ty_xlenbits * Term _ ty_word * list Annot * AST)` | EXECUTOR only — `sexec_cfg_addr` runs on this |
+| `SInstrTable` | `list (Term _ ty_xlenbits * AnnotInstr)` | CONTRACT level — what `table_of_list` builds, what `itable_rel` relates to the gmap, what `TablesRel.v`'s faith lemmas discharge |
+| `SInstrTableW` | `list (Term _ ty_xlenbits * Term _ ty_word * AnnotInstr)` | EXECUTOR only — `sexec_cfg_addr` runs on this |
 
-Both gained a third `list Annot` column in the AnnotInstr migration
-(PLAN-annotinstr.md, landed through Phase 1 — commits 2274a22b/323db24c). See
-"Ghost annotations" below before touching either type.
+The payload column became `AnnotInstr` (from bare `AST`) in the AnnotInstr
+migration — **no new column**, which is why `itable_rel` and the faith lemmas
+need only a projection rather than a new tuple position. See "Ghost annotations"
+below before touching either type, and always name these types by their alias
+(same section) rather than spelling the tuple out.
 
 The extra column is the raw instruction WORD. It exists because
 `sep_contract_fetch_instr` used to hide the word behind an `∃`, minting a fresh
@@ -73,42 +75,89 @@ two sides' VCs correspond.
 
 `Verifier.v`:
 ```coq
-Inductive Annot :=
-| AnnotDebugBreak
-| AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
-Inductive AnnotInstr := AnnotAST (i : AST) | AnnotGhost (a : Annot).
-```
-Ghosts are a prefix attached to the AnnotAST that follows them; `table_of_list`
-(`Tables.v`) groups them and only advances the address offset on `AnnotAST` — a
-trailing ghost run (nothing follows it) is a hard error in v1, silently dropped,
-not fixed. `strip : list AnnotInstr -> list AST` is the trusted-layer projection:
-`Noninterference.v` and every `length`-of-program computation
-(`exits_of_offs`/the exit-offset math in four of `GenContract.v`'s six builders)
-use `length (strip instrs)`, since ghosts occupy no address.
+Inductive Annot := AnnotDebugBreak.
 
-**Only `AnnotDebugBreak` is interpreted so far** (Phase 1). `sexec_ghost`/
-`sexec_ghosts` run the ghost prefix before `sexec_instruction`; `AnnotDebugBreak`
-is a transparent `debug` node carrying a `DebugAnnot` payload (pathcondition +
-heap at that position — the mechanism BlockVer's `DebugBlockver` already has,
-`BlockVer/Verifier.v:499`; also live and compiling on `main`'s
-`BlockVer/PartialVerifier.v:458`, useful as a working reference for the eventual
-`AnnotLemmaInvocation` relational proof). `AnnotLemmaInvocation` currently
-errors `"not yet supported"` — giving it real semantics (a fresh-logical-variable
-abstraction lemma, to beat term-duplication blowups like `muladd`'s) is Phase 4,
-a *separate* effort tied to a genuine loop-invariant design
-(PLAN-loop-invariant.md), not a mechanical extension of this plumbing.
+Record AnnotInstr := MkAnnotInstr
+  { ai_ghost_before : option Annot
+  ; ai_instr        : AST
+  ; ai_ghost_after  : option Annot
+  }.
+
+Definition strip (instrs : list AnnotInstr) : list AST :=
+  List.map (fun ai => ai_instr ai) instrs.
+```
+
+**`AnnotInstr` is a PRODUCT, and that is load-bearing.** It was first written as
+a SUM (`AnnotAST i | AnnotGhost a`, commits 2274a22b/323db24c) and that shape
+was reverted as a foundational bug (13eb91e0), because a sum can represent a
+ghost with no instruction to attach to. Consequences of the product shape, each
+of which was a whole mechanism under the sum:
+- `table_of_list` (`Tables.v`) is a straight walk — one address per record, no
+  `pending`-accumulator grouping fold.
+- "trailing ghost with nothing to attach to" is unrepresentable, so there is no
+  hard-error case to declare.
+- `length instrs = length (strip instrs)` definitionally, so `GenContract.v`'s
+  exit-offset arithmetic needs **no** `strip` — only the trusted layer
+  (`Noninterference.v`, and `EndToEnd.v`'s `instrs_of_list`/`mem_has_instrs`
+  boundary) ever needs the projection.
+- One unambiguous answer to "what happens if you jump to this pc" — a whole
+  record, always. Under the sum, a ghost sharing its instruction's address made
+  `lookup_instr`'s `List.find` return the ghost forever, so the executor could
+  never reach the real instruction: a correctness bug, not a style problem.
+
+**No ghost is interpreted yet.** `sexec_cfg_addr` projects `ai_instr` and
+ignores both ghost slots; the executor is semantically identical to the
+pre-migration one, which is what makes GATE 1 cost-neutrality exact rather than
+approximate. `AnnotLemmaInvocation` was deliberately **removed** from `Annot`
+until Phase 4 implements it — it was a `SymProp.error "not yet supported"` stub
+with no soundness content, and its dependent constructor
+(`{Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)`) is the leading suspect for the
+`rexec_ghost` compile hang described below. Phase 4 is a *separate* effort tied
+to a genuine loop-invariant design (PLAN-loop-invariant.md), not a mechanical
+extension of this plumbing.
+
+**Interpret a ghost as a `debug` WRAPPER, never as a bound step.** This is the
+single most expensive thing learned in this migration. The reverted attempt made
+ghost execution a bound niladic action —
+`⟨θ0'⟩ _ <- sexec_ghosts ghosts ;;` where `sexec_ghost AnnotDebugBreak =
+debug msg (pure tt)` — and that shape:
+- does not match `refine_debug` / `refine_compat_debug`
+  (`theories/Refinement/Monads.v:1683,1693`), which state `debug` as a **function
+  on computations** (`RHeapSpec RA -> RHeapSpec RA`). `bind (debug msg (pure tt)) f`
+  is not `debug msg (f …)`, so the ready-made instance cannot fire and a
+  hand-written bridge lemma is forced. That lemma (`rexec_ghost`) hung at compile
+  for 300 s+ under every tactic tried and its root cause was never found;
+- adds a THIRD world to the persist chain (`θ0 ∘ θ0' ∘ θ1`), i.e. a second copy
+  of exactly the `chunk_gc` problem that `rexec_cfg_addr` already needs ~30 lines
+  of `gc_binds_heap`/`refine_gc_heap` handling to survive;
+- is not cost-neutral even for an unannotated program: `bind (pure tt) f` is not
+  `f`, so all 12 examples' VCs would be perturbed and GATE 1's own cost check
+  would fail.
+
+The wrapper shape has none of those problems. `CHeapSpec.debug := fun m => m`
+(`theories/Shallow/Monads.v:1112`) is the **identity**, so a symbolic
+`debug msg s` refines against an *unchanged* concrete `c` — meaning
+`cexec_cfg_addr` keeps its `gmap … AST` and needs no ghosts at all. `main`'s
+`BlockVer/PartialVerifier.v` is the working precedent on both sides
+(`sexec_annotated_block_addr:541` wraps; `cexec_annotated_block_addr:597`
+mirrors with the identity `debug`), and its `rexec_annotated_block_addr:641`
+closes the `AnnotDebugBreak` case on the bare `destruct instr; cbn; rsolve`
+line with no bullet. **The 2026-08-20 session ported that tactic without
+porting that shape**, which is why the idiom "that works on main" failed. If you
+are about to write a ghost-refinement lemma, check first whether you have
+accidentally built a bound step.
 
 **Two coercions make every existing `_instrs : list AST` program keep
 typechecking as `list AnnotInstr` unedited** (`Verifier.v`, both declared
 `Coercion`, deliberately NOT `Local` — `Local` would never reach `Example/*.v`,
 which only `Require Export`s `Verifier.v` via `Prelude.v`; this exact mistake
 was made and caught before landing):
-- `AST_AnnotAST : AST -> AnnotInstr`, per-element, for a **fresh** `[...]`
+- `AST_AnnotInstr : AST -> AnnotInstr`, per-element, for a **fresh** `[...]`
   literal — only fires inside a bracket literal thanks to a companion
   `Local Arguments List.cons {_} & _ _.` (FemtoKernel.v:160 precedent); without
   it Coq elaborates the literal as `list AST` first and the whole-list
   comparison against `list AnnotInstr` just fails.
-- `list_AST_AnnotInstr : list AST -> list AnnotInstr := List.map AST_AnnotAST`,
+- `list_AST_AnnotInstr : list AST -> list AnnotInstr := List.map AST_AnnotInstr`,
   whole-list, for reusing an **already-elaborated** `list AST` value (e.g.
   `cmovznz4_instrs`) — the per-element coercion above does NOT fire for this
   case; a value already has a type, there is no bracket-literal elaboration site
@@ -116,21 +165,41 @@ was made and caught before landing):
   neither alone covers both authoring styles. (Not in the original plan
   write-up — found by the Phase 0 probe, `Example/ZZAnnotProbe0.v`.)
 
-**`sexec_ghost`/`sexec_ghosts` are declared with an implicit `{w : World}`, NOT
-`⊢`/`Valid`.** A niladic `⊢`-typed action (no world-indexed value argument) does
-not get its world auto-supplied when used bare as a bind action in either
-position of `⟨θ⟩ x <- ma ;; mb` — probed and confirmed to fail both ways
-("cannot unify ... World" / "expected type SHeapSpec ?A ?w"). Contrast
-`sexec_instruction`, also `⊢`-typed, which works fine bare because its three
-explicit `STerm` arguments already carry a concrete world, so unification pins
-`w` from THEM, not from `⊢` itself. `chunk_gc`'s existing `{w : World}` shape was
-the working precedent to copy. Full write-up (why, and the failed attempts):
-**core-executor-internals**.
+  Latent hazard, benign today: the whole-list one is a `list >-> list` coercion,
+  so it warns `does not respect the uniform inheritance condition` and
+  `New coercion path … is not definitionally an identity function
+  [ambiguous-paths]`. `_CoqProject` passes `-arg "-w all"` so these stay
+  warnings, but Coq can insert such a coercion where you did not intend it.
 
-Migration status: Phase 0 (probe) and Phase 1 (symbolic side — this section) are
-done and GATE 1 (`Tables.v`/`Contracts.v`/`GenContract.v` + all 12
-`Example/*.v` compile, `strip_id_*` reflexivity, no cost regression) is green.
-Phase 2 (`VerifierRel.v`/`TablesRel.v` — the concrete mirror and the relational
+**Always type a table with the `SInstrTable`/`SInstrTableW` ALIAS, never a
+spelled-out tuple.** Two signatures have been caught with a literal
+`list (Term Σ ty_xlenbits * AST)` in them — `scfg_verification_condition`
+(`Verifier.v`, fixed 2026-08-21) and `rexec_triple_addr` (`VerifierRel.v`, still
+open) — and *both* silently failed to track *both* columns added since (the word
+column and then `AnnotInstr`). The type error surfaces far from the cause.
+
+**A niladic ghost action would need an implicit `{w : World}`, NOT `⊢`/`Valid`** —
+relevant only if you reintroduce one against the advice above. A niladic
+`⊢`-typed action (no world-indexed value argument) does not get its world
+auto-supplied when used bare as a bind action in either position of
+`⟨θ⟩ x <- ma ;; mb` — probed and confirmed to fail both ways ("cannot unify ...
+World" / "expected type SHeapSpec ?A ?w"). Contrast `sexec_instruction`, also
+`⊢`-typed, which works fine bare because its three explicit `STerm` arguments
+already carry a concrete world, so unification pins `w` from THEM, not from `⊢`
+itself. `chunk_gc`'s existing `{w : World}` shape was the working precedent to
+copy. Full write-up (why, and the failed attempts): **core-executor-internals**.
+The `ghost_wrap` shape sidesteps this entirely — its `SHeapSpec A w` argument
+pins `w` by ordinary application.
+
+Migration status (2026-08-21): the symbolic side is **green** —
+`Verifier.v`/`Tables.v`/`Contracts.v`/`GenContract.v` and all 12 `Example/*.v`
+compile with **no edit to any example**, and all 9 `strip_id_*` lemmas close by
+`reflexivity` (`Example/ZZAnnotStripIdProbe.v`; `Jumps`/`MvSwap`/`SetX2` build
+their list inline in the contract literal so there is no named object to state
+the lemma about — their unchanged compilation is the only evidence for those
+three). Still to do on this side: `ghost_wrap`, i.e. actually interpreting
+`ai_ghost_before`/`ai_ghost_after`. The relational phase
+(`VerifierRel.v`/`TablesRel.v` — the concrete mirror and the
 `itable_rel`/`rexec_cfg_addr` proofs) is **not started and those two files
 currently fail to compile** — they still assume the pre-migration 2-/3-tuple
 table shape. That is expected, not a regression to chase; see
@@ -442,7 +511,7 @@ Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 ```coq
 scfg_verification_condition {Σ : LCtx}
   (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-  (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits))
+  (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
   (fuel : nat)
   (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
   (w : World) : 𝕊 w

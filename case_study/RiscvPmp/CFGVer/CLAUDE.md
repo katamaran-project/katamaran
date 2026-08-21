@@ -170,22 +170,24 @@ to plain `Require Import`.
 > switch the downstream files to a plain `Require Import` and delete this note.
 
 **Currently violated in `Tables.v`/`Contracts.v`/`GenContract.v` (2026-08-20,
-AnnotInstr migration Phase 1, commit 323db24c) — flagged, not yet fixed.** All
-three now do `Require Import RiscvPmp.CFGVer.Verifier` and reference
-`Annot`/`AnnotInstr`/`AnnotAST`/`AnnotGhost`/`strip` unqualified, because
-qualifying them hit a confusing `rocq_compile_file` dune-fallback resolution
-failure mid-session (see **rocq-implementation**'s tooling-caveat entry) that
-was mistaken for the names genuinely not existing. It compiles today
-(`make -f Makefile.coq`, verified) ONLY because BlockVer is fully commented out
-of `_CoqProject` on this branch, so there is no live BlockVer module to clash
-with. **This is latent, not inert**: reactivating BlockVer alongside these
-files without reverting this first will reproduce exactly the clash this note
-exists to prevent. To fix: revert the three `Require Import` back to bare
-`Require`, and qualify every bare `Annot`/`AnnotInstr`/`AnnotAST`/`AnnotGhost`/
-`strip` occurrence (`Tables.v`'s `table_of_list'`/`exits_of_list`, `Contracts.v`'s
-`CFG_VC_triple`/`Valid_CFG_VC`/`CFGVerifierContract`/`cfg_map`, and six
-`GenContract.v` builders) as `Katamaran.RiscvPmp.CFGVer.Verifier.<name>` —
-confirm the qualified path actually resolves with a plain `rocq_check`/
-`rocq_start` probe FIRST (not `Locate`, which reported false negatives on stale
-state during this session), then re-run GATE 1 (Phase 1 of
-`plans/PLAN-annotinstr.md`) to confirm nothing broke.
+AnnotInstr migration, commit 323db24c) — flagged, not yet fixed.** All three do
+`Require Import RiscvPmp.CFGVer.Verifier` and reference `AnnotInstr`
+unqualified, because qualifying it hit a confusing `rocq_compile_file`
+dune-fallback resolution failure mid-session (see **rocq-implementation**'s
+tooling-caveat entry) that was mistaken for the name genuinely not existing. It
+compiles today (`make -f Makefile.coq`, verified) ONLY because BlockVer is fully
+commented out of `_CoqProject` on this branch, so there is no live BlockVer
+module to clash with. **This is latent, not inert**: reactivating BlockVer
+alongside these files without reverting this first will reproduce exactly the
+clash this note exists to prevent.
+
+To fix: revert the three `Require Import` back to bare `Require`, and qualify
+every bare `AnnotInstr` occurrence as
+`Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr` — 3 in `Tables.v`, 4 in
+`Contracts.v`, 6 in `GenContract.v`, and **nothing else**: the product-type
+redesign means these files no longer name `Annot`, `strip`, or any constructor
+(the two coercions do the work implicitly and need no name). Confirm the
+qualified path actually resolves with a plain `rocq_check`/`rocq_start` probe
+FIRST (not `Locate`, which reported false negatives on stale state during that
+session), then re-run GATE 1 (`plans/PLAN-annotinstr.md`) to confirm nothing
+broke.
