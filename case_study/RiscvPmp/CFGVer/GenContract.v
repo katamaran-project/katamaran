@@ -258,7 +258,7 @@ Import asn.notations.
         (init_addr : N)
         (reg_specs : list reg_spec)
         (mem_specs : list mem_full_spec)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (ec : bv xlenbits -> bool)
         (fl : nat)
@@ -266,7 +266,7 @@ Import asn.notations.
       @MkCFGVerifierContract [ctx] init_addr
         (term_val ty_xlenbits (bv.of_N init_addr))
         (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
-           ((4 * N.of_nat (length (strip instrs)))%N :: extra_exit_offs))
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
         (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
         instrs ec fl.
 
@@ -663,7 +663,7 @@ Import asn.notations.
         (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
@@ -672,7 +672,7 @@ Import asn.notations.
       @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
         (term_var "p")
         (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length (strip instrs)))%N :: extra_exit_offs))
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
         ( asn_pc_eq (term_var "p")
           ∗ asn.formula (formula_relop bop.le
                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
@@ -713,7 +713,7 @@ Import asn.notations.
         (reg_specs : list reg_spec_rel)
         (word_data : list mem_spec_rel)   (* word-granular class *)
         (byte_data : list mem_spec_rel)   (* byte-granular class *)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
@@ -722,7 +722,7 @@ Import asn.notations.
       @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
         (term_var "p")
         (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length (strip instrs)))%N :: extra_exit_offs))
+           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
         ( asn_pc_eq (term_var "p")
           ∗ asn.formula (formula_relop bop.le
                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
@@ -743,7 +743,7 @@ Import asn.notations.
         (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
@@ -789,7 +789,7 @@ Import asn.notations.
     Definition gen_contract_param
         (init_addr : N)
         (reg_specs : list reg_spec)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (ec : bv xlenbits -> bool)
         (fl : nat)
@@ -797,7 +797,7 @@ Import asn.notations.
       gen_contract_u init_addr
         (List.map reg_spec_to_rel reg_specs) [] []
         instrs extra_exit_offs
-        (4 * N.of_nat (length (strip instrs)))%N
+        (4 * N.of_nat (length instrs))%N
         ec fl.
 
     (* gen_contract_rel with an ADDITIONAL, byte-expanded data list
@@ -819,7 +819,7 @@ Import asn.notations.
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (byte_mem_specs : list mem_spec_rel)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
