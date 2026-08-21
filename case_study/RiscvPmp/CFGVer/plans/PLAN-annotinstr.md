@@ -119,30 +119,61 @@ world-threading COMPILER-CHECKED instead of asserted in a comment — and it
 immediately paid for itself by exposing the `LEnv` qualification bug below.
 No soundness debt: it invokes existing `LEnv` entries, adds none.
 
-*What actually landed (symbolic side, all gated green):*
+*What actually landed (symbolic side COMPLETE, all gated green):*
 
 ```coq
-Definition sexec_ghost {A} (a : Annot) {w : World}
-    (k : Box (SHeapSpec A) w) : Box (SHeapSpec A) w :=
+Definition sexec_ghost (a : Annot) {w : World} : SHeapSpec Unit w :=
   match a with
-  | AnnotDebugBreak => fun w2 θ => debug (fun h0 => amsg.mk {| … wco w2 … h0 |})
-                                         (k w2 θ)
-  | AnnotLemmaInvocation l es =>
-      fun w2 θ => ⟨θ'⟩ _ <- call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
-                              (seval_exps [env] es) ;;
-                  k _ (θ ∘ θ')
+  | AnnotDebugBreak           => debug (fun h0 => amsg.mk {| … wco w … h0 |})
+                                       (pure tt)
+  | AnnotLemmaInvocation l es => call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
+                                            (seval_exps [env] es)
   end.
 
-Definition sexec_ghosts {A} (gs : list Annot) {w : World}
-    (k : Box (SHeapSpec A) w) : SHeapSpec A w :=
-  T (List.fold_right (fun a k' => sexec_ghost a k') k gs).
+Fixpoint sexec_ghosts (gs : list Annot) {w : World} : SHeapSpec Unit w :=
+  match gs with
+  | nil      => pure tt
+  | a :: gs' => ⟨ θ ⟩ _ <- sexec_ghost a ;; sexec_ghosts gs'
+  end.
 ```
 
-`Box -> Box` and not `Box -> SHeapSpec`, so the two compose and the list case is
-a plain `fold_right` with `T` applied once at the end; `nil` gives `T k` with no
-residue, which is what makes cost-neutrality exact. `fold_right` puts the first
-annotation outermost, so list order is execution order. Declared `{w : World}`
-(`chunk_gc`'s shape) rather than `⊢`.
+Ordinary actions, bound flat into `sexec_cfg_addr` alongside `chunk_gc` and
+`sexec_instruction`, with the ghosts running AFTER `chunk_gc` so a break dumps
+the POST-GC heap. `{w : World}` implicit (`chunk_gc`'s shape), not `⊢`.
+
+**A `Box -> Box` transformer with a continuation-nested call site was written
+first and REVERTED the same day.** Its justification was that a bound `debug`
+differs from a wrapping one. Checked directly instead of argued, and it is
+false — `reflexivity` closes both
+
+```coq
+SHeapSpec.bind (sexec_ghosts nil) f Φ h = T f tt Φ h
+SHeapSpec.bind (sexec_ghosts [AnnotDebugBreak]) f Φ h
+  = SymProp.debug (amsg.mk {| … wco w … h |}) (T f tt Φ h)
+```
+
+in 2–3 ms, for exactly the reason `gc_binds_heap` holds: `pure` and `debug` bind
+at `acc_refl`, so `bind`'s world bookkeeping collapses away. Same term, same node
+position, same heap. There is no third world and cost-neutrality was never at
+risk. **So three claims made against the bound shape in the entry above are
+RETRACTED:** that `bind (debug msg (pure tt)) f` differs from `debug msg (f …)`,
+that it adds a third world, and that it breaks cost-neutrality. The transformer
+cost readability and moved the recursive call out of tail position (a
+guard-checker hazard) in exchange for nothing. Only `ghost_binds_nil` was kept,
+demoted to an `Example` in this file's existing self-test idiom.
+
+*Two things this leaves for Phase 2, both sharper than previously recorded.*
+- **`gc_binds_heap` is not the template.** It works as a rewrite because
+  `chunk_gc` is a CLOSED term, so one equation covers every use. `sexec_ghosts`
+  is applied to `ai_ghost_before ai` with `ai` an OPAQUE variable out of
+  `lookup_instr`, so the ghost list in the refinement proof is ARBITRARY and no
+  finite set of instances discharges it. Phase 2 needs an INDUCTIVE relational
+  lemma over `gs` — `rexec_ghosts`, i.e. the lemma that hung at 2274a22b. That
+  risk is unavoidable and is not a reason to distort the symbolic side, since the
+  term is identical under both shapes.
+- **`sexec_cfg_addr`'s shape has changed FOR THE PROOF whether or not any program
+  writes a ghost.** Only the computed VC is unaffected. Earlier wording here let
+  "cost-neutral" imply "invisible to Phase 2"; those are different claims.
 
 *Two traps hit while landing this:*
 - **`LEnv` needs qualifying** as `RiscvPmpCFGVerifSpec.LEnv`. `Verifier.v`
@@ -201,12 +232,12 @@ Neither is a shortcut past `PLAN-loop-invariant.md`: chunk-dropping cannot help
 `muladd`, where `A0`/`A1` are live accumulators that must stay owned, so
 abstraction remains the only route there.
 
-*Recommended ordering for what is left.* `sexec_cfg_addr` does not yet CALL
-`sexec_ghosts` — that is the next diff, and it is where the persist chain gets
-threaded. Then Phase 2. The claim that `refine_debug` fires inside
-`rexec_cfg_addr` specifically is still UNVERIFIED — `main`'s precedent is a far
-simpler proof, and `rexec_cfg_addr` already needs bespoke handling for
-`chunk_gc`'s trivial world motion.
+*Phase 1 is COMPLETE.* `sexec_cfg_addr` calls `sexec_ghosts` for both slots and
+the light branch is gated green (17 files, no edit to any example, `strip_id_*`
+still `reflexivity`). What is left is Phase 2, and the claim that `refine_debug`
+fires inside `rexec_cfg_addr` specifically is still UNVERIFIED — `main`'s
+precedent is a far simpler proof, and `rexec_cfg_addr` already needs bespoke
+handling for `chunk_gc`'s trivial world motion.
 
 *Also noted, not acted on.* The whole-list coercion is a `list >-> list`
 coercion, so it warns `does not respect the uniform inheritance condition` and

@@ -115,54 +115,76 @@ Both halves were wrong: more than one annotation per instruction is a real case
 to avoid, because ghosts are interpreted by folding TRANSFORMERS, not by
 building a bind chain. Those are independent — see the next two sections.
 
-**The interpreter: `sexec_ghost` for one annotation, `sexec_ghosts` folding it.**
+**The interpreter — ordinary `SHeapSpec` ACTIONS, bound like every other step.**
 
 ```coq
-Definition sexec_ghost {A} (a : Annot) {w : World}
-    (k : Box (SHeapSpec A) w) : Box (SHeapSpec A) w := …
-Definition sexec_ghosts {A} (gs : list Annot) {w : World}
-    (k : Box (SHeapSpec A) w) : SHeapSpec A w :=
-  T (List.fold_right (fun a k' => sexec_ghost a k') k gs).
+Definition sexec_ghost (a : Annot) {w : World} : SHeapSpec Unit w :=
+  match a with
+  | AnnotDebugBreak           => debug (fun h0 => amsg.mk {| … |}) (pure tt)
+  | AnnotLemmaInvocation l es => call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
+                                            (seval_exps [env] es)
+  end.
+
+Fixpoint sexec_ghosts (gs : list Annot) {w : World} : SHeapSpec Unit w :=
+  match gs with
+  | nil      => pure tt
+  | a :: gs' => ⟨ θ ⟩ _ <- sexec_ghost a ;; sexec_ghosts gs'
+  end.
 ```
 
-`Box -> Box`, **not** `Box -> SHeapSpec`: a transformer of world-polymorphic
-computations composes with itself, so the list case is a plain `fold_right` with
-`T` applied exactly once at the end. With the un-boxed result type the two could
-not be chained (one returns `SHeapSpec`, the next needs `Box (SHeapSpec …)`) and
-`sexec_ghosts` would need its own `Fixpoint` duplicating the match. `fold_right`
-puts the FIRST annotation outermost, so list order is execution order; `nil`
-gives `T k` with no residue, which is what makes cost-neutrality for
-unannotated programs exact rather than approximate. Declared `{w : World}`
-(`chunk_gc`'s shape) rather than `⊢`.
+and in `sexec_cfg_addr`, flat, ghosts as peers of `chunk_gc`:
 
-**The two kinds have DIFFERENT shapes and the asymmetry is the design.**
-`AnnotDebugBreak` wraps (leaves the world alone); `AnnotLemmaInvocation` binds
-(`call_lemma` consumes and produces heap, so it moves the world, and hands `k`
-the composite `θ ∘ θ'`). The rule behind it:
+```coq
+⟨ θ0 ⟩ _    <- chunk_gc ;;
+⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
+⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai) … (θ0 ∘ θ1) … ;;
+⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
+sexec_cfg_addr n' (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl) …
+```
 
-> **A bound step is fine exactly when the CONCRETE side binds too.**
+Ghosts run AFTER `chunk_gc`, so a break dumps the POST-GC heap — the one the
+executor carries forward, and the relevant one given that a leaked
+`encodes_instr` chunk was the O(steps²) driver. `{w : World}` implicit
+(`chunk_gc`'s shape), not `⊢`.
 
-- `call_lemma` HAS a concrete counterpart, so both sides bind and `rsolve`
-  dispatches it through ordinary `refine_bind`. `main`'s
-  `BlockVer/PartialVerifier.v` does this and closes the case with
-  `iApply "IHb"; rsolve`.
-- `debug` has NO concrete content — `CHeapSpec.debug := fun m => m`, the
-  **identity** (`theories/Shallow/Monads.v:1112`). Binding it moves the symbolic
-  world with nothing concrete to match, and `refine_debug` /
-  `refine_compat_debug` (`theories/Refinement/Monads.v:1683,1693`) are stated
-  for `debug` AS A TRANSFORMER (`RHeapSpec RA -> RHeapSpec RA`), so they would
-  not apply.
+**A `Box -> Box` transformer with a continuation-nested call site was tried here
+first and REVERTED (2026-08-21). Do not reintroduce it.** It was justified by
+the belief that a bound `debug` differs from a wrapping one. It does not:
 
-**So do NOT "simplify" `AnnotDebugBreak` into an `SHeapSpec Unit` action bound
-with `⟨θ⟩ _ <- `.** That was the reverted attempt (2274a22b): it forced a
-hand-written `rexec_ghost` bridge, which hung at compile for 300 s+ under every
-tactic tried with root cause never found; it adds a THIRD world to the persist
-chain (a second copy of the `chunk_gc` problem `rexec_cfg_addr` already needs
-~30 lines of `gc_binds_heap`/`refine_gc_heap` to survive); and it breaks
-cost-neutrality, since `bind (pure tt) f` is not `f`. **The 2026-08-20 session
-ported `main`'s TACTIC without porting `main`'s SHAPE** — which fully explains
-"the exact idiom that works on main failed here", with no need for the
-dependent-constructor hypothesis that entry also floated.
+```coq
+Example ghost_binds_nil … : SHeapSpec.bind (sexec_ghosts nil) f Φ h = T f tt Φ h.
+Proof. reflexivity. Qed.   (* 3 ms *)
+```
+
+and likewise `bind (debug msg (pure tt)) f` **is** `debug msg (f …)` — same term,
+same node position, same heap — for exactly the reason `gc_binds_heap` holds by
+`reflexivity`: `pure` and `debug` bind at `acc_refl`, so `bind`'s world
+bookkeeping collapses away. There is no third world, and cost-neutrality is not
+at risk. The transformer cost readability and put the recursive call outside tail
+position (a guard-checker hazard) in exchange for nothing.
+
+**What IS true — the only real asymmetry, and it lives entirely in Phase 2.**
+`debug` has no concrete content (`CHeapSpec.debug := fun m => m`, the identity,
+`theories/Shallow/Monads.v:1112`) whereas `call_lemma` does. So the lemma case
+binds on both sides and `rsolve` dispatches it through ordinary `refine_bind`
+(`main`'s `rexec_annotated_block_addr` closes it with `iApply "IHb"; rsolve`),
+while the debug case cannot use the ready-made `refine_compat_debug`
+(`theories/Refinement/Monads.v:1683,1693`), which is stated for `debug` as a
+transformer.
+
+**And `gc_binds_heap` is NOT the template for fixing that.** It works as a
+rewrite in `rexec_cfg_addr` because `chunk_gc` is a **closed** term, so one
+equation covers every use. `sexec_ghosts` is applied to `ai_ghost_before ai`
+with `ai` an **opaque variable** out of `lookup_instr`, so in the refinement
+proof the ghost list is ARBITRARY and no finite set of instances discharges it.
+Phase 2 needs an **inductive** relational lemma over `gs` — which is
+`rexec_ghosts`, the lemma that hung at 2274a22b for 300 s+ with root cause never
+found. That risk is real and unavoidable; it is not a reason to distort the
+symbolic definition, since the term is identical under both shapes.
+
+**Corollary worth stating plainly:** `sexec_cfg_addr`'s shape has changed FOR THE
+PROOF whether or not any program ever writes a ghost. Only the computed VC is
+unaffected. "Cost-neutral" does not mean "invisible to Phase 2".
 
 `AnnotDebugBreak`'s payload is the framework's `DebugAsn`
 (`theories/Symbolic/Monads.v:71-101`) reached through a
@@ -239,8 +261,8 @@ also catches it, replays through the project's real load path, works inside
 module functors where preamble mode cannot reach, and costs seconds — use it
 before every build here.
 
-**A niladic ghost action would need an implicit `{w : World}`, NOT `⊢`/`Valid`** —
-relevant only if you reintroduce one against the advice above. A niladic
+**`sexec_ghost`/`sexec_ghosts` need an implicit `{w : World}`, NOT `⊢`/`Valid`.**
+This is load-bearing for the action shape above. A niladic
 `⊢`-typed action (no world-indexed value argument) does not get its world
 auto-supplied when used bare as a bind action in either position of
 `⟨θ⟩ x <- ma ;; mb` — probed and confirmed to fail both ways ("cannot unify ...
@@ -249,20 +271,18 @@ World" / "expected type SHeapSpec ?A ?w"). Contrast `sexec_instruction`, also
 already carry a concrete world, so unification pins `w` from THEM, not from `⊢`
 itself. `chunk_gc`'s existing `{w : World}` shape was the working precedent to
 copy. Full write-up (why, and the failed attempts): **core-executor-internals**.
-The `ghost_wrap` shape sidesteps this entirely — its `SHeapSpec A w` argument
-pins `w` by ordinary application.
 
-Migration status (2026-08-21): the symbolic side is **green** —
+Migration status (2026-08-21): **the symbolic side is DONE and green.**
 `Verifier.v`/`Tables.v`/`Contracts.v`/`GenContract.v` and all 12 `Example/*.v`
-compile with **no edit to any example**, and all 9 `strip_id_*` lemmas close by
+compile with **no edit to any example**; all 9 `strip_id_*` lemmas close by
 `reflexivity` (`Example/ZZAnnotStripIdProbe.v`; `Jumps`/`MvSwap`/`SetX2` build
 their list inline in the contract literal so there is no named object to state
 the lemma about — their unchanged compilation is the only evidence for those
-three). `sexec_ghost`/`sexec_ghosts` exist and interpret both `Annot` kinds.
-**Still to do on this side: `sexec_cfg_addr` does not CALL them yet** — it
-projects `ai_instr` and ignores both slots, so no example's VC has changed and
-cost-neutrality holds by construction rather than by measurement. The
-relational phase
+three). `sexec_ghost`/`sexec_ghosts` interpret both `Annot` kinds and
+`sexec_cfg_addr` calls them for both slots. Every current program has `nil`
+slots, and `ghost_binds_nil` discharges the claim that this contributes nothing
+to the term — so no example's VC changed, as a checked fact rather than an
+assumption. The relational phase
 (`VerifierRel.v`/`TablesRel.v` — the concrete mirror and the
 `itable_rel`/`rexec_cfg_addr` proofs) is **not started and those two files
 currently fail to compile** — they still assume the pre-migration 2-/3-tuple

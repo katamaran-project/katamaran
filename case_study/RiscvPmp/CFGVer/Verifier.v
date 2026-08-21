@@ -429,44 +429,41 @@ Section CFGVerificationDerived.
 
     (* ================================================================== *)
     (* Ghost annotations: sexec_ghost interprets ONE annotation,           *)
-    (* sexec_ghosts folds it over an instruction's ghost list.             *)
+    (* sexec_ghosts runs an instruction's ghost list in order.             *)
     (*                                                                     *)
-    (* WHY □ -> □ AND NOT □ -> SHeapSpec.  A TRANSFORMER of                *)
-    (* world-polymorphic computations composes with itself, so the list    *)
-    (* case is a plain fold_right and `T` is applied exactly once, at the  *)
-    (* end.  With the un-boxed result type the two could not be chained    *)
-    (* (one returns SHeapSpec, the next needs □ SHeapSpec) and sexec_ghosts *)
-    (* would have to be its own Fixpoint duplicating the match.  The box   *)
-    (* also means each annotation's message is built at the world where    *)
-    (* ITS node lands, not at the outer world.                             *)
+    (* Both are ORDINARY SHeapSpec ACTIONS, bound into sexec_cfg_addr's    *)
+    (* chain with ⟨θ⟩ _ <- like every other step, and declared with an     *)
+    (* implicit {w : World} rather than ⊢ (chunk_gc's shape — see          *)
+    (* core-executor-internals for why a niladic ⊢-typed action fails to   *)
+    (* elaborate as a bind action).                                        *)
     (*                                                                     *)
-    (* THE TWO KINDS HAVE DIFFERENT SHAPES, AND THE ASYMMETRY IS CORRECT.  *)
-    (* AnnotDebugBreak WRAPS (leaves the world alone); AnnotLemmaInvocation *)
-    (* BINDS (call_lemma consumes and produces heap, so it moves the        *)
-    (* world).  The Box -> Box signature accommodates both, which is why    *)
-    (* it is worth writing now rather than discovering at Phase 4 that the  *)
-    (* shape has to change in the middle of the relational proofs.         *)
+    (* THIS FILE PREVIOUSLY USED A Box -> Box TRANSFORMER with a           *)
+    (* continuation-nested call site, on the belief that a bound debug     *)
+    (* differed from a wrapping one.  It does not: `bind (debug msg (pure  *)
+    (* tt)) f` and `debug msg (f …)` are the SAME term, for exactly the    *)
+    (* reason gc_binds_heap above holds by reflexivity — `pure` and        *)
+    (* `debug` bind at acc_refl, so bind's world bookkeeping collapses     *)
+    (* away (checked directly: `reflexivity` closes it in 2 ms).  The      *)
+    (* transformer bought nothing and cost readability plus a              *)
+    (* guard-checker risk (the recursive call left tail position).          *)
     (*                                                                     *)
-    (* The rule behind the asymmetry — a BOUND step is fine exactly when    *)
-    (* the CONCRETE side binds too:                                        *)
-    (*  - call_lemma HAS a concrete counterpart (CHeapSpec.call_lemma), so  *)
-    (*    both sides bind, and rsolve dispatches it through the ordinary    *)
-    (*    refine_bind machinery.  main's BlockVer/PartialVerifier.v does    *)
-    (*    exactly this and closes the case with `iApply "IHb"; rsolve`.     *)
-    (*  - debug has NO concrete content: CHeapSpec.debug = fun m => m, the  *)
-    (*    IDENTITY (theories/Shallow/Monads.v:1112).  Binding it would move *)
-    (*    the world on the symbolic side with nothing on the concrete side  *)
-    (*    to match, and the framework's refine_debug /                      *)
-    (*    refine_compat_debug (theories/Refinement/Monads.v:1683,1693) are  *)
-    (*    stated for debug AS A TRANSFORMER, so they would not apply.       *)
+    (* What IS true, and is the only real asymmetry: `debug` has no        *)
+    (* concrete content — CHeapSpec.debug = fun m => m, the IDENTITY       *)
+    (* (theories/Shallow/Monads.v:1112) — whereas call_lemma does.  So on  *)
+    (* the RELATIONAL side the debug case cannot go through the ready-made *)
+    (* refine_compat_debug (theories/Refinement/Monads.v:1683,1693), which *)
+    (* is stated for debug as a transformer.  The lemma case binds on both *)
+    (* sides and rsolve dispatches it through ordinary refine_bind (main's *)
+    (* BlockVer/PartialVerifier.v closes it with `iApply "IHb"; rsolve`).  *)
+    (* Phase 2 therefore needs an INDUCTIVE lemma over an arbitrary ghost  *)
+    (* list — see the note on ghost_binds_nil below for why a rewrite in   *)
+    (* gc_binds_heap's style cannot substitute for it.                     *)
     (*                                                                     *)
-    (* DO NOT "simplify" AnnotDebugBreak into an SHeapSpec Unit action      *)
-    (* bound with ⟨θ⟩ _ <- .  That was tried (2274a22b): it forced a        *)
-    (* hand-written rexec_ghost bridge lemma, which hung at compile for     *)
-    (* 300 s+ with no root cause found; it adds a third world to the        *)
-    (* persist chain (a second copy of the chunk_gc problem above); and it  *)
-    (* breaks cost-neutrality for unannotated programs, since               *)
-    (* `bind (pure tt) f` is not `f` whereas `fold_right … nil` IS `T k`.   *)
+    (* Caveat kept from the reverted attempt (2274a22b), which also used   *)
+    (* the action shape: its rexec_ghost hung at compile for 300 s+ and    *)
+    (* the root cause was never found.  That risk lives in Phase 2 either  *)
+    (* way — the term here is the same under both shapes — so it is not a  *)
+    (* reason to distort this definition.                                  *)
     (*                                                                     *)
     (* PHASE 2 OBLIGATION: cexec_cfg_addr must mirror the LEMMA case (not   *)
     (* the debug one).  Nothing needs a new LEnv entry — these invoke       *)
@@ -475,16 +472,15 @@ Section CFGVerificationDerived.
     (* FUTURE-PROOFING (checked 2026-08-21, no change needed).  Two further *)
     (* annotation kinds have been discussed, and BOTH fit this signature as *)
     (* it stands — do not widen it for them:                               *)
-    (*  - DROP CHUNKS (a user-directed chunk_gc).  A same-world WRAPPER,    *)
-    (*    like the debug case.  Sound for ANY chunk by affineness of iProp  *)
+    (*  - DROP CHUNKS (a user-directed chunk_gc).  Just another action,     *)
+    (*    like chunk_gc itself.  Sound for ANY chunk by affineness of iProp *)
     (*    (a fold_right of ∗ can discard a conjunct) — see PLAN-encoded-    *)
     (*    instr.md §11, whose refine_chunk_gc/inst_gc_heap are audited      *)
     (*    Closed under the global context.  So it needs NO LEnv entry and   *)
     (*    no per-use soundness proof; the price is completeness, and it     *)
     (*    fails loudly at the next consume rather than silently.            *)
-    (*  - DROP AN UNREFERENCED LOGICAL VARIABLE.  A BIND, like the lemma    *)
-    (*    case, and it composes with the SAME `θ ∘ θ'` code even though it  *)
-    (*    moves to a SMALLER context: acc_subst_right gives                *)
+    (*  - DROP AN UNREFERENCED LOGICAL VARIABLE.  Also just an action,      *)
+    (*    even though it moves to a SMALLER context: acc_subst_right gives *)
     (*    `w ⊒ wsubst w x t` whose wctx is `w - x∷σ`, because ⊒ orders      *)
     (*    worlds by INFORMATION, not by size.  Motivation: demonicv_prune   *)
     (*    (Propositions.v:1175) only collapses on `block`, so a binder      *)
@@ -494,39 +490,57 @@ Section CFGVerificationDerived.
     (*    drivers.md).                                                      *)
     (*    Unimplemented and unproven; sketch only.                          *)
     (* ================================================================== *)
-    Definition sexec_ghost {A} (a : Annot) {w : World}
-        (k : Box (SHeapSpec A) w) : Box (SHeapSpec A) w :=
+    Definition sexec_ghost (a : Annot) {w : World} : SHeapSpec Unit w :=
       match a with
       | AnnotDebugBreak =>
-          fun w2 θ =>
-            debug
-              (fun (h0 : SHeap w2) =>
-                 amsg.mk {| debug_asn_pathcondition := wco w2
-                          ; debug_asn_heap          := h0 |})
-              (k w2 θ)
+          debug
+            (fun (h0 : SHeap w) =>
+               amsg.mk {| debug_asn_pathcondition := wco w
+                        ; debug_asn_heap          := h0 |})
+            (pure tt)
       | AnnotLemmaInvocation l es =>
-          fun w2 θ =>
-            (* LEnv is QUALIFIED: Verifier.v imports
-               RiscvPmpCFGVerifExecutor, but that is `MakeExecutor …
-               RiscvPmpCFGVerifSpec` (Spec.v:720) and the functor does NOT
-               re-export its Specification argument — which is why
-               RiscvPmpSpecVerif (Spec.v:723) imports BOTH.  SpecIris.v names
-               spec members the same qualified way.  A bare `LEnv` fails with
-               "The reference LEnv was not found", and note rocq_compile_file's
-               dune-fallback ACCEPTS the bare form — only `make` catches it. *)
-            ⟨ θ' ⟩ _ <- call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
-                          (seval_exps [env] es) ;;
-            k _ (θ ∘ θ')
+          (* LEnv is QUALIFIED: Verifier.v imports
+             RiscvPmpCFGVerifExecutor, but that is `MakeExecutor …
+             RiscvPmpCFGVerifSpec` (Spec.v:720) and the functor does NOT
+             re-export its Specification argument — which is why
+             RiscvPmpSpecVerif (Spec.v:723) imports BOTH.  SpecIris.v names
+             spec members the same qualified way.  A bare `LEnv` fails with
+             "The reference LEnv was not found", and note rocq_compile_file's
+             dune-fallback ACCEPTS the bare form — only `make` catches it. *)
+          call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)
       end.
 
-    (* fold_right, so the FIRST annotation in the list is the OUTERMOST
-       wrapper and therefore the first node encountered — list order is
-       execution order.  `nil` gives `T k` with no residue: ghosts are
-       cost-free for every program that has none, which is what makes the
-       migration's cost-neutrality exact rather than approximate. *)
-    Definition sexec_ghosts {A} (gs : list Annot) {w : World}
-        (k : Box (SHeapSpec A) w) : SHeapSpec A w :=
-      T (List.fold_right (fun a k' => sexec_ghost a k') k gs).
+    (* Recurses in list order, so the first annotation runs first.  `nil` is
+       `pure tt`, whose bind collapses definitionally — see ghost_binds_nil
+       below, which is what makes cost-neutrality for unannotated programs a
+       checked fact rather than an assertion. *)
+    Fixpoint sexec_ghosts (gs : list Annot) {w : World} : SHeapSpec Unit w :=
+      match gs with
+      | nil      => pure tt
+      | a :: gs' => ⟨ θ ⟩ _ <- sexec_ghost a ;; sexec_ghosts gs'
+      end.
+
+    (* A SELF-TEST, not machinery — nothing consumes it.  It pins the      *)
+    (* migration's central cost claim: an instruction with no ghosts       *)
+    (* contributes NOTHING to the term, because binding `sexec_ghosts nil` *)
+    (* is definitionally the same as not binding at all.  That is why all  *)
+    (* 12 existing examples' VCs are untouched.                            *)
+    (*                                                                     *)
+    (* Do NOT mistake this for gc_binds_heap's counterpart.  gc_binds_heap *)
+    (* works as a rewrite in rexec_cfg_addr because `chunk_gc` is a CLOSED *)
+    (* term, so one equation covers every use.  `sexec_ghosts` is applied  *)
+    (* to `ai_ghost_before ai` with `ai` an OPAQUE variable coming out of  *)
+    (* lookup_instr, so in the refinement proof the ghost list is          *)
+    (* ARBITRARY and no finite set of instances can discharge it.  Phase 2 *)
+    (* needs an INDUCTIVE relational lemma over `gs` (rexec_ghosts) — the  *)
+    (* one that hung at 2274a22b.  Corollary worth stating plainly:        *)
+    (* sexec_cfg_addr's shape has changed FOR THE PROOF whether or not any *)
+    (* program ever writes a ghost; only the computed VC is unaffected.    *)
+    Example ghost_binds_nil {A w} (f : Box (Impl Unit (SHeapSpec A)) w)
+        (Φ : Box (Impl A (Impl (fun w' => SHeap w') (fun w' => 𝕊 w'))) w)
+        (h : SHeap w) :
+      SHeapSpec.bind (sexec_ghosts nil) f Φ h = T f tt Φ h.
+    Proof. reflexivity. Qed.
 
     (* lookup_instr / is_exit: syntactic-modulo-peval matching of the     *)
     (* current pc term against the table keys.  `peval` on BOTH sides is  *)
@@ -610,10 +624,24 @@ Section CFGVerificationDerived.
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, ai) =>
+                   (* Ghosts run AFTER chunk_gc, so an AnnotDebugBreak dumps
+                      the POST-GC heap — the one the executor actually carries
+                      forward.  Given that a leaked encodes_instr chunk was the
+                      O(steps²) driver, the filtered heap is the one worth
+                      looking at.  Both slots are `nil` for every current
+                      program and ghost_binds_nil shows that contributes
+                      nothing to the term. *)
                    ⟨ θ0 ⟩ _    <- chunk_gc ;;
-                   ⟨ θ1 ⟩ apc' <- sexec_instruction (ai_instr ai) (persist__term apc θ0) (persist__term anp θ0) (persist__term wd θ0) ;;
-                   sexec_cfg_addr n' (persist_itableW (θ0 ∘ θ1) tbl) (persist_etable (θ0 ∘ θ1) exits)
-                     apc' apc'
+                   ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
+                   ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
+                                    (persist__term apc (θ0 ∘ θ1))
+                                    (persist__term anp (θ0 ∘ θ1))
+                                    (persist__term wd  (θ0 ∘ θ1)) ;;
+                   ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
+                   sexec_cfg_addr n'
+                     (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl)
+                     (persist_etable  (θ0 ∘ θ1 ∘ θ2 ∘ θ3) exits)
+                     (persist__term apc' θ3) (persist__term apc' θ3)
                end)
         end.
 
