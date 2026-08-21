@@ -171,6 +171,36 @@ becomes `AnnotInstr`-valued, and the MEMORY predicates keep speaking `AST`
 (`ptsto_instrs (ai_instr <$> instrs)`, `mem_has_instrs … (strip instrs')`),
 which is where this document's Files table always put the boundary.
 
+*Two further annotation kinds, and why the signature already fits them
+(checked 2026-08-21 — no change needed, recorded so nobody widens the type
+for them).*
+
+- **Drop chunks** — a user-directed `chunk_gc`. A same-world WRAPPER, like the
+  debug case. **Sound for ANY chunk** by affineness of `iProp` (a `fold_right`
+  of `∗` can discard a conjunct); `PLAN-encoded-instr.md` §11 makes the point
+  explicitly that soundness is NOT `encodes_instr`-specific and only
+  COMPLETENESS is, and its `refine_chunk_gc` / `inst_gc_heap` / `cgc_binds_heap`
+  are audited *Closed under the global context*. So this needs no `LEnv` entry
+  and no per-use soundness proof — markedly cheaper than the lemma route. The
+  price is completeness, and it fails LOUDLY at the next consume.
+- **Drop an unreferenced logical variable** — a BIND, like the lemma case, and it
+  composes with the *same* `θ ∘ θ'` code despite moving to a SMALLER context,
+  because `acc_subst_right : w ⊒ wsubst w x t` has `wctx = w - x∷σ` and `⊒`
+  orders worlds by INFORMATION, not size. (An earlier version of this entry
+  asserted Σ grows monotonically within a run. **That is wrong.**) Motivation:
+  `demonicv_prune` (`Propositions.v:1175`) only collapses on `block`, so a binder
+  nothing references any more SURVIVES — an abstraction lemma shrinks terms but
+  leaves the old binders in Σ, and the lvar-lookup work found variable *count* to
+  be quadratic in lookup cost. Once nothing references `x`,
+  `acc_subst_right x (term_val σ <any inhabitant>)` should be available, the
+  substitution being the identity on everything precisely because nothing
+  mentions `x`. **Sketch only — unimplemented, unproven, and it needs the occurs
+  check run across heap, path condition and continuation.**
+
+Neither is a shortcut past `PLAN-loop-invariant.md`: chunk-dropping cannot help
+`muladd`, where `A0`/`A1` are live accumulators that must stay owned, so
+abstraction remains the only route there.
+
 *Recommended ordering for what is left.* `sexec_cfg_addr` does not yet CALL
 `sexec_ghosts` — that is the next diff, and it is where the persist chain gets
 threaded. Then Phase 2. The claim that `refine_debug` fires inside
