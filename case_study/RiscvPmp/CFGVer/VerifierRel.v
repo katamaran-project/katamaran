@@ -184,7 +184,45 @@ Section CFGVerificationDerived.
        supplied by Adequacy.v out of the `∃ v` inside interp_ptsto_instr.  It
        is a total FUNCTION, not a gmap, so the lookup is
        total, so there is no "no word here" case to carry. *)
-    Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
+    (* ---------------------------------------------------------------- *)
+    (* Concrete mirrors of Verifier.v's sexec_ghost/sexec_ghosts.        *)
+    (*                                                                   *)
+    (* AnnotDebugBreak is the IDENTITY here — CHeapSpec.debug is         *)
+    (* `fun m => m` (theories/Shallow/Monads.v:1112) — which is exactly  *)
+    (* why the symbolic debug node needs no concrete content.  The lemma *)
+    (* case is real and mirrors the symbolic call_lemma one-for-one,     *)
+    (* which is what makes binding it refinable by ordinary refine_bind. *)
+    (* LEnv is qualified for the same reason as in Verifier.v: the       *)
+    (* executor functor does not re-export its Specification argument.   *)
+    (* ---------------------------------------------------------------- *)
+    Definition cexec_ghost (a : Annot) : CHeapSpec unit :=
+      match a with
+      | AnnotDebugBreak           => debug (pure tt)
+      | AnnotLemmaInvocation l es => call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
+                                                (evals es [env])
+      end.
+
+    (* List.nil/List.cons spelled out rather than []/:: — ctx.notations (in
+       scope throughout this file) hijacks list cons, the same trap Tables.v
+       and Verifier.v each carry a note about.  Those files fix it with a
+       file-wide `Open Scope list_scope`; doing that HERE would change parsing
+       across 1400 lines of existing proofs, so the local fix is better. *)
+    Fixpoint cexec_ghosts (gs : list Annot) : CHeapSpec unit :=
+      match gs with
+      | List.nil        => pure tt
+      | List.cons a gs' => _ <- cexec_ghost a ;; cexec_ghosts gs'
+      end.
+
+    (* `instrs` is AnnotInstr-valued, mirroring the symbolic SInstrTable.
+       Ghosts are FUSED here rather than given a separate channel: they share
+       the AST's origin (the `list AnnotInstr` the author wrote), so splitting
+       them out would mean proving two halves agree.  Contrast `words` above,
+       which is separate precisely because its origin IS separate (supplied by
+       Adequacy.v out of interp_ptsto_instr's ∃v) — that split already costs a
+       whole wtable_rel/itable_relW_zip family and is not a pattern to copy
+       without the same justification.  MEMORY still speaks AST: see
+       ptsto_instrs in Section Soundness, fed `ai_instr <$> instrs`. *)
+    Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool) (fuel : nat) :
       RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
       fun apc anp =>
@@ -197,10 +235,13 @@ Section CFGVerificationDerived.
                 angelic_binary
                   (if exitCond v then pure apc else error)
                   (match instrs !! v with
-                   | None   => error
-                   | Some i =>
+                   | None    => error
+                   | Some ai =>
                        _ <- cchunk_gc ;;
-                       apc' <- cexec_instruction i apc anp (ty.SyncVal (words v)) ;;
+                       _ <- cexec_ghosts (ai_ghost_before ai) ;;
+                       apc' <- cexec_instruction (ai_instr ai) apc anp
+                                 (ty.SyncVal (words v)) ;;
+                       _ <- cexec_ghosts (ai_ghost_after ai) ;;
                        cexec_cfg_addr instrs words exitCond n' apc' apc'
                    end)
             end
@@ -211,6 +252,16 @@ Section CFGVerificationDerived.
     #[export] Instance mono_cexec_instruction {i a np w} :
       Monotonic (MHeapSpec eq) (cexec_instruction i a np w).
     Proof. typeclasses eauto. Qed.
+
+    (* mono_cexec_cfg_addr's `typeclasses eauto` needs these for the two ghost
+       binds, exactly as it needs mono_cchunk_gc for chunk_gc's. *)
+    #[export] Instance mono_cexec_ghost {a} :
+      Monotonic (MHeapSpec eq) (cexec_ghost a).
+    Proof. destruct a; typeclasses eauto. Qed.
+
+    #[export] Instance mono_cexec_ghosts {gs} :
+      Monotonic (MHeapSpec eq) (cexec_ghosts gs).
+    Proof. induction gs; cbn; typeclasses eauto. Qed.
 
     #[export] Instance mono_cexec_cfg_addr {instrs words exitCond fuel apc anp} :
       Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs words exitCond fuel apc anp).
@@ -326,7 +377,7 @@ Section CFGVerificationDerived.
     (* ------------------------------------------------------------------ *)
 
     (* TODO: All this machinery surrounding SInstrTable and gmap and SExitTable deserves its own section, module or even file. *)
-    Definition itable_rel {w} (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w) : Pred w :=
+    Definition itable_rel {w} (instrs : gmap (bv xlenbits) AnnotInstr) (tbl : SInstrTable w) : Pred w :=
       fun ι => List.Forall
         (fun p => exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)) tbl.
 
@@ -340,7 +391,7 @@ Section CFGVerificationDerived.
        itable_rel at the contract context Σ (so TablesRel.v's faith lemmas and
        EndToEnd.v are untouched), and itable_relW_zip below builds this from it
        plus the refinement of the per-address word variables. *)
-    Definition itable_relW {w} (instrs : gmap (bv xlenbits) AST)
+    Definition itable_relW {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (tbl : SInstrTableW w) : Pred w :=
       fun ι => List.Forall
         (fun '(t,x,i) => exists v,
@@ -384,9 +435,9 @@ Section CFGVerificationDerived.
 
     (* One lookup yields BOTH the word term and the instruction, so this
        returns the gmap facts for both columns at once. *)
-    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AST)
+    Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
-        (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AST)
+        (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AnnotInstr)
         (ι : Valuation w) :
       lookup_instr tbl apc = Some (x, i) ->
       itable_relW instrs words tbl ι ->
@@ -424,7 +475,7 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma forgetting_itable_rel {w1 w2} (θ : Acc w1 w2)
-        (instrs : gmap (bv xlenbits) AST) (tbl : SInstrTable w1) :
+        (instrs : gmap (bv xlenbits) AnnotInstr) (tbl : SInstrTable w1) :
       (forgetting θ (itable_rel instrs tbl) ⊣⊢ itable_rel instrs (persist_itable θ tbl))%I.
     Proof.
       constructor.
@@ -438,7 +489,7 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma forgetting_itable_relW {w1 w2} (θ : Acc w1 w2)
-        (instrs : gmap (bv xlenbits) AST) (words : bv xlenbits -> bv word)
+        (instrs : gmap (bv xlenbits) AnnotInstr) (words : bv xlenbits -> bv word)
         (tbl : SInstrTableW w1) :
       (forgetting θ (itable_relW instrs words tbl)
        ⊣⊢ itable_relW instrs words (persist_itableW θ tbl))%I.
@@ -532,9 +583,9 @@ Section CFGVerificationDerived.
     (* The word column comes out as a repₚ rather than a pure fact: the
        refinement of the recursive call needs ℛ⟦RVal ty_word⟧ (SyncVal y) x,
        which is exactly repₚ (SyncVal y) x. *)
-    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AST)
+    Lemma lookup_instr_sound_repₚ {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
-        (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AST)
+        (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AnnotInstr)
         (a : RelVal ty_xlenbits) :
       lookup_instr tbl apc = Some (x, i) ->
       (itable_relW instrs words tbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
@@ -569,6 +620,43 @@ Section CFGVerificationDerived.
       now rewrite <- Ha.
     Qed.
 
+    (* rexec_ghosts: refinement of the ghost interpreter, for an ARBITRARY
+       ghost list.  It must be inductive: in rexec_cfg_addr the list is
+       `ai_ghost_before ai` with `ai` opaque out of lookup_instr, so no finite
+       set of instances (a gc_binds_heap-style rewrite) can discharge it —
+       gc_binds_heap only works because chunk_gc is a CLOSED term.
+
+       The □ᵣ / unconditionally_T wrapper is REQUIRED, not stylistic: without
+       it the IH lands at the wrong world and iApply simply cannot apply it,
+       which fails in a way that looks nothing like "you need a box".  Both
+       rexec_cfg_addr below and main's rexec_annotated_block_addr open with the
+       same iAssert.  The 2026-08-20 attempt at a ghost lemma copied main's
+       TACTIC without this surrounding structure and was never made to work
+       (it hung 300 s+, root cause never found); with the structure the whole
+       thing is ~11 s and every step is an idiom already used in this file.
+       Developed in isolation first — see the ZZGhostRefineProbe.v record in
+       PLAN-annotinstr.md — precisely so a failure here would be attributable
+       to the plumbing rather than to the lemma. *)
+    Lemma rexec_ghosts (gs : list Annot) {w} :
+      ⊢ ℛ⟦RHeapSpec RUnit⟧ (cexec_ghosts gs) (sexec_ghosts gs (w := w)).
+    Proof.
+      iAssert (ℛ⟦□ᵣ (RHeapSpec RUnit)⟧ (cexec_ghosts gs)
+                 (fun w' θ => sexec_ghosts gs (w := w'))) as "H".
+      { iInduction gs as [| a gs] "IH"; cbn; rsolve.
+        2: { iPoseProof (forgetting_unconditionally_drastic with "IH") as "IH2".
+             iApply "IH2". }
+        destruct a; cbn; rsolve. }
+      now iApply (unconditionally_T with "H").
+    Qed.
+
+    (* So rsolve dispatches the two ghost binds in sexec_cfg_addr's step the
+       way it already dispatches sexec_instruction's, rather than needing them
+       spelled out by hand in rexec_cfg_addr below. *)
+    #[export] Instance refine_compat_exec_ghosts {gs : list Annot} {w} :
+      RefineCompat (RHeapSpec RUnit)
+        (cexec_ghosts gs) w (sexec_ghosts gs (w := w)) _ :=
+      MkRefineCompat (rexec_ghosts gs).
+
     (* rexec_cfg_addr: refinement of the gmap concrete executor by the  *)
     (* term-table symbolic executor, under table faithfulness.  Proved by   *)
     (* iInduction on fuel, boxed IH projected by                            *)
@@ -578,7 +666,7 @@ Section CFGVerificationDerived.
     (* It should be relatively easy with most of the complexity handled by rsolve. *)
     (* I suspect there are a few missing RefineCompat instances for tables. *)
     (* This is maybe a good proof golf target. *)
-    Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AST)
+    Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
         (fuel : nat) {w} (tbl : SInstrTableW w) (exits : SExitTable w) :
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
@@ -636,25 +724,50 @@ Section CFGVerificationDerived.
             * iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
               rewrite cgc_binds_heap gc_binds_heap.
               unfold T; cbv beta.
-              assert (Heq :
-                SHeapSpec.bind
-                  (sexec_instruction i (persist__term ta acc_refl) (persist__term ta0 acc_refl) (persist__term x acc_refl))
-                  (fun (w1 : World) (θ1 : Acc w2 w1) (apc' : Term w1 ty_xlenbits) =>
-                     sexec_cfg_addr n' (persist_itableW (acc_trans acc_refl θ1) (persist_itableW ω tbl))
-                       (persist_etable (acc_trans acc_refl θ1) (persist_etable ω exits)) apc' apc')
-                = SHeapSpec.bind (sexec_instruction i ta ta0 x)
-                  (fun w1 θ1 apc' => sexec_cfg_addr n' (persist_itableW θ1 (persist_itableW ω tbl))
-                       (persist_etable θ1 (persist_etable ω exits)) apc' apc'))
-                by reflexivity.
-              rewrite Heq.
+              (* EXPERIMENT 2026-08-21: the acc_refl-normalising `assert Heq … by
+                 reflexivity; rewrite Heq` that used to sit here spelled out a
+                 term shape that is now stale (three nested binds, not one).
+                 Dropped to find out whether refine_compat_exec_ghosts lets
+                 rsolve handle it unaided. *)
               iPoseProof (refine_gc_heap with "rh") as "rh'".
               iClear "rh".
               rsolve.
-              { rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+              (* `?…_trans` with no explicit accessibilities, repeated: the ghost
+                 binds add world hops, so the number of nested persist layers
+                 here is no longer fixed at two.  The old form named ω/ω0
+                 explicitly and broke the moment the chain grew. *)
+              { rewrite ?persist_itableW_trans ?persist_etable_trans.
                 iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+                (* The pc fact sits under `forgetting ω2` — ω2 being the
+                   GHOST-AFTER world motion, which lands between where the
+                   fact is established (the instruction's bind) and where the
+                   IH consumes it.  refine_inst_persist transports it. *)
+                iRename select (forgetting ω2 (ℛ⟦RVal ty_xlenbits⟧ a1 ta2))
+                  into "Hpc".
+                iPoseProof (refine_inst_persist with "Hpc") as "Hpc2".
+                (* Acc composition is not definitionally ASSOCIATIVE, and
+                   `forgetting` accumulates left-assoc — ((ω∘ω0)∘ω1)∘ω2 —
+                   while sexec_cfg_addr's own θ0∘θ1∘θ2∘θ3 becomes
+                   ω∘(((acc_refl∘ω0)∘ω1)∘ω2) once persist_itableW_trans
+                   collapses the outer layer (θ0 is chunk_gc's acc_refl,
+                   substituted in by gc_binds_heap).  Same substitution,
+                   different term.  Both expand to the SAME fully-nested form,
+                   so trans-backwards plus _refl closes the gap with no new
+                   lemmas.  The pre-ghost proof dodged this by naming ω/ω0 in a
+                   two-hop chain; that stopped working at four hops. *)
+                assert (Htbl :
+                  persist_itableW (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) tbl
+                  = persist_itableW (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) tbl)
+                  by (rewrite <- !persist_itableW_trans, persist_itableW_refl;
+                      reflexivity).
+                assert (Hetbl :
+                  persist_etable (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) exits
+                  = persist_etable (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) exits)
+                  by (rewrite <- !persist_etable_trans, persist_etable_refl;
+                      reflexivity).
+                rewrite Htbl Hetbl.
                 (* TWO "[$]", one per RVal argument: the recursive call passes
-                   apc' as both the pc and the incoming nextpc.  Both premises
-                   are the same persistent ℛ⟦RVal⟧ fact, so it frames twice over. *)
+                   apc' as both the pc and the incoming nextpc. *)
                 iApply ("IH" with "[$] [$]"). }
               { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
                 iApply ("rΦ2" with "[$] [$]"). }
@@ -677,22 +790,38 @@ Section CFGVerificationDerived.
             * iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
               rewrite cgc_binds_heap gc_binds_heap.
               unfold T; cbv beta.
-              assert (Heq :
-                SHeapSpec.bind
-                  (sexec_instruction i (persist__term ta acc_refl) (persist__term ta0 acc_refl) (persist__term x acc_refl))
-                  (fun (w1 : World) (θ1 : Acc w2 w1) (apc' : Term w1 ty_xlenbits) =>
-                     sexec_cfg_addr n' (persist_itableW (acc_trans acc_refl θ1) (persist_itableW ω tbl))
-                       (persist_etable (acc_trans acc_refl θ1) (persist_etable ω exits)) apc' apc')
-                = SHeapSpec.bind (sexec_instruction i ta ta0 x)
-                  (fun w1 θ1 apc' => sexec_cfg_addr n' (persist_itableW θ1 (persist_itableW ω tbl))
-                       (persist_etable θ1 (persist_etable ω exits)) apc' apc'))
-                by reflexivity.
-              rewrite Heq.
+              (* EXPERIMENT 2026-08-21: the acc_refl-normalising `assert Heq … by
+                 reflexivity; rewrite Heq` that used to sit here spelled out a
+                 term shape that is now stale (three nested binds, not one).
+                 Dropped to find out whether refine_compat_exec_ghosts lets
+                 rsolve handle it unaided. *)
               iPoseProof (refine_gc_heap with "rh") as "rh'".
               iClear "rh".
               rsolve.
-              { rewrite (persist_itableW_trans ω ω0 tbl) (persist_etable_trans ω ω0 exits).
+              (* `?…_trans` with no explicit accessibilities, repeated: the ghost
+                 binds add world hops, so the number of nested persist layers
+                 here is no longer fixed at two.  The old form named ω/ω0
+                 explicitly and broke the moment the chain grew. *)
+              { rewrite ?persist_itableW_trans ?persist_etable_trans.
                 iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
+                (* Same two obstacles as the exit-hit/lookup-hit case above —
+                   the pc fact under the ghost-after `forgetting`, and the
+                   non-associativity of Acc composition.  See the comments
+                   there for why each arises. *)
+                iRename select (forgetting ω2 (ℛ⟦RVal ty_xlenbits⟧ a1 ta2))
+                  into "Hpc".
+                iPoseProof (refine_inst_persist with "Hpc") as "Hpc2".
+                assert (Htbl :
+                  persist_itableW (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) tbl
+                  = persist_itableW (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) tbl)
+                  by (rewrite <- !persist_itableW_trans, persist_itableW_refl;
+                      reflexivity).
+                assert (Hetbl :
+                  persist_etable (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) exits
+                  = persist_etable (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) exits)
+                  by (rewrite <- !persist_etable_trans, persist_etable_refl;
+                      reflexivity).
+                rewrite Htbl Hetbl.
                 iApply ("IH" with "[$] [$]"). }
               { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
                 iApply ("rΦ2" with "[$] [$]"). }
@@ -732,7 +861,7 @@ Section CFGVerificationDerived.
     (* valuations where the table doesn't match the gmap, and meaningfully  *)
     (* only at the one valuation the end-to-end proof discharges it at. *)
     Definition cexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -787,7 +916,7 @@ Section CFGVerificationDerived.
     (* w := wlctx Σ') via a substitution ζ.  Both are needed (used         *)
     (* together at the rexec_triple_addr call site below). *)
     Lemma itable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (instrs' : gmap (bv xlenbits) AST) (tbl' : SInstrTable (wlctx Σ'))
+        (instrs' : gmap (bv xlenbits) AnnotInstr) (tbl' : SInstrTable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') :
       itable_rel instrs' tbl' ιΣ ->
       (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ itable_rel instrs' (subst_itable (persist ζ θ) tbl'))%I.
@@ -934,7 +1063,7 @@ Section CFGVerificationDerived.
        column from wtable_rel, and they agree because both are indexed by the
        same table entry — the SyncVal address is shared, so the two gmap
        lookups are at the same key by construction. *)
-    Lemma itable_relW_zip {w} (instrs : gmap (bv xlenbits) AST)
+    Lemma itable_relW_zip {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (T : SInstrTable w)
         (ws : list (Term (wctx w) ty_word)) (cws : list (RelVal ty_word))
         (ι : Valuation w) :
@@ -1024,7 +1153,7 @@ Section CFGVerificationDerived.
        keys instantiate to SyncVal addresses — which itable_rel already says.
        This is what lets Adequacy.v discharge the word guard without any extra
        hypothesis travelling down from the end theorems. *)
-    Lemma wtable_rel_cws_of (instrs : gmap (bv xlenbits) AST)
+    Lemma wtable_rel_cws_of (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w) (ι : Valuation w) :
       itable_rel instrs tbl ι -> wtable_rel words tbl (cws_of words tbl ι) ι.
     Proof.
@@ -1044,7 +1173,7 @@ Section CFGVerificationDerived.
        through iStopProof instead is fragile: it folds the WHOLE persistent
        context into one conjunction, so the intro pattern has to be adjusted
        every time an unrelated hypothesis appears earlier in the proof. *)
-    Lemma itable_relW_zip_pred {w} (instrs : gmap (bv xlenbits) AST)
+    Lemma itable_relW_zip_pred {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (T : SInstrTable w)
         (ws : list (Term (wctx w) ty_word)) (cws : list (RelVal ty_word)) :
       (itable_rel instrs T ∗
@@ -1114,11 +1243,11 @@ Section CFGVerificationDerived.
     (* the executor bind (no RefineCompat instance matches the table       *)
     (* executor's premise-free form; typeclass search diverges).           *)
     Lemma rexec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       ⊢ ℛ⟦RHeapSpec RUnit⟧
           (cexec_triple_addr req instrs words exitCond fuel ens tbl exits)
           (sexec_triple_addr req tbl exits fuel ens (w := w)).
@@ -1191,30 +1320,30 @@ Section CFGVerificationDerived.
     Qed.
 
     #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       RefineCompat (RHeapSpec RUnit)
         (cexec_triple_addr req instrs words exitCond fuel ens tbl exits) w
         (sexec_triple_addr req tbl exits fuel ens (w := w)) _ :=
       MkRefineCompat (rexec_triple_addr req instrs words exitCond fuel ens tbl exits).
 
     Definition ccfg_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) : Prop :=
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : Prop :=
       CHeapSpec.run (cexec_triple_addr req instrs words exitCond fuel ens tbl exits).
 
     Lemma rcfg_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
           (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits)
           (scfg_verification_condition req tbl exits fuel ens w).
@@ -1224,11 +1353,11 @@ Section CFGVerificationDerived.
     Qed.
 
     #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AST)
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : list (Term Σ ty_xlenbits * AST)) (exits : list (Term Σ ty_xlenbits)) {w} :
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       RefineCompat (LogicalSoundness.RProp)
         (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits) w
         (scfg_verification_condition req tbl exits fuel ens w) _ :=
