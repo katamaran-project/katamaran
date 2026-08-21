@@ -196,21 +196,23 @@ Open Scope list_scope.
   (* Term-level instruction/exit tables (symbolic placement).            *)
   (*                                                                     *)
   (* table_of_list builds the address-term instruction table for the     *)
-  (* table-based symbolic executor (sexec_cfg_addr): the key for the *)
-  (* k-th instruction is peval_bvadd (term_val (4k+off)) p, constructed  *)
-  (* THROUGH peval_bvadd so keys are born canonical — for a concrete     *)
-  (* placement term p = term_val b they fold to literals, for a symbolic *)
-  (* p they take the constant-first `c ⊕ p` shape the step semantics     *)
-  (* produces (offset 0 collapses to p itself via the zero rule).        *)
+  (* table-based symbolic executor (sexec_cfg_addr), pairing each        *)
+  (* address with its AnnotInstr record (instruction + optional ghosts). *)
+  (* The base address can be concrete (term_val b) or symbolic (e.g.     *)
+  (* term_var "p" in parametric contracts); addresses are computed via   *)
+  (* peval_bvadd so they're born canonical — concrete bases fold to      *)
+  (* literals, symbolic bases take the constant-first shape (offset 0    *)
+  (* collapses to base itself).                                          *)
   (*                                                                     *)
   (* NOTE: `is` is an SSReflect keyword in this file, hence `instrs`.    *)
   (* ------------------------------------------------------------------ *)
-  Fixpoint table_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (off : N) (instrs : list AST)
-    : list (Term Σ ty_xlenbits * AST) :=
+  Fixpoint table_of_list {Σ : LCtx} (base : Term Σ ty_xlenbits) (off : N) (instrs : list AnnotInstr)
+    : list (Term Σ ty_xlenbits * AnnotInstr) :=
     match instrs with
     | []        => []
-    | i :: rest => (peval_bvadd (term_val ty_xlenbits (bv.of_N off)) p, i)
-                     :: table_of_list p (off + 4)%N rest
+    | ai :: rest =>
+        let addr := peval_bvadd (term_val ty_xlenbits (bv.of_N off)) base in
+        (addr, ai) :: table_of_list base (off + 4)%N rest
     end.
 
   (* Default exit table: the single fall-through address just past the
