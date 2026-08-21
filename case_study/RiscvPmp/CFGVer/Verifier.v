@@ -280,7 +280,7 @@ Section CFGVerificationDerived.
     (* CONTRACT-LEVEL shape: what table_of_list builds, what itable_rel    *)
     (* relates to the gmap, and what TablesRel.v's faith lemmas discharge. *)
     Definition SInstrTable : TYPE :=
-      fun w => list (Term (wctx w) ty_xlenbits * AST).
+      fun w => list (Term (wctx w) ty_xlenbits * AnnotInstr).
 
     Definition SExitTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits).
@@ -310,7 +310,7 @@ Section CFGVerificationDerived.
        once per execution step, so a loop re-executing the same addresses
        reuses the same word variables every trip.  PLAN-encoded-instr.md. *)
     Definition SInstrTableW : TYPE :=
-      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * AST).
+      fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * AnnotInstr).
 
     Definition persist_itable {w1 w2} (θ : w1 ⊒ w2) : SInstrTable w1 -> SInstrTable w2 :=
       List.map (fun '(t,i) => (persist__term t θ, i)).
@@ -373,7 +373,7 @@ Section CFGVerificationDerived.
     (* NB an entry is ((addr, word), ast), so the key projection needs the   *)
     (* three-place pattern `'(t,_,_)`, not `'(t,_)`. *)
     Definition lookup_instr {w} (tbl : SInstrTableW w)
-        (apc : STerm ty_xlenbits w) : option (Term (wctx w) ty_word * AST) :=
+        (apc : STerm ty_xlenbits w) : option (Term (wctx w) ty_word * AnnotInstr) :=
       option_map (fun '(_,x,i) => (x,i))
         (List.find (fun '(t,_,_) => Term_eqb (peval apc) (peval t)) tbl).
     Definition is_exit {w} (exits : SExitTable w)
@@ -390,14 +390,14 @@ Section CFGVerificationDerived.
       Let wA : Term (wctx w1) ty_word := term_val ty_word (bv.of_N 11).
       Let wB : Term (wctx w1) ty_word := term_val ty_word (bv.of_N 22).
       Let tbl1 : SInstrTableW w1 :=
-        [ (p1, wA, instrA)
-        ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, wB, instrB)
+        [ (p1, wA, AST_AnnotInstr instrA)
+        ; (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1, wB, AST_AnnotInstr instrB)
         ]%list.
 
       (* pc = 4 ⊕ p matches the second table entry, yielding ITS word too. *)
       Example lookup_instr_hit :
         lookup_instr tbl1 (term_bvadd (term_val ty_xlenbits (bv.of_N 4)) p1)
-        = Some (wB, instrB).
+        = Some (wB, AST_AnnotInstr instrB).
       Proof. vm_compute. reflexivity. Qed.
 
       (* pc = 8 ⊕ p matches no key in tbl1. *)
