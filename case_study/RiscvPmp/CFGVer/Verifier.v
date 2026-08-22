@@ -119,6 +119,14 @@ Record AnnotInstr := MkAnnotInstr
 Definition strip (instrs : list AnnotInstr) : list AST :=
   List.map (fun ai => ai_instr ai) instrs.
 
+(* Ghosts occupy no address, so stripping cannot change the program's length.
+   Needed wherever a TRUSTED premise is stated over `strip instrs` while the
+   caller's bound is over `instrs` (EndToEnd.v's length side conditions).
+   Under the PRODUCT AnnotInstr this is just map_length; under the reverted SUM
+   it would have been a real fact about the grouping fold. *)
+Lemma strip_length (l : list AnnotInstr) : length (strip l) = length l.
+Proof. apply List.length_map. Qed.
+
 (* Coercions: wrap plain AST values in AnnotInstr with no ghosts, so that
    existing programs like cmovznz4_instrs : list AST still typecheck as
    list AnnotInstr without modification.

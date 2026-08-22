@@ -97,7 +97,16 @@ Import IrisModel.RiscvPmpIrisBase.
   Definition cfg_instrs_pre `{sailGS2 Σ} instrs γ1 γ2 : iProp Σ :=
     own_regstore2 γ1 γ2 ∗
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs) ∗
+        (* MEMORY holds instructions, not annotations.  `ai_instr <$> <map>`
+           rather than `instrs_of_list _ (strip _)` so these five sites match
+           Adequacy.v's soundness lemmas SYNTACTICALLY — Adequacy has no choice
+           in the matter, since its `instrs` is a gmap and cannot say `strip`.
+           instrsMemory / intro_ptsto_instrs produce the OTHER form, so the
+           bridge (Tables.v's fmap_instrs_of_list) is applied where those two
+           meet, inside cfg_instrs_endToEnd*.  Both directions cost exactly two
+           rewrites; this one keeps the five statements uniform with
+           Adequacy. *)
+        (ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs) ∗
       interp_inv_constant_time.
 
   Definition cfg_instrs_contract `{sailGS2 Σ} exitCond instrs γ1 γ2 :=
@@ -125,7 +134,7 @@ Import IrisModel.RiscvPmpIrisBase.
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⊢ own_regstore2 γ1 γ2 ∗
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs') ∗
+        (ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs') ∗
       interp_inv_constant_time
     -∗ exitCond_WP2_loop exitCond.
   Proof.
@@ -184,7 +193,7 @@ Import IrisModel.RiscvPmpIrisBase.
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⊢ own_regstore2 γ1 γ2 ∗
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs') ∗
+        (ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs') ∗
       interp_inv_constant_time
     -∗ exitCond_WP2_loop exitCond.
   Proof.
@@ -217,7 +226,7 @@ Import IrisModel.RiscvPmpIrisBase.
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⊢ own_regstore2 γ1 γ2 ∗
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs') ∗
+        (ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs') ∗
       interp_mem_with_public_memory μ1 μ2 data_specs ∗
       interp_inv_constant_time
     -∗ exitCond_WP2_loop exitCond.
@@ -281,7 +290,7 @@ Import IrisModel.RiscvPmpIrisBase.
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⊢ own_regstore2 γ1 γ2 ∗
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs') ∗
+        (ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs') ∗
       interp_mem_with_public_memory μ1 μ2 data_specs ∗
       interp_inv_constant_time
     -∗ exitCond_WP2_loop exitCond.
@@ -1436,8 +1445,8 @@ Import IrisModel.RiscvPmpIrisBase.
           asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
             ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
       (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N ->
-      mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
-      mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
+      mem_has_instrs μ1 (bv.of_N init_addr) ws (strip instrs') ->
+      mem_has_instrs μ2 (bv.of_N init_addr) ws (strip instrs') ->
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
       RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
       RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
@@ -1450,6 +1459,14 @@ Import IrisModel.RiscvPmpIrisBase.
     Proof.
       intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
         steps1 Htrace.
+      (* Length bound in BOTH forms: some premises below are stated over
+         `strip instrs'` (the trusted ones) and others over `instrs'`; ghosts
+         occupy no address so they agree (strip_length), but only up to a
+         syntactic rewrite.  Normalising to ONE form was tried and merely moved
+         the stranded side goal elsewhere in the script. *)
+      assert (Hleninstrs_s :
+                (init_addr + 4 * N.of_nat (length (strip instrs')) < lenAddr)%N)
+        by (rewrite strip_length; exact Hleninstrs).
       apply (adequacy_gen_RiscVNStepsExitCond_strong
         (μ21 := μ2) (γ21 := γ2)
         (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
@@ -1461,6 +1478,16 @@ Import IrisModel.RiscvPmpIrisBase.
         as "Hinv"; auto.
       iMod "Hinv" as "#Hinv".
       iMod (instrsMemory init_addr with "Hmem") as "H"; eauto.
+      (* THE ONE BRIDGE.  instrsMemory yields the map over `strip instrs'`,
+         while cfg_instrs_safe (matching Adequacy.v) wants the projection of
+         the map over `instrs'`.  Equal by Tables.v's fmap_instrs_of_list; the
+         `unfold strip` is needed because `strip` is not syntactically `map`,
+         which is why a bare `rewrite <- fmap_instrs_of_list` finds no
+         subterm. *)
+      assert (Hbridge : instrs_of_list (bv.of_N init_addr) (strip instrs')
+                      = ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs')
+        by (unfold strip; now rewrite fmap_instrs_of_list).
+      iEval (rewrite Hbridge) in "H".
       iSplitR "".
       - iApply (cfg_instrs_safe γ1 γ2 contract).
         all: eauto.
@@ -1517,8 +1544,8 @@ Import IrisModel.RiscvPmpIrisBase.
               ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
         (init_addr + 4 * N.of_nat (length instrs') +
          4 * N.of_nat (length data_specs) < lenAddr)%N →
-        mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs' →
-        mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs' →
+        mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs (strip instrs') →
+        mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs (strip instrs') →
         RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
         RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
         RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
@@ -1544,8 +1571,13 @@ Import IrisModel.RiscvPmpIrisBase.
         as "Hinv"; auto.
       iMod "Hinv" as "#Hinv".
       (* Extract instruction + data memory from raw byte ownership *)
-      iMod (instrsAndDataMemory init_addr ws_instrs data_specs instrs' with "Hmem") as "[H Hmemdata]";
+      iMod (instrsAndDataMemory init_addr ws_instrs data_specs (strip instrs') with "Hmem") as "[H Hmemdata]";
         [exact Hlen | exact μinit1 | exact μinit2 | exact HDataAddrs |].
+      (* Same single bridge as cfg_instrs_endToEnd — see the note there. *)
+      assert (Hbridge : instrs_of_list (bv.of_N init_addr) (strip instrs')
+                      = ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs')
+        by (unfold strip; now rewrite fmap_instrs_of_list).
+      iEval (rewrite Hbridge) in "H".
       (* Convert all-NonSyncVal to public form *)
       rewrite (something_memory data_specs HpubMem).
       iSplitR "".
@@ -1831,7 +1863,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (reg_specs : list reg_spec_rel)
       (word_data : list mem_spec_rel)
       (byte_data : list mem_spec_rel)
-      (instrs : list AST)
+      (instrs : list AnnotInstr)
       (extra_exit_offs : list N)
       (bound : N)
       (exitCond : bv xlenbits -> bool)
@@ -1852,7 +1884,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_u init_addr reg_specs word_data byte_data instrs
              extra_exit_offs bound exitCond fuel)) :
-    noninterferent_strong init_addr instrs exitCond
+    noninterferent_strong init_addr (strip instrs) exitCond
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
@@ -1927,7 +1959,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (reg_specs : list reg_spec_rel)
       (word_data : list mem_spec_rel)
       (byte_data : list mem_spec_rel)
-      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (instrs : list AnnotInstr) (bound : N) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec
@@ -1939,9 +1971,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hbound : (init_addr + bound < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_u init_addr reg_specs word_data byte_data instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
-    noninterferent_strong init_addr instrs
-      (pcOutOfInstrs_exitCond init_addr instrs)
+             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+    noninterferent_strong init_addr (strip instrs)
+      (pcOutOfInstrs_exitCond init_addr (strip instrs))
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
@@ -1951,7 +1983,12 @@ Import IrisModel.RiscvPmpIrisBase.
     - exact HDataAddrs.
     - exact Hlen.
     - exact Hbound.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
+       `strip instrs`, so it wants `length (strip instrs)` where the goal has
+       `length instrs`.  Ghosts occupy no address, so these agree. *)
+    - constructor;
+        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
+        | constructor].
   Qed.
 
   (* ------------------------------------------------------------------- *)
@@ -1994,7 +2031,7 @@ Import IrisModel.RiscvPmpIrisBase.
      mem_specs, and is vacuous at []), and Hlen lost its 4*|mem_specs| term. *)
   Lemma gen_contract_noninterferent_param
       (reg_specs : list reg_spec)
-      (instrs : list AST)
+      (instrs : list AnnotInstr)
       (extra_exit_offs : list N)
       (exitCond : bv xlenbits -> bool)
       (fuel : nat)
@@ -2006,7 +2043,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs instrs extra_exit_offs
              exitCond fuel)) :
-    noninterferent_strong init_addr instrs exitCond reg_specs [].
+    noninterferent_strong init_addr (strip instrs) exitCond reg_specs [].
   Proof.
     rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
     (* Every data argument of _rel_classed is IMPLICIT (each occurs in some
@@ -2061,14 +2098,14 @@ Import IrisModel.RiscvPmpIrisBase.
 
   (* Register-only, straight-line (fall-through exit) programs. *)
   Lemma gen_contract_noninterferent_param_simple
-      (reg_specs : list reg_spec) (instrs : list AST) (fuel : nat) (init_addr : N)
+      (reg_specs : list reg_spec) (instrs : list AnnotInstr) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx reg_specs))
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs instrs []
-             (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
-    noninterferent_strong init_addr instrs
-      (pcOutOfInstrs_exitCond init_addr instrs) reg_specs [].
+             (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+    noninterferent_strong init_addr (strip instrs)
+      (pcOutOfInstrs_exitCond init_addr (strip instrs)) reg_specs [].
   Proof.
     (* one premise fewer since stage 1: _param's HDataAddrs quantified over the
        deleted mem_specs, so the vacuous-lookup bullet is gone and the VC moved
@@ -2077,7 +2114,12 @@ Import IrisModel.RiscvPmpIrisBase.
     4: exact valid_contract.
     - exact HND.
     - cbn. lia.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
+       `strip instrs`, so it wants `length (strip instrs)` where the goal has
+       `length instrs`.  Ghosts occupy no address, so these agree. *)
+    - constructor;
+        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
+        | constructor].
   Qed.
 
 
@@ -2093,7 +2135,7 @@ Import IrisModel.RiscvPmpIrisBase.
      statement surface. *)
   Lemma gen_contract_noninterferent_rel_classed_simple
       (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
-      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (instrs : list AnnotInstr) (bound : N) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
@@ -2104,9 +2146,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hbound : (init_addr + bound < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
-    noninterferent_strong init_addr instrs
-      (pcOutOfInstrs_exitCond init_addr instrs)
+             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+    noninterferent_strong init_addr (strip instrs)
+      (pcOutOfInstrs_exitCond init_addr (strip instrs))
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) mem_specs).
   Proof.
@@ -2123,7 +2165,12 @@ Import IrisModel.RiscvPmpIrisBase.
     - rewrite app_nil_r. exact HDataAddrs.
     - rewrite app_nil_r. exact Hlen.
     - exact Hbound.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
+       `strip instrs`, so it wants `length (strip instrs)` where the goal has
+       `length instrs`.  Ghosts occupy no address, so these agree. *)
+    - constructor;
+        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
+        | constructor].
     - exact valid_contract.
   Qed.
 
@@ -2132,7 +2179,7 @@ Import IrisModel.RiscvPmpIrisBase.
      -- mirrors gen_contract_noninterferent_rel_classed_simple. *)
   Lemma gen_contract_noninterferent_rel_bytes_simple
       (reg_specs : list reg_spec_rel) (byte_mem_specs : list mem_spec_rel)
-      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (instrs : list AnnotInstr) (bound : N) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) !! i = Some spec →
@@ -2143,9 +2190,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hbound : (init_addr + bound < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
-    noninterferent_strong init_addr instrs
-      (pcOutOfInstrs_exitCond init_addr instrs)
+             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+    noninterferent_strong init_addr (strip instrs)
+      (pcOutOfInstrs_exitCond init_addr (strip instrs))
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) byte_mem_specs).
   Proof.
@@ -2159,7 +2206,12 @@ Import IrisModel.RiscvPmpIrisBase.
     - exact HDataAddrs.
     - exact Hlen.
     - exact Hbound.
-    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
+       `strip instrs`, so it wants `length (strip instrs)` where the goal has
+       `length instrs`.  Ghosts occupy no address, so these agree. *)
+    - constructor;
+        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
+        | constructor].
     - exact valid_contract.
   Qed.
 
