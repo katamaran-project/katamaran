@@ -1,17 +1,147 @@
 # PLAN — migrate CFGVer's instruction surface from `AST` to `AnnotInstr`
 
-Status: **ACTIVE, 2026-08-21 — redesigned against the product type and the
-symbolic side is GREEN.** The sum-type version (2274a22b, 323db24c) was
-reverted (13eb91e0) and rebuilt as a record (0c8fd8cf..5647fe12, then
-2026-08-21); `Verifier.v`/`Tables.v`/`Contracts.v`/`GenContract.v` and all 12
-`Example/*.v` now compile with no edit to any example, and the 9 `strip_id_*`
-lemmas close by `reflexivity`. Read the 2026-08-21 Log entry first — it
-supersedes the phase numbering used below, records the `rexec_ghost`
-reevaluation (short version: **do not port it**), and lists what is left.
-**cfgver-executor**'s "Ghost annotations" section has been rewritten to match
-the code as it now stands.
+Status: **PHASES 1 AND 2 COMPLETE, 2026-08-22.** The whole CFGVer closure
+builds — `Results.vo` green, every file from `Verifier` through `Results` with
+real `Qed` and zero `Admitted`/`admit`. `AnnotInstr` is now the default
+instruction surface all the way to the trusted boundary, with `strip` marking
+where the machine-program view is taken. Every end theorem's statement is
+UNCHANGED VERBATIM.
+
+**Still open before this can be called landed:**
+1. **GATE 2's axiom-clean check** on the 14 end theorems (`Print Assumptions`
+   / `scripts/gate.sh` at `GATE_JOBS=1`). A green build does NOT answer this,
+   and the migration moved `strip` into the trusted conclusions, added
+   `ai_instr <$>` at the memory boundary, and stubbed `AnnotLemmaInvocation`.
+   This is the check that decides whether the noninterference results still
+   rest on nothing but the allowlisted `Machine.pure_decode`.
+2. `cfgver-refinement` / `cfgver-soundness` skills do not yet mention the new
+   `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)
+3. Phase 3 (`AnnotDebugBreak` as a usable tool) and Phase 4
+   (`AnnotLemmaInvocation` semantics) are untouched — see below.
 
 ## Log
+
+**2026-08-22, PHASES 1+2 COMPLETE.** Read this entry before the older ones; it
+supersedes their status claims.
+
+*What the final shape is.*
+```coq
+Inductive Annot := AnnotDebugBreak
+                 | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
+Record AnnotInstr := MkAnnotInstr
+  { ai_ghost_before : list Annot ; ai_instr : AST ; ai_ghost_after : list Annot }.
+sexec_ghost  / cexec_ghost  : one annotation, ordinary (S|C)HeapSpec actions
+sexec_ghosts / cexec_ghosts : the list, bound flat into (s|c)exec_cfg_addr
+rexec_ghosts + refine_compat_exec_ghosts : the relational side
+```
+
+*AnnotLemmaInvocation is a STUB ON BOTH SIDES.* `sexec_ghost` errors (VC =
+`False`); `cexec_ghost` returns `pure tt`. Giving the CONCRETE side real
+`call_lemma` while the symbolic side stubbed was tried and reverted:
+`sound_exec_cfg_addr_myWP2` then has to absorb the lemma's heap effect, which
+is genuine lemma-soundness content — exactly the Phase 4 work this document
+says not to bundle. With both stubbed, `cexec_ghosts gs = pure tt`
+unconditionally (`cexec_ghosts_pure`), so absorption is one rewrite.
+**`cexec_ghosts_pure` MUST BE DELETED when Phase 4 makes the lemma case real**
+— it is where the Phase 4 soundness obligation lands. Total cost of the stub:
+one tactic line (`iApply refine_unit` in `rexec_ghosts`).
+
+*THE ONE REAL SEAM.*
+```
+instrsMemory / intro_ptsto_instrs PRODUCE  instrs_of_list b (strip instrs')
+Adequacy.v's soundness lemmas WANT         ai_instr <$> instrs_of_list b instrs'
+```
+Adequacy has no choice — its `instrs` is a gmap and cannot say `strip`. Equal
+only via `Tables.v`'s `fmap_instrs_of_list`. Both directions cost exactly two
+rewrites; the projection form was kept so `EndToEnd`'s five statements stay
+uniform with Adequacy, bridge applied once in each `cfg_instrs_endToEnd*`. The
+`unfold strip` inside it is REQUIRED — `strip` is not syntactically `map`.
+
+*Second recurring gap: `length (strip l) = length l` is true but NOT
+definitional.* `strip_length` (`Verifier.v`, `List.length_map`) is used at six
+sites. **Normalising everything to one form does NOT work** — tried twice, it
+just moves the stranded side goal, because different consumers want different
+forms. Provide BOTH: `Hleninstrs_s`, `Hlen_s`, `HDataAddrs_s`, plus four
+`rewrite <- (strip_length instrs)` before `pcOutOfInstrs_fallthrough`.
+
+*`instrs_of_list` and `exits_of_list` are POLYMORPHIC in the element type.* One
+definition serves the executor (at `AnnotInstr`) and memory (at `AST`, fed
+`strip`), type inferred per use. Chosen over a second `annots_of_list`
+(duplication) and over a `Definition … := @map_of_list AST` wrapper (breaks
+`cbn [instrs_of_list]` in existing proofs). `exits_of_list` needs no `strip` at
+all — it only reads `length`, and under the PRODUCT AnnotInstr that IS the
+instruction count. That is the fifth place the product shape removed work
+rather than adding it.
+
+*The trusted surface, preserved verbatim.* Every end theorem still states
+`noninterferent_strong init_addr <prog>_instrs …`. Two patterns close the gap
+to the bridges' `strip instrs` conclusion:
+- 9 programs with a named list: a `strip_id_<prog>` anchor in
+  `Example/<Prog>.v` (`reflexivity`, verified at 1ms each) plus
+  `rewrite <- strip_id_<prog>` in the Result file.
+- 3 programs building the list inline (`Jumps` ×2, `MvSwap`, `SetX2`): a local
+  `assert (Hstrip : strip [.…] = [.…]) by reflexivity`.
+`CountdownResult.v` is the only MIXED file — inline literal in one theorem,
+`countdown_mem_instrs` in another — and a script assuming one program per
+Result file will put the anchor before the wrong `eapply`. **The audit that
+catches that class of error without a compile:** per Result file, count
+`eapply gen_contract_noninterferent` against the number of strip rewrites
+(14 across 12 files).
+
+*THE ALIAS BUG IS SIX SIGNATURES, not the one this document flagged.* Five in
+`VerifierRel.v` and two in `Adequacy.v` spelled out
+`list (Term _ ty_xlenbits * AST)` instead of `SInstrTable`/`SExitTable`, and
+every one silently failed to track BOTH columns added since (the word column,
+then `AnnotInstr`). One missing convention, not six mistakes: **if you are
+writing a table type and it contains a `*`, it is wrong.**
+
+*Two simplifications of PRE-migration proof text, both from adding
+`refine_compat_exec_ghosts`:* the two 11-line
+`assert (Heq : …) by reflexivity; rewrite Heq` blocks in `rexec_cfg_addr` are
+GONE (rsolve handles that region unaided), and
+`rewrite (persist_itableW_trans ω ω0 tbl)` — which named its accessibilities
+explicitly and broke as soon as the world chain grew — is now
+`rewrite ?persist_itableW_trans ?persist_etable_trans`.
+
+*`rexec_cfg_addr`'s two real obstacles, neither about ghosts semantically:*
+1. the pc fact sits under `forgetting ω2` (the ghost-after world motion) —
+   `refine_inst_persist` transports it;
+2. `Acc` composition is not definitionally ASSOCIATIVE. `forgetting`
+   accumulates `((ω∘ω0)∘ω1)∘ω2` while `sexec_cfg_addr`'s `θ0∘θ1∘θ2∘θ3` becomes
+   `ω∘(((acc_refl∘ω0)∘ω1)∘ω2)`. Same substitution, different term. Both expand
+   to the SAME fully-nested form, so
+   `rewrite <- !persist_itableW_trans, persist_itableW_refl` closes it in 126ms
+   with NO new lemmas. I first chased a `sub_acc`-equality helper and got stuck
+   on the `WTerm`/`STerm` instance mismatch that stops `rewrite persist_subst`
+   firing on `persist__term`; reading this file's own `persist_itableW_trans`
+   was the fix.
+
+*The 2274a22b hang is EXPLAINED and does not recur.* `rexec_ghosts` closes in
+~1.3s. The hang was a shape mistake: that attempt bound `debug msg (pure tt)`
+as a niladic action, which matches neither `refine_debug` nor
+`refine_compat_debug` (both stated for `debug` as a TRANSFORMER), forcing a
+hand-written bridge. It also lacked the `□ᵣ`/`unconditionally_T` wrapper, so
+its IH landed at the wrong world — a failure that looks nothing like "you need
+a box". `main`'s `rexec_annotated_block_addr` has both; that session ported its
+TACTIC without its STRUCTURE.
+
+*TOOLING, and the most expensive lesson of the whole effort.*
+**`rocq_compile_file` verifies TACTICS. Only `make` verifies a FILE.** Three
+distinct false-green modes hit in one session: (1) failing to resolve a
+freshly built sibling `.vo`; (2) accepting a bare `LEnv` the real build
+rejects, while writing `.vo`s with the WRONG LOGICAL NAME (no `-Q`/`-R`, so
+unusable downstream and undiagnosable-looking); (3) reporting `EndToEnd.v`
+green when `make` rejected it, twice, on premises it never checked. A "Phase 2
+complete" commit was made on (3) and had to be corrected by `a8672075`.
+Corollary on the interactive side: `rocq_start(theorem=…)` replays VOS-STYLE
+and reaches theorems in files where mid-proof POSITION mode OOMs pet — that is
+what finally gave goals on `EndToEnd.v` (325ms, 18ms) after four ~2min compile
+guesses. It stops working once the file's heavy proofs are restored. And pet
+OOMs on `VerifierRel.v` at ANY position (Fleche checks the whole document), so
+that one file needs the restate-in-a-probe pattern; `Tables`, `TablesRel`,
+`Adequacy` and the examples all open fine.
+
+
 
 **2026-08-21, product-type Phase 0 finished + the `rexec_ghost` reevaluation.**
 
