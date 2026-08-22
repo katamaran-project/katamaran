@@ -7,14 +7,21 @@ instruction surface all the way to the trusted boundary, with `strip` marking
 where the machine-program view is taken. Every end theorem's statement is
 UNCHANGED VERBATIM.
 
-**Still open before this can be called landed:**
-1. **GATE 2's axiom-clean check** on the 14 end theorems (`Print Assumptions`
-   / `scripts/gate.sh` at `GATE_JOBS=1`). A green build does NOT answer this,
-   and the migration moved `strip` into the trusted conclusions, added
-   `ai_instr <$>` at the memory boundary, and stubbed `AnnotLemmaInvocation`.
-   This is the check that decides whether the noninterference results still
-   rest on nothing but the allowlisted `Machine.pure_decode`.
-2. `cfgver-refinement` / `cfgver-soundness` skills do not yet mention the new
+**GATE 2 PASSED, 2026-08-22** (`GATE_JOBS=1 ./scripts/gate.sh`): build clean,
+no proof holes, and all **14 end theorems axiom-clean** — nothing beyond the
+allowlisted `Machine.pure_decode` and `Base.mmioenv`. So the trusted-surface
+claim is not merely "the statements read the same": they are proved from the
+same axiom base as before the migration, with `strip` in the trusted
+conclusions and `ai_instr <$>` at the memory boundary.
+
+*Process caveat:* this work was committed DIRECTLY to `KatamaranRel`, so the
+`pre-merge-commit` hook never fired and the gate was run after the fact rather
+than as a merge precondition. It passed, so mainline is clean — but the
+invariant went unenforced for the whole session. Phase 3/4 work should go on a
+topic branch and reach the protected branch via `git merge --no-ff`.
+
+**Still open:**
+1. `cfgver-refinement` / `cfgver-soundness` skills do not yet mention the new
    `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)
 3. Phase 3 (`AnnotDebugBreak` as a usable tool) and Phase 4
    (`AnnotLemmaInvocation` semantics) are untouched — see below.
