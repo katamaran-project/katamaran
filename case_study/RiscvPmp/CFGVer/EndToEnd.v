@@ -1560,6 +1560,19 @@ Import IrisModel.RiscvPmpIrisBase.
         steps1 Htrace.
       assert (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
         by (unfold lenAddr in *; lia).
+      (* instrsAndDataMemory is instantiated at `strip instrs'`, so its length
+         premise is over the stripped list while Hlen is over instrs'.  Ghosts
+         occupy no address (strip_length), but the two differ syntactically. *)
+      assert (Hlen_s : (init_addr + 4 * N.of_nat (length (strip instrs')) +
+                        4 * N.of_nat (length data_specs) < lenAddr)%N)
+        by (rewrite strip_length; exact Hlen).
+      assert (HDataAddrs_s :
+                ∀ (i : nat) (spec : bv word * bool),
+                  data_specs !! i = Some spec ->
+                  spec.1 = bv.of_N (init_addr
+                                    + 4 * N.of_nat (length (strip instrs'))
+                                    + 4 * N.of_nat i))
+        by (rewrite strip_length; exact HDataAddrs).
       apply (adequacy_gen_RiscVNStepsExitCond_strong
         (μ21 := μ2) (γ21 := γ2)
         (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
@@ -1572,7 +1585,7 @@ Import IrisModel.RiscvPmpIrisBase.
       iMod "Hinv" as "#Hinv".
       (* Extract instruction + data memory from raw byte ownership *)
       iMod (instrsAndDataMemory init_addr ws_instrs data_specs (strip instrs') with "Hmem") as "[H Hmemdata]";
-        [exact Hlen | exact μinit1 | exact μinit2 | exact HDataAddrs |].
+        [exact Hlen_s | exact μinit1 | exact μinit2 | exact HDataAddrs_s |].
       (* Same single bridge as cfg_instrs_endToEnd — see the note there. *)
       assert (Hbridge : instrs_of_list (bv.of_N init_addr) (strip instrs')
                       = ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs')
