@@ -128,6 +128,16 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         countdown_mem_instrs [] 20
         (pcOutOfInstrs_exitCond ia countdown_mem_instrs) 10.
 
+    (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+       The end theorem states noninterferent_strong over `countdown_mem_instrs` while the
+       EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+       those the SAME statement, and it MUST close by `reflexivity` -- if it
+       ever needs more, the migration has changed what is being proved and
+       must stop.  An auditor checks one thing: that `strip` is a plain
+       projection. *)
+    Lemma strip_id_countdown_mem_instrs : strip countdown_mem_instrs = countdown_mem_instrs.
+    Proof. reflexivity. Qed.
+
     Lemma valid_countdown_mem_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (countdown_mem_cfg_contract_param ia).
     Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

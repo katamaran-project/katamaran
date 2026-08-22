@@ -59,6 +59,11 @@ Lemma precompute_noninterferent_param (init_addr : N) :
     precompute_reg_specs [].
 Proof.
   intros Hbound.
+  (* Restate the goal over `strip precompute_instrs` -- the form the EndToEnd
+     bridges now conclude.  reflexivity-equal (strip_id_precompute_instrs), so
+     the theorem above is literally the same statement as before the
+     AnnotInstr migration; this rewrite is where that is discharged. *)
+  rewrite <- strip_id_precompute_instrs.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.

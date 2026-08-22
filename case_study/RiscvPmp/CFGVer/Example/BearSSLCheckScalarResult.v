@@ -47,6 +47,11 @@ Lemma check_scalar_noninterferent_param (init_addr : N) :
     check_scalar_reg_specs [].
 Proof.
   intros Hbound.
+  (* Restate the goal over `strip check_scalar_instrs` -- the form the EndToEnd
+     bridges now conclude.  reflexivity-equal (strip_id_check_scalar_instrs), so
+     the theorem above is literally the same statement as before the
+     AnnotInstr migration; this rewrite is where that is discharged. *)
+  rewrite <- strip_id_check_scalar_instrs.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.

@@ -121,8 +121,7 @@ building a bind chain. Those are independent — see the next two sections.
 Definition sexec_ghost (a : Annot) {w : World} : SHeapSpec Unit w :=
   match a with
   | AnnotDebugBreak           => debug (fun h0 => amsg.mk {| … |}) (pure tt)
-  | AnnotLemmaInvocation l es => call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
-                                            (seval_exps [env] es)
+  | AnnotLemmaInvocation l es => error "not yet supported"   (* STUB *)
   end.
 
 Fixpoint sexec_ghosts (gs : list Annot) {w : World} : SHeapSpec Unit w :=
@@ -162,6 +161,21 @@ same node position, same heap — for exactly the reason `gc_binds_heap` holds b
 bookkeeping collapses away. There is no third world, and cost-neutrality is not
 at risk. The transformer cost readability and put the recursive call outside tail
 position (a guard-checker hazard) in exchange for nothing.
+
+**BOTH the symbolic AND the concrete lemma case are STUBS, and they must match.**
+`sexec_ghost` errors (VC = `False`); `cexec_ghost` returns `pure tt`. Giving the
+concrete side real `call_lemma` semantics while the symbolic side stubbed was
+tried (2026-08-21) and reverted: `sound_exec_cfg_addr_myWP2` (`Adequacy.v`) then
+has to absorb the lemma's heap effect, which is genuine lemma-soundness content
+and exactly the Phase 4 work `PLAN-annotinstr.md` says not to bundle. With both
+stubbed, `cexec_ghosts gs = pure tt` unconditionally (`cexec_ghosts_pure`), so
+absorption is one rewrite — `cgc_binds_heap_fwd`'s role for `chunk_gc`. **When
+Phase 4 makes the lemma case real, `cexec_ghosts_pure` MUST GO**; it is where
+the Phase 4 soundness obligation lands. Cost of the stub: exactly one tactic
+line (`iApply refine_unit` in `rexec_ghosts` — with a real `call_lemma`, `rsolve`
+resolved the relation evar from that pairing; with `error`, the lemma case closes
+trivially and leaves the DEBUG case's `ℛ⟦?RA⟧ () ()` with `?RA` still an evar, so
+the registered `ℛ⟦RUnit⟧` hint cannot fire).
 
 **What IS true — the only real asymmetry, and it lives entirely in Phase 2.**
 `debug` has no concrete content (`CHeapSpec.debug := fun m => m`, the identity,
@@ -272,13 +286,38 @@ already carry a concrete world, so unification pins `w` from THEM, not from `⊢
 itself. `chunk_gc`'s existing `{w : World}` shape was the working precedent to
 copy. Full write-up (why, and the failed attempts): **core-executor-internals**.
 
+**The `strip` boundary, and the two gaps that are true-but-not-definitional.**
+`strip : list AnnotInstr -> list AST` is where the machine-program view is
+taken. Two facts about it need SAYING rather than holding by computation, and
+each cost several wrong turns:
+- `strip_length : length (strip l) = length l` (`Verifier.v`, by
+  `List.length_map`). Needed at six sites in `EndToEnd.v`, because some premises
+  are stated over `strip instrs` and others over `instrs`. **Normalising
+  everything to one form does NOT work** — tried twice, it just moves the
+  stranded side goal, since different consumers want different forms. Provide
+  BOTH (local `assert`s: `Hleninstrs_s`, `Hlen_s`, `HDataAddrs_s`).
+- `fmap_instrs_of_list : f <$> instrs_of_list b l = instrs_of_list b (map f l)`
+  (`Tables.v`). `instrsMemory`/`intro_ptsto_instrs` PRODUCE
+  `instrs_of_list b (strip l)`; `Adequacy.v`'s soundness lemmas WANT
+  `ai_instr <$> instrs_of_list b l` and have no choice (their `instrs` is a
+  gmap, which cannot say `strip`). Bridge applied once in each
+  `cfg_instrs_endToEnd*`. The `unfold strip` inside it is required — `strip` is
+  not syntactically `map`, so a bare `rewrite <- fmap_instrs_of_list` finds no
+  subterm.
+
+`instrs_of_list` and `exits_of_list` (`Tables.v`) are POLYMORPHIC in the element
+type: one definition serves the executor (at `AnnotInstr`) and memory (at `AST`,
+fed `strip`), with the type inferred per use. Chosen over a second
+`annots_of_list` (duplication) and over a `Definition … := @map_of_list AST`
+wrapper (would break `cbn [instrs_of_list]` in existing proofs).
+
 Migration status (2026-08-21): **the symbolic side is DONE and green.**
 `Verifier.v`/`Tables.v`/`Contracts.v`/`GenContract.v` and all 12 `Example/*.v`
 compile with **no edit to any example**; all 9 `strip_id_*` lemmas close by
 `reflexivity` (`Example/ZZAnnotStripIdProbe.v`; `Jumps`/`MvSwap`/`SetX2` build
 their list inline in the contract literal so there is no named object to state
 the lemma about — their unchanged compilation is the only evidence for those
-three). `sexec_ghost`/`sexec_ghosts` interpret both `Annot` kinds and
+three). `sexec_ghost`/`sexec_ghosts` interpret `AnnotDebugBreak` and
 `sexec_cfg_addr` calls them for both slots. Every current program has `nil`
 slots, and `ghost_binds_nil` discharges the claim that this contributes nothing
 to the term — so no example's VC changed, as a checked fact rather than an

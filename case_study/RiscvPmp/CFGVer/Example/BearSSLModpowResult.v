@@ -47,6 +47,11 @@ Lemma modpow_win_noninterferent_param (init_addr : N) :
     modpow_win_reg_specs [].
 Proof.
   intros Hbound.
+  (* Restate the goal over `strip modpow_win_instrs` -- the form the EndToEnd
+     bridges now conclude.  reflexivity-equal (strip_id_modpow_win_instrs), so
+     the theorem above is literally the same statement as before the
+     AnnotInstr migration; this rewrite is where that is discharged. *)
+  rewrite <- strip_id_modpow_win_instrs.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.

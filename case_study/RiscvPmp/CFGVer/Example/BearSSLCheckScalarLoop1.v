@@ -121,6 +121,16 @@ Definition loop1_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_x
     loop1_instrs [] 48
     (pcOutOfInstrs_exitCond ia loop1_instrs) 136.
 
+(* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+   The end theorem states noninterferent_strong over `loop1_instrs` while the
+   EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+   those the SAME statement, and it MUST close by `reflexivity` -- if it
+   ever needs more, the migration has changed what is being proved and
+   must stop.  An auditor checks one thing: that `strip` is a plain
+   projection. *)
+Lemma strip_id_loop1_instrs : strip loop1_instrs = loop1_instrs.
+Proof. reflexivity. Qed.
+
 Lemma valid_loop1_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (loop1_cfg_contract_param ia).
 Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

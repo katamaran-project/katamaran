@@ -198,6 +198,16 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         cmovznz4_instrs [] 164
         (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
 
+    (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+       The end theorems in Cmovznz4Result.v state noninterferent_strong over
+       `cmovznz4_instrs` while the EndToEnd bridges now conclude over
+       `strip instrs`.  This lemma is what makes those the SAME statement, and
+       it must close by `reflexivity` — if it ever needs more, the migration
+       has changed what is being proved and must stop.  An auditor checks one
+       thing: that `strip` is a plain projection. *)
+    Lemma strip_id_cmovznz4 : strip cmovznz4_instrs = cmovznz4_instrs.
+    Proof. reflexivity. Qed.
+
     Lemma valid_cmovznz4_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (cmovznz4_cfg_contract_param ia).
     Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

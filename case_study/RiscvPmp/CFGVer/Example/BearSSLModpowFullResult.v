@@ -40,6 +40,11 @@ Lemma modpow_win_full_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) modpow_win_full_mem_specs_rel).
 Proof.
   intros Hb.
+  (* Restate the goal over `strip modpow_win_full_instrs` -- the form the EndToEnd
+     bridges now conclude.  reflexivity-equal (strip_id_modpow_win_full_instrs), so
+     the theorem above is literally the same statement as before the
+     AnnotInstr migration; this rewrite is where that is discharged. *)
+  rewrite <- strip_id_modpow_win_full_instrs.
   eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|[|[|[|[|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]]]]]] spec H; cbn in H;

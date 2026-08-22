@@ -57,6 +57,14 @@ Lemma swap_noninterferent_param (init_addr : N) :
     [(X1, false, None); (X2, false, None); (X3, false, None)] [].
 Proof.
   intros Hbound.
+  (* This program builds its instruction list INLINE in the contract
+     literal, so there is no named object to hang a strip_id_* anchor
+     on (unlike the nine that have one).  Same job, done locally: the
+     goal is restated over `strip <literal>`, the form the EndToEnd
+     bridges now conclude, and it is reflexivity-equal so the theorem
+     above is unchanged. *)
+  assert (Hstrip : strip [MV X3 X2; MV X2 X1; MV X1 X3] = [MV X3 X2; MV X2 X1; MV X1 X3]) by reflexivity.
+  rewrite <- Hstrip.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.

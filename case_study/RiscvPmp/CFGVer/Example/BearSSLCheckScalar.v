@@ -142,6 +142,16 @@ Definition check_scalar_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" 
   gen_contract_param ia check_scalar_reg_specs check_scalar_instrs []
     (pcOutOfInstrs_exitCond ia check_scalar_instrs) 24.
 
+(* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+   The end theorem states noninterferent_strong over `check_scalar_instrs` while the
+   EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+   those the SAME statement, and it MUST close by `reflexivity` -- if it
+   ever needs more, the migration has changed what is being proved and
+   must stop.  An auditor checks one thing: that `strip` is a plain
+   projection. *)
+Lemma strip_id_check_scalar_instrs : strip check_scalar_instrs = check_scalar_instrs.
+Proof. reflexivity. Qed.
+
 Lemma valid_check_scalar_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (check_scalar_cfg_contract_param ia).
 Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

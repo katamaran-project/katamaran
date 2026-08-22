@@ -64,6 +64,11 @@ Lemma key_schedule_loop2_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel).
 Proof.
   intros Hb.
+  (* Restate the goal over `strip key_schedule_loop2_instrs` -- the form the EndToEnd
+     bridges now conclude.  reflexivity-equal (strip_id_key_schedule_loop2_instrs), so
+     the theorem above is literally the same statement as before the
+     AnnotInstr migration; this rewrite is where that is discharged. *)
+  rewrite <- strip_id_key_schedule_loop2_instrs.
   eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|[|i]] spec H; cbn in H;

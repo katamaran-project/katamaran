@@ -131,6 +131,16 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         key_schedule_loop2_instrs [] 64
         (pcOutOfInstrs_exitCond ia key_schedule_loop2_instrs) 40.
 
+    (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+       The end theorem states noninterferent_strong over `key_schedule_loop2_instrs` while the
+       EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+       those the SAME statement, and it MUST close by `reflexivity` -- if it
+       ever needs more, the migration has changed what is being proved and
+       must stop.  An auditor checks one thing: that `strip` is a plain
+       projection. *)
+    Lemma strip_id_key_schedule_loop2_instrs : strip key_schedule_loop2_instrs = key_schedule_loop2_instrs.
+    Proof. reflexivity. Qed.
+
     Lemma valid_key_schedule_loop2_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (key_schedule_loop2_cfg_contract_param ia).
     Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

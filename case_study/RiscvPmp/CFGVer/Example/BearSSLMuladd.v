@@ -133,6 +133,16 @@ Definition muladd_q_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: t
   gen_contract_param ia muladd_q_reg_specs muladd_q_instrs []
     (pcOutOfInstrs_exitCond ia muladd_q_instrs) 20.
 
+(* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+   The end theorem states noninterferent_strong over `muladd_q_instrs` while the
+   EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+   those the SAME statement, and it MUST close by `reflexivity` -- if it
+   ever needs more, the migration has changed what is being proved and
+   must stop.  An auditor checks one thing: that `strip` is a plain
+   projection. *)
+Lemma strip_id_muladd_q_instrs : strip muladd_q_instrs = muladd_q_instrs.
+Proof. reflexivity. Qed.
+
 Lemma valid_muladd_q_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (muladd_q_cfg_contract_param ia).
 Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

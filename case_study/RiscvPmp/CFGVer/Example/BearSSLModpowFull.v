@@ -146,6 +146,16 @@ Definition modpow_win_full_cfg_contract_param (ia : N) : @CFGVerifierContract ["
     modpow_win_full_instrs [] 176
     (pcOutOfInstrs_exitCond ia modpow_win_full_instrs) 150.
 
+(* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+   The end theorem states noninterferent_strong over `modpow_win_full_instrs` while the
+   EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+   those the SAME statement, and it MUST close by `reflexivity` -- if it
+   ever needs more, the migration has changed what is being proved and
+   must stop.  An auditor checks one thing: that `strip` is a plain
+   projection. *)
+Lemma strip_id_modpow_win_full_instrs : strip modpow_win_full_instrs = modpow_win_full_instrs.
+Proof. reflexivity. Qed.
+
 Lemma valid_modpow_win_full_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (modpow_win_full_cfg_contract_param ia).
 Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.

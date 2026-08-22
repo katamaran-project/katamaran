@@ -59,6 +59,15 @@ Lemma countdown_noninterferent_param (init_addr : N) :
     [(X1, true, Some (bv.of_N 2))] [].
 Proof.
   intros Hbound.
+  (* This theorem's program is an INLINE literal (countdown_mem_instrs belongs
+     to countdown_mem_noninterferent_param below -- CountdownResult.v is the one
+     MIXED file, and a script that assumed one program per Result file put the
+     wrong rewrite here).  Same job done locally: restate over `strip <literal>`,
+     the form the EndToEnd bridges now conclude, reflexivity-equal so the
+     theorem above is unchanged. *)
+  assert (Hstrip : strip [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
+                 = [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]) by reflexivity.
+  rewrite <- Hstrip.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
@@ -90,6 +99,9 @@ Lemma countdown_mem_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) countdown_mem_mem_specs_rel).
 Proof.
   intros Hb.
+  (* Restate over `strip countdown_mem_instrs`, the form the bridges conclude;
+     reflexivity-equal by strip_id_countdown_mem_instrs. *)
+  rewrite <- strip_id_countdown_mem_instrs.
   eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|i] spec H; cbn in H;

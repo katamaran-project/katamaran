@@ -57,6 +57,14 @@ Lemma jumpIfZero_noninterferent_param (init_addr : N) :
     (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
 Proof.
   intros Hbound.
+  (* This program builds its instruction list INLINE in the contract
+     literal, so there is no named object to hang a strip_id_* anchor
+     on (unlike the nine that have one).  Same job, done locally: the
+     goal is restated over `strip <literal>`, the form the EndToEnd
+     bridges now conclude, and it is reflexivity-equal so the theorem
+     above is unchanged. *)
+  assert (Hstrip : strip [BEQ X1 X0 true_offset] = [BEQ X1 X0 true_offset]) by reflexivity.
+  rewrite <- Hstrip.
   eapply gen_contract_noninterferent_param.
   4: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
   (* Position 4, not 5, and no vacuous-lookup bullet: stage 1 of
@@ -101,6 +109,14 @@ Lemma jmp_fwd_noninterferent_param (init_addr : N) :
     (pcOutOfInstrs_exitCond init_addr [JAL X0 jmp_offset; NOP]) [] [].
 Proof.
   intros Hbound.
+  (* This program builds its instruction list INLINE in the contract
+     literal, so there is no named object to hang a strip_id_* anchor
+     on (unlike the nine that have one).  Same job, done locally: the
+     goal is restated over `strip <literal>`, the form the EndToEnd
+     bridges now conclude, and it is reflexivity-equal so the theorem
+     above is unchanged. *)
+  assert (Hstrip : strip [JAL X0 jmp_offset; NOP] = [JAL X0 jmp_offset; NOP]) by reflexivity.
+  rewrite <- Hstrip.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.

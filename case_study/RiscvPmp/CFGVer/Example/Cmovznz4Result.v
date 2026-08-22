@@ -62,6 +62,11 @@ Lemma cmovznz4_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
 Proof.
   intros Hb.
+  (* `<- strip_id_cmovznz4` restates the goal over `strip cmovznz4_instrs`, the
+     form the bridge now concludes.  reflexivity-equal, so the theorem above is
+     literally the same statement as before the AnnotInstr migration — that is
+     the invariant, and this rewrite is where it is discharged. *)
+  rewrite <- strip_id_cmovznz4.
   eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;

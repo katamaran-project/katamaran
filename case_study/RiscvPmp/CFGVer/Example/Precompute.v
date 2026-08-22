@@ -92,6 +92,16 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       gen_contract_param ia precompute_reg_specs precompute_instrs []
         (pcOutOfInstrs_exitCond ia precompute_instrs) 16.
 
+    (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
+       The end theorem states noninterferent_strong over `precompute_instrs` while the
+       EndToEnd bridges now conclude over `strip instrs`.  This is what makes
+       those the SAME statement, and it MUST close by `reflexivity` -- if it
+       ever needs more, the migration has changed what is being proved and
+       must stop.  An auditor checks one thing: that `strip` is a plain
+       projection. *)
+    Lemma strip_id_precompute_instrs : strip precompute_instrs = precompute_instrs.
+    Proof. reflexivity. Qed.
+
     Lemma valid_precompute_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (precompute_cfg_contract_param ia).
     Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
