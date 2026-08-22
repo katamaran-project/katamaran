@@ -816,7 +816,11 @@ Section AdequacyTools.
          a+4 (matching bv.seqBv_app), and instrs_of_list_fresh shows a is
          not among them (no 2^xlenbits wraparound under the lenAddr bound). *)
       assert (Hfresh : instrs_of_list (bv.add a (bv.of_N 4)) instrs !! a = None).
-      { apply (@instrs_of_list_fresh instrs a 4); [lia|].
+      (* `_` for the element type: instrs_of_list(_fresh) became POLYMORPHIC in
+         it (Tables.v, AnnotInstr migration), so an @-application's positions
+         shifted by one.  Nothing semantic changed here — memory still holds
+         AST, and the element type is simply inferred. *)
+      { apply (@instrs_of_list_fresh _ instrs a 4); [lia|].
         unfold lenAddr in Hrep. change (2 ^ 10)%N with 1024%N in Hrep.
         (* lia chokes on the 2^32 literal, so bound to <1024 then transit. *)
         assert (Hb : (bv.bin a + 4 + 4 * N.of_nat (length instrs) < 1024)%N) by lia.
@@ -1106,11 +1110,17 @@ Section AdequacyTools.
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
       Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words exitCond fuel apc anp Φ h →
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
-        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words instrs ⊢
+        (* THE BOUNDARY: the executor's map is AnnotInstr-valued, MEMORY is
+           AST-valued — memory holds instructions, not annotations.  This is
+           the one place the two views meet, and the projection lives here
+           rather than in ptsto_instrs (which the trusted statements name). *)
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+          (ai_instr <$> instrs) ⊢
       (∀ an,
          ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words instrs ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+             (ai_instr <$> instrs) ∗
          (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
       myWP2_loop ExitCondIprop.
     Proof.
@@ -1142,10 +1152,25 @@ Section AdequacyTools.
                   Hh to match via interpret_scheap_gc_heap (§4: sound because
                   iProp Σ is affine). *)
                apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
+               (* Absorb the two ghost binds the same way, and for the same
+                  reason: every ghost is concretely the identity right now, so
+                  cexec_ghosts is `pure tt` and its binds collapse.  When
+                  Phase 4 gives AnnotLemmaInvocation real semantics this stops
+                  holding and genuine lemma soundness is needed here — see
+                  cexec_ghosts_pure's own note. *)
+               rewrite !Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts_pure in Hexec.
+               cbn [CHeapSpec.bind CHeapSpec.pure] in Hexec.
                iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
                iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
+               (* ptsto_instrs_lookup works on the PROJECTED (AST) map, so the
+                  lookup fact has to be projected too: lookup_fmap turns
+                  `instrs !! v = Some i` into `(ai_instr <$> instrs) !! v =
+                  Some (ai_instr i)`, which is also exactly the instruction
+                  cexec_cfg_addr passed to cexec_instruction. *)
+               assert (Hlk' : (ai_instr <$> instrs) !! v = Some (ai_instr i))
+                 by (rewrite lookup_fmap; rewrite Hlk; reflexivity).
                iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
-                             words instrs v Hlk
+                             words (ai_instr <$> instrs) v Hlk'
                  with "Hinstrs") as "[Hinstr Hframe]".
                rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
                iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
@@ -1183,23 +1208,35 @@ Section AdequacyTools.
     (* caller-supplied faithfulness facts at ι.                          *)
     (* ---------------------------------------------------------------- *)
     Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
-        {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
+        (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
+           signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
+           it (five in VerifierRel.v), and every one of them silently failed to
+           track BOTH table columns added since — the word column and then
+           AnnotInstr.  The type error always surfaces far from the cause. *)
+        {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+        {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
         (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
       (* ∀ words: the VC is UNIFORM in the instruction words, because on the
          symbolic side they are demonic.  So the caller proves it once and this
-         lemma instantiates it with the actual words carried by ptsto_instrs. *)
+         lemma instantiates it with the actual words carried by ptsto_instrs.
+
+         `ai_instr <$> instrs` for the same reason as in
+         sound_exec_cfg_addr_myWP2: the executor's map is AnnotInstr-valued
+         and MEMORY is AST-valued.  ptsto_instrs itself keeps its AST type —
+         it is what the trusted statements name — so the projection lives at
+         every use site rather than inside it. *)
       (forall words : bv xlenbits -> bv word,
          Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
         (∀ an,
            ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗ ExitCondIprop) -∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗ ExitCondIprop) -∗
         myWP2_loop ExitCondIprop.
     Proof.
       cbv [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr bind demonic_ctx demonic
@@ -1246,7 +1283,13 @@ Section AdequacyTools.
     Qed.
 
     Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
-        {tbl : list (Term Γ ty_xlenbits * AST)} {exits : list (Term Γ ty_xlenbits)}
+        (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
+           signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
+           it (five in VerifierRel.v), and every one of them silently failed to
+           track BOTH table columns added since — the word column and then
+           AnnotInstr.  The type error always surfaces far from the cause. *)
+        {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+        {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
         (Hverif : safeE (postprocess (
             Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
               pre tbl exits fuel post wnil)))
@@ -1256,14 +1299,14 @@ Section AdequacyTools.
       ⊢ ∀ a : RelVal ty_xlenbits,
           asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗
+          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
           (∀ an,
              ⌜match an with
                | SyncVal v => exitCond v = true
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs instrs -∗
+             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.

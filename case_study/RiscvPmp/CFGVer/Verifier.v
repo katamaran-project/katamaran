@@ -499,15 +499,29 @@ Section CFGVerificationDerived.
                         ; debug_asn_heap          := h0 |})
             (pure tt)
       | AnnotLemmaInvocation l es =>
-          (* LEnv is QUALIFIED: Verifier.v imports
-             RiscvPmpCFGVerifExecutor, but that is `MakeExecutor …
-             RiscvPmpCFGVerifSpec` (Spec.v:720) and the functor does NOT
-             re-export its Specification argument — which is why
-             RiscvPmpSpecVerif (Spec.v:723) imports BOTH.  SpecIris.v names
-             spec members the same qualified way.  A bare `LEnv` fails with
-             "The reference LEnv was not found", and note rocq_compile_file's
-             dune-fallback ACCEPTS the bare form — only `make` catches it. *)
-          call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)
+          (* A STUB, deliberately — Phase 4's work, not this migration's.  The
+             constructor exists so the world-threading below is checked by the
+             compiler rather than asserted in a comment, but giving it real
+             `call_lemma` semantics was tried (2026-08-21) and REVERTED: the
+             soundness chain then has to absorb the lemma's heap effect in
+             sound_exec_cfg_addr_myWP2 (Adequacy.v), which is genuine
+             lemma-soundness content and exactly what PLAN-annotinstr.md means
+             by "Phase 4 is a separate effort, do NOT bundle".
+             `error` here makes the VC False, so a program that writes an
+             AnnotLemmaInvocation cannot be verified — loudly, not silently —
+             and no soundness debt is incurred.  THE STUB MUST BE ON BOTH
+             SIDES: cexec_ghost (VerifierRel.v) returns `pure tt` to match, and
+             the refinement holds because a symbolic `error` refines anything.
+             Making only the concrete side real is the mistake that produced
+             the Adequacy.v blocker.
+             For Phase 4 the real body is
+               `call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)`
+             — note LEnv must be QUALIFIED (MakeExecutor does not re-export its
+             Specification argument, Spec.v:720/723; a bare `LEnv` fails under
+             `make` while rocq_compile_file's dune fallback ACCEPTS it). *)
+          error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                     debug_string_message :=
+                                       "AnnotLemmaInvocation: not yet supported" |})
       end.
 
     (* Recurses in list order, so the first annotation runs first.  `nil` is

@@ -72,8 +72,11 @@ Import RiscvPmp.Sig.
 
   (* itable_rel is monotone in the instruction map: enlarging the map
      preserves faithfulness of every table entry. *)
-  Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AST)
-      (tbl : list (Term Σ ty_xlenbits * AST)) (ι : Valuation Σ) :
+  Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AnnotInstr)
+      (* the ALIAS, never a spelled-out tuple — five signatures in VerifierRel.v
+         silently missed both new table columns that way *)
+      (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Σ))
+      (ι : Valuation Σ) :
     m ⊆ m' ->
     Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ) m tbl ι ->
     Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ) m' tbl ι.
@@ -86,7 +89,7 @@ Import RiscvPmp.Sig.
      gmap store, at any valuation where the placement term resolves to a
      concrete base (generalized over the running offset). *)
   Lemma itable_faith_of_list_aux {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (instrs : list AST) :
+      (cbase : bv xlenbits) (instrs : list AnnotInstr) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     forall off : N,
     (bv.bin cbase + off + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
@@ -121,7 +124,7 @@ Import RiscvPmp.Sig.
   Qed.
 
   Lemma itable_faith_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (instrs : list AST) :
+      (cbase : bv xlenbits) (instrs : list AnnotInstr) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     (bv.bin cbase + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
     Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ)
@@ -136,7 +139,7 @@ Import RiscvPmp.Sig.
   (* Exit-table analog: the fall-through exit term is faithful to any
      exit condition that accepts the first address past the program. *)
   Lemma etable_faith_exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AST) :
+      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AnnotInstr) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     exitCond (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))) = true ->
     Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Σ)

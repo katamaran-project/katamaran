@@ -111,13 +111,35 @@ Open Scope list_scope.
      absolute address [base + 4*k] (4 = bytes_per_instr).  This is the
      "moment to convert" that keeps the ergonomic list syntax in the
      contracts while the verifier works purely with exact-match gmap
-     lookups. *)
-  Fixpoint instrs_of_list (base : bv xlenbits) (b : list AST)
-    : gmap (bv xlenbits) AST :=
+     lookups.
+
+     POLYMORPHIC in the element type (2026-08-21, AnnotInstr migration).  The
+     recursion is purely about ADDRESSES, so one definition serves both
+     consumers: the executor instantiates it at AnnotInstr (cexec_cfg_addr,
+     itable_rel) and the MEMORY predicates at AST (ptsto_instrs — memory holds
+     instructions, not annotations), the latter by feeding it `strip instrs`.
+     Deliberately ONE Fixpoint rather than a second `annots_of_list`: a near-copy
+     would be duplication, and a `Definition instrs_of_list := @map_of_list AST`
+     wrapper would break the `cbn [instrs_of_list]` in existing proofs. *)
+  Fixpoint instrs_of_list {A} (base : bv xlenbits) (b : list A)
+    : gmap (bv xlenbits) A :=
     match b with
     | []          => ∅
     | i :: rest   => <[ base := i ]> (instrs_of_list (bv.add base (bv.of_N 4)) rest)
     end.
+
+  (* The bridge between the two instantiations: projecting the elements of the
+     map is the same as projecting the list first.  This is a THEOREM about one
+     shared recursion, not a faithfulness assumption two separate maps would
+     have needed — which is why generalising is safe where a second symbolic
+     table would not have been. *)
+  Lemma fmap_instrs_of_list {A B} (f : A -> B) (base : bv xlenbits) (b : list A) :
+    f <$> instrs_of_list base b = instrs_of_list base (List.map f b).
+  Proof.
+    revert base. induction b as [|i rest IH]; intros base; cbn [instrs_of_list List.map].
+    - apply fmap_empty.
+    - now rewrite fmap_insert, IH.
+  Qed.
 
   (* words_of_list: the raw instruction WORD at each absolute address, keyed by
      the same addresses instrs_of_list uses.  A TOTAL FUNCTION rather than a
@@ -162,7 +184,7 @@ Open Scope list_scope.
      whole program fits below 2^xlenbits (no wraparound).  This is the side
      condition [big_sepM_insert] needs to peel the head instruction off the
      gmap. *)
-  Lemma instrs_of_list_fresh (b : list AST) (base : bv xlenbits) (d : N) :
+  Lemma instrs_of_list_fresh {A} (b : list A) (base : bv xlenbits) (d : N) :
     (0 < d)%N ->
     (bv.bin base + d + 4 * N.of_nat (length b) < bv.exp2 xlenbits)%N ->
     instrs_of_list (bv.add base (bv.of_N d)) b !! base = None.
@@ -217,7 +239,11 @@ Open Scope list_scope.
 
   (* Default exit table: the single fall-through address just past the
      program's instructions. *)
-  Definition exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list AST)
+  (* POLYMORPHIC in the element type, same reason as instrs_of_list: this only
+     reads `length instrs`, and under the PRODUCT AnnotInstr that length is the
+     instruction count either way (ghosts occupy no address), so no `strip` is
+     needed here — a sum-typed AnnotInstr would have required one. *)
+  Definition exits_of_list {A} {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list A)
     : list (Term Σ ty_xlenbits) :=
     [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p].
 

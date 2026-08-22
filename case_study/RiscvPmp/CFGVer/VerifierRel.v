@@ -198,8 +198,16 @@ Section CFGVerificationDerived.
     Definition cexec_ghost (a : Annot) : CHeapSpec unit :=
       match a with
       | AnnotDebugBreak           => debug (pure tt)
-      | AnnotLemmaInvocation l es => call_lemma (RiscvPmpCFGVerifSpec.LEnv l)
-                                                (evals es [env])
+      (* STUB, matching sexec_ghost's `error` (Verifier.v) — see the long note
+         there.  Making THIS side real while the symbolic side stubbed is the
+         mistake that blocked sound_exec_cfg_addr_myWP2: the soundness chain
+         would have to absorb a real call_lemma's heap effect, which is Phase 4
+         content.  With the symbolic side erroring, the VC is False, so `pure
+         tt` here refines it trivially and cexec_ghosts is unconditionally the
+         identity (cexec_ghosts_pure below), which is what makes absorption
+         free.  Phase 4's real body:
+           `call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (evals es [env])` *)
+      | AnnotLemmaInvocation l es => pure tt
       end.
 
     (* List.nil/List.cons spelled out rather than []/:: — ctx.notations (in
@@ -212,6 +220,18 @@ Section CFGVerificationDerived.
       | List.nil        => pure tt
       | List.cons a gs' => _ <- cexec_ghost a ;; cexec_ghosts gs'
       end.
+
+    (* Every ghost is currently the identity concretely (debug is `fun m => m`,
+       the lemma case is a stub), so the whole list is.  This is what lets
+       sound_exec_cfg_addr_myWP2 absorb the two ghost binds for free —
+       cgc_binds_heap_fwd's role for chunk_gc.  It is deliberately stated as an
+       EQUALITY on the computation, so it can be rewritten in a hypothesis.
+       When Phase 4 makes the lemma case real, THIS LEMMA MUST GO, and its
+       users need genuine lemma-soundness instead — that is the Phase 4
+       soundness obligation, and this is where it lands. *)
+    Lemma cexec_ghosts_pure (gs : list Annot) :
+      cexec_ghosts gs = pure tt.
+    Proof. induction gs as [|a gs IH]; [reflexivity|]; destruct a; cbn; exact IH. Qed.
 
     (* `instrs` is AnnotInstr-valued, mirroring the symbolic SInstrTable.
        Ghosts are FUSED here rather than given a separate channel: they share
@@ -645,7 +665,14 @@ Section CFGVerificationDerived.
       { iInduction gs as [| a gs] "IH"; cbn; rsolve.
         2: { iPoseProof (forgetting_unconditionally_drastic with "IH") as "IH2".
              iApply "IH2". }
-        destruct a; cbn; rsolve. }
+        (* `iApply refine_unit` is needed only since AnnotLemmaInvocation
+           became an `error` stub: with a real call_lemma, rsolve resolved the
+           relation evar from that pairing, but the error case closes trivially
+           and leaves the debug case's `ℛ⟦?RA⟧ () ()` with ?RA still an EVAR —
+           so the registered `ℛ⟦RUnit⟧` hint cannot fire.  Phase 4 will likely
+           make this line unnecessary again. *)
+        destruct a; cbn; rsolve.
+        iApply refine_unit. }
       now iApply (unconditionally_T with "H").
     Qed.
 
