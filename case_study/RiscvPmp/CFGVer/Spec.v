@@ -702,6 +702,44 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   (*       asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")); *)
   (*   |}. *)
 
+  (* ------------------------------------------------------------------ *)
+  (* PLAN-annotinstr Phase 4: the ABSTRACTION (havoc) lemma.              *)
+  (*                                                                      *)
+  (* Consume each named register's points-to and produce a fresh          *)
+  (* existential in its place.  Invoked as an `AnnotLemmaInvocation`      *)
+  (* ghost at a loop head, this is what stops loop-carried registers from *)
+  (* accumulating ever-larger symbolic terms: br_divrem's growth is       *)
+  (* PURELY term size in six register slots (x5 x6 x10 x11 x14 x28),      *)
+  (* every other chunk being exactly 1.00x per trip.                      *)
+  (*                                                                      *)
+  (* `reg_convert` (Base.v) is a COQ-level match on a static RegIdx, so   *)
+  (* this reduces to a plain `chunk_ptsreg` and does NOT build the 32-way *)
+  (* `asn_with_reg` cascade that the term-indexed `asn_reg_ptsto` above   *)
+  (* would.  Register 0 (x0, hardwired zero) has no Reg and maps to ⊤.    *)
+  (*                                                                      *)
+  (* Soundness is existential introduction — `r ↦ v ⊢ ∃w, r ↦ w` — with   *)
+  (* no side condition.  What it COSTS is completeness: the havoced value *)
+  (* carries no `secLeakvar`, so it is treated as possibly-secret, and    *)
+  (* anything downstream that branches on it or leaks it will hit the     *)
+  (* NonSyncVal wall.  Havoc only registers whose value is genuinely dead *)
+  (* across the annotation point — never a loop counter the executor      *)
+  (* needs concrete to decide a back edge.                                *)
+  Definition asn_havoc_reg {Σ} (r : RegIdx) : Assertion Σ :=
+    match reg_convert r with
+    | None     => ⊤
+    | Some reg => asn.exist "hv" ty_xlenbits (asn.chunk (chunk_ptsreg reg (term_var "hv")))
+    end.
+
+  Definition asn_havoc_regs {Σ} (regs : list RegIdx) : Assertion Σ :=
+    List.fold_right (fun r acc => asn_havoc_reg r ∗ acc) ⊤ regs.
+
+  Definition lemma_havoc_regs (regs : list RegIdx) : SepLemma (havoc_regs regs) :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_havoc_regs regs;
+       lemma_postcondition   := asn_havoc_regs regs;
+    |}.
+
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
        match l with
@@ -709,6 +747,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
        | close_gprs                   => lemma_close_gprs
        | open_ptsto_instr             => lemma_open_ptsto_instr
        | close_ptsto_instr            => lemma_close_ptsto_instr
+       | havoc_regs regs              => lemma_havoc_regs regs
        (* | open_pmp_entries             => lemma_open_pmp_entries *)
        (* | close_pmp_entries            => lemma_close_pmp_entries *)
        (* | extract_pmp_ptsto bytes      => lemma_extract_pmp_ptsto bytes *)

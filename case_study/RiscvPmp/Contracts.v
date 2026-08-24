@@ -1268,6 +1268,16 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         (*      lemma_postcondition   := ⊤; *)
         (*   |}. *)
 
+        (* Phase 4 (PLAN-annotinstr): only CFGVer's LEnv gives this real
+           content; here it is the trivial ⊤ ⊢ ⊤ spec, so it is valid but
+           useless — nothing in this environment invokes it. *)
+        Definition lemma_havoc_regs (regs : list RegIdx) : SepLemma (havoc_regs regs) :=
+          {| lemma_logic_variables := ctx.nil;
+             lemma_patterns        := env.nil;
+             lemma_precondition    := ⊤;
+             lemma_postcondition   := ⊤;
+          |}.
+
         Definition LEnv : LemmaEnv :=
           fun Δ l =>
             match l with
@@ -1277,6 +1287,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             (* | close_pmp_entries       => lemma_close_pmp_entries *)
             | open_ptsto_instr        => lemma_open_ptsto_instr
             | close_ptsto_instr       => lemma_close_ptsto_instr
+            | havoc_regs regs          => lemma_havoc_regs regs
             (* | extract_pmp_ptsto bytes => lemma_extract_pmp_ptsto bytes *)
             (* | return_pmp_ptsto bytes  => lemma_return_pmp_ptsto bytes *)
             (* | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh *)

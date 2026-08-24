@@ -255,6 +255,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits] *)
   | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
   | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
+  (* PLAN-annotinstr Phase 4: havoc a statically-known set of GPRs — consume
+     each register's points-to and produce a fresh existential for it.  The
+     register set is a COQ-LEVEL parameter, not a logic variable, so the
+     assertion reduces through `reg_convert` immediately instead of building
+     Spec.v's 32-way `asn_with_reg` cascade, and Δ stays empty (no arguments
+     to evaluate at an instruction boundary).  Invoked only as an
+     `AnnotLemmaInvocation` ghost from CFGVer — no FunDef uses it, so the
+     μSail program semantics are unchanged. *)
+  | havoc_regs (rs : list RegIdx)   : Lem ctx.nil
   (* | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits] (* Statically known quantities; lemma is called in between instructions! *) *)
   .
 
