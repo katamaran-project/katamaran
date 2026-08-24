@@ -41,6 +41,23 @@ gate PASSED (14 theorems axiom-clean).
 and no loss of generality: `forall W : bv (word*n)` and
 `forall w_0..w_{n-1} : bv word` are in bijection under slicing.
 
+*Caution on the table above, added 2026-08-24.* Those four figures are WALL
+CLOCK, and both arms ran two heavy `Eval`s in one `coqc` process — the second
+inherits a heap the first grew. They are directionally right and were never
+retracted, but they are not a measurement in this project's sense (no
+`allocated_words`, no baseline subtraction, contaminated process). They are
+also measured on a rig with 10.54x/trip term growth, which DILUTES the ratio:
+the part of the cost slicing cannot touch sits in the denominator.
+
+**A confound-free re-measurement now exists:
+`diagnostics/word-slicing-payoff.md`** — same axis, on `ZZKslHeapCommon`'s
+term-flat rig, in allocated words with a per-arm baseline. It reads
+**2.77x-2.86x** (marginal 2.862x), i.e. LARGER than the numbers above, and
+confirms the payoff is a constant factor: both arms are exactly linear in trip
+count (held-out fit within 0.002%). Structural counterpart there: `|Sigma|`
+17 -> 4 with the node count moving by exactly the 13 removed `demonicv` nodes,
+so the win is entirely variable carrying/lookup cost, not a smaller tree.
+
 *Framing that matters.* This is a CONSTANT-FACTOR win on an overhead
 proportional to program LENGTH (the word count is flat in trips — 63 binders at
 n=1, n=2 and n=3 alike). It does nothing to br_divrem's real blocker, which is
@@ -48,6 +65,13 @@ term growth at 10.54x/trip in six loop-carried registers
 (`PLAN-annotinstr.md`'s 2026-08-24 entries). Its value is that |Sigma| drives
 lookup cost QUADRATICALLY (`diagnostics/lvar-lookup-cost-drivers.md`), so
 removing 78% of |Sigma| helps every program rather than one.
+
+*Correction 2026-08-24 to the sentence above*: "an overhead proportional to
+program LENGTH" is too strong. `diagnostics/word-slicing-payoff.md` measures a
+SHORTER program (14 words vs 49) paying off MORE (2.86x vs 1.6-1.7x). Word
+count sets how many variables slicing removes; what sets the RATIO is the share
+of total cost that |Sigma| was driving. "Flat in trips" and "constant factor"
+both stand.
 
 *Why slicing, when five other routes are dead.* A word is a pure identity
 token, and a logic variable is the CHEAPEST representation of one — its identity
