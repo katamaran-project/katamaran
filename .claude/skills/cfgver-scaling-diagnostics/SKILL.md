@@ -47,6 +47,7 @@ to a fresh one until you compare.
 | `byte-classed-block-payoff.md` | the BYTE-granular classed block (`gen_mem_pre_rel_bytes_classed`, 2026-08-19) closes the last declared-cell `|Σ|` gap: **1.10× at 2 cells, 1.32× at 4, 1.77× at 8**, growing with cell count so more than a constant — but a held-out fit fails on BOTH arms (−14%/−23%), so **not** established as an exponent fix. Also the record that found the `Qed`/`Admitted` protocol trap recurring in the two loop records above. |
 | `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit (**that ratio is NOT a constant — `lvar-lookup-cost-drivers.md` §5.3 measures 19.5× at `|Σ|`=25, 65× at 89, 111× at 153, because the variable cost is quadratic and the chunk cost linear; never quote it without an `|Σ|`**) — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
 | `lvar-lookup-cost-drivers.md` | 2026-08-19, answers Dominique's "is it variable LOOKUP?" hypothesis. **Chunk count spawns ZERO logic variables** (every structural count byte-identical over a 4× chunk range) and carrying one costs a flat **1.289 M words**; but the SAME chunk costs **16.1× more** when its variables sit 64 binders deeper, and the depth surcharge is `0.627 + 0.0195·chunks` G words (held-out **−0.0005%**). So chunks and lookup are NOT competing drivers — the dominant chunk-related cost IS a lookup cost, and they multiply exactly linearly. Pure lookup DEPTH at identical `|Σ|` is **1.16×–1.47×**; declared-variable COUNT is **quadratic** (held-out **+0.17%** at 4× beyond the fit range). Also: peak `|Σ|` is only 25 because the solver eliminates 1281 of 1293 mints, so the `|Σ|` quadratic is about DECLARED entries only, never per-step ones. |
+| `word-slicing-payoff.md` | 2026-08-24, the payoff of instruction-word SLICING measured with the term-growth confound removed. **2.77×–2.86×** in allocated words (marginal 2.862×), vs the **1.61×/1.72×** wall-clock figure published on br_divrem — *larger*, because br_divrem's 10.54×/trip term growth sits in the denominator of a cost slicing cannot touch. Both arms exactly LINEAR in trips (held-out within 0.002%), so it is a constant factor, not an exponent change. `|Σ|` 17 → 4 with the node count moving by exactly the 13 removed `demonicv` nodes, so the win is variable carrying/lookup cost and not a smaller tree. Also the worked example for the **two-commit A/B** method below, and the counter-example to "payoff ∝ program length" — a SHORTER program (14 words vs 49) paid off MORE. |
 
 Note what the two `check-scalar-loop*` records have in common: a mechanism
 that is genuinely dominant in one example was measured near-zero in
@@ -165,7 +166,13 @@ those terms grows with the trip count `N`:
   one per world extension — per-mint `tabulate`/`ctx.fresh` are only `O(|Σ|)` and
   cannot produce the quadratic. Sources of `|Σ|` growth: one
   `asn.exist` per unpinned (`PVExist`) spec entry, and per-step demonic
-  variables. **The FIRST source is now fixed for the base-relative word-granular
+  variables. **A THIRD source, one demonic variable per instruction ADDRESS
+  (the instruction words), was closed 2026-08-24** by slicing them all off one
+  wide `bv (word*n)` variable — worth **2.86×** on a term-flat rig
+  (`word-slicing-payoff.md`), and it is the cheapest kind of `|Σ|` fix there is:
+  a pure re-encoding with no trusted-surface change, since
+  `∀ W : bv (word*n)` and `∀ w_0..w_{n-1} : bv word` are in bijection under
+  slicing. **The FIRST source is now fixed for the base-relative word-granular
   family: `gen_contract_rel_classed` (2026-08-18) emits one existential per
   publicness class instead of per cell, which is EQUIVALENT rather than weaker,
   and re-measured on the KSL rig it is an exponent reduction (1.72 → 1.22 at
@@ -418,6 +425,27 @@ finding.
 - **Trusting OS peak RSS for a ratio.** It saturates near the machine
   ceiling, compressing exactly the largest effects — it reported 3.5× where
   `allocated_words` reported 18.6× on the same pair.
+- **Comparing two COMMITS by editing the working tree.** Don't. To price a
+  landed change, build the old arm in a scratch COPY and switch load paths:
+  `cp -r case_study/RiscvPmp $OFF/RiscvPmp`,
+  `git show <old>:…/Verifier.v > $OFF/RiscvPmp/CFGVer/Verifier.v`, rebuild only
+  the light chain there, then measure with `-Q $OFF/RiscvPmp Katamaran.RiscvPmp
+  -R theories Katamaran`. `theories/` is shared and unchanged, so nothing heavy
+  rebuilds (52 s for the whole CFGVer light chain, 2026-08-24). The working tree
+  is never touched, the two arms cannot clobber each other's `.vo`s, and there is
+  no restore step to forget. **Rebuild every file that `Require`s the one you
+  swapped** — `Noninterference.v` requires `Verifier`, and a missed one shows up
+  as a digest mismatch, not a wrong number. **Re-measure the baseline on BOTH
+  arms**: the two baselines agreeing (1,441 words in 607 M) is what proves the
+  import closures cost the same and the ratio is clean.
+- **A sweep loop written with a shell variable is NOT exempt from
+  `coqc-guard.sh`.** The hook waives its 3-builds-per-15-min rate limit for
+  single-file probes by matching the literal string `CFGVer/Example/ZZ` in the
+  command — so `for f in ZZFooN4 ZZFooN8; do coqc … Example/$f.v; done` is
+  blocked mid-sweep, while the same builds with literal paths sail through.
+  Write the paths out in full (several per Bash call is fine — the hook fires
+  once per call). The denial lands mid-sweep and the budget only frees on a
+  rolling 15-minute window, so it is worth getting right before starting.
 - **Assuming an added EXIT prunes execution.** The exit/execute choice is
   `angelic_binary`, so an extra exit only grants permission to stop; the
   execute branch is still constructed and `vm_compute` still pays for it. An
