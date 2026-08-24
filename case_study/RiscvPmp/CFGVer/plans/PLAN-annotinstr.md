@@ -23,8 +23,12 @@ topic branch and reach the protected branch via `git merge --no-ff`.
 **Still open:**
 1. `cfgver-refinement` / `cfgver-soundness` skills do not yet mention the new
    `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)
-3. Phase 3 (`AnnotDebugBreak` as a usable tool) and Phase 4
-   (`AnnotLemmaInvocation` semantics) are untouched — see below.
+3. Phase 3 (`AnnotDebugBreak` as a usable tool) is DONE (GATE 3 met).
+   Phase 4 (`AnnotLemmaInvocation` semantics) has its payoff MEASURED on
+   branch `issue/annot-havoc-spike` (symbolic side only, both other sides
+   still stubs, heavy branch deliberately not building there) —
+   `diagnostics/havoc-abstraction-payoff.md`. The soundness half is not
+   started; see the Phase 4 section below for exactly what is owed.
 
 ## Log
 
@@ -1044,6 +1048,51 @@ shape flat on purpose. The stable-slots/growing-terms split is what makes the
 Phase 4 abstraction lemma statable.
 
 ### Phase 4 — `AnnotLemmaInvocation` (separate effort, do NOT bundle)
+
+**MEASURED 2026-08-24 on branch `issue/annot-havoc-spike`, before any soundness
+work: the payoff is REAL and it is an exponent change.**
+`diagnostics/havoc-abstraction-payoff.md` has the full record. Headline: a
+`havoc_regs` lemma on br_divrem's loop head takes the per-trip cost multiplier
+from **≈10× (7.71×, 9.97× at n=1→2→3) to successive doublings of
+2.29×/3.04×/4.08×** — 32.9× less allocation at n=3, and n=16 reachable at 28.9 G
+words where plain would need ~10¹³ times its n=3 cost. Three corrections to what
+this document assumed:
+
+- **"λ → 1" is too strong.** What remains grows polynomially with a *rising*
+  local exponent (1.19 → 1.60 → 2.03); a held-out quadratic fit misses n=16 by
+  −13%, so no growth law is established. The residual's likeliest home is
+  `|Σ| = 15 + 7n` — one fresh variable per havoced register per trip — which
+  points at the "drop an unreferenced logical variable" annotation kind already
+  sketched in `Verifier.v`, not at a second abstraction lemma.
+- **The six growing slots are NOT the right target set.** Four of them
+  (T0–T3) are dead at the loop head, and havocing exactly those — information-
+  lossless, the obvious free win — costs **1.94× MORE than doing nothing**,
+  because their size is a symptom of a recurrence carried by A0/A1/A4 and they
+  grow straight back inside the same trip. Target the loop-carried values, not
+  the largest terms.
+- **The abstraction lemma did NOT need to be a loop invariant.** This document
+  says the lemma "is only as sound as its `LEnv` proof, and `inv` must be weak
+  enough to hold every trip and strong enough to still prove the postcondition."
+  For br_divrem `inv` is `True`: consume `r ↦ v`, produce `∃w, r ↦ w`, whose
+  `ValidLemma` obligation is existential introduction with no side condition,
+  and every arm still discharges its VC to `block`. What it costs is
+  completeness (the havoced value carries no `secLeakvar`, so it is treated as
+  possibly-secret) — and the positive controls show where that bites: havocing
+  A5 (the counter the back edge is decided on) or A3 (the base pointer) leaves a
+  19–31 node residual instead of collapsing. So "Phase 4 is a delivery vehicle
+  for `PLAN-loop-invariant.md`" holds for programs needing a real invariant, but
+  is NOT a precondition for a payoff on this one.
+
+What is still owed for Phase 4 proper — none of it novel, all of it named:
+`cexec_ghost` calling `CHeapSpec.call_lemma`; `rexec_ghost` via the ready-made
+`refine_compat_call_lemma` (`Refinement/Monads.v:1875`); and `cexec_ghosts_pure`
+DELETED in favour of an inductive `sound_cexec_ghosts` built from
+`call_lemma_sound` (`MicroSail/ShallowSoundness.v:91` — generic over the BI, so
+it applies to the binary instance) plus the existing `lemSemCFGVerif`
+(`SpecIris.v:364`), discharged as `iris_rule_stm_lemmak` does it
+(`BinaryInstance.v:196`, three lines). The 2026-08-21 revert note reads as
+though absorbing the lemma's heap effect in `sound_exec_cfg_addr_myWP2` were
+open research; it is an induction over the ghost list with those two ingredients.
 
 Symbolic `call_lemma (LEnv l) args` on both sides plus the relational lemma.
 CFGVer's `LEnv` is already non-empty (`Spec.v:631` `lemma_open_gprs`,
