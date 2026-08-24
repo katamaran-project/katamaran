@@ -28,6 +28,88 @@ topic branch and reach the protected branch via `git merge --no-ff`.
 
 ## Log
 
+**2026-08-24 (later), br_divrem MEASURED — the motivating program, and the
+"stable slots, growing terms" split holds far harder there.** GATE 3 was met on
+`ZZKslHeapCommon`, but that rig pins term shape flat on purpose, so the result
+did not reach the program this document exists to unblock. It does now. Probe:
+`Example/ZZDivremDebugProbe.v` (throwaway, gitignored), rig copied verbatim from
+`ZZDivremNCommon.v`, break on the loop head.
+
+*Why this was affordable at all*, given `PLAN-muladd-full.md` records 67.5 s for
+2 trips: **a dump needs no VC proof.** Only `postprocess (CFG_VC_triple …)` has
+to build. So `ZZDivremProbe2.v`'s unresolved `solve_symbase_fetch` residual —
+the thing that has kept that probe from ever compiling — is irrelevant to
+dumping, and so is `solve_vc`.
+
+*The loop head is index 8, not 0.* The back edge `bltu A6, A5` sits at index 34
+(byte 136) with offset −104, so the target is byte 32 = index 8
+(`addi A5, A5, -1`); indices 0–7 are the prologue, matching `zzdrn_fuel`'s "8
+prologue" comment. Getting this wrong puts the break in straight-line code and
+it fires once, which looks like the mechanism failing.
+
+*Structure and cost.*
+
+| n | debug nodes | tree nodes | binders (\|Σ\|) | vm_compute |
+|---|---|---|---|---|
+| 1 | 1 | 67 | 63 | 13.8 s |
+| 2 | 2 | 68 | 63 | 32.7 s |
+
+|Σ| is **flat in trips**, the tree grows by exactly the one debug node per trip
+(the same law as Countdown and KSL), and **tree CONSTRUCTION alone is already
+2.4× for one extra trip** — no `solve_vc` involved.
+
+*The heap, trip 1 → trip 2, within the n=2 run.*
+
+| | trip 1 | trip 2 | |
+|---|---|---|---|
+| chunks | 15 | 15 | static |
+| heap printed chars | 786 | 8 787 | **11.2×** |
+| `term_` nodes | 23 | 439 | **19.1×** |
+
+*Per slot — this is the actionable part, because it names Phase 4's target set.*
+Seven of fifteen chunks grow; eight are BYTE-IDENTICAL across trips.
+
+| slot | reg | role | `term_` t1 → t2 |
+|---|---|---|---|
+| `x10` | A0 | remainder/dividend | 7 → 95 |
+| `x11` | A1 | | 1 → 71 |
+| `x6`  | T1 | | 1 → 69 |
+| `x14` | A4 | quotient accumulator | 1 → 65 |
+| `x5`  | T0 | | 1 → 63 |
+| `x28` | T3 | | 1 → 62 |
+| `x7`  | T2 | | 1 → 4 |
+| `x12` | A2 | divisor, read-only | 1 → 1 |
+| `x13` | A3 | base pointer | 2 → 2 |
+| `x15`/`x16`/`x17` | A5/A6/A7 | loop counters, and CONCRETE (`0x2`,`0x1`,`0x2`) | 1 → 1 each |
+| `cur_privilege`, `inv_leakage`, `ptstomem 4` | | the `sw` is in the EPILOGUE, not the loop body | unchanged |
+
+So an abstraction lemma has to abstract **six registers** (`x5`, `x6`, `x10`,
+`x11`, `x14`, `x28`); the other nine chunks need nothing. The loop counters
+staying concrete is also what lets the executor decide the back edge at all.
+
+*What this does and does not establish.* It confirms the split the KSL rig
+suggested, on the program that matters, with a named target set. It does NOT
+establish a growth LAW: two dumps give ONE increment, and 19.1× cannot be told
+apart from polynomial-in-steps by a single ratio. Nor is 19.1× the same metric
+as this document's λ ≈ 10.53 — do not equate them.
+
+*Method notes.*
+- 63 leading binders indent the payload past every truncation limit, so strip the
+  prefix with a `spine_drop` into `{Σ' & 𝕊 Σ'}` (the sigma is unavoidable: a
+  binder's continuation lives in a different context). **Normalise the tree into
+  a `Definition` FIRST** — `spine_drop k (dr_tree 2 0)` recomputes the tree
+  inside the sigma and OOMs; against a pre-normalised tree it is cheap. The
+  earlier "pet OOMs on a vm_compute'd sigma" note was WRONG about the cause.
+- pet cannot do this rig at all (7656 MB cap). Run `coqc` directly.
+- **`Redirect` is forbidden by the MCP layer.** Run `coqc` by hand with the
+  `_CoqProject` flags and split one stdout stream on `Eval vm_compute in
+  "MARK_…"` sentinels instead.
+- Counting the PRINTED form is the only quantitative handle on a dump, since
+  `AMessage` can never be projected. It works well: per-slot char and `term_`
+  counts fall straight out of a paren-depth split of `debug_asn_heap`.
+- Ask for ONE tree per `vm_compute`. The first attempt put four trees in a single
+  query and paid 4×.
+
 **2026-08-24, GATE 3 MEASURED — and the answer is a distinction, not a yes/no.**
 Phase 3's mechanism turned out to be already delivered by Phases 1+2; what was
 missing was the measurement. Both are now done. Probes:
