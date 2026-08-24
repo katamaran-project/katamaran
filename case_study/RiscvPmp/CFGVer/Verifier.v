@@ -691,38 +691,89 @@ Section CFGVerificationDerived.
       List.map (fun t => subst t ζ) exits.
 
     (* ---------------------------------------------------------------- *)
-    (* The word supplier.  One logic variable per instruction ADDRESS,   *)
-    (* introduced once at contract entry — see SInstrTableW's comment    *)
-    (* for why the words have to come from outside at all.               *)
+    (* The word supplier.  ONE logic variable for the whole program, of   *)
+    (* width word * n, with each address's word a SLICE of it — see       *)
+    (* SInstrTableW's comment for why the words have to come from outside *)
+    (* at all.                                                            *)
     (*                                                                   *)
-    (* They are introduced by EXTENDING the context that sexec_triple_addr *)
-    (* already hands to demonic_ctx, from Σ to Σ ▻▻ words_ctx n, rather   *)
-    (* than by a fresh fold or by declaring them in the contract's own Σ. *)
-    (* Both alternatives were considered; this one is why Tables.v,       *)
-    (* Contracts.v, GenContract.v, TablesRel.v and all seven examples are *)
-    (* untouched by the word threading, and it reuses the already-proved  *)
-    (* refine_demonic_ctx instead of needing a new refinement lemma.      *)
+    (* It used to be one variable PER ADDRESS (n of them).  That is not   *)
+    (* wasteful in itself — a word is a pure identity token, and a logic  *)
+    (* variable is the cheapest representation of one, since its identity *)
+    (* lives in its de Bruijn INDEX and so stays decidable even though    *)
+    (* its value is unknown.  What made n of them expensive is that |Σ|   *)
+    (* drives lookup cost QUADRATICALLY (diagnostics/lvar-lookup-cost-    *)
+    (* drivers.md), and on br_divrem the words were 49 of 63 binders.     *)
     (*                                                                   *)
-    (* All n bindings are named "w"; duplicate names in an LCtx are fine  *)
-    (* here because the terms are read POSITIONALLY (words_of_env), never *)
-    (* resolved by name — demonic_ctx alpha-renames them to w, w.1, ...   *)
+    (* Slicing keeps the property that made variables work: the LEAF is   *)
+    (* still a term_var, compared by index, and the bvtake/bvdrop         *)
+    (* wrappers carry concrete nat indices that uop.tel_eq_dec settles.   *)
+    (* So Term_eqb on two slices of the same variable is `true`, and on   *)
+    (* different slices `false` — measured before writing this.  Every    *)
+    (* attempt to make a word a term_val of a Coq-level value instead     *)
+    (* FAILED, and not for a shallow reason: eq_dec on an opaque `bv`     *)
+    (* exhausts memory under vm_compute (Bitvector.v's eqdec_bv builds an *)
+    (* equality PROOF via bin_inj), and no reduction strategy can decide  *)
+    (* equality of an opaque value at all.  Do not retry that.            *)
+    (*                                                                   *)
+    (* NO LOSS OF GENERALITY: ∀ W : bv (word*n) and ∀ w_0..w_{n-1} : bv   *)
+    (* word are in bijection under slicing.                               *)
+    (*                                                                   *)
+    (* Shape copied from GenContract.v's mem_class_width /                *)
+    (* gen_mem_cells_class, which does exactly this for memory cells.     *)
+    (* words_width (S n) must stay DEFINITIONALLY `word + words_width n`  *)
+    (* or the slices do not typecheck against uop.bvtake/bvdrop's         *)
+    (* `bvec (m + k)` index — the same trap GenContract.v flags.          *)
+    (*                                                                   *)
+    (* n = 0 gives a width-0 binding rather than no binding.  Deliberate: *)
+    (* it keeps words_ctx a single uniform shape, and an empty program    *)
+    (* cannot occur.                                                      *)
     (* ---------------------------------------------------------------- *)
-    Fixpoint words_ctx (n : nat) : LCtx :=
+    Fixpoint words_width (n : nat) : nat :=
       match n with
-      | O    => [ctx]
-      | S n' => words_ctx n' ▻ ("w"∷ty_word)
+      | O    => 0
+      | S n' => word + words_width n'
       end.
 
-    (* Read the n word entries off as a plain list.  Generic in the value
-       functor D so the concrete mirror (VerifierRel.v, D := Val) and the
-       symbolic side (D := Term w) share one definition, hence one induction
-       when relating them. *)
-    Fixpoint words_of_env {D : Ty -> Set} (n : nat) :
-      NamedEnv D (words_ctx n) -> list (D ty_word) :=
-      match n with
+    Definition words_ctx (n : nat) : LCtx :=
+      [ctx] ▻ ("w"∷ty.bvec (words_width n)).
+
+    (* Peel the n words off the class variable, word bits at a time.
+       Generic in the value functor D — so the concrete mirror
+       (VerifierRel.v, D := Val) and the symbolic side (D := Term w) still
+       share ONE definition and hence one induction when relating them —
+       but now PARAMETERISED by D's take/drop, because slicing needs
+       operations and those differ per functor (term_unop for Term,
+       bv.take/bv.drop for Val). *)
+    Fixpoint words_of_slice {D : Ty -> Set}
+        (dtake : forall m k, D (ty.bvec (m + k)) -> D (ty.bvec m))
+        (ddrop : forall m k, D (ty.bvec (m + k)) -> D (ty.bvec k))
+        (n : nat) : D (ty.bvec (words_width n)) -> list (D ty_word) :=
+      match n return D (ty.bvec (words_width n)) -> list (D ty_word) with
       | O    => fun _ => nil
-      | S n' => fun E => cons (env.head E) (words_of_env n' (env.tail E))
+      | S n' => fun W =>
+          cons (dtake word (words_width n') W)
+               (words_of_slice dtake ddrop n' (ddrop word (words_width n') W))
       end.
+
+    Definition words_of_env {D : Ty -> Set}
+        (dtake : forall m k, D (ty.bvec (m + k)) -> D (ty.bvec m))
+        (ddrop : forall m k, D (ty.bvec (m + k)) -> D (ty.bvec k))
+        (n : nat) (E : NamedEnv D (words_ctx n)) : list (D ty_word) :=
+      words_of_slice dtake ddrop n (env.head E).
+
+    (* D := Term w.  NOTE `Set Implicit Arguments` is on in this file, so
+       `n` is IMPLICIT in both words_of_env and words_of_env_term (it is
+       inferable from E) — passing it explicitly is a type error whose
+       message points at the wrong argument. *)
+    Definition wterm_take {Σ} (m k : nat) (t : Term Σ (ty.bvec (m + k)))
+      : Term Σ (ty.bvec m) := term_unop (uop.bvtake m) t.
+    Definition wterm_drop {Σ} (m k : nat) (t : Term Σ (ty.bvec (m + k)))
+      : Term Σ (ty.bvec k) := term_unop (uop.bvdrop m) t.
+
+    Definition words_of_env_term {w} (n : nat)
+        (E : NamedEnv (Term (wctx w)) (words_ctx n))
+      : list (Term (wctx w) ty_word) :=
+      words_of_env (@wterm_take (wctx w)) (@wterm_drop (wctx w)) E.
 
     (* Attach the word column.  Lengths always agree at the one call site
        (n := length tbl), so the []-fallback is never taken; if it ever were,
@@ -735,10 +786,11 @@ Section CFGVerificationDerived.
       | _ , _ => nil
       end.
 
-    (* The one demonic_ctx call now covers Σ AND the n = length tbl word
-       variables; δw is split back apart with env.drop / env.take.  Note the
-       words are introduced HERE, before the execution loop, so their count is
-       the PROGRAM's instruction count and is independent of the trip count. *)
+    (* The one demonic_ctx call covers Σ AND the SINGLE wide word variable;
+       δw is split back apart with env.drop / env.take.  The words are
+       introduced HERE, before the execution loop, so nothing about them
+       depends on the trip count — and since 2026-08-24 they cost ONE binder
+       for the whole program rather than one per instruction. *)
     Definition sexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
@@ -749,7 +801,7 @@ Section CFGVerificationDerived.
         let n := length tbl in
         ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
         let δ   := env.drop (words_ctx n) δw in
-        let ws0 := words_of_env n (env.take (words_ctx n) δw) in
+        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
         ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
         (* The ONLY nextpc variable in the whole run.  The first step cannot
            know the incoming nextpc value, so it is quantified here — ONCE,
