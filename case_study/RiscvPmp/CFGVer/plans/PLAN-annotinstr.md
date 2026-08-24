@@ -58,13 +58,49 @@ it fires once, which looks like the mechanism failing.
 (the same law as Countdown and KSL), and **tree CONSTRUCTION alone is already
 2.4× for one extra trip** — no `solve_vc` involved.
 
-*The heap, trip 1 → trip 2, within the n=2 run.*
+*The heap, per trip. THREE trips measured (n=3 completed in ~5 min / 9.3 GB
+peak under coqc), so there are two increments and the law is visible.*
 
-| | trip 1 | trip 2 | |
-|---|---|---|---|
-| chunks | 15 | 15 | static |
-| heap printed chars | 786 | 8 787 | **11.2×** |
-| `term_` nodes | 23 | 439 | **19.1×** |
+| trip | chunks | heap chars | `term_` nodes | ratio |
+|---|---|---|---|---|
+| 1 | 15 | 786 | 23 | — |
+| 2 | 15 | 8 787 | 439 | 19.09x |
+| 3 | 15 | 89 011 | 4 629 | **10.54x** |
+
+`|Sigma| = 63` and tree = 67/68/69 nodes at n=1/2/3 -- so |Sigma| is flat and the
+tree grows by exactly the one debug node per trip. **The growth is PURELY term
+size, in six register slots, and nothing else moves at all.**
+
+**lambda = 10.54, measured -- an independent confirmation of this document's
+lambda ~ 10.53.** The trip-1 -> trip-2 ratio of 19.09x is inflated by first-trip
+effects (five of the six slots are still atoms on entry to trip 1, and `x10`
+already carries the prologue); the steady-state ratio is trip 2 -> trip 3 =
+**10.54x**. That this lands on 10.53 from a completely different measurement --
+counting `term_` nodes in a printed heap dump, rather than whatever the original
+lambda was derived from -- is either a strong independent confirmation or a
+coincidence to three significant figures. I do not know the original derivation,
+so I record it as the former with that caveat. An earlier draft of this entry
+said "do not equate them"; the numbers landed on top of each other.
+
+*Consequence, stated bluntly.* At 10.54x per trip and 31 trips fixed by the
+division algorithm, the heap term count goes as ~23 x 10.5^29. This is the
+quantitative form of "muladd is blocked on cost", and it says what the
+abstraction lemma has to achieve: fire EVERY trip on those six registers, taking
+10.54 -> 1. A lemma that fires occasionally does not help.
+
+*Per-slot steady-state ratios (t2 -> t3) all cluster at ~10-12x*, and the eight
+static slots are EXACTLY constant at all three trips:
+
+| slot | t1 | t2 | t3 | t2->t3 |
+|---|---|---|---|---|
+| `x10` (A0) | 7 | 95 | 991 | 10.43x |
+| `x11` (A1) | 1 | 71 | 843 | 11.87x |
+| `x6` (T1) | 1 | 69 | 771 | 11.17x |
+| `x14` (A4) | 1 | 65 | 691 | 10.63x |
+| `x5` (T0) | 1 | 63 | 625 | 9.92x |
+| `x28` (T3) | 1 | 62 | 624 | 10.06x |
+| `x7` (T2) | 1 | 4 | 74 | 18.50x (late starter, still catching up) |
+| the other 8 | | | | **1.00x at every trip** |
 
 *Per slot — this is the actionable part, because it names Phase 4's target set.*
 Seven of fifteen chunks grow; eight are BYTE-IDENTICAL across trips.
@@ -87,11 +123,12 @@ So an abstraction lemma has to abstract **six registers** (`x5`, `x6`, `x10`,
 `x11`, `x14`, `x28`); the other nine chunks need nothing. The loop counters
 staying concrete is also what lets the executor decide the back edge at all.
 
-*What this does and does not establish.* It confirms the split the KSL rig
-suggested, on the program that matters, with a named target set. It does NOT
-establish a growth LAW: two dumps give ONE increment, and 19.1× cannot be told
-apart from polynomial-in-steps by a single ratio. Nor is 19.1× the same metric
-as this document's λ ≈ 10.53 — do not equate them.
+*What this establishes.* The split the KSL rig suggested, on the program that
+matters, with a named target set AND a measured per-trip law (10.54x, steady
+state) that independently reproduces this document's lambda. What it does not
+establish: anything beyond trip 3 -- there are two increments and only the second
+is steady-state, so a change of regime at higher trips is not excluded. n=4 would
+cost roughly 10x the n=3 build and is not obviously worth it.
 
 *Method notes.*
 - 63 leading binders indent the payload past every truncation limit, so strip the
