@@ -28,6 +28,103 @@ topic branch and reach the protected branch via `git merge --no-ff`.
 
 ## Log
 
+**2026-08-24, GATE 3 MEASURED — and the answer is a distinction, not a yes/no.**
+Phase 3's mechanism turned out to be already delivered by Phases 1+2; what was
+missing was the measurement. Both are now done. Probes:
+`Example/ZZCountdownDebugProbe.v`, `Example/ZZKslHeapDebugProbe.v` (throwaway,
+gitignored, not in `_CoqProject`).
+
+*The mechanism, on a real loop.* A break on the loop head fires **once per
+trip**, and costs exactly one node per firing:
+
+| rig | trips | debug nodes | total nodes | non-debug |
+|---|---|---|---|---|
+| Countdown, X1=2, fuel 5 | 2 | 2 | 9 | 7 |
+| Countdown, X1=4, fuel 9 | 4 | 4 | 11 | 7 |
+| `zzkh`, t=2, P=1, fuel 48 | 2 | 2 | 25 | 23 |
+
+Non-debug node count is CONSTANT in trips (7 = 4 `demonicv` + 2 `assumek` +
+`block`), so the tree is `nondebug + N`. The *unannotated* tree of the same
+program prunes to a single `block` in both rigs — i.e. debug nodes are what
+stops `prune` collapsing the tree, which is the whole cost of instrumentation
+and is consistent with this document's own "dump with it, measure without it".
+The annotated Countdown VC still proves with the tactic unchanged (7.9 s +
+3.8 s `Qed`).
+
+*Dumps self-identify; no label is needed.* Countdown's four dumps carry
+`x1 = 0x4, 0x3, 0x2, 0x1` — the value on entry to each trip — and tree nesting
+gives the order. A label argument on `AnnotDebugBreak` would be a convenience,
+not a prerequisite. (An earlier note in this session claimed the dumps were
+indistinguishable. Wrong: content distinguishes them.)
+
+*GATE 3 proper — `zzkh` at t=2, the rig this document names.* Verdict: **"the
+heap is static across trips" is TRUE in inventory and |Σ|, FALSE in order, and
+FALSE in content.**
+
+- **|Σ| flat.** 20 `demonicv` binders, and *none* added between the two dumps.
+  Confirms this document's "|Σ| flat" claim directly.
+- **Chunk inventory static.** 8 chunks on both trips, the same 8 identities
+  (`inv_leakage`, `cur_privilege`, `ptstomem 4`, `x14`, `x13`, `x12`, `x11`,
+  `x10`).
+- **Chunk order changes.** Same multiset, different list. Countdown does this
+  too, and there it is a ONE-TIME flip: trip 1 is
+  `[inv_leakage; cur_privilege; x1]`, trips 2–4 are all
+  `[x1; cur_privilege; inv_leakage]`. It does not alternate.
+- **Chunk contents GROW.** This is the real finding. On trip 1, `x10`/`x11`/`x12`
+  hold the bare classed existentials `term_var "v"`, `"v.1"`, `"v.2"` — atoms.
+  On trip 2 they hold compound terms: `x10 = term_mulx (0x38 +ᵇ p) 0xe1000000`,
+  `x12 = 0xe1000000`, and `x11` a nested
+  `bvand/shiftr/bvand/bvxor/bvand/bvadd` expression. The memory cell goes from
+  `term_bvtake 32 (term_var "mwpriv")` to `term_mulx (0x38 +ᵇ p) 0xe1000000`.
+- **Path condition** is the same one-time step as Countdown: 1 formula on trip 1,
+  2 from trip 2 on (gaining `formula_secLeak (term_var "p")`), then fixed. Not
+  per-trip growth.
+
+*Why this confirms rather than undermines the Phase 4 targeting.* The slot
+STRUCTURE is stable while the TERMS in those slots grow — which is exactly the
+shape that makes the abstraction lemma statable ("consume `A0 ↦ <huge term>`,
+produce `∃v, A0 ↦ v ∗ inv v`"): there is a fixed set of slots to write such a
+lemma about. Read together with §"Before funding this", the claim "heap fixed by
+construction, term growth is the whole story" is now measured and holds in the
+sense that matters.
+
+*Strength and limit of this evidence.* Stronger than expected, because
+`ZZKslHeapCommon`'s header pins term shape FLAT on purpose — the mask bit and H
+both come from `A3`, a constant, never from `A0`, so terms are not supposed to
+self-accumulate — and they grew from atoms to nested expressions in TWO trips
+anyway. Still not `muladd`/`br_divrem`, where the shape is self-referential by
+design and this should be strictly worse. GATE 3 as written is met; the
+motivating program remains unmeasured.
+
+*Five method corrections to the Phase 3 recipe below — it is wrong as written.*
+1. **`DebugCFGVerifierContract` + `vc_debug` DOES NOT WORK.** `apply vc_debug;
+   vm_compute` yields a ~12,000,000-character goal. Use instead:
+   `Eval vm_compute in (cfg_map contract (fun _ p exits Q i _ fl =>
+   postprocess (CFG_VC_triple p exits Q i fl)))`. No VC proof is needed to dump.
+2. **The payload can be PRINTED, never EXTRACTED.** `AMessage` is
+   `mk {M} {instances} (msg : M Σ)` — existentially packed (`Messages.v:80`) —
+   so no Coq function projects a `DebugAsn` back out. `count_debug` /
+   `count_nodes` (in both probes) give summaries instead.
+3. **Indentation, not size, is the printing obstacle.** 20 leading `demonicv`
+   indent the payload ~70 columns and wrap every line, truncating output before
+   the later trips. `Set Printing Width 1000` fixes it. Do NOT try to strip the
+   prefix by `vm_compute`-ing a `{Σ' & 𝕊 Σ'}` spine-drop (the sigma is needed
+   because a binder's continuation lives in a different context) — pet OOMs at
+   7656 MB. The `spine_drop` in `ZZKslHeapDebugProbe.v` is kept as a record of
+   that dead end.
+4. **Throwaway `ZZ*.vo` in the source tree are PRE-MIGRATION** and importing one
+   gives "makes inconsistent assumptions over library Prelude".
+   `rocq_compile_file`'s `keep_vo` is a **no-op under dune** — the artifact goes
+   to `_build/default`, never the source tree. Copy the rig's definitions into
+   the probe instead. (`ZZKslHeapCommon.v`'s SOURCE compiles unchanged
+   post-migration: the `AST → AnnotInstr` coercion adapts `list AST` rigs with
+   no edit, which is the coercion's design intent confirmed.)
+5. The break belongs on the loop HEAD, and that is not always instruction 0 of
+   the file — check the branch target. For `zzkh`, `zzkh_back_offset = 8140`
+   = −52 in 13-bit two's complement and the `BNE` sits at byte offset 52, so the
+   target is 0 and instruction 0 is the head.
+
+
 **2026-08-22, PHASES 1+2 COMPLETE.** Read this entry before the older ones; it
 supersedes their status claims.
 
@@ -733,13 +830,25 @@ end theorems axiom-clean.
 
 ### Phase 3 — `AnnotDebugBreak` as a usable tool (1 day)
 
-Plant one at a chosen pc and dump `(pathcondition, heap)` per trip via
-`DebugCFGVerifierContract` + `vc_debug` (`safe_debug` keeps `Debug` records;
-`prune` preserves debug nodes, `Propositions.v:1221`). This is the deliverable
-that pays for Phases 0–2 on its own.
+**DONE 2026-08-24; GATE 3 MET. See the top Log entry, and prefer it to the
+paragraph below, whose prescribed route does not work.**
+
+~~Plant one at a chosen pc and dump `(pathcondition, heap)` per trip via
+`DebugCFGVerifierContract` + `vc_debug`~~ — measured: `vc_debug` produces a
+~12 M-character goal and is unusable. Phases 1+2 already delivered the whole
+mechanism; what Phase 3 actually cost was the measurement plus finding a
+printable route (`Eval vm_compute` on the `postprocess (CFG_VC_triple …)` tree,
+`Set Printing Width 1000`). `safe_debug` keeping `Debug` records and `prune`
+preserving debug nodes (`Propositions.v:1221`) both hold as stated.
 
 **GATE 3:** per-trip heap and path condition dumped for `ZZKslHeapCommon` at
 `t=2`, showing the heap is static (which this plan asserts but has not measured).
+**MET, with a refinement of "static":** static in chunk inventory (8 chunks,
+same identities) and in |Σ| (20 binders, none added between trips); NOT static
+in chunk order; NOT static in chunk CONTENTS, which grow from bare classed
+existentials to nested compound terms within two trips — on a rig that pins term
+shape flat on purpose. The stable-slots/growing-terms split is what makes the
+Phase 4 abstraction lemma statable.
 
 ### Phase 4 — `AnnotLemmaInvocation` (separate effort, do NOT bundle)
 
