@@ -1253,18 +1253,24 @@ Section AdequacyTools.
       iDestruct "Hinstrs" as (words) "Hinstrs".
       specialize (Htrip words).
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
+      (* env_of_words now CONCATENATES the words into one wide value, so it
+         takes the plain-bv list (cws_of_bv) and the default is a bare
+         bv.zero rather than a SyncVal one. *)
       specialize (Htrip (env.cat ι (Katamaran.RiscvPmp.CFGVer.VerifierRel.env_of_words
-                                      (length tbl) (ty.SyncVal bv.zero)
-                                      (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of
+                                      (length tbl) bv.zero
+                                      (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_bv
                                          (w := wlctx Γ) words tbl ι)))).
       (* Split the supplied valuation back into its two halves, exactly as
          cexec_triple_addr does. *)
       rewrite env.drop_cat in Htrip.
       rewrite Katamaran.RiscvPmp.CFGVer.VerifierRel.env_take_cat in Htrip.
       (* `d` is explicit (it cannot be inferred), the length proof follows it. *)
+      (* The round trip now yields `map SyncVal (cws_of_bv ...)`; cws_of_bv_spec
+         folds that back to the cws_of the rest of the proof already speaks. *)
       rewrite (Katamaran.RiscvPmp.CFGVer.VerifierRel.words_of_env_of_words
-                 (ty.SyncVal (bv.zero : bv word)) _
-                 (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_length (w := wlctx Γ) words tbl ι)) in Htrip.
+                 (bv.zero : bv word) _
+                 (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_bv_length (w := wlctx Γ) words tbl ι)) in Htrip.
+      rewrite (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_bv_spec (w := wlctx Γ) words tbl ι) in Htrip.
       (* The word guard is free: cws_of is BUILT from `words` at the table's
          addresses, so wtable_rel holds by construction given itable_rel. *)
       specialize (Htrip (conj Hif (conj Hef

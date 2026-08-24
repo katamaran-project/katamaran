@@ -28,6 +28,80 @@ topic branch and reach the protected branch via `git merge --no-ff`.
 
 ## Log
 
+**2026-08-24 (third), CORRECTIONS to the two entries below, and where the word
+thread went.** Five claims made while measuring were wrong or overstated. They
+are corrected here rather than edited away, because each was believed on
+plausible-looking evidence and the reasoning is the reusable part.
+
+1. **"lambda = 10.54 reproduces 10.53 to three significant figures" —
+   OVERSTATED.** There are TWO proxies for term size in a printed dump and they
+   disagree: printed CHARS give a steady-state ratio of 10.13x
+   (89011/8787), `term_` node counts give 10.54x (4629/439). The honest
+   statement is **~10.1-10.5**, which contains the plan's lambda and supports
+   the ORDER, not a three-figure match. Cause: `term_` undercounts, because
+   infix notations (`+ᵇ`, `-ᵇ`, `<=ᵘ`) print as operators rather than as
+   `term_binop`, and unevenly across slots.
+
+2. **`|Sigma| = 63` was reported as if the DUMP carried it. It does not.**
+   `DebugAsn` has exactly two fields, `debug_asn_pathcondition` and
+   `debug_asn_heap` — there is **no variable-context field**, so
+   `AnnotDebugBreak` never snapshots Sigma. The 63 came from `count_binders`
+   walking the tree's `demonicv` spine. Binders ARE readable, including by a Coq
+   function (they are `SymProp` node data); what is unreadable is the HEAP's
+   variable references, which sit inside the packed `AMessage`. So a Coq-level
+   unused-variable analysis is writable for the path-condition half and not for
+   the heap half.
+
+3. **"chunks 15 -> 15" for br_divrem is identity-and-count only.** The analyser
+   keys slots by NAME, so chunk ORDER is normalised away and was never measured
+   there. The order finding (a one-time flip, then fixed) is from the KSL and
+   Countdown rigs only.
+
+4. **"50 of 54 bound variables are referenced nowhere" — WRONG, and this one
+   mattered most.** It was an artifact of BREAK PLACEMENT. The 49 `w.*` are used
+   on EVERY step: `exec_instruction_prologue` PRODUCES
+   `ptstoinstr [a; w; i]` and the epilogue CONSUMES it, and
+   `interp_ptsto_instr addr w instr := interp_ptstomem 4 addr w ∗ ⌜pure_decode w
+   = inr instr⌝` — so the word is the actual memory content, and the link
+   between it and the instruction. That produce/consume happens strictly INSIDE
+   `sexec_instruction`, whereas a break lives in `ai_ghost_before` /
+   `ai_ghost_after`, i.e. OUTSIDE it. **So no annotation position can ever
+   observe a word.** Genuinely dead: `v.3`-`v.6` (A4-A7, overwritten by the
+   prologue's `li` at instructions 0/1/6/7) plus `np` after the first step —
+   **five, not fifty**.
+
+   **The general lesson, worth more than the number: `AnnotDebugBreak` cannot
+   see anything that lives only inside a single instruction's execution.** A
+   liveness conclusion drawn from breaks is a claim about the state BETWEEN
+   instructions, and nothing more.
+
+5. **"Eliminating the words is a lever" — RETRACTED, twice over.** First
+   because `pure_decode` is an uninterpreted `Axiom` with no injectivity, so the
+   word is genuinely not determined by the instruction (`Verifier.v:373-384`
+   says so, and `PLAN-encoded-instr.md` is the plan that did the work). Second
+   because the per-address introduction I read as waste IS the fix for a
+   per-step leak — its flatness in trips, which I measured, is the signature of
+   that fix WORKING. Measuring an optimisation and mistaking it for a defect.
+
+*Where the thread did lead.* The words were reduced after all, by a route
+suggested by the user rather than by any of the above: ONE wide variable with
+each word a `bvtake`/`bvdrop` slice, mirroring `GenContract.v`'s
+`gen_mem_cells_class`. |Sigma| 63 -> 15, `vm_compute` ~1.6-1.7x faster, gate
+PASSED. **Recorded in `PLAN-encoded-instr.md` §12-SEQUEL, which is its proper
+home** — that plan owns the word threading — including the five dead
+alternatives with their reasons. Note it is a constant-factor win on an overhead
+proportional to program LENGTH; br_divrem's 10.5x/trip term growth is untouched
+and still needs Phase 4.
+
+*Methodology note, since it recurred.* FOUR harnesses in this session were
+vacuous, each caught only by a control: `assumek f block` reduces to `block` for
+ANY `f` (twice); `postprocess` never invokes the solver on a formula already
+embedded in an `assertk`, so a known-FALSE formula also survived; and
+`vm_compute` on `combined_solver` OOMs on concrete input, so every result was
+"fails". Write the control — a known-false instance, or a known-different one —
+in the FIRST version of a harness, not after the third suspicious pass.
+
+
 **2026-08-24 (later), br_divrem MEASURED — the motivating program, and the
 "stable slots, growing terms" split holds far harder there.** GATE 3 was met on
 `ZZKslHeapCommon`, but that rig pins term shape flat on purpose, so the result
