@@ -887,6 +887,17 @@ Section CFGVerificationDerived.
     (* above (step 5): the guard makes the triple hold vacuously at         *)
     (* valuations where the table doesn't match the gmap, and meaningfully  *)
     (* only at the one valuation the end-to-end proof discharges it at. *)
+    (* The concrete-side slicing ops for the word variable.  Defined AS
+       uop.evalRel of the very same UnOp the symbolic side applies
+       (Verifier.v's wterm_take/wterm_drop), so `inst` of a symbolic slice and
+       the concrete slice are the same function up to the standard
+       inst-of-term_unop clause — which is why words_of_slice_inst below closes
+       on `reflexivity` rather than needing a bridging lemma. *)
+    Definition rvtake (m k : nat) : RelVal (ty.bvec (m + k)) -> RelVal (ty.bvec m) :=
+      uop.evalRel (uop.bvtake m).
+    Definition rvdrop (m k : nat) : RelVal (ty.bvec (m + k)) -> RelVal (ty.bvec k) :=
+      uop.evalRel (uop.bvdrop m).
+
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
@@ -898,7 +909,7 @@ Section CFGVerificationDerived.
          and split back out with env.drop / env.take. *)
       CHeapSpec.bind (CHeapSpec.demonic_ctx (Σ ▻▻ words_ctx (length tbl))) (fun lenvw =>
       let lenv := env.drop (words_ctx (length tbl)) lenvw in
-      let cws  := words_of_env (length tbl) (env.take (words_ctx (length tbl)) lenvw) in
+      let cws  := words_of_env rvtake rvdrop (env.take (words_ctx (length tbl)) lenvw) in
       CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
           (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv
            /\ wtable_rel words tbl cws lenv))) (fun _ =>
@@ -1047,17 +1058,34 @@ Section CFGVerificationDerived.
        gives pointwise-related lists.  This is the ONLY place the positional
        (rather than by-name) reading of the word variables has to be justified,
        and it is justified by using the very same words_of_env on both sides. *)
+    (* Stated about words_of_slice, not words_of_env: the recursive call is on
+       `drop`-of-the-wide-term, so the induction must generalise over the WIDE
+       TERM and not merely over n. *)
+    Lemma words_of_slice_inst (n : nat) {w : World}
+        (W : Term (wctx w) (ty.bvec (words_width n))) (ι : Valuation w) :
+      List.Forall2 (fun (x : Term (wctx w) ty_word) (cx : RelVal ty_word) =>
+                      inst (T := fun Σ => Term Σ ty_word) x ι = cx)
+        (words_of_slice (@wterm_take (wctx w)) (@wterm_drop (wctx w)) n W)
+        (words_of_slice rvtake rvdrop n
+           (inst (T := fun Σ => Term Σ (ty.bvec (words_width n))) W ι)).
+    Proof.
+      revert w W ι. induction n; intros w W ι; cbn; [constructor|].
+      constructor.
+      - reflexivity.
+      - apply IHn.
+    Qed.
+
     Lemma words_of_env_inst {n : nat} {w : World}
         (E : Sub (words_ctx n) w) (ι : Valuation w) :
       List.Forall2 (fun (x : Term (wctx w) ty_word) (cx : RelVal ty_word) =>
                       inst (T := fun Σ => Term Σ ty_word) x ι = cx)
-        (words_of_env n E) (words_of_env n (inst E ι)).
+        (words_of_env (@wterm_take (wctx w)) (@wterm_drop (wctx w)) E)
+        (words_of_env rvtake rvdrop (inst E ι)).
     Proof.
-      induction n; cbn; [constructor|].
-      destruct (env.view E) as [E' v].
+      unfold words_of_env.
+      destruct (env.view E) as [E' t].
       cbn.
-      constructor; [reflexivity|].
-      apply IHn.
+      apply words_of_slice_inst.
     Qed.
 
     (* The word half of the extended demonic env: the symbolic word terms and
@@ -1068,8 +1096,9 @@ Section CFGVerificationDerived.
       inst δ ι = lenv ->
       List.Forall2 (fun (x : Term (wctx w) ty_word) (cx : RelVal ty_word) =>
                       inst (T := fun Σ => Term Σ ty_word) x ι = cx)
-        (words_of_env n (env.take (words_ctx n) δ))
-        (words_of_env n (env.take (words_ctx n) lenv)).
+        (words_of_env (@wterm_take (wctx w)) (@wterm_drop (wctx w))
+           (env.take (words_ctx n) δ))
+        (words_of_env rvtake rvdrop (env.take (words_ctx n) lenv)).
     Proof.
       intros <-.
       (* `rewrite <- inst_env_take` does NOT fire here even fully instantiated —
@@ -1137,28 +1166,44 @@ Section CFGVerificationDerived.
       apply IHEΔ.
     Qed.
 
-    (* The inverse of words_of_env: package a list of word values back into the
-       env shape demonic_ctx quantifies over. *)
-    Fixpoint env_of_words {D : Ty -> Set} (n : nat) (d : D ty_word)
-        (l : list (D ty_word)) : NamedEnv D (words_ctx n) :=
-      match n with
-      | O    => env.nil
-      | S n' => env.snoc (env_of_words n' d (List.tl l)) _ (List.hd d l)
+    (* The inverse of words_of_env.  It used to snoc n bindings; now it has to
+       CONCATENATE the n words into the single wide value, so bv.app replaces
+       env.snoc and the recursion is right-nested to match words_width's
+       `word + rest`.
+
+       Built over PLAIN bv and wrapped in SyncVal exactly once.  That is not a
+       restriction: wtable_rel already requires every concrete word to be
+       `ty.SyncVal (words v)`, so the per-word RelVal generality was never
+       used — instruction words are memory contents at public addresses and are
+       always sync.  It also avoids a real trap: a general RelVal concatenation
+       (liftBinOp bv.app) does NOT round-trip on a MIXED list, because
+       liftBinOp app (SyncVal a) (NonSyncVal b1 b2) sliced back gives
+       NonSyncVal a a rather than SyncVal a. *)
+    Fixpoint bv_of_words (n : nat) (d : bv word) (l : list (bv word))
+      : bv (words_width n) :=
+      match n return bv (words_width n) with
+      | O    => bv.zero
+      | S n' => bv.app (List.hd d l) (bv_of_words n' d (List.tl l))
       end.
 
-    Lemma words_of_env_of_words {D : Ty -> Set} (n : nat) (d : D ty_word)
-        (l : list (D ty_word)) :
-      length l = n -> words_of_env n (env_of_words n d l) = l.
+    Definition env_of_words (n : nat) (d : bv word) (l : list (bv word))
+      : NamedEnv RelVal (words_ctx n) :=
+      env.snoc env.nil _ (ty.SyncVal (bv_of_words n d l)).
+
+    Lemma words_of_env_of_words (n : nat) (d : bv word) (l : list (bv word)) :
+      length l = n ->
+      words_of_env rvtake rvdrop (env_of_words n d l) = List.map ty.SyncVal l.
     Proof.
-      revert l.
-      induction n; intros l Hl; cbn.
+      unfold env_of_words, words_of_env. cbn.
+      revert l. induction n; intros l Hl; cbn.
       - destruct l; [reflexivity|discriminate].
-      - destruct l as [|x l']; [discriminate|].
-        cbn.
-        f_equal.
-        apply IHn.
-        cbn in Hl.
-        now injection Hl.
+      - destruct l as [|x l']; [discriminate|]. cbn.
+        unfold rvtake, rvdrop. cbn.
+        (* SSReflect's rewrite is in scope here and takes SPACE-separated
+           rules, not comma-separated ones — hence two calls. *)
+        rewrite bv.take_app.
+        rewrite bv.drop_app.
+        f_equal. apply IHn. cbn in Hl. now injection Hl.
     Qed.
 
     (* The concrete word values at the table's addresses.  Total because `words`
@@ -1175,6 +1220,35 @@ Section CFGVerificationDerived.
         (ι : Valuation w) :
       length (cws_of words tbl ι) = length tbl.
     Proof. apply List.map_length. Qed.
+
+    (* The same list at the PLAIN bv level.  env_of_words now needs raw words to
+       concatenate, while wtable_rel and itable_relW_zip still speak RelVal, so
+       both forms exist and cws_of_bv_spec is the one-line bridge.  Keeping
+       cws_of's own definition and proofs untouched is deliberate: it is what
+       stops this change reaching wtable_rel_cws_of and itable_relW_zip. *)
+    Definition cws_of_bv (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w)
+        (ι : Valuation w) : list (bv word) :=
+      List.map (fun p =>
+         match ty.RVToOption (inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι) with
+         | Some v => words v
+         | None   => bv.zero
+         end) tbl.
+
+    Lemma cws_of_bv_length (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w)
+        (ι : Valuation w) :
+      length (cws_of_bv words tbl ι) = length tbl.
+    Proof. apply List.map_length. Qed.
+
+    Lemma cws_of_bv_spec (words : bv xlenbits -> bv word) {w} (tbl : SInstrTable w)
+        (ι : Valuation w) :
+      List.map ty.SyncVal (cws_of_bv words tbl ι) = cws_of words tbl ι.
+    Proof.
+      unfold cws_of, cws_of_bv.
+      rewrite List.map_map.
+      apply List.map_ext.
+      intros [t i].
+      now destruct (ty.RVToOption _).
+    Qed.
 
     (* wtable_rel holds for cws_of BY CONSTRUCTION, given only that the table's
        keys instantiate to SyncVal addresses — which itable_rel already says.
@@ -1249,8 +1323,9 @@ Section CFGVerificationDerived.
           (fun (x : Term (wctx wb) ty_word) (cx : RelVal ty_word) =>
              inst (T := fun Σ => Term Σ ty_word) x ι = cx)
           (List.map (fun x => persist__term x θ)
-             (words_of_env n (env.take (words_ctx n) δw)))
-          (words_of_env n (env.take (words_ctx n) lenvw))) : Pred wb)%I.
+             (words_of_env (@wterm_take (wctx wa)) (@wterm_drop (wctx wa))
+                (env.take (words_ctx n) δw)))
+          (words_of_env rvtake rvdrop (env.take (words_ctx n) lenvw))) : Pred wb)%I.
     Proof.
       constructor.
       intros ι Hpc Hrel.
@@ -1329,7 +1404,7 @@ Section CFGVerificationDerived.
                         (subst_itable (persist (env.drop (words_ctx (length tbl)) δw)
                                          (acc_trans (acc_trans θ1 θ1') θ2)) tbl)
                         (List.map (fun x => persist__term x (acc_trans (acc_trans θ1 θ1') θ2))
-                           (words_of_env (length tbl)
+                           (words_of_env (@wterm_take _) (@wterm_drop _)
                               (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
           { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
           iApply (rexec_cfg_addr instrs words exitCond fuel _ _ with "[$Hi $He]").
