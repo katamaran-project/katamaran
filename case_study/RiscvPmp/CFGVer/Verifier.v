@@ -379,9 +379,14 @@ Section CFGVerificationDerived.
        pure_decode is an uninterpreted Axiom (Machine.v:147) with no
        injectivity, so the word is genuinely not determined by the
        instruction and must be supplied from outside.  The words are
-       introduced ONCE per instruction ADDRESS (sexec_triple_addr below), not
-       once per execution step, so a loop re-executing the same addresses
-       reuses the same word variables every trip.  PLAN-encoded-instr.md. *)
+       introduced ONCE for the whole program (sexec_triple_addr below), not
+       once per execution step and — since 2026-08-24 — not once per address
+       either: there is a SINGLE demonic variable of width word * n and each
+       address's word is a bvtake/bvdrop SLICE of it, so a loop re-executing
+       the same addresses reuses the same slices every trip.  |Σ| for
+       br_divrem is 15 rather than 63 as a result.  PLAN-encoded-instr.md for
+       the per-step -> per-address step, PLAN-annotinstr.md's 2026-08-24 log
+       for the per-address -> single-variable step. *)
     Definition SInstrTableW : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w) ty_word * AnnotInstr).
 

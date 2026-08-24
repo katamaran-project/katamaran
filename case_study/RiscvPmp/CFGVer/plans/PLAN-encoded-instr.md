@@ -21,6 +21,103 @@ quoting any timing from §7.
 > and the `encodes_instr` CHUNK that leaks are different objects.** A sound
 > chunk-GC may already exist at tag `archive/gc-attempt-2026-07`.
 
+## §12-SEQUEL (2026-08-24). Per-ADDRESS -> ONE variable for the whole program
+
+This plan took the words from once-per-STEP to once-per-ADDRESS. They are now
+once per PROGRAM: a single `bv (words_width n)` demonic variable, with each
+address's word a `bvtake`/`bvdrop` SLICE of it. Branch `issue/word-slicing`,
+gate PASSED (14 theorems axiom-clean).
+
+*Measured on the `zzdrn` br_divrem rig (`Example/ZZDivremDebugProbe.v`).*
+
+| | \|Sigma\| | tree nodes | vm_compute |
+|---|---|---|---|
+| n=1 before | 63 | 67 | 13.8 s |
+| n=1 after | **15** | 19 | **8.55 s** |
+| n=2 before | 63 | 68 | 32.7 s |
+| n=2 after | **15** | 20 | **18.98 s** |
+
+49 of the 63 binders were words. No trusted-surface change, no example edited,
+and no loss of generality: `forall W : bv (word*n)` and
+`forall w_0..w_{n-1} : bv word` are in bijection under slicing.
+
+*Framing that matters.* This is a CONSTANT-FACTOR win on an overhead
+proportional to program LENGTH (the word count is flat in trips — 63 binders at
+n=1, n=2 and n=3 alike). It does nothing to br_divrem's real blocker, which is
+term growth at 10.54x/trip in six loop-carried registers
+(`PLAN-annotinstr.md`'s 2026-08-24 entries). Its value is that |Sigma| drives
+lookup cost QUADRATICALLY (`diagnostics/lvar-lookup-cost-drivers.md`), so
+removing 78% of |Sigma| helps every program rather than one.
+
+*Why slicing, when five other routes are dead.* A word is a pure identity
+token, and a logic variable is the CHEAPEST representation of one — its identity
+lives in its de Bruijn INDEX, so it stays decidable while its value is unknown.
+Slicing preserves exactly that: the leaf is still a `term_var`, and the
+`bvtake`/`bvdrop` wrappers carry concrete `nat` indices that `uop.tel_eq_dec`
+settles. Verified before writing any code: `Term_eqb` on two slices of one
+variable is `true`, on different slices `false`, and `peval` leaves slices
+alone.
+
+**The five dead routes, each with its reason — do not re-propose (this
+supersedes §1's list for the word question specifically):**
+
+1. **A `term_val` of an opaque Coq-level `bv`.** DEAD, measured. `Term_eqb`'s
+   `term_val` case calls `eq_dec`, and `Bitvector.v:141`'s `eqdec_bv` builds an
+   equality PROOF via `bin_inj`; on an opaque `bv` that exhausts memory under
+   BOTH `vm_compute` and `native_compute`, while `cbn` merely leaves it stuck.
+   Deeper reason: no reduction strategy can decide equality of an opaque value,
+   so such a term can never take part in the solver's syntactic machinery. This
+   is also why the symbolic base must be `term_var "p"` — and note it is a
+   SECOND, independent blowup site from `bv.of_N` on an opaque `N`, which the
+   symbolic-base attempt hit (`project_cfgver_symbolic_base_poc`). Fixing one
+   would not have rescued the other.
+2. **Hiding the word under an existential in the predicate.** That is the
+   PRE-2026-07-31 design this plan removed; it costs one variable per FETCH
+   (~850 at 31 trips) instead of per address.
+3. **Postulating injectivity of `pure_decode`.** Gives uniqueness, not a
+   witness — you still cannot write a term for "the word encoding `i`", so the
+   variable stays. Also: check it is even TRUE before postulating it; if the
+   decoder abstracts any don't-care bits, two words decode to one AST and the
+   axiom is false.
+4. **Moving the decode boundary so `fetch` returns an AST.** Requires changing
+   MicroSail's `fetch`, which is TRUSTED code. And a contract-only version is
+   impossible: `step` computes `pure_decode w`, and rewriting that to `i` needs
+   the chunk's fact matched against a HANDLE on `w`, so the caller must be able
+   to name it. A contract can only choose WHERE the handle comes from (its own
+   postcondition = per fetch, or the precondition = per address), and this plan
+   already took the better option.
+5. **Concrete word literals from the assembler.** Technically viable —
+   `Term_eqb` on literals works, `asm_to_ast.py` knows the real encodings, and
+   the decode facts can arrive as Coq hypotheses from `mem_has_instrs` with no
+   change to `fetch` or its contract. NOT taken because the price is at the
+   STATEMENT level: the theorem becomes specific to one encoding and
+   `Example/*Result.v` would mention machine words. Quantifying to recover
+   generality puts you back in case 1.
+
+*Implementation notes.* `words_width (S n)` must stay DEFINITIONALLY
+`word + words_width n` or the slices fail to typecheck against `uop.bvtake`'s
+`bvec (m + k)` index — the same trap `GenContract.v` flags for
+`mem_class_width`, whose `gen_mem_cells_class` is the shape this copies. On the
+refinement side, define the concrete ops AS `uop.evalRel` of the same `UnOp` the
+symbolic side applies (`rvtake m k := uop.evalRel (uop.bvtake m)`): since
+`evalRel op := liftUnOp (eval op)`, the `inst`-correspondence becomes
+DEFINITIONAL and `words_of_slice_inst` closes on `reflexivity` + `apply IHn`.
+State the induction over `words_of_slice`, not `words_of_env` — the recursive
+call is on drop-of-the-wide-term, so it must generalise over the WIDE TERM.
+`env_of_words` concatenates with `bv.app` over plain `bv`, wrapped in `SyncVal`
+once; a general `RelVal` concatenation is WRONG because
+`liftBinOp bv.app (SyncVal a) (NonSyncVal b1 b2)` sliced back gives
+`NonSyncVal a a`, and it is also no restriction since `wtable_rel` already pins
+every concrete word to `ty.SyncVal (words v)`.
+
+*Three things that cost time.* `words_of_env` had THREE call sites and the
+compiler surfaces them one at a time (`VerifierRel.v:901`, `:1326`, `:1406` —
+the last inside an `iAssert`); grep for all of them up front. SSReflect's
+`rewrite` is in scope in `VerifierRel.v` and takes SPACE-separated rules, so
+`rewrite A, B.` is a SYNTAX error there even though the identical line parsed in
+a probe. And `Set Implicit Arguments` makes `n` implicit in `words_of_env` /
+`words_of_env_term`, with an error message that points at the wrong argument.
+
 ## §0. Why this is worth doing, and what "done" looks like
 
 Measured on the flat `zzn` reproducer (`PLAN-nextpc-param.md` §5-RESULTS, probe

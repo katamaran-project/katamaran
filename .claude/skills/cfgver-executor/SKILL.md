@@ -61,7 +61,42 @@ demonic variable on EVERY step; the word cannot be derived (`pure_decode` is an
 uninterpreted `Axiom` with no injectivity), so it must be supplied per address.
 `sexec_triple_addr` introduces the words ONCE by extending the context it already
 hands to `demonic_ctx`, from `Σ` to `Σ ▻▻ words_ctx (length tbl)`, then
-`zip_words` attaches them. Because the column lives on `SInstrTableW` and not on
+`zip_words` attaches them.
+
+**`words_ctx n` is ONE binding, not n (2026-08-24).** It is a single
+`bv (words_width n)` variable (`words_width (S n) = word + words_width n`), and
+each address's word is a `bvtake`/`bvdrop` slice read off by `words_of_slice`.
+On `br_divrem` this took |Σ| from **63 to 15** (49 of the 63 binders were words)
+and `vm_compute` from 13.8 s to 8.55 s at one trip, 32.7 s to 18.98 s at two.
+Shape copied from `GenContract.v`'s `mem_class_width` / `gen_mem_cells_class`,
+which already does this for memory cells — and `words_width (S n)` must stay
+DEFINITIONALLY `word + words_width n` or the slices fail to typecheck against
+`uop.bvtake`'s `bvec (m + k)` index.
+
+*Why slicing and not a Coq-level value.* A word is a pure identity token, and a
+logic variable is the cheapest representation of one: its identity lives in its
+de Bruijn **index**, so it stays decidable while its value is unknown. Slicing
+keeps that — the leaf is still a `term_var`, and the wrappers carry concrete
+`nat` indices that `uop.tel_eq_dec` settles. **Do not retry making a word a
+`term_val` of an opaque Coq value**: `Bitvector.v`'s `eqdec_bv` builds an
+equality *proof* via `bin_inj`, and `Term_eqb` on an opaque `bv` exhausts memory
+under both `vm_compute` and `native_compute` (measured). More fundamentally, no
+reduction strategy can decide equality of an opaque value at all — which is also
+why the symbolic base must be `term_var "p"`.
+
+*Refinement side.* `words_of_env` is now parameterised by `D`'s take/drop, and
+the concrete ops are defined **as** `uop.evalRel` of the same `UnOp` the
+symbolic side applies (`rvtake m k := uop.evalRel (uop.bvtake m)`) — since
+`evalRel op := liftUnOp (eval op)`, that makes the `inst`-correspondence
+definitional and `words_of_slice_inst` closes on `reflexivity` + `apply IHn`.
+`env_of_words` **concatenates** (`bv.app`) over plain `bv`, wrapped in `SyncVal`
+once. A general `RelVal` concatenation is WRONG, not merely clumsy:
+`liftBinOp bv.app (SyncVal a) (NonSyncVal b₁ b₂)` sliced back gives
+`NonSyncVal a a`. It is also no restriction — `wtable_rel` already pins every
+concrete word to `ty.SyncVal (words v)`, since instruction words sit at public
+addresses and are always sync. `cws_of_bv` (raw) sits alongside an untouched
+`cws_of` (RelVal) with a three-line `cws_of_bv_spec` bridge, which is what keeps
+`wtable_rel_cws_of` and `itable_relW_zip` unchanged. Because the column lives on `SInstrTableW` and not on
 the Σ-level `SInstrTable`, **`itable_rel`, the faith lemmas, `Contracts.v`,
 `GenContract.v` and every example were untouched by the change.**
 
