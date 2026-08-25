@@ -255,17 +255,99 @@ the fresh variable, and you choose `ι(x)`.
    step of `sexec_cfg_addr` (or a fused `havoc` primitive), not an
    `sexec_ghost` case, because the carried state must be transported.
 
+### Two further checks, also verified (2026-08-25)
+
+```coq
+(* The composite instantiates back to exactly ι — the heap-transport core. *)
+Lemma zz_helper3 … : inst (sub_acc (acc_trans acc_snoc_right (acc_subst_right (term_var y))))
+                          (env.snoc (env.remove (x∷σ) ι xIn) (y∷σ) (env.lookup ι xIn)) = ι.
+Proof. rewrite sub_acc_trans. rewrite inst_subst. rewrite zz_helper. now rewrite inst_sub_wk1. Qed.
+
+(* Hence the heap relation transports with NO side condition. *)
+Lemma zz_heap_transport … (h : SHeap w) :
+  inst (persist h (acc_trans acc_snoc_right (acc_subst_right (term_var y))))
+       (env.snoc (env.remove (x∷σ) ι xIn) (y∷σ) (env.lookup ι xIn)) = inst h ι.
+Proof. rewrite inst_persist. now rewrite zz_helper3. Qed.
+```
+
+Also confirmed by `Check`: the `occurs_check` instance resolves at `SHeap` —
+`occurs_check bIn h : SHeap Σ → option (SHeap (Σ - b))` — so no new instance is
+needed for the candidate scan.
+
+### THE SEQUENCING CONSTRAINT (found 2026-08-25, and it changes the design again)
+
+**Non-vacuity holds only for the composite that starts BEFORE the mint.** This is
+not a detail — it is forced, and it dictates the whole shape:
+
+- `zz_dummy_witness` is stuck for an **arbitrary** witness `t` at a **fixed**
+  world. `term_var y` is an instance of that. So a drop taken from the POST-mint
+  world `wsnoc w y`, with witness `term_var y`, is **exactly as unprovable as the
+  dummy** — at valuations of `wsnoc w y` with `ι(x) ≠ ι(y)` the fibre is empty.
+- Non-vacuity comes *only* from `acc_snoc_right` sitting inside the same
+  `acc_trans`, which is what lets `assuming_acc_snoc_right` choose the fresh
+  variable's value to be `ι(x)`.
+- Consequence: **nothing may be produced into the heap between the mint and the
+  drop.** The heap the composite transports is the PRE-mint heap (`h : SHeap w`
+  in `zz_heap_transport` — note w has no y, which is why the counterexample
+  "table mentions y and register also holds y" cannot arise there).
+
+So the havoc's correct order is:
+
+1. consume the k register chunks — this is what makes the old variables dead;
+2. k× **fused mint+drop** (mint `y_i`, retire dead `x_i` with witness
+   `term_var y_i`);
+3. produce the k new chunks, holding `term_var y_i`.
+
+**Therefore the havoc CANNOT remain a plain `Lem`.** `produce (asn.exist …)`
+fuses minting with chunk-production, which is exactly the grouping that breaks
+this: it would put the produce between the mint and the drop. `havoc_regs` must
+become an **executor primitive** that separates the two. That is a scope increase
+over Phase 1 as written below, and it is the main structural cost of this plan.
+
+### CORRECTION to "soundness needs no side condition"
+
+An earlier version of this section (and the commit message of `6cc76a53`) said the
+fused drop needs **no** side condition, because a rename is unconditionally
+sound. **That is too strong and is corrected here.** The rename *in isolation* is
+unconditionally sound — `zz_fresh_witness` and `zz_heap_transport` carry no
+hypotheses, and that is real. But the rename's *purpose* is to then produce a
+chunk holding the fresh variable, and there the check bites:
+
+- if `x` genuinely occurs nowhere in the carried state, the rename moves nothing,
+  the net effect is "x out, y in", and producing `r ↦ y` is a genuine havoc;
+- if `x` DOES occur somewhere — say a table key — the rename is still faithful,
+  but afterwards that occurrence and the register's new value are **the same
+  variable**. The tree is then `∀y (… mentions y … r ↦ y …)` where the correct
+  havoc is `∀x ∀y (… mentions x … r ↦ y …)`. The former is the diagonal of the
+  latter, i.e. **strictly weaker — unsound**, not merely incomplete.
+
+So an `occurs_check` over the **full** carried state (heap, `wco`, `tbl`,
+`exits`, `apc`) is required, and design decision 2 below **stands** rather than
+dropping away. The sharper reason: the check is what guarantees the fresh
+variable is still fresh *after* the rename. Design decision 4 (the `Inhabited`
+witness) does genuinely drop away — the witness is always a `term_var`.
+
 ### What is NOT yet verified — do not call this done
 
 Only the crux is proved. Still open, and NOT to be assumed routine (that
 assumption is what produced two wrong verdicts already):
 
-- the full `refine_*` lemma for the fused action, including the `□ᵣ` /
-  `refine_four` plumbing and the heap transport
-  `inst (subst h ζ) ιpast = inst h ι`;
+- the full `refine_*` lemma for the fused action — the `□ᵣ` / `refine_four`
+  plumbing that glues the two verified pieces together. Both ingredients are now
+  proved (`zz_fresh_witness` for the pure-goal step, `zz_heap_transport` for the
+  heap relation), but the assembly is not, and it lives in
+  `theories/Refinement/Monads.v`, a different functor from the one the checks
+  above ran in;
+- **the refinement lemma for step 3, the produce.** This is where the
+  `occurs_check` obligation actually has to be discharged, per the correction
+  above, and it is the piece with the least evidence behind it;
+- restructuring `havoc_regs` from a `Lem` into an executor primitive (the
+  sequencing constraint above) — named, but not prototyped;
 - that the executor can actually pair each fresh variable with a dead one at the
-  loop head (the `occurs_check` bookkeeping);
-- everything in Phases 1–3 below, which are unchanged in substance.
+  loop head, and that on the real program the candidates ARE dead (empirical;
+  §8's positive controls show A5/A3 reaching formulas);
+- everything in Phases 1–3 below, unchanged in substance except that Phase 1 now
+  includes the `Lem`→primitive restructuring.
 
 ## Log
 

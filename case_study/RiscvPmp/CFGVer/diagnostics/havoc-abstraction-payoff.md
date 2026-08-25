@@ -417,14 +417,18 @@ RENAME rather than an erasure. `zz_fresh_witness` closes with `Qed`
 `UnifLogic.v:1248`, is what carries it — the enclosing demonic binder hands you
 the continuation at any chosen value of the fresh variable, and you choose ι(x)).
 
-Three consequences, all simplifications: **soundness needs NO side condition**
-(a rename is unconditionally sound, so the operation can only be useless, never
-unsound — the same risk profile as `chunk_gc`); `occurs_check` is still wanted but
-only to pick genuinely dead candidates, so the fresh variable stays
-unconstrained; and **net Σ growth per trip is zero**, since the havoc mints k
-variables anyway and each can serve as the witness retiring one dead variable
-from the previous trip. Only the crux is verified — the `□ᵣ`/`refine_four`
-plumbing and the heap transport are not. Original paragraph follows.
+**Net Σ growth per trip is zero**, since the havoc mints k variables anyway and
+each can serve as the witness retiring one dead variable from the previous trip.
+Two further pieces are also verified (`zz_helper3`, `zz_heap_transport`: the
+composite instantiates back to ι, so the heap relation transports), and the
+`occurs_check` instance resolves at `SHeap`. **But two claims made when this was
+first written are corrected in the plan:** an `occurs_check` over the full
+carried state IS required for soundness (the rename is unconditionally sound in
+isolation, but if x occurs anywhere the fresh variable ends up aliased with that
+occurrence and the VC becomes the diagonal — strictly weaker); and non-vacuity
+holds ONLY for a composite that starts before the mint, so nothing may be
+produced between mint and drop, which means `havoc_regs` cannot stay a `Lem`.
+The `□ᵣ`/`refine_four` assembly is still not done. Original paragraph follows.
 
 **Why this is now the most valuable lever here, ahead of the packing below.** On
 this program every havoced `hv` becomes state-dead the moment the next trip's
