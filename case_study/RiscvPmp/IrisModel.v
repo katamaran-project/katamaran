@@ -96,7 +96,7 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
 
   Lemma nothingPending_written `{writePendingG Σ} e :
     nothingPending_auth ∗ nothingPending ==∗
-                                             written_auth e ∗ written e.
+    written_auth e ∗ written e.
   Proof.
     rewrite -!own_op.
     iApply own_update. apply auth_update.
@@ -106,7 +106,7 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
 
   Lemma written_nothingPending `{writePendingG Σ} e :
     written_auth e ∗ written e ==∗
-                                   nothingPending_auth ∗ nothingPending.
+    nothingPending_auth ∗ nothingPending.
   Proof.
     rewrite -!own_op.
     iApply own_update. apply auth_update.
@@ -161,9 +161,9 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
               ∃ t, ( let mgl := mc_ghGS2_left in
                      ((⌜filter_adv_observable t1 = t⌝ ∗ nothingPending_auth)
                       ∨ ∃ e1, ⌜filter_adv_observable t1 = e1 :: t⌝ ∗ written_auth e1)
-                       ∗ let mgr := mc_ghGS2_left in
-               ((⌜filter_adv_observable t2 = t⌝ ∗ nothingPending_auth)
-               ∨ ∃ e2, ⌜filter_adv_observable t2 = e2 :: t⌝ ∗ written_auth e2)
+                   ∗ let mgr := mc_ghGS2_right in
+                    ((⌜filter_adv_observable t2 = t⌝ ∗ nothingPending_auth)
+                    ∨ ∃ e2, ⌜filter_adv_observable t2 = e2 :: t⌝ ∗ written_auth e2)
              )
         ).
   End SharedBinaryInvariant.
