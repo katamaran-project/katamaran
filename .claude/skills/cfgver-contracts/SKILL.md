@@ -35,14 +35,19 @@ Record CFGVerifierContract {Σ} :=
 ```
 
 `cfg_instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
-migration (PLAN-annotinstr.md Phase 1) — `AnnotInstr := AnnotAST (i : AST) |
-AnnotGhost (a : Annot)`, a ghost prefix (currently `AnnotDebugBreak`, a
-transparent per-position heap/pathcondition dump) attached to the AnnotAST that
-follows it. `Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so
-every existing hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs`
-(a plain `list AST`) still typechecks unedited — see **cfgver-executor** for the
-coercion mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer
-projection every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
+migration (PLAN-annotinstr.md Phase 1). `AnnotInstr` is a PRODUCT record —
+`MkAnnotInstr { ai_ghost_before : list Annot ; ai_instr : AST ; ai_ghost_after :
+list Annot }` — NOT the sum `AnnotAST | AnnotGhost` an earlier version of this
+skill described; that sum was tried and reverted at `13eb91e0`, because it can
+represent a ghost with no instruction to attach to. `Annot` is `AnnotDebugBreak`
+(a transparent per-position heap/pathcondition dump) or `AnnotLemmaInvocation`
+(a real `call_lemma`, since Phase 4 — see `cfgver-executor`).
+
+`Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so every existing
+hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs` (a plain
+`list AST`) still typechecks unedited — see **cfgver-executor** for the coercion
+mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer projection
+every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 
 | Field | Meaning |
 |---|---|

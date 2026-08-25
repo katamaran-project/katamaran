@@ -197,20 +197,52 @@ bookkeeping collapses away. There is no third world, and cost-neutrality is not
 at risk. The transformer cost readability and put the recursive call outside tail
 position (a guard-checker hazard) in exchange for nothing.
 
-**BOTH the symbolic AND the concrete lemma case are STUBS, and they must match.**
-`sexec_ghost` errors (VC = `False`); `cexec_ghost` returns `pure tt`. Giving the
-concrete side real `call_lemma` semantics while the symbolic side stubbed was
-tried (2026-08-21) and reverted: `sound_exec_cfg_addr_myWP2` (`Adequacy.v`) then
-has to absorb the lemma's heap effect, which is genuine lemma-soundness content
-and exactly the Phase 4 work `PLAN-annotinstr.md` says not to bundle. With both
-stubbed, `cexec_ghosts gs = pure tt` unconditionally (`cexec_ghosts_pure`), so
-absorption is one rewrite — `cgc_binds_heap_fwd`'s role for `chunk_gc`. **When
-Phase 4 makes the lemma case real, `cexec_ghosts_pure` MUST GO**; it is where
-the Phase 4 soundness obligation lands. Cost of the stub: exactly one tactic
-line (`iApply refine_unit` in `rexec_ghosts` — with a real `call_lemma`, `rsolve`
-resolved the relation evar from that pairing; with `error`, the lemma case closes
-trivially and leaves the DEBUG case's `ℛ⟦?RA⟧ () ()` with `?RA` still an evar, so
-the registered `ℛ⟦RUnit⟧` hint cannot fire).
+**BOTH lemma cases are REAL as of Phase 4 (2026-08-25), and they must match.**
+`sexec_ghost` and `cexec_ghost` both call `call_lemma (RiscvPmpCFGVerifSpec.LEnv
+l) …` — qualified, because `MakeExecutor` does not re-export its Specification
+argument, and a bare `LEnv` fails under `make` while `rocq_compile_file`'s dune
+fallback accepts it. They were stubs (`error` / `pure tt`) until Phase 4, and the
+historical reason is still the live design rule: **making ONE side real is
+unsound-by-construction and was reverted (2026-08-21)** — a symbolic `error`
+refines anything, but `pure tt` does not, so a real concrete side with a stubbed
+symbolic one gives the concrete executor a heap effect the VC never accounted
+for. Both move together or neither does.
+
+Two consequences of Phase 4 landing, each of which invalidates advice this skill
+used to give:
+
+- **`cexec_ghosts_pure` IS DELETED.** It said `cexec_ghosts gs = pure tt`, true
+  only while every ghost was concretely the identity. Absorption in
+  `sound_exec_cfg_addr_myWP2` (`Adequacy.v`) is no longer one rewrite: it is
+  `sound_cexec_ghosts`, an induction over the ghost list whose lemma case is
+  `call_lemma_sound` (`MicroSail/ShallowSoundness.v` — stated over an abstract
+  `BiAffine` BI, so it applies verbatim to the binary instance) plus
+  `lemSemCFGVerif` (`SpecIris.v`), discharged the way `iris_rule_stm_lemmak`
+  does it (`Iris/BinaryInstance.v`). It fires at two points, once on the
+  before-ghosts and once on the after-ghosts inside the instruction's
+  postcondition, each handing back a NEW heap.
+- **`rexec_ghosts` no longer needs `iApply refine_unit`.** That line existed
+  only because the `error` stub closed trivially and left the DEBUG case's
+  `ℛ⟦?RA⟧ () ()` with `?RA` an evar; with a real `call_lemma` on both sides
+  `rsolve` resolves it from the pairing. Develop changes to it in
+  `Example/ZZGhostRefineProbe.v`, not in place — `VerifierRel.v` cannot be
+  opened by pet at any position, and that probe is what de-risked the 2274a22b
+  300 s+ hang (which did not recur).
+
+**The one lemma that exists to be invoked this way** is `havoc_regs (regs : list
+RegIdx) : Lem ctx.nil` (`Machine.v`; real content only in CFGVer's `LEnv`).
+Pre- and postcondition are the SAME assertion `∃hv, r ↦ hv` per register, and
+`call_lemma`'s `consume req ;; produce ens` instantiates `asn.exist` in OPPOSITE
+directions — consume angelically (the evar unifies with whatever term the heap
+holds, chunk REMOVED), produce demonically (fresh unconstrained variable, chunk
+re-added). The register's slot survives, its accumulated term does not, and
+`ValidLemma` is the identity. It removes a loop's per-trip term recurrence
+(measured 10.7× → flat on `br_divrem`) at the price of seven dead logical
+variables per trip; **read `diagnostics/havoc-abstraction-payoff.md` before
+using or extending it**, especially §5b/§5c, and note the completeness cost — a
+havoced value carries no `secLeakvar`, so it is treated as possibly-secret, and
+havocing a register the executor needs concrete (a loop counter, a base pointer)
+leaves a residual instead of collapsing.
 
 **What IS true — the only real asymmetry, and it lives entirely in Phase 2.**
 `debug` has no concrete content (`CHeapSpec.debug := fun m => m`, the identity,
