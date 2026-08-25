@@ -1105,6 +1105,60 @@ Section AdequacyTools.
         [iIntros "[_ H]" | iIntros "[Hc H]"; iFrame "Hc"]; iApply IH; iExact "H".
     Qed.
 
+    (* ---------------------------------------------------------------- *)
+    (* Phase 4: ghost soundness.  This REPLACES VerifierRel's deleted        *)
+    (* cexec_ghosts_pure, which said `cexec_ghosts gs = pure tt` and was     *)
+    (* true only while every ghost was concretely the identity.  With a real *)
+    (* call_lemma that is false, and the absorption in                       *)
+    (* sound_exec_cfg_addr_myWP2 below has to be a genuine entailment        *)
+    (* instead of a rewrite.                                                 *)
+    (*                                                                       *)
+    (* PLAN-annotinstr.md treats this as the hard, open part of Phase 4.  It *)
+    (* is not: both ingredients already exist and neither is CFGVer-specific.*)
+    (*  - call_lemma_sound (MicroSail/ShallowSoundness.v) turns the shallow  *)
+    (*    executor's call_lemma into an LTriple.  It is stated in a section  *)
+    (*    over `{L} {biA : BiAffine L} {PI : PredicateDef L}`, so it applies *)
+    (*    verbatim to the BINARY instance — nothing unary about it.          *)
+    (*  - lemSemCFGVerif (SpecIris.v) supplies ValidLemma for every entry of *)
+    (*    CFGVer's LEnv, which is what discharges the LTriple's `req -∗ ens` *)
+    (*    obligation.                                                        *)
+    (* The combination is exactly iris_rule_stm_lemmak's three-line move     *)
+    (* (Iris/BinaryInstance.v): pose the entailment, apply the continuation, *)
+    (* feed it the lemma's semantics.  All this lemma adds is the induction  *)
+    (* over the ghost LIST, which is needed for the same reason rexec_ghosts *)
+    (* needs one — the list comes out of an opaque `ai`, so no finite set of *)
+    (* instances covers it.                                                  *)
+    (*                                                                       *)
+    (* The debug case needs no content because CHeapSpec.debug is the        *)
+    (* identity (Shallow/Monads.v), which is also why the symbolic debug     *)
+    (* node carries no soundness obligation.                                 *)
+    (* ---------------------------------------------------------------- *)
+    Lemma sound_cexec_ghosts (gs : list Annot) :
+      forall (Φ : unit -> SCHeap -> Prop) (h : SCHeap),
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts gs Φ h ->
+        interpret_scheap h ⊢ ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ tt h'⌝.
+    Proof.
+      induction gs as [|a gs IH]; intros Φ h Hexec.
+      - iIntros "Hh". iExists h. iSplitL "Hh"; [iExact "Hh"|]. iPureIntro. exact Hexec.
+      - destruct a; cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts
+                         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghost] in Hexec.
+        + (* AnnotDebugBreak: debug is the identity, so the bind collapses and
+             the remaining list is executed on the SAME heap. *)
+          now apply IH.
+        + (* AnnotLemmaInvocation *)
+          unfold bind, CHeapSpec.bind in Hexec.
+          apply call_lemma_sound in Hexec.
+          pose proof (lemSemCFGVerif l) as lemSem.
+          remember (RiscvPmpCFGVerifSpec.LEnv l) as contractL.
+          clear HeqcontractL.
+          destruct Hexec as [Ψ pats req ens ent]; cbn in lemSem.
+          iIntros "Hh".
+          iPoseProof (ent with "Hh") as (ι Heq) "[Hreq Hcons]".
+          iPoseProof ("Hcons" with "[Hreq]") as "H"; [by iApply lemSem|].
+          iDestruct "H" as (h') "[Hh' %Hrest]".
+          iApply (IH _ _ Hrest with "Hh'").
+    Qed.
+
     Lemma sound_exec_cfg_addr_myWP2
         {instrs} {words : bv xlenbits -> bv word} {exitCond fuel} (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
@@ -1152,16 +1206,16 @@ Section AdequacyTools.
                   Hh to match via interpret_scheap_gc_heap (§4: sound because
                   iProp Σ is affine). *)
                apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
-               (* Absorb the two ghost binds the same way, and for the same
-                  reason: every ghost is concretely the identity right now, so
-                  cexec_ghosts is `pure tt` and its binds collapse.  When
-                  Phase 4 gives AnnotLemmaInvocation real semantics this stops
-                  holding and genuine lemma soundness is needed here — see
-                  cexec_ghosts_pure's own note. *)
-               rewrite !Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts_pure in Hexec.
-               cbn [CHeapSpec.bind CHeapSpec.pure] in Hexec.
                iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
                iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
+               (* Absorb the BEFORE-ghosts.  This used to be a rewrite with
+                  cexec_ghosts_pure; with a real call_lemma the ghosts have a
+                  genuine heap effect, so it becomes an entailment that hands
+                  back a NEW heap h1 together with the residual execution on
+                  it.  Same role chunk_gc's cgc_binds_heap_fwd plays two lines
+                  up, just no longer free. *)
+               iDestruct (sound_cexec_ghosts _ _ _ Hexec with "Hh") as (h1) "[Hh %Hexec1]".
+               clear Hexec.
                (* ptsto_instrs_lookup works on the PROJECTED (AST) map, so the
                   lookup fact has to be projected too: lookup_fmap turns
                   `instrs !! v = Some i` into `(ai_instr <$> instrs) !! v =
@@ -1176,19 +1230,22 @@ Section AdequacyTools.
                iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
-               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec). iFrame. }
+               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. }
                iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
                2-3: iIntros "(%δ' & _ & HF)"; auto.
                2: iIntros "_"; done.
                iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
                iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+               (* Absorb the AFTER-ghosts, same lemma, inside the instruction's
+                  postcondition where the new heap h' has just appeared. *)
+               iDestruct (sound_cexec_ghosts _ _ _ Hcfg with "Hh'") as (h'') "[Hh' %Hcfg']".
                iModIntro.
                iRevert "Hk".
                (* `an an`: the recursive call passes the new pc as both the pc
                   and the incoming nextpc, which is exactly what the epilogue
                   established (pc = nextpc = an).  Hnpc' is framed directly —
                   no `iExists`, since the PRE now names the value. *)
-               iApply (IH an an h' Hcfg).
+               iApply (IH an an h'' Hcfg').
                iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
