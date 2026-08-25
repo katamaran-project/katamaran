@@ -1060,12 +1060,18 @@ this document assumed:
 
 - **"λ → 1" is too strong.** What remains grows polynomially with a *rising*
   local exponent (1.19 → 1.60 → 2.03); a held-out quadratic fit misses n=16 by
-  −13%, so no growth law is established. ~~The residual's likeliest home is
-  `|Σ| = 15 + 7n`~~ — RETRACTED 2026-08-25 (diagnostics §5b): that count came
-  from FUEL-STARVED runs, and measured directly the havoc adds 7 demonic + 7
-  angelic mints per trip on a baseline of 659 (+2.1%) with ZERO surviving
-  `postprocess`. The residual driver is UNIDENTIFIED; do not assume the
-  "drop an unreferenced logical variable" annotation addresses it.
+  −13%, so no growth law is established. The residual's likeliest home remains
+  `|Σ| = 15 + 7n` — 7 fresh variables per trip alive in the world, against a
+  flat 15 without the havoc (diagnostics §5c, measured with a matched control).
+  A demonically produced unconstrained value cannot be solved away, unlike all
+  659 of the executor's own per-trip mints, which the solver eliminates
+  completely. Those binders are DEAD once the next trip havocs the register, so
+  the "drop an unreferenced logical variable" annotation sketched in
+  `Verifier.v` has a named target. Hypothesis, not a measured cause.
+  (A 2026-08-25 edit of this bullet briefly retracted the `15 + 7n` figure on
+  the grounds that it came from fuel-starved runs; that retraction was wrong —
+  starvation is the instrument, not a confound, and the baseline is flat under
+  identical starvation. See diagnostics §5c.)
 - **The term recurrence is confirmed broken, directly** (diagnostics §5b): at the
   loop head the loop-carried registers hold 243 → 8,244 → 88,468 printed chars
   without the havoc (λ = 10.7, independently reproducing the 2026-08-24 dump),

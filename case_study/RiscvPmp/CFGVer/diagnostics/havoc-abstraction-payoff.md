@@ -13,11 +13,13 @@ first measured evidence for it.
 Two things it is *not*. It is not "λ → 1": what remains grows polynomially with a
 **rising** local exponent (1.19 → 1.60 → 2.03 over successive doublings), and a
 quadratic fit on n=2,4,8 under-predicts n=16 by 13%, so **no growth law is
-established here — do not quote one.** It is very nearly free in variables, though: §5b measures
-the lemma minting 7 demonic + 7 angelic variables per trip against a baseline of
-659 per trip (+2.1%), with **zero** surviving `postprocess`. (An earlier version
-of this record said `|Σ| = 15 + 7n` and blamed the residual growth on it; that
-is RETRACTED in §5b — it was an artifact of fuel-starved runs.)
+established here — do not quote one.** And it is not free: the lemma leaves **7 fresh logic
+variables per trip alive in the world** (`|Σ| = 15 + 7n`, against a flat 15
+without it — §5c), because a demonically produced unconstrained value is not
+determined by anything and so cannot be solved away, unlike all 659 of the
+executor's own per-trip mints. Those binders are dead as soon as the next trip
+havocs the register again, which makes them the named target for the
+drop-an-unreferenced-variable annotation.
 
 ## 1. The axes
 
@@ -197,27 +199,53 @@ each per havoced register, the angelic one being the instantiation that consumes
 It also adds exactly 21 raw nodes per trip.
 
 **Surviving `postprocess`: zero, in both arms** (tree is `block`, 1 node, 0
-binders, at every n). The havoc's variables cost nothing in the final VC.
+binders, at every n). But that is a fact about the FINAL TREE, not about the
+live world — see §5c, which measures the live world and reaches the opposite
+conclusion about cost.
 
-### RETRACTED: `|Σ| = 15 + 7n` as the explanation for §3's residual growth
+### 5c. Live world size — `|Σ| = 15 + 7n` STANDS (and a retraction of a retraction)
 
-§4 reported `binders = 15 + 7n` and §6.3 called it "the only quantity known to
-grow per trip in arm D" and hence the likeliest home of the residual
-superquadratic cost. **Both the number and the inference are withdrawn.**
+*History, because the reasoning is the reusable part.* §4 read `binders = 15 + 7n`
+off the fuel-starved n≥18 residuals. An earlier version of this section then
+RETRACTED that, on the grounds that fuel starvation is a broken configuration and
+that healthy runs read 15 flat. **That retraction was itself wrong and is
+withdrawn.** Starvation is not a confound here, it is the INSTRUMENT: a healthy
+run's tree collapses to `block`, `demonicv_prune` folds the whole binder spine
+away, and `DebugAsn` has no variable-context field to snapshot `Σ` with — so
+there is no other way to read the live world back out. What makes the instrument
+trustworthy is the control that was missing the first time round.
 
-- The number came from runs whose execution died in `error` on exhausted fuel.
-  Prune cannot collapse a binder spine that does not end in `block`, so those
-  binders survived as an artifact of the broken configuration. In a healthy run
-  the count is **15, flat, at n=1, 2 and 3** — identical to the no-havoc arm.
-- A related printing artifact, worth knowing before trusting any postprocessed
-  dump: the debug payload at trip 2 references `hv.4` while no `demonicv "hv.4"`
-  remains in the tree. `AMessage` is opaque to prune, so a message can name a
-  variable whose binder prune has already dropped.
-- The inference is therefore dead too: 14 extra mints per trip on a baseline of
-  659 cannot produce §3's residual. Whatever drives that is in the executor's
-  own per-step mints, and this study does not identify it. **Do not cite the
-  havoc's variable count as a cost driver, and do not treat the
-  "drop-an-unreferenced-variable" annotation as its fix on this evidence.**
+**The control.** Same starvation, both arms, n = 1,2,3:
+
+| arm | binders | distinct `hv` names |
+|---|---|---|
+| no havoc | 15 / 15 / 15 | 0 / 0 / 0 |
+| havoc | 22 / 29 / 36 | 7 / 14 / 21 |
+
+The baseline is **flat at 15 under identical starvation**, so the 7-per-trip is
+the havoc's and not an artifact of starving. And the names settle their origin
+without inference — the extra binders are literally `hv`, `hv.1`, … `hv.20`,
+against the baseline's fixed `p, w, np, v, v.1…v.10, mv`. Twenty-one distinct
+names at n=3, none reused.
+
+**So `|Σ| = 15 + 7n` in the live world, and it is a real asymmetry, not a 2.1%
+rounding error.** The mint-ratio framing in §5b is the misleading one: the
+executor mints 659 variables per trip and the solver eliminates **all** of them
+(live world flat at 15), whereas the havoc mints 14 per trip and **7 survive for
+the rest of execution**, because a demonically-produced unconstrained value is by
+construction not determined by anything and there is nothing for the solver to
+substitute. Compare live worlds rather than mints: at n=16 that is 15 against
+127, an **8.5× larger** world, and declared-variable count is quadratic in lookup
+cost (`lvar-lookup-cost-drivers.md`).
+
+**Consequence for §6.3:** the "drop an unreferenced logical variable" annotation
+is back to being the natural next lever, and for a sharper reason than before.
+These binders are not merely numerous, they are *dead*: once trip k+1's havoc
+replaces the register, trip k's `hv` is referenced by nothing at all, and it
+survives only because `demonicv_prune` collapses on `block` and nothing else.
+That is precisely the case the sketch in `Verifier.v` was written for. Still
+unmeasured, and still to be measured before building: whether removing them
+accounts for §3's residual exponent.
 
 ### Correction to the per-slot target set: x7 grows too, so it is SEVEN slots
 
@@ -246,14 +274,18 @@ program is seven registers, not six.
    over the BI so it applies to the binary instance) plus the existing
    `lemSemCFGVerif` (`SpecIris.v:364`), discharged the way
    `iris_rule_stm_lemmak` does it (`BinaryInstance.v:196`, three lines).
-3. **The next cost lever is NOT identified.** ~~`|Σ| = 15 + 7n` is the only
-   quantity known to grow per trip in arm D~~ — RETRACTED, see §5b. The havoc
-   adds 2.1% to per-trip mints and nothing at all to the final VC, so it cannot
-   be what drives §3's residual. The remaining candidate is the executor's own
-   per-step mints (265 demonic + 394 angelic per trip), but peak `|Σ|` during
-   execution was not measured here and the "drop an unreferenced logical
-   variable" annotation has no evidence behind it on this program. Measure
-   before building anything.
+3. **The next cost lever: the havoc's own dead binders.** `|Σ|` in the live world
+   is `15 + 7n` with the havoc and a flat 15 without it (§5c) — the executor's
+   own per-step mints are all eliminated by the solver, while a demonically
+   produced unconstrained value never can be. Each trip's seven become dead the
+   moment the next trip's havoc replaces them, and survive only because
+   `demonicv_prune` collapses on `block`. So the "drop an unreferenced logical
+   variable" annotation kind sketched in `Verifier.v` has a concrete, named
+   target here. It is a HYPOTHESIS about §3's residual, not a measured cause;
+   measure before building. (An earlier version of this record retracted the
+   `15 + 7n` figure and declared the driver unidentified — see §5c for why that
+   retraction was wrong.)
+
 4. **Amdahl.** After the havoc, the per-trip term recurrence is gone as a driver;
    whatever remains is a *different* mechanism and this study does not identify
    it. Do not assume a second abstraction lemma helps.
