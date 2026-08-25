@@ -238,10 +238,10 @@ substitute. Compare live worlds rather than mints: at n=16 that is 15 against
 127, an **8.5× larger** world, and declared-variable count is quadratic in lookup
 cost (`lvar-lookup-cost-drivers.md`).
 
-**Consequence for §6.3 — RETRACTED 2026-08-25, see §8.1:** the drop annotation is
-UNSOUND, not merely unbuilt. The deadness reasoning below is correct and is
-exactly why the register-set axis (§8) pays; it is the *annotation* that is out.
-Original text follows.
+**Consequence for §6.3 — see §8.1, which first declared this annotation UNSOUND
+and then WITHDREW that.** The deadness reasoning below is correct, and is both why
+the register-set axis (§8) pays AND why the drop remains live: a state-dead
+variable cannot resurface, and `occurs_check` proves it. Original text follows.
 
 the "drop an unreferenced logical variable" annotation
 is back to being the natural next lever, and for a sharper reason than before.
@@ -279,13 +279,14 @@ program is seven registers, not six.
    over the BI so it applies to the binary instance) plus the existing
    `lemSemCFGVerif` (`SpecIris.v:364`), discharged the way
    `iris_rule_stm_lemmak` does it (`BinaryInstance.v:196`, three lines).
-3. **RETRACTED 2026-08-25 as to its CONCLUSION, see §8.1 — the measurement below
-   stands, the proposed lever does not.** `|Σ| = 15 + 7n` is correct and the
-   binders really are dead; but "drop an unreferenced logical variable" cannot be
-   built soundly, because the only accessibility into a smaller context needs a
-   witness term and the deadness side condition is about the CONTINUATION, a
-   function. **Never cite this item as an open option.** The real lever on the
-   same `|Σ|` axis is the havoc's REGISTER SET (§8), measured at 2.66× at n=16.
+3. **STANDS, with one addition — see §8.1.** `|Σ| = 15 + 7n` is correct and the
+   binders really are dead. An intermediate version of §8.1 declared the drop
+   annotation UNSOUND and that is **WITHDRAWN**: the side condition is about the
+   PRESENT STATE, not the continuation's future, and `occurs_check` +
+   `occurs_check_sound` already prove exactly it. What the drop needs is the
+   carried state in hand, i.e. a step of `sexec_cfg_addr` rather than an
+   `sexec_ghost` case. A second, independent lever on the same axis landed
+   meanwhile: the havoc's REGISTER SET (§8), measured at 2.66× at n=16.
    Original text follows.
 
    **The next cost lever: the havoc's own dead binders.** `|Σ|` in the live world
@@ -330,43 +331,92 @@ light chain through `Example/Prelude.vo` must be built first.
 
 **Finding, one sentence: havocing three registers instead of seven costs 2.66×
 less at n=16 and is what makes br_divrem's real 31 trips reachable at all
-(41.25 G words, `BLOCK`, 531 s) — while the annotation §6.3 named as the next
-lever is not merely unbuilt but unsound, so this axis replaces it.**
+(41.25 G words, `BLOCK`, 531 s).** §6.3's proposed "drop an unreferenced logical
+variable" annotation is NOT retired by this — an intermediate version of §8.1
+claimed it was unsound and **that claim is withdrawn**; it needs a different
+INTERFACE (the carried state in hand) and the `occurs_check` machinery it needs
+is already in the tree. See §8.1.
 
-### 8.1 Why the sketched annotation is out
+### 8.1 The sketched annotation, and a same-day CORRECTION of this section
 
-`Verifier.v`'s "DROP AN UNREFERENCED LOGICAL VARIABLE" sketch is right that the
-*typing* works. It is the soundness that cannot be had, and the argument is
-short enough to be checkable:
+**RETRACTED within hours of writing, 2026-08-25.** This section first concluded
+that the `Verifier.v` "DROP AN UNREFERENCED LOGICAL VARIABLE" sketch is
+**UNSOUND and off the table**. **That verdict is WRONG and is withdrawn — never
+requote it.** The mechanism analysis below is correct and is retained, because it
+does explain why the *shape the sketch proposes* fails; the impossibility
+conclusion drawn from it does not follow. The error was conflating "the action
+cannot inspect its continuation" with "the deadness fact is unavailable".
+
+**Why the naive shape fails (this part stands).**
 
 - `acc_subst_right` (`Worlds.v:381`) is the ONLY accessibility into a smaller
   context — every `acc_*` in `Worlds.v:320-411` was enumerated — and it requires
   a witness term `t`.
-- The continuation runs at `w - x` but the action must return a `SymProp w`.
-  The framework offers exactly TWO embeddings back, both visible in
+- The continuation runs at `w - x` but the action must return a `SymProp w`. The
+  framework offers exactly TWO embeddings back, both visible in
   `assume_triangular` / `assert_triangular` (`Propositions.v:281,314`):
   `assume_vareq` and `assert_vareq`.
-- `safe` (`Propositions.v:340,345`) settles both. `safe (demonicv x k) ι =
-  ∀v, safe k`, while `safe (assume_vareq x t k) ι = (ι(x) = inst t → safe k)`.
-  Under the `demonicv` the havoc already emitted, the drop composes to
-  `safe k[x:=t]` — **strictly weaker** than `∀v, safe k`, equal only when
-  `x ∉ fv(k)`. `assert_vareq` instead demands a proof that an unconstrained
-  demonic variable equals `t`, i.e. the VC goes to `False`.
+- `safe` (`Propositions.v:340,345`): `safe (demonicv x k) ι = ∀v, safe k`, while
+  `safe (assume_vareq x t k) ι = (ι(x) = inst t → safe k)`. Under the `demonicv`
+  the havoc already emitted, a drop composes to `safe k[x:=t]` — strictly weaker
+  than `∀v, safe k` **unless `x ∉ fv(k)`**. `assert_vareq` instead demands a
+  proof that an unconstrained demonic variable equals `t`, i.e. VC → `False`.
 
-So the drop needs a deadness side condition, and the condition is about the
-CONTINUATION — a `Box`, i.e. a function, which the action cannot inspect and
-which the refinement obligation quantifies over universally. **This is the sharp
-contrast with the drop-chunks sibling in the same comment block**: `chunk_gc` is
-sound for any chunk by affineness and pays only completeness, failing loudly at
-the next consume. Dropping a quantifier silently changes which statement was
-proved. One costs completeness; the other costs soundness.
+So a drop needs the side condition `x ∉ fv(k)`. **The withdrawn step was
+concluding that condition is unavailable.** It is a condition on the PRESENT
+STATE, not on the future: every term the continuation can ever build is built
+from terms that exist now, so a variable occurring nowhere in the current state
+cannot reappear in any later term. And the state is data.
 
-Corollary for anything built here later: **one fresh binder per trip is
-irreducible.** A per-trip unconstrained value needs a per-trip binder, and a
-lemma can only weaken (`r ↦ v ⊢ ∃w, r ↦ w`), so it cannot hand back a slice of a
-pre-declared pool indexed by the trip — and the index is not available anyway,
-`AnnotLemmaInvocation`'s `es` being closed `Exp [ctx]`. Zero growth needs a real
-loop rule (`plans/PLAN-loop-invariant.md`), not an annotation.
+**The machinery for exactly this already exists in the tree.**
+
+- `occurs_check` (`Symbolic/OccursCheck.v:56`), reachable everywhere via
+  `Base.v:68`'s mixin, returns `Some t'` precisely when the variable does NOT
+  occur, handing back the term at the smaller context.
+- Its law is the required fact verbatim:
+  `occurs_check_sound : occurs_check xIn t = Some t' → t = subst t' (sub_shift xIn)`
+  — "does not occur" ⟹ "is a weakening" (`OccursCheck.v:135`, via
+  `OccursCheckSoundPoint`).
+- Instances exist for Term, Formula (`Formulas.v:301`), Chunk
+  (`Chunks.v:188`), list, Env, pair, option and Assertion
+  (`Assertions.v:135-139`), so `SHeap = list Chunk` and
+  `PathCondition = list Formula` are covered by composition.
+- `Symbolic/Monads.v:97-99,130-133,163-164,195-197` **already occurs-checks the
+  path condition and the heap together as a state** (for the debug-message
+  instances). The state-level check is not hypothetical.
+- The unifier already uses `occurs_check` for the structurally identical purpose
+  — confirming `x ∉ t` before substituting `x := t`.
+
+**What is genuinely left, and it is an interface question, not a soundness one.**
+An opaque `SHeapSpec` action in `chunk_gc`'s shape receives `h` and `wco w` but
+NOT the terms the continuation closed over — in `sexec_cfg_addr` those are `tbl`,
+`exits`, `apc` and the outer postcondition. Each of those has an `occurs_check`
+instance; they are simply not passed in. So the check is INCOMPLETE at that
+interface, which is also why the refinement obligation (quantified over all
+related continuations) cannot be discharged there. **The drop therefore belongs
+as a step of `sexec_cfg_addr`, with the carried state in hand — not as an
+`sexec_ghost` case.** Given an x-free state the `assuming`-vacuity objection also
+dissolves: the concrete side at ι equals the concrete side at ι[x↦dummy], where
+`assuming` is not vacuous.
+
+**Why this is now the most valuable lever here, ahead of the packing below.** On
+this program every havoced `hv` becomes state-dead the moment the next trip's
+havoc consumes its chunk: the value is unconstrained so it is absent from `wco`,
+and after the consume it is absent from the heap; `apc`, `tbl`, `exits` and the
+postcondition all live over the contract's Σ and never mention it. So a working
+drop takes the slope to **0 per trip — `|Σ|` FLAT** — where packing only reaches
+1 per trip. That makes it a candidate for an actual exponent fix rather than
+another factor, and it should be prototyped before the packing is built.
+UNBUILT and UNMEASURED; the claim here is feasibility, not a result.
+
+**The one part of the old verdict worth keeping as a design rule.** The contrast
+with drop-chunks is still real and still instructive: throwing away a RESOURCE is
+sound for any chunk by affineness and fails loudly at the next consume, whereas
+throwing away a QUANTIFIER is sound only under a side condition and, if that
+condition is not actually checked, silently changes which statement was proved.
+Dropping a chunk costs completeness; dropping a binder without the
+`occurs_check` costs soundness. The check is not optional bookkeeping — it is the
+whole proof.
 
 ### 8.2 The axis, and the arms
 
@@ -471,16 +521,23 @@ quadratic and R3's exponent is still rising** (1.269 → 1.631 → 2.015 over 4�
    NOT identified. §6.4 said not to assume a second abstraction lemma helps;
    that still holds.
 
-**Next lever, sound and precedented but unmeasured:** pack each trip's remaining
-fresh values into ONE wide binder by slicing, exactly as `words_ctx` /
-`mem_class_width` already do (`word-slicing-payoff.md` — worth 2.86× there).
+**Next lever: prototype the DROP first (§8.1), then packing.** The drop takes the
+slope to 0/trip (`|Σ|` flat) where packing only reaches 1/trip, and every
+ingredient it needs is already in the tree; it is the only candidate here for an
+exponent fix rather than another factor. Packing, sound and precedented but
+unmeasured, is the fallback: pack each trip's remaining fresh values into ONE
+wide binder by slicing, exactly as `words_ctx` / `mem_class_width` already do
+(`word-slicing-payoff.md` — worth 2.86× there).
 Keep the precondition as separate `∃v_i` so the angelic consume still unifies per
 chunk; make the postcondition a single `asn.exist "hv" (ty.bvec (k*xlenbits))`
 with each register a `bvtake`/`bvdrop` slice. `bv.take_app` / `bv.drop_app`
 (`Bitvector.v:947,974`) and `uop.bvtake` / `uop.bvdrop` (`UnOps.v:66-67`) all
 exist, and `ValidLemma` stays existential intro over a `bv.app`. That takes the
-slope from 3/trip to 1/trip — the floor established in §8.1. It is a
-HYPOTHESIS about the remaining cost, not a measured cause.
+slope from 3/trip to 1/trip — which is the floor for a LEMMA-only approach, since
+a per-trip unconstrained value needs a per-trip binder and a lemma can only
+weaken. It is NOT the floor overall: the drop (§8.1) is an executor step, not a
+lemma, and reaches 0. Both are HYPOTHESES about the remaining cost, not measured
+causes.
 
 ### 8.6 Files and reproduction
 

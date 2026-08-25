@@ -740,7 +740,13 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   (* (T2) is better left out, because its accumulation is linear once its *)
   (* source is havoced while a binder per trip is not.  Completeness      *)
   (* points the same way: fewer havoced registers is fewer values without *)
-  (* secLeakvar.                                                          *)
+  (* secLeakvar.  Both corollaries were measured; do not re-derive.        *)
+  (*                                                                      *)
+  (* This is a FACTOR, not a fix for the growth itself.  The surviving     *)
+  (* binders can in principle be dropped outright (|Sigma| flat) — see     *)
+  (* Verifier.v's note above sexec_ghost on why that has to be a step of   *)
+  (* sexec_cfg_addr rather than a ghost annotation, and note that an       *)
+  (* earlier claim that dropping them is UNSOUND has been WITHDRAWN.       *)
   Definition asn_havoc_reg {Σ} (r : RegIdx) : Assertion Σ :=
     match reg_convert r with
     | None     => ⊤

@@ -47,15 +47,23 @@ the second cost is real:
   fuel `27n+60` (`diagnostics/havoc-abstraction-payoff.md` §8). The seven-register
   figures in this bullet stand as measurements of that arm.
 
-**Next lever — RESOLVED 2026-08-25, and not the way this said.** ~~the "drop an
-unreferenced logical variable" annotation kind sketched above `sexec_ghost` in
-`Verifier.v`~~ **That annotation is UNSOUND and is off the table** — see
-`diagnostics/havoc-abstraction-payoff.md` §8.1: the only accessibility into a
-smaller context (`acc_subst_right`) needs a witness term, the only two embeddings
-back (`assume_vareq` / `assert_vareq`) give respectively a strictly weaker VC and
-an unprovable one, and the deadness side condition is about the CONTINUATION,
-which is a function the action cannot inspect. Contrast drop-chunks, sound for
-any chunk by affineness. **Never re-open this as an option.**
+**Next lever — the "drop an unreferenced logical variable" annotation is STILL
+THE MAIN LEVER, and a same-day retraction lives underneath it.** An earlier
+version of this paragraph (and of `diagnostics/havoc-abstraction-payoff.md` §8.1)
+declared that annotation **UNSOUND and off the table**. **That is WITHDRAWN —
+never requote it.** What is true is narrower: it cannot be an opaque
+`SHeapSpec` action in `chunk_gc`'s shape, because such an action sees `h` and
+`wco w` but not the terms the continuation closed over (`tbl`, `exits`, `apc`,
+the outer postcondition). The deadness side condition is about the PRESENT STATE
+— every future term is built from present terms, so a variable occurring nowhere
+now cannot reappear — and the machinery to prove it is already in the tree:
+`occurs_check` (`Symbolic/OccursCheck.v:56`, reachable via `Base.v:68`) with
+`occurs_check_sound : occurs_check xIn t = Some t' → t = subst t' (sub_shift xIn)`,
+instances for Term/Formula/Chunk/list/Env/Assertion, and `Symbolic/Monads.v:97`
+already occurs-checking the path condition and heap together as a state. **So the
+work is to make the drop a step of `sexec_cfg_addr` with the carried state in
+hand, not an `sexec_ghost` case.** Payoff if it works: slope 0/trip, `|Σ|` FLAT —
+the only candidate here for an exponent fix rather than another factor. UNBUILT.
 
 **What DID pay, on the same `|Σ|` axis: the havoc's REGISTER SET.** Havocing
 three registers (A0 A1 A4 — the recurrence carriers) instead of seven is **2.00×
@@ -68,11 +76,12 @@ carrying no `secLeakvar`. Full record, arms and held-out fits:
 not an exponent fix — R3's local exponent is 1.269 → 1.631 → 2.015 and still
 rising, so `|Σ|` was never all of it and the residual mechanism is unidentified.
 
-**Next lever after that, sound but unmeasured:** pack each trip's remaining fresh
-values into ONE wide binder by slicing (`words_ctx` / `mem_class_width`
-precedent, 2.86× where it was measured), taking the slope from 3/trip to 1/trip
-— which §8.1 establishes is the FLOOR, since a per-trip unconstrained value needs
-a per-trip binder and a lemma can only weaken.
+**Fallback if the drop does not work out, sound but unmeasured:** pack each trip's
+remaining fresh values into ONE wide binder by slicing (`words_ctx` /
+`mem_class_width` precedent, 2.86× where it was measured), taking the slope from
+3/trip to 1/trip. That is the floor for a LEMMA-only approach — a per-trip
+unconstrained value needs a per-trip binder and a lemma can only weaken — but not
+the floor overall, since the drop is an executor step and reaches 0.
 
 **Second open item, independent of the above:** no committed example uses a
 ghost annotation. The whole payoff lives in gitignored `ZZ*` probes; what landed
