@@ -1,16 +1,16 @@
 # PLAN — drop dead logical variables during symbolic execution
 
-Status: **PHASE 0 PASSED on its crux, 2026-08-25 — but only for a FUSED
-mint+drop, not for the standalone drop this plan first proposed.** The blocking
-obstacle is verifiably gone (`Qed` recorded below). The design changed as a
-result: the drop must be *fused with the havoc's own mint* and use the freshly
-minted variable as its witness. Net Σ change per trip: **zero**.
+Status: **CLOSED, NEGATIVE, 2026-08-25 — Phase 0 ran to completion and the idea
+does not work, for a reason that is now a proved dichotomy rather than an
+argument.** Nothing was built. The measured fallback (havoc fewer registers,
+2.66x at n=16, `diagnostics/havoc-abstraction-payoff.md` §8) stands and is
+already landed; the remaining options are the wide-binder packing (a factor), a
+real loop rule (`PLAN-loop-invariant.md`), or a framework extension in
+`Worlds.v` — see §"Phase 0 verdict".
 
-*History, because two intermediate verdicts were wrong and the reasoning is the
-reusable part.* This plan was first written for a standalone drop with a dummy
-witness (`term_val bv.zero`), and was then ABANDONED the same day on the grounds
-that its refinement lemma is false. **The abandonment was right about the
-standalone drop and wrong as a verdict on the idea.** See §"Phase 0 result".
+*History, kept deliberately: this plan went through FIVE verdicts in one day, and
+the design section below is the third of them, left unedited so the error is
+legible. Read the Phase 0 verdict first; do not act on anything above it.*
 
 ## The problem
 
@@ -109,6 +109,87 @@ check for the same purpose. Note `UnifLogic.v:1345` holds a commented-out
    restriction, not a gap.
 5. **`None` ⇒ no-op, never `error`.** A refused drop must cost completeness
    nothing: it is a missed optimisation, not a failure.
+
+## Phase 0 verdict — THE DICHOTOMY (this is the section that matters)
+
+Four lemmas, all checked by position mode at `theories/Symbolic/UnifLogic.v:1343`
+(preamble mode cannot reach these — functor internals). Together they close the
+question.
+
+`assuming` (`Worlds.v:755`) is a quantification over the **fibre** of the
+accessibility:
+
+```coq
+assuming ω P ι = forall ιpast, inst (sub_acc ω) ιpast = ι ->
+                               instprop (wco w1) ιpast -> P ιpast
+```
+
+and the fibre's size is *exactly* the freedom the accessibility grants. Removing
+a binder means shrinking the world, which within the existing `Acc` machinery
+means a substitution (`acc_subst_right` is the only way in — every `acc_*` in
+`Worlds.v:320-411` enumerated), which needs a witness term. There are only two
+kinds of witness, and each fails in its own way:
+
+| witness | fibre | consequence |
+|---|---|---|
+| a dummy value (`term_val bv.zero`) | **EMPTY** at the generic ι | the hypothesis is vacuous, the concrete goal is unreachable — `zz_dummy_witness` gets stuck with no nameable `ιpast` |
+| the freshly minted variable | **SINGLETON** | provable (`zz_fresh_witness`, `Qed`) but it grants **no freedom**: `zz_pins` proves every fibre element assigns `y` the value `ι(x)` |
+
+**`zz_pins` is the lemma that closes it** (`Qed`):
+
+```coq
+Lemma zz_pins … (ι : Valuation w) (ιp : Valuation (w - x∷σ ▻ y∷σ)) :
+  inst (sub_acc (acc_trans acc_snoc_right (acc_subst_right (term_var y)))) ιp = ι ->
+  env.lookup ιp ctx.in_zero = env.lookup ι xIn.
+Proof.
+  intros H. rewrite <- H. rewrite sub_acc_trans. rewrite inst_subst.
+  rewrite env.lookup_map. rewrite inst_sub_single2. cbn.
+  destruct (env.view ιp) as [E v']. cbn. unfold sub_wk1.
+  rewrite env.lookup_tabulate. cbn. now rewrite env.lookup_insert.
+Qed.
+```
+
+Contrast the existing `assuming_acc_snoc_right` (`UnifLogic.v:1248`), which shows
+a bare mint's `assuming` is a genuine `∀ v` over **all** values. So the drop
+consumes precisely the freedom the mint created: net Σ change zero, and net
+freedom change zero too. **A rename.**
+
+**Why a rename cannot serve as a havoc.** The havoc's shallow/concrete mirror is a
+demonic choice — `∀w, r ↦ w` — and that is what makes `r ↦ v ⊢ ∃w, r ↦ w` a valid
+lemma. To refine a shallow `∀w`, the symbolic side must cover every value of `w`.
+`zz_pins` says the fused step's fibre pins it to `ι(x)`. So the fused step cannot
+mirror the havoc's demonic choice, and the register's new value is not free.
+
+*Status of that last inference: it is an argument FROM `zz_pins`, not itself
+mechanised.* What would settle it definitively is attempting the refinement of the
+fused primitive against a shallow demonic mirror (`CHeapSpec.demonic`) rather
+than against `pure tt`, in `theories/Refinement/Monads.v`. I did not do that. But
+the two fibre facts are proved, and the dichotomy they form is the substance:
+**either the fibre is empty (unprovable) or it is a singleton (no freedom).**
+
+### The structural conclusion, and where a fix would have to live
+
+Within the existing `Acc` machinery you cannot both **shrink Σ** and **grant
+freedom**, because `assuming`'s fibre is the freedom and shrinking Σ requires a
+substitution that collapses it. So a real fix is not a client-side trick in
+`Verifier.v` — it is a **new accessibility in `Worlds.v`** whose `assuming` is
+defined by `forgetting` (the valuation is pushed forward, no fibre condition)
+rather than by a fibre, valid when the dropped variable occurs nowhere. That is a
+framework change with its own soundness burden, and it is the honest shape of
+this idea.
+
+Note the ingredients for such an extension already exist and are correct — they
+are simply not enough on their own: `occurs_check`
+(`Symbolic/OccursCheck.v:56`, in scope via `Base.v:68`) with
+`occurs_check_sound : occurs_check xIn u = Some u' → u = subst u' (sub_shift xIn)`
+decides deadness on data; the instance resolves at `SHeap`
+(`occurs_check bIn h : SHeap Σ → option (SHeap (Σ - b))`, checked);
+`Symbolic/Monads.v:97-99` already runs it on a (pathcondition, heap) pair; and
+`zz_helper3` / `zz_heap_transport` show the state transports cleanly. The
+semantic intuition the whole plan rests on — a variable occurring nowhere in the
+present state can never reappear, because every future term is built from present
+terms — is **correct**. It is the *modality* that cannot express it, not the
+mathematics.
 
 ## Phases
 
@@ -351,26 +432,33 @@ assumption is what produced two wrong verdicts already):
 
 ## Log
 
-**2026-08-25 — plan opened, Phase 0 run three times, crux PROVED for the fused
-design.** Author's note, since the flip-flopping is the expensive part and the
-pattern is worth not repeating. Three verdicts on the same question:
+**2026-08-25 — opened, five verdicts, closed negative.** The flip-flopping is the
+expensive part of this record, so it is kept in full:
 
-1. "The drop is UNSOUND, the deadness condition is about the continuation" —
-   **wrong**. The condition is about the present state; every future term is
-   built from present terms.
-2. "It is locally provable via two `occurs_check`s, half a day" — **wrong**, and
-   pitched without reading `assuming`'s definition first. It fails on fibre
-   vacuity.
-3. "The local refinement lemma is false, soundness belongs to the mint/drop pair
-   and needs the whole intervening execution" — **half right**. It IS about the
-   pair; it is NOT about the intervening execution. Fusing mint and drop, with
-   the fresh variable as witness, makes the fibre inhabited and the crux closes
-   in ten lines.
+1. "UNSOUND, the deadness condition is about the continuation" — **wrong**. The
+   condition is about the present state.
+2. "Locally provable via two `occurs_check`s, half a day" — **wrong**, pitched
+   without reading `assuming`. Fails on fibre vacuity.
+3. "The local lemma is false; soundness needs the whole intervening execution" —
+   **half right**: it is about the mint/drop pair, not the execution.
+4. "Fuse mint and drop, witness = the fresh variable — crux `Qed`, slope 0" —
+   the crux really is proved, but the conclusion was **premature**.
+5. **Final: a proved dichotomy.** Empty fibre (dummy witness) ⇒ unprovable;
+   singleton fibre (fresh witness) ⇒ no freedom, hence a rename, hence not a
+   havoc. `zz_pins` is the lemma. Fix would have to be a new accessibility in
+   `Worlds.v`.
 
-Emiel was right at (1), at (2) and at (3); each correction came from him
-restating the same simple semantic fact and refusing the framework-shaped excuse
-for it. **The lesson is not "read the definitions" (though that would have caught
-(2) in two minutes) — it is that a soundness claim about this framework is cheap
-to TEST and expensive to argue.** `zz_dummy_witness` and `zz_fresh_witness` are
-each about ten lines and settle in under a second what four rounds of prose could
-not. Test the entailment, do not reason about it.
+Emiel was right at every step that the *semantics* are fine — and they are; the
+plan dies on the modality, not the mathematics.
+
+**The reusable lesson, and it is not "read the definitions".** It is that in this
+framework the size of `assuming`'s fibre is the invariant worth computing FIRST,
+because it measures exactly how much freedom an accessibility grants. Every one of
+the five verdicts above would have been settled immediately by asking "what is the
+fibre of this accessibility?" — empty, singleton, or full. Four ten-line lemmas
+answer it; four rounds of prose did not. Ask about the fibre.
+
+**Cost of the whole exercise:** one afternoon, no code written, three landed
+commits of record. The alternative — believing verdict 4 and building Phase 1 —
+would have produced an executor primitive, a concrete mirror and an Adequacy
+change before discovering the register value was not free.

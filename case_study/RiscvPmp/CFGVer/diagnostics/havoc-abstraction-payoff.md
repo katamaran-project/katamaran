@@ -399,36 +399,33 @@ as a step of `sexec_cfg_addr`, with the carried state in hand — not as an
 dissolves: the concrete side at ι equals the concrete side at ι[x↦dummy], where
 `assuming` is not vacuous.
 
-**PHASE 0 RESULT (2026-08-25, and it went through TWO wrong verdicts before this
-one — read `plans/PLAN-lvar-drop.md`, not this paragraph, for the design).** The
-STANDALONE drop with a dummy witness is unprovable: `assuming` (`Worlds.v:755`)
-requires an `ιpast` with `inst (sub_acc ω) ιpast = ι`, which for
-`acc_subst_right t` forces `ι(x) = inst t (ι∖x)`, so with x unconstrained the
-fibre over the generic ι is EMPTY, the hypothesis is vacuous, and the concrete
-goal still has to be produced. (Nor is that repaired by the goal being
-x-independent: entailment in `Pred` is POINTWISE in ι.)
+**PHASE 0 CLOSED NEGATIVE (2026-08-25). The drop does not work; read
+`plans/PLAN-lvar-drop.md`, not the paragraph below, which is one of five verdicts
+that plan went through in a day.** The result is a proved DICHOTOMY about the only
+mechanism available for shrinking Σ. `assuming` (`Worlds.v:755`) quantifies over
+the FIBRE of an accessibility, and the fibre size is exactly the freedom granted:
 
-**But the FUSED mint+drop IS provable, and it is proved.** Give the drop the
-havoc's own freshly-minted variable as its witness instead of a dummy: the
-composite `w ⊒ wsnoc w y ⊒ (wsnoc w y) - x` maps `x ↦ term_var y`, the fibre over
-every ι is then inhabited by `(ι∖x) ► (y ↦ ι(x))`, and the operation is a faithful
-RENAME rather than an erasure. `zz_fresh_witness` closes with `Qed`
-(`plans/PLAN-lvar-drop.md` has the script; `assuming_acc_snoc_right`,
-`UnifLogic.v:1248`, is what carries it — the enclosing demonic binder hands you
-the continuation at any chosen value of the fresh variable, and you choose ι(x)).
+- **dummy witness** (`term_val bv.zero`) ⇒ fibre EMPTY at the generic ι ⇒ the
+  hypothesis is vacuous and the concrete goal unreachable (`zz_dummy_witness`
+  sticks with no nameable `ιpast`);
+- **freshly-minted-variable witness** ⇒ fibre non-empty, so it is provable
+  (`zz_fresh_witness`, `Qed`) — but SINGLETON: `zz_pins` proves every fibre
+  element assigns the fresh variable the value ι(x), so it grants NO freedom. The
+  drop consumes exactly the freedom the mint created. It is a RENAME.
 
-**Net Σ growth per trip is zero**, since the havoc mints k variables anyway and
-each can serve as the witness retiring one dead variable from the previous trip.
-Two further pieces are also verified (`zz_helper3`, `zz_heap_transport`: the
-composite instantiates back to ι, so the heap relation transports), and the
-`occurs_check` instance resolves at `SHeap`. **But two claims made when this was
-first written are corrected in the plan:** an `occurs_check` over the full
-carried state IS required for soundness (the rename is unconditionally sound in
-isolation, but if x occurs anywhere the fresh variable ends up aliased with that
-occurrence and the VC becomes the diagonal — strictly weaker); and non-vacuity
-holds ONLY for a composite that starts before the mint, so nothing may be
-produced between mint and drop, which means `havoc_regs` cannot stay a `Lem`.
-The `□ᵣ`/`refine_four` assembly is still not done. Original paragraph follows.
+A havoc's shallow mirror is a demonic `∀w, r ↦ w` — that is what makes
+`r ↦ v ⊢ ∃w, r ↦ w` valid — and refining a shallow `∀w` needs the symbolic side
+to cover every w. A pinned fibre cannot. (That last step is argued from `zz_pins`,
+not mechanised; mechanising it means refining the fused primitive against
+`CHeapSpec.demonic` in `theories/Refinement/Monads.v`.)
+
+**Structural conclusion:** within the existing `Acc` machinery you cannot both
+shrink Σ and grant freedom. A fix is not a client-side trick but a NEW
+ACCESSIBILITY in `Worlds.v`, whose `assuming` is `forgetting`-based rather than
+fibre-based, valid when the dropped variable occurs nowhere. The semantic
+intuition is correct and `occurs_check` does decide deadness on data (instance
+confirmed at `SHeap`); it is the modality that cannot express it. Original
+paragraph follows.
 
 **Why this is now the most valuable lever here, ahead of the packing below.** On
 this program every havoced `hv` becomes state-dead the moment the next trip's
@@ -552,13 +549,13 @@ quadratic and R3's exponent is still rising** (1.269 → 1.631 → 2.015 over 4�
    NOT identified. §6.4 said not to assume a second abstraction lemma helps;
    that still holds.
 
-**Next lever: the FUSED mint+drop (slope 0/trip), whose crux is proved** — §8.1's
-Phase 0 note and `plans/PLAN-lvar-drop.md`. Packing stays as the fallback and is
-strictly weaker (slope 1/trip, and it needs the wide-binder machinery the fused
-drop does not): pack each trip's remaining fresh values into ONE
-wide binder by slicing, exactly as `words_ctx` / `mem_class_width` already do
-(`word-slicing-payoff.md` — worth 2.86× there).
-Keep the precondition as separate `∃v_i` so the angelic consume still unifies per
+**Next lever: PACKING — the drop is closed negative (§8.1, and
+`plans/PLAN-lvar-drop.md`).** Packing is a factor, not an exponent fix, and it is
+what remains at this level; the principled alternatives are a real loop rule
+(`plans/PLAN-loop-invariant.md`) or the `Worlds.v` accessibility extension the
+drop turned out to need. Packing: pack each trip's remaining fresh values into
+ONE wide binder by slicing, exactly as `words_ctx` / `mem_class_width` already do
+(`word-slicing-payoff.md` — worth 2.86× there). Keep the precondition as separate `∃v_i` so the angelic consume still unifies per
 chunk; make the postcondition a single `asn.exist "hv" (ty.bvec (k*xlenbits))`
 with each register a `bvtake`/`bvdrop` slice. `bv.take_app` / `bv.drop_app`
 (`Bitvector.v:947,974`) and `uop.bvtake` / `uop.bvdrop` (`UnOps.v:66-67`) all
