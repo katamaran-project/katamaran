@@ -399,22 +399,32 @@ as a step of `sexec_cfg_addr`, with the carried state in hand — not as an
 dissolves: the concrete side at ι equals the concrete side at ι[x↦dummy], where
 `assuming` is not vacuous.
 
-**PHASE 0 RESULT, same day: the drop is ABANDONED. Read `plans/PLAN-lvar-drop.md`
-before acting on the paragraph below.** The local refinement lemma is FALSE.
-`assuming ω P ι` (`Worlds.v:755`) quantifies over `ιpast` with
-`inst (sub_acc ω) ιpast = ι`, which for `acc_subst_right t` forces
-`ι(x) = inst t (ι∖x)` — and x being unconstrained is precisely the premise, so at
-the generic ι the hypothesis is VACUOUS while the concrete goal still has to be
-produced. The escape route claimed below ("evaluate at ι₀ where the equation
-holds") is not available: `⊢` in `Pred` is POINTWISE in ι. Soundness turns out to
-be a property of the MINT/DROP PAIR — `psafe (demonicv …)` is itself an
-`assuming`, and `assuming_trans` collapses the pair only if every intervening
-world extension is x-free — which is a subtree-sized obligation, not a step-sized
-one. The principled version is therefore a loop rule
-(`plans/PLAN-loop-invariant.md`), which closes the binder AT the loop head
-instead of shrinking a scope from the inside. **The two `occurs_check` facts and
-the semantic intuition below are correct and are not what blocks it.** Original
-paragraph follows.
+**PHASE 0 RESULT (2026-08-25, and it went through TWO wrong verdicts before this
+one — read `plans/PLAN-lvar-drop.md`, not this paragraph, for the design).** The
+STANDALONE drop with a dummy witness is unprovable: `assuming` (`Worlds.v:755`)
+requires an `ιpast` with `inst (sub_acc ω) ιpast = ι`, which for
+`acc_subst_right t` forces `ι(x) = inst t (ι∖x)`, so with x unconstrained the
+fibre over the generic ι is EMPTY, the hypothesis is vacuous, and the concrete
+goal still has to be produced. (Nor is that repaired by the goal being
+x-independent: entailment in `Pred` is POINTWISE in ι.)
+
+**But the FUSED mint+drop IS provable, and it is proved.** Give the drop the
+havoc's own freshly-minted variable as its witness instead of a dummy: the
+composite `w ⊒ wsnoc w y ⊒ (wsnoc w y) - x` maps `x ↦ term_var y`, the fibre over
+every ι is then inhabited by `(ι∖x) ► (y ↦ ι(x))`, and the operation is a faithful
+RENAME rather than an erasure. `zz_fresh_witness` closes with `Qed`
+(`plans/PLAN-lvar-drop.md` has the script; `assuming_acc_snoc_right`,
+`UnifLogic.v:1248`, is what carries it — the enclosing demonic binder hands you
+the continuation at any chosen value of the fresh variable, and you choose ι(x)).
+
+Three consequences, all simplifications: **soundness needs NO side condition**
+(a rename is unconditionally sound, so the operation can only be useless, never
+unsound — the same risk profile as `chunk_gc`); `occurs_check` is still wanted but
+only to pick genuinely dead candidates, so the fresh variable stays
+unconstrained; and **net Σ growth per trip is zero**, since the havoc mints k
+variables anyway and each can serve as the witness retiring one dead variable
+from the previous trip. Only the crux is verified — the `□ᵣ`/`refine_four`
+plumbing and the heap transport are not. Original paragraph follows.
 
 **Why this is now the most valuable lever here, ahead of the packing below.** On
 this program every havoced `hv` becomes state-dead the moment the next trip's
@@ -538,11 +548,10 @@ quadratic and R3's exponent is still rising** (1.269 → 1.631 → 2.015 over 4�
    NOT identified. §6.4 said not to assume a second abstraction lemma helps;
    that still holds.
 
-**Next lever: PACKING. The drop was prototyped and abandoned the same day** — see
-§8.1's Phase 0 note and `plans/PLAN-lvar-drop.md`; it would have taken the slope
-to 0/trip but its refinement lemma is false, and the principled version of it is a
-loop rule (`plans/PLAN-loop-invariant.md`). So packing, sound and precedented but
-unmeasured, is what is left at this level: pack each trip's remaining fresh values into ONE
+**Next lever: the FUSED mint+drop (slope 0/trip), whose crux is proved** — §8.1's
+Phase 0 note and `plans/PLAN-lvar-drop.md`. Packing stays as the fallback and is
+strictly weaker (slope 1/trip, and it needs the wide-binder machinery the fused
+drop does not): pack each trip's remaining fresh values into ONE
 wide binder by slicing, exactly as `words_ctx` / `mem_class_width` already do
 (`word-slicing-payoff.md` — worth 2.86× there).
 Keep the precondition as separate `∃v_i` so the angelic consume still unifies per

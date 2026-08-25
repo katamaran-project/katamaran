@@ -1,16 +1,16 @@
 # PLAN — drop dead logical variables during symbolic execution
 
-Status: **ABANDONED AT PHASE 0, 2026-08-25, the same day it was opened.** The
-kill-gate fired: the local refinement lemma is **false**, for a reason readable
-straight off `assuming`'s definition. Nothing was built. Fall back to the
-wide-binder packing (`diagnostics/havoc-abstraction-payoff.md` §8.5, slope
-1/trip) or go to a real loop rule (`PLAN-loop-invariant.md`, slope 0) — see
-§"Phase 0 result" below for why the loop rule is the principled version of this
-idea rather than a different one.
+Status: **PHASE 0 PASSED on its crux, 2026-08-25 — but only for a FUSED
+mint+drop, not for the standalone drop this plan first proposed.** The blocking
+obstacle is verifiably gone (`Qed` recorded below). The design changed as a
+result: the drop must be *fused with the havoc's own mint* and use the freshly
+minted variable as its witness. Net Σ change per trip: **zero**.
 
-**The gate did its job.** It cost an afternoon of reading instead of a week of
-building, and the design section below is kept exactly as pitched so the error is
-legible. Read the Phase 0 result BEFORE believing any of it.
+*History, because two intermediate verdicts were wrong and the reasoning is the
+reusable part.* This plan was first written for a standalone drop with a dummy
+witness (`term_val bv.zero`), and was then ABANDONED the same day on the grounds
+that its refinement lemma is false. **The abandonment was right about the
+standalone drop and wrong as a verdict on the idea.** See §"Phase 0 result".
 
 ## The problem
 
@@ -158,70 +158,137 @@ dominated.
    but `Qed` needs its own look, since `Qed` re-runs the executor via the VM
    cast (so `Qed ≈ vm_compute`).
 
-## Phase 0 result — THE GATE FIRED, and why
+## Phase 0 result
 
-**The lemma is false.** `assuming` (`Worlds.v:755`) is
+### What is false: the STANDALONE drop with a dummy witness
+
+`assuming` (`Worlds.v:755`) is
 
 ```coq
 assuming ω P ι = forall ιpast, inst (sub_acc ω) ιpast = ι ->
                                instprop (wco w1) ιpast -> P ιpast
 ```
 
-For `ω = acc_subst_right t` we have `sub_acc ω = sub_single xIn t`, so
-`inst (sub_single xIn t) ιpast` is `ιpast` with `inst t ιpast` inserted at x, and
-the premise `= ι` forces **`ι(x) = inst t (ι∖x)`**. But the premise of the whole
-enterprise is that x is UNCONSTRAINED — absent from `wco w`, which is exactly
-what makes it droppable. So at the generic ι no `ιpast` exists, the hypothesis
-`assuming ω (psafe K)` is **vacuously true**, and the goal `⌜Φc tt ch⌝` still has
-to be produced. Nothing else in the context can produce it. Hence
-`⊢ ℛ⟦RHeapSpec RUnit⟧ (pure tt) (drop_var …)` does not hold.
+For `ω = acc_subst_right t` we have `sub_acc ω = sub_single xIn t`, so the
+premise `= ι` forces **`ι(x) = inst t (ι∖x)`**. With `t` a dummy value and x
+unconstrained, no such `ιpast` exists at the generic ι: the hypothesis is
+**vacuously true** while the goal `⌜Φc tt ch⌝` still has to be produced.
+Verified by inspecting the goal — the fibre has no inhabitant to name.
 
-**Where the pitch above went wrong.** Its step 1–4 argued: the goal is
-x-independent (true — `Φc` carries no valuation and `x ∉ h`), so evaluate at
-ι₀ := ι[x ↦ inst t] where the equation holds and `knowing_acc_subst_right`
-applies. The flaw is that `⊢` in `Pred` is **pointwise in ι**: we are handed the
-hypothesis at ι and must discharge the goal at ι. Being able to prove the goal at
-some *other* valuation is not available as a step. x-independence of the goal is
-true and useless.
+Note this is NOT repaired by the goal being x-independent (it is: `Φc` carries no
+valuation). Entailment in `Pred` is **pointwise in ι**; being able to prove the
+goal at some other valuation is not a step.
 
-**What is actually true, and it is the reusable part.** The fact that rescues the
-drop is that the enclosing binder universally quantifies x — and that fact lives
-OUTSIDE the action. `psafe (demonicv x k) = assuming acc_snoc_right (psafe k)`
-(`Propositions.v:2431`), the drop is `assuming (acc_subst_right t) …`
-(`:2439`), and `assuming_trans` (`UnifLogic.v:961`) composes them. Mint
-immediately followed by drop collapses: the composite accessibility
-`w ⊒ wsnoc w x ⊒ wsubst (wsnoc w x) x t` lands back at `w`, and
-`assuming acc_refl P ⊣⊢ P` (`:939`). **So soundness is a property of the
-MINT/DROP PAIR, not of the drop.** A real theorem here has to quantify over
-everything the executor emits between the two — every intervening world
-extension must itself be x-free for the composite to collapse. That is a
-substantially larger obligation than the one pitched, and it is about a subtree
-rather than a step.
+### What is TRUE, and verified: the FUSED mint+drop
 
-**Consequently the principled version of this idea is a loop rule, not an
-annotation.** A loop invariant closes the binder AT the loop head, which makes
-the mint/drop pairing lexically explicit; the drop tries to shrink a lexical
-scope from the inside, which is why it needs a non-local justification and the
-loop rule does not. `PLAN-loop-invariant.md` is therefore not an alternative to
-this plan — it is this plan done in the place where the framework can express it.
+Give the drop the **freshly minted variable** as its witness instead of a dummy.
+The composite accessibility is then
+`w ⊒ wsnoc w y ⊒ (wsnoc w y) - x` with `sub_acc` mapping `x ↦ term_var y` and
+fixing everything else — and now the fibre over *every* ι is inhabited: take
+`ιpast := (ι∖x) ► (y ↦ ι(x))`. The operation is a faithful **renaming**, not an
+erasure.
 
-**Two `occurs_check` facts remain correct and worth keeping**, since a future
-attempt needs them either way: `occurs_check`
-(`Symbolic/OccursCheck.v:56`, in scope via `Base.v:68`) with
-`occurs_check_sound : occurs_check xIn u = Some u' → u = subst u' (sub_shift xIn)`
-decides deadness on data, and `Symbolic/Monads.v:97-99` already runs it on a
-(pathcondition, heap) pair. The semantic claim behind the whole plan — a variable
-occurring nowhere in the present state can never reappear, because every future
-term is built from present terms — is **also correct**. Neither fact is what
-blocks it.
+**Checked, `Qed`, by position mode at `theories/Symbolic/UnifLogic.v:1343`**
+(preamble mode cannot reach these definitions — they live inside the
+`UnifLogicOn` functor):
+
+```coq
+Lemma zz_helper {w : World} {x y : LVar} {σ : Ty} (xIn : (x∷σ ∈ w)%katamaran)
+  (ι : Valuation w) :
+  inst (sub_single (ctx.in_succ (b' := (y∷σ)) xIn) (@term_var _ y σ ctx.in_zero))
+       (env.snoc (env.remove (x∷σ) ι xIn) (y∷σ) (env.lookup ι xIn))
+  = env.snoc ι (y∷σ) (env.lookup ι xIn).
+Proof. rewrite inst_sub_single2. cbn. now rewrite env.insert_remove. Qed.
+
+Lemma zz_helper2 {w : World} {x y : LVar} {σ : Ty} (xIn : (x∷σ ∈ w)%katamaran)
+  (ι : Valuation w) :
+  instprop (subst (subst (wco w) sub_wk1)
+              (sub_single (ctx.in_succ (b' := (y∷σ)) xIn)
+                          (@term_var _ y σ ctx.in_zero)))
+           (env.snoc (env.remove (x∷σ) ι xIn) (y∷σ) (env.lookup ι xIn))
+  <-> instprop (wco w) ι.
+Proof. rewrite ?instprop_subst. rewrite zz_helper. rewrite inst_sub_wk1. reflexivity. Qed.
+
+(* THE CRUX: the step that kills the standalone drop, discharged for the
+   fused one.  G is an arbitrary PURE proposition — which is what the
+   concrete side of the refinement obligation is. *)
+Lemma zz_fresh_witness {w : World} {x y : LVar} {σ : Ty}
+  (xIn : (x∷σ ∈ w)%katamaran) (G : Prop) :
+  assuming (acc_trans (@acc_snoc_right w (y∷σ))
+              (@acc_subst_right (wsnoc w (y∷σ)) x σ (ctx.in_succ xIn)
+                 (@term_var _ y σ ctx.in_zero)))
+           (⌜ G ⌝)%I ⊢ (⌜ G ⌝)%I.
+Proof.
+  rewrite assuming_trans assuming_acc_snoc_right.
+  unfold forgetting, assuming. crushPredEntails3.
+  apply (H0 (env.lookup ι xIn)
+            (env.snoc (env.remove (x∷σ) ι xIn) (y∷σ) (env.lookup ι xIn))).
+  - change (env.map (fun (b : LVar∷Ty) (s : Term w (type b)) => inst s ι) (sub_id w))
+      with (inst (sub_id w) ι).
+    rewrite inst_sub_id. apply (zz_helper xIn ι).
+  - apply (proj2 (zz_helper2 xIn ι)). exact H.
+Qed.
+```
+
+`assuming_acc_snoc_right` (`UnifLogic.v:1248`) is what carries the argument: the
+enclosing demonic binder hands you the continuation at **any chosen value** of
+the fresh variable, and you choose `ι(x)`.
+
+### Consequences for the design — it gets SIMPLER, not harder
+
+1. **Soundness needs NO side condition.** `zz_fresh_witness` has no
+   `occurs_check` hypothesis, because a rename is sound unconditionally. The
+   operation therefore cannot be unsound, only useless — the same risk profile as
+   `chunk_gc`. This is a large simplification over the original design.
+2. **`occurs_check` is still wanted, but only for USEFULNESS.** Rename a *dead*
+   old variable and the fresh one stays unconstrained, which is what the havoc
+   needs. Rename a *live* one and the fresh variable inherits its constraints —
+   still sound, but the havoc stops giving a free value. So the check selects
+   good candidates; it does not guard soundness.
+3. **Net Σ change per trip is zero.** The havoc mints k fresh variables anyway
+   (k = 3 on br_divrem, `diagnostics/havoc-abstraction-payoff.md` §8); using each
+   as the witness that drops the corresponding dead variable from the previous
+   trip gives +k−k = 0. Pairing is arbitrary — any rename is sound.
+4. **Design decision 4 is DROPPED.** No `Inhabited`/`defaultVal` witness is
+   needed, since the witness is always a `term_var`. That restriction is gone.
+5. Design decision 1 still holds and is now the main structural work: this is a
+   step of `sexec_cfg_addr` (or a fused `havoc` primitive), not an
+   `sexec_ghost` case, because the carried state must be transported.
+
+### What is NOT yet verified — do not call this done
+
+Only the crux is proved. Still open, and NOT to be assumed routine (that
+assumption is what produced two wrong verdicts already):
+
+- the full `refine_*` lemma for the fused action, including the `□ᵣ` /
+  `refine_four` plumbing and the heap transport
+  `inst (subst h ζ) ιpast = inst h ι`;
+- that the executor can actually pair each fresh variable with a dead one at the
+  loop head (the `occurs_check` bookkeeping);
+- everything in Phases 1–3 below, which are unchanged in substance.
 
 ## Log
 
-**2026-08-25 — plan opened, Phase 0 run, plan abandoned.** Author's note, since
-the flip-flop is the expensive part: I first called the drop UNSOUND (wrong —
-retracted in `diagnostics` §8.1), then called it locally provable and pitched
-this plan (also wrong — it fails on `assuming`'s vacuity). The check that
-settled it, reading the definition of `assuming`, cost about two minutes and
-should have come BEFORE the pitch, not after. The semantic intuition that
-started it was right throughout; what neither verdict engaged with until now is
-the framework's pointwise-in-ι entailment.
+**2026-08-25 — plan opened, Phase 0 run three times, crux PROVED for the fused
+design.** Author's note, since the flip-flopping is the expensive part and the
+pattern is worth not repeating. Three verdicts on the same question:
+
+1. "The drop is UNSOUND, the deadness condition is about the continuation" —
+   **wrong**. The condition is about the present state; every future term is
+   built from present terms.
+2. "It is locally provable via two `occurs_check`s, half a day" — **wrong**, and
+   pitched without reading `assuming`'s definition first. It fails on fibre
+   vacuity.
+3. "The local refinement lemma is false, soundness belongs to the mint/drop pair
+   and needs the whole intervening execution" — **half right**. It IS about the
+   pair; it is NOT about the intervening execution. Fusing mint and drop, with
+   the fresh variable as witness, makes the fibre inhabited and the crux closes
+   in ten lines.
+
+Emiel was right at (1), at (2) and at (3); each correction came from him
+restating the same simple semantic fact and refusing the framework-shaped excuse
+for it. **The lesson is not "read the definitions" (though that would have caught
+(2) in two minutes) — it is that a soundness claim about this framework is cheap
+to TEST and expensive to argue.** `zz_dummy_witness` and `zz_fresh_witness` are
+each about ten lines and settle in under a second what four rounds of prose could
+not. Test the entailment, do not reason about it.
