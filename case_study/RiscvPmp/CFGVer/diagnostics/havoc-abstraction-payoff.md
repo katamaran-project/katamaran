@@ -399,6 +399,23 @@ as a step of `sexec_cfg_addr`, with the carried state in hand — not as an
 dissolves: the concrete side at ι equals the concrete side at ι[x↦dummy], where
 `assuming` is not vacuous.
 
+**PHASE 0 RESULT, same day: the drop is ABANDONED. Read `plans/PLAN-lvar-drop.md`
+before acting on the paragraph below.** The local refinement lemma is FALSE.
+`assuming ω P ι` (`Worlds.v:755`) quantifies over `ιpast` with
+`inst (sub_acc ω) ιpast = ι`, which for `acc_subst_right t` forces
+`ι(x) = inst t (ι∖x)` — and x being unconstrained is precisely the premise, so at
+the generic ι the hypothesis is VACUOUS while the concrete goal still has to be
+produced. The escape route claimed below ("evaluate at ι₀ where the equation
+holds") is not available: `⊢` in `Pred` is POINTWISE in ι. Soundness turns out to
+be a property of the MINT/DROP PAIR — `psafe (demonicv …)` is itself an
+`assuming`, and `assuming_trans` collapses the pair only if every intervening
+world extension is x-free — which is a subtree-sized obligation, not a step-sized
+one. The principled version is therefore a loop rule
+(`plans/PLAN-loop-invariant.md`), which closes the binder AT the loop head
+instead of shrinking a scope from the inside. **The two `occurs_check` facts and
+the semantic intuition below are correct and are not what blocks it.** Original
+paragraph follows.
+
 **Why this is now the most valuable lever here, ahead of the packing below.** On
 this program every havoced `hv` becomes state-dead the moment the next trip's
 havoc consumes its chunk: the value is unconstrained so it is absent from `wco`,
@@ -521,11 +538,11 @@ quadratic and R3's exponent is still rising** (1.269 → 1.631 → 2.015 over 4�
    NOT identified. §6.4 said not to assume a second abstraction lemma helps;
    that still holds.
 
-**Next lever: prototype the DROP first (§8.1), then packing.** The drop takes the
-slope to 0/trip (`|Σ|` flat) where packing only reaches 1/trip, and every
-ingredient it needs is already in the tree; it is the only candidate here for an
-exponent fix rather than another factor. Packing, sound and precedented but
-unmeasured, is the fallback: pack each trip's remaining fresh values into ONE
+**Next lever: PACKING. The drop was prototyped and abandoned the same day** — see
+§8.1's Phase 0 note and `plans/PLAN-lvar-drop.md`; it would have taken the slope
+to 0/trip but its refinement lemma is false, and the principled version of it is a
+loop rule (`plans/PLAN-loop-invariant.md`). So packing, sound and precedented but
+unmeasured, is what is left at this level: pack each trip's remaining fresh values into ONE
 wide binder by slicing, exactly as `words_ctx` / `mem_class_width` already do
 (`word-slicing-payoff.md` — worth 2.86× there).
 Keep the precondition as separate `∃v_i` so the angelic consume still unifies per

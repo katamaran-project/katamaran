@@ -742,11 +742,13 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   (* points the same way: fewer havoced registers is fewer values without *)
   (* secLeakvar.  Both corollaries were measured; do not re-derive.        *)
   (*                                                                      *)
-  (* This is a FACTOR, not a fix for the growth itself.  The surviving     *)
-  (* binders can in principle be dropped outright (|Sigma| flat) — see     *)
-  (* Verifier.v's note above sexec_ghost on why that has to be a step of   *)
-  (* sexec_cfg_addr rather than a ghost annotation, and note that an       *)
-  (* earlier claim that dropping them is UNSOUND has been WITHDRAWN.       *)
+  (* This is a FACTOR, not a fix for the growth itself.  Dropping the      *)
+  (* surviving binders outright was tried and ABANDONED (2026-08-25,       *)
+  (* plans/PLAN-lvar-drop.md Phase 0: the local refinement lemma is false, *)
+  (* soundness belongs to the mint/drop PAIR, and the principled version   *)
+  (* is a loop rule).  What is left at this level is packing the per-trip   *)
+  (* values into ONE wide binder by slicing (slope 1/trip instead of 3),   *)
+  (* diagnostics/havoc-abstraction-payoff.md §8.5.                          *)
   Definition asn_havoc_reg {Σ} (r : RegIdx) : Assertion Σ :=
     match reg_convert r with
     | None     => ⊤
