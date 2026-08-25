@@ -1060,10 +1060,24 @@ this document assumed:
 
 - **"λ → 1" is too strong.** What remains grows polynomially with a *rising*
   local exponent (1.19 → 1.60 → 2.03); a held-out quadratic fit misses n=16 by
-  −13%, so no growth law is established. The residual's likeliest home is
-  `|Σ| = 15 + 7n` — one fresh variable per havoced register per trip — which
-  points at the "drop an unreferenced logical variable" annotation kind already
-  sketched in `Verifier.v`, not at a second abstraction lemma.
+  −13%, so no growth law is established. ~~The residual's likeliest home is
+  `|Σ| = 15 + 7n`~~ — RETRACTED 2026-08-25 (diagnostics §5b): that count came
+  from FUEL-STARVED runs, and measured directly the havoc adds 7 demonic + 7
+  angelic mints per trip on a baseline of 659 (+2.1%) with ZERO surviving
+  `postprocess`. The residual driver is UNIDENTIFIED; do not assume the
+  "drop an unreferenced logical variable" annotation addresses it.
+- **The term recurrence is confirmed broken, directly** (diagnostics §5b): at the
+  loop head the loop-carried registers hold 243 → 8,244 → 88,468 printed chars
+  without the havoc (λ = 10.7, independently reproducing the 2026-08-24 dump),
+  and 117 → 123 → 126 with it, each register reduced to a bare `term_var`. The
+  pre-havoc term inside each trip is built from LAST trip's fresh variables, so
+  it stops compounding (5,203 → 5,256, +1%).
+- **The target set is SEVEN registers, not six.** The 2026-08-24 entry below says
+  the other eight chunks are "EXACTLY 1.00x at every trip"; x7 (T2) is not —
+  16 → 80 → 1,418 chars, 17.7× steady state, because at the loop head it holds
+  the previous trip's `sub T2, A1, T2`, which reads A1. It is 1.6% of the trip-3
+  total, which is presumably why it read as flat. Including T2 in the havoc set
+  was correct, not redundant.
 - **The six growing slots are NOT the right target set.** Four of them
   (T0–T3) are dead at the loop head, and havocing exactly those — information-
   lossless, the obvious free win — costs **1.94× MORE than doing nothing**,
