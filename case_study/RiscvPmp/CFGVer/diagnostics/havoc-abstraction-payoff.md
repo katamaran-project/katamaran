@@ -238,7 +238,12 @@ substitute. Compare live worlds rather than mints: at n=16 that is 15 against
 127, an **8.5× larger** world, and declared-variable count is quadratic in lookup
 cost (`lvar-lookup-cost-drivers.md`).
 
-**Consequence for §6.3:** the "drop an unreferenced logical variable" annotation
+**Consequence for §6.3 — RETRACTED 2026-08-25, see §8.1:** the drop annotation is
+UNSOUND, not merely unbuilt. The deadness reasoning below is correct and is
+exactly why the register-set axis (§8) pays; it is the *annotation* that is out.
+Original text follows.
+
+the "drop an unreferenced logical variable" annotation
 is back to being the natural next lever, and for a sharper reason than before.
 These binders are not merely numerous, they are *dead*: once trip k+1's havoc
 replaces the register, trip k's `hv` is referenced by nothing at all, and it
@@ -274,7 +279,16 @@ program is seven registers, not six.
    over the BI so it applies to the binary instance) plus the existing
    `lemSemCFGVerif` (`SpecIris.v:364`), discharged the way
    `iris_rule_stm_lemmak` does it (`BinaryInstance.v:196`, three lines).
-3. **The next cost lever: the havoc's own dead binders.** `|Σ|` in the live world
+3. **RETRACTED 2026-08-25 as to its CONCLUSION, see §8.1 — the measurement below
+   stands, the proposed lever does not.** `|Σ| = 15 + 7n` is correct and the
+   binders really are dead; but "drop an unreferenced logical variable" cannot be
+   built soundly, because the only accessibility into a smaller context needs a
+   witness term and the deadness side condition is about the CONTINUATION, a
+   function. **Never cite this item as an open option.** The real lever on the
+   same `|Σ|` axis is the havoc's REGISTER SET (§8), measured at 2.66× at n=16.
+   Original text follows.
+
+   **The next cost lever: the havoc's own dead binders.** `|Σ|` in the live world
    is `15 + 7n` with the havoc and a flat 15 without it (§5c) — the executor's
    own per-step mints are all eliminated by the solver, while a demonically
    produced unconstrained value never can be. Each trip's seven become dead the
@@ -311,3 +325,177 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none \
 Requires this branch's `Machine.v` (`havoc_regs` constructor), `CFGVer/Spec.v`
 (`lemma_havoc_regs`) and `CFGVer/Verifier.v` (the real `call_lemma` case); the
 light chain through `Example/Prelude.vo` must be built first.
+
+## 8. The havoc's REGISTER SET is itself a cost axis — and the "drop a dead variable" annotation cannot be built (2026-08-25)
+
+**Finding, one sentence: havocing three registers instead of seven costs 2.66×
+less at n=16 and is what makes br_divrem's real 31 trips reachable at all
+(41.25 G words, `BLOCK`, 531 s) — while the annotation §6.3 named as the next
+lever is not merely unbuilt but unsound, so this axis replaces it.**
+
+### 8.1 Why the sketched annotation is out
+
+`Verifier.v`'s "DROP AN UNREFERENCED LOGICAL VARIABLE" sketch is right that the
+*typing* works. It is the soundness that cannot be had, and the argument is
+short enough to be checkable:
+
+- `acc_subst_right` (`Worlds.v:381`) is the ONLY accessibility into a smaller
+  context — every `acc_*` in `Worlds.v:320-411` was enumerated — and it requires
+  a witness term `t`.
+- The continuation runs at `w - x` but the action must return a `SymProp w`.
+  The framework offers exactly TWO embeddings back, both visible in
+  `assume_triangular` / `assert_triangular` (`Propositions.v:281,314`):
+  `assume_vareq` and `assert_vareq`.
+- `safe` (`Propositions.v:340,345`) settles both. `safe (demonicv x k) ι =
+  ∀v, safe k`, while `safe (assume_vareq x t k) ι = (ι(x) = inst t → safe k)`.
+  Under the `demonicv` the havoc already emitted, the drop composes to
+  `safe k[x:=t]` — **strictly weaker** than `∀v, safe k`, equal only when
+  `x ∉ fv(k)`. `assert_vareq` instead demands a proof that an unconstrained
+  demonic variable equals `t`, i.e. the VC goes to `False`.
+
+So the drop needs a deadness side condition, and the condition is about the
+CONTINUATION — a `Box`, i.e. a function, which the action cannot inspect and
+which the refinement obligation quantifies over universally. **This is the sharp
+contrast with the drop-chunks sibling in the same comment block**: `chunk_gc` is
+sound for any chunk by affineness and pays only completeness, failing loudly at
+the next consume. Dropping a quantifier silently changes which statement was
+proved. One costs completeness; the other costs soundness.
+
+Corollary for anything built here later: **one fresh binder per trip is
+irreducible.** A per-trip unconstrained value needs a per-trip binder, and a
+lemma can only weaken (`r ↦ v ⊢ ∃w, r ↦ w`), so it cannot hand back a slice of a
+pre-declared pool indexed by the trip — and the index is not available anyway,
+`AnnotLemmaInvocation`'s `es` being closed `Exp [ctx]`. Zero growth needs a real
+loop rule (`plans/PLAN-loop-invariant.md`), not an annotation.
+
+### 8.2 The axis, and the arms
+
+| axis | states | what moves it |
+|---|---|---|
+| `havoc-breadth` | 3 / 4 / 7 registers | the `regs` list in the `havoc` ghost — nothing else |
+
+| arm | registers havoced | rationale |
+|---|---|---|
+| R7 | T0 T1 T2 T3 A0 A1 A4 | = §1's arm D, re-run as a matched control |
+| R4 | T2 A0 A1 A4 | the loop-carried set (T2 holds last trip's `sub T2,A1,T2`) |
+| R3 | A0 A1 A4 | the recurrence carriers only (§5's conclusion) |
+
+One axis, one knob: the three arm files differ from `ZZAllocF_D1.v` in exactly
+the final `Definition t` line. **Protocol identical to §2 in every arm**
+(`allocated_words`, `postprocess`'d tree via `Eval vm_compute`, no VC proof, no
+`Qed`, fuel `27n+60`, one `Eval` per process), and the imports-only baseline was
+**re-measured on this commit**: 611,601,212 words against §2's 611,564,884, i.e.
++0.006% — so §3's D column is directly comparable and is not being quoted across
+a protocol or baseline boundary.
+
+### 8.3 Results
+
+Net G words. Protocol column deliberately present, per this project's own rule.
+
+| n | R7 (7) | R4 (4) | R3 (3) | R3/R7 | protocol |
+|---|---|---|---|---|---|
+| 1 | 0.5685 | 0.4899 | 0.4647 | 0.817× | Eval, no Qed, 27n+60 |
+| 2 | 1.0183 | 0.8179 | 0.7501 | 0.737× | ″ |
+| 3 | 1.5998 | 1.2101 | 1.0803 | 0.675× | ″ |
+| 4 | 2.3299 | 1.6719 | 1.4587 | 0.626× | ″ |
+| 8 | 7.0788 | 4.3267 | 3.5150 | 0.497× | ″ |
+| 16 | 28.9014 | 14.6691 | 10.8835 | **0.377×** | ″ |
+| 31 | — | *killed mid-run* | **41.2498** | — | ″ |
+
+**Every cell is `("BLOCK-vc-discharged", (1,0,0))`, checked explicitly** — n=31
+included. So the term recurrence stays dead at three registers: the plain arm
+was already 52.68 G at n=3, and R3 reaches 31 trips for 41.25 G.
+
+**The control reproduces §3 at all six n** — recorded 0.5684 / 1.0183 / 1.5997 /
+2.3299 / 7.0787 / 28.9014 against measured 0.5685 / 1.0183 / 1.5998 / 2.3299 /
+7.0788 / 28.9014. Six for six. Independently, R3 at n=1 was run twice and
+differed by 2,150 words in 1.076e9 (0.0002%), reconfirming the noise floor.
+
+Local exponents per doubling (1→2, 2→4, 4→8, 8→16):
+
+| arm | | | | |
+|---|---|---|---|---|
+| R7 | 0.841 | 1.194 | 1.603 | **2.030** |
+| R4 | 0.740 | 1.031 | 1.372 | 1.761 |
+| R3 | 0.691 | 0.960 | 1.269 | **1.631** |
+
+**Held-out fits (required, and all three fail in the same direction).** Quadratic
+on n = 2, 4, 8 predicting n=16: R7 25.08 vs 28.90 (**−13.2%**, reproducing §3's
+published figure and thereby validating the fit method), R4 13.42 vs 14.67
+(**−8.5%**), R3 10.18 vs 10.88 (**−6.4%**). For R3 a quadratic on n = 4, 8, 16
+predicts n=31 at 36.40 against 41.25 actual (**−11.8%**).
+
+So: fewer havoced registers is monotonically closer to quadratic, but **no arm is
+quadratic and R3's exponent is still rising** (1.269 → 1.631 → 2.015 over 4→8,
+8→16, 16→31). Quote the ratios, not a law.
+
+### 8.4 Reading the axis
+
+- **Dropping the three dead temps from the havoc is free money, and the case for
+  it is now measured from both sides.** §5 found arm C (temps only) *actively
+  harmful* at 1.941×; this section finds that removing those same temps from the
+  full set is worth **2.00× at n=8 and 2.66× at n=16**, growing. Their term size
+  is a symptom, they are recomputed from A0/A1/A4 inside every trip, and havocing
+  them buys nothing while costing three binders per trip plus three
+  consume/produce pairs.
+- **Completeness moves the same way, not against it.** A havoced value carries no
+  `secLeakvar` and is therefore treated as possibly-secret, so three fewer
+  havoced registers is three fewer possibly-secret values. This axis is the rare
+  one where cost and completeness are not in tension.
+- **R3 beats R4 by 1.35× at n=16, so even a genuinely loop-carried register is
+  better left alone here.** T2 does accumulate across trips (16 → 80 → 1,418
+  chars, the correction recorded above), but that accumulation is *linear* once
+  A1 is havoced, and one extra binder per trip costs more than it. **General
+  rule: havoc the minimum set that breaks the recurrence, not every slot that
+  grows.**
+- **Peak footprint follows, which is what makes n=31 feasible at all.**
+  `top_heap_words` at n=16: R7 1.693 G, R4 1.113 G, R3 0.968 G — R3 at n=8
+  (0.636 G) peaks no higher than R7 at n=3. R3 at n=31 peaks at 1.947 G words
+  (≈15.6 GB on a 14 GB box, so it swapped) and still finished in 531 s.
+
+### 8.5 Before proposing anything further
+
+1. **Predicted effect at the n that matters.** At br_divrem's 31 trips, R3 is a
+   measured 41.25 G. R7 at n=31 was NOT measured; a quadratic on its n = 4, 8, 16
+   gives 114.1 G, and since that fit underpredicts by ~13% it is a floor, so
+   ≳2.8×. R4 at n=31 was killed mid-run and **the cause is not established** — no
+   journal access on this box — though memory exhaustion is the obvious
+   candidate given R3's own 15.6 GB peak. Do not record R4 at n=31 as an OOM
+   without evidence.
+2. **Constant factor or exponent change? A large factor, NOT an exponent fix.**
+   R3's exponent is 1.269 → 1.631 → 2.015 and rising, the same shape as R7's
+   one step lower. The wall moved; it was not removed.
+3. **Still dominant after the fix? No — and this is the Amdahl point.** |Σ| is
+   worth 2.66× at n=16, so it was never all of §3's residual, and after this the
+   remaining ~2.6× superquadratic growth at n≥16 is a mechanism this study has
+   NOT identified. §6.4 said not to assume a second abstraction lemma helps;
+   that still holds.
+
+**Next lever, sound and precedented but unmeasured:** pack each trip's remaining
+fresh values into ONE wide binder by slicing, exactly as `words_ctx` /
+`mem_class_width` already do (`word-slicing-payoff.md` — worth 2.86× there).
+Keep the precondition as separate `∃v_i` so the angelic consume still unifies per
+chunk; make the postcondition a single `asn.exist "hv" (ty.bvec (k*xlenbits))`
+with each register a `bvtake`/`bvdrop` slice. `bv.take_app` / `bv.drop_app`
+(`Bitvector.v:947,974`) and `uop.bvtake` / `uop.bvdrop` (`UnOps.v:66-67`) all
+exist, and `ValidLemma` stays existential intro over a `bv.app`. That takes the
+slope from 3/trip to 1/trip — the floor established in §8.1. It is a
+HYPOTHESIS about the remaining cost, not a measured cause.
+
+### 8.6 Files and reproduction
+
+Throwaway, gitignored, not in `_CoqProject`. Generated from `ZZAllocF_D1.v` by
+replacing only the last two lines, so nothing but the register list and `n` can
+differ.
+
+| file | what |
+|---|---|
+| `Example/ZZAllocF_BASE.v` | imports-only baseline, re-measured on this commit |
+| `Example/ZZAlloc{R7,R4,R3}_{1,2,3,4,8,16,31}.v` | one arm, one n, one `Eval` |
+
+```bash
+OCAMLRUNPARAM='v=0x400' coqc -q -w none \
+  -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+  case_study/RiscvPmp/CFGVer/Example/ZZAllocR3_31.v 2>&1 \
+  | grep -E 'BLOCK|ERROR|allocated_words|top_heap_words'
+```

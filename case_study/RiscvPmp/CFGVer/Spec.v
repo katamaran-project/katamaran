@@ -724,6 +724,23 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   (* NonSyncVal wall.  Havoc only registers whose value is genuinely dead *)
   (* across the annotation point — never a loop counter the executor      *)
   (* needs concrete to decide a back edge.                                *)
+  (*                                                                      *)
+  (* HAVOC THE MINIMUM SET THAT BREAKS THE RECURRENCE, NOT EVERY SLOT     *)
+  (* THAT GROWS (measured 2026-08-25, diagnostics/havoc-abstraction-      *)
+  (* payoff.md §8).  Each havoced register costs ONE surviving logical    *)
+  (* variable PER TRIP — a demonically produced unconstrained value is    *)
+  (* determined by nothing, so the solver can never eliminate it — and    *)
+  (* |Σ| is quadratic in lookup cost.  On br_divrem, havocing the three   *)
+  (* recurrence carriers (A0 A1 A4) instead of all seven growing slots is  *)
+  (* 2.00x cheaper at n=8 and 2.66x at n=16, and is what makes its real   *)
+  (* 31 trips reachable at all.  Two counter-intuitive corollaries, both  *)
+  (* measured: havocing the DEAD TEMPS alone is 1.94x WORSE than doing    *)
+  (* nothing (their size is a symptom — they are recomputed from the      *)
+  (* carriers inside every trip), and even a genuinely LOOP-CARRIED slot  *)
+  (* (T2) is better left out, because its accumulation is linear once its *)
+  (* source is havoced while a binder per trip is not.  Completeness      *)
+  (* points the same way: fewer havoced registers is fewer values without *)
+  (* secLeakvar.                                                          *)
   Definition asn_havoc_reg {Σ} (r : RegIdx) : Assertion Σ :=
     match reg_convert r with
     | None     => ⊤

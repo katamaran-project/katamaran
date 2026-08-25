@@ -40,16 +40,39 @@ the second cost is real:
   an 8.5× larger world, and lvar count is quadratic in lookup cost.
 - So cost is still superlinear with a **rising** local exponent (1.19 → 1.60 →
   2.03 over n=2→4→8→16) and a held-out quadratic misses n=16 by −13%.
-  **br_divrem's real 31 trips are still not reached** — n=16 is 28.9 G words /
+  ~~**br_divrem's real 31 trips are still not reached** — n=16 is 28.9 G words /
   132 s, and n=31 timed out at 1800 s, though only at the OLD insufficient fuel
-  and so is untested at `27n+60`.
+  and so is untested at `27n+60`.~~ **SUPERSEDED 2026-08-25: n=31 IS reached** —
+  41.25 G words, `BLOCK-vc-discharged`, 531 s, with a three-register havoc at
+  fuel `27n+60` (`diagnostics/havoc-abstraction-payoff.md` §8). The seven-register
+  figures in this bullet stand as measurements of that arm.
 
-**Next lever, hypothesis not measurement:** the "drop an unreferenced logical
-variable" annotation kind sketched above `sexec_ghost` in `Verifier.v`. It now
-has a named target — each trip's seven `hv` binders are dead the moment the next
-trip's havoc replaces the register, and survive only because `demonicv_prune`
-collapses on `block`. Since the exponent is still rising, `|Σ|` may not be all
-of it; measure before building.
+**Next lever — RESOLVED 2026-08-25, and not the way this said.** ~~the "drop an
+unreferenced logical variable" annotation kind sketched above `sexec_ghost` in
+`Verifier.v`~~ **That annotation is UNSOUND and is off the table** — see
+`diagnostics/havoc-abstraction-payoff.md` §8.1: the only accessibility into a
+smaller context (`acc_subst_right`) needs a witness term, the only two embeddings
+back (`assume_vareq` / `assert_vareq`) give respectively a strictly weaker VC and
+an unprovable one, and the deadness side condition is about the CONTINUATION,
+which is a function the action cannot inspect. Contrast drop-chunks, sound for
+any chunk by affineness. **Never re-open this as an option.**
+
+**What DID pay, on the same `|Σ|` axis: the havoc's REGISTER SET.** Havocing
+three registers (A0 A1 A4 — the recurrence carriers) instead of seven is **2.00×
+at n=8 and 2.66× at n=16**, every cell still `BLOCK`, and it is what makes
+**br_divrem's real 31 trips reachable: 41.25 G words, discharged, 531 s** — this
+section previously recorded n=31 as timing out at 1800 s. Completeness improves
+in the same direction, since three fewer havoced registers is three fewer values
+carrying no `secLeakvar`. Full record, arms and held-out fits:
+`diagnostics/havoc-abstraction-payoff.md` §8. Caveat kept: it is a large FACTOR,
+not an exponent fix — R3's local exponent is 1.269 → 1.631 → 2.015 and still
+rising, so `|Σ|` was never all of it and the residual mechanism is unidentified.
+
+**Next lever after that, sound but unmeasured:** pack each trip's remaining fresh
+values into ONE wide binder by slicing (`words_ctx` / `mem_class_width`
+precedent, 2.86× where it was measured), taking the slope from 3/trip to 1/trip
+— which §8.1 establishes is the FLOOR, since a per-trip unconstrained value needs
+a per-trip binder and a lemma can only weaken.
 
 **Second open item, independent of the above:** no committed example uses a
 ghost annotation. The whole payoff lives in gitignored `ZZ*` probes; what landed
