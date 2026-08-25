@@ -20,15 +20,50 @@ than as a merge precondition. It passed, so mainline is clean — but the
 invariant went unenforced for the whole session. Phase 3/4 work should go on a
 topic branch and reach the protected branch via `git merge --no-ff`.
 
-**Still open:**
+**ALL FOUR PHASES ARE LANDED.** Phase 4 completed 2026-08-25 on branch
+`issue/annot-havoc-spike` (`a9a1392d` → `20722200`), **gate green at `6fc12d73`**
+— build clean, no holes, 14 end theorems axiom-clean. **NOT MERGED**: needs
+`git merge --no-ff` into `KatamaranRel`.
+
+### THE CURRENT PROBLEM
+
+**The havoc works, and it is not enough on its own.** It converts an
+exponential TERM recurrence into linear growth in DEAD LOGICAL VARIABLES, and
+the second cost is real:
+
+- Term growth is gone. Loop-head register terms go 243 → 8,244 → 88,468 printed
+  chars without the havoc (λ = 10.7) and 117 → 123 → 126 with it.
+- But live `|Σ| = 15 + 7n`, against a flat 15 without the havoc. The executor
+  mints 659 variables per trip and the solver eliminates **all** of them; a
+  demonically produced unconstrained value is determined by nothing, so the
+  havoc's seven per trip survive to the end of execution. 15 vs 127 at n=16 is
+  an 8.5× larger world, and lvar count is quadratic in lookup cost.
+- So cost is still superlinear with a **rising** local exponent (1.19 → 1.60 →
+  2.03 over n=2→4→8→16) and a held-out quadratic misses n=16 by −13%.
+  **br_divrem's real 31 trips are still not reached** — n=16 is 28.9 G words /
+  132 s, and n=31 timed out at 1800 s, though only at the OLD insufficient fuel
+  and so is untested at `27n+60`.
+
+**Next lever, hypothesis not measurement:** the "drop an unreferenced logical
+variable" annotation kind sketched above `sexec_ghost` in `Verifier.v`. It now
+has a named target — each trip's seven `hv` binders are dead the moment the next
+trip's havoc replaces the register, and survive only because `demonicv_prune`
+collapses on `block`. Since the exponent is still rising, `|Σ|` may not be all
+of it; measure before building.
+
+**Second open item, independent of the above:** no committed example uses a
+ghost annotation. The whole payoff lives in gitignored `ZZ*` probes; what landed
+is capability plus the lemma. Wiring it into a real br_divrem/muladd example is
+where the COMPLETENESS cost first meets a real end theorem — a havoced value
+carries no `secLeakvar`, so it is treated as possibly-secret. The two positive
+controls show where that bites: havocing A5 (the counter the back edge is
+decided on) or A3 (the base pointer) leaves a 19–31 node residual instead of
+collapsing to `block`.
+
+**Also still open:**
 1. `cfgver-refinement` / `cfgver-soundness` skills do not yet mention the new
-   `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)
-3. Phase 3 (`AnnotDebugBreak` as a usable tool) is DONE (GATE 3 met).
-   Phase 4 (`AnnotLemmaInvocation` semantics) has its payoff MEASURED on
-   branch `issue/annot-havoc-spike` (symbolic side only, both other sides
-   still stubs, heavy branch deliberately not building there) —
-   `diagnostics/havoc-abstraction-payoff.md`. The soundness half is not
-   started; see the Phase 4 section below for exactly what is owed.
+   `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)  Neither
+   mentions the ghost/`call_lemma` column either, now that it is real.
 
 ## Log
 
