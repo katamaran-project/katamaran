@@ -13,11 +13,11 @@ first measured evidence for it.
 Two things it is *not*. It is not "λ → 1": what remains grows polynomially with a
 **rising** local exponent (1.19 → 1.60 → 2.03 over successive doublings), and a
 quadratic fit on n=2,4,8 under-predicts n=16 by 13%, so **no growth law is
-established here — do not quote one.** And it is not free: the lemma mints one
-fresh logic variable per havoced register per trip (`|Σ| = 15 + 7n`, read
-directly off the binder counts in §4), which is the most likely home of the
-residual growth given that declared-variable count is quadratic in lookup cost
-(`lvar-lookup-cost-drivers.md`).
+established here — do not quote one.** It is very nearly free in variables, though: §5b measures
+the lemma minting 7 demonic + 7 angelic variables per trip against a baseline of
+659 per trip (+2.1%), with **zero** surviving `postprocess`. (An earlier version
+of this record said `|Σ| = 15 + 7n` and blamed the residual growth on it; that
+is RETRACTED in §5b — it was an artifact of fuel-starved runs.)
 
 ## 1. The axes
 
@@ -141,6 +141,95 @@ n: 0.829× at n=1, **5.19×** at n=2, **32.9×** at n=3. The ratio grows without
 bound because the two arms have different growth *shapes*, which is exactly why
 a single-N speedup figure would be meaningless here.
 
+## 5b. Direct measurement: term growth and variable count (2026-08-25)
+
+§3–5 measure aggregate allocation, which is indirect evidence for a claim about
+*term size*, and §4's `|Σ| = 15 + 7n` came from FUEL-STARVED runs. Both are now
+measured directly, in the healthy configuration.
+
+**Method.** An `AnnotDebugBreak` on the loop head is what makes either readable:
+without one the postprocessed tree collapses to `block` (`demonicv_prune` folds
+a binder spine over `block`), so there is no heap to dump and no binder to count.
+Arm **E** plants `[break; havoc; break]`, and since `ai_ghost_before` runs in list
+order that gives the PRE- and POST-havoc heap at the same pc on the same trip —
+one run, no cross-run comparison to get wrong. Sizes are printed characters of
+each register's term at `Set Printing Width 1000`.
+
+### Term size in the loop-carried registers, at the loop head
+
+| trip | baseline (break only) | havoc: PRE | havoc: POST |
+|---|---|---|---|
+| 1 | 243 | 243 | 117 |
+| 2 | 8,244 | 5,203 | 123 |
+| 3 | 88,468 | 5,256 | 126 |
+
+(Whole-heap chars: baseline 814 / 8,815 / 89,039. That independently reproduces
+the 786 / 8,787 / 89,011 measured 2026-08-24 by a different session, and pins
+the baseline's steady-state λ at **10.7**.)
+
+**The recurrence is broken, and the dump shows the mechanism outright.**
+Post-havoc every watched register holds a bare `term_var "hv.N"` (15–18 chars).
+The PRE-havoc term at trip 2 is built out of `hv.4`/`hv.5` — *last trip's* fresh
+variables — so each trip constructs one trip's worth of nesting and is reset,
+instead of nesting on top of the previous trip's term. That is why PRE is flat
+after the first trip (5,203 → 5,256, +1.0%) rather than growing ×10.7.
+
+At trip 3 the comparison is 88,468 against 5,256 — **16.8×** at the worst point
+inside the trip — and that ratio grows by roughly the baseline's λ per further
+trip.
+
+### Variables spawned
+
+Counted on the **RAW** tree (`CFG_VC_triple` with no `postprocess`), summing
+every binder node anywhere rather than the leading spine — `count_binders` walks
+only the leading spine and reads 4 on a raw tree regardless, which is a trap
+worth knowing before quoting it.
+
+| | demonicv | angelicv | per trip |
+|---|---|---|---|
+| no havoc | 493 / 758 / 1023 | 708 / 1102 / 1496 | +265 / +394 |
+| havoc | 500 / 772 / 1044 | 715 / 1116 / 1517 | +272 / +401 |
+| **difference** | **+7 / +14 / +21** | **+7 / +14 / +21** | **+7 / +7** |
+
+So the havoc mints **exactly 7 demonic + 7 angelic variables per trip** — one
+each per havoced register, the angelic one being the instantiation that consumes
+`∃v, r ↦ v` — against a baseline of 659 mints per trip. That is **+2.1%**.
+It also adds exactly 21 raw nodes per trip.
+
+**Surviving `postprocess`: zero, in both arms** (tree is `block`, 1 node, 0
+binders, at every n). The havoc's variables cost nothing in the final VC.
+
+### RETRACTED: `|Σ| = 15 + 7n` as the explanation for §3's residual growth
+
+§4 reported `binders = 15 + 7n` and §6.3 called it "the only quantity known to
+grow per trip in arm D" and hence the likeliest home of the residual
+superquadratic cost. **Both the number and the inference are withdrawn.**
+
+- The number came from runs whose execution died in `error` on exhausted fuel.
+  Prune cannot collapse a binder spine that does not end in `block`, so those
+  binders survived as an artifact of the broken configuration. In a healthy run
+  the count is **15, flat, at n=1, 2 and 3** — identical to the no-havoc arm.
+- A related printing artifact, worth knowing before trusting any postprocessed
+  dump: the debug payload at trip 2 references `hv.4` while no `demonicv "hv.4"`
+  remains in the tree. `AMessage` is opaque to prune, so a message can name a
+  variable whose binder prune has already dropped.
+- The inference is therefore dead too: 14 extra mints per trip on a baseline of
+  659 cannot produce §3's residual. Whatever drives that is in the executor's
+  own per-step mints, and this study does not identify it. **Do not cite the
+  havoc's variable count as a cost driver, and do not treat the
+  "drop-an-unreferenced-variable" annotation as its fix on this evidence.**
+
+### Correction to the per-slot target set: x7 grows too, so it is SEVEN slots
+
+`PLAN-annotinstr.md`'s 2026-08-24 entry names six growing slots (x5 x6 x10 x11
+x14 x28) and says the other eight chunks are "EXACTLY 1.00x at every trip".
+**x7 (T2) is not 1.00×: it goes 16 → 80 → 1,418 chars, a 17.7× steady-state
+growth.** It is only 1.6% of the trip-3 total, which is presumably why it read
+as flat, but it is a genuine loop-carried slot — at the loop head T2 holds the
+previous trip's `sub T2, A1, T2`, which reads A1. Including T2 in `zz_all` was
+therefore correct rather than harmlessly redundant, and the target set for this
+program is seven registers, not six.
+
 ## 6. What this means
 
 1. **`PLAN-annotinstr.md` Phase 4 is worth funding, and its predicted mechanism
@@ -157,14 +246,14 @@ a single-N speedup figure would be meaningless here.
    over the BI so it applies to the binary instance) plus the existing
    `lemSemCFGVerif` (`SpecIris.v:364`), discharged the way
    `iris_rule_stm_lemmak` does it (`BinaryInstance.v:196`, three lines).
-3. **The next cost lever is named and is not this one.** `|Σ| = 15 + 7n` is the
-   only quantity known to grow per trip in arm D, and declared-variable count is
-   quadratic in lookup cost. The matching fix is already sketched — the
-   "drop an unreferenced logical variable" annotation kind
-   (`Verifier.v`, the FUTURE-PROOFING note above `sexec_ghost`), which exists
-   precisely because `demonicv_prune` only collapses on `block` so a binder
-   nothing references any more survives. Measure before building it: the
-   residual's exponent is still rising, so `|Σ|` may not be all of it.
+3. **The next cost lever is NOT identified.** ~~`|Σ| = 15 + 7n` is the only
+   quantity known to grow per trip in arm D~~ — RETRACTED, see §5b. The havoc
+   adds 2.1% to per-trip mints and nothing at all to the final VC, so it cannot
+   be what drives §3's residual. The remaining candidate is the executor's own
+   per-step mints (265 demonic + 394 angelic per trip), but peak `|Σ|` during
+   execution was not measured here and the "drop an unreferenced logical
+   variable" annotation has no evidence behind it on this program. Measure
+   before building anything.
 4. **Amdahl.** After the havoc, the per-trip term recurrence is gone as a driver;
    whatever remains is a *different* mechanism and this study does not identify
    it. Do not assume a second abstraction lemma helps.
