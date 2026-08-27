@@ -1,6 +1,12 @@
 # PLAN — drop dead logical variables during symbolic execution
 
-Status: **DO NOT FUND — the prize is a FACTOR, not an exponent change
+Status: **INVESTIGATION RECORD ONLY — the build plan is
+`PLAN-lvar-drop-build.md`.** Owner decision 2026-08-27: proceed with the build
+despite this page's recommendation, starting with the support lemma. The
+recommendation below is kept because its reasoning and its numbers are the input
+to that decision, not because it was followed.
+
+Original status: **DO NOT FUND — the prize is a FACTOR, not an exponent change
 (measured 2026-08-27, `diagnostics/havoc-abstraction-payoff.md` §10).** The idea
 is sound and the mechanism is understood; it simply is not worth what it costs.
 
