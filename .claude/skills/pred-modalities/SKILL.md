@@ -102,9 +102,11 @@ Concretely for the second row with `w = [x∷bool]` and `t = term_val ty.bool fa
 `ι = [x↦false]` has the empty assignment as its one preimage; `ι = [x↦true]` has
 none. That is `[a↦8, b↦0]` from §1 again — same mechanism, same reason.
 
-(`sub_shift bIn : Sub (Σ - b) Σ` at `Terms.v:780` is the *other* direction —
-weakening, not shrinking. It is not any step's `sub_acc`, which turns out to
-matter; see §7.)
+(`sub_shift bIn : Sub (Σ - b) Σ` at `Terms.v:780` runs the *other* way —
+weakening, not shrinking. It is nobody's `sub_acc` among the steps above, but it
+can perfectly well be one: `acc_sub (sub_shift xIn) _` is a legal **backward**
+accessibility whenever `x` is dead in the path condition. See §7 — that turns
+out to matter a lot.)
 
 ## 3. `Pred` and why entailment is pointwise
 
@@ -219,25 +221,51 @@ fibre is inhabited, i.e. that `x` really does equal `t` at your ι. If you can
 supply that equation, this lemma is your route. If you cannot, no amount of
 massaging the modality will help, because that equation is the entire difference.
 
-## 7. What this layer cannot express (and the standing consequence)
+## 7. When a fibre looks empty: choose the witness at proof time
 
-`assuming` is *derived* from `sub_acc`. So the only backward transports available
-are the two quantified ones, and a world-**shrinking** step always pins, hence
-always has thin fibres. There is no total backward transport.
+The reflex on meeting an empty fibre is "this transport is impossible". Often it
+is not, and the way out is worth knowing because it is not visible in the goal.
 
-That is not an abstract worry — it is why dropping a dead logical variable
-mid-execution is not implementable today, even though the drop is *sound*
-(`zz_drop_equiv`). The total map you would want, "delete `x` from an
-assignment", exists and is `env.remove` = `inst (sub_shift xIn)` — but
-`sub_shift` is not any accessibility's `sub_acc` (§2), so the machinery cannot
-reach it. Reaching it needs an accessibility with the smaller world as the
-*earlier* one, which inverts how the executor threads `⊒`.
+**First, backward accessibilities are legal.** `Acc` has only two constructors
+(`Worlds.v:280`) — `acc_refl` and `acc_sub ζ (ent : wco w2 ⊢ subst (wco w1) ζ)`.
+Every named `acc_*` is a *Definition* over `acc_sub`. So nothing stops you
+building `acc_sub (sub_shift xIn) _ : (w - x∷σ) ⊒ w`, provided you can discharge
+the entailment — and if `occurs_check xIn (wco w) = Some pc'`, then
+`occurs_check_sound` makes it **reflexivity**. `forgetting` along that
+accessibility is a *total* `Pred (w-x) → Pred w`, no fibre, no vacuity. Adding an
+accessibility is a Definition, not a framework change.
 
-Full mechanised record, including a `Qed` that the per-step refinement lemma is
-false and not merely unproven:
-`case_study/RiscvPmp/CFGVer/plans/PLAN-lvar-drop-build.md` §2bis. Read it before
-proposing any variant of "just drop the variable" — three hypothesis shapes are
-already refuted there by one counterexample.
+**Second, and this is the technique.** Suppose a step moves `w ⊒ (w - x∷σ)` with
+`sub_acc = sub_single xIn t`, so it pins `x` and the fibre over your ι is empty
+unless `ι(x) = inst t (ι∖x)`. If the witness `t` is baked into the *data* you are
+reasoning about, you are stuck. But if `t` appears only in the *accessibility*,
+you are not — because:
+
+- `term_relval : ∀ {Σ} (σ : Ty), RelVal σ → Term Σ σ` is a **constructor of
+  `Term`**, so every value has a closed term at every context; and
+- `□ᵣ`/`unconditionally` quantifies over `ω`, and you instantiate that `∀`
+  **after** you are handed ι.
+
+So take `t := term_relval σ (env.lookup ι xIn)` — read the witness off ι — and the
+fibre over ι is inhabited by construction. The box then hands you the
+continuation at `ι∖x` with no vacuity, at *every* ι. Note also that
+`subst_shift_single` holds for **any** `t`, so `wsubst w x t` is the *same world*
+for every witness: the choice of `t` changes only `sub_acc`, never the target.
+
+**The residual, when this technique applies**, is that the object you are
+reasoning about was built with some *fixed* witness `t₀` while the box hands you
+the one for `t`. That gap is an equation at a single world — no `𝕊`-weakening
+needed — and it discharges for anything whose `ω`-dependence is *persisting
+x-free data*, since `subst (subst a (sub_shift xIn)) (sub_single xIn t) = a`
+(`subst_shift_single`) for every `t`.
+
+**Worked all the way through, with `Qed`s**, on the dead-logical-variable drop:
+`case_study/RiscvPmp/CFGVer/plans/PLAN-lvar-drop-build.md`. Read **§2bis first**
+— it refutes, by counterexample, the design that bakes the witness into the tree
+(`assume_vareq`), and three hypothesis shapes die with it — then **§2ter**, which
+applies the technique above to the design that does not (`dropk`). The contrast
+between the two is the practical lesson: *keep witnesses out of the trusted
+semantics and in the accessibility, where a proof may still choose them.*
 
 ## 8. Where `assuming` reaches you: `□ᵣ`
 

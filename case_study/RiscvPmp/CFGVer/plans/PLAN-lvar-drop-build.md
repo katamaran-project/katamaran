@@ -5,10 +5,13 @@ that. This is the *build* plan. Read `PLAN-lvar-drop.md`'s status block and its
 Phase 0 verdict first; do not read its design section, which is a superseded
 third verdict left in place deliberately.
 
-**Status: PHASE A DONE AND NEGATIVE (2026-08-27). The per-step support lemma is
-not merely hard, it is FALSE — refuted by a `Qed`. Exit criteria row 3 fires:
-STOP AND RE-SCOPE. Phases B-F are not started and should not be started as
-written. Read §2bis before anything else on this page.**
+**Status: RE-SCOPED AND REOPENED (2026-08-27, same day). Phase A killed the
+`assume_vareq` design by `Qed` (§2bis) — that stands. The RE-SCOPE then settled
+POSITIVE (§2ter): a `dropk` node plus `acc_forget` needs NO change to `Acc`, NO
+change to `unconditionally`/`RBox`, and no new modality. Four `Qed`s. What
+remains is a statable, plausibly dischargeable condition on the continuation
+(`ZZAccIndep`) and ~10 mechanical `𝕊` cases. Read §2bis then §2ter; do not act on
+§2bis's "what a real fix would have to be" paragraph, which §2ter supersedes.**
 
 ---
 
@@ -239,7 +242,7 @@ thread: the shape it was to have is not statable (above), and no hypothesis of
 that kind would help (also above). Nothing was learned about A.3 and nothing
 needs to be.
 
-### What a real fix would have to be, and it is bigger than §A.4's stop line
+### What a real fix would have to be — **SUPERSEDED BY §2ter, read that instead**
 
 §A.4 drew the stop line at `theories/Refinement/Monads.v`. The actual re-scope is
 elsewhere and larger, and it is exactly the "structural conclusion" of
@@ -370,6 +373,115 @@ Two mechanics worth keeping, both cost time here:
 - Phases B-F were not started. §3's translation-is-a-root warning and §7's
   register-set re-measurement remain unexercised and still look right; they are
   simply not reachable from here.
+
+---
+
+## §2ter THE RE-SCOPE, SETTLED POSITIVE — `dropk` is self-contained
+
+**Verdict: the box question settles POSITIVE.** §2bis predicted that a real fix
+would need a new accessibility *kind* and probably a change to
+`unconditionally`/`RBox`, i.e. every case study's code. **Both predictions are
+wrong**, and the refutations are `Qed`. Checked 2026-08-27 at the same probe
+position (`Propositions.v:2722,40`), `Print Assumptions` clean modulo the
+functor's own parameters and the section hypotheses.
+
+### The setup: two accessibilities between the same pair of worlds
+
+`Acc` has only **two constructors** (`Worlds.v:280`) — `acc_refl` and
+`acc_sub ζ (ent : wco w2 ⊢ subst (wco w1) ζ)`. Every named `acc_snoc_right` /
+`acc_subst_right` is a *Definition* over `acc_sub`. So no constructor is added,
+`acc_trans` is untouched, and no `Acc`-induction breaks.
+
+With `Hoc : occurs_check xIn (wco w) = Some pc'` in scope — Phase B's premise —
+put `w' := MkWorld (wctx w - x∷σ) pc'`. Then **both** accessibilities exist:
+
+| | substitution | obligation | discharged by |
+|---|---|---|---|
+| `zz_bwd : w' ⊒ w` | `sub_shift xIn` | `wco w ⊢ subst pc' (sub_shift xIn)` | `occurs_check_sound`, then reflexivity |
+| `zz_fwd t : w ⊒ w'` | `sub_single xIn t` | `pc' ⊢ subst (wco w) (sub_single xIn t)` | `subst_shift_single`, then reflexivity |
+
+**Phase B's occurs-check is not a bolted-on side condition — it IS the
+accessibility's well-formedness proof.** And note `subst_shift_single` holds for
+*any* `t`, so `wsubst w x t = w'` for **every** witness term: all the forward
+accessibilities land in the same world and differ only in their `sub_acc`. That
+is the fact the whole re-scope turns on.
+
+### The four results
+
+```coq
+(* 1. forgetting is at least as strong as assuming, for any witness *)
+Lemma zz_forgetting_stronger (t) (Q : Pred zzw') (ι : Valuation w) :
+  W.forgetting zz_bwd Q ι -> W.assuming (zz_fwd t) Q ι.
+
+(* 2. THE MONEY LEMMA.  The box hands you the continuation at the SHRUNK
+      valuation, with no vacuity, at EVERY ι. *)
+Lemma zz_box_at_chosen (P : forall w2, w ⊒ w2 -> Pred w2) (ι) (Hpc : instprop (wco w) ι) :
+  W.unconditionally P ι ->
+  P zzw' (zz_fwd (term_relval σ (env.lookup ι xIn))) (inst (sub_shift xIn) ι).
+
+(* 3. so, modulo the residual condition, the box delivers exactly what dropk needs *)
+Definition ZZAccIndep (P : forall w2, w ⊒ w2 -> Pred w2) : Prop :=
+  forall t1 t2 : Term (wctx w - x∷σ) σ, P zzw' (zz_fwd t1) = P zzw' (zz_fwd t2).
+
+Lemma zz_box_delivers_forgetting (P) (Hind : ZZAccIndep P) (t0) (ι) (Hpc) :
+  W.unconditionally P ι -> W.forgetting zz_bwd (P zzw' (zz_fwd t0)) ι.
+
+(* 4. and ZZAccIndep is dischargeable by the SAME occurs_check Phase B computes *)
+Lemma zz_persist_indep {AT} `{SubstLaws AT, OccursCheck AT, OccursCheckLaws AT}
+    (a : AT (wctx w)) (a') (Ha : occurs_check xIn a = Some a') (t) :
+  subst a (sub_single xIn t) = a'.
+```
+
+### Why this breaks the Phase A deadlock — the one idea
+
+`term_relval : ∀ {Σ} (σ : Ty), RelVal σ → Term Σ σ` is a **constructor of
+`Term`**. So every valuation value has a closed term at every context, and the
+fibre of a substitution accessibility can always be made *inhabited at a given ι*
+by reading the witness off ι itself. The box quantifies over `ω`, and you
+instantiate it **after** seeing ι. So the fibre is only empty if you are forced
+to commit to the witness in advance.
+
+And that is exactly the difference between the two designs:
+
+| | where the witness lives | consequence |
+|---|---|---|
+| `assume_vareq x t k` (Phase A) | **in the tree**, and `safe` guards on it | the *hypothesis* is vacuous at almost every ι; no proof-time choice can repair it — `zz_drop_vacuous` |
+| `dropk x k` (§2ter) | **nowhere in the tree**; `safe (dropk x k) ι = safe k (ι∖x)` unconditionally | the witness appears only in the accessibility, which is a *proof-time* object and may be chosen per-ι |
+
+So `dropk` is not "a bit better than `assume_vareq`". Removing the witness from
+the trusted semantics is precisely what makes the per-ι choice legal, and that is
+the whole re-scope.
+
+### What is NOT claimed
+
+- This settles **the box channel only**. It does not prove the drop step's full
+  refinement obligation; it shows the channel Phase A found dead is alive under
+  `dropk`. The full obligation is the next thing to attempt, and it should now be
+  attempted.
+- `ZZAccIndep` is proved *dischargeable in principle* (result 4), not discharged
+  for the real `sΦ`. The executor's continuation depends on `ω` by persisting
+  captured data; result 4 says x-free data persists to the same thing for every
+  witness. Whether **all** of `sΦ`'s captured data is x-free is Phase B's
+  computation, now extended to the continuation's captures — and the accumulated
+  translation is a root here too (§3's warning applies).
+- **A.3 comes BACK, and this time it is a real question rather than moot.** In
+  the executor the drop sits mid-chain, so `ZZAccIndep` is about the *composite*
+  continuation and becomes a hypothesis threaded through `rexec_cfg_addr`'s
+  induction — exactly A.3's two sources. Unlike A.2's condition it is statable
+  (an equation between two `Pred`s at ONE world, so no `Subst 𝕊` is needed).
+- Unchanged: the ~10 `dropk` cases across `𝕊` consumers in `Propositions.v`
+  (`safe`, `safe_debug`, `wsafe`, `prune`, two `ectx` walks, `uqSymProp`,
+  `Erasure`, `psafe`) with `prune` and `Erasure` the two real proofs; Phases B-F;
+  the standing maintenance; and the payoff, still **~3x at n=16** with the
+  residual exponent driver unidentified.
+
+### Revised verdict
+
+Not "STOP and re-scope". The re-scope is done and it is **materially cheaper than
+§2bis feared**: no framework-shape change, no `RBox` change, no new modality —
+a new `𝕊` constructor, a five-line `acc_forget`, and a statable condition on the
+continuation. Whether ~3x is worth that is still an owner call, and §10 is still
+the cheap way to inform it.
 
 ---
 
@@ -513,3 +625,18 @@ plus a `forgetting`-style modality in `Worlds.v`/`Propositions.v`, which is
 direction problem (the drop needs the small world as the accessibility's PAST,
 the executor's `□ᵣ` indexes it as the FUTURE). Not taken. §10 is the only cheap
 work left on this page and is unaffected.
+
+**2026-08-27 (later the same day) — THE RE-SCOPE SETTLED POSITIVE. See §2ter.**
+Four more `Qed`s overturn two of §2bis's predictions. `Acc` has only two
+constructors, so `acc_forget` is a five-line `acc_sub` whose obligation is
+`occurs_check_sound` + reflexivity — no new accessibility kind, no `acc_trans`
+change. And `unconditionally`/`RBox` does **not** need to change:
+`zz_box_at_chosen` shows the box can be instantiated at a witness term read off
+ι (`term_relval` is a `Term` constructor, so every value has a closed term), so
+the fibre is inhabited at every ι and the continuation arrives at the shrunk
+valuation with no vacuity. The deadlock was never the modality — it was that
+`assume_vareq` bakes the witness into the TREE, where no proof-time choice can
+reach it; `dropk` carries no witness at all. Residual: `ZZAccIndep`, statable at
+one world (no `Subst 𝕊` needed) and dischargeable by the same occurs-check Phase
+B runs (`zz_persist_indep`). A.3 comes back as a real question. Payoff unchanged
+at ~3x.
