@@ -1,43 +1,42 @@
 # PLAN — drop dead logical variables during symbolic execution
 
-Status: **OPEN, and the gate now reads GO — but only for a 7-register havoc.**
-Superseding two earlier verdicts on this page, both of which were wrong.
+Status: **DO NOT FUND — the prize is a FACTOR, not an exponent change
+(measured 2026-08-27, `diagnostics/havoc-abstraction-payoff.md` §10).** The idea
+is sound and the mechanism is understood; it simply is not worth what it costs.
 
-What is settled, with `Qed`:
-- **Fixing the dropped variable at an arbitrary value is semantically SOUND**, with
-  no side condition, when the mint and the drop are adjacent (`zz_drop_equiv`).
-  The continuation's *type* places it at the smaller variable list, so it cannot
-  mention the dropped variable — no `occurs_check` is even needed at that level.
-- **The framework's per-action refinement lemma is NOT provable** for it
-  (`zz_dummy_witness` sticks). That lemma quantifies over an ARBITRARY
-  continuation and is discharged pointwise in the valuation, which discards
-  exactly the two facts that make the drop valid: the enclosing binder above it,
-  and the continuation's x-freedom below it.
+The pre-registered criterion on this page was an exponent change. It is not met:
 
-So the obstacle is the framework's *local* proof method, not the claim. Closing
-it needs a **support lemma** — "run from a state with no occurrences of x, the
-executor produces a tree at the smaller list" — which is an induction over the
-executor: routine in kind, one case per executor case, and a standing
-maintenance obligation of the same sort this project already carries for
-`rexec_cfg_addr`. **UNVERIFIED**, and the main open risk is whether the side
-condition threads through without touching the generic refinement lemmas in
-`theories/Refinement/Monads.v`.
+- at fixed trip count, cost is **precisely quadratic in `|Σ|`** — held-out error
+  **0.00%**, the cleanest fit in the diagnostics directory
+- one declared variable costs **0.358 G words at n=16** (measured directly)
+- a flat-`|Σ|` world is worth **~1.9x at n=8 and ~3x at n=16** — three
+  independent routes converge there, and all three over-estimate (§10.3)
+- R3's growth exponent is **1.63** at 8→16 and `|Σ|` is demonstrably not all of
+  it, so removing this axis does not remove the wall
 
-What is measured (`diagnostics/havoc-abstraction-payoff.md` §9):
-- the path condition pins NOTHING — the hypothesised spoiler is absent
-- with a **3-register** havoc only **1 of 3** per trip is droppable: the
-  un-havoced temps carry the previous trip's variables. Slope 3/trip → 2/trip.
-- with a **7-register** havoc **all 7** are droppable. Slope 7/trip → **flat**.
-- so the drop and the register set INTERACT, and §8's landed "havoc three
-  registers" advice is optimal only while no drop exists
-- ceiling ESTIMATE (extrapolated, confounded, not a measurement): 3.2x better
-  than the best current arm at n=16, with a local exponent of 0.78 against R3's
-  1.63
+Against that: a support lemma needing an induction over the whole executor, a
+standing maintenance obligation, and an unquantified risk of having to modify the
+generic refinement lemmas in `theories/Refinement/Monads.v` — every case study's
+code. That is the `select_last_k` trade, which this project has already paid for
+once.
 
-*History, kept deliberately: this page went through five verdicts in one day
-(see the log), and the design section below is the third of them, left unedited
-so the error stays legible. Read the status and the Phase 0 verdict, not the
-design section.*
+**What remains true and useful from this investigation:**
+- the drop IS sound (`zz_drop_equiv`, `Qed`) — see the Phase 0 verdict
+- what blocks it is the framework's per-action proof shape, not the claim
+- the path condition pins nothing; the un-havoced registers do (§9)
+- **the register-set choice interacts with the drop**: 7 registers make all 7
+  droppable, 3 make only 1 — so §8's landed advice is drop-conditional
+- `|Σ|` is worth 0.358 G/variable at n=16, so any change that removes declared
+  variables **for free** is worth taking. Word slicing and classed existentials
+  are the precedents: pure re-encodings, no soundness burden.
+
+**Reopen this only if** someone finds a way to justify the drop without a
+support lemma, or if the residual driver behind R3's 1.63 exponent turns out to
+be `|Σ|`-mediated after all.
+
+*History: this page went through six verdicts. The design section below is the
+third and is left unedited so the error stays legible. Read this status block and
+the Phase 0 verdict; do not act on the design section.*
 
 ## The problem
 

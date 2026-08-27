@@ -691,9 +691,17 @@ Local exponents per doubling (2→4, 4→8, 8→16):
 
 | arm | | | |
 |---|---|---|---|
-| flat (ESTIMATED) | 0.610 | 0.716 | **0.778** |
+| ~~flat (ESTIMATED)~~ | ~~0.610~~ | ~~0.716~~ | ~~**0.778**~~ |
 | R3 (measured) | 0.960 | 1.269 | 1.631 |
 | R7 (measured) | 1.194 | 1.603 | 2.030 |
+
+**RETRACTED 2026-08-27 — the flat row is not credible; never requote it.** Those
+exponents are BELOW 1, i.e. sublinear in the trip count, which is impossible: the
+executor performs n trips, so work is at least linear in n. §10 identifies why the
+extrapolation misbehaves (a large n-independent overhead that the fit
+mis-assigns) and replaces it with a measured `|Σ|` sensitivity. The LEVEL
+estimates in the table above survive as order-of-magnitude figures; the exponent
+row does not.
 
 **Three reasons not to quote these as results.** (1) It extrapolates BELOW every
 measured point — at n=16 the data sit at `|Σ|` = 63/79/127 and the target is 22,
@@ -719,3 +727,121 @@ already uses.
 `ZZRaw_E1.v`'s prelude with the final block replaced by a `tree_of` carrying
 `[AnnotDebugBreak; havoc <set>; AnnotDebugBreak]` plus `Eval vm_compute in t`.
 Redirect stdout to a file: the dumps are meant to be grepped, not read.
+
+## 10. The `|Σ|`-only axis, measured (2026-08-27)
+
+**Finding, one sentence: at fixed trip count, cost is PRECISELY quadratic in
+`|Σ|` (held-out error 0.00%), the marginal cost of one declared variable at
+n=16 is 0.358 G words, and a flat-`|Σ|` world would be worth roughly 2-3x at the
+trip counts that matter — a FACTOR, not an exponent change.**
+
+### 10.1 Method
+
+`k` unused demonic existentials prepended to the contract precondition of the
+3-register arm, everything else held identical. Built as a context-polymorphic
+`Fixpoint pads (k : nat) {Sig} : Assertion Sig` of nested `asn.exist`s over `⊤`,
+which needs no weakening (`Subst Assertion` is not in scope in the probe, and is
+not needed). Probes `Example/ZZPad{0,8,16,32}_8.v`, `ZZPad{0,16}_16.v`.
+
+`k=0` reproduces `ZZAllocR3_8.v` to **+0.025%** — not byte-identical, because the
+precondition gains a `⊤ ∗` conjunct, so `k=0` is used as the family's own
+baseline rather than the R3 number.
+
+### 10.2 Results
+
+| k | `|Σ|` at n=8 | net G | `|Σ|` at n=16 | net G |
+|---|---|---|---|---|
+| 0 | 39 | 3.5160 | 63 | 10.8845 |
+| 8 | 47 | 4.6232 | — | — |
+| 16 | 55 | 5.9273 | 79 | 16.6063 |
+| 32 | 71 | 9.1267 | — | — |
+
+**Cost is exactly quadratic in `|Σ|` at fixed n.** Fit on k = 0, 8, 32 predicts
+k=16 at 5.9273 against 5.9273 actual — **held-out error 0.00%**, agreeing to four
+decimal places. This is the cleanest fit in this whole directory and it is the
+main result of this section.
+
+**Marginal cost per declared variable, measured directly:**
+
+| n | `|Σ|` range | G words per variable |
+|---|---|---|
+| 8 | 39 → 47 | 0.138 |
+| 8 | 47 → 55 | 0.163 |
+| 8 | 55 → 71 | 0.200 |
+| 16 | 63 → 79 | **0.358** |
+
+Rising with `|Σ|` (the quadratic) and rising with n (roughly doubling from n=8 to
+n=16, consistent with a marginal proportional to n·`|Σ|`).
+
+### 10.3 The padding axis OVERSTATES cost — three cross-checks
+
+Padding to a given `|Σ|` costs more than reaching the same `|Σ|` by havocing more
+registers:
+
+| `|Σ|` | n | padding | real arm | ratio |
+|---|---|---|---|---|
+| 47 | 8 | 4.6232 | R4 4.3267 | 1.069 |
+| 71 | 8 | 9.1267 | R7 7.0788 | 1.289 |
+| 79 | 16 | 16.6063 | R4 14.6691 | 1.132 |
+
+Direction explained: padding is introduced FIRST, so it pushes every pre-existing
+variable k positions deeper, and lookup DEPTH is a separate documented cost axis
+worth 1.16-1.47x (`lvar-lookup-cost-drivers.md` §4-5). So the padding curve mixes
+count with depth and is steeper than a pure count axis. **Consequence: savings
+extrapolated from padding are OVER-estimates.**
+
+### 10.4 A clean model, REFUTED — and why that matters
+
+`cost = n · f(|Σ|)` fits the n=8 series to **0.00% on all four points** and then
+over-predicts both n=16 points by **+36.5%** and **+32.7%**. So cost is not a
+product of a trip factor and a `|Σ|` factor. Cause: a large n-INDEPENDENT
+overhead (contract setup, prologue/epilogue). Dividing total cost by n spreads
+that overhead over n trips, the fit absorbs it into f's constant term, and then
+multiplying by n inflates it.
+
+**This is what invalidates §9.6's exponent row** (retracted in place there), and
+it is the reason no exponent claim is made here: separating the n-independent
+overhead from the n-scaling terms needs a design that varies n at FIXED `|Σ|`,
+which is exactly what no arm can do without the drop actually existing.
+
+### 10.5 What the prize looks like, with the honest error bars
+
+Three routes, all requiring an assumption, converge on the same order:
+
+| route | flat-`|Σ|` at n=8 | flat-`|Σ|` at n=16 |
+|---|---|---|
+| §9.6 cross-arm fit (confounded) | 1.9656 | 3.3704 |
+| padding quadratic, n=8 curve | 1.8175 | — |
+| padding, quadratic coefficient scaled by n | — | ~3.4 |
+
+Against R3's measured 3.5150 (n=8) and 10.8835 (n=16), that is **~1.9x at n=8 and
+~3x at n=16**. The convergence across three routes is mildly reassuring; every
+one of them over-estimates, per §10.3.
+
+**So: the drop is a FACTOR of roughly 2-3x at the trip counts that matter, not an
+exponent change.** State it that way. It does not remove the wall; R3's growth
+exponent is 1.63 at 8→16 and something else is driving that.
+
+### 10.6 Recommendation
+
+**Do not fund the drop on these numbers.** The pre-registered criterion in
+`plans/PLAN-lvar-drop.md` was an exponent change; this is a constant factor. Set
+against it: a support lemma requiring an induction over the whole executor, a
+standing maintenance obligation, and an unquantified risk of having to touch the
+generic refinement lemmas in `theories/Refinement/Monads.v` (every case study's
+code). That is the `select_last_k` trade — a correct diagnosis and a working fix
+for 12% — and this project has already paid for it once.
+
+What the numbers DO justify, cheaply:
+1. **`|Σ|` is worth 0.358 G per variable at n=16** — so any change that removes
+   declared variables *for free* is worth taking. The word-slicing and
+   classed-existential work are the precedents, and both were pure re-encodings
+   with no soundness burden.
+2. **Find what drives R3's 1.63 exponent.** `|Σ|` demonstrably is not all of it,
+   and everything above prices only the `|Σ|` axis.
+
+### 10.7 Files
+
+`Example/ZZPad{0,8,16,32}_8.v`, `ZZPad{0,16}_16.v`. Generated from
+`ZZAllocR3_8.v` by replacing the final two lines with the `pads`/`contract_pad`/
+`tree_pad` block; the n=16 pair by `sed`-ing the trip count.
