@@ -1,16 +1,43 @@
 # PLAN — drop dead logical variables during symbolic execution
 
-Status: **CLOSED, NEGATIVE, 2026-08-25 — Phase 0 ran to completion and the idea
-does not work, for a reason that is now a proved dichotomy rather than an
-argument.** Nothing was built. The measured fallback (havoc fewer registers,
-2.66x at n=16, `diagnostics/havoc-abstraction-payoff.md` §8) stands and is
-already landed; the remaining options are the wide-binder packing (a factor), a
-real loop rule (`PLAN-loop-invariant.md`), or a framework extension in
-`Worlds.v` — see §"Phase 0 verdict".
+Status: **OPEN, and the gate now reads GO — but only for a 7-register havoc.**
+Superseding two earlier verdicts on this page, both of which were wrong.
 
-*History, kept deliberately: this plan went through FIVE verdicts in one day, and
-the design section below is the third of them, left unedited so the error is
-legible. Read the Phase 0 verdict first; do not act on anything above it.*
+What is settled, with `Qed`:
+- **Fixing the dropped variable at an arbitrary value is semantically SOUND**, with
+  no side condition, when the mint and the drop are adjacent (`zz_drop_equiv`).
+  The continuation's *type* places it at the smaller variable list, so it cannot
+  mention the dropped variable — no `occurs_check` is even needed at that level.
+- **The framework's per-action refinement lemma is NOT provable** for it
+  (`zz_dummy_witness` sticks). That lemma quantifies over an ARBITRARY
+  continuation and is discharged pointwise in the valuation, which discards
+  exactly the two facts that make the drop valid: the enclosing binder above it,
+  and the continuation's x-freedom below it.
+
+So the obstacle is the framework's *local* proof method, not the claim. Closing
+it needs a **support lemma** — "run from a state with no occurrences of x, the
+executor produces a tree at the smaller list" — which is an induction over the
+executor: routine in kind, one case per executor case, and a standing
+maintenance obligation of the same sort this project already carries for
+`rexec_cfg_addr`. **UNVERIFIED**, and the main open risk is whether the side
+condition threads through without touching the generic refinement lemmas in
+`theories/Refinement/Monads.v`.
+
+What is measured (`diagnostics/havoc-abstraction-payoff.md` §9):
+- the path condition pins NOTHING — the hypothesised spoiler is absent
+- with a **3-register** havoc only **1 of 3** per trip is droppable: the
+  un-havoced temps carry the previous trip's variables. Slope 3/trip → 2/trip.
+- with a **7-register** havoc **all 7** are droppable. Slope 7/trip → **flat**.
+- so the drop and the register set INTERACT, and §8's landed "havoc three
+  registers" advice is optimal only while no drop exists
+- ceiling ESTIMATE (extrapolated, confounded, not a measurement): 3.2x better
+  than the best current arm at n=16, with a local exponent of 0.78 against R3's
+  1.63
+
+*History, kept deliberately: this page went through five verdicts in one day
+(see the log), and the design section below is the third of them, left unedited
+so the error stays legible. Read the status and the Phase 0 verdict, not the
+design section.*
 
 ## The problem
 
@@ -110,7 +137,14 @@ check for the same purpose. Note `UnifLogic.v:1345` holds a commented-out
 5. **`None` ⇒ no-op, never `error`.** A refused drop must cost completeness
    nothing: it is a missed optimisation, not a failure.
 
-## Phase 0 verdict — THE DICHOTOMY (this is the section that matters)
+## Phase 0 verdict — SUPERSEDED IN PART, read this whole section
+
+**The fibre facts below are correct and remain the useful content. The
+CONCLUSION drawn from them — that the drop cannot be done — is WITHDRAWN.** What
+they actually establish is narrower: no *per-action* lemma can justify a drop.
+`zz_drop_equiv` (added 2026-08-27, at the end of this section) shows the drop is
+sound once the enclosing binder is in scope, which is the fact a per-action lemma
+throws away. Never cite the dichotomy as a closure argument.
 
 Four lemmas, all checked by position mode at `theories/Symbolic/UnifLogic.v:1343`
 (preamble mode cannot reach these — functor internals). Together they close the
@@ -166,6 +200,35 @@ fused primitive against a shallow demonic mirror (`CHeapSpec.demonic`) rather
 than against `pure tt`, in `theories/Refinement/Monads.v`. I did not do that. But
 the two fibre facts are proved, and the dichotomy they form is the substance:
 **either the fibre is empty (unprovable) or it is a singleton (no freedom).**
+
+### zz_drop_equiv — the drop IS sound, with the mint in scope (2026-08-27, `Qed`)
+
+Checked by position mode at `theories/Symbolic/Propositions.v:420`:
+
+```coq
+Lemma zz_drop_equiv {Σ} (x : LVar) (σ : Ty) (t : Term Σ σ) (k : 𝕊 Σ) (ι : Valuation Σ) :
+  safe (demonicv (x∷σ) (@assume_vareq (Σ ▻ (x∷σ)) x σ ctx.in_zero t k)) ι <-> safe k ι.
+Proof. cbn. split; [ intros H; apply (H (inst t ι)); reflexivity | auto ]. Qed.
+```
+
+`cbn` reduces the goal to `(forall v, v = inst t ι -> safe k ι) <-> safe k ι`.
+Note the conclusion contains no `v`: `k : 𝕊 Σ` is typed at the SMALLER list, so
+it cannot mention the dropped variable. The typing performs the occurs-check for
+free, and the equivalence needs no side condition at all.
+
+Two consequences:
+
+- the drop is sound; there is nothing wrong with fixing the variable at an
+  arbitrary value;
+- what the framework asks you to prove about the *step alone* is a different,
+  stronger statement, and that one is false. The per-action lemma quantifies over
+  an arbitrary continuation and is checked pointwise in the valuation, so neither
+  the enclosing binder nor the continuation's x-freedom is available to it.
+
+**Adjacency caveat.** `zz_drop_equiv` puts the mint and the drop next to each
+other; in the executor they are a trip apart. The argument survives the gap
+provided nothing still IN FORCE between them mentions the variable — and "in
+force" is the path condition, which §9.2 measures as mentioning no `hv` at all.
 
 ### The structural conclusion, and where a fix would have to live
 

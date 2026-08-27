@@ -583,3 +583,139 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none \
   case_study/RiscvPmp/CFGVer/Example/ZZAllocR3_31.v 2>&1 \
   | grep -E 'BLOCK|ERROR|allocated_words|top_heap_words'
 ```
+
+## 9. What pins the havoc variables, and why §8's register-set advice INVERTS if a drop lands (2026-08-27)
+
+**Finding, one sentence: the havoc variables are pinned by nothing in the path
+condition and everything in the un-havoced registers — so a 3-register havoc
+leaves only 1 of 3 per trip droppable while a 7-register havoc leaves all 7, and
+§8's "havoc three registers" recommendation is therefore optimal only while there
+is no variable-drop feature.**
+
+### 9.1 Method
+
+`AnnotDebugBreak` planted BEFORE and AFTER the havoc at the loop head, on the
+POSTPROCESSED tree (`tree_of`, not `tree_raw`): postprocess collapses everything
+else to `block` but cannot see inside a debug `AMessage`, so the dump is 16-29 KB
+rather than megabytes. `Set Printing Width 1000`. The payload's two fields give
+the path condition and heap exactly as the executor held them at that point.
+
+**Scope limit, stated up front: this reads deadness against the HEAP and PATH
+CONDITION only.** `DebugAsn` has no other fields, so `apc`, `tbl`, `exits` and —
+the one that matters — the **accumulated translation** are invisible here. The
+tables live over the contract context and are very unlikely to mention an `hv`;
+the translation is a genuine unknown that could hide occurrences. Every count
+below is therefore an UPPER bound.
+
+### 9.2 The path condition pins nothing
+
+Zero `hv` occurrences in the path condition, in all ten payloads across three
+probes. The path condition is 154-246 chars and holds exactly two formulas: a
+base bound `formula_le …` and `formula_secLeak (term_var "p")`.
+
+Worth recording because this was the hypothesised spoiler — it is what
+`PLAN-unquantify-forward.md` §2 explicitly warns about. **It is not the spoiler.**
+The havoc's values are unconstrained exactly as their construction implies, and
+the solver never introduces an equation about them.
+
+Note what the single `secLeak` is: it is on `p`, the symbolic base. So "a variable
+pinned in the path condition by a `secLeak` and nothing else" is a real
+phenomenon in this program — it just never touches an `hv`, and `p` is not a drop
+candidate anyway, being referenced throughout as the base pointer.
+
+### 9.3 What DOES pin them: the registers we chose not to havoc
+
+Trip 2's loop head, immediately after a 3-register havoc (`A0 A1 A4`):
+
+| register | contents | mentions |
+|---|---|---|
+| x10, x11, x14 (the havoced carriers) | bare fresh `term_var`, 24 chars | current trip only |
+| x5, x6, x28 (T0, T1, T3) | 750-970 char terms | **previous trip's `hv`, `hv.1`** |
+| x7 (T2) | 87 chars | **previous trip's `hv.1`** |
+
+The temps are recomputed from the carriers every trip (§5's finding), which is
+precisely why they carry the carriers' VARIABLES forward. Declining to havoc a
+register keeps its term from accumulating; it does not stop it referencing last
+trip's variables.
+
+### 9.4 The counts, n=3, steady state
+
+| arm | minted | dead at final break | live at final break | droppable per trip |
+|---|---|---|---|---|
+| 3 registers | 9 | 4 | previous `hv.3 hv.4` + current 3 | **1 of 3** |
+| 7 registers | 21 | 14 | current 7 only | **7 of 7** |
+
+The 7-register trace is unambiguous: at every loop head after the havoc the live
+set is *exactly* the current trip's seven and the previous trip's are all gone.
+Mint 7, retire 7, net zero. The 3-register trace never clears: two of the previous
+trip's three survive in the temps every trip, so even a perfect drop leaves +2.
+
+| configuration | `|Σ|` slope, no drop | `|Σ|` slope, perfect drop |
+|---|---|---|
+| 3 registers | 3/trip | 2/trip |
+| 7 registers | 7/trip | **0/trip — FLAT** |
+
+Against `PLAN-unquantify-forward.md` §2's thresholds (≥20/trip GO, <5 STOP) this
+reads STOP for three registers and GO for seven — though those thresholds were
+written for the pre-word-slicing executor that minted ~29 variables per trip, so
+the meaningful reading is the FRACTION of growth that is droppable: 33% vs 100%.
+
+### 9.5 Consequence: §8's recommendation is configuration-dependent
+
+**§8 concluded "havoc the minimum set that breaks the recurrence" and measured
+2.66x for three registers over seven. That stands as measured — and it is optimal
+only in the absence of a drop.** With a drop, the wide havoc is the configuration
+that makes the variables droppable at all, and the ordering may reverse.
+
+This is the one-axis-at-a-time trap in its most literal form: the register set was
+tuned with the drop absent, and that answer does not transfer to a setting where
+a drop exists. Neither §8 nor `plans/PLAN-lvar-drop.md` anticipated the
+interaction.
+
+### 9.6 Ceiling ESTIMATE — extrapolation, not measurement
+
+Building the drop needs the `gc_dead` combinator (a dependent fold producing a
+`Tri`), i.e. Phase 1 work rather than an afternoon. So the prize is estimated
+from §8.3's three arms: fit cost against `|Σ|` at each n across k = 3, 4, 7 and
+evaluate at a flat `|Σ| = 22` (15 contract variables plus the current trip's 7).
+
+| n | R3 measured | R7 measured | flat-`|Σ|` estimate | vs R3 |
+|---|---|---|---|---|
+| 2 | 0.7501 | 1.0183 | 0.7841 | 0.96x |
+| 3 | 1.0803 | 1.5998 | 0.9938 | 1.09x |
+| 4 | 1.4587 | 2.3299 | 1.1965 | 1.22x |
+| 8 | 3.5150 | 7.0788 | 1.9656 | 1.79x |
+| 16 | 10.8835 | 28.9014 | 3.3704 | **3.23x** |
+
+Local exponents per doubling (2→4, 4→8, 8→16):
+
+| arm | | | |
+|---|---|---|---|
+| flat (ESTIMATED) | 0.610 | 0.716 | **0.778** |
+| R3 (measured) | 0.960 | 1.269 | 1.631 |
+| R7 (measured) | 1.194 | 1.603 | 2.030 |
+
+**Three reasons not to quote these as results.** (1) It extrapolates BELOW every
+measured point — at n=16 the data sit at `|Σ|` = 63/79/127 and the target is 22,
+far outside; the n=16 figure is the least reliable of the five. (2) The fitted
+axis is CONFOUNDED: the three arms differ by register set, not by `|Σ|` alone,
+and so also differ in consume/produce counts and in the temps' term sizes. (3) No
+held-out point exists — all three arms went into the fit.
+
+One mild reassurance: the model reproduces a qualitative feature it was not told
+about. At n=2 it predicts the flat arm is slightly WORSE than R3 (0.96x), matching
+§5's measured fact that havocing extra registers is harmful at small trip counts.
+
+**Honest reading: a win that grows with n, and an exponent materially below R3's.
+Enough to justify building the drop; not enough to claim the number.** The clean
+way to firm it up without building anything is a padding experiment on the
+`|Σ|`-only axis — add k unused contract existentials to ONE arm at fixed n and
+measure the sensitivity directly, the method `lvar-lookup-cost-drivers.md` §4-5
+already uses.
+
+### 9.7 Files
+
+`Example/ZZPin_2.v` (n=2, 3 registers), `ZZPin3_3.v`, `ZZPin7_3.v` (n=3). Each is
+`ZZRaw_E1.v`'s prelude with the final block replaced by a `tree_of` carrying
+`[AnnotDebugBreak; havoc <set>; AnnotDebugBreak]` plus `Eval vm_compute in t`.
+Redirect stdout to a file: the dumps are meant to be grepped, not read.
