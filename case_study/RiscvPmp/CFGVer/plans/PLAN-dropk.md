@@ -3,8 +3,10 @@
 Successor to `PLAN-lvar-drop-build.md`, which is now the *investigation record*
 and stays that. This is the executable build plan.
 
-**Status: PHASE 0 NOT STARTED. Design settled and de-risked 2026-08-27 (seven
-`Qed`s across two sessions). No owner funding decision has been taken on this
+**Status: PHASE 0 CLOSED POSITIVE 2026-08-27 — the full per-step drop
+obligation holds, `Qed`, with exactly the premises §3 pre-registered (see
+§3bis). GATE VERDICT: GO to Phase 1. Design settled and de-risked by eight
+`Qed`s across three sessions. No owner funding decision has been taken on this
 page — see §0.**
 
 **Read before doing anything:** `PLAN-lvar-drop-build.md` §2bis (why the obvious
@@ -33,7 +35,7 @@ Nothing here unblocks anything. The landed 3-register havoc already reaches
 
 ## §1 Established — do NOT re-derive
 
-Seven `Qed`s. All checked by position mode at
+Eight `Qed`s (plus Phase 0's four supporting ones). All checked by position mode at
 `rocq_start(file="theories/Symbolic/Propositions.v", line=2722, character=40)`.
 Scripts are in `PLAN-lvar-drop-build.md` §2bis and §2ter; they replay in ~2 s.
 
@@ -70,6 +72,21 @@ Scripts are in `PLAN-lvar-drop-build.md` §2bis and §2ter; they replay in ~2 s.
   `occurs_check xIn a = Some a'`, **for every `t`**. So x-free captured data
   persists identically along every witness; this is `ZZAccIndep`'s discharge
   route, and it is the same occurs-check §4 computes.
+
+**About the full drop step (added by Phase 0, 2026-08-27)**
+
+- `zz_dropk_step` — **the whole per-step obligation, `Qed`**. See §3bis. It is
+  the line-by-line mirror of §2bis's `ZZDropStepObligationStrong`, which is
+  FALSE; the only change is `dropk`'s `psafe`. Nothing else was weakened.
+- `zz_heap_transport` / `zz_heap_rel_transport` — heap transport across the
+  projection falls straight out of `occurs_check_sound` + `inst_subst`, exactly
+  as §3 predicted. It was not the hard part.
+- **`OccursCheckLaws Chunk` DOES NOT EXIST** in the tree — only the operation
+  `OccursCheckChunk` (`Chunks.v:188`). So there is no `OccursCheckLaws SHeap`
+  either (`occurs_check_laws_list` needs it), and heap transport has nothing to
+  stand on until it is added. It is a **one-liner**,
+  `Proof. occurs_check_derive. Qed.`, same idiom as `occurs_check_laws_formula`
+  (`Formulas.v:301`). Phase 2 must add it; see §5.
 
 **Structural facts worth not rediscovering**
 
@@ -135,6 +152,217 @@ Heap transport is the new work: you need `ℛ⟦RHeap⟧ ch sh` at ι to give
 
 Report before Phase 1 — decision checkpoint per `CLAUDE.md`.
 
+---
+
+## §3bis PHASE 0 RESULT — the full obligation HOLDS. GATE VERDICT: **GO**.
+
+**`zz_dropk_step` closes with `Qed`**, 2026-08-27, at the §10 probe position.
+`Print Assumptions` lists only the functor's own abstract parameters
+(`𝑷`, `𝑯`, `varkit`, `typedeclkit`, `𝑹𝑬𝑮`, …) and the section variables — which
+are precisely the premises — so **no proof holes and no extra axioms**. The
+whole script below replays clean in **one run, 1.4 s**, from a cold
+`force_restart` probe.
+
+This is §3's exit-criteria **row 1**, with one qualification recorded in the
+"extra requirement" heading below: the extra thing needed is not a *hypothesis*
+about the executor, it is a missing framework *instance*, so it does not go to
+row 2's "judge it against §4's dischargeability" — there is nothing to
+discharge, only a one-liner to write.
+
+### What was proved, and against what
+
+`zz_dropk_step` is the line-by-line mirror of `ZZDropStepObligationStrong`
+(`PLAN-lvar-drop-build.md` §2bis), which is **FALSE** (`zz_drop_step_strong_false`,
+`Qed`). Same continuation quantification `ℛ⟦□ᵣ(RUnit -> RHeap -> ℙ)⟧`, same
+`ℛ⟦RHeap⟧` heap premise, same conclusion at the enclosing world, same
+occurs-check liveness premises. **The only thing changed is the symbolic side of
+the conclusion** — `assume_vareq x t (…)` becomes `dropk`'s intended `psafe`,
+i.e. `forgetting zz_bwd (psafe …)`. Nothing was weakened to make it go through:
+§2bis's fallback (ii), semantic insensitivity of the continuation, is **not**
+assumed here and is not needed.
+
+That contrast is the result. It confirms §2ter's claim operationally: moving the
+witness out of the trusted semantics and into the accessibility is *exactly* what
+flips this obligation from false to provable.
+
+### Premises actually used — the complete list
+
+1. `Hoc : occurs_check xIn (wco w) = Some pc'` — Phase 3's liveness premise on
+   the path condition. Doubles as `zz_bwd`'s well-formedness proof (§2ter).
+2. `Hh : occurs_check xIn sh = Some h'` — Phase 3's liveness premise on the heap.
+3. `Hindep : ZZAccIndep (fun w2 ω => ℛ⟦RUnit -> RHeap -> ℙ⟧ cΦ (sΦ w2 ω))` —
+   assumed, per §3's brief. **This is now the whole remaining risk**, and it is
+   Phase 1's subject.
+
+No fourth premise appeared. In particular the `RUnit` base case closed by
+`eq_refl` and the ℙ base case by `wand_unfold` — §3's "still have to close"
+worry was unfounded.
+
+### The one extra requirement, and it is NOT a hypothesis
+
+**`OccursCheckLaws Chunk` does not exist in the tree.** `Chunks.v:188` defines
+the *operation* `OccursCheckChunk` and nothing else; there is no laws instance,
+hence no `OccursCheckLaws SHeap` (which `occurs_check_laws_list` would derive
+from it), hence `occurs_check_sound` is not applicable to a heap at all and heap
+transport cannot even be stated productively.
+
+It is a **one-liner** — `Proof. occurs_check_derive. Qed.` — the same idiom
+`occurs_check_laws_formula` uses at `Formulas.v:301`. Verified by `Qed` in the
+script below. **Phase 2 must add it to `theories/Syntax/Chunks.v`**, next to
+`OccursCheckChunk`. It is an addition, not a change: nothing existing depends on
+its absence, so it cannot break another case study.
+
+Worth noting *why* it was missing: nothing in the framework had ever needed to
+occurs-check a heap before. That is a mild independent signal that the drop is
+doing something the executor genuinely does not already do.
+
+### Heap transport — resolved, and it was not the hard part
+
+§3 flagged this as "the new work" and asked for a verdict. Verdict: it falls out
+of `occurs_check_sound` + `inst_subst` in two lines, exactly as predicted, once
+the instance above exists. `zz_heap_transport` gives
+`inst h' (inst (sub_shift xIn) ι) = inst sh ι`, and `zz_heap_rel_transport`
+wraps it at the `ℛ⟦RHeap⟧` level.
+
+### Mechanics that cost time here — add to §10
+
+- **`P` and `ι` are inferred IMPLICIT on these section lemmas**, so
+  `zz_box_at_chosen PP ι Hpc HB` silently shifts arguments and reports
+  `has type "∀ w2, w ⊒ w2 → Pred w2" while it is expected to have type
+  "instprop (wco w) ?ι"`. **Apply every one of these lemmas with `@`.** Three
+  separate detours came from this alone.
+- **`RHeap`/`RInst`/`RImpl`/`RProp` are `simpl never`**; `cbn` will not touch
+  them. `unfold RSat, RHeap, RInst, repₚ` (or `unfold RImpl` / `unfold RProp`)
+  **first**, then `cbn`. The `pred-modalities` skill says this for
+  `RSat`/`RBox`/`RImpl`; it applies to `RProp` and `RInst` too.
+- **A goal at the smaller world cannot infer its world** from an `ℛ⟦RHeap⟧`
+  application — `assert (Hh2 : ℛ⟦RHeap⟧ ch h' …)` fails with
+  `expected to have type "SHeap (wctx ?w)"`. State it as
+  `@RSat SHeap SCHeap RHeap ch zzw' h' …` and the world is pinned.
+- `rewrite !wand_unfold` unfolds **all** nested wands at once, so the whole
+  hypothesis chain arrives with a single `intros HB Hheap Hsafe`.
+
+### The script, verbatim (replays clean in one run, 1.4 s)
+
+Position mode: `rocq_start(file="theories/Symbolic/Propositions.v", line=2722,
+character=40)`.
+
+```coq
+Import ctx.notations ctx.resolution env.notations.
+Import UL.logicalrelation UL.logicalrelation.notations.
+Import iris.proofmode.tactics.
+Open Scope ctx_scope.
+
+(* MISSING FRAMEWORK INSTANCE: there is no OccursCheckLaws Chunk in the tree,
+   only OccursCheck Chunk (Chunks.v:188).  Without it there is no
+   OccursCheckLaws SHeap and heap transport has nothing to stand on.
+   One line, same idiom as occurs_check_laws_formula (Formulas.v:301). *)
+#[local] Instance zz_occurs_check_laws_chunk : OccursCheckLaws Chunk.
+Proof. occurs_check_derive. Qed.
+
+Section ZZDropk.
+  Context (w : World) (x : LVar) (σ : Ty) (xIn : (x∷σ ∈ w)%katamaran).
+  Context (pc' : PathCondition (wctx w - x∷σ)).
+  Context (Hoc : occurs_check xIn (wco w) = Some pc').
+
+  Definition zzw' : World := @MkWorld (wctx w - x∷σ) pc'.
+
+  Lemma zz_wco_eq : wco w = subst pc' (sub_shift xIn).
+  Proof.
+    pose proof (occurs_check_sound xIn (wco w)) as HH.
+    unfold OccursCheckSoundPoint in HH. rewrite Hoc in HH. now inversion HH.
+  Qed.
+
+  Program Definition zz_bwd : zzw' ⊒ w := @W.acc_sub zzw' w (sub_shift xIn) _.
+  Next Obligation.
+    intros ι Hι. cbn in *. now rewrite <- zz_wco_eq.
+  Qed.
+
+  Program Definition zz_fwd (t : Term (wctx w - x∷σ) σ) : w ⊒ zzw' :=
+    @W.acc_sub w zzw' (sub_single xIn t) _.
+  Next Obligation.
+    intros t ι Hι. cbn in *.
+    rewrite zz_wco_eq. rewrite subst_shift_single. exact Hι.
+  Qed.
+
+  (* §2ter's money lemma, re-proved. *)
+  Lemma zz_box_at_chosen (P : forall w2 : World, (w ⊒ w2) -> Pred w2)
+      (ι : Valuation w) (Hpc : instprop (wco w) ι) :
+    W.unconditionally P ι ->
+    P zzw' (zz_fwd (term_relval σ (env.lookup ι xIn))) (inst (sub_shift xIn) ι).
+  Proof.
+    intros HB.
+    specialize (HB zzw' (zz_fwd (term_relval σ (env.lookup ι xIn)))).
+    unfold W.assuming in HB.
+    apply HB.
+    - cbn. rewrite inst_sub_single2. cbn.
+      rewrite inst_sub_shift. apply env.insert_remove.
+    - cbn. rewrite zz_wco_eq in Hpc.
+      apply (instprop_subst (sub_shift xIn) ι pc'). exact Hpc.
+  Qed.
+
+  (* PHASE 0's new work #1: heap transport across the projection. *)
+  Lemma zz_heap_transport (sh : SHeap (wctx w)) (h' : SHeap (wctx w - x∷σ))
+      (Hh : occurs_check xIn sh = Some h') (ι : Valuation w) :
+    inst h' (inst (sub_shift xIn) ι) = inst sh ι.
+  Proof.
+    pose proof (occurs_check_sound (T := SHeap) xIn sh) as HH.
+    unfold OccursCheckSoundPoint in HH. rewrite Hh in HH. inversion HH; subst.
+    now rewrite inst_subst.
+  Qed.
+
+  Lemma zz_heap_rel_transport (sh : SHeap (wctx w)) (h' : SHeap (wctx w - x∷σ))
+      (Hh : occurs_check xIn sh = Some h') (ch : SCHeap) (ι : Valuation w) :
+    ℛ⟦RHeap⟧ ch sh ι ->
+    @RSat SHeap SCHeap RHeap ch zzw' h' (inst (sub_shift xIn) ι).
+  Proof.
+    unfold RSat, RHeap, RInst, repₚ. cbn.
+    intros Hheap. rewrite (@zz_heap_transport sh h' Hh ι). exact Hheap.
+  Qed.
+
+  Definition ZZAccIndep (P : forall w2 : World, (w ⊒ w2) -> Pred w2) : Prop :=
+    forall t1 t2 : Term (wctx w - x∷σ) σ, P zzw' (zz_fwd t1) = P zzw' (zz_fwd t2).
+
+  (* PHASE 0's GATE: the FULL per-step drop obligation, dropk's psafe modelled
+     as forgetting zz_bwd (psafe ...).  Mirrors ZZDropStepObligationStrong
+     (PLAN-lvar-drop-build.md §2bis) line by line -- which is FALSE. *)
+  Lemma zz_dropk_step
+      (h' : SHeap (wctx w - x∷σ))
+      (cΦ : unit -> SCHeap -> Prop)
+      (sΦ : forall w2 : World, (w ⊒ w2) -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+      (ch : SCHeap) (sh : SHeap (wctx w))
+      (t0 : Term (wctx w - x∷σ) σ)
+      (Hh : occurs_check xIn sh = Some h')
+      (Hindep : ZZAccIndep (fun w2 ω => ℛ⟦RUnit -> RHeap -> ℙ⟧ cΦ (sΦ w2 ω))) :
+    ⊢ ℛ⟦□ᵣ (RUnit -> RHeap -> ℙ)⟧ cΦ sΦ -∗
+      ℛ⟦RHeap⟧ ch sh -∗
+      (W.forgetting zz_bwd (psafe (sΦ zzw' (zz_fwd t0) tt h')) -∗ ⌜cΦ tt ch⌝).
+  Proof.
+    constructor. intros ι Hpc _.
+    rewrite !wand_unfold. intros HB Hheap Hsafe.
+    pose proof (@zz_box_at_chosen
+                  (fun (w2 : World) (ω : w ⊒ w2) => ℛ⟦RUnit -> RHeap -> ℙ⟧ cΦ (sΦ w2 ω))
+                  ι Hpc HB) as HP.
+    cbv beta in HP.
+    unfold ZZAccIndep in Hindep.
+    specialize (Hindep (term_relval σ (env.lookup ι xIn)) t0).
+    cbv beta in Hindep.
+    rewrite Hindep in HP.
+    unfold RImpl in HP. cbn in HP.
+    specialize (HP tt tt).
+    rewrite wand_unfold in HP. specialize (HP eq_refl).
+    specialize (HP ch h').
+    rewrite wand_unfold in HP.
+    specialize (HP (@zz_heap_rel_transport sh h' Hh ch ι Hheap)).
+    unfold RProp in HP. cbn in HP.
+    rewrite wand_unfold in HP.
+    apply HP. exact Hsafe.
+  Qed.
+
+  Print Assumptions zz_dropk_step.
+End ZZDropk.
+```
+
 ## §4 PHASE 1 — settle `ZZAccIndep`'s threadability ON PAPER. Hours.
 
 `PLAN-lvar-drop-build.md` §A.3 asked this for the old design and it was moot
@@ -167,6 +395,12 @@ study.
   Budget accordingly.
 - `acc_forget` in `Worlds.v`; the `psafe` case's `forgetting` lemma in
   `UnifLogic.v`.
+- **`OccursCheckLaws Chunk` in `theories/Syntax/Chunks.v`**, next to
+  `OccursCheckChunk` (`:188`). It does not exist and the heap side of Phase 0's
+  lemma cannot be stated without it (§3bis). One line:
+  `Proof. occurs_check_derive. Qed.` Pure addition — nothing depends on its
+  absence, so it cannot break another case study. Do this FIRST; it is the one
+  item in Phase 2 already known to work.
 - Re-prove whatever breaks: `psafe_safe` (:2455) at minimum.
 
 **Kill-gate: the whole project must still build.** `GATE_JOBS=1 ./scripts/gate.sh`.
@@ -292,8 +526,8 @@ an extrapolation from the smallest one.
 
 | risk | severity | mitigation |
 |---|---|---|
-| Phase 0's heap transport does not close | high | it is Phase 0's explicit exit criterion; report the residual goal rather than working around it |
-| `ZZAccIndep` not dischargeable for the recursive call | high | §4, settled on paper before any `theories/` edit |
+| ~~Phase 0's heap transport does not close~~ | **RETIRED** | closed 2026-08-27, `Qed` (§3bis). Two lines from `occurs_check_sound` + `inst_subst`, once `OccursCheckLaws Chunk` exists |
+| `ZZAccIndep` not dischargeable for the recursive call | **high — now the ONLY open risk in the proof** | §4, settled on paper before any `theories/` edit. Phase 0 used no other premise, so this hypothesis alone stands between the design and a working drop step |
 | the ~10 `𝕊` cases break another case study | moderate | Phase 2's kill-gate is a full build, run before any CFGVer work |
 | `prune` / `Erasure` cases turn out to be real research | moderate | do those two first within Phase 2; if either resists, stop there rather than after the boilerplate |
 | `rexec_cfg_addr` re-pairing hangs or OOMs | moderate | probe-first; precedent exists; `cfgver-rsolve` |
@@ -335,3 +569,14 @@ either way this is a topic branch and lands through
 **2026-08-27 — plan opened**, superseding `PLAN-lvar-drop-build.md` after that
 page's §2ter settled the re-scope positive. Design de-risked, nothing built,
 no funding decision taken.
+
+**2026-08-27 — PHASE 0 CLOSED POSITIVE (§3bis).** `zz_dropk_step` — the FULL
+per-step drop obligation, the line-by-line mirror of the `assume_vareq`
+obligation that is false — holds with `Qed`, assumptions clean, replaying in
+1.4 s. Premises used: the two occurs-check liveness conditions and `ZZAccIndep`,
+and nothing else; §2bis's continuation-insensitivity fallback was neither
+assumed nor needed. Heap transport was not the hard part. One unbudgeted
+discovery: `OccursCheckLaws Chunk` does not exist in the framework — a
+one-liner, now a Phase 2 line item. **`ZZAccIndep` is now the sole open risk in
+the proof**, which is exactly Phase 1's subject. Still nothing built in
+`theories/`, still no funding decision.
