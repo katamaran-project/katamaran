@@ -1286,6 +1286,7 @@ Module Type SymPropOn
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       (* - destruct p2; cbn; auto; intuition. *)
       (* - destruct p2; cbn; auto; intuition. *)
     Qed.
@@ -1305,6 +1306,7 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       (* - destruct p2; cbn; auto; intuition. *)

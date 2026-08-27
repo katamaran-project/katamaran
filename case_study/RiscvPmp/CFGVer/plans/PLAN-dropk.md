@@ -125,6 +125,33 @@ Definition acc_forget {w} x {σ} (xIn : x∷σ ∈ w) (pc' : PathCondition (w - 
   := acc_sub (sub_shift xIn) _.
 ```
 
+> **SUPERSEDED by what Phase 2 actually built (2026-08-27) — and it is
+> SIMPLER.** The `H : occurs_check … = Some pc'` argument above does not
+> survive contact with `safe`/`psafe`/`wsafe`, which must be **total**: there is
+> nowhere to get that proof term from inside a `SymProp` consumer. Instead
+> `wdrop` makes the projected path condition total by falling back to the empty
+> one, and then `acc_forget` needs **no side condition at all**:
+>
+> ```coq
+> Definition wdrop (w : World) x {σ} {xIn : x∷σ ∈ w} : World :=
+>   {| wctx := wctx w - x∷σ;
+>      wco  := match occurs_check xIn (wco w) with Some pc' => pc' | None => ctx.nil end |}.
+>
+> Program Definition acc_forget {w} x {σ} {xIn : x∷σ ∈ w} : wdrop w x ⊒ w :=
+>   acc_sub (sub_shift xIn) _.   (* Some: occurs_check_sound, then reflexivity.
+>                                   None: everything entails the empty pc. *)
+> ```
+>
+> The fallback is **conservative** — fewer assumptions reach the continuation,
+> so its proposition is harder to prove, never easier — and is dead weight in
+> practice, because the executor only emits `dropk` when the occurs-check
+> succeeds. **When it succeeds, `wdrop w x` IS Phase 0's `zzw'`**, so
+> `zz_dropk_step` applies verbatim and nothing in §3bis is invalidated.
+>
+> Trap for whoever writes the next call site: `acc_forget`'s trailing implicits
+> make `x` *maximally inserted*, so `acc_forget x` is an "Illegal application
+> (Non-functional construction)" error. Write `@acc_forget w x σ xIn`.
+
 The whole design in one line: **keep the witness out of the trusted semantics and
 in the accessibility, where a proof may still choose it per-ι.**
 
