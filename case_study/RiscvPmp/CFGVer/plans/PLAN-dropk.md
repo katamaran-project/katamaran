@@ -3,11 +3,13 @@
 Successor to `PLAN-lvar-drop-build.md`, which is now the *investigation record*
 and stays that. This is the executable build plan.
 
-**Status: PHASE 0 CLOSED POSITIVE 2026-08-27 — the full per-step drop
-obligation holds, `Qed`, with exactly the premises §3 pre-registered (see
-§3bis). GATE VERDICT: GO to Phase 1. Design settled and de-risked by eight
-`Qed`s across three sessions. No owner funding decision has been taken on this
-page — see §0.**
+**Status: PHASES 0 AND 1 BOTH CLOSED POSITIVE 2026-08-27. Phase 0 — the full
+per-step drop obligation holds, `Qed`, on exactly the premises §3 pre-registered
+(§3bis). Phase 1 — both `ZZAccIndep` sources settled on paper, the one
+non-obvious step mechanised (§4bis); it also found a required change to Phase 4
+(`sexec_cfg_addr` must thread `δ1`). NEXT: Phase 2, the framework change — the
+POINT OF NO RETURN. Ten `Qed`s across three sessions. No owner funding decision
+has been taken on this page — see §0.**
 
 **Read before doing anything:** `PLAN-lvar-drop-build.md` §2bis (why the obvious
 design is FALSE) then §2ter (why this one is not). Do **not** read that page's
@@ -381,6 +383,205 @@ settled before any `theories/` edit:
 **Exit:** both settled on paper → GO. Either one not dischargeable → **STOP**,
 report which.
 
+---
+
+## §4bis PHASE 1 RESULT — both sources settled. GATE VERDICT: **GO**.
+
+Settled 2026-08-27 by reading the real executor (`Verifier.v:686` / `:847`) and
+the real refinement proof (`VerifierRel.v:699` / `:1350`), with the one
+load-bearing new fact mechanised (`zz_persist_indep_future`, `Qed`, script
+below, replays in 0.3 s).
+
+### Source 1 — the recursive call. Settled, and §4's framing was WRONG.
+
+§4 says this "comes from the induction hypothesis" and asks whether the IH is
+strong enough. **The IH is not involved and the question does not arise.** The
+IH (`VerifierRel.v:708`) is a *refinement* fact, `ℛ⟦□ᵣ(RVal -> RVal ->
+RHeapSpec (RVal))⟧`; `ZZAccIndep` is a *syntactic equation* on the symbolic
+side. A refinement fact cannot supply an equation, so no amount of
+IH-strengthening would have helped — and none is needed.
+
+What actually settles it: the recursive call in `sexec_cfg_addr`
+(`Verifier.v:716`) is in **tail position**, and its entire ω-dependence is
+
+```
+persist_itableW (θ0∘θ1∘θ2∘θ3) tbl   persist_etable (…) exits   persist__term apc' θ3
+```
+
+i.e. persisted captured data and nothing else. If those occurs-check clean for
+`x`, the two applications at `zz_fwd t1` and `zz_fwd t2` are **equal by
+congruence** over `zz_persist_indep`. No induction, no IH, no new hypothesis.
+
+Confirmed: the induction *is* on fuel and the IH *is* `□ᵣ`-boxed — exactly the
+shape `zz_box_at_chosen` consumes — so Phase 0's lemma docks onto this proof
+without reshaping it. That much of §4's expectation holds.
+
+### Source 2 — the outer continuation. Settled, and localised to ONE object.
+
+`sexec_triple_addr` (`Verifier.v:847`) ends:
+
+```coq
+⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (zip_words (subst_itable ζ tbl) ws)
+                            (subst_etable ζ exits) a2 (persist__term np θ2) ;;
+let δ3 := persist δ1 (θ2 ∘ θ3) in
+consume ens δ3.["an"∷ty_xlenbits ↦ na].
+```
+
+- `ens : Assertion (Σ ▻ "a" ▻ "an")` lives over the **fixed contract context Σ**
+  and has *no world dependence at all*;
+- `na` is an **argument** to the continuation, not a capture.
+
+So **the entire ω-dependence of the outer continuation is `persist δ1`**, where
+`δ1 = env.snoc (persist δ (θ1∘θ1')) _ (persist__term a θ1')`. That object *is*
+§6's "ACCUMULATED TRANSLATION" root — the warning is confirmed, and now has a
+name: **δ1**.
+
+Discharge route: `zz_persist_indep` gives `subst δ1 (sub_single xIn t) = δ1'`
+for every `t`, so the two continuations coincide. Threading through the rest of
+the run is `zz_persist_indep_future` (below).
+
+### The new fact — why the bind does not break this
+
+The continuation does **not** sit at `zzw'`. Monadic binding puts it at some
+later `w3` reached by `ω' : zzw' ⊒ w3`, and the ambient continuation is
+persisted as `four ω Φ = fun w3 ω' => Φ w3 (acc_trans ω ω')`. So what is needed
+is independence of `t` in `subst a (sub_acc (acc_trans (zz_fwd t) ω'))`, for
+**arbitrary** `ω'`. `zz_persist_indep_future` (`Qed`) closes that in three
+rewrites — `sub_acc_trans`, `subst_sub_comp`, then `zz_persist_indep` twice.
+
+This is the fact §4 did not anticipate and is the real content of Phase 1.
+
+### DESIGN CONSEQUENCE — Phase 4 changes. `sexec_cfg_addr` must thread δ1.
+
+`sexec_cfg_addr` takes only `tbl, exits, apc, anp`. **It does not have δ1**, so
+the drop step cannot occurs-check it, so source 2 cannot be discharged by
+computation — it would have to be a hypothesis about an opaque `Φ` quantified
+inside `RHeapSpec`, which is exactly the kind of un-dischargeable premise §2bis
+died on.
+
+Fix, and it is small: **pass `δ1` into `sexec_cfg_addr` as a threaded, persisted
+argument alongside `tbl`/`exits`, and add it to Phase 3's occurs-check roots.**
+
+- `ζ` is **already computed at the call site** (`Verifier.v:868`) and already
+  passed in *indirectly* via `subst_itable ζ tbl`. It is just not available as
+  an object the drop step can check.
+- **Do not pass `ζ` alone — pass `δ1`.** `δ1 = env.snoc ζ a2`, and `a2` is the
+  executor's *initial* `apc`. Since `apc` is overwritten every trip, the current
+  `apc` does **not** cover `a2`, which `δ3` still captures. Checking `ζ` + the
+  live `apc` therefore leaves a hole; checking `δ1` does not.
+- Occurs-checking `tbl` is **not** a substitute for occurs-checking `ζ`: a
+  component of `ζ` unused by the table is invisible in `subst_itable ζ tbl` but
+  still present in `δ3`.
+
+### Instance and representation gaps found (Phase 2/3 work items)
+
+1. **`OccursCheckLaws (Const A)` does not exist** — same pattern as Phase 0's
+   `Chunk`. One line, verified: `constructor; intros; now constructor.`
+2. **With it, the table SHAPE assembles for free**: `OccursCheckLaws (fun Σ =>
+   list (Pair (Pair (STerm τ1) (STerm τ2)) (Const A) Σ))` closes by
+   `typeclasses eauto` (verified). So Phase 3's liveness check on the tables
+   needs no bespoke recursion — **provided** the table types are stated in the
+   `Pair`/`Const` algebra, or given instances directly.
+3. **The table types are bespoke and side-step the generic machinery.**
+   `SInstrTableW := fun w => list (Term (wctx w) ty_xlenbits * Term (wctx w)
+   ty_word * AnnotInstr)` (`Verifier.v:390`) with hand-rolled
+   `persist_itableW` / `persist_etable` as `List.map` over `persist__term`
+   (`:395`, `:397`) — **not** the generic `subst`. So `zz_persist_indep` does
+   not apply to a table off the shelf. Phase 5 needs bridging lemmas
+   `persist_itableW θ tbl = subst tbl (sub_acc θ)` (and `_etable`), or the
+   independence proved directly by list induction. Either is routine; neither
+   is free.
+
+### What is NOT claimed
+
+- `ZZAccIndep` is **not** discharged for the real `sΦ`. Phase 1's exit criterion
+  is "settled on paper", and that is what this is: the route is identified, its
+  one non-obvious step is mechanised, and the object that has to be checked is
+  named. Actually discharging it is Phase 5.
+- The δ1-threading change to `sexec_cfg_addr` is **not** implemented and its
+  knock-on cost to `cexec_cfg_addr` / `rexec_cfg_addr` (an extra argument on a
+  proof with a 300 s+ hang in its history) is **not** estimated.
+- Nothing was measured. §0's ~3× is untouched by any of this.
+
+### The script, verbatim (replays clean in one run, 0.3 s)
+
+Position mode: `rocq_start(file="theories/Symbolic/Propositions.v", line=2722,
+character=40)`.
+
+```coq
+Import ctx.notations ctx.resolution env.notations.
+Import UL.logicalrelation UL.logicalrelation.notations.
+Import iris.proofmode.tactics.
+Open Scope ctx_scope.
+
+(* Second missing framework instance, same shape as Phase 0's Chunk one. *)
+#[local] Instance zz_occ_laws_const {A} : OccursCheckLaws (Const A).
+Proof. constructor; intros; now constructor. Qed.
+
+(* With it, the SInstrTableW SHAPE assembles with no bespoke work. *)
+Goal forall (τ1 τ2 : Ty) (A : Type),
+  OccursCheckLaws (fun Σ => list (Pair (Pair (STerm τ1) (STerm τ2)) (Const A) Σ)).
+Proof. intros. typeclasses eauto. Qed.
+
+Section ZZPhase1.
+  Context (w : World) (x : LVar) (σ : Ty) (xIn : (x∷σ ∈ w)%katamaran).
+  Context (pc' : PathCondition (wctx w - x∷σ)).
+  Context (Hoc : occurs_check xIn (wco w) = Some pc').
+
+  Definition zzw' : World := @MkWorld (wctx w - x∷σ) pc'.
+
+  Lemma zz_wco_eq : wco w = subst pc' (sub_shift xIn).
+  Proof.
+    pose proof (occurs_check_sound xIn (wco w)) as HH.
+    unfold OccursCheckSoundPoint in HH. rewrite Hoc in HH. now inversion HH.
+  Qed.
+
+  Program Definition zz_fwd (t : Term (wctx w - x∷σ) σ) : w ⊒ zzw' :=
+    @W.acc_sub w zzw' (sub_single xIn t) _.
+  Next Obligation.
+    intros t ι Hι. cbn in *.
+    rewrite zz_wco_eq. rewrite subst_shift_single. exact Hι.
+  Qed.
+
+  Section ZZIndep.
+    (* NB: the backtick form `{SubstLaws AT, OccursCheck AT, OccursCheckLaws AT}
+       silently generates DUPLICATE Subst/OccursCheck instances and then
+       `rewrite subst_shift_single` fails with "matches but type classes
+       inference fails".  Name the instances explicitly. *)
+    Context {AT : LCtx -> Type} {SubstAT : Subst AT} {OccAT : OccursCheck AT}
+            {SubstLawsAT : SubstLaws AT} {OccLawsAT : OccursCheckLaws AT}.
+
+    (* §2ter result 4, re-proved: Phase 1's linchpin. *)
+    Lemma zz_persist_indep (a : AT (wctx w)) (a' : AT (wctx w - x∷σ))
+        (Ha : occurs_check xIn a = Some a') (t : Term (wctx w - x∷σ) σ) :
+      subst a (sub_single xIn t) = a'.
+    Proof.
+      pose proof (occurs_check_sound xIn a) as HH.
+      unfold OccursCheckSoundPoint in HH. rewrite Ha in HH. inversion HH; subst.
+      now rewrite subst_shift_single.
+    Qed.
+
+    (* PHASE 1's NEW FACT.  x-free captured data persists to the SAME thing
+       along every witness THROUGH AN ARBITRARY FUTURE ACCESSIBILITY.  This is
+       what makes ZZAccIndep survive the monadic bind: the continuation does
+       not sit at zzw', it sits at some w3 reached from zzw' by ω'. *)
+    Lemma zz_persist_indep_future (a : AT (wctx w)) (a' : AT (wctx w - x∷σ))
+        (Ha : occurs_check xIn a = Some a')
+        {w3 : World} (ω' : zzw' ⊒ w3) (t1 t2 : Term (wctx w - x∷σ) σ) :
+      subst a (W.sub_acc (W.acc_trans (zz_fwd t1) ω'))
+      = subst a (W.sub_acc (W.acc_trans (zz_fwd t2) ω')).
+    Proof.
+      rewrite !sub_acc_trans.
+      rewrite !subst_sub_comp.
+      cbn [W.sub_acc zz_fwd].
+      rewrite (@zz_persist_indep a a' Ha t1).
+      rewrite (@zz_persist_indep a a' Ha t2).
+      reflexivity.
+    Qed.
+  End ZZIndep.
+End ZZPhase1.
+```
+
 ## §5 PHASE 2 — the framework change. Mechanical, broad, point of no return.
 
 Only after Phases 0 and 1 close. This touches `theories/`, shared by every case
@@ -401,6 +602,11 @@ study.
   `Proof. occurs_check_derive. Qed.` Pure addition — nothing depends on its
   absence, so it cannot break another case study. Do this FIRST; it is the one
   item in Phase 2 already known to work.
+- **`OccursCheckLaws (Const A)` in `theories/Symbolic/OccursCheck.v`**, next to
+  `OccursCheck_Const` (`:61`). Also missing, also one line
+  (`constructor; intros; now constructor.`), also a pure addition. With it the
+  instruction-table SHAPE resolves by `typeclasses eauto` (§4bis). Same slot as
+  the `Chunk` one — do both together.
 - Re-prove whatever breaks: `psafe_safe` (:2455) at minimum.
 
 **Kill-gate: the whole project must still build.** `GATE_JOBS=1 ./scripts/gate.sh`.
@@ -527,7 +733,9 @@ an extrapolation from the smallest one.
 | risk | severity | mitigation |
 |---|---|---|
 | ~~Phase 0's heap transport does not close~~ | **RETIRED** | closed 2026-08-27, `Qed` (§3bis). Two lines from `occurs_check_sound` + `inst_subst`, once `OccursCheckLaws Chunk` exists |
-| `ZZAccIndep` not dischargeable for the recursive call | **high — now the ONLY open risk in the proof** | §4, settled on paper before any `theories/` edit. Phase 0 used no other premise, so this hypothesis alone stands between the design and a working drop step |
+| ~~`ZZAccIndep` not dischargeable for the recursive call~~ | **RETIRED** | §4bis, 2026-08-27. The recursive call is congruence over `zz_persist_indep`, not an IH question at all; the outer continuation reduces to `δ1` alone |
+| `sexec_cfg_addr` must now thread `δ1`, so `cexec_cfg_addr` / `rexec_cfg_addr` gain an argument | moderate — **NEW, found by §4bis** | unavoidable: without it source 2 is a hypothesis about an opaque `Φ`, which is what §2bis died on. Cost lands in Phases 4-5, on a file with a 300 s+ hang in its history. Not estimated |
+| `ZZAccIndep` not discharged for the REAL `sΦ` (as opposed to on paper) | moderate | Phase 5. §4bis identifies the route and names the object; the table types' bespoke `persist` needs bridging lemmas first |
 | the ~10 `𝕊` cases break another case study | moderate | Phase 2's kill-gate is a full build, run before any CFGVer work |
 | `prune` / `Erasure` cases turn out to be real research | moderate | do those two first within Phase 2; if either resists, stop there rather than after the boilerplate |
 | `rexec_cfg_addr` re-pairing hangs or OOMs | moderate | probe-first; precedent exists; `cfgver-rsolve` |
@@ -580,3 +788,18 @@ discovery: `OccursCheckLaws Chunk` does not exist in the framework — a
 one-liner, now a Phase 2 line item. **`ZZAccIndep` is now the sole open risk in
 the proof**, which is exactly Phase 1's subject. Still nothing built in
 `theories/`, still no funding decision.
+
+**2026-08-27 — PHASE 1 CLOSED POSITIVE (§4bis).** Both `ZZAccIndep` sources
+settled on paper against the real executor and refinement proof. Source 1 is
+NOT an IH question — §4's framing was wrong; the recursive call is in tail
+position and its ω-dependence is persisted captures, so it is congruence over
+`zz_persist_indep`. Source 2 localises to exactly ONE object, `δ1`, because
+`ens` is world-independent and `na` is an argument; `δ1` is §6's "accumulated
+translation" root, now named. New mechanised fact `zz_persist_indep_future`
+(`Qed`) carries independence through an arbitrary FUTURE accessibility, which is
+what the monadic bind needs and §4 did not anticipate. **Found a required change
+to Phase 4: `sexec_cfg_addr` must thread `δ1`** — it currently cannot see it, and
+without it source 2 becomes an un-dischargeable hypothesis about an opaque `Φ`.
+Two more missing instances found (`OccursCheckLaws (Const A)`; the tables' own
+bespoke `persist_itableW`/`persist_etable` are not generic `subst`). Still
+nothing built in `theories/`. **Next is Phase 2 — the point of no return.**
