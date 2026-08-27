@@ -112,6 +112,25 @@ Module Type WorldsOn
       {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
+    (* Change the world by FORGETTING variable [x] rather than unifying it with
+       a term.  The path condition is PROJECTED: every conjunct that does not
+       mention [x] survives, and `occurs_check` computes exactly that.
+
+       The `None` fallback keeps this TOTAL, which is what lets `safe`/`psafe`
+       have a `dropk` case at all — no proof term has to be threaded through the
+       SymProp.  Falling back to the empty path condition is CONSERVATIVE: it
+       carries fewer assumptions into the continuation, so the continuation's
+       proposition is harder to prove, never easier.  In practice the executor
+       only emits `dropk` when the occurs-check succeeds, so the fallback is
+       dead weight that exists purely for totality. *)
+    Definition wdrop (w : World) x {σ} {xIn : (x∷σ ∈ w)%katamaran} : World :=
+      {| wctx := (wctx w - x∷σ);
+         wco  := match occurs_check xIn (wco w) with
+                 | Some pc' => pc'
+                 | None     => ctx.nil
+                 end |}.
+    Global Arguments wdrop w x {σ xIn}.
+
     Definition wmatch (w : World) {σ} (s : Term w σ) (p : Pattern (N:=LVar) σ)
       (pc : PatternCase p) : World :=
       let wsL  : World         := wsecLeak w s in
@@ -384,6 +403,30 @@ Module Type WorldsOn
       let w' := {| wctx := w - x∷σ; wco := subst (wco w) ζ |}  in
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
+
+    (* The BACKWARD accessibility of the variable drop: the smaller world is the
+       PAST.  Note the direction — `wdrop w x ⊒ w`, not `w ⊒ wdrop w x` — which
+       is what makes `forgetting` along it TOTAL (no fibre, hence no vacuity).
+       `Acc` has only two constructors and both named `acc_*` are Definitions
+       over `acc_sub`, so this adds no framework shape.
+
+       It needs NO side condition: when the occurs-check succeeds the obligation
+       is `occurs_check_sound` then reflexivity, and when it fails `wdrop`'s path
+       condition is empty and everything entails it.  (PLAN-dropk.md §2 sketched
+       this with an `occurs_check … = Some pc'` argument; making `wdrop` total
+       removes it.) *)
+    Program Definition acc_forget {w : World} x {σ} {xIn : (x∷σ ∈ w)%katamaran} :
+      wdrop w x ⊒ w := @acc_sub (wdrop w x) w (sub_shift xIn) _.
+    Next Obligation.
+    Proof.
+      intros w x σ xIn ι Hι. cbn.
+      destruct (occurs_check xIn (wco w)) as [pc'|] eqn:Hoc; cbn.
+      - pose proof (occurs_check_sound xIn (wco w)) as HH.
+        unfold OccursCheckSoundPoint in HH. rewrite Hoc in HH.
+        inversion HH as [? Heq|]. now rewrite <- Heq.
+      - exact I.
+    Qed.
+    Arguments acc_forget {w} x {σ xIn}.
 
     Definition acc_secLeak {w : World} {σ} {s : Term w σ} : w ⊒ wsecLeak w s :=
       acc_formula_right (formula_secLeak s).

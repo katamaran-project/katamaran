@@ -476,6 +476,9 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let t' := inst t ι' in
             assume_formula (t' = x') ;;
             replay k ι'
+        (* No formula: the drop imposes no constraint, it only projects. *)
+        | @SymProp.dropk _ x σ xIn k =>
+            replay k (env.remove (x ∷ σ) ι xIn)
         (* | SymProp.pattern_match s pat rhs => *)
         (*     error *)
         (* | SymProp.pattern_match_var x pat rhs => *)
@@ -997,6 +1000,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       - apply all_impl_morphism. intros v; red; apply IHs.
       - intros []. intuition auto.
       - intuition auto.
+      - apply IHs.
       (* - inversion 1. *)
       (* - inversion 1. *)
       - unfold debug. apply IHs.

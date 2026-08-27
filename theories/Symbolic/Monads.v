@@ -796,6 +796,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let fml  := formula_propeq (subst t ζ) (term_var x) in
             ⟨ θ ⟩ _ <- assume_formula (subst fml δ) ;;
             replay k (env.remove (x∷_) δ⟨θ⟩ _)
+        (* No formula: the drop imposes no constraint, it only projects δ. *)
+        | SymProp.dropk x k =>
+            replay k (env.remove (x∷_) δ _)
         (* | SymProp.pattern_match s pat rhs => *)
         (*     (* FIXME *) *)
         (*     (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *) *)

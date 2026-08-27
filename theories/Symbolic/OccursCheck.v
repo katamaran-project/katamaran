@@ -243,6 +243,16 @@ Module Type OccursCheckOn
   #[export] Instance occurs_check_laws_unit : OccursCheckLaws Unit.
   Proof. derive. Qed.
 
+  (* `OccursCheck_Const` (:61) has existed without a laws instance.  Nothing
+     needed it until the dead-logical-variable drop had to occurs-check an
+     instruction table, whose payload column is a `Const AnnotInstr`; with this
+     instance the whole table shape resolves by `typeclasses eauto`
+     (PLAN-dropk.md §4bis).  `derive` does not apply — `occurs_check` on a
+     `Const` returns its argument unchanged rather than recursing — but both
+     obligations are immediate. *)
+  #[export] Instance occurs_check_laws_const {A} : OccursCheckLaws (Const A).
+  Proof. constructor; intros; now constructor. Qed.
+
   #[export] Instance occurscheck_ctx `{OccursCheck A} : OccursCheck (fun Σ => Ctx (A Σ)) :=
     fix oc {Σ x} xIn ys {struct ys} :=
       match ys with
