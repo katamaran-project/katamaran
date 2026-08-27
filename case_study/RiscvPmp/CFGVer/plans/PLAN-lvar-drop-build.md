@@ -5,13 +5,19 @@ that. This is the *build* plan. Read `PLAN-lvar-drop.md`'s status block and its
 Phase 0 verdict first; do not read its design section, which is a superseded
 third verdict left in place deliberately.
 
-**Status: RE-SCOPED AND REOPENED (2026-08-27, same day). Phase A killed the
-`assume_vareq` design by `Qed` (§2bis) — that stands. The RE-SCOPE then settled
-POSITIVE (§2ter): a `dropk` node plus `acc_forget` needs NO change to `Acc`, NO
-change to `unconditionally`/`RBox`, and no new modality. Four `Qed`s. What
-remains is a statable, plausibly dischargeable condition on the continuation
-(`ZZAccIndep`) and ~10 mechanical `𝕊` cases. Read §2bis then §2ter; do not act on
-§2bis's "what a real fix would have to be" paragraph, which §2ter supersedes.**
+**Status: INVESTIGATION RECORD ONLY — the build plan is `PLAN-dropk.md`.**
+
+This page did its job and stops here. Phase A killed the `assume_vareq` design by
+`Qed` (§2bis) and the re-scope then settled POSITIVE (§2ter): a `dropk` node plus
+`acc_forget` needs NO change to `Acc`, NO change to `unconditionally`/`RBox`, and
+no new modality — seven `Qed`s in all.
+
+**What to read here, and only this: §2bis, then §2ter.** They carry the
+counterexample that kills the obvious design and the four lemmas that open the
+other one, with verbatim replayable scripts. **§0-§2 and §3-§10 are written for
+the REFUTED design** — their surviving content is carried forward into
+`PLAN-dropk.md`; do not act on them, and in particular do not act on §2bis's
+"what a real fix would have to be" paragraph, which §2ter supersedes.
 
 ---
 
