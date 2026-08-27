@@ -12,6 +12,12 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   underneath every case study's own executor (not CFGVer-specific; library skill)
 > - **`relval-model`** — the `SyncVal`/`NonSyncVal` relational value representation
 >   (`RelVal = RV (Val σ)`, homomorphic lifting) (not CFGVer-specific; library skill)
+> - **`pred-modalities`** — the `Pred`/world/modality layer under every refinement
+>   proof: why a substitution runs BACKWARDS on valuations, the FIBRE of an
+>   accessibility, and `assuming`/`knowing`/`forgetting` as the standard adjoint
+>   triple (`knowing ⊣ forgetting ⊣ assuming`). Load it when a refinement
+>   hypothesis looks strong but proves nothing — the usual cause is a modality
+>   gone vacuous on an empty fibre, invisible in the goal (library skill)
 > - **`relval-rewrite-over-secrets`** — why a pure `bv`/`Val`-identity rewrite is
 >   auto-sound over secrets, no `NonSyncVal` case-split (library skill)
 > - **`secret-data-walls`** — the three `NonSyncVal ⇒ False` walls (`formula_bool`/
@@ -30,7 +36,7 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-scaling-diagnostics`** — running/writing up a cost-driver investigation
 >   (`diagnostics/` convention, cost-driver catalog, one-axis-at-a-time ablation discipline)
 >
-> **Skill routing is TWO-TIERED (since 2026-07-28).** Ten pitfall/library skills
+> **Skill routing is TWO-TIERED (since 2026-07-28).** Eleven pitfall/library skills
 > are set to `name-only` in `.claude/settings.json`'s `skillOverrides`: they are
 > listed WITHOUT their description, so they no longer compete for the initial
 > routing decision, and are reached from a tier-1 parent's routing table instead
@@ -43,7 +49,7 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   workflow and routes to the tier-2 set below.
 > - **Tier-2 (`name-only`, reached via `rocq-implementation`):** `bv-pitfalls`,
 >   `rocq-pitfalls`, `iris-proofmode`, `core-executor-internals`, `relval-model`,
->   `relval-rewrite-over-secrets`, `cfgver-rsolve`, `cfgver-wp2`,
+>   `relval-rewrite-over-secrets`, `pred-modalities`, `cfgver-rsolve`, `cfgver-wp2`,
 >   `cfgver-gen-contract-internals`, `cfgver-endtoend-internals`. Several are
 >   labelled "library skill" in the list above; that label now also means
 >   name-only. **Note `secret-data-walls` is labelled a library skill but is
@@ -239,7 +245,7 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   TABLE of path → required-skill rules. Any `*.v` write requires
   `rocq-implementation`; on top of that each documented file demands its own
   skill (`Solver.v`/`Monads.v`/`SymbolicExecutor.v` →
-  `core-executor-internals`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
+  `core-executor-internals`; `Worlds.v`/`UnifLogic.v` → `pred-modalities`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
   `cfgver-refinement`; `Adequacy.v`/`SpecIris.v` → `cfgver-soundness`;
   `GenContract.v` → `cfgver-gen-contract-internals`; `EndToEnd.v` →
   `cfgver-endtoend-internals`; `Example/*Result.v` + `Noninterference.v` →

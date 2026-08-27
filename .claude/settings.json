@@ -18,6 +18,7 @@
     "bv-pitfalls": "name-only",
     "rocq-pitfalls": "name-only",
     "iris-proofmode": "name-only",
+    "pred-modalities": "name-only",
     "core-executor-internals": "name-only",
     "relval-model": "name-only",
     "relval-rewrite-over-secrets": "name-only",
