@@ -3,13 +3,15 @@
 Successor to `PLAN-lvar-drop-build.md`, which is now the *investigation record*
 and stays that. This is the executable build plan.
 
-**Status: PHASES 0 AND 1 BOTH CLOSED POSITIVE 2026-08-27. Phase 0 — the full
-per-step drop obligation holds, `Qed`, on exactly the premises §3 pre-registered
-(§3bis). Phase 1 — both `ZZAccIndep` sources settled on paper, the one
-non-obvious step mechanised (§4bis); it also found a required change to Phase 4
-(`sexec_cfg_addr` must thread `δ1`). NEXT: Phase 2, the framework change — the
-POINT OF NO RETURN. Ten `Qed`s across three sessions. No owner funding decision
-has been taken on this page — see §0.**
+**Status: PHASES 0, 1 AND 2 ALL DONE. Phase 0 — the full per-step drop
+obligation holds, `Qed` (§3bis). Phase 1 — both `ZZAccIndep` sources settled on
+paper, the one non-obvious step mechanised (§4bis). **Phase 2 — the framework
+change is LANDED and the kill-gate is GREEN** (2026-08-27, branch
+`issue/dropk-framework`): `GATE_JOBS=1 ./scripts/gate.sh` reports build clean,
+no proof holes, 14 end theorems axiom-clean. The point of no return has been
+passed. NEXT: Phase 3, the liveness computation (CFGVer side) — and note §4bis's
+finding that Phase 4 must thread `δ1`. No owner funding decision has been taken
+on this page — see §0.**
 
 **Read before doing anything:** `PLAN-lvar-drop-build.md` §2bis (why the obvious
 design is FALSE) then §2ter (why this one is not). Do **not** read that page's
@@ -670,6 +672,10 @@ study.
 **Kill-gate: the whole project must still build.** `GATE_JOBS=1 ./scripts/gate.sh`.
 Do this *before* writing any CFGVer code on top.
 
+> **DONE 2026-08-27. GATE GREEN** — "build clean, no holes, 14 end theorems
+> axiom-clean (only: `Machine.pure_decode` `Base.mmioenv`)". 65 files rebuilt.
+> Commits `3cdaf029`, `d39d372e` (+ the bullet fix) on `issue/dropk-framework`.
+
 **The `skill-path-guard` hook now demands `pred-modalities` on writes to
 `Worlds.v`/`UnifLogic.v`, and `core-executor-internals` is NOT required for
 `Propositions.v`** — read `pred-modalities` anyway; §7 of it is this design.
@@ -794,8 +800,8 @@ an extrapolation from the smallest one.
 | ~~`ZZAccIndep` not dischargeable for the recursive call~~ | **RETIRED** | §4bis, 2026-08-27. The recursive call is congruence over `zz_persist_indep`, not an IH question at all; the outer continuation reduces to `δ1` alone |
 | `sexec_cfg_addr` must now thread `δ1`, so `cexec_cfg_addr` / `rexec_cfg_addr` gain an argument | moderate — **NEW, found by §4bis** | unavoidable: without it source 2 is a hypothesis about an opaque `Φ`, which is what §2bis died on. Cost lands in Phases 4-5, on a file with a 300 s+ hang in its history. Not estimated |
 | `ZZAccIndep` not discharged for the REAL `sΦ` (as opposed to on paper) | moderate | Phase 5. §4bis identifies the route and names the object; the table types' bespoke `persist` needs bridging lemmas first |
-| the ~10 `𝕊` cases break another case study | moderate | Phase 2's kill-gate is a full build, run before any CFGVer work |
-| `prune` / `Erasure` cases turn out to be real research | moderate | do those two first within Phase 2; if either resists, stop there rather than after the boilerplate |
+| ~~the ~10 `𝕊` cases break another case study~~ | **RETIRED, with a caveat** | gate green 2026-08-27. Caveat: `_CoqProject` on this branch activates only `RiscvPmp`+`CFGVer`, so MinimalCaps / BlockVer / BinaryBlockVer / `theories/Staging` were **not compiled**. Hand-checked that none matches on a `SymProp` constructor — an inspection, not a build |
+| ~~`prune` / `Erasure` cases turn out to be real research~~ | **RETIRED** | both were routine. The actual difficulty was elsewhere: tactic scripts whose GOAL COUNT tracks the constructor count, which `vos` cannot see (§5's box) |
 | `rexec_cfg_addr` re-pairing hangs or OOMs | moderate | probe-first; precedent exists; `cfgver-rsolve` |
 | drop never fires on the real program | moderate | Phase 3 instrumentation |
 | the drop costs more than it saves | moderate | one state traversal per candidate variable per trip; a plausible outcome, not a bug |
@@ -861,3 +867,21 @@ without it source 2 becomes an un-dischargeable hypothesis about an opaque `Φ`.
 Two more missing instances found (`OccursCheckLaws (Const A)`; the tables' own
 bespoke `persist_itableW`/`persist_etable` are not generic `subst`). Still
 nothing built in `theories/`. **Next is Phase 2 — the point of no return.**
+
+**2026-08-27 — PHASE 2 LANDED, KILL-GATE GREEN.** `dropk` constructor,
+`wdrop`/`acc_forget`, the two missing `OccursCheckLaws` instances, and ~16
+consumer cases across `Propositions.v`, both `Monads.v` files and
+`Refinement/Monads.v`. `GATE_JOBS=1 ./scripts/gate.sh` passes: build clean, no
+holes, 14 end theorems axiom-clean. Branch `issue/dropk-framework`, off
+`issue/annot-havoc-spike`, unmerged.
+
+Two things worth carrying forward. (1) **`acc_forget` needs no side condition** —
+making `wdrop`'s path condition total (empty-pc fallback) removes the
+`occurs_check … = Some pc'` argument §2 sketched, which mattered because
+`safe`/`psafe`/`wsafe` cannot carry a proof term. (2) **The real hazard of
+adding an `𝕊` constructor is not missing match cases** — those are exhaustive
+and `vos` catches them — **it is tactic scripts whose goal count tracks the
+constructor count**, which are green under `vos` and fail only under a full
+compile, sometimes reporting the error at a bullet one past the real cause
+(`refine_replay_aux` blamed its `debug` bullet). Three sites bit:
+`prune_angelic_binary_sound`, `prune_demonic_binary_sound`, `refine_replay_aux`.
