@@ -621,6 +621,37 @@ study.
   grepping `assume_vareq` — every site that matches on it needs a `dropk` case.
 - **`prune` and `Erasure` are the two real proofs**; the rest is boilerplate.
   Budget accordingly.
+
+> **What Phase 2 ACTUALLY touched (2026-08-27) — the list above is
+> incomplete.** Grepping `assume_vareq` as instructed found two consumers
+> *outside* `Propositions.v`: `replay` in **`theories/Shallow/Monads.v`** and in
+> **`theories/Symbolic/Monads.v`** (plus `replay_sound`'s bullet in the former).
+> Neither is in §5's list. Also needed but unlisted: `size`, `count_nodes`,
+> `dropk_prune` + `prune_dropk_sound`, `proper_dropk` / `proper_dropk_impl`
+> instances (the two `push_plug` proofs need them), `weaken_symprop`,
+> `uq_dropk`, `wsafe_safe`, `safe_debug_safe`, `erase_safe`, and a **parallel
+> `edropk` constructor on the separate `ESymProp` inductive** with its four
+> consumers — `Erasure` is two constructors' worth of work, not one case.
+>
+> **The trap that vos cannot catch**: `prune_angelic_binary_sound` and
+> `prune_demonic_binary_sound` do `destruct p1; cbn; auto.` followed by **one
+> bullet per constructor**. The match is still exhaustive, so `vos` is green and
+> only a `full` compile fails, with "Attempt to save an incomplete proof". Any
+> new `𝕊` constructor must add a bullet to **both**. The same shape is why
+> `psafe_safe`'s `SymProp_ind` needs an extra `_` and a `11:` goal selector.
+> Sites whose goal count is constructor-dependent, all of which had to be
+> touched: `wsafe_safe`, `safe_debug_safe`, `prune_sound`, both `push_plug`s,
+> `erase_safe`, `psafe_safe`, and the two binary prune lemmas.
+> `ok_sound` (`MicroSail/SymbolicExecutor.v`) is bullet-free and unaffected.
+>
+> **Scope note on the kill-gate.** On this branch `_CoqProject` activates only
+> `case_study/RiscvPmp` + `CFGVer`; MinimalCaps, BlockVer, BinaryBlockVer and
+> `theories/Staging` are all commented out, so the gate does **not** exercise
+> them and §11's "breaks another case study" risk is **not** discharged by it.
+> Checked by hand instead: none of those files matches on a `SymProp`
+> constructor (they only reference `SymProp.safe` and the notations), so the
+> change is very unlikely to affect them — but that is an inspection, not a
+> compile.
 - `acc_forget` in `Worlds.v`; the `psafe` case's `forgetting` lemma in
   `UnifLogic.v`.
 - **`OccursCheckLaws Chunk` in `theories/Syntax/Chunks.v`**, next to
