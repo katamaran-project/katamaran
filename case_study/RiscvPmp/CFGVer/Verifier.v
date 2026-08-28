@@ -945,6 +945,127 @@ Section CFGVerificationDerived.
                end)
         end.
 
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY for the CFGVer executor.                *)
+    (*                                                                    *)
+    (* This closes the chain that PLAN-dropk.md §16 opened:  PExt/CExt in   *)
+    (* theories/Symbolic/Monads.v, SExt + exec_aux + sexec in               *)
+    (* theories/MicroSail/SymbolicExecutor.v, and these.  Together they say  *)
+    (* the symbolic executor produces the SAME TREE from pointwise-equal     *)
+    (* continuations -- which is what lets the drop's premise propagate      *)
+    (* through a step WITHOUT functional extensionality.                     *)
+    (* ================================================================== *)
+    Lemma cext_chunk_gc {w : World} : CExt (chunk_gc (w := w)).
+    Proof. intros P1 P2 HP h. unfold chunk_gc. apply HP. Qed.
+
+    Lemma cext_sexec_ghost (a : Annot) {w : World} : CExt (sexec_ghost a (w := w)).
+    Proof.
+      destruct a; cbn.
+      - apply cext_debug, cext_pure.
+      - apply cext_call_lemma.
+    Qed.
+
+    Lemma cext_sexec_ghosts (gs : list Annot) {w : World} :
+      CExt (sexec_ghosts gs (w := w)).
+    Proof.
+      revert w. induction gs as [|a gs IH]; intros w; cbn.
+      - apply cext_pure.
+      - apply cext_bind; [apply cext_sexec_ghost|]. intros w1 th1 _. apply IH.
+    Qed.
+
+    (* cext_evalStoreSpec + sext_sexec is the bridge down into the CORE
+       executor; without those two this lemma has no way through `sexec`. *)
+    Lemma cext_sexec_instruction (i : AST) {w : World}
+        (a np : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word) :
+      CExt (sexec_instruction i a np wd).
+    Proof.
+      unfold sexec_instruction.
+      apply cext_bind; [apply cext_produce|]. intros w1 th1 _.
+      apply cext_bind; [apply SStoreSpec.cext_evalStoreSpec, sext_sexec|].
+      intros w2 th2 _.
+      apply cext_bind; [apply cext_angelic|]. intros w3 th3 na.
+      apply cext_bind; [apply cext_consume|]. intros w4 th4 _.
+      apply cext_pure.
+    Qed.
+
+    (* TWO-SIDED convoy elimination: drop_dead's inner match appears on BOTH
+       sides of the equation, so the one-sided form cannot be used.  As there,
+       `S` being a variable is what makes `destruct S` legal. *)
+    Lemma option_convoy_eq {X T : Type} {S : option X}
+        (f1 f2 : forall v : X, S = Some v -> T) (g1 g2 : S = None -> T)
+        (Hf : forall v (e : S = Some v), f1 v e = f2 v e)
+        (Hg : forall e : S = None, g1 e = g2 e) :
+      (match S as o return S = o -> T with Some v => f1 v | None => g1 end) eq_refl
+      = (match S as o return S = o -> T with Some v => f2 v | None => g2 end) eq_refl.
+    Proof.
+      revert f1 f2 g1 g2 Hf Hg. generalize (@eq_refl _ S).
+      destruct S as [v|]; intros e f1 f2 g1 g2 Hf Hg; [apply Hf | apply Hg].
+    Qed.
+
+    (* Two traps in this one, both about the drop's world index:
+       - `destruct c as [b [bIn t0]]` FIRST.  Left as `projT1 c`, the goal's
+         world index is `ctx.remove … {| name := name (projT1 c); … |}` -- an
+         ETA-EXPANDED record -- and the IH's `wctx ?w` cannot be inverted
+         against it.
+       - even then, `apply IH` cannot infer `?w` from a type index, so the
+         target world must be supplied: `refine (IH (@wdrop w (name b) (type b)
+         bIn) …)`, with `@` per the standing maximally-inserted-x trap. *)
+    Lemma cext_drop_dead {Sg0 : LCtx} (fuel : nat) :
+      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+        (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits)
+        (wd : Term (wctx w) ty_word),
+        CExt (drop_dead fuel trans tbl exits apc anp wd).
+    Proof.
+      induction fuel as [|n IH];
+        intros w trans tbl exits apc anp wd P1 P2 HP h.
+      - apply HP.
+      - cbn [drop_dead].
+        destruct (find_dead trans tbl exits apc anp wd h) as [c|]; [|apply HP].
+        destruct c as [b [bIn t0]]. cbn [projT1 projT2].
+        destruct (occurs_check bIn h) as [h'|]; [|apply HP].
+        apply option_convoy_eq.
+        + intros v e. f_equal.
+          refine (IH (@wdrop w (name b) (type b) bIn) _ _ _ _ _ _ _ _ _ h').
+          intros w' th' a' h''. unfold four. apply HP.
+        + intros e. apply HP.
+    Qed.
+
+    Lemma cext_step_after_drop {Sg0 : LCtx}
+        (rec : forall w : World, Sub Sg0 w -> SInstrTableW w -> SExitTable w ->
+                 Term (wctx w) ty_xlenbits -> Term (wctx w) ty_xlenbits ->
+                 SHeapSpec (STerm ty_xlenbits) w)
+        (Hrec : forall w trans tbl exits apc anp,
+                  CExt (rec w trans tbl exits apc anp))
+        (ai : AnnotInstr) {w : World}
+        (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word) :
+      CExt (step_after_drop rec ai trans tbl exits apc anp wd).
+    Proof.
+      unfold step_after_drop.
+      apply cext_bind; [apply cext_sexec_ghosts|]. intros w1 th1 _.
+      apply cext_bind; [apply cext_sexec_instruction|]. intros w2 th2 apc'.
+      apply cext_bind; [apply cext_sexec_ghosts|]. intros w3 th3 _.
+      apply Hrec.
+    Qed.
+
+    Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
+      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+        (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
+        CExt (sexec_cfg_addr fuel trans tbl exits apc anp).
+    Proof.
+      induction fuel as [|n IH]; intros w trans tbl exits apc anp;
+        cbn [sexec_cfg_addr].
+      - apply cext_error.
+      - apply cext_angelic_binary.
+        + destruct (is_exit exits apc); [apply cext_pure | apply cext_error].
+        + destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
+          apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.
+          apply cext_bind; [apply cext_drop_dead|]. intros w1 th1 _.
+          apply cext_step_after_drop. intros w' trans' tbl' exits' apc' anp'.
+          apply IH.
+    Qed.
+
     (* sexec_triple_addr / scfg_verification_condition: apply     *)
     (* symbolic execution to verify a Hoare triple for a program.  The     *)
     (* precondition can mention the address a where the program is loaded; *)
