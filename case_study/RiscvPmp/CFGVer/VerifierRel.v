@@ -159,6 +159,22 @@ Section CFGVerificationDerived.
       Monotonic (MHeapSpec eq) cchunk_gc.
     Proof. firstorder. Qed.
 
+    (* Concrete mirror of the dead-logical-variable drop.  There are no logical
+       variables concretely, so it is the IDENTITY — but it must exist as a
+       BIND, because refine_bind pairs a symbolic bind with a concrete one and
+       drop_dead is bound on the symbolic side.  Costs nothing in the term:
+       `bind (pure tt) k` is `k tt` definitionally (cdrop_binds below). *)
+    Definition cdrop_dead : CHeapSpec unit :=
+      fun POST h => POST tt h.
+
+    #[export] Instance mono_cdrop_dead :
+      Monotonic (MHeapSpec eq) cdrop_dead.
+    Proof. firstorder. Qed.
+
+    Lemma cdrop_binds {A} (k : CHeapSpec A) (Φ : A -> SCHeap -> Prop) (h : SCHeap) :
+      (_ <- cdrop_dead ;; k) Φ h = k Φ h.
+    Proof. reflexivity. Qed.
+
     (* The GC bind inserted into cexec_cfg_addr's step rewrites the heap and never inspects
        the postcondition, so the equation holds definitionally. *)
     Lemma cgc_binds_heap {A} (k : CHeapSpec A) (Φ : A -> SCHeap -> Prop) (h : SCHeap) :
@@ -259,6 +275,7 @@ Section CFGVerificationDerived.
                    | None    => error
                    | Some ai =>
                        _ <- cchunk_gc ;;
+                       _ <- cdrop_dead ;;
                        _ <- cexec_ghosts (ai_ghost_before ai) ;;
                        apc' <- cexec_instruction (ai_instr ai) apc anp
                                  (ty.SyncVal (words v)) ;;

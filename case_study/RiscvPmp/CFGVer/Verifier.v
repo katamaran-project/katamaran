@@ -806,6 +806,24 @@ Section CFGVerificationDerived.
             end
       end.
 
+    (* The A/B knob for the drop, and DELIBERATELY NOT A BOOLEAN FLAG.
+       PLAN-chunk-gc.md §2 rejected a flag in this exact code for reasons that
+       apply verbatim here — chiefly that flag SKEW is an established failure
+       mode (a port left Adequacy.v at `false` while Contracts.v emitted `true`,
+       so the fast VC could not reach the adequacy chain at all).
+
+       Fuel is a better knob than a bool on every axis: `drop_dead 0` IS
+       `SHeapSpec.pure tt`, which binds at acc_refl and collapses definitionally
+       (the ghost_binds_nil precedent), so 0 gives a BYTE-IDENTICAL tree; there
+       is ONE code path rather than two, so the refinement is proved once
+       instead of per-branch; and being a single Definition with no threading,
+       it cannot skew. A/B is two builds, which is what §2 asks for anyway.
+
+       Kept at 0 until the refinement (Phase 5) is re-paired. rexec_cfg_addr
+       must handle `drop_dead` for an ARBITRARY fuel, never by reducing this
+       constant, or flipping it later would reopen the proof. *)
+    Definition drop_fuel : nat := 0.
+
     (* `trans` is THE ACCUMULATED TRANSLATION: the contract context's variables
        as terms over the CURRENT world, i.e. `persist δ1 …` from
        sexec_triple_addr below.  It is threaded and persisted exactly like
@@ -846,16 +864,27 @@ Section CFGVerificationDerived.
                       program and ghost_binds_nil shows that contributes
                       nothing to the term. *)
                    ⟨ θ0 ⟩ _    <- chunk_gc ;;
+                   (* Drop dead logical variables AFTER chunk_gc, so the check
+                      sees the post-GC heap — the leaked encodes_instr chunks
+                      the GC removes are exactly what used to keep per-trip
+                      variables alive in the heap root.  Placed inside this
+                      branch rather than before the `match fuel`, so `emsg`
+                      stays at world w and only the persist chains lengthen. *)
+                   ⟨ θd ⟩ _    <- drop_dead drop_fuel
+                                    (persist (A := Sub Σ0) trans θ0)
+                                    (persist_itableW θ0 tbl)
+                                    (persist_etable  θ0 exits)
+                                    (persist__term apc θ0) (persist__term anp θ0) ;;
                    ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
                    ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
-                                    (persist__term apc (θ0 ∘ θ1))
-                                    (persist__term anp (θ0 ∘ θ1))
-                                    (persist__term wd  (θ0 ∘ θ1)) ;;
+                                    (persist__term apc (θ0 ∘ θd ∘ θ1))
+                                    (persist__term anp (θ0 ∘ θd ∘ θ1))
+                                    (persist__term wd  (θ0 ∘ θd ∘ θ1)) ;;
                    ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
                    sexec_cfg_addr n'
-                     (persist (A := Sub Σ0) trans (θ0 ∘ θ1 ∘ θ2 ∘ θ3))
-                     (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl)
-                     (persist_etable  (θ0 ∘ θ1 ∘ θ2 ∘ θ3) exits)
+                     (persist (A := Sub Σ0) trans (θ0 ∘ θd ∘ θ1 ∘ θ2 ∘ θ3))
+                     (persist_itableW (θ0 ∘ θd ∘ θ1 ∘ θ2 ∘ θ3) tbl)
+                     (persist_etable  (θ0 ∘ θd ∘ θ1 ∘ θ2 ∘ θ3) exits)
                      (persist__term apc' θ3) (persist__term apc' θ3)
                end)
         end.
