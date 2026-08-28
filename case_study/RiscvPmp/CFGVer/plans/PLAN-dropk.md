@@ -1360,16 +1360,20 @@ Section DropRefineProbe.
     Context {A : LCtx -> Type} {SubstA : Subst A} {SubstLawsA : SubstLaws A}
             {OccA : OccursCheck A} {OccLawsA : OccursCheckLaws A}.
 
-    Definition Factors {w : World} (a : A (wctx w))
-        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2) : Prop :=
-      exists g : forall w2 : World, A (wctx w2) -> Unit w2 -> SHeap w2 -> 𝕊 w2,
+    (* Generic in the VALUE type V: rdrop_dead uses it at Unit (drop_dead returns
+       nothing), but sexec_cfg_addr's own ambient continuation carries an
+       STerm ty_xlenbits, and that is the Factors the drop's premise is derived
+       from.  Nothing in the three lemmas below inspects V. *)
+    Definition Factors {V : TYPE} {w : World} (a : A (wctx w))
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) : Prop :=
+      exists g : forall w2 : World, A (wctx w2) -> V w2 -> SHeap w2 -> 𝕊 w2,
         forall (w2 : World) (om : Acc w w2), sPhi w2 om = g w2 (persist (A := A) a om).
 
     (* CLOSED: and note the new carrier is `persist a om`, which is EXACTLY
        what drop_dead already passes to its recursive call.  That is why the
        executor threads the carrier at all. *)
-    Lemma factors_four {w : World} (a : A (wctx w))
-        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+    Lemma factors_four {V : TYPE} {w : World} (a : A (wctx w))
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2)
         {w1 : World} (om : Acc w w1) :
       Factors a sPhi -> Factors (persist (A := A) a om) (four sPhi om).
     Proof.
@@ -1381,12 +1385,12 @@ Section DropRefineProbe.
        witness, which is the whole gap Phase 0's Hindep had to bridge.  The
        x-freeness premise is `occurs_check xIn a = Some a'` -- precisely what
        var_dead computes. *)
-    Lemma factors_witness_indep {w : World} {x : LVar} {σ : Ty}
+    Lemma factors_witness_indep {V : TYPE} {w : World} {x : LVar} {σ : Ty}
         {xIn : (x∷σ ∈ w)%katamaran} {pc' : PathCondition (wctx w - x∷σ)}
         (Hpc : occurs_check xIn (wco w) = Some pc')
         (a : A (wctx w)) (a' : A (wctx w - x∷σ))
         (Ha : occurs_check xIn a = Some a')
-        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2)
         (Hfac : Factors a sPhi)
         (t1 t2 : Term (wctx w - x∷σ) σ) (w2 : World)
         (om2 : Acc (@wdrop w x σ xIn) w2) :
@@ -1424,11 +1428,11 @@ Section DropRefineProbe.
       now rewrite !subst_shift_single.
     Qed.
 
-    Lemma factors_witness_indep' {w : World} {x : LVar} {σ : Ty}
+    Lemma factors_witness_indep' {V : TYPE} {w : World} {x : LVar} {σ : Ty}
         {xIn : (x∷σ ∈ w)%katamaran} {pc' : PathCondition (wctx w - x∷σ)}
         (Hpc : occurs_check xIn (wco w) = Some pc')
         (a : A (wctx w)) (Hbl : WitnessBlind xIn a)
-        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2)
         (Hfac : Factors a sPhi)
         (t1 t2 : Term (wctx w - x∷σ) σ) (w2 : World)
         (om2 : Acc (@wdrop w x σ xIn) w2) :
@@ -1485,25 +1489,34 @@ Section DropRefineProbe.
     exact (wb_of_ocok xIn v Hb t1 t2).
   Qed.
 
+  (* SIX components, not five.  `wd` (the instruction word out of lookup_instr)
+     is captured by the drop's continuation -- step_after_drop persists it by
+     theta_d like everything else -- so the Factors carrier must cover it or the
+     witness does not exist.  It costs nothing operationally: var_dead's new
+     conjunct is implied by itableW_free, since wd IS one of the table's words. *)
   Definition dcarrier (Sg0 : LCtx) : LCtx -> Type :=
     fun Sg => (Sub Sg0 Sg *
                list (Term Sg ty_xlenbits * Term Sg ty_word * AnnotInstr) *
                list (Term Sg ty_xlenbits) *
                Term Sg ty_xlenbits *
-               Term Sg ty_xlenbits)%type.
+               Term Sg ty_xlenbits *
+               Term Sg ty_word)%type.
 
   Definition dbundle {Sg0 : LCtx} {w : World}
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-      (apc anp : Term (wctx w) ty_xlenbits) : dcarrier Sg0 (wctx w) :=
-    (trans, tbl, exits, apc, anp).
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+      : dcarrier Sg0 (wctx w) :=
+    (trans, tbl, exits, apc, anp, wd).
 
   Lemma wb_bundle {Sg0 : LCtx} {w : World} {x σ} (xIn : (x∷σ ∈ w)%katamaran)
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-      (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w)) :
-    var_dead xIn trans tbl exits apc anp h = true ->
-    @WitnessBlind (dcarrier Sg0) _ w x σ xIn (dbundle trans tbl exits apc anp).
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+      (h : SHeap (wctx w)) :
+    var_dead xIn trans tbl exits apc anp wd h = true ->
+    @WitnessBlind (dcarrier Sg0) _ w x σ xIn (dbundle trans tbl exits apc anp wd).
   Proof.
     unfold var_dead. intros H t1 t2.
+    apply Bool.andb_true_iff in H as [H Hwd].
     apply Bool.andb_true_iff in H as [H Hex].
     apply Bool.andb_true_iff in H as [H Htbl].
     apply Bool.andb_true_iff in H as [H Hanp].
@@ -1511,12 +1524,13 @@ Section DropRefineProbe.
     apply Bool.andb_true_iff in H as [H Htr].
     apply Bool.andb_true_iff in H as [Hpc Hh].
     unfold dbundle. cbn.
-    f_equal. f_equal. f_equal. f_equal.
+    f_equal. f_equal. f_equal. f_equal. f_equal.
     - exact (wb_of_ocok xIn trans Htr t1 t2).
     - exact (wb_itableW xIn tbl Htbl t1 t2).
     - exact (wb_etable xIn exits Hex t1 t2).
     - exact (wb_of_ocok xIn apc Hapc t1 t2).
     - exact (wb_of_ocok xIn anp Hanp t1 t2).
+    - exact (wb_of_ocok xIn wd Hwd t1 t2).
   Qed.
 
   (* §4bis's flagged bridges.  destruct the ACCESSIBILITY first: SubstList is a
@@ -1550,10 +1564,11 @@ Section DropRefineProbe.
      right-hand side is literally what drop_dead passes to its recursive call. *)
   Lemma dbundle_persist {Sg0 : LCtx} {w1 w2 : World} (om : Acc w1 w2)
       (trans : Sub Sg0 w1) (tbl : SInstrTableW w1) (exits : SExitTable w1)
-      (apc anp : Term (wctx w1) ty_xlenbits) :
-    persist (A := dcarrier Sg0) (dbundle trans tbl exits apc anp) om
+      (apc anp : Term (wctx w1) ty_xlenbits) (wd : Term (wctx w1) ty_word) :
+    persist (A := dcarrier Sg0) (dbundle trans tbl exits apc anp wd) om
     = dbundle (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
-        (persist_etable om exits) (persist__term apc om) (persist__term anp om).
+        (persist_etable om exits) (persist__term apc om) (persist__term anp om)
+        (persist__term wd om).
   Proof.
     unfold dbundle, dcarrier.
     rewrite zz_persist_itableW_subst, zz_persist_etable_subst.
@@ -1574,14 +1589,14 @@ Section DropRefineProbe.
 
   Lemma rdrop_dead_base {Sg0 : LCtx} : forall (w : World)
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-      (apc anp : Term (wctx w) ty_xlenbits)
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
       (cPhi : unit -> SCHeap -> Prop)
       (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
       (ch : SCHeap) (sh : SHeap (wctx w))
       (iota : Valuation w) (Hpc : instprop (wco w) iota),
       ℛ⟦RBox (RImpl RUnit (RImpl RHeap LogicalSoundness.RProp))⟧ cPhi sPhi iota ->
       ℛ⟦RHeap⟧ ch sh iota ->
-      LogicalSoundness.psafe (drop_dead 0 trans tbl exits apc anp sPhi sh) iota ->
+      LogicalSoundness.psafe (drop_dead 0 trans tbl exits apc anp wd sPhi sh) iota ->
       cPhi tt ch.
   Proof.
     intros. cbn in *.
@@ -1605,17 +1620,17 @@ Section DropRefineProbe.
      the destruct's equation no longer matches syntactically. *)
   Lemma find_dead_sound {Sg0 : LCtx} {w : World}
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-      (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w))
-      (c : drop_candidate w) :
-    find_dead trans tbl exits apc anp h = Some c ->
-    var_dead (projT1 (projT2 c)) trans tbl exits apc anp h = true.
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+      (h : SHeap (wctx w)) (c : drop_candidate w) :
+    find_dead trans tbl exits apc anp wd h = Some c ->
+    var_dead (projT1 (projT2 c)) trans tbl exits apc anp wd h = true.
   Proof.
     unfold find_dead.
     generalize (all_ins (wctx w)) as l. intros l.
     revert c. induction l as [|p l' IH]; intros c; cbn [List.fold_right]; [discriminate|].
     destruct (List.fold_right _ None l') as [c'|] eqn:E.
     - exact (IH c).
-    - destruct (var_dead (projT2 p) trans tbl exits apc anp h) eqn:Ev; [|discriminate].
+    - destruct (var_dead (projT2 p) trans tbl exits apc anp wd h) eqn:Ev; [|discriminate].
       destruct (ty.inhabit (type (projT1 p))) as [v|]; [|discriminate].
       intros Hc. inversion Hc. cbn. exact Ev.
   Qed.
@@ -1760,24 +1775,24 @@ Section DropRefineProbe.
          passes to its recursive call.  That is why drop_dead threads one. *)
   Lemma rdrop_dead {Sg0 : LCtx} (fuel : nat) : forall (w : World)
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-      (apc anp : Term (wctx w) ty_xlenbits)
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
       (cPhi : unit -> SCHeap -> Prop)
       (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
       (ch : SCHeap) (sh : SHeap (wctx w))
-      (Hfac : Factors (dbundle trans tbl exits apc anp) sPhi)
+      (Hfac : Factors (dbundle trans tbl exits apc anp wd) sPhi)
       (iota : Valuation w) (Hpc : instprop (wco w) iota),
       ℛ⟦RBox (RImpl RUnit (RImpl RHeap LogicalSoundness.RProp))⟧ cPhi sPhi iota ->
       ℛ⟦RHeap⟧ ch sh iota ->
-      LogicalSoundness.psafe (drop_dead fuel trans tbl exits apc anp sPhi sh) iota ->
+      LogicalSoundness.psafe (drop_dead fuel trans tbl exits apc anp wd sPhi sh) iota ->
       cPhi tt ch.
   Proof.
     induction fuel as [|n IH];
-      intros w trans tbl exits apc anp cPhi sPhi ch sh Hfac iota Hpc HB Hheap Hsafe.
+      intros w trans tbl exits apc anp wd cPhi sPhi ch sh Hfac iota Hpc HB Hheap Hsafe.
     - exact (rdrop_leaf Hpc HB Hheap Hsafe).
     - cbn [drop_dead] in Hsafe.
-      destruct (find_dead trans tbl exits apc anp sh) as [c|] eqn:Ec;
+      destruct (find_dead trans tbl exits apc anp wd sh) as [c|] eqn:Ec;
         [|exact (rdrop_leaf Hpc HB Hheap Hsafe)].
-      pose proof (find_dead_sound trans tbl exits apc anp sh Ec) as Hdead.
+      pose proof (find_dead_sound trans tbl exits apc anp wd sh Ec) as Hdead.
       destruct c as [b [bIn t0]]. cbn [projT1 projT2] in Hsafe, Ec, Hdead.
       destruct (occurs_check bIn sh) as [h'|] eqn:Eh;
         [|exact (rdrop_leaf Hpc HB Hheap Hsafe)].
@@ -1789,8 +1804,8 @@ Section DropRefineProbe.
       intros v e Hsafe.
       cbn [LogicalSoundness.psafe] in Hsafe.
       unfold forgetting, acc_forget in Hsafe. cbn [sub_acc] in Hsafe.
-      pose proof (wb_bundle bIn trans tbl exits apc anp sh Hdead) as Hbl.
-      refine (IH (@wdrop w (name b) (type b) bIn) _ _ _ _ _ cPhi
+      pose proof (wb_bundle bIn trans tbl exits apc anp wd sh Hdead) as Hbl.
+      refine (IH (@wdrop w (name b) (type b) bIn) _ _ _ _ _ _ cPhi
                 (four sPhi (acc_drop e t0)) ch h' _ (inst (sub_shift bIn) iota) _ _ _ Hsafe).
       + rewrite <- dbundle_persist. exact (factors_four _ Hfac).
       + rewrite (wco_wdrop e).
@@ -1806,3 +1821,86 @@ Section DropRefineProbe.
 
 End DropRefineProbe.
 ```
+
+---
+
+## §15 THE HOIST — `step_after_drop`, and why the carrier grew to six (2026-08-28)
+
+**Landed. `Verifier.v` builds; MvSwap, Jumps and Cmovznz4 rebuild clean, so the
+computed VC is unchanged.**
+
+### The problem it solves
+
+`SHeapSpec.bind m f Φ = m (fun w1 θ1 a1 => f w1 θ1 a1 (four Φ θ1))`. So the
+continuation `drop_dead` actually receives is
+
+```
+POSTd w1 θd _  =  ⟨the rest of the step at w1⟩ (four (four Φ θ0) θd)
+```
+
+`Factors` DOES hold for it — the persisted data is exactly the bundle, and
+`four (four Φ θ0) θd` factors through `persist bundle θd` given `Factors` for the
+outer `Φ` (rewrite the outer equation under the `fun w' ω' =>` binder, then
+`persist_trans`; **no funext**, which matters — funext appears nowhere in
+`theories/` and the gate admits only `pure_decode` and `mmioenv`).
+
+But `Factors` is an EXISTENTIAL, so discharging it means exhibiting `g`, and `g`
+is "the step body as a function of the bundle". Written inline, that witness would
+have to be a hand-copy of the chain living in `VerifierRel.v` and kept in sync
+with the executor by hand — the same staleness class as §14's trap 3.
+
+### The fix
+
+Hoist the post-drop chain into `step_after_drop` (`Verifier.v`), taking the bundle
+explicitly. The continuation then IS `step_after_drop rec ai (persist tr0 θd) …
+(four Φ' θd)`, so **`Factors`' witness is that definition** and there is nothing to
+keep in sync. Every argument at the call site is literally `persist ⟨the same
+thing drop_dead was given⟩ θd`; the `let tr0 := … in` block exists to make that
+visible rather than to save typing.
+
+Two facts worth recording:
+
+- **The guard checker accepts `step_after_drop (@sexec_cfg_addr Σ0 n') ai …`.**
+  The recursive call is applied to its decreasing argument, so passing the result
+  as a function argument is fine. This was the main risk of the hoist and it did
+  not materialise.
+- **The persist layers SPLIT.** `persist wd (θ0 ∘ θd ∘ θ1)` becomes
+  `persist (persist (persist wd θ0) θd) θ1` — propositionally equal by
+  `subst_sub_comp`, NOT definitionally. Irrelevant to the VC (`vm_compute`
+  normalises both identically, confirmed by the three examples), but it does
+  change the term shape `rexec_cfg_addr` sees.
+
+### Why the carrier is SIX components, not five
+
+`step_after_drop` also consumes `wd`, the instruction word out of `lookup_instr`,
+and persists it by `θd` like everything else. So `wd` is part of the continuation's
+ω-dependence and the `Factors` carrier must cover it — otherwise the witness simply
+does not exist. `dcarrier` / `dbundle` / `wb_bundle` / `dbundle_persist` /
+`var_dead` / `find_dead` / `drop_dead` / `rdrop_dead` all gained the column.
+
+**This is bookkeeping, not a soundness gap.** `var_dead`'s new conjunct
+`oc_ok bIn wd` is IMPLIED by `itableW_free bIn tbl`, since `wd` is one of that
+table's words — so no variable that used to be droppable stops being droppable.
+It is listed explicitly only so the carrier can be read straight off the
+conjunction.
+
+### Also done here
+
+`Factors` is now generic in the VALUE type `V`. `rdrop_dead` uses it at `Unit`
+(the drop returns nothing), but `sexec_cfg_addr`'s ambient continuation carries an
+`STerm ty_xlenbits`, and THAT is the `Factors` the drop's premise is derived from.
+None of `factors_four` / `factors_witness_indep'` inspects `V`.
+
+### What remains
+
+1. `factors_drop_cont` — from `Factors a Φ` derive `Factors a` for the drop's
+   continuation. With the hoist this is the rewrite-under-binder plus
+   `persist_trans` described above; the witness is `step_after_drop` itself.
+2. Restate `rexec_cfg_addr` to carry the `Factors` premise. **This is the
+   remaining unknown**: its conclusion is currently `ℛ⟦… -> RHeapSpec (RVal …)⟧`,
+   which universally quantifies the continuation, so the premise cannot be added
+   without changing that shape — and `rsolve`'s instance search keys on it.
+3. Fix the ω-numbering in `rexec_cfg_addr` (the drop's bind added a hop; the
+   current failure is `line 808: The variable ω2 was not found`, i.e. purely the
+   shift, nothing structural).
+4. Discharge at `rexec_triple_addr`, carrier `δ1`. Then Phase 6, Phase 7.

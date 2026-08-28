@@ -733,14 +733,20 @@ Section CFGVerificationDerived.
     Definition var_dead {Σ0 : LCtx} {w : World} {b}
         (bIn : (b ∈ w)%katamaran)
         (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-        (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w)) : bool :=
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        (h : SHeap (wctx w)) : bool :=
       oc_ok (AT := PathCondition) bIn (wco w)
       && oc_ok (AT := SHeap) bIn h
       && oc_ok (AT := Sub Σ0) bIn trans
       && oc_ok (AT := STerm ty_xlenbits) bIn apc
       && oc_ok (AT := STerm ty_xlenbits) bIn anp
       && itableW_free bIn tbl
-      && etable_free bIn exits.
+      && etable_free bIn exits
+      (* `wd` is REDUNDANT-but-true: it is one of the table's word column, so
+         itableW_free above already implies it.  It is listed anyway because the
+         drop's continuation captures `wd` and so the Factors CARRIER must cover
+         it — and the carrier is read off this conjunction (PLAN-dropk.md §15). *)
+      && oc_ok (AT := STerm ty_word) bIn wd.
 
     (* The witness term is needed for the ACCESSIBILITY, not for the tree:
        calling the continuation at the smaller world needs a Sub with an entry
@@ -755,14 +761,15 @@ Section CFGVerificationDerived.
 
     Definition find_dead {Σ0 : LCtx} {w : World}
         (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-        (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w))
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        (h : SHeap (wctx w))
         : option (drop_candidate w) :=
       List.fold_right
         (fun p acc =>
            match acc with
            | Some _ => acc
            | None =>
-               if var_dead (projT2 p) trans tbl exits apc anp h
+               if var_dead (projT2 p) trans tbl exits apc anp wd h
                then match ty.inhabit (type (projT1 p)) with
                     | Some v => Some (existT (projT1 p)
                                         (existT (projT2 p)
@@ -781,12 +788,13 @@ Section CFGVerificationDerived.
        so the un-`@`-ed form silently shifts `name b` onto the witness slot. *)
     Fixpoint drop_dead (fuel : nat) {Σ0 : LCtx} {w : World}
         (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
-        (apc anp : Term (wctx w) ty_xlenbits) {struct fuel} : SHeapSpec Unit w :=
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        {struct fuel} : SHeapSpec Unit w :=
       match fuel with
       | O   => SHeapSpec.pure tt
       | S n =>
           fun POST h =>
-            match find_dead trans tbl exits apc anp h with
+            match find_dead trans tbl exits apc anp wd h with
             | None   => POST w acc_refl tt h
             | Some c =>
                 let b   := projT1 c in
@@ -811,6 +819,7 @@ Section CFGVerificationDerived.
                                 (persist (A := Sub Σ0) trans om)
                                 (persist_itableW om tbl) (persist_etable om exits)
                                 (persist__term apc om) (persist__term anp om)
+                                (persist__term wd om)
                                 (four POST om) h')
                      | None => fun _ => POST w acc_refl tt h
                      end) eq_refl
@@ -852,6 +861,40 @@ Section CFGVerificationDerived.
        `subst_itable ζ tbl` yet still present in δ3.  And it must be δ1, not ζ
        alone — δ1 = snoc ζ a2 with a2 the INITIAL pc, which the live `apc` no
        longer covers once the loop advances. *)
+    (* THE POST-DROP STEP BODY, HOISTED OUT OF sexec_cfg_addr.
+       It is a plain let-hoist — the same chain, in the same order, with the
+       persist layers split at the drop instead of accumulated across it — and it
+       exists for ONE reason, in the refinement proof rather than the executor:
+
+       `rdrop_dead` needs `Factors (dbundle …) sΦ`, i.e. that drop_dead's
+       continuation depends on the drop's accessibility ONLY through the persisted
+       bundle.  Written inline, that continuation is `fun w1 θd _ => ⟨the chain⟩`
+       and the witness `g` demanded by Factors would have to be a hand-copy of the
+       chain living in VerifierRel.v, kept in sync by hand forever.  Hoisted, the
+       continuation IS `step_after_drop rec ai (persist tr0 θd) … (four Φ' θd)`,
+       so `g` is this very definition and there is nothing to keep in sync.
+
+       Every argument at the call site below is literally `persist <the same thing
+       drop_dead was given> θd`.  That is not stylistic: it is what makes Factors'
+       witness definitional rather than a proof obligation. *)
+    Definition step_after_drop {Σ0 : LCtx}
+        (rec : forall w : World, Sub Σ0 w -> SInstrTableW w -> SExitTable w ->
+                 Term (wctx w) ty_xlenbits -> Term (wctx w) ty_xlenbits ->
+                 SHeapSpec (STerm ty_xlenbits) w)
+        (ai : AnnotInstr) :
+      ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+        STerm ty_xlenbits -> STerm ty_word -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w trans tbl exits apc anp wd =>
+        ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
+        ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
+                         (persist__term apc θ1) (persist__term anp θ1)
+                         (persist__term wd  θ1) ;;
+        ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
+        rec _ (persist (A := Sub Σ0) trans (θ1 ∘ θ2 ∘ θ3))
+              (persist_itableW (θ1 ∘ θ2 ∘ θ3) tbl)
+              (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
+              (persist__term apc' θ3) (persist__term apc' θ3).
+
     Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
@@ -882,22 +925,23 @@ Section CFGVerificationDerived.
                       variables alive in the heap root.  Placed inside this
                       branch rather than before the `match fuel`, so `emsg`
                       stays at world w and only the persist chains lengthen. *)
-                   ⟨ θd ⟩ _    <- drop_dead drop_fuel
-                                    (persist (A := Sub Σ0) trans θ0)
-                                    (persist_itableW θ0 tbl)
-                                    (persist_etable  θ0 exits)
-                                    (persist__term apc θ0) (persist__term anp θ0) ;;
-                   ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
-                   ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
-                                    (persist__term apc (θ0 ∘ θd ∘ θ1))
-                                    (persist__term anp (θ0 ∘ θd ∘ θ1))
-                                    (persist__term wd  (θ0 ∘ θd ∘ θ1)) ;;
-                   ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
-                   sexec_cfg_addr n'
-                     (persist (A := Sub Σ0) trans (θ0 ∘ θd ∘ θ1 ∘ θ2 ∘ θ3))
-                     (persist_itableW (θ0 ∘ θd ∘ θ1 ∘ θ2 ∘ θ3) tbl)
-                     (persist_etable  (θ0 ∘ θd ∘ θ1 ∘ θ2 ∘ θ3) exits)
-                     (persist__term apc' θ3) (persist__term apc' θ3)
+                   (* The bundle is named ONCE so that drop_dead's arguments and
+                      step_after_drop's are visibly the same objects, the latter
+                      persisted by θd.  Factors' witness reads straight off that. *)
+                   let tr0 := persist (A := Sub Σ0) trans θ0 in
+                   let tb0 := persist_itableW θ0 tbl in
+                   let ex0 := persist_etable  θ0 exits in
+                   let pc0 := persist__term apc θ0 in
+                   let np0 := persist__term anp θ0 in
+                   let wd0 := persist__term wd  θ0 in
+                   ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
+                   step_after_drop (@sexec_cfg_addr Σ0 n') ai
+                     (persist (A := Sub Σ0) tr0 θd)
+                     (persist_itableW θd tb0)
+                     (persist_etable  θd ex0)
+                     (persist__term pc0 θd)
+                     (persist__term np0 θd)
+                     (persist__term wd0 θd)
                end)
         end.
 
