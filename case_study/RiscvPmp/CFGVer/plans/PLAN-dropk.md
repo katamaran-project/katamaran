@@ -1258,11 +1258,30 @@ Phases 0, 1, 2, 3, and the `δ1` threading. `theories/` carries `dropk`,
   concrete bind in `cexec_cfg_addr`. **Does NOT build** — `rexec_cfg_addr` has
   not been re-paired.
 
-### The ONE open proof
+### `rdrop_dead` is CLOSED (2026-08-28) — `Qed`, axiom-clean
 
-`rdrop_dead`'s **step case**. Statement and base case are settled (§6). Every
-ingredient is proved: Phase 0's `zz_dropk_step` script, `factors_witness_indep'`,
-`wb_bundle`, `zz_heap_transport`, `factors_four`, `dbundle_persist`.
+The step case closed the same day §14 was written. `rdrop_dead` now holds at
+ARBITRARY fuel with `Factors (dbundle trans tbl exits apc anp) sΦ` as its single
+premise, and `Print Assumptions` says **Closed under the global context**. The
+whole probe file compiles green end to end (`coqc`, full mode, no `Admitted`).
+
+Five lemmas were added to get there, all `Qed` (verbatim in §14.1):
+
+- **`find_dead_sound`** — `find_dead` returns a bare `sigT` carrying no proof, so
+  `var_dead`'s verdict is recovered by induction over the fold. Needed because
+  `wb_bundle` consumes that verdict.
+- **`factors_box_drop`** — THE step case's real content: the box TRANSPORTS across
+  the drop. Phase 0 *consumed* the box at the drop; a fuel-indexed chain must hand
+  one down instead. Instantiate at the witness read off ι (fibre inhabited by
+  construction, so `assuming` cannot go vacuous), then slide to the tree's fixed
+  `t0` via `factors_witness_indep'`.
+- **`option_convoy`** — generic convoy elimination. A plain `destruct … eqn:` on
+  `occurs_check bIn (wco w)` abstracts the motive's LHS as well and `acc_drop Hpc0 t0`
+  stops typechecking. This lemma's `S` is a variable, so `destruct S` is legal.
+- **`wco_wdrop` / `zz_heap_transport` / `zz_wco_eq`** — the three transports.
+- **`rdrop_leaf`** — the leaf, stated at `sPhi w acc_refl tt sh` rather than
+  `drop_dead 0 …`. See §14.1's comment: routing the leaf through `rdrop_dead_base`
+  instead leaves SHELVED evars and `Qed` fails with no open goal shown.
 
 Then, in order: thread `Factors` through `rexec_cfg_addr`'s fuel induction →
 discharge once at `rexec_triple_addr` with carrier `δ1` → Phase 6 (absorb the new
@@ -1580,12 +1599,165 @@ Section DropRefineProbe.
     unfold SHeapSpec.pure, T in H1. exact H1.
   Qed.
 
-  (* THE REMAINING PIECE: the same statement at `fuel`, by induction.  The
-     drop case is Phase 0's script plus factors_witness_indep' (to move the
-     box's read-off witness to the tree's fixed one), wb_bundle (to get
-     WitnessBlind from var_dead), zz_heap_transport (for the heap), and
-     factors_four + dbundle_persist (to re-establish Factors at the
-     recursive call). *)
+  (* find_dead hands back a bare sigT with no proof attached, so var_dead's
+     verdict has to be recovered by an induction over the fold.  cbn [List.fold_right]
+     and NOT plain cbn: plain cbn normalises the LVar alias to string, after which
+     the destruct's equation no longer matches syntactically. *)
+  Lemma find_dead_sound {Sg0 : LCtx} {w : World}
+      (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+      (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w))
+      (c : drop_candidate w) :
+    find_dead trans tbl exits apc anp h = Some c ->
+    var_dead (projT1 (projT2 c)) trans tbl exits apc anp h = true.
+  Proof.
+    unfold find_dead.
+    generalize (all_ins (wctx w)) as l. intros l.
+    revert c. induction l as [|p l' IH]; intros c; cbn [List.fold_right]; [discriminate|].
+    destruct (List.fold_right _ None l') as [c'|] eqn:E.
+    - exact (IH c).
+    - destruct (var_dead (projT2 p) trans tbl exits apc anp h) eqn:Ev; [|discriminate].
+      destruct (ty.inhabit (type (projT1 p))) as [v|]; [|discriminate].
+      intros Hc. inversion Hc. cbn. exact Ev.
+  Qed.
+
+  (* BOX TRANSPORT ACROSS THE DROP -- the real content of rdrop_dead's step case.
+     Phase 0 CONSUMED the box at the drop; the fuel-indexed chain must instead
+     HAND ONE DOWN, so the box has to survive the world hop.
+
+     The move is Phase 0's zz_box_at_chosen composed with factors_witness_indep':
+     instantiate the box at `acc_trans (acc_drop t_iota) om2` with the witness READ
+     OFF iota (which makes the fibre inhabited by construction, so `assuming` does
+     not go vacuous), then slide from that witness to the tree's fixed t0.  The
+     slide is exactly what Factors + WitnessBlind buy. *)
+  Section BoxDrop.
+    Context {A : LCtx -> Type} {SubstA : Subst A} {SubstLawsA : SubstLaws A}.
+
+    Lemma factors_box_drop {w : World} {x : LVar} {σ : Ty}
+        {xIn : (x∷σ ∈ w)%katamaran} {pc' : PathCondition (wctx w - x∷σ)}
+        (Hpc : occurs_check xIn (wco w) = Some pc')
+        (a : A (wctx w)) (Hbl : WitnessBlind xIn a)
+        (cPhi : unit -> SCHeap -> Prop)
+        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+        (Hfac : Factors a sPhi)
+        (t0 : Term (wctx w - x∷σ) σ)
+        (iota : Valuation w) (Hpci : instprop (wco w) iota) :
+      ℛ⟦RBox (RImpl RUnit (RImpl RHeap LogicalSoundness.RProp))⟧ cPhi sPhi iota ->
+      ℛ⟦RBox (RImpl RUnit (RImpl RHeap LogicalSoundness.RProp))⟧ cPhi
+        (four sPhi (@acc_drop w x σ xIn pc' Hpc t0)) (inst (sub_shift xIn) iota).
+    Proof.
+      intros HB. unfold RSat, RBox in *. cbn in *.
+      unfold unconditionally, assuming in *.
+      intros w2 om2 iota2 Hfib Hpc2.
+      specialize (HB w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc
+                                      (term_relval σ (env.lookup iota xIn))) om2) iota2).
+      unfold four.
+      rewrite (factors_witness_indep' Hpc Hbl Hfac t0
+                 (term_relval σ (env.lookup iota xIn)) om2).
+      apply HB; [|exact Hpc2].
+      (* the fibre over iota is inhabited BY CONSTRUCTION: the witness was read off
+         iota, so sub_single puts back exactly what sub_shift removed. *)
+      cbn. rewrite sub_acc_trans. rewrite inst_subst. rewrite Hfib.
+      cbn [sub_acc]. apply inst_sub_single_shift. reflexivity.
+    Qed.
+  End BoxDrop.
+
+  (* CONVOY ELIMINATION.  drop_dead's inner match is a convoy -- it scrutinises
+     `occurs_check bIn (wco w)` while its motive mentions that same term on the
+     LEFT of the equation -- so a plain `destruct ... eqn:` abstracts the motive's
+     LHS too and the branch's `acc_drop Hpc0 t0` stops typechecking (`o0 = Some pc'`
+     is not `occurs_check bIn (wco w) = Some pc'`).  Abstracting the SCRUTINEE and
+     the equation's RHS only is what this lemma packages: its `S` is a variable, so
+     `destruct S` is legal, and the two branch obligations arrive with the equation
+     intact. *)
+  Lemma option_convoy {X : Type} {T : Type} {S : option X} {P : T -> Prop}
+      (f : forall v : X, S = Some v -> T) (g : S = None -> T)
+      (Hf : forall v (e : S = Some v), P (f v e))
+      (Hg : forall e : S = None, P (g e)) :
+    P (match S as o return S = o -> T with
+       | Some v => f v
+       | None   => g
+       end eq_refl).
+  Proof.
+    revert f g Hf Hg. generalize (@eq_refl _ S).
+    destruct S as [v|]; intros e f g Hf Hg; [apply Hf | apply Hg].
+  Qed.
+
+  (* Transport across the projection: path condition, dropped world's pc, heap. *)
+  Lemma zz_wco_eq {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
+      {pc' : PathCondition (wctx w - x∷σ)}
+      (Hoc : occurs_check xIn (wco w) = Some pc') :
+    wco w = subst pc' (sub_shift xIn).
+  Proof.
+    pose proof (occurs_check_sound xIn (wco w)) as HH.
+    unfold OccursCheckSoundPoint in HH. rewrite Hoc in HH. now inversion HH.
+  Qed.
+
+  (* `cbn [wco]`, NOT `cbn`: plain cbn normalises the LVar alias to string and
+     then `rewrite Hoc` finds no subterm -- the same trap as find_dead_sound. *)
+  Lemma wco_wdrop {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
+      {pc' : PathCondition (wctx w - x∷σ)}
+      (Hoc : occurs_check xIn (wco w) = Some pc') :
+    wco (@wdrop w x σ xIn) = pc'.
+  Proof. unfold wdrop. cbn [wco]. now rewrite Hoc. Qed.
+
+  Lemma zz_heap_transport {w : World} {x σ} {xIn : (x∷σ ∈ w)%katamaran}
+      (sh : SHeap (wctx w)) (h' : SHeap (wctx w - x∷σ))
+      (Hh : occurs_check xIn sh = Some h') (iota : Valuation w) :
+    inst h' (inst (sub_shift xIn) iota) = inst sh iota.
+  Proof.
+    pose proof (occurs_check_sound (T := SHeap) xIn sh) as HH.
+    unfold OccursCheckSoundPoint in HH. rewrite Hh in HH. inversion HH; subst.
+    now rewrite inst_subst.
+  Qed.
+
+  (* THE LEAF.  Same content as rdrop_dead_base but stated at `sPhi w acc_refl tt sh`
+     instead of `drop_dead 0 ...`, which matters: rdrop_dead reaches this leaf at
+     FOUR places (fuel = 0, and the three degenerate branches of a step), and at
+     three of them `trans`/`tbl`/`exits`/`apc`/`anp` are NOT determined by anything
+     in the conclusion.  Going through rdrop_dead_base there leaves them as SHELVED
+     evars and `Qed` fails with "the proof term is not complete" -- with no open goal
+     shown.  Dropping the executor arguments from the leaf's statement removes the
+     underdetermination at the source. *)
+  Lemma rdrop_leaf {w : World}
+      (cPhi : unit -> SCHeap -> Prop)
+      (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+      (ch : SCHeap) (sh : SHeap (wctx w))
+      (iota : Valuation w) (Hpc : instprop (wco w) iota) :
+    ℛ⟦RBox (RImpl RUnit (RImpl RHeap LogicalSoundness.RProp))⟧ cPhi sPhi iota ->
+    ℛ⟦RHeap⟧ ch sh iota ->
+    LogicalSoundness.psafe (sPhi w acc_refl tt sh) iota ->
+    cPhi tt ch.
+  Proof.
+    intros H H0 H1. cbn in *.
+    unfold RBox, RImpl in H. cbn in H.
+    unfold unconditionally, assuming in H.
+    specialize (H w acc_refl iota (inst_sub_id iota) Hpc).
+    cbn in H, H1.
+    specialize (H tt tt).
+    rewrite wand_unfold in H.
+    specialize (H eq_refl ch sh).
+    rewrite wand_unfold in H.
+    specialize (H H0).
+    unfold LogicalSoundness.RProp in H. cbn in H.
+    rewrite wand_unfold in H. apply H. exact H1.
+  Qed.
+
+  (* rdrop_dead: the same statement at arbitrary `fuel`, by induction, with
+     `Factors` as the SINGLE premise.  This is Phase 0's zz_dropk_step generalised
+     to the fuel-indexed chain.
+
+     Four branches.  Three are leaves (fuel = 0; no dead variable found; the heap's
+     own occurs-check fails) and go straight to rdrop_leaf.  The fourth is the drop:
+
+       - option_convoy splits the convoy and hands back `e : occurs_check bIn (wco w)
+         = Some v`, the equation acc_drop needs;
+       - psafe of a dropk node IS `forgetting acc_forget`, so Hsafe arrives at the
+         valuation `inst (sub_shift bIn) iota` -- exactly the IH's;
+       - find_dead_sound + wb_bundle turn find_dead's verdict into WitnessBlind,
+         which is what makes the box survive the hop (factors_box_drop);
+       - factors_four + dbundle_persist re-establish Factors at the smaller world,
+         and the carrier they produce is literally the tuple drop_dead already
+         passes to its recursive call.  That is why drop_dead threads one. *)
   Lemma rdrop_dead {Sg0 : LCtx} (fuel : nat) : forall (w : World)
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
       (apc anp : Term (wctx w) ty_xlenbits)
@@ -1598,8 +1770,39 @@ Section DropRefineProbe.
       ℛ⟦RHeap⟧ ch sh iota ->
       LogicalSoundness.psafe (drop_dead fuel trans tbl exits apc anp sPhi sh) iota ->
       cPhi tt ch.
-  Proof. Admitted.   (* probe only -- gitignored, outside _CoqProject, gate-excluded *)
+  Proof.
+    induction fuel as [|n IH];
+      intros w trans tbl exits apc anp cPhi sPhi ch sh Hfac iota Hpc HB Hheap Hsafe.
+    - exact (rdrop_leaf Hpc HB Hheap Hsafe).
+    - cbn [drop_dead] in Hsafe.
+      destruct (find_dead trans tbl exits apc anp sh) as [c|] eqn:Ec;
+        [|exact (rdrop_leaf Hpc HB Hheap Hsafe)].
+      pose proof (find_dead_sound trans tbl exits apc anp sh Ec) as Hdead.
+      destruct c as [b [bIn t0]]. cbn [projT1 projT2] in Hsafe, Ec, Hdead.
+      destruct (occurs_check bIn sh) as [h'|] eqn:Eh;
+        [|exact (rdrop_leaf Hpc HB Hheap Hsafe)].
+      revert Hsafe.
+      (* %type: logicalrelation.notations overloads `->` as RImpl, so an unannotated
+         motive is parsed in Rel scope and fails with "expected type Rel ?AT ?A". *)
+      apply (option_convoy (P := fun s => (LogicalSoundness.psafe s iota -> cPhi tt ch)%type)).
+      2: { intros _ Hsafe. exact (rdrop_leaf Hpc HB Hheap Hsafe). }
+      intros v e Hsafe.
+      cbn [LogicalSoundness.psafe] in Hsafe.
+      unfold forgetting, acc_forget in Hsafe. cbn [sub_acc] in Hsafe.
+      pose proof (wb_bundle bIn trans tbl exits apc anp sh Hdead) as Hbl.
+      refine (IH (@wdrop w (name b) (type b) bIn) _ _ _ _ _ cPhi
+                (four sPhi (acc_drop e t0)) ch h' _ (inst (sub_shift bIn) iota) _ _ _ Hsafe).
+      + rewrite <- dbundle_persist. exact (factors_four _ Hfac).
+      + rewrite (wco_wdrop e).
+        apply (instprop_subst (sub_shift bIn) iota v).
+        (* NOT `rewrite <- (zz_wco_eq e)`: the goal's `sub_shift bIn` is indexed by
+           `b`, the lemma's by `MkB (name b) (type b)` -- convertible, not syntactically
+           equal.  Rewriting in a COPY of Hpc, where `wco w` matches on the nose, and
+           closing by conversion sidesteps it. *)
+        pose proof Hpc as Hp. rewrite (zz_wco_eq e) in Hp. exact Hp.
+      + exact (factors_box_drop e Hbl Hfac t0 Hpc HB).
+      + exact (eq_trans (zz_heap_transport sh Eh iota) Hheap).
+  Qed.
 
 End DropRefineProbe.
-
 ```
