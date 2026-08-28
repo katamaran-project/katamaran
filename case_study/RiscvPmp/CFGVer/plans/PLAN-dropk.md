@@ -788,6 +788,38 @@ and A/B is one recompile apart.
 > `VerifierRel.v` built clean first time after those — no 300 s hang, no `rsolve`
 > blowup.
 
+> **PHASE 5 STATE, 2026-08-28. GATE IS RED; this is the open work.**
+>
+> Done and building: `acc_drop` (`Worlds.v`), `drop_dead` retargeted to `wdrop`
+> via a convoy match, `cdrop_dead` + `mono_cdrop_dead` + `cdrop_binds` and the
+> concrete bind in `cexec_cfg_addr`. `Verifier.vo` compiles.
+>
+> **The remaining obligation is `rdrop_dead`, and it needs `ZZAccIndep`.**
+> `RHeapSpec RA` is literally `□ᵣ(RA -> RHeap -> ℙ) -> RHeap -> ℙ`, so the
+> unfolded goal is Phase 0's `zz_dropk_step` line for line — **including its
+> `Hindep` premise**, which is not optional:
+>
+> To use the box at the smaller world the fibre of `om` over ι must be
+> inhabited, i.e. `inst t0 (ι∖x) = ι(x)`. For the executor's FIXED `t0` and
+> arbitrary ι that is FALSE. Phase 0's way through is to read the witness off ι
+> (legal — the box quantifies over ω and is instantiated after ι is in hand) and
+> then bridge to the tree's `t0` with `ZZAccIndep`. There is no way to avoid the
+> premise; it is the same quantifier-order gap that killed the `assume_vareq`
+> design, and `dropk` survives it only because the witness is choosable at proof
+> time.
+>
+> So `rdrop_dead` must be stated WITH the independence premise, and
+> `rexec_cfg_addr` must thread it through its fuel induction — exactly §4's
+> "it becomes a hypothesis on `rexec_cfg_addr` discharged once at the entry
+> point". §4bis settled the discharge route: `sΦ`'s ω-dependence is persisting
+> x-free data, and `var_dead` occurs-checks precisely those roots
+> (`trans`/`tbl`/`exits`/`apc`/`anp`/heap/`wco`) — that is WHY it checks them.
+>
+> Also measured here: at `drop_fuel = 0` the bind does **not** collapse in the
+> proof (`drop_fuel` is a `Definition`; `rsolve` will not unfold it), so there is
+> no green intermediate checkpoint for the wiring. That is deliberate — it keeps
+> the proof general in fuel — but budget for it.
+
 **Phase 5 — concrete mirror, then re-pair the refinement.** `cexec_cfg_addr`
 gains `pure tt` (no logical variables concretely). `rexec_cfg_addr` re-paired
 using Phase 0's lemma. **Budget for trouble**: this file has a 300 s+ compile hang
