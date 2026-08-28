@@ -732,6 +732,32 @@ case: the step needs `tbl`, `exits`, `apc` and the translations, none of which a
 ghost annotation can see. Gate behind a flag so the old path stays byte-identical
 and A/B is one recompile apart.
 
+> **The δ1 THREADING half of Phase 4 is DONE, 2026-08-28, gate green.**
+> `sexec_cfg_addr` now takes `{Σ0} (trans : Sub Σ0 w)`, threaded and persisted
+> like `tbl`/`exits` and otherwise unused, so the VC is unchanged — confirmed by
+> the gate rebuilding 32 files with all 14 end theorems still axiom-clean.
+> `sexec_triple_addr` passes `persist δ1 θ2`; its own signature is unchanged.
+> `rexec_cfg_addr` takes `trans` as a fixed argument with **no relational
+> premise** (the concrete executor has no logical variables), so
+> **`cexec_cfg_addr` is UNTOUCHED** — that is what kept this cheap, and it also
+> means Phase 5's re-pairing does not inherit an extra relation to maintain.
+>
+> Three traps, one build cycle each:
+> - **`{w}` must be annotated `World`** once `trans` precedes the tables — `Sub`
+>   takes an `LCtx`, so an inferred `w` elaborates as `LCtx` and
+>   `SInstrTableW w` then fails.
+> - **`persist_itableW_trans`/`persist_etable_trans` COLLAPSE** nested persists
+>   into one composed accessibility; the generic `persist_trans` is stated in the
+>   OPPOSITE (decomposing) direction. So `tbl`/`exits` arrive collapsed and
+>   `trans` does not, and the association-normalising `assert` has nothing to
+>   match until you add `rewrite <- ?(persist_trans (A := Sub Σ0))`.
+> - **`persist x acc_refl` is DEFINITIONAL** (`persistent_subst` matches on the
+>   accessibility), so the final `acc_refl` case needs no rewrite — unlike
+>   `tbl`/`exits`, which need their `_refl` lemmas.
+>
+> `VerifierRel.v` built clean first time after those — no 300 s hang, no `rsolve`
+> blowup.
+
 **Phase 5 — concrete mirror, then re-pair the refinement.** `cexec_cfg_addr`
 gains `pure tt` (no logical variables concretely). `rexec_cfg_addr` re-paired
 using Phase 0's lemma. **Budget for trouble**: this file has a 300 s+ compile hang
