@@ -871,6 +871,75 @@ and A/B is one recompile apart.
 > `A` at their tuple. `var_dead` already occurs-checks each of them, which is
 > what makes step 3 go through.
 >
+> **The carrier needs only `Subst`/`SubstLaws`, NOT `OccursCheck`.**
+> `factors_witness_indep` only ever *uses* substitution-invariance, so state that
+> (`WitnessBlind`) rather than an occurs-check. This is what makes a bundled
+> carrier possible at all — the bundle has to cover `tbl`/`exits`, which
+> deliberately have no `OccursCheck` instance. `witness_blind_of_oc` recovers it
+> for any component that does have one, so componentwise checks feed the bundle.
+>
+> ### The scripts, verbatim
+>
+> **`Example/ZZDropRefineProbe.v` is GITIGNORED** (`.gitignore:33`,
+> `case_study/RiscvPmp/CFGVer/Example/ZZ*`), so nothing in it survives on its
+> own — these are recorded here for the same reason
+> `PLAN-lvar-drop-build.md` §2bis records its own. Section context:
+> `Context {A : LCtx -> Type} {SubstA : Subst A} {SubstLawsA : SubstLaws A}
+> {OccA : OccursCheck A} {OccLawsA : OccursCheckLaws A}.`
+> (`OccA`/`OccLawsA` are needed only by `witness_blind_of_oc`.)
+>
+> ```coq
+> Definition Factors {w : World} (a : A (wctx w))
+>     (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2) : Prop :=
+>   exists g : forall w2 : World, A (wctx w2) -> Unit w2 -> SHeap w2 -> 𝕊 w2,
+>     forall (w2 : World) (om : Acc w w2), sPhi w2 om = g w2 (persist (A := A) a om).
+>
+> Lemma factors_four {w : World} (a : A (wctx w))
+>     (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+>     {w1 : World} (om : Acc w w1) :
+>   Factors a sPhi -> Factors (persist (A := A) a om) (four sPhi om).
+> Proof.
+>   intros [g Hg]. exists g. intros w2 om2.
+>   unfold four. rewrite Hg. now rewrite persist_trans.
+> Qed.
+>
+> Definition WitnessBlind {w : World} {x : LVar} {σ : Ty}
+>     (xIn : (x∷σ ∈ w)%katamaran) (a : A (wctx w)) : Prop :=
+>   forall t1 t2 : Term (wctx w - x∷σ) σ,
+>     subst a (sub_single xIn t1) = subst a (sub_single xIn t2).
+>
+> Lemma witness_blind_of_oc {w : World} {x : LVar} {σ : Ty}
+>     {xIn : (x∷σ ∈ w)%katamaran} (a : A (wctx w)) (a' : A (wctx w - x∷σ))
+>     (Ha : occurs_check xIn a = Some a') : WitnessBlind xIn a.
+> Proof.
+>   intros t1 t2.
+>   pose proof (occurs_check_sound xIn a) as HH.
+>   unfold OccursCheckSoundPoint in HH. rewrite Ha in HH.
+>   inversion HH as [? Heq|]. rewrite Heq.
+>   now rewrite !subst_shift_single.
+> Qed.
+>
+> Lemma factors_witness_indep' {w : World} {x : LVar} {σ : Ty}
+>     {xIn : (x∷σ ∈ w)%katamaran} {pc' : PathCondition (wctx w - x∷σ)}
+>     (Hpc : occurs_check xIn (wco w) = Some pc')
+>     (a : A (wctx w)) (Hbl : WitnessBlind xIn a)
+>     (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+>     (Hfac : Factors a sPhi)
+>     (t1 t2 : Term (wctx w - x∷σ) σ) (w2 : World)
+>     (om2 : Acc (@wdrop w x σ xIn) w2) :
+>   sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t1) om2)
+>   = sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t2) om2).
+> Proof.
+>   destruct Hfac as [g Hg]. rewrite !Hg. f_equal.
+>   rewrite !persist_trans. f_equal.
+>   rewrite !persist_subst. cbn. apply Hbl.
+> Qed.
+> ```
+>
+> Mechanics: the probe has **no `ModalNotations`**, so `⊒` is an "Undefined
+> token" — write `Acc w w2`. And `@acc_drop` / `@wdrop` need the `@`
+> (maximally-inserted `x`, the fifth instance of that trap).
+>
 > **Consequence for §11's risk register:** "`ZZAccIndep` not discharged for the
 > REAL `sΦ`" is not a moderate residual — it is the whole of Phase 5's
 > difficulty, and §4's "settled on paper" verdict covered the DISCHARGE ROUTE
