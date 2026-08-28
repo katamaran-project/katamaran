@@ -1949,51 +1949,63 @@ PExt m  :=  ∀ P₁ P₂, (∀ w' θ a,   P₁ w' θ a   = P₂ w' θ a)   → 
 CExt m  :=  ∀ P₁ P₂, (∀ w' θ a h, P₁ w' θ a h = P₂ w' θ a h) → ∀ h, m P₁ h = m P₂ h  (* SHeapSpec *)
 ```
 
-**Landed in `theories/Symbolic/Monads.v`, 26 lemmas, all `Qed`:**
+**`theories/Symbolic/Monads.v` IS COMPLETE — 57 lemmas, all `Qed`, build green
+through `Verifier.vo`.** Everything the drop's continuation can reach inside that
+file is covered:
 
-- `PExt` + `pext_` `pure`, `block`, `error`, `bind`, `angelic`, `demonic`,
-  `angelic_binary`, `demonic_binary`, `debug`, `assert_pathcondition`,
-  `assume_pathcondition`, `assert_formula`, `assume_formula`, `angelic_list'`,
+- `PExt` (19 + 4 pattern-match): `pure`, `block`, `error`, `bind`, `angelic`,
+  `demonic`, `angelic_ctx`, `demonic_ctx`, `angelic_binary`, `demonic_binary`,
+  `debug`, `assert_pathcondition`, `assume_pathcondition`, `assert_formula`,
+  `assume_formula`, `assertSecLeak`, `assumeSecLeak`, `angelic_list'`,
   `angelic_list`, `demonic_list'`, `demonic_list`, `angelic_finite`,
-  `demonic_finite`.
-- `CExt` + `cext_` `pure`, `error`, `bind`, `angelic_binary`, `demonic_binary`,
-  `debug`, `lift_purespec`.
+  `demonic_finite`, `demonic_pattern_match'`, `angelic_pattern_match'`,
+  `demonic_pattern_match`, `angelic_pattern_match`, `assert_eq_env`,
+  `assert_eq_nenv`, `assert_eq_chunk`, `produce_chunk`, `consume_chunk`,
+  `consume_chunk_angelic`, `read_register`, `write_register`.
+- `CExt`: `pure`, `error`, `bind`, `angelic_binary`, `demonic_binary`, `debug`,
+  `lift_purespec`, `angelic`, `demonic`, `angelic_ctx`, `demonic_ctx`,
+  `assert_formula`, `assume_formula`, `produce_chunk`, `consume_chunk`,
+  `consume_chunk_angelic`, `read_register`, `write_register`, `produce`,
+  `consume`, `call_contract`, `call_lemma`.
 
-Every one landed first or second try; the recursive ones (`angelic_list'` and
-friends) are four lines each — `induction`, then `apply pext_angelic_binary;
-[apply pext_pure | apply IH]`.
+**Deliberately NOT covered:** `replay_aux` / `replay` / `run`. They sit at the top
+of the VC pipeline, not inside the executor's continuation flow, so the drop never
+reaches them.
 
-Two findings from validating the shape:
+Findings from the build, all cheap to know and expensive to rediscover:
 
-- **Each instance is 1–5 lines.** `cext_bind` — the one that has to thread
-  through `four` — is five.
+- **Every instance is 1–5 lines**, and the recursive ones are four:
+  `induction`, then `apply pext_angelic_binary; [apply pext_pure | apply IH]`.
+  `cext_produce` and `cext_consume` are eight one-line bullets each.
 - **The solver-backed case is NOT the hard one.** `pext_assert_pathcondition`
-  looked like the risk and is five lines: the residual `fun msg' => …` binder
-  does not capture the continuation's occurrence, so a plain `rewrite HP` fires
-  under it.
-
-Measured on `produce`'s `Assertion` induction: after `induction asn; cbn;
-try (now rewrite HP)`, exactly **8 goals** remain, and every one is a combinator
-instance (`assume_formula`, `produce_chunk` ×2, `demonic_pattern_match`+bind,
-bind, `demonic_binary`, `demonic`+bind, `debug`). So the recursive definitions
-close by `typeclasses eauto` once the instance set exists — which is the argument
-that this is a grind rather than a research problem.
+  looked like the risk and is five lines: its residual `fun msg' => …` binder does
+  not capture the continuation's occurrence, so a plain `rewrite HP` fires under
+  it. That single fact is why the whole approach is cheap.
+- **These lemmas' `m1 m2` come out STRICT-IMPLICIT** (inferable from the `PExt`
+  premises), so `exact (pext_angelic_binary _ _ H1 H2 P1 P2 HP)` mis-slots and
+  blames the `PExt` proof for being a continuation. `revert P1 P2 HP; apply
+  pext_angelic_binary` is robust.
+- **`destruct (env.view E2)` must be done PER BRANCH**, not as one combined
+  `as [|E2 t2]`: once `Δ` is fixed by the induction the view type has a single
+  constructor, so the two-branch pattern is rejected for arity.
+- **`assert_eq_chunk` is `□`-valued with an IMPLICIT target world** — write
+  `assert_eq_chunk msg c1 c2 th1`, not `… c2 w1 th1`.
 
 ### What remains, in dependency order
 
-1. ~15 more `SHeapSpec` instances, ~25 more `SPureSpec` (pattern-match
-   `Equations`, `consume_chunk`'s heap fold, `angelic_list`, `assert_eq_env`).
-   **Register `PExt`/`CExt` as typeclasses first** so the inductions close with
-   `typeclasses eauto` instead of by hand.
-2. `produce` / `consume` (the 8 goals above).
-3. `SStoreSpec` instances, then `SStoreSpec.exec_aux` (a `Stm` induction, ~25
-   cases) and `sexec_call` (fuel induction) in
-   `theories/MicroSail/SymbolicExecutor.v`.
-4. CFGVer: `sexec_instruction`, `sexec_ghosts`, `sexec_cfg_addr`,
+1. **`SStoreSpec` instances**, then **`SStoreSpec.exec_aux`** (a `Stm`
+   induction, ~25 cases) and **`sexec_call`** (fuel induction) in
+   `theories/MicroSail/SymbolicExecutor.v`. This is the bulk of what is left.
+2. CFGVer: `sexec_instruction`, `sexec_ghosts`, `sexec_cfg_addr`,
    `step_after_drop`.
-5. Then the drop proper: restate the premise in the psafe/equality-congruence
-   form below, re-prove `rdrop_dead` against it, and only then touch
-   `rexec_cfg_addr`.
+3. Then the drop proper: restate the premise in the `PtEq` congruence form below,
+   re-prove `rdrop_dead` against it, and only then touch `rexec_cfg_addr`.
+
+Consider registering `PExt`/`CExt` as typeclasses before step 1 — with 57
+instances in hand the `exec_aux` induction's ~25 cases would then close by
+`typeclasses eauto` rather than by naming each combinator. Not done yet, because
+`Monads.v` was small enough to do by hand and doing it now would mean re-touching
+all 57.
 
 ### The premise shape this enables
 
@@ -2015,8 +2027,9 @@ once the framework lands, not a retraction.
 
 ### Estimate
 
-Roughly 40–60 further small lemmas plus two inductions, in core `theories/`.
-Each is mechanical; the volume is the cost. This is a multi-session build, and
-the gate stays RED throughout since `VerifierRel.v` cannot be re-paired until
-step 5.
+`Monads.v` took 57 lemmas and landed in one sitting, which recalibrates the
+original 40–60 estimate downward for the rest: `SStoreSpec` is smaller than
+`SPureSpec`, and `exec_aux`'s cases are bind chains of combinators that now all
+have instances. The gate stays RED throughout, since `VerifierRel.v` cannot be
+re-paired until step 3.
 
