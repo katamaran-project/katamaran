@@ -940,6 +940,48 @@ and A/B is one recompile apart.
 > token" — write `Acc w w2`. And `@acc_drop` / `@wdrop` need the `@`
 > (maximally-inserted `x`, the fifth instance of that trap).
 >
+> ### The persist/subst bridges — §4bis's flagged work item, DONE
+>
+> `Factors`'s carrier must bundle `tbl`/`exits`, whose `persist_itableW` /
+> `persist_etable` are bespoke `List.map`s rather than generic `subst`. Both
+> bridges are proved, and the `Subst`/`SubstLaws` instances they need resolve by
+> `typeclasses eauto` **at the LCtx level** — note `SInstrTableW : TYPE` is
+> `World -> Type` and `Subst` wants `LCtx -> Type`, so the type must be written
+> out as `fun Σ : LCtx => list (Term Σ ty_xlenbits * Term Σ ty_word * AnnotInstr)`.
+>
+> ```coq
+> Lemma zz_persist_itableW_subst {w1 w2 : World} (th : Acc w1 w2) (tbl : SInstrTableW w1) :
+>   persist_itableW th tbl
+>   = subst (T := fun Σ : LCtx => list (Term Σ ty_xlenbits * Term Σ ty_word * AnnotInstr))
+>       tbl (sub_acc th).
+> Proof.
+>   unfold persist_itableW. cbn. destruct th; cbn.
+>   - induction tbl as [|[[t x] i] tbl' IH]; cbn; [reflexivity|].
+>     rewrite IH. now rewrite !subst_sub_id.
+>   - induction tbl as [|[[t x] i] tbl' IH]; cbn; [reflexivity|].
+>     now rewrite IH.
+> Qed.
+>
+> Lemma zz_persist_etable_subst {w1 w2 : World} (th : Acc w1 w2) (exits : SExitTable w1) :
+>   persist_etable th exits
+>   = subst (T := fun Σ : LCtx => list (Term Σ ty_xlenbits)) exits (sub_acc th).
+> Proof.
+>   unfold persist_etable. destruct th; cbn.
+>   - induction exits as [|t exits' IH]; cbn; [reflexivity|].
+>     rewrite IH. now rewrite !subst_sub_id.
+>   - induction exits as [|t exits' IH]; cbn; [reflexivity|].
+>     now rewrite IH.
+> Qed.
+> ```
+>
+> **`destruct th` FIRST, before the induction.** The obvious route —
+> `apply List.map_ext` then `persist_subst` — fails twice over: `SubstList` is a
+> FIXPOINT, not a `List.map`, so `map_ext` does not apply; and `cbn` unfolds
+> `persist__term` to the instance body `persistent_subst`, after which
+> `persist_subst` no longer matches syntactically. Case-splitting the
+> accessibility sidesteps both, because `persistent_subst` is itself defined by
+> matching on it.
+>
 > **Consequence for §11's risk register:** "`ZZAccIndep` not discharged for the
 > REAL `sΦ`" is not a moderate residual — it is the whole of Phase 5's
 > difficulty, and §4's "settled on paper" verdict covered the DISCHARGE ROUTE
