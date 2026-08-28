@@ -683,6 +683,129 @@ Section CFGVerificationDerived.
     (* epilogue establishes pc = nextpc = an after each step; they are      *)
     (* separate parameters only so the FIRST step, which genuinely does not *)
     (* know nextpc, can differ. *)
+    (* ================================================================== *)
+    (* PHASE 3 (PLAN-dropk.md §6): the dead-logical-variable liveness       *)
+    (* computation and the drop loop.                                      *)
+    (*                                                                     *)
+    (* NOT YET WIRED INTO sexec_cfg_addr — that is Phase 4, and it changes  *)
+    (* the VC, which breaks rexec_cfg_addr until Phase 5 re-pairs it.       *)
+    (* Everything here is dead code today and the gate is green with it.    *)
+    (*                                                                     *)
+    (* The plan warned that this needs a DEPENDENT FOLD (each step's type   *)
+    (* mentioning the previous step's smaller context).  It does not, and   *)
+    (* avoiding it is the whole shape below: rather than computing a SET of *)
+    (* dead variables and removing them together, `drop_dead` finds ONE,    *)
+    (* drops it as a single step, and RE-SCANS at the new world.  Recursion *)
+    (* is on fuel; nothing is dependently folded.                           *)
+    (* ================================================================== *)
+
+    (* Enumerate a context with its In-proofs.  Also not a dependent fold:   *)
+    (* every proof in the result lives at the one fixed Γ.                   *)
+    Fixpoint all_ins (Γ : LCtx) : list (sigT (fun b => (b ∈ Γ)%katamaran)) :=
+      match Γ with
+      | ctx.nil       => List.nil
+      | ctx.snoc Δ b0 =>
+          cons (existT b0 ctx.in_zero)
+            (List.map (fun p => existT (projT1 p) (ctx.in_succ (projT2 p))) (all_ins Δ))
+      end.
+
+    Definition oc_ok {AT} `{OccursCheck AT} {Σ} {b}
+        (bIn : (b ∈ Σ)%katamaran) (a : AT Σ) : bool :=
+      match occurs_check bIn a with Some _ => true | None => false end.
+
+    (* SInstrTableW / SExitTable are bespoke tuple-lists with no OccursCheck
+       instance, so the check is spelled out over their TERM columns rather
+       than adding instances to theories/.  The AnnotInstr payload is
+       world-independent and cannot mention a logical variable. *)
+    Definition itableW_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (tbl : SInstrTableW w) : bool :=
+      List.forallb (fun e => match e with (t, x, _) =>
+                      oc_ok (AT := STerm ty_xlenbits) bIn t
+                      && oc_ok (AT := STerm ty_word) bIn x end) tbl.
+
+    Definition etable_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (exits : SExitTable w) : bool :=
+      List.forallb (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
+
+    (* ALL the roots.  `trans` is the one that is easy to forget and the one
+       whose omission would be UNSOUND rather than merely incomplete — see
+       sexec_cfg_addr's comment below and PLAN-dropk.md §4bis. *)
+    Definition var_dead {Σ0 : LCtx} {w : World} {b}
+        (bIn : (b ∈ w)%katamaran)
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w)) : bool :=
+      oc_ok (AT := PathCondition) bIn (wco w)
+      && oc_ok (AT := SHeap) bIn h
+      && oc_ok (AT := Sub Σ0) bIn trans
+      && oc_ok (AT := STerm ty_xlenbits) bIn apc
+      && oc_ok (AT := STerm ty_xlenbits) bIn anp
+      && itableW_free bIn tbl
+      && etable_free bIn exits.
+
+    (* The witness term is needed for the ACCESSIBILITY, not for the tree:
+       calling the continuation at the smaller world needs a Sub with an entry
+       for every variable, x included.  `ty.inhabit`'s None on
+       enum/tuple/union/record therefore still under-approximates — but every
+       variable we actually want to drop is a havoced register, i.e. bvec, and
+       `inhabit (bvec n) = Some bv.zero`. *)
+    Definition drop_candidate (w : World) : Type :=
+      sigT (fun b : LVar∷Ty =>
+        sigT (fun bIn : (b ∈ w)%katamaran =>
+          Term (@ctx.remove _ (wctx w) b bIn) (type b))).
+
+    Definition find_dead {Σ0 : LCtx} {w : World}
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (h : SHeap (wctx w))
+        : option (drop_candidate w) :=
+      List.fold_right
+        (fun p acc =>
+           match acc with
+           | Some _ => acc
+           | None =>
+               if var_dead (projT2 p) trans tbl exits apc anp h
+               then match ty.inhabit (type (projT1 p)) with
+                    | Some v => Some (existT (projT1 p)
+                                        (existT (projT2 p)
+                                           (term_val (type (projT1 p)) v)))
+                    | None   => None
+                    end
+               else None
+           end)
+        None (all_ins (wctx w)).
+
+    (* One drop per iteration, re-scanning at the new world.  `fuel` bounds the
+       number of drops per call; |wctx w| is the natural bound.
+
+       Note `@acc_subst_right` and `@SymProp.dropk` are applied with `@`: both
+       have trailing implicits that make their `x` argument maximally inserted,
+       so the un-`@`-ed form silently shifts `name b` onto the witness slot. *)
+    Fixpoint drop_dead (fuel : nat) {Σ0 : LCtx} {w : World}
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) {struct fuel} : SHeapSpec Unit w :=
+      match fuel with
+      | O   => SHeapSpec.pure tt
+      | S n =>
+          fun POST h =>
+            match find_dead trans tbl exits apc anp h with
+            | None   => POST w acc_refl tt h
+            | Some c =>
+                let b   := projT1 c in
+                let bIn := projT1 (projT2 c) in
+                let t0  := projT2 (projT2 c) in
+                match occurs_check bIn h with
+                | None    => POST w acc_refl tt h   (* unreachable: find_dead checked it *)
+                | Some h' =>
+                    let om := @acc_subst_right w (name b) (type b) bIn t0 in
+                    @SymProp.dropk (wctx w) (name b) (type b) bIn
+                      (drop_dead n
+                         (persist (A := Sub Σ0) trans om)
+                         (persist_itableW om tbl) (persist_etable om exits)
+                         (persist__term apc om) (persist__term anp om)
+                         (four POST om) h')
+                end
+            end
+      end.
+
     (* `trans` is THE ACCUMULATED TRANSLATION: the contract context's variables
        as terms over the CURRENT world, i.e. `persist δ1 …` from
        sexec_triple_addr below.  It is threaded and persisted exactly like
