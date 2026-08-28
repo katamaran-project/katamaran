@@ -1367,7 +1367,8 @@ Section DropRefineProbe.
     Definition Factors {V : TYPE} {w : World} (a : A (wctx w))
         (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) : Prop :=
       exists g : forall w2 : World, A (wctx w2) -> V w2 -> SHeap w2 -> 𝕊 w2,
-        forall (w2 : World) (om : Acc w w2), sPhi w2 om = g w2 (persist (A := A) a om).
+        forall (w2 : World) (om : Acc w w2) (v : V w2) (h : SHeap w2),
+          sPhi w2 om v h = g w2 (persist (A := A) a om) v h.
 
     (* CLOSED: and note the new carrier is `persist a om`, which is EXACTLY
        what drop_dead already passes to its recursive call.  That is why the
@@ -1377,7 +1378,7 @@ Section DropRefineProbe.
         {w1 : World} (om : Acc w w1) :
       Factors a sPhi -> Factors (persist (A := A) a om) (four sPhi om).
     Proof.
-      intros [g Hg]. exists g. intros w2 om2.
+      intros [g Hg]. exists g. intros w2 om2 v h.
       unfold four. rewrite Hg. now rewrite persist_trans.
     Qed.
 
@@ -1393,9 +1394,9 @@ Section DropRefineProbe.
         (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2)
         (Hfac : Factors a sPhi)
         (t1 t2 : Term (wctx w - x∷σ) σ) (w2 : World)
-        (om2 : Acc (@wdrop w x σ xIn) w2) :
-      sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t1) om2)
-      = sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t2) om2).
+        (om2 : Acc (@wdrop w x σ xIn) w2) (v : V w2) (h : SHeap w2) :
+      sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t1) om2) v h
+      = sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t2) om2) v h.
     Proof.
       destruct Hfac as [g Hg]. rewrite !Hg. f_equal.
       rewrite !persist_trans. f_equal.
@@ -1435,9 +1436,9 @@ Section DropRefineProbe.
         (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2)
         (Hfac : Factors a sPhi)
         (t1 t2 : Term (wctx w - x∷σ) σ) (w2 : World)
-        (om2 : Acc (@wdrop w x σ xIn) w2) :
-      sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t1) om2)
-      = sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t2) om2).
+        (om2 : Acc (@wdrop w x σ xIn) w2) (v : V w2) (h : SHeap w2) :
+      sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t1) om2) v h
+      = sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc t2) om2) v h.
     Proof.
       destruct Hfac as [g Hg]. rewrite !Hg. f_equal.
       rewrite !persist_trans. f_equal.
@@ -1644,6 +1645,32 @@ Section DropRefineProbe.
      OFF iota (which makes the fibre inhabited by construction, so `assuming` does
      not go vacuous), then slide from that witness to the tree's fixed t0.  The
      slide is exactly what Factors + WitnessBlind buy. *)
+  (* Factors' equation is POINTWISE (fully applied) rather than an equality of
+     functions.  That is load-bearing, not stylistic: the composite obligation in
+     factors_drop_cont compares the executor applied to two POINTWISE-equal
+     continuations, and turning that into an equality of the continuations
+     themselves is exactly funext.  Pointwise, CExt closes it instead.
+
+     The cost is that factors_witness_indep' can no longer be used as a `rewrite`
+     at a function position inside the relation.  This lemma pays it: the relation
+     only ever uses its continuation APPLIED, so a pointwise equality suffices. *)
+  Lemma rel_pointwise {w2 : World} (cPhi : unit -> SCHeap -> Prop)
+      (f1 f2 : Unit w2 -> SHeap w2 -> 𝕊 w2) (iota2 : Valuation w2) :
+    (forall v h, f1 v h = f2 v h) ->
+    ℛ⟦RImpl RUnit (RImpl RHeap LogicalSoundness.RProp)⟧ cPhi f1 iota2 ->
+    ℛ⟦RImpl RUnit (RImpl RHeap LogicalSoundness.RProp)⟧ cPhi f2 iota2.
+  Proof.
+    intros Hpt H. unfold RSat, RImpl in *. cbn in *.
+    intros a v. specialize (H a v).
+    rewrite wand_unfold in H |- *. intros Hav ch sh.
+    specialize (H Hav ch sh).
+    rewrite wand_unfold in H |- *. intros Hheap.
+    specialize (H Hheap).
+    unfold LogicalSoundness.RProp in *. cbn in *.
+    rewrite wand_unfold in H |- *. intros Hsafe.
+    apply H. now rewrite Hpt.
+  Qed.
+
   Section BoxDrop.
     Context {A : LCtx -> Type} {SubstA : Subst A} {SubstLawsA : SubstLaws A}.
 
@@ -1665,14 +1692,19 @@ Section DropRefineProbe.
       intros w2 om2 iota2 Hfib Hpc2.
       specialize (HB w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc
                                       (term_relval σ (env.lookup iota xIn))) om2) iota2).
+      assert (HB' : ℛ⟦RImpl RUnit (RImpl RHeap LogicalSoundness.RProp)⟧ cPhi
+                      (sPhi w2 (acc_trans (@acc_drop w x σ xIn pc' Hpc
+                         (term_relval σ (env.lookup iota xIn))) om2)) iota2).
+      { apply HB; [|exact Hpc2].
+        (* the fibre over iota is inhabited BY CONSTRUCTION: the witness was read
+           off iota, so sub_single puts back exactly what sub_shift removed. *)
+        cbn. rewrite sub_acc_trans. rewrite inst_subst. rewrite Hfib.
+        cbn [sub_acc]. apply inst_sub_single_shift. reflexivity. }
       unfold four.
-      rewrite (factors_witness_indep' Hpc Hbl Hfac t0
-                 (term_relval σ (env.lookup iota xIn)) om2).
-      apply HB; [|exact Hpc2].
-      (* the fibre over iota is inhabited BY CONSTRUCTION: the witness was read off
-         iota, so sub_single puts back exactly what sub_shift removed. *)
-      cbn. rewrite sub_acc_trans. rewrite inst_subst. rewrite Hfib.
-      cbn [sub_acc]. apply inst_sub_single_shift. reflexivity.
+      eapply rel_pointwise; [|exact HB'].
+      intros v h.
+      apply (factors_witness_indep' Hpc Hbl Hfac
+               (term_relval σ (env.lookup iota xIn)) t0 om2).
     Qed.
   End BoxDrop.
 
@@ -1817,6 +1849,51 @@ Section DropRefineProbe.
         pose proof Hpc as Hp. rewrite (zz_wco_eq e) in Hp. exact Hp.
       + exact (factors_box_drop e Hbl Hfac t0 Hpc HB).
       + exact (eq_trans (zz_heap_transport sh Eh iota) Hheap).
+  Qed.
+
+
+  (* ================================================================== *)
+  (* THE PROPAGATION -- what the whole PExt/CExt framework was built for. *)
+  (*                                                                    *)
+  (* From Factors for sexec_cfg_addr's AMBIENT continuation, derive Factors *)
+  (* for the continuation drop_dead actually receives.  This is the step    *)
+  (* that needed funext before the framework existed:                       *)
+  (*                                                                        *)
+  (*   SHeapSpec.bind m f Phi = m (fun w1 th1 a1 => f w1 th1 a1 (four Phi th1)) *)
+  (*                                                                        *)
+  (* so drop_dead's continuation is `step_after_drop ... (four Phi thd)`, and  *)
+  (* the witness g must reproduce it from the persisted bundle alone.  The     *)
+  (* persisted arguments match on the nose (dbundle_persist); the two          *)
+  (* CONTINUATIONS are only POINTWISE equal, and cext_step_after_drop is what   *)
+  (* turns that into the tree equality Factors asks for. *)
+  (* ================================================================== *)
+  Lemma factors_drop_cont {Sg0 : LCtx} {w : World} (n' : nat) (ai : AnnotInstr)
+      (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+      (Phi : forall w2 : World, Acc w w2 -> STerm ty_xlenbits w2 -> SHeap w2 -> 𝕊 w2)
+      (HPhi : Factors (dbundle trans tbl exits apc anp wd) Phi) :
+    Factors (dbundle trans tbl exits apc anp wd)
+      (fun w1 (om : Acc w w1) (_ : Unit w1) =>
+         step_after_drop (@sexec_cfg_addr Sg0 n') ai
+           (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
+           (persist_etable om exits) (persist__term apc om) (persist__term anp om)
+           (persist__term wd om) (four Phi om)).
+  Proof.
+    destruct HPhi as [g Hg].
+    (* q1..q6 and NOT tr/tb/ex/pc/np/wd: `pc` is a RISC-V REGISTER constructor,
+       so that pattern name is read as a Reg and the `exists` fails with
+       "Found a constructor of inductive type Reg while a constructor of Term
+       is expected". *)
+    exists (fun w1 (bnd : dcarrier Sg0 (wctx w1)) (_ : Unit w1) =>
+              let '(q1, q2, q3, q4, q5, q6) := bnd in
+              step_after_drop (@sexec_cfg_addr Sg0 n') ai q1 q2 q3 q4 q5 q6
+                (fun w' om' => g w' (persist (A := dcarrier Sg0) bnd om'))).
+    intros w2 om v h.
+    rewrite dbundle_persist. cbn [dbundle].
+    apply cext_step_after_drop.
+    - intros. apply cext_sexec_cfg_addr.
+    - intros w' th' a' h'. unfold four. rewrite Hg.
+      f_equal. rewrite persist_trans. now rewrite dbundle_persist.
   Qed.
 
 End DropRefineProbe.
@@ -1993,43 +2070,74 @@ Findings from the build, all cheap to know and expensive to rediscover:
 
 ### What remains, in dependency order
 
-1. **`SStoreSpec` instances**, then **`SStoreSpec.exec_aux`** (a `Stm`
-   induction, ~25 cases) and **`sexec_call`** (fuel induction) in
-   `theories/MicroSail/SymbolicExecutor.v`. This is the bulk of what is left.
-2. CFGVer: `sexec_instruction`, `sexec_ghosts`, `sexec_cfg_addr`,
-   `step_after_drop`.
-3. Then the drop proper: restate the premise in the `PtEq` congruence form below,
-   re-prove `rdrop_dead` against it, and only then touch `rexec_cfg_addr`.
+**ALL DONE, 2026-08-28.** 94 lemmas, three files, full rebuild green:
 
-Consider registering `PExt`/`CExt` as typeclasses before step 1 — with 57
-instances in hand the `exec_aux` induction's ~25 cases would then close by
-`typeclasses eauto` rather than by naming each combinator. Not done yet, because
-`Monads.v` was small enough to do by hand and doing it now would mean re-touching
-all 57.
+- `theories/Symbolic/Monads.v` — 57 (`PExt` + `CExt`).
+- `theories/MicroSail/SymbolicExecutor.v` — 29 (`SExt` + 22 instances,
+  `cext_evalStoreSpec`, `sext_exec_aux`, and the `WithSpec` set ending in
+  **`sext_sexec`**, so the CORE executor is extensional).
+- `case_study/RiscvPmp/CFGVer/Verifier.v` — 8 (`chunk_gc`, `sexec_ghost(s)`,
+  `sexec_instruction`, `drop_dead`, `step_after_drop`, `sexec_cfg_addr`, plus
+  `option_convoy_eq`).
 
-### The premise shape this enables
+A hint DB (`sext`) is what made `exec_aux` cheap: **`auto 12 with sext` closes
+SEVENTEEN of its eighteen `Stm` cases outright**. Only `stm_pattern_match` needed
+hand-work, and only because its `'(existT pc vs)` continuation pattern must be
+destructed before the IH applies. Registering `PExt`/`CExt` as typeclasses turned
+out to be unnecessary — a plain hint DB at the `SStoreSpec` level was enough, and
+it did not require re-touching the 57 `Monads.v` lemmas.
 
-`Factors` (∃ g) can be replaced by a pure congruence, which is strictly weaker
-and needs no witness construction:
+### `PtEq` turned out to be UNNECESSARY — `Factors` survives, pointwise
+
+The plan here was to replace `Factors` (∃ g) with a `PtEq` congruence. **That is
+not what was needed.** With `CExt` in hand, `Factors` propagates as it stands —
+the only change required was making its EQUATION pointwise (fully applied):
 
 ```coq
-PtEq a sΦ  :=  ∀ w₂ ω₁ ω₂ v h, persist a ω₁ = persist a ω₂ → sΦ w₂ ω₁ v h = sΦ w₂ ω₂ v h
+Factors a sΦ  :=  ∃ g, ∀ w₂ ω v h,  sΦ w₂ ω v h = g w₂ (persist a ω) v h
 ```
 
-- CLOSED under `four` — same `persist_trans` argument as `factors_four`.
-- SUFFICIENT at the drop — `WitnessBlind` gives `persist a (D₁∘ω₂) =
-  persist a (D₂∘ω₂)`, and the conclusion is used at an APPLIED position inside
-  `ℛ⟦RUnit -> RHeap -> ℙ⟧`, so pointwise equality is all that is consumed.
-- PROPAGATES through a step **given `CExt`** — that is exactly what step 4 buys.
+That one change is load-bearing. Function-valued, the composite obligation
+compares the executor applied to two POINTWISE-equal continuations, and turning
+that into an equality of the continuations themselves is precisely funext.
+Pointwise, `cext_step_after_drop` closes it.
 
-`Factors` and its lemmas stay valid meanwhile; `PtEq` is the migration target
-once the framework lands, not a retraction.
+**`factors_drop_cont` (`Qed`, axiom-clean)** is the propagation:
+
+```coq
+Factors (dbundle …) Φ  →  Factors (dbundle …) (drop_dead's own continuation)
+```
+
+Its proof is six lines. The persisted arguments match on the nose
+(`dbundle_persist`); the continuations are pointwise equal by `Hg` +
+`persist_trans`; `cext_step_after_drop` does the rest.
+
+Two costs of going pointwise, both paid:
+- `factors_witness_indep'` can no longer be used as a `rewrite` at a function
+  position inside the relation. **`rel_pointwise`** pays for it in one small
+  lemma: the relation only ever uses its continuation APPLIED, so a pointwise
+  equality suffices. `factors_box_drop` now goes through an `assert` + `eapply
+  rel_pointwise` instead of a bare `rewrite`.
+- **`rdrop_dead` itself was NOT touched** and still closes verbatim.
+
+`Print Assumptions` on both `rdrop_dead` and `factors_drop_cont`: **Closed under
+the global context.**
+
+### What actually remains
+
+1. Restate `rexec_cfg_addr` to carry the `Factors` premise and thread it through
+   the fuel induction, using `factors_drop_cont` at the drop's bind.
+2. Discharge it once at `rexec_triple_addr`, carrier `δ1`.
+3. Phase 6 (absorb the new bind in `sound_exec_cfg_addr_myWP2`), Phase 7 (flip
+   `drop_fuel`, measure, gate).
+
+Also still to fix, and purely mechanical: `VerifierRel.v` fails at
+`line 808: The variable ω2 was not found` — the drop's bind added a world hop and
+the hand-named accessibilities shifted.
 
 ### Estimate
 
-`Monads.v` took 57 lemmas and landed in one sitting, which recalibrates the
-original 40–60 estimate downward for the rest: `SStoreSpec` is smaller than
-`SPureSpec`, and `exec_aux`'s cases are bind chains of combinators that now all
-have instances. The gate stays RED throughout, since `VerifierRel.v` cannot be
-re-paired until step 3.
+The whole framework — 94 lemmas across three files — landed in one sitting, well
+inside the 40–60 estimate for what was then "the rest". The gate stays RED until
+`rexec_cfg_addr` is re-paired.
 
