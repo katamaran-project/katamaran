@@ -1896,6 +1896,89 @@ Section DropRefineProbe.
       f_equal. rewrite persist_trans. now rewrite dbundle_persist.
   Qed.
 
+
+  (* ================================================================== *)
+  (* CARRIER WEAKENING -- what lets rexec_cfg_addr carry a FIVE-component  *)
+  (* premise while the drop needs six.                                     *)
+  (*                                                                       *)
+  (* At the top of sexec_cfg_addr there is no `wd` yet: it comes out of      *)
+  (* lookup_instr, INSIDE the step.  So the premise threaded through the     *)
+  (* fuel induction is over (trans, tbl, exits, apc, anp) and the sixth       *)
+  (* column is added at the drop site.  That is sound because Factors is      *)
+  (* MONOTONE in the carrier -- a bigger carrier gives g more to work with,   *)
+  (* so it is the WEAKER condition. *)
+  (* ================================================================== *)
+  Definition dcarrier5 (Sg0 : LCtx) : LCtx -> Type :=
+    fun Sg => (Sub Sg0 Sg *
+               list (Term Sg ty_xlenbits * Term Sg ty_word * AnnotInstr) *
+               list (Term Sg ty_xlenbits) *
+               Term Sg ty_xlenbits *
+               Term Sg ty_xlenbits)%type.
+
+  Definition dbundle5 {Sg0 : LCtx} {w : World}
+      (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+      (apc anp : Term (wctx w) ty_xlenbits) : dcarrier5 Sg0 (wctx w) :=
+    (trans, tbl, exits, apc, anp).
+
+  (* The six-tuple IS the five-tuple paired with wd, definitionally -- which is
+     what makes factors_pair_l applicable without any repackaging. *)
+  Lemma dbundle6_eq {Sg0 : LCtx} {w : World}
+      (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word) :
+    dbundle trans tbl exits apc anp wd = (dbundle5 trans tbl exits apc anp, wd).
+  Proof. reflexivity. Qed.
+
+  Lemma factors_pair_l {A B : LCtx -> Type}
+      {SubstA : Subst A} {SubstLawsA : SubstLaws A}
+      {SubstB : Subst B} {SubstLawsB : SubstLaws B}
+      {V : TYPE} {w : World} (a : A (wctx w)) (b : B (wctx w))
+      (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) :
+    Factors a sPhi -> Factors (A := fun Sg => (A Sg * B Sg)%type) (a, b) sPhi.
+  Proof.
+    intros [g Hg]. exists (fun w2 p => g w2 (fst p)).
+    intros w2 om v h. rewrite Hg. cbn. f_equal.
+    (* `cbn` alone will NOT reduce (persist (a,b) om).1 -- persistent_subst
+       matches on the accessibility, so it has to be destructed. *)
+    destruct om; cbn; reflexivity.
+  Qed.
+
+  Lemma dbundle5_persist {Sg0 : LCtx} {w1 w2 : World} (om : Acc w1 w2)
+      (trans : Sub Sg0 w1) (tbl : SInstrTableW w1) (exits : SExitTable w1)
+      (apc anp : Term (wctx w1) ty_xlenbits) :
+    persist (A := dcarrier5 Sg0) (dbundle5 trans tbl exits apc anp) om
+    = dbundle5 (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
+        (persist_etable om exits) (persist__term apc om) (persist__term anp om).
+  Proof.
+    unfold dbundle5, dcarrier5.
+    rewrite zz_persist_itableW_subst, zz_persist_etable_subst.
+    unfold persist__term. destruct om; cbn; now rewrite ?subst_sub_id.
+  Qed.
+
+  (* THE FORM rexec_cfg_addr WILL ACTUALLY USE at the drop's bind: from the
+     five-component premise threaded through the fuel induction, produce exactly
+     the six-component Factors that rdrop_dead consumes.
+
+     factors_pair_l's A and B must be given EXPLICITLY -- the goal's carrier is
+     `dcarrier Sg0`, not syntactically `fun Sg => (?A Sg * ?B Sg)`, so
+     unification cannot invert it. *)
+  Lemma factors_drop_at_step {Sg0 : LCtx} {w : World} (n' : nat) (ai : AnnotInstr)
+      (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+      (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+      (Phi : forall w2 : World, Acc w w2 -> STerm ty_xlenbits w2 -> SHeap w2 -> 𝕊 w2)
+      (HPhi : Factors (dbundle5 trans tbl exits apc anp) Phi) :
+    Factors (dbundle trans tbl exits apc anp wd)
+      (fun w1 (om : Acc w w1) (_ : Unit w1) =>
+         step_after_drop (@sexec_cfg_addr Sg0 n') ai
+           (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
+           (persist_etable om exits) (persist__term apc om) (persist__term anp om)
+           (persist__term wd om) (four Phi om)).
+  Proof.
+    apply factors_drop_cont.
+    rewrite dbundle6_eq.
+    apply (factors_pair_l (A := dcarrier5 Sg0) (B := fun Sg => Term Sg ty_word)).
+    exact HPhi.
+  Qed.
+
 End DropRefineProbe.
 ```
 
@@ -2123,10 +2206,44 @@ Two costs of going pointwise, both paid:
 `Print Assumptions` on both `rdrop_dead` and `factors_drop_cont`: **Closed under
 the global context.**
 
+### The premise machinery is COMPLETE (all `Qed`, probe green)
+
+`rexec_cfg_addr` will carry a **FIVE**-component premise, not six. At the top of
+`sexec_cfg_addr` there is no `wd` — it comes out of `lookup_instr`, INSIDE the
+step — so the threaded carrier is `(trans, tbl, exits, apc, anp)` and the sixth
+column is added at the drop site. That is sound because **`Factors` is MONOTONE
+in the carrier**: a bigger carrier gives `g` more to work with, so it is the
+weaker condition (`factors_pair_l`).
+
+The six-tuple IS the five-tuple paired with `wd` **definitionally**
+(`dbundle6_eq` closes by `reflexivity`), which is what makes `factors_pair_l`
+apply with no repackaging.
+
+**`factors_drop_at_step`** is the form the proof will use: from the
+five-component premise, produce exactly the six-component `Factors` that
+`rdrop_dead` consumes. Two lines.
+
+Also landed: `dcarrier5` / `dbundle5` / `dbundle5_persist` (for `factors_four` at
+the recursive call).
+
+Trap: `factors_pair_l`'s `A` and `B` must be given EXPLICITLY at the use site —
+the goal's carrier is `dcarrier Sg0`, not syntactically `fun Sg => (?A Sg * ?B
+Sg)`, so unification cannot invert it. And inside its own proof, `cbn` alone will
+not reduce `(persist (a,b) om).1`: `persistent_subst` matches on the
+accessibility, so `om` has to be destructed.
+
 ### What actually remains
 
-1. Restate `rexec_cfg_addr` to carry the `Factors` premise and thread it through
-   the fuel induction, using `factors_drop_cont` at the drop's bind.
+1. Restate `rexec_cfg_addr` in UNFOLDED form (decision taken 2026-08-28 — the
+   `ℛ⟦… -> RHeapSpec …⟧` conclusion universally quantifies the continuation, so
+   the premise cannot be added while keeping that shape; a bespoke `Rel` was
+   rejected because `Rel`'s `RSat` is world-polymorphic while the carrier lives
+   at one fixed world). Thread the five-component `Factors` through the fuel
+   induction and use `factors_drop_at_step` + `rdrop_dead` at the drop's bind.
+   **Risk to budget for:** the inner `rsolve` calls that dispatch `chunk_gc` /
+   `sexec_instruction` / the ghost binds sit under the changed shape and will
+   need re-plumbing, in a file whose history includes a 300 s+ hang whose root
+   cause was never found.
 2. Discharge it once at `rexec_triple_addr`, carrier `δ1`.
 3. Phase 6 (absorb the new bind in `sound_exec_cfg_addr_myWP2`), Phase 7 (flip
    `drop_fuel`, measure, gate).
