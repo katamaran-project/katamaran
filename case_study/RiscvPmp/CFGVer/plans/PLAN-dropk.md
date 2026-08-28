@@ -819,6 +819,46 @@ and A/B is one recompile apart.
 > proof (`drop_fuel` is a `Definition`; `rsolve` will not unfold it), so there is
 > no green intermediate checkpoint for the wiring. That is deliberate — it keeps
 > the proof general in fuel — but budget for it.
+>
+> ### The premise must be BOTH sufficient AND closed under the recursion — two forms tried, both fail
+>
+> This is the real content of the remaining work, and it is NOT "apply Phase 0's
+> lemma". `drop_dead` recurses at the shrunk world with continuation
+> `four sΦ om`, so whatever premise `rdrop_dead` carries must survive that step.
+> Two natural formulations, and why each is not enough:
+>
+> 1. **"`sΦ` depends on ω only through `sub_acc`"** —
+>    `∀ w' (ω1 ω2 : w ⊒ w'), sub_acc ω1 = sub_acc ω2 → sΦ w' ω1 = sΦ w' ω2`.
+>    **CLOSED** under `four` (since `sub_acc (om ∘ ω) = subst (sub_acc om)
+>    (sub_acc ω)`), but **NOT SUFFICIENT**: the drop's two witnesses give
+>    genuinely different substitutions, `sub_single xIn t1 ≠ sub_single xIn t2`,
+>    so it says nothing about the case we need.
+> 2. **The witness-specific form** (quantify `t1 t2` over drops of `w`'s own
+>    variables, as §2ter's `ZZAccIndep` does) — **SUFFICIENT** for one step, but
+>    **NOT CLOSED**: the recursive call needs the same property for drops at
+>    `wdrop w x` composed with `om`, which is not an instance of the property at
+>    `w`.
+>
+> So the premise has to say what §4bis established semantically: **`sΦ` FACTORS
+> through persisted x-free data**. That is statable (`∃ A a f, ∀ w' ω, sΦ w' ω =
+> f w' (persist a ω)` plus x-freeness of `a`) but it is a characterisation of
+> the executor's continuation, not a property one can assume of an opaque `sΦ`
+> and hand to `RHeapSpec`. Formalising it, and threading it through
+> `rexec_cfg_addr`'s fuel induction, IS the remaining Phase 5 work.
+>
+> **Consequence for §11's risk register:** "`ZZAccIndep` not discharged for the
+> REAL `sΦ`" is not a moderate residual — it is the whole of Phase 5's
+> difficulty, and §4's "settled on paper" verdict covered the DISCHARGE ROUTE
+> (x-free data persists identically) and not the STATEMENT problem above, which
+> only appears once the premise has to survive a recursion. Do not read §4bis as
+> saying this part is done.
+>
+> Probe for this work: `Example/ZZDropRefineProbe.v` (gitignored, outside
+> `_CoqProject`, excluded from the gate's hole scan, so an `Admitted` there is
+> harmless). It requires `Verifier` + `SpecIris` and NOT `VerifierRel`, so it
+> iterates at `rocq_check` speed instead of recompiling the 900-line file blind.
+> Rebuild its dependency closure after any `theories/` edit or it fails with
+> "makes inconsistent assumptions over library …".
 
 **Phase 5 — concrete mirror, then re-pair the refinement.** `cexec_cfg_addr`
 gains `pure tt` (no logical variables concretely). `rexec_cfg_addr` re-paired
