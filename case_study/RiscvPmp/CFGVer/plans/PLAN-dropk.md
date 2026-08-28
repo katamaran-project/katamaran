@@ -974,6 +974,29 @@ and A/B is one recompile apart.
 > Qed.
 > ```
 >
+> ### The premise machinery is COMPLETE — 11 `Qed`s
+>
+> With these, `rdrop_dead`'s only premise is `Factors (dbundle …) sΦ`:
+> `factors_four` + `dbundle_persist` re-establish it at the recursive call, and
+> `wb_bundle` + `factors_witness_indep'` kill the witness dependence at the drop.
+> **`WitnessBlind` is a LEMMA from `var_dead`, not a premise** — which is
+> precisely what makes the induction close, and is why the carrier must be
+> literally the bundle the executor threads.
+>
+> - `wb_of_ocok` — `oc_ok` ⇒ `WitnessBlind`, for any component with an instance
+> - `wb_etable`, `wb_itableW` — the same for the two bespoke tuple-lists, by list
+>   induction (they have no `OccursCheck` instance, hence the elementwise route)
+> - `dcarrier` / `dbundle` — the 5-tuple carrier; `Subst`/`SubstLaws` resolve by
+>   `typeclasses eauto`
+> - **`wb_bundle`** — `var_dead … = true` ⇒ `WitnessBlind xIn (dbundle …)`, at
+>   ANY world, no extra premise. The keystone.
+> - **`dbundle_persist`** — `persist (dbundle …) om = dbundle (persist trans om)
+>   (persist_itableW om tbl) …`, i.e. the bundle commutes with persisting and the
+>   RHS is *literally* what `drop_dead` hands its recursive call.
+>
+> Full scripts are in `Example/ZZDropRefineProbe.v` — **which is gitignored**, so
+> if that file is lost they must be reconstructed from the shapes above.
+>
 > **`destruct th` FIRST, before the induction.** The obvious route —
 > `apply List.map_ext` then `persist_subst` — fails twice over: `SubstList` is a
 > FIXPOINT, not a `List.map`, so `map_ext` does not apply; and `cbn` unfolds
