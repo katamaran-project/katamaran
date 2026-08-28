@@ -683,6 +683,36 @@ Do this *before* writing any CFGVer code on top.
 These are unchanged from `PLAN-lvar-drop-build.md` §3–§6 and were never
 invalidated; that page's text is the reference, this is the summary.
 
+> **PHASE 3 IS DONE, 2026-08-28, gate green** (34 files rebuilt, 14 end theorems
+> axiom-clean). `all_ins` / `oc_ok` / `itableW_free` / `etable_free` /
+> `var_dead` / `drop_candidate` / `find_dead` / `drop_dead` are in `Verifier.v`
+> ahead of `sexec_cfg_addr`, **deliberately unwired** — wiring is Phase 4 and it
+> changes the VC, which breaks `rexec_cfg_addr` until Phase 5. Dead code today.
+>
+> **The "dependent fold" never materialised.** `drop_dead` finds ONE dead
+> variable, drops it, and RE-SCANS at the new world, recursing on fuel. Nothing
+> is dependently folded, and `all_ins` is non-dependent too.
+>
+> Two traps, one iteration each:
+> - **`ctx.remove` needs its `In`-proof BOUND FIRST**, so `drop_candidate` is a
+>   NESTED `sigT` (`b`, then `bIn`, then the witness at `wctx w - b`). The flat
+>   version fails with "cannot infer this placeholder".
+> - **`@acc_subst_right` and `@SymProp.dropk` both need `@`** — trailing
+>   implicits make their `x` maximally inserted, so the bare form silently
+>   shifts `name b` onto the WITNESS slot. Third instance of this trap
+>   (`acc_forget` and the Phase 0 section lemmas were the others); assume it for
+>   any `{w} x {σ xIn} …` signature in this codebase.
+>
+> `SInstrTableW`/`SExitTable` have no `OccursCheck` instance, so the check is
+> spelled out over their term columns rather than adding instances to
+> `theories/`. The `AnnotInstr` payload is world-independent and cannot mention
+> a logical variable.
+>
+> **Instrumentation is NOT built yet** and §6's warning stands. There is nothing
+> to count until Phase 4 wires the step in. Route: a probe-file census of
+> `dropk` nodes in the produced tree (as the `ZZ*.v` files already do), NOT an
+> executor-side counter, which would perturb the term it measures.
+
 **Phase 3 — liveness computation.** For each variable in `wctx w`, `occurs_check`
 against **all** roots: `heap ∪ apc ∪ wco w ∪ tbl ∪ exits ∪ THE ACCUMULATED
 TRANSLATION`. *The translation is a root and is easy to forget* —
