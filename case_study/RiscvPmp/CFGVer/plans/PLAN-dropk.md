@@ -2291,3 +2291,247 @@ The whole framework — 94 lemmas across three files — landed in one sitting, 
 inside the 40–60 estimate for what was then "the rest". The gate stays RED until
 `rexec_cfg_addr` is re-paired.
 
+---
+
+## §17 THE MIRROR PROBE for `rexec_cfg_addr` — BUILT AND WORKING (2026-08-28)
+
+### Read this first: there is now an `Admitted` in `VerifierRel.v`
+
+`rexec_cfg_addr`'s 187-line proof body has been replaced by `Admitted`, with a
+loud in-file comment. **This is a development scaffold and MUST NOT BE MERGED.**
+The gate's hole scan reads the filesystem, so it blocks the merge gate outright —
+which is intentional: the branch must not be mergeable while it stands.
+
+Recover the original body with
+`git show aebc8f23:case_study/RiscvPmp/CFGVer/VerifierRel.v`.
+
+### Why the scaffold exists
+
+**pet cannot open `VerifierRel.v` at any position** — `rocq_start` dies with
+"RSS exceeded 7656 MB". Re-confirmed 2026-08-28. So `rexec_cfg_addr` cannot be
+developed in place, and iterating by re-running `make` is minutes per attempt.
+
+The established workaround for this exact file (recorded in the `cfgver-executor`
+skill, used by `ZZGhostRefineProbe.v` to de-risk the ghost refinement after the
+2026-08-20 300 s+ hang, and by `ZZRexecIHProbe.v` before that) is:
+
+1. `Admit` the lemma in `VerifierRel.v` so `VerifierRel.vo` exists;
+2. RESTATE it in a small probe that `Require`s that `.vo`;
+3. develop there, where pet works.
+
+**This works — verified, not assumed.** pet opens `ZZRexecDropProbe.v` and hands
+back the live goal, and iteration is ~30 ms.
+
+### What the probe already bought
+
+Three notation attempts at ~30 ms each, which would otherwise have been three
+multi-minute rebuilds:
+
+- **`ℙ` is NOT in scope** in the probe, and neither is a bare `RProp`. Write
+  `LogicalSoundness.RProp` — the same prefix `ZZDropRefineProbe.v` needs.
+- `□ᵣ` IS in scope, and `->` inside `ℛ⟦…⟧` is `RImpl` as usual.
+- **The `iIntros` must be SPLIT.** Folding them into one string with `%Hfac`
+  among the rest is a syntax error (`[ltac_use_default] expected after
+  [tactic]`).
+
+**The target statement typechecks and its goal is live**, with everything landing
+persistent and `Hfac` a plain Coq hypothesis.
+
+### Note for whoever picks this up
+
+`sΦ`'s value type elaborates to `Term w2 ty_xlenbits` — printed `WTerm` in the
+statement but `STerm` in `factors_drop_at_step`. That is the WTerm/STerm
+schizophrenia `Worlds.v:545` warns about. If a later `apply` refuses on those
+arguments, that is why.
+
+Both gitignored probes need their `.vo` built by hand before this one compiles:
+
+```
+coqc <the -Q/-R flags from _CoqProject> \
+     case_study/RiscvPmp/CFGVer/Example/ZZDropRefineProbe.v
+```
+
+### §17.1 The probe, VERBATIM
+
+`Example/ZZRexecDropProbe.v` is gitignored, so this is the only durable copy.
+
+```coq
+(* ========================================================================= *)
+(* ZZRexecDropProbe.v — THROWAWAY, gitignored, not in _CoqProject.           *)
+(*                                                                           *)
+(* MIRROR PROBE for rexec_cfg_addr, for the dead-lvar drop (PLAN-dropk §16). *)
+(*                                                                           *)
+(* WHY THIS FILE EXISTS: pet OOMs at 7.6 GB opening VerifierRel.v itself, at *)
+(* ANY position, so rexec_cfg_addr cannot be developed in place.  It is      *)
+(* RESTATED here against VerifierRel's .vo — which exists only because       *)
+(* rexec_cfg_addr is temporarily Admitted there.  A file this small pet CAN  *)
+(* open, so rocq_check iterates at ~30 ms instead of a multi-minute make.    *)
+(*                                                                           *)
+(* This indirection is the whole reason the 2026-08-20 ghost-refinement      *)
+(* attempt could not diagnose its 300 s+ hang: it iterated inside the broken *)
+(* file.  Same trick, same file, second time.  (Precedent:                   *)
+(* ZZRexecIHProbe.v and ZZGhostRefineProbe.v.)                               *)
+(*                                                                           *)
+(* It also requires ZZDropRefineProbe, which carries the drop's premise       *)
+(* machinery (Factors, dbundle/dbundle5, rdrop_dead, factors_drop_at_step).   *)
+(* That file is ALSO gitignored, so its .vo must be built by hand:            *)
+(*                                                                           *)
+(*   coqc <the -Q/-R flags from _CoqProject> \                               *)
+(*        case_study/RiscvPmp/CFGVer/Example/ZZDropRefineProbe.v             *)
+(*                                                                           *)
+(* WHAT TO DO HERE:                                                          *)
+(*   1. rexec_cfg_addr_old is the statement as it stands in VerifierRel.v.    *)
+(*      It is here as a CONTROL: if it stops typechecking, the probe's        *)
+(*      environment has drifted from VerifierRel's, not the proof.            *)
+(*   2. rexec_cfg_addr_F is the target: RHeapSpec unfolded, with the Factors  *)
+(*      premise inserted before the box.  Develop its proof here.             *)
+(*   3. When it closes, port BOTH statement and proof back into              *)
+(*      VerifierRel.v, delete the Admitted scaffold there, and discharge the  *)
+(*      premise at rexec_triple_addr with carrier delta1.                     *)
+(*                                                                           *)
+(* Original 187-line proof body (Qed before the drop's bind was added):       *)
+(*   git show aebc8f23:case_study/RiscvPmp/CFGVer/VerifierRel.v              *)
+(* ========================================================================= *)
+
+From Coq Require Import
+     Classes.Morphisms_Prop ZArith.ZArith Lists.List micromega.Lia Strings.String.
+From Equations Require Import Equations.
+From Katamaran Require Import
+     Iris.BinaryInstance Iris.Base Notations Semantics Bitvector
+     Refinement.Monads Sep.Hoare Specification
+     Symbolic.Propositions Symbolic.Solver Symbolic.Worlds
+     MicroSail.ShallowExecutor MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor MicroSail.RefineExecutor MicroSail.Soundness
+     RiscvPmp.CFGVer.Spec
+     RiscvPmp.CFGVer.SpecIris
+     RiscvPmp.CFGVer.Verifier
+     RiscvPmp.CFGVer.VerifierRel
+     RiscvPmp.CFGVer.Example.ZZDropRefineProbe
+     RiscvPmp.IrisModel RiscvPmp.IrisModelBinary
+     RiscvPmp.IrisInstance RiscvPmp.IrisInstanceBinary
+     RiscvPmp.Machine RiscvPmp.Sig.
+From iris.base_logic Require lib.gen_heap lib.iprop invariants.
+From iris.bi Require interface big_op.
+From iris.algebra Require dfrac.
+From iris.program_logic Require weakestpre adequacy.
+From iris.proofmode Require string_ident tactics.
+From stdpp Require namespaces.
+From stdpp Require Import gmap.
+
+Import RiscvPmpProgram.
+
+Set Implicit Arguments.
+Import ctx.resolution.
+Import ctx.notations.
+Import env.notations.
+Import ListNotations.
+Open Scope string_scope.
+Open Scope ctx_scope.
+Open Scope Z_scope.
+
+Import RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
+
+Section RexecDropProbe.
+
+  Import RiscvPmpCFGVerifExecutor.
+  Import RiscvPmpCFGVerifShalExecutor.
+  Import CStoreSpec (evalStoreSpec).
+  Import CHeapSpec CHeapSpec.notations.
+
+  Section Relational.
+
+    Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
+    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
+    Import RiscvPmpIrisInstanceWithContracts.
+    Import RiscvPmpSignature.HeapSpec.
+    Import RSolve HeapSpec.
+
+    (* CONTROL: verbatim from VerifierRel.v.  If this breaks, the probe's
+       environment has drifted, not the proof. *)
+    Lemma rexec_cfg_addr_old (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w) :
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+       ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
+           (cexec_cfg_addr instrs words exitCond fuel)
+           (sexec_cfg_addr fuel trans tbl exits))%I.
+    Proof.
+    Admitted.
+
+    (* ------------------------------------------------------------------ *)
+    (* THE TARGET.  RHeapSpec unfolded, with the Factors premise inserted   *)
+    (* before the box.                                                     *)
+    (*                                                                    *)
+    (* RHeapSpec RA = box(RA -> RHeap -> RProp) -> RHeap -> RProp, so       *)
+    (* unfolding it is purely mechanical -- the ONLY change of substance is *)
+    (* the added premise.  It has to be added here rather than inside a Rel *)
+    (* because RHeapSpec quantifies the continuation UNIVERSALLY.           *)
+    (*                                                                    *)
+    (* The carrier is dbundle5 (FIVE components): at this point `wd` does   *)
+    (* not exist yet -- it comes out of lookup_instr inside the step -- and  *)
+    (* factors_drop_at_step adds the sixth column at the drop site.          *)
+    (*                                                                    *)
+    (* NOTATION, settled by probing (this is what the probe is FOR):        *)
+    (*   - `ℙ` is NOT in scope here, and neither is a bare `RProp`.          *)
+    (*     Write `LogicalSoundness.RProp` -- same prefix ZZDropRefineProbe   *)
+    (*     needs.                                                          *)
+    (*   - `□ᵣ` IS in scope, and `->` inside `ℛ⟦…⟧` is RImpl as usual.       *)
+    (* ------------------------------------------------------------------ *)
+    Lemma rexec_cfg_addr_F (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w) :
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+       ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
+       ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+         ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+       ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+         ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_cfg_addr instrs words exitCond fuel a na cΦ ch)
+            (sexec_cfg_addr fuel trans tbl exits ta tna sΦ sh))%I.
+    Proof.
+      (* SPLIT the iIntros.  Folding these into one
+           iIntros "#[Hi He]" (a ta) "#Ha" ... (cΦ sΦ) "%Hfac #rΦ" ...
+         is a SYNTAX ERROR ("[ltac_use_default] expected after [tactic]") --
+         the pure-intro `%Hfac` will not sit in the same string as the rest. *)
+      iIntros "#[Hi He]".
+      iIntros (a ta) "#Ha".
+      iIntros (na tna) "#Hna".
+      iIntros (cΦ sΦ) "%Hfac".
+      iIntros "#rΦ".
+      iIntros (ch sh) "#rh".
+      (* Reaches, with everything persistent and Hfac a plain Coq hypothesis:
+
+           Hfac : Factors (dbundle5 trans tbl exits ta tna) sΦ
+           "Hi" : itable_relW instrs words tbl
+           "He" : etable_rel exitCond exits
+           "Ha" : ℛ⟦RVal ty_xlenbits⟧ a ta
+           "Hna": ℛ⟦RVal ty_xlenbits⟧ na tna
+           "rΦ" : ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ
+           "rh" : ℛ⟦RHeap⟧ ch sh
+           ------------------------------------□
+           ℛ⟦LogicalSoundness.RProp⟧ (cexec_cfg_addr … a na cΦ ch)
+                                     (sexec_cfg_addr fuel … ta tna sΦ sh)
+
+         NEXT QUESTION, and the real design content of the rewrite: the old
+         proof needed a BOXED IH (`iAssert (ℛ⟦□ᵣ …⟧ …) as "H"`) because the
+         recursive call lands at a later world.  With the statement unfolded
+         that box has to wrap the WHOLE new form, premise included -- and at
+         the later world the carrier is `dbundle5 (persist trans θ) … ta tna`,
+         so `factors_four` + `dbundle5_persist` are what re-establish it.
+
+         At the drop's bind: `factors_drop_at_step` then `rdrop_dead`.
+
+         Note sΦ's value type elaborates to `Term w2 ty_xlenbits` (printed
+         WTerm in the statement, STerm in factors_drop_at_step) -- the
+         WTerm/STerm schizophrenia Worlds.v:545 warns about.  If a later
+         `apply` refuses on those, that is why. *)
+    Admitted.
+
+  End Relational.
+
+End RexecDropProbe.
+```
+

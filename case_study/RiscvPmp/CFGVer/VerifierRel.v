@@ -730,193 +730,27 @@ Section CFGVerificationDerived.
        ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
            (cexec_cfg_addr instrs words exitCond fuel)
            (sexec_cfg_addr fuel trans tbl exits))%I.
+    (* ================================================================== *)
+    (* TEMPORARY SCAFFOLD -- MUST NOT BE MERGED.                           *)
+    (*                                                                    *)
+    (* pet CANNOT OPEN THIS FILE at any position ("RSS exceeded 7656 MB"), *)
+    (* so rexec_cfg_addr cannot be developed here.  The established         *)
+    (* workaround for exactly this file (cfgver-executor skill; used by      *)
+    (* ZZGhostRefineProbe.v to de-risk the ghost refinement after the        *)
+    (* 2026-08-20 300 s+ hang) is to Admit it HERE so VerifierRel.vo exists, *)
+    (* then restate and develop it in a small probe that REQUIRES that .vo   *)
+    (* -- a file pet can open, iterating at ~30 ms instead of ~50 s.         *)
+    (*                                                                    *)
+    (* Development probe: Example/ZZRexecDropProbe.v.                      *)
+    (* Original proof body: `git show aebc8f23:case_study/RiscvPmp/CFGVer/  *)
+    (* VerifierRel.v` (187 lines, was Qed before the drop's bind was added).*)
+    (*                                                                    *)
+    (* The gate's hole scan reads the filesystem, so this Admitted BLOCKS   *)
+    (* the merge gate outright.  That is intentional and is the point: the  *)
+    (* branch must not be mergeable while this stands.                     *)
+    (* ================================================================== *)
     Proof.
-      iIntros "#[Hi He]".
-      iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
-                 (cexec_cfg_addr instrs words exitCond fuel)
-                 (fun w' θ => sexec_cfg_addr fuel (persist (A := Sub Σ0) trans θ)
-                                (persist_itableW θ tbl)
-                                (persist_etable θ exits))) as "H".
-      {
-        iInduction fuel as [|n'] "IHfuel".
-        - rsolve.
-        - cbn [sexec_cfg_addr cexec_cfg_addr].
-          rsolve.
-          rewrite forgetting_itable_relW forgetting_etable_rel.
-          iRename select (ℛ⟦RVal ty_xlenbits⟧ a ta) into "Ha".
-          destruct (is_exit (persist_etable ω exits) ta) eqn:Hex;
-            destruct (lookup_instr (persist_itableW ω tbl) ta) as [[x i]|] eqn:Hlk.
-          (* The four cases are BULLETED deliberately.  This script used to be
-             positional, and when sexec_cfg_addr gained the anp argument the
-             first case stopped closing its goal (the IH now takes TWO RVal
-             premises, see below) — which silently shifted every later block by
-             one goal and surfaced as an unresolvable evar in case 2's
-             is_exit_sound_repₚ, i.e. nowhere near the actual cause.  Bullets
-             pin each block to its own goal so the next such change fails
-             locally instead. *)
-          + (* exit-hit / lookup-hit *)
-            iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
-              as (v) "[%Hfact #Hx]".
-            destruct Hfact as (-> & Hm).
-            iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact2".
-            destruct Hfact2 as (v' & Hveq & Hcond).
-            injection Hveq as <-.
-            cbn [ty.RVToOption].
-            rewrite Hcond Hm.
-            (* The step now binds chunk_gc THEN sexec_instruction (Phase 2), so
-               a bare rsolve here would dispatch chunk_gc's bind through the
-               generic RefineCompat/refine_bind machinery — which doesn't know
-               chunk_gc's own acc_refl makes that step's world motion trivial,
-               so it introduces a SPURIOUS extra world whose accessibility then
-               fails to re-associate with ω/ω0 (Acc composition isn't
-               definitionally associative). Fix: split angelic_binary
-               manually, introduce ch/sh ourselves, collapse the acc_refl
-               residue via one reflexivity-provable rewrite (gc_binds_heap /
-               cgc_binds_heap eliminate the bind head first, keeping the
-               REMAINING sexec_instruction bind intact so rsolve can still
-               dispatch it — introducing exactly ONE new world, as before
-               Phase 2), then transport rh across the filter via
-               refine_gc_heap and hand off to rsolve/IHfuel as usual. *)
-            iApply HeapSpec.refine_angelic_binary.
-            * rsolve.
-            * iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
-              rewrite cgc_binds_heap gc_binds_heap.
-              unfold T; cbv beta.
-              (* EXPERIMENT 2026-08-21: the acc_refl-normalising `assert Heq … by
-                 reflexivity; rewrite Heq` that used to sit here spelled out a
-                 term shape that is now stale (three nested binds, not one).
-                 Dropped to find out whether refine_compat_exec_ghosts lets
-                 rsolve handle it unaided. *)
-              iPoseProof (refine_gc_heap with "rh") as "rh'".
-              iClear "rh".
-              rsolve.
-              (* `?…_trans` with no explicit accessibilities, repeated: the ghost
-                 binds add world hops, so the number of nested persist layers
-                 here is no longer fixed at two.  The old form named ω/ω0
-                 explicitly and broke the moment the chain grew. *)
-              { rewrite ?persist_itableW_trans ?persist_etable_trans.
-                (* persist_itableW_trans/persist_etable_trans COLLAPSE nested
-                   persists; the generic persist_trans is stated the other way
-                   round, so `trans` needs the reverse rewrite to reach the same
-                   collapsed shape before Htrans below can match it. *)
-                rewrite <- ?(persist_trans (A := Sub Σ0)).
-                iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-                (* The pc fact sits under `forgetting ω2` — ω2 being the
-                   GHOST-AFTER world motion, which lands between where the
-                   fact is established (the instruction's bind) and where the
-                   IH consumes it.  refine_inst_persist transports it. *)
-                iRename select (forgetting ω2 (ℛ⟦RVal ty_xlenbits⟧ a1 ta2))
-                  into "Hpc".
-                iPoseProof (refine_inst_persist with "Hpc") as "Hpc2".
-                (* Acc composition is not definitionally ASSOCIATIVE, and
-                   `forgetting` accumulates left-assoc — ((ω∘ω0)∘ω1)∘ω2 —
-                   while sexec_cfg_addr's own θ0∘θ1∘θ2∘θ3 becomes
-                   ω∘(((acc_refl∘ω0)∘ω1)∘ω2) once persist_itableW_trans
-                   collapses the outer layer (θ0 is chunk_gc's acc_refl,
-                   substituted in by gc_binds_heap).  Same substitution,
-                   different term.  Both expand to the SAME fully-nested form,
-                   so trans-backwards plus _refl closes the gap with no new
-                   lemmas.  The pre-ghost proof dodged this by naming ω/ω0 in a
-                   two-hop chain; that stopped working at four hops. *)
-                assert (Htbl :
-                  persist_itableW (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) tbl
-                  = persist_itableW (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) tbl)
-                  by (rewrite <- !persist_itableW_trans, persist_itableW_refl;
-                      reflexivity).
-                assert (Hetbl :
-                  persist_etable (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) exits
-                  = persist_etable (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) exits)
-                  by (rewrite <- !persist_etable_trans, persist_etable_refl;
-                      reflexivity).
-                assert (Htrans :
-                  persist (A := Sub Σ0) trans (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2))
-                  = persist (A := Sub Σ0) trans (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2))
-                  by (rewrite !persist_trans; reflexivity).
-                rewrite Htbl Hetbl Htrans.
-                (* TWO "[$]", one per RVal argument: the recursive call passes
-                   apc' as both the pc and the incoming nextpc. *)
-                iApply ("IH" with "[$] [$]"). }
-              { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
-                iApply ("rΦ2" with "[$] [$]"). }
-          + (* exit-hit / lookup-miss *)
-            iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]") as "%Hfact".
-            destruct Hfact as (v & -> & Hcond).
-            cbn [ty.RVToOption].
-            rewrite Hcond.
-            rsolve.
-          + (* exit-miss / lookup-hit *)
-            iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
-              as (v) "[%Hfact #Hx]".
-            destruct Hfact as (-> & Hm).
-            cbn [ty.RVToOption].
-            rewrite Hm.
-            (* Same chunk_gc-bind trap and fix as the exit-hit/lookup-hit case
-               above — see the comment there. *)
-            iApply HeapSpec.refine_angelic_binary.
-            * rsolve.
-            * iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
-              rewrite cgc_binds_heap gc_binds_heap.
-              unfold T; cbv beta.
-              (* EXPERIMENT 2026-08-21: the acc_refl-normalising `assert Heq … by
-                 reflexivity; rewrite Heq` that used to sit here spelled out a
-                 term shape that is now stale (three nested binds, not one).
-                 Dropped to find out whether refine_compat_exec_ghosts lets
-                 rsolve handle it unaided. *)
-              iPoseProof (refine_gc_heap with "rh") as "rh'".
-              iClear "rh".
-              rsolve.
-              (* `?…_trans` with no explicit accessibilities, repeated: the ghost
-                 binds add world hops, so the number of nested persist layers
-                 here is no longer fixed at two.  The old form named ω/ω0
-                 explicitly and broke the moment the chain grew. *)
-              { rewrite ?persist_itableW_trans ?persist_etable_trans.
-                (* persist_itableW_trans/persist_etable_trans COLLAPSE nested
-                   persists; the generic persist_trans is stated the other way
-                   round, so `trans` needs the reverse rewrite to reach the same
-                   collapsed shape before Htrans below can match it. *)
-                rewrite <- ?(persist_trans (A := Sub Σ0)).
-                iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
-                (* Same two obstacles as the exit-hit/lookup-hit case above —
-                   the pc fact under the ghost-after `forgetting`, and the
-                   non-associativity of Acc composition.  See the comments
-                   there for why each arises. *)
-                iRename select (forgetting ω2 (ℛ⟦RVal ty_xlenbits⟧ a1 ta2))
-                  into "Hpc".
-                iPoseProof (refine_inst_persist with "Hpc") as "Hpc2".
-                assert (Htbl :
-                  persist_itableW (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) tbl
-                  = persist_itableW (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) tbl)
-                  by (rewrite <- !persist_itableW_trans, persist_itableW_refl;
-                      reflexivity).
-                assert (Hetbl :
-                  persist_etable (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2)) exits
-                  = persist_etable (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) exits)
-                  by (rewrite <- !persist_etable_trans, persist_etable_refl;
-                      reflexivity).
-                assert (Htrans :
-                  persist (A := Sub Σ0) trans (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2))
-                  = persist (A := Sub Σ0) trans (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2))
-                  by (rewrite !persist_trans; reflexivity).
-                rewrite Htbl Hetbl Htrans.
-                iApply ("IH" with "[$] [$]"). }
-              { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
-                iApply ("rΦ2" with "[$] [$]"). }
-          + (* exit-miss / lookup-miss: symbolic errors twice; concrete side *)
-            (* must also fail — NonSyncVal pc is rejected, SyncVal pc closed  *)
-            (* by the empty angelic_binary of two errors.                     *)
-            destruct a as [va|va1 va2]; cbn [ty.RVToOption]; rsolve.
-            iIntros (cΦ sΦ) "#rΦ %ch %sh #rh".
-            unfold LogicalSoundness.RProp; cbn.
-            iIntros "[%HF|%HF]"; destruct HF.
-      }
-      iPoseProof (unconditionally_T with "H") as "HT".
-      unfold T.
-      cbv beta.
-      rewrite (persist_itableW_refl tbl) (persist_etable_refl exits).
-      (* `persist trans acc_refl` needs no rewrite — `persistent_subst` matches
-         on the accessibility, so acc_refl reduces definitionally. *)
-      iApply "HT".
-    Qed.
+    Admitted.
 
     (* ------------------------------------------------------------------ *)
     (* VC-level refinement for the term-table verifier (guarded form).     *)
