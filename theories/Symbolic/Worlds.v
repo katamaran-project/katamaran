@@ -428,6 +428,35 @@ Module Type WorldsOn
     Qed.
     Arguments acc_forget {w} x {σ xIn}.
 
+    (* The FORWARD accessibility of the drop, `w ⊒ wdrop w x`.  Unlike
+       `acc_forget` it CANNOT be total: the backward direction wants a WEAK path
+       condition at the smaller world (empty works) while the forward direction
+       wants a STRONG one, and the two coincide only where the occurs-check
+       succeeds.  So the occurs-check equation is an explicit argument — the
+       executor has it from the dependent match it already performs.  (Do not
+       try to fix this by changing `wdrop`'s None fallback; the two directions
+       want opposite fallbacks.  See PLAN-dropk.md.)
+
+       Targeting `wdrop w x` rather than `wsubst w x t` is the point: the two
+       are only PROPOSITIONALLY equal, and `psafe (dropk …)` is defined at
+       `wdrop`, so using `acc_subst_right` here would force a dependent rewrite
+       of a World inside `psafe`. *)
+    Program Definition acc_drop {w : World} x {σ} {xIn : (x∷σ ∈ w)%katamaran}
+        (pc' : PathCondition (wctx w - x∷σ))
+        (H : occurs_check xIn (wco w) = Some pc')
+        (t : Term (wctx w - x∷σ) σ) : w ⊒ wdrop w x :=
+      @acc_sub w (wdrop w x) (sub_single xIn t) _.
+    Next Obligation.
+    Proof.
+      intros w x σ xIn pc' H t ι Hι. cbn in *.
+      rewrite H in Hι. cbn in Hι.
+      pose proof (occurs_check_sound xIn (wco w)) as HH.
+      unfold OccursCheckSoundPoint in HH. rewrite H in HH.
+      inversion HH as [? Heq|].
+      rewrite Heq. rewrite subst_shift_single. exact Hι.
+    Qed.
+    Arguments acc_drop {w} x {σ xIn} pc' H t.
+
     Definition acc_secLeak {w : World} {σ} {s : Term w σ} : w ⊒ wsecLeak w s :=
       acc_formula_right (formula_secLeak s).
 

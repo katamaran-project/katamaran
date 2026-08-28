@@ -795,13 +795,25 @@ Section CFGVerificationDerived.
                 match occurs_check bIn h with
                 | None    => POST w acc_refl tt h   (* unreachable: find_dead checked it *)
                 | Some h' =>
-                    let om := @acc_subst_right w (name b) (type b) bIn t0 in
-                    @SymProp.dropk (wctx w) (name b) (type b) bIn
-                      (drop_dead n
-                         (persist (A := Sub Σ0) trans om)
-                         (persist_itableW om tbl) (persist_etable om exits)
-                         (persist__term apc om) (persist__term anp om)
-                         (four POST om) h')
+                    (* Convoy match: the drop's forward accessibility needs the
+                       occurs-check EQUATION, not just its success, so that it
+                       can target `wdrop w x` — the same world `psafe (dropk …)`
+                       is defined at.  Using acc_subst_right here would land at
+                       `wsubst w x t0`, only propositionally equal, and force a
+                       dependent rewrite of a World inside psafe. *)
+                    (match occurs_check bIn (wco w) as o
+                           return occurs_check bIn (wco w) = o -> 𝕊 (wctx w) with
+                     | Some pc' =>
+                         fun Hpc =>
+                           let om := @acc_drop w (name b) (type b) bIn pc' Hpc t0 in
+                           @SymProp.dropk (wctx w) (name b) (type b) bIn
+                             (drop_dead n
+                                (persist (A := Sub Σ0) trans om)
+                                (persist_itableW om tbl) (persist_etable om exits)
+                                (persist__term apc om) (persist__term anp om)
+                                (four POST om) h')
+                     | None => fun _ => POST w acc_refl tt h
+                     end) eq_refl
                 end
             end
       end.
