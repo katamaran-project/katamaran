@@ -974,6 +974,39 @@ and A/B is one recompile apart.
 > Qed.
 > ```
 >
+> ### `rdrop_dead` — statement settled, base case `Qed`, step case OPEN
+>
+> Stated **pointwise** (`… iota -> … iota`) per §10: the unary `⊢` will not
+> parse after a binder, and the probe has no `ModalNotations`. `RProp` and
+> `psafe` need the `LogicalSoundness.` prefix there.
+>
+> ```coq
+> Lemma rdrop_dead {Sg0 : LCtx} (fuel : nat) : forall (w : World)
+>     (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+>     (apc anp : Term (wctx w) ty_xlenbits)
+>     (cPhi : unit -> SCHeap -> Prop)
+>     (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+>     (ch : SCHeap) (sh : SHeap (wctx w))
+>     (Hfac : Factors (dbundle trans tbl exits apc anp) sPhi)
+>     (iota : Valuation w) (Hpc : instprop (wco w) iota),
+>     ℛ⟦RBox (RImpl RUnit (RImpl RHeap LogicalSoundness.RProp))⟧ cPhi sPhi iota ->
+>     ℛ⟦RHeap⟧ ch sh iota ->
+>     LogicalSoundness.psafe (drop_dead fuel trans tbl exits apc anp sPhi sh) iota ->
+>     cPhi tt ch.
+> ```
+>
+> That is Phase 0's `zz_dropk_step` generalised to the fuel-indexed chain, with
+> `Factors` the single premise. **`rdrop_dead_base` (fuel = 0) is `Qed`** —
+> `drop_dead 0` is `SHeapSpec.pure tt`, so it is the box at `acc_refl`; note
+> `specialize (H w acc_refl iota (inst_sub_id iota) Hpc)`, since
+> `inst (sub_acc acc_refl) iota = iota` is NOT `eq_refl`.
+>
+> **The step case is the one thing still open.** Its ingredients are all proved:
+> Phase 0's script, `factors_witness_indep'` (move the box's read-off witness to
+> the tree's fixed one), `wb_bundle` (`WitnessBlind` from `var_dead`),
+> `zz_heap_transport` (the heap), and `factors_four` + `dbundle_persist`
+> (re-establish `Factors` at the recursive call).
+>
 > ### The premise machinery is COMPLETE — 11 `Qed`s
 >
 > With these, `rdrop_dead`'s only premise is `Factors (dbundle …) sΦ`:
