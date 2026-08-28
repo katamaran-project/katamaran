@@ -970,6 +970,77 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
       destruct (combined_solver w C) as [[w1 [ζ C1]]|]; cbn; now rewrite ?HP.
     Qed.
 
+    Lemma pext_pure {A} {w : World} (a : A w) : PExt (pure a).
+    Proof. intros P1 P2 HP. unfold pure, T. apply HP. Qed.
+
+    Lemma pext_block {A} {w : World} : PExt (block (A := A) (w := w)).
+    Proof. intros P1 P2 HP. reflexivity. Qed.
+
+    Lemma pext_error {A} {w : World} (msg : AMessage w) : PExt (error (A := A) msg).
+    Proof. intros P1 P2 HP. reflexivity. Qed.
+
+    Lemma pext_angelic_binary {A} {w : World} (m1 m2 : SPureSpec A w) :
+      PExt m1 -> PExt m2 -> PExt (angelic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP. unfold angelic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma pext_demonic_binary {A} {w : World} (m1 m2 : SPureSpec A w) :
+      PExt m1 -> PExt m2 -> PExt (demonic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP. unfold demonic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma pext_debug {A} {w : World} msg (m : SPureSpec A w) :
+      PExt m -> PExt (debug msg m).
+    Proof. intros Hm P1 P2 HP. unfold debug. f_equal. now apply Hm. Qed.
+
+    Lemma pext_assert_formula {w : World} msg (fml : Formula w) :
+      PExt (assert_formula msg fml).
+    Proof. intros P1 P2 HP. unfold assert_formula. now apply pext_assert_pathcondition. Qed.
+
+    Lemma pext_assume_formula {w : World} (fml : Formula w) :
+      PExt (assume_formula fml).
+    Proof. intros P1 P2 HP. unfold assume_formula. now apply pext_assume_pathcondition. Qed.
+
+    Lemma pext_angelic_list' {A} {w : World} (d : A w) (xs : list (A w)) :
+      PExt (angelic_list' d xs).
+    Proof.
+      revert d. induction xs as [|x xs IH]; intros d; cbn.
+      - intros P1 P2 HP. apply HP.
+      - apply pext_angelic_binary; [apply pext_pure | apply IH].
+    Qed.
+
+    Lemma pext_angelic_list {A} {w : World} msg (xs : list (A w)) :
+      PExt (angelic_list msg xs).
+    Proof.
+      destruct xs as [|x xs]; cbn; [apply pext_error | apply pext_angelic_list'].
+    Qed.
+
+    Lemma pext_demonic_list' {A} {w : World} (d : A w) (xs : list (A w)) :
+      PExt (demonic_list' d xs).
+    Proof.
+      revert d. induction xs as [|x xs IH]; intros d; cbn.
+      - intros P1 P2 HP. apply HP.
+      - apply pext_demonic_binary; [apply pext_pure | apply IH].
+    Qed.
+
+    Lemma pext_demonic_list {A} {w : World} (xs : list (A w)) :
+      PExt (demonic_list xs).
+    Proof.
+      destruct xs as [|x xs]; cbn; [apply pext_block | apply pext_demonic_list'].
+    Qed.
+
+    Lemma pext_angelic_finite {w : World} F `{finite.Finite F} msg :
+      PExt (angelic_finite (w := w) F msg).
+    Proof. unfold angelic_finite. apply pext_angelic_list. Qed.
+
+    Lemma pext_demonic_finite {w : World} F `{finite.Finite F} :
+      PExt (demonic_finite (w := w) F).
+    Proof. unfold demonic_finite. apply pext_demonic_list. Qed.
+
   End SPureSpec.
   Export (hints) SPureSpec.
 

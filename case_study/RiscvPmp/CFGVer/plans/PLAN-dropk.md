@@ -1949,11 +1949,19 @@ PExt m  :=  ∀ P₁ P₂, (∀ w' θ a,   P₁ w' θ a   = P₂ w' θ a)   → 
 CExt m  :=  ∀ P₁ P₂, (∀ w' θ a h, P₁ w' θ a h = P₂ w' θ a h) → ∀ h, m P₁ h = m P₂ h  (* SHeapSpec *)
 ```
 
-**Landed in `theories/Symbolic/Monads.v`, all `Qed`:** `PExt` + `pext_bind`,
-`pext_angelic`, `pext_demonic`, `pext_assert_pathcondition`,
-`pext_assume_pathcondition`; `CExt` + `cext_pure`, `cext_error`, `cext_bind`,
-`cext_angelic_binary`, `cext_demonic_binary`, `cext_debug`,
-`cext_lift_purespec`.
+**Landed in `theories/Symbolic/Monads.v`, 26 lemmas, all `Qed`:**
+
+- `PExt` + `pext_` `pure`, `block`, `error`, `bind`, `angelic`, `demonic`,
+  `angelic_binary`, `demonic_binary`, `debug`, `assert_pathcondition`,
+  `assume_pathcondition`, `assert_formula`, `assume_formula`, `angelic_list'`,
+  `angelic_list`, `demonic_list'`, `demonic_list`, `angelic_finite`,
+  `demonic_finite`.
+- `CExt` + `cext_` `pure`, `error`, `bind`, `angelic_binary`, `demonic_binary`,
+  `debug`, `lift_purespec`.
+
+Every one landed first or second try; the recursive ones (`angelic_list'` and
+friends) are four lines each — `induction`, then `apply pext_angelic_binary;
+[apply pext_pure | apply IH]`.
 
 Two findings from validating the shape:
 
