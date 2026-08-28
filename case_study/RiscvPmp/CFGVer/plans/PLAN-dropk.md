@@ -840,11 +840,36 @@ and A/B is one recompile apart.
 >    `w`.
 >
 > So the premise has to say what §4bis established semantically: **`sΦ` FACTORS
-> through persisted x-free data**. That is statable (`∃ A a f, ∀ w' ω, sΦ w' ω =
-> f w' (persist a ω)` plus x-freeness of `a`) but it is a characterisation of
-> the executor's continuation, not a property one can assume of an opaque `sΦ`
-> and hand to `RHeapSpec`. Formalising it, and threading it through
-> `rexec_cfg_addr`'s fuel induction, IS the remaining Phase 5 work.
+> through persisted x-free data**.
+>
+> ### RESOLVED 2026-08-28 — `Factors` is both sufficient and closed, two `Qed`s
+>
+> ```coq
+> Factors a sΦ  :=  ∃ g, ∀ w2 ω, sΦ w2 ω = g w2 (persist a ω)
+> ```
+>
+> - **`factors_four` (`Qed`)** — CLOSED: `Factors a sΦ → Factors (persist a om)
+>   (four sΦ om)`. And the new carrier `persist a om` is **exactly what
+>   `drop_dead` already passes to its recursive call** — which is, in
+>   retrospect, why the executor threads a carrier at all.
+> - **`factors_witness_indep` (`Qed`)** — SUFFICIENT: with
+>   `occurs_check xIn a = Some a'` (precisely what `var_dead` computes),
+>   `sΦ w2 (acc_drop … t1 ∘ ω2) = sΦ w2 (acc_drop … t2 ∘ ω2)`. That is the whole
+>   gap Phase 0's `Hindep` had to bridge, now discharged from x-freeness.
+>
+> Both are in `Example/ZZDropRefineProbe.v`, generic over any carrier `A` with
+> `SubstLaws`/`OccursCheckLaws`. The blocker above is therefore CLEARED; what
+> remains is assembly, not design:
+> 1. state `rdrop_dead` with `Factors` and prove it by induction on fuel
+>    (base from the box at `acc_refl`; drop case = Phase 0's script + the two
+>    lemmas above + `zz_heap_transport`);
+> 2. thread `Factors` through `rexec_cfg_addr`'s fuel induction;
+> 3. discharge it once at `rexec_triple_addr`, where the carrier is `δ1`.
+>
+> Note the carrier at the real call site must cover EVERYTHING the ambient
+> continuation captures — `trans`, `tbl`, `exits`, `apc`, `anp` — so instantiate
+> `A` at their tuple. `var_dead` already occurs-checks each of them, which is
+> what makes step 3 go through.
 >
 > **Consequence for §11's risk register:** "`ZZAccIndep` not discharged for the
 > REAL `sΦ`" is not a moderate residual — it is the whole of Phase 5's
