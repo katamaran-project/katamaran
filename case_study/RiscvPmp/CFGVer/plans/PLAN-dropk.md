@@ -646,14 +646,12 @@ study.
 > `erase_safe`, `psafe_safe`, and the two binary prune lemmas.
 > `ok_sound` (`MicroSail/SymbolicExecutor.v`) is bullet-free and unaffected.
 >
-> **Scope note on the kill-gate.** On this branch `_CoqProject` activates only
+> **Scope note on the kill-gate — resolved.** The gate compiles only
 > `case_study/RiscvPmp` + `CFGVer`; MinimalCaps, BlockVer, BinaryBlockVer and
-> `theories/Staging` are all commented out, so the gate does **not** exercise
-> them and §11's "breaks another case study" risk is **not** discharged by it.
-> Checked by hand instead: none of those files matches on a `SymProp`
-> constructor (they only reference `SymProp.safe` and the notations), so the
-> change is very unlikely to affect them — but that is an inspection, not a
-> compile.
+> `theories/Staging` are commented out of `_CoqProject`. **Owner confirms
+> 2026-08-28 that all four are outdated dead code**, so "the framework change
+> might break another case study" is not a live concern for this repo. A future
+> `𝕊` constructor need not worry about them either.
 - `acc_forget` in `Worlds.v`; the `psafe` case's `forgetting` lemma in
   `UnifLogic.v`.
 - **`OccursCheckLaws Chunk` in `theories/Syntax/Chunks.v`**, next to
@@ -695,8 +693,39 @@ Output a `Tri w w'`. Two fiddly parts, both plumbing: enumerating `wctx w` with
 `In`-proofs, and the dependent fold. **Instrument it — emit how many drops
 actually FIRE.** A drop that never fires is indistinguishable from one that works.
 
-Note `dropk` needs no witness, so `ty.inhabit`'s `None` on tuple/union/record is
-no longer a restriction — that under-approximation from the old design is gone.
+~~Note `dropk` needs no witness, so `ty.inhabit`'s `None` on tuple/union/record is
+no longer a restriction — that under-approximation from the old design is gone.~~
+
+> **WRONG — corrected 2026-08-28 against the types.** `dropk` needs no witness
+> **in the tree**, which is what makes the refinement work. But the executor
+> still needs one **in the accessibility**: `SHeapSpec A = □(A -> SHeap -> 𝕊)
+> -> SHeap -> 𝕊` (`Symbolic/Monads.v:917`), so calling the continuation at the
+> smaller world requires an `Acc w (wdrop w x)`, and `Acc`'s only non-reflexive
+> constructor is `acc_sub ζ` with `ζ : Sub (wctx w) (wctx w - x∷σ)` — an `Env`
+> with an entry for **every** variable of `wctx w`, `x` included. So a closed
+> term of type σ over the smaller context is mandatory and `ty.inhabit`'s
+> under-approximation **survives**.
+>
+> **Impact in practice: nil.** What we drop are havoced registers, which are
+> `ty_xlenbits = bvec _`, and `inhabit (bvec n) = Some bv.zero`
+> (`TypeDecl.v:973`). Only `enum` / `tuple` / `union` / `record` are undroppable.
+>
+> Useful corollary: since `𝕊` is indexed by **LCtx, not World**, and
+> `wsubst w x t0` and `wdrop w x` have the same `wctx`, the executor may build
+> the tree with the ordinary existing `acc_subst_right t0 : w ⊒ wsubst w x t0`.
+> The two worlds are propositionally equal whenever
+> `occurs_check xIn (wco w) = Some pc'` (by `subst_shift_single`), and that
+> equality is needed only in the Phase 5 *proof*, never to typecheck the term.
+
+> **§6's "dependent fold" difficulty is AVOIDABLE.** Do not compute a set of
+> dead variables and remove them all at once — that is what forces a fold whose
+> every step's type mentions the previous step's smaller context. Instead make
+> the drop a **monadic loop over fuel**: find ONE dead variable, drop it as a
+> single step, recurse and re-scan at the new world. Each drop is then an
+> ordinary `SHeapSpec` step and nothing is dependently folded. Enumerating the
+> context with `In`-proofs is likewise not dependent — it is
+> `all_ins (Δ ▻ b) := existT b ctx.in_zero :: map (in_succ …) (all_ins Δ)`,
+> every proof living at one fixed context.
 
 **Phase 4 — executor step.** Inlined in `sexec_cfg_addr`, not an `sexec_ghost`
 case: the step needs `tbl`, `exits`, `apc` and the translations, none of which a
@@ -800,7 +829,7 @@ an extrapolation from the smallest one.
 | ~~`ZZAccIndep` not dischargeable for the recursive call~~ | **RETIRED** | §4bis, 2026-08-27. The recursive call is congruence over `zz_persist_indep`, not an IH question at all; the outer continuation reduces to `δ1` alone |
 | `sexec_cfg_addr` must now thread `δ1`, so `cexec_cfg_addr` / `rexec_cfg_addr` gain an argument | moderate — **NEW, found by §4bis** | unavoidable: without it source 2 is a hypothesis about an opaque `Φ`, which is what §2bis died on. Cost lands in Phases 4-5, on a file with a 300 s+ hang in its history. Not estimated |
 | `ZZAccIndep` not discharged for the REAL `sΦ` (as opposed to on paper) | moderate | Phase 5. §4bis identifies the route and names the object; the table types' bespoke `persist` needs bridging lemmas first |
-| ~~the ~10 `𝕊` cases break another case study~~ | **RETIRED, with a caveat** | gate green 2026-08-27. Caveat: `_CoqProject` on this branch activates only `RiscvPmp`+`CFGVer`, so MinimalCaps / BlockVer / BinaryBlockVer / `theories/Staging` were **not compiled**. Hand-checked that none matches on a `SymProp` constructor — an inspection, not a build |
+| ~~the ~10 `𝕊` cases break another case study~~ | **RETIRED — no caveat** | gate green 2026-08-27. The gate does not compile MinimalCaps / BlockVer / BinaryBlockVer / `theories/Staging`, but **the owner confirms (2026-08-28) all four are outdated DEAD CODE**. There is no other live case study to break, so this risk is void rather than merely untested. Do not re-raise it |
 | ~~`prune` / `Erasure` cases turn out to be real research~~ | **RETIRED** | both were routine. The actual difficulty was elsewhere: tactic scripts whose GOAL COUNT tracks the constructor count, which `vos` cannot see (§5's box) |
 | `rexec_cfg_addr` re-pairing hangs or OOMs | moderate | probe-first; precedent exists; `cfgver-rsolve` |
 | drop never fires on the real program | moderate | Phase 3 instrumentation |
