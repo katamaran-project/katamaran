@@ -696,18 +696,29 @@ Section CFGVerificationDerived.
     (* It should be relatively easy with most of the complexity handled by rsolve. *)
     (* I suspect there are a few missing RefineCompat instances for tables. *)
     (* This is maybe a good proof golf target. *)
+    (* `trans` (the accumulated translation) is threaded on the SYMBOLIC side
+       only and carries NO relational premise: the concrete executor has no
+       logical variables, so there is nothing for it to be related to.  It is a
+       fixed argument like tbl/exits, present so the dead-variable drop can
+       occurs-check it (PLAN-dropk.md §4bis / Verifier.v's comment on
+       sexec_cfg_addr).  cexec_cfg_addr is therefore UNCHANGED. *)
     Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
-        (fuel : nat) {w} (tbl : SInstrTableW w) (exits : SExitTable w) :
+        (* `{w : World}` must be ANNOTATED: `trans : Sub Σ0 w` now precedes the
+           table arguments, and `Sub` takes an LCtx, so leaving `w` to be
+           inferred elaborates it as an LCtx and `SInstrTableW w` then fails. *)
+        (fuel : nat) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w) :
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ℛ⟦RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits)⟧
            (cexec_cfg_addr instrs words exitCond fuel)
-           (sexec_cfg_addr fuel tbl exits))%I.
+           (sexec_cfg_addr fuel trans tbl exits))%I.
     Proof.
       iIntros "#[Hi He]".
       iAssert (ℛ⟦□ᵣ (RVal ty_xlenbits -> RVal ty_xlenbits -> RHeapSpec (RVal ty_xlenbits))⟧
                  (cexec_cfg_addr instrs words exitCond fuel)
-                 (fun w' θ => sexec_cfg_addr fuel (persist_itableW θ tbl)
+                 (fun w' θ => sexec_cfg_addr fuel (persist (A := Sub Σ0) trans θ)
+                                (persist_itableW θ tbl)
                                 (persist_etable θ exits))) as "H".
       {
         iInduction fuel as [|n'] "IHfuel".
@@ -767,6 +778,11 @@ Section CFGVerificationDerived.
                  here is no longer fixed at two.  The old form named ω/ω0
                  explicitly and broke the moment the chain grew. *)
               { rewrite ?persist_itableW_trans ?persist_etable_trans.
+                (* persist_itableW_trans/persist_etable_trans COLLAPSE nested
+                   persists; the generic persist_trans is stated the other way
+                   round, so `trans` needs the reverse rewrite to reach the same
+                   collapsed shape before Htrans below can match it. *)
+                rewrite <- ?(persist_trans (A := Sub Σ0)).
                 iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
                 (* The pc fact sits under `forgetting ω2` — ω2 being the
                    GHOST-AFTER world motion, which lands between where the
@@ -795,7 +811,11 @@ Section CFGVerificationDerived.
                   = persist_etable (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) exits)
                   by (rewrite <- !persist_etable_trans, persist_etable_refl;
                       reflexivity).
-                rewrite Htbl Hetbl.
+                assert (Htrans :
+                  persist (A := Sub Σ0) trans (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2))
+                  = persist (A := Sub Σ0) trans (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2))
+                  by (rewrite !persist_trans; reflexivity).
+                rewrite Htbl Hetbl Htrans.
                 (* TWO "[$]", one per RVal argument: the recursive call passes
                    apc' as both the pc and the incoming nextpc. *)
                 iApply ("IH" with "[$] [$]"). }
@@ -833,6 +853,11 @@ Section CFGVerificationDerived.
                  here is no longer fixed at two.  The old form named ω/ω0
                  explicitly and broke the moment the chain grew. *)
               { rewrite ?persist_itableW_trans ?persist_etable_trans.
+                (* persist_itableW_trans/persist_etable_trans COLLAPSE nested
+                   persists; the generic persist_trans is stated the other way
+                   round, so `trans` needs the reverse rewrite to reach the same
+                   collapsed shape before Htrans below can match it. *)
+                rewrite <- ?(persist_trans (A := Sub Σ0)).
                 iPoseProof (forgetting_unconditionally_drastic with "IHfuel") as "IH".
                 (* Same two obstacles as the exit-hit/lookup-hit case above —
                    the pc fact under the ghost-after `forgetting`, and the
@@ -851,7 +876,11 @@ Section CFGVerificationDerived.
                   = persist_etable (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2) exits)
                   by (rewrite <- !persist_etable_trans, persist_etable_refl;
                       reflexivity).
-                rewrite Htbl Hetbl.
+                assert (Htrans :
+                  persist (A := Sub Σ0) trans (acc_trans ω (acc_trans (acc_trans (acc_trans acc_refl ω0) ω1) ω2))
+                  = persist (A := Sub Σ0) trans (acc_trans (acc_trans (acc_trans ω ω0) ω1) ω2))
+                  by (rewrite !persist_trans; reflexivity).
+                rewrite Htbl Hetbl Htrans.
                 iApply ("IH" with "[$] [$]"). }
               { iPoseProof (forgetting_unconditionally_drastic with "rΦ") as "rΦ2".
                 iApply ("rΦ2" with "[$] [$]"). }
@@ -867,6 +896,8 @@ Section CFGVerificationDerived.
       unfold T.
       cbv beta.
       rewrite (persist_itableW_refl tbl) (persist_etable_refl exits).
+      (* `persist trans acc_refl` needs no rewrite — `persistent_subst` matches
+         on the accessibility, so acc_refl reduces definitionally. *)
       iApply "HT".
     Qed.
 
@@ -1410,7 +1441,7 @@ Section CFGVerificationDerived.
                            (words_of_env (@wterm_take _) (@wterm_drop _)
                               (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
           { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
-          iApply (rexec_cfg_addr instrs words exitCond fuel _ _ with "[$Hi $He]").
+          iApply (rexec_cfg_addr instrs words exitCond fuel _ _ _ with "[$Hi $He]").
           (* TWO RVal premises now: the pc, persisted across θ1' ∘ θ2, and the
              initial nextpc, persisted across θ2.  Bulleted rather than
              sequenced — a positional script here is what turned a missing

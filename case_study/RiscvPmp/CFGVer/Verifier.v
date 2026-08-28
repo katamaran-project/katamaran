@@ -683,10 +683,26 @@ Section CFGVerificationDerived.
     (* epilogue establishes pc = nextpc = an after each step; they are      *)
     (* separate parameters only so the FIRST step, which genuinely does not *)
     (* know nextpc, can differ. *)
-    Fixpoint sexec_cfg_addr (fuel : nat) :
-      ⊢ SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+    (* `trans` is THE ACCUMULATED TRANSLATION: the contract context's variables
+       as terms over the CURRENT world, i.e. `persist δ1 …` from
+       sexec_triple_addr below.  It is threaded and persisted exactly like
+       tbl/exits and is otherwise UNUSED — it exists so that the dead-variable
+       drop (PLAN-dropk.md) can occurs-check it.
+
+       Why it has to be here rather than inferred later: the outer continuation
+       of the executor is `consume ens δ3` with `δ3 = persist δ1 (θ2 ∘ θ3)`, so
+       δ1 is the ONLY thing that continuation's ω-dependence factors through
+       (PLAN-dropk.md §4bis).  The executor cannot see that continuation, so a
+       variable live only in δ1 would look dead against heap/pc/tbl/exits and be
+       dropped unsoundly.  Occurs-checking `tbl` is NOT a substitute: a component
+       of the translation unused by the table is invisible in
+       `subst_itable ζ tbl` yet still present in δ3.  And it must be δ1, not ζ
+       alone — δ1 = snoc ζ a2 with a2 the INITIAL pc, which the live `apc` no
+       longer covers once the loop advances. *)
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) :
+      ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w tbl exits apc anp =>
+      fun w trans tbl exits apc anp =>
         let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
           error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
                                      debug_string_message := s |}) in
@@ -714,6 +730,7 @@ Section CFGVerificationDerived.
                                     (persist__term wd  (θ0 ∘ θ1)) ;;
                    ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
                    sexec_cfg_addr n'
+                     (persist (A := Sub Σ0) trans (θ0 ∘ θ1 ∘ θ2 ∘ θ3))
                      (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl)
                      (persist_etable  (θ0 ∘ θ1 ∘ θ2 ∘ θ3) exits)
                      (persist__term apc' θ3) (persist__term apc' θ3)
@@ -867,7 +884,9 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (zip_words (subst_itable ζ tbl) ws)
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel
+                       (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
+                       (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
