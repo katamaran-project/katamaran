@@ -2234,16 +2234,49 @@ accessibility, so `om` has to be destructed.
 
 ### What actually remains
 
-1. Restate `rexec_cfg_addr` in UNFOLDED form (decision taken 2026-08-28 — the
+1. Restate `rexec_cfg_addr` in UNFOLDED form and re-prove it. **This is now the
+   whole remaining risk**; everything it needs is proved and green.
+
+   *Decision taken 2026-08-28:* unfolded form, not a bespoke `Rel`. The
    `ℛ⟦… -> RHeapSpec …⟧` conclusion universally quantifies the continuation, so
    the premise cannot be added while keeping that shape; a bespoke `Rel` was
-   rejected because `Rel`'s `RSat` is world-polymorphic while the carrier lives
-   at one fixed world). Thread the five-component `Factors` through the fuel
-   induction and use `factors_drop_at_step` + `rdrop_dead` at the drop's bind.
-   **Risk to budget for:** the inner `rsolve` calls that dispatch `chunk_gc` /
-   `sexec_instruction` / the ghost binds sit under the changed shape and will
-   need re-plumbing, in a file whose history includes a 300 s+ hang whose root
-   cause was never found.
+   rejected because `Rel`'s `RSat` is WORLD-POLYMORPHIC while the `Factors`
+   carrier lives at one fixed world, which would force the carrier to become
+   `forall w, dcarrier Σ0 (wctx w)` for no gain — `rsolve`'s registered
+   instances would not fire on the new head either way.
+
+   The target statement (`RHeapSpec RA` unfolded, with the premise inserted
+   before the box):
+
+   ```coq
+   Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
+       (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+       (fuel : nat) {w : World} {Σ0 : LCtx}
+       (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w) :
+     (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+      ∀ a ta,  ℛ⟦RVal ty_xlenbits⟧ a  ta  -∗
+      ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+      ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+        ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> ℙ)⟧ cΦ sΦ -∗
+      ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+        ℛ⟦ℙ⟧ (cexec_cfg_addr instrs words exitCond fuel a na cΦ ch)
+              (sexec_cfg_addr fuel trans tbl exits ta tna sΦ sh))%I.
+   ```
+
+   At the drop's bind: `factors_drop_at_step` then `rdrop_dead`. At the
+   recursive call: `factors_four` + `dbundle5_persist` re-establish the premise.
+
+   **Two risks to budget for, and the second is the expensive one:**
+   - the inner `rsolve` calls that dispatch `chunk_gc` / `sexec_instruction` /
+     the ghost binds sit under the changed shape and will need re-plumbing;
+   - **pet CANNOT OPEN `VerifierRel.v` AT ANY POSITION** — confirmed again
+     2026-08-28, `rocq_start` dies with "pet RSS exceeded 7656 MB". So there is
+     no interactive iteration on this proof at all. Follow the precedent the
+     `cfgver-executor` skill already records for exactly this file: **build a
+     mirror probe first** (as `Example/ZZGhostRefineProbe.v` did to de-risk the
+     ghost refinement, whose 2274a22b attempt hung for 300 s+ with the root
+     cause never found) and develop there, where pet works. Do NOT iterate by
+     re-running `make` on `VerifierRel.v`; that is minutes per attempt.
 2. Discharge it once at `rexec_triple_addr`, carrier `δ1`.
 3. Phase 6 (absorb the new bind in `sound_exec_cfg_addr_myWP2`), Phase 7 (flip
    `drop_fuel`, measure, gate).
