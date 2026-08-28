@@ -1904,3 +1904,111 @@ None of `factors_four` / `factors_witness_indep'` inspects `V`.
    current failure is `line 808: The variable ω2 was not found`, i.e. purely the
    shift, nothing structural).
 4. Discharge at `rexec_triple_addr`, carrier `δ1`. Then Phase 6, Phase 7.
+
+---
+
+## §16 THE FUNEXT WALL, and the framework that replaces it (2026-08-28)
+
+### The wall, stated exactly
+
+Propagating the drop's premise through ONE executor step requires comparing
+`step_after_drop … ARGS C₁` with `step_after_drop … ARGS C₂`, where
+`C_i = four Φ (D_i ∘ ω)` is the ambient continuation at the drop's two witnesses
+(`D_ι` = the witness read off ι, which makes the fibre inhabited; `D₀` = the
+witness baked into the tree).
+
+Everything else matches: `WitnessBlind` + `persist_trans` make the persisted
+arguments **literally equal**. `C₁` and `C₂` are **pointwise** equal and never
+syntactically equal — and the executor consumes its continuation as a FUNCTION
+argument. So one of two things is needed:
+
+- **funext**, to turn pointwise equality into `C₁ = C₂`; or
+- **continuation extensionality for the symbolic executor**, proved
+  combinator-by-combinator.
+
+**At the LEAF (`rexec_triple_addr`, carrier δ1) neither is needed** — `Factors`'
+equation arrives as a hypothesis, already a function equality. The wall is
+entirely in the PROPAGATION.
+
+### Why not funext
+
+It cannot be confined. `rdrop_dead` feeds `rexec_cfg_addr` feeds every end
+theorem, so all fourteen would name it in `Print Assumptions`, next to
+`pure_decode` and `mmioenv` — which are DOMAIN axioms (uninterpreted decode, the
+MMIO environment), not logical ones. Decision taken 2026-08-28: **do not add it.**
+
+Checked while deciding: funext appears nowhere in `theories/`, and
+`Monotonic`/`MHeapSpec` exists only on the SHALLOW side (`theories/Shallow/`,
+`theories/MicroSail/ShallowExecutor.v`, plus CFGVer's own `mono_c*`). Nothing
+comparable exists for `theories/Symbolic/`, so this is new framework.
+
+### The framework — VALIDATED, partially landed
+
+```coq
+PExt m  :=  ∀ P₁ P₂, (∀ w' θ a,   P₁ w' θ a   = P₂ w' θ a)   → m P₁   = m P₂     (* SPureSpec *)
+CExt m  :=  ∀ P₁ P₂, (∀ w' θ a h, P₁ w' θ a h = P₂ w' θ a h) → ∀ h, m P₁ h = m P₂ h  (* SHeapSpec *)
+```
+
+**Landed in `theories/Symbolic/Monads.v`, all `Qed`:** `PExt` + `pext_bind`,
+`pext_angelic`, `pext_demonic`, `pext_assert_pathcondition`,
+`pext_assume_pathcondition`; `CExt` + `cext_pure`, `cext_error`, `cext_bind`,
+`cext_angelic_binary`, `cext_demonic_binary`, `cext_debug`,
+`cext_lift_purespec`.
+
+Two findings from validating the shape:
+
+- **Each instance is 1–5 lines.** `cext_bind` — the one that has to thread
+  through `four` — is five.
+- **The solver-backed case is NOT the hard one.** `pext_assert_pathcondition`
+  looked like the risk and is five lines: the residual `fun msg' => …` binder
+  does not capture the continuation's occurrence, so a plain `rewrite HP` fires
+  under it.
+
+Measured on `produce`'s `Assertion` induction: after `induction asn; cbn;
+try (now rewrite HP)`, exactly **8 goals** remain, and every one is a combinator
+instance (`assume_formula`, `produce_chunk` ×2, `demonic_pattern_match`+bind,
+bind, `demonic_binary`, `demonic`+bind, `debug`). So the recursive definitions
+close by `typeclasses eauto` once the instance set exists — which is the argument
+that this is a grind rather than a research problem.
+
+### What remains, in dependency order
+
+1. ~15 more `SHeapSpec` instances, ~25 more `SPureSpec` (pattern-match
+   `Equations`, `consume_chunk`'s heap fold, `angelic_list`, `assert_eq_env`).
+   **Register `PExt`/`CExt` as typeclasses first** so the inductions close with
+   `typeclasses eauto` instead of by hand.
+2. `produce` / `consume` (the 8 goals above).
+3. `SStoreSpec` instances, then `SStoreSpec.exec_aux` (a `Stm` induction, ~25
+   cases) and `sexec_call` (fuel induction) in
+   `theories/MicroSail/SymbolicExecutor.v`.
+4. CFGVer: `sexec_instruction`, `sexec_ghosts`, `sexec_cfg_addr`,
+   `step_after_drop`.
+5. Then the drop proper: restate the premise in the psafe/equality-congruence
+   form below, re-prove `rdrop_dead` against it, and only then touch
+   `rexec_cfg_addr`.
+
+### The premise shape this enables
+
+`Factors` (∃ g) can be replaced by a pure congruence, which is strictly weaker
+and needs no witness construction:
+
+```coq
+PtEq a sΦ  :=  ∀ w₂ ω₁ ω₂ v h, persist a ω₁ = persist a ω₂ → sΦ w₂ ω₁ v h = sΦ w₂ ω₂ v h
+```
+
+- CLOSED under `four` — same `persist_trans` argument as `factors_four`.
+- SUFFICIENT at the drop — `WitnessBlind` gives `persist a (D₁∘ω₂) =
+  persist a (D₂∘ω₂)`, and the conclusion is used at an APPLIED position inside
+  `ℛ⟦RUnit -> RHeap -> ℙ⟧`, so pointwise equality is all that is consumed.
+- PROPAGATES through a step **given `CExt`** — that is exactly what step 4 buys.
+
+`Factors` and its lemmas stay valid meanwhile; `PtEq` is the migration target
+once the framework lands, not a retraction.
+
+### Estimate
+
+Roughly 40–60 further small lemmas plus two inductions, in core `theories/`.
+Each is mechanical; the volume is the cost. This is a multi-session build, and
+the gate stays RED throughout since `VerifierRel.v` cannot be re-paired until
+step 5.
+

@@ -911,6 +911,65 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         | None => error (amsg.mk (MkDebugWriteRegister (wco w) h reg t))
         end.
 
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY (2026-08-28).                           *)
+    (*                                                                    *)
+    (* `PExt m` says: m produces the same tree from pointwise-equal        *)
+    (* continuations.  With functional extensionality this would be free;  *)
+    (* it is proved combinator-by-combinator instead because this project  *)
+    (* admits exactly two axioms (Machine.pure_decode, Base.mmioenv), both *)
+    (* DOMAIN axioms, and funext is a logical one that could not be        *)
+    (* confined -- it would surface in all fourteen end theorems.          *)
+    (*                                                                    *)
+    (* WHY IT IS NEEDED: the dead-logical-variable drop (PLAN-dropk.md).   *)
+    (* A dropk node's forward accessibility carries a WITNESS term, and the *)
+    (* soundness proof must move between the witness read off the          *)
+    (* valuation (which makes the fibre inhabited, so `assuming` does not   *)
+    (* go vacuous) and the fixed witness baked into the tree.  Those two    *)
+    (* give pointwise-equal continuations, never syntactically equal ones,  *)
+    (* and the executor consumes its continuation as a FUNCTION argument.   *)
+    (* See PLAN-dropk.md §16.                                              *)
+    (* ================================================================== *)
+    Definition PExt {A} {w : World} (m : SPureSpec A w) : Prop :=
+      forall (P1 P2 : (□(A -> 𝕊))%modal w),
+        (forall w' (th : Acc w w') (a : A w'), P1 w' th a = P2 w' th a) ->
+        m P1 = m P2.
+
+    Lemma pext_bind {A B} {w : World} (m : SPureSpec A w)
+        (f : (□(A -> SPureSpec B))%modal w) :
+      PExt m -> (forall w' (th : Acc w w') (a : A w'), PExt (f w' th a)) ->
+      PExt (bind m f).
+    Proof.
+      intros Hm Hf P1 P2 HP. unfold bind.
+      apply Hm. intros w' th a. apply Hf. intros w'' th'' a''. unfold four. apply HP.
+    Qed.
+
+    Lemma pext_angelic {w : World} (x : option LVar) (σ : Ty) :
+      PExt (angelic x σ (w := w)).
+    Proof. intros P1 P2 HP. unfold angelic. cbn. now rewrite HP. Qed.
+
+    Lemma pext_demonic {w : World} (x : option LVar) (σ : Ty) :
+      PExt (demonic x σ (w := w)).
+    Proof. intros P1 P2 HP. unfold demonic. cbn. now rewrite HP. Qed.
+
+    (* The solver-backed case, and the one that looked hardest.  It is five
+       lines: the residual `fun msg' => ...` binder does NOT capture the
+       continuation's occurrence, so a plain `rewrite HP` still fires under it. *)
+    Lemma pext_assert_pathcondition {w : World} msg (C : PathCondition w) :
+      PExt (assert_pathcondition msg C).
+    Proof.
+      intros P1 P2 HP. unfold assert_pathcondition.
+      destruct (combined_solver w C) as [[w1 [ζ C1]]|]; [|reflexivity].
+      cbn. f_equal. f_equal. now rewrite HP.
+    Qed.
+
+    Lemma pext_assume_pathcondition {w : World} (C : PathCondition w) :
+      PExt (assume_pathcondition C).
+    Proof.
+      intros P1 P2 HP. unfold assume_pathcondition.
+      destruct (combined_solver w C) as [[w1 [ζ C1]]|]; cbn; now rewrite ?HP.
+    Qed.
+
   End SPureSpec.
   Export (hints) SPureSpec.
 
@@ -1128,6 +1187,58 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let evars3 := persist (A := Sub _) evars2 θ3 in
             produce ens evars3
         end.
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY at heap level -- see SPureSpec.PExt      *)
+    (* above for what this is and why it is not just funext.               *)
+    (* ================================================================== *)
+    Definition CExt {A} {w : World} (m : SHeapSpec A w) : Prop :=
+      forall (P1 P2 : (□(A -> SHeap -> 𝕊))%modal w),
+        (forall w' (th : Acc w w') (a : A w') (h : SHeap w'),
+           P1 w' th a h = P2 w' th a h) ->
+        forall h, m P1 h = m P2 h.
+
+    Lemma cext_pure {A} {w : World} (a : A w) : CExt (pure a).
+    Proof. intros P1 P2 HP h. unfold pure, T. apply HP. Qed.
+
+    Lemma cext_error {A} {w : World} (msg : (SHeap -> AMessage)%modal w) :
+      CExt (A := A) (error msg).
+    Proof. intros P1 P2 HP h. reflexivity. Qed.
+
+    Lemma cext_bind {A B} {w : World} (m : SHeapSpec A w)
+        (f : (□(A -> SHeapSpec B))%modal w) :
+      CExt m -> (forall w' (th : Acc w w') (a : A w'), CExt (f w' th a)) ->
+      CExt (bind m f).
+    Proof.
+      intros Hm Hf P1 P2 HP h. unfold bind.
+      apply Hm. intros w' th a h'. apply Hf.
+      intros w'' th'' a'' h''. unfold four. apply HP.
+    Qed.
+
+    Lemma cext_angelic_binary {A} {w : World} (m1 m2 : SHeapSpec A w) :
+      CExt m1 -> CExt m2 -> CExt (angelic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP h. unfold angelic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma cext_demonic_binary {A} {w : World} (m1 m2 : SHeapSpec A w) :
+      CExt m1 -> CExt m2 -> CExt (demonic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP h. unfold demonic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma cext_debug {A} {w : World} msg (m : SHeapSpec A w) :
+      CExt m -> CExt (debug msg m).
+    Proof. intros Hm P1 P2 HP h. unfold debug. f_equal. now apply Hm. Qed.
+
+    Lemma cext_lift_purespec {A} {w : World} (m : SPureSpec A w) :
+      SPureSpec.PExt m -> CExt (lift_purespec m).
+    Proof.
+      intros Hm P1 P2 HP h. unfold lift_purespec.
+      apply Hm. intros w' th a. apply HP.
+    Qed.
 
   End SHeapSpec.
 
