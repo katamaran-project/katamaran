@@ -3154,3 +3154,153 @@ no ω/forgetting layer over the whole proof.
    the first genuinely open step — nobody has looked at it yet.
 3. Phase 6 — `sound_exec_cfg_addr_myWP2` in `Adequacy.v`.
 4. Phase 7 — flip `drop_fuel`, measure, gate.
+
+## §19 THE PORT — landed in `VerifierRel.v`, and the wall it hit (2026-08-31)
+
+### What's real now, in the actual file (not a probe)
+
+The whole `Factors`/`rdrop_dead` framework, `dcarrier3`/`dbundle3`/
+`factors_widen5`, `rprop_error`/`rprop_or`/`rdrop_dead_iris`, `rexF0`, `rexFS`,
+and the fuel-general `rexec_cfg_addr` are transcribed **verbatim** from
+`ZZDropRefineProbe.v` / `ZZRexecDropProbe.v` into `VerifierRel.v`'s
+`Section Relational`, replacing the old scaffold comment + `Admitted`. Every
+piece was already `Qed`'d and axiom-clean in the probes before the
+transcription — this is a copy, not a re-proof. `make -f Makefile.coq
+VerifierRel.vo` is green, and `Print Assumptions rexec_cfg_addr` reports
+**"Closed under the global context"** — axiom-clean, no dependence on the new
+gap in `rexec_triple_addr` (see below) or anything else.
+
+`rexec_cfg_addr`'s statement now carries the `Factors (dbundle3 trans tbl
+exits) sΦ` premise before its box, kept `{w}`/`{Σ0}` implicit and
+`trans`/`tbl`/`exits` explicit (the ORIGINAL signature shape, so the call
+site's argument count for those three doesn't change — only the number of
+resulting bullets does). Proved by `revert w trans tbl exits; induction fuel;
+- apply rexF0; - apply (rexFS n' IH)` — three lines; all the real content sits
+in `rexF0`/`rexFS`.
+
+### Two traps hit while wiring the one call site (`rexec_triple_addr`)
+
+**1. `rewrite A, B.` (comma form) fails under `make`, not just under
+`rocq_check`.** Earlier session notes filed this as a `rocq_check`-only
+artifact; it is NOT — `zz_persist_itableW_subst, zz_persist_etable_subst` in
+comma form produced the exact same `[ltac_use_default] expected after
+[tactic]` parser error from plain `coqc` via `make`, at `dbundle_persist` and
+`dbundle5_persist` (both untouched-since-authoring copies from the probe).
+Fix, confirmed: split into two `rewrite` sentences — same fix as before, but
+now known to be needed unconditionally, not just interactively. (Root cause
+still not identified — plausibly a notation registered somewhere in this
+file's specific import chain that the standalone probe's hand-built `coqc`
+invocation didn't trigger; not worth chasing further, the fix is free.)
+
+**2. `iApply (rexec_cfg_addr …)` cannot match the goal directly anymore — a
+consequence of the very design change that added the premise.** The OLD
+statement was `ℛ⟦RVal -> RVal -> RHeapSpec RA⟧`-FOLDED, and `iApply` has a
+dedicated instance for "the whole partial application matches an
+`RHeapSpec`-wrapped goal via the generic arrow-`Rel` combinator" — that's what
+let the old call site work with `a`/`np` already fixed (not literally
+`∀`-bound) in the goal. The NEW statement is a RAW, hand-unfolded Iris
+proposition (`∀ a ta, ℛ⟦RVal⟧ a ta -∗ …`) precisely because `RHeapSpec`
+quantifies its continuation universally and the `Factors` premise had to be
+inserted BEFORE that quantifier — so the "arrow-`Rel` shortcut" no longer
+applies, and a raw `∀ a ta, …` cannot match a goal where `a`/`np` are already
+ground values. `iApply` failed outright (not partially) — `trans` showed up
+as `?trans` even in the final conclusion, because the whole match attempt
+failed, not because of one late unresolved variable.
+
+Fix: peel the goal to the `RProp` level FIRST — `iIntros (cΦ sΦ) "#rΦ0".
+iIntros (ch sh) "#rh0".` — exactly mirroring what `rexFS` does internally
+before ITS OWN recursive call to `IH` (which is why that call site never hit
+this). Only then does `iApply (rexec_cfg_addr instrs words exitCond fuel _ _ _
+with "[$Hi $He]")` leave a ground, first-order unification problem, and it
+resolves `trans`/`tbl`/`exits` correctly again. The bullet count goes from 2 to
+5: the two RVal premises (unchanged), the new `Factors` premise (below), then
+`ℛ⟦□ᵣ …⟧ cΦ sΦ` and `ℛ⟦RHeap⟧ ch sh` — both trivially `iApply "rΦ0"` /
+`iApply "rh0"`, handed back from the `iIntros` just added.
+
+**Lesson for anyone giving another `RHeapSpec`-shaped lemma a `Factors`-style
+premise:** unfolding `RHeapSpec` in the STATEMENT is exactly this same
+mechanical tax at every CALL SITE, not just a cosmetic rewrite — every caller
+needs an extra `iIntros`-peel it didn't need before, and the failure mode
+(`iApply: cannot apply`, with a metavariable surviving into the displayed goal)
+looks like a substitution/unification bug rather than what it actually is.
+
+### THE WALL: `Factors` does not propagate through `refine_bind`
+
+With the mechanics fixed, the goal left by the third bullet is exactly
+`⌜Factors (dbundle3 trans_local tbl_local exits_local) sΦ⌝` for the CONCRETE
+`trans_local`/`tbl_local`/`exits_local` built just above (the `zip_words …`
+table etc.) and `sΦ` the continuation freshly introduced by THIS bullet's own
+`iIntros (cΦ sΦ) "#rΦ0"`. **This bullet is `admit.`ed — not closable as things
+stand — and the reason is structural, not a missing lemma:**
+
+- `HeapSpec.refine_bind`'s generic combinator, at EVERY nested `RHeapSpec`-typed
+  subgoal it produces, re-quantifies a FRESH, fully opaque continuation. That is
+  the literal MEANING of "`ℛ⟦RHeapSpec RA⟧ cm sm` holds for an arbitrary
+  continuation" — and it is exactly why every OTHER `refine_bind` bullet in
+  `rexec_triple_addr` (`rexec_ghosts`, `rexec_instruction`, the pc/nextpc
+  demonics) needs no extra premise: their own relations hold UNCONDITIONALLY,
+  for any continuation.
+- So the `sΦ` reaching `rexec_cfg_addr`'s call is exactly as
+  opaque/unconstrained as `sΦ` was inside `sexec_cfg_addr`'s OWN recursion
+  (`rexFS`'s premise `Hfac`).
+- Inside `rexFS`, `Factors` was NEVER independently proved for an arbitrary
+  `sΦ` — it was always a HYPOTHESIS threaded in from the CALLER
+  (`rexec_cfg_addr`'s own signature) and only ever algebraically transformed
+  (`factors_four`, `factors_pair_l`). There is no equivalent caller-supplied
+  hypothesis at `rexec_triple_addr`, because ITS OWN statement
+  (`⊢ ℛ⟦RHeapSpec RUnit⟧ …`) doesn't carry one.
+- For a truly unconstrained continuation, `Factors _ sΦ` is FALSE in general:
+  an adversarial `sΦ` can distinguish two accessibilities reaching the same
+  world that agree on their persisted substitution but differ as TERMS —
+  `Acc`'s two constructors (`acc_refl` / `acc_sub ζ ent`) are genuinely
+  different even when `sub_acc` agrees, since `ent : wco w2 ⊢ subst (wco w1) ζ`
+  is an ordinary `Prop`-valued field with no proof-irrelevance in play (checked:
+  `Worlds.v`'s `entails` is a plain `Record … : Prop`, no `SProp`/axiom).
+
+**Dead end recorded so it isn't retried:** my first hypothesis was that `sΦ` at
+this call site is `four sΦ_top (θ1∘θ1'∘θ2∘θ3)` for `rexec_triple_addr`'s OWN
+outer `sΦ_top`, i.e. that the premise reduces to "does `sΦ_top`'s dependence on
+`θ3` factor through `persist trans_local θ3`". That is the WRONG model:
+`bind`'s `Φ`-threading only happens INSIDE the ALREADY-PROVED `refine_bind`
+lemma; from the CALLER's side each nested `RHeapSpec` obligation re-quantifies
+fresh (confirmed by the very error that motivated trap 2 above — `iApply`
+genuinely treats `sΦ` here as a brand-new binder, not a derived closure). Don't
+re-derive the `four`-composed version — go straight to "does this propagate
+through the generic combinator" below.
+
+**Consequence:** discharging this is not "step 2, a follow-up fix." It most
+likely requires giving `rexec_triple_addr` (and transitively whatever calls it
+— `rcfg_verification_condition`, then presumably `Adequacy.v`'s `myWP2` chain)
+a `Factors`-carrying statement of its OWN, i.e. a GENERIC "Factors propagates
+through `refine_bind`" argument — comparable in size to the `Factors`/
+`rdrop_dead` framework already built this session, not a one-line follow-up.
+Two shapes worth considering, NEITHER attempted yet:
+
+1. A new combinator lemma, `HeapSpec.refine_bind_factors` or similar, stating
+   that IF `cm`/`sm`'s own relation carries a Factors-style commitment about how
+   its continuation's result depends on some carrier, THEN `bind cm f`/
+   `bind sm g` carries one too — i.e. redo `factors_drop_cont`'s "propagate
+   through one bind" argument at the GENERIC combinator level instead of
+   `sexec_cfg_addr`'s own bespoke bind chain.
+2. Thread the carrier ALL THE WAY to wherever the REAL, concrete top-level
+   continuation is instantiated (`SHeapSpec.run`'s trivial `fun _ _ => True`, or
+   whatever `Adequacy.v`'s `myWP2_loop` actually uses) and show Factors holds
+   there TRIVIALLY (a constant/degenerate continuation factors through ANY
+   carrier, including the empty one) — then work BACKWARDS, showing each
+   intermediate layer's obligation reduces to the next.
+
+Both are un-derisked. **Do not attempt either without checking back — this is
+a design decision, not a mechanical continuation of the port.**
+
+### Where the file stands
+
+- `VerifierRel.v` modified, `make -f Makefile.coq VerifierRel.vo` GREEN.
+- `rexec_cfg_addr` closes for real (`Qed`), **axiom-clean**
+  (`Print Assumptions` → "Closed under the global context").
+- `rexec_triple_addr` is now `Admitted` (was `Qed` before this session), for
+  exactly the one bullet above — everything else in its proof is unchanged and
+  intact. `Print Assumptions rexec_triple_addr` — see the commit this section
+  lands in.
+- The gate stays red, same invariant as before the port, now localized to one
+  `admit.` with a comment explaining precisely why, instead of a 30-line
+  "pet can't open this file" scaffold comment.
