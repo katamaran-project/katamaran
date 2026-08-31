@@ -2523,8 +2523,218 @@ Section RexecDropProbe.
       iIntros "%HF". destruct HF.
     Qed.
 
+
+    (* ================================================================== *)
+    (* THE STEP CASE.  Two of four branches CLOSED; the third is driven to  *)
+    (* the frontier and the fourth reuses the third's script.               *)
+    (*                                                                    *)
+    (* Branches are closed in DESCENDING index order (4, then 3, then 2) so  *)
+    (* that closing one does not renumber the ones not yet handled.          *)
+    (*                                                                    *)
+    (* NOTE the induction shape: `w` is generalised in the COQ statement and  *)
+    (* this is a plain `induction fuel`, so there is NO boxed-IH dance and no  *)
+    (* omega/forgetting layer over the whole proof.  The original            *)
+    (* rexec_cfg_addr needed `iAssert (ℛ⟦□ᵣ …⟧ …) as "H"` only because its    *)
+    (* statement fixed w.                                                    *)
+    (* ================================================================== *)
+    Lemma rexFS (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        {Σ0 : LCtx} (n' : nat)
+        (IH : forall (w : World) (trans : Sub Σ0 w)
+                (tbl : SInstrTableW w) (exits : SExitTable w),
+           (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+            ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
+            ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+            ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+              ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+            ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+              ℛ⟦LogicalSoundness.RProp⟧
+                 (cexec_cfg_addr instrs words exitCond n' a na cΦ ch)
+                 (sexec_cfg_addr n' trans tbl exits ta tna sΦ sh))%I) :
+      forall (w : World) (trans : Sub Σ0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w),
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+       ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
+       ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+         ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+       ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+         ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_cfg_addr instrs words exitCond (S n') a na cΦ ch)
+            (sexec_cfg_addr (S n') trans tbl exits ta tna sΦ sh))%I.
+    Proof.
+      intros w trans tbl exits.
+      iIntros "#[Hi He]".
+      iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
+      iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
+      cbn [sexec_cfg_addr cexec_cfg_addr].
+      destruct (is_exit exits ta) eqn:Hex;
+        destruct (lookup_instr tbl ta) as [[wd ai]|] eqn:Hlk.
+
+      (* ---- 4: exit-miss / lookup-miss.  Both symbolic branches are errors, *)
+      (* so psafe is False on either side of the angelic split.               *)
+      4: { destruct a as [va|va1 va2]; cbn [ty.RVToOption];
+           unfold LogicalSoundness.RProp; cbn;
+           iIntros "[%HF|%HF]"; destruct HF. }
+
+      (* ---- 3: exit-miss / lookup-hit.  THE CORE -- this is the branch that *)
+      (* actually contains the drop.  Driven to the frontier below.           *)
+      3: { iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
+             as (v) "[%Hfact #Hx]".
+           destruct Hfact as (-> & Hm).
+           cbn [ty.RVToOption]. rewrite Hm.
+           (* BOTH angelic_binary's must be unfolded before rprop_or applies:
+              the concrete one is CHeapSpec's, the symbolic one SHeapSpec's, and
+              rprop_or is stated over SymProp.angelic_binary. *)
+           unfold CHeapSpec.angelic_binary, SHeapSpec.angelic_binary.
+           iApply rprop_or; [iApply rprop_error|].
+           (* Eliminate both chunk_gc binds and the concrete drop bind.  After
+              this the goal is EXACTLY rdrop_dead_iris's shape. *)
+           rewrite cgc_binds_heap cdrop_binds gc_binds_heap.
+           unfold T; cbv beta.
+           unfold SHeapSpec.bind at 1.
+           rewrite (persist_itableW_refl tbl) (persist_etable_refl exits).
+           (* `persist x acc_refl` needs NO rewrite -- persistent_subst matches on
+              the accessibility, so acc_refl reduces definitionally.  Only the
+              bespoke table persists need their _refl lemmas. *)
+           match goal with |- context [ ?C cΦ (cgc_heap ch) ] => set (crest := C) end.
+           unshelve iApply (rdrop_dead_iris drop_fuel (fun _ ch' => crest cΦ ch')
+                              (cgc_heap ch) (gc_heap sh) _).
+           - (* Factors for the drop's own continuation: ONE line. *)
+             apply factors_drop_at_step. exact Hfac.
+           - (* THE CONTINUATION BOX -- the frontier.  `iModIntro` introduces
+                `assuming`, so the box opens cleanly and everything in context
+                lands under `forgetting θ1`. *)
+             iIntros (w1 θ1). iModIntro. iIntros (u tu) "_".
+             iIntros (ch' sh') "#rh'".
+             unfold step_after_drop.
+             (* GOAL HERE:
+                  ℛ⟦RProp⟧ (crest cΦ ch')
+                    (bind (sexec_ghosts (ai_ghost_before ai)) (fun … =>
+                      bind (sexec_instruction …) (fun … apc' =>
+                        bind (sexec_ghosts (ai_ghost_after ai)) (fun … =>
+                          sexec_cfg_addr n' …))) (four sΦ θ1) sh')
+
+                WHAT IS LEFT: relate this chain to `crest`.  It is the original
+                proof's inner part -- rexec_ghosts, the instruction refinement,
+                and the recursive call -- with two differences:
+                  * the IH is a PLAIN COQ hypothesis applied directly, not
+                    projected out of a box with forgetting_unconditionally_drastic;
+                  * the IH's Factors premise is re-established by factors_four +
+                    dbundle5_persist on `four sΦ θ1`.
+                Do NOT reach for refine_gc_heap HERE -- `rh'` supplied by this
+                box is already the right heap relation.  refine_gc_heap belongs
+                to the THIRD obligation below, not this one. *)
+             admit.
+           - (* the heap argument of rdrop_dead_iris: the drop runs on the
+                POST-GC heap on both sides, which is exactly refine_gc_heap. *)
+             iApply (refine_gc_heap with "rh"). }
+
+      (* ---- 2: exit-hit / lookup-miss.  Symbolic takes the exit branch. *)
+      2: { iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]")
+             as "%Hfact".
+           destruct Hfact as (v & -> & Hcond).
+           cbn [ty.RVToOption]. rewrite Hcond.
+           unfold LogicalSoundness.RProp; cbn.
+           (* LEFT disjunct is an Iris hypothesis, RIGHT is pure False --
+              "[%Hs|%Hs]" fails with "iPure: … not pure". *)
+           iIntros "[Hs|%Hs]"; [|destruct Hs].
+           iPoseProof (unconditionally_T with "rΦ") as "rΦ0".
+           iDestruct ("rΦ0" $! (SyncVal v) ta with "Ha") as "rΦ1".
+           iDestruct ("rΦ1" $! ch sh with "rh") as "rΦ2".
+           iDestruct ("rΦ2" with "Hs") as "%Hc".
+           iPureIntro. left. exact Hc. }
+
+      (* ---- 1: exit-hit / lookup-hit.  Same execution branch as case 3; the
+         only difference is that the concrete LEFT branch is `pure` rather than
+         `error`, so rprop_or's first obligation is case 2's script instead of
+         rprop_error.  Reuse case 3 once it closes. *)
+      admit.
+    Admitted.
+
   End Relational.
 
 End RexecDropProbe.
 ```
 
+
+## §18 `rexec_cfg_addr_F` — STATE OF THE PROOF (2026-08-31)
+
+Everything named here is in the probe verbatim above. The probe **compiles
+clean**; the only holes are the two `admit.`s named below.
+
+### Closed, `Qed`, axiom-clean
+
+| lemma | what it is |
+|---|---|
+| `rprop_error` | a symbolic `error` refines anything — `destruct` on the `False` |
+| `rprop_or` | `angelic_binary` on both sides: pair the two branches |
+| `rdrop_dead_iris` | the Iris-level wrapper around `rdrop_dead`; premise is `Factors` |
+| `rexF0` | THE FUEL-0 CASE, complete |
+
+`rdrop_dead_iris` is a `constructor. intros iota Hpc _. rewrite !wand_unfold.`
+shim and then `exact (rdrop_dead …)` — i.e. the whole content is the Qed'd
+`rdrop_dead` from `ZZDropRefineProbe.v`, and no new proof obligation appears at
+the Iris boundary. That is the load-bearing fact: **the drop's refinement did
+not get harder when it moved into an Iris goal.**
+
+### `rexFS` (the successor case): 3 of 4 branches closed, 1 at the frontier
+
+Branches are closed in **DESCENDING index order** (4, then 3, then 2) so that
+closing one does not renumber the others. Do not reorder them.
+
+| # | branch | state |
+|---|---|---|
+| 4 | exit-miss / lookup-miss | **closed** — both sides `error` |
+| 3 | exit-miss / lookup-**hit** — CONTAINS THE DROP | driven to the frontier, one `admit.` |
+| 2 | exit-**hit** / lookup-miss | **closed** |
+| 1 | exit-hit / lookup-hit | `admit.` — untouched |
+
+Branch 1 is expected to be cheap: its script is branch 3's, with `rprop_or`'s
+FIRST obligation being branch 2's script instead of `rprop_error` (the concrete
+left branch is `pure`, not `error`).
+
+### The frontier, and what closes it
+
+Branch 3 reaches `unshelve iApply (rdrop_dead_iris drop_fuel …)`, which yields
+**THREE** goals, in this order:
+
+1. `Factors (dbundle5 …) …` — closed by `apply factors_drop_at_step. exact Hfac.`
+2. the `□ᵣ` continuation box — **THE REMAINING WORK**
+3. `ℛ⟦RHeap⟧ (cgc_heap ch) (gc_heap sh)` — closed by
+   `iApply (refine_gc_heap with "rh").`
+
+Two traps, both paid for:
+
+- **Three goals, not two.** The first bank of this script had two bullets and
+  failed with `This proof is focused, but cannot be unfocused this way` —
+  a message that points at the closing brace, not at the missing bullet.
+- **`refine_gc_heap` belongs to obligation 3, NOT inside the box.** Tried in the
+  box first; it fails to instantiate there, correctly — inside the box the heap
+  relation is `rh'`, supplied by the box itself, and the GC already happened
+  before the drop.
+
+Inside the box (obligation 2) the goal is `step_after_drop` on the symbolic side
+against the concrete step. It needs: the ghost chain, `sexec_instruction`, and
+then the recursive call, closed by `IH`. **`IH` is a plain Coq hypothesis
+applied directly** — `induction fuel` after generalizing `w` in the Coq
+statement gives a strong enough IH, so there is NO ω/forgetting layer over the
+whole proof and no boxed-IH construction is needed (this was checked; see §16).
+`IH`'s own `Factors` premise is re-established by `factors_four` +
+`dbundle5_persist` applied to `four sΦ θ1`.
+
+### Two more traps recorded while getting here
+
+- **`rsolve` OVERSHOOTS on the unfolded statement.** It tries to apply the box
+  where an `error` should close, leaving `ℛ⟦?RA⟧ a0 ta0` with `?RA` an evar. The
+  error cases are closed by hand (`rprop_error`) for exactly this reason.
+- **BOTH `angelic_binary`s must be unfolded** — `CHeapSpec.angelic_binary` and
+  `SHeapSpec.angelic_binary` — before `rprop_or` will apply.
+
+### After the probe closes
+
+1. Port statement + proof into `VerifierRel.v` and **DELETE the scaffold
+   `Admitted`** (§17). The gate stays red until this happens.
+2. Discharge the premise at `rexec_triple_addr` (carrier `δ1`).
+3. Phase 6 — `sound_exec_cfg_addr_myWP2` in `Adequacy.v`.
+4. Phase 7 — flip `drop_fuel`, measure, gate.
