@@ -586,6 +586,14 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none \
 
 ## 9. What pins the havoc variables, and why §8's register-set advice INVERTS if a drop lands (2026-08-27)
 
+> **CONFIRMED 2026-08-31 — the drop landed and §9.4's prediction is exact.**
+> `dropk-firing-payoff.md` Part 2 measures the seven-register arm at
+> `drop_fuel = 8`: peak `|Σ|` goes from `19 + 7n` to a **constant 21** (slope
+> 7/trip → 0/trip, the "mint 7, retire 7, net zero" row of §9.4), with `dropk`
+> exactly `7n + 8`, and **4.05× less allocation at n=8**. §9.5's warning is
+> therefore live, not hypothetical: **§8's "havoc three registers" is optimal
+> only WITHOUT the drop.**
+
 **Finding, one sentence: the havoc variables are pinned by nothing in the path
 condition and everything in the un-havoced registers — so a 3-register havoc
 leaves only 1 of 3 per trip droppable while a 7-register havoc leaves all 7, and

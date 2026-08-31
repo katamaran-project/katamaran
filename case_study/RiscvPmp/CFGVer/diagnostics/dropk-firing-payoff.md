@@ -140,3 +140,126 @@ coqc -w all -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
 Every dependent of `Verifier.v` must be rebuilt between arms; a stale
 `KeyScheduleLoop.vo` surfaces as `makes inconsistent assumptions over library
 … Prelude`, not as a wrong number. (Hit once during this study.)
+
+---
+
+# Part 2 — on the vehicle it was built for, the drop makes `|Σ|` FLAT (2026-08-31)
+
+**Finding, one sentence.** On br_divrem with a seven-register `havoc_regs` at the
+loop head, `drop_fuel = 8` takes peak `|Σ|` from **`19 + 7n` to a constant 21** —
+slope 7/trip to **0/trip** — and costs **4.05× less allocation at n=8**. This is
+an **exponent change, not a constant factor**: the ratio grows without bound in
+`n`, because the drop removes the linear-in-`n` growth of `|Σ|` and `|Σ|` cost is
+quadratic.
+
+Part 1's negative result stands exactly as written and is not retracted. It
+measured the drop on programs that generate no dead variables. This measures it
+on the program that does.
+
+## The vehicle
+
+`havoc-abstraction-payoff.md` §9.4 predicted this and named the configuration:
+a **seven**-register havoc leaves all 7 of 7 fresh variables droppable per trip,
+while the **three**-register arm leaves only 1 of 3, because the un-havoced temps
+carry the previous trip's variables forward. The seven-register set is used here
+for exactly that reason. §9.5's warning applies and is now load-bearing: §8's
+"havoc three registers" recommendation was tuned with no drop available, and
+**inverts** once a drop exists.
+
+Rig: `ZZPin7_3.v`'s (itself `ZZDivremNCommon`'s), copied verbatim, with the ghost
+list `[havoc zz_all]` planted at index 8, the loop head.
+
+## Results
+
+**Protocol: raw VC (`tree_raw`, no `postprocess`), no `Qed`, structural
+`vm_compute` — identical on both arms. Allocation rows: `OCAMLRUNPARAM=v=0x400`,
+one heavy `Eval` per process, imports-only baseline subtracted.**
+
+| n | 1 | 2 | 3 | 4 | 8 |
+|---|---|---|---|---|---|
+| peak `\|Σ\|`, `drop_fuel = 0` | 26 | 33 | 40 | 47 | 75 |
+| peak `\|Σ\|`, `drop_fuel = 8` | 21 | 21 | 21 | **21** | **21** |
+| `dropk` nodes | 15 | 22 | 29 | 36 | 64 |
+
+Fits, with held-out checks (n=4 and n=8 withheld from both):
+
+| quantity | fit on n=1,2,3 | predicted n=4 / n=8 | actual | error |
+|---|---|---|---|---|
+| peak `\|Σ\|` @ fuel 0 | `19 + 7n` | 47 / 75 | 47 / 75 | **0% / 0%** |
+| peak `\|Σ\|` @ fuel 8 | `21` | 21 / 21 | 21 / 21 | **0% / 0%** |
+| `dropk` | `7n + 8` | 36 / 64 | 36 / 64 | **0% / 0%** |
+
+Exact at every held-out point, at up to 2.7× beyond the fitted range. These are
+structural integer counts, so exactness is expected rather than impressive — but
+it does mean the flatness is not a small-`n` plateau of the kind this directory
+has been fooled by before.
+
+### Cost, measured properly
+
+| arm | baseline | with `Eval` | net | ratio |
+|---|---|---|---|---|
+| `drop_fuel = 0` | 610,499,159 | 7,609,766,834 | 6,999,267,675 | — |
+| `drop_fuel = 8` | 610,500,970 | 2,336,826,618 | 1,726,325,648 | **4.054×** |
+
+The two baselines agree to **1,811 words in 610 M (0.0003%)**, which is the
+check that the import closures cost the same and the ratio is clean.
+
+(Wall clock at n=8 was 41.4 s → 21.1 s, i.e. 1.96×. Recorded only to note it
+points the same way; per this directory's rules it is not the measurement, and
+it understates the allocation ratio by half.)
+
+## Reading it
+
+- **`|Σ|` slope 7 → 0 is the whole story.** The 7 dropped per trip are exactly
+  the 7 the havoc mints; `dropk = 7n + 8` says so directly, the constant 8 being
+  one-off drops in the prologue. Mint 7, retire 7, net zero — §9.4's "mint 7,
+  retire 7" prediction, confirmed mechanically.
+- **Exponent, not constant.** `|Σ|` cost is quadratic
+  (`lvar-lookup-cost-drivers.md`), so removing a linear-in-`n` term from `|Σ|`
+  removes a quadratic-in-`n` term from cost. 4.05× at n=8 is a point on a
+  diverging curve, **not** a factor to quote at other `n`. Do not extrapolate it
+  as a constant; re-measure at the `n` you care about.
+- **Amdahl, honestly.** 4.05× at n=8 means the `|Σ|` term was ~75% of cost there.
+  The remaining 25% is now the wall and this mechanism cannot touch it. What that
+  residual is has not been identified here.
+- **br_divrem's real 31 trips.** §8 measured those at 41.25 G words with the
+  three-register havoc and no drop. Nothing here licenses a prediction for n=31 —
+  the arms differ in register set as well as fuel, and the curve is diverging.
+  It is the obvious next measurement.
+
+## What this means
+
+- **The drop is worth its ~1500 lines, on havoc-shaped code.** That question was
+  open at the end of Part 1 and is now answered.
+- **`drop_fuel` is still `0` in the tree**, because no example under `Example/`
+  uses `havoc_regs`, and Part 1 showed flipping it buys those examples ~nothing
+  while requiring a full gate re-run. The flip becomes correct the moment a
+  havoc-using example lands — at which point it is a one-line edit plus a gate
+  run.
+- **`havoc-abstraction-payoff.md` §8's register-set advice is now formally
+  superseded for any configuration with the drop enabled**, per its own §9.5.
+  Three registers is optimal without a drop; seven is optimal with one. Both are
+  measured; neither is universal.
+
+## Files / reproduction
+
+`Example/ZZDropHavoc_n{1,2,3,4,8}.v` (structural counts),
+`Example/ZZDropHavocAlloc_{BASE,n8}.v` (allocation, one `Eval` each).
+All throwaway, gitignored, not in `_CoqProject`.
+
+```bash
+# per arm: set drop_fuel, rebuild the light chain, then run the probes
+sed -i 's/drop_fuel : nat := [08]/drop_fuel : nat := 8/' case_study/RiscvPmp/CFGVer/Verifier.v
+make -f Makefile.coq case_study/RiscvPmp/CFGVer/Example/Prelude.vo
+coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+     case_study/RiscvPmp/CFGVer/Example/ZZDropHavoc_n8.v
+OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+     -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/ZZDropHavocAlloc_n8.v \
+     2>&1 | grep allocated_words
+```
+
+`Example/Prelude.vo` MUST be rebuilt between arms — a stale one surfaces as
+`makes inconsistent assumptions over library … Prelude`, not as a wrong number.
+Note also that `ZZPin*.v` and the other pre-dropk probes no longer compile at
+all: their `count_*` fixpoints predate the `dropk` constructor and are now
+non-exhaustive.

@@ -3652,9 +3652,25 @@ sound and INERT. It says nothing yet about the drop switched on.
   that the whole framework was built to collect. This study measured the drop
   on programs that never generate its garbage.
 
-- **The real open question.** Does the drop clear `br_divrem`'s +7/trip? That
-  is what dropk exists for and it is STILL UNMEASURED. Until it is answered,
-  the honest status of ~1500 lines of framework is "correct, gate-green, and
-  of unproven value". Next step is a havoc-using vehicle, **not** a higher
-  fuel — the counts above are totals, nothing suggests the per-step bound of
-  8 was ever reached, so more fuel cannot help.
+- **ANSWERED 2026-08-31 — and the answer is YES.** `dropk-firing-payoff.md`
+  Part 2. On br_divrem with a SEVEN-register havoc at the loop head, the drop
+  clears exactly the +7/trip: peak `|Σ|` goes from `19 + 7n` to a **constant
+  21**, `dropk` is exactly `7n + 8`, both fits exact at held-out n=4 and n=8,
+  and allocation is **4.05× lower at n=8** (baselines agreeing to 0.0003%).
+  That is an **exponent change, not a constant factor** — removing a
+  linear-in-`n` term from `|Σ|` removes a quadratic-in-`n` term from cost, so
+  the ratio diverges and 4.05× must not be quoted at other `n`.
+
+  **The framework is worth its ~1500 lines on havoc-shaped code.** That was the
+  open question at the end of Phase 7 part 1 and it is now closed.
+
+- **Why `drop_fuel` is nonetheless still `0`.** No example under `Example/`
+  uses `havoc_regs`, and part 1 measured the flip as worth ~nothing on the
+  examples that exist while costing a full gate re-run. The flip becomes
+  correct the moment a havoc-using example lands; it is a one-line edit plus a
+  gate run.
+
+- **Open, and NOT measured here:** br_divrem's real 31 trips (§8 has the
+  no-drop three-register figure at 41.25 G words, but the arms differ in
+  register set as well as fuel, so nothing here predicts n=31); and what the
+  residual ~25% of cost at n=8 actually is, now that the `|Σ|` term is gone.
