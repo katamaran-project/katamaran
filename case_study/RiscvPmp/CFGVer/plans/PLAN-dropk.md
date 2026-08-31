@@ -2356,81 +2356,6 @@ coqc <the -Q/-R flags from _CoqProject> \
 `Example/ZZRexecDropProbe.v` is gitignored, so this is the only durable copy.
 
 ```coq
-(* ========================================================================= *)
-(* ZZRexecDropProbe.v — THROWAWAY, gitignored, not in _CoqProject.           *)
-(*                                                                           *)
-(* MIRROR PROBE for rexec_cfg_addr, for the dead-lvar drop (PLAN-dropk §16). *)
-(*                                                                           *)
-(* WHY THIS FILE EXISTS: pet OOMs at 7.6 GB opening VerifierRel.v itself, at *)
-(* ANY position, so rexec_cfg_addr cannot be developed in place.  It is      *)
-(* RESTATED here against VerifierRel's .vo — which exists only because       *)
-(* rexec_cfg_addr is temporarily Admitted there.  A file this small pet CAN  *)
-(* open, so rocq_check iterates at ~30 ms instead of a multi-minute make.    *)
-(*                                                                           *)
-(* This indirection is the whole reason the 2026-08-20 ghost-refinement      *)
-(* attempt could not diagnose its 300 s+ hang: it iterated inside the broken *)
-(* file.  Same trick, same file, second time.  (Precedent:                   *)
-(* ZZRexecIHProbe.v and ZZGhostRefineProbe.v.)                               *)
-(*                                                                           *)
-(* It also requires ZZDropRefineProbe, which carries the drop's premise       *)
-(* machinery (Factors, dbundle/dbundle5, rdrop_dead, factors_drop_at_step).   *)
-(* That file is ALSO gitignored, so its .vo must be built by hand:            *)
-(*                                                                           *)
-(*   coqc <the -Q/-R flags from _CoqProject> \                               *)
-(*        case_study/RiscvPmp/CFGVer/Example/ZZDropRefineProbe.v             *)
-(*                                                                           *)
-(* WHAT TO DO HERE:                                                          *)
-(*   1. rexec_cfg_addr_old is the statement as it stands in VerifierRel.v.    *)
-(*      It is here as a CONTROL: if it stops typechecking, the probe's        *)
-(*      environment has drifted from VerifierRel's, not the proof.            *)
-(*   2. rexec_cfg_addr_F is the target: RHeapSpec unfolded, with the Factors  *)
-(*      premise inserted before the box.  Develop its proof here.             *)
-(*   3. When it closes, port BOTH statement and proof back into              *)
-(*      VerifierRel.v, delete the Admitted scaffold there, and discharge the  *)
-(*      premise at rexec_triple_addr with carrier delta1.                     *)
-(*                                                                           *)
-(* Original 187-line proof body (Qed before the drop's bind was added):       *)
-(*   git show aebc8f23:case_study/RiscvPmp/CFGVer/VerifierRel.v              *)
-(* ========================================================================= *)
-
-From Coq Require Import
-     Classes.Morphisms_Prop ZArith.ZArith Lists.List micromega.Lia Strings.String.
-From Equations Require Import Equations.
-From Katamaran Require Import
-     Iris.BinaryInstance Iris.Base Notations Semantics Bitvector
-     Refinement.Monads Sep.Hoare Specification
-     Symbolic.Propositions Symbolic.Solver Symbolic.Worlds
-     MicroSail.ShallowExecutor MicroSail.ShallowSoundness
-     MicroSail.SymbolicExecutor MicroSail.RefineExecutor MicroSail.Soundness
-     RiscvPmp.CFGVer.Spec
-     RiscvPmp.CFGVer.SpecIris
-     RiscvPmp.CFGVer.Verifier
-     RiscvPmp.CFGVer.VerifierRel
-     RiscvPmp.CFGVer.Example.ZZDropRefineProbe
-     RiscvPmp.IrisModel RiscvPmp.IrisModelBinary
-     RiscvPmp.IrisInstance RiscvPmp.IrisInstanceBinary
-     RiscvPmp.Machine RiscvPmp.Sig.
-From iris.base_logic Require lib.gen_heap lib.iprop invariants.
-From iris.bi Require interface big_op.
-From iris.algebra Require dfrac.
-From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
-From stdpp Require namespaces.
-From stdpp Require Import gmap.
-
-Import RiscvPmpProgram.
-
-Set Implicit Arguments.
-Import ctx.resolution.
-Import ctx.notations.
-Import env.notations.
-Import ListNotations.
-Open Scope string_scope.
-Open Scope ctx_scope.
-Open Scope Z_scope.
-
-Import RiscvPmpIrisBase2 RiscvPmpIrisInstance2.
-
 Section RexecDropProbe.
 
   Import RiscvPmpCFGVerifExecutor.
@@ -2529,6 +2454,74 @@ Section RexecDropProbe.
          WTerm/STerm schizophrenia Worlds.v:545 warns about.  If a later
          `apply` refuses on those, that is why. *)
     Admitted.
+
+
+    (* ================================================================== *)
+    (* PROGRESS ON rexec_cfg_addr_F.  Everything below is Qed.             *)
+    (* ================================================================== *)
+
+    Lemma rprop_error {w : World} (c : Prop) (msg : AMessage w) :
+      ⊢ ℛ⟦LogicalSoundness.RProp⟧ c (SymProp.error msg).
+    Proof. unfold LogicalSoundness.RProp; cbn. iIntros "%HF". destruct HF. Qed.
+
+    Lemma rprop_or {w : World} (c1 c2 : Prop) (s1 s2 : 𝕊 w) :
+      ℛ⟦LogicalSoundness.RProp⟧ c1 s1 -∗
+      ℛ⟦LogicalSoundness.RProp⟧ c2 s2 -∗
+      ℛ⟦LogicalSoundness.RProp⟧ (c1 \/ c2) (SymProp.angelic_binary s1 s2).
+    Proof.
+      unfold LogicalSoundness.RProp; cbn.
+      iIntros "H1 H2 [Hs|Hs]".
+      - iDestruct ("H1" with "Hs") as "%Hc". iPureIntro. now left.
+      - iDestruct ("H2" with "Hs") as "%Hc". iPureIntro. now right.
+    Qed.
+
+    (* rdrop_dead is stated POINTWISE at a valuation; this lifts it to an Iris
+       entailment so it can be iApply'd.  Phase 0's idiom (zz_dropk_step):
+       `constructor. intros iota Hpc _. rewrite !wand_unfold.` *)
+    Lemma rdrop_dead_iris {Sg0 : LCtx} (fuel : nat) {w : World}
+        (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term w ty_xlenbits) (wd : Term w ty_word)
+        (cPhi : unit -> SCHeap -> Prop)
+        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+        (ch : SCHeap) (sh : SHeap w)
+        (Hfac : Factors (dbundle trans tbl exits apc anp wd) sPhi) :
+      ℛ⟦□ᵣ (RUnit -> RHeap -> LogicalSoundness.RProp)⟧ cPhi sPhi -∗
+      ℛ⟦RHeap⟧ ch sh -∗
+      ℛ⟦LogicalSoundness.RProp⟧ (cPhi tt ch)
+         (drop_dead fuel trans tbl exits apc anp wd sPhi sh).
+    Proof.
+      constructor. intros iota Hpc _.
+      rewrite !wand_unfold. intros HB Hheap Hsafe.
+      exact (rdrop_dead fuel Hfac Hpc HB Hheap Hsafe).
+    Qed.
+
+    (* THE FUEL-0 CASE, Qed.  Note `rsolve` OVERSHOOTS here: with the statement
+       unfolded it tries to apply the box instead of closing the error, and
+       leaves a residual `ℛ⟦?RA⟧ a0 ta0` with ?RA an evar.  Close the error by
+       hand instead. *)
+    Lemma rexF0 (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        {Σ0 : LCtx} :
+      forall (w : World) (trans : Sub Σ0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w),
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+       ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
+       ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+         ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+       ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+         ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_cfg_addr instrs words exitCond 0 a na cΦ ch)
+            (sexec_cfg_addr 0 trans tbl exits ta tna sΦ sh))%I.
+    Proof.
+      intros w trans tbl exits.
+      iIntros "#[Hi He]".
+      iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
+      iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
+      cbn [sexec_cfg_addr cexec_cfg_addr].
+      unfold LogicalSoundness.RProp; cbn.
+      iIntros "%HF". destruct HF.
+    Qed.
 
   End Relational.
 
