@@ -3610,7 +3610,7 @@ parses. It is **QUALIFIED names in a comma list** that fail —
 `[ltac_use_default] expected after [tactic]`. Split those into two sentences;
 unqualified lists are fine.
 
-### What is now open
+### Phase 6 — settled
 
 - **Phase 6 — Adequacy: DONE, and it needed ZERO edits.** `Adequacy.vo`
   predated the `cdrop_dead` bind commit 44e300fc added to `cexec_cfg_addr`, so
@@ -3621,9 +3621,23 @@ unqualified lists are fine.
   lesson is worth keeping: an identity monadic action inserted into a chain
   costs the soundness proof nothing WHILE IT STAYS TRANSPARENT — making
   `cdrop_dead` opaque would turn this into real work.
-- **Phase 7 — turn the drop on.** `drop_fuel : nat := 0` (`Verifier.v`), so
-  today the drop emits a byte-identical tree and buys nothing. Flip it, measure,
-  `GATE_JOBS=1 ./scripts/gate.sh`.
+### GATE GREEN (2026-08-31, `GATE_JOBS=1`)
+
+`✓ GATE PASSED — build clean, no holes, 14 end theorems axiom-clean (only:
+Machine.pure_decode Base.mmioenv).` This is the check that matters: until this
+commit `rexec_triple_addr` was `Admitted`, so all fourteen `_param` end theorems
+were transitively carrying it, and step 3 following the real dependency graph is
+what says the new `Qed` is load-bearing rather than vacuous.
+
+**But note WHAT was gated.** `drop_fuel` is still `0`, so the tree the examples
+verify is byte-identical to the pre-dropk one. Green here means the framework is
+sound and INERT. It says nothing yet about the drop switched on.
+
+### What is now open
+
+- **Phase 7 — turn the drop on.** `drop_fuel : nat := 0` (`Verifier.v`). Flip
+  it, measure, re-run `GATE_JOBS=1 ./scripts/gate.sh` — and expect that run to
+  be the informative one, since it is the first where the emitted tree differs.
 - **The unmeasured question.** Nothing yet shows the drop FIRES on a real
   program, or how often. That risk has been on this plan's register since §14
   and is still open; Phase 7 is where it gets answered.
