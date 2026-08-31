@@ -3315,6 +3315,13 @@ a design decision, not a mechanical continuation of the port.**
 
 ## §20 THE WALL IS NARROWER THAN §19 SAYS — the obstacle is `refine_bind`, not the theory (2026-08-31)
 
+> **SUPERSEDED BY §21 (same day) — the wall is CLOSED.** §20's diagnosis of the
+> obstacle (`refine_bind` demands more than `bind` uses) is correct and is what
+> the fix is built on. But §20's OWN cost estimate — "four carriers and five
+> bind-site conversions" — is too high and is RETRACTED in §21: the outer binds
+> need no carrier at all, only ω-independence. §20's "Residual risks" 2 and 3
+> did not materialise, and its comma note is wrong. Read §21.
+
 **§19's cost estimate and its "dead end" note are both CORRECTED here.** Its
 diagnosis of *why* the bullet does not close is right and stands unchanged; its
 conclusion about *what it would take* is wrong, and wrong in a way that would
@@ -3500,3 +3507,123 @@ version rejects a SECOND parenthesised group after a string
 (`iIntros "H" (a b) "c" (d e) "f".` fails at the second `(`). Use the
 single-string form with `%` — `iIntros "H %a %b c %d %e f".` — which is what
 `refine_bind` itself does.
+
+---
+
+## §21 THE WALL IS CLOSED — and §20's own cost estimate was too high (2026-08-31)
+
+`rexec_triple_addr`'s `admit.` is gone. `VerifierRel.v` has no `admit.` and no
+`Admitted.` left. What follows is what it actually took, which is less than §20
+said, and where §20 was wrong.
+
+### The premise is ω-INDEPENDENCE, not a carrier chain
+
+§20's "The path" step 3 threads a carrier down all five binds
+(`tt → δ → (δ,a) → (δ1,np,ws) → trans_local`). That is unnecessary. The outer
+continuations never need a carrier at all — they need only
+
+```coq
+Definition OmegaIndep {V : TYPE} {w : World}
+    (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) : Prop :=
+  exists g : forall w2 : World, V w2 -> SHeap w2 -> 𝕊 w2,
+    forall w2 om v h, sPhi w2 om v h = g w2 v h.
+```
+
+and `four` preserves it in one line (`omega_indep_four`), because
+`four sPhi om w' om' v h = sPhi w' (om ∘ om') v h = g w' v h` with no `om`
+anywhere. So the four outer binds carry a `Prop` and nothing else. **A carrier
+appears at exactly ONE bind — the executor's** — and there it is `dbundle3`'s
+first component and nothing more, which is what `Verifier.v`'s comment on
+`trans` already predicted. §20's step 4 was right; steps 1–3 were overbuilt.
+
+Retract, therefore, BOTH cost estimates on record: §19's "comparable in size to
+the `Factors`/`rdrop_dead` framework" and §20's "four carriers and five bind-site
+conversions". The real figure is one definition, three three-line lemmas, one
+lemma with content, and five bind-site conversions.
+
+### The one lemma with content: `factors_consume_tail`
+
+The executor's tail is `consume ens (persist δ1 (θ2∘θ3)).["an"↦na] (four Φ2 θ3)`.
+The carrier can recover `persist δ1 (θ2∘θ3)` — that is just `persist_trans` plus
+`dbundle3_persist`. It cannot recover `four Φ2 θ3`, which *mentions* `θ3` while
+the witness `g` may only see `persist carrier θ3`. **That is §16's funext wall
+again, in miniature.** Pointwise, `four Φ2 θ3` equals a θ3-free function exactly
+when `Φ2` is ω-independent — but `consume` is applied to it, not fully applied
+itself, so pointwise equality has to be *transported through `consume`*.
+
+`SHeapSpec.cext_consume` (`theories/Symbolic/Monads.v`) is precisely that: the
+`CExt` framework §16 built says `consume` yields the same tree from
+pointwise-equal continuations. The whole proof is nine lines and closed on the
+first attempt. **The `PExt`/`CExt`/`SExt` framework paid for itself a second
+time here**, at a call site nobody had it in mind for.
+
+### `rcfg_verification_condition`: §20's risk 1, smaller than advertised
+
+§20 said "expect this to break first". It needed a manual `run` unfold and three
+goals — `omega_indep_block` for the premise, `rsolve` for the other two — and
+closes in 2.3 s. `refine_compat_exec_triple_addr` is DELETED (an instance cannot
+carry a premise) and there is a comment where it was saying so.
+
+§20's risks 2 and 3 did not materialise at all: the four intermediate witnesses
+were never needed (see above), and `Subst Unit` was never needed either, because
+`OmegaIndep` is carrier-free by construction.
+
+### The binds are paired at RProp, and that is the SANCTIONED shape
+
+`HeapSpec.refine_bind` cannot be used here — it states its m-premise for ALL
+continuations while `SHeapSpec.bind` uses one, which is exactly §20's diagnosis.
+The five binds are therefore paired one level down, at `RProp`, by `rbind_at`,
+with `guard_reduce`/`rprop_guard` replacing `refine_guard` and `rconsume_at`
+replacing an rsolve-on-consume.
+
+**This is the `cfgver-rsolve` skill's documented remedy** ("pair the binds
+manually and run rsolve only on the aligned atomic subgoals"), applied at RProp
+instead of RHeapSpec. It is not a departure from the automation; the old proof
+already paired all five by hand at the level above.
+
+### Three rsolve divergences, and what each really was
+
+All three presented identically — pet killed at >7.6 GB — and per
+`cfgver-rsolve` all three mean "a goal pairing with no matching instance, so the
+search diverged instead of failing". They are worth telling apart:
+
+1. **`rsolve` on the APPLIED consume goal** (`ℛ⟦RProp⟧ (consume … cΦ ch)
+   (consume … sΦ sh)`). No instance exists at the applied pairing — instances
+   live at `RHeapSpec RUnit`. Fix: `rconsume_at`.
+2. **`repeat (rewrite ?forgetting_trans; try iModIntro; rsolve)` on the
+   `□ᵣ`/`four` goal.** Fix: `refine_four5`, stated as its OWN lemma. The same
+   script inline diverges because `iModIntro` acts on a twenty-hypothesis
+   context; in a standalone lemma the context is one hypothesis and it closes in
+   4.7 s. **Isolation is the fix, not a different tactic.**
+3. **A residual env refinement at the leaf**, under `forgetting (θ2 ∘ θ3)`. This
+   one was NOT a missing instance: hoisting the fact to the `w3` level as
+   `Hd1` — where the forgetting nesting is still shallow — lets a plain `rsolve`
+   close it. Reach for a hoisted `iAssert` before reaching for a lemma.
+
+### CORRECTION to §20's comma note
+
+§20 says "something in this import environment makes a comma unparseable in
+tactic-argument position generally". WRONG, and the counterexample is in the new
+proof: `unfold ccfg_verification_condition, scfg_verification_condition.`
+parses. It is **QUALIFIED names in a comma list** that fail —
+`unfold CHeapSpec.bind, SHeapSpec.bind.` is the case that errors with
+`[ltac_use_default] expected after [tactic]`. Split those into two sentences;
+unqualified lists are fine.
+
+### What is now open
+
+- **Phase 6 — Adequacy: DONE, and it needed ZERO edits.** `Adequacy.vo`
+  predated the `cdrop_dead` bind commit 44e300fc added to `cexec_cfg_addr`, so
+  it had never been compiled against it. It rebuilds clean (71 s, exit 0, no
+  source change): `cdrop_binds` holds by `reflexivity` and `cdrop_dead` is a
+  transparent `Definition`, so the existing `cgc_binds_heap_fwd` →
+  `sound_cexec_ghosts` step absorbs the extra bind by CONVERSION. The general
+  lesson is worth keeping: an identity monadic action inserted into a chain
+  costs the soundness proof nothing WHILE IT STAYS TRANSPARENT — making
+  `cdrop_dead` opaque would turn this into real work.
+- **Phase 7 — turn the drop on.** `drop_fuel : nat := 0` (`Verifier.v`), so
+  today the drop emits a byte-identical tree and buys nothing. Flip it, measure,
+  `GATE_JOBS=1 ./scripts/gate.sh`.
+- **The unmeasured question.** Nothing yet shows the drop FIRES on a real
+  program, or how often. That risk has been on this plan's register since §14
+  and is still open; Phase 7 is where it gets answered.

@@ -1377,6 +1377,67 @@ Section CFGVerificationDerived.
       exact H.
     Qed.
 
+    (* ================================================================== *)
+    (* OMEGA-INDEPENDENCE -- the premise the OUTER triple needs.           *)
+    (*                                                                    *)
+    (* PLAN-dropk.md §20 predicted four carriers threaded through five     *)
+    (* binds.  It is less than that: the outer continuations only ever     *)
+    (* need to be omega-INDEPENDENT, a property `four` preserves for free, *)
+    (* and a carrier is needed at exactly ONE bind -- the executor's,      *)
+    (* whose tail is `consume ens (persist delta1 (theta2 o theta3)).[..]`.*)
+    (* ================================================================== *)
+    Definition OmegaIndep {V : TYPE} {w : World}
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) : Prop :=
+      exists g : forall w2 : World, V w2 -> SHeap w2 -> 𝕊 w2,
+        forall (w2 : World) (om : Acc w w2) (v : V w2) (h : SHeap w2),
+          sPhi w2 om v h = g w2 v h.
+
+    Lemma omega_indep_four {V : TYPE} {w w1 : World} (om : Acc w w1)
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) :
+      OmegaIndep sPhi -> OmegaIndep (four sPhi om).
+    Proof. intros [g Hg]. exists g. intros w2 om2 v h. unfold four. apply Hg. Qed.
+
+    (* SHeapSpec.run's constant continuation: what discharges the premise
+       at the top of the chain, in rcfg_verification_condition. *)
+    Lemma omega_indep_block {V : TYPE} {w : World} :
+      OmegaIndep (fun (w1 : World) (_ : Acc w w1) (_ : V w1) (_ : SHeap w1) => SymProp.block).
+    Proof. exists (fun w1 _ _ => SymProp.block). reflexivity. Qed.
+
+    Lemma factors_of_omega_indep {A : LCtx -> Type} {SubstA : Subst A}
+        {V : TYPE} {w : World} (a : A (wctx w))
+        (sPhi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) :
+      OmegaIndep sPhi -> Factors (A := A) a sPhi.
+    Proof. intros [g Hg]. exists (fun w2 _ v h => g w2 v h). exact Hg. Qed.
+
+    (* THE LINCHPIN.  The executor call site's own continuation Factors,
+       given only omega-independence of the triple's ambient one.
+       `consume` is applied to `four sPhi om`, which MENTIONS om, so no
+       carrier can see it syntactically -- that is §16's funext wall in
+       miniature.  CExt closes it pointwise: consume respects
+       pointwise-equal continuations. *)
+    Lemma factors_consume_tail {Sg0 : LCtx} {w1 w : World}
+        (ens : Assertion (Sg0 ▻ "an"∷ty_xlenbits))
+        (th : Acc w1 w) (d1 : Sub Sg0 w1)
+        (tbl : SInstrTableW w) (exits : SExitTable w)
+        (sPhi : forall w2 : World, Acc w w2 -> Unit w2 -> SHeap w2 -> 𝕊 w2)
+        (Hoi : OmegaIndep sPhi) :
+      Factors (dbundle3 (persist d1 th) tbl exits)
+        (fun (w3 : World) (om : Acc w w3) (na : Term w3 ty_xlenbits) (h3 : SHeap w3) =>
+           SHeapSpec.consume ens (persist d1 (acc_trans th om)).["an"∷ty_xlenbits ↦ na]
+             (four sPhi om) h3).
+    Proof.
+      destruct Hoi as [g2 Hg2].
+      exists (fun (w3 : World) (bnd : dcarrier3 Sg0 w3) (na : Term w3 ty_xlenbits) (h3 : SHeap w3) =>
+                SHeapSpec.consume ens (fst (fst bnd)).["an"∷ty_xlenbits ↦ na]
+                  (fun (w4 : World) (_ : Acc w3 w4) (v : Unit w4) (h : SHeap w4) => g2 w4 v h) h3).
+      intros w3 om na h3.
+      rewrite persist_trans.
+      rewrite dbundle3_persist.
+      cbn [dbundle3 fst].
+      apply SHeapSpec.cext_consume.
+      intros w4 th4 v h. unfold four. apply Hg2.
+    Qed.
+
     Lemma rprop_error {w : World} (c : Prop) (msg : AMessage w) :
       ⊢ ℛ⟦LogicalSoundness.RProp⟧ c (SymProp.error msg).
     Proof. unfold LogicalSoundness.RProp; cbn. iIntros "%HF". destruct HF. Qed.
@@ -1839,6 +1900,93 @@ Section CFGVerificationDerived.
       exact (H HP cΦ sΦ HΦ ch sh Hh Hs).
     Qed.
 
+    (* ================================================================== *)
+    (* APPLIED-LEVEL PAIRING.  rexec_triple_addr below carries a premise   *)
+    (* about its OWN continuation (OmegaIndep), and HeapSpec.refine_bind   *)
+    (* destroys that link -- it states its m-premise for ALL continuations *)
+    (* while SHeapSpec.bind only ever USES one.  So the five binds are     *)
+    (* paired one level down, at RProp, where the continuation stays       *)
+    (* concrete.  This is the `cfgver-rsolve` skill's documented remedy    *)
+    (* ("pair the binds manually, run rsolve only on the aligned atomic    *)
+    (* subgoals"), applied at RProp instead of RHeapSpec; each lemma below *)
+    (* is the applied counterpart of one the old proof already used by     *)
+    (* hand (refine_bind, refine_guard, and rsolve-on-consume).            *)
+    (*                                                                    *)
+    (* Do NOT replace these by a bare rsolve on the applied goal: there is *)
+    (* no RefineCompat instance at that pairing, so the search DIVERGES    *)
+    (* rather than failing -- measured twice at >7.6 GB.                   *)
+    (* ================================================================== *)
+
+    Lemma rbind_at `{RA : Rel SA CA, RB : Rel SB CB} {w}
+        (cm : CHeapSpec CA) (sm : SHeapSpec SA w)
+        (cf : CA -> CHeapSpec CB)
+        (sf : forall w1 : World, Acc w w1 -> SA w1 -> SHeapSpec SB w1)
+        (cPhi : CB -> SCHeap -> Prop)
+        (sPhi : forall w1 : World, Acc w w1 -> SB w1 -> SHeap w1 -> 𝕊 w1)
+        (ch : SCHeap) (sh : SHeap w) :
+      ℛ⟦RHeapSpec RA⟧ cm sm -∗
+      ℛ⟦□ᵣ (RA -> RHeap -> LogicalSoundness.RProp)⟧
+         (fun a => cf a cPhi) (fun w1 om a1 h1 => sf w1 om a1 (four sPhi om) h1) -∗
+      ℛ⟦RHeap⟧ ch sh -∗
+      ℛ⟦LogicalSoundness.RProp⟧
+         (CHeapSpec.bind cm cf cPhi ch) (SHeapSpec.bind sm sf sPhi sh).
+    Proof.
+      iIntros "Hm Hk Hh".
+      unfold CHeapSpec.bind. unfold SHeapSpec.bind.
+      iApply ("Hm" with "Hk Hh").
+    Qed.
+
+    (* The concrete-only guard is DEFINITIONALLY an implication once
+       applied to a continuation and a heap, so refine_guard's
+       RHeapSpec-level statement is not needed down here. *)
+    Lemma guard_reduce {CA} (P : Prop) (c : CHeapSpec CA)
+        (cPhi : CA -> SCHeap -> Prop) (ch : SCHeap) :
+      CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula P)) (fun _ => c) cPhi ch
+      = (P -> c cPhi ch)%type.
+    Proof. reflexivity. Qed.
+
+    Lemma rprop_guard {P : Prop} {c : Prop} {w : World} {s : 𝕊 w} :
+      (⌜P⌝ -∗ ℛ⟦LogicalSoundness.RProp⟧ c s) ⊢ ℛ⟦LogicalSoundness.RProp⟧ (P -> c)%type s.
+    Proof.
+      constructor. intros ι Hpc H.
+      cbn in H |- *.
+      cbv [RSat LogicalSoundness.RProp] in H |- *.
+      cbn in H |- *.
+      intros Hs HP.
+      exact (H HP Hs).
+    Qed.
+
+    Lemma rconsume_at {Sg0 : LCtx} (asn : Assertion Sg0) {w : World}
+        (cs : Valuation Sg0) (ss : Sub Sg0 w)
+        (cPhi : unit -> SCHeap -> Prop)
+        (sPhi : forall w1 : World, Acc w w1 -> Unit w1 -> SHeap w1 -> 𝕊 w1)
+        (ch : SCHeap) (sh : SHeap w) :
+      ℛ⟦RInst (Sub Sg0) (Valuation Sg0)⟧ cs ss -∗
+      ℛ⟦□ᵣ (RUnit -> RHeap -> LogicalSoundness.RProp)⟧ cPhi sPhi -∗
+      ℛ⟦RHeap⟧ ch sh -∗
+      ℛ⟦LogicalSoundness.RProp⟧
+        (CHeapSpec.consume asn cs cPhi ch) (SHeapSpec.consume asn ss sPhi sh).
+    Proof.
+      iIntros "Hs Hk Hh". iApply (refine_consume with "Hs Hk Hh").
+    Qed.
+
+    (* Five nested `four`s, ISOLATED ON PURPOSE.  The same script inline
+       inside rexec_triple_addr makes iModIntro act on a twenty-hypothesis
+       context and rsolve diverge; here the context is one hypothesis. *)
+    Lemma refine_four5 {AT A} (RA : Rel AT A)
+        {w0 w1 w2 w3 w4 w5 : World}
+        (o0 : Acc w0 w1) (o1 : Acc w1 w2) (o2 : Acc w2 w3) (o3 : Acc w3 w4) (o4 : Acc w4 w5)
+        (v : A) (vs : Box AT w0) :
+      forgetting (acc_trans (acc_trans (acc_trans (acc_trans o0 o1) o2) o3) o4)
+        (ℛ⟦□ᵣ RA⟧ v vs)
+      ⊢ ℛ⟦□ᵣ RA⟧ v (four (four (four (four (four vs o0) o1) o2) o3) o4).
+    Proof.
+      iIntros "H".
+      rewrite !forgetting_trans.
+      do 5 (iApply refine_four; iModIntro).
+      iApply "H".
+    Qed.
+
     (* Not a duplicate of forgetting_itable_rel above, despite the similar *)
     (* proof shape: that lemma commutes forgetting with persist_itable     *)
     (* given an EXISTING itable_rel hypothesis at the SAME world (SInstrTable  *)
@@ -2237,153 +2385,122 @@ Section CFGVerificationDerived.
     (* morphisms by the _forget lemmas.  rsolve must NOT be let loose on   *)
     (* the executor bind (no RefineCompat instance matches the table       *)
     (* executor's premise-free form; typeclass search diverges).           *)
+    (* rexec_triple_addr: unconditional refinement of the guarded          *)
+    (* concrete triple by the table-based symbolic triple.                  *)
+    (*                                                                      *)
+    (* STATED IN PEELED FORM, and carrying a premise on its own ambient     *)
+    (* continuation, for the reason PLAN-dropk.md §19/§20 records: the      *)
+    (* executor now demands `Factors (dbundle3 trans tbl exits) sPhi`, and  *)
+    (* for a truly unconstrained sPhi that is FALSE (an adversarial sPhi    *)
+    (* can distinguish two accessibilities that agree on their persisted    *)
+    (* substitution -- Acc's constructors are genuinely different terms).   *)
+    (* OmegaIndep is the weakest thing that suffices, and SHeapSpec.run     *)
+    (* supplies it (omega_indep_block).                                     *)
+    (*                                                                      *)
+    (* The five binds are paired with rbind_at rather than                  *)
+    (* HeapSpec.refine_bind -- see the comment on rbind_at above for why    *)
+    (* the latter cannot work here.  Otherwise this is the old proof:       *)
+    (* the guard, the four _forget transports, itable_relW_zip_pred, and    *)
+    (* the executor dispatched by rexec_cfg_addr are all unchanged.         *)
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
-      ⊢ ℛ⟦RHeapSpec RUnit⟧
-          (cexec_triple_addr req instrs words exitCond fuel ens tbl exits)
-          (sexec_triple_addr req tbl exits fuel ens (w := w)).
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w : World} :
+      ⊢ ∀ (cPhi : unit -> SCHeap -> Prop)
+          (sPhi : forall w1 : World, Acc w w1 -> Unit w1 -> SHeap w1 -> 𝕊 w1),
+        ⌜OmegaIndep sPhi⌝ -∗
+        ℛ⟦□ᵣ (RUnit -> RHeap -> LogicalSoundness.RProp)⟧ cPhi sPhi -∗
+        ∀ (ch : SCHeap) (sh : SHeap w), ℛ⟦RHeap⟧ ch sh -∗
+          ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_triple_addr req instrs words exitCond fuel ens tbl exits cPhi ch)
+            (sexec_triple_addr req tbl exits fuel ens (w := w) sPhi sh).
     Proof.
+      iIntros (cPhi sPhi) "%Hoi #rPhi". iIntros (ch sh) "#rh".
       unfold cexec_triple_addr, sexec_triple_addr.
-      iApply (HeapSpec.refine_bind (RA := RNEnv LVar (Σ ▻▻ words_ctx (length tbl)))
-                (RB := RUnit)).
+      iApply (rbind_at (RA := RNEnv LVar (Σ ▻▻ words_ctx (length tbl))) (RB := RUnit) with "[] [] rh").
       - rsolve.
-      - iIntros (w1 θ0).
-        iModIntro.
-        iIntros (lenvw δw) "#Hδw".
-        iApply refine_guard.
-        iIntros "%Hfaith".
+      - iIntros (w1 om0) "!>". iIntros (lenvw δw) "#Hδw". iIntros (ch1 sh1) "#rh1".
+        rewrite guard_reduce.
+        iApply rprop_guard. iIntros "%Hfaith".
         destruct Hfaith as [Hif [Hef Hwg]].
         (* Split the extended demonic env: the Σ half feeds the existing
            itable_rel/etable_rel transport, the word half feeds
            words_of_env_take_inst. *)
         iPoseProof (refine_env_drop with "Hδw") as "#Hδ".
-        iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
-        { rsolve. }
-        iIntros (w0 θ1).
-        iModIntro.
-        iIntros (a ta) "#Ha".
-        (* The initial-nextpc demonic, paired here.  Both executors introduce it
-           ONCE, right after `a` and before `produce req` — see
-           exec_instruction_prologue (Verifier.v) for why it is a parameter
-           threaded inward rather than an existential minted per step. *)
-        iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
-        { rsolve. }
-        iIntros (w1' θ1').
-        iModIntro.
-        iIntros (np tnp) "#Hnp".
-        iApply (HeapSpec.refine_bind (RA := RUnit) (RB := RUnit)).
-        { rsolve. }
-        iIntros (w2 θ2).
-        iModIntro.
-        iIntros (u tu) "#Hu".
-        iApply (HeapSpec.refine_bind (RA := RVal ty_xlenbits) (RB := RUnit)).
-        { (* TODO: It feels like rsolve should be able to handle this, if you have the right RefineCompat instances. *)
-          iPoseProof (itable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
-                        (env.drop (words_ctx (length tbl)) δw) Hif with "Hδ") as "#Hi0".
-          iPoseProof (etable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
-                        (env.drop (words_ctx (length tbl)) δw) Hef with "Hδ") as "#He".
-          (* Build the loop-carried itable_relW out of the two guards: address
-             column from Hi0, word column from Hwg + the demonic refinement. *)
-          iPoseProof (wtable_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
-                        (env.drop (words_ctx (length tbl)) δw) Hwg with "Hδ") as "#Hw0".
-          iPoseProof (words_rel_of_faith_forget (acc_trans (acc_trans θ1 θ1') θ2)
-                        δw lenvw with "Hδw") as "#Hws".
-          iAssert (itable_relW instrs words
-                     (zip_words
-                        (subst_itable (persist (env.drop (words_ctx (length tbl)) δw)
-                                         (acc_trans (acc_trans θ1 θ1') θ2)) tbl)
-                        (List.map (fun x => persist__term x (acc_trans (acc_trans θ1 θ1') θ2))
-                           (words_of_env (@wterm_take _) (@wterm_drop _)
-                              (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
-          { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
-          (* rexec_cfg_addr's statement changed 2026-08-31 (dropk integration):
-             it is no longer ℛ⟦RVal -> RVal -> RHeapSpec RA⟧-FOLDED, so the
-             "iApply matches the whole partial application against an
-             RHeapSpec-wrapped goal via the generic arrow-Rel instance" trick
-             no longer fires -- the lemma's head is now a RAW `∀ a ta, … -∗ …`,
-             which cannot match a goal whose `a`/`np` are already fixed, ONLY a
-             goal already peeled to the RProp level.  Peel THIS goal down to
-             that level FIRST (cΦ/sΦ/ch/sh — mirroring exactly what rexFS does
-             internally before ITS OWN recursive call to IH), THEN iApply. *)
-          iIntros (cΦ sΦ) "#rΦ0". iIntros (ch sh) "#rh0".
-          iApply (rexec_cfg_addr instrs words exitCond fuel _ _ _ with "[$Hi $He]").
-          (* FIVE bullets now, not two -- two RVal premises (unchanged), the
-             NEW Factors premise (NOT YET CLOSED), then the □ᵣ/RHeap premises
-             that used to be supplied automatically by the RHeapSpec-folded
-             match and now have to be handed back explicitly from the iIntros
-             just above. *)
-          - iApply (refine_inst_persist with "Ha").
-          - iApply (refine_inst_persist with "Hnp").
-          - (* ================================================================
-               OPEN, NOT A TRANSCRIPTION GAP -- a genuinely unresolved question.
+        iApply (rbind_at (RA := RVal ty_xlenbits) (RB := RUnit) with "[] [] rh1").
+        + rsolve.
+        + iIntros (w2 th1) "!>". iIntros (a ta) "#Ha". iIntros (ch2 sh2) "#rh2".
+          (* The initial-nextpc demonic, paired here.  Both executors introduce
+             it ONCE, right after `a` and before `produce req` -- see
+             exec_instruction_prologue (Verifier.v) for why it is a parameter
+             threaded inward rather than an existential minted per step. *)
+          iApply (rbind_at (RA := RVal ty_xlenbits) (RB := RUnit) with "[] [] rh2").
+          * rsolve.
+          * iIntros (w3 th1') "!>". iIntros (np tnp) "#Hnp". iIntros (ch3 sh3) "#rh3".
+            (* Established HERE, where the forgetting nesting is still
+               shallow.  Left to the consume at the leaf it becomes a
+               residual under forgetting (θ2 ∘ θ3) that rsolve diverges on. *)
+            iAssert (ℛ⟦RInst (fun Sig : LCtx => NamedEnv (Term Sig) (Σ ▻ "a"∷ty_xlenbits))
+                         (Valuation (Σ ▻ "a"∷ty_xlenbits))⟧
+                       (env.drop (words_ctx (length tbl)) lenvw).["a"∷ty_xlenbits ↦ a]
+                       (persist (env.drop (words_ctx (length tbl)) δw)
+                          (acc_trans th1 th1')).["a"∷ty_xlenbits ↦ persist__term ta th1'])
+              as "#Hd1".
+            { rsolve. }
+            iApply (rbind_at (RA := RUnit) (RB := RUnit) with "[] [] rh3").
+            -- rsolve.
+            -- iIntros (w4 th2) "!>". iIntros (u tu) "#Hu". iIntros (ch4 sh4) "#rh4".
+               (* TODO: It feels like rsolve should be able to handle the
+                  executor bind, if you have the right RefineCompat
+                  instances -- it cannot today, and diverges rather than
+                  failing (cfgver-rsolve). *)
+               iPoseProof (itable_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             (env.drop (words_ctx (length tbl)) δw) Hif with "Hδ") as "#Hi0".
+               iPoseProof (etable_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             (env.drop (words_ctx (length tbl)) δw) Hef with "Hδ") as "#He".
+               (* Build the loop-carried itable_relW out of the two guards:
+                  address column from Hi0, word column from Hwg + the demonic
+                  refinement. *)
+               iPoseProof (wtable_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             (env.drop (words_ctx (length tbl)) δw) Hwg with "Hδ") as "#Hw0".
+               iPoseProof (words_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             δw lenvw with "Hδw") as "#Hws".
+               iAssert (itable_relW instrs words
+                          (zip_words
+                             (subst_itable (persist (env.drop (words_ctx (length tbl)) δw)
+                                              (acc_trans (acc_trans th1 th1') th2)) tbl)
+                             (List.map (fun x => persist__term x (acc_trans (acc_trans th1 th1') th2))
+                                (words_of_env (@wterm_take _) (@wterm_drop _)
+                                   (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
+               { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
+               unfold CHeapSpec.bind. unfold SHeapSpec.bind.
+               iApply (rexec_cfg_addr instrs words exitCond fuel _ _ _ with "[$Hi $He]").
+               (* FIVE premises: two RVal, the Factors one, then the □ᵣ/RHeap
+                  pair, which the RHeapSpec-folded statement used to supply
+                  automatically. *)
+               ++ iApply (refine_inst_persist with "Ha").
+               ++ iApply (refine_inst_persist with "Hnp").
+               ++ (* PLAN-dropk.md §19's `admit.`, closed 2026-08-31.  The
+                     carrier is dbundle3's FIRST component and nothing else --
+                     which is exactly what Verifier.v's comment on `trans`
+                     says the outer continuation's ω-dependence factors
+                     through, so this is the last mile of that design. *)
+                  iPureIntro. apply factors_consume_tail.
+                  apply omega_indep_four. apply omega_indep_four.
+                  apply omega_indep_four. apply omega_indep_four. exact Hoi.
+               ++ iIntros (w5 th3) "!>". iIntros (na tna) "#Hna". iIntros (ch5 sh5) "#rh5".
+                  iApply (rconsume_at with "[] [] rh5").
+                  ** rsolve.
+                  ** iApply (refine_four5 with "rPhi").
+               ++ iApply "rh4".
+    Qed.
 
-               Goal here: ⌜Factors (dbundle3 trans_local tbl_local exits_local) sΦ⌝
-               where trans_local/tbl_local/exits_local are the CONCRETE table
-               arguments built just above (persist (env.drop … δw) …, the
-               zip_words … table), and sΦ is the AMBIENT continuation of THIS
-               bullet's own ℛ⟦RHeapSpec (RVal ty_xlenbits)⟧ goal.
-
-               sΦ is opaque HERE, but -- corrected 2026-08-31, see PLAN-dropk
-               §20 -- that is a property of this PROOF, not of the term. In
-               sexec_triple_addr itself the continuation reaching sexec_cfg_addr
-               IS `four`-derived from the outer one; HeapSpec.refine_bind simply
-               throws that away, because its m-premise is stated for ALL
-               continuations while SHeapSpec.bind only ever USES one (watch it
-               happen in refine_bind's own 5-line proof). Reaching this goal
-               through refine_bind is what made sΦ fresh.
-
-               Factors was NEVER independently proved for an arbitrary sΦ inside
-               sexec_cfg_addr's OWN recursion (rexFS) either; there it was a
-               HYPOTHESIS threaded in from rexec_cfg_addr's caller and only ever
-               algebraically transformed (factors_four, factors_pair_l). There is
-               no caller-supplied Factors hypothesis available HERE, because
-               rexec_triple_addr's own statement doesn't carry one -- and that,
-               not the opacity, is the thing to fix.
-
-               For a truly unconstrained sΦ, `Factors _ sΦ` is FALSE in general
-               (an adversarial sΦ can distinguish two accessibilities reaching the
-               same world that agree on their persisted substitution, e.g. by
-               matching on acc_refl vs. acc_sub _ _ directly — Acc's constructors
-               are genuinely different terms even when sub_acc agrees). So closing
-               this bullet is not a missing rewrite; rexec_triple_addr's OWN
-               statement must gain a Factors-carrying premise (ω-independence of
-               its own continuation), which propagates to
-               rcfg_verification_condition -- where SHeapSpec.run's constant
-               `fun w1 θ1 _ h1 => block` discharges it by reflexivity.
-
-               THE PLAN IS WRITTEN UP AND ITS TWO MECHANISMS ARE CHECKED:
-               PLAN-dropk.md §20, probed in Example/ZZFactorsBindProbe.v
-               (refine_bind_cont, a 3-line variant of refine_bind that states its
-               m-premise AT the derived continuation so the caller keeps sΦ; and
-               factors_run). §19's estimate that this needs a second framework
-               "comparable in size to Factors/rdrop_dead" is RETRACTED there --
-               it is four carriers and five bind-site conversions. Read §20, then
-               §19 for the port mechanics.
-               ================================================================ *)
-            admit.
-          - iApply "rΦ0".
-          - iApply "rh0". }
-        iIntros (w3 θ3).
-        iModIntro.
-        iIntros (na tna) "#Hna".
-        rsolve.
-        repeat (rewrite ?forgetting_trans; try iModIntro; rsolve).
-    Admitted.
-
-    #[export] Instance refine_compat_exec_triple_addr {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (words : bv xlenbits -> bv word)
-      (exitCond : bv xlenbits -> bool) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
-      RefineCompat (RHeapSpec RUnit)
-        (cexec_triple_addr req instrs words exitCond fuel ens tbl exits) w
-        (sexec_triple_addr req tbl exits fuel ens (w := w)) _ :=
-      MkRefineCompat (rexec_triple_addr req instrs words exitCond fuel ens tbl exits).
+    (* NO RefineCompat instance for rexec_triple_addr any more: an instance
+       cannot carry the OmegaIndep premise.  Its sole consumer was
+       rcfg_verification_condition's bare `rsolve`, which now applies the
+       lemma by hand (three goals, two of them still rsolve). *)
 
     Definition ccfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
@@ -2404,7 +2521,16 @@ Section CFGVerificationDerived.
           (scfg_verification_condition req tbl exits fuel ens w).
     Proof.
       unfold ccfg_verification_condition, scfg_verification_condition.
-      rsolve.
+      (* Was a bare `rsolve`, which went through refine_compat_exec_triple_addr.
+         That instance is gone (it cannot carry rexec_triple_addr's OmegaIndep
+         premise), so the run is unfolded and the lemma applied by hand.  The
+         constant continuation `fun w1 θ1 _ h1 => block` is what makes the
+         premise true, by omega_indep_block. *)
+      unfold CHeapSpec.run. unfold SHeapSpec.run.
+      iApply (rexec_triple_addr req instrs words exitCond fuel ens tbl exits).
+      - iPureIntro. apply omega_indep_block.
+      - rsolve.
+      - rsolve.
     Qed.
 
     #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
