@@ -2371,6 +2371,72 @@ Section RexecDropProbe.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
 
+    (* ================================================================== *)
+    (* THE LOOP-CARRIED CARRIER IS THREE COMPONENTS, NOT FIVE.             *)
+    (*                                                                    *)
+    (* The premise first written here was                                  *)
+    (*   Factors (dbundle5 trans tbl exits ta tna) sPhi                    *)
+    (* i.e. the carrier that `factors_drop_at_step` consumes.  That premise *)
+    (* CANNOT PROPAGATE THROUGH THE RECURSION, and the reason is structural: *)
+    (* `factors_four` re-establishes Factors at `persist a Theta`, so the    *)
+    (* pc it hands you is the OLD pc persisted forward -- while the         *)
+    (* recursive call runs at `apc'`, the pc the instruction just produced.  *)
+    (* Those are different terms and neither is a projection of the other,   *)
+    (* so no amount of monotonicity bridges them.                            *)
+    (*                                                                    *)
+    (* trans / tbl / exits are exactly the arguments that DO travel by       *)
+    (* persist alone, so they are what the loop can carry.  The pc and       *)
+    (* nextpc are re-supplied at each step, and the 5-carrier the drop wants  *)
+    (* is rebuilt LOCALLY by factors_widen5 at the point of use.             *)
+    (*                                                                    *)
+    (* Direction of Factors, since it is easy to get backwards: a SMALLER    *)
+    (* carrier is a STRONGER hypothesis (the continuation is blind to more), *)
+    (* so `factors_pair_l` weakens by ADDING a component on the right.       *)
+    (* dbundle5 is dbundle3 with two components added on the right --        *)
+    (* DEFINITIONALLY, since `*` is left-associative -- which is what makes  *)
+    (* factors_widen5 two applications of factors_pair_l and nothing else.   *)
+    (* ================================================================== *)
+
+    Definition dcarrier3 (Sg0 : LCtx) : LCtx -> Type :=
+      fun Sg => (Sub Sg0 Sg *
+                 list (Term Sg ty_xlenbits * Term Sg ty_word * AnnotInstr) *
+                 list (Term Sg ty_xlenbits))%type.
+
+    Definition dbundle3 {Sg0 : LCtx} {w : World}
+        (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        : dcarrier3 Sg0 (wctx w) := (trans, tbl, exits).
+
+    Lemma dbundle5_eq {Sg0 : LCtx} {w : World}
+        (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) :
+      dbundle5 trans tbl exits apc anp = ((dbundle3 trans tbl exits, apc), anp).
+    Proof. reflexivity. Qed.
+
+    Lemma dbundle3_persist {Sg0 : LCtx} {w1 w2 : World} (om : Acc w1 w2)
+        (trans : Sub Sg0 w1) (tbl : SInstrTableW w1) (exits : SExitTable w1) :
+      persist (A := dcarrier3 Sg0) (dbundle3 trans tbl exits) om
+      = dbundle3 (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
+          (persist_etable om exits).
+    Proof.
+      unfold dbundle3, dcarrier3.
+      rewrite zz_persist_itableW_subst. rewrite zz_persist_etable_subst.
+      destruct om; cbn; now rewrite ?subst_sub_id.
+    Qed.
+
+    Lemma factors_widen5 {Sg0 : LCtx} {w : World} {V : TYPE}
+        (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits)
+        (Phi : forall w2 : World, Acc w w2 -> V w2 -> SHeap w2 -> 𝕊 w2) :
+      Factors (dbundle3 trans tbl exits) Phi ->
+      Factors (dbundle5 trans tbl exits apc anp) Phi.
+    Proof.
+      intros H. rewrite dbundle5_eq.
+      apply (factors_pair_l (A := fun Sg => (dcarrier3 Sg0 Sg * Term Sg ty_xlenbits)%type)
+                            (B := fun Sg => Term Sg ty_xlenbits)).
+      apply (factors_pair_l (A := dcarrier3 Sg0) (B := fun Sg => Term Sg ty_xlenbits)).
+      exact H.
+    Qed.
+
     (* CONTROL: verbatim from VerifierRel.v.  If this breaks, the probe's
        environment has drifted, not the proof. *)
     Lemma rexec_cfg_addr_old (instrs : gmap (bv xlenbits) AnnotInstr)
@@ -2410,7 +2476,7 @@ Section RexecDropProbe.
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
-       ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
@@ -2429,7 +2495,7 @@ Section RexecDropProbe.
       iIntros (ch sh) "#rh".
       (* Reaches, with everything persistent and Hfac a plain Coq hypothesis:
 
-           Hfac : Factors (dbundle5 trans tbl exits ta tna) sΦ
+           Hfac : Factors (dbundle3 trans tbl exits) sΦ
            "Hi" : itable_relW instrs words tbl
            "He" : etable_rel exitCond exits
            "Ha" : ℛ⟦RVal ty_xlenbits⟧ a ta
@@ -2507,7 +2573,7 @@ Section RexecDropProbe.
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
-       ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
@@ -2545,7 +2611,7 @@ Section RexecDropProbe.
            (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
             ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
             ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
-            ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+            ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
               ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
             ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
               ℛ⟦LogicalSoundness.RProp⟧
@@ -2556,7 +2622,7 @@ Section RexecDropProbe.
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
-       ∀ cΦ sΦ, ⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝ -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
@@ -2600,32 +2666,109 @@ Section RexecDropProbe.
            match goal with |- context [ ?C cΦ (cgc_heap ch) ] => set (crest := C) end.
            unshelve iApply (rdrop_dead_iris drop_fuel (fun _ ch' => crest cΦ ch')
                               (cgc_heap ch) (gc_heap sh) _).
-           - (* Factors for the drop's own continuation: ONE line. *)
-             apply factors_drop_at_step. exact Hfac.
+           - (* Factors for the drop's own continuation: widen the loop-carried
+                3-carrier to the 5-carrier the drop wants, then hand it over. *)
+             apply factors_drop_at_step. apply factors_widen5. exact Hfac.
            - (* THE CONTINUATION BOX -- the frontier.  `iModIntro` introduces
                 `assuming`, so the box opens cleanly and everything in context
                 lands under `forgetting θ1`. *)
              iIntros (w1 θ1). iModIntro. iIntros (u tu) "_".
              iIntros (ch' sh') "#rh'".
              unfold step_after_drop.
-             (* GOAL HERE:
-                  ℛ⟦RProp⟧ (crest cΦ ch')
-                    (bind (sexec_ghosts (ai_ghost_before ai)) (fun … =>
-                      bind (sexec_instruction …) (fun … apc' =>
-                        bind (sexec_ghosts (ai_ghost_after ai)) (fun … =>
-                          sexec_cfg_addr n' …))) (four sΦ θ1) sh')
-
-                WHAT IS LEFT: relate this chain to `crest`.  It is the original
-                proof's inner part -- rexec_ghosts, the instruction refinement,
-                and the recursive call -- with two differences:
-                  * the IH is a PLAIN COQ hypothesis applied directly, not
-                    projected out of a box with forgetting_unconditionally_drastic;
-                  * the IH's Factors premise is re-established by factors_four +
-                    dbundle5_persist on `four sΦ θ1`.
-                Do NOT reach for refine_gc_heap HERE -- `rh'` supplied by this
-                box is already the right heap relation.  refine_gc_heap belongs
-                to the THIRD obligation below, not this one. *)
-             admit.
+             iClear "rh".
+             (* ---- THE BOX-LOCKSTEP RULE, and it is the whole trick here. ----
+                The goal's continuation grows a `four` tower, one layer per bind:
+                  four (four (four (four sΦ θ1) θ0) θ2) θ3
+                while the IPM context ACCUMULATES the accessibility the other
+                way -- `into_assuming_forgetting` merges each intro into a single
+                left-nested forgetting (((θ1∘θ0)∘θ2)∘θ3).  Those two are equal
+                only up to associativity of acc_trans, which is NOT definitional
+                and has no lemma (Acc carries an entailment PROOF, so proving it
+                would need proof irrelevance).
+                Fix: convert the box with `forgetting_unconditionally` AFTER EVERY
+                intro, so it grows its own `four` layer in step with the goal and
+                the two never have to be reconciled.  Do NOT batch the intros and
+                convert once at the end -- that is exactly the shape that cannot
+                be closed.  (forgetting_unconditionally_drastic, which the old
+                rexec_cfg_addr used, is the WRONG tool here: it lands the relation
+                at ONE world instead of rebuilding the box.) *)
+             iPoseProof (forgetting_unconditionally with "rΦ") as "rQ1".
+             iClear "rΦ".
+             (* `unfold crest` is REQUIRED before any of this: rsolve and the
+                pointwise binds both need to SEE the concrete side's bind chain,
+                and `set` had hidden it behind a local definition. *)
+             unfold crest.
+             (* ---- ghosts-before.  Note this is NOT rsolve.  rsolve dispatches
+                a bind through the generic refine_bind, whose box obligation
+                UNIVERSALLY QUANTIFIES the symbolic continuation -- and with the
+                drop inside sexec_cfg_addr that goal is FALSE.  Unfolding the two
+                binds by hand and applying the component's own RHeapSpec
+                refinement keeps sΦ concrete, which is what lets factors_four
+                re-establish Factors at the recursive call. *)
+             unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+             iApply (rexec_ghosts (ai_ghost_before ai)).
+             2: iApply "rh'".
+             iIntros (w0 θ0). iModIntro. iIntros (u0 tu0) "_".
+             iIntros (ch0 sh0) "#rh0".
+             iPoseProof (forgetting_unconditionally with "rQ1") as "rQ2".
+             iClear "rQ1".
+             (* ---- the instruction.  Its three RVal arguments come out as
+                persist towers; refine_inst_persist needs them collapsed to a
+                SINGLE persist first, hence the `<- persist_trans`.  The innermost
+                `persist _ acc_refl` needs no lemma -- persistent_subst matches on
+                the accessibility, so it reduces definitionally (checked). *)
+             unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+             iApply (rexec_instruction (ai_instr ai)).
+             1: (rewrite <- (persist_trans (A := STerm ty_xlenbits));
+                 iApply (refine_inst_persist with "Ha")).
+             1: (rewrite <- (persist_trans (A := STerm ty_xlenbits));
+                 iApply (refine_inst_persist with "Hna")).
+             1: (rewrite <- (persist_trans (A := STerm ty_word));
+                 iApply (refine_inst_persist with "Hx")).
+             2: iApply "rh0".
+             iIntros (w2 θ2). iModIntro. iIntros (apc' tapc') "#Hapc".
+             iIntros (ch2 sh2) "#rh2".
+             iPoseProof (forgetting_unconditionally with "rQ2") as "rQ3".
+             iClear "rQ2".
+             (* ---- ghosts-after *)
+             unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+             iApply (rexec_ghosts (ai_ghost_after ai)).
+             2: iApply "rh2".
+             iIntros (w3 θ3). iModIntro. iIntros (u3 tu3) "_".
+             iIntros (ch3 sh3) "#rh3".
+             iPoseProof (forgetting_unconditionally with "rQ3") as "rQ4".
+             iClear "rQ3".
+             (* ---- THE RECURSIVE CALL.  Re-establish Factors by walking the
+                SAME four layers the goal walked -- one factors_four per bind, in
+                the same order -- so F4's continuation is syntactically the goal's
+                tower.  Applying factors_four once at the composed accessibility
+                would give `four sΦ Θ` instead, and hit the same associativity
+                wall as the box. *)
+             pose proof (factors_four θ1 Hfac) as F1.
+             pose proof (factors_four θ0 F1) as F2.
+             pose proof (factors_four θ2 F2) as F3.
+             pose proof (factors_four θ3 F3) as F4.
+             rewrite !dbundle3_persist in F4.
+             clear F1 F2 F3.
+             (* Normalise the three loop-carried arguments to F4's FULLY-EXPANDED
+                persist form (one layer per hop).  Mind the two orientations:
+                persist_itableW_trans/persist_etable_trans are stated
+                nested = collapsed, so `<-` expands; persist_trans is stated
+                collapsed = nested, so it expands FORWARDS.  Getting persist_trans
+                backwards collapses `trans` to an acc_trans chain that then cannot
+                match F4. *)
+             rewrite forgetting_itable_relW. rewrite forgetting_etable_rel.
+             rewrite <- !persist_itableW_trans. rewrite <- !persist_etable_trans.
+             rewrite !(persist_trans (A := Sub Σ0)).
+             (* The IH is a PLAIN COQ hypothesis applied directly -- `w` is
+                generalised in the statement and this is a plain `induction fuel`,
+                so there is no boxed IH and no forgetting_unconditionally_drastic. *)
+             iApply (IH _ _ _ _ with "[$Hi $He]").
+             1: iApply (refine_inst_persist with "Hapc").
+             1: iApply (refine_inst_persist with "Hapc").
+             1: (iPureIntro; exact F4).
+             1: iApply "rQ4".
+             1: iApply "rh3".
            - (* the heap argument of rdrop_dead_iris: the drop runs on the
                 POST-GC heap on both sides, which is exactly refine_gc_heap. *)
              iApply (refine_gc_heap with "rh"). }
@@ -2661,7 +2804,7 @@ End RexecDropProbe.
 ## §18 `rexec_cfg_addr_F` — STATE OF THE PROOF (2026-08-31)
 
 Everything named here is in the probe verbatim above. The probe **compiles
-clean**; the only holes are the two `admit.`s named below.
+clean**; the only hole is branch 1 of `rexFS`.
 
 ### Closed, `Qed`, axiom-clean
 
@@ -2670,6 +2813,7 @@ clean**; the only holes are the two `admit.`s named below.
 | `rprop_error` | a symbolic `error` refines anything — `destruct` on the `False` |
 | `rprop_or` | `angelic_binary` on both sides: pair the two branches |
 | `rdrop_dead_iris` | the Iris-level wrapper around `rdrop_dead`; premise is `Factors` |
+| `dbundle3` / `dbundle5_eq` / `dbundle3_persist` / `factors_widen5` | the 3-component loop-carried carrier — see below |
 | `rexF0` | THE FUEL-0 CASE, complete |
 
 `rdrop_dead_iris` is a `constructor. intros iota Hpc _. rewrite !wand_unfold.`
@@ -2678,63 +2822,170 @@ shim and then `exact (rdrop_dead …)` — i.e. the whole content is the Qed'd
 the Iris boundary. That is the load-bearing fact: **the drop's refinement did
 not get harder when it moved into an Iris goal.**
 
-### `rexFS` (the successor case): 3 of 4 branches closed, 1 at the frontier
+### THE PREMISE CHANGED: the loop-carried carrier is THREE components
+
+The premise was first written with the carrier `factors_drop_at_step` consumes:
+
+```coq
+⌜Factors (dbundle5 trans tbl exits ta tna) sΦ⌝
+```
+
+**That premise cannot propagate through the recursion, and the reason is
+structural.** `factors_four` re-establishes `Factors` at `persist a Θ`, so the pc
+it hands you is the *old* pc persisted forward — while the recursive call runs at
+`apc'`, the pc the instruction just produced. Those are different terms and
+neither is a projection of the other, so no amount of monotonicity bridges them.
+
+`trans` / `tbl` / `exits` are exactly the arguments that DO travel by persist
+alone, so they are what the loop can carry. The premise is now
+
+```coq
+⌜Factors (dbundle3 trans tbl exits) sΦ⌝
+```
+
+and the 5-carrier the drop wants is rebuilt LOCALLY, at the point of use, by
+`factors_widen5`.
+
+**Direction of `Factors`, since it is easy to get backwards:** a SMALLER carrier
+is a STRONGER hypothesis (the continuation is blind to more), so `factors_pair_l`
+WEAKENS by adding a component on the right. `dbundle5` is `dbundle3` with two
+components added on the right — **definitionally**, because `*` is
+left-associative — which is why `dbundle5_eq` is `reflexivity` and
+`factors_widen5` is two `factors_pair_l`s and nothing else.
+
+Consequence for the next step: the premise discharged at `rexec_triple_addr` is
+now the 3-carrier one, i.e. STRONGER than what was planned. What has to be shown
+there is that the top-level continuation depends on the accessibility only
+through `trans`/`tbl`/`exits` — the pc it receives comes in as `Factors`' own
+explicit `v` argument, so pc-dependence is free.
+
+### `rexFS`: 3 of 4 branches CLOSED
 
 Branches are closed in **DESCENDING index order** (4, then 3, then 2) so that
-closing one does not renumber the others. Do not reorder them.
+closing one does not renumber the ones not yet handled. Do not reorder them.
 
 | # | branch | state |
 |---|---|---|
 | 4 | exit-miss / lookup-miss | **closed** — both sides `error` |
-| 3 | exit-miss / lookup-**hit** — CONTAINS THE DROP | driven to the frontier, one `admit.` |
+| 3 | exit-miss / lookup-**hit** — CONTAINS THE DROP | **CLOSED** |
 | 2 | exit-**hit** / lookup-miss | **closed** |
-| 1 | exit-hit / lookup-hit | `admit.` — untouched |
+| 1 | exit-hit / lookup-hit | `admit.` — the only hole |
 
-Branch 1 is expected to be cheap: its script is branch 3's, with `rprop_or`'s
-FIRST obligation being branch 2's script instead of `rprop_error` (the concrete
-left branch is `pure`, not `error`).
+Branch 1 is expected to be cheap: it is branch 3's script with `rprop_or`'s FIRST
+obligation being branch 2's tail instead of `rprop_error` (the concrete left
+branch is `pure`, not `error`), plus branch 3's `is_exit_sound_repₚ` /
+`injection Hveq as <-` preamble.
 
-### The frontier, and what closes it
+### The drop's obligation: `unshelve iApply (rdrop_dead_iris …)` yields THREE goals
 
-Branch 3 reaches `unshelve iApply (rdrop_dead_iris drop_fuel …)`, which yields
-**THREE** goals, in this order:
+In this order:
 
-1. `Factors (dbundle5 …) …` — closed by `apply factors_drop_at_step. exact Hfac.`
-2. the `□ᵣ` continuation box — **THE REMAINING WORK**
-3. `ℛ⟦RHeap⟧ (cgc_heap ch) (gc_heap sh)` — closed by
-   `iApply (refine_gc_heap with "rh").`
+1. `Factors (dbundle5 …) …` — `apply factors_drop_at_step. apply factors_widen5. exact Hfac.`
+2. the `□ᵣ` continuation box — branch 3's body, below
+3. `ℛ⟦RHeap⟧ (cgc_heap ch) (gc_heap sh)` — `iApply (refine_gc_heap with "rh").`
 
 Two traps, both paid for:
 
 - **Three goals, not two.** The first bank of this script had two bullets and
-  failed with `This proof is focused, but cannot be unfocused this way` —
-  a message that points at the closing brace, not at the missing bullet.
+  failed with `This proof is focused, but cannot be unfocused this way` — a
+  message that points at the closing brace, not at the missing bullet.
 - **`refine_gc_heap` belongs to obligation 3, NOT inside the box.** Tried in the
   box first; it fails to instantiate there, correctly — inside the box the heap
   relation is `rh'`, supplied by the box itself, and the GC already happened
   before the drop.
 
-Inside the box (obligation 2) the goal is `step_after_drop` on the symbolic side
-against the concrete step. It needs: the ghost chain, `sexec_instruction`, and
-then the recursive call, closed by `IH`. **`IH` is a plain Coq hypothesis
-applied directly** — `induction fuel` after generalizing `w` in the Coq
-statement gives a strong enough IH, so there is NO ω/forgetting layer over the
-whole proof and no boxed-IH construction is needed (this was checked; see §16).
-`IH`'s own `Factors` premise is re-established by `factors_four` +
-`dbundle5_persist` applied to `four sΦ θ1`.
+### Inside the box: FOUR rules, each of which cost a wrong turn
 
-### Two more traps recorded while getting here
+**1. `unfold crest` FIRST.** The concrete side had been hidden behind a `set`
+(needed to state the `rdrop_dead_iris` application), and both `rsolve` and the
+pointwise binds need to SEE the bind chain. With `crest` folded, `rsolve` is a
+silent no-op that merely eats the IH's `∀ w` — which reads as "rsolve can't do
+this" when the real problem is one `unfold`.
 
+**2. `rsolve` MUST NOT drive the recursion.** `rsolve` dispatches a bind through
+the generic `refine_bind`, whose box obligation is
+`ℛ⟦RHeapSpec ?RB⟧ (cexec_cfg_addr …) (sexec_cfg_addr …)` — i.e. it UNIVERSALLY
+QUANTIFIES the symbolic continuation. With the drop inside `sexec_cfg_addr` that
+goal is **FALSE**, which is the whole reason `Factors` exists. So each bind is
+driven POINTWISE instead:
+
+```coq
+unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+iApply (rexec_ghosts (ai_ghost_before ai)).
+```
+
+This is not a new lemma — it is just `ℛ⟦RHeapSpec RA⟧ cm sm` instantiated at the
+two bind continuations, which is sound because `CHeapSpec.bind m f Φ h` IS
+`m (fun a h' => f a Φ h') h` and likewise on the symbolic side. `sΦ` stays
+concrete, which is what lets `factors_four` re-establish `Factors` at the
+recursive call.
+
+**3. THE BOX-LOCKSTEP RULE — convert after EVERY intro, never batch.** The goal's
+continuation grows a `four` tower, one layer per bind:
+`four (four (four (four sΦ θ1) θ0) θ2) θ3`. Meanwhile the IPM context accumulates
+the accessibility the OTHER way: `into_assuming_forgetting` merges each intro
+into a single left-nested `forgetting ((((θ1∘θ0)∘θ2)∘θ3))`. Those two agree only
+up to associativity of `acc_trans`, which is **not definitional and has no
+lemma** — `Acc`'s `acc_sub` carries an entailment PROOF, so proving it would need
+proof irrelevance. Fix:
+
+```coq
+iPoseProof (forgetting_unconditionally with "rΦ") as "rQ1". iClear "rΦ".
+```
+
+immediately after each box intro, so the hypothesis grows its own `four` layer in
+step with the goal and the two never have to be reconciled. `four` of the
+`ℛ⟦□ᵣ RA⟧` body is definitionally (eta) the `ℛ⟦□ᵣ RA⟧` of `four`, so nothing else
+is needed.
+
+`forgetting_unconditionally_drastic` — the tool the OLD `rexec_cfg_addr` used
+here — is the WRONG one: it lands the relation at ONE world instead of rebuilding
+the box. The old proof got away with it because `rsolve` never let more than one
+`four` layer accumulate in a single goal.
+
+**4. Rebuild `Factors` by walking the SAME four layers, in the same order.**
+`pose proof (factors_four θ1 Hfac)`, then `θ0`, `θ2`, `θ3` — one per bind — so the
+result's continuation is syntactically the goal's tower. Applying `factors_four`
+once at the composed accessibility gives `four sΦ Θ` and hits the same
+associativity wall as the box.
+
+Then normalise the three loop-carried arguments to the FULLY-EXPANDED persist
+form (one layer per hop). **Mind the two orientations** —
+`persist_itableW_trans` / `persist_etable_trans` are stated `nested = collapsed`,
+so `<-` expands; `persist_trans` is stated `collapsed = nested`, so it expands
+FORWARDS. Getting `persist_trans` backwards collapses `trans` into an
+`acc_trans` chain that then cannot match, and the error names only the `trans`
+component while the two table components look fine.
+
+The IH is then a PLAIN COQ HYPOTHESIS applied directly — `w` is generalised in
+the statement and this is a plain `induction fuel`, so there is no boxed IH and
+no ω/forgetting layer over the whole proof.
+
+### Smaller things that cost time
+
+- **`refine_inst_persist` does not unify a persist TOWER.** It concludes at
+  `persist t ω` (one layer); the goal has
+  `persist (persist (persist t acc_refl) θ1) θ0`. Collapse with
+  `rewrite <- (persist_trans (A := STerm σ))` first. The `A` must be given
+  explicitly — a bare `rewrite <- ?persist_trans` silently rewrites nothing and
+  the failure then looks like `iApply`'s.
+- **`persist x acc_refl` IS definitional** (checked: `reflexivity`, 8 ms), so the
+  innermost layer needs no lemma. `persist (persist a θ1) θ0 = persist a (θ1∘θ0)`
+  is NOT.
 - **`rsolve` OVERSHOOTS on the unfolded statement.** It tries to apply the box
   where an `error` should close, leaving `ℛ⟦?RA⟧ a0 ta0` with `?RA` an evar. The
   error cases are closed by hand (`rprop_error`) for exactly this reason.
 - **BOTH `angelic_binary`s must be unfolded** — `CHeapSpec.angelic_binary` and
   `SHeapSpec.angelic_binary` — before `rprop_or` will apply.
+- **`rewrite A, B.` (comma form) is a syntax error inside a `rocq_check` body**
+  (`[ltac_use_default] expected after [tactic]`). Split into two sentences.
 
 ### After the probe closes
 
 1. Port statement + proof into `VerifierRel.v` and **DELETE the scaffold
-   `Admitted`** (§17). The gate stays red until this happens.
-2. Discharge the premise at `rexec_triple_addr` (carrier `δ1`).
+   `Admitted`** (§17). The gate stays red until this happens. `dcarrier3`,
+   `dbundle3`, `dbundle5_eq`, `dbundle3_persist` and `factors_widen5` travel with
+   it (they currently live in the probe, above `rexec_cfg_addr_old`).
+2. Discharge the premise at `rexec_triple_addr` — now the 3-carrier form.
 3. Phase 6 — `sound_exec_cfg_addr_myWP2` in `Adequacy.v`.
 4. Phase 7 — flip `drop_fuel`, measure, gate.
