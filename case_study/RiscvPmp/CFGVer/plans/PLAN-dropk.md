@@ -3635,9 +3635,26 @@ sound and INERT. It says nothing yet about the drop switched on.
 
 ### What is now open
 
-- **Phase 7 — turn the drop on.** `drop_fuel : nat := 0` (`Verifier.v`). Flip
-  it, measure, re-run `GATE_JOBS=1 ./scripts/gate.sh` — and expect that run to
-  be the informative one, since it is the first where the emitted tree differs.
-- **The unmeasured question.** Nothing yet shows the drop FIRES on a real
-  program, or how often. That risk has been on this plan's register since §14
-  and is still open; Phase 7 is where it gets answered.
+- **Phase 7 — MEASURED, and the answer is negative. Left at `0`.**
+  `diagnostics/dropk-firing-payoff.md`. At `drop_fuel = 8` the drop FIRES on
+  every example tried (1 / 7 / 4 `dropk` nodes on Countdown / Cmovznz4 /
+  KeyScheduleLoop) and both examples still `Qed`, so the knob works — but peak
+  `|Σ|` moves by **at most one** (17→16 on Cmovznz4, unchanged elsewhere). Left
+  at `0`: flipping it rewrites every VC and needs a full gate run, for one
+  binder on one program.
+
+  **The standing §14 risk — "does the drop ever fire?" — is ANSWERED YES, and
+  it was the wrong question.** Firing was never in doubt once measured; what
+  matters is whether it fires *on the peak-`|Σ|` path*, and it does not. Two
+  reasons: anything the solver has constrained appears in `wco` and is
+  therefore live, and no example under `Example/` calls `havoc_regs` — the
+  `+7 dead lvars/trip` population (`diagnostics/havoc-abstraction-payoff.md`)
+  that the whole framework was built to collect. This study measured the drop
+  on programs that never generate its garbage.
+
+- **The real open question.** Does the drop clear `br_divrem`'s +7/trip? That
+  is what dropk exists for and it is STILL UNMEASURED. Until it is answered,
+  the honest status of ~1500 lines of framework is "correct, gate-green, and
+  of unproven value". Next step is a havoc-using vehicle, **not** a higher
+  fuel — the counts above are totals, nothing suggests the per-step bound of
+  8 was ever reached, so more fuel cannot help.

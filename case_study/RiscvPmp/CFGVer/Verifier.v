@@ -842,7 +842,17 @@ Section CFGVerificationDerived.
 
        Kept at 0 until the refinement (Phase 5) is re-paired. rexec_cfg_addr
        must handle `drop_dead` for an ARBITRARY fuel, never by reducing this
-       constant, or flipping it later would reopen the proof. *)
+       constant, or flipping it later would reopen the proof.
+
+       PHASE 7 (2026-08-31): the refinement IS re-paired and the whole chain is
+       Qed + gate-green, so the knob is live.  MEASURED at 8 and left at 0:
+       the drop FIRES (1/7/4 dropk nodes on Countdown/Cmovznz4/KeyScheduleLoop)
+       but peak |Sigma| moves by at most ONE, because the variables it finds
+       dead are not on the peak path and no live example calls havoc_regs --
+       the +7-dead-lvars-per-trip population it was built for.  Turning it on
+       rewrites every VC and needs a full gate run, for one binder on one
+       example.  Full write-up, including why SymProp size is the WRONG
+       instrument here: diagnostics/dropk-firing-payoff.md. *)
     Definition drop_fuel : nat := 0.
 
     (* `trans` is THE ACCUMULATED TRANSLATION: the contract context's variables
