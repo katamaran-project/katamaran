@@ -2327,35 +2327,42 @@ Section CFGVerificationDerived.
                zip_words … table), and sΦ is the AMBIENT continuation of THIS
                bullet's own ℛ⟦RHeapSpec (RVal ty_xlenbits)⟧ goal.
 
-               sΦ is NOT derived from rexec_triple_addr's own outer sΦ by any
-               chain of `four`s reaching down to here -- HeapSpec.refine_bind's
-               generic combinator re-quantifies a FRESH, independent continuation
-               at EVERY nested RHeapSpec-typed subgoal it produces (that is what
-               "RHeapSpec RA holds for an arbitrary continuation" means, and it is
-               why none of the OTHER refine_bind calls in this proof need any
-               extra premise: their own relations hold unconditionally). So the sΦ
-               reaching this bullet is exactly as opaque/unconstrained as sΦ was
-               inside sexec_cfg_addr's OWN recursion (rexFS) -- and there, Factors
-               was NEVER independently proved for an arbitrary sΦ; it was a
+               sΦ is opaque HERE, but -- corrected 2026-08-31, see PLAN-dropk
+               §20 -- that is a property of this PROOF, not of the term. In
+               sexec_triple_addr itself the continuation reaching sexec_cfg_addr
+               IS `four`-derived from the outer one; HeapSpec.refine_bind simply
+               throws that away, because its m-premise is stated for ALL
+               continuations while SHeapSpec.bind only ever USES one (watch it
+               happen in refine_bind's own 5-line proof). Reaching this goal
+               through refine_bind is what made sΦ fresh.
+
+               Factors was NEVER independently proved for an arbitrary sΦ inside
+               sexec_cfg_addr's OWN recursion (rexFS) either; there it was a
                HYPOTHESIS threaded in from rexec_cfg_addr's caller and only ever
                algebraically transformed (factors_four, factors_pair_l). There is
                no caller-supplied Factors hypothesis available HERE, because
-               rexec_triple_addr's own statement doesn't carry one.
+               rexec_triple_addr's own statement doesn't carry one -- and that,
+               not the opacity, is the thing to fix.
 
                For a truly unconstrained sΦ, `Factors _ sΦ` is FALSE in general
                (an adversarial sΦ can distinguish two accessibilities reaching the
                same world that agree on their persisted substitution, e.g. by
                matching on acc_refl vs. acc_sub _ _ directly — Acc's constructors
                are genuinely different terms even when sub_acc agrees). So closing
-               this bullet is not a missing rewrite; it most likely needs
-               rexec_triple_addr's OWN statement to gain a Factors-carrying form
-               (mirroring rexec_cfg_addr's own redesign), which propagates the
-               same obligation to whatever calls rexec_triple_addr in turn
-               (rcfg_verification_condition, then presumably Adequacy.v's
-               myWP2 chain) — i.e. a generic "Factors propagates through
-               refine_bind" argument, comparable in size to the Factors/rdrop_dead
-               framework itself, not a one-line fix. Flagged for discussion rather
-               than attempted here. See PLAN-dropk.md §18/§19.
+               this bullet is not a missing rewrite; rexec_triple_addr's OWN
+               statement must gain a Factors-carrying premise (ω-independence of
+               its own continuation), which propagates to
+               rcfg_verification_condition -- where SHeapSpec.run's constant
+               `fun w1 θ1 _ h1 => block` discharges it by reflexivity.
+
+               THE PLAN IS WRITTEN UP AND ITS TWO MECHANISMS ARE CHECKED:
+               PLAN-dropk.md §20, probed in Example/ZZFactorsBindProbe.v
+               (refine_bind_cont, a 3-line variant of refine_bind that states its
+               m-premise AT the derived continuation so the caller keeps sΦ; and
+               factors_run). §19's estimate that this needs a second framework
+               "comparable in size to Factors/rdrop_dead" is RETRACTED there --
+               it is four carriers and five bind-site conversions. Read §20, then
+               §19 for the port mechanics.
                ================================================================ *)
             admit.
           - iApply "rΦ0".

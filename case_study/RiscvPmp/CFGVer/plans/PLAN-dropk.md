@@ -3157,6 +3157,12 @@ no ω/forgetting layer over the whole proof.
 
 ## §19 THE PORT — landed in `VerifierRel.v`, and the wall it hit (2026-08-31)
 
+> **PARTLY SUPERSEDED BY §20 (same day).** The mechanics below (both traps, the
+> state of the file) are accurate. The *cost estimate* at the end of this
+> section — "comparable in size to the `Factors`/`rdrop_dead` framework itself"
+> — is WRONG, and the "dead end recorded so it isn't retried" is NOT a dead end:
+> the `four`-composed model is the design. Read §20 before acting on either.
+
 ### What's real now, in the actual file (not a probe)
 
 The whole `Factors`/`rdrop_dead` framework, `dcarrier3`/`dbundle3`/
@@ -3304,3 +3310,193 @@ a design decision, not a mechanical continuation of the port.**
 - The gate stays red, same invariant as before the port, now localized to one
   `admit.` with a comment explaining precisely why, instead of a 30-line
   "pet can't open this file" scaffold comment.
+
+---
+
+## §20 THE WALL IS NARROWER THAN §19 SAYS — the obstacle is `refine_bind`, not the theory (2026-08-31)
+
+**§19's cost estimate and its "dead end" note are both CORRECTED here.** Its
+diagnosis of *why* the bullet does not close is right and stands unchanged; its
+conclusion about *what it would take* is wrong, and wrong in a way that would
+have sent the next session off to build a second framework it does not need.
+Read §19 for the mechanics of the port (both traps there are still accurate,
+modulo the trap-1 refinement at the end of this section); read this for what to
+actually do about the open bullet.
+
+### What §19 got right, and is not in question
+
+`Factors _ sΦ` really is false for an unconstrained continuation, and
+`rexec_triple_addr` really does need a premise of its own. Re-derived
+independently, from the modality side rather than the counterexample side:
+
+- `drop_dead` emits its continuation at `om := acc_drop w x bIn pc' Hpc t0`, and
+  `sub_acc om` must supply a term for `x` — there is no witness-free
+  `Sub (wctx w) (wctx w - x)`. (Note `sub_shift xIn` runs the OTHER way,
+  `wdrop w x ⊒ w`; pred-modalities §7's backward accessibility does not help
+  here.) So `om` PINS `x`.
+- A pinning step makes `assuming om` vacuous at every ι with
+  `ι(x) ≠ inst t0 (ι∖x)`, and `assuming` is the only door `□ᵣ` opens
+  (pred-modalities §8). So the box cannot be instantiated at the tree's own `t0`.
+- The one escape is pred-modalities §7 — choose the witness per-valuation,
+  `t := term_relval σ (env.lookup ι xIn)` — and that requires the TREE to give
+  the same answer at `t0` and at `t_ι`. For everything the executor threads
+  that is free (`persist a om` is witness-independent for x-free `a`,
+  `subst_shift_single`); for the AMBIENT continuation it is exactly `Factors`.
+
+So `Factors` on the ambient continuation is not an artifact of how `rdrop_dead`
+was proved. It is forced. Nothing below weakens that.
+
+### What §19 got wrong: `refine_bind` DEMANDS more than `bind` USES
+
+§19 concluded that closing the bullet needs "a generic *Factors propagates
+through `refine_bind`* argument, comparable in size to the `Factors`/
+`rdrop_dead` framework itself". That framing is what makes it look like a second
+framework. The real obstacle is one lemma being stated stronger than it needs
+to be:
+
+```coq
+Lemma refine_bind `{RA : Rel SA CA, RB : Rel SB CB} {w} :
+  ⊢ ℛ⟦RHeapSpec RA -> □ᵣ(RA -> RHeapSpec RB) -> RHeapSpec RB⟧
+    CHeapSpec.bind (SHeapSpec.bind (w := w)).
+Proof.
+  iIntros (cm sm) "rm %cf %sf rf %Φ %sΦ rΦ %ch %sh rh".
+  unfold SHeapSpec.bind, CHeapSpec.bind. iApply ("rm" with "[rf rΦ] rh").
+  iIntros (w1 θ1) "!> %ca %sa ra %ch1 %sh1 rh1".
+  iApply ("rf" with "ra [rΦ] rh1").
+  now iApply (refine_four with "rΦ").
+Qed.
+```
+
+Its first premise, `ℛ⟦RHeapSpec RA⟧ cm sm`, quantifies over ALL continuations —
+but its own proof instantiates that premise at exactly ONE,
+`fun w1 ω a1 h1 => sf w1 ω a1 (four sΦ ω) h1`, because that is literally what
+`SHeapSpec.bind sm sf sΦ` unfolds to. The universality is a convenience of the
+combinator, not a fact about `bind`. §19 read the fresh opaque `sΦ` at the
+bullet as a property of the TERM ("each nested `RHeapSpec` obligation
+re-quantifies fresh"); it is a property of the PROOF STRUCTURE — of having
+reached that goal through `refine_bind`.
+
+### VERIFIED, not argued — `Example/ZZFactorsBindProbe.v` (gitignored, EXIT=0)
+
+Both of the things §19 called un-derisked are now checked. The probe carries
+`ZZRexecDropProbe.v`'s import header minus `ZZDropRefineProbe` (so `Factors`
+below is `VerifierRel`'s, not the probe's copy) and nothing else.
+
+**1. The continuation-preserving bind.** Same conclusion as `refine_bind`, with
+the m-premise stated AT the derived continuation. It closes in three lines,
+because `bind` is definitionally that application — there is no content here at
+all, only a statement that does not throw the continuation away:
+
+```coq
+Lemma refine_bind_cont `{RA : Rel SA CA, RB : Rel SB CB} {w}
+    (cm : CHeapSpec CA) (sm : SHeapSpec SA w)
+    (cf : CA -> CHeapSpec CB)
+    (sf : forall w1 : World, Acc w w1 -> SA w1 -> SHeapSpec SB w1) :
+  (∀ cΦ sΦ, ℛ⟦□ᵣ (RB -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+     ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+       ℛ⟦LogicalSoundness.RProp⟧
+         (cm (fun a => cf a cΦ) ch)
+         (sm (fun w1 ω a1 h1 => sf w1 ω a1 (four sΦ ω) h1) sh))
+  ⊢ ℛ⟦RHeapSpec RB⟧ (CHeapSpec.bind cm cf) (SHeapSpec.bind sm sf).
+Proof.
+  iIntros "H %cΦ %sΦ rΦ %ch %sh rh".
+  unfold CHeapSpec.bind. unfold SHeapSpec.bind.
+  iApply ("H" with "rΦ rh").
+Qed.
+```
+
+Note `sf`'s type is spelled out rather than written `□(SA -> SHeapSpec SB) w`:
+**`□` is not in scope in the probe's import environment** ("Unknown
+interpretation for notation `□ _`"), even though `□ᵣ` is. Do not assume the two
+travel together.
+
+**2. `run`'s continuation factors through ANY carrier.** So the propagation
+chain terminates trivially at the top, which was §19's candidate approach 2:
+
+```coq
+Lemma factors_run {A : LCtx -> Type} {SubstA : Subst A}
+    {V : TYPE} {w : World} (a : A (wctx w)) :
+  Factors (A := A) (V := V) a
+    (fun (w1 : World) (_ : Acc w w1) (_ : V w1) (_ : SHeap w1) => SymProp.block).
+Proof. exists (fun w1 _ _ _ => SymProp.block). reflexivity. Qed.
+```
+
+`SHeapSpec.run m := m (fun w1 θ1 _ h1 => SymProp.block) List.nil` — the top-level
+continuation is a CONSTANT, so it is not merely factoring, it is ω-independent.
+
+### §19's recorded "dead end" is REINSTATED — it was the design, not a wrong turn
+
+§19 says: *"my first hypothesis was that `sΦ` at this call site is
+`four sΦ_top (θ1∘θ1'∘θ2∘θ3)` … That is the WRONG model … Don't re-derive the
+`four`-composed version."* **Ignore that instruction.** The `four`-composed
+model is correct — it is exactly what `SHeapSpec.bind` builds, and
+`refine_bind`'s own proof (quoted above) is where you can watch it happen. What
+misled §19 is that `iApply` genuinely treats `sΦ` as a fresh binder *at a goal
+produced by `refine_bind`*, and that was read back as evidence about the term.
+It is evidence about the lemma.
+
+### The path
+
+1. `rexec_triple_addr` gains a premise on its OWN ambient continuation. The
+   right one is ω-INDEPENDENCE, i.e. `Factors (A := Unit) tt sΦ` — `persist tt
+   om = tt`, so the equation says `sΦ w2 om v h = g w2 tt v h`, no ω anywhere.
+   That is what `run` supplies and it is preserved by `four` for free.
+2. Its five binds move from `refine_bind` to `refine_bind_cont`. Per site this
+   costs ~4 extra lines — copy `refine_bind`'s own proof body, which is what
+   those lines are.
+3. The carrier grows down the chain, and each step's witness is read off
+   `sexec_triple_addr`'s body:
+   - `θ0` (`demonic_ctx`): the tail never mentions `θ0` — it uses the BOUND
+     `δw`, not the accessibility. Carrier stays `tt`.
+   - `θ1` (`a`): tail's ω-dependence is `persist δ (θ1 ∘ θ1')`. Carrier `δ`.
+   - `θ1'` (`np`): adds `persist a θ1'`. Carrier `(δ, a)`.
+   - `θ2` (`produce req`): adds `persist δ1 θ2`, `persist np θ2`, `ζ`, `ws`.
+     Carrier `(δ1, np, ws)` — the word list is the fiddly one.
+   - `θ3` (the executor call): tail is
+     `consume ens (persist δ1 (θ2 ∘ θ3)).["an" ↦ na]` applied to `four Φ2 θ3`.
+     `Φ2` is ω-independent by (1)+(2), so the ONLY ω-dependence left is
+     `persist δ1 (θ2 ∘ θ3)` = `persist trans_local θ3` (`persist_trans`).
+4. And `trans_local` is precisely `dbundle3`'s first component. That alignment
+   is not luck: `Verifier.v`'s comment on `trans` already says δ1 is the only
+   thing the outer continuation's ω-dependence factors through, and that this is
+   why `trans` is threaded at all. §19's open bullet is the last mile of that
+   design, not a new obstacle to it.
+5. `rcfg_verification_condition` discharges the top premise with `factors_run`.
+
+### Cost, honestly
+
+Four carrier definitions with their witnesses, five bind-site conversions at
+~4 lines each, plus the `Factors` algebra to glue them — which already exists
+(`factors_four`, `factors_pair_l`, `factors_widen5`). This is §15's carrier
+bookkeeping repeated once at the outer level. It is NOT §16's funext framework,
+and it is not "comparable in size to the `Factors`/`rdrop_dead` framework".
+
+### Residual risks — NOT checked, in descending order of how likely they are to bite
+
+1. **`refine_compat_exec_triple_addr` cannot carry a premise.**
+   `rcfg_verification_condition` is currently a bare `rsolve` that goes through
+   that instance. Once `rexec_triple_addr` takes a `Factors` premise the
+   instance is either gone or unusable, and that one-liner probably has to
+   become a manual `unfold …run` + `iApply rexec_triple_addr` + `factors_run`.
+   Expect this to break first.
+2. **The four intermediate witnesses actually closing.** The `env.take`/
+   `env.drop` split of `δw` and the persisted word list `ws` are the parts with
+   real content; the rest is `persist_trans`.
+3. **`Subst Unit`** — needed for the `tt` carrier in step 1. Not verified to
+   exist. If it does not, use a one-field dummy carrier instead of widening the
+   framework.
+
+### Correction to §19's trap 1: it is the COMMA, not `rewrite`
+
+§19 records the `[ltac_use_default] expected after [tactic]` parser error as a
+`rewrite A, B.` problem. It is not specific to `rewrite`: the probe hit the
+identical error on `unfold CHeapSpec.bind, SHeapSpec.bind.`, and splitting into
+two sentences fixed it the same way. Something in this import environment makes
+a comma unparseable in tactic-argument position generally. **Write every tactic
+argument list as separate sentences in any file with these imports.**
+
+Second, unrelated grammar note from the same probe: `iIntros` in this Iris
+version rejects a SECOND parenthesised group after a string
+(`iIntros "H" (a b) "c" (d e) "f".` fails at the second `(`). Use the
+single-string form with `%` — `iIntros "H %a %b c %d %e f".` — which is what
+`refine_bind` itself does.
