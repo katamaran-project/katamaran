@@ -2518,7 +2518,11 @@ Section RexecDropProbe.
          Note sΦ's value type elaborates to `Term w2 ty_xlenbits` (printed
          WTerm in the statement, STerm in factors_drop_at_step) -- the
          WTerm/STerm schizophrenia Worlds.v:545 warns about.  If a later
-         `apply` refuses on those, that is why. *)
+         `apply` refuses on those, that is why.
+
+         PROVED as ZZ_rexec_cfg_addr_F at the end of this section.  The proof
+         lives there rather than here because `w` must be GENERALISED (a plain
+         Coq forall) for `induction fuel` to give a strong enough IH. *)
     Admitted.
 
 
@@ -2788,12 +2792,124 @@ Section RexecDropProbe.
            iDestruct ("rΦ2" with "Hs") as "%Hc".
            iPureIntro. left. exact Hc. }
 
-      (* ---- 1: exit-hit / lookup-hit.  Same execution branch as case 3; the
-         only difference is that the concrete LEFT branch is `pure` rather than
-         `error`, so rprop_or's first obligation is case 2's script instead of
-         rprop_error.  Reuse case 3 once it closes. *)
-      admit.
-    Admitted.
+      (* ---- 1: exit-hit / lookup-hit.  BOTH branches of the angelic split are
+         live here, so this is case 2 and case 3 glued by rprop_or: the concrete
+         LEFT branch is `pure` (not `error`), so rprop_or's first obligation is
+         case 2's tail, and its second is case 3 verbatim.
+         The opener needs BOTH soundness facts, and `injection Hveq as <-` is
+         what identifies the `v` that lookup_instr_sound_repₚ produced with the
+         one is_exit_sound_repₚ produced -- they are separately existentially
+         quantified and nothing else ties them together. *)
+      iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
+        as (v) "[%Hfact #Hx]".
+      destruct Hfact as (-> & Hm).
+      iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]")
+        as "%Hfact2".
+      destruct Hfact2 as (v' & Hveq & Hcond).
+      injection Hveq as <-.
+      cbn [ty.RVToOption].
+      rewrite Hcond. rewrite Hm.
+      unfold CHeapSpec.angelic_binary, SHeapSpec.angelic_binary.
+      iApply rprop_or.
+      - (* exit taken on both sides: pure/pure.  Both `pure`s bind at acc_refl,
+           so unfolding T collapses the world bookkeeping and what is left is
+           the continuation applied at acc_refl -- i.e. unconditionally_T. *)
+        unfold CHeapSpec.pure, SHeapSpec.pure, T; cbv beta.
+        iPoseProof (unconditionally_T with "rΦ") as "rΦ0".
+        iDestruct ("rΦ0" $! (SyncVal v) ta with "Ha") as "rΦ1".
+        iApply ("rΦ1" $! ch sh with "rh").
+      - (* execute: case 3 verbatim, bullets renumbered to `+`. *)
+        rewrite cgc_binds_heap cdrop_binds gc_binds_heap.
+        unfold T; cbv beta.
+        unfold SHeapSpec.bind at 1.
+        rewrite (persist_itableW_refl tbl) (persist_etable_refl exits).
+        match goal with |- context [ ?C cΦ (cgc_heap ch) ] => set (crest := C) end.
+        unshelve iApply (rdrop_dead_iris drop_fuel (fun _ ch' => crest cΦ ch')
+                           (cgc_heap ch) (gc_heap sh) _).
+        + apply factors_drop_at_step. apply factors_widen5. exact Hfac.
+        + iIntros (w1 θ1). iModIntro. iIntros (u tu) "_".
+          iIntros (ch' sh') "#rh'".
+          unfold step_after_drop.
+          iClear "rh".
+          iPoseProof (forgetting_unconditionally with "rΦ") as "rΦ1".
+          iClear "rΦ".
+          unfold crest.
+          unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+          iApply (rexec_ghosts (ai_ghost_before ai)).
+          2: iApply "rh'".
+          iIntros (w0 θ0). iModIntro. iIntros (u0 tu0) "_".
+          iIntros (ch0 sh0) "#rh0".
+          iPoseProof (forgetting_unconditionally with "rΦ1") as "rQ2".
+          iClear "rΦ1".
+          unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+          iApply (rexec_instruction (ai_instr ai)).
+          1: (rewrite <- (persist_trans (A := STerm ty_xlenbits));
+              iApply (refine_inst_persist with "Ha")).
+          1: (rewrite <- (persist_trans (A := STerm ty_xlenbits));
+              iApply (refine_inst_persist with "Hna")).
+          1: (rewrite <- (persist_trans (A := STerm ty_word));
+              iApply (refine_inst_persist with "Hx")).
+          2: iApply "rh0".
+          iIntros (w2 θ2). iModIntro. iIntros (apc' tapc') "#Hapc".
+          iIntros (ch2 sh2) "#rh2".
+          iPoseProof (forgetting_unconditionally with "rQ2") as "rQ3".
+          iClear "rQ2".
+          unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+          iApply (rexec_ghosts (ai_ghost_after ai)).
+          2: iApply "rh2".
+          iIntros (w3 θ3). iModIntro. iIntros (u3 tu3) "_".
+          iIntros (ch3 sh3) "#rh3".
+          iPoseProof (forgetting_unconditionally with "rQ3") as "rQ4".
+          iClear "rQ3".
+          pose proof (factors_four θ1 Hfac) as F1.
+          pose proof (factors_four θ0 F1) as F2.
+          pose proof (factors_four θ2 F2) as F3.
+          pose proof (factors_four θ3 F3) as F4.
+          rewrite !dbundle3_persist in F4.
+          clear F1 F2 F3.
+          rewrite forgetting_itable_relW. rewrite forgetting_etable_rel.
+          rewrite <- !persist_itableW_trans. rewrite <- !persist_etable_trans.
+          rewrite !(persist_trans (A := Sub Σ0)).
+          iApply (IH _ _ _ _ with "[$Hi $He]").
+          1: iApply (refine_inst_persist with "Hapc").
+          1: iApply (refine_inst_persist with "Hapc").
+          1: (iPureIntro; exact F4).
+          1: iApply "rQ4".
+          1: iApply "rh3".
+        + iApply (refine_gc_heap with "rh").
+    Qed.
+
+
+    (* ================================================================== *)
+    (* THE TARGET, ASSEMBLED.  Plain `induction fuel` with w generalised:   *)
+    (* that is what makes the IH a strong enough PLAIN COQ HYPOTHESIS, so   *)
+    (* no boxed IH / iInduction is needed anywhere (contrast the old        *)
+    (* rexec_cfg_addr, whose statement fixed w and which therefore had to   *)
+    (* build a `□ᵣ` IH by hand with iAssert).                               *)
+    (* ================================================================== *)
+    Lemma ZZ_rexec_cfg_addr_F (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {Sg0 : LCtx} :
+      forall (w : World) (trans : Sub Sg0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w),
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+       ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
+       ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
+         ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+       ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+         ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_cfg_addr instrs words exitCond fuel a na cΦ ch)
+            (sexec_cfg_addr fuel trans tbl exits ta tna sΦ sh))%I.
+    Proof.
+      induction fuel as [|n' IH].
+      - apply rexF0.
+      - (* `Set Implicit Arguments` (file top) makes rexFS's instrs/words/
+           exitCond IMPLICIT -- they are inferable from IH -- so its first
+           EXPLICIT argument is n'.  Passing them positionally mis-slots and
+           reports "instrs ... expected to have type nat". *)
+        apply (rexFS n' IH).
+    Qed.
 
   End Relational.
 
@@ -2803,8 +2919,21 @@ End RexecDropProbe.
 
 ## §18 `rexec_cfg_addr_F` — STATE OF THE PROOF (2026-08-31)
 
-Everything named here is in the probe verbatim above. The probe **compiles
-clean**; the only hole is branch 1 of `rexFS`.
+Everything named here is in the probe verbatim above. **The probe compiles
+clean and `rexec_cfg_addr_F` is PROVED** — as `ZZ_rexec_cfg_addr_F`, at the end
+of the probe's `Relational` section. The only two `Admitted`s left in the file
+are deliberate: `rexec_cfg_addr_old` (the drift CONTROL, copied from
+`VerifierRel.v`) and the statement-only copy of `rexec_cfg_addr_F` that the
+narration above refers to.
+
+**`Print Assumptions ZZ_rexec_cfg_addr_F` reports `Closed under the global
+context`** — no axioms at all (not even `pure_decode` / `mmioenv`, which enter
+only at the Adequacy layer), and in particular NO dependence on the `Admitted`
+`rexec_cfg_addr` still sitting in `VerifierRel.v`. So the probe's proof stands on
+its own and the port is a transcription, not a re-proof. Re-run that check the
+same way: a two-line throwaway that `Require`s the probe's `.vo` and prints the
+assumptions — do NOT try it from a `rocq_start` position replay, which is
+vos-style and skips proof bodies, so its answer would be meaningless.
 
 ### Closed, `Qed`, axiom-clean
 
@@ -2814,7 +2943,9 @@ clean**; the only hole is branch 1 of `rexFS`.
 | `rprop_or` | `angelic_binary` on both sides: pair the two branches |
 | `rdrop_dead_iris` | the Iris-level wrapper around `rdrop_dead`; premise is `Factors` |
 | `dbundle3` / `dbundle5_eq` / `dbundle3_persist` / `factors_widen5` | the 3-component loop-carried carrier — see below |
-| `rexF0` | THE FUEL-0 CASE, complete |
+| `rexF0` | the fuel-0 case |
+| `rexFS` | the successor case, all four branches |
+| `ZZ_rexec_cfg_addr_F` | the target: `induction fuel`, then `apply rexF0` / `apply (rexFS … n' IH)` — three lines |
 
 `rdrop_dead_iris` is a `constructor. intros iota Hpc _. rewrite !wand_unfold.`
 shim and then `exact (rdrop_dead …)` — i.e. the whole content is the Qed'd
@@ -2859,7 +2990,7 @@ there is that the top-level continuation depends on the accessibility only
 through `trans`/`tbl`/`exits` — the pc it receives comes in as `Factors`' own
 explicit `v` argument, so pc-dependence is free.
 
-### `rexFS`: 3 of 4 branches CLOSED
+### `rexFS`: ALL FOUR BRANCHES CLOSED
 
 Branches are closed in **DESCENDING index order** (4, then 3, then 2) so that
 closing one does not renumber the ones not yet handled. Do not reorder them.
@@ -2867,14 +2998,28 @@ closing one does not renumber the ones not yet handled. Do not reorder them.
 | # | branch | state |
 |---|---|---|
 | 4 | exit-miss / lookup-miss | **closed** — both sides `error` |
-| 3 | exit-miss / lookup-**hit** — CONTAINS THE DROP | **CLOSED** |
+| 3 | exit-miss / lookup-**hit** — CONTAINS THE DROP | **closed** |
 | 2 | exit-**hit** / lookup-miss | **closed** |
-| 1 | exit-hit / lookup-hit | `admit.` — the only hole |
+| 1 | exit-hit / lookup-hit | **closed** |
 
-Branch 1 is expected to be cheap: it is branch 3's script with `rprop_or`'s FIRST
-obligation being branch 2's tail instead of `rprop_error` (the concrete left
-branch is `pure`, not `error`), plus branch 3's `is_exit_sound_repₚ` /
-`injection Hveq as <-` preamble.
+Branch 1 is branches 2 and 3 glued by `rprop_or` — the concrete LEFT branch is
+`pure` rather than `error`, so `rprop_or`'s first obligation is branch 2's tail
+and its second is branch 3 verbatim (bullets renumbered `-` → `+`). Two things
+in its opener are worth knowing:
+
+- it needs BOTH soundness facts, and **`injection Hveq as <-` is what identifies
+  the `v` `lookup_instr_sound_repₚ` produced with the one `is_exit_sound_repₚ`
+  produced** — they are separately existentially quantified and nothing else
+  ties them together;
+- the pure/pure obligation is just `unconditionally_T`: both `pure`s bind at
+  `acc_refl`, so `unfold CHeapSpec.pure, SHeapSpec.pure, T; cbv beta` collapses
+  the world bookkeeping and leaves the continuation applied at `acc_refl`.
+
+`ZZ_rexec_cfg_addr_F` then assembles the two halves with a plain
+`induction fuel`. Note the halves are stated with `w` GENERALISED (a plain Coq
+`forall`, not the implicit `{w}` of the target) — that is what makes the IH
+strong enough to be applied directly, and is why no `iInduction` / boxed IH
+appears anywhere in this proof.
 
 ### The drop's obligation: `unshelve iApply (rdrop_dead_iris …)` yields THREE goals
 
@@ -2977,15 +3122,35 @@ no ω/forgetting layer over the whole proof.
   error cases are closed by hand (`rprop_error`) for exactly this reason.
 - **BOTH `angelic_binary`s must be unfolded** — `CHeapSpec.angelic_binary` and
   `SHeapSpec.angelic_binary` — before `rprop_or` will apply.
+- **`Set Implicit Arguments` is on at the top of the probe, and it bites twice.**
+  It makes any argument inferable from a LATER argument implicit, so
+  `factors_four`'s first explicit slot is the accessibility (not the carrier) and
+  `rexFS`'s is `n'` (not `instrs`). Passing them positionally mis-slots and the
+  error names a type mismatch far from the cause
+  (`"instrs" has type "gmap …" while it is expected to have type "nat"`).
+  Same trap will fire on the port if these are restated in `VerifierRel.v`.
 - **`rewrite A, B.` (comma form) is a syntax error inside a `rocq_check` body**
   (`[ltac_use_default] expected after [tactic]`). Split into two sentences.
 
-### After the probe closes
+### NEXT: the port, then the premise
 
-1. Port statement + proof into `VerifierRel.v` and **DELETE the scaffold
-   `Admitted`** (§17). The gate stays red until this happens. `dcarrier3`,
-   `dbundle3`, `dbundle5_eq`, `dbundle3_persist` and `factors_widen5` travel with
-   it (they currently live in the probe, above `rexec_cfg_addr_old`).
-2. Discharge the premise at `rexec_triple_addr` — now the 3-carrier form.
+1. **Port into `VerifierRel.v` and DELETE the scaffold `Admitted`** (§17). The
+   gate stays red until this happens. Mechanical but SLOW — pet cannot open
+   `VerifierRel.v` at any position, so each iteration is a multi-minute `make`,
+   not a 30 ms `rocq_check`. What travels with the proof, in order:
+   `dcarrier3`, `dbundle3`, `dbundle5_eq`, `dbundle3_persist`, `factors_widen5`
+   (currently in the probe, just above `rexec_cfg_addr_old`), then `rprop_error`,
+   `rprop_or`, `rdrop_dead_iris`, `rexF0`, `rexFS`, `ZZ_rexec_cfg_addr_F`.
+   `rexec_cfg_addr_old` is probe-only scaffolding and does NOT travel.
+   Everything `ZZDropRefineProbe.v` currently supplies (`Factors`,
+   `factors_four`, `factors_pair_l`, `dbundle5`, `dbundle5_persist`,
+   `factors_drop_at_step`, `rdrop_dead`) must also find a home — that probe is
+   gitignored, so it is not a dependency `VerifierRel.v` can keep.
+2. **Discharge the premise at `rexec_triple_addr`** — now the 3-carrier form,
+   i.e. STRONGER than planned. What must be shown is that the top-level
+   continuation depends on the accessibility only through
+   `trans` / `tbl` / `exits`. The pc is NOT a worry: it reaches the continuation
+   as `Factors`' own explicit `v` argument, so pc-dependence is free. This is
+   the first genuinely open step — nobody has looked at it yet.
 3. Phase 6 — `sound_exec_cfg_addr_myWP2` in `Adequacy.v`.
 4. Phase 7 — flip `drop_fuel`, measure, gate.
