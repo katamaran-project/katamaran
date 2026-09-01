@@ -1,6 +1,6 @@
 # PLAN-muladd-full — BearSSL `br_i31_muladd_small` to a whole-function end theorem
 
-Status: **Phases 0–2 DONE, Phase 3 BLOCKED (2026-08-11 same day).** GATE 1 and
+Status: **Phases 0–2 DONE. Phase 3 BLOCKED — cause IDENTIFIED 2026-09-01, see the Phase 3 section and `diagnostics/muladd-full-cost-drivers.md`.** GATE 1 and
 GATE 2 passed, but not as originally stated — see their sections below for
 what actually needed fixing. GATE 3 is NOT reached: the whole function's
 `vm_compute` times out at 300s even at the smallest synthetic size, and an
@@ -244,6 +244,31 @@ patch — see Phase 3) in each file's own header comment. `vos` mode
 (matching every other `ZZ*.v` probe) — no gate impact.
 
 ### Phase 3 — measure small before committing to real size — **BLOCKED, 2026-08-11**
+
+> **UPDATED 2026-09-01 — still blocked, but the cause is now IDENTIFIED and the
+> 2026-08-11 diagnosis below is superseded.** Full write-up:
+> `diagnostics/muladd-full-cost-drivers.md`. Headlines:
+> - The wall is **tree CONSTRUCTION**, not `solve_vc` — a raw-VC probe with no
+>   `Qed` dies too. Everything below about fuel/timeouts is beside the point.
+> - The driver is **term DUPLICATION**, not computation: a dumped register held a
+>   **215,636-char** term in which ONE variable appears **460 times** (the term
+>   representation is a tree, so a read inlines rather than references).
+> - **`br_divrem` is NOT the dominant cost here**, contrary to this section's
+>   conclusion — this probe patches its trip count to 2, and at 2 trips it is
+>   cheap. The suspicion below was reasonable in 2026-08 but is wrong for THIS
+>   configuration. (It IS dominant at its real 31–32 trips; see
+>   `diagnostics/dropk-firing-payoff.md` Part 3, where that loop is now exactly
+>   affine in trips.)
+> - Two hypotheses **eliminated, do not re-investigate**: symbolic store-address
+>   disambiguation (4.8%) and the `MUL`/`MULHU` M-extension pair (8.2%).
+> - **Havocing after every instruction** (not just at loop heads) removes the
+>   duplication and makes the limb-loop block complete — 155 s where loop-head
+>   havoc alone dies. It trades the exponential for a quadratic `|Σ|` cost, and
+>   the existing variable drop makes that **4.3× worse**, not better.
+> - The "growth curve for `br_divrem` alone" asked for below **now exists** and is
+>   the whole of `diagnostics/dropk-firing-payoff.md` Part 3 (n = 1..32).
+> - The chunk-GC prerequisite asked about below **landed** (2026-08-03).
+
 
 **The `mlen`-doubling plan does not apply as written, because `br_divrem`'s
 own loop trip count (fixed at 31 by the division algorithm) does not scale
