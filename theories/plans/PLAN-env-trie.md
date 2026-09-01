@@ -1,6 +1,13 @@
 # PLAN-env-trie — sub-linear `env.lookup` for `theories/Environment.v`
 
-**Status: UNSTARTED. Written 2026-09-01.**
+**Status: GATE 0 REACHED AND FAILED-OVER, 2026-09-01. §3 (skew-binary RAL) and
+Phase 3 are DROPPED; a much smaller fix replaces them. Read
+`theories/diagnostics/env-lookup-cost-drivers.md` first, then §5's revised
+Phase 1'. The transport risk that this plan was built around did NOT
+materialise; a different assumption (§1's "the index is already a machine
+`nat`") did, and it was wrong.**
+
+**Status (original): UNSTARTED. Written 2026-09-01.**
 
 Audience: a later session executing one phase at a time, same convention as
 `case_study/RiscvPmp/CFGVer/plans/PLAN-loop-invariant.md` — each phase ends in an
@@ -42,10 +49,15 @@ Do it before funding anything else.
   `snoc {Γ} (E : Env Γ) {b} (db : D b) : Env (Γ ▻ b)` (`Environment.v:65`).
 - `lookup` (`Environment.v:154`) recurses **structurally on the Env**, matching
   `ctx.view` at each step. It walks from the most recent end.
-- `ctx.In` is **already index-optimised**: a primitive-projection class
+- ~~`ctx.In` is **already index-optimised**: a primitive-projection class
   `MkIn { in_at : nat; in_valid : nth_is Γ in_at b }` (`Context.v:195`), with a
   comment saying the naive inductive "is not very efficient". So the index is a
-  machine `nat`; there is nothing to gain there.
+  machine `nat`; there is nothing to gain there.~~ **RETRACTED 2026-09-01**: the
+  record is real, but a Coq `nat` is **unary Peano, not a machine word**, and
+  `vm_compute` has no special representation for it. Every `<`, `-` and `/2` on
+  `in_at` therefore costs O(`in_at`). This single sentence is what made §3 look
+  viable; measured, the skew RAL stays LINEAR because of it
+  (`diagnostics/env-lookup-cost-drivers.md` §3.3). Never requote it.
 - `nth_is` (`Context.v:127`) is a `Prop`. **`in_valid` therefore cannot be
   eliminated into `Set`**, so no lookup implementation can branch on it — a
   constraint, but also a guarantee that proofs never block reduction.
@@ -127,7 +139,23 @@ existing `to_env`/`of_env` pattern. **If Phase 0b says the quadratic is in
 
 ## §5. Phases
 
-### Phase 0 — SPIKE: does a dependent RAL survive `vm_compute`? (BLOCKING)
+### Phase 0 — SPIKE — **DONE 2026-09-01. Transports PASS, design FAILS.**
+
+Result in `theories/diagnostics/env-lookup-cost-drivers.md`; probe body
+`theories/diagnostics/ZZEnvLookupProbe.v`. Three things it established:
+
+- **No `eq_rect` survives reduction** — a lookup at depth 196/200 reduces to a
+  bare constructor under both `vm_compute` and `cbv`, including the hardest
+  case (transporting along `ctx.in_valid` itself). §2c's "assumption that kills
+  the plan" is simply not a problem.
+- **The skew RAL does not win**: linear at 1.1 words/binder instead of 23.5,
+  and it *cannot* be sub-linear while `in_at` is a unary `nat` (§1, retracted).
+- **`env.lookup`'s entire linear cost is `ctx.view`'s per-step allocation** —
+  a fresh `MkIn` plus a `SnocView` at every step (`Context.v:131`), 23.5
+  allocated words per binder walked, against **0.000** for the identical
+  traversal written without `ctx.view`.
+
+### Phase 0 (original text, superseded) — does a dependent RAL survive `vm_compute`?
 Throwaway file, no framework changes, nothing in `_CoqProject`. Build a
 heterogeneous skew-binary RAL over a toy `Ctx`, plus the list version, and
 `vm_compute` the same lookup workload on both.
@@ -147,7 +175,27 @@ Cheap, and it decides §4-only vs. full replacement. **Also settles a live
 question from 2026-09-01:** why `drop_fuel = 8` cost 4.3× on muladd — the drop's
 `var_dead` scan pays the same lookup cost it is trying to reduce.
 
-### Phase 1 — `FastEnv` alongside `Env`, no client changes
+### Phase 1' — REPLACES Phases 1 and 3: rewrite `lookup` in place
+
+Define `lookup` by simultaneous recursion on the `Env` spine and `ctx.in_at`,
+transporting once at the base case along the **existing** `ctx.in_valid` proof
+(`ZZEnvLookupProbe.v`'s `lookup5`/`lookupJ`, the `IDX2` arm). No new type, no
+`to_fast`/`of_fast` conversion, no `EqDec B` constraint, no API change. Both
+defining equations still hold **definitionally**:
+`lookup (snoc E v) in_zero = v` and `lookup (snoc E v) (in_succ i) = lookup E i`.
+
+Measured **5.9× on allocated words and 3.1× on wall clock at |Σ| = 200**. It is
+a **constant factor, not an exponent change** — `sub_comp` stays O(`|Σ|²`).
+
+Real cost of the phase: the 54 lemmas. Their *statements* are unchanged, but
+proofs that `cbn` through `ctx.view` need a `lookup_snoc` rewrite lemma instead;
+budget that, not the definition.
+
+**GATE 1':** `Environment.v` builds; every existing lemma re-proved with no
+statement change; whole project builds; `scripts/gate.sh` green with the same
+14 axiom-clean end theorems.
+
+### Phase 1 (original, SUPERSEDED by Phase 1') — `FastEnv` alongside `Env`
 Add the structure, `to_fast`/`of_fast`, and the agreement lemma
 `lookup_fast (to_fast E) i = lookup E i`. Mirrors `EnvRec`/`to_env`/`of_env`
 exactly. Nothing else in the tree changes.
@@ -155,7 +203,16 @@ exactly. Nothing else in the tree changes.
 **GATE 1:** `Environment.v` builds; agreement lemma `Qed`; full project build
 unaffected (it is additive).
 
-### Phase 2 — route the hot paths through it (the §4 fix)
+### Phase 2 — measure the real probes (this is also Phase 0b)
+
+With Phase 1' landed, the K=206 muladd probe re-measured against its baseline
+**is** the L1 attribution PLAN §5's Phase 0b was asking for, and it delivers the
+fix in the same build instead of throwing instrumentation away. Amdahl bound to
+beat: `lvar-lookup-cost-drivers.md` §5.4 puts only **26.4%** of the variable
+surcharge on L1, so the predicted end-to-end win is ~**1.28×**, and `NULL`-arm
+data says the `env.tabulate` floor (L2) becomes the wall next.
+
+### Phase 2 (original, superseded) — route the hot paths through it (the §4 fix)
 `inst_subst_env`, `sub_comp`, `persist`. Convert once per call, serve many.
 
 **GATE 2:** the muladd K=206 probe (`ZZDS206.v`, peak `|Σ|` = 135) improves on
@@ -163,7 +220,11 @@ its measured **10.55 G net**, with `allocated_words` and a re-measured baseline.
 No trusted-surface change, so the merge gate must stay green with the same 14
 axiom-clean end theorems.
 
-### Phase 3 — replace `Env`'s representation (ONLY if 0b and 2 justify it)
+### Phase 3 — **DROPPED 2026-09-01.** Phase 1' obtains the win with a local
+rewrite, and the structure this phase would install is linear anyway (§3.3 of
+the diagnostic). Original text kept below for the record only.
+
+### Phase 3 (DROPPED) — replace `Env`'s representation
 Swap the internals, keeping `nil`/`snoc`/`lookup`/`view` and all 54 lemma
 *statements* identical. Client code that only constructs (~379 of the 421
 `env.snoc`/`env.nil` mentions) is unaffected; only the ~19 pattern positions and

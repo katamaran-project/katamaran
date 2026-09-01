@@ -1,0 +1,236 @@
+# `env.lookup` — where its linear cost actually is
+
+Status: **Diagnostic record, 2026-09-01. This is PLAN-env-trie's GATE 0, and it
+overturns that plan's premise.** Read §5 before funding any part of §3 of
+`theories/plans/PLAN-env-trie.md`.
+
+## One-sentence finding
+
+`env.lookup`'s cost is **not** the linear walk — it is **allocation inside the
+walk**: `ctx.view` builds a `SnocView` value *and* a fresh `MkIn` record at
+every step, costing a measured **23.5 allocated words per binder walked**,
+whereas the identical O(depth) traversal written without `ctx.view` allocates
+**exactly zero** words per step — so the indicated fix is a ~20-line rewrite of
+`Environment.v:154`, worth **5.9× on allocation / 3.1× on time at |Σ|=200**, and
+the skew-binary RAL of PLAN §3 is *not* indicated: it cannot be sub-linear at
+all, because `ctx.in_at` is a **unary** `nat`, so every comparison and
+subtraction inside a tree descent costs O(index).
+
+## 0. Protocol
+
+| tag | protocol |
+|---|---|
+| **ALLOC** | `OCAMLRUNPARAM='v=0x400' coqc`, **one** `Time Eval vm_compute` per process, `allocated_words` net of a per-`n` imports+definitions baseline (`BASE` arm, identical file with the `Eval` removed). Gated on the arm's checksum being correct and `errors=0`. |
+
+Every arm is generated from one common body by a two-token `sed` on `NN` and
+`ROUNDS`, so only `n` and the benchmarked function can differ. Total lookups is
+held at **9600 in every cell** (`ROUNDS = 9600/n`), so a column is directly a
+*per-lookup* cost and `n` moves only the depth, never the work count.
+
+Wall-clock figures below are from the same runs and are **indicative only**
+(shared 14 GB box); every ratio claimed in §5 is on `allocated_words`.
+
+## 1. The axes
+
+The plan named one axis (lookup **algorithm**: linear walk vs. random access).
+This study needed a second, because the first sweep contradicted itself:
+
+| axis | states |
+|---|---|
+| `algorithm` | `walk` (O(depth)) \| `ral` (skew-binary random access) |
+| `per-step-allocation` | `view` (current: `ctx.view`, allocates) \| `fused` (recurse on `(Env, in_at, in_valid)` together, allocates a closure) \| `none` (non-dependent walk, allocates nothing) |
+| `index-arithmetic` | `unary` (as `ctx.in_at` really is) \| `binary` (`N`) |
+
+| arm | algorithm | per-step alloc | what it is |
+|---|---|---|---|
+| `SLOW` | walk | `view` | **`env.lookup` as it exists today** |
+| `IDX` | walk | `fused` | fused walk, curried — closure per step |
+| `IDX2` | walk | `fused` | fused walk, all args up front |
+| `WALK` | walk | `none` | non-dependent spine walk, binder type recovered once by `EqDec B` |
+| `BARE` | walk | `none` | `WALK` with the type recovery deleted — not a usable lookup, a floor |
+| `FAST` | ral | — | PLAN §3's skew-binary RAL, `nat` (unary) sizes and indices |
+| `NULL` | — | — | the same `env.tabulate` with **no lookup at all** — the floor both arms pay |
+
+Every arm is driven by `env.tabulate (fun b bIn => <arm> E bIn)`, which is
+exactly `sub_comp`'s shape (one traversal of `Σ`, one lookup per entry).
+
+## 2. Results — allocated words **per lookup**, net of the `NULL` floor
+
+| n = \|Γ\| | `SLOW` | `IDX` | `IDX2` | `WALK` | `BARE` | `FAST` |
+|---|---|---|---|---|---|---|
+| 100 | 2371.7 | 752.0 | 397.6 | 194.6 | 5.29 | 305.3 |
+| 200 | 4721.9 | 1502.2 | 797.6 | 224.6 | 5.20 | 436.8 |
+| 400 | 9421.9 | 3002.2 | 1597.7 | 254.4 | 5.22 | 671.1 |
+| 1600 | 37621.7 | 12001.9 | 6398.5 | 314.1 | 5.17 | 1961.9 |
+
+(`FAST` is from a sibling sweep with its own `BASE`/`NULL`; all others share one.)
+
+Per-binder slopes, **fitted on n ∈ {100, 200} only and held out at n = 1600**,
+which is 8× beyond the fit range:
+
+| arm | fitted law (words/lookup) | predicted @1600 | actual | error |
+|---|---|---|---|---|
+| `SLOW` | 22.2 + **23.503**·n | 37627.0 | 37621.7 | **−0.014%** |
+| `IDX` | 2.2 + **7.5017**·n | 12005.0 | 12001.9 | **−0.026%** |
+| `IDX2` | −2.4 + **4.0001**·n | 6397.7 | 6398.5 | **+0.012%** |
+| `WALK` | 164.6 + **29.98**·log₂n | 313.6 | 314.1 | **+0.16%** |
+| `BARE` | **5.2**, no n term | 5.2 | 5.17 | −0.6% |
+
+Five arms, five held-out points, all inside 0.2%. The laws are not in doubt.
+
+`FAST` is **linear too** — slope ≈1.1 words/binder fitted on n ∈ {400, 800},
+predicting 1991 at n=1600 against 1962 (−1.5%). It never becomes logarithmic.
+
+Wall clock, whole 9600-lookup `Eval`, net of `NULL` (indicative):
+
+| n | `SLOW` | `IDX` | `IDX2` | `WALK` | `BARE` |
+|---|---|---|---|---|---|
+| 200 | 0.123 s | 0.043 | 0.040 | 0.036 | 0.022 |
+| 1600 | 1.062 s | 0.407 | 0.313 | 0.205 | 0.167 |
+
+## 3. Reading the axes apart
+
+### 3.1 The whole linear term of `env.lookup` is `ctx.view`'s allocation
+
+`SLOW` and `BARE` execute the **same number of steps over the same spine**.
+`SLOW` allocates 23.5 words per step; `BARE` allocates **0.000 words per step**
+(5.2 words per lookup, flat over a 16× range in n). The mechanism is visible in
+the source: `ctx.view = ctx.In_case _ isZero isSucc`, and `In_case`'s successor
+branch is
+
+```coq
+| S n => fun p => fs _ _ _ (MkIn n p)          (* Context.v:131 *)
+```
+
+so each step allocates a fresh `MkIn` record *and* the `isSucc` constructor
+wrapping it. Nothing else in the walk allocates.
+
+**This is the finding.** "`env.lookup` is a linear walk" is true and was never
+the problem; the problem is that each of those steps costs 23.5 words instead of
+0.
+
+### 3.2 Recovering the binder type is what a `fused` walk pays for
+
+`IDX`/`IDX2` keep full dependency — they recurse on the `Env` spine and the raw
+`in_at` nat together and transport `d : D b'` to `D b` **once**, at the base
+case, along the *existing* `in_valid` proof. No `EqDec`, no conversion, no new
+structure. They cost 7.5 and 4.0 words/step: the residual is the per-step
+closure the dependent motive forces, and taking every argument up front (`IDX2`)
+halves it.
+
+`WALK` removes even that by walking non-dependently into a `sigT D` and
+recovering `b' = b` once per lookup with a decidable test. Its 30 words/doubling
+is that test (`N.eq_dec` on binder *values* 0..n−1, whose bit length grows with
+n); with a fixed binder type — which is the real case, `B = Binding` — that term
+is a constant, not a function of `|Σ|`.
+
+### 3.3 The RAL cannot be sub-linear, and the reason is the index type
+
+`FAST` is PLAN §3's design, and it is **linear**, at slope 1.1 instead of 23.5.
+The cause is not transports (§4) and not the tree: a skew-RAL descent must
+compute `i < h`, `i − h` and `h/2`, and `ctx.in_at` is a **unary `nat`**, so each
+of those is O(index). Summed over a halving descent that is Θ(n) again.
+
+PLAN §1 states this exactly backwards:
+
+> "`ctx.In` is **already index-optimised** … the index is a machine `nat`;
+> there is nothing to gain there."
+
+A Coq `nat` is not a machine word; it is unary Peano, and the VM has no special
+representation for it. **Any** random-access scheme keyed on `in_at` pays O(in_at)
+in arithmetic before it looks at a single tree node. A sub-linear lookup would
+require `ctx.In` to carry a *binary* index (`N`/`positive`), which is a far
+larger change than the plan scoped — and §3.1 says it would buy nothing anyway,
+because a linear walk that allocates nothing already has zero allocation slope.
+
+### 3.4 GATE 0's transport question: PASSED, and it is not the risk
+
+PLAN §2c called dependent transports "the assumption that kills the plan if it
+is wrong". It is not wrong, in any arm:
+
+- `FAST`/`WALK`: `eq_rect` on a decided `N.eq_dec` equality.
+- `IDX`/`IDX2`: `eq_rect` on the **`in_valid` proof itself**, the harder case.
+
+A lookup at **depth 196 of 200** reduces to a bare constructor (`dmk 3%N 4`)
+under **both `vm_compute` and `cbv`** in every arm, and the strict variants —
+which return a deliberately wrong value instead of falling back on the linear
+walk, so a blocked transport cannot be masked — return the exact checksum
+(20100 = Σ 1..200) at every index. No `eq_rect` survives reduction anywhere.
+
+## 4. RETRACTION of this study's own first sweep (same day)
+
+The first sweep reported `SLOW`/`FAST` net costs of 108.7 M / 65.8 M words at
+n=200 and a ratio that **shrank** with n (2.75× → 1.72×). **Never requote those
+numbers.** They were ~85% *my own checksum*: the harness summed the payloads
+with `Nat.add (esum E') (meas d)` over unary nats, and since `Nat.add` recurses
+on its first argument, summing 1..n costs Θ(n³/6) — 66.6 M words per 50 rounds at
+n=200, swamping the arms being compared. Replaced by an O(1)-per-entry
+accumulator; every number in §2 is from the corrected harness. The measurements
+were bad, not merely the conclusion.
+
+Cost-of-the-instrument is the same class of error this directory's records
+warn about for baselines and protocols. The tell was that the *shape* was
+impossible — no log-vs-linear pair can converge as n grows.
+
+## 5. What this means
+
+1. **PLAN-env-trie §3 (skew-binary RAL) and Phase 3 (replace `Env`'s
+   representation) should be dropped.** The structure is linear anyway (§3.3),
+   and the win it was reaching for is available from a local rewrite.
+2. **The indicated fix is `Environment.v:154` itself**: define `lookup` by
+   recursion on the `Env` spine and `ctx.in_at` simultaneously, transporting
+   once along `ctx.in_valid`. No new type, no conversion, no `EqDec`
+   constraint, no API change — `lookup (snoc E v) in_zero = v` and
+   `lookup (snoc E v) (in_succ i) = lookup E i` both still hold
+   **definitionally**. This is `IDX2`: **5.9× on allocation and 3.1× on time at
+   n=200**, **5.9×/3.4× at n=1600**.
+3. **Constant factor, NOT an exponent change.** `sub_comp` stays O(`|Σ|²`); the
+   constant on the `|Σ|²` term drops ~5.9×. Say this in those words when
+   quoting it. The `WALK` arm *is* an exponent change in allocation (flat
+   vs. linear per step, 120× at n=1600) but needs `EqDec B` in
+   `Environment.v`'s `WithBinding` section, which `lookup` does not currently
+   assume.
+4. **Amdahl is NOT yet applied and this fix is NOT yet justified.**
+   `case_study/RiscvPmp/CFGVer/diagnostics/lvar-lookup-cost-drivers.md` §5.4
+   attributes only **26.4%** of the K=64 variable surcharge to the `env.lookup`
+   walk (L1); the other 73.6% is `env.tabulate` per mint, `ctx.fresh`'s name
+   scan, and pc re-substitution. On that reading a 5.9× on L1 is worth
+   ~1.28× end to end. **PLAN Phase 0b is still the deciding measurement** — and
+   it now has a much better instrument than the one it specified: land the
+   `IDX2` rewrite and re-measure the real probes, which prices L1 exactly *and*
+   delivers the fix in the same build. Note the tabulate floor measured here
+   (`NULL`) is itself substantial — 5.9 M words at n=200 against 45.3 M for the
+   lookups — so L2 is real and will become the wall.
+
+## 6. Files / reproduction
+
+`theories/diagnostics/ZZEnvLookupProbe.v` is the common body. It is **not** in
+`_CoqProject` (so the gate never builds it) and its `ZZ` prefix keeps it outside
+`gate.sh`'s hole scan (`--exclude='ZZ*'`, `scripts/gate.sh:152`); it is
+nonetheless committed rather than left untracked, because it contains no
+`Admitted.` at all -- there is not a single proof in it -- and the reproduction
+below is worthless without it. It defines every arm over a toy
+`B := N`, `D := Dty` (a genuine `B -> Set` family) but uses **Katamaran's real
+`env.Env`, `ctx.nth_is`, `ctx.in_at`, `ctx.in_valid`**, so the candidate
+definitions transplant verbatim.
+
+```bash
+for n in 100 200 400 1600; do r=$((9600/n)); for arm in BASE NULL SLOW IDX IDX2 WALK BARE; do
+  f=ZZU_${n}_${arm}
+  sed "s/^Definition NN : nat := 200\./Definition NN : nat := $n./;
+       s/^Definition ROUNDS : nat := 50\./Definition ROUNDS : nat := $r./" \
+      theories/diagnostics/ZZEnvLookupProbe.v > /tmp/$f.v
+  [ $arm = BASE ] || echo "Time Eval vm_compute in bench_$(echo $arm | tr A-Z a-z)." >> /tmp/$f.v
+  OCAMLRUNPARAM='v=0x400' coqc -q -w none -R theories Katamaran /tmp/$f.v \
+    2>&1 | grep -E 'allocated_words|Finished transaction|Error'
+done; done
+```
+
+Run `coqc` from the repo root (`-R theories Katamaran` is relative).
+
+Two harness traps, both hit here: an accumulator built with unary `Nat.add`
+dominates the measurement (§4) *and* stack-overflows past n≈400; and
+`allocated_words` is **blind to a pointer-chasing walk** — the `BARE` arm does
+960 000 spine steps for 5.2 words per lookup. That is the finding in §3.1, but
+it also means allocation alone cannot price a *time* question here; §2's wall
+clock is quoted for exactly that reason.
