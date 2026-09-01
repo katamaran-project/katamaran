@@ -1,7 +1,10 @@
 # PLAN-env-trie — sub-linear `env.lookup` for `theories/Environment.v`
 
-**Status: GATE 0 REACHED AND FAILED-OVER, 2026-09-01. §3 (skew-binary RAL) and
-Phase 3 are DROPPED; a much smaller fix replaces them. Read
+**Status: DONE, 2026-09-01. GATE 0 failed over to a much smaller fix than this
+plan designed; that fix LANDED (`acb0368d`, gate green) and GATE 2 measured it
+at 2.41×–2.89× on the real muladd probe (held-out ratio +0.53%). §3 (skew-binary
+RAL) and Phase 3 are DROPPED and should not be revived. Only Phase 4 (docs)
+remains. Read
 `theories/diagnostics/env-lookup-cost-drivers.md` first, then §5's revised
 Phase 1'. The transport risk that this plan was built around did NOT
 materialise; a different assumption (§1's "the index is already a machine
@@ -203,14 +206,29 @@ exactly. Nothing else in the tree changes.
 **GATE 1:** `Environment.v` builds; agreement lemma `Qed`; full project build
 unaffected (it is additive).
 
-### Phase 2 — measure the real probes (this is also Phase 0b)
+### Phase 2 — measure the real probes (also subsumes Phase 0b) — **DONE**
 
-With Phase 1' landed, the K=206 muladd probe re-measured against its baseline
-**is** the L1 attribution PLAN §5's Phase 0b was asking for, and it delivers the
-fix in the same build instead of throwing instrumentation away. Amdahl bound to
-beat: `lvar-lookup-cost-drivers.md` §5.4 puts only **26.4%** of the variable
-surcharge on L1, so the predicted end-to-end win is ~**1.28×**, and `NULL`-arm
-data says the `env.tabulate` floor (L2) becomes the wall next.
+**GATE 2 MET.** Two full builds of the same commit differing only in
+`env.lookup`; four K values each; baselines 0.0049% apart; old arm reproduces
+the published `muladd-full-cost-drivers.md` §3.6 figures within 0.34%.
+
+| K | peak `|Σ|` | OLD net G | NEW net G | ratio |
+|---|---|---|---|---|
+| 118 | 33 | 0.8678 | 0.3608 | 2.406× |
+| 162 | 96 | 4.3507 | 1.5927 | 2.732× |
+| 184 | 108 | 6.5027 | 2.3153 | 2.809× (held out, ratio +0.53%) |
+| 206 | 135 | 10.5100 | 3.6358 | 2.891× |
+
+The ~**1.28×** Amdahl estimate this phase set out to beat was wrong by 2.2×, and
+`diagnostics/env-lookup-cost-drivers.md` §7.3 says why: it priced the fix
+against `lvar-lookup-cost-drivers.md` §5.4's DEPTH axis, but removing
+`ctx.view`'s per-step allocation touches every lookup everywhere, including the
+ones inside the mechanisms §5.4 classes as breadth. Use **58–65%** as the share
+for any future Amdahl estimate on this workload.
+
+**Constant factor, not an exponent change** (§7.4): the marginal ratio saturates
+at ~3× rather than diverging. `sub_comp` is still O(`|Σ|²`). The wall moves; it
+does not go away.
 
 ### Phase 2 (original, superseded) — route the hot paths through it (the §4 fix)
 `inst_subst_env`, `sub_comp`, `persist`. Convert once per call, serve many.

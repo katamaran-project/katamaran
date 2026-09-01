@@ -23,7 +23,7 @@ instantiates the module types at each layer.
 | `Specification.v` | module-type interface for supplying a case study's contracts (`CEnv`/`CEnvEx`/`LEnv`) |
 | `Semantics.v` | packages the generic small-step operational semantics of the statement language |
 | `Base.v` | module-type interface fixing a case study's object language and machine model (`Types <+ RegDeclKit <+ OperationalModel <+ BaseMixin`) |
-| `Environment.v` | heterogeneous, context-indexed environments (`Env`) — `CStore`/`Valuation`/`SStore`/`Sub` are all instances |
+| `Environment.v` | heterogeneous, context-indexed environments (`Env`) — `CStore`/`Valuation`/`SStore`/`Sub` are all instances. `lookup` walks the `Env` spine and `ctx.in_at` together and transports once along `ctx.in_valid`; it is `Arguments … !E` and `cbn` now leaves `lookup_at`, so **refold with `rewrite ?env.lookup_at_fold`** (primed variant if the index is a raw `MkIn`). Why, and what it bought (2.4–2.9×): `diagnostics/env-lookup-cost-drivers.md` |
 | `Sep/Hoare.v` | the language-generic axiomatic Hoare-triple layer (`Triple`/`CTriple`/`LTriple`), proof-theoretic only |
 | `Iris/Instance.v` | generic Iris model layer proving `Sep/Hoare.v`'s triples sound against `semWP` |
 | `Program.v` | module type supplying a case study's function declarations/definitions + the call-graph/termination machinery |

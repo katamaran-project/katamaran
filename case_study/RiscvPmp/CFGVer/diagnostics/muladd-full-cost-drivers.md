@@ -186,10 +186,19 @@ that dense havoc itself creates.
   per-trip havoc values out of ONE wide binder
   (`havoc-abstraction-payoff.md` §8.5), taking `|Σ|` growth from k/trip to 1/trip
   with no scan at all.
-- **Deeper lever, planned but unstarted:** `theories/plans/PLAN-env-trie.md` —
-  `env.lookup` is a linear walk, which is why `|Σ|` cost is quadratic. Its §0
-  states honestly that the upside is unquantified, and its Phase 0b is the
-  measurement that would also explain §3.5's 4.3×.
+- ~~**Deeper lever, planned but unstarted:** `theories/plans/PLAN-env-trie.md` —
+  `env.lookup` is a linear walk, which is why `|Σ|` cost is quadratic.~~
+  **DONE 2026-09-01, and the diagnosis in that sentence was wrong.** The linear
+  WALK was never the cost; `ctx.view`'s per-step ALLOCATION was (a fresh `MkIn`
+  plus a `SnocView` per binder, `Context.v:131`). Rewritten in `acb0368d` and
+  measured **on this very rig**: §3.6's three points drop 0.868 → 0.361,
+  4.351 → 1.593 and 10.510 → 3.636 G, i.e. **2.41×/2.73×/2.89×**, with a
+  held-out K=184 ratio inside 0.53%
+  (`theories/diagnostics/env-lookup-cost-drivers.md` §7). **§3.6's own figures
+  are therefore superseded for any build after `acb0368d`** — they were
+  reproduced to within 0.34% on the old arm, so they were right, but they now
+  describe the old `lookup`. It is a CONSTANT FACTOR: `|Σ|` cost stays
+  quadratic, so `mlen`=2 is still not expected to complete.
 - **Not established:** everything here is raw-VC CONSTRUCTION cost. No `Qed`, no
   `solve_vc`. And 111 havoc sites make a great deal of data possibly-secret (a
   havoced value carries no `secLeakvar`), so the risk shifts from cost to

@@ -285,6 +285,16 @@ to 0.0003%, entirely chunk-independent**, which is exactly what L2 and L5 predic
 (they depend on `|Σ|` and mint count, never on the heap) and what L1-via-heap
 does not.
 
+**Do not use this §5.4 split to price a change to `env.lookup` itself
+(added 2026-09-01).** It partitions by AXIS — depth at fixed `|Σ|` vs everything
+else — and a fix to `lookup`'s per-step cost does not lie on either side of that
+line: `env.tabulate` and pc re-substitution, both counted here as *breadth*,
+themselves call `lookup` per entry/occurrence. Predicting ~1.28× for the
+2026-09-01 `env.lookup` rewrite from the 26.4% below under-called it by 2.2×;
+measured it removes **58–65%** of total cost (2.41×–2.89×,
+`theories/diagnostics/env-lookup-cost-drivers.md` §7). The measurements below
+stand; only that inference was wrong.
+
 Candidate for the quadratic specifically, from the code and not yet isolated:
 `sub_comp ζ1 ζ2 = subst ζ1 ζ2` maps `subst` over an `Env` of `|Σ|` terms
 (`SubstEnv`, `Terms.v:767`), each doing an `env.lookup` of depth up to `|Σ|` — so

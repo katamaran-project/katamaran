@@ -1,7 +1,8 @@
 # `env.lookup` — where its linear cost actually is
 
-Status: **Diagnostic record, 2026-09-01. This is PLAN-env-trie's GATE 0, and it
-overturns that plan's premise.** Read §5 before funding any part of §3 of
+Status: **Diagnostic record, 2026-09-01. §1–§4 are PLAN-env-trie's GATE 0 and
+overturn that plan's premise; §7 is GATE 2, measured on the real workload after
+the fix landed (commit `acb0368d`).** Read §5 before funding any part of §3 of
 `theories/plans/PLAN-env-trie.md`.
 
 ## One-sentence finding
@@ -14,7 +15,10 @@ whereas the identical O(depth) traversal written without `ctx.view` allocates
 `Environment.v:154`, worth **5.9× on allocation / 3.1× on time at |Σ|=200**, and
 the skew-binary RAL of PLAN §3 is *not* indicated: it cannot be sub-linear at
 all, because `ctx.in_at` is a **unary** `nat`, so every comparison and
-subtraction inside a tree descent costs O(index).
+subtraction inside a tree descent costs O(index). **Landed and measured on the
+real workload (§7): 2.41×–2.89× over `|Σ|` = 33–135, removing 58–65% of total
+cost — roughly double the ~1.28× Amdahl estimate, for the reason in §7.3. A
+constant factor, not an exponent change.**
 
 ## 0. Protocol
 
@@ -248,7 +252,10 @@ impossible — no log-vs-linear pair can converge as n grows.
    vs. linear per step, 120× at n=1600) but needs `EqDec B` in
    `Environment.v`'s `WithBinding` section, which `lookup` does not currently
    assume.
-4. **Amdahl is NOT yet applied and this fix is NOT yet justified.**
+4. ~~**Amdahl is NOT yet applied and this fix is NOT yet justified.**~~
+   **SUPERSEDED by §7, which measured it: the real answer is 2.41×–2.89×, not
+   the ~1.28× predicted here. The prediction below is left in place because the
+   REASON it was wrong is the useful part — see §7.3.**
    `case_study/RiscvPmp/CFGVer/diagnostics/lvar-lookup-cost-drivers.md` §5.4
    attributes only **26.4%** of the K=64 variable surcharge to the `env.lookup`
    walk (L1); the other 73.6% is `env.tabulate` per mint, `ctx.fresh`'s name
@@ -292,3 +299,128 @@ dominates the measurement (§4) *and* stack-overflows past n≈400; and
 960 000 spine steps for 5.2 words per lookup. That is the finding in §3.1, but
 it also means allocation alone cannot price a *time* question here; §2's wall
 clock is quoted for exactly that reason.
+
+---
+
+# Part II — GATE 2: what it was actually worth
+
+## 7. The fix, measured on the real workload
+
+Two full builds of the same commit, differing **only** in `env.lookup`: the
+working tree (fused walk, `acb0368d`) and a scratch copy with
+`theories/Environment.v`, `Syntax/Terms.v`, `Symbolic/Instantiation.v` and
+`Symbolic/GenOccursCheck.v` reverted to `7da9ce85`. Neither arm's `.vo`s can
+clobber the other's, and the working tree was never edited to produce the
+old arm (`cfgver-scaling-diagnostics`: "comparing two COMMITS by editing the
+working tree — don't").
+
+Probe: the muladd dense-havoc prefix `Example/ZZDS<K>.v`, `drop_fuel = 0`, raw
+VC construction, **one `Eval vm_compute` per `coqc` process**, net of
+`ZZDSB.v` — the identical file with its final `Eval` deleted. Protocol tag:
+**ALLOC** (`allocated_words`; no `Qed`, no `solve_vc`, so this is not
+comparable to any `Qed`-protocol figure in this repo — that mismatch is worth
+1.81×).
+
+**Two checks before reading anything into the numbers.** The two arms' import
+baselines are 656,540,034 (old) and 656,571,975 (new) — **0.0049% apart**, so
+the closures cost the same and the ratios are clean. And the old arm reproduces
+`muladd-full-cost-drivers.md` §3.6's published figures (0.904 / 4.387 /
+10.546 G) at 0.868 / 4.351 / 10.510 — within **0.34% at K=206** — so the
+published numbers stand on this commit and this is the same rig.
+
+### 7.1 Results
+
+| K | peak `\|Σ\|` | OLD net G | NEW net G | **ratio** | share of cost removed |
+|---|---|---|---|---|---|
+| 118 | 33 | 0.8678 | 0.3608 | **2.406×** | 58.4% |
+| 162 | 96 | 4.3507 | 1.5927 | **2.732×** | 63.4% |
+| **184** | **108** | **6.5027** | **2.3153** | **2.809×** | **64.4%** |
+| 206 | 135 | 10.5100 | 3.6358 | **2.891×** | 65.4% |
+
+`peak |Σ|` is byte-identical between arms at every K (33/96/108/135), so both
+arms verify the same VC — the change is not observable in what is proved.
+
+Marginal cost per instruction, which strips the K-independent part out:
+
+| segment | OLD | NEW | ratio |
+|---|---|---|---|
+| K 118→162 | 79.16 M/instr | 28.00 M/instr | 2.827× |
+| K 162→184 | 97.82 M/instr | 32.85 M/instr | 2.978× |
+| K 184→206 | 182.15 M/instr | 60.02 M/instr | 3.035× |
+
+### 7.2 Held-out point
+
+K=184 was **not** used to fit anything: the quadratic in K was fitted on
+{118, 162, 206} (equally spaced, ΔK=44) and the prediction recorded before the
+run.
+
+| | predicted | actual | error |
+|---|---|---|---|
+| OLD net | 7.096 G | 6.503 G | **+9.1%** |
+| NEW net | 2.513 G | 2.315 G | **+8.5%** |
+| **ratio** | **2.824** | **2.809** | **+0.53%** |
+
+Read this the right way round. The quadratic-in-K model is **not** accurate in
+absolute terms — it over-predicts both arms by ~9%, so the growth is somewhat
+sub-quadratic in K and no absolute figure should be extrapolated from it. But
+the error is common-mode and cancels: **the ratio is predicted to 0.53%**, which
+is what the claim rests on. Quote ratios from this rig, not levels.
+
+### 7.3 Why the ~1.28× Amdahl prediction was wrong
+
+§5's prediction came from `lvar-lookup-cost-drivers.md` §5.4, which attributes
+**26.4%** of the K=64 variable surcharge to L1 (`env.lookup`'s walk) and 73.6%
+to "breadth" — `env.tabulate` per mint, `ctx.fresh`'s name scan, pc
+re-substitution. A 5.9× on 26.4% is 1.28×.
+
+**That §5.4 measurement is not retracted; the inference from it was wrong.**
+§5.4 partitions by *axis* — how deep the hot variables sit at fixed `|Σ|`
+(depth) versus everything that scales with `|Σ|` regardless of depth (breadth).
+This fix does not live on either side of that line. It removes `ctx.view`'s
+**per-step allocation from every lookup everywhere**, including the lookups
+performed *inside* the mechanisms §5.4 counts as breadth — `env.tabulate` calls
+`lookup` per entry, and pc re-substitution does a lookup per variable
+occurrence. So a fix priced against the depth axis alone was always going to be
+under-predicted.
+
+The measured share removed is **58–65%, rising with `|Σ|`**, which is the number
+to use for any future Amdahl estimate on this workload.
+
+### 7.4 Constant factor or exponent change?
+
+**Constant factor.** Say it in those words. The marginal ratio is *saturating*
+(2.83 → 2.98 → 3.04), not diverging, and the share removed is converging on
+~65% — the signature of an Amdahl ceiling near 1/(1−0.67) ≈ 3×, not of an
+exponent reduction. Both arms remain superlinear in `|Σ|`; `sub_comp` is still
+O(`|Σ|²`), now with a ~3× smaller constant. **The wall moves; it does not go
+away.** `muladd` at `mlen`=2 is not expected to complete because of this.
+
+### 7.5 Not measured
+
+Wall clock (the probe has a bare `Eval`, not `Time Eval`, and this box is
+shared — the §2 microbenchmark's 3.1× time figure is the only timing evidence
+here). Peak RSS. Anything under a real `Qed` or `solve_vc`: this is raw VC
+construction only, so the figures are not comparable to any `Qed`-protocol
+number in `case_study/RiscvPmp/CFGVer/diagnostics/`.
+
+### 7.6 Reproduction
+
+Both arms, four K values each:
+
+```bash
+# new arm = the working tree at acb0368d; old arm:
+tar -cf - --exclude=.git --exclude=_build . | (cd $OFF && tar -xf -)
+for f in theories/Environment.v theories/Syntax/Terms.v \
+         theories/Symbolic/Instantiation.v theories/Symbolic/GenOccursCheck.v; do
+  git show 7da9ce85:"$f" > "$OFF/$f"; done
+(cd $OFF && make -f Makefile.coq -j1)
+
+# ZZDS<K>.v is ZZDS206.v with `Definition ZZK` sed'd; ZZDSB.v is it minus the
+# final Eval.  One process per point, sequentially:
+OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+  -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/ZZDS206.v \
+  2>&1 | grep -E 'allocated_words|Error'
+```
+
+`ZZDS*.v` are gitignored throwaways derived from `Example/ZZMuladdFullN2.v`;
+see `muladd-full-cost-drivers.md` §5 for how that root artifact is produced.
