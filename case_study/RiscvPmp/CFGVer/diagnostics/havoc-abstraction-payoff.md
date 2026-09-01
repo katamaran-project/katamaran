@@ -648,6 +648,19 @@ trip's variables.
 
 ### 9.4 The counts, n=3, steady state
 
+> **RETRACTED 2026-09-01 — the "1 of 3" row and the 2/trip slope it implies are
+> WRONG; never requote them.** `dropk-firing-payoff.md` Part 3 measures the
+> three-register arm under a real drop at n=32: `dropk = 3n + 8`, i.e. **3 of 3**
+> retired every trip, with peak `|Σ|` FLAT at 19 — where 2/trip would have given
+> 83. The measurements below are real; the inference from them is not. **Cause,
+> and the transferable lesson: this section takes a deadness census at ONE
+> program point (the loop head).** A variable live there can die later in the same
+> trip, and the drop runs at *every* executor step, so it collects garbage a
+> single-point snapshot cannot see. A one-point census systematically
+> UNDER-predicts a per-step drop — note this went the OPPOSITE way to §9.1's
+> stated "upper bound" scope limit.
+
+
 | arm | minted | dead at final break | live at final break | droppable per trip |
 |---|---|---|---|---|
 | 3 registers | 9 | 4 | previous `hv.3 hv.4` + current 3 | **1 of 3** |
@@ -669,6 +682,15 @@ written for the pre-word-slicing executor that minted ~29 variables per trip, so
 the meaningful reading is the FRACTION of growth that is droppable: 33% vs 100%.
 
 ### 9.5 Consequence: §8's recommendation is configuration-dependent
+
+> **DIRECTION CONFIRMED, MAGNITUDE REFUTED 2026-09-01.** `dropk-firing-payoff.md`
+> Part 3 measures both arms under the drop at n=32: R7 6.1186 G vs R3 6.1486 G,
+> i.e. R7 does win, **by 0.5%** — against the 2.66× it was supposedly reversing.
+> The honest reading is not "the ordering flips" but **"the drop COLLAPSES this
+> axis"**: a knob worth 2.66× without the drop is worth 1.005× with it. Take
+> "seven registers is now optimal" as true and "the register set matters" as
+> false.
+
 
 **§8 concluded "havoc the minimum set that breaks the recurrence" and measured
 2.66x for three registers over seven. That stands as measured — and it is optimal

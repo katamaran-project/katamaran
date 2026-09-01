@@ -263,3 +263,238 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPm
 Note also that `ZZPin*.v` and the other pre-dropk probes no longer compile at
 all: their `count_*` fixpoints predate the `dropk` constructor and are now
 non-exhaustive.
+
+---
+
+# Part 3 — at br_divrem's REAL trip count, the drop makes cost EXACTLY AFFINE (2026-09-01)
+
+**Finding, one sentence.** At n = 32 trips, `drop_fuel = 8` on the seven-register
+havoc holds peak `|Σ|` at a constant **21** (against `19 + 7n` = 243) and makes
+total allocation **exactly affine in the trip count** — `262.2 M + 183.0 M·n`,
+fitted on n = 4,8 and predicting BOTH held-out points to **+0.00006% / +0.0002%**,
+below the metric's own 0.0008% noise floor — where the same rig without the drop
+has a local exponent of **2.029** and rising. br_divrem's real trip count now
+costs **6.119 G words in 91 s**.
+
+Part 2 called this "the obvious next measurement" and explicitly declined to
+predict it. This is that measurement. Nothing in Part 1 or Part 2 is retracted.
+
+## Why n = 32, when §8 measured n = 31
+
+BearSSL's `br_divrem` loop runs **31** times (fixed by the division algorithm,
+one trip per bit of a 31-bit word); the rig's `li A5, n+1` immediate sets it.
+This study was run at **32**, i.e. one trip MORE than the real program, so any
+comparison against §8's n = 31 figures is conservative in the drop's disfavour.
+For the real count exactly, the affine law gives n = 31 → **5.936 G words**.
+
+## The experiment
+
+| axis | states | what moves it |
+|---|---|---|
+| `drop_fuel` | `0` (drop is `SHeapSpec.pure tt`, byte-identical tree) &#124; `8` | `Verifier.v:856`, one constant |
+| `havoc-breadth` | 3 (`A0 A1 A4`) &#124; 7 (`T0 T1 T2 T3 A0 A1 A4`) | the `regs` list in the ghost, nothing else |
+| `trip-count` | n = 4, 8, 16, 32 | the `li A5, n+1` immediate; program LENGTH is constant in n |
+
+The R3 and R7 probe files differ from each other in **exactly one line** (the
+register list); the n-variants differ in **exactly one token** (`zz_n`). Both
+checked by `diff` before running, per this directory's single-axis rule.
+
+**Protocol, identical on every cell: raw VC via `cfg_map … CFG_VC_triple`
+(`tree_raw`), NO `postprocess`, NO `Qed`, one heavy `Eval` per `coqc` process,
+`OCAMLRUNPARAM='v=0x400'`, imports-only baseline subtracted and RE-MEASURED on
+each arm.** This is Part 2's protocol and NOT §8's (which is postprocessed) — see
+the cross-protocol section before mixing them.
+
+Baselines: **610,502,973** and **610,505,052** (`drop_fuel = 8`, two separate
+rebuilds) and **610,504,516** (`drop_fuel = 0`). Total spread **2,079 words in
+610 M = 0.0003%**, which is the check that the import closures cost the same and
+the ratios below are clean. All three are within 0.0006% of Part 2's, so Part 2's
+n = 8 rows are directly comparable and are reused rather than re-run.
+
+## Results
+
+### Structural counts
+
+| n | peak `\|Σ\|` @ fuel 0 | peak `\|Σ\|` @ fuel 8 | `dropk` @ fuel 8 |
+|---|---|---|---|
+| 8 | 75 | 21 | 64 |
+| 16 | **131** | **21** | **120** |
+| 32 | *not run — see below* | **21** | **232** |
+
+### Allocation, net G words
+
+| n | R7, fuel 0 (no drop) | R7, fuel 8 (drop) | ratio | protocol |
+|---|---|---|---|---|
+| 4 | — | **0.9943** | — | raw, no Qed, one Eval |
+| 8 | 6.9993 | 1.7263 | 4.054× | ″ |
+| 16 | **28.5725** | **3.1904** | **8.956×** | ″ |
+| 32 | *not run* (≥116.6 G projected) | **6.1186** | *≥19.1× projected* | ″ |
+
+### Held-out fits — fitted LOW, held out HIGH
+
+| quantity | fit on | held-out point | predicted | actual | error |
+|---|---|---|---|---|---|
+| alloc @ fuel 8 | n = 4,8 → `262,235,088 + 183,011,320·n` | n = 16 | 3,190,416,208 | 3,190,418,257 | **+0.00006%** |
+| ″ | ″ | n = 32 | 6,118,597,328 | 6,118,609,830 | **+0.0002%** |
+| peak `\|Σ\|` @ fuel 8 | Part 2's `21` (n=1..4) | n = 16, 32 | 21 | 21 | **0%** |
+| `dropk` @ fuel 8 | Part 2's `7n + 8` (n=1..4) | n = 16, 32 | 120 / 232 | 120 / 232 | **0%** |
+| peak `\|Σ\|` @ fuel 0 | Part 2's `19 + 7n` (n=1..4) | n = 16 | 131 | 131 | **0%** |
+
+The `|Σ|` and `dropk` laws are now confirmed at **8× beyond** the range they were
+fitted on. They are structural integer counts, so exactness is expected rather
+than impressive — but it does rule out the small-n plateau this directory has
+been fooled by before, which was Part 2's stated residual doubt.
+
+**The allocation law is the new result.** The fit is taken on the two LOWEST
+points and predicts both higher ones, so it extrapolates 4× beyond its range
+rather than interpolating; the errors are **below the metric's own
+reproducibility** (0.0008%, measured 2026-08-19). Cost per trip is a constant
+**183.0 M words**, and the **262.2 M** intercept is the n-independent prologue,
+epilogue and contract setup.
+
+That intercept is worth naming: it is exactly the "large n-independent overhead"
+that `havoc-abstraction-payoff.md` §10 identified as the thing which broke §9.6's
+extrapolation and forced its retraction. Here it is *measured directly* rather
+than inferred from a misbehaving fit.
+
+### The no-drop arm at n = 32 was DELIBERATELY NOT RUN
+
+It was started and killed after ~15 minutes. This is not a failed measurement and
+should not be recorded as one — the arm is *known* infeasible and re-establishing
+that has no value. The evidence, all measured here:
+
+- at n = 16 it already allocates 28.57 G and peaks at **1.694 G words ≈ 13.5 GB**,
+  i.e. the entire RAM of the box (which reproduces §8.4's 1.693 G to 0.06%);
+- its local exponent 8→16 is **2.029**, so n = 32 projects to **≥116.6 G words**
+  and a peak of roughly 27 GB — reachable only through deep swap;
+- while running it sat in uninterruptible sleep with 0 GB available.
+
+**≥19.1× is therefore a FLOOR on the drop's payoff at n = 32, not a measurement**,
+and this directory's own rule (quadratic fits here underpredict by ~13%) says the
+true figure is higher. Do not quote 19.1× as a result.
+
+## Cross-protocol validation (new, and it licenses a comparison Part 2 could not)
+
+The same R7/no-drop configuration, raw here vs postprocessed in §8:
+
+| n | raw (this study) | postprocessed (§8) | raw/post |
+|---|---|---|---|
+| 8 | 6.9993 | 7.0788 | 0.9888 |
+| 16 | 28.5725 | 28.9014 | 0.9886 |
+
+Two independent n agreeing on the correction factor to **0.02%**. The raw
+protocol is a uniform **1.14% cheaper** on this rig, so §8's series may be
+compared with these numbers *with that correction stated*. Independently, the
+local exponent 8→16 measured here is **2.029** against §8's **2.030** — a
+cross-protocol reproduction of the no-drop exponent to 0.05%.
+
+**This is not a general license to mix protocols.** It is one measured
+equivalence, on one rig, for a tree whose `postprocess` happens to do little.
+`check-scalar-combined-cost-drivers.md` prices a protocol mismatch at 1.81×.
+
+## Reading the axes apart
+
+### The `drop_fuel` axis: an exponent, seen from three sides
+
+- **The payoff is not a constant: 4.05× at n=8, 8.96× at n=16.** It doubles as n
+  doubles, which is what an exponent change looks like from the ratio side, and
+  it is why Part 2's "do not extrapolate 4.05× as a constant" was correct.
+- **Why *exactly* affine, mechanically.** `|Σ|` is flat at 21, so every trip runs
+  against a context of the same size and costs the same 183.0 M words. The
+  no-drop arm's quadratic is `|Σ|`-lookup cost against a `|Σ|` that grows linearly
+  in n (`lvar-lookup-cost-drivers.md`: `|Σ|` cost is quadratic). Remove the
+  linear-in-n growth of `|Σ|` and the quadratic term goes with it, leaving work
+  proportional to trip count and nothing else.
+- **Amdahl, at the n that matters.** At n=16 the ratio 8.96× means the `|Σ|` term
+  was **88.8%** of the no-drop cost there, up from 75% at n=8. What remains is
+  now perfectly linear, so on this rig there is no second superlinear driver
+  hiding behind the one just removed — which is the outcome
+  `havoc-abstraction-payoff.md` §8.5 explicitly could not promise.
+
+### The `havoc-breadth` axis: the drop COLLAPSES it (and §9.4's forecast is refuted)
+
+Both at n = 32, `drop_fuel = 8`, differing only in the register list:
+
+| arm | peak `\|Σ\|` | `dropk` | net G words | vs R7 |
+|---|---|---|---|---|
+| R7 (`T0 T1 T2 T3 A0 A1 A4`) | 21 | 232 = `7n + 8` | **6.1186** | — |
+| R3 (`A0 A1 A4`) | **19** | **104 = `3n + 8`** | 6.1486 | 1.0049× |
+
+Three things here, two of them corrections:
+
+1. **The register-set axis is worth 0.5%, having been worth 2.66× without the
+   drop** (§8.3, R3/R7 at n=16 = 0.377×). The drop does not merely change which
+   register set wins — it makes the choice nearly irrelevant. 0.5% is real (it is
+   600× the noise floor) but it is not a design consideration.
+2. **§9.5's predicted INVERSION is confirmed in direction and refuted in
+   magnitude.** R7 does now beat R3, as §9.5 said it would — by 0.5%, not by
+   anything resembling the 2.66× it was reversing. Anyone reading §9.5 should
+   take "seven registers is now optimal" as true and "the register set matters"
+   as false.
+3. **§9.4's "1 of 3 droppable per trip" for R3 is REFUTED — never requote it.**
+   It predicted R3 under a perfect drop would retain a `|Σ|` slope of 2/trip.
+   Measured: `dropk = 3n + 8`, i.e. **3 of 3** are retired every trip, and peak
+   `|Σ|` is flat at 19 — *lower* than R7's 21, where 2/trip would have given 83.
+   The cause is a method limitation, and it is the transferable lesson:
+   **§9.4 took a deadness census at ONE program point (the loop head).** A
+   variable live at the loop head can die later in the same trip, and the drop
+   runs at *every executor step*, so it collects garbage the loop-head snapshot
+   cannot see. A single-point census systematically UNDER-predicts a per-step
+   drop. (§9.4's own scope note called its counts an upper bound on droppability;
+   the measurement went the other way.)
+
+The mechanism behind the 0.5%: R7 havocs the temps, so their terms stay tiny but
+it carries 7 binders per trip; R3 lets the temps be recomputed as real terms each
+trip but carries only 3. Under the drop both are flat, and the two effects very
+nearly cancel.
+
+## What this means
+
+- **br_divrem's loop is no longer a scaling wall.** It is affine, 183 M words per
+  trip, and its real trip count builds in 91 seconds. `PLAN-muladd-full.md` Phase 3
+  was blocked on exactly this loop (67.5 s for *two* trips when first isolated;
+  31 trips unreachable). That blocker is lifted, and the whole-function question
+  becomes total step count rather than this loop's blowup.
+- **The drop is the load-bearing half, not the havoc.** The havoc alone removed
+  the term recurrence but left exponent 2.03 (`havoc-abstraction-payoff.md` §8.3);
+  the drop removes what the havoc left. Neither is sufficient alone, and the
+  ~1500 lines are now justified on the program they were written for.
+- **`drop_fuel` is still `0` in the tree, and this study does not change that.**
+  Part 1's reasoning is unchanged: no example under `Example/` calls `havoc_regs`,
+  so flipping it rewrites every VC and needs a full gate run in exchange for ~one
+  binder on one example. The flip becomes correct the moment a havoc-using
+  example lands — this is the evidence for making it then, not now.
+- **What this does NOT establish.** Every number here is raw-VC *construction*
+  cost, with no `Qed` and no `solve_vc`. A real end-to-end example adds the `Qed`
+  (priced at 1.81× on a different rig) and the VC discharge. **Linearity of the
+  construction is not linearity of the proof**, and the proof side is unmeasured.
+  That is the next measurement, and it needs a havoc-using example to exist first.
+
+## Files / reproduction
+
+`Example/ZZDropHavoc_n{16,32}.v`, `ZZDropHavocR3_n32.v` (structural counts);
+`ZZDropHavocAlloc_{BASE,n4,n16,n32}.v`, `ZZDropHavocAllocR3_n32.v` (allocation,
+one `Eval` each). Generated from Part 2's n=8 files by `sed` on a single token, so
+nothing but the intended axis can differ. All throwaway, gitignored, not in
+`_CoqProject`.
+
+```bash
+# per arm: set drop_fuel, rebuild the light chain, then run the probes
+sed -i 's/drop_fuel : nat := [08]\./drop_fuel : nat := 8./' case_study/RiscvPmp/CFGVer/Verifier.v
+make -f Makefile.coq case_study/RiscvPmp/CFGVer/Example/Prelude.vo
+coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran \
+     case_study/RiscvPmp/CFGVer/Example/ZZDropHavoc_n32.v
+OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+     -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/ZZDropHavocAlloc_n32.v \
+     2>&1 | grep -E 'allocated_words|top_heap_words'
+```
+
+`Example/Prelude.vo` MUST be rebuilt between arms (Part 2's note; a stale one
+surfaces as `makes inconsistent assumptions over library … Prelude`).
+
+**Box caveat, for wall-clock and peak-footprint figures only.** These runs shared
+a 14 GB box with an unrelated 4.4 GB process, and the no-drop arm at n ≥ 16
+exceeds RAM and runs in swap. `allocated_words` is deterministic and unaffected —
+it reproduced to 0.0003% across three independent baseline runs here — but **no
+wall-clock or `top_heap_words` figure in this section is a clean measurement**,
+per this directory's standing rule.
