@@ -157,6 +157,62 @@ which return a deliberately wrong value instead of falling back on the linear
 walk, so a blocked transport cannot be masked — return the exact checksum
 (20100 = Σ 1..200) at every index. No `eq_rect` survives reduction anywhere.
 
+## 3.5 Landing it: `cbn`-refoldability is a THIRD axis, and it costs the win
+
+Found while landing Phase 1', not predicted by anything above, and it is the
+part of this change most likely to bite a future reader.
+
+The old `lookup` was a **`Fixpoint` on `E`**, which gave downstream proofs *two*
+properties, easily conflated:
+
+1. `cbn` unfolded it **only** when `E` was in constructor form.
+2. What it unfolded **to** contained a folded `lookup E' i`, because the body's
+   recursive occurrence was `lookup` itself — so the next `rewrite` of any
+   `lookup`-shaped lemma still matched.
+
+Property 1 is recoverable: `Arguments lookup {Γ} !E {b} x` reproduces the old
+gating exactly. **Property 2 is not**, because the fast body's recursive
+occurrence must be the auxiliary `lookup_at` — carrying `(n, p)` onward instead
+of rebuilding an `In` *is* the optimisation. Isolated on a three-line control
+(a hypothesis `Hwk : forall b i, lk Ewk i = f b i`, goal
+`lk (snoc Ewk v) (in_succ i) = f b i`, tactic `cbn; rewrite Hwk`):
+
+| definition | goal after `cbn` | `rewrite Hwk` |
+|---|---|---|
+| old, `ctx.view` | `oldlk Ewk i = f b i` | **✓** |
+| fused walk **+ `!E`** | `newlk_at Ewk (ctx.in_at i) b (ctx.in_valid i) = f b i` | **✗** |
+| `Fixpoint`, recursive call `fixlk E' (ctx.MkIn n' p)` | `fixlk Ewk i = f b i` | **✓** |
+
+The failure mode is nasty because the error names nothing relevant: `Terms.v`'s
+`sub_up1_id` reported `Found no subterm matching "sub_wk1.[? ?x∷?σ]"`.
+
+**Resolution (what landed): `!E` plus a refold lemma.**
+`lookup_at_fold : lookup_at E (ctx.in_at x) b (ctx.in_valid x) = lookup E x`,
+true by `reflexivity`, with `lookup_at_fold'` for a goal whose index is a raw
+`MkIn` record. `cbn` then reduces exactly where it used to, and the repair for
+any proof that notices is the single uniform line `rewrite ?lookup_at_fold`.
+
+An earlier attempt used `Arguments lookup : simpl never` instead. It also
+builds, but it blocks reduction that proofs legitimately want, so each repair
+had to be reasoned out separately (`unfold sub_snoc`, `cbn -[env.lookup]`,
+`rewrite env.lookup_snoc_succ`, …). Prefer the refold lemma: same cost, same
+proofs touched, one rule instead of three.
+
+**The zero-churn alternative, measured rather than assumed.** Row 3 above needs
+*no* `Arguments`, *no* refold lemma and *no* proof changes anywhere — but it
+rebuilds one `MkIn` per step:
+
+| variant | words/binder | vs. old |
+|---|---|---|
+| old, `ctx.view` (inlined into the probe, so this arm is stable) | 22.5 | — |
+| `Fixpoint`, rebuilds `MkIn` per step — **zero churn** | 9.5 | **2.4×** |
+| fused walk + `!E` + refold — **what landed** | 4.0 | **5.6×** |
+
+So refoldability is worth 2.3× of the speedup, and buying it back costs eleven
+repaired proofs. The old arm reads 22.5 words/binder here against §2's 23.5 for
+the real `env.lookup`; the 4% gap is the inlined copy plus a different `BASE`,
+and affects no ratio in this section.
+
 ## 4. RETRACTION of this study's own first sweep (same day)
 
 The first sweep reported `SLOW`/`FAST` net costs of 108.7 M / 65.8 M words at
@@ -183,7 +239,9 @@ impossible — no log-vs-linear pair can converge as n grows.
    constraint, no API change — `lookup (snoc E v) in_zero = v` and
    `lookup (snoc E v) (in_succ i) = lookup E i` both still hold
    **definitionally**. This is `IDX2`: **5.9× on allocation and 3.1× on time at
-   n=200**, **5.9×/3.4× at n=1600**.
+   n=200**, **5.9×/3.4× at n=1600**. It also needs `Arguments lookup !E`, a
+   `lookup_at_fold` refold lemma, and eleven repaired proofs — see §3.5, none
+   of which was foreseen here.
 3. **Constant factor, NOT an exponent change.** `sub_comp` stays O(`|Σ|²`); the
    constant on the `|Σ|²` term drops ~5.9×. Say this in those words when
    quoting it. The `WALK` arm *is* an exponent change in allocation (flat

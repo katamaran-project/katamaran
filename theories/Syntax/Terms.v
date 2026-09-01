@@ -1005,6 +1005,8 @@ Module Type TermsOn (Import TY : Types).
       destruct (ctx.view yIn) as [|[y τ] yIn].
       - reflexivity.
       - rewrite lookup_sub_id. cbn.
+        (* refold [env.lookup_at] back to [env.lookup]; see Environment.v *)
+        rewrite env.lookup_at_fold.
         now rewrite lookup_sub_wk1.
     Qed.
 
