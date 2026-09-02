@@ -325,7 +325,7 @@ checklist says is routinely skipped.
    matter is that each chunk multiplies the lookup-depth cost by 0.0195 G per
    64-deep shift. **Reduce the depth, not the chunk count** — the same 64 chunks
    cost 82 M or 1.33 G depending only on where their variables sit.
-4. **L5 (`ctx.fresh`) is worth its own experiment and was not isolated here.**
+4. ~~**L5 (`ctx.fresh`) is worth its own experiment and was not isolated here.**
    Every mint builds the full name list of `Σ` and `List.find`s it, then on a
    base-name collision runs `max_with_base` — a second full scan with
    `split_at_dot` string parsing per element (`Context.v:707–714`). Per-step
@@ -333,7 +333,18 @@ checklist says is routinely skipped.
    always take the expensive branch. It is inside the 73.6% breadth block above,
    undifferentiated from L2 and L3-pc. If it is a large share, the fix — name by
    a counter — is the cheapest in the whole catalog and changes nothing
-   observable. **This is the recommended next experiment.**
+   observable. **This is the recommended next experiment.**~~
+   **RETRACTED 2026-09-02 — the experiment was run and L5 is NOT a large share
+   of the breadth block: `ctx.fresh` is 0.32–0.48% of TOTAL cost at K=206 on the
+   muladd rig, and its share falls as K grows (`ctx-fresh-cost.md`). The
+   mechanism description above is accurate and stands; only the ranking was
+   wrong. Two things it got wrong beyond the magnitude: the per-element cost is
+   `split_at_dot`, not the `names` cons cells, so the obvious cheap fusion
+   attacks the small half; and "name by a counter" is not available at all,
+   because `fresh` must be a pure function of the context (its result lands in a
+   type, `wsnoc w (y∷σ)`). So the 73.6% breadth block is still essentially
+   undifferentiated — L5 is now excluded from it, which leaves L2
+   (`env.tabulate` per mint) and L3-pc as the remaining candidates.**
 5. **The KSL exponent-1.22 residual is still open**, but variables are now
    excluded from the suspect list (§3), which is a real narrowing: the remaining
    candidate is the bilinear `chunks × steps` carrying term, and §5.1 gives a

@@ -377,6 +377,13 @@ is what the claim rests on. Quote ratios from this rig, not levels.
 to "breadth" — `env.tabulate` per mint, `ctx.fresh`'s name scan, pc
 re-substitution. A 5.9× on 26.4% is 1.28×.
 
+**Update 2026-09-02:** one of those three breadth components is now priced and
+is negligible — `ctx.fresh` is **0.32–0.48% of total cost** at K=206 on this
+same rig, share falling with K (`case_study/RiscvPmp/CFGVer/diagnostics/
+ctx-fresh-cost.md`). That does not change §5.4's partition, but it does mean
+the breadth block is essentially `env.tabulate` per mint plus pc
+re-substitution; do not chase the name scan.
+
 **That §5.4 measurement is not retracted; the inference from it was wrong.**
 §5.4 partitions by *axis* — how deep the hot variables sit at fixed `|Σ|`
 (depth) versus everything that scales with `|Σ|` regardless of depth (breadth).

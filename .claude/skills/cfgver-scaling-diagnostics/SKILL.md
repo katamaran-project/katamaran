@@ -47,6 +47,7 @@ to a fresh one until you compare.
 | `byte-classed-block-payoff.md` | the BYTE-granular classed block (`gen_mem_pre_rel_bytes_classed`, 2026-08-19) closes the last declared-cell `|Σ|` gap: **1.10× at 2 cells, 1.32× at 4, 1.77× at 8**, growing with cell count so more than a constant — but a held-out fit fails on BOTH arms (−14%/−23%), so **not** established as an exponent fix. Also the record that found the `Qed`/`Admitted` protocol trap recurring in the two loop records above. |
 | `check-scalar-combined-cost-drivers.md` | re-concluded 2026-08-14: combining two loops costs **5.5–18.6×** the sum of the parts, splitting into a **symbolic-base amplification of 2.8–7.2×** (a concrete base removes it) and a residual **1.6–2.6× that is chunk-inventory cost**, dominated by instruction chunks. **§6.6 (2026-08-17) then retracted §6.5's chunk exponent**: chunk count is exactly linear, and the superlinearity is the LOGIC-VARIABLE count, quadratic and ~30–46× more expensive per unit (**that ratio is NOT a constant — `lvar-lookup-cost-drivers.md` §5.3 measures 19.5× at `|Σ|`=25, 65× at 89, 111× at 153, because the variable cost is quadratic and the chunk cost linear; never quote it without an `|Σ|`**) — read §6.6 before quoting any cost law from this file. Also the worked example for the PROTOCOL trap: a `Qed`+`solve_symbase_fetch` denominator against an `Admitted` numerator invalidated two tables. The old "~8–12%" is a pinned-sweep lower bound, superseded. |
 | `lvar-lookup-cost-drivers.md` | 2026-08-19, answers Dominique's "is it variable LOOKUP?" hypothesis. **Chunk count spawns ZERO logic variables** (every structural count byte-identical over a 4× chunk range) and carrying one costs a flat **1.289 M words**; but the SAME chunk costs **16.1× more** when its variables sit 64 binders deeper, and the depth surcharge is `0.627 + 0.0195·chunks` G words (held-out **−0.0005%**). So chunks and lookup are NOT competing drivers — the dominant chunk-related cost IS a lookup cost, and they multiply exactly linearly. Pure lookup DEPTH at identical `|Σ|` is **1.16×–1.47×**; declared-variable COUNT is **quadratic** (held-out **+0.17%** at 4× beyond the fit range). Also: peak `|Σ|` is only 25 because the solver eliminates 1281 of 1293 mints, so the `|Σ|` quadratic is about DECLARED entries only, never per-step ones. |
+| `ctx-fresh-cost.md` | 2026-09-02. `ctx.fresh` is **0.32–0.48%** of total cost and its share FALLS with K — the fresh-name scan is closed, and the catalog bullet that called it "the recommended next experiment" is retracted there. Also carries the first measurement-side evidence that per-mint work is **superlinear in `|Σ|`** (traffic grows 1.853× where cost grows 2.283× over K=162→206), pointing at `sub_comp` — indicative, not a fit. The worked example for bounding a candidate with two cheap measurements instead of building the fix. |
 | `word-slicing-payoff.md` | 2026-08-24, the payoff of instruction-word SLICING measured with the term-growth confound removed. **2.77×–2.86×** in allocated words (marginal 2.862×), vs the **1.61×/1.72×** wall-clock figure published on br_divrem — *larger*, because br_divrem's 10.54×/trip term growth sits in the denominator of a cost slicing cannot touch. Both arms exactly LINEAR in trips (held-out within 0.002%), so it is a constant factor, not an exponent change. `|Σ|` 17 → 4 with the node count moving by exactly the 13 removed `demonicv` nodes, so the win is variable carrying/lookup cost and not a smaller tree. Also the worked example for the **two-commit A/B** method below, and the counter-example to "payoff ∝ program length" — a SHORTER program (14 words vs 49) paid off MORE. |
 
 Note what the two `check-scalar-loop*` records have in common: a mechanism
@@ -194,16 +195,25 @@ those terms grows with the trip count `N`:
   small ones have smaller individual terms. **Isolate this axis** by holding
   chunk count and per-chunk term shape fixed and varying only how many distinct
   variables the chunk values project from.
-- **FRESH-NAME GENERATION (`ctx.fresh`) — not yet isolated, cheapest possible
-  fix.** Every mint builds the full name list of `Σ` and `List.find`s it; on a
-  base-name collision it then runs `max_with_base`, a second full scan with
-  `split_at_dot` string parsing per element (`Context.v:707–714`). Per-step mints
-  ALWAYS collide (`"a"`, `"np"`, `"na"` — `Verifier.v:188,501,507`), so they always
-  take the expensive branch: `O(mints × |Σ| × string work)`, chunk-free. It sits
-  undifferentiated inside the 74% "breadth" block of
-  `lvar-lookup-cost-drivers.md` §5.4. If it is a large share of that, the fix —
-  name by a counter — changes nothing observable anywhere. **Named as the
-  recommended next experiment; do not quote a magnitude, none was measured.**
+- **FRESH-NAME GENERATION (`ctx.fresh`) — MEASURED 2026-09-02 AND CLOSED:
+  0.32–0.48% of total cost, share FALLING with K. Do not fund a fix.**
+  The mechanism is real — every mint builds the full name list of `Σ` and
+  `List.find`s it, then on a base-name collision runs `max_with_base`, a second
+  full scan with `split_at_dot` string parsing per element (`Context.v:707–714`),
+  and per-step mints ALWAYS collide (`"a"`, `"np"`, `"na"` —
+  `Verifier.v:188,501,507`) so they always take the expensive branch. It is just
+  tiny: at K=206 on the muladd rig it is 12–17 M words against 3.64 G
+  (`ctx-fresh-cost.md`), and over K=162→206 the traffic it generates grows
+  1.853× where total cost grows 2.283×, so its share DROPS 0.59% → 0.48%. Two
+  corollaries worth keeping: the obvious cheap fix (fuse `names` away) attacks
+  the *small* half — the per-element cost is `split_at_dot`, not the cons cells;
+  and "name by a counter" is not available at all, because `fresh` must be a
+  pure function of the context (its result lands in a type, `wsnoc w (y∷σ)`).
+  **RETRACTED, previous text of this bullet:** *"not yet isolated, cheapest
+  possible fix … named as the recommended next experiment"*. The mechanism
+  description was right and the recommendation was wrong; it was ranked on
+  code-reading alone, and one afternoon of measurement — two microbenchmarks and
+  two instrumented runs, no rebuild — would have settled it at any point.
 
 - **Self-referential symbolic term growth.** A register whose new value is
   computed from its *own* previous value every iteration (`H := f(H)`, not
