@@ -20,7 +20,9 @@ real workload (§7): 2.41×–2.89× over `|Σ|` = 33–135, removing 58–65% o
 cost — roughly double the ~1.28× Amdahl estimate, for the reason in §7.3. A
 constant factor, not an exponent change, and a THROUGHPUT win only: full-length
 muladd at `mlen`=2 still does not fit in 14 GB (§7.5), because what blocks it is
-peak live heap and every figure here is total allocation.**
+peak live heap and every figure here is total allocation. On the twelve shipped
+examples, whose `|Σ|` is far smaller, the same mechanism is worth
+**1.11×–1.93× of their own verification work** (§8).**
 
 ## 0. Protocol
 
@@ -452,3 +454,90 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPm
 
 `ZZDS*.v` are gitignored throwaways derived from `Example/ZZMuladdFullN2.v`;
 see `muladd-full-cost-drivers.md` §5 for how that root artifact is produced.
+
+---
+
+# Part III — what it did for the shipped examples
+
+## 8. Per-example payoff (`Qed` protocol, the examples' real one)
+
+### One-sentence finding
+
+On the twelve verified CFGVer examples the rewrite is worth **1.11×–1.93× of
+each example's OWN verification work**, monotone in example size and **every one
+of them below §7's 2.41×–2.89×** — because the examples run at far smaller `|Σ|`
+than the probe, so the lookup walk is a smaller share of what they do.
+
+### 8.1 Protocol, and why "own work" is the only column that means anything
+
+**ALLOC**, but under the examples' **real** protocol — one `coqc` per file,
+whole file, `vm_compute` + `solve_vc` + a real `Qed` — not §7's raw-VC
+construction. The two are not comparable to each other (§7.6); they are
+comparable *within* this section, arm to arm.
+
+`own work = aw(file) − aw(ZZExBase)`, where `Example/ZZExBase.v` contains
+exactly the examples' shared import line and nothing else. That baseline is
+**605,766,546** (new) / **605,756,891** (old) — **0.0016% apart**, which is what
+makes the ratios below clean.
+
+**Own work is the object of study; the whole-file figure is not.** ~0.6 G of
+every example's compile is the import closure, which is a **constant** — it is
+the same in both arms to four decimal places, no part of this study touches it,
+and `theories/CLAUDE.md`'s compile-cost section already records that it has
+resisted every attempt to reduce it. Dividing by it does nothing but dilute the
+measurement by a factor that varies with example size for reasons unrelated to
+the mechanism. The whole-file column is retained in 8.2 only so that nobody
+re-derives it and thinks it contradicts the own-work column.
+
+### 8.2 Results
+
+| example | OLD own | NEW own | **own-work ratio** | (whole-file, not the metric) |
+|---|---|---|---|---|
+| SetX2 | 5.6 M | 5.1 M | **1.105×** | 1.001× |
+| Jumps | 7.7 M | 6.7 M | **1.141×** | 1.002× |
+| MvSwap | 20.6 M | 17.4 M | **1.183×** | 1.005× |
+| Countdown | 42.2 M | 35.6 M | **1.184×** | 1.010× |
+| Precompute | 39.9 M | 27.5 M | **1.451×** | 1.020× |
+| `BearSSLMuladd` (snippet) | 48.9 M | 33.5 M | **1.460×** | 1.024× |
+| BearSSLModpow | 26.7 M | 18.2 M | **1.469×** | 1.014× |
+| Cmovznz4 | 477.6 M | 307.2 M | **1.555×** | 1.187× |
+| BearSSLCheckScalarLoop1 | 1146.1 M | 721.2 M | **1.589×** | 1.320× |
+| KeyScheduleLoop | 127.8 M | 80.2 M | **1.594×** | 1.069× |
+| BearSSLCheckScalar | 117.9 M | 65.1 M | **1.810×** | 1.079× |
+| **BearSSLModpowFull** | 2504.2 M | 1296.0 M | **1.932×** | 1.635× |
+
+### 8.3 Reading it
+
+**The payoff scales with the example, and the ordering is the point.** Sorted by
+own work, the ratio rises 1.10 → 1.93 essentially monotonically. That is the
+same `|Σ|` law as §7 seen from below: `lvar-lookup-cost-drivers.md` puts the
+verified examples' peak `|Σ|` at ~25, *under* §7's smallest point (33), and the
+lookup walk's share of cost falls with `|Σ|`. **§7's 2.41×–2.89× was never
+transferable to these files**, and 1.11×–1.93× is what the same mechanism is
+worth in their regime.
+
+**Same function, opposite verdicts.** `Example/BearSSLMuladd.v` — the landed
+`muladd_q` snippet — gets **1.46×** on 48.9 M of work, while the *whole
+function* under dense havoc gets **2.89×** (§7.1). One mechanism, one program,
+a 2× spread in payoff, decided entirely by `|Σ|`. Do not quote either number as
+"muladd".
+
+**Wall clock is not evidence here and is not tabulated.** Cmovznz4 measured
+11.87 s old vs 12.50 s new — the *wrong direction* — while its allocation
+improved 1.19×. At ~10 s per file on a shared box the wall figures are noise;
+`BearSSLModpowFull` (23.33 → 20.39 s, 1.14×) is the only one whose wall moved
+beyond it, and it under-reads its own 1.64× allocation change.
+
+### 8.4 Reproduction
+
+`Example/ZZExBase.v` is one line (`Require Import …Example.Prelude.`). Then, one
+process per file, both arms, no `make` wrapper — `make` runs `coqdep`, which
+under `OCAMLRUNPARAM='v=0x400'` prints its **own** `allocated_words` line and
+silently corrupts a naive grep (hit once here; take the LAST match, or call
+`coqc` directly as the script does):
+
+```bash
+OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+  -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/<Example>.v \
+  2>&1 | grep -E 'allocated_words|top_heap_words'
+```

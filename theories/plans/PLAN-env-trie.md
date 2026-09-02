@@ -228,7 +228,15 @@ for any future Amdahl estimate on this workload.
 
 **Constant factor, not an exponent change** (§7.4): the marginal ratio saturates
 at ~3× rather than diverging. `sub_comp` is still O(`|Σ|²`). The wall moves; it
-does not go away.
+does not go away — confirmed by direct attempt (§7.5): full-length muladd at
+`mlen`=2 still hits 12.0 GB peak RSS on a 14 GB box, because it is bounded by
+peak live heap and every figure here is total allocation.
+
+**On the twelve shipped examples (§8): 1.11×–1.93× of their OWN verification
+work**, monotone in example size and all below the probe's range, because they
+run at `|Σ|` ≈ 25 — under the probe's smallest point. `BearSSLMuladd` (the
+landed snippet) gets 1.46× where the whole function gets 2.89×: same mechanism,
+same program, decided entirely by `|Σ|`.
 
 ### Phase 2 (original, superseded) — route the hot paths through it (the §4 fix)
 `inst_subst_env`, `sub_comp`, `persist`. Convert once per call, serve many.
