@@ -17,8 +17,8 @@ not term-variable density (`occ/nodes` flat).
 | `subst (wco w) sub_wk1` — copying the path condition per extension | **REFUTED** | Σ\|wco\| at binders grows 1.438× where cost grows 2.283×; mean \|wco\| is ~10 formulas (§2) |
 | `sub_wk1` construction | **not it, but real**: 3.9 % and *rising* (exponent 4.18 vs 3.44) — the only candidate here whose share grows (§3) |
 | term SIZE in formula and vareq payloads | **REFUTED** | 72,099 term nodes in the whole tree at K=206; the ENTIRE tree is ≤2.6 % of peak (§4) |
-| heap `persist` (chunk carrying) | **12.7 %, exactly LINEAR** — held-out +0.0017 % (§5). Not the quadratic. |
-| **transient construction state** (CPS closures, intermediate executor states, allocation churn) | **OPEN — 80 % of cost is unattributed, and no Coq-level instrument can reach it** (§4, §5) |
+| heap `persist` (chunk carrying) | **12.7 % of level, 9.6 % of GROWTH**, exactly linear in chunks — held-out +0.0017 % at both K (§5, §6). Not the quadratic. |
+| **transient construction state** (CPS closures, intermediate executor states, allocation churn) | **OPEN — 83.6 % of the GROWTH, and it grows FASTER than total cost (2.418× vs 2.283×). No Coq-level instrument can reach it** (§4, §5, §6) |
 
 # Part I — `AMessage` snapshots are NOT `Base(K)` (refuted 2026-09-02)
 
@@ -468,3 +468,85 @@ done
 Gate every arm on its printed peak `|Σ|` being 135 and `Error` absent — a failing
 arm reports near-baseline allocation, which reads as "free" (it happened twice
 while building these probes).
+
+---
+
+# Part VI — attribute the GROWTH, not the level: 83.6 % unidentified, and it grows FASTEST
+
+## One-sentence finding
+
+Decomposing the **increment** K=162→206 rather than the level: the identified
+mechanisms account for only **16.4 % of the growth**, the unidentified remainder
+grows at **2.418×** against total cost's **2.283×** (exponent **3.67** vs
+**3.44**) — i.e. *faster* than the thing it is part of — so the quadratic lives
+entirely in what no instrument here can see, and every mechanism named in this
+file except `sub_wk1` is **diluting** the growth rather than driving it.
+
+## Why the level table was the wrong table
+
+Parts I–V each reported a mechanism's share of **total cost at K=206**. That
+answers "how big is it", not "does it drive the scaling". A mechanism that is
+12.7 % of cost but linear in K contributes nothing to the exponent; one that is
+4 % but grows as K⁴ could dominate it. **For a scaling question the denominator
+must be the increment.** Recorded because this file spent five parts on the
+wrong denominator before the distinction was drawn.
+
+## The missing measurement
+
+Part V measured the per-chunk slope only at K=206, which cannot give a growth
+contribution. Repeating the chunk-count axis at K=162 (`Example/ZZHQ{32,64}.v`;
+pad-0 is `ZZDS162`, all arms printed peak `|Σ|` = 96, `err=0`):
+
+| K | slope | held-out at 32 chunks |
+|---|---|---|
+| 162 | 8,839,835 words/chunk | **+0.0017 %** |
+| 206 | 15,381,320 words/chunk | **+0.0017 %** |
+
+Two independently fitted lines, same precision. Per-chunk cost grows **1.740×**
+while K grows 1.272× — **exponent 2.31**. So carrying a chunk is exactly linear
+*in chunks* but grows superlinearly *in K*, as expected: more steps means more
+world extensions to persist through.
+
+## The growth decomposition
+
+Increment K=162→206 = 2,043,169,004 words (total 2.283×).
+
+| mechanism | growth × | % of GROWTH | (cf. % of level) |
+|---|---|---|---|
+| `ctx.fresh` | 1.853 | 0.26 % | 0.39 % |
+| `sub_wk1` construction | 2.747 | 4.45 % | 3.93 % |
+| path-condition copy (est) | 1.438 | 0.66 % | 1.21 % |
+| `AMessage` copies | 1.866 | 1.43 % | 1.73 % |
+| heap carrying (30 chunks) | 1.740 | 9.60 % | 12.69 % |
+| **IDENTIFIED** | | **16.41 %** | 19.95 % |
+| **UNIDENTIFIED** | **2.418** | **83.59 %** | 80.05 % |
+| *total* | *2.283* | | |
+
+`AMessage` is the one row measured as a genuine two-arm difference at both ends
+(BASE − ABLATED); `ctx.fresh`, `sub_wk1` and heap carrying are microbenchmark ×
+traffic; the path-condition row multiplies a counted formula tally by an
+**assumed** 1,000 words per copy, so its 0.66 % is order-of-magnitude only (its
+1.438× growth ratio is solid, being a counted quantity).
+
+## Reading it
+
+- **The unidentified block grows faster than total cost** — 2.418× against
+  2.283×, exponent 3.67 against 3.44. It is not merely the largest term; it is
+  the only one accelerating.
+- **Every identified mechanism except `sub_wk1` grows slower than total**, so
+  they are *dilutants*: as K rises their shares fall. Cataloguing more mechanisms
+  of this kind cannot converge on the driver.
+- **`sub_wk1` is the sole mechanism outrunning total cost** (2.747× vs 2.283×)
+  and is still only 4.45 % of the growth.
+- **Eager weakening totals 14.72 % of the growth** (`sub_wk1` + pc copy + heap
+  carrying), against 17.8 % of the level. The Part V recommendation stands and
+  strengthens: **do not fund the weakening rewrite.**
+
+## What this changes about next steps
+
+Nothing about the direction — the next instrument still has to be OCaml-level
+(`memtrace`/`statmemprof` over one `ZZDS<K>` build) — but it sharpens the target.
+The profiler should be run at **two** K values and the allocation sites ranked by
+**Δ between them**, not by absolute share. Ranking by absolute share is what this
+file did for five parts, and it surfaces exactly the mechanisms that turn out not
+to matter.
