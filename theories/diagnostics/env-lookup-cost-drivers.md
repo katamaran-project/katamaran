@@ -377,6 +377,17 @@ is what the claim rests on. Quote ratios from this rig, not levels.
 to "breadth" — `env.tabulate` per mint, `ctx.fresh`'s name scan, pc
 re-substitution. A 5.9× on 26.4% is 1.28×.
 
+**Update 2026-09-02 — and a warning about §9's `Base(K)`:** the 62%-dominant
+`Base(K)` block of §9 has since been hunted directly and is **not** any structure
+in the `SymProp` tree. The entire finished VC — 36,970 nodes plus 72,099 term
+constructor nodes — is at most 2.6% of peak heap at K=206
+(`case_study/RiscvPmp/CFGVer/diagnostics/base-k-hunt.md` §4), so `Base(K)` is
+transient construction state (CPS closures, intermediate heaps, uncollected
+garbage) and no Coq-level traversal can attribute it. Four candidates were
+eliminated one at a time before that container bound was taken; don't repeat
+that. §9's decomposition into Base + per-variable + per-chunk still describes the
+FIT, but its residual term should not be read as naming a retained object.
+
 **Update 2026-09-02:** one of those three breadth components is now priced and
 is negligible — `ctx.fresh` is **0.32–0.48% of total cost** at K=206 on this
 same rig, share falling with K (`case_study/RiscvPmp/CFGVer/diagnostics/

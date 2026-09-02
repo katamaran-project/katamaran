@@ -1,0 +1,358 @@
+# Hunting `Base(K)` — three candidates eliminated, one new suspect
+
+Status: **Diagnostic record, 2026-09-02. `Base(K)` is still UNIDENTIFIED.** This
+file is the negative-results record for it: what it is *not*, each with a
+measurement, plus the method lesson each elimination carries. `Base(K)` is the
+name given in `theories/diagnostics/env-lookup-cost-drivers.md` §9 to the
+K-dependent block that is **62 % of peak footprint** and was identified only by
+elimination — not variables (linear, 5–11 MB each), not chunks (1.18 MB each),
+not the `SymProp` skeleton (nodes ↑2.49× while footprint ↑6.19×, KB/node 32→80),
+not term-variable density (`occ/nodes` flat).
+
+## Scoreboard
+
+| candidate | verdict | evidence |
+|---|---|---|
+| `AMessage` snapshots on every `assertk` | **REFUTED as a large block** | ablation: peak heap unmoved (but see §1's quantisation caveat — this bounds it well below 62 %, it does not measure it at zero), 1.7–2.1 % of allocation (§1) |
+| `subst (wco w) sub_wk1` — copying the path condition per extension | **REFUTED** | Σ\|wco\| at binders grows 1.438× where cost grows 2.283×; mean \|wco\| is ~10 formulas (§2) |
+| `sub_wk1` construction | **not it, but real**: 3.9 % and *rising* (exponent 4.18 vs 3.44) — the only candidate here whose share grows (§3) |
+| term SIZE in formula and vareq payloads | **REFUTED** | 72,099 term nodes in the whole tree at K=206; the ENTIRE tree is ≤2.6 % of peak (§4) |
+| **transient construction state** (CPS closures, intermediate heaps, uncollected garbage) | **OPEN — and it is the only place left** (§4) |
+
+# Part I — `AMessage` snapshots are NOT `Base(K)` (refuted 2026-09-02)
+
+## One-sentence finding
+
+Every `assertk` carries an `AMessage` holding the whole path condition, local
+store and symbolic heap, in ordinary non-debug runs — but ablating it away
+changes peak heap by **0.00 %** (12,800 words in 415 million) and total
+allocation by only **1.7–2.1 %**, so messages are **not** the dominant footprint
+block, and the `Base(K)` question is still open.
+
+## 1. Why it looked like the answer
+
+`Base(K)` had been identified only by elimination (`env-lookup-cost-drivers.md`
+§9): 62 % of footprint, not variables, not chunks, not the `SymProp` skeleton
+(nodes ↑2.49× while footprint ↑6.19×, KB/node 32→80), not term-var density. The
+instrument that ruled those out states its own scope limit as *"not `AMessage`
+contents and not the symbolic heap"* — so messages were the one named thing left.
+
+They are also built unconditionally. `Config`'s `config_debug_function` /
+`config_debug_lemma` (`MicroSail/SymbolicExecutor.v:266`, both `false` by
+default) gate `SymProp.debug` **nodes**, not this:
+
+```coq
+Definition assert_formula :                          (* Monads.v:1268, SHeapSpec *)
+  ⊢ (SHeap -> AMessage) -> Formula -> SHeapSpec Unit :=
+  fun w msg C Φ h => SPureSpec.assert_formula (msg h) C (...)
+```
+
+`(msg h)` is applied with no flag, and `consume`'s `asn.formula` case
+(`Monads.v:1330`) supplies `{| pathcondition := wco _; heap := h; ... |}`. The
+message then enters every node via `assert_pathcondition_without_solver'`
+(`Propositions.v:313`) and is **deep-copied** once per eliminated variable by
+`assert_triangular`'s `let msg' := subst msg ζ` (`Propositions.v:341`), where
+`SubstMessage` does `subst δ`, `subst h`, `subst pc`.
+
+And it is provably inert: `Obligation msg fml ι <-> instprop fml ι`
+(`Propositions.v:485`) — the constructor ignores `msg` entirely.
+
+## 2. The ablation
+
+Two-arm A/B on one commit. The variant arm is a scratch **copy** (never the
+working tree, per this skill's rule), patched at the choke point where a message
+enters the tree rather than at the ~20 construction sites — so construction is
+untouched and the single axis moved is *carrying and copying*:
+
+```coq
+SymProp.assert_triangular amsg.empty ν      (* was: msg  -- Monads.v:340 *)
+SymProp.error amsg.empty                    (* was: msg *)
+⟨ θ ⟩ _ <- assertSecLeak amsg.empty t ;;    (* was: a full snapshot -- Monads.v:577 *)
+```
+
+Full `theories/` + CFGVer light chain rebuild in the copy: 17m44s, exit 0,
+**zero errors** — which is itself a result: `amsg.empty` typechecks throughout,
+confirming from the build that nothing downstream depends on message content.
+
+Protocol tag **ALLOC** + peak heap via OCaml's own `top_heap_words` (not OS RSS,
+which this directory records as pointing the wrong way between variants).
+
+## 3. Results
+
+Net of each arm's own `ZZDSB` baseline. **Baselines agree to 0.050 % (alloc) and
+0.003 % (peak)**, so the import closures cost the same and the ratios are clean.
+Both arms report identical peak `|Σ|` (96 at K=162, 135 at K=206), so they
+verify the same VC.
+
+| K | metric | BASE net | ABLATED net | saved |
+|---|---|---|---|---|
+| 162 | allocated | 1,592,697,620 | 1,558,982,772 | 2.12 % |
+| 162 | **peak heap** | 178,776,576 | 178,770,944 | **0.00 %** |
+| 206 | allocated | 3,635,767,677 | 3,572,859,352 | 1.73 % |
+| 206 | **peak heap** | 415,208,448 | 415,195,648 | **0.00 %** |
+
+Peak heap: 3.322 GB → 3.322 GB at K=206.
+
+The base arm reproduces `env-lookup-cost-drivers.md` §7.1 to five significant
+figures (1.5927 / 3.6358 G), so this is the same rig those conclusions rest on.
+
+## 4. Reading it
+
+**The 2 % allocation saving is the `subst msg ζ` deep copies** — ~63 M words over
+4,031 variable eliminations, ≈15.6k words per copy. The mechanism is real; it is
+transient, so it costs throughput and nothing in peak heap.
+
+**The 0.00 % footprint was predictable from the code and should not have needed
+an experiment.** The message record holds `{| pathcondition := wco _; heap := h |}`
+— it **aliases** structures the world and the executor state already retain.
+Removing an alias frees nothing, because the referent stays live either way. A
+pure-aliasing structure cannot be a footprint driver. This was noticed
+mid-investigation (an earlier estimate of "≈720 KB per message × 2,460 messages"
+was corrected on exactly these grounds) but the correction was not followed
+through to its conclusion, and an 18-minute rebuild plus 20 minutes of
+measurement was spent on a question that reading answers. **Generalisable rule:
+before ablating X for FOOTPRINT, ask whether X owns its bytes or aliases them.
+For a THROUGHPUT question the same structure can still matter — copying an alias
+is real work — which is why the two metrics disagreed here by two orders of
+magnitude.**
+
+## 5. What this means
+
+- **Messages are removed from the `Base(K)` candidate list.** Do not revisit.
+- A 1.7–2.1 % throughput fix does exist here and is free of trusted-surface risk
+  (`Obligation` ignores the message; the ablated arm builds with zero errors).
+  Not worth landing on its own, and it would cost the `DebugCFGVerifierContract`
+  diagnostics; note it if something else makes messages worth touching.
+- **`Base(K)` is still unidentified**, and the elimination list is now one longer.
+- **The surviving candidate is the path conditions the messages were aliasing.**
+  `wsnoc w b = MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1)` builds a **fresh
+  copy** of the whole path condition at every world extension, not shared with
+  the parent, and every tree node is indexed by such a world. That is per-node,
+  retained, and invisible to the instrument — the same fingerprint. It is the
+  *application* half of the weakening cost whose *construction* half is measured
+  at 3.9 % and rising in Part III below.
+
+## 6. Files / reproduction
+
+```bash
+OFF=<scratch>; tar -cf - --exclude=.git --exclude=_build --exclude='*.vo' . \
+  | (cd $OFF && tar -xf -)
+# apply the three amsg.empty edits to $OFF/theories/Symbolic/Monads.v
+(cd $OFF && make -f Makefile.coq -j1 case_study/RiscvPmp/CFGVer/Example/Prelude.vo)
+# then, per arm, one process per point:
+OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+  -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/ZZDS206.v
+```
+
+Gate every point on the `Eval` result line being present and `Error` absent.
+Note `ZZDS*.v` use a bare `Eval`, not `Time Eval`, so **"Finished transaction"
+never appears** and is the wrong string to gate on — that produced a false alarm
+here.
+
+---
+
+# Part II — the path-condition copy is NOT `Base(K)` (refuted 2026-09-02)
+
+## One-sentence finding
+
+Part I's refutation left the structures the messages were *aliasing* as the
+natural next suspect — `wsnoc` builds a fresh copy of the whole path condition
+at every world extension — but the path condition averages only **~10 formulas**,
+and its integral grows **1.438×** where total cost grows **2.283×**, so its share
+is *falling* and it cannot be a 62 % block.
+
+## The mechanism
+
+```coq
+Definition wsnoc (w : World) (b : LVar ∷ Ty) : World :=      (* Worlds.v:88 *)
+  @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
+```
+
+Not shared with the parent — a genuine fresh copy per extension, and every tree
+node is indexed by such a world. Right fingerprint (per-node, retained,
+invisible to the instrument), wrong magnitude.
+
+## Measurement
+
+`wco` is **not reachable from the tree** — `SymProp` is indexed by `LCtx`, not
+`World` — so it is reconstructed top-down: `pc` grows by one at each
+`assertk`/`assumek` ancestor, and is accumulated at each binder node. Probe
+`Example/ZZPC<K>.v`, one `Eval` per process.
+
+| K | Σ\|wco\| over binders | binders | mean \|wco\| | Σ\|wco\| weighted by `fml_lw` |
+|---|---|---|---|---|
+| 162 | 30,770 | 3,082 | 9.98 | 107,111 |
+| 206 | 44,241 | 4,152 | 10.66 | 147,332 |
+
+Growth 162→206: **1.438×**, against total cost **2.283×**.
+
+## Reading it
+
+~44k formula-copies over the whole K=206 run. Even at a generous 1,000 words per
+formula copy that is ~44 M words against 3.64 G — about 1 %, and shrinking as a
+fraction. Same shape as `ctx.fresh` in `ctx-fresh-cost.md`: a real mechanism, too
+small to matter, share falling with K.
+
+---
+
+# Part III — `sub_wk1` is Θ(\|Σ\|²) per extension: 3.9 % and RISING
+
+## One-sentence finding
+
+Building the weakening substitution costs **≈14 words per (variable × its de
+Bruijn index)**, i.e. **Θ(\|Σ\|²) per world extension** — because `ctx.in_at` is a
+**unary** `nat` — which is **3.3–3.9 % of total cost**, and unlike every other
+candidate in this file its share **rises** with K (exponent 4.18 against total
+cost's 3.44).
+
+## The mechanism
+
+```coq
+Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=                   (* Terms.v:785 *)
+  env.tabulate (fun '(ς∷σ) ςIn => @term_var _ ς σ (ctx.in_succ ςIn)).
+
+Definition in_succ {b Γ b'} (bIn : In b Γ) : In b (snoc Γ b') :=
+  @MkIn _ (snoc Γ b') (S (in_at bIn)) (in_valid bIn).          (* Context.v:203 *)
+```
+
+De Bruijn indices count from the **innermost** binder (`lookup (snoc _ b) O = b`,
+`Context.v:113`), so adding one binder renumbers every variable in scope. The
+k-th variable's index is `S^k O` — O(k) words. Tabulating all \|Σ\| of them is
+therefore Σk = Θ(\|Σ\|²). The `In` *proof* is not the problem: `nth_is` computes to
+an equality, so `in_valid` is `eq_refl`-sized.
+
+**This is the second consequence of the fact that killed the skew RAL in
+`env-lookup-cost-drivers.md` GATE 0.** That record concluded unary indices make
+*lookup* unavoidably linear. They also make the *weakening substitution
+quadratic to write down*, and one is built at every extension.
+
+## Measurement
+
+Two measurements multiplied, no rebuild. Microbenchmark `Example/ZZWk1Bench<n>.v`
+(2000 builds, net of `ZZWk1BenchB` at 610,306,286); traffic from a variant of the
+`ZZLvarInstrCommon` instrument whose `lv_bind` accumulates `sg*sg` instead of
+`sg` (`Example/ZZSigSqCommon.v` + `ZZSQ<K>.v`) — every other counter came back
+byte-identical, confirming only the accumulator changed.
+
+| \|Σ\| | net words | words/build | **words / (n(n−1)/2)** |
+|---|---|---|---|
+| 34 | 18,260,922 | 9,130 | 16.3 |
+| 97 | 130,536,388 | 65,268 | 14.0 |
+| 136 | 252,301,214 | 126,151 | 13.7 |
+
+The last column is flat — that is the Θ(n²) law, ≈14 words per (variable × index).
+
+| K | extensions | Σ\|Σ\| | Σ\|Σ\|² | `sub_wk1` build | total | share |
+|---|---|---|---|---|---|---|
+| 162 | 3,082 | 137,914 | 7,575,890 | 52.1 M | 1.593 G | **3.27 %** |
+| 206 | 4,152 | 255,568 | 20,687,322 | 143.0 M | 3.636 G | **3.93 %** |
+
+Doubled if `acc_snoc_right` (`Worlds.v:345`) builds it a second time: 6.5–7.9 %.
+
+## Reading it
+
+Exponent in K is **4.18** against total cost's **3.44** — the only candidate in
+this file whose share grows. But the gap is only 0.75, so it extrapolates to ~5 %
+(or ~10 % doubled) at full length K=292, and would need K≈6000 to become half the
+cost. **A fix to this alone buys at most ~1.09× at the scale that matters.**
+
+It is nonetheless the most interesting structural finding here, because the fix
+is not a micro-optimisation: making weakening free requires a
+**weakening-stable variable representation** (de Bruijn *levels*, so `sub_wk1`
+becomes `sub_id` and `subst (wco w) sub_wk1` becomes `wco w`). Katamaran is
+**intrinsically scoped** — `Term Σ σ` carries `ctx.In` proofs — so making that
+definitionally free reaches `Context.v`, `Environment.v`, `Worlds.v`, all of
+`Symbolic/`, and the `Pred`/modality layer. Research-scale, and on these numbers
+**not justified by `Base(K)`**, because `sub_wk1` is not `Base(K)`.
+
+---
+
+# Part IV — the tree is not the footprint, so `Base(K)` is not in it
+
+## One-sentence finding
+
+The **entire** finished VC — 36,970 `SymProp` nodes plus 72,099 term
+constructor nodes — is at most **2.6 %** of the 3.32 GB net peak heap at K=206,
+so `Base(K)` is not a retained structure in the tree at all, and every
+tree-reachable candidate is thereby excluded at once.
+
+## The measurement that opened it
+
+The existing instrument never measured term SIZE. `tm_occ` counts only
+`term_var`: `term_val` scores 0, and `term_binop`/`term_unop` add nothing for
+themselves, so a term of 10,000 operator nodes over constants scores **zero**.
+Every "the tree is small" reading taken from it was about *variable density*, not
+bytes. `Example/ZZTN<K>.v` adds `tm_nodes`/`fml_nodes`/`sp_termnodes`, counting
+every constructor:
+
+| K | term nodes | `SymProp` nodes | growth of term nodes |
+|---|---|---|---|
+| 162 | 47,226 | 26,653 | — |
+| 206 | 72,099 | 36,970 | 1.527× (vs total cost 2.283×) |
+
+## Reading it
+
+109,069 objects total at K=206. Against a net peak of 415,208,448 words
+(3.32 GB):
+
+| assumed words/object | tree total | share of peak |
+|---|---|---|
+| 20 | 17.5 MB | 0.53 % |
+| 50 | 43.6 MB | 1.31 % |
+| 100 | 87.3 MB | 2.63 % |
+
+**So the finished VC is ~1–3 % of peak footprint.** Whatever holds the other
+97 % is *not reachable from the `SymProp`* — which is precisely why four
+successive tree-based instruments found nothing: they were all measuring an
+object that is not the cost.
+
+What is left, none of it tree-reachable: the CPS continuation closures
+`sexec_cfg_addr` builds at every step (each capturing a world, a heap and a
+store), the intermediate symbolic heaps threaded through execution, and garbage
+the major GC has not reclaimed at the high-water mark.
+
+**Method consequence, and the reason this file exists.** Four candidates were
+eliminated one at a time, at a cost including one 18-minute full rebuild, when a
+single structural question — *can the object I am dissecting even hold 3.32 GB?*
+— excludes all four in one measurement. **Bound the container before dissecting
+the contents.** The arithmetic needed was one term-node count.
+
+## A near-proportionality that must NOT be quoted as a law
+
+Across this sweep, peak heap tracks allocation closely:
+
+| K | net alloc | net peak | peak/alloc |
+|---|---|---|---|
+| 162 | 1.5927 G | 178,776,576 | 0.11225 |
+| 206 | 3.6358 G | 415,208,448 | 0.11420 |
+
+Net peak grew 2.322× where net alloc grew 2.283× — within 1.7 %. It is tempting
+to conclude footprint is simply ~11.4 % of allocation and there is no separate
+footprint driver. **Do not.** `footprint-vs-throughput.md` measured the
+`drop_fuel` axis at **10.5× throughput for 1.12× footprint** — a 10×
+decoupling. The two metrics genuinely separate on that axis. The constant ratio
+here is an artifact of the K axis, along which every contributor scales
+together; it is not a law and does not transfer.
+
+## Correction to Part I
+
+Part I reported the message ablation as **0.00 %** of peak heap. That figure
+leans on `top_heap_words` at a ~2 % effect size, which is exactly the trap this
+skill's checklist names: *"quantized to OCaml's ~15 % growth steps … produced a
+confident 'this variant is free at every N' for a variant whose allocation
+demonstrably grew 3×."* The two arms' peaks differ by 12,800 words — the
+signature of both landing on the same heap-growth step, not of a measured zero.
+
+**What the ablation does establish:** messages are not a *large* footprint block,
+since a 62 % reduction would cross many quantisation steps. **What it does not
+establish:** that they are exactly zero. The allocation figures (1.7–2.1 %) are
+unaffected and stand. Part IV makes the point moot — nothing in the tree is
+`Base(K)` — but the reasoning error should not be reused.
+
+## What to do next
+
+`Base(K)` needs an instrument that can see **live heap during construction**, not
+the finished term: OCaml-level heap profiling (`Gc.stat` sampling, or a
+`memtrace`/`statmemprof` run over one `ZZDS<K>` build) to attribute the
+high-water mark to allocation sites. No Coq-level traversal can answer it, and
+four have now tried.

@@ -166,3 +166,10 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPm
 `ZZFreshBench<n>.v` is `ZZFreshBenchT.v` with `Definition NN` sed'd;
 `ZZFreshBenchB.v` is it with the final `Eval` line deleted. `ZZDSI<K>.v`
 derives from `Example/ZZMuladdFullN2.v` — see `muladd-full-cost-drivers.md` §5.
+
+---
+
+**Sequel:** the same session went on to hunt `Base(K)` itself with the same
+two-measurement method. That is a separate causal question and lives in
+`base-k-hunt.md` — which refutes the `AMessage` hypothesis outright (0.00 % of
+peak heap) and records the `sub_wk1` Θ(|Σ|²) finding.
