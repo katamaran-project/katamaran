@@ -605,18 +605,37 @@ person actually waits through** — quote 1.7× for "how much faster is the mula
 probe", not 2.9×. (The `K=B` wall pair is discarded: the new arm's baseline ran
 first from a cold page cache, 14.10 s vs 9.90 s, in the wrong direction.)
 
-### 9.4 The reduced rig predicts the wall it never touches
+### 9.4 The reduced rig predicts the wall it never touches — and footprint is `|Σ|²` too
 
-Peak RSS is **roughly linear in K** — 38.3 / 26.4 / 47.7 MB per instruction over
-the three segments — unlike allocation, which is superlinear. Fitting a straight
-line on the **two cheapest usable points only** (K = 140 and 162, together under
-30 s of compute) and extrapolating to K=292:
+Fitting a straight line to **gross** peak RSS on the two cheapest usable points
+(K = 140 and 162, together under 30 s of compute) and extrapolating to K=292
+gives **10.12 GB against an observed 11.46 GB, −11.7%** — enough to answer "will
+this fit" from a sub-minute pair of runs. **Nobody needs to run full-length
+muladd again to know it does not fit in 14 GB.**
 
-> predicted 10.12 GB, **observed 11.46 GB**, error **−11.7%**
+**But do not read that linear fit as a growth law — CORRECTED, same day.** Gross
+RSS is dominated by a *constant* 3.89 GB import baseline (`ZZDSB`), which masks
+the shape. Net of it:
 
-So a sub-minute pair of runs predicts the full-length memory wall to about 12%,
-which is more than enough to answer "will this fit". **Nobody needs to run
-full-length muladd again to know it does not fit in 14 GB.**
+| K | `\|Σ\|` | net peak RSS | net / `\|Σ\|²` |
+|---|---|---|---|
+| 140 | 42 | 0.40 GB | 0.228 |
+| 162 | 96 | 1.25 GB | 0.135 |
+| 184 | 108 | 1.83 GB | 0.157 |
+| 206 | 135 | 2.88 GB | **0.158** |
+
+Net footprint grows **7.2×** while K grows 1.47× — strongly superlinear — and
+`net/|Σ|²` is constant to **±8%** across the top three points. (K=140 is the
+outlier at 0.228; its net is only 0.40 GB, where OCaml's 1.15× heap quantisation
+is a large fraction of the reading. Treat the low end as uninformative here for
+the same reason §9.3 does.)
+
+**So footprint obeys the SAME `|Σ|²` law as throughput.** The two metrics that
+§7.5 and §9.3 carefully separated are separate in *what a given fix moves*, not
+in what drives them: `|Σ|` drives both, quadratically. The linear fit above
+happens to work as a **lower bound** — a straight line through a convex curve
+under-predicts, which is exactly the sign of the −11.7% error — and should be
+quoted as a bound, not an estimate.
 
 ### 9.5 What this says about attacking `mlen`=2
 
