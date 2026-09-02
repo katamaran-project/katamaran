@@ -18,7 +18,7 @@ not term-variable density (`occ/nodes` flat).
 | `sub_wk1` construction | **not it, but real**: 3.9 % and *rising* (exponent 4.18 vs 3.44) — the only candidate here whose share grows (§3) |
 | term SIZE in formula and vareq payloads | **REFUTED** | 72,099 term nodes in the whole tree at K=206; the ENTIRE tree is ≤2.6 % of peak (§4) |
 | heap `persist` (chunk carrying) | **12.7 % of level, 9.6 % of GROWTH**, exactly linear in chunks — held-out +0.0017 % at both K (§5, §6). Not the quadratic. |
-| `combined_solver` (construction-time) | **24.5 % of level, 22.8 % of GROWTH** — the largest single mechanism found, and an ORDINARY Rocq-level fix target (§7). Still not the driver: exponent 3.08 vs total 3.44. |
+| `combined_solver` (construction-time) | **24.5 % of level, 22.8 % of GROWTH** — largest single mechanism found (§7). **LOAD-BEARING: halving its passes costs 20–25 % MORE (§8)** — it buys back more than it costs. Do not shorten it. Still not the scaling driver: exponent 3.08 vs total 3.44. |
 | **transient construction state** (CPS closures, intermediate executor states, allocation churn) | **OPEN — 60.8 % of the GROWTH, exponent 3.96 vs total 3.44** (§4, §6, §7) |
 
 # Part I — `AMessage` snapshots are NOT `Base(K)` (refuted 2026-09-02)
@@ -666,3 +666,90 @@ what is explained.
 Scratch copy, both `combined_solver` call sites amplified as above, full
 `theories/` + light chain rebuild (16m57s), then `ZZDSB`/`ZZDS162`/`ZZDS206` one
 process per point. Gate on peak `|Σ|` = 96/135 and `err=0`.
+
+---
+
+# Part VIII — the solver is LOAD-BEARING: halving its passes costs 20–25 % MORE
+
+## One-sentence finding
+
+Cutting `combined_solver` from 8 passes to 4 leaves **1,182 more undischarged
+asserts (+48 %)** and makes total cost **1.249× at K=162 / 1.204× at K=206** —
+so the solver's 24.5 % (Part VII) is buying back *more* than it costs, and the
+"shorten the composition" hypothesis is **refuted**.
+
+## The hypothesis and why it was wrong
+
+Part VII observed that `combined_solver` is eight passes (`g g u g g u g g`) and
+suggested the later ones might be redundant. `core-executor-internals` already
+warned against this — *"an un-discharged assert permanently enlarges `wco` with a
+redundant copy, and every later `wco` walk pays for it — a term-size-independent
+quadratic if it happens per step"* — and that warning was recorded as a risk but
+the shortening was still proposed as the likely win. It is not.
+
+## The experiment
+
+Scratch arm with `combined_solver := ggu` (4 passes: `g g u`) instead of
+`solver_compose ggu (solver_compose ggu gg)` (8). Full rebuild 17m05s, exit 0.
+**`combined_solver_spec`'s proof — `auto using solver_compose_spec,
+solver_generic_spec, solver_spec` — went through unchanged**, which is the
+soundness-by-construction property exercised rather than argued: any composition
+of spec-satisfying solvers satisfies the spec. Shortening risks *completeness*,
+never soundness.
+
+Baselines 0.049 % apart.
+
+## Results
+
+| counter (K=206) | 8-pass | 4-pass | |
+|---|---|---|---|
+| `lv_binders` / `lv_vareqs` | 4,152 / 4,031 | 4,152 / 4,031 | same |
+| `lv_maxsig` / `lv_sigint` | 135 / 255,568 | 135 / 255,568 | same |
+| `lv_lw` / `lv_occ` | 85,061 / 2,196 | 85,061 / 2,196 | same |
+| term nodes | 72,099 | 72,099 | same |
+| `lv_nodes` | 36,970 | 38,978 | **+2,008 (+5.4 %)** |
+| **`sp_asserts`** | **2,460** | **3,642** | **+1,182 (+48.0 %)** |
+
+| K | 8-pass net | 4-pass net | ratio |
+|---|---|---|---|
+| 162 | 1,592,697,620 | 1,988,713,189 | **1.249×** |
+| 206 | 3,635,767,677 | 4,378,677,690 | **1.204×** |
+
+## Reading it
+
+Every variable- and term-related counter is **byte-identical**: the shorter
+solver mints the same variables, eliminates the same variables, and produces the
+same terms. The *sole* structural difference is undischarged asserts. So passes
+5–8 exist to discharge 1,182 asserts — 48 % of the total — and the cost of *not*
+doing so exceeds the cost of the four passes, via the `wco`-growth feedback loop:
+each surviving assert is appended to `wco` (`wpathcondition`, `Worlds.v:104`), and
+stage 2 of `solver_generic` (`assumption_pathcondition (wco w0) C1`) walks `wco`
+on **every subsequent solver call**.
+
+This is the first quantification of that documented mechanism.
+
+Note the penalty *shrinks* with K (1.249× → 1.204×) and the 4-pass arm's growth
+exponent is slightly lower (2.202× vs 2.283× over this interval). Two points
+only; do not read a law into it.
+
+## What this means
+
+- **`combined_solver` is not over-provisioned. Do not shorten it.**
+- Its Part VII cost of 24.5 % of level / 22.8 % of growth is a *net* figure that
+  already includes the saving it generates elsewhere; the gross saving is larger.
+- **Optimising the solver means making each pass cheaper, not running fewer.**
+  The remaining lever from Part VII — fixpoint-detecting early exit in
+  `solver_compose` — is still sound *and* complete by construction (skipping a
+  pass that provably computes its own input changes nothing), but its ceiling is
+  lower than Part VII implied, because passes demonstrably do work.
+- **Open, and the cheap next experiment: is 8 the optimum, or just where someone
+  stopped?** The loop is hand-unrolled with no saturation test. A 12-pass arm is
+  a one-line change with no soundness risk. If `sp_asserts` falls below 2,460 and
+  cost falls with it, that is a free win on a quarter of construction cost.
+
+## Reproduction
+
+`combined_solver := ggu` in `theories/Symbolic/Solver.v:3819` in a scratch copy;
+rebuild `theories/` + light chain; compare `ZZDSI206` (LvStats), `ZZAST206`
+(`sp_asserts`), `ZZTN206` (term nodes) against base before comparing cost — a
+moved VC makes the cost figure incomparable.
