@@ -18,7 +18,9 @@ all, because `ctx.in_at` is a **unary** `nat`, so every comparison and
 subtraction inside a tree descent costs O(index). **Landed and measured on the
 real workload (§7): 2.41×–2.89× over `|Σ|` = 33–135, removing 58–65% of total
 cost — roughly double the ~1.28× Amdahl estimate, for the reason in §7.3. A
-constant factor, not an exponent change.**
+constant factor, not an exponent change, and a THROUGHPUT win only: full-length
+muladd at `mlen`=2 still does not fit in 14 GB (§7.5), because what blocks it is
+peak live heap and every figure here is total allocation.**
 
 ## 0. Protocol
 
@@ -395,15 +397,41 @@ exponent reduction. Both arms remain superlinear in `|Σ|`; `sub_comp` is still
 O(`|Σ|²`), now with a ~3× smaller constant. **The wall moves; it does not go
 away.** `muladd` at `mlen`=2 is not expected to complete because of this.
 
-### 7.5 Not measured
+### 7.5 THROUGHPUT vs FOOTPRINT — this fix buys the first, and the muladd wall is the second
 
-Wall clock (the probe has a bare `Eval`, not `Time Eval`, and this box is
-shared — the §2 microbenchmark's 3.1× time figure is the only timing evidence
-here). Peak RSS. Anything under a real `Qed` or `solve_vc`: this is raw VC
-construction only, so the figures are not comparable to any `Qed`-protocol
-number in `case_study/RiscvPmp/CFGVer/diagnostics/`.
+**Every number in this record is `allocated_words`: total allocation over a
+run, a THROUGHPUT metric.** What makes muladd at `mlen`=2 infeasible is *peak
+live heap*, which is a different quantity, and the two come apart badly here:
+the `MkIn` + `SnocView` pairs this fix removes are **short-lived garbage**. They
+inflate allocation enormously and contribute almost nothing to the high-water
+mark. So a 2.9× on allocation should NOT be read as a 2.9× on footprint, and
+the feasibility question is not answered by anything in §7.1–§7.4.
 
-### 7.6 Reproduction
+Measured directly, 2026-09-01, on the new arm: the **full-length** dense-havoc
+arm (`ZZDSFULL.v`, `ZZK = 400` so `firstn` takes all ~292 instructions — K=206
+was only a 70% prefix) reached **12.0 GB peak RSS and ~34 GB VSZ on a 14 GB
+box**, went into sustained swap thrashing at ~85–100 MB/s in both directions,
+and was killed at 26:32 having made no useful progress. It does not fit, and
+`allocated_words` was never going to predict that.
+
+**So the motivating problem is NOT solved.** This is consistent with §7.4 — a
+constant factor moves a wall rather than removing one — but the reason
+full-length muladd still fails is a metric this study did not track. Anyone
+extending it should use **`top_heap_words`** (also in the GC dump) or peak RSS
+for the feasibility question, and should read
+`cfgver-scaling-diagnostics`'s warnings about both before quoting either.
+
+### 7.6 Not measured
+
+Wall clock at the probe level (the probe has a bare `Eval`, not `Time Eval`, and
+this box is shared — the §2 microbenchmark's 3.1× and the whole-project build's
+58:04 → 47:21 are the only timing evidence here). Anything under a real `Qed` or
+`solve_vc`: §7.1–§7.4 are raw VC construction only, so those figures are not
+comparable to any `Qed`-protocol number in
+`case_study/RiscvPmp/CFGVer/diagnostics/`. Where full-length muladd stops
+fitting (a `top_heap_words` bisection over K) — not attempted.
+
+### 7.7 Reproduction
 
 Both arms, four K values each:
 

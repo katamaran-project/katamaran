@@ -198,7 +198,11 @@ that dense havoc itself creates.
   are therefore superseded for any build after `acb0368d`** — they were
   reproduced to within 0.34% on the old arm, so they were right, but they now
   describe the old `lookup`. It is a CONSTANT FACTOR: `|Σ|` cost stays
-  quadratic, so `mlen`=2 is still not expected to complete.
+  quadratic, so `mlen`=2 still does not complete — **confirmed by direct
+  attempt, not inference**: the full-length dense-havoc arm (all ~292
+  instructions; every K in §3.6 is a PREFIX, 206 being only 70%) hit 12.0 GB
+  peak RSS / ~34 GB VSZ on a 14 GB box and thrashed. The fix is a THROUGHPUT
+  win; this wall is a FOOTPRINT one, and `allocated_words` cannot see it.
 - **Not established:** everything here is raw-VC CONSTRUCTION cost. No `Qed`, no
   `solve_vc`. And 111 havoc sites make a great deal of data possibly-secret (a
   havoced value carries no `secLeakvar`), so the risk shifts from cost to
