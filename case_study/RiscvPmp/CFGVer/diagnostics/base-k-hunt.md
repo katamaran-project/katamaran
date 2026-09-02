@@ -18,7 +18,8 @@ not term-variable density (`occ/nodes` flat).
 | `sub_wk1` construction | **not it, but real**: 3.9 % and *rising* (exponent 4.18 vs 3.44) — the only candidate here whose share grows (§3) |
 | term SIZE in formula and vareq payloads | **REFUTED** | 72,099 term nodes in the whole tree at K=206; the ENTIRE tree is ≤2.6 % of peak (§4) |
 | heap `persist` (chunk carrying) | **12.7 % of level, 9.6 % of GROWTH**, exactly linear in chunks — held-out +0.0017 % at both K (§5, §6). Not the quadratic. |
-| **transient construction state** (CPS closures, intermediate executor states, allocation churn) | **OPEN — 83.6 % of the GROWTH, and it grows FASTER than total cost (2.418× vs 2.283×). No Coq-level instrument can reach it** (§4, §5, §6) |
+| `combined_solver` (construction-time) | **24.5 % of level, 22.8 % of GROWTH** — the largest single mechanism found, and an ORDINARY Rocq-level fix target (§7). Still not the driver: exponent 3.08 vs total 3.44. |
+| **transient construction state** (CPS closures, intermediate executor states, allocation churn) | **OPEN — 60.8 % of the GROWTH, exponent 3.96 vs total 3.44** (§4, §6, §7) |
 
 # Part I — `AMessage` snapshots are NOT `Base(K)` (refuted 2026-09-02)
 
@@ -550,3 +551,118 @@ The profiler should be run at **two** K values and the allocation sites ranked b
 **Δ between them**, not by absolute share. Ranking by absolute share is what this
 file did for five parts, and it surfaces exactly the mechanisms that turn out not
 to matter.
+
+---
+
+# Part VII — `combined_solver` is 24.5 % of cost / 22.8 % of growth
+
+## One-sentence finding
+
+`combined_solver` runs during **VC construction** (not `solve_vc`) and costs
+**424,964,133 words at K=162 and 891,153,245 at K=206** — **24.5 % of the level
+and 22.8 % of the growth**, by far the largest single mechanism identified — but
+it grows at **2.097×** against total cost's 2.283× (exponent 3.08 vs 3.44), so it
+too is a *dilutant* and not the scaling driver.
+
+## It runs in `vm_compute`, not `solve_vc`
+
+Two independent confirmations, worth stating because the answer decides whether
+the ZZDS rig (raw construction, no `Qed`, no `solve_vc`) can see it at all:
+
+1. `combined_solver` is called only at `Monads.v:337` and `:360`, inside
+   `assert_pathcondition` / `assume_pathcondition`, and the `match` on its result
+   **decides which `SymProp` constructor is emitted** (`assert_triangular ν …`
+   vs `error`). The tree cannot be built without running it.
+2. Empirically: the raw-tree instrument counts **4,031 `vareq` nodes** at K=206
+   on `zz_vc_raw`, *pre-`postprocess`*. Those nodes are precisely the solver's
+   triangular substitution entries.
+
+## Why AMPLIFICATION and not ablation
+
+The obvious experiment — stub `combined_solver` — is **confounded and would have
+been uninterpretable**. The solver is what eliminates variables (peak `|Σ|` = 135
+is the *post*-elimination figure; `lvar-lookup-cost-drivers.md` reports 1281 of
+1293 mints eliminated on its rig). Stub it and no elimination happens, `|Σ|`
+explodes, and the "ablated" arm can come out *slower*. Two axes move at once.
+
+So the arm runs the solver **twice** and uses the second result:
+
+```coq
+match (match combined_solver w C with
+       | Some _ => combined_solver w C
+       | None   => combined_solver w C
+       end) with
+```
+
+Scrutinising the first call makes it undeletable by the VM; both branches return
+a second call, so the **value is identical** (pure function). Δ between arms is
+exactly one solver pass, single-axis by construction.
+
+**Both validity checks were stated before the run and both passed:** peak `|Σ|`
+came back 96 / 135 (output unchanged, `err=0`), and cost went **up** — so the VM
+did not share the duplicate calls. Had Δ been ≈0 the test would have been
+*inconclusive*, not "the solver is free": a shared call and a free call are
+indistinguishable in this metric.
+
+## Results
+
+Baselines 656,591,136 (base) vs 656,272,880 (amplified) — **0.048 % apart**.
+
+| K | base net | amplified net | one solver pass | % of level |
+|---|---|---|---|---|
+| 162 | 1,592,697,620 | 2,017,661,753 | 424,964,133 | 26.68 % |
+| 206 | 3,635,767,677 | 4,526,920,922 | 891,153,245 | 24.51 % |
+
+Growth 2.097× against total 2.283× → **22.82 % of the increment**.
+
+## Full attribution
+
+| mechanism | growth × | % level | % GROWTH |
+|---|---|---|---|
+| `combined_solver` | 2.097 | 24.51 % | 22.82 % |
+| heap carrying (30 chunks) | 1.740 | 12.69 % | 9.61 % |
+| `sub_wk1` construction | 2.747 | 3.93 % | 4.45 % |
+| `AMessage` copies | 1.866 | 1.73 % | 1.43 % |
+| path-condition copy (est) | 1.438 | 1.22 % | 0.66 % |
+| `ctx.fresh` | 1.853 | 0.32 % | 0.26 % |
+| **IDENTIFIED** | | **44.41 %** | **39.23 %** |
+| **UNIDENTIFIED** | **2.593** | **55.59 %** | **60.77 %** |
+
+Exponents in K: total **3.44**, solver **3.08**, unidentified **3.96**.
+
+**Additivity caveat:** these terms may not be cleanly additive. The solver
+internally performs substitutions and lookups, and adding pinned chunks generates
+formulas the solver then processes, so some double-counting between the solver
+row and the heap/`sub_wk1` rows is likely. Treat 44.41 % as an upper bound on
+what is explained.
+
+## What this means
+
+- **A quarter of construction cost is in one function**, and unlike everything
+  else in this file the fix is ordinary Rocq work with no representation change
+  and no TCB implication:
+
+  ```coq
+  Definition combined_solver : Solver :=                 (* Solver.v:3819 *)
+    let g   := solver_generic in
+    let gg  := solver_compose g g in
+    let ggu := solver_compose gg solver in
+    solver_compose ggu (solver_compose ggu gg).
+  ```
+
+  Five composed passes, with `solver_generic` appearing six times. **The obvious
+  next experiment is to measure each composition layer's marginal value** — same
+  amplification trick, or simply shortening the composition and checking the VC
+  is unchanged. If any layer is idempotent on this workload it is a direct win on
+  24.5 % of cost.
+- **It is still not the scaling driver.** Exponent 3.08 vs total 3.44.
+- **The residual now grows at exponent 3.96.** Every mechanism identified across
+  Parts I–VII except `sub_wk1` grows *slower* than total cost, so peeling them off
+  makes the unexplained remainder accelerate. 60.8 % of the growth remains
+  unattributed and is the only thing outrunning the average by a wide margin.
+
+## Reproduction
+
+Scratch copy, both `combined_solver` call sites amplified as above, full
+`theories/` + light chain rebuild (16m57s), then `ZZDSB`/`ZZDS162`/`ZZDS206` one
+process per point. Gate on peak `|Σ|` = 96/135 and `err=0`.
