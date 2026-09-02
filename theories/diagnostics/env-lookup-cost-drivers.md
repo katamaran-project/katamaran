@@ -630,12 +630,20 @@ outlier at 0.228; its net is only 0.40 GB, where OCaml's 1.15× heap quantisatio
 is a large fraction of the reading. Treat the low end as uninformative here for
 the same reason §9.3 does.)
 
-**So footprint obeys the SAME `|Σ|²` law as throughput.** The two metrics that
-§7.5 and §9.3 carefully separated are separate in *what a given fix moves*, not
-in what drives them: `|Σ|` drives both, quadratically. The linear fit above
-happens to work as a **lower bound** — a straight line through a convex curve
-under-predicts, which is exactly the sign of the −11.7% error — and should be
-quoted as a bound, not an estimate.
+~~**So footprint obeys the SAME `|Σ|²` law as throughput.**~~ **RETRACTED the
+same day — see `case_study/RiscvPmp/CFGVer/diagnostics/footprint-vs-throughput.md`.
+This was the SECOND collinear fit in this section: `|Σ|` and K rise together
+across the sweep above, so a `|Σ|²` constant and a `Base(K)` term are
+indistinguishable in it. Moving `|Σ|` ALONE at fixed K (`drop_fuel` 0 vs 8:
+`|Σ|` 135 → 33 at K=206) changes footprint by only **1.41×**, where `|Σ|²`
+predicts ~17×. Footprint is `Base(K) + ~5–11 MB per variable + 1.18 MB per
+chunk` — LINEAR in `|Σ|`, with the instruction term at 62% and dominant. Never
+requote the `net/|Σ|²` column as a law; the measurements are fine, the exponent
+read off them is not.**
+
+The linear fit on gross RSS still stands as a **lower bound** on the full-length
+wall — a straight line through a convex curve under-predicts, which is the sign
+of the −11.7% error — and should be quoted as a bound, not an estimate.
 
 ### 9.5 What this says about attacking `mlen`=2
 
