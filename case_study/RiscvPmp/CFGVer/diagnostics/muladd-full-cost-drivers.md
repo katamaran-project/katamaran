@@ -203,6 +203,15 @@ that dense havoc itself creates.
   instructions; every K in §3.6 is a PREFIX, 206 being only 70%) hit 12.0 GB
   peak RSS / ~34 GB VSZ on a 14 GB box and thrashed. The fix is a THROUGHPUT
   win; this wall is a FOOTPRINT one, and `allocated_words` cannot see it.
+  **Measured, not inferred**: over K = 140/162/184/206 the two arms'
+  `top_heap_words` are BYTE-IDENTICAL and peak RSS agrees to 1.3%, while
+  allocation differs 2.4×–2.9×. And peak RSS is roughly LINEAR in K, so a
+  straight line through K = 140 and 162 alone (under 30 s of compute) predicts
+  the full-length 11.46 GB to −11.7% — **nobody needs to run full length again
+  to know it does not fit.** Corollary for this file's whole catalogue of
+  levers: every figure in it is `allocated_words`, so as written it cannot
+  distinguish a throughput lever from a footprint one, and `mlen`=2 needs the
+  latter.
 - **Not established:** everything here is raw-VC CONSTRUCTION cost. No `Qed`, no
   `solve_vc`. And 111 havoc sites make a great deal of data possibly-secret (a
   havoced value carries no `secLeakvar`), so the risk shifts from cost to

@@ -407,7 +407,9 @@ live heap*, which is a different quantity, and the two come apart badly here:
 the `MkIn` + `SnocView` pairs this fix removes are **short-lived garbage**. They
 inflate allocation enormously and contribute almost nothing to the high-water
 mark. So a 2.9× on allocation should NOT be read as a 2.9× on footprint, and
-the feasibility question is not answered by anything in §7.1–§7.4.
+the feasibility question is not answered by anything in §7.1–§7.4. **§9 then
+measured it: footprint is unchanged EXACTLY — `top_heap_words` byte-identical
+between arms at every K, peak RSS within 1.3%.**
 
 Measured directly, 2026-09-01, on the new arm: the **full-length** dense-havoc
 arm (`ZZDSFULL.v`, `ZZK = 400` so `firstn` takes all ~292 instructions — K=206
@@ -541,3 +543,103 @@ OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPm
   -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/<Example>.v \
   2>&1 | grep -E 'allocated_words|top_heap_words'
 ```
+
+---
+
+# Part IV — the reduced rig: footprint, and why `mlen`=2 is untouched
+
+## 9. Throughput, footprint and wall on one cheap sweep
+
+### One-sentence finding
+
+The rewrite removes **2.4×–2.9× of allocation, 1.14×–1.70× of wall clock, and
+EXACTLY ZERO footprint** — `top_heap_words` is byte-identical between arms at
+every K and peak RSS agrees within 1.3% — which is the whole explanation for why
+`mlen`=2 remains infeasible, and it was obtainable from runs of 14–73 s each
+without ever going near the memory ceiling.
+
+### 9.1 Why a reduced rig, and what "reduced" means here
+
+Running full length (K=292) cost 26 minutes of swap thrashing and produced one
+number before being killed. The K-prefix knob (`zz_prefix k = firstn k`) gives
+the same function at any length, is already validated (§7 reproduced the
+published figures to 0.34%), and **K ≤ 206 never exceeds ~7 GB**. So the rule
+is: *cap the sweep below the wall and extrapolate to it*. §9.4 shows that works.
+
+The other half of the reduction was not size at all — it was **grepping one more
+line out of a dump I was already producing**. `OCAMLRUNPARAM='v=0x400'` prints
+`top_heap_words` next to `allocated_words`; §7 simply never read it.
+
+### 9.2 Results — six K values, both arms, one process each
+
+| K | `\|Σ\|` | alloc OLD | alloc NEW | **alloc ratio** | `top_heap_words` OLD | NEW | identical? | RSS OLD | RSS NEW | **wall ratio** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 140 | 42 | 1.196 G | 0.495 G | **2.415×** | 636,785,152 | 636,785,152 | **yes** | 4.30 G | 4.29 G | 1.14× |
+| 162 | 96 | 4.351 G | 1.593 G | **2.732×** | 732,303,360 | 732,303,360 | **yes** | 5.18 G | 5.14 G | 1.44× |
+| 184 | 108 | 6.503 G | 2.315 G | **2.809×** | 842,148,864 | 842,148,864 | **yes** | 5.79 G | 5.72 G | 1.61× |
+| 206 | 135 | 10.510 G | 3.636 G | **2.891×** | 968,471,552 | 968,471,552 | **yes** | 6.84 G | 6.77 G | 1.70× |
+
+Baseline arm (`ZZDSB`) also identical: 553,725,952 both. Five matched pairs,
+byte-for-byte. The allocation ratios reproduce §7.1 to four significant figures.
+
+### 9.3 Reading it
+
+**Footprint: unchanged, and this is the finding.** Peak live heap is identical
+at every K. This is exactly what the mechanism predicts — the `MkIn` +
+`SnocView` pairs the rewrite eliminates are **short-lived garbage**: enormous in
+allocation, absent from the high-water mark. So the rewrite makes tractable work
+~3× cheaper and does **nothing at all** for work that fails by exhausting
+memory. `mlen`=2 is the latter.
+
+*Resolution caveat, stated because it bounds the claim:* `top_heap_words` moves
+in exact **1.15× steps** here (636.8/553.7 = 732.3/636.8 = 842.1/732.3 =
+968.5/842.1 = 1.150), i.e. it is counting OCaml heap-growth increments, so
+"identical" means "the same number of growth steps" and could in principle hide
+up to 15%. **Peak RSS is the finer check and agrees to 1.001×–1.013×** — the new
+arm is a hair *lower*, never higher. Both metrics, two directions, same answer.
+
+**Wall clock is 1.14×–1.70×, not 2.4×–2.9×.** Measured back-to-back on an
+otherwise idle box (K=206: 72.53 s → 42.71 s). Time is not purely
+allocation-bound, so **the allocation ratios in §7 and §8 over-state what a
+person actually waits through** — quote 1.7× for "how much faster is the muladd
+probe", not 2.9×. (The `K=B` wall pair is discarded: the new arm's baseline ran
+first from a cold page cache, 14.10 s vs 9.90 s, in the wrong direction.)
+
+### 9.4 The reduced rig predicts the wall it never touches
+
+Peak RSS is **roughly linear in K** — 38.3 / 26.4 / 47.7 MB per instruction over
+the three segments — unlike allocation, which is superlinear. Fitting a straight
+line on the **two cheapest usable points only** (K = 140 and 162, together under
+30 s of compute) and extrapolating to K=292:
+
+> predicted 10.12 GB, **observed 11.46 GB**, error **−11.7%**
+
+So a sub-minute pair of runs predicts the full-length memory wall to about 12%,
+which is more than enough to answer "will this fit". **Nobody needs to run
+full-length muladd again to know it does not fit in 14 GB.**
+
+### 9.5 What this says about attacking `mlen`=2
+
+The footprint curve is *identical in both arms*, so it is a property of the VC
+being constructed, not of how it is walked. Any attack on `mlen`=2 has to
+**shrink the live symbolic term** — fewer/smaller chunks, fewer live logic
+variables, earlier `dropk` — and not the garbage rate. Every lever in
+`cfgver-scaling-diagnostics`'s catalogue should be re-read with that
+distinction in mind, because the catalogue is written in `allocated_words`
+throughout and therefore cannot, as written, tell a throughput lever from a
+footprint lever.
+
+### 9.6 Reproduction
+
+`ZZDS<K>.v` = `ZZDS206.v` with `Definition ZZK` sed'd; `ZZDSB.v` = it minus the
+final `Eval`. One process per point, both arms:
+
+```bash
+OCAMLRUNPARAM='v=0x400' /usr/bin/time -f "RSS %M WALL %e" \
+  coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+  -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/ZZDS206.v \
+  2>&1 | grep -E 'allocated_words|top_heap_words|RSS'
+```
+
+Whole sweep, 6 K values × 2 arms, is ~5 minutes. Do not raise K past 206 on a
+14 GB box.
