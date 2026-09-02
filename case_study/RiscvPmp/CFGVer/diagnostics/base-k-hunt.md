@@ -17,7 +17,8 @@ not term-variable density (`occ/nodes` flat).
 | `subst (wco w) sub_wk1` — copying the path condition per extension | **REFUTED** | Σ\|wco\| at binders grows 1.438× where cost grows 2.283×; mean \|wco\| is ~10 formulas (§2) |
 | `sub_wk1` construction | **not it, but real**: 3.9 % and *rising* (exponent 4.18 vs 3.44) — the only candidate here whose share grows (§3) |
 | term SIZE in formula and vareq payloads | **REFUTED** | 72,099 term nodes in the whole tree at K=206; the ENTIRE tree is ≤2.6 % of peak (§4) |
-| **transient construction state** (CPS closures, intermediate heaps, uncollected garbage) | **OPEN — and it is the only place left** (§4) |
+| heap `persist` (chunk carrying) | **12.7 %, exactly LINEAR** — held-out +0.0017 % (§5). Not the quadratic. |
+| **transient construction state** (CPS closures, intermediate executor states, allocation churn) | **OPEN — 80 % of cost is unattributed, and no Coq-level instrument can reach it** (§4, §5) |
 
 # Part I — `AMessage` snapshots are NOT `Base(K)` (refuted 2026-09-02)
 
@@ -356,3 +357,114 @@ the finished term: OCaml-level heap profiling (`Gc.stat` sampling, or a
 `memtrace`/`statmemprof` run over one `ZZDS<K>` build) to attribute the
 high-water mark to allocation sites. No Coq-level traversal can answer it, and
 four have now tried.
+
+---
+
+# Part V — heap `persist` is 12.7 % and LINEAR; the weakening rewrite is not justified
+
+## One-sentence finding
+
+Carrying one heap chunk costs **15.38 M words, exactly linear** (held-out
+**+0.0017 %**), so at the ~30 declared chunks of the muladd contract heap
+`persist` is **12.7 %** of total cost — which, with `sub_wk1` (3.93 %) and the
+path-condition copy (1.21 %), puts **everything attributable to eager weakening
+at 17.8 %, an Amdahl ceiling of 1.22×** — and that does **not** justify a
+weakening-stable-representation rewrite.
+
+## Why this measurement
+
+`lvar-lookup-cost-drivers.md` §5.2 established the mechanism — a chunk costs
+16.1× more when its variables sit 64 binders deeper, "because `persist`
+re-looks-up every occurrence at every world extension" — and concluded *"reduce
+the DEPTH, not the chunk count."* That is the strongest statement in the record
+that weakening is the `|Σ|²` driver. But it is from the ZZLvD rig, and this
+skill is explicit that **magnitudes do not transfer between rigs**. The Amdahl
+number for the muladd rig had never been taken.
+
+## The experiment
+
+**Axis: heap chunk count, at fixed `|Σ|` and fixed step count.** `PVConst`
+(pinned constant) cells add a chunk but mint **no logic variable**, which is what
+keeps this single-axis — the catalog records a previous chunk measurement
+invalidated by exactly the confound of growing chunks and variables together.
+Padding sits at addresses 828–1080: above the 206 instructions (which end at 824),
+below the real data at 1128, under the existing 1168 bound, so nothing else in
+the contract shifts. Probes `Example/ZZHP{0,16,32,64}.v`.
+
+**Single-axis proof:** every arm prints its own peak `|Σ|`, and all four read
+**135** with `err=0`. Had any read differently the comparison would be void.
+
+## Results
+
+| pad chunks | allocated | marginal words/chunk |
+|---|---|---|
+| 0 | 4,292,457,760 | — |
+| 16 | 4,538,560,185 | 15,381,402 |
+| 32 | 4,784,580,256 | 15,376,254 |
+| 64 | 5,276,862,216 | 15,383,811 |
+
+Constant to four significant figures. Fitting on {0, 64} and predicting the
+withheld 32: **+0.0017 %**. Exactly linear — corroborating
+`check-scalar-combined-cost-drivers.md` §6.6 on an independent rig.
+
+Net cost at K=206 (no pad, baseline 656,591,136) = 3.6359 G words.
+Heap carrying at ~30 declared chunks (20 register + 10 memory) = 0.461 G =
+**12.7 %**.
+
+Note `ptsto_instrs` lives in the Iris/soundness layer, not the symbolic VC, and
+the per-fetch `encodes_instr` chunks are reclaimed by the 2026-08-03 chunk-GC —
+so the live symbolic heap really is ~30 chunks, not one per instruction.
+
+## Cumulative attribution at K=206
+
+| mechanism | share | where measured |
+|---|---|---|
+| `ctx.fresh` | 0.39 % | `ctx-fresh-cost.md` |
+| `sub_wk1` construction | 3.93 % | Part III |
+| path-condition copy | 1.21 % | Part II |
+| `AMessage` copies | 1.73 % | Part I |
+| heap carrying, 30 chunks | 12.69 % | Part V |
+| **identified** | **19.95 %** | |
+| **UNIDENTIFIED** | **80.05 %** | |
+
+## What this means
+
+- **Do not fund the weakening rewrite on these numbers.** Eager weakening totals
+  17.8 % (`sub_wk1` + pc copy + heap carrying) — ceiling **1.22×** — against a
+  change reaching `Context.v`, `Environment.v`, `Worlds.v`, all of `Symbolic/`
+  and the `Pred`/modality layer. The mechanism is real and the diagnosis was
+  right; the prize is too small. This is the `select_last_k` lesson again:
+  a correct diagnosis does not imply a fix worth building.
+- **The `|Σ|²` driver is still unlocated, and 80 % of cost is unattributed.**
+  Five Coq-level instruments have now each returned a single-digit or low-teens
+  percentage. Combined with Part IV (the whole finished VC is ≤2.6 % of peak
+  heap), the consistent reading is that the cost lives in **transient
+  construction machinery** — CPS continuation closures, intermediate executor
+  states, allocation churn — none of which any `Fixpoint` over `SymProp` can see.
+- **Next instrument must be OCaml-level**, not Coq-level: `memtrace`/
+  `statmemprof` over one `ZZDS<K>` build, attributing allocation to source
+  sites. Every remaining Coq-side hypothesis is a guess until that exists.
+
+## `top_heap_words` is unusable at this scale — confirmed hard
+
+All four arms reported **byte-identical** `top_heap_words` (969,552,896) while
+allocation grew **22.9 %**. That is a clean demonstration of the quantisation
+caveat in this skill's checklist, and it independently justifies Part IV's
+correction to Part I: no footprint conclusion in this file should rest on
+`top_heap_words` differences, in either direction.
+
+## Reproduction
+
+```bash
+# ZZHP<N>.v = ZZDS206.v with N pinned PVConst cells appended to mem_specs_rel.
+# NOTE: an empty list must be written `@nil mem_spec_rel` -- a bare `[]` is
+# hijacked by the ctx notations and yields "illegal begin of vernac".
+for f in ZZHP0 ZZHP16 ZZHP32 ZZHP64; do
+  OCAMLRUNPARAM='v=0x400' coqc -q -w none -Q case_study/RiscvPmp Katamaran.RiscvPmp \
+    -R theories Katamaran case_study/RiscvPmp/CFGVer/Example/$f.v
+done
+```
+
+Gate every arm on its printed peak `|Σ|` being 135 and `Error` absent — a failing
+arm reports near-baseline allocation, which reads as "free" (it happened twice
+while building these probes).
