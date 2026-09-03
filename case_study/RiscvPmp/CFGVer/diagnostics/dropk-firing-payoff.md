@@ -603,3 +603,85 @@ clean, no holes, 14 end theorems axiom-clean.
    class across `OccursCheck.v`/`Formulas.v`/`Chunks.v` with ten soundness
    lemmas: after the reordering its ceiling is a fraction of 1.947 G, so it was
    dropped unbuilt. Bound the candidate before building the fix.
+
+## ADDENDUM PART 2 (same day) — the K sweep at CONSTANT `|Sigma|`, and a footprint win that is bigger than the throughput one
+
+The ADDENDUM's open question was whether the REMAINING scan cost justifies a
+non-allocating `occurs` (the "Fix 1" declined above). Because `drop_fuel=8` pins
+peak `|Sigma|` at **33 regardless of K**, a K sweep at fuel 8 is the first
+measurement in this directory that moves program length with `|Sigma|` HELD
+FIXED — which answers that question and several others.
+
+Protocol ALLOC + peak RSS, net of a freshly-measured `ZZDSB`
+(656,599,455 words / 4,080,536 KB). `|Sigma|` printed **33 at all four K**, and
+`ZZDS206` reproduced the ADDENDUM's figure **to the byte** (2,603,120,486).
+
+| K | net alloc (M words) | delta per 22 instrs | net peak RSS (GB) |
+|---|---|---|---|
+| 140 | 452.4 | — | 0.3016 |
+| 162 | 1101.5 | **649.0** | 0.6394 |
+| 184 | 1398.5 | **297.1** | 0.8172 |
+| 206 | 1946.5 | **548.0** | 1.0818 |
+
+### 1. "Fix 1" is CLOSED — the scan is not the dominant term
+
+A dominant `O(K^2 * |Sigma| * fuel)` scan requires the marginal cost per
+instruction to RISE monotonically with K. It does not: over three windows of
+identical width (22 instructions) it goes **649 -> 297 -> 548**, falling by more
+than half and then rising. So the residual copy-and-discard is the ~6-12% the
+ADDENDUM estimated bottom-up, not the ~93% that extrapolating a `|Sigma|^2.4`
+law had suggested. **A non-allocating `occurs` class buys ~1.1x. Do not build
+it.** (The competing extrapolation is itself refuted: `|Sigma|`^2.4 does not
+hold down to 33.)
+
+### 2. TWO-POINT EXPONENTS ON THIS RIG ARE WORTHLESS — including my own
+
+Adjacent windows of EQUAL WIDTH differ by **2.2x** in marginal cost, so the
+muladd prefix is structurally heterogeneous and any exponent depends on which
+two points were picked:
+
+| interval | fuel | exponent in K |
+|---|---|---|
+| 140 -> 206 | 8 | **3.78** |
+| 162 -> 206 | 8 | **2.37** |
+| 162 -> 206 | 0 | **3.44** (recorded) |
+
+**RETRACTED, as laws:** the "total exponent 3.44" and the two-variable fit
+`footprint ~ K^2.22 * |Sigma|^0.83` derived from it (this session, unpublished
+outside these notes). Both were fitted on two points of a program whose
+per-instruction cost swings 2.2x between adjacent windows. Quote a marginal cost
+(mean **22.6 M words/instruction** at `|Sigma|`=33, range 13.5-29.5) rather than
+an exponent, and never fit an exponent here on fewer than four points.
+
+### 3. The FOOTPRINT win, which matters more than the throughput one
+
+`mlen=2` dies on memory, not time, and this is where the fix lands hardest.
+
+| arm | net peak RSS at K=206 |
+|---|---|
+| `drop_fuel=0` (today) | **2.8759 GB** — reproduces the recorded 2.876 to **-0.01%** |
+| `drop_fuel=8`, pre-fix | 2.045 GB (recorded) |
+| `drop_fuel=8`, **post-fix** | **1.0818 GB** |
+
+- **The fix is worth 1.89x in PEAK MEMORY**, not only 22.7x in allocation —
+  the discarded copies were real GC pressure. This was not predicted; the fix
+  was aimed at throughput.
+- **dropk's footprint benefit is now 2.66x, not the 1.41x** recorded in
+  `footprint-vs-throughput.md` §3. That figure is superseded: it was measured
+  with the scan bug inflating the fuel=8 arm.
+- The `drop_fuel=0` reproduction at -0.01% is what licenses comparing today's
+  numbers against that study's baseline.
+
+### 4. The drop's benefit GROWS with K
+
+| K | fuel=0 | fuel=8 post-fix | ratio |
+|---|---|---|---|
+| 162 | 1.593 G | 1.101 G | **1.45x** |
+| 206 | 3.636 G | 1.947 G | **1.87x** |
+
+Because fuel=0's `|Sigma|` grows with K (96 -> 135) while fuel=8 pins it at 33,
+the gap widens with program length — so it extrapolates FAVOURABLY toward the
+full K=292. **This is the strongest argument yet for making `drop_fuel = 8` the
+default**: 1.87x throughput and 2.66x footprint at K=206, both still growing.
+Still requires its own gate run (it changes every VC), and 8 is still not shown
+to be binding.

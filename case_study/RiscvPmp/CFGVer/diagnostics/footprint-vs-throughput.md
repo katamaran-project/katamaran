@@ -119,6 +119,10 @@ heap** — so the unexplained mass is, by construction, in the part it cannot se
 ## 3. What this means
 
 - **`|Σ|` is quadratic for throughput and LINEAR for footprint.** That single
+  asymmetry is SUPERSEDED 2026-09-03 for the fuel=8 arm: with the `var_dead`
+  scan bug fixed, `drop_fuel=8` costs 1.87× LESS allocation than fuel=0 and
+  2.66× less peak RSS (not 12.17× more and 1.41× less). See
+  `dropk-firing-payoff.md` ADDENDUM PART 2. Original text follows. This
   asymmetry explains why `drop_fuel` looks like a disaster on this directory's
   usual metric and does almost nothing for memory: at K=206 it pays **12.17×
   allocation** (see §4) to buy **1.41×** footprint.
