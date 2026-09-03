@@ -700,3 +700,68 @@ Lemma myWP2_loop_join (E : iProp Σ) : myWP2_loop (myWP2_loop E) ⊢ myWP2_loop 
 
 so U1's lemma is load-bearing and not merely convenient. Land it with that
 corollary next to it.
+
+## U7. LANDED 2026-09-03 — change 1 (the bridge re-thread) is DONE
+
+`Adequacy.v` and `EndToEnd.v` both compile green. It was smaller than U2
+predicted, for a reason U2 had not yet found.
+
+**The inner lemma never lost the postcondition.**
+`sound_exec_cfg_addr_myWP2` (`Adequacy.v:1162`) already returns, as the fifth
+conjunct of its continuation:
+
+```coq
+(∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝)
+```
+
+and `sound_cexec_triple_addr_myWP2` was **discarding it** — literally
+`iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)"`. Since `Φ` is
+`cexec_triple_addr`'s `consume ens lenv.["a"↦a].["an"↦na]`
+(`VerifierRel.v:1877`), `consume_sound` turns that conjunct straight into the
+exit assertion. So `2b6c7753` weakened one statement and dropped one intro
+pattern; the machinery underneath was never touched.
+
+**The whole diff, three parts:**
+
+1. `sound_cexec_triple_addr_myWP2` — statement gains
+   `∗ asn.interpret post (ι.["a"↦a].["an"↦an])` in the continuation; proof
+   gains three lines, copied from `BlockVer/Verifier.v:448-450`:
+   ```coq
+   iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
+   apply consume_sound in Hconsume.
+   iPoseProof (Hconsume with "Hh3") as "[HPOST _]".
+   ```
+   plus `HPOST` added to the closing `iFrame`.
+2. `sound_scfg_verification_condition_myWP2` — same statement change,
+   **proof unchanged** (it only `apply`s the above).
+3. `EndToEnd.v:168,262` (`cfg_instrs_verified` / `cfg_instrs_safe`) — the two
+   consumers gain `& _`. `CFG_VC_triple` still passes a trivial post, so there
+   is nothing for them to use yet; the conjunct just has to be introduced.
+
+`sound_exec_cfg_addr_myWP2` unchanged. `sexec_cfg_addr` unchanged.
+`myWP2_loop_fix` unchanged. Shallow continuation stays `(fun _ _ => True)`
+(U2a). Trusted surface — `Noninterference.v`, every `Example/*Result.v` —
+unchanged.
+
+**On WHEN the assertion holds** (the owner's caveat, and it needed no
+accommodation): it is the condition at the moment the EXIT CONDITION is hit,
+not when execution halts. That is already what the code does —
+`sexec_cfg_addr` returns only through its exit branch (`pure apc` under
+`is_exit`; out-of-fuel is an `emsg`, i.e. a failure, not a return), so the
+`consume ens` in `sexec_triple_addr:1309` fires exactly there, with `an` bound
+to whichever declared exit was taken. Because `ens` is parametric in `an` it
+can also case on WHICH exit — which is what a multi-exit segment needs.
+
+### What is still open
+
+- **Change 3** (light chain): a postcondition field on `CFGVerifierContract`,
+  passed by `CFG_VC_triple` instead of `True`. Until then the re-threaded
+  conjunct is vacuous, and nothing can actually be composed — this is the
+  next step, and it is the one that touches the nine live examples (default it
+  to `True` so they do not change).
+- **`myWP2_loop_bind` + `myWP2_loop_join`** (U1) still live in the throwaway
+  probe; they need moving into `Adequacy.v` next to
+  `exitCondImpliesMyWP2_loop`.
+- **Gate not yet run.** Both edited files compile and the `Results.v` closure
+  was rebuilt, but `scripts/gate.sh` (axiom-cleanliness, no proof holes) has
+  not been run on this change.

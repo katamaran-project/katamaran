@@ -1293,7 +1293,20 @@ Section AdequacyTools.
         (∀ an,
            ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗ ExitCondIprop) -∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
+           (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
+              conjunct ("keep post in hypothesis for maximal generality, remove
+              asn.interpret post from the continuation").  It is the exit
+              assertion, and note WHEN it holds: at the moment the EXIT
+              CONDITION holds, not when execution halts -- sexec_cfg_addr
+              returns only via its exit branch (out-of-fuel is an emsg), and
+              `an` is bound to whichever declared exit was taken.  That is what
+              lets one segment's exit feed the next segment's precondition; see
+              plans/PLAN-loop-invariant.md U2/U6.  Nothing is proved about the
+              RESIDUAL heap (SHeapSpec has no leakcheck), which is why the
+              shallow continuation stays `(fun _ _ => True)`. *)
+           asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+           ExitCondIprop) -∗
         myWP2_loop ExitCondIprop.
     Proof.
       cbv [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr bind demonic_ctx demonic
@@ -1336,10 +1349,17 @@ Section AdequacyTools.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
       iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
         with "[$Hpc $Hnpc $Hinstrs $Hh2]").
-      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
+      (* The fifth conjunct used to be DROPPED (`& _`).  It is
+         `∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝`, and Φ here is
+         cexec_triple_addr's `consume ens ι.["a"↦a].["an"↦na]` — so
+         consume_sound turns it into the exit assertion.  Same three-line
+         pattern as BlockVer/Verifier.v:448-450, which never lost it. *)
+      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
+      apply consume_sound in Hconsume.
+      iPoseProof (Hconsume with "Hh3") as "[HPOST _]".
       iApply ("Hk" $! an).
       iSplit. { iPureIntro. exact Hexit. }
-      iFrame "Hpc Hnpc".
+      iFrame "Hpc Hnpc HPOST".
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
       iExists words.
       iFrame "Hinstrs".
@@ -1369,7 +1389,9 @@ Section AdequacyTools.
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
+             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
+             (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
+             asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.
