@@ -152,6 +152,60 @@ Import iris.algebra.gmap.
     iIntros "EC". rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix. iLeft. done.
   Qed.
 
+  (* ---------------------------------------------------------------- *)
+  (* CONTRACT COMPOSITION.  exitCondImpliesMyWP2_loop above is the    *)
+  (* UNIT of a monad in ExitCond; myWP2_loop_bind is its BIND, and it  *)
+  (* is what lets two separately-verified segment contracts be joined  *)
+  (* into one fact about the whole program.  Every flavour of          *)
+  (* composition (a straight-line cut, a loop invariant, a function    *)
+  (* contract at a call site) is a client of these two.                *)
+  (* See plans/PLAN-loop-invariant.md U1/U6.                            *)
+  (*                                                                   *)
+  (* The directed halves of fixpoint_myWP2_loop_eq are separate lemmas *)
+  (* on purpose: a bare `rewrite fixpoint_myWP2_loop_eq` inside the    *)
+  (* bind proof also rewrites inside the Lob hypothesis (in IPM the    *)
+  (* hypotheses are part of the goal term), after which iApply "IH"    *)
+  (* fails with "iSpecialize: cannot instantiate ... with myWP2_loop   *)
+  (* E1".  Note also that fixpoint_myWP2_loop_eq mentions the fixpoint *)
+  (* on BOTH sides, hence the occurrence selectors.                    *)
+  (* ---------------------------------------------------------------- *)
+  Lemma myWP2_loop_unfold `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_loop E ⊢ myWP2_loop_fix E (myWP2_loop E).
+  Proof. rewrite {1}fixpoint_myWP2_loop_eq. done. Qed.
+
+  Lemma myWP2_loop_fold `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_loop_fix E (myWP2_loop E) ⊢ myWP2_loop E.
+  Proof. rewrite {2}fixpoint_myWP2_loop_eq. done. Qed.
+
+  (* If E1 (the first segment's exit assertion) itself implies "keep
+     running until E2", then running until E1 and then continuing is
+     running until E2. *)
+  Lemma myWP2_loop_bind `{sailGS2 Σ} (E1 E2 : iProp Σ) :
+    ⊢ (E1 -∗ myWP2_loop E2) -∗ myWP2_loop E1 -∗ myWP2_loop E2.
+  Proof.
+    iLöb as "IH". iIntros "HE H".
+    iDestruct (myWP2_loop_unfold with "H") as "H".
+    iEval (rewrite /myWP2_loop_fix) in "H".
+    iDestruct "H" as "[HE1 | H]".
+    - by iApply "HE".
+    - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix). iRight.
+      iDestruct "H" as (v) "[Hpc Hcont]".
+      iExists v. iFrame "Hpc". iIntros "Hpc".
+      iDestruct ("Hcont" with "Hpc") as "Hwp".
+      iApply (semWP2_mono with "Hwp").
+      iIntros (v1 ? v2 ?) "Hm".
+      destruct v1 as [v1|m1]; destruct v2 as [v2|m2]; try done.
+      iNext. iApply ("IH" with "HE Hm").
+  Qed.
+
+  (* The form actually used at a cut point: a segment is discharged with
+     ExitCond := myWP2_loop <real exit>, which yields a nested loop. *)
+  Lemma myWP2_loop_join `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_loop (myWP2_loop E) ⊢ myWP2_loop E.
+  Proof.
+    iIntros "H". iApply (myWP2_loop_bind (myWP2_loop E) E with "[] H"). auto.
+  Qed.
+
   Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (pc : Val ty_xlenbits) : Prop :=
       bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 

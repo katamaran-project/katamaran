@@ -268,7 +268,7 @@ Import asn.notations.
         (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
            ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
         (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
-        instrs ec fl.
+        instrs ec fl asn_no_post.
 
     (* ================================================================ *)
     (* PARAMETRIC-BASE SUPPORT — READING GUIDE (Examples.v side).        *)
@@ -679,7 +679,7 @@ Import asn.notations.
                   (term_val ty.int (Z.of_N bound)))
                (term_val ty.int (Z.of_N lenAddr)))
           ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs )
-        instrs ec fl.
+        instrs ec fl asn_no_post.
 
     (* ================================================================== *)
     (* THE UNIFIED BUILDER (PLAN-unify-generators.md stage 3).             *)
@@ -731,7 +731,7 @@ Import asn.notations.
           ∗ gen_pre_rel reg_specs
           ∗ gen_mem_pre_rel_classed word_data
           ∗ gen_mem_pre_rel_bytes_classed byte_data )
-        instrs ec fl.
+        instrs ec fl asn_no_post.
 
     (* gen_contract_rel with the data block grouped into ONE existential per
        publicness class (see gen_mem_pre_rel_classed above).  Same statement

@@ -92,6 +92,15 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
       P ∗ minimal_pre.
 
+    (* The TRIVIAL exit assertion — what a whole-program contract carries,
+       and what every generator below supplies.  A contract that is one
+       SEGMENT of a program supplies a real one instead: the resources and
+       publicness facts the next segment needs.  See
+       plans/PLAN-loop-invariant.md U6. *)
+    Definition asn_no_post {Σ} :
+      Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+      asn.formula (formula_bool (term_val ty.bool true)).
+
     (* CFGVerifierContract: unlike a plain Hoare-triple contract, the CFG
        verifier requires an explicit exit condition and fuel bound.
        Postconditions are not exposed: SHeapSpec has no leakcheck, so the final
@@ -111,10 +120,16 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (exits : list (Term Σ ty_xlenbits))
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AnnotInstr)
-      (fl : nat) :=
+      (fl : nat)
+      (* The exit assertion, RE-EXPOSED 2026-09-03 (it was hardwired to
+         `true` by 2b6c7753).  `consume`d at the moment the exit condition
+         is hit, with "an" bound to whichever declared exit was taken; the
+         soundness bridge hands it back to the caller, which is what makes
+         two segment contracts composable.  Pass asn_no_post for an
+         ordinary whole-program contract. *)
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
       Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
-        (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl
-        (asn.formula (formula_bool (term_val ty.bool true))) wnil.
+        (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
 
     (* init_addr and ec are unused by the symbolic VC (the exit condition
        lives in the exit TABLE now); they are kept in the signature so
@@ -126,8 +141,9 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AnnotInstr)
       (ec : bv xlenbits -> bool)
-      (fl : nat) :=
-      safeE (postprocess (CFG_VC_triple p exits P i fl)).
+      (fl : nat)
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
+      safeE (postprocess (CFG_VC_triple p exits P i fl Q)).
 
     Record CFGVerifierContract {Σ} :=
       MkCFGVerifierContract
@@ -138,24 +154,27 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       ; cfg_instrs        : list AnnotInstr
       ; cfg_exitCond      : bv xlenbits -> bool
       ; cfg_fuel          : nat
+      ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
       }.
 
     Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
       (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
            Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AnnotInstr ->
-           (bv xlenbits -> bool) -> nat -> A) : A :=
+           (bv xlenbits -> bool) -> nat ->
+           Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
       match c with
       | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
            cfg_precondition := pre; cfg_instrs := i;
-           cfg_exitCond := ec; cfg_fuel := fl |} => f ia p exits pre i ec fl
+           cfg_exitCond := ec; cfg_fuel := fl;
+           cfg_postcondition := post |} => f ia p exits pre i ec fl post
       end.
 
     Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
       cfg_map c Valid_CFG_VC.
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c (fun ia p exits P i ec fl =>
-        VerificationCondition (postprocess (CFG_VC_triple p exits P i fl))).
+      cfg_map c (fun ia p exits P i ec fl Q =>
+        VerificationCondition (postprocess (CFG_VC_triple p exits P i fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a
        CFGVerifierContract literal lives as a Local Notation in
