@@ -506,10 +506,45 @@ The postcondition channel exists all the way down and is deliberately trivial:
 | `Verifier.v:1309` `sexec_triple_addr` | ends in `consume ens δ3.["an" ↦ na]` — the channel EXISTS |
 | `Contracts.v:117` `CFG_VC_triple` | passes `asn.formula (formula_bool (term_val ty.bool true))` — i.e. `True` |
 | `Contracts.v:132` `CFGVerifierContract` | has **no postcondition field** at all |
-| `Adequacy.v:1288` | runs `cexec_triple_addr … (λ _ _, True) []` — final continuation discards the exit heap |
+| `Adequacy.v:1288` | runs `cexec_triple_addr … (λ _ _, True) []` — but see U2a: this row is NOT the cause |
 
 So CFGVer today proves "this program is safe and leaks nothing", never "and it
 ends in state Q". Composition needs the latter, and only at the cut points.
+
+### U2a. CORRECTION (same session) — the mechanism is a WEAKENED STATEMENT, not the `True` continuation
+
+My first reading blamed `Adequacy.v:1288`'s `(λ _ _, True)` shallow
+continuation for discarding the exit state. **That is wrong, and checking the
+sibling verifier is what showed it.** `BlockVer/Verifier.v:435` proves
+
+```coq
+Lemma sound_cexec_triple_addr {Γ} {pre post instrs} {ι : Valuation Γ} :
+  cexec_triple_addr pre instrs post (fun _ _ => True) []%list ->
+  ⊢ semTripleBlock (λ a, asn.interpret pre (ι.["a"↦a]) ∗ ⌜secLeak a⌝) instrs
+      (λ a na, asn.interpret post (ι.["a"↦a].["an"↦na])).
+```
+
+— the **same** `(fun _ _ => True)` and the same empty initial heap, and it still
+hands `asn.interpret post` to the caller. That continuation is the *residual
+heap* continuation ("we do not care what is left over", i.e. no leakcheck) and
+is CORRECT as it stands; `consume post`'s own soundness is what yields `post` to
+the caller. **Keep it.**
+
+The real cause is narrower and better: commit `2b6c7753` (2026-06-20, "remove
+postconditions from CFGVerifierContract") **weakened the CFGVer bridge's
+conclusion** — its own message says "keep post in hypothesis for maximal
+generality, *remove `asn.interpret post` from the continuation*". The parameter
+survived; only the guarantee was dropped. Its rationale — "SHeapSpec has no
+leakcheck, so exposing postconditions adds complexity with no semantic benefit"
+— was correct for a WHOLE-PROGRAM contract (nothing downstream consumes the exit
+state) and is exactly what composition invalidates.
+
+**Consequence: change 1 is not a design, it is a revert with a live template.**
+The `(λ a na, asn.interpret post (ι.["a"↦a].["an"↦na]))` continuation shape is
+alive and compiling at HEAD in BOTH sibling verifiers — `BlockVer/Verifier.v`
+(:438, :459, :470, :795), `BlockVer/Examples.v` (:1119, :1148, :1159),
+`BinaryBlockVer/Verifier.v` (:392, :412, :423, :723, :748). Re-thread what
+`2b6c7753` stripped, against those as the model.
 
 **Revised scope, three changes, none touching the trusted statement surface:**
 
@@ -599,3 +634,69 @@ declared context), one axis moved.
   the three-change programme in U2 is justified on its own.
 
 Run this before Phase 1.
+
+## U6. What the exit assertion must actually CARRY (owner's framing, 2026-09-03)
+
+Recorded verbatim as the design constraint, because it sharpens U2: composition
+needs *"a post-condition or rather a requirement on present heap chunks when
+reaching the exit condition, because ownership of certain locations and
+publicness of certain values and maybe more will be necessary information for
+the next step."*
+
+That is the right reading and it is narrower than a functional postcondition —
+which matters, because the cost of the whole scheme is the size of this
+assertion. It is a **`consume` at the exit**, which is exactly what
+`sexec_triple_addr:1309` already does, and its type is already correct:
+`Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)` — same assertion language
+as `cfg_precondition`, so "segment 1's exit assertion ⟹ segment 2's
+precondition" is expressible, and for a loop ONE `Inv(u)` serves as both ends.
+
+The four things it has to carry, and where each already has vocabulary:
+
+1. **Ownership** of the locations the next segment touches — `↦ᵣ` / `↦ₘ` chunks.
+   Ordinary assertion syntax.
+2. **Publicness** of the values that must be leakable downstream — `secLeakvar`
+   (`GenContract.v:99,112,247,356,374`). This is the part with no analogue in an
+   ordinary Hoare postcondition and the easiest to forget; a value that is
+   public on entry to iteration `u+1` is *not* public just because it was public
+   at `u`, it has to be re-asserted.
+3. **Value constraints** — `asn.exist` plus pure formulas relating the values to
+   the induction variable (`a0 = p + 52 + u`, the accumulator after `u` steps).
+   Without these the induction has nothing to step.
+4. **`pc` / `nextpc` / `ptsto_instrs`** — do NOT put these in the assertion. The
+   bridge's continuation already hands all three back
+   (`Adequacy.v:1371-1372`).
+
+**One obligation discharges itself, worth knowing before it is budgeted for.**
+The next segment's `⌜secLeak a⌝` premise is FREE at every cut point: the
+bridge's exit fact is `⌜match an with SyncVal v => exitCond v = true |
+NonSyncVal _ _ => False end⌝`, which forces `an` to be `SyncVal`, and
+`secLeak (SyncVal v) = True` by definition (`Formulas.v:117`). So the pc is
+automatically public where segments join, and only categories 1-3 above cost
+anything.
+
+**The frame is what keeps the footprint O(1), and it needs NO new lemma.**
+Resources not mentioned by the exit assertion are dropped by the VC (no
+leakcheck). So the `2(n-1)` array cells the loop is not currently touching must
+NOT appear in `Inv(u)` — that would reintroduce the `H ≈ h₀+cN` term this whole
+scheme exists to remove. They stay in the CALLER's Iris context: the bridge's
+premise is a wand consuming only `pre`, so anything never fed to it simply is
+never touched. Note this means **no frame rule for `myWP2_loop` is required** —
+a nontrivial saving, since framing `R` through the fixpoint would need a frame
+rule for `semWP2` under the `▷` and is a much harder lemma than
+`myWP2_loop_bind`. §4's framing argument is therefore right, but for a slightly
+different reason than it states: the frame never enters the VC at all, rather
+than being split out of a whole-array assertion inside it.
+
+**Corollary for the bind lemma's use site.** With the strengthened bridge you
+instantiate `ExitCond := myWP2_loop RealExit` and prove it from the exit
+assertion plus the next segment's fact — which yields
+`myWP2_loop (myWP2_loop RealExit)`. Collapsing that is exactly
+`myWP2_loop_bind` with the identity continuation, i.e. the corollary
+
+```coq
+Lemma myWP2_loop_join (E : iProp Σ) : myWP2_loop (myWP2_loop E) ⊢ myWP2_loop E.
+```
+
+so U1's lemma is load-bearing and not merely convenient. Land it with that
+corollary next to it.
