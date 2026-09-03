@@ -765,3 +765,106 @@ can also case on WHICH exit — which is what a multi-exit segment needs.
 - **Gate not yet run.** Both edited files compile and the `Results.v` closure
   was rebuilt, but `scripts/gate.sh` (axiom-cleanliness, no proof holes) has
   not been run on this change.
+
+## U8. LANDED 2026-09-04 — a real program verified by COMPOSING TWO CONTRACTS
+
+`Example/SwapComposed.v` + `Example/SwapComposedResult.v`, both in `_CoqProject`
+and re-exported from `Results.v`. `swap_composed` is axiom-clean
+(`Machine.pure_decode`, `Base.mmioenv` only) and is now in the gate's
+`AXIOM_CLEAN_THMS`.
+
+**What it proves.** The three-instruction register swap
+`[MV X3 X2; MV X2 X1; MV X1 X3]`, cut at offset 4:
+
+| | segment A | segment B |
+|---|---|---|
+| range | 0 → 4 | 4 → 12 |
+| executes | `MV X3 X2` | `MV X2 X1; MV X1 X3` |
+| exits | `[4]`, `cut_exitCond v := bv.eqb v 4` | `[12]`, `pcOutOfInstrs_exitCond` |
+| pre | `asn_init_pc 0 ∗ X1↦x ∗ X2↦y ∗ X3↦z` | `asn_pc_eq 4 ∗ X1↦x ∗ X2↦y ∗ X3↦y` |
+| post | `X1↦x ∗ X2↦y ∗ X3↦y ∗ minimal_pre` | `asn_no_post` |
+| fuel | 3 | 4 |
+
+Both range over the SAME instruction table — only pre/post/exits/fuel differ.
+That is the intended shape of a cut: instruction ownership threads straight
+through the bridge, and each segment's VC unrolls only its own steps.
+`swap_composed` then derives ONE `myWP2_loop` fact for the whole program using
+**nothing about the program except the two segment contracts.**
+
+**The proof shape, three lines of structure:**
+
+```coq
+iApply myWP2_loop_join.                              (* collapse the nested loop *)
+iApply (sound_scfg_verification_condition_myWP2 HvA (myWP2_loop swapExit) ...).
+  (* ... at the cut, "Hpost" IS segment A's exit assertion ... *)
+  iApply (sound_scfg_verification_condition_myWP2 HvB swapExit ...).
+```
+
+Discharging segment A with `ExitCond := myWP2_loop <real exit>` is what creates
+the nested loop, and `myWP2_loop_join` (U1) is what collapses it. So the bind
+lemma is load-bearing, exactly as U6 predicted.
+
+### Findings worth keeping
+
+- **`solve_vc` discharges a non-trivial postcondition with no new tactic.** This
+  was the open risk and it evaporated: both VCs are `vm_compute. solve_vc.` and
+  the pair compiles in **9 s**. Nothing about consuming a real `ens` needed
+  special handling.
+- **`minimal_pre` must be in the cut assertion.** Segment B's precondition is
+  wrapped in `extend_to_minimal_pre`, so `cur_privilege` and the leakage-inv
+  chunk have to be handed across the cut. Forgetting this is the first thing to
+  check if a cut fails to connect.
+- **THE ONE REAL FRICTION — valuation bookkeeping at the cut.** Segment A's post
+  is interpreted at `ι.["a"↦0].["an"↦4]`, segment B's pre at `ι.["a"↦4]`. The two
+  are **convertible** (`reflexivity` proves the register chunks equal) but NOT
+  syntactically equal, so `iFrame` — which matches syntactically — cannot place
+  them, and `rewrite` fails with *"found no subterm"* because a prior `cbn` has
+  unfolded `X1` to `[bv 0x1]` in the goal but not in the hypothesis. **The fix is
+  `iExact`, which goes through conversion.** Pattern:
+  ```coq
+  iDestruct "Hpost" as "(H1 & H2 & H3 & Hpriv & Hinv)".
+  iSplitR "Hpriv Hinv"; [| iFrame].
+  iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+  iSplitL "H1"; [iExact "H1"|]. iSplitL "H2"; [iExact "H2"| iExact "H3"].
+  ```
+  A generator for segment contracts should avoid this by construction (build both
+  ends from ONE assertion at `Σ` and weaken explicitly), rather than making every
+  call site pay it.
+- **`ι` is IMPLICIT in `sound_scfg_verification_condition_myWP2`** — it occurs in
+  `Hif`'s type, so `Set Implicit Arguments` hides it. The call is
+  `(… HvA ExitCond Hif Hef $! a)`, matching `EndToEnd.v`'s `valid_contract _ Hif
+  HexitsFaith`. Passing `ι` positionally gives *"has type Valuation swapCtx while
+  it is expected to have type iProp"*. Same asymmetry `cfgver-endtoend-internals`
+  documents for the bridges.
+- **Contract-level `↦ᵣ` and Iris-level `↦ᵣ` collide.** Importing the Iris
+  instances into a file that also builds contracts makes `X1 ↦ᵣ …` fail with
+  *"X1 has type RegIdx while it is expected to have type Reg ?τ"*. This is why
+  the light/heavy `Example/<Prog>.v` + `Example/<Prog>Result.v` split is not
+  optional here.
+- `cbn [cfg_map swapA swapB]` (naming the contracts) is needed to reduce
+  `cfg_map`; `cbn [cfg_map]` alone leaves it folded.
+
+### What this does NOT yet do
+
+- It stops at `myWP2_loop`, not at `noninterferent_strong`. Wiring a composed
+  proof through `cfg_instrs_endToEnd` to a leakage statement is the next step.
+- The cut is straight-line. A LOOP invariant additionally needs the induction of
+  §7 over a `u`-indexed family of cut assertions — but the operator it needs
+  (`myWP2_loop_bind`/`_join`) and the mechanism (a real `cfg_postcondition`
+  returned by the bridge) are both now in place and exercised.
+- Nothing here reduces cost yet: the two segments share one instruction table
+  and the program is 3 instructions long. The payoff measurement (U5) is still
+  unrun, and is still the thing that decides whether this is worth generalising.
+
+### Method correction recorded 2026-09-04
+
+An earlier claim in this session that the `Results.v` closure "rebuilt clean"
+after the `cfg_postcondition` change was **false** — that `make` never ran. It
+was launched with a stale shell cwd (`case_study/RiscvPmp/CFGVer`, which has no
+`Makefile.coq`) and died instantly with *"No rule to make target"*; the
+background command ended in `tail`, so the reported exit status was `tail`'s, and
+the error grep (`^Error|error:`) did not match make's wording. Two lessons, both
+already half-written in `CLAUDE.md`: **put the command whose status you care
+about LAST in a background pipeline**, and **grep for the failing tool's own
+wording**, not a generic `Error`. The rebuild was then run properly (30 targets,
+clean) before anything was claimed.

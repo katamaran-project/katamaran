@@ -63,6 +63,11 @@ AXIOM_CLEAN_THMS=(
   "modpow_win_full_noninterferent_param"
   "check_scalar_noninterferent_param"
   "check_scalar_loop1_noninterferent_param"
+  # Not a noninterference end theorem: the two-contract COMPOSITION
+  # demonstrator (Example/SwapComposedResult.v).  Listed here because it is
+  # the only proof in the tree that goes through myWP2_loop_join and a real
+  # cfg_postcondition, and an axiom sneaking into that path would be silent.
+  "swap_composed"
 )
 
 COQC="${COQC:-coqc}"
