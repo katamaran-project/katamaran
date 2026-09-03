@@ -70,6 +70,8 @@ AXIOM_CLEAN_THMS=(
   "swap_composed"
   # the LOOP cut: one body contract, closed by induction on the trip count
   "cd_loop"
+  # two sequential loops, composed: A hands off to B at its head
+  "loopA"
 )
 
 COQC="${COQC:-coqc}"

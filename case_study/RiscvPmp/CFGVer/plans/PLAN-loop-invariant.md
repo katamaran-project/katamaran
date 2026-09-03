@@ -1016,3 +1016,71 @@ measured the payoff, and this is that measurement, landing unfavourably.
   status is "unmeasured there", not "will win there".
 - **Before generalising into a segment-contract generator**, the thing to price
   is the 9.19× pinning gap on a REAL target, not countdown.
+
+## U11. TWO LOOPS, COMPOSED (2026-09-04)
+
+`Example/TwoLoopsComposed.v` + `…Result.v`. Two sequential countdown loops in one
+program, each verified by its own body/exit contract pair, then joined.
+
+```
+addr  0: ADDI X1 X1 -1     loop A head
+addr  4: BNE  X1 X0 -4     back to 0
+addr  8: ADDI X2 X2 -1     loop B head
+addr 12: BNE  X2 X0 -4     back to 8
+addr 16: exit
+```
+
+**Four contracts, each `vm_compute; solve_vc`'d ONCE at a symbolic counter:**
+`tAbody` (0→0), `tAfinal` (0→8), `tBbody` (8→8), `tBfinal` (8→16). Loop A's exit
+contract lands on loop B's HEAD — that is the join.
+
+**Two inductions:**
+```coq
+loopB n : bv.bin m = n+1 -> invB m -∗ myWP2_loop tExit
+loopA n : bv.bin k = n+1 -> bv.bin m = nB+1 ->
+          invA k ∗ asn.interpret tX2 (iB m) -∗ myWP2_loop tExit
+```
+`loopA`'s base case is the hand-off: A's exit lands at pc 8 and `loopB` takes
+over, receiving X2 from the frame and `minimal_pre` from A's postcondition.
+`two_loops_2_3` anchors it at 2 trips of A then 3 of B. **Neither trip count ever
+reaches the symbolic executor.**
+
+### The framing property, exercised for the first time
+
+**Loop A's contracts never mention X2.** Loop B's counter is held in the caller's
+Iris context across the whole of loop A and handed to `loopB` at the join, so no
+step of loop A pays for it — exactly U6's "the frame never enters the VC at all,
+rather than being split out of a whole-array assertion inside it". `loopA`'s
+statement carries it as a separate `∗` conjunct that is simply threaded through
+both cases (`iFrame "… HX2"` in the step, `iExact "HX2"` at the join).
+
+A's final `X1` value is dropped at the join with a `_` pattern — sound because
+`iProp Σ` is affine, the same property `Adequacy.v` already relies on.
+
+### Why this is the interesting case, and what is still unmeasured
+
+U10 measured composition LOSING 6.4× on a single loop, because the flat arm there
+is linear (`3.410 + 1.5278·N`). **Two loops is the case where the flat arm is
+known to be superadditive** — `check-scalar-combined-cost-drivers.md` measures
+**5.5–18.6×** for combining two loops, decomposing into symbolic-base
+amplification and chunk inventory, with the mechanism being that *each loop's
+steps transport the other loop's chunks*. Composition removes exactly that: loop
+A's VCs never see X2, and loop B's never see X1.
+
+**That comparison was NOT run here.** This is a correctness/expressiveness
+result, like U8 and U9. The flat two-loop countdown VC at matched trip counts is
+the missing arm, and it is cheap to build — the natural continuation of U10's
+rig. Until it is run, do not claim composition wins on two loops either; U10's
+lesson is precisely that the intuition ran the wrong way once already.
+
+### Traps
+
+- **A `Common`/light file that other light arms import must `Require Export`
+  Prelude, but one imported by a HEAVY file must `Require Import` it.** Export
+  drags the assertion-scope `∃` into the Iris file and shadows Iris's, giving
+  *"The reference v was not found"* on `(∃ v, pc ↦ᵣ …)`. `SwapComposed.v` and
+  `CountdownComposed.v` use Import for this reason; the U5 probe arms needed
+  Export. Both are correct in their place.
+- Everything else is the U9 list unchanged: `iExact` not `iFrame` across the
+  valuation shift (now the FOURTH and FIFTH occurrence), `cbn [cfg_map <contract>]`
+  naming the contract, `ι` implicit in the bridge.
