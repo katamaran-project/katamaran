@@ -974,3 +974,45 @@ exist) + `change (bv.exp2 xlenbits) with 4294967296%N` to keep `lia` away from
   `formula_relop` on it. A loop whose trip count is SECRET cannot be cut this way
   — `formula_relop` on `NonSyncVal` is `False` (`secret-data-walls`). That is a
   real limit of this technique, not an accident of the example.
+
+
+## U10. U5 IS RUN — and the payoff is NEGATIVE at the sizes we have (2026-09-04)
+
+Full record: `diagnostics/composition-payoff.md`. Headline numbers, so this plan
+stops promising a win it has not got:
+
+- **U5 as specified** (fixed segment, K unexecuted instructions in front):
+  **1.155× at K=32**, ~0.031-0.037 M words per prefix instruction, held-out
+  linear fit -0.87%. The table-shrinking benefit of composition is a small
+  constant. **U5's question is answered: composition buys very little
+  throughput on that axis.**
+- **Flat unrolled countdown VC is EXACTLY LINEAR** in trip count:
+  `3.410 + 1.5278·N` M words, held-out +0.025%.
+- **The composed loop proof costs a flat 178 M words** (body 97.95, final
+  83.44) — **6.4× the flat VC at N=16**, breaking even only at **N ≈ 114**.
+- **Isolated cause, one axis, 9.19×:** the same body contract with the counter
+  PINNED (`k = 5` in the path condition, same `|Σ|`, same chunks, same steps)
+  costs 10.66 M vs 97.95 M unpinned. **The expense of a segment contract is that
+  its counter is unknown, not that the program is long.**
+
+**This retracts nothing above** — U8/U9 are correctness and expressiveness
+results and remain exactly as stated; U9 explicitly flagged that it had not
+measured the payoff, and this is that measurement, landing unfavourably.
+
+**What it changes for the plan:**
+
+- §0's premise (`O(L·N²) → O(L·N)`) assumed the flat arm is superlinear. For a
+  loop with a CONCRETE trip count it is linear, and then composition is a pure
+  loss below ~114 trips. **§0's payoff claim is only valid where the flat arm is
+  genuinely superlinear** — which for countdown it is not.
+- The tension is intrinsic, not an implementation defect: an invariant must hold
+  for an unknown counter, or it is not an invariant. **You cannot have the flat
+  arm's concreteness and the invariant's generality at once.** Any future work
+  here should target symbolic-value cost, not program length.
+- **The case is NOT closed for the real targets.** `muladd` at `mlen=2` and
+  `check_scalar` have flat arms that do not terminate; against a non-terminating
+  baseline there is no crossover and composition wins by default. That
+  comparison was not run — it cannot be, in the flat direction — so the honest
+  status is "unmeasured there", not "will win there".
+- **Before generalising into a segment-contract generator**, the thing to price
+  is the 9.19× pinning gap on a REAL target, not countdown.
