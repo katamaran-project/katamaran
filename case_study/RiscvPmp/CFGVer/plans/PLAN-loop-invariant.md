@@ -408,3 +408,194 @@ secondary check).
   upfront-declared array); a program whose bottleneck is something else
   (e.g. genuine chunk leaks, as `encodes_instr` was) still needs the
   matching lever from `PLAN-chunk-gc.md`, not this one.
+
+---
+
+# UPDATE 2026-09-03 — the composition operator is PROVED, and §4/§6/§12 are wrong about scope
+
+Written at the start of the loop-invariant session this plan was handed off to
+(`diagnostics/base-k-hunt.md`'s "READ BEFORE THE LOOP-INVARIANT WORK" header is
+the brief). Nothing in §5–§10's phase structure is retracted; what changes is
+**what the phases have to touch**, and one premise of §0 needs restating under
+the corrected cost model.
+
+## U1. GOOD NEWS — `myWP2_loop` admits a bind rule, and it is 15 lines
+
+The operator every flavour of contract composition needs — loop invariant,
+straight-line segment cut, function contract — is monotonicity of `myWP2_loop`
+in its `ExitCond`. It did not exist. It does now, **proved and compiled green**
+(`Example/ZZLoopBind.v`, gitignored throwaway; ~7 min total including two
+helper lemmas):
+
+```coq
+Lemma myWP2_loop_unfold (E : iProp Σ) :
+  myWP2_loop E ⊢ myWP2_loop_fix E (myWP2_loop E).
+Proof. rewrite {1}fixpoint_myWP2_loop_eq. done. Qed.
+
+Lemma myWP2_loop_fold (E : iProp Σ) :
+  myWP2_loop_fix E (myWP2_loop E) ⊢ myWP2_loop E.
+Proof. rewrite {2}fixpoint_myWP2_loop_eq. done. Qed.
+
+(* THE composition operator: if E1 (the first segment's exit assertion) itself
+   implies "keep running until E2", then running until E1 and then continuing
+   is running until E2. *)
+Lemma myWP2_loop_bind (E1 E2 : iProp Σ) :
+  ⊢ (E1 -∗ myWP2_loop E2) -∗ myWP2_loop E1 -∗ myWP2_loop E2.
+Proof.
+  iLöb as "IH". iIntros "HE H".
+  iDestruct (myWP2_loop_unfold with "H") as "H".
+  iEval (rewrite /myWP2_loop_fix) in "H".
+  iDestruct "H" as "[HE1 | H]".
+  - by iApply "HE".
+  - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix). iRight.
+    iDestruct "H" as (v) "[Hpc Hcont]".
+    iExists v. iFrame "Hpc". iIntros "Hpc".
+    iDestruct ("Hcont" with "Hpc") as "Hwp".
+    iApply (semWP2_mono with "Hwp").
+    iIntros (v1 ? v2 ?) "Hm".
+    destruct v1 as [v1|m1]; destruct v2 as [v2|m2]; try done.
+    iNext. iApply ("IH" with "HE Hm").
+Qed.
+```
+
+Notes for whoever lands this for real:
+
+- It is **generic** — no CFGVer vocabulary, no table, no VC. It belongs next to
+  `exitCondImpliesMyWP2_loop` in `Adequacy.v` (which is the `E ⊢ myWP2_loop E`
+  unit of the same monad; `myWP2_loop_bind` is its bind).
+- The `▷` bookkeeping §11 anticipated as the hard part **is one `iNext`**. The
+  Löb IH lands exactly on the `▷ wp` in `myWP2_loop_fix`'s `inl/inl` branch.
+- Two traps, both costing a compile. (1) A bare
+  `rewrite fixpoint_myWP2_loop_eq` **also rewrites inside the Löb hypothesis**,
+  because in IPM the hypotheses are part of the goal term — the IH then reads
+  `(E1 ∨ …) -∗ (E2 ∨ …)` and `iApply "IH"` fails with
+  `iSpecialize: cannot instantiate … with (myWP2_loop E1)`. Hence the directed
+  fold/unfold pair plus `iEval (…) in "H"`. (2) `fixpoint_myWP2_loop_eq` has the
+  fixpoint on BOTH sides, so the helper lemmas need occurrence selectors
+  (`{1}` unfold, `{2}` fold) — same shape as `Adequacy.v:146`'s own proof.
+- `rocq_start(theorem=myWP2_loop_bind)` reported the main lemma green while both
+  helper lemmas were **broken** — `theorem=` replays the prefix vos-style and
+  skips proof bodies. Exactly `rocq-implementation` §1's documented trap; the
+  confirming `mode="full"` compile is what caught it.
+
+## U2. BAD NEWS — §4 and §12 are wrong: the soundness bridge MUST change
+
+§4 claims "nothing new needed here" and §12 says "Do NOT modify
+`sound_scfg_verification_condition_myWP2`'s statement". §6 builds on that,
+proposing to call it with `ExitCondIprop := Inv(u+1)`. **That call cannot be
+made.** Read the bridge's actual conclusion (`Adequacy.v:1362-1374`):
+
+```coq
+⊢ ∀ a, asn.interpret pre … ∗ ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs -∗
+    (∀ an, ⌜exitCond an⌝ ∗ pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs -∗ ExitCond) -∗
+    myWP2_loop ExitCond
+```
+
+`ExitCond` is indeed a genuine parameter, so §1.2's genericity claim is CORRECT.
+But to *obtain* `myWP2_loop ExitCond` you must supply a continuation proving
+`ExitCond` from **only** `pc`, `nextpc` and `ptsto_instrs`. Instantiating
+`ExitCond := Inv(u+1)` therefore requires proving the loop-carried resources out
+of nothing. The registers and memory cells `Inv(u+1)` names are gone: they were
+handed to `produce req` at entry and never returned.
+
+**Why they are gone is precise, and it is a wiring decision, not a limitation.**
+The postcondition channel exists all the way down and is deliberately trivial:
+
+| layer | what it does with the postcondition |
+|---|---|
+| `Verifier.v:1309` `sexec_triple_addr` | ends in `consume ens δ3.["an" ↦ na]` — the channel EXISTS |
+| `Contracts.v:117` `CFG_VC_triple` | passes `asn.formula (formula_bool (term_val ty.bool true))` — i.e. `True` |
+| `Contracts.v:132` `CFGVerifierContract` | has **no postcondition field** at all |
+| `Adequacy.v:1288` | runs `cexec_triple_addr … (λ _ _, True) []` — final continuation discards the exit heap |
+
+So CFGVer today proves "this program is safe and leaks nothing", never "and it
+ends in state Q". Composition needs the latter, and only at the cut points.
+
+**Revised scope, three changes, none touching the trusted statement surface:**
+
+1. **`Adequacy.v` (heavy branch, the real work).** Strengthen
+   `sound_cexec_triple_addr_myWP2` / `sound_scfg_verification_condition_myWP2`
+   so the `ExitCond` continuation also receives
+   `asn.interpret post ι.["a"↦a].["an"↦an]`, by threading a non-trivial shallow
+   continuation instead of `(λ _ _, True)`.
+2. **`myWP2_loop_bind`** — done, U1 above.
+3. **Light chain**, mechanical: a postcondition field on `CFGVerifierContract`,
+   passed by `CFG_VC_triple` instead of `True`. Default it to `True` so the nine
+   live examples and `gen_contract` are unaffected.
+
+`sexec_cfg_addr` itself, `myWP2_loop_fix`, `Noninterference.v` and every
+`Example/*Result.v` stay untouched — §4's instinct was right about the
+executor and the trusted surface, wrong only about the bridge. Keep §12's other
+prohibitions.
+
+## U3. §0's payoff argument needs restating — the mechanism it cites was retracted
+
+§0 and the 2026-08-14 evidence update rest on cost `~ H·S` with a **superlinear
+chunk exponent** (`H^(1+ε)·S`). That exponent is **RETRACTED**
+(`check-scalar-combined-cost-drivers.md` §6.6, isolating grid): chunk count is
+**exactly linear** — held-out linear fit 0.00% at 4× the heap size — and the
+superlinear factor is `|Σ|`, which enters quadratically. So do not reuse "each
+added chunk raises the cost of carrying every other one."
+
+**The `O(L·N²) → O(L·N)` claim nevertheless survives, for a simpler reason.**
+Cost is bilinear `H·S`, linear in each. A flat fuel-unrolled loop VC has
+`H ≈ h₀ + cN` (all N cells declared up front) and `S ≈ sN` (N trips of the
+body), so the product is quadratic on the diagonal. A per-iteration contract has
+`H = O(1)` and `S = body`, both **independent of N**, and the executor runs it
+ONCE — the N-fold repetition moves into a cheap Iris induction. The asymptotic
+claim is if anything stronger than §0 states.
+
+Two further reasons the case is now better than when this plan was written:
+
+- **`drop_fuel=8` pins peak `|Σ|` at 33 regardless of program length**, and
+  since the `var_dead` fix that is free (1.87× throughput, 2.66× footprint at
+  K=206, both growing with K). That retires the `|Σ|` axis and leaves program
+  length as the sole target. **Still ungated** — see the handoff TODO.
+- **`Base(K)` — instructions plus the live `SymProp` tree — is 62% of peak
+  footprint and rising**, `mlen=2` dies on memory, and *no* lever in the
+  diagnostics catalogue touches it (`footprint-vs-throughput.md` §2.4).
+  Composition attacks it directly: peak becomes the **max** over segments
+  instead of the **sum**.
+
+## U4. The pilot target should probably change
+
+§2 fixes the pilot as check_scalar loop 2's 13-instruction body. Since then the
+actual blocker moved: `PLAN-muladd-full.md` Phase 3 is BLOCKED, `mlen=2` dies on
+memory, and the identified cost is `br_divrem`'s own loop (67.5 s for 2 trips in
+isolation) called from a per-limb outer loop. That is a **doubly** favourable
+shape — the inner loop wants an invariant, and `br_divrem` wants a *function*
+contract applied at its call site. §12's "check_scalar loop 2 is the pilot, do
+not generalize" still stands as scope discipline, but note the payoff now lands
+on muladd, and pick the pilot with that in mind.
+
+## U5. Before building anything — the ONE probe that bounds the payoff
+
+The handoff's method lesson ("bound the candidate with a probe before building
+the fix"; every candidate reasoned about from code alone was wrong or
+negligible) applies here, and there is a specific cheap probe.
+
+The K sweep at constant `|Σ|`=33 (`dropk-firing-payoff.md` ADDENDUM PART 2) has
+alloc 452 → 1946 M words and peak RSS 0.30 → 1.08 GB for K 140 → 206 — 4.3× and
+3.6× for a 1.47× rise in K, i.e. marginal cost per instruction (22.6 M) about
+**7× the average at K=140** (3.2 M). That looks like strong superlinearity in
+program length, which is what composition would remove. **But it is a PREFIX
+sweep and the muladd prefix is structurally heterogeneous** (adjacent equal-width
+windows swing 2.2×), so the later instructions may simply be intrinsically
+costlier rather than made costlier by the ones before them. The two readings
+predict different payoffs and the measurement cannot tell them apart.
+
+**The probe that can:** take a FIXED instruction segment and measure its VC cost
+standalone versus as the TAIL of a longer prefix, at constant `|Σ|`. Same design
+as §6's `ZZSkipCommon` inventory swap (identical executed work, different
+declared context), one axis moved.
+
+- Fixed segment costs the SAME either way ⟹ cost is linear in K, and
+  composition buys **footprint only** (peak vs sum) — which is still exactly the
+  `mlen=2` wall, but it makes the cheaper unannotated alternative
+  (`footprint-vs-throughput.md` §3: must the VC be built whole before `solve_vc`
+  consumes it?) the better first move, since it buys the same thing with no
+  annotation burden and no soundness work.
+- Fixed segment costs MORE in context ⟹ composition buys throughput too, and
+  the three-change programme in U2 is justified on its own.
+
+Run this before Phase 1.
