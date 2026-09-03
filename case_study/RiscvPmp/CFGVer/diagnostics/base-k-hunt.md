@@ -755,3 +755,44 @@ only; do not read a law into it.
 rebuild `theories/` + light chain; compare `ZZDSI206` (LvStats), `ZZAST206`
 (`sp_asserts`), `ZZTN206` (term nodes) against base before comparing cost — a
 moved VC makes the cost figure incomparable.
+
+---
+
+# READ BEFORE THE LOOP-INVARIANT WORK (written 2026-09-03)
+
+This file is the cost-model record the invariant discussion will reach for, so
+the four things that discussion needs are stated here rather than left implicit.
+
+**1. Two numbers in this directory are RETRACTED as laws.** The CFGVer total
+"exponent 3.44" and the derived `footprint ~ K^2.22 * |Sigma|^0.83` fit. A
+four-point sweep at CONSTANT `|Sigma|` = 33 (`dropk-firing-payoff.md` ADDENDUM
+PART 2) shows marginal cost over equal-width 22-instruction windows swinging
+**649 -> 297 -> 548 M words** -- the muladd prefix is structurally
+heterogeneous, so any two-point exponent measures point selection. **Quote a
+marginal cost: 22.6 M words/instruction at `|Sigma|`=33 (range 13.5-29.5).**
+Minimum four points before fitting an exponent on this rig. This file's own
+"exponent in K" columns inherit the caveat; its SHARE columns (solver 22.8% of
+growth, etc.) are ratios at fixed endpoints and survive.
+
+**2. `Base(K)` is the wall, and no lever in this directory touches it.**
+`mlen=2` dies on MEMORY. `Base(K)` -- footprint minus the `|Sigma|` term, i.e.
+instructions plus the live tree -- is **62% of peak footprint and rising**
+(`footprint-vs-throughput.md` §2.4, at `drop_fuel=0`; **unmeasured at fuel 8**).
+Classing, pinning, sharing, byte blocks, word slicing, chunk-GC, the
+`env.lookup` rewrite and dropk are ALL `|Sigma|` or constant-factor levers.
+This is what invariants would actually attack.
+
+**3. Decide `drop_fuel` first — the gate at fuel 8 has never been run.** At
+fuel 8 the drop pins peak `|Sigma|` at 33 regardless of program length, and
+since the `var_dead` fix that is free: 1.87x throughput and 2.66x footprint at
+K=206, both GROWING with K. That removes the `|Sigma|` axis outright and leaves
+program length as the sole target -- which sharpens the invariant case, but
+moves the baseline invariants would improve on. It changes every VC, so it needs
+its own gate run (`GATE_JOBS=1`, ~40 min).
+
+**4. Compare the cheaper alternative before committing.** Whether the VC must be
+built whole before `solve_vc` consumes it (`footprint-vs-throughput.md` §3's own
+unattempted suggestion). Fusing construction and consumption, or discharging and
+freeing subtrees, attacks `Base(K)` **without touching the executor's cost law
+and without requiring users to write relational two-run invariants** -- the
+latter being a change to what CFGVer *is*, from automatic/bounded to annotated.
