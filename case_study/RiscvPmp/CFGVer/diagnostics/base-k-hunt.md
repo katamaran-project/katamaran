@@ -331,7 +331,9 @@ Across this sweep, peak heap tracks allocation closely:
 Net peak grew 2.322× where net alloc grew 2.283× — within 1.7 %. It is tempting
 to conclude footprint is simply ~11.4 % of allocation and there is no separate
 footprint driver. **Do not.** `footprint-vs-throughput.md` measured the
-`drop_fuel` axis at **10.5× throughput for 1.12× footprint** — a 10×
+`drop_fuel` axis at **10.5× throughput for 1.12× footprint** (that
+throughput figure is SUPERSEDED 2026-09-03 — it was the `var_dead` scan bug,
+now 22.7× cheaper and a net *win*; see `dropk-firing-payoff.md` ADDENDUM) — a 10×
 decoupling. The two metrics genuinely separate on that axis. The constant ratio
 here is an artifact of the K axis, along which every contributor scales
 together; it is not a law and does not transfer.

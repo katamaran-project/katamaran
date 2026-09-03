@@ -142,6 +142,20 @@ Full 2×2 at K=206, net of baselines — the `env.lookup` rewrite × `drop_fuel`
 |---|---|---|---|
 | old `lookup` | 10.510 G | 45.319 G | **4.31×** |
 | new fused walk | 3.636 G | 44.233 G | **12.17×** |
+
+> **SUPERSEDED 2026-09-03 for the `drop_fuel=8` COLUMN — the 12.17× and 4.31×
+> are measuring a cost bug in `var_dead`'s scan, not the drop mechanism.**
+> `var_dead` was an eight-conjunct `&&`, and `&&` is `andb`, a function, so
+> call-by-value evaluated every conjunct — including a full `occurs_check`
+> REBUILD of the O(K) instruction table — for every candidate variable at every
+> step. Short-circuiting it and moving the table last takes `drop_fuel=8` from
+> 44.233 G to **1.947 G (22.72×)**, at which point the drop is **1.87× cheaper
+> than `drop_fuel=0`**. The `drop_fuel=0` column and every conclusion in §2/§3
+> are unaffected (the drop is `pure tt` there, so `var_dead` never runs — the
+> 3.636 G reproduces to +0.0111% post-fix). Full record and control:
+> `dropk-firing-payoff.md`, ADDENDUM 2026-09-03. Do not requote 12.17× or the
+> "pays 12.17× allocation to buy 1.41× footprint" line below as a property of
+> dropk.
 | lookup win | **2.891×** | **1.025×** | |
 
 The rewrite is worth 2.89× to the executor and **1.02× to `var_dead`'s scan** —
@@ -178,5 +192,5 @@ Two traps hit here, both costing a full sweep:
 - **`ZZLvarInstrCommon.v` predates `SymProp.dropk`** and has four
   non-exhaustive matches (`sp_stats`, `sp_asserts`, `sp_assumes`, `sp_branch`).
   Patched 2026-09-01.
-- **`drop_fuel` lives in `Verifier.v:856`**, so an arm needs only the CFGVer
+- **`drop_fuel` lives in `Verifier.v:934`**, so an arm needs only the CFGVer
   light chain rebuilt in a scratch copy — `theories/` is shared and untouched.

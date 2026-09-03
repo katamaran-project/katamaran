@@ -874,7 +874,7 @@ Section CFGVerificationDerived.
     var_dead xIn trans tbl exits apc anp wd h = true ->
     @WitnessBlind (dcarrier Sg0) _ w x σ xIn (dbundle trans tbl exits apc anp wd).
   Proof.
-    unfold var_dead. intros H t1 t2.
+    intros H t1 t2. rewrite var_dead_andb in H.
     apply Bool.andb_true_iff in H as [H Hwd].
     apply Bool.andb_true_iff in H as [H Hex].
     apply Bool.andb_true_iff in H as [H Htbl].

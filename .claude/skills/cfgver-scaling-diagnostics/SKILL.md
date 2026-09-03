@@ -216,6 +216,32 @@ those terms grows with the trip count `N`:
   code-reading alone, and one afternoon of measurement — two microbenchmarks and
   two instrumented runs, no rebuild — would have settled it at any point.
 
+- **NON-SHORT-CIRCUITING `&&` / `List.forallb` in per-step code — a COST BUG,
+  measured 22.7x on one call site.** Coq's `&&` is `andb`, a plain FUNCTION, so
+  under the call-by-value `vm_compute` **both arguments are evaluated**; the same
+  goes for `List.forallb`, which is `f a && forallb f l'`. Standalone probe:
+  `andb cheap_false slow` **1.416 s** vs
+  `if cheap_false then slow else false` **0.000 s**. Writing the match by hand
+  (`if a then b else false`) is CONVERTIBLE to `a && b` but the VM takes exactly
+  one branch. This bit CFGVer's `var_dead` (`Verifier.v`), an eight-conjunct
+  `&&` guarding the dead-variable drop whose roots include the O(K) instruction
+  table: every logical variable, at every drop attempt, at every step, forced a
+  full walk of the whole program even after the variable had been found in the
+  first root. Respelling it as nested `if`s and moving the O(K) root LAST took
+  `drop_fuel=8` on the muladd rig from 44.233 G to 1.947 G net
+  (**22.72x**), turning a 12.17x penalty into a 1.87x *saving*
+  (`dropk-firing-payoff.md` ADDENDUM 2026-09-03). **Where to look:** grep `&&`
+  and `List.forallb` in anything that runs per executor step, and check whether
+  the conjuncts differ in cost by orders of magnitude — if they do, order them
+  cheapest-first as nested `if`s. **The compounding factor to check alongside
+  it:** an `oc_ok`-style wrapper that runs a CONSTRUCTIVE function and inspects
+  only its constructor. `occurs_check : x in Sigma -> T Sigma -> option (T (Sigma - x))`
+  REBUILDS the whole structure at the smaller context, and a boolean wrapper
+  throws that copy away — so each forced conjunct was not a traversal but a
+  copy-and-discard, which is exactly what `allocated_words` measures. **Cheap to
+  fix, and the equivalence is a `reflexivity`-grade theorem** (`var_dead_andb`,
+  256 subgoals), so there is no soundness argument to make and no trusted
+  surface to move.
 - **Self-referential symbolic term growth.** A register whose new value is
   computed from its *own* previous value every iteration (`H := f(H)`, not
   merely read twice within one iteration's formula) accumulates a nested

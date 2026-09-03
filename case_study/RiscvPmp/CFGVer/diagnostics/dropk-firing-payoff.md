@@ -31,7 +31,7 @@ variables after the fact.
 ## The experiment
 
 One axis, `drop_fuel`, at two states. Nothing else differs — same commit, same
-sources, the constant is the only edit (`Verifier.v:852`).
+sources, the constant is the only edit (`Verifier.v:934`).
 
 | axis | states |
 |---|---|
@@ -498,3 +498,108 @@ exceeds RAM and runs in swap. `allocated_words` is deterministic and unaffected 
 it reproduced to 0.0003% across three independent baseline runs here — but **no
 wall-clock or `top_heap_words` figure in this section is a clean measurement**,
 per this directory's standing rule.
+
+
+---
+
+# ADDENDUM 2026-09-03 — the scan was 22.7x too expensive, and fixing it inverts the verdict ON HAVOC-SHAPED CODE
+
+**This does NOT retract anything above.** Everything in this record is about the
+nine live examples, where the drop finds at most one binder worth retiring and
+the recommendation to leave `drop_fuel = 0` stands unchanged. What follows is the
+measurement this record named as the missing next step -- *"the next measurement
+is a `havoc_regs` vehicle, not a higher fuel"* -- run on the muladd probe rig
+(`Example/ZZDS<K>.v`, dense per-instruction `havoc` annotations), plus a cost bug
+found on the way that had been hiding the answer.
+
+## The bug: `var_dead` re-walked the whole program for every candidate
+
+Two facts about `find_dead`/`var_dead` (`Verifier.v`), each harmless alone:
+
+1. **`oc_ok` does not test, it REBUILDS.** `occurs_check` has type
+   `x ∈ Σ -> T Σ -> option (T (Σ - x))` -- it constructs a complete copy of the
+   structure at the smaller context, and `oc_ok` discards that copy to keep one
+   bit.
+2. **`&&` does not short-circuit under `vm_compute`.** `&&` is `andb`, a plain
+   FUNCTION, so call-by-value evaluates both arguments. Measured on a closed
+   standalone probe: `andb cheap_false slow` **1.416 s**,
+   `if cheap_false then slow else false` **0.000 s**.
+
+`var_dead` is an eight-conjunct `&&` whose roots include the O(K) instruction
+table, and `itableW_free` is `List.forallb`, itself `f a && forallb f l'`.
+Together: **for every logical variable, at every drop attempt, at every step,
+the entire instruction table plus path condition plus heap were reconstructed
+and thrown away** -- even when the variable had already been found in the first
+root. Cost `O(K^2 * |Sigma| * fuel)`, all of it copy-and-discard, which is
+exactly what `allocated_words` measures.
+
+## The fix (~40 lines, `Verifier.v`)
+
+- `forallb_sc`, a short-circuiting `forallb`, with
+  `forallb_sc_spec : forallb_sc f l = List.forallb f l`.
+- `itableW_free` / `etable_free` use it; each keeps a bridge lemma back to the
+  `List.forallb` form.
+- `var_dead` respelled as nested `if`s and **reordered cheapest-first**:
+  `apc`, `anp`, `wd`, `trans`, `h`, `wco`, `exits`, instruction table **LAST**.
+  The variables the drop asks about are havoced registers, whose occurrence is
+  in the heap -- so for them the table is now never walked at all.
+- `var_dead_andb` proves the new definition **equals** the old `&&`-chain in the
+  original order (256 subgoals, all `reflexivity`, 122 ms). Behaviour identity
+  is therefore a THEOREM, not a measurement, and `VerifierRel.v`'s `wb_bundle`
+  needed one line changed (`unfold var_dead` -> `rewrite var_dead_andb in H`).
+
+## Results -- muladd rig, K=206, protocol ALLOC, net of the `ZZDSB` baseline (656,267,200)
+
+| arm | net allocated words | |
+|---|---|---|
+| `drop_fuel=8`, pre-fix | 44.233 G | the 12.17x penalty in `footprint-vs-throughput.md` §4 |
+| `drop_fuel=8`, **post-fix** | **1.947 G** | **22.72x cheaper** |
+| `drop_fuel=0` | 3.636 G | |
+
+**So the drop is now 1.87x CHEAPER than not dropping.** The 12.17x penalty is
+gone and inverted. Peak `|Sigma|` is unchanged at 33 (fuel 8) and 135 (fuel 0),
+as it must be given `var_dead_andb`.
+
+**Control, because the 44.233 G figure is from a different session.** Re-ran
+`drop_fuel=0` post-fix: net **3,636,172,368** against the recorded
+**3,635,767,677**, i.e. **+0.0111%**; and against the same-file `ZZHP0` arm
+(4,292,457,760 gross vs 4,292,439,568 today) **-0.0004%**. The rig is identical
+to the study that produced 44.233 G, so both ratios stand. Gate green: build
+clean, no holes, 14 end theorems axiom-clean.
+
+## What this changes, and what it does not
+
+- **Not dominant on the live examples -- unchanged.** The Amdahl argument above
+  still holds there: `|Sigma|` 17 -> 16 is a ~6% ceiling on one program.
+  `drop_fuel` stays at `0` in the committed tree.
+- **On havoc-shaped code the verdict inverts.** `|Sigma|` 135 -> 33 was always
+  worth a large factor; it was buried under ~42 G words of copy-and-discard.
+  This record's own diagnosis that dropk "buys ~nothing" was a statement about
+  the example set, but `footprint-vs-throughput.md` §4's *cost* figures were
+  measuring the scan bug, not the mechanism.
+- **`|Sigma|` = 33 is now free**, which puts it below the ~100-variable region
+  where the verifier is reported to degrade. Any cost model built at
+  `drop_fuel=0` (i.e. `|Sigma|`=135) -- including `base-k-hunt.md`'s exponent
+  work -- describes a configuration that may no longer be the one to run.
+- **Open, and NOT measured:** whether `drop_fuel` should become the default.
+  It changes every VC in the project, so it needs its own gate run and a
+  re-measurement of the `|Sigma|` picture. Also unmeasured: whether 1-2 fuel
+  gives the same drops at lower cost (this record's earlier note that 8 was
+  never shown to be binding still applies).
+
+## Method lessons
+
+1. **A `&&` in a hot loop is a cost bug under `vm_compute`, not a style choice.**
+   This generalises past dropk: any boolean conjunction of expensive tests in
+   executor-side code pays for every conjunct. Grep for `&&` and `List.forallb`
+   in anything that runs per-step.
+2. **`oc_ok`-style "run the constructive version and look at the constructor"
+   wrappers are a silent allocation multiplier.** The `option` return says the
+   work was done; only the caller knows it is being thrown away.
+3. **Two fixes proposed on code-reading alone were wrong, and measurement killed
+   both.** Hoisting `all_ins` out of `find_dead`'s fold: it is the fold's LIST
+   ARGUMENT, already evaluated once per call, and the world changes each drop so
+   there is nothing to hoist -- ~0.1% of cost. And a non-allocating `occurs`
+   class across `OccursCheck.v`/`Formulas.v`/`Chunks.v` with ten soundness
+   lemmas: after the reordering its ceiling is a fraction of 1.947 G, so it was
+   dropped unbuilt. Bound the candidate before building the fix.

@@ -713,19 +713,57 @@ Section CFGVerificationDerived.
         (bIn : (b ∈ Σ)%katamaran) (a : AT Σ) : bool :=
       match occurs_check bIn a with Some _ => true | None => false end.
 
+    (* SHORT-CIRCUITING forallb, and the reason every `&&` in this block is
+       spelled as a nested `if`.  `List.forallb` is `f a && forallb f l'`, and
+       `&&` is `andb` -- a FUNCTION -- so under the call-by-value `vm_compute`
+       BOTH arguments are evaluated and the walk never stops early.  Writing
+       the match by hand makes the VM take exactly one branch.  Measured on a
+       closed probe: `andb cheap_false slow` 1.416 s vs
+       `if cheap_false then slow else false` 0.000 s.  This matters here and
+       almost nowhere else, because `var_dead` runs once per LOGICAL VARIABLE
+       per drop attempt per step and its roots include the O(K) instruction
+       table -- so a non-short-circuiting conjunction re-walks the whole
+       program for every candidate even after the variable has been found. *)
+    Fixpoint forallb_sc {A} (f : A -> bool) (l : list A) : bool :=
+      match l with
+      | List.nil       => true
+      | List.cons a l' => if f a then forallb_sc f l' else false
+      end.
+
+    Lemma forallb_sc_spec {A} (f : A -> bool) (l : list A) :
+      forallb_sc f l = List.forallb f l.
+    Proof.
+      induction l as [|a l' IH]; cbn; [reflexivity|].
+      destruct (f a); cbn; [exact IH|reflexivity].
+    Qed.
+
     (* SInstrTableW / SExitTable are bespoke tuple-lists with no OccursCheck
        instance, so the check is spelled out over their TERM columns rather
        than adding instances to theories/.  The AnnotInstr payload is
        world-independent and cannot mention a logical variable. *)
     Definition itableW_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
         (tbl : SInstrTableW w) : bool :=
-      List.forallb (fun e => match e with (t, x, _) =>
+      forallb_sc (fun e => match e with (t, x, _) =>
                       oc_ok (AT := STerm ty_xlenbits) bIn t
                       && oc_ok (AT := STerm ty_word) bIn x end) tbl.
 
+    Lemma itableW_free_forallb {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (tbl : SInstrTableW w) :
+      itableW_free bIn tbl =
+      List.forallb (fun e => match e with (t, x, _) =>
+                      oc_ok (AT := STerm ty_xlenbits) bIn t
+                      && oc_ok (AT := STerm ty_word) bIn x end) tbl.
+    Proof. apply forallb_sc_spec. Qed.
+
     Definition etable_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
         (exits : SExitTable w) : bool :=
+      forallb_sc (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
+
+    Lemma etable_free_forallb {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (exits : SExitTable w) :
+      etable_free bIn exits =
       List.forallb (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
+    Proof. apply forallb_sc_spec. Qed.
 
     (* ALL the roots.  `trans` is the one that is easy to forget and the one
        whose omission would be UNSOUND rather than merely incomplete — see
@@ -735,18 +773,58 @@ Section CFGVerificationDerived.
         (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
         (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
         (h : SHeap (wctx w)) : bool :=
-      oc_ok (AT := PathCondition) bIn (wco w)
-      && oc_ok (AT := SHeap) bIn h
-      && oc_ok (AT := Sub Σ0) bIn trans
-      && oc_ok (AT := STerm ty_xlenbits) bIn apc
-      && oc_ok (AT := STerm ty_xlenbits) bIn anp
-      && itableW_free bIn tbl
-      && etable_free bIn exits
-      (* `wd` is REDUNDANT-but-true: it is one of the table's word column, so
-         itableW_free above already implies it.  It is listed anyway because the
+      (* ORDER IS DELIBERATE and is half of the fix: cheapest and
+         most-likely-to-hit roots first, the O(K) instruction table LAST.  The
+         variables this is asked about are havoced registers, whose occurrence
+         is in the heap -- so for them the table is now never walked at all.
+         `wd` is REDUNDANT-but-true: it is one of the table's word column, so
+         itableW_free below already implies it.  It is listed anyway because the
          drop's continuation captures `wd` and so the Factors CARRIER must cover
-         it — and the carrier is read off this conjunction (PLAN-dropk.md §15). *)
-      && oc_ok (AT := STerm ty_word) bIn wd.
+         it -- and the carrier is read off this conjunction (PLAN-dropk.md §15).
+         See forallb_sc above for why these are nested `if`s and not `&&`. *)
+      if oc_ok (AT := STerm ty_xlenbits) bIn apc then (
+      if oc_ok (AT := STerm ty_xlenbits) bIn anp then (
+      if oc_ok (AT := STerm ty_word) bIn wd then (
+      if oc_ok (AT := Sub Σ0) bIn trans then (
+      if oc_ok (AT := SHeap) bIn h then (
+      if oc_ok (AT := PathCondition) bIn (wco w) then (
+      if etable_free bIn exits then
+        itableW_free bIn tbl
+      else false)
+      else false)
+      else false)
+      else false)
+      else false)
+      else false)
+      else false.
+
+    (* Bridge back to the original conjunction, IN THE ORIGINAL ORDER, so that
+       VerifierRel.v's wb_bundle can keep peeling it with andb_true_iff. *)
+    Lemma var_dead_andb {Σ0 : LCtx} {w : World} {b}
+        (bIn : (b ∈ w)%katamaran)
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        (h : SHeap (wctx w)) :
+      var_dead bIn trans tbl exits apc anp wd h =
+        (oc_ok (AT := PathCondition) bIn (wco w)
+         && oc_ok (AT := SHeap) bIn h
+         && oc_ok (AT := Sub Σ0) bIn trans
+         && oc_ok (AT := STerm ty_xlenbits) bIn apc
+         && oc_ok (AT := STerm ty_xlenbits) bIn anp
+         && itableW_free bIn tbl
+         && etable_free bIn exits
+         && oc_ok (AT := STerm ty_word) bIn wd).
+    Proof.
+      unfold var_dead.
+      destruct (oc_ok (AT := STerm ty_xlenbits) bIn apc),
+               (oc_ok (AT := STerm ty_xlenbits) bIn anp),
+               (oc_ok (AT := STerm ty_word) bIn wd),
+               (oc_ok (AT := Sub Σ0) bIn trans),
+               (oc_ok (AT := SHeap) bIn h),
+               (oc_ok (AT := PathCondition) bIn (wco w)),
+               (etable_free bIn exits),
+               (itableW_free bIn tbl); reflexivity.
+    Qed.
 
     (* The witness term is needed for the ACCESSIBILITY, not for the tree:
        calling the continuation at the smaller world needs a Sub with an entry
