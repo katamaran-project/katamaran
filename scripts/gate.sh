@@ -68,6 +68,8 @@ AXIOM_CLEAN_THMS=(
   # the only proof in the tree that goes through myWP2_loop_join and a real
   # cfg_postcondition, and an axiom sneaking into that path would be silent.
   "swap_composed"
+  # the LOOP cut: one body contract, closed by induction on the trip count
+  "cd_loop"
 )
 
 COQC="${COQC:-coqc}"

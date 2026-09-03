@@ -868,3 +868,109 @@ already half-written in `CLAUDE.md`: **put the command whose status you care
 about LAST in a background pipeline**, and **grep for the failing tool's own
 wording**, not a generic `Error`. The rebuild was then run properly (30 targets,
 clean) before anything was claimed.
+
+## U9. LANDED 2026-09-04 — the LOOP cut. §7 is done.
+
+`Example/CountdownComposed.v` + `Example/CountdownComposedResult.v`. This is the
+thing the whole plan was written for: **a loop verified without unrolling it.**
+
+### The program and the cut
+
+```
+addr 0: ADDI X1 X1 (-1)      <- loop head
+addr 4: BNE  X1 X0 (-4)      <- backward branch to the head
+addr 8: exit
+```
+
+Two contracts, both at `Σ = ["k"]`, both anchored at the loop HEAD:
+
+| | `cdBody` | `cdFinal` |
+|---|---|---|
+| range | head → head (one trip) | head → 8 |
+| exits | `[0]`, `head_exitCond v := bv.eqb v 0` | `[8]`, `pcOutOfInstrs_exitCond` |
+| guard in pre | `dec k ≠ 0` (BNE taken) | `dec k = 0` (BNE falls through) |
+| post | `X1 ↦ dec k ∗ secLeakvar "k" ∗ minimal_pre` | `asn_no_post` |
+| fuel | 3 | 3 |
+
+**Each is `vm_compute; solve_vc` ONCE, at a symbolic `k`.** The trip count exists
+only in the Coq-level induction. The symbolic executor never sees more than one
+loop body — which is exactly the property §0 wanted.
+
+**The guards are what make single-exit contracts describe a two-way branch.**
+Each contract's precondition makes the *other* BNE branch infeasible, so the
+executor's fall-through (resp. taken) path is discharged by contradiction rather
+than needing to appear in the exit table. Both VCs leave one residual — the
+branch the guard excludes — closed by:
+```coq
+destruct v as [v'|a b]; [|contradiction]. cbn in *.
+(* body:  *) right. intros Heq. apply H0. unfold ty.valToRelVal in Heq. congruence.
+(* final: *) unfold ty.valToRelVal in H0. congruence.
+```
+
+### The composition (`cd_loop`)
+
+```coq
+Lemma cd_loop (n : nat) : forall k,
+  bv.bin k = (N.of_nat n + 1)%N -> cdInv k -∗ myWP2_loop cdExit.
+```
+by `induction n`:
+
+- **base** (`k = 1`): `cdFinal` → the real exit.
+- **step** (`k = m+2`): `myWP2_loop_join`, then `cdBody` discharged with
+  `ExitCond := myWP2_loop cdExit` ("one trip, then keep looping"), landing back
+  at the head with counter `dec k`; rebuild the invariant there and apply the IH.
+
+So `myWP2_loop`'s existing Löb-guarded recursion is being used at per-ITERATION
+granularity instead of per-run — §1's design intent, now realised. Plain
+induction on a known bound, no `iLöb` at the top level (as §7 predicted, and for
+the reason it gave).
+
+`cd_loop_from_2` instantiates at the original program's starting value.
+
+### The invariant, and why it is an iProp here
+
+`cdInv k := asn.interpret cdInvAsn (ik k) ∗ pc ↦ᵣ 0 ∗ (∃v, nextpc ↦ᵣ v) ∗
+ptsto_instrs …`, with `cdInvAsn : Assertion cdCtx := X1 ↦ᵣ term_var "k" ∗
+minimal_pre` **defined in the LIGHT file**. That placement is forced: in any file
+importing the Iris stack, `∗` is Iris's separating conjunction and `(…)%asn` does
+NOT recover the assertion-level one — `X1 ↦ᵣ term_var "k"` then fails with
+*"has type Assertion ?Σ while it is expected to have type bi_car ?PROP"*.
+
+### bv obligations — smaller than feared
+
+Only two, both about the decrement `bvdec k := bv.add k minus1` (`minus1` =
+`0xFFFFFFFF`, the sign-extended ADDI immediate):
+
+```coq
+bvdec_one : bv.bin k = 1  ->  bvdec k = bv.zero
+bvdec_bin : bv.bin k = m+2 -> bv.bin (bvdec k) = m+1
+```
+`bv.bin_add` + `bv.bv_is_wf` (the `bin < exp2` bound; it is **`bv_is_wf`**, not
+`bin_bounds`/`bin_in_range`/`wf_bin` — all three of those were tried and do not
+exist) + `change (bv.exp2 xlenbits) with 4294967296%N` to keep `lia` away from
+`exp2` (the `bv-pitfalls` trap), then `N.Div0.mod_add` and `N.mod_small`.
+
+### Traps, both already documented and both hit anyway
+
+- **`rewrite A, B` (comma form) is a syntax error** in this notation environment —
+  *"Syntax error: [ltac_use_default] expected"*. So is `rewrite … by lia`. Write
+  separate `rewrite`s and use the `Div0` lemma that needs no side condition.
+  (`cfgver-endtoend-internals` documents the comma form; the `by` form is new.)
+- **The same convertibility friction as U8**, twice: the invariant at `(ik k)`
+  versus the post at `(ik k).["a"↦0].["an"↦0]`, and `interp (X1 ↦ᵣ dec (term_var
+  "k")) (ik k)` versus `interp (X1 ↦ᵣ term_var "k") (ik (bvdec k))`. Both are
+  convertible; both need `iExact`, not `iFrame`. This has now cost the same fix
+  three times — **a segment-contract generator should carry a lemma for it.**
+
+### What this does and does not show
+
+- It **does** show the cost mechanism is available: one body VC, trip count in
+  the induction, executor cost independent of N.
+- It does **not** yet measure that. `cd_loop` is proved for all `n`, so there is
+  no N-sweep to compare against the flat `countdown` VC — the honest comparison
+  is "flat VC at trip count N" vs "this, at trip count N", and the flat one needs
+  fuel ∝ N. That measurement is U5's job and is still unrun.
+- The loop counter here is **public** (`secLeakvar`), and the guard is a
+  `formula_relop` on it. A loop whose trip count is SECRET cannot be cut this way
+  — `formula_relop` on `NonSyncVal` is `False` (`secret-data-walls`). That is a
+  real limit of this technique, not an accident of the example.
