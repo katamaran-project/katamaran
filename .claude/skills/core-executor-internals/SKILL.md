@@ -176,6 +176,72 @@ a case analysis on the `formula_eqb` tests.
 Note this was *usually* masked by `combined_solver`'s repeated passes. For the
 `secLeak`-specific semantics these formulas carry, see **secret-data-walls**.
 
+### Added 2026-09-04: REFUTING a formula against `wco` (`formula_refuted_by`)
+
+The counterpart to the above. `formula_simplifies` can only ever *discharge* a
+hypothesis — its whole range is `Some formula_true` / a weakened conjunction /
+`None`. It never returns `formula_false`, so **the solver had no way at all to
+kill a branch that one `wco` entry already refutes**, and such a branch survived
+into the VC as a residual for the user to close by hand. (Someone had started
+exactly this rule and left it commented out in the `formula_relop` case.)
+
+`assumption_formula` now tests `formula_refuted_by F F'` per `wco` entry before
+calling `formula_simplifies`, and on a hit returns `k ▻ formula_false`. It does
+not have to detect the inconsistency itself: `combined_solver` runs
+`solver_generic` several times, and the next pass's `simplify_formula
+formula_false = error` turns it into `DList.run = None`, hence `SymProp.block`
+for an assume and `SymProp.error` for an assert. Soundness is the ordinary
+`assumption_formula_spec` bi-implication — under `instpred C` (which gives
+`instpred F'`) both sides are `False` — so `SolverSpec` carries the whole
+downstream chain with no other proof touched.
+
+**The shapes that actually meet are NOT the two halves of one relop, and this is
+the part worth knowing.** Dumped from CFGVer's countdown loop, where the
+precondition says `k-1 <> 0` and the BNE tests exactly that:
+
+```
+wco   : formula_relop bop.neq (0xffffffff +ᵇ k) 0x0
+new   : formula_propeq         0x0 (0xffffffff +ᵇ k)      <- survived, guarding a dead `error`
+```
+
+`simplify_relop`'s `eq` arm decomposes an equality into `formula_propeq` +
+publicness, **and the operands come back in the opposite order**. So the rule
+matches a `propeq` against a `bop.neq` relop in *both* argument orders, and the
+generic op-vs-`formula_relop_neg op` case (the obvious guess) fires on nothing
+here. The loop BODY and the loop EXIT contract hit opposite directions — body
+assumes `<>` and the branch offers the propeq, exit assumes `=` and the branch
+offers the relop — so both are needed. Result: both countdown contracts went
+from a tree plus a three-line hand closer to a bare `SymProp.block`.
+
+**`formula_eqb` had NO `formula_propeq` clause** (fixed at the same time). Two
+syntactically identical `propeq`s compared as `false`, which silently disabled
+every `formula_eqb`-based discharge for the one formula shape the `eq` arm
+produces — `formula_simplifies`' own first line included. Adding the clause is
+one `with eq_dec σ τ` block copied from the `secLeak` case; `formula_eqb_spec`'s
+`repeat match` script absorbs it with **no change**.
+
+Three method notes, each of which cost something:
+
+- **Dump the VC before writing the rule.** Step 1 of the recipe below is not
+  optional here: the first version of this rule was written against the guessed
+  shape and would have matched nothing. One `Eval vm_compute in (cfg_map c (fun
+  _ p e P i _ fl Q => postprocess (CFG_VC_triple p e P i fl Q)))` on a
+  two-instruction program settled it in seconds.
+- **`cbn [formula_refuted_by]`, never a bare `cbn`.** A bare `cbn` unfolds
+  `formula_eqb` into a match on `fact` whenever its *first* argument is
+  constructor-headed; then `destruct (formula_eqb_spec ..)` abstracts nothing and
+  the false branch cannot be discriminated. (Symptom while debugging: a
+  `destruct rop; try discriminate` that closes *every* case including the one you
+  meant to keep — that is the tell that a sub-test has folded to a constant.)
+- **`RiscvPmp.Sig` DOES load in a preamble** — the "Iteration order" section
+  below says it does not, and that is wrong (measured 2026-09-04). This matters a
+  lot: with it you reach `Import GenericSolver` and therefore `formula_eqb`,
+  `smart_and`, `formula_discharge`, `instpred`, `repₚ`, `crushPredEntails2/3` and
+  the real `Formula` type, so an ENTIRE modified `Equations` block plus its
+  `BoolSpec` proof can be cloned under a `zz_` name and checked in ~10 s before
+  paying the ~6 min `Solver.vo` build. The whole of this change was developed
+  that way and compiled first try.
+
 ### An assert is discharged against what was known WHEN IT RAN, not when you read it
 
 The corollary of the above that costs the most time. `consume` walks `∗`
@@ -328,7 +394,11 @@ unreachable from a position state. Consequences:
   `Syntax.TypeDecl` both load standalone, and `ty.liftBinOpRV`/`liftUnOpRV` are
   what `bop.evalRel`/`uop.evalRel` reduce to — so the real RelVal argument,
   including the `SyncVal`/`NonSyncVal` split, restates faithfully there and runs
-  in ~100 ms. `RiscvPmp.Sig` does **not** load in a preamble.
+  in ~100 ms. **`RiscvPmp.Sig` DOES load in a preamble** (measured 2026-09-04;
+  this line previously claimed the opposite). Prefer it: it brings the real
+  `Formula`/`instpred`/`repₚ` and, after `Import GenericSolver`, the solver's own
+  helpers, so a whole modified definition — `Equations` block included — can be
+  cloned under a `zz_` name and proved before paying the build.
 - The definitions' own elaboration genuinely cannot be pre-checked. Accept one
   build for that, and keep them as non-dependent as possible (see 6) so there is
   little left to fail.

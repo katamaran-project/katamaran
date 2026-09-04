@@ -89,8 +89,6 @@ Definition cdBody : @CFGVerifierContract cdCtx :=
 Lemma valid_cdBody : ValidCFGVerifierContract cdBody.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  right. intros Heq. apply H0. unfold ty.valToRelVal in Heq. congruence.
 Qed.
 
 (* The LOOP INVARIANT's resource part, as an assertion at cdCtx.  Defined
@@ -117,6 +115,4 @@ Definition cdFinal : @CFGVerifierContract cdCtx :=
 Lemma valid_cdFinal : ValidCFGVerifierContract cdFinal.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  unfold ty.valToRelVal in H0. congruence.
 Qed.

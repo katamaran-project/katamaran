@@ -72,8 +72,6 @@ Definition plBody : @CFGVerifierContract cdCtx :=
 Lemma valid_plBody : ValidCFGVerifierContract plBody.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  right. intros Heq. apply H0. unfold ty.valToRelVal in Heq. congruence.
 Qed.
 
 (* ---- LOOP EXIT: head -> 264 (one past the 66-instruction program). ---- *)
@@ -93,6 +91,4 @@ Definition plFinal : @CFGVerifierContract cdCtx :=
 Lemma valid_plFinal : ValidCFGVerifierContract plFinal.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  unfold ty.valToRelVal in H0. congruence.
 Qed.

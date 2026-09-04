@@ -79,8 +79,6 @@ Definition tAbody : @CFGVerifierContract tCtxA :=
 Lemma valid_tAbody : ValidCFGVerifierContract tAbody.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  right. intros Heq. apply H0. unfold ty.valToRelVal in Heq. congruence.
 Qed.
 
 (* A's last trip: falls through to 8, which is LOOP B's HEAD. *)
@@ -97,8 +95,6 @@ Definition tAfinal : @CFGVerifierContract tCtxA :=
 Lemma valid_tAfinal : ValidCFGVerifierContract tAfinal.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  unfold ty.valToRelVal in H0. congruence.
 Qed.
 
 (* ---- LOOP B: head 8.  Owns ONLY X2.  Entered from A's fall-through. ---- *)
@@ -116,8 +112,6 @@ Definition tBbody : @CFGVerifierContract tCtxB :=
 Lemma valid_tBbody : ValidCFGVerifierContract tBbody.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  right. intros Heq. apply H0. unfold ty.valToRelVal in Heq. congruence.
 Qed.
 
 Definition tBfinal : @CFGVerifierContract tCtxB :=
@@ -134,8 +128,6 @@ Definition tBfinal : @CFGVerifierContract tCtxB :=
 Lemma valid_tBfinal : ValidCFGVerifierContract tBfinal.
 Proof.
   vm_compute. solve_vc.
-  destruct v as [v'|a b]; [|contradiction]. cbn in *.
-  unfold ty.valToRelVal in H0. congruence.
 Qed.
 
 (* invariant resource parts, defined here where `∗` is the assertion-level one *)
