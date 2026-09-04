@@ -8,7 +8,9 @@ U5, finally run, plus the direct flat-vs-composed comparison the landed loop cut
 
 Composition's throughput payoff comes almost entirely from a mechanism we do NOT
 have — **a fixed segment costs only 1.155× more with 32 unexecuted instructions
-in front of it** — while the composed loop proof costs a flat **178 M words**
+in front of it** (**SCOPED 2026-09-04: true of the STRAIGHT-LINE segment measured
+here, false of a loop-body contract, which is quadratic in prefix length —
+`prefix-length-cost.md`**) — while the composed loop proof costs a flat **178 M words**
 against a flat unrolled VC that is **exactly linear at 1.528 M words/trip**, so
 for the countdown loop **composition does not pay until ~114 trips**, and the
 reason is a single isolated axis: **a segment contract whose counter is
@@ -34,7 +36,10 @@ That agreement is what licenses comparing across the families below.
 **`top_heap_words` is USELESS on this rig** — byte-identical (553,738,752 or
 554,344,448) across every arm, and peak RSS moves by at most 1.6%. The live sets
 all fit in the import closure's existing slack. So **this record says nothing
-about footprint**; it is a throughput measurement only.
+about footprint**; it is a throughput measurement only. (True of these
+arms. The PREFIX axis, re-run on the loop-body contract, *does* move footprint —
+41 MB → 1318 MB net RSS over P=0→64, with `top_heap_words` stepping off its
+floor: `prefix-length-cost.md` §2.5.)
 
 ## 1. Axes
 
@@ -72,6 +77,18 @@ distinguish linear from quadratic and **no exponent should be quoted**.
 the tail of a longer program?"* — is **yes, but barely**. Removing a
 32-instruction prefix from a segment's table is worth 13%. This is the axis
 composition attacks by giving each segment its own table, and it is small.
+
+> **SCOPE LIMIT added 2026-09-04 — do not generalise this row.** Re-run on the
+> LOOP-BODY segment contract instead of these 3 MVs, the same axis is an exact
+> quadratic: `93.81 + 4.05·P + 0.531·P²` M words, **26.93× over 64 filler
+> instructions** (held-out +0.0024%), and it needs the unknown counter — pinning
+> it returns 1.42×. The trigger is a branch condition the solver cannot decide
+> by computation, which this straight-line rig lacks even though it does carry
+> three symbolic register values. **`prefix-length-cost.md`.** The row above is
+> correct as a measurement and wrong as a general claim about segment contracts;
+> consequently "composition's table-shrinking benefit is a modest constant, not
+> an exponent fix" (§3, first bullet) is **RETRACTED** — for a loop-body contract
+> it IS an exponent fix, worth (K/k)².
 
 ### 2.2 The flat unrolled countdown VC is EXACTLY linear in trip count
 
@@ -115,6 +132,15 @@ path condition:
 | arm | net M words | ratio |
 |---|---|---|
 | `ZZCmpBody` (symbolic `k`) | 97.95 | **9.19×** |
+
+> **Two corrections to this ratio, 2026-09-04 (`prefix-length-cost.md`).**
+> (a) **9.19× is not a constant** — it is the value at a 2-instruction program,
+> and it grows linearly in program length, reaching **307×** at 64 filler
+> instructions. (b) The pinned arm's cost depends on **conjunct order**: pinning
+> BEFORE the guard rather than after is 1.74× cheaper (5.79 M vs 10.06 M on a
+> matched rig), so a pinning ratio quoted without the ordering is ambiguous by
+> that factor. `ZZCmpBodyPin` re-runs at exactly 10.660 M on the 2026-09-04
+> commit, so nothing here has drifted.
 | `ZZCmpBodyPin` (`k` pinned to 5) | 10.66 | 1.00 |
 
 **That is the whole story.** The expense of a segment contract is not its size,
@@ -245,7 +271,14 @@ it contains.** Across every segment contract measured:
 | two-loop, mean of 4 contracts | 98.65 |
 
 That flatness is the real cost law of composition: **you pay ~90 M per segment
-contract, and the flat arm buys ~60 trips for that same money.** Adding a second
+contract, and the flat arm buys ~60 trips for that same money.**
+
+> **SCOPED 2026-09-04:** ~90 M is the value at a 2–4 instruction table, which is
+> what every contract in this table has. The same contract in a 66-instruction
+> program costs **2.53 G**, because the per-segment cost is quadratic in the
+> surrounding program's length (`prefix-length-cost.md` §2.1). The law is flat in
+> the segment's OWN content and quadratic in the program around it, so the
+> break-even is not ~60 trips per cut but ~60 at K=2 and ~970 at K=66. Adding a second
 loop doubled the contract count (2 → 4) and doubled the composed cost
 (177.96 → 394.61, 2.22×), exactly as that model predicts.
 

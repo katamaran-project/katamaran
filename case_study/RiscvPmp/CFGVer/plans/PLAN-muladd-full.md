@@ -423,6 +423,26 @@ symbolic execution of the segment at all. Something fails immediately and every
 probe re-measures the same tree. The residual is a bare `False`
 (`ZZSeg3E.v` dumps it), i.e. the VC is unprovable rather than merely unfinished.
 
+> **A FIFTH candidate, and now the leading one (2026-09-04):
+> `diagnostics/prefix-length-cost.md`.** A segment contract whose branch
+> condition the solver cannot decide by computation costs
+> `93.81 + 4.05·K + 0.531·K²` M words in the number of **never-executed**
+> instructions sharing its table (held-out +0.0024% on a countdown rig).
+> Extrapolated to this program's K=282 that is **43.4 G** — 0.9% from the 43.8 G
+> measured here, and it explains the fuel-invariance directly, because the K²
+> term is paid on the *table*, not on executing the segment.
+>
+> **Do not treat the 0.9% as confirmation.** A coefficient fitted on a
+> 2-instruction loop with `|Σ|`=1 has no business predicting a 282-instruction
+> program with a symbolic base and ten memory cells; agreement that tight over a
+> 4.4× extrapolation is as likely coincidence as not. It does mean the K² axis
+> should be tested before anything else here, and the test is one run: give one
+> segment contract a table **trimmed to its own instructions** and see whether
+> the cost drops by ~(282/k)². If it does, mid-program cuts were never blocked by
+> the offset or the contract shape — they were blocked by carrying the whole
+> program's table in every segment, and the fix is a sub-table faithfulness lemma
+> rather than anything about this program.
+
 ## THE METHOD ERROR, recorded because it cost four probes
 
 **The comparison was never controlled.** The one working point (`ZZSeg1`) uses

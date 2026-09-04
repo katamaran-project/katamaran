@@ -790,6 +790,18 @@ program length as the sole target -- which sharpens the invariant case, but
 moves the baseline invariants would improve on. It changes every VC, so it needs
 its own gate run (`GATE_JOBS=1`, ~40 min).
 
+**3b. A CHEAP RIG FOR THIS EXISTS NOW (added 2026-09-04).** This record closes
+by saying `Base(K)` "needs OCaml heap profiling" because no Coq-level traversal
+can reach it. That stands, but `prefix-length-cost.md` found a *dial*: a
+loop-body segment contract's cost is an exact quadratic in the number of
+never-executed instructions in its table (26.9× over 64 filler instructions,
+held-out +0.0024%) while **every structural counter is byte-identical** — 236
+nodes, 42 obligations, `|Σ|`=7, the same branch structure, at every prefix
+length. That is this record's "the finished VC is ≤2.6% of peak" finding again,
+now as an exact invariance on a rig with a 2-instruction executed segment and
+10–17 s arms. Test transient-construction hypotheses there before profiling a
+282-instruction muladd prefix.
+
 **4. Compare the cheaper alternative before committing.** Whether the VC must be
 built whole before `solve_vc` consumes it (`footprint-vs-throughput.md` §3's own
 unattempted suggestion). Fusing construction and consumption, or discharging and
