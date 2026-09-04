@@ -375,6 +375,77 @@ rig; if that transfers, the candidate list is thin and the remaining mass is in
 per-step transport of the table through world extensions
 (`persist`/`occurs_check`/`sub_comp`) rather than in anything retained.
 
+### 3.2b REFUTED: the word column's O(K²) term size. Exactly quadratic, and FREE.
+
+The strongest structural candidate, eliminated 2026-09-04 by ablation.
+
+`words_ctx n` is ONE wide `bv (word·n)` variable and each address's instruction
+word is a slice read off it by `words_of_slice` (`Verifier.v:1234`):
+
+```coq
+| S n' => cons (dtake word (words_width n') W)
+               (words_of_slice ... n' (ddrop word (words_width n') W))
+```
+
+Entry `i` is therefore `take (drop^i W)` — **i nested `bvdrop` wrappers** — so the
+column's total term size is quadratic. Measured exactly (`Example/ZZWordSize.v`):
+
+| K | 8 | 16 | 32 | 64 | 128 |
+|---|---|---|---|---|---|
+| word-column term nodes | 44 | 152 | 560 | 2144 | 8384 |
+
+which is **exactly `K(K+3)/2`** at every point. `peval` does **not** collapse the
+nesting (identical sizes after `List.map peval`), so there is no take/drop
+composition rule to lean on.
+
+That is a genuine O(K²) structure, in the right variable, inside the object the
+executor persists at every step. **It is nonetheless not the cost.** Ablating it
+— every entry replaced by the *depth-0* slice, shared, so the column becomes O(1)
+(`List.repeat (dtake word (words_width n') W) (S n')`, list length verified
+preserved at 64 so `zip_words` cannot truncate) — moves nothing:
+
+| P | ablated | original | Δ |
+|---|---|---|---|
+| 0 | 93.804 | 93.809 | −0.005% |
+| 32 | 766.139 | 766.845 | −0.09% |
+| 64 | **2524.939** | 2526.656 | **−0.07%** |
+
+**So do not "fix" the word-slice nesting.** Removing the entire quadratic from the
+representation is worth 0.07%, and de-nesting it properly would mean fighting the
+width-index typing that `cfgver-executor` and `GenContract.v:536` both flag. The
+ablation was temporary and unsound (every address gets the same word) and has
+been reverted; the tree was rebuilt from the reverted source.
+
+**Method lesson worth more than the result:** an exactly-quadratic structure, in
+the same variable as an exactly-quadratic cost, in the object most obviously
+implicated, was still not the cause. Matching exponents are not causation, and
+the ablation cost ~15 minutes where building the de-nesting fix would have cost
+days. Same shape as `ctx-fresh-cost.md`: bound the candidate before funding it.
+
+### 3.2c What is now excluded, and what is left
+
+Excluded by measurement or construction: a larger VC (§3.1), `var_dead`'s scan
+(`drop_fuel = 0`), `|Σ|` (constant 7), chunk count, executed steps, lookup depth
+and occurrence count (§3.2), symbolic values as such (§2.4), program length alone
+(§2.3/§2.4), **the word column's term size (§3.2b)**, and — from an earlier
+session, on the *exit*-table knob — per-entry-per-step persist cost, measured
+FLAT with an exactly linear total (`cfgver-executor`'s backward-branch banner).
+
+Two candidates survive, neither tested:
+
+- **`lookup_instr`'s `List.find`** recomputes the loop-invariant `peval apc`
+  inside the predicate, once per table entry (`Verifier.v:630`); `is_exit` does
+  the same over the exit list. That is the `var_dead` `&&` shape exactly. It
+  gives O(K) per lookup with a constant number of lookups, so on its own it
+  predicts LINEAR — it cannot be the whole story, but hoisting the `let` is
+  zeta-convertible and therefore nearly free to try.
+- **Something in the consume/produce path inside `sexec_instruction`**, which is
+  where the earlier session's search also ended ("what carries the quadratic is
+  still unidentified — it lives in the ACTIVE consume/produce path, not in
+  anything reachable from a contract"). Note `chunk_gc` filters every
+  `encodes_instr` chunk each step, so the symbolic heap does *not* hold one chunk
+  per instruction and heap size is not the K factor.
+
 ### 3.3 Why this rig matters beyond this question
 
 `base-k-hunt.md` closed with "`Base(K)` needs OCaml heap profiling", having
@@ -581,6 +652,7 @@ Throwaway, gitignored, none in `_CoqProject`:
 | muladd trimming pair (§4.3) | `Example/ZZTrim{Base,F,T}.v` |
 | the realised demo (§2.6b) | `Example/PaddedLoop.v`, `Example/PaddedLoopResult.v` (both PERMANENT, gate-checked); measurement baseline `Example/ZZPaddedLoopBase.v` |
 | structural counts | `Example/ZZPadI{0,16,32,64}.v` + `ZZLvarInstrCommon.v` |
+| word-column term size (§3.2b) | `Example/ZZWordSize.v` |
 
 ```bash
 OCAMLRUNPARAM='v=0x400' /usr/bin/time -f "RSS %M KB WALL %e s" \

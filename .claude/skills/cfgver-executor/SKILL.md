@@ -73,6 +73,18 @@ which already does this for memory cells — and `words_width (S n)` must stay
 DEFINITIONALLY `word + words_width n` or the slices fail to typecheck against
 `uop.bvtake`'s `bvec (m + k)` index.
 
+**The nesting this creates is exactly `K(K+3)/2` term nodes, and it is FREE —
+do not try to de-nest it (measured 2026-09-04).** `words_of_slice` builds entry
+`i` as `take (drop^i W)`, so the column's total term size is quadratic in program
+length: 44/152/560/2144/8384 nodes at K=8/16/32/64/128, exactly `K(K+3)/2`
+(`Example/ZZWordSize.v`). `peval` does not collapse the nesting either. That
+looks like an obvious target — it is in the object the executor persists every
+step, and the executor's cost really is quadratic in K
+(`diagnostics/prefix-length-cost.md`). But ablating the whole quadratic away
+(every entry the shared depth-0 slice) moves total cost by **−0.07%**. So the
+representation is not the cost, and de-nesting it would mean fighting the
+width-index typing for nothing.
+
 *Why slicing and not a Coq-level value.* A word is a pure identity token, and a
 logic variable is the cheapest representation of one: its identity lives in its
 de Bruijn **index**, so it stays decidable while its value is unknown. Slicing
