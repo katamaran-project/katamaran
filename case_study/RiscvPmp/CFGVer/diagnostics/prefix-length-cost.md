@@ -422,14 +422,58 @@ implicated, was still not the cause. Matching exponents are not causation, and
 the ablation cost ~15 minutes where building the de-nesting fix would have cost
 days. Same shape as `ctx-fresh-cost.md`: bound the candidate before funding it.
 
+### 3.2d The K² is BASE-INDEPENDENT — identical to four significant figures
+
+Asked because every rig in §2 has a CONCRETE base while every real target
+(`muladd`, `check_scalar`) has a symbolic one. Same loop-body segment, same
+guard, same fuel, same table; the only change is `cfg_placement := term_var "p"`
+with the base bound added to the precondition (`|Σ|` 1 → 2). **One protocol for
+both arms** (`intros; vm_compute; solve_vc. Admitted.`), baseline 605,918,314:
+
+| P | concrete base | symbolic base | sym/con |
+|---|---|---|---|
+| 0 | 82.634 | 101.302 | 1.226× |
+| 16 | 281.828 | 305.978 | 1.086× |
+| 32 | 752.695 | 782.242 | 1.039× |
+| 64 | 2509.392 | 2549.633 | **1.016×** |
+
+| base | fitted law (on P ∈ {0,16,32}) | held-out P=64 |
+|---|---|---|
+| concrete | `82.634 + 3.9598·P + 0.530613·P²` | **+0.0024%** |
+| symbolic | `101.302 + 4.3052·P + 0.530444·P²` | **−0.0040%** |
+
+**The quadratic coefficients agree to 0.03% (ratio 0.9997).** So the base
+contributes a CONSTANT (~18.7 M on the intercept) plus a small linear increment
+(3.96 → 4.31 M per instruction), and **nothing at all to the quadratic**. Its
+relative penalty therefore *shrinks* as the program grows — 1.226× at P=0 down to
+1.016× at P=64 — which independently reproduces `cfgver-executor`'s standing
+finding that "the symbolic base is a shrinking constant-factor penalty, not the
+driver", on a different axis.
+
+Two consequences:
+
+- **Base-relative address arithmetic is eliminated as the mechanism.** `peval_bvadd`
+  folding `c ⊕ p` keys, the extra base variable, and the fetch-bound machinery
+  are all absent from the quadratic.
+- **Everything measured on the concrete rigs transfers to the symbolic targets**,
+  for this axis. That was an open assumption in §2 and it is now checked.
+
+Side benefit, since both protocols now exist on the same rig: comparing this
+concrete arm with §2.1's `Qed` one, `Qed` moves the intercept (82.6 → 93.8) and
+the linear term (3.96 → 4.05) but leaves the **quadratic coefficient at 0.5306
+either way (0.013% apart)**. So the `Qed`/`Admitted` gap is a constant plus a
+touch of linear and cannot distort an exponent — which is what licenses the
+one-protocol comparison above.
+
 ### 3.2c What is now excluded, and what is left
 
 Excluded by measurement or construction: a larger VC (§3.1), `var_dead`'s scan
 (`drop_fuel = 0`), `|Σ|` (constant 7), chunk count, executed steps, lookup depth
 and occurrence count (§3.2), symbolic values as such (§2.4), program length alone
-(§2.3/§2.4), **the word column's term size (§3.2b)**, and — from an earlier
-session, on the *exit*-table knob — per-entry-per-step persist cost, measured
-FLAT with an exactly linear total (`cfgver-executor`'s backward-branch banner).
+(§2.3/§2.4), **the word column's term size (§3.2b)**, **base-relative address arithmetic and the base
+variable itself (§3.2d)**, and — from an earlier session, on the *exit*-table
+knob — per-entry-per-step persist cost, measured FLAT with an exactly linear
+total (`cfgver-executor`'s backward-branch banner).
 
 Two candidates survive, neither tested:
 
@@ -653,6 +697,7 @@ Throwaway, gitignored, none in `_CoqProject`:
 | the realised demo (§2.6b) | `Example/PaddedLoop.v`, `Example/PaddedLoopResult.v` (both PERMANENT, gate-checked); measurement baseline `Example/ZZPaddedLoopBase.v` |
 | structural counts | `Example/ZZPadI{0,16,32,64}.v` + `ZZLvarInstrCommon.v` |
 | word-column term size (§3.2b) | `Example/ZZWordSize.v` |
+| base-independence (§3.2d) | `Example/ZZPadBA{0,16,32,64}.v` (concrete) vs `ZZPadSB{0,16,32,64}.v` (symbolic) |
 
 ```bash
 OCAMLRUNPARAM='v=0x400' /usr/bin/time -f "RSS %M KB WALL %e s" \
