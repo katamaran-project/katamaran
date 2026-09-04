@@ -165,10 +165,89 @@ same day) were motivated by exactly this quadratic. They remain sound and remain
 the right thing for a contract to carry only its own instructions, and the
 `(K/k)²` payoff never transferred to real muladd anyway (3.03×). But the
 headline motivation is now largely gone: at P=64 the thing they were built to
-avoid costs 1.37×, not 26.9×. **Re-measure the sub-table payoff before investing
-further in it.**
+avoid costs 1.37×, not 26.9×. **This was re-measured — see §6, which REVERSES
+the caution originally written here: the payoff on real programs is entirely
+intact (3.03× / 3.63× / 95.3×, unchanged to ≤0.2%), because it was never
+branch-driven. Keep the machinery.**
 
-## 6. Files
+## 6. The sub-table payoff, RE-MEASURED — synthetic collapses, REAL PROGRAM UNCHANGED
+
+§5 said "re-measure the sub-table payoff before investing further in it". Done,
+same day, same protocol. The answer splits cleanly and reverses that caution.
+
+| rig | arm pair | before | after | change |
+|---|---|---:|---:|---:|
+| countdown (synthetic) | `pbody 64` / `pseg 256` | 26.93× | **1.36×** | **−94.9%** |
+| muladd seg 1, decidable branches | 282-entry / 56-entry | 3.026× | **3.025×** | −0.0% |
+| muladd cut @220, `T0` pinned | 282-entry / 15-entry | 3.64× | **3.63×** | −0.1% |
+| muladd cut @220, `T0` havoc'd | 282-entry / 15-entry | 95.37× | **95.33×** | −0.0% |
+
+**On the real program the fix changes nothing at all.** All four muladd arms
+reproduce their published pre-fix figures to ≤0.175%, the 43.5 G arm to
+**0.001%**:
+
+| muladd arm | published (pre-fix) | now (post-fix) | delta |
+|---|---:|---:|---:|
+| seg1 full (282) | 1098.54 M | 1098.79 M | +0.023% |
+| seg1 trimmed (56) | 363.10 M | 363.23 M | +0.037% |
+| cut pinned, full | 1231.66 M | 1232.53 M | +0.071% |
+| cut pinned, trimmed | 338.78 M | 339.37 M | +0.175% |
+| cut havoc'd, full | 43503 M | 43503.25 M | **+0.001%** |
+| cut havoc'd, trimmed | 456.16 M | 456.36 M | +0.044% |
+
+### 6.1 Why: the two levers are ORTHOGONAL, and countdown conflated them
+
+Read the same data as a marginal cost per table entry:
+
+| rig | M words per table entry |
+|---|---:|
+| countdown, before | 38.013 |
+| countdown, after | **0.038** (998× lower) |
+| muladd seg1 (decidable) | 3.255 |
+| muladd cut, pinned | 3.345 |
+| muladd cut, havoc'd | **161.224** |
+
+- **Branch refutation removes the cost of a branch that is refutable but was not
+  refuted.** That is countdown's entire situation, and it inflated countdown's
+  per-entry cost 998×.
+- **Trimming removes the per-entry table cost**, which is a real,
+  branch-independent charge — 3.25–3.35 M/entry on muladd, ~100× countdown's
+  post-fix 0.038, exactly as `prefix-length-cost.md` §4.2 predicted from the
+  linear regime.
+
+Neither lever substitutes for the other. Countdown made them look like one
+mechanism because there the branch charge dominated the table charge by ~1000×.
+
+Muladd is untouched because its branches are in the two regimes the rule cannot
+reach: segment 1's are already **decidable by computation** (pinned public
+`m[0] = 63`), and the cut's are **genuinely undecidable** (`T0` havoc'd, so no
+refuting fact exists in `wco` to match). The rule only fires on the middle case.
+
+**The remaining 48× is the undecidable-branch regime**: 161.2 M/entry havoc'd vs
+3.35 M/entry pinned, same program, same cut, same table. An undecidable branch
+still multiplies the per-entry table cost by ~48×, and nothing in this commit
+touches that. It is the obvious next target, and trimming is the only lever
+currently known to work on it (95.3×).
+
+### 6.2 Verdict, reversing §5's caution
+
+**Keep the sub-table machinery.** Its payoff on real programs is entirely
+intact and was never branch-driven. What evaporated is only the *synthetic*
+motivation: `prefix-length-cost.md`'s 26.93× was measuring the branch charge
+through a table-shaped hole, and that charge is now gone by other means.
+
+Method caveat: the muladd "before" column is the published record, not a
+same-session BASE re-run — the probe files are unmodified and §1 shows published
+figures reproduce on this machine to ≤0.013%, so the ≤0.175% deltas bound the
+fix's effect there, but it is a comparison against a record rather than a
+matched A/B.
+
+Incidental: the placement-offset cost (`pseg 256` vs `pseg 0`) is **41,198 words
+after vs 42,000 before** — an absolute constant, unchanged. Its *share* rose
+from 0.045% to 0.614% only because the total fell 14×. Do not read that as a
+regression.
+
+## 7. Files
 
 - Rig: `Example/ZZPadCommon.v` (unchanged, from `prefix-length-cost.md`)
 - Arms: generated `Example/ZZM_*.v` (throwaway, not in `_CoqProject`)
