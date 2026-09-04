@@ -4,6 +4,14 @@ Status: **Diagnostic record, 2026-09-04.** This is `plans/PLAN-loop-invariant.md
 U5, finally run, plus the direct flat-vs-composed comparison the landed loop cut
 (U9) made possible.
 
+> **VERDICT REVERSED 2026-09-05 — see the ADDENDUM at the end of this file.**
+> After `cfdcc92f` (branch refutation) a cut costs **7.10 M words, not ~108 M**,
+> composition is **0.56×** the flat VC where it was 6.4–7.3×, break-even falls
+> from ~71 trips per cut to **~4.65**, and §2.4's "the expense is the unknown
+> counter, 9.19×" is now **1.006×**. Everything below remains a correct record
+> of the pre-fix executor and its flat arms still reproduce exactly — but do
+> **not** quote 6.4×, 7.30×, ~90 M per contract, 9.19×, or "cut sparingly".
+
 ## One-sentence finding
 
 Composition's throughput payoff comes almost entirely from a mechanism we do NOT
@@ -306,3 +314,122 @@ loop doubled the contract count (2 → 4) and doubled the composed cost
 is `Example/TwoLoopsComposed.v` against baseline `ZZCmpBase.v`. Same protocol as
 the main record (`vm_compute. solve_vc. Qed.` throughout; the composed arm's four
 proofs carry residual-closing tactics before `Qed`, priced at ~0.004%).
+
+---
+
+# ADDENDUM 2026-09-05 — RE-MEASURED after branch refutation: the verdict REVERSES
+
+Everything above is a correct record of the pre-`cfdcc92f` executor. On code at
+or after that commit (`diagnostics/branch-refutation-payoff.md`) the numbers move
+by an order of magnitude and **the conclusion flips sign**: composition now WINS
+at every size we actually build.
+
+## One-sentence finding
+
+A segment contract costs **7.10 M words per cut** instead of ~108 M, so the
+composed proof is **0.56× the flat unrolled VC** where it was 6.4–7.3×, the
+break-even falls from **~71 trips per cut to ~4.65**, and §2.4's central
+mechanism — "the expense is the unknown counter, 9.19×" — is now **1.006×**.
+
+## Calibration
+
+The flat arms cannot be affected by the fix (trip count concrete, every branch
+decided by computation), so they are the control that the rig and tree are the
+same objects the original record measured:
+
+| arm | published | now | delta |
+|---|---:|---:|---:|
+| flat 1-loop, N=8 | 15.632 | 15.632 | **+0.00%** |
+| flat 1-loop, N=16 | 27.862 | 27.862 | **−0.00%** |
+| flat 2-loop, T=32 | 54.042 | 54.041 | **−0.00%** |
+
+Exact to the last published digit. Baselines: 606,197,695 (`ZZCmpBase`),
+606,210,788 (`ZZFlatBase`), 606,211,196 (`ZZF2Base`); `ZZFlatCommon.vo` /
+`ZZF2Common.vo` rebuilt first (the stale-`Common` trap this file documents).
+
+## Results
+
+| arm | published | now | change |
+|---|---:|---:|---:|
+| `cdBody` (segment contract) | 97.95 | **10.879** | −88.9% |
+| `cdFinal` (segment contract) | 83.44 | **8.137** | −90.3% |
+| composed, 1 loop (2 contracts) | 177.96 | **15.653** | −91.2% |
+| composed, 2 loops (4 contracts) | 394.61 | **29.857** | −92.4% |
+| `ZZCmpBodyPin` (pinned ablation) | 10.66 | 10.811 | +1.42% |
+
+| | before | after |
+|---|---:|---:|
+| composed / flat, 1 loop at N=16 | 6.39× | **0.562×** |
+| composed / flat, 2 loops at T=32 | 7.30× | **0.552×** |
+| crossover, 1 loop | N ≈ 114 | **N ≈ 8.0** |
+| crossover, 2 loops | T ≈ 247 | **T ≈ 16.7** |
+| marginal cost of one extra cut | 108.33 M | **7.102 M** (15.3× cheaper) |
+| break-even trips per cut | ~71 | **~4.65** |
+
+The marginal figure is the clean one: it is
+`(2-loop composed − 1-loop composed)/2`, i.e. two extra segment contracts on the
+same rig, so every shared cost cancels.
+
+## §2.4 is RETRACTED: the unknown counter is no longer the story
+
+§2.4 concluded, in bold, *"That is the whole story. The expense of a segment
+contract is not its size, its table, or its chunk inventory — it is that the
+executor must reason about a value it does not know,"* on a measured 9.19× gap
+between a symbolic and a pinned counter.
+
+| | before | after |
+|---|---:|---:|
+| `cdBody` (symbolic `k`) / `ZZCmpBodyPin` (`k` = 5) | **9.19×** | **1.006×** |
+
+Post-fix a symbolic counter costs **0.6%** more than a pinned one on this rig
+(1.16× on `prefix-length-cost.md`'s `pbody`/`pbodyPin` rig). The 9.19× was never
+the cost of *not knowing* the counter — it was the cost of the infeasible branch
+that not knowing it left live, and the solver now refutes that branch against the
+path condition directly. Pinning was one way to kill the branch; refuting it is
+another, and it does not require knowing the value.
+
+## What this means
+
+- **"Cut sparingly — every cut costs ~90 M" is RETRACTED.** A cut costs ~7 M and
+  pays for itself after ~5 trips. Cut where it makes the proof clearer.
+- **Composition is no longer a loss at the sizes we build.** It wins from ~8
+  trips (one loop) / ~17 total trips (two loops); `CountdownComposed` at N=16 is
+  now 0.56× the flat VC rather than 6.4×.
+- **U11's two-loop retraction stands on its own facts but not on its numbers.**
+  There is still no superadditivity to recover here (§ADDENDUM 2026-09-04's
+  0.970× is a property of the flat arms, which have not moved). What changed is
+  that composition no longer needs superadditivity to be worth doing.
+- **The break-even is now nearly K-independent.** The old scoping note said
+  break-even was ~60 trips at K=2 but ~970 at K=66, because the per-segment cost
+  was quadratic in surrounding program length. That quadratic is 3544× smaller
+  now, so a K=66 segment costs ~1.36× a K=2 one and the break-even goes ~4.65 →
+  ~6.3 trips. (Estimate: it combines this rig's marginal cut cost with
+  `branch-refutation-payoff.md`'s P-law, not a single measurement.)
+- **Still open, unchanged:** the case where the flat arm does not terminate
+  (`muladd` mlen=2, `check_scalar` — symbolic base, large inventories). That
+  argument for the technique was always independent of these numbers and is
+  now joined by a positive one.
+
+## Caveats
+
+- The "before" column is this file's published record, not a same-session BASE
+  re-run. The three flat arms reproducing to ≤0.01% is what licenses that.
+- **The split-vs-together consistency check changed shape** and should not be
+  reused as a proxy: `cdBody + cdFinal` was +1.93% over the composed measurement
+  and is now **+21.49%**, because each contract's own cost fell ~10× while the
+  shared elaboration did not. Use the marginal (7.102 M/cut), not the sum.
+- `ZZCmpBodyPin` moved **+1.42%** (151k words) on an arm the refutation rule
+  cannot help — an order of magnitude more than the 10,228-word tax measured on
+  `pbodyPin`. Most likely the `formula_eqb` `formula_propeq` clause landing in
+  the same commit, which changes which formulas discharge. Small, and in the
+  costs-slightly-more direction; not chased.
+- All arms here have 2–4 instruction tables.
+
+## Files
+
+Arms: `ZZM_cdbody.v` / `ZZM_cdfinal.v` (copies of `ZZCmpBody`/`ZZCmpFinal` with
+the now-dead residual closers stripped — post-fix `solve_vc` closes those VCs
+outright), `ZZM_cmp1.v` / `ZZM_cmp2.v` (copies of `Example/CountdownComposed.v`
+and `Example/TwoLoopsComposed.v`), plus the unmodified `ZZFlat_N*`, `ZZF2_N16`,
+`ZZCmpBodyPin` and the three baselines.
+
