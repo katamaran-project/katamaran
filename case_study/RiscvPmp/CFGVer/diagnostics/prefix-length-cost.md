@@ -465,6 +465,53 @@ either way (0.013% apart)**. So the `Qed`/`Admitted` gap is a constant plus a
 touch of linear and cannot distort an exponent — which is what licenses the
 one-protocol comparison above.
 
+### 3.2e The backward branch is NOT resolved by its guard — but that is not the K² either
+
+Two separate findings, from an instrument that separates a LIVE demonic split
+(both children survive) from a DEAD-SIDED one (the solver killed a child, leaving
+`SymProp.block`). A dead-sided split still cost a full branch construction, so
+counting them against P tests "the executor keeps splitting, and that is why cost
+grows with the table". Counts are `(dem_live, dem_dead, ang_live, ang_dead)` on
+the raw VC (`Example/ZZSplit.v`):
+
+| arm | P=0 | P=16 | P=64 |
+|---|---|---|---|
+| unpinned, guarded | (4, 25, 14, 1) | (4, 25, 14, 1) | (4, 25, 14, 1) |
+| unpinned, **NO guard** | (4, 25, 14, 1) | — | (4, 25, 14, 1) |
+| counter pinned | (3, 26, 13, 1) | — | (3, 26, 13, 1) |
+
+**Finding 1 — the guard resolves nothing.** `cdBody`'s precondition carries
+`dec k ≠ 0` and the BNE tests exactly that formula, yet deleting the guard leaves
+the split structure *byte-identical*. Two independent signs point the same way:
+the counts above, and the fact that the guard reappears as the hand-discharged
+residual after `solve_vc` (`right. intros Heq. apply H0. …`). So the executor
+builds both successors and defers the discharge, rather than using a
+syntactically identical path-condition fact to kill the infeasible branch at
+construction time. **This is real and was not previously recorded.** 25 of 29
+demonic splits *are* dead-sided, so the solver is doing this job in general —
+it just is not doing it here.
+
+**Finding 2 — and it is NOT the K².** Cost, baseline 605,924,796:
+
+| arm | P=0 | P=64 | excess over P=0 |
+|---|---|---|---|
+| guarded | 82.635 | 2509.390 | 2426.8 |
+| no guard | 59.507 | 2469.330 | **2409.8** |
+
+The K-dependent part is the same to **0.7%** with the branch guard entirely
+absent. The guard buys a constant (+23 M at P=0, +40 M at P=64) and touches the
+exponent not at all. So "it keeps splitting on the backward jump" is a genuine
+inefficiency and **cannot be the scaling cause**: the split count is invariant in
+P, and removing the guard that should resolve it leaves the quadratic intact.
+
+**What this sharpens.** Pinning the counter removes exactly ONE live demonic
+split and kills the quadratic (1.42× vs 26.9×); deleting the guard changes the
+split structure not at all and keeps the quadratic. So the K² needs a register to
+hold a **symbolic value**, not an **unresolved branch** — those are now separated,
+and it is the former. The mystery is therefore an interaction between "a value is
+unknown" and "the table has K entries", with branch structure held constant, and
+neither the table representation nor the branch structure explains it.
+
 ### 3.2c What is now excluded, and what is left
 
 Excluded by measurement or construction: a larger VC (§3.1), `var_dead`'s scan
@@ -697,6 +744,7 @@ Throwaway, gitignored, none in `_CoqProject`:
 | the realised demo (§2.6b) | `Example/PaddedLoop.v`, `Example/PaddedLoopResult.v` (both PERMANENT, gate-checked); measurement baseline `Example/ZZPaddedLoopBase.v` |
 | structural counts | `Example/ZZPadI{0,16,32,64}.v` + `ZZLvarInstrCommon.v` |
 | word-column term size (§3.2b) | `Example/ZZWordSize.v` |
+| split structure / guard (§3.2e) | `Example/ZZSplit.v`, `ZZPadNG{0,64}.v` |
 | base-independence (§3.2d) | `Example/ZZPadBA{0,16,32,64}.v` (concrete) vs `ZZPadSB{0,16,32,64}.v` (symbolic) |
 
 ```bash
