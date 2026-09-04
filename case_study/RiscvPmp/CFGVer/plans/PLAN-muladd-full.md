@@ -443,6 +443,66 @@ probe re-measures the same tree. The residual is a bare `False`
 > program's table in every segment, and the fix is a sub-table faithfulness lemma
 > rather than anything about this program.
 
+## RESOLVED 2026-09-04 — the mid-program cut VERIFIES. The blocker was the CUT
+## ASSERTION, not the offset, the builder, the base, the length or the fuel.
+
+**`ZZSeg2`'s cut at offset 220 now closes with a real `Qed`.** The full 2x2,
+one axis per direction, all four arms on the same commit with the same
+`intros; vm_compute; solve_vc; solve_symbase_fetch` protocol and a re-measured
+baseline of 606,239,793:
+
+| | full table (282 entries) | trimmed table (15 entries) |
+|---|---|---|
+| `T0` havoc'd (`PVExist`) | 43,503 M, **bare `False`** | 456.16 M, **bare `False`** |
+| `T0` pinned public 63 | 1,231.66 M, **`Qed`** | **338.78 M, `Qed`** |
+
+### What was actually wrong
+
+The segment at offsets 220..276 contains, at index 66,
+`lw A4, 0(A7)` with `A7 = A0 + (((T0 + 31) >> 5) << 2)` — **a load whose address
+is computed from `T0`**. The cut declared `(T0, false, PVExist)`, i.e. secret and
+unknown. But on the only path that reaches offset 220 (`beqz T0` not taken, then
+`bltu 31, T0` taken from index 3, target 12+208=220), `T0` holds `m[0] = 63`,
+which the whole-function contract pins as **PUBLIC**. So the cut assertion threw
+away exactly the fact the segment needs, and a secret-dependent load address is
+correctly `False`.
+
+Changing one spec entry to `(T0, true, PVConst (bv.of_N 63))` closes it. Note the
+header comment that justified the havoc — *"Registers arrive HAVOC'd (PVExist) —
+which is exactly what a cut assertion supplies for a non-public value"* — was
+right about non-public values and wrong that every register is one. **A cut
+assertion must carry every public/pinned fact the segment depends on; havocking
+uniformly is not a safe default, it is a way to make the VC false.**
+
+### Attribution, stated plainly
+
+- **The sub-table work did NOT unblock this.** Provability is entirely the pin:
+  both havoc'd arms fail, both pinned arms verify, at either table size. Do not
+  credit `itable_faith_of_segment` with unblocking muladd.
+- **What the sub-table work bought is cost**: 95.4x on the unprovable arm and
+  **3.64x on the now-provable one** (1231.66 -> 338.78 M).
+- **The two axes are strongly SUB-multiplicative.** Trimming alone from the worst
+  corner is 95.4x and pinning alone is 35.3x; if independent, both would give
+  ~3368x. Measured together: **128.4x**. They overlap because both reduce the
+  same product — solver work on undecided values, times table size. Either one
+  captures most of it; the second adds little.
+- The 43.8 G figure that four probes chased was therefore *two* things at once,
+  and neither was the entry offset.
+
+### What this unlocks
+
+The cut is now **338.78 M and 15 s**, from 43.5 G and 158 s. Mid-program muladd
+cuts are debuggable for the first time — the `ZZSegTrimD.v` goal dump that found
+this took 11 s. The obvious continuation is to pin the remaining segments'
+public facts the same way and compose them; the machinery
+(`myWP2_loop_bind`/`_join`/`_induction`, `itable_faith_of_segment`) is all in
+place, and the per-segment cost is now in the hundreds of M rather than tens of
+G.
+
+Probes (throwaway, gitignored): `Example/ZZSegTrim.v` (trimmed, havoc'd),
+`ZZSegTrimP.v` (trimmed, pinned — the one that verifies), `ZZSeg2P.v` (full
+table, pinned), `ZZSegTrimD.v` (the goal dump), baseline `ZZSegBase.v`.
+
 ## THE METHOD ERROR, recorded because it cost four probes
 
 **The comparison was never controlled.** The one working point (`ZZSeg1`) uses

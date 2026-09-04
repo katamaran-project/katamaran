@@ -484,6 +484,32 @@ for that blowup, and the controlled test is direct: run one muladd segment
 contract with its table trimmed to the segment's own instructions and see
 whether the cost falls by ~(282/k)².
 
+## 4.4 The undecidable-branch muladd arm, measured — 95.4x, and a 2x2
+
+§4.3 could only measure a *decidable*-branch segment (3.03x). The undecidable
+one is now measured too, on `ZZSeg2`'s mid-program cut at offset 220, and it is
+the arm this record's law is about:
+
+| | full table (282) | trimmed table (15) |
+|---|---|---|
+| `T0` havoc'd | 43,503 M, `False` | 456.16 M, `False` |
+| `T0` pinned public | 1,231.66 M, `Qed` | 338.78 M, `Qed` |
+
+- **Trimming is worth 95.4x** on the undecidable/unprovable arm — vs 3.03x on
+  §4.3's decidable one, exactly the regime split this record isolates, now on
+  the same program. Exponent implied: `log 95.4 / log(282/15) = 1.55`, i.e.
+  superlinear and sub-quadratic, so **the countdown coefficient still does not
+  transfer** even in the right regime.
+- **Trimming on the PROVABLE arm is only 3.64x.** Pinning a register the segment
+  branches/addresses on removes most of the same work, which is why the two axes
+  are strongly sub-multiplicative: 95.4x and 35.3x alone, **128.4x** together
+  where independence would predict ~3368x. Both reduce the same product (solver
+  work on undecided values x table size).
+- **Cost was not the blocker.** Both havoc'd arms give a bare `False`; trimming
+  made it 95.4x cheaper to *discover* that. The blocker was the cut assertion
+  havocking `T0`, which holds the public pinned `m[0] = 63` that a load address
+  in the segment depends on. Full write-up: `plans/PLAN-muladd-full.md`.
+
 ## 5. What this means
 
 - **§2.1's "prefix length is nearly free" is CORRECT BUT NOT GENERAL.** It is a
