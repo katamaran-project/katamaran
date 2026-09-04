@@ -72,6 +72,10 @@ AXIOM_CLEAN_THMS=(
   "cd_loop"
   # two sequential loops, composed: A hands off to B at its head
   "loopA"
+  # the SUB-TABLE cut (Example/PaddedLoopResult.v): the only proof in the tree
+  # whose contract table covers a PROPER SUBSET of the program, so it is the
+  # only check that itable_faith_of_segment / instrs_of_list_segment are sound.
+  "pl_loop"
 )
 
 COQC="${COQC:-coqc}"

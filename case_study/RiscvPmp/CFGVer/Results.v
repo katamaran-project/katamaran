@@ -75,4 +75,5 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Example.BearSSLCheckScalarLoop1Result
      RiscvPmp.CFGVer.Example.SwapComposedResult
      RiscvPmp.CFGVer.Example.CountdownComposedResult
-     RiscvPmp.CFGVer.Example.TwoLoopsComposedResult.
+     RiscvPmp.CFGVer.Example.TwoLoopsComposedResult
+     RiscvPmp.CFGVer.Example.PaddedLoopResult.

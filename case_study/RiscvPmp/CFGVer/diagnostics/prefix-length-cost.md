@@ -225,27 +225,59 @@ recurring theme, not a one-off.
 
 ### 2.6b The payoff realised: a loop cut inside a 66-instruction program
 
-`Example/ZZPaddedLoop.v` (throwaway) is the countdown loop cut, verbatim, except
+`Example/PaddedLoop.v` is the countdown loop cut, verbatim, except
 that the program is `List.repeat (MV X4 X4) 64 ++ cd_instrs` (66 instructions,
 loop head at byte 256) and both segment contracts carry **only their own two
 instructions**, with the offset in `cfg_placement`. Both close with a real `Qed`.
 
 | arm | program | net M words |
 |---|---|---|
-| `ZZPaddedLoop` (both segment contracts) | 66 instrs | **177.10** |
+| `PaddedLoop` (both segment contracts) | 66 instrs | **177.21** |
 | published `CountdownComposed` (same cut) | 2 instrs | 177.96 |
 | same cut with untrimmed tables (2 × `pbody` at P=64) | 66 instrs | ~5053 |
 
-**The cut inside the 66-instruction program costs 0.48% LESS than the identical
+**The cut inside the 66-instruction program costs 0.42% LESS than the identical
 cut in a 2-instruction program.** Program length has become free for the composed
 proof, against ~28.5× for the untrimmed alternative. That is the whole point of
 the exercise, and it is measured rather than projected.
 
-The heavy half (`ZZPaddedLoopResult.v`) is written with full proof bodies and no
-`Admitted`, owning `ptsto_instrs` of the **whole** 66-instruction program and
-closing the table gap with `itable_faith_of_segment` at
-`pre := repeat (MV X4 X4) 64, seg := cd_instrs, post := []`. **It has not been
-compiled** — four specific unchecked points are listed in §6.
+The heavy half is **compiled, hole-free and axiom-clean** (`Print Assumptions
+pl_loop` reports only `pure_decode` and `mmioenv`, the model's inherent
+parameters). It owns `ptsto_instrs` of the **whole** 66-instruction program and
+closes the table gap with `itable_faith_of_segment` at
+`pre := pl_pre, seg := pl_seg, post := pl_post`, then gets the loop from
+`myWP2_loop_induction`. Both files are now permanent and gate-checked:
+`Example/PaddedLoop.v` + `Example/PaddedLoopResult.v`, with `pl_loop` in
+`scripts/gate.sh`'s `AXIOM_CLEAN_THMS` — **the only proof in the tree whose
+contract table covers a proper subset of the program**, hence the only check
+that the sub-table path stays sound.
+
+Figures above re-measured serially (177.21 M net, baseline 605,916,589), since
+the first reading was taken while other work was building — 0.06% apart, so the
+concurrency hazard in §0 did not bite here.
+
+Two traps cost a compile each and are worth knowing before writing another
+sub-table contract:
+
+- **`list_AST_AnnotInstr` is `List.map AST_AnnotInstr`, NOT an identity**
+  (`Verifier.v:145`; coqc even warns "not definitionally an identity
+  function"). So a `list AST` cannot stand in for the `list AnnotInstr` that
+  `ptsto_instrs` and `itable_rel` are stated over — the existing examples only
+  get away with writing `cd_instrs` because the *contract field* coerces it. The
+  failure is an unresolved-implicit error on `<$>` ("Cannot infer the implicit
+  parameter M of fmap"), which reads like an Iris notation problem and is not
+  one. Give the program an explicit `AnnotInstr`-level `pre`/`seg`/`post`
+  decomposition and define `padded_annot := pl_pre ++ pl_seg ++ pl_post`; the
+  lemma's `pre ++ seg ++ post` then matches SYNTACTICALLY, which also avoids an
+  `app_nil_r` rewrite that would otherwise hit the `seg` occurrence inside
+  `table_of_list` as well.
+- **`itable_faith_of_segment`'s `pre`/`seg`/`post` are EXPLICIT.** `Set Implicit
+  Arguments` marks only *strict* implicits and `length pre` is not a rigid
+  position, so only `Σ`, `cbase` and `off` are implicit. `off` occurs in no
+  explicit argument's type, so it cannot be inferred; and `(off := _)` fails
+  with "Not enough non implicit arguments" unless every preceding explicit
+  argument is supplied. Use the fully-`@` form:
+  `@itable_faith_of_segment Σ p ι cbase off pre seg post`.
 
 ### 2.7 The lever, measured directly: a SUB-TABLE contract
 
@@ -521,7 +553,7 @@ Throwaway, gitignored, none in `_CoqProject`:
 | sub-table arm (§2.7) | `Example/ZZPadS{0,256}.v` |
 | P=128 point | `Example/ZZPadB128.v` |
 | muladd trimming pair (§4.3) | `Example/ZZTrim{Base,F,T}.v` |
-| the realised demo (§2.6b) | `Example/ZZPaddedLoop{,Base,Result}.v` |
+| the realised demo (§2.6b) | `Example/PaddedLoop.v`, `Example/PaddedLoopResult.v` (both PERMANENT, gate-checked); measurement baseline `Example/ZZPaddedLoopBase.v` |
 | structural counts | `Example/ZZPadI{0,16,32,64}.v` + `ZZLvarInstrCommon.v` |
 
 ```bash
@@ -531,17 +563,11 @@ OCAMLRUNPARAM='v=0x400' /usr/bin/time -f "RSS %M KB WALL %e s" \
   | grep -E 'allocated_words|top_heap_words|RSS|Error'
 ```
 
-**Not yet verified, in `ZZPaddedLoopResult.v`** (the heavy half of §2.6b): the
-`apply` of `itable_faith_of_segment` must unify against `pre ++ seg ++ post` at
-`post := []` (if it fails, `rewrite <- (app_nil_r cd_instrs)` first); a
-`reflexivity` must prove `inst (term_val _ (bv.of_N 256)) ι = SyncVal (bv.add
-(bv.of_N 0) (bv.of_N 256))`, which may need `bv.add_zero_l`; `plFinal`'s exit
-faithfulness computes `pcOutOfInstrs_exitCond` over a 66-element list by
-`reflexivity`; and the `iFrame`/`iExact` block is copied from a template whose
-valuation shift is `ι.["a"↦0]` where this one is `ι.["a"↦256]`. Promoting the
-demo out of the `ZZ` prefix (so it is gate-checked) additionally needs
-`_CoqProject`, `Results.v` and `scripts/gate.sh` entries per
-`cfgver-new-example`.
+**Promoting the demo is DONE**: `Example/PaddedLoop.v` +
+`Example/PaddedLoopResult.v` are in `_CoqProject`, re-exported from `Results.v`,
+and `pl_loop` is in the gate's `AXIOM_CLEAN_THMS`. The four points previously
+listed here as unchecked are discharged — the two that were real are written up
+in §2.6b; the `app_nil_r` and `iExact`-position worries did not materialise.
 
 Traps hit here:
 
