@@ -177,3 +177,99 @@ Two traps hit while building this:
   goal"*. The pinned arm therefore ends `solve_vc. Qed.` while the unpinned one
   has three extra tactics before `Qed`. Both are `Qed`, which is the factor that
   actually matters.
+
+---
+
+# ADDENDUM 2026-09-04 — the TWO-LOOP payoff, and the superadditivity that isn't
+
+`plans/PLAN-loop-invariant.md` U11 predicted composition would win on two loops,
+on the grounds that combining two loops was measured **5.5–18.6× superadditive**
+(`check-scalar-combined-cost-drivers.md`). **That prediction is wrong for this
+program, and the reason is instructive.**
+
+## One-sentence finding
+
+The flat two-loop VC is **exactly linear in total trips** (`3.427 + 1.5811·T`,
+held-out −0.036%) and combining the two loops is **0.970× the cost of verifying
+them separately — SUBadditive** — so there is no superadditivity for composition
+to recover, and the composed proof loses by **7.30×**, worse than the 6.4× it
+lost by on a single loop.
+
+## Results
+
+Same program as `Example/TwoLoopsComposed.v`, both counters pinned concrete at
+`nA = nB = N`, fuel `2nA+2nB+3`. `T = nA+nB` total trips. Baseline 605,870,094.
+
+| N | T | net M words |
+|---|---|---|
+| 2 | 4 | 9.751 |
+| 4 | 8 | 16.075 |
+| 8 | 16 | 28.725 |
+| 16 | 32 | 54.042 |
+
+Marginal per trip: **1.581 / 1.581 / 1.582** — constant to four significant
+figures. Held-out linear fit on T ∈ {4,8,16} predicting T=32: **−0.036%**.
+
+| arm | net M words |
+|---|---|
+| flat two-loop, T=32 | 54.04 |
+| **composed (4 contracts)** | **394.61** |
+
+**Composed / flat at T=32 = 7.30×. Crossover at T ≈ 247 total trips (124 per
+loop).**
+
+## Reading the axes apart
+
+**1. There is no superadditivity here.** Against U10's single-loop law
+(`3.410 + 1.5278·N`), two separate single-loop VCs at N=16 each would cost
+**55.71 M**; the combined two-loop program costs **54.04 M**. Ratio **0.970** —
+combining is very slightly CHEAPER than separating, because the ~3.4 M fixed
+intercept is paid once instead of twice.
+
+**Why `check_scalar`'s 5.5–18.6× does not reproduce:** that figure decomposes
+into a **symbolic-base amplification of 2.8–7.2×** and a **chunk-inventory
+residual of 1.6–2.6×** (`check-scalar-combined-cost-drivers.md` §5.5, §6). This
+program has a **concrete base** and a **two-register inventory**, so both
+mechanisms are absent. The superadditivity was never a property of "two loops";
+it was a property of symbolic bases and large declared inventories that happened
+to be measured on a two-loop program. **Do not treat "combining loops is
+superadditive" as a general law — it is contingent on those two mechanisms.**
+
+**2. A symbolic segment contract costs ~83–99 M words almost regardless of what
+it contains.** Across every segment contract measured:
+
+| contract | net M words |
+|---|---|
+| `cdBody` (single loop, body) | 97.95 |
+| `cdFinal` (single loop, exit) | 83.44 |
+| two-loop, mean of 4 contracts | 98.65 |
+
+That flatness is the real cost law of composition: **you pay ~90 M per segment
+contract, and the flat arm buys ~60 trips for that same money.** Adding a second
+loop doubled the contract count (2 → 4) and doubled the composed cost
+(177.96 → 394.61, 2.22×), exactly as that model predicts.
+
+## What this means
+
+- **U11's prediction is RETRACTED** (marked in place in the plan). Composition
+  loses on two loops by 7.30×, *more* than on one.
+- **The mechanism is unchanged from §2.4**: it is the unknown counter (9.19×),
+  and it is paid once per segment contract. Adding structure to the program adds
+  contracts, so composition's cost scales with the number of CUTS while the flat
+  arm's scales with TRIPS. Composition wins only when trips ≫ cuts, by roughly
+  60 trips per cut on this rig.
+- **The case that remains genuinely open is the one where the flat arm does not
+  terminate** (`muladd` mlen=2, `check_scalar` — symbolic base, large
+  inventories, i.e. exactly the two mechanisms absent here). There, "flat cost"
+  is ∞ and any finite composed cost wins. **That is now the ONLY remaining
+  argument for this technique on performance grounds**, and it has not been
+  measured because the flat arm cannot be run.
+- Corollary for design: **cut sparingly.** Every cut costs ~90 M. A loop
+  invariant that replaces 250+ trips pays; a cut that replaces 10 does not.
+
+## Files
+
+`Example/ZZF2Common.v`, `ZZF2_N{2,4,8,16}.v`, baseline `ZZF2Base.v`; composed arm
+is `Example/TwoLoopsComposed.v` against baseline `ZZCmpBase.v`. Same protocol as
+the main record (`vm_compute. solve_vc. Qed.` throughout; the composed arm's four
+proofs carry residual-closing tactics before `Qed`, priced at ~0.004%).

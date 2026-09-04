@@ -1059,6 +1059,18 @@ A's final `X1` value is dropped at the join with a `_` pattern — sound because
 
 ### Why this is the interesting case, and what is still unmeasured
 
+> **RETRACTED 2026-09-04, same day: the prediction below is WRONG.** Measured in
+> `diagnostics/composition-payoff.md` ADDENDUM: the flat two-loop VC is EXACTLY
+> LINEAR (`3.427 + 1.5811·T`, held-out −0.036%), combining the two loops is
+> **0.970× the cost of verifying them separately (SUBadditive)**, and the
+> composed proof loses by **7.30×** — worse than the 6.4× on one loop.
+> `check_scalar`'s 5.5–18.6× superadditivity decomposes into symbolic-base
+> amplification (2.8–7.2×) and chunk inventory (1.6–2.6×), and this program has
+> a concrete base and two registers, so neither mechanism is present. **Never
+> quote "combining loops is superadditive" as a general law.** Original text
+> follows.
+
+
 U10 measured composition LOSING 6.4× on a single loop, because the flat arm there
 is linear (`3.410 + 1.5278·N`). **Two loops is the case where the flat arm is
 known to be superadditive** — `check-scalar-combined-cost-drivers.md` measures
