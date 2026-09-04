@@ -44,6 +44,14 @@ the rigs are measuring the same objects as the earlier records:
 | `ZZCmpBodyPin` (re-run) | 10.660 | 10.66 | 0.00% |
 | `ZZU5_K0` / `_K32` | 7.220 / 8.339 | 7.223 / 8.343 | −0.04% |
 
+**Never measure while anything else rebuilds the shared source tree.** A sweep
+run 2026-09-04 while sibling processes rebuilt `Tables.vo`/`TablesRel.vo`
+returned `Error:` in all three arms *at identical baseline-level cost* (within
+826 words) — the "this variant is free" failure mode, caused by concurrent `.vo`
+churn rather than by anything in the arms. Re-run serially, the same arms cost
+3.5× more. Parallel workers measuring in one working tree corrupt each other's
+numbers silently; only the `Error` gate caught it.
+
 **Gate:** every arm grepped for `Error`. This caught the known stale-`.vo` trap
 (`footprint-vs-throughput.md` §5) on the structural-count arms, which would
 otherwise have reported as "free".
@@ -351,7 +359,50 @@ support.** Downgrading it explicitly: what transfers is the regime split (§4.1,
 well supported), not the law. The trimming payoff on muladd is **unmeasured**,
 and the run named below is what would measure it.
 
-**Treat this as a hint, not a result.** A coefficient fitted on a 2-instruction
+**Treat this as a hint, not a result.**
+
+### 4.3 The muladd trimming payoff, MEASURED — 3.03×, and (K/k)² does not transfer
+
+Matched pair on muladd segment 1 (`ZZSeg1`'s contract: `gen_contract_rel`, entry
+offset 0, `extra_exit_offs = [220]`, bound 1168, fuel 8, identical reg/mem specs
+and identical `exitCond` function; `vm_compute; solve_vc; solve_symbase_fetch.
+Qed.` in both arms). Baseline 606,236,136.
+
+| arm | table | net M words |
+|---|---|---|
+| full table | 282 entries | **1098.54** |
+| trimmed table | 56 entries | **363.10** |
+
+**Ratio 3.026×** — trimming removes 67.0% of the segment's cost. The full arm
+reproduces `PLAN-muladd-full.md`'s published 1.099 G exactly, which is the check
+that the rig measures the intended object.
+
+**The countdown-derived model over-predicts by 8.4×.** `(K/k)²` at K=282, k=56
+predicts 25.35×; even a purely linear `K/k` predicts 5.04×. A two-point
+decomposition `net(K) = Base + c·K` gives **c ≈ 3.254 M words per table entry**
+and **Base ≈ 180.9 M**, so 83% of this segment's cost is its table and the rest
+is its own content. (Two points cannot distinguish linear from anything else —
+that split is a decomposition, not a fit, and **no exponent should be quoted
+from it.**)
+
+**This is consistent with §2.4's regime split rather than against it.**
+`PLAN-muladd-full.md` states segment 1's *"two forward branches are decidable
+from the pinned public `m[0] = 63`"*, so it sits in the **linear** regime, where
+this record measures length at 1.35–1.60× on countdown. Muladd's per-entry
+constant is ~100× countdown's (3.254 vs 0.0334 M), which is why the same regime
+yields 3.03× here instead of 1.4×. **The quadratic claim remains COUNTDOWN-ONLY:
+the muladd arms that would test it are the mid-program cuts, and those do not
+verify at all.**
+
+Residual confound, not eliminated: `gen_contract_rel` derives the exit *table*
+from its `instrs` argument, so the fall-through exit entry moved (1128 → 224)
+between arms. The `exitCond` *function* was pinned identical. Decoupling the exit
+table would have required a hand-written contract and so reintroduced the
+two-axis method error `PLAN-muladd-full.md` already flags. One entry in a small
+exit table — plausibly negligible, **unverified**. Also: the 56th entry (offset
+220) is in the trimmed table but never executed, so 55 entries is the true
+minimum; untested. Footprint is unusable on this rig (peak RSS came out *lower*
+for the baseline than for the trimmed arm — import-closure floor noise). A coefficient fitted on a 2-instruction
 loop with `|Σ|`=1 and a two-register inventory has no business predicting a
 282-instruction program with a symbolic base and ten memory cells, and agreement
 this tight over a 4.4× extrapolation in K is more likely coincidence than not.
@@ -377,8 +428,9 @@ whether the cost falls by ~(282/k)².
   **972 trips** at P=64 (a full cut, body + exit contract, is ~2× both, which
   recovers the published 114 at P=0). So the technique degrades fastest exactly
   where it was meant to help — long programs.
-- **The actionable fix is per-segment table trimming, and it is now worth
-  (K/k)² rather than the 1.155× §2.1 implied.** A segment contract currently
+- **The actionable fix is per-segment table trimming. Worth 26.93× on this
+  rig; MEASURED at 3.03× on the one real muladd segment that verifies — the
+  (K/k)² model does NOT transfer (§4.3).** A segment contract currently
   carries `cfg_instrs` = the *whole* program; it only ever fetches from its own
   segment.
   **Payoff measured directly in §2.7 (26.93×, with the placement offset free at
