@@ -380,3 +380,72 @@ green, allowlist unchanged.
 - Skills: **cfgver-new-example** (the recipe), **cfgver-gen-contract** (word
   vs byte granularity), **secret-data-walls** (why Phase 1's "no comparison on
   the product" hope needs checking against the real loop, not assuming).
+
+---
+
+# ATTEMPT 2026-09-04 — verifying muladd by CUTS. One segment lands; mid-program cuts do not.
+
+Tried after the composition machinery landed (`PLAN-loop-invariant.md` U1-U12).
+**Result: muladd is NOT verified by cuts.** Recorded so the next attempt does not
+repeat the same four probes.
+
+## What worked
+
+**Segment 1 verifies.** Entry offset 0, exit at offset 220, built with
+`gen_contract_rel` + `extra_exit_offs = [220]`, fuel 8, trivial post:
+**1.099 G words net, 15 s, real `Qed`** (`Example/ZZSeg1.v`). The whole function
+has never finished (§ diagnostics: killed at 14.5-19 min). So cutting does make
+part of muladd tractable, which was the open question from
+`diagnostics/composition-payoff.md`.
+
+Its two forward branches are decidable from the pinned public `m[0] = 63`
+(`beqz T0` false, `bltu 31, 63` taken), so the only feasible path leaves at 220.
+
+**Control-flow map** (from the 282-instruction listing): 7 loop heads at offsets
+**64, 336, 452, 540, 760, 948, 1056**; forward branches at 4→216, 12→220,
+280→428, 320→360, 436→472, 652→668, 920→1000, 1000→1108. Roughly 16 natural cut
+points.
+
+## What did not
+
+**Every mid-program cut collapses to a bare `False`**, at ~43.8 G words and
+~155 s. Four hypotheses tested and refuted, each on a matched pair:
+
+| hypothesis | arms | result |
+|---|---|---|
+| pc term written var-first vs const-first | both | 44.109 G both, ~500 words apart |
+| the symbolic base is the cost | symbolic vs concrete (ia=0) | 44.11 vs 43.80 G (0.7%) |
+| segment length / the four spill STOREs | 15 instrs vs 10, stores dropped | 43.80 vs 43.83 G |
+| fuel | 20 / 11 / 2 | 43.8296 / 43.8296 / 43.804 G |
+
+**Fuel-invariance down to 2 is the decisive observation:** the 43.8 G is not
+symbolic execution of the segment at all. Something fails immediately and every
+probe re-measures the same tree. The residual is a bare `False`
+(`ZZSeg3E.v` dumps it), i.e. the VC is unprovable rather than merely unfinished.
+
+## THE METHOD ERROR, recorded because it cost four probes
+
+**The comparison was never controlled.** The one working point (`ZZSeg1`) uses
+`gen_contract_rel`; every failing point uses a hand-written
+`MkCFGVerifierContract`. They differ in **two** things — contract builder AND
+entry offset — and the whole attempt attributed the gap to the offset. That is
+the one-axis-at-a-time violation `cfgver-scaling-diagnostics` opens with.
+
+**The test that should have come first, and still should:** a hand-written
+contract at entry offset **0** — same shape, same specs, same table, only the
+offset reverted. If it also costs 43.8 G and gives `False`, the problem is the
+hand-written contract shape (suspect the precondition or the exit table), and
+`ZZSeg1`'s success says nothing about mid-program cuts. If it is cheap, the entry
+offset really is the blocker. One run, and it converts a guess into a fact.
+
+Unverified leading hypothesis, offered only as a starting point: the entry pc is
+the demonic `a` pinned by `asn_pc_eq`, and at muladd's inventory (~30
+existentials plus a 9024-bit words variable) the solver may not resolve `a` to
+the literal, so `lookup_instr` matches no table key. The contrast is that the
+identical construction works on swap (entry offset 4) and countdown (offset 8),
+whose inventories are tiny. **Four hypotheses have already died here — treat this
+as the fifth candidate, not as the answer.**
+
+Probes: `Example/ZZSeg1.v`, `ZZSeg2.v` (symbolic base), `ZZSeg2C.v` (concrete),
+`ZZSeg3C.v` (shorter), `ZZSeg3T.v` (tight fuel), `ZZSeg3D/E.v` (goal dumps),
+baseline `ZZSegBase.v`.

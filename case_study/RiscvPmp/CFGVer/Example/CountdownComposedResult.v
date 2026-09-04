@@ -133,84 +133,95 @@ Section ComposeLoop.
      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
          (ai_instr <$> instrs_of_list (bv.of_N 0) (cfg_instrs cdBody)))%I.
 
-  Lemma cd_loop (n : nat) : forall (k : bv xlenbits),
-    bv.bin k = (N.of_nat n + 1)%N -> cdInv k -∗ myWP2_loop cdExit.
+  (* The invariant as a FAMILY indexed by trips-remaining -- the shape
+     myWP2_loop_induction wants.  The counter value is existential; only its
+     relation to n is fixed. *)
+  Definition cdInvN (n : nat) : iProp Σ :=
+    (∃ k : bv xlenbits, ⌜bv.bin k = (N.of_nat n + 1)%N⌝ ∗ cdInv k)%I.
+
+  (* ===== THE BODY CONTRACT: one trip, n+1 -> n. =====
+     Note there is no myWP2_loop_join here: the body is discharged with
+     ExitCond := cdInvN n, so its conclusion IS myWP2_loop (cdInvN n). *)
+  Lemma cd_step (n : nat) : cdInvN (S n) -∗ myWP2_loop (cdInvN n).
   Proof.
-    induction n as [|m IH]; intros k Hk.
-    - (* ===== FINAL TRIP: counter is 1, the BNE falls through to the exit. ===== *)
-      pose proof valid_cdFinal as Hv.
-      unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
-      cbn [cfg_map cdFinal] in Hv.
-      assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
-                      (instrs_of_list (bv.of_N 0) (cfg_instrs cdBody))
-                      (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 cd_instrs) (ik k)).
-      { apply itable_faith_of_list; [reflexivity|].
-        apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
-      assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                      (pcOutOfInstrs_exitCond 0 cd_instrs)
-                      (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [8%N]) (ik k)).
-      { constructor; [|constructor]. eexists. split; reflexivity. }
-      iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
-      iApply (sound_scfg_verification_condition_myWP2 Hv cdExit Hif Hef
-                $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
-      + unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
-        iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
-        iSplitR "Hpriv Hinv"; [| iFrame].
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
-        iSplitL "H1"; [iExact "H1"|].
-        iSplitR; [iSplit; [done|done]|].
-        iSplit; [|done]. iPureIntro.
-        change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
-      + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
-        destruct an as [av|a1 a2]; [|contradiction].
-        unfold cdExit. iExists av. iFrame "Hpc". iPureIntro. rewrite Hex. exact I.
-    - (* ===== ONE LOOP TRIP: counter > 1, the BNE jumps back to the head. ===== *)
-      pose proof valid_cdBody as Hv.
-      unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
-      cbn [cfg_map cdBody] in Hv.
-      assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
-                      (instrs_of_list (bv.of_N 0) (cfg_instrs cdBody))
-                      (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 cd_instrs) (ik k)).
-      { apply itable_faith_of_list; [reflexivity|].
-        apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
-      assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                      head_exitCond
-                      (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [0%N]) (ik k)).
-      { constructor; [|constructor]. eexists. split; reflexivity. }
-      assert (Hk2 : bv.bin k = (N.of_nat m + 2)%N) by lia.
-      assert (Hdec : bv.bin (bvdec k) = (N.of_nat m + 1)%N) by (apply bvdec_bin; exact Hk2).
-      assert (Hne : bvdec k <> bv.zero).
-      { intros HH. rewrite HH in Hdec. cbn in Hdec. lia. }
-      iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
-      (* the trip lands back at the head, so its ExitCond is "keep looping" *)
-      iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop cdExit) Hif Hef
-                $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
-      + unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
-        iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
-        iSplitR "Hpriv Hinv"; [| iFrame].
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
-        iSplitL "H1"; [iExact "H1"|].
-        iSplitR; [iSplit; [done|done]|].
-        iSplit; [|done]. iPureIntro.
-        change ((k + minus1)%bv) with (bvdec k). exact Hne.
-      + (* back at the loop head: rebuild the invariant at the decremented
-           counter and hand it to the induction hypothesis. *)
-        iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-        destruct an as [av|a1 a2]; [|contradiction].
-        cbn in Hex. unfold head_exitCond in Hex.
-        assert (Hav : av = bv.of_N 0) by (destruct (bv.eqb_spec av (bv.of_N 0)); congruence).
-        subst av.
-        iApply (IH (bvdec k) Hdec).
-        unfold cdInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
-        iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
-        iFrame "Hpc Hnpc Hinstrs Hpriv Hinv". iExact "H1".
+    iIntros "(%k & %Hk & Hres0)".
+    iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
+    pose proof valid_cdBody as Hv.
+    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    cbn [cfg_map cdBody] in Hv.
+    assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
+                    (instrs_of_list (bv.of_N 0) (cfg_instrs cdBody))
+                    (table_of_list (cfg_placement cdBody) 0 (cfg_instrs cdBody)) (ik k)).
+    { apply itable_faith_of_list; [reflexivity|].
+      apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
+    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
+                    head_exitCond (cfg_exits cdBody) (ik k)).
+    { constructor; [|constructor]. eexists. split; reflexivity. }
+    assert (Hk2 : bv.bin k = (N.of_nat n + 2)%N) by lia.
+    assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
+    assert (Hne : bvdec k <> bv.zero).
+    { intros HH. rewrite HH in Hdec. cbn in Hdec. lia. }
+    iApply (sound_scfg_verification_condition_myWP2 Hv (cdInvN n) Hif Hef
+              $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
+    - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
+      iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+      iSplitR "Hpriv Hinv"; [| iFrame].
+      iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+      iSplitL "H1"; [iExact "H1"|].
+      iSplitR; [iSplit; [done|done]|].
+      iSplit; [|done]. iPureIntro.
+      change ((k + minus1)%bv) with (bvdec k). exact Hne.
+    - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
+      destruct an as [av|a1 a2]; [|contradiction].
+      cbn in Hex. unfold head_exitCond in Hex.
+      assert (Hav : av = bv.of_N 0) by (destruct (bv.eqb_spec av (bv.of_N 0)); congruence).
+      subst av.
+      iExists (bvdec k). iSplitR; [iPureIntro; exact Hdec|].
+      unfold cdInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
+      iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
+      iFrame "Hpc Hnpc Hinstrs Hpriv Hinv". iExact "H1".
   Qed.
 
+  (* ===== THE EXIT CONTRACT: the guard fails, leave the loop. ===== *)
+  Lemma cd_exit : cdInvN 0 -∗ myWP2_loop cdExit.
+  Proof.
+    iIntros "(%k & %Hk & Hres0)".
+    iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
+    pose proof valid_cdFinal as Hv.
+    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    cbn [cfg_map cdFinal] in Hv.
+    assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
+                    (instrs_of_list (bv.of_N 0) (cfg_instrs cdBody))
+                    (table_of_list (cfg_placement cdBody) 0 (cfg_instrs cdBody)) (ik k)).
+    { apply itable_faith_of_list; [reflexivity|].
+      apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
+    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
+                    (pcOutOfInstrs_exitCond 0 cd_instrs) (cfg_exits cdFinal) (ik k)).
+    { constructor; [|constructor]. eexists. split; reflexivity. }
+    iApply (sound_scfg_verification_condition_myWP2 Hv cdExit Hif Hef
+              $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
+    - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
+      iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+      iSplitR "Hpriv Hinv"; [| iFrame].
+      iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+      iSplitL "H1"; [iExact "H1"|].
+      iSplitR; [iSplit; [done|done]|].
+      iSplit; [|done]. iPureIntro.
+      change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
+    - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
+      destruct an as [av|a1 a2]; [|contradiction].
+      unfold cdExit. iExists av. iFrame "Hpc". iPureIntro. rewrite Hex. exact I.
+  Qed.
 
-  (* Concrete anchor: the original countdown program starts X1 at 2, i.e.
-     two trips -- one loop-back and one fall-through. *)
+  (* ===== THE LOOP CONTRACT, for free from the two above. ===== *)
+  Lemma cd_loop (n : nat) : cdInvN n -∗ myWP2_loop cdExit.
+  Proof. apply (myWP2_loop_induction cdInvN cdExit cd_step cd_exit). Qed.
+
+  (* Concrete anchor: the original countdown program starts X1 at 2. *)
   Corollary cd_loop_from_2 : cdInv (bv.of_N 2) -∗ myWP2_loop cdExit.
-  Proof. apply (cd_loop 1). reflexivity. Qed.
+  Proof.
+    iIntros "H". iApply (cd_loop 1). iExists (bv.of_N 2).
+    iSplitR; [iPureIntro; reflexivity|]. iExact "H".
+  Qed.
 
 End ComposeLoop.

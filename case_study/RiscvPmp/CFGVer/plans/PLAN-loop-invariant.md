@@ -1096,3 +1096,46 @@ lesson is precisely that the intuition ran the wrong way once already.
 - Everything else is the U9 list unchanged: `iExact` not `iFrame` across the
   valuation shift (now the FOURTH and FIFTH occurrence), `cbn [cfg_map <contract>]`
   naming the contract, `ι` implicit in the bridge.
+
+## U12. THE LOOP RULE — body contract in, loop contract out (2026-09-04)
+
+`Adequacy.v`, next to `myWP2_loop_bind`/`_join`:
+
+```coq
+Lemma myWP2_loop_induction (Inv : nat -> iProp Σ) (E : iProp Σ) :
+  (forall n, Inv (S n) -∗ myWP2_loop (Inv n)) ->   (* the BODY contract *)
+  (Inv 0 -∗ myWP2_loop E) ->                       (* the EXIT contract *)
+  forall n, Inv n -∗ myWP2_loop E.                 (* the LOOP contract *)
+Proof.
+  intros Hstep Hexit n. induction n as [|n IH]; iIntros "H".
+  - by iApply Hexit.
+  - iApply (myWP2_loop_bind (Inv n) E with "[] [H]").
+    + iApply IH.
+    + by iApply Hstep.
+Qed.
+```
+
+Eight lines, and it is the whole of what U9 and U11 hand-rolled once per loop.
+**A caller now supplies only two facts and gets the loop summary**; the
+induction, the `myWP2_loop_join` and the fixpoint bookkeeping are library code.
+
+`Example/CountdownComposedResult.v` is refactored onto it and gate-green:
+
+| before | after |
+|---|---|
+| `cd_loop` = one 70-line `induction` carrying the IH by hand | `cd_step` + `cd_exit` (the two contracts) and `cd_loop` = **one line** |
+
+**Two things worth knowing about the shape:**
+
+- **The invariant must be a FAMILY indexed by trips-remaining**, `Inv : nat ->
+  iProp Σ`. Where the natural invariant is indexed by a counter VALUE, wrap it:
+  `cdInvN n := ∃ k, ⌜bv.bin k = n+1⌝ ∗ cdInv k`. The existential is what lets the
+  body contract hand back a *different* counter value at the same index.
+- **The body case no longer needs `myWP2_loop_join`.** Discharging the body with
+  `ExitCond := Inv n` makes its conclusion literally `myWP2_loop (Inv n)`, which
+  is the lemma's premise. The join only appears where a segment's exit condition
+  is "keep running until something else", i.e. at a straight-line cut.
+
+`TwoLoopsComposedResult.v` still hand-rolls its two inductions; porting it is
+mechanical and would shrink it the same way, but was not done here.
+

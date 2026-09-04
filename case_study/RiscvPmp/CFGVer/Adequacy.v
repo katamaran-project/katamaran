@@ -206,6 +206,31 @@ Import iris.algebra.gmap.
     iIntros "H". iApply (myWP2_loop_bind (myWP2_loop E) E with "[] H"). auto.
   Qed.
 
+  (* ---------------------------------------------------------------- *)
+  (* THE LOOP RULE.  Turns a contract for the loop BODY into a contract *)
+  (* for the whole LOOP, back edge included.                            *)
+  (*                                                                    *)
+  (*   Inv n   = the loop invariant with n trips still to run           *)
+  (*   Hstep   = the BODY contract: one trip, n+1 -> n                  *)
+  (*   Hexit   = the EXIT contract: the guard fails, leave the loop     *)
+  (*                                                                    *)
+  (* The caller supplies those two and gets the loop summary; the        *)
+  (* induction and the `▷`/fixpoint bookkeeping stay in here.  This is   *)
+  (* the whole of what Example/CountdownComposedResult.v and            *)
+  (* Example/TwoLoopsComposedResult.v used to hand-roll per loop.       *)
+  (* ---------------------------------------------------------------- *)
+  Lemma myWP2_loop_induction `{sailGS2 Σ} (Inv : nat -> iProp Σ) (E : iProp Σ) :
+    (forall n, Inv (S n) -∗ myWP2_loop (Inv n)) ->
+    (Inv 0 -∗ myWP2_loop E) ->
+    forall n, Inv n -∗ myWP2_loop E.
+  Proof.
+    intros Hstep Hexit n. induction n as [|n IH]; iIntros "H".
+    - by iApply Hexit.
+    - iApply (myWP2_loop_bind (Inv n) E with "[] [H]").
+      + iApply IH.
+      + by iApply Hstep.
+  Qed.
+
   Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (pc : Val ty_xlenbits) : Prop :=
       bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 
