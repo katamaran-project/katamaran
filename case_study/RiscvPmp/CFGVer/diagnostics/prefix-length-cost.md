@@ -198,6 +198,50 @@ Compare the already-known conjunct-order cost bug in
 `sep_contract_fetch_instr`; ordering effects in the path condition are a
 recurring theme, not a one-off.
 
+### 2.7 The lever, measured directly: a SUB-TABLE contract
+
+The trimming fix is not a projection — it is the same dial read in the other
+direction. `pseg off` is the identical loop-body segment (same precondition,
+same guard, same post, same fuel, same executed steps) except that its table
+holds **only the two instructions it executes** and the segment's byte offset is
+carried by the **placement term** (`cfg_placement := term_val (bv.of_N off)`)
+instead of by a prefix of filler in the table. `table_of_list p 0 seg` then emits
+exactly the addresses `base+off`, `base+off+4` that `pbody`'s padded table emits
+for those same two instructions.
+
+| arm | table | net M words |
+|---|---|---|
+| `pseg` at offset 0 | 2 instrs | 93.788 |
+| `pseg` at offset 256 | 2 instrs | **93.830** |
+| `pbody` at P=64 (same segment) | 66 instrs | **2526.656** |
+
+Two readings, both clean:
+
+- **The placement offset is free: 0.045%.** Moving a segment from address 0 to
+  address 256 costs nothing. So the K² term is entirely the *table*, not the
+  addressing, and a sub-table contract at a nonzero offset pays the same as one
+  at zero.
+- **Trimming recovers the whole 26.93×.** `pseg 256` vs `pbody 64` is the
+  identical segment differing only in what its table contains.
+
+(`pseg 0` vs `pbody 0` agree to 0.02%, which is the consistency check that they
+are the same object.)
+
+**Soundness of this is now largely built** (2026-09-04, `Tables.v`): `itable_rel`
+is a `List.Forall` over the *table's* entries asserting only that the map
+*contains* each one, and `itable_faith_weaken` already lifts it along `m ⊆ m'`,
+so the obligation reduces to three gmap containments —
+`instrs_of_list_prefix`, `instrs_of_list_suffix` and their composition
+`instrs_of_list_segment`:
+
+```coq
+instrs_of_list (base + 4·|pre|) seg  ⊆  instrs_of_list base (pre ++ seg ++ post)
+```
+
+That is the whole soundness content of "a contract that knows only the
+instructions it executes". `etable_faith_exits_of_offs` needs no change — it is
+already placement-relative.
+
 ## 3. Mechanism: the cost is TRANSIENT — the VC does not get bigger
 
 ### 3.1 Every structural count is invariant in P
@@ -337,8 +381,11 @@ whether the cost falls by ~(282/k)².
   (K/k)² rather than the 1.155× §2.1 implied.** A segment contract currently
   carries `cfg_instrs` = the *whole* program; it only ever fetches from its own
   segment.
-  **The soundness side is largely already built** (checked 2026-09-04, by
-  reading the statements, not by attempting the proof): `itable_rel` is a
+  **Payoff measured directly in §2.7 (26.93×, with the placement offset free at
+  0.045%), and the soundness side is now partly BUILT** — the three gmap
+  containment lemmas are proved in `Tables.v` as of 2026-09-04
+  (`instrs_of_list_prefix` / `_suffix` / `_segment`), on top of what already
+  existed: `itable_rel` is a
   `List.Forall` over the *table's* entries each asserting `m !! a = Some i`, so
   it is indexed by the table and merely *contained* in the map; and
   `TablesRel.v`'s **`itable_faith_weaken`** already proves
@@ -378,6 +425,7 @@ Throwaway, gitignored, none in `_CoqProject`:
 | flat unrolled, prefix axis | `Example/ZZPadF{0,16,32,64}.v`, `ZZPadFN16_{0,64}.v` |
 | conjunct-order control | `Example/ZZPadPrev0.v` |
 | straight-line comparison | `Example/ZZU5_K64.v` (new point on §2.1's rig) |
+| sub-table arm (§2.7) | `Example/ZZPadS{0,256}.v` |
 | structural counts | `Example/ZZPadI{0,16,32,64}.v` + `ZZLvarInstrCommon.v` |
 
 ```bash
