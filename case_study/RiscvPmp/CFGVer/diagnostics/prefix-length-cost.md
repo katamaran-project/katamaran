@@ -268,7 +268,44 @@ whole-function muladd collapsed to a bare `False` at **~43.8 G words**, with the
 cause listed as unidentified after four refuted hypotheses.
 
 Extrapolating §2.1's law to K=282 gives **43.4 G words** — 0.9% from the
-observed figure.
+observed figure. **See §4.2: that agreement is almost certainly
+coincidental, and the mechanism rather than the number is what carries over.**
+
+### 4.1 The MECHANISM is independently corroborated by that same record
+
+`PLAN-muladd-full.md` reports, for the one segment that *does* verify:
+`ZZSeg1`, entry offset 0, **1.099 G words, real `Qed`**, and — in its own words
+— *"its two forward branches are decidable from the pinned public `m[0] = 63`"*.
+The mid-program cuts that fail cut into loops with symbolic counters.
+
+So on muladd, at an **identical** K = 282:
+
+| segment | branches | cost |
+|---|---|---|
+| `ZZSeg1` | decidable | 1.099 G, verifies |
+| mid-program cuts | undecidable | 43.8 G, bare `False` |
+
+**39.9× apart at the same program length**, split by exactly the property this
+record isolates on countdown. That is independent corroboration of the
+*mechanism* — the regime split — on a different program, a different contract
+builder, a symbolic base and a ten-cell inventory. (It is not a matched pair:
+the two arms also differ in contract builder and entry offset, which is the
+method error that record already flags. It corroborates the split; it does not
+measure it.)
+
+### 4.2 …and it makes the COEFFICIENT agreement almost certainly a coincidence
+
+The same number cuts the other way, and against §4's headline. `ZZSeg1` sits in
+the **linear** regime at K=282 and costs 1.099 G, where this record's linear-
+regime arm (`ZZU5_K64`) costs 0.0098 G. Muladd's per-instruction constants are
+therefore on the order of **100× countdown's**. If its quadratic coefficient
+scaled anywhere near its linear one, the undecidable-branch cuts would land in
+the thousands of G, not at 43.8.
+
+**So the 43.4 G vs 43.8 G agreement in §4 should be read as luck, not as
+support.** Downgrading it explicitly: what transfers is the regime split (§4.1,
+well supported), not the law. The trimming payoff on muladd is **unmeasured**,
+and the run named below is what would measure it.
 
 **Treat this as a hint, not a result.** A coefficient fitted on a 2-instruction
 loop with `|Σ|`=1 and a two-register inventory has no business predicting a
@@ -299,11 +336,23 @@ whether the cost falls by ~(282/k)².
 - **The actionable fix is per-segment table trimming, and it is now worth
   (K/k)² rather than the 1.155× §2.1 implied.** A segment contract currently
   carries `cfg_instrs` = the *whole* program; it only ever fetches from its own
-  segment. Letting a contract declare a sub-table needs a **sub-table
-  faithfulness lemma** — if the contract's table agrees with the program's gmap
-  on every address the segment can fetch, the existing `itable_rel` bridge
-  should still go through. That is the highest-value item this measurement
-  produces, and §4 suggests it is worth ~200× on the muladd cut.
+  segment.
+  **The soundness side is largely already built** (checked 2026-09-04, by
+  reading the statements, not by attempting the proof): `itable_rel` is a
+  `List.Forall` over the *table's* entries each asserting `m !! a = Some i`, so
+  it is indexed by the table and merely *contained* in the map; and
+  `TablesRel.v`'s **`itable_faith_weaken`** already proves
+  `m ⊆ m' → itable_rel m tbl → itable_rel m' tbl`, while
+  `itable_faith_of_list_aux` is already generalised over a running offset
+  `off`. A segment contract's table is therefore faithful to the *whole*
+  program's gmap by the lemma that exists. What is missing is plumbing: a
+  sublist lemma (`instrs_of_list (cbase+off) segment ⊆ instrs_of_list cbase
+  full`), the exit-table analogue, a segment offset threaded through the
+  contract record, and the `EndToEnd` bridges that currently assume
+  `cfg_instrs` *is* the program. Real work, but not a new theorem.
+  **Scope, stated because it is easy to overreach:** trimming only pays for a
+  contract in the quadratic regime. A flat whole-program VC has nothing to trim,
+  and a decidable-branch segment gets ~1.35×.
 - **It is also a footprint lever** (§2.5), which none of the other levers in
   `composition-payoff.md` are, so it plausibly bears on the `mlen`=2 memory wall
   and on `footprint-vs-throughput.md`'s `Base(K)` block. Note the two are
