@@ -7,6 +7,19 @@ question on a *straight-line* 3-instruction segment and found it nearly free
 (1.155× over 32 filler instructions). Asked again of the **loop-body segment
 contract**, the same axis behaves completely differently.
 
+> **SUPERSEDED for code at or after `cfdcc92f` (2026-09-04, same day).** The
+> quadratic below was driven by the loop's infeasible fall-through branch
+> staying live, and the solver now REFUTES that branch against the path
+> condition (`formula_refuted_by`). Re-measured on this very rig, the same
+> `pbody` arm went from `93.809 + 4.0506·P + 0.530681·P²` to
+> `6.7197 + 0.029083·P + 0.00014974·P²` M words — **1.368× at P=64 instead of
+> 26.93×** — and its P-coefficients are now identical to the PINNED arm's to
+> 0.13%/0.23%. Everything below remains a correct record of the pre-fix
+> executor, and `branch-refutation-payoff.md` calibrates against this file's
+> law to −0.013% / −0.002%, so do not delete it — but **never quote 26.93× as
+> current**. §2.2's reading that pinning matters because the counter is
+> symbolic is also retracted there: `k` is still symbolic post-fix.
+
 ## One-sentence finding
 
 A segment contract whose branch condition the solver cannot decide by

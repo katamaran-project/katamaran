@@ -220,6 +220,17 @@ produces — `formula_simplifies`' own first line included. Adding the clause is
 one `with eq_dec σ τ` block copied from the `secLeak` case; `formula_eqb_spec`'s
 `repeat match` script absorbs it with **no change**.
 
+**Measured 2026-09-04** (`diagnostics/branch-refutation-payoff.md`, two-commit
+A/B): on the loop-body segment contract this is **14× at prefix length P=0 and
+275× at P=64**, taking the cost law from `93.809 + 4.0506·P + 0.530681·P²` to
+`6.7197 + 0.029083·P + 0.00014974·P²` M words — a **3544× smaller quadratic
+coefficient**. The surviving P-coefficients are identical to the same contract
+with its counter PINNED (0.13% / 0.23%), so this removed a *branch* cost, not a
+table cost. The tax on contracts where the rule fires on nothing is a constant
+**10,228 words** — bit-identical at P=0 and P=64 — i.e. 0.005–0.18% and falling
+with contract size, the `formula_eqb` propeq clause included. So the answer to
+"does an O(|wco|) test per formula cost anything" is: no, measurably.
+
 Three method notes, each of which cost something:
 
 - **Dump the VC before writing the rule.** Step 1 of the recipe below is not
