@@ -44,6 +44,12 @@ the rigs are measuring the same objects as the earlier records:
 | `ZZCmpBodyPin` (re-run) | 10.660 | 10.66 | 0.00% |
 | `ZZU5_K0` / `_K32` | 7.220 / 8.339 | 7.223 / 8.343 | −0.04% |
 
+**A `Prelude.v` rebuild stales `ZZPadCommon.vo`**, and the arms then read as
+*cheaper than free* (490.8 M against a 605.9 M baseline) with a bare
+`Error: ... makes inconsistent assumptions over library ... Prelude`. Rebuild
+`ZZPadCommon.vo` after anything touches `Prelude`. This recurred twice on
+2026-09-04, and the plumbing work rebuilds `Prelude` constantly.
+
 **Never measure while anything else rebuilds the shared source tree.** A sweep
 run 2026-09-04 while sibling processes rebuilt `Tables.vo`/`TablesRel.vo`
 returned `Error:` in all three arms *at identical baseline-level cost* (within
@@ -95,12 +101,19 @@ separate (and probably much worse) story, unmeasured.
 | 32 | 766.845 | 8.17× | 29.52 |
 | 64 | **2526.656** | **26.93×** | 54.99 |
 
+| 128 | **9306.238** | **99.2×** | 71.95 |
+
 Exact quadratic through P ∈ {0,16,32}:
 
 > **cost = 93.809 + 4.0506·P + 0.530681·P² M words**
 
 Held out at P=64: predicted 2526.716 vs **actual 2526.656**, i.e. **+0.0024%**
-— 24 parts per million, on a point 3.3× outside the fit range. This is the
+— 24 parts per million, on a point 3.3× outside the fit range. **Held out again
+at P=128 (2026-09-04): predicted 9306.970 vs actual 9306.238, +0.0079%** — 79 ppm
+at 4× outside the fit range and 2× beyond the P=64 check. The quadratic is
+confirmed, not merely consistent. Note the scale: a **2-instruction** loop with
+128 never-executed neighbours costs **9.31 G words**, within ~4.7× of the muladd
+mid-program cut's 43.8 G, reached from a trivial loop purely by table length. This is the
 tightest held-out fit in this directory, and it is a genuine **exponent**, not a
 constant factor. The quadratic term overtakes the linear one at **P = 7.6**, so
 a program of more than ~8 instructions is already in the quadratic regime.
@@ -182,8 +195,12 @@ axis it is not.
 
 **31.8×** on the composed arm against 1.35× and 1.88× on the others, and
 `top_heap_words` finally steps off its floor (553,738,752 → 732,320,256) at
-P=64. A quadratic fit on the RSS points holds out at only −7.1% and produces a
-negative linear coefficient, so **do not quote a footprint coefficient** — but
+P=64. At P=128 net RSS is 3481.1 MB against P=64's 1317.7 MB — **2.64× for a 2× rise
+in P, where quadratic would give 4×** — so the throughput law demonstrably does
+NOT transfer to footprint (`top_heap_words` stepped again, 553,738,752 →
+1,113,767,936). A quadratic fit on the RSS points holds out at only −7.1% and
+produces a negative linear coefficient, so **do not quote a footprint
+coefficient** — but
 the axis is unambiguously superlinear, and it is a footprint driver, not just a
 throughput one.
 
@@ -205,6 +222,30 @@ being reduced by `vm_compute` — the two rigs are otherwise the same object.)
 Compare the already-known conjunct-order cost bug in
 `sep_contract_fetch_instr`; ordering effects in the path condition are a
 recurring theme, not a one-off.
+
+### 2.6b The payoff realised: a loop cut inside a 66-instruction program
+
+`Example/ZZPaddedLoop.v` (throwaway) is the countdown loop cut, verbatim, except
+that the program is `List.repeat (MV X4 X4) 64 ++ cd_instrs` (66 instructions,
+loop head at byte 256) and both segment contracts carry **only their own two
+instructions**, with the offset in `cfg_placement`. Both close with a real `Qed`.
+
+| arm | program | net M words |
+|---|---|---|
+| `ZZPaddedLoop` (both segment contracts) | 66 instrs | **177.10** |
+| published `CountdownComposed` (same cut) | 2 instrs | 177.96 |
+| same cut with untrimmed tables (2 × `pbody` at P=64) | 66 instrs | ~5053 |
+
+**The cut inside the 66-instruction program costs 0.48% LESS than the identical
+cut in a 2-instruction program.** Program length has become free for the composed
+proof, against ~28.5× for the untrimmed alternative. That is the whole point of
+the exercise, and it is measured rather than projected.
+
+The heavy half (`ZZPaddedLoopResult.v`) is written with full proof bodies and no
+`Admitted`, owning `ptsto_instrs` of the **whole** 66-instruction program and
+closing the table gap with `itable_faith_of_segment` at
+`pre := repeat (MV X4 X4) 64, seg := cd_instrs, post := []`. **It has not been
+compiled** — four specific unchecked points are listed in §6.
 
 ### 2.7 The lever, measured directly: a SUB-TABLE contract
 
@@ -478,6 +519,9 @@ Throwaway, gitignored, none in `_CoqProject`:
 | conjunct-order control | `Example/ZZPadPrev0.v` |
 | straight-line comparison | `Example/ZZU5_K64.v` (new point on §2.1's rig) |
 | sub-table arm (§2.7) | `Example/ZZPadS{0,256}.v` |
+| P=128 point | `Example/ZZPadB128.v` |
+| muladd trimming pair (§4.3) | `Example/ZZTrim{Base,F,T}.v` |
+| the realised demo (§2.6b) | `Example/ZZPaddedLoop{,Base,Result}.v` |
 | structural counts | `Example/ZZPadI{0,16,32,64}.v` + `ZZLvarInstrCommon.v` |
 
 ```bash
@@ -486,6 +530,18 @@ OCAMLRUNPARAM='v=0x400' /usr/bin/time -f "RSS %M KB WALL %e s" \
   case_study/RiscvPmp/CFGVer/Example/<probe>.v 2>&1 \
   | grep -E 'allocated_words|top_heap_words|RSS|Error'
 ```
+
+**Not yet verified, in `ZZPaddedLoopResult.v`** (the heavy half of §2.6b): the
+`apply` of `itable_faith_of_segment` must unify against `pre ++ seg ++ post` at
+`post := []` (if it fails, `rewrite <- (app_nil_r cd_instrs)` first); a
+`reflexivity` must prove `inst (term_val _ (bv.of_N 256)) ι = SyncVal (bv.add
+(bv.of_N 0) (bv.of_N 256))`, which may need `bv.add_zero_l`; `plFinal`'s exit
+faithfulness computes `pcOutOfInstrs_exitCond` over a 66-element list by
+`reflexivity`; and the `iFrame`/`iExact` block is copied from a template whose
+valuation shift is `ι.["a"↦0]` where this one is `ι.["a"↦256]`. Promoting the
+demo out of the `ZZ` prefix (so it is gate-checked) additionally needs
+`_CoqProject`, `Results.v` and `scripts/gate.sh` entries per
+`cfgver-new-example`.
 
 Traps hit here:
 

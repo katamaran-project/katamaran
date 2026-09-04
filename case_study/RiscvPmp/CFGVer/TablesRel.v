@@ -136,6 +136,45 @@ Import RiscvPmp.Sig.
     apply itable_faith_of_list_aux; [exact Hp|lia].
   Qed.
 
+  (* SEGMENT faithfulness (2026-09-04): a contract that knows only the
+     instructions it actually executes.  Its table covers a SEGMENT of the
+     program while the machine owns the whole program's store, and the
+     segment's byte offset `off` is carried by the PLACEMENT term p (which
+     instantiates to cbase + off) rather than by a prefix of filler in the
+     table -- so table_of_list p 0 seg emits exactly the addresses
+     cbase+off, cbase+off+4, ... and itable_faith_of_list applies verbatim
+     at that shifted base.  The only genuinely new step is the containment
+     (Tables.v's instrs_of_list_segment), lifted by itable_faith_weaken.
+
+     Why it is worth having: a segment contract whose branch condition the
+     solver cannot decide by computation costs 93.81 + 4.05*P + 0.531*P^2 M
+     words in the number P of NEVER-EXECUTED instructions sharing its table,
+     so trimming the table is worth (K/k)^2 -- already 26.93x at 64 filler
+     instructions.  diagnostics/prefix-length-cost.md. *)
+  Lemma itable_faith_of_segment {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
+      (cbase : bv xlenbits) (off : N) (pre seg post : list AnnotInstr) :
+    (4 * N.of_nat (length pre) = off)%N ->
+    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal (bv.add cbase (bv.of_N off)) ->
+    (bv.bin cbase + 4 * N.of_nat (length (pre ++ seg ++ post)) < bv.exp2 xlenbits)%N ->
+    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ)
+      (instrs_of_list cbase (pre ++ seg ++ post))
+      (table_of_list p 0 seg) ι.
+  Proof.
+    intros <- Hp Hbound.
+    apply (itable_faith_weaken
+             (m := instrs_of_list (bv.add cbase (bv.of_N (4 * N.of_nat (length pre)))) seg)).
+    - apply instrs_of_list_segment, Hbound.
+    - apply itable_faith_of_list; [exact Hp|].
+      assert (Hb1 : (bv.bin (bv.add cbase (bv.of_N (4 * N.of_nat (length pre))))
+                     <= bv.bin cbase + 4 * N.of_nat (length pre))%N).
+      { rewrite bv.bin_add. etransitivity; [apply N.Div0.mod_le|].
+        apply N.add_le_mono_l. apply bv.bin_of_N_decr. }
+      rewrite !length_app in Hbound.
+      (* lia chokes on 2^32; make bv.exp2 xlenbits an opaque atom first. *)
+      set (E := bv.exp2 xlenbits) in *; clearbody E. lia.
+  Qed.
+
+
   (* Exit-table analog: the fall-through exit term is faithful to any
      exit condition that accepts the first address past the program. *)
   Lemma etable_faith_exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
