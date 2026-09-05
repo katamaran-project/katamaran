@@ -15,6 +15,17 @@ description: >
 
 # Branch + merge-gate workflow
 
+> **`main` is NEVER a push or merge target from this repo (2026-09-05, user's
+> rule).** Integration happens on **`KatamaranRel`**; `main` is upstream and is
+> only ever read. This is enforced, not remembered:
+> `.claude/hooks/git-workflow-guard.sh` hard-denies `git push` naming `main`,
+> `git push --all/--mirror`, a bare `git push` while HEAD is `main`, and
+> `git merge` while HEAD is `main`. That deny is **not** satisfiable by loading
+> this skill and has its own override (`CLAUDE_ALLOW_MAIN=1`, settable only in
+> the environment Claude Code is launched with), so silencing the skill nag with
+> `CLAUDE_GIT_GUARD_OFF=1` does not unlock `main`. Merging `main` *into* a topic
+> branch, and pushing a topic branch, are both fine and ungated.
+
 The invariant: **mainline (`main` / `KatamaranRel`) is always full-compiling,
 hole-free, and axiom-clean.** You thrash freely on a topic branch; only a clean
 state is allowed to become the baseline. A green `coqc` guarantees proof *validity*
@@ -36,11 +47,14 @@ stay fast.
 ## Per-issue loop
 
 ```bash
-git switch -c issue/<short-name>     # branch off the protected branch
+git switch -c issue/<short-name>     # branch off KatamaranRel
 # … work: edit, prove, commit WIP freely (rocq-checkpoint is fine here) …
-git switch KatamaranRel
+git switch KatamaranRel              # NEVER main -- see the banner above
 git merge --no-ff issue/<short-name> # --no-ff forces a merge commit → hook fires
 ```
+
+To share work without landing it, push the **topic** branch and open a PR:
+`git push -u origin issue/<short-name>`. That is ungated by the main-deny.
 
 **`--no-ff` is required.** A fast-forward merge creates no commit, so
 `pre-merge-commit` does not run and the gate is silently skipped. Always merge with

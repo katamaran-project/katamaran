@@ -26,19 +26,95 @@
 #
 # Override is the user's: CLAUDE_GIT_GUARD_OFF=1 in the environment Claude Code
 # was launched with.
+#
+# TWO INDEPENDENT MECHANISMS live here, in this order:
+#   1. HARD DENY -- `main` is never a push or merge TARGET (2026-09-05, at the
+#      user's instruction after a topic branch was pushed and the question came
+#      up). This is NOT satisfiable by loading a skill, and it has its OWN
+#      override (CLAUDE_ALLOW_MAIN=1) so that silencing the skill nag with
+#      CLAUDE_GIT_GUARD_OFF=1 does not also unlock main. This repo's integration
+#      branch is KatamaranRel; main is upstream and is never written to from
+#      here.
+#   2. SKILL GATE -- the pre-existing "load branch-workflow first" nag.
 set -u
 
 input=$(cat)
-
-if [ "${CLAUDE_GIT_GUARD_OFF:-}" = "1" ]; then
-  exit 0
-fi
 
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null) || exit 0
 [ -n "$cmd" ] || exit 0
 
 # `git` as a command word: start of string, or after a shell separator.
 gitre='(^|[;&|]|&&|\|\||^[[:space:]]*)[[:space:]]*git[[:space:]]'
+
+deny () { # $1 = reason text
+  jq -n --arg r "$1" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: $r
+    }
+  }'
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
+# 1. HARD DENY: main is never a push or merge target.
+#
+# Deliberately BIASED TOWARDS FALSE DENY, unlike mechanism 2 below -- a wrong
+# allow here is an irreversible write to a shared upstream, a wrong deny costs
+# one env var. Consequence: a branch literally named `<something>/main` reads as
+# main and is refused. That is the intended trade.
+# ---------------------------------------------------------------------------
+if [ "${CLAUDE_ALLOW_MAIN:-}" != "1" ]; then
+  head_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || head_branch=""
+  # `main` as a REF token: preceded by space, ':', '+' or '/', and ending the
+  # token. Excludes `domain`, `main-fix`, `mainline`.
+  mainre='(^|[[:space:]:+/])main([[:space:]:]|$)'
+  why=""
+
+  if printf '%s' "$cmd" | grep -Eq "${gitre}+push([[:space:]]|$)"; then
+    if printf '%s' "$cmd" | grep -Eq "$mainre"; then
+      why="a \`git push\` naming \`main\`"
+    elif printf '%s' "$cmd" | grep -Eq '[[:space:]](--all|--mirror)([[:space:]]|$)'; then
+      why="\`git push --all/--mirror\`, which would include \`main\`"
+    elif [ "$head_branch" = "main" ]; then
+      why="a bare \`git push\` while HEAD is \`main\`"
+    fi
+  fi
+
+  if [ -z "$why" ] && printf '%s' "$cmd" | grep -Eq "${gitre}+merge([[:space:]]|$)"; then
+    if [ "$head_branch" = "main" ]; then
+      why="a \`git merge\` while HEAD is \`main\` -- that merges INTO main"
+    fi
+  fi
+
+  if [ -n "$why" ]; then
+    deny "BLOCKED by git-workflow-guard: main is never a push or merge target.
+
+Refused: ${why}
+Command: ${cmd}
+
+This repo integrates on **KatamaranRel**, not main. main is upstream and is
+never written to from here.
+
+What to do instead:
+  - landing work : merge the topic branch into KatamaranRel with --no-ff (that
+                   is what fires scripts/gate.sh via the pre-merge-commit hook)
+  - sharing work : push the TOPIC branch and open a PR
+  - updating     : \`git merge main\` FROM a topic branch is fine and not gated
+
+This deny cannot be satisfied by loading a skill. If it is genuinely wrong (a
+branch whose name merely ends in /main, say), the user -- not a session -- can
+set CLAUDE_ALLOW_MAIN=1 in the environment Claude Code is launched with."
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 2. SKILL GATE (pre-existing): load branch-workflow before the gated ops.
+# ---------------------------------------------------------------------------
+if [ "${CLAUDE_GIT_GUARD_OFF:-}" = "1" ]; then
+  exit 0
+fi
 op=""
 if printf '%s' "$cmd" | grep -Eq "${gitre}+merge([[:space:]]|$)"; then op="git merge"; fi
 if printf '%s' "$cmd" | grep -Eq "${gitre}+push([[:space:]]|$)"; then op="git push"; fi

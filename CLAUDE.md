@@ -257,11 +257,20 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   governs "what we intend to build"). All missing skills are reported in ONE
   denial, and each fires at most once per session. Override:
   `CLAUDE_V_GUARD_OFF=1`.
-- **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash):
-  `git merge` / `git push` / `checkout -b` / `switch -c` require
-  `branch-workflow`. Commit, status, log, diff and path-checkout are NOT gated
-  (milestone commits are `rocq-checkpoint`'s business). Override:
-  `CLAUDE_GIT_GUARD_OFF=1`.
+- **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash), now TWO
+  mechanisms. (1) A **hard deny**: `main` is never a push or merge TARGET —
+  `git push` naming `main`, `git push --all/--mirror`, a bare `git push` or any
+  `git merge` while HEAD is `main`. This repo integrates on **`KatamaranRel`**;
+  `main` is upstream and only read. Merging `main` INTO a topic branch, and
+  pushing a topic branch, stay allowed. Not satisfiable by loading a skill;
+  separate override `CLAUDE_ALLOW_MAIN=1` so that silencing (2) does not unlock
+  it. Deliberately biased towards a false DENY (a branch named `<x>/main` reads
+  as main) — the opposite bias from every other guard here, because a wrong
+  allow is an irreversible write to a shared upstream. 23-case test suite.
+  (2) The pre-existing skill gate: `git merge` / `git push` / `checkout -b` /
+  `switch -c` require `branch-workflow`. Commit, status, log, diff and
+  path-checkout are NOT gated (milestone commits are `rocq-checkpoint`'s
+  business). Override: `CLAUDE_GIT_GUARD_OFF=1`.
 
   Both are backed by `skill-load-marker.sh` (PreToolUse Skill), which records
   every skill invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` —
