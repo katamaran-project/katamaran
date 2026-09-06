@@ -3442,6 +3442,16 @@ Module Type GenericSolverOn
           (if eq_dec op1 op2 then true else false) &&& Term_eqb t11 t21 &&& Term_eqb t12 t22;
         formula_eqb (@formula_relop _ σ op1 t11 t12) (@formula_relop _ τ op2 t21 t22) (right _) := false
       };
+      (* [formula_propeq] had NO clause here until 2026-09-04, so two SYNTACTICALLY
+         IDENTICAL propeq formulas compared as [false].  That silently disabled
+         every [formula_eqb]-based discharge for the one formula shape
+         [simplify_relop]'s [eq] arm produces -- including [formula_simplifies]'
+         own first line, and [formula_refuted_by] below. *)
+      formula_eqb (@formula_propeq _ σ t11 t12) (@formula_propeq _ τ t21 t22) with eq_dec σ τ => {
+        formula_eqb (@formula_propeq _ σ t11 t12) (@formula_propeq _ ?(σ) t21 t22) (left eq_refl) :=
+          Term_eqb t11 t21 &&& Term_eqb t12 t22;
+        formula_eqb (@formula_propeq _ σ t11 t12) (@formula_propeq _ τ t21 t22) (right _) := false
+      };
       formula_eqb (@formula_user _ p ts1) (@formula_user _ q ts2) with 𝑷_eq_dec p q => {
         formula_eqb (@formula_user _ p ts1) (@formula_user _ ?(p) ts2) (left eq_refl) :=
           env.eqb_hom (@Term_eqb _) ts1 ts2;
@@ -3721,13 +3731,137 @@ Module Type GenericSolverOn
       (* - iIntros ([]). *)
     Qed.
 
+    (* ---------------------------------------------------------------------- *)
+    (* REFUTING a formula against the path condition.                           *)
+    (*                                                                          *)
+    (* [formula_simplifies] can only ever DISCHARGE a hypothesis (turn it into  *)
+    (* [formula_true]); it has no way to report "this contradicts [fact]", so   *)
+    (* an infeasible branch whose infeasibility follows from a single [wco]     *)
+    (* entry stayed live and was left to the user as a residual.  Measured on   *)
+    (* CFGVer's countdown loop (2026-09-04): the precondition carries           *)
+    (* [k-1 <> 0], the BNE tests exactly that, and the fall-through branch --   *)
+    (* which ends in an [error] -- survived to the VC anyway.                   *)
+    (*                                                                          *)
+    (* The shapes that actually meet, dumped from that VC, are NOT the two      *)
+    (* halves of one relop: [simplify_relop]'s [eq] arm decomposes an equality  *)
+    (* into [formula_propeq] + publicness, and the operands come back in the    *)
+    (* opposite order, so the pair is                                           *)
+    (*     wco   :  formula_relop bop.neq (-1 +ᵇ k) 0                           *)
+    (*     new   :  formula_propeq        0 (-1 +ᵇ k)                           *)
+    (* Hence the [formula_propeq] case below tests BOTH argument orders against *)
+    (* a [bop.neq] relop, and is the case that fires in practice.               *)
+    (*                                                                          *)
+    (* Both directions are covered, because the loop BODY and the loop EXIT     *)
+    (* contract hit opposite ones: the body assumes [k-1 <> 0] and the branch   *)
+    (* offers the propeq, the exit assumes [k-1 = 0] and the branch offers the  *)
+    (* relop.  The neq-vs-propeq direction needs [formula_eqb] to compare two   *)
+    (* [formula_propeq]s, which it could not do until the clause added above.   *)
+    (* ---------------------------------------------------------------------- *)
+
+    (* [op] and its negation cannot both hold: under the relational semantics   *)
+    (* each says the same term evaluates to a DIFFERENT boolean RelVal.  This   *)
+    (* covers the [NonSyncVal] case for free -- neither side holds there.       *)
+    Lemma formula_relop_contra {w : World} {σ} (op : bop.RelOp σ) (t1 t2 : Term w σ) :
+      ⊢ instpred (formula_relop_neg op t1 t2) -∗
+        (instpred (formula_relop op t1 t2) ∗-∗ instpred (@formula_false w)).
+    Proof.
+      rewrite formula_relop_term instpred_formula_relop_neg.
+      unfold repₚ. crushPredEntails2. crushPredEntails3.
+      rewrite H1 in H2. cbn in H2. unfold ty.valToRelVal in H2. inversion H2.
+    Qed.
+
+    (* [propeq] equates the two RelVals outright, so a [bop.neq] relop on the   *)
+    (* same pair is false whether the values are Sync or NonSync.               *)
+    Lemma formula_propeq_neq_contra {w : World} {σ} (t1 t2 : Term w σ) :
+      ⊢ instpred (formula_relop bop.neq t1 t2) -∗
+        (instpred (formula_propeq t1 t2) ∗-∗ instpred (@formula_false w)).
+    Proof.
+      rewrite formula_relop_term. unfold repₚ. crushPredEntails2. crushPredEntails3.
+      cbn in H1. rewrite H2 in H1. destruct (inst t2 ι); cbn in H1;
+        repeat destruct Classes.eq_dec; cbn in H1; try discriminate; try congruence.
+    Qed.
+
+    Lemma formula_propeq_neq_contra' {w : World} {σ} (t1 t2 : Term w σ) :
+      ⊢ instpred (formula_relop bop.neq t2 t1) -∗
+        (instpred (formula_propeq t1 t2) ∗-∗ instpred (@formula_false w)).
+    Proof.
+      rewrite formula_relop_term. unfold repₚ. crushPredEntails2. crushPredEntails3.
+      cbn in H1. rewrite H2 in H1. destruct (inst t2 ι); cbn in H1;
+        repeat destruct Classes.eq_dec; cbn in H1; try discriminate; try congruence.
+    Qed.
+
+    (* Mirror direction: the [propeq] is the [wco] fact and the [bop.neq] relop
+       is the new formula.  This is the shape CFGVer's loop-EXIT contract hits
+       (precondition [k-1 = 0], BNE's taken branch assumes [k-1 <> 0]), where
+       the body contract hits the pair above. *)
+    Lemma formula_neq_propeq_contra {w : World} {σ} (t1 t2 : Term w σ) :
+      ⊢ instpred (formula_propeq t1 t2) -∗
+        (instpred (formula_relop bop.neq t1 t2) ∗-∗ instpred (@formula_false w)).
+    Proof.
+      rewrite formula_relop_term. unfold repₚ. crushPredEntails2. crushPredEntails3.
+      cbn in H1. rewrite H1 in H2. destruct (inst t2 ι); cbn in H2;
+        repeat destruct Classes.eq_dec; cbn in H2; try discriminate; try congruence.
+    Qed.
+
+    Lemma formula_neq_propeq_contra' {w : World} {σ} (t1 t2 : Term w σ) :
+      ⊢ instpred (formula_propeq t2 t1) -∗
+        (instpred (formula_relop bop.neq t1 t2) ∗-∗ instpred (@formula_false w)).
+    Proof.
+      rewrite formula_relop_term. unfold repₚ. crushPredEntails2. crushPredEntails3.
+      cbn in H1. rewrite H1 in H2. destruct (inst t1 ι); cbn in H2;
+        repeat destruct Classes.eq_dec; cbn in H2; try discriminate; try congruence.
+    Qed.
+
+    (* [formula_refuted_by F fact]: [fact] alone makes [F] impossible.  Every    *)
+    (* [false] is "cannot decide" and falls through untouched -- returning       *)
+    (* [true] here refutes a path, so it must be a genuine syntactic match.      *)
+    Definition formula_refuted_by {Σ} (F fact : Formula Σ) : bool :=
+      match F with
+      | @formula_relop _ σ op t1 t2 =>
+          if formula_eqb (formula_relop_neg op t1 t2) fact then true else
+          match op with
+          | bop.neq =>
+              if formula_eqb (formula_propeq t1 t2) fact then true
+              else formula_eqb (formula_propeq t2 t1) fact
+          | _ => false
+          end
+      | @formula_propeq _ σ t1 t2 =>
+          if formula_eqb (formula_relop bop.neq t1 t2) fact then true
+          else formula_eqb (formula_relop bop.neq t2 t1) fact
+      | _ => false
+      end.
+
+    (* [cbn [formula_refuted_by]] rather than a bare [cbn]: the latter unfolds   *)
+    (* [formula_eqb] into a match on [fact] whenever its first argument is       *)
+    (* constructor-headed, and then [destruct (formula_eqb_spec ..)] no longer   *)
+    (* abstracts anything and the false branch cannot be discriminated.          *)
+    Lemma formula_refuted_by_spec {w : World} (F fact : Formula w) :
+      formula_refuted_by F fact = true ->
+      ⊢ instpred fact -∗ (instpred F ∗-∗ instpred (@formula_false w)).
+    Proof.
+      destruct F; cbn [formula_refuted_by]; try discriminate.
+      - destruct (formula_eqb_spec (formula_relop_neg rop t1 t2) fact).
+        { intros _. subst. apply formula_relop_contra. }
+        destruct rop; try discriminate.
+        destruct (formula_eqb_spec (formula_propeq t1 t2) fact).
+        { intros _. subst. apply formula_neq_propeq_contra. }
+        destruct (formula_eqb_spec (formula_propeq t2 t1) fact); [|discriminate].
+        intros _. subst. apply formula_neq_propeq_contra'.
+      - destruct (formula_eqb_spec (formula_relop bop.neq t1 t2) fact).
+        { intros _. subst. apply formula_propeq_neq_contra. }
+        destruct (formula_eqb_spec (formula_relop bop.neq t2 t1) fact); [|discriminate].
+        intros _. subst. apply formula_propeq_neq_contra'.
+    Qed.
+
     Fixpoint assumption_formula {Σ} (C : PathCondition Σ) (F : Formula Σ) (k : PathCondition Σ) {struct C} : PathCondition Σ :=
       match C with
       | [ctx]  => k ▻ F
-      | C ▻ F' => match formula_simplifies F F' with
-                  | Some F2 => assumption_formula C F2 k
-                  | None => assumption_formula C F k
-                  end
+      | C ▻ F' => if formula_refuted_by F F'
+                  then k ▻ formula_false
+                  else match formula_simplifies F F' with
+                       | Some F2 => assumption_formula C F2 k
+                       | None => assumption_formula C F k
+                       end
       end.
 
     Fixpoint assumption_pathcondition {Σ} (C : PathCondition Σ) (Fs : PathCondition Σ) (k : PathCondition Σ) {struct Fs} : PathCondition Σ :=
@@ -3741,6 +3875,14 @@ Module Type GenericSolverOn
     Proof.
       revert F; induction C as [|C ? F']; intros F; cbn; auto.
       iIntros "[#HC #HF']".
+      (* The refuted case: [F] is impossible under [F'], so both sides of the
+         bi-implication are [False] -- the left because [F] is, the right
+         because [formula_false] is. *)
+      destruct (formula_refuted_by F F') eqn:Href.
+      { iPoseProof (formula_refuted_by_spec F F' Href with "HF'") as "HFF".
+        cbn. iSplit.
+        - iIntros "[Hk HF]". iDestruct ("HFF" with "HF") as "H". iFrame.
+        - iIntros "[Hk []]". }
       destruct (formula_simplifies_spec F F');
         subst; [|now iApply IHC].
       iPoseProof (IHC a with "HC") as "HC'".

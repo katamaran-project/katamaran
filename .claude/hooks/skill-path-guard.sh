@@ -78,7 +78,7 @@ base=${path##*/}
 # ---- blanket rule: any Rocq source ------------------------------------------
 case $path in
   *.v) req rocq-implementation \
-    "tier-1 entry point for writing/repairing a proof here; carries the rocq-mcp preamble-mode workflow that coqc-guard.sh separately enforces, and is the ONLY route to the tier-2 library skills (bv-pitfalls, rocq-pitfalls, iris-proofmode, core-executor-internals, relval-model, cfgver-rsolve, cfgver-wp2, the two -internals), which are listed WITHOUT descriptions so nothing else surfaces them" ;;
+    "tier-1 entry point for writing/repairing a proof here; carries the rocq-mcp preamble-mode workflow that coqc-guard.sh separately enforces, and is the ONLY route to the tier-2 library skills (bv-pitfalls, rocq-pitfalls, iris-proofmode, core-executor-internals, relval-model, pred-modalities, cfgver-rsolve, cfgver-wp2, the two -internals), which are listed WITHOUT descriptions so nothing else surfaces them" ;;
 esac
 
 # ---- core framework ----------------------------------------------------------
@@ -86,6 +86,13 @@ case $path in
   */theories/Symbolic/Solver.v|*/theories/Symbolic/Monads.v|*/theories/MicroSail/SymbolicExecutor.v)
     req core-executor-internals \
       "how an \`assert\` is discharged against the path condition (solver_generic's stages, the wco walk, the wpathcondition world-extension) AND the \"Adding a NEW solver rule\" recipe -- where to hook, why returning \`error\` for \"cannot decide\" is unsoundness that does NOT fail the build, the Equations two-type-index refusal, and the iteration order that keeps you off ~6-minute rebuilds. On 2026-08-17 this file was edited without it and two builds were burned on a trap the recipe now documents" ;;
+esac
+
+# ---- the Pred/world/modality layer -------------------------------------------
+case $path in
+  */theories/Symbolic/Worlds.v|*/theories/Symbolic/UnifLogic.v)
+    req pred-modalities \
+      "this file DEFINES the Pred/world/modality layer -- Acc/sub_acc, Pred with its POINTWISE entails, and assuming/knowing/forgetting, which are the standard adjoint triple (f* / exists_f / forall_f) with knowing -| forgetting -| assuming proved right here. Two things are easy to break from inside and invisible from a goal: a backward modality goes VACUOUS whenever the step's substitution pins a variable (empty fibre => assuming is True and useless, knowing is False), and assuming is DERIVED from sub_acc, so every accessibility you add or change silently fixes what its modalities can express. A 2026-08-27 session spent a whole Phase A rediscovering both" ;;
 esac
 
 # ---- CFGVer: transcribed from CFGVer/CLAUDE.md's file table -------------------

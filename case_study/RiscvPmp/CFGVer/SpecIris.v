@@ -361,6 +361,18 @@ Module RiscvPmpIrisInstanceWithContracts.
   (*   destruct width; now compute. *)
   (* Qed. *)
 
+  (* Phase 4's abstraction lemma.  Its precondition and postcondition are the
+     SAME assertion — `∃v, r ↦ v` for each register — so the semantic
+     obligation is the IDENTITY, with no side condition and nothing to prove
+     about the values.  All the work happens in the symbolic consume/produce:
+     consuming the existential removes the chunk carrying the accumulated
+     term, producing it mints a fresh variable.  That asymmetry is the whole
+     mechanism (`diagnostics/havoc-abstraction-payoff.md`), and it is sound
+     for exactly the reason this proof is one line. *)
+  Lemma havoc_regs_sound `{sailGS2 Σ} (regs : list RegIdx) :
+    ValidLemma (RiscvPmpCFGVerifSpec.lemma_havoc_regs regs).
+  Proof. intros ι; iIntros "$". Qed.
+
   Lemma lemSemCFGVerif `{sailGS2 Σ} : LemmaSem.
   Proof.
     intros Δ []; intros ι; destruct_syminstance ι; try now iIntros "_".
@@ -368,6 +380,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     (* - apply Model.RiscvPmpModel2.close_pmp_entries_sound. *)
     - apply open_ptsto_instr_sound.
     - apply close_ptsto_instr_sound.
+    - apply havoc_regs_sound.
     (* - apply close_mmio_write_sound. *)
   Qed.
 

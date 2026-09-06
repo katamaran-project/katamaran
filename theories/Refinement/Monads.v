@@ -1250,6 +1250,12 @@ Module Type RefinementMonadsOn
         iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "[Hι]").
         { intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift. }
         now rewrite forgetting_repₚ.
+      (* dropk: unlike assume_vareq there is no assume_formula, hence no bind
+         and no world hop, so Hι is usable directly (no forgetting_repₚ) and
+         there is only the continuation to discharge. *)
+      - iApply "IH".
+        iApply (repₚ_cong (T1 := Sub Σ) (T2 := Sub (Σ - (x∷σ))) (fun vs => env.remove (x∷σ) vs xIn) (fun vs => env.remove (x∷σ) vs xIn) with "Hι").
+        intros. now rewrite <- inst_sub_shift, <- inst_subst, sub_comp_shift.
       - now iApply "IH".
     Qed.
 

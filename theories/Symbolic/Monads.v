@@ -796,6 +796,9 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let fml  := formula_propeq (subst t ζ) (term_var x) in
             ⟨ θ ⟩ _ <- assume_formula (subst fml δ) ;;
             replay k (env.remove (x∷_) δ⟨θ⟩ _)
+        (* No formula: the drop imposes no constraint, it only projects δ. *)
+        | SymProp.dropk x k =>
+            replay k (env.remove (x∷_) δ _)
         (* | SymProp.pattern_match s pat rhs => *)
         (*     (* FIXME *) *)
         (*     (* ⟨ θ ⟩ '(existT pc δpc) <- new_pattern_match id pat (subst s δ) ;; *) *)
@@ -907,6 +910,295 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
         | Some (_, h') => pure (t, cons (chunk_ptsreg reg t) h')
         | None => error (amsg.mk (MkDebugWriteRegister (wco w) h reg t))
         end.
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY (2026-08-28).                           *)
+    (*                                                                    *)
+    (* `PExt m` says: m produces the same tree from pointwise-equal        *)
+    (* continuations.  With functional extensionality this would be free;  *)
+    (* it is proved combinator-by-combinator instead because this project  *)
+    (* admits exactly two axioms (Machine.pure_decode, Base.mmioenv), both *)
+    (* DOMAIN axioms, and funext is a logical one that could not be        *)
+    (* confined -- it would surface in all fourteen end theorems.          *)
+    (*                                                                    *)
+    (* WHY IT IS NEEDED: the dead-logical-variable drop (PLAN-dropk.md).   *)
+    (* A dropk node's forward accessibility carries a WITNESS term, and the *)
+    (* soundness proof must move between the witness read off the          *)
+    (* valuation (which makes the fibre inhabited, so `assuming` does not   *)
+    (* go vacuous) and the fixed witness baked into the tree.  Those two    *)
+    (* give pointwise-equal continuations, never syntactically equal ones,  *)
+    (* and the executor consumes its continuation as a FUNCTION argument.   *)
+    (* See PLAN-dropk.md §16.                                              *)
+    (* ================================================================== *)
+    Definition PExt {A} {w : World} (m : SPureSpec A w) : Prop :=
+      forall (P1 P2 : (□(A -> 𝕊))%modal w),
+        (forall w' (th : Acc w w') (a : A w'), P1 w' th a = P2 w' th a) ->
+        m P1 = m P2.
+
+    Lemma pext_bind {A B} {w : World} (m : SPureSpec A w)
+        (f : (□(A -> SPureSpec B))%modal w) :
+      PExt m -> (forall w' (th : Acc w w') (a : A w'), PExt (f w' th a)) ->
+      PExt (bind m f).
+    Proof.
+      intros Hm Hf P1 P2 HP. unfold bind.
+      apply Hm. intros w' th a. apply Hf. intros w'' th'' a''. unfold four. apply HP.
+    Qed.
+
+    Lemma pext_angelic {w : World} (x : option LVar) (σ : Ty) :
+      PExt (angelic x σ (w := w)).
+    Proof. intros P1 P2 HP. unfold angelic. cbn. now rewrite HP. Qed.
+
+    Lemma pext_demonic {w : World} (x : option LVar) (σ : Ty) :
+      PExt (demonic x σ (w := w)).
+    Proof. intros P1 P2 HP. unfold demonic. cbn. now rewrite HP. Qed.
+
+    (* The solver-backed case, and the one that looked hardest.  It is five
+       lines: the residual `fun msg' => ...` binder does NOT capture the
+       continuation's occurrence, so a plain `rewrite HP` still fires under it. *)
+    Lemma pext_assert_pathcondition {w : World} msg (C : PathCondition w) :
+      PExt (assert_pathcondition msg C).
+    Proof.
+      intros P1 P2 HP. unfold assert_pathcondition.
+      destruct (combined_solver w C) as [[w1 [ζ C1]]|]; [|reflexivity].
+      cbn. f_equal. f_equal. now rewrite HP.
+    Qed.
+
+    Lemma pext_assume_pathcondition {w : World} (C : PathCondition w) :
+      PExt (assume_pathcondition C).
+    Proof.
+      intros P1 P2 HP. unfold assume_pathcondition.
+      destruct (combined_solver w C) as [[w1 [ζ C1]]|]; cbn; now rewrite ?HP.
+    Qed.
+
+    Lemma pext_pure {A} {w : World} (a : A w) : PExt (pure a).
+    Proof. intros P1 P2 HP. unfold pure, T. apply HP. Qed.
+
+    Lemma pext_block {A} {w : World} : PExt (block (A := A) (w := w)).
+    Proof. intros P1 P2 HP. reflexivity. Qed.
+
+    Lemma pext_error {A} {w : World} (msg : AMessage w) : PExt (error (A := A) msg).
+    Proof. intros P1 P2 HP. reflexivity. Qed.
+
+    Lemma pext_angelic_binary {A} {w : World} (m1 m2 : SPureSpec A w) :
+      PExt m1 -> PExt m2 -> PExt (angelic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP. unfold angelic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma pext_demonic_binary {A} {w : World} (m1 m2 : SPureSpec A w) :
+      PExt m1 -> PExt m2 -> PExt (demonic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP. unfold demonic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma pext_debug {A} {w : World} msg (m : SPureSpec A w) :
+      PExt m -> PExt (debug msg m).
+    Proof. intros Hm P1 P2 HP. unfold debug. f_equal. now apply Hm. Qed.
+
+    Lemma pext_assert_formula {w : World} msg (fml : Formula w) :
+      PExt (assert_formula msg fml).
+    Proof. intros P1 P2 HP. unfold assert_formula. now apply pext_assert_pathcondition. Qed.
+
+    Lemma pext_assume_formula {w : World} (fml : Formula w) :
+      PExt (assume_formula fml).
+    Proof. intros P1 P2 HP. unfold assume_formula. now apply pext_assume_pathcondition. Qed.
+
+    Lemma pext_angelic_list' {A} {w : World} (d : A w) (xs : list (A w)) :
+      PExt (angelic_list' d xs).
+    Proof.
+      revert d. induction xs as [|x xs IH]; intros d; cbn.
+      - intros P1 P2 HP. apply HP.
+      - apply pext_angelic_binary; [apply pext_pure | apply IH].
+    Qed.
+
+    Lemma pext_angelic_list {A} {w : World} msg (xs : list (A w)) :
+      PExt (angelic_list msg xs).
+    Proof.
+      destruct xs as [|x xs]; cbn; [apply pext_error | apply pext_angelic_list'].
+    Qed.
+
+    Lemma pext_demonic_list' {A} {w : World} (d : A w) (xs : list (A w)) :
+      PExt (demonic_list' d xs).
+    Proof.
+      revert d. induction xs as [|x xs IH]; intros d; cbn.
+      - intros P1 P2 HP. apply HP.
+      - apply pext_demonic_binary; [apply pext_pure | apply IH].
+    Qed.
+
+    Lemma pext_demonic_list {A} {w : World} (xs : list (A w)) :
+      PExt (demonic_list xs).
+    Proof.
+      destruct xs as [|x xs]; cbn; [apply pext_block | apply pext_demonic_list'].
+    Qed.
+
+    Lemma pext_angelic_finite {w : World} F `{finite.Finite F} msg :
+      PExt (angelic_finite (w := w) F msg).
+    Proof. unfold angelic_finite. apply pext_angelic_list. Qed.
+
+    Lemma pext_demonic_finite {w : World} F `{finite.Finite F} :
+      PExt (demonic_finite (w := w) F).
+    Proof. unfold demonic_finite. apply pext_demonic_list. Qed.
+
+    Lemma pext_angelic_ctx {N : Set} (nf : N -> LVar) {w : World} (Δ : NCtx N Ty) :
+      PExt (angelic_ctx nf (w := w) Δ).
+    Proof.
+      revert w. induction Δ as [|Δ IH [x σ]]; intros w; cbn.
+      - apply pext_pure.
+      - apply pext_bind; [apply IH|]. intros w1 th1 tD.
+        apply pext_bind; [apply pext_angelic|]. intros w2 th2 ts. apply pext_pure.
+    Qed.
+
+    Lemma pext_demonic_ctx {N : Set} (nf : N -> LVar) {w : World} (Δ : NCtx N Ty) :
+      PExt (demonic_ctx nf (w := w) Δ).
+    Proof.
+      revert w. induction Δ as [|Δ IH [x σ]]; intros w; cbn.
+      - apply pext_pure.
+      - apply pext_bind; [apply IH|]. intros w1 th1 tD.
+        apply pext_bind; [apply pext_demonic|]. intros w2 th2 ts. apply pext_pure.
+    Qed.
+
+    Lemma pext_assertSecLeak {σ} {w : World} msg (t : WTerm σ w) :
+      PExt (assertSecLeak msg t).
+    Proof. unfold assertSecLeak. apply pext_assert_formula. Qed.
+
+    Lemma pext_assumeSecLeak {σ} {w : World} (t : WTerm σ w) :
+      PExt (assumeSecLeak t).
+    Proof. unfold assumeSecLeak. apply pext_assume_formula. Qed.
+
+    Section PExtPatternMatching.
+      Context {N : Set} (nf : N -> LVar).
+
+      Lemma pext_demonic_pattern_match' {σ} (pat : Pattern (N:=N) σ)
+          {w : World} (t : WTerm σ w) :
+        PExt (demonic_pattern_match' nf pat t).
+      Proof.
+        unfold demonic_pattern_match'.
+        apply pext_bind; [apply pext_assertSecLeak|]. intros w1 th1 _.
+        apply pext_bind; [apply pext_demonic_finite|]. intros w2 th2 pc.
+        apply pext_bind; [apply pext_demonic_ctx|]. intros w3 th3 ts.
+        apply pext_bind; [apply pext_assume_formula|]. intros w4 th4 _.
+        apply pext_pure.
+      Qed.
+
+      Lemma pext_angelic_pattern_match' {σ} (pat : Pattern (N:=N) σ)
+          {w : World} msg (t : WTerm σ w) :
+        PExt (angelic_pattern_match' nf pat msg t).
+      Proof.
+        unfold angelic_pattern_match'.
+        apply pext_bind; [apply pext_assertSecLeak|]. intros w1 th1 _.
+        apply pext_bind; [apply pext_angelic_finite|]. intros w2 th2 pc.
+        apply pext_bind; [apply pext_angelic_ctx|]. intros w3 th3 ts.
+        apply pext_bind; [apply pext_assert_formula|]. intros w4 th4 _.
+        apply pext_pure.
+      Qed.
+
+      Lemma pext_demonic_pattern_match {σ} (pat : Pattern (N:=N) σ) :
+        forall {w : World} (t : WTerm σ w), PExt (demonic_pattern_match nf pat t).
+      Proof.
+        induction pat; intros w t; cbn.
+        all: try apply pext_demonic_pattern_match'.
+        all: try apply pext_pure.
+        destruct (term_get_union t) as [[K t']|]; [|apply pext_demonic_pattern_match'].
+        apply pext_bind; [apply H|]. intros w1 th1 [pc dpc]. apply pext_pure.
+      Qed.
+
+      Lemma pext_angelic_pattern_match {σ} (pat : Pattern (N:=N) σ) :
+        forall {w : World} msg (t : WTerm σ w),
+          PExt (angelic_pattern_match nf pat msg t).
+      Proof.
+        induction pat; intros w msg t; cbn.
+        all: try apply pext_angelic_pattern_match'.
+        all: try apply pext_pure.
+        destruct (term_get_union t) as [[K t']|]; [|apply pext_angelic_pattern_match'].
+        apply pext_bind; [apply H|]. intros w1 th1 [pc dpc]. apply pext_pure.
+      Qed.
+    End PExtPatternMatching.
+
+    (* `destruct (env.view E2)` per BRANCH, not as one combined intro pattern:
+       once Delta is fixed by the induction the view type has a single
+       constructor, so `as [|E2 t2]` is rejected for wrong arity. *)
+    Lemma pext_assert_eq_env {w : World} (Δ : Ctx Ty) msg (E1 E2 : Env (Term w) Δ) :
+      PExt (assert_eq_env msg E1 E2).
+    Proof.
+      induction E1 as [|Δ E1 IH σ t].
+      - destruct (env.view E2). cbn. apply pext_pure.
+      - destruct (env.view E2) as [E2 t2]. cbn.
+        apply pext_bind; [apply IH|]. intros w1 th1 _. apply pext_assert_formula.
+    Qed.
+
+    Lemma pext_assert_eq_nenv {N} {w : World} (Δ : NCtx N Ty) msg
+        (E1 E2 : NamedEnv (Term w) Δ) :
+      PExt (assert_eq_nenv msg E1 E2).
+    Proof.
+      induction E1 as [|Δ E1 IH σ t].
+      - destruct (env.view E2). cbn. apply pext_pure.
+      - destruct (env.view E2) as [E2 t2]. cbn.
+        apply pext_bind; [apply IH|]. intros w1 th1 _. apply pext_assert_formula.
+    Qed.
+
+    (* assert_eq_chunk is □-valued, and its target world is IMPLICIT -- write
+       `assert_eq_chunk msg c1 c2 th1`, not `... c2 w1 th1`. *)
+    Lemma pext_assert_eq_chunk {w0 : World} msg (c1 : Chunk w0) :
+      forall (c2 : Chunk w0) {w1 : World} (th1 : Acc w0 w1),
+        PExt (assert_eq_chunk msg c1 c2 th1).
+    Proof.
+      induction c1; intros c2 w1 th1; destruct c2; cbn.
+      all: try apply pext_error.
+      - destruct (eq_dec p p0); [apply pext_assert_eq_env | apply pext_error].
+      - destruct (eq_dec_het r r0); [apply pext_assert_formula | apply pext_error].
+      - apply pext_bind; [apply IHc1_1|]. intros w2 th2 _. apply IHc1_2.
+      - apply pext_bind; [apply IHc1_1|]. intros w2 th2 _. apply IHc1_2.
+    Qed.
+
+    Lemma pext_produce_chunk {w : World} (c : Chunk w) (h : SHeap w) :
+      PExt (produce_chunk c h).
+    Proof. unfold produce_chunk. apply pext_pure. Qed.
+
+    Lemma pext_consume_chunk {w : World} (c : Chunk w) (h : SHeap w) :
+      PExt (consume_chunk c h).
+    Proof.
+      unfold consume_chunk.
+      destruct (try_consume_chunk_exact h (peval_chunk c)) as [h'|]; [apply pext_pure|].
+      destruct (try_consume_chunk_precise h (peval_chunk c)) as [[h' Fs]|];
+        [|apply pext_error].
+      apply pext_bind; [apply pext_assert_pathcondition|].
+      intros w1 th1 _. apply pext_pure.
+    Qed.
+
+    Lemma pext_consume_chunk_angelic {w : World} (c : Chunk w) (h : SHeap w) :
+      PExt (consume_chunk_angelic c h).
+    Proof.
+      unfold consume_chunk_angelic.
+      destruct (try_consume_chunk_exact h (peval_chunk c)) as [h'|]; [apply pext_pure|].
+      destruct (try_consume_chunk_precise h (peval_chunk c)) as [[h' Fs]|].
+      - apply pext_bind; [apply pext_assert_pathcondition|].
+        intros w1 th1 _. apply pext_pure.
+      - apply pext_bind; [apply pext_angelic_list|]. intros w1 th1 [c' h''].
+        apply pext_bind; [apply pext_assert_eq_chunk|]. intros w2 th2 _. apply pext_pure.
+    Qed.
+
+    Lemma pext_read_register {τ} (reg : 𝑹𝑬𝑮 τ) {w : World} (h : SHeap w) :
+      PExt (read_register reg h).
+    Proof.
+      unfold read_register.
+      destruct (find_chunk_ptsreg_precise reg h) as [[t' h']|];
+        [apply pext_pure|apply pext_error].
+    Qed.
+
+    Lemma pext_write_register {τ} (reg : 𝑹𝑬𝑮 τ) {w : World} (t : STerm τ w)
+        (h : SHeap w) :
+      PExt (write_register reg t h).
+    Proof.
+      unfold write_register.
+      destruct (find_chunk_ptsreg_precise reg h) as [[t' h']|];
+        [apply pext_pure|apply pext_error].
+    Qed.
+
+    (* NOT covered, deliberately: replay_aux / replay / run.  They sit at the
+       top of the VC pipeline, not inside the executor's continuation flow, so
+       the drop never needs them.  Add them only if that changes. *)
 
   End SPureSpec.
   Export (hints) SPureSpec.
@@ -1125,6 +1417,179 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
             let evars3 := persist (A := Sub _) evars2 θ3 in
             produce ens evars3
         end.
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY at heap level -- see SPureSpec.PExt      *)
+    (* above for what this is and why it is not just funext.               *)
+    (* ================================================================== *)
+    Definition CExt {A} {w : World} (m : SHeapSpec A w) : Prop :=
+      forall (P1 P2 : (□(A -> SHeap -> 𝕊))%modal w),
+        (forall w' (th : Acc w w') (a : A w') (h : SHeap w'),
+           P1 w' th a h = P2 w' th a h) ->
+        forall h, m P1 h = m P2 h.
+
+    Lemma cext_pure {A} {w : World} (a : A w) : CExt (pure a).
+    Proof. intros P1 P2 HP h. unfold pure, T. apply HP. Qed.
+
+    Lemma cext_error {A} {w : World} (msg : (SHeap -> AMessage)%modal w) :
+      CExt (A := A) (error msg).
+    Proof. intros P1 P2 HP h. reflexivity. Qed.
+
+    Lemma cext_bind {A B} {w : World} (m : SHeapSpec A w)
+        (f : (□(A -> SHeapSpec B))%modal w) :
+      CExt m -> (forall w' (th : Acc w w') (a : A w'), CExt (f w' th a)) ->
+      CExt (bind m f).
+    Proof.
+      intros Hm Hf P1 P2 HP h. unfold bind.
+      apply Hm. intros w' th a h'. apply Hf.
+      intros w'' th'' a'' h''. unfold four. apply HP.
+    Qed.
+
+    Lemma cext_angelic_binary {A} {w : World} (m1 m2 : SHeapSpec A w) :
+      CExt m1 -> CExt m2 -> CExt (angelic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP h. unfold angelic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma cext_demonic_binary {A} {w : World} (m1 m2 : SHeapSpec A w) :
+      CExt m1 -> CExt m2 -> CExt (demonic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP h. unfold demonic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma cext_debug {A} {w : World} msg (m : SHeapSpec A w) :
+      CExt m -> CExt (debug msg m).
+    Proof. intros Hm P1 P2 HP h. unfold debug. f_equal. now apply Hm. Qed.
+
+    Lemma cext_lift_purespec {A} {w : World} (m : SPureSpec A w) :
+      SPureSpec.PExt m -> CExt (lift_purespec m).
+    Proof.
+      intros Hm P1 P2 HP h. unfold lift_purespec.
+      apply Hm. intros w' th a. apply HP.
+    Qed.
+
+    Lemma cext_angelic {w : World} (x : option LVar) (σ : Ty) :
+      CExt (angelic x (w := w) σ).
+    Proof. apply cext_lift_purespec, SPureSpec.pext_angelic. Qed.
+
+    Lemma cext_demonic {w : World} (x : option LVar) (σ : Ty) :
+      CExt (demonic x (w := w) σ).
+    Proof. apply cext_lift_purespec, SPureSpec.pext_demonic. Qed.
+
+    Lemma cext_angelic_ctx {N : Set} (nf : N -> LVar) {w : World} (Δ : NCtx N Ty) :
+      CExt (angelic_ctx nf (w := w) Δ).
+    Proof. apply cext_lift_purespec, SPureSpec.pext_angelic_ctx. Qed.
+
+    Lemma cext_demonic_ctx {N : Set} (nf : N -> LVar) {w : World} (Δ : NCtx N Ty) :
+      CExt (demonic_ctx nf (w := w) Δ).
+    Proof. apply cext_lift_purespec, SPureSpec.pext_demonic_ctx. Qed.
+
+    Lemma cext_assume_formula {w : World} (fml : Formula w) :
+      CExt (assume_formula fml).
+    Proof. apply cext_lift_purespec, SPureSpec.pext_assume_formula. Qed.
+
+    (* assert_formula is NOT a lift_purespec -- it threads the heap into the
+       message -- so it goes through pext_assert_formula by hand. *)
+    Lemma cext_assert_formula {w : World} msg (C : Formula w) :
+      CExt (assert_formula msg C).
+    Proof.
+      intros P1 P2 HP h. unfold assert_formula.
+      apply SPureSpec.pext_assert_formula. intros w1 th1 a. apply HP.
+    Qed.
+
+    Lemma cext_produce_chunk {w : World} (c : Chunk w) : CExt (produce_chunk c).
+    Proof.
+      intros P1 P2 HP h. unfold produce_chunk.
+      apply SPureSpec.pext_produce_chunk. intros w1 th1 h'. apply HP.
+    Qed.
+
+    Lemma cext_consume_chunk {w : World} (c : Chunk w) : CExt (consume_chunk c).
+    Proof.
+      intros P1 P2 HP h. unfold consume_chunk.
+      apply SPureSpec.pext_consume_chunk. intros w1 th1 h'. apply HP.
+    Qed.
+
+    Lemma cext_consume_chunk_angelic {w : World} (c : Chunk w) :
+      CExt (consume_chunk_angelic c).
+    Proof.
+      intros P1 P2 HP h. unfold consume_chunk_angelic.
+      apply SPureSpec.pext_consume_chunk_angelic. intros w1 th1 h'. apply HP.
+    Qed.
+
+    Lemma cext_read_register {τ} (reg : 𝑹𝑬𝑮 τ) {w : World} :
+      CExt (read_register reg (w := w)).
+    Proof.
+      intros P1 P2 HP h. unfold read_register.
+      apply SPureSpec.pext_read_register. intros w1 th1 [t h']. apply HP.
+    Qed.
+
+    Lemma cext_write_register {τ} (reg : 𝑹𝑬𝑮 τ) {w : World} (t : WTerm τ w) :
+      CExt (write_register reg t).
+    Proof.
+      intros P1 P2 HP h. unfold write_register.
+      apply SPureSpec.pext_write_register. intros w1 th1 [t' h']. apply HP.
+    Qed.
+
+    Lemma cext_produce {Sg : LCtx} (asn : Assertion Sg) :
+      forall {w : World} (sub : Sub Sg w), CExt (produce asn sub).
+    Proof.
+      induction asn; intros w sub; cbn.
+      - apply cext_assume_formula.
+      - apply cext_produce_chunk.
+      - apply cext_produce_chunk.
+      - apply cext_bind;
+          [apply cext_lift_purespec, SPureSpec.pext_demonic_pattern_match|].
+        intros w1 th1 [pc dpc]. apply H.
+      - apply cext_bind; [apply IHasn1|]. intros w1 th1 _. apply IHasn2.
+      - apply cext_demonic_binary; [apply IHasn1|apply IHasn2].
+      - apply cext_bind; [apply cext_demonic|]. intros w1 th1 t. apply IHasn.
+      - apply cext_debug, cext_pure.
+    Qed.
+
+    Lemma cext_consume {Sg : LCtx} (asn : Assertion Sg) :
+      forall {w : World} (sub : Sub Sg w), CExt (consume asn sub).
+    Proof.
+      induction asn; intros w sub; cbn.
+      - apply cext_assert_formula.
+      - apply cext_consume_chunk.
+      - apply cext_consume_chunk_angelic.
+      - apply cext_bind;
+          [apply cext_lift_purespec, SPureSpec.pext_angelic_pattern_match|].
+        intros w1 th1 [pc dpc]. apply H.
+      - apply cext_bind; [apply IHasn1|]. intros w1 th1 _. apply IHasn2.
+      - apply cext_angelic_binary; [apply IHasn1|apply IHasn2].
+      - apply cext_bind; [apply cext_angelic|]. intros w1 th1 t. apply IHasn.
+      - apply cext_debug, cext_pure.
+    Qed.
+
+    Lemma cext_call_contract {Δ τ} (c : SepContract Δ τ) {w : World}
+        (args : SStore Δ w) :
+      CExt (call_contract c args).
+    Proof.
+      destruct c; cbn.
+      apply cext_bind; [apply cext_lift_purespec, SPureSpec.pext_angelic_ctx|].
+      intros w1 th1 evars.
+      apply cext_bind; [apply cext_lift_purespec, SPureSpec.pext_assert_eq_nenv|].
+      intros w2 th2 _.
+      apply cext_bind; [apply cext_consume|]. intros w3 th3 _.
+      apply cext_bind; [apply cext_demonic|]. intros w4 th4 res.
+      apply cext_bind; [apply cext_produce|]. intros w5 th5 _.
+      apply cext_pure.
+    Qed.
+
+    Lemma cext_call_lemma {Δ} (lem : Lemma Δ) {w : World} (args : SStore Δ w) :
+      CExt (call_lemma lem args).
+    Proof.
+      destruct lem; cbn.
+      apply cext_bind; [apply cext_lift_purespec, SPureSpec.pext_angelic_ctx|].
+      intros w1 th1 evars.
+      apply cext_bind; [apply cext_lift_purespec, SPureSpec.pext_assert_eq_nenv|].
+      intros w2 th2 _.
+      apply cext_bind; [apply cext_consume|]. intros w3 th3 _.
+      apply cext_produce.
+    Qed.
 
   End SHeapSpec.
 

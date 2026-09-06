@@ -154,6 +154,22 @@ Module Type SymPropOn
         x σ (xIn : x∷σ ∈ Σ)
         (t : Term (Σ - x∷σ) σ)
         (k : SymProp (Σ - x∷σ))
+    (* dropk: drop a DEAD logical variable.  Unlike assume_vareq it carries NO
+       witness term, and `safe` does not guard on one — it simply projects the
+       valuation:
+
+         safe (dropk x k) ι  :=  safe k (env.remove (x∷σ) ι xIn)
+
+       Soundness comes for free from the TYPE: `k` lives at `Σ - x∷σ`, so the
+       typing performs the occurs-check.  Keeping the witness out of the trusted
+       semantics is the whole point — with a witness in the tree the per-step
+       refinement obligation is FALSE (the node is vacuous off the fibre); with
+       none, the witness lives only in the accessibility, a proof-time object a
+       proof may choose per-valuation.  See PLAN-dropk.md §2 and, for the
+       refuted alternative, PLAN-lvar-drop-build.md §2bis. *)
+    | dropk
+        x σ (xIn : x∷σ ∈ Σ)
+        (k : SymProp (Σ - x∷σ))
     (* | pattern_match {σ} (s : Term Σ σ) (pat : Pattern σ) *)
     (*     (rhs : forall (pc : PatternCase pat), *)
     (*         SymProp (Σ ▻▻ PatternCaseCtx pc)) *)
@@ -173,6 +189,7 @@ Module Type SymPropOn
     Global Arguments demonicv {_} _ _.
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
+    Global Arguments dropk {_} x {_ _} k.
     (* Global Arguments pattern_match_var {_} x {σ xIn} _ _. *)
 
     Definition angelic_close0 {Σ0 : LCtx} :
@@ -346,6 +363,10 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe k ι'
+        (* No guard: the drop simply projects the valuation.  Sound because k's
+           TYPE already puts it at Σ - x∷σ. *)
+        | @dropk _ x σ xIn k =>
+          safe k (env.remove (x∷σ) ι xIn)
         (* | pattern_match s pat rhs => *)
         (*     match pattern_match_relval pat (inst s ι) with *)
         (*     | Some (existT c ι__pat) => safe (rhs c) (ι ►► ι__pat) *)
@@ -386,6 +407,8 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe_debug k ι'
+        | @dropk _ x σ xIn k =>
+          safe_debug k (env.remove (x∷σ) ι xIn)
         (* | pattern_match s pat rhs => *)
         (*     match pattern_match_relval pat (inst s ι) with *)
         (*     | Some (existT c ι__pat) => safe_debug (rhs c) (ι ►► ι__pat) *)
@@ -425,6 +448,8 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           @wsafe (wsubst w x t) k ι'
+        | @dropk _ x σ xIn k =>
+          @wsafe (wdrop w x) k (env.remove (x∷σ) ι xIn)
         (* | pattern_match s pat rhs => *)
         (*     match pattern_match_relval pat (inst s ι) with *)
         (*     | Some (existT c ι__pat) => *)
@@ -486,6 +511,7 @@ Module Type SymPropOn
       (* - destruct pattern_match_relval. *)
       (*   + destruct m. apply H. *)
       (*   + tauto. *)
+      - eauto.
       - rewrite !debug_equiv; auto.
     Qed.
 
@@ -510,6 +536,7 @@ Module Type SymPropOn
       (* - destruct pattern_match_relval. *)
       (*   + destruct m. apply H. *)
       (*   + tauto. *)
+      - eauto.
       - rewrite debug_equiv; auto.
     Qed.
 
@@ -766,6 +793,14 @@ Module Type SymPropOn
     #[export] Instance proper_assume_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assume_vareq x t).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition auto. Qed.
+
+    #[export] Instance proper_dropk {Σ x σ} (xIn : x∷σ ∈ Σ) :
+      Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (dropk x (xIn := xIn)).
+    Proof. unfold sequiv. intros p q pq ι. cbn. apply pq. Qed.
+
+    #[export] Instance proper_dropk_impl {Σ x σ} (xIn : x∷σ ∈ Σ) :
+      Proper (simpl (Σ - x∷σ) ==> simpl Σ) (dropk x (xIn := xIn)).
+    Proof. unfold simpl. intros p q pq ι. cbn. apply pq. Qed.
 
     #[export] Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
@@ -1029,6 +1064,7 @@ Module Type SymPropOn
         | SymProp.demonicv b k => 1 + size k
         | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
         | @SymProp.assume_vareq _ x σ xIn t k => 1 + size k
+        | @SymProp.dropk _ x σ xIn k => 1 + size k
         (* | pattern_match _ pat rhs => *)
         (*     List.fold_right *)
         (*       (fun pc => N.add (size (rhs pc))) 1%N *)
@@ -1077,6 +1113,7 @@ Module Type SymPropOn
         | SymProp.assumek _ s          => count_nodes s c
         | SymProp.assert_vareq _ _ _ s => count_nodes s c
         | SymProp.assume_vareq _ _ s   => count_nodes s c
+        | SymProp.dropk _ s            => count_nodes s c
         | SymProp.angelic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
         | SymProp.demonic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
         (* | SymProp.pattern_match _ pat rhs  => *)
@@ -1186,6 +1223,13 @@ Module Type SymPropOn
       end.
     Global Arguments assume_vareq_prune {Σ} x {σ xIn} t k.
 
+    Definition dropk_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ} (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
+      match k with
+      | block => block
+      | _     => dropk x k
+      end.
+    Global Arguments dropk_prune {Σ} x {σ xIn} k.
+
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
       (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
@@ -1214,6 +1258,8 @@ Module Type SymPropOn
         assert_vareq_prune x t msg (prune k)
       | assume_vareq x t k =>
         assume_vareq_prune x t (prune k)
+      | dropk x k =>
+        dropk_prune x (prune k)
       (* | pattern_match s pat rhs => *)
       (*   pattern_match s pat (fun pc => prune (rhs pc)) *)
       (* | pattern_match_var x pat rhs => *)
@@ -1240,6 +1286,7 @@ Module Type SymPropOn
           rewrite ?obligation_equiv; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
       (* - destruct p2; cbn; auto; intuition. *)
       (* - destruct p2; cbn; auto; intuition. *)
     Qed.
@@ -1259,6 +1306,7 @@ Module Type SymPropOn
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto;
           rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       - destruct p2; cbn; auto; intuition.
       (* - destruct p2; cbn; auto; intuition. *)
@@ -1293,6 +1341,11 @@ Module Type SymPropOn
       safe (assume_vareq_prune x t p) ι <-> safe (assume_vareq x t p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
+    Lemma prune_dropk_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
+      (p : 𝕊 (Σ - x∷σ)) (ι : Valuation Σ) :
+      safe (dropk_prune x p) ι <-> safe (dropk x p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
     Lemma prune_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe (prune p) ι <-> safe p ι.
     Proof.
@@ -1316,6 +1369,8 @@ Module Type SymPropOn
       - rewrite prune_assert_vareq_sound; cbn.
         now rewrite IHp.
       - rewrite prune_assume_vareq_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_dropk_sound; cbn.
         now rewrite IHp.
       (* - destruct pattern_match_relval as [m|]. *)
       (*   + destruct m. cbn; auto. *)
@@ -1393,6 +1448,7 @@ Module Type SymPropOn
             | None    => plug ec (assert_vareq x t msg (push ectx_refl p))
             end
         | assume_vareq x t p     => plug ec (assume_vareq x t (push ectx_refl p))
+        | dropk x p              => plug ec (dropk x (push ectx_refl p))
         (* | pattern_match s pat rhs => *)
         (*     plug ec (pattern_match s pat (fun pc => push ectx_refl (rhs pc))) *)
         (* | pattern_match_var x pat rhs => *)
@@ -1508,6 +1564,7 @@ Module Type SymPropOn
           + rewrite IHp. rewrite H. reflexivity.
           + apply proper_plug, proper_assert_vareq, IHp.
         - apply proper_plug, proper_assume_vareq, IHp.
+        - apply proper_plug, proper_dropk, IHp.
         (* - apply proper_plug. (* rewrite angelic_pattern_match_correct. *) *)
         (*   apply proper_pattern_match. intros pc. now rewrite H. *)
         (* - apply proper_plug.  (* rewrite angelic_pattern_match_var_correct. *) *)
@@ -1598,6 +1655,7 @@ Module Type SymPropOn
             | Some e' => push e' p
             | None    => plug ec (assume_vareq x t (push uctx_refl p))
             end
+        | dropk x p              => plug ec (dropk x (push uctx_refl p))
         (* | pattern_match s pat rhs => *)
         (*     plug ec (pattern_match s pat (fun pc => push uctx_refl (rhs pc))) *)
         (* | pattern_match_var x pat rhs => *)
@@ -1719,6 +1777,7 @@ Module Type SymPropOn
         - destruct (uctx_subst_spec ec xIn t).
           + rewrite IHp. intros ι. apply H.
           + apply proper_plug_impl, proper_assume_vareq_impl, IHp.
+        - apply proper_plug_impl, proper_dropk_impl, IHp.
         (* - apply proper_plug_impl. (* rewrite demonic_pattern_match_correct. *) *)
         (*   apply proper_pattern_match_impl. intros pc. now rewrite H. *)
         (* - apply proper_plug_impl. (* rewrite demonic_pattern_match_var_correct. *) *)
@@ -1847,6 +1906,10 @@ Module Type SymPropOn
           let xIn' : ((x∷σ) ∈ Σ2)%katamaran := weakenIn ζ xIn in
           let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x::σ)%ctx) := weakenRemovePres ζ xIn in
           assume_vareq x (substSU (T := fun Σ => Term Σ σ) t ζ') (weaken_symprop P ζ')
+      | @dropk _ x σ xIn P =>
+          let xIn' : ((x∷σ) ∈ Σ2)%katamaran := weakenIn ζ xIn in
+          let ζ' : WeakensTo (Σ1 - (x∷σ)%ctx) (Σ2 - (x::σ)%ctx) := weakenRemovePres ζ xIn in
+          dropk x (weaken_symprop P ζ')
       | debug msg P => debug (substSU (T := AMessage) msg ζ) (weaken_symprop P ζ)
       end.
     #[export] Instance SubstSU_SymProp : SubstSU WeakensTo 𝕊 :=
@@ -1920,6 +1983,15 @@ Module Type SymPropOn
         (liftBinOp (fun _ => pair) (fun _ _ _ _ _ => eq_refl) (gen_occurs_check t) P).
     Arguments uq_assume_vareq x {σ Σ xIn} t P.
 
+    (* No `Pair (STerm σ) 𝕊` here: `dropk` carries no witness term, so there is
+       nothing to occurs-check alongside the continuation. *)
+    Definition uq_dropk x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran}
+      (P : UQSymProp (Σ - (x::σ)%ctx)) : UQSymProp Σ :=
+      elimWeakenedVar (T1 := 𝕊)
+        (fun Σ xIn' kP' => dropk (xIn := xIn') x kP')
+        P.
+    Arguments uq_dropk x {σ Σ xIn} P.
+
     Program Definition uq_debug {Σ : LCtx} (msg : AMessage Σ) : UQSymProp Σ -> UQSymProp Σ :=
       liftUnOp (fun _ P' => debug amsg.empty P') _.
     Admit Obligations.
@@ -1936,6 +2008,7 @@ Module Type SymPropOn
       | demonicv b P => uq_demonicv (to_uqSymProp P)
       | assert_vareq x t msg P => uq_assert_vareq x t msg (to_uqSymProp P)
       | assume_vareq x t P => uq_assume_vareq x t (to_uqSymProp P)
+      | dropk x P => uq_dropk x (to_uqSymProp P)
       | debug msg P => uq_debug msg (to_uqSymProp P)
       end.
 
@@ -1999,6 +2072,11 @@ Module Type SymPropOn
         (n : nat)
         (t : ETerm σ)
         (k : ESymProp)
+    (* No term, and no `σ` either — the erased form never uses it. *)
+    | edropk
+        (x : LVar)
+        (n : nat)
+        (k : ESymProp)
     | epattern_match {σ} (s : ETerm σ) (pat : Pattern (N:=LVar) σ)
         (rhs : PatternCase pat -> ESymProp)
     | epattern_match_var (x : LVar) σ (n : nat) (pat : Pattern (N:=LVar) σ)
@@ -2046,6 +2124,7 @@ Module Type SymPropOn
       | edemonicv b k => edemonicv b (erase_EErrors k)
       | eassert_vareq x xIn t k => eassert_vareq x xIn t (erase_EErrors k)
       | eassume_vareq x xIn t k => eassume_vareq x xIn t (erase_EErrors k)
+      | edropk x n k => edropk x n (erase_EErrors k)
       | epattern_match s pat rhs =>
           epattern_match s pat
             (fun pc => erase_EErrors (rhs pc))
@@ -2067,6 +2146,7 @@ Module Type SymPropOn
       | demonicv b k => edemonicv b (erase_symprop' k)
       | @assert_vareq _ x σ xIn t msg k => eassert_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
       | @assume_vareq _ x σ xIn t k => eassume_vareq x (ctx.in_at xIn) (erase_term t) (erase_symprop' k)
+      | @dropk _ x σ xIn k => edropk x (ctx.in_at xIn) (erase_symprop' k)
       (* | pattern_match s pat rhs => *)
       (*     epattern_match (erase_term s) pat *)
       (*       (fun pc => erase_symprop' (rhs pc)) *)
@@ -2223,6 +2303,8 @@ Module Type SymPropOn
           let ι' := list_remove ι n in
           inst_eq (inst_eterm ι (eterm_var x _ n)) (inst_eterm ι' t) ->
           inst_symprop ι' k
+      | edropk x n k =>
+          inst_symprop (list_remove ι n) k
       | epattern_match s pat rhs =>
           match inst_eterm ι s with
           | Some v => match pattern_match_relval pat v with
@@ -2331,6 +2413,7 @@ Module Type SymPropOn
       - change (eterm_var x σ (ctx.in_at xIn)) with (erase_term (term_var x)).
         rewrite erase_valuation_remove, !inst_eterm_erase.
         now apply Morphisms_Prop.iff_iff_iff_impl_morphism.
+      - rewrite erase_valuation_remove. apply IHp.
       (* - rewrite inst_eterm_erase. *)
       (*   destruct pattern_match_relval as [m|]. *)
       (*   + destruct m as [pc ι__pat]. *)
@@ -2437,6 +2520,13 @@ Module Type LogSymPropOn
            (* eqₚ (term_var x (ςInΣ := xIn)) (subst t (sub_shift xIn)) -∗ *)
            let ω := acc_subst_right t in
            assuming (w1 := wsubst w x t) ω (psafe (w := wsubst w x t) k)
+       (* `forgetting`, not `assuming`.  The accessibility runs BACKWARDS
+          (`wdrop w x ⊒ w`), so this is a pullback along `sub_shift` — total, no
+          fibre, hence never vacuous.  That is the entire difference from
+          `assume_vareq` above, and it is what makes the per-step refinement
+          obligation provable rather than false. *)
+       | @dropk _ x σ xIn k =>
+           forgetting (w1 := wdrop w x) (@acc_forget w x σ xIn) (psafe (w := wdrop w x) k)
        (* | pattern_match s pat rhs => *)
        (*     ∀ (pc : PatternCase pat), *)
        (*       let wm : World := wmatch w s pat pc in *)
@@ -2454,11 +2544,23 @@ Module Type LogSymPropOn
     (* TODO: Two false goals admitted, this can be solved either by making safe output True instead of false for failed pattern matching or by somehow leveraging the secLeak check in wmatch *)
     Lemma psafe_safe {w p} : psafe (w := w) p ⊣⊢ safe p.
     Proof.
-      refine (SymProp_ind (fun Σ p => forall (w : World) (eq : Σ = w), (psafe (w := w) (eq_rect Σ 𝕊 p w eq) : Pred w) ⊣⊢ safe (eq_rect Σ 𝕊 p w eq)) _ _ _ _ _ _ _ _ _ _ _ (* _ _ *) p w eq_refl);
+      refine (SymProp_ind (fun Σ p => forall (w : World) (eq : Σ = w), (psafe (w := w) (eq_rect Σ 𝕊 p w eq) : Pred w) ⊣⊢ safe (eq_rect Σ 𝕊 p w eq)) _ _ _ _ _ _ _ _ _ _ _ _ (* _ _ *) p w eq_refl);
         clear; intros; subst; cbn.
       5, 6:  specialize (H (wformula w fml) eq_refl); cbn in H.
       7, 8:  specialize (H (wsnoc w b) eq_refl); cbn in H.
       9, 10: specialize (H (wsubst w x t)%ctx eq_refl); cbn in H.
+      11:    specialize (H (wdrop w x) eq_refl); cbn in H.
+      (* dropk is discharged HERE, in its own block, so the goal count for the
+         bullets below is unchanged.  `forgetting` is a pullback, so both
+         directions are the IH transported along `sub_shift`; the only content
+         is that ι∖x satisfies the projected path condition, which is
+         `acc_pathcond` on `acc_forget`. *)
+      11: { unfold W.forgetting. destruct H as [H].
+            pose proof (fun ι (Hpc : instprop (wco w) ι) =>
+                          acc_pathcond (@acc_forget w x σ xIn) ι Hpc) as Hfwd.
+            cbn in Hfwd. setoid_rewrite inst_sub_shift in Hfwd.
+            crushPredEntails3.
+            all: rewrite ?inst_sub_shift in H1 |- *; apply H; assumption. }
       (* 11: constructor; intros ι; *)
       (*   destruct (pattern_match_relval pat (inst s ι)) as [m|] eqn:Hpmv. *)
       (* 11: destruct m as [c ι__pat]; *)

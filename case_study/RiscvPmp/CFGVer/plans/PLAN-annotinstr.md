@@ -20,11 +20,82 @@ than as a merge precondition. It passed, so mainline is clean — but the
 invariant went unenforced for the whole session. Phase 3/4 work should go on a
 topic branch and reach the protected branch via `git merge --no-ff`.
 
-**Still open:**
+**ALL FOUR PHASES ARE LANDED.** Phase 4 completed 2026-08-25 on branch
+`issue/annot-havoc-spike` (`a9a1392d` → `20722200`), **gate green at `6fc12d73`**
+— build clean, no holes, 14 end theorems axiom-clean. **NOT MERGED**: needs
+`git merge --no-ff` into `KatamaranRel`.
+
+### THE CURRENT PROBLEM
+
+**The havoc works, and it is not enough on its own.** It converts an
+exponential TERM recurrence into linear growth in DEAD LOGICAL VARIABLES, and
+the second cost is real:
+
+- Term growth is gone. Loop-head register terms go 243 → 8,244 → 88,468 printed
+  chars without the havoc (λ = 10.7) and 117 → 123 → 126 with it.
+- But live `|Σ| = 15 + 7n`, against a flat 15 without the havoc. The executor
+  mints 659 variables per trip and the solver eliminates **all** of them; a
+  demonically produced unconstrained value is determined by nothing, so the
+  havoc's seven per trip survive to the end of execution. 15 vs 127 at n=16 is
+  an 8.5× larger world, and lvar count is quadratic in lookup cost.
+- So cost is still superlinear with a **rising** local exponent (1.19 → 1.60 →
+  2.03 over n=2→4→8→16) and a held-out quadratic misses n=16 by −13%.
+  ~~**br_divrem's real 31 trips are still not reached** — n=16 is 28.9 G words /
+  132 s, and n=31 timed out at 1800 s, though only at the OLD insufficient fuel
+  and so is untested at `27n+60`.~~ **SUPERSEDED 2026-08-25: n=31 IS reached** —
+  41.25 G words, `BLOCK-vc-discharged`, 531 s, with a three-register havoc at
+  fuel `27n+60` (`diagnostics/havoc-abstraction-payoff.md` §8). The seven-register
+  figures in this bullet stand as measurements of that arm.
+
+**Next lever — the "drop an unreferenced logical variable" annotation is STILL
+THE MAIN LEVER, and a same-day retraction lives underneath it.** An earlier
+version of this paragraph (and of `diagnostics/havoc-abstraction-payoff.md` §8.1)
+declared that annotation **UNSOUND and off the table**. **That is WITHDRAWN —
+never requote it.** What is true is narrower: it cannot be an opaque
+`SHeapSpec` action in `chunk_gc`'s shape, because such an action sees `h` and
+`wco w` but not the terms the continuation closed over (`tbl`, `exits`, `apc`,
+the outer postcondition). The deadness side condition is about the PRESENT STATE
+— every future term is built from present terms, so a variable occurring nowhere
+now cannot reappear — and the machinery to prove it is already in the tree:
+`occurs_check` (`Symbolic/OccursCheck.v:56`, reachable via `Base.v:68`) with
+`occurs_check_sound : occurs_check xIn t = Some t' → t = subst t' (sub_shift xIn)`,
+instances for Term/Formula/Chunk/list/Env/Assertion, and `Symbolic/Monads.v:97`
+already occurs-checking the path condition and heap together as a state. **So the
+work is to make the drop a step of `sexec_cfg_addr` with the carried state in
+hand, not an `sexec_ghost` case.** Payoff if it works: slope 0/trip, `|Σ|` FLAT —
+the only candidate here for an exponent fix rather than another factor. UNBUILT.
+
+**What DID pay, on the same `|Σ|` axis: the havoc's REGISTER SET.** Havocing
+three registers (A0 A1 A4 — the recurrence carriers) instead of seven is **2.00×
+at n=8 and 2.66× at n=16**, every cell still `BLOCK`, and it is what makes
+**br_divrem's real 31 trips reachable: 41.25 G words, discharged, 531 s** — this
+section previously recorded n=31 as timing out at 1800 s. Completeness improves
+in the same direction, since three fewer havoced registers is three fewer values
+carrying no `secLeakvar`. Full record, arms and held-out fits:
+`diagnostics/havoc-abstraction-payoff.md` §8. Caveat kept: it is a large FACTOR,
+not an exponent fix — R3's local exponent is 1.269 → 1.631 → 2.015 and still
+rising, so `|Σ|` was never all of it and the residual mechanism is unidentified.
+
+**Fallback if the drop does not work out, sound but unmeasured:** pack each trip's
+remaining fresh values into ONE wide binder by slicing (`words_ctx` /
+`mem_class_width` precedent, 2.86× where it was measured), taking the slope from
+3/trip to 1/trip. That is the floor for a LEMMA-only approach — a per-trip
+unconstrained value needs a per-trip binder and a lemma can only weaken — but not
+the floor overall, since the drop is an executor step and reaches 0.
+
+**Second open item, independent of the above:** no committed example uses a
+ghost annotation. The whole payoff lives in gitignored `ZZ*` probes; what landed
+is capability plus the lemma. Wiring it into a real br_divrem/muladd example is
+where the COMPLETENESS cost first meets a real end theorem — a havoced value
+carries no `secLeakvar`, so it is treated as possibly-secret. The two positive
+controls show where that bites: havocing A5 (the counter the back edge is
+decided on) or A3 (the base pointer) leaves a 19–31 node residual instead of
+collapsing to `block`.
+
+**Also still open:**
 1. `cfgver-refinement` / `cfgver-soundness` skills do not yet mention the new
-   `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)
-3. Phase 3 (`AnnotDebugBreak` as a usable tool) and Phase 4
-   (`AnnotLemmaInvocation` semantics) are untouched — see below.
+   `strip` / `ai_instr <$>` boundary. (`cfgver-executor` does.)  Neither
+   mentions the ghost/`call_lemma` column either, now that it is real.
 
 ## Log
 
@@ -1044,6 +1115,71 @@ shape flat on purpose. The stable-slots/growing-terms split is what makes the
 Phase 4 abstraction lemma statable.
 
 ### Phase 4 — `AnnotLemmaInvocation` (separate effort, do NOT bundle)
+
+**MEASURED 2026-08-24 on branch `issue/annot-havoc-spike`, before any soundness
+work: the payoff is REAL and it is an exponent change.**
+`diagnostics/havoc-abstraction-payoff.md` has the full record. Headline: a
+`havoc_regs` lemma on br_divrem's loop head takes the per-trip cost multiplier
+from **≈10× (7.71×, 9.97× at n=1→2→3) to successive doublings of
+2.29×/3.04×/4.08×** — 32.9× less allocation at n=3, and n=16 reachable at 28.9 G
+words where plain would need ~10¹³ times its n=3 cost. Three corrections to what
+this document assumed:
+
+- **"λ → 1" is too strong.** What remains grows polynomially with a *rising*
+  local exponent (1.19 → 1.60 → 2.03); a held-out quadratic fit misses n=16 by
+  −13%, so no growth law is established. The residual's likeliest home remains
+  `|Σ| = 15 + 7n` — 7 fresh variables per trip alive in the world, against a
+  flat 15 without the havoc (diagnostics §5c, measured with a matched control).
+  A demonically produced unconstrained value cannot be solved away, unlike all
+  659 of the executor's own per-trip mints, which the solver eliminates
+  completely. Those binders are DEAD once the next trip havocs the register, so
+  the "drop an unreferenced logical variable" annotation sketched in
+  `Verifier.v` has a named target. Hypothesis, not a measured cause.
+  (A 2026-08-25 edit of this bullet briefly retracted the `15 + 7n` figure on
+  the grounds that it came from fuel-starved runs; that retraction was wrong —
+  starvation is the instrument, not a confound, and the baseline is flat under
+  identical starvation. See diagnostics §5c.)
+- **The term recurrence is confirmed broken, directly** (diagnostics §5b): at the
+  loop head the loop-carried registers hold 243 → 8,244 → 88,468 printed chars
+  without the havoc (λ = 10.7, independently reproducing the 2026-08-24 dump),
+  and 117 → 123 → 126 with it, each register reduced to a bare `term_var`. The
+  pre-havoc term inside each trip is built from LAST trip's fresh variables, so
+  it stops compounding (5,203 → 5,256, +1%).
+- **The target set is SEVEN registers, not six.** The 2026-08-24 entry below says
+  the other eight chunks are "EXACTLY 1.00x at every trip"; x7 (T2) is not —
+  16 → 80 → 1,418 chars, 17.7× steady state, because at the loop head it holds
+  the previous trip's `sub T2, A1, T2`, which reads A1. It is 1.6% of the trip-3
+  total, which is presumably why it read as flat. Including T2 in the havoc set
+  was correct, not redundant.
+- **The six growing slots are NOT the right target set.** Four of them
+  (T0–T3) are dead at the loop head, and havocing exactly those — information-
+  lossless, the obvious free win — costs **1.94× MORE than doing nothing**,
+  because their size is a symptom of a recurrence carried by A0/A1/A4 and they
+  grow straight back inside the same trip. Target the loop-carried values, not
+  the largest terms.
+- **The abstraction lemma did NOT need to be a loop invariant.** This document
+  says the lemma "is only as sound as its `LEnv` proof, and `inv` must be weak
+  enough to hold every trip and strong enough to still prove the postcondition."
+  For br_divrem `inv` is `True`: consume `r ↦ v`, produce `∃w, r ↦ w`, whose
+  `ValidLemma` obligation is existential introduction with no side condition,
+  and every arm still discharges its VC to `block`. What it costs is
+  completeness (the havoced value carries no `secLeakvar`, so it is treated as
+  possibly-secret) — and the positive controls show where that bites: havocing
+  A5 (the counter the back edge is decided on) or A3 (the base pointer) leaves a
+  19–31 node residual instead of collapsing. So "Phase 4 is a delivery vehicle
+  for `PLAN-loop-invariant.md`" holds for programs needing a real invariant, but
+  is NOT a precondition for a payoff on this one.
+
+What is still owed for Phase 4 proper — none of it novel, all of it named:
+`cexec_ghost` calling `CHeapSpec.call_lemma`; `rexec_ghost` via the ready-made
+`refine_compat_call_lemma` (`Refinement/Monads.v:1875`); and `cexec_ghosts_pure`
+DELETED in favour of an inductive `sound_cexec_ghosts` built from
+`call_lemma_sound` (`MicroSail/ShallowSoundness.v:91` — generic over the BI, so
+it applies to the binary instance) plus the existing `lemSemCFGVerif`
+(`SpecIris.v:364`), discharged as `iris_rule_stm_lemmak` does it
+(`BinaryInstance.v:196`, three lines). The 2026-08-21 revert note reads as
+though absorbing the lemma's heap effect in `sound_exec_cfg_addr_myWP2` were
+open research; it is an induction over the ghost list with those two ingredients.
 
 Symbolic `call_lemma (LEnv l) args` on both sides plus the relational lemma.
 CFGVer's `LEnv` is already non-empty (`Spec.v:631` `lemma_open_gprs`,

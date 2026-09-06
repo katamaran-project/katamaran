@@ -202,6 +202,15 @@ Module Type ChunksOn
           Some (chunk_wand c1' c2')
       end.
 
+  (* `OccursCheckChunk` above has existed without a laws instance, so there was
+     no `OccursCheckLaws SHeap` either (`occurs_check_laws_list` needs one) and
+     `occurs_check_sound` could not be applied to a heap at all.  Nothing in the
+     framework had ever needed to occurs-check a heap; the dead-logical-variable
+     drop does, to transport the heap relation across the projection
+     (PLAN-dropk.md §3bis). *)
+  #[export] Instance occurs_check_laws_chunk : OccursCheckLaws Chunk.
+  Proof. occurs_check_derive. Qed.
+
   (* THROWAWAY PORT (unquantify-gate branch, PLAN-unquantify-gate.md Phase B):
      ported verbatim from main:theories/Syntax/Chunks.v — Chunk is identical
      (4 constructors) on both branches, no divergence to patch. *)

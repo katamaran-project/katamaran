@@ -112,6 +112,25 @@ Module Type WorldsOn
       {| wctx := (wctx w - x∷σ); wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
 
+    (* Change the world by FORGETTING variable [x] rather than unifying it with
+       a term.  The path condition is PROJECTED: every conjunct that does not
+       mention [x] survives, and `occurs_check` computes exactly that.
+
+       The `None` fallback keeps this TOTAL, which is what lets `safe`/`psafe`
+       have a `dropk` case at all — no proof term has to be threaded through the
+       SymProp.  Falling back to the empty path condition is CONSERVATIVE: it
+       carries fewer assumptions into the continuation, so the continuation's
+       proposition is harder to prove, never easier.  In practice the executor
+       only emits `dropk` when the occurs-check succeeds, so the fallback is
+       dead weight that exists purely for totality. *)
+    Definition wdrop (w : World) x {σ} {xIn : (x∷σ ∈ w)%katamaran} : World :=
+      {| wctx := (wctx w - x∷σ);
+         wco  := match occurs_check xIn (wco w) with
+                 | Some pc' => pc'
+                 | None     => ctx.nil
+                 end |}.
+    Global Arguments wdrop w x {σ xIn}.
+
     Definition wmatch (w : World) {σ} (s : Term w σ) (p : Pattern (N:=LVar) σ)
       (pc : PatternCase p) : World :=
       let wsL  : World         := wsecLeak w s in
@@ -384,6 +403,59 @@ Module Type WorldsOn
       let w' := {| wctx := w - x∷σ; wco := subst (wco w) ζ |}  in
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
+
+    (* The BACKWARD accessibility of the variable drop: the smaller world is the
+       PAST.  Note the direction — `wdrop w x ⊒ w`, not `w ⊒ wdrop w x` — which
+       is what makes `forgetting` along it TOTAL (no fibre, hence no vacuity).
+       `Acc` has only two constructors and both named `acc_*` are Definitions
+       over `acc_sub`, so this adds no framework shape.
+
+       It needs NO side condition: when the occurs-check succeeds the obligation
+       is `occurs_check_sound` then reflexivity, and when it fails `wdrop`'s path
+       condition is empty and everything entails it.  (PLAN-dropk.md §2 sketched
+       this with an `occurs_check … = Some pc'` argument; making `wdrop` total
+       removes it.) *)
+    Program Definition acc_forget {w : World} x {σ} {xIn : (x∷σ ∈ w)%katamaran} :
+      wdrop w x ⊒ w := @acc_sub (wdrop w x) w (sub_shift xIn) _.
+    Next Obligation.
+    Proof.
+      intros w x σ xIn ι Hι. cbn.
+      destruct (occurs_check xIn (wco w)) as [pc'|] eqn:Hoc; cbn.
+      - pose proof (occurs_check_sound xIn (wco w)) as HH.
+        unfold OccursCheckSoundPoint in HH. rewrite Hoc in HH.
+        inversion HH as [? Heq|]. now rewrite <- Heq.
+      - exact I.
+    Qed.
+    Arguments acc_forget {w} x {σ xIn}.
+
+    (* The FORWARD accessibility of the drop, `w ⊒ wdrop w x`.  Unlike
+       `acc_forget` it CANNOT be total: the backward direction wants a WEAK path
+       condition at the smaller world (empty works) while the forward direction
+       wants a STRONG one, and the two coincide only where the occurs-check
+       succeeds.  So the occurs-check equation is an explicit argument — the
+       executor has it from the dependent match it already performs.  (Do not
+       try to fix this by changing `wdrop`'s None fallback; the two directions
+       want opposite fallbacks.  See PLAN-dropk.md.)
+
+       Targeting `wdrop w x` rather than `wsubst w x t` is the point: the two
+       are only PROPOSITIONALLY equal, and `psafe (dropk …)` is defined at
+       `wdrop`, so using `acc_subst_right` here would force a dependent rewrite
+       of a World inside `psafe`. *)
+    Program Definition acc_drop {w : World} x {σ} {xIn : (x∷σ ∈ w)%katamaran}
+        (pc' : PathCondition (wctx w - x∷σ))
+        (H : occurs_check xIn (wco w) = Some pc')
+        (t : Term (wctx w - x∷σ) σ) : w ⊒ wdrop w x :=
+      @acc_sub w (wdrop w x) (sub_single xIn t) _.
+    Next Obligation.
+    Proof.
+      intros w x σ xIn pc' H t ι Hι. cbn in *.
+      rewrite H in Hι. cbn in Hι.
+      pose proof (occurs_check_sound xIn (wco w)) as HH.
+      unfold OccursCheckSoundPoint in HH. rewrite H in HH.
+      inversion HH as [? Heq|].
+      rewrite Heq. rewrite subst_shift_single. exact Hι.
+    Qed.
+    Arguments acc_drop {w} x {σ xIn} pc' H t.
 
     Definition acc_secLeak {w : World} {σ} {s : Term w σ} : w ⊒ wsecLeak w s :=
       acc_formula_right (formula_secLeak s).

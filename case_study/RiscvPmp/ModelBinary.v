@@ -602,10 +602,19 @@ Module RiscvPmpModel2.
     (*   iApply ("Hwithout" with "Hacc"). *)
     (* Qed. *)
 
+    (* Trivial: this environment's spec for it is ⊤ ⊢ ⊤ (Contracts.v).  Only
+       CFGVer's own LEnv gives havoc_regs real content. *)
+    Lemma havoc_regs_sound (regs : list RegIdx) :
+      ValidLemma (RiscvPmpSpecification.lemma_havoc_regs regs).
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      now iIntros.
+    Qed.
+
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ [];
-        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound(* , open_pmp_entries_sound, *)
+        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, havoc_regs_sound(* , open_pmp_entries_sound, *)
         (* close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound *)
       .
     Qed.

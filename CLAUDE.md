@@ -12,6 +12,12 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   underneath every case study's own executor (not CFGVer-specific; library skill)
 > - **`relval-model`** — the `SyncVal`/`NonSyncVal` relational value representation
 >   (`RelVal = RV (Val σ)`, homomorphic lifting) (not CFGVer-specific; library skill)
+> - **`pred-modalities`** — the `Pred`/world/modality layer under every refinement
+>   proof: why a substitution runs BACKWARDS on valuations, the FIBRE of an
+>   accessibility, and `assuming`/`knowing`/`forgetting` as the standard adjoint
+>   triple (`knowing ⊣ forgetting ⊣ assuming`). Load it when a refinement
+>   hypothesis looks strong but proves nothing — the usual cause is a modality
+>   gone vacuous on an empty fibre, invisible in the goal (library skill)
 > - **`relval-rewrite-over-secrets`** — why a pure `bv`/`Val`-identity rewrite is
 >   auto-sound over secrets, no `NonSyncVal` case-split (library skill)
 > - **`secret-data-walls`** — the three `NonSyncVal ⇒ False` walls (`formula_bool`/
@@ -30,7 +36,7 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 > - **`cfgver-scaling-diagnostics`** — running/writing up a cost-driver investigation
 >   (`diagnostics/` convention, cost-driver catalog, one-axis-at-a-time ablation discipline)
 >
-> **Skill routing is TWO-TIERED (since 2026-07-28).** Ten pitfall/library skills
+> **Skill routing is TWO-TIERED (since 2026-07-28).** Eleven pitfall/library skills
 > are set to `name-only` in `.claude/settings.json`'s `skillOverrides`: they are
 > listed WITHOUT their description, so they no longer compete for the initial
 > routing decision, and are reached from a tier-1 parent's routing table instead
@@ -43,7 +49,7 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   workflow and routes to the tier-2 set below.
 > - **Tier-2 (`name-only`, reached via `rocq-implementation`):** `bv-pitfalls`,
 >   `rocq-pitfalls`, `iris-proofmode`, `core-executor-internals`, `relval-model`,
->   `relval-rewrite-over-secrets`, `cfgver-rsolve`, `cfgver-wp2`,
+>   `relval-rewrite-over-secrets`, `pred-modalities`, `cfgver-rsolve`, `cfgver-wp2`,
 >   `cfgver-gen-contract-internals`, `cfgver-endtoend-internals`. Several are
 >   labelled "library skill" in the list above; that label now also means
 >   name-only. **Note `secret-data-walls` is labelled a library skill but is
@@ -239,7 +245,7 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   TABLE of path → required-skill rules. Any `*.v` write requires
   `rocq-implementation`; on top of that each documented file demands its own
   skill (`Solver.v`/`Monads.v`/`SymbolicExecutor.v` →
-  `core-executor-internals`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
+  `core-executor-internals`; `Worlds.v`/`UnifLogic.v` → `pred-modalities`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
   `cfgver-refinement`; `Adequacy.v`/`SpecIris.v` → `cfgver-soundness`;
   `GenContract.v` → `cfgver-gen-contract-internals`; `EndToEnd.v` →
   `cfgver-endtoend-internals`; `Example/*Result.v` + `Noninterference.v` →
@@ -251,11 +257,20 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   governs "what we intend to build"). All missing skills are reported in ONE
   denial, and each fires at most once per session. Override:
   `CLAUDE_V_GUARD_OFF=1`.
-- **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash):
-  `git merge` / `git push` / `checkout -b` / `switch -c` require
-  `branch-workflow`. Commit, status, log, diff and path-checkout are NOT gated
-  (milestone commits are `rocq-checkpoint`'s business). Override:
-  `CLAUDE_GIT_GUARD_OFF=1`.
+- **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash), now TWO
+  mechanisms. (1) A **hard deny**: `main` is never a push or merge TARGET —
+  `git push` naming `main`, `git push --all/--mirror`, a bare `git push` or any
+  `git merge` while HEAD is `main`. This repo integrates on **`KatamaranRel`**;
+  `main` is upstream and only read. Merging `main` INTO a topic branch, and
+  pushing a topic branch, stay allowed. Not satisfiable by loading a skill;
+  separate override `CLAUDE_ALLOW_MAIN=1` so that silencing (2) does not unlock
+  it. Deliberately biased towards a false DENY (a branch named `<x>/main` reads
+  as main) — the opposite bias from every other guard here, because a wrong
+  allow is an irreversible write to a shared upstream. 23-case test suite.
+  (2) The pre-existing skill gate: `git merge` / `git push` / `checkout -b` /
+  `switch -c` require `branch-workflow`. Commit, status, log, diff and
+  path-checkout are NOT gated (milestone commits are `rocq-checkpoint`'s
+  business). Override: `CLAUDE_GIT_GUARD_OFF=1`.
 
   Both are backed by `skill-load-marker.sh` (PreToolUse Skill), which records
   every skill invocation as `$TMPDIR/claude-skillload-<slug>-<session-id>` —

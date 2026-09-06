@@ -151,15 +151,91 @@ Section WithBinding.
 
     End Inversions.
 
-    Fixpoint lookup {Γ} (E : Env Γ) : forall {b}, b ∈ Γ -> D b :=
-      match E with
-      | nil      => fun _ bIn => match ctx.view bIn with end
-      | snoc E v => fun _ bIn =>
-        match ctx.view bIn with
-        | ctx.isZero   => v
-        | ctx.isSucc i => lookup E i
-        end
+    (* [lookup] recurses on the [Env] spine and the de Bruijn index [ctx.in_at]
+       SIMULTANEOUSLY, and transports once at the base case along the membership
+       proof [ctx.in_valid] that the caller already has.
+
+       The obvious formulation instead peels the index with [ctx.view] at every
+       step. That is what this used to do, and it is expensive for a reason that
+       is invisible in the source: [ctx.view] is [ctx.In_case], whose successor
+       branch is [fs _ _ _ (MkIn n p)] (Context.v:131), so it ALLOCATES a fresh
+       [In] record plus a [SnocView] constructor per binder walked. Measured at
+       23.5 allocated words per step, against 0.000 for the identical traversal
+       written this way -- see theories/diagnostics/env-lookup-cost-drivers.md.
+       Since substitution pays this walk per variable occurrence, and [sub_comp]
+       does |Σ| of them, it is a constant factor on the hottest path in the
+       project (5.9x on allocation, 3.1x on time at |Σ| = 200).
+
+       Both defining equations still hold DEFINITIONALLY -- [lookup_snoc_zero]
+       and [lookup_snoc_succ] below are proved by [reflexivity] -- so this is
+       not observable in any statement. What DOES change is the shape [cbn]
+       leaves behind; [lookup_at_fold] below is the one-line repair, and the
+       [Arguments]/refold note further down explains why it is needed. *)
+    Fixpoint lookup_at {Γ} (E : Env Γ) (n : nat) (b : B)
+      (p : ctx.nth_is Γ n b) {struct E} : D b :=
+      match E in Env Γ0 return ctx.nth_is Γ0 n b -> D b with
+      | nil => fun p0 => match p0 return D b with end
+      | @snoc Γ' E' b' d =>
+          match n as n0 return ctx.nth_is (Γ' ▻ b') n0 b -> D b with
+          | O    => fun p0 => eq_rect b' D d b p0
+          | S n' => fun p0 => lookup_at E' n' b p0
+          end
+      end p.
+
+    (* The membership argument is named [x] to match this file's existing
+       [Arguments lookup {B D Γ} E%_env [_] x%_ctx] line below. *)
+    Definition lookup {Γ} (E : Env Γ) {b} (x : b ∈ Γ) : D b :=
+      lookup_at E (ctx.in_at x) b (ctx.in_valid x).
+
+    (* [lookup] used to be a Fixpoint on [E], so [cbn] unfolded it ONLY when
+       [E] was in constructor form and left [lookup E x] alone otherwise. As a
+       plain Definition it would delta-unfold unconditionally; [!E] restores
+       exactly the old gating.
+
+       That is only half of the old behaviour, though. The old body's recursive
+       occurrence was [lookup] ITSELF, so [cbn] handed back a folded
+       application that the next [rewrite] of a [lookup]-shaped lemma could
+       match. This body's recursive occurrence must be [lookup_at] -- carrying
+       [(n, p)] onward instead of rebuilding an [In] IS the optimisation -- so
+       [cbn] now yields [lookup_at E (ctx.in_at x) b (ctx.in_valid x)], and a
+       downstream [rewrite] silently stops matching (first casualty:
+       [Terms.v]'s [sub_up1_id], which reported "Found no subterm matching
+       sub_wk1.[? ?x∷?σ]" -- an error that names nothing relevant).
+
+       [lookup_at_fold] is the other half: it refolds that back to [lookup],
+       by [reflexivity]. The repair for any proof that hits this is therefore
+       uniform -- [cbn; rewrite ?lookup_at_fold] reproduces the old goal. *)
+    Arguments lookup {Γ} !E {b} x.
+
+    Lemma lookup_at_fold {Γ} (E : Env Γ) {b} (x : b ∈ Γ) :
+      lookup_at E (ctx.in_at x) b (ctx.in_valid x) = lookup E x.
+    Proof. reflexivity. Qed.
+
+    (* Same, for a goal whose index is a raw [MkIn] record rather than an
+       [ctx.in_at]/[ctx.in_valid] pair (i.e. after [intros [n e]] rather than
+       after [ctx.view]). *)
+    Lemma lookup_at_fold' {Γ} (E : Env Γ) (n : nat) (b : B)
+      (p : ctx.nth_is Γ n b) :
+      lookup_at E n b p = lookup E (ctx.MkIn n p).
+    Proof. reflexivity. Qed.
+
+    Lemma lookup_snoc_zero {Γ b} (E : Env Γ) (v : D b) :
+      lookup (snoc E v) ctx.in_zero = v.
+    Proof. reflexivity. Qed.
+
+    Lemma lookup_snoc_succ {Γ b b'} (E : Env Γ) (v : D b') (i : b ∈ Γ) :
+      lookup (snoc E v) (ctx.in_succ i) = lookup E i.
+    Proof. reflexivity. Qed.
+
+    (* The old definition, as a rewrite rule: use this where a proof used to
+       rely on [cbn] unfolding [lookup] into a [ctx.view] match. *)
+    Lemma lookup_snoc {Γ b'} (E : Env Γ) (v : D b') {b} (bIn : b ∈ Γ ▻ b') :
+      lookup (snoc E v) bIn =
+      match ctx.view bIn with
+      | ctx.isZero   => v
+      | ctx.isSucc i => lookup E i
       end.
+    Proof. destruct (ctx.view bIn); reflexivity. Qed.
 
     Inductive All (Q : forall b, D b -> Type) : forall {Γ}, Env Γ -> Type :=
     | all_nil : All Q nil
@@ -179,7 +255,12 @@ Section WithBinding.
 
     Lemma all_elim {Q : forall [b], D b -> Type} {Γ} {E : Env Γ} (HE : All Q E) :
       forall b (bIn : b ∈ Γ), Q (lookup E bIn).
-    Proof. induction HE; intros x xIn; destruct (ctx.view xIn); cbn; auto. Defined.
+    Proof.
+      (* [apply IHHE] rather than [rewrite ?lookup_at_fold] because this one is
+         [Defined] and its computational content is used; [apply] adds no
+         transport to the term where a [rewrite] would. *)
+      induction HE; intros x xIn; destruct (ctx.view xIn); cbn; auto; apply IHHE.
+    Defined.
 
     Section HomEquality.
 
@@ -293,19 +374,19 @@ Section WithBinding.
 
     Lemma lookup_insert {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
       lookup (insert bIn E v) bIn = v.
-    Proof. induction Γ; destroy bIn; destroy E; cbn; auto. Qed.
+    Proof. induction Γ; destroy bIn; destroy E; cbn; rewrite ?lookup_at_fold; auto. Qed.
 
     Lemma lookup_drop {b Σ Γ} (bIn : b ∈ Γ) (E : Env (Γ ▻▻ Σ)) :
       lookup (drop Σ E) bIn = lookup E (ctx.in_cat_left Σ bIn).
-    Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
+    Proof. induction Σ; destroy bIn; destroy E; cbn; rewrite ?lookup_at_fold; auto. Qed.
 
     Lemma lookup_take {b Σ Γ} (bIn : b ∈ Σ) (E : Env (Γ ▻▻ Σ)) :
       lookup (take Σ E) bIn = lookup E (ctx.in_cat_right bIn).
-    Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
+    Proof. induction Σ; destroy bIn; destroy E; cbn; rewrite ?lookup_at_fold; auto. Qed.
 
     Lemma lookup_remove {x b Γ} (xIn : x ∈ Γ) (bIn : b ∈ Γ - x) (E : Env Γ) :
       lookup (remove x E xIn) bIn = lookup E (ctx.shift_var xIn bIn).
-    Proof. induction Γ; destroy xIn; destroy bIn; destroy E; cbn; auto. Qed.
+    Proof. induction Γ; destroy xIn; destroy bIn; destroy E; cbn; rewrite ?lookup_at_fold; auto. Qed.
 
     Lemma lookup_insert_shift {b Γ} {bIn : b ∈ Γ}
           {E : Env (Γ - b)} {v : D b}
@@ -334,7 +415,7 @@ Section WithBinding.
         lookup (update E bInΓ db) bInΓ = db.
     Proof.
       induction E; intros ? [n e]; try destruct e;
-        destruct n; cbn in *; subst; auto.
+        destruct n; cbn in *; subst; intros; rewrite ?lookup_at_fold'; auto.
     Qed.
 
     Lemma drop_cat {Γ Δ} (δΔ : Env Δ) (δΓ : Env Γ) :
@@ -412,7 +493,7 @@ Section WithBinding.
 
     Lemma lookup_cat_right {Γ1 Γ2 x} (xIn : x ∈ Γ2) (E1 : Env Γ1) (E2 : Env Γ2) :
       lookup (cat E1 E2) (ctx.in_cat_right xIn) = lookup E2 xIn.
-    Proof. induction E2; destroy xIn; cbn; auto. Qed.
+    Proof. induction E2; destroy xIn; cbn; rewrite ?lookup_at_fold; auto. Qed.
 
     Lemma snoc_eq_rect {Γ1 Γ2 b v} (e : Γ1 = Γ2) (E : Env Γ1) :
       snoc (eq_rect Γ1 Env E Γ2 e) v =
@@ -603,7 +684,7 @@ Section WithBinding.
         lookup (map E) bInΓ = f (lookup E bInΓ).
     Proof.
       induction E; intros ? [n e]; try destruct e;
-        destruct n; cbn in *; subst; auto.
+        destruct n; cbn in *; subst; intros; rewrite ?lookup_at_fold'; auto.
     Qed.
 
     Lemma remove_map {b Γ} (E : Env D1 Γ) (bIn : b ∈ Γ) :
@@ -695,7 +776,7 @@ End WithBinding.
 Arguments Env {B} D Γ.
 Arguments nil {B D}.
 Arguments snoc {B%_type D%_function Γ%_ctx} E%_env b%_ctx & db.
-Arguments lookup {B D Γ} E%_env [_] x%_ctx.
+Arguments lookup {B D Γ} !E%_env [_] x%_ctx.   (* [!E]: see the definition *)
 Arguments update {B}%_type {D}%_function {Γ}%_ctx E%_env {b}%_ctx.
 (* Arguments tabulate {_ _} _. *)
 (* Arguments tail {_ _ _} / _. *)

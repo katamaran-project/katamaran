@@ -517,6 +517,170 @@ Module Type SymbolicExecOn
 
     End ExecAux.
 
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY at store level.                         *)
+    (* See SPureSpec.PExt (theories/Symbolic/Monads.v) for what this is and *)
+    (* why it is proved rather than taken from funext.  PLAN-dropk.md §16.  *)
+    (* ================================================================== *)
+    Definition SExt {Γ1 Γ2 A} {w : World} (m : SStoreSpec Γ1 Γ2 A w) : Prop :=
+      forall (P1 P2 : (□(A -> SStore Γ2 -> SHeap -> 𝕊))%modal w),
+        (forall w' (th : Acc w w') (a : A w') (d : SStore Γ2 w') (h : SHeap w'),
+           P1 w' th a d h = P2 w' th a d h) ->
+        forall d h, m P1 d h = m P2 d h.
+
+    Lemma sext_pure {Γ A} {w : World} (a : A w) : SExt (pure (Γ := Γ) a).
+    Proof. intros P1 P2 HP d h. unfold pure, T. apply HP. Qed.
+
+    (* `msg` needs its world ANNOTATED or SExt's implicit w cannot be inferred. *)
+    Lemma sext_error {Γ1 Γ2 A} {w : World}
+        (msg : (SStore Γ1 -> SHeap -> AMessage)%modal w) :
+      SExt (error (Γ1:=Γ1) (Γ2:=Γ2) (A:=A) msg).
+    Proof. intros P1 P2 HP d h. reflexivity. Qed.
+
+    Lemma sext_block {Γ1 Γ2 A} {w : World} :
+      SExt (block (Γ1:=Γ1) (Γ2:=Γ2) (A:=A) (w:=w)).
+    Proof. intros P1 P2 HP d h. reflexivity. Qed.
+
+    Lemma sext_bind {Γ1 Γ2 Γ3 A B} {w : World} (m : SStoreSpec Γ1 Γ2 A w)
+        (f : (□(A -> SStoreSpec Γ2 Γ3 B))%modal w) :
+      SExt m -> (forall w' (th : Acc w w') (a : A w'), SExt (f w' th a)) ->
+      SExt (bind m f).
+    Proof.
+      intros Hm Hf P1 P2 HP d h. unfold bind.
+      apply Hm. intros w' th a d' h'.
+      apply Hf. intros w'' th'' a'' d'' h''. unfold four. apply HP.
+    Qed.
+
+    Lemma sext_angelic_binary {Γ1 Γ2 A} {w : World} (m1 m2 : SStoreSpec Γ1 Γ2 A w) :
+      SExt m1 -> SExt m2 -> SExt (angelic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP d h. unfold angelic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma sext_demonic_binary {Γ1 Γ2 A} {w : World} (m1 m2 : SStoreSpec Γ1 Γ2 A w) :
+      SExt m1 -> SExt m2 -> SExt (demonic_binary m1 m2).
+    Proof.
+      intros H1 H2 P1 P2 HP d h. unfold demonic_binary.
+      f_equal; [apply H1|apply H2]; exact HP.
+    Qed.
+
+    Lemma sext_debug {Γ1 Γ2 A} {w : World} msg (m : SStoreSpec Γ1 Γ2 A w) :
+      SExt m -> SExt (debug msg m).
+    Proof. intros Hm P1 P2 HP d h. unfold debug. f_equal. now apply Hm. Qed.
+
+    Lemma sext_lift_purespec {Γ A} {w : World} (m : SPureSpec A w) :
+      SPureSpec.PExt m -> SExt (lift_purespec (Γ := Γ) m).
+    Proof.
+      intros Hm P1 P2 HP d h. unfold lift_purespec.
+      apply Hm. intros w' th a. apply HP.
+    Qed.
+
+    Lemma sext_lift_heapspec {Γ A} {w : World} (m : SHeapSpec A w) :
+      SHeapSpec.CExt m -> SExt (lift_heapspec (Γ := Γ) m).
+    Proof.
+      intros Hm P1 P2 HP d h. unfold lift_heapspec.
+      apply Hm. intros w' th a h'. apply HP.
+    Qed.
+
+    (* The bridge BACK to heap level: this is how sexec_instruction's
+       `evalStoreSpec (sexec ...)` gets its CExt. *)
+    Lemma cext_evalStoreSpec {Γ1 Γ2 A} {w : World} (m : SStoreSpec Γ1 Γ2 A w)
+        (d : SStore Γ1 w) :
+      SExt m -> SHeapSpec.CExt (evalStoreSpec m d).
+    Proof.
+      intros Hm P1 P2 HP h. unfold evalStoreSpec.
+      apply Hm. intros w' th a d' h'. apply HP.
+    Qed.
+
+    Lemma sext_angelic {Γ} {w : World} (x : option LVar) (σ : Ty) :
+      SExt (angelic (Γ := Γ) x (w := w) σ).
+    Proof. apply sext_lift_purespec, SPureSpec.pext_angelic. Qed.
+
+    Lemma sext_demonic {Γ} {w : World} (x : option LVar) (σ : Ty) :
+      SExt (demonic (Γ := Γ) x (w := w) σ).
+    Proof. apply sext_lift_purespec, SPureSpec.pext_demonic. Qed.
+
+    Lemma sext_angelic_ctx {N : Set} (nf : N -> LVar) {Γ} {w : World} (Δ : NCtx N Ty) :
+      SExt (angelic_ctx nf (Γ := Γ) (w := w) Δ).
+    Proof. apply sext_lift_purespec, SPureSpec.pext_angelic_ctx. Qed.
+
+    Lemma sext_demonic_ctx {N : Set} (nf : N -> LVar) {Γ} {w : World} (Δ : NCtx N Ty) :
+      SExt (demonic_ctx nf (Γ := Γ) (w := w) Δ).
+    Proof. apply sext_lift_purespec, SPureSpec.pext_demonic_ctx. Qed.
+
+    Lemma sext_pushpop {A Γ1 Γ2 x σ} {w : World} (t : STerm σ w)
+        (m : SStoreSpec (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A w) :
+      SExt m -> SExt (pushpop t m).
+    Proof.
+      intros Hm P1 P2 HP d h. unfold pushpop.
+      apply Hm. intros w' th a d' h'. apply HP.
+    Qed.
+
+    Lemma sext_pushspops {A Γ1 Γ2 Δ} {w : World} (dD : SStore Δ w)
+        (m : SStoreSpec (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A w) :
+      SExt m -> SExt (pushspops dD m).
+    Proof.
+      intros Hm P1 P2 HP d h. unfold pushspops.
+      apply Hm. intros w' th a d' h'. apply HP.
+    Qed.
+
+    Lemma sext_get_local {Γ} {w : World} : SExt (get_local (Γ := Γ) (w := w)).
+    Proof. intros P1 P2 HP d h. unfold get_local, T. apply HP. Qed.
+
+    Lemma sext_put_local {Γ1 Γ2} {w : World} (d : SStore Γ2 w) :
+      SExt (put_local (Γ1 := Γ1) d).
+    Proof. intros P1 P2 HP d' h. unfold put_local, T. apply HP. Qed.
+
+    Lemma sext_eval_exp {Γ σ} (e : Exp Γ σ) {w : World} : SExt (eval_exp e (w := w)).
+    Proof. intros P1 P2 HP d h. unfold eval_exp, T. apply HP. Qed.
+
+    Lemma sext_eval_exps {Γ σs} (es : NamedEnv (Exp Γ) σs) {w : World} :
+      SExt (eval_exps es (w := w)).
+    Proof. intros P1 P2 HP d h. unfold eval_exps, T. apply HP. Qed.
+
+    Lemma sext_assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} {w : World} (t : STerm σ w) :
+      SExt (assign x t).
+    Proof. intros P1 P2 HP d h. unfold assign, T. apply HP. Qed.
+
+    Lemma sext_demonic_pattern_match {N : Set} (nf : N -> LVar) {Γ σ}
+        (pat : Pattern (N:=N) σ) {w : World} (t : STerm σ w) :
+      SExt (demonic_pattern_match nf (Γ := Γ) pat t).
+    Proof.
+      intros P1 P2 HP d h. unfold demonic_pattern_match.
+      apply SPureSpec.pext_demonic_pattern_match. intros w' th mr. apply HP.
+    Qed.
+
+    (* The hint DB is what makes exec_aux cheap: `auto 12 with sext` closes
+       SEVENTEEN of its eighteen cases outright.  Only stm_pattern_match needs
+       hand-work, and only because its `'(existT pc vs)` continuation pattern
+       has to be destructed before the IH applies. *)
+    Create HintDb sext.
+    #[export] Hint Resolve sext_pure sext_error sext_block sext_bind
+      sext_angelic_binary sext_demonic_binary sext_debug
+      sext_lift_purespec sext_lift_heapspec
+      sext_angelic sext_demonic sext_angelic_ctx sext_demonic_ctx
+      sext_pushpop sext_pushspops sext_get_local sext_put_local
+      sext_eval_exp sext_eval_exps sext_assign sext_demonic_pattern_match : sext.
+    #[export] Hint Resolve SHeapSpec.cext_read_register
+      SHeapSpec.cext_write_register SHeapSpec.cext_assume_formula : sext.
+    #[export] Hint Resolve SPureSpec.pext_assertSecLeak : sext.
+
+    Lemma sext_exec_aux (ecf : ExecCallForeign) (el : ExecLemma) (ec : ExecCall)
+        (Hecf : forall Δ τ f w args, SHeapSpec.CExt (ecf Δ τ f w args))
+        (Hel  : forall Δ l w args, SHeapSpec.CExt (el Δ l w args))
+        (Hec  : forall Δ τ f w args, SHeapSpec.CExt (ec Δ τ f w args))
+        {Γ τ} (s : Stm Γ τ) :
+      forall {w : World}, SExt (exec_aux ecf el ec s (w := w)).
+    Proof.
+      induction s; intros w; cbn.
+      all: try (now auto 12 with sext).
+      apply sext_bind; [apply IHs|]. intros w1 th1 v.
+      apply sext_bind; [apply sext_demonic_pattern_match|]. intros w2 th2 [pc vs].
+      apply sext_pushspops. apply H.
+    Qed.
+
   End SStoreSpec.
 
   Section WithExec.
@@ -623,6 +787,70 @@ Module Type SymbolicExecOn
     Definition sexec (inline_fuel : nat) : Exec :=
       @SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call inline_fuel).
     #[global] Arguments sexec _ [_ _] s _ _ _ : simpl never.
+
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY for the CORE symbolic executor.         *)
+    (* This is what makes the dead-lvar drop's premise propagate through an *)
+    (* executor step without functional extensionality.  PLAN-dropk.md §16. *)
+    (* ================================================================== *)
+    Lemma cext_exec_call_error_no_fuel Δ τ f (w : World) (args : SStore Δ w) :
+      SHeapSpec.CExt (@exec_call_error_no_fuel Δ τ f w args).
+    Proof. intros P1 P2 HP h. reflexivity. Qed.
+
+    Lemma cext_sexec_call_foreign Δ τ f (w : World) (args : SStore Δ w) :
+      SHeapSpec.CExt (@sexec_call_foreign Δ τ f w args).
+    Proof. unfold sexec_call_foreign. apply SHeapSpec.cext_call_contract. Qed.
+
+    Lemma cext_debug_lemma Δ (l : 𝑳 Δ) (w : World) (args : SStore Δ w) :
+      SHeapSpec.CExt (@debug_lemma Δ l w args).
+    Proof.
+      unfold debug_lemma. destruct (config_debug_lemma cfg l).
+      - apply SHeapSpec.cext_debug, SHeapSpec.cext_pure.
+      - apply SHeapSpec.cext_pure.
+    Qed.
+
+    Lemma cext_sexec_lemma Δ (l : 𝑳 Δ) (w : World) (args : SStore Δ w) :
+      SHeapSpec.CExt (@sexec_lemma Δ l w args).
+    Proof.
+      unfold sexec_lemma.
+      apply SHeapSpec.cext_bind; [apply cext_debug_lemma|].
+      intros w1 th1 _. apply SHeapSpec.cext_call_lemma.
+    Qed.
+
+    Lemma cext_debug_call Δ τ (f : 𝑭 Δ τ) (w : World) (args : SStore Δ w) :
+      SHeapSpec.CExt (@debug_call Δ τ f w args).
+    Proof.
+      unfold debug_call. destruct (config_debug_function cfg f).
+      - apply SHeapSpec.cext_debug, SHeapSpec.cext_pure.
+      - apply SHeapSpec.cext_pure.
+    Qed.
+
+    Lemma cext_sexec_call (fuel : nat) :
+      forall Δ τ (f : 𝑭 Δ τ) (w : World) (args : SStore Δ w),
+        SHeapSpec.CExt (@sexec_call fuel Δ τ f w args).
+    Proof.
+      induction fuel as [|n IH]; intros Δ τ f w args; cbn.
+      - apply SHeapSpec.cext_bind; [apply cext_debug_call|]. intros w1 th1 _.
+        destruct (CEnv f) as [c|];
+          [apply SHeapSpec.cext_call_contract | apply cext_exec_call_error_no_fuel].
+      - apply SHeapSpec.cext_bind; [apply cext_debug_call|]. intros w1 th1 _.
+        destruct (CEnv f) as [c|]; [apply SHeapSpec.cext_call_contract|].
+        apply SStoreSpec.cext_evalStoreSpec.
+        apply SStoreSpec.sext_exec_aux;
+          [apply cext_sexec_call_foreign | apply cext_sexec_lemma | apply IH].
+    Qed.
+
+    (* `sexec` has an Arguments line that makes its world POSITIONAL, so write
+       `@sexec fuel Γ τ s w` -- `sexec fuel s (w := w)` is rejected with
+       "Wrong argument name w (possible names: Γ τ)". *)
+    Lemma sext_sexec (fuel : nat) {Γ τ} (s : Stm Γ τ) (w : World) :
+      SStoreSpec.SExt (@sexec fuel Γ τ s w).
+    Proof.
+      unfold sexec. apply SStoreSpec.sext_exec_aux;
+        [apply cext_sexec_call_foreign | apply cext_sexec_lemma
+        | apply cext_sexec_call].
+    Qed.
 
     Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
       fun w => SHeapSpec.run (exec_contract (sexec inline_fuel) c s (w := w)).

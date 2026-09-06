@@ -61,6 +61,43 @@ every step, and already has refinement lemmas. What this plan adds is only a new
 
 ---
 
+> **UPDATE 2026-08-27 — this gate has now been PARTLY RUN, and §3's design is
+> REFUTED. Read `diagnostics/havoc-abstraction-payoff.md` §9 and
+> `plans/PLAN-lvar-drop.md` before using anything below.**
+>
+> 1. **The forward count was measured** (heap + path condition only, via
+>    `AnnotDebugBreak` dumps rather than the instrumented executor this section
+>    specifies): with a 3-register havoc **1 of 3** per trip is droppable, with a
+>    7-register havoc **7 of 7**. So the gate reads STOP for the narrow
+>    configuration and GO for the wide one — the answer is configuration-
+>    dependent, which this section does not anticipate.
+> 2. **`fv(wco w)` is NOT the spoiler this section predicts.** Zero `hv`
+>    occurrences in the path condition across ten payloads. What pins them is the
+>    un-havoced registers, which carry the previous trip's variables in their
+>    terms.
+> 3. **`live(w)` below is MISSING A ROOT: the accumulated translation.** If the
+>    solver ever eliminated a contract variable in favour of a term mentioning a
+>    per-trip variable, the outer continuation will mention it once persisted,
+>    even though heap and path condition look clean. `occurs_check` has a `Sub`
+>    instance (`theories/Symbolic/OccursCheck.v`), and the translations are
+>    already threaded at the §3 call site, so adding the root is mechanical.
+> 4. **§3's design (Option A) is REFUTED.** It substitutes an arbitrary
+>    inhabitant from `ty.inhabit` via `acc_subst_right`, and asserts "the design
+>    needs no new core machinery". The per-action refinement lemma for that step
+>    is not provable — `zz_dummy_witness` sticks, because with a constant witness
+>    the accessibility's fibre is empty at the generic valuation. What is missing
+>    is not a different witness but a SUPPORT LEMMA over the executor; see
+>    `PLAN-lvar-drop.md`.
+> 5. **§4's Option B is not constructible as written.** `acc_weaken {w w'}
+>    (wk : WeakensTo (wctx w') (wctx w)) : w ⊒ w'` needs `Sub big small`, whereas
+>    `WeakensTo` runs small→big and `interpSU` yields `Sub small big`. Inverting
+>    the thinning means naming values for the dropped variables — Option A again.
+> 6. **§1's correction is half right.** Shrinking a world mid-execution is indeed
+>    routine — but only when the substitution is JUSTIFIED by an equation in the
+>    path condition, which is why the solver's own shrinking works. A
+>    dead-variable shrink with an invented witness has an empty fibre. Same
+>    machinery, different reason, different outcome.
+
 ## §2 Phase 0 — measure the FORWARD-visible dead count (do this first)
 
 **This is the gate. Do not write the combinator before this number exists.**

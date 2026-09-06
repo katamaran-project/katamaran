@@ -492,16 +492,58 @@ Section CFGVerificationDerived.
     (*    Closed under the global context.  So it needs NO LEnv entry and   *)
     (*    no per-use soundness proof; the price is completeness, and it     *)
     (*    fails loudly at the next consume rather than silently.            *)
-    (*  - DROP AN UNREFERENCED LOGICAL VARIABLE.  Also just an action,      *)
-    (*    even though it moves to a SMALLER context: acc_subst_right gives *)
-    (*    `w ⊒ wsubst w x t` whose wctx is `w - x∷σ`, because ⊒ orders      *)
-    (*    worlds by INFORMATION, not by size.  Motivation: demonicv_prune   *)
-    (*    (Propositions.v:1175) only collapses on `block`, so a binder      *)
-    (*    nothing references any more SURVIVES — an abstraction lemma       *)
-    (*    shrinks terms but leaves the old binders in Σ, and variable count *)
-    (*    is quadratic in lookup cost (diagnostics/lvar-lookup-cost-       *)
-    (*    drivers.md).                                                      *)
-    (*    Unimplemented and unproven; sketch only.                          *)
+    (*  - DROP A DEAD LOGICAL VARIABLE.  *** TRIED IN FULL AND CLOSED        *)
+    (*    NEGATIVE 2026-08-25.  DO NOT REOPEN WITHOUT READING                *)
+    (*    plans/PLAN-lvar-drop.md, which records FIVE verdicts in one day    *)
+    (*    and the proved dichotomy that ends them. ***                       *)
+    (*                                                                       *)
+    (*    The idea is semantically FINE: a variable occurring nowhere in the *)
+    (*    present state can never reappear, because every future term is     *)
+    (*    built from present ones, and occurs_check                          *)
+    (*    (Symbolic/OccursCheck.v:56) decides that on data.  What defeats it *)
+    (*    is the MODALITY.  `assuming` (Worlds.v:755) quantifies over the    *)
+    (*    FIBRE of an accessibility, and the fibre size IS the freedom the   *)
+    (*    accessibility grants.  Shrinking the world needs a substitution    *)
+    (*    (acc_subst_right is the only way in), which needs a witness, and   *)
+    (*    there are only two kinds:                                          *)
+    (*      * a DUMMY value: fibre EMPTY at the generic i, so the hypothesis *)
+    (*        is vacuous and the concrete goal is unreachable.               *)
+    (*      * the FRESHLY MINTED variable: fibre non-empty, so the crux is   *)
+    (*        provable (zz_fresh_witness, Qed) -- but SINGLETON.  zz_pins    *)
+    (*        (Qed) shows every fibre element assigns the fresh variable the *)
+    (*        value i(x), so the drop consumes exactly the freedom the mint  *)
+    (*        created.  It is a RENAME.                                      *)
+    (*    A havoc's shallow mirror is a demonic forall w, r |-> w, and       *)
+    (*    refining that needs the symbolic side to cover every w.  A pinned  *)
+    (*    fibre cannot.  Compare assuming_acc_snoc_right (UnifLogic.v:1248), *)
+    (*    where a bare mint gives a genuine forall over ALL values.          *)
+    (*                                                                       *)
+    (*    SO: within the existing Acc machinery you cannot both shrink Sigma *)
+    (*    and grant freedom.  Any fix is a NEW ACCESSIBILITY in Worlds.v     *)
+    (*    whose `assuming` is forgetting-based rather than fibre-based --    *)
+    (*    a framework change, not a client-side trick, and not something to  *)
+    (*    attempt from this file.                                            *)
+    (*                                                                       *)
+    (*    THE HEURISTIC WORTH KEEPING, for any future question of this kind: *)
+    (*    compute the FIBRE of the accessibility first -- empty, singleton   *)
+    (*    or full.  All five verdicts on this question would have been       *)
+    (*    settled immediately by asking that, and four rounds of reasoning   *)
+    (*    settled none of them.                                              *)
+    (*                                                                       *)
+    (*    Motivation, still valid, and the measured alternative: an          *)
+    (*    abstraction lemma shrinks terms but leaves its old binders in      *)
+    (*    Sigma (demonicv_prune, Propositions.v:1175, collapses only on      *)
+    (*    `block`), and variable count is quadratic in lookup cost           *)
+    (*    (diagnostics/lvar-lookup-cost-drivers.md).  What DOES pay, and is  *)
+    (*    landed: havoc fewer registers -- 2.66x at n=16, and it reaches     *)
+    (*    br_divrem's real 31 trips (diagnostics/havoc-abstraction-          *)
+    (*    payoff.md 8).                                                      *)
+    (*                                                                       *)
+    (*    Keep the contrast with DROP CHUNKS above: discarding a RESOURCE is *)
+    (*    sound for any chunk by affineness and fails loudly at the next     *)
+    (*    consume, whereas discarding a BINDER is sound only under the       *)
+    (*    occurs_check and, without it, silently changes which statement was *)
+    (*    proved.  The check is not bookkeeping; it is the proof.            *)
     (* ================================================================== *)
     Definition sexec_ghost (a : Annot) {w : World} : SHeapSpec Unit w :=
       match a with
@@ -512,29 +554,35 @@ Section CFGVerificationDerived.
                         ; debug_asn_heap          := h0 |})
             (pure tt)
       | AnnotLemmaInvocation l es =>
-          (* A STUB, deliberately — Phase 4's work, not this migration's.  The
-             constructor exists so the world-threading below is checked by the
-             compiler rather than asserted in a comment, but giving it real
-             `call_lemma` semantics was tried (2026-08-21) and REVERTED: the
-             soundness chain then has to absorb the lemma's heap effect in
-             sound_exec_cfg_addr_myWP2 (Adequacy.v), which is genuine
-             lemma-soundness content and exactly what PLAN-annotinstr.md means
-             by "Phase 4 is a separate effort, do NOT bundle".
-             `error` here makes the VC False, so a program that writes an
-             AnnotLemmaInvocation cannot be verified — loudly, not silently —
-             and no soundness debt is incurred.  THE STUB MUST BE ON BOTH
-             SIDES: cexec_ghost (VerifierRel.v) returns `pure tt` to match, and
-             the refinement holds because a symbolic `error` refines anything.
-             Making only the concrete side real is the mistake that produced
-             the Adequacy.v blocker.
-             For Phase 4 the real body is
-               `call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)`
-             — note LEnv must be QUALIFIED (MakeExecutor does not re-export its
-             Specification argument, Spec.v:720/723; a bare `LEnv` fails under
-             `make` while rocq_compile_file's dune fallback ACCEPTS it). *)
-          error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
-                                     debug_string_message :=
-                                       "AnnotLemmaInvocation: not yet supported" |})
+          (* PHASE 4 SPIKE (branch issue/annot-havoc-spike): this case is now
+             REAL on the symbolic side only.  It was an `error` stub whose
+             comment recorded the exact body to write, which is what is
+             written here — LEnv QUALIFIED, because MakeExecutor does not
+             re-export its Specification argument (Spec.v:720/723) and a bare
+             `LEnv` fails under `make` while rocq_compile_file's dune fallback
+             accepts it.  `es` lives at the empty program context, so the
+             store passed to seval_exps is `[env]`.
+
+             *** THE TWO SIDES ARE DELIBERATELY OUT OF SYNC ON THIS BRANCH. ***
+             VerifierRel.v's cexec_ghost still returns `pure tt` and
+             Adequacy.v still rewrites with cexec_ghosts_pure, so the HEAVY
+             branch (SpecIris → … → Results) does NOT build here.  That is
+             intentional and bounded: the spike measures whether a havoc at a
+             loop head resets br_divrem's 10.5x/trip term growth, and a dump
+             needs no VC proof, no refinement and no adequacy — only the light
+             branch (Spec → Verifier → Tables → Contracts → GenContract →
+             Example files).  Making the concrete side real without the soundness
+             work is the mistake that produced the 2026-08-21 Adequacy blocker
+             (a symbolic `error` refines anything; `pure tt` does not).  If
+             this spike pays off, Phase 4 proper resyncs both sides:
+             cexec_ghost calls CHeapSpec.call_lemma, rexec_ghost uses the
+             ready-made refine_compat_call_lemma (Refinement/Monads.v:1875),
+             and cexec_ghosts_pure is DELETED in favour of an inductive
+             sound_cexec_ghosts built from call_lemma_sound
+             (MicroSail/ShallowSoundness.v:91) + lemSemCFGVerif
+             (SpecIris.v:364), following iris_rule_stm_lemmak's three-line
+             discharge (BinaryInstance.v:196). *)
+          call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)
       end.
 
     (* Recurses in list order, so the first annotation runs first.  `nil` is
@@ -635,10 +683,310 @@ Section CFGVerificationDerived.
     (* epilogue establishes pc = nextpc = an after each step; they are      *)
     (* separate parameters only so the FIRST step, which genuinely does not *)
     (* know nextpc, can differ. *)
-    Fixpoint sexec_cfg_addr (fuel : nat) :
-      ⊢ SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+    (* ================================================================== *)
+    (* PHASE 3 (PLAN-dropk.md §6): the dead-logical-variable liveness       *)
+    (* computation and the drop loop.                                      *)
+    (*                                                                     *)
+    (* NOT YET WIRED INTO sexec_cfg_addr — that is Phase 4, and it changes  *)
+    (* the VC, which breaks rexec_cfg_addr until Phase 5 re-pairs it.       *)
+    (* Everything here is dead code today and the gate is green with it.    *)
+    (*                                                                     *)
+    (* The plan warned that this needs a DEPENDENT FOLD (each step's type   *)
+    (* mentioning the previous step's smaller context).  It does not, and   *)
+    (* avoiding it is the whole shape below: rather than computing a SET of *)
+    (* dead variables and removing them together, `drop_dead` finds ONE,    *)
+    (* drops it as a single step, and RE-SCANS at the new world.  Recursion *)
+    (* is on fuel; nothing is dependently folded.                           *)
+    (* ================================================================== *)
+
+    (* Enumerate a context with its In-proofs.  Also not a dependent fold:   *)
+    (* every proof in the result lives at the one fixed Γ.                   *)
+    Fixpoint all_ins (Γ : LCtx) : list (sigT (fun b => (b ∈ Γ)%katamaran)) :=
+      match Γ with
+      | ctx.nil       => List.nil
+      | ctx.snoc Δ b0 =>
+          cons (existT b0 ctx.in_zero)
+            (List.map (fun p => existT (projT1 p) (ctx.in_succ (projT2 p))) (all_ins Δ))
+      end.
+
+    Definition oc_ok {AT} `{OccursCheck AT} {Σ} {b}
+        (bIn : (b ∈ Σ)%katamaran) (a : AT Σ) : bool :=
+      match occurs_check bIn a with Some _ => true | None => false end.
+
+    (* SHORT-CIRCUITING forallb, and the reason every `&&` in this block is
+       spelled as a nested `if`.  `List.forallb` is `f a && forallb f l'`, and
+       `&&` is `andb` -- a FUNCTION -- so under the call-by-value `vm_compute`
+       BOTH arguments are evaluated and the walk never stops early.  Writing
+       the match by hand makes the VM take exactly one branch.  Measured on a
+       closed probe: `andb cheap_false slow` 1.416 s vs
+       `if cheap_false then slow else false` 0.000 s.  This matters here and
+       almost nowhere else, because `var_dead` runs once per LOGICAL VARIABLE
+       per drop attempt per step and its roots include the O(K) instruction
+       table -- so a non-short-circuiting conjunction re-walks the whole
+       program for every candidate even after the variable has been found. *)
+    Fixpoint forallb_sc {A} (f : A -> bool) (l : list A) : bool :=
+      match l with
+      | List.nil       => true
+      | List.cons a l' => if f a then forallb_sc f l' else false
+      end.
+
+    Lemma forallb_sc_spec {A} (f : A -> bool) (l : list A) :
+      forallb_sc f l = List.forallb f l.
+    Proof.
+      induction l as [|a l' IH]; cbn; [reflexivity|].
+      destruct (f a); cbn; [exact IH|reflexivity].
+    Qed.
+
+    (* SInstrTableW / SExitTable are bespoke tuple-lists with no OccursCheck
+       instance, so the check is spelled out over their TERM columns rather
+       than adding instances to theories/.  The AnnotInstr payload is
+       world-independent and cannot mention a logical variable. *)
+    Definition itableW_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (tbl : SInstrTableW w) : bool :=
+      forallb_sc (fun e => match e with (t, x, _) =>
+                      oc_ok (AT := STerm ty_xlenbits) bIn t
+                      && oc_ok (AT := STerm ty_word) bIn x end) tbl.
+
+    Lemma itableW_free_forallb {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (tbl : SInstrTableW w) :
+      itableW_free bIn tbl =
+      List.forallb (fun e => match e with (t, x, _) =>
+                      oc_ok (AT := STerm ty_xlenbits) bIn t
+                      && oc_ok (AT := STerm ty_word) bIn x end) tbl.
+    Proof. apply forallb_sc_spec. Qed.
+
+    Definition etable_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (exits : SExitTable w) : bool :=
+      forallb_sc (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
+
+    Lemma etable_free_forallb {w : World} {b} (bIn : (b ∈ w)%katamaran)
+        (exits : SExitTable w) :
+      etable_free bIn exits =
+      List.forallb (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
+    Proof. apply forallb_sc_spec. Qed.
+
+    (* ALL the roots.  `trans` is the one that is easy to forget and the one
+       whose omission would be UNSOUND rather than merely incomplete — see
+       sexec_cfg_addr's comment below and PLAN-dropk.md §4bis. *)
+    Definition var_dead {Σ0 : LCtx} {w : World} {b}
+        (bIn : (b ∈ w)%katamaran)
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        (h : SHeap (wctx w)) : bool :=
+      (* ORDER IS DELIBERATE and is half of the fix: cheapest and
+         most-likely-to-hit roots first, the O(K) instruction table LAST.  The
+         variables this is asked about are havoced registers, whose occurrence
+         is in the heap -- so for them the table is now never walked at all.
+         `wd` is REDUNDANT-but-true: it is one of the table's word column, so
+         itableW_free below already implies it.  It is listed anyway because the
+         drop's continuation captures `wd` and so the Factors CARRIER must cover
+         it -- and the carrier is read off this conjunction (PLAN-dropk.md §15).
+         See forallb_sc above for why these are nested `if`s and not `&&`. *)
+      if oc_ok (AT := STerm ty_xlenbits) bIn apc then (
+      if oc_ok (AT := STerm ty_xlenbits) bIn anp then (
+      if oc_ok (AT := STerm ty_word) bIn wd then (
+      if oc_ok (AT := Sub Σ0) bIn trans then (
+      if oc_ok (AT := SHeap) bIn h then (
+      if oc_ok (AT := PathCondition) bIn (wco w) then (
+      if etable_free bIn exits then
+        itableW_free bIn tbl
+      else false)
+      else false)
+      else false)
+      else false)
+      else false)
+      else false)
+      else false.
+
+    (* Bridge back to the original conjunction, IN THE ORIGINAL ORDER, so that
+       VerifierRel.v's wb_bundle can keep peeling it with andb_true_iff. *)
+    Lemma var_dead_andb {Σ0 : LCtx} {w : World} {b}
+        (bIn : (b ∈ w)%katamaran)
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        (h : SHeap (wctx w)) :
+      var_dead bIn trans tbl exits apc anp wd h =
+        (oc_ok (AT := PathCondition) bIn (wco w)
+         && oc_ok (AT := SHeap) bIn h
+         && oc_ok (AT := Sub Σ0) bIn trans
+         && oc_ok (AT := STerm ty_xlenbits) bIn apc
+         && oc_ok (AT := STerm ty_xlenbits) bIn anp
+         && itableW_free bIn tbl
+         && etable_free bIn exits
+         && oc_ok (AT := STerm ty_word) bIn wd).
+    Proof.
+      unfold var_dead.
+      destruct (oc_ok (AT := STerm ty_xlenbits) bIn apc),
+               (oc_ok (AT := STerm ty_xlenbits) bIn anp),
+               (oc_ok (AT := STerm ty_word) bIn wd),
+               (oc_ok (AT := Sub Σ0) bIn trans),
+               (oc_ok (AT := SHeap) bIn h),
+               (oc_ok (AT := PathCondition) bIn (wco w)),
+               (etable_free bIn exits),
+               (itableW_free bIn tbl); reflexivity.
+    Qed.
+
+    (* The witness term is needed for the ACCESSIBILITY, not for the tree:
+       calling the continuation at the smaller world needs a Sub with an entry
+       for every variable, x included.  `ty.inhabit`'s None on
+       enum/tuple/union/record therefore still under-approximates — but every
+       variable we actually want to drop is a havoced register, i.e. bvec, and
+       `inhabit (bvec n) = Some bv.zero`. *)
+    Definition drop_candidate (w : World) : Type :=
+      sigT (fun b : LVar∷Ty =>
+        sigT (fun bIn : (b ∈ w)%katamaran =>
+          Term (@ctx.remove _ (wctx w) b bIn) (type b))).
+
+    Definition find_dead {Σ0 : LCtx} {w : World}
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        (h : SHeap (wctx w))
+        : option (drop_candidate w) :=
+      List.fold_right
+        (fun p acc =>
+           match acc with
+           | Some _ => acc
+           | None =>
+               if var_dead (projT2 p) trans tbl exits apc anp wd h
+               then match ty.inhabit (type (projT1 p)) with
+                    | Some v => Some (existT (projT1 p)
+                                        (existT (projT2 p)
+                                           (term_val (type (projT1 p)) v)))
+                    | None   => None
+                    end
+               else None
+           end)
+        None (all_ins (wctx w)).
+
+    (* One drop per iteration, re-scanning at the new world.  `fuel` bounds the
+       number of drops per call; |wctx w| is the natural bound.
+
+       Note `@acc_subst_right` and `@SymProp.dropk` are applied with `@`: both
+       have trailing implicits that make their `x` argument maximally inserted,
+       so the un-`@`-ed form silently shifts `name b` onto the witness slot. *)
+    Fixpoint drop_dead (fuel : nat) {Σ0 : LCtx} {w : World}
+        (trans : Sub Σ0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
+        {struct fuel} : SHeapSpec Unit w :=
+      match fuel with
+      | O   => SHeapSpec.pure tt
+      | S n =>
+          fun POST h =>
+            match find_dead trans tbl exits apc anp wd h with
+            | None   => POST w acc_refl tt h
+            | Some c =>
+                let b   := projT1 c in
+                let bIn := projT1 (projT2 c) in
+                let t0  := projT2 (projT2 c) in
+                match occurs_check bIn h with
+                | None    => POST w acc_refl tt h   (* unreachable: find_dead checked it *)
+                | Some h' =>
+                    (* Convoy match: the drop's forward accessibility needs the
+                       occurs-check EQUATION, not just its success, so that it
+                       can target `wdrop w x` — the same world `psafe (dropk …)`
+                       is defined at.  Using acc_subst_right here would land at
+                       `wsubst w x t0`, only propositionally equal, and force a
+                       dependent rewrite of a World inside psafe. *)
+                    (match occurs_check bIn (wco w) as o
+                           return occurs_check bIn (wco w) = o -> 𝕊 (wctx w) with
+                     | Some pc' =>
+                         fun Hpc =>
+                           let om := @acc_drop w (name b) (type b) bIn pc' Hpc t0 in
+                           @SymProp.dropk (wctx w) (name b) (type b) bIn
+                             (drop_dead n
+                                (persist (A := Sub Σ0) trans om)
+                                (persist_itableW om tbl) (persist_etable om exits)
+                                (persist__term apc om) (persist__term anp om)
+                                (persist__term wd om)
+                                (four POST om) h')
+                     | None => fun _ => POST w acc_refl tt h
+                     end) eq_refl
+                end
+            end
+      end.
+
+    (* The A/B knob for the drop, and DELIBERATELY NOT A BOOLEAN FLAG.
+       PLAN-chunk-gc.md §2 rejected a flag in this exact code for reasons that
+       apply verbatim here — chiefly that flag SKEW is an established failure
+       mode (a port left Adequacy.v at `false` while Contracts.v emitted `true`,
+       so the fast VC could not reach the adequacy chain at all).
+
+       Fuel is a better knob than a bool on every axis: `drop_dead 0` IS
+       `SHeapSpec.pure tt`, which binds at acc_refl and collapses definitionally
+       (the ghost_binds_nil precedent), so 0 gives a BYTE-IDENTICAL tree; there
+       is ONE code path rather than two, so the refinement is proved once
+       instead of per-branch; and being a single Definition with no threading,
+       it cannot skew. A/B is two builds, which is what §2 asks for anyway.
+
+       Kept at 0 until the refinement (Phase 5) is re-paired. rexec_cfg_addr
+       must handle `drop_dead` for an ARBITRARY fuel, never by reducing this
+       constant, or flipping it later would reopen the proof.
+
+       PHASE 7 (2026-08-31): the refinement IS re-paired and the whole chain is
+       Qed + gate-green, so the knob is live.  MEASURED at 8 and left at 0:
+       the drop FIRES (1/7/4 dropk nodes on Countdown/Cmovznz4/KeyScheduleLoop)
+       but peak |Sigma| moves by at most ONE, because the variables it finds
+       dead are not on the peak path and no live example calls havoc_regs --
+       the +7-dead-lvars-per-trip population it was built for.  Turning it on
+       rewrites every VC and needs a full gate run, for one binder on one
+       example.  Full write-up, including why SymProp size is the WRONG
+       instrument here: diagnostics/dropk-firing-payoff.md. *)
+    Definition drop_fuel : nat := 0.
+
+    (* `trans` is THE ACCUMULATED TRANSLATION: the contract context's variables
+       as terms over the CURRENT world, i.e. `persist δ1 …` from
+       sexec_triple_addr below.  It is threaded and persisted exactly like
+       tbl/exits and is otherwise UNUSED — it exists so that the dead-variable
+       drop (PLAN-dropk.md) can occurs-check it.
+
+       Why it has to be here rather than inferred later: the outer continuation
+       of the executor is `consume ens δ3` with `δ3 = persist δ1 (θ2 ∘ θ3)`, so
+       δ1 is the ONLY thing that continuation's ω-dependence factors through
+       (PLAN-dropk.md §4bis).  The executor cannot see that continuation, so a
+       variable live only in δ1 would look dead against heap/pc/tbl/exits and be
+       dropped unsoundly.  Occurs-checking `tbl` is NOT a substitute: a component
+       of the translation unused by the table is invisible in
+       `subst_itable ζ tbl` yet still present in δ3.  And it must be δ1, not ζ
+       alone — δ1 = snoc ζ a2 with a2 the INITIAL pc, which the live `apc` no
+       longer covers once the loop advances. *)
+    (* THE POST-DROP STEP BODY, HOISTED OUT OF sexec_cfg_addr.
+       It is a plain let-hoist — the same chain, in the same order, with the
+       persist layers split at the drop instead of accumulated across it — and it
+       exists for ONE reason, in the refinement proof rather than the executor:
+
+       `rdrop_dead` needs `Factors (dbundle …) sΦ`, i.e. that drop_dead's
+       continuation depends on the drop's accessibility ONLY through the persisted
+       bundle.  Written inline, that continuation is `fun w1 θd _ => ⟨the chain⟩`
+       and the witness `g` demanded by Factors would have to be a hand-copy of the
+       chain living in VerifierRel.v, kept in sync by hand forever.  Hoisted, the
+       continuation IS `step_after_drop rec ai (persist tr0 θd) … (four Φ' θd)`,
+       so `g` is this very definition and there is nothing to keep in sync.
+
+       Every argument at the call site below is literally `persist <the same thing
+       drop_dead was given> θd`.  That is not stylistic: it is what makes Factors'
+       witness definitional rather than a proof obligation. *)
+    Definition step_after_drop {Σ0 : LCtx}
+        (rec : forall w : World, Sub Σ0 w -> SInstrTableW w -> SExitTable w ->
+                 Term (wctx w) ty_xlenbits -> Term (wctx w) ty_xlenbits ->
+                 SHeapSpec (STerm ty_xlenbits) w)
+        (ai : AnnotInstr) :
+      ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+        STerm ty_xlenbits -> STerm ty_word -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w trans tbl exits apc anp wd =>
+        ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
+        ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
+                         (persist__term apc θ1) (persist__term anp θ1)
+                         (persist__term wd  θ1) ;;
+        ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
+        rec _ (persist (A := Sub Σ0) trans (θ1 ∘ θ2 ∘ θ3))
+              (persist_itableW (θ1 ∘ θ2 ∘ θ3) tbl)
+              (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
+              (persist__term apc' θ3) (persist__term apc' θ3).
+
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) :
+      ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w tbl exits apc anp =>
+      fun w trans tbl exits apc anp =>
         let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
           error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
                                      debug_string_message := s |}) in
@@ -659,18 +1007,152 @@ Section CFGVerificationDerived.
                       program and ghost_binds_nil shows that contributes
                       nothing to the term. *)
                    ⟨ θ0 ⟩ _    <- chunk_gc ;;
-                   ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
-                   ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
-                                    (persist__term apc (θ0 ∘ θ1))
-                                    (persist__term anp (θ0 ∘ θ1))
-                                    (persist__term wd  (θ0 ∘ θ1)) ;;
-                   ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
-                   sexec_cfg_addr n'
-                     (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl)
-                     (persist_etable  (θ0 ∘ θ1 ∘ θ2 ∘ θ3) exits)
-                     (persist__term apc' θ3) (persist__term apc' θ3)
+                   (* Drop dead logical variables AFTER chunk_gc, so the check
+                      sees the post-GC heap — the leaked encodes_instr chunks
+                      the GC removes are exactly what used to keep per-trip
+                      variables alive in the heap root.  Placed inside this
+                      branch rather than before the `match fuel`, so `emsg`
+                      stays at world w and only the persist chains lengthen. *)
+                   (* The bundle is named ONCE so that drop_dead's arguments and
+                      step_after_drop's are visibly the same objects, the latter
+                      persisted by θd.  Factors' witness reads straight off that. *)
+                   let tr0 := persist (A := Sub Σ0) trans θ0 in
+                   let tb0 := persist_itableW θ0 tbl in
+                   let ex0 := persist_etable  θ0 exits in
+                   let pc0 := persist__term apc θ0 in
+                   let np0 := persist__term anp θ0 in
+                   let wd0 := persist__term wd  θ0 in
+                   ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
+                   step_after_drop (@sexec_cfg_addr Σ0 n') ai
+                     (persist (A := Sub Σ0) tr0 θd)
+                     (persist_itableW θd tb0)
+                     (persist_etable  θd ex0)
+                     (persist__term pc0 θd)
+                     (persist__term np0 θd)
+                     (persist__term wd0 θd)
                end)
         end.
+
+
+    (* ================================================================== *)
+    (* CONTINUATION EXTENSIONALITY for the CFGVer executor.                *)
+    (*                                                                    *)
+    (* This closes the chain that PLAN-dropk.md §16 opened:  PExt/CExt in   *)
+    (* theories/Symbolic/Monads.v, SExt + exec_aux + sexec in               *)
+    (* theories/MicroSail/SymbolicExecutor.v, and these.  Together they say  *)
+    (* the symbolic executor produces the SAME TREE from pointwise-equal     *)
+    (* continuations -- which is what lets the drop's premise propagate      *)
+    (* through a step WITHOUT functional extensionality.                     *)
+    (* ================================================================== *)
+    Lemma cext_chunk_gc {w : World} : CExt (chunk_gc (w := w)).
+    Proof. intros P1 P2 HP h. unfold chunk_gc. apply HP. Qed.
+
+    Lemma cext_sexec_ghost (a : Annot) {w : World} : CExt (sexec_ghost a (w := w)).
+    Proof.
+      destruct a; cbn.
+      - apply cext_debug, cext_pure.
+      - apply cext_call_lemma.
+    Qed.
+
+    Lemma cext_sexec_ghosts (gs : list Annot) {w : World} :
+      CExt (sexec_ghosts gs (w := w)).
+    Proof.
+      revert w. induction gs as [|a gs IH]; intros w; cbn.
+      - apply cext_pure.
+      - apply cext_bind; [apply cext_sexec_ghost|]. intros w1 th1 _. apply IH.
+    Qed.
+
+    (* cext_evalStoreSpec + sext_sexec is the bridge down into the CORE
+       executor; without those two this lemma has no way through `sexec`. *)
+    Lemma cext_sexec_instruction (i : AST) {w : World}
+        (a np : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word) :
+      CExt (sexec_instruction i a np wd).
+    Proof.
+      unfold sexec_instruction.
+      apply cext_bind; [apply cext_produce|]. intros w1 th1 _.
+      apply cext_bind; [apply SStoreSpec.cext_evalStoreSpec, sext_sexec|].
+      intros w2 th2 _.
+      apply cext_bind; [apply cext_angelic|]. intros w3 th3 na.
+      apply cext_bind; [apply cext_consume|]. intros w4 th4 _.
+      apply cext_pure.
+    Qed.
+
+    (* TWO-SIDED convoy elimination: drop_dead's inner match appears on BOTH
+       sides of the equation, so the one-sided form cannot be used.  As there,
+       `S` being a variable is what makes `destruct S` legal. *)
+    Lemma option_convoy_eq {X T : Type} {S : option X}
+        (f1 f2 : forall v : X, S = Some v -> T) (g1 g2 : S = None -> T)
+        (Hf : forall v (e : S = Some v), f1 v e = f2 v e)
+        (Hg : forall e : S = None, g1 e = g2 e) :
+      (match S as o return S = o -> T with Some v => f1 v | None => g1 end) eq_refl
+      = (match S as o return S = o -> T with Some v => f2 v | None => g2 end) eq_refl.
+    Proof.
+      revert f1 f2 g1 g2 Hf Hg. generalize (@eq_refl _ S).
+      destruct S as [v|]; intros e f1 f2 g1 g2 Hf Hg; [apply Hf | apply Hg].
+    Qed.
+
+    (* Two traps in this one, both about the drop's world index:
+       - `destruct c as [b [bIn t0]]` FIRST.  Left as `projT1 c`, the goal's
+         world index is `ctx.remove … {| name := name (projT1 c); … |}` -- an
+         ETA-EXPANDED record -- and the IH's `wctx ?w` cannot be inverted
+         against it.
+       - even then, `apply IH` cannot infer `?w` from a type index, so the
+         target world must be supplied: `refine (IH (@wdrop w (name b) (type b)
+         bIn) …)`, with `@` per the standing maximally-inserted-x trap. *)
+    Lemma cext_drop_dead {Sg0 : LCtx} (fuel : nat) :
+      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+        (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits)
+        (wd : Term (wctx w) ty_word),
+        CExt (drop_dead fuel trans tbl exits apc anp wd).
+    Proof.
+      induction fuel as [|n IH];
+        intros w trans tbl exits apc anp wd P1 P2 HP h.
+      - apply HP.
+      - cbn [drop_dead].
+        destruct (find_dead trans tbl exits apc anp wd h) as [c|]; [|apply HP].
+        destruct c as [b [bIn t0]]. cbn [projT1 projT2].
+        destruct (occurs_check bIn h) as [h'|]; [|apply HP].
+        apply option_convoy_eq.
+        + intros v e. f_equal.
+          refine (IH (@wdrop w (name b) (type b) bIn) _ _ _ _ _ _ _ _ _ h').
+          intros w' th' a' h''. unfold four. apply HP.
+        + intros e. apply HP.
+    Qed.
+
+    Lemma cext_step_after_drop {Sg0 : LCtx}
+        (rec : forall w : World, Sub Sg0 w -> SInstrTableW w -> SExitTable w ->
+                 Term (wctx w) ty_xlenbits -> Term (wctx w) ty_xlenbits ->
+                 SHeapSpec (STerm ty_xlenbits) w)
+        (Hrec : forall w trans tbl exits apc anp,
+                  CExt (rec w trans tbl exits apc anp))
+        (ai : AnnotInstr) {w : World}
+        (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
+        (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word) :
+      CExt (step_after_drop rec ai trans tbl exits apc anp wd).
+    Proof.
+      unfold step_after_drop.
+      apply cext_bind; [apply cext_sexec_ghosts|]. intros w1 th1 _.
+      apply cext_bind; [apply cext_sexec_instruction|]. intros w2 th2 apc'.
+      apply cext_bind; [apply cext_sexec_ghosts|]. intros w3 th3 _.
+      apply Hrec.
+    Qed.
+
+    Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
+      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+        (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
+        CExt (sexec_cfg_addr fuel trans tbl exits apc anp).
+    Proof.
+      induction fuel as [|n IH]; intros w trans tbl exits apc anp;
+        cbn [sexec_cfg_addr].
+      - apply cext_error.
+      - apply cext_angelic_binary.
+        + destruct (is_exit exits apc); [apply cext_pure | apply cext_error].
+        + destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
+          apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.
+          apply cext_bind; [apply cext_drop_dead|]. intros w1 th1 _.
+          apply cext_step_after_drop. intros w' trans' tbl' exits' apc' anp'.
+          apply IH.
+    Qed.
 
     (* sexec_triple_addr / scfg_verification_condition: apply     *)
     (* symbolic execution to verify a Hoare triple for a program.  The     *)
@@ -819,7 +1301,9 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel (zip_words (subst_itable ζ tbl) ws)
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel
+                       (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
+                       (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].

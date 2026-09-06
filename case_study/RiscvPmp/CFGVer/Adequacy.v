@@ -152,6 +152,85 @@ Import iris.algebra.gmap.
     iIntros "EC". rewrite fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix. iLeft. done.
   Qed.
 
+  (* ---------------------------------------------------------------- *)
+  (* CONTRACT COMPOSITION.  exitCondImpliesMyWP2_loop above is the    *)
+  (* UNIT of a monad in ExitCond; myWP2_loop_bind is its BIND, and it  *)
+  (* is what lets two separately-verified segment contracts be joined  *)
+  (* into one fact about the whole program.  Every flavour of          *)
+  (* composition (a straight-line cut, a loop invariant, a function    *)
+  (* contract at a call site) is a client of these two.                *)
+  (* See plans/PLAN-loop-invariant.md U1/U6.                            *)
+  (*                                                                   *)
+  (* The directed halves of fixpoint_myWP2_loop_eq are separate lemmas *)
+  (* on purpose: a bare `rewrite fixpoint_myWP2_loop_eq` inside the    *)
+  (* bind proof also rewrites inside the Lob hypothesis (in IPM the    *)
+  (* hypotheses are part of the goal term), after which iApply "IH"    *)
+  (* fails with "iSpecialize: cannot instantiate ... with myWP2_loop   *)
+  (* E1".  Note also that fixpoint_myWP2_loop_eq mentions the fixpoint *)
+  (* on BOTH sides, hence the occurrence selectors.                    *)
+  (* ---------------------------------------------------------------- *)
+  Lemma myWP2_loop_unfold `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_loop E ⊢ myWP2_loop_fix E (myWP2_loop E).
+  Proof. rewrite {1}fixpoint_myWP2_loop_eq. done. Qed.
+
+  Lemma myWP2_loop_fold `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_loop_fix E (myWP2_loop E) ⊢ myWP2_loop E.
+  Proof. rewrite {2}fixpoint_myWP2_loop_eq. done. Qed.
+
+  (* If E1 (the first segment's exit assertion) itself implies "keep
+     running until E2", then running until E1 and then continuing is
+     running until E2. *)
+  Lemma myWP2_loop_bind `{sailGS2 Σ} (E1 E2 : iProp Σ) :
+    ⊢ (E1 -∗ myWP2_loop E2) -∗ myWP2_loop E1 -∗ myWP2_loop E2.
+  Proof.
+    iLöb as "IH". iIntros "HE H".
+    iDestruct (myWP2_loop_unfold with "H") as "H".
+    iEval (rewrite /myWP2_loop_fix) in "H".
+    iDestruct "H" as "[HE1 | H]".
+    - by iApply "HE".
+    - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix). iRight.
+      iDestruct "H" as (v) "[Hpc Hcont]".
+      iExists v. iFrame "Hpc". iIntros "Hpc".
+      iDestruct ("Hcont" with "Hpc") as "Hwp".
+      iApply (semWP2_mono with "Hwp").
+      iIntros (v1 ? v2 ?) "Hm".
+      destruct v1 as [v1|m1]; destruct v2 as [v2|m2]; try done.
+      iNext. iApply ("IH" with "HE Hm").
+  Qed.
+
+  (* The form actually used at a cut point: a segment is discharged with
+     ExitCond := myWP2_loop <real exit>, which yields a nested loop. *)
+  Lemma myWP2_loop_join `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_loop (myWP2_loop E) ⊢ myWP2_loop E.
+  Proof.
+    iIntros "H". iApply (myWP2_loop_bind (myWP2_loop E) E with "[] H"). auto.
+  Qed.
+
+  (* ---------------------------------------------------------------- *)
+  (* THE LOOP RULE.  Turns a contract for the loop BODY into a contract *)
+  (* for the whole LOOP, back edge included.                            *)
+  (*                                                                    *)
+  (*   Inv n   = the loop invariant with n trips still to run           *)
+  (*   Hstep   = the BODY contract: one trip, n+1 -> n                  *)
+  (*   Hexit   = the EXIT contract: the guard fails, leave the loop     *)
+  (*                                                                    *)
+  (* The caller supplies those two and gets the loop summary; the        *)
+  (* induction and the `▷`/fixpoint bookkeeping stay in here.  This is   *)
+  (* the whole of what Example/CountdownComposedResult.v and            *)
+  (* Example/TwoLoopsComposedResult.v used to hand-roll per loop.       *)
+  (* ---------------------------------------------------------------- *)
+  Lemma myWP2_loop_induction `{sailGS2 Σ} (Inv : nat -> iProp Σ) (E : iProp Σ) :
+    (forall n, Inv (S n) -∗ myWP2_loop (Inv n)) ->
+    (Inv 0 -∗ myWP2_loop E) ->
+    forall n, Inv n -∗ myWP2_loop E.
+  Proof.
+    intros Hstep Hexit n. induction n as [|n IH]; iIntros "H".
+    - by iApply Hexit.
+    - iApply (myWP2_loop_bind (Inv n) E with "[] [H]").
+      + iApply IH.
+      + by iApply Hstep.
+  Qed.
+
   Definition pcOutOfInstrs (start : Val ty_word) (instrs : list AST) (pc : Val ty_xlenbits) : Prop :=
       bv.ult pc start \/ bv.uge pc (start + bv.of_N (4 * N.of_nat (length instrs))).
 
@@ -1105,6 +1184,60 @@ Section AdequacyTools.
         [iIntros "[_ H]" | iIntros "[Hc H]"; iFrame "Hc"]; iApply IH; iExact "H".
     Qed.
 
+    (* ---------------------------------------------------------------- *)
+    (* Phase 4: ghost soundness.  This REPLACES VerifierRel's deleted        *)
+    (* cexec_ghosts_pure, which said `cexec_ghosts gs = pure tt` and was     *)
+    (* true only while every ghost was concretely the identity.  With a real *)
+    (* call_lemma that is false, and the absorption in                       *)
+    (* sound_exec_cfg_addr_myWP2 below has to be a genuine entailment        *)
+    (* instead of a rewrite.                                                 *)
+    (*                                                                       *)
+    (* PLAN-annotinstr.md treats this as the hard, open part of Phase 4.  It *)
+    (* is not: both ingredients already exist and neither is CFGVer-specific.*)
+    (*  - call_lemma_sound (MicroSail/ShallowSoundness.v) turns the shallow  *)
+    (*    executor's call_lemma into an LTriple.  It is stated in a section  *)
+    (*    over `{L} {biA : BiAffine L} {PI : PredicateDef L}`, so it applies *)
+    (*    verbatim to the BINARY instance — nothing unary about it.          *)
+    (*  - lemSemCFGVerif (SpecIris.v) supplies ValidLemma for every entry of *)
+    (*    CFGVer's LEnv, which is what discharges the LTriple's `req -∗ ens` *)
+    (*    obligation.                                                        *)
+    (* The combination is exactly iris_rule_stm_lemmak's three-line move     *)
+    (* (Iris/BinaryInstance.v): pose the entailment, apply the continuation, *)
+    (* feed it the lemma's semantics.  All this lemma adds is the induction  *)
+    (* over the ghost LIST, which is needed for the same reason rexec_ghosts *)
+    (* needs one — the list comes out of an opaque `ai`, so no finite set of *)
+    (* instances covers it.                                                  *)
+    (*                                                                       *)
+    (* The debug case needs no content because CHeapSpec.debug is the        *)
+    (* identity (Shallow/Monads.v), which is also why the symbolic debug     *)
+    (* node carries no soundness obligation.                                 *)
+    (* ---------------------------------------------------------------- *)
+    Lemma sound_cexec_ghosts (gs : list Annot) :
+      forall (Φ : unit -> SCHeap -> Prop) (h : SCHeap),
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts gs Φ h ->
+        interpret_scheap h ⊢ ∃ h' : SCHeap, interpret_scheap h' ∧ ⌜Φ tt h'⌝.
+    Proof.
+      induction gs as [|a gs IH]; intros Φ h Hexec.
+      - iIntros "Hh". iExists h. iSplitL "Hh"; [iExact "Hh"|]. iPureIntro. exact Hexec.
+      - destruct a; cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts
+                         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghost] in Hexec.
+        + (* AnnotDebugBreak: debug is the identity, so the bind collapses and
+             the remaining list is executed on the SAME heap. *)
+          now apply IH.
+        + (* AnnotLemmaInvocation *)
+          unfold bind, CHeapSpec.bind in Hexec.
+          apply call_lemma_sound in Hexec.
+          pose proof (lemSemCFGVerif l) as lemSem.
+          remember (RiscvPmpCFGVerifSpec.LEnv l) as contractL.
+          clear HeqcontractL.
+          destruct Hexec as [Ψ pats req ens ent]; cbn in lemSem.
+          iIntros "Hh".
+          iPoseProof (ent with "Hh") as (ι Heq) "[Hreq Hcons]".
+          iPoseProof ("Hcons" with "[Hreq]") as "H"; [by iApply lemSem|].
+          iDestruct "H" as (h') "[Hh' %Hrest]".
+          iApply (IH _ _ Hrest with "Hh'").
+    Qed.
+
     Lemma sound_exec_cfg_addr_myWP2
         {instrs} {words : bv xlenbits -> bv word} {exitCond fuel} (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
@@ -1152,16 +1285,16 @@ Section AdequacyTools.
                   Hh to match via interpret_scheap_gc_heap (§4: sound because
                   iProp Σ is affine). *)
                apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
-               (* Absorb the two ghost binds the same way, and for the same
-                  reason: every ghost is concretely the identity right now, so
-                  cexec_ghosts is `pure tt` and its binds collapse.  When
-                  Phase 4 gives AnnotLemmaInvocation real semantics this stops
-                  holding and genuine lemma soundness is needed here — see
-                  cexec_ghosts_pure's own note. *)
-               rewrite !Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_ghosts_pure in Hexec.
-               cbn [CHeapSpec.bind CHeapSpec.pure] in Hexec.
                iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
                iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
+               (* Absorb the BEFORE-ghosts.  This used to be a rewrite with
+                  cexec_ghosts_pure; with a real call_lemma the ghosts have a
+                  genuine heap effect, so it becomes an entailment that hands
+                  back a NEW heap h1 together with the residual execution on
+                  it.  Same role chunk_gc's cgc_binds_heap_fwd plays two lines
+                  up, just no longer free. *)
+               iDestruct (sound_cexec_ghosts _ _ _ Hexec with "Hh") as (h1) "[Hh %Hexec1]".
+               clear Hexec.
                (* ptsto_instrs_lookup works on the PROJECTED (AST) map, so the
                   lookup fact has to be projected too: lookup_fmap turns
                   `instrs !! v = Some i` into `(ai_instr <$> instrs) !! v =
@@ -1176,19 +1309,22 @@ Section AdequacyTools.
                iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
-               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec). iFrame. }
+               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. }
                iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
                2-3: iIntros "(%δ' & _ & HF)"; auto.
                2: iIntros "_"; done.
                iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
                iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+               (* Absorb the AFTER-ghosts, same lemma, inside the instruction's
+                  postcondition where the new heap h' has just appeared. *)
+               iDestruct (sound_cexec_ghosts _ _ _ Hcfg with "Hh'") as (h'') "[Hh' %Hcfg']".
                iModIntro.
                iRevert "Hk".
                (* `an an`: the recursive call passes the new pc as both the pc
                   and the incoming nextpc, which is exactly what the epilogue
                   established (pc = nextpc = an).  Hnpc' is framed directly —
                   no `iExists`, since the PRE now names the value. *)
-               iApply (IH an an h' Hcfg).
+               iApply (IH an an h'' Hcfg').
                iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
@@ -1236,7 +1372,20 @@ Section AdequacyTools.
         (∀ an,
            ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗ ExitCondIprop) -∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
+           (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
+              conjunct ("keep post in hypothesis for maximal generality, remove
+              asn.interpret post from the continuation").  It is the exit
+              assertion, and note WHEN it holds: at the moment the EXIT
+              CONDITION holds, not when execution halts -- sexec_cfg_addr
+              returns only via its exit branch (out-of-fuel is an emsg), and
+              `an` is bound to whichever declared exit was taken.  That is what
+              lets one segment's exit feed the next segment's precondition; see
+              plans/PLAN-loop-invariant.md U2/U6.  Nothing is proved about the
+              RESIDUAL heap (SHeapSpec has no leakcheck), which is why the
+              shallow continuation stays `(fun _ _ => True)`. *)
+           asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+           ExitCondIprop) -∗
         myWP2_loop ExitCondIprop.
     Proof.
       cbv [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr bind demonic_ctx demonic
@@ -1279,10 +1428,17 @@ Section AdequacyTools.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
       iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
         with "[$Hpc $Hnpc $Hinstrs $Hh2]").
-      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
+      (* The fifth conjunct used to be DROPPED (`& _`).  It is
+         `∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝`, and Φ here is
+         cexec_triple_addr's `consume ens ι.["a"↦a].["an"↦na]` — so
+         consume_sound turns it into the exit assertion.  Same three-line
+         pattern as BlockVer/Verifier.v:448-450, which never lost it. *)
+      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
+      apply consume_sound in Hconsume.
+      iPoseProof (Hconsume with "Hh3") as "[HPOST _]".
       iApply ("Hk" $! an).
       iSplit. { iPureIntro. exact Hexit. }
-      iFrame "Hpc Hnpc".
+      iFrame "Hpc Hnpc HPOST".
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
       iExists words.
       iFrame "Hinstrs".
@@ -1312,7 +1468,9 @@ Section AdequacyTools.
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
+             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
+             (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
+             asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.

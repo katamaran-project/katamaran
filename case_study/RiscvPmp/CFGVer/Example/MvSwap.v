@@ -43,13 +43,13 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']'" :=
   (@MkCFGVerifierContract [ctx] init_addr
      (term_val ty_xlenbits (bv.of_N init_addr))
      (exits_of_list (term_val ty_xlenbits (bv.of_N init_addr)) i)
-     P%asn i ec fl)
+     P%asn i ec fl asn_no_post)
   (at level 90).
 Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
   (@MkCFGVerifierContract logvars init_addr
      (term_val ty_xlenbits (bv.of_N init_addr))
      (exits_of_list (term_val ty_xlenbits (bv.of_N init_addr)) i)
-     P%asn i ec fl)
+     P%asn i ec fl asn_no_post)
   (at level 90).
 
     Definition mv_zero_ex : CFGVerifierContract :=

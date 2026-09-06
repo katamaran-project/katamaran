@@ -1,6 +1,6 @@
 # PLAN-muladd-full — BearSSL `br_i31_muladd_small` to a whole-function end theorem
 
-Status: **Phases 0–2 DONE, Phase 3 BLOCKED (2026-08-11 same day).** GATE 1 and
+Status: **Phases 0–2 DONE. Phase 3 BLOCKED — cause IDENTIFIED 2026-09-01, see the Phase 3 section and `diagnostics/muladd-full-cost-drivers.md`.** GATE 1 and
 GATE 2 passed, but not as originally stated — see their sections below for
 what actually needed fixing. GATE 3 is NOT reached: the whole function's
 `vm_compute` times out at 300s even at the smallest synthetic size, and an
@@ -245,6 +245,31 @@ patch — see Phase 3) in each file's own header comment. `vos` mode
 
 ### Phase 3 — measure small before committing to real size — **BLOCKED, 2026-08-11**
 
+> **UPDATED 2026-09-01 — still blocked, but the cause is now IDENTIFIED and the
+> 2026-08-11 diagnosis below is superseded.** Full write-up:
+> `diagnostics/muladd-full-cost-drivers.md`. Headlines:
+> - The wall is **tree CONSTRUCTION**, not `solve_vc` — a raw-VC probe with no
+>   `Qed` dies too. Everything below about fuel/timeouts is beside the point.
+> - The driver is **term DUPLICATION**, not computation: a dumped register held a
+>   **215,636-char** term in which ONE variable appears **460 times** (the term
+>   representation is a tree, so a read inlines rather than references).
+> - **`br_divrem` is NOT the dominant cost here**, contrary to this section's
+>   conclusion — this probe patches its trip count to 2, and at 2 trips it is
+>   cheap. The suspicion below was reasonable in 2026-08 but is wrong for THIS
+>   configuration. (It IS dominant at its real 31–32 trips; see
+>   `diagnostics/dropk-firing-payoff.md` Part 3, where that loop is now exactly
+>   affine in trips.)
+> - Two hypotheses **eliminated, do not re-investigate**: symbolic store-address
+>   disambiguation (4.8%) and the `MUL`/`MULHU` M-extension pair (8.2%).
+> - **Havocing after every instruction** (not just at loop heads) removes the
+>   duplication and makes the limb-loop block complete — 155 s where loop-head
+>   havoc alone dies. It trades the exponential for a quadratic `|Σ|` cost, and
+>   the existing variable drop makes that **4.3× worse**, not better.
+> - The "growth curve for `br_divrem` alone" asked for below **now exists** and is
+>   the whole of `diagnostics/dropk-firing-payoff.md` Part 3 (n = 1..32).
+> - The chunk-GC prerequisite asked about below **landed** (2026-08-03).
+
+
 **The `mlen`-doubling plan does not apply as written, because `br_divrem`'s
 own loop trip count (fixed at 31 by the division algorithm) does not scale
 with `mlen` at all** — unlike every prior small-N probe in this project,
@@ -355,3 +380,152 @@ green, allowlist unchanged.
 - Skills: **cfgver-new-example** (the recipe), **cfgver-gen-contract** (word
   vs byte granularity), **secret-data-walls** (why Phase 1's "no comparison on
   the product" hope needs checking against the real loop, not assuming).
+
+---
+
+# ATTEMPT 2026-09-04 — verifying muladd by CUTS. One segment lands; mid-program cuts do not.
+
+Tried after the composition machinery landed (`PLAN-loop-invariant.md` U1-U12).
+**Result: muladd is NOT verified by cuts.** Recorded so the next attempt does not
+repeat the same four probes.
+
+## What worked
+
+**Segment 1 verifies.** Entry offset 0, exit at offset 220, built with
+`gen_contract_rel` + `extra_exit_offs = [220]`, fuel 8, trivial post:
+**1.099 G words net, 15 s, real `Qed`** (`Example/ZZSeg1.v`). The whole function
+has never finished (§ diagnostics: killed at 14.5-19 min). So cutting does make
+part of muladd tractable, which was the open question from
+`diagnostics/composition-payoff.md`.
+
+Its two forward branches are decidable from the pinned public `m[0] = 63`
+(`beqz T0` false, `bltu 31, 63` taken), so the only feasible path leaves at 220.
+
+**Control-flow map** (from the 282-instruction listing): 7 loop heads at offsets
+**64, 336, 452, 540, 760, 948, 1056**; forward branches at 4→216, 12→220,
+280→428, 320→360, 436→472, 652→668, 920→1000, 1000→1108. Roughly 16 natural cut
+points.
+
+## What did not
+
+**Every mid-program cut collapses to a bare `False`**, at ~43.8 G words and
+~155 s. Four hypotheses tested and refuted, each on a matched pair:
+
+| hypothesis | arms | result |
+|---|---|---|
+| pc term written var-first vs const-first | both | 44.109 G both, ~500 words apart |
+| the symbolic base is the cost | symbolic vs concrete (ia=0) | 44.11 vs 43.80 G (0.7%) |
+| segment length / the four spill STOREs | 15 instrs vs 10, stores dropped | 43.80 vs 43.83 G |
+| fuel | 20 / 11 / 2 | 43.8296 / 43.8296 / 43.804 G |
+
+**Fuel-invariance down to 2 is the decisive observation:** the 43.8 G is not
+symbolic execution of the segment at all. Something fails immediately and every
+probe re-measures the same tree. The residual is a bare `False`
+(`ZZSeg3E.v` dumps it), i.e. the VC is unprovable rather than merely unfinished.
+
+> **A FIFTH candidate, and now the leading one (2026-09-04):
+> `diagnostics/prefix-length-cost.md`.** A segment contract whose branch
+> condition the solver cannot decide by computation costs
+> `93.81 + 4.05·K + 0.531·K²` M words in the number of **never-executed**
+> instructions sharing its table (held-out +0.0024% on a countdown rig).
+> Extrapolated to this program's K=282 that is **43.4 G** — 0.9% from the 43.8 G
+> measured here, and it explains the fuel-invariance directly, because the K²
+> term is paid on the *table*, not on executing the segment.
+>
+> **Do not treat the 0.9% as confirmation.** A coefficient fitted on a
+> 2-instruction loop with `|Σ|`=1 has no business predicting a 282-instruction
+> program with a symbolic base and ten memory cells; agreement that tight over a
+> 4.4× extrapolation is as likely coincidence as not. It does mean the K² axis
+> should be tested before anything else here, and the test is one run: give one
+> segment contract a table **trimmed to its own instructions** and see whether
+> the cost drops by ~(282/k)². If it does, mid-program cuts were never blocked by
+> the offset or the contract shape — they were blocked by carrying the whole
+> program's table in every segment, and the fix is a sub-table faithfulness lemma
+> rather than anything about this program.
+
+## RESOLVED 2026-09-04 — the mid-program cut VERIFIES. The blocker was the CUT
+## ASSERTION, not the offset, the builder, the base, the length or the fuel.
+
+**`ZZSeg2`'s cut at offset 220 now closes with a real `Qed`.** The full 2x2,
+one axis per direction, all four arms on the same commit with the same
+`intros; vm_compute; solve_vc; solve_symbase_fetch` protocol and a re-measured
+baseline of 606,239,793:
+
+| | full table (282 entries) | trimmed table (15 entries) |
+|---|---|---|
+| `T0` havoc'd (`PVExist`) | 43,503 M, **bare `False`** | 456.16 M, **bare `False`** |
+| `T0` pinned public 63 | 1,231.66 M, **`Qed`** | **338.78 M, `Qed`** |
+
+### What was actually wrong
+
+The segment at offsets 220..276 contains, at index 66,
+`lw A4, 0(A7)` with `A7 = A0 + (((T0 + 31) >> 5) << 2)` — **a load whose address
+is computed from `T0`**. The cut declared `(T0, false, PVExist)`, i.e. secret and
+unknown. But on the only path that reaches offset 220 (`beqz T0` not taken, then
+`bltu 31, T0` taken from index 3, target 12+208=220), `T0` holds `m[0] = 63`,
+which the whole-function contract pins as **PUBLIC**. So the cut assertion threw
+away exactly the fact the segment needs, and a secret-dependent load address is
+correctly `False`.
+
+Changing one spec entry to `(T0, true, PVConst (bv.of_N 63))` closes it. Note the
+header comment that justified the havoc — *"Registers arrive HAVOC'd (PVExist) —
+which is exactly what a cut assertion supplies for a non-public value"* — was
+right about non-public values and wrong that every register is one. **A cut
+assertion must carry every public/pinned fact the segment depends on; havocking
+uniformly is not a safe default, it is a way to make the VC false.**
+
+### Attribution, stated plainly
+
+- **The sub-table work did NOT unblock this.** Provability is entirely the pin:
+  both havoc'd arms fail, both pinned arms verify, at either table size. Do not
+  credit `itable_faith_of_segment` with unblocking muladd.
+- **What the sub-table work bought is cost**: 95.4x on the unprovable arm and
+  **3.64x on the now-provable one** (1231.66 -> 338.78 M).
+- **The two axes are strongly SUB-multiplicative.** Trimming alone from the worst
+  corner is 95.4x and pinning alone is 35.3x; if independent, both would give
+  ~3368x. Measured together: **128.4x**. They overlap because both reduce the
+  same product — solver work on undecided values, times table size. Either one
+  captures most of it; the second adds little.
+- The 43.8 G figure that four probes chased was therefore *two* things at once,
+  and neither was the entry offset.
+
+### What this unlocks
+
+The cut is now **338.78 M and 15 s**, from 43.5 G and 158 s. Mid-program muladd
+cuts are debuggable for the first time — the `ZZSegTrimD.v` goal dump that found
+this took 11 s. The obvious continuation is to pin the remaining segments'
+public facts the same way and compose them; the machinery
+(`myWP2_loop_bind`/`_join`/`_induction`, `itable_faith_of_segment`) is all in
+place, and the per-segment cost is now in the hundreds of M rather than tens of
+G.
+
+Probes (throwaway, gitignored): `Example/ZZSegTrim.v` (trimmed, havoc'd),
+`ZZSegTrimP.v` (trimmed, pinned — the one that verifies), `ZZSeg2P.v` (full
+table, pinned), `ZZSegTrimD.v` (the goal dump), baseline `ZZSegBase.v`.
+
+## THE METHOD ERROR, recorded because it cost four probes
+
+**The comparison was never controlled.** The one working point (`ZZSeg1`) uses
+`gen_contract_rel`; every failing point uses a hand-written
+`MkCFGVerifierContract`. They differ in **two** things — contract builder AND
+entry offset — and the whole attempt attributed the gap to the offset. That is
+the one-axis-at-a-time violation `cfgver-scaling-diagnostics` opens with.
+
+**The test that should have come first, and still should:** a hand-written
+contract at entry offset **0** — same shape, same specs, same table, only the
+offset reverted. If it also costs 43.8 G and gives `False`, the problem is the
+hand-written contract shape (suspect the precondition or the exit table), and
+`ZZSeg1`'s success says nothing about mid-program cuts. If it is cheap, the entry
+offset really is the blocker. One run, and it converts a guess into a fact.
+
+Unverified leading hypothesis, offered only as a starting point: the entry pc is
+the demonic `a` pinned by `asn_pc_eq`, and at muladd's inventory (~30
+existentials plus a 9024-bit words variable) the solver may not resolve `a` to
+the literal, so `lookup_instr` matches no table key. The contrast is that the
+identical construction works on swap (entry offset 4) and countdown (offset 8),
+whose inventories are tiny. **Four hypotheses have already died here — treat this
+as the fifth candidate, not as the answer.**
+
+Probes: `Example/ZZSeg1.v`, `ZZSeg2.v` (symbolic base), `ZZSeg2C.v` (concrete),
+`ZZSeg3C.v` (shorter), `ZZSeg3T.v` (tight fuel), `ZZSeg3D/E.v` (goal dumps),
+baseline `ZZSegBase.v`.

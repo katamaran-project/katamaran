@@ -165,7 +165,11 @@ Import IrisModel.RiscvPmpIrisBase.
         repeat (iDestruct "Hregs" as "($ & Hregs)").
       + iSplit. { done. }
         iFrame.
-    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
+    (* `& _` absorbs the re-threaded exit assertion (Adequacy.v,
+         sound_cexec_triple_addr_myWP2).  These callers want only pc-in-exit,
+         and CFG_VC_triple still passes a trivial post, so there is nothing to
+         use here — but the conjunct has to be introduced. *)
+    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
       destruct an as [v | v1 v2].
       + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. rewrite Hexit. exact I.
       + contradiction.
@@ -259,7 +263,11 @@ Import IrisModel.RiscvPmpIrisBase.
         repeat (iDestruct "Hregs" as "($ & Hregs)").
       + iSplit. { done. }
         iFrame.
-    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs)".
+    (* `& _` absorbs the re-threaded exit assertion (Adequacy.v,
+         sound_cexec_triple_addr_myWP2).  These callers want only pc-in-exit,
+         and CFG_VC_triple still passes a trivial post, so there is nothing to
+         use here — but the conjunct has to be introduced. *)
+    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
       destruct an as [v | v1 v2].
       + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. rewrite Hexit. exact I.
       + contradiction.

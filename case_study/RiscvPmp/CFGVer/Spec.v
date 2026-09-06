@@ -702,6 +702,81 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
   (*       asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w")); *)
   (*   |}. *)
 
+  (* ------------------------------------------------------------------ *)
+  (* PLAN-annotinstr Phase 4: the ABSTRACTION (havoc) lemma.              *)
+  (*                                                                      *)
+  (* Consume each named register's points-to and produce a fresh          *)
+  (* existential in its place.  Invoked as an `AnnotLemmaInvocation`      *)
+  (* ghost at a loop head, this is what stops loop-carried registers from *)
+  (* accumulating ever-larger symbolic terms: br_divrem's growth is       *)
+  (* PURELY term size in six register slots (x5 x6 x10 x11 x14 x28),      *)
+  (* every other chunk being exactly 1.00x per trip.                      *)
+  (*                                                                      *)
+  (* `reg_convert` (Base.v) is a COQ-level match on a static RegIdx, so   *)
+  (* this reduces to a plain `chunk_ptsreg` and does NOT build the 32-way *)
+  (* `asn_with_reg` cascade that the term-indexed `asn_reg_ptsto` above   *)
+  (* would.  Register 0 (x0, hardwired zero) has no Reg and maps to ⊤.    *)
+  (*                                                                      *)
+  (* Soundness is existential introduction — `r ↦ v ⊢ ∃w, r ↦ w` — with   *)
+  (* no side condition.  What it COSTS is completeness: the havoced value *)
+  (* carries no `secLeakvar`, so it is treated as possibly-secret, and    *)
+  (* anything downstream that branches on it or leaks it will hit the     *)
+  (* NonSyncVal wall.  Havoc only registers whose value is genuinely dead *)
+  (* across the annotation point — never a loop counter the executor      *)
+  (* needs concrete to decide a back edge.                                *)
+  (*                                                                      *)
+  (* HAVOC THE MINIMUM SET THAT BREAKS THE RECURRENCE, NOT EVERY SLOT     *)
+  (* THAT GROWS (measured 2026-08-25, diagnostics/havoc-abstraction-      *)
+  (* payoff.md §8).  Each havoced register costs ONE surviving logical    *)
+  (* variable PER TRIP — a demonically produced unconstrained value is    *)
+  (* determined by nothing, so the solver can never eliminate it — and    *)
+  (* |Σ| is quadratic in lookup cost.  On br_divrem, havocing the three   *)
+  (* recurrence carriers (A0 A1 A4) instead of all seven growing slots is  *)
+  (* 2.00x cheaper at n=8 and 2.66x at n=16, and is what makes its real   *)
+  (* 31 trips reachable at all.  Two counter-intuitive corollaries, both  *)
+  (* measured: havocing the DEAD TEMPS alone is 1.94x WORSE than doing    *)
+  (* nothing (their size is a symptom — they are recomputed from the      *)
+  (* carriers inside every trip), and even a genuinely LOOP-CARRIED slot  *)
+  (* (T2) is better left out, because its accumulation is linear once its *)
+  (* source is havoced while a binder per trip is not.  Completeness      *)
+  (* points the same way: fewer havoced registers is fewer values without *)
+  (* secLeakvar.  Both corollaries were measured; do not re-derive.        *)
+  (*                                                                      *)
+  (* *** THIS ADVICE INVERTS IF A VARIABLE-DROP FEATURE EVER LANDS          *)
+  (* (measured 2026-08-27, diagnostics/havoc-abstraction-payoff.md 9). ***  *)
+  (* The un-havoced registers carry the PREVIOUS trip's havoc variables in  *)
+  (* their terms, so with three registers only 1 of 3 per trip becomes      *)
+  (* droppable, whereas with all seven ALL of them do -- slope 7/trip goes  *)
+  (* FLAT instead of 3/trip going to 2/trip.  So "havoc the minimum set" is *)
+  (* optimal only while nothing drops dead variables; with a drop the wide  *)
+  (* set is what makes them droppable at all.  Re-measure before assuming   *)
+  (* the three-register choice still wins.                                  *)
+  (*                                                                        *)
+  (* This is a FACTOR, not a fix for the growth itself.  Retiring the       *)
+  (* surviving binders was investigated in full and CLOSED NEGATIVE         *)
+  (* (2026-08-25, plans/PLAN-lvar-drop.md): a drop with a dummy witness has *)
+  (* an EMPTY accessibility fibre and is unprovable, while a drop witnessed *)
+  (* by the freshly minted variable has a SINGLETON fibre, so it grants no  *)
+  (* freedom and is a rename rather than a havoc.  See Verifier.v's note    *)
+  (* above sexec_ghost.  What remains at this level is packing the per-trip *)
+  (* values into ONE wide binder by slicing (slope 1/trip instead of 3),    *)
+  (* diagnostics/havoc-abstraction-payoff.md §8.5 -- still only a factor.   *)
+  Definition asn_havoc_reg {Σ} (r : RegIdx) : Assertion Σ :=
+    match reg_convert r with
+    | None     => ⊤
+    | Some reg => asn.exist "hv" ty_xlenbits (asn.chunk (chunk_ptsreg reg (term_var "hv")))
+    end.
+
+  Definition asn_havoc_regs {Σ} (regs : list RegIdx) : Assertion Σ :=
+    List.fold_right (fun r acc => asn_havoc_reg r ∗ acc) ⊤ regs.
+
+  Definition lemma_havoc_regs (regs : list RegIdx) : SepLemma (havoc_regs regs) :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_havoc_regs regs;
+       lemma_postcondition   := asn_havoc_regs regs;
+    |}.
+
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
        match l with
@@ -709,6 +784,7 @@ Module RiscvPmpCFGVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Risc
        | close_gprs                   => lemma_close_gprs
        | open_ptsto_instr             => lemma_open_ptsto_instr
        | close_ptsto_instr            => lemma_close_ptsto_instr
+       | havoc_regs regs              => lemma_havoc_regs regs
        (* | open_pmp_entries             => lemma_open_pmp_entries *)
        (* | close_pmp_entries            => lemma_close_pmp_entries *)
        (* | extract_pmp_ptsto bytes      => lemma_extract_pmp_ptsto bytes *)

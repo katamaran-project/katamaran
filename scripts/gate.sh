@@ -63,6 +63,19 @@ AXIOM_CLEAN_THMS=(
   "modpow_win_full_noninterferent_param"
   "check_scalar_noninterferent_param"
   "check_scalar_loop1_noninterferent_param"
+  # Not a noninterference end theorem: the two-contract COMPOSITION
+  # demonstrator (Example/SwapComposedResult.v).  Listed here because it is
+  # the only proof in the tree that goes through myWP2_loop_join and a real
+  # cfg_postcondition, and an axiom sneaking into that path would be silent.
+  "swap_composed"
+  # the LOOP cut: one body contract, closed by induction on the trip count
+  "cd_loop"
+  # two sequential loops, composed: A hands off to B at its head
+  "loopA"
+  # the SUB-TABLE cut (Example/PaddedLoopResult.v): the only proof in the tree
+  # whose contract table covers a PROPER SUBSET of the program, so it is the
+  # only check that itable_faith_of_segment / instrs_of_list_segment are sound.
+  "pl_loop"
 )
 
 COQC="${COQC:-coqc}"

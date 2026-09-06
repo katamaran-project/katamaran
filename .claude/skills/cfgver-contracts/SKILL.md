@@ -31,18 +31,24 @@ Record CFGVerifierContract {Σ} :=
   ; cfg_instrs        : list AnnotInstr
   ; cfg_exitCond      : bv xlenbits -> bool
   ; cfg_fuel          : nat
+  ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
   }.
 ```
 
 `cfg_instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
-migration (PLAN-annotinstr.md Phase 1) — `AnnotInstr := AnnotAST (i : AST) |
-AnnotGhost (a : Annot)`, a ghost prefix (currently `AnnotDebugBreak`, a
-transparent per-position heap/pathcondition dump) attached to the AnnotAST that
-follows it. `Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so
-every existing hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs`
-(a plain `list AST`) still typechecks unedited — see **cfgver-executor** for the
-coercion mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer
-projection every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
+migration (PLAN-annotinstr.md Phase 1). `AnnotInstr` is a PRODUCT record —
+`MkAnnotInstr { ai_ghost_before : list Annot ; ai_instr : AST ; ai_ghost_after :
+list Annot }` — NOT the sum `AnnotAST | AnnotGhost` an earlier version of this
+skill described; that sum was tried and reverted at `13eb91e0`, because it can
+represent a ghost with no instruction to attach to. `Annot` is `AnnotDebugBreak`
+(a transparent per-position heap/pathcondition dump) or `AnnotLemmaInvocation`
+(a real `call_lemma`, since Phase 4 — see `cfgver-executor`).
+
+`Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so every existing
+hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs` (a plain
+`list AST`) still typechecks unedited — see **cfgver-executor** for the coercion
+mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer projection
+every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 
 | Field | Meaning |
 |---|---|
@@ -51,6 +57,7 @@ projection every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 | `cfg_exits` | exit addresses as **terms** (built by `exits_of_offs` from base-relative offsets) — this is what the symbolic executor's exit choice checks against |
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
 | `cfg_instrs` | the program, a `list AnnotInstr` placed at `cfg_placement` (coerces transparently from a plain `list AST` — see above) |
+| `cfg_postcondition` | RE-EXPOSED 2026-09-03 (it had been hardwired to `true`). `consume`d at the moment the exit condition is hit, with `"an"` bound to whichever declared exit was taken; the soundness bridge hands it back to the caller, which is **what makes two segment contracts composable**. Pass `asn_no_post` for an ordinary whole-program contract. |
 | `cfg_init_addr`, `cfg_exitCond` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
 
 **The ignored-fields subtlety:** the VC dispatches exits against the *term table*
@@ -75,6 +82,61 @@ failure modes in **cfgver-solve-vc**.
 **Debugging a failing VC:** `DebugCFGVerifierContract c` is the same VC wrapped as
 a `VerificationCondition` instead of `safeE` — state it as a `Lemma`, `vm_compute`,
 and read the residual instead of guessing.
+
+## A contract may cover only PART of the program (sub-table contracts)
+
+Since 2026-09-04 `cfg_instrs` need not be the whole program — it may hold only
+the instructions the contract's segment actually executes, with the segment's
+byte offset carried in **`cfg_placement`**:
+
+```coq
+cfg_placement := term_val ty_xlenbits (bv.of_N 256);   (* base + segment offset *)
+cfg_instrs    := pl_seg;                               (* the SEGMENT only *)
+cfg_exits     := exits_of_offs (term_val ty_xlenbits (bv.of_N 256)) [0%N];
+```
+
+`table_of_list p 0 seg` then emits exactly `256, 260, …`, so **no new record
+field was needed** and `etable_faith_exits_of_offs` needs no change (it was
+already placement-relative).
+
+**Why bother:** a segment contract whose branch condition the solver cannot
+decide by computation costs `93.81 + 4.05·P + 0.531·P²` M words in the number
+`P` of *never-executed* instructions sharing its table — quadratic, held out to
++0.0024% at P=64 and +0.0079% at P=128, so **26.93× at 64 filler instructions**.
+Trimming recovers all of it. On a *decidable*-branch segment the same axis is
+only 1.35–1.60× on countdown but was measured at **3.03×** on real muladd (67%
+of that segment's cost). Full record: `diagnostics/prefix-length-cost.md`.
+
+**What you owe at the Iris level.** The caller owns `ptsto_instrs` of the WHOLE
+program and must supply `itable_rel <whole-program map> <segment table>`. That
+is `TablesRel.v`'s **`itable_faith_of_segment`**, over `Tables.v`'s three gmap
+containments (`instrs_of_list_prefix` / `_suffix` / `_segment`). Nothing else
+changes — `sound_scfg_verification_condition_myWP2` takes the map and the table
+as separate arguments, so no resource splitting is needed and the continuation
+hands the instruction ownership back.
+
+Worked example: `Example/PaddedLoop.v` + `Example/PaddedLoopResult.v` (the
+countdown loop inside a 66-instruction program; `pl_loop` is gate-checked
+axiom-clean, and is the tree's ONLY proof whose table is a proper subset of the
+program).
+
+Three traps, each of which cost a compile:
+
+- **`list_AST_AnnotInstr` is `List.map AST_AnnotInstr`, not an identity**
+  (`Verifier.v:145`). Existing examples get away with writing a `list AST` only
+  because the *record field* coerces it; `ptsto_instrs` and `itable_rel` will
+  not. Symptom is an unresolved-implicit error on `<$>` ("Cannot infer the
+  implicit parameter M of fmap"), which reads like an Iris notation bug.
+- **Define the program AS the decomposition**: `padded_annot := pl_pre ++ pl_seg
+  ++ pl_post` with all three at `list AnnotInstr`. Then
+  `itable_faith_of_segment`'s `pre ++ seg ++ post` matches syntactically, which
+  also avoids an `app_nil_r` rewrite that would otherwise hit the `seg`
+  occurrence inside `table_of_list` too.
+- **`itable_faith_of_segment`'s `pre`/`seg`/`post` are EXPLICIT** (only `Σ`,
+  `cbase`, `off` are implicit — `length pre` is not a rigid position, and
+  `Set Implicit Arguments` marks only strict implicits). `off` is inferable from
+  nothing, and `(off := _)` fails with *"Not enough non implicit arguments"*.
+  Use the fully-`@` form: `@itable_faith_of_segment Σ p ι cbase off pre seg post`.
 
 ## Hand-writing a contract: the assertion vocabulary
 

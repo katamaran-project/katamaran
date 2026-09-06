@@ -800,6 +800,8 @@ Module Type GenOccursCheckOn
       apply env.lookup_extensional; intros.
       destruct (ctx.view bInΓ); first easy.
       cbn -[env.tabulate].
+      (* refold [env.lookup_at] back to [env.lookup]; see Environment.v *)
+      rewrite ?env.lookup_at_fold.
       rewrite lookup_sub_comp.
       rewrite lookup_sub_shift.
       destruct b0 as [x0 τ0].
@@ -807,6 +809,7 @@ Module Type GenOccursCheckOn
         (ctx.remove (ctx.in_succ (b' := b') bIn)).
       rewrite (lookup_sub_shift (ctx.in_succ (b' := b') bIn) (ctx.in_succ (b := x0∷τ0) i)).
       cbn.
+      rewrite ?env.lookup_at_fold.
       now rewrite lookup_sub_wk1.
     Qed.
 

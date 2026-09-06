@@ -381,6 +381,10 @@ Module Type InstantiationOn
     - cbn in *.
       now subst.
     - cbn in *.
+      (* refold [env.lookup_at] back to [env.lookup]; see Environment.v.  The
+         primed variant because this proof destructures the [In] record rather
+         than going through [ctx.view]. *)
+      rewrite ?env.lookup_at_fold'.
       rewrite env.lookup_tabulate; cbn.
       now rewrite lookup_sub_id.
   Qed.

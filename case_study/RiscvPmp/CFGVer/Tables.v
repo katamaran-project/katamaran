@@ -215,6 +215,83 @@ Open Scope list_scope.
   Qed.
 
   (* ------------------------------------------------------------------ *)
+  (* SEGMENT CONTAINMENT (2026-09-04).                                    *)
+  (*                                                                     *)
+  (* A contract that only knows the instructions it actually executes    *)
+  (* carries a table over a SEGMENT of the program, while the machine    *)
+  (* owns the whole program's store.  itable_rel is indexed by the TABLE *)
+  (* and only asks that the map CONTAIN each entry (see VerifierRel.v),  *)
+  (* and TablesRel.v's itable_faith_weaken lifts it along map inclusion  *)
+  (* -- so the whole soundness obligation for a sub-table contract       *)
+  (* reduces to the three gmap containments below.                       *)
+  (*                                                                     *)
+  (* Measured motivation: a segment contract whose branch condition the  *)
+  (* solver cannot decide by computation costs                           *)
+  (* 93.81 + 4.05*P + 0.531*P^2 M words in the number P of              *)
+  (* NEVER-EXECUTED instructions sharing its table, so trimming the      *)
+  (* table is worth (K/k)^2 -- 26.93x already at 64 filler instructions. *)
+  (* diagnostics/prefix-length-cost.md.                                  *)
+
+  (* A prefix of the list occupies a sub-map: same base, fewer entries.
+     No bound needed -- insert_mono is structural, and any address
+     collision from wraparound would only make the RIGHT side smaller in
+     the same way. *)
+  Lemma instrs_of_list_prefix {A} (l1 l2 : list A) (base : bv xlenbits) :
+    instrs_of_list base l1 ⊆ instrs_of_list base (l1 ++ l2).
+  Proof.
+    revert base. induction l1 as [|i rest IH]; intros base; cbn [instrs_of_list app].
+    - apply map_empty_subseteq.
+    - apply insert_mono. apply IH.
+  Qed.
+
+  (* Dropping l1 from the front shifts the base by 4*|l1| and lands inside
+     the full map.  The no-wrap bound is the same one instrs_of_list_fresh
+     needs, and is used for exactly that: to peel each head insert. *)
+  Lemma instrs_of_list_suffix {A} (l1 l2 : list A) (base : bv xlenbits) :
+    (bv.bin base + 4 * N.of_nat (length l1 + length l2) < bv.exp2 xlenbits)%N ->
+    instrs_of_list (bv.add base (bv.of_N (4 * N.of_nat (length l1)))) l2
+      ⊆ instrs_of_list base (l1 ++ l2).
+  Proof.
+    revert base. induction l1 as [|i rest IH]; intros base Hbound;
+      cbn [instrs_of_list app length] in *.
+    - (* bv.of_N 0 is only CONVERTIBLE to bv.zero, so rewrite bv.add_zero_r
+         finds no subterm; apply does, through conversion. *)
+      replace (bv.add base (bv.of_N (4 * N.of_nat 0))) with base
+        by (symmetry; apply bv.add_zero_r).
+      reflexivity.
+    - replace (4 * N.of_nat (S (length rest)))%N
+        with (4 + 4 * N.of_nat (length rest))%N by lia.
+      rewrite <- bv.of_N_add, bv.add_assoc.
+      assert (Hb1 : (bv.bin (bv.add base (bv.of_N 4)) <= bv.bin base + 4)%N).
+      { rewrite bv.bin_add. etransitivity; [apply N.Div0.mod_le|].
+        apply N.add_le_mono_l. apply bv.bin_of_N_decr. }
+      etransitivity.
+      + apply IH.
+        (* lia chokes on 2^32; make bv.exp2 xlenbits an opaque atom first. *)
+        set (E := bv.exp2 xlenbits) in *; clearbody E. lia.
+      + apply insert_subseteq.
+        apply (instrs_of_list_fresh (rest ++ l2) base (d := 4)); [lia|].
+        rewrite length_app.
+        set (E := bv.exp2 xlenbits) in *; clearbody E. lia.
+  Qed.
+
+  (* The combination a segment contract needs: the store of the segment,
+     based at its own address, sits inside the store of the whole program.
+     `off` is 4 * |pre|, i.e. the segment's byte offset -- which a segment
+     contract carries in its PLACEMENT term rather than as a table prefix. *)
+  Lemma instrs_of_list_segment {A} (pre seg post : list A) (base : bv xlenbits) :
+    (bv.bin base + 4 * N.of_nat (length (pre ++ seg ++ post)) < bv.exp2 xlenbits)%N ->
+    instrs_of_list (bv.add base (bv.of_N (4 * N.of_nat (length pre)))) seg
+      ⊆ instrs_of_list base (pre ++ seg ++ post).
+  Proof.
+    intros Hbound.
+    etransitivity; [apply (instrs_of_list_prefix seg post)|].
+    apply instrs_of_list_suffix.
+    rewrite !length_app in *. lia.
+  Qed.
+
+
+  (* ------------------------------------------------------------------ *)
   (* Term-level instruction/exit tables (symbolic placement).            *)
   (*                                                                     *)
   (* table_of_list builds the address-term instruction table for the     *)
