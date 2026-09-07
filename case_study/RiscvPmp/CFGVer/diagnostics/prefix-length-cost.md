@@ -20,6 +20,27 @@ contract**, the same axis behaves completely differently.
 > current**. §2.2's reading that pinning matters because the counter is
 > symbolic is also retracted there: `k` is still symbolic post-fix.
 
+> **AND THE RIG IS NOT A PROXY FOR A REAL PROGRAM'S TABLE COST (2026-09-07).**
+> `pfiller` sits BEFORE the entry pc, so filler entries are unreachable by
+> construction. That makes this rig a clean instrument for the cost of *carrying*
+> a table entry — and *only* that. Measured
+> (`table-entry-cost.md` §3): an inert entry here costs **0.0136 M** and changes
+> the VC not at all (every node-kind count byte-identical at P=0 vs P=64), while
+> a *reachable* entry removed by segment-contract trimming costs **3.344 M** on
+> muladd and adds ~4 nodes, 78% of them branch structure. A factor of **246, and
+> a difference in KIND**: trimming prunes reachable control flow, padding only
+> adds ballast. So do not use `pbody`/`pflat`/`pseg` numbers to predict what
+> trimming a real contract will buy, in either direction — this rig said 26.93×
+> pre-fix and 1.36× post-fix where muladd was 3.03× both times.
+>
+> Corollary for §3.2's ablations: each verdict is relative to the denominator
+> present when it ran, and `cfdcc92f` shrank the quadratic coefficient 3544×.
+> §3.2b's word-column verdict is the worked example — re-run 2026-09-06 it is
+> **65% of this rig's K-dependence**, not 0.07%. Its practical advice ("do not
+> fix the word-slice nesting") nonetheless survives, because that same ablation
+> is **2.1%** on real muladd. Re-run any §3.2 candidate before trusting a
+> sub-percent dismissal.
+
 ## One-sentence finding
 
 A segment contract whose branch condition the solver cannot decide by

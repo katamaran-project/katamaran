@@ -218,6 +218,17 @@ Read the same data as a marginal cost per table entry:
 Neither lever substitutes for the other. Countdown made them look like one
 mechanism because there the branch charge dominated the table charge by ~1000×.
 
+> **MECHANISM FOUND 2026-09-07** (`table-entry-cost.md` §3). The two rigs were
+> never measuring the same quantity. `pfiller` sits before the entry pc, so
+> countdown's extra entries are UNREACHABLE — an inert entry costs 0.0136 M and
+> changes no VC node count at all. Muladd's trimming removes entries that are
+> REACHABLE: each costs 3.344 M and adds ~4 raw nodes, 78% of them branch
+> structure (+223 `demonic_binary`, +198 `error`, +223 `block` over 267
+> entries), all of which `postprocess` then discards — the postprocessed VCs of
+> the 15- and 282-entry arms are IDENTICAL. So trimming is control-flow pruning,
+> not data-structure shrinking, which is why it is branch-independent yet real,
+> and why the two per-entry figures differ 246×.
+
 Muladd is untouched because its branches are in the two regimes the rule cannot
 reach: segment 1's are already **decidable by computation** (pinned public
 `m[0] = 63`), and the cut's are **genuinely undecidable** (`T0` havoc'd, so no
