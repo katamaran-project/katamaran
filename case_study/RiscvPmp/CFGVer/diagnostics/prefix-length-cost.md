@@ -20,18 +20,17 @@ contract**, the same axis behaves completely differently.
 > current**. §2.2's reading that pinning matters because the counter is
 > symbolic is also retracted there: `k` is still symbolic post-fix.
 
-> **AND THE RIG IS NOT A PROXY FOR A REAL PROGRAM'S TABLE COST (2026-09-07).**
-> `pfiller` sits BEFORE the entry pc, so filler entries are unreachable by
-> construction. That makes this rig a clean instrument for the cost of *carrying*
-> a table entry — and *only* that. Measured
-> (`table-entry-cost.md` §3): an inert entry here costs **0.0136 M** and changes
-> the VC not at all (every node-kind count byte-identical at P=0 vs P=64), while
-> a *reachable* entry removed by segment-contract trimming costs **3.344 M** on
-> muladd and adds ~4 nodes, 78% of them branch structure. A factor of **246, and
-> a difference in KIND**: trimming prunes reachable control flow, padding only
-> adds ballast. So do not use `pbody`/`pflat`/`pseg` numbers to predict what
-> trimming a real contract will buy, in either direction — this rig said 26.93×
-> pre-fix and 1.36× post-fix where muladd was 3.03× both times.
+> **AND THE RIG IS USABLE FOR MECHANISM, USELESS FOR MAGNITUDE — 224× LOW
+> (2026-09-07).** `pfiller` sits BEFORE the entry pc, so filler entries are
+> unreachable and this rig measures the cost of *carrying* a table entry. That
+> IS the dominant real mechanism — a seven-point sweep on muladd
+> (`table-entry-cost.md` §3) puts carrying cost at **89%** of the 15-vs-282 gap,
+> with only 8% from reachable overshoot past the declared exit. But the
+> magnitude does not transfer: carrying costs **0.0136 M/entry** here and
+> **3.04 M/entry** on muladd, because per-entry cost is ~quadratic in `|Σ|` and
+> this rig runs at `|Σ|`=7 where real targets are at 32+. So use it to identify
+> mechanism; never to predict a payoff. It said 26.93× pre-`cfdcc92f` and 1.36×
+> post, where muladd was 3.03× both times.
 >
 > Corollary for §3.2's ablations: each verdict is relative to the denominator
 > present when it ran, and `cfdcc92f` shrank the quadratic coefficient 3544×.

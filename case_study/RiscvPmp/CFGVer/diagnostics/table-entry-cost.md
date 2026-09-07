@@ -1,7 +1,9 @@
 # Why the VC cost scales with the number of instruction-table entries
 
-**Status: ANSWERED (2026-09-07).** §3 is the answer; §1–2 are the route, including
-two refuted hypotheses of mine and one arithmetic error, all kept deliberately. The mechanism inventory in §1 is from
+**Status: ANSWERED (2026-09-07).** §3 is the answer — **89% carrying cost, 8% exit
+overshoot**. §1–2 are the route; §3a retracts an earlier revision of §3 that had
+it backwards. Three refuted hypotheses and one arithmetic error are kept
+deliberately, all four from fitting a mechanism to two data points. The mechanism inventory in §1 is from
 the code and is settled. The fix §1b proposed was implemented, measured, and
 **buys nothing** (§2). The per-entry charge is real and remains UNEXPLAINED — §1's
 three named mechanisms do not account for its magnitude, and §2 rules the
@@ -296,77 +298,99 @@ M/entry**, which is the §1 structural cost — `persist_itableW`'s list rebuild
 (§3) addresses, and it is now known to be linear, so it is a constant-factor
 target, not an exponent one.
 
-## 3. THE ANSWER: it is reachable control flow, not carrying cost
+## 3. THE ANSWER: 89% carrying cost, 8% exit overshoot
 
-The `pflat` pair and the muladd pair are not measuring the same thing, and the
-node-kind breakdown says so outright (`Example/ZZNodeKinds.v`, raw VC):
+A seven-point table-size sweep (`Example/ZZK_*.v`: `List.firstn K (List.skipn 55
+zzmuladdfulln2_instrs)`, K = 15…75, everything else fixed, all `Qed`), plus node
+counts at three of those K. K=15 is exactly the executed segment (offsets
+220..276); the declared exit is at 280, so K≥16 puts an instruction AT the exit.
 
-| kind | `zzsegtrim` (15) | `zzseg2` (282) | Δ | per extra entry |
+| K | net | Δ | per entry | raw nodes |
+|---:|---:|---:|---:|---:|
+| 15 | 339.371 M | — | — | 2374 |
+| 16 | 349.580 M | 10.209 | 10.21 | — |
+| 18 | 378.155 M | 28.575 | 14.29 | — |
+| 20 | 413.524 M | 35.369 | **17.69** | **3454** |
+| 25 | 428.688 M | 15.164 | 3.033 | — |
+| 35 | 459.089 M | 30.401 | 3.040 | — |
+| 75 | 581.068 M | 121.979 | **3.049** | **3454** |
+| 282 (= `ZZSeg2P`) | 1232.250 M | | | **3454** |
+
+K=15 reproduces `ZZSegTrimP` to 0.007%, so the sweep is calibrated.
+
+**Two regimes, and the node counts separate them exactly.**
+
+1. **K=15→20 — EXIT OVERSHOOT, 74.15 M (8.3%), +1080 nodes.** The segment
+   executes 15 of its 20 fuel, so ~5 remain; with an instruction at the exit
+   address the executor spends them running PAST the declared exit. Marginal
+   cost 10–18 M/entry. Bounded by leftover fuel, and the bound fits to the
+   instruction.
+2. **K>20 — CARRYING COST, 3.033/3.040/3.049 M/entry, ZERO extra nodes.**
+   Byte-identical node counts at K=20, 75 and 282 (279/191/214/275/0/0/661/586/
+   586/662). These entries sit at offsets 300–516, unreachable on the remaining
+   fuel, produce nothing, and cost 3.04 M each with no ceiling.
+
+Model closes on the full 892.9 M gap to **2.5%**:
+`74.15 (overshoot) + 207×3.04 (suffix) + 55×3.04 (prefix) = 870.6`.
+
+### 3a. RETRACTION: this file's own previous §3
+
+An earlier revision of this section (commit message included) concluded
+**"reachable control flow, not carrying cost"**. That is **backwards** — it is
+89% carrying cost. The error was reading the +4.04 nodes/entry from the *two*
+available table sizes as evidence that exploration was the whole mechanism. The
+node growth is entirely confined to the fuel-reachable window; the cost is not.
+The sweep is the seven points that should have preceded the conclusion, and it
+is the third two-point mechanism-fit to fail in this investigation (see §2a,
+§2f).
+
+Consequently retracted from the previous revision:
+- "base+offsets is NOT worth doing (~0.4%)" — **wrong**; it attacks the 89%.
+- "the padding rig is unrepresentative IN KIND" — **wrong**; it measures the
+  right mechanism (carrying cost) at 224× too small a magnitude. See §3b.
+- "the sub-table mechanism is control-flow pruning" — **wrong**; it is
+  overwhelmingly table-carrying reduction, with an 8% pruning bonus.
+
+Upheld from the previous revision: the machinery is sound (identical
+postprocessed VCs), and the word-column verdict (§2h/§2i).
+
+### 3b. Why the pad rig is 224× too small — the `|Σ|` axis, again
+
+| rig | per entry | steps | per entry per step | peak `\|Σ\|` |
 |---|---:|---:|---:|---:|
-| `assertk` | 207 | 279 | +72 | 0.27 |
-| `assumek` | 143 | 191 | +48 | 0.18 |
-| `demonicv` | 166 | 214 | +48 | 0.18 |
-| `angelicv` | 205 | 275 | +70 | 0.26 |
-| `demonic_binary` | 438 | 661 | **+223** | 0.84 |
-| `angelic_binary` | 388 | 586 | **+198** | 0.74 |
-| `error` | 388 | 586 | **+198** | 0.74 |
-| `block` | 439 | 662 | **+223** | 0.84 |
-| total | 2374 | 3454 | +1080 | 4.04 |
+| `pbody`/`pflat` (word-column-ablated, pure carrying) | 0.0136 M | ~2.5 | 0.0054 M | 7 |
+| muladd, K>20 (pure carrying) | 3.04 M | ~20 | 0.152 M | 32 |
 
-78% of the growth is branch structure. **And after `postprocess` the two VCs are
-IDENTICAL** — `assert=1, assume=4, demonicv=27, block=1` on both sides.
+**28× per entry per step against a 4.6× `|Σ|` ratio** — consistent with the
+quadratic in declared-variable count that `lvar-lookup-cost-drivers.md` §5
+measured (4.6² ≈ 21). So `|Σ|` is the multiplier on carrying cost, exactly as
+§2d/§2f modelled before §3's earlier revision talked me out of it.
 
-Mechanism: with 282 entries a branch leaving the segment lands on an
-instruction and the executor **keeps going**, forking, exploring, and ending in
-`error` or a solver-refuted `block`. With 15 entries the same branch hits
-`lookup_instr = None` ("no instruction key matches this pc term") and dies at
-once. The whole 892.9 M difference is construction work that `postprocess`
-discards — consistent with `base-k-hunt.md`'s ≤2.6%-of-peak-heap finding.
+The rig is therefore usable for MECHANISM and useless for MAGNITUDE: its
+K-coefficient is the coefficient at `|Σ|`=7, and real targets run at 32+.
 
-### 3a. Why the padding rig is unrepresentative IN KIND
+### 3c. Two fixes, both now justified
 
-`ZZPadCommon.v` places `pfiller` **before** the entry pc, so filler entries are
-unreachable by construction — that is deliberate, and it makes the rig a clean
-instrument for *carrying* cost. Trimming a segment contract removes entries that
-are **reachable**. Hence:
+- **`is_exit` short-circuit (executor, small).** `sexec_cfg_addr` builds BOTH
+  sides of `angelic_binary (exit-branch) (execute-branch)` even when
+  `is_exit apc` is already `true`, in which case the left side is `pure apc`, an
+  unconditional success, and the right side is waste. Collapsing the choice when
+  the pc is a declared exit removes regime 1 — **8% here**, and more for a
+  segment leaving more fuel unspent. NOTE this is **not** a solver failure: the
+  solver refutes one side of every demonic fork (`#block = #dbin + 1` exactly,
+  both arms).
+- **base+offsets (representation, a project).** §2j/§3 of earlier revisions
+  describe it: one base term + one wide word term + a world-independent
+  `list (N * AnnotInstr)`, making `persist_itableW` and `itableW_free` O(1) in K
+  and `lookup_instr` one `peval` plus a numeric lookup. It attacks regime 2, i.e.
+  **~797 M of `ZZSeg2P`'s 1232 M (~2.8× on that arm)**, and it makes table size
+  free — which would remove the need for sub-table trimming rather than
+  complementing it. Cost is reworking `itable_rel`, the `TablesRel.v` faith
+  lemmas, and `wtable_rel`/`itable_relW_zip`.
 
-| | pad rig (inert entries) | muladd (reachable entries) |
-|---|---:|---:|
-| per entry | 0.0136 M | 3.344 M |
-| VC node change | **zero, every kind** | +4.04 nodes/entry |
-
-A factor of 246, and a difference in kind. This is the mechanism behind
-`branch-refutation-payoff.md` §6.1's otherwise-unexplained observation that
-countdown's per-entry cost collapsed 998× while muladd's moved 0.0%: they were
-never measuring the same quantity.
-
-**Do not use `pbody`/`pflat`/`pseg` to predict a real program's table cost.**
-They bound the carrying cost only, and the carrying cost is ~0.4% of it.
-
-### 3b. Consequences
-
-- **The sub-table machinery is sound and its payoff is real.** The identical
-  postprocessed VCs are direct evidence the trimmed contract proves the same
-  thing — the live worry once the extra entries turn out to be reachable.
-- **Its mechanism is control-flow pruning, not data-structure shrinking.** It
-  pays in proportion to the *reachable* code a segment carries, which is why it
-  is 3.03–3.63× on a 282-instruction function and 1.36× on countdown.
-- **base+offsets (§2j's target) is NOT worth doing.** It attacks carrying cost
-  only, so its ceiling is the pad rig's 0.0136 M/entry against muladd's 3.344 —
-  about **0.4%**. The representation criticism in earlier revisions of this file
-  stands as a criticism and is irrelevant as an optimisation.
-- **The word-column O(K²) fix is likewise not worth doing** on real targets
-  (§2h/§2i): 65–72% of the pad rig's K-dependence, **2.1%** of muladd's.
-  `prefix-length-cost.md` §3.2b's advice stands; only its stated reason changed.
-
-### 3c. What to attack instead
-
-The lever is the **number of reachable-but-irrelevant control-flow paths** a
-contract admits. Trimming is one way to reduce it. The `error`/`block` counts
-above (+198/+223 per 267 entries) say the executor spends most of the difference
-building branches that are then thrown away, so anything that refutes or avoids
-a branch earlier attacks this directly — which is the same lever `cfdcc92f`
-pulled, and it was worth 275× on the rig where those branches dominated.
+Before funding base+offsets, isolate the `|Σ|` axis properly (§3b is a two-rig
+fit). The cheap version: raise `|Σ|` on the pad rig at fixed table, fixed steps,
+fixed chunks, and check the K-coefficient scales quadratically.
 
 ## 4. Files
 
