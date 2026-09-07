@@ -57,8 +57,18 @@ paired `refine_bind`. This is why `rexec_cfg_addr`'s proof is NOT written in
 unlike a clean structural mirror, matching the two sides here needs explicit
 `itable_rel`/`etable_rel` faithfulness facts (below), not just instance search.
 
-**MIRROR (still mandatory where it applies):** fuel, the angelic exit/execute
-choice, and the recursive step. **DON'T MIRROR (symbolic-only bookkeeping):**
+**MIRROR (still mandatory where it applies):** fuel and the recursive step.
+**NO LONGER the exit/execute choice, deliberately (2026-09-07):**
+`sexec_cfg_addr` has no `angelic_binary` at all — it stops iff
+`negb first && is_exit` — while `cexec_cfg_addr` keeps its unconditional
+`angelic_binary`. That asymmetry is SOUND and is the whole point:
+`is_exit_sound` runs one way only (`is_exit = true -> exitCond v = true`), so the
+symbolic side may be strictly MORE decisive, which makes the VC stronger. The
+payoff was removing a per-step dead branch (1.21× on every program) and a
+fuel-dependent overshoot past mid-program exits; see **cfgver-executor** and
+`diagnostics/table-entry-cost.md` §3d. Consequence for `rexFS`: the symbolic side
+is always a SINGLE branch, so its cases take `rprop_left` / `rprop_right` into
+the concrete disjunction rather than `rprop_or`. **DON'T MIRROR (symbolic-only bookkeeping):**
 world-indexed binds (`⟨θ1⟩` substitutions), `persist_itable`/`persist_etable`
 threading, path conditions, and error-message payloads (`amsg` with
 `debug_string_pathcondition`; concrete errors are a bare `error`).
@@ -95,13 +105,16 @@ this skill.
 
 The relational-correctness lemma refining `cexec_cfg_addr` by `sexec_cfg_addr`,
 proved by `iInduction` on fuel, GIVEN `itable_relW instrs words tbl` and
-`etable_rel exitCond exits`. Its four subgoals (`is_exit`/`lookup_instr`, hit/miss
-on each) are discharged sequentially by hand rather than through
-`rsolve`/`refine_bind` pairing — see the divergence note above. **Keep the four
-cases bulleted** (`+`): the script used to be positional, and when
-`sexec_cfg_addr` gained `anp` the first case stopped closing, silently shifting
-every later block by one goal and surfacing as an unresolvable evar nowhere near
-the cause.
+`etable_rel exitCond exits`. **THREE subgoals since 2026-09-07** (was four): when the stop guard holds the
+symbolic side is `pure ta` and `lookup_instr` is never consulted, so the old
+exit-hit/exit-miss pair MERGES — which also deleted the old case 1, a verbatim
+58-line copy of the core case that `rprop_or` had glued on (270 → 198 lines).
+Goals are 1 = stop, 2 = run/lookup-hit, 3 = run/lookup-miss. They are discharged
+sequentially by hand rather than through `rsolve`/`refine_bind` pairing — see the
+divergence note above. **Keep the cases explicitly selected/bracketed**: the
+script used to be positional, and when `sexec_cfg_addr` gained `anp` the first
+case stopped closing, silently shifting every later block by one goal and
+surfacing as an unresolvable evar nowhere near the cause.
 
 **`itable_relW` vs `itable_rel` — the distinction to keep straight:**
 

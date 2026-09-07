@@ -1232,7 +1232,7 @@ Section CFGVerificationDerived.
       (HPhi : Factors (dbundle trans tbl exits apc anp wd) Phi) :
     Factors (dbundle trans tbl exits apc anp wd)
       (fun w1 (om : Acc w w1) (_ : Unit w1) =>
-         step_after_drop (@sexec_cfg_addr Sg0 n') ai
+         step_after_drop (@sexec_cfg_addr Sg0 n' false) ai
            (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
            (persist_etable om exits) (persist__term apc om) (persist__term anp om)
            (persist__term wd om) (four Phi om)).
@@ -1244,7 +1244,7 @@ Section CFGVerificationDerived.
        is expected". *)
     exists (fun w1 (bnd : dcarrier Sg0 (wctx w1)) (_ : Unit w1) =>
               let '(q1, q2, q3, q4, q5, q6) := bnd in
-              step_after_drop (@sexec_cfg_addr Sg0 n') ai q1 q2 q3 q4 q5 q6
+              step_after_drop (@sexec_cfg_addr Sg0 n' false) ai q1 q2 q3 q4 q5 q6
                 (fun w' om' => g w' (persist (A := dcarrier Sg0) bnd om'))).
     intros w2 om v h.
     rewrite dbundle_persist. cbn [dbundle].
@@ -1326,7 +1326,7 @@ Section CFGVerificationDerived.
       (HPhi : Factors (dbundle5 trans tbl exits apc anp) Phi) :
     Factors (dbundle trans tbl exits apc anp wd)
       (fun w1 (om : Acc w w1) (_ : Unit w1) =>
-         step_after_drop (@sexec_cfg_addr Sg0 n') ai
+         step_after_drop (@sexec_cfg_addr Sg0 n' false) ai
            (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
            (persist_etable om exits) (persist__term apc om) (persist__term anp om)
            (persist__term wd om) (four Phi om)).
@@ -1453,6 +1453,29 @@ Section CFGVerificationDerived.
       - iDestruct ("H2" with "Hs") as "%Hc". iPureIntro. now right.
     Qed.
 
+    (* Since sexec_cfg_addr stopped offering an angelic exit/execute choice
+       (Verifier.v, 2026-09-07), the symbolic side of this refinement is a
+       SINGLE branch while cexec_cfg_addr still produces a disjunction.  These
+       pick the matching disjunct.  Same principle as
+       theories/Refinement/Monads.v's refine_purespec_mono -- RProp is
+       "symbolic implies concrete", so weakening the concrete side is free --
+       specialised to `\/` so it can be iApply'd directly. *)
+    Lemma rprop_left {w : World} (c1 c2 : Prop) (s : 𝕊 w) :
+      ℛ⟦LogicalSoundness.RProp⟧ c1 s -∗
+      ℛ⟦LogicalSoundness.RProp⟧ (c1 \/ c2) s.
+    Proof.
+      unfold LogicalSoundness.RProp; cbn.
+      iIntros "H1 Hs". iDestruct ("H1" with "Hs") as "%Hc". iPureIntro. now left.
+    Qed.
+
+    Lemma rprop_right {w : World} (c1 c2 : Prop) (s : 𝕊 w) :
+      ℛ⟦LogicalSoundness.RProp⟧ c2 s -∗
+      ℛ⟦LogicalSoundness.RProp⟧ (c1 \/ c2) s.
+    Proof.
+      unfold LogicalSoundness.RProp; cbn.
+      iIntros "H2 Hs". iDestruct ("H2" with "Hs") as "%Hc". iPureIntro. now right.
+    Qed.
+
     (* rdrop_dead is stated POINTWISE at a valuation; this lifts it to an Iris
        entailment so it can be iApply'd.  Phase 0's idiom (zz_dropk_step):
        `constructor. intros iota Hpc _. rewrite !wand_unfold.` *)
@@ -1476,7 +1499,7 @@ Section CFGVerificationDerived.
     Lemma rexF0 (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
         {Σ0 : LCtx} :
-      forall (w : World) (trans : Sub Σ0 w)
+      forall (first : bool) (w : World) (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w),
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
@@ -1486,9 +1509,9 @@ Section CFGVerificationDerived.
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
             (cexec_cfg_addr instrs words exitCond 0 a na cΦ ch)
-            (sexec_cfg_addr 0 trans tbl exits ta tna sΦ sh))%I.
+            (sexec_cfg_addr 0 first trans tbl exits ta tna sΦ sh))%I.
     Proof.
-      intros w trans tbl exits.
+      intros first w trans tbl exits.
       iIntros "#[Hi He]".
       iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
       iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
@@ -1499,7 +1522,7 @@ Section CFGVerificationDerived.
 
     Lemma rexFS (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
-        {Σ0 : LCtx} (n' : nat)
+        {Σ0 : LCtx} (n' : nat) (first : bool)
         (IH : forall (w : World) (trans : Sub Σ0 w)
                 (tbl : SInstrTableW w) (exits : SExitTable w),
            (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
@@ -1510,7 +1533,7 @@ Section CFGVerificationDerived.
             ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
               ℛ⟦LogicalSoundness.RProp⟧
                  (cexec_cfg_addr instrs words exitCond n' a na cΦ ch)
-                 (sexec_cfg_addr n' trans tbl exits ta tna sΦ sh))%I) :
+                 (sexec_cfg_addr n' false trans tbl exits ta tna sΦ sh))%I) :
       forall (w : World) (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w),
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
@@ -1521,33 +1544,45 @@ Section CFGVerificationDerived.
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
             (cexec_cfg_addr instrs words exitCond (S n') a na cΦ ch)
-            (sexec_cfg_addr (S n') trans tbl exits ta tna sΦ sh))%I.
+            (sexec_cfg_addr (S n') first trans tbl exits ta tna sΦ sh))%I.
     Proof.
       intros w trans tbl exits.
       iIntros "#[Hi He]".
       iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
       iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
       cbn [sexec_cfg_addr cexec_cfg_addr].
-      destruct (is_exit exits ta) eqn:Hex;
-        destruct (lookup_instr tbl ta) as [[wd ai]|] eqn:Hlk.
+      (* THREE cases, not four.  sexec_cfg_addr has NO angelic_binary any more
+         (Verifier.v, 2026-09-07): it stops iff `negb first && is_exit`, so the
+         symbolic side is always a SINGLE branch while cexec_cfg_addr still
+         produces a disjunction -- hence rprop_left / rprop_right below instead
+         of rprop_or.  When the guard holds the lookup result is irrelevant, so
+         the old exit-hit/exit-miss pair MERGES, and that deletes the old case 1,
+         which was a verbatim 58-line copy of the core case glued on by
+         rprop_or.  Goals below: 1 = stop, 2 = run/lookup-hit,
+         3 = run/lookup-miss. *)
+      destruct (andb (negb first) (is_exit exits ta)) eqn:Hcol.
+      2: destruct (lookup_instr tbl ta) as [[wd ai]|] eqn:Hlk.
 
-      (* ---- 4: exit-miss / lookup-miss.  Both symbolic branches are errors, *)
-      (* so psafe is False on either side of the angelic split.               *)
-      4: { destruct a as [va|va1 va2]; cbn [ty.RVToOption];
+      (* ---- 3: no-exit / lookup-miss.  The symbolic side is a bare error now
+         (no angelic wrapper), so psafe is outright False. *)
+      3: { destruct a as [va|va1 va2]; cbn [ty.RVToOption];
            unfold LogicalSoundness.RProp; cbn;
-           iIntros "[%HF|%HF]"; destruct HF. }
+           iIntros "%HF"; destruct HF. }
 
-      (* ---- 3: exit-miss / lookup-hit.  THE CORE -- this is the branch that *)
+      (* ---- 2: no-exit / lookup-hit.  THE CORE -- this is the branch that *)
       (* actually contains the drop.  Driven to the frontier below.           *)
-      3: { iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
+      2: { iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
              as (v) "[%Hfact #Hx]".
            destruct Hfact as (-> & Hm).
            cbn [ty.RVToOption]. rewrite Hm.
-           (* BOTH angelic_binary's must be unfolded before rprop_or applies:
-              the concrete one is CHeapSpec's, the symbolic one SHeapSpec's, and
-              rprop_or is stated over SymProp.angelic_binary. *)
-           unfold CHeapSpec.angelic_binary, SHeapSpec.angelic_binary.
-           iApply rprop_or; [iApply rprop_error|].
+           (* Only the CONCRETE angelic_binary is left to unfold -- the
+              symbolic side no longer has one -- and we take its RIGHT disjunct.
+              Note this needs NOTHING about `exitCond v`: `is_exit = false` does
+              not imply `exitCond v = false` (is_exit_sound runs the other way),
+              so the concrete exit branch may well be `pure`; rprop_right
+              ignores it. *)
+           unfold CHeapSpec.angelic_binary.
+           iApply rprop_right.
            (* Eliminate both chunk_gc binds and the concrete drop bind.  After
               this the goal is EXACTLY rdrop_dead_iris's shape. *)
            rewrite cgc_binds_heap cdrop_binds gc_binds_heap.
@@ -1667,106 +1702,25 @@ Section CFGVerificationDerived.
                 POST-GC heap on both sides, which is exactly refine_gc_heap. *)
              iApply (refine_gc_heap with "rh"). }
 
-      (* ---- 2: exit-hit / lookup-miss.  Symbolic takes the exit branch. *)
-      2: { iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]")
-             as "%Hfact".
-           destruct Hfact as (v & -> & Hcond).
-           cbn [ty.RVToOption]. rewrite Hcond.
-           unfold LogicalSoundness.RProp; cbn.
-           (* LEFT disjunct is an Iris hypothesis, RIGHT is pure False --
-              "[%Hs|%Hs]" fails with "iPure: … not pure". *)
-           iIntros "[Hs|%Hs]"; [|destruct Hs].
-           iPoseProof (unconditionally_T with "rΦ") as "rΦ0".
-           iDestruct ("rΦ0" $! (SyncVal v) ta with "Ha") as "rΦ1".
-           iDestruct ("rΦ1" $! ch sh with "rh") as "rΦ2".
-           iDestruct ("rΦ2" with "Hs") as "%Hc".
-           iPureIntro. left. exact Hc. }
-
-      (* ---- 1: exit-hit / lookup-hit.  BOTH branches of the angelic split are
-         live here, so this is case 2 and case 3 glued by rprop_or: the concrete
-         LEFT branch is `pure` (not `error`), so rprop_or's first obligation is
-         case 2's tail, and its second is case 3 verbatim.
-         The opener needs BOTH soundness facts, and `injection Hveq as <-` is
-         what identifies the `v` that lookup_instr_sound_repₚ produced with the
-         one is_exit_sound_repₚ produced -- they are separately existentially
-         quantified and nothing else ties them together. *)
-      iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
-        as (v) "[%Hfact #Hx]".
-      destruct Hfact as (-> & Hm).
+      (* ---- 1: STOP (non-entry arrival at a declared exit).  The symbolic side
+         is `pure ta` outright, so this single case replaces the old exit-hit and
+         exit-miss pair -- `lookup_instr` is never consulted.  is_exit_sound_repₚ supplies `exitCond v = true`,
+         which is exactly what makes the CONCRETE exit disjunct `pure` rather
+         than `error`, so rprop_left applies.  The tail is the old case 1's
+         first bullet verbatim: both `pure`s bind at acc_refl, so unfolding T
+         collapses the world bookkeeping and what is left is the continuation
+         applied at acc_refl -- i.e. unconditionally_T. *)
+      apply andb_prop in Hcol as [_ Hex].
       iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]")
-        as "%Hfact2".
-      destruct Hfact2 as (v' & Hveq & Hcond).
-      injection Hveq as <-.
-      cbn [ty.RVToOption].
-      rewrite Hcond. rewrite Hm.
-      unfold CHeapSpec.angelic_binary, SHeapSpec.angelic_binary.
-      iApply rprop_or.
-      - (* exit taken on both sides: pure/pure.  Both `pure`s bind at acc_refl,
-           so unfolding T collapses the world bookkeeping and what is left is
-           the continuation applied at acc_refl -- i.e. unconditionally_T. *)
-        unfold CHeapSpec.pure, SHeapSpec.pure, T; cbv beta.
-        iPoseProof (unconditionally_T with "rΦ") as "rΦ0".
-        iDestruct ("rΦ0" $! (SyncVal v) ta with "Ha") as "rΦ1".
-        iApply ("rΦ1" $! ch sh with "rh").
-      - (* execute: case 3 verbatim, bullets renumbered to `+`. *)
-        rewrite cgc_binds_heap cdrop_binds gc_binds_heap.
-        unfold T; cbv beta.
-        unfold SHeapSpec.bind at 1.
-        rewrite (persist_itableW_refl tbl) (persist_etable_refl exits).
-        match goal with |- context [ ?C cΦ (cgc_heap ch) ] => set (crest := C) end.
-        unshelve iApply (rdrop_dead_iris drop_fuel (fun _ ch' => crest cΦ ch')
-                           (cgc_heap ch) (gc_heap sh) _).
-        + apply factors_drop_at_step. apply factors_widen5. exact Hfac.
-        + iIntros (w1 θ1). iModIntro. iIntros (u tu) "_".
-          iIntros (ch' sh') "#rh'".
-          unfold step_after_drop.
-          iClear "rh".
-          iPoseProof (forgetting_unconditionally with "rΦ") as "rΦ1".
-          iClear "rΦ".
-          unfold crest.
-          unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
-          iApply (rexec_ghosts (ai_ghost_before ai)).
-          2: iApply "rh'".
-          iIntros (w0 θ0). iModIntro. iIntros (u0 tu0) "_".
-          iIntros (ch0 sh0) "#rh0".
-          iPoseProof (forgetting_unconditionally with "rΦ1") as "rQ2".
-          iClear "rΦ1".
-          unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
-          iApply (rexec_instruction (ai_instr ai)).
-          1: (rewrite <- (persist_trans (A := STerm ty_xlenbits));
-              iApply (refine_inst_persist with "Ha")).
-          1: (rewrite <- (persist_trans (A := STerm ty_xlenbits));
-              iApply (refine_inst_persist with "Hna")).
-          1: (rewrite <- (persist_trans (A := STerm ty_word));
-              iApply (refine_inst_persist with "Hx")).
-          2: iApply "rh0".
-          iIntros (w2 θ2). iModIntro. iIntros (apc' tapc') "#Hapc".
-          iIntros (ch2 sh2) "#rh2".
-          iPoseProof (forgetting_unconditionally with "rQ2") as "rQ3".
-          iClear "rQ2".
-          unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
-          iApply (rexec_ghosts (ai_ghost_after ai)).
-          2: iApply "rh2".
-          iIntros (w3 θ3). iModIntro. iIntros (u3 tu3) "_".
-          iIntros (ch3 sh3) "#rh3".
-          iPoseProof (forgetting_unconditionally with "rQ3") as "rQ4".
-          iClear "rQ3".
-          pose proof (factors_four θ1 Hfac) as F1.
-          pose proof (factors_four θ0 F1) as F2.
-          pose proof (factors_four θ2 F2) as F3.
-          pose proof (factors_four θ3 F3) as F4.
-          rewrite !dbundle3_persist in F4.
-          clear F1 F2 F3.
-          rewrite forgetting_itable_relW. rewrite forgetting_etable_rel.
-          rewrite <- !persist_itableW_trans. rewrite <- !persist_etable_trans.
-          rewrite !(persist_trans (A := Sub Σ0)).
-          iApply (IH _ _ _ _ with "[$Hi $He]").
-          1: iApply (refine_inst_persist with "Hapc").
-          1: iApply (refine_inst_persist with "Hapc").
-          1: (iPureIntro; exact F4).
-          1: iApply "rQ4".
-          1: iApply "rh3".
-        + iApply (refine_gc_heap with "rh").
+        as "%Hfact".
+      destruct Hfact as (v & -> & Hcond).
+      cbn [ty.RVToOption]. rewrite Hcond.
+      unfold CHeapSpec.angelic_binary.
+      iApply rprop_left.
+      unfold CHeapSpec.pure, SHeapSpec.pure, T; cbv beta.
+      iPoseProof (unconditionally_T with "rΦ") as "rΦ0".
+      iDestruct ("rΦ0" $! (SyncVal v) ta with "Ha") as "rΦ1".
+      iApply ("rΦ1" $! ch sh with "rh").
     Qed.
 
     (* rexec_cfg_addr: refinement of the gmap concrete executor by the  *)
@@ -1799,7 +1753,7 @@ Section CFGVerificationDerived.
         (* `{w : World}` must be ANNOTATED: `trans : Sub Σ0 w` now precedes the
            table arguments, and `Sub` takes an LCtx, so leaving `w` to be
            inferred elaborates it as an LCtx and `SInstrTableW w` then fails. *)
-        (fuel : nat) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
+        (fuel : nat) (first : bool) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w) :
       (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
@@ -1809,16 +1763,21 @@ Section CFGVerificationDerived.
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
             (cexec_cfg_addr instrs words exitCond fuel a na cΦ ch)
-            (sexec_cfg_addr fuel trans tbl exits ta tna sΦ sh))%I.
+            (sexec_cfg_addr fuel first trans tbl exits ta tna sΦ sh))%I.
     Proof.
-      revert w trans tbl exits.
-      induction fuel as [|n' IH]; intros w trans tbl exits.
+      (* `first` must be REVERTED along with the rest: the goal fixes it, but
+         the recursive call inside sexec_cfg_addr always passes `false`, so the
+         induction hypothesis is needed at `false` while the conclusion is at an
+         arbitrary `first`.  rexFS's IH argument is stated with `false` pinned,
+         so `IH false` is exactly its shape. *)
+      revert first w trans tbl exits.
+      induction fuel as [|n' IH]; intros first w trans tbl exits.
       - apply rexF0.
       - (* `Set Implicit Arguments` (file top) makes rexFS's instrs/words/
            exitCond IMPLICIT -- they are inferable from IH -- so its first
-           EXPLICIT argument is n'.  Passing them positionally mis-slots and
-           reports "instrs ... expected to have type nat". *)
-        apply (rexFS n' IH).
+           EXPLICIT arguments are n' and first.  Passing them positionally
+           mis-slots and reports "instrs ... expected to have type nat". *)
+        apply (rexFS n' first (IH false)).
     Qed.
 
     (* ------------------------------------------------------------------ *)
@@ -2476,7 +2435,7 @@ Section CFGVerificationDerived.
                                    (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
                { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
                unfold CHeapSpec.bind. unfold SHeapSpec.bind.
-               iApply (rexec_cfg_addr instrs words exitCond fuel _ _ _ with "[$Hi $He]").
+               iApply (rexec_cfg_addr instrs words exitCond fuel true _ _ _ with "[$Hi $He]").
                (* FIVE premises: two RVal, the Factors one, then the □ᵣ/RHeap
                   pair, which the RHeapSpec-folded statement used to supply
                   automatically. *)

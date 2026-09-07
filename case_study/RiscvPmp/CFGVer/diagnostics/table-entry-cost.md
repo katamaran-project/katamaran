@@ -369,9 +369,11 @@ measured (4.6² ≈ 21). So `|Σ|` is the multiplier on carrying cost, exactly a
 The rig is therefore usable for MECHANISM and useless for MAGNITUDE: its
 K-coefficient is the coefficient at `|Σ|`=7, and real targets run at 32+.
 
-### 3c. Two fixes, both now justified
+### 3c. Two fixes, both now justified (the first LANDED — see 3d)
 
-- **`is_exit` short-circuit (executor, small).** `sexec_cfg_addr` builds BOTH
+- **`is_exit` short-circuit (executor, small).  LANDED 2026-09-07, see 3d --
+  and it turned out to also delete a per-step dead branch, so it is worth
+  ~1.21x on every program on top of removing the overshoot.** `sexec_cfg_addr` builds BOTH
   sides of `angelic_binary (exit-branch) (execute-branch)` even when
   `is_exit apc` is already `true`, in which case the left side is `pure apc`, an
   unconditional success, and the right side is waste. Collapsing the choice when
@@ -391,6 +393,70 @@ K-coefficient is the coefficient at `|Σ|`=7, and real targets run at 32+.
 Before funding base+offsets, isolate the `|Σ|` axis properly (§3b is a two-rig
 fit). The cheap version: raise `|Σ|` on the pad rig at fixed table, fixed steps,
 fixed chunks, and check the K-coefficient scales quadratically.
+
+## 3d. FIXED 2026-09-07: the exit overshoot is gone, and so is a dead branch
+
+`sexec_cfg_addr` no longer has an `angelic_binary` at all:
+
+```coq
+| S n' => if andb (negb first) (is_exit exits apc) then pure apc else (execute…)
+```
+
+`first` is set by `sexec_triple_addr` and cleared on every recursive call.
+
+**Two effects, measured separately (matched same-session A/B).**
+
+(1) The old exit ARM WAS DEAD on every non-exit step — it was `emsg`, so the old
+form emitted an `angelic_binary` plus a dead `error` per step of every program.
+Node census confirms exactly that: `ZZSegTrimP` goes `abin`/`error` 388/388 →
+**372/372**, i.e. 16 pairs for ~16 executed steps, while `dbin`/`block` stay
+438/439 (instruction-semantics forks, untouched). Worth a uniform **~1.21×** on
+the pad rig:
+
+| P | 0 | 16 | 32 | 64 | 128 |
+|---|---:|---:|---:|---:|---:|
+| before | 6.721 | 7.228 | 7.805 | 9.188 | 12.883 |
+| after | 5.588 | 5.967 | 6.414 | 7.529 | 10.659 |
+| ratio | 1.203 | 1.211 | 1.217 | 1.220 | 1.209 |
+
+(2) **The fuel-dependent exit overshoot is eliminated.** Re-running §3's sweep:
+
+| K | 15 | 16 | 18 | 20 | 25 | 35 | 75 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| marginal BEFORE | — | 10.209 | 14.288 | 17.685 | 3.033 | 3.040 | 3.049 |
+| marginal AFTER | — | **3.012** | **3.023** | **3.011** | **3.017** | **3.021** | **3.030** |
+
+Flat at 3.011–3.030 M/entry across the whole range, including the first entry
+past the exit. The discontinuity that grew with every unit of slack fuel is
+gone. On the arms: `ZZSeg2P` 1232.250 → **1164.651 M** (−67.6 M, 91% of the
+74.2 M §3 attributed to overshoot); `ZZSegTrimP` 339.348 → 339.316 M
+(**unchanged**, correctly — its table holds no instruction at the exit address,
+so it never overshot). Per-entry 3.344 → 3.091 M/entry.
+
+**`first` is NOT removable.** A loop-body segment contract starts and ends at the
+SAME address (`exits_of_offs <base> [0]` against `asn_init_pc <base>` in
+`PaddedLoop.v`, `CountdownComposed.v`, `TwoLoopsComposed.v`), so its trace visits
+that address twice — execute at step 0, stop at step 2 — and the pc is the same
+TERM both times. Fuel cannot substitute: the executor sees only what remains,
+never the initial value. Dropping `first` and stopping at any declared exit was
+tried and makes `pbody 0` fail with residual `v = v + 0xffffffff`, i.e. the
+postcondition demanded at the entry.
+
+What the old `angelic_binary` was really doing was two jobs at once: deciding
+"am I done" (the exit table's job) and disambiguating the two visits (nothing
+else can). Because it was a CHOICE it had to construct both branches, and that
+construction is the fuel cost. `first` separates the jobs so "am I done" becomes
+a decision.
+
+**Proof side.** Only the symbolic executor changed; `cexec_cfg_addr` keeps its
+unconditional `angelic_binary` (deliberately breaking cfgver-refinement's
+"mirror the choice" rule), which is sound because `is_exit_sound` runs one way
+only. `rexFS` went 4 cases → 3 and 270 → 198 lines: the exit-hit/exit-miss pair
+merges, which deleted a verbatim 58-line copy of the core case that `rprop_or`
+had glued on. New helpers `rprop_left`/`rprop_right` replace `rprop_or`.
+
+**`./scripts/gate.sh` PASSED** — build clean, no holes, 18 end theorems
+axiom-clean (only `Machine.pure_decode` / `Base.mmioenv`).
 
 ## 4. Files
 

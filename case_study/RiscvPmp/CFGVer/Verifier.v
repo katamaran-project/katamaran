@@ -983,7 +983,7 @@ Section CFGVerificationDerived.
               (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
               (persist__term apc' θ3) (persist__term apc' θ3).
 
-    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) :
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (first : bool) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w trans tbl exits apc anp =>
@@ -993,9 +993,70 @@ Section CFGVerificationDerived.
         match fuel with
         | O    => emsg "sexec_cfg_addr: out of fuel"
         | S n' =>
-            angelic_binary
-              (if is_exit exits apc then pure apc
-               else emsg "sexec_cfg_addr: exit branch chosen but pc matches no declared exit term")
+            (* A DECLARED EXIT STOPS -- except at the ENTRY step.  There is
+               no angelic choice here at all any more.
+
+               This replaced `angelic_binary (if is_exit .. then pure apc else
+               emsg ..) (<execute>)` on 2026-09-07.  The replacement is smaller
+               in every direction:
+
+               - The old exit ARM WAS DEAD ON EVERY NON-EXIT STEP -- it was
+                 `emsg`, which the angelic could never usefully take -- so the
+                 old form emitted an `angelic_binary` plus a dead `error` per
+                 step of every program.  That is visible as `#abin = #error`
+                 exactly in the node census of both muladd arms (586/586 and
+                 388/388).  Its message ("exit branch chosen but pc matches no
+                 declared exit term") is deleted with it, being unreachable.
+               - The old form made cost depend on SLACK FUEL: at an exit-matching
+                 pc it built the execute side too, so when the table held an
+                 instruction at the exit address the executor ran on until fuel
+                 ran out.  Measured on the muladd cut segment (fuel 20, 15
+                 instructions executed): 74.2 M words, 8% of that arm's table
+                 cost, rising with every unit of fuel an author adds for safety
+                 -- while cfgver-new-example tells authors to fuel "with slack".
+                 See diagnostics/table-entry-cost.md 3.
+
+               SOUNDNESS.  `cexec_cfg_addr` keeps its unconditional
+               `angelic_binary`, deliberately breaking cfgver-refinement's
+               "mirror the choice" rule.  That is the sound direction:
+               `is_exit_sound` gives `is_exit = true -> exitCond v = true`, one
+               way only, so the symbolic side may be strictly MORE decisive.  In
+               rexec_cfg_addr the two branches now take `left` / `right` into the
+               concrete disjunction instead of `rprop_or`.
+
+               WHY `first` IS NEEDED, and it is not optional.  A loop-body
+               segment contract STARTS AND ENDS AT THE SAME ADDRESS: `pbody`
+               (and PaddedLoop.v / CountdownComposed.v / TwoLoopsComposed.v, all
+               gate-checked) declare `exits_of_offs <base> [0]` against
+               `asn_init_pc <base>`.  Its trace visits that address twice --
+               execute the body at step 0, stop at step 2 -- and the pc is the
+               same TERM both times, so the pc cannot tell them apart.  Fuel
+               cannot either: the executor sees only what remains, never the
+               initial value.
+
+               The old `angelic_binary` was silently doing this job by letting
+               the prover guess which visit it was on, and that is what cost the
+               fuel sensitivity: an angelic choice must CONSTRUCT both branches.
+               `first` separates the two jobs -- it answers "which visit is
+               this", after which "am I done" is a decision rather than a
+               choice, and nothing gets built speculatively.
+
+               Verified empirically: dropping `first` and stopping at any
+               declared exit makes `pbody 0` fail with residual
+               `v = v + 0xffffffff`, i.e. the postcondition demanded at the
+               entry.  Do not "simplify" it away.
+
+               At the entry we always EXECUTE rather than offering a choice: a
+               body contract's precondition carries the loop guard, so the body
+               must run, and the zero-trip case belongs to the composition
+               lemma (myWP2_loop_induction), not to the body contract.
+
+               COMPLETENESS.  A contract can no longer pass THROUGH its own
+               declared exit and continue, other than at the entry.  `is_exit`
+               is a syntactic `Term_eqb` after `peval`, so this fires only where
+               the pc term literally IS a declared exit term -- never on an
+               undecided comparison. *)
+            if andb (negb first) (is_exit exits apc) then pure apc else
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, ai) =>
@@ -1023,7 +1084,7 @@ Section CFGVerificationDerived.
                    let np0 := persist__term anp θ0 in
                    let wd0 := persist__term wd  θ0 in
                    ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
-                   step_after_drop (@sexec_cfg_addr Σ0 n') ai
+                   step_after_drop (@sexec_cfg_addr Σ0 n' false) ai
                      (persist (A := Sub Σ0) tr0 θd)
                      (persist_itableW θd tb0)
                      (persist_etable  θd ex0)
@@ -1138,20 +1199,19 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
-      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+      forall (first : bool) {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
         (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
-        CExt (sexec_cfg_addr fuel trans tbl exits apc anp).
+        CExt (sexec_cfg_addr fuel first trans tbl exits apc anp).
     Proof.
-      induction fuel as [|n IH]; intros w trans tbl exits apc anp;
+      induction fuel as [|n IH]; intros first w trans tbl exits apc anp;
         cbn [sexec_cfg_addr].
       - apply cext_error.
-      - apply cext_angelic_binary.
-        + destruct (is_exit exits apc); [apply cext_pure | apply cext_error].
-        + destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
-          apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.
-          apply cext_bind; [apply cext_drop_dead|]. intros w1 th1 _.
-          apply cext_step_after_drop. intros w' trans' tbl' exits' apc' anp'.
-          apply IH.
+      - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
+        destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
+        apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.
+        apply cext_bind; [apply cext_drop_dead|]. intros w1 th1 _.
+        apply cext_step_after_drop. intros w' trans' tbl' exits' apc' anp'.
+        apply IH.
     Qed.
 
     (* sexec_triple_addr / scfg_verification_condition: apply     *)
@@ -1301,7 +1361,7 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true
                        (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;

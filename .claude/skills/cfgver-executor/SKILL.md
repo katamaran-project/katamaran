@@ -118,6 +118,50 @@ executor's induction uses, DERIVED from them at the entry point (see
 **cfgver-refinement**). The refinement proof (`rexec_cfg_addr`) is what lets the
 two sides' VCs correspond.
 
+## A declared exit STOPS — `sexec_cfg_addr` has no `angelic_binary` (2026-09-07)
+
+```coq
+| S n' => if andb (negb first) (is_exit exits apc) then pure apc else (execute…)
+```
+
+`first` is set by `sexec_triple_addr`, cleared on every recursive call. This
+replaced `angelic_binary (if is_exit .. then pure apc else emsg ..) (<execute>)`.
+
+**Why the angelic went.** Its exit arm was DEAD on every non-exit step (it was
+`emsg`), so the old form emitted an `angelic_binary` plus a dead `error` per step
+of every program — visible as `#abin = #error` exactly in a node census, and
+worth a uniform **1.21×** once removed. Worse, an angelic choice must CONSTRUCT
+both branches, so at a pc matching a declared exit it also built the execute
+side: if the table held an instruction at that address the executor ran on until
+fuel was exhausted. That made cost depend on SLACK FUEL, while step 2 of
+**cfgver-new-example** tells authors to fuel "with slack". Measured on the muladd
+cut segment: 74.2 M words, removed. The per-entry marginal at the exit boundary
+went 10.2 / 14.3 / 17.7 → a flat **3.01** M/entry.
+
+**`first` IS NOT REMOVABLE — do not "simplify" it away.** A loop-body segment
+contract starts and ends at the SAME ADDRESS: `exits_of_offs <base> [0]` against
+`asn_init_pc <base>` in `PaddedLoop.v`, `CountdownComposed.v`,
+`TwoLoopsComposed.v` (all gate-checked). Its trace visits that address twice —
+execute the body, then stop — and the pc is the same TERM both times, so the pc
+cannot tell them apart. Fuel cannot either: the executor sees only what remains,
+never the initial value. Dropping `first` was tried 2026-09-07 and makes
+`pbody 0` fail with residual `v = v + 0xffffffff`, the postcondition demanded at
+the entry. The old `angelic_binary` was quietly doing this disambiguation by
+letting the prover guess, and that is exactly what cost the fuel sensitivity.
+
+**Completeness cost:** a contract can no longer pass THROUGH its own declared
+exit and continue, other than at the entry. Nothing in the tree does.
+
+**Refinement side (cfgver-refinement).** Only the SYMBOLIC executor changed;
+`cexec_cfg_addr` keeps its unconditional `angelic_binary`, deliberately breaking
+that skill's "mirror the angelic exit/execute choice" rule. Sound because
+`is_exit_sound` runs one way only (`is_exit = true -> exitCond v = true`), so the
+symbolic side may be strictly MORE decisive. `rexFS` went 4 cases → 3 and 270 →
+198 lines — the exit-hit/exit-miss pair merges, deleting a verbatim 58-line copy
+of the core case — with new `rprop_left`/`rprop_right` in place of `rprop_or`.
+
+Full record: `diagnostics/table-entry-cost.md` §3d.
+
 ## Ghost annotations (AnnotInstr)
 
 `Verifier.v`:
