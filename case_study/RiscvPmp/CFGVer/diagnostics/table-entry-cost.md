@@ -369,6 +369,20 @@ measured (4.6² ≈ 21). So `|Σ|` is the multiplier on carrying cost, exactly a
 The rig is therefore usable for MECHANISM and useless for MAGNITUDE: its
 K-coefficient is the coefficient at `|Σ|`=7, and real targets run at 32+.
 
+> **RETRACTED 2026-09-07 — both halves.** See
+> `table-entry-sigma-axis.md`, a 5×3 `|Σ|`×K grid with three held-out points.
+> (1) The per-entry law is **LINEAR** in `|Σ|` — `3.0261 + 0.08188·D` M words,
+> held out to 0.003% — and the total's quadratic coefficient is *independent of
+> table size* to 0.006%, so the quadratic is not a table cost at all. A linear
+> law cannot yield 28× from a 4.6× ratio, so the gap was never evidence of an
+> exponent. (2) The two rigs are not comparable on this axis: `ZZPadShrCommon.v`
+> has a CONCRETE base and empty `Σ0`, so after `peval` its table keys are bare
+> `term_val`s with **no variable to look up**. It measures the residue; muladd
+> measures residue + lookup. `|Σ|`=7 vs 32 was the wrong difference to read.
+>
+> The correct statement: 68–84% of the per-entry cost is the `env.lookup` walk
+> inside `persist_itableW`, and the pad rig cannot see it.
+
 ### 3c. Two fixes, both now justified (the first LANDED — see 3d)
 
 - **`is_exit` short-circuit (executor, small).  LANDED 2026-09-07, see 3d --
