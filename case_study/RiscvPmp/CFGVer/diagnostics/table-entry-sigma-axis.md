@@ -1,5 +1,25 @@
 # The instruction table's per-entry cost is variable LOOKUP — isolated
 
+> ## ⚠ ATTRIBUTION CORRECTION 2026-09-08 — read `vm-vs-tactic-split.md` first
+>
+> Every number below is whole-process `allocated_words`, which includes
+> `solve_vc` and the kernel. On THIS rig (the muladd cut segment) the split is
+> **1.6% `vm_compute` / 95.3% `solve_vc` / 3.1% kernel** of the per-entry
+> K-slope, and `solve_vc`'s share grows with table size (33% at K=15, 57% at
+> K=75, 78% at K=282). So the measurements stand, but wherever this file names
+> an EXECUTOR mechanism — carrying cost, `persist_itableW`, table entries — it
+> is naming a mechanism worth 1.6% of what it measured.
+>
+> The actual driver is one `cbn` inside `solve_vc` unfolding bv width indices
+> into unary Peano (the `bv-pitfalls` trap, as a cost rather than a matching
+> failure). Removing it: per-entry 3.007 → 0.332 M (**9.06x**), K=227 arm
+> **3.71x**, still `Qed`.
+>
+> Note this does NOT generalise: the key-schedule-loop, check-scalar and
+> prefix-length rigs are 0–8.4% `solve_vc`, so their conclusions stand as
+> executor findings. The split must be measured per rig.
+
+
 **Date:** 2026-09-07. **Rig:** the muladd cut segment (`ZZK_*` / `ZZSg_*`,
 15 executed instructions at offset 220, fuel 20, symbolic base `term_var "p"`).
 **Protocol:** `OCAMLRUNPARAM='v=0x400'`, one heavy proof per `coqc`,
