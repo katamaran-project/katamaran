@@ -78,6 +78,61 @@ Definition sep_contract_leak : SepContractFunX leak :=       (* CFGVer/Spec.v *)
 new constructor inherits the whole assertion, refinement and adequacy chain
 with no per-constructor case anywhere.
 
+The proof that makes this work is `leak_sound` (`CFGVer/SpecIris.v:284`, with a
+twin at `ModelBinary.v:318` for the non-CFGVer verifier) — the single lemma
+tying `sep_contract_leak` to the operational semantics
+`ForeignCall leak [le] … = (γ, fun_leak μ le, inr tt)`. It **never destructs
+the event**: `leak0 : RelVal ty_leak_event` stays abstract and the precondition
+is discharged by
+
+```coq
+secLeakOtherDef : secLeak rv <-> rv = SyncVal (ty.projLeft rv)
+```
+
+i.e. "the event is literally the same value in both worlds", after which the
+two `cons e t` trace updates are syntactically identical. Nothing in it depends
+on how many constructors `LeakEvent` has or what they carry. Note this was
+genuinely RE-CHECKED, not assumed: `SpecIris.v` and `ModelBinary.v` both
+recompiled against the four-constructor `LeakEvent`.
+
+### 2a. The third reason: `execute_MUL` has no contract to update
+
+`CEnv execute_MUL = None` (`CFGVer/Spec.v`) — `execute_EBREAK` is the **only**
+`execute_*` with a contract, so every arithmetic and branch instruction is
+INLINED. `sexec_call` (`SymbolicExecutor.v:769`):
+
+```coq
+match CEnv f , inline_fuel with
+| Some c , _   => SHeapSpec.call_contract c …
+| None   , S n => … exec_aux … (sexec_call n) (FunDef f) …   (* inline *)
+| None   , 0   => exec_call_error_no_fuel f …                (* loud error *)
+end
+```
+
+CFGVer runs `sexec` on `FunDef step` at `inline_fuel := 10`
+(`Verifier.v:291`), so a MUL unrolls `step → execute → execute_MUL`, and only
+the callees that DO have contracts are interpreted as such: `rX`, `wX`, and
+`leak` (foreign, via `CEnvEx`).
+
+**This is why the emit site needed no contract work at all.** Had
+`execute_MUL` carried a contract, adding the leak would have required
+`secLeakvar` on both operands in its precondition AND a re-proved
+`ValidContract execute_MUL` against the new body, with every caller's
+obligations shifting. There was simply no contract to update.
+
+Two consequences worth keeping:
+
+- **The fuel bound is not a soundness risk.** Running out is
+  `exec_call_error_no_fuel`, i.e. `error`, never a silent pass — so
+  insufficient inline fuel cannot mask an unreached leak. That the emit IS
+  reached is shown positively by §5: the secret probe fails on `secLeak "v"`,
+  an obligation that only exists if the executor entered the body.
+- **The leak obligation is per-occurrence, not per-contract.** It is
+  re-derived at every MUL in the unrolled trace. Free on a 4-instruction
+  example; a real per-instruction cost in a multiply-heavy loop. Putting
+  `execute_MUL` behind a contract — stating operand-publicness once,
+  declaratively — is a genuine design option and is NOT done here.
+
 The `typedefkit` fold/unfold obligations (`Base.v:915`) absorb a `ty.prod`
 payload unchanged: they are `abstract (intros [] [[] x]; repeat destruct on
 unit/prod; auto)`, and the `prod` arm was already there for
