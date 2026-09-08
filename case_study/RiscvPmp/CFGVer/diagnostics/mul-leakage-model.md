@@ -256,6 +256,35 @@ note (§4 there) explains why that is a sound over-approximation and what the
 general fix would be. `LeakMul` is orthogonal: it adds an observation the
 model previously lacked, it does not widen what the executor can reason about.
 
+## 6a. Regression: the full gate
+
+`GATE_JOBS=1 ./scripts/gate.sh`, 2026-09-08:
+
+```
+✓ GATE PASSED — build clean, no holes, 19 end theorems axiom-clean
+  (only: Machine.pure_decode Base.mmioenv).
+```
+
+19 = the 18 pre-existing end theorems plus `mul_public_noninterferent_param`.
+So all three of the gate's checks pass under the extended model: the full
+`Results.vo` closure builds (proof bodies, not `.vos`), no
+`Admitted`/`Axiom`/`Conjecture`/`Parameter` in scope, and every end theorem is
+closed under the two whitelisted axioms.
+
+**Why the 18 pre-existing theorems are the interesting half.** Their statement
+text did not change, but `noninterferent_strong`'s conclusion is
+`leakage_trace μ1' = leakage_trace μ2'` over `list LeakEvent`
+(`Noninterference.v`, `Base.v:1166`), quantified abstractly — so extending
+`LeakEvent` STRENGTHENS all of them in place, and re-passing is a real result
+rather than a null one. None of the 18 contains a MUL, so none of them had new
+`secLeak` obligations to discharge; what they demonstrate is that the extension
+is conservative on programs that do not multiply.
+
+Note the harness may report the gate's exit code as `-1` when it is run
+detached; that is the process wrapper losing track, not a failure. The verdict
+is the `GATE PASSED` line, which `gate.sh:287` reaches only after all three
+steps (every failure path calls `fail()`, which exits 1).
+
 ## 7. Files / reproduction
 
 Probes (deliberately not in `_CoqProject`, per the `ZZ*.v` convention):
