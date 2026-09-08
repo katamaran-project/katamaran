@@ -443,7 +443,20 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Proof. destruct X as [a|a b]; cbn; [intros H; now apply H | exact (fun H => H)]. Qed.
 
     Ltac solve_vc :=
-      vm_compute; constructor; cbn; intros; repeat split; try solve_bv;
+      (* `cbn -[Erasure.inst_symprop]`, not a bare `cbn` (2026-09-08).
+         inst_symprop (Propositions.v:2297) unfolds edemonicv to
+           `forall v : RelVal (type b), inst_symprop (cons (existT (type b) v) i) k`
+         -- a valuation accumulator that carries the BINDER'S TYPE as a value
+         and is rebuilt at every one of the ~22 binder levels.  One of those
+         binders is the instruction-word variable at `ty.bvec (32*K)`, a UNARY
+         nat, so cbn paid O(binders x width) and that was 95% of everything the
+         table-size sweeps ever measured.  Blocking this one constant is
+         exactly as cheap as disabling delta entirely (0.0898 -> 0.00297 M per
+         bit of width, i.e. 30x) while leaving every other constant
+         unfoldable, because the rest of the delta cost only exists inside what
+         inst_symprop produces.  All 16 examples are unaffected.
+         See diagnostics/vm-vs-tactic-split.md. *)
+      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros; repeat split; try solve_bv;
       (* Phase 0 extension (PLAN-symbolic-base.md §1): try the compound
          secLeak / fetch-bound helpers on any residual goal before falling
          back to auto.  The `solve [...]` wrapper is required for failure

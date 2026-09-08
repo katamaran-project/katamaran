@@ -89,9 +89,45 @@ nowhere, so it moves only total bit-width in Σ):
 | `+ intros; repeat split` | 267.735 | 609.691 | +0.0000 |
 | `+ try solve_bv` | 267.738 | 609.694 | +0.0000 |
 
-One `cbn` is 100% of it; every later step adds nothing.  This is the blanket-`cbn`
-trap already in **bv-pitfalls** (`cbn` unfolding a bv width index into unary
-Peano), showing up as a COST driver rather than as a matching failure.
+One `cbn` is 100% of it; every later step adds nothing.
+
+### The constant is `Erasure.inst_symprop`, and the mechanism is its valuation accumulator
+
+`Propositions.v:2297`:
+
+```coq
+| edemonicv b k => forall v : RelVal (type b),
+                     inst_symprop (cons (existT (type b) v) ι) k
+```
+
+Each unfolding step builds `existT (type b) v` -- a dependent pair carrying the
+binder's TYPE as a runtime value -- conses it onto the accumulated valuation,
+and recurses.  The goal `cbn` sees is TINY (~7 KB, dumped: a chain of ~22
+`edemonicv` nodes under one `inst_symprop`), but one of those binders is the
+instruction-word variable at `ty.bvec (32*K)` -- `ty.bvec 7264` at K=227 -- and
+`nat` is UNARY.  So that width is rebuilt and carried at every subsequent binder
+level: **O(binders x width)**, exactly the law measured from outside (linear in
+width at 0.0916 M/bit with 0.13% spread, linear in `|Σ|`).
+
+Confirmed by whitelisting delta to that one constant:
+
+| variant | X=32 (M) | X=3840 (M) | M/bit | share |
+|---|---:|---:|---:|---:|
+| `cbn beta iota zeta` (no delta) | 100.325 | 111.638 | 0.00297 | — |
+| `cbn [Erasure.inst_symprop]` | 215.511 | 473.693 | 0.0678 | **75%** |
+| plain `cbn` | 267.645 | 609.600 | 0.0898 | 100% |
+| **`cbn -[Erasure.inst_symprop]`** | **100.354** | **111.667** | **0.00297** | **0%** |
+
+Blocking that ONE constant is exactly as cheap as disabling delta entirely,
+while leaving every other constant unfoldable -- it is the gateway, so the rest
+of the delta cost only exists inside what it produces.
+
+**Eliminated, do not re-test:** `ty.Val`, `bv.is_wf`, `bv.at_most` (all
+indistinguishable from plain `cbn` under `-[...]`), and `safeE`, `inst`,
+`bv.bin` (all indistinguishable from no-delta under `[...]`).  A minimal
+`forall v : bv.bv 3840, v = v` costs `cbn` **0.000 s**, so this does not
+reproduce outside the real goal -- the bv type is not the problem, the erasure
+layer's valuation accumulator dragging it around is.
 
 Removing that one `cbn`, everything else identical, real `Qed`:
 
@@ -104,8 +140,42 @@ Removing that one `cbn`, everything else identical, real `Qed`:
 | per-entry (75→227) | 3.0054 | 0.3316 | **9.06x** |
 
 Both arms linear (0.36% between the two slope estimates) and both reach `Qed`.
-NOT YET LANDED: it is a shared tactic and only this one program has been
-checked.
+
+**LANDED 2026-09-08** as `cbn -[Erasure.inst_symprop]` (the surgical form, not
+deletion): all 16 real examples build, and **`./scripts/gate.sh` PASSED** --
+build clean, no holes, 18 end theorems axiom-clean.
+
+### Payoff on real examples is SMALL -- do not quote the 9x as a project speedup
+
+| example | `cbn` | fixed | change |
+|---|---:|---:|---:|
+| Cmovznz4 | 915.4 M | 847.7 M | -7.4% |
+| BearSSLModpowFull | 1917.8 M | 1809.9 M | -5.6% |
+| BearSSLCheckScalarLoop1 | 1345.4 M | 1320.9 M | -1.8% |
+| KeyScheduleLoop | 687.1 M | 687.1 M | **0.0%** |
+| BearSSLCheckScalar | 671.9 M | 671.9 M | **0.0%** |
+
+The two zeros are byte-identical, which is exactly what the rig split above
+predicts (both were measured at 0% `solve_vc` share).  This is a tax that
+scales with INSTRUCTION-TABLE SIZE: large on segment contracts carrying a big
+table, ~nil on the current suite.
+
+### It re-prices the SUB-TABLE payoff on the motivating example
+
+muladd cut segment, full 282-entry table vs the 15 instructions it executes
+(same `measure.sh` rig both sides):
+
+| | full table | trimmed | carrying penalty |
+|---|---:|---:|---:|
+| before | 1164.651 M | 339.316 M | **3.43x** |
+| after | 311.578 M | 194.629 M | **1.60x** |
+| speedup | 3.74x | 1.74x | |
+
+The cost of carrying 267 unexecuted instructions fell from **825.3 M to
+116.9 M (7.06x)**.  So most of what sub-table trimming was credited with on
+this example was a `cbn` in a tactic.  The machinery is landed and gate-clean,
+so this is a RE-PRICING, not a reason to remove it -- but
+`project-subtable-contracts`' 3.03x / 3.63x / 95.3x all need re-measuring.
 
 ## Why the muladd rig differs -- NOT base concreteness
 
