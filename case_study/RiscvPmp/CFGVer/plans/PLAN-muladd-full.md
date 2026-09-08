@@ -443,6 +443,22 @@ probe re-measures the same tree. The residual is a bare `False`
 > program's table in every segment, and the fix is a sub-table faithfulness lemma
 > rather than anything about this program.
 
+> **CORRECTION 2026-09-08 — the goal this section closes is VACUOUS.  Read
+> `plans/PLAN-muladd-composed.md`'s RESULTS section before quoting anything
+> below.**  `Base.v:80` sets `lenAddr = 2^10 = 1024`, and every contract in this
+> family passes `bound = 1168` (282 instructions = 1128 bytes of code, plus
+> x[]/m[]/stack to offset 1168).  `gen_contract_rel` puts
+> `unsigned p + bound <= lenAddr` in the precondition, and `unsigned p >= 0`, so
+> **that precondition is unsatisfiable** and every `Qed` in this family proves a
+> statement with a false hypothesis.  `cfg_instrs_verified`'s
+> `init_addr + 4 * length instrs < lenAddr` premise is likewise false for every
+> `init_addr`, so this program could never have been wired end-to-end at this
+> `lenAddr` — which is why no cost lever was ever going to unblock it.  The
+> mechanism reported below (a cut assertion must carry the segment's pinned
+> public facts) is still a REAL and useful lesson, and the 128.4x/3.64x cost
+> ratios still describe real symbolic execution; what is retracted is the word
+> "VERIFIES".
+
 ## RESOLVED 2026-09-04 — the mid-program cut VERIFIES. The blocker was the CUT
 ## ASSERTION, not the offset, the builder, the base, the length or the fuel.
 

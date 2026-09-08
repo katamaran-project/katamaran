@@ -256,19 +256,19 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
       (* --- (2) Fetch-bounds discharge ---
          Probe-confirmed shapes at step k: `0 <= unsigned pc_k` and
-         `unsigned pc_k + 4 <= 1024`, where `pc_k = bv.add (bv.of_N c) a`
+         `unsigned pc_k + 4 <= 4096`, where `pc_k = bv.add (bv.of_N c) a`
          (c = 4k the constant offset, a the symbolic base), with `unsigned
          (c ⊕ a)` NOT distributed by the solver (decision #5: never ask the
          solver to cancel bvadd). *)
 
       (* Value-level core, exactly as specified in the plan. *)
       Lemma fetch_bound_step (a : bv xlenbits) (c X : N) :
-        (bv.bin a + X <= 1024)%N -> (c + 4 <= X)%N ->
-        (bv.bin (bv.add (bv.of_N c) a) + 4 <= 1024)%N.
+        (bv.bin a + X <= 4096)%N -> (c + 4 <= X)%N ->
+        (bv.bin (bv.add (bv.of_N c) a) + 4 <= 4096)%N.
       Proof.
         intros Hbound Hc.
-        assert (Hsum : (c + bv.bin a <= 1020)%N) by lia.
-        assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+        assert (Hsum : (c + bv.bin a <= 4092)%N) by lia.
+        assert (Hexp : (4096 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
         assert (HcE : (c < bv.exp2 xlenbits)%N).
         { set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
         pose proof (bv.bin_of_N_small HcE) as Heq.
@@ -281,8 +281,8 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          the ty.int level the fetch-bound VC obligations are phrased at
          (term_unsigned = term_unop uop.unsigned, eval = bv.unsigned). *)
       Lemma fetch_bound_step_Z (a : bv xlenbits) (c X : N) :
-        (bv.bin a + X <= 1024)%N -> (c + 4 <= X)%N ->
-        (bv.unsigned (bv.add (bv.of_N c) a) + 4 <= 1024)%Z.
+        (bv.bin a + X <= 4096)%N -> (c + 4 <= X)%N ->
+        (bv.unsigned (bv.add (bv.of_N c) a) + 4 <= 4096)%Z.
       Proof.
         intros H1 H2. pose proof (@fetch_bound_step a c X H1 H2) as Hn.
         unfold bv.unsigned. set (B := bv.bin (bv.add (bv.of_N c) a)) in *. lia.
@@ -309,13 +309,13 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       Lemma instprop_fetch_bound_upper {Σ} (ι : Valuation Σ)
         (base : Term Σ ty_xlenbits) (a : Val ty_xlenbits) (c X : N)
         (Hsync : inst base ι = SyncVal a)
-        (Hwin : (bv.bin a + X <= 1024)%N) (Hc : (c + 4 <= X)%N) :
+        (Hwin : (bv.bin a + X <= 4096)%N) (Hc : (c + 4 <= X)%N) :
         instprop (formula_relop bop.le
           (term_binop bop.plus
              (term_unop uop.unsigned
                 (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N c)) base))
              (term_val ty.int 4%Z))
-          (term_val ty.int 1024%Z)) ι.
+          (term_val ty.int 4096%Z)) ι.
       Proof.
         cbn -[xlenbits]. rewrite Hsync. cbn -[xlenbits].
         exact (@fetch_bound_step_Z a c X Hwin Hc).
@@ -341,7 +341,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Goal forall (Σ : LCtx) (ι : Valuation Σ) (base : Term Σ ty_xlenbits)
       (a : Val ty_xlenbits),
       inst base ι = SyncVal a ->
-      (bv.bin a + 40 <= 1024)%N ->
+      (bv.bin a + 40 <= 4096)%N ->
       instprop (formula_relop bop.le (term_val ty.int 0%Z)
         (term_unop uop.unsigned
            (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 12)) base))) ι /\
@@ -350,7 +350,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
            (term_unop uop.unsigned
               (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 12)) base))
            (term_val ty.int 4%Z))
-        (term_val ty.int 1024%Z)) ι.
+        (term_val ty.int 4096%Z)) ι.
     Proof.
       intros Σ ι base a Hsync Hwin. split.
       - eapply instprop_fetch_bound_lower; eauto.
@@ -392,12 +392,12 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Lemma relval_fetch_upper_bare (v : RelVal ty_xlenbits) (A B : Z) :
       RiscvPmpSignature.secLeak v ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal 4096%Z)
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end ->
       (A <= B)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal 4096%Z)
            (bop.evalRel bop.plus (SyncVal A) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end.
     Proof.
@@ -406,25 +406,25 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Qed.
 
     (* Same generalisation, plus the `0 <= A` the no-wrap step needs: bounding
-       `bin cbv + bin a` below exp2 goes through `1024 - A`, which only stays
+       `bin cbv + bin a` below exp2 goes through `4096 - A`, which only stays
        under 2^32 for a non-negative A. *)
     Lemma relval_fetch_upper_add (v : RelVal ty_xlenbits) (cbv : bv xlenbits) (A B : Z) :
       RiscvPmpSignature.secLeak v ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal 4096%Z)
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end ->
       (Z.of_N (bv.bin cbv) + A <= B)%Z ->
       (0 <= A)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal 4096%Z)
            (bop.evalRel bop.plus (SyncVal A)
               (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
       with SyncVal p => p | NonSyncVal _ _ => False end.
     Proof.
       intros H Hb Hle HA; destruct v as [a|a b]; [| destruct H].
       cbn in *; unfold bv.unsigned in *.
-      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      assert (Hexp : (4096 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
       assert (Hlt : (bv.bin cbv + bv.bin a < bv.exp2 xlenbits)%N) by lia.
       rewrite (bv.bin_add_small Hlt). lia.
     Qed.

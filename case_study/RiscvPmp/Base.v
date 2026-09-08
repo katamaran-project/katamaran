@@ -77,7 +77,25 @@ Definition Byte : Set     := bv byte.
 
 (* 1. Definition of RAM memory *)
 Definition minAddr : N := 0.
-Definition lenAddr : N := 2^10.
+(* RAISED 2^10 -> 2^12 on 2026-09-08.  Reason: BearSSL br_i31_muladd_small's
+   whole function is 282 instructions = 1128 bytes of code, so at 2^10 its
+   contract's `unsigned p + bound <= lenAddr` was UNSATISFIABLE and
+   cfg_instrs_verified's `init_addr + 4*|instrs| < lenAddr` premise was false
+   for every init_addr -- the program could not be verified at any cost.
+   See CFGVer/plans/PLAN-muladd-composed.md.
+
+   lenAddr is a Definition, so symbolic references adapt by themselves.  But
+   TWENTY-TWO SITES HARDCODE THE VALUE and must move with it -- if you change
+   this line, change those too:
+     CFGVer/Contracts.v  (17: the relval_fetch_* / fetch-bound family that IS
+                          solve_symbase_fetch; note 4092 = lenAddr - 4)
+     CFGVer/Adequacy.v   (3, incl. an explicit `change (2 ^ 12)%N with 4096%N`)
+     CFGVer/EndToEnd.v   (1)
+     CFGVer/Tables.v     (1, written as a bare 2 ^ 12)
+   theories/ mentions lenAddr/maxAddr in COMMENTS ONLY and is unaffected.
+   Note liveAddrs below is lenAddr entries long, so this also quadruples the
+   list the Iris memory model iterates over. *)
+Definition lenAddr : N := 2^12.
 Definition maxAddr : N := minAddr + lenAddr.
 Lemma minAddr_rep : (minAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.

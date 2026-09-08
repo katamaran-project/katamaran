@@ -1945,7 +1945,7 @@ Import IrisModel.RiscvPmpIrisBase.
     { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
     iSplitL "".
     { iSplit; [iPureIntro | done]. unfold bv.unsigned.
-      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      assert (Hexp : (4096 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
       assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
       { unfold lenAddr in Hbound. set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
       rewrite (bv.bin_of_N_small Hib). unfold lenAddr in *. lia. }
