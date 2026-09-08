@@ -132,7 +132,8 @@ A matched A/B would cost one more CFGVer rebuild and was not run.
 
 - The `K · cost(peval apc)` model of the per-entry charge.
 - With it, the conjecture in §1b that the **48× undecidable-branch multiplier**
-  is a `peval`-cost ratio. That multiplier is still unexplained.
+  is a `peval`-cost ratio. ~~That multiplier is still unexplained.~~
+  **SOLVED 2026-09-08 — see §5.**
 - The hoist is kept anyway — it is strictly less work and zeta-convertible — but
   it should not be described as a fix for anything.
 
@@ -192,9 +193,11 @@ counted as one.** It is persisted at every world extension, its cost is
 `O(entries × |Σ|)` per extension, and no entry in the cost-driver catalog covers
 it.
 
-This also gives the **48× havoc'd multiplier** a mechanism rather than a name:
+~~This also gives the **48× havoc'd multiplier** a mechanism rather than a name:
 havocking mints logic variables, `|Σ|` rises, and every table entry pays for it
-at every step.
+at every step.~~ **RETRACTED 2026-09-08 — see §5. The multiplier was a `cbn`
+artefact and is now 0.71×, so there is no havoc'd multiplier left to explain and
+this mechanism story explains something that does not happen.**
 
 ### 2e. Structural counts: the charge produces ZERO output
 
@@ -515,3 +518,34 @@ net of an imports-only baseline re-measured per side, strictly serial, `Error`
 gate on every arm. `ZZSegTrim` is the havoc'd arm and legitimately fails to close
 (bare `False`, `PLAN-muladd-full.md`) — its allocation was read from the failure
 log, as the earlier record did.
+
+
+## 5. The 48x undecidable-branch multiplier was a `cbn`, and is GONE (2026-09-08)
+
+The one item this record left open. Settled by a matched old-vs-new A/B: each
+arm run twice in the same file, once with today's `solve_vc` and once with the
+pre-fix tactic inlined verbatim as `solve_vc_old` (bare `cbn`, everything else
+identical). Full table in `vm-vs-tactic-split.md`.
+
+| | OLD (M/entry) | NEW (M/entry) |
+|---|---:|---:|
+| havoc'd `T0` | **161.224** | **0.3113** |
+| pinned `T0` | 3.091 | 0.4380 |
+| **havoc / pinned** | **52.2x** | **0.71x** |
+
+The OLD column reproduces this record's own 161.2 and 3.09 to four digits, and
+the underlying `ZZSeg2` arm reproduces its published 43503 M net to **0.0007%**
+— so the rig is unchanged and the whole difference is the one `cbn`.
+
+**The multiplier is not reduced, it is inverted**: with `cbn
+-[Erasure.inst_symprop]` an undecidable branch makes a table entry marginally
+*cheaper* than a decidable one. Mechanism: an undecidable branch leaves more
+`edemonicv` binders standing in the erased VC, and the old `cbn` charged
+O(binders x width) per binder. Nothing about the executor's treatment of
+undecidable branches was ever involved.
+
+Knock-on: the sub-table payoff on that pair falls from **95.3x to 1.638x**
+(matched `Admitted` cross-check 1.655x), which removes the argument that
+trimming is "the only lever known to work on the undecidable-branch regime" —
+there is no such regime. The machinery stays: it is still worth 1.6-1.9x on real
+muladd segments.

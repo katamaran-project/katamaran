@@ -1,5 +1,12 @@
 # muladd whole-function at mlen=2: the wall is TERM DUPLICATION, and dense havoc trades it for `|Σ|`
 
+> **STAGE SPLIT, 2026-09-08 — 0% tactic, and this record already said so.**
+> Every probe here (13 x `ZZDS*`, `ZZMuladd{Prefix,PrefixHavoc,HavocAll,Dense,DenseAll,Dump}`)
+> is a bare `Eval vm_compute in ...` with no `Lemma`/`Proof`/`Qed` and no
+> `solve_vc` anywhere in the file, so every figure below is pure symbolic-executor
+> cost.  §1's "the raw-VC kill localises the wall to CONSTRUCTION" is the same
+> point, stated before the question was asked.  See `vm-vs-tactic-split.md`.
+
 **Finding, one sentence.** `br_i31_muladd_small` at `mlen`=2 does not verify: the
 wall is **symbolic tree CONSTRUCTION** (never reaching `solve_vc`), caused by
 symbolic terms being *copied* rather than shared — one register was dumped

@@ -1,5 +1,10 @@
 # Word slicing, measured without the term-explosion confound
 
+> **STAGE SPLIT, 2026-09-08 — 0% tactic.**  All eight `ZZWsFlat*` arms are bare
+> `Eval vm_compute` probes (no `Lemma`/`Proof`/`Qed`, no `solve_vc`), so the
+> 2.77x-2.86x slicing payoff is a pure symbolic-executor measurement.
+> See `vm-vs-tactic-split.md`.
+
 **Finding (2026-08-24).** On a rig whose term shape is pinned flat, replacing
 the per-address instruction-word logic variables with slices of ONE wide
 variable is a **2.77x–2.86x reduction in allocated words**, a pure CONSTANT

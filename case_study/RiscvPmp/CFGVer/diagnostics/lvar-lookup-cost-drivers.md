@@ -1,5 +1,26 @@
 # Logical-variable lookup vs chunk count — which is the driver?
 
+> **STAGE SPLIT, 2026-09-08 — 91-100% executor; the |Sigma| QUADRATIC IS THE
+> EXECUTOR'S.**  The INSTR half (15 x `ZZLvI_*`) is bare `Eval vm_compute`, 0%
+> tactic by construction.  The COST grid (13 x `ZZLvD_*`) does run `solve_vc`,
+> at 4.8-10.5% of TOTAL, but per axis it contributes: chunk count **-2.4% to
+> +2.0%**, pure lookup depth **-4.5% to +1.4%** (three of six readings negative,
+> i.e. noise), variable count **9.1-9.3%**.  And over F16->F32->F64 `solve_vc`
+> grows 2.005x then 1.882x — LINEAR in the count — while `vm_compute` grows
+> 1.658x then 2.239x, rising.  So the quadratic this record reports is an
+> executor quadratic, not a tactic artefact.
+>
+> Two things found while re-running it, both worth knowing before you reuse this
+> rig: (1) `ZZPadShrCommon.v` and `ZZLvarDepthCommon.v` **did not compile at
+> all** — they predate `CFGVerifierContract`'s `cfg_postcondition` field, so
+> every `MkCFGVerifierContract` was one argument short; fixed by appending
+> `asn_no_post`.  (2) The magnitudes have moved a long way since 2026-08-19: the
+> depth surcharge is **4.71x**, not 16.1x, and pure depth L64/F64 is
+> **1.09-1.27x**, not 1.16-1.47x.  Directions and orderings hold.  That is NOT a
+> matched A/B — several fixes landed in between and the probe itself was
+> repaired — so read it as "the mechanism is still there and smaller".
+> See `vm-vs-tactic-split.md`.
+
 Status: **Diagnostic record, 2026-08-19; §2 and the headline PARTLY RETRACTED
 the same day — see §8 before quoting anything about chunks.** Designed against
 `plans/PLAN-lvar-lookup.md`, whose axes were committed to disk before any

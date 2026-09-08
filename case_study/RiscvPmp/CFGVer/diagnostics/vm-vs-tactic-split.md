@@ -160,22 +160,72 @@ predicts (both were measured at 0% `solve_vc` share).  This is a tax that
 scales with INSTRUCTION-TABLE SIZE: large on segment contracts carrying a big
 table, ~nil on the current suite.
 
-### It re-prices the SUB-TABLE payoff on the motivating example
+### It re-prices EVERY SUB-TABLE payoff -- matched old-vs-new A/B
 
-muladd cut segment, full 282-entry table vs the 15 instructions it executes
-(same `measure.sh` rig both sides):
+Completed 2026-09-08.  Each pair was run twice in the same file: once with
+today's `solve_vc`, once with the pre-fix tactic **inlined verbatim as
+`solve_vc_old`** (bare `cbn`, everything else identical), so this is a matched
+A/B and not a comparison against the published record.  Baselines `ZZSegBase`
+606.649 M / `ZZM_base` 606.323 M, net M words, strictly serial.
 
-| | full table | trimmed | carrying penalty |
+| pair | OLD full | OLD trim | OLD x | NEW full | NEW trim | **NEW x** | published |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| countdown synthetic (`pbody 64`/`pseg 256`) | 7.572 | 5.663 | 1.337 | 7.512 | 5.602 | **1.341** | 1.36 |
+| muladd seg1, decidable (282/56) | 1055.403 | 354.884 | 2.974 | 172.929 | 90.416 | **1.913** | 3.025 |
+| muladd cut @220, `T0` pinned (282/15) | 1164.651 | 339.316 | 3.432 | 311.578 | 194.629 | **1.601** | 3.63 |
+| muladd cut @220, `T0` havoc'd (282/15) | 43503.287 | 456.400 | 95.318 | 213.345 | 130.227 | **1.638** | 95.33 |
+
+**Every OLD column reproduces its published figure** -- 1.337 vs 1.36, 2.974 vs
+3.025, 95.318 vs **95.33**, and the havoc'd full arm at 43503.287 M against a
+published 43503 M, i.e. **0.0007%**.  (The pinned row's OLD is the post-`7e5ceffe`
+1164.651/339.316 = 3.432, not the pre-exit-fix 3.63.)  So the rigs are unchanged
+and the whole delta is the one `cbn`.
+
+Both havoc'd arms fail to close -- they always have (`table-entry-cost.md`
+§Files: *"`ZZSegTrim` is the havoc'd arm and legitimately fails to close (bare
+`False`) -- its allocation was read from the failure log"*), and the pre-fix
+tactic fails at exactly the same point, so the failure is not new.  Re-run as a
+matched `Admitted` pair the ratio is **1.655x** against the failure-log arms'
+1.638x, so nothing rests on reading a failed arm.
+
+Per-arm, what the `cbn` was worth:
+
+| arm | old | new | ratio |
 |---|---:|---:|---:|
-| before | 1164.651 M | 339.316 M | **3.43x** |
-| after | 311.578 M | 194.629 M | **1.60x** |
-| speedup | 3.74x | 1.74x | |
+| `ZZSeg2` (havoc'd, 282) | 43503.287 | 213.345 | **203.9x** |
+| `ZZTrimF` (decidable, 282) | 1055.403 | 172.929 | 6.10x |
+| `ZZSegTrim` (havoc'd, 15) | 456.400 | 130.227 | 3.50x |
+| `ZZTrimT` (decidable, 56) | 354.884 | 90.416 | 3.93x |
+| `ZZM_b64` / `ZZM_seg256` (countdown) | 7.572 / 5.663 | 7.512 / 5.602 | **1.01x** |
 
-The cost of carrying 267 unexecuted instructions fell from **825.3 M to
-116.9 M (7.06x)**.  So most of what sub-table trimming was credited with on
-this example was a `cbn` in a tactic.  The machinery is landed and gate-clean,
-so this is a RE-PRICING, not a reason to remove it -- but
-`project-subtable-contracts`' 3.03x / 3.63x / 95.3x all need re-measuring.
+### This CLOSES the 48x undecidable-branch multiplier
+
+`table-entry-cost.md` ended on *"Still unexplained: the 48x undecidable-branch
+multiplier (161.2 vs 3.35 M/entry, same program/cut/table)"*.  Reading the same
+four arms as a marginal cost per table entry (267 entries between 282 and 15):
+
+| | OLD (M/entry) | NEW (M/entry) |
+|---|---:|---:|
+| havoc'd `T0` | **161.224** | **0.3113** |
+| pinned `T0` | 3.091 | 0.4380 |
+| **havoc / pinned** | **52.2x** | **0.71x** |
+
+161.224 is the published 161.2 to four digits, and 3.091 the published 3.09.
+**The multiplier is not merely reduced, it is gone** -- an undecidable branch now
+makes a table entry very slightly CHEAPER than a decidable one.  So the "48x"
+was never an executor property of undecidable branches: an undecidable branch
+leaves more `edemonicv` binders standing in the erased VC, and the old `cbn`
+charged O(binders x width) for each of them.  It was a `cbn` multiplier the
+whole time.
+
+**Consequence for the sub-table machinery.** Its largest advertised payoff,
+95.3x, is now **1.638x**, and that was the one number arguing that trimming is
+"the only lever currently known to work on" the undecidable-branch regime.  That
+regime no longer exists as a distinct cost class.  The machinery is landed,
+gate-clean and still worth **1.6-1.9x** on real muladd segments, so this is a
+RE-PRICING, not a reason to remove it -- but it is no longer a headline result,
+and `prefix-length-cost.md`'s implied *"per-segment trimming is worth (K/k)^2"*
+is now doubly superseded (first by `cfdcc92f`, now by this).
 
 ## Why the muladd rig differs -- NOT base concreteness
 
@@ -195,13 +245,113 @@ which costs one `Admitted` arm.
   `table-entry-cost.md`'s "carrying cost" and `table-entry-sigma-axis.md`'s
   "`persist_itableW` lookup" name executor mechanisms for a cost that is 1.6%
   executor.  Both records carry a correction banner as of today.
-- Unmeasured and therefore unknown: `muladd-full-cost-drivers.md`,
-  `composition-payoff.md`, `subtable`-related figures, `base-k-hunt.md`,
-  `word-slicing-payoff.md`, `ctx-fresh-cost.md`, `lvar-lookup-cost-drivers.md`
-  (its rig's commons did not rebuild in time).  `base-k-hunt.md` is the most
-  interesting of these: it concluded the finished VC is <=2.6% of peak heap and
-  the cost is "transient construction state" -- which is consistent with the
-  cost being in a TACTIC rather than in the executor at all.
+- **The rest of the catalog is now split too -- see the next section. Every
+  remaining record is executor-dominated; the muladd cut-segment family stays
+  the only tactic-bound rig in `diagnostics/`.**
+
+## The catalog split, COMPLETED 2026-09-08
+
+The six records left open above are now classified.  Two classification methods,
+in decreasing order of cost:
+
+**(a) STRUCTURAL -- the arm contains no tactic at all.**  Four records (and half
+of a fifth) are measured with a bare `Eval vm_compute in ...` at file top level:
+no `Lemma`, no `Proof`, no `Qed`, no `solve_vc` anywhere in the file.  For these
+the split is **0% tactic by construction** and needs no run:
+
+| record | arms | checked |
+|---|---|---|
+| `muladd-full-cost-drivers.md` | 13 x `ZZDS*`, `ZZMuladd{Prefix,PrefixHavoc,HavocAll,Dense,DenseAll,Dump}` | 0 of 13 contain `solve_vc` |
+| `base-k-hunt.md` | 4 x `ZZDSI*` | 0 of 4 |
+| `word-slicing-payoff.md` | 8 x `ZZWsFlat*` | 0 of 8 |
+| `ctx-fresh-cost.md` | 6 x `ZZFreshBench*` (+ `ZZDSI206`) | 0 of 6 |
+| `lvar-lookup-cost-drivers.md`, INSTR half | 15 x `ZZLvI_*` | 0 of 15 |
+
+`muladd-full-cost-drivers.md` **already said this in its own §1** -- *"the raw-VC
+kill is the load-bearing one: it localises the wall to CONSTRUCTION.  `solve_vc`
+and the `Qed` are never reached"* -- and it was listed as unmeasured above only
+because that line was not re-read.  Check the arm before scheduling a run.
+
+**This REFUTES the speculation above about `base-k-hunt.md`.**  That record's
+"the finished VC is <=2.6% of peak heap, so the cost is transient construction
+state" was flagged here as *"consistent with the cost being in a TACTIC"*.  It is
+not: its rig never runs one.  The transient state is `vm_compute`'s own, and
+`base-k-hunt.md`'s conclusion -- including that `Base(K)` needs OCaml heap
+profiling rather than any Coq-level traversal -- stands unmodified.
+
+**(b) MEASURED -- one `coqc` per arm, reading `Time vm_compute` / `Time solve_vc`.**
+The two remaining rigs both have real tactics.  What matters is not the tactic's
+share of the TOTAL but its share of the EFFECT the record attributes to a
+mechanism, so each axis is differenced:
+
+### `lvar-lookup-cost-drivers.md` COST grid -- 91-100% executor
+
+13 arms, `intros. Time vm_compute. Time solve_vc. Admitted.`  Baseline
+`ZZLvDBase` = 606.3 M.  `solve_vc` share of TOTAL runs 4.8-10.5%.  Per axis:
+
+| axis | dvm (s) | dsolve_vc (s) | tactic share OF THE EFFECT |
+|---|---:|---:|---:|
+| chunk count pw 0->16, at K0 | +0.519 | **-0.008** | **-1.6%** |
+| chunk count pw 0->16, at F64 | +0.427 | **-0.010** | **-2.4%** |
+| chunk count pw 0->16, at L64 | +1.836 | +0.037 | **2.0%** |
+| pure DEPTH (F64->L64) @ pw0 | +0.484 | **-0.021** | **-4.5%** |
+| pure DEPTH (F64->L64) @ pw8 | +1.337 | +0.005 | **0.4%** |
+| pure DEPTH (F64->L64) @ pw16 | +1.893 | +0.026 | **1.4%** |
+| variable COUNT K0->F64 @ pw0 | +6.525 | +0.673 | **9.3%** |
+| variable COUNT F16->F64 @ pw8 | +5.515 | +0.549 | **9.1%** |
+
+Chunk count and lookup depth move `solve_vc` by *nothing* (three of six readings
+are negative, i.e. inside noise).  Variable count moves it by 9%, and even there
+the shape is the record's, not the tactic's: over the doublings F16->F32->F64,
+`solve_vc` grows **2.005x then 1.882x** -- flat, i.e. LINEAR in the count --
+while `vm_compute` grows **1.658x then 2.239x**, rising.  **So the |Sigma|
+quadratic is entirely an EXECUTOR quadratic**, which is the one claim in that
+record a tactic could have counterfeited, and it did not.
+
+*Incidental, and NOT a matched A/B:* the rig's absolute magnitudes have moved a
+lot since 2026-08-19.  The published depth surcharge (chunk marginal at L64 vs
+at K0) was **16.1x**; today it is **4.71x** (3.581 -> 16.881 M/pw).  Pure depth
+L64/F64 was **1.16-1.47x**; today **1.09-1.27x**.  Directions and orderings all
+hold.  Several fixes have landed in between (branch refutation, the exit
+short-circuit, dropk, this cbn) and the probe itself had to be repaired to
+compile at all -- so treat these as "the mechanism is still there and smaller",
+not as a measurement of any one commit.
+
+### `composition-payoff.md` -- 0.0% tactic on every arm
+
+| family | arms | `solve_vc` (s) | share |
+|---|---|---:|---:|
+| prefix axis | `ZZU5_K{0,8,16,32}` | 0.000 | **0.0%** |
+| flat trip count | `ZZFlat_N{2,4,8,16}` | 0.000 | **0.0%** |
+| composed / pinned | `ZZCmp{Body,Final,BodyPin}` | 0.000 | **0.0%** |
+
+This rig REPRODUCES its published numbers, unlike the lvar one: net M words
+7.2 / 7.4 / 7.7 / 8.3 against the published 7.223 / 7.471 / 7.747 / 8.343, and a
+flat slope of 1.55 M/trip against the published 1.528.  So the composition
+verdict -- including the 2026-09-05 reversal (composition 0.56x the flat VC,
+break-even ~4.65 trips/cut) -- is an executor result and is untouched.
+
+**One live discrepancy found while doing this, and it is NOT the cbn change.**
+`ZZCmpBody.v` and `ZZCmpFinal.v` carry three residual-closing tactics after
+`solve_vc`; today both fail with *"Error: No such goal"*, i.e. `solve_vc` closes
+those VCs outright.  Tested directly by re-running each arm against an inlined
+copy of the PRE-FIX tactic (bare `cbn`) in the same file:
+
+| arm | new `solve_vc` | old tactic inlined | delta |
+|---|---:|---:|---:|
+| `ZZCmpBody` | 616.0 M | 616.1 M | 0.016% |
+| `ZZCmpFinal` | 614.4 M | 614.5 M | 0.016% |
+
+Both spellings close the goal and cost the same, so the dead tactics predate
+2026-09-08 -- most likely `cfdcc92f` (branch refutation) or `7e5ceffe` (the exit
+short-circuit).  `composition-payoff.md` §0's note that those two arms "carry
+three extra residual-closing tactics" is stale.
+
+### Summary of the whole catalog
+
+| tactic-bound | executor-bound |
+|---|---|
+| muladd cut-segment family ONLY (`table-entry-cost.md`, `table-entry-sigma-axis.md`) -- 33% at K=15 rising to 78% at K=282 | everything else: key-schedule-loop2, classed existentials, prefix-length, branch-refutation, check-scalar loop1/loop2/combined, muladd-full, base-k-hunt, word-slicing, ctx-fresh, lvar-lookup, composition |
 
 ## Method lesson
 
@@ -219,4 +369,18 @@ worth 0.58%.
 `Example/ZZSg_WX{32,480,1920,3840}.v` (width axis),
 `Example/ZZSg_{NOCBN,CBN}_K{15,75,227}.v` (the fix),
 `Example/ZZSg_TIME_K{15,75}.v`, `Example/ZZSg_T_ZZ*.v` (wall-clock split).
-Script: `split.sh`, `sgsweep.sh` in the session tmp dir.
+Catalog split (2026-09-08): `Example/ZZLvD_*.v` (12 arms, the lvar COST grid,
+after repairing `ZZPadShrCommon.v`/`ZZLvarDepthCommon.v` with `asn_no_post`),
+`Example/ZZ{U5_K*,Flat_N*,Cmp*}_T.v` (`Time`-instrumented composition arms).
+Sub-table re-pricing: `Example/ZZ{Seg2,SegTrim,TrimF,TrimT,M_b64,M_seg256}.v` for
+the NEW arm and `..._O.v` for the OLD (the pre-fix tactic inlined as a local
+`Ltac solve_vc_old`), plus `ZZ{Seg2,SegTrim}_A.v` for the matched `Admitted`
+cross-check; baselines `ZZSegBase.v` / `ZZM_base.v`.
+Scripts: `split.sh`, `sgsweep.sh`, `subtable.sh`, `rebuild_commons.sh` in the
+session tmp dir.
+
+**Reusable method: to A/B a tactic change, inline the old tactic as a local
+`Ltac` in the probe file.** No rebuild of `Contracts.v`, no scratch tree, ~10 s
+per arm, and both spellings run against byte-identical everything else. It
+validated itself three times here by reproducing published figures (456.36 M to
+0.009%, 43503 M to 0.0007%, 161.2/3.09 M per entry to four digits).

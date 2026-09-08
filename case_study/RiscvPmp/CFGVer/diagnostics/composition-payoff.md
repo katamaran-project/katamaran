@@ -1,5 +1,19 @@
 # The payoff of contract composition — measured, and it is NEGATIVE at the sizes we have
 
+> **STAGE SPLIT, 2026-09-08 — 0.0% tactic on every arm, and this rig
+> REPRODUCES.**  `ZZU5_K{0,8,16,32}`, `ZZFlat_N{2,4,8,16}` and
+> `ZZCmp{Body,Final,BodyPin}` all show `Time solve_vc` = 0.000 s.  Net M words
+> 7.2 / 7.4 / 7.7 / 8.3 against the published 7.223 / 7.471 / 7.747 / 8.343, and
+> a flat slope of 1.55 M/trip against 1.528 — so the composition verdict,
+> including the 2026-09-05 reversal, is an executor result and is untouched.
+>
+> **Stale detail in §0:** `ZZCmpBody` and `ZZCmpFinal` no longer need their three
+> residual-closing tactics — `solve_vc` closes both VCs outright and the tactics
+> now fail with *"No such goal"*.  That is NOT the 2026-09-08 `cbn` change:
+> re-running each arm against an inlined copy of the pre-fix tactic gives
+> 616.1 vs 616.0 M and 614.5 vs 614.4 M (0.016%), both closing.  The dead
+> tactics predate it, most likely `cfdcc92f` or `7e5ceffe`.
+
 Status: **Diagnostic record, 2026-09-04.** This is `plans/PLAN-loop-invariant.md`
 U5, finally run, plus the direct flat-vs-composed comparison the landed loop cut
 (U9) made possible.

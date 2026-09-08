@@ -1,5 +1,14 @@
 # Hunting `Base(K)` — three candidates eliminated, one new suspect
 
+> **STAGE SPLIT, 2026-09-08 — 0% tactic.**  All four `ZZDSI*` arms are bare
+> `Eval vm_compute` probes with no proof and no `solve_vc`, so `Base(K)` is
+> executor cost.  `vm-vs-tactic-split.md` had flagged this record as the one
+> whose "the finished VC is <=2.6% of peak heap, so the cost is transient
+> construction state" might really mean "the cost is in a tactic"; **that
+> speculation is refuted** — the rig never runs one.  The conclusions here,
+> including that `Base(K)` needs OCaml heap profiling rather than a Coq-level
+> traversal, stand unmodified.
+
 Status: **Diagnostic record, 2026-09-02. `Base(K)` is still UNIDENTIFIED.** This
 file is the negative-results record for it: what it is *not*, each with a
 measurement, plus the method lesson each elimination carries. `Base(K)` is the

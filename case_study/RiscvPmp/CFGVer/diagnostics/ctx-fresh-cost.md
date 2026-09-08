@@ -1,5 +1,11 @@
 # `ctx.fresh` — measured, and it is not a driver
 
+> **STAGE SPLIT, 2026-09-08 — 0% tactic.**  The per-call arms
+> (`ZZFreshBench*`) are standalone microbenchmarks that never build a VC, and
+> the real-traffic arm (`ZZDSI206`) is a bare `Eval vm_compute`.  No `solve_vc`
+> in any of them, so the 0.32-0.48% verdict is about the executor and is not
+> diluted by a tactic.  See `vm-vs-tactic-split.md`.
+
 Status: **Diagnostic record, 2026-09-02.** Closes the "FRESH-NAME GENERATION"
 entry in the `cfgver-scaling-diagnostics` driver catalog, which stood as
 *"not yet isolated, cheapest possible fix … named as the recommended next
