@@ -330,6 +330,11 @@ Inductive LeakEvent : Set :=
 | LeakPc : Addr -> LeakEvent
 | LeakMemRead : Addr -> LeakEvent
 | LeakMemWrite : Addr -> LeakEvent
+(* A multiplication leaks BOTH its operands, as one atomic event: the
+   leakage model of a variable-latency multiplier.  Both operands travel in
+   a single event (a `ty.prod` payload) rather than in two consecutive
+   single-operand events, so the trace records them as one observation. *)
+| LeakMul : bv xlenbits -> bv xlenbits -> LeakEvent
 .
 
 Inductive ASTConstructor : Set :=
@@ -384,6 +389,7 @@ Inductive LeakEventConstructor : Set :=
 | KLeakPc
 | KLeakMemRead
 | KLeakMemWrite
+| KLeakMul
 .
 
 Inductive Unions : Set :=
@@ -591,7 +597,7 @@ Section Finite.
 
   #[export,program] Instance LeakEventConstructor_finite :
     Finite LeakEventConstructor :=
-    {| enum := [KLeakPc;KLeakMemRead;KLeakMemWrite] |}.
+    {| enum := [KLeakPc;KLeakMemRead;KLeakMemWrite;KLeakMul] |}.
 End Finite.
 
 Module Export RiscvPmpBase <: Base.
@@ -746,6 +752,7 @@ Module Export RiscvPmpBase <: Base.
                             | KLeakPc => ty.bvec xlenbits
                             | KLeakMemRead => ty.bvec xlenbits
                             | KLeakMemWrite => ty.bvec xlenbits
+                            | KLeakMul => ty.prod (ty.bvec xlenbits) (ty.bvec xlenbits)
                             end
     end.
 
@@ -817,6 +824,7 @@ Module Export RiscvPmpBase <: Base.
                             | LeakPc pc => existT KLeakPc pc
                             | LeakMemRead addr => existT KLeakMemRead addr
                             | LeakMemWrite addr => existT KLeakMemWrite addr
+                            | LeakMul v1 v2 => existT KLeakMul (v1 , v2)
                             end
     end.
 
@@ -875,6 +883,7 @@ Module Export RiscvPmpBase <: Base.
                               |existT KLeakPc pc => LeakPc pc
                               | existT KLeakMemRead addr => LeakMemRead addr
                               | existT KLeakMemWrite addr => LeakMemWrite addr
+                              | existT KLeakMul (v1 , v2) => LeakMul v1 v2
                               end
       end.
 

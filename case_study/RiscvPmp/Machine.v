@@ -584,11 +584,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
          cannot be justified by "no proof broke" — nothing breaks when you
          accept more.  It must be justified by the leakage model, (4).
 
-     (4) WHY IT IS DEFENSIBLE.  The leakage model already says ALU operations
-         are unobservable: `LeakEvent := LeakPc | LeakMemRead | LeakMemWrite`
-         (Base.v:329-333), emitted at exactly three sites in this file (the
-         memory read at ~614, the memory write at ~640, the pc at ~816).
-         `bool_to_bits` emits none of them, in EITHER version.  So the old
+     (4) WHY IT IS DEFENSIBLE.  The leakage model says the ALU operations
+         RELEVANT HERE are unobservable.  `LeakEvent := LeakPc | LeakMemRead
+         | LeakMemWrite | LeakMul` (Base.v:329-338) is emitted at exactly
+         four sites in this file: the memory read in `checked_mem_read`, the
+         memory write in `checked_mem_write`, the pc in `fun_fetch`, and the
+         two multiplication operands in `fun_execute_MUL`.  `LeakMul` is the
+         one arithmetic observation the model records, and it is confined to
+         the MUL family; `bool_to_bits` emits none of the four, in EITHER
+         version, so the argument below is unaffected by it.  So the old
          definition was already inconsistent with the intended leakage model:
          it made an ALU instruction behave, for the verifier, like a branch,
          even though the model records no observation for it.  On that reading
@@ -1150,6 +1154,14 @@ alid tvec mode"
     let tb := to_bits (2 * xlenbits) in
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
+    (* LEAKAGE MODEL: the multiplier is variable-latency, so a multiplication
+       leaks BOTH of its operands.  Emitted here, after the operand reads and
+       before the product is formed, so the event is on the raw register
+       values and covers the whole MUL/MULH/MULHU/MULHSU family (they all
+       route through this one function -- `high`/`signed1`/`signed2` only
+       affect how the product is interpreted, not what is fed in). *)
+    stm_foreign leak [exp_union leak_event KLeakMul
+                        (exp_binop bop.pair rs1_val rs2_val)];;
     let: rs1_int := if: signed1
                     then exp_unop uop.signed rs1_val
                     else exp_unop uop.unsigned rs1_val
