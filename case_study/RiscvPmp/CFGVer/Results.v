@@ -76,4 +76,5 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Example.SwapComposedResult
      RiscvPmp.CFGVer.Example.CountdownComposedResult
      RiscvPmp.CFGVer.Example.TwoLoopsComposedResult
-     RiscvPmp.CFGVer.Example.PaddedLoopResult.
+     RiscvPmp.CFGVer.Example.PaddedLoopResult
+     RiscvPmp.CFGVer.Example.MulPublicResult.

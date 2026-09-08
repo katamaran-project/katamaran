@@ -81,6 +81,7 @@ case_study/RiscvPmp/CFGVer/Example/SwapComposed.v
 case_study/RiscvPmp/CFGVer/Example/CountdownComposed.v
 case_study/RiscvPmp/CFGVer/Example/TwoLoopsComposed.v
 case_study/RiscvPmp/CFGVer/Example/PaddedLoop.v
+case_study/RiscvPmp/CFGVer/Example/MulPublic.v
 case_study/RiscvPmp/CFGVer/Example/MvSwapResult.v
 case_study/RiscvPmp/CFGVer/Example/JumpsResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownResult.v
@@ -97,6 +98,7 @@ case_study/RiscvPmp/CFGVer/Example/SwapComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/TwoLoopsComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/PaddedLoopResult.v
+case_study/RiscvPmp/CFGVer/Example/MulPublicResult.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v
 # case_study/RiscvPmp/BinaryBlockVer/Verifier.v

@@ -76,6 +76,11 @@ AXIOM_CLEAN_THMS=(
   # whose contract table covers a PROPER SUBSET of the program, so it is the
   # only check that itable_faith_of_segment / instrs_of_list_segment are sound.
   "pl_loop"
+  # the MUL-leaks-its-operands leakage model (Example/MulPublicResult.v): the
+  # only end theorem whose statement depends on the LeakMul event, i.e. the
+  # only check that a multiplication on public operands still discharges once
+  # the model records its operands.
+  "mul_public_noninterferent_param"
 )
 
 COQC="${COQC:-coqc}"
