@@ -227,14 +227,48 @@ RE-PRICING, not a reason to remove it -- but it is no longer a headline result,
 and `prefix-length-cost.md`'s implied *"per-segment trimming is worth (K/k)^2"*
 is now doubly superseded (first by `cfdcc92f`, now by this).
 
-## Why the muladd rig differs -- NOT base concreteness
+## Why the muladd rig differs -- the LEADING BINDER CHAIN (answered 2026-09-08)
 
 The obvious hypothesis is that symbolic-base contracts leave fetch-bound
-residuals for `cbn` to chew.  **It is wrong:** `ZZKslChunkDistinctCommon` uses
-`gen_contract_rel`, i.e. it is symbolic-base too, and its `solve_vc` share is
-0%.  What actually distinguishes the muladd cut segment is not established.
-Do not predict the split from the contract builder -- **measure it per rig**,
-which costs one `Admitted` arm.
+residuals for `cbn` to chew.  **Wrong:** `ZZKslChunkDistinctCommon` uses
+`gen_contract_rel`, i.e. is symbolic-base too, and its `solve_vc` share is 0%.
+
+The second obvious hypothesis is instruction-table SIZE, since the cost is
+O(binders x width) and width is `32*K`.  **Also wrong on its own**, and the
+counterexample is sharp: `ZZByteLoop1N16` has K=**4** and is 8.2% tactic, while
+`ZZKslCD_N16` has K=**14** and is **0%**, and `ZZSegTrimP` has K=**15** and is
+33.2%.  Table size alone predicts nothing.
+
+The factor that was missing is the other half of the product.  `inst_symprop`'s
+only expensive case is `edemonicv`, so what matters is how long a chain of
+`demonicv`/`angelicv` nodes the POSTPROCESSED VC leads with.  Counted directly
+(`Example/ZZBind_*.v`, a `count_binders` walk over
+`postprocess (CFG_VC_triple ...)`):
+
+| rig | leading binders | K | width `32K` | binders x width | `solve_vc` share |
+|---|---:|---:|---:|---:|---:|
+| `ZZKslCD_N16` | **0** | 14 | 448 | **0** | **0%** |
+| `ZZByteLoop1N16` | 5 | 4 | 128 | 640 | 8.2% |
+| `ZZSegTrimP` | 27 | 15 | 480 | 12,960 | 33.2% |
+| `ZZSeg2P` | 27 | 282 | 9,024 | 243,648 | 78.1% |
+
+**The zero is the decisive one.** With no leading binders the `edemonicv` case
+never fires at all, so the `cbn` is free no matter how big the table is -- which
+is exactly why `KeyScheduleLoop` and `BearSSLCheckScalar` came out
+BYTE-IDENTICAL before and after the fix.  The product orders all four rigs
+correctly, and within the muladd family (binders fixed at 27) the share rises
+with K alone, 33% -> 57% -> 78%.
+
+**Do not read the product as a fitted law** -- four points, and the record's own
+lesson is that a handful of points will fit anything.  What is established is
+the GATE (zero binders ⇒ zero cost, measured) and the two factors' identity
+(from `Propositions.v:2297`, not from a fit).  `ZZK_75`'s binder count was not
+measured; it is assumed to share `ZZSegTrimP`'s contract shape.
+
+Practical consequence: **to predict whether a rig is tactic-bound, count the
+leading binder chain of its postprocessed VC** -- one `Eval vm_compute`, no
+proof, seconds.  That is cheaper than the staged `Admitted` arm and answers the
+question before you schedule anything.
 
 ## What this does and does not retract
 
@@ -376,6 +410,7 @@ Sub-table re-pricing: `Example/ZZ{Seg2,SegTrim,TrimF,TrimT,M_b64,M_seg256}.v` fo
 the NEW arm and `..._O.v` for the OLD (the pre-fix tactic inlined as a local
 `Ltac solve_vc_old`), plus `ZZ{Seg2,SegTrim}_A.v` for the matched `Admitted`
 cross-check; baselines `ZZSegBase.v` / `ZZM_base.v`.
+Binder census: `Example/ZZBind_{ksl,bl1,mulTrimP,mul2P}.v`.
 Scripts: `split.sh`, `sgsweep.sh`, `subtable.sh`, `rebuild_commons.sh` in the
 session tmp dir.
 
