@@ -81,9 +81,15 @@ precedent. Nothing is needed in the Semantics — `Expressions.v:138/159`
 dispatch generically through `uop.eval`/`uop.evalRel`.
 
 **Why this is a faithfulness fix, not a soundness hole.** The leakage model
-already treats ALU work as unobservable: `LeakEvent := LeakPc | LeakMemRead |
-LeakMemWrite` (`case_study/RiscvPmp/Base.v:329`), and `bool_to_bits` emits none
-of them in either version. So the blanket "secret-dependent control flow is
+treats the ALU work RELEVANT HERE as unobservable: `LeakEvent := LeakPc |
+LeakMemRead | LeakMemWrite | LeakMul` (`case_study/RiscvPmp/Base.v:329`), and
+`bool_to_bits` emits none of the four in either version. (`LeakMul` — a
+multiplication leaks BOTH operands, for a variable-latency multiplier — was
+added 2026-09-08 and is the one arithmetic observation the model records;
+`diagnostics/mul-leakage-model.md`.  It does not bear on `bool_to_bits`, and
+it does NOT widen what the executor can reason about: a secret-dependent
+BRANCH is still rejected outright, which is what the rest of this skill is
+about.) So the blanket "secret-dependent control flow is
 fatal" rule is a sound but **incomplete** over-approximation of the intended
 leakage model, and the old `if:` was already inconsistent with it. The full
 disclaimer for that model change is above `fun_bool_to_bits` in `Machine.v`.
