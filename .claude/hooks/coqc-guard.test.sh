@@ -22,7 +22,7 @@ p "make clean"                 ALLOW 'make -f Makefile.coq clean'
 p "echo mentioning make"       ALLOW 'echo remember to make -f Makefile.coq'
 p "unrelated make"             ALLOW 'make -C /tmp/other all'
 p "names a hook file"          ALLOW 'cat .claude/hooks/coqc-guard.sh'
-p "harmless script"            ALLOW 'bash "$HARMLESS"'
+p "harmless script"            ALLOW "bash $HARMLESS"
 echo "--- same-target rule (source newer than .vo) ---"
 touch "$T"
 p "ZZ probe, no check"         DENY  "coqc $T"
@@ -38,6 +38,6 @@ p "preamble marker, 1st"       ALLOW "coqc $T"
 p "preamble marker, 2nd"       DENY  "coqc $T"
 echo "--- builds hidden in scripts ---"
 rm -f /tmp/claude-rocq-interactive-regr-*
-p "wrapper script, no check"   DENY  'nohup "$WRAP" ZZMladTail'
+p "wrapper script, no check"   DENY  "nohup $WRAP ZZMladTail"
 date +%s%N > /tmp/claude-rocq-interactive-regr-$K
-p "wrapper script, checked"    ALLOW 'nohup "$WRAP" ZZMladTail'
+p "wrapper script, checked"    ALLOW "nohup $WRAP ZZMladTail"
