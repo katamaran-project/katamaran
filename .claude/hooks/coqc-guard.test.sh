@@ -13,7 +13,10 @@ v() { printf "$J" "$1" | .claude/hooks/coqc-guard.sh 2>/dev/null | grep -q deny 
 rm -f /tmp/claude-rocq-interactive-regr-*
 T=case_study/RiscvPmp/CFGVer/Example/ZZMladTail.v
 K=$(printf '%s' "$T" | cksum | cut -d' ' -f1)
-p() { printf "  %-46s want %-5s got %s\n" "$1" "$2" "$(v "$3")"; }
+fails=0; total=0
+p() { got=$(v "$3"); total=$((total+1))
+      if [ "$got" = "$2" ]; then st="ok  "; else st="FAIL"; fails=$((fails+1)); fi
+      printf "  [%s] %-44s want %-5s got %s\n" "$st" "$1" "$2" "$got"; }
 echo "--- must ALLOW (no regressions) ---"
 p "inspection: ps|grep"        ALLOW 'ps -ef | grep coqc'
 p "grep in a file"             ALLOW "grep -n 'coqc' notes.txt"
@@ -41,3 +44,7 @@ rm -f /tmp/claude-rocq-interactive-regr-*
 p "wrapper script, no check"   DENY  "nohup $WRAP ZZMladTail"
 date +%s%N > /tmp/claude-rocq-interactive-regr-$K
 p "wrapper script, checked"    ALLOW "nohup $WRAP ZZMladTail"
+
+echo
+if [ "$fails" -eq 0 ]; then echo "PASS: $total/$total"; else echo "FAIL: $fails of $total cases"; fi
+exit $((fails > 0))
