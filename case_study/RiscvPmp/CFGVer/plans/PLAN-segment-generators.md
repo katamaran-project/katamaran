@@ -107,6 +107,7 @@ seg_exits_faith   -- one lemma for all 10 Hef call sites
 seg_vc            -- projects ValidCFGVerifierContract past the stuck cfg_map
 seg_entry/seg_exit -- the bundles the soundness bridge consumes / hands back
 seg_step          -- ONE segment execution, with an explicit FRAME
+seg_step1         -- single-exit specialisation; the pc is PINNED
 seg_seq           -- SEQUENTIAL composition (what the straight-line cuts need)
 seg_loop          -- myWP2_loop_induction + a hand-off to any continuation
 ```
@@ -157,6 +158,56 @@ builder happened in the first place.
 proof — the difference between a loop lemma usable mid-function and one usable
 only for the last segment. (`am_loop` hardwired its conclusion to `sgN`'s exit
 condition and so could not be reused.)
+
+---
+
+## 3b. THE pc, standardised (2026-09-09, second pass)
+
+Everything about the pc turned out to be standardisable too, and it was the
+largest pocket left. Two distinct problems, measured across the live
+compositional files:
+
+| pc boilerplate at call sites | count |
+|---|---|
+| `destruct an as [av\|..]; [\|contradiction]` | 6 |
+| `assert (Hav : av = ...)` via `bv.eqb_spec` + `congruence` | 6 |
+| `unfold <seg>_headExitCond / _exitCond` | 13 |
+| `rewrite <- bv.of_N_add` (address normalisation) | 7 |
+
+**(a) Two spellings of the same address.** `bv.add (bv.of_N ia) (bv.of_N off)`
+— what `inst place iota` produces, since a placement is `p +b of_N head` — and
+`bv.of_N (ia + off)`, what `seg_exitCond` compares against. 30 and 24
+occurrences respectively, and any proof meeting both pays a `bv.of_N_add`
+rewrite. Fixed by a canonical form in `GenSegment.v`:
+
+```coq
+Definition seg_addr (ia off : N) : bv xlenbits := bv.of_N (ia + off).
+Lemma seg_addr_add : seg_addr ia off = bv.add (bv.of_N ia) (bv.of_N off).
+```
+
+**(b) Exit-address resolution.** `seg_exitCond_hit` (a declared target IS hit)
+was already there; its CONVERSE was not, and that is what every call site was
+open-coding:
+
+```coq
+Lemma seg_exitCond_inv  : seg_exitCond ia targets v = true ->
+                          exists t, In t targets /\ v = seg_addr ia t.
+Lemma seg_exitCond_inv1 : seg_exitCond ia [t] v = true -> v = seg_addr ia t.
+```
+
+Only a declared target is reachable, so the exit condition PINS the pc. With
+`inv1`, `seg_step1` removes the whole ritual from the call site: no `forall
+an`, no SyncVal-vs-NonSyncVal destruct, no `unfold …exitCond`, no
+`bv.eqb_spec` assert, no `subst`. `Hec : cfg_exitCond c = seg_exitCond ia [t]`
+is `eq_refl` for any contract `gen_seg_contract` built with a one-element
+`targets`.
+
+All the pure exitCond algebra lives in `GenSegment.v` next to `seg_exitCond`
+(no Iris in any of it); `GenCompose.v` keeps only `seg_exit_at` / `seg_step1`.
+
+Multi-exit segments (muladd's `sgL` declares two) still use `seg_step` and
+`seg_exitCond_inv`, whose `In t targets` destructs to the disjunction — one
+`destruct` instead of a hand-rolled `bv.eqb_spec` chain per target.
 
 ---
 

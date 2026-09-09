@@ -129,21 +129,9 @@ Section SegCompose.
   (* 2. EXIT-TABLE FAITHFULNESS                                               *)
   (* ======================================================================== *)
 
-  (* A target in the list is hit.  Induction on the fold_right orb; there is no
-     bv.eqb_refl, so the reflect view is the way in. *)
-  Lemma seg_exitCond_hit (ia : N) (targets : list N) (t : N) :
-    List.In t targets -> seg_exitCond ia targets (bv.of_N (ia + t)%N) = true.
-  Proof.
-    induction targets as [|t0 ts IH]; [contradiction|].
-    intros [Heq | Hin]; cbn [seg_exitCond List.fold_right].
-    - subst t0.
-      destruct (bv.eqb_spec (@bv.of_N xlenbits (ia + t)%N)
-                            (@bv.of_N xlenbits (ia + t)%N)); [reflexivity | congruence].
-    - (* the cbn above has already unfolded seg_exitCond into its foldr, so
-         `rewrite (IH Hin)` finds no subterm; `exact` unifies up to conversion
-         where `rewrite` matches syntactically. *)
-      apply Bool.orb_true_iff. right. exact (IH Hin).
-  Qed.
+  (* seg_exitCond_hit / seg_exitCond_inv / seg_exitCond_inv1 live in
+     GenSegment.v, next to seg_exitCond itself -- they are pure boolean
+     algebra with no Iris in them. *)
 
   (* One lemma for all 10 call sites, replacing the copied `exit_hit` tactic.
      No per-call offset arithmetic: the caller supplies only
@@ -248,6 +236,51 @@ Section SegCompose.
     (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
     - iFrame.
     - iIntros (an) "Hex". iApply HPost. iFrame.
+  Qed.
+
+  (* ---- SINGLE-EXIT specialisation -----------------------------------------
+     A segment with ONE declared target has its exit pc PINNED by the exit
+     condition, so all of this can go away at the call site: the `forall an`,
+     the `destruct an as [av|..]; [|contradiction]` for SyncVal-vs-NonSyncVal,
+     the `unfold <seg>_exitCond`, and the
+     `assert (Hav : av = ...) by (destruct (bv.eqb_spec ...); congruence)`.
+     Measured across the live compositional files before this existed: 6 + 6 +
+     13 occurrences of exactly that ritual.
+
+     `Hec` is `eq_refl` for any contract built by gen_seg_contract with a
+     one-element `targets`. *)
+  Definition seg_exit_at {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+      (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits)
+      (v : bv xlenbits) : iProp Σ :=
+    ( pc ↦ᵣ SyncVal v
+      ∗ (bi_exist (fun u => nextpc ↦ᵣ u))
+      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+          (ai_instr <$> instrs_of_list cbase L)
+      ∗ asn.interpret (cfg_postcondition c)
+          ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ SyncVal v]) )%I.
+
+  Lemma seg_step1 {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+    (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
+    (ia t : N)
+    {Pre Post : iProp Σ}
+    (Hec : cfg_exitCond c = seg_exitCond ia [t])
+    (Hv : ValidCFGVerifierContract c)
+    (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
+             (instrs_of_list cbase L)
+             (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
+    (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+             (cfg_exitCond c) (cfg_exits c) iota)
+    (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
+    (HPost : Fr ∗ seg_exit_at c iota a L cbase (seg_addr ia t) -∗ Post) :
+    Pre -∗ myWP2_loop Post.
+  Proof.
+    apply (seg_step c iota a L cbase Fr Hv Hif Hef HPre).
+    iIntros (an) "H".
+    destruct an as [av | a1 a2].
+    2:{ iDestruct "H" as "(_ & %Hf & _)". destruct Hf. }
+    iDestruct "H" as "(HF & %Hex & Hpc & Hnpc & Hinstrs & Hpost)".
+    rewrite Hec in Hex. apply seg_exitCond_inv1 in Hex. subst av.
+    iApply HPost. unfold seg_exit_at. iFrame.
   Qed.
 
   (* SEQUENTIAL composition: run one segment, then continue.  This is the

@@ -122,6 +122,64 @@ Definition seg_exitCond (ia : N) (targets : list N) : bv xlenbits -> bool :=
   fun v => List.fold_right
              (fun t acc => orb (bv.eqb v (bv.of_N (ia + t)%N)) acc) false targets.
 
+(* ---- pc ALGEBRA -----------------------------------------------------------
+   Segment addresses are written TWO ways across the hand-written proofs:
+   `bv.add (bv.of_N ia) (bv.of_N off)` (what `inst place iota` produces, since
+   a placement term is `p +b of_N head`) and `bv.of_N (ia + off)` (what
+   seg_exitCond compares against).  30 and 24 occurrences respectively, and
+   every proof that meets both pays a bv.of_N_add rewrite to reconcile them.
+   `seg_addr` is the canonical form; `seg_addr_add` is the one conversion, so a
+   call site never has to think about which spelling it is holding. *)
+Definition seg_addr (ia off : N) : bv xlenbits := @bv.of_N xlenbits (ia + off).
+
+Lemma seg_addr_add (ia off : N) :
+  seg_addr ia off = bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits off).
+Proof. unfold seg_addr. now rewrite bv.of_N_add. Qed.
+
+(* A declared target IS hit.  (Used by GenCompose.seg_exits_faith.) *)
+Lemma seg_exitCond_hit (ia : N) (targets : list N) (t : N) :
+  List.In t targets -> seg_exitCond ia targets (seg_addr ia t) = true.
+Proof.
+  unfold seg_addr.
+  induction targets as [|t0 ts IH]; [contradiction|].
+  intros [Heq | Hin]; cbn [seg_exitCond List.fold_right].
+  - subst t0.
+    destruct (bv.eqb_spec (@bv.of_N xlenbits (ia + t)%N)
+                          (@bv.of_N xlenbits (ia + t)%N)); [reflexivity | congruence].
+  - (* the cbn has already unfolded seg_exitCond into its foldr, so
+       `rewrite (IH Hin)` finds no subterm; `exact` unifies up to conversion
+       where `rewrite` matches syntactically. *)
+    apply Bool.orb_true_iff. right. exact (IH Hin).
+Qed.
+
+(* ...and the CONVERSE, which is what every call site was open-coding as
+   `destruct an as [av|..]; [|contradiction]` + `unfold <seg>_exitCond` +
+   `assert (Hav : av = ...) by (destruct (bv.eqb_spec ...); congruence)`.
+   Only a declared target can be reached, so knowing the exit condition holds
+   PINS the pc. *)
+Lemma seg_exitCond_inv (ia : N) (targets : list N) (v : bv xlenbits) :
+  seg_exitCond ia targets v = true ->
+  exists t, List.In t targets /\ v = seg_addr ia t.
+Proof.
+  unfold seg_addr.
+  induction targets as [|t0 ts IH]; cbn [seg_exitCond List.fold_right].
+  - discriminate.
+  - intros Hor. apply Bool.orb_true_iff in Hor as [Heq | Hrest].
+    + exists t0. split; [now left |].
+      destruct (bv.eqb_spec v (@bv.of_N xlenbits (ia + t0)%N));
+        [assumption | discriminate].
+    + destruct (IH Hrest) as [t [Hin Hv]]. exists t. split; [now right | exact Hv].
+Qed.
+
+(* The overwhelmingly common case: ONE declared exit, so the pc is determined
+   outright and no case analysis survives at all. *)
+Lemma seg_exitCond_inv1 (ia t : N) (v : bv xlenbits) :
+  seg_exitCond ia [t] v = true -> v = seg_addr ia t.
+Proof.
+  intros H. apply seg_exitCond_inv in H as [t' [Hin Hv]].
+  destruct Hin as [-> | []]. exact Hv.
+Qed.
+
 (* ========================================================================== *)
 (* 3. THE SEGMENT CONTRACT GENERATOR                                           *)
 (* ========================================================================== *)
