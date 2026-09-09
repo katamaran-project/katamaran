@@ -900,10 +900,11 @@ Section AdequacyTools.
          shifted by one.  Nothing semantic changed here — memory still holds
          AST, and the element type is simply inferred. *)
       { apply (@instrs_of_list_fresh _ instrs a 4); [lia|].
-        unfold lenAddr in Hrep. change (2 ^ 12)%N with 4096%N in Hrep.
-        (* lia chokes on the 2^32 literal, so bound to <4096 then transit. *)
-        assert (Hb : (bv.bin a + 4 + 4 * N.of_nat (length instrs) < 4096)%N) by lia.
-        eapply N.lt_trans; [exact Hb|]. reflexivity. }
+        (* lia chokes on the 2^32 literal, so bound below lenAddr -- kept
+           SYMBOLIC, so this proof does not move when lenAddr does -- and
+           transit through Base.v's lenAddr_rep. *)
+        assert (Hb : (bv.bin a + 4 + 4 * N.of_nat (length instrs) < lenAddr)%N) by lia.
+        eapply N.lt_trans; [exact Hb|]. exact lenAddr_rep. }
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w.
       cbn [instrs_of_list words_of_list].
       rewrite (big_sepM_insert

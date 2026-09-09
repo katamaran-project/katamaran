@@ -75,8 +75,15 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Definition memΣ : gFunctors :=
     #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; tracePreΣ LeakageTrace].
 
+  (* Was `now eapply Prelude.nodup_fixed`, which DECIDES NoDup by computing
+     `nodup eq_dec liveAddrs = liveAddrs` -- O(lenAddr^2) bv equality tests.
+     At lenAddr = 2^10 that was ~0.5M comparisons and merely slow; the raise to
+     2^12 made it ~8.4M and this file stopped fitting in RAM (14.6 GB, still
+     growing, when it was killed).  bv.seqBv_NoDup proves it structurally, at a
+     cost INDEPENDENT of lenAddr, so the address space can now be sized on its
+     merits rather than on what NoDup can afford. *)
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
-  Proof. now eapply Prelude.nodup_fixed. Qed.
+  Proof. apply bv.seqBv_NoDup. now vm_compute. Qed.
 
   #[global] Arguments liveAddrs : simpl never.
 

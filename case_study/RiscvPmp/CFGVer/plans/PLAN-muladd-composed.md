@@ -323,3 +323,81 @@ Committed nothing. Probes (untracked, in `Example/`): `ZZMladCommon.v` (the
 shared instruction list with deviation 3 reverted — the only artifact worth
 keeping), `ZZMladBase.v`, `ZZMladDv{Body,Final,BodyP,BodyBad,Fit}.v`,
 `ZZMlad{Add,Sub,Limb,Mv}{Body,Final}.v`.
+
+---
+
+# RESULTS 2026-09-09 — segment G is NON-VACUOUS; Phase 5's machinery EXISTS
+
+## Segment G re-run at `lenAddr = 2^12` — the precondition is now satisfiable
+
+Three `Qed`s, and this time they mean something (`bound = 1168 <= 4096`, and
+`unsigned p >= 0` leaves `p` in `[0, 2928]`).
+
+| | vacuous (2^10) | non-vacuous (2^12) | delta |
+|---|---:|---:|---:|
+| body (`ZZMladDvBody`) | 856,390,131 | 856,403,082 | **+0.0015%** |
+| exit (`ZZMladDvFinal`) | 856,439,435 | 856,451,554 | +0.0014% |
+| invariant post (`ZZMladDvBodyP`) | 864,610,421 | 864,621,715 | +0.0013% |
+| control (`ZZMladDvBodyBad`, T5 un-pinned) | 10.68 G, FAILS | 10.67 G, **still FAILS** | — |
+
+**`allocated_words` is identical to four decimal places.** So the solver never
+exploited the contradictory precondition: it built and discharged exactly the
+same VC, and only the truth of the hypothesis changed.
+
+Consequences:
+- The Phase 1 cost model transfers unchanged; composed 4.3 GB vs flat 11.5 GB
+  stands.
+- The earlier caveat that `diagnostics/muladd-full-cost-drivers.md`'s numbers
+  are "probably still representative — but that is an argument, not a
+  measurement" is DISCHARGED. It is now a measurement.
+- Ignore the wall-clock drop (14.4 s -> 11.0 s): wall is contended on this box
+  and the vacuous run competed with another session. `allocated_words` is the
+  deterministic metric and it is flat.
+
+## Phase 5 — the last mile WORKS (spike, `Example/ZZPhase5.v`, untracked)
+
+The plan called this NEW MACHINERY and the highest-risk item. It is done, and
+it was smaller than expected.
+
+**The translation lemma is not needed.** `exitCond_WP2_loop exitCond` is
+*definitionally* `myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜exitCond v⌝)`
+(`Adequacy.v:1140`), and `swap_composed` already concludes exactly that shape
+(`swapExit`). So the two are the same proposition and no bridge between them
+has to be proved.
+
+What DID have to be written is `cfg_instrs_verified_composed`: `cfg_instrs_
+verified` with the one `sound_scfg_verification_condition_myWP2` step replaced
+by the caller's composed fact, keeping the register destructuring, the four
+`read_register` rewrites, `regPstsTo_sync_is_nonsync` and the `ImplPre`
+plumbing — which is the part a composed proof otherwise has no route to, and
+the actual reason `swap_composed`, `cd_loop`, `loopA` and `pl_loop` all stop at
+`myWP2_loop`.
+
+`swap_composed_endToEnd` then drives the real two-segment `swap_composed`
+through it to the same conclusion `cfg_instrs_verified` produces.
+
+Both are **axiom-clean**: `Print Assumptions` gives `pure_decode` and
+`mmioenv` only — the two the gate whitelists. Zero `Admitted`.
+
+**The one remaining gap, stated precisely:** `swap_composed_endToEnd` takes
+`ImplPre` as a HYPOTHESIS, exactly as `cfg_instrs_verified` does. So it is not
+yet a closed leakage theorem for swap. For GENERATED contracts `gen_implpre`
+supplies that hypothesis; `swapA` is hand-written over a bespoke `swapCtx`, so
+there is no generator to ask and one would have to be built by hand. This is
+instantiation, not new machinery. muladd's segments would be generated, so
+this gap is not expected to recur there — but that is a prediction, not a
+measurement, and it should be checked before relying on it.
+
+## Where that leaves the muladd plan
+
+Phase 1 (segment G) and Phase 5 (the last mile) are the two that were in
+doubt. Both now hold. What is left is the bulk, and it is ordinary work except
+for one model question:
+
+- Phase 2: four loop bodies still `No applicable tactic`; the diagnosed fix
+  (carry `minAddr <= unsigned ap` and `unsigned ap + bytes <= maxAddr` per cell)
+  is UNATTEMPTED and UNCONFIRMED — the `ZZMladAddDump` diagnostic has still
+  never run.
+- Segment I additionally risks being impossible under `LeakMul` (its
+  `MUL31(mw, q)` has a SECRET `q`). That is a model question, not a proof one.
+- Phases 3, 4, 6: nine straight-line segments, composition, promotion.

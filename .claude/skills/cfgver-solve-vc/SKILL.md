@@ -65,7 +65,8 @@ help":
   PARAMETER `A` (`… (v) (A B : Z)` / `… (v) (cbv) (A B : Z)`) rather than
   hardcoding 4 — do not "fix" a width-1 residual by adding a duplicate lemma.
   `_add` carries an extra `0 ≤ A` premise because its no-wrap step bounds
-  `bin cbv + bin a` via `1024 - A`.
+  `bin cbv + bin a` via `maxAddr - A` (written symbolically since 2026-09-08;
+  it used to be a literal `1024`).
 - **`relval_neq_irrefl` closes a loop-EXIT residual, not a bound.** A loop whose
   exit test is a POINTER COMPARE — `bne a0, a1` with both operands
   base-relative, which is what clang emits for BearSSL `check_scalar`'s byte

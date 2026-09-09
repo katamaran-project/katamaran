@@ -76,25 +76,46 @@ Definition Word : Set     := bv word.
 Definition Byte : Set     := bv byte.
 
 (* 1. Definition of RAM memory *)
+(* minAddr IS ASSUMED TO BE 0, and not only numerically -- do not raise it
+   expecting the proofs to follow.  `Spec.v` is honest (it writes
+   `Z.of_N minAddr` symbolically), but two DISCHARGES bake the value in, and
+   neither is a literal, so no grep finds them:
+     - CFGVer/Contracts.v `relval_fetch_lower` / `instprop_fetch_bound_lower`
+       prove `0 <= unsigned X` from NOTHING -- that is just unsigned-
+       nonnegativity.  They close the real goal `Z.of_N minAddr <= unsigned
+       paddr` only because it vm_computes to 0.
+     - CFGVer/Adequacy.v:946 `instrsMemory` and :1092 `instrsAndDataMemory`
+       split liveAddrs and close the split with
+       `bv.of_N minAddr + bv.of_N start = bv.of_N start`.
+   Raising minAddr also falsifies every concrete corollary, because
+   CFGVer/Noninterference.v sets `init_addr := 0`.
+   What it would take is written up in CFGVer/plans/PLAN-address-space-params.md,
+   including three already-validated proof skeletons.  Deferred 2026-09-08:
+   nothing currently wants a nonzero minAddr. *)
 Definition minAddr : N := 0.
-(* RAISED 2^10 -> 2^12 on 2026-09-08.  Reason: BearSSL br_i31_muladd_small's
-   whole function is 282 instructions = 1128 bytes of code, so at 2^10 its
+(* Raised 2^10 -> 2^12 on 2026-09-08: BearSSL br_i31_muladd_small's whole
+   function is 282 instructions = 1128 bytes of code, so at 2^10 its
    contract's `unsigned p + bound <= lenAddr` was UNSATISFIABLE and
    cfg_instrs_verified's `init_addr + 4*|instrs| < lenAddr` premise was false
    for every init_addr -- the program could not be verified at any cost.
    See CFGVer/plans/PLAN-muladd-composed.md.
 
-   lenAddr is a Definition, so symbolic references adapt by themselves.  But
-   TWENTY-TWO SITES HARDCODE THE VALUE and must move with it -- if you change
-   this line, change those too:
-     CFGVer/Contracts.v  (17: the relval_fetch_* / fetch-bound family that IS
-                          solve_symbase_fetch; note 4092 = lenAddr - 4)
-     CFGVer/Adequacy.v   (3, incl. an explicit `change (2 ^ 12)%N with 4096%N`)
-     CFGVer/EndToEnd.v   (1)
-     CFGVer/Tables.v     (1, written as a bare 2 ^ 12)
+   THIS LINE IS THE ONLY PLACE THE SIZE OF THE ADDRESS SPACE IS WRITTEN.
+   That was made true on 2026-09-08 and is worth keeping: the raise above
+   initially missed two proof sites (Example/JumpsResult.v's `1024`/`1028`
+   transit bounds) that no amount of grepping the verifier files would have
+   found, because they sat in an example.  Every former site now says
+   `lenAddr` / `maxAddr` and discharges its `< bv.exp2 xlenbits` obligation
+   with maxAddr_rep / lenAddr_rep below.  Two rules keep it that way:
+     - never write the numeric value in a proof; write the constant, and let
+       `lia` treat it as an atom;
+     - where a proof runs a normalising tactic (`cbn in *`), POSE the
+       maxAddr_rep/lenAddr_rep fact BEFORE it, so the constant in the
+       hypothesis and the constant in the goal normalise together and `lia`
+       sees one atom instead of two (see relval_fetch_upper_add).
    theories/ mentions lenAddr/maxAddr in COMMENTS ONLY and is unaffected.
-   Note liveAddrs below is lenAddr entries long, so this also quadruples the
-   list the Iris memory model iterates over. *)
+   Note liveAddrs below is lenAddr entries long, so raising this also
+   multiplies the list the Iris memory model iterates over. *)
 Definition lenAddr : N := 2^12.
 Definition maxAddr : N := minAddr + lenAddr.
 Lemma minAddr_rep : (minAddr < bv.exp2 xlenbits)%N.

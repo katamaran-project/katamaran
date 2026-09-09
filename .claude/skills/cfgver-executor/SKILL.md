@@ -626,7 +626,7 @@ It stops with `error` when:
 > and is ~1.8× faster at N=16, but its exponent is **1.63, steeper**. So the
 > symbolic base is a shrinking constant-factor penalty, not the driver — don't
 > chase it expecting a slope change. `solve_vc`'s residuals under a symbolic base
-> are all `0 ≤ 1024 - (4 + unsigned (p ⊕ off))`, one per instruction address plus
+> are all `0 ≤ maxAddr - (4 + unsigned (p ⊕ off))`, one per instruction address plus
 > the exit (15/22/30 at N=1/8/16, +1/trip for each iteration's store address);
 > the `SyncVal p => p | NonSyncVal _ _ => False` wrapper is just how
 > `formula_relop` prints and is NOT a secret-data wall.

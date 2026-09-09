@@ -83,11 +83,15 @@ Proof.
       rewrite bv.of_N_add.
       assert (Hlen1 : N.of_nat (length [BEQ X1 X0 true_offset]) = 1%N) by reflexivity.
       rewrite Hlen1.
-      unfold lenAddr in Hbound.
+      (* The two transit bounds are lenAddr and lenAddr + 4, kept SYMBOLIC.
+         Spelled as literals they were the only address-space constants
+         hiding in an Example/, and the only two the 2^10 -> 2^12 raise
+         missed. *)
       assert (Hs4 : (init_addr + 4 * 1 < bv.exp2 xlenbits)%N)
-        by (apply N.le_lt_trans with (m := 1024%N); [lia | vm_compute; reflexivity]).
+        by (apply N.le_lt_trans with (m := lenAddr); [lia | exact lenAddr_rep]).
       assert (Hs8 : (init_addr + 8 < bv.exp2 xlenbits)%N)
-        by (apply N.le_lt_trans with (m := 1028%N); [lia | vm_compute; reflexivity]).
+        by (apply N.le_lt_trans with (m := (lenAddr + 4)%N);
+            [lia | vm_compute; reflexivity]).
       rewrite (bv.bin_of_N_small Hs4) (bv.bin_of_N_small Hs8).
       lia.
 Qed.

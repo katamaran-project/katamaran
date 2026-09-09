@@ -21,8 +21,14 @@ description: >
 
 `lia` chokes evaluating the literal `4294967296`. Two escapes:
 
-- Bound to a small literal, then transit:
-  `assert (Hb : … < 1024) by lia; eapply N.lt_trans; [exact Hb|]; reflexivity.`
+- Bound below the address space, then transit through `Base.v`'s pre-proved
+  `lenAddr_rep` / `maxAddr_rep`:
+  `assert (Hb : … < lenAddr) by lia; eapply N.lt_trans; [exact Hb|]; exact lenAddr_rep.`
+  **Do not write the numeric value here.** This idiom used to say `< 1024` and
+  `reflexivity`, and when `lenAddr` was raised `2^10 -> 2^12` on 2026-09-08 the
+  literal form was one of 24 sites that had to move by hand — two of which were
+  missed and only surfaced as a build break. `lenAddr` is now the single place
+  the size of the address space is written.
 - Make the power opaque:
   `set (E := bv.exp2 xlenbits) in *; clearbody E; lia.`
 
@@ -52,6 +58,75 @@ needing the bound at all. Pre-existing instance of the same idiom:
 lia`). Cost of not knowing this, measured 2026-07-28: two full 5-minute
 `Symbolic/Solver.v` compiles. Iterate such tactic fixes in rocq-mcp **preamble
 mode** instead (~30 ms) — see the Tooling-gotchas block in the root `CLAUDE.md`.
+
+### `Cannot find witness` from a constant that normalised on ONE side only
+
+Fourth mechanism behind the same message, and the one that survives the fix
+above. `lia` needs every constant to arrive as a **consistent atom**, and a
+bare `cbn in *` guarantees the opposite: it reduces a constant where it occurs
+in an *existing* hypothesis, but a hypothesis you `assert`/`pose` **afterwards**
+is stated fresh and stays folded. The two then look unrelated to `lia`.
+
+Measured 2026-09-08 in `Contracts.v`'s `relval_fetch_upper_add`, which hit it
+**twice in a row**, one level apart:
+
+1. `maxAddr` was reduced in `Hb` (it arrived via the lemma statement) but not
+   in a later-posed `Hexp : maxAddr < bv.exp2 xlenbits`.
+2. Posing `maxAddr_rep` *before* the `cbn` fixed that — and broke the next one
+   down: `cbn` then reduced **`bv.exp2 xlenbits` to `bv.exp2 32`** in `Hexp`
+   (`xlenbits` is only `Opaque` inside `ModelBinary.v`) while the freshly
+   stated `Hlt` still said `bv.exp2 xlenbits`.
+
+The fix is not ordering — it is to block delta on **every** constant that
+appears on both sides of the `lia`:
+
+```coq
+pose proof maxAddr_rep as Hexp.
+cbn -[maxAddr bv.exp2 xlenbits] in *; unfold bv.unsigned in *.
+```
+
+**Do not guess at this one.** Both guesses above were wrong and cost a full
+`Contracts.v` compile each; one goal dump settled it immediately:
+
+```coq
+lazymatch type of Hb   with ?T => idtac "ZZHb:"   T end.
+lazymatch type of Hexp with ?T => idtac "ZZHexp:" T end.
+```
+
+printing `ZZHexp: (maxAddr < bv.exp2 32)%N` against a goal saying
+`bv.exp2 xlenbits` — the mismatch is invisible in the error message and obvious
+in the dump.
+
+## Never DECIDE a property of a list whose length is a model parameter
+
+`Prelude.nodup_fixed` proves `NoDup l` from `nodup eq_dec l = l`, discharged by
+computation. That is O(|l|^2) in equality tests. It is the right tool for a
+FIXED small list — the `Example/*Result.v` reg-spec lists use it correctly —
+and the wrong tool the moment the length is a parameter of the model.
+
+`RiscvPmp/IrisInstance.v`'s `NoDup_liveAddrs` used it on `liveAddrs`, which is
+`lenAddr` elements long. So the SIZE OF THE ADDRESS SPACE entered the Iris
+layer quadratically, invisibly, until someone changed it: raising `lenAddr`
+`2^10 -> 2^12` on 2026-09-08 (4x the list, ~16x the comparisons, ~0.5M ->
+~8.4M) took that one lemma from "slow" to **48+ minutes at 14.6 GB, killed
+without finishing**.
+
+Use the structural lemma instead (added 2026-09-09):
+
+```coq
+bv.seqBv_NoDup : (bv.unsigned min + Z.of_N len <= 2 ^ Z.of_nat n)%Z ->
+                 base.NoDup (bv.seqBv min len)
+```
+
+`seqZ` is `NoDup` and `bv.of_Z` is injective on the no-wrap range, so its cost
+does not depend on `len` at all (checked at `len = 2^20`). Measured effect on
+`IrisInstance.v`: **>48 min / did-not-finish -> 109 s.**
+
+Note the `NoDup` here is stdpp's `base.NoDup`, not `List.NoDup` — inside
+`Bitvector.v`'s `Section Sequences` an `Import Lists.List` is in scope, and only
+`stdpp.base` is Required at the top, so the supporting lemmas need qualifying
+(`list.NoDup_fmap_2_strong`, `list_numbers.NoDup_seqZ`,
+`list_numbers.elem_of_seqZ`).
 
 ## Enum membership: the lemma is `elem_of_enum`
 

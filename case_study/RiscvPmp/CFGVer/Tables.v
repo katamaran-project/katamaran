@@ -336,7 +336,7 @@ Open Scope list_scope.
 
   (* Transit the end-to-end layer's lenAddr bound into the no-wrap bound
      itable_faith_of_list needs.  lia cannot handle bv.exp2 xlenbits (2^32)
-     directly, so bound below lenAddr = 2^12 first and transit. *)
+     directly, so bound below lenAddr first and transit. *)
   Lemma table_bound_of_lenAddr (ia : N) (len : nat) :
     (ia + 4 * N.of_nat len < lenAddr)%N ->
     (bv.bin (@bv.of_N xlenbits ia) + 4 * N.of_nat len < bv.exp2 xlenbits)%N.
@@ -344,10 +344,9 @@ Open Scope list_scope.
     intros H.
     pose proof (@bv.bin_of_N_decr xlenbits ia) as Hdec.
     set (B := bv.bin (@bv.of_N xlenbits ia)) in *; clearbody B.
-    unfold lenAddr in H.
-    assert (Hsmall : (B + 4 * N.of_nat len < 2 ^ 12)%N) by lia.
+    assert (Hsmall : (B + 4 * N.of_nat len < lenAddr)%N) by lia.
     eapply N.lt_trans; [exact Hsmall|].
-    now vm_compute.
+    exact lenAddr_rep.
   Qed.
 
     (* TODO: move into Spec.v *)
