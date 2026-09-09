@@ -1,0 +1,19 @@
+# LOCAL project file, for coq-lsp / rocq-mcp INTERACTIVE mode only.
+#
+# Why this exists: the repo root has BOTH _CoqProject and dune-project, and
+# coq-lsp prefers dune when it finds dune-project.  No dune stanza covers
+# case_study/RiscvPmp, so under the dune workspace this subtree gets NO load
+# path and every `From Katamaran Require Import ...` silently fails -- which
+# surfaces as "The reference Valuation was not found in the current
+# environment" on any rocq_start against a file here, and as a preamble that
+# reports success while loading zero Katamaran libraries.
+#
+# coq-lsp's workspace detection stops at the FIRST directory (walking up from
+# the source file) that holds a project file.  This file is that directory, and
+# there is no dune-project here, so interactive mode uses these paths instead.
+#
+# Not used by the build: `make -f Makefile.coq` is generated from the ROOT
+# _CoqProject and never reads this one.  Keep the two -Q/-R lines in sync with
+# the root file's.
+-Q ../.. Katamaran.RiscvPmp
+-R ../../../../theories Katamaran
