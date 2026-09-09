@@ -34,6 +34,28 @@ dir="${TMPDIR:-/tmp}"
 # not seconds: a check issued in the same second as the preceding build read
 # as "not after it" and produced a false denial (caught by the guard's own
 # test, case 3).
-date +%s%N > "${dir}/claude-rocq-interactive-${sid:-nosession}" 2>/dev/null || true
+# PER-TARGET (2026-09-09).  The marker used to be one file per SESSION, so a
+# single interactive check -- on anything at all, even an unrelated scratch
+# lemma -- satisfied the guard's same-target rule for every later build for the
+# rest of the session.  Observed doing exactly that: one preamble-mode check of
+# some bitvector arithmetic authorised a dozen later full compiles of an
+# unrelated file.
+#
+# So: when the call NAMES a file (rocq_start(file=...), rocq_compile_file), the
+# marker is keyed to that file and authorises only it.  Preamble-mode work and
+# `rocq_check(from_state=...)` name no file -- the hook cannot know which target
+# they are about -- so they write a CONSUME-ON-USE marker good for ONE build,
+# which keeps preamble mode usable (it is the recommended workflow) without
+# letting it unlock everything.
+tgt=$(printf '%s' "$input" | jq -r '.tool_input.file // ""' 2>/dev/null) || tgt=""
+tgt=${tgt#./}
+now_ns=$(date +%s%N)
+
+if [ -n "$tgt" ]; then
+  k=$(printf '%s' "$tgt" | cksum | cut -d' ' -f1)
+  printf '%s\n' "$now_ns" > "${dir}/claude-rocq-interactive-${sid:-nosession}-${k}" 2>/dev/null || true
+else
+  printf '%s\n' "$now_ns" > "${dir}/claude-rocq-interactive-${sid:-nosession}-any" 2>/dev/null || true
+fi
 
 exit 0
