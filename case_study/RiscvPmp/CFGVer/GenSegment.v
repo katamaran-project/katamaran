@@ -122,6 +122,101 @@ Definition seg_exitCond (ia : N) (targets : list N) : bv xlenbits -> bool :=
   fun v => List.fold_right
              (fun t acc => orb (bv.eqb v (bv.of_N (ia + t)%N)) acc) false targets.
 
+(* ========================================================================== *)
+(* 2b. BOUNDS                                                                  *)
+(* ========================================================================== *)
+
+(* Every compositional lemma was threading THREE bounds by hand -- 12 + 9 + 3
+   = 24 hypothesis re-declarations across ~14 lemmas:
+     Hrep : bv.bin (bv.of_N ia) + 4 * |instrs| < bv.exp2 xlenbits
+     Hlen : bv.unsigned (bv.of_N ia) + Z.of_N bound <= Z.of_N lenAddr
+     Hmax : bv.bin (bv.of_N ia) + bound <= maxAddr
+   They are NOT independent.  maxAddr = minAddr + lenAddr and minAddr = 0, so
+   Hmax and Hlen are the SAME fact in N and in Z; and Hrep follows from either
+   plus lenAddr_rep, as long as the segment fits inside `bound`.
+
+   So the caller supplies ONE fact -- the natural one, on the raw ia -- and the
+   three forms each lemma happens to want are projections. *)
+(* The CANONICAL segment address.  Two spellings of the same thing were in use
+   -- `bv.add (bv.of_N ia) (bv.of_N off)`, what `inst place iota` produces
+   since a placement is `p +b of_N head`, and `bv.of_N (ia + off)`, what
+   seg_exitCond compares against (30 and 24 occurrences).  Any proof meeting
+   both paid a bv.of_N_add rewrite; seg_addr_add is now the ONE conversion. *)
+Definition seg_addr (ia off : N) : bv xlenbits := @bv.of_N xlenbits (ia + off).
+
+Lemma seg_addr_add (ia off : N) :
+  seg_addr ia off = bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits off).
+Proof. unfold seg_addr. now rewrite bv.of_N_add. Qed.
+
+Definition seg_wf (ia bound : N) : Prop := (ia + bound <= lenAddr)%N.
+
+(* ia is representable, so bv.of_N does not truncate it. *)
+Lemma seg_wf_bin (ia bound : N) (H : seg_wf ia bound) :
+  bv.bin (@bv.of_N xlenbits ia) = ia.
+Proof. apply bv.bin_of_N_small. pose proof lenAddr_rep. unfold seg_wf in H. lia. Qed.
+
+(* the form fetch_bound_step_Z / sep_contract_mem_read want *)
+Lemma seg_wf_max (ia bound : N) (H : seg_wf ia bound) :
+  (bv.bin (@bv.of_N xlenbits ia) + bound <= maxAddr)%N.
+Proof.
+  rewrite (seg_wf_bin ia bound H). unfold seg_wf in H.
+  unfold maxAddr, minAddr. lia.
+Qed.
+
+(* the form gen_seg_contract's base-bound conjunct wants *)
+Lemma seg_wf_Z (ia bound : N) (H : seg_wf ia bound) :
+  (bv.unsigned (@bv.of_N xlenbits ia) + Z.of_N bound <= Z.of_N lenAddr)%Z.
+Proof.
+  unfold bv.unsigned. rewrite (seg_wf_bin ia bound H).
+  unfold seg_wf in H. lia.
+Qed.
+
+(* the form itable_faith_at wants.  Hsz is `reflexivity`-adjacent: bound is
+   chosen >= the program's byte length by construction. *)
+Lemma seg_wf_rep (ia bound : N) (L : list AnnotInstr)
+  (Hsz : (4 * N.of_nat (length L) <= bound)%N) (H : seg_wf ia bound) :
+  (bv.bin (@bv.of_N xlenbits ia) + 4 * N.of_nat (length L) < bv.exp2 xlenbits)%N.
+Proof.
+  rewrite (seg_wf_bin ia bound H). pose proof lenAddr_rep.
+  unfold seg_wf in H. lia.
+Qed.
+
+(* An in-range offset does not truncate either -- this packages the
+   bv.bin_of_N_small rewrites (8 occurrences) with their side condition
+   already discharged. *)
+Lemma seg_addr_bin (ia bound off : N)
+  (Hoff : (off <= bound)%N) (H : seg_wf ia bound) :
+  bv.bin (seg_addr ia off) = (ia + off)%N.
+Proof.
+  unfold seg_addr. apply bv.bin_of_N_small.
+  pose proof lenAddr_rep. unfold seg_wf in H. lia.
+Qed.
+
+(* DISTINCT offsets give DISTINCT addresses.  This is the obligation every
+   sliding-window loop body owes (two cells must not alias); the tail proved it
+   inline as `bv_off_neq` with a bv.add_cancel_l/_r + bin_of_N_small + lia
+   chain, once per use. *)
+Lemma seg_addr_neq (ia bound o1 o2 : N)
+  (H1 : (o1 <= bound)%N) (H2 : (o2 <= bound)%N) (Hne : o1 <> o2)
+  (H : seg_wf ia bound) :
+  seg_addr ia o1 <> seg_addr ia o2.
+Proof.
+  intros HH. apply (f_equal (@bv.bin xlenbits)) in HH.
+  rewrite (seg_addr_bin ia bound o1 H1 H) in HH.
+  rewrite (seg_addr_bin ia bound o2 H2 H) in HH.
+  unfold seg_wf in H. lia.
+Qed.
+
+(* Advancing a window by d.  The tail proved this inline as `bv_shift4`,
+   hardcoded at d = 4; every sliding loop needs it. *)
+Lemma seg_addr_step (ia off d : N) :
+  bv.add (seg_addr ia off) (@bv.of_N xlenbits d) = seg_addr ia (off + d).
+Proof. unfold seg_addr. rewrite bv.of_N_add. f_equal. lia. Qed.
+
+(* `lia` chokes on 2^32 while bv.exp2 xlenbits is folded (bv-pitfalls); this is
+   the incantation, 5 copies of which were inline. *)
+Ltac bv_bound := change (bv.exp2 xlenbits) with 4294967296%N; lia.
+
 (* ---- pc ALGEBRA -----------------------------------------------------------
    Segment addresses are written TWO ways across the hand-written proofs:
    `bv.add (bv.of_N ia) (bv.of_N off)` (what `inst place iota` produces, since
@@ -130,11 +225,6 @@ Definition seg_exitCond (ia : N) (targets : list N) : bv xlenbits -> bool :=
    every proof that meets both pays a bv.of_N_add rewrite to reconcile them.
    `seg_addr` is the canonical form; `seg_addr_add` is the one conversion, so a
    call site never has to think about which spelling it is holding. *)
-Definition seg_addr (ia off : N) : bv xlenbits := @bv.of_N xlenbits (ia + off).
-
-Lemma seg_addr_add (ia off : N) :
-  seg_addr ia off = bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits off).
-Proof. unfold seg_addr. now rewrite bv.of_N_add. Qed.
 
 (* A declared target IS hit.  (Used by GenCompose.seg_exits_faith.) *)
 Lemma seg_exitCond_hit (ia : N) (targets : list N) (t : N) :
@@ -225,7 +315,13 @@ Definition gen_seg_contract {Σ : LCtx}
     (List.firstn take (List.skipn skip prog))
     (seg_exitCond ia targets)
     fl
-    post.
+    (* minimal_pre is appended HERE rather than left to the caller, so the
+       post MIRRORS the pre: CFG_VC_triple already wraps the precondition in
+       extend_to_minimal_pre, and the asymmetry was a real bug source.  A post
+       that forgets to hand cur_privilege / inv_leakage back consumes them on
+       every trip, so the loop body can only ever run ONCE -- which is exactly
+       what happened to amBody_post, and it fails late and confusingly. *)
+    (post ∗ minimal_pre)%asn.
 
 (* The 31 byte-identical segment VC proofs, once. *)
 Ltac solve_seg := intros; vm_compute; solve_vc; solve_symbase_fetch.

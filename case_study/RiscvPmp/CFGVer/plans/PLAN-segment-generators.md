@@ -211,6 +211,61 @@ Multi-exit segments (muladd's `sgL` declares two) still use `seg_step` and
 
 ---
 
+## 3c. BOUNDS, and one correctness-by-construction fix (2026-09-10)
+
+### The three bounds are not independent
+
+Every compositional lemma threaded three hypotheses by hand — **24
+re-declarations across ~14 lemmas** (12 `Hrep`, 9 `Hlen`, 3 `Hmax`), plus 29
+mentions of `bv.exp2 xlenbits`, 5 inline copies of the
+`change (bv.exp2 xlenbits) with 4294967296%N` incantation, 8 `bv.bin_of_N_small`
+rewrites and 4 `bv.add_cancel_*` chains.
+
+They collapse. `maxAddr = minAddr + lenAddr` and **`minAddr = 0`**, so `Hmax`
+and `Hlen` are the *same fact* in N and in Z; and `Hrep` follows from either
+plus `lenAddr_rep`, provided the segment fits inside `bound` (which it does by
+construction — `bound` is chosen ≥ the program's byte length). So the caller
+supplies ONE natural fact and the rest are projections:
+
+```coq
+Definition seg_wf (ia bound : N) : Prop := (ia + bound <= lenAddr)%N.
+
+seg_wf_bin  : bv.bin (bv.of_N ia) = ia            (* ia is not truncated *)
+seg_wf_max  : bv.bin (bv.of_N ia) + bound <= maxAddr
+seg_wf_Z    : bv.unsigned (bv.of_N ia) + Z.of_N bound <= Z.of_N lenAddr
+seg_wf_rep  : 4*|L| <= bound -> bv.bin (bv.of_N ia) + 4*|L| < bv.exp2 xlenbits
+```
+
+Each is two or three lines. The point is not the lines saved but that a caller
+no longer has to know *which of three shapes* a given lemma wants.
+
+### Address lemmas the sliding loops will each need
+
+```coq
+seg_addr_bin  : off <= bound -> bv.bin (seg_addr ia off) = ia + off
+seg_addr_neq  : o1,o2 <= bound -> o1 <> o2 -> seg_addr ia o1 <> seg_addr ia o2
+seg_addr_step : seg_addr ia off +b bv.of_N d = seg_addr ia (off + d)
+Ltac bv_bound := change (bv.exp2 xlenbits) with 4294967296%N; lia.
+```
+
+`seg_addr_neq` is the non-aliasing obligation every sliding-window loop body
+owes; the tail proved it inline as `bv_off_neq` with a
+`bv.add_cancel_l`/`_r` + `bin_of_N_small` + `lia` chain. `seg_addr_step` is the
+tail's `bv_shift4` with the hardcoded `d = 4` generalised. D, I and K will each
+have wanted both.
+
+### minimal_pre: closing an asymmetry that WAS a bug
+
+`CFG_VC_triple` already wraps the precondition in `extend_to_minimal_pre`, but
+the postcondition was left to the caller. A post that forgets to hand
+`cur_privilege` / `inv_leakage` back consumes them on every trip, so the loop
+body can only ever run ONCE — which is exactly what happened to `amBody_post`,
+and it fails late and confusingly. `gen_seg_contract` now appends
+`∗ minimal_pre` itself, so the post mirrors the pre and the mistake is not
+expressible. Re-validated: segment G's VCs still close with `solve_seg` alone.
+
+---
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
