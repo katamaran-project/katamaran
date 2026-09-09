@@ -10,8 +10,10 @@ which layer) stays in the `cfgver` hub skill and its sub-skills.
 
 Post 2026-07-17 split of the old monolithic `Examples.v`:
 
-`Spec.v` → `Verifier.v` → `Tables.v` → `Contracts.v` → `GenContract.v` → then
-TWO INDEPENDENT BRANCHES that rejoin at `Example/<Prog>Result.v`:
+`Spec.v` → `Verifier.v` → `Tables.v` → `Contracts.v` → `GenContract.v` →
+`GenSegment.v` → then TWO INDEPENDENT BRANCHES that rejoin at
+`Example/<Prog>Result.v` (`GenCompose.v` hangs off the heavy branch, after
+`Adequacy.v`):
 
 - **example branch (LIGHT, ~2.45 GB):** `Example/Prelude.v` →
   `Example/{MvSwap,Jumps,Countdown,SetX2,Cmovznz4,Precompute,KeyScheduleLoop}.v`
@@ -145,6 +147,8 @@ errors on the dependents.
 | `TablesRel.v` | the `itable_rel`/`etable_rel` faith lemmas (statements mention `Pred w`, hence Iris). Sole consumer: `EndToEnd.v` | cfgver-executor |
 | `Contracts.v` | `CFGVerifierContract`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc` | cfgver-contracts, cfgver-solve-vc |
 | `GenContract.v` | `gen_contract(_param/_rel)`, `param_val`, concretize maps | cfgver-gen-contract(-internals) |
+| `GenSegment.v` | **LIGHT.** The MID-PROGRAM SEGMENT (cut) contract generator: `gen_seg_contract`, the Σ-generic `gen_reg_asn_at`/`gen_regs_at`, `seg_exitCond`, `Ltac solve_seg`, and the shared `rc_*` `reg_convert` table + `reg_reduce`. Iris-free | cfgver-gen-contract-internals |
+| `GenCompose.v` | **HEAVY.** Composition combinators: `split_id`/`itable_faith_at` (sub-table faith), `seg_exitCond_hit`/`seg_exits_faith` (exit-table faith), `seg_vc`/`seg_entry`/`seg_exit`/`seg_step` (one segment, with an explicit frame), `seg_loop` | cfgver-soundness |
 | `Adequacy.v` | `myWP2_loop`, `create_resources`, `semWP2_*`, `sound_*_myWP2` | cfgver-soundness, cfgver-wp2 |
 | `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` (incl. the `_simple`/`_rel_simple` common-case bridges + the `ni_rel_corollary` tactic notation that folds the `_rel` concrete-corollary ritual) | cfgver-endtoend(-internals), cfgver-memory |
 | `Example/Prelude.v` | shared `Require Export`/`Import` preamble every example re-imports (no defs) | cfgver-new-example |

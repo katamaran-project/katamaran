@@ -105,6 +105,15 @@ Open Scope list_scope.
   Definition T4 : RegIdx := bv.of_nat 29.
   Definition T5 : RegIdx := bv.of_nat 30.
   Definition T6 : RegIdx := bv.of_nat 31.
+  (* Saved registers.  Added 2026-09-09: only S0..S3 are ever referenced, but
+     they were being re-defined LOCALLY in 163 files under Example/ because
+     they were missing here.  Same values as those copies (s0=x8, s1=x9,
+     s2=x18, s3=x19), so a file that still defines them locally merely shadows
+     these with identical bindings. *)
+  Definition S0 : RegIdx := bv.of_nat 8.
+  Definition S1 : RegIdx := bv.of_nat 9.
+  Definition S2 : RegIdx := bv.of_nat 18.
+  Definition S3 : RegIdx := bv.of_nat 19.
 
   (* Convert a contiguous instruction list into the finite map the CFG
      verifier now consumes.  Instruction k of the list is placed at the

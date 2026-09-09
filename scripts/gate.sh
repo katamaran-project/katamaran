@@ -27,7 +27,13 @@ cd "$REPO_ROOT"
 # Build targets: the .vo whose dependency closure the gate compiles. Building the
 # end example's .vo pulls in everything the results rest on, while skipping
 # unrelated experiments (e.g. theories/Staging/) that are active in _CoqProject.
-BUILD_TARGETS=("case_study/RiscvPmp/CFGVer/Results.vo")
+# GenCompose.vo is listed EXPLICITLY: nothing in Results.vo's closure
+# Requires it yet (the compositional segment proofs that use it are still
+# untracked ZZ* probes), so without this the gate would not build it at all.
+# Its own closure pulls in GenSegment.vo.  Drop it from this list once a
+# tracked Example/*Result.v depends on it.
+BUILD_TARGETS=("case_study/RiscvPmp/CFGVer/Results.vo"
+               "case_study/RiscvPmp/CFGVer/GenCompose.vo")
 
 # Directories scanned for proof holes.
 SCOPE_DIRS=("case_study/RiscvPmp/CFGVer")

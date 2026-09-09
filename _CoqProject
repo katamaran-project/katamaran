@@ -62,7 +62,9 @@ case_study/RiscvPmp/CFGVer/Tables.v
 case_study/RiscvPmp/CFGVer/TablesRel.v
 case_study/RiscvPmp/CFGVer/Contracts.v
 case_study/RiscvPmp/CFGVer/GenContract.v
+case_study/RiscvPmp/CFGVer/GenSegment.v
 case_study/RiscvPmp/CFGVer/Adequacy.v
+case_study/RiscvPmp/CFGVer/GenCompose.v
 case_study/RiscvPmp/CFGVer/EndToEnd.v
 case_study/RiscvPmp/CFGVer/Example/Prelude.v
 case_study/RiscvPmp/CFGVer/Example/MvSwap.v
