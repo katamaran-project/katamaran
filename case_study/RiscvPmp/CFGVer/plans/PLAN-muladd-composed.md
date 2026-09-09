@@ -1116,3 +1116,139 @@ Two caveats measured the same day:
 - **G (`br_divrem`, 31 trips) is now the interesting case**: it is the loop this
   machinery was built for, and unlike M it cannot be unrolled.
 - Everything but the tail four still carries `asn_no_post`.
+
+---
+
+## Phase 4c — segment G (`br_divrem`, 31 trips) COMPOSED (2026-09-09)
+
+**Status: `ZZMladDvLoop.v`, 20 `Qed`, no holes, compiles clean.**  G — the loop
+this whole machinery was built for, and the one that cannot be unrolled — is now
+a reusable loop-elimination lemma.  The tail (Phase 4b) exercised the machinery
+on M, which runs only two trips at `mlen = 2`; G runs 31 and the executor still
+sees the 27 instructions exactly once.
+
+### What was missing and what was added
+
+Both G contracts already existed as Phase-1 spikes with `asn_no_post`
+(`ZZMladDvBody.v` = latch taken, `ZZMladDvFinal.v` = latch falls through to
+offset 108).  `asn_no_post` proves "this segment runs and leaks nothing"; it
+hands nothing to the next trip, so neither could be chained.  Added:
+
+- `dvBody_post` — T4 pinned to `dvdec (term_var "k")` (= k-1) with its
+  `secLeak`, the other ten registers re-havoc'd at their own publicness
+  (`dv_regs` serves unchanged: T0/T6 public, T5 the pinned literal 1,
+  q/hi/lo/S0..S3 secret), plus `minimal_pre`.
+- `dvFinal_post` — `dvf_out_regs = (T4, true, PVExist) :: dvf_regs` plus
+  `minimal_pre`.  T4 is deliberately NOT pinned at the exit: idx 162
+  (`li T4, 32`, the *next* loop's initialiser) overwrites it immediately, so
+  the weakest useful claim is "some public value" — which is exactly the shape
+  sgH's `gen_pre_rel` precondition wants.
+
+**Both VCs verified FIRST TRY**, 2.8 s and 3.7 s, with the unchanged
+`intros; vm_compute; solve_vc; solve_symbase_fetch`.  `secLeak (k-1)` and
+`secLeak (j+1)` come for free from `instprop_formula_secLeak_binop` (compositional
+through `bvadd`, literal on the other side) — no new solver work was needed.
+
+### The rotated-loop indexing (get this wrong and the trip count is off by one)
+
+    idx 132 (byte 528)  li   T4, 32          <- segment F leaves the counter
+    idx 135 (byte 540)  addi T4, T4, -1      <- LOOP HEAD decrements
+    ...
+    idx 161 (byte 644)  bltu T5, T4, -104    <- LATCH, back-edge to 540,
+                                                taken while 1 <u T4
+    fall-through -> byte 648 = idx 162       <- segment H
+
+The head value (PRE-decrement) runs 32, 31, …, 2 — **31 head visits**, of which
+visits 1..30 take the back edge and visit 31 exits.  Post-decrement that is
+k = 31, 30, …, 1, i.e. the C loop's `for (k = 31; k > 0; k--)` exactly.
+So `dvInvN ia F n` carries T4 = n + 2, and the entry state is `dvInvN ia F 30`
+(30 `dv_step`s + one `dv_exit`).  `dv_loop_31` is that instance.
+
+### THE reusable shape — parametric in BOTH frame and continuation
+
+    Lemma dv_loop (ia : N) (Hrep …) (Hlen …) (F Post : iProp Σ)
+      (Hcont : dvOut ia F -∗ myWP2_loop Post) :
+      forall n, dvInvN ia F n -∗ myWP2_loop Post.
+
+This is the piece worth reusing verbatim for the other four loops.  Two
+decisions make it drop-in:
+
+1. **The frame `F` is an OPAQUE `iProp Σ`.**  G touches eleven registers and NO
+   memory, so A0-A7 / X2 / the whole x[]/m[]/stack block are what actually ride
+   in `F` — but nothing in the file knows that.  Verified in the proof: after
+   the `iApply`, `HF : F` sits untouched in the continuation goal.  Contrast
+   Phase 4b, where the out-of-contract resources were a concrete `cellsPriv`/
+   `cellsPub` fixpoint because M's footprint genuinely slides.  **When a loop's
+   footprint is fixed, use an opaque frame; the range fixpoint is only for
+   sliding footprints.**
+2. **The continuation `Post` is a parameter, discharged by `myWP2_loop_bind`.**
+   So G does not mention segment H, and the same lemma serves the eventual full
+   chain and any standalone use.  Compare `am_loop`, whose conclusion is
+   hardwired to `exitCond_WP2_loop (sgN_exitCond ia)` — fine there because N is
+   the last segment, useless for a mid-function loop.
+
+`dvOut ia F` is spelled as `asn.interpret dvFinal_post` at the exit valuation,
+so `dv_exit`'s continuation obligation is *literally* what the soundness bridge
+hands back and closes with one `iFrame`.  Worth copying: it removes an entire
+class of reduction fighting.
+
+### Method notes that generalise
+
+- **The counter lives as a PURE side condition, not inside the bitvector.**
+  `dvInvN` existentially quantifies `kv : N` with `⌜kv = N.of_nat n + 2⌝`, the
+  amInvN trick.  Baking `N.of_nat n` into `bv.of_N` directly would force
+  `N.of_nat (S k)` to reduce (to `N.succ …` / `Pos.of_succ_nat`), which no `cbn`
+  setting normalises usefully.  With the side condition, `assert (kv = (N.of_nat
+  k + 2) + 1) by lia` puts it in exactly the `m + 1` shape the decrement lemma
+  wants.
+- **A no-wrap bound must be carried too**: `⌜kv + 1 < bv.exp2 xlenbits⌝`.  It is
+  used in exactly ONE place — the latch's `bv.ult`, via `bv.bin_of_N_small` —
+  because `kv = n + 2` alone says nothing about wrapping for an unbounded `nat`.
+- **The decrement is unconditional at the bv level.**  `dv_dec (m : N) :
+  bv.of_N (m+1) + bv.of_N 4294967295 = bv.of_N m` needs NO hypothesis on `m`:
+  `(m+1) + (2^32-1) = m + 2^32`, and `bv.of_N 4294967296 = bv.zero` at width 32
+  by `vm_compute`.  Route: `rewrite bv.of_N_add` (collapse), `replace` the
+  N-level sum, `rewrite <- bv.of_N_add` (SPLIT it back the other way — the same
+  lemma both directions), then `bv.add_zero_r`.  133 ms.  A first attempt via
+  `bv.of_N_Proper` + `bv.eq2n` died because `bv.truncn` is not `N.modulo` (it
+  matches on `N.pos` and calls `bv.trunc`), so no `N.Div0.*` lemma applies.
+- **`cbn [dv_reg_asn dv_post_reg_asn]` + `reg_reduce` + `cbn`, in that order.**
+  Same convertible-but-not-syntactically-equal wall as Phase 4b, same fix.  The
+  eleven `rc_*` equations (T0→x5, T1→x6, T2→x7, T3→x28, T4→x29, T5→x30, T6→x31,
+  S0→x8, S1→x9, S2→x18, S3→x19) are each `vm_compute; reflexivity`; `cbn` will
+  not touch `reg_convert` at any delta setting.  The trailing whole-goal `cbn`
+  is safe ONLY after the 282-entry instruction store has been framed away.
+- **`dvWinAsn` nests the register block one level deeper** than the contract's
+  precondition does (`… ∗ dv_pre_regs …` vs the flattened `… ∗ regT0 ∗ … ∗ ⊤`),
+  so the `iDestruct` pattern needs an inner group:
+  `"(Hw1 & Hw2 & Hw3 & (Hr1 & … & Hr11) & Hw5)"`.  Flattening it as sixteen
+  atoms silently mis-binds.
+- **dvCtx and dvfCtx are two definitions with identical bodies** (as are
+  dvI/dvfI, dv_pre_regs/dvf_pre_regs, dv_reg_asn/dvf_reg_asn).  `dv_exit` mixes
+  them — the invariant is at dvCtx, dvFinal's contract at dvfCtx — so BOTH must
+  be unfolded before `iFrame`.  Once reduced to `x5 ↦ᵣ …` the two sides match
+  term-for-term.
+- At the concrete `kv = 2` of the exit, pc-eq AND the negated guard both simply
+  **compute**: `repeat iSplit; try done` closes them, no `dv_dec` needed.  Only
+  the symbolic body needs the rewrite.
+- Interactive mode carried the whole file: `rocq_start(theorem=…)` reached
+  `dv_step`, `dv_exit`, `dv_loop` and `dv_loop_31` in this HEAVY Iris file
+  without timing out, and each proof step ran in 30 ms – 7 s.  Total interactive
+  cost for all four proofs was well under a minute; the confirming full compile
+  was paid once.  (Phase 4b's note that file/theorem mode was unusable here no
+  longer holds — that was before `Example/_CoqProject` landed.)
+
+### What G does NOT yet give
+
+- **No F ; G ; H chain.**  `dv_loop` is the loop-elimination step; wiring it
+  needs `sgF_post` extended to establish `dvInvN ia F 30` (with `F` instantiated
+  to sgH's precondition minus G's eleven registers) and `sgH`'s precondition met
+  by `dvOut`.  That is the same per-cut work the other eleven segments need, not
+  new machinery.
+- **No leakage theorem for G alone.**  `ImplPre` + the Phase-5 bridge are still
+  open, exactly as for the tail.
+- The three remaining loops (D memmove 6 instrs, I limb-accumulate 29, K
+  `br_i31_add` 13) should now be near-mechanical: each needs its Body/Final
+  posts plus a copy of the `dv_loop` shape.  D/I/K all have SLIDING memory
+  footprints, so they need Phase 4b's cell-range fixpoint rather than G's opaque
+  frame — G is the only register-only loop of the five.
