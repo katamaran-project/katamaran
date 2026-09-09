@@ -401,3 +401,718 @@ for one model question:
 - Segment I additionally risks being impossible under `LeakMul` (its
   `MUL31(mw, q)` has a SECRET `q`). That is a model question, not a proof one.
 - Phases 3, 4, 6: nine straight-line segments, composition, promotion.
+
+---
+
+# RESULTS 2026-09-09 (later) — PHASE 2 COMPLETE; Phase 3 is 3/9
+
+Gate PASSED first (build clean, no holes, 18 end theorems axiom-clean), so all
+of the below sits on a validated tree.
+
+## Phase 2 — ALL TEN loop contracts verify
+
+The diagnosed fix was right, and it was HALF of what the earlier note said.
+`sep_contract_mem_read` wants two bounds per access, but only the UPPER one was
+missing: `minAddr <= unsigned paddr` is discharged unconditionally by
+`relval_fetch_lower` — which works only because `minAddr = 0`, one more place
+that assumption is load-bearing (see PLAN-address-space-params.md). So each
+pointer needed exactly `unsigned ptr + 4 <= maxAddr`.
+
+| loop | body | exit | body before the fix |
+|---|---|---|---|
+| D memmove | QED 0.705 G | QED 0.704 G | FAIL 1.805 G |
+| G `br_divrem` | QED 0.856 G | QED 0.856 G | (already passing) |
+| I limb accumulate | QED 0.998 G | QED 0.970 G | FAIL 21.242 G |
+| K `br_i31_add` | QED 0.801 G | QED 0.788 G | FAIL 4.823 G |
+| M `br_i31_sub` | QED 0.784 G | QED 0.773 G | FAIL 4.815 G |
+
+**Segment I verifies.** The `LeakMul` risk does not apply: that model is on
+`issue/mul-leaks-args` and not on this branch (owner, 2026-09-09). If it ever
+merges, segment I must be re-checked — its `MUL31(mw, q)` has a secret `q`.
+
+Note every fixed body got CHEAPER than its failing run (I: 21.2 G -> 1.0 G).
+A `solve_vc` that cannot close does extra work, so failing-run costs are upper
+bounds and must never be quoted as the cost of the segment.
+
+Two traps hit while doing this, both already documented and both walked into
+anyway:
+- the four `*Final.v` files had **never compiled** — three unterminated header
+  comments each, left by the session that wrote them. `wc -l` and "the file
+  exists" say nothing; only a compile does.
+- `asn_pc_eq`'s argument lives at `Σ ▻ "a"`, so a `Definition foo : Term Σ _`
+  does not weaken into it and must be INLINED. `ZZMladAddBody.v` carries a
+  comment saying exactly this, which I read and then did anyway.
+
+## Phase 3 — nine straight-line segments written, THREE verify
+
+`Example/ZZMladStraight.v` (also split into `ZZMladSg{A,B,C,E,F,H,J,L,N}.v` so
+one failure does not mask the rest). Exit targets were read off the actual
+branch instructions, NOT off §1's map — **§1's segment B range is off by one**:
+idx 70 (byte 280) IS the `if (mblr==0)` test the map attributes to B, so B
+spans idx 55..70 and exits at 284.
+
+| seg | idx | instrs | head | exit | result |
+|---|---|---|---|---|---|
+| A | 0..3 | 4 | 0 | 220 (branch taken) | **QED** |
+| B | 55..70 | 16 | 220 | 284 | FAIL |
+| C | 71..83 | 13 | 284 | 336 | FAIL |
+| E | 90..106 | 17 | 360 | 492 (uncond. jump) | FAIL |
+| F | 123..134 | 12 | 492 | 540 | **QED** |
+| H | 162..189 | 28 | 648 | 760 | FAIL |
+| J | 219..236 | 18 | 876 | 948 | **QED** |
+| L | 250..263 | 14 | 1000 | 1056 | FAIL |
+| N | 277..281 | 5 | 1108 | 1128 | FAIL |
+
+### What the failures are NOT
+
+Dumped rather than guessed (`ZZMladSgBDump.v`): **`solve_vc` COMPLETES** and
+leaves an unreduced `Erasure.inst_symprop` tree. So this is not a solver bug,
+not a missing `solve_symbase_fetch` shape, and not the fetch-bound residual
+that Phase 2 was. Fuel is not it either — the passing A/F/J run at 3.6-7.5x the
+instruction count and the failures are at 3-6x.
+
+### The leading hypothesis, NOT yet confirmed
+
+**A cut assertion must carry PUBLICNESS, and `mlad_reg_specs_rel` does not.**
+It marks nearly every register private (`false`), which is right at function
+ENTRY but wrong at a cut: a mid-program segment that BRANCHES on a register
+receives it havoc'd-and-private from the cut, and a `formula_relop` on private
+data is the `secret-data-walls` `False`. A/F/J are consistent with this —
+segment A branches on `T0`, but loads it FRESH from the PUBLIC-pinned `m[0]`
+inside the segment, so the entry spec never constrains it.
+
+Next step is per-segment: find which register each failing segment branches on
+and mark exactly those public in a mid-program spec. That is invariant DESIGN,
+one segment at a time, not a mechanical edit.
+
+**Independently confirmed and separate:** segment N needs `X2 = PVBaseOff 1152`,
+not 1168. The prologue's `addi X2, X2, -16` lives in segment B, so 1168 is the
+entry value and every segment after B sees 1152. N reads the four spill slots at
+`0/4/8/12(X2)` = p+1152..1164, which only lands in `mlad_stack_specs_rel` if X2
+is 1152. B and N are the only segments that touch X2 at all.
+
+## Still to do
+
+- Phase 3: the six failing straight-line segments (above).
+- Phase 4: compose the fourteen via `myWP2_loop_induction` / `_bind` / `_join`.
+- Phase 5: MACHINERY DONE (`cfg_instrs_verified_composed`, see the earlier
+  RESULTS section); what remains is instantiating `ImplPre`, which `gen_implpre`
+  supplies for generated contracts.
+- Phase 6: promote out of `ZZ*` into tracked files, `_CoqProject`, `Results.v`,
+  gate allowlist.
+
+## Phase 3 update — 5/9 straight-line segments verify
+
+A, F, J (already), plus **N** and **L**. B, C, E, H still fail.
+
+### Two confirmed causes, both found by dumping rather than guessing
+
+**1. The stack pointer moves at segment B (fixes N).** The prologue's
+`addi X2, X2, -16` lives INSIDE B, so `X2 = p+1168` holds only up to and
+including B; every later segment sees `p+1152`. N's four spill reloads at
+`0/4/8/12(X2)` land on `mlad_stack_specs_rel`'s 1152..1164 only with the
+smaller value. `mlad_reg_specs_cut_at` in ZZMladCommon.v now takes the stack
+offset as a parameter (`_cut_hi` = 1168 for B, `_cut` = 1152 after).
+
+**2. A conditional branch has TWO successors; a one-exit contract is a `False`
+(fixes L).** The taken arm lands on an address that is in neither the segment's
+own sub-table nor its exit list, and the executor errors on a pc matching no
+table key — which surfaces as the bare `False` `cfgver-solve-vc` documents.
+Resolving each taken target says which fix applies, and they differ:
+
+| seg | branch | taken target | what it is | fix |
+|---|---|---|---|---|
+| B | idx 70 `beqz T0` | 428 | the DEAD `mblr==0` arm | guard (T0 <> 0) |
+| C | idx 80 `beqz T6` | 360 | segment E's head — REAL | second exit (done, still fails) |
+| H | idx 163 `bgeu A6,T4` | 668 | INTERNAL to H (648..756) | not an exit at all |
+| L | idx 250 `bltu T1,T2` | 1108 | segment N's head — REAL | **second exit — QED** |
+
+C and L are the same shape: `if (trip count == 0) skip the following loop`, so
+both genuinely have two successors. L verifies with both declared; C does not,
+so C has a further cause not yet found.
+
+### What the publicness hypothesis was worth
+
+It was NOT the cause. `mlad_reg_specs_cut_at` marks T0/T1/T2/T4/T6/A6 public —
+the six registers the straight-line segments branch on, each a length or counter
+that is public in the C source. That change alone fixed nothing; only combined
+with the stack-pointer offset did N pass. It is retained because it is correct
+and will be needed once B's guard is written (a guard on a private register is
+the secret-data wall), but it must not be credited with the fix.
+
+### The `False` was invisible until inst_symprop was unfolded
+
+`solve_vc` runs `cbn -[Erasure.inst_symprop]` — a deliberate 30x speedup landed
+2026-09-08. Blocking that constant also stops the demonic binders being peeled,
+so a failing VC shows as one goal that is the WHOLE erasure tree, with no hint
+of the actual obligation. A full `cbn` (paying the 30x) reduced sgE's residual
+to the single word `False`, which is what identified the exit problem. Worth
+knowing for any future `No applicable tactic` on this rig: the informative dump
+is `constructor; cbn; intros; repeat split`, NOT `solve_vc`.
+
+### Remaining, with what is known about each
+
+- **B** — needs a guard making the dead-arm branch infeasible (`T0 <> 0`, i.e.
+  mblr != 0). Cannot be written with `gen_pre_rel`: the register values are
+  existentially bound inside it and cannot be named from outside. B needs its
+  branched-on register lifted into its own LCtx and pinned, the way the loop
+  Body contracts do. That is invariant design, not a mechanical edit.
+- **C** — has both real successors declared and still fails; cause unknown.
+  Suspect a second control-flow instruction in idx 71..83 not found by the
+  BTYPE grep (a JAL would have been missed).
+- **E** — no conditional branch at all (ends in an unconditional `j` to 492,
+  which IS declared). Residual is `False`. Cause unknown.
+- **H** — its only branch is internal, so the two-exit story does not apply.
+  Cause unknown.
+
+## Phase 3 COMPLETE — all 19 segment contracts verify (2026-09-09)
+
+Ten loop contracts (5 bodies + 5 exits) and nine straight-line segments, all
+`Qed`, no `Admitted`. Phases 1, 2 and 3 are done.
+
+### The one rule that explains every straight-line failure
+
+**A cut assertion must pin every register that feeds a MEMORY ADDRESS or a
+BRANCH CONDITION. Nothing else needs pinning.**
+
+That is the whole story, and each of the six failures was one instance:
+
+| seg | what was missing |
+|---|---|
+| N | `X2 = p+1152`, not 1168 — the prologue's `addi X2,X2,-16` is inside B, so every segment after B sees the lowered pointer |
+| L | a SECOND EXIT: `bltu T1,T2` at 1000 skips the sub-loop straight to N (1108) |
+| H | a second exit again, but via an unconditional `j` at 664 -> 876 that a BTYPE-only grep MISSED |
+| B | `T0 = 63` — segment A loads m[0] into it; without the value the dead `mblr==0` arm at 428 has to be explored |
+| C | `T0=31, T1=2, T5=0x3FFFFFFF, A3=0x7FFFFFFF` — idx 78 is `and T6,T6,T5`, so `beqz T6` is decided by (T1-1) & T5, NOT by T1 alone |
+| E | `A7=&x[2], T3=&x[1], A5=8, T2=4` — E loads from four addresses built from otherwise-havoc'd registers, and an unresolvable load address IS the bare `False` |
+
+The pinned values are not guesses: they were obtained by symbolically executing
+segment B by hand from the pinned public `m[0] = 63`
+(`A6 = 94`, `T1 = 94>>5 = 2 = mlen`, `A5 = 8`, `A7 = A0+8`, `T0 = 63&31 = 31 =
+mblr`, `T5 = 0x40000000-1`, `A3 = 0x7FFFFFFF`), then segment C the same way.
+Every value pinned is PUBLIC in the C source (lengths, counters, pointers);
+every secret (`x[]`, `A4`, and everything derived) stays `PVExist`/private, so
+no secret is assumed public anywhere.
+
+### Two method lessons
+
+- **`solve_vc` hides the diagnosis.** Its `cbn -[Erasure.inst_symprop]` (the
+  2026-09-08 30x speedup) also stops the demonic binders being peeled, so every
+  failure looks like one goal containing the whole erasure tree. Pay the 30x
+  once — `constructor; cbn; intros; repeat split` — and the residual reduces to
+  the single word `False`, which is what made all six diagnosable. This is now
+  the first thing to try on a `No applicable tactic` here.
+- **Grep for ALL control flow, not just `BTYPE`.** Segment H's second exit is a
+  `RISCV_JAL`. One missed jump cost a full wrong hypothesis.
+
+### Retraction
+
+The earlier "publicness of branched-on registers" hypothesis was **wrong as
+stated**. Marking T0/T1/T2/T4/T6/A6 public fixed NOTHING on its own — E has no
+branch at all and still failed. Publicness is necessary for the pinned values
+to be usable (a guard on a private register is the secret-data wall) but it was
+never the cause. `mlad_reg_specs_cut_at` is retained on those grounds.
+
+## What remains
+
+- **Phase 4 — compose.** Fourteen segments via `myWP2_loop_induction` /
+  `_bind` / `_join`, plus `itable_faith_of_segment` for the sub-table gaps.
+  Note every contract currently carries `asn_no_post`: nothing flows from one
+  segment's exit to the next's entry. Composition needs real postconditions,
+  and the values above are exactly what they must carry.
+- **Phase 5 — DONE as machinery** (`cfg_instrs_verified_composed`); what is
+  left is instantiating `ImplPre`.
+- **Phase 6 — promote** out of `ZZ*` into tracked files + `_CoqProject` +
+  `Results.v` + the gate allowlist.
+
+## Phase 4 — machinery all validated; the chaining proof itself is NOT written
+
+Every mechanism the composition needs now has a working instance on muladd.
+What is missing is the (large, mechanical) work of applying them 14 times.
+
+### 1. Post-context generators — DONE (`ZZMladCommon.v`)
+
+A precondition lives at `Σ ▻ "a"`, a postcondition at `Σ ▻ "a" ▻ "an"`, and an
+Assertion is indexed by its context: `gen_pre_rel` / `gen_mem_pre_rel` are fixed
+at the narrower one and do NOT weaken. Added `gen_post_rel` /
+`gen_mem_post_rel` (same bodies, wider context), so a cut assertion can be
+written as literally the next segment's precondition. Note the PVExist branch
+must write the address term OUT IN FULL — `asn.exist` extends the context and an
+outer `let addr := …` does not weaken into it, which is why GenContract repeats
+it too.
+
+### 2. The first real cut assertion — DONE and VERIFIED
+
+`sgA_post := gen_post_rel sgB_regs ∗ gen_mem_post_rel mlad_mem_specs_rel ∗
+minimal_pre`, i.e. A's postcondition IS B's precondition. Both segments still
+`Qed` with it.
+
+**The discipline that makes this work, and it cost a failed attempt to find:**
+a cut assertion may claim only publicness the previous segment can ESTABLISH.
+Assuming `secLeak` in a standalone precondition is free; PROVING it as a
+postcondition is not. `sgB_regs` initially promoted A6/T1/T2/T4/T6 to public
+(left over from the retracted publicness hypothesis) and sgA could not prove it
+— those registers are private garbage at function entry. B only ever needed
+`T0` pinned, because `beqz T0` is its one branch and it computes everything
+else itself. Tightened, both pass.
+
+### 3. Sub-table derivation — DONE (`ZZMladCompose.v`, `HifA`)
+
+Unlike `SwapComposedResult` (both segments share one table, one `Hif` serves
+both), each muladd segment carries its OWN sub-table, so each needs its
+`itable_rel` derived from the whole-program list via `itable_faith_of_segment`.
+`HifA` does this for segment A and is `Qed`.
+
+Two argument-passing traps, both costing a compile each:
+- **Do NOT `Set Implicit Arguments` in the composition file.** It makes
+  `itable_faith_of_segment`'s `pre`/`seg`/`post` positional-only *and*
+  unnameable, so the split cannot be supplied at all.
+- Its implicit arguments are exactly `Σ`, `cbase`, `off` (a failed named
+  application reports those three); `p`, `ι`, `pre`, `seg`, `post` are
+  positional. `mlad_instrs` is a `list AST` and the tables are over
+  `AnnotInstr`: `list_AST_AnnotInstr` is a Coercion but does not fire inside a
+  stated goal under `firstn`/`length`, so name it once (`mlad_ai`).
+
+### 4. The bridge to a leakage theorem — DONE (Phase 5, earlier section)
+
+### What is actually left
+
+- **The chaining proof.** 13 more cut assertions (each needing the publicness
+  discipline above), a `HifX` per segment, and the `sound_scfg_verification_
+  condition_myWP2` / `myWP2_loop_join` chain. `SwapComposedResult` is ~60 lines
+  for TWO segments over ONE table; muladd is fourteen over fourteen, and the
+  framing at each cut needs `iExact` rather than `iFrame` because the two sides
+  are convertible but not syntactically equal.
+- **Five loop inductions.** `myWP2_loop_induction` needs
+  `Inv : nat -> iProp`, with the body contract's postcondition being `Inv n`.
+  NOTE: `mlen = 2` is pinned, so D/I/K/M run 1-2 trips and could simply be
+  unrolled via `myWP2_loop_bind` instead; only **G** (`br_divrem`, 31 trips)
+  genuinely needs an induction, and its invariant must own the loop state
+  across all remaining trips rather than the single sliding pair the body
+  contract currently states.
+- **`ImplPre`** for the composed whole.
+
+## Phase 4 — the TAIL chain: cut assertions all VERIFIED (2026-09-09)
+
+`sgL (1000..1052) ; amBody (trip 1) ; amFinal (trip 2) ; sgN (1108..1124)`.
+Files: `Example/ZZMladTail.v` plus the four segment files.
+
+**Trip count settled, and confirmed by the executor rather than by hand.**
+Segment J loads `T1 = x[0] = 63` (idx 222), makes it 126 (idx 226), sets
+`T2 = 64` (idx 228) and `A7 = (126>>5)<<2 = 12` (idx 227/229). So `bltu T1,T2`
+at idx 250 is `126 <u 64` = FALSE, control falls into the sub setup, and idx
+261..263 give `A4 = m+4 = p+1144`, `A0 = p+1132`, `e = m+12 = p+1152`.
+**Exactly two trips** (bp = 1144 then 1148), both over declared cells; 1152 is
+only the sentinel and is never dereferenced. So D/I/K/M need no induction at
+all — `amBody` once, then `amFinal`. (I briefly mis-derived this as 3 trips
+running off the end of `m[]` and raised a false alarm about the memory spec;
+there is no such problem.)
+
+| contract | what it now proves | |
+|---|---|---|
+| `sgL` | the L->M cut: ap=p+1132, bp=p+1144, e=p+1152 | Qed |
+| `amBody` | the BACK EDGE: ap+4, bp+4, one trip later | Qed |
+| `amFinal` | the M->N cut | Qed |
+| `sgN` | tail end, minimal `mlad_reg_specs_tail` | Qed |
+| `HifSub` | the shared sub-table for BOTH loop links | Qed |
+
+### THE rule for cut assertions, learned three times over
+
+**A postcondition can only assert what the segment OWNS or COMPUTED.** Every
+failed attempt was an over-claim, and standalone verification of all 19
+contracts revealed none of them — only composition does:
+
+1. `sgA_post` promoted A6/T1/T2/T4/T6 to public; segment A cannot establish
+   publicness for registers that are private garbage at function entry.
+   (Assuming `secLeak` in a precondition is free; PROVING it in a
+   postcondition is not.)
+2. `sgL_post` claimed `A3 = 0x7FFFFFFF` while sgL's entry left A3 unknown —
+   residual was the single equation `v3 = [bv 0x7fffffff]`. Fixed by pinning A3
+   at sgL's entry (it IS the limb mask, set in segment B idx 60/61).
+3. `amFinal_post` claimed all TWENTY registers while amFinal owns NINE. That
+   over-claim is what produced a bare `False` — you cannot conjure ownership.
+   Fixed by shrinking the cut to the five registers sgN actually uses (X2 plus
+   S0-S3, its four spill reloads) and carrying those through the loop.
+
+So a cut assertion should be the MINIMAL frame the next segment needs, not a
+copy of a whole-program register spec.
+
+### Method notes
+
+- **`rocq_start` cannot replay these files** (`Valuation`/`N` unresolved in the
+  pet session) — the dune/load-path problem `rocq-implementation` documents for
+  `case_study/RiscvPmp/CFGVer/`. Preamble mode needs the whole definition block
+  pasted. Where a diagnosis is unambiguous, one `coqc` is cheaper than setting
+  that up; where it is not, the full-`cbn` dump is the tool.
+- **Occurrence-numbered rewrites are fragile.** `rewrite … at 4` in `HifSub`
+  was simply wrong; the obligation is only about the reassembled list's LENGTH,
+  and both sides `vm_compute` to 282, so assert that equality instead.
+- **An interrupted tool call may already have written its file.** A rejected
+  edit left `persist p acc_snoc_right` (a world/modality-level operation, wrong
+  layer for an Assertion) on disk; it sent elaboration into an unbounded search
+  — 5.8 GB and climbing after 9m42s on a file of pure definitions that compiles
+  in 9 s. Verify the tree after an interruption instead of assuming nothing
+  happened.
+- The register block CAN be context-generic (`gen_regs_any`, parameterised by
+  the base term); the memory block CANNOT, because `p` is used inside the
+  `asn.exist` branch that extends the context.
+
+### Still to write
+
+The Iris glue only: `HifL` / `HifN`, four `etable_rel` facts via
+`etable_faith_exits_of_offs`, and the `sound_scfg_verification_condition_myWP2`
+/ `myWP2_loop_join` chain. Then `ImplPre` and Phase 5's bridge give a leakage
+theorem for the tail.
+
+## Phase 4 — tail chain: 7 supporting facts + the first LINK are Qed (2026-09-09)
+
+`Example/ZZMladTail.v`, all `Qed`, no holes:
+
+| fact | what it gives |
+|---|---|
+| `HifL`, `HifSub`, `HifN` | each segment's sub-table from the ONE whole-program list (`HifSub` serves both loop links, which share `am_seg`) |
+| `HefL`, `HefBody`, `HefFinal`, `HefN` | the four `etable_rel` facts |
+| **`linkN`** | **sgN alone: its precondition -∗ `exitCond_WP2_loop (sgN_exitCond ia)`** |
+
+`linkN` is the important one: it is the full `sound_scfg_verification_condition_
+myWP2` application for a segment with its OWN sub-table, which
+`SwapComposedResult` never needed (there both segments share one table). The
+remaining three links are the same shape plus a cut.
+
+### Reusable pieces found here
+
+- **Exit-offset tactic** (`exit_hit x y`), validated in preamble mode at 46 ms:
+  `rewrite !bv.of_N_add`, normalise the N-level sum with `lia`, then close via
+  `bv.eqb_spec`'s reflect. **There is no `bv.eqb_refl`.** The matched disjunct
+  may sit on EITHER side of an `orb` (sgL has two exits) and `X || true` does
+  not reduce, so finish with `rewrite ?Bool.orb_true_r; rewrite ?Bool.orb_true_l`
+  rather than `reflexivity`.
+- **Sub-table obligations**: never use occurrence-numbered rewrites. The goal is
+  only about the reassembled list's LENGTH, and both sides `vm_compute` to 282 —
+  `assert (Hlen : … = length mlad_ai) by (vm_compute; reflexivity)`.
+- `etable_faith_exits_of_offs` takes `cbase` EXPLICITLY: use
+  `apply … with (cbase := …)`, not term-level naming. `itable_faith_of_segment`
+  is the opposite (`Σ`/`cbase`/`off` implicit, `p`/`ι`/`pre`/`seg`/`post`
+  positional).
+- The exit tail is `rewrite Hexit; exact I` — the goal is `Is_true (…)`, not
+  `… = true`.
+
+### Syntax traps that cost a compile each
+
+- **The Iris `∃` binder notation is NOT active in this import context.** Both
+  `ZZMladCompose.v` and `ZZMladTail.v` reject `(∃ v, nextpc ↦ᵣ v)` with
+  "reference v was not found", even though `SwapComposedResult.v` has exactly
+  that line with the same imports. Write `bi_exist (fun v => …)` — the
+  application form needs no notation. (`iExists` in a PROOF is fine.)
+- A Coq comment inside a `[ t1 | t2 ]` tactic bracket breaks parsing; put it
+  above the tactic.
+- `rewrite ?A, ?B` inside a tactic bracket does not parse (the comma clashes
+  with the goal-selector grammar). Sequence them: `rewrite ?A; rewrite ?B`.
+
+### The coercion "obstacle" was NOT one — RETRACTED
+
+I recorded that chaining `amFinal` would need a `map`/`firstn` commutation
+lemma, because `HifSub`'s table is over `firstn 13 (skipn 264 mlad_ai)` while
+the contract's is built from `amf_seg` (a `list AST` reaching `list AnnotInstr`
+via the `list_AST_AnnotInstr` Coercion). **Wrong**: both are CONCRETE literal
+lists, so they compute to the same value and conversion closes the gap with no
+lemma at all. Tested rather than assumed. Do not write that lemma.
+
+### `linkFN` framing goals — DUMPED and diagnosed (2026-09-09)
+
+**Bullet 1 (feeding amFinal its precondition) — mechanical.** The hypothesis is
+`asn.interpret (extend_to_minimal_pre (cfg_precondition (amFinal ia))) ι.[a↦…]`
+and the goal is the same thing UNFOLDED (convertible, so `cbn` + `iExact`, not
+`iFrame`, which matches syntactically) plus ONE EXTRA PURE CONJUNCT the goal
+carries and the hypothesis does not:
+
+    ⌜secLeak (SyncVal (bv.of_N ia + bv.of_N 1056))⌝
+
+That is a fact to PROVE, not to frame — a `SyncVal` is public by construction.
+`cfg_instrs_verified` discharges the identical obligation with
+`iSplit. { done. }`. So bullet 1 is:
+
+    cbn [cfg_precondition amFinal].
+    iSplitL "Hpre"; [iExact "Hpre" | iSplit; [done | iFrame]].
+
+**Bullet 2 (the cut into linkN) — reveals the cut assertion is STILL too weak.**
+The goal is
+
+    pc ↦ᵣ SyncVal av ∗ (∃ v, nextpc ↦ᵣ v) ∗ ptsto_instrs …
+    ∗ asn.interpret amFinal_post ι.[a↦…].[an↦SyncVal av]
+    ⊢ exitCond_WP2_loop (sgN_exitCond ia)
+
+Two gaps against what `linkN` consumes:
+
+1. `av` must be shown to BE `bv.of_N ia + bv.of_N 1108`. It follows from
+   `Hexit : amf_headExitCond ia av`, exactly as `SwapComposedResult` does it:
+   `assert (Hav : av = …) by (destruct (bv.eqb_spec …); congruence). subst av.`
+2. **`amFinal_post` supplies only the register block; sgN's precondition also
+   wants `gen_mem_pre_rel mlad_mem_specs_rel` (the WHOLE memory block), the
+   pc-eq, and the base bound.** amFinal owns two cells, not ten, so it cannot
+   supply that — the same over-claim that gave the earlier bare `False`, now on
+   the MEMORY side rather than the register side.
+
+**The fix, and it is the minimal-frame rule again:** sgN only reads the four
+spill slots at 1152/1156/1160/1164 (`lw S0,12(X2)` … `lw S3,0(X2)`). So
+introduce `mlad_mem_specs_tail` = those four cells, use it in BOTH sgN's
+precondition and `amFinal_post`, and add the four cells to amFinal's
+precondition so they flow through the loop. The pc-eq is delivered by the exit
+(`pc ↦ᵣ`), and the base bound is a pure fact about `p` that can be carried as a
+hypothesis of the link lemma rather than through the assertion.
+
+Note this is the FOURTH instance of the same rule (registers at A->B, values at
+L->M, register ownership at M->N, now memory ownership at M->N). Write cut
+assertions as the minimal frame from the start.
+
+### `linkFN` — bullet 1 CLOSED, bullet 2 needs ι PINNED (2026-09-09, latest)
+
+**CORRECTION (same day): the claim "bullet 1 now closes" was WRONG.** It came
+from misreading a dump: `iStopProof` had failed silently so no goal printed for
+bullet 1, and the absence of output was read as success even though the same
+output line said `B1 goals: 1`. Both bullets still have exactly one open goal.
+Read the COUNTER, not the absence of a print.
+
+The tactic below is still the right shape for bullet 1 (iExact for conversion,
+`done` for the pure secLeak conjunct) but does not finish it:
+
+    cbn [cfg_precondition amFinal].
+    iSplitL "Hpre"; [iExact "Hpre" | iSplit; [done | iFrame]].
+
+The memory-frame fix also landed: `sgN` uses `gen_mem_pre_rel
+mlad_stack_specs_rel` (the four spill slots it actually reads, already defined
+in ZZMladCommon.v) instead of the whole ten-cell block, and `amFinal` carries
+those four cells in BOTH its precondition and `amFinal_post`. `sgN` and
+`amFinal` are both Qed with that.
+
+**Bullet 2 has ONE goal left, and it is a STATEMENT problem, not a tactic one:**
+
+    Hpost : asn.interpret amFinal_post ι.[a↦…].[an↦SyncVal (bv.of_N (ia+1056+52))]
+      ⊢ asn.interpret (… (cfg_precondition (sgN_contract ia)))
+            (tailI ia).[a↦…] ∗ pc ↦ᵣ SyncVal (bv.of_N ia + bv.of_N 1108)
+
+- minor: `bv.of_N (ia+1056+52)` vs `bv.of_N ia + bv.of_N 1108` — `bv.of_N_add`
+  plus `1056+52 = 1108`, i.e. the same `exit_hit` normalisation used for the
+  etable facts.
+- **the real one: `Hpost` is interpreted at the ARBITRARY valuation `ι`, while
+  the goal needs `tailI ia`.** `linkFN` quantifies `ι` freely and only
+  constrains it through `Hp` (about `inst amf_place ι`), which pins
+  `ι("p") + 1056` but not `ι("p")` itself. Nothing lets the two assertions be
+  equated.
+
+**DONE: the concrete valuation is in place** (`amI ia apo bpo eo` in
+ZZMladTail.v, with `linkFN` stated at `ιF ia = amI ia 1136 1148 1152`, the
+second trip). Both sides of the cut are now CLOSED terms, and bullet 2's
+remaining goal is legible and reachable:
+
+    Hpost : asn.interpret amFinal_post (ιF ia).[a↦…].[an↦SyncVal (bv.of_N (ia+1056+52))]
+      ⊢ asn.interpret (… (cfg_precondition (sgN_contract ia))) (tailI ia).[a↦…]
+        ∗ pc ↦ᵣ SyncVal (bv.of_N ia + bv.of_N 1108)
+
+Next step: `replace (ia+1056+52)%N with (ia+1108)%N by lia`, then
+`rewrite <- bv.of_N_add` to match the goal's `bv.of_N ia + bv.of_N 1108`, then
+split `pc` off (`iSplitR "Hpc"`) and match the assertion halves by `iExact`
+after `unfold amFinal_post; cbn`.
+
+Also fixed on the way: **`HifSub` had an unused `ia` binder.** Because `ia`
+does not occur in its conclusion, `apply` could not infer it and failed with a
+completely misleading "Cannot find a relation to rewrite". Dropped.
+
+The original write-up of the fix, for reference:
+
+    Definition amI (ia apo bpo eo : N) : Valuation amfCtx :=
+      [env].["p"∷ty_xlenbits  ↦ SyncVal (bv.of_N ia)]
+           .["ap"∷ty_xlenbits ↦ SyncVal (bv.add (bv.of_N ia) (bv.of_N apo))]
+           .["bp"∷ty_xlenbits ↦ SyncVal (bv.add (bv.of_N ia) (bv.of_N bpo))]
+           .["e"∷ty_xlenbits  ↦ SyncVal (bv.add (bv.of_N ia) (bv.of_N eo))]
+
+and state `linkFN` at `amI ia 1136 1148 1152` (the SECOND trip: ap and bp have
+each advanced 4 from sgL's 1132/1144). Then `ι("p")` is `bv.of_N ia` by
+construction, `Hp` becomes `reflexivity`, and the register/memory halves of the
+cut denote the same iProp on both sides. `linkBFN` then uses
+`amI ia 1132 1144 1152` (the first trip) and `amBody`'s back-edge postcondition
+carries it to the second.
+
+Alternative if that proves awkward: keep `ι` free and add the hypothesis
+`env.lookup ι ("p"∷ty_xlenbits) = SyncVal (bv.of_N ia)` — derivable from `Hp`
+by `bv.add_cancel_l`, which exists and needs no no-wrap side condition.
+
+### `linkFN` — earlier state (superseded by the entry above)
+
+The `assert`ed `HifF`/`HefF` facts and the
+`sound_scfg_verification_condition_myWP2` application all go through; the proof
+fails only with "Attempt to save an incomplete proof" — the remaining goals are
+the FRAMING at the cut, which is exactly where `SwapComposedResult` needs
+`iExact` rather than `iFrame` (its own comment says why: the two sides are
+convertible but not syntactically equal, and `iFrame` matches syntactically).
+That is the next thing to write, and it needs the goals dumped rather than
+guessed.
+
+### Argument-passing: use `assert` + `apply … with`, not term-level naming
+
+Three different conventions were hit in one proof, so do not try to remember
+them per lemma:
+- `itable_faith_of_segment` reports nameable `Σ cbase off`; `p`/`ι`/`pre`/`seg`/
+  `post` are positional.
+- `etable_faith_exits_of_offs` takes `cbase` EXPLICITLY — term-level
+  `(cbase := …)` fails, `apply … with (cbase := …)` works.
+- `HefFinal` (a local lemma!) reports nameable `ia cbase` only.
+
+**The robust pattern that works for all of them**: `assert` the fact you want
+with its statement written out, prove it `by (apply L with (cbase := …); …)`,
+and pass the resulting hypothesis. Term-level named application is not portable
+across these.
+
+### Remaining for the tail
+
+`linkFN` (amFinal + the cut into linkN), `linkBFN` (amBody + the back edge),
+`tailChain` (sgL), then `ImplPre` and Phase 5's bridge for a leakage theorem.
+
+
+## Phase 4b — the sub-loop verified by a RANGE INVARIANT (2026-09-09)
+
+`ZZMladTail.v` compiles clean, 188 s, 23 `Qed`, no holes. The tail is now
+
+    sgL (1000..1052) ; amBody x k (by induction) ; amFinal ; sgN (1108..1124)
+
+with the loop discharged by `myWP2_loop_induction`, NOT by unrolling. Owner
+chose this over widening `amBody`'s frame ("we will want to use these methods
+in other places as well").
+
+### The framing fact this rests on — and a RETRACTION
+
+I first claimed the remaining cells could not be framed around a segment,
+because "CFGVer contracts drop leftover resources". **That is wrong**, and the
+claim conflated two different things: the SYMBOLIC EXECUTOR drops leftover
+chunks at a contract's exit (`Contracts.v`'s own comment, and true), but at the
+IRIS level `sound_scfg_verification_condition_myWP2`'s `with "[...]"` selector
+decides only what the CONTRACT consumes -- every unselected spatial hypothesis
+stays in context for the continuation goal. Verified with a probe carrying a
+spare `(P : iProp Σ)` through: it arrives in goal 2 untouched.
+
+So `amBody`'s sliding two-cell contract is UNCHANGED. The n windows beyond the
+current one ride outside it as ordinary Iris resources. Being Iris-level they
+may be a Coq `Fixpoint` over the trip count, which is what makes a
+symbolic-length range expressible at all -- inside an `Assertion` it is not,
+because the VC is discharged by `vm_compute` and needs a concrete length.
+
+### Shape
+
+- `cellsPriv` / `cellsPub n base off` -- the range, indexed by an **N offset**,
+  not by repeated `bv.add` (see below).
+- `amWinAsn` -- the current window: `amBody`'s precondition MINUS `asn_pc_eq`
+  and MINUS the guard, PLUS `minimal_pre`. The guard is what separates body
+  from exit (`bp+4 <> e` vs `= e`), so each half derives its own from the trip
+  arithmetic. This is why the invariant carries its own assertion rather than
+  `cfg_precondition (amBody ia)` -- exactly what `cdInvAsn` does in
+  `Example/PaddedLoopResult.v`, the working `myWP2_loop_induction` call site.
+- `amInvN ia n` -- `bi_exist apo/bpo` + the trip relations as PURE side
+  conditions (`bpo + 4*(n+1) = 1152`, `apo + 12 = bpo`), mirroring `plInvN`'s
+  `bv.bin k = n+1`.
+- `amTailRegs` -- X2 and S0-S3. `amf_regs` is `X2 :: am_regs ++ [S0..S3]`, so
+  `amFinal` needs registers `amBody` never owns; they ride outside too.
+  `gen_regs_any` already covers them (it takes the base TERM), no new builder.
+
+### One contract change was needed: amBody_post += minimal_pre
+
+`amBody_post` did not hand back the ambient chunks (`cur_privilege`,
+`inv_leakage`), so each trip consumed them and the invariant could never be
+re-established -- the body would run exactly once. `cdInvAsn` carries the same
+chunks (`pl_step` destructures them as `Hpriv`/`Hinv`). The segment never
+writes `cur_privilege`, so the executor still holds both at the exit and the
+postcondition can claim them; re-verified in 15 s. **This invalidated
+`ZZMladSgL.vo`** (it uses `am_regs`) -- rebuilt, 19 s.
+
+### THE recurring cost: convertible but not SYNTACTICALLY equal
+
+`iFrame` matches syntactically. Six distinct instances in this one proof, each
+costing an iteration; this is the dominant cost of composing CFGVer segments
+and should be the first hypothesis whenever a frame "obviously" ought to close:
+
+1. `bv.of_N (off+4)` vs `bv.of_N off + bv.of_N 4` -- hence the N-offset
+   indexing of `cellsPriv`; a recursion building `((base + of_N 1152) + of_N 4)
+   + of_N 4` is equal to `base + of_N 1160` but unmatchable.
+2. `subst` orienting on `apo + 12 = bpo`, leaving `amI ia 1136 (1136+12) 1152`
+   against the goal's `... 1148 ...`. Fix: `clear` the trip equations first.
+3. `1152 + 4` vs `1156` -- `cbn [N.add Pos.add]` does NOT collapse N literals;
+   needs `change (1152+4)%N with 1156%N`, innermost first.
+4. `asn_regidx_pts` (`↦ᵣ`) is `match reg_convert r with ...`, and `reg_convert`
+   dispatches on `bv.to_bitstring` -- a match **cbn will not reduce at any
+   delta setting**; only `vm_compute` does. Fix: eight equations
+   (`reg_convert A0 = Some x10`, ...) by `vm_compute; reflexivity`, then `cbn`
+   gets through. Packaged as the `reg_reduce` tactic.
+5. `am_reg_asn` vs `am_post_reg_asn` -- two separate definitions with IDENTICAL
+   bodies, so the pre- and post-register blocks never match. Fix:
+   `cbn [am_reg_asn am_post_reg_asn]` then `reg_reduce` AGAIN for the
+   `reg_convert` matches that exposes. **This one produced the misleading
+   "No applicable tactic"**: the register conjuncts stayed unframed, so the
+   `first [...]` handling the pure leftovers met goals it had no case for.
+6. `rewrite bv_shift4` reports "found no subterm" on a goal equal to its RHS
+   (elaboration difference in the implicit width), while the PRIMITIVE sequence
+   `rewrite <- bv.add_assoc; rewrite bv.of_N_add; rewrite bv.add_comm` works.
+   **`rewrite` matches syntactically; `apply` unifies up to conversion** -- when
+   a rewrite refuses on a term you can prove equal, reach for the primitives or
+   for `apply`, not for another delta flag.
+
+### iFrame performance, which is a real constraint here
+
+- **Split before reducing.** A `cbn` that reaches `instrs_of_list ... mlad_ai`
+  tries to compute the 282-entry store and diverges. Peel pc/nextpc/instrs off
+  with `iSplitR`/`iSplitL` FIRST; only the assertion half is ever reduced.
+- **Isolate the big conjunct.** With `asn.interpret amWinAsn` still in the
+  goal, `iFrame` tries every named hypothesis against that unreduced term and
+  times out even when the rest match verbatim.
+- **Name the hypotheses, in goal order.** A bare `iFrame` over ~25 atomised
+  hypotheses times out; naming them runs in ~19 s.
+- **`iFrame "H"` needs the WHOLE hypothesis as one syntactic block** -- on a
+  `∗`-chain it fails outright. Destructure to atoms first.
+
+### Other traps banked
+
+- `%N` does NOT stop `exp_scope`'s `=` / `<=` from winning. Write `@eq N` /
+  `N.le` explicitly in `assert`s.
+- `exitCond_WP2_loop c` is `myWP2_loop (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜c v⌝)` -- `⌜c v⌝`
+  under the **`Is_true` coercion**, not `c v = true`. Spelling it `= true` does
+  not unify. (Same distinction as `linkN`'s `rewrite Hexit; exact I`.)
+- `linkFN` needed a NEW hypothesis `Hb`: `sgN`'s precondition demands the
+  address-space bound and `amFinal_post` does not carry it, so it threads in
+  like `Hrep`. `am_step` needs `Hmax` (maxAddr form) and `Hlen` (lenAddr form)
+  for the same reason -- the old window's copies are consumed by `amBody`.
+- Old-window cells (`Hp7`/`Hp8`) are deliberately dropped: that limb is summed
+  and the invariant does not mention it. `iProp` is affine, so this is sound.
+
+### INTERACTIVE MODE WORKS HERE -- previous note retracted
+
+The standing belief that `rocq_start` cannot replay these files was a
+misdiagnosis of a fixable load-path problem, not a property of the files. The
+repo root holds BOTH `_CoqProject` and `dune-project`; coq-lsp prefers dune,
+and no dune stanza covers `case_study/RiscvPmp`, so under the dune workspace
+this subtree gets NO load path and every `From Katamaran Require` silently
+no-ops. Symptoms: "The reference Valuation was not found in the current
+environment" on any `rocq_start` against a file here, and a preamble that
+returns `success: true` having loaded ZERO Katamaran libraries.
+
+Fix: `Example/_CoqProject` (untracked, 2 lines, `-Q ../.. Katamaran.RiscvPmp`
+and `-R ../../../../theories Katamaran`) -- coq-lsp's detection stops at the
+first directory holding a project file, and there is no dune-project there.
+With it, `rocq_check` against the full tail context runs in 10 ms - 19 s.
+
+Two caveats measured the same day:
+- **Preamble mode reports success on a partial load.** A cold `rocq_start` with
+  the whole heavy import block returned `success: true` with only Coq/stdpp/
+  Iris present. ALWAYS `Locate` a name you expect before trusting a preamble.
+  Building the context up with one `Require` per `rocq_check` works.
+- `rocq_check` echoes the entire session's tactic history on every call, so
+  deep in a session each step costs ~7k tokens regardless of what it does. For
+  a self-contained sub-question, start a FRESH light session (Prelude only)
+  rather than continuing in the heavy one.
+
+### Still open
+
+- Wire `am_loop` into the chain at `n = 1` (`sgL` -> loop -> `sgN`), i.e. the
+  `tailChain` lemma. `sgL_post` is already the loop's entry shape.
+- `ImplPre` + the Phase-5 bridge for a leakage theorem on the tail.
+- The other ten segments: 12 cut assertions, a `Hif`/`Hef` each.
+- **G (`br_divrem`, 31 trips) is now the interesting case**: it is the loop this
+  machinery was built for, and unlike M it cannot be unrolled.
+- Everything but the tail four still carries `asn_no_post`.
