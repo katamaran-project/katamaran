@@ -324,26 +324,22 @@ Section SegCompose.
   Qed.
 
   (* ======================================================================== *)
-  (* 5. VALUATION-INDEPENDENCE OF THE GENERATED BLOCKS                        *)
+  (* 5. CROSSING A CUT: WHEN THE VALUATION CHANGES                            *)
   (* ======================================================================== *)
 
-  (* WHY THIS EXISTS.  A cut hands the NEXT segment a postcondition
-     interpreted at the valuation the PREVIOUS segment ran under -- extended
-     with "an", and generally with a different counter -- while the next
-     segment's precondition wants the same assertion at its OWN valuation.
-     The two are equal as resources but not syntactically, so iFrame refuses
-     them, and the hand-written proofs paid for that by REDUCING both sides
-     (cbn on the fold, reg_reduce to unblock reg_convert, then a bare cbn)
-     and re-framing eleven atomised register hypotheses by name.  That
-     `iDestruct ... as "(H1 & ... & H11)"`-with-exact-arity ritual was the
-     single biggest per-call-site cost left after seg_step1.
+  (* A cut hands the next segment a postcondition interpreted at the valuation
+     the PREVIOUS segment ran under -- extended with "an", and generally with a
+     different counter -- while the next segment's precondition wants its own
+     valuation.  MEASURED 2026-09-10, on segment G's body cut: `iFrame` DOES
+     match the generated register block (0.6 s) and `minimal_pre` (0.8 s)
+     across that change on its own, because for those the two iProps are
+     convertible.  So do NOT reach for a lemma there; the earlier claim that
+     iFrame refuses them was wrong, and the two lemmas written for it
+     (`gen_regs_at_inst`, `minimal_pre_inst`) were deleted unused.
 
-     These three lemmas remove it: the generated blocks depend on the
-     valuation ONLY through `inst base`, so a one-line rewrite moves the
-     whole block across, no reduction and no atomising.  Stated across TWO
-     contexts R1/R2 because that is the actual cut situation -- pre at
-     `Sigma > "a"`, post at `Sigma > "a" > "an"`. *)
-
+     What iFrame genuinely CANNOT cross is a register whose VALUE changed --
+     the thing a segment is for.  That is this lemma, and its premise is
+     exactly the arithmetic the segment did. *)
   Lemma asn_regidx_pts_inst {R1 R2 : LCtx} (r : RegIdx)
     (t1 : Term R1 ty_xlenbits) (t2 : Term R2 ty_xlenbits)
     (i1 : Valuation R1) (i2 : Valuation R2)
@@ -355,33 +351,13 @@ Section SegCompose.
     destruct (reg_convert r); cbn; [rewrite H |]; reflexivity.
   Qed.
 
-  (* The register block.  Only PVBaseOff reads `base` at all, which is why a
-     block of PVExist/PVConst entries (every segment so far) moves across for
-     free -- but stating it via `inst base` keeps base-relative pointers
-     working too. *)
-  Lemma gen_regs_at_inst {R1 R2 : LCtx} (b1 : Term R1 ty_xlenbits)
-    (b2 : Term R2 ty_xlenbits) (i1 : Valuation R1) (i2 : Valuation R2)
-    (H : inst (T := fun Σ => Term Σ ty_xlenbits) b1 i1
-         = inst (T := fun Σ => Term Σ ty_xlenbits) b2 i2)
-    (regs : list reg_spec_rel) :
-    asn.interpret (gen_regs_at b1 regs) i1 ⊣⊢ asn.interpret (gen_regs_at b2 regs) i2.
-  Proof.
-    unfold gen_regs_at.
-    induction regs as [| [[r pub] pv] rs IH]; cbn [List.fold_right foldr asn.interpret].
-    - reflexivity.
-    - f_equiv; [| exact IH].
-      unfold gen_reg_asn_at. destruct pv.
-      + destruct pub; cbn [asn.interpret]; apply bi.exist_proper; intros v.
-        * f_equiv; [apply asn_regidx_pts_inst; reflexivity | reflexivity].
-        * apply asn_regidx_pts_inst; reflexivity.
-      + apply asn_regidx_pts_inst; reflexivity.
-      + apply asn_regidx_pts_inst; cbn; rewrite H; reflexivity.
-  Qed.
-
-  (* The ambient chunks gen_seg_contract appends to both the pre and the post
-     are closed, so they cross a cut with no side condition at all. *)
-  Lemma minimal_pre_inst {R1 R2 : LCtx} (i1 : Valuation R1) (i2 : Valuation R2) :
-    asn.interpret (@minimal_pre R1) i1 ⊣⊢ asn.interpret (@minimal_pre R2) i2.
-  Proof. unfold minimal_pre. cbn [asn.interpret]. reflexivity. Qed.
+  (* PERFORMANCE, and it is not a detail: SPLIT THE GOAL BEFORE FRAMING.
+     `iFrame` searches every conjunct of the goal for each named hypothesis,
+     so framing the ambient resources (F / pc / nextpc / the instruction
+     store) while the generated blocks are still in the goal costs 46-66 s on
+     segment G -- and framing them ONE at a time is worse still (`iFrame "Hpc"`
+     alone did not finish in 300 s).  Peel the ambient half off first with
+     `iSplitR "HF Hpc Hnpc Hinstrs"; [| iFrame]` and the same work is 0.4 s.
+     Measured on ZZMladDvLoop2.v: 47.8 s -> 28.5 s for the whole file. *)
 
 End SegCompose.

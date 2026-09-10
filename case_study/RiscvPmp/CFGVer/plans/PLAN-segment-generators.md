@@ -295,41 +295,74 @@ site actually stop declaring it. What the port itself removed:
   exit-resolution block: gone, into `seg_step1`.
 - `dv_loop`'s body is now literally `apply (seg_loop …)`.
 
-### What the port ADDED, and why it was worth doing
+### What the port ADDED — CORRECTED 2026-09-10 after measuring
 
-Two things only a real call site could have surfaced.
+Two things only a real call site could have surfaced. The first write-up of
+this section got the second one wrong; both versions are below because the
+correction is the more useful fact.
 
-**1. HPre needs no register reduction at all.** Because `dvWinAsn` now uses the
+**1. HPre needs no register reduction at all.** Because `dvWinAsn` uses the
 generator's own `gen_regs_at` (not a local copy) at the *same* valuation as the
 contract's precondition, the register block, `T4`, the `secLeak` fact, the base
 bound and `minimal_pre` are literally the same terms on both sides and frame
 WHOLE. The hand-written `iDestruct … as "(Hr1 & … & Hr11)"`-with-exact-arity
-plus `reg_reduce` plus a blanket `cbn` simply does not appear. No `frame_regs`
-tactic was needed here.
+plus `reg_reduce` plus a blanket `cbn` does not appear.
 
-**2. HPost needs a lemma, not a tactic.** Across a cut the valuations genuinely
-DIFFER (the counter is decremented, `"an"` is bound), so the same blocks are
-equal as resources but not syntactically, and `iFrame` refuses them. That is
-what the hand-written proof was paying `cbn`/`reg_reduce`/eleven-atom framing
-for. `GenCompose` §5 now carries the three lemmas that fix it structurally:
+**2. Crossing a cut needs ONE lemma — not three, and not a tactic.** Across a
+cut the valuations DIFFER (counter decremented, `"an"` bound). I claimed
+`iFrame` therefore refuses the blocks and added three lemmas. **Measured, and
+two of the three were unnecessary:**
+
+| conjunct | bare `iFrame` | |
+|---|---|---|
+| `gen_regs_at (term_var "p") dv_regs` | **succeeds, 0.6 s** | lemma deleted |
+| `minimal_pre` | **succeeds, 0.8 s** | lemma deleted |
+| `T4 ↦ᵣ …` | **fails** — `iFrame: cannot frame` | needs the lemma |
+
+`iFrame` matches convertible-but-not-syntactic assertions here after all. What
+it genuinely cannot cross is a register whose **value** changed — which is the
+one thing a segment is for. So `GenCompose` §5 keeps exactly:
 
 ```coq
 asn_regidx_pts_inst : inst t1 i1 = inst t2 i2 ->
   asn.interpret (asn_regidx_pts r t1) i1 ⊣⊢ asn.interpret (asn_regidx_pts r t2) i2
-gen_regs_at_inst    : inst b1 i1 = inst b2 i2 ->
-  asn.interpret (gen_regs_at b1 regs) i1 ⊣⊢ asn.interpret (gen_regs_at b2 regs) i2
-minimal_pre_inst    : asn.interpret (@minimal_pre R1) i1 ⊣⊢ asn.interpret (@minimal_pre R2) i2
 ```
 
-Stated across **two** contexts `R1`/`R2` because that is the actual cut
-situation (pre at `Σ ▻ "a"`, post at `Σ ▻ "a" ▻ "an"`). The generated blocks
-read the valuation only through `inst base`, so one rewrite moves a whole
-block across — no reduction, no atomising. This is the answer to the
-"`frame_regs` tactic?" question: it wanted to be a lemma.
+stated across two contexts `R1`/`R2` because that is the cut situation (pre at
+`Σ ▻ "a"`, post at `Σ ▻ "a" ▻ "an"`). Its premise is exactly the segment's
+arithmetic — here `dv_dec`, the head's `addi T4,T4,-1` — so the program content
+ends up isolated in one hypothesis and everything else is plumbing.
 
-The remaining verbosity in `dv_step_at`'s HPost is that each rewrite must spell
-its two valuations out in full (~4 lines each). Worth revisiting if a later cut
-makes it three times over.
+`gen_regs_at_inst` and `minimal_pre_inst` were proved, then deleted unused.
+Re-derive them (12 lines) only if a real failure appears — plausibly a
+`PVBaseOff` register under a base whose value is not pinned identically on both
+sides. Do not add them back on the strength of the argument alone; that
+argument has now been measured false once.
+
+### PERFORMANCE: split the goal before framing (2026-09-10)
+
+Not a detail — it was the file's dominant cost. `iFrame` searches every
+conjunct of the goal for each named hypothesis, so framing the ambient
+resources while the generated blocks are still in the goal is expensive:
+
+| | |
+|---|---|
+| `iFrame "HF Hpc Hnpc Hinstrs"` over the whole goal | **46 s** (54 s if `cbn` runs first) |
+| of which `iFrame "Hinstrs"` (the 282-instruction store) | 2.9 s |
+| of which `iFrame "HF Hpc Hnpc"` | **66 s** |
+| `iFrame "Hpc"` alone | **did not finish in 300 s** |
+| `iSplitR "HF Hpc Hnpc Hinstrs"; [\| iFrame]` | **0.16 s + 0.35 s** |
+
+So the instruction store is NOT the problem, and framing fewer hypotheses at a
+time is *worse*. Peel the ambient half off with a split first. Whole-file
+effect: `ZZMladDvLoop2.v` **47.8 s -> 28.5 s**, which makes the generated proof
+faster than the hand-written one it replaces (36.4 s in the same run).
+
+The hand-written `ZZMladDvLoop.v` recorded this trick in a comment
+("Isolate the dvWinAsn conjunct FIRST: with it in the goal, iFrame tries to
+unify every named hypothesis against that big unreduced term") and the first
+port dropped it. Worth reading the proof you are replacing for its comments,
+not just its structure.
 
 ### Two API facts confirmed
 
