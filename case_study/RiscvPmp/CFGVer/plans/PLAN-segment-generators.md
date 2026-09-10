@@ -382,6 +382,92 @@ not just its structure.
   the argument instead.
 - **`bv_bound` is now `pose proof exp2_xlenbits; lia`.** See §5.
 
+### 3e. THE FOUR FAITH LEMMAS ARE GONE (2026-09-10)
+
+The port left segment G's composition proof with 90 of 243 code lines still
+mechanical, and the largest single block was four named faithfulness lemmas --
+`HifDvBody`/`HifDvFinal` (BYTE-IDENTICAL except the contract name) and
+`HefDvBody`/`HefDvFinal` (differing only by the target list). 45 lines whose
+only content was the numbers `135 27 540 1168` and the target list, every one
+of which the caller had ALREADY passed to `gen_seg_contract`.
+
+Their four bullets were three DECIDABLE side conditions plus `seg_wf`:
+
+| bullet | old discharge |
+|---|---|
+| `4 * skip = head` | `reflexivity` |
+| `skip <= length prog` | `vm_compute; lia` |
+| `4 * length prog <= bound` | `vm_compute; discriminate` |
+| `Forall (head <=) targets` | `constructor; [lia \| constructor]` |
+
+Two of those are tactics, which is the whole reason the obligations had to
+become named lemmas rather than inline arguments. `GenSegment.seg_ok prog skip
+head bound targets : bool` bundles all four into one boolean, with four
+projections (`seg_ok_off/_skip/_sz/_tgts`), and `GenCompose.seg_itable_faith` /
+`seg_etable_faith` take exactly `(Hok, Hp, Hwf)` / `(Hok, Hp)`. Both are then
+terms, so both obligations go INLINE into the `seg_step1` application:
+
+```coq
+apply (seg_step1 (dvBody ia) (dvI ia (m + 1)%N) (seg_addr ia 540) mlad_ai
+         (@bv.of_N xlenbits ia) F ia 540%N eq_refl (valid_dvBody ia)
+         (seg_itable_faith (cfg_placement (dvBody ia)) (dvI ia (m + 1)%N)
+            ia mlad_ai 135 27 540%N 1168 [540%N] eq_refl eq_refl Hwf)
+         (seg_etable_faith (cfg_placement (dvBody ia)) (dvI ia (m + 1)%N)
+            ia mlad_ai 135 540%N 1168 [540%N] eq_refl eq_refl)).
+```
+
+45 lines and 4 `Qed`s out, 8 lines in: `ZZMladDvLoop2.v` 242 -> **204 code
+lines**, 11 -> 7 `Qed`. Leaves exactly HPre/HPost in 24 ms.
+
+Three things worth knowing before reusing this:
+
+- **`place` and `iota` must be written out; `L` too.** `apply` elaborates an
+  argument bottom-up BEFORE propagating the expected type into it, so an `_`
+  there leaves `eq_refl`'s type as `seg_ok ?L ... = seg_ok ?L ...` (or `inst
+  ?place ?iota = inst ?place ?iota`) and elaboration fails with a message that
+  looks like the lemma is wrong. `take`, and only `take`, may be `_`.
+- **`eq_refl` for `Hok` is FREE; a `vm_compute` lemma is not an improvement.**
+  Discharging `seg_ok mlad_ai 135 540 1168 [540] = true` by kernel conversion
+  reduces `length` over a 282-element `map`, four times per file. Measured
+  against the obvious alternative (two named `Lemma ... = true` proved by
+  `vm_compute; reflexivity`, passed in place of the `eq_refl`s): 32.84 s vs
+  28.99 s, i.e. no reason to write the lemmas.
+- **The change is line-count-only. It does not make the file faster.** Three
+  interleaved runs each (coqc, matched): before 31.24 / 27.70 / 27.83 s, after
+  28.99 / 30.75 / 27.62 s. The run-to-run spread is +-3 s and swamps any
+  effect; do NOT quote a speed-up. (The first post-change run read 34.9 s and
+  was a cold-cache artefact.)
+
+Gate: PASSED 4m47s at `GATE_JOBS=1 GATE_PROBE_BATCH=18`, 18 theorems
+axiom-clean. Note step 1 reports both `Results.vo` and `GenCompose.vo` up to
+date -- `GenSegment.v`/`GenCompose.v` are outside `Results.vo`'s closure and
+`GenCompose.vo` is in `BUILD_TARGETS` only because of that.
+
+**Still open, and it is the same shape one level up.** What survives per call
+site is ~12 lines: `seg_step1`'s own `(c, iota, a, L, cbase, Fr, ia, t)` plus
+the two faith terms, and `ia mlad_ai 135 (27) 540 1168 targets` is written
+THREE times in it. A `SegSpec` record (`ss_base/ss_base_a/ss_ia/ss_head/
+ss_prog/ss_skip/ss_take/ss_targets/ss_bound/ss_fuel/ss_regs/ss_pre/ss_post`)
+with `seg_contract : SegSpec Sigma -> CFGVerifierContract Sigma` and a
+`seg_step1_spec` over it would take those 12 lines to ~2, and would matter
+about 11 more times in muladd. Not built: it changes `gen_seg_contract`'s call
+convention, and the projections (`ss_prog s` vs `mlad_ai`) are convertible but
+not syntactically equal -- which is exactly the class of thing that has cost
+iFrame time twice in this family already, so it needs measuring, not
+reasoning.
+
+### A build note for the ZZ probes (cost 3 dead ends today)
+
+`ZZ*.v` files are NOT in `_CoqProject`, so `make -f Makefile.coq
+<...>/ZZFoo.vo` silently has no rule and reports success having done nothing,
+and `rocq_compile_file`'s dune fallback writes its `.vo` into
+`_build/default/` while leaving the source-tree `.vo` stale. A dependent file
+then reports `The reference seg_wf was not found in the current environment`
+-- the stale-`.vo`-drops-names signature again, from a build that said it
+succeeded. Compile a probe with `coqc` directly, passing `_CoqProject`'s two
+load-path lines (`-Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories
+Katamaran`).
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under

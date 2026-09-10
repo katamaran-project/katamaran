@@ -286,6 +286,64 @@ Proof.
 Qed.
 
 (* ========================================================================== *)
+(* 2b. THE SEGMENT'S DECIDABLE SIDE CONDITIONS, AS ONE BOOLEAN                 *)
+(* ========================================================================== *)
+
+(* Every compositional call site owes three facts about the SLICING, and all
+   three are closed and decidable -- they mention only the numbers the caller
+   already handed to gen_seg_contract, never the base address or the
+   valuation.  Bundling them into one boolean is what lets the two
+   faithfulness obligations be discharged by `eq_refl` INSIDE a seg_step1
+   application, instead of by four named lemmas per segment (measured on
+   segment G: 45 lines of near-byte-identical ritual for two contracts).
+
+   `Hoff` is the head = 4 * skip invariant gen_seg_contract documents but
+   cannot enforce in its type; `Hskip`/`Hsz` are the sub-table's fit. *)
+Definition seg_ok (prog : list AnnotInstr) (skip : nat)
+    (head bound : N) (targets : list N) : bool :=
+  andb (andb (N.eqb (N.mul 4 (N.of_nat skip)) head)
+             (Nat.leb skip (length prog)))
+       (andb (N.leb (N.mul 4 (N.of_nat (length prog))) bound)
+             (List.forallb (fun t => N.leb head t) targets)).
+
+Lemma seg_ok_off (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+  @eq N (N.mul 4 (N.of_nat skip)) head.
+Proof.
+  unfold seg_ok in H.
+  apply Bool.andb_true_iff in H as [H _]. apply Bool.andb_true_iff in H as [H _].
+  now apply N.eqb_eq.
+Qed.
+
+Lemma seg_ok_skip (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+  Nat.le skip (length prog).
+Proof.
+  unfold seg_ok in H.
+  apply Bool.andb_true_iff in H as [H _]. apply Bool.andb_true_iff in H as [_ H].
+  now apply Nat.leb_le.
+Qed.
+
+Lemma seg_ok_sz (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+  (N.mul 4 (N.of_nat (length prog)) <= bound)%N.
+Proof.
+  unfold seg_ok in H.
+  apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [H _].
+  now apply N.leb_le.
+Qed.
+
+Lemma seg_ok_tgts (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+  List.Forall (fun t => N.le head t) targets.
+Proof.
+  unfold seg_ok in H.
+  apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [_ H].
+  apply List.Forall_forall. intros t Hin.
+  rewrite List.forallb_forall in H. apply N.leb_le. now apply H.
+Qed.
+
+(* ========================================================================== *)
 (* 3. THE SEGMENT CONTRACT GENERATOR                                           *)
 (* ========================================================================== *)
 

@@ -161,6 +161,46 @@ Section SegCompose.
     apply seg_exitCond_hit. exact Hint.
   Qed.
 
+  (* ---- ...and the same two obligations with every DECIDABLE side condition
+         bundled, so a call site can pass them INLINE as `eq_refl eq_refl Hwf`
+         instead of naming a lemma per (contract x table).  On segment G the
+         four named lemmas this replaces were 45 lines, of which the only
+         non-ritual content was the numbers `135 27 540 1168` and the target
+         list -- all five of which the caller had ALREADY handed to
+         gen_seg_contract.  Argument order is chosen so that every argument
+         before Hok is inferable from the conclusion. --------------------- *)
+  Lemma seg_itable_faith {R : LCtx} (place : Term R ty_xlenbits)
+      (iota : Valuation R) (ia : N) (L : list AnnotInstr) (skip take : nat)
+      (head bound : N) (targets : list N)
+      (Hok : seg_ok L skip head bound targets = true)
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
+            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head)))
+      (Hwf : seg_wf ia bound) :
+    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
+      (instrs_of_list (@bv.of_N xlenbits ia) L)
+      (table_of_list place 0 (List.firstn take (List.skipn skip L))) iota.
+  Proof.
+    exact (itable_faith_at place iota (@bv.of_N xlenbits ia) L skip take head
+             (seg_ok_off L skip head bound targets Hok)
+             (seg_ok_skip L skip head bound targets Hok)
+             Hp
+             (seg_wf_rep ia bound L (seg_ok_sz L skip head bound targets Hok) Hwf)).
+  Qed.
+
+  Lemma seg_etable_faith {R : LCtx} (place : Term R ty_xlenbits)
+      (iota : Valuation R) (ia : N) (L : list AnnotInstr) (skip : nat)
+      (head bound : N) (targets : list N)
+      (Hok : seg_ok L skip head bound targets = true)
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
+            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))) :
+    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+      (seg_exitCond ia targets)
+      (exits_of_offs place (List.map (fun t => (t - head)%N) targets)) iota.
+  Proof.
+    exact (seg_exits_faith place iota ia head targets
+             (seg_ok_tgts L skip head bound targets Hok) Hp).
+  Qed.
+
   (* ======================================================================== *)
   (* 3. THE STEP COMBINATOR                                                   *)
   (* ======================================================================== *)
