@@ -468,6 +468,92 @@ succeeded. Compile a probe with `coqc` directly, passing `_CoqProject`'s two
 load-path lines (`-Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories
 Katamaran`).
 
+### 3f. RE-BASING A SEGMENT ON ITS OWN CODE BASE (2026-09-10, measured at the M->N cut)
+
+A segment contract should not have to name the whole program's base and its own
+byte offset. Re-based on its own `q` at `iq = ia + head`, FIVE of the seven
+contract fields lose both:
+
+| field | today | re-based |
+|---|---|---|
+| `cfg_init_addr` | `(ia + head)%N` | `iq` |
+| `cfg_placement` | `base +b of_N head` | `term_var "q"` |
+| pc-eq in the pre | `a = base_a +b of_N head` | `a = term_var "q"` |
+| `cfg_exits` | `exits_of_offs place (map (fun t => t - head) targets)` | `exits_of_offs q targets` |
+| `cfg_exitCond` | `seg_exitCond ia targets` (ABSOLUTE targets) | `seg_exitCond iq targets` |
+
+`head` and `skip` then survive only in `seg_ok` / `itable_faith_at` -- the
+composition side, which is where "how this segment sits in the program"
+belongs -- and the `map (fun t => t - head)` disappears because the targets are
+already what `exits_of_offs` wants.
+
+**The experiment: the M->N cut (amFinal -> sgN), the one place a base-relative
+pointer crosses a cut.** Probes `Example/ZZRebaseN.v` (117 lines, light) and
+`Example/ZZRebaseCut.v` (97, heavy), both green.
+
+**Result 1 -- a re-based contract VERIFIES.** `sgN` re-based on a code base
+`"r"` (= p+1108) with the spill base as a separate logic variable `"d"`
+(= p+1128) is discharged by plain `solve_seg`; `solve_symbase_fetch` copes with
+two independent symbolic bases, each carrying its own address-space bound
+conjunct. NON-VACUITY CHECKED: delete one of the four spill cells from the
+precondition and it fails with `No applicable tactic`, so the five instructions
+really are executing and really do need the cells.
+
+**Result 2 -- the cut becomes a PURE FRAME, and a simpler one than today's.**
+`cut_MN` hands amFinal's post (code base `q` = p+1056) to sgN's pre (code base
+`r` = p+1108) with a single `iFrame`, 4.8 s, consuming X2, the `secLeak`, all
+four spill cells, the register block and `minimal_pre`. Three PURE residues
+remain -- the pc equation and the two bounds -- which is EXACTLY what
+`ZZMladTail.linkFN` is left with today. It works because, re-based, not one
+conjunct of the cut assertion mentions a code base: they are stated against the
+shared data base or are base-free.
+
+**Result 3 -- and this is the condition on the whole thing. Base-relative DATA
+must move onto its own base at the same time.** Every base-relative item in the
+muladd specs sits at offset >= 1128, i.e. past the 1128-byte code: registers
+`A0 = p+1128`, `A2 = p+1140`, `X2 = p+1168`/`p+1152`, and every
+`mem_spec_rel` cell (1128..1164). These are DATA addresses; they have nothing to
+do with where a segment starts. Hang them off the code base and re-basing
+breaks the cut. Measured, both halves:
+
+- `X2 |-> q+96` vs `X2 |-> r+44` (equal values, different bases):
+  **`iFrame` silently does nothing.** Fixable with `asn_regidx_pts_inst`
+  (314 ms) but it costs ~14 lines per register per cut -- the premise restates
+  both terms and both valuations in full. The premise itself is
+  `cbn; rewrite <- !seg_addr_add; unfold seg_addr; f_equal; f_equal; lia`
+  (28 ms). NOTE `rewrite <- !bv.of_N_add` does NOT work here (it rewrites the
+  inner `bv.of_N (ia+1056)` forward and `lia` then dies on
+  `bv.of_N ia + bv.of_N 1056 = bv.of_N ia + bv.of_N 1108`); go through
+  `seg_addr_add`.
+- the same for a memory cell (`q+96 |->m mv` vs `r+44 |->m mv` under
+  `asn.exist "mv"`): **`iFrame` does nothing, and `asn_regidx_pts_inst` does
+  not apply** -- it is about `asn_regidx_pts`, and there is an existential
+  binder in the way. A new lemma would be needed, and there are four such cells
+  at this one cut.
+
+With the shared data base instead, both cross on a bare `iFrame` (224 ms, 2
+lines) because both sides say the same term at valuations that agree.
+
+**No performance argument -- do not claim one.** `peval` already flattens the
+nested add: `peval ((p +b 540) +b 4) = term_val 0x220 + term_var "p"`. Fetch
+addresses inside a segment are the same term size either way. The case for
+re-basing is that the contract becomes self-contained, nothing more.
+
+**What it costs to build:** a re-based generator (no `head`), `itable_faith_at`'s
+`Hp` restated in `seg_addr` form so it stays `reflexivity` at the call site,
+`seg_addr_rebase : seg_addr (ia+h) t = seg_addr ia (h+t)` for handing the pc
+across, and `seg_wf_shift : seg_wf ia bound -> h + b' <= bound -> seg_wf (ia+h) b'`.
+All small. The real work is re-pointing `mlad_reg_specs_rel` / `mlad_mem_specs_rel`
+at a data base, which is a change to the muladd spec block, not to the machinery.
+
+**One thing that did NOT get solved and will be hit again:** the spill block had
+to be written TWICE in the probe (once at `nCtx > "a"`, once at
+`mCtx > "a" > "an"`), because the cell address mentions the base and sits under
+`asn.exist "mv"`, so a `Term Sigma` parameter would need weakening and the only
+weakening to hand is `subst _ sub_wk1` -- a recorded Theta(|Sigma|^2) driver.
+This is the same wall `GenSegment.v` documents for a generic memory-block
+builder. A shared data base makes the DUPLICATION more visible, not worse.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
