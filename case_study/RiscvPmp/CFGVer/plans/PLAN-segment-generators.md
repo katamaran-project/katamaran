@@ -72,7 +72,7 @@ gen_reg_asn_at  {Σ} (base : Term Σ ty_xlenbits) : reg_spec_rel -> Assertion Σ
 gen_regs_at     {Σ} (base : Term Σ ty_xlenbits) : list reg_spec_rel -> Assertion Σ
 seg_exitCond    (ia : N) (targets : list N) : bv xlenbits -> bool
 gen_seg_contract {Σ} (base : Term Σ _) (base_a : Term (Σ ▻ "a") _)
-                 (ia head : N) (prog : list AST) (skip take : nat)
+                 (ia head : N) (prog : list AnnotInstr) (skip take : nat)
                  (targets : list N) (bound : N) (fl : nat)
                  (regs : list reg_spec_rel)
                  (extra_pre : Assertion (Σ ▻ "a"))
@@ -245,7 +245,7 @@ no longer has to know *which of three shapes* a given lemma wants.
 seg_addr_bin  : off <= bound -> bv.bin (seg_addr ia off) = ia + off
 seg_addr_neq  : o1,o2 <= bound -> o1 <> o2 -> seg_addr ia o1 <> seg_addr ia o2
 seg_addr_step : seg_addr ia off +b bv.of_N d = seg_addr ia (off + d)
-Ltac bv_bound := change (bv.exp2 xlenbits) with 4294967296%N; lia.
+Ltac bv_bound := pose proof exp2_xlenbits; lia.   (* see the port's traps, §5 *)
 ```
 
 `seg_addr_neq` is the non-aliasing obligation every sliding-window loop body
@@ -265,6 +265,89 @@ and it fails late and confusingly. `gen_seg_contract` now appends
 expressible. Re-validated: segment G's VCs still close with `solve_seg` alone.
 
 ---
+
+## 3d. THE PORT, and what it found (2026-09-10)
+
+`Example/ZZMladDvLoop2.v` is segment G composed **through** the machinery:
+same theorem as the hand-written `ZZMladDvLoop.v`, but nothing open-codes the
+soundness bridge. It compiles clean in 47.8 s, 12 `Qed`, no holes,
+`dv_loop_31` axiom-clean (only `Machine.pure_decode`, `Base.mmioenv`).
+
+Like-for-like against the hand-written path:
+
+| | files | total lines | code lines | `Qed` |
+|---|---|---|---|---|
+| hand-written (`DvBody` + `DvFinal` + `DvLoop`) | 3 | 797 | 563 | 22 |
+| generated (`DvGen` + `DvLoop2`) | 2 | 441 | 343 | 14 |
+
+Eight of the fourteen removed `Qed`s are the `rc_*` register table, which
+moved to `GenSegment` in the previous commit — the port is what let the call
+site actually stop declaring it. What the port itself removed:
+
+- `HifDv`/`HifDvf`, 25 lines each with a **per-call 282-element `vm_compute`**,
+  become 6 lines each on `itable_faith_at` (the `vm_compute` is gone: `split_id`
+  makes reassembly an identity).
+- `HefDvBody`/`HefDvFinal` plus the copied `exit_hit` Ltac (12 + 12 + 5) become
+  6 lines each on `seg_exits_faith`.
+- The whole `pose proof valid_… ; unfold ValidCFGVerifierContract, Valid_CFG_VC,
+  CFG_VC_triple ; iApply (sound_scfg_verification_condition_myWP2 … $! … with
+  "[…]")` ritual, and the `forall an` / `destruct an` / `bv.eqb_spec`
+  exit-resolution block: gone, into `seg_step1`.
+- `dv_loop`'s body is now literally `apply (seg_loop …)`.
+
+### What the port ADDED, and why it was worth doing
+
+Two things only a real call site could have surfaced.
+
+**1. HPre needs no register reduction at all.** Because `dvWinAsn` now uses the
+generator's own `gen_regs_at` (not a local copy) at the *same* valuation as the
+contract's precondition, the register block, `T4`, the `secLeak` fact, the base
+bound and `minimal_pre` are literally the same terms on both sides and frame
+WHOLE. The hand-written `iDestruct … as "(Hr1 & … & Hr11)"`-with-exact-arity
+plus `reg_reduce` plus a blanket `cbn` simply does not appear. No `frame_regs`
+tactic was needed here.
+
+**2. HPost needs a lemma, not a tactic.** Across a cut the valuations genuinely
+DIFFER (the counter is decremented, `"an"` is bound), so the same blocks are
+equal as resources but not syntactically, and `iFrame` refuses them. That is
+what the hand-written proof was paying `cbn`/`reg_reduce`/eleven-atom framing
+for. `GenCompose` §5 now carries the three lemmas that fix it structurally:
+
+```coq
+asn_regidx_pts_inst : inst t1 i1 = inst t2 i2 ->
+  asn.interpret (asn_regidx_pts r t1) i1 ⊣⊢ asn.interpret (asn_regidx_pts r t2) i2
+gen_regs_at_inst    : inst b1 i1 = inst b2 i2 ->
+  asn.interpret (gen_regs_at b1 regs) i1 ⊣⊢ asn.interpret (gen_regs_at b2 regs) i2
+minimal_pre_inst    : asn.interpret (@minimal_pre R1) i1 ⊣⊢ asn.interpret (@minimal_pre R2) i2
+```
+
+Stated across **two** contexts `R1`/`R2` because that is the actual cut
+situation (pre at `Σ ▻ "a"`, post at `Σ ▻ "a" ▻ "an"`). The generated blocks
+read the valuation only through `inst base`, so one rewrite moves a whole
+block across — no reduction, no atomising. This is the answer to the
+"`frame_regs` tactic?" question: it wanted to be a lemma.
+
+The remaining verbosity in `dv_step_at`'s HPost is that each rewrite must spell
+its two valuations out in full (~4 lines each). Worth revisiting if a later cut
+makes it three times over.
+
+### Two API facts confirmed
+
+- `seg_step1`'s argument order works: one `apply` with `eq_refl` for `Hec`
+  leaves exactly HPre and HPost, in 7 ms.
+- `Post` must be a **parameter** of the per-trip lemma, not fixed to the
+  invariant: `myWP2_loop` has no monotonicity lemma, so a trip-indexed
+  invariant has to be reached from inside the step, not weakened afterwards.
+
+### Two fixes the port forced
+
+- **`gen_seg_contract`'s `prog` is now `list AnnotInstr`, not `list AST`.**
+  `cfg_instrs` is an `AnnotInstr` list, so with `list AST` the coercion lands
+  OUTSIDE the slicing (`list_AST_AnnotInstr (firstn take (skipn skip prog))`)
+  and can never unify with `itable_faith_at`'s `firstn take (skipn skip L)`.
+  Callers with a `list AST` program are unaffected — the coercion just fires at
+  the argument instead.
+- **`bv_bound` is now `pose proof exp2_xlenbits; lia`.** See §5.
 
 ## 4. Deliberately NOT built
 
@@ -313,13 +396,31 @@ FIXED, cell-range fixpoint when it SLIDES.
 
 ---
 
+### Traps added by the port (2026-09-10)
+
+- **`rewrite ?lemma in *` can fail with "assumptions should be named
+  explicitly."** I "improved" `bv_bound` from `change … ; lia` to
+  `rewrite ?exp2_xlenbits in *; lia` and broke it. The message names no
+  hypothesis and points at the `assert`'s binder, so it reads as a parse error
+  in your own tactic. `pose proof exp2_xlenbits; lia` does the same job (hand
+  lia the equation and let it treat `bv.exp2 xlenbits` as an atom) and works
+  whether the bound arrives in the goal or in a hypothesis.
+- **`iApply HP` re-folds the goal**, so any `unfold` done before it is thrown
+  away. Apply the continuation first, then unfold.
+- **`subst kv` picks the FIRST equation on `kv`**, which is the
+  `N.of_nat (S k)` form the invariant exists to avoid. `clear Hkv.` before
+  `subst`.
+- **`N.le` `vm_compute`s to `Lt <> Gt`, which `lia` cannot close** —
+  `discriminate` does. The `nat`-`le` sibling in the same proof is a real
+  inequality and does want `lia`, so the two bullets of one `itable_faith_at`
+  application need different tactics.
+
 ## 6. Open
 
-- **Port the two hand-written proofs onto this API.** `Example/ZZMladDvGen.v`
-  (segment G's two contracts through `gen_seg_contract`, 79 lines vs 307) is
-  written; the heavy port of `dv_step`/`dv_exit`/`dv_loop` onto
-  `seg_step`/`seg_loop` is not yet a compiled artifact, though the fit was
-  verified interactively against the real goals.
+- **The other cuts.** Nine straight-line segments and three sliding loops still
+  need real postconditions and cut assertions. The machinery is now
+  call-site-tested, but only on a FIXED-footprint loop; the three sliding loops
+  need the cell-range fixpoint, which is untouched by this work.
 - **Gate coverage.** `GenCompose.vo` is listed explicitly in `gate.sh`'s
   `BUILD_TARGETS` because nothing in `Results.vo`'s closure Requires it yet.
   Drop it from that list once a tracked `Example/*Result.v` depends on it.

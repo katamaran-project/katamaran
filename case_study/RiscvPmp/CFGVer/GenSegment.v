@@ -214,8 +214,23 @@ Lemma seg_addr_step (ia off d : N) :
 Proof. unfold seg_addr. rewrite bv.of_N_add. f_equal. lia. Qed.
 
 (* `lia` chokes on 2^32 while bv.exp2 xlenbits is folded (bv-pitfalls); this is
-   the incantation, 5 copies of which were inline. *)
-Ltac bv_bound := change (bv.exp2 xlenbits) with 4294967296%N; lia.
+   the incantation, 5 copies of which were inline.
+
+   It supplies the value as a HYPOTHESIS rather than rewriting the goal.  The
+   `change (bv.exp2 xlenbits) with 4294967296%N; lia` form this replaces is a
+   trap: it unfolds only the goal, so a bound that arrives as a hypothesis
+   (`Hm : (m + 2 < bv.exp2 xlenbits)%N`) stays a DIFFERENT atom from the
+   goal's literal and lia reports "Cannot find witness" on something it could
+   have closed by treating both as the same opaque atom.  Handing lia the
+   equation instead works in BOTH directions.
+
+   Do NOT "improve" this to `rewrite ?exp2_xlenbits in *; lia`: `in *` fails
+   here with the (very unhelpful) "assumptions should be named explicitly",
+   measured 2026-09-10. *)
+Lemma exp2_xlenbits : bv.exp2 xlenbits = 4294967296%N.
+Proof. vm_compute; reflexivity. Qed.
+
+Ltac bv_bound := pose proof exp2_xlenbits; lia.
 
 (* ---- pc ALGEBRA -----------------------------------------------------------
    Segment addresses are written TWO ways across the hand-written proofs:
@@ -292,7 +307,14 @@ Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
     (ia head : N)
-    (prog : list AST) (skip take : nat)
+    (* `list AnnotInstr`, NOT `list AST`: cfg_instrs is an AnnotInstr list, so
+       with `list AST` here the coercion lands OUTSIDE the slicing
+       (`list_AST_AnnotInstr (firstn take (skipn skip prog))`) and can never
+       unify with GenCompose.itable_faith_at's `firstn take (skipn skip L)`
+       for `L : list AnnotInstr`.  Taking the AnnotInstr list makes the two
+       syntactically identical; a caller with a `list AST` program still just
+       writes it and lets the coercion fire at the argument. *)
+    (prog : list AnnotInstr) (skip take : nat)
     (targets : list N)
     (bound : N)
     (fl : nat)
