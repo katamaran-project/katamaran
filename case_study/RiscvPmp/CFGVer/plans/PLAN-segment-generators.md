@@ -398,6 +398,16 @@ FIXED, cell-range fixpoint when it SLIDES.
 
 ### Traps added by the port (2026-09-10)
 
+- **A polling predicate that matches the tool's own banner.** Waiting on
+  `scripts/gate.sh` with `grep -q "GATE" <log>` matches its hint lines
+  (`override with GATE_JOBS=N`), so every poll returned at once and I concluded
+  the gate had stalled for hours and killed two runs. It had not: with a correct
+  end-marker (`^real`) it passes in **5m50s**. Key on a token that can only
+  appear at the END. Same self-match class as the four hook misfires CLAUDE.md
+  banks. What IS measured about gate memory: an `AxiomProbe` peaks at ~7 GB
+  regardless of `GATE_PROBE_BATCH`, because the cost is loading `Results.vo`'s
+  closure — so RAISE the batch (fewer loads), never lower it.
+
 - **`rewrite ?lemma in *` can fail with "assumptions should be named
   explicitly."** I "improved" `bv_bound` from `change … ; lia` to
   `rewrite ?exp2_xlenbits in *; lia` and broke it. The message names no
