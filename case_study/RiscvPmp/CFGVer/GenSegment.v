@@ -665,3 +665,21 @@ Lemma seg_exitCond_hit0 (iq : N) (targets : list N) (t : N)
   seg_exitCond iq targets (bv.add (@bv.of_N xlenbits iq) (@bv.of_N xlenbits t))
   = true.
 Proof. rewrite <- seg_addr_add. now apply seg_exitCond_hit. Qed.
+
+(* The counter step of a COUNTED loop, at the bitvector level.  `addi ctr,ctr,-s`
+   assembles to an add of the wrap-around literal `2^32 - s` (RISC-V has no
+   subtract-immediate), so every counted loop's trip-to-trip transfer needs
+   exactly this rewrite.  Unconditional in `m`: it is the wrap that makes it
+   true, not a no-overflow side condition -- the `dvP`-style bound a loop
+   carries is for its GUARD, not for this step. *)
+Lemma bv_of_N_wrap_dec (s m : N) (Hs : (s <= bv.exp2 xlenbits)%N) :
+  bv.add (@bv.of_N xlenbits (m + s)) (@bv.of_N xlenbits (bv.exp2 xlenbits - s))
+  = @bv.of_N xlenbits m.
+Proof.
+  rewrite bv.of_N_add.
+  replace (m + s + (bv.exp2 xlenbits - s))%N with (m + bv.exp2 xlenbits)%N by lia.
+  rewrite <- (bv.of_N_add (n := xlenbits) m (bv.exp2 xlenbits)).
+  replace (@bv.of_N xlenbits (bv.exp2 xlenbits)) with (@bv.zero xlenbits)
+    by (vm_compute; reflexivity).
+  now rewrite bv.add_zero_r.
+Qed.

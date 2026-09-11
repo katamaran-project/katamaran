@@ -1196,19 +1196,33 @@ removes most of it; the rest is a Section carrying `iq/pia/pbound/Fr` and four
 placement hypotheses, which is the SAME unbuilt "bundle the placement facts"
 abstraction §3e identified for `seg_step1` and I have now deferred twice.
 
-`dv_dec` is generic and should move to `GenSegment` as a lemma about
-`ls_imm` -- that is 11 of the 102 gone for every counted loop.
+`dv_dec` is generic and HAS MOVED (2026-09-12) to `GenSegment` as
+`bv_of_N_wrap_dec s m : bv.add (of_N (m+s)) (of_N (exp2 xlenbits - s)) = of_N m`
+-- the wrap-around add that `addi ctr,ctr,-s` compiles to, unconditional in `m`
+(the no-overflow bound a loop carries is for its GUARD, not for this step).
+Every counted loop's decrement is now one line
+(`exact (bv_of_N_wrap_dec 1 m ltac:(bv_bound))`), 11 of the 102 gone.
 
 Genuinely per-loop and irreducible: `dv_guard`, `dv_exitg`, `dv_trans` and the
 valuation family -- 45 lines, and they ARE the loop's content.
 
-A TRAP THAT COST THREE HOURS: passing `HP0` as an inline
-`ltac:(unfold dvP; bv_bound)` argument inside the `exact` term sent coqc into a
-hang with no output -- killed after >10000 s. The identical proof with
-`assert (HP0 : dvP 0) by (unfold dvP; bv_bound)` on its own line Qeds in 40 ms.
-**Do not put `ltac:(…)` in a term-level argument here.** The interactive checks
-missed it because a `rocq_check` body without a trailing `Qed.` never runs the
-kernel; always include the `Qed.` when the question is whether it compiles.
+NOT A TRAP -- RETRACTED 2026-09-12. An earlier draft of this section claimed
+that passing `HP0` as an inline `ltac:(unfold dvP; bv_bound)` argument inside
+the `exact` term sent coqc into a >10000 s hang, and told you to use
+`assert (HP0 : dvP 0) by (…)` instead. **That is wrong.** The wall-clock came
+from the laptop being suspended mid-compile, not from the term. Measured
+directly (`rocq_start` at `dvs_exit`, `rocq_check` with the inline form and a
+trailing `Qed.`): **35 ms**, `dvs_exit is defined`. Both forms are fine; the
+`assert` in `ZZDvLoopThm.v` is kept only because it reads better.
+
+The method lesson that survives, and the reason this took a measurement to
+settle rather than a glance: **a wall-clock number from an unattended compile is
+not evidence of anything.** Suspend, swap and a contended machine are all
+invisible in "the call returned after N seconds". Before attributing a hang to a
+term, reproduce it interactively -- here that cost one `rocq_start` plus one
+`rocq_check`. (Include the trailing `Qed.` in the body: without it the kernel
+check never runs, so a `rocq_check` can go green on a body that `coqc` would
+reject.)
 
 ## 4. Deliberately NOT built
 
