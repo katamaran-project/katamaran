@@ -873,6 +873,42 @@ counter block, so `solve_step_post`'s prescribed shape does not fit it. An exit
 segment wants its own, simpler tactic. And the `seg_step1` argument block (6 of
 the 24 lines) still wants the `SegSpec` record from §3e.
 
+### 3m. WHERE THE MEMORY STARTS (2026-09-11)
+
+It is already a free parameter, and deliberately so. `loopCtx` carries TWO
+bases: `"q"`, the loop's own code base, and `"d"`, the data base. The generated
+contract says exactly one thing about `"d"` --
+
+    unsigned (term_var "d") + ls_dbound <= lenAddr
+
+-- an address-space bound. **Nothing relates `d` to `q`.** Where the data
+starts is not decided in the contract at all; composition supplies it, exactly
+as it supplies `q`. For muladd that will be `q = programBase + 540` and
+`d = programBase + 1128`, and the loop contract sees neither.
+
+MEASURED 2026-09-11: putting a cell at `d + 0` into `ls_mem_a`/`ls_mem_an`
+elaborates at both contexts and `solve_seg` still discharges (1.60 s vs
+1.51 s without). CAVEAT: divrem never READS that cell, so this validates the
+plumbing -- the cell rides in the frame across the loop -- and NOT a load
+through `d`. The first loop that actually reads memory is still the real test.
+
+Three limits worth knowing before relying on it:
+
+1. **One data base, one contiguous span.** `ls_dbound` bounds a single region
+   from `d`. A loop touching two disjoint regions (an input array and an
+   output array at unrelated addresses) needs two bases; today the second one
+   has to be folded into `ls_mem_a` with its bound stated by hand. Extending
+   `loopCtx` to a fixed small number of data bases is easy; making the number
+   arbitrary re-opens the weakening problem that fixing the context solved.
+2. **No disjointness is generated.** Not between the data region and the code,
+   and not between cells. Code-vs-data does not need it in this model
+   (instructions live in a separate `ptsto_instrs` resource, so a data write
+   cannot corrupt them). Cell-vs-cell DOES matter for a sliding loop -- that
+   is what `seg_addr_neq` is for, and the LoopSpec does not emit it.
+3. `ls_mem_a` / `ls_mem_an` are two hand-written copies, one per context,
+   because a cell's value sits under `asn.exist "mv"` while its address
+   mentions the base.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
