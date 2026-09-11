@@ -1168,6 +1168,48 @@ NOT DONE: the guard lemma (`dvP (S n) -> 1 <u k-1`, a `lia` plus two
 `loop_step`/`loop_exit`/`loop_counted` for divrem -- perhaps 30 lines,
 mechanical, but not written, so there is no `dv_loop` theorem yet.
 
+### 3t. DIVREM'S LOOP THEOREM IS DONE -- and where the lines actually go (2026-09-11)
+
+`Example/ZZDvLoopThm.v` compiles: **`dvs_loop : forall n, dvInv n -∗
+myWP2_loop Post`**. The loop, not just its body contract.
+
+Asked why the assembly was "~30 mechanical lines", I measured instead of
+estimating. It is 102 code lines, and the split is not what I said:
+
+| block | lines | what it is |
+|---|---|---|
+| `dvI`, `dvP`, `dvP_mono` | 6 | the valuation family and the no-wrap bound |
+| `dv_dec` | 11 | the bitvector decrement -- GENERIC across counted loops |
+| `dv_trans` | 19 | the trip-to-trip transfer |
+| `dv_guard` | 12 | the latch holds while trips remain |
+| `dv_exitg` | 8 | the latch falls through at trip 0 |
+| the assembly | 46 | three `exact`s and their statements |
+
+So the answer to "why 30 lines": it was not 30, and it is not proof. The three
+assembly lemmas have **3-line proofs and 9-line statements**, and the
+statements are almost entirely re-spelling `loop_inv`'s six arguments, twice
+each. A one-line abbreviation
+
+    Definition dvInv : nat -> iProp Σ := loop_inv (dvSpec iq) (dvI iq) … dvP.
+
+removes most of it; the rest is a Section carrying `iq/pia/pbound/Fr` and four
+placement hypotheses, which is the SAME unbuilt "bundle the placement facts"
+abstraction §3e identified for `seg_step1` and I have now deferred twice.
+
+`dv_dec` is generic and should move to `GenSegment` as a lemma about
+`ls_imm` -- that is 11 of the 102 gone for every counted loop.
+
+Genuinely per-loop and irreducible: `dv_guard`, `dv_exitg`, `dv_trans` and the
+valuation family -- 45 lines, and they ARE the loop's content.
+
+A TRAP THAT COST THREE HOURS: passing `HP0` as an inline
+`ltac:(unfold dvP; bv_bound)` argument inside the `exact` term sent coqc into a
+hang with no output -- killed after >10000 s. The identical proof with
+`assert (HP0 : dvP 0) by (unfold dvP; bv_bound)` on its own line Qeds in 40 ms.
+**Do not put `ltac:(…)` in a term-level argument here.** The interactive checks
+missed it because a `rocq_check` body without a trailing `Qed.` never runs the
+kernel; always include the `Qed.` when the question is whether it compiles.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
