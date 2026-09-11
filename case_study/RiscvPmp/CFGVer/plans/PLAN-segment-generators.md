@@ -368,9 +368,13 @@ not just its structure.
 
 - `seg_step1`'s argument order works: one `apply` with `eq_refl` for `Hec`
   leaves exactly HPre and HPost, in 7 ms.
-- `Post` must be a **parameter** of the per-trip lemma, not fixed to the
-  invariant: `myWP2_loop` has no monotonicity lemma, so a trip-indexed
-  invariant has to be reached from inside the step, not weakened afterwards.
+- ~~`Post` must be a **parameter** of the per-trip lemma, not fixed to the
+  invariant: `myWP2_loop` has no monotonicity lemma.~~ **RETRACTED 2026-09-11.**
+  No such lemma EXISTED, but it is a two-line corollary: `myWP2_loop` is a
+  monad in its ExitCond, `exitCondImpliesMyWP2_loop` is the unit and
+  `myWP2_loop_bind` the bind, so
+  `myWP2_loop_mono (H : P -∗ Q) : myWP2_loop P -∗ myWP2_loop Q` follows
+  immediately (56 ms). It is now in `GenCompose.v` §4. See §3i.
 
 ### Two fixes the port forced
 
@@ -679,6 +683,46 @@ with plain `lia`.
    Verify-once-reuse-anywhere needs that quantified too.
 6. **The invariant itself** -- which is the specification, and should stay
    hand-written.
+
+### 3i. LOOPS ARE ALLOWED TO BE DIFFERENT (2026-09-11)
+
+The owner's observation, and it holds up: the one thing the cut generator cannot
+collapse -- a register whose VALUE changes across the cut (`dvdec`) -- is
+specific to LOOP BACK EDGES, not to cuts in general. The reason is structural,
+not incidental:
+
+- At a **straight-line cut** you CHOOSE the cut assertion, so you can always
+  describe the state with fresh Σ variables and no computed terms. `cut_MN` is
+  the demonstration: pure data, one `iFrame`.
+- At a **back edge** you cannot. The invariant must be the SAME assertion at
+  entry and exit, and something must decrease, so the relation between the two
+  states is forced into the open. `dvdec` IS that relation
+  (`T4 |-> dvdec k` in the post vs `T4 |-> k` one trip on).
+
+So the right split is: cuts are data; loops carry one extra piece of
+arithmetic, and that is the price of a back edge.
+
+**`dvdec`, for the record.** `dvdec t := t +b 0xFFFFFFFF` in `ZZMladDvGen.v` --
+`t - 1` in 32-bit two's complement. It is index 135 / byte 540, the loop head,
+`addi T4, T4, -1`. It is written as an ADD and not `bop.bvsub` (which exists)
+because that is what the executor produces: `Machine.v:1200` gives
+`RISCV_ADDI => rs1_val +b immext`, RISC-V sign-extending the 12-bit `-1` to
+`0xFFFFFFFF`. MEASURED: rewriting `dvdec` as `term_binop bop.bvsub t 1` -- same
+value -- makes `solve_seg` fail with `No applicable tactic`. **The spelling is
+load-bearing; mirror the executor's term, do not simplify it.**
+
+**Landed: `myWP2_loop_mono`** (`GenCompose.v` §4, 2 lines). Corrects the
+retraction above. `dv_step_at` now states what a trip does --
+`dvInvAt ia F (m+1) -∗ myWP2_loop (dvInvAt ia F m)` -- instead of being
+parameterised over an arbitrary continuation, and the weakening moves to the
+call site (`iApply (myWP2_loop_mono _ _ (dvInvAt_to_N …))`).
+
+**BUT the line saving is 2, not the ~27 I estimated.** `ZZMladDvLoop2.v`
+204 -> 202 code lines. `dvInvAt_to_N` / `dv_step` / `dv_exit` are still needed:
+they bridge the kv-indexed invariant to the trip-indexed one, which is
+indexing, not weakening, and mono does not touch it. The value of mono is that
+the per-trip lemma is now a standalone, reusable statement -- not brevity.
+Do not quote the 27.
 
 ## 4. Deliberately NOT built
 

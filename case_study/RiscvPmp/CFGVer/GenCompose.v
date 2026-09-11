@@ -340,6 +340,21 @@ Section SegCompose.
     - iApply H1. iExact "H".
   Qed.
 
+  (* MONOTONICITY.  This did not exist, and its absence was recorded as a
+     design constraint -- "myWP2_loop has no monotonicity lemma, so a per-trip
+     lemma must take Post as a PARAMETER and reach the trip-indexed invariant
+     from inside the step".  That was wrong: `myWP2_loop` is a monad in its
+     ExitCond, `exitCondImpliesMyWP2_loop` is its unit and `myWP2_loop_bind`
+     its bind, and mono is the two-line corollary.  A per-trip lemma can now
+     say what it means -- `Inv (m+1) -∗ myWP2_loop (Inv m)` -- and be weakened
+     afterwards. *)
+  Lemma myWP2_loop_mono (P Q : iProp Σ) (H : P -∗ Q) :
+    myWP2_loop P -∗ myWP2_loop Q.
+  Proof.
+    iApply myWP2_loop_bind. iIntros "HP".
+    iApply exitCondImpliesMyWP2_loop. iApply H. iExact "HP".
+  Qed.
+
   (* ======================================================================== *)
   (* 4. THE LOOP COMBINATOR                                                   *)
   (* ======================================================================== *)
