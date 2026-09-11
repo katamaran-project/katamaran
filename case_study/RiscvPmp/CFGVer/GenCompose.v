@@ -394,7 +394,18 @@ Section SegCompose.
 
      What iFrame genuinely CANNOT cross is a register whose VALUE changed --
      the thing a segment is for.  That is this lemma, and its premise is
-     exactly the arithmetic the segment did. *)
+     exactly the arithmetic the segment did.
+
+     PREFER NOT TO NEED IT (2026-09-11).  A postcondition that BINDS a fresh
+     variable and states the change as a PURE equation --
+     `asn.exist "k2" (T4 |-> term_var "k2" ∗ formula (k2 = dvdec k) ∗ …)` --
+     keeps the spatial half DATA, so it frames like any other cut, and reduces
+     the arithmetic to `destruct`/`subst`/`rewrite` on a hypothesis. Measured on
+     segment G: the `asn_regidx_pts_inst` rewrite and BOTH written-out
+     valuations disappear (ZZMladDvLoop2.v 202 -> 196), the VC still discharges,
+     and this lemma is now referenced by NO call site. Keep it as the fallback
+     for a post that cannot be restructured; reach for the fresh variable
+     first. *)
   Lemma asn_regidx_pts_inst {R1 R2 : LCtx} (r : RegIdx)
     (t1 : Term R1 ty_xlenbits) (t2 : Term R2 ty_xlenbits)
     (i1 : Valuation R1) (i2 : Valuation R2)

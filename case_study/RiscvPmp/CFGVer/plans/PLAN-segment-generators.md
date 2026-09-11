@@ -724,6 +724,63 @@ indexing, not weakening, and mono does not touch it. The value of mono is that
 the per-trip lemma is now a standalone, reusable statement -- not brevity.
 Do not quote the 27.
 
+### 3j. THE BLUEPRINT, AND WHAT IS STILL MISSING FROM IT (2026-09-11)
+
+Asked: is there a blueprint for cuts and loop invariants needing essentially
+zero manual effort beyond identifying the invariant? **For cuts, yes and it is
+demonstrated. For loops, the pieces exist but nothing has been assembled
+end-to-end, and the per-trip lemma is still ~38 hand-written lines.**
+
+DEMONSTRATED:
+
+| step | what you write | status |
+|---|---|---|
+| segment contract | `gen_seg_contract …` | 1 line + `Proof. solve_seg. Qed.` |
+| its VC | `solve_seg` | 1 line |
+| sub-table + exit faithfulness | `eq_refl eq_refl Hwf`, inline | 0 lines |
+| every address-space bound | one `seg_wf ia bound` for the whole chain | 0 per cut |
+| a STRAIGHT-LINE cut | `solve_cut cpost cpre` | **1 line** |
+| a loop | `seg_loop` + `myWP2_loop_mono` | combinators done |
+| a value change at a back edge | fresh Σ var + pure equation in the post | see below |
+
+**NEW THIS ROUND, and it is the one that mattered.** The `dvdec` problem is
+solved by construction, not by a lemma. Write the post as
+
+```coq
+asn.exist "k2" ty_xlenbits
+  ( T4 |-> term_var "k2"
+    ∗ asn.formula (formula_relop bop.eq (term_var "k2") (dvdec (term_var "k")))
+    ∗ asn.formula (formula_secLeak (term_var "k2")) )
+```
+
+instead of putting the computed term `dvdec k` in the spatial part. MEASURED:
+the VC still discharges (`solve_seg`, 21.7 s), the `asn_regidx_pts_inst` rewrite
+and BOTH written-out valuations disappear, and the arithmetic becomes
+`destruct v; cbn in Heq; subst w; rewrite dv_dec`. `ZZMladDvLoop2.v` 202 -> 196
+code lines, and **`asn_regidx_pts_inst` is now referenced by no call site**
+(kept as the fallback). The rule: **a cut assertion, at a back edge too, must
+be DATA -- never a computed term.**
+
+STILL MISSING, and a blueprint claim should not be made until these close:
+
+1. **The per-trip lemma body is 38 lines** (`dv_step_at`), `dv_exit_at` another
+   22. Roughly: HPre ~18 (of which the latch guard is real program content and
+   the rest is `iSplit`/`iFrame`/`cbn` scaffolding), HPost ~12. A `solve_step`
+   tactic on the model of `solve_cut` looks feasible -- NOT built, NOT tested.
+2. **Invariant PACKAGING, ~28 lines** (`dvI`, `dvInvAt`, `dvInvN`, `dvOut`).
+   Identifying the invariant is the user's job and should stay so; the
+   valuation, the `∃kv`/`kv = n+2` trip bridge and the exit state are
+   boilerplate on top of it and look derivable.
+3. **THE TWO LINES OF WORK HAVE NEVER BEEN COMBINED.** `ZZRebaseN`/`ZZRebaseCut`
+   (re-based contracts, generated cut assertions) and `ZZMladDvLoop2` (the loop)
+   are separate probes; the loop still uses the OLD shared-base style with
+   hand-written cut assertions. Until one program uses both, "blueprint" is a
+   projection, not a result.
+4. **No re-based GENERATOR exists.** `sgN_reb` was hand-written as a record
+   literal; `gen_seg_contract` still takes `ia`/`head`.
+5. Fuel is still hand-tuned. Reuse at another address still blocked by
+   `cfg_init_addr`/`cfg_exitCond` naming `iq` concretely.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
