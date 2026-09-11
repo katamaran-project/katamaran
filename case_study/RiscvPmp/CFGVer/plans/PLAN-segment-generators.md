@@ -554,6 +554,75 @@ weakening to hand is `subst _ sub_wk1` -- a recorded Theta(|Sigma|^2) driver.
 This is the same wall `GenSegment.v` documents for a generic memory-block
 builder. A shared data base makes the DUPLICATION more visible, not worse.
 
+### 3g. GENERATING BOTH SIDES OF A CUT -- the framing does collapse (2026-09-11)
+
+Goal stated by the owner: minimise MANUAL WORK, not run time; each segment
+verified independently and reusable; and `gen_contract` (or a slight adaptation)
+used for the pre- AND post-condition at a cut, in the hope that the framing then
+disappears. Measured on the M->N cut. Probes `ZZRebaseN.v` (118) +
+`ZZRebaseCut.v` (88), both green.
+
+**It is not a hope, it is a mechanism.** `iFrame` matches SYNTACTICALLY. Two
+convertible copies of an assertion do not match; ONE Sigma-generic definition
+applied at two contexts does. That is precisely why `gen_regs_at` was built, and
+why registers already cross a cut for free. Extending it to the whole cut:
+
+```coq
+Definition gen_mem_at {Σ} (base : Term Σ ty_xlenbits)
+    (specs : list (N * Term Σ ty_xlenbits)) : Assertion Σ := …
+Definition gen_cut_at {Σ} (base : Term Σ ty_xlenbits)
+    (regs : list reg_spec_rel) (mems : list (N * Term Σ ty_xlenbits))
+    : Assertion Σ :=
+  ( gen_regs_at base regs ∗ gen_mem_at base mems
+    ∗ asn.formula (formula_secLeak base) )%asn.
+```
+
+A cut is then DATA -- one base, one register spec list, one memory spec list --
+and the producing segment's post and the consuming segment's pre are the same
+application of it. **Result: the cut hand-off is `iIntros "(Hcut & Hmin)"` and
+`iFrame`.** Packaged:
+
+```coq
+Ltac solve_cut cpost cpre :=
+  unfold cpost, cpre, extend_to_minimal_pre;
+  cbn [cfg_postcondition cfg_precondition];
+  iIntros "(Hcut & Hmin)"; iFrame;
+  cbn; repeat iSplit; try done; iPureIntro; assumption.
+```
+and the whole cut is `Proof. solve_cut m_cut sgN_reb. Qed.`
+
+Against what it replaces -- the hand-off half of `ZZMladTail.linkFN`, same cut,
+same content: **10 lines -> 1**, two `unfold` chains (8 and 4 definitions) -> 0,
+a six-way `iDestruct` -> a two-name `iIntros`. Everything after the `iFrame` is
+NOT framing: it is the three pure residues every cut has (the pc equation and
+the two address-space bounds a postcondition may not claim), and `linkFN` is
+left with exactly the same three.
+
+**What had to be solved to get there: the memory builder.** `gen_mem_asn_rel`
+puts the cell value under `asn.exist "mv"` while the address mentions the base,
+so a `Term Σ` parameter needs weakening -- `subst _ sub_wk1`, the recorded
+Theta(|Σ|^2) driver -- which is why `GenSegment.v` deliberately has no memory
+builder. The way through is the one that comment itself names: **take the cell
+VALUES as parameters so the builder never extends the context.** The values then
+live in Σ and the composition existentially quantifies them at the iProp level,
+exactly as `dvInvN` already does for its counter.
+
+**The cost of that, MEASURED, and do not over-read it.** Moving four cell values
+into Σ takes sgN's context from 2 to 6 variables. Matched `-time` runs of the
+same VC: `solve_seg` 0.878 s -> 0.918 s, `Qed` 0.629 s -> 0.634 s. Invisible.
+BUT this is a 5-instruction segment with 4 cells, and |Σ| is the measured
+QUADRATIC driver ([[project-lvar-lookup]]) -- a 27-instruction segment carrying
+16 cells is a different question and has not been measured. Do not quote 4.5%
+as "the cost of values-in-Σ".
+
+Non-vacuity checked on the values-in-Σ form too: drop one cell from `cutMems`
+and `solve_seg` fails with `No applicable tactic`.
+
+**Still hand-written after this, at a cut:** nothing, for the spatial part. What
+remains per cut is the pc equation and the bounds, both pure and both already
+one `assumption` inside `solve_cut`. What remains per SEGMENT is the invariant
+itself -- which is the specification, and should stay hand-written.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
