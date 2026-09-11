@@ -426,6 +426,49 @@ Section SegCompose.
      `iSplitR "HF Hpc Hnpc Hinstrs"; [| iFrame]` and the same work is 0.4 s.
      Measured on ZZMladDvLoop2.v: 47.8 s -> 28.5 s for the whole file. *)
 
+
+  (* ======================================================================== *)
+  (* 6. COUNTED LOOPS                                                         *)
+  (* ======================================================================== *)
+
+  (* Exit-table faithfulness for a RE-BASED segment: the contract is stated at
+     its own entry address, so head is 0 and the targets are already relative.
+     seg_exits_faith's head-shifted form does not apply definitionally
+     (`t - 0` and `q +b of_N 0` are both stuck on a symbolic argument). *)
+  Lemma seg_exits_faith0 {R : LCtx} (place : Term R ty_xlenbits)
+      (iota : Valuation R) (iq : N) (targets : list N)
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
+            = ty.SyncVal (@bv.of_N xlenbits iq)) :
+    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+      (seg_exitCond iq targets) (exits_of_offs place targets) iota.
+  Proof.
+    apply etable_faith_exits_of_offs with (cbase := @bv.of_N xlenbits iq);
+      [exact Hp |].
+    apply List.Forall_forall. intros o Hin.
+    apply List.in_map_iff in Hin as [t [Heq Hint]]. subst o.
+    now apply seg_exitCond_hit0.
+  Qed.
+
+  (* The valuation at trip n: the two bases, and the counter at ls_at n. *)
+  Definition loop_iota (ls : LoopSpec) (q d : bv xlenbits) (n : nat)
+      : Valuation loopCtx :=
+    [env].["q"∷ty_xlenbits ↦ ty.SyncVal q]
+         .["d"∷ty_xlenbits ↦ ty.SyncVal d]
+         .["k"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (ls_at ls n))].
+
+  (* THE LOOP INVARIANT.  Generated: the counter pinned at `ls_at n`, the
+     frame, and the four ambient resources every segment carries.  `Fr` is
+     what the loop never touches, and it is opaque -- which is what lets a
+     SLIDING footprint be passed here as `cells n` with nothing in this file
+     changing. *)
+  Definition loop_inv (ls : LoopSpec) (q d : bv xlenbits)
+      (Fr Instrs : iProp Σ) (n : nat) : iProp Σ :=
+    ( asn.interpret (gen_loop_win ls)
+        ((loop_iota ls q d n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      ∗ Fr ∗ pc ↦ᵣ ty.SyncVal q
+      ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
+      ∗ Instrs )%I.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
