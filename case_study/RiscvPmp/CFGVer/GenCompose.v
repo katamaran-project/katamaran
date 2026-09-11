@@ -462,15 +462,198 @@ Section SegCompose.
      (it is verified once and used at every trip), while the invariant
      instantiates the moving variables per trip.
 
-     `Fr` is what the loop never touches, and it is opaque. *)
+     `Fr` is what the loop never touches, and it is opaque.
+
+     `P` is a pure side condition carried per trip.  It is NOT decoration:
+     a counter's no-wrap bound (`ls_at n + 1 < 2^32`) holds only below 2^32,
+     while seg_loop's step is quantified over ALL n, so without somewhere to
+     put it the step is unprovable.  The hand-written dvInvN carried exactly
+     this.  The caller also supplies P (S n) -> P n, which is immediate for a
+     bound that shrinks with the counter. *)
   Definition loop_inv {R : LCtx} (ls : LoopSpec R)
       (iotaf : nat -> Valuation R) (q : bv xlenbits)
-      (Fr Instrs : iProp Σ) (n : nat) : iProp Σ :=
-    ( asn.interpret (gen_loop_win ls)
+      (Fr Instrs : iProp Σ) (P : nat -> Prop) (n : nat) : iProp Σ :=
+    ( bi_pure (P n)
+      ∗ asn.interpret (gen_loop_win ls)
         ((iotaf n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
       ∗ Fr ∗ pc ↦ᵣ ty.SyncVal q
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
       ∗ Instrs )%I.
+
+  (* ---- ONE TRIP ---------------------------------------------------------- *)
+
+  (* Everything generic is discharged here.  What the caller supplies is
+     exactly the loop's own content:
+       Hpl/Hpa : the valuation family pins the code base (reflexivity in
+                 practice, since a caller's iotaf maps "q" to a literal);
+       Hg      : the GUARD holds at trip S n -- one arithmetic fact;
+       Htrans  : one trip's POSTcondition establishes the next trip's
+                 invariant -- the counter decremented and the frame moved on.
+     Htrans is where a sliding footprint lives: the contract is
+     trip-independent, and iotaf moves the pointers. *)
+  Lemma loop_step {R : LCtx} (ls : LoopSpec R) (pia pbound : N)
+      (Fr : iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop) (n : nat)
+      (HPm : P (S n) -> P n)
+      (Hq : @bv.of_N xlenbits (ls_iq ls)
+            = bv.add (@bv.of_N xlenbits pia)
+                (@bv.of_N xlenbits (4 * N.of_nat (ls_skip ls))))
+      (Hok : seg_ok (ls_prog ls) (ls_skip ls)
+               (4 * N.of_nat (ls_skip ls))%N pbound [0%N] = true)
+      (Hwf : seg_wf pia pbound)
+      (Hv  : ValidCFGVerifierContract (loop_body ls))
+      (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q ls) (iotaf (S n))
+             = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
+      (Hpa : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls)
+               ((iotaf (S n)).["a"∷ty_xlenbits
+                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+             = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
+      (Hg  : P (S n) ->
+             instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls)))
+               ((iotaf (S n)).["a"∷ty_xlenbits
+                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
+      (Htrans : P (S n) ->
+         asn.interpret (cfg_postcondition (loop_body ls))
+           (((iotaf (S n)).["a"∷ty_xlenbits
+               ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+              .["an"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+         ⊢ asn.interpret (gen_loop_win ls)
+             ((iotaf n).["a"∷ty_xlenbits
+                ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])) :
+    loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+      (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+         (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+      P (S n)
+    -∗ myWP2_loop (loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+         (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+            (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+         P n).
+  Proof.
+    (* Peel the pure side condition FIRST: the two bullets are separate goals,
+       so an iIntros inside HPre would not scope over HPost, and HPost is
+       where P n has to be re-established. *)
+    unfold loop_inv at 1.
+    iIntros "(%HP & H)".
+    iApply (seg_step1 (loop_body ls) (iotaf (S n))
+             (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
+             (@bv.of_N xlenbits pia) Fr (ls_iq ls) 0%N eq_refl Hv
+             (seg_itable_faith (cfg_placement (loop_body ls)) (iotaf (S n))
+                pia (ls_prog ls) (ls_skip ls) (ls_take ls)
+                (4 * N.of_nat (ls_skip ls))%N pbound [0%N] Hok
+                ltac:(cbn [cfg_placement loop_body gen_loop_contract];
+                      rewrite Hpl; now rewrite Hq) Hwf)
+             (seg_exits_faith0 (cfg_placement (loop_body ls)) (iotaf (S n))
+                (ls_iq ls) [0%N] Hpl) with "H").
+    - (* HPre: the invariant IS the precondition minus the branch decision, at
+         the SAME valuation, so one iFrame takes it whole. *)
+      unfold seg_entry, extend_to_minimal_pre, gen_loop_win.
+      iIntros "(H & HF & Hpc & Hnpc & Hinstrs)".
+      iSplitL "HF"; [ iFrame |].
+      iSplitR "Hpc Hnpc Hinstrs"; [| iFrame].
+      cbn [cfg_precondition loop_body gen_loop_contract gen_loop_pre
+           asn.interpret].
+      iDestruct "H" as "[Hcore Hmin]".
+      iFrame "Hcore Hmin".
+      unfold asn_pc_eq; cbn.
+      iSplit; [iPureIntro; now rewrite Hpa |].
+      iSplit; [iPureIntro; exact (Hg HP) | done].
+    - (* HPost: frame the ambient half, then the caller's transfer. *)
+      unfold loop_inv, seg_exit_at.
+      rewrite seg_addr_0.
+      iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
+      iSplit; [iPureIntro; exact (HPm HP) |].
+      iSplitR "HF Hpc Hnpc Hinstrs"; [| iFrame].
+      iApply (Htrans HP). iExact "Hpost".
+  Qed.
+
+  (* ---- THE EXIT TRIP ------------------------------------------------------ *)
+
+  (* Same shape, with the exit guard and the fall-through target.  `Out` is
+     whatever the caller wants to hand the next segment -- this is the cut out
+     of the loop, and it is genuine specification. *)
+  Lemma loop_exit {R : LCtx} (ls : LoopSpec R)
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (pia pbound : N) (Fr Out : iProp Σ) (iotaf : nat -> Valuation R)
+      (P : nat -> Prop) (HP0 : P 0)
+      (Hq : @bv.of_N xlenbits (ls_iq ls)
+            = bv.add (@bv.of_N xlenbits pia)
+                (@bv.of_N xlenbits (4 * N.of_nat (ls_skip ls))))
+      (Hok : seg_ok (ls_prog ls) (ls_skip ls)
+               (4 * N.of_nat (ls_skip ls))%N pbound [ls_exit ls] = true)
+      (Hwf : seg_wf pia pbound)
+      (Hv  : ValidCFGVerifierContract (loop_final ls post))
+      (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q ls) (iotaf 0)
+             = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
+      (Hpa : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls)
+               ((iotaf 0).["a"∷ty_xlenbits
+                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+             = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
+      (Hg  : instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls)))
+               ((iotaf 0).["a"∷ty_xlenbits
+                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
+      (HOut : Fr ∗ seg_exit_at (loop_final ls post) (iotaf 0)
+                     (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
+                     (@bv.of_N xlenbits pia)
+                     (seg_addr (ls_iq ls) (ls_exit ls))
+              -∗ Out) :
+    loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+      (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+         (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+      P 0
+    -∗ myWP2_loop Out.
+  Proof.
+    apply (seg_step1 (loop_final ls post) (iotaf 0)
+             (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
+             (@bv.of_N xlenbits pia) Fr (ls_iq ls) (ls_exit ls) eq_refl Hv
+             (seg_itable_faith (cfg_placement (loop_final ls post)) (iotaf 0)
+                pia (ls_prog ls) (ls_skip ls) (ls_take ls)
+                (4 * N.of_nat (ls_skip ls))%N pbound [ls_exit ls] Hok
+                ltac:(cbn [cfg_placement loop_final gen_loop_contract];
+                      rewrite Hpl; now rewrite Hq) Hwf)
+             (seg_exits_faith0 (cfg_placement (loop_final ls post)) (iotaf 0)
+                (ls_iq ls) [ls_exit ls] Hpl)).
+    - unfold loop_inv, seg_entry, extend_to_minimal_pre, gen_loop_win.
+      iIntros "(_ & H & HF & Hpc & Hnpc & Hinstrs)".
+      iSplitL "HF"; [ iFrame |].
+      iSplitR "Hpc Hnpc Hinstrs"; [| iFrame].
+      cbn [cfg_precondition loop_final gen_loop_contract gen_loop_pre
+           asn.interpret].
+      iDestruct "H" as "[Hcore Hmin]".
+      iFrame "Hcore Hmin".
+      unfold asn_pc_eq; cbn.
+      iSplit; [iPureIntro; now rewrite Hpa |].
+      iSplit; [iPureIntro; exact Hg | done].
+    - exact HOut.
+  Qed.
+
+  (* ---- THE WHOLE LOOP ----------------------------------------------------- *)
+
+  (* seg_loop, instantiated.  Given a step for every trip and an exit, the
+     loop runs to its continuation. *)
+  Lemma loop_counted {R : LCtx} (ls : LoopSpec R) (pia : N)
+      (Fr Out Post : iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
+      (Hstep : forall n,
+         loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+           (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+              (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+           P (S n)
+         -∗ myWP2_loop (loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+              (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+                 (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia)
+                    (ls_prog ls))) P n))
+      (Hexit :
+         loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+           (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+              (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+           P 0
+         -∗ myWP2_loop Out)
+      (Hcont : Out -∗ myWP2_loop Post) :
+    forall n,
+      loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+        (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+           (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+        P n
+      -∗ myWP2_loop Post.
+  Proof. apply (seg_loop _ Out Post Hstep Hexit Hcont). Qed.
 
 End SegCompose.
 

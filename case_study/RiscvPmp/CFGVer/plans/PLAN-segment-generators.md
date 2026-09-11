@@ -1128,6 +1128,46 @@ THEOREM -- HPost, the exit lemma, the induction -- is unfinished (§3o), so
 "verifies" here means every loop's body contract discharges, not that any loop
 is proved to run to its exit.
 
+### 3s. THE LOOP THEOREM (2026-09-11) -- generic part DONE
+
+`GenCompose.v` §6 now carries the three lemmas, all compiling:
+
+- **`loop_step`** -- one trip. `apply (seg_step1 …)` works generically off the
+  LoopSpec, and both bullets collapse: HPre because the invariant IS the
+  precondition minus the branch decision at the SAME valuation (one `iFrame`
+  takes it whole, leaving only the pc equation and the guard); HPost because
+  the ambient half frames and the rest is the caller's transfer.
+- **`loop_exit`** -- the same with the exit guard and the fall-through target.
+- **`loop_counted`** -- `seg_loop` instantiated.
+
+What the caller supplies is exactly the loop's own content: `Hpl`/`Hpa` (the
+valuation pins the code base -- `reflexivity` in practice), `Hg` (the guard
+holds at trip S n), and `Htrans` (one trip's postcondition establishes the next
+trip's invariant).
+
+**`loop_inv` gained a pure side condition `P : nat -> Prop`, and it is NOT
+decoration.** A counter's no-wrap bound (`ls_at n + 1 < 2^32`) holds only below
+2^32, while `seg_loop`'s step is quantified over ALL n -- with nowhere to put
+it the step is simply unprovable. The hand-written `dvInvN` carried exactly
+this. The caller also supplies `P (S n) -> P n`, immediate for a bound that
+shrinks with the counter.
+
+TRAP, and it shaped the proof: **the two bullets of `seg_step1` are separate
+goals, so an `iIntros` inside HPre does not scope over HPost** -- and HPost is
+where `P n` must be re-established. Peel the pure conjunct BEFORE applying:
+`unfold loop_inv at 1; iIntros "(%HP & H)"; iApply (seg_step1 … with "H")`.
+
+END-TO-END on divrem (`Example/ZZDvLoopThm.v`): `dvI` (the valuation family),
+`dvP` + `dvP_mono` (the no-wrap bound), `dv_dec` (the bitvector decrement) and
+**`dv_trans` -- the trip-to-trip transfer, PROVED**. It is 12 lines: destructure
+the post's fresh-variable block, show the witness equals k-1, and frame. The
+bounds and the register block cross the valuation change untouched.
+
+NOT DONE: the guard lemma (`dvP (S n) -> 1 <u k-1`, a `lia` plus two
+`bv.bin_of_N_small`) and the three applications that assemble
+`loop_step`/`loop_exit`/`loop_counted` for divrem -- perhaps 30 lines,
+mechanical, but not written, so there is no `dv_loop` theorem yet.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
