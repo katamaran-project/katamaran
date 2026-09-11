@@ -444,8 +444,9 @@ Section SegCompose.
   Proof.
     apply etable_faith_exits_of_offs with (cbase := @bv.of_N xlenbits iq);
       [exact Hp |].
+    (* NB: offs IS targets here -- there is no `map (.- head)` to invert, unlike
+       seg_exits_faith.  Copying its `in_map_iff` line does not typecheck. *)
     apply List.Forall_forall. intros o Hin.
-    apply List.in_map_iff in Hin as [t [Heq Hint]]. subst o.
     now apply seg_exitCond_hit0.
   Qed.
 

@@ -560,25 +560,31 @@ Definition gen_loop_frame (ls : LoopSpec) {Σ : LCtx}
 
 (* ---- the two contracts, generated as a PAIR so they cannot disagree ------ *)
 
-(* Common to both: the counter is held, is public, and the branch has been
-   decided one way or the other on its POST-decrement value.  That the guard
-   is applied to `ls_step` and not to the raw counter is the off-by-one this
-   design exists to make impossible: the head decrements, THEN the branch
-   tests. *)
-(* What is true at the loop head EVERY trip: the counter is held and public,
-   and the frame is intact.  This is the loop INVARIANT's assertion half, and
-   it is deliberately a PREFIX of both contracts' preconditions -- the only
-   thing either adds is the branch decision. *)
-Definition gen_loop_win (ls : LoopSpec)
+(* The counter and the frame.  SHARED by the contracts' preconditions and the
+   invariant, which differ only in what each adds.
+
+   MIND THE minimal_pre.  `CFG_VC_triple` already wraps a contract's
+   precondition in `extend_to_minimal_pre`, so gen_loop_pre must NOT carry it
+   -- a second copy makes the precondition demand two and the postcondition
+   return one, i.e. the body consumes cur_privilege / inv_leakage every trip
+   and can only ever run ONCE.  That still VERIFIES (the executor is happy to
+   leave a chunk on the heap), so it fails late and only at composition; it is
+   the amBody_post bug, and it bit this file too.  The INVARIANT does carry
+   minimal_pre, because it describes the whole state at the loop head. *)
+Definition gen_loop_core (ls : LoopSpec)
     : Assertion (loopCtx ▻ "a"∷ty_xlenbits) :=
   ( ls_ctr ls ↦ᵣ term_var "k" ∗ secLeakvar "k"
-    ∗ gen_loop_frame ls (term_var "q") (term_var "d") (ls_mem_a ls)
-    ∗ minimal_pre )%asn.
+    ∗ gen_loop_frame ls (term_var "q") (term_var "d") (ls_mem_a ls) )%asn.
 
+Definition gen_loop_win (ls : LoopSpec)
+    : Assertion (loopCtx ▻ "a"∷ty_xlenbits) :=
+  ( gen_loop_core ls ∗ minimal_pre )%asn.
+
+(* ...and the branch decision is the ONLY thing a contract adds. *)
 Definition gen_loop_pre (ls : LoopSpec)
     (g : forall Σ : LCtx, Term Σ ty_xlenbits -> Formula Σ)
     : Assertion (loopCtx ▻ "a"∷ty_xlenbits) :=
-  ( gen_loop_win ls
+  ( gen_loop_core ls
     ∗ asn.formula (g _ (ls_step (ls_imm ls) (term_var "k"))) )%asn.
 
 (* The body's post names a FRESH variable and states the decrement as a PURE
