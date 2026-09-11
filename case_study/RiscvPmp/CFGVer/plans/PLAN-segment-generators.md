@@ -781,6 +781,51 @@ STILL MISSING, and a blueprint claim should not be made until these close:
 5. Fuel is still hand-tuned. Reuse at another address still blocked by
    `cfg_init_addr`/`cfg_exitCond` naming `iq` concretely.
 
+### 3k. A FOR-LOOP TACTIC: possible, but NOT over a free-form invariant (2026-09-11)
+
+Asked whether a tactic specialised to counted for-loops (which is what compiled
+C gives us) could absorb the per-trip lemma the way `solve_cut` absorbs a cut.
+Most of `dv_step_at`'s 38 lines ARE generic -- the two `iIntros` patterns, the
+split-before-framing dance, `rewrite seg_addr_add`, the final bound. What is
+per-loop is the guard at trip m and the decrement arithmetic, and for a counted
+loop both are small.
+
+The blocker is the `iDestruct` pattern, and it is not cosmetic. MEASURED, three
+ways on the same goal:
+
+| how the invariant hypothesis is broken up | `iFrame` |
+|---|---|
+| named, arity-aware: `iDestruct "H" as "(Hbnd & HT4 & Hsl & Hregs & Hmin)"` then `iFrame "Hbnd HT4 Hsl Hregs Hmin"` | **0.35 s** |
+| arity-blind `repeat (iDestruct "H" as "[? H]")` then bare `iFrame` | **TIMEOUT > 300 s** |
+| same, with `minimal_pre` also unfolded so both sides split alike | **TIMEOUT > 150 s** |
+
+So the named pattern is doing two jobs, and the second one is invisible: it
+says WHERE TO STOP SPLITTING (at `minimal_pre`, keeping it whole), and it gives
+`iFrame` an explicit ORDERED list. Bare `iFrame` over many separate hypotheses
+explodes -- the same pathology already recorded for the opposite extreme
+(`iFrame "Hpc"` alone, one hypothesis at a time, also > 300 s). **iFrame wants
+a named list of the right length; both "all at once, unnamed" and "one at a
+time" are pathological.**
+
+Consequence, and it is the same conclusion as everywhere else in this file:
+**a per-trip tactic is writable only against a GENERATED invariant**, whose
+conjunct structure -- hence the destructure pattern and the frame list -- is
+fixed and known. Against a hand-written invariant the pattern is part of the
+specification and cannot be inferred.
+
+So the shape of the thing to build is `gen_loop_inv base regs mems counter`
+(fixed arity) plus `solve_loop_step`, leaving exactly two obligations per loop:
+the guard holds at trip m, and the counter decrements. For a compiled C
+for-loop those are one `lia` and one `dv_dec`.
+
+NOT BUILT. It collides with the `LoopSpec` decision in §4 -- which was taken
+against a record that CONSTRUCTS the invariant, because the two worked loops
+differ exactly there (G has a fixed footprint and uses an opaque frame; the
+tail slides and uses a cell-range fixpoint). `gen_loop_inv` would have to
+handle both, or be restricted to the fixed-footprint case and say so. That
+fork needs deciding before it is written, not after. (Note §4's memory-builder
+objection is partly overtaken: `gen_mem_at`, values-as-parameters, now exists.)
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
