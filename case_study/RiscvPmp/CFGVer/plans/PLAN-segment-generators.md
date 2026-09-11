@@ -1040,6 +1040,42 @@ NOT DONE: the `solve_symbase_fetch` alternative does not fire end to end.
 So loop B still carries the ~10-line hand arithmetic; the lemma that should
 replace it exists and is proved, and only the plumbing is missing.
 
+### 3q. LOOP C FITS -- the generality check passes (2026-09-11)
+
+Loop C (idx 113..117) was chosen precisely because it violates BOTH assumptions
+the counter fields appear to make:
+
+    113  lw   T2, -4(T1)      114  addi T3, T1, -4     115  sw   T2, 0(T1)
+    116  mv   T1, T3          117  bne  T3, T0
+
+There is NO counter register -- the loop variable IS the pointer T1 -- and the
+limit is another REGISTER, T0, not a constant. It fits anyway, for three
+reasons worth naming because none was designed in:
+
+1. **The "counter" may be the pointer.** `ls_imm := -4`, and the guard is
+   applied to `ls_step`, which is exactly the value `bne` tests (`T3 = T1-4`).
+   The decrement-then-test convention happens to be what a pointer loop does
+   too.
+2. **`ls_guard` may mention ANY variable of the context**, so a register limit
+   is just a logic variable `"e"` that T0 is pinned to. This is the thing the
+   FIXED context could not do (§3n).
+3. **`ls_at` is not consulted by the contracts at all.** So a counter whose
+   value is SYMBOLIC -- here `e + 4n`, not a concrete address -- costs
+   nothing. NOTE: `ls_at` is currently a DEAD FIELD; `loop_inv` takes the
+   valuation family from the caller. It will earn its place when the loop
+   theorem's induction is written, and not before.
+
+RESULT: `solve_seg` drives the executor through the WHOLE body and leaves
+exactly ONE residual, IDENTICAL in shape to loop B's -- the `base - 4` access
+bound -- closed by the same ~10 lines. Non-vacuity checked: delete the
+`4 <= unsigned p1` conjunct and the arithmetic step fails, i.e. the contract
+genuinely needs the lower bound it supplies.
+
+muladd is now **3 of 7 loops** through the framework (divrem, B, C), and the
+two remaining shapes are the counter-vs-counter `bltu A5, A4` at idx 16 and the
+two-pointer loops at 190/237/264. Nothing seen so far suggests they do not
+fit; what they need is spec-writing.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
