@@ -964,6 +964,53 @@ for a counted loop with a FIXED footprint, yes -- divrem is two `solve_seg`
 one-liners off a 17-field record. For muladd's other six, no, and it needs the
 context parameterised first.
 
+### 3o. THE FIX APPLIED: Sigma-parametric LoopSpec (2026-09-11)
+
+`LoopSpec` is now `Record LoopSpec {Σ : LCtx}`. The code base and the counter
+are explicit TERMS, supplied once per context they appear in; the bases are a
+LIST of (term, bound) pairs whose address-space conjuncts are generated; and
+`ls_extra_a`/`ls_extra_an` is the escape hatch for what a spec list cannot
+say -- a walking pointer's value, memory cells, an extra bound.
+
+The counter needs FOUR copies (`ls_k_a`, `ls_k_an`, `ls_k_anc`) because the
+post binds a fresh variable and a `Term (Σ ▻ "a" ▻ "an")` does not weaken under
+`asn.exist "c"`. Writing `term_var "k"` four times is tedious, but it is
+resolution, not proof.
+
+RESULTS:
+
+- **divrem still verifies**, 1.36 s (was 1.51 s) -- and its context SHRANK to
+  `["q"; "k"]`. The fixed version forced an unused data base into every loop;
+  now a loop declares exactly the variables it has.
+- **loop B now verifies** -- idx 84..89, the memmove-down loop, which the
+  fixed-context version could not even STATE. Its walking pointer S0 is a
+  logic variable `"sp"`, the two cells it touches are addressed off it, and
+  the guard is `c <> 0` against the counter T6.
+
+So muladd is 2 of 7 loops through the framework, against 1 before, and the
+five remaining are now EXPRESSIBLE -- the guard may mention any variable in
+Σ (so `bne T3, T0` against a register limit is fine) and a pointer may be a
+variable (so a sliding footprint is fine). What is left for them is
+spec-writing, not a framework limit.
+
+ONE NEW GAP, and it is small and precise. Loop B's `solve_seg` gets the
+executor ALL THE WAY THROUGH the body and leaves exactly ONE residual: the
+upper bound for the access at `sp - 4`. `solve_symbase_fetch` cannot close it
+because it only knows base PLUS a positive offset, and this address is
+`0xfffffffc + sp`, whose `bv.bin` WRAPS. Discharged by hand in the probe:
+
+    rewrite bv.bin_add; (bv.bin of the literal and bv.exp2 32 by vm_compute);
+    replace (c + bin w) with ((bin w - 4) + 1 * 2^32) by lia;
+    rewrite N.Div0.mod_add; apply N.mod_small; lia.
+
+The right fix is a `fetch_bound_step_neg` beside the existing
+`fetch_bound_step`, so `solve_symbase_fetch` handles base-minus-offset. Until
+then, any loop walking a pointer DOWNWARD pays ~10 lines once.
+
+(Two syntax notes banked: `rewrite H1, H2.` and `rewrite ... by tac` both hit
+`Syntax error: [ltac_use_default] expected` through rocq-mcp; split into
+separate `rewrite` calls and a braced sub-proof.)
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under

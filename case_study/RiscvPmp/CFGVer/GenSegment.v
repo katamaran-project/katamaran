@@ -485,35 +485,26 @@ Ltac reg_reduce :=
 (* ========================================================================== *)
 
 (* A loop is stated ONCE, as data, and BOTH its segment contracts plus its
-   invariant are generated from that.  Two design choices worth knowing:
+   invariant are generated from that.
 
-   THE CONTEXT IS FIXED.  `loopCtx` is ["q"; "d"; "k"] -- the loop's own CODE
-   base, the program's DATA base, and the counter.  Fixing it is what makes
-   this tractable: a Sigma-generic builder has to take every term twice (once
-   at Sigma, once at Sigma > "a") because an Assertion's context is an index,
-   and a memory cell's address would additionally need weakening under
-   `asn.exist "mv"` -- the `subst _ sub_wk1` wall.  With the context fixed,
-   `term_var "d"` simply RESOLVES at whatever context it is written in, and
-   both problems vanish.  The cost is that a loop needing extra logic
-   variables does not fit; `gen_loop_extra` is the escape hatch.
+   THE CONTEXT IS A PARAMETER.  An earlier version fixed it at ["q";"d";"k"],
+   which bought a large simplification -- `term_var "d"` resolves at whatever
+   context it is written in, so no term has to be passed twice and nothing
+   needs weakening under `asn.exist`.  It also made the framework fit exactly
+   ONE of muladd's seven loops: six of them compare the counter against a
+   REGISTER (needing a limit variable) and every one walks a POINTER (needing
+   a pointer variable), and a fixed context has no room for either.  So Sigma
+   is a parameter and the counter and the bases are explicit terms.
 
-   THE DATA CELLS ARE THE CALLER'S ASSERTION, not a spec list.  The data BASE
-   "d" and its address-space bound ARE structural (generated, and the bound is
-   discharged from the program's single seg_wf), but the cells themselves are
-   two Assertion fields, one per context.  Reason: a cell's value sits under
-   `asn.exist "mv"` while its address mentions the base, so a Sigma-generic
-   builder would need `subst _ sub_wk1` -- the recorded Theta(|Sigma|^2)
-   driver.  ZZMladCommon reaches the same conclusion and calls the per-context
-   copies "cheaper than being clever here".  divrem needs none of this
-   (ls_mem_a = asn_true), so THIS PATH IS UNTESTED.
+   THE PRICE is that a term must be supplied once per context it appears in --
+   `gen_seg_contract` already pays this with base/base_a, and here the counter
+   needs FOUR copies because the post binds a fresh variable and a
+   `Term (Σ ▻ "a" ▻ "an")` does not weaken under `asn.exist "c"`.  Writing
+   `term_var "k"` four times is tedious but it is resolution, not proof.
 
-   THE CODE BASE CARRIES NO OFFSET.  `cfg_placement` is `term_var "q"`, not
-   `q +b of_N head`: the loop is stated against ITS OWN entry address, so the
-   contract never mentions where it sits in the program.  Composition supplies
-   `q = programBase + head` (see GenCompose). *)
-
-Definition loopCtx : LCtx :=
-  ["q"∷ty_xlenbits; "d"∷ty_xlenbits; "k"∷ty_xlenbits].
+   THE CODE BASE CARRIES NO OFFSET: cfg_placement is `ls_q`, so the contract
+   never mentions where the loop sits in the program.  Composition supplies
+   q = programBase + head. *)
 
 (* The counter's update, as the machine does it: RISC-V sign-extends the
    12-bit immediate and ADDS, so a decrement by one is `+ 0xFFFFFFFF`.  Do not
@@ -523,92 +514,128 @@ Definition ls_step {Σ} (imm : Val ty_xlenbits) (t : Term Σ ty_xlenbits)
     : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits imm).
 
-Record LoopSpec : Type := MkLoopSpec
+(* Address-space bounds, one per base the loop uses.  Generated rather than
+   written, because forgetting one fails late and confusingly. *)
+Definition gen_loop_bounds {Σ : LCtx}
+    (bs : list (Term Σ ty_xlenbits * N)) : Assertion Σ :=
+  List.fold_right
+    (fun (b : Term Σ ty_xlenbits * N) (acc : Assertion Σ) =>
+       (asn.formula (formula_relop bop.le
+          (term_binop bop.plus (term_unop uop.unsigned (fst b))
+             (term_val ty.int (Z.of_N (snd b))))
+          (term_val ty.int (Z.of_N lenAddr))) ∗ acc)%asn)
+    ⊤%asn bs.
+
+Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
   { ls_iq     : N            (* ABSOLUTE address of the loop head              *)
   ; ls_prog   : list AnnotInstr
   ; ls_skip   : nat          (* first instruction of the body, as a list index *)
   ; ls_take   : nat          (* how many instructions the body is              *)
   ; ls_exit   : N            (* fall-through target, RELATIVE to the head      *)
-  ; ls_bound  : N            (* address-space bound from "q"                   *)
-  ; ls_dbound : N            (* address-space bound from "d"                   *)
   ; ls_fuel   : nat
-  ; ls_ctr    : RegIdx       (* the counter register                           *)
-  ; ls_imm    : Val ty_xlenbits          (* its per-trip update                *)
-  ; ls_at     : nat -> N     (* trips-remaining |-> counter value              *)
-  ; ls_regs   : list reg_spec_rel        (* the OTHER registers, classified    *)
-  ; ls_mem_a  : Assertion (loopCtx ▻ "a"∷ty_xlenbits)   (* data cells, off "d" *)
-  ; ls_mem_an : Assertion (loopCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)
-  ; ls_guard  : forall Σ : LCtx, Term Σ ty_xlenbits -> Formula Σ  (* go round  *)
-  ; ls_exitg  : forall Σ : LCtx, Term Σ ty_xlenbits -> Formula Σ  (* fall out  *)
+
+    (* the loop's own CODE base, at the three contexts it appears in *)
+  ; ls_q      : Term Σ ty_xlenbits
+  ; ls_q_a    : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
+  ; ls_q_an   : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits
+
+    (* THE COUNTER: its register, its value as a term, and its per-trip
+       update.  ls_at is the bridge from trips-remaining to counter value. *)
+  ; ls_ctr    : RegIdx
+  ; ls_k_a    : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
+  ; ls_k_an   : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits
+  ; ls_k_anc  : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits ▻ "c"∷ty_xlenbits)
+                     ty_xlenbits                  (* under the post's binder *)
+  ; ls_imm    : Val ty_xlenbits
+  ; ls_at     : nat -> N
+
+    (* the classification: registers by spec list, every base with its bound,
+       and an escape hatch for what a spec list cannot say -- a walking
+       pointer's value, memory cells, anything loop-specific. *)
+  ; ls_regs     : list reg_spec_rel
+  ; ls_bases_a  : list (Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits * N)
+  ; ls_bases_an : list (Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits * N)
+  ; ls_extra_a  : Assertion (Σ ▻ "a"∷ty_xlenbits)
+  ; ls_extra_an : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)
+
+    (* the branch, as a predicate on the counter's POST-decrement value.  Two
+       fields rather than one plus a negation: Formula is not usefully closed
+       under negation, and flipping a relop mechanically would be wrong for
+       some comparison. *)
+  ; ls_guard  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
+                -> Formula (Σ ▻ "a"∷ty_xlenbits)
+  ; ls_exitg  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
+                -> Formula (Σ ▻ "a"∷ty_xlenbits)
   }.
+Arguments LoopSpec : clear implicits.
+Arguments MkLoopSpec {Σ}.
 
-(* The part of the state that is the same at entry and exit: the two
-   address-space bounds, the classified registers, the data cells.  The
-   counter is NOT here -- it is what changes. *)
-Definition gen_loop_frame (ls : LoopSpec) {Σ : LCtx}
-    (qb db : Term Σ ty_xlenbits) (mem : Assertion Σ) : Assertion Σ :=
-  ( asn.formula (formula_relop bop.le
-       (term_binop bop.plus (term_unop uop.unsigned qb)
-          (term_val ty.int (Z.of_N (ls_bound ls))))
-       (term_val ty.int (Z.of_N lenAddr)))
-    ∗ asn.formula (formula_relop bop.le
-       (term_binop bop.plus (term_unop uop.unsigned db)
-          (term_val ty.int (Z.of_N (ls_dbound ls))))
-       (term_val ty.int (Z.of_N lenAddr)))
-    ∗ gen_regs_at qb (ls_regs ls)
-    ∗ mem )%asn.
+(* What is the same at entry and exit.  Written once per context because a
+   Term does not weaken; the two must agree, and that is a real proof
+   obligation at composition, not a convention. *)
+Definition gen_loop_frame_a {Σ : LCtx} (ls : LoopSpec Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  ( gen_loop_bounds (ls_bases_a ls)
+    ∗ gen_regs_at (ls_q_a ls) (ls_regs ls)
+    ∗ ls_extra_a ls )%asn.
 
-(* ---- the two contracts, generated as a PAIR so they cannot disagree ------ *)
+Definition gen_loop_frame_an {Σ : LCtx} (ls : LoopSpec Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( gen_loop_bounds (ls_bases_an ls)
+    ∗ gen_regs_at (ls_q_an ls) (ls_regs ls)
+    ∗ ls_extra_an ls )%asn.
 
 (* The counter and the frame.  SHARED by the contracts' preconditions and the
    invariant, which differ only in what each adds.
 
-   MIND THE minimal_pre.  `CFG_VC_triple` already wraps a contract's
-   precondition in `extend_to_minimal_pre`, so gen_loop_pre must NOT carry it
-   -- a second copy makes the precondition demand two and the postcondition
-   return one, i.e. the body consumes cur_privilege / inv_leakage every trip
-   and can only ever run ONCE.  That still VERIFIES (the executor is happy to
-   leave a chunk on the heap), so it fails late and only at composition; it is
-   the amBody_post bug, and it bit this file too.  The INVARIANT does carry
-   minimal_pre, because it describes the whole state at the loop head. *)
-Definition gen_loop_core (ls : LoopSpec)
-    : Assertion (loopCtx ▻ "a"∷ty_xlenbits) :=
-  ( ls_ctr ls ↦ᵣ term_var "k" ∗ secLeakvar "k"
-    ∗ gen_loop_frame ls (term_var "q") (term_var "d") (ls_mem_a ls) )%asn.
+   MIND THE minimal_pre.  CFG_VC_triple already wraps a precondition in
+   extend_to_minimal_pre, so gen_loop_pre must NOT carry it -- a second copy
+   makes the pre demand two and the post return one, i.e. the body consumes
+   cur_privilege / inv_leakage every trip and can only run ONCE.  That still
+   VERIFIES, so it fails late and only at composition; it is the amBody_post
+   bug, and it bit this file too.  The INVARIANT does carry minimal_pre,
+   because it describes the whole state at the loop head. *)
+Definition gen_loop_core {Σ : LCtx} (ls : LoopSpec Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  ( ls_ctr ls ↦ᵣ ls_k_a ls
+    ∗ asn.formula (formula_secLeak (ls_k_a ls))
+    ∗ gen_loop_frame_a ls )%asn.
 
-Definition gen_loop_win (ls : LoopSpec)
-    : Assertion (loopCtx ▻ "a"∷ty_xlenbits) :=
+Definition gen_loop_win {Σ : LCtx} (ls : LoopSpec Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
   ( gen_loop_core ls ∗ minimal_pre )%asn.
 
-(* ...and the branch decision is the ONLY thing a contract adds. *)
-Definition gen_loop_pre (ls : LoopSpec)
-    (g : forall Σ : LCtx, Term Σ ty_xlenbits -> Formula Σ)
-    : Assertion (loopCtx ▻ "a"∷ty_xlenbits) :=
+(* ...and the branch decision is the ONLY thing a contract adds.  Note it is
+   applied to ls_step, never to the raw counter: the head decrements, THEN the
+   branch tests, and that off-by-one is now unstateable. *)
+Definition gen_loop_pre {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
   ( gen_loop_core ls
-    ∗ asn.formula (g _ (ls_step (ls_imm ls) (term_var "k"))) )%asn.
+    ∗ asn.formula (g (ls_step (ls_imm ls) (ls_k_a ls))) )%asn.
 
-(* The body's post names a FRESH variable and states the decrement as a PURE
+(* The body's post binds a FRESH variable and states the decrement as a PURE
    equation, rather than putting the computed term in the spatial part.  That
    is what lets the back edge frame like any other cut (measured: it removes
    the valuation-crossing rewrite entirely). *)
-Definition gen_loop_post (ls : LoopSpec)
-    : Assertion (loopCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+Definition gen_loop_post {Σ : LCtx} (ls : LoopSpec Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( asn.exist "c" ty_xlenbits
       ( ls_ctr ls ↦ᵣ term_var "c"
         ∗ asn.formula (formula_relop bop.eq (term_var "c")
-                         (ls_step (ls_imm ls) (term_var "k")))
+                         (ls_step (ls_imm ls) (ls_k_anc ls)))
         ∗ asn.formula (formula_secLeak (term_var "c")) )
-    ∗ gen_loop_frame ls (term_var "q") (term_var "d") (ls_mem_an ls) )%asn.
+    ∗ gen_loop_frame_an ls )%asn.
 
-Definition gen_loop_contract (ls : LoopSpec)
-    (g : forall Σ : LCtx, Term Σ ty_xlenbits -> Formula Σ)
+Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N)
-    (post : Assertion (loopCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-    : @CFGVerifierContract loopCtx :=
-  @MkCFGVerifierContract loopCtx (ls_iq ls)
-    (term_var "q")
-    (exits_of_offs (term_var "q") [target])
-    (asn_pc_eq (term_var "q") ∗ gen_loop_pre ls g)
+    (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    : @CFGVerifierContract Σ :=
+  @MkCFGVerifierContract Σ (ls_iq ls)
+    (ls_q ls)
+    (exits_of_offs (ls_q ls) [target])
+    (asn_pc_eq (ls_q_a ls) ∗ gen_loop_pre ls g)
     (List.firstn (ls_take ls) (List.skipn (ls_skip ls) (ls_prog ls)))
     (seg_exitCond (ls_iq ls) [target])
     (ls_fuel ls)
@@ -616,16 +643,17 @@ Definition gen_loop_contract (ls : LoopSpec)
 
 (* BODY: guard holds, back edge to the head (offset 0 -- the loop is stated
    against its own entry address). *)
-Definition loop_body (ls : LoopSpec) : @CFGVerifierContract loopCtx :=
+Definition loop_body {Σ : LCtx} (ls : LoopSpec Σ) : @CFGVerifierContract Σ :=
   gen_loop_contract ls (ls_guard ls) 0%N (gen_loop_post ls).
 
 (* FINAL: the guard fails, fall out to ls_exit.  Its postcondition is the
    caller's -- that is the cut into whatever follows the loop, and it is
    genuine specification. *)
-Definition loop_final (ls : LoopSpec)
-    (post : Assertion (loopCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-    : @CFGVerifierContract loopCtx :=
+Definition loop_final {Σ : LCtx} (ls : LoopSpec Σ)
+    (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    : @CFGVerifierContract Σ :=
   gen_loop_contract ls (ls_exitg ls) (ls_exit ls) post.
+
 
 (* head 0 is not definitionally `+ 0`, so the two shapes the composition needs
    get their own one-liners. *)

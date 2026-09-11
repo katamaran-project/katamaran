@@ -450,22 +450,24 @@ Section SegCompose.
     now apply seg_exitCond_hit0.
   Qed.
 
-  (* The valuation at trip n: the two bases, and the counter at ls_at n. *)
-  Definition loop_iota (ls : LoopSpec) (q d : bv xlenbits) (n : nat)
-      : Valuation loopCtx :=
-    [env].["q"∷ty_xlenbits ↦ ty.SyncVal q]
-         .["d"∷ty_xlenbits ↦ ty.SyncVal d]
-         .["k"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (ls_at ls n))].
+  (* THE LOOP INVARIANT.  Generated: the counter pinned at `ls_at n` (via the
+     caller's valuation family), the frame, and the four ambient resources
+     every segment carries.
 
-  (* THE LOOP INVARIANT.  Generated: the counter pinned at `ls_at n`, the
-     frame, and the four ambient resources every segment carries.  `Fr` is
-     what the loop never touches, and it is opaque -- which is what lets a
-     SLIDING footprint be passed here as `cells n` with nothing in this file
-     changing. *)
-  Definition loop_inv (ls : LoopSpec) (q d : bv xlenbits)
+     `iotaf` is a FAMILY of valuations, one per trip: the context is the
+     loop's own, so only the caller knows how its variables move.  For a
+     counted loop with a fixed footprint only the counter changes; for a loop
+     walking a pointer, the pointer's variable moves too, and THAT is how a
+     sliding footprint is expressed -- the contract stays trip-independent
+     (it is verified once and used at every trip), while the invariant
+     instantiates the moving variables per trip.
+
+     `Fr` is what the loop never touches, and it is opaque. *)
+  Definition loop_inv {R : LCtx} (ls : LoopSpec R)
+      (iotaf : nat -> Valuation R) (q : bv xlenbits)
       (Fr Instrs : iProp Σ) (n : nat) : iProp Σ :=
     ( asn.interpret (gen_loop_win ls)
-        ((loop_iota ls q d n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+        ((iotaf n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
       ∗ Fr ∗ pc ↦ᵣ ty.SyncVal q
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
       ∗ Instrs )%I.
