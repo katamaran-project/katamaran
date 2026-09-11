@@ -204,9 +204,10 @@ Proof. unfold seg_wf in *. lia. Qed.
 Ltac seg_bound :=
   unfold bv.unsigned;
   match goal with
-  | [ H : seg_wf ?ia ?bound |- context[bv.bin (@bv.of_N _ (?ia + ?h))] ] =>
-      rewrite (seg_wf_bin (ia + h) 0%N
-                 (seg_wf_shift ia bound h 0%N ltac:(lia) H))
+  | [ H : seg_wf ?i ?b |- context[bv.bin (@bv.of_N _ (?i + ?h))] ] =>
+      rewrite (seg_wf_bin (i + h) 0%N (seg_wf_shift i b h 0%N ltac:(lia) H))
+  | [ H : seg_wf ?i ?b |- context[bv.bin (@bv.of_N _ ?i)] ] =>
+      rewrite (seg_wf_bin i b H)
   end;
   unfold seg_wf in *; lia.
 

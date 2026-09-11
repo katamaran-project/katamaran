@@ -427,3 +427,46 @@ Section SegCompose.
      Measured on ZZMladDvLoop2.v: 47.8 s -> 28.5 s for the whole file. *)
 
 End SegCompose.
+
+(* Ltac defined INSIDE a Section does not survive `End`, so these live after
+   it.  They need no section variable -- a tactic is syntax. *)
+(* ---- THE PER-TRIP LEMMA, as two tactics ---------------------------------
+   `seg_step1` leaves HPre and HPost; these discharge everything in them
+   that is not the loop's own arithmetic.  What each leaves behind:
+     solve_step_pre  -> the GUARD at trip m (the latch condition)
+     solve_step_post -> the counter's DECREMENT (`Hc`, `v`, `Heq` in scope)
+   which is exactly the content of a counted for-loop and nothing else.
+
+   `repeat (iDestruct … as "[Hx H]"; iFrame "Hx")` is what makes these
+   arity-blind, and the shape of that line is load-bearing.  MEASURED on this
+   goal: a NAMED, explicit frame list is 0.35-2.1 s whichever way the
+   hypothesis is split (correct arity or over-split), while a BARE `iFrame`
+   after splitting does not finish in 300 s -- and `iFrame` on ONE hypothesis
+   at a time, with the instruction block still in the goal, also does not
+   finish.  So: peel one, frame it BY NAME, repeat; never bare `iFrame`, and
+   always after the ambient half has been split off. *)
+Ltac solve_step_pre c win instrRes :=
+  iIntros "(H & HF & Hpc & Hnpc & Hinstrs)";
+  unfold seg_entry, win, extend_to_minimal_pre, instrRes, c;
+  iSplitL "HF"; [ iFrame |];
+  iSplitR "Hpc Hnpc Hinstrs"; [| iFrame];
+  cbn [cfg_precondition gen_seg_contract asn.interpret];
+  repeat (iDestruct "H" as "[Hx H]"; iFrame "Hx");
+  iFrame "H";
+  rewrite ?seg_addr_add; repeat iSplit; try done.
+
+(* The post's TOP-LEVEL shape is prescribed by the blueprint --
+   `(counter-block ∗ rest) ∗ minimal_pre`, where the counter block binds a
+   fresh variable and states the decrement as a pure equation (§3j).  That is
+   why this one is not arity-blind at the top: it is matching a generated
+   shape, not guessing. *)
+Ltac solve_step_post c inv win instrRes :=
+  iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)";
+  unfold inv, win, instrRes, c;
+  iSplitR "HF Hpc Hnpc Hinstrs"; [| iFrame];
+  cbn [cfg_postcondition gen_seg_contract asn.interpret];
+  iDestruct "Hpost" as "((Hex & Hrest) & Hmin)";
+  iDestruct "Hex" as (v) "(Hc & (%Heq & _) & (%Hsl & _))";
+  iFrame "Hrest Hmin".
+
+

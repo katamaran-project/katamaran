@@ -826,6 +826,53 @@ handle both, or be restricted to the fixed-footprint case and say so. That
 fork needs deciding before it is written, not after. (Note §4's memory-builder
 objection is partly overtaken: `gen_mem_at`, values-as-parameters, now exists.)
 
+### 3l. THE PER-TRIP TACTICS -- and a correction to 3k (2026-09-11)
+
+§3k concluded that an arity-blind per-trip tactic was impossible because
+`repeat (iDestruct … as "[? H]")` + `iFrame` timed out. **That diagnosis was
+wrong, and the correction is the whole reason the tactics exist.** The blow-up
+was not the over-splitting, it was the BARE `iFrame`. Measured on one goal:
+
+| hypothesis handling | `iFrame` |
+|---|---|
+| named, correct arity: `"(H1 & … & H5)"` + `iFrame "H1 … H5"` | 0.35 s |
+| named, DELIBERATELY OVER-SPLIT (6 parts) + `iFrame "H1 … H6"` | **1.98 s** |
+| arity-blind peel, each framed BY NAME: `repeat (iDestruct "H" as "[Hx H]"; iFrame "Hx")` | **2.1 s** |
+| arity-blind peel + BARE `iFrame` | timeout > 300 s |
+| same, both sides split alike + bare `iFrame` | timeout > 150 s |
+
+So `iFrame` is fine with any splitting as long as it is given an explicit NAMED
+target; it is bare `iFrame` over many hypotheses that explodes. Peel one, frame
+it by name, repeat -- and the tactic needs to know no arity at all.
+
+**LANDED** (`GenCompose.v`, after `End SegCompose`):
+
+```coq
+Ltac solve_step_pre  c win instrRes      (* leaves: the loop GUARD *)
+Ltac solve_step_post c inv win instrRes  (* leaves: the counter DECREMENT *)
+```
+
+`solve_step_pre` is fully arity-blind. `solve_step_post` matches the post's
+top-level shape `(counter-block ∗ rest) ∗ minimal_pre`, which is what the
+blueprint prescribes (§3j), so it is matching a generated shape rather than
+guessing; `rest` is peeled blind. It leaves `v`, `Heq` and `Hc` in scope for the
+caller's arithmetic -- **Ltac1 resolves a hypothesis name at DEFINITION time, so
+a tactic cannot itself say `cbn in Heq` for a name its own `iDestruct`
+introduces**; the caller does it, where the name exists.
+
+`dv_step_at`: **38 -> 24 code lines**, and what is left is exactly (a) the
+`seg_step1` argument block, (b) the latch guard, (c) the decrement. File
+196 -> 182. Gate PASSED 5m56s, 18 theorems axiom-clean.
+
+`seg_bound` gained a second case: the goal is sometimes `bv.bin (of_N ia)` with
+no shift, and `cbn` reduces `Z.of_N 1168` to the literal `1168` so `seg_wf_Z`
+cannot apply (the `Z.of_N` inversion trap again, §3h).
+
+NOT DONE: `dv_exit_at` (22 lines) still uses the long form -- its post has no
+counter block, so `solve_step_post`'s prescribed shape does not fit it. An exit
+segment wants its own, simpler tactic. And the `seg_step1` argument block (6 of
+the 24 lines) still wants the `SegSpec` record from §3e.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
