@@ -909,6 +909,61 @@ Three limits worth knowing before relying on it:
    because a cell's value sits under `asn.exist "mv"` while its address
    mentions the base.
 
+### 3n. THE OTHER SIX MULADD LOOPS DO NOT FIT (2026-09-11)
+
+Asked to re-verify muladd's remaining loops through the LoopSpec with no hand
+work. **They do not fit**, and the blocker is a decision I made while
+implementing, not something inherent.
+
+Scanning `mlad_instrs` for backward branches finds SEVEN loops:
+
+| head idx / byte | body | branch | fits? |
+|---|---|---|---|
+| 16 / 64 | 25 | `bltu A5, A4` | limit is a REGISTER |
+| 84 / 336 | 6 | `bnez T6` | counter OK, but memory SLIDES |
+| 113 / 452 | 5 | `bne T3, T0` | no counter; pointer vs register; slides |
+| **135 / 540** | **27** | `bltu T5, T4` | **divrem -- VERIFIED** |
+| 190 / 760 | 29 | `bne A1, T1` | pointer vs register; slides |
+| 237 / 948 | 13 | `bne T5, S0` | two pointers; slides |
+| 264 / 1056 | 13 | `bne A4, A2` | pointer vs register; slides (the tail) |
+
+DEMONSTRATED, not predicted: `Example/ZZLoopBProbe.v` states loop B -- the
+closest fit, since T6 is a genuine counter decremented to zero -- and
+`solve_seg` fails. The residual ends in `Erasure.eerror` immediately after the
+guard is assumed: the first instruction `lw S1, -4(S0)` has no `ptstomem`
+chunk to read, because with `ls_regs` a CONSTANT the strongest thing the spec
+can say about the walking pointer S0 is "some secret value".
+
+TWO GAPS, both mine:
+
+1. **`ls_regs` / `ls_mem_a` are constants.** The design proposed
+   `nat -> list reg_spec_rel`; the implementation made them constants. BUT
+   trip-indexing is NOT the right fix, and it is worth being clear about why:
+   a contract is verified ONCE and used at every trip, so it cannot depend on
+   `n`. The moving pointer has to be a LOGIC VARIABLE in the context, with the
+   cells addressed off it and the INVARIANT instantiating it per trip -- which
+   is exactly what the hand-written sliding loops already do (`amCtx` carries
+   `ap`, `bp`, `e`).
+2. **`loopCtx` is fixed at `["q"; "d"; "k"]`.** Six of the seven loops compare
+   against a REGISTER, which needs a limit variable, and every one of them
+   walks a pointer, which needs a pointer variable. There is no room.
+
+So the fixed context -- the simplification that made this tractable at all
+(§4: no double-passing of terms, no weakening under `asn.exist`) -- is
+precisely what stops it generalising. That is the trade, stated plainly.
+
+THE FIX, and it is bounded: make the context a PARAMETER,
+`ls_ctx : LCtx`, with the counter, the bases and the pointers as terms over
+it. The record then gains a few fields duplicated at two contexts, exactly as
+`gen_seg_contract` already has `base`/`base_a`. It does NOT re-open the memory
+weakening wall, because `ls_mem_a`/`ls_mem_an` are already per-context
+assertions supplied by the caller.
+
+VERDICT on "can loop verification be done without too much boilerplate now":
+for a counted loop with a FIXED footprint, yes -- divrem is two `solve_seg`
+one-liners off a 17-field record. For muladd's other six, no, and it needs the
+context parameterised first.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
