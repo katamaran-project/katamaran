@@ -623,6 +623,63 @@ remains per cut is the pc equation and the bounds, both pure and both already
 one `assumption` inside `solve_cut`. What remains per SEGMENT is the invariant
 itself -- which is the specification, and should stay hand-written.
 
+### 3h. WHAT IS LEFT AT A CUT (2026-09-11)
+
+Three things assumed in 3g were TESTED this round, and one more was removed.
+
+**Tested and true:**
+- **The realistic two-contract form works.** `cut_MN` now goes
+  `cfg_postcondition (amFinal_reb …) |- extend_to_minimal_pre
+  (cfg_precondition (sgN_reb …))`, i.e. contract to contract, and is still
+  `Proof. solve_cut amFinal_reb sgN_reb. Qed.`
+- **Variable NAMING is not load-bearing.** amFinal calls the data base `"sp"`
+  and the cells `"s0".."s3"`; sgN calls them `"d"` and `"m0".."m3"`. The cut
+  still frames. Segments are therefore independently nameable -- no global
+  convention, which is a precondition for reusing one.
+
+**Removed this round: the per-cut address-space bounds.** `seg_wf_shift`
+(a sub-segment of a well-formed segment is well-formed) plus the `seg_bound`
+tactic, both in `GenSegment.v`, derive every segment's and every data block's
+bound from the program's ONE `seg_wf ia bound`. `cut_MN` went from two
+hand-threaded hypotheses (`Hr`, `Hd`) to one `Hwf : seg_wf ia 1168` -- and that
+is the same fact the faithfulness obligations already need, so a chain now
+threads exactly one. For scale: `ZZMladTail.linkFN` threads two (`Hrep`, `Hb`)
+and every further link would add more.
+
+TRAP: do not reach for `seg_wf_Z` here. By the time the goal is reduced the
+byte count is a Z LITERAL, so `apply seg_wf_Z` must unify `Z.of_N ?b` with
+`20` -- inverting `Z.of_N`, which unification will not do. `seg_bound` instead
+uses `seg_wf_bin` at bound 0 purely for the no-truncation fact and finishes
+with plain `lia`.
+
+**What still needs manual work at a cut, in order of cost:**
+
+1. **A register whose VALUE changes across the cut.** The generator makes both
+   sides the same term; here they genuinely differ (`dv_step_at`'s T4: post says
+   `T4 |-> dvdec (term_var "k")`, the next pre says `T4 |-> term_var "k"`).
+   Costs `asn_regidx_pts_inst` plus a premise that restates both terms and both
+   valuations in full -- **14 of `dv_step_at`'s 43 lines**. This is now the
+   single largest remaining item.
+   UNTESTED IDEA: have a segment's post name a FRESH Sigma variable and a pure
+   equation (`asn.exist "k2" (T4 |-> term_var "k2" ∗ formula (k2 = dvdec k))`)
+   instead of a computed term, so the spatial part frames and the arithmetic
+   becomes a pure side goal. Risks: an existential in a postcondition may cost
+   VC time, and the composition has to instantiate the witness. MEASURE IT.
+2. **The per-segment valuations** (`mI`, `nI`). Mechanical, hand-written, and
+   they grow with |Sigma| -- which 3g just enlarged by moving cell values into
+   it. Derivable from the cut spec in principle; untested.
+3. **iProp-level existential quantification of the cell values.** Four cells is
+   `∃ v0 v1 v2 v3`; sixteen is worse, and every step lemma introduces and
+   repackages them. `dvInvN` shows the pattern for one variable. A combinator
+   quantifying a whole Sigma-suffix would do it; untested.
+4. **Fuel.** Still hand-tuned per segment, still no evidence for a formula.
+5. **Reuse at a different address.** A re-based contract no longer mentions the
+   program base, but it still names `iq` concretely in `cfg_init_addr` and
+   `cfg_exitCond`, because `seg_exitCond` is a concrete `bv -> bool`.
+   Verify-once-reuse-anywhere needs that quantified too.
+6. **The invariant itself** -- which is the specification, and should stay
+   hand-written.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under

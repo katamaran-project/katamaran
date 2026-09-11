@@ -181,6 +181,35 @@ Proof.
   unfold seg_wf in H. lia.
 Qed.
 
+(* A SUB-SEGMENT of a well-formed segment is well-formed.  This is what lets a
+   whole chain thread ONE `seg_wf ia bound` for the program instead of a
+   separate address-space bound per segment and per cut: every segment's own
+   bound, and every data block's, is a shift of the program's. *)
+Lemma seg_wf_shift (ia bound h b : N)
+  (Hfit : (h + b <= bound)%N) (H : seg_wf ia bound) :
+  seg_wf (ia + h) b.
+Proof. unfold seg_wf in *. lia. Qed.
+
+(* ...and the tactic that uses it.  EVERY address-space bound a segment or a
+   data block owes is a shift of the program's single `seg_wf`, so a whole
+   chain can thread ONE well-formedness fact instead of a bound per segment and
+   per cut (ZZMladTail.linkFN threads two, Hrep and Hb, and every link after it
+   would thread more).
+
+   `seg_wf_bin` is applied at bound 0 purely to get the no-truncation fact
+   `bv.bin (of_N (ia+h)) = ia+h`; the real inequality is then plain lia against
+   the hypothesis.  Applying `seg_wf_Z` directly does NOT work: by the time the
+   goal is reduced the byte count is a Z LITERAL, and unifying `Z.of_N ?b` with
+   `20` would require inverting Z.of_N. *)
+Ltac seg_bound :=
+  unfold bv.unsigned;
+  match goal with
+  | [ H : seg_wf ?ia ?bound |- context[bv.bin (@bv.of_N _ (?ia + ?h))] ] =>
+      rewrite (seg_wf_bin (ia + h) 0%N
+                 (seg_wf_shift ia bound h 0%N ltac:(lia) H))
+  end;
+  unfold seg_wf in *; lia.
+
 (* An in-range offset does not truncate either -- this packages the
    bv.bin_of_N_small rewrites (8 occurrences) with their side condition
    already discharged. *)
