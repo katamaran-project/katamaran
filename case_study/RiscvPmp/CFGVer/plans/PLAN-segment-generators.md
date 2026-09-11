@@ -1076,6 +1076,58 @@ two remaining shapes are the counter-vs-counter `bltu A5, A4` at idx 16 and the
 two-pointer loops at 190/237/264. Nothing seen so far suggests they do not
 fit; what they need is spec-writing.
 
+### 3r. ALL SEVEN MULADD LOOPS VERIFY (2026-09-11)
+
+Every backward branch in `mlad_instrs` now has a LoopSpec whose body contract
+discharges. Probes are `Example/ZZLoop{A,B,C,D,F,Tail}Probe.v` and
+`ZZDvLoopSpec.v`.
+
+| head idx / byte | instrs | branch | shape | proof |
+|---|---|---|---|---|
+| 16 / 64 | 25 | `bltu A5, A4` | counter, no memory | `solve_seg`, 1.02 s |
+| 84 / 336 | 6 | `bnez T6` | counter + pointer walking DOWN | `solve_seg` + ~10 lines |
+| 113 / 452 | 5 | `bne T3, T0` | pointer IS the counter, walks DOWN, register limit | `solve_seg` + ~10 lines |
+| 135 / 540 | 27 | `bltu T5, T4` | counter, no memory (divrem) | `solve_seg`, 1.36 s |
+| 190 / 760 | 29 | `bne A1, T1` | two pointers UP, register limit, MUL/MULHU/SLTU | `solve_seg`, 2.09 s |
+| 237 / 948 | 13 | `bne T5, S0` | two pointers UP, register limit | `solve_seg`, 0.76 s |
+| 264 / 1056 | 13 | `bne A4, A2` | two pointers UP, register limit (the tail) | `solve_seg`, 0.65 s |
+
+**Five of seven are a bare `solve_seg`.** The two that are not are exactly the
+two that walk a pointer DOWNWARD, and what they pay is the `base - 4` access
+bound that `relval_fetch_upper_neg` exists to absorb once its
+`solve_symbase_fetch` wiring is finished (§3p). Nothing else needed hand work.
+
+THE RECIPE, which is now uniform:
+- whichever pointer or counter the BRANCH tests becomes `ls_ctr` / `ls_k_*`,
+  with `ls_imm` its per-trip update;
+- every OTHER moving pointer goes in `ls_extra_a` / `ls_extra_an` with its
+  entry and exit value;
+- the limit, if a register, is a logic variable the guard mentions;
+- cells go in `ls_extra_*`, bases and their bounds in `ls_bases_*`.
+
+TWO FINDINGS WORTH KEEPING:
+
+1. **Loop D's `sltu T4, A6, T4` (idx 194) does NOT hit the documented
+   secret-data comparison wall.** `cfgver-solve-vc` records that SLTU on
+   private operands leaves an unclosable `secLeak ?v` goal. Here it does not,
+   because the comparison's result feeds only branchless arithmetic (idx 195
+   `add T3, T3, T4`) and is never branched on nor leaked. The wall is about a
+   comparison whose result must be PUBLIC, not about SLTU per se.
+2. **The non-aliasing conjunct is REDUNDANT.** The tail loop verifies with
+   `ap <> bp` REMOVED: separating conjunction already forces the two
+   `ptstomem` chunks apart, so a contract owning both cells cannot have them
+   alias. `seg_addr_neq` is for a SLIDING invariant that must show successive
+   cells distinct -- not for a single trip's footprint.
+
+NON-VACUITY spot-checked per shape, not assumed: divrem (unpin T5 -> fails),
+loop C (drop the lower bound -> fails), loop D (drop the second memory cell ->
+`No applicable tactic`).
+
+STILL TRUE: this is the one-pass BODY contract for each loop. The loop
+THEOREM -- HPost, the exit lemma, the induction -- is unfinished (§3o), so
+"verifies" here means every loop's body contract discharges, not that any loop
+is proved to run to its exit.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under
