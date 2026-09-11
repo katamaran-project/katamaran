@@ -1011,6 +1011,35 @@ then, any loop walking a pointer DOWNWARD pays ~10 lines once.
 `Syntax error: [ltac_use_default] expected` through rocq-mcp; split into
 separate `rewrite` calls and a braced sub-proof.)
 
+### 3p. fetch_bound_step_neg: lemma DONE, tactic wiring NOT (2026-09-11)
+
+`Contracts.relval_fetch_upper_neg` is proved and landed: the upper fetch/access
+bound for an address BELOW the base, `cbv + v` with `cbv` the two's-complement
+encoding of `-D`, where `bv.bin` WRAPS so
+`relval_fetch_upper_add`'s no-overflow step does not apply. Premises are the
+base's upper bound, its LOWER bound (`D <= unsigned v` -- a contract must
+supply it, or the access really does underflow), the encoding
+`Z.of_N (bin cbv) + D = Z.of_N (exp2 xlenbits)`, and `A <= B + D`.
+
+TWO TRAPS BANKED:
+- **`D` must be a plain `Z`, not `Z.of_N D`.** The goal's offset arrives as a Z
+  LITERAL, so `eassumption` would have to unify `Z.of_N ?D` with `4` -- the
+  `Z.of_N` inversion trap, same as `seg_wf_Z` in §3h. Stating D : Z fixed it.
+- **`replace S with (S - E + 1 * E) by lia` fires inside its own RHS.** The
+  resulting goal is unprovable-looking (`S-E+1*E-E` vs `S-E`). `set` both atoms
+  first and restrict with `at 1`.
+
+NOT DONE: the `solve_symbase_fetch` alternative does not fire end to end.
+`eapply relval_fetch_upper_neg` DOES apply and produces the five subgoals, and
+`eassumption` closes the first individually -- but the bulleted chain inside
+`solve [...]` fails. Prime suspect: `eapply` leaves 2 SHELVED goals, and
+`solve` counts shelved goals as unfinished. Next thing to try is
+`unshelve eapply` or an `Unshelve` tail, mirroring however
+`relval_fetch_upper_add` gets away with it.
+
+So loop B still carries the ~10-line hand arithmetic; the lemma that should
+replace it exists and is proved, and only the plumbing is missing.
+
 ## 4. Deliberately NOT built
 
 - **No memory-block builder.** A Σ-generic one needs the base weakened under

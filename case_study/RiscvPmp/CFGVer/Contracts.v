@@ -438,6 +438,55 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       rewrite (bv.bin_add_small Hlt). lia.
     Qed.
 
+    (* The same bound for an access BELOW the base -- `lw rd, -4(rs)`, which
+       is what clang emits for any loop walking a pointer DOWNWARD (muladd's
+       memmove-down at idx 84..89, and its sibling at 113..117).  The address
+       is `cbv + v` with cbv the wrapped representation of -D, so `bv.bin`
+       WRAPS and relval_fetch_upper_add's no-overflow step does not apply.
+
+       The extra premise is a LOWER bound on the base (`D <= unsigned v`),
+       which a contract must supply -- without it `v - D` underflows and the
+       access really is out of range.  `Hc` pins cbv as the two's-complement
+       encoding of -D and is `vm_compute; reflexivity` at any concrete offset. *)
+    Lemma relval_fetch_upper_neg (v : RelVal ty_xlenbits) (cbv : bv xlenbits)
+      (A B D : Z) :
+      RiscvPmpSignature.secLeak v ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
+           (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
+      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (uop.evalRel uop.unsigned v) (SyncVal D))
+      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      (* D is a plain Z, NOT `Z.of_N D`: the goal's offset arrives as a Z
+         LITERAL, and unifying `Z.of_N ?D` with `4` would require inverting
+         Z.of_N -- the same trap as seg_wf_Z. *)
+      @eq Z (Z.add (Z.of_N (bv.bin cbv)) D) (Z.of_N (bv.exp2 xlenbits)) ->
+      (A <= B + D)%Z ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
+           (bop.evalRel bop.plus (SyncVal A)
+              (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
+      with SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros Hs Hub Hlb Hc HA; destruct v as [a | x y]; [| destruct Hs].
+      pose proof maxAddr_rep as Hexp.
+      pose proof (bv.bv_is_wf a) as Ha.
+      pose proof (bv.bv_is_wf cbv) as Hc2.
+      cbn -[maxAddr bv.exp2 xlenbits] in *; unfold bv.unsigned in *.
+      rewrite bv.bin_add.
+      (* exp2 <= bin cbv + bin a < 2 * exp2, so the mod is one subtraction.
+         `set` both atoms first and restrict the replace with `at 1`: without
+         it the rewrite also fires inside its own right-hand side. *)
+      set (E := bv.exp2 xlenbits) in *.
+      set (S := N.add (bv.bin cbv) (bv.bin a)) in *.
+      assert (HS : (E <= S)%N /\ (S < E + E)%N) by (unfold S; lia).
+      assert (Hm : @eq N (N.modulo S E) (N.sub S E)).
+      { replace S with (N.add (N.sub S E) (N.mul 1 E)) at 1 by lia.
+        rewrite N.Div0.mod_add. apply N.mod_small. lia. }
+      rewrite Hm. unfold S. lia.
+    Qed.
+
     (* Loop-EXIT residual, not a fetch bound.  A loop whose exit test is a
        POINTER COMPARE (`bne a0, a1` with a0/a1 both base-relative, as clang
        emits for BearSSL check_scalar's byte loops) leaves, on the final
@@ -501,6 +550,12 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
             | apply Z.leb_le; vm_compute; reflexivity
             | apply Z.leb_le; vm_compute; reflexivity ]
         | eapply relval_fetch_upper_bare; [ eassumption | eassumption | lia ]
+        | (* base MINUS a constant: the eassumption for the LOWER bound is what
+             fixes ?D, so it must come before the encoding check. *)
+          eapply relval_fetch_upper_neg;
+            [ eassumption | eassumption | eassumption
+            | vm_compute; reflexivity
+            | apply Z.leb_le; vm_compute; reflexivity ]
         | apply relval_neq_irrefl ].
 
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
