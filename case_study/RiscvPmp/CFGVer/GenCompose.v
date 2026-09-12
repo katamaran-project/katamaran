@@ -1029,6 +1029,62 @@ Section SegCompose.
     iApply (gen_pures_interp fs (gen_cells_a cs) _ Hf). iExact "Hca".
   Qed.
 
+  (* ---- WHERE THE RESERVOIR COMES FROM ------------------------------------
+
+     Everything above ASSUMES the reservoir: `loop_inv` carries `Fr n`, the
+     trip step trades with it, and at trip 0 it is empty.  Nothing so far said
+     where a caller GETS one, which is what a real program proof has to supply
+     before it can instantiate any of this.
+
+     `loop_res_intro` is the general answer: a reservoir IS a block of per-trip
+     resources, so producing one is producing `A` at each future trip's
+     valuation.  `loop_res_words` is the case that actually occurs -- a loop
+     walking an array of words -- where the block is n memory cells at
+     addresses the caller computes, and the per-trip obligation collapses to
+     one arithmetic fact about `addr i`. *)
+
+  Lemma loop_res_intro {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat) (blk : nat -> iProp Σ)
+    (H : forall i,
+           blk i ⊢ asn.interpret A ((iota i).["a"∷ty_xlenbits ↦ ty.SyncVal q])) :
+    ([∗ list] i ∈ seq 0 n, blk i) ⊢ loop_res A iota q n.
+  Proof.
+    unfold loop_res. apply big_sepL_mono. intros k i _. apply H.
+  Qed.
+
+  (* one word of memory at a PUBLIC address, contents arbitrary *)
+  Definition mem_word (a : bv xlenbits) : iProp Σ :=
+    asn.interpret (Σ := ["p"∷ty_xlenbits])
+      (asn.exist "w" ty_xlenbits (term_var "p" ↦ₘ term_var "w"))
+      ([env].["p"∷ty_xlenbits ↦ ty.SyncVal a]).
+
+  Lemma loop_res_words {R : LCtx} (c : cell_spec R) (iota : nat -> Valuation R)
+    (q : bv xlenbits) (n : nat) (addr : nat -> bv xlenbits)
+    (Hpub : cs_pub c = false)
+    (Haddr : forall i (v : ty.RelVal (ty.bvec (bytes_per_word * byte))),
+       inst (T := fun Σ => Term Σ ty_xlenbits)
+         (addr_off (@term_var _ (cs_var c) _ (ctx.in_succ (ctx.in_succ (cs_in c))))
+            (cs_off c))
+         ((((iota i).["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+            .[cs_bind c ∷ty.bvec (bytes_per_word * byte) ↦ v])
+       = ty.SyncVal (addr i)) :
+    ([∗ list] i ∈ seq 0 n, mem_word (addr i)) ⊢ loop_res (gen_cells_a [c]) iota q n.
+  Proof.
+    unfold loop_res. apply big_sepL_mono. intros k i _.
+    unfold mem_word.
+    cbn [gen_cells_a List.fold_right asn.interpret].
+    rewrite Hpub.
+    iIntros "H". iSplitL "H"; [| iSplit; [iPureIntro; cbn; reflexivity | done]].
+    iApply (bi.equiv_entails_1_1 _ _
+              (asn_cell_inst "w" (cs_bind c) (term_var "p")
+                 (addr_off (@term_var _ (cs_var c) _ (ctx.in_succ (ctx.in_succ (cs_in c))))
+                    (cs_off c))
+                 ([env].["p"∷ty_xlenbits ↦ ty.SyncVal (addr i)])
+                 ((iota i).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 ltac:(intros v; cbn; symmetry; exact (Haddr i v)))).
+    iExact "H".
+  Qed.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
