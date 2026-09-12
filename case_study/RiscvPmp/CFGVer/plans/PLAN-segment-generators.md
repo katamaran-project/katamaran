@@ -1723,3 +1723,55 @@ and the caller names them anyway.
 - The address function is the caller's to invent. There is no lemma saying
   "`bv.seqBv base (4*n)` gives you `addr i = base + 4i`"; each caller writes
   the arithmetic. That is one lemma away if it recurs.
+
+## 4b. A POINTER loop, assembled end to end (2026-09-13)
+
+divrem was the only loop with a `forall n` theorem, and it is the easy one: no
+memory in its frame, so its ambient `Fr` is constant. **Loop D is now assembled
+too** (`Example/ZZLoopDThm.v`, 21.7 s, no admits):
+
+```coq
+Lemma lds_loop (Out Post : iProp Σ) (HP0 : ldP pe p7e 0) (HOut …) (Hcont …) :
+  forall n, ldInv n -∗ myWP2_loop Post.
+```
+
+D walks TWO pointers, so its `Fr` is genuinely trip-indexed -- the invariant
+carries the RESERVOIR, which shrinks by one pair of cells per trip. That is the
+first loop theorem where §4a's machinery is load-bearing rather than decorative.
+
+What the assembly needed beyond the obligations §3z already had:
+
+- **an EXIT contract.** Only divrem had one. `ld_out` is the register block with
+  the walking pointer released (`(A1, true, PVExist) :: ld_regs`) -- "some
+  public value", the same choice divrem makes -- and `valid_ld_final` is a
+  bare `solve_seg`.
+- **a trip predicate over TWO bounds.** `ldP pe p7e n` is a conjunction; the
+  per-trip facts then need weakening from `S n` to `n`, which is `lia` but must
+  be done in TACTIC position (`intros HP; unfold ldP in HP; apply …; [lia|…]`).
+  Passing `proj1 HP` directly does not typecheck -- the bound at `S n` is
+  stronger, not equal.
+
+### C is BLOCKED, and it is a solver gap not a proof gap
+
+C was the first choice (its reservoir origin is §4a's worked example) and its
+EXIT contract does not discharge. One residual survives `solve_seg`:
+
+```
+0 ≤ 4096 - (4 + unsigned (0xfffffffc + p1))
+```
+
+i.e. the access BELOW the pointer, which is exactly what
+`relval_fetch_upper_neg` was added for. The lemma is in `solve_symbase_fetch`'s
+`solve [...]` and does not fire. Diagnosed: the `eapply` applies fine and the
+FIRST `eassumption` closes `secLeak v`, but the second fails because `?B` is an
+evar while the hypotheses are still in ERASED form (`Erasure.inst_eformula' …`)
+-- unifying an evar under `inst_eformula'` needs the hypothesis reduced first.
+Supplying `B`/`D` explicitly is the obvious fix and did not work either: the
+lemma's argument names as compiled do not match what the source appears to
+declare (`Wrong argument name D (possible name: A)`), so the shape needs a
+`Check` before another attempt. **Not chased further** -- D is a pointer loop
+and answers the question; C's exit is a separate, small solver-tactic bug.
+
+This is the same lemma the earlier session recorded as "wired but never fired"
+(§3t-era note, `solve_symbase_fetch` + `relval_fetch_upper_neg`); it now has a
+diagnosis.
