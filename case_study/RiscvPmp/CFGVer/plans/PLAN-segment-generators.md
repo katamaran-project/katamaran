@@ -1460,3 +1460,54 @@ and not a per-loop reinvention.
   entailment, so hoist a pure `assert` ABOVE the `iIntros` instead of stopping
   the proof mid-way to prove it. And `rewrite` with an `⊣⊢` does not fire
   inside a proof-mode goal -- `iApply (bi.equiv_entails_1_1 _ _ H)` does.
+
+## 3w. Cutting the per-loop frame: 59 -> 40, and a rule (2026-09-12)
+
+§3v left each loop's frame proof at 49-60 lines with an identical SHAPE, which
+is the tell that something is missing from the library rather than from the
+loops. Three rounds of cutting, all measured on D:
+
+| | lines | what changed |
+|---|---|---|
+| §3v baseline | 59 | -- |
+| + `loop_reg_shift`, `loop_cell_shift`, `bv_of_N_neq`, `lenAddr_lt_exp2` | 48 | the two MOVES and the two pure facts become lemmas |
+| + `loop_frame_std` (with `gen_regs_at_inst`) | 45 | the STRUCTURE becomes a lemma |
+| + `refine`-inferred bounds, bullet form for the shift | **40** | the argument lists stop being written out |
+
+`loop_frame_std` is the one that matters conceptually: it says what a loop
+frame IS -- `bounds ∗ regs ∗ extra`, where the first two are the same argument
+every time -- so a per-loop proof is the bounds `Forall` plus the extra
+entailment and nothing else. `gen_regs_at_inst` had to come BACK for it (it was
+written once and deleted as unused, because `iFrame` crosses a register block at
+a CONCRETE call site; over abstract valuations it does not).
+
+### The rule, which cost a detour to learn
+
+**Whenever you reach for a tactic, check whether a lemma does it better.** A
+`loop_bounds` Ltac was written here and then removed: `loop_bound_le` already
+WAS the lemma, and the only thing the tactic added was inferring the per-base
+value from the goal -- which `refine` does:
+
+```coq
+{ repeat constructor.
+  all: refine (loop_bound_le _ _ _ _ _ _ _); [cbn; reflexivity | lia | cbn; lia]. }
+```
+
+One line for every base of every loop, the value unified by `reflexivity`, and
+the reasoning stays in a lemma that can be read, reused and re-proved. A tactic
+that only wraps a lemma is vocabulary without content.
+
+Two mechanical notes from the same round: `iApply` determines `i2` from the
+goal but NOT `i1` (that one comes from a premise), so `loop_reg_shift`'s source
+valuation must be written out while the target can stay `_`; and `cbn` is
+needed before `lia` on a bounds side condition because the offset is still a
+pair projection `(t, 4).2`.
+
+### What the remaining 40 lines are
+
+12 of statement, 26 of proof, and the proof is now four NAMED steps:
+`loop_frame_std` (structure) / `loop_bound_le` (one line, all bases) /
+`loop_reg_shift` (the advanced register) / `bv_of_N_neq` + `loop_res_peel` (the
+dropped fact and the cell trade). Everything left is specific to the loop.
+The other four loops still carry their §3v proofs; converting them is the same
+mechanical edit and would land them at the same place.
