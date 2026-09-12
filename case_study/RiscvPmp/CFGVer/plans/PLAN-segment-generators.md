@@ -1553,3 +1553,64 @@ seven spec blocks; NOT attempted here, and it is the honest next step.
 
 C, Tail and B still carry their §3v proofs (51 / 49 / 60). Converting them is
 the same mechanical edit that took F from 59 to 29.
+
+## 3y. `ls_extra_*` as DATA -- built, verified on D, and it does NOT cut lines
+
+Done as asked in §3x's "honest next step". The machinery is in place and D is
+converted end to end. The line count is the surprise, and it is reported first
+because it contradicts the reason for doing it.
+
+### The blocker that was not one
+
+§4 of this plan says a Σ-generic memory builder is not worth building: the base
+has to be weakened under `asn.exist` and the only weakening to hand is
+`subst _ sub_wk1`, a recorded Θ(|Σ|²) driver that `iFrame` cannot see through.
+**That is true of a builder that takes TERMS.** A builder that takes a
+variable's NAME together with its `In`-proof weakens nothing -- it re-derives
+the variable at the wider context with `ctx.in_succ`, which is structural and
+transparent. Measured 2026-09-12 on a three-line probe: a hand-written extra
+and the built one are equal by `reflexivity`. That one experiment is what made
+the rest possible, and it cost ~100 ms.
+
+### What landed (696aed6b)
+
+- `walk_reg` / `cell_spec` records, `addr_off` (which must emit the BARE term at
+  offset zero, or a non-moving register stops matching what the executor
+  builds), `gen_walk_a/_an`, `gen_cells_a/_an`, `gen_pures`, `gen_extra_a/_an`.
+- `loop_extra_step` (GenCompose) on top of `gen_walk_step`, `gen_pures_interp`
+  and `walk_secLeak`. A caller supplies three things, all its own: what each
+  walking register evaluates to on both sides, the pure facts the post drops,
+  and the cell trade with the reservoir.
+- The walk, the pures and the cells are SEPARATE conjuncts of `gen_extra_*`.
+  Threading a tail through the folds instead interleaves the reservoir with the
+  walk and makes the induction fight the frame; keeping them apart is what lets
+  the step be three independent lemmas.
+- **`LoopSpec` is UNCHANGED.** `ls_extra_*` stay free-form `Assertion` fields
+  and a probe simply defines its own with the builders, so nothing in the
+  record, the contracts or `solve_seg` had to move. D's contract re-verifies
+  through `solve_seg` unchanged (22 s).
+
+### The measurement
+
+| D's frame | lines |
+|---|---|
+| §3x, hand-written extra + one `iFrame` | **29** |
+| §3y, extra from data + `loop_extra_step` | **34** |
+
+The `Forall` bookkeeping (`apply List.Forall_cons`, one `exists` witness and two
+`split`s per walking register) costs about what the single `iFrame` saved.
+Collapsing the witness from `∃ x y, … ∧ x = y` to `∃ x, …` bought 3 lines back
+and no more.
+
+**So: the restructuring does not reduce per-loop lines.** What it does buy is
+real but different -- both sides of a back edge are generated from ONE
+description and cannot drift apart (§3u found D's two sides HAD drifted: the
+post silently dropped `p1 ≠ p7`), and the remaining proof is driven by the data
+rather than by naming conjuncts in an `iSplit` walk.
+
+### Not converted
+
+F, C, Tail and B still use their hand-written extras and their §3v/§3x proofs,
+and all still compile. Converting them is ~4× the same mechanical work for a
+line count that measures neutral-to-worse, so it is a judgement call rather than
+an obvious win -- parked for a decision rather than done on momentum.
