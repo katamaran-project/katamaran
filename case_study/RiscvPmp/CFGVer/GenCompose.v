@@ -932,6 +932,103 @@ Section SegCompose.
         ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
       ∗ Fr n.
 
+  (* ---- THE EXTRA, STEPPED GENERICALLY ------------------------------------
+
+     With `ls_extra_*` built from data (GenSegment §5), the walk of iSplits
+     that every loop's frame proof used to spell out becomes one lemma.  What
+     a caller supplies is three things, and each is exactly the loop's own
+     content:
+
+       Hw : per walking register, what both sides evaluate to and why equal;
+       Hf : the pure facts the postcondition DROPS, at trip n;
+       Hc : the cell trade with the reservoir.
+
+     Nothing else survives -- the registers, their secLeak facts and the
+     nesting are all discharged here, once. *)
+
+  Lemma walk_secLeak {R : LCtx} (v : string) (vIn : (v∷ty_xlenbits ∈ R)%katamaran)
+    (i : Valuation R) (y : N)
+    (Hy : inst (T := fun Σ => Term Σ ty_xlenbits) (@term_var _ v _ vIn) i
+          = ty.SyncVal (@bv.of_N xlenbits y)) :
+    instprop (formula_secLeak (@term_var _ v _ vIn)) i.
+  Proof. cbn. cbn in Hy. rewrite Hy. exact I. Qed.
+
+  Lemma gen_walk_step {R : LCtx} (ws : list (walk_reg R)) (iS iN : Valuation R)
+    (q : bv xlenbits)
+    (Hw : List.Forall (fun w => exists x : N,
+            inst (T := fun Σ => Term Σ ty_xlenbits)
+              (addr_off (@term_var _ (wr_var w) _ (ctx.in_succ (ctx.in_succ (wr_in w))))
+                 (wr_off w))
+              ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)
+         /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+              (@term_var _ (wr_var w) _ (ctx.in_succ (wr_in w)))
+              (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)) ws) :
+    asn.interpret (gen_walk_an ws)
+      ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ⊢ asn.interpret (gen_walk_a ws) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    induction ws as [| w ws IH]; cbn [gen_walk_an gen_walk_a List.fold_right].
+    - iIntros "_". iSplit; [iPureIntro; cbn; reflexivity | done].
+    - inversion Hw as [| ?? Hh Ht]; subst.
+      destruct Hh as (x & Hx & Hy).
+      destruct (wr_pub w); cbn [asn.interpret].
+      + iIntros "(Hr & Hsl & Hrest)".
+        iSplitL "Hr";
+          [ iApply (loop_reg_shift (wr_reg w) _ _ _ _ x x Hx Hy eq_refl); iExact "Hr" |].
+        iSplitR;
+          [ iSplit; [ iPureIntro; exact (walk_secLeak _ _ _ x Hy) | done ] |].
+        iApply (IH Ht). iExact "Hrest".
+      + iIntros "(Hr & Hrest)".
+        iSplitL "Hr";
+          [ iApply (loop_reg_shift (wr_reg w) _ _ _ _ x x Hx Hy eq_refl); iExact "Hr" |].
+        iApply (IH Ht). iExact "Hrest".
+  Qed.
+
+  Lemma gen_pures_interp {R : LCtx} (fs : list (Formula (R ▻ "a"∷ty_xlenbits)))
+    (tail : Assertion (R ▻ "a"∷ty_xlenbits)) (i : Valuation (R ▻ "a"∷ty_xlenbits))
+    (Hf : List.Forall (fun f => instprop f i) fs) :
+    asn.interpret tail i ⊢ asn.interpret (gen_pures fs tail) i.
+  Proof.
+    induction fs as [| f fs IH]; cbn [gen_pures List.fold_right asn.interpret].
+    - auto.
+    - inversion Hf as [| ?? Hh Ht]; subst.
+      iIntros "H". iSplitR; [iSplit; [iPureIntro; exact Hh | done] |].
+      iApply (IH Ht). iExact "H".
+  Qed.
+
+  Lemma loop_extra_step {R : LCtx} (ws : list (walk_reg R))
+    (fs : list (Formula (R ▻ "a"∷ty_xlenbits))) (cs : list (cell_spec R))
+    (iS iN : Valuation R) (q : bv xlenbits) (FS Fn : iProp Σ)
+    (Hw : List.Forall (fun w => exists x : N,
+            inst (T := fun Σ => Term Σ ty_xlenbits)
+              (addr_off (@term_var _ (wr_var w) _ (ctx.in_succ (ctx.in_succ (wr_in w))))
+                 (wr_off w))
+              ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)
+         /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+              (@term_var _ (wr_var w) _ (ctx.in_succ (wr_in w)))
+              (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)) ws)
+    (Hf : List.Forall (fun f => instprop f (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])) fs)
+    (Hc : asn.interpret (gen_cells_an cs)
+            ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+          ∗ FS
+          ⊢ asn.interpret (gen_cells_a cs) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fn) :
+    asn.interpret (gen_extra_an ws cs)
+      ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ∗ FS
+    ⊢ asn.interpret (gen_extra_a ws fs cs) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fn.
+  Proof.
+    unfold gen_extra_an, gen_extra_a. cbn [asn.interpret].
+    iIntros "((Hw' & Hc') & HFS)".
+    iDestruct (Hc with "[$Hc' $HFS]") as "(Hca & HFn)".
+    iSplitR "HFn"; [| iExact "HFn"].
+    iSplitL "Hw'"; [ iApply (gen_walk_step ws iS iN q Hw); iExact "Hw'" |].
+    iApply (gen_pures_interp fs (gen_cells_a cs) _ Hf). iExact "Hca".
+  Qed.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after

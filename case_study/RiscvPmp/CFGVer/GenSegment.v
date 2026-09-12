@@ -814,3 +814,126 @@ Proof. vm_compute. reflexivity. Qed.
    `reflexivity` unifies the value evar against the valuation, so nothing has
    to be written out per base, and the reasoning stays in the lemma where it
    can be read and reused. *)
+
+(* ========================================================================== *)
+(* 5. THE EXTRA, AS DATA                                                       *)
+(* ========================================================================== *)
+
+(* §4 said a Sigma-generic memory builder was NOT worth building, because the
+   base has to be weakened under `asn.exist` and the only weakening to hand is
+   `subst _ sub_wk1` -- a recorded Theta(|Sigma|^2) driver, and opaque to
+   `iFrame`.  That is true of a builder that takes TERMS.  A builder that takes
+   a variable's NAME together with its In-proof does not weaken anything: it
+   re-derives the variable at the wider context with `ctx.in_succ`, which is
+   structural, transparent, and CONVERTIBLE with what the hand-written
+   assertion produces.  Measured 2026-09-12: a hand-written extra and the
+   built one are equal by `reflexivity`.
+
+   So the loop's `ls_extra_*` can be DATA, and the step across the back edge
+   becomes one lemma (`loop_extra_step`, GenCompose) instead of the same
+   `iSplit` walk written once per loop. *)
+
+(* A register holding an ADDRESS: which register, which Sigma-variable holds
+   its value at the loop head, what the BODY adds to it over one trip (zero
+   for a register the loop does not move), and whether it is public. *)
+Record walk_reg (Σ : LCtx) : Type := MkWalkReg
+  { wr_reg : RegIdx
+  ; wr_var : string
+  ; wr_in  : (wr_var∷ty_xlenbits ∈ Σ)%katamaran
+  ; wr_off : Val ty_xlenbits
+  ; wr_pub : bool }.
+Arguments MkWalkReg {Σ} wr_reg wr_var {wr_in} wr_off wr_pub.
+Arguments wr_reg {Σ}. Arguments wr_var {Σ}. Arguments wr_in {Σ}.
+Arguments wr_off {Σ}. Arguments wr_pub {Σ}.
+
+(* A memory cell: the binder for its value, the Sigma-variable holding its
+   base address, a constant offset from that base, and whether the VALUE is
+   public (a walking pointer's target usually is not). *)
+Record cell_spec (Σ : LCtx) : Type := MkCellSpec
+  { cs_bind : string
+  ; cs_var  : string
+  ; cs_in   : (cs_var∷ty_xlenbits ∈ Σ)%katamaran
+  ; cs_off  : Val ty_xlenbits
+  ; cs_pub  : bool }.
+Arguments MkCellSpec {Σ} cs_bind cs_var {cs_in} cs_off cs_pub.
+Arguments cs_bind {Σ}. Arguments cs_var {Σ}. Arguments cs_in {Σ}.
+Arguments cs_off {Σ}. Arguments cs_pub {Σ}.
+
+(* `t + off`, except that a ZERO offset must produce the bare term: the
+   contract has to match the term the executor builds, and a register the loop
+   does not move is written `r |-> term_var v`, not `r |-> v + 0`. *)
+Definition addr_off {Σ : LCtx} (t : Term Σ ty_xlenbits) (off : Val ty_xlenbits)
+    : Term Σ ty_xlenbits :=
+  if bv.eqb off bv.zero then t
+  else term_binop bop.bvadd t (term_val ty_xlenbits off).
+
+(* the walk registers at the loop head ("a") and after one trip ("an"): same
+   list, and the only difference is that the "an" side has advanced. *)
+Definition gen_walk_a {Σ : LCtx} (ws : list (walk_reg Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  List.fold_right
+    (fun w acc =>
+       let t := @term_var _ (wr_var w) _ (ctx.in_succ (wr_in w)) in
+       (wr_reg w ↦ᵣ t
+        ∗ (if wr_pub w then asn.formula (formula_secLeak t) ∗ acc else acc))%asn)
+    ⊤%asn ws.
+
+Definition gen_walk_an {Σ : LCtx} (ws : list (walk_reg Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  List.fold_right
+    (fun w acc =>
+       let t := @term_var _ (wr_var w) _ (ctx.in_succ (ctx.in_succ (wr_in w))) in
+       (wr_reg w ↦ᵣ addr_off t (wr_off w)
+        ∗ (if wr_pub w then asn.formula (formula_secLeak t) ∗ acc else acc))%asn)
+    ⊤%asn ws.
+
+(* the cells.  Written twice for the same reason every Term is: the two
+   contexts differ.  The BINDER's variable is always the head one, hence
+   ctx.in_zero; the base needs one more in_succ than the enclosing context. *)
+Definition gen_cells_a {Σ : LCtx} (cs : list (cell_spec Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  List.fold_right
+    (fun c acc =>
+       (asn.exist (cs_bind c) ty_xlenbits
+          (let a := addr_off (@term_var _ (cs_var c) _
+                                (ctx.in_succ (ctx.in_succ (cs_in c)))) (cs_off c) in
+           let v := @term_var _ (cs_bind c) _ ctx.in_zero in
+           if cs_pub c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
+           else (a ↦ₘ v)%asn)
+        ∗ acc)%asn)
+    ⊤%asn cs.
+
+Definition gen_cells_an {Σ : LCtx} (cs : list (cell_spec Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  List.fold_right
+    (fun c acc =>
+       (asn.exist (cs_bind c) ty_xlenbits
+          (let a := addr_off (@term_var _ (cs_var c) _
+                                (ctx.in_succ (ctx.in_succ (ctx.in_succ (cs_in c)))))
+                     (cs_off c) in
+           let v := @term_var _ (cs_bind c) _ ctx.in_zero in
+           if cs_pub c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
+           else (a ↦ₘ v)%asn)
+        ∗ acc)%asn)
+    ⊤%asn cs.
+
+(* the pure facts the PRECONDITION carries and the postcondition drops --
+   disjointness of two pointers, a lower bound on one, and so on. *)
+Definition gen_pures {Σ : LCtx} (fs : list (Formula (Σ ▻ "a"∷ty_xlenbits)))
+    (tail : Assertion (Σ ▻ "a"∷ty_xlenbits)) : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  List.fold_right (fun f acc => (asn.formula f ∗ acc)%asn) tail fs.
+
+(* THE THREE PARTS STAY SEPARATE CONJUNCTS.  Threading a tail through the
+   folds instead would interleave the reservoir with the walk in every proof;
+   keeping them apart is what lets the step across the back edge be the
+   composition of three independent lemmas (GenCompose: gen_walk_step,
+   gen_pures_interp, and the caller's cell trade). *)
+Definition gen_extra_a {Σ : LCtx} (ws : list (walk_reg Σ))
+    (fs : list (Formula (Σ ▻ "a"∷ty_xlenbits))) (cs : list (cell_spec Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  (gen_walk_a ws ∗ gen_pures fs (gen_cells_a cs))%asn.
+
+Definition gen_extra_an {Σ : LCtx} (ws : list (walk_reg Σ))
+    (cs : list (cell_spec Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  (gen_walk_an ws ∗ gen_cells_an cs)%asn.
