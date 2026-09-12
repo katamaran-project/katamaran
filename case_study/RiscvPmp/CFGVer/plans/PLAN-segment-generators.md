@@ -1313,3 +1313,78 @@ FIXED, cell-range fixpoint when it SLIDES.
   onto existing skills. Per CLAUDE.md a new skill must be authored through
   `skill-creator`, not hand-written; that is the right follow-up rather than a
   hand-rolled `SKILL.md`.
+
+## 3u. The per-trip obligations become LEMMAS (2026-09-12)
+
+Asked whether the per-loop ritual wanted a tactic or a lemma, and told lemmas
+(the `cfg_instrs_endToEnd` precedent: one general lemma, side conditions at the
+call site). It wanted lemmas, and the survey of the seven loops says why the
+ritual looked tactic-shaped in the first place: the obligations could not be
+STATED generically, because the valuation family is hand-written and nothing in
+`LoopSpec` relates trip `n+1` to trip `n`.
+
+Landed (commit 750ac416):
+
+- **`GenSegment`: `loop_latch_neq` / `_eq` / `_ult` / `_ule`.** The branch
+  obligation of `loop_step` / `loop_exit`. Hypotheses are the counter's value
+  off the valuation, the machine's step (`Hstep`), two `< 2^32` bounds and one
+  numeric fact -- all in `N`, so a caller never touches `bv.bin`.
+- **`GenCompose`: `loop_trans`.** The trip-to-trip transfer. Does the four
+  generic moves (open the counter existential, refute `NonSyncVal` from
+  `secLeak`, rewrite the step, frame) and leaves `Hstep` plus **`Hframe`**:
+  the frame at trip `S n` implies the frame at trip `n`.
+
+Two relop families, not one relop-parametric lemma -- the parametric version
+needs guard/exit complementarity as a per-loop side condition, i.e. most of
+what these exist to delete. The seven loops use exactly two families:
+`neq`/`eq` against a sentinel (5 of 7; the sentinel is a variable in C/D/F/Tail
+and the literal 0 in B) and `ult`/`ule` against a literal bound (divrem, A).
+Strides are -1, -4 and +4; `Hstep` is `bv_of_N_wrap_dec` for a decrement and
+`eq_sym (bv.of_N_add ..)` for an increment.
+
+### Verified against all seven, and it is NOT all good news
+
+`Example/ZZLoopLatchCheck.v` -- **14 latch obligations, all seven loops, no
+admits, 21 s.** Both relop families, both stride directions, literal and
+variable sentinels. The latch lemmas are general.
+
+`Example/ZZLoopTransCheck.v` -- `loop_trans` on A (footprint does not move:
+the whole transfer closes, `Hframe` is one `iFrame`) and on D (two walking
+pointers: `loop_trans` applies unchanged, `Hframe` is exposed).
+
+**And `Hframe` is NOT PROVABLE for D from `ldSpec` as written.** Read off both
+sides of the goal, the trip-`S n` frame is short of the trip-`n` frame by:
+
+1. **the cells are at the old addresses** -- `ld_extra_an` gives `p1 ↦ₘ _`,
+   `p7 ↦ₘ _` at pe-4(n+2)/p7e-4(n+2); trip `n` needs pe-4(n+1)/p7e-4(n+1);
+2. **`p1 ≠ p7` is dropped** -- asserted by `ld_extra_a`, absent from
+   `ld_extra_an`.
+
+This is a gap in the SPEC, not in `loop_trans`: `ls_extra_a`/`ls_extra_an` are
+fixed assertions describing ONE trip's window, with no reservoir to draw the
+next cell from, and `loop_inv`'s `Fr` is trip-independent too. An array loop
+needs `ls_extra_*` indexed by the trip index. **The six muladd probes were
+only ever checked at CONTRACT level (`solve_seg`); this is the first time
+their back edges were examined, and 5 of 7 cannot close one.** divrem and A
+(no memory in the frame) are the two that can.
+
+### The line count barely moved, and that is the honest headline
+
+divrem's per-loop block: **49 -> 45 code lines.** The 26 lines of proof became
+~15 lines of argument list. What changed is the KIND of line, not the number:
+every remaining line is data (a counter value, a bound, a valuation) rather
+than reasoning, and every loop's lines are now the same shape. The next real
+cut is a `loop_counted_ult` / `_neq` that bundles all three obligations plus
+the placement facts into ONE lemma per relop family -- the `endToEnd` shape
+done properly, which would take the call site to ~10 lines. Not built.
+
+### One real trap (and it is the small true version of a retracted one)
+
+`exact (loop_latch_ult (dvSpec iq) _ 1 .. ltac:(cbn; do 2 f_equal; lia) ..)`
+fails with **"Cannot find witness"**. The `_` for the valuation leaves the
+inline `ltac:`'s EXPECTED TYPE full of evars, so `lia` runs on a goal that is
+not yet a goal. Writing the valuation out fixes it (85 ms). Note this is the
+genuine, narrow version of the claim retracted in §3t: `ltac:` in a term
+argument is fine -- `ltac:` in a term argument *behind an undetermined `_`* is
+not. The `refine (.. _ _ _); bullets` style avoids the question entirely and
+is what D/F/Tail use.
