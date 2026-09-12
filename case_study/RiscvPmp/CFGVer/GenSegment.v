@@ -788,3 +788,29 @@ Proof.
   cbn. rewrite HT. cbn. unfold bv.unsigned.
   rewrite (bv.bin_of_N_small Hx). lia.
 Qed.
+
+(* Two facts every loop-frame proof needs, so that none of them re-derives
+   them: a disequality of addresses from a disequality of N, and the fact
+   that the address space fits in a word. *)
+Lemma bv_of_N_neq (x y : N)
+  (Hx : (x < bv.exp2 xlenbits)%N) (Hy : (y < bv.exp2 xlenbits)%N) (H : x <> y) :
+  @bv.of_N xlenbits x <> @bv.of_N xlenbits y.
+Proof.
+  intros Hc. apply (f_equal (@bv.bin xlenbits)) in Hc.
+  rewrite (bv.bin_of_N_small Hx) in Hc.
+  rewrite (bv.bin_of_N_small Hy) in Hc. contradiction.
+Qed.
+
+Lemma lenAddr_lt_exp2 : (lenAddr < bv.exp2 xlenbits)%N.
+Proof. vm_compute. reflexivity. Qed.
+
+(* NO tactic for the bounds block.  `loop_bound_le` above already IS the
+   lemma; the only thing a tactic added was INFERRING the per-base value from
+   the goal, and `refine` does that:
+
+     repeat constructor;
+     all: refine (loop_bound_le _ _ _ _ _ _ _); [cbn; reflexivity | lia | lia].
+
+   `reflexivity` unifies the value evar against the valuation, so nothing has
+   to be written out per base, and the reasoning stays in the lemma where it
+   can be read and reused. *)

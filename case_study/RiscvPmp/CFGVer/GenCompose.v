@@ -798,6 +798,115 @@ Section SegCompose.
     cbn. apply bi.exist_proper. intros v. now rewrite (H v).
   Qed.
 
+  (* ---- THE TWO MOVES A FRAME PROOF MAKES --------------------------------
+
+     Both are `*_inst` plus the arithmetic, packaged so that a call site says
+     only WHAT THE TWO SIDES EVALUATE TO (as N) and why those are equal.  That
+     is the whole content of "this register advanced by 4" / "this cell is the
+     one the previous trip handed back". *)
+  Lemma loop_reg_shift {R1 R2 : LCtx} (r : RegIdx)
+    (t1 : Term R1 ty_xlenbits) (t2 : Term R2 ty_xlenbits)
+    (i1 : Valuation R1) (i2 : Valuation R2) (x y : N)
+    (H1 : inst (T := fun Σ => Term Σ ty_xlenbits) t1 i1
+          = ty.SyncVal (@bv.of_N xlenbits x))
+    (H2 : inst (T := fun Σ => Term Σ ty_xlenbits) t2 i2
+          = ty.SyncVal (@bv.of_N xlenbits y))
+    (Hxy : x = y) :
+    asn.interpret (asn_regidx_pts r t1) i1
+    ⊢ asn.interpret (asn_regidx_pts r t2) i2.
+  Proof.
+    apply bi.equiv_entails_1_1, (asn_regidx_pts_inst r t1 t2 i1 i2).
+    rewrite H1. rewrite H2. now subst y.
+  Qed.
+
+  Lemma loop_cell_shift {R1 R2 : LCtx} (x1 x2 : string)
+    (T1 : Term (R1 ▻ x1∷ty.bvec (bytes_per_word * byte)) ty_xlenbits)
+    (T2 : Term (R2 ▻ x2∷ty.bvec (bytes_per_word * byte)) ty_xlenbits)
+    (i1 : Valuation R1) (i2 : Valuation R2) (x y : N)
+    (H1 : forall v, inst (T := fun Σ => Term Σ ty_xlenbits) T1
+                      (i1.[x1∷ty.bvec (bytes_per_word * byte) ↦ v])
+                    = ty.SyncVal (@bv.of_N xlenbits x))
+    (H2 : forall v, inst (T := fun Σ => Term Σ ty_xlenbits) T2
+                      (i2.[x2∷ty.bvec (bytes_per_word * byte) ↦ v])
+                    = ty.SyncVal (@bv.of_N xlenbits y))
+    (Hxy : x = y) :
+    asn.interpret (asn.exist x1 (ty.bvec (bytes_per_word * byte))
+                     (T1 ↦ₘ @term_var _ x1 _ ctx.in_zero)) i1
+    ⊢ asn.interpret (asn.exist x2 (ty.bvec (bytes_per_word * byte))
+                        (T2 ↦ₘ @term_var _ x2 _ ctx.in_zero)) i2.
+  Proof.
+    apply bi.equiv_entails_1_1, (asn_cell_inst x1 x2 T1 T2 i1 i2).
+    intros v. rewrite (H1 v). rewrite (H2 v). now subst y.
+  Qed.
+
+  (* ---- THE WHOLE FRAME, STRUCTURALLY -------------------------------------
+
+     A loop's frame is always `bounds ∗ regs ∗ extra`, and the first two are
+     the SAME argument every time: the bounds are rebuilt from N-level facts,
+     the register block crosses on its base's value.  Only `extra` is the
+     loop's own.  This lemma says exactly that, so a per-loop frame proof is
+     a Forall of bounds plus the extra entailment -- and nothing else.
+
+     (`gen_regs_at_inst` was written once before, deleted as unused because
+     `iFrame` crosses the register block at a CONCRETE call site.  Stating
+     the step generically is what brings it back: over abstract valuations
+     the two interpretations are no longer convertible.) *)
+  Lemma gen_regs_at_inst {R1 R2 : LCtx} (b1 : Term R1 ty_xlenbits)
+    (b2 : Term R2 ty_xlenbits) (i1 : Valuation R1) (i2 : Valuation R2)
+    (specs : list reg_spec_rel)
+    (Hb : inst (T := fun Σ => Term Σ ty_xlenbits) b1 i1
+          = inst (T := fun Σ => Term Σ ty_xlenbits) b2 i2) :
+    asn.interpret (gen_regs_at b1 specs) i1
+    ⊣⊢ asn.interpret (gen_regs_at b2 specs) i2.
+  Proof.
+    induction specs as [| s specs IH];
+      cbn [gen_regs_at List.fold_right asn.interpret].
+    - reflexivity.
+    - destruct s as [[r pub] pv]; destruct pv;
+        cbn [gen_reg_asn_at asn.interpret].
+      + apply bi.sep_proper; [| exact IH].
+        destruct pub; cbn [asn.interpret];
+          apply bi.exist_proper; intros v;
+          unfold asn_regidx_pts; destruct (reg_convert r); cbn; reflexivity.
+      + apply bi.sep_proper; [| exact IH].
+        unfold asn_regidx_pts; destruct (reg_convert r); cbn; reflexivity.
+      + apply bi.sep_proper; [| exact IH].
+        unfold asn_regidx_pts; destruct (reg_convert r); cbn;
+          [now rewrite Hb | reflexivity].
+  Qed.
+
+  Lemma loop_frame_std {R : LCtx} (ls : LoopSpec R) (iS iN : Valuation R)
+    (q : bv xlenbits) (FS Fn : iProp Σ)
+    (Hq : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_an ls)
+            ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+          = inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls)
+              (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+    (Hb : List.Forall (fun b =>
+            instprop (formula_relop bop.le
+              (term_binop bop.plus (term_unop uop.unsigned (fst b))
+                 (term_val ty.int (Z.of_N (snd b))))
+              (term_val ty.int (Z.of_N lenAddr)))
+              (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])) (ls_bases_a ls))
+    (Hex : asn.interpret (ls_extra_an ls)
+             ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+           ∗ FS
+           ⊢ asn.interpret (ls_extra_a ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fn) :
+    asn.interpret (gen_loop_frame_an ls)
+      ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ∗ FS
+    ⊢ asn.interpret (gen_loop_frame_a ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fn.
+  Proof.
+    unfold gen_loop_frame_an, gen_loop_frame_a. cbn [asn.interpret].
+    iIntros "((_ & Hregs & Hex') & HFS)".
+    iDestruct (Hex with "[$Hex' $HFS]") as "(Hea & HFn)".
+    iSplitR "HFn"; [| iExact "HFn"].
+    iSplitR; [iApply gen_loop_bounds_intro; exact Hb |].
+    iSplitL "Hregs"; [| iExact "Hea"].
+    iApply (bi.equiv_entails_1_1 _ _
+              (gen_regs_at_inst (ls_q_an ls) (ls_q_a ls) _ _ (ls_regs ls) Hq)).
+    iExact "Hregs".
+  Qed.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
