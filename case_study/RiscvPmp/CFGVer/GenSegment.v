@@ -772,3 +772,19 @@ Proof.
   rewrite (bv.bin_of_N_small Hb).
   rewrite (bv.bin_of_N_small Hw). exact Hle.
 Qed.
+
+(* One address-space bound, from N-level facts: the caller says what the term
+   evaluates to and that it fits, and never touches `bv.bin`.  Every loop's
+   `gen_loop_bounds` is a list of these (see `gen_loop_bounds_intro`). *)
+Lemma loop_bound_le {Σ : LCtx} (T : Term Σ ty_xlenbits) (ι : Valuation Σ)
+  (x off : N)
+  (HT : inst (T := fun Σ => Term Σ ty_xlenbits) T ι
+        = ty.SyncVal (@bv.of_N xlenbits x))
+  (Hx : (x < bv.exp2 xlenbits)%N) (H : (x + off <= lenAddr)%N) :
+  instprop (formula_relop bop.le
+      (term_binop bop.plus (term_unop uop.unsigned T) (term_val ty.int (Z.of_N off)))
+      (term_val ty.int (Z.of_N lenAddr))) ι.
+Proof.
+  cbn. rewrite HT. cbn. unfold bv.unsigned.
+  rewrite (bv.bin_of_N_small Hx). lia.
+Qed.

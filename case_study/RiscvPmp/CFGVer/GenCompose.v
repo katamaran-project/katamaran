@@ -472,11 +472,12 @@ Section SegCompose.
      bound that shrinks with the counter. *)
   Definition loop_inv {R : LCtx} (ls : LoopSpec R)
       (iotaf : nat -> Valuation R) (q : bv xlenbits)
-      (Fr Instrs : iProp Σ) (P : nat -> Prop) (n : nat) : iProp Σ :=
+      (Fr : nat -> iProp Σ) (Instrs : iProp Σ) (P : nat -> Prop) (n : nat)
+      : iProp Σ :=
     ( bi_pure (P n)
       ∗ asn.interpret (gen_loop_win ls)
         ((iotaf n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
-      ∗ Fr ∗ pc ↦ᵣ ty.SyncVal q
+      ∗ Fr n ∗ pc ↦ᵣ ty.SyncVal q
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
       ∗ Instrs )%I.
 
@@ -492,7 +493,8 @@ Section SegCompose.
      Htrans is where a sliding footprint lives: the contract is
      trip-independent, and iotaf moves the pointers. *)
   Lemma loop_step {R : LCtx} (ls : LoopSpec R) (pia pbound : N)
-      (Fr : iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop) (n : nat)
+      (Fr : nat -> iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
+      (n : nat)
       (HPm : P (S n) -> P n)
       (Hq : @bv.of_N xlenbits (ls_iq ls)
             = bv.add (@bv.of_N xlenbits pia)
@@ -516,9 +518,11 @@ Section SegCompose.
            (((iotaf (S n)).["a"∷ty_xlenbits
                ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
               .["an"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+         ∗ Fr (S n)
          ⊢ asn.interpret (gen_loop_win ls)
              ((iotaf n).["a"∷ty_xlenbits
-                ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])) :
+                ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+           ∗ Fr n) :
     loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
       (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
          (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
@@ -535,7 +539,7 @@ Section SegCompose.
     iIntros "(%HP & H)".
     iApply (seg_step1 (loop_body ls) (iotaf (S n))
              (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
-             (@bv.of_N xlenbits pia) Fr (ls_iq ls) 0%N eq_refl Hv
+             (@bv.of_N xlenbits pia) (Fr (S n)) (ls_iq ls) 0%N eq_refl Hv
              (seg_itable_faith (cfg_placement (loop_body ls)) (iotaf (S n))
                 pia (ls_prog ls) (ls_skip ls) (ls_take ls)
                 (4 * N.of_nat (ls_skip ls))%N pbound [0%N] Hok
@@ -561,8 +565,8 @@ Section SegCompose.
       rewrite seg_addr_0.
       iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
       iSplit; [iPureIntro; exact (HPm HP) |].
-      iSplitR "HF Hpc Hnpc Hinstrs"; [| iFrame].
-      iApply (Htrans HP). iExact "Hpost".
+      iDestruct ((Htrans HP) with "[$Hpost $HF]") as "(Hwin & HFn)".
+      iFrame.
   Qed.
 
   (* ---- THE EXIT TRIP ------------------------------------------------------ *)
@@ -572,7 +576,8 @@ Section SegCompose.
      of the loop, and it is genuine specification. *)
   Lemma loop_exit {R : LCtx} (ls : LoopSpec R)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (pia pbound : N) (Fr Out : iProp Σ) (iotaf : nat -> Valuation R)
+      (pia pbound : N) (Fr : nat -> iProp Σ) (Out : iProp Σ)
+      (iotaf : nat -> Valuation R)
       (P : nat -> Prop) (HP0 : P 0)
       (Hq : @bv.of_N xlenbits (ls_iq ls)
             = bv.add (@bv.of_N xlenbits pia)
@@ -590,7 +595,7 @@ Section SegCompose.
       (Hg  : instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls)))
                ((iotaf 0).["a"∷ty_xlenbits
                   ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
-      (HOut : Fr ∗ seg_exit_at (loop_final ls post) (iotaf 0)
+      (HOut : Fr 0 ∗ seg_exit_at (loop_final ls post) (iotaf 0)
                      (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
                      (@bv.of_N xlenbits pia)
                      (seg_addr (ls_iq ls) (ls_exit ls))
@@ -603,7 +608,7 @@ Section SegCompose.
   Proof.
     apply (seg_step1 (loop_final ls post) (iotaf 0)
              (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
-             (@bv.of_N xlenbits pia) Fr (ls_iq ls) (ls_exit ls) eq_refl Hv
+             (@bv.of_N xlenbits pia) (Fr 0) (ls_iq ls) (ls_exit ls) eq_refl Hv
              (seg_itable_faith (cfg_placement (loop_final ls post)) (iotaf 0)
                 pia (ls_prog ls) (ls_skip ls) (ls_take ls)
                 (4 * N.of_nat (ls_skip ls))%N pbound [ls_exit ls] Hok
@@ -630,7 +635,8 @@ Section SegCompose.
   (* seg_loop, instantiated.  Given a step for every trip and an exit, the
      loop runs to its continuation. *)
   Lemma loop_counted {R : LCtx} (ls : LoopSpec R) (pia : N)
-      (Fr Out Post : iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
+      (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
+      (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (Hstep : forall n,
          loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
            (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
@@ -674,7 +680,7 @@ Section SegCompose.
      existential's witness because `ls_k_anc` sits under the post's binder;
      in practice it does not mention "c" and the caller passes `fun _ => _`. *)
   Lemma loop_trans {R : LCtx} (ls : LoopSpec R) (iS iN : Valuation R)
-    (q : bv xlenbits) (kv w : N)
+    (q : bv xlenbits) (kv w : N) (FS Fn : iProp Σ)
     (Hk : forall x : ty.RelVal ty_xlenbits,
             inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_anc ls)
               (((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
@@ -686,14 +692,17 @@ Section SegCompose.
            = ty.SyncVal (@bv.of_N xlenbits w))
     (Hframe : asn.interpret (gen_loop_frame_an ls)
                 ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
-              ⊢ asn.interpret (gen_loop_frame_a ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])) :
+              ∗ FS
+              ⊢ asn.interpret (gen_loop_frame_a ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                ∗ Fn) :
     asn.interpret (cfg_postcondition (loop_body ls))
       ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
-    ⊢ asn.interpret (gen_loop_win ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+    ∗ FS
+    ⊢ asn.interpret (gen_loop_win ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fn.
   Proof.
     cbn [cfg_postcondition loop_body gen_loop_contract].
     unfold gen_loop_win, gen_loop_core, gen_loop_post.
-    iIntros "((Hex & Hfr) & Hmin)".
+    iIntros "(((Hex & Hfr) & Hmin) & HFS)".
     iDestruct "Hex" as (v) "(Hc & (%Heq & _) & (%Hsl & _))".
     destruct v as [w' | va vb]; [| destruct Hsl].
     cbn in Heq. rewrite (Hk (ty.SyncVal w')) in Heq. cbn in Heq.
@@ -706,10 +715,87 @@ Section SegCompose.
                       (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]))
       by (cbn; now rewrite Hkn).
     rewrite <- (asn_regidx_pts_inst (ls_ctr ls) (term_var "c") (ls_k_a ls) _ _ Hc2).
+    iDestruct (Hframe with "[$Hfr $HFS]") as "(Hfr' & HFn)".
+    iSplitR "HFn"; [| iExact "HFn"].
     iSplitR "Hmin"; [| iExact "Hmin"].
     iSplitL "Hc"; [iExact "Hc" |].
     iSplitR; [iPureIntro; cbn; now rewrite Hkn |].
-    iApply Hframe. iExact "Hfr".
+    iExact "Hfr'".
+  Qed.
+
+  (* ---- THE RESERVOIR -----------------------------------------------------
+
+     An ARRAY loop cannot close its own back edge with a trip-independent
+     frame: the body consumes the cell at the current pointer and the next
+     trip needs the cell at the next one, which was never in the frame.  The
+     reservoir is where the not-yet-reached cells live, and `loop_inv`'s `Fr`
+     is trip-indexed so that it can hold them.
+
+     The definition avoids ALL binder machinery by a trick: the cells trip i
+     needs are, by construction, `A` interpreted at trip i's own valuation --
+     so the reservoir is just that assertion at every future trip, and peeling
+     one off is `big_sepL`'s app lemma.  `A` is the CELL half of the loop's
+     `ls_extra_a`; the carried half (registers, pure facts) crosses the back
+     edge in the frame as usual. *)
+  Definition loop_res {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+      (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat) : iProp Σ :=
+    ([∗ list] i ∈ seq 0 n,
+       asn.interpret A ((iota i).["a"∷ty_xlenbits ↦ ty.SyncVal q]))%I.
+
+  Lemma loop_res_peel {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+      (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat) :
+    loop_res A iota q (S n)
+    ⊣⊢ loop_res A iota q n
+        ∗ asn.interpret A ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    unfold loop_res. rewrite seq_S. rewrite big_opL_app. cbn.
+    now rewrite bi.sep_emp.
+  Qed.
+
+  (* The whole bounds block of a frame, from a Forall of per-base facts --
+     each of which is `loop_bound_le`.  Rebuilding the bounds is necessary
+     rather than framing them across the back edge: a walking pointer's bound
+     at trip n is NOT implied by its bound at trip S n. *)
+  Lemma gen_loop_bounds_intro {R : LCtx} (bs : list (Term R ty_xlenbits * N))
+      (ι : Valuation R)
+      (H : List.Forall (fun b =>
+             instprop (formula_relop bop.le
+               (term_binop bop.plus (term_unop uop.unsigned (fst b))
+                  (term_val ty.int (Z.of_N (snd b))))
+               (term_val ty.int (Z.of_N lenAddr))) ι) bs) :
+    ⊢ asn.interpret (gen_loop_bounds bs) ι.
+  Proof.
+    induction bs as [| b bs IH];
+      cbn [gen_loop_bounds List.fold_right asn.interpret].
+    - iSplit; [iPureIntro; cbn; reflexivity | done].
+    - inversion H as [| ?? Hb Hbs]; subst.
+      iSplitR; [iSplit; [iPureIntro; exact Hb | done] |].
+      iApply IH. exact Hbs.
+  Qed.
+
+  (* The MEMORY analogue of asn_regidx_pts_inst, which did not exist before
+     2026-09-12 (it is what a sliding two-cell window needs when one cell
+     CROSSES the back edge: the post holds it under one address term and
+     binder name, the next trip's frame wants it under another).
+
+     Note `@term_var _ x _ ctx.in_zero` rather than `term_var x`: with an
+     abstract `x : string`, ctx.resolution cannot compute the In-proof, and
+     writing the index explicitly is the whole fix. *)
+  Lemma asn_cell_inst {R1 R2 : LCtx} (x1 x2 : string)
+    (T1 : Term (R1 ▻ x1∷ty.bvec (bytes_per_word * byte)) ty_xlenbits)
+    (T2 : Term (R2 ▻ x2∷ty.bvec (bytes_per_word * byte)) ty_xlenbits)
+    (i1 : Valuation R1) (i2 : Valuation R2)
+    (H : forall v : ty.RelVal (ty.bvec (bytes_per_word * byte)),
+           inst (T := fun Σ => Term Σ ty_xlenbits) T1
+             (i1.[x1∷ty.bvec (bytes_per_word * byte) ↦ v])
+           = inst (T := fun Σ => Term Σ ty_xlenbits) T2
+               (i2.[x2∷ty.bvec (bytes_per_word * byte) ↦ v])) :
+    asn.interpret (asn.exist x1 (ty.bvec (bytes_per_word * byte))
+                     (T1 ↦ₘ @term_var _ x1 _ ctx.in_zero)) i1
+    ⊣⊢ asn.interpret (asn.exist x2 (ty.bvec (bytes_per_word * byte))
+                        (T2 ↦ₘ @term_var _ x2 _ ctx.in_zero)) i2.
+  Proof.
+    cbn. apply bi.exist_proper. intros v. now rewrite (H v).
   Qed.
 
 End SegCompose.
