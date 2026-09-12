@@ -1675,3 +1675,51 @@ still show:
   past the timeout; inferring them from the goal takes 190 ms.
 - `repeat constructor` cannot be used on the walk `Forall`: it dives into the
   `exists` and picks evars. Write `apply List.Forall_cons` per element.
+
+## 4a. The reservoir's ORIGIN (2026-09-13)
+
+The gap §3z left: every loop theorem so far *assumes* the reservoir. `loop_inv`
+carries `Fr n`, the trip step trades with it, trip 0 is empty -- but nothing
+said where a caller GETS one, so none of the machinery could be instantiated
+from a real program state. Closed (commit e5f08c00).
+
+- **`loop_res_intro`** -- the general statement, and it is almost a tautology
+  once said out loud: a reservoir IS a block of per-trip resources, so
+  producing one is producing `A` at each future trip's valuation.
+  `([∗ list] i ∈ seq 0 n, blk i) ⊢ loop_res A iota q n` given
+  `blk i ⊢ interp A (iota i)`. Two lines (`big_sepL_mono`).
+- **`mem_word a`** -- one word at a PUBLIC address, contents arbitrary, stated
+  as `asn.interpret` over a one-variable context so it is the same object the
+  cells are.
+- **`loop_res_words`** -- the case that occurs: a loop walking an array of
+  words. The caller hands over `n` cells at addresses it names, and the
+  per-trip obligation collapses to ONE arithmetic fact about `addr i`.
+
+Demonstrated on C (`lc_reservoir`): C walks DOWN from its start pointer, so
+what a caller must hand it is the n words BELOW that pointer --
+`pe, pe+4, …, pe+4(n-1)` -- and the proof is four lines:
+
+```coq
+  apply (loop_res_words (MkCellSpec "v0" "p1" (bv.of_N 4294967292) false) … eq_refl).
+  intros i v. cbn.
+  replace (pe + 4 * (N.of_nat i + 1))%N with ((pe + 4 * N.of_nat i) + 4)%N by lia.
+  f_equal. exact (bv_of_N_wrap_dec 4 (pe + 4 * N.of_nat i)%N ltac:(bv_bound)).
+```
+
+`loop_res_words` covers a ONE-cell reservoir, which is exactly the sliding-
+window loops (C, B) -- the shape where the reservoir is load-bearing. A
+multi-cell reservoir (D, F, Tail) goes through `loop_res_intro` with a
+per-trip supply; no separate lemma, because the cells there are independent
+and the caller names them anyway.
+
+### What this does NOT yet do
+
+- **Nothing consumes what is left.** At trip 0 the reservoir is `emp`, so the
+  loop gives nothing back. A caller that owned an array before the loop has
+  handed it away permanently. For a straight-line cut after the loop that is
+  fine; for a caller that needs the array afterwards it is not, and the fix is
+  the mirror of this lemma (`loop_res` of the CONSUMED prefix, returned by the
+  exit) which does not exist.
+- The address function is the caller's to invent. There is no lemma saying
+  "`bv.seqBv base (4*n)` gives you `addr i = base + 4i`"; each caller writes
+  the arithmetic. That is one lemma away if it recurs.
