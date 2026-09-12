@@ -683,3 +683,92 @@ Proof.
     by (vm_compute; reflexivity).
   now rewrite bv.add_zero_r.
 Qed.
+
+(* ---- THE LATCH ------------------------------------------------------------
+
+   `loop_step`/`loop_exit` each leave one obligation about the BRANCH: the
+   guard holds at trip S n, the exit guard holds at trip 0.  Both are the same
+   three moves -- read the counter off the valuation, apply the machine's
+   step, compare -- so they are proved ONCE here and instantiated per loop.
+
+   There is a pair per relop family, not one relop-parametric lemma: a
+   parametric version would need the two formulas' complementarity as a
+   per-loop side condition, which is most of what these exist to delete.  The
+   seven muladd loops use exactly two families:
+
+     neq/eq    -- the counter (usually a walking POINTER) against a sentinel,
+                  either a limit variable or a literal.  5 of 7.
+     ult/ule   -- a countdown against a literal bound.  2 of 7.
+
+   `Hstep` is the one place the machine's arithmetic enters: supply
+   `bv_of_N_wrap_dec` for a decrement and `eq_sym (bv.of_N_add ..)` for an
+   increment.  Everything else is bounds, stated in N so the caller never
+   touches `bv.bin`. *)
+
+Lemma loop_latch_neq {R : LCtx} (ls : LoopSpec R)
+  (i : Valuation (R ▻ "a"∷ty_xlenbits))
+  (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (kv w ev : N)
+  (Hg : ls_guard ls = fun t => formula_relop bop.neq t e)
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+        = ty.SyncVal (@bv.of_N xlenbits kv))
+  (He : inst (T := fun Σ => Term Σ ty_xlenbits) e i
+        = ty.SyncVal (@bv.of_N xlenbits ev))
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hw : (w < bv.exp2 xlenbits)%N) (Hev : (ev < bv.exp2 xlenbits)%N)
+  (Hne : w <> ev) :
+  instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+Proof.
+  rewrite Hg. cbn. rewrite Hk. rewrite He. cbn. rewrite Hstep.
+  intros Hc. apply Hne.
+  apply (f_equal (@bv.bin xlenbits)) in Hc.
+  rewrite (bv.bin_of_N_small Hw) in Hc.
+  rewrite (bv.bin_of_N_small Hev) in Hc. exact Hc.
+Qed.
+
+Lemma loop_latch_eq {R : LCtx} (ls : LoopSpec R)
+  (i : Valuation (R ▻ "a"∷ty_xlenbits))
+  (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (kv w ev : N)
+  (Hg : ls_exitg ls = fun t => formula_relop bop.eq t e)
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+        = ty.SyncVal (@bv.of_N xlenbits kv))
+  (He : inst (T := fun Σ => Term Σ ty_xlenbits) e i
+        = ty.SyncVal (@bv.of_N xlenbits ev))
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Heq : w = ev) :
+  instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+Proof.
+  rewrite Hg. cbn. rewrite Hk. rewrite He. cbn. rewrite Hstep.
+  now subst w.
+Qed.
+
+Lemma loop_latch_ult {R : LCtx} (ls : LoopSpec R)
+  (i : Valuation (R ▻ "a"∷ty_xlenbits)) (b kv w : N)
+  (Hg : ls_guard ls = fun t => formula_relop bop.bvult
+                                 (term_val ty_xlenbits (@bv.of_N xlenbits b)) t)
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+        = ty.SyncVal (@bv.of_N xlenbits kv))
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hb : (b < bv.exp2 xlenbits)%N) (Hw : (w < bv.exp2 xlenbits)%N)
+  (Hlt : (b < w)%N) :
+  instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+Proof.
+  rewrite Hg. cbn. rewrite Hk. cbn. rewrite Hstep. unfold bv.ult.
+  rewrite (bv.bin_of_N_small Hb).
+  rewrite (bv.bin_of_N_small Hw). exact Hlt.
+Qed.
+
+Lemma loop_latch_ule {R : LCtx} (ls : LoopSpec R)
+  (i : Valuation (R ▻ "a"∷ty_xlenbits)) (b kv w : N)
+  (Hg : ls_exitg ls = fun t => formula_relop bop.bvule t
+                                 (term_val ty_xlenbits (@bv.of_N xlenbits b)))
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+        = ty.SyncVal (@bv.of_N xlenbits kv))
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hb : (b < bv.exp2 xlenbits)%N) (Hw : (w < bv.exp2 xlenbits)%N)
+  (Hle : (w <= b)%N) :
+  instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+Proof.
+  rewrite Hg. cbn. rewrite Hk. cbn. rewrite Hstep. unfold bv.ule.
+  rewrite (bv.bin_of_N_small Hb).
+  rewrite (bv.bin_of_N_small Hw). exact Hle.
+Qed.

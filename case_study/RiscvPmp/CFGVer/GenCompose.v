@@ -655,6 +655,63 @@ Section SegCompose.
       -∗ myWP2_loop Post.
   Proof. apply (seg_loop _ Out Post Hstep Hexit Hcont). Qed.
 
+  (* ---- THE TRANSFER, GENERICALLY ----------------------------------------
+
+     `loop_step`'s `Htrans` -- one trip's postcondition establishes the next
+     trip's invariant -- is the same four moves for every counted loop: open
+     the post's counter existential, kill the NonSyncVal branch (the counter
+     is public, so `secLeak` refutes it), rewrite the machine's step, and
+     frame.  Only two things are the loop's own, and they are the hypotheses:
+
+       Hstep  : the counter's arithmetic (bv_of_N_wrap_dec for a decrement,
+                eq_sym (bv.of_N_add ..) for an increment);
+       Hframe : the frame at trip S n implies the frame at trip n.  For a
+                loop whose footprint does not move this is `iIntros; iFrame`;
+                for a pointer walk it is where the SLIDING WINDOW lives, and
+                it is genuine specification.
+
+     Hk/Hkn read the counter off the two valuations.  Hk quantifies over the
+     existential's witness because `ls_k_anc` sits under the post's binder;
+     in practice it does not mention "c" and the caller passes `fun _ => _`. *)
+  Lemma loop_trans {R : LCtx} (ls : LoopSpec R) (iS iN : Valuation R)
+    (q : bv xlenbits) (kv w : N)
+    (Hk : forall x : ty.RelVal ty_xlenbits,
+            inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_anc ls)
+              (((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["c"∷ty_xlenbits ↦ x])
+            = ty.SyncVal (@bv.of_N xlenbits kv))
+    (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+    (Hkn : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+             (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           = ty.SyncVal (@bv.of_N xlenbits w))
+    (Hframe : asn.interpret (gen_loop_frame_an ls)
+                ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+              ⊢ asn.interpret (gen_loop_frame_a ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q])) :
+    asn.interpret (cfg_postcondition (loop_body ls))
+      ((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ⊢ asn.interpret (gen_loop_win ls) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    cbn [cfg_postcondition loop_body gen_loop_contract].
+    unfold gen_loop_win, gen_loop_core, gen_loop_post.
+    iIntros "((Hex & Hfr) & Hmin)".
+    iDestruct "Hex" as (v) "(Hc & (%Heq & _) & (%Hsl & _))".
+    destruct v as [w' | va vb]; [| destruct Hsl].
+    cbn in Heq. rewrite (Hk (ty.SyncVal w')) in Heq. cbn in Heq.
+    rewrite Hstep in Heq. subst w'.
+    cbn [asn.interpret].
+    assert (Hc2 : inst (T := fun Σ => Term Σ ty_xlenbits) (term_var "c")
+                    (((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+                       .["c"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits w)])
+                  = inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+                      (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+      by (cbn; now rewrite Hkn).
+    rewrite <- (asn_regidx_pts_inst (ls_ctr ls) (term_var "c") (ls_k_a ls) _ _ Hc2).
+    iSplitR "Hmin"; [| iExact "Hmin"].
+    iSplitL "Hc"; [iExact "Hc" |].
+    iSplitR; [iPureIntro; cbn; now rewrite Hkn |].
+    iApply Hframe. iExact "Hfr".
+  Qed.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
