@@ -1511,3 +1511,45 @@ pair projection `(t, 4).2`.
 dropped fact and the cell trade). Everything left is specific to the loop.
 The other four loops still carry their §3v proofs; converting them is the same
 mechanical edit and would land them at the same place.
+
+## 3x. Per-loop frame: 59 -> 29 (2026-09-12)
+
+Continuing §3w on the instruction that anything identical across examples
+belongs in a lemma, endToEnd-style. Two more groupings, both measured on D and
+then re-derived on F by pure renaming (29 lines each):
+
+- **`loop_frame_obl` / `loop_edge`** -- the two things a caller proves per loop
+  now have NAMES, so their statements stop being a dozen lines of re-spelled
+  valuation. Same fix as `dvInv` for the assembly block; it is worth saying
+  plainly that *statements* were a third of the cost every single time.
+- **one `iFrame` replaces the conjunct-by-conjunct walk.** Once the ONE
+  register that moved is converted with `loop_reg_shift`, a bare `iFrame`
+  discharges the fixed register, both `secLeak` facts, both cells and the
+  reservoir in one step. The eleven lines of `iSplitL`/`iSplitR` ritual that
+  did this by hand are gone. (It costs ~4 s; that is the documented
+  split-before-framing tradeoff, and at this size it is worth it.)
+
+| | D | what it is |
+|---|---|---|
+| §3v | 59 | conjunct-by-conjunct, every valuation written out |
+| §3w | 40 | move/structure lemmas, refine-inferred bounds |
+| §3x | **29** | named obligations + one iFrame |
+
+Of those 29: **8 are the loop's own numeric side conditions** (`iq + 116 ≤
+lenAddr`, the no-underflow bounds, `pe ≠ p7e`), 2 are `Proof`/`Qed`, and 19 are
+proof. The 19 break down as 3 structural (`apply loop_frame_std`, bounds), 4
+opening the loop's own `ls_extra_*` (irreducible -- they are the loop's own
+names), 1 intro, 6 the `loop_reg_shift` call, 1 `iFrame`, 3 the pure fact the
+post drops, 1 the reservoir peel.
+
+**What is left is loop-specific, not ritual**: which register advances and by
+how much, which pure fact the postcondition drops, and the loop's bounds. The
+one remaining candidate for grouping is `ls_extra_*` itself -- if it were
+STRUCTURED data (walking registers / fixed registers / pure facts / cells) the
+way `ls_regs` already is, a single `loop_extra_step` lemma would take the 6-line
+shift call and the 3-line pure fact down to side conditions, and the four
+opening lines with them. That is a change to `LoopSpec`'s fields and to all
+seven spec blocks; NOT attempted here, and it is the honest next step.
+
+C, Tail and B still carry their §3v proofs (51 / 49 / 60). Converting them is
+the same mechanical edit that took F from 59 to 29.
