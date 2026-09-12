@@ -1614,3 +1614,64 @@ F, C, Tail and B still use their hand-written extras and their §3v/§3x proofs,
 and all still compile. Converting them is ~4× the same mechanical work for a
 line count that measures neutral-to-worse, so it is a judgement call rather than
 an obvious win -- parked for a decision rather than done on momentum.
+
+## 3z. ALL FIVE loops go through the same lemma (2026-09-13)
+
+§3y stopped after D because the line count had gone 29 -> 34 and that seemed
+like a reason to stop. It was not: **uniformity was the point, not brevity** --
+one lemma taking the example-specific logic as arguments, the way
+`cfg_instrs_endToEnd` takes a program. Converted F, Tail, C and B.
+
+Every loop's frame proof is now literally this, with nothing else in it:
+
+```coq
+  unfold loop_frame_obl. pose proof lenAddr_lt_exp2.
+  apply (loop_frame_std <spec> <iota (S n)> <iota n> <q> _ _ eq_refl).
+  { repeat constructor.
+    all: refine (loop_bound_le _ _ _ _ _ _ _); [cbn; reflexivity | lia | cbn; lia]. }
+  cbn [ls_extra_an ls_extra_a <spec>]. unfold <X>_extra_an, <X>_extra_a.
+  apply (loop_extra_step <X>_walk <X>_pures <X>_cellspecs _ _ _ _ _).
+  - (* the walking registers, as N values *) ...
+  - (* the pure facts the postcondition drops *) ...
+  - (* the cell trade with the reservoir *) ...
+```
+
+All four contracts re-verify through `solve_seg` unchanged -- `LoopSpec` never
+moved, a probe just defines its `ls_extra_*` with the builders.
+
+| loop | frame lines | §3v baseline |
+|---|---|---|
+| D | 34 | 59 |
+| F | 31 | 59 |
+| Tail | **28** | 49 |
+| C | 40 | 51 |
+| B | 45 | 60 |
+| total | **178** | 278 |
+
+36% overall, but the number that matters is that the five proofs now differ
+ONLY in their three arguments. Tail is the cheapest because it has no pure
+facts at all (`lt_pures := []`); C and B are dearest because the cell trade is
+a crossing rather than a hand-off -- and that is the one place the two SHAPES
+still show:
+
+- **D / F / Tail** -- every cell is new: the third argument is
+  `rewrite loop_res_peel; iIntros "(_ & Hres & Hnew)"; iFrame`.
+- **C / B** -- a sliding two-cell window: one cell CROSSES the edge under a
+  different address term and binder name, so the third argument is
+  `loop_cell_shift`. **The reservoir must hold ONLY the genuinely new cell**
+  (`lc_newcells` / `lb_newcells`); one holding both cells of an overlapping
+  window would claim an address at two different trips, be unsatisfiable, and
+  make the loop theorem vacuous while still compiling.
+
+### Mechanical notes worth keeping
+
+- `addr_off t off` must emit the BARE `t` when `off = 0`, or a register the
+  loop does not move stops matching the term the executor builds.
+- `cbn` must be told the record projections (`cs_pub cs_var cs_bind cs_off
+  addr_off bv.eqb`) or the goal keeps whole `{| ... |}` literals in every
+  position and `iIntros` runs past a 30 s timeout on a 20k-char goal.
+- `iApply (loop_cell_shift "v0" "v1" _ _ _ _ x y)` -- leave the TERMS as `_`.
+  Writing them out with explicit `ctx.in_succ` chains made unification thrash
+  past the timeout; inferring them from the goal takes 190 ms.
+- `repeat constructor` cannot be used on the walk `Forall`: it dives into the
+  `exists` and picks evars. Write `apply List.Forall_cons` per element.
