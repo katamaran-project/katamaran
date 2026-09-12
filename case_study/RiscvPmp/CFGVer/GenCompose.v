@@ -907,6 +907,31 @@ Section SegCompose.
     iExact "Hregs".
   Qed.
 
+  (* ---- THE TWO OBLIGATIONS, NAMED ---------------------------------------
+
+     What a caller proves per loop is exactly these two, and without a name
+     each one's STATEMENT is a dozen lines of re-spelled valuation.  Same
+     disease, same cure, as `dvInv` for the assembly block. *)
+  Definition loop_frame_obl {R : LCtx} (ls : LoopSpec R)
+      (iota : nat -> Valuation R) (q : bv xlenbits) (Fr : nat -> iProp Σ)
+      (n : nat) : Prop :=
+    asn.interpret (gen_loop_frame_an ls)
+      (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ∗ Fr (S n)
+    ⊢ asn.interpret (gen_loop_frame_a ls)
+        ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      ∗ Fr n.
+
+  Definition loop_edge {R : LCtx} (ls : LoopSpec R)
+      (iota : nat -> Valuation R) (q : bv xlenbits) (Fr : nat -> iProp Σ)
+      (n : nat) : Prop :=
+    asn.interpret (cfg_postcondition (loop_body ls))
+      (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ∗ Fr (S n)
+    ⊢ asn.interpret (gen_loop_win ls)
+        ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      ∗ Fr n.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
