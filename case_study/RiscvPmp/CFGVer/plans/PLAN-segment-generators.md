@@ -1388,3 +1388,75 @@ genuine, narrow version of the claim retracted in §3t: `ltac:` in a term
 argument is fine -- `ltac:` in a term argument *behind an undetermined `_`* is
 not. The `refine (.. _ _ _); bullets` style avoids the question entirely and
 is what D/F/Tail use.
+
+## 3v. All seven back edges CLOSE (2026-09-12)
+
+§3u found that 5 of 7 loops could not close their back edge. Fixed. The cause
+was one design decision, not five bugs: **`loop_inv`'s ambient frame `Fr` was
+trip-INDEPENDENT**, so an array loop had nowhere to keep the cells it had not
+reached yet. The body consumes the cell at the current pointer and the next
+trip needs the cell at the next one, which was never anywhere in the invariant.
+
+### The fix, in three generic pieces (commit 742b47da)
+
+- **`Fr : nat -> iProp Σ`** in `loop_inv` / `loop_step` / `loop_exit` /
+  `loop_counted`, and `loop_trans` gains `FS`/`Fn`. `Htrans` is now
+  `post(S n) ∗ Fr (S n) ⊢ win(n) ∗ Fr n`, so the trip-to-trip step can EXCHANGE
+  resources with the reservoir instead of only framing.
+- **`loop_res A iota q n`** (GenCompose) -- the reservoir, defined as the
+  loop's own cell assertion `A` interpreted at EVERY FUTURE TRIP'S VALUATION:
+  `[∗ list] i ∈ seq 0 n, asn.interpret A ((iota i).[a↦q])`. This is the trick
+  that avoids all binder machinery -- the cells trip `i` needs are by
+  construction `A` at trip `i`, so no weakening under `asn.exist` is required,
+  and `loop_res_peel` is just `big_opL_app`.
+- **`gen_loop_bounds_intro` + `loop_bound_le`** -- the bounds block is REBUILT
+  at each trip, not framed: a walking pointer's `p+4 ≤ lenAddr` at trip n does
+  NOT follow from the same bound at trip S n. Stated in `N`; the caller never
+  touches `bv.bin`.
+- **`asn_cell_inst`** -- the memory analogue of `asn_regidx_pts_inst`, which
+  this plan recorded as missing. Needed when a cell CROSSES the back edge under
+  a different address term and binder name. Note `@term_var _ x _ ctx.in_zero`:
+  with an abstract `x : string`, `ctx.resolution` cannot compute the In-proof.
+
+### NO contract changed
+
+Not one `ls_extra_*`, not one `LoopSpec`, not one `solve_seg`. The two deficits
+§3u measured on D turned out not to need the spec at all: the missing cells
+come from the reservoir, and the dropped `p1 ≠ p7` is a PURE fact about the
+valuation, so it is re-proved from arithmetic rather than carried.
+
+### Reusability: TWO shapes cover all seven
+
+`Example/ZZLoopTransCheck.v` -- all five previously-open back edges closed, no
+admits, 50 s for the file.
+
+| shape | loops | reservoir holds |
+|---|---|---|
+| every cell is new | D, F, Tail | both cells |
+| SLIDING WINDOW, one cell crosses | B, C | one cell |
+| no memory at all | divrem, A | nothing (`Fr` constant) |
+
+The sliding-window case is the one that needed `asn_cell_inst`, and it also
+carries a trap worth stating: the reservoir must hold ONLY the genuinely new
+cell. A reservoir holding both cells of an overlapping window would claim the
+same address at two different trips, be unsatisfiable, and make the whole loop
+theorem vacuous while still compiling.
+
+Per-loop cost, measured: **49-60 code lines** of frame proof, and the SHAPE is
+identical every time -- rebuild the bounds, frame the register block, move the
+one advanced register with `asn_regidx_pts_inst`, rebuild any dropped pure
+fact, take the new cells from the reservoir, cross the shared cell with
+`asn_cell_inst`. **F was produced from D by pure textual renaming and compiled
+unchanged**, which is the strongest evidence available that the shape is real
+and not a per-loop reinvention.
+
+### Two method notes
+
+- A 2005 s compile of this file was **contention, not cost**: held `pet`
+  sessions plus `coqc` exceeded the 14 GB box and it swapped. Re-measured alone:
+  **50 s**. Same lesson as §3t, hit twice in one day -- an unattended wall-clock
+  number is not evidence. Check `free`/`ps` before believing one.
+- `iStopProof` bundles the WHOLE remaining proof-mode context into the
+  entailment, so hoist a pure `assert` ABOVE the `iIntros` instead of stopping
+  the proof mid-way to prove it. And `rewrite` with an `⊣⊢` does not fire
+  inside a proof-mode goal -- `iApply (bi.equiv_entails_1_1 _ _ H)` does.
