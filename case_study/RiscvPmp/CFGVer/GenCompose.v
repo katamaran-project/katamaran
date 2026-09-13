@@ -1085,6 +1085,152 @@ Section SegCompose.
     iExact "H".
   Qed.
 
+  (* ---- THE EDGE, FROM THE DATA ------------------------------------------
+
+     `loop_edge` is a Prop, so it can be BUILT rather than proved by hand.
+     Every counted loop whose extra is data (GenSegment §5) gets its back edge
+     from exactly this composition -- loop_trans over loop_frame_std over
+     loop_extra_step -- and the caller is left with the six facts that are
+     genuinely its own:
+
+       Hk/Hstep/Hkn : the counter's arithmetic across the trip;
+       Hqan         : the code base is the same on both sides (eq_refl);
+       Hb           : each base is in range at trip n;
+       Hw/Hf/Hc     : the walk, the dropped pure facts, the reservoir trade.
+
+     `Hea`/`Hean` are `eq_refl` whenever `ls_extra_*` was defined as the
+     generator applied to the loop's own lists, which is the point of defining
+     them that way. *)
+  Lemma loop_edge_std {R : LCtx} (ls : LoopSpec R)
+    (ws : list (walk_reg R)) (fs : list (Formula (R ▻ "a"∷ty_xlenbits)))
+    (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (Fr : nat -> iProp Σ)
+    (n : nat) (kv w : N)
+    (Hea  : ls_extra_a ls = gen_extra_a ws fs cs)
+    (Hean : ls_extra_an ls = gen_extra_an ws cs)
+    (Hk : forall x : ty.RelVal ty_xlenbits,
+            inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_anc ls)
+              ((((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                  .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["c"∷ty_xlenbits ↦ x])
+            = ty.SyncVal (@bv.of_N xlenbits kv))
+    (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+    (Hkn : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+             ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           = ty.SyncVal (@bv.of_N xlenbits w))
+    (Hqan : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_an ls)
+              (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls)
+                ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+    (Hb : List.Forall (fun b =>
+            instprop (formula_relop bop.le
+              (term_binop bop.plus (term_unop uop.unsigned (fst b))
+                 (term_val ty.int (Z.of_N (snd b))))
+              (term_val ty.int (Z.of_N lenAddr)))
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])) (ls_bases_a ls))
+    (Hw : List.Forall (fun v => exists x : N,
+            inst (T := fun Σ => Term Σ ty_xlenbits)
+              (addr_off (@term_var _ (wr_var v) _ (ctx.in_succ (ctx.in_succ (wr_in v))))
+                 (wr_off v))
+              (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)
+         /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+              (@term_var _ (wr_var v) _ (ctx.in_succ (wr_in v)))
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)) ws)
+    (Hf : List.Forall
+            (fun f => instprop f ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])) fs)
+    (Hc : asn.interpret (gen_cells_an cs)
+            (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+               .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+          ∗ Fr (S n)
+          ⊢ asn.interpret (gen_cells_a cs)
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fr n) :
+    loop_edge ls iota q Fr n.
+  Proof.
+    unfold loop_edge.
+    apply (loop_trans ls (iota (S n)) (iota n) q kv w (Fr (S n)) (Fr n)
+             Hk Hstep Hkn).
+    apply (loop_frame_std ls (iota (S n)) (iota n) q (Fr (S n)) (Fr n)
+             Hqan Hb).
+    rewrite Hea. rewrite Hean.
+    exact (loop_extra_step ws fs cs (iota (S n)) (iota n) q (Fr (S n)) (Fr n)
+             Hw Hf Hc).
+  Qed.
+
+  (* ---- THE WHOLE LOOP, FROM ITS OBLIGATIONS ------------------------------
+
+     The analogue of `cfg_instrs_endToEnd`: everything generic about a counted
+     loop is discharged here, and what a caller passes is a fixed list of
+     example-specific arguments.  Assembling a loop used to mean writing out
+     `loop_step`, `loop_exit` and `loop_counted` -- three lemmas whose
+     statements are mostly re-spelled valuations -- for every example.
+
+     The arguments group as:
+       placement  Hq/Hok/HokF/Hwf -- where the segment sits in the program;
+       the VCs    Hvb/Hvf         -- `solve_seg` on body and final;
+       the base   Hpl/Hpa         -- eq_refl whenever iotaf maps "q" to a literal;
+       the count  HP0/HPm         -- the trip predicate survives decrement;
+       THE FOUR   Hg/Hxg/Hedge    -- guard, exit guard, back edge (and nothing
+                  else: the frame lives inside `loop_edge`, built by
+                  `loop_edge_std` above);
+       the cut    HOut/Hcont      -- what the loop hands the next segment.
+
+     `Hg` and `Hedge` take `P (S n)`, so a loop whose guard needs a no-wrap
+     bound gets it from the trip predicate rather than from a side hypothesis. *)
+  Lemma loop_all {R : LCtx} (ls : LoopSpec R)
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (pia pbound : N) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
+      (iotaf : nat -> Valuation R) (P : nat -> Prop)
+      (Hq : @bv.of_N xlenbits (ls_iq ls)
+            = bv.add (@bv.of_N xlenbits pia)
+                (@bv.of_N xlenbits (4 * N.of_nat (ls_skip ls))))
+      (Hok : seg_ok (ls_prog ls) (ls_skip ls)
+               (4 * N.of_nat (ls_skip ls))%N pbound [0%N] = true)
+      (HokF : seg_ok (ls_prog ls) (ls_skip ls)
+                (4 * N.of_nat (ls_skip ls))%N pbound [ls_exit ls] = true)
+      (Hwf : seg_wf pia pbound)
+      (Hvb : ValidCFGVerifierContract (loop_body ls))
+      (Hvf : ValidCFGVerifierContract (loop_final ls post))
+      (Hpl : forall n, inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q ls) (iotaf n)
+                       = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
+      (Hpa : forall n, inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls)
+                         ((iotaf n).["a"∷ty_xlenbits
+                            ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
+                       = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
+      (HP0 : P 0) (HPm : forall n, P (S n) -> P n)
+      (Hg : forall n, P (S n) ->
+             instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls)))
+               ((iotaf (S n)).["a"∷ty_xlenbits
+                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
+      (Hxg : instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls)))
+               ((iotaf 0).["a"∷ty_xlenbits
+                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
+      (Hedge : forall n, P (S n) ->
+             loop_edge ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr n)
+      (HOut : Fr 0 ∗ seg_exit_at (loop_final ls post) (iotaf 0)
+                     (@bv.of_N xlenbits (ls_iq ls)) (ls_prog ls)
+                     (@bv.of_N xlenbits pia)
+                     (seg_addr (ls_iq ls) (ls_exit ls))
+              -∗ Out)
+      (Hcont : Out -∗ myWP2_loop Post) :
+    forall n,
+      loop_inv ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr
+        (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+           (ai_instr <$> instrs_of_list (@bv.of_N xlenbits pia) (ls_prog ls)))
+        P n
+      -∗ myWP2_loop Post.
+  Proof.
+    apply (loop_counted ls pia Fr Out Post iotaf P
+             (fun n => loop_step ls pia pbound Fr iotaf P n (HPm n) Hq Hok Hwf
+                         Hvb (Hpl (S n)) (Hpa (S n)) (Hg n) (Hedge n))
+             (loop_exit ls post pia pbound Fr Out iotaf P HP0 Hq HokF Hwf Hvf
+                (Hpl 0) (Hpa 0) Hxg HOut)
+             Hcont).
+  Qed.
+
 End SegCompose.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after

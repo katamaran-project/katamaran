@@ -1827,3 +1827,48 @@ fixed at the word case:
 Not applied: `Contracts.v` is the shared solver surface every example depends
 on, so it wants a full rebuild and the gate behind it, not a drive-by edit at
 the end of a session. Flagged for a decision.
+
+## 4d. ONE LEMMA PER LOOP: `loop_all` + `loop_edge_std` (2026-09-13)
+
+The goal stated in §4a -- "one lemma covering every example, with the
+example-specific logic as an argument, just like `cfg_instrs_endToEnd`" -- is
+reached by TWO lemmas in `GenCompose.v`, not one, and the split is deliberate.
+
+### `loop_all` -- the assembly
+
+Replaces the per-example `<x>s_step` / `<x>s_exit` / `<x>s_loop` triple (three
+lemmas, each re-spelling `loop_inv`'s six arguments twice) with one
+application. Its arguments group as:
+
+| group | arguments | in practice |
+|---|---|---|
+| placement | `Hq` `Hok` `HokF` `Hwf` | the §3e bundle, still four |
+| the VCs | `Hvb` `Hvf` | `solve_seg` on body and final |
+| the base | `Hpl` `Hpa` | `fun _ => eq_refl` |
+| the count | `HP0` `HPm` | the trip predicate |
+| **THE OBLIGATIONS** | `Hg` `Hxg` `Hedge` | guard, exit guard, back edge |
+| the cut | `HOut` `Hcont` | what the loop hands the next segment |
+
+The FRAME is no longer a separate obligation: it lives inside `loop_edge`.
+
+### `loop_edge_std` -- the back edge, from the data
+
+`loop_edge` is a `Prop`, so it can be BUILT. `loop_edge_std` is
+`loop_trans` over `loop_frame_std` over `loop_extra_step`, and leaves seven
+goals, each genuinely the loop's own: the counter read off both trips and its
+step (3), the bases still in range (1), and the walk / dropped pure facts /
+cell trade (3). `Hea`/`Hean` are `eq_refl` because `ls_extra_*` was defined as
+the generator applied to the loop's own lists -- that is the payoff for §5's
+extra-as-data.
+
+Kept separate from `loop_all` because a loop whose footprint does not move
+(divrem) does not want the data-shaped arguments at all: it passes its own
+`loop_edge` and skips `loop_edge_std` entirely. One lemma for both would have
+to carry the union.
+
+### Converted
+
+`ZZLoopDThm.v` (pointer loop) and `ZZDvLoopThm.v` (counter loop) each collapse
+to ONE `loop_all`; `ZZLoopTransCheck.v` (D) and `ZZLoopTransCheck2.v`
+(F, C, Tail, B) each collapse `<x>_frame` + `<x>_trans_closed` to ONE
+`loop_edge_std`. All five back edges now have byte-identical structure.

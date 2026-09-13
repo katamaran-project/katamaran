@@ -556,7 +556,34 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
             [ eassumption | eassumption | eassumption
             | vm_compute; reflexivity
             | apply Z.leb_le; vm_compute; reflexivity ]
-        | apply relval_neq_irrefl ].
+        | apply relval_neq_irrefl
+        (* BASE MINUS A CONSTANT, with both offsets READ OFF THE GOAL.  The
+           alternative above leaves `B` and `D` as evars, and that cannot
+           work: the premises are stated over `bop.eval_relop_relprop` while
+           the hypotheses are still ERASED (`Erasure.inst_eformula' …`), so
+           what closes them is CONVERSION, not unification -- and conversion
+           needs every numeric parameter concrete before `eassumption` runs.
+           Pinning them at literals would only move the problem (`D` is the
+           program's own offset, not a fixed width), so both come from the
+           goal: `A` is the access width it already mentions, and `D` is
+           recovered from the two's-complement constant `cbv` as 2^32 - cbv.
+           `B := A` is the bound the contract registers for the pointer
+           itself, which is what the fetch/word case leaves in context.
+           Found 2026-09-13 on loop C's exit contract -- the first DESCENDING
+           pointer loop, which is what makes every access sit below its
+           base. *)
+        | match goal with
+          | |- context [ Erasure.eterm_binop bop.plus (Erasure.eterm_val ty.int ?A)
+                           (Erasure.eterm_unop uop.unsigned
+                              (Erasure.eterm_binop bop.bvadd
+                                 (Erasure.eterm_val (ty.bvec _) ?cbv) _)) ] =>
+              let d := eval vm_compute in
+                ((Z.of_N (bv.exp2 xlenbits) - Z.of_N (bv.bin cbv))%Z) in
+              eapply (relval_fetch_upper_neg _ _ A d);
+                [ eassumption | eassumption | eassumption
+                | vm_compute; reflexivity
+                | apply Z.leb_le; vm_compute; reflexivity ]
+          end ].
 
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
     (*   match reg_convert r with *)
