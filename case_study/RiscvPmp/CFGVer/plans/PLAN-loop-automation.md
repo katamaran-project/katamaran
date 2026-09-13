@@ -353,6 +353,85 @@ Three findings, in increasing order of how much they change the plan:
 
 ---
 
+## Step 1 results (2026-09-13) — A3 + C4 + C5 landed
+
+All three done, plus two derivations that fell out of A3. Every loop VC and
+every composition probe re-verified; `GenCompose.vo` is already a gate build
+target, so this is gate-covered.
+
+**A3 — `gen_loop_contract` now delegates to `gen_seg_contract`.** A loop's
+contract IS an ordinary segment contract, entered at head 0 of its own code
+base. The risk was never the statement, it was the *precondition order*:
+`gen_seg_contract` puts the code bound second and the register block last,
+where the loop generator buried both mid-frame, and conjunct order moves
+consume-scan positions. Measured before committing to it
+(`Example/ZZSpikeA3.v`, loop D — two walking pointers, two cells, three base
+bounds): both contracts verify with a bare `solve_param_vc`. All 14 loop VCs
+(7 loops x body+final) then re-verified with **no tactic changes at all**.
+
+Consequences in the generated contract, none cosmetic: `cfg_placement` is
+`ls_q + 0` and `cfg_init_addr` is `ls_iq + 0`, neither definitionally the bare
+form (`N.sub`/`bv.add` do not see through a variable), so the composition
+lemmas pick up an `inst_addr_plus0`. `cfg_exitCond` is unchanged. Four
+projection lemmas (`gen_loop_place`/`_exitCond`/`_instrs`/`_exits`) keep the
+composition layer from ever cbn-ing through `gen_seg_contract`'s
+`let place := …`; three are `eq_refl`, and only `gen_loop_exits` needs work,
+because `t - 0` is STUCK for a variable `t`.
+
+**A3, second half — `loop_step` and `loop_exit` are now ONE lemma.**
+`loop_trip`, parameterised by the guard, the target, the valuation and the
+continuation; the two are three-line corollaries. They had been ~40 lines each
+differing only in those four things, with both faith arguments and the entire
+HPre bullet duplicated verbatim.
+
+**Derived: `ls_bound` (= `4 * ls_take`) and the code base's bounds entry.** The
+code extent used to be hand-written as the LEADING entry of `ls_bases_a` /
+`ls_bases_an`, where it had to agree with `ls_take` and (for a bottom-tested
+loop) with `ls_exit`, and nothing checked it. 7/7 loops had all three equal.
+`ls_bases_*` now carry DATA bases only and `ls_bases_all_a/_an` prepend the
+derived entry — which is also what keeps the frames symmetric, so
+`loop_frame_std`, `loop_edge`, `loop_edge_std` and `loop_all` needed no
+restructuring at all. (The first attempt made the frames asymmetric and would
+have rewritten all four; reverted before compiling.)
+
+**C4 — six LoopSpec fields become two.** `ls_q`/`ls_q_a`/`ls_q_an` and
+`ls_k_a`/`ls_k_an`/`ls_k_anc` were one variable at three weakenings each;
+they are now `ls_qvar`/`ls_qin` and `ls_kvar`/`ls_kin` (a name plus its
+membership proof, written `_` in a literal and resolved by `ctx.resolution`),
+with the six Terms derived. Validated in 56 ms before any editing: `_` does
+resolve under record syntax, and `ls_q ls` is DEFINITIONALLY the `term_var "q"`
+the literals used to spell out — so C4 changed no contract and re-proved no VC.
+It also kills `loop_all`'s `Hpa` premise, since `inst (ls_q_a ls) (i.["a"↦w])
+= inst (ls_q ls) i` is now `reflexivity` (`inst_ls_q_a`).
+
+**C4, continued — `ls_at` deleted.** Spike (a) found it vestigial and
+inconsistent (the counter's `iota` in the three countdown loops, `fun n => n`
+in the four pointer loops) and nothing referenced it outside its own
+declaration. The information is not lost: spike (a)'s closed form derives it.
+
+**C5 — the placement bundle.** `pia`/`pbound`/`Hq`/`Hok`/`HokF`/`Hwf` become
+one `LoopPlace` record; `loop_instrs ls pl` replaces the `ptsto_instrs (… <$>
+instrs_of_list (of_N pia) …)` block every statement re-spelled. `loop_all` goes
+from **22 arguments to 16**.
+
+**Two traps worth keeping.**
+
+1. **Do NOT make the C4 accessors `Arguments … : simpl never`.** It looks right
+   — it restores the stuck-on-a-variable behaviour of the record projections
+   they replace — and it fixes this file's own latch lemmas. But it is too
+   blunt: every example proof relies on `cbn` reducing `ls_k_a (ldSpec iq)`, a
+   projection of a CONCRETE record, down to `term_var "p1"`, and blocking the
+   definition blocks that too. The problem is only the VARIABLE case, in six
+   sites inside `GenSegment.v` and `GenCompose.v`, which say
+   `cbn -[ls_k_a]` / `cbn -[ls_q_a]` / `cbn -[ls_k_anc]` instead.
+2. **`ls_bound` is not cbn-reducible in the bounds bullet.** `cbn` will not
+   delta-expand it (its body starts with a multiplication, not a match), so the
+   standard `loop_bound_le` incantation needs `try unfold ls_bound` for the
+   code base. The `try` is because the data bases are still literals; if it ever
+   fails to fire where it should, the following `lia` fails loudly.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
@@ -364,11 +443,8 @@ order below is the REVISED one, and the revision is the point. Spike (a) made C
 cheap, so C moves ahead of B. Spike (b) moved B's cost out of `GenContract.v`
 and into `Adequacy.v`, so B drops to last and acquires a go/no-go.
 
-**1. A3 + C4 + C5 — the loop layer's own cleanup.** Self-contained, no
-trusted-surface impact. A3 matters most: collapsing `loop_final` into an
-ordinary segment turns `loop_step`/`loop_exit` into one lemma, and that lemma
-is what D and E build on. Doing it after E means rebuilding E. C4 now also
-retires `ls_at` — but as a supersession by C2, not a deletion (spike (a)).
+**1. A3 + C4 + C5 — the loop layer's own cleanup. DONE 2026-09-13.** See
+§Step 1 results below.
 
 **2. D3 (`loop_enter`).** Unchanged, and still second. It is what makes
 composition possible at all; it is independent of C2 (it can take `Fr n` as an

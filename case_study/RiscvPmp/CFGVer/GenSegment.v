@@ -391,6 +391,17 @@ Qed.
    are not the ones in its sub-table.  GenCompose.itable_faith_at makes the
    mismatch a PROOF OBLIGATION (`4 * skip = head`), so it cannot pass silently
    once the segment is composed. *)
+(* The address-space bound on ONE base, as a precondition conjunct.  Factored
+   out because gen_seg_contract emits it for the code base while the loop
+   invariant has to RE-establish exactly the same conjunct at the back edge:
+   two spellings of one formula is how they drift. *)
+Definition gen_base_bound {Σ : LCtx} (base : Term Σ ty_xlenbits) (bound : N)
+    : Assertion Σ :=
+  asn.formula (formula_relop bop.le
+     (term_binop bop.plus (term_unop uop.unsigned base)
+        (term_val ty.int (Z.of_N bound)))
+     (term_val ty.int (Z.of_N lenAddr))).
+
 Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
@@ -416,10 +427,7 @@ Definition gen_seg_contract {Σ : LCtx}
     (exits_of_offs place (List.map (fun t => (t - head)%N) targets))
     ( asn_pc_eq (term_binop bop.bvadd base_a
                    (term_val ty_xlenbits (bv.of_N head)))
-      ∗ asn.formula (formula_relop bop.le
-           (term_binop bop.plus (term_unop uop.unsigned base_a)
-              (term_val ty.int (Z.of_N bound)))
-           (term_val ty.int (Z.of_N lenAddr)))
+      ∗ gen_base_bound base_a bound
       ∗ extra_pre
       ∗ gen_regs_at base_a regs )
     (List.firstn take (List.skipn skip prog))
@@ -536,20 +544,24 @@ Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
   ; ls_exit   : N            (* fall-through target, RELATIVE to the head      *)
   ; ls_fuel   : nat
 
-    (* the loop's own CODE base, at the three contexts it appears in *)
-  ; ls_q      : Term Σ ty_xlenbits
-  ; ls_q_a    : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
-  ; ls_q_an   : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits
+    (* C4: the loop's own CODE base, as a NAME plus its membership proof.  It
+       used to be three fields -- ls_q / ls_q_a / ls_q_an -- because a Term
+       does not weaken, so the same variable had to be written once per
+       context.  Storing the name and the In-proof instead lets the three
+       Terms be DERIVED (below), which makes them agree by construction rather
+       than by a convention nothing checked, and makes the composition lemmas'
+       Hpa premise follow from Hpl by reflexivity.  In a LoopSpec literal the
+       proof is written `_` and resolved by ctx.resolution. *)
+  ; ls_qvar   : string
+  ; ls_qin    : (ls_qvar∷ty_xlenbits ∈ Σ)%katamaran
 
-    (* THE COUNTER: its register, its value as a term, and its per-trip
-       update.  ls_at is the bridge from trips-remaining to counter value. *)
+    (* THE COUNTER: its register, its variable (same treatment as ls_qvar --
+       ls_k_a / ls_k_an / ls_k_anc were one variable at three weakenings), and
+       its per-trip update. *)
   ; ls_ctr    : RegIdx
-  ; ls_k_a    : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
-  ; ls_k_an   : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits
-  ; ls_k_anc  : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits ▻ "c"∷ty_xlenbits)
-                     ty_xlenbits                  (* under the post's binder *)
+  ; ls_kvar   : string
+  ; ls_kin    : (ls_kvar∷ty_xlenbits ∈ Σ)%katamaran
   ; ls_imm    : Val ty_xlenbits
-  ; ls_at     : nat -> N
 
     (* the classification: registers by spec list, every base with its bound,
        and an escape hatch for what a spec list cannot say -- a walking
@@ -572,18 +584,83 @@ Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
 Arguments LoopSpec : clear implicits.
 Arguments MkLoopSpec {Σ}.
 
+(* THE SIX DERIVED TERMS (C4).  Each is `term_var <name>` at one more binder
+   than the last; `ls_q` and `ls_k_a` are DEFINITIONALLY the `term_var "q"` /
+   `term_var "p1"` the LoopSpec literals used to spell out, so collapsing the
+   fields changed no contract and re-proved no VC. *)
+Definition ls_q {Σ : LCtx} (ls : LoopSpec Σ) : Term Σ ty_xlenbits :=
+  @term_var Σ (ls_qvar ls) ty_xlenbits (ls_qin ls).
+Definition ls_q_a {Σ : LCtx} (ls : LoopSpec Σ)
+    : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits :=
+  @term_var _ (ls_qvar ls) ty_xlenbits (ctx.in_succ (ls_qin ls)).
+Definition ls_q_an {Σ : LCtx} (ls : LoopSpec Σ)
+    : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits :=
+  @term_var _ (ls_qvar ls) ty_xlenbits (ctx.in_succ (ctx.in_succ (ls_qin ls))).
+
+Definition ls_k_a {Σ : LCtx} (ls : LoopSpec Σ)
+    : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits :=
+  @term_var _ (ls_kvar ls) ty_xlenbits (ctx.in_succ (ls_kin ls)).
+Definition ls_k_an {Σ : LCtx} (ls : LoopSpec Σ)
+    : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits :=
+  @term_var _ (ls_kvar ls) ty_xlenbits (ctx.in_succ (ctx.in_succ (ls_kin ls))).
+Definition ls_k_anc {Σ : LCtx} (ls : LoopSpec Σ)
+    : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits ▻ "c"∷ty_xlenbits)
+           ty_xlenbits :=
+  @term_var _ (ls_kvar ls) ty_xlenbits
+    (ctx.in_succ (ctx.in_succ (ctx.in_succ (ls_kin ls)))).
+
+(* NOT `Arguments … : simpl never`, though that is the obvious way to make
+   these behave like the record PROJECTIONS they replace.  It is too blunt:
+   the examples' proofs rely on `cbn` reducing `ls_k_a (ldSpec iq)` -- a
+   projection of a CONCRETE record -- down to `term_var "p1"`, and blocking
+   the definition blocks that too.  The problem is only the VARIABLE case, in
+   this file's own latch lemmas, where `cbn` would unfold `ls_k_a ls` into
+   `term_var (ls_kvar ls) …` and strand a `rewrite Hk` written against the
+   folded form.  Those few sites say `cbn -[ls_k_a]` instead. *)
+
+(* What ls_q_a's extra binder costs: nothing.  This is why the composition
+   lemmas need only the BARE placement fact -- the "a"-context one follows.
+   (Before C4 the two were independent fields and both had to be supplied.) *)
+Lemma inst_ls_q_a {Σ : LCtx} (ls : LoopSpec Σ) (i : Valuation Σ)
+  (w : RelVal ty_xlenbits) :
+  inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls) (i.["a"∷ty_xlenbits ↦ w])
+  = inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q ls) i.
+Proof. reflexivity. Qed.
+
+(* THE LOOP'S OWN CODE EXTENT.  The body is `ls_take` instructions starting at
+   `ls_skip`, so it occupies 4*ls_take bytes.  This used to be written by hand
+   as the LEADING entry of ls_bases_a/ls_bases_an, where it had to agree with
+   ls_take (and, for a bottom-tested loop, with ls_exit) and could silently
+   drift; 7/7 loops in the tree had all three equal.  It is now derived, and
+   ls_bases_* carry DATA bases only. *)
+Definition ls_bound {Σ : LCtx} (ls : LoopSpec Σ) : N :=
+  (4 * N.of_nat (ls_take ls))%N.
+
+(* EVERY base the loop uses, code first.  The code entry used to be written by
+   hand as the head of ls_bases_a/ls_bases_an; deriving it is what lets
+   ls_bound stay the single source of truth, and it keeps the frames below
+   SYMMETRIC and shaped exactly as they were before A3 -- which is why
+   loop_frame_std, loop_edge and loop_all needed no restructuring. *)
+Definition ls_bases_all_a {Σ : LCtx} (ls : LoopSpec Σ)
+    : list (Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits * N) :=
+  (ls_q_a ls, ls_bound ls) :: ls_bases_a ls.
+
+Definition ls_bases_all_an {Σ : LCtx} (ls : LoopSpec Σ)
+    : list (Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits * N) :=
+  (ls_q_an ls, ls_bound ls) :: ls_bases_an ls.
+
 (* What is the same at entry and exit.  Written once per context because a
    Term does not weaken; the two must agree, and that is a real proof
    obligation at composition, not a convention. *)
 Definition gen_loop_frame_a {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  ( gen_loop_bounds (ls_bases_a ls)
+  ( gen_loop_bounds (ls_bases_all_a ls)
     ∗ gen_regs_at (ls_q_a ls) (ls_regs ls)
     ∗ ls_extra_a ls )%asn.
 
 Definition gen_loop_frame_an {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( gen_loop_bounds (ls_bases_an ls)
+  ( gen_loop_bounds (ls_bases_all_an ls)
     ∗ gen_regs_at (ls_q_an ls) (ls_regs ls)
     ∗ ls_extra_an ls )%asn.
 
@@ -610,10 +687,20 @@ Definition gen_loop_win {Σ : LCtx} (ls : LoopSpec Σ)
 (* ...and the branch decision is the ONLY thing a contract adds.  Note it is
    applied to ls_step, never to the raw counter: the head decrements, THEN the
    branch tests, and that off-by-one is now unstateable. *)
+(* NOT `gen_loop_core ∗ guard`, since A3: this is what the contract hands to
+   gen_seg_contract as its `extra_pre`, and gen_seg_contract emits the code
+   bound and the register block ITSELF.  So this is gen_loop_core MINUS those
+   two, plus the branch decision -- and gen_loop_win, which is the invariant's
+   view, still carries all of it.  The two therefore have the same conjuncts in
+   a different order, which is why loop_step's HPre is an iFrame and not a
+   rewrite. *)
 Definition gen_loop_pre {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  ( gen_loop_core ls
+  ( ls_ctr ls ↦ᵣ ls_k_a ls
+    ∗ asn.formula (formula_secLeak (ls_k_a ls))
+    ∗ gen_loop_bounds (ls_bases_a ls)
+    ∗ ls_extra_a ls
     ∗ asn.formula (g (ls_step (ls_imm ls) (ls_k_a ls))) )%asn.
 
 (* The body's post binds a FRESH variable and states the decrement as a PURE
@@ -629,19 +716,68 @@ Definition gen_loop_post {Σ : LCtx} (ls : LoopSpec Σ)
         ∗ asn.formula (formula_secLeak (term_var "c")) )
     ∗ gen_loop_frame_an ls )%asn.
 
+(* A3 (PLAN-loop-automation.md): a loop's contract IS an ordinary segment
+   contract, entered at head 0 of its own code base.  It used to build a
+   MkCFGVerifierContract by hand, which meant loop_final could compose with a
+   following segment but could not be STATED in segment vocabulary.
+
+   What changed in the generated contract, and why none of it is cosmetic:
+     - the precondition is now gen_seg_contract's layout (pc-eq, code bound,
+       extra, registers LAST) rather than the loop generator's.  Conjunct order
+       moves consume-scan positions, so this was measured, not assumed --
+       ZZSpikeA3.v verifies both of loop D's contracts, the shape with two
+       walking pointers, two cells and three base bounds;
+     - cfg_placement is `ls_q + 0` and cfg_init_addr `ls_iq + 0`, neither
+       definitionally the bare form, which is why the composition lemmas pick
+       up a bv.add_zero_r / N.add_0_r;
+     - cfg_exitCond is unchanged (`seg_exitCond (ls_iq ls) [target]`), because
+       gen_seg_contract takes ia and head separately. *)
 Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N)
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  @MkCFGVerifierContract Σ (ls_iq ls)
-    (ls_q ls)
-    (exits_of_offs (ls_q ls) [target])
-    (asn_pc_eq (ls_q_a ls) ∗ gen_loop_pre ls g)
-    (List.firstn (ls_take ls) (List.skipn (ls_skip ls) (ls_prog ls)))
-    (seg_exitCond (ls_iq ls) [target])
-    (ls_fuel ls)
-    (post ∗ minimal_pre)%asn.
+  gen_seg_contract (ls_q ls) (ls_q_a ls) (ls_iq ls) 0
+    (ls_prog ls) (ls_skip ls) (ls_take ls) [target]
+    (ls_bound ls) (ls_fuel ls) (ls_regs ls)
+    (gen_loop_pre ls g) post.
+
+(* THE FOUR PROJECTIONS the composition lemmas use, so they never cbn through
+   gen_seg_contract's `let place := …`.  Three are eq_refl.  Only the exit
+   table needs a rewrite: gen_seg_contract subtracts the head offset from every
+   target, and `t - 0` is STUCK for a variable t (N.sub matches on its first
+   argument, so it cannot see that the second is zero). *)
+Lemma gen_loop_place {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
+    (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
+  cfg_placement (gen_loop_contract ls g target post)
+  = term_binop bop.bvadd (ls_q ls) (term_val ty_xlenbits (bv.of_N 0)).
+Proof. reflexivity. Qed.
+
+Lemma gen_loop_exitCond {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
+    (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
+  cfg_exitCond (gen_loop_contract ls g target post)
+  = seg_exitCond (ls_iq ls) [target].
+Proof. reflexivity. Qed.
+
+Lemma gen_loop_instrs {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
+    (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
+  cfg_instrs (gen_loop_contract ls g target post)
+  = List.firstn (ls_take ls) (List.skipn (ls_skip ls) (ls_prog ls)).
+Proof. reflexivity. Qed.
+
+Lemma gen_loop_exits {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
+    (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
+  cfg_exits (gen_loop_contract ls g target post)
+  = exits_of_offs (term_binop bop.bvadd (ls_q ls) (term_val ty_xlenbits (bv.of_N 0)))
+      [target].
+Proof.
+  unfold gen_loop_contract, gen_seg_contract.
+  cbn [cfg_exits List.map]. now rewrite N.sub_0_r.
+Qed.
 
 (* BODY: guard holds, back edge to the head (offset 0 -- the loop is stated
    against its own entry address). *)
@@ -661,6 +797,31 @@ Definition loop_final {Σ : LCtx} (ls : LoopSpec Σ)
    get their own one-liners. *)
 Lemma seg_addr_0 (ia : N) : seg_addr ia 0 = @bv.of_N xlenbits ia.
 Proof. unfold seg_addr. f_equal. lia. Qed.
+
+(* A3 made every loop's cfg_placement `ls_q + 0` rather than the bare `ls_q`,
+   because gen_seg_contract always adds its head offset.  The composition
+   lemmas are handed the BARE fact (`inst (ls_q ls) iota = SyncVal q`, which is
+   reflexivity for a caller whose iota maps "q" to a literal), so these two
+   carry it across the `+ 0`.  Stated for a general offset as well, because
+   loop_enter will want the non-zero case. *)
+Lemma inst_addr_plus {R : LCtx} (t : Term R ty_xlenbits) (iota : Valuation R)
+  (q : bv xlenbits) (off : N)
+  (H : inst (T := fun Σ => Term Σ ty_xlenbits) t iota = ty.SyncVal q) :
+  inst (T := fun Σ => Term Σ ty_xlenbits)
+    (term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_N off))) iota
+  = ty.SyncVal (bv.add q (@bv.of_N xlenbits off)).
+Proof. cbn. now rewrite H. Qed.
+
+Lemma inst_addr_plus0 {R : LCtx} (t : Term R ty_xlenbits) (iota : Valuation R)
+  (q : bv xlenbits)
+  (H : inst (T := fun Σ => Term Σ ty_xlenbits) t iota = ty.SyncVal q) :
+  inst (T := fun Σ => Term Σ ty_xlenbits)
+    (term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_N 0))) iota
+  = ty.SyncVal q.
+Proof.
+  rewrite (inst_addr_plus t iota q 0 H). do 2 f_equal.
+  apply bv.add_zero_r.
+Qed.
 
 Lemma seg_exitCond_hit0 (iq : N) (targets : list N) (t : N)
   (Hin : List.In t targets) :
@@ -720,7 +881,10 @@ Lemma loop_latch_neq {R : LCtx} (ls : LoopSpec R)
   (Hne : w <> ev) :
   instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
 Proof.
-  rewrite Hg. cbn. rewrite Hk. rewrite He. cbn. rewrite Hstep.
+  (* `cbn -[ls_k_a]`, not plain `cbn`: with ls a VARIABLE, cbn unfolds the
+     C4 accessor into `term_var (ls_kvar ls) …` and Hk -- stated against the
+     folded form -- then matches nothing. *)
+  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
   intros Hc. apply Hne.
   apply (f_equal (@bv.bin xlenbits)) in Hc.
   rewrite (bv.bin_of_N_small Hw) in Hc.
@@ -739,7 +903,10 @@ Lemma loop_latch_eq {R : LCtx} (ls : LoopSpec R)
   (Heq : w = ev) :
   instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
 Proof.
-  rewrite Hg. cbn. rewrite Hk. rewrite He. cbn. rewrite Hstep.
+  (* `cbn -[ls_k_a]`, not plain `cbn`: with ls a VARIABLE, cbn unfolds the
+     C4 accessor into `term_var (ls_kvar ls) …` and Hk -- stated against the
+     folded form -- then matches nothing. *)
+  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
   now subst w.
 Qed.
 
@@ -754,7 +921,7 @@ Lemma loop_latch_ult {R : LCtx} (ls : LoopSpec R)
   (Hlt : (b < w)%N) :
   instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
 Proof.
-  rewrite Hg. cbn. rewrite Hk. cbn. rewrite Hstep. unfold bv.ult.
+  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ult.
   rewrite (bv.bin_of_N_small Hb).
   rewrite (bv.bin_of_N_small Hw). exact Hlt.
 Qed.
@@ -770,7 +937,7 @@ Lemma loop_latch_ule {R : LCtx} (ls : LoopSpec R)
   (Hle : (w <= b)%N) :
   instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
 Proof.
-  rewrite Hg. cbn. rewrite Hk. cbn. rewrite Hstep. unfold bv.ule.
+  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ule.
   rewrite (bv.bin_of_N_small Hb).
   rewrite (bv.bin_of_N_small Hw). exact Hle.
 Qed.
