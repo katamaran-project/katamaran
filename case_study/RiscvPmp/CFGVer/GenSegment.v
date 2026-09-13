@@ -773,6 +773,104 @@ Proof.
   rewrite (bv.bin_of_N_small Hw). exact Hle.
 Qed.
 
+(* ---- THE LATCH, AS ONE OBLIGATION ---------------------------------------
+
+   `loop_all` asks for two things about the branch: that the GUARD holds at
+   every trip that still has work, and that the EXIT guard holds at trip 0.
+   They are the same branch read two ways, and every loop discharged them as
+   two near-identical `refine`s whose bullets were the same six moves --
+   differing only in the counter values, which are exactly the values
+   `loop_edge_std` already takes.  `loop_latch_obl` names the pair; the two
+   builders below produce it from the counter alone, so a loop states its
+   recurrence ONCE.
+
+   `kv n` is the counter as read off trip n BEFORE the latch's own step, and
+   `w n` is it after -- the value the branch actually compares.  The trip
+   predicate `P` is what separates "still looping" from "done": the guard
+   obligation may assume `P (S n)`, the exit obligation gets nothing. *)
+Definition loop_latch_obl {R : LCtx} (ls : LoopSpec R)
+    (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop) : Prop :=
+  (forall n, P (S n) ->
+     instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls)))
+       ((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+  /\ instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls)))
+       ((iota 0).["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+
+(* Both builders take their facts as `forall n, P n -> ...`.  That is not
+   decoration: a COUNTDOWN's no-wrap bound is FALSE for large n, so an
+   unconditional hypothesis could not be discharged at all.  The two
+   obligations only ever look at trip `S n` (where the guard half has
+   `P (S n)`) and trip 0 (hence `HP0`, which `loop_all` already carries), so
+   this is exactly as strong as it needs to be. *)
+
+(* THE POINTER-COMPARE FAMILY: `bne c, e` / `beq c, e`, where the limit `e` is
+   a TERM of the loop's context (B, C, D, F, Tail).  What the loop supplies is
+   its counter, its limit, and the one fact that makes the loop terminate --
+   the counter misses the limit while trips remain and hits it at trip 0. *)
+Lemma loop_latch_ptr {R : LCtx} (ls : LoopSpec R)
+  (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
+  (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (kv w : nat -> N) (ev : N)
+  (HP0 : P 0)
+  (Hg  : ls_guard ls = fun t => formula_relop bop.neq t e)
+  (Hxg : ls_exitg ls = fun t => formula_relop bop.eq t e)
+  (Hk : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits (kv n)))
+  (He : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) e
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits ev))
+  (Hstep : forall n, P n ->
+             bv.add (@bv.of_N xlenbits (kv n)) (ls_imm ls)
+             = @bv.of_N xlenbits (w n))
+  (Hwb : forall n, P n -> (w n < bv.exp2 xlenbits)%N)
+  (Hev : (ev < bv.exp2 xlenbits)%N)
+  (Hne : forall n, P (S n) -> w (S n) <> ev)
+  (Heq : w 0%nat = ev) :
+  loop_latch_obl ls iota q P.
+Proof.
+  split.
+  - intros n HP.
+    exact (loop_latch_neq ls _ e (kv (S n)) (w (S n)) ev Hg (Hk _ HP)
+             (He _ HP) (Hstep _ HP) (Hwb _ HP) Hev (Hne n HP)).
+  - exact (loop_latch_eq ls _ e (kv 0) (w 0) ev Hxg (Hk 0 HP0) (He 0 HP0)
+             (Hstep 0 HP0) Heq).
+Qed.
+
+(* THE COUNTER-VS-BOUND FAMILY: `bltu b, c` / `bleu c, b` against a LITERAL
+   bound (A, divrem).  Same shape; the limit is a constant rather than a term,
+   so there is no `He`. *)
+Lemma loop_latch_ctr {R : LCtx} (ls : LoopSpec R)
+  (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
+  (b : N) (kv w : nat -> N)
+  (HP0 : P 0)
+  (Hg  : ls_guard ls = fun t => formula_relop bop.bvult
+                                 (term_val ty_xlenbits (@bv.of_N xlenbits b)) t)
+  (Hxg : ls_exitg ls = fun t => formula_relop bop.bvule t
+                                 (term_val ty_xlenbits (@bv.of_N xlenbits b)))
+  (Hk : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits (kv n)))
+  (Hstep : forall n, P n ->
+             bv.add (@bv.of_N xlenbits (kv n)) (ls_imm ls)
+             = @bv.of_N xlenbits (w n))
+  (Hb : (b < bv.exp2 xlenbits)%N)
+  (Hwb : forall n, P n -> (w n < bv.exp2 xlenbits)%N)
+  (Hlt : forall n, P (S n) -> (b < w (S n))%N)
+  (* `0%nat`: the %N would otherwise make `w`'s ARGUMENT parse as N. *)
+  (Hle : (w 0%nat <= b)%N) :
+  loop_latch_obl ls iota q P.
+Proof.
+  split.
+  - intros n HP.
+    exact (loop_latch_ult ls _ b (kv (S n)) (w (S n)) Hg (Hk _ HP)
+             (Hstep _ HP) Hb (Hwb _ HP) (Hlt n HP)).
+  - exact (loop_latch_ule ls _ b (kv 0) (w 0) Hxg (Hk 0 HP0) (Hstep 0 HP0) Hb
+             (Hwb 0 HP0) Hle).
+Qed.
+
 (* One address-space bound, from N-level facts: the caller says what the term
    evaluates to and that it fits, and never touches `bv.bin`.  Every loop's
    `gen_loop_bounds` is a list of these (see `gen_loop_bounds_intro`). *)

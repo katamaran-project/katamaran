@@ -1173,13 +1173,15 @@ Section SegCompose.
        the VCs    Hvb/Hvf         -- `solve_seg` on body and final;
        the base   Hpl/Hpa         -- eq_refl whenever iotaf maps "q" to a literal;
        the count  HP0/HPm         -- the trip predicate survives decrement;
-       THE FOUR   Hg/Hxg/Hedge    -- guard, exit guard, back edge (and nothing
-                  else: the frame lives inside `loop_edge`, built by
-                  `loop_edge_std` above);
+       THE TWO    Hlatch/Hedge    -- the latch (guard + exit guard, as one
+                  `loop_latch_obl`, built by `loop_latch_ptr`/`_ctr`) and the
+                  back edge (built by `loop_edge_std` above).  Nothing else:
+                  the frame lives inside `loop_edge`;
        the cut    HOut/Hcont      -- what the loop hands the next segment.
 
-     `Hg` and `Hedge` take `P (S n)`, so a loop whose guard needs a no-wrap
-     bound gets it from the trip predicate rather than from a side hypothesis. *)
+     Both `Hlatch`'s guard half and `Hedge` take `P (S n)`, so a loop whose
+     guard needs a no-wrap bound gets it from the trip predicate rather than
+     from a side hypothesis. *)
   Lemma loop_all {R : LCtx} (ls : LoopSpec R)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (pia pbound : N) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
@@ -1201,13 +1203,10 @@ Section SegCompose.
                             ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))])
                        = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
       (HP0 : P 0) (HPm : forall n, P (S n) -> P n)
-      (Hg : forall n, P (S n) ->
-             instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls)))
-               ((iotaf (S n)).["a"∷ty_xlenbits
-                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
-      (Hxg : instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls)))
-               ((iotaf 0).["a"∷ty_xlenbits
-                  ↦ ty.SyncVal (@bv.of_N xlenbits (ls_iq ls))]))
+      (* guard + exit guard, as the single obligation `loop_latch_obl`
+         (GenSegment): both are the same branch read two ways, and the two
+         builders there produce the pair from the loop's counter alone. *)
+      (Hlatch : loop_latch_obl ls iotaf (@bv.of_N xlenbits (ls_iq ls)) P)
       (Hedge : forall n, P (S n) ->
              loop_edge ls iotaf (@bv.of_N xlenbits (ls_iq ls)) Fr n)
       (HOut : Fr 0 ∗ seg_exit_at (loop_final ls post) (iotaf 0)
@@ -1225,9 +1224,10 @@ Section SegCompose.
   Proof.
     apply (loop_counted ls pia Fr Out Post iotaf P
              (fun n => loop_step ls pia pbound Fr iotaf P n (HPm n) Hq Hok Hwf
-                         Hvb (Hpl (S n)) (Hpa (S n)) (Hg n) (Hedge n))
+                         Hvb (Hpl (S n)) (Hpa (S n)) (proj1 Hlatch n)
+                         (Hedge n))
              (loop_exit ls post pia pbound Fr Out iotaf P HP0 Hq HokF Hwf Hvf
-                (Hpl 0) (Hpa 0) Hxg HOut)
+                (Hpl 0) (Hpa 0) (proj2 Hlatch) HOut)
              Hcont).
   Qed.
 
