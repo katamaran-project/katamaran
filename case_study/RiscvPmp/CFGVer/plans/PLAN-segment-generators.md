@@ -1751,7 +1751,9 @@ What the assembly needed beyond the obligations §3z already had:
   Passing `proj1 HP` directly does not typecheck -- the bound at `S n` is
   stronger, not equal.
 
-### C is BLOCKED, and it is a solver gap not a proof gap
+### C was NOT blocked -- CORRECTED same day, see §4c below
+
+### C looked blocked; the diagnosis below is half right
 
 C was the first choice (its reservoir origin is §4a's worked example) and its
 EXIT contract does not discharge. One residual survives `solve_seg`:
@@ -1775,3 +1777,53 @@ and answers the question; C's exit is a separate, small solver-tactic bug.
 This is the same lemma the earlier session recorded as "wired but never fired"
 (§3t-era note, `solve_symbase_fetch` + `relval_fetch_upper_neg`); it now has a
 diagnosis.
+
+## 4c. Why C was "blocked" -- CORRECTION (2026-09-13)
+
+§4b reported C's exit contract as blocked on a solver gap, with two causes.
+One was real, one was my own error, and C verifies:
+
+**Real:** `solve_symbase_fetch` applies `relval_fetch_upper_neg` with `B` and
+`D` left as EVARS. The first `eassumption` closes `secLeak v` fine; the second
+must solve `0 ≤ maxAddr - (?B + unsigned v)` against a hypothesis still in
+ERASED form (`Erasure.inst_eformula' … (eformula_relop …)`), and `eassumption`
+will not instantiate an evar through that. So the branch fails and, being
+inside `solve [...]`, takes the whole tactic down with it.
+
+**Mine:** I then tried to supply the offsets and reported that "the lemma's
+argument names do not match the source". They do. `About` says:
+
+```
+relval_fetch_upper_neg : ∀ (v : RelVal ty_xlenbits) (cbv : bv xlenbits)
+                           [A : Z] (B D : Z), …
+```
+
+**`A` is IMPLICIT**; only `B` and `D` are explicit. `relval_fetch_upper_neg _ _ 4 4 4`
+is one argument too many, which is why the fifth `4` landed on the first
+hypothesis -- and `(A := …) (B := …) (D := …)` fails for the same reason, since
+after naming the implicit `A` the explicit ones cannot also be named.
+
+The fix is one line, and C's exit contract now compiles (21.5 s):
+
+```coq
+  intros; vm_compute; solve_vc.
+  eapply (relval_fetch_upper_neg _ _ 4%Z 4%Z);
+    [ eassumption | eassumption | eassumption
+    | vm_compute; reflexivity | apply Z.leb_le; vm_compute; reflexivity ].
+```
+
+### The shared tactic is still wrong, and is NOT changed here
+
+`solve_symbase_fetch` will keep failing on every below-the-base access for the
+evar reason above. The obvious repair is an extra alternative with the offsets
+fixed at the word case:
+
+```coq
+  | eapply (relval_fetch_upper_neg _ _ 4%Z 4%Z);
+      [ eassumption | eassumption | eassumption
+      | vm_compute; reflexivity | apply Z.leb_le; vm_compute; reflexivity ]
+```
+
+Not applied: `Contracts.v` is the shared solver surface every example depends
+on, so it wants a full rebuild and the gate behind it, not a drive-by edit at
+the end of a session. Flagged for a decision.
