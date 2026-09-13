@@ -432,6 +432,69 @@ from **22 arguments to 16**.
 
 ---
 
+## Step 2 results (2026-09-13) — D3 `loop_enter`
+
+**Delivered (GenCompose.v):** `loop_entry` (the assertion-level obligation, as
+a named Prop mirroring `loop_edge`), `loop_enter` (turns a predecessor's
+`seg_exit_at` into `loop_inv n`), and `seg_then_loop` (`seg_seq` with the cut
+filled in — run the predecessor, land in the loop, run the loop). All three
+compiled first try.
+
+**The premise that justified promoting this was right.** Nothing in the tree
+had ever ENTERED a loop: `seg_exit_at` appeared only as a loop's *output*, in
+`loop_exit`. So the entry side really was analysis-only.
+
+**The analysis HELD.** Exercised on the one real loop-entry site in the tree —
+`sgL` (muladd instrs 250..263, head 1000) falls through at offset 1056, which
+is exactly the tail loop's head (`ls_skip` 264). Probe:
+`Example/ZZSpikeEnter.v` / `ZZSpikeEnterA.v` (untracked).
+
+- The two sides are in DIFFERENT contexts (`["p"]` vs
+  `ltCtx = ["q";"ap";"bp";"e"]`), as predicted — and `loop_reg_shift` /
+  `loop_cell_shift` are ALREADY `{R1 R2 : LCtx}`, so the back edge's
+  cross-valuation machinery transfers to the entry direction unchanged. That
+  was the main thing in doubt.
+- The entry arithmetic is FORCED, not chosen: `iotaT`'s `bp(n) = pe - 4(n+1)`
+  plus sgL handing over A4 = p+1144 and A2 = p+1152 pins `pe = ia+1152` and
+  `n = 1`; A0 = p+1132 then pins `ape = ia+1140`; and `tot = 1` because
+  `loop_done`'s window must be empty at entry. All of that agrees with
+  `sgL_post`'s own comment ("exactly two trips").
+- `loop_res` at trip 0 is EXACTLY sgL's declared second window (p+1136 /
+  p+1148). The reservoir lines up with no adjustment.
+- The resources the loop never touches (four spill slots, X2/S0-S3, the
+  program bound) frame with a bare `iFrame`.
+
+**Not finished, and left visibly so.** The INVARIANT half of the sgL->tail
+transfer is `admit`, and the probe does not compile in reasonable time.
+
+**The reason is a real finding, not just a stall.** Everything in this proof
+has to be hoisted OUT of the Iris context:
+
+- a blanket `cbn` on an `inst` goal took the file from 30 s to over 4 minutes,
+  twice — it unfolds `bv.of_N` at width `xlenbits` (the `bv-pitfalls` trap, in
+  a new place). Every address fact is now `cbn`-free (`inst_addr_plus` plus one
+  `bv.of_N_add`);
+- but even with every address fact hoisted and `cbn`-free, applying
+  `loop_cell_shift` with `iApply` INSIDE the entry proof still did not finish
+  in 4.5 minutes, while the identical applications in a separate file are part
+  of a **21 s** compile. Elaborating the implicit arguments against a context
+  holding the whole unfolded `sgL_post` is what costs.
+
+**So the `_std` builder for the entry side must take its cell and register
+transfers as ALREADY-PROVED ENTAILMENTS**, the way `loop_edge_std` takes
+`Hw`/`Hf`/`Hc` from outside. That is the design constraint D3 was supposed to
+discover, and it is not visible from reading goals — which is exactly why this
+was promoted ahead of the phases that depend on it.
+
+**What is left here:** finish the two cell entailments in `ZZSpikeEnterA.v`,
+add the register-block rebase (`gen_regs_any p specs` to
+`gen_regs_at q specs'` for base-free specs, modulo permutation — `am_regs` and
+`lt_regs` are the same five registers in a different order), and rebuild the
+three `gen_loop_bounds` conjuncts from the single program bound via
+`loop_bound_le`. None of it is in doubt; it is the `_std` builder's content.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
@@ -446,12 +509,7 @@ and into `Adequacy.v`, so B drops to last and acquires a go/no-go.
 **1. A3 + C4 + C5 — the loop layer's own cleanup. DONE 2026-09-13.** See
 §Step 1 results below.
 
-**2. D3 (`loop_enter`).** Unchanged, and still second. It is what makes
-composition possible at all; it is independent of C2 (it can take `Fr n` as an
-opaque hypothesis); and everything this plan says about the entry side comes
-from READING an unfolded `ldInv`, never from building one. Building it is how
-we find out whether that analysis holds. The back edge falsified a
-read-off-the-goal guess twice in one day.
+**2. D3 (`loop_enter`). DONE 2026-09-13** — see §Step 2 results below.
 
 **3. C1, C2, C3 — PROMOTED past A1/A2 and past B.** Two reasons from spike (a):
 C2 is a projection off fields C1 must compute anyway, so C1→C2 is nearly free

@@ -684,6 +684,79 @@ Section SegCompose.
              (Fr 0) Out (lp_okF pl) Hv Hpl Hg HOut with "H").
   Qed.
 
+  (* ---- ENTERING A LOOP (D3) ----------------------------------------------
+
+     The mirror of loop_exit.  loop_exit turns the loop's last trip into a
+     `seg_exit_at` for whatever follows; this turns a PREDECESSOR's
+     `seg_exit_at` into the loop's invariant, which is what `seg_seq` needs to
+     put a segment and a loop in sequence.  Until this existed, nothing in the
+     tree entered a loop at all -- `seg_exit_at` appeared only as a loop's
+     output.
+
+     NOTE THE TWO CONTEXTS.  The predecessor lives at its own S (muladd's
+     segments are all at `["p"]`) while the loop lives at R (its pointers and
+     its code base).  They are related only through the two VALUATIONS, j and
+     `iota n`, which is why the assertion-level obligation below is stated
+     across both and cannot be a re-indexing the way the back edge is. *)
+  Definition loop_entry {R S : LCtx} (ls : LoopSpec R)
+      (c : @CFGVerifierContract S) (j : Valuation S) (a q : bv xlenbits)
+      (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
+      (n : nat) : Prop :=
+    asn.interpret (cfg_postcondition c)
+      ((j.["a"∷ty_xlenbits ↦ ty.SyncVal a]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ∗ Fin
+    ⊢ asn.interpret (gen_loop_win ls)
+        ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      ∗ Fr n.
+
+  (* `v` is taken as a parameter with a proof rather than fixed at
+     `bv.of_N (ls_iq ls)`, because what a caller HAS is whatever seg_step1
+     handed back -- `seg_addr ia t` for the predecessor's own base and target.
+     Hv is then `f_equal; lia`, or reflexivity when both are literals. *)
+  Lemma loop_enter {R S : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+      (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
+      (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
+      (P : nat -> Prop) (n : nat)
+      (Hv : v = @bv.of_N xlenbits (ls_iq ls))
+      (HP : P n)
+      (Hent : loop_entry ls c j a (@bv.of_N xlenbits (ls_iq ls)) iota Fin Fr n) :
+    Fin ∗ seg_exit_at c j a (ls_prog ls) (@bv.of_N xlenbits (lp_ia pl)) v
+    ⊢ loop_inv ls iota (@bv.of_N xlenbits (ls_iq ls)) Fr (loop_instrs ls pl) P n.
+  Proof.
+    subst v. unfold seg_exit_at, loop_inv, loop_instrs.
+    iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
+    iSplit; [iPureIntro; exact HP |].
+    iDestruct (Hent with "[$Hpost $HF]") as "(Hwin & HFn)".
+    iFrame.
+  Qed.
+
+  (* Segment THEN loop, in one step: run the predecessor, land in the loop,
+     run the loop.  This is `seg_seq` with the cut assertion filled in, and it
+     is the shape a chain into a loop actually wants. *)
+  Lemma seg_then_loop {R S : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+      (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
+      (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
+      (P : nat -> Prop) (n : nat) (Pre Post : iProp Σ)
+      (Hv : v = @bv.of_N xlenbits (ls_iq ls))
+      (HP : P n)
+      (Hent : loop_entry ls c j a (@bv.of_N xlenbits (ls_iq ls)) iota Fin Fr n)
+      (Hpred : Pre -∗ myWP2_loop
+                 (Fin ∗ seg_exit_at c j a (ls_prog ls)
+                         (@bv.of_N xlenbits (lp_ia pl)) v))
+      (Hloop : loop_inv ls iota (@bv.of_N xlenbits (ls_iq ls)) Fr
+                 (loop_instrs ls pl) P n
+               -∗ myWP2_loop Post) :
+    Pre -∗ myWP2_loop Post.
+  Proof.
+    apply (seg_seq Pre (Fin ∗ seg_exit_at c j a (ls_prog ls)
+                          (@bv.of_N xlenbits (lp_ia pl)) v) Post Hpred).
+    iIntros "H".
+    iApply Hloop.
+    iApply (loop_enter ls pl c j a v iota Fin Fr P n Hv HP Hent).
+    iExact "H".
+  Qed.
+
+
   (* ---- THE WHOLE LOOP ----------------------------------------------------- *)
 
   (* seg_loop, instantiated.  Given a step for every trip and an exit, the
