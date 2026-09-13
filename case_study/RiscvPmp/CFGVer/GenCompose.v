@@ -1232,7 +1232,7 @@ Section SegCompose.
 
      The arguments group as:
        placement  Hq/Hok/HokF/Hwf -- where the segment sits in the program;
-       the VCs    Hvb/Hvf         -- `solve_seg` on body and final;
+       the VCs    Hvb/Hvf         -- `solve_param_vc` on body and final;
        the base   Hpl/Hpa         -- eq_refl whenever iotaf maps "q" to a literal;
        the count  HP0/HPm         -- the trip predicate survives decrement;
        THE TWO    Hlatch/Hedge    -- the latch (guard + exit guard, as one
