@@ -464,34 +464,57 @@ is exactly the tail loop's head (`ls_skip` 264). Probe:
 - The resources the loop never touches (four spill slots, X2/S0-S3, the
   program bound) frame with a bare `iFrame`.
 
-**Not finished, and left visibly so.** The INVARIANT half of the sgL->tail
-transfer is `admit`, and the probe does not compile in reasonable time.
+**Then finished, by changing the layer.** The hand reconciliation was
+abandoned; `Example/ZZSpikeEnter{,A}.v` have been deleted. The replacement,
+`Example/ZZSpikeEnter2.v`, compiles in **25 s** with no `admit`, and proves the
+same thing the hand version could not.
 
-**The reason is a real finding, not just a stall.** Everything in this proof
-has to be hoisted OUT of the Iris context:
+**What was wrong was the LAYER, not the tactics.** `sgL_post` and
+`gen_loop_win (ltSpec …)` describe the same machine state in two spellings, and
+I was reconciling them resource by resource inside Iris. Two separate blowups
+made that visible before the diagnosis did:
 
-- a blanket `cbn` on an `inst` goal took the file from 30 s to over 4 minutes,
-  twice — it unfolds `bv.of_N` at width `xlenbits` (the `bv-pitfalls` trap, in
-  a new place). Every address fact is now `cbn`-free (`inst_addr_plus` plus one
-  `bv.of_N_add`);
-- but even with every address fact hoisted and `cbn`-free, applying
-  `loop_cell_shift` with `iApply` INSIDE the entry proof still did not finish
-  in 4.5 minutes, while the identical applications in a separate file are part
-  of a **21 s** compile. Elaborating the implicit arguments against a context
-  holding the whole unfolded `sgL_post` is what costs.
+- a blanket `cbn` on an `inst` goal took the file from 30 s past 4 minutes,
+  TWICE — it unfolds `bv.of_N` at width `xlenbits` (the `bv-pitfalls` trap in a
+  new place; use `inst_addr_plus` + `bv.of_N_add`);
+- and even with every address fact hoisted and `cbn`-free, `iApply
+  (loop_cell_shift …)` INSIDE the entry proof did not finish in 4.5 minutes,
+  while the identical applications in a separate file were part of a 21 s
+  compile. Elaborating implicit arguments against a context holding the whole
+  unfolded `sgL_post` is what costs.
 
-**So the `_std` builder for the entry side must take its cell and register
-transfers as ALREADY-PROVED ENTAILMENTS**, the way `loop_edge_std` takes
-`Hw`/`Hf`/`Hc` from outside. That is the design constraint D3 was supposed to
-discover, and it is not visible from reading goals — which is exactly why this
-was promoted ahead of the phases that depend on it.
+**The fix is F2, made concrete: GENERATE the cut assertion from the successor's
+precondition.** A predecessor's post is stated as `subst (gen_loop_win ls) ζ ∗
+Rest`, and the entry obligation stops being a separation-logic proof and
+becomes a VALUATION EQUALITY. Three pieces:
 
-**What is left here:** finish the two cell entailments in `ZZSpikeEnterA.v`,
-add the register-block rebase (`gen_regs_any p specs` to
-`gen_regs_at q specs'` for base-free specs, modulo permutation — `am_regs` and
-`lt_regs` are the same five registers in a different order), and rebuild the
-three `gen_loop_bounds` conjuncts from the single program bound via
-`loop_bound_le`. None of it is in doubt; it is the `_std` builder's content.
+1. **`asn.interpret_subst`** (`theories/Syntax/Assertions.v`) — substitute then
+   interpret = interpret under the substituted valuation. Did not exist; ~20
+   lines by induction, needing a new `interpret_chunk_subst` in `Chunks.v`.
+2. **`loop_entry_subst`** (GenCompose) — six lines of proof. `ζ` does BOTH jobs
+   at once: it carries the predecessor's context `S` to the loop's `R` (sgL is
+   at `["p"]`, the tail loop at `["q";"ap";"bp";"e"]`) AND absorbs the extra
+   `"an"` binder, so no separately shifted copy of `gen_loop_win` is needed.
+3. **`Rest` is not optional.** A predecessor's post must return everything its
+   PREcondition consumed or the executor drops it — sgL owns ten data cells and
+   hands the loop two. So the cut is `successor's precondition ∗ frame`, and
+   the frame is exactly what the loop rides over (here: the second window,
+   which becomes the loop's reservoir, plus the spill slots and X2/S0-S3).
+
+**And sgL still verifies.** `valid_sgL'` — sgL's contract with its hand-written
+`sgL_post` replaced by the generated one — is a bare `solve_param_vc`. That was
+the real risk and it did not materialise.
+
+**A FRAMEWORK BUG, found on the way.** `sub_assertion` mapped `or` to **`sep`**
+(`Assertions.v:125`), while `interpret` maps it to `∨` — so substituting an
+assertion containing a disjunction changed what it meant. `asn.or` is live
+(both the symbolic and shallow executors consume it). `interpret_subst` is
+exactly the statement that was false because of it, which is how it surfaced.
+Fixed.
+
+**What is left:** `loop_entry_subst` gives the entry obligation; wiring it
+through `seg_then_loop` to a full "sgL then the tail loop" theorem also needs
+that loop's `LoopPlace` and trip predicate, which is ordinary `loop_all` work.
 
 ---
 

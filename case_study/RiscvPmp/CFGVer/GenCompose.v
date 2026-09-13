@@ -730,6 +730,60 @@ Section SegCompose.
     iFrame.
   Qed.
 
+  (* ---- THE ENTRY OBLIGATION, DISCHARGED BY SUBSTITUTION -------------------
+
+     The first attempt at an entry proof reconciled a hand-written cut
+     assertion with the loop's invariant resource by resource: fifteen
+     cross-context `iApply`s of loop_reg_shift / loop_cell_shift.  It did not
+     finish in four and a half minutes, and the diagnosis was that the whole
+     activity is at the wrong layer.  A cut assertion is determined by its
+     SUCCESSOR's precondition (PLAN-loop-automation F2), so it should be
+     GENERATED from it -- and then the obligation is not a separation-logic
+     proof at all but a VALUATION EQUALITY.
+
+     One substitution does both jobs at once: `ζ` carries the predecessor's
+     context S to the loop's R (muladd's segments live at ["p"], the tail loop
+     at ["q";"ap";"bp";"e"]) AND absorbs the extra "an" binder, so no separate
+     shifted copy of gen_loop_win is needed.  `Fin` is `Fr n` because with the
+     post generated there is nothing left to transfer.
+
+     Hval is `reflexivity` / `vm_compute` whenever ζ and the valuations are
+     concrete, which they are at every call site.
+
+     `Rest` is NOT optional and not a generalisation for its own sake: a
+     predecessor's postcondition has to return everything its PREcondition
+     consumed, or the executor drops it (sgL owns ten data cells and hands the
+     loop two).  So the cut assertion is `successor's precondition ∗ frame`,
+     and the frame is exactly what the loop never touches.  Pass `⊤%asn` when
+     there is none. *)
+  (* The `Subst Assertion` instance lives inside `Module Import asn` and is
+     not in scope here, so `subst` on an Assertion does not resolve. *)
+  #[local] Existing Instance asn.sub_assertion.
+
+  Lemma loop_entry_subst {R S : LCtx} (ls : LoopSpec R)
+      (c : @CFGVerifierContract S)
+      (ζ : Sub (R ▻ "a"∷ty_xlenbits)
+               (S ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (Rest : Assertion (S ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (j : Valuation S) (a q : bv xlenbits)
+      (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ) (n : nat)
+      (* `asn.sep`, not `_ ∗ _`: this file does not import asn.notations,
+         and the iProp `∗` it does have is a different scope. *)
+      (Hpost : cfg_postcondition c = asn.sep (subst (gen_loop_win ls) ζ) Rest)
+      (Hval : inst ζ (((j.["a"∷ty_xlenbits ↦ ty.SyncVal a])
+                         .["an"∷ty_xlenbits ↦ ty.SyncVal q]))
+              = (iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      (Hfr : asn.interpret Rest ((j.["a"∷ty_xlenbits ↦ ty.SyncVal a])
+                                   .["an"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fin
+             ⊢ Fr n) :
+    loop_entry ls c j a q iota Fin Fr n.
+  Proof.
+    unfold loop_entry. rewrite Hpost.
+    cbn [asn.interpret]. rewrite asn.interpret_subst. rewrite Hval.
+    iIntros "((Hwin & Hrest) & HF)". iFrame "Hwin".
+    iApply Hfr. iFrame.
+  Qed.
+
   (* Segment THEN loop, in one step: run the predecessor, land in the loop,
      run the loop.  This is `seg_seq` with the cut assertion filled in, and it
      is the shape a chain into a loop actually wants. *)
