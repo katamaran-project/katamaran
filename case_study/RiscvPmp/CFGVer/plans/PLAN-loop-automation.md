@@ -81,19 +81,38 @@ executor could discharge them at the end of the body and `Hf` would disappear.
 
 ## Phase B — give DATA the base/offset treatment CODE already has
 
-This is the structural gap, and it is why the reservoir has no origin.
+**RE-SCOPED 2026-09-13 by spike (b); the premise below was wrong.** This
+section used to open by claiming data is not addressed base-relatively. It is:
+`mem_spec_rel : N * bool * param_val` (address = `p + k`) has existed since the
+unify-generators work and is cmovznz4's *production* path — its end theorem is
+stated over `map (concretize_mem init_addr) cmovznz4_mem_specs_rel`. The
+paragraph that follows is retained only because the *shape* of the complaint
+survives: there are still two vocabularies, just not the two named.
 
-Code is addressed base-relatively (`cfg_placement` + offsets). Data is not:
-```
-(* mem_full_spec: (address, is_public, optional_init_value) *)
-gen_mem_asn: ... term_val ty_xlenbits a ↦ₘ ...     (* a CONCRETE literal *)
-```
-while the loop layer invented `cell_spec` with `cs_var` (base VARIABLE) +
-`cs_off`. Two incompatible addressing schemes for data, so the whole-program
-precondition and a loop's `loop_res` cannot be the same statement.
+What is actually true: `mem_spec_rel` is relative to the ONE distinguished base
+`"p"` (the code base), with an `N` offset; `cell_spec` is relative to an
+ARBITRARY variable `cs_var ∈ Σ` with a `bv` offset. So data can be addressed
+relative to the CODE, but not relative to an independent data base. cmovznz4
+gets away with one base because its data lives at `p+116 … p+160`, inside the
+code image's tail.
 
-**B1.** Give `mem_full_spec` a base-relative form, sharing `cell_spec`'s
-vocabulary. One addressing scheme for data.
+And the binding constraint is not the vocabulary at all — see §Spike results
+(b). It is `HDataAddrs`, a PLACEMENT premise carried by every EndToEnd bridge.
+
+**B1 (cheap, ~25 sites, no soundness-chain impact).** Generalise `mem_spec_rel`
+from the implicit `"p"` to a NAMED base, converging on `cell_spec`'s
+vocabulary. The single-base assumption is confined to `GenContract.v` (22),
+`EndToEnd.v` (2) and `GenCompose.v` (1); `Verifier`, `VerifierRel`, `Adequacy`,
+`Spec`, `SpecIris`, `Tables`, `TablesRel` contain ZERO — the soundness chain is
+already generic in Σ. Verified to restate an end theorem without loss: see
+`Example/ZZSpikeMemBase.v`.
+
+**B1' (expensive, HEAVY chain — the actual blocker).** Lift `HDataAddrs` and
+`Adequacy.v`'s `instrsAndDataMemory` from ONE contiguous data run immediately
+after the code to k disjoint runs. Today that lemma splits `liveAddrs` four
+ways (`before ++ instrs ++ data ++ rest`) and inducts over one contiguous run;
+k runs needs ordering/disjointness hypotheses between the bases. **B1 alone
+buys nothing** — do not do it without committing to B1'.
 
 **B2.** The bridging lemma: whole-program memory precondition ⊢ `loop_res` /
 `loop_done` blocks. `loop_res_words` and `mem_word` are the loop-side half and
@@ -115,11 +134,18 @@ CFG pass finds the back edge and the fall-through, decode gives the branch
 relop, fuel is the step count plus slack. Deliver as a Gallina function
 returning a `LoopSpec` skeleton, with well-formedness `vm_compute`-checkable.
 
-**C2. `iota` from induction-variable analysis.** THE big one: five lines per
-loop, but `Hk`, `Hkn`, `Hw`, most of `P`, and the affine part of the cell trade
-all hang off it. For affine IVs with constant stride this is the standard
-analysis and is decidable. Output: `iota` plus the per-variable recurrence,
-with the correctness side condition discharged by `lia`.
+**C2. `iota` from induction-variable analysis.** **DOWNGRADED 2026-09-13 by
+spike (a): this is a PROJECTION, not an analysis.** It used to be billed as
+"THE big one" and as the largest single piece of real work in the plan; that
+was wrong. Every stride is already DATA in the `LoopSpec` (`−ls_imm` for the
+counter's variable, `−wr_off` for each `walk_reg`'s, 0 for everything else in
+`R`), and the counter's anchor is the unique solution of `loop_latch_obl`. No
+instruction-level analysis is needed to produce `iota` for any loop already
+expressible as a `LoopSpec`. What stays free is one anchor per NON-counter
+walking pointer — exactly the datum a predecessor segment supplies, so it is an
+input by design, not a gap. `Hk`, `Hkn`, `Hw`, most of `P` and the affine part
+of the cell trade still hang off it; they just cost less than budgeted.
+Evidence: §Spike results (a), 7/7.
 
 **C3. Derive the trip predicate `P`.** It must imply exactly: the no-wrap
 bounds the latch needs, the address bounds `ls_bases_a` needs, and `n <= tot`.
@@ -223,51 +249,164 @@ a note, not a fix.)
 
 ---
 
+## Spike results (2026-09-13)
+
+Both spikes from the execution order below have been RUN. Each changed the
+plan: (a) made C2 much cheaper, (b) moved Phase B's cost into a different file
+and a heavier chain.
+
+### (a) Does IV analysis actually yield `iota`?  YES — 7/7, and it is a projection.
+
+Checked against every loop in the tree expressed as a `LoopSpec`: A, B, C, D,
+F, Tail (`Example/ZZLoopLatchCheck.v`) and divrem (`dvI`, `Example/ZZDvLoopThm.v`).
+
+Every component of every `iota` has the form `anchor + n · stride`, and **each
+stride is already a literal field of the `LoopSpec`**:
+
+| variable in `R` | stride (per unit of n, trips-REMAINING indexing) | where it already lives |
+|---|---|---|
+| the code base `"q"` | 0 | — |
+| the counter (`ls_k_a`'s variable) | `−ls_imm` | `ls_imm` |
+| each walking pointer | `−wr_off` | `walk_reg` in `ls_extra_a` |
+| anything else | 0 (must be, or the loop is out of scope) | — |
+
+So deriving `iota` needs no pass over the instruction list. C1 already has to
+find the strides to build the `LoopSpec` at all; C2 then just reads them back.
+
+**The counter's anchor is FORCED, not chosen.** Writing `counter(n) =
+sentinel − (n+1)·imm` with the sentinel read off `ls_exitg` reproduces all
+seven hand-written values exactly — δ = 1 uniformly, across both relop families
+(`eq`/`neq` and `bvule`/`bvult`), both stride signs (±1, ±4), and both literal
+(A, B, dv) and variable (C, D, F, Tail) sentinels. It is forced because it is
+precisely what `loop_latch_obl` demands, and `loop_latch_obl` is two-sided —
+the exit must hold at trip 0 AND the guard at every trip above it. For the
+equality family the exit alone pins it; for the inequality family (A, dv) it
+genuinely takes both: with `counter(n) = a + n`, `exitg` gives `a ≤ 2` and
+`guard` gives `a ≥ 2`. Checked numerically over n ∈ [0,40) including
+uniqueness against every anchor shifted by ±1..8 strides: unique in all seven.
+
+**What is NOT derived:** one anchor per non-counter walking pointer (`p7e`,
+`p6e`, `ape`, `spb`). These are free parameters of the loop's contract, which
+is correct — they are what the predecessor segment supplies.
+
+**Honest limit on the evidence.** This samples loops that were *already*
+expressed as `LoopSpec`s, i.e. the successes. It confirms the abstraction is
+faithful to every loop currently in it (which was not obvious — `ls_at`, see
+below, suggested drift). It says nothing about a loop that has never been
+attempted, and the §0 scope limit on non-affine IVs stands unchanged.
+
+**Incidental finding — `ls_at` is vestigial and inconsistent.** For the
+countdown loops (A, B, dv) `ls_at` IS the counter's `iota` component
+(`n+2`, `n+1`, `n+2`); for the pointer loops (C, D, F, Tail) it is `fun n => n`,
+which is not the counter's value or anything else. `ZZLoopCProbe.v`'s own
+comment says it "is not consulted by the contracts at all". Fold its removal
+into C4 (retire the redundant `LoopSpec` fields) — but note that in three of
+seven loops it happens to hold the right thing, so deleting it is not free of
+meaning: C2 should SUPERSEDE it rather than drop it.
+
+### (b) Does a base-relative `mem_full_spec` break an end theorem?  NO — but that was the wrong question.
+
+Probe: `Example/ZZSpikeMemBase.v` (untracked). It defines a genuinely different
+memory-spec vocabulary — `mem_spec_at : N * N * bool * param_val`, where each
+entry NAMES ITS OWN BASE rather than sharing the implicit code base — restates
+cmovznz4's end theorem over it, and re-derives it from
+`cmovznz4_noninterferent_param`. Compiles; `Print Assumptions` on the restated
+theorem gives exactly `pure_decode` and `mmioenv`, the two whitelisted axioms.
+So the trusted statement surface tolerates the new form with no loss.
+
+Three findings, in increasing order of how much they change the plan:
+
+1. **Base-relative data already exists and is in production.** `mem_spec_rel`
+   (`N * bool * param_val`, address `p + k`) plus `concretize_mem` is how
+   cmovznz4 is stated. Phase B's opening premise was simply false; corrected in
+   place above.
+
+2. **The single-base assumption is cheap to lift.** 25 sites, all in
+   `GenContract.v` (22), `EndToEnd.v` (2), `GenCompose.v` (1). The soundness
+   chain — `Verifier`, `VerifierRel`, `Adequacy`, `Spec`, `SpecIris`, `Tables`,
+   `TablesRel` — has ZERO. It is already generic in Σ.
+
+3. **The actual blocker is `HDataAddrs`, and it is not about addressing at
+   all.** Every EndToEnd bridge carries
+   ```
+   ∀ i spec, data_specs !! i = Some spec →
+     spec.1 = bv.of_N (init_addr + 4*|instrs| + 4*i)
+   ```
+   — the data words must occupy the 4·|data| bytes IMMEDIATELY AFTER the code,
+   contiguously. The probe proves the consequence: handing the bridge cmovznz4's
+   specs at any other base `arr` forces `bv.of_N (arr+116) = bv.of_N (ia+116)`,
+   i.e. it pins the data base to the code base
+   (`data_base_pinned_by_HDataAddrs`).
+
+   It is consumed by `Adequacy.v`'s `instrsAndDataMemory`, which splits
+   `liveAddrs` four ways (`before ++ instrs ++ data ++ rest`) to carve the data
+   region out of raw byte ownership, then inducts along one contiguous run.
+   Supporting an independent data base means generalising that to k disjoint
+   runs with ordering/disjointness hypotheses — **work in the HEAVY chain, not
+   in `GenContract.v`.**
+
+   Consequence worth stating plainly: **no example in this tree has ever had
+   data at a base independent of its code.** Every example with memory puts its
+   array immediately after the instructions. A loop over a caller-supplied
+   array — the thing Phase B exists to make expressible — is therefore blocked
+   on an `Adequacy.v` change that nothing has needed so far.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
 unknowns before investing in what depends on them, and unblock a real task
 early — today a loop cannot be composed with a neighbour at all.
 
-**0. Two spikes first.**
-   - Does IV analysis actually yield `iota` for the five existing loops?  Not
-     the implementation, just enough to know.  If it does not, C2 collapses and
-     with it D1, D2, and most of §0's "derivable" classification.  Everything
-     downstream is priced on this being routine.
-   - Does a base-relative `mem_full_spec` break an existing end theorem?  Write
-     the new form alongside the old on ONE example and re-run that theorem.
-     `mem_full_spec` is the trusted statement surface; discovering a problem
-     after B2 is built on top is the worst case.
+**0. Two spikes. DONE 2026-09-13 — see §Spike results.** Both landed; the
+order below is the REVISED one, and the revision is the point. Spike (a) made C
+cheap, so C moves ahead of B. Spike (b) moved B's cost out of `GenContract.v`
+and into `Adequacy.v`, so B drops to last and acquires a go/no-go.
 
 **1. A3 + C4 + C5 — the loop layer's own cleanup.** Self-contained, no
 trusted-surface impact. A3 matters most: collapsing `loop_final` into an
 ordinary segment turns `loop_step`/`loop_exit` into one lemma, and that lemma
-is what D and E build on. Doing it after E means rebuilding E.
+is what D and E build on. Doing it after E means rebuilding E. C4 now also
+retires `ls_at` — but as a supersession by C2, not a deletion (spike (a)).
 
-**2. D3 (`loop_enter`) — PROMOTED from near-last.** It is what makes
+**2. D3 (`loop_enter`).** Unchanged, and still second. It is what makes
 composition possible at all; it is independent of C2 (it can take `Fr n` as an
-opaque hypothesis, so it does not wait for B); and everything this plan says
-about the entry side comes from READING an unfolded `ldInv`, never from
-building one. Building it is how we find out whether that analysis holds. The
-back edge falsified a read-off-the-goal guess twice in one day.
+opaque hypothesis); and everything this plan says about the entry side comes
+from READING an unfolded `ldInv`, never from building one. Building it is how
+we find out whether that analysis holds. The back edge falsified a
+read-off-the-goal guess twice in one day.
 
-**3. A1 + A2, batched.** Pure hygiene, both touch the contract record, both
-need a full gate. One gate run, not two. No dependency either way, so they go
-where convenient — here, before B, which touches the same area.
+**3. C1, C2, C3 — PROMOTED past A1/A2 and past B.** Two reasons from spike (a):
+C2 is a projection off fields C1 must compute anyway, so C1→C2 is nearly free
+once C1 exists; and C no longer waits on B, because the convergence direction
+is mem-spec → `cell_spec`, i.e. the loop-side cell vocabulary is the STABLE
+side. The old ordering had C behind B on the guess that B1 might rewrite
+`cell_spec`; spike (b) says B1 rewrites `mem_spec_rel` instead.
 
-**4. B — memory addressing.** Informed by spike (b) and by what D3 actually
-turned out to need.
+**4. D1, D2.** Follow C directly — both are driven by C2's output, and D2's
+cell-trade dispatch (which cells leave, which enter) is the affine set
+computation over `iota`. No longer gated on B, same reason as step 3.
 
-**5. C1, C2, C3, then D1, D2.** D2 must follow B: if B1 changes the cell
-vocabulary, a cell-trade tactic written first gets rewritten.
+**5. A1 + A2, batched.** Pure hygiene, both touch the contract record, both
+need a full gate. One gate run, not two.
 
 **6. E.**
+
+**7. B — memory addressing, LAST, and behind a go/no-go.** Spike (b) turned
+this from "the phase that changes the trusted statement surface" into "the
+phase that changes `Adequacy.v`". Decide B1' (k disjoint data runs) explicitly
+before touching B1 — B1 alone buys nothing, and B1' is the only thing standing
+between this machinery and a loop over a caller-supplied array. If the answer
+is no, say so in §0 as a scope limit rather than leaving B half-built.
 
 Then F, in whatever order the work at the time demands; F1 and F2 are the two
 worth doing.
 
-**Risk notes.** B is the only phase changing the trusted statement surface — it
-needs the gate and a deliberate look at what it means for existing end
-theorems. C2 is the largest single piece of real work. Every phase touching
-`Contracts.v`, `mem_full_spec` or the generators needs a full rebuild and the
-gate behind it (~45 min on this box at GATE_JOBS=1).
+**Risk notes.** REVISED. B remains the phase to be careful with, but not for
+the reason previously given: the trusted STATEMENT surface tolerates a
+base-relative form (spike (b), proved), while `Adequacy.v`'s contiguity
+assumption does not generalise for free. C2 is no longer the largest single
+piece of real work — B1' is. Every phase touching `Contracts.v`,
+`mem_full_spec` or the generators needs a full rebuild and the gate behind it
+(~45 min on this box at GATE_JOBS=1).
