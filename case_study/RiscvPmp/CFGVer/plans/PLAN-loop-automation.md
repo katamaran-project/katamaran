@@ -18,8 +18,11 @@ These have no canonical answer and must be written by a human.
    security property; nothing derives it.
 2. **Footprint ownership.** That the caller owns `[p, p+4n)`. An API contract;
    the code merely dereferences.
-3. **The exit postcondition.** What the loop promises whoever runs next. A cut
-   is a specification decision by definition.
+3. **The OUTERMOST postconditions.** What the whole program promises. Note the
+   narrowing (2026-09-13, after review): an INTERMEDIATE cut assertion is NOT
+   free — it is determined up to strengthening by its successor's
+   precondition. Only the endpoints of a chain are genuine specification. This
+   entry originally read "the exit postcondition", which over-claimed; see F2.
 
 Everything else below is derivable, and the rest of this plan is how.
 
@@ -169,13 +172,102 @@ calls.
 
 ---
 
-## Ordering and risk
+## Phase F — what is STILL automatable once A-E are done
 
-A1-A3 are independent and cheap; do them first, they simplify everything after.
-B is the structural one and the only phase that changes the trusted statement
-surface (`mem_full_spec` is in the spec layer) — it needs the gate and a careful
-look at what it means for existing end theorems. C2 is the largest single piece
-of real work. D2 depends on C2. E is assembly once C and D land.
+A-E get to "instruction list + publicness + ownership + outermost posts + two
+tactic calls". Several of those inputs are themselves partly derivable, and two
+whole areas are untouched. Recorded here so the plan is honest about its own
+ceiling rather than implying A-E is the end.
 
-Every phase that touches `Contracts.v`, `mem_full_spec` or the generators needs
-a full rebuild and the gate behind it.
+**F1. NESTED LOOPS — the structural omission.** `LoopSpec` is single-level
+throughout and nothing in A-E changes that. An inner loop ought to become a
+segment of the outer loop's body, which is what the segment machinery is for;
+what is unexplored is the FRAME interaction — the outer invariant must be
+framed across the inner loop, and the inner loop's own `Fr` has to thread
+through it. No evidence either way on difficulty. Probably the next structural
+piece after E.
+
+**F2. INTERMEDIATE CUT ASSERTIONS.** §0 originally classified "the exit
+postcondition" as irreducible specification. That is right for a chain's
+ENDPOINTS and wrong in the middle: a cut assertion between two segments is
+determined up to strengthening by the successor's precondition. In a composed
+setting most cut assertions should be derived from their neighbours, leaving
+only the outermost two free. Plausibly the largest single remaining win.
+
+**F3. CELL SPECS ARE DERIVABLE.** Phase C derives the control-flow fields but
+not the memory footprint. Given C2's `iota` plus a memory def-use pass over the
+body, the addresses the loop touches per trip fall out — so `ls_extra_a`'s cell
+list is derivable. What stays human is whether the caller OWNS them (§0.2) and
+their publicness (§0.1). Narrows the human input further than A-E does.
+
+**F4. PUBLICNESS RELEVANCE.** A liveness analysis says which publicness
+annotations cannot matter (dead after the loop), shrinking what a human must
+decide without touching what publicness MEANS.
+
+**F5. THE SOLVER RESIDUAL CATALOGUE.** `solve_symbase_fetch` is eight
+alternatives accreted one per new program shape (the eighth landed
+2026-09-13). That is an unbounded backlog by construction. The real fix is
+teaching the solver about base-relative bounds rather than patching residuals
+afterwards — work in `theories/Symbolic/Solver.v`, outside this plan's scope
+but on its critical path eventually.
+
+**F6. FUEL.** C1 says "step count plus slack", which is hand-waving. Too little
+gives a misleading bare `False` (cfgver-solve-vc documents the trap); too much
+inflates every VC. A bounded-step analysis would compute it.
+
+**F7. FAILURE LOCALISATION.** Everything here fails as `No applicable tactic`.
+For a system this automated the failure mode IS the user interface, and nothing
+in A-E improves diagnosis. (This cost a detour through the `Ltac` body on
+2026-09-13 when loop C failed; the warning now in `solve_param_vc`'s comment is
+a note, not a fix.)
+
+---
+
+## Execution order
+
+NOT A-E in sequence. Two principles override the grouping: resolve the
+unknowns before investing in what depends on them, and unblock a real task
+early — today a loop cannot be composed with a neighbour at all.
+
+**0. Two spikes first.**
+   - Does IV analysis actually yield `iota` for the five existing loops?  Not
+     the implementation, just enough to know.  If it does not, C2 collapses and
+     with it D1, D2, and most of §0's "derivable" classification.  Everything
+     downstream is priced on this being routine.
+   - Does a base-relative `mem_full_spec` break an existing end theorem?  Write
+     the new form alongside the old on ONE example and re-run that theorem.
+     `mem_full_spec` is the trusted statement surface; discovering a problem
+     after B2 is built on top is the worst case.
+
+**1. A3 + C4 + C5 — the loop layer's own cleanup.** Self-contained, no
+trusted-surface impact. A3 matters most: collapsing `loop_final` into an
+ordinary segment turns `loop_step`/`loop_exit` into one lemma, and that lemma
+is what D and E build on. Doing it after E means rebuilding E.
+
+**2. D3 (`loop_enter`) — PROMOTED from near-last.** It is what makes
+composition possible at all; it is independent of C2 (it can take `Fr n` as an
+opaque hypothesis, so it does not wait for B); and everything this plan says
+about the entry side comes from READING an unfolded `ldInv`, never from
+building one. Building it is how we find out whether that analysis holds. The
+back edge falsified a read-off-the-goal guess twice in one day.
+
+**3. A1 + A2, batched.** Pure hygiene, both touch the contract record, both
+need a full gate. One gate run, not two. No dependency either way, so they go
+where convenient — here, before B, which touches the same area.
+
+**4. B — memory addressing.** Informed by spike (b) and by what D3 actually
+turned out to need.
+
+**5. C1, C2, C3, then D1, D2.** D2 must follow B: if B1 changes the cell
+vocabulary, a cell-trade tactic written first gets rewritten.
+
+**6. E.**
+
+Then F, in whatever order the work at the time demands; F1 and F2 are the two
+worth doing.
+
+**Risk notes.** B is the only phase changing the trusted statement surface — it
+needs the gate and a deliberate look at what it means for existing end
+theorems. C2 is the largest single piece of real work. Every phase touching
+`Contracts.v`, `mem_full_spec` or the generators needs a full rebuild and the
+gate behind it (~45 min on this box at GATE_JOBS=1).
