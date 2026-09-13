@@ -1029,6 +1029,68 @@ Section SegCompose.
     iApply (gen_pures_interp fs (gen_cells_a cs) _ Hf). iExact "Hca".
   Qed.
 
+  (* ---- WHAT THE LOOP HAS ALREADY DONE ------------------------------------
+
+     `loop_res` is the RESERVOIR: the trips the loop has not reached yet.  At
+     trip 0 it is `emp`, which is why every loop so far simply DROPPED the
+     cells it wrote -- each `_trans_closed`'s cell trade discards them
+     (`iIntros "(_ & ...)"`).  Harmless for a loop nobody reads afterwards,
+     fatal for one whose whole point is the array it writes.
+
+     `loop_done` is the other half: the trips it HAS run, from `lo` up to the
+     total count `hi`.  A caller that wants the array back uses
+
+       Fr n := loop_res A iota q n ∗ loop_done A iota q n N
+
+     and the per-trip trade becomes "move one cell across" instead of "drop
+     it".  NOTHING in loop_inv/loop_all changes: `Fr` was always an arbitrary
+     `nat -> iProp`, and `loop_all`'s `HOut` already hands `Fr 0` back.  At
+     entry (n = N) the done block is `seq (S N) 0` = emp; at exit (n = 0) it
+     is trips 1..N, which is every trip the body ran. *)
+  Definition loop_done {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+      (iota : nat -> Valuation R) (q : bv xlenbits) (lo hi : nat) : iProp Σ :=
+    ([∗ list] i ∈ seq (S lo) (hi - lo),
+       asn.interpret A ((iota i).["a"∷ty_xlenbits ↦ ty.SyncVal q]))%I.
+
+  (* The mirror of `loop_res_peel`, peeling the OTHER end: the trip just
+     finished is the FIRST entry of the done block, not the last. *)
+  Lemma loop_done_push {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+      (iota : nat -> Valuation R) (q : bv xlenbits) (n N : nat)
+      (H : (n < N)%nat) :
+    loop_done A iota q n N
+    ⊣⊢ asn.interpret A ((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+        ∗ loop_done A iota q (S n) N.
+  Proof.
+    unfold loop_done.
+    replace (N - n)%nat with (S (N - S n)) by lia.
+    cbn [seq]. now rewrite big_sepL_cons.
+  Qed.
+
+  (* The `_an` and `_a` cell blocks differ by exactly ONE weakening -- the
+     extra `an` binder cannot change what a `term_var` of R resolves to -- so
+     at the SAME trip they are the same resources.  This is what lets a
+     finished trip be filed into `loop_done`, whose entries are `_a`-shaped,
+     from the post, which hands them back `_an`-shaped. *)
+  Lemma gen_cells_drop_an {R : LCtx} (cs : list (cell_spec R))
+      (i : Valuation R) (q : bv xlenbits) :
+    asn.interpret (gen_cells_an cs)
+      ((i.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ⊣⊢ asn.interpret (gen_cells_a cs) (i.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    induction cs as [| c cs IH];
+      cbn [gen_cells_an gen_cells_a List.fold_right asn.interpret].
+    - reflexivity.
+    - rewrite IH. apply bi.sep_proper; [| reflexivity].
+      apply bi.exist_proper. intros v.
+      (* `addr_off`'s `if bv.eqb off bv.zero` is STUCK on a variable offset,
+         which is the only thing stopping conversion here -- force the branch
+         and both sides reduce to the same term.  (The underlying fact,
+         `inst (term_var x (in_succ h)) (E.[y↦w]) = inst (term_var x h) E`,
+         is already `reflexivity`.) *)
+      unfold addr_off; destruct (bv.eqb (cs_off c) bv.zero);
+        destruct (cs_pub c); reflexivity.
+  Qed.
+
   (* ---- WHERE THE RESERVOIR COMES FROM ------------------------------------
 
      Everything above ASSUMES the reservoir: `loop_inv` carries `Fr n`, the
