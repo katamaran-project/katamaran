@@ -56,7 +56,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Lemma valid_jump_if_zero_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (jump_if_zero_cfg_contract_param ia).
-    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+    Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)
 
     (* Unconditional forward jump: jumps 8 bytes ahead (2 instruction widths).
@@ -80,6 +80,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Lemma valid_jmp_fwd_cfg_contract_param (ia : N) :
       ValidCFGVerifierContract (jmp_fwd_cfg_contract_param ia).
-    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+    Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)
 

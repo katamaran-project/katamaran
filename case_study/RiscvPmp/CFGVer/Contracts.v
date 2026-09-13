@@ -585,6 +585,23 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
                 | apply Z.leb_le; vm_compute; reflexivity ]
           end ].
 
+    (* THE PARAMETRIC-BASE DISCHARGE, once.  Every contract whose base is a
+       TERM rather than a literal -- which is every `gen_contract_param` and
+       every mid-program segment, since a segment is by construction cut at a
+       symbolic base -- is discharged by exactly these four steps.  It lived in
+       GenSegment.v as `solve_param_vc` and was ALSO written out at 154 sites, so
+       there were two spellings of one tactic split by vintage rather than by
+       meaning; and the name said "segment" when the property that matters is
+       "parametric base".  It belongs here, beside the two tactics it calls.
+
+       Spelling out the stages is still the right move when one FAILS: this
+       abbreviation reports a bare `No applicable tactic`, and on 2026-09-13 a
+       failure in the last component cost a detour through the Ltac body to
+       localise.  If a VC will not close, inline the four steps and see which
+       one stops. *)
+    Ltac solve_param_vc :=
+      intros; vm_compute; solve_vc; solve_symbase_fetch.
+
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
     (*   match reg_convert r with *)
     (*   | None     => ⊤ *)

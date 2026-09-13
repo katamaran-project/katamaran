@@ -122,4 +122,4 @@ Proof. reflexivity. Qed.
 
 Lemma valid_modpow_win_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (modpow_win_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+Proof. solve_param_vc. Qed.

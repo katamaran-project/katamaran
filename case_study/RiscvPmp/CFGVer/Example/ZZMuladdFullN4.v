@@ -362,4 +362,4 @@ Definition zzmuladdfulln4_cfg_contract_param (ia : N)
 
 Lemma valid_zzmuladdfulln4_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (zzmuladdfulln4_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+Proof. solve_param_vc. Qed.

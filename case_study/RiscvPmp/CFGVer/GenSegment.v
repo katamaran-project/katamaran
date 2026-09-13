@@ -433,8 +433,10 @@ Definition gen_seg_contract {Σ : LCtx}
        what happened to amBody_post, and it fails late and confusingly. *)
     (post ∗ minimal_pre)%asn.
 
-(* The 31 byte-identical segment VC proofs, once. *)
-Ltac solve_seg := intros; vm_compute; solve_vc; solve_symbase_fetch.
+(* `solve_param_vc` lived here and is GONE: it was character-for-character the
+   standard parametric-base discharge, which ~150 other sites wrote out.  One
+   spelling now, `solve_param_vc`, defined in Contracts.v beside the tactics
+   it calls -- a segment needs nothing a parametric-base contract does not. *)
 
 (* ========================================================================== *)
 (* 4. THE reg_convert TABLE                                                    *)

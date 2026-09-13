@@ -66,5 +66,5 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Lemma valid_set_X2_to_42_param (ia : N) :
       ValidCFGVerifierContract (set_X2_to_42_param ia).
-    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+    Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 proof-of-concept ===== *)

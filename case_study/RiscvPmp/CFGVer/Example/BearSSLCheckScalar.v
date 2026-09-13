@@ -154,4 +154,4 @@ Proof. reflexivity. Qed.
 
 Lemma valid_check_scalar_cfg_contract_param (ia : N) :
   ValidCFGVerifierContract (check_scalar_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+Proof. solve_param_vc. Qed.
