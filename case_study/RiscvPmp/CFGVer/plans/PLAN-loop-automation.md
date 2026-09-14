@@ -623,6 +623,92 @@ C2's input, not C1's output — see C2.
 
 ---
 
+## Step 3 results, part 2 (2026-09-14) — C2 landed, at the LATCH level
+
+**Scope changed from what the plan said, deliberately and with the user's
+call.** The plan scopes C2 as "derive `iota`". Measuring the duplication first
+said `iota` is the smaller half: the six `*_iota` + `*_latch` pairs are 146
+lines, of which the `iota` definitions are ~30; `mulinner_latch` and
+`walkup_latch` are byte-identical apart from variable names. Deriving `iota`
+alone would have left every `refine (loop_latch_ptr ...)` and its seven bullets
+standing. So C2 derives the LATCH OBLIGATION, with `iota` still supplied by the
+caller and only *checked* against the affine closed form.
+
+**The forced `+1` is the thing actually removed.** Spike (a) found the counter's
+anchor is not chosen but forced — `counter n = sentinel − (n+1)·imm` is exactly
+what `loop_latch_obligation` demands, because it is two-sided (exit at trip 0,
+guard above it). That `+1` is invisible in the goal and fails late. It now lives
+in `loop_ctr_down` / `loop_ctr_up` and nowhere else.
+
+**Delivered:** `loop_ctr_down`, `loop_ctr_up`, and three wrappers —
+`loop_latch_ptr_affine_down`, `loop_latch_ptr_affine_up`,
+`loop_latch_ctr_affine_up`.
+
+**TWO AXES, NOT ONE — a correction to this plan's own framing.** I assumed the
+`ptr` family counts down and the `ctr` family up. That is wrong. The GUARD
+FAMILY (`ptr` = neq/eq against a term, `ctr` = bvult/bvule against a literal)
+and the DIRECTION are INDEPENDENT:
+
+| loop | guard family | direction | anchor, stride |
+|---|---|---|---|
+| countdown (A) | ctr | up | 1, 1 |
+| divrem | ctr | up | 1, 1 |
+| shiftdown_ctr (B) | **ptr** (vs literal 0) | **up** | 0, 1 |
+| shiftdown_ptr (C) | ptr | **up** | pe, 4 |
+| mulinner (D) | ptr | down | pe, 4 |
+| walkup (F) | ptr | down | pe, 4 |
+| subword (Tail) | ptr | down | pe, 4 |
+
+So `ptr` needs both directions. `ctr` has only `_up` because no loop in the tree
+counts the other way — an absence, not an impossibility; say so rather than
+implying the case cannot arise.
+
+**`anch` is ONE number, not two.** In the pointer family the counter's anchor
+and the limit's value are the same — that is the forced-anchor finding restated,
+since the loop stops exactly when the counter reaches the limit. Taking them as
+separate parameters would have let a non-terminating loop typecheck.
+
+**Payoff, measured.** The six latch proofs in `ZZLoopLatchCheck.v`: 96 → 55
+lines of `Proof..Qed`, and the per-loop data drops from three hand-written
+closed forms (`kv`, `w`, `ev`) to an anchor and a stride. `Hk`/`He` stay
+`cbn. reflexivity.` on the loops that had them — the arithmetic regression I
+feared at the `iota`-only level does not occur here, because the user never
+writes `Hk` for the parts that differ.
+
+**One asymmetry that is real, not an oversight.** `_ctr_affine_up` and
+`_ptr_affine_up` need `stride < bv.exp2 xlenbits`, `_down` does not: the up
+direction encodes its step as the wrap-around `2^32 - stride`, which only
+denotes a decrement while the stride fits in a word. `_up` in exchange needs no
+separate `Hb`, since its `HPb` at trip 0 already bounds the anchor.
+
+### A METHOD CORRECTION that invalidates an earlier green — read this
+
+`rocq_compile_file` on a `CFGVer/Example/ZZ*.v` file compiled it against a
+**stale `GenSegment.vo` in `_build/default`**, not the source tree. So the
+"whole chain rebuilds green" reported for C1 was not a real check: rebuilding
+the same files with plain `coqc` and the `_CoqProject` flags found TWO genuine
+failures that `rocq_compile_file` had reported green —
+
+1. `@eq N (shape_exit_off _) 116` — `116` parsed as `nat`. Needs `116%N`.
+2. `ZZLoopTransCheck.v:202`'s `lia` — `loop_num_instrs` now routes through
+   `shape_num_instrs`, and `cbn` cannot reduce `loop_shape_at` (it would have to
+   unfold `nth_error` over a 282-element list and `bv.signed` under it), so the
+   code-extent bound became an opaque atom.
+
+Fix for (2), and it is the general rule for any C1 consumer: define the shape
+with **`Eval vm_compute in`**, so the record is a LITERAL at definition time and
+every downstream `cbn` behaves exactly as it did when the fields were typed by
+hand. This costs nothing in checking power — a bogus shape still makes
+`_shape_found` and `_shape_values` fail.
+
+**Rule going forward: these probes are verified with `coqc` + the `_CoqProject`
+flags, not with `rocq_compile_file`.** The ZZ files are not in `_CoqProject`, so
+`make` does not know them either; the invocation is
+`coqc -Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories Katamaran <flags> <file>.v`
+run from the repo root.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the

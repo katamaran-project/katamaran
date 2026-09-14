@@ -1238,6 +1238,180 @@ Proof.
              (Hwb 0 HP0) Hle).
 Qed.
 
+
+(* ---- C2: THE AFFINE LATCH, SO A LOOP STATES ITS RECURRENCE ONCE ----------
+
+   Spike (a) found that every `iota` in the tree is `anchor + n·stride` with
+   every stride already a field of the `LoopSpec`, and -- the part that
+   matters -- that the counter's ANCHOR IS FORCED rather than chosen: writing
+   `counter n = sentinel − (n+1)·imm` reproduces all seven hand-written
+   families exactly, because that is precisely what `loop_latch_obligation`
+   demands.  It is two-sided (exit at trip 0, guard above it), which is what
+   pins the `+1`.
+
+   So the `+1` is the thing worth removing from user code: it is forced, it is
+   invisible in the goal, and getting it wrong fails late.  The two lemmas
+   below take the closed form as DATA -- an anchor and a stride -- and
+   discharge every one of `loop_latch_ptr`/`_ctr`'s seven remaining premises
+   from three N-level facts.  A loop then names its recurrence once, in
+   `loop_ctr_down`/`loop_ctr_up`, and never writes `kv`, `w`, `ev`, or the
+   wrap-around step again.
+
+   WHY THE LATCH AND NOT JUST `iota`.  Deriving `iota` alone would have left
+   each loop's `refine (loop_latch_ptr ...)` and its seven bullets standing --
+   `mulinner_latch` and `walkup_latch` are byte-identical apart from variable
+   names -- and would have forced ONE arithmetic on both families, where the
+   pointer family wants N-subtraction and the counter family N-addition.  At
+   this level each family keeps its own form and the user never writes either.
+
+   NOT DERIVED, deliberately: the non-counter walking pointers.  They do not
+   appear in `loop_latch_obligation` at all (only the counter and the limit
+   do), so asking for them here would be asking for data the obligation
+   cannot use. *)
+
+(* The counter as a function of TRIPS REMAINING.  `down` for a pointer walking
+   up towards a limit (the limit is the anchor, and trip 0 is AT it); `up` for
+   a countdown towards a bound (the bound is the anchor, trip 0 is AT it).
+   Both carry the forced `+1`. *)
+Definition loop_ctr_down (anchor stride : N) (n : nat) : N :=
+  (anchor - stride * (N.of_nat n + 1))%N.
+
+Definition loop_ctr_up (bound stride : N) (n : nat) : N :=
+  (bound + stride * (N.of_nat n + 1))%N.
+
+(* TWO AXES, NOT ONE -- worth stating because the obvious reading is wrong.
+   The GUARD FAMILY (`ptr` = neq/eq against a term, `ctr` = bvult/bvule against
+   a literal) and the DIRECTION (does the counter grow or shrink as trips
+   REMAIN) are independent.  Of the five `ptr` loops, D, F and Tail count down
+   (`loop_counter_step` positive) while B and C count up (step negative, hence
+   encoded as a wrap-around `2^32 - stride`).  So `ptr` needs both directions
+   below.  `ctr` gets only `_up`, because no loop in the tree counts the other
+   way -- an absence, not an impossibility.
+
+   THE POINTER-COMPARE FAMILY, COUNTING DOWN (D, F, Tail).  `anch` is both the
+   counter's anchor and the limit's value -- one number, not two, and that
+   identity is the spike's "the anchor is forced" restated: the loop stops
+   exactly when the counter reaches the limit, so `ev` cannot be anything else.
+   Passing them separately would have let a non-terminating loop typecheck. *)
+Lemma loop_latch_ptr_affine_down {R : LCtx} (ls : LoopSpec R)
+  (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
+  (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (anch stride : N)
+  (HP0 : P 0)
+  (Hg  : loop_guard ls = fun t => formula_relop bop.neq t e)
+  (Hxg : loop_exit_guard ls = fun t => formula_relop bop.eq t e)
+  (Himm : loop_counter_step ls = @bv.of_N xlenbits stride)
+  (Hk : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down anch stride n)))
+  (He : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) e
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits anch))
+  (Hs : (0 < stride)%N)
+  (HPle : forall n, P n -> (stride * (N.of_nat n + 1) <= anch)%N)
+  (Hb : (anch < bv.exp2 xlenbits)%N) :
+  loop_latch_obligation ls iota q P.
+Proof.
+  refine (loop_latch_ptr ls iota q P e (loop_ctr_down anch stride)
+            (fun n => (anch - stride * N.of_nat n)%N) anch
+            HP0 Hg Hxg Hk He _ _ Hb _ _).
+  - (* the latch's own step, at the bv level: one increment, no wrap *)
+    intros n HP. rewrite Himm. rewrite bv.of_N_add. f_equal.
+    unfold loop_ctr_down. pose proof (HPle n HP). lia.
+  - (* the post-step counter fits *) intros n HP. pose proof (HPle n HP). lia.
+  - (* MISSES the limit while trips remain.  This is where `0 < stride` earns
+       its place: a zero stride would make the counter sit on the limit
+       forever and the loop would not terminate. *)
+    intros n HP. pose proof (HPle (S n) HP). cbn [N.of_nat] in *. lia.
+  - (* HITS it at trip 0 *) pose proof (HPle 0%nat HP0). lia.
+Qed.
+
+(* THE POINTER-COMPARE FAMILY, COUNTING UP (B, C).  Same identity `anch = ev`,
+   mirrored.  Two differences from `_down`, both forced by the direction:
+   `Himm` is the wrap-around form (a negative step is not a `Val ty_xlenbits`),
+   and there is no separate `Hb` -- `HPb` at trip 0 already bounds the anchor,
+   so asking for it again would be asking the caller to prove it twice. *)
+Lemma loop_latch_ptr_affine_up {R : LCtx} (ls : LoopSpec R)
+  (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
+  (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (anch stride : N)
+  (HP0 : P 0)
+  (Hg  : loop_guard ls = fun t => formula_relop bop.neq t e)
+  (Hxg : loop_exit_guard ls = fun t => formula_relop bop.eq t e)
+  (Himm : loop_counter_step ls
+          = @bv.of_N xlenbits (bv.exp2 xlenbits - stride))
+  (Hk : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_up anch stride n)))
+  (He : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) e
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits anch))
+  (Hs : (0 < stride < bv.exp2 xlenbits)%N)
+  (HPb : forall n, P n -> (anch + stride * N.of_nat n < bv.exp2 xlenbits)%N) :
+  loop_latch_obligation ls iota q P.
+Proof.
+  assert (Hsb : (stride <= bv.exp2 xlenbits)%N) by lia.
+  refine (loop_latch_ptr ls iota q P e (loop_ctr_up anch stride)
+            (fun n => (anch + stride * N.of_nat n)%N) anch
+            HP0 Hg Hxg Hk He _ _ _ _ _).
+  - (* the latch's own step: a wrap-around decrement *)
+    intros n HP. rewrite Himm.
+    replace (loop_ctr_up anch stride n)
+      with ((anch + stride * N.of_nat n) + stride)%N
+      by (unfold loop_ctr_up; lia).
+    apply bv_of_N_wrap_dec. exact Hsb.
+  - (* the post-step counter fits *) intros n HP. exact (HPb n HP).
+  - (* the limit fits -- from HPb at trip 0, not a separate premise *)
+    pose proof (HPb 0%nat HP0). cbn [N.of_nat] in *. lia.
+  - (* MISSES the limit while trips remain: `0 < stride` earns its place *)
+    intros n HP. pose proof (HPb (S n) HP). cbn [N.of_nat] in *. lia.
+  - (* HITS it at trip 0 *) cbn [N.of_nat]. lia.
+Qed.
+
+(* THE COUNTER-VS-BOUND FAMILY (A, divrem).  The limit is a literal, so there
+   is no `He`; in exchange the step is a WRAP-AROUND decrement, which is why
+   `Himm` is stated against `bv.exp2 xlenbits - stride` rather than against a
+   negative number that `Val ty_xlenbits` cannot hold. *)
+Lemma loop_latch_ctr_affine_up {R : LCtx} (ls : LoopSpec R)
+  (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
+  (b stride : N)
+  (HP0 : P 0)
+  (Hg  : loop_guard ls = fun t => formula_relop bop.bvult
+                                 (term_val ty_xlenbits (@bv.of_N xlenbits b)) t)
+  (Hxg : loop_exit_guard ls = fun t => formula_relop bop.bvule t
+                                 (term_val ty_xlenbits (@bv.of_N xlenbits b)))
+  (Himm : loop_counter_step ls
+          = @bv.of_N xlenbits (bv.exp2 xlenbits - stride))
+  (Hk : forall n, P n ->
+          inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_up b stride n)))
+  (* `< bv.exp2 xlenbits` here but not in the pointer family: that is the
+     wrap-around encoding's doing, not an oversight.  `Himm` writes the
+     decrement as `2^32 - stride`, which only denotes a decrement while the
+     stride fits in a word. *)
+  (Hs : (0 < stride < bv.exp2 xlenbits)%N)
+  (Hb : (b < bv.exp2 xlenbits)%N)
+  (HPb : forall n, P n -> (b + stride * N.of_nat n < bv.exp2 xlenbits)%N) :
+  loop_latch_obligation ls iota q P.
+Proof.
+  assert (Hsb : (stride <= bv.exp2 xlenbits)%N) by lia.
+  refine (loop_latch_ctr ls iota q P b (loop_ctr_up b stride)
+            (fun n => (b + stride * N.of_nat n)%N)
+            HP0 Hg Hxg Hk _ Hb _ _ _).
+  - (* the wrap-around decrement *)
+    intros n HP. rewrite Himm.
+    replace (loop_ctr_up b stride n) with ((b + stride * N.of_nat n) + stride)%N
+      by (unfold loop_ctr_up; lia).
+    apply bv_of_N_wrap_dec. exact Hsb.
+  - (* the post-step counter fits *) intros n HP. exact (HPb n HP).
+  - (* still ABOVE the bound while trips remain: `0 < stride` again *)
+    intros n HP. cbn [N.of_nat] in *. lia.
+  - (* AT the bound at trip 0 *) cbn [N.of_nat]. lia.
+Qed.
+
 (* One address-space bound, from N-level facts: the caller says what the term
    evaluates to and that it fits, and never touches `bv.bin`.  Every loop's
    `gen_loop_bounds` is a list of these (see `gen_loop_bounds_intro`). *)
