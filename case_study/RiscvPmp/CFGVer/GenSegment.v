@@ -1736,15 +1736,38 @@ Arguments walk_step {Σ}. Arguments walk_is_public {Σ}.
 (* A memory cell: the binder for its value, the Sigma-variable holding its
    base address, a constant offset from that base, and whether the VALUE is
    public (a walking pointer's target usually is not). *)
-Record cell_spec (Σ : LCtx) : Type := MkCellSpec
+Record cell_spec (Σ : LCtx) : Type := MkCellSpecFull
   { cell_binder : string
   ; cell_base_var  : string
   ; cell_base_in   : (cell_base_var∷ty_xlenbits ∈ Σ)%katamaran
   ; cell_offset  : Val ty_xlenbits
-  ; cell_is_public  : bool }.
-Arguments MkCellSpec {Σ} cell_binder cell_base_var {cell_base_in} cell_offset cell_is_public.
+  ; cell_is_public  : bool
+    (* `None` = the cell holds SOME value, as an existential; `Some v` = it
+       holds exactly `v`.  A constant cell needs NO BINDER, which is the whole
+       reason this is a field rather than two record types: the base then needs
+       one fewer `ctx.in_succ`, and everything downstream must branch on it.
+       It is public for free (`term_val` is `SyncVal`), so `cell_is_public` is
+       ignored in that branch -- mirroring `mem_spec_rel`'s `PVConst`, which
+       likewise emits no `secLeak`. *)
+  ; cell_value : option (Val ty_xlenbits) }.
+Arguments MkCellSpecFull {Σ} cell_binder cell_base_var {cell_base_in} cell_offset
+  cell_is_public cell_value.
 Arguments cell_binder {Σ}. Arguments cell_base_var {Σ}. Arguments cell_base_in {Σ}.
-Arguments cell_offset {Σ}. Arguments cell_is_public {Σ}.
+Arguments cell_offset {Σ}. Arguments cell_is_public {Σ}. Arguments cell_value {Σ}.
+
+(* The original constructor, signature UNCHANGED, so no call site moves: a cell
+   whose value is existentially quantified. *)
+Definition MkCellSpec {Σ : LCtx} (binder base : string)
+    {baseIn : (base∷ty_xlenbits ∈ Σ)%katamaran}
+    (off : Val ty_xlenbits) (pub : bool) : cell_spec Σ :=
+  @MkCellSpecFull Σ binder base baseIn off pub None.
+
+(* A cell holding a KNOWN value -- an array-length word, a pinned constant.
+   The binder name is never used and is fixed rather than asked for. *)
+Definition MkCellConst {Σ : LCtx} (base : string)
+    {baseIn : (base∷ty_xlenbits ∈ Σ)%katamaran}
+    (off : Val ty_xlenbits) (v : Val ty_xlenbits) : cell_spec Σ :=
+  @MkCellSpecFull Σ "cv" base baseIn off true (Some v).
 
 (* `t + off`, except that a ZERO offset must produce the bare term: the
    contract has to match the term the executor builds, and a register the loop
@@ -1781,12 +1804,18 @@ Definition gen_cells_pre {Σ : LCtx} (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
   List.fold_right
     (fun c acc =>
-       (asn.exist (cell_binder c) ty_xlenbits
-          (let a := addr_off (@term_var _ (cell_base_var c) _
-                                (ctx.in_succ (ctx.in_succ (cell_base_in c)))) (cell_offset c) in
-           let v := @term_var _ (cell_binder c) _ ctx.in_zero in
-           if cell_is_public c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
-           else (a ↦ₘ v)%asn)
+       (match cell_value c with
+        | Some cv =>
+            (addr_off (@term_var _ (cell_base_var c) _ (ctx.in_succ (cell_base_in c)))
+               (cell_offset c) ↦ₘ term_val ty_xlenbits cv)%asn
+        | None =>
+            asn.exist (cell_binder c) ty_xlenbits
+              (let a := addr_off (@term_var _ (cell_base_var c) _
+                                    (ctx.in_succ (ctx.in_succ (cell_base_in c)))) (cell_offset c) in
+               let v := @term_var _ (cell_binder c) _ ctx.in_zero in
+               if cell_is_public c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
+               else (a ↦ₘ v)%asn)
+        end
         ∗ acc)%asn)
     ⊤%asn cs.
 
@@ -1794,13 +1823,20 @@ Definition gen_cells_post {Σ : LCtx} (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   List.fold_right
     (fun c acc =>
-       (asn.exist (cell_binder c) ty_xlenbits
-          (let a := addr_off (@term_var _ (cell_base_var c) _
-                                (ctx.in_succ (ctx.in_succ (ctx.in_succ (cell_base_in c)))))
-                     (cell_offset c) in
-           let v := @term_var _ (cell_binder c) _ ctx.in_zero in
-           if cell_is_public c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
-           else (a ↦ₘ v)%asn)
+       (match cell_value c with
+        | Some cv =>
+            (addr_off (@term_var _ (cell_base_var c) _
+                         (ctx.in_succ (ctx.in_succ (cell_base_in c))))
+               (cell_offset c) ↦ₘ term_val ty_xlenbits cv)%asn
+        | None =>
+            asn.exist (cell_binder c) ty_xlenbits
+              (let a := addr_off (@term_var _ (cell_base_var c) _
+                                    (ctx.in_succ (ctx.in_succ (ctx.in_succ (cell_base_in c)))))
+                         (cell_offset c) in
+               let v := @term_var _ (cell_binder c) _ ctx.in_zero in
+               if cell_is_public c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
+               else (a ↦ₘ v)%asn)
+        end
         ∗ acc)%asn)
     ⊤%asn cs.
 

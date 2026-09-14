@@ -1375,14 +1375,17 @@ Section SegCompose.
       cbn [gen_cells_post gen_cells_pre List.fold_right asn.interpret].
     - reflexivity.
     - rewrite IH. apply bi.sep_proper; [| reflexivity].
-      apply bi.exist_proper. intros v.
       (* `addr_off`'s `if bv.eqb off bv.zero` is STUCK on a variable offset,
          which is the only thing stopping conversion here -- force the branch
          and both sides reduce to the same term.  (The underlying fact,
          `inst (term_var x (in_succ h)) (E.[y↦w]) = inst (term_var x h) E`,
-         is already `reflexivity`.) *)
-      unfold addr_off; destruct (bv.eqb (cell_offset c) bv.zero);
-        destruct (cell_is_public c); reflexivity.
+         is already `reflexivity`.)  A CONSTANT cell has no binder, so it needs
+         neither `exist_proper` nor the publicness split. *)
+      destruct (cell_value c).
+      + unfold addr_off; destruct (bv.eqb (cell_offset c) bv.zero); reflexivity.
+      + apply bi.exist_proper. intros v.
+        unfold addr_off; destruct (bv.eqb (cell_offset c) bv.zero);
+          destruct (cell_is_public c); reflexivity.
   Qed.
 
   (* ---- WHERE THE RESERVOIR COMES FROM ------------------------------------
@@ -1417,6 +1420,10 @@ Section SegCompose.
   Lemma loop_reservoir_words {R : LCtx} (c : cell_spec R) (iota : nat -> Valuation R)
     (q : bv xlenbits) (n : nat) (addr : nat -> bv xlenbits)
     (Hpub : cell_is_public c = false)
+    (* the cell is EXISTENTIAL: `mem_word` is an existential resource and
+       cannot produce a constant cell's `addr ↦ₘ term_val v`.  Stated rather
+       than assumed, since `cell_value` became a field (2026-09-14). *)
+    (Hex : cell_value c = None)
     (Haddr : forall i (v : ty.RelVal (ty.bvec (bytes_per_word * byte))),
        inst (T := fun Σ => Term Σ ty_xlenbits)
          (addr_off (@term_var _ (cell_base_var c) _ (ctx.in_succ (ctx.in_succ (cell_base_in c))))
@@ -1429,7 +1436,7 @@ Section SegCompose.
     unfold loop_reservoir. apply big_sepL_mono. intros k i _.
     unfold mem_word.
     cbn [gen_cells_pre List.fold_right asn.interpret].
-    rewrite Hpub.
+    rewrite Hex. rewrite Hpub.
     iIntros "H". iSplitL "H"; [| iSplit; [iPureIntro; cbn; reflexivity | done]].
     iApply (bi.equiv_entails_1_1 _ _
               (asn_cell_inst "w" (cell_binder c) (term_var "p")
@@ -1461,16 +1468,24 @@ Section SegCompose.
      are public, which is what a loop reading a public array (muladd's I, K, M
      all read one) needs.  `mem_cell false` IS `mem_word`, by conversion. *)
 
-  Definition mem_cell (pub : bool) (a : bv xlenbits) : iProp Σ :=
-    asn.interpret (Σ := ["p"∷ty_xlenbits])
-      (asn.exist "w" ty_xlenbits
-         (if pub
-          then asn.sep (term_var "p" ↦ₘ term_var "w")
-                 (asn.formula (formula_secLeak (@term_var _ "w" _ ctx.in_zero)))
-          else (term_var "p" ↦ₘ term_var "w")%asn))
-      ([env].["p"∷ty_xlenbits ↦ ty.SyncVal a]).
+  Definition mem_cell (val : option (Val ty_xlenbits)) (pub : bool) (a : bv xlenbits)
+      : iProp Σ :=
+    match val with
+    | Some v =>
+        asn.interpret (Σ := ["p"∷ty_xlenbits])
+          (term_var "p" ↦ₘ term_val ty_xlenbits v)
+          ([env].["p"∷ty_xlenbits ↦ ty.SyncVal a])
+    | None =>
+        asn.interpret (Σ := ["p"∷ty_xlenbits])
+          (asn.exist "w" ty_xlenbits
+             (if pub
+              then asn.sep (term_var "p" ↦ₘ term_var "w")
+                     (asn.formula (formula_secLeak (@term_var _ "w" _ ctx.in_zero)))
+              else (term_var "p" ↦ₘ term_var "w")%asn))
+          ([env].["p"∷ty_xlenbits ↦ ty.SyncVal a])
+    end.
 
-  Lemma mem_cell_false (a : bv xlenbits) : mem_cell false a = mem_word a.
+  Lemma mem_cell_false (a : bv xlenbits) : mem_cell None false a = mem_word a.
   Proof. reflexivity. Qed.
 
   (* the public twin of `asn_cell_inst`.  The `secLeak` conjunct mentions only
@@ -1494,19 +1509,40 @@ Section SegCompose.
     cbn. apply bi.exist_proper. intros v. now rewrite (H v).
   Qed.
 
+  (* the CONSTANT twin: no binder at all, so the two sides agree as soon as the
+     two address terms denote the same address. *)
+  Lemma asn_cell_inst_const {R1 R2 : LCtx}
+    (T1 : Term R1 ty_xlenbits) (T2 : Term R2 ty_xlenbits)
+    (i1 : Valuation R1) (i2 : Valuation R2) (v : Val ty_xlenbits)
+    (H : inst (T := fun Σ => Term Σ ty_xlenbits) T1 i1
+         = inst (T := fun Σ => Term Σ ty_xlenbits) T2 i2) :
+    asn.interpret (T1 ↦ₘ term_val ty_xlenbits v) i1
+    ⊣⊢ asn.interpret (T2 ↦ₘ term_val ty_xlenbits v) i2.
+  Proof. cbn. now rewrite H. Qed.
+
   (* what a cell's reservoir entry must sit at: the address the contract's own
      `addr_off` evaluates to at this trip.  Independent of the cell's VALUE,
      which is why it quantifies over `v`. *)
   Definition cell_addr_ok {R : LCtx} (c : cell_spec R) (i : Valuation R)
       (q : bv xlenbits) (a : bv xlenbits) : Prop :=
-    forall v : ty.RelVal (ty.bvec (bytes_per_word * byte)),
-      inst (T := fun Σ => Term Σ ty_xlenbits)
-        (addr_off (@term_var _ (cell_base_var c) _
-                     (ctx.in_succ (ctx.in_succ (cell_base_in c))))
-           (cell_offset c))
-        ((i.["a"∷ty_xlenbits ↦ ty.SyncVal q])
-           .[cell_binder c ∷ty.bvec (bytes_per_word * byte) ↦ v])
-      = ty.SyncVal a.
+    match cell_value c with
+    | Some _ =>
+        (* no binder, hence one fewer weakening and no quantifier *)
+        inst (T := fun Σ => Term Σ ty_xlenbits)
+          (addr_off (@term_var _ (cell_base_var c) _ (ctx.in_succ (cell_base_in c)))
+             (cell_offset c))
+          (i.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+        = ty.SyncVal a
+    | None =>
+        forall v : ty.RelVal (ty.bvec (bytes_per_word * byte)),
+          inst (T := fun Σ => Term Σ ty_xlenbits)
+            (addr_off (@term_var _ (cell_base_var c) _
+                         (ctx.in_succ (ctx.in_succ (cell_base_in c))))
+               (cell_offset c))
+            ((i.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+               .[cell_binder c ∷ty.bvec (bytes_per_word * byte) ↦ v])
+          = ty.SyncVal a
+    end.
 
   (* the same zero-offset convention `addr_off` uses, on VALUES *)
   Definition cell_addr_at (b off : bv xlenbits) : bv xlenbits :=
@@ -1517,17 +1553,19 @@ Section SegCompose.
     (Hb : env.lookup i (cell_base_in c) = ty.SyncVal b) :
     cell_addr_ok c i q (cell_addr_at b (cell_offset c)).
   Proof.
-    intros v. unfold addr_off, cell_addr_at.
+    unfold cell_addr_ok, addr_off, cell_addr_at.
     (* `env.lookup_at_fold` is needed because cbn pushes `inst` through to
        `env.lookup_at`, at which point `Hb` stops matching syntactically. *)
-    destruct (bv.eqb (cell_offset c) bv.zero); cbn;
-      rewrite env.lookup_at_fold; rewrite Hb; reflexivity.
+    destruct (cell_value c);
+      [ | intros v ];
+      destruct (bv.eqb (cell_offset c) bv.zero); cbn;
+        rewrite env.lookup_at_fold; rewrite Hb; reflexivity.
   Qed.
 
   Lemma gen_cells_pre_intro {R : LCtx} (cs : list (cell_spec R))
     (i : Valuation R) (q : bv xlenbits) (addr : cell_spec R -> bv xlenbits)
     (H : List.Forall (fun c => cell_addr_ok c i q (addr c)) cs) :
-    ([∗ list] c ∈ cs, mem_cell (cell_is_public c) (addr c))
+    ([∗ list] c ∈ cs, mem_cell (cell_value c) (cell_is_public c) (addr c))
     ⊢ asn.interpret (gen_cells_pre cs) (i.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
   Proof.
     induction cs as [| c cs IH];
@@ -1536,7 +1574,18 @@ Section SegCompose.
     - inversion H as [| ?? Haddr Ht]; subst.
       rewrite big_sepL_cons.
       iIntros "(Hc & Hrest)". iSplitL "Hc".
-      + unfold mem_cell. destruct (cell_is_public c).
+      + unfold mem_cell, cell_addr_ok in *.
+        destruct (cell_value c) as [cv |].
+        { iApply (bi.equiv_entails_1_1 _ _
+                    (asn_cell_inst_const (term_var "p")
+                       (addr_off (@term_var _ (cell_base_var c) _
+                                    (ctx.in_succ (cell_base_in c)))
+                          (cell_offset c))
+                       ([env].["p"∷ty_xlenbits ↦ ty.SyncVal (addr c)])
+                       (i.["a"∷ty_xlenbits ↦ ty.SyncVal q]) cv
+                       ltac:(cbn; symmetry; exact Haddr))).
+          iExact "Hc". }
+        destruct (cell_is_public c).
         * iApply (bi.equiv_entails_1_1 _ _
                     (asn_cell_inst_pub "w" (cell_binder c) (term_var "p")
                        (addr_off (@term_var _ (cell_base_var c) _
@@ -1564,7 +1613,7 @@ Section SegCompose.
     (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat)
     (addr : nat -> cell_spec R -> bv xlenbits)
     (H : forall i, List.Forall (fun c => cell_addr_ok c (iota i) q (addr i c)) cs) :
-    ([∗ list] i ∈ seq 0 n, [∗ list] c ∈ cs, mem_cell (cell_is_public c) (addr i c))
+    ([∗ list] i ∈ seq 0 n, [∗ list] c ∈ cs, mem_cell (cell_value c) (cell_is_public c) (addr i c))
     ⊢ loop_reservoir (gen_cells_pre cs) iota q n.
   Proof.
     apply loop_reservoir_intro. intros i.
@@ -1609,7 +1658,7 @@ Section SegCompose.
     (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat)
     (addr : nat -> cell_spec R -> bv xlenbits)
     (H : forall i, List.Forall (fun c => cell_addr_ok c (iota i) q (addr i c)) cs) :
-    ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs, mem_cell (cell_is_public c) (addr i c))
+    ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs, mem_cell (cell_value c) (cell_is_public c) (addr i c))
     ⊢ loop_carry (gen_cells_pre cs) iota q N N.
   Proof.
     iIntros "H". iApply loop_carry_entry.
@@ -1665,7 +1714,7 @@ Section SegCompose.
     (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat)
     (H : forall i, List.Forall (cell_base_sync (iota i)) cs) :
     ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs,
-       mem_cell (cell_is_public c) (cell_addr_of (iota i) c))
+       mem_cell (cell_value c) (cell_is_public c) (cell_addr_of (iota i) c))
     ⊢ loop_carry (gen_cells_pre cs) iota q N N.
   Proof.
     apply (loop_carry_cells cs iota q N (fun i c => cell_addr_of (iota i) c)).
