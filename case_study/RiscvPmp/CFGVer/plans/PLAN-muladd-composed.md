@@ -1641,3 +1641,79 @@ Two things that make F;G;H the right first instance, both confirmed 2026-09-14:
 
 And `subword_entry` hand-rolls at n=1 exactly what §R6's `loop_carry_entry`
 now packages, so the two strands meet at the enter.
+
+
+# ========================================================================
+# §R9. THE F -> G CUT, stage 1 -- PROVED and FALSIFIED (2026-09-14)
+# ========================================================================
+
+`Example/ZZEnterFG.v` (untracked). First instance of §R3 step 3 executed the
+§R8 way -- generate the cut assertion from the successor, do not write one.
+
+## The cut is FOUR LINES
+
+    Definition divrem_cut_subst : Sub (divrem_ctx ▻ "a") (["p"] ▻ "a" ▻ "an") :=
+      [env].["q" ↦ PO 540]                            (* G's head, base-relative *)
+           .["k" ↦ term_val ty_xlenbits (bv.of_N 32)] (* the counter at entry    *)
+           .["a" ↦ term_var "an"].                    (* G's entry pc IS F's exit *)
+
+and F's postcondition becomes
+`asn.sep (subst (gen_loop_at_head (divrem_spec (ia+540))) divrem_cut_subst) sgF_rest`.
+No hand-written assertion; `valid_sgF'` is `solve_param_vc`, one line.
+
+G is the register-only loop, so this is the SIMPLEST of the five enters:
+`divrem_ctx` is just `["q";"k"]` and there is no reservoir substitution at all,
+where L->M needed a second one for its sliding window.
+
+## The entry arithmetic is FORCED, which is the repeatability point
+
+F's last three instructions are `li T4,32` / `li T5,1` / `li T6,1` (idx 132-134;
+idx 135 is G's `loop_first_instr`). `divrem_iota`'s `k(n) = n+2` then PINS
+**n = 30** -- independently the same 31 head visits (32,31,...,2) §1 derives
+from the listing. Nothing about this cut was a free choice, which is exactly
+what §R8 predicts: the resource content is generated, and the arithmetic is
+dictated by the program.
+
+## NON-VACUITY: FALSIFIED, not assumed
+
+One token changed, `bv.of_N 32` -> `bv.of_N 31` in the substitution
+(`ZZEnterFG_bad.v`):
+
+| arm | result |
+|---|---|
+| `k = 32` | **Qed** |
+| `k = 31` | **`No applicable tactic`** |
+
+So the generated postcondition is genuinely checked and `valid_sgF'` is not
+passing on an unsatisfiable precondition. **Do this for every cut** -- it is one
+`sed` and one compile, and it is the only thing separating "the cut is proved"
+from "the cut typechecks".
+
+## One gap closed by existing work
+
+`dvs_regs` needs **T0 public** ("d = b0, from the public modulus") and F's
+original precondition used `mlad_reg_specs_rel`, which marks it private -- the
+same publicness issue that broke the six segments. `mlad_reg_specs_cut` (landed
+09-13) already marks T0 public, so F simply moves onto it, as the other eight
+straight-line segments already have. **A cut's precondition wants the CUT
+spec, not the ENTRY spec** -- worth stating as the rule.
+
+## Stage 2, and the machinery it needs
+
+This file sets `sgF_rest := ⊤`. Dropping resources only weakens a
+postcondition, so stage 1 is exactly "does F establish G's entry state?" with
+nothing else in the way -- and it does. Stage 2 must carry what G never touches
+but H needs: the memory block and A0-A7/X2.
+
+**BLOCKER, and it is a MACHINERY gap rather than per-cut work:**
+`gen_mem_pre_rel` is hardwired to `Assertion (["p"] ▻ "a")` (GenContract.v:381),
+so it cannot be used in a postcondition at `... ▻ "a" ▻ "an"`. The register half
+has a Σ-generic builder -- `gen_regs_any` (ZZMladCommon) takes the base as a
+`Term Σ` and works at any context -- but the memory half has NO analogue, which
+is why `sgL_carry` spells its four cells out by hand. `mlad_mem_specs_rel` is
+x ++ m ++ stack, so spelling it out per cut is both long and per-cut.
+
+**Next machinery item: a Σ-generic `gen_mem_any`, the memory twin of
+`gen_regs_any`.** Every cut that carries memory across it needs one, so it
+amortises exactly like §R6's cell trade; without it, step 3's remaining cuts
+each pay a hand-written cell block.
