@@ -1252,3 +1252,143 @@ class of reduction fighting.
   posts plus a copy of the `dv_loop` shape.  D/I/K all have SLIDING memory
   footprints, so they need Phase 4b's cell-range fixpoint rather than G's opaque
   frame — G is the only register-only loop of the five.
+
+
+# ========================================================================
+# THE REPEATABILITY GOAL (2026-09-14)
+# ========================================================================
+
+Everything above treats muladd as the target. This section restates the target
+as the thing that actually matters — **a whole-function proof whose cost is
+linear in segments, with a per-segment cost that is mostly mechanical** — and
+re-orders the remaining work by that criterion rather than by segment index.
+muladd is then the 14-segment instance that demonstrates it, not the goal.
+
+## §R0. The claim we are trying to be able to make
+
+> For a function cut into `n` segments, verifying it costs `n` × (a small
+> mechanical part + one genuine specification decision per cut), and neither
+> part grows with `n`.
+
+Three things have to hold, and they are separable:
+
+1. **Per-segment cost does not grow with program size.** This is §0's bet. It is
+   the reason cutting works at all, and it is the one thing that makes a LARGER
+   program tractable rather than merely longer.
+2. **The mechanical part is actually generated**, not re-typed per segment.
+3. **The specification part is small and local** — one statement per cut about
+   what that cut hands the next segment.
+
+## §R1. Honest stock-take
+
+**(1) is the weakest-evidenced of the three, and the plan has been overstating
+it.** §0 cites `ZZSegTrimP` (339 M words / 15 s for a mid-program cut) — but the
+RESULTS section then records that `ZZSegTrimP`'s goal is VACUOUS. It evidences
+that a cut is cheap to *state*, not that a real one is cheap to *prove*. The
+non-vacuous data points are segment G composed at its real 31 trips, and the
+tail `sgL;M;sgN`. **Neither has been priced as a per-segment cost.** Until a
+non-vacuous per-segment number exists across at least two segment sizes, "cost
+is linear in segments" is a hypothesis, not a result.
+
+**(2) is largely done for LOOPS and not started for the CELL TRADE.**
+`PLAN-loop-automation.md` phases C and D landed 2026-09-14:
+
+| piece | state |
+|---|---|
+| six `LoopSpec` CFG fields + the counter step | derived from the instruction list (C1) |
+| the latch obligation | three bullets from an anchor and a stride (C2) |
+| the trip predicate and its `_mono` | generated from an axis list (C3) |
+| back edge: counter at `S n`, the step, counter at `n` | derived (D2) |
+| back edge: walking registers | one lemma, one call shape, all eight in the tree (Hw) |
+| segment table obligations | `gen_seg_*_table_ok`, discharged once (A1') |
+| back edge: **the cell trade `Hc`** | **hand-written per loop — the gap** |
+
+**(3) has barely started.** Most straight-line segments still carry
+`asn_no_post`, i.e. they prove nothing to hand on. Only the tail chain and G are
+composed; there is no F;G;H chain and no leakage theorem for the whole function
+or for G alone.
+
+## §R2. Machinery vs specification — the distinction that decides the order
+
+**Machinery (amortises across programs; worth generating):**
+
+- **M1. The cell trade `Hc`, and the cell-range fixpoint behind it.** The last
+  hand-written back-edge premise. It blocks three of muladd's five loops: D
+  (memmove), I (limb-accumulate) and K (`br_i31_add`) all have SLIDING memory
+  footprints and need Phase 4b's cell-range fixpoint rather than G's opaque
+  frame. G is the only register-only loop of the five, which is exactly why it
+  is the one that got composed first — it is the easy case, and generalising
+  from it is the trap §5 warns about.
+- **M2. The per-cut *plumbing*** — `ImplPre` instantiation and the Phase-5
+  bridge. Machinery exists (`cfg_instrs_verified_composed`, `gen_implpre`); what
+  is missing is applying it, once per program.
+
+**Specification (per-program; NOT generatable, and should stop being treated as
+a backlog item):**
+
+- **S1. What each cut promises the next segment.** Nine straight-line cuts here.
+  `gen_seg_contract` makes these cheap to *state* and (since A1') discharges
+  their table obligations for free, but nothing can decide what a cut says. This
+  is the irreducible cost, and it is proportional to the number of cuts — which
+  is the argument for cutting on C-function and loop boundaries, as §1 does,
+  rather than for cutting sparingly or often.
+
+## §R3. Revised order
+
+1. **M1 — the cell trade.** Highest repeatability payoff of anything left: it is
+   the last generatable piece of the loop layer, and it unblocks 3 of 5 muladd
+   loops. Do it against D (memmove, 6 instructions) — the smallest sliding
+   footprint in the program — then check it covers I and K without special
+   cases. If it needs a special case per loop it is not machinery and should be
+   re-scoped.
+2. **PRICE A SEGMENT, non-vacuously.** Before writing nine more cut contracts,
+   measure what one real cut costs to prove, at two different segment sizes.
+   This is the missing evidence for §R0(1), and it is cheap now that G and the
+   tail exist. If the per-segment cost turns out to grow, the whole segment-count
+   plan needs revisiting and it is much better to learn that at segment 3 than
+   at segment 14.
+3. **S1 — the cut postconditions, in dependency order.** F;G;H first, since G is
+   already composed and its neighbours are the shortest path to a second
+   composed chain. Then J;K, then the rest.
+4. **M2 + promote.** `ImplPre`, the bridge, and Phase 6 (out of `ZZ*` into
+   tracked files, `_CoqProject`, `Results.v`, the gate allowlist).
+
+Steps 1 and 2 are the ones that generalise. 3 and 4 are what makes muladd
+specifically finish.
+
+## §R4. The second-program test
+
+Repeatability cannot be claimed from one program. `check_scalar` is the existing
+second data point (whole-function N=2/4/8 with a real `Qed`, see
+`PLAN-check-scalar-full.md`). **The test for this whole line of work is whether a
+loop in `check_scalar` can be brought up on the phase-C/D machinery without
+adding a case to it.** That is a cheap experiment and it should be run once M1
+lands, not after muladd finishes — a machinery gap found on a second program is
+worth more than another muladd segment.
+
+## §R5. Banked, so it is not re-derived
+
+**Converting the four composed examples onto `gen_seg_contract` was attempted
+and reverted 2026-09-14, with results worth keeping:**
+
+- The **contract side converts cleanly**: `PaddedLoop.v`'s two contracts became
+  `gen_seg_contract` applications and BOTH VCs still discharge with the
+  identical `vm_compute. solve_vc.` — including with the exit condition
+  strengthened from `pcOutOfInstrs_exitCond` (any pc past the code) to the exact
+  return address.
+- The uniformity payoff is real: `pl_itable`'s 16 hand-written lines applying
+  `itable_faith_of_segment` — whose comment was entirely about `@`-argument
+  order — collapse to a 3-line `gen_seg_instr_table_ok` application.
+- The cost is the `*Result.v` side: the precondition gains a `gen_base_bound`
+  conjunct and a trailing `⊤`, so each `ImplPre` framing chain needs rework, and
+  the `Hex` destructuring changes with the exit condition. ~30 lines of brittle
+  `iSplit`/`iFrame` churn per contract, ×10 contracts across 8 files.
+- **`GenSegment` is safe to import into a light `Example/*.v`**: measured +1.8 MB
+  peak and no extra time on `PaddedLoop.v`. CLAUDE.md's 1.2 GB light-branch
+  invariant is about the Iris MODEL (`SpecIris`/`VerifierRel`/`Adequacy`), which
+  `GenSegment` does not require. `GenCompose` does, so that one is genuinely
+  heavy.
+
+It was reverted because it is polish on machinery that already works, while M1
+blocks three loops. Resume it when the segment path needs to be demonstrated
+uniform, or fold it into step 3 as each example gets a real postcondition.

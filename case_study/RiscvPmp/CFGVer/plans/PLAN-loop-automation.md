@@ -1005,6 +1005,26 @@ for free.
 
 ---
 
+## Where this plan's output is consumed (2026-09-14)
+
+Phases C and D exist to make a WHOLE-FUNCTION proof repeatable, and the target
+that measures them is `PLAN-muladd-composed.md` — see its **§R0–§R5, "The
+repeatability goal"**, added the same day. Three of muladd's five loops are
+already in this plan's working set: `divrem` = segment G (`br_divrem`),
+`mulinner` = segment I (limb multiply-accumulate, 29 instrs), `subword` =
+segment M (`br_i31_sub` word loop).
+
+The one conclusion from that section which changes THIS plan's priorities: of
+everything left here, **the cell trade `Hc` is the piece with the highest
+repeatability payoff**, because it is the last generatable back-edge premise AND
+it blocks muladd's D, I and K — the three loops with sliding memory footprints.
+G is the only register-only loop of the five, so the opaque-frame shape it
+demonstrated does not generalise to them. The remaining D2 items (`Hb`, `Hf`)
+are smaller and can wait; `Hb` is already a fixed three-line script and `Hf` is
+per-loop specification.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
