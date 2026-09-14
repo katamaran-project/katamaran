@@ -1952,3 +1952,52 @@ mirrors of M's), where the entry must build N cells via
 `loop_reservoir_cells` -- the lemma from §R6 that still has no caller. M's own
 enter (`ZZSpikeEnter2`) does it at `tot = 1`, peeling the single copy by hand,
 so the N-copy path is genuinely untested.
+
+
+# ========================================================================
+# §R13. PATH 2 CLOSED -- the reservoir is INHABITABLE at any trip count
+# ========================================================================
+
+`Example/ZZAddkLoop.v`, `Section AddkEntry`. §R11's second untested path, and
+the one that could still have hidden a D-shaped surprise: everything before this
+TRADED cells (`loop_cells_trade` moves resources it assumes exist); nothing
+SUPPLIED a reservoir at a real trip count. `loop_reservoir_cells` and
+`loop_carry_cells_sync` (§R6) had **no caller** -- M's own enter does it at
+`tot = 1` and peels the single copy by hand.
+
+    Lemma addk_reservoir_entry (iq pe ape : N) (tot : nat) :
+      ([∗ list] i ∈ seq 0 tot, [∗ list] c ∈ addk_cells,
+         mem_cell (cell_value c) (cell_is_public c)
+                  (cell_addr_of (addk_iota iq pe ape i) c))
+      ⊢ addk_frame iq pe ape tot tot.
+
+`tot` copies of the two-cell window, at the addresses each trip will use,
+become the entry frame -- for ARBITRARY `tot`, with the per-trip side condition
+discharged by the same `repeat constructor; eexists; cbn; reflexivity` that
+`ZZCellTrade` uses. `addk_reservoir_exit` is the far end: at trip 0 the caller
+gets the array back, which is what every loop before §R6 had to DROP.
+
+**Why this was the load-bearing test.** D taught that a reservoir can be
+tradeable and still impossible to inhabit -- `loop_carry_cells` proves from a
+`False` premise when trips overlap. K is disjoint, and now demonstrably
+inhabitable rather than presumed so.
+
+## Both §R11 paths are now closed
+
+| path | status |
+|---|---|
+| a sliding loop's BACK EDGE on generated machinery | `addk_back_edge`, no holes (§R12) |
+| the reservoir INHABITED at a real trip count | `addk_reservoir_entry/_exit` |
+
+`loop_cells_trade`, `loop_carry`, `loop_carry_exit`, `loop_reservoir_cells` and
+`loop_carry_cells_sync` all now have real callers on a loop they were not
+developed against.
+
+## Next, and it is MECHANICAL
+
+`addk_place`, the trip bound and `addk_loop_runs` -- direct mirrors of M's
+`subword_place` / `subword_trip_bound` / `subword_loop_runs`, tying latch +
+back edge + entry into one `loop_runs` instance. Nothing in them is new
+machinery; §R12/§R13 removed the parts that were.
+
+Then: I and M on the same pattern, the remaining cuts, and only then D (§R11).
