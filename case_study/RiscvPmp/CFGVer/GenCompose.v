@@ -1535,44 +1535,6 @@ Section SegCompose.
       cbn. cbn in HSn. rewrite HSn. cbn. now rewrite Hstep.
   Qed.
 
-  (* The common case, in C2's vocabulary.  `walk_step_ok` alone is LINE-NEUTRAL
-     at a call site -- naming `xn` and `xSn` explicitly costs what dropping the
-     inline `replace` saves, measured.  Taking the ANCHOR and STRIDE instead is
-     what makes it pay: both values are then derived, `Hstep` is proved here
-     from the no-wrap bound, and that bound is the loop's existing hypothesis
-     (C3's `TripDown` clause for this register's axis).  A moving pointer is a
-     counter with its own anchor, so this is D2's counter lemma again. *)
-  Lemma walk_step_down {R : LCtx} (v : walk_reg R) (iota : nat -> Valuation R)
-    (q : bv xlenbits) (n : nat) (a s : N)
-    (Hs : walk_step v = @bv.of_N xlenbits s)
-    (HSn : inst (T := fun Σ => Term Σ ty_xlenbits)
-             (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
-             (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
-                .["an"∷ty_xlenbits ↦ ty.SyncVal q])
-           = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down a s (S n))))
-    (Hn : inst (T := fun Σ => Term Σ ty_xlenbits)
-            (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
-            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
-          = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down a s n)))
-    (Hle : (s * (N.of_nat n + 2) <= a)%N) :
-    exists x : N,
-      inst (T := fun Σ => Term Σ ty_xlenbits)
-        (addr_off (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
-           (walk_step v))
-        (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
-           .["an"∷ty_xlenbits ↦ ty.SyncVal q])
-      = ty.SyncVal (@bv.of_N xlenbits x)
-   /\ inst (T := fun Σ => Term Σ ty_xlenbits)
-        (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
-        ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
-      = ty.SyncVal (@bv.of_N xlenbits x).
-  Proof.
-    refine (walk_step_ok v iota q n
-              (loop_ctr_down a s n) (loop_ctr_down a s (S n)) HSn Hn _).
-    rewrite Hs. rewrite bv.of_N_add. f_equal.
-    unfold loop_ctr_down. cbn [N.of_nat] in *. lia.
-  Qed.
-
   (* ---- D2: THE BACK EDGE, WITH ITS COUNTER THREE DERIVED -----------------
 
      `loop_back_edge_std` takes ten premises.  Three of them -- the counter at

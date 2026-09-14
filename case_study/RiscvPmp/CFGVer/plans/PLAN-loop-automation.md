@@ -850,49 +850,73 @@ following `.`-separated tactic errors with "No such goal". Use `;` there, not
 
 ---
 
-## Step 4 results, part 2 (2026-09-14) — `Hw`, and an honest measurement
+## Step 4 results, part 2 (2026-09-14) — `Hw`, and a correction about the criterion
 
-**Delivered:** `walk_step_ok` and `walk_step_down` (GenCompose.v).
+**Delivered:** `walk_step_ok` (GenCompose.v). All EIGHT walking registers in
+the tree go through it, with one call shape.
 
-**What the obligation actually is.** `Hw`'s element is an existential — "there
-is an `x` the register holds at trip `n` and reaches from trip `S n` after its
-own step" — and every loop discharged it by guessing `x`, splitting, and doing
-the step arithmetic with the `addr_off` still folded. The guess is never a
-guess: `x` IS the value at trip `n`, which the loop already knows. So the only
-content is the step arithmetic, and that is the counter's: a walking pointer is
-a counter with its own anchor.
+**What `Hw` is.** One obligation per walking register, saying the register's
+value transfers across the back edge:
 
-**A NEGATIVE result worth recording, because the first version looked right.**
-`walk_step_ok` on its own — taking `xn` and `xSn` as explicit N arguments — is
-LINE-NEUTRAL at a call site (5 lines before, 5 after) and a LOSS on a fixed
-register (1 line before, 2 after). Naming the two values costs exactly what
-dropping the inline `replace` saves. Measured, not estimated.
+```
+exists x, inst (addr_off (term_var v ↑↑) (walk_step v)) (iota (S n) ▻a▻an) = SyncVal (of_N x)
+       /\ inst (term_var v ↑)                          (iota n  ▻a)      = SyncVal (of_N x)
+```
 
-What makes it pay is taking the ANCHOR and STRIDE instead, i.e. C2's
-vocabulary: both values are then derived, `Hstep` is proved inside from the
-no-wrap bound, and that bound is the loop's EXISTING hypothesis — C3's
-`TripDown` clause for that register's axis. A moving pointer's block goes from
-6 tactic lines to 2.
+i.e. *what trip `S n` leaves in `v` after its own step is what trip `n` finds
+there*. It is an EXISTENTIAL rather than an equation because the two sides live
+in different contexts — the post at `Σ ▻ "a" ▻ "an"`, the pre at `Σ ▻ "a"` —
+and a `Term` is indexed by its context and does not weaken. They can only meet
+at a shared concrete value. That is the cross-valuation step every loop was
+hand-rolling.
 
-**Honest total.** ~2 tactic lines saved per moving register (there are four in
-the tree), less 1 per fixed register converted for uniformity (four of those):
-**net about −6 tactic lines across five loops.** That is far smaller than
-"the walk bullet is determined" suggests, and smaller than C1/C2. The durable
-part is not the lines: it is that `Hw`, like the latch and the trip bound, now
-takes its no-wrap fact from the same place as everything else.
+`walk_step_ok` takes the two values and the one step fact, and does the
+existential, the `addr_off` unfolding and the ZERO-STEP branch. The zero branch
+is handled here rather than left to the caller because `addr_off` deliberately
+returns the BARE term on a zero offset (a register the loop does not move must
+read `r ↦ᵣ term_var v`, not `v + 0`, or the contract stops matching what the
+executor builds), so the two branches have genuinely different shapes.
 
-**Two traps.** (1) The lemma's conclusion must bind `x` in BOTH conjuncts —
-pinning the second to `xn` gives a different proposition that is still provable
-but will not unify with the `Forall`'s `exists x, P x /\ Q x`. (2) `eq_refl`
-for `walk_step v = bv.of_N s` cannot be passed positionally: `v` is only
-determined by unifying the CONCLUSION with the goal, which happens after the
-argument elaborates. Pass `_` and discharge it as a goal.
+### The criterion is UNIFORMITY, not line count — and optimising the wrong one made this worse
 
-**`shiftdown_ctr`'s walking register keeps the general form.** It is the only
-one that moves UP, and its `iota` writes `spb + 4*n` rather than the generated
-`spb + 4*(n+1)`, so no anchor makes the `cbn; reflexivity` premises hold
-syntactically. `walk_step_ok` covers it; a `walk_step_up` would have exactly
-one user and would not fit it.
+First measured `walk_step_ok` as line-NEUTRAL at a call site (5 lines before, 5
+after) and a small loss on a fixed register, and "fixed" that with
+`walk_step_down`, which takes an anchor and stride like C2's counter lemmas and
+cuts a moving pointer to 2 lines.
+
+**That was a regression, and it has been reverted.** `walk_step_down` fits only
+3 of the 8 walking registers, so it replaced ONE uniform treatment with a
+shorter special case plus two exceptions. The goal is that every example is
+solved the same way; a lemma that covers three of eight works against it however
+few lines it saves.
+
+**And the reason it cannot cover the rest is structural.** The COUNTER's `+1`
+offset is FORCED — spike (a) showed `loop_latch_obligation` pins it. A WALKING
+register's offset is NOT: its anchor is whatever the predecessor segment
+supplies. `shiftdown_ctr`'s `sp` writes `spb + 4*n` where the counter convention
+gives `spb + 4*(n+1)`, and no choice of anchor makes those syntactically equal.
+Forcing walking registers into the counter's convention is wrong in principle,
+and that loop is the case that proves it.
+
+**Final shape.** Eight registers, one lemma, one call shape:
+
+```
+refine (walk_step_ok _ <iota> _ n <value at n> <value at S n> _ _ _);
+  [ cbn; reflexivity | cbn; reflexivity | <step arithmetic> ].
+```
+
+Only the third bullet varies, in exactly three ways that correspond to three
+real facts: a plain increment (3 registers), a wrap-around decrement (1), and no
+movement at all (4). Turning those three into named one-line lemmas would make
+the call sites identical to the last bullet; not done yet.
+
+**Two traps.** (1) The conclusion must bind `x` in BOTH conjuncts — pinning the
+second to `xn` gives a different proposition, still provable, that will not
+unify with the `Forall`'s `exists x, P x /\ Q x`. (2) `eq_refl` for
+`walk_step v = bv.of_N s` cannot be passed positionally: `v` is only determined
+by unifying the CONCLUSION with the goal, which happens after the argument
+elaborates. (Trap (2) was hit only by the reverted `walk_step_down`, and is
+recorded because the same shape will recur.)
 
 **Still not done in D2:** the bounds bullet `Hb` (already a fixed three-line
 script), the dropped facts `Hf` (genuinely per-loop), and the cell trade `Hc`
