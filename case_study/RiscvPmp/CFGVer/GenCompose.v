@@ -1441,6 +1441,239 @@ Section SegCompose.
     iExact "H".
   Qed.
 
+  (* ---- CARRYING THE ARRAY ACROSS THE TRIPS -------------------------------
+
+     Everything above builds the reservoir and files finished trips away, but
+     never JOINED the two: every loop so far instantiated `Hc` by DISCARDING
+     the cells it wrote.  That is fatal for a loop whose whole point is the
+     array it writes, and it is the last hand-written premise of
+     `loop_back_edge_std`.
+
+     `loop_carry` is the frame that does both halves at once, and
+     `loop_cells_trade` IS `Hc` for it.  The trade turns out to be a PURE
+     PERMUTATION -- peel one cell off the reservoir, push the finished one onto
+     the done block, and the two sides are the same resources -- so it carries
+     no arithmetic and no per-loop content.  That is what makes it machinery:
+     one lemma serves every loop, for any number of cells, at any publicness.
+
+     Publicness is a FIELD of `cell_spec`, so the reservoir's per-cell resource
+     has to branch on it too: `mem_cell true` additionally knows its contents
+     are public, which is what a loop reading a public array (muladd's I, K, M
+     all read one) needs.  `mem_cell false` IS `mem_word`, by conversion. *)
+
+  Definition mem_cell (pub : bool) (a : bv xlenbits) : iProp Σ :=
+    asn.interpret (Σ := ["p"∷ty_xlenbits])
+      (asn.exist "w" ty_xlenbits
+         (if pub
+          then asn.sep (term_var "p" ↦ₘ term_var "w")
+                 (asn.formula (formula_secLeak (@term_var _ "w" _ ctx.in_zero)))
+          else (term_var "p" ↦ₘ term_var "w")%asn))
+      ([env].["p"∷ty_xlenbits ↦ ty.SyncVal a]).
+
+  Lemma mem_cell_false (a : bv xlenbits) : mem_cell false a = mem_word a.
+  Proof. reflexivity. Qed.
+
+  (* the public twin of `asn_cell_inst`.  The `secLeak` conjunct mentions only
+     the BINDER, which both sides share, so the proof is the same one-liner. *)
+  Lemma asn_cell_inst_pub {R1 R2 : LCtx} (x1 x2 : string)
+    (T1 : Term (R1 ▻ x1∷ty.bvec (bytes_per_word * byte)) ty_xlenbits)
+    (T2 : Term (R2 ▻ x2∷ty.bvec (bytes_per_word * byte)) ty_xlenbits)
+    (i1 : Valuation R1) (i2 : Valuation R2)
+    (H : forall v : ty.RelVal (ty.bvec (bytes_per_word * byte)),
+           inst (T := fun Σ => Term Σ ty_xlenbits) T1
+             (i1.[x1∷ty.bvec (bytes_per_word * byte) ↦ v])
+           = inst (T := fun Σ => Term Σ ty_xlenbits) T2
+               (i2.[x2∷ty.bvec (bytes_per_word * byte) ↦ v])) :
+    asn.interpret (asn.exist x1 (ty.bvec (bytes_per_word * byte))
+                     (asn.sep (T1 ↦ₘ @term_var _ x1 _ ctx.in_zero)
+                        (asn.formula (formula_secLeak (@term_var _ x1 _ ctx.in_zero))))) i1
+    ⊣⊢ asn.interpret (asn.exist x2 (ty.bvec (bytes_per_word * byte))
+                        (asn.sep (T2 ↦ₘ @term_var _ x2 _ ctx.in_zero)
+                           (asn.formula (formula_secLeak (@term_var _ x2 _ ctx.in_zero))))) i2.
+  Proof.
+    cbn. apply bi.exist_proper. intros v. now rewrite (H v).
+  Qed.
+
+  (* what a cell's reservoir entry must sit at: the address the contract's own
+     `addr_off` evaluates to at this trip.  Independent of the cell's VALUE,
+     which is why it quantifies over `v`. *)
+  Definition cell_addr_ok {R : LCtx} (c : cell_spec R) (i : Valuation R)
+      (q : bv xlenbits) (a : bv xlenbits) : Prop :=
+    forall v : ty.RelVal (ty.bvec (bytes_per_word * byte)),
+      inst (T := fun Σ => Term Σ ty_xlenbits)
+        (addr_off (@term_var _ (cell_base_var c) _
+                     (ctx.in_succ (ctx.in_succ (cell_base_in c))))
+           (cell_offset c))
+        ((i.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           .[cell_binder c ∷ty.bvec (bytes_per_word * byte) ↦ v])
+      = ty.SyncVal a.
+
+  (* the same zero-offset convention `addr_off` uses, on VALUES *)
+  Definition cell_addr_at (b off : bv xlenbits) : bv xlenbits :=
+    if bv.eqb off bv.zero then b else bv.add b off.
+
+  Lemma cell_addr_ok_of_base {R : LCtx} (c : cell_spec R) (i : Valuation R)
+    (q : bv xlenbits) (b : bv xlenbits)
+    (Hb : env.lookup i (cell_base_in c) = ty.SyncVal b) :
+    cell_addr_ok c i q (cell_addr_at b (cell_offset c)).
+  Proof.
+    intros v. unfold addr_off, cell_addr_at.
+    (* `env.lookup_at_fold` is needed because cbn pushes `inst` through to
+       `env.lookup_at`, at which point `Hb` stops matching syntactically. *)
+    destruct (bv.eqb (cell_offset c) bv.zero); cbn;
+      rewrite env.lookup_at_fold; rewrite Hb; reflexivity.
+  Qed.
+
+  Lemma gen_cells_pre_intro {R : LCtx} (cs : list (cell_spec R))
+    (i : Valuation R) (q : bv xlenbits) (addr : cell_spec R -> bv xlenbits)
+    (H : List.Forall (fun c => cell_addr_ok c i q (addr c)) cs) :
+    ([∗ list] c ∈ cs, mem_cell (cell_is_public c) (addr c))
+    ⊢ asn.interpret (gen_cells_pre cs) (i.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    induction cs as [| c cs IH];
+      cbn [gen_cells_pre List.fold_right asn.interpret].
+    - iIntros "_". iSplit; [iPureIntro; cbn; reflexivity | done].
+    - inversion H as [| ?? Haddr Ht]; subst.
+      rewrite big_sepL_cons.
+      iIntros "(Hc & Hrest)". iSplitL "Hc".
+      + unfold mem_cell. destruct (cell_is_public c).
+        * iApply (bi.equiv_entails_1_1 _ _
+                    (asn_cell_inst_pub "w" (cell_binder c) (term_var "p")
+                       (addr_off (@term_var _ (cell_base_var c) _
+                                    (ctx.in_succ (ctx.in_succ (cell_base_in c))))
+                          (cell_offset c))
+                       ([env].["p"∷ty_xlenbits ↦ ty.SyncVal (addr c)])
+                       (i.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                       ltac:(intros v; cbn; symmetry; exact (Haddr v)))).
+          iExact "Hc".
+        * iApply (bi.equiv_entails_1_1 _ _
+                    (asn_cell_inst "w" (cell_binder c) (term_var "p")
+                       (addr_off (@term_var _ (cell_base_var c) _
+                                    (ctx.in_succ (ctx.in_succ (cell_base_in c))))
+                          (cell_offset c))
+                       ([env].["p"∷ty_xlenbits ↦ ty.SyncVal (addr c)])
+                       (i.["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                       ltac:(intros v; cbn; symmetry; exact (Haddr v)))).
+          iExact "Hc".
+      + iApply (IH Ht). iExact "Hrest".
+  Qed.
+
+  (* the many-cell generalisation of `loop_reservoir_words` (which stays: it is
+     the one-cell form, and ZZLoopTransCheck2 uses it). *)
+  Lemma loop_reservoir_cells {R : LCtx} (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat)
+    (addr : nat -> cell_spec R -> bv xlenbits)
+    (H : forall i, List.Forall (fun c => cell_addr_ok c (iota i) q (addr i c)) cs) :
+    ([∗ list] i ∈ seq 0 n, [∗ list] c ∈ cs, mem_cell (cell_is_public c) (addr i c))
+    ⊢ loop_reservoir (gen_cells_pre cs) iota q n.
+  Proof.
+    apply loop_reservoir_intro. intros i.
+    exact (gen_cells_pre_intro cs (iota i) q (addr i) (H i)).
+  Qed.
+
+  Lemma loop_reservoir_sep {R : LCtx} (A B : Assertion (R ▻ "a"∷ty_xlenbits))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat) :
+    loop_reservoir (asn.sep A B) iota q n
+    ⊣⊢ loop_reservoir A iota q n ∗ loop_reservoir B iota q n.
+  Proof.
+    unfold loop_reservoir. rewrite <- big_sepL_sep.
+    apply big_sepL_proper. intros k i _. cbn [asn.interpret]. reflexivity.
+  Qed.
+
+  (* THE FRAME: what is still to come, plus what has already been done. *)
+  Definition loop_carry {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+      (iota : nat -> Valuation R) (q : bv xlenbits) (N n : nat) : iProp Σ :=
+    (loop_reservoir A iota q n ∗ loop_completed A iota q n N)%I.
+
+  Lemma loop_carry_entry {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat) :
+    loop_reservoir A iota q N ⊢ loop_carry A iota q N N.
+  Proof.
+    unfold loop_carry, loop_completed. rewrite Nat.sub_diag. cbn.
+    now rewrite bi.sep_emp.
+  Qed.
+
+  (* at exit the reservoir is empty and the done block is every trip the body
+     ran -- which is the array the loop wrote, handed back to the caller. *)
+  Lemma loop_carry_exit {R : LCtx} (A : Assertion (R ▻ "a"∷ty_xlenbits))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat) :
+    loop_carry A iota q N 0
+    ⊢ [∗ list] i ∈ seq 1 N,
+        asn.interpret A ((iota i).["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    unfold loop_carry, loop_reservoir, loop_completed. rewrite Nat.sub_0_r. cbn.
+    now rewrite bi.emp_sep.
+  Qed.
+
+  Lemma loop_carry_cells {R : LCtx} (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat)
+    (addr : nat -> cell_spec R -> bv xlenbits)
+    (H : forall i, List.Forall (fun c => cell_addr_ok c (iota i) q (addr i c)) cs) :
+    ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs, mem_cell (cell_is_public c) (addr i c))
+    ⊢ loop_carry (gen_cells_pre cs) iota q N N.
+  Proof.
+    iIntros "H". iApply loop_carry_entry.
+    iApply (loop_reservoir_cells cs iota q N addr H). iExact "H".
+  Qed.
+
+  (* ---- Hc ---------------------------------------------------------------- *)
+  Lemma loop_cells_trade {R : LCtx} (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (N n : nat) (Hn : (n < N)%nat) :
+    asn.interpret (gen_cells_post cs)
+      (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+         .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ∗ loop_carry (gen_cells_pre cs) iota q N (S n)
+    ⊢ asn.interpret (gen_cells_pre cs) ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      ∗ loop_carry (gen_cells_pre cs) iota q N n.
+  Proof.
+    unfold loop_carry.
+    rewrite gen_cells_drop_exit_pc.
+    rewrite loop_reservoir_peel.
+    rewrite (loop_completed_push (gen_cells_pre cs) iota q n N Hn).
+    iIntros "(Hs & (Hres & Hnew) & Hdone)". iFrame.
+  Qed.
+
+  (* ---- ONE SIDE CONDITION PER LOOP, NOT PER CELL -------------------------
+
+     `loop_carry_cells` still asks the caller for an ADDRESS per cell per trip.
+     Two of muladd's three sliding loops (I, K) walk TWO independent bases, so
+     writing that function by hand means matching on the cell -- exactly the
+     per-loop special-casing this layer exists to remove.  Reading the address
+     off the valuation instead makes it a PROJECTION, and what is left for the
+     caller is one fact: every cell's base is a public address at every trip. *)
+  Definition cell_addr_of {R : LCtx} (i : Valuation R) (c : cell_spec R)
+      : bv xlenbits :=
+    match env.lookup i (cell_base_in c) with
+    | ty.SyncVal b => cell_addr_at b (cell_offset c)
+    | _ => bv.zero
+    end.
+
+  (* `@eq` spelled out: a bare `=` here elaborates against `Term _ ty.int`. *)
+  Definition cell_base_sync {R : LCtx} (i : Valuation R) (c : cell_spec R) : Prop :=
+    exists b : bv xlenbits,
+      @eq (ty.RelVal ty_xlenbits) (env.lookup i (cell_base_in c)) (ty.SyncVal b).
+
+  Lemma cell_addr_ok_of_sync {R : LCtx} (c : cell_spec R) (i : Valuation R)
+    (q : bv xlenbits) (H : cell_base_sync i c) :
+    cell_addr_ok c i q (cell_addr_of i c).
+  Proof.
+    destruct H as (b & Hb). unfold cell_addr_of. rewrite Hb.
+    exact (cell_addr_ok_of_base c i q b Hb).
+  Qed.
+
+  Lemma loop_carry_cells_sync {R : LCtx} (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat)
+    (H : forall i, List.Forall (cell_base_sync (iota i)) cs) :
+    ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs,
+       mem_cell (cell_is_public c) (cell_addr_of (iota i) c))
+    ⊢ loop_carry (gen_cells_pre cs) iota q N N.
+  Proof.
+    apply (loop_carry_cells cs iota q N (fun i c => cell_addr_of (iota i) c)).
+    intros i. apply List.Forall_forall. intros c Hin.
+    apply cell_addr_ok_of_sync.
+    exact (proj1 (List.Forall_forall _ _) (H i) c Hin).
+  Qed.
+
   (* ---- THE EDGE, FROM THE DATA ------------------------------------------
 
      `loop_back_edge` is a Prop, so it can be BUILT rather than proved by hand.

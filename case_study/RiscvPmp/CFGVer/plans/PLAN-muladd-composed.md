@@ -1392,3 +1392,108 @@ and reverted 2026-09-14, with results worth keeping:**
 It was reverted because it is polish on machinery that already works, while M1
 blocks three loops. Resume it when the segment path needs to be demonstrated
 uniform, or fold it into step 3 as each example gets a real postcondition.
+
+
+# ========================================================================
+# §R6. M1 LANDED -- the cell trade (2026-09-14)
+# ========================================================================
+
+§R3 step 1 is DONE.  `GenCompose.v` gains 13 items (commit below); the
+falsification test the step set itself -- "check it covers I and K without
+special cases, and if it needs a special case per loop it is not machinery" --
+was run and **passed for 3 of 3 sliding loops**, but only after two genuine
+design changes that the D-only version would have hidden.
+
+## What `Hc` turned out to be
+
+A **pure permutation**, and that is the headline.  With the frame
+
+    Fr n := loop_carry A iota q N n  ==  loop_reservoir A iota q n
+                                         ∗ loop_completed A iota q n N
+
+the back edge's cell obligation is: peel trip n's cells off the reservoir
+(`loop_reservoir_peel`), push trip (S n)'s finished cells onto the done block
+(`loop_completed_push`), re-index the post's `an`-shaped cells to `a`-shaped
+(`gen_cells_drop_exit_pc`) -- and the two sides are then literally the same
+resources.  `loop_cells_trade` is four rewrites and an `iFrame`.
+
+It carries NO arithmetic and NO per-loop content, works for any `cs` of any
+length at any publicness, and its only side condition is `n < N`, which every
+back edge satisfies by construction (entry at trip N, edges at n = N-1 … 0).
+That is what makes it machinery rather than a per-loop obligation.
+
+`loop_carry_exit` is the point of the whole exercise: at trip 0 the reservoir
+is empty and the done block is every trip the body ran, i.e. **the array the
+loop wrote, handed back to the caller**.  Every loop before this dropped it.
+
+## The two things D alone would NOT have found
+
+Both were caught by actually instantiating I and K, not by inspection.
+
+1. **A public cell is not a special case, it is a MISSING BRANCH.**  D's two
+   cells are both private; I, K and M each have one PUBLIC cell (`mw`, carrying
+   `secLeakvar`) alongside a private one.  The first cut required
+   `cell_is_public c = false` and so covered D only.  But publicness is already
+   a field of `cell_spec`, so the fix was to make the reservoir's per-cell
+   resource branch on it (`mem_cell : bool -> bv -> iProp`) plus a public twin
+   of `asn_cell_inst`.  `mem_cell false` IS `mem_word`, by conversion, so
+   nothing existing moved.  **Rule of thumb this confirms: when a generator
+   takes a record, every FIELD of that record needs a branch before the
+   generator is finished -- "the examples I have don't use it" is how a missing
+   branch gets mistaken for a special case.**
+
+2. **The per-cell address had to become a PROJECTION.**  `loop_carry_cells`
+   originally asked the caller for `addr : nat -> cell_spec R -> bv`.  Fine for
+   D (one base), but I and K each walk TWO INDEPENDENT bases, so writing that
+   function by hand means matching on which cell -- exactly the per-loop
+   special-casing this layer exists to delete.  Reading the address off the
+   trip valuation instead (`cell_addr_of i c`, matching `addr_off`'s own
+   zero-offset convention via `cell_addr_at`) makes it a projection, and what
+   is left for the caller is ONE side condition per LOOP:
+
+       cell_base_sync : every cell's base is a public (SyncVal) address
+
+   discharged by a single `repeat constructor; eexists; cbn; reflexivity`.
+   This is the SAME move as "iota is a projection off LoopSpec fields" from the
+   segment-generator spikes, arrived at independently.  Worth treating as a
+   general rule for this codebase: **if a generator's caller-supplied function
+   would have to match on the data, the function is a projection.**
+
+## The uniformity evidence
+
+`Example/ZZCellTrade.v` (untracked probe, compiles clean with the project's own
+flags; 12 lemmas verified present in the `.vo`).  D, I and K each get the same
+four items -- `_bases_sync`, `_entry`, `_Hc`, `_exit` -- with **byte-identical
+proof scripts**.  The only per-loop text is the data: its cell list and its trip
+valuation, both transcribed from the segment's own VC contract
+(`ZZMladMvBody.v` / `ZZMladLimbBody.v` / `ZZMladAddBody.v`).
+
+    D  memmove      "sw" @ dp-4 (priv), "dw" @ dp   (priv)   ONE base
+    I  limb-macc    "xw" @ xp   (priv), "mw" @ mp   (PUB)    TWO bases
+    K  br_i31_add   "xw" @ ap   (priv), "mw" @ bp   (PUB)    TWO bases
+
+## What this does NOT yet show
+
+Stated plainly, because §R1 already had to retract one "cuts are cheap" claim
+that rested on a vacuous goal:
+
+- These are the CELL half of each loop's back edge only.  None of D/I/K has its
+  full `LoopSpec` / `loop_back_edge_std` instance yet -- `Hc` is now free, the
+  other nine premises are not.
+- Nothing here is priced.  §R3 step 2 (price a segment non-vacuously at two
+  segment sizes) is unaffected and is still the next thing.
+- `loop_reservoir_words` (the one-cell form) is kept rather than replaced, since
+  `ZZLoopTransCheck2` uses it; `loop_reservoir_cells` is its generalisation.
+
+## Method note that cost real time
+
+`make ... | tail` reports **tail's** exit code, not make's.  A failed
+`GenCompose.v` build was read as green that way and the stale `.vo` looked
+plausible because an EARLIER successful build had left one.  Same false-green
+class as the two already in `feedback_rocq_workflow`, but self-inflicted.  Check
+`$?` on the make itself (or `set -o pipefail`) AND confirm the new name is in
+the artifact with `strings <file>.vo | grep <newname>`.
+
+The build failure itself is worth recording: `GenCompose.v` has **no
+`Import asn.notations`** (unlike `GenSegment.v`), so `(A ∗ B)%asn` does not
+parse there -- write `asn.sep A B`.  Three sites.
