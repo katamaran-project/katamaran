@@ -36,9 +36,9 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Specification
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Contracts
      RiscvPmp.Model
      RiscvPmp.IrisModelBinary
@@ -79,18 +79,14 @@ Ltac destruct_syminstance ι :=
 Import RiscvPmpIrisBase2.
 
 Module RiscvPmpModel2.
-  Module Import RiscvPmpIrisInstance2 := RiscvPmpIrisInstance2 DefaultFailLogic.
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
+  Import RiscvPmpIrisInstance2.
 
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-  End RiscvPmpProgramLogic.
-  Include RiscvPmpProgramLogic.
-
-  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic
-    RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase2  RiscvPmpIrisAdeqParams2 RiscvPmpIrisInstance2.
+  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpProgramLogic
+    RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2 RiscvPmpIrisInstance2.
 
   Section ForeignProofs.
     Context `{sg : sailGS2 Σ}.
@@ -589,7 +585,7 @@ Module RiscvPmpModel2.
 
     Lemma lemSem : LemmaSem.
     Proof.
-      intros Δ [];
+      intros Δ []; cbn - [ValidLemma];
         eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
         close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound.
     Qed.

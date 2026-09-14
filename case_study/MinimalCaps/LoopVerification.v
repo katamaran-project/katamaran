@@ -41,7 +41,6 @@ From Katamaran Require Import
      Semantics
      Sep.Hoare
      Sep.Logic
-     Specification
      MinimalCaps.Machine
      MinimalCaps.Sig
      MinimalCaps.Model
@@ -65,12 +64,6 @@ Import MinCapsIrisInstanceWithContracts.
 Import MinCapsValidContracts.
 
 Import MinCapsSignature.
-Module Import MinCapsShallowExecutor :=
-  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
-
-Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsIrisInstanceWithContracts.
-
-Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsExecutor.
 
 Section Loop.
   Context `{sg : sailGS Σ}.

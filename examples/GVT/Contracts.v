@@ -33,14 +33,16 @@ From Coq Require Import
      micromega.Lia.
 From Katamaran Require Import
      Notations
+     Context
      Bitvector
-     Specification
-     Hoare
+     Environment
+     Sep.Hoare
      Symbolic.Solver
      Symbolic.Propositions
      Symbolic.Worlds
      MicroSail.ShallowExecutor
      MicroSail.SymbolicExecutor
+     RiscvPmp.GVT.Logic
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.GVT.Sig.
@@ -64,10 +66,10 @@ Open Scope Z_scope.
 (* NOTE: same as for mincaps, avoid Lemma in definition body for coqwc *)
 Definition KatamaranLem := Lemma.
 
-Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+Module Import RiscvPmpSpecification.
 
-  Section Contracts.
+  Import RiscvPmpProgramLogic.
+
     Section ContractDefKit.
       Import asn.notations.
       Import rv_notations.
@@ -982,7 +984,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                else term_var "result_pmpWriteAddr" = term_var value;
           |}.
 
-        Definition CEnv : SepContractEnv :=
+        Definition contract_environment : SepContractEnv :=
           fun Δ τ fn =>
             match fn with
             | execute_RTYPE           => Some sep_contract_execute_RTYPE
@@ -1049,9 +1051,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | _                       => None
             end.
 
-        Lemma linted_cenv :
+        Lemma linted_contract_environment :
           forall Δ τ (fn : Fun Δ τ),
-            match CEnv fn with
+            match contract_environment fn with
             | Some cnt => Linted cnt
             | None   => True
             end.
@@ -1134,21 +1136,21 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
 
-        Definition CEnvEx : SepContractEnvEx :=
+        Definition contract_environment_foreign : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
             | read_ram bytes       => sep_contract_read_ram bytes
             | write_ram bytes      => sep_contract_write_ram bytes
             | @within_mmio bytes H => @sep_contract_within_mmio bytes H
             | mmio_read bytes      => sep_contract_mmio_read bytes
-            | mmio_write bytes     => sep_contract_mmio_write bytes 
+            | mmio_write bytes     => sep_contract_mmio_write bytes
             | decode               => sep_contract_decode
             | externalWorldUpdates => sep_contract_externalWorldUpdates
             end.
 
-        Lemma linted_cenvex :
+        Lemma linted_contract_environment_foreign :
           forall Δ τ (fn : FunX Δ τ),
-            Linted (CEnvEx fn).
+            Linted (contract_environment_foreign fn).
         Proof.
           intros ? ? []; try constructor.
         Qed.
@@ -1246,7 +1248,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              lemma_postcondition   := ⊤;
           |}.
 
-        Definition LEnv : LemmaEnv :=
+        Definition lemma_environment : LemmaEnv :=
           fun Δ l =>
             match l with
             | open_gprs               => lemma_open_gprs
@@ -1262,21 +1264,21 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
 
       End LemDef.
 
-  End ContractDefKit.
+    End ContractDefKit.
 
-  End Contracts.
+  #[export] Instance riscvpmp_universal_contract_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
 
 End RiscvPmpSpecification.
 
-Module RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-
-Module RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-
 Module RiscvPmpValidContracts.
+  Import RiscvPmpProgramLogic.
   Import RiscvPmpExecutor.
-  Import RiscvPmpShallowExecutor.
+  Import RiscvPmpShallowExec.
 
   Inductive Fuel : Set :=
   | NoInlining

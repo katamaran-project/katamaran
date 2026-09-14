@@ -37,12 +37,12 @@ From Katamaran Require Import
      Semantics
      Sep.Hoare
      Sep.Logic
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.RefineExecutor
      MicroSail.Soundness
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Sig
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstanceBinary
@@ -62,18 +62,15 @@ Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
 Import RiscvPmpIrisBase2.
 Import RiscvPmpModel2.
-Import RiscvPmpModel2.RiscvPmpIrisInstance2.
+Import RiscvPmpIrisInstance2.
 Import RiscvPmpValidContracts.
 Import IrisInstance.RiscvPmpIrisInstancePredicates.
 Import RiscvPmpIrisInstancePredicates2.
+Import RiscvPmpProgramLogic.ProgLog.
+Import RiscvPmpShallowSoundness.
+Import RiscvPmpSymbolicSoundness.
 
 Import RiscvPmpSignature.
-Module Import RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-
-Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
-
-Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
 
 Section Loop.
   Context `{sg : sailGS2 Σ}.
@@ -207,7 +204,7 @@ Section Loop.
     iApply (sound $! _ _ step).
     exact foreignSem.
     exact lemSem.
-    unfold ProgramLogic.ValidContractCEnv.
+    unfold ValidContractCEnv.
     intros.
     pose (ValidContracts f H) as Hc.
     destruct Hc as [fuel Hc].
@@ -220,7 +217,7 @@ Section Loop.
     iApply (sound $! _ _ init_model).
     exact foreignSem.
     exact lemSem.
-    unfold ProgramLogic.ValidContractCEnv.
+    unfold ValidContractCEnv.
     intros.
     pose (ValidContracts f H) as Hc.
     destruct Hc as [fuel Hc].
@@ -256,10 +253,10 @@ Section Loop.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.
   Proof.
-    iApply (@iris_rule_consequence _ _ _ _ env.nil
+    iApply (@iris_rule_consequence _ _ _ _ _ env.nil
              ((∃ p : Privilege, cur_privilege ↦ p) ∗
               (∃ es : list PmpEntryCfg, interp_pmp_entries es))
-             _ _ _ fun_init_model _ _).
+             _ _ _ fun_init_model _ _)%I.
     iApply valid_init_model_contract.
     Unshelve.
     cbn.

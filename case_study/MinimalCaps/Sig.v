@@ -38,7 +38,7 @@ From Equations Require Import
 From Katamaran Require Import
   MinimalCaps.Base
   Notations
-  Specification
+  Signature
   Symbolic.Solver.
 
 Set Implicit Arguments.

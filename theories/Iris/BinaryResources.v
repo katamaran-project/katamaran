@@ -42,14 +42,13 @@ From iris Require Import
      proofmode.tactics.
 
 From Katamaran Require Import
+     Base
      Iris.Base
      Iris.Instance
-     Prelude
      Semantics
      Sep.Hoare
      Signature
-     SmallStep.Step
-     Specification.
+     SmallStep.Step.
 
 Import ctx.notations.
 Import env.notations.

@@ -50,7 +50,6 @@ From Katamaran Require Import
      Semantics.Registers
      Sep.Hoare
      Signature
-     Specification
      Symbolic.Propositions
      Symbolic.Solver
      Symbolic.Worlds
@@ -191,9 +190,11 @@ Module Import ExampleSig <: Signature DefaultBase.
   Include SignatureMixin DefaultBase.
 End ExampleSig.
 
+Module Import ExampleProgramLogic :=
+  MakeProgramLogic DefaultBase ExampleSig ExampleProgram.
+
 (* The specification module defines the contract for the [summaxlen] function. *)
-Module Import ExampleSpecification <: Specification DefaultBase ExampleSig ExampleProgram.
-  Include SpecificationMixin DefaultBase ExampleSig ExampleProgram.
+Module Import ExampleSpecification.
 
   Import ctx.resolution.
   Import asn.notations.
@@ -212,28 +213,30 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSig Examp
                term_val ty.int 0 <= term_var "l"));
     |}.
 
-  Definition CEnv : SepContractEnv :=
+  Definition contract_environment : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | summaxlen => Some sep_contract_summaxlen
       end.
 
   (* No foreign functions. *)
-  Definition CEnvEx : SepContractEnvEx :=
+  Definition contract_environment_foreign : SepContractEnvEx :=
     fun Δ τ f =>
       match f with end.
 
   (* No ghost lemmas. *)
-  Definition LEnv : LemmaEnv :=
+  Definition lemma_environment : LemmaEnv :=
     fun Δ l =>
       match l with end.
 
-End ExampleSpecification.
+  #[export] Instance example_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
 
-(* Use the specification and the solver module to compose the symbolic executor
-   and symbolic verification condition generator. *)
-Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
+End ExampleSpecification.
 
 (* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
@@ -253,9 +256,13 @@ Local Ltac solve :=
      try progress subst);
   auto.
 
+(* Use the specification and the solver module to compose the symbolic executor
+   and symbolic verification condition generator. *)
+Module Import ExampleExecutor :=
+  MakeExecutor DefaultBase ExampleSig ExampleProgram ExampleProgramLogic.
 (* Also instantiate the shallow verification condition generator. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
+  MakeShallowExecutor DefaultBase ExampleSig ExampleProgram ExampleProgramLogic.
 
 (* This computes and proves the shallow VC. Make sure to not unfold the
    definition of the binary operators and Coq predicates used in the example. *)
@@ -390,8 +397,8 @@ Module Import ExampleModel.
   (* Finally, include the constructed operational model, the axiomatic program
      logic, and the Iris implementation of the axioms. *)
   Module Import ExampleIrisInstance <:
-    IrisInstance DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSemantics
-      ExampleIrisBase ExampleIrisAdeqParams.
+    IrisInstance DefaultBase ExampleSig ExampleProgram ExampleSemantics
+      ExampleProgramLogic ExampleIrisBase ExampleIrisAdeqParams.
 
     (* There are no user-defined spatial predicates, also use trivial definitions
        here. *)
@@ -409,12 +416,11 @@ Module Import ExampleModel.
     End ExampleIrisPredicates.
 
     Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram
-      DefaultFailLogic ExampleSemantics ExampleIrisBase.
-    Include IrisAdequacy DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSemantics
-      ExampleIrisBase ExampleIrisAdeqParams.
-    Include ProgramLogicOn DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
+      ExampleSemantics ExampleProgramLogic ExampleIrisBase.
+    Include IrisAdequacy DefaultBase ExampleSig ExampleProgram ExampleSemantics
+      ExampleProgramLogic ExampleIrisBase ExampleIrisAdeqParams.
     Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleProgram
-      DefaultFailLogic ExampleSemantics ExampleSpecification ExampleIrisBase ExampleIrisAdeqParams.
+      ExampleSemantics ExampleProgramLogic ExampleIrisBase ExampleIrisAdeqParams.
 
     (* Verification of the absent foreign functions. *)
     Lemma foreignSem `{sailGS Σ} : ForeignSem.
@@ -426,9 +432,9 @@ Module Import ExampleModel.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include MicroSail.ShallowSoundness.Soundness DefaultBase ExampleSig ExampleProgram
-      DefaultFailLogic ExampleSpecification ExampleShalExec.
+      ExampleProgramLogic ExampleShalExec.
     Include MicroSail.RefineExecutor.RefineExecOn DefaultBase ExampleSig
-      ExampleProgram DefaultFailLogic ExampleSpecification ExampleShalExec ExampleExecutor.
+      ExampleProgram ExampleProgramLogic ExampleShalExec ExampleExecutor.
 
     (* Show that all the contracts are sound in the Iris model. *)
     Lemma contracts_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
@@ -483,7 +489,7 @@ Module Import ExampleModel.
       refine (adequacy
                 (Q := fun v => asn.interpret_pure post ι.[result∷σ ↦ v]) evals I _).
       iIntros (Σ' sG).
-      iApply (iris_rule_stm_call _ _ _ _ Heqc).
+      iApply (iris_rule_stm_call _ _ _ _ _ Heqc).
       - cbn.
         iIntros "_".
         iExists ι.

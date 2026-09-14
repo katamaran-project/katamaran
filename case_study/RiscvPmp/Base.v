@@ -237,9 +237,8 @@ Class MMIOEnv : Type := {
 }.
 Parameter mmioenv : MMIOEnv.
 #[export] Existing Instance mmioenv.
-#[export] Instance state_inhabited : Inhabited Base.State := populate (state_init).
+#[export] Instance state_inhabited : Inhabited State := populate (state_init).
 
-Require Import stdpp.finite.
 (* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
 
 Lemma mmio_ram_False a : a ∈ liveAddrs → a ∈ mmioAddrs -> False.

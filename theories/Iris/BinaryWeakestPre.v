@@ -56,7 +56,6 @@ From Katamaran Require Import
      Sep.Logic
      Signature
      SmallStep.Step
-     Specification
      BinaryResources.
 
 Import ctx.notations.
@@ -838,8 +837,8 @@ Module Type IrisSignatureRules2
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
-  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
+  (Import PLOG  : ProgramLogic B SIG PROG)
   (Import IB2   : IrisBase2 B PROG SEM)
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
 
@@ -849,6 +848,8 @@ Module Type IrisSignatureRules2
   Context `{sG : sailGS2 Σ}.
 
 Section Soundness.
+
+  Context {SPEC : Specification}.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=

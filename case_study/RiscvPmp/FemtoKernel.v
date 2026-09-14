@@ -31,9 +31,9 @@ From Coq Require Import
      Lists.List
      Strings.String.
 From Katamaran Require Import
+     Base
      Bitvector
      Notations
-     Specification
      SmallStep.Step
      Instance
      RiscvPmp.BlockVer.Spec
@@ -41,7 +41,9 @@ From Katamaran Require Import
      RiscvPmp.BlockVer.BinaryVerifier
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
+     RiscvPmp.IrisInstanceBinary
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.PmpCheck
      RiscvPmp.Sig.
 From Katamaran Require
@@ -78,10 +80,10 @@ Module inv := invariants.
   Import Contracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstancePredicates.
-  Import RiscvPmpBlockVerifIrisInstance.
+  Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpIrisInstanceWithContracts.
-  Import RiscvPmpBlockVerifShalExecutor.
+  Import RiscvPmpShallowExec.
   Import Assembly.
 
 
@@ -1527,7 +1529,7 @@ Module inv := invariants.
 
   Section RelationalVerification.
     Import BinaryBlockVerifier.
-    Import RiscvPmpBlockVerifIrisInstance2.
+    Import RiscvPmpIrisInstance2.
     Import IrisModelBinary.RiscvPmpIrisBase2.
     Import IrisInstanceBinary.RiscvPmpIrisInstancePredicates2.
 
@@ -1536,7 +1538,7 @@ Module inv := invariants.
     Let femto_inv_mmio `{sailGS2 Σ} := interp_inv_mmio bytes_per_word.
 
     Definition UnaryPredicateDefIProp {Σ} {_ : trivGS Σ} (sG : sailGS Σ) :=
-      @RiscvPmpBlockVerifIrisInstance.PredicateDefIProp _ sG.
+      @RiscvPmpIrisInstance.PredicateDefIProp _ sG.
 
     Definition asn_interpret_left `{sailGS2 Σ} {_ : trivGS Σ} : ∀ {Γ : LCtx}, Assertion Γ -> Valuation Γ -> iProp Σ :=
       @asn.interpret _ (UnaryPredicateDefIProp sailGS2_sailGS_left _).

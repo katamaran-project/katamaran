@@ -1,6 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Dominique Devriese, Georgy Lukyanov,                    *)
-(*   Sander Huyghebaert, Steven Keuchel                                       *)
+(* Copyright (c) 2026 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,51 +26,27 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
-     Classes.Morphisms
-     Classes.RelationClasses
-     Program.Tactics
-     Relations.Relation_Definitions
-     String.
+From Katamaran Require Import
+     RiscvPmp.Machine
+     RiscvPmp.GVT.Sig
+     Sep.Hoare
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.Soundness.
 
-From Katamaran Require Export
-     Base
-     Program
-     Signature.
+Module RiscvPmpProgramLogic :=
+  MakeProgramLogic RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
 
-Import ctx.notations.
-Import env.notations.
+Module RiscvPmpExecutor :=
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpProgramLogic.
+Module RiscvPmpShallowExec :=
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpProgramLogic.
 
-Module Type SpecificationMixin (B : Base) (Import SIG : Signature B) (Import P : Program B).
-
-  Definition SepContractEnv : Type :=
-    forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
-  Definition SepContractEnvEx : Type :=
-    forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
-  Definition LemmaEnv : Type :=
-    forall Δ (l : 𝑳 Δ), Lemma Δ.
-
-  Definition SepContractFun {Δ τ} (f : 𝑭 Δ τ) : Type :=
-    SepContract Δ τ.
-  Definition SepContractFunX {Δ τ} (f : 𝑭𝑿 Δ τ) : Type :=
-    SepContract Δ τ.
-  Definition SepLemma {Δ} (f : 𝑳 Δ) : Type :=
-    Lemma Δ.
-
-End SpecificationMixin.
-
-Module Type SpecificationKit (B : Base) (Import SIG : Signature B) (P : Program B)
-  (Import SM : SpecificationMixin B SIG P).
-
-  Local Set Implicit Arguments.
-
-  Parameter CEnv   : SepContractEnv.
-  Parameter CEnvEx : SepContractEnvEx.
-  Parameter LEnv   : LemmaEnv.
-
-End SpecificationKit.
-
-Module Type Specification (B : Base) (SIG : Signature B) (P : Program B).
-  Include SpecificationMixin B SIG P.
-  Include SpecificationKit B SIG P.
-End Specification.
+(* Import the soundness proofs for the shallow and symbolic executors. *)
+Module RiscvPmpShallowSoundness :=
+  MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpProgramLogic RiscvPmpShallowExec.
+Module RiscvPmpSymbolicSoundness :=
+  MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpProgramLogic RiscvPmpShallowExec RiscvPmpExecutor.

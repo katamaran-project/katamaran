@@ -37,12 +37,12 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Base
+     MinimalCaps.Logic
      MinimalCaps.Machine
      MinimalCaps.Sig
      MinimalCaps.Contracts.Definitions
-     Notations
-     Specification
-     Hoare
+     Sep.Hoare
      MicroSail.ShallowExecutor
      MicroSail.SymbolicExecutor
      Symbolic.Solver.
@@ -55,12 +55,8 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
+Import MinCapsProgramLogic.
 Import MinCapsSpecification.
-
-Module Import MinCapsExecutor :=
-  MakeExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
-Module Import MinCapsShallowExec :=
-  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
 
 (*** MinCapsValidContracts ***)
 (* In this module we prove that all specified contracts are valid. *)
