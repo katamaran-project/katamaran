@@ -30,8 +30,7 @@ From Coq Require Import
   Strings.String.
 From Katamaran Require Import
   MinimalCaps.Machine
-  MinimalCaps.Sig
-  Specification.
+  MinimalCaps.Sig.
 
 Import ctx.notations.
 Import ctx.resolution.

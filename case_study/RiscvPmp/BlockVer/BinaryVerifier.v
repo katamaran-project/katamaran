@@ -38,7 +38,6 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.SymbolicExecutor
@@ -48,6 +47,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Sig
      RiscvPmp.Contracts
      RiscvPmp.BlockVer.Spec
@@ -55,6 +55,8 @@ From Katamaran Require Import
 From Katamaran Require RiscvPmp.ModelBinary.
 
 Import RiscvPmpProgram.
+Import RiscvPmpProgramLogic.
+Import RiscvPmpBlockVerifSpec.
 Import RiscvPmpIrisInstancePredicates2.
 Import ListNotations.
 
@@ -65,8 +67,6 @@ Import env.notations.
 
 Import RiscvPmpIrisBase2.
 
-Module RiscvPmpBlockVerifIrisInstance2 := RiscvPmpIrisInstance2 RiscvPmpBlockVerifFailLogic.
-
 Module Import BinaryBlockVerifierNotations.
   Notation "a '↦' t" := (reg_pointsTo21 a t) (at level 70).
   Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
@@ -74,7 +74,7 @@ End BinaryBlockVerifierNotations.
 
 Module BinaryBlockVerifier.
   Import iris.base_logic.lib.iprop iris.proofmode.tactics.
-  Import RiscvPmpBlockVerifIrisInstance2.
+  Import RiscvPmpIrisInstance2.
 
   (* TODO: annoying, but not inj in general (illegal instructions...)
            Decode (at least the Sail one) does seem to be injective
@@ -143,7 +143,7 @@ Module BinaryBlockVerifier.
                          ∃ na, asn.interpret (exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
                                ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                      | inr _ =>
-                       if RiscvPmpBlockVerifFailLogic.fail_rule_pre
+                       if fail_rule_pre
                        then True
                        else False
                       end)%I)

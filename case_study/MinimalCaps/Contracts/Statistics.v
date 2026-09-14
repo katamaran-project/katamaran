@@ -37,7 +37,8 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
-     Specification
+     Base
+     MinimalCaps.Logic
      MinimalCaps.Machine
      MinimalCaps.Contracts.Verification.
 
@@ -97,6 +98,8 @@ Section Statistics.
       existT _ (existT _ loop)
     ]%list.
 
+  Import (hints) Definitions.MinCapsSpecification.
+
   Definition symbolic_stats : Stats :=
     List.fold_right
       (fun '(existT _ (existT _ f)) r =>
@@ -109,7 +112,7 @@ Section Statistics.
 
   Goal True.
     idtac "Symbolic branching statistics:".
-    let t := eval compute in symbolic_stats in idtac t.
+    let t := eval vm_compute in symbolic_stats in idtac t.
   Abort.
 
   (* The counting of the shallow nodes is too slow in Ltac. Hence there is and

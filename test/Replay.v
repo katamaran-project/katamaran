@@ -38,13 +38,17 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
-     Signature
+     Program
+     Semantics
      Semantics.Registers
-     MicroSail.SymbolicExecutor
-     MicroSail.ShallowExecutor
+     Sep.Hoare
+     Signature
      Symbolic.Solver
-     Specification
-     Program.
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.RefineExecutor
+     MicroSail.Soundness.
 
 From stdpp Require Import decidable finite.
 
@@ -392,8 +396,21 @@ Module Import ReplaySig <: Signature DefaultBase.
 
 End ReplaySig.
 
-Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayProgram.
-  Include SpecificationMixin DefaultBase ReplaySig ReplayProgram.
+Module Import ReplayProgramLogic :=
+  MakeProgramLogic DefaultBase ReplaySig ReplayProgram.
+(* Compose the symbolic executor and symbolic verification condition generator. *)
+Module Import ReplayExecutor :=
+  MakeExecutor DefaultBase ReplaySig ReplayProgram ReplayProgramLogic.
+(* Also instantiate the shallow executor for the soundness proofs and the
+   statistics. *)
+Module Import ReplayShalExec :=
+  MakeShallowExecutor DefaultBase ReplaySig ReplayProgram ReplayProgramLogic.
+(* Instantiate the operational semantics which is an input to the Iris model. *)
+Module ReplaySemantics <: Semantics DefaultBase ReplayProgram :=
+  MakeSemantics DefaultBase ReplayProgram.
+
+(* The specification module contains the contracts for all μSail and foreign functions. *)
+Module Import ReplaySpecification.
   Import ctx.resolution.
   Import List.ListNotations.
 
@@ -412,14 +429,14 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
          sep_contract_postcondition   := term_val ty.int 1%Z = term_val ty.int 7%Z;
       |}.
 
-    Definition CEnv : SepContractEnv :=
+    Definition contract_environment : SepContractEnv :=
       fun Δ τ f =>
         match f with
         | main => Some sep_contract_main
         | _    => None
         end.
 
-    Definition CEnvEx : SepContractEnvEx :=
+    Definition contract_environment_foreign : SepContractEnvEx :=
       fun Δ τ f =>
         match f with end.
 
@@ -430,7 +447,7 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
          lemma_postcondition   := term_var "l" = term_list [term_val ty.int 0%Z];
       |}.
 
-    Definition LEnv : LemmaEnv :=
+    Definition lemma_environment : LemmaEnv :=
       fun Δ l =>
         match l with
         | open_list => lemma_open_list
@@ -438,12 +455,14 @@ Module Import ReplaySpecification <: Specification DefaultBase ReplaySig ReplayP
 
   End ContractDefKit.
 
-End ReplaySpecification.
+  #[export] Instance replay_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
 
-Module Import ReplayExecutor :=
-  MakeExecutor DefaultBase ReplaySig ReplayProgram Hoare.DefaultFailLogic ReplaySpecification.
-Module Import ReplayShallowExecutor :=
-  MakeShallowExecutor DefaultBase ReplaySig ReplayProgram Hoare.DefaultFailLogic ReplaySpecification.
+End ReplaySpecification.
 
 Lemma shallow_valid_contract_main : Shallow.ValidContract sep_contract_main (FunDef main).
 Proof.
@@ -489,8 +508,6 @@ Section ReplayExamples.
   #[local] Notation P := (interp_Pₐ).
   #[local] Notation Q := (interp_Qₐ).
   #[local] Notation "a <= b" := ((term_binop (bop.relop bop.le) a b = term_val ty.bool true)).
-
-  Print ValidContractWithFuel.
 
   Definition ValidContractWithoutReplay {Δ τ} (c : SepContract Δ τ)
     (s : Stm Δ τ) : Prop :=

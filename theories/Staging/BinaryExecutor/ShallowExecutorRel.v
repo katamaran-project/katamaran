@@ -44,8 +44,7 @@ From Katamaran Require Import
      Prelude
      Signature
      Symbolic.Propositions
-     Syntax.BinOps
-     Specification.
+     Syntax.BinOps.
 
 From stdpp Require base list option.
 

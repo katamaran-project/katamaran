@@ -55,7 +55,6 @@ From Katamaran Require Import
      Sep.Hoare
      Signature
      SmallStep.Step
-     Specification
      BinaryResources
      BinaryWeakestPre
      BinaryAdequacy.
@@ -65,10 +64,11 @@ Import env.notations.
 
 Set Implicit Arguments.
 
-Module Type IrisInstance2 (B : Base) (SIG : Signature B) (PROG : Program B) (FL : FailLogic)
-  (SEM : Semantics B PROG) (IB2 : IrisBase2 B PROG SEM) (IAP : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2) :=
-  IrisPredicates2 B SIG PROG SEM IB2 <+ IrisSignatureRules2 B SIG PROG FL SEM IB2
-    <+ IrisAdequacy2 B SIG PROG FL SEM IB2 IAP.
+Module Type IrisInstance2 (B : Base) (SIG : Signature B) (PROG : Program B)
+  (SEM : Semantics B PROG) (PLOG : ProgramLogic B SIG PROG)
+  (IB2 : IrisBase2 B PROG SEM) (IAP : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2) :=
+  IrisPredicates2 B SIG PROG SEM IB2 <+ IrisSignatureRules2 B SIG PROG SEM PLOG IB2
+    <+ IrisAdequacy2 B SIG PROG SEM PLOG IB2 IAP.
 
 (*  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature. *)
 (*  * This is kept to a minimum (see comment for the IrisPredicates module). *)
@@ -77,17 +77,15 @@ Module IrisInstanceWithContracts2
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
-  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
-  (Import SPEC  : Specification B SIG PROG)
+  (Import PLOG  : ProgramLogic B SIG PROG)
   (Import IB2   : IrisBase2 B PROG SEM)
   (Import IAP   : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2)
-  (Import II    : IrisInstance2 B SIG PROG FL SEM IB2 IAP)
-  (Import PLOG  : ProgramLogicOn B SIG PROG FL SPEC).
+  (Import II    : IrisInstance2 B SIG PROG SEM PLOG IB2 IAP).
 
   Section WithSailGS.
-  Import ProgramLogic.
-  Context `{sG : sailGS2 Σ}.
+  Import ProgLog.
+  Context `{sG : sailGS2 Σ} {SPEC : Specification}.
 
   Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),

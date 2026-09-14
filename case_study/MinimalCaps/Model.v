@@ -49,11 +49,11 @@ From Katamaran Require Import
      Iris.Base
      Semantics
      Sep.Hoare
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.SymbolicExecutor
      MicroSail.RefineExecutor
+     MinimalCaps.Logic
      MinimalCaps.Machine
      MinimalCaps.Sig
      MinimalCaps.Contracts.Definitions
@@ -102,6 +102,7 @@ Ltac destruct_syminstances :=
 Import MinCapsBase.
 Import MinCapsSignature.
 Import MinCapsProgram.
+Import MinCapsProgramLogic.
 Import MinCapsSpecification.
 
 Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSemantics.
@@ -186,7 +187,7 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
 
 End MinCapsIrisAdeqParameters.
 
-Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
+Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisBase MinCapsIrisAdeqParameters.
   Import env.notations.
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -527,15 +528,15 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
 
   End MinimalCapsPredicates.
 
-  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics MinCapsIrisBase.
-  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics MinCapsIrisBase MinCapsIrisAdeqParameters.
+  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisBase.
+  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisBase MinCapsIrisAdeqParameters.
 
 End MinCapsIrisInstance.
 
 Module MinCapsIrisInstanceWithContracts.
-  Include ProgramLogicOn MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
-  Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSemantics
-    MinCapsSpecification MinCapsIrisBase MinCapsIrisAdeqParameters MinCapsIrisInstance.
+
+  Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics
+    MinCapsProgramLogic MinCapsIrisBase MinCapsIrisAdeqParameters MinCapsIrisInstance.
 
   Section LemProofs.
     (* In this section we prove that the lemmas we defined in this case study
@@ -799,20 +800,14 @@ Module MinCapsIrisInstanceWithContracts.
 
   End ForeignProofs.
 
-  (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include MicroSail.RefineExecutor.RefineExecOn MinCapsBase MinCapsSignature
-    MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExec MinCapsExecutor.
-  Include MicroSail.ShallowSoundness.Soundness MinCapsBase MinCapsSignature
-    MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExec.
-
   (* contracts_sound proves that all contracts in our contract environment
      are sound. *)
   Lemma contracts_sound `{sg : sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.
     apply (sound foreignSem lemSem).
     intros Γ τ f c Heq.
-    apply shallow_vcgen_soundness.
-    apply symbolic_vcgen_soundness.
+    apply MinCapsShallowSoundness.shallow_vcgen_soundness.
+    apply MinCapsSymbolicSoundness.symbolic_vcgen_soundness.
     now apply MinCapsValidContracts.ValidContracts.
   Qed.
 

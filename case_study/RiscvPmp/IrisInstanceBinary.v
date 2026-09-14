@@ -37,6 +37,7 @@ From Katamaran Require Import
      Syntax.Predicates
      RiscvPmp.Base
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstance
      RiscvPmp.Sig.
@@ -196,10 +197,9 @@ Module RiscvPmpIrisInstancePredicates2.
   End WithSailGS.
 End RiscvPmpIrisInstancePredicates2.
 
-Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
-  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics
-    RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
-  Module Import RiscvPmpIrisInstance := RiscvPmpIrisInstance FL.
+Module RiscvPmpIrisInstance2 <:
+  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpProgramLogic RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
   Import RiscvPmpIrisInstancePredicates2.
   Import RiscvPmpIrisBase2.
   Import RiscvPmpProgram.
@@ -372,10 +372,10 @@ Module RiscvPmpIrisInstance2 (FL : FailLogic) <:
     RiscvPmpSemantics RiscvPmpIrisBase2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RiscvPmpIrisBase2.
+    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase2.
 
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
 
   Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢

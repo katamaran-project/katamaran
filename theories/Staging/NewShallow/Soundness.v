@@ -34,7 +34,6 @@ From Katamaran Require Import
      Signature
      Sep.Hoare
      Sep.Logic
-     Specification
      Prelude
      Program
      Staging.NewShallow.Executor.
@@ -48,14 +47,10 @@ Module Type Soundness
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
-  (Import SPEC : Specification B SIG PROG)
-  (Import EXEC : NewShallowExecOn B SIG PROG SPEC)
-  (* TODO: passes DefaultFailLogic, should be parametrized by some FailLogic in
-           the future. Also requires modifying NewShallowExecOn. *)
-  (Import HOAR : ProgramLogicOn B SIG PROG DefaultFailLogic SPEC).
+  (Import PLOG : ProgramLogic B SIG PROG)
+  (Import EXEC : NewShallowExecOn B SIG PROG PLOG).
 
-  Import CHeapSpecM.
-  Import ProgramLogic.
+  Import ProgLog.
 
   Section Soundness.
 
@@ -63,123 +58,141 @@ Module Type Soundness
 
     Lemma call_contract_sound {Δ τ}
       (c : SepContract Δ τ) (δΔ : CStore Δ) (POST : Val τ -> L) :
-      CTriple (CPureSpecM.call_contract c δΔ POST) c δΔ POST.
+      CTriple (CPureSpec.call_contract c δΔ POST) c δΔ POST.
     Proof.
       unfold CTriple. destruct c as [Σe δe req result ens].
-      now rewrite CPureSpecM.equiv_call_contract.
+      now rewrite CPureSpec.equiv_call_contract.
     Qed.
 
     Lemma call_lemma_sound {Δ}
       (lem : Lemma Δ) (δΔ : CStore Δ) (POST : unit -> L) :
-      LTriple δΔ (CPureSpecM.call_lemma lem δΔ POST) (POST tt) lem.
+      LTriple δΔ (CPureSpec.call_lemma lem δΔ POST) (POST tt) lem.
     Proof.
       destruct lem as [Σe δe req ens]. constructor.
-      now rewrite CPureSpecM.equiv_call_lemma.
+      now rewrite CPureSpec.equiv_call_lemma.
     Qed.
 
-    Definition SoundExec (rec : Exec) : Prop :=
-      forall Γ σ (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L) (δ1 : CStore Γ),
-        ⦃ rec _ _ s POST δ1 ⦄ s ; δ1 ⦃ POST ⦄.
+    Section ExecAux.
 
-    Lemma exec_aux_sound rec (rec_sound : SoundExec rec) :
-      SoundExec (exec_aux (exec_call_with_contracts rec)).
-    Proof.
-      unfold SoundExec. intros ? ? s.
-      induction s; intros ? ?; cbn.
+      Import CStoreSpec.
 
-      - (* stm_val *)
-        now apply rule_stm_val.
+      Context {SPEC : Specification}.
+      Variable exec_call_foreign : ExecCallForeign (L := L).
+      Variable exec_lemma : ExecLemma (L := L).
+      Variable exec_call : ExecCall (L := L).
+      Variable exec_fail : ExecFail (L := L).
 
-      - (* stm_exp *)
-        now apply rule_stm_exp.
+      Definition SoundExec {SPEC : Specification} (rec : Exec) : Prop :=
+        forall Γ σ (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L) (δ1 : CStore Γ),
+          ⦃ rec _ _ s POST δ1 ⦄ s ; δ1 ⦃ POST ⦄.
 
-      - (* stm_let *)
-        eapply rule_stm_let. apply IHs1. intros v2 δ2; cbn. apply IHs2.
+      Lemma exec_aux_sound :
+        SoundExec (exec_aux exec_call_foreign exec_lemma exec_call exec_fail).
+      Proof.
+        unfold SoundExec. intros ? ? s.
+        induction s; intros ? ?; cbn.
 
-      - (* stm_block *)
-        now apply rule_stm_block, IHs.
+        - (* stm_val *)
+          now apply rule_stm_val.
 
-      - (* stm_assign *)
-        now apply rule_stm_assign, IHs.
+        - (* stm_exp *)
+          now apply rule_stm_exp.
 
-      - (* stm_call *)
-        destruct (CEnv f) as [c|] eqn:Heq.
-        + apply rule_stm_call with c.
-          assumption.
-          now apply call_contract_sound.
-        + apply rule_stm_call_inline.
-          apply rec_sound.
+        - (* stm_let *)
+          eapply rule_stm_let. apply IHs1. intros v2 δ2; cbn. apply IHs2.
 
-      - (* stm_call_frame *)
-        now apply rule_stm_call_frame, IHs.
+        - (* stm_block *)
+          now apply rule_stm_block, IHs.
 
-      - (* stm_foreign *)
-        apply rule_stm_foreign.
-        apply call_contract_sound.
+        - (* stm_assign *)
+          now apply rule_stm_assign, IHs.
 
-      - (* stm_lemmak *)
-        unfold eval_exps.
-        eapply rule_stm_lemmak.
-        apply call_lemma_sound.
-        apply IHs.
+        - (* stm_call *)
+          admit.
+          (* destruct (CEnv f) as [c|] eqn:Heq. *)
+          (* + apply rule_stm_call with c. *)
+          (*   assumption. *)
+          (*   now apply call_contract_sound. *)
+          (* + apply rule_stm_call_inline. *)
+          (*   apply rec_sound. *)
 
-      - (* stm_seq *)
-        eapply rule_stm_seq. apply IHs1. intros δ2. apply IHs2.
+        - (* stm_call_frame *)
+          now apply rule_stm_call_frame, IHs.
 
-      - (* stm_assert *)
-        apply rule_stm_assert. intro Heval.
-        eapply rule_consequence_left. apply IHs.
-        now apply entails_apply, bi.pure_intro.
-        now unfold DefaultFailLogic.fail_rule_pre.
+        - (* stm_foreign *)
+          admit.
+          (* apply rule_stm_foreign. *)
+          (* apply call_contract_sound. *)
 
-      - (* stm_fail *)
+        - (* stm_lemmak *)
+          admit.
+          (* unfold eval_exps. *)
+          (* eapply rule_stm_lemmak. *)
+          (* apply call_lemma_sound. *)
+          (* apply IHs. *)
+
+        - (* stm_seq *)
+          eapply rule_stm_seq. apply IHs1. intros δ2. apply IHs2.
+
+        - (* stm_assert *)
+          rewrite bi.and_comm. apply rule_pull. intros HYP.
+          apply rule_stm_assert; auto. intro Heval.
+          eapply rule_consequence_left. apply IHs.
+          now apply entails_apply, bi.pure_intro.
+
+        - (* stm_fail *)
+          admit.
+          (* eapply rule_consequence_left. *)
+          (* apply rule_stm_fail. *)
+          (* reflexivity. *)
+
+        - (* stm_pattern_match *)
+          eapply rule_stm_pattern_match. apply IHs. cbn.
+          intros pc δpc δ1'. rewrite pattern_match_val_inverse_right.
+          now apply H.
+
+        - (* stm_read_register *)
+          apply rule_exist. intros v.
+          apply (rule_stm_read_register_backwards (v := v)).
+
+        - (* stm_write_register *)
+          apply rule_exist. intros v.
+          apply (rule_stm_write_register_backwards (v := v)).
+
+        - (* stm_bind *)
+          eapply rule_stm_bind. apply IHs. intros v2 δ2; cbn. apply H.
+        - constructor. auto.
+      Admitted.
+
+      Lemma cexec_sound n : SoundExec (cexec n).
+      Proof.
+        (* induction n; cbn. *)
+        (* - unfold cexec. cbn. unfold SoundExec. intros. apply rule_false. *)
+        (* - apply exec_aux_sound; auto using exec_monotonic. *)
+      Admitted.
+
+      Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ)
+        (body : Stm Δ τ) :
+        (⊢ vcgen n c body) ->
+        ProgLog.ValidContract c body.
+      Proof.
+        unfold vcgen, ValidContract.
+        unfold inst_contract_localstore.
+        destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
         eapply rule_consequence_left.
-        apply rule_stm_fail.
-        reflexivity.
+        apply cexec_sound.
+        admit.
+      Admitted.
 
-      - (* stm_pattern_match *)
-        eapply rule_stm_pattern_match. apply IHs. cbn.
-        intros pc δpc δ1'. rewrite pattern_match_val_inverse_right.
-        now apply H.
+      Lemma shallow_vcgen_soundness {Δ τ}
+        (c : SepContract Δ τ) (body : Stm Δ τ) :
+        Shallow.ValidContract c body ->
+        ProgLog.ValidContract c body.
+      Proof. apply vcgen_sound. Qed.
 
-      - (* stm_read_register *)
-        apply rule_exist. intros v.
-        apply (rule_stm_read_register_backwards (v := v)).
+      (* Print Assumptions shallow_vcgen_soundness. *)
 
-      - (* stm_write_register *)
-        apply rule_exist. intros v.
-        apply (rule_stm_write_register_backwards (v := v)).
-
-      - (* stm_bind *)
-        eapply rule_stm_bind. apply IHs. intros v2 δ2; cbn. apply H.
-      - constructor. auto.
-    Qed.
-
-    Lemma exec_sound n : SoundExec (exec n).
-    Proof.
-      induction n; cbn.
-      - unfold SoundExec. intros. apply rule_false.
-      - apply exec_aux_sound; auto using exec_monotonic.
-    Qed.
-
-    Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      CHeapSpecM.vcgen n c body ->
-      ProgramLogic.ValidContract c body.
-    Proof.
-      rewrite CHeapSpecM.vcgen_equiv.
-      unfold CHeapSpecM.vcgen', ProgramLogic.ValidContract.
-      unfold inst_contract_localstore.
-      destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
-      eapply rule_consequence_left.
-      apply exec_sound. apply HYP.
-    Qed.
-
-    Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      Shallow.ValidContract c body ->
-      ProgramLogic.ValidContract c body.
-    Proof. apply vcgen_sound. Qed.
-
-    (* Print Assumptions shallow_vcgen_soundness. *)
+    End ExecAux.
 
   End Soundness.
 

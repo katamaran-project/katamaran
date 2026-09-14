@@ -36,6 +36,7 @@ From Katamaran Require Import
      RiscvPmp.Base
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.GVT.Logic
      RiscvPmp.IrisModel
      RiscvPmp.trace
      RiscvPmp.iostate
@@ -460,9 +461,9 @@ Module RiscvPmpIrisInstancePredicates.
   End WithSailGS.
 End RiscvPmpIrisInstancePredicates.
 
-Module RiscvPmpIrisInstance (FL : FailLogic) <:
-  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics
-    RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+Module RiscvPmpIrisInstance <:
+  IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpProgramLogic RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
   Import RiscvPmpIrisBase.
   Import RiscvPmpProgram.
   Import RiscvPmpIrisInstancePredicates.
@@ -968,9 +969,9 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
 
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RiscvPmpIrisBase.
+    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase.
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+    RiscvPmpSemantics RiscvPmpProgramLogic  RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
   Lemma gprs_equiv `{sailGS Σ, iostateG IOState Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢

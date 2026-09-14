@@ -43,8 +43,7 @@ From Katamaran Require Import
      Prelude
      Signature
      Symbolic.Propositions
-     Hoare
-     Specification.
+     Hoare.
 
 From stdpp Require base list option.
 
@@ -59,8 +58,7 @@ Module Type ShallowExecOn
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG).
+  (Import PLOG : ProgramLogic B SIG PROG).
 
   (* The main specification monad that we use for execution. It is indexed by
      two program variable contexts Γ1 Γ2 that encode the shape of the program
@@ -296,6 +294,7 @@ Module Type ShallowExecOn
 
     Section ExecAux.
 
+      Context {SPEC : Specification}.
       Variable exec_call_foreign : ExecCallForeign.
       Variable exec_lemma : ExecLemma.
       Variable exec_call : ExecCall.
@@ -366,7 +365,7 @@ Module Type ShallowExecOn
       Proof. induction s; typeclasses eauto. Qed.
 
     End ExecAux.
-    #[global] Arguments exec_aux _ _ _ _ [Γ τ] !s.
+    #[global] Arguments exec_aux {_} _ _ _ _ [Γ τ] !s.
 
   End CStoreSpec.
 
@@ -397,7 +396,7 @@ Module Type ShallowExecOn
     Definition exec_call_error_no_fuel : ExecCall :=
       fun Δ τ f args => CHeapSpec.error.
 
-    Definition cexec_call_foreign : ExecCallForeign :=
+    Definition cexec_call_foreign {SPEC : Specification} : ExecCallForeign :=
       fun Δ τ f args =>
         CHeapSpec.call_contract (CEnvEx f) args.
 
@@ -406,7 +405,7 @@ Module Type ShallowExecOn
 
     Import CHeapSpec.notations.
 
-    Definition cexec_lemma : ExecLemma :=
+    Definition cexec_lemma {SPEC : Specification} : ExecLemma :=
       fun Δ l args =>
         _ <- debug_lemma l args ;;
         CHeapSpec.call_lemma (LEnv l) args.
@@ -414,13 +413,13 @@ Module Type ShallowExecOn
     Definition debug_call [Δ τ] (f : 𝑭 Δ τ) (args : CStore Δ) : CHeapSpec unit :=
       CHeapSpec.pure tt.
 
-    Definition cexec_fail : ExecFail :=
+    Definition cexec_fail {SPEC : Specification} : ExecFail :=
       fun Γ τ s => if fail_rule_pre then CStoreSpec.block else CStoreSpec.error.
 
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
-    Fixpoint cexec_call (inline_fuel : nat) : ExecCall :=
+    Fixpoint cexec_call {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
       fun Δ τ f args =>
         _ <- debug_call f args ;;
         (* Let's first see if we have a contract defined for function [f]
@@ -438,11 +437,12 @@ Module Type ShallowExecOn
               args
         end.
 
-    Definition cexec (inline_fuel : nat) : Exec :=
-      @CStoreSpec.exec_aux cexec_call_foreign cexec_lemma (cexec_call inline_fuel) cexec_fail.
-    #[global] Arguments cexec _ [_ _] s _ _ _ : simpl never.
+    Definition cexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
+      @CStoreSpec.exec_aux SPEC cexec_call_foreign cexec_lemma
+        (cexec_call inline_fuel) cexec_fail.
+    #[global] Arguments cexec {_} _ [_ _] s _ _ _ : simpl never.
 
-    Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       CHeapSpec.run (exec_contract (cexec inline_fuel) c body).
 
     Import (hints) CStoreSpec.
@@ -450,33 +450,39 @@ Module Type ShallowExecOn
     Lemma mon_exec_call_error_no_fuel : MonotonicExecCall exec_call_error_no_fuel.
     Proof. typeclasses eauto. Qed.
 
-    Lemma mon_cexec_call_foreign : MonotonicExecCallForeign cexec_call_foreign.
+    Lemma mon_cexec_call_foreign {SPEC : Specification} :
+      MonotonicExecCallForeign cexec_call_foreign.
     Proof. typeclasses eauto. Qed.
 
-    Lemma mon_cexec_lemma : MonotonicExecLemma cexec_lemma.
+    Lemma mon_cexec_lemma {SPEC : Specification} :
+      MonotonicExecLemma cexec_lemma.
     Proof. typeclasses eauto. Qed.
 
-    Lemma mon_cexec_fail : MonotonicExecFail cexec_fail.
+    Lemma mon_cexec_fail {SPEC : Specification} : MonotonicExecFail cexec_fail.
     Proof. unfold cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
 
-    #[export] Instance mon_cexec_call (fuel : nat) : MonotonicExecCall (cexec_call fuel).
+    #[export] Instance mon_cexec_call {SPEC : Specification} (fuel : nat) :
+      MonotonicExecCall (cexec_call fuel).
     Proof.
       induction fuel; intros; cbn; destruct CEnv;
         unfold cexec_fail; destruct fail_rule_pre;
         typeclasses eauto.
     Qed.
 
-    Lemma mon_cexec (fuel : nat) : MonotonicExec (cexec fuel).
+    Lemma mon_cexec {SPEC : Specification} (fuel : nat) :
+      MonotonicExec (cexec fuel).
     Proof. unfold cexec, cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
 
   End WithSpec.
 
   Module Shallow.
 
-    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithFuel {SPEC : Specification} {Δ τ} (fuel : nat)
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       vcgen fuel c body.
 
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContract {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
+      (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
       ValidContractWithFuel 1 c body.
 
@@ -504,9 +510,8 @@ Module MakeShallowExecutor
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG).
+  (Import PLOG : ProgramLogic B SIG PROG).
 
-  Include ShallowExecOn B SIG PROG FL SPEC.
+  Include ShallowExecOn B SIG PROG PLOG.
 
 End MakeShallowExecutor.

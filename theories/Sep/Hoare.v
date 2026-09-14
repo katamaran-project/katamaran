@@ -32,38 +32,54 @@ From Coq Require Import
 From iris Require Import
   proofmode.tactics.
 
+From Katamaran Require Export
+  Base
+  Program
+  Signature.
 From Katamaran Require Import
   Context
   Environment
-  Notations
-  Specification.
+  Notations.
 
 Import ctx.notations.
 Import env.notations.
 
-Module Type FailLogic.
-
-  Parameter fail_rule_pre : bool.
-
-End FailLogic.
-
-Module DefaultFailLogic <: FailLogic.
-
-  Definition fail_rule_pre : bool := true.
-
-End DefaultFailLogic.
-
-Module Type ProgramLogicOn
+Module Type ProgramLogic
   (Import B : Base)
   (Import SIG : Signature B)
-  (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG).
-Module ProgramLogic.
+  (Import PROG : Program B).
 
+  Definition SepContractEnv : Type :=
+    forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
+  Definition SepContractEnvEx : Type :=
+    forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
+  Definition LemmaEnv : Type :=
+    forall Δ (l : 𝑳 Δ), Lemma Δ.
+
+  Definition SepContractFun {Δ τ} (f : 𝑭 Δ τ) : Type :=
+    SepContract Δ τ.
+  Definition SepContractFunX {Δ τ} (f : 𝑭𝑿 Δ τ) : Type :=
+    SepContract Δ τ.
+  Definition SepLemma {Δ} (f : 𝑳 Δ) : Type :=
+    Lemma Δ.
+
+  Class Specification : Type :=
+    MkSpecification {
+        CEnv   : SepContractEnv;
+        CEnvEx : SepContractEnvEx;
+        LEnv   : LemmaEnv;
+
+        fail_rule_pre : bool;
+      }.
+
+  #[global] Arguments CEnv {_} [Δ τ] f.
+  #[global] Arguments CEnvEx {_} [Δ τ] f.
+  #[global] Arguments LEnv {_} [Δ] l.
+
+  Module ProgLog.
   Section Triples.
 
-    Context {L : bi} {PI : PredicateDef L}.
+    Context {L : bi} {PI : PredicateDef L} {SPEC : Specification}.
 
     (* Hoare triples for SepContract *)
 
@@ -344,7 +360,11 @@ Module ProgramLogic.
 
   End Triples.
 
-  Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ P%I s Q%I).
+  Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ _ δ _ P%I s Q%I).
 
+End ProgLog.
 End ProgramLogic.
-End ProgramLogicOn.
+
+Module MakeProgramLogic (B : Base) (SIG : Signature B) (PROG : Program B) <:
+  ProgramLogic B SIG PROG :=
+  Equalities.Nop <+ ProgramLogic B SIG PROG.

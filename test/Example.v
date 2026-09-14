@@ -40,10 +40,10 @@ From Equations Require Import
 From Katamaran Require Import
      Signature
      Bitvector
+     Sep.Hoare
      Semantics.Registers
      MicroSail.SymbolicExecutor
      Symbolic.Solver
-     Specification
      Program.
 
 From stdpp Require Import decidable finite.
@@ -439,8 +439,11 @@ Module Import ExampleSig <: Signature ExampleBase.
   Include SignatureMixin ExampleBase.
 End ExampleSig.
 
-Module Import ExampleSpecification <: Specification ExampleBase ExampleSig ExampleProgram.
-  Include SpecificationMixin ExampleBase ExampleSig ExampleProgram.
+Module Import ExampleProgramLogic :=
+  MakeProgramLogic ExampleBase ExampleSig ExampleProgram.
+
+Module Import ExampleSpecification.
+
   Import ctx.resolution.
 
   Section ContractDefKit.
@@ -541,7 +544,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         sep_contract_postcondition   := term_var "result" = term_val ty.int 0%Z
       |}.
 
-    Definition CEnv : SepContractEnv :=
+    Definition contract_environment : SepContractEnv :=
       fun Δ τ f =>
         match f with
         | abs        => Some sep_contract_abs
@@ -559,20 +562,27 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         | pevaltest1 => Some sep_contract_pevaltest1
         end.
 
-    Definition CEnvEx : SepContractEnvEx :=
+    Definition contract_environment_foreign : SepContractEnvEx :=
       fun Δ τ f =>
         match f with end.
 
-    Definition LEnv : LemmaEnv :=
+    Definition lemma_environment : LemmaEnv :=
       fun Δ l =>
         match l with end.
 
   End ContractDefKit.
 
+  #[export] Instance example_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
+
 End ExampleSpecification.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleProgram Hoare.DefaultFailLogic ExampleSpecification.
+  MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleProgramLogic.
 
 Local Ltac solve :=
   repeat

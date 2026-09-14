@@ -44,7 +44,6 @@ From Equations Require Import
 
 From Katamaran Require Import
      Signature
-     Specification
      Program
      Tactics
      Hoare
@@ -61,10 +60,10 @@ Module RefineExecOn
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG FL SPEC)
-  (Import SYMB : SymbolicExecOn B SIG PROG FL SPEC).
+  (Import PLOG : ProgramLogic B SIG PROG)
+
+  (Import SHAL : ShallowExecOn B SIG PROG PLOG)
+  (Import SYMB : SymbolicExecOn B SIG PROG PLOG).
 
   Import ModalNotations.
   Import SymProp.
@@ -562,8 +561,8 @@ Module RefineExecOn
       Context `(rexec_call : RefineExecCall c_exec_call s_exec_call).
       Context `(rexec_fail : RefineExecFail c_exec_fail s_exec_fail).
 
-      Lemma refine_exec_aux :
-        RefineExec (@CStoreSpec.exec_aux c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreSpec.exec_aux s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
+      Lemma refine_exec_aux {SPEC : Specification} :
+        RefineExec (@CStoreSpec.exec_aux _ c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreSpec.exec_aux _ s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
       Proof.
         intros ? ? s. induction s; cbn; intros w; rsolve.
         - now iApply rexec_call.
@@ -612,6 +611,8 @@ Module RefineExecOn
       unfold SHAL.exec_call_error_no_fuel, SYMB.exec_call_error_no_fuel.
       iApply HeapSpec.refine_error.
     Qed.
+
+    Context {SPEC : Specification}.
 
     Lemma refine_exec_call_foreign :
       RefineExecCallForeign cexec_call_foreign sexec_call_foreign.
@@ -707,7 +708,8 @@ Module RefineExecOn
     now apply (fromEntails H0 [env]).
   Qed.
 
-  Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) :
+  Lemma symbolic_vcgen_fuel_soundness {SPEC : Specification} {Γ τ} (fuel : nat)
+    (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContractWithFuel fuel c body ->
     Shallow.ValidContractWithFuel fuel c body.
   Proof.
@@ -720,7 +722,8 @@ Module RefineExecOn
     apply refine_vcgen; try done.
   Qed.
 
-  Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+  Lemma symbolic_vcgen_soundness {SPEC : Specification} {Γ τ}
+    (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContract c body ->
     Shallow.ValidContract c body.
   Proof.

@@ -37,9 +37,9 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Specification
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Contracts
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
@@ -81,18 +81,13 @@ Ltac destruct_syminstance ι :=
 Import RiscvPmpIrisBase.
 
 Module RiscvPmpModel2.
-  Module Import RiscvPmpIrisInstance := RiscvPmpIrisInstance DefaultFailLogic.
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
-
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-  End RiscvPmpProgramLogic.
-  Include RiscvPmpProgramLogic.
+  Import RiscvPmpIrisInstance.
 
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram DefaultFailLogic RiscvPmpSemantics RiscvPmpSpecification RiscvPmpIrisBase
+    RiscvPmpProgram RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase
     RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
 
   Section ForeignProofs.
@@ -267,7 +262,7 @@ Module RiscvPmpModel2.
 
     Lemma TforeignSem : TForeignSem.
     Proof.
-      intros Δ τ f; destruct f;
+      intros Δ τ f; destruct f; cbn - [TValidContractForeign];
         eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
     Qed.
 
@@ -362,7 +357,7 @@ Module RiscvPmpModel2.
 
     Lemma lemSem : LemmaSem.
     Proof.
-      intros Δ [];
+      intros Δ []; cbn - [ValidLemma];
         eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound, close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound.
     Qed.
   End LemProofs.

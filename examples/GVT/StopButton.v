@@ -31,9 +31,8 @@ From Coq Require Import
      Lists.List
      Strings.String.
 From Katamaran Require Import
+     Base
      Bitvector
-     Notations
-     Specification
      SmallStep.Step
      RiscvPmp.PmpCheck
      RiscvPmp.GVT.Spec
@@ -41,6 +40,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.GVT.Logic
      RiscvPmp.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
@@ -77,11 +77,10 @@ Module inv := invariants.
   Import RiscvPmp.GVT.Contracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstancePredicates.
-  Import RiscvPmpBlockVerifIrisInstance.
+  Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpIrisInstanceWithContracts.
-  Import RiscvPmpBlockVerifShalExecutor.
-
+  Import RiscvPmpShallowExec.
 
   Section FemtoKernel.
     Import bv.notations.

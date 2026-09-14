@@ -36,12 +36,12 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.RefineExecutor
      MicroSail.Soundness
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Sig
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
@@ -62,17 +62,12 @@ Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
 Import RiscvPmpIrisBase.
 Import RiscvPmpModel2.
-Import RiscvPmpModel2.RiscvPmpIrisInstance.
+Import RiscvPmpIrisInstance.
 Import RiscvPmpValidContracts.
 Import RiscvPmpIrisInstancePredicates.
 
 Import RiscvPmpSignature.
-Module Import RiscvPmpShallowExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-
-Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
-
-Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
+Import RiscvPmpProgramLogic.
 
 (* We need to provide a SepContract with filled in Δ, τ so we get a more
        computable sep_contract_step version. TODO: maybe fix this directly in
@@ -244,11 +239,11 @@ Section Loop.
     iApply (sound $! _ _ step).
     exact foreignSem.
     exact lemSem.
-    unfold ProgramLogic.ValidContractCEnv.
+    unfold ProgLog.ValidContractCEnv.
     intros Δ τ f c H.
     destruct (ValidContracts f H) as [fuel Hc].
-    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
-    now apply symbolic_vcgen_fuel_soundness.
+    apply RiscvPmpShallowSoundness.shallow_vcgen_fuel_soundness with (fuel := fuel).
+    now apply RiscvPmpSymbolicSoundness.symbolic_vcgen_fuel_soundness.
   Qed.
 
   Lemma valid_init_model_contract : ⊢ ValidContractSem fun_init_model sep_contract_init_model.
@@ -256,11 +251,11 @@ Section Loop.
     iApply (sound $! _ _ init_model).
     exact foreignSem.
     exact lemSem.
-    unfold ProgramLogic.ValidContractCEnv.
+    unfold ProgLog.ValidContractCEnv.
     intros Δ τ f c H.
     destruct (ValidContracts f H) as [fuel Hc].
-    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
-    now apply symbolic_vcgen_fuel_soundness.
+    apply RiscvPmpShallowSoundness.shallow_vcgen_fuel_soundness with (fuel := fuel).
+    now apply RiscvPmpSymbolicSoundness.symbolic_vcgen_fuel_soundness.
   Qed.
 
   Import env.notations.
@@ -277,10 +272,10 @@ Section Loop.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.
   Proof.
-    iApply (@iris_rule_consequence _ _ _ _ env.nil
+    iApply (@iris_rule_consequence _ _ _ _ _ env.nil
              ((∃ p : Privilege, cur_privilege ↦ p) ∗
               (∃ es : list PmpEntryCfg, interp_pmp_entries es))
-             _ _ _ fun_init_model _ _).
+             _ _ _ fun_init_model _ _)%I.
     iApply valid_init_model_contract.
     Unshelve.
     cbn.

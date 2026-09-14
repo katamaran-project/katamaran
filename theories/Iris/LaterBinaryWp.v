@@ -56,7 +56,6 @@ From Katamaran Require Import
      Sep.Logic
      Signature
      SmallStep.Step
-     Specification
      BinaryModel.
 
 Import ctx.notations.

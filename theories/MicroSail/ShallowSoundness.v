@@ -32,7 +32,6 @@ From Coq Require Import
 From Katamaran Require Import
      Signature
      Sep.Hoare
-     Specification
      Prelude
      Program
      MicroSail.ShallowExecutor.
@@ -46,19 +45,17 @@ Module Type Soundness
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG)
-  (Import EXEC : ShallowExecOn B SIG PROG FL SPEC)
-  (Import HOAR : ProgramLogicOn B SIG PROG FL SPEC).
+  (Import PLOG : ProgramLogic B SIG PROG)
+  (Import EXEC : ShallowExecOn B SIG PROG PLOG).
 
   Import CStoreSpec.
-  Import ProgramLogic.
+  Import ProgLog.
 
   Section Soundness.
 
     Import iris.proofmode.tactics.
 
-    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L} {SPEC : Specification}.
 
     (* liftP converts the "proof theoretic" predicates (CStore Γ -> L), with L
        being a type of separation logic propositions, to the "model theoretic"
@@ -424,9 +421,9 @@ Module Type Soundness
 
     Lemma vcgen_sound fuel {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       vcgen fuel c body ->
-      ProgramLogic.ValidContract c body.
+      ProgLog.ValidContract c body.
     Proof.
-      cbv [vcgen CHeapSpec.run ProgramLogic.ValidContract]. intros HYP ι.
+      cbv [vcgen CHeapSpec.run ProgLog.ValidContract]. intros HYP ι.
       eapply exec_contract_sound in HYP; auto using sound_cexec. cbn in HYP.
       rewrite bi.emp_sep in HYP.
       apply (rule_consequence_right _ HYP). clear HYP.
@@ -436,12 +433,12 @@ Module Type Soundness
 
     Lemma shallow_vcgen_soundness {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContract c body ->
-      ProgramLogic.ValidContract c body.
+      ProgLog.ValidContract c body.
     Proof. apply vcgen_sound. Qed.
 
     Lemma shallow_vcgen_fuel_soundness {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
       Shallow.ValidContractWithFuel fuel c body ->
-      ProgramLogic.ValidContract c body.
+      ProgLog.ValidContract c body.
     Proof. apply vcgen_sound. Qed.
 
     (* Print Assumptions shallow_vcgen_soundnes. *)
@@ -454,11 +451,9 @@ Module MakeShallowSoundness
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG)
-  (Import EXEC : ShallowExecOn B SIG PROG FL SPEC)
-  (Import HOAR : ProgramLogicOn B SIG PROG FL SPEC).
+  (Import PLOG : ProgramLogic B SIG PROG)
+  (Import EXEC : ShallowExecOn B SIG PROG PLOG).
 
-  Include Soundness B SIG PROG FL SPEC EXEC HOAR.
+  Include Soundness B SIG PROG PLOG EXEC.
 
 End MakeShallowSoundness.

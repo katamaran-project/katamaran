@@ -37,11 +37,10 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     MinimalCaps.Logic
      MinimalCaps.Machine
      MinimalCaps.Sig
-     MinimalCaps.Contracts.Notations
-     Notations
-     Specification.
+     MinimalCaps.Contracts.Notations.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -51,9 +50,9 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature MinCapsProgram.
-  Include SpecificationMixin MinCapsBase MinCapsSignature MinCapsProgram.
+Module Import MinCapsSpecification.
   Import MinCapsSignature.
+  Import MinCapsProgramLogic.
   Import MinCapsContractNotations.
   Import Notations.
 
@@ -333,7 +332,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
       Definition sep_contract_step : SepContractFun step :=
         mach_inv_contract.
 
-      Definition CEnv : SepContractEnv :=
+      Definition contract_environment : SepContractEnv :=
         fun Δ τ f =>
           match f with
           | read_allowed           => Some sep_contract_read_allowed
@@ -390,9 +389,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
           | loop                   => None
           end.
 
-      Lemma linted_cenv :
+      Lemma linted_contract_environment :
         forall Δ τ (f : Fun Δ τ),
-          match CEnv f with
+          match contract_environment f with
           | Some c => Linted c
           | None   => True
           end.
@@ -455,7 +454,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
       Definition lemma_int_safe : SepLemma int_safe :=
         {{ ⊤ }} lem int_safe ["i" :: ty.int] {{ 𝒱(term_var "i") }}.
 
-      Definition LEnv : LemmaEnv :=
+      Definition lemma_environment : LemmaEnv :=
         fun Δ l =>
           match l with
           | open_gprs           => lemma_open_gprs
@@ -502,7 +501,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
       Definition sep_contract_dI : SepContractFunX dI :=
         {{ ⊤ }} fn dI ["code" :: ty.int] ty.instr {{ "_", ⊤ }}.
 
-      Definition CEnvEx : SepContractEnvEx :=
+      Definition contract_environment_foreign : SepContractEnvEx :=
         fun Δ τ f =>
           match f with
           | rM => sep_contract_rM
@@ -511,13 +510,20 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
           end.
     End ForeignDef.
 
-  Lemma linted_cenvex :
-    forall Δ τ (f : FunX Δ τ),
-      Linted (CEnvEx f).
-  Proof.
-    intros ? ? []; try constructor.
-  Qed.
+    Lemma linted_contract_environment_foreign :
+      forall Δ τ (f : FunX Δ τ),
+        Linted (contract_environment_foreign f).
+    Proof.
+      intros ? ? []; try constructor.
+    Qed.
 
-End ContractDefKit.
+  End ContractDefKit.
+
+  #[export] Instance mincaps_universal_contract_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
 
 End MinCapsSpecification.
