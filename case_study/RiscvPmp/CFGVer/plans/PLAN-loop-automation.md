@@ -40,7 +40,11 @@ attempts it.
 
 ## Phase A — record hygiene (cheap; unblocks the rest)
 
-**A1. `cfg_exits` and `cfg_exitCond` are one datum stored twice.**
+**A1. ~~`cfg_exits` and `cfg_exitCond` are one datum stored twice.~~
+REFUTED 2026-09-14 — see Step 5 results. They are a SYMBOLIC table and a
+CONCRETE decision procedure, related under a valuation by `etable_rel`; that is
+the symbolic/concrete bridge, not a redundancy. Landed as A1' instead.**
+Original text kept below for the record:
 ```
 exits_of_offs p offs = map (fun o => peval_bvadd (of_N o) p) offs
 seg_exitCond ia offs = fun v => orb over (bv.eqb v (of_N (ia + t)))
@@ -53,7 +57,10 @@ load-bearing. **Payoff beyond tidiness:** storing both lets them drift, and the
 soundness bridge currently has to PROVE they agree (`seg_exit_table_ok`,
 `etable_rel`). Deriving makes that obligation vanish by construction.
 
-**A2. `extend_to_minimal_post`.** `CFG_VC_triple` wraps the PRE in
+**A2. ~~`extend_to_minimal_post`.~~ ALREADY DONE WHERE CORRECT 2026-09-14 —
+see Step 5 results. Making it structural in `CFG_VC_triple` would add an exit
+obligation to every WHOLE-PROGRAM contract, which is a change to what ~30 end
+theorems prove, not hygiene.** Original text kept below for the record: `CFG_VC_triple` wraps the PRE in
 `extend_to_minimal_pre`; the POST is wrapped by hand in each generator as
 `(post ∗ minimal_pre)`. GenSegment's own comment records the failure mode when
 a generator forgets: the post consumes `cur_privilege`/`inv_leakage`, so the
@@ -921,6 +928,80 @@ recorded because the same shape will recur.)
 **Still not done in D2:** the bounds bullet `Hb` (already a fixed three-line
 script), the dropped facts `Hf` (genuinely per-loop), and the cell trade `Hc`
 (the affine set computation — the hardest, and untouched).
+
+---
+
+## Step 5 results (2026-09-14) — A1 REFUTED, A2 already done; A1' landed
+
+**Both halves of step 5 were mis-specified in Phase A above, and neither is the
+"pure hygiene" the execution order calls it. Nothing in `Contracts.v` was
+touched.**
+
+### A1 — `cfg_exits` and `cfg_exitCond` are NOT one datum stored twice
+
+They have different kinds. `cfg_exits : list (Term Σ ty_xlenbits)` is SYMBOLIC
+and relative to `cfg_placement`, which may be `term_var "p"` for a parametric
+base; `cfg_exitCond : bv xlenbits -> bool` is CONCRETE and decides a real pc.
+The soundness bridge relates them as `etable_rel exitCond (cfg_exits c) ι` —
+**under a valuation**. That is the symbolic/concrete bridge, and it cannot
+vanish by construction except where the placement is concrete.
+
+Deriving would also need `cfg_init_addr` to be the segment's ENTRY address, and
+it is not, consistently: `Example/PaddedLoop.v`'s `plBody` has
+`cfg_init_addr = 0` with `cfg_placement = bv.of_N pl_head`, so a derived
+condition would accept address 0 where the hand-written `pl_headExitCond`
+accepts `pl_head` — a different contract, silently.
+
+The blast-radius estimate was also wrong. "One hand-rolled `fun v =>` found" is
+actually FIVE bespoke exit conditions (`pl_headExitCond`, `at0`, `at8`,
+`head_exitCond`, `cut_exitCond`), THIRTEEN hand-written `MkCFGVerifierContract`
+literals in tracked `Example/*.v`, and `cfg_map`'s 8-argument destructuring
+consumed by `cbn [cfg_map …]` in five `*Result.v` files — the TRUSTED statement
+surface.
+
+### A2 — would add an exit obligation to ~30 end theorems
+
+`CFG_VC_triple` passes `Q` through raw. Wrapping it structurally turns every
+whole-program post from `asn_no_post` (`True`) into `True ∗ minimal_pre`, i.e.
+the program would have to ESTABLISH `cur_privilege ↦ Machine ∗ inv_leakage` at
+exit, which it currently needn't. `gen_contract` passes bare `asn_no_post` at
+three sites and that looks deliberate — a whole program has no successor to
+hand those resources to.
+
+**The footgun A2 describes is real and already fixed where it applies**:
+`GenSegment.v`'s `gen_seg_contract` appends `∗ minimal_pre` to the post
+structurally, with a comment naming the exact bug (`amBody_post`). So A2 is
+done for segments, which is the case that has a successor; extending it to
+whole programs is a semantic change, not hygiene.
+
+### A1' — what actually landed
+
+`gen_loop_contract` has had `gen_loop_place`/`_instrs`/`_exits`/`_exitCond`
+since A3, and they are why `loop_runs` discharges `itable_rel`/`etable_rel`
+INLINE — a loop's caller never sees either obligation. The SEGMENT generator
+had no projections, so a hand-cut segment had to re-spell
+`gen_seg_contract`'s internals to reach `seg_instr_table_ok` /
+`seg_exit_table_ok_at`. Same contract shape, two ways to use it.
+
+Added: `gen_seg_init_addr`, `gen_seg_place`, `gen_seg_instrs`,
+`gen_seg_exitCond`, `gen_seg_exits` (GenSegment.v — all five `reflexivity`,
+unlike the loop's exits projection) and `gen_seg_instr_table_ok` /
+`gen_seg_exit_table_ok` (GenCompose.v), stated ON the generated contract and
+taking the same two inputs the loop path takes: the `seg_placement_ok` boolean
+and one placement fact.
+
+**So the real content of A1 was never removing a field — the agreement
+obligation is already discharged once for everything the generators build. A1'
+extends that from loops to plain segments, which is the uniformity the phase
+was after.**
+
+**What A1' does NOT cover, and could not**: the ten hand-rolled `etable_rel`
+asserts in `CountdownComposedResult`, `SwapComposedResult`,
+`TwoLoopsComposedResult` and `PaddedLoopResult`. Those belong to HAND-WRITTEN
+contracts with bespoke exit conditions — exactly the ones A1's derivation would
+have changed the meaning of. Converting them is a separate job: rebuild those
+four examples on `gen_seg_contract`, and then they get the one-line discharge
+for free.
 
 ---
 

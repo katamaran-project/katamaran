@@ -201,6 +201,51 @@ Section SegCompose.
              (seg_placement_targets L skip head bound targets Hok) Hp).
   Qed.
 
+
+  (* ---- A1' : ...and the two table obligations, stated ON the generated
+         contract.  With these a hand-cut segment discharges `itable_rel` and
+         `etable_rel` exactly the way `loop_runs` does for a loop -- from the
+         `seg_placement_ok` boolean and one placement fact -- instead of
+         re-spelling gen_seg_contract's internals to reach the `_at` forms. *)
+  Section GenSegTables.
+    Context {R : LCtx}
+      (base : Term R ty_xlenbits)
+      (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (ia head : N) (prog : list AnnotInstr) (skip take : nat)
+      (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (iota : Valuation R)
+      (Hok : seg_placement_ok prog skip head bound targets = true)
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits)
+              (cfg_placement (gen_seg_contract base base_a ia head prog skip take
+                                targets bound fl regs extra_pre post)) iota
+            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))).
+
+    Lemma gen_seg_instr_table_ok (Hwf : seg_fits_memory ia bound) :
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
+        (instrs_of_list (@bv.of_N xlenbits ia) prog)
+        (table_of_list
+           (cfg_placement (gen_seg_contract base base_a ia head prog skip take
+                             targets bound fl regs extra_pre post)) 0
+           (cfg_instrs (gen_seg_contract base base_a ia head prog skip take
+                          targets bound fl regs extra_pre post))) iota.
+    Proof.
+      exact (seg_instr_table_ok _ iota ia prog skip take head bound targets
+               Hok Hp Hwf).
+    Qed.
+
+    Lemma gen_seg_exit_table_ok :
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+        (cfg_exitCond (gen_seg_contract base base_a ia head prog skip take
+                         targets bound fl regs extra_pre post))
+        (cfg_exits (gen_seg_contract base base_a ia head prog skip take
+                      targets bound fl regs extra_pre post)) iota.
+    Proof.
+      exact (seg_exit_table_ok_at _ iota ia prog skip head bound targets Hok Hp).
+    Qed.
+  End GenSegTables.
+
   (* ======================================================================== *)
   (* 3. THE STEP COMBINATOR                                                   *)
   (* ======================================================================== *)

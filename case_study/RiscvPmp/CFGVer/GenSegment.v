@@ -1049,6 +1049,75 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (loop_code_extent ls) (loop_fuel ls) (loop_regs ls)
     (gen_loop_contract_pre ls g) post.
 
+
+(* ---- A1' : THE SEGMENT PROJECTIONS, so a hand-cut segment is solved the
+       SAME WAY a loop is --------------------------------------------------
+
+   `gen_loop_contract` has had `gen_loop_place`/`_instrs`/`_exits`/`_exitCond`
+   since A3, and they are what let `loop_runs` discharge `itable_rel` and
+   `etable_rel` inline -- a loop's caller never sees either obligation.  The
+   SEGMENT generator had no such projections, so a hand-cut segment had to
+   re-spell `gen_seg_contract`'s internals to reach `seg_instr_table_ok` /
+   `seg_exit_table_ok_at`.  Same contract shape, two different ways to use it.
+
+   WHAT A1 WAS SUPPOSED TO BE, AND WHY THIS IS IT INSTEAD.  The plan scoped A1
+   as "cfg_exits and cfg_exitCond are one datum stored twice -- replace both
+   with cfg_exit_offs and derive; the agreement obligation then vanishes by
+   construction".  They are NOT one datum: `cfg_exits` is SYMBOLIC (Terms over
+   Σ, relative to a `cfg_placement` that may be `term_var "p"`) while
+   `cfg_exitCond` is CONCRETE (`bv xlenbits -> bool`).  The soundness bridge
+   relates them as `etable_rel exitCond (cfg_exits c) ι` -- under a VALUATION.
+   That is the symbolic/concrete bridge, not a redundancy, and it cannot vanish
+   by construction except where the placement is concrete.  Deriving would also
+   need `cfg_init_addr` to be the segment's entry address, and it is not
+   consistently: `Example/PaddedLoop.v`'s `plBody` has `cfg_init_addr = 0` with
+   `cfg_placement = bv.of_N pl_head`, so the derived condition would accept
+   address 0 where the hand-written `pl_headExitCond` accepts `pl_head`.
+
+   So the real win is not removing a field; it is that the obligation is
+   already DISCHARGED ONCE for everything the generators build, and the
+   projections below extend that from loops to plain segments. *)
+Section GenSegProjections.
+  Context {Σ : LCtx}
+    (base : Term Σ ty_xlenbits)
+    (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (ia head : N) (prog : list AnnotInstr) (skip take : nat)
+    (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+    (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
+    (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)).
+
+  Let c : @CFGVerifierContract Σ :=
+    gen_seg_contract base base_a ia head prog skip take targets bound fl regs
+      extra_pre post.
+
+  Lemma gen_seg_init_addr : @eq N (cfg_init_addr c) (ia + head)%N.
+  Proof. reflexivity. Qed.
+
+  Lemma gen_seg_place :
+    cfg_placement c
+    = term_binop bop.bvadd base (term_val ty_xlenbits (bv.of_N head)).
+  Proof. reflexivity. Qed.
+
+  Lemma gen_seg_instrs :
+    @eq (list AnnotInstr) (cfg_instrs c)
+      (List.firstn take (List.skipn skip prog)).
+  Proof. reflexivity. Qed.
+
+  Lemma gen_seg_exitCond :
+    @eq (bv xlenbits -> bool) (cfg_exitCond c) (seg_exitCond ia targets).
+  Proof. reflexivity. Qed.
+
+  (* the only one that is not eq_refl, for the same reason gen_loop_exits is
+     not: gen_seg_contract subtracts the head offset from every target, and
+     `t - head` is STUCK for a variable t (N.sub matches on its FIRST
+     argument, so it cannot see that the second is zero). *)
+  Lemma gen_seg_exits :
+    cfg_exits c
+    = exits_of_offs (term_binop bop.bvadd base (term_val ty_xlenbits (bv.of_N head)))
+        (List.map (fun t => (t - head)%N) targets).
+  Proof. reflexivity. Qed.
+End GenSegProjections.
+
 (* THE FOUR PROJECTIONS the composition lemmas use, so they never cbn through
    gen_seg_contract's `let place := …`.  Three are eq_refl.  Only the exit
    table needs a rewrite: gen_seg_contract subtracts the head offset from every
