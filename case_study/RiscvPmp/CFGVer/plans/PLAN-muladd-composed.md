@@ -1887,3 +1887,68 @@ final contract cannot differ in isolation.**
 
 `gen_cell_shift` is landed regardless: any overlapping-window design needs the
 carry step, and it cost one lemma.
+
+
+# ========================================================================
+# §R12. K's BACK EDGE -- the first sliding loop on the generated machinery
+# ========================================================================
+
+`Example/ZZAddkSpec.v` + `Example/ZZAddkLoop.v` (untracked). §R11 chose K to
+validate the two untested paths. **Path 1 -- a sliding-footprint loop's back
+edge -- is DONE, no holes.**
+
+## What transferred without change
+
+K is the `add` mirror of the tail loop M, and every `LoopSpec` field came off
+the listing: `T6`(ap) and `T5`(bp) both `+= 4`, `bne T5, S0` as the latch,
+`sw S1, 0(T6)` writing x[] at `ap`, `lw S2, 0(T5)` reading m[] at `bp`.
+`valid_addk_body` and `valid_addk_final` are `solve_param_vc`, first attempt.
+
+The back edge mirrors M's field for field -- the counter through
+`loop_back_edge_affine_down` (anchor/stride), the range bounds, and both walking
+registers through `walk_step_ok`, INCLUDING the zero-step branch for the limit
+register `S0`.
+
+## THE PAYOFF, and it is the point of §R6
+
+M's back edge spells the cell trade out in five tactic lines
+(`loop_reservoir_peel`, `loop_completed_push`, `gen_cells_drop_exit_pc`,
+destructure, `iFrame`). K's is ONE:
+
+    exact (loop_cells_trade addk_cells (addk_iota iq pe ape)
+             (@bv.of_N xlenbits iq) tot n Hlt).
+
+and the frame is `loop_carry` directly, where M hand-wrote
+`subword_reservoir_frame` as literally the same definition before the
+abstraction existed. So §R6's `Hc` -- built against D/I/K as ISOLATED lemmas --
+works inside a real `loop_back_edge` on a loop it had never been applied to.
+
+## The one genuinely new obligation
+
+K's `loop_dropped_facts` is NON-EMPTY where M's is `[]`: `ap ≠ bp`, the
+x[]/m[] array disjointness that the hand-written `akBody` carries. First real
+use of that field, and it needed content -- the goal reduces to a BITVECTOR
+disequality, which `bv.bin_of_N_small` carries back to `N` where the no-wrap
+bounds make both subtractions exact.
+
+**Trap, comment left in place:** `rewrite A, B in H` is SSReflect-hijacked here
+and is a *syntax error* (`[ltac_use_default] expected after [tactic]`), not a
+tactic failure. Write the two rewrites as separate sentences.
+
+## Method note
+
+The intermediate version of this file carried a deliberate `admit` on that
+bullet plus `Admitted`, purely to make the compiler PRINT the goal instead of
+guessing its shape -- the "dump rather than guess" method this plan uses
+elsewhere. It was labelled a scaffold when written and is gone: the file has
+zero `admit`s and the lemma ends in `Qed`.
+
+## Still open: path 2
+
+**The reservoir has been TRADED but never INHABITED.** `loop_cells_trade` moves
+cells across the back edge; nothing yet supplies `loop_reservoir` at a real trip
+count. That needs `addk_place`, the trip bound, and `addk_loop_runs` (all direct
+mirrors of M's), where the entry must build N cells via
+`loop_reservoir_cells` -- the lemma from §R6 that still has no caller. M's own
+enter (`ZZSpikeEnter2`) does it at `tot = 1`, peeling the single copy by hand,
+so the N-copy path is genuinely untested.
