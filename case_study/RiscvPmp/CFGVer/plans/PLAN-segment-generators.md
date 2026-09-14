@@ -101,14 +101,14 @@ exit-table mismatches.
 
 ```coq
 split_id          {A} (m n) (L) : firstn m L ++ firstn n (skipn m L) ++ skipn (m+n) L = L
-itable_faith_at   -- one lemma for all 20 Hif call sites
+instr_table_ok_at   -- one lemma for all 20 Hif call sites
 seg_exitCond_hit  -- In t targets -> seg_exitCond ia targets (of_N (ia+t)) = true
-seg_exits_faith   -- one lemma for all 10 Hef call sites
+seg_exit_table_ok   -- one lemma for all 10 Hef call sites
 seg_vc            -- projects ValidCFGVerifierContract past the stuck cfg_map
 seg_entry/seg_exit -- the bundles the soundness bridge consumes / hands back
-seg_step          -- ONE segment execution, with an explicit FRAME
-seg_step1         -- single-exit specialisation; the pc is PINNED
-seg_seq           -- SEQUENTIAL composition (what the straight-line cuts need)
+seg_run          -- ONE segment execution, with an explicit FRAME
+seg_run_single_exit         -- single-exit specialisation; the pc is PINNED
+seg_then           -- SEQUENTIAL composition (what the straight-line cuts need)
 seg_loop          -- myWP2_loop_induction + a hand-off to any continuation
 ```
 
@@ -116,15 +116,15 @@ seg_loop          -- myWP2_loop_induction + a hand-off to any continuation
 `length (firstn m L ++ firstn n (skipn m L) ++ skipn (m+n) L) = length L` and
 closed it by `vm_compute` — computing a 282-element list, eight times over. It
 is an *identity*, provable in one line with no numbers:
-`rewrite <- drop_drop, take_drop, take_drop.` (46 ms). `itable_faith_at` then
+`rewrite <- drop_drop, take_drop, take_drop.` (46 ms). `instr_table_ok_at` then
 discharges the real `HifDv` goal by `eapply … ; [reflexivity | vm_compute; lia
 | exact Hp | exact Hrep]`.
 
-`itable_faith_at` carries `4 * skip = head` as a **proof obligation**, which
+`instr_table_ok_at` carries `4 * skip = head` as a **proof obligation**, which
 turns GenSegment's head/skip agreement from a silent convention into something
 that cannot pass unnoticed.
 
-**`seg_step` is the centrepiece.** It reduces one segment execution to two
+**`seg_run` is the centrepiece.** It reduces one segment execution to two
 ordinary iProp implications:
 
 ```coq
@@ -146,7 +146,7 @@ survives untouched into the continuation. Making it a parameter is what lets a
 segment be dropped mid-chain without restating the registers and memory it does
 not touch.
 
-**`seg_seq` is the one most of the remaining work needs.** Nine of muladd's
+**`seg_then` is the one most of the remaining work needs.** Nine of muladd's
 fourteen segments are straight-line: they do not want `seg_loop` at all, they
 want A's postcondition chained into B's precondition, which is what the tail
 spelled out per link as `linkN`/`linkFN`. It is five lines over
@@ -196,16 +196,16 @@ Lemma seg_exitCond_inv1 : seg_exitCond ia [t] v = true -> v = seg_addr ia t.
 ```
 
 Only a declared target is reachable, so the exit condition PINS the pc. With
-`inv1`, `seg_step1` removes the whole ritual from the call site: no `forall
+`inv1`, `seg_run_single_exit` removes the whole ritual from the call site: no `forall
 an`, no SyncVal-vs-NonSyncVal destruct, no `unfold …exitCond`, no
 `bv.eqb_spec` assert, no `subst`. `Hec : cfg_exitCond c = seg_exitCond ia [t]`
 is `eq_refl` for any contract `gen_seg_contract` built with a one-element
 `targets`.
 
 All the pure exitCond algebra lives in `GenSegment.v` next to `seg_exitCond`
-(no Iris in any of it); `GenCompose.v` keeps only `seg_exit_at` / `seg_step1`.
+(no Iris in any of it); `GenCompose.v` keeps only `seg_exit_state` / `seg_run_single_exit`.
 
-Multi-exit segments (muladd's `sgL` declares two) still use `seg_step` and
+Multi-exit segments (muladd's `sgL` declares two) still use `seg_run` and
 `seg_exitCond_inv`, whose `In t targets` destructs to the disjunction — one
 `destruct` instead of a hand-rolled `bv.eqb_spec` chain per target.
 
@@ -228,12 +228,12 @@ construction — `bound` is chosen ≥ the program's byte length). So the caller
 supplies ONE natural fact and the rest are projections:
 
 ```coq
-Definition seg_wf (ia bound : N) : Prop := (ia + bound <= lenAddr)%N.
+Definition seg_fits_memory (ia bound : N) : Prop := (ia + bound <= lenAddr)%N.
 
-seg_wf_bin  : bv.bin (bv.of_N ia) = ia            (* ia is not truncated *)
-seg_wf_max  : bv.bin (bv.of_N ia) + bound <= maxAddr
-seg_wf_Z    : bv.unsigned (bv.of_N ia) + Z.of_N bound <= Z.of_N lenAddr
-seg_wf_rep  : 4*|L| <= bound -> bv.bin (bv.of_N ia) + 4*|L| < bv.exp2 xlenbits
+seg_fits_bin  : bv.bin (bv.of_N ia) = ia            (* ia is not truncated *)
+seg_fits_max  : bv.bin (bv.of_N ia) + bound <= maxAddr
+seg_fits_Z    : bv.unsigned (bv.of_N ia) + Z.of_N bound <= Z.of_N lenAddr
+seg_fits_rep  : 4*|L| <= bound -> bv.bin (bv.of_N ia) + 4*|L| < bv.exp2 xlenbits
 ```
 
 Each is two or three lines. The point is not the lines saved but that a caller
@@ -285,14 +285,14 @@ moved to `GenSegment` in the previous commit — the port is what let the call
 site actually stop declaring it. What the port itself removed:
 
 - `HifDv`/`HifDvf`, 25 lines each with a **per-call 282-element `vm_compute`**,
-  become 6 lines each on `itable_faith_at` (the `vm_compute` is gone: `split_id`
+  become 6 lines each on `instr_table_ok_at` (the `vm_compute` is gone: `split_id`
   makes reassembly an identity).
 - `HefDvBody`/`HefDvFinal` plus the copied `exit_hit` Ltac (12 + 12 + 5) become
-  6 lines each on `seg_exits_faith`.
+  6 lines each on `seg_exit_table_ok`.
 - The whole `pose proof valid_… ; unfold ValidCFGVerifierContract, Valid_CFG_VC,
   CFG_VC_triple ; iApply (sound_scfg_verification_condition_myWP2 … $! … with
   "[…]")` ritual, and the `forall an` / `destruct an` / `bv.eqb_spec`
-  exit-resolution block: gone, into `seg_step1`.
+  exit-resolution block: gone, into `seg_run_single_exit`.
 - `dv_loop`'s body is now literally `apply (seg_loop …)`.
 
 ### What the port ADDED — CORRECTED 2026-09-10 after measuring
@@ -366,7 +366,7 @@ not just its structure.
 
 ### Two API facts confirmed
 
-- `seg_step1`'s argument order works: one `apply` with `eq_refl` for `Hec`
+- `seg_run_single_exit`'s argument order works: one `apply` with `eq_refl` for `Hec`
   leaves exactly HPre and HPost, in 7 ms.
 - ~~`Post` must be a **parameter** of the per-trip lemma, not fixed to the
   invariant: `myWP2_loop` has no monotonicity lemma.~~ **RETRACTED 2026-09-11.**
@@ -381,7 +381,7 @@ not just its structure.
 - **`gen_seg_contract`'s `prog` is now `list AnnotInstr`, not `list AST`.**
   `cfg_instrs` is an `AnnotInstr` list, so with `list AST` the coercion lands
   OUTSIDE the slicing (`list_AST_AnnotInstr (firstn take (skipn skip prog))`)
-  and can never unify with `itable_faith_at`'s `firstn take (skipn skip L)`.
+  and can never unify with `instr_table_ok_at`'s `firstn take (skipn skip L)`.
   Callers with a `list AST` program are unaffected — the coercion just fires at
   the argument instead.
 - **`bv_bound` is now `pose proof exp2_xlenbits; lia`.** See §5.
@@ -395,7 +395,7 @@ mechanical, and the largest single block was four named faithfulness lemmas --
 only content was the numbers `135 27 540 1168` and the target list, every one
 of which the caller had ALREADY passed to `gen_seg_contract`.
 
-Their four bullets were three DECIDABLE side conditions plus `seg_wf`:
+Their four bullets were three DECIDABLE side conditions plus `seg_fits_memory`:
 
 | bullet | old discharge |
 |---|---|
@@ -405,18 +405,18 @@ Their four bullets were three DECIDABLE side conditions plus `seg_wf`:
 | `Forall (head <=) targets` | `constructor; [lia \| constructor]` |
 
 Two of those are tactics, which is the whole reason the obligations had to
-become named lemmas rather than inline arguments. `GenSegment.seg_ok prog skip
+become named lemmas rather than inline arguments. `GenSegment.seg_placement_ok prog skip
 head bound targets : bool` bundles all four into one boolean, with four
-projections (`seg_ok_off/_skip/_sz/_tgts`), and `GenCompose.seg_itable_faith` /
-`seg_etable_faith` take exactly `(Hok, Hp, Hwf)` / `(Hok, Hp)`. Both are then
-terms, so both obligations go INLINE into the `seg_step1` application:
+projections (`seg_placement_off/_skip/_sz/_tgts`), and `GenCompose.seg_instr_table_ok` /
+`seg_exit_table_ok_at` take exactly `(Hok, Hp, Hwf)` / `(Hok, Hp)`. Both are then
+terms, so both obligations go INLINE into the `seg_run_single_exit` application:
 
 ```coq
-apply (seg_step1 (dvBody ia) (dvI ia (m + 1)%N) (seg_addr ia 540) mlad_ai
+apply (seg_run_single_exit (dvBody ia) (divrem_iota ia (m + 1)%N) (seg_addr ia 540) mlad_ai
          (@bv.of_N xlenbits ia) F ia 540%N eq_refl (valid_dvBody ia)
-         (seg_itable_faith (cfg_placement (dvBody ia)) (dvI ia (m + 1)%N)
+         (seg_instr_table_ok (cfg_placement (dvBody ia)) (divrem_iota ia (m + 1)%N)
             ia mlad_ai 135 27 540%N 1168 [540%N] eq_refl eq_refl Hwf)
-         (seg_etable_faith (cfg_placement (dvBody ia)) (dvI ia (m + 1)%N)
+         (seg_exit_table_ok_at (cfg_placement (dvBody ia)) (divrem_iota ia (m + 1)%N)
             ia mlad_ai 135 540%N 1168 [540%N] eq_refl eq_refl)).
 ```
 
@@ -427,11 +427,11 @@ Three things worth knowing before reusing this:
 
 - **`place` and `iota` must be written out; `L` too.** `apply` elaborates an
   argument bottom-up BEFORE propagating the expected type into it, so an `_`
-  there leaves `eq_refl`'s type as `seg_ok ?L ... = seg_ok ?L ...` (or `inst
+  there leaves `eq_refl`'s type as `seg_placement_ok ?L ... = seg_placement_ok ?L ...` (or `inst
   ?place ?iota = inst ?place ?iota`) and elaboration fails with a message that
   looks like the lemma is wrong. `take`, and only `take`, may be `_`.
 - **`eq_refl` for `Hok` is FREE; a `vm_compute` lemma is not an improvement.**
-  Discharging `seg_ok mlad_ai 135 540 1168 [540] = true` by kernel conversion
+  Discharging `seg_placement_ok mlad_ai 135 540 1168 [540] = true` by kernel conversion
   reduces `length` over a 282-element `map`, four times per file. Measured
   against the obvious alternative (two named `Lemma ... = true` proved by
   `vm_compute; reflexivity`, passed in place of the `eq_refl`s): 32.84 s vs
@@ -448,7 +448,7 @@ date -- `GenSegment.v`/`GenCompose.v` are outside `Results.vo`'s closure and
 `GenCompose.vo` is in `BUILD_TARGETS` only because of that.
 
 **Still open, and it is the same shape one level up.** What survives per call
-site is ~12 lines: `seg_step1`'s own `(c, iota, a, L, cbase, Fr, ia, t)` plus
+site is ~12 lines: `seg_run_single_exit`'s own `(c, iota, a, L, cbase, Fr, ia, t)` plus
 the two faith terms, and `ia mlad_ai 135 (27) 540 1168 targets` is written
 THREE times in it. A `SegSpec` record (`ss_base/ss_base_a/ss_ia/ss_head/
 ss_prog/ss_skip/ss_take/ss_targets/ss_bound/ss_fuel/ss_regs/ss_pre/ss_post`)
@@ -466,7 +466,7 @@ reasoning.
 <...>/ZZFoo.vo` silently has no rule and reports success having done nothing,
 and `rocq_compile_file`'s dune fallback writes its `.vo` into
 `_build/default/` while leaving the source-tree `.vo` stale. A dependent file
-then reports `The reference seg_wf was not found in the current environment`
+then reports `The reference seg_fits_memory was not found in the current environment`
 -- the stale-`.vo`-drops-names signature again, from a build that said it
 succeeded. Compile a probe with `coqc` directly, passing `_CoqProject`'s two
 load-path lines (`-Q case_study/RiscvPmp Katamaran.RiscvPmp -R theories
@@ -486,7 +486,7 @@ contract fields lose both:
 | `cfg_exits` | `exits_of_offs place (map (fun t => t - head) targets)` | `exits_of_offs q targets` |
 | `cfg_exitCond` | `seg_exitCond ia targets` (ABSOLUTE targets) | `seg_exitCond iq targets` |
 
-`head` and `skip` then survive only in `seg_ok` / `itable_faith_at` -- the
+`head` and `skip` then survive only in `seg_placement_ok` / `instr_table_ok_at` -- the
 composition side, which is where "how this segment sits in the program"
 belongs -- and the `map (fun t => t - head)` disappears because the targets are
 already what `exits_of_offs` wants.
@@ -543,10 +543,10 @@ nested add: `peval ((p +b 540) +b 4) = term_val 0x220 + term_var "p"`. Fetch
 addresses inside a segment are the same term size either way. The case for
 re-basing is that the contract becomes self-contained, nothing more.
 
-**What it costs to build:** a re-based generator (no `head`), `itable_faith_at`'s
+**What it costs to build:** a re-based generator (no `head`), `instr_table_ok_at`'s
 `Hp` restated in `seg_addr` form so it stays `reflexivity` at the call site,
 `seg_addr_rebase : seg_addr (ia+h) t = seg_addr ia (h+t)` for handing the pc
-across, and `seg_wf_shift : seg_wf ia bound -> h + b' <= bound -> seg_wf (ia+h) b'`.
+across, and `seg_fits_shift : seg_fits_memory ia bound -> h + b' <= bound -> seg_fits_memory (ia+h) b'`.
 All small. The real work is re-pointing `mlad_reg_specs_rel` / `mlad_mem_specs_rel`
 at a data base, which is a change to the muladd spec block, not to the machinery.
 
@@ -641,19 +641,19 @@ Three things assumed in 3g were TESTED this round, and one more was removed.
   still frames. Segments are therefore independently nameable -- no global
   convention, which is a precondition for reusing one.
 
-**Removed this round: the per-cut address-space bounds.** `seg_wf_shift`
+**Removed this round: the per-cut address-space bounds.** `seg_fits_shift`
 (a sub-segment of a well-formed segment is well-formed) plus the `seg_bound`
 tactic, both in `GenSegment.v`, derive every segment's and every data block's
-bound from the program's ONE `seg_wf ia bound`. `cut_MN` went from two
-hand-threaded hypotheses (`Hr`, `Hd`) to one `Hwf : seg_wf ia 1168` -- and that
+bound from the program's ONE `seg_fits_memory ia bound`. `cut_MN` went from two
+hand-threaded hypotheses (`Hr`, `Hd`) to one `Hwf : seg_fits_memory ia 1168` -- and that
 is the same fact the faithfulness obligations already need, so a chain now
 threads exactly one. For scale: `ZZMladTail.linkFN` threads two (`Hrep`, `Hb`)
 and every further link would add more.
 
-TRAP: do not reach for `seg_wf_Z` here. By the time the goal is reduced the
-byte count is a Z LITERAL, so `apply seg_wf_Z` must unify `Z.of_N ?b` with
+TRAP: do not reach for `seg_fits_Z` here. By the time the goal is reduced the
+byte count is a Z LITERAL, so `apply seg_fits_Z` must unify `Z.of_N ?b` with
 `20` -- inverting `Z.of_N`, which unification will not do. `seg_bound` instead
-uses `seg_wf_bin` at bound 0 purely for the no-truncation fact and finishes
+uses `seg_fits_bin` at bound 0 purely for the no-truncation fact and finishes
 with plain `lia`.
 
 **What still needs manual work at a cut, in order of cost:**
@@ -738,7 +738,7 @@ DEMONSTRATED:
 | segment contract | `gen_seg_contract …` | 1 line + `Proof. solve_seg. Qed.` |
 | its VC | `solve_seg` | 1 line |
 | sub-table + exit faithfulness | `eq_refl eq_refl Hwf`, inline | 0 lines |
-| every address-space bound | one `seg_wf ia bound` for the whole chain | 0 per cut |
+| every address-space bound | one `seg_fits_memory ia bound` for the whole chain | 0 per cut |
 | a STRAIGHT-LINE cut | `solve_cut cpost cpre` | **1 line** |
 | a loop | `seg_loop` + `myWP2_loop_mono` | combinators done |
 | a value change at a back edge | fresh Σ var + pure equation in the post | see below |
@@ -767,7 +767,7 @@ STILL MISSING, and a blueprint claim should not be made until these close:
    22. Roughly: HPre ~18 (of which the latch guard is real program content and
    the rest is `iSplit`/`iFrame`/`cbn` scaffolding), HPost ~12. A `solve_step`
    tactic on the model of `solve_cut` looks feasible -- NOT built, NOT tested.
-2. **Invariant PACKAGING, ~28 lines** (`dvI`, `dvInvAt`, `dvInvN`, `dvOut`).
+2. **Invariant PACKAGING, ~28 lines** (`divrem_iota`, `dvInvAt`, `dvInvN`, `dvOut`).
    Identifying the invariant is the user's job and should stay so; the
    valuation, the `∃kv`/`kv = n+2` trip bridge and the exit state are
    boilerplate on top of it and look derivable.
@@ -861,16 +861,16 @@ a tactic cannot itself say `cbn in Heq` for a name its own `iDestruct`
 introduces**; the caller does it, where the name exists.
 
 `dv_step_at`: **38 -> 24 code lines**, and what is left is exactly (a) the
-`seg_step1` argument block, (b) the latch guard, (c) the decrement. File
+`seg_run_single_exit` argument block, (b) the latch guard, (c) the decrement. File
 196 -> 182. Gate PASSED 5m56s, 18 theorems axiom-clean.
 
 `seg_bound` gained a second case: the goal is sometimes `bv.bin (of_N ia)` with
-no shift, and `cbn` reduces `Z.of_N 1168` to the literal `1168` so `seg_wf_Z`
+no shift, and `cbn` reduces `Z.of_N 1168` to the literal `1168` so `seg_fits_Z`
 cannot apply (the `Z.of_N` inversion trap again, §3h).
 
 NOT DONE: `dv_exit_at` (22 lines) still uses the long form -- its post has no
 counter block, so `solve_step_post`'s prescribed shape does not fit it. An exit
-segment wants its own, simpler tactic. And the `seg_step1` argument block (6 of
+segment wants its own, simpler tactic. And the `seg_run_single_exit` argument block (6 of
 the 24 lines) still wants the `SegSpec` record from §3e.
 
 ### 3m. WHERE THE MEMORY STARTS (2026-09-11)
@@ -931,12 +931,12 @@ DEMONSTRATED, not predicted: `Example/ZZLoopBProbe.v` states loop B -- the
 closest fit, since T6 is a genuine counter decremented to zero -- and
 `solve_seg` fails. The residual ends in `Erasure.eerror` immediately after the
 guard is assumed: the first instruction `lw S1, -4(S0)` has no `ptstomem`
-chunk to read, because with `ls_regs` a CONSTANT the strongest thing the spec
+chunk to read, because with `loop_regs` a CONSTANT the strongest thing the spec
 can say about the walking pointer S0 is "some secret value".
 
 TWO GAPS, both mine:
 
-1. **`ls_regs` / `ls_mem_a` are constants.** The design proposed
+1. **`loop_regs` / `ls_mem_a` are constants.** The design proposed
    `nat -> list reg_spec_rel`; the implementation made them constants. BUT
    trip-indexing is NOT the right fix, and it is worth being clear about why:
    a contract is verified ONCE and used at every trip, so it cannot depend on
@@ -969,10 +969,10 @@ context parameterised first.
 `LoopSpec` is now `Record LoopSpec {Σ : LCtx}`. The code base and the counter
 are explicit TERMS, supplied once per context they appear in; the bases are a
 LIST of (term, bound) pairs whose address-space conjuncts are generated; and
-`ls_extra_a`/`ls_extra_an` is the escape hatch for what a spec list cannot
+`loop_extra_pre`/`loop_extra_post` is the escape hatch for what a spec list cannot
 say -- a walking pointer's value, memory cells, an extra bound.
 
-The counter needs FOUR copies (`ls_k_a`, `ls_k_an`, `ls_k_anc`) because the
+The counter needs FOUR copies (`loop_counter_pre`, `loop_counter_post`, `loop_counter_post_ex`) because the
 post binds a fresh variable and a `Term (Σ ▻ "a" ▻ "an")` does not weaken under
 `asn.exist "c"`. Writing `term_var "k"` four times is tedious, but it is
 resolution, not proof.
@@ -1024,7 +1024,7 @@ supply it, or the access really does underflow), the encoding
 TWO TRAPS BANKED:
 - **`D` must be a plain `Z`, not `Z.of_N D`.** The goal's offset arrives as a Z
   LITERAL, so `eassumption` would have to unify `Z.of_N ?D` with `4` -- the
-  `Z.of_N` inversion trap, same as `seg_wf_Z` in §3h. Stating D : Z fixed it.
+  `Z.of_N` inversion trap, same as `seg_fits_Z` in §3h. Stating D : Z fixed it.
 - **`replace S with (S - E + 1 * E) by lia` fires inside its own RHS.** The
   resulting goal is unprovable-looking (`S-E+1*E-E` vs `S-E`). `set` both atoms
   first and restrict with `at 1`.
@@ -1052,16 +1052,16 @@ There is NO counter register -- the loop variable IS the pointer T1 -- and the
 limit is another REGISTER, T0, not a constant. It fits anyway, for three
 reasons worth naming because none was designed in:
 
-1. **The "counter" may be the pointer.** `ls_imm := -4`, and the guard is
-   applied to `ls_step`, which is exactly the value `bne` tests (`T3 = T1-4`).
+1. **The "counter" may be the pointer.** `loop_counter_step := -4`, and the guard is
+   applied to `counter_after_step`, which is exactly the value `bne` tests (`T3 = T1-4`).
    The decrement-then-test convention happens to be what a pointer loop does
    too.
-2. **`ls_guard` may mention ANY variable of the context**, so a register limit
+2. **`loop_guard` may mention ANY variable of the context**, so a register limit
    is just a logic variable `"e"` that T0 is pinned to. This is the thing the
    FIXED context could not do (§3n).
 3. **`ls_at` is not consulted by the contracts at all.** So a counter whose
    value is SYMBOLIC -- here `e + 4n`, not a concrete address -- costs
-   nothing. NOTE: `ls_at` is currently a DEAD FIELD; `loop_inv` takes the
+   nothing. NOTE: `ls_at` is currently a DEAD FIELD; `loop_invariant` takes the
    valuation family from the caller. It will earn its place when the loop
    theorem's induction is written, and not before.
 
@@ -1098,9 +1098,9 @@ bound that `relval_fetch_upper_neg` exists to absorb once its
 `solve_symbase_fetch` wiring is finished (§3p). Nothing else needed hand work.
 
 THE RECIPE, which is now uniform:
-- whichever pointer or counter the BRANCH tests becomes `ls_ctr` / `ls_k_*`,
-  with `ls_imm` its per-trip update;
-- every OTHER moving pointer goes in `ls_extra_a` / `ls_extra_an` with its
+- whichever pointer or counter the BRANCH tests becomes `loop_counter_reg` / `ls_k_*`,
+  with `loop_counter_step` its per-trip update;
+- every OTHER moving pointer goes in `loop_extra_pre` / `loop_extra_post` with its
   entry and exit value;
 - the limit, if a register, is a logic variable the guard mentions;
 - cells go in `ls_extra_*`, bases and their bounds in `ls_bases_*`.
@@ -1132,45 +1132,45 @@ is proved to run to its exit.
 
 `GenCompose.v` §6 now carries the three lemmas, all compiling:
 
-- **`loop_step`** -- one trip. `apply (seg_step1 …)` works generically off the
+- **`loop_body_trip`** -- one trip. `apply (seg_run_single_exit …)` works generically off the
   LoopSpec, and both bullets collapse: HPre because the invariant IS the
   precondition minus the branch decision at the SAME valuation (one `iFrame`
   takes it whole, leaving only the pc equation and the guard); HPost because
   the ambient half frames and the rest is the caller's transfer.
-- **`loop_exit`** -- the same with the exit guard and the fall-through target.
-- **`loop_counted`** -- `seg_loop` instantiated.
+- **`loop_final_trip`** -- the same with the exit guard and the fall-through target.
+- **`loop_by_induction`** -- `seg_loop` instantiated.
 
 What the caller supplies is exactly the loop's own content: `Hpl`/`Hpa` (the
 valuation pins the code base -- `reflexivity` in practice), `Hg` (the guard
 holds at trip S n), and `Htrans` (one trip's postcondition establishes the next
 trip's invariant).
 
-**`loop_inv` gained a pure side condition `P : nat -> Prop`, and it is NOT
+**`loop_invariant` gained a pure side condition `P : nat -> Prop`, and it is NOT
 decoration.** A counter's no-wrap bound (`ls_at n + 1 < 2^32`) holds only below
 2^32, while `seg_loop`'s step is quantified over ALL n -- with nowhere to put
 it the step is simply unprovable. The hand-written `dvInvN` carried exactly
 this. The caller also supplies `P (S n) -> P n`, immediate for a bound that
 shrinks with the counter.
 
-TRAP, and it shaped the proof: **the two bullets of `seg_step1` are separate
+TRAP, and it shaped the proof: **the two bullets of `seg_run_single_exit` are separate
 goals, so an `iIntros` inside HPre does not scope over HPost** -- and HPost is
 where `P n` must be re-established. Peel the pure conjunct BEFORE applying:
-`unfold loop_inv at 1; iIntros "(%HP & H)"; iApply (seg_step1 … with "H")`.
+`unfold loop_invariant at 1; iIntros "(%HP & H)"; iApply (seg_run_single_exit … with "H")`.
 
-END-TO-END on divrem (`Example/ZZDvLoopThm.v`): `dvI` (the valuation family),
-`dvP` + `dvP_mono` (the no-wrap bound), `dv_dec` (the bitvector decrement) and
-**`dv_trans` -- the trip-to-trip transfer, PROVED**. It is 12 lines: destructure
+END-TO-END on divrem (`Example/ZZDvLoopThm.v`): `divrem_iota` (the valuation family),
+`divrem_trip_bound` + `divrem_trip_bound_mono` (the no-wrap bound), `dv_dec` (the bitvector decrement) and
+**`divrem_counter_transfer` -- the trip-to-trip transfer, PROVED**. It is 12 lines: destructure
 the post's fresh-variable block, show the witness equals k-1, and frame. The
 bounds and the register block cross the valuation change untouched.
 
-NOT DONE: the guard lemma (`dvP (S n) -> 1 <u k-1`, a `lia` plus two
+NOT DONE: the guard lemma (`divrem_trip_bound (S n) -> 1 <u k-1`, a `lia` plus two
 `bv.bin_of_N_small`) and the three applications that assemble
-`loop_step`/`loop_exit`/`loop_counted` for divrem -- perhaps 30 lines,
+`loop_body_trip`/`loop_final_trip`/`loop_by_induction` for divrem -- perhaps 30 lines,
 mechanical, but not written, so there is no `dv_loop` theorem yet.
 
 ### 3t. DIVREM'S LOOP THEOREM IS DONE -- and where the lines actually go (2026-09-11)
 
-`Example/ZZDvLoopThm.v` compiles: **`dvs_loop : forall n, dvInv n -∗
+`Example/ZZDvLoopThm.v` compiles: **`divrem_loop_runs : forall n, divrem_invariant n -∗
 myWP2_loop Post`**. The loop, not just its body contract.
 
 Asked why the assembly was "~30 mechanical lines", I measured instead of
@@ -1178,23 +1178,23 @@ estimating. It is 102 code lines, and the split is not what I said:
 
 | block | lines | what it is |
 |---|---|---|
-| `dvI`, `dvP`, `dvP_mono` | 6 | the valuation family and the no-wrap bound |
+| `divrem_iota`, `divrem_trip_bound`, `divrem_trip_bound_mono` | 6 | the valuation family and the no-wrap bound |
 | `dv_dec` | 11 | the bitvector decrement -- GENERIC across counted loops |
-| `dv_trans` | 19 | the trip-to-trip transfer |
+| `divrem_counter_transfer` | 19 | the trip-to-trip transfer |
 | `dv_guard` | 12 | the latch holds while trips remain |
 | `dv_exitg` | 8 | the latch falls through at trip 0 |
 | the assembly | 46 | three `exact`s and their statements |
 
 So the answer to "why 30 lines": it was not 30, and it is not proof. The three
 assembly lemmas have **3-line proofs and 9-line statements**, and the
-statements are almost entirely re-spelling `loop_inv`'s six arguments, twice
+statements are almost entirely re-spelling `loop_invariant`'s six arguments, twice
 each. A one-line abbreviation
 
-    Definition dvInv : nat -> iProp Σ := loop_inv (dvSpec iq) (dvI iq) … dvP.
+    Definition divrem_invariant : nat -> iProp Σ := loop_invariant (divrem_spec iq) (divrem_iota iq) … divrem_trip_bound.
 
 removes most of it; the rest is a Section carrying `iq/pia/pbound/Fr` and four
 placement hypotheses, which is the SAME unbuilt "bundle the placement facts"
-abstraction §3e identified for `seg_step1` and I have now deferred twice.
+abstraction §3e identified for `seg_run_single_exit` and I have now deferred twice.
 
 `dv_dec` is generic and HAS MOVED (2026-09-12) to `GenSegment` as
 `bv_of_N_wrap_dec s m : bv.add (of_N (m+s)) (of_N (exp2 xlenbits - s)) = of_N m`
@@ -1203,13 +1203,13 @@ abstraction §3e identified for `seg_step1` and I have now deferred twice.
 Every counted loop's decrement is now one line
 (`exact (bv_of_N_wrap_dec 1 m ltac:(bv_bound))`), 11 of the 102 gone.
 
-Genuinely per-loop and irreducible: `dv_guard`, `dv_exitg`, `dv_trans` and the
+Genuinely per-loop and irreducible: `dv_guard`, `dv_exitg`, `divrem_counter_transfer` and the
 valuation family -- 45 lines, and they ARE the loop's content.
 
 NOT A TRAP -- RETRACTED 2026-09-12. An earlier draft of this section claimed
-that passing `HP0` as an inline `ltac:(unfold dvP; bv_bound)` argument inside
+that passing `HP0` as an inline `ltac:(unfold divrem_trip_bound; bv_bound)` argument inside
 the `exact` term sent coqc into a >10000 s hang, and told you to use
-`assert (HP0 : dvP 0) by (…)` instead. **That is wrong.** The wall-clock came
+`assert (HP0 : divrem_trip_bound 0) by (…)` instead. **That is wrong.** The wall-clock came
 from the laptop being suspended mid-compile, not from the term. Measured
 directly (`rocq_start` at `dvs_exit`, `rocq_check` with the inline form and a
 trailing `Qed.`): **35 ms**, `dvs_exit is defined`. Both forms are fine; the
@@ -1238,7 +1238,7 @@ reject.)
 - **No `LoopSpec` record → one theorem.** The two worked loops differ exactly
   where such a record would have to be uniform: G uses an opaque frame (fixed
   footprint), the tail uses a `cellsPriv`/`cellsPub` fixpoint (sliding
-  footprint). `seg_step` + `seg_loop` sit below that fork.
+  footprint). `seg_run` + `seg_loop` sit below that fork.
 
 **The rule of thumb this yields:** opaque frame when a loop's footprint is
 FIXED, cell-range fixpoint when it SLIDES.
@@ -1248,7 +1248,7 @@ FIXED, cell-range fixpoint when it SLIDES.
 ## 5. Traps banked while building this
 
 - **`Set Implicit Arguments` leaks.** `GenContract.v` sets it non-`Local`, so
-  it reaches every consumer. It silently made `seg_step`'s `iota` implicit —
+  it reaches every consumer. It silently made `seg_run`'s `iota` implicit —
   and since **only implicit arguments can be passed by name**, the explicit
   ones then had to be positional. Both new files do `Local Unset Implicit
   Arguments`; implicit marks are baked in at definition time, so consumers see
@@ -1266,7 +1266,7 @@ FIXED, cell-range fixpoint when it SLIDES.
   `Tables.v` produced `The reference S3 was not found`, with a `.vo` newer than
   the source. `force_restart=True`.
 - `exact` unifies up to conversion where `rewrite` does not, which is why
-  `itable_faith_at`'s `off` can be given as `540` and matched against
+  `instr_table_ok_at`'s `off` can be given as `540` and matched against
   `4 * N.of_nat 135`.
 
 ---
@@ -1297,7 +1297,7 @@ FIXED, cell-range fixpoint when it SLIDES.
   `subst`.
 - **`N.le` `vm_compute`s to `Lt <> Gt`, which `lia` cannot close** —
   `discriminate` does. The `nat`-`le` sibling in the same proof is a real
-  inequality and does want `lia`, so the two bullets of one `itable_faith_at`
+  inequality and does want `lia`, so the two bullets of one `instr_table_ok_at`
   application need different tactics.
 
 ## 6. Open
@@ -1326,10 +1326,10 @@ STATED generically, because the valuation family is hand-written and nothing in
 Landed (commit 750ac416):
 
 - **`GenSegment`: `loop_latch_neq` / `_eq` / `_ult` / `_ule`.** The branch
-  obligation of `loop_step` / `loop_exit`. Hypotheses are the counter's value
+  obligation of `loop_body_trip` / `loop_final_trip`. Hypotheses are the counter's value
   off the valuation, the machine's step (`Hstep`), two `< 2^32` bounds and one
   numeric fact -- all in `N`, so a caller never touches `bv.bin`.
-- **`GenCompose`: `loop_trans`.** The trip-to-trip transfer. Does the four
+- **`GenCompose`: `loop_counter_transfer`.** The trip-to-trip transfer. Does the four
   generic moves (open the counter existential, refute `NonSyncVal` from
   `secLeak`, rewrite the step, frame) and leaves `Hstep` plus **`Hframe`**:
   the frame at trip `S n` implies the frame at trip `n`.
@@ -1348,21 +1348,21 @@ Strides are -1, -4 and +4; `Hstep` is `bv_of_N_wrap_dec` for a decrement and
 admits, 21 s.** Both relop families, both stride directions, literal and
 variable sentinels. The latch lemmas are general.
 
-`Example/ZZLoopTransCheck.v` -- `loop_trans` on A (footprint does not move:
+`Example/ZZLoopTransCheck.v` -- `loop_counter_transfer` on A (footprint does not move:
 the whole transfer closes, `Hframe` is one `iFrame`) and on D (two walking
-pointers: `loop_trans` applies unchanged, `Hframe` is exposed).
+pointers: `loop_counter_transfer` applies unchanged, `Hframe` is exposed).
 
-**And `Hframe` is NOT PROVABLE for D from `ldSpec` as written.** Read off both
+**And `Hframe` is NOT PROVABLE for D from `mulinner_spec` as written.** Read off both
 sides of the goal, the trip-`S n` frame is short of the trip-`n` frame by:
 
-1. **the cells are at the old addresses** -- `ld_extra_an` gives `p1 ↦ₘ _`,
+1. **the cells are at the old addresses** -- `mulinner_extra_post` gives `p1 ↦ₘ _`,
    `p7 ↦ₘ _` at pe-4(n+2)/p7e-4(n+2); trip `n` needs pe-4(n+1)/p7e-4(n+1);
-2. **`p1 ≠ p7` is dropped** -- asserted by `ld_extra_a`, absent from
-   `ld_extra_an`.
+2. **`p1 ≠ p7` is dropped** -- asserted by `mulinner_extra_pre`, absent from
+   `mulinner_extra_post`.
 
-This is a gap in the SPEC, not in `loop_trans`: `ls_extra_a`/`ls_extra_an` are
+This is a gap in the SPEC, not in `loop_counter_transfer`: `loop_extra_pre`/`loop_extra_post` are
 fixed assertions describing ONE trip's window, with no reservoir to draw the
-next cell from, and `loop_inv`'s `Fr` is trip-independent too. An array loop
+next cell from, and `loop_invariant`'s `Fr` is trip-independent too. An array loop
 needs `ls_extra_*` indexed by the trip index. **The six muladd probes were
 only ever checked at CONTRACT level (`solve_seg`); this is the first time
 their back edges were examined, and 5 of 7 cannot close one.** divrem and A
@@ -1380,7 +1380,7 @@ done properly, which would take the call site to ~10 lines. Not built.
 
 ### One real trap (and it is the small true version of a retracted one)
 
-`exact (loop_latch_ult (dvSpec iq) _ 1 .. ltac:(cbn; do 2 f_equal; lia) ..)`
+`exact (loop_latch_ult (divrem_spec iq) _ 1 .. ltac:(cbn; do 2 f_equal; lia) ..)`
 fails with **"Cannot find witness"**. The `_` for the valuation leaves the
 inline `ltac:`'s EXPECTED TYPE full of evars, so `lia` runs on a goal that is
 not yet a goal. Writing the valuation out fixes it (85 ms). Note this is the
@@ -1392,23 +1392,23 @@ is what D/F/Tail use.
 ## 3v. All seven back edges CLOSE (2026-09-12)
 
 §3u found that 5 of 7 loops could not close their back edge. Fixed. The cause
-was one design decision, not five bugs: **`loop_inv`'s ambient frame `Fr` was
+was one design decision, not five bugs: **`loop_invariant`'s ambient frame `Fr` was
 trip-INDEPENDENT**, so an array loop had nowhere to keep the cells it had not
 reached yet. The body consumes the cell at the current pointer and the next
 trip needs the cell at the next one, which was never anywhere in the invariant.
 
 ### The fix, in three generic pieces (commit 742b47da)
 
-- **`Fr : nat -> iProp Σ`** in `loop_inv` / `loop_step` / `loop_exit` /
-  `loop_counted`, and `loop_trans` gains `FS`/`Fn`. `Htrans` is now
+- **`Fr : nat -> iProp Σ`** in `loop_invariant` / `loop_body_trip` / `loop_final_trip` /
+  `loop_by_induction`, and `loop_counter_transfer` gains `FS`/`Fn`. `Htrans` is now
   `post(S n) ∗ Fr (S n) ⊢ win(n) ∗ Fr n`, so the trip-to-trip step can EXCHANGE
   resources with the reservoir instead of only framing.
-- **`loop_res A iota q n`** (GenCompose) -- the reservoir, defined as the
+- **`loop_reservoir A iota q n`** (GenCompose) -- the reservoir, defined as the
   loop's own cell assertion `A` interpreted at EVERY FUTURE TRIP'S VALUATION:
   `[∗ list] i ∈ seq 0 n, asn.interpret A ((iota i).[a↦q])`. This is the trick
   that avoids all binder machinery -- the cells trip `i` needs are by
   construction `A` at trip `i`, so no weakening under `asn.exist` is required,
-  and `loop_res_peel` is just `big_opL_app`.
+  and `loop_reservoir_peel` is just `big_opL_app`.
 - **`gen_loop_bounds_intro` + `loop_bound_le`** -- the bounds block is REBUILT
   at each trip, not framed: a walking pointer's `p+4 ≤ lenAddr` at trip n does
   NOT follow from the same bound at trip S n. Stated in `N`; the caller never
@@ -1471,10 +1471,10 @@ loops. Three rounds of cutting, all measured on D:
 |---|---|---|
 | §3v baseline | 59 | -- |
 | + `loop_reg_shift`, `loop_cell_shift`, `bv_of_N_neq`, `lenAddr_lt_exp2` | 48 | the two MOVES and the two pure facts become lemmas |
-| + `loop_frame_std` (with `gen_regs_at_inst`) | 45 | the STRUCTURE becomes a lemma |
+| + `loop_frame_transfer` (with `gen_regs_at_inst`) | 45 | the STRUCTURE becomes a lemma |
 | + `refine`-inferred bounds, bullet form for the shift | **40** | the argument lists stop being written out |
 
-`loop_frame_std` is the one that matters conceptually: it says what a loop
+`loop_frame_transfer` is the one that matters conceptually: it says what a loop
 frame IS -- `bounds ∗ regs ∗ extra`, where the first two are the same argument
 every time -- so a per-loop proof is the bounds `Forall` plus the extra
 entailment and nothing else. `gen_regs_at_inst` had to come BACK for it (it was
@@ -1506,8 +1506,8 @@ pair projection `(t, 4).2`.
 ### What the remaining 40 lines are
 
 12 of statement, 26 of proof, and the proof is now four NAMED steps:
-`loop_frame_std` (structure) / `loop_bound_le` (one line, all bases) /
-`loop_reg_shift` (the advanced register) / `bv_of_N_neq` + `loop_res_peel` (the
+`loop_frame_transfer` (structure) / `loop_bound_le` (one line, all bases) /
+`loop_reg_shift` (the advanced register) / `bv_of_N_neq` + `loop_reservoir_peel` (the
 dropped fact and the cell trade). Everything left is specific to the loop.
 The other four loops still carry their §3v proofs; converting them is the same
 mechanical edit and would land them at the same place.
@@ -1518,9 +1518,9 @@ Continuing §3w on the instruction that anything identical across examples
 belongs in a lemma, endToEnd-style. Two more groupings, both measured on D and
 then re-derived on F by pure renaming (29 lines each):
 
-- **`loop_frame_obl` / `loop_edge`** -- the two things a caller proves per loop
+- **`loop_frame_obligation` / `loop_back_edge`** -- the two things a caller proves per loop
   now have NAMES, so their statements stop being a dozen lines of re-spelled
-  valuation. Same fix as `dvInv` for the assembly block; it is worth saying
+  valuation. Same fix as `divrem_invariant` for the assembly block; it is worth saying
   plainly that *statements* were a third of the cost every single time.
 - **one `iFrame` replaces the conjunct-by-conjunct walk.** Once the ONE
   register that moved is converted with `loop_reg_shift`, a bare `iFrame`
@@ -1537,7 +1537,7 @@ then re-derived on F by pure renaming (29 lines each):
 
 Of those 29: **8 are the loop's own numeric side conditions** (`iq + 116 ≤
 lenAddr`, the no-underflow bounds, `pe ≠ p7e`), 2 are `Proof`/`Qed`, and 19 are
-proof. The 19 break down as 3 structural (`apply loop_frame_std`, bounds), 4
+proof. The 19 break down as 3 structural (`apply loop_frame_transfer`, bounds), 4
 opening the loop's own `ls_extra_*` (irreducible -- they are the loop's own
 names), 1 intro, 6 the `loop_reg_shift` call, 1 `iFrame`, 3 the pure fact the
 post drops, 1 the reservoir peel.
@@ -1546,7 +1546,7 @@ post drops, 1 the reservoir peel.
 how much, which pure fact the postcondition drops, and the loop's bounds. The
 one remaining candidate for grouping is `ls_extra_*` itself -- if it were
 STRUCTURED data (walking registers / fixed registers / pure facts / cells) the
-way `ls_regs` already is, a single `loop_extra_step` lemma would take the 6-line
+way `loop_regs` already is, a single `loop_extra_transfer` lemma would take the 6-line
 shift call and the 3-line pure fact down to side conditions, and the four
 opening lines with them. That is a change to `LoopSpec`'s fields and to all
 seven spec blocks; NOT attempted here, and it is the honest next step.
@@ -1576,8 +1576,8 @@ the rest possible, and it cost ~100 ms.
 
 - `walk_reg` / `cell_spec` records, `addr_off` (which must emit the BARE term at
   offset zero, or a non-moving register stops matching what the executor
-  builds), `gen_walk_a/_an`, `gen_cells_a/_an`, `gen_pures`, `gen_extra_a/_an`.
-- `loop_extra_step` (GenCompose) on top of `gen_walk_step`, `gen_pures_interp`
+  builds), `gen_walk_pre/_an`, `gen_cells_pre/_an`, `gen_pures`, `gen_extra_pre/_an`.
+- `loop_extra_transfer` (GenCompose) on top of `gen_walk_step`, `gen_pures_interp`
   and `walk_secLeak`. A caller supplies three things, all its own: what each
   walking register evaluates to on both sides, the pure facts the post drops,
   and the cell trade with the reservoir.
@@ -1595,7 +1595,7 @@ the rest possible, and it cost ~100 ms.
 | D's frame | lines |
 |---|---|
 | §3x, hand-written extra + one `iFrame` | **29** |
-| §3y, extra from data + `loop_extra_step` | **34** |
+| §3y, extra from data + `loop_extra_transfer` | **34** |
 
 The `Forall` bookkeeping (`apply List.Forall_cons`, one `exists` witness and two
 `split`s per walking register) costs about what the single `iFrame` saved.
@@ -1625,12 +1625,12 @@ one lemma taking the example-specific logic as arguments, the way
 Every loop's frame proof is now literally this, with nothing else in it:
 
 ```coq
-  unfold loop_frame_obl. pose proof lenAddr_lt_exp2.
-  apply (loop_frame_std <spec> <iota (S n)> <iota n> <q> _ _ eq_refl).
+  unfold loop_frame_obligation. pose proof lenAddr_lt_exp2.
+  apply (loop_frame_transfer <spec> <iota (S n)> <iota n> <q> _ _ eq_refl).
   { repeat constructor.
     all: refine (loop_bound_le _ _ _ _ _ _ _); [cbn; reflexivity | lia | cbn; lia]. }
-  cbn [ls_extra_an ls_extra_a <spec>]. unfold <X>_extra_an, <X>_extra_a.
-  apply (loop_extra_step <X>_walk <X>_pures <X>_cellspecs _ _ _ _ _).
+  cbn [loop_extra_post loop_extra_pre <spec>]. unfold <X>_extra_an, <X>_extra_a.
+  apply (loop_extra_transfer <X>_walk <X>_pures <X>_cellspecs _ _ _ _ _).
   - (* the walking registers, as N values *) ...
   - (* the pure facts the postcondition drops *) ...
   - (* the cell trade with the reservoir *) ...
@@ -1650,16 +1650,16 @@ moved, a probe just defines its `ls_extra_*` with the builders.
 
 36% overall, but the number that matters is that the five proofs now differ
 ONLY in their three arguments. Tail is the cheapest because it has no pure
-facts at all (`lt_pures := []`); C and B are dearest because the cell trade is
+facts at all (`subword_dropped_facts := []`); C and B are dearest because the cell trade is
 a crossing rather than a hand-off -- and that is the one place the two SHAPES
 still show:
 
 - **D / F / Tail** -- every cell is new: the third argument is
-  `rewrite loop_res_peel; iIntros "(_ & Hres & Hnew)"; iFrame`.
+  `rewrite loop_reservoir_peel; iIntros "(_ & Hres & Hnew)"; iFrame`.
 - **C / B** -- a sliding two-cell window: one cell CROSSES the edge under a
   different address term and binder name, so the third argument is
   `loop_cell_shift`. **The reservoir must hold ONLY the genuinely new cell**
-  (`lc_newcells` / `lb_newcells`); one holding both cells of an overlapping
+  (`shiftdown_ptr_entering_cells` / `shiftdown_ctr_entering_cells`); one holding both cells of an overlapping
   window would claim an address at two different trips, be unsatisfiable, and
   make the loop theorem vacuous while still compiling.
 
@@ -1667,7 +1667,7 @@ still show:
 
 - `addr_off t off` must emit the BARE `t` when `off = 0`, or a register the
   loop does not move stops matching the term the executor builds.
-- `cbn` must be told the record projections (`cs_pub cs_var cs_bind cs_off
+- `cbn` must be told the record projections (`cell_is_public cell_base_var cell_binder cell_offset
   addr_off bv.eqb`) or the goal keeps whole `{| ... |}` literals in every
   position and `iIntros` runs past a 30 s timeout on a 20k-char goal.
 - `iApply (loop_cell_shift "v0" "v1" _ _ _ _ x y)` -- leave the TERMS as `_`.
@@ -1678,37 +1678,37 @@ still show:
 
 ## 4a. The reservoir's ORIGIN (2026-09-13)
 
-The gap §3z left: every loop theorem so far *assumes* the reservoir. `loop_inv`
+The gap §3z left: every loop theorem so far *assumes* the reservoir. `loop_invariant`
 carries `Fr n`, the trip step trades with it, trip 0 is empty -- but nothing
 said where a caller GETS one, so none of the machinery could be instantiated
 from a real program state. Closed (commit e5f08c00).
 
-- **`loop_res_intro`** -- the general statement, and it is almost a tautology
+- **`loop_reservoir_intro`** -- the general statement, and it is almost a tautology
   once said out loud: a reservoir IS a block of per-trip resources, so
   producing one is producing `A` at each future trip's valuation.
-  `([∗ list] i ∈ seq 0 n, blk i) ⊢ loop_res A iota q n` given
+  `([∗ list] i ∈ seq 0 n, blk i) ⊢ loop_reservoir A iota q n` given
   `blk i ⊢ interp A (iota i)`. Two lines (`big_sepL_mono`).
 - **`mem_word a`** -- one word at a PUBLIC address, contents arbitrary, stated
   as `asn.interpret` over a one-variable context so it is the same object the
   cells are.
-- **`loop_res_words`** -- the case that occurs: a loop walking an array of
+- **`loop_reservoir_words`** -- the case that occurs: a loop walking an array of
   words. The caller hands over `n` cells at addresses it names, and the
   per-trip obligation collapses to ONE arithmetic fact about `addr i`.
 
-Demonstrated on C (`lc_reservoir`): C walks DOWN from its start pointer, so
+Demonstrated on C (`shiftdown_ptr_reservoir_block`): C walks DOWN from its start pointer, so
 what a caller must hand it is the n words BELOW that pointer --
 `pe, pe+4, …, pe+4(n-1)` -- and the proof is four lines:
 
 ```coq
-  apply (loop_res_words (MkCellSpec "v0" "p1" (bv.of_N 4294967292) false) … eq_refl).
+  apply (loop_reservoir_words (MkCellSpec "v0" "p1" (bv.of_N 4294967292) false) … eq_refl).
   intros i v. cbn.
   replace (pe + 4 * (N.of_nat i + 1))%N with ((pe + 4 * N.of_nat i) + 4)%N by lia.
   f_equal. exact (bv_of_N_wrap_dec 4 (pe + 4 * N.of_nat i)%N ltac:(bv_bound)).
 ```
 
-`loop_res_words` covers a ONE-cell reservoir, which is exactly the sliding-
+`loop_reservoir_words` covers a ONE-cell reservoir, which is exactly the sliding-
 window loops (C, B) -- the shape where the reservoir is load-bearing. A
-multi-cell reservoir (D, F, Tail) goes through `loop_res_intro` with a
+multi-cell reservoir (D, F, Tail) goes through `loop_reservoir_intro` with a
 per-trip supply; no separate lemma, because the cells there are independent
 and the caller names them anyway.
 
@@ -1718,7 +1718,7 @@ and the caller names them anyway.
   loop gives nothing back. A caller that owned an array before the loop has
   handed it away permanently. For a straight-line cut after the loop that is
   fine; for a caller that needs the array afterwards it is not, and the fix is
-  the mirror of this lemma (`loop_res` of the CONSUMED prefix, returned by the
+  the mirror of this lemma (`loop_reservoir` of the CONSUMED prefix, returned by the
   exit) which does not exist.
 - The address function is the caller's to invent. There is no lemma saying
   "`bv.seqBv base (4*n)` gives you `addr i = base + 4i`"; each caller writes
@@ -1731,8 +1731,8 @@ memory in its frame, so its ambient `Fr` is constant. **Loop D is now assembled
 too** (`Example/ZZLoopDThm.v`, 21.7 s, no admits):
 
 ```coq
-Lemma lds_loop (Out Post : iProp Σ) (HP0 : ldP pe p7e 0) (HOut …) (Hcont …) :
-  forall n, ldInv n -∗ myWP2_loop Post.
+Lemma mulinner_loop_runs (Out Post : iProp Σ) (HP0 : mulinner_trip_bound pe p7e 0) (HOut …) (Hcont …) :
+  forall n, mulinner_invariant n -∗ myWP2_loop Post.
 ```
 
 D walks TWO pointers, so its `Fr` is genuinely trip-indexed -- the invariant
@@ -1741,13 +1741,13 @@ first loop theorem where §4a's machinery is load-bearing rather than decorative
 
 What the assembly needed beyond the obligations §3z already had:
 
-- **an EXIT contract.** Only divrem had one. `ld_out` is the register block with
-  the walking pointer released (`(A1, true, PVExist) :: ld_regs`) -- "some
+- **an EXIT contract.** Only divrem had one. `mulinner_exit_post` is the register block with
+  the walking pointer released (`(A1, true, PVExist) :: mulinner_regs`) -- "some
   public value", the same choice divrem makes -- and `valid_ld_final` is a
   bare `solve_seg`.
-- **a trip predicate over TWO bounds.** `ldP pe p7e n` is a conjunction; the
+- **a trip predicate over TWO bounds.** `mulinner_trip_bound pe p7e n` is a conjunction; the
   per-trip facts then need weakening from `S n` to `n`, which is `lia` but must
-  be done in TACTIC position (`intros HP; unfold ldP in HP; apply …; [lia|…]`).
+  be done in TACTIC position (`intros HP; unfold mulinner_trip_bound in HP; apply …; [lia|…]`).
   Passing `proj1 HP` directly does not typecheck -- the bound at `S n` is
   stronger, not equal.
 
@@ -1828,16 +1828,16 @@ Not applied: `Contracts.v` is the shared solver surface every example depends
 on, so it wants a full rebuild and the gate behind it, not a drive-by edit at
 the end of a session. Flagged for a decision.
 
-## 4d. ONE LEMMA PER LOOP: `loop_all` + `loop_edge_std` (2026-09-13)
+## 4d. ONE LEMMA PER LOOP: `loop_runs` + `loop_back_edge_std` (2026-09-13)
 
 The goal stated in §4a -- "one lemma covering every example, with the
 example-specific logic as an argument, just like `cfg_instrs_endToEnd`" -- is
 reached by TWO lemmas in `GenCompose.v`, not one, and the split is deliberate.
 
-### `loop_all` -- the assembly
+### `loop_runs` -- the assembly
 
 Replaces the per-example `<x>s_step` / `<x>s_exit` / `<x>s_loop` triple (three
-lemmas, each re-spelling `loop_inv`'s six arguments twice) with one
+lemmas, each re-spelling `loop_invariant`'s six arguments twice) with one
 application. Its arguments group as:
 
 | group | arguments | in practice |
@@ -1849,26 +1849,26 @@ application. Its arguments group as:
 | **THE OBLIGATIONS** | `Hg` `Hxg` `Hedge` | guard, exit guard, back edge |
 | the cut | `HOut` `Hcont` | what the loop hands the next segment |
 
-The FRAME is no longer a separate obligation: it lives inside `loop_edge`.
+The FRAME is no longer a separate obligation: it lives inside `loop_back_edge`.
 
-### `loop_edge_std` -- the back edge, from the data
+### `loop_back_edge_std` -- the back edge, from the data
 
-`loop_edge` is a `Prop`, so it can be BUILT. `loop_edge_std` is
-`loop_trans` over `loop_frame_std` over `loop_extra_step`, and leaves seven
+`loop_back_edge` is a `Prop`, so it can be BUILT. `loop_back_edge_std` is
+`loop_counter_transfer` over `loop_frame_transfer` over `loop_extra_transfer`, and leaves seven
 goals, each genuinely the loop's own: the counter read off both trips and its
 step (3), the bases still in range (1), and the walk / dropped pure facts /
 cell trade (3). `Hea`/`Hean` are `eq_refl` because `ls_extra_*` was defined as
 the generator applied to the loop's own lists -- that is the payoff for §5's
 extra-as-data.
 
-Kept separate from `loop_all` because a loop whose footprint does not move
+Kept separate from `loop_runs` because a loop whose footprint does not move
 (divrem) does not want the data-shaped arguments at all: it passes its own
-`loop_edge` and skips `loop_edge_std` entirely. One lemma for both would have
+`loop_back_edge` and skips `loop_back_edge_std` entirely. One lemma for both would have
 to carry the union.
 
 ### Converted
 
 `ZZLoopDThm.v` (pointer loop) and `ZZDvLoopThm.v` (counter loop) each collapse
-to ONE `loop_all`; `ZZLoopTransCheck.v` (D) and `ZZLoopTransCheck2.v`
+to ONE `loop_runs`; `ZZLoopTransCheck.v` (D) and `ZZLoopTransCheck2.v`
 (F, C, Tail, B) each collapse `<x>_frame` + `<x>_trans_closed` to ONE
-`loop_edge_std`. All five back edges now have byte-identical structure.
+`loop_back_edge_std`. All five back edges now have byte-identical structure.

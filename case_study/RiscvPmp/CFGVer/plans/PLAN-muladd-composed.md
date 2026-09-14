@@ -1223,9 +1223,9 @@ class of reduction fighting.
   so the `iDestruct` pattern needs an inner group:
   `"(Hw1 & Hw2 & Hw3 & (Hr1 & … & Hr11) & Hw5)"`.  Flattening it as sixteen
   atoms silently mis-binds.
-- **dvCtx and dvfCtx are two definitions with identical bodies** (as are
-  dvI/dvfI, dv_pre_regs/dvf_pre_regs, dv_reg_asn/dvf_reg_asn).  `dv_exit` mixes
-  them — the invariant is at dvCtx, dvFinal's contract at dvfCtx — so BOTH must
+- **divrem_ctx and dvfCtx are two definitions with identical bodies** (as are
+  divrem_iota/dvfI, dv_pre_regs/dvf_pre_regs, dv_reg_asn/dvf_reg_asn).  `dv_exit` mixes
+  them — the invariant is at divrem_ctx, dvFinal's contract at dvfCtx — so BOTH must
   be unfolded before `iFrame`.  Once reduced to `x5 ↦ᵣ …` the two sides match
   term-for-term.
 - At the concrete `kv = 2` of the exit, pc-eq AND the negated guard both simply

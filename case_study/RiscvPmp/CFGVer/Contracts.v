@@ -460,7 +460,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       with SyncVal p => p | NonSyncVal _ _ => False end ->
       (* D is a plain Z, NOT `Z.of_N D`: the goal's offset arrives as a Z
          LITERAL, and unifying `Z.of_N ?D` with `4` would require inverting
-         Z.of_N -- the same trap as seg_wf_Z. *)
+         Z.of_N -- the same trap as seg_fits_Z. *)
       @eq Z (Z.add (Z.of_N (bv.bin cbv)) D) (Z.of_N (bv.exp2 xlenbits)) ->
       (A <= B + D)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)

@@ -58,7 +58,7 @@ Import RiscvPmpProgram.
 (* GenContract.v does a non-Local `Set Implicit Arguments`, which persists into
    every file that Requires it.  It is what makes `itable_faith_of_segment`'s
    pre/seg/post positional-only-and-unnameable (ZZMladTail.v records that trap)
-   and it silently turned `iota` implicit on a first draft of seg_step.  Turn it
+   and it silently turned `iota` implicit on a first draft of seg_run.  Turn it
    off HERE so this file's own signatures are predictable; `Local` keeps the
    change from leaking on to consumers, and implicit-argument marks are baked in
    at definition time, so consumers see the explicit signatures regardless. *)
@@ -148,78 +148,78 @@ Lemma seg_addr_add (ia off : N) :
   seg_addr ia off = bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits off).
 Proof. unfold seg_addr. now rewrite bv.of_N_add. Qed.
 
-Definition seg_wf (ia bound : N) : Prop := (ia + bound <= lenAddr)%N.
+Definition seg_fits_memory (ia bound : N) : Prop := (ia + bound <= lenAddr)%N.
 
 (* ia is representable, so bv.of_N does not truncate it. *)
-Lemma seg_wf_bin (ia bound : N) (H : seg_wf ia bound) :
+Lemma seg_fits_bin (ia bound : N) (H : seg_fits_memory ia bound) :
   bv.bin (@bv.of_N xlenbits ia) = ia.
-Proof. apply bv.bin_of_N_small. pose proof lenAddr_rep. unfold seg_wf in H. lia. Qed.
+Proof. apply bv.bin_of_N_small. pose proof lenAddr_rep. unfold seg_fits_memory in H. lia. Qed.
 
 (* the form fetch_bound_step_Z / sep_contract_mem_read want *)
-Lemma seg_wf_max (ia bound : N) (H : seg_wf ia bound) :
+Lemma seg_fits_max (ia bound : N) (H : seg_fits_memory ia bound) :
   (bv.bin (@bv.of_N xlenbits ia) + bound <= maxAddr)%N.
 Proof.
-  rewrite (seg_wf_bin ia bound H). unfold seg_wf in H.
+  rewrite (seg_fits_bin ia bound H). unfold seg_fits_memory in H.
   unfold maxAddr, minAddr. lia.
 Qed.
 
 (* the form gen_seg_contract's base-bound conjunct wants *)
-Lemma seg_wf_Z (ia bound : N) (H : seg_wf ia bound) :
+Lemma seg_fits_Z (ia bound : N) (H : seg_fits_memory ia bound) :
   (bv.unsigned (@bv.of_N xlenbits ia) + Z.of_N bound <= Z.of_N lenAddr)%Z.
 Proof.
-  unfold bv.unsigned. rewrite (seg_wf_bin ia bound H).
-  unfold seg_wf in H. lia.
+  unfold bv.unsigned. rewrite (seg_fits_bin ia bound H).
+  unfold seg_fits_memory in H. lia.
 Qed.
 
-(* the form itable_faith_at wants.  Hsz is `reflexivity`-adjacent: bound is
+(* the form instr_table_ok_at wants.  Hsz is `reflexivity`-adjacent: bound is
    chosen >= the program's byte length by construction. *)
-Lemma seg_wf_rep (ia bound : N) (L : list AnnotInstr)
-  (Hsz : (4 * N.of_nat (length L) <= bound)%N) (H : seg_wf ia bound) :
+Lemma seg_fits_rep (ia bound : N) (L : list AnnotInstr)
+  (Hsz : (4 * N.of_nat (length L) <= bound)%N) (H : seg_fits_memory ia bound) :
   (bv.bin (@bv.of_N xlenbits ia) + 4 * N.of_nat (length L) < bv.exp2 xlenbits)%N.
 Proof.
-  rewrite (seg_wf_bin ia bound H). pose proof lenAddr_rep.
-  unfold seg_wf in H. lia.
+  rewrite (seg_fits_bin ia bound H). pose proof lenAddr_rep.
+  unfold seg_fits_memory in H. lia.
 Qed.
 
 (* A SUB-SEGMENT of a well-formed segment is well-formed.  This is what lets a
-   whole chain thread ONE `seg_wf ia bound` for the program instead of a
+   whole chain thread ONE `seg_fits_memory ia bound` for the program instead of a
    separate address-space bound per segment and per cut: every segment's own
    bound, and every data block's, is a shift of the program's. *)
-Lemma seg_wf_shift (ia bound h b : N)
-  (Hfit : (h + b <= bound)%N) (H : seg_wf ia bound) :
-  seg_wf (ia + h) b.
-Proof. unfold seg_wf in *. lia. Qed.
+Lemma seg_fits_shift (ia bound h b : N)
+  (Hfit : (h + b <= bound)%N) (H : seg_fits_memory ia bound) :
+  seg_fits_memory (ia + h) b.
+Proof. unfold seg_fits_memory in *. lia. Qed.
 
 (* ...and the tactic that uses it.  EVERY address-space bound a segment or a
-   data block owes is a shift of the program's single `seg_wf`, so a whole
+   data block owes is a shift of the program's single `seg_fits_memory`, so a whole
    chain can thread ONE well-formedness fact instead of a bound per segment and
    per cut (ZZMladTail.linkFN threads two, Hrep and Hb, and every link after it
    would thread more).
 
-   `seg_wf_bin` is applied at bound 0 purely to get the no-truncation fact
+   `seg_fits_bin` is applied at bound 0 purely to get the no-truncation fact
    `bv.bin (of_N (ia+h)) = ia+h`; the real inequality is then plain lia against
-   the hypothesis.  Applying `seg_wf_Z` directly does NOT work: by the time the
+   the hypothesis.  Applying `seg_fits_Z` directly does NOT work: by the time the
    goal is reduced the byte count is a Z LITERAL, and unifying `Z.of_N ?b` with
    `20` would require inverting Z.of_N. *)
 Ltac seg_bound :=
   unfold bv.unsigned;
   match goal with
-  | [ H : seg_wf ?i ?b |- context[bv.bin (@bv.of_N _ (?i + ?h))] ] =>
-      rewrite (seg_wf_bin (i + h) 0%N (seg_wf_shift i b h 0%N ltac:(lia) H))
-  | [ H : seg_wf ?i ?b |- context[bv.bin (@bv.of_N _ ?i)] ] =>
-      rewrite (seg_wf_bin i b H)
+  | [ H : seg_fits_memory ?i ?b |- context[bv.bin (@bv.of_N _ (?i + ?h))] ] =>
+      rewrite (seg_fits_bin (i + h) 0%N (seg_fits_shift i b h 0%N ltac:(lia) H))
+  | [ H : seg_fits_memory ?i ?b |- context[bv.bin (@bv.of_N _ ?i)] ] =>
+      rewrite (seg_fits_bin i b H)
   end;
-  unfold seg_wf in *; lia.
+  unfold seg_fits_memory in *; lia.
 
 (* An in-range offset does not truncate either -- this packages the
    bv.bin_of_N_small rewrites (8 occurrences) with their side condition
    already discharged. *)
 Lemma seg_addr_bin (ia bound off : N)
-  (Hoff : (off <= bound)%N) (H : seg_wf ia bound) :
+  (Hoff : (off <= bound)%N) (H : seg_fits_memory ia bound) :
   bv.bin (seg_addr ia off) = (ia + off)%N.
 Proof.
   unfold seg_addr. apply bv.bin_of_N_small.
-  pose proof lenAddr_rep. unfold seg_wf in H. lia.
+  pose proof lenAddr_rep. unfold seg_fits_memory in H. lia.
 Qed.
 
 (* DISTINCT offsets give DISTINCT addresses.  This is the obligation every
@@ -228,13 +228,13 @@ Qed.
    chain, once per use. *)
 Lemma seg_addr_neq (ia bound o1 o2 : N)
   (H1 : (o1 <= bound)%N) (H2 : (o2 <= bound)%N) (Hne : o1 <> o2)
-  (H : seg_wf ia bound) :
+  (H : seg_fits_memory ia bound) :
   seg_addr ia o1 <> seg_addr ia o2.
 Proof.
   intros HH. apply (f_equal (@bv.bin xlenbits)) in HH.
   rewrite (seg_addr_bin ia bound o1 H1 H) in HH.
   rewrite (seg_addr_bin ia bound o2 H2 H) in HH.
-  unfold seg_wf in H. lia.
+  unfold seg_fits_memory in H. lia.
 Qed.
 
 (* Advancing a window by d.  The tail proved this inline as `bv_shift4`,
@@ -271,7 +271,7 @@ Ltac bv_bound := pose proof exp2_xlenbits; lia.
    `seg_addr` is the canonical form; `seg_addr_add` is the one conversion, so a
    call site never has to think about which spelling it is holding. *)
 
-(* A declared target IS hit.  (Used by GenCompose.seg_exits_faith.) *)
+(* A declared target IS hit.  (Used by GenCompose.seg_exit_table_ok.) *)
 Lemma seg_exitCond_hit (ia : N) (targets : list N) (t : N) :
   List.In t targets -> seg_exitCond ia targets (seg_addr ia t) = true.
 Proof.
@@ -323,51 +323,51 @@ Qed.
    three are closed and decidable -- they mention only the numbers the caller
    already handed to gen_seg_contract, never the base address or the
    valuation.  Bundling them into one boolean is what lets the two
-   faithfulness obligations be discharged by `eq_refl` INSIDE a seg_step1
+   faithfulness obligations be discharged by `eq_refl` INSIDE a seg_run_single_exit
    application, instead of by four named lemmas per segment (measured on
    segment G: 45 lines of near-byte-identical ritual for two contracts).
 
    `Hoff` is the head = 4 * skip invariant gen_seg_contract documents but
    cannot enforce in its type; `Hskip`/`Hsz` are the sub-table's fit. *)
-Definition seg_ok (prog : list AnnotInstr) (skip : nat)
+Definition seg_placement_ok (prog : list AnnotInstr) (skip : nat)
     (head bound : N) (targets : list N) : bool :=
   andb (andb (N.eqb (N.mul 4 (N.of_nat skip)) head)
              (Nat.leb skip (length prog)))
        (andb (N.leb (N.mul 4 (N.of_nat (length prog))) bound)
              (List.forallb (fun t => N.leb head t) targets)).
 
-Lemma seg_ok_off (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+Lemma seg_placement_off (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
   @eq N (N.mul 4 (N.of_nat skip)) head.
 Proof.
-  unfold seg_ok in H.
+  unfold seg_placement_ok in H.
   apply Bool.andb_true_iff in H as [H _]. apply Bool.andb_true_iff in H as [H _].
   now apply N.eqb_eq.
 Qed.
 
-Lemma seg_ok_skip (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+Lemma seg_placement_skip (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
   Nat.le skip (length prog).
 Proof.
-  unfold seg_ok in H.
+  unfold seg_placement_ok in H.
   apply Bool.andb_true_iff in H as [H _]. apply Bool.andb_true_iff in H as [_ H].
   now apply Nat.leb_le.
 Qed.
 
-Lemma seg_ok_sz (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+Lemma seg_placement_size (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
   (N.mul 4 (N.of_nat (length prog)) <= bound)%N.
 Proof.
-  unfold seg_ok in H.
+  unfold seg_placement_ok in H.
   apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [H _].
   now apply N.leb_le.
 Qed.
 
-Lemma seg_ok_tgts (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_ok prog skip head bound targets = true) :
+Lemma seg_placement_targets (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
   List.Forall (fun t => N.le head t) targets.
 Proof.
-  unfold seg_ok in H.
+  unfold seg_placement_ok in H.
   apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [_ H].
   apply List.Forall_forall. intros t Hin.
   rewrite List.forallb_forall in H. apply N.leb_le. now apply H.
@@ -388,7 +388,7 @@ Qed.
    INVARIANT THE CALLER MUST RESPECT: `head = 4 * skip`.  It is not enforced in
    the type -- head is a byte offset and skip an instruction index -- and
    getting it wrong yields a segment placed at an address whose instructions
-   are not the ones in its sub-table.  GenCompose.itable_faith_at makes the
+   are not the ones in its sub-table.  GenCompose.instr_table_ok_at makes the
    mismatch a PROOF OBLIGATION (`4 * skip = head`), so it cannot pass silently
    once the segment is composed. *)
 (* The address-space bound on ONE base, as a precondition conjunct.  Factored
@@ -409,7 +409,7 @@ Definition gen_seg_contract {Σ : LCtx}
     (* `list AnnotInstr`, NOT `list AST`: cfg_instrs is an AnnotInstr list, so
        with `list AST` here the coercion lands OUTSIDE the slicing
        (`list_AST_AnnotInstr (firstn take (skipn skip prog))`) and can never
-       unify with GenCompose.itable_faith_at's `firstn take (skipn skip L)`
+       unify with GenCompose.instr_table_ok_at's `firstn take (skipn skip L)`
        for `L : list AnnotInstr`.  Taking the AnnotInstr list makes the two
        syntactically identical; a caller with a `list AST` program still just
        writes it and lets the coercion fire at the argument. *)
@@ -512,7 +512,7 @@ Ltac reg_reduce :=
    `Term (Σ ▻ "a" ▻ "an")` does not weaken under `asn.exist "c"`.  Writing
    `term_var "k"` four times is tedious but it is resolution, not proof.
 
-   THE CODE BASE CARRIES NO OFFSET: cfg_placement is `ls_q`, so the contract
+   THE CODE BASE CARRIES NO OFFSET: cfg_placement is `loop_base`, so the contract
    never mentions where the loop sits in the program.  Composition supplies
    q = programBase + head. *)
 
@@ -520,7 +520,7 @@ Ltac reg_reduce :=
    12-bit immediate and ADDS, so a decrement by one is `+ 0xFFFFFFFF`.  Do not
    "simplify" this to a bvsub -- the contract must match the term the executor
    produces or the VC will not discharge (measured 2026-09-11). *)
-Definition ls_step {Σ} (imm : Val ty_xlenbits) (t : Term Σ ty_xlenbits)
+Definition counter_after_step {Σ} (imm : Val ty_xlenbits) (t : Term Σ ty_xlenbits)
     : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits imm).
 
@@ -537,188 +537,188 @@ Definition gen_loop_bounds {Σ : LCtx}
     ⊤%asn bs.
 
 Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
-  { ls_iq     : N            (* ABSOLUTE address of the loop head              *)
-  ; ls_prog   : list AnnotInstr
-  ; ls_skip   : nat          (* first instruction of the body, as a list index *)
-  ; ls_take   : nat          (* how many instructions the body is              *)
-  ; ls_exit   : N            (* fall-through target, RELATIVE to the head      *)
-  ; ls_fuel   : nat
+  { loop_head_addr     : N            (* ABSOLUTE address of the loop head              *)
+  ; loop_prog   : list AnnotInstr
+  ; loop_first_instr   : nat          (* first instruction of the body, as a list index *)
+  ; loop_num_instrs   : nat          (* how many instructions the body is              *)
+  ; loop_exit_off   : N            (* fall-through target, RELATIVE to the head      *)
+  ; loop_fuel   : nat
 
     (* C4: the loop's own CODE base, as a NAME plus its membership proof.  It
-       used to be three fields -- ls_q / ls_q_a / ls_q_an -- because a Term
+       used to be three fields -- loop_base / loop_base_pre / loop_base_post -- because a Term
        does not weaken, so the same variable had to be written once per
        context.  Storing the name and the In-proof instead lets the three
        Terms be DERIVED (below), which makes them agree by construction rather
        than by a convention nothing checked, and makes the composition lemmas'
        Hpa premise follow from Hpl by reflexivity.  In a LoopSpec literal the
        proof is written `_` and resolved by ctx.resolution. *)
-  ; ls_qvar   : string
-  ; ls_qin    : (ls_qvar∷ty_xlenbits ∈ Σ)%katamaran
+  ; loop_base_var   : string
+  ; loop_base_in    : (loop_base_var∷ty_xlenbits ∈ Σ)%katamaran
 
-    (* THE COUNTER: its register, its variable (same treatment as ls_qvar --
-       ls_k_a / ls_k_an / ls_k_anc were one variable at three weakenings), and
+    (* THE COUNTER: its register, its variable (same treatment as loop_base_var --
+       loop_counter_pre / loop_counter_post / loop_counter_post_ex were one variable at three weakenings), and
        its per-trip update. *)
-  ; ls_ctr    : RegIdx
-  ; ls_kvar   : string
-  ; ls_kin    : (ls_kvar∷ty_xlenbits ∈ Σ)%katamaran
-  ; ls_imm    : Val ty_xlenbits
+  ; loop_counter_reg    : RegIdx
+  ; loop_counter_var   : string
+  ; loop_counter_in    : (loop_counter_var∷ty_xlenbits ∈ Σ)%katamaran
+  ; loop_counter_step    : Val ty_xlenbits
 
     (* the classification: registers by spec list, every base with its bound,
        and an escape hatch for what a spec list cannot say -- a walking
        pointer's value, memory cells, anything loop-specific. *)
-  ; ls_regs     : list reg_spec_rel
-  ; ls_bases_a  : list (Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits * N)
-  ; ls_bases_an : list (Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits * N)
-  ; ls_extra_a  : Assertion (Σ ▻ "a"∷ty_xlenbits)
-  ; ls_extra_an : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)
+  ; loop_regs     : list reg_spec_rel
+  ; loop_data_bounds_pre  : list (Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits * N)
+  ; loop_data_bounds_post : list (Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits * N)
+  ; loop_extra_pre  : Assertion (Σ ▻ "a"∷ty_xlenbits)
+  ; loop_extra_post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)
 
     (* the branch, as a predicate on the counter's POST-decrement value.  Two
        fields rather than one plus a negation: Formula is not usefully closed
        under negation, and flipping a relop mechanically would be wrong for
        some comparison. *)
-  ; ls_guard  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
+  ; loop_guard  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
                 -> Formula (Σ ▻ "a"∷ty_xlenbits)
-  ; ls_exitg  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
+  ; loop_exit_guard  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits
                 -> Formula (Σ ▻ "a"∷ty_xlenbits)
   }.
 Arguments LoopSpec : clear implicits.
 Arguments MkLoopSpec {Σ}.
 
 (* THE SIX DERIVED TERMS (C4).  Each is `term_var <name>` at one more binder
-   than the last; `ls_q` and `ls_k_a` are DEFINITIONALLY the `term_var "q"` /
+   than the last; `loop_base` and `loop_counter_pre` are DEFINITIONALLY the `term_var "q"` /
    `term_var "p1"` the LoopSpec literals used to spell out, so collapsing the
    fields changed no contract and re-proved no VC. *)
-Definition ls_q {Σ : LCtx} (ls : LoopSpec Σ) : Term Σ ty_xlenbits :=
-  @term_var Σ (ls_qvar ls) ty_xlenbits (ls_qin ls).
-Definition ls_q_a {Σ : LCtx} (ls : LoopSpec Σ)
+Definition loop_base {Σ : LCtx} (ls : LoopSpec Σ) : Term Σ ty_xlenbits :=
+  @term_var Σ (loop_base_var ls) ty_xlenbits (loop_base_in ls).
+Definition loop_base_pre {Σ : LCtx} (ls : LoopSpec Σ)
     : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits :=
-  @term_var _ (ls_qvar ls) ty_xlenbits (ctx.in_succ (ls_qin ls)).
-Definition ls_q_an {Σ : LCtx} (ls : LoopSpec Σ)
+  @term_var _ (loop_base_var ls) ty_xlenbits (ctx.in_succ (loop_base_in ls)).
+Definition loop_base_post {Σ : LCtx} (ls : LoopSpec Σ)
     : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits :=
-  @term_var _ (ls_qvar ls) ty_xlenbits (ctx.in_succ (ctx.in_succ (ls_qin ls))).
+  @term_var _ (loop_base_var ls) ty_xlenbits (ctx.in_succ (ctx.in_succ (loop_base_in ls))).
 
-Definition ls_k_a {Σ : LCtx} (ls : LoopSpec Σ)
+Definition loop_counter_pre {Σ : LCtx} (ls : LoopSpec Σ)
     : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits :=
-  @term_var _ (ls_kvar ls) ty_xlenbits (ctx.in_succ (ls_kin ls)).
-Definition ls_k_an {Σ : LCtx} (ls : LoopSpec Σ)
+  @term_var _ (loop_counter_var ls) ty_xlenbits (ctx.in_succ (loop_counter_in ls)).
+Definition loop_counter_post {Σ : LCtx} (ls : LoopSpec Σ)
     : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits :=
-  @term_var _ (ls_kvar ls) ty_xlenbits (ctx.in_succ (ctx.in_succ (ls_kin ls))).
-Definition ls_k_anc {Σ : LCtx} (ls : LoopSpec Σ)
+  @term_var _ (loop_counter_var ls) ty_xlenbits (ctx.in_succ (ctx.in_succ (loop_counter_in ls))).
+Definition loop_counter_post_ex {Σ : LCtx} (ls : LoopSpec Σ)
     : Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits ▻ "c"∷ty_xlenbits)
            ty_xlenbits :=
-  @term_var _ (ls_kvar ls) ty_xlenbits
-    (ctx.in_succ (ctx.in_succ (ctx.in_succ (ls_kin ls)))).
+  @term_var _ (loop_counter_var ls) ty_xlenbits
+    (ctx.in_succ (ctx.in_succ (ctx.in_succ (loop_counter_in ls)))).
 
 (* NOT `Arguments … : simpl never`, though that is the obvious way to make
    these behave like the record PROJECTIONS they replace.  It is too blunt:
-   the examples' proofs rely on `cbn` reducing `ls_k_a (ldSpec iq)` -- a
+   the examples' proofs rely on `cbn` reducing `loop_counter_pre (ldSpec iq)` -- a
    projection of a CONCRETE record -- down to `term_var "p1"`, and blocking
    the definition blocks that too.  The problem is only the VARIABLE case, in
-   this file's own latch lemmas, where `cbn` would unfold `ls_k_a ls` into
-   `term_var (ls_kvar ls) …` and strand a `rewrite Hk` written against the
-   folded form.  Those few sites say `cbn -[ls_k_a]` instead. *)
+   this file's own latch lemmas, where `cbn` would unfold `loop_counter_pre ls` into
+   `term_var (loop_counter_var ls) …` and strand a `rewrite Hk` written against the
+   folded form.  Those few sites say `cbn -[loop_counter_pre]` instead. *)
 
-(* What ls_q_a's extra binder costs: nothing.  This is why the composition
+(* What loop_base_pre's extra binder costs: nothing.  This is why the composition
    lemmas need only the BARE placement fact -- the "a"-context one follows.
    (Before C4 the two were independent fields and both had to be supplied.) *)
-Lemma inst_ls_q_a {Σ : LCtx} (ls : LoopSpec Σ) (i : Valuation Σ)
+Lemma inst_loop_base_pre {Σ : LCtx} (ls : LoopSpec Σ) (i : Valuation Σ)
   (w : RelVal ty_xlenbits) :
-  inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q_a ls) (i.["a"∷ty_xlenbits ↦ w])
-  = inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q ls) i.
+  inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base_pre ls) (i.["a"∷ty_xlenbits ↦ w])
+  = inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) i.
 Proof. reflexivity. Qed.
 
-(* THE LOOP'S OWN CODE EXTENT.  The body is `ls_take` instructions starting at
-   `ls_skip`, so it occupies 4*ls_take bytes.  This used to be written by hand
-   as the LEADING entry of ls_bases_a/ls_bases_an, where it had to agree with
-   ls_take (and, for a bottom-tested loop, with ls_exit) and could silently
+(* THE LOOP'S OWN CODE EXTENT.  The body is `loop_num_instrs` instructions starting at
+   `loop_first_instr`, so it occupies 4*loop_num_instrs bytes.  This used to be written by hand
+   as the LEADING entry of loop_data_bounds_pre/loop_data_bounds_post, where it had to agree with
+   loop_num_instrs (and, for a bottom-tested loop, with loop_exit_off) and could silently
    drift; 7/7 loops in the tree had all three equal.  It is now derived, and
    ls_bases_* carry DATA bases only. *)
-Definition ls_bound {Σ : LCtx} (ls : LoopSpec Σ) : N :=
-  (4 * N.of_nat (ls_take ls))%N.
+Definition loop_code_extent {Σ : LCtx} (ls : LoopSpec Σ) : N :=
+  (4 * N.of_nat (loop_num_instrs ls))%N.
 
 (* EVERY base the loop uses, code first.  The code entry used to be written by
-   hand as the head of ls_bases_a/ls_bases_an; deriving it is what lets
-   ls_bound stay the single source of truth, and it keeps the frames below
+   hand as the head of loop_data_bounds_pre/loop_data_bounds_post; deriving it is what lets
+   loop_code_extent stay the single source of truth, and it keeps the frames below
    SYMMETRIC and shaped exactly as they were before A3 -- which is why
-   loop_frame_std, loop_edge and loop_all needed no restructuring. *)
-Definition ls_bases_all_a {Σ : LCtx} (ls : LoopSpec Σ)
+   loop_frame_transfer, loop_back_edge and loop_runs needed no restructuring. *)
+Definition loop_all_bounds_pre {Σ : LCtx} (ls : LoopSpec Σ)
     : list (Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits * N) :=
-  (ls_q_a ls, ls_bound ls) :: ls_bases_a ls.
+  (loop_base_pre ls, loop_code_extent ls) :: loop_data_bounds_pre ls.
 
-Definition ls_bases_all_an {Σ : LCtx} (ls : LoopSpec Σ)
+Definition loop_all_bounds_post {Σ : LCtx} (ls : LoopSpec Σ)
     : list (Term (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) ty_xlenbits * N) :=
-  (ls_q_an ls, ls_bound ls) :: ls_bases_an ls.
+  (loop_base_post ls, loop_code_extent ls) :: loop_data_bounds_post ls.
 
 (* What is the same at entry and exit.  Written once per context because a
    Term does not weaken; the two must agree, and that is a real proof
    obligation at composition, not a convention. *)
-Definition gen_loop_frame_a {Σ : LCtx} (ls : LoopSpec Σ)
+Definition gen_loop_frame_pre {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  ( gen_loop_bounds (ls_bases_all_a ls)
-    ∗ gen_regs_at (ls_q_a ls) (ls_regs ls)
-    ∗ ls_extra_a ls )%asn.
+  ( gen_loop_bounds (loop_all_bounds_pre ls)
+    ∗ gen_regs_at (loop_base_pre ls) (loop_regs ls)
+    ∗ loop_extra_pre ls )%asn.
 
-Definition gen_loop_frame_an {Σ : LCtx} (ls : LoopSpec Σ)
+Definition gen_loop_frame_post {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( gen_loop_bounds (ls_bases_all_an ls)
-    ∗ gen_regs_at (ls_q_an ls) (ls_regs ls)
-    ∗ ls_extra_an ls )%asn.
+  ( gen_loop_bounds (loop_all_bounds_post ls)
+    ∗ gen_regs_at (loop_base_post ls) (loop_regs ls)
+    ∗ loop_extra_post ls )%asn.
 
 (* The counter and the frame.  SHARED by the contracts' preconditions and the
    invariant, which differ only in what each adds.
 
    MIND THE minimal_pre.  CFG_VC_triple already wraps a precondition in
-   extend_to_minimal_pre, so gen_loop_pre must NOT carry it -- a second copy
+   extend_to_minimal_pre, so gen_loop_contract_pre must NOT carry it -- a second copy
    makes the pre demand two and the post return one, i.e. the body consumes
    cur_privilege / inv_leakage every trip and can only run ONCE.  That still
    VERIFIES, so it fails late and only at composition; it is the amBody_post
    bug, and it bit this file too.  The INVARIANT does carry minimal_pre,
    because it describes the whole state at the loop head. *)
-Definition gen_loop_core {Σ : LCtx} (ls : LoopSpec Σ)
+Definition gen_loop_state {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  ( ls_ctr ls ↦ᵣ ls_k_a ls
-    ∗ asn.formula (formula_secLeak (ls_k_a ls))
-    ∗ gen_loop_frame_a ls )%asn.
+  ( loop_counter_reg ls ↦ᵣ loop_counter_pre ls
+    ∗ asn.formula (formula_secLeak (loop_counter_pre ls))
+    ∗ gen_loop_frame_pre ls )%asn.
 
-Definition gen_loop_win {Σ : LCtx} (ls : LoopSpec Σ)
+Definition gen_loop_at_head {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  ( gen_loop_core ls ∗ minimal_pre )%asn.
+  ( gen_loop_state ls ∗ minimal_pre )%asn.
 
 (* ...and the branch decision is the ONLY thing a contract adds.  Note it is
-   applied to ls_step, never to the raw counter: the head decrements, THEN the
+   applied to counter_after_step, never to the raw counter: the head decrements, THEN the
    branch tests, and that off-by-one is now unstateable. *)
-(* NOT `gen_loop_core ∗ guard`, since A3: this is what the contract hands to
+(* NOT `gen_loop_state ∗ guard`, since A3: this is what the contract hands to
    gen_seg_contract as its `extra_pre`, and gen_seg_contract emits the code
-   bound and the register block ITSELF.  So this is gen_loop_core MINUS those
-   two, plus the branch decision -- and gen_loop_win, which is the invariant's
+   bound and the register block ITSELF.  So this is gen_loop_state MINUS those
+   two, plus the branch decision -- and gen_loop_at_head, which is the invariant's
    view, still carries all of it.  The two therefore have the same conjuncts in
-   a different order, which is why loop_step's HPre is an iFrame and not a
+   a different order, which is why loop_body_trip's HPre is an iFrame and not a
    rewrite. *)
-Definition gen_loop_pre {Σ : LCtx} (ls : LoopSpec Σ)
+Definition gen_loop_contract_pre {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  ( ls_ctr ls ↦ᵣ ls_k_a ls
-    ∗ asn.formula (formula_secLeak (ls_k_a ls))
-    ∗ gen_loop_bounds (ls_bases_a ls)
-    ∗ ls_extra_a ls
-    ∗ asn.formula (g (ls_step (ls_imm ls) (ls_k_a ls))) )%asn.
+  ( loop_counter_reg ls ↦ᵣ loop_counter_pre ls
+    ∗ asn.formula (formula_secLeak (loop_counter_pre ls))
+    ∗ gen_loop_bounds (loop_data_bounds_pre ls)
+    ∗ loop_extra_pre ls
+    ∗ asn.formula (g (counter_after_step (loop_counter_step ls) (loop_counter_pre ls))) )%asn.
 
 (* The body's post binds a FRESH variable and states the decrement as a PURE
    equation, rather than putting the computed term in the spatial part.  That
    is what lets the back edge frame like any other cut (measured: it removes
    the valuation-crossing rewrite entirely). *)
-Definition gen_loop_post {Σ : LCtx} (ls : LoopSpec Σ)
+Definition gen_loop_contract_post {Σ : LCtx} (ls : LoopSpec Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( asn.exist "c" ty_xlenbits
-      ( ls_ctr ls ↦ᵣ term_var "c"
+      ( loop_counter_reg ls ↦ᵣ term_var "c"
         ∗ asn.formula (formula_relop bop.eq (term_var "c")
-                         (ls_step (ls_imm ls) (ls_k_anc ls)))
+                         (counter_after_step (loop_counter_step ls) (loop_counter_post_ex ls)))
         ∗ asn.formula (formula_secLeak (term_var "c")) )
-    ∗ gen_loop_frame_an ls )%asn.
+    ∗ gen_loop_frame_post ls )%asn.
 
 (* A3 (PLAN-loop-automation.md): a loop's contract IS an ordinary segment
    contract, entered at head 0 of its own code base.  It used to build a
-   MkCFGVerifierContract by hand, which meant loop_final could compose with a
+   MkCFGVerifierContract by hand, which meant loop_final_contract could compose with a
    following segment but could not be STATED in segment vocabulary.
 
    What changed in the generated contract, and why none of it is cosmetic:
@@ -727,20 +727,20 @@ Definition gen_loop_post {Σ : LCtx} (ls : LoopSpec Σ)
        moves consume-scan positions, so this was measured, not assumed --
        ZZSpikeA3.v verifies both of loop D's contracts, the shape with two
        walking pointers, two cells and three base bounds;
-     - cfg_placement is `ls_q + 0` and cfg_init_addr `ls_iq + 0`, neither
+     - cfg_placement is `loop_base + 0` and cfg_init_addr `loop_head_addr + 0`, neither
        definitionally the bare form, which is why the composition lemmas pick
        up a bv.add_zero_r / N.add_0_r;
-     - cfg_exitCond is unchanged (`seg_exitCond (ls_iq ls) [target]`), because
+     - cfg_exitCond is unchanged (`seg_exitCond (loop_head_addr ls) [target]`), because
        gen_seg_contract takes ia and head separately. *)
 Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N)
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  gen_seg_contract (ls_q ls) (ls_q_a ls) (ls_iq ls) 0
-    (ls_prog ls) (ls_skip ls) (ls_take ls) [target]
-    (ls_bound ls) (ls_fuel ls) (ls_regs ls)
-    (gen_loop_pre ls g) post.
+  gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls) 0
+    (loop_prog ls) (loop_first_instr ls) (loop_num_instrs ls) [target]
+    (loop_code_extent ls) (loop_fuel ls) (loop_regs ls)
+    (gen_loop_contract_pre ls g) post.
 
 (* THE FOUR PROJECTIONS the composition lemmas use, so they never cbn through
    gen_seg_contract's `let place := …`.  Three are eq_refl.  Only the exit
@@ -751,28 +751,28 @@ Lemma gen_loop_place {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_placement (gen_loop_contract ls g target post)
-  = term_binop bop.bvadd (ls_q ls) (term_val ty_xlenbits (bv.of_N 0)).
+  = term_binop bop.bvadd (loop_base ls) (term_val ty_xlenbits (bv.of_N 0)).
 Proof. reflexivity. Qed.
 
 Lemma gen_loop_exitCond {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_exitCond (gen_loop_contract ls g target post)
-  = seg_exitCond (ls_iq ls) [target].
+  = seg_exitCond (loop_head_addr ls) [target].
 Proof. reflexivity. Qed.
 
 Lemma gen_loop_instrs {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_instrs (gen_loop_contract ls g target post)
-  = List.firstn (ls_take ls) (List.skipn (ls_skip ls) (ls_prog ls)).
+  = List.firstn (loop_num_instrs ls) (List.skipn (loop_first_instr ls) (loop_prog ls)).
 Proof. reflexivity. Qed.
 
 Lemma gen_loop_exits {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_exits (gen_loop_contract ls g target post)
-  = exits_of_offs (term_binop bop.bvadd (ls_q ls) (term_val ty_xlenbits (bv.of_N 0)))
+  = exits_of_offs (term_binop bop.bvadd (loop_base ls) (term_val ty_xlenbits (bv.of_N 0)))
       [target].
 Proof.
   unfold gen_loop_contract, gen_seg_contract.
@@ -781,16 +781,16 @@ Qed.
 
 (* BODY: guard holds, back edge to the head (offset 0 -- the loop is stated
    against its own entry address). *)
-Definition loop_body {Σ : LCtx} (ls : LoopSpec Σ) : @CFGVerifierContract Σ :=
-  gen_loop_contract ls (ls_guard ls) 0%N (gen_loop_post ls).
+Definition loop_body_contract {Σ : LCtx} (ls : LoopSpec Σ) : @CFGVerifierContract Σ :=
+  gen_loop_contract ls (loop_guard ls) 0%N (gen_loop_contract_post ls).
 
-(* FINAL: the guard fails, fall out to ls_exit.  Its postcondition is the
+(* FINAL: the guard fails, fall out to loop_exit_off.  Its postcondition is the
    caller's -- that is the cut into whatever follows the loop, and it is
    genuine specification. *)
-Definition loop_final {Σ : LCtx} (ls : LoopSpec Σ)
+Definition loop_final_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  gen_loop_contract ls (ls_exitg ls) (ls_exit ls) post.
+  gen_loop_contract ls (loop_exit_guard ls) (loop_exit_off ls) post.
 
 
 (* head 0 is not definitionally `+ 0`, so the two shapes the composition needs
@@ -798,12 +798,12 @@ Definition loop_final {Σ : LCtx} (ls : LoopSpec Σ)
 Lemma seg_addr_0 (ia : N) : seg_addr ia 0 = @bv.of_N xlenbits ia.
 Proof. unfold seg_addr. f_equal. lia. Qed.
 
-(* A3 made every loop's cfg_placement `ls_q + 0` rather than the bare `ls_q`,
+(* A3 made every loop's cfg_placement `loop_base + 0` rather than the bare `loop_base`,
    because gen_seg_contract always adds its head offset.  The composition
-   lemmas are handed the BARE fact (`inst (ls_q ls) iota = SyncVal q`, which is
+   lemmas are handed the BARE fact (`inst (loop_base ls) iota = SyncVal q`, which is
    reflexivity for a caller whose iota maps "q" to a literal), so these two
    carry it across the `+ 0`.  Stated for a general offset as well, because
-   loop_enter will want the non-zero case. *)
+   loop_enter_from_seg will want the non-zero case. *)
 Lemma inst_addr_plus {R : LCtx} (t : Term R ty_xlenbits) (iota : Valuation R)
   (q : bv xlenbits) (off : N)
   (H : inst (T := fun Σ => Term Σ ty_xlenbits) t iota = ty.SyncVal q) :
@@ -849,7 +849,7 @@ Qed.
 
 (* ---- THE LATCH ------------------------------------------------------------
 
-   `loop_step`/`loop_exit` each leave one obligation about the BRANCH: the
+   `loop_body_trip`/`loop_final_trip` each leave one obligation about the BRANCH: the
    guard holds at trip S n, the exit guard holds at trip 0.  Both are the same
    three moves -- read the counter off the valuation, apply the machine's
    step, compare -- so they are proved ONCE here and instantiated per loop.
@@ -871,20 +871,20 @@ Qed.
 Lemma loop_latch_neq {R : LCtx} (ls : LoopSpec R)
   (i : Valuation (R ▻ "a"∷ty_xlenbits))
   (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (kv w ev : N)
-  (Hg : ls_guard ls = fun t => formula_relop bop.neq t e)
-  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+  (Hg : loop_guard ls = fun t => formula_relop bop.neq t e)
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls) i
         = ty.SyncVal (@bv.of_N xlenbits kv))
   (He : inst (T := fun Σ => Term Σ ty_xlenbits) e i
         = ty.SyncVal (@bv.of_N xlenbits ev))
-  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (loop_counter_step ls) = @bv.of_N xlenbits w)
   (Hw : (w < bv.exp2 xlenbits)%N) (Hev : (ev < bv.exp2 xlenbits)%N)
   (Hne : w <> ev) :
-  instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+  instprop (loop_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls))) i.
 Proof.
-  (* `cbn -[ls_k_a]`, not plain `cbn`: with ls a VARIABLE, cbn unfolds the
-     C4 accessor into `term_var (ls_kvar ls) …` and Hk -- stated against the
+  (* `cbn -[loop_counter_pre]`, not plain `cbn`: with ls a VARIABLE, cbn unfolds the
+     C4 accessor into `term_var (loop_counter_var ls) …` and Hk -- stated against the
      folded form -- then matches nothing. *)
-  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
+  rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
   intros Hc. apply Hne.
   apply (f_equal (@bv.bin xlenbits)) in Hc.
   rewrite (bv.bin_of_N_small Hw) in Hc.
@@ -894,62 +894,62 @@ Qed.
 Lemma loop_latch_eq {R : LCtx} (ls : LoopSpec R)
   (i : Valuation (R ▻ "a"∷ty_xlenbits))
   (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (kv w ev : N)
-  (Hg : ls_exitg ls = fun t => formula_relop bop.eq t e)
-  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+  (Hg : loop_exit_guard ls = fun t => formula_relop bop.eq t e)
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls) i
         = ty.SyncVal (@bv.of_N xlenbits kv))
   (He : inst (T := fun Σ => Term Σ ty_xlenbits) e i
         = ty.SyncVal (@bv.of_N xlenbits ev))
-  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (loop_counter_step ls) = @bv.of_N xlenbits w)
   (Heq : w = ev) :
-  instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+  instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls))) i.
 Proof.
-  (* `cbn -[ls_k_a]`, not plain `cbn`: with ls a VARIABLE, cbn unfolds the
-     C4 accessor into `term_var (ls_kvar ls) …` and Hk -- stated against the
+  (* `cbn -[loop_counter_pre]`, not plain `cbn`: with ls a VARIABLE, cbn unfolds the
+     C4 accessor into `term_var (loop_counter_var ls) …` and Hk -- stated against the
      folded form -- then matches nothing. *)
-  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
+  rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
   now subst w.
 Qed.
 
 Lemma loop_latch_ult {R : LCtx} (ls : LoopSpec R)
   (i : Valuation (R ▻ "a"∷ty_xlenbits)) (b kv w : N)
-  (Hg : ls_guard ls = fun t => formula_relop bop.bvult
+  (Hg : loop_guard ls = fun t => formula_relop bop.bvult
                                  (term_val ty_xlenbits (@bv.of_N xlenbits b)) t)
-  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls) i
         = ty.SyncVal (@bv.of_N xlenbits kv))
-  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (loop_counter_step ls) = @bv.of_N xlenbits w)
   (Hb : (b < bv.exp2 xlenbits)%N) (Hw : (w < bv.exp2 xlenbits)%N)
   (Hlt : (b < w)%N) :
-  instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+  instprop (loop_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls))) i.
 Proof.
-  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ult.
+  rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ult.
   rewrite (bv.bin_of_N_small Hb).
   rewrite (bv.bin_of_N_small Hw). exact Hlt.
 Qed.
 
 Lemma loop_latch_ule {R : LCtx} (ls : LoopSpec R)
   (i : Valuation (R ▻ "a"∷ty_xlenbits)) (b kv w : N)
-  (Hg : ls_exitg ls = fun t => formula_relop bop.bvule t
+  (Hg : loop_exit_guard ls = fun t => formula_relop bop.bvule t
                                  (term_val ty_xlenbits (@bv.of_N xlenbits b)))
-  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls) i
+  (Hk : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls) i
         = ty.SyncVal (@bv.of_N xlenbits kv))
-  (Hstep : bv.add (@bv.of_N xlenbits kv) (ls_imm ls) = @bv.of_N xlenbits w)
+  (Hstep : bv.add (@bv.of_N xlenbits kv) (loop_counter_step ls) = @bv.of_N xlenbits w)
   (Hb : (b < bv.exp2 xlenbits)%N) (Hw : (w < bv.exp2 xlenbits)%N)
   (Hle : (w <= b)%N) :
-  instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls))) i.
+  instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls))) i.
 Proof.
-  rewrite Hg. cbn -[ls_k_a]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ule.
+  rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ule.
   rewrite (bv.bin_of_N_small Hb).
   rewrite (bv.bin_of_N_small Hw). exact Hle.
 Qed.
 
 (* ---- THE LATCH, AS ONE OBLIGATION ---------------------------------------
 
-   `loop_all` asks for two things about the branch: that the GUARD holds at
+   `loop_runs` asks for two things about the branch: that the GUARD holds at
    every trip that still has work, and that the EXIT guard holds at trip 0.
    They are the same branch read two ways, and every loop discharged them as
    two near-identical `refine`s whose bullets were the same six moves --
    differing only in the counter values, which are exactly the values
-   `loop_edge_std` already takes.  `loop_latch_obl` names the pair; the two
+   `loop_back_edge_std` already takes.  `loop_latch_obligation` names the pair; the two
    builders below produce it from the counter alone, so a loop states its
    recurrence ONCE.
 
@@ -957,19 +957,19 @@ Qed.
    `w n` is it after -- the value the branch actually compares.  The trip
    predicate `P` is what separates "still looping" from "done": the guard
    obligation may assume `P (S n)`, the exit obligation gets nothing. *)
-Definition loop_latch_obl {R : LCtx} (ls : LoopSpec R)
+Definition loop_latch_obligation {R : LCtx} (ls : LoopSpec R)
     (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop) : Prop :=
   (forall n, P (S n) ->
-     instprop (ls_guard ls (ls_step (ls_imm ls) (ls_k_a ls)))
+     instprop (loop_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
        ((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q]))
-  /\ instprop (ls_exitg ls (ls_step (ls_imm ls) (ls_k_a ls)))
+  /\ instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
        ((iota 0).["a"∷ty_xlenbits ↦ ty.SyncVal q]).
 
 (* Both builders take their facts as `forall n, P n -> ...`.  That is not
    decoration: a COUNTDOWN's no-wrap bound is FALSE for large n, so an
    unconditional hypothesis could not be discharged at all.  The two
    obligations only ever look at trip `S n` (where the guard half has
-   `P (S n)`) and trip 0 (hence `HP0`, which `loop_all` already carries), so
+   `P (S n)`) and trip 0 (hence `HP0`, which `loop_runs` already carries), so
    this is exactly as strong as it needs to be. *)
 
 (* THE POINTER-COMPARE FAMILY: `bne c, e` / `beq c, e`, where the limit `e` is
@@ -980,10 +980,10 @@ Lemma loop_latch_ptr {R : LCtx} (ls : LoopSpec R)
   (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
   (e : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits) (kv w : nat -> N) (ev : N)
   (HP0 : P 0)
-  (Hg  : ls_guard ls = fun t => formula_relop bop.neq t e)
-  (Hxg : ls_exitg ls = fun t => formula_relop bop.eq t e)
+  (Hg  : loop_guard ls = fun t => formula_relop bop.neq t e)
+  (Hxg : loop_exit_guard ls = fun t => formula_relop bop.eq t e)
   (Hk : forall n, P n ->
-          inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+          inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
             ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
           = ty.SyncVal (@bv.of_N xlenbits (kv n)))
   (He : forall n, P n ->
@@ -991,13 +991,13 @@ Lemma loop_latch_ptr {R : LCtx} (ls : LoopSpec R)
             ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
           = ty.SyncVal (@bv.of_N xlenbits ev))
   (Hstep : forall n, P n ->
-             bv.add (@bv.of_N xlenbits (kv n)) (ls_imm ls)
+             bv.add (@bv.of_N xlenbits (kv n)) (loop_counter_step ls)
              = @bv.of_N xlenbits (w n))
   (Hwb : forall n, P n -> (w n < bv.exp2 xlenbits)%N)
   (Hev : (ev < bv.exp2 xlenbits)%N)
   (Hne : forall n, P (S n) -> w (S n) <> ev)
   (Heq : w 0%nat = ev) :
-  loop_latch_obl ls iota q P.
+  loop_latch_obligation ls iota q P.
 Proof.
   split.
   - intros n HP.
@@ -1014,23 +1014,23 @@ Lemma loop_latch_ctr {R : LCtx} (ls : LoopSpec R)
   (iota : nat -> Valuation R) (q : bv xlenbits) (P : nat -> Prop)
   (b : N) (kv w : nat -> N)
   (HP0 : P 0)
-  (Hg  : ls_guard ls = fun t => formula_relop bop.bvult
+  (Hg  : loop_guard ls = fun t => formula_relop bop.bvult
                                  (term_val ty_xlenbits (@bv.of_N xlenbits b)) t)
-  (Hxg : ls_exitg ls = fun t => formula_relop bop.bvule t
+  (Hxg : loop_exit_guard ls = fun t => formula_relop bop.bvule t
                                  (term_val ty_xlenbits (@bv.of_N xlenbits b)))
   (Hk : forall n, P n ->
-          inst (T := fun Σ => Term Σ ty_xlenbits) (ls_k_a ls)
+          inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
             ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
           = ty.SyncVal (@bv.of_N xlenbits (kv n)))
   (Hstep : forall n, P n ->
-             bv.add (@bv.of_N xlenbits (kv n)) (ls_imm ls)
+             bv.add (@bv.of_N xlenbits (kv n)) (loop_counter_step ls)
              = @bv.of_N xlenbits (w n))
   (Hb : (b < bv.exp2 xlenbits)%N)
   (Hwb : forall n, P n -> (w n < bv.exp2 xlenbits)%N)
   (Hlt : forall n, P (S n) -> (b < w (S n))%N)
   (* `0%nat`: the %N would otherwise make `w`'s ARGUMENT parse as N. *)
   (Hle : (w 0%nat <= b)%N) :
-  loop_latch_obl ls iota q P.
+  loop_latch_obligation ls iota q P.
 Proof.
   split.
   - intros n HP.
@@ -1097,34 +1097,34 @@ Proof. vm_compute. reflexivity. Qed.
    built one are equal by `reflexivity`.
 
    So the loop's `ls_extra_*` can be DATA, and the step across the back edge
-   becomes one lemma (`loop_extra_step`, GenCompose) instead of the same
+   becomes one lemma (`loop_extra_transfer`, GenCompose) instead of the same
    `iSplit` walk written once per loop. *)
 
 (* A register holding an ADDRESS: which register, which Sigma-variable holds
    its value at the loop head, what the BODY adds to it over one trip (zero
    for a register the loop does not move), and whether it is public. *)
 Record walk_reg (Σ : LCtx) : Type := MkWalkReg
-  { wr_reg : RegIdx
-  ; wr_var : string
-  ; wr_in  : (wr_var∷ty_xlenbits ∈ Σ)%katamaran
-  ; wr_off : Val ty_xlenbits
-  ; wr_pub : bool }.
-Arguments MkWalkReg {Σ} wr_reg wr_var {wr_in} wr_off wr_pub.
-Arguments wr_reg {Σ}. Arguments wr_var {Σ}. Arguments wr_in {Σ}.
-Arguments wr_off {Σ}. Arguments wr_pub {Σ}.
+  { walk_register : RegIdx
+  ; walk_var : string
+  ; walk_var_in  : (walk_var∷ty_xlenbits ∈ Σ)%katamaran
+  ; walk_step : Val ty_xlenbits
+  ; walk_is_public : bool }.
+Arguments MkWalkReg {Σ} walk_register walk_var {walk_var_in} walk_step walk_is_public.
+Arguments walk_register {Σ}. Arguments walk_var {Σ}. Arguments walk_var_in {Σ}.
+Arguments walk_step {Σ}. Arguments walk_is_public {Σ}.
 
 (* A memory cell: the binder for its value, the Sigma-variable holding its
    base address, a constant offset from that base, and whether the VALUE is
    public (a walking pointer's target usually is not). *)
 Record cell_spec (Σ : LCtx) : Type := MkCellSpec
-  { cs_bind : string
-  ; cs_var  : string
-  ; cs_in   : (cs_var∷ty_xlenbits ∈ Σ)%katamaran
-  ; cs_off  : Val ty_xlenbits
-  ; cs_pub  : bool }.
-Arguments MkCellSpec {Σ} cs_bind cs_var {cs_in} cs_off cs_pub.
-Arguments cs_bind {Σ}. Arguments cs_var {Σ}. Arguments cs_in {Σ}.
-Arguments cs_off {Σ}. Arguments cs_pub {Σ}.
+  { cell_binder : string
+  ; cell_base_var  : string
+  ; cell_base_in   : (cell_base_var∷ty_xlenbits ∈ Σ)%katamaran
+  ; cell_offset  : Val ty_xlenbits
+  ; cell_is_public  : bool }.
+Arguments MkCellSpec {Σ} cell_binder cell_base_var {cell_base_in} cell_offset cell_is_public.
+Arguments cell_binder {Σ}. Arguments cell_base_var {Σ}. Arguments cell_base_in {Σ}.
+Arguments cell_offset {Σ}. Arguments cell_is_public {Σ}.
 
 (* `t + off`, except that a ZERO offset must produce the bare term: the
    contract has to match the term the executor builds, and a register the loop
@@ -1136,50 +1136,50 @@ Definition addr_off {Σ : LCtx} (t : Term Σ ty_xlenbits) (off : Val ty_xlenbits
 
 (* the walk registers at the loop head ("a") and after one trip ("an"): same
    list, and the only difference is that the "an" side has advanced. *)
-Definition gen_walk_a {Σ : LCtx} (ws : list (walk_reg Σ))
+Definition gen_walk_pre {Σ : LCtx} (ws : list (walk_reg Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
   List.fold_right
     (fun w acc =>
-       let t := @term_var _ (wr_var w) _ (ctx.in_succ (wr_in w)) in
-       (wr_reg w ↦ᵣ t
-        ∗ (if wr_pub w then asn.formula (formula_secLeak t) ∗ acc else acc))%asn)
+       let t := @term_var _ (walk_var w) _ (ctx.in_succ (walk_var_in w)) in
+       (walk_register w ↦ᵣ t
+        ∗ (if walk_is_public w then asn.formula (formula_secLeak t) ∗ acc else acc))%asn)
     ⊤%asn ws.
 
-Definition gen_walk_an {Σ : LCtx} (ws : list (walk_reg Σ))
+Definition gen_walk_post {Σ : LCtx} (ws : list (walk_reg Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   List.fold_right
     (fun w acc =>
-       let t := @term_var _ (wr_var w) _ (ctx.in_succ (ctx.in_succ (wr_in w))) in
-       (wr_reg w ↦ᵣ addr_off t (wr_off w)
-        ∗ (if wr_pub w then asn.formula (formula_secLeak t) ∗ acc else acc))%asn)
+       let t := @term_var _ (walk_var w) _ (ctx.in_succ (ctx.in_succ (walk_var_in w))) in
+       (walk_register w ↦ᵣ addr_off t (walk_step w)
+        ∗ (if walk_is_public w then asn.formula (formula_secLeak t) ∗ acc else acc))%asn)
     ⊤%asn ws.
 
 (* the cells.  Written twice for the same reason every Term is: the two
    contexts differ.  The BINDER's variable is always the head one, hence
    ctx.in_zero; the base needs one more in_succ than the enclosing context. *)
-Definition gen_cells_a {Σ : LCtx} (cs : list (cell_spec Σ))
+Definition gen_cells_pre {Σ : LCtx} (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
   List.fold_right
     (fun c acc =>
-       (asn.exist (cs_bind c) ty_xlenbits
-          (let a := addr_off (@term_var _ (cs_var c) _
-                                (ctx.in_succ (ctx.in_succ (cs_in c)))) (cs_off c) in
-           let v := @term_var _ (cs_bind c) _ ctx.in_zero in
-           if cs_pub c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
+       (asn.exist (cell_binder c) ty_xlenbits
+          (let a := addr_off (@term_var _ (cell_base_var c) _
+                                (ctx.in_succ (ctx.in_succ (cell_base_in c)))) (cell_offset c) in
+           let v := @term_var _ (cell_binder c) _ ctx.in_zero in
+           if cell_is_public c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
            else (a ↦ₘ v)%asn)
         ∗ acc)%asn)
     ⊤%asn cs.
 
-Definition gen_cells_an {Σ : LCtx} (cs : list (cell_spec Σ))
+Definition gen_cells_post {Σ : LCtx} (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   List.fold_right
     (fun c acc =>
-       (asn.exist (cs_bind c) ty_xlenbits
-          (let a := addr_off (@term_var _ (cs_var c) _
-                                (ctx.in_succ (ctx.in_succ (ctx.in_succ (cs_in c)))))
-                     (cs_off c) in
-           let v := @term_var _ (cs_bind c) _ ctx.in_zero in
-           if cs_pub c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
+       (asn.exist (cell_binder c) ty_xlenbits
+          (let a := addr_off (@term_var _ (cell_base_var c) _
+                                (ctx.in_succ (ctx.in_succ (ctx.in_succ (cell_base_in c)))))
+                     (cell_offset c) in
+           let v := @term_var _ (cell_binder c) _ ctx.in_zero in
+           if cell_is_public c then (a ↦ₘ v ∗ asn.formula (formula_secLeak v))%asn
            else (a ↦ₘ v)%asn)
         ∗ acc)%asn)
     ⊤%asn cs.
@@ -1195,12 +1195,12 @@ Definition gen_pures {Σ : LCtx} (fs : list (Formula (Σ ▻ "a"∷ty_xlenbits))
    keeping them apart is what lets the step across the back edge be the
    composition of three independent lemmas (GenCompose: gen_walk_step,
    gen_pures_interp, and the caller's cell trade). *)
-Definition gen_extra_a {Σ : LCtx} (ws : list (walk_reg Σ))
+Definition gen_extra_pre {Σ : LCtx} (ws : list (walk_reg Σ))
     (fs : list (Formula (Σ ▻ "a"∷ty_xlenbits))) (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  (gen_walk_a ws ∗ gen_pures fs (gen_cells_a cs))%asn.
+  (gen_walk_pre ws ∗ gen_pures fs (gen_cells_pre cs))%asn.
 
-Definition gen_extra_an {Σ : LCtx} (ws : list (walk_reg Σ))
+Definition gen_extra_post {Σ : LCtx} (ws : list (walk_reg Σ))
     (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  (gen_walk_an ws ∗ gen_cells_an cs)%asn.
+  (gen_walk_post ws ∗ gen_cells_post cs)%asn.

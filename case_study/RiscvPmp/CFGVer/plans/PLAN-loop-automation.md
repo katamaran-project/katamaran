@@ -4,9 +4,9 @@ Target: once the SPECIFICATION is written, obtaining a loop's contract and
 composing it with its neighbours is an application of a lemma plus a tactic,
 with no hand-written glue.
 
-Written 2026-09-13, after `loop_all` / `loop_edge_std` / `loop_latch_obl` /
-`loop_done` landed (commits 0568430f, e6cd34fc, 554f7cc7) and the composition
-interface was read off an unfolded `ldInv`.
+Written 2026-09-13, after `loop_runs` / `loop_back_edge_std` / `loop_latch_obligation` /
+`loop_completed` landed (commits 0568430f, e6cd34fc, 554f7cc7) and the composition
+interface was read off an unfolded `mulinner_invariant`.
 
 ---
 
@@ -31,7 +31,7 @@ abstraction. `iota : nat -> Valuation R` presupposes a closed form for every
 variable at trip `n`. A linked-list walk (`p := p->next`), a data-dependent
 index, or a variable stride falls outside it — there the pointer at trip `n` is
 determined by the heap, not by `n`, and the representation itself must change
-(`loop_res`'s `[∗ list] i ∈ seq 0 n` becomes a recursive list-segment
+(`loop_reservoir`'s `[∗ list] i ∈ seq 0 n` becomes a recursive list-segment
 predicate, and the per-trip obligation becomes "unfold one step"). That is a
 different development, not a harder instance of this one. Nothing in this plan
 attempts it.
@@ -50,7 +50,7 @@ holds (`cfg_placement`, `cfg_init_addr`). Replace both fields with
 `cfg_exit_offs : list N` and derive. Every call site in the tree already goes
 through these two generators (one hand-rolled `fun v =>` found), so nothing is
 load-bearing. **Payoff beyond tidiness:** storing both lets them drift, and the
-soundness bridge currently has to PROVE they agree (`seg_exits_faith`,
+soundness bridge currently has to PROVE they agree (`seg_exit_table_ok`,
 `etable_rel`). Deriving makes that obligation vanish by construction.
 
 **A2. `extend_to_minimal_post`.** `CFG_VC_triple` wraps the PRE in
@@ -61,14 +61,14 @@ body runs exactly once, failing late and confusingly. Make it structural.
 *Measure*: this puts `minimal_pre` into every VC uniformly, paid at
 `vm_compute` scale on ~30 examples. Expected nil, not free.
 
-**A3. `loop_final` should BE an ordinary segment.** It composes today
-(`loop_exit` is `seg_step1` underneath) but cannot be STATED in ordinary-segment
-vocabulary, because `gen_loop_contract` forces the pre to `gen_loop_core ∗
+**A3. `loop_final_contract` should BE an ordinary segment.** It composes today
+(`loop_final_trip` is `seg_run_single_exit` underneath) but cannot be STATED in ordinary-segment
+vocabulary, because `gen_loop_contract` forces the pre to `gen_loop_state ∗
 guard`. Restate:
 ```
-loop_final ls post := gen_seg_contract ... (extra_pre := gen_loop_core ls ∗ exit-guard) post
+loop_final_contract ls post := gen_seg_contract ... (extra_pre := gen_loop_state ls ∗ exit-guard) post
 ```
-Then `loop_exit` collapses into `seg_step1`, and `loop_step`/`loop_exit` become
+Then `loop_final_trip` collapses into `seg_run_single_exit`, and `loop_body_trip`/`loop_final_trip` become
 one lemma parameterised by the guard and the target.
 
 **A4. Try moving `gen_pures` into `extra_an`.** Every edge proof has an `Hf`
@@ -91,7 +91,7 @@ survives: there are still two vocabularies, just not the two named.
 
 What is actually true: `mem_spec_rel` is relative to the ONE distinguished base
 `"p"` (the code base), with an `N` offset; `cell_spec` is relative to an
-ARBITRARY variable `cs_var ∈ Σ` with a `bv` offset. So data can be addressed
+ARBITRARY variable `cell_base_var ∈ Σ` with a `bv` offset. So data can be addressed
 relative to the CODE, but not relative to an independent data base. cmovznz4
 gets away with one base because its data lives at `p+116 … p+160`, inside the
 code image's tail.
@@ -114,22 +114,22 @@ ways (`before ++ instrs ++ data ++ rest`) and inducts over one contiguous run;
 k runs needs ordering/disjointness hypotheses between the bases. **B1 alone
 buys nothing** — do not do it without committing to B1'.
 
-**B2.** The bridging lemma: whole-program memory precondition ⊢ `loop_res` /
-`loop_done` blocks. `loop_res_words` and `mem_word` are the loop-side half and
+**B2.** The bridging lemma: whole-program memory precondition ⊢ `loop_reservoir` /
+`loop_completed` blocks. `loop_reservoir_words` and `mem_word` are the loop-side half and
 already exist; B1 supplies the other half. This is what makes an array
 expressible end to end.
 
 **B3.** Consequence to check, not assume: a `CFGVerifierContract`'s post is an
 `Assertion Σ` over a FIXED `Σ`, so it can never mention `n` cells. The reservoir
-must therefore still be threaded as `seg_step1`'s opaque `iProp` frame. B1/B2
+must therefore still be threaded as `seg_run_single_exit`'s opaque `iProp` frame. B1/B2
 make the ENDPOINTS expressible; they do not remove that constraint.
 
 ---
 
 ## Phase C — derive the mechanical LoopSpec fields
 
-**C1. Placement and control flow** — `ls_skip`, `ls_take`, `ls_exit`,
-`ls_guard`, `ls_exitg`, `ls_fuel`. All computable from the instruction list: a
+**C1. Placement and control flow** — `loop_first_instr`, `loop_num_instrs`, `loop_exit_off`,
+`loop_guard`, `loop_exit_guard`, `loop_fuel`. All computable from the instruction list: a
 CFG pass finds the back edge and the fall-through, decode gives the branch
 relop, fuel is the step count plus slack. Deliver as a Gallina function
 returning a `LoopSpec` skeleton, with well-formedness `vm_compute`-checkable.
@@ -137,9 +137,9 @@ returning a `LoopSpec` skeleton, with well-formedness `vm_compute`-checkable.
 **C2. `iota` from induction-variable analysis.** **DOWNGRADED 2026-09-13 by
 spike (a): this is a PROJECTION, not an analysis.** It used to be billed as
 "THE big one" and as the largest single piece of real work in the plan; that
-was wrong. Every stride is already DATA in the `LoopSpec` (`−ls_imm` for the
-counter's variable, `−wr_off` for each `walk_reg`'s, 0 for everything else in
-`R`), and the counter's anchor is the unique solution of `loop_latch_obl`. No
+was wrong. Every stride is already DATA in the `LoopSpec` (`−loop_counter_step` for the
+counter's variable, `−walk_step` for each `walk_reg`'s, 0 for everything else in
+`R`), and the counter's anchor is the unique solution of `loop_latch_obligation`. No
 instruction-level analysis is needed to produce `iota` for any loop already
 expressible as a `LoopSpec`. What stays free is one anchor per NON-counter
 walking pointer — exactly the datum a predecessor segment supplies, so it is an
@@ -148,36 +148,36 @@ of the cell trade still hang off it; they just cost less than budgeted.
 Evidence: §Spike results (a), 7/7.
 
 **C3. Derive the trip predicate `P`.** It must imply exactly: the no-wrap
-bounds the latch needs, the address bounds `ls_bases_a` needs, and `n <= tot`.
+bounds the latch needs, the address bounds `loop_data_bounds_pre` needs, and `n <= tot`.
 All three are computable from C2's recurrences plus the bases list. `P_mono` is
 then generated with it.
 
-**C4. Retire the redundant LoopSpec fields.** `ls_q`/`ls_q_a`/`ls_q_an` and
-`ls_k_a`/`ls_k_an`/`ls_k_anc` are one variable at three weakenings; the
+**C4. Retire the redundant LoopSpec fields.** `loop_base`/`loop_base_pre`/`loop_base_post` and
+`loop_counter_pre`/`loop_counter_post`/`loop_counter_post_ex` are one variable at three weakenings; the
 In-proof trick (already demonstrated) collapses each triple to a name plus an
-`∈` proof. This also makes `loop_all`'s `Hpl`/`Hpa` STRUCTURALLY true instead
+`∈` proof. This also makes `loop_runs`'s `Hpl`/`Hpa` STRUCTURALLY true instead
 of `fun _ => eq_refl`.
 
 **C5. The placement bundle.** `pia`/`pbound`/`Hq`/`Hok`/`HokF`/`Hwf` → one
-record. `loop_all` 20 args -> 15.
+record. `loop_runs` 20 args -> 15.
 
 ---
 
 ## Phase D — the obligation tactics
 
 **D1. `solve_latch`** — dispatch on the guard family (`ptr` vs `ctr`) and on
-the SIGN of `ls_imm` (`bv.of_N_add` vs `bv_of_N_wrap_dec`), discharging all
+the SIGN of `loop_counter_step` (`bv.of_N_add` vs `bv_of_N_wrap_dec`), discharging all
 six/seven bullets. Both dispatches are decidable from the LoopSpec.
 
-**D2. `solve_edge`** — the seven `loop_edge_std` bullets. Given C2, the counter
+**D2. `solve_edge`** — the seven `loop_back_edge_std` bullets. Given C2, the counter
 three are determined; the bounds bullet is already a fixed three-tactic script;
 the walk bullet is determined; the cell trade is the affine set computation
 (which cells overlap, which leave, which enter — the difference between D's
 "replace both" and C's "slide by one" is READABLE FROM THE CELL SPECS: whether
 the two offsets share a base variable).
 
-**D3. `loop_enter`** — the missing mirror of `loop_edge_std`: turn a
-predecessor's `seg_exit_at` into `loop_inv n`. Same cross-valuation machinery
+**D3. `loop_enter_from_seg`** — the missing mirror of `loop_back_edge_std`: turn a
+predecessor's `seg_exit_state` into `loop_invariant n`. Same cross-valuation machinery
 (`gen_regs_at_inst`, `loop_reg_shift`, `loop_cell_shift`). Without it every
 composition hand-rolls ~40 lines.
 
@@ -222,7 +222,7 @@ only the outermost two free. Plausibly the largest single remaining win.
 
 **F3. CELL SPECS ARE DERIVABLE.** Phase C derives the control-flow fields but
 not the memory footprint. Given C2's `iota` plus a memory def-use pass over the
-body, the addresses the loop touches per trip fall out — so `ls_extra_a`'s cell
+body, the addresses the loop touches per trip fall out — so `loop_extra_pre`'s cell
 list is derivable. What stays human is whether the caller OWNS them (§0.2) and
 their publicness (§0.1). Narrows the human input further than A-E does.
 
@@ -258,7 +258,7 @@ and a heavier chain.
 ### (a) Does IV analysis actually yield `iota`?  YES — 7/7, and it is a projection.
 
 Checked against every loop in the tree expressed as a `LoopSpec`: A, B, C, D,
-F, Tail (`Example/ZZLoopLatchCheck.v`) and divrem (`dvI`, `Example/ZZDvLoopThm.v`).
+F, Tail (`Example/ZZLoopLatchCheck.v`) and divrem (`divrem_iota`, `Example/ZZDvLoopThm.v`).
 
 Every component of every `iota` has the form `anchor + n · stride`, and **each
 stride is already a literal field of the `LoopSpec`**:
@@ -266,19 +266,19 @@ stride is already a literal field of the `LoopSpec`**:
 | variable in `R` | stride (per unit of n, trips-REMAINING indexing) | where it already lives |
 |---|---|---|
 | the code base `"q"` | 0 | — |
-| the counter (`ls_k_a`'s variable) | `−ls_imm` | `ls_imm` |
-| each walking pointer | `−wr_off` | `walk_reg` in `ls_extra_a` |
+| the counter (`loop_counter_pre`'s variable) | `−loop_counter_step` | `loop_counter_step` |
+| each walking pointer | `−walk_step` | `walk_reg` in `loop_extra_pre` |
 | anything else | 0 (must be, or the loop is out of scope) | — |
 
 So deriving `iota` needs no pass over the instruction list. C1 already has to
 find the strides to build the `LoopSpec` at all; C2 then just reads them back.
 
 **The counter's anchor is FORCED, not chosen.** Writing `counter(n) =
-sentinel − (n+1)·imm` with the sentinel read off `ls_exitg` reproduces all
+sentinel − (n+1)·imm` with the sentinel read off `loop_exit_guard` reproduces all
 seven hand-written values exactly — δ = 1 uniformly, across both relop families
 (`eq`/`neq` and `bvule`/`bvult`), both stride signs (±1, ±4), and both literal
 (A, B, dv) and variable (C, D, F, Tail) sentinels. It is forced because it is
-precisely what `loop_latch_obl` demands, and `loop_latch_obl` is two-sided —
+precisely what `loop_latch_obligation` demands, and `loop_latch_obligation` is two-sided —
 the exit must hold at trip 0 AND the guard at every trip above it. For the
 equality family the exit alone pins it; for the inequality family (A, dv) it
 genuinely takes both: with `counter(n) = a + n`, `exitg` gives `a ≤ 2` and
@@ -370,7 +370,7 @@ bounds): both contracts verify with a bare `solve_param_vc`. All 14 loop VCs
 (7 loops x body+final) then re-verified with **no tactic changes at all**.
 
 Consequences in the generated contract, none cosmetic: `cfg_placement` is
-`ls_q + 0` and `cfg_init_addr` is `ls_iq + 0`, neither definitionally the bare
+`loop_base + 0` and `cfg_init_addr` is `loop_head_addr + 0`, neither definitionally the bare
 form (`N.sub`/`bv.add` do not see through a variable), so the composition
 lemmas pick up an `inst_addr_plus0`. `cfg_exitCond` is unchanged. Four
 projection lemmas (`gen_loop_place`/`_exitCond`/`_instrs`/`_exits`) keep the
@@ -378,31 +378,31 @@ composition layer from ever cbn-ing through `gen_seg_contract`'s
 `let place := …`; three are `eq_refl`, and only `gen_loop_exits` needs work,
 because `t - 0` is STUCK for a variable `t`.
 
-**A3, second half — `loop_step` and `loop_exit` are now ONE lemma.**
-`loop_trip`, parameterised by the guard, the target, the valuation and the
+**A3, second half — `loop_body_trip` and `loop_final_trip` are now ONE lemma.**
+`loop_one_trip`, parameterised by the guard, the target, the valuation and the
 continuation; the two are three-line corollaries. They had been ~40 lines each
 differing only in those four things, with both faith arguments and the entire
 HPre bullet duplicated verbatim.
 
-**Derived: `ls_bound` (= `4 * ls_take`) and the code base's bounds entry.** The
-code extent used to be hand-written as the LEADING entry of `ls_bases_a` /
-`ls_bases_an`, where it had to agree with `ls_take` and (for a bottom-tested
-loop) with `ls_exit`, and nothing checked it. 7/7 loops had all three equal.
-`ls_bases_*` now carry DATA bases only and `ls_bases_all_a/_an` prepend the
+**Derived: `loop_code_extent` (= `4 * loop_num_instrs`) and the code base's bounds entry.** The
+code extent used to be hand-written as the LEADING entry of `loop_data_bounds_pre` /
+`loop_data_bounds_post`, where it had to agree with `loop_num_instrs` and (for a bottom-tested
+loop) with `loop_exit_off`, and nothing checked it. 7/7 loops had all three equal.
+`ls_bases_*` now carry DATA bases only and `loop_all_bounds_pre/_an` prepend the
 derived entry — which is also what keeps the frames symmetric, so
-`loop_frame_std`, `loop_edge`, `loop_edge_std` and `loop_all` needed no
+`loop_frame_transfer`, `loop_back_edge`, `loop_back_edge_std` and `loop_runs` needed no
 restructuring at all. (The first attempt made the frames asymmetric and would
 have rewritten all four; reverted before compiling.)
 
-**C4 — six LoopSpec fields become two.** `ls_q`/`ls_q_a`/`ls_q_an` and
-`ls_k_a`/`ls_k_an`/`ls_k_anc` were one variable at three weakenings each;
-they are now `ls_qvar`/`ls_qin` and `ls_kvar`/`ls_kin` (a name plus its
+**C4 — six LoopSpec fields become two.** `loop_base`/`loop_base_pre`/`loop_base_post` and
+`loop_counter_pre`/`loop_counter_post`/`loop_counter_post_ex` were one variable at three weakenings each;
+they are now `loop_base_var`/`loop_base_in` and `loop_counter_var`/`loop_counter_in` (a name plus its
 membership proof, written `_` in a literal and resolved by `ctx.resolution`),
 with the six Terms derived. Validated in 56 ms before any editing: `_` does
-resolve under record syntax, and `ls_q ls` is DEFINITIONALLY the `term_var "q"`
+resolve under record syntax, and `loop_base ls` is DEFINITIONALLY the `term_var "q"`
 the literals used to spell out — so C4 changed no contract and re-proved no VC.
-It also kills `loop_all`'s `Hpa` premise, since `inst (ls_q_a ls) (i.["a"↦w])
-= inst (ls_q ls) i` is now `reflexivity` (`inst_ls_q_a`).
+It also kills `loop_runs`'s `Hpa` premise, since `inst (loop_base_pre ls) (i.["a"↦w])
+= inst (loop_base ls) i` is now `reflexivity` (`inst_loop_base_pre`).
 
 **C4, continued — `ls_at` deleted.** Spike (a) found it vestigial and
 inconsistent (the counter's `iota` in the three countdown loops, `fun n => n`
@@ -410,8 +410,8 @@ in the four pointer loops) and nothing referenced it outside its own
 declaration. The information is not lost: spike (a)'s closed form derives it.
 
 **C5 — the placement bundle.** `pia`/`pbound`/`Hq`/`Hok`/`HokF`/`Hwf` become
-one `LoopPlace` record; `loop_instrs ls pl` replaces the `ptsto_instrs (… <$>
-instrs_of_list (of_N pia) …)` block every statement re-spelled. `loop_all` goes
+one `LoopPlace` record; `loop_instr_block ls pl` replaces the `ptsto_instrs (… <$>
+instrs_of_list (of_N pia) …)` block every statement re-spelled. `loop_runs` goes
 from **22 arguments to 16**.
 
 **Two traps worth keeping.**
@@ -419,47 +419,47 @@ from **22 arguments to 16**.
 1. **Do NOT make the C4 accessors `Arguments … : simpl never`.** It looks right
    — it restores the stuck-on-a-variable behaviour of the record projections
    they replace — and it fixes this file's own latch lemmas. But it is too
-   blunt: every example proof relies on `cbn` reducing `ls_k_a (ldSpec iq)`, a
+   blunt: every example proof relies on `cbn` reducing `loop_counter_pre (mulinner_spec iq)`, a
    projection of a CONCRETE record, down to `term_var "p1"`, and blocking the
    definition blocks that too. The problem is only the VARIABLE case, in six
    sites inside `GenSegment.v` and `GenCompose.v`, which say
-   `cbn -[ls_k_a]` / `cbn -[ls_q_a]` / `cbn -[ls_k_anc]` instead.
-2. **`ls_bound` is not cbn-reducible in the bounds bullet.** `cbn` will not
+   `cbn -[loop_counter_pre]` / `cbn -[loop_base_pre]` / `cbn -[loop_counter_post_ex]` instead.
+2. **`loop_code_extent` is not cbn-reducible in the bounds bullet.** `cbn` will not
    delta-expand it (its body starts with a multiplication, not a match), so the
-   standard `loop_bound_le` incantation needs `try unfold ls_bound` for the
+   standard `loop_bound_le` incantation needs `try unfold loop_code_extent` for the
    code base. The `try` is because the data bases are still literals; if it ever
    fails to fire where it should, the following `lia` fails loudly.
 
 ---
 
-## Step 2 results (2026-09-13) — D3 `loop_enter`
+## Step 2 results (2026-09-13) — D3 `loop_enter_from_seg`
 
-**Delivered (GenCompose.v):** `loop_entry` (the assertion-level obligation, as
-a named Prop mirroring `loop_edge`), `loop_enter` (turns a predecessor's
-`seg_exit_at` into `loop_inv n`), and `seg_then_loop` (`seg_seq` with the cut
+**Delivered (GenCompose.v):** `loop_entry_obligation` (the assertion-level obligation, as
+a named Prop mirroring `loop_back_edge`), `loop_enter_from_seg` (turns a predecessor's
+`seg_exit_state` into `loop_invariant n`), and `seg_then_loop` (`seg_then` with the cut
 filled in — run the predecessor, land in the loop, run the loop). All three
 compiled first try.
 
 **The premise that justified promoting this was right.** Nothing in the tree
-had ever ENTERED a loop: `seg_exit_at` appeared only as a loop's *output*, in
-`loop_exit`. So the entry side really was analysis-only.
+had ever ENTERED a loop: `seg_exit_state` appeared only as a loop's *output*, in
+`loop_final_trip`. So the entry side really was analysis-only.
 
 **The analysis HELD.** Exercised on the one real loop-entry site in the tree —
 `sgL` (muladd instrs 250..263, head 1000) falls through at offset 1056, which
-is exactly the tail loop's head (`ls_skip` 264). Probe:
+is exactly the tail loop's head (`loop_first_instr` 264). Probe:
 `Example/ZZSpikeEnter.v` / `ZZSpikeEnterA.v` (untracked).
 
 - The two sides are in DIFFERENT contexts (`["p"]` vs
-  `ltCtx = ["q";"ap";"bp";"e"]`), as predicted — and `loop_reg_shift` /
+  `subword_ctx = ["q";"ap";"bp";"e"]`), as predicted — and `loop_reg_shift` /
   `loop_cell_shift` are ALREADY `{R1 R2 : LCtx}`, so the back edge's
   cross-valuation machinery transfers to the entry direction unchanged. That
   was the main thing in doubt.
-- The entry arithmetic is FORCED, not chosen: `iotaT`'s `bp(n) = pe - 4(n+1)`
+- The entry arithmetic is FORCED, not chosen: `subword_iota`'s `bp(n) = pe - 4(n+1)`
   plus sgL handing over A4 = p+1144 and A2 = p+1152 pins `pe = ia+1152` and
   `n = 1`; A0 = p+1132 then pins `ape = ia+1140`; and `tot = 1` because
-  `loop_done`'s window must be empty at entry. All of that agrees with
+  `loop_completed`'s window must be empty at entry. All of that agrees with
   `sgL_post`'s own comment ("exactly two trips").
-- `loop_res` at trip 0 is EXACTLY sgL's declared second window (p+1136 /
+- `loop_reservoir` at trip 0 is EXACTLY sgL's declared second window (p+1136 /
   p+1148). The reservoir lines up with no adjustment.
 - The resources the loop never touches (four spill slots, X2/S0-S3, the
   program bound) frame with a bare `iFrame`.
@@ -470,7 +470,7 @@ abandoned; `Example/ZZSpikeEnter{,A}.v` have been deleted. The replacement,
 same thing the hand version could not.
 
 **What was wrong was the LAYER, not the tactics.** `sgL_post` and
-`gen_loop_win (ltSpec …)` describe the same machine state in two spellings, and
+`gen_loop_at_head (subword_spec …)` describe the same machine state in two spellings, and
 I was reconciling them resource by resource inside Iris. Two separate blowups
 made that visible before the diagnosis did:
 
@@ -484,17 +484,17 @@ made that visible before the diagnosis did:
   unfolded `sgL_post` is what costs.
 
 **The fix is F2, made concrete: GENERATE the cut assertion from the successor's
-precondition.** A predecessor's post is stated as `subst (gen_loop_win ls) ζ ∗
+precondition.** A predecessor's post is stated as `subst (gen_loop_at_head ls) ζ ∗
 Rest`, and the entry obligation stops being a separation-logic proof and
 becomes a VALUATION EQUALITY. Three pieces:
 
 1. **`asn.interpret_subst`** (`theories/Syntax/Assertions.v`) — substitute then
    interpret = interpret under the substituted valuation. Did not exist; ~20
    lines by induction, needing a new `interpret_chunk_subst` in `Chunks.v`.
-2. **`loop_entry_subst`** (GenCompose) — six lines of proof. `ζ` does BOTH jobs
+2. **`loop_entry_by_subst`** (GenCompose) — six lines of proof. `ζ` does BOTH jobs
    at once: it carries the predecessor's context `S` to the loop's `R` (sgL is
    at `["p"]`, the tail loop at `["q";"ap";"bp";"e"]`) AND absorbs the extra
-   `"an"` binder, so no separately shifted copy of `gen_loop_win` is needed.
+   `"an"` binder, so no separately shifted copy of `gen_loop_at_head` is needed.
 3. **`Rest` is not optional.** A predecessor's post must return everything its
    PREcondition consumed or the executor drops it — sgL owns ten data cells and
    hands the loop two. So the cut is `successor's precondition ∗ frame`, and
@@ -517,38 +517,38 @@ composes sgL with the tail loop end to end: axiom-clean, no `admit`, whole file
 27 s. It is the first time anything in this tree has ENTERED a loop. Four
 things had to be added on the way, and three of them are reusable:
 
-- **`seg_step_pinned`** (GenCompose) — sgL declares TWO exits (the
+- **`seg_run_pinned_exit`** (GenCompose) — sgL declares TWO exits (the
   fall-through into the loop and a branch that skips it when the trip count is
-  zero), so `seg_step1`, which pins the exit from the exit CONDITION, does not
+  zero), so `seg_run_single_exit`, which pins the exit from the exit CONDITION, does not
   apply. When the postcondition says which exit was taken, the segment can
   still be composed as single-exit, and the VC then has to prove the others
   unreachable — which is where that obligation belongs. Adding `an = p+1056`
   to sgL's post left `solve_param_vc` unchanged, so the skip really is dead.
-- **`loop_edge_frame`** (GenCompose) — an edge proved for one frame holds for
+- **`loop_back_edge_frame`** (GenCompose) — an edge proved for one frame holds for
   that frame plus a constant carry, which is how a predecessor's leftovers
   (spill slots, callee-saved block) thread through a loop whose edge lemma was
   stated for the reservoir alone.
-- **The RESERVOIR is also a substitution.** `loop_res` is an iProp built from a
+- **The RESERVOIR is also a substitution.** `loop_reservoir` is an iProp built from a
   `[∗ list]` and so cannot BE a postcondition (B3) — but at a CONCRETE entry
   trip count it is finitely many copies of the loop's own cell assertion, each
   that assertion substituted at that trip's valuation. So the same mechanism
-  covers it; `sgL_rest` carries `subst (gen_cells_a lt_cellspecs) ltZeta0`.
-- **`lt_out` / `valid_lt_final`** — `ZZLoopTailProbe` only ever stated the loop
-  BODY's contract. `loop_all` needs both.
+  covers it; `sgL_rest` carries `subst (gen_cells_pre subword_cells) subword_reservoir_subst`.
+- **`subword_exit_post` / `valid_lt_final`** — `ZZLoopTailProbe` only ever stated the loop
+  BODY's contract. `loop_runs` needs both.
 
-**A SECOND BUG, and a worse one than the `or` slip.** `LoopPlace`'s `lp_ok` /
-`lp_okF` stated their target lists HEAD-RELATIVE (`[0%N]`, `[ls_exit ls]`) —
-the convention a loop's EXIT table uses. But `seg_ok`'s last conjunct is
+**A SECOND BUG, and a worse one than the `or` slip.** `LoopPlace`'s `place_body_table_ok` /
+`place_exit_table_ok` stated their target lists HEAD-RELATIVE (`[0%N]`, `[loop_exit_off ls]`) —
+the convention a loop's EXIT table uses. But `seg_placement_ok`'s last conjunct is
 `forallb (fun t => head <=? t) targets` with `head = 4*skip`, so `1056 <=? 0`
 made the field **unsatisfiable for every loop at a nonzero offset**. Every loop
-theorem taking it as a hypothesis — `ZZLoopDThm.lds_loop`,
-`ZZDvLoopThm.dvs_loop` — was therefore VACUOUS, and nobody noticed because the
+theorem taking it as a hypothesis — `ZZLoopDThm.mulinner_loop_runs`,
+`ZZDvLoopThm.divrem_loop_runs` — was therefore VACUOUS, and nobody noticed because the
 premise was always assumed and never discharged. It surfaced only here, where
-`ltPlace` had to actually *prove* it and `vm_compute` answered `false`.
-`seg_itable_faith`, the only consumer, uses just `seg_ok`'s offset/skip/size
+`subword_place` had to actually *prove* it and `vm_compute` answered `false`.
+`seg_instr_table_ok`, the only consumer, uses just `seg_placement_ok`'s offset/skip/size
 parts and ignores the targets, so the fix is to state them program-relative
 (`4*skip + target`). No tracked end theorem was affected — none goes through
-`loop_all` — so nothing false was ever claimed on the trusted surface.
+`loop_runs` — so nothing false was ever claimed on the trusted surface.
 
 ---
 
@@ -566,7 +566,7 @@ and into `Adequacy.v`, so B drops to last and acquires a go/no-go.
 **1. A3 + C4 + C5 — the loop layer's own cleanup. DONE 2026-09-13.** See
 §Step 1 results below.
 
-**2. D3 (`loop_enter`). DONE 2026-09-13** — see §Step 2 results below.
+**2. D3 (`loop_enter_from_seg`). DONE 2026-09-13** — see §Step 2 results below.
 
 **3. C1, C2, C3 — PROMOTED past A1/A2 and past B.** Two reasons from spike (a):
 C2 is a projection off fields C1 must compute anyway, so C1→C2 is nearly free
