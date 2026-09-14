@@ -552,6 +552,77 @@ parts and ignores the targets, so the fix is to state them program-relative
 
 ---
 
+## Step 3 results (2026-09-14) — C1 landed (narrow form)
+
+**What it is.** `GenSegment.v` gained `LoopShape` + `loop_shape_at`, which
+derives six of a LoopSpec's fields from the instruction list plus ONE input:
+the back edge's list index. The wide form (scan for a branch whose target is
+at most its own address) was considered and rejected — the caller always knows
+which loop they mean, so naming its back edge costs one number and buys the
+rest.
+
+**Fields derived:** `loop_first_instr`, `loop_num_instrs`, `loop_exit_off`,
+`loop_fuel` (= body length + a caller-supplied slack), `loop_guard`,
+`loop_exit_guard`.
+
+**NOTHING C1 PRODUCES IS TRUSTED, and that is what buys the API.** Every field
+is re-checked downstream — the instruction table by `seg_placement_ok`, the
+extent and both guards by the VC itself. A wrong derivation cannot make a false
+theorem, only fail to prove a true one. So `loop_shape` is TOTAL (empty body as
+the junk value) rather than threading an `option` through every LoopSpec
+literal, with `loop_shape_found` as the `vm_compute`-checkable early error.
+
+**The guards are a TABLE, not a relop flip.** The LoopSpec record's own comment
+warns that "flipping a relop mechanically would be wrong for some comparison",
+and that warning stands — `shape_guards` is six explicit rows (one per `BOP`),
+each naming its exact complement, doubled for whether the counter is the
+branch's first or second operand. It is available for all six only because
+RISC-V's branch conditions are equality plus two total orders, so `not (a <u b)`
+really is `b <=u a` at the same signedness. A generic `formula_not` would have
+been the unsound shortcut. Operand ORDER is preserved rather than normalised,
+because the solver matches terms syntactically.
+
+**Proved, not assumed:** `loop_shape_at_spec` — a `Some` really does mean the
+branch at `back` targets the head (which is what licenses
+`loop_body_contract`'s exit target `0%N`) and the body really is head..back
+inclusive (which is what makes `shape_exit_off` the fall-through).
+
+**Exercised on the two loops that differ, and it reproduces both EXACTLY,
+operand order included:**
+
+| loop | back edge | counter side | derived guard / exit guard |
+|---|---|---|---|
+| `mulinner` (D) | `bne A1, T1, -112` @ idx 218 | rs1 | `neq c e` / `eq c e` |
+| `countdown` (A) | `bltu A5, A4, -96` @ idx 40 | **rs2** | `bvult other c` / `bvule c other` |
+
+`countdown` is the load-bearing one: its counter is the branch's SECOND
+operand, so it exercises the mirrored half of the table, and its "other"
+operand is a `term_val` (a register holding the constant 1) rather than a
+variable. Both `_spec`s now take all six fields from their shape and carry a
+`_shape_values` regression lemma pinning the derived numbers to the
+hand-written ones.
+
+**The risk that did not materialise.** The latch lemmas take
+`Hg : loop_guard ls = fun t => ...` as a HYPOTHESIS, discharged by callers with
+`eq_refl`. A derived guard still closes these by conversion —
+`ZZLoopLatchCheck`, both `ZZLoopTransCheck`s, `ZZLoopDThm`, `ZZSpikeA3` and
+`ZZSpikeEnter2` (the assembled `sgL_then_tail`) all rebuild green with no
+change.
+
+**Two method notes.** (1) The lemma statement AND one interior `assert` both
+had to be respelled with `@eq`/`Z.mul` — infix `=`/`*` in `GenSegment.v`
+elaborate against `Term _ ty.int` (rocq-pitfalls' notation hijack; `Contracts.v`
+already uses the `@eq Z` idiom for the same reason). (2) `lia` does not connect
+`Z.rem _ 4 = 0` to divisibility on its own; that needs an explicit
+`Z.rem_divide` step.
+
+**NOT done, deliberately.** `loop_counter_step` is still hand-written. It is a
+one-instruction body scan (`addi ctr, ctr, imm` with `rd = rs1 = ctr`) and
+would remove the last field that must silently agree with the code, but it is
+C2's input, not C1's output — see C2.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
