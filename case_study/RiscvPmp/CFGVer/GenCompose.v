@@ -1472,6 +1472,107 @@ Section SegCompose.
   Qed.
 
 
+
+  (* ---- D2, CONTINUED: ONE WALKING REGISTER ACROSS THE BACK EDGE ----------
+
+     `Hw`'s element obligation is an existential -- "there is an `x` that the
+     register holds at trip `n` and that it reaches from trip `S n` after its
+     own step" -- and every loop discharged it by guessing `x`, splitting, and
+     then doing the step arithmetic inside the second half with the `addr_off`
+     still folded.  The guess is never a guess: `x` IS the value at trip `n`,
+     which the loop already knows.
+
+     So the only real content is the step arithmetic, and that is exactly the
+     counter's -- a walking register is a counter with its own anchor, which is
+     why C2's vocabulary fits it unchanged.
+
+     ONE lemma, not a down/up pair, because the two directions differ only in
+     how `Hstep` is discharged (a plain increment versus the wrap-around form)
+     and that is the caller's one line either way.  The ZERO-STEP case is
+     handled here rather than left to the caller: `addr_off` deliberately
+     returns the BARE term on a zero offset (a register the loop does not move
+     must be written `r |-> term_var v`, not `v + 0`, or the contract stops
+     matching what the executor builds), so the two branches of that `if` have
+     genuinely different shapes and a caller would have to know which. *)
+  Lemma walk_step_ok {R : LCtx} (v : walk_reg R) (iota : nat -> Valuation R)
+    (q : bv xlenbits) (n : nat) (xn xSn : N)
+    (HSn : inst (T := fun Σ => Term Σ ty_xlenbits)
+             (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
+             (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+           = ty.SyncVal (@bv.of_N xlenbits xSn))
+    (Hn : inst (T := fun Σ => Term Σ ty_xlenbits)
+            (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits xn))
+    (Hstep : bv.add (@bv.of_N xlenbits xSn) (walk_step v) = @bv.of_N xlenbits xn) :
+    exists x : N,
+      inst (T := fun Σ => Term Σ ty_xlenbits)
+        (addr_off (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
+           (walk_step v))
+        (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+      = ty.SyncVal (@bv.of_N xlenbits x)
+   (* `x`, not `xn`, in BOTH conjuncts: the target is `exists x, P x /\ Q x`,
+      and pinning the second to xn would make this a different proposition
+      that happens to be provable -- and would not unify. *)
+   /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+        (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
+        ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      = ty.SyncVal (@bv.of_N xlenbits x).
+  Proof.
+    exists xn. split; [| exact Hn].
+    unfold addr_off. destruct (bv.eqb (walk_step v) bv.zero) eqn:Hz.
+    - (* the register does not move: addr_off is the bare term, and Hstep
+         degenerates to xSn = xn *)
+      assert (walk_step v = bv.zero) as Hz0
+        by (destruct (bv.eqb_spec (walk_step v) bv.zero); congruence).
+      rewrite Hz0 in Hstep. rewrite bv.add_zero_r in Hstep.
+      rewrite HSn. now rewrite Hstep.
+    - (* `cbn in HSn` too, not just the goal: cbn pushes `inst` through the
+         bvadd into a raw `env.lookup_at`, after which HSn's folded LHS
+         matches no subterm. *)
+      cbn. cbn in HSn. rewrite HSn. cbn. now rewrite Hstep.
+  Qed.
+
+  (* The common case, in C2's vocabulary.  `walk_step_ok` alone is LINE-NEUTRAL
+     at a call site -- naming `xn` and `xSn` explicitly costs what dropping the
+     inline `replace` saves, measured.  Taking the ANCHOR and STRIDE instead is
+     what makes it pay: both values are then derived, `Hstep` is proved here
+     from the no-wrap bound, and that bound is the loop's existing hypothesis
+     (C3's `TripDown` clause for this register's axis).  A moving pointer is a
+     counter with its own anchor, so this is D2's counter lemma again. *)
+  Lemma walk_step_down {R : LCtx} (v : walk_reg R) (iota : nat -> Valuation R)
+    (q : bv xlenbits) (n : nat) (a s : N)
+    (Hs : walk_step v = @bv.of_N xlenbits s)
+    (HSn : inst (T := fun Σ => Term Σ ty_xlenbits)
+             (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
+             (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+           = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down a s (S n))))
+    (Hn : inst (T := fun Σ => Term Σ ty_xlenbits)
+            (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
+            ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+          = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down a s n)))
+    (Hle : (s * (N.of_nat n + 2) <= a)%N) :
+    exists x : N,
+      inst (T := fun Σ => Term Σ ty_xlenbits)
+        (addr_off (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
+           (walk_step v))
+        (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+      = ty.SyncVal (@bv.of_N xlenbits x)
+   /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+        (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
+        ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+      = ty.SyncVal (@bv.of_N xlenbits x).
+  Proof.
+    refine (walk_step_ok v iota q n
+              (loop_ctr_down a s n) (loop_ctr_down a s (S n)) HSn Hn _).
+    rewrite Hs. rewrite bv.of_N_add. f_equal.
+    unfold loop_ctr_down. cbn [N.of_nat] in *. lia.
+  Qed.
+
   (* ---- D2: THE BACK EDGE, WITH ITS COUNTER THREE DERIVED -----------------
 
      `loop_back_edge_std` takes ten premises.  Three of them -- the counter at

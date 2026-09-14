@@ -165,9 +165,12 @@ record. `loop_runs` 20 args -> 15.
 
 ## Phase D — the obligation tactics
 
-**D1. `solve_latch`** — dispatch on the guard family (`ptr` vs `ctr`) and on
-the SIGN of `loop_counter_step` (`bv.of_N_add` vs `bv_of_N_wrap_dec`), discharging all
-six/seven bullets. Both dispatches are decidable from the LoopSpec.
+**D1. `solve_latch`** — **CLOSED 2026-09-14 as DONE-BY-C2, not built.** The
+dispatch it describes (guard family; sign of `loop_counter_step`) IS the choice
+between `loop_latch_ptr_affine_down`/`_up` and `loop_latch_ctr_affine_up`, and
+the caller already knows which loop they have. After C2 the latch is three
+short bullets, so the tactic would have saved ~21 lines across seven loops and
+reintroduced a tactic where a lemma now does the work.
 
 **D2. `solve_edge`** — the seven `loop_back_edge_std` bullets. Given C2, the counter
 three are determined; the bounds bullet is already a fixed three-tactic script;
@@ -844,6 +847,56 @@ plan describes and is the hardest.
 `loop_ctr_up` outright, so `do 2 f_equal` closes the counter goals and a
 following `.`-separated tactic errors with "No such goal". Use `;` there, not
 `.`. The other four loops keep a non-trivial residue and do not hit it.
+
+---
+
+## Step 4 results, part 2 (2026-09-14) — `Hw`, and an honest measurement
+
+**Delivered:** `walk_step_ok` and `walk_step_down` (GenCompose.v).
+
+**What the obligation actually is.** `Hw`'s element is an existential — "there
+is an `x` the register holds at trip `n` and reaches from trip `S n` after its
+own step" — and every loop discharged it by guessing `x`, splitting, and doing
+the step arithmetic with the `addr_off` still folded. The guess is never a
+guess: `x` IS the value at trip `n`, which the loop already knows. So the only
+content is the step arithmetic, and that is the counter's: a walking pointer is
+a counter with its own anchor.
+
+**A NEGATIVE result worth recording, because the first version looked right.**
+`walk_step_ok` on its own — taking `xn` and `xSn` as explicit N arguments — is
+LINE-NEUTRAL at a call site (5 lines before, 5 after) and a LOSS on a fixed
+register (1 line before, 2 after). Naming the two values costs exactly what
+dropping the inline `replace` saves. Measured, not estimated.
+
+What makes it pay is taking the ANCHOR and STRIDE instead, i.e. C2's
+vocabulary: both values are then derived, `Hstep` is proved inside from the
+no-wrap bound, and that bound is the loop's EXISTING hypothesis — C3's
+`TripDown` clause for that register's axis. A moving pointer's block goes from
+6 tactic lines to 2.
+
+**Honest total.** ~2 tactic lines saved per moving register (there are four in
+the tree), less 1 per fixed register converted for uniformity (four of those):
+**net about −6 tactic lines across five loops.** That is far smaller than
+"the walk bullet is determined" suggests, and smaller than C1/C2. The durable
+part is not the lines: it is that `Hw`, like the latch and the trip bound, now
+takes its no-wrap fact from the same place as everything else.
+
+**Two traps.** (1) The lemma's conclusion must bind `x` in BOTH conjuncts —
+pinning the second to `xn` gives a different proposition that is still provable
+but will not unify with the `Forall`'s `exists x, P x /\ Q x`. (2) `eq_refl`
+for `walk_step v = bv.of_N s` cannot be passed positionally: `v` is only
+determined by unifying the CONCLUSION with the goal, which happens after the
+argument elaborates. Pass `_` and discharge it as a goal.
+
+**`shiftdown_ctr`'s walking register keeps the general form.** It is the only
+one that moves UP, and its `iota` writes `spb + 4*n` rather than the generated
+`spb + 4*(n+1)`, so no anchor makes the `cbn; reflexivity` premises hold
+syntactically. `walk_step_ok` covers it; a `walk_step_up` would have exactly
+one user and would not fit it.
+
+**Still not done in D2:** the bounds bullet `Hb` (already a fixed three-line
+script), the dropped facts `Hf` (genuinely per-loop), and the cell trade `Hc`
+(the affine set computation — the hardest, and untouched).
 
 ---
 
