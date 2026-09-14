@@ -1717,3 +1717,86 @@ x ++ m ++ stack, so spelling it out per cut is both long and per-cut.
 `gen_regs_any`.** Every cut that carries memory across it needs one, so it
 amortises exactly like §R6's cell trade; without it, step 3's remaining cuts
 each pay a hand-written cell block.
+
+
+# ========================================================================
+# §R10. F -> G STAGE 2 DONE, and the memory carry now GENERATES (2026-09-14)
+# ========================================================================
+
+§R9's blocker is closed and the F -> G cut is complete.
+
+## The blocker, and why it was real
+
+`gen_mem_pre_rel` is hardwired to `Assertion (["p"] ▻ "a")`, so it cannot appear
+in a postcondition at `... ▻ "a" ▻ "an"`. The reason there was no Σ-generic twin
+is structural, and worth keeping:
+
+- `gen_reg_asn_any` takes a `Term Σ` and gets away with it because its `PVExist`
+  branch **never mentions the base inside the existential** (`r ↦ᵣ term_var "v"`);
+  the base appears only in `PVBaseOff`, which has no binder.
+- `gen_mem_asn_rel`'s `PVExist` branch uses the base **inside** the binder
+  (`p + k ↦ₘ term_var "mv"`), so a `Term`-taking version must weaken it, and the
+  only weakening available is `subst _ sub_wk1` -- a recorded Θ(|Σ|²) driver and
+  opaque to `iFrame`. **GenSegment §4 declined to build it for exactly this
+  reason.**
+
+§5 is the way through and `cell_spec` already used it (name + In-proof,
+re-derived with `ctx.in_succ`). So the fix was to FINISH `cell_spec`, not to
+write a new builder: `cell_value : option (Val ty_xlenbits)`, because two of
+muladd's ten declared cells are `PVConst` and the builders could only express
+existential ones. Commit `d0a84fc5`.
+
+**A constant cell has NO BINDER**, hence one fewer `ctx.in_succ` -- which is why
+this is a field rather than two record types, and why every consumer branches
+rather than forwarding it. `loop_cells_trade` (§R6's `Hc`) needed no change: a
+permutation is indifferent to what a cell contains.
+
+## Acceptance, in the strong form §5 specifies
+
+    Lemma mlad_mem_cells_faithful :
+      gen_cells_pre mlad_mem_cells = gen_mem_pre_rel mlad_mem_specs_rel.
+    Proof. reflexivity. Qed.
+
+All ten cells, CONVERTIBLE with the hand-written block rather than merely
+provably equal -- which is what keeps `iFrame` working downstream. The same data
+then builds `gen_cells_post` at the context `gen_mem_pre_rel` cannot reach.
+
+## Stage 2: F's postcondition is G's entry state PLUS a real carry
+
+`sgF_rest` is now the pinned exit, the program bound,
+`gen_regs_any (term_var "p") sgF_rest_regs`, and
+`gen_cells_post mlad_mem_cells`. `valid_sgF'` is still ONE `solve_param_vc`.
+
+The register split is DETERMINED, not chosen: G's `dvs_regs` consumes T0-T3,
+T5, T6, S0-S3, plus T4 as counter and `"q"` as base, leaving exactly A0-A7 and
+X2.
+
+## NON-VACUITY: one arm PER HALF, and stage 1's single check was not enough
+
+A bigger postcondition is exactly where an obligation can quietly stop being
+enforced, and stage 1 could not have caught a vacuous carry because there was
+none.
+
+| arm | one token changed | result |
+|---|---|---|
+| `ZZEnterFG_badk` | entry counter 32 → 31 | **fails as required** |
+| `ZZEnterFG_badr` | carried `A0` `PVBaseOff` 1128 → 1124 | **fails as required** |
+
+So BOTH halves are genuinely checked. **Rule for the remaining cuts: one
+falsification arm per independent half of the cut assertion, not one per cut.**
+
+## Next
+
+- **G -> H**, the same shape in the other direction: `dvs_out` meeting H's
+  precondition. H already `Qed`s independently.
+- **Then price the Iris-level composition** (§R7's open item). F;G;H is the
+  first chain long enough to show segment-count superlinearity if it exists,
+  and that is a different pipeline from the VC cost §R7 measured.
+
+## Promotion risk, worth naming now
+
+`ZZMemCells.v`, `ZZEnterFG.v` and the falsification arms are UNTRACKED probes.
+`mlad_mem_cells` is now the single definition of muladd's memory layout used by
+a real cut, and `mlad_mem_cells_faithful` is the ONLY thing tying it to the
+tracked spec -- and it lives in an untracked file too. **When Phase 6 promotes
+this, that lemma travels first.**
