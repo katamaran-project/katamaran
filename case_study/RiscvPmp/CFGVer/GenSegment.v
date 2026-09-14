@@ -536,6 +536,204 @@ Definition gen_loop_bounds {Σ : LCtx}
           (term_val ty.int (Z.of_N lenAddr))) ∗ acc)%asn)
     ⊤%asn bs.
 
+(* ========================================================================= *)
+(*  C1 (PLAN-loop-automation.md) -- THE MECHANICAL LoopSpec FIELDS, DERIVED.  *)
+(*                                                                           *)
+(*  Six of a LoopSpec's fields state nothing a reader could not read off the  *)
+(*  instruction list: where the body starts, how long it is, where the        *)
+(*  fall-through goes, how much fuel it needs, and which way the branch       *)
+(*  tests.  Written by hand they are that many separate opportunities to be   *)
+(*  off by one -- and the part that actually bites is that a wrong one does   *)
+(*  NOT fail where it was written.  It surfaces as a bare `False` deep in a   *)
+(*  VC (cfgver-solve-vc's third entry is exactly this: a hand-authored        *)
+(*  backward branch offset), or, worse, verifies a real loop that is not the  *)
+(*  one in the program.                                                       *)
+(*                                                                           *)
+(*  NARROW form: the BACK EDGE's list index is an INPUT.  The wide form would *)
+(*  find it by scanning for a branch whose target is at most its own address, *)
+(*  which is the whole CFG pass; the caller always knows which loop they      *)
+(*  mean, so naming its back edge costs them one number and buys the other    *)
+(*  six fields.                                                               *)
+(*                                                                           *)
+(*  NOTHING HERE IS TRUSTED.  Every field this computes is re-checked         *)
+(*  downstream -- the instruction table by seg_placement_ok, the extent and   *)
+(*  both guards by the VC itself.  A wrong derivation therefore cannot make a *)
+(*  false theorem; it can only fail to prove a true one.  That is what buys   *)
+(*  the convenience below: `loop_shape` is TOTAL, answering with an empty     *)
+(*  body (shape_num_instrs = 0) rather than threading an option through every *)
+(*  LoopSpec literal, and `loop_shape_found` is the vm_compute-checkable      *)
+(*  early error for the cases where that happened.                            *)
+(* ========================================================================= *)
+Record LoopShape : Type := MkLoopShape
+  { shape_first_instr : nat    (* the head, as a list index                   *)
+  ; shape_num_instrs  : nat    (* head .. back edge, INCLUSIVE                *)
+  ; shape_exit_off    : N      (* fall-through, RELATIVE to the head          *)
+  ; shape_fuel        : nat
+  ; shape_branch_op   : BOP    (* the back edge's condition and its operands, *)
+  ; shape_branch_rs1  : RegIdx (* kept so the guards can be built without     *)
+  ; shape_branch_rs2  : RegIdx (* decoding the instruction a second time      *)
+  }.
+
+(* The four ways `back` can fail to be a back edge, each answered with None
+   rather than with a plausible-looking shape: it must exist, be a B-type
+   branch, jump BACKWARDS by a multiple of the instruction width, and not
+   jump off the front of the list.  A `Some` is then a real claim that
+   indices `first .. back` are a loop body entered at `first`. *)
+Definition loop_shape_at (prog : list AnnotInstr) (back slack : nat)
+    : option LoopShape :=
+  match nth_error prog back with
+  | Some ai =>
+      match ai_instr ai with
+      | BTYPE imm rs2 rs1 op =>
+          let off      := bv.signed imm in
+          let back_off := (4 * Z.of_nat back)%Z in
+          if (off <? 0)%Z then
+            if (Z.rem off 4 =? 0)%Z then
+              if (0 <=? back_off + off)%Z then
+                let first := Z.to_nat ((back_off + off) / 4) in
+                let num   := S (back - first) in
+                Some (MkLoopShape first num (4 * N.of_nat num)%N (num + slack)
+                        op rs1 rs2)
+              else None
+            else None
+          else None
+      | _ => None
+      end
+  | None => None
+  end.
+
+(* An empty body is the safe junk value: it makes the loop's instruction
+   table empty, so the failure is immediate and local rather than subtle. *)
+Definition loop_shape_bogus : LoopShape :=
+  MkLoopShape 0 0 0%N 0 RISCV_BEQ bv.zero bv.zero.
+
+Definition loop_shape (prog : list AnnotInstr) (back slack : nat) : LoopShape :=
+  match loop_shape_at prog back slack with
+  | Some sh => sh
+  | None    => loop_shape_bogus
+  end.
+
+(* `Proof. vm_compute. reflexivity. Qed.` -- says "index `back` is not a back
+   edge" AT the LoopSpec, instead of as a False in its VC ten minutes later. *)
+Definition loop_shape_found (prog : list AnnotInstr) (back slack : nat) : bool :=
+  match loop_shape_at prog back slack with Some _ => true | None => false end.
+
+(* THE BRANCH, AS THE RECORD'S TWO GUARD FIELDS.  `c` is the counter's
+   POST-step value, so the caller never re-writes the head-decrements-then-
+   branch-tests off-by-one; `other` is the Sigma-level name for whatever the
+   branch's OTHER operand holds, which is the one thing no CFG pass can
+   supply.
+
+   THIS IS NOT the mechanical relop flip the record's comment warns against.
+   It is a TABLE, one row per BOP, each row naming the exact complement --
+   available for all six because RISC-V's branch conditions are equality and
+   two total orders, so `not (a < b)` really is `b <= a` at the same
+   signedness.  A generic `formula_not` would have been the unsound shortcut;
+   six explicit rows are not.  Operand ORDER is preserved rather than
+   normalised (the eq/neq rows could swap and mean the same thing) because
+   the solver matches terms syntactically. *)
+Definition shape_guards {Σ : LCtx} (sh : LoopShape) (ctr : RegIdx)
+    (other : Term Σ ty_xlenbits)
+    : (Term Σ ty_xlenbits -> Formula Σ) * (Term Σ ty_xlenbits -> Formula Σ) :=
+  if bv.eqb ctr (shape_branch_rs1 sh) then
+    match shape_branch_op sh with
+    | RISCV_BEQ  => (fun c => formula_relop bop.eq    c other,
+                     fun c => formula_relop bop.neq   c other)
+    | RISCV_BNE  => (fun c => formula_relop bop.neq   c other,
+                     fun c => formula_relop bop.eq    c other)
+    | RISCV_BLT  => (fun c => formula_relop bop.bvslt c other,
+                     fun c => formula_relop bop.bvsle other c)
+    | RISCV_BGE  => (fun c => formula_relop bop.bvsle other c,
+                     fun c => formula_relop bop.bvslt c other)
+    | RISCV_BLTU => (fun c => formula_relop bop.bvult c other,
+                     fun c => formula_relop bop.bvule other c)
+    | RISCV_BGEU => (fun c => formula_relop bop.bvule other c,
+                     fun c => formula_relop bop.bvult c other)
+    end
+  else if bv.eqb ctr (shape_branch_rs2 sh) then
+    (* the counter is the branch's SECOND operand, so every row is the mirror
+       of the one above -- `c` and `other` trade places, the relops do not. *)
+    match shape_branch_op sh with
+    | RISCV_BEQ  => (fun c => formula_relop bop.eq    other c,
+                     fun c => formula_relop bop.neq   other c)
+    | RISCV_BNE  => (fun c => formula_relop bop.neq   other c,
+                     fun c => formula_relop bop.eq    other c)
+    | RISCV_BLT  => (fun c => formula_relop bop.bvslt other c,
+                     fun c => formula_relop bop.bvsle c other)
+    | RISCV_BGE  => (fun c => formula_relop bop.bvsle c other,
+                     fun c => formula_relop bop.bvslt other c)
+    | RISCV_BLTU => (fun c => formula_relop bop.bvult other c,
+                     fun c => formula_relop bop.bvule c other)
+    | RISCV_BGEU => (fun c => formula_relop bop.bvule c other,
+                     fun c => formula_relop bop.bvult other c)
+    end
+  else
+    (* the named counter is neither operand: an unsatisfiable guard, so the
+       body contract fails rather than quietly testing something else. *)
+    (fun _ => formula_false, fun _ => formula_false).
+
+Definition shape_guard {Σ : LCtx} (sh : LoopShape) (ctr : RegIdx)
+    (other : Term Σ ty_xlenbits) : Term Σ ty_xlenbits -> Formula Σ :=
+  fst (shape_guards sh ctr other).
+
+Definition shape_exit_guard {Σ : LCtx} (sh : LoopShape) (ctr : RegIdx)
+    (other : Term Σ ty_xlenbits) : Term Σ ty_xlenbits -> Formula Σ :=
+  snd (shape_guards sh ctr other).
+
+(* WHAT A `Some` MEANS.  The two facts a LoopSpec built from a shape relies on
+   and cannot check for itself: the branch at `back` really does target the
+   head -- which is what makes loop_body_contract's exit target `0%N` correct
+   -- and the body really does run from the head through that branch, which is
+   what makes shape_exit_off the fall-through. *)
+Lemma loop_shape_at_spec (prog : list AnnotInstr) (back slack : nat)
+    (sh : LoopShape) (H : loop_shape_at prog back slack = Some sh) :
+  exists (imm : bv 13) (ai : AnnotInstr),
+    nth_error prog back = Some ai
+    /\ @eq AST (ai_instr ai)
+          (BTYPE imm (shape_branch_rs2 sh) (shape_branch_rs1 sh)
+             (shape_branch_op sh))
+    (* the back edge lands on the head.  Spelled with @eq/Z.mul rather than
+       infix: asn.notations' `=`/`*` are in scope here and would elaborate
+       these plain Z's against Term _ ty.int (see rocq-pitfalls). *)
+    /\ @eq Z (Z.add (Z.mul 4 (Z.of_nat back)) (bv.signed imm))
+             (Z.mul 4 (Z.of_nat (shape_first_instr sh)))
+    (* the body is head .. back inclusive, so the fall-through is one past *)
+    /\ Nat.le (shape_first_instr sh) back
+    /\ @eq nat (shape_num_instrs sh) (S (Nat.sub back (shape_first_instr sh)))
+    /\ @eq N (shape_exit_off sh) (N.mul 4 (N.of_nat (shape_num_instrs sh))).
+Proof.
+  unfold loop_shape_at in H.
+  destruct (nth_error prog back) as [ai|] eqn:Hai; [|discriminate].
+  destruct (ai_instr ai) eqn:Hi; try discriminate.
+  destruct (bv.signed imm <? 0)%Z eqn:Hneg; [|discriminate].
+  destruct (Z.rem (bv.signed imm) 4 =? 0)%Z eqn:Hrem; [|discriminate].
+  destruct (0 <=? 4 * Z.of_nat back + bv.signed imm)%Z eqn:Hlo; [|discriminate].
+  apply Z.ltb_lt in Hneg. apply Z.eqb_eq in Hrem. apply Z.leb_le in Hlo.
+  injection H as <-.
+  exists imm, ai.
+  cbn [shape_first_instr shape_num_instrs shape_exit_off shape_fuel
+       shape_branch_op shape_branch_rs1 shape_branch_rs2].
+  assert (H4 : (4 <> 0)%Z) by lia.
+  (* the alignment test is stated with Z.rem, which lia does NOT connect to
+     divisibility on its own -- hence the explicit Z.rem_divide step. *)
+  assert (Hd : (4 | 4 * Z.of_nat back + bv.signed imm)%Z).
+  { apply Z.divide_add_r.
+    - apply Z.divide_factor_l.
+    - exact (proj1 (Z.rem_divide (bv.signed imm) 4 H4) Hrem). }
+  assert (Hpos : (0 <= (4 * Z.of_nat back + bv.signed imm) / 4)%Z).
+  { apply Z.div_pos; lia. }
+  (* the head index is EXACT: Z.to_nat o (/4) undoes the 4.  Spelled with
+     @eq/Z.mul for the same reason as the statement -- infix `=`/`*` here
+     parse against Term _ ty.int. *)
+  assert (Hex : @eq Z
+                  (Z.mul 4 (Z.of_nat (Z.to_nat
+                     (Z.div (Z.add (Z.mul 4 (Z.of_nat back)) (bv.signed imm)) 4))))
+                  (Z.add (Z.mul 4 (Z.of_nat back)) (bv.signed imm))).
+  { rewrite (Z2Nat.id _ Hpos). destruct Hd as [k Hk]. rewrite Hk.
+    rewrite (Z.div_mul k 4 H4). lia. }
+  repeat split; try reflexivity; try exact Hi; lia.
+Qed.
+
 Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
   { loop_head_addr     : N            (* ABSOLUTE address of the loop head              *)
   ; loop_prog   : list AnnotInstr
