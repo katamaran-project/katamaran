@@ -323,6 +323,49 @@ Section SegCompose.
     iApply HPost. unfold seg_exit_at. iFrame.
   Qed.
 
+  (* ---- WHEN THE DECLARED EXITS EXCEED THE REACHABLE ONES ------------------
+
+     seg_step1 pins the exit pc from the EXIT CONDITION, so it needs a
+     one-element target list.  A segment ending in a conditional branch whose
+     condition its own precondition decides has more DECLARED exits than
+     reachable ones -- muladd's sgL declares the fall-through into the tail
+     loop and a branch that skips the loop when the trip count is zero, but
+     that count is pinned to 12, so the skip is dead.
+
+     Such a segment can still be composed as if single-exit, provided its
+     POSTCONDITION says which exit was taken (`an = <addr>` as a pure
+     conjunct).  Then the VC has to prove the other exits unreachable, which
+     is where that obligation belongs.  Verified on sgL: adding the equation
+     left `solve_param_vc` unchanged.
+
+     `iAssert … as %H` rather than `iDestruct`: the pin is a PURE consequence
+     of the postcondition, and iDestruct would consume the postcondition to
+     get it. *)
+  Lemma seg_step_pinned {R : LCtx} (c : @CFGVerifierContract R)
+    (iota : Valuation R) (a : bv xlenbits) (L : list AnnotInstr)
+    (cbase : bv xlenbits) (Fr : iProp Σ) (v : bv xlenbits)
+    {Pre Post : iProp Σ}
+    (Hv : ValidCFGVerifierContract c)
+    (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
+             (instrs_of_list cbase L)
+             (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
+    (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+             (cfg_exitCond c) (cfg_exits c) iota)
+    (Hpin : forall an : RelVal ty_xlenbits,
+              asn.interpret (cfg_postcondition c)
+                ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ an])
+              ⊢ ⌜an = ty.SyncVal v⌝)
+    (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
+    (HPost : Fr ∗ seg_exit_at c iota a L cbase v -∗ Post) :
+    Pre -∗ myWP2_loop Post.
+  Proof.
+    apply (seg_step c iota a L cbase Fr Hv Hif Hef HPre).
+    iIntros (an) "(HF & %Hex & Hpc & Hnpc & Hinstrs & Hpost)".
+    iAssert (⌜an = ty.SyncVal v⌝)%I as %Han; [ iApply (Hpin an); iExact "Hpost" |].
+    subst an.
+    iApply HPost. unfold seg_exit_at. iFrame.
+  Qed.
+
   (* SEQUENTIAL composition: run one segment, then continue.  This is the
      shape the STRAIGHT-LINE cuts need -- nine of muladd's fourteen segments,
      i.e. most of the remaining work -- and it is what the hand-written tail
@@ -497,10 +540,21 @@ Section SegCompose.
                  = bv.add (@bv.of_N xlenbits lp_ia)
                      (@bv.of_N xlenbits (4 * N.of_nat (ls_skip ls)))
     ; lp_wf    : seg_wf lp_ia lp_bound
+    (* NOTE THE TARGET CONVENTION, and that it was WRONG until 2026-09-14.
+       These lists used to read `[0%N]` and `[ls_exit ls]` -- the loop's own
+       head-relative offsets, which is the convention its EXIT table uses.
+       But seg_ok's last conjunct is `forallb (fun t => head <=? t) targets`
+       with head = 4*skip, so `1056 <=? 0` made the field UNSATISFIABLE for
+       every loop at a nonzero offset, and every loop theorem that took it as
+       a hypothesis was vacuous.  seg_itable_faith -- the only consumer -- uses
+       only seg_ok's offset/skip/size parts and ignores the targets, so the
+       fix is simply to state them program-relative. *)
     ; lp_ok    : seg_ok (ls_prog ls) (ls_skip ls)
-                   (4 * N.of_nat (ls_skip ls))%N lp_bound [0%N] = true
+                   (4 * N.of_nat (ls_skip ls))%N lp_bound
+                   [(4 * N.of_nat (ls_skip ls) + 0)%N] = true
     ; lp_okF   : seg_ok (ls_prog ls) (ls_skip ls)
-                   (4 * N.of_nat (ls_skip ls))%N lp_bound [ls_exit ls] = true }.
+                   (4 * N.of_nat (ls_skip ls))%N lp_bound
+                   [(4 * N.of_nat (ls_skip ls) + ls_exit ls)%N] = true }.
   (* `#[global]`, not bare `Arguments`: inside a Section an Arguments command
      is section-LOCAL and silently reverts at `End`, so callers saw R and ls
      as explicit and record syntax elaborated the fields before it could learn
@@ -535,8 +589,10 @@ Section SegCompose.
       (target : N)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (i : Valuation R) (F Out : iProp Σ)
+      (* program-relative, matching lp_ok / lp_okF -- see the note there *)
       (Hokt : seg_ok (ls_prog ls) (ls_skip ls)
-                (4 * N.of_nat (ls_skip ls))%N (lp_bound pl) [target] = true)
+                (4 * N.of_nat (ls_skip ls))%N (lp_bound pl)
+                [(4 * N.of_nat (ls_skip ls) + target)%N] = true)
       (Hv  : ValidCFGVerifierContract (gen_loop_contract ls g target post))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (ls_q ls) i
              = ty.SyncVal (@bv.of_N xlenbits (ls_iq ls)))
@@ -569,7 +625,8 @@ Section SegCompose.
       exact (seg_itable_faith
                (cfg_placement (gen_loop_contract ls g target post)) i
                (lp_ia pl) (ls_prog ls) (ls_skip ls) (ls_take ls)
-               (4 * N.of_nat (ls_skip ls))%N (lp_bound pl) [target] Hokt
+               (4 * N.of_nat (ls_skip ls))%N (lp_bound pl)
+               [(4 * N.of_nat (ls_skip ls) + target)%N] Hokt
                (eq_trans Hplace (f_equal ty.SyncVal (lp_q pl))) (lp_wf pl)). }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
                     (cfg_exitCond (gen_loop_contract ls g target post))
@@ -1107,6 +1164,22 @@ Section SegCompose.
     ⊢ asn.interpret (gen_loop_win ls)
         ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
       ∗ Fr n.
+
+  (* A loop's back edge does not care about resources it never touches, so an
+     edge proved for one frame holds for that frame plus any constant carry.
+     This is what lets a composition thread a predecessor's leftovers (spill
+     slots, callee-saved blocks) through a loop whose own edge lemma was
+     stated for the reservoir alone. *)
+  Lemma loop_edge_frame {R : LCtx} (ls : LoopSpec R)
+    (iota : nat -> Valuation R) (q : bv xlenbits) (Fr : nat -> iProp Σ)
+    (C : iProp Σ) (n : nat) (H : loop_edge ls iota q Fr n) :
+    loop_edge ls iota q (fun m => Fr m ∗ C)%I n.
+  Proof.
+    unfold loop_edge in *.
+    iIntros "(Hpost & Hfr & Hc)".
+    iDestruct (H with "[$Hpost $Hfr]") as "(Hwin & Hfn)".
+    iFrame.
+  Qed.
 
   (* ---- THE EXTRA, STEPPED GENERICALLY ------------------------------------
 

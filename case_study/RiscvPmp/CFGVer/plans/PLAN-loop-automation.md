@@ -512,9 +512,43 @@ assertion containing a disjunction changed what it meant. `asn.or` is live
 exactly the statement that was false because of it, which is how it surfaced.
 Fixed.
 
-**What is left:** `loop_entry_subst` gives the entry obligation; wiring it
-through `seg_then_loop` to a full "sgL then the tail loop" theorem also needs
-that loop's `LoopPlace` and trip predicate, which is ordinary `loop_all` work.
+**AND THE COMPOSITION IS DONE.** `sgL_then_tail` (`Example/ZZSpikeEnter2.v`)
+composes sgL with the tail loop end to end: axiom-clean, no `admit`, whole file
+27 s. It is the first time anything in this tree has ENTERED a loop. Four
+things had to be added on the way, and three of them are reusable:
+
+- **`seg_step_pinned`** (GenCompose) — sgL declares TWO exits (the
+  fall-through into the loop and a branch that skips it when the trip count is
+  zero), so `seg_step1`, which pins the exit from the exit CONDITION, does not
+  apply. When the postcondition says which exit was taken, the segment can
+  still be composed as single-exit, and the VC then has to prove the others
+  unreachable — which is where that obligation belongs. Adding `an = p+1056`
+  to sgL's post left `solve_param_vc` unchanged, so the skip really is dead.
+- **`loop_edge_frame`** (GenCompose) — an edge proved for one frame holds for
+  that frame plus a constant carry, which is how a predecessor's leftovers
+  (spill slots, callee-saved block) thread through a loop whose edge lemma was
+  stated for the reservoir alone.
+- **The RESERVOIR is also a substitution.** `loop_res` is an iProp built from a
+  `[∗ list]` and so cannot BE a postcondition (B3) — but at a CONCRETE entry
+  trip count it is finitely many copies of the loop's own cell assertion, each
+  that assertion substituted at that trip's valuation. So the same mechanism
+  covers it; `sgL_rest` carries `subst (gen_cells_a lt_cellspecs) ltZeta0`.
+- **`lt_out` / `valid_lt_final`** — `ZZLoopTailProbe` only ever stated the loop
+  BODY's contract. `loop_all` needs both.
+
+**A SECOND BUG, and a worse one than the `or` slip.** `LoopPlace`'s `lp_ok` /
+`lp_okF` stated their target lists HEAD-RELATIVE (`[0%N]`, `[ls_exit ls]`) —
+the convention a loop's EXIT table uses. But `seg_ok`'s last conjunct is
+`forallb (fun t => head <=? t) targets` with `head = 4*skip`, so `1056 <=? 0`
+made the field **unsatisfiable for every loop at a nonzero offset**. Every loop
+theorem taking it as a hypothesis — `ZZLoopDThm.lds_loop`,
+`ZZDvLoopThm.dvs_loop` — was therefore VACUOUS, and nobody noticed because the
+premise was always assumed and never discharged. It surfaced only here, where
+`ltPlace` had to actually *prove* it and `vm_compute` answered `false`.
+`seg_itable_faith`, the only consumer, uses just `seg_ok`'s offset/skip/size
+parts and ignores the targets, so the fix is to state them program-relative
+(`4*skip + target`). No tracked end theorem was affected — none goes through
+`loop_all` — so nothing false was ever claimed on the trusted surface.
 
 ---
 
