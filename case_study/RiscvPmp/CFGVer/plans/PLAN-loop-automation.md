@@ -751,6 +751,50 @@ makes `P` derivable from C1's strides once C1 also derives `loop_counter_step`.
 
 ---
 
+## Step 3 results, part 4 (2026-09-14) — `loop_counter_step` derived, phase C closed
+
+The last `LoopSpec` field that had to silently agree with the code. Deliberately
+deferred twice (out of C1's scope, and C2's input rather than its output), and
+picked up once C2 and C3 had shown how much depends on it: BOTH take their
+stride from this field, so one typo propagates into the latch and the trip
+bound at once, and a wrong step does not make the loop look wrong — it makes it
+look like a DIFFERENT loop.
+
+**Delivered:** `instr_writes`, `loop_body_slice`, `writes_to`,
+`loop_ctr_step_at`, `loop_ctr_step`, `loop_ctr_step_found`,
+`loop_ctr_step_at_spec`. It is a separate function from `loop_shape`, not
+another of its fields, because it needs the counter's REGISTER — which is the
+user's choice of what the loop is "about" and no CFG pass can supply it.
+
+**What makes it more than a scan, and this is the point.** Looking for an
+`addi ctr, ctr, k` and taking `k` would be wrong in a way that fails SILENTLY:
+if the body also writes `ctr` some other way (`add ctr, ctr, rX`, a `lw` into
+it), the step is not constant and the affine model is void — but a scan that
+only looks at ADDIs reports a confident, wrong answer. So `instr_writes` covers
+every AST constructor, the body is scanned for EVERY write to `ctr`, and the
+answer is `None` unless there is exactly one and it is a constant-immediate
+SELF-increment (`rs1 = ctr`, so `addi ctr, rX, k` — which sets rather than
+advances — is refused too). Refusing beats guessing, because the guess is what
+C2 and C3 build on.
+
+**That check found something worth having.** `_step_found` passing on both
+wired loops is a real fact about the code: mulinner's 29-instruction body writes
+A1 exactly once, countdown's 25-instruction body writes A4 exactly once. Neither
+was previously checked anywhere.
+
+**One Rocq trap.** `MUL` in a pattern does not mean the AST constructor —
+`Import Assembly` puts a smart constructor of that name in scope which shadows
+it and cannot appear in a pattern. `Base.MUL` is the spelling. The error
+(`Unknown constructor: MUL`) points at the pattern, not at the import, so it
+reads as a missing constructor rather than a shadowed one.
+
+**Phase C is now complete**: C1 (+ this), C2, C3, C4 and C5 all landed. Every
+`LoopSpec` field is either derived from the instruction list, chosen by the user
+as a matter of specification (which registers, which limits, what the loop is
+about), or an anchor a predecessor segment supplies.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the

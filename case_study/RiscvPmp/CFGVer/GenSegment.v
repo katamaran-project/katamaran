@@ -734,6 +734,115 @@ Proof.
   repeat split; try reflexivity; try exact Hi; lia.
 Qed.
 
+
+(* ---- C1, CONTINUED: THE COUNTER'S STEP ----------------------------------
+
+   The last `LoopSpec` field that has to silently agree with the code.  It is
+   also the one whose being wrong is hardest to see: the step feeds
+   `counter_after_step`, so a wrong value does not make the loop look wrong,
+   it makes it look like a DIFFERENT loop -- and C2 and C3 both read their
+   strides off it, so one typo propagates into the latch and the trip bound.
+
+   Deriving it needs the counter's REGISTER, which no CFG pass can supply (it
+   is the user's choice of which register the loop is "about"), so this is a
+   separate function from `loop_shape` rather than another of its fields.
+
+   WHAT MAKES IT MORE THAN A SCAN.  Looking for an `addi ctr, ctr, k` and
+   taking `k` would be wrong in a way that fails silently: if the body ALSO
+   writes `ctr` some other way (`add ctr, ctr, rX`, a `lw` into it), the step
+   is not constant and the whole affine model is void, but a scan that only
+   looks at ADDIs would report a confident, wrong answer.  So the body is
+   scanned for EVERY write to `ctr`, and the answer is `None` unless there is
+   exactly one and it is a constant-immediate self-increment.  Refusing beats
+   guessing here, because the guess is what C2 and C3 build on. *)
+Definition instr_writes (i : AST) : option RegIdx :=
+  match i with
+  | RTYPE _ _ rd _         => Some rd
+  | ITYPE _ _ rd _         => Some rd
+  | SHIFTIOP _ _ rd _      => Some rd
+  | UTYPE _ rd _           => Some rd
+  | RISCV_JAL _ rd         => Some rd
+  | RISCV_JALR _ _ rd      => Some rd
+  | LOAD _ _ rd _ _        => Some rd
+  | CSR _ _ rd _ _         => Some rd
+  (* QUALIFIED: `Import Assembly` puts a smart constructor named MUL in
+     scope, which shadows the AST one and cannot appear in a pattern. *)
+  | Base.MUL _ _ rd _ _ _  => Some rd
+  | BTYPE _ _ _ _          => None   (* branches and stores write no register *)
+  | STORE _ _ _ _          => None
+  | ECALL | EBREAK | MRET  => None
+  end.
+
+Definition loop_body_slice (prog : list AnnotInstr) (sh : LoopShape)
+    : list AnnotInstr :=
+  List.firstn (shape_num_instrs sh) (List.skipn (shape_first_instr sh) prog).
+
+Definition writes_to (ctr : RegIdx) (ai : AnnotInstr) : bool :=
+  match instr_writes (ai_instr ai) with
+  | Some r => bv.eqb r ctr
+  | None   => false
+  end.
+
+Definition loop_ctr_step_at (prog : list AnnotInstr) (sh : LoopShape)
+    (ctr : RegIdx) : option (Val ty_xlenbits) :=
+  match List.filter (writes_to ctr) (loop_body_slice prog sh) with
+  | ai :: nil =>
+      match ai_instr ai with
+      | ITYPE imm rs1 _ RISCV_ADDI =>
+          (* self-increment, not merely a write: `addi ctr, rX, k` with
+             rX <> ctr sets the counter rather than advancing it. *)
+          if bv.eqb rs1 ctr
+          then Some (@bv.of_Z xlenbits (bv.signed imm))
+          else None
+      | _ => None
+      end
+  | _ => None
+  end.
+
+(* Total, like `loop_shape`, and for the same reason -- nothing here is
+   trusted.  The junk value is a ZERO step, which is the loudest one
+   available: `loop_latch_*_affine` all demand `0 < stride`, so a loop built
+   on a failed derivation cannot have its latch discharged. *)
+Definition loop_ctr_step (prog : list AnnotInstr) (sh : LoopShape)
+    (ctr : RegIdx) : Val ty_xlenbits :=
+  match loop_ctr_step_at prog sh ctr with
+  | Some s => s
+  | None   => bv.zero
+  end.
+
+Definition loop_ctr_step_found (prog : list AnnotInstr) (sh : LoopShape)
+    (ctr : RegIdx) : bool :=
+  match loop_ctr_step_at prog sh ctr with Some _ => true | None => false end.
+
+(* WHAT A `Some` MEANS: the body writes `ctr` exactly once, that write is a
+   constant self-increment, and the step is its sign-extended immediate.  The
+   first conjunct is the one worth having -- it is what licenses treating the
+   counter as affine at all. *)
+Lemma loop_ctr_step_at_spec (prog : list AnnotInstr) (sh : LoopShape)
+    (ctr : RegIdx) (s : Val ty_xlenbits)
+    (H : loop_ctr_step_at prog sh ctr = Some s) :
+  exists (imm : bv 12) (rd : RegIdx) (ai : AnnotInstr),
+    @eq (list AnnotInstr)
+      (List.filter (writes_to ctr) (loop_body_slice prog sh)) (cons ai nil)
+    /\ @eq AST (ai_instr ai) (ITYPE imm ctr rd RISCV_ADDI)
+    /\ @eq (Val ty_xlenbits) s (@bv.of_Z xlenbits (bv.signed imm)).
+Proof.
+  unfold loop_ctr_step_at in H.
+  destruct (List.filter (writes_to ctr) (loop_body_slice prog sh))
+    as [|ai tl] eqn:Hf; [discriminate|].
+  destruct tl; [|discriminate].
+  destruct (ai_instr ai) eqn:Hi; try discriminate.
+  destruct op; try discriminate.
+  destruct (bv.eqb rs1 ctr) eqn:Hr; [|discriminate].
+  (* bv.eqb_spec is a `reflect`, not an iff, so it cannot be applied to Hr
+     directly. *)
+  assert (rs1 = ctr) as -> by (destruct (bv.eqb_spec rs1 ctr); congruence).
+  injection H as <-.
+  (* `repeat split` closes the two reflexivity conjuncts itself -- `split` is
+     `constructor`, and eq_refl is one. *)
+  exists imm, rd, ai. repeat split; exact Hi.
+Qed.
+
 Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
   { loop_head_addr     : N            (* ABSOLUTE address of the loop head              *)
   ; loop_prog   : list AnnotInstr
