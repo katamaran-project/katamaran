@@ -453,6 +453,19 @@ anyway:
 
 ## Phase 3 — nine straight-line segments written, THREE verify
 
+> **SUPERSEDED 2026-09-14 — ALL NINE NOW `Qed`.** Re-compiled from source this
+> date: B, C, E, H, N all `Qed` (L confirmed separately). The `.v` files were
+> edited 09-13, four days after the table below was written, and the fix is
+> visible in them: a cut-specific register spec, `mlad_reg_specs_cut`, in place
+> of `mlad_reg_specs_rel`. **That CONFIRMS "the leading hypothesis, NOT yet
+> confirmed" further down this section** — a cut assertion must carry
+> publicness, because a mid-program segment that branches on a register
+> receives it havoc'd-and-private from the cut and a `formula_relop` on private
+> data is the `secret-data-walls` `False`. The hypothesis is closed; the
+> "next step is per-segment" paragraph below is DONE, not pending. The
+> FAIL/QED column below is kept as the historical record of the pre-fix state —
+> **never read it as current status.**
+
 `Example/ZZMladStraight.v` (also split into `ZZMladSg{A,B,C,E,F,H,J,L,N}.v` so
 one failure does not mask the rest). Exit targets were read off the actual
 branch instructions, NOT off §1's map — **§1's segment B range is off by one**:
@@ -1570,3 +1583,61 @@ rather than instruction count.
   nothing prices it for a chain longer than the three-segment tail. If a
   superlinearity in segment count exists anywhere, that is where it is. Price it
   when the F;G;H chain exists, i.e. during step 3, not before.
+
+
+# ========================================================================
+# §R8. §R2's machinery/specification LINE IS IN THE WRONG PLACE (2026-09-14)
+# ========================================================================
+
+§R2 classified **S1, the cut postconditions, as irreducible specification:**
+"nothing can decide what a cut says … This is the irreducible cost, and it is
+proportional to the number of cuts."
+
+**That is wrong as stated, and `ZZSpikeEnter2.v` (2026-09-14) is the
+counter-example.** Its header states the principle:
+
+> a cut assertion is determined by its SUCCESSOR's precondition, so it should
+> be GENERATED from it … `sgL_post` is not bridged to -- it is deleted.
+
+An earlier spike (`ZZSpikeEnter.v`) did it the §R2 way -- hand-write the cut
+assertion, then reconcile it against the successor's invariant resource by
+resource. Fifteen cross-context `iApply`s, and it **did not finish in 4.5
+minutes**. `loop_entry_by_subst` (GenCompose) replaces the whole activity: the
+cut assertion IS the successor's precondition transported along one
+substitution, and the entry obligation collapses to a **valuation equality**
+(`subword_cut_valuation`) closed by `cbn; repeat f_equal; rewrite ?bv.of_N_add;
+lia` -- no separation logic at all.
+
+## Where the line actually falls
+
+- **GENERATABLE**: the cut assertion's RESOURCE CONTENT. It is the successor's
+  precondition, re-based. Nothing per-cut to invent.
+- **IRREDUCIBLE**: the ARITHMETIC relating predecessor to successor -- which
+  trip the loop starts at, how the predecessor's pointers relate to the loop's
+  walking variables. In `ZZSpikeEnter2` that is the substitution plus a
+  half-dozen `lia` lines, and it is FORCED by the program, not chosen: the loop
+  head is p+1056, sgL hands over bp = p+1144, and `subword_iota`'s
+  `bp(n) = pe - 4*(n+1)` then PINS n = 1.
+
+So the per-cut cost is a substitution and an arithmetic reconciliation, not a
+20-conjunct assertion. §R2's "proportional to the number of cuts" survives; its
+"nothing can decide what a cut says" does not.
+
+## Consequence for §R3 step 3
+
+Step 3 should be executed as *"for each cut, write the substitution and its
+valuation equality"*, following `ZZSpikeEnter2.v` as the precedent -- NOT as
+"write nine postconditions", which is what §R2's framing implies and what the
+4.5-minute spike actually tried.
+
+Two things that make F;G;H the right first instance, both confirmed 2026-09-14:
+
+- **F and H both `Qed`** (see the Phase 3 supersession note above), so the
+  chain's endpoints are sound.
+- **G is already on the `LoopSpec` machinery** -- `divrem_spec : LoopSpec
+  divrem_ctx` (`ZZDvLoopSpec.v`) with its loop theorem in `ZZDvLoopThm.v` -- so
+  F->G is structurally the SAME enter that already works for M, with
+  `divrem_spec` in place of `subword_spec`.
+
+And `subword_entry` hand-rolls at n=1 exactly what §R6's `loop_carry_entry`
+now packages, so the two strands meet at the enter.
