@@ -426,6 +426,14 @@ pointer needed exactly `unsigned ptr + 4 <= maxAddr`.
 | K `br_i31_add` | QED 0.801 G | QED 0.788 G | FAIL 4.823 G |
 | M `br_i31_sub` | QED 0.784 G | QED 0.773 G | FAIL 4.815 G |
 
+**PROTOCOL (added 2026-09-14): every figure in this table is GROSS
+`allocated_words`, not net.** Subtract the Phase-1 baseline (`ZZMladBase.v`,
+641,953,144) to get the cost of the segment: D 63 M, M 142 M, K 159 M, G 214 M,
+I 356 M. Read as net they say "per-segment cost is nearly size-independent",
+which is false and was briefly concluded on 2026-09-14; read correctly they say
+cost is roughly PROPORTIONAL to segment size at ~12.7 M words/instruction.
+See `diagnostics/segment-postcondition-cost.md` §3.
+
 **Segment I verifies.** The `LeakMul` risk does not apply: that model is on
 `issue/mul-leaks-args` and not on this branch (owner, 2026-09-09). If it ever
 merges, segment I must be re-checked — its `MUL31(mw, q)` has a secret `q`.
@@ -1497,3 +1505,68 @@ the artifact with `strings <file>.vo | grep <newname>`.
 The build failure itself is worth recording: `GenCompose.v` has **no
 `Import asn.notations`** (unlike `GenSegment.v`), so `(A ∗ B)%asn` does not
 parse there -- write `asn.sep A B`.  Three sites.
+
+
+# ========================================================================
+# §R7. STEP 2 DONE -- a cut postcondition is free to prove (2026-09-14)
+# ========================================================================
+
+Full record: `diagnostics/segment-postcondition-cost.md`.
+
+## Step 2 was HALF ALREADY ANSWERED, and the half that was missing was the
+## one that mattered
+
+§R3 step 2 asks to price a segment "at two different segment sizes". A sweep of
+`diagnostics/` and of this plan's own tables found the SIZE axis already
+measured at FIVE sizes (D/M/K/G/I, Phase 2 above), post-`cfdcc92f`,
+post-`7e5ceffe`, post-`cbn` — so running it again would have re-derived an
+existing result. What no record contained was §R1's actual worry: **cheap to
+STATE versus cheap to PROVE**. That is the postcondition-strength axis, and it
+is what got measured instead.
+
+## The finding
+
+One token changed -- the contract's postcondition field -- in two otherwise
+byte-identical files, `sed`-generated so nothing else can differ, same
+`Proof. solve_param_vc. Qed.` in both arms, same-session baseline:
+
+| pair | segment | real post | `asn_no_post` | ratio |
+|---|---|---:|---:|---:|
+| M | `br_i31_sub` body, 13 instrs | 162.41 M | 161.53 M | **1.0054x** |
+| L | segment L, straight-line, 14 instrs | 190.75 M | 186.80 M | **1.0212x** |
+
+**0.5-2.1%.** For scale, the `Qed`/`Admitted` protocol gap is 1.81x. A cut
+postcondition is free to discharge; the cost of a segment is executing its
+instructions, which is paid whether or not you cut there.
+
+**This closes §R1's objection for the postcondition axis.** It does NOT close
+§R1 entirely -- see "still open" below.
+
+## A retraction of my own, same day
+
+I read the Phase-2 QED table as NET and concluded "per-segment cost is almost
+size-independent, 1.42x over a 4.8x size range, hence constant-dominated". Those
+figures are **GROSS**; the 1.42x was the import closure. Net, the spread is
+**5.6x over 4.8x** -- cost is roughly PROPORTIONAL to segment size,
+`~ -14 + 12.76 M words/instruction`, and the table now carries the protocol note
+it was missing. The law is LOOSE: held-out L is +13.7% and G is -35.2%, G being
+the only segment with no memory cells, so part of the slope is cell inventory
+rather than instruction count.
+
+## What this changes for the plan
+
+- **§R0(1)'s cost model, corrected: cost tracks INSTRUCTIONS, not CUTS.**
+  Verifying a program in `n` segments costs about what those instructions cost
+  in one piece, however `n` is chosen. So segment count is nearly free and
+  should be chosen for PROOF CLARITY -- which is independently where
+  `composition-payoff.md` landed post-`cfdcc92f` ("cut where it makes the proof
+  clearer"), reached from the other direction.
+- **Step 3 (the nine cut postconditions) is de-risked on the cost side.** Its
+  cost is design effort, not machine time. That was the open question gating it,
+  and it is answered; S1 remains irreducible but is no longer a cost risk.
+- **STILL OPEN, and it is the other half of §R0(1):** the **Iris-level
+  COMPOSITION** cost -- chaining segments in `ZZMladTail.v` and through the
+  Phase-5 bridge -- is a different pipeline from the VC cost priced here, and
+  nothing prices it for a chain longer than the three-segment tail. If a
+  superlinearity in segment count exists anywhere, that is where it is. Price it
+  when the F;G;H chain exists, i.e. during step 3, not before.
