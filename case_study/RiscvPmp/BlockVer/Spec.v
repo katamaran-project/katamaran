@@ -38,7 +38,6 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.SymbolicExecutor
@@ -49,25 +48,23 @@ From Katamaran Require Import
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.Sig
+     RiscvPmp.Logic
      RiscvPmp.Contracts.
 From Katamaran Require RiscvPmp.Model.
 
 From iris.program_logic Require Import total_lifting.
 
 Import RiscvPmpProgram.
+Import RiscvPmpProgramLogic.
 Import RiscvPmpIrisInstancePredicates.
+Import RiscvPmpShallowSoundness.
+Import RiscvPmpSymbolicSoundness.
 Import ListNotations.
 
 Set Implicit Arguments.
 Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
-
-Module RiscvPmpBlockVerifFailLogic <: FailLogic.
-  Definition fail_rule_pre : bool := false.
-End RiscvPmpBlockVerifFailLogic.
-
-Module RiscvPmpBlockVerifIrisInstance := RiscvPmpIrisInstance RiscvPmpBlockVerifFailLogic.
 
 Module Assembly.
   (* Instruction synonyms. *)
@@ -97,8 +94,7 @@ Module Assembly.
     Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
-Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+Module RiscvPmpBlockVerifSpec.
   Section ContractDefKit.
 
   Import asn.notations.
@@ -423,9 +419,10 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
     |}.
 
   Definition sep_contract_execute_EBREAK : SepContractFun execute_EBREAK :=
-    RiscvPmpExecutor.Symbolic.Statistics.extend_postcond_with_debug sep_contract_execute_EBREAK.
+    RiscvPmpExecutor.Symbolic.Statistics.extend_postcond_with_debug
+      RiscvPmpSpecification.sep_contract_execute_EBREAK.
 
-  Definition CEnv : SepContractEnv :=
+  Definition contract_environment : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | rX                         => Some sep_contract_rX
@@ -445,9 +442,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       | _                         => None
       end.
 
-  Lemma linted_cenv :
+  Lemma linted_contract_environment :
     forall Δ τ (f : Fun Δ τ),
-      match CEnv f with
+    match contract_environment f with
       | Some c => Linted c
       | None   => True
       end.
@@ -517,7 +514,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
          mip ↦ term_val ty_Minterrupts (MkMinterrupts false false false false false false);
     |}.
 
-  Definition CEnvEx : SepContractEnvEx :=
+  Definition contract_environment_foreign : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
       | read_ram bytes       => sep_contract_read_ram
@@ -529,9 +526,9 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
       | externalWorldUpdates => sep_contract_externalWorldUpdates
       end.
 
-  Lemma linted_cenvex :
+  Lemma linted_contract_environment_foreign :
     forall Δ τ (f : FunX Δ τ),
-      Linted (CEnvEx f).
+      Linted (contract_environment_foreign f).
   Proof.
     intros ? ? []; try constructor.
   Qed.
@@ -604,7 +601,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
 
-   Definition LEnv : LemmaEnv :=
+   Definition lemma_environment : LemmaEnv :=
      fun Δ l =>
        match l with
        | open_gprs                    => lemma_open_gprs
@@ -617,16 +614,21 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes
        | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
       end.
+
+   #[export] Instance riscvpmp_blockverif_specification : Specification :=
+     {| CEnv   := contract_environment;
+        CEnvEx := contract_environment_foreign;
+        LEnv   := lemma_environment;
+        fail_rule_pre := false;
+     |}.
+
 End RiscvPmpBlockVerifSpec.
 
-Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
-Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
-
 Module RiscvPmpSpecVerif.
+  Import RiscvPmpSpecification.
   Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.Symbolic.
+  Import RiscvPmpExecutor.
+  Import RiscvPmpExecutor.Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -680,8 +682,6 @@ Module RiscvPmpSpecVerif.
     vm_compute;
     constructor;
     cbn.
-
-  Import RiscvPmpBlockVerifExecutor.
 
   Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_read bytes H).
   Proof. destruct H; now vm_compute. Qed.
@@ -742,7 +742,7 @@ Module RiscvPmpSpecVerif.
   Proof. now symbolic_simpl. Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
-      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      CEnv f = Some c ->
       ValidContract f ->
       Symbolic.ValidContract c (FunDef f).
   Proof.
@@ -754,7 +754,7 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_contract_with_fuel_debug : forall {Δ τ} (fuel : nat) (f : Fun Δ τ) (c : SepContract Δ τ),
-      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      CEnv f = Some c ->
       ValidContractWithFuelDebug fuel f ->
       Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
@@ -797,21 +797,12 @@ Module RiscvPmpSpecVerif.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
-    RiscvPmpIrisAdeqParameters
-    RiscvPmpBlockVerifIrisInstance.
-  Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
-  Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
-    RiscvPmpBlockVerifExecutor.
 
   Import RiscvPmpIrisBase.
-  Import RiscvPmpBlockVerifIrisInstance.
+  Import RiscvPmpIrisInstance.
+  Import RiscvPmpBlockVerifSpec.
   Import RiscvPmp.Model.
+  Import RiscvPmpModel2.
 
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -1052,9 +1043,9 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.Symbolic.
+  (* Import RiscvPmpBlockVerifExecutor.Symbolic. *)
 
-  Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma TcontractsSound `{sailGS Σ} : ⊢ TValidContractEnvSem CEnv.
   Proof.
     apply (tsound TforeignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
@@ -1064,18 +1055,18 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma TValidContractEnvSem_ValidContractEnvSem `{sailGS Σ} :
-    TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv ⊢
-    ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+    TValidContractEnvSem CEnv ⊢
+    ValidContractEnvSem CEnv.
   Proof.
     unfold TValidContractEnvSem, TValidContractEnvN, HasValidContract, ValidContractEnvSem.
     iIntros "H" (σs σ f). iSpecialize ("H" $! (callgraph.mkNode f)). simpl.
-    destruct (CEnv f) eqn:Ef; auto.
+    destruct (contract_environment f) eqn:Ef; auto.
     iApply TValidContractSem_ValidContractSem.
     iApply "H". iPureIntro.
     destruct f; try discriminate Ef; typeclasses eauto.
   Qed.
 
-  Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.
     iApply (TValidContractEnvSem_ValidContractEnvSem $! TcontractsSound).
   Qed.

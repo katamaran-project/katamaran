@@ -55,7 +55,6 @@ From Katamaran Require Import
      Sep.Hoare
      Signature
      SmallStep.Step
-     Specification
      BinaryResources
      BinaryWeakestPre.
 
@@ -91,12 +90,12 @@ Module Type IrisAdequacy2
   (Import B       : Base)
   (Import SIG     : Signature B)
   (Import PROG    : Program B)
-  (Import FL      : FailLogic)
   (Import SEM     : Semantics B PROG)
+  (Import PLOG    : ProgramLogic B SIG PROG)
   (Import IB2     : IrisBase2 B PROG SEM)
   (Import IAP2    : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2)
   (Import IPred2  : IrisPredicates2 B SIG PROG SEM IB2)
-  (Import IRules2 : IrisSignatureRules2 B SIG PROG FL SEM IB2 IPred2).
+  (Import IRules2 : IrisSignatureRules2 B SIG PROG SEM PLOG IB2 IPred2).
 
   Import SmallStepNotations.
 

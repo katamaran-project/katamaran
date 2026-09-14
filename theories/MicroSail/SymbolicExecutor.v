@@ -49,7 +49,6 @@ From Katamaran Require Import
      Bitvector
      Signature
      Symbolic.Worlds
-     Specification
      Hoare
      Base.
 
@@ -67,8 +66,7 @@ Module Type SymbolicExecOn
   (Import B : Base)
   (Import SIG : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG).
+  (Import PLOG : ProgramLogic B SIG PROG).
 
   Import Entailment.
   Import Erasure.
@@ -567,6 +565,7 @@ Module Type SymbolicExecOn
 
     Section ExecAux.
 
+      Context {SPEC : Specification}.
       Variable exec_call_foreign : ExecCallForeign.
       Variable exec_lemma : ExecLemma.
       Variable exec_call : ExecCall.
@@ -688,7 +687,7 @@ Module Type SymbolicExecOn
                    error_no_fuel_heap := h
                  |}).
 
-    Definition sexec_call_foreign : ExecCallForeign :=
+    Definition sexec_call_foreign {SPEC : Specification} : ExecCallForeign :=
       fun Δ τ f w args =>
         SHeapSpec.call_contract (CEnvEx f) args.
 
@@ -697,7 +696,7 @@ Module Type SymbolicExecOn
     Variable cfg : Config.
 
 
-    Definition debug_lemma [Δ] (l : 𝑳 Δ) :
+    Definition debug_lemma {SPEC : Specification} [Δ] (l : 𝑳 Δ) :
       ⊢ SStore Δ -> SHeapSpec Unit :=
       fun w0 args0 =>
         if config_debug_lemma cfg l
@@ -712,12 +711,12 @@ Module Type SymbolicExecOn
                            debug_call_lemma_heap := h0
                          |}) (SHeapSpec.pure tt)
         else SHeapSpec.pure tt.
-    Definition sexec_lemma : ExecLemma :=
+    Definition sexec_lemma {SPEC : Specification} : ExecLemma :=
       fun Δ l w args =>
         ⟨ θ ⟩ _ <- debug_lemma l args ;;
         SHeapSpec.call_lemma (LEnv l) (persist args θ).
 
-    Definition debug_call [Δ τ] (f : 𝑭 Δ τ) :
+    Definition debug_call {SPEC : Specification} [Δ τ] (f : 𝑭 Δ τ) :
       ⊢ SStore Δ -> SHeapSpec Unit :=
       fun w0 args0 =>
         if config_debug_function cfg f
@@ -736,7 +735,7 @@ Module Type SymbolicExecOn
                (SHeapSpec.pure tt)
         else SHeapSpec.pure tt.
 
-    Definition sexec_fail : ExecFail :=
+    Definition sexec_fail {SPEC : Specification} : ExecFail :=
       fun Γ τ s {w0} =>
         if fail_rule_pre
         then @SStoreSpec.block _ _ _ w0
@@ -753,7 +752,7 @@ Module Type SymbolicExecOn
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
-    Fixpoint sexec_call (inline_fuel : nat) : ExecCall :=
+    Fixpoint sexec_call {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
       fun Δ τ f w0 args0 =>
         ⟨ θ1 ⟩ _ <- debug_call f args0 ;;
         (* Let's first see if we have a contract defined for function [f]
@@ -771,22 +770,26 @@ Module Type SymbolicExecOn
               (persist args0 θ1)
         end.
 
-    Definition sexec (inline_fuel : nat) : Exec :=
-      @SStoreSpec.exec_aux sexec_call_foreign sexec_lemma (sexec_call inline_fuel) sexec_fail.
-    #[global] Arguments sexec _ [_ _] s _ _ _ _ : simpl never.
+    Definition sexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
+      @SStoreSpec.exec_aux SPEC sexec_call_foreign sexec_lemma
+        (sexec_call inline_fuel) sexec_fail.
+    #[global] Arguments sexec {_} _ [_ _] s _ _ _ _ : simpl never.
 
-    Definition vcgen (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
+    Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ}
+      (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
       fun w => SHeapSpec.run (exec_contract (sexec inline_fuel) c s (w := w)).
 
   End WithSpec.
 
   Module Symbolic.
 
-    Definition ValidContractWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithFuel {SPEC : Specification} {Δ τ} (fuel : nat)
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
         (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContract {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
+      (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
       ValidContractWithFuel 1 c body.
 
@@ -810,13 +813,16 @@ Module Type SymbolicExecOn
       induction q; try discriminate; cbn; intuition.
     Qed.
 
-    Definition ValidContractReflectWithFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractReflectWithFuel {SPEC : Specification} {Δ τ}
+      (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
 
-    Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractReflect {SPEC : Specification} {Δ τ}
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
 
-    Lemma validcontract_reflect_fuel_sound {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
+    Lemma validcontract_reflect_fuel_sound {SPEC : Specification} {Δ τ}
+      (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflectWithFuel fuel c body ->
       ValidContractWithFuel fuel c body.
     Proof.
@@ -824,7 +830,8 @@ Module Type SymbolicExecOn
       apply (ok_sound _ env.nil) in Hok. now constructor.
     Qed.
 
-    Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+    Lemma validcontract_reflect_sound {SPEC : Specification} {Δ τ}
+      (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
       ValidContract c body.
     Proof.
@@ -832,16 +839,20 @@ Module Type SymbolicExecOn
       now apply validcontract_reflect_fuel_sound.
     Qed.
 
-    Definition VcGenErasureFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
+    Definition VcGenErasureFuel {SPEC : Specification} {Δ τ} (fuel : nat)
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
       Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
-    Definition ValidContractWithErasureAndFuel {Δ τ} (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithErasureAndFuel {SPEC : Specification} {Δ τ}
+      (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasureFuel fuel c body).
 
-    Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
+    Definition VcGenErasure {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
+      (body : Stm Δ τ) : Erasure.ESymProp :=
       VcGenErasureFuel 1 c body.
 
-    Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithErasure {SPEC : Specification} {Δ τ}
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
 
     Lemma verification_condition_with_erasure_sound (p : 𝕊 ctx.nil) :
@@ -849,12 +860,14 @@ Module Type SymbolicExecOn
       VerificationCondition p.
     Proof. intros [H]. constructor. now rewrite <- Erasure.erase_safe. Qed.
 
-    Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+    Lemma validcontract_with_erasure_sound {SPEC : Specification} {Δ τ}
+      (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasure c body ->
       ValidContract c body.
     Proof. apply verification_condition_with_erasure_sound. Qed.
 
-    Lemma validcontract_with_erasure_and_fuel_sound {Δ τ} {fuel} (c : SepContract Δ τ) (body : Stm Δ τ) :
+    Lemma validcontract_with_erasure_and_fuel_sound {SPEC : Specification} {Δ τ}
+      {fuel} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasureAndFuel fuel c body ->
       ValidContractWithFuel fuel c body.
     Proof. apply verification_condition_with_erasure_sound. Qed.
@@ -878,7 +891,7 @@ Module Type SymbolicExecOn
                 |}
         end.
 
-      Definition calc {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
+      Definition calc {SPEC : Specification} {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
         match CEnv f with
         | Some contract =>
             let contract' := extend_postcond_with_debug contract in
@@ -898,9 +911,8 @@ Module MakeExecutor
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG).
+  (Import PLOG : ProgramLogic B SIG PROG).
 
-  Include SymbolicExecOn B SIG PROG FL SPEC .
+  Include SymbolicExecOn B SIG PROG PLOG.
 
 End MakeExecutor.

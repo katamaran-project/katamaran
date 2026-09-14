@@ -6,6 +6,7 @@
 -arg "-w -deprecated-transitive-library-file"
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
+case_study/MinimalCaps/Logic.v
 case_study/MinimalCaps/Machine.v
 case_study/MinimalCaps/Sig.v
 case_study/MinimalCaps/Contracts/Notations.v
@@ -19,6 +20,7 @@ case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
+case_study/RiscvPmp/Logic.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/trace.v
 case_study/RiscvPmp/iostate.v
@@ -40,6 +42,7 @@ case_study/RiscvPmp/FemtoKernel.v
 case_study/Assumptions.v
 -Q examples/GVT Katamaran.RiscvPmp.GVT
 examples/GVT/Sig.v
+examples/GVT/Logic.v
 examples/GVT/Contracts.v
 examples/GVT/IrisInstance.v
 examples/GVT/Model.v
@@ -84,7 +87,6 @@ theories/Signature.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
-theories/Specification.v
 theories/Symbolic/Instantiation.v
 theories/Symbolic/Monads.v
 theories/Symbolic/OccursCheck.v

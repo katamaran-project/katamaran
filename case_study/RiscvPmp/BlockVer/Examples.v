@@ -39,11 +39,12 @@ From Katamaran Require Import
      RiscvPmp.BlockVer.Spec
      RiscvPmp.BlockVer.PartialVerifier
      RiscvPmp.Machine
+     RiscvPmp.Logic
+     RiscvPmp.IrisInstance
      RiscvPmp.trace
      RiscvPmp.Sig.
 
 Import RiscvPmpProgram.
-Import RiscvPmpBlockVerifExecutor.
 Import Assembly.
 
 Set Implicit Arguments.
@@ -62,7 +63,7 @@ From stdpp Require namespaces.
 From Katamaran Require Import RiscvPmp.LoopVerification.
 
 Module Examples.
-  Import RiscvPmpBlockVerifExecutor.
+  Import RiscvPmpExecutor.
   Import Assembly.
   Import RiscvPmp.Sig.
   Import iris.proofmode.tactics.
@@ -270,7 +271,7 @@ Module Examples.
 
   Section WithSailResources.
       Import IrisModel.RiscvPmpIrisBase.
-      Import RiscvPmpBlockVerifIrisInstance.
+      Import RiscvPmpIrisInstance.
       Import RiscvPmpIrisInstanceWithContracts.
 
       Context `{sailGS Σ} {rG : trivGS Σ}.

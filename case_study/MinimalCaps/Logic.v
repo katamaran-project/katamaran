@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Dominique Devriese, Sander Huyghebaert, Steven Keuchel  *)
+(* Copyright (c) 2026 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,21 +27,26 @@
 (******************************************************************************)
 
 From Katamaran Require Import
-  Signature
-  Program
-  Tactics
-  Hoare
-  MicroSail.ShallowExecutor
-  MicroSail.SymbolicExecutor
-  MicroSail.RefineExecutor.
+     MinimalCaps.Machine
+     MinimalCaps.Sig
+     Sep.Hoare
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.Soundness.
 
-Module MakeSymbolicSoundness
-  (Import B    : Base)
-  (Import SIG  : Signature B)
-  (Import PROG : Program B)
-  (Import PLOG : ProgramLogic B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG PLOG)
-  (Import SYMB : SymbolicExecOn B SIG PROG PLOG).
+Module MinCapsProgramLogic :=
+  MakeProgramLogic MinCapsBase MinCapsSignature MinCapsProgram.
 
-Include RefineExecOn B SIG PROG PLOG SHAL SYMB.
-End MakeSymbolicSoundness.
+Module MinCapsExecutor :=
+  MakeExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsProgramLogic.
+Module MinCapsShallowExec :=
+  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram MinCapsProgramLogic.
+
+(* Import the soundness proofs for the shallow and symbolic executors. *)
+Module MinCapsShallowSoundness :=
+  MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram
+    MinCapsProgramLogic MinCapsShallowExec.
+Module MinCapsSymbolicSoundness :=
+  MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsProgram
+    MinCapsProgramLogic MinCapsShallowExec MinCapsExecutor.

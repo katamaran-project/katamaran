@@ -53,7 +53,6 @@ From Katamaran Require Import
      Sep.Logic
      Signature
      SmallStep.Step
-     Specification
      Staging.NewShallow.Executor.
 
 Import ctx.notations.

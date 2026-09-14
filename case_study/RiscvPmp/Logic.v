@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2020 Dominique Devriese, Sander Huyghebaert, Steven Keuchel  *)
+(* Copyright (c) 2026 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,21 +27,26 @@
 (******************************************************************************)
 
 From Katamaran Require Import
-  Signature
-  Program
-  Tactics
-  Hoare
-  MicroSail.ShallowExecutor
-  MicroSail.SymbolicExecutor
-  MicroSail.RefineExecutor.
+     RiscvPmp.Machine
+     RiscvPmp.Sig
+     Sep.Hoare
+     MicroSail.ShallowExecutor
+     MicroSail.ShallowSoundness
+     MicroSail.SymbolicExecutor
+     MicroSail.Soundness.
 
-Module MakeSymbolicSoundness
-  (Import B    : Base)
-  (Import SIG  : Signature B)
-  (Import PROG : Program B)
-  (Import PLOG : ProgramLogic B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG PLOG)
-  (Import SYMB : SymbolicExecOn B SIG PROG PLOG).
+Module RiscvPmpProgramLogic :=
+  MakeProgramLogic RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
 
-Include RefineExecOn B SIG PROG PLOG SHAL SYMB.
-End MakeSymbolicSoundness.
+Module RiscvPmpExecutor :=
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpProgramLogic.
+Module RiscvPmpShallowExec :=
+  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpProgramLogic.
+
+(* Import the soundness proofs for the shallow and symbolic executors. *)
+Module RiscvPmpShallowSoundness :=
+  MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpProgramLogic RiscvPmpShallowExec.
+Module RiscvPmpSymbolicSoundness :=
+  MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpProgramLogic RiscvPmpShallowExec RiscvPmpExecutor.

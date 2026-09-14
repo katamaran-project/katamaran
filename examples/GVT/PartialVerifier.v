@@ -42,7 +42,6 @@ From Katamaran Require Import
      Bitvector
      Refinement.Monads
      Sep.Hoare
-     Specification
      Symbolic.Propositions
      Symbolic.Solver
      Symbolic.Worlds
@@ -51,10 +50,12 @@ From Katamaran Require Import
      MicroSail.SymbolicExecutor
      MicroSail.RefineExecutor
      MicroSail.Soundness
+     RiscvPmp.GVT.Model
      RiscvPmp.GVT.Spec
      RiscvPmp.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.GVT.Logic
      RiscvPmp.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
@@ -76,12 +77,13 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpBlockVerifIrisInstance.
+Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpIrisInstance.
 
 Section BlockVerificationDerived.
 
-  Import RiscvPmpBlockVerifExecutor.
-  Import RiscvPmpBlockVerifShalExecutor.
+  Import RiscvPmpExecutor.
+  Import RiscvPmpShallowExec.
+  Import RiscvPmpBlockVerifSpec.
 
   Definition safeE {Σ} : 𝕊 Σ -> Prop :=
     fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
@@ -247,7 +249,9 @@ Section BlockVerificationDerived.
   Section Relational.
 
     Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
-    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
+    Import RiscvPmpSymbolicSoundness.
+    Import RiscvPmpSymbolicSoundness.StoreSpec.
+    Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
@@ -312,7 +316,11 @@ Section BlockVerificationDerived.
 
     Import iris.base_logic.lib.iprop iris.proofmode.tactics.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import ProgramLogic.
+    Import RiscvPmpProgramLogic.
+    Import RiscvPmpProgramLogic.ProgLog.
+    Import RiscvPmpShallowSoundness.
+    Locate RiscvPmpModel2.
+    Import RiscvPmpModel2.
     Import CHeapSpec.
 
     Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
@@ -552,7 +560,7 @@ Section AnnotatedBlockVerification.
                   (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := seval_exps [env] es in
-                ⟨ θ1 ⟩ _ <- call_lemma (LEnv l) args ;;
+                ⟨ θ1 ⟩ _ <- call_lemma (lemma_environment l) args ;;
                 sexec_annotated_block_addr b'
                   (persist__term ainstr θ1)
                   (persist__term apc θ1)
@@ -601,7 +609,7 @@ Section AnnotatedBlockVerification.
             | AnnotDebugBreak => debug (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := evals es [env] in
-                _ <- call_lemma (LEnv l) args ;;
+                _ <- call_lemma (lemma_environment l) args ;;
                 cexec_annotated_block_addr b' ainstr apc
             end
         end.
@@ -634,8 +642,10 @@ Section AnnotatedBlockVerification.
 
   Section Relational.
 
+    Import RiscvPmpSymbolicSoundness.
+    Import RiscvPmpSymbolicSoundness.StoreSpec.
+    Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
     Import iris.proofmode.tactics.
@@ -687,7 +697,10 @@ Section AnnotatedBlockVerification.
 
     Import iris.base_logic.lib.iprop iris.proofmode.tactics.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import ProgramLogic.
+    Import RiscvPmpProgramLogic.
+    Import RiscvPmpProgramLogic.ProgLog.
+    Import RiscvPmpShallowSoundness.
+    Import RiscvPmpModel2.
     Import CHeapSpec.
 
     Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
@@ -734,7 +747,7 @@ Section AnnotatedBlockVerification.
           iIntros (->) "(Hh & Hblockver & Hinstrs) Hk".
           now iApply ("Hk" with "[$Hblockver $Hinstrs Hh]").
         + iIntros (Hlemcall) "(Hh & Hblockver & Hinstrs) Hk".
-          pose proof (Hlem := lemSem _ lem).
+          pose proof (Hlem := lemSem _ lem). cbn in Hlem.
           apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
           iPoseProof (H with "Hh") as "(%ι & %Heq & Hreq & Hk2)". clear H.
           iPoseProof (Hlem with "Hreq") as "Hens".
