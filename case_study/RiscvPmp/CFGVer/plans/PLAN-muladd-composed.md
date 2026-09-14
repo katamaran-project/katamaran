@@ -1800,3 +1800,90 @@ falsification arm per independent half of the cut assertion, not one per cut.**
 a real cut, and `mlad_mem_cells_faithful` is the ONLY thing tying it to the
 tracked spec -- and it lives in an untracked file too. **When Phase 6 promotes
 this, that lemma travels first.**
+
+
+# ========================================================================
+# §R11. D's WINDOW -- the reservoir needs DISJOINT trips, and D has not
+#       (2026-09-14)
+# ========================================================================
+
+Attempted §R3-step-3's "risky items first" on **D** (memmove, 6 instructions),
+chosen for being the smallest sliding loop. **Wrong axis: D is the HARDEST of
+the four, not the easiest**, and the reason is worth recording because it is
+invisible in every check §R6 ran.
+
+## The unstated assumption in `loop_carry`
+
+`loop_reservoir A iota q n` is `[∗ list] i ∈ seq 0 n, A@(iota i)`. If two trips'
+cells share an address that separating conjunction is **`False`** -- so
+`loop_carry_cells` still PROVES, from a premise no caller can supply. Vacuous,
+not unsound, and it would have passed every test in §R6.
+
+**Mechanical criterion, checkable from the cell list alone: two cells sharing a
+base variable whose offsets differ by a multiple of the walk step overlap across
+trips.**
+
+| loop | cells | same base? | trip n vs n+1 |
+|---|---|---|---|
+| D memmove | `sw@dp-4`, `dw@dp`, step −4 | **yes** | **OVERLAP** |
+| I limb-macc | `xw@xp`, `mw@mp`, step +4 | no | disjoint |
+| K `br_i31_add` | `xw@ap`, `mw@bp`, step +4 | no | disjoint |
+| M `br_i31_sub` | `xw@ap`, `mw@bp`, step +4 | no | disjoint |
+
+**Only D**, because it is an in-place shift: source and destination are the same
+array one word apart. I/K/M read and write DIFFERENT arrays, so their footprints
+slide in parallel and never meet.
+
+**Scope note on §R6:** `ZZCellTrade.v`'s `mv_*` lemmas for D are all TRUE and the
+uniformity result for the TRADE stands. What they do not establish is that D's
+reservoir is INHABITABLE. "The trade is uniform" and "the loop can be entered"
+are different claims and §R6 only made the first.
+
+## The design that does work, and the one piece of it that is proved
+
+Split the loop's FOOTPRINT from the reservoir's UNIT:
+
+- reservoir unit `A` := ONE cell (offset 0) -- what each trip newly acquires
+- the loop's window := TWO cells (offsets 0 and −4)
+- frame at trip `m` := `reservoir (m−1) ∗ completed (m, N)` -- one cell already
+  peeled forward into the window
+
+The back edge is then three steps:
+
+1. **retire** the written cell -> `loop_completed_push` (existed)
+2. **carry** the shared cell, described with offset −4 at trip `S n` and offset 0
+   at trip `n` -- two names for one address -> **`gen_cell_shift`, PROVED and
+   landed**, the cell analogue of `walk_step_ok`
+3. **acquire** the next cell -> `loop_reservoir_peel` (existed)
+
+## Why that is still not enough: the extra must be TRIP-DEPENDENT
+
+D writes `dp(N)…dp(1)` and reads `dp(N−1)…dp(0)`: **N trips, N+1 cells.** At the
+head of trip `m` the window is `{dp(m), dp(m−1)}`; at trip 0 the body never runs
+and the window is `{dp(0)}` alone. A uniform width-2 extra makes the exit state
+claim `dp(0)−4`, one cell below everything the loop touches -- and no
+re-indexing discharges it: the last back edge (1→0) would have to ACQUIRE from
+trip −1. Pre-loading that cell into the constant carry does not help either,
+because then trip 0 acquires from the carry while every other trip acquires from
+the reservoir, which is non-uniform again.
+
+**`LoopSpec` cannot express a trip-dependent extra.** `loop_body_contract` and
+`loop_final_contract` both go through `gen_loop_contract ls …`, and
+`loop_invariant` carries the single `gen_loop_at_head ls` at EVERY trip. Making
+it trip-dependent touches `gen_loop_at_head`, `loop_invariant`, both trip lemmas
+and the transfer lemmas -- the core, not the periphery. **An earlier note in this
+session proposing "just give the final contract its own extra" is RETRACTED: the
+final contract cannot differ in isolation.**
+
+## Decision: PARK D, do K next
+
+- **3 of the 4 sliding loops need none of this** -- I/K/M are disjoint and the
+  existing `loop_cells_trade` applies unchanged.
+- K validates both genuinely untested paths (`loop_runs` on a sliding loop, and
+  the reservoir at a REAL trip count) without also paying for a core change.
+- D's shape -- an in-place overlapping shift -- may want a different invariant
+  altogether ("the array with its first k words already shifted", as one block)
+  rather than a sliding window. Decide that after seeing K and I, not before.
+
+`gen_cell_shift` is landed regardless: any overlapping-window design needs the
+carry step, and it cost one lemma.

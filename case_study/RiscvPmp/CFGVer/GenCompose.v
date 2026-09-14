@@ -1682,6 +1682,54 @@ Section SegCompose.
     iIntros "(Hs & (Hres & Hnew) & Hdone)". iFrame.
   Qed.
 
+  (* ---- A CELL THAT SURVIVES THE TRIP, UNDER A NEW DESCRIPTION -----------
+
+     `loop_cells_trade` assumes the per-trip footprints are DISJOINT: the
+     reservoir is `[∗ list] i, A@(iota i)`, so if two trips' cells share an
+     address that separating conjunction is `False` and no caller can supply
+     it.  Checkable from the cell list alone -- two cells sharing a base whose
+     offsets differ by a multiple of the walk step overlap across trips.
+     muladd's I, K and M read and write DIFFERENT arrays and are fine; D
+     (memmove, an in-place shift) is not: its source cell at `dp-4` is the next
+     trip's destination at `dp`.
+
+     For an overlapping window the shared cell must CROSS the back edge rather
+     than be retired and re-acquired -- and it is described with one offset
+     before and another after (`dp-4` at trip `S n`, `dp` at trip `n`), two
+     names for one address.  This is the cell analogue of `walk_step_ok`, and
+     the enabling fact is the same walk-step arithmetic.
+
+     NOT SUFFICIENT on its own for D -- see PLAN-muladd-composed.md §R11: an
+     in-place shift touches N+1 cells in N trips, so its exit window is
+     narrower than its body window, and `LoopSpec` carries ONE `gen_loop_at_head`
+     for every trip. *)
+  Lemma gen_cell_shift {R : LCtx} (cfrom cto : cell_spec R)
+    (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat) (a : bv xlenbits)
+    (Hbind : cell_binder cfrom = cell_binder cto)
+    (Hpub  : cell_is_public cfrom = cell_is_public cto)
+    (Hval  : cell_value cfrom = cell_value cto)
+    (Hfrom : cell_addr_ok cfrom (iota (S n)) q a)
+    (Hto   : cell_addr_ok cto (iota n) q a) :
+    asn.interpret (gen_cells_post [cfrom])
+      (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+         .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+    ⊣⊢ asn.interpret (gen_cells_pre [cto]) ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]).
+  Proof.
+    rewrite gen_cells_drop_exit_pc.
+    cbn [gen_cells_pre List.fold_right asn.interpret].
+    apply bi.sep_proper; [| reflexivity].
+    unfold cell_addr_ok in *.
+    rewrite <- Hval in Hto. rewrite <- Hbind in Hto.
+    rewrite <- Hbind. rewrite <- Hpub. rewrite <- Hval.
+    destruct (cell_value cfrom) as [cv |].
+    - exact (asn_cell_inst_const _ _ _ _ cv (eq_trans Hfrom (eq_sym Hto))).
+    - destruct (cell_is_public cfrom).
+      + exact (asn_cell_inst_pub _ _ _ _ _ _
+                 (fun v => eq_trans (Hfrom v) (eq_sym (Hto v)))).
+      + exact (asn_cell_inst _ _ _ _ _ _
+                 (fun v => eq_trans (Hfrom v) (eq_sym (Hto v)))).
+  Qed.
+
   (* ---- ONE SIDE CONDITION PER LOOP, NOT PER CELL -------------------------
 
      `loop_carry_cells` still asks the caller for an ADDRESS per cell per trip.
