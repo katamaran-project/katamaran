@@ -1412,6 +1412,76 @@ Proof.
   - (* AT the bound at trip 0 *) cbn [N.of_nat]. lia.
 Qed.
 
+
+(* ---- C3: THE TRIP PREDICATE ---------------------------------------------
+
+   `P` separates "still looping" from "done", and every loop's is the same
+   shape: one no-wrap bound per MOVING variable, and a cap on how many trips
+   the loop was entered with.  Three were written by hand (mulinner, subword,
+   divrem), each with its own `_mono` proved by hand, each re-deriving the
+   same `+2`.
+
+   WHY `+2` AND NOT THE LATCH'S `+1`.  The latch only ever reads trip `n`, so
+   `loop_latch_*_affine` asks for the bound at `n+1`.  The BACK EDGE reads trip
+   `S n` -- it has to know what the previous trip left -- so `P` must cover one
+   trip more than the latch needs.  That off-by-one between the two consumers
+   is invisible in a goal and fails late, which is why it lives here once
+   rather than in each loop.
+
+   `P` is a HYPOTHESIS the caller establishes, so every clause added here makes
+   the loop's theorem WEAKER.  Hence the trip cap is `option`: divrem genuinely
+   has none, and giving it one to make the shape uniform would have silently
+   strengthened its premise.
+
+   EVERYTHING REDUCES UNDER ONE `cbn`.  That is a design constraint, not an
+   accident: a call site used to say `unfold X_trip_bound` and then read the
+   conjunction off.  An earlier draft here made the cap a `nat -> Prop`
+   parameter, which `cbn` will not unfold (its body is a lambda, not a match),
+   so every site needed an extra `unfold` -- turning C3 into a NET LOSS in
+   lines.  `trip_tail`'s match on `option` reduces, so one
+   `cbn [loop_trip_bound List.fold_right trip_axis_bound trip_tail]` is the
+   whole incantation, and `_mono` needs no side premise about the cap. *)
+Variant trip_axis : Type :=
+| TripDown (anchor stride : N)   (* value SHRINKS as trips remain: must not underflow *)
+| TripUp   (anchor stride : N).  (* value GROWS as trips remain: must not overflow    *)
+
+Definition trip_axis_bound (ax : trip_axis) (n : nat) : Prop :=
+  match ax with
+  | TripDown a s => (s * (N.of_nat n + 2) <= a)%N
+  | TripUp   a s => (a + s * (N.of_nat n + 2) < bv.exp2 xlenbits)%N
+  end.
+
+Definition trip_tail (tot : option nat) (n : nat) : Prop :=
+  match tot with Some t => Nat.le n t | None => True end.
+
+(* RIGHT fold, so the result is the same RIGHT-NESTED conjunction the
+   hand-written predicates were: a loop's existing `intros (H1 & H2 & H3)` and
+   `repeat split; lia` keep working verbatim. *)
+Definition loop_trip_bound (axes : list trip_axis) (tot : option nat)
+    (n : nat) : Prop :=
+  List.fold_right (fun ax acc => trip_axis_bound ax n /\ acc)
+    (trip_tail tot n) axes.
+
+(* `P_mono` for every loop at once. *)
+Lemma loop_trip_bound_mono (axes : list trip_axis) (tot : option nat) (n : nat) :
+  loop_trip_bound axes tot (S n) -> loop_trip_bound axes tot n.
+Proof.
+  unfold loop_trip_bound. induction axes as [|ax axes IH]; cbn.
+  - destruct tot; cbn; [lia | exact (fun _ => I)].
+  - intros [Hax Hrest]. split; [| exact (IH Hrest)].
+    destruct ax; cbn in *; lia.
+Qed.
+
+(* WHAT `P` HANDS THE LATCH: the `+2`-to-`+1` weakening, written once.  Stated
+   as lemmas rather than folded into a tactic so a call site can `exact` them. *)
+Lemma trip_axis_down_latch (a s : N) (n : nat) :
+  trip_axis_bound (TripDown a s) n -> (s * (N.of_nat n + 1) <= a)%N.
+Proof. cbn. lia. Qed.
+
+Lemma trip_axis_up_latch (a s : N) (n : nat) :
+  trip_axis_bound (TripUp a s) n -> (a + s * N.of_nat n < bv.exp2 xlenbits)%N.
+Proof. cbn. lia. Qed.
+
 (* One address-space bound, from N-level facts: the caller says what the term
    evaluates to and that it fits, and never touches `bv.bin`.  Every loop's
    `gen_loop_bounds` is a list of these (see `gen_loop_bounds_intro`). *)

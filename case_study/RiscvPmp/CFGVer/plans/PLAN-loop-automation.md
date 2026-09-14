@@ -709,6 +709,48 @@ run from the repo root.
 
 ---
 
+## Step 3 results, part 3 (2026-09-14) — C3 landed
+
+**Delivered:** `trip_axis` (`TripDown`/`TripUp`), `trip_axis_bound`,
+`trip_tail`, `loop_trip_bound`, `loop_trip_bound_mono`, and the two
+`+2`-to-`+1` projections `trip_axis_down_latch` / `trip_axis_up_latch`.
+
+**The `+2` is the point.** The latch reads trip `n`, so it wants the bound at
+`n+1`; the BACK EDGE reads trip `S n`, so `P` must cover one trip more. That
+off-by-one between two consumers is invisible in a goal and fails late. It now
+lives in `trip_axis_bound` once, and the weakening to what the latch wants is a
+named lemma rather than an anonymous `lia`.
+
+**The trip cap is an `option`, deliberately.** `P` is a HYPOTHESIS the caller
+establishes, so every clause added to it makes the loop's theorem WEAKER.
+divrem genuinely has no trip cap; giving it one to make the shape uniform would
+have silently strengthened its premise. `None` costs a trailing `/\ True`,
+which is cheaper than that.
+
+**A design constraint worth recording: EVERYTHING MUST REDUCE UNDER ONE `cbn`.**
+The first draft made the cap a `nat -> Prop` parameter with `trip_within` /
+`trip_unbounded` as its two instances. That typechecks and `_mono` goes through,
+but `cbn` will NOT unfold `trip_within` — its body is a lambda, not a match — so
+every call site needed an extra `unfold` on top of the `cbn`. Counting lines,
+that made C3 a NET LOSS: the three predicates plus three `_mono`s saved ~12
+lines, and the added tactic noise cost more. Rewriting the cap as
+`trip_tail : option nat -> nat -> Prop`, a match, fixed it: one
+`cbn [loop_trip_bound List.fold_right trip_axis_bound trip_tail]` is the whole
+incantation, and `loop_trip_bound_mono` lost its side premise about the cap.
+
+**Wired:** `mulinner_trip_bound` = `[TripDown pe 4; TripDown p7e 4] (Some tot)`,
+`subword_trip_bound` = `[TripDown pe 4; TripDown ape 4] (Some tot)`,
+`divrem_trip_bound` = `[TripUp 1 1] None`. Each `_mono` is now
+`exact (loop_trip_bound_mono _ _ n).` All 17 probe files rebuild green with
+the real compiler.
+
+**Honest accounting.** C3 is roughly line-neutral, unlike C1 and C2 which won
+on lines as well. What it buys is that the axis shape and the `+2` are DATA
+rather than hand-typed arithmetic — which is what a generator needs, and what
+makes `P` derivable from C1's strides once C1 also derives `loop_counter_step`.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
