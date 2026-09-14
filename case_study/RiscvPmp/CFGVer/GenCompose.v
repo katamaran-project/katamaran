@@ -1471,6 +1471,152 @@ Section SegCompose.
              Hw Hf Hc).
   Qed.
 
+
+  (* ---- D2: THE BACK EDGE, WITH ITS COUNTER THREE DERIVED -----------------
+
+     `loop_back_edge_std` takes ten premises.  Three of them -- the counter at
+     trip `S n` before the step (`Hk`), the step itself (`Hstep`), and the
+     counter at trip `n` after it (`Hkn`) -- are not independent: given C2's
+     closed form they are the SAME recurrence read at two trips, and `Hstep` is
+     the arithmetic between them.  Every loop restated all three, passing `kv`
+     and `w` as hand-written N expressions, and then paid a `do 2 f_equal; lia`
+     to reconcile `w` with what its own `iota` actually said.
+
+     Taking the anchor and stride instead removes both.  `Hstep` goes entirely
+     (it is proved here from the no-wrap bound), and `Hkn` improves from
+     `cbn. do 2 f_equal; lia.` to `cbn. reflexivity.` -- because `w` is now
+     `loop_ctr_down anch stride n`, which is literally what `iota n` holds,
+     rather than `kv + stride`, which is only equal to it.
+
+     A LEMMA, not the tactic the plan called D2.  Same reason C2 went this way:
+     the dispatch a tactic would do (guard family, step sign) is exactly the
+     choice between these two lemmas, and the caller already knows it.  The
+     remaining premises -- the bounds, the walking registers, the dropped
+     facts, the cell trade -- stay the caller's, because each is genuinely
+     loop-specific data rather than a consequence of the recurrence. *)
+  Lemma loop_back_edge_affine_down {R : LCtx} (ls : LoopSpec R)
+    (ws : list (walk_reg R)) (fs : list (Formula (R ▻ "a"∷ty_xlenbits)))
+    (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (Fr : nat -> iProp Σ)
+    (n : nat) (anch stride : N)
+    (Hea  : loop_extra_pre ls = gen_extra_pre ws fs cs)
+    (Hean : loop_extra_post ls = gen_extra_post ws cs)
+    (Himm : loop_counter_step ls = @bv.of_N xlenbits stride)
+    (Hk : forall x : ty.RelVal ty_xlenbits,
+            inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_post_ex ls)
+              ((((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                  .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["c"∷ty_xlenbits ↦ x])
+            = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down anch stride (S n))))
+    (Hkn : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
+             ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_down anch stride n)))
+    (Hqan : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base_post ls)
+              (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base_pre ls)
+                ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+    (* the ONE arithmetic fact, and it is C3's clause for this axis at trip n *)
+    (HPle : (stride * (N.of_nat n + 2) <= anch)%N)
+    (Hb : List.Forall (fun b =>
+            instprop (formula_relop bop.le
+              (term_binop bop.plus (term_unop uop.unsigned (fst b))
+                 (term_val ty.int (Z.of_N (snd b))))
+              (term_val ty.int (Z.of_N lenAddr)))
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])) (loop_all_bounds_pre ls))
+    (Hw : List.Forall (fun v => exists x : N,
+            inst (T := fun Σ => Term Σ ty_xlenbits)
+              (addr_off (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
+                 (walk_step v))
+              (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)
+         /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+              (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)) ws)
+    (Hf : List.Forall
+            (fun f => instprop f ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])) fs)
+    (Hc : asn.interpret (gen_cells_post cs)
+            (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+               .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+          ∗ Fr (S n)
+          ⊢ asn.interpret (gen_cells_pre cs)
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fr n) :
+    loop_back_edge ls iota q Fr n.
+  Proof.
+    refine (loop_back_edge_std ls ws fs cs iota q Fr n
+              (loop_ctr_down anch stride (S n)) (loop_ctr_down anch stride n)
+              Hea Hean Hk _ Hkn Hqan Hb Hw Hf Hc).
+    (* one increment, no wrap -- the whole of `Hstep`, from HPle *)
+    rewrite Himm. rewrite bv.of_N_add. f_equal.
+    unfold loop_ctr_down. cbn [N.of_nat] in *. lia.
+  Qed.
+
+  (* The mirror, for a counter that GROWS as trips remain (B, C).  Same two
+     differences as in C2's latch pair: the step is the wrap-around form, and
+     the no-wrap fact bounds the value from ABOVE rather than below. *)
+  Lemma loop_back_edge_affine_up {R : LCtx} (ls : LoopSpec R)
+    (ws : list (walk_reg R)) (fs : list (Formula (R ▻ "a"∷ty_xlenbits)))
+    (cs : list (cell_spec R))
+    (iota : nat -> Valuation R) (q : bv xlenbits) (Fr : nat -> iProp Σ)
+    (n : nat) (anch stride : N)
+    (Hea  : loop_extra_pre ls = gen_extra_pre ws fs cs)
+    (Hean : loop_extra_post ls = gen_extra_post ws cs)
+    (Himm : loop_counter_step ls
+            = @bv.of_N xlenbits (bv.exp2 xlenbits - stride))
+    (Hk : forall x : ty.RelVal ty_xlenbits,
+            inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_post_ex ls)
+              ((((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                  .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["c"∷ty_xlenbits ↦ x])
+            = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_up anch stride (S n))))
+    (Hkn : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_counter_pre ls)
+             ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+           = ty.SyncVal (@bv.of_N xlenbits (loop_ctr_up anch stride n)))
+    (Hqan : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base_post ls)
+              (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base_pre ls)
+                ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]))
+    (Hs : (stride <= bv.exp2 xlenbits)%N)
+    (Hb : List.Forall (fun b =>
+            instprop (formula_relop bop.le
+              (term_binop bop.plus (term_unop uop.unsigned (fst b))
+                 (term_val ty.int (Z.of_N (snd b))))
+              (term_val ty.int (Z.of_N lenAddr)))
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])) (loop_all_bounds_pre ls))
+    (Hw : List.Forall (fun v => exists x : N,
+            inst (T := fun Σ => Term Σ ty_xlenbits)
+              (addr_off (@term_var _ (walk_var v) _ (ctx.in_succ (ctx.in_succ (walk_var_in v))))
+                 (walk_step v))
+              (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+                 .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)
+         /\ inst (T := fun Σ => Term Σ ty_xlenbits)
+              (@term_var _ (walk_var v) _ (ctx.in_succ (walk_var_in v)))
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+            = ty.SyncVal (@bv.of_N xlenbits x)) ws)
+    (Hf : List.Forall
+            (fun f => instprop f ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q])) fs)
+    (Hc : asn.interpret (gen_cells_post cs)
+            (((iota (S n)).["a"∷ty_xlenbits ↦ ty.SyncVal q])
+               .["an"∷ty_xlenbits ↦ ty.SyncVal q])
+          ∗ Fr (S n)
+          ⊢ asn.interpret (gen_cells_pre cs)
+              ((iota n).["a"∷ty_xlenbits ↦ ty.SyncVal q]) ∗ Fr n) :
+    loop_back_edge ls iota q Fr n.
+  Proof.
+    refine (loop_back_edge_std ls ws fs cs iota q Fr n
+              (loop_ctr_up anch stride (S n)) (loop_ctr_up anch stride n)
+              Hea Hean Hk _ Hkn Hqan Hb Hw Hf Hc).
+    rewrite Himm.
+    replace (loop_ctr_up anch stride (S n))
+      with ((loop_ctr_up anch stride n) + stride)%N
+      by (unfold loop_ctr_up; cbn [N.of_nat] in *; lia).
+    apply bv_of_N_wrap_dec. exact Hs.
+  Qed.
+
   (* ---- THE WHOLE LOOP, FROM ITS OBLIGATIONS ------------------------------
 
      The analogue of `cfg_instrs_endToEnd`: everything generic about a counted

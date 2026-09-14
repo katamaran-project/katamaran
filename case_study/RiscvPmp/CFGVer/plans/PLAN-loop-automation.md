@@ -795,6 +795,58 @@ about), or an anchor a predecessor segment supplies.
 
 ---
 
+## Step 4 results (2026-09-14) — D2's counter three; D1 found to be SUBSUMED
+
+**D1 is subsumed by C2 and should not be built as specified.** The plan scopes
+D1 as `solve_latch`, a tactic dispatching on guard family and step sign. After
+C2 those dispatches ARE the choice between `loop_latch_ptr_affine_down/_up` and
+`loop_latch_ctr_affine_up`, which the caller already knows, and the latch is
+down to three short bullets. A dispatching tactic would save ~21 lines across
+seven loops and reintroduce exactly the tactic-over-lemma the project prefers
+to avoid. **Recommend closing D1 as done-by-C2** rather than building it.
+
+**D2 done as a LEMMA pair, not the tactic the plan called for**, for the same
+reason: `loop_back_edge_affine_down` / `_up` (GenCompose.v).
+
+**What they remove.** `loop_back_edge_std` takes ten premises; three of them —
+the counter at trip `S n` before the step (`Hk`), the step (`Hstep`), and the
+counter at trip `n` after it (`Hkn`) — are not independent. Given C2's closed
+form they are the same recurrence read at two trips, with `Hstep` the
+arithmetic between. Every loop restated all three, passing `kv` and `w` as
+hand-written N expressions, then paid a `do 2 f_equal; lia` to reconcile `w`
+with what its own `iota` actually said.
+
+Taking the anchor and stride instead:
+- `Hstep` disappears entirely — proved inside from the no-wrap bound;
+- the two hand-written N expressions become one `pe 4`;
+- `Hkn` improves from `cbn. do 2 f_equal; lia.` to `cbn. reflexivity.` on four
+  of the five loops, because `w` is now literally what `iota n` holds rather
+  than `kv + stride`, which is merely equal to it.
+
+**And the no-wrap premise is already there.** For the three `down` loops the
+lemma's `HPle` is passed as `Hn`, the loop's existing hypothesis — which is
+C3's `TripDown` clause at trip `n`. C2, C3 and D2 now all take the same fact
+from the same place.
+
+**Honest accounting.** ~4 tactic lines per loop, ~20 across five — a small line
+win, like C3 and unlike C1/C2. The real gain is that the hand-written `kv`/`w`
+pair is gone: those had to agree with `iota` AND with each other, and nothing
+checked either.
+
+**NOT done — the rest of D2.** The bounds bullet (`Hb`), the walking registers
+(`Hw`), the dropped facts (`Hf`) and the cell trade (`Hc`) are untouched. `Hb`
+is already a fixed three-line script and does not obviously improve as a lemma.
+`Hw` is the substantial one (9+ lines per loop, and it IS determined by C2's
+strides) and is the clear next piece. `Hc` is the affine set computation the
+plan describes and is the hardest.
+
+**One tactic trap.** For `shiftdown_ctr` (anchor 0, stride 1) `cbn` unfolds
+`loop_ctr_up` outright, so `do 2 f_equal` closes the counter goals and a
+following `.`-separated tactic errors with "No such goal". Use `;` there, not
+`.`. The other four loops keep a non-trivial residue and do not hit it.
+
+---
+
 ## Execution order
 
 NOT A-E in sequence. Two principles override the grouping: resolve the
