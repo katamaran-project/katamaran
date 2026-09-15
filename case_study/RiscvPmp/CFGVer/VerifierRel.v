@@ -355,23 +355,37 @@ Section CFGVerificationDerived.
             | Some v =>
                 angelic_binary
                   (if exitCond v then pure apc else error)
-                  (match bblks !! v with
-                   | Some b =>
-                       apc' <- cexec_block b v ;;
-                       cexec_cfg_addr_b instrs bblks words exitCond n' apc' apc'
-                   | None =>
-                     match instrs !! v with
-                     | None    => error
-                     | Some ai =>
-                         _ <- cchunk_gc ;;
-                         _ <- cdrop_dead ;;
-                         _ <- cexec_ghosts (ai_ghost_before ai) ;;
-                         apc' <- cexec_instruction (ai_instr ai) apc anp
-                                   (ty.SyncVal (words v)) ;;
-                         _ <- cexec_ghosts (ai_ghost_after ai) ;;
-                         cexec_cfg_addr_b instrs bblks words exitCond n' apc' apc'
-                     end
-                   end)
+                  (angelic_binary
+                     (* BLOCK branch.  Angelic, NOT a rigid match on
+                        `bblks !! v` -- for exactly the reason the exit/execute
+                        choice above is angelic.  The symbolic side dispatches
+                        by a decisive `lookup_blk`, so it may be strictly MORE
+                        decisive than the concrete table; the angelic choice
+                        lets the concrete side follow whichever branch the
+                        symbolic side took.  That keeps `btable_rel` ONE-WAY,
+                        mirroring `itable_rel` and `is_exit_sound`.
+                        With a rigid match, a concrete block entry the symbolic
+                        table lacks would force the concrete side to consume/
+                        produce while the symbolic side executed instructions,
+                        and refinement would fail -- an artifact of the rigid
+                        match, not a property of blocks. *)
+                     (match bblks !! v with
+                      | Some b =>
+                          apc' <- cexec_block b v ;;
+                          cexec_cfg_addr_b instrs bblks words exitCond n' apc' apc'
+                      | None => error
+                      end)
+                     (match instrs !! v with
+                      | None    => error
+                      | Some ai =>
+                          _ <- cchunk_gc ;;
+                          _ <- cdrop_dead ;;
+                          _ <- cexec_ghosts (ai_ghost_before ai) ;;
+                          apc' <- cexec_instruction (ai_instr ai) apc anp
+                                    (ty.SyncVal (words v)) ;;
+                          _ <- cexec_ghosts (ai_ghost_after ai) ;;
+                          cexec_cfg_addr_b instrs bblks words exitCond n' apc' apc'
+                      end))
             end
         end.
 
@@ -534,6 +548,49 @@ Section CFGVerificationDerived.
 
     (* One lookup yields BOTH the word term and the instruction, so this
        returns the gmap facts for both columns at once. *)
+    (* ===================================================================== *)
+    (* BLOCK TABLE RELATION -- the SOUNDNESS half.                            *)
+    (*                                                                       *)
+    (* Mirrors `itable_rel` exactly: every SYMBOLIC entry names an address the *)
+    (* concrete gmap maps to the same block.  Needed under either design for   *)
+    (* the completeness question below, so it is written first.                *)
+    (*                                                                       *)
+    (* ONE-WAY, exactly like `itable_rel` and `is_exit_sound`, and that is
+       sufficient: `cexec_cfg_addr_b` dispatches blocks ANGELICALLY, so where
+       the symbolic side is more decisive the concrete side simply follows it.
+       (An earlier version of this comment claimed blocks needed a two-way
+       relation because a symbolic block MISS falls through to the instruction
+       path rather than erroring.  That was a consequence of writing the
+       concrete dispatch as a rigid match, not a property of blocks.) *)
+    Definition btable_rel {w} (bblks : gmap (bv xlenbits) SBlk)
+        (btbl : SBlkTableT (wctx w)) : Pred w :=
+      fun ι => List.Forall
+        (fun p => exists v, inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι
+                            = ty.SyncVal v /\ bblks !! v = Some (snd p)) btbl.
+
+    Lemma lookup_blk_sound {w} (bblks : gmap (bv xlenbits) SBlk)
+        (btbl : SBlkTableT (wctx w))
+        (apc : STerm ty_xlenbits w) (b : SBlk) (ι : Valuation w) :
+      lookup_blk btbl apc = Some b ->
+      btable_rel bblks btbl ι ->
+      exists v, inst apc ι = ty.SyncVal v /\ bblks !! v = Some b.
+    Proof.
+      unfold lookup_blk, btable_rel.
+      intros Hlk Hrel.
+      (* the predicate must be SPELLED OUT: with a two-place tuple pattern Coq
+         cannot infer the placeholder (lookup_instr_sound's three-place one
+         happens to pin it). *)
+      destruct (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) btbl)
+        as [[t b']|] eqn:Hfind; cbn in Hlk; [|discriminate].
+      injection Hlk as ->.
+      apply find_some in Hfind as [Hin Heqb].
+      rewrite List.Forall_forall in Hrel.
+      specialize (Hrel _ Hin) as (v & Hv & Hmap).
+      exists v. split; [| exact Hmap].
+      rewrite (peval_eqb_inst apc t ι Heqb).
+      exact Hv.
+    Qed.
+
     Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
         (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AnnotInstr)
