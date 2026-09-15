@@ -1860,3 +1860,98 @@ Definition gen_extra_post {Σ : LCtx} (ws : list (walk_reg Σ))
     (cs : list (cell_spec Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   (gen_walk_post ws ∗ gen_cells_post cs)%asn.
+
+(* ========================================================================= *)
+(* SELF-CONTAINED register specs: PVVar / PQAt                               *)
+(*                                                                           *)
+(* `gen_regs_at` applies ONE base term to every `PVBaseOff`, which is right   *)
+(* for a whole-program contract (everything is an offset from `p`) and wrong  *)
+(* for a SELF-CONTAINED one, where the code base and each data base are       *)
+(* separate parameters.  A segment that says "X2 holds the stack base" cannot *)
+(* say it with `PVBaseOff` when the base term is the CODE base.               *)
+(*                                                                           *)
+(* Fix, mirroring `cell_spec` rather than inventing a second idiom: index the *)
+(* spec by Sigma and let each entry name its OWN base VARIABLE plus an        *)
+(* offset.  The membership proof is implicit and resolved by ctx.resolution   *)
+(* at the call site, exactly as `MkCellSpec`'s is.                            *)
+(*                                                                           *)
+(* `PQAt b k` is "register holds (b + k)"; `PVVar b` is the k=0 sugar.  The   *)
+(* old `PVBaseOff k` is the special case `PQAt <the code base var> k`, so     *)
+(* nothing is lost and `reg_spec_rel` is untouched -- the whole-program       *)
+(* contracts keep working unchanged.                                         *)
+(* ========================================================================= *)
+
+Inductive param_val_q (Σ : LCtx) : Type :=
+| PQExist
+| PQConst (v : Val ty_xlenbits)
+| PQAt (b : string) (bIn : (b∷ty_xlenbits ∈ Σ)%katamaran) (k : N).
+
+Arguments PQExist {Σ}.
+Arguments PQConst {Σ} v.
+Arguments PQAt {Σ} b bIn k.
+
+(* "this register holds the value of logic variable b" *)
+Definition PVVar {Σ : LCtx} (b : string)
+    {bIn : (b∷ty_xlenbits ∈ Σ)%katamaran} : param_val_q Σ :=
+  @PQAt Σ b bIn 0.
+
+(* "this register holds b + k" *)
+Definition PVOff {Σ : LCtx} (b : string)
+    {bIn : (b∷ty_xlenbits ∈ Σ)%katamaran} (k : N) : param_val_q Σ :=
+  @PQAt Σ b bIn k.
+
+Definition reg_spec_q (Σ : LCtx) : Type := RegIdx * bool * param_val_q Σ.
+
+(* At the PRE context (Σ |> "a"): one ctx.in_succ past the segment's own Σ,
+   and a second inside the existential binder -- the same two-level shift
+   gen_cells_pre performs, and for the same reason. *)
+Definition gen_reg_asn_q {Σ : LCtx} (s : reg_spec_q Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  let '(r, is_pub, pv) := s in
+  match pv with
+  | PQExist =>
+      asn.exist "v" ty_xlenbits
+        (let v := @term_var _ "v" _ ctx.in_zero in
+         if is_pub then (r ↦ᵣ v ∗ asn.formula (formula_secLeak v))%asn
+         else (r ↦ᵣ v)%asn)
+  | PQConst v => (r ↦ᵣ term_val ty_xlenbits v)%asn
+  | PQAt b bIn k =>
+      (* `addr_off` collapses a ZERO offset, so `PVVar b` yields the bare
+         `term_var b` rather than `b + 0`.  Those are equal but not
+         SYNTACTICALLY equal, and the difference is enough to fail the VC.
+         And `is_pub` is honoured here, not ignored: for a whole-program
+         contract the base is `p`, whose publicness is established once
+         elsewhere, but a self-contained segment's data base is a PARAMETER
+         and nothing else says it is public. *)
+      let a := addr_off (@term_var _ b _ (ctx.in_succ bIn)) (bv.of_N k) in
+      if is_pub then (r ↦ᵣ a ∗ asn.formula (formula_secLeak a))%asn
+      else (r ↦ᵣ a)%asn
+  end.
+
+Definition gen_regs_q {Σ : LCtx} (specs : list (reg_spec_q Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
+  List.fold_right (fun s acc => (gen_reg_asn_q s ∗ acc)%asn) ⊤%asn specs.
+
+(* The same at the POST context (Σ |> "a" |> "an").  A cut assertion needs it:
+   gen_regs_q lives at Σ |> "a" and an Assertion does not weaken, the same
+   reason ZZMladCommon carries gen_post_rel beside gen_pre_rel.  Two in_succ
+   to cross "a" and "an", three inside the existential's own binder. *)
+Definition gen_reg_asn_q_post {Σ : LCtx} (s : reg_spec_q Σ)
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  let '(r, is_pub, pv) := s in
+  match pv with
+  | PQExist =>
+      asn.exist "v" ty_xlenbits
+        (let v := @term_var _ "v" _ ctx.in_zero in
+         if is_pub then (r ↦ᵣ v ∗ asn.formula (formula_secLeak v))%asn
+         else (r ↦ᵣ v)%asn)
+  | PQConst v => (r ↦ᵣ term_val ty_xlenbits v)%asn
+  | PQAt b bIn k =>
+      let a := addr_off (@term_var _ b _ (ctx.in_succ (ctx.in_succ bIn))) (bv.of_N k) in
+      if is_pub then (r ↦ᵣ a ∗ asn.formula (formula_secLeak a))%asn
+      else (r ↦ᵣ a)%asn
+  end.
+
+Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
+    : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  List.fold_right (fun s acc => (gen_reg_asn_q_post s ∗ acc)%asn) ⊤%asn specs.

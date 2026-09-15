@@ -2418,3 +2418,111 @@ part of the contract too.
 - Method note worth keeping: a batch script printed `ZZMladCompose EXIT=143 OK`
   because its summary grepped the log for `^Error` while the exit code said 143.
   Key the verdict on the exit code; a log grep reports "OK" for a killed process.
+
+---
+
+# §R17. Self-contained segments: `PVVar` and the conversion (2026-09-15)
+
+Asked: can every segment be stated as if it were the only code being verified —
+own base, offset 0, no knowledge of muladd? **Yes. All eight straight-line
+segments now are, and the five loops already were.**
+
+## Scoping correction: "eleven" was six
+
+The loops were parameterised from the start — `LoopSpec` has a `loop_base_var`
+field, and every generated loop spec uses it:
+
+| loop | context |
+|---|---|
+| D | `mulinner_ctx = ["q"; "p1"; "p7"; "e"]` |
+| G | `divrem_ctx`, plus `ZZDvAlone.v` at its own base, offset 0 |
+| K | `addk_ctx = ["q"; "ap"; "bp"; "e"]` |
+| M | `subword_ctx = ["q"; "ap"; "bp"; "e"]` |
+
+None mentions `"p"`. The one exception is `amCtx = ["p"; …]` in
+`ZZMladSubBody.v` — the OLD hand-written M loop, superseded by the generated
+`subword_ctx` form. So whole-program knowledge was confined to the
+straight-line segments.
+
+## The machinery gap, and `PVVar`
+
+Three of the four pieces already existed: `gen_seg_contract` takes `base` and
+`head`, so offset-0 placement is free; the bound is a parameter; and
+`cell_spec` carries a **per-cell base variable**, so `gen_cells_pre` puts memory
+at a data-base parameter (`gen_mem_pre_rel` cannot — it is hardwired to
+`(["p"] |> "a")` and muladd's offsets).
+
+The gap was registers. `gen_regs_at` applies ONE base term to every
+`PVBaseOff`, which is right when everything is an offset from `p` and useless
+when the code base and each data base are separate parameters. Added to
+`GenSegment.v`, mirroring `cell_spec` rather than inventing a second idiom:
+
+```coq
+Inductive param_val_q (Σ : LCtx) : Type :=
+| PQExist | PQConst (v : Val ty_xlenbits)
+| PQAt (b : string) (bIn : (b∷ty_xlenbits ∈ Σ)%katamaran) (k : N).
+
+Definition PVVar {Σ} (b : string) {bIn} := @PQAt Σ b bIn 0.   (* holds b *)
+Definition PVOff {Σ} (b : string) {bIn} (k : N) := @PQAt Σ b bIn k.  (* holds b + k *)
+```
+
+plus `gen_regs_q` (pre) and `gen_regs_q_post` (post — an Assertion does not
+weaken across `"an"`, the same reason `gen_post_rel` sits beside
+`gen_pre_rel`). `reg_spec_rel` is untouched, so the whole-program contracts keep
+working; `PVBaseOff k` is just `PQAt <code base> k`.
+
+**Two bugs of mine in the first cut, both worth the note:**
+
+1. `PVVar b` emitted `b + 0` instead of `b`. Equal, not SYNTACTICALLY equal, and
+   the VC failed. Fixed by routing through `addr_off`, which already collapses a
+   zero offset — it existed and I had not used it.
+2. The `PQAt` branch **ignored `is_pub`**, so publicness of a data base was
+   never asserted. Harmless for `PVBaseOff` (the base is `p`, whose publicness
+   is established once elsewhere) and wrong here, where the base is a parameter
+   nothing else constrains.
+
+## Result
+
+| seg | context | memory | bound |
+|---|---|---|---|
+| A | `["q"; "mb"]` | m[] at `mb` | 16 |
+| BC | `["q"; "xb"; "sp"]` | x[] at `xb`, spills at `sp` | 116 |
+| E | `["q"; "xb"; "mb"]` | x[], m[] | 68 |
+| F | `["q"; "xb"]` | none | 48 |
+| H | `["q"]` | none | 112 |
+| J | `["q"; "xb"; "mb"]` | x[] | 72 |
+| L | `["q"; "xb"; "mb"]` | none | 56 |
+| N | `["q"; "sp"]` | spills at `sp` | 20 |
+
+All eight `Qed`. Bounds are per-base and per-extent; none mentions 1168 or
+muladd. **A keeps its real cut postcondition** (`T0 = m[0] = 63`), which is what
+exercises `gen_regs_q_post`.
+
+**NON-VACUITY, swept not assumed** — a self-contained precondition has more ways
+to be accidentally unsatisfiable than a whole-program one, since nothing forces
+the bases to be disjoint or the bounds consistent. Falsification arm per
+segment, first declared exit bumped by 4: **all six new ones REJECTED**
+(`ZZSegQH`/`ZZSegQN` were checked when they were spiked). Separation does give
+code/data disjointness for free — aliasing `ptsto_instrs` and `ptstomem` chunks
+is unsatisfiable — but unsatisfiable means VACUOUS, not caught, which is exactly
+why these arms matter here more than elsewhere.
+
+## The readability win, which was not the goal
+
+`p + 1132` becomes `PVOff "xb" 4`. The first is a byte offset into muladd that
+happens to land inside an array; the second says *x[1]*. Several specs stopped
+needing a comment explaining what the offset was.
+
+## What is NOT done
+
+- **Composition sites are untouched.** `tailChain`, `ZZSpikeEnter2` and the
+  `Hif` lemmas get `p + 648` definitionally today; against a self-contained
+  segment they need `q = p + 648`, `xb = p + 1128`, … supplied and rewritten.
+  That is the real remaining work and it is the same asymmetry the framing pass
+  hit: contracts convert easily, composition is the expensive half.
+- The converted segments live beside the originals (`ZZSegQ*.v` vs
+  `ZZMladSg*.v`) rather than replacing them, so nothing downstream broke — and
+  so the old ones are still what the chain uses.
+- **F's and L's real postconditions are not converted** — `ZZSegQF`/`ZZSegQL`
+  carry `asn_no_post` where `ZZEnterFG.v`'s G-entry cut and `sgL_post` carry
+  real ones. Only A's was converted.
