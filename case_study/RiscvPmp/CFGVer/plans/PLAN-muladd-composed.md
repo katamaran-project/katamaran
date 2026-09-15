@@ -2152,3 +2152,122 @@ Measurement rig kept: `ZZImpCarry.v` (imports baseline), `ZZEnterFGCarry.v`
 recoverable from git), `ZZEnterFGFrame.v` (memory-only arm),
 `ZZEnterFGFramedM.v` (framed contract at carry imports),
 `ZZEnterFGImportsNM.v` (the 1,447,984 arm that exposed the protocol trap).
+
+---
+
+# §R15. Framing applied to the other straight-line cuts (2026-09-15)
+
+§R14 did F. This does the rest: **seven more straight-line segments, 1.924×
+aggregate**, which replicates F's 1.961× rather than depending on it.
+
+## Method — the footprint is read off the instructions, then narrowed by trial
+
+`Example/ZZFootDump.v` prints each segment's instruction list; a decoder over
+the AST arms (`LOAD imm rs1 rd`, `STORE imm rs2 rs1`, `RTYPE rs2 rs1 rd`,
+`ITYPE`/`SHIFTIOP imm rs1 rd`, `BTYPE imm rs2 rs1`, `UTYPE imm rd`) gives the
+register set and the memory ops. x0 is excluded — it is not a resource. Two
+`RISCV_JAL` arms write x0, i.e. plain jumps, and contribute nothing.
+
+That gives a CANDIDATE footprint. It is then narrowed by compiling: too narrow
+fails with `No applicable tactic` in ~30 s. Two rounds were run — registers
+first, then memory — because attributing a single combined change is guesswork.
+
+## Results
+
+`allocated_words` net of `ZZSgImports.v` (642,110,411), the two-line import
+block every `ZZMladSg*.v` shares. Matched: same file, same imports, same
+`solve_param_vc`.
+
+| seg | instrs | regs | orig M | framed M | ratio | memory kept |
+|---|---|---|---|---|---|---|
+| sgA | 4 | 20→3 | 109.3 | 62.0 | 1.764× | `m[]` only |
+| sgB | 16 | 20→14 | 193.5 | 132.8 | 1.457× | `x[]`+stack |
+| sgC | 13 | 20→11 | 196.1 | 90.7 | **2.163×** | `x[]` only |
+| sgE | 17 | 20→12 | 276.3 | 153.0 | 1.806× | `x[]`+`m[]` |
+| sgH | 28 | 20→12 | 421.9 | 190.1 | **2.220×** | **FRAMED OFF** |
+| sgJ | 18 | 20→14 | 253.5 | 138.4 | 1.832× | `x[]` only |
+| sgL | 14 | 20→11 | 227.2 | 105.3 | **2.158×** | **FRAMED OFF** |
+| **total** | | | **1677.9** | **872.1** | **1.924×** | |
+
+With F (§R14, 1.961×) that is **eight segments between 1.46× and 2.22×**. The
+effect is not one segment's accident.
+
+**The two axes are independent and both matter**, which is why they were run
+separately:
+
+| seg | orig | after regs | after regs+memory |
+|---|---|---|---|
+| sgB | 193.5 | 157.5 (1.228×) | 132.8 (1.457×) |
+| sgC | 196.1 | 141.1 (1.390×) | 90.7 (2.163×) |
+| sgE | 276.3 | 194.5 (1.421×) | 153.0 (1.806×) |
+| sgJ | 253.5 | 206.6 (1.227×) | 138.4 (1.832×) |
+
+Registers alone buy 1.23–1.42×; memory buys roughly as much again. Neither
+dominates.
+
+**The best two are the ones that touch NO memory at all** — sgH (28
+instructions, zero memory ops) and sgL. So the ceiling of this technique is set
+by how much of the declared state a segment genuinely ignores, not by its
+length: sgH is the longest straight-line segment and also the best payoff.
+
+**§R14's "partial memory footprints need a cell-level block" is now only half
+true.** Four segments narrowed memory at ARRAY granularity — dropping `m[]`, or
+the stack, or both — without any new machinery, because `mlad_mem_specs_rel` is
+already `x[] ++ m[] ++ stack` and the arrays are separately nameable. What still
+needs the cell-level block is narrowing WITHIN an array. sgE is the counter-
+example that keeps the limit real: it reads `m[]` and the trim to `x[]+stack`
+was REJECTED, so it keeps both arrays.
+
+## What LANDED and what did not
+
+Landed into `Example/ZZMladSg{A,B,C,E,H,J}.v`, each with a header block stating
+its footprint, its ratio, and where its pre-framing arm lives. The originals are
+kept verbatim as `ZZSgCarry{A,B,C,E,H,J}.v` — **these files are untracked, so
+the carry arms are NOT recoverable from git**; deleting them destroys the A/B.
+
+**sgL is NOT landed, deliberately.** Its postcondition feeds the live tail chain
+(`ZZMladTail.v`, 23 `Qed`, plus `ZZSpikeEnter2.v`), and the framed version
+WEAKENS that postcondition — it drops the two window cells, the second window's
+cells, the four spill slots and the X2/S0–S3 block. Those must instead reach the
+loop through `seg_run`'s `Fr` at the composition site, which is real work and
+would break 23 `Qed` until done. The framed contract is proved and kept as
+`Example/ZZFrSgL.v` at 2.158×; landing it is a task for whoever reworks the tail
+composition.
+
+**sgN needed nothing.** It already declares `mlad_reg_specs_tail` (5 registers)
+and `mlad_stack_specs_rel` (4 cells) — it was written minimal in the first place,
+which is some evidence the discipline is natural once noticed.
+
+## sgL had already noticed this, in a comment, 2026-09-09
+
+Inside `sgL_post`, explaining why a block had to be re-claimed:
+
+> "(Resources can be framed AROUND a segment at the Iris level, but not ones the
+> contract's own precondition demands.)"
+
+That is exactly §R14's observation, written down six days earlier and solved the
+other way round — by re-claiming in the postcondition rather than by not
+demanding in the precondition. **The cheaper half of a correct observation went
+unused because the expensive half worked.** Worth remembering as a review
+reflex: when a postcondition re-claims something the precondition consumed, ask
+whether the precondition needed it.
+
+## A mistake of mine, and it was §R14's own rule
+
+sgL's first framed attempt FAILED. Cause: its postcondition's `am_regs` demands
+**A3** (the limb mask), and A3 appears in NONE of sgL's 14 instructions — so the
+instruction-derived footprint was wrong. §R14 states the rule ("the footprint of
+the CONTRACT, not of the instructions", with S0–S3 as the worked example) and I
+violated it one section later by decoding instructions mechanically and trusting
+the result. The decoder gives a LOWER BOUND on the footprint; the postcondition
+can only add.
+
+## Next
+
+- The eight framed contracts have not been composed. The saving is real at the
+  VC level; whether `Fr` threading at the Iris level eats it is **unmeasured**,
+  and that is the same gap §R1 flagged for composition generally.
+- `gen_cut_contract` should take the footprint as data, so a new cut starts
+  minimal and is widened only when the executor objects. The eight worked
+  examples now exist to fix its shape.
+- Rework the tail composition to supply `Fr`, then land sgL.
