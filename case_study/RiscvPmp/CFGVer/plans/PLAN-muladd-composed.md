@@ -2271,3 +2271,150 @@ can only add.
   minimal and is widened only when the executor objects. The eight worked
   examples now exist to fix its shape.
 - Rework the tail composition to supply `Fr`, then land sgL.
+
+---
+
+# §R16. The tail composition supplies `Fr`; sgL landed (2026-09-15)
+
+§R15 proved framed sgL at 2.158× but did NOT land it, because its postcondition
+feeds the live tail chain and the framed version weakens it. This closes that:
+**`ZZMladTail.v` now threads an explicit frame, sgL is landed, and the chain is
+green with 24 `Qed` and no holes.**
+
+## What changed
+
+sgL's contract states its footprint (11 registers, no memory), so its
+postcondition drops from **22 conjuncts to 13**. The resources it no longer
+re-claims are supplied by the caller instead:
+
+```coq
+Definition tailFr (ia : N) : iProp Σ :=
+  ( asn.interpret cellPrivA (cellI (bv.add (bv.of_N ia) (bv.of_N 1132)))
+  ∗ asn.interpret cellPubA  (cellI (bv.add (bv.of_N ia) (bv.of_N 1144)))
+  ∗ asn.interpret cellPrivA (cellI (bv.add (bv.of_N ia) (bv.of_N 1136)))
+  ∗ asn.interpret cellPubA  (cellI (bv.add (bv.of_N ia) (bv.of_N 1148)))
+  ∗ amSpills ia
+  ∗ amTailRegs ia 1132 1144 )%I.
+```
+
+`tailChain` takes `∗ tailFr ia` in its premise and — the whole mechanism —
+**`HFr` is simply absent from the `with "[Hpre Hpc Hnpc Hinstrs]"` selector.**
+What the selector omits is not consumed by the contract and survives untouched
+into the continuation. This chain predates `seg_run`, so it calls
+`sound_scfg_verification_condition_myWP2` directly and the frame is threaded by
+hand; `seg_run`'s `Fr` parameter is the packaged version of exactly this.
+
+## The shape rule that decided the whole edit
+
+`iFrame` matches SYNTACTICALLY, so frame and goal must agree on what is folded.
+The split that works:
+
+| piece | in the goal | in `tailFr` |
+|---|---|---|
+| the four data cells | unfolded (goal cbn's `cellsPriv`/`cellsPub`) | spelled out |
+| `amSpills`, `amTailRegs` | **folded** (removed from the `unfold` list) | folded |
+
+Getting that wrong is an `iFrame` failure, and the fix is to move a name between
+the `unfold` list and the frame definition — not to add tactics.
+
+## Two branches, and only one of them is the interesting one
+
+`sgL` declares two exits. **1056** enters the loop and is the real one; **1108**
+skips it (dead at mlen=2, but declared, so the continuation must discharge it).
+
+- **1056 worked first time.** The frame went straight into `amInvN`.
+- **1108 failed:** `iAndDestruct: cannot destruct emp`. It is the branch that
+  additionally unfolds `amSpills`/`amTailRegs` to meet sgN's precondition shape,
+  and the nested destruct pattern
+  `(Hx1 & Hm1 & Hx2 & Hm2 & (Hs0 & Hs1 & Hs2 & Hs3 & _) & Htl)` was wrong.
+
+**Fix: split the frame BEFORE unfolding**, so every pattern sees a small known
+arity — `unfold tailFr`, the 6-way split (identical to the one already working
+in 1056), then the big unfold, then `Hsp` and `Htl` separately.
+
+**Stated plainly: this is a fix by mirroring a working sequence, not by
+diagnosis.** Reasoning about `cellsPriv 4`'s arity did not find the fault —
+`c ∗ (c ∗ (c ∗ (c ∗ emp)))` should take a 5-slot pattern. The rule that came out
+of it is still worth having: *destructure a frame at its own definition's arity
+before any unfolding changes that arity.*
+
+## Cost
+
+`ZZMladTail.v` compiles in **251 s** against 241 s for the failing run and the
+same order as before the rework; the Iris-level cost of threading `Fr` is not
+visibly different. That is a single wall-clock pair on one file, NOT a matched
+`allocated_words` measurement, so it is evidence that framing did not blow up
+the composition — not a claim that composition is free. The question §R15 left
+open ("whether `Fr` threading at the Iris level eats the VC saving") is
+therefore still **open**, now with one reassuring data point.
+
+## Status
+
+| file | state |
+|---|---|
+| `ZZMladSgL.v` | framed, 11 regs / no memory, green (13 s) |
+| `ZZMladTail.v` | frame threaded, **24 `Qed`, 0 holes**, green (251 s) |
+| `ZZSgCarryL.v` | pre-framing arm, untracked, the only copy |
+
+All eight straight-line segments are now framed AND, for sgL, composed.
+
+## Still open
+
+## A STRUCTURAL LIMIT, found via ZZSpikeEnter2
+
+`ZZSpikeEnter2.v` inherits `cfg_precondition (sgL_contract ia)` and broke on the
+framed version (`No applicable tactic` at `valid_sgL'`). The cause is not a slip
+and cannot be fixed by threading a frame:
+
+> **A segment whose successor is entered through the GENERATED path must OWN
+> that successor's memory footprint. Its memory cannot be framed off.**
+
+Why: `gen_loop_at_head (subword_spec ...)` includes `subword_cells` — the loop's
+window cells at `ap` and `bp` — so the cut postcondition IS partly a memory
+claim, and a postcondition can only claim what the precondition owns.
+`loop_entry_by_subst` then collapses the entry obligation to a single valuation
+equality, which leaves **no seam at which a frame could be merged in**.
+
+`ZZMladTail.v` frames precisely because it is HAND-WRITTEN: it assembles
+`amInvN` from the postcondition AND `tailFr` at the Iris level, where the two
+can be combined. The generator has no equivalent of that step.
+
+So `ZZSpikeEnter2.v` keeps the pre-framing precondition, now spelled out inline
+rather than inherited, with the reasoning recorded at the definition. Green.
+
+**Consequence for `gen_cut_contract` (§R15's next item): the footprint it takes
+as data must be the union of the segment's own footprint and, when the successor
+is a generated loop entry, that loop's memory footprint.** A generator that
+takes only the instruction footprint will produce contracts that cannot state
+their successor's entry condition. This is the same "footprint of the CONTRACT,
+not of the instructions" rule as §R15, one level up: the successor's needs are
+part of the contract too.
+- **`ZZMladCompose.v` does not build on this box — OOM, and it is NOT the
+  framing's doing.** Re-run cleanly after the tail landed: killed at 659 s with
+  `EXIT=143` and no Coq error in the log. `systemd-oomd` is active and sends
+  SIGTERM (143) rather than the kernel killer's SIGKILL, and the first attempt
+  had reached the full 14 GB — so this is `rocq-compile-oom`'s signature.
+
+  **Independence proved structurally rather than by re-running** (a re-run would
+  just OOM again):
+
+  | check | result |
+  |---|---|
+  | `sgA_place` carry vs landed | byte-identical (`abacfc11c4b0`) |
+  | `sgB_place` carry vs landed | byte-identical (`850a96c97356`) |
+  | `ZZMladCommon.v` (source of `mlad_ai`) | unmodified since 09-09 |
+  | references to `sg{A,B}_contract` / `_foot` / `_post` / `cfg_precondition` / `gen_regs_any` / `gen_mem_pre_rel` | **0 each** |
+
+  The file names only `mlad_ai`, `sgA_place` and `sgB_place`, all unchanged, so
+  the framing cannot affect it. Its cost is the two whole-table `vm_compute`s.
+  Its `.vo` dates from 2026-09-09, so it did build once; what changed is the
+  box, not the file. Needs either more RAM or a cheaper formulation of
+  `itable_faith_of_segment`'s side condition.
+
+  Method note: when a candidate cause and an observation are both present,
+  prefer a structural check that the cause cannot reach the observation over
+  re-running the expensive observation. Four definitions and a grep settled
+  this; a re-run would have cost 11 minutes and answered nothing.
+- Method note worth keeping: a batch script printed `ZZMladCompose EXIT=143 OK`
+  because its summary grepped the log for `^Error` while the exit code said 143.
+  Key the verdict on the exit code; a log grep reports "OK" for a killed process.
