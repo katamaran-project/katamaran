@@ -949,6 +949,65 @@ Section CFGVerificationDerived.
        `subst_itable ζ tbl` yet still present in δ3.  And it must be δ1, not ζ
        alone — δ1 = snoc ζ a2 with a2 the INITIAL pc, which the live `apc` no
        longer covers once the loop advances. *)
+    (* ---- SPIKE 2 (PLAN §7 step 2): SEVERAL blocks, in sequence. -----------
+       The question this answers is whether a PRODUCED postcondition is
+       consumable as the next block's precondition with no hand-written glue --
+       the property `tailChain` spends ~90 lines on at the Iris level.
+
+       Blocks are fixed at the EMPTY logic context and use `asn.exist` for
+       whatever they need to quantify.  That is a real restriction (a general
+       version wants a heterogeneous list, indexed per block), but it is not the
+       property under test, and `asn.exist` covers the spike's contracts. *)
+    Record SBlk : Type := MkSBlk
+      { sblk_pre  : Assertion [ctx]
+      ; sblk_post : Assertion [ctx]
+      ; sblk_off  : N }.
+
+    Definition sexec_block (b : SBlk) :
+      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w apc =>
+        ⟨ θ1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id [ctx]) ;;
+        ⟨ θ2 ⟩ _     <- consume (sblk_pre b) evars ;;
+        let evars2 := persist (A := Sub [ctx]) evars θ2 in
+        ⟨ θ3 ⟩ _     <- produce (sblk_post b) evars2 ;;
+        pure (term_binop bop.bvadd (persist__term apc (θ1 ∘ θ2 ∘ θ3))
+                (term_val ty_xlenbits (bv.of_N (sblk_off b)))).
+
+    Fixpoint sexec_blocks (bs : list SBlk) :
+      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w apc =>
+        match bs with
+        | nil      => pure apc
+        | b :: bs' => ⟨ θ ⟩ apc' <- sexec_block b apc ;; sexec_blocks bs' apc'
+        end.
+
+    (* ---- BLOCK TABLE (PLAN-executor-composition.md §4.1) ------------------
+       The CFG analogue of `CEnv`: address term -> block contract.  Shaped
+       exactly like SInstrTableW so the same peval/Term_eqb matching applies and
+       a symbolic pc dispatches the same way -- see lookup_instr above; do not
+       drop either peval call. *)
+    Definition SBlkTableT : TYPE := fun w => list (Term w ty_xlenbits * SBlk).
+
+    Definition persist_blktable {w1 w2} (θ : w1 ⊒ w2) : SBlkTableT (wctx w1) -> SBlkTableT (wctx w2) :=
+      List.map (fun '(t,b) => (persist__term t θ, b)).
+
+    Definition lookup_blk {w} (btbl : SBlkTableT (wctx w))
+        (apc : STerm ty_xlenbits w) : option SBlk :=
+      option_map snd
+        (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) btbl).
+
+    Definition subst_blktable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
+        (btbl : SBlkTableT (wlctx Σ)) : SBlkTableT w :=
+      List.map (fun '(t,b) => (subst t ζ, b)) btbl.
+
+    (* Weaken a contract-level block table from Σ into Σ ▻ b.  The executor's
+       fixed block table lives at its Σ0 = Σ ▻ "a"∷ty_xlenbits (the pc binder),
+       while an author writes block addresses over Σ; this is the one-binder
+       shift between the two. *)
+    Definition wk1_blktable {Σ : LCtx} {b}
+        (btbl : SBlkTableT (wlctx Σ)) : SBlkTableT (wlctx (Σ ▻ b)) :=
+      List.map (fun '(t,bl) => (subst t (sub_wk1 (b := b)), bl)) btbl.
+
     (* THE POST-DROP STEP BODY, HOISTED OUT OF sexec_cfg_addr.
        It is a plain let-hoist — the same chain, in the same order, with the
        persist layers split at the drop instead of accumulated across it — and it
@@ -983,7 +1042,8 @@ Section CFGVerificationDerived.
               (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
               (persist__term apc' θ3) (persist__term apc' θ3).
 
-    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (first : bool) :
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (first : bool)
+        (btbl0 : SBlkTableT (wlctx Σ0)) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w trans tbl exits apc anp =>
@@ -1057,6 +1117,69 @@ Section CFGVerificationDerived.
                the pc term literally IS a declared exit term -- never on an
                undecided comparison. *)
             if andb (negb first) (is_exit exits apc) then pure apc else
+            (* ---- THE BLOCK HOOK (PLAN-executor-composition.md §4.2) --------
+               Consulted BEFORE lookup_instr: if the pc matches a block entry,
+               CONSUME the block's precondition, PRODUCE its postcondition, and
+               resume at entry + off instead of executing anything.
+
+               `btbl0` is a FIXED parameter at the contract context Σ0, mapped
+               into the current world by the very `trans` the executor already
+               carries -- it is NOT persisted per step like `tbl`.  That is not
+               a stylistic choice.  `drop_dead` may only remove a variable dead
+               in its whole root set (trans/tbl/exits/apc/anp/wd/heap); a
+               w-level block table would be an EIGHTH root, and adding one
+               means changing `var_dead`, `var_dead_andb`, `drop_dead`,
+               `step_after_drop`'s `rec` type, `cext_drop_dead` and
+               `rdrop_dead`'s Factors witness.  Substituting through `trans`
+               makes the block table's variables a SUBSET of trans's by
+               construction, so none of that is needed and `step_after_drop` is
+               untouched: `@sexec_cfg_addr Σ0 n' false btbl0` has exactly the
+               `rec` type it already had.
+
+               Blocks are looked up with the same peval/Term_eqb matching as
+               instructions, so a symbolic pc dispatches the same way.
+
+               `lookup_blk (subst_blktable trans []) apc` reduces to `None` by
+               computation, so passing `[]` -- what every non-composed contract
+               does -- recovers the previous definition DEFINITIONALLY.  The
+               block branch does NOT consult `first`: a block is accounted for
+               at the address it starts at, and its exit is reached by the
+               arithmetic rather than by the pc matching a declared exit.
+
+               THE RESUMED NEXTPC IS DEMONIC, and that is forced.  `apc`/
+               `anp` are the VALUES of the pc and nextpc registers, held in
+               terms rather than in the heap: sexec_instruction PRODUCES
+               `pc ↦ a ∗ nextpc ↦ np` at its prologue and CONSUMES
+               `pc ↦ an ∗ nextpc ↦ an` at its epilogue, so between steps the
+               heap holds neither chunk.  The instruction path may pass `apc'`
+               for both only because that epilogue CONSUMED `nextpc ↦ an` --
+               the heap forced the value.  A block consumes no epilogue, so
+               nothing forces it, and passing `apc'` would be exactly the
+               "assume nextpc = pc" strengthening that exec_instruction_
+               prologue's comment records as REJECTED.  The spike passed
+               `persist__term anp θb` (staler still: the PRE-block nextpc), and
+               both were caught only by writing the concrete mirror.
+
+               A demonic variable is as general as an existential and costs one
+               binder per block -- blocks are few, and this is the same choice
+               sexec_triple_addr already makes for the first step, which
+               genuinely does not know the incoming nextpc either.
+
+               What this leaves for the Iris layer: `blocksSound` (Adequacy.v)
+               need only deliver the block's exit as `pc ↦ entry + off` with
+               `∃ x, nextpc ↦ x` -- which is precisely what
+               sound_scfg_verification_condition_myWP2 already concludes, so a
+               segment's own VC discharges it with no strengthening. *)
+            match lookup_blk (subst_blktable trans btbl0) apc with
+            | Some b =>
+                ⟨ θb ⟩ apc' <- sexec_block b apc ;;
+                ⟨ θn ⟩ np'  <- demonic (Some "np") _ ;;
+                sexec_cfg_addr n' false btbl0
+                  (persist (A := Sub Σ0) trans (θb ∘ θn))
+                  (persist_itableW (θb ∘ θn) tbl)
+                  (persist_etable  (θb ∘ θn) exits)
+                  (persist__term apc' θn) np'
+            | None =>
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, ai) =>
@@ -1084,7 +1207,7 @@ Section CFGVerificationDerived.
                    let np0 := persist__term anp θ0 in
                    let wd0 := persist__term wd  θ0 in
                    ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
-                   step_after_drop (@sexec_cfg_addr Σ0 n' false) ai
+                   step_after_drop (@sexec_cfg_addr Σ0 n' false btbl0) ai
                      (persist (A := Sub Σ0) tr0 θd)
                      (persist_itableW θd tb0)
                      (persist_etable  θd ex0)
@@ -1092,6 +1215,7 @@ Section CFGVerificationDerived.
                      (persist__term np0 θd)
                      (persist__term wd0 θd)
                end)
+            end
         end.
 
 
@@ -1198,15 +1322,31 @@ Section CFGVerificationDerived.
       apply Hrec.
     Qed.
 
-    Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
-      forall (first : bool) {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
-        (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
-        CExt (sexec_cfg_addr fuel first trans tbl exits apc anp).
+    Lemma cext_sexec_block (b : SBlk) {w : World} (apc : Term (wctx w) ty_xlenbits) :
+      CExt (sexec_block b apc).
     Proof.
-      induction fuel as [|n IH]; intros first w trans tbl exits apc anp;
+      unfold sexec_block.
+      apply cext_bind; [apply cext_lift_purespec, SPureSpec.pext_angelic_ctx|].
+      intros w1 th1 evars.
+      apply cext_bind; [apply cext_consume|]. intros w2 th2 _.
+      apply cext_bind; [apply cext_produce|]. intros w3 th3 _.
+      apply cext_pure.
+    Qed.
+
+    Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
+      forall (first : bool) (btbl0 : SBlkTableT (wlctx Sg0))
+        {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+        (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
+        CExt (sexec_cfg_addr fuel first btbl0 trans tbl exits apc anp).
+    Proof.
+      induction fuel as [|n IH]; intros first btbl0 w trans tbl exits apc anp;
         cbn [sexec_cfg_addr].
       - apply cext_error.
       - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
+        destruct (lookup_blk (subst_blktable trans btbl0) apc) as [b|].
+        { apply cext_bind; [apply cext_sexec_block|]. intros w1 th1 apc'.
+          apply cext_bind; [apply cext_demonic|]. intros w2 th2 np'.
+          apply IH. }
         destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
         apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.
         apply cext_bind; [apply cext_drop_dead|]. intros w1 th1 _.
@@ -1361,7 +1501,7 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true []
                        (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;
@@ -1419,113 +1559,12 @@ Section CFGVerificationDerived.
         let aex := term_binop bop.bvadd a2 (term_val ty_xlenbits (bv.of_N boff)) in
         let ζ   := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2 ∘ θb) in
         let ws  := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2 ∘ θb)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false δ1b
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false [] δ1b
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) aex (persist__term np (θ2 ∘ θb)) ;;
         let δ3 := persist δ1b θ3 in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-    (* ---- SPIKE 2 (PLAN §7 step 2): SEVERAL blocks, in sequence. -----------
-       The question this answers is whether a PRODUCED postcondition is
-       consumable as the next block's precondition with no hand-written glue --
-       the property `tailChain` spends ~90 lines on at the Iris level.
-
-       Blocks are fixed at the EMPTY logic context and use `asn.exist` for
-       whatever they need to quantify.  That is a real restriction (a general
-       version wants a heterogeneous list, indexed per block), but it is not the
-       property under test, and `asn.exist` covers the spike's contracts. *)
-    Record SBlk : Type := MkSBlk
-      { sblk_pre  : Assertion [ctx]
-      ; sblk_post : Assertion [ctx]
-      ; sblk_off  : N }.
-
-    Definition sexec_block (b : SBlk) :
-      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w apc =>
-        ⟨ θ1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id [ctx]) ;;
-        ⟨ θ2 ⟩ _     <- consume (sblk_pre b) evars ;;
-        let evars2 := persist (A := Sub [ctx]) evars θ2 in
-        ⟨ θ3 ⟩ _     <- produce (sblk_post b) evars2 ;;
-        pure (term_binop bop.bvadd (persist__term apc (θ1 ∘ θ2 ∘ θ3))
-                (term_val ty_xlenbits (bv.of_N (sblk_off b)))).
-
-    Fixpoint sexec_blocks (bs : list SBlk) :
-      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w apc =>
-        match bs with
-        | nil      => pure apc
-        | b :: bs' => ⟨ θ ⟩ apc' <- sexec_block b apc ;; sexec_blocks bs' apc'
-        end.
-
-    (* ---- BLOCK TABLE (PLAN-executor-composition.md §4.1) ------------------
-       The CFG analogue of `CEnv`: address term -> block contract.  Shaped
-       exactly like SInstrTableW so the same peval/Term_eqb matching applies and
-       a symbolic pc dispatches the same way -- see lookup_instr above; do not
-       drop either peval call. *)
-    Definition SBlkTableT : TYPE := fun w => list (Term w ty_xlenbits * SBlk).
-
-    Definition persist_blktable {w1 w2} (θ : w1 ⊒ w2) : SBlkTableT (wctx w1) -> SBlkTableT (wctx w2) :=
-      List.map (fun '(t,b) => (persist__term t θ, b)).
-
-    Definition lookup_blk {w} (btbl : SBlkTableT (wctx w))
-        (apc : STerm ty_xlenbits w) : option SBlk :=
-      option_map snd
-        (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) btbl).
-
-    (* ---- THE HOOK, INSIDE the executor loop (PLAN §4.2) -------------------
-       `sexec_cfg_addr_b` is `sexec_cfg_addr` with ONE extra branch, consulted
-       BEFORE lookup_instr: if the pc matches a block entry, consume the
-       block's precondition, produce its postcondition, and continue at
-       entry + off instead of executing anything.
-
-       Written as a separate Fixpoint rather than a parameter on the original,
-       so `sexec_cfg_addr` -- and therefore `rexec_cfg_addr`, `Adequacy`, and
-       every existing example -- is untouched while this is a spike.  Merging
-       the two is what §6.1 costs, because THAT is the version the refinement
-       has to mirror.
-
-       Note the block branch does NOT consult `first`: a block is accounted for
-       at the address it starts at, and its exit is reached by the arithmetic
-       rather than by the pc happening to match a declared exit.  Whether that
-       survives contact with a LOOP-head block is §6.3 and is not tested here. *)
-    Fixpoint sexec_cfg_addr_b {Σ0 : LCtx} (fuel : nat) (first : bool) :
-      ⊢ Sub Σ0 -> SBlkTableT -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
-        STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w trans btbl tbl exits apc anp =>
-        let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
-          error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
-                                     debug_string_message := s |}) in
-        match fuel with
-        | O    => emsg "sexec_cfg_addr_b: out of fuel"
-        | S n' =>
-            if andb (negb first) (is_exit exits apc) then pure apc else
-            match lookup_blk btbl apc with
-            | Some b =>
-                ⟨ θb ⟩ apc' <- sexec_block b apc ;;
-                sexec_cfg_addr_b n' false (persist trans θb)
-                  (persist_blktable θb btbl) (persist_itableW θb tbl)
-                  (persist_etable θb exits) apc' (persist__term anp θb)
-            | None =>
-              match lookup_instr tbl apc with
-              | None         => emsg "sexec_cfg_addr_b: no instruction key matches this pc term"
-              | Some (wd, ai) =>
-                  ⟨ θ0 ⟩ _    <- chunk_gc ;;
-                  ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
-                  ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
-                                    (persist__term apc (θ0 ∘ θ1))
-                                    (persist__term anp (θ0 ∘ θ1))
-                                    (persist__term wd (θ0 ∘ θ1)) ;;
-                  ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
-                  sexec_cfg_addr_b n' false
-                    (persist trans (θ0 ∘ θ1 ∘ θ2 ∘ θ3))
-                    (persist_blktable (θ0 ∘ θ1 ∘ θ2 ∘ θ3) btbl)
-                    (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl)
-                    (persist_etable (θ0 ∘ θ1 ∘ θ2 ∘ θ3) exits)
-                    (persist__term apc' θ3)
-                    (persist__term anp (θ0 ∘ θ1 ∘ θ2 ∘ θ3))
-              end
-            end
-        end.
 
     Definition sexec_triple_addr_blks {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
@@ -1547,19 +1586,16 @@ Section CFGVerificationDerived.
         let δ1b := persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 (θ2 ∘ θb) in
         let ζ   := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2 ∘ θb) in
         let ws  := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2 ∘ θb)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false δ1b
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false [] δ1b
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) aex (persist__term np (θ2 ∘ θb)) ;;
         let δ3 := persist δ1b θ3 in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
-    Definition subst_blktable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
-        (btbl : SBlkTableT (wlctx Σ)) : SBlkTableT w :=
-      List.map (fun '(t,b) => (subst t ζ, b)) btbl.
 
     (* The VC entry point for the IN-LOOP hook.  Identical to
-       sexec_triple_addr except that it threads a block table and runs
-       sexec_cfg_addr_b.  A block may now sit ANYWHERE in the program, not
+       sexec_triple_addr except that it supplies a NON-EMPTY block table.  A
+       block may now sit ANYWHERE in the program, not
        only at the entry -- which is what distinguishes this from
        sexec_triple_addr_blks above, and what the refinement will have to
        mirror. *)
@@ -1582,9 +1618,8 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr_b fuel true
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true (wk1_blktable btbl)
                        (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
-                       (subst_blktable ζ btbl)
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;
         let δ3 := persist δ1 (θ2 ∘ θ3) in
