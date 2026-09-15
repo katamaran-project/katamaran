@@ -1457,6 +1457,76 @@ Section CFGVerificationDerived.
         | b :: bs' => ⟨ θ ⟩ apc' <- sexec_block b apc ;; sexec_blocks bs' apc'
         end.
 
+    (* ---- BLOCK TABLE (PLAN-executor-composition.md §4.1) ------------------
+       The CFG analogue of `CEnv`: address term -> block contract.  Shaped
+       exactly like SInstrTableW so the same peval/Term_eqb matching applies and
+       a symbolic pc dispatches the same way -- see lookup_instr above; do not
+       drop either peval call. *)
+    Definition SBlkTableT : TYPE := fun w => list (Term w ty_xlenbits * SBlk).
+
+    Definition persist_blktable {w1 w2} (θ : w1 ⊒ w2) : SBlkTableT (wctx w1) -> SBlkTableT (wctx w2) :=
+      List.map (fun '(t,b) => (persist__term t θ, b)).
+
+    Definition lookup_blk {w} (btbl : SBlkTableT (wctx w))
+        (apc : STerm ty_xlenbits w) : option SBlk :=
+      option_map snd
+        (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) btbl).
+
+    (* ---- THE HOOK, INSIDE the executor loop (PLAN §4.2) -------------------
+       `sexec_cfg_addr_b` is `sexec_cfg_addr` with ONE extra branch, consulted
+       BEFORE lookup_instr: if the pc matches a block entry, consume the
+       block's precondition, produce its postcondition, and continue at
+       entry + off instead of executing anything.
+
+       Written as a separate Fixpoint rather than a parameter on the original,
+       so `sexec_cfg_addr` -- and therefore `rexec_cfg_addr`, `Adequacy`, and
+       every existing example -- is untouched while this is a spike.  Merging
+       the two is what §6.1 costs, because THAT is the version the refinement
+       has to mirror.
+
+       Note the block branch does NOT consult `first`: a block is accounted for
+       at the address it starts at, and its exit is reached by the arithmetic
+       rather than by the pc happening to match a declared exit.  Whether that
+       survives contact with a LOOP-head block is §6.3 and is not tested here. *)
+    Fixpoint sexec_cfg_addr_b {Σ0 : LCtx} (fuel : nat) (first : bool) :
+      ⊢ Sub Σ0 -> SBlkTableT -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+        STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w trans btbl tbl exits apc anp =>
+        let emsg (s : string) : SHeapSpec (STerm ty_xlenbits) w :=
+          error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                     debug_string_message := s |}) in
+        match fuel with
+        | O    => emsg "sexec_cfg_addr_b: out of fuel"
+        | S n' =>
+            if andb (negb first) (is_exit exits apc) then pure apc else
+            match lookup_blk btbl apc with
+            | Some b =>
+                ⟨ θb ⟩ apc' <- sexec_block b apc ;;
+                sexec_cfg_addr_b n' false (persist trans θb)
+                  (persist_blktable θb btbl) (persist_itableW θb tbl)
+                  (persist_etable θb exits) apc' (persist__term anp θb)
+            | None =>
+              match lookup_instr tbl apc with
+              | None         => emsg "sexec_cfg_addr_b: no instruction key matches this pc term"
+              | Some (wd, ai) =>
+                  ⟨ θ0 ⟩ _    <- chunk_gc ;;
+                  ⟨ θ1 ⟩ _    <- sexec_ghosts (ai_ghost_before ai) ;;
+                  ⟨ θ2 ⟩ apc' <- sexec_instruction (ai_instr ai)
+                                    (persist__term apc (θ0 ∘ θ1))
+                                    (persist__term anp (θ0 ∘ θ1))
+                                    (persist__term wd (θ0 ∘ θ1)) ;;
+                  ⟨ θ3 ⟩ _    <- sexec_ghosts (ai_ghost_after ai) ;;
+                  sexec_cfg_addr_b n' false
+                    (persist trans (θ0 ∘ θ1 ∘ θ2 ∘ θ3))
+                    (persist_blktable (θ0 ∘ θ1 ∘ θ2 ∘ θ3) btbl)
+                    (persist_itableW (θ0 ∘ θ1 ∘ θ2 ∘ θ3) tbl)
+                    (persist_etable (θ0 ∘ θ1 ∘ θ2 ∘ θ3) exits)
+                    (persist__term apc' θ3)
+                    (persist__term anp (θ0 ∘ θ1 ∘ θ2 ∘ θ3))
+              end
+            end
+        end.
+
     Definition sexec_triple_addr_blks {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
       (bs : list SBlk)
@@ -1482,6 +1552,52 @@ Section CFGVerificationDerived.
                        (subst_etable ζ exits) aex (persist__term np (θ2 ∘ θb)) ;;
         let δ3 := persist δ1b θ3 in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
+
+    Definition subst_blktable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
+        (btbl : SBlkTableT (wlctx Σ)) : SBlkTableT w :=
+      List.map (fun '(t,b) => (subst t ζ, b)) btbl.
+
+    (* The VC entry point for the IN-LOOP hook.  Identical to
+       sexec_triple_addr except that it threads a block table and runs
+       sexec_cfg_addr_b.  A block may now sit ANYWHERE in the program, not
+       only at the entry -- which is what distinguishes this from
+       sexec_triple_addr_blks above, and what the refinement will have to
+       mirror. *)
+    Definition sexec_triple_addr_bt {Σ : LCtx}
+      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
+      (btbl : SBlkTableT (wlctx Σ))
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
+      (fuel : nat)
+      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
+      ⊢ SHeapSpec Unit :=
+      fun w =>
+        let n := length tbl in
+        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
+        let δ   := env.drop (words_ctx n) δw in
+        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
+        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
+        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
+        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
+        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
+        let a2 := persist__term a (θ1' ∘ θ2) in
+        let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
+        let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr_b fuel true
+                       (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
+                       (subst_blktable ζ btbl)
+                       (zip_words (subst_itable ζ tbl) ws)
+                       (subst_etable ζ exits) a2 (persist__term np θ2) ;;
+        let δ3 := persist δ1 (θ2 ∘ θ3) in
+        consume ens δ3.["an"∷ty_xlenbits ↦ na].
+
+    Definition scfg_verification_condition_bt {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
+      (btbl : SBlkTableT (wlctx Σ))
+      (tbl : SInstrTable (wlctx Σ))
+      (exits : SExitTable (wlctx Σ)) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
+      fun w =>
+        SHeapSpec.run (sexec_triple_addr_bt req btbl tbl exits fuel ens (w := w)).
 
     Definition scfg_verification_condition_blks {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))

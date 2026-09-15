@@ -343,3 +343,79 @@ Step 3: a counted loop on the §5 rule, against a gate-checked example
 (`PaddedLoop.v` or `Countdown`). Before that, §6.1 deserves at least a sketch —
 the spikes have shown the shape works, and the open question is now entirely
 whether it is sound, not whether it computes.
+
+
+---
+
+## §10. The IN-LOOP hook, and what §6.1 actually costs (2026-09-15)
+
+### §6.1 is smaller than §6 claimed — its semantic content already exists
+
+`Adequacy.v:1448`, `sound_scfg_verification_condition_myWP2`, says:
+
+> given a valid contract, `pre` at the entry ⊢ `myWP2_loop` with `post` at the
+> exit, consuming and producing precisely those.
+
+**That IS a block step's justification at the Iris level**, and `seg_run`
+(`GenCompose.v:304`) is its framed form — it calls that very lemma. So §6.1 is
+not "can a block step be justified" (it can, and the proof is in the tree); it
+is **"can the executor's own soundness induction reach that lemma"**, which
+needs the concrete mirror and the refinement.
+
+The function-contract chain to mirror, for reference:
+
+| link | where |
+|---|---|
+| `call_contract_sound` | `MicroSail/ShallowSoundness.v:69` |
+| `rexec_cfg_addr` | `VerifierRel.v:325` |
+| `sound_exec_cfg_addr_myWP2` | `Adequacy.v:1242` (induction on fuel over `cexec_cfg_addr`) |
+
+Expected shape, following `contractsSound`: the soundness lemma takes a side
+hypothesis "every block in the table has a valid contract", and the block case
+of the induction discharges via `sound_scfg_verification_condition_myWP2`
+applied to that block.
+
+### The spikes were the WRONG SHAPE for that, so the real hook is now built
+
+Spikes 1 and 2 applied blocks at the ENTRY, from the triple. Cheap and
+additive, but not what refinement mirrors. Added to `Verifier.v`, still
+additive:
+
+- `SBlkTableT`, `lookup_blk`, `persist_blktable`, `subst_blktable` — shaped
+  exactly like `SInstrTableW` so a symbolic pc dispatches by the same
+  `peval` + `Term_eqb` match;
+- `sexec_cfg_addr_b` — `sexec_cfg_addr` with ONE extra branch, consulted
+  BEFORE `lookup_instr`;
+- `sexec_triple_addr_bt` / `scfg_verification_condition_bt`.
+
+`sexec_cfg_addr` itself is untouched, so `rexec_cfg_addr`, `Adequacy` and every
+example are unaffected. **Merging the two is exactly what §6.1 costs.**
+
+### Test: a block replaced in the MIDDLE (`Example/ZZBlkMid.v`)
+
+Six instructions, three blocks; A executed, **B replaced via the table**, C
+executed. The executor runs two instructions, hits a block entry at `p+8`,
+consumes and produces, resumes at `p+16`, runs two more.
+
+| arm | result |
+|---|---|
+| empty block table — all six executed | `Qed` |
+| `mid_btbl` — the middle block replaced | `Qed` |
+| `mid_btbl_bad` — the entry demands `T0 = 41` | **REJECTED** |
+
+The bad arm matters more here than in the earlier spikes: it shows the hook
+consumes the block's precondition **against the heap the executor had built by
+running A**, not against something the entry handed it.
+
+### Still untouched, and now precisely stated
+
+- **`cexec_cfg_addr` has no block case** — the concrete mirror. This is the next
+  real piece.
+- **`rexec_cfg_addr` has no block case** — and `VerifierRel.v` cannot be opened
+  by pet at any position (see `cfgver-executor`), so that work needs a probe
+  file, as the ghost-refinement work did.
+- **§6.3, the `first` flag, is NOT tested.** The block branch deliberately
+  ignores `first`: for a straight-line block that is right, but a LOOP-HEAD
+  block starts and ends at the same address, which is the exact situation
+  `first` exists for. Expect this to bite at step 3.
+- **Cost still unmeasured.** No matched pair; no speedup claimed.
