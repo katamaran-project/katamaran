@@ -155,8 +155,12 @@ Import IrisModel.RiscvPmpIrisBase.
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    iApply (sound_scfg_verification_condition_myWP2
+    (* bblks := ∅ INSTANTIATES the general lemma; it does not restrict it.
+       blocksSound_empty is vacuous, so this end-to-end theorem is exactly as
+       strong as before the block hook existed. *)
+    iApply (sound_scfg_verification_condition_myWP2 (bblks := ∅)
               valid_contract _ Hif HexitsFaith
+              (fun words => blocksSound_empty words _)
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv Hregs".
@@ -253,8 +257,12 @@ Import IrisModel.RiscvPmpIrisBase.
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    iApply (sound_scfg_verification_condition_myWP2
+    (* bblks := ∅ INSTANTIATES the general lemma; it does not restrict it.
+       blocksSound_empty is vacuous, so this end-to-end theorem is exactly as
+       strong as before the block hook existed. *)
+    iApply (sound_scfg_verification_condition_myWP2 (bblks := ∅)
               valid_contract _ Hif HexitsFaith
+              (fun words => blocksSound_empty words _)
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").
     - iSplitL "Hpriv Hregs Hmem".

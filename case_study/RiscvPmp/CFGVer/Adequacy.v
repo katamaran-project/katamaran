@@ -1239,10 +1239,96 @@ Section AdequacyTools.
           iApply (IH _ _ Hrest with "Hh'").
     Qed.
 
+    (* ================================================================ *)
+    (* BLOCK SOUNDNESS -- the Iris-level premise the block hook needs.    *)
+    (*                                                                   *)
+    (* This is the `contractsSound` of executor-level composition: the    *)
+    (* executor is allowed to REPLACE the instructions at address v by    *)
+    (* b's contract exactly when a real execution entering at v with      *)
+    (* b's precondition reaches v + sblk_off b with b's postcondition.    *)
+    (*                                                                   *)
+    (* Stated in continuation-passing form over an ARBITRARY ExitCond,    *)
+    (* which is what makes it compose: the caller instantiates ExitCond   *)
+    (* with `myWP2_loop <real exit>` and joins the nested loop away with  *)
+    (* myWP2_loop_join.  That is the idiom myWP2_loop_bind was written    *)
+    (* for, so no new Iris machinery is needed here.                      *)
+    (*                                                                   *)
+    (* Note what is NOT demanded at the exit: `∃ x, nextpc ↦ᵣ x`, not     *)
+    (* `nextpc ↦ᵣ pc`.  A block consumes no instruction epilogue, so      *)
+    (* nothing forces the nextpc register, and the executor quantifies it *)
+    (* demonically instead (Verifier.v).  This is precisely what          *)
+    (* sound_scfg_verification_condition_myWP2 already CONCLUDES, so a    *)
+    (* segment's own VC discharges this premise with no strengthening.    *)
+    (*                                                                   *)
+    (* PERSISTENT (□) on purpose: the executor may pass through the same  *)
+    (* block table at every step of the induction.                        *)
+    (* ================================================================ *)
+    Definition blockSound (words : bv xlenbits -> bv word)
+        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk) : iProp Σ :=
+      (∀ (ι : Valuation [ctx]) (ExitCond : iProp Σ),
+         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) ι ∗
+         pc ↦ᵣ ty.SyncVal v ∗ (∃ x, nextpc ↦ᵣ x) ∗
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+           (ai_instr <$> instrs) -∗
+         (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_post b) ι ∗
+          pc ↦ᵣ ty.SyncVal (bv.add v (bv.of_N
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b))) ∗
+          (∃ x, nextpc ↦ᵣ x) ∗
+          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+            (ai_instr <$> instrs) -∗ ExitCond) -∗
+         myWP2_loop ExitCond)%I.
+
+    Definition blocksSound (words : bv xlenbits -> bv word)
+        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (bblks : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.SBlk) : iProp Σ :=
+      (□ ∀ v b, ⌜bblks !! v = Some b⌝ → blockSound words instrs v b)%I.
+
+    #[export] Instance blocksSound_persistent words instrs bblks :
+      Persistent (blocksSound words instrs bblks).
+    Proof. apply _. Qed.
+
+    (* The EMPTY block table is vacuously sound.  This is what keeps every
+       existing end-to-end theorem exactly as strong as it was: they
+       instantiate at ∅ rather than being restated at ∅. *)
+    Lemma blocksSound_empty words instrs :
+      ⊢ blocksSound words instrs ∅.
+    Proof.
+      iIntros "!>" (v b) "%Hlk". rewrite lookup_empty in Hlk. discriminate.
+    Qed.
+
+    (* cexec_block's shallow-to-Iris step, the exact analogue of
+       call_lemma_sound (MicroSail/ShallowSoundness.v) minus the
+       assert_eq_nenv a function call needs and with a fixed result. *)
+    Lemma cexec_block_sound (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk)
+        (v : bv xlenbits) (Φ : RelVal ty_xlenbits -> SCHeap -> Prop) (h : SCHeap) :
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block b v Φ h ->
+      (interpret_scheap h ⊢
+         ∃ ι : Valuation [ctx],
+           asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) ι ∗
+           (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_post b) ι -∗
+            ∃ h', interpret_scheap h' ∧
+              ⌜Φ (ty.SyncVal (bv.add v (bv.of_N
+                   (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b)))) h'⌝))%I.
+    Proof.
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block.
+      unfold CHeapSpec.bind, CHeapSpec.lift_purespec.
+      rewrite CPureSpec.wp_angelic_ctx.
+      intros [ι Hwp]; revert Hwp.
+      intros Hwp%CHeapSpec.consume_sound.
+      apply bi.exist_intro' with ι.
+      rewrite Hwp. apply bi.sep_mono'; [easy|].
+      apply bi.exist_elim. intros h'.
+      apply bi.pure_elim_r.
+      apply CHeapSpec.produce_sound.
+    Qed.
+
     Lemma sound_exec_cfg_addr_myWP2
-        {instrs} {words : bv xlenbits -> bv word} {exitCond fuel} (apc anp : RelVal ty_xlenbits)
+        {instrs} {bblks} {words : bv xlenbits -> bv word} {exitCond fuel}
+        (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words exitCond fuel apc anp Φ h →
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs bblks words exitCond fuel apc anp Φ h →
+      blocksSound words instrs bblks ∗
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
         (* THE BOUNDARY: the executor's map is AnnotInstr-valued, MEMORY is
            AST-valued — memory holds instructions, not annotations.  This is
@@ -1268,13 +1354,47 @@ Section AdequacyTools.
           destruct Hexec as [Hexit | Hexec].
           * destruct (exitCond v) eqn:Hexit_eq.
             -- cbn [CHeapSpec.pure] in Hexit.
-               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+               iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iApply exitCondImpliesMyWP2_loop.
                iApply ("Hk" $! (SyncVal v)).
                iSplit. { iPureIntro. exact Hexit_eq. }
                iFrame. iPureIntro. exact Hexit.
             -- cbn [CHeapSpec.error] in Hexit. contradiction.
-          * (* Execute branch: the instruction is looked up at address v
+          * (* The execute disjunct is itself `block \/ instruction` since the
+               block hook landed.  Braced rather than bulleted so the existing
+               `++` depth below is untouched. *)
+            destruct Hexec as [Hblk | Hexec].
+            { (* ---- BLOCK branch.  The executor replaced the instructions at
+                 v by b's contract, and blocksSound is what pays for that.
+
+                 The whole step is: read `pre ∗ rest` out of the heap
+                 (cexec_block_sound), hand `pre` plus the machine resources to
+                 blocksSound with ExitCond := myWP2_loop <real exit>, and join
+                 the resulting nested loop away.  That instantiation is exactly
+                 the idiom myWP2_loop_bind/join were written for. *)
+              destruct (bblks !! v) as [b|] eqn:Hbl;
+                [|cbn [CHeapSpec.error] in Hblk; contradiction].
+              unfold bind, CHeapSpec.bind in Hblk.
+              iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
+              iDestruct (cexec_block_sound _ _ _ _ Hblk with "Hh")
+                as (ι) "[Hpre Hpost]".
+              iAssert (blockSound words instrs v b) as "Hb".
+              { iApply ("Hbs" $! v b). iPureIntro. exact Hbl. }
+              iApply myWP2_loop_join.
+              iApply ("Hb" $! ι (myWP2_loop ExitCondIprop)
+                        with "[$Hpre $Hpc $Hinstrs Hnpc]").
+              { iExists anp. iExact "Hnpc". }
+              iIntros "(Hpost' & Hpc' & Hnpc' & Hinstrs')".
+              iDestruct ("Hpost" with "Hpost'") as (h') "[Hh' %Hrest]".
+              (* The resumed nextpc is DEMONIC (Verifier.v), so Hrest is
+                 universally quantified over it and the block's exit only owes
+                 us `∃ x, nextpc ↦ᵣ x`.  Instantiate at whatever x the block
+                 actually left. *)
+              iDestruct "Hnpc'" as (x) "Hnpc'".
+              iRevert "Hk".
+              iApply (IH _ x h' (Hrest x)).
+              iFrame "Hbs Hh' Hpc' Hinstrs' Hnpc'". }
+            (* Instruction branch: the instruction is looked up at address v
                directly (instrs !! v).  No alignment / base guard / index
                arithmetic: the gmap key IS the current PC. *)
             destruct (instrs !! v) as [i|] eqn:Hlk.
@@ -1286,7 +1406,7 @@ Section AdequacyTools.
                   Hh to match via interpret_scheap_gc_heap (§4: sound because
                   iProp Σ is affine). *)
                apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
-               iIntros "(Hh & Hpc & Hnpc & Hinstrs) Hk".
+               iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
                (* Absorb the BEFORE-ghosts.  This used to be a rewrite with
                   cexec_ghosts_pure; with a real call_lemma the ghosts have a
@@ -1326,7 +1446,7 @@ Section AdequacyTools.
                   established (pc = nextpc = an).  Hnpc' is framed directly —
                   no `iExists`, since the PRE now names the value. *)
                iApply (IH an an h'' Hcfg').
-               iFrame "Hh' Hpc' Hinstrs' Hnpc'".
+               iFrame "Hbs Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
                CHeapSpec.error] in Hexec.
@@ -1344,7 +1464,7 @@ Section AdequacyTools.
     (* `itable_rel ∧ etable_rel →` premise, discharged here by the   *)
     (* caller-supplied faithfulness facts at ι.                          *)
     (* ---------------------------------------------------------------- *)
-    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
+    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs bblks exitCond fuel}
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
            it (five in VerifierRel.v), and every one of them silently failed to
@@ -1365,7 +1485,11 @@ Section AdequacyTools.
          it is what the trusted statements name — so the projection lives at
          every use site rather than inside it. *)
       (forall words : bv xlenbits -> bv word,
-         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs bblks words exitCond fuel post tbl exits (λ _ _, True) []) →
+      (* Quantified over `words` for the same reason the VC premise is: the
+         actual words are only read out of ptsto_instrs inside the proof.
+         At bblks = ∅ this is blocksSound_empty and costs the caller nothing. *)
+      (forall words : bv xlenbits -> bv word, ⊢ blocksSound words instrs bblks) →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
@@ -1397,11 +1521,12 @@ Section AdequacyTools.
          witness npc handed to cexec_triple_addr's single nextpc demonic and to
          sound_exec_cfg_addr_myWP2.  That is why threading the value inward
          costs no change to the trusted surface. *)
-      iIntros (Htrip a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
+      iIntros (Htrip Hbs a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
       (* Name the words the memory actually holds; they instantiate both the
          uniform VC and the word half of cexec_triple_addr's demonic_ctx. *)
       iDestruct "Hinstrs" as (words) "Hinstrs".
       specialize (Htrip words).
+      iPoseProof (Hbs words) as "#Hbsw".
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
       (* env_of_words now CONCATENATES the words into one wide value, so it
          takes the plain-bv list (cws_of_bv) and the default is a bare
@@ -1428,7 +1553,7 @@ Section AdequacyTools.
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
       iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
-        with "[$Hpc $Hnpc $Hinstrs $Hh2]").
+        with "[$Hbsw $Hpc $Hnpc $Hinstrs $Hh2]").
       (* The fifth conjunct used to be DROPPED (`& _`).  It is
          `∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝`, and Φ here is
          cexec_triple_addr's `consume ens ι.["a"↦a].["an"↦na]` — so
@@ -1445,7 +1570,7 @@ Section AdequacyTools.
       iFrame "Hinstrs".
     Qed.
 
-    Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
+    Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs bblks exitCond fuel}
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
            it (five in VerifierRel.v), and every one of them silently failed to
@@ -1458,7 +1583,17 @@ Section AdequacyTools.
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι)
+        (* GENERAL in the block table, not restricted to ∅.  The symbolic VC
+           here carries no blocks, so the concrete executor never NEEDS the
+           block branch to be safe -- but it may still take it, so soundness
+           owes the premise either way.  Every existing caller passes ∅ and
+           blocksSound_empty, which is why no end-to-end theorem changes
+           strength.  The block-CARRYING entry point
+           (scfg_verification_condition_bt) needs its own triple-level
+           refinement and is not wired yet. *)
+        (Hbs : forall words : bv xlenbits -> bv word,
+                 ⊢ blocksSound words instrs bblks) :
       ⊢ ∀ a : RelVal ty_xlenbits,
           asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
@@ -1475,7 +1610,9 @@ Section AdequacyTools.
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.
-      apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel) (ι := ι) ExitCond Hif Hef).
+      apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel) (bblks := bblks)
+               (ι := ι) ExitCond Hif Hef);
+        [|exact Hbs].
       intros words.
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].

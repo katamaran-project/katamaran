@@ -316,7 +316,9 @@ Section SegCompose.
   Proof.
     iIntros "HP".
     iDestruct (HPre with "HP") as "(HF & Hpre & Hpc & Hnpc & Hinstrs)".
-    iApply (sound_scfg_verification_condition_myWP2 (seg_vc c Hv) Post Hif Hef
+    iApply (sound_scfg_verification_condition_myWP2 (bblks := ∅)
+              (seg_vc c Hv) Post Hif Hef
+              (fun words => blocksSound_empty words _)
               $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
     (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
     - iFrame.
