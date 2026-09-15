@@ -2526,3 +2526,88 @@ needing a comment explaining what the offset was.
 - **F's and L's real postconditions are not converted** — `ZZSegQF`/`ZZSegQL`
   carry `asn_no_post` where `ZZEnterFG.v`'s G-entry cut and `sgL_post` carry
   real ones. Only A's was converted.
+
+---
+
+# §R18. The publicness sweep: 29 of 45 marks were unearned (2026-09-15)
+
+Prompted by an observation that `br_i31_sub`'s `b` argument need not be public.
+It was right, and it generalised much further than the one mark.
+
+## Method
+
+Every publicness mark in the eight self-contained straight-line contracts and
+the four loop specs — 45 of them, excluding `PVConst`/`PQConst` entries whose
+generator branch ignores the flag entirely. Each flipped to private in
+isolation, compiled, kept if it still verified. Then **all survivors per file
+applied together and re-verified**, because single flips do not compose.
+
+| | |
+|---|---|
+| marks swept | 45 |
+| survived in isolation | 33 |
+| **survived the combined batch** | **29** |
+| **load-bearing** | **16** |
+
+## The rule that came out of it
+
+> **Public is required exactly for ADDRESSES and BRANCH OPERANDS. Never for
+> data.**
+
+Both halves have a mechanical reason:
+
+- a pointer the loop's exit test compares is a `formula_relop` operand, and that
+  is `False` on a `NonSyncVal` (`secret-data-walls`);
+- a pointer that is dereferenced has its address carried by `LeakMemRead` /
+  `LeakMemWrite`, so a secret address is a real leak.
+
+The 16 required marks, and every one fits:
+
+| kind | marks |
+|---|---|
+| compared in a loop guard | `ZZAddkSpec` T6 "ap", S0 "e"; `ZZLoopTailProbe` A0 "ap", A2 "e"; `ZZLoopDProbe` T1 "e" |
+| dereferenced | `ZZSegQA` A2; `ZZSegQBC` A0, X2; `ZZSegQE` A0, A2, A7, T3, T4; `ZZSegQJ` A0; `ZZSegQN` X2 |
+| branch operand, no memory | `ZZSegQH` A6 (the `bgeu A6, T4` limb-loop guard) |
+
+**Not one VALUE in this program needs to be public** — not a limb, not an `m[]`
+cell, not a scratch register. Every such mark was a fact about muladd's *caller*
+that had leaked into the callee's contract, e.g. `addk_cells`' comment
+"Publicness follows the hand-written akBody: … the m[] cell [is] public",
+justified by "the modulus is public in BearSSL". True of muladd's use of
+`br_i31_add`; not a requirement of `br_i31_add`.
+
+That is the same disease as §R14 (resources the segment never touches) and §R17
+(where the segment sits, and how big the program is), in a third guise: **the
+contract knew something only its caller had a right to know.** It also directly
+undercut §R17 — a segment parameterised over its bases that still assumes the
+caller's modulus is public is not reusable by a caller whose modulus is secret.
+
+## THE METHOD TRAP, and it fired
+
+**Single-flip results do not compose, and this is not hypothetical.**
+`ZZSegQE` was the only batch failure. Its `A0 = PVVar "xb"` survived *alone*
+because A7 (`PVOff "xb" 8`) and T3 (`PVOff "xb" 4`) were still public in that
+variant and supplied `xb`'s publicness transitively through the solver's
+compositional `secLeak` rule. With all eight of E's marks flipped at once,
+nothing supplied it.
+
+Bisecting on the rule above — keep the four dereferenced pointers public, flip
+the rest — verifies. **Landing the 33 isolated survivors without the combined
+check would have shipped a wrong E.** A one-factor-at-a-time sweep answers "is
+this mark load-bearing ON ITS OWN", which is not the question when the fix is to
+remove several at once.
+
+## Result
+
+All twelve files verify with the weakenings applied; 27 public marks remain
+against 109 private. Pre-sweep copies kept as `Example/*.v.pre-sweep`
+(untracked, the only copies) so every weakening is reversible.
+
+## Not done
+
+- The whole-program `ZZMladSg*.v` contracts carry the same over-assumptions and
+  were NOT swept; the chain still uses them, so the weakenings do not yet reach
+  the composed theorems.
+- `secLeak`-carrying assertions written by hand (outside the spec lists) were
+  not enumerated — the sweep covered `reg_spec_rel` / `reg_spec_q` / `cell_spec`
+  / `walk_reg` marks only.
