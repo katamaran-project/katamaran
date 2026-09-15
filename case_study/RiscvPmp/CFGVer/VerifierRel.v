@@ -314,6 +314,67 @@ Section CFGVerificationDerived.
         + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
     Qed.
 
+    (* ===================================================================== *)
+    (* THE CONCRETE MIRROR of the block hook (plans/PLAN-executor-composition) *)
+    (*                                                                       *)
+    (* `cexec_block` mirrors `sexec_block` (Verifier.v) step for step:        *)
+    (* instantiate the block's logic variables angelically, CONSUME its        *)
+    (* precondition, PRODUCE its postcondition, resume at entry + off.  The    *)
+    (* angelic_ctx is kept even though SBlk fixes the context to [ctx] (so it  *)
+    (* yields [env]) precisely BECAUSE the symbolic side has one: refinement   *)
+    (* pairs structurally, and dropping a step here would force a bespoke      *)
+    (* lemma where refine_bind would otherwise dispatch.  Same reasoning as    *)
+    (* cexec_ghost's `call_lemma` mirroring sexec_ghost's.                     *)
+    (*                                                                       *)
+    (* The exit pc is built from the CONCRETE address `v` rather than by       *)
+    (* lifting a RelVal addition: the block branch is only reached when        *)
+    (* `ty.RVToOption apc = Some v`, so `SyncVal (v + off)` is exactly what    *)
+    (* the symbolic `term_binop bop.bvadd apc (term_val off)` instantiates to. *)
+    (* ===================================================================== *)
+    Definition cexec_block (b : SBlk) (v : bv xlenbits) :
+      CHeapSpec (RelVal ty_xlenbits) :=
+      ι <- lift_purespec (CPureSpec.angelic_ctx [ctx]) ;;
+      _ <- consume (sblk_pre b) ι ;;
+      _ <- produce (sblk_post b) ι ;;
+      pure (ty.SyncVal (bv.add v (@bv.of_N xlenbits (sblk_off b)))).
+
+    (* The concrete block table is a gmap keyed by ADDRESS, mirroring `instrs`
+       rather than the symbolic term table -- the same divergence the skill
+       records for `lookup_instr tbl apc` vs `instrs !! v`, and for the same
+       reason: the concrete side has a concrete pc in hand. *)
+    Fixpoint cexec_cfg_addr_b (instrs : gmap (bv xlenbits) AnnotInstr)
+      (bblks : gmap (bv xlenbits) SBlk)
+      (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool) (fuel : nat) :
+      RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
+      fun apc anp =>
+        match fuel with
+        | O    => error
+        | S n' =>
+            match ty.RVToOption apc with
+            | None   => error
+            | Some v =>
+                angelic_binary
+                  (if exitCond v then pure apc else error)
+                  (match bblks !! v with
+                   | Some b =>
+                       apc' <- cexec_block b v ;;
+                       cexec_cfg_addr_b instrs bblks words exitCond n' apc' apc'
+                   | None =>
+                     match instrs !! v with
+                     | None    => error
+                     | Some ai =>
+                         _ <- cchunk_gc ;;
+                         _ <- cdrop_dead ;;
+                         _ <- cexec_ghosts (ai_ghost_before ai) ;;
+                         apc' <- cexec_instruction (ai_instr ai) apc anp
+                                   (ty.SyncVal (words v)) ;;
+                         _ <- cexec_ghosts (ai_ghost_after ai) ;;
+                         cexec_cfg_addr_b instrs bblks words exitCond n' apc' apc'
+                     end
+                   end)
+            end
+        end.
+
   End Shallow.
 
   (* ====================================================================== *)
