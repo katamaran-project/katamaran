@@ -1,7 +1,8 @@
 # PLAN — composition in the EXECUTOR, not at the contract level
 
-**Status:** design note. Nothing built. Written 2026-09-15 after a day of
-work on contract-level composition made the alternative visible.
+**Status:** design note, plus §7 steps 1 and 2 BUILT and green (2026-09-15).
+Written after a day of work on contract-level composition made the
+alternative visible; see §9 for what the two spikes settled.
 
 ---
 
@@ -258,3 +259,87 @@ Under this design neither is needed: muladd stays one program with one
 `gen_contract`, its thirteen blocks are replaced by their contracts, and the end
 theorem is the three-line route that `muladd_q_noninterferent_param` already
 takes.
+
+
+---
+
+## §9. SPIKE RESULTS — steps 1 and 2 (2026-09-15)
+
+Both built, both green, both with a falsification arm that is REJECTED.
+Additive to `Verifier.v` only: `sexec_cfg_addr` and every existing definition
+are untouched, so nothing downstream can have regressed.
+
+### Step 1 — one block replaced (`Example/ZZBlkSpike.v`)
+
+Four instructions, two blocks; A sets `T0 = 42`, B copies it to `T1`; program
+postcondition `T1 = 42`.
+
+| arm | result |
+|---|---|
+| flat — all four executed | `Qed` |
+| block — A replaced by `consume A_pre ; produce A_post`, resume at p+8 | `Qed` |
+| bad — A claims `T0 = 43` | **REJECTED** |
+
+`solve_param_vc` throughout; no bespoke tactics.
+
+### Step 2 — chained blocks (`Example/ZZBlkChain.v`)
+
+Six instructions, three blocks; **A and B both replaced**, only C executed, so
+the A→B hand-off is a `produce` immediately followed by a `consume`.
+
+| arm | result |
+|---|---|
+| `[]` — nothing replaced | `Qed` |
+| `[blkA]` | `Qed` |
+| `[blkA; blkB]` — **the spike** | `Qed` |
+| `[blkA; blkB_unmet]` — B demands `T0 = 41` | **REJECTED** |
+
+**A produced postcondition IS consumable as the next block's precondition with
+no hand-written glue** — the property `tailChain` spends ~90 lines of
+destructing and re-framing on.
+
+**And the frame works without being asked.** B's footprint is `T0` AND `T1`,
+while A's postcondition mentions only `T0`, so the `T1` chunk B consumes comes
+from the AMBIENT heap. Nothing had to route it there — which is exactly the
+work §R14's framing pass and `seg_run`'s `Fr` parameter do by hand.
+
+### §6.4 ANSWERED
+
+No `assert_eq_nenv` is needed. A function call matches the callee's parameter
+store against the caller's arguments; a block has no argument list — its
+arguments are the machine state, which the precondition already describes.
+Dropping that step from `call_contract`'s shape cost nothing.
+
+A risk flagged in §6 did not bite either: the resumed pc is `a + off` against a
+table key `p + off`, and producing `asn_pc_eq` substitutes `a := p` before the
+lookup, as the flat executor's first step already relies on.
+
+### METHOD NOTE — the false start, and it is the reusable part
+
+Spike 1's first version had the block arm AND the bad arm both pass. The cause
+was the TEST, not the executor: `gen_contract_u` hardwires **`asn_no_post`**, so
+there was no postcondition for a false block claim to contradict. Supplying a
+real one (`T1 = 42`) made the bad arm fail correctly.
+
+**A block-replacement experiment against a trivially-true postcondition can only
+ever succeed.** Every arm in both spikes therefore states a real postcondition,
+and every conclusion is paired with a rejected falsification.
+
+### What these spikes do NOT show
+
+- **Soundness (§6.1) — untouched.** `ValidCFGVerifierContract` is
+  `safeE (postprocess …)`, so a green VC says the obligation discharges, NOT
+  that replacing a block is sound. The `contractsSound` analogue and the
+  `cexec_cfg_addr` mirror are still to write, and are the gate on everything.
+- **Loops — untouched** (§5, and step 3).
+- **Cost — unmeasured.** No matched pair was taken; no speedup is claimed.
+- The spike's `SBlk` fixes blocks at the EMPTY logic context, using `asn.exist`
+  for what they quantify. A general version wants a per-block context; that is
+  a known restriction, not a finding.
+
+### Next
+
+Step 3: a counted loop on the §5 rule, against a gate-checked example
+(`PaddedLoop.v` or `Countdown`). Before that, §6.1 deserves at least a sketch —
+the spikes have shown the shape works, and the open question is now entirely
+whether it is sound, not whether it computes.

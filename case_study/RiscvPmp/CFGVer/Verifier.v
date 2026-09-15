@@ -1425,6 +1425,73 @@ Section CFGVerificationDerived.
         let δ3 := persist δ1b θ3 in
         consume ens δ3.["an"∷ty_xlenbits ↦ na].
 
+    (* ---- SPIKE 2 (PLAN §7 step 2): SEVERAL blocks, in sequence. -----------
+       The question this answers is whether a PRODUCED postcondition is
+       consumable as the next block's precondition with no hand-written glue --
+       the property `tailChain` spends ~90 lines on at the Iris level.
+
+       Blocks are fixed at the EMPTY logic context and use `asn.exist` for
+       whatever they need to quantify.  That is a real restriction (a general
+       version wants a heterogeneous list, indexed per block), but it is not the
+       property under test, and `asn.exist` covers the spike's contracts. *)
+    Record SBlk : Type := MkSBlk
+      { sblk_pre  : Assertion [ctx]
+      ; sblk_post : Assertion [ctx]
+      ; sblk_off  : N }.
+
+    Definition sexec_block (b : SBlk) :
+      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w apc =>
+        ⟨ θ1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id [ctx]) ;;
+        ⟨ θ2 ⟩ _     <- consume (sblk_pre b) evars ;;
+        let evars2 := persist (A := Sub [ctx]) evars θ2 in
+        ⟨ θ3 ⟩ _     <- produce (sblk_post b) evars2 ;;
+        pure (term_binop bop.bvadd (persist__term apc (θ1 ∘ θ2 ∘ θ3))
+                (term_val ty_xlenbits (bv.of_N (sblk_off b)))).
+
+    Fixpoint sexec_blocks (bs : list SBlk) :
+      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w apc =>
+        match bs with
+        | nil      => pure apc
+        | b :: bs' => ⟨ θ ⟩ apc' <- sexec_block b apc ;; sexec_blocks bs' apc'
+        end.
+
+    Definition sexec_triple_addr_blks {Σ : LCtx}
+      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
+      (bs : list SBlk)
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
+      (fuel : nat)
+      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
+      ⊢ SHeapSpec Unit :=
+      fun w =>
+        let n := length tbl in
+        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
+        let δ   := env.drop (words_ctx n) δw in
+        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
+        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
+        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
+        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
+        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
+        ⟨ θb ⟩ aex <- sexec_blocks bs (persist__term a (θ1' ∘ θ2)) ;;
+        let δ1b := persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 (θ2 ∘ θb) in
+        let ζ   := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2 ∘ θb) in
+        let ws  := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2 ∘ θb)) ws0 in
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false δ1b
+                       (zip_words (subst_itable ζ tbl) ws)
+                       (subst_etable ζ exits) aex (persist__term np (θ2 ∘ θb)) ;;
+        let δ3 := persist δ1b θ3 in
+        consume ens δ3.["an"∷ty_xlenbits ↦ na].
+
+    Definition scfg_verification_condition_blks {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
+      (bs : list SBlk)
+      (tbl : SInstrTable (wlctx Σ))
+      (exits : SExitTable (wlctx Σ)) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
+      fun w =>
+        SHeapSpec.run (sexec_triple_addr_blks req bs tbl exits fuel ens (w := w)).
+
     Definition scfg_verification_condition_blk {Σ Σb : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
       (bpre bpost : Assertion Σb) (boff : N)
