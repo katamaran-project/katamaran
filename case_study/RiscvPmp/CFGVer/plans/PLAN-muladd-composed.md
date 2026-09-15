@@ -2001,3 +2001,154 @@ back edge + entry into one `loop_runs` instance. Nothing in them is new
 machinery; §R12/§R13 removed the parts that were.
 
 Then: I and M on the same pattern, the remaining cuts, and only then D (§R11).
+
+---
+
+# §R14. The cuts were not using the FRAME RULE (2026-09-15)
+
+Prompted by the question "do we leverage separation logic in proving our cuts —
+can we use the frame rule somehow, that would make it possible to prove segments
+in a self-contained way?". The answer turned out to be *the mechanism is already
+in the code and the cuts were not using it*, and switching the F→G cut onto it
+halves its proof cost.
+
+## The mechanism was already there
+
+`seg_run` (`GenCompose.v:304`) — the lemma turning one verified segment contract
+into one step of the Iris proof — has always taken an explicit frame:
+
+```coq
+Lemma seg_run {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+  (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
+  (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
+  (HPost : forall an, Fr ∗ seg_exit c iota a L cbase an -∗ Post) :
+  Pre -∗ myWP2_loop Post.
+```
+
+`Fr` is an arbitrary `iProp Σ`, split off before the segment runs and handed back
+untouched — i.e. `{P} c {Q}` ⟹ `{P ∗ Fr} c {Q ∗ Fr}` at segment granularity. Its
+own comment already said why it works: `Fr` is not selected by the soundness
+bridge's `with "[...]"` selector, so unselected spatial resources survive into
+the continuation goal.
+
+## What the cuts were doing instead
+
+`sgF_rest` (§R10, stage 2) carried the data-memory block and nine registers
+through F's **postcondition**, justified in a comment as "which G never touches
+and H needs". But *G never touches it* is the side condition of the frame rule.
+Those resources belong in `Fr` at the composition site, not in F's contract.
+
+Stage 2 was not wrong, only unnecessary — and §R10's framing of it as "the
+carry" is what hid the alternative.
+
+## Measurement
+
+Matched arms: same file, same import block, same `solve_param_vc`, one changed
+block. `allocated_words` net of `ZZImpCarry.v`, an imports-only arm measuring
+1,117,458,396.
+
+| arm | total M | net M | ratio |
+|---|---|---|---|
+| `ZZEnterFGCarry` — stage 2, memory carried + 20 regs declared | 1296.5 | 179.1 | 1.00× |
+| `ZZEnterFGFrame` — memory framed off | 1230.5 | 113.0 | **1.585×** |
+| `ZZEnterFGFramedM` — + registers trimmed to footprint | 1208.8 | 91.3 | **1.961×** |
+
+**About half the proof cost of this cut was specifying resources the segment
+never touches.** The split matters: framing the memory is worth 1.585× on its
+own, trimming the register list a further 1.241×.
+
+The landed `ZZEnterFG.v` additionally drops the `ZZMemCells` `Require` it no
+longer needs, so whole-process it totals 1170.4 M against the carry arm's
+1296.5 M = **1.108×**. Quote 1.96× for proof cost and 1.11× for process cost;
+they answer different questions and neither alone is the headline.
+
+## PROTOCOL TRAP — the imports baseline is not a constant
+
+Worth more than the ratios, and it nearly produced a wrong number here. Roughly
+1.117 G of that "imports baseline" is forcing the heavy RiscvPmp instantiation,
+and **which file pays depends on what first forces it**. An imports-only arm cut
+from the *framed* file measures **1,447,984** — three orders of magnitude less —
+because its import block no longer forces the instantiation; the same 1.117 G
+then reappears inside the proof. Subtracting the carry arm's baseline from the
+framed file's total would report a ~1,169 M "proof cost" that is almost entirely
+instantiation, i.e. would say framing made the cut *six times worse*.
+
+So: **a net-of-baseline figure is comparable only between arms with the same
+import block.** This is `diagnostics/vm-vs-tactic-split.md`'s lesson (an
+`allocated_words` figure prices a pipeline) recurring on the import axis, and
+`check-scalar-loop*`'s cross-protocol retraction recurring in a new disguise.
+`ZZEnterFGFramedM.v` exists solely to keep the A/B matched and should not be
+deleted as a duplicate of `ZZEnterFG.v`.
+
+## The footprint is ENFORCED, not trusted
+
+The reason framing can be done by trial rather than by careful reasoning: the
+symbolic executor rejects any access outside the declared footprint. An early
+trim dropped A7 and the VC failed with `No applicable tactic` in ~28 s — A7 is
+x17, the `rs1` of the SRLI/SLLI pair at idx 125/126, so F does read it. Restore
+it and the proof goes green; A2, X2 and A3–A6 stay dropped because F genuinely
+never names them.
+
+**Recipe for narrowing a segment's footprint:** delete a resource, recompile,
+and keep the deletion iff it still verifies. A wrong guess is caught locally by
+the executor rather than distantly by a later composition failure.
+
+One refinement learned doing it: the rule is *the footprint of the contract*,
+not *the footprint of the instructions*. S0–S3 are kept although F never
+mentions them, because G's precondition (reached through `divrem_cut_subst`)
+demands them — what the POSTCONDITION promises counts too.
+
+## Non-vacuity re-checked on the framed shape
+
+A weaker contract could in principle make a false claim provable, so both
+falsification arms were regenerated from the framed file and re-run:
+
+| arm | change | result |
+|---|---|---|
+| `ZZEnterFG_badk` | `k = 31` instead of 32 (wrong entry counter) | **REJECTED**, `No applicable tactic` |
+| `ZZEnterFG_badr` | `A0 = p+1124` instead of `p+1128` | **REJECTED**, `No applicable tactic` |
+
+`A0` is inside F's footprint, so trimming did not defang the register arm. The
+stale stage-1 arm `ZZEnterFG_bad.v` (trivial `sgF_rest`, `k=31`) was deleted as
+superseded.
+
+## Where framing does NOT reach
+
+Three limits, and they are why `loop_carry` (§R6) is complementary rather than
+redundant:
+
+1. **Sliding-footprint loops cannot frame their array off.** K, I and D *do*
+   touch the memory, at different addresses each trip. `Fr` is a single opaque
+   proposition and cannot express "the part of the array we have not reached
+   yet". That is exactly `loop_carry`'s reservoir/completed split.
+2. **Partial memory footprints need a cell-level block.** F was the easy case —
+   it touches no memory, so the choice was all-or-nothing. A segment touching
+   three of twelve words must declare those three and frame the rest;
+   `cell_spec`/`gen_cells_pre` (§R9) is what makes that writable, since
+   `ZZMladCommon.v` records why no context-generic memory block existed before.
+3. **One segment, one size, no held-out point.** And per
+   `diagnostics/vm-vs-tactic-split.md` the muladd cut-segment family is
+   tactic-bound (33–78% `solve_vc`), so part of the 1.96× may be `cbn` rather
+   than executor work. Not split.
+
+## Consequence for the remaining cuts
+
+`ZZDvAlone.v` already demonstrates the endpoint: the `br_divrem` loop stated at
+its OWN symbolic base `q` at offset 0, knowing nothing about its host program.
+That is framing taken to its conclusion, and it verifies.
+
+For the eight straight-line cuts still to write, the default should be
+**minimal footprint plus `Fr`**, not carry-everything. This strengthens the case
+for the deferred `gen_cut_contract` wrapper (§R3 step 3): it should take the
+footprint as data and generate the framed contract, so a new cut starts minimal
+and is widened only when the executor says so.
+
+## Files
+
+Landed: `Example/ZZEnterFG.v` reworked onto the framed shape (`valid_sgF'`,
+`Qed`, hole-free), arms `ZZEnterFG_badk.v` / `ZZEnterFG_badr.v` regenerated.
+Measurement rig kept: `ZZImpCarry.v` (imports baseline), `ZZEnterFGCarry.v`
+(pre-framing arm — the ONLY copy, since these files are untracked and it is not
+recoverable from git), `ZZEnterFGFrame.v` (memory-only arm),
+`ZZEnterFGFramedM.v` (framed contract at carry imports),
+`ZZEnterFGImportsNM.v` (the 1,447,984 arm that exposed the protocol trap).
