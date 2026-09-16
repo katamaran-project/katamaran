@@ -64,7 +64,7 @@ From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 From stdpp Require namespaces fin_maps.
 
 Set Implicit Arguments.
@@ -143,7 +143,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
       rewrite elem_of_map_to_list.
       intros el.
       apply elem_of_list_to_map_2 in el.
-      apply elem_of_list_In in el.
+      apply list_elem_of_In in el.
       apply in_map_iff in el.
       by destruct el as (a' & <- & _).
     Qed.
@@ -218,7 +218,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
       a ∈ region_addrs b e.
     Proof.
       intros Hb He [Hba Hae].
-      apply elem_of_list_filter.
+      apply list_elem_of_filter.
       repeat (split; try assumption).
       apply elem_of_seqZ in Hb.
       apply elem_of_seqZ in He.

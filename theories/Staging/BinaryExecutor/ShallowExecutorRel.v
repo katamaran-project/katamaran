@@ -438,7 +438,7 @@ Module Type ShallowExecRelOn
 
     Section WithBI.
 
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 

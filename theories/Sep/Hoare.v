@@ -30,7 +30,7 @@ From Coq Require Import
   Classes.Morphisms.
 
 From iris Require Import
-  proofmode.tactics.
+  proofmode.proofmode.
 
 From Katamaran Require Import
   Context

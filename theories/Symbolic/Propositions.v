@@ -1757,7 +1757,7 @@ Module Type SymPropOn
     End Experimental.
 
     Section Unquantify.
-      Import iris.bi.interface iris.proofmode.tactics.
+      Import iris.bi.interface iris.proofmode.proofmode.
 
       Fixpoint weaken_symprop {Σ1} (P : SymProp Σ1) {Σ2} (ζ : WeakensTo Σ1 Σ2) {struct P} : SymProp Σ2 :=
         match P with
@@ -2562,7 +2562,7 @@ Module Type LogSymPropOn
   (Import UL : UnifLogicOn B P W).
 
   Module LogicalSoundness.
-    Import iris.bi.interface iris.proofmode.tactics.
+    Import iris.bi.interface iris.proofmode.proofmode.
     Import SymProp.
     Import ModalNotations.
     Import proofmode logicalrelation.

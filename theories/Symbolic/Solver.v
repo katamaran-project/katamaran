@@ -63,7 +63,7 @@ Module Type GenericSolverOn
   (Import UL : UnifLogicOn B P W)
   (Import LSP : LogSymPropOn B P W SP UL).
 
-  Import iris.bi.interface iris.proofmode.tactics proofmode LogicalSoundness.
+  Import iris.bi.interface iris.proofmode.proofmode proofmode LogicalSoundness.
   Import AutorewriteUnifLogic.
 
   Module Import GenericSolver.

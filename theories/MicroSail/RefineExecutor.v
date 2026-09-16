@@ -72,7 +72,7 @@ Module RefineExecOn
   Import LogicalSoundness.
   Import proofmode.
   Import iris.proofmode.environments.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
   Import RSolve.
 
   Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
