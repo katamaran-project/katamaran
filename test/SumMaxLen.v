@@ -361,7 +361,7 @@ Module Import ExampleModel.
   Import iris.bi.big_op.
   Import iris.base_logic.lib.iprop.
   Import iris.base_logic.lib.gen_heap.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   (* There is no memory, so use trivial definitions to instantiate the ghost
      state and its requirements. *)
@@ -382,7 +382,7 @@ Module Import ExampleModel.
 
   Module ExampleIrisAdeqParams <: IrisAdeqParameters DefaultBase ExampleIrisBase.
     Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => True.
     Definition memΣ : gFunctors := gFunctors.nil.
