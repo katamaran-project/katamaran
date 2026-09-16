@@ -857,7 +857,7 @@ Module inv := invariants.
     - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
       now cbn -[xlenbits].
     - apply bv.NoDup_seqbv. now compute.
-    - intros x. rewrite elem_of_list_filter.
+    - intros x. rewrite list_elem_of_filter.
       split.
       + now intros [? ?].
       + split; [auto | apply addr_in_all_addrs].
@@ -892,7 +892,7 @@ Module inv := invariants.
     rewrite -> (big_opL_permutation _ _ _ allAddr_filter_advAddr).
     iApply (big_sepL_mono with "Hadv"). iIntros (? ? Hsom) "Hptsto".
     unfold interp_addr_access_byte.
-    apply elem_of_list_lookup_2, adv_is_live in Hsom.
+    apply list_elem_of_lookup_2, adv_is_live in Hsom.
     repeat case_decide; auto.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
@@ -930,8 +930,8 @@ Module inv := invariants.
     end.
 
   Ltac solve_elem_of :=
-    repeat (try apply elem_of_list_here;
-            try apply elem_of_list_further).
+    repeat (try apply list_elem_of_here;
+            try apply list_elem_of_further).
 
   Ltac solve_list_subseteq :=
     repeat
@@ -1489,7 +1489,7 @@ Module inv := invariants.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= /not; apply mmio_ram_False.
-    apply elem_of_list_lookup_2 in Hsom.
+    apply list_elem_of_lookup_2 in Hsom.
     refine (bv.seqBv_sub_elem_of _ _ Hsom).
     - solve_bv.
     - rewrite bv.bin_of_N_small; last apply minAddr_rep. lia.
@@ -2102,7 +2102,7 @@ Module inv := invariants.
       rewrite -> (big_opL_permutation _ _ _ allAddr_filter_advAddr).
       iApply (big_sepL_mono with "Hadv"). iIntros (? ? Hsom) "Hptsto".
       unfold interp_addr_access_byte.
-      apply elem_of_list_lookup_2, adv_is_live in Hsom.
+      apply list_elem_of_lookup_2, adv_is_live in Hsom.
       repeat case_decide; auto.
       iPureIntro. eapply mmio_ram_False; eauto.
     Qed.

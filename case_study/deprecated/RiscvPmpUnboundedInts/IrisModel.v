@@ -89,7 +89,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
       rewrite elem_of_map_to_list.
       intros el.
       apply elem_of_list_to_map_2 in el.
-      apply elem_of_list_In in el.
+      apply list_elem_of_In in el.
       apply in_map_iff in el.
       by destruct el as (a' & <- & _).
     Qed.

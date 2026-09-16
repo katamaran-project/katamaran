@@ -84,7 +84,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
     rewrite elem_of_map_to_list.
     intros el.
     apply elem_of_list_to_map_2 in el.
-    apply elem_of_list_In in el.
+    apply list_elem_of_In in el.
     apply in_map_iff in el.
     by destruct el as (a' & <- & _).
   Qed.
@@ -280,7 +280,7 @@ Module RiscvPmpIrisInstancePredicates.
     destruct (reg_convert_to_idx r) as [rid|] eqn:E; auto.
     apply NoDup_cons. split; auto.
     intros Helem.
-    apply elem_of_list_omap in Helem.
+    apply list_elem_of_omap in Helem.
     destruct Helem as (? & Hin & Heq).
     pose proof (reg_convert_to_idx_Some_inj _ _ E Heq) as ?; subst.
     apply (Hr Hin).
@@ -901,7 +901,7 @@ Module RiscvPmpIrisInstance (FL : FailLogic) <:
       apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
       unfold liveAddrs, bv.seqBv.
       rewrite -(bv.of_Z_unsigned y).
-      apply elem_of_list_fmap_1.
+      apply list_elem_of_fmap_2.
       rewrite elem_of_seqZ.
       subst y.
       unfold maxAddr in HmaxOK.
