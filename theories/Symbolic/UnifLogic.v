@@ -1307,8 +1307,8 @@ Module Type UnifLogicOn
     Definition RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
       RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
     Definition REnv (Δ : Ctx Ty) : Rel _ _ :=
-        RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
-    Definition RUnit : Rel Unit unit := RInst Unit unit.
+      RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
+    Definition RUnit : Rel B.Unit unit := RInst B.Unit unit.
 
     Definition RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
     Arguments RPathCondition : simpl never.
@@ -1383,7 +1383,7 @@ Module Type UnifLogicOn
 
 
   Module RSolve.
-    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations iris.proofmode.tactics iris.proofmode.environments.
+    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations iris.proofmode.proofmode iris.proofmode.environments.
 
     Class RefineCompat `(R : Rel AT A) (v : A)  w (vs : AT w) (Ob : Pred w) :=
       MkRefineCompat {
@@ -1533,7 +1533,7 @@ Module Type UnifLogicOn
     Import logicalrelation.
     Import logicalrelation.notations.
     (* Import ModalNotations. *)
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RSolve.
     
     Lemma refine_RMatchResult_existT_eq {N σ} {p : Pattern (N:=N) σ} {w} {pc args1 args2}:
