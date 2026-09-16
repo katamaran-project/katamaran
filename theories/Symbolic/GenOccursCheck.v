@@ -381,7 +381,7 @@ Module Type GenOccursCheckOn
       match ts with
       | env.nil         => weakenInit [env]
       | env.snoc ts _ t => liftBinOp (fun _ ts' t' => env.snoc (B := I) ts' _ t')
-                             (fun _ _ _ _ _ => eq_refl)(oc ts) (gen_occurs_check t)
+                             (fun _ _ _ _ _ => eq_refl)(oc ts) (gen_occurs_check (GenOccursCheck := OCT _) t)
       end.
 
   Lemma boxSbLaws_term_var `{SubstUniv Sb} {sSUM : SubstUnivMeet Sb} {sSUL : SubstUnivLaws Sb} {Σ x τ} (xIn : x∷τ ∈ Σ) : BoxSbLaws (boxSb (T := fun Σ => Term Σ τ) (term_var x)).

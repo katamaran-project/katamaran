@@ -33,7 +33,7 @@ From Katamaran Require Import
      Bitvector
      RiscvPmp.Base.
 From iris.proofmode Require Import
-     tactics.
+     proofmode.
 
 Import ListNotations.
 Import bv.notations.

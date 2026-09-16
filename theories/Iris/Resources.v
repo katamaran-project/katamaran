@@ -35,7 +35,7 @@ From iris Require Import
      algebra.gmap
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Prelude
@@ -337,7 +337,7 @@ Module Type IrisPrelims
       specialize (Hl 0).
       setoid_rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl.
       destruct Hl as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
-        auto with typeclass_instances.
+        auto 6 with typeclass_instances.
       specialize (regsv (existT _ r)).
       rewrite eq1 in regsv.
       destruct y as [y|]; [|inversion regsv].

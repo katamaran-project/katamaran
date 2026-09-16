@@ -35,7 +35,7 @@ From iris Require Import
      algebra.gmap
      program_logic.adequacy
      program_logic.total_weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Prelude
