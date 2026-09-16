@@ -1,7 +1,7 @@
 From stdpp Require Import hlist.
 From iris.prelude Require Export prelude.
 From iris.bi Require Export bi.
-From iris.proofmode Require Import base environments classes string_ident ltac_tactics coq_tactics reduction intro_patterns ltac_tactics.
+From iris.proofmode Require Import base environments classes string_ident ltac_tactics rocq_tactics reduction intro_patterns ltac_tactics.
 From iris.prelude Require Import options.
 Import bi.
 
@@ -431,7 +431,7 @@ Proof.
   now apply (tac_pure_intro_cohyp _ _ _ _ _ Hci Hpure HQ).
 Qed.
 
-(* not sure why this is local in iris.proofmode.coq_tactics.v *)
+(* not sure why this is local in iris.proofmode.rocq_tactics.v *)
 Local Instance affine_env_spatial Δ :
   AffineEnv (env_spatial Δ) → Affine ([∗] env_spatial Δ).
 Proof. intros H. induction H; simpl; apply _. Qed.
@@ -621,7 +621,7 @@ Ltac iFresh :=
     end in
   constr:(IAnon c).
 
-(* stolen from iris.proofmode.coq_tactics *)
+(* stolen from iris.proofmode.rocq_tactics *)
 Local Ltac ident_for_pat pat :=
   lazymatch pat with
   | IIdent ?x => x

@@ -79,7 +79,7 @@ Module Type ProgramMixin (Import B : Base)
     Definition CallGraph : Set := Node -> Nodes.
 
     Instance 𝑭_elem_of : forall {Δ τ}, ElemOf (𝑭 Δ τ) Nodes :=
-      fun _ _ => @elem_of_list Node.
+      fun _ _ => @list_elem_of Node.
 
     (* We turn the edges in the callgraph into a relation. This says [f1] may
        be called by [f2]. *)
@@ -189,9 +189,9 @@ Module Type ProgramMixin (Import B : Base)
         eauto.
       - intros pc. apply H.
         + rewrite forallb_forall in Hbindfree1. apply Hbindfree1.
-          apply elem_of_list_In, elem_of_enum.
-        + intros h hIn. apply Hsub1, elem_of_list_In, in_flat_map.
-          exists pc. split; apply elem_of_list_In; auto.
+          apply list_elem_of_In, elem_of_enum.
+        + intros h hIn. apply Hsub1, list_elem_of_In, in_flat_map.
+          exists pc. split; apply list_elem_of_In; auto.
           apply elem_of_enum.
     Qed.
 

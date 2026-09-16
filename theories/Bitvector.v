@@ -1798,13 +1798,13 @@ Module bv.
       (∃ k, a = add s (of_Z k) /\ 0 <= k < l)%Z.
     Proof.
       split.
-      - intros (k & -> & Hk%elem_of_seqZ)%elem_of_list_fmap.
+      - intros (k & -> & Hk%elem_of_seqZ)%list_elem_of_fmap.
         assert (exists i, k = unsigned s + i /\ 0 <= i < l)%Z.
         { exists (k - unsigned s)%Z. lia. }
         destruct H as (i & -> & Hb). clear Hk.
         exists i.
         by rewrite <- of_Z_add, of_Z_unsigned.
-      - intros (k & Heq & Hlt). apply elem_of_list_fmap.
+      - intros (k & Heq & Hlt). apply list_elem_of_fmap.
         exists (unsigned s + k)%Z. split.
         + subst. by rewrite <-of_Z_add, of_Z_unsigned.
         + apply elem_of_seqZ. lia.
@@ -2083,11 +2083,11 @@ Module bv.
       (c_inj : forall k b1 b2 v1 v2, c k b1 v1 = c k b2 v2 -> b1 = b2 /\ v1 = v2)
       (n1 n2 : V O) (Heq : n1 <> n2) (m : nat) :
       forall (x : V m),
-        elem_of_list x (enumV c n1 m) ->
-        elem_of_list x (enumV c n2 m) -> False.
+        list_elem_of x (enumV c n1 m) ->
+        list_elem_of x (enumV c n2 m) -> False.
     Proof.
       revert V c c_inj n1 n2 Heq. induction m; intros V c c_inj n1 n2 Heq; cbn [enumV].
-      - intros x xIn1%list.elem_of_list_singleton xIn2% list.elem_of_list_singleton.
+      - intros x xIn1%list.list_elem_of_singleton xIn2% list.list_elem_of_singleton.
         congruence.
       - specialize (IHm (fun k => V (S k)) (fun k => c (S k)) (fun k => c_inj (S k))).
         intros x [in1|in1]%list.elem_of_app [in2|in2]%list.elem_of_app;
@@ -2113,7 +2113,7 @@ Module bv.
         elem_of (c m b x) (enumV c n (S m)).
     Proof.
       revert V c n. induction m; cbn; intros V c n b x xIn.
-      - apply list.elem_of_list_singleton in xIn. subst x.
+      - apply list.list_elem_of_singleton in xIn. subst x.
         destruct b; repeat constructor.
       - rewrite ?list.elem_of_app. rewrite list.elem_of_app in xIn.
         destruct xIn as [xIn|xIn];
@@ -2130,7 +2130,7 @@ Module bv.
     Lemma elem_of_enum (m : nat) (x : bv m) : base.elem_of x (enum m).
     Proof.
       induction x using bv_rect.
-      - now apply list.elem_of_list_singleton.
+      - now apply list.list_elem_of_singleton.
       - now apply elem_of_enumV.
     Qed.
 
@@ -2915,7 +2915,7 @@ Module bv.
     Proof.
       unfold bv.ule, seqBv.
       intros mla alm.
-      apply (list.elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
+      apply (list.list_elem_of_fmap_2' bv.of_Z _ (bv.unsigned v)).
       - apply list_numbers.elem_of_seqZ.
         unfold unsigned, Z.of_nat.
         destruct len; Lia.lia.
@@ -2945,7 +2945,7 @@ Module bv.
       False.
     Proof.
       intros Hrep Hlt Hain Hbin.
-      rewrite !list.elem_of_list_lookup in Hain, Hbin.
+      rewrite !list.list_elem_of_lookup in Hain, Hbin.
       destruct Hain as (ai & Hain).
       destruct Hbin as (bi & Hbin).
       apply list.lookup_lt_Some in Hain as Halen.
@@ -2989,7 +2989,7 @@ Module bv.
     and (min <=ᵘ v) (bv.bin v < bv.bin min + len)%N.
   Proof.
      unfold bv.ule, bv.ult, seqBv.
-     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%list.elem_of_list_fmap_2.
+     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%list.list_elem_of_fmap_1.
      unfold bv.of_Z.
      rewrite <-(Znat.Z2N.id y); last bv_zify.
      rewrite bv.to_N_truncz.

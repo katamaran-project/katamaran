@@ -174,7 +174,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     destruct List.forallb eqn:Hwf; [|easy].
     rewrite List.forallb_forall in Hwf.
     specialize (Hwf K).
-    rewrite <- base.elem_of_list_In in Hwf.
+    rewrite <- base.list_elem_of_In in Hwf.
     inster Hwf by apply finite.elem_of_enum.
     now destruct (findUnionAlt K alts).
   Qed.
