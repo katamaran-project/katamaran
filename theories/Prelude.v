@@ -114,8 +114,9 @@ Section Equality.
     {i1 i2} (x1 : A i1) (x2 : A i2) : dec_eq (existT i1 x1) (existT i2 x2) :=
     eq_dec (existT i1 x1) (existT i2 x2).
 
+  Print HintDb typeclass_instances.
   #[export] Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
-    stdpp.base.EqDecision A | 10 := eqdec.
+    stdpp.base.EqDecision A | 1 := eqdec.
 
   Lemma cons_inj [A] (x y : A) (xs ys : list A) :
     x :: xs = y :: ys <-> x = y /\ xs = ys.
@@ -176,10 +177,12 @@ Section Finite.
 
   Import stdpp.finite.
 
+  Locate sigT_eq_dec.
+
   #[local] Set Equations With UIP.
   #[export,program] Instance Finite_sigT (A : Type) {eqA : EqDec A} {finA : Finite A}
     (B : A -> Type) {eqB : forall x, EqDec (B x)} {finB : forall x, Finite (B x)} :
-    @Finite {x : A & B x} EqDecision_from_EqDec :=
+    Finite {x : A & B x} :=
     {| enum := foldr (fun a xs => map (existT a) (enum (B a)) ++ xs) [] (enum A) |}.
   Next Obligation.
   Proof.
