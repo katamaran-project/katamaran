@@ -235,10 +235,11 @@ Section BlockVerificationDerived.
 
   Section Relational.
 
-    Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
+  Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
     Import RiscvPmpSymbolicSoundness.
     Import RiscvPmpSymbolicSoundness.StoreSpec.
     Import RiscvPmpShallowSoundness.
+    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
@@ -301,7 +302,7 @@ Section BlockVerificationDerived.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpProgramLogic.
     Import RiscvPmpShallowSoundness.
@@ -758,7 +759,7 @@ Section AnnotatedBlockVerification.
     Import RiscvPmpIrisInstanceWithContracts.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve.
 
@@ -805,7 +806,7 @@ Section AnnotatedBlockVerification.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpModel2.
     Import RiscvPmpShallowSoundness.

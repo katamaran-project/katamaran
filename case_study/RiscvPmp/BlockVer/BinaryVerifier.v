@@ -73,8 +73,8 @@ Module Import BinaryBlockVerifierNotations.
 End BinaryBlockVerifierNotations.
 
 Module BinaryBlockVerifier.
-  Import iris.base_logic.lib.iprop iris.proofmode.tactics.
-  Import RiscvPmpIrisInstance2.
+  Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
+  Import RiscvPmpBlockVerifIrisInstance2.
 
   (* TODO: annoying, but not inj in general (illegal instructions...)
            Decode (at least the Sail one) does seem to be injective
