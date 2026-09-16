@@ -235,7 +235,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           if L cfg
           then pmp_check_RWX cfg acc
           else true
-      | User =>
+      | _ =>
           pmp_check_RWX cfg acc
       end.
 
