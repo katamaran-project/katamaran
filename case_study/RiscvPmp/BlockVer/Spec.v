@@ -847,6 +847,11 @@ End StringToIdent.
             Angelic lv lt (reify_sp sp)
         end
     (* | edemonicv : LVar∷Ty → Erasure.ESymProp → Erasure.ESymProp *)
+    (* | eassert_vareq *)
+    (* | eassume_vareq *)
+    (* | epattern_match *)
+    (* | epattern_match_var *)
+    (* | edebug *)
     | _ => let m := fprintf "reify: fallback case expects a variable but got '%t'" sp in
            Control.zero (Tactic_failure (Some m))
     end.
@@ -862,8 +867,6 @@ End StringToIdent.
     | Term t => let tt := reflect_term t in constr:($tt = $tt)
     | _ => constr:(@True)
     end.
-
-  
 
   Ltac2 rec reflect_sp (sp : symprop) : constr :=
     match sp with
