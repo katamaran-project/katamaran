@@ -229,6 +229,17 @@ Record Minterrupts : Set :=
     ; USI : bool
     }.
 
+Definition Minterrupts_zero : Minterrupts :=
+  {| MEI := false
+   ; SEI := false
+   ; UEI := false
+   ; MTI := false
+   ; STI := false
+   ; UTI := false
+   ; MSI := false
+   ; SSI := false
+   ; USI := false |}.
+
 (* Actual Sail type declaration is called Medeleg, we use RMedeleg to avoid
    a name clash below with the CSRIdx for Medeleg. *)
 Record RMedeleg : Set :=
@@ -248,6 +259,23 @@ Record RMedeleg : Set :=
     ; Fetch_Access_Fault : bool
     ; Fetch_Addr_Align   : bool
     }.
+
+Definition Medeleg_zero : RMedeleg :=
+  {| SAMO_Page_Fault    := false
+   ; Load_Page_Fault    := false
+   ; Fetch_Page_Fault   := false
+   ; MEnvCall           := false
+   ; SEnvCall           := false
+   ; UEnvCall           := false
+   ; SAMO_Access_Fault  := false
+   ; SAMO_Addr_Align    := false
+   ; Load_Access_Fault  := false
+   ; Load_Addr_Align    := false
+   ; Breakpoint         := false
+   ; Illegal_Instr      := false
+   ; Fetch_Access_Fault := false
+   ; Fetch_Addr_Align   := false
+  |}.
 
 (* 3. Definition of machinery required to do MMIO *)
 Class MMIOEnv : Type := {

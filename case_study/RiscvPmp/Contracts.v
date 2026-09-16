@@ -81,23 +81,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          we never use it for the Universal Contract verification. *)
       Definition asn_regs_ptsto {Σ} : Assertion Σ := asn_regs_ptsto ∅.
 
-      Definition medeleg_off : RMedeleg :=
-        {| SAMO_Page_Fault    := false
-         ; Load_Page_Fault    := false
-         ; Fetch_Page_Fault   := false
-         ; MEnvCall           := false
-         ; SEnvCall           := false
-         ; UEnvCall           := false
-         ; SAMO_Access_Fault  := false
-         ; SAMO_Addr_Align    := false
-         ; Load_Access_Fault  := false
-         ; Load_Addr_Align    := false
-         ; Breakpoint         := false
-         ; Illegal_Instr      := false
-         ; Fetch_Access_Fault := false
-         ; Fetch_Addr_Align   := false
-        |}.
-
       Section ContractDef.
         Import RiscvNotations.
         Import RiscvPmpSignature.notations.
@@ -216,7 +199,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                 ∨
                   (* Trap occured -> Go into S-mode *)
                   asn_pmp_entries (term_var "entries") ∗
-                  term_var "medeleg" != term_val ty_Medeleg medeleg_off ∗
+                  term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∗
                   cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
                   nextpc        ↦ term_var "stvec" ∗
                   mtvec         ↦ term_var "h" ∗
@@ -557,7 +540,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                     ∗ mcause ↦ term_var "mcause"
                     ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"]
                     ∗ medeleg ↦ term_var "medeleg"
-                    ∗ term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                    ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                     ∗ mepc ↦ term_var "mepc"
                     ∗ ∃ "scause", scause ↦ term_var "scause"
                     ∗ sepc ↦ term_var "i"
@@ -598,7 +581,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                           | KCTL_TRAP => MkAlt (pat_var e)
                                                   ((term_var "result_exception_handler" = term_var "stvec"
                                                   ∗ cur_privilege ↦ term_val ty_privilege Supervisor
-                                                  ∗ term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                                                  ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                                                   ∗ mcause ↦ term_var "mcause"
                                                   ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var cur_priv; term_var "mpie"; term_var "mie"]
                                                   ∗ mepc ↦ term_var "mepc"
@@ -663,7 +646,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                term_var "result_handle_illegal" = term_val ty.unit tt
                ∗ ((cur_privilege ↦ term_val ty_privilege Supervisor
                    ∗ nextpc ↦ term_var "stvec"
-                   ∗ term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                   ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                    ∗ mepc ↦ term_var "mepc"
                    ∗ sepc ↦ term_var "pc"
                    ∗ mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"])
@@ -770,7 +753,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   :=
                 term_var "result_exception_delegatee" != term_val ty_privilege User
                 ∗ (if: term_eq (term_var "result_exception_delegatee") (term_val ty_privilege Supervisor)
-                   then term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                   then term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                    else ⊤)
                 ∗ medeleg ↦ term_var "medeleg";
           |}.
@@ -958,7 +941,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                   asn_gprs ∗
                   asn_pmp_entries (term_var "entries") ∗
-                  term_var "medeleg" != term_val ty_Medeleg medeleg_off ∗
+                  term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
                   cur_privilege ↦ (term_val ty_privilege Supervisor) ∗

@@ -466,7 +466,7 @@ Module inv := invariants.
       mepc ↦ term_var "mepc" ∗
       mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ] ∗
       mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
-      medeleg ↦ term_val ty_Medeleg medeleg_off ∗
+      medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       (∃ "x1", x1 ↦ term_var "x1") ∗
       (asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero);
@@ -483,7 +483,7 @@ Module inv := invariants.
           mepc ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N adv_addr) ∗
           mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool true; term_val ty.bool true ] ∗
           mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
-          medeleg ↦ term_val ty_Medeleg medeleg_off ∗
+          medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
           cur_privilege ↦ term_val ty_privilege User ∗
           x1 ↦ term_val ty_xlenbits [bv 0x80] ∗
           asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a")))
@@ -540,7 +540,7 @@ Module inv := invariants.
       sscratch ↦ term_var "sscratch" ∗
       stvec ↦ term_var "stvec" ∗
       mideleg ↦ term_var "mideleg" ∗
-      medeleg ↦ term_val ty_Medeleg medeleg_off ∗
+      medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
       asn_pmp_entries term_femto_pmpentries ∗
       (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))) ∗ (* Different handler sizes cause different entries *) *)
       asn_inv_mmio.
@@ -556,7 +556,7 @@ Module inv := invariants.
       sscratch ↦ term_var "sscratch" ∗
       stvec ↦ term_var "stvec" ∗
       mideleg ↦ term_var "mideleg" ∗
-      medeleg ↦ term_val ty_Medeleg medeleg_off ∗
+      medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
       asn_pmp_entries term_femto_pmpentries.
       (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))). (* Different handler sizes cause different entries *) *)
 
@@ -992,7 +992,7 @@ Module inv := invariants.
       LVars.mpie := vmstatus_mpie csrs;
       LVars.mie := false;
       LVars.mideleg := vmideleg csrs;
-      LVars.medeleg := medeleg_off |}.
+      LVars.medeleg := Medeleg_zero |}.
 
   Lemma femtokernel_handler_exit_safe `{sailGS Σ} (csrs : CSRVals) :
     ⊢ femtokernel_safe_shared_pre handler_exit_addr femtokernel_handler_exit ∗
@@ -1026,7 +1026,7 @@ Module inv := invariants.
          LVars.mpie := true;
          LVars.mie := vmstatus_mpie csrs;
          LVars.mideleg := vmideleg csrs;
-         LVars.medeleg := medeleg_off |} with "[-]") as "Hk".
+         LVars.medeleg := Medeleg_zero |} with "[-]") as "Hk".
     - iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _])"; cbn in *.
       iFrame "Hpc Hnpc Hmstatus HaccU Hgprs Hmscratch Htrap".
       iSplitL "Hshared";
@@ -1223,7 +1223,7 @@ Module inv := invariants.
       (∃ v, sepc ↦ᵣ v) ∗
       (∃ v, stvec ↦ᵣ v) ∗
       mideleg ↦ᵣ Minterrupts_zero ∗
-      medeleg ↦ᵣ medeleg_off ∗
+      medeleg ↦ᵣ Medeleg_zero ∗
       cur_privilege ↦ᵣ User ∗
       interp_gprs ∅ ∗
       interp_pmp_entries femto_pmpentries ∗
@@ -1251,7 +1251,7 @@ Module inv := invariants.
                   LVars.mpie := mpie;
                   LVars.mie := mie;
                   LVars.mideleg := Minterrupts_zero;
-                  LVars.medeleg := medeleg_off |}.
+                  LVars.medeleg := Medeleg_zero |}.
   Proof.
     iIntros "((%mpp & %mpie & %mie & Hmst) & Hmtvec & [%vmcause Hmcause] & Hmip & Hmie & [%vmscratch Hmscratch] & [%vmepc Hmepc] & [%vscause Hscause] & [%vsscratch Hsscratch] & [%vsepc Hsepc] & [%vstvec Hstvec] & Hmideleg & Hmedeleg & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & (Hhentry & Hhwrite & Hhsecret & Hhexit) & Hdata & Hmemadv)".
     iExists mpp, vmcause, vmscratch, vmepc, vscause, vsscratch, vsepc, vstvec, mpie, mie.
@@ -1291,7 +1291,7 @@ Module inv := invariants.
                                                vmip          := vmip;
                                                vmstatus_mpie := vmpie;
                                                vmideleg      := Minterrupts_zero;
-                                               vmedeleg      := medeleg_off;
+                                               vmedeleg      := Medeleg_zero;
                                                vscause       := vscause';
                                                vsscratch     := vsscratch;
                                                vsepc         := vsepc;
@@ -1604,7 +1604,7 @@ Module inv := invariants.
     read_register γ pmpaddr1 = bv.zero ->
     read_register γ pc = (bv.of_N init_addr) ->
     read_register γ mideleg = Minterrupts_zero ->
-    read_register γ medeleg = medeleg_off ->
+    read_register γ medeleg = Medeleg_zero ->
     ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
     mmio_pred bytes_per_word (memory_trace μ') (* The initial demands hold over the final state *).
   Proof.
@@ -1629,7 +1629,7 @@ Module inv := invariants.
                          vmip          := read_register γ mip;
                          vmstatus_mpie := false;
                          vmideleg      := Minterrupts_zero;
-                         vmedeleg      := medeleg_off;
+                         vmedeleg      := Medeleg_zero;
                          vscause       := read_register γ scause;
                          vsscratch     := read_register γ sscratch;
                          vsepc         := read_register γ sepc;
@@ -1885,7 +1885,7 @@ Module inv := invariants.
              LVars.mpie := true;
              LVars.mie := vmstatus_mpie csrs;
              LVars.mideleg := vmideleg csrs;
-             LVars.medeleg := medeleg_off |} with "[-]") as "Hk".
+             LVars.medeleg := Medeleg_zero |} with "[-]") as "Hk".
         + iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _])"; cbn in *.
           iFrame "Hpc Hnpc Hmstatus HaccU Hgprs Hmscratch Htrap".
           iSplitL "Hshared";
@@ -2119,7 +2119,7 @@ Module inv := invariants.
         (∃ v, sepc ↦ᵣ v) ∗
         (∃ v, stvec ↦ᵣ v) ∗
         mideleg ↦ᵣ Minterrupts_zero ∗
-        medeleg ↦ᵣ medeleg_off ∗
+        medeleg ↦ᵣ Medeleg_zero ∗
         cur_privilege ↦ᵣ User ∗
         interp_gprs ∅ ∗
         interp_pmp_entries femto_pmpentries ∗
@@ -2147,7 +2147,7 @@ Module inv := invariants.
                   LVars.mpie := mpie;
                   LVars.mie := mie;
                   LVars.mideleg := Minterrupts_zero;
-                  LVars.medeleg := medeleg_off |}.
+                  LVars.medeleg := Medeleg_zero |}.
     Proof.
       iIntros "((%mpp & %mpie & %mie & Hmst) & Hmtvec & [%vmcause Hmcause] & Hmip & Hmie & [%vmscratch Hmscratch] & [%vmepc Hmepc] & [%vscause Hscause] & [%vsscratch Hsscratch] & [%vsepc Hsepc] & [%vstvec Hstvec] & Hmideleg & Hmedeleg & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & ((Hhentry1 & Hhwrite1 & Hhsecret1 & Hhexit1) & (Hhentry2 & Hhwrite2 & Hhsecret2 & Hhexit2)) & Hdata & Hmemadv)".
       cbn - [ptstoSthL interp_ptstomem].
@@ -2194,7 +2194,7 @@ Module inv := invariants.
                                                vmip          := vmip;
                                                vmstatus_mpie := vmpie;
                                                vmideleg      := Minterrupts_zero;
-                                               vmedeleg      := medeleg_off;
+                                               vmedeleg      := Medeleg_zero;
                                                vscause       := vscause';
                                                vsscratch     := vsscratch;
                                                vsepc         := vsepc;
@@ -2346,7 +2346,7 @@ Module inv := invariants.
       read_register γ1 pmpaddr1 = bv.zero ->
       read_register γ1 pc = bv.of_N init_addr ->
       read_register γ1 mideleg = Minterrupts_zero ->
-      read_register γ1 medeleg = medeleg_off ->
+      read_register γ1 medeleg = Medeleg_zero ->
       (* We require termination of the executions by using the fail statement.
          The proper shutdown is part of mmio_pred_final as an event, and when
          such a shutdown event is triggered, we step to fail.
@@ -2375,7 +2375,7 @@ Module inv := invariants.
                          vmip          := read_register γ1 mip;
                          vmstatus_mpie := false;
                          vmideleg      := Minterrupts_zero;
-                         vmedeleg      := medeleg_off;
+                         vmedeleg      := Medeleg_zero;
                          vscause       := read_register γ1 scause;
                          vsscratch     := read_register γ1 sscratch;
                          vsepc         := read_register γ1 sepc;
