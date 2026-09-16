@@ -1036,13 +1036,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_exceptionType_to_bits : Stm [e ∷ ty_exception_type] ty_exc_code :=
     match: e in union exception_type with
-      |> KE_Fetch_Access_Fault pat_unit => stm_val ty_exc_code [bv 1]
-      |> KE_Illegal_Instr      pat_unit => stm_val ty_exc_code [bv 2]
-      |> KE_Load_Access_Fault  pat_unit => stm_val ty_exc_code [bv 5]
-      |> KE_SAMO_Access_Fault  pat_unit => stm_val ty_exc_code [bv 7]
-      |> KE_U_EnvCall          pat_unit => stm_val ty_exc_code [bv 8]
-      |> KE_S_EnvCall          pat_unit => stm_val ty_exc_code [bv 9]
-      |> KE_M_EnvCall          pat_unit => stm_val ty_exc_code [bv 11]
+    |> KE_Fetch_Addr_Align pat_unit   => stm_val ty_exc_code [bv 0x00]
+    |> KE_Fetch_Access_Fault pat_unit => stm_val ty_exc_code [bv 0x01]
+    |> KE_Illegal_Instr pat_unit      => stm_val ty_exc_code [bv 0x02]
+    |> KE_Breakpoint pat_unit         => stm_val ty_exc_code [bv 0x03]
+    |> KE_Load_Addr_Align pat_unit    => stm_val ty_exc_code [bv 0x04]
+    |> KE_Load_Access_Fault pat_unit  => stm_val ty_exc_code [bv 0x05]
+    |> KE_SAMO_Addr_Align pat_unit    => stm_val ty_exc_code [bv 0x06]
+    |> KE_SAMO_Access_Fault pat_unit  => stm_val ty_exc_code [bv 0x07]
+    |> KE_U_EnvCall pat_unit          => stm_val ty_exc_code [bv 0x08]
+    |> KE_S_EnvCall pat_unit          => stm_val ty_exc_code [bv 0x09]
+    |> KE_Reserved_10 pat_unit        => stm_val ty_exc_code [bv 0x0a]
+    |> KE_M_EnvCall pat_unit          => stm_val ty_exc_code [bv 0x0b]
+    |> KE_Fetch_Page_Fault pat_unit   => stm_val ty_exc_code [bv 0x0c]
+    |> KE_Load_Page_Fault pat_unit    => stm_val ty_exc_code [bv 0x0d]
+    |> KE_Reserved_14 pat_unit        => stm_val ty_exc_code [bv 0x0e]
+    |> KE_SAMO_Page_Fault pat_unit    => stm_val ty_exc_code [bv 0x0f]
     end.
 
   Definition fun_interruptType_to_bits : Stm ["i" ∷ ty_interruptType] ty_exc_code :=
@@ -1106,13 +1115,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
      bitvector. *)
   Definition stm_idx_medeleg {Γ} (medeleg : Exp Γ ty_xlenbits) (ee : Exp Γ ty_exception_type) : Stm Γ ty.bool :=
     match: ee in union exception_type with
-      |> KE_Fetch_Access_Fault pat_unit => stm_exp (exp_testbit medeleg 1)
-      |> KE_Illegal_Instr      pat_unit => stm_exp (exp_testbit medeleg 2)
-      |> KE_Load_Access_Fault  pat_unit => stm_exp (exp_testbit medeleg 5)
-      |> KE_SAMO_Access_Fault  pat_unit => stm_exp (exp_testbit medeleg 7)
-      |> KE_U_EnvCall          pat_unit => stm_exp (exp_testbit medeleg 8)
-      |> KE_S_EnvCall          pat_unit => stm_exp (exp_testbit medeleg 9)
-      |> KE_M_EnvCall          pat_unit => stm_exp (exp_testbit medeleg 10)
+    |> KE_Fetch_Addr_Align pat_unit   => stm_exp (exp_testbit medeleg 0)
+    |> KE_Fetch_Access_Fault pat_unit => stm_exp (exp_testbit medeleg 1)
+    |> KE_Illegal_Instr pat_unit      => stm_exp (exp_testbit medeleg 2)
+    |> KE_Breakpoint pat_unit         => stm_exp (exp_testbit medeleg 3)
+    |> KE_Load_Addr_Align pat_unit    => stm_exp (exp_testbit medeleg 4)
+    |> KE_Load_Access_Fault pat_unit  => stm_exp (exp_testbit medeleg 5)
+    |> KE_SAMO_Addr_Align pat_unit    => stm_exp (exp_testbit medeleg 6)
+    |> KE_SAMO_Access_Fault pat_unit  => stm_exp (exp_testbit medeleg 7)
+    |> KE_U_EnvCall pat_unit          => stm_exp (exp_testbit medeleg 8)
+    |> KE_S_EnvCall pat_unit          => stm_exp (exp_testbit medeleg 9)
+    |> KE_Reserved_10 pat_unit        => stm_exp (exp_testbit medeleg 10)
+    |> KE_M_EnvCall pat_unit          => stm_exp (exp_testbit medeleg 11)
+    |> KE_Fetch_Page_Fault pat_unit   => stm_exp (exp_testbit medeleg 12)
+    |> KE_Load_Page_Fault pat_unit    => stm_exp (exp_testbit medeleg 13)
+    |> KE_Reserved_14 pat_unit        => stm_exp (exp_testbit medeleg 14)
+    |> KE_SAMO_Page_Fault pat_unit    => stm_exp (exp_testbit medeleg 15)
     end.
 
   Definition fun_idx_medeleg_record : Stm ["i" ∷ ty_Medeleg; e ∷ ty_exception_type] ty.bool :=
@@ -1133,13 +1151,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       ; "Fetch_Addr_Align"
       ] =>
         match: exp_var "e" in union exception_type with
+        |> KE_Fetch_Addr_Align pat_unit   => stm_exp (exp_var "Fetch_Addr_Align")
         |> KE_Fetch_Access_Fault pat_unit => stm_exp (exp_var "Fetch_Access_Fault")
-        |> KE_Illegal_Instr      pat_unit => stm_exp (exp_var "Illegal_Instr")
-        |> KE_Load_Access_Fault  pat_unit => stm_exp (exp_var "Load_Access_Fault")
-        |> KE_SAMO_Access_Fault  pat_unit => stm_exp (exp_var "SAMO_Access_Fault")
-        |> KE_U_EnvCall          pat_unit => stm_exp (exp_var "UEnvCall")
-        |> KE_S_EnvCall          pat_unit => stm_exp (exp_var "SEnvCall")
-        |> KE_M_EnvCall          pat_unit => stm_exp (exp_var "MEnvCall")
+        |> KE_Illegal_Instr pat_unit      => stm_exp (exp_var "Illegal_Instr")
+        |> KE_Breakpoint pat_unit         => stm_exp (exp_var "Breakpoint")
+        |> KE_Load_Addr_Align pat_unit    => stm_exp (exp_var "Load_Addr_Align")
+        |> KE_Load_Access_Fault pat_unit  => stm_exp (exp_var "Load_Access_Fault")
+        |> KE_SAMO_Addr_Align pat_unit    => stm_exp (exp_var "SAMO_Addr_Align")
+        |> KE_SAMO_Access_Fault pat_unit  => stm_exp (exp_var "SAMO_Access_Fault")
+        |> KE_U_EnvCall pat_unit          => stm_exp (exp_var "UEnvCall")
+        |> KE_S_EnvCall pat_unit          => stm_exp (exp_var "SEnvCall")
+        |> KE_Reserved_10 pat_unit        => stm_exp (exp_val ty.bool false)
+        |> KE_M_EnvCall pat_unit          => stm_exp (exp_var "MEnvCall")
+        |> KE_Fetch_Page_Fault pat_unit   => stm_exp (exp_var "Fetch_Page_Fault")
+        |> KE_Load_Page_Fault pat_unit    => stm_exp (exp_var "Load_Page_Fault")
+        |> KE_Reserved_14 pat_unit        => stm_exp (exp_val ty.bool false)
+        |> KE_SAMO_Page_Fault pat_unit    => stm_exp (exp_var "SAMO_Page_Fault")
       end
     end.
       

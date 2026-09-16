@@ -511,13 +511,22 @@ Inductive AccessType : Set :=
 .
 
 Inductive ExceptionType : Set :=
+| E_Fetch_Addr_Align
 | E_Fetch_Access_Fault
+| E_Illegal_Instr
+| E_Breakpoint
+| E_Load_Addr_Align
 | E_Load_Access_Fault
+| E_SAMO_Addr_Align
 | E_SAMO_Access_Fault
 | E_U_EnvCall
 | E_S_EnvCall
+| E_Reserved_10
 | E_M_EnvCall
-| E_Illegal_Instr
+| E_Fetch_Page_Fault
+| E_Load_Page_Fault
+| E_Reserved_14
+| E_SAMO_Page_Fault
 .
 
 Inductive FetchResult : Set :=
@@ -570,13 +579,22 @@ Inductive AccessTypeConstructor : Set :=
 .
 
 Inductive ExceptionTypeConstructor : Set :=
+| KE_Fetch_Addr_Align
 | KE_Fetch_Access_Fault
+| KE_Illegal_Instr
+| KE_Breakpoint
+| KE_Load_Addr_Align
 | KE_Load_Access_Fault
+| KE_SAMO_Addr_Align
 | KE_SAMO_Access_Fault
 | KE_U_EnvCall
 | KE_S_EnvCall
+| KE_Reserved_10
 | KE_M_EnvCall
-| KE_Illegal_Instr
+| KE_Fetch_Page_Fault
+| KE_Load_Page_Fault
+| KE_Reserved_14
+| KE_SAMO_Page_Fault
 .
 
 Inductive MemoryOpResultConstructor : Set :=
@@ -817,8 +835,12 @@ Section Finite.
 
   #[export,program] Instance ExceptionTypeConstructor_finite :
     Finite ExceptionTypeConstructor :=
-    {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;
-                KE_U_EnvCall;KE_S_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
+    {| enum := [KE_Fetch_Addr_Align; KE_Fetch_Access_Fault; KE_Illegal_Instr
+               ; KE_Breakpoint; KE_Load_Addr_Align; KE_Load_Access_Fault
+               ; KE_SAMO_Addr_Align; KE_SAMO_Access_Fault; KE_U_EnvCall
+               ; KE_S_EnvCall; KE_Reserved_10; KE_M_EnvCall
+               ; KE_Fetch_Page_Fault; KE_Load_Page_Fault; KE_Reserved_14
+               ; KE_SAMO_Page_Fault] |}.
 
   #[export,program] Instance FetchResultConstructor_finite :
     Finite FetchResultConstructor :=
@@ -1047,13 +1069,22 @@ Module Export RiscvPmpBase <: Base.
                             end
     | exception_type   => fun Kv =>
                             match Kv with
+                            | E_Fetch_Addr_Align   => existT KE_Fetch_Addr_Align tt
                             | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt
+                            | E_Illegal_Instr      => existT KE_Illegal_Instr tt
+                            | E_Breakpoint         => existT KE_Breakpoint tt
+                            | E_Load_Addr_Align    => existT KE_Load_Addr_Align tt
                             | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
+                            | E_SAMO_Addr_Align    => existT KE_SAMO_Addr_Align tt
                             | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
                             | E_U_EnvCall          => existT KE_U_EnvCall tt
                             | E_S_EnvCall          => existT KE_S_EnvCall tt
+                            | E_Reserved_10        => existT KE_Reserved_10 tt
                             | E_M_EnvCall          => existT KE_M_EnvCall tt
-                            | E_Illegal_Instr      => existT KE_Illegal_Instr tt
+                            | E_Fetch_Page_Fault   => existT KE_Fetch_Page_Fault tt
+                            | E_Load_Page_Fault    => existT KE_Load_Page_Fault tt
+                            | E_Reserved_14        => existT KE_Reserved_14 tt
+                            | E_SAMO_Page_Fault    => existT KE_SAMO_Page_Fault tt
                             end
     | memory_op_result bytes => fun Kv =>
                             match Kv with
@@ -1108,13 +1139,22 @@ Module Export RiscvPmpBase <: Base.
                               end
       | exception_type   => fun Kv =>
                               match Kv with
+                              | existT KE_Fetch_Addr_Align tt   => E_Fetch_Addr_Align
                               | existT KE_Fetch_Access_Fault tt => E_Fetch_Access_Fault
+                              | existT KE_Illegal_Instr tt      => E_Illegal_Instr
+                              | existT KE_Breakpoint tt         => E_Breakpoint
+                              | existT KE_Load_Addr_Align tt    => E_Load_Addr_Align
                               | existT KE_Load_Access_Fault tt  => E_Load_Access_Fault
+                              | existT KE_SAMO_Addr_Align tt    => E_SAMO_Addr_Align
                               | existT KE_SAMO_Access_Fault tt  => E_SAMO_Access_Fault
                               | existT KE_U_EnvCall tt          => E_U_EnvCall
                               | existT KE_S_EnvCall tt          => E_S_EnvCall
+                              | existT KE_Reserved_10 tt        => E_Reserved_10
                               | existT KE_M_EnvCall tt          => E_M_EnvCall
-                              | existT KE_Illegal_Instr tt      => E_Illegal_Instr
+                              | existT KE_Fetch_Page_Fault tt   => E_Fetch_Page_Fault
+                              | existT KE_Load_Page_Fault tt    => E_Load_Page_Fault
+                              | existT KE_Reserved_14 tt        => E_Reserved_14
+                              | existT KE_SAMO_Page_Fault tt    => E_SAMO_Page_Fault
                               end
       | memory_op_result bytes => fun Kv =>
                               match Kv with
