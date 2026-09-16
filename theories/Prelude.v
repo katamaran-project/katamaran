@@ -159,13 +159,13 @@ End Equality.
 Ltac finite_from_eqdec :=
   match goal with
   | |- base.NoDup ?xs =>
-      now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
+      now apply (@decidable.bool_decide_unpack _ (ListDec.NoDup_dec xs))
   | |- forall x : ?T, base.elem_of x _ =>
       lazymatch T with
       | sigT _ => intros [? []]
       | _      => intros []
       end;
-      apply (@decidable.bool_decide_unpack _ (list.list_elem_of_dec _ _));
+      apply (@decidable.bool_decide_unpack _ (base.list_elem_of _ _));
       auto
   end.
 
