@@ -245,7 +245,7 @@ Section BlockVerificationDerived.
 
   Section Relational.
 
-    Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
+    Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
@@ -309,7 +309,7 @@ Section BlockVerificationDerived.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
     Import ProgramLogic.
     Import CHeapSpec.
@@ -634,7 +634,7 @@ Section AnnotatedBlockVerification.
     Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve.
 
@@ -681,7 +681,7 @@ Section AnnotatedBlockVerification.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
     Import ProgramLogic.
     Import CHeapSpec.

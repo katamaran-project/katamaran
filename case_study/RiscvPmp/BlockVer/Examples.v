@@ -65,7 +65,7 @@ Module Examples.
   Import RiscvPmpBlockVerifExecutor.
   Import Assembly.
   Import RiscvPmp.Sig.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
   Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
   Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
   Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.

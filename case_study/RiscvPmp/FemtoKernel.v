@@ -71,7 +71,7 @@ Module inv := invariants.
   Import ctx.notations.
   Import env.notations.
   Import iris.program_logic.weakestpre.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Import MicroSail.ShallowExecutor.
 

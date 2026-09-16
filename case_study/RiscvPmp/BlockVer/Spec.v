@@ -820,7 +820,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.program_logic.total_weakestpre.
   Import iris.base_logic.lib.gen_heap.
   Import iris.proofmode.string_ident.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Lemma read_ram_sound `{sailGS Σ} {bytes} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).

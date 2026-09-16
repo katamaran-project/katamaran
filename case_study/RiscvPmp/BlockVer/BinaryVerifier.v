@@ -73,7 +73,7 @@ Module Import BinaryBlockVerifierNotations.
 End BinaryBlockVerifierNotations.
 
 Module BinaryBlockVerifier.
-  Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+  Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
   Import RiscvPmpBlockVerifIrisInstance2.
 
   (* TODO: annoying, but not inj in general (illegal instructions...)

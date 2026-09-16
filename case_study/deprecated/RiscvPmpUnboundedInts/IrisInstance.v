@@ -37,7 +37,7 @@ From Katamaran Require Import
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 From stdpp Require namespaces.
 Module ns := stdpp.namespaces.
 

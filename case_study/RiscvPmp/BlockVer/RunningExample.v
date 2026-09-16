@@ -190,7 +190,7 @@ Module RunningExample.
 
     Section WithIris.
       Import iris.program_logic.weakestpre.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Lemma contract_step_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits), ⊢ contract_step a.
       Proof.
@@ -205,7 +205,7 @@ Module RunningExample.
 
   Section WithIris.
     Import iris.program_logic.weakestpre.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RiscvPmpIrisBase2.
     Import RiscvPmpIrisInstance2.
 
