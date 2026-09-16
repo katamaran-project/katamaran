@@ -45,7 +45,7 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Iris.Base

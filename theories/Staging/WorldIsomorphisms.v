@@ -44,7 +44,7 @@ From Katamaran Require Import
   Symbolic.UnifLogic
   Syntax.Predicates
 .
-From iris Require bi.derived_connectives bi.interface proofmode.tactics.
+From iris Require bi.derived_connectives bi.interface proofmode.proofmode.
 
 Set Implicit Arguments.
 
@@ -57,7 +57,7 @@ Module Type WorldIsomorphisms
   Import ctx.notations.
   Import ModalNotations.
   Import iris.bi.interface.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
 
   Definition Inverse {w1 w2 : World} (ω12 : Sub w1 w2) (ω21 : Sub w2 w1) :=

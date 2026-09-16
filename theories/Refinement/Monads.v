@@ -69,7 +69,7 @@ Module Type RefinementMonadsOn
   Import SymProp RSolve.
 
   Import logicalrelation logicalrelation.notations proofmode.
-  Import iris.bi.interface iris.proofmode.tactics.
+  Import iris.bi.interface iris.proofmode.proofmode.
 
   Definition RPureSpec [SA CA] (RA : Rel SA CA) :
     Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> ℙ) -> ℙ.

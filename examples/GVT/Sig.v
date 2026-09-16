@@ -39,7 +39,7 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck.
 From Equations Require Import
      Equations.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ctx.resolution.

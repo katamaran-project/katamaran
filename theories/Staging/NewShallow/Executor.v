@@ -64,7 +64,7 @@ Module Type NewShallowExecOn
   (Import PROG : Program B)
   (Import PLOG : ProgramLogic B SIG PROG).
 
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Module CPureSpec.
   Section WithProp.

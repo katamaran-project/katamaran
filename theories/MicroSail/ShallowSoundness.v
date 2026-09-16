@@ -53,7 +53,7 @@ Module Type Soundness
 
   Section Soundness.
 
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Context {L} {biA : BiAffine L} {PI : PredicateDef L} {SPEC : Specification}.
 
