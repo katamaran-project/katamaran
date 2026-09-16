@@ -43,7 +43,7 @@ From Equations Require Import
 From Katamaran Require Import
      Notations Prelude.
 From Ltac2 Require Ltac2.
-Require Import stdpp.base.
+From stdpp Require Import base list.
 Local Set Implicit Arguments.
 
 Declare Scope bv_scope.
@@ -520,7 +520,7 @@ Module bv.
       view (app x y) = cvapp (view x) y.
     Proof.
       destruct (view x).
-      rewrite <- (f_equal_dep _ view (eq_sym (app_cons b xs y))).
+      rewrite <- (Logic.f_equal_dep _ view (eq_sym (app_cons b xs y))).
       cbn. now rewrite view_cons.
     Qed.
 
@@ -1791,7 +1791,7 @@ Module bv.
 
     Lemma length_seq n s l :
       length (@seq n s l) = Z.to_nat l.
-    Proof. unfold seq. now rewrite length_map, list_numbers.length_seqZ. Qed.
+    Proof. unfold seq. now rewrite length_map, length_seqZ. Qed.
 
     Lemma elem_of_seq {n} (s : bv n) l a :
       a ∈ seq s l ↔
@@ -2850,18 +2850,18 @@ Module bv.
     Import ListNotations.
 
     (* why do we have both bv_seq and seqBv? *)
-    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_N len)).
+    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (seqZ (bv.unsigned min) (Z.of_N len)).
 
     Lemma seqBv_zero {n} m : @seqBv n m 0 = nil.
     Proof. unfold seqBv. now cbv. Qed.
     Lemma seqBv_one {n} m : @seqBv n m 1 = cons m nil.
     Proof.
       unfold seqBv.
-      rewrite list_numbers.seqZ_cons; [|lia]. cbn.
+      rewrite seqZ_cons; [|lia]. cbn.
       f_equal. now rewrite of_Z_unsigned. Qed.
 
     Lemma seqBv_len n base width : length (@seqBv n base width) = N.to_nat width.
-    Proof. unfold seqBv. rewrite length_map, list_numbers.length_seqZ. lia. Qed.
+    Proof. unfold seqBv. rewrite length_map, length_seqZ. lia. Qed.
 
     Lemma seqBv_width_at_least {n width} base k y :
       base.lookup k (@seqBv n base width) = Some y -> exists p , width = N.of_nat (k + S p)%nat.
@@ -2879,8 +2879,8 @@ Module bv.
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_N n1)) n2.
     Proof.
       unfold seqBv.
-      rewrite Znat.N2Z.inj_add, list_numbers.seqZ_app, map_app; try lia.
-      f_equal. unfold list_numbers.seqZ. rewrite <- !list.list_fmap_compose.
+      rewrite Znat.N2Z.inj_add, seqZ_app, map_app; try lia.
+      f_equal. unfold seqZ. rewrite <- !list.list_fmap_compose.
       apply list.list_fmap_ext. intros _ x _. cbn.
       now rewrite <- !of_Z_add, !of_Z_unsigned, !of_Z_N.
     Qed.
@@ -2916,7 +2916,7 @@ Module bv.
       unfold bv.ule, seqBv.
       intros mla alm.
       apply (list.list_elem_of_fmap_2' bv.of_Z _ (bv.unsigned v)).
-      - apply list_numbers.elem_of_seqZ.
+      - apply elem_of_seqZ.
         unfold unsigned, Z.of_nat.
         destruct len; Lia.lia.
       - now rewrite bv.of_Z_unsigned.
@@ -2989,7 +2989,7 @@ Module bv.
     and (min <=ᵘ v) (bv.bin v < bv.bin min + len)%N.
   Proof.
      unfold bv.ule, bv.ult, seqBv.
-     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%list.list_elem_of_fmap_1.
+     intros Hflow [y [-> Hel%elem_of_seqZ]]%list.list_elem_of_fmap_1.
      unfold bv.of_Z.
      rewrite <-(Znat.Z2N.id y); last bv_zify.
      rewrite bv.to_N_truncz.
@@ -3003,9 +3003,9 @@ Module bv.
     base.NoDup (@seqBv n min len).
   Proof.
     intros Hof.
-    apply list.NoDup_fmap_2_strong; last apply list_numbers.NoDup_seqZ.
+    apply list.NoDup_fmap_2_strong; last apply NoDup_seqZ.
     intros x y Hxin Hyin Heq.
-    rewrite !list_numbers.elem_of_seqZ in Hxin, Hyin.
+    rewrite !elem_of_seqZ in Hxin, Hyin.
     rewrite <-(Znat.Z2N.id y) in Heq; last bv_zify.
     rewrite <-(Znat.Z2N.id x) in Heq; last bv_zify.
     unfold bv.unsigned, bv.of_Z in *.

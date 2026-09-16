@@ -198,7 +198,7 @@ Module Type PatternsOn (Import TY : Types).
       forall {σ} (pat : Pattern σ),
         finite.Finite (PatternCase pat) :=
       fix fin {σ} pat :=
-        match pat with
+        match pat as pat return finite.Finite (PatternCase pat) with
         | pat_var _              => finite.unit_finite
         | pat_bool               => Finite_bool
         | pat_list _ _ _         => Finite_bool
