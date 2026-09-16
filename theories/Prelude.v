@@ -32,6 +32,7 @@ From Coq Require Import
      Bool.Bool
      Classes.Morphisms
      Lists.List
+     Lists.ListDec
      NArith.NArith
      Relations.Relation_Definitions
      Strings.String
@@ -39,14 +40,15 @@ From Coq Require Import
      ZArith.BinInt.
 From Katamaran Require Export
      Notations.
-From Equations Require Import
-     Equations.
 
 (* stdpp changes a lot of flags and changes implicit arguments of standard
    library functions and constructors. Import the module here, so that the
    changes are consistently applied over our code base. *)
-From stdpp Require
-     base countable finite list.
+From stdpp Require countable finite.
+From stdpp Require Import base list.
+
+From Equations Require Import
+  Equations.
 
 Local Set Implicit Arguments.
 
@@ -61,6 +63,7 @@ Section Equality.
     DepElim.eq_simplification_sigma1_dep a1 a2 b1 b2
       (fun e => match e with eq_refl => fun b eb => f_equal (f a1) eb end b2).
 
+  Locate dec_eq.
   Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
              (hyp : dec_eq x y) : dec_eq (f x) (f y) :=
     match hyp with
@@ -159,13 +162,13 @@ End Equality.
 Ltac finite_from_eqdec :=
   match goal with
   | |- base.NoDup ?xs =>
-      now apply (@decidable.bool_decide_unpack _ (ListDec.NoDup_dec xs))
+      now apply (@decidable.bool_decide_unpack _ (NoDup_dec xs))
   | |- forall x : ?T, base.elem_of x _ =>
       lazymatch T with
       | sigT _ => intros [? []]
       | _      => intros []
       end;
-      apply (@decidable.bool_decide_unpack _ (base.list_elem_of _ _));
+      apply (@decidable.bool_decide_unpack _ (list_elem_of_dec _ _));
       auto
   end.
 
@@ -176,7 +179,7 @@ Section Finite.
   #[local] Set Equations With UIP.
   #[export,program] Instance Finite_sigT (A : Type) {eqA : EqDec A} {finA : Finite A}
     (B : A -> Type) {eqB : forall x, EqDec (B x)} {finB : forall x, Finite (B x)} :
-    Finite {x : A & B x} :=
+    @Finite {x : A & B x} EqDecision_from_EqDec :=
     {| enum := foldr (fun a xs => map (existT a) (enum (B a)) ++ xs) [] (enum A) |}.
   Next Obligation.
   Proof.
@@ -772,7 +775,7 @@ Proof.
     specialize (IHi (prefix ++ cons a nil)).
     rewrite <-app_assoc in IHi.
     apply IHi.
-    rewrite list.length_app, Hlenpref; cbn.
+    rewrite length_app, Hlenpref; cbn.
     now rewrite <-plus_n_Sm, plus_n_O.
 Qed.
 

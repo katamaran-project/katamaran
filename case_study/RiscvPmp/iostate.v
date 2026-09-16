@@ -1,6 +1,6 @@
 From iris.algebra Require Import auth excl.
 From iris.base_logic Require Import lib.own.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 
 Class iostateG (IOStateG : Type) Σ := IOStateG {
    iostate_inG :: inG Σ (authR (optionUR (exclR (leibnizO IOStateG))));
