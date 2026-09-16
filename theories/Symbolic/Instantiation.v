@@ -309,7 +309,7 @@ Module Type InstantiationOn
     intros b bInΔ.
     unfold inst, inst_sub, inst_env, sub_cat_right.
     rewrite ?env.lookup_map, env.lookup_tabulate. cbn.
-    now rewrite env.lookup_take.
+    now rewrite env.lookup_take_lt.
   Qed.
 
   Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Val (type b)) :
@@ -370,7 +370,7 @@ Module Type InstantiationOn
         (t : Term (Σ - x∷σ) σ) (ι : Valuation (Σ - x∷σ)) :
     inst (sub_single xIn t) ι = env.insert xIn ι (inst t ι).
   Proof.
-    rewrite env.insert_insert'.
+    rewrite env.insert_insert_eq'.
     apply env.lookup_extensional. intros y yIn.
     unfold env.insert', sub_single; cbn.
     unfold inst at 1, inst_sub, inst_env.

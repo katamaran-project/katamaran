@@ -417,7 +417,7 @@ Module Type IrisAdequacy
     destruct o; inversion eq; subst.
     assert (eq' := eq_sym Heqo).
     rewrite <-elem_of_list_to_map in eq'.
-    - eapply elem_of_list_fmap_2 in eq'.
+    - eapply list_elem_of_fmap_1 in eq'.
       destruct eq' as ([σ' r'] & eq2 & eq3).
       now inversion eq2.
     - rewrite <-list_fmap_compose.
@@ -438,10 +438,10 @@ Module Type IrisAdequacy
       exists (existT _ (read_register γ r)).
       eapply elem_of_list_to_map_1'.
       + intros y eq.
-        eapply elem_of_list_fmap_2 in eq.
+        eapply list_elem_of_fmap_1 in eq.
         destruct eq as ([σ2 r2] & eq1 & eq2).
         now inversion eq1.
-      + refine (elem_of_list_fmap_1 _ _ (existT _ r) _).
+      + refine (list_elem_of_fmap_2 _ _ (existT _ r) _).
         eapply finite.elem_of_enum.
   Qed.
 

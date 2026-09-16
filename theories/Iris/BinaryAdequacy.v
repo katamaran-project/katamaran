@@ -257,7 +257,7 @@ Module Type IrisAdequacy2
     intros Hwp.
     destruct (steps_to_nsteps Hsteps) as [n steps].
     eapply (uPred.pure_soundness (M := iResUR sailΣ2)).
-    eapply (step_fupdN_soundness_gen _ HasLc n n).
+    eapply (step_fupdN_soundness _ HasLc n n).
     iIntros (Hinv) "Hlc".
     assert (regsmapv1 := RegStore_to_map_valid γ1).
     assert (regsmapv2 := RegStore_to_map_valid γ2).

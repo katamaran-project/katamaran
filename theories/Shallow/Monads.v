@@ -637,7 +637,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         now rewrite pattern_match_val_inverse_right.
       - set (mr := pattern_match_val pat v). intros HΦ.
         exists (projT1 mr). split.
-        { rewrite <- base.elem_of_list_In. apply finite.elem_of_enum. }
+        { rewrite <- base.list_elem_of_In. apply finite.elem_of_enum. }
         exists (projT2 mr). split.
         { subst mr. apply pattern_match_val_inverse_left. }
         destruct mr. apply HΦ.
@@ -652,7 +652,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       split.
       - set (mr := pattern_match_val pat v). intros HΦ.
         specialize (HΦ (projT1 mr)).
-        rewrite <- base.elem_of_list_In in HΦ.
+        rewrite <- base.list_elem_of_In in HΦ.
         specialize (HΦ (finite.elem_of_enum _) (projT2 mr)).
         specialize (HΦ (pattern_match_val_inverse_left pat v)).
         now destruct mr.

@@ -165,7 +165,7 @@ Ltac finite_from_eqdec :=
       | sigT _ => intros [? []]
       | _      => intros []
       end;
-      apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _));
+      apply (@decidable.bool_decide_unpack _ (list.list_elem_of_dec _ _));
       auto
   end.
 
@@ -190,7 +190,7 @@ Section Finite.
       + apply NoDup_fmap. intros x y Heq.
         now dependent elimination Heq.
         apply NoDup_enum.
-      + intros [a' b'] (b & Heq & HbIn)%elem_of_list_fmap.
+      + intros [a' b'] (b & Heq & HbIn)%list_elem_of_fmap.
         dependent elimination Heq.
         intros HxIn. apply HaIn.
         { clear - HxIn.
@@ -198,7 +198,7 @@ Section Finite.
           - inversion HxIn.
           - apply elem_of_app in HxIn.
             destruct HxIn as [HxIn|HxIn].
-            + apply elem_of_list_fmap in HxIn.
+            + apply list_elem_of_fmap in HxIn.
               destruct HxIn as (b & Heq & HbIn).
               dependent elimination Heq.
               constructor.
@@ -218,7 +218,7 @@ Section Finite.
     - intros [Ha|Ha]%elem_of_cons.
       + clear - Ha.
         apply elem_of_app. left. subst.
-        apply elem_of_list_fmap_1.
+        apply list_elem_of_fmap_2.
         apply elem_of_enum.
       + apply elem_of_app. right.
         now apply IHxs.
