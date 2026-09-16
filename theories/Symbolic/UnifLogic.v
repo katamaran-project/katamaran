@@ -45,7 +45,7 @@ From Katamaran Require Import
      Symbolic.Worlds
      Syntax.Predicates
 .
-From iris Require bi.derived_connectives bi.interface proofmode.tactics.
+From iris Require bi.derived_connectives bi.interface proofmode.proofmode.
 
 Declare Scope pred_scope.
 Delimit Scope pred_scope with P.
@@ -436,7 +436,7 @@ Module Type UnifLogicOn
 
     Import iris.proofmode.modalities.
     Import iris.proofmode.classes.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Lemma knowing_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       knowing ω (bi_pure P) ⊢ bi_pure P.
@@ -1244,7 +1244,7 @@ Module Type UnifLogicOn
     Import ModalNotations.
     Import iris.bi.interface.
     Import iris.proofmode.classes.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Record Rel (AT : TYPE) (A : Type) : Type :=
       MkRel { RSat : A -> (⊢ AT -> Pred)%modal }.
     Bind Scope rel_scope with Rel.

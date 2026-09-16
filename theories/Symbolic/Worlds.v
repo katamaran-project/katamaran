@@ -35,7 +35,7 @@ From Katamaran Require Import
      Syntax.Predicates
      Base.
 From stdpp Require Import base.
-From iris Require proofmode.tactics.
+From iris Require proofmode.proofmode.
 
 Import ctx.notations.
 Import env.notations.
@@ -1225,7 +1225,7 @@ Module Type WorldsOn
     Section SimplifyAllSpec.
       Import option.notations.
       Import iris.bi.interface.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
       Context {w : World} (g : Formula w -> PathCondition w -> option (PathCondition w)).
       Context (g_spec : forall F k,
                   option.spec
@@ -1295,7 +1295,7 @@ Module Type WorldsOn
       Context (user_spec : SolverUserOnlySpec user).
 
       Import iris.bi.interface.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Lemma solveruseronly_simplify_formula_spec {w : World} (F : Formula w) (k : PathCondition w) :
         option.spec

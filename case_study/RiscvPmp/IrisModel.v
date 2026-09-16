@@ -34,7 +34,7 @@ From Katamaran Require Import
      RiscvPmp.trace.
 From iris Require Import
      base_logic.lib.gen_heap
-     proofmode.tactics.
+     proofmode.proofmode.
 
 Set Implicit Arguments.
 

@@ -39,7 +39,7 @@ From stdpp Require Import
 From stdpp Require
      finite strings.
 From iris.proofmode Require Import
-     tactics.
+     proofmode.
 From Katamaran Require Import
      Base
      Bitvector

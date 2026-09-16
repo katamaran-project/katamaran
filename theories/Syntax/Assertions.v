@@ -167,7 +167,7 @@ Module Import asn.
     (* Import iris.bi.interface. *)
     (* Import iris.bi.derived_laws. *)
     (* Import iris.bi.extensions. *)
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Fixpoint interpret_pure {Σ} (a : Assertion Σ) (ι : Valuation Σ) : Prop :=
       match a with
