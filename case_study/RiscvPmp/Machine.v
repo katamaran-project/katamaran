@@ -124,6 +124,7 @@ Module RiscvNotations.
   Notation "'epc'"          := "epc" : string_scope.
   Notation "'prev_priv'"    := "prev_priv" : string_scope.
   Notation "'MPP'"          := "MPP" : string_scope.
+  Notation "'SPP'"          := "SPP" : string_scope.
   Notation "'csr'"          := "csr" : string_scope.
   Notation "'csrrw'"        := "csrrw" : string_scope.
   Notation "'csrpr'"        := "csrpr" : string_scope.
@@ -195,14 +196,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | interruptType_to_bits : Fun ["i" ∷ ty_interruptType ] ty_exc_code
   | Minterrupts_to_bits   : Fun ["i" ∷ ty_Minterrupts ] ty_xlenbits
   | Minterrupts_from_bits : Fun ["i" ∷ ty_xlenbits ] ty_Minterrupts
+  | Medeleg_to_bits       : Fun ["i" ∷ ty_Medeleg ] ty_xlenbits
+  | Medeleg_from_bits     : Fun ["i" ∷ ty_xlenbits ] ty_Medeleg
+  | idx_medeleg_record    : Fun ["i" ∷ ty_Medeleg; e ∷ ty_exception_type] ty.bool
   | privLevel_to_bits     : Fun [p ∷ ty_privilege] ty_priv_level
   | handle_mem_exception  : Fun [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit
   | exception_handler     : Fun [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits
-  | exception_delegatee   : Fun [p ∷ ty_privilege] ty_privilege
+  | exception_delegatee   : Fun [e ∷ ty_exception_type; p ∷ ty_privilege] ty_privilege
   | trap_handler          : Fun [del_priv ∷ ty_privilege; "intr" ∷ ty.bool; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits
   | prepare_trap_vector   : Fun [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits
   | tvec_addr             : Fun [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits)
   | handle_illegal        : Fun ctx.nil ty.unit
+  | lower_mstatus         : Fun [m ∷ ty_mstatus] ty_sstatus
   | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
   | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
   | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type
@@ -228,6 +233,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_STORE         : Fun [imm ∷ ty.bvec 12; rs2 ∷ ty_regno; rs1 ∷ ty_regno; width :: ty_word_width] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
   | execute_EBREAK        : Fun ctx.nil ty_retired
+  | execute_SRET          : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   | execute_CSR           : Fun [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired
   | execute_MUL           : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; high :: ty.bool; signed1 :: ty.bool; signed2 :: ty.bool] ty_retired
@@ -334,6 +340,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'prev_priv'"    := (@exp_var _ "prev_priv" _ _) : exp_scope.
     Notation "'p'"            := (@exp_var _ "p" _ _) : exp_scope.
     Notation "'MPP'"          := (@exp_var _ "MPP" _ _) : exp_scope.
+    Notation "'SPP'"          := (@exp_var _ "SPP" _ _) : exp_scope.
     Notation "'csr'"          := (@exp_var _ "csr" _ _) : exp_scope.
     Notation "'csrrw'"        := (@exp_var _ "csrrw" _ _) : exp_scope.
     Notation "'csrpr'"        := (@exp_var _ "csrpr" _ _) : exp_scope.
@@ -354,6 +361,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_val ty.unit tt)) : exp_scope.
     Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty.unit tt)) : exp_scope.
     Notation "'E_U_EnvCall'" := (exp_union exception_type KE_U_EnvCall (exp_val ty.unit tt)) : exp_scope.
+    Notation "'E_S_EnvCall'" := (exp_union exception_type KE_S_EnvCall (exp_val ty.unit tt)) : exp_scope.
     Notation "'E_M_EnvCall'" := (exp_union exception_type KE_M_EnvCall (exp_val ty.unit tt)) : exp_scope.
     Notation "'E_Illegal_Instr'" := (exp_union exception_type KE_Illegal_Instr (exp_val ty.unit tt)) : exp_scope.
 
@@ -367,6 +375,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'F_Error' meme memv" := (exp_union fetch_result KF_Error (exp_binop bop.pair meme memv)) (at level 10, meme at next level, memv at next level) : exp_scope.
 
     Notation "'CTL_TRAP' exc" := (exp_union ctl_result KCTL_TRAP exc) (at level 10, exc at next level) : exp_scope.
+    Notation "'CTL_SRET'" := (exp_union ctl_result KCTL_SRET (exp_val ty.unit tt)) : exp_scope.
     Notation "'CTL_MRET'" := (exp_union ctl_result KCTL_MRET (exp_val ty.unit tt)) : exp_scope.
   End RiscvμSailNotations.
 
@@ -386,57 +395,146 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: "b"   := b in
     let: "mpp" := let: "mstatus_mpp" := exp_binop bop.bvand (exp_var "b") (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 3 11))) in
                   if: exp_var "mstatus_mpp" = (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 0 11))) then stm_val ty_privilege User else
-                  (* if: exp_var "mstatus_mpp" = exp_int (Z.shiftl 1 11) then stm_val ty_privilege Supervisor else *)
+                  if: exp_var "mstatus_mpp" = (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 1 11))) then stm_val ty_privilege Supervisor else
                   if: exp_var "mstatus_mpp" = (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 3 11))) then stm_val ty_privilege Machine else
                   stm_fail ty_privilege "mstatus_from_bits" in
+    let: "spp" := let: "sstatus_spp" := exp_binop bop.bvand (exp_var "b") (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 1 8))) in
+                  if: exp_var "sstatus_spp" = (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 0 8)))
+                  then stm_val ty_privilege User
+                  else stm_val ty_privilege Supervisor in
     stm_match_bvec_split 4 (xlenbits - 4) (exp_var "b") "msuie" "mstatusrest1"
       (let: "mie" := stm_match_bvec_split 3 1 (exp_var "msuie") "suie" "miebv" (exp_var (σ := ty.bvec 1) "miebv" = exp_val (ty.bvec 1) [bv 0x1]) in
        stm_match_bvec_split 4 (xlenbits - 8) (exp_var "mstatusrest1") "msupie" "mstatusrest2"
          (let: "mpie" := stm_match_bvec_split 3 1 (exp_var "msupie") "supie" "mpiebv" (exp_var (σ := ty.bvec 1) "mpiebv" = exp_val (ty.bvec 1) [bv 0x1]) in
-           stm_exp (exp_record rmstatus [ exp_var "mpp"; exp_var "mpie"; exp_var "mie" ]))).
+           stm_exp (exp_record rmstatus [ exp_var "mpp"; exp_var "spp"; exp_var "mpie"; exp_var "mie" ]))).
 
   Definition stm_mstatus_to_bits {Γ} (mst : Stm Γ ty_mstatus) : Stm Γ ty_xlenbits :=
     let: "mst" := mst in
     match: exp_var "mst" in rmstatus with
-      ["mpp"; "mpie"; "mie"] =>
+      ["mpp"; "spp"; "mpie"; "mie"] =>
         let: "mppb" := match: exp_var "mpp" in privilege with
-                       | User    => stm_val (ty.bvec 2) [bv 0x0]
-                       | Machine => stm_val (ty.bvec 2) [bv[2] 0x3]
+                       | User       => stm_val (ty.bvec 2) [bv 0x0]
+                       | Supervisor => stm_val (ty.bvec 2) [bv[2] 0x1]
+                       | Machine    => stm_val (ty.bvec 2) [bv[2] 0x3]
                        end
+        in let: "sppb" := match: exp_var "spp" in privilege with
+                          | User       => stm_val (ty.bvec 1) [bv 0x0]
+                          | Supervisor => stm_val (ty.bvec 1) [bv 0x1]
+                          | Machine    => stm_fail (ty.bvec 1) "mstatus_to_bits: Can never have Machine as privilege level in SPP, this case should be unreachable"
+                          end
         in let: "mpieb" := if: exp_var "mpie"
                            then stm_val (ty.bvec 4) [bv 0x8]
-                           else stm_val (ty.bvec 4) [bv 0x8]
+                           else stm_val (ty.bvec 4) [bv 0x0]
         in let: "mieb" := if: exp_var "mie"
                           then stm_val (ty.bvec 4) [bv 0x8]
                           else stm_val (ty.bvec 4) [bv 0x0]
-        in exp_bvapp (exp_bvapp (exp_var "mpieb") (exp_var "mieb"))
-             (exp_bvapp (exp_val (ty.bvec 3) [bv 0x0])
-                (exp_bvapp (exp_var "mppb")
-                   (exp_val (ty.bvec (xlenbits - 13)) [bv 0x0])))
+        in exp_bvapp (exp_bvapp (exp_var "mieb") (exp_var "mpieb"))
+             (exp_bvapp (exp_var "sppb")
+               (exp_bvapp (exp_val (ty.bvec 2) [bv 0x0])
+                 (exp_bvapp (exp_var "mppb")
+                   (exp_val (ty.bvec (xlenbits - 13)) [bv 0x0]))))
+    end.
+
+  Definition stm_sstatus_from_bits {Γ} (b : Stm Γ ty_xlenbits) : Stm Γ ty_sstatus :=
+    let: "b"   := b in
+    let: "spp" := let: "sstatus_spp" := exp_binop bop.bvand (exp_var "b") (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 1 8))) in
+                  if: exp_var "sstatus_spp" = (exp_val ty_xlenbits (Bitvector.bv.of_N (N.shiftl 0 8)))
+                  then stm_val ty_privilege User
+                  else stm_val ty_privilege Supervisor in
+    stm_exp (exp_record rsstatus [exp_var "spp"]).
+
+  Definition stm_sstatus_to_bits {Γ} (sst : Stm Γ ty_sstatus) : Stm Γ ty_xlenbits :=
+    let: "sst" := sst in
+    match: exp_var "sst" in rsstatus with
+      ["spp"] =>
+        let: "sppb" := match: exp_var "spp" in privilege with
+                       | User       => stm_val (ty.bvec 1) [bv 0x0]
+                       | Supervisor => stm_val (ty.bvec 1) [bv 0x1]
+                       | Machine    => stm_fail (ty.bvec 1) "sstatus_to_bits: illegal spp, cannot be Machine"
+                       end
+        in exp_bvapp (exp_val (ty.bvec 8) [bv 0x0])
+                     (exp_bvapp (exp_var "sppb") (exp_val (ty.bvec (xlenbits - 9)) [bv 0x0]))
+    end.
+
+  Definition fun_Medeleg_to_bits : Stm ["i" ∷ ty_Medeleg] ty_xlenbits :=
+    match: exp_var "i" in rmedeleg with
+      [ "SAMO_Page_Fault"
+      ; "Load_Page_Fault"
+      ; "Fetch_Page_Fault"
+      ; "MEnvCall"
+      ; "SEnvCall"
+      ; "UEnvCall"
+      ; "SAMO_Access_Fault"
+      ; "SAMO_Addr_Align"
+      ; "Load_Access_Fault"
+      ; "Load_Addr_Align"
+      ; "Breakpoint"
+      ; "Illegal_Instr"
+      ; "Fetch_Access_Fault"
+      ; "Fetch_Addr_Align"
+      ] =>
+      let: "b15" := stm_call bool_to_bits [nenv exp_var "SAMO_Page_Fault"] in
+      let: "b13" := stm_call bool_to_bits [nenv exp_var "Load_Page_Fault"] in
+      let: "b12" := stm_call bool_to_bits [nenv exp_var "Fetch_Page_Fault"] in
+      let: "b10" := stm_call bool_to_bits [nenv exp_var "MEnvCall"] in
+      let: "b9" := stm_call bool_to_bits [nenv exp_var "SEnvCall"] in
+      let: "b8" := stm_call bool_to_bits [nenv exp_var "UEnvCall"] in
+      let: "b7" := stm_call bool_to_bits [nenv exp_var "SAMO_Access_Fault"] in
+      let: "b6" := stm_call bool_to_bits [nenv exp_var "SAMO_Addr_Align"] in
+      let: "b5" := stm_call bool_to_bits [nenv exp_var "Load_Access_Fault"] in
+      let: "b4" := stm_call bool_to_bits [nenv exp_var "Load_Addr_Align"] in
+      let: "b3" := stm_call bool_to_bits [nenv exp_var "Breakpoint"] in
+      let: "b2" := stm_call bool_to_bits [nenv exp_var "Illegal_Instr"] in
+      let: "b1" := stm_call bool_to_bits [nenv exp_var "Fetch_Access_Fault"] in
+      let: "b0" := stm_call bool_to_bits [nenv exp_var "Fetch_Addr_Align"] in
+      let r16 : Exp _ (ty.bvec 16) :=
+         exp_bvapp (exp_var (σ := ty.bvec 1) "b0")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b1")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b2")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b3")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b4")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b5")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b6")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b7")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b8")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b9")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b10")
+        (exp_bvapp (exp_val (ty.bvec 1) Bitvector.bv.zero)
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b12")
+        (exp_bvapp (exp_var (σ := ty.bvec 1) "b13")
+        (exp_bvapp (exp_val (ty.bvec 1) Bitvector.bv.zero)
+                   (exp_var (σ := ty.bvec 1) "b15"))))))))))))))) in
+      stm_exp (exp_unop uop.zext r16)
     end.
 
   Definition fun_Minterrupts_to_bits : Stm ["i" ∷ ty_Minterrupts] ty_xlenbits :=
     match: exp_var "i" in rminterrupts with
-      ["MEI"; "UEI"; "MTI"; "UTI"; "MSI"; "USI"] =>
+      ["MEI"; "SEI"; "UEI"; "MTI"; "STI"; "UTI"; "MSI"; "SSI"; "USI"] =>
         let: "b11" := stm_call bool_to_bits [nenv exp_var "MEI"] in
+        let: "b9" := stm_call bool_to_bits [nenv exp_var "SEI"] in
         let: "b8" := stm_call bool_to_bits [nenv exp_var "UEI"] in
         let: "b7" := stm_call bool_to_bits [nenv exp_var "MTI"] in
+        let: "b5" := stm_call bool_to_bits [nenv exp_var "STI"] in
         let: "b4" := stm_call bool_to_bits [nenv exp_var "UTI"] in
         let: "b3" := stm_call bool_to_bits [nenv exp_var "MSI"] in
+        let: "b1" := stm_call bool_to_bits [nenv exp_var "SSI"] in
         let: "b0" := stm_call bool_to_bits [nenv exp_var "USI"] in
         let r12 : Exp _ (ty.bvec 12) :=
           (exp_bvapp
              (exp_var (σ := ty.bvec 1) "b0")
              (exp_bvapp
                 (exp_bvapp
-                   (exp_bvapp (exp_val (ty.bvec 2) Bitvector.bv.zero)
+                   (exp_bvapp (exp_bvapp (exp_var (σ := ty.bvec 1) "b1")
+                                         (exp_val (ty.bvec 1) Bitvector.bv.zero))
                               (exp_var (σ := ty.bvec 1) "b3"))
                    (exp_bvapp (exp_var (σ := ty.bvec 1) "b4")
-                      (exp_val (ty.bvec 2) Bitvector.bv.zero)))
+                              (exp_bvapp (exp_var (σ := ty.bvec 1) "b5")
+                                         (exp_val (ty.bvec 1) Bitvector.bv.zero))))
                 (exp_bvapp
                    (exp_bvapp (exp_var (σ := ty.bvec 1) "b7")
                       (exp_var (σ := ty.bvec 1) "b8"))
-                   (exp_bvapp (exp_val (ty.bvec 2) Bitvector.bv.zero)
+                   (exp_bvapp (exp_bvapp (exp_var (σ := ty.bvec 1) "b9")
+                                         (exp_val (ty.bvec 1) Bitvector.bv.zero))
                       (exp_var (σ := ty.bvec 1) "b11"))
                 )
             )) in
@@ -464,12 +562,46 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_Minterrupts_from_bits : Stm ["i" ∷ ty_xlenbits] ty_Minterrupts :=
     let: "MEI" := exp_testbit (exp_var "i") 11 in
+    let: "SEI" := exp_testbit (exp_var "i") 9 in
     let: "UEI" := exp_testbit (exp_var "i") 8 in
     let: "MTI" := exp_testbit (exp_var "i") 7 in
+    let: "STI" := exp_testbit (exp_var "i") 5 in
     let: "UTI" := exp_testbit (exp_var "i") 4 in
     let: "MSI" := exp_testbit (exp_var "i") 3 in
+    let: "SSI" := exp_testbit (exp_var "i") 1 in
     let: "USI" := exp_testbit (exp_var "i") 0 in
-    exp_record rminterrupts [exp_var "MEI"; exp_var "UEI"; exp_var "MTI"; exp_var "UTI"; exp_var "MSI"; exp_var "USI"].
+    exp_record rminterrupts [exp_var "MEI"; exp_var "SEI"; exp_var "UEI"; exp_var "MTI"; exp_var "STI"; exp_var "UTI"; exp_var "MSI"; exp_var "SSI"; exp_var "USI"].
+
+  Definition fun_Medeleg_from_bits : Stm ["i" ∷ ty_xlenbits] ty_Medeleg :=
+      let: "SAMO_Page_Fault"    := exp_testbit (exp_var "i") 15 in
+      let: "Load_Page_Fault"    := exp_testbit (exp_var "i") 13 in
+      let: "Fetch_Page_Fault"   := exp_testbit (exp_var "i") 12 in
+      let: "MEnvCall"           := exp_testbit (exp_var "i") 10 in
+      let: "SEnvCall"           := exp_testbit (exp_var "i") 9 in
+      let: "UEnvCall"           := exp_testbit (exp_var "i") 8 in
+      let: "SAMO_Access_Fault"  := exp_testbit (exp_var "i") 7 in
+      let: "SAMO_Addr_Align"    := exp_testbit (exp_var "i") 6 in
+      let: "Load_Access_Fault"  := exp_testbit (exp_var "i") 5 in
+      let: "Load_Addr_Align"    := exp_testbit (exp_var "i") 4 in
+      let: "Breakpoint"         := exp_testbit (exp_var "i") 3 in
+      let: "Illegal_Instr"      := exp_testbit (exp_var "i") 2 in
+      let: "Fetch_Access_Fault" := exp_testbit (exp_var "i") 1 in
+      let: "Fetch_Addr_Align"   := exp_testbit (exp_var "i") 0 in
+      exp_record rmedeleg [ exp_var "SAMO_Page_Fault"
+                          ; exp_var "Load_Page_Fault"
+                          ; exp_var "Fetch_Page_Fault"
+                          ; exp_var "MEnvCall"
+                          ; exp_var "SEnvCall"
+                          ; exp_var "UEnvCall"
+                          ; exp_var "SAMO_Access_Fault"
+                          ; exp_var "SAMO_Addr_Align"
+                          ; exp_var "Load_Access_Fault"
+                          ; exp_var "Load_Addr_Align"
+                          ; exp_var "Breakpoint"
+                          ; exp_var "Illegal_Instr"
+                          ; exp_var "Fetch_Access_Fault"
+                          ; exp_var "Fetch_Addr_Align"
+                          ].
 
   Notation "x '|bv|' y" := (exp_binop bop.bvor x y)
       (at level 60) : exp_scope.
@@ -726,8 +858,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       | PMP_Fail     => stm_val ty.bool false
       | PMP_Continue =>
           match: priv in privilege with
-          | Machine => stm_val ty.bool true
-          | User    => stm_val ty.bool false
+          | Machine    => stm_val ty.bool true
+          | Supervisor => stm_val ty.bool false
+          | User       => stm_val ty.bool false
           end
       end
       end in
@@ -749,6 +882,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       if: tmp
       then call pmpCheckRWX ent acc
       else stm_val ty.bool true
+    | Supervisor =>
+      call pmpCheckRWX ent acc
     | User =>
       call pmpCheckRWX ent acc
     end.
@@ -906,19 +1041,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       |> KE_Load_Access_Fault  pat_unit => stm_val ty_exc_code [bv 5]
       |> KE_SAMO_Access_Fault  pat_unit => stm_val ty_exc_code [bv 7]
       |> KE_U_EnvCall          pat_unit => stm_val ty_exc_code [bv 8]
+      |> KE_S_EnvCall          pat_unit => stm_val ty_exc_code [bv 9]
       |> KE_M_EnvCall          pat_unit => stm_val ty_exc_code [bv 11]
     end.
 
   Definition fun_interruptType_to_bits : Stm ["i" ∷ ty_interruptType] ty_exc_code :=
     match: (exp_var "i") in interruptType with
     | I_U_Software => stm_val ty_exc_code [bv 0x00]
+    | I_S_Software => stm_val ty_exc_code [bv 0x01]
     | I_M_Software => stm_val ty_exc_code [bv 0x03]
     | I_U_Timer => stm_val ty_exc_code [bv 0x04]
+    | I_S_Timer => stm_val ty_exc_code [bv 0x05]
     | I_M_Timer => stm_val ty_exc_code [bv 0x07]
     | I_U_External => stm_val ty_exc_code [bv 0x08]
+    | I_S_External => stm_val ty_exc_code [bv 0x09]
     | I_M_External => stm_val ty_exc_code [bv 0x0b]
     end.
-
 
   Definition fun_handle_mem_exception : Stm [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit :=
     let: tmp1 := stm_read_register pc in
@@ -928,7 +1066,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_exception_handler : Stm [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits :=
     match: ctl in union ctl_result with
-    |> KCTL_TRAP (pat_var "e") => let: del_priv := call exception_delegatee cur_priv in
+    |> KCTL_TRAP (pat_var "e") => let: del_priv := call exception_delegatee e cur_priv in
                                   let: tmp := call exceptionType_to_bits e in
                                   call trap_handler del_priv (exp_val ty.bool false) tmp (exp_var "pc")
     |> KCTL_MRET pat_unit      =>
@@ -939,33 +1077,108 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                the value of mepc *)
       let: "tmp1" := stm_read_register mstatus in
       match: exp_var "tmp1" in rmstatus with
-        ["MPP"; "MPIE"; "MIE"] =>
-          stm_write_register cur_privilege MPP ;;
+        ["MPP"; "SPP"; "MPIE"; "MIE"] =>
+          stm_write_register cur_privilege (exp_var "MPP") ;;
+          (* if   cur_privilege != Machine *)
+          (* then mstatus->MPRV() = 0b0; *)
           stm_write_register mstatus
-            (exp_record rmstatus ([nenv exp_val ty_privilege User; exp_val ty.bool true; exp_var (σ := ty.bool) "MPIE" ]
+            (exp_record rmstatus ([nenv exp_val ty_privilege User; exp_var "SPP"; exp_val ty.bool true; exp_var (σ := ty.bool) "MPIE" ]
                                    )) ;;
           stm_read_register mepc
       end
+    |> KCTL_SRET pat_unit      =>
+      let: "tmp1" := stm_read_register mstatus in
+      match: exp_var "tmp1" in rmstatus with
+        ["MPP"; "SPP"; "MPIE"; "MIE"] =>
+          if: exp_var "SPP" = exp_val ty_privilege Machine
+          then fail "Invalid SPP value" (* Sail code uses 1 bit to represent SPP, being either User or Supervisor, i.e., Machine is an impossible case so we simply fail here. *)
+          else
+            stm_write_register cur_privilege (exp_var "SPP") ;;
+            stm_write_register mstatus
+              (exp_record rmstatus ([nenv exp_var "MPP"; exp_val ty_privilege User; exp_var "MPIE"; exp_var "MIE" ])) ;;
+            stm_read_register sepc
+      end
     end.
 
-  Definition fun_exception_delegatee : Stm [p ∷ ty_privilege] ty_privilege :=
-    stm_val ty_privilege Machine.
+  (* Inline function to index a medeleg bitvector based on an exception type.
+     The Sail codebase handles this slightly different, by converting the
+     exception_type param ee into a number first and using that to index the
+     bitvector. *)
+  Definition stm_idx_medeleg {Γ} (medeleg : Exp Γ ty_xlenbits) (ee : Exp Γ ty_exception_type) : Stm Γ ty.bool :=
+    match: ee in union exception_type with
+      |> KE_Fetch_Access_Fault pat_unit => stm_exp (exp_testbit medeleg 1)
+      |> KE_Illegal_Instr      pat_unit => stm_exp (exp_testbit medeleg 2)
+      |> KE_Load_Access_Fault  pat_unit => stm_exp (exp_testbit medeleg 5)
+      |> KE_SAMO_Access_Fault  pat_unit => stm_exp (exp_testbit medeleg 7)
+      |> KE_U_EnvCall          pat_unit => stm_exp (exp_testbit medeleg 8)
+      |> KE_S_EnvCall          pat_unit => stm_exp (exp_testbit medeleg 9)
+      |> KE_M_EnvCall          pat_unit => stm_exp (exp_testbit medeleg 10)
+    end.
+
+  Definition fun_idx_medeleg_record : Stm ["i" ∷ ty_Medeleg; e ∷ ty_exception_type] ty.bool :=
+    match: exp_var "i" in rmedeleg with
+      [ "SAMO_Page_Fault"
+      ; "Load_Page_Fault"
+      ; "Fetch_Page_Fault"
+      ; "MEnvCall"
+      ; "SEnvCall"
+      ; "UEnvCall"
+      ; "SAMO_Access_Fault"
+      ; "SAMO_Addr_Align"
+      ; "Load_Access_Fault"
+      ; "Load_Addr_Align"
+      ; "Breakpoint"
+      ; "Illegal_Instr"
+      ; "Fetch_Access_Fault"
+      ; "Fetch_Addr_Align"
+      ] =>
+        match: exp_var "e" in union exception_type with
+        |> KE_Fetch_Access_Fault pat_unit => stm_exp (exp_var "Fetch_Access_Fault")
+        |> KE_Illegal_Instr      pat_unit => stm_exp (exp_var "Illegal_Instr")
+        |> KE_Load_Access_Fault  pat_unit => stm_exp (exp_var "Load_Access_Fault")
+        |> KE_SAMO_Access_Fault  pat_unit => stm_exp (exp_var "SAMO_Access_Fault")
+        |> KE_U_EnvCall          pat_unit => stm_exp (exp_var "UEnvCall")
+        |> KE_S_EnvCall          pat_unit => stm_exp (exp_var "SEnvCall")
+        |> KE_M_EnvCall          pat_unit => stm_exp (exp_var "MEnvCall")
+      end
+    end.
+      
+
+  Definition fun_exception_delegatee : Stm [e ∷ ty_exception_type; p ∷ ty_privilege] ty_privilege :=
+    let: "medeleg_v" := stm_read_register medeleg in
+    (* Normally we need to use the bitvector representation and index that with
+       the number corresponding to the exception type e. We currently just index
+       the record directly using pattern matches instead. *)
+    (* let: "medeleg_bits" := call Medeleg_to_bits (exp_var "medeleg_v") in *)
+    (* let: "super" := stm_idx_medeleg (exp_var "medeleg_bits") (exp_var "e") in *)
+    let: "super" := call idx_medeleg_record (exp_var "medeleg_v") (exp_var "e") in
+    let: "deleg" := if: exp_var "super"
+                    then exp_val ty_privilege Supervisor
+                    else exp_val ty_privilege Machine in
+    let: "deleg_bits" := call privLevel_to_bits (exp_var "deleg") in
+    let: "p_bits" := call privLevel_to_bits (exp_var "p") in
+    let: tmp := exp_var "deleg_bits" <=ᵘ exp_var "p_bits" in
+    if: tmp
+    then exp_var "p"
+    else exp_var "deleg".
 
   Definition fun_trap_handler : Stm [del_priv ∷ ty_privilege; "intr" ∷ ty.bool; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits :=
-    let: "intrb" := call bool_to_bits (exp_var "intr") in
-    (* TODO: mcause[IsInterrupt] = bool_to_bits(intr); *)
-    stm_write_register mcause (exp_zext c) ;;
-    let: tmp := stm_read_register cur_privilege in
-    let: "tmp1" := stm_read_register mstatus in
-    match: exp_var "tmp1" in rmstatus with
-      ["MPP"; "MPIE"; "MIE"] =>
-        stm_write_register mstatus (exp_record rmstatus ([nenv tmp; exp_var "MIE"; exp_val ty.bool false]
-                                      ))
-    end ;;
-    (* TODO: mtval           = tval(info); *)
-    stm_write_register mepc (exp_var "pc") ;;
-    stm_write_register cur_privilege del_priv ;;
-    (* NOTE: the following let can be dropped by just reusing c (the value we are
+    match: del_priv in privilege with
+    | Machine =>
+      let: "intrb" := call bool_to_bits (exp_var "intr") in
+      (* TODO: mcause[IsInterrupt] = bool_to_bits(intr); *)
+      stm_write_register mcause (exp_zext c) ;;
+      let: tmp := stm_read_register cur_privilege in
+      let: "tmp1" := stm_read_register mstatus in
+      match: exp_var "tmp1" in rmstatus with
+        ["MPP"; "SPP"; "MPIE"; "MIE"] =>
+          stm_write_register mstatus (exp_record rmstatus ([nenv tmp; exp_var "SPP"; exp_var "MIE"; exp_val ty.bool false]
+            ))
+      end ;;
+      (* TODO: mtval           = tval(info); *)
+      stm_write_register mepc (exp_var "pc") ;;
+      stm_write_register cur_privilege del_priv ;;
+      (* NOTE: the following let can be dropped by just reusing c (the value we are
              writing into mcause, but this (manual) translation is more faithful to
              what I expect an automatic translation would produce, i.e. do an
              stm_read_register when a register is used as param to a function call,
@@ -979,14 +1192,52 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
              that the trap handler function installed at the memory address denoted
              by mtvec will need to read the mcause register to dispatch to the
              corresponding trap handler for the cause). *)
-    let: tmp := stm_read_register mcause in
-    call prepare_trap_vector del_priv tmp.
+      let: tmp := stm_read_register mcause in
+      call prepare_trap_vector del_priv tmp
+    | Supervisor =>
+      (* TODO: S-Mode (interrupts) *)
+      let: "intrb" := call bool_to_bits (exp_var "intr") in
+      (* TODO: mcause[IsInterrupt] = bool_to_bits(intr); *)
+      stm_write_register scause (exp_zext c) ;;
+      let: tmp := stm_read_register cur_privilege in
+      let: "tmp_SPP" := match: tmp in privilege with
+                        | Machine => fail "invalid privilege for s-mode trap"
+                        | _       => tmp
+                        end in
+      let: "tmp1" := stm_read_register mstatus in
+      match: exp_var "tmp1" in rmstatus with
+        ["MPP"; "SPP"; "MPIE"; "MIE"] =>
+          stm_write_register mstatus (exp_record rmstatus ([nenv exp_var "MPP"; tmp; exp_var "MPIE"; exp_var "MIE"]))
+      end ;;
+      (* TODO: stval           = tval(info); *)
+      stm_write_register sepc (exp_var "pc") ;;
+      stm_write_register cur_privilege del_priv ;;
+      (* NOTE: the following let can be dropped by just reusing c (the value we are
+             writing into mcause, but this (manual) translation is more faithful to
+             what I expect an automatic translation would produce, i.e. do an
+             stm_read_register when a register is used as param to a function call,
+             to get the value in the register
+
+             Also keep into account that the risc-v model trap handler function handles
+             more cases than represented here, i.e. we only have support for M-mode and
+             do not explicitly check for this here. So we could simplify
+             prepare_trap_vector to not take a cause parameter (which it won't use
+             anyway because we only support direct mode for the trap vector, meaning
+             that the trap handler function installed at the memory address denoted
+             by mtvec will need to read the mcause register to dispatch to the
+             corresponding trap handler for the cause). *)
+      let: tmp := stm_read_register scause in
+      call prepare_trap_vector del_priv tmp
+    | User =>
+      stm_fail ty_xlenbits "trap_handler: Cannot delegate traps to User mode!"
+    end.
 
   Definition fun_prepare_trap_vector : Stm [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits :=
     let: tvec := match: p in privilege with
-    | Machine => stm_read_register mtvec
-    | User => fail "N extension (user-level interrupts) not supported"
-    end in
+                 | Machine    => stm_read_register mtvec
+                 | Supervisor => stm_read_register stvec
+                 | User       => fail "N extension (user-level interrupts) not supported"
+                 end in
     let: tmp := call tvec_addr tvec cause in
     (* NOTE: tvec_addr will only ever return Some(epc), because we don't support
              the 2 mode bits and only have direct mode. The None case only arises
@@ -1009,6 +1260,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
     call set_next_pc tmp3.
 
+  Definition fun_lower_mstatus : Stm [m ∷ ty_mstatus] ty_sstatus :=
+    match: exp_var "m" in rmstatus with
+      ["MPP"; "SPP"; "MPIE"; "MIE"] =>
+        exp_record rsstatus [ exp_var "SPP" ]
+    end.
+
   Definition fun_check_CSR : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
     let: tmp1 := call is_CSR_defined csr p in
     let: tmp2 := call csrAccess csr in
@@ -1018,66 +1275,63 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_is_CSR_defined : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
     match: csr in csridx with
-    | MStatus => match: p in privilege with
-                 | Machine => stm_val ty.bool true
-                 | _ => stm_val ty.bool false
-                 end
-    | Mie     => match: p in privilege with
-                 | Machine => stm_val ty.bool true
-                 | _ => stm_val ty.bool false
-                 end
-    | Mip     => match: p in privilege with
-                 | Machine => stm_val ty.bool true
-                 | _ => stm_val ty.bool false
-                 end
-    | MTvec => match: p in privilege with
-                 | Machine => stm_val ty.bool true
-                 | _ => stm_val ty.bool false
-                 end
-    | MScratch => match: p in privilege with
-                  | Machine => stm_val ty.bool true
-                  | _ => stm_val ty.bool false
-                  end
-    | MEpc => match: p in privilege with
-              | Machine => stm_val ty.bool true
-              | _ => stm_val ty.bool false
-              end
-    | MCause => match: p in privilege with
-                | Machine => stm_val ty.bool true
-                | _ => stm_val ty.bool false
-                end
-    | MPMP0CFG => match: p in privilege with
-                  | Machine => stm_val ty.bool true
-                  | _ => stm_val ty.bool false
-                  end
-    | MPMPADDR0 => match: p in privilege with
-                   | Machine => stm_val ty.bool true
-                   | _ => stm_val ty.bool false
-                   end
-    | MPMPADDR1 => match: p in privilege with
-                   | Machine => stm_val ty.bool true
-                   | _ => stm_val ty.bool false
-                   end
+    | MStatus   => p = exp_val ty_privilege Machine
+    | Mie       => p = exp_val ty_privilege Machine
+    | Mip       => p = exp_val ty_privilege Machine
+    | MTvec     => p = exp_val ty_privilege Machine
+    | MScratch  => p = exp_val ty_privilege Machine
+    | MEpc      => p = exp_val ty_privilege Machine
+    | MCause    => p = exp_val ty_privilege Machine
+    | Mideleg   => p = exp_val ty_privilege Machine
+    | Medeleg   => p = exp_val ty_privilege Machine
+    | MPMP0CFG  => p = exp_val ty_privilege Machine
+    | MPMPADDR0 => p = exp_val ty_privilege Machine
+    | MPMPADDR1 => p = exp_val ty_privilege Machine
+    | SStatus   => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
+    | STvec     => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
+    | SScratch  => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
+    | SEpc      => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
+    | SCause    => (p = exp_val ty_privilege Machine) || (p = exp_val ty_privilege Supervisor)
     end.
 
-  (* NOTE: - normally this information is part of the CSR bitpattern,
-             we are reusing our existing access_type
-           - all CSRs we currently support are MRW (= Machine, ReadWrite) *)
+  (* NOTE: for csrAccess and csrPriv, the access permissions and privilege that
+           are associated with a CSR are gathered from a CSR index (a 12-bit
+           vector), which we currently do not have (and use an enum directly). *)
+  (* NOTE: currently just assuming everything is ReadWrite and reusing our
+           existing access_type (Sail code uses a different type, csrRW here *)
   Definition fun_csrAccess : Stm [csr ∷ ty_csridx] ty_access_type :=
     ReadWrite.
   Definition fun_csrPriv : Stm [csr ∷ ty_csridx] ty_privilege :=
-    stm_val ty_privilege Machine.
+    match: csr in csridx with
+    | MStatus   => exp_val ty_privilege Machine
+    | Mie       => exp_val ty_privilege Machine
+    | Mip       => exp_val ty_privilege Machine
+    | MTvec     => exp_val ty_privilege Machine
+    | MScratch  => exp_val ty_privilege Machine
+    | MEpc      => exp_val ty_privilege Machine
+    | MCause    => exp_val ty_privilege Machine
+    | Mideleg   => exp_val ty_privilege Machine
+    | Medeleg   => exp_val ty_privilege Machine
+    | MPMP0CFG  => exp_val ty_privilege Machine
+    | MPMPADDR0 => exp_val ty_privilege Machine
+    | MPMPADDR1 => exp_val ty_privilege Machine
+    | SStatus   => exp_val ty_privilege Supervisor
+    | STvec     => exp_val ty_privilege Supervisor
+    | SScratch  => exp_val ty_privilege Supervisor
+    | SEpc      => exp_val ty_privilege Supervisor
+    | SCause    => exp_val ty_privilege Supervisor
+    end.
 
   Definition fun_check_CSR_access : Stm [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool :=
     let: tmp1 := call privLevel_to_bits csrpr in
     let: tmp2 := call privLevel_to_bits p in
-    (* TODO(SK): @Sander please check this *)
     tmp1 <=ᵘ tmp2.
 
   Definition fun_privLevel_to_bits : Stm [p ∷ ty_privilege] ty_priv_level :=
     match: p in privilege with
-    | Machine => stm_val ty_priv_level [bits 11]
-    | User => stm_val ty_priv_level [bits 00]
+    | Machine    => stm_val ty_priv_level [bits 11]
+    | Supervisor => stm_val ty_priv_level [bits 01]
+    | User       => stm_val ty_priv_level [bits 00]
     end.
 
   Definition fun_readCSR : Stm [csr ∷ ty_csridx] ty_xlenbits :=
@@ -1091,12 +1345,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MScratch  => stm_read_register mscratch
     | MEpc      => stm_read_register mepc
     | MCause    => stm_read_register mcause
+    | Mideleg   => let: value := stm_read_register mideleg in
+                   call Minterrupts_to_bits value
+    | Medeleg   => let: value := stm_read_register medeleg in
+                   call Medeleg_to_bits value
     | MPMP0CFG  =>
         let: tmp1 := stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg) in
         let: tmp2 := stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg) in
         exp_zext (exp_binop bop.bvapp tmp1 tmp2)
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
+    | SStatus   => let: value := stm_read_register mstatus in
+                   let: value := call lower_mstatus value in
+                   stm_sstatus_to_bits value
+    | STvec     => stm_read_register stvec
+    | SScratch  => stm_read_register sscratch
+    | SEpc      => stm_read_register sepc
+    | SCause    => stm_read_register scause
     end.
 
   Definition fun_writeCSR : Stm [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit :=
@@ -1118,6 +1383,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
               stm_val ty.unit tt
     | MCause => stm_write_register mcause value ;;
                 stm_val ty.unit tt
+    | Mideleg => let: tmp := call Minterrupts_from_bits value in
+                 stm_write_register mideleg tmp ;;
+                 stm_val ty.unit tt
+    | Medeleg => let: tmp := call Medeleg_from_bits value in
+                 stm_write_register medeleg tmp ;;
+                 stm_val ty.unit tt
     | MPMP0CFG => stm_call pmpWriteCfgReg ([exp_int 0%Z : Exp _ (type (_∷ _)); value])
     | MPMPADDR0 => let: tmp1 := stm_read_register pmp0cfg in
                    let: tmp1 := call pmpLocked tmp1 in
@@ -1131,19 +1402,38 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                    let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
                    stm_write_register pmpaddr1 value ;;
                    stm_val ty.unit tt
+    | SStatus   => (* TODO: adhoc impl., normalize some legalize functions are used, but in essence we currently can only overwrite SPP, so we pretty much inline the relevant code here *)
+                   let: tmp := stm_sstatus_from_bits value in
+                   let: m   := stm_read_register mstatus in
+                   match: exp_var "m" in rmstatus with
+                     ["MPP"; "SPP"; "MPIE"; "MIE"] =>
+                       match: exp_var "tmp" in rsstatus with
+                         ["new_SPP"] =>
+                           stm_write_register mstatus (exp_record rmstatus [exp_var "MPP"; exp_var "new_SPP"; exp_var "MPIE"; exp_var "MIE"])
+                       end
+                   end ;;
+                   stm_val ty.unit tt
+    | STvec     => stm_write_register stvec value ;;
+                   stm_val ty.unit tt
+    | SScratch  => stm_write_register sscratch value ;;
+                   stm_val ty.unit tt
+    | SEpc      => stm_write_register sepc value ;;
+                   stm_val ty.unit tt
+    | SCause    => stm_write_register scause value ;;
+                   stm_val ty.unit tt
     end.
 
   Definition fun_and_Minterrupts : Stm ["ints1" ∷ ty_Minterrupts; "ints2" ∷ ty_Minterrupts] ty_Minterrupts :=
     match: exp_var "ints1" in rminterrupts with
-        ["MEI1"; "UEI1";"MTI1";"UTI1"; "MSI1"; "USI1"] =>
+        ["MEI1";"SEI1";"UEI1";"MTI1";"STI1";"UTI1"; "MSI1";"SSI1";"USI1"] =>
       match: exp_var "ints2" in rminterrupts with
-        ["MEI2"; "UEI2";"MTI2";"UTI2"; "MSI2"; "USI2"] =>
-        stm_exp (exp_record rminterrupts [nenv (exp_var "MEI1" && exp_var "MEI2"); (exp_var "UEI1" && exp_var "UEI2"); (exp_var "MTI1" && exp_var "MTI2"); (exp_var "UTI1" && exp_var "UTI2"); (exp_var "MSI1" && exp_var "MSI2"); (exp_var "USI1" && exp_var "USI2")])
+        ["MEI2";"SEI2";"UEI2";"MTI2";"STI2";"UTI2";"MSI2";"SSI2";"USI2"] =>
+        stm_exp (exp_record rminterrupts [nenv (exp_var "MEI1" && exp_var "MEI2"); (exp_var "SEI1" && exp_var "SEI2"); (exp_var "UEI1" && exp_var "UEI2"); (exp_var "MTI1" && exp_var "MTI2"); (exp_var "STI1" && exp_var "STI2"); (exp_var "UTI1" && exp_var "UTI2"); (exp_var "MSI1" && exp_var "MSI2"); (exp_var "SSI1" && exp_var "SSI2"); (exp_var "USI1" && exp_var "USI2")])
   end
        end.
 
   Definition Minterrupts_zero : Minterrupts :=
-    {| MEI := false; UEI := false; MTI := false; UTI := false; MSI := false; USI := false |}.
+    {| MEI := false; SEI := false; UEI := false; MTI := false; STI := false; UTI := false; MSI := false; SSI := false; USI := false |}.
 
   Definition fun_processPending : Stm ["xip" ∷ ty_Minterrupts; "xie" ∷ ty_Minterrupts; "priv_enabled" ∷ ty.bool] ty_interrupt_set :=
     let: "effective_pend" := stm_call and_Minterrupts [exp_var "xip"; exp_var "xie"] in
@@ -1154,10 +1444,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_findPendingInterrupt : Stm ["ip" ∷ ty_Minterrupts] (ty.option ty_interruptType) :=
     match: exp_var "ip" in rminterrupts with
-      ["MEI";"UEI";"MTI";"UTI";"MSI";"USI"] =>
+      ["MEI";"SEI";"UEI";"MTI";"STI";"UTI";"MSI";"SSI";"USI"] =>
         if: exp_var "MEI" then stm_val (ty.option ty_interruptType) (inl I_M_External)
         else if: exp_var "MSI" then stm_val (ty.option ty_interruptType) (inl I_M_Software)
         else if: exp_var "MTI" then stm_val (ty.option ty_interruptType) (inl I_M_Timer)
+        else if: exp_var "SEI" then stm_val (ty.option ty_interruptType) (inl I_S_External)
+        else if: exp_var "SSI" then stm_val (ty.option ty_interruptType) (inl I_S_Software)
+        else if: exp_var "STI" then stm_val (ty.option ty_interruptType) (inl I_S_Timer)
         else if: exp_var "UEI" then stm_val (ty.option ty_interruptType) (inl I_U_External)
         else if: exp_var "USI" then stm_val (ty.option ty_interruptType) (inl I_U_Software)
         else if: exp_var "UTI" then stm_val (ty.option ty_interruptType) (inl I_U_Timer)
@@ -1167,7 +1460,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_getPendingSet : Stm ["priv" ∷ ty_privilege] (ty.option (ty.prod ty_Minterrupts ty_privilege)) :=
       let: "mst" := stm_read_register mstatus in
     match: exp_var "mst" in rmstatus with
-      ["MPP"; "MPIE"; "MIE"] =>
+      ["MPP"; "SPP"; "MPIE"; "MIE"] =>
         let: "mIE" := (exp_var "priv" != exp_val ty_privilege Machine) ||
                         ((exp_var "priv" = exp_val ty_privilege Machine) && exp_var "MIE") in
         let: "mip" := stm_read_register mip in
@@ -1214,6 +1507,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KSTORE (pat_tuple (imm , rs2 , rs1 , w))                        => call execute_STORE imm rs2 rs1 w
     |> KECALL pat_unit                                                 => call execute_ECALL
     |> KEBREAK pat_unit                                                => call execute_EBREAK
+    |> KSRET pat_unit                                                  => call execute_SRET
     |> KMRET pat_unit                                                  => call execute_MRET
     |> KCSR (pat_tuple (csr , rs1 , rd , is_imm , op))                 => call execute_CSR csr rs1 rd is_imm op
     |> KMUL (pat_tuple (rs2 , rs1 , rd , high , signed1 , signed2))    => call execute_MUL rs2 rs1 rd high signed1 signed2
@@ -1393,8 +1687,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_execute_ECALL : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
     let: t := match: tmp1 in privilege with
-              | Machine => E_M_EnvCall
-              | User    => E_U_EnvCall
+              | Machine    => E_M_EnvCall
+              | Supervisor => E_S_EnvCall
+              | User       => E_U_EnvCall
               end in
     let: tmp2 := stm_read_register pc in
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
@@ -1405,18 +1700,35 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_execute_EBREAK : Stm ctx.nil ty_retired :=
     stm_debugk (stm_val ty_retired RETIRE_FAIL).
 
+  Definition fun_execute_SRET : Stm ctx.nil ty_retired :=
+    let: tmp1 := stm_read_register cur_privilege in
+    let: "sret_illegal" :=
+      match: tmp1 in privilege with
+      | User       => stm_val ty.bool true
+      | Supervisor => stm_val ty.bool false
+      | Machine    => stm_val ty.bool false
+      end in
+    if: exp_var "sret_illegal"
+    then
+      call handle_illegal ;;
+      stm_val ty_retired RETIRE_FAIL
+    else
+      let: tmp2 := stm_read_register pc in
+      let: tmp3 := call exception_handler tmp1 CTL_SRET tmp2 in
+      call set_next_pc tmp3 ;;
+      stm_val ty_retired RETIRE_SUCCESS.
+
   Definition fun_execute_MRET : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
-    match: tmp1 in privilege with
-    | Machine =>
+    if: tmp1 != exp_val ty_privilege Machine
+    then
+      call handle_illegal ;;
+      stm_val ty_retired RETIRE_FAIL
+    else
       let: tmp2 := stm_read_register pc in
       let: tmp3 := call exception_handler tmp1 CTL_MRET tmp2 in
       call set_next_pc tmp3 ;;
-      stm_val ty_retired RETIRE_SUCCESS
-    | User    =>
-      call handle_illegal ;;
-      stm_val ty_retired RETIRE_FAIL
-    end.
+      stm_val ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_CSR : Stm [csr :: ty_csridx; rs1 :: ty_regno; rd :: ty_regno; is_imm :: ty.bool; op :: ty_csrop] ty_retired :=
     let: rs1_val := if: is_imm
@@ -1519,6 +1831,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | and_Minterrupts         => fun_and_Minterrupts
     | Minterrupts_to_bits     => fun_Minterrupts_to_bits
     | Minterrupts_from_bits   => fun_Minterrupts_from_bits
+    | Medeleg_to_bits         => fun_Medeleg_to_bits
+    | Medeleg_from_bits       => fun_Medeleg_from_bits
+    | idx_medeleg_record      => fun_idx_medeleg_record
     | exceptionType_to_bits   => fun_exceptionType_to_bits
     | interruptType_to_bits   => fun_interruptType_to_bits
     | privLevel_to_bits       => fun_privLevel_to_bits
@@ -1536,6 +1851,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | prepare_trap_vector     => fun_prepare_trap_vector
     | tvec_addr               => fun_tvec_addr
     | handle_illegal          => fun_handle_illegal
+    | lower_mstatus           => fun_lower_mstatus
     | check_CSR               => fun_check_CSR
     | is_CSR_defined          => fun_is_CSR_defined
     | csrAccess               => fun_csrAccess
@@ -1560,6 +1876,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_STORE           => fun_execute_STORE
     | execute_ECALL           => fun_execute_ECALL
     | execute_EBREAK          => fun_execute_EBREAK
+    | execute_SRET            => fun_execute_SRET
     | execute_MRET            => fun_execute_MRET
     | execute_CSR             => fun_execute_CSR
     | execute_MUL             => fun_execute_MUL
@@ -1615,8 +1932,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Proof. accessible_proof. Qed.
     Instance accessible_set_next_pc : AccessibleFun set_next_pc.
     Proof. accessible_proof. Qed.
-    Instance accessible_exception_delegatee : AccessibleFun exception_delegatee.
-    Proof. accessible_proof. Qed.
     Instance accessible_exceptionType_to_bits : AccessibleFun exceptionType_to_bits.
     Proof. accessible_proof. Qed.
     Instance accessible_interruptType_to_bits : AccessibleFun interruptType_to_bits.
@@ -1633,19 +1948,17 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Proof. accessible_proof. Qed.
     Instance accessible_Minterrupts_from_bits : AccessibleFun Minterrupts_from_bits.
     Proof. accessible_proof. Qed.
+    Instance accessible_Medeleg_to_bits : AccessibleFun Medeleg_to_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_Medeleg_from_bits : AccessibleFun Medeleg_from_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_idx_medeleg_record : AccessibleFun idx_medeleg_record.
+    Proof. accessible_proof. Qed.
     Instance accessible_processPending : AccessibleFun processPending.
     Proof. accessible_proof. Qed.
     Instance accessible_findPendingInterrupt : AccessibleFun findPendingInterrupt.
     Proof. accessible_proof. Qed.
     Instance accessible_getPendingSet : AccessibleFun getPendingSet.
-    Proof. accessible_proof. Qed.
-    Instance accessible_trap_handler : AccessibleFun trap_handler.
-    Proof. accessible_proof. Qed.
-    Instance accessible_exception_handler : AccessibleFun exception_handler.
-    Proof. accessible_proof. Qed.
-    Instance accessible_handle_illegal : AccessibleFun handle_illegal.
-    Proof. accessible_proof. Qed.
-    Instance accessible_handle_mem_exception : AccessibleFun handle_mem_exception.
     Proof. accessible_proof. Qed.
     Instance accessible_checked_mem_read (bytes : nat) (rest : restrict_bytes bytes) :
       AccessibleFun (@checked_mem_read bytes rest).
@@ -1665,9 +1978,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Instance accessible_mem_write_value (bytes : nat) (rest : restrict_bytes bytes) :
       AccessibleFun (@mem_write_value bytes rest).
     Proof. accessible_proof. Qed.
-    Instance accessuble_shift_right_arith32 : AccessibleFun shift_right_arith32.
+    Instance accessible_shift_right_arith32 : AccessibleFun shift_right_arith32.
     Proof. accessible_proof. Qed.
-    Instance accessuble_privLevel_to_bits : AccessibleFun privLevel_to_bits.
+    Instance accessible_privLevel_to_bits : AccessibleFun privLevel_to_bits.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exception_delegatee : AccessibleFun exception_delegatee.
+    Proof. accessible_proof. Qed.
+    Instance accessible_trap_handler : AccessibleFun trap_handler.
+    Proof. accessible_proof. Qed.
+    Instance accessible_exception_handler : AccessibleFun exception_handler.
+    Proof. accessible_proof. Qed.
+    Instance accessible_handle_illegal : AccessibleFun handle_illegal.
+    Proof. accessible_proof. Qed.
+    Instance accessible_handle_mem_exception : AccessibleFun handle_mem_exception.
     Proof. accessible_proof. Qed.
     Instance accessible_extend_value (bytes : nat)
       {p : IsTrue (width_constraint bytes)} : AccessibleFun (extend_value bytes).
@@ -1680,6 +2003,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Instance accessible_init_sys : AccessibleFun init_sys.
     Proof. accessible_proof. Qed.
     Instance accessible_fetch : AccessibleFun fetch.
+    Proof. accessible_proof. Qed.
+    Instance accessible_lower_mstatus : AccessibleFun lower_mstatus.
     Proof. accessible_proof. Qed.
     Instance accessible_is_CSR_defined : AccessibleFun is_CSR_defined.
     Proof. accessible_proof. Qed.
@@ -1722,6 +2047,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Instance accessible_execute_ECALL : AccessibleFun execute_ECALL.
     Proof. accessible_proof. Qed.
     Instance accessible_execute_EBREAK : AccessibleFun execute_EBREAK.
+    Proof. accessible_proof. Qed.
+    Instance accessible_execute_SRET : AccessibleFun execute_SRET.
     Proof. accessible_proof. Qed.
     Instance accessible_execute_MRET : AccessibleFun execute_MRET.
     Proof. accessible_proof. Qed.

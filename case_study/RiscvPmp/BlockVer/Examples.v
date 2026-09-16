@@ -87,7 +87,7 @@ Module Examples.
     Definition minimal_pre {Σ} : Assertion Σ :=
       (* asn.exist "_" _ (nextpc ↦ term_var "_")
       ∗ *)cur_privilege ↦ term_val ty_privilege Machine
-      ∗ mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ]
+      ∗ mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege Supervisor; term_val ty.bool false; term_val ty.bool false ]
       ∗ ∃ "mip", mip ↦ term_var "mip" ∗ ∃ "mie", mie ↦ term_var "mie"
       ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
                                     (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).
@@ -97,7 +97,7 @@ Module Examples.
     Definition minimal_post {Σ} : Assertion Σ :=
       (* asn.exist "_" _ (nextpc ↦ term_var "_")
       ∗ *) cur_privilege ↦ term_val ty_privilege Machine
-      ∗ mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ]
+      ∗ mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege Supervisor; term_val ty.bool false; term_val ty.bool false ]
       ∗ ∃ "mip", mip ↦ term_var "mip" ∗ ∃ "mie", mie ↦ term_var "mie"
       ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ;
                                     (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]).

@@ -514,7 +514,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
        sep_contract_precondition    := mip ↦ term_var "vmip";
        sep_contract_result          := "result_externalWorldUpdates";
        sep_contract_postcondition   :=
-         mip ↦ term_val ty_Minterrupts (MkMinterrupts false false false false false false);
+         mip ↦ term_val ty_Minterrupts (MkMinterrupts false false false false false false false false false);
     |}.
 
   Definition CEnvEx : SepContractEnvEx :=

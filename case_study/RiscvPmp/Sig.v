@@ -141,7 +141,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           if L cfg
           then pmp_check_RWX cfg acc
           else true
-      | User =>
+      | _ =>
           pmp_check_RWX cfg acc
       end.
 
@@ -828,7 +828,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                                   | Some false => Some []
                                   | None       => Some [formula_user pmp_check_perms [cfg;acc;p]]
                                   end
-    | Some cfg' , Some User    => Some [formula_user pmp_check_rwx [cfg;acc]]
+    | Some cfg' , Some _    => Some [formula_user pmp_check_rwx [cfg;acc]]
     | _         , _            => Some [formula_user pmp_check_perms [cfg;acc;p]]
     end%ctx.
 

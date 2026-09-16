@@ -81,6 +81,23 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          we never use it for the Universal Contract verification. *)
       Definition asn_regs_ptsto {Σ} : Assertion Σ := asn_regs_ptsto ∅.
 
+      Definition medeleg_off : RMedeleg :=
+        {| SAMO_Page_Fault    := false
+         ; Load_Page_Fault    := false
+         ; Fetch_Page_Fault   := false
+         ; MEnvCall           := false
+         ; SEnvCall           := false
+         ; UEnvCall           := false
+         ; SAMO_Access_Fault  := false
+         ; SAMO_Addr_Align    := false
+         ; Load_Access_Fault  := false
+         ; Load_Addr_Align    := false
+         ; Breakpoint         := false
+         ; Illegal_Instr      := false
+         ; Fetch_Access_Fault := false
+         ; Fetch_Addr_Align   := false
+        |}.
+
       Section ContractDef.
         Import RiscvNotations.
         Import RiscvPmpSignature.notations.
@@ -96,21 +113,29 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
            @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
            τ f(Δ...)*)
         Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
-          let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
+          let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "stvec" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "sscratch" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "vmip" :: ty_Minterrupts; "vmie" :: ty_Minterrupts; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
              sep_contract_localstore      := create_localstore Δ Σ;
              sep_contract_precondition    :=
+                           (* Need to force destruct of m, otherwise the execute_CSR verification will be stuck,
+                              with the remaining goal simply proceeding by doing this destruct... *)
+                           asn.match_enum privilege (term_var "m") (fun _ => ⊤) ∗
                            cur_privilege ↦ term_var "m" ∗
                            mtvec         ↦ term_var "h" ∗
+                           stvec         ↦ term_var "stvec" ∗
+                           sscratch ↦ term_var "sscratch" ∗
                            pc            ↦ term_var "i" ∗
                            nextpc        ↦ term_var "npc" ∗
-               ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                           mscratch ↦ term_var "mscratch" ∗
                            mepc          ↦ term_var "mepc" ∗
-               ∃ "mcause", mcause        ↦ term_var "mcause" ∗
-               ∃ "mip", mip ↦ term_var "mip" ∗
-               ∃ "mie", mie ↦ term_var "mie" ∗
-               ∃ "mpie", ∃ "mie",
-                           mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "mpie"; term_var "mie" ] ∗
+                           sepc          ↦ term_var "sepc" ∗
+                           mideleg       ↦ term_var "mideleg" ∗
+                           medeleg       ↦ term_var "medeleg" ∗
+                           mcause        ↦ term_var "mcause" ∗
+                           scause        ↦ term_var "scause" ∗
+                           mip ↦ term_var "vmip" ∗
+                           mie ↦ term_var "vmie" ∗
+                           mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ] ∗
                            asn_pmp_entries (term_var "entries") ∗
                            asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                            asn_gprs;
@@ -119,8 +144,6 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                            asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                            asn_gprs ∗
                            pc     ↦ term_var "i" ∗
-               ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
-               ∃ "mcause", mcause ↦ term_var "mcause" ∗
                ∃ "mip", mip ↦ term_var "mip" ∗
                ∃ "mie", mie ↦ term_var "mie" ∗
                (  (* Executing normally *)
@@ -128,28 +151,86 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                        cur_privilege ↦ term_var "m" ∗
                   ∃ v, nextpc        ↦ term_var v ∗
                        mtvec         ↦ term_var "h" ∗
-                  ∃ "mpie", ∃ "mie",
-                       mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "mpie"; term_var "mie" ] ∗
-                       mepc          ↦ term_var "mepc"
+                       stvec         ↦ term_var "stvec" ∗
+                       mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ] ∗
+                       mepc          ↦ term_var "mepc" ∗
+                       sepc          ↦ term_var "sepc" ∗
+                       mideleg       ↦ term_var "mideleg" ∗
+                       medeleg       ↦ term_var "medeleg" ∗
+                       mscratch      ↦ term_var "mscratch" ∗
+                       mcause        ↦ term_var "mcause" ∗
+                       sscratch      ↦ term_var "sscratch" ∗
+                       scause        ↦ term_var "scause"
                 ∨
-                  (* Modified CSRs, requires Machine mode *)
+                  (* Modified CSRs, Machine mode case (access to all CSRs) *)
                                  term_var "m"  =  term_val ty_privilege Machine ∗
                   ∃ "entries",   asn_pmp_entries (term_var "entries") ∗
                                  cur_privilege ↦ term_val ty_privilege Machine ∗
                                  nextpc        ↦ term_var "npc" ∗
                   ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
-                  ∃ "new_mpp", ∃ "new_mpie", ∃ "new_mie",
-                    mstatus       ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_mpie"; term_var "new_mie" ] ∗
-                  ∃ "new_mepc",  mepc          ↦ term_var "new_mepc"
+                  ∃ "new_stvec", stvec         ↦ term_var "new_stvec" ∗
+                  ∃ "new_mpp", ∃ "new_spp", ∃ "new_mpie", ∃ "new_mie",
+                    mstatus       ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "new_mpie"; term_var "new_mie" ] ∗
+                  ∃ "new_mepc",  mepc          ↦ term_var "new_mepc" ∗
+                  ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
+                  ∃ "new_mideleg", mideleg ↦ term_var "new_mideleg" ∗
+                  ∃ "new_medeleg", medeleg ↦ term_var "new_medeleg" ∗
+                  ∃ "new_mscratch", mscratch ↦ term_var "new_mscratch" ∗
+                  ∃ "new_mcause", mcause ↦ term_var "new_mcause" ∗
+                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
+                  ∃ "new_scause", scause ↦ term_var "new_scause"
+                ∨
+                  (* Modified CSRs, Supervisor mode case *)
+                                 term_var "m"  =  term_val ty_privilege Supervisor ∗
+                                 asn_pmp_entries (term_var "entries") ∗
+                                 cur_privilege ↦ term_val ty_privilege Supervisor ∗
+                                 nextpc        ↦ term_var "npc" ∗
+                                 mtvec         ↦ term_var "h" ∗
+                  ∃ "new_stvec", stvec         ↦ term_var "new_stvec" ∗
+                  ∃ "new_spp",   mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "mie" ] ∗
+                                 mepc          ↦ term_var "mepc" ∗
+                  ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
+                                 mideleg ↦ term_var "mideleg" ∗
+                                 medeleg ↦ term_var "medeleg" ∗
+                                 mscratch ↦ term_var "mscratch" ∗
+                                 mcause ↦ term_var "mcause" ∗
+                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
+                  ∃ "new_scause", scause ↦ term_var "new_scause"
                 ∨
                   (* Trap occured -> Go into M-mode *)
                   asn_pmp_entries (term_var "entries") ∗
                   cur_privilege ↦ (term_val ty_privilege Machine) ∗
                   nextpc        ↦ term_var "h" ∗
                   mtvec         ↦ term_var "h" ∗
+                  stvec         ↦ term_var "stvec" ∗
                   ∃ "mpie",
-                    mstatus       ↦ term_record rmstatus [nenv term_var "m"; term_var "mpie"; term_val ty.bool false ] ∗
-                  mepc          ↦ term_var "i"
+                    mstatus     ↦ term_record rmstatus [nenv term_var "m"; term_var "spp"; term_var "mpie"; term_val ty.bool false ] ∗
+                  ∃ "mepc", mepc          ↦ term_var "mepc" ∗
+                  sepc          ↦ term_var "sepc" ∗
+                  mideleg ↦ term_var "mideleg" ∗
+                  medeleg ↦ term_var "medeleg" ∗
+                  ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                              sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause"
+                ∨
+                  (* Trap occured -> Go into S-mode *)
+                  asn_pmp_entries (term_var "entries") ∗
+                  term_var "medeleg" != term_val ty_Medeleg medeleg_off ∗
+                  cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
+                  nextpc        ↦ term_var "stvec" ∗
+                  mtvec         ↦ term_var "h" ∗
+                  stvec         ↦ term_var "stvec" ∗
+                  ∃ "mpie", ∃ "mie",
+                    mstatus     ↦ term_record rmstatus [nenv term_var "mpp"; term_var "m"; term_var "mpie"; term_var "mie" ] ∗
+                  mepc          ↦ term_var "mepc" ∗
+                  ∃ "sepc", sepc ↦ term_var "sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                  sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause"
                 ∨
                   (* MRET = Recover *)
                   asn_pmp_entries (term_var "entries") ∗
@@ -157,9 +238,35 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   cur_privilege ↦ term_var "mpp" ∗
                   nextpc        ↦ term_var "mepc" ∗
                   mtvec         ↦ term_var "h" ∗
+                  stvec         ↦ term_var "stvec" ∗
                   ∃ "mie",
-                  mstatus       ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true ; term_var "mie" ] ∗
-                  mepc          ↦ term_var "mepc")
+                  mstatus       ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true ; term_var "mie" ] ∗
+                  mepc          ↦ term_var "mepc" ∗
+                  sepc          ↦ term_var "sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                  ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause"
+                ∨
+                  (* SRET = Recover *)
+                  asn_pmp_entries (term_var "entries") ∗
+                  (term_var "m"  =  term_val ty_privilege Supervisor ∨ term_var "m" = term_val ty_privilege Machine) ∗
+                  cur_privilege ↦ term_var "spp" ∗
+                  nextpc        ↦ term_var "sepc" ∗
+                  mtvec         ↦ term_var "h" ∗
+                  stvec         ↦ term_var "stvec" ∗
+                  ∃ "mpie", ∃ "mie",
+                  mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_var "mie" ] ∗
+                  mepc          ↦ term_var "mepc" ∗
+                  sepc          ↦ term_var "sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                  ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause")
           |}.
 
         Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
@@ -197,6 +304,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   := ⊤;
           |}.
 
+        Definition sep_contract_execute_SRET : SepContractFun execute_SRET :=
+          instr_exec_contract.
+
         Definition sep_contract_execute_MRET : SepContractFun execute_MRET :=
           instr_exec_contract.
 
@@ -215,65 +325,103 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Definition sep_contract_readCSR : SepContractFun readCSR :=
           {| sep_contract_logic_variables := [csr :: ty_csridx; "mpp" :: ty_privilege;
                                               "mtvec" :: ty_xlenbits; "mcause" :: ty_mcause;
-                                              "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits];
+                                              "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits; "spp" :: ty_privilege; "stvec" :: ty_xlenbits; "sepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "mscratch" :: ty_xlenbits; "vmip" :: ty_Minterrupts; "vmie" :: ty_Minterrupts; "sscratch" :: ty_xlenbits; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := [term_var csr];
              sep_contract_precondition    :=
-              ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var "mpie"; term_var "mie" ]
+               mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
                ∗ mtvec ↦ term_var "mtvec"
-               ∗ (∃ "mscratch", mscratch ↦ term_var "mscratch")
+               ∗ mscratch ↦ term_var "mscratch"
                ∗ mepc ↦ term_var "mepc"
-               ∗ ∃ "mip", mip ↦ term_var "mip"
-               ∗ ∃ "mie", mie ↦ term_var "mie"
+               ∗ mip ↦ term_var "vmip"
+               ∗ mie ↦ term_var "vmie"
+               ∗ mideleg ↦ term_var "mideleg"
+               ∗ medeleg ↦ term_var "medeleg"
                ∗ mcause ↦ term_var "mcause"
                ∗ pmp0cfg ↦ term_var "cfg0"
                ∗ pmp1cfg ↦ term_var "cfg1"
                ∗ pmpaddr0 ↦ term_var "addr0"
-               ∗ pmpaddr1 ↦ term_var "addr1";
+               ∗ pmpaddr1 ↦ term_var "addr1"
+               ∗ stvec ↦ term_var "stvec"
+               ∗ sscratch ↦ term_var "sscratch"
+               ∗ sepc ↦ term_var "sepc"
+               ∗ scause ↦ term_var "scause";
              sep_contract_result          := "result_readCSR";
              sep_contract_postcondition   :=
                ∃ "result", term_var "result_readCSR" = term_var "result"
-               ∗ ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "mpie"; term_var "mie" ]
+               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
                ∗ mtvec ↦ term_var "mtvec"
-               ∗ (∃ "mscratch", mscratch ↦ term_var "mscratch")
+               ∗ mscratch ↦ term_var "mscratch"
                ∗ mepc ↦ term_var "mepc"
-               ∗ ∃ "mip", mip ↦ term_var "mip"
-               ∗ ∃ "mie", mie ↦ term_var "mie"
+               ∗ mip ↦ term_var "vmip"
+               ∗ mie ↦ term_var "vmie"
+               ∗ mideleg ↦ term_var "mideleg"
+               ∗ medeleg ↦ term_var "medeleg"
                ∗ mcause ↦ term_var "mcause"
                ∗ pmp0cfg ↦ term_var "cfg0"
                ∗ pmp1cfg ↦ term_var "cfg1"
                ∗ pmpaddr0 ↦ term_var "addr0"
-               ∗ pmpaddr1 ↦ term_var "addr1";
+               ∗ pmpaddr1 ↦ term_var "addr1"
+               ∗ stvec ↦ term_var "stvec"
+               ∗ sscratch ↦ term_var "sscratch"
+               ∗ sepc ↦ term_var "sepc"
+               ∗ scause ↦ term_var "scause";
           |}.
 
         Definition sep_contract_writeCSR : SepContractFun writeCSR :=
-          {| sep_contract_logic_variables := [csr :: ty_csridx; value :: ty_xlenbits];
+          (* The logic vars contain a few bindings that we use as read-only (ro)
+             binders, to ensure certain regs/fields cannot be modified. *)
+          let Σ := [csr :: ty_csridx; value :: ty_xlenbits; "ro_cfg" :: ty_pmpcfg_ent; "ro_mpp" :: ty_privilege; "ro_mie" :: ty.bool; "ro_mpie" :: ty.bool] in
+          (* We declare default bindings for the "ro" (read-only) logic vars when
+             they are not used in the resulting assertion from csr_ptsto. Each
+             case in that function is accompanied with some defaults assertion
+             (all, ro_cfg, ro_m), this ensures we do not end up with needless
+             existentials in the postcondition when using this contract to
+             verify other functions. *)
+          let default_ro_cfg : Assertion Σ := term_var "ro_cfg" = term_val ty_pmpcfg_ent default_pmpcfg_ent in
+          let default_ro_m : Assertion Σ :=
+            term_var "ro_mpp"  = term_val ty_privilege User ∗
+            term_var "ro_mie"  = term_val ty.bool false ∗
+            term_var "ro_mpie" = term_val ty.bool false in
+          let all_defaults : Assertion Σ := default_ro_cfg ∗ default_ro_m in
+          (* csr_ptsto returns the assertion needed for a write to a specific csr *)
+          let csr_ptsto (csr_param : CSRIdx) : Assertion Σ :=
+            match csr_param in CSRIdx with
+            | MStatus   => ∃ "mpp", ∃ "spp", ∃ "mpie", ∃ "mie",
+                             mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie"]
+                             ∗ all_defaults
+            | Mie       => ∃ "v", mie ↦ term_var "v" ∗ all_defaults
+            | MTvec     => ∃ "v", mtvec ↦ term_var "v" ∗ all_defaults
+            | MScratch  => ∃ "v", mscratch ↦ term_var "v" ∗ all_defaults
+            | MEpc      => ∃ "v", mepc ↦ term_var "v" ∗ all_defaults
+            | MCause    => ∃ "v", mcause ↦ term_var "v" ∗ all_defaults
+            | Mideleg   => ∃ "v", mideleg ↦ term_var "v" ∗ all_defaults
+            | Medeleg   => ∃ "v", medeleg ↦ term_var "v" ∗ all_defaults
+            | MPMP0CFG  => ∃ "v", (pmp0cfg ↦ term_var "v" ∗ asn_expand_pmpcfg_ent (term_var "v"))
+                          ∗ ∃ "v", (pmp1cfg ↦ term_var "v" ∗ asn_expand_pmpcfg_ent (term_var "v"))
+                          ∗ all_defaults
+            | Mip       => ∃ "v", mip ↦ term_var "v" ∗ all_defaults
+            | MPMPADDR0 =>
+                pmp0cfg ↦ term_var "ro_cfg" ∗ asn_expand_pmpcfg_ent (term_var "ro_cfg")
+                ∗ ∃ "v", pmpaddr0 ↦ term_var "v" ∗ default_ro_m
+            | MPMPADDR1 =>
+                pmp1cfg ↦ term_var "ro_cfg" ∗ asn_expand_pmpcfg_ent (term_var "ro_cfg")
+                ∗ ∃ "v", pmpaddr1 ↦ term_var "v" ∗ default_ro_m
+            | SStatus   =>
+                ∃ "v", mstatus ↦ term_record rmstatus [term_var "ro_mpp"; term_var "v"; term_var "ro_mpie"; term_var "ro_mie"]
+                ∗ default_ro_cfg
+            | STvec     => ∃ "v", stvec ↦ term_var "v" ∗ all_defaults
+            | SScratch  => ∃ "v", sscratch ↦ term_var "v" ∗ all_defaults
+            | SEpc      => ∃ "v", sepc ↦ term_var "v" ∗ all_defaults
+            | SCause    => ∃ "v", scause ↦ term_var "v" ∗ all_defaults
+            end in
+          {| sep_contract_logic_variables := Σ;
              sep_contract_localstore      := [term_var csr; term_var value];
              sep_contract_precondition    :=
-              ∃ "mpp", ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "mpie"; term_var "mie" ]
-               ∗ ∃ "mtvec", mtvec ↦ term_var "mtvec"
-               ∗ (∃ "mscratch", mscratch ↦ term_var "mscratch")
-               ∗ ∃ "mepc", mepc ↦ term_var "mepc"
-               ∗ ∃ "mip", mip ↦ term_var "mip"
-               ∗ ∃ "mie", mie ↦ term_var "mie"
-               ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-               ∗ ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
-               ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"))
-               ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
-               ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
+               asn.match_enum csridx (term_var csr) csr_ptsto;
              sep_contract_result          := "result_writeCSR";
              sep_contract_postcondition   :=
                term_var "result_writeCSR" = term_val ty.unit tt
-               ∗ ∃ "mpie", ∃ "mie", ∃ "mpp", mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "mpie"; term_var "mie" ]
-               ∗ ∃ "mtvec", mtvec ↦ term_var "mtvec"
-               ∗ (∃ "mscratch", mscratch ↦ term_var "mscratch")
-               ∗ ∃ "mepc", mepc ↦ term_var "mepc"
-               ∗ ∃ "mip", mip ↦ term_var "mip"
-               ∗ ∃ "mie", mie ↦ term_var "mie"
-               ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-               ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
-               ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
-               ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
-               ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
+               ∗ asn.sub_assertion (asn.match_enum csridx (term_var csr) csr_ptsto) sub_wk1;
           |}.
 
         Definition sep_contract_check_CSR : SepContractFun check_CSR :=
@@ -281,27 +429,46 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_localstore      := [term_var csr; term_var p];
              sep_contract_precondition    := ⊤;
              sep_contract_result          := "result_check_CSR";
-             sep_contract_postcondition   :=
-               asn.match_enum privilege (term_var p)
-                 (fun K => match K with
-                           | Machine => term_var "result_check_CSR" = term_val ty.bool true
-                           | User    => term_var "result_check_CSR" = term_val ty.bool false
-                           end)
+             sep_contract_postcondition   := ⊤
           |}.
 
         Definition sep_contract_is_CSR_defined : SepContractFun is_CSR_defined :=
-          {| sep_contract_logic_variables := [csr :: ty_csridx; p :: ty_privilege];
+          let Σ := ["csr"∷ty_csridx; "p"∷ty_privilege] in
+          {| sep_contract_logic_variables := Σ;
              sep_contract_localstore      := [term_var csr; term_var p];
-             sep_contract_precondition    := ⊤;
+             sep_contract_precondition    :=
+              (* TODO: bit ugly, this is just saying "destruct p", comment this line out and check the valid_contract_is_CSR_defined proof (change it into a Debug contract), we'll be stuck with lots of equalities... *)
+              asn.match_enum privilege (term_var p) (fun _ => ⊤);
              sep_contract_result          := "result_is_CSR_defined";
              sep_contract_postcondition   :=
-               asn.match_enum privilege (term_var p)
-                 (fun K => match K with
-                           | Machine => term_var "result_is_CSR_defined" =
-                                          term_val ty.bool true
-                           | User    =>term_var "result_is_CSR_defined" =
-                                         term_val ty.bool false
-                           end);
+              asn.match_enum csridx (term_var csr)
+                (fun K => let req_priv : Term Σ ty.bool :=
+                            match K with
+                            | MStatus   => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | Mie       => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | Mip       => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MTvec     => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MScratch  => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MEpc      => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MCause    => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | Mideleg   => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | Medeleg   => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MPMP0CFG  => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MPMPADDR0 => term_eq (term_var p) (term_val ty_privilege Machine)
+                            | MPMPADDR1 => term_or (term_eq (term_var p) (term_val ty_privilege Machine)) (term_val ty.bool false)
+                            | SStatus   => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | STvec     => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | SScratch  => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | SEpc      => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | SCause    => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            end in
+                          let req_priv : Term (Σ ▻ "result_is_CSR_defined" ∷ ty.bool) ty.bool := sub_term req_priv sub_wk1 in
+                          term_var "result_is_CSR_defined" = req_priv);
           |}.
 
         Definition sep_contract_check_CSR_access : SepContractFun check_CSR_access :=
@@ -317,17 +484,20 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                  (fun K => match K with
                                            | Machine => term_var "result_check_CSR_access" =
                                                           term_val ty.bool true
-                                           | User    => term_var "result_check_CSR_access" =
+                                           | _       => term_var "result_check_CSR_access" =
                                                           term_val ty.bool false
                                            end)
-                           | User =>
+                           | Supervisor =>
                                asn.match_enum privilege (term_var p)
                                  (fun K => match K with
-                                           | Machine => term_var "result_check_CSR_access" =
-                                                          term_val ty.bool true
-                                           | User    => term_var "result_check_CSR_access" =
-                                                          term_val ty.bool true
+                                           | Machine    => term_var "result_check_CSR_access" =
+                                                             term_val ty.bool true
+                                           | Supervisor => term_var "result_check_CSR_access" =
+                                                             term_val ty.bool true
+                                           | User       => term_var "result_check_CSR_access" =
+                                                             term_val ty.bool false
                                            end)
+                           | User => term_var "result_check_CSR_access" = term_val ty.bool true
                            end);
           |}.
 
@@ -339,10 +509,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_postcondition   :=
                asn.match_enum privilege (term_var p)
                  (fun K => match K with
-                           | Machine => term_var "result_privLevel_to_bits" =
-                                          term_val ty_priv_level [bits 11]
-                           | User    => term_var "result_privLevel_to_bits" =
-                                          term_val ty_priv_level [bits 00]
+                           | Machine    => term_var "result_privLevel_to_bits" =
+                                             term_val ty_priv_level [bits 11]
+                           | Supervisor => term_var "result_privLevel_to_bits" =
+                                             term_val ty_priv_level [bits 01]
+                           | User       => term_var "result_privLevel_to_bits" =
+                                             term_val ty_priv_level [bits 00]
                            end);
           |}.
 
@@ -360,115 +532,207 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_localstore      := [term_var csr];
              sep_contract_precondition    := ⊤;
              sep_contract_result          := "result_csrPriv";
-             sep_contract_postcondition   :=
-               term_var "result_csrPriv" = term_val ty_privilege Machine;
+             sep_contract_postcondition   := ⊤;
           |}.
 
         Definition sep_contract_handle_mem_exception : SepContractFun handle_mem_exception :=
-          {| sep_contract_logic_variables := [addr :: ty_xlenbits; e :: ty_exception_type; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits];
+          {| sep_contract_logic_variables := [addr :: ty_xlenbits; e :: ty_exception_type; "i" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := [term_var addr; term_var e];
              sep_contract_precondition    :=
                              pc            ↦ term_var "i"
                ∗ ∃ "npc",    nextpc        ↦ term_var "npc"
                ∗             cur_privilege ↦ term_var p
-               ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-               ∗ ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "mpie"; term_var "mie" ]
+               ∗             mcause        ↦ term_var "mcause"
+               ∗             scause        ↦ term_var "scause"
+               ∗             mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
+               ∗             medeleg       ↦ term_var "medeleg"
                ∗             mtvec         ↦ term_var tvec
-               ∗             mepc          ↦ term_var "mepc";
+               ∗             stvec         ↦ term_var "stvec"
+               ∗             mepc          ↦ term_var "mepc"
+               ∗             sepc          ↦ term_var "sepc";
              sep_contract_result          := "result_handle_mem_exception";
              sep_contract_postcondition   :=
                term_var "result_handle_mem_exception" = term_val ty.unit tt
-               ∗             pc            ↦ term_var "i"
-               ∗             nextpc        ↦ term_var tvec
-               ∗             cur_privilege ↦ term_val ty_privilege Machine
-               ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-               ∗ ∃ "mpie", mstatus       ↦ term_record rmstatus [ term_var p; term_var "mpie"; term_val ty.bool false  ]
-               ∗             mepc          ↦ term_var "i"
-               ∗             mtvec         ↦ term_var tvec
+               ∗ (( cur_privilege ↦ term_val ty_privilege Supervisor
+                    ∗ mcause ↦ term_var "mcause"
+                    ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"]
+                    ∗ medeleg ↦ term_var "medeleg"
+                    ∗ term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                    ∗ mepc ↦ term_var "mepc"
+                    ∗ ∃ "scause", scause ↦ term_var "scause"
+                    ∗ sepc ↦ term_var "i"
+                    ∗ mtvec ↦ term_var tvec
+                    ∗ stvec ↦ term_var "stvec"
+                    ∗ nextpc ↦ term_var "stvec")
+                  ∨
+                    ( cur_privilege ↦ term_val ty_privilege Machine
+                    ∗ ∃ "mcause", mcause ↦ term_var "mcause"
+                    ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_val ty.bool false ]
+                    ∗ medeleg ↦ term_var "medeleg"
+                    ∗ mepc ↦ term_var "i"
+                    ∗ scause ↦ term_var "scause"
+                    ∗ sepc ↦ term_var "sepc"
+                    ∗ mtvec ↦ term_var tvec
+                    ∗ stvec ↦ term_var "stvec"
+                    ∗ nextpc ↦ term_var tvec))
+               ∗ pc            ↦ term_var "i";
           |}.
 
         Definition sep_contract_exception_handler : SepContractFun exception_handler :=
-          {| sep_contract_logic_variables := [cur_priv :: ty_privilege; ctl :: ty_ctl_result; "pc" :: ty_xlenbits; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege];
+          {| sep_contract_logic_variables := [cur_priv :: ty_privilege; ctl :: ty_ctl_result; "pc" :: ty_xlenbits; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "spp" :: ty_privilege; "stvec" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := [term_var cur_priv; term_var ctl; term_var "pc"];
              sep_contract_precondition    :=
-                             cur_privilege ↦ (term_var p)
-               ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-               ∗ ∃ "mpie", ∃ "mie", mstatus       ↦ (term_record rmstatus [ term_var "mpp"; term_var "mpie"; term_var "mie" ])
-               ∗             mtvec         ↦ (term_var tvec)
-               ∗             mepc          ↦ (term_var "mepc");
+                             cur_privilege ↦ term_var cur_priv
+               ∗             mcause        ↦ term_var "mcause"
+               ∗             mstatus       ↦ (term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ])
+               ∗             mtvec         ↦ (term_var "mtvec")
+               ∗             mepc          ↦ (term_var "mepc")
+               ∗             medeleg       ↦ (term_var "medeleg")
+               ∗             scause        ↦ term_var "scause"
+               ∗             stvec         ↦ (term_var "stvec")
+               ∗             sepc          ↦ (term_var "sepc");
              sep_contract_result          := "result_exception_handler";
              sep_contract_postcondition   :=
               asn.match_union_alt ctl_result (term_var ctl)
                 (fun K => match K with
                           | KCTL_TRAP => MkAlt (pat_var e)
-                                           (term_var "result_exception_handler" = term_var tvec
-                                            ∗             cur_privilege ↦ term_val ty_privilege Machine
-                                            ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                                            ∗ ∃ "mpie", mstatus       ↦ term_record rmstatus [nenv term_var p; term_var "mpie"; term_val ty.bool false ]
-                                            ∗             mepc          ↦ term_var "pc"
-                                            ∗             mtvec         ↦ term_var tvec)
+                                                  ((term_var "result_exception_handler" = term_var "stvec"
+                                                  ∗ cur_privilege ↦ term_val ty_privilege Supervisor
+                                                  ∗ term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                                                  ∗ mcause ↦ term_var "mcause"
+                                                  ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var cur_priv; term_var "mpie"; term_var "mie"]
+                                                  ∗ mepc ↦ term_var "mepc"
+                                                  ∗ medeleg ↦ term_var "medeleg"
+                                                  ∗ ∃ "scause", scause ↦ term_var "scause"
+                                                  ∗ sepc ↦ term_var "pc"
+                                                  ∗ mtvec ↦ term_var "mtvec"
+                                                  ∗ stvec ↦ term_var "stvec")
+                                                ∨
+                                                  (term_var "result_exception_handler" = term_var "mtvec"
+                                                  ∗ cur_privilege ↦ term_val ty_privilege Machine
+                                                  ∗ ∃ "mcause", mcause ↦ term_var "mcause"
+                                                  ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var cur_priv; term_var "spp"; term_var "mpie"; term_val ty.bool false ]
+                                                  ∗ mepc ↦ term_var "pc"
+                                                  ∗ medeleg ↦ term_var "medeleg"
+                                                  ∗ scause ↦ term_var "scause"
+                                                  ∗ sepc ↦ term_var "sepc"
+                                                  ∗ mtvec ↦ term_var "mtvec"
+                                                  ∗ stvec ↦ term_var "stvec"))
+                          | KCTL_SRET => MkAlt pat_unit
+                                           (term_var "result_exception_handler" = term_var "sepc"
+                                            ∗             cur_privilege  ↦ term_var "spp"
+                                            ∗             mcause         ↦ term_var "mcause"
+                                            ∗ ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_var "mie"  ]
+                                            ∗             mtvec          ↦ term_var "mtvec"
+                                            ∗             mepc           ↦ term_var "mepc"
+                                            ∗             medeleg        ↦ term_var "medeleg"
+                                            ∗             scause         ↦ term_var "scause"
+                                            ∗             stvec          ↦ term_var "stvec"
+                                            ∗             sepc           ↦ term_var "sepc")
                           | KCTL_MRET => MkAlt pat_unit
                                            (term_var "result_exception_handler" = term_var "mepc"
                                             ∗             cur_privilege ↦ term_var "mpp"
                                             ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                                            ∗ ∃ "mie", mstatus       ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty.bool true; term_var "mie"  ]
-                                            ∗             mtvec         ↦ term_var tvec
-                                            ∗             mepc          ↦ term_var "mepc")
+                                            ∗ ∃ "mie", mstatus          ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "mie"  ]
+                                            ∗             mtvec         ↦ term_var "mtvec"
+                                            ∗             mepc          ↦ term_var "mepc"
+                                            ∗             medeleg       ↦ term_var "medeleg"
+                                            ∗             scause        ↦ term_var "scause"
+                                            ∗             stvec         ↦ term_var "stvec"
+                                            ∗             sepc          ↦ term_var "sepc")
                           end);
           |}.
 
         Definition sep_contract_handle_illegal : SepContractFun handle_illegal :=
-          {| sep_contract_logic_variables := [p :: ty_privilege; "pc" :: ty_xlenbits; tvec :: ty_xlenbits];
+          {| sep_contract_logic_variables := [p :: ty_privilege; "pc" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "mie" :: ty.bool; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := env.nil;
              sep_contract_precondition    :=
                cur_privilege ↦ term_var p
                ∗ pc ↦ term_var "pc"
                ∗ ∃ "mcause_val", mcause  ↦ term_var "mcause_val"
-               ∗ ∃ "mpp", ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "mpie"; term_var "mie" ]
-               ∗ ∃ "mepc_val", mepc ↦ term_var "mepc_val"
+               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
+               ∗ medeleg ↦ term_var "medeleg"
+               ∗ mepc ↦ term_var "mepc"
                ∗ mtvec ↦ term_var tvec
+               ∗ stvec ↦ term_var "stvec"
+               ∗ sepc ↦ term_var "sepc"
+               ∗ ∃ "scause", scause ↦ term_var "scause"
                ∗ ∃ v, nextpc ↦ term_var v;
              sep_contract_result          := "result_handle_illegal";
              sep_contract_postcondition   :=
                term_var "result_handle_illegal" = term_val ty.unit tt
-               ∗ cur_privilege ↦ term_val ty_privilege Machine
+               ∗ ((cur_privilege ↦ term_val ty_privilege Supervisor
+                   ∗ nextpc ↦ term_var "stvec"
+                   ∗ term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                   ∗ mepc ↦ term_var "mepc"
+                   ∗ sepc ↦ term_var "pc"
+                   ∗ mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"])
+                 ∨
+                   (cur_privilege ↦ term_val ty_privilege Machine
+                   ∗ nextpc ↦ term_var tvec
+                   ∗ mepc ↦ term_var "pc"
+                   ∗ sepc ↦ term_var "sepc"
+                   ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [term_var p; term_var "spp"; term_var "mpie"; term_val ty.bool false]))
                ∗ pc ↦ term_var "pc"
+               ∗ medeleg ↦ term_var "medeleg"
                ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-               ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [ term_var p; term_var "mpie"; term_val ty.bool false ]
-               ∗ mepc ↦ term_var "pc"
                ∗ mtvec ↦ term_var tvec
-               ∗ nextpc ↦ term_var tvec
+               ∗ stvec ↦ term_var "stvec"
+               ∗ ∃ "scause", scause ↦ term_var "scause"
           |}.
 
         Definition sep_contract_trap_handler : SepContractFun trap_handler :=
-          {| sep_contract_logic_variables := [del_priv :: ty_privilege; "intr" :: ty.bool; c :: ty_exc_code; "pc" :: ty_xlenbits; p :: ty_privilege; tvec :: ty_xlenbits];
+          {| sep_contract_logic_variables := [del_priv :: ty_privilege; "intr" :: ty.bool; c :: ty_exc_code; "pc" :: ty_xlenbits; p :: ty_privilege; "mcause" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "mie" :: ty.bool; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "scause" :: ty_xlenbits; "sepc" :: ty_xlenbits; "stvec" :: ty_xlenbits];
              sep_contract_localstore      := [term_var del_priv; term_var "intr"; term_var c; term_var "pc"];
              sep_contract_precondition    :=
                cur_privilege ↦ term_var p
-               ∗ ∃ "mcause_val", mcause  ↦ term_var "mcause_val"
-               ∗ ∃ "mstatus_val", mstatus ↦ term_var "mstatus_val"
-               ∗ ∃ "mepc_val", mepc    ↦ term_var "mepc_val"
-               ∗ mtvec ↦ term_var tvec;
+               ∗ mcause  ↦ term_var "mcause"
+               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie"]
+               ∗ mepc    ↦ term_var "mepc"
+               ∗ mtvec ↦ term_var "mtvec"
+               ∗ scause  ↦ term_var "scause"
+               ∗ sepc    ↦ term_var "sepc"
+               ∗ stvec ↦ term_var "stvec";
              sep_contract_result          := "result_trap_handler";
              sep_contract_postcondition   :=
-               term_var "result_trap_handler" = term_var tvec
-               ∗ term_var del_priv = term_val ty_privilege Machine
-               ∗ cur_privilege ↦ term_var del_priv
-               ∗ mcause        ↦ term_zext (term_var c)
-               ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "mpie"; term_val ty.bool false ]
-               ∗ mepc          ↦ term_var "pc"
-               ∗ mtvec         ↦ term_var tvec;
+               cur_privilege ↦ term_var del_priv
+               ∗ asn.match_enum privilege (term_var del_priv) 
+                   (fun K => match K with
+                             | Machine    =>
+                                 term_var "result_trap_handler" = term_var "mtvec"
+                                 ∗ mcause ↦ term_zext (term_var c)
+                                 ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_val ty.bool false ]
+                                 ∗ mepc ↦ term_var "pc"
+                                 ∗ scause ↦ term_var "scause"
+                                 ∗ sepc ↦ term_var "sepc"
+                             | Supervisor =>
+                                 term_var "result_trap_handler" = term_var "stvec"
+                                 ∗ mcause ↦ term_var "mcause"
+                                 ∗ mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"]
+                                 ∗ mepc ↦ term_var "mepc"
+                                 ∗ scause ↦ term_zext (term_var c)
+                                 ∗ sepc ↦ term_var "pc"
+                             | User       => ⊥
+                             end)
+               ∗ mtvec ↦ term_var "mtvec"
+               ∗ stvec ↦ term_var "stvec";
           |}.
 
         Definition sep_contract_prepare_trap_vector : SepContractFun prepare_trap_vector :=
-          {| sep_contract_logic_variables := [p :: ty_privilege; cause :: ty_mcause; tvec :: ty_xlenbits];
+          {| sep_contract_logic_variables := [p :: ty_privilege; cause :: ty_mcause; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits];
              sep_contract_localstore      := [term_var p; term_var cause];
-             sep_contract_precondition    := mtvec ↦ term_var tvec;
+             sep_contract_precondition    :=
+               mtvec ↦ term_var tvec ∗ stvec ↦ term_var "stvec";
              sep_contract_result          := "result_prepare_trap_vector";
              sep_contract_postcondition   :=
-               term_var "result_prepare_trap_vector" = term_var tvec
-               ∗ term_var p = term_val ty_privilege Machine
-               ∗ mtvec ↦ term_var tvec;
+               asn.match_enum privilege (term_var p)
+                 (fun K => match K with
+                           | Machine    => term_var "result_prepare_trap_vector" = term_var tvec
+                           | Supervisor => term_var "result_prepare_trap_vector" = term_var "stvec"
+                           | User       => ⊥
+                           end)
+               ∗ mtvec ↦ term_var tvec
+               ∗ stvec ↦ term_var "stvec";
           |}.
 
         Definition sep_contract_tvec_addr : SepContractFun tvec_addr :=
@@ -489,13 +753,26 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∃ result, term_var "result_exceptionType_to_bits" = term_var result
           |}.
 
-        Definition sep_contract_exception_delegatee : SepContractFun exception_delegatee :=
-          {| sep_contract_logic_variables := [p :: ty_privilege];
-             sep_contract_localstore      := [term_var p];
+        Definition sep_contract_Medeleg_to_bits : SepContractFun Medeleg_to_bits :=
+          {| sep_contract_logic_variables := ["i" :: ty_Medeleg];
+             sep_contract_localstore      := [term_var "i"];
              sep_contract_precondition    := ⊤;
+             sep_contract_result          := "result_Medeleg_to_bits";
+             sep_contract_postcondition   :=
+               ∃ result, term_var "result_Medeleg_to_bits" = term_var result
+          |}.
+
+        Definition sep_contract_exception_delegatee : SepContractFun exception_delegatee :=
+          {| sep_contract_logic_variables := [e :: ty_exception_type; p :: ty_privilege; "medeleg" :: ty_Medeleg];
+             sep_contract_localstore      := [term_var e; term_var p];
+             sep_contract_precondition    := medeleg ↦ term_var "medeleg";
              sep_contract_result          := "result_exception_delegatee";
              sep_contract_postcondition   :=
-              term_var "result_exception_delegatee" = term_val ty_privilege Machine
+                term_var "result_exception_delegatee" != term_val ty_privilege User
+                ∗ (if: term_eq (term_var "result_exception_delegatee") (term_val ty_privilege Supervisor)
+                   then term_var "medeleg" != term_val ty_Medeleg medeleg_off
+                   else ⊤)
+                ∗ medeleg ↦ term_var "medeleg";
           |}.
 
         Definition sep_contract_get_arch_pc : SepContractFun get_arch_pc :=
@@ -566,95 +843,182 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∗ asn_gprs;
           |}.
 
-        (* Definition sep_contract_abs : SepContractFun abs := *)
-        (*   {| sep_contract_logic_variables := [v :: ty.int]; *)
-        (*      sep_contract_localstore      := [term_var v]; *)
-        (*      sep_contract_precondition    := ⊤; *)
-        (*      sep_contract_result          := "result_abs"; *)
-        (*      sep_contract_postcondition   := ⊤; *)
-        (*   |}. *)
-
         Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
-          let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "i" :: ty_xlenbits] in
+          let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "stvec" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "i" :: ty_xlenbits; "mcause" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "sscratch" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
              sep_contract_localstore      := create_localstore Δ Σ;
              sep_contract_precondition    :=
-                           cur_privilege ↦ term_var "m" ∗
-                           mtvec         ↦ term_var "h" ∗
-                           pc            ↦ term_var "i" ∗
-               ∃ "npc",    nextpc        ↦ term_var "npc" ∗
-               ∃ "mcause", mcause        ↦ term_var "mcause" ∗
-               ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
-               ∃ "mepc",   mepc          ↦ term_var "mepc" ∗
+                           asn.match_enum privilege (term_var "m") (fun _ => ⊤) ∗
+                           asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                           asn_gprs ∗
+                           asn_pmp_entries (term_var "entries") ∗
                ∃ "mie",    mie           ↦ term_var "mie" ∗
                ∃ "mip",    mip           ↦ term_var "mip" ∗
-               ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "mpie"; term_var "mie" ] ∗
-                           asn_pmp_entries (term_var "entries") ∗
-                           asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
-                           asn_gprs;
+                           cur_privilege ↦ term_var "m" ∗
+                           pc            ↦ term_var "i" ∗
+               ∃ "npc",    nextpc        ↦ term_var "npc" ∗
+                           mtvec         ↦ term_var "h" ∗
+                           stvec         ↦ term_var "stvec" ∗
+                           mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ] ∗
+                           mepc          ↦ term_var "mepc" ∗
+                           sepc          ↦ term_var "sepc" ∗
+                           mideleg       ↦ term_var "mideleg" ∗
+                           medeleg       ↦ term_var "medeleg" ∗
+                           mscratch      ↦ term_var "mscratch" ∗
+                           mcause        ↦ term_var "mcause" ∗
+                           sscratch      ↦ term_var "sscratch" ∗
+                           scause        ↦ term_var "scause";
              sep_contract_result          := "result_mach_inv";
              sep_contract_postcondition   :=
                (  (* Executing normally *)
                               asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                               asn_gprs ∗
                               asn_pmp_entries (term_var "entries") ∗
-                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
-                  ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                               cur_privilege ↦ term_var "m" ∗
                   ∃ v,       (pc        ↦ term_var v ∗
                               nextpc    ↦ term_var v) ∗
                               mtvec         ↦ term_var "h" ∗
-                  ∃ "mpie", ∃ "mie", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "mpie"; term_var "mie"  ] ∗
-                  ∃ v,        mepc          ↦ term_var v
+                              stvec         ↦ term_var "stvec" ∗
+                              mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie"  ] ∗
+                              mepc          ↦ term_var "mepc" ∗
+                              sepc          ↦ term_var "sepc" ∗
+                              mideleg       ↦ term_var "mideleg" ∗
+                              medeleg       ↦ term_var "medeleg" ∗
+                              mscratch ↦ term_var "mscratch" ∗
+                              mcause ↦ term_var "mcause" ∗
+                              sscratch ↦ term_var "sscratch" ∗
+                              scause ↦ term_var "scause"
                 ∨
-                  (* Modified CSRs, requires Machine mode *)
+                  (* Modified CSRs, Machine mode case (access to all CSRs) *)
                                  asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                                  asn_gprs ∗
                   ∃ "entries",   asn_pmp_entries (term_var "entries") ∗
                                  term_var "m"  =  term_val ty_privilege Machine ∗
-                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
-                  ∃ "mie",    mie           ↦ term_var "mie" ∗
-                  ∃ "mip",    mip           ↦ term_var "mip" ∗
-                  ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
+                  ∃ "mie",       mie           ↦ term_var "mie" ∗
+                  ∃ "mip",       mip           ↦ term_var "mip" ∗
                                  cur_privilege ↦ term_val ty_privilege Machine ∗
                   ∃ v, (pc                ↦ term_var v ∗ (* tick, nextpc + 4 *)
                         nextpc            ↦ term_var v) ∗
                   ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
-                  ∃ "new_mpp", ∃ "mpie", ∃ "mie", mstatus       ↦ term_record rmstatus [ term_var "new_mpp"; term_var "mpie"; term_var "mie" ] ∗
-                  ∃ "new_mepc",  mepc          ↦ term_var "new_mepc"
+                  ∃ "new_mpp", ∃ "new_spp", ∃ "new_mpie", ∃ "new_mie", mstatus       ↦ term_record rmstatus [ term_var "new_mpp"; term_var "new_spp"; term_var "new_mpie"; term_var "new_mie" ] ∗
+                  ∃ "new_mepc",  mepc          ↦ term_var "new_mepc" ∗
+                  ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
+                  ∃ "new_mideleg", mideleg       ↦ term_var "new_mideleg" ∗
+                  ∃ "new_medeleg", medeleg       ↦ term_var "new_medeleg" ∗
+                  ∃ "new_mscratch", mscratch ↦ term_var "new_mscratch" ∗
+                  ∃ "new_mcause", mcause ↦ term_var "new_mcause" ∗
+                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
+                  ∃ "new_scause", scause ↦ term_var "new_scause"
+                ∨
+                  (* Modified CSRs, Supervisor mode case *)
+                                 asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                                 asn_gprs ∗
+                  ∃ "entries",   asn_pmp_entries (term_var "entries") ∗
+                                 term_var "m"  =  term_val ty_privilege Supervisor ∗
+                  ∃ "mie",       mie           ↦ term_var "mie" ∗
+                  ∃ "mip",       mip           ↦ term_var "mip" ∗
+                                 cur_privilege ↦ term_val ty_privilege Supervisor ∗
+                  ∃ v, (pc                ↦ term_var v ∗ (* tick, nextpc + 4 *)
+                        nextpc            ↦ term_var v) ∗
+                  mtvec         ↦ term_var "h" ∗
+                  ∃ "new_spp", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "mie" ] ∗
+                  mepc          ↦ term_var "mepc" ∗
+                  ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  mscratch ↦ term_var "mscratch" ∗
+                  mcause ↦ term_var "mcause" ∗
+                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
+                  ∃ "new_scause", scause ↦ term_var "new_scause"
                 ∨
                   (* Trap occured -> Go into M-mode *)
                   asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                   asn_gprs ∗
                   asn_pmp_entries (term_var "entries") ∗
-                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
-                  ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                   cur_privilege ↦ (term_val ty_privilege Machine) ∗
                   pc            ↦ term_var "h" ∗
                   nextpc        ↦ term_var "h" ∗
                   mtvec         ↦ term_var "h" ∗
-                  ∃ "mpie", mstatus       ↦ term_record rmstatus [ term_var "m"; term_var "mpie"; term_val ty.bool false  ] ∗
-                  mepc          ↦ term_var "i"
+                  stvec         ↦ term_var "stvec" ∗
+                  ∃ "mpie", mstatus       ↦ term_record rmstatus [ term_var "m"; term_var "spp"; term_var "mpie"; term_val ty.bool false  ] ∗
+                  ∃ "mepc", mepc          ↦ term_var "mepc" ∗
+                  sepc          ↦ term_var "sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                              sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause"
+                ∨
+                  (* Trap occured -> Go into S-mode *)
+                  asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                  asn_gprs ∗
+                  asn_pmp_entries (term_var "entries") ∗
+                  term_var "medeleg" != term_val ty_Medeleg medeleg_off ∗
+                  ∃ "mie",    mie           ↦ term_var "mie" ∗
+                  ∃ "mip",    mip           ↦ term_var "mip" ∗
+                  cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
+                  pc            ↦ term_var "stvec" ∗
+                  nextpc        ↦ term_var "stvec" ∗
+                  mtvec         ↦ term_var "h" ∗
+                  stvec         ↦ term_var "stvec" ∗
+                  ∃ "mpie", ∃ "mie", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "m"; term_var "mpie"; term_var "mie" ] ∗
+                  mepc          ↦ term_var "mepc" ∗
+                  ∃ "sepc", sepc ↦ term_var "sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                              sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause"
                 ∨
                   (* MRET = Recover *)
                   asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                   asn_gprs ∗
                   asn_pmp_entries (term_var "entries") ∗
                   term_var "m"  =  term_val ty_privilege Machine ∗
-                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
-                  ∃ "mscratch", mscratch    ↦ term_var "mscratch" ∗
                   cur_privilege ↦ term_var "mpp" ∗
                   ∃ "mepc", (mepc          ↦ term_var "mepc" ∗
                              pc            ↦ term_var "mepc" ∗
                              nextpc        ↦ term_var "mepc") ∗
+                  sepc          ↦ term_var "sepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
                   mtvec         ↦ term_var "h" ∗
-                  ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "mpie"; term_var "mie" ])
+                  stvec         ↦ term_var "stvec" ∗
+                  ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                  ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause" ∗
+                  ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "mie" ]
+                ∨
+                  (* SRET = Recover *)
+                  asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                  asn_gprs ∗
+                  asn_pmp_entries (term_var "entries") ∗
+                  (term_var "m" = term_val ty_privilege Supervisor ∨ term_var "m"  =  term_val ty_privilege Machine) ∗
+                  ∃ "mie",    mie           ↦ term_var "mie" ∗
+                  ∃ "mip",    mip           ↦ term_var "mip" ∗
+                  cur_privilege ↦ term_var "spp" ∗
+                  ∃ "sepc", (sepc          ↦ term_var "sepc" ∗
+                             pc            ↦ term_var "sepc" ∗
+                             nextpc        ↦ term_var "sepc") ∗
+                  mepc          ↦ term_var "mepc" ∗
+                  mideleg       ↦ term_var "mideleg" ∗
+                  medeleg       ↦ term_var "medeleg" ∗
+                  mtvec         ↦ term_var "h" ∗
+                  stvec         ↦ term_var "stvec" ∗
+                  ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
+                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                  ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
+                  ∃ "scause", scause ↦ term_var "scause" ∗
+                  ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_var "mie" ])
           |}.
 
         Definition sep_contract_fetch : SepContractFun fetch :=
@@ -954,7 +1318,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_precondition    := asn_expand_pmpcfg_ent (term_var cfg);
              sep_contract_result          := "result_pmpWriteCfg";
              sep_contract_postcondition   :=
-               ∃ "cfg", term_var "result_pmpWriteCfg" = term_var "cfg";
+               ∃ "cfg", (term_var "result_pmpWriteCfg" = term_var "cfg" ∗ asn_expand_pmpcfg_ent (term_var "cfg"));
           |}.
 
 
@@ -967,8 +1331,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_result          := "result_pmpWriteCfgReg";
              sep_contract_postcondition   :=
                term_var "result_pmpWriteCfgReg" = term_val ty.unit tt
-               ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
-               ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
+               ∗ ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
+               ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
           |}.
 
         Definition sep_contract_pmpWriteAddr : SepContractFun pmpWriteAddr :=
@@ -994,6 +1358,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | execute_RISCV_JALR      => Some sep_contract_execute_RISCV_JALR
             | execute_ECALL           => Some sep_contract_execute_ECALL
             | execute_EBREAK          => Some sep_contract_execute_EBREAK
+            | execute_SRET            => Some sep_contract_execute_SRET
             | execute_MRET            => Some sep_contract_execute_MRET
             | execute_CSR             => Some sep_contract_execute_CSR
             | execute_STORE           => Some sep_contract_execute_STORE
@@ -1011,6 +1376,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | prepare_trap_vector     => Some sep_contract_prepare_trap_vector
             | tvec_addr               => Some sep_contract_tvec_addr
             | exceptionType_to_bits   => Some sep_contract_exceptionType_to_bits
+            | Medeleg_to_bits         => Some sep_contract_Medeleg_to_bits
             | exception_delegatee     => Some sep_contract_exception_delegatee
             | rX                      => Some sep_contract_rX
             | wX                      => Some sep_contract_wX
@@ -1018,7 +1384,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | within_phys_mem         => Some sep_contract_within_phys_mem
             | readCSR                 => Some sep_contract_readCSR
             | writeCSR                => Some sep_contract_writeCSR
-            | check_CSR               => Some sep_contract_check_CSR
+            (* | check_CSR               => Some sep_contract_check_CSR *)
             | is_CSR_defined          => Some sep_contract_is_CSR_defined
             | check_CSR_access        => Some sep_contract_check_CSR_access
             | privLevel_to_bits       => Some sep_contract_privLevel_to_bits
@@ -1308,11 +1674,16 @@ Module RiscvPmpValidContracts.
     | None   => False
     end.
 
-
   Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => Symbolic.ValidContract c (FunDef f)
     | None => False
+    end.
+
+  Definition ValidContractDebugWithFuel {Δ τ} (fuel : Fuel) (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractWithFuel (fuel_to_nat fuel) c (FunDef f)
+    | None   => False
     end.
 
   Ltac symbolic_simpl :=
@@ -1326,9 +1697,20 @@ Module RiscvPmpValidContracts.
     Local Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
     Local Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
 
-    (* Import RiscvNotations.
-     Import RiscvμSailNotations. *)
+    Import RiscvNotations.
+    Import RiscvμSailNotations.
     Import SymProp.notations.
+    Import asn.notations.
+    Import rv_notations.
+
+  Lemma tmp : Symbolic.ValidContractWithErasureAndFuel 2 sep_contract_exception_delegatee fun_exception_delegatee.
+  Proof.
+    unfold sep_contract_exception_delegatee, fun_exception_delegatee.
+    Set Printing Depth 1000.
+    vm_compute.
+    constructor. cbn.
+    intros. repeat split; intros; intros E; inversion_clear E.
+  Qed.
 
   End Debug.
 
@@ -1445,8 +1827,8 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_writeCSR : ValidContract writeCSR.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_check_CSR : ValidContract check_CSR.
-  Proof. now vm_compute. Qed.
+  (* Lemma valid_contract_check_CSR : ValidContract check_CSR.
+  Proof. now vm_compute. Qed. *)
 
   Lemma valid_contract_is_CSR_defined : ValidContract is_CSR_defined.
   Proof. now vm_compute. Qed.
@@ -1463,12 +1845,6 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_exception_handler : ValidContract exception_handler.
-  Proof. now vm_compute. Qed.
-
-  Lemma valid_contract_handle_illegal : ValidContract handle_illegal.
-  Proof. now vm_compute. Qed.
-
   Lemma valid_contract_trap_handler : ValidContract trap_handler.
   Proof. now vm_compute. Qed.
 
@@ -1481,7 +1857,21 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_exceptionType_to_bits : ValidContract exceptionType_to_bits.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_exception_delegatee : ValidContract exception_delegatee.
+  Lemma valid_contract_Medeleg_to_bits : ValidContract Medeleg_to_bits.
+  Proof. now vm_compute. Qed.
+
+  Lemma valid_contract_exception_delegatee : ValidContractDebugWithFuel InlineOneLevel exception_delegatee.
+  Proof.
+    now apply Symbolic.validcontract_with_erasure_and_fuel_sound;
+      vm_compute;
+      constructor;
+      cbn.
+  Qed.
+
+  Lemma valid_contract_exception_handler : ValidContract exception_handler.
+  Proof. now vm_compute. Qed.
+
+  Lemma valid_contract_handle_illegal : ValidContract handle_illegal.
   Proof. now vm_compute. Qed.
 
   Lemma valid_contract_get_arch_pc : ValidContract get_arch_pc.
@@ -1536,11 +1926,14 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_RISCV_JALR : ValidContract execute_RISCV_JALR.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
+  Lemma valid_contract_execute_ECALL : ValidContractDebug execute_ECALL.
   Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
   Proof. now symbolic_simpl. Qed.
+
+  Lemma valid_contract_execute_SRET : ValidContract execute_SRET.
+  Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
   Proof. now vm_compute. Qed.
@@ -1556,7 +1949,6 @@ Module RiscvPmpValidContracts.
 
   Lemma valid_contract_execute_MUL : ValidContract execute_MUL.
   Proof. now vm_compute. Qed.
-
 
   Lemma pmp_check_perms_gives_access :
     forall acc p L0 A0 X0 W0 R0,
@@ -1607,6 +1999,18 @@ Module RiscvPmpValidContracts.
     apply Hvc.
   Qed.
 
+  Lemma valid_contract_debug_with_fuel : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ) (fuel : Fuel),
+      CEnv f = Some c ->
+      ValidContractDebugWithFuel fuel f ->
+      exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
+  Proof.
+    intros ? ? f c fuel Hcenv Hvc.
+    unfold ValidContractDebugWithFuel in Hvc.
+    rewrite Hcenv in Hvc.
+    exists (fuel_to_nat fuel).
+    apply Hvc.
+  Qed.
+
   Lemma ValidContracts : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->
       exists fuel, Symbolic.ValidContractWithFuel fuel c (FunDef f).
@@ -1643,15 +2047,15 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_init_sys).
     - refine (valid_contract _ H valid_contract_init_pmp).
     - refine (valid_contract _ H valid_contract_exceptionType_to_bits).
+    - refine (valid_contract _ H valid_contract_Medeleg_to_bits).
     - refine (valid_contract _ H valid_contract_privLevel_to_bits).
     - refine (valid_contract _ H valid_contract_handle_mem_exception).
     - refine (valid_contract _ H valid_contract_exception_handler).
-    - refine (valid_contract _ H valid_contract_exception_delegatee).
+    - refine (valid_contract_debug_with_fuel _ _ H valid_contract_exception_delegatee).
     - refine (valid_contract _ H valid_contract_trap_handler).
     - refine (valid_contract _ H valid_contract_prepare_trap_vector).
     - refine (valid_contract _ H valid_contract_tvec_addr).
     - refine (valid_contract _ H valid_contract_handle_illegal).
-    - refine (valid_contract _ H valid_contract_check_CSR).
     - refine (valid_contract _ H valid_contract_is_CSR_defined).
     - refine (valid_contract _ H valid_contract_csrAccess).
     - refine (valid_contract _ H valid_contract_csrPriv).
@@ -1668,8 +2072,9 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_execute_RISCV_JALR).
     - refine (valid_contract_with_fuel _ _ H valid_contract_execute_LOAD).
     - refine (valid_contract _ H valid_contract_execute_STORE).
-    - refine (valid_contract _ H valid_contract_execute_ECALL).
+    - refine (valid_contract_debug _ H valid_contract_execute_ECALL).
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
+    - refine (valid_contract _ H valid_contract_execute_SRET).
     - refine (valid_contract _ H valid_contract_execute_MRET).
     - refine (valid_contract _ H valid_contract_execute_CSR).
     - refine (valid_contract _ H valid_contract_execute_MUL).

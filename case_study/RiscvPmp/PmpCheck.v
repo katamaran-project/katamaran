@@ -138,7 +138,7 @@ Section Implementation.
         if L cfg
         then pmp_get_RWX cfg p
         else PmpRWX
-    | User =>
+    | _ =>
         pmp_get_RWX cfg p
     end.
 

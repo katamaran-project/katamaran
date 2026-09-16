@@ -219,11 +219,34 @@ End WithBvNotations.
 Record Minterrupts : Set :=
   MkMinterrupts
     { MEI : bool
+    ; SEI : bool
     ; UEI : bool
     ; MTI : bool
+    ; STI : bool
     ; UTI : bool
     ; MSI : bool
+    ; SSI : bool
     ; USI : bool
+    }.
+
+(* Actual Sail type declaration is called Medeleg, we use RMedeleg to avoid
+   a name clash below with the CSRIdx for Medeleg. *)
+Record RMedeleg : Set :=
+  MkRMedeleg
+    { SAMO_Page_Fault    : bool
+    ; Load_Page_Fault    : bool
+    ; Fetch_Page_Fault   : bool
+    ; MEnvCall           : bool
+    ; SEnvCall           : bool
+    ; UEnvCall           : bool
+    ; SAMO_Access_Fault  : bool
+    ; SAMO_Addr_Align    : bool
+    ; Load_Access_Fault  : bool
+    ; Load_Addr_Align    : bool
+    ; Breakpoint         : bool
+    ; Illegal_Instr      : bool
+    ; Fetch_Access_Fault : bool
+    ; Fetch_Addr_Align   : bool
     }.
 
 (* 3. Definition of machinery required to do MMIO *)
@@ -263,30 +286,43 @@ Definition Trace : Set := list Event.
 
 Inductive Privilege : Set :=
 | User
+| Supervisor
 | Machine
 .
 
 Inductive InterruptType : Set :=
 | I_U_Software
+| I_S_Software
 | I_M_Software
 | I_U_Timer
+| I_S_Timer
 | I_M_Timer
 | I_U_External
+| I_S_External
 | I_M_External
 .
 
 (* Enum for available CRSs' *)
 Inductive CSRIdx : Set :=
+(* M-mode CSRs *)
 | MStatus
 | Mie
 | MTvec
 | MScratch
 | MEpc
 | MCause
-| MPMP0CFG
 | Mip
+| Mideleg (* Delegation to S-mode for interrupts *)
+| Medeleg (* Delegation to S-mode for exceptions *)
+| MPMP0CFG
 | MPMPADDR0
 | MPMPADDR1
+(* S-mode CSRs *)
+| SStatus
+| STvec
+| SScratch
+| SEpc
+| SCause
 .
 
 Definition NumPmpEntries := 2.
@@ -434,6 +470,7 @@ Inductive AST : Set :=
 | ECALL
 | EBREAK
 | MRET
+| SRET
 | CSR (csr : CSRIdx) (rs1 rd : RegIdx) (is_imm : bool) (csrop : CSROP)
 | MUL (rs2 rs1 rd : RegIdx) (high signed1 signed2 : bool)
 .
@@ -450,6 +487,7 @@ Inductive ExceptionType : Set :=
 | E_Load_Access_Fault
 | E_SAMO_Access_Fault
 | E_U_EnvCall
+| E_S_EnvCall
 | E_M_EnvCall
 | E_Illegal_Instr
 .
@@ -463,6 +501,7 @@ Inductive FetchResult : Set :=
          (other constructors are for mret, sret and uret, not considered atm) *)
 Inductive CtlResult : Set :=
 | CTL_TRAP (e : ExceptionType)
+| CTL_SRET
 | CTL_MRET
 .
 
@@ -490,6 +529,7 @@ Inductive ASTConstructor : Set :=
 | KECALL
 | KEBREAK
 | KMRET
+| KSRET
 | KCSR
 | KMUL
 .
@@ -506,6 +546,7 @@ Inductive ExceptionTypeConstructor : Set :=
 | KE_Load_Access_Fault
 | KE_SAMO_Access_Fault
 | KE_U_EnvCall
+| KE_S_EnvCall
 | KE_M_EnvCall
 | KE_Illegal_Instr
 .
@@ -522,6 +563,7 @@ Inductive FetchResultConstructor : Set :=
 
 Inductive CtlResultConstructor : Set :=
 | KCTL_TRAP
+| KCTL_SRET
 | KCTL_MRET
 .
 
@@ -553,15 +595,23 @@ Record Pmpcfg_ent : Set :=
 
 Record Mstatus : Set :=
   MkMstatus
-    { MPP : Privilege
+    { MPP  : Privilege
+    ; SPP  : Privilege
     ; MPIE : bool
-    ; MIE : bool
+    ; MIE  : bool
+    }.
+
+Record Sstatus : Set :=
+  MkSstatus
+    { S_SPP : Privilege (* Bit annoying S_ prefix, but otherwise we have a conflict with the SPP definition above *)
     }.
 
 Inductive Records : Set :=
 | rpmpcfg_ent
 | rmstatus
+| rsstatus
 | rminterrupts
+| rmedeleg
 .
 
 Section TransparentObligations.
@@ -604,7 +654,9 @@ Section TransparentObligations.
   Derive NoConfusion for Records.
   Derive NoConfusion for Pmpcfg_ent.
   Derive NoConfusion for Mstatus.
+  Derive NoConfusion for Sstatus.
   Derive NoConfusion for Minterrupts.
+  Derive NoConfusion for RMedeleg.
   Derive NoConfusion for InterruptSet.
 End TransparentObligations.
 
@@ -646,7 +698,9 @@ Derive EqDec for MemoryOpResultConstructor.
 Derive EqDec for Records.
 Derive EqDec for Pmpcfg_ent.
 Derive EqDec for Mstatus.
+Derive EqDec for Sstatus.
 Derive EqDec for Minterrupts.
+Derive EqDec for RMedeleg.
 Derive EqDec for InterruptSet.
 
 Section Finite.
@@ -656,16 +710,16 @@ Section Finite.
     try finite_from_eqdec.
 
   #[export,program] Instance Privilege_finite : Finite Privilege :=
-    {| enum := [User;Machine] |}.
+    {| enum := [User;Supervisor;Machine] |}.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip] |}.
+    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip;Medeleg;Mideleg;SStatus;STvec;SScratch;SEpc;SCause] |}.
 
   #[export,program] Instance EventTy_finite : Finite EventTy :=
     {| enum := [IOWrite; IORead; IOShutdown] |}.
 
   #[export,program] Instance InterruptType_finite : Finite InterruptType :=
-    {| enum := [I_U_Software; I_M_Software; I_U_Timer; I_M_Timer; I_U_External; I_M_External] |}.
+    {| enum := [I_U_Software; I_S_Software; I_M_Software; I_U_Timer; I_S_Timer; I_M_Timer; I_U_External; I_S_External; I_M_External] |}.
 
   #[export,program] Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG;PMP1CFG] |}.
@@ -723,7 +777,7 @@ Section Finite.
 
   #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KMRET;KCSR;KMUL] |}.
+    {| enum := [KRTYPE;KITYPE;KSHIFTIOP;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KEBREAK;KSRET;KMRET;KCSR;KMUL] |}.
 
   #[export,program] Instance AccessType_finite :
     Finite AccessType :=
@@ -736,7 +790,7 @@ Section Finite.
   #[export,program] Instance ExceptionTypeConstructor_finite :
     Finite ExceptionTypeConstructor :=
     {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;
-                KE_U_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
+                KE_U_EnvCall;KE_S_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
 
   #[export,program] Instance FetchResultConstructor_finite :
     Finite FetchResultConstructor :=
@@ -744,7 +798,7 @@ Section Finite.
 
   #[export,program] Instance CtlResultConstructor_finite :
     Finite CtlResultConstructor :=
-    {| enum := [KCTL_TRAP;KCTL_MRET] |}.
+    {| enum := [KCTL_TRAP;KCTL_SRET;KCTL_MRET] |}.
 
   #[export,program] Instance InterruptSetConstructor_finite :
     Finite InterruptSetConstructor :=
@@ -798,6 +852,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_retired                        := (ty.enum retired).
   Definition ty_word_width                     := (ty.enum wordwidth).
   Definition ty_mcause                         := (ty_xlenbits).
+  Definition ty_scause                         := (ty_xlenbits).
   Definition ty_exc_code                       := (ty.bvec 8).
   Definition ty_ast                            := (ty.union ast).
   Definition ty_access_type                    := (ty.union access_type).
@@ -808,7 +863,9 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_interrupt_set                  := (ty.union interrupt_set).
   Definition ty_pmpcfg_ent                     := (ty.record rpmpcfg_ent).
   Definition ty_mstatus                        := (ty.record rmstatus).
+  Definition ty_sstatus                        := (ty.record rsstatus).
   Definition ty_Minterrupts                    := (ty.record rminterrupts).
+  Definition ty_Medeleg                        := (ty.record rmedeleg).
   Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
   Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)).
 
@@ -849,9 +906,11 @@ Module Export RiscvPmpBase <: Base.
 
   Definition record_denote (R : Records) : Set :=
     match R with
-    | rpmpcfg_ent => Pmpcfg_ent
-    | rmstatus    => Mstatus
-    | rminterrupts    => Minterrupts
+    | rpmpcfg_ent  => Pmpcfg_ent
+    | rmstatus     => Mstatus
+    | rsstatus     => Sstatus
+    | rminterrupts => Minterrupts
+    | rmedeleg     => RMedeleg
     end.
 
   #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
@@ -887,6 +946,7 @@ Module Export RiscvPmpBase <: Base.
                             | KSTORE      => ty.tuple [ty.bvec 12; ty_regno; ty_regno; ty_word_width]
                             | KECALL      => ty.unit
                             | KEBREAK     => ty.unit
+                            | KSRET       => ty.unit
                             | KMRET       => ty.unit
                             | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty.bool; ty_csrop]
                             | KMUL        => ty.tuple [ty_regno; ty_regno; ty_regno; ty.bool; ty.bool; ty.bool]
@@ -906,6 +966,7 @@ Module Export RiscvPmpBase <: Base.
     | ctl_result       => fun K =>
                             match K with
                             | KCTL_TRAP => ty_exception_type
+                            | KCTL_SRET => ty.unit
                             | KCTL_MRET => ty.unit
                             end
     | interrupt_set    => fun K =>
@@ -944,6 +1005,7 @@ Module Export RiscvPmpBase <: Base.
                             | STORE imm rs2 rs1 w           => existT KSTORE (tt , imm , rs2 , rs1 , w)
                             | ECALL                         => existT KECALL tt
                             | EBREAK                        => existT KEBREAK tt
+                            | SRET                          => existT KSRET tt
                             | MRET                          => existT KMRET tt
                             | CSR csr rs1 rd is_imm op      => existT KCSR (tt , csr , rs1 , rd , is_imm , op)
                             | MUL rs2 rs1 rd h s1 s2        => existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )
@@ -961,6 +1023,7 @@ Module Export RiscvPmpBase <: Base.
                             | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
                             | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
                             | E_U_EnvCall          => existT KE_U_EnvCall tt
+                            | E_S_EnvCall          => existT KE_S_EnvCall tt
                             | E_M_EnvCall          => existT KE_M_EnvCall tt
                             | E_Illegal_Instr      => existT KE_Illegal_Instr tt
                             end
@@ -977,6 +1040,7 @@ Module Export RiscvPmpBase <: Base.
     | ctl_result       => fun Kv =>
                             match Kv with
                             | CTL_TRAP e => existT KCTL_TRAP e
+                            | CTL_SRET   => existT KCTL_SRET tt
                             | CTL_MRET   => existT KCTL_MRET tt
                             end
     | interrupt_set    => fun Kv =>
@@ -1002,6 +1066,7 @@ Module Export RiscvPmpBase <: Base.
                               | existT KSTORE (tt , imm , rs2 , rs1 , w)             => STORE imm rs2 rs1 w
                               | existT KECALL tt                                     => ECALL
                               | existT KEBREAK tt                                    => EBREAK
+                              | existT KSRET tt                                      => SRET
                               | existT KMRET tt                                      => MRET
                               | existT KCSR (tt , csr , rs1 , rd , is_imm , op)      => CSR csr rs1 rd is_imm op
                               | existT KMUL (tt, rs2 , rs1 , rd , h, s1, s2 )        => MUL rs2 rs1 rd h s1 s2
@@ -1019,6 +1084,7 @@ Module Export RiscvPmpBase <: Base.
                               | existT KE_Load_Access_Fault tt  => E_Load_Access_Fault
                               | existT KE_SAMO_Access_Fault tt  => E_SAMO_Access_Fault
                               | existT KE_U_EnvCall tt          => E_U_EnvCall
+                              | existT KE_S_EnvCall tt          => E_S_EnvCall
                               | existT KE_M_EnvCall tt          => E_M_EnvCall
                               | existT KE_Illegal_Instr tt      => E_Illegal_Instr
                               end
@@ -1035,6 +1101,7 @@ Module Export RiscvPmpBase <: Base.
       | ctl_result       => fun Kv =>
                               match Kv with
                               | existT KCTL_TRAP e  => CTL_TRAP e
+                              | existT KCTL_SRET tt => CTL_SRET
                               | existT KCTL_MRET tt => CTL_MRET
                               end
       | interrupt_set    => fun Kv =>
@@ -1053,23 +1120,46 @@ Module Export RiscvPmpBase <: Base.
                        "W" ∷ ty.bool;
                        "R" ∷ ty.bool
       ]
-    | rmstatus    => ["MPP" ∷ ty_privilege
-                      ; "MPIE" ∷ ty.bool
-                      ; "MIE" ∷ ty.bool
-      ]
+    | rmstatus    => [ "MPP" ∷ ty_privilege
+                     ; "SPP" ∷ ty_privilege
+                     ; "MPIE" ∷ ty.bool
+                     ; "MIE" ∷ ty.bool
+                     ]
+    | rsstatus    => ["SPP" ∷ ty_privilege ]
     | rminterrupts    => [ "MEI" ∷ ty.bool
-                           ; "UEI" ∷ ty.bool
-                           ; "MTI" ∷ ty.bool
-                           ; "UTI" ∷ ty.bool
-                           ; "MSI" ∷ ty.bool
-                           ; "USI" ∷ ty.bool
-      ]
+                         ; "SEI" ∷ ty.bool
+                         ; "UEI" ∷ ty.bool
+                         ; "MTI" ∷ ty.bool
+                         ; "STI" ∷ ty.bool
+                         ; "UTI" ∷ ty.bool
+                         ; "MSI" ∷ ty.bool
+                         ; "SSI" ∷ ty.bool
+                         ; "USI" ∷ ty.bool
+                         ]
+    | rmedeleg => [ "SAMO_Page_Fault"    ∷ ty.bool
+                  ; "Load_Page_Fault"    ∷ ty.bool
+                  ; "Fetch_Page_Fault"   ∷ ty.bool
+                  ; "MEnvCall"           ∷ ty.bool
+                  ; "SEnvCall"           ∷ ty.bool
+                  ; "UEnvCall"           ∷ ty.bool
+                  ; "SAMO_Access_Fault"  ∷ ty.bool
+                  ; "SAMO_Addr_Align"    ∷ ty.bool
+                  ; "Load_Access_Fault"  ∷ ty.bool
+                  ; "Load_Addr_Align"    ∷ ty.bool
+                  ; "Breakpoint"         ∷ ty.bool
+                  ; "Illegal_Instr"      ∷ ty.bool
+                  ; "Fetch_Access_Fault" ∷ ty.bool
+                  ; "Fetch_Addr_Align"   ∷ ty.bool
+                  ]
     end.
 
   Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
-  | rpmpcfg_ent  | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
-  | rmstatus     | [mpp;mpie;mie]%env       := MkMstatus mpp mpie mie
-  | rminterrupts | [mei;uei;mti;uti;msi;usi]%env       := MkMinterrupts mei uei mti uti msi usi.
+  | rpmpcfg_ent  | [l;a;x;w;r]%env               := MkPmpcfg_ent l a x w r
+  | rmstatus     | [mpp;spp;mpie;mie]%env        := MkMstatus mpp spp mpie mie
+  | rsstatus     | [spp]%env                     := MkSstatus spp
+  | rminterrupts | [mei;sei;uei;mti;sti;uti;msi;ssi;usi]%env := MkMinterrupts mei sei uei mti sti uti msi ssi usi
+  | rmedeleg     | [spf;lpf;fpf;mecall;secall;uecall;saf;saa;laf;laa;br;ii;faf;faa]%env :=
+                     MkRMedeleg spf lpf fpf mecall secall uecall saf saa laf laa br ii faf faa.
 
   Equations record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
   | rpmpcfg_ent  | p := [kv (_ ∷ ty.bool             ; L p);
@@ -1078,15 +1168,35 @@ Module Export RiscvPmpBase <: Base.
                          (_ ∷ ty.bool             ; W p);
                          (_ ∷ ty.bool             ; R p) ]
   | rmstatus     | m := [kv ("MPP" ∷ ty_privilege; MPP m)
-                         ; ("MPIE" ∷ ty.bool; MPIE m)
-                         ; ("MIE" ∷ ty.bool; MIE m)]
+                        ;   ("SPP" ∷ ty_privilege; SPP m)
+                        ;   ("MPIE" ∷ ty.bool; MPIE m)
+                        ;   ("MIE" ∷ ty.bool; MIE m)]
+  | rsstatus     | s := [kv ("SPP" ∷ ty_privilege; S_SPP s)]
   | rminterrupts | m := [kv ("MEI" ∷ ty.bool; MEI m)
-                         ; ("UEI" ∷ ty.bool; UEI m)
-                         ; ("MTI" ∷ ty.bool; MTI m)
-                         ; ("UTI" ∷ ty.bool; UTI m)
-                         ; ("MSI" ∷ ty.bool; MSI m)
-                         ; ("USI" ∷ ty.bool; USI m)
-  ].
+                         ;  ("SEI" ∷ ty.bool; SEI m)
+                         ;  ("UEI" ∷ ty.bool; UEI m)
+                         ;  ("MTI" ∷ ty.bool; MTI m)
+                         ;  ("STI" ∷ ty.bool; STI m)
+                         ;  ("UTI" ∷ ty.bool; UTI m)
+                         ;  ("MSI" ∷ ty.bool; MSI m)
+                         ;  ("SSI" ∷ ty.bool; SSI m)
+                         ;  ("USI" ∷ ty.bool; USI m)
+                         ]
+    | rmedeleg   | m := [kv ("SAMO_Page_Fault"    ∷ ty.bool; SAMO_Page_Fault m)
+                        ;   ("Load_Page_Fault"    ∷ ty.bool; Load_Page_Fault m)
+                        ;   ("Fetch_Page_Fault"   ∷ ty.bool; Fetch_Page_Fault m)
+                        ;   ("MEnvCall"           ∷ ty.bool; MEnvCall m)
+                        ;   ("SEnvCall"           ∷ ty.bool; SEnvCall m)
+                        ;   ("UEnvCall"           ∷ ty.bool; UEnvCall m)
+                        ;   ("SAMO_Access_Fault"  ∷ ty.bool; SAMO_Access_Fault m)
+                        ;   ("SAMO_Addr_Align"    ∷ ty.bool; SAMO_Addr_Align m)
+                        ;   ("Load_Access_Fault"  ∷ ty.bool; Load_Access_Fault m)
+                        ;   ("Load_Addr_Align"    ∷ ty.bool; Load_Addr_Align m)
+                        ;   ("Breakpoint"         ∷ ty.bool; Breakpoint m)
+                        ;   ("Illegal_Instr"      ∷ ty.bool; Illegal_Instr m)
+                        ;   ("Fetch_Access_Fault" ∷ ty.bool; Fetch_Access_Fault m)
+                        ;   ("Fetch_Addr_Align"   ∷ ty.bool; Fetch_Addr_Align m)
+                        ].
 
   #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk           := union_constructor;
@@ -1123,10 +1233,16 @@ Module Export RiscvPmpBase <: Base.
     | mstatus       : Reg ty_mstatus
     | mie           : Reg ty_Minterrupts
     | mip           : Reg ty_Minterrupts
+    | mideleg       : Reg ty_Minterrupts
+    | medeleg       : Reg ty_Medeleg
     | mtvec         : Reg ty_xlenbits
     | mcause        : Reg ty_mcause
     | mepc          : Reg ty_xlenbits
     | mscratch      : Reg ty_xlenbits
+    | stvec         : Reg ty_xlenbits
+    | sscratch      : Reg ty_xlenbits
+    | sepc          : Reg ty_xlenbits
+    | scause        : Reg ty_scause
     | cur_privilege : Reg ty_privilege
     | x1            : Reg ty_xlenbits
     | x2            : Reg ty_xlenbits
@@ -1278,12 +1394,18 @@ Module Export RiscvPmpBase <: Base.
         | pc            , pc            => left eq_refl
         | nextpc        , nextpc        => left eq_refl
         | mstatus       , mstatus       => left eq_refl
-        | mie           , mie       => left eq_refl
-        | mip           , mip       => left eq_refl
+        | mie           , mie           => left eq_refl
+        | mip           , mip           => left eq_refl
+        | mideleg       , mideleg       => left eq_refl
+        | medeleg       , medeleg       => left eq_refl
         | mtvec         , mtvec         => left eq_refl
         | mscratch      , mscratch      => left eq_refl
         | mepc          , mepc          => left eq_refl
         | mcause        , mcause        => left eq_refl
+        | stvec         , stvec         => left eq_refl
+        | sscratch      , sscratch      => left eq_refl
+        | sepc          , sepc          => left eq_refl
+        | scause        , scause        => left eq_refl
         | cur_privilege , cur_privilege => left eq_refl
         | x1            , x1            => left eq_refl
         | x2            , x2            => left eq_refl
@@ -1342,10 +1464,16 @@ Module Export RiscvPmpBase <: Base.
           existT _ mstatus;
           existT _ mie;
           existT _ mip;
+          existT _ mideleg;
+          existT _ medeleg;
           existT _ mtvec;
           existT _ mscratch;
           existT _ mepc;
           existT _ mcause;
+          existT _ stvec;
+          existT _ sscratch;
+          existT _ sepc;
+          existT _ scause;
           existT _ cur_privilege;
           existT _ x1;
           existT _ x2;
@@ -1393,6 +1521,10 @@ Module Export RiscvPmpBase <: Base.
           mcause;
           mscratch;
           mepc;
+          stvec;
+          sscratch;
+          sepc;
+          scause;
           x1;
           x2;
           x3;
@@ -1537,7 +1669,7 @@ Module Export RiscvPmpBase <: Base.
     Definition fun_externalWorldUpdates (μ : Memory)  :
       Minterrupts * Memory :=
       (* DOMI: temporarily disabled interrupts until I know how to fix the relational model *)
-      (MkMinterrupts false false false false false false , μ).
+      (MkMinterrupts false false false false false false false false false , μ).
       (* let '(vmip , s') := state_tra_world_updates (memory_state μ) in *)
       (* let μ' := memory_update_state μ s' in *)
       (* (vmip , μ'). *)
