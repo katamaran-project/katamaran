@@ -897,7 +897,7 @@ Module RiscvPmpIrisInstanceWithContracts.
        MMIO write event, or if an MMIO write on behalf of U-mode is requested.
        In that case, the only possible write event is with value 42. *)
     destruct Hmmio_checked as [-> |[-> ->]];
-      iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]".
+      iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]". auto.
     - iMod ("Hclose" with "[Htrf]") as "_".
       {(* Instantiate evars *)
         iExists _; iFrame. iPureIntro.

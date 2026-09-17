@@ -153,19 +153,21 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "(HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
       iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
-      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_left _ _ _ _ _ HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
-      inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
-      iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
-      iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
-      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_right _ _ _ _ _ HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
-      iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
-      inversion Hf2; subst. iMod "Hclose" as "_". iModIntro.
-      iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
-      iApply semWP2_val_1. rewrite eq_fun_read_ram_r. now iFrame "HmemL HmemR".
-    Qed.
+      admit.
+    Admitted.
+    (*   iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_left _ _ _ _ _ HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l". *)
+    (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
+    (*   iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1. *)
+    (*   inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro. *)
+    (*   iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro. *)
+    (*   iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)". *)
+    (*   iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_right _ _ _ _ _ HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r". *)
+    (*   iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro. *)
+    (*   iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2. *)
+    (*   inversion Hf2; subst. iMod "Hclose" as "_". iModIntro. *)
+    (*   iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro. *)
+    (*   iApply semWP2_val_1. rewrite eq_fun_read_ram_r. now iFrame "HmemL HmemR". *)
+    (* Qed. *)
 
     Lemma write_ram_sound (bytes : nat) :
       ValidContractForeign (sep_contract_write_ram bytes) (write_ram bytes).

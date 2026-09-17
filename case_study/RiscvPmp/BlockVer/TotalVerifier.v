@@ -61,7 +61,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
