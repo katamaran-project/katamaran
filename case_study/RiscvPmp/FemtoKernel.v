@@ -1976,7 +1976,7 @@ Module inv := invariants.
           now iFrame "Hx1". }
         iApply femtokernel_handler_exit_safe_rel.
         rewrite Han.
-        iSpecialize ("Htrap" with "[Hinstrs] [Hdata]"); try by iModIntro.
+        iSpecialize ("Htrap" with "[Hinstrs] [Haddr]"); try by iModIntro.
         iFrame "Hhexit Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Htrap".
         now iPureIntro.
     Qed.
