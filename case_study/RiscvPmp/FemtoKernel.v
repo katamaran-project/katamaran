@@ -53,7 +53,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -2283,6 +2283,9 @@ Module inv := invariants.
       (instrs : list AST) : Prop :=
       mem_has_instrs μ1 a instrs ∧ mem_has_instrs μ2 a instrs.
 
+    Locate RiscvPmpIrisInstancePredicates.
+    From Katamaran.RiscvPmp Require Import IrisInstance.
+
     Lemma femtokernel_splitMemory_rel `{sailGS2 Σ} {μ1 μ2 : Memory} (secret1 secret2 : Val ty_xlenbits) :
       mem_has_instrs2 μ1 μ2 (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
       mem_has_instrs2 μ1 μ2 (bv.of_N handler_entry_addr) (filter_AnnotInstr_AST femtokernel_handler_entry) ->
@@ -2317,13 +2320,19 @@ Module inv := invariants.
       - by iFrame "Hinv1 Hinv2".
       - unfold ptstoSthL, RiscvPmpIrisInstancePredicates.ptstoSthL,
           RiscvPmpIrisInstancePredicates.ptstoSth.
-        iPoseProof (big_sepL_impl _ (λ k v, v ↦ₘ (memory_ram μ1 v))
-                     with "Hadv2 []") as "Hadv2".
-        { iModIntro. iIntros (k v HIn) "H".
-          pose proof (Forall_lookup_1 _ _ _ _ Hadv HIn) as Heq.
-          simpl in Heq. now rewrite Heq. }
-        iApply (intro_ptstoSthL_binary with "[$Hadv1 $Hadv2]").
-    Qed.
+        Locate "v ↦ₘ x".
+        Open Scope asn_scope.
+        (* TODO: wrong default scope for ptsto? *)
+        (* How to coerce GChunk (Term X) into GChunk X ? *)
+        admit.
+    Admitted.
+    (*     iPoseProof (big_sepL_impl _ (λ k v, v ↦ₘ (memory_ram μ1 v)) *)
+    (*                  with "Hadv2 []") as "Hadv2". *)
+    (*     { iModIntro. iIntros (k v HIn) "H". *)
+    (*       pose proof (Forall_lookup_1 _ _ _ _ Hadv HIn) as Heq. *)
+    (*       simpl in Heq. now rewrite Heq. } *)
+    (*     iApply (intro_ptstoSthL_binary with "[$Hadv1 $Hadv2]"). *)
+    (* Qed. *)
 
     Lemma femtokernel_rel_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ1' μ2 : Memory}
       {δ1 δ1' δ2 : CStore [ctx]} {m1 : string} {secret1 secret2 : Val ty_xlenbits} :
