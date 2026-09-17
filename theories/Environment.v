@@ -168,6 +168,70 @@ Section WithBinding.
       forall b (bIn : b ∈ Γ), Q (lookup E bIn).
     Proof. induction HE; intros x xIn; destruct (ctx.view xIn); cbn; auto. Defined.
 
+    Definition Any (Q : forall b, D b -> Prop) : forall {Γ}, Env Γ -> Prop :=
+      fun {Γ} E => exists x, exists xIn : x ∈ Γ, Q _ (lookup E xIn).
+
+    Lemma Any_nil (Q : forall b, D b -> Prop) :
+      ~ Any Q nil.
+    Proof.
+      intros [x [xIn _]].
+      destruct (ctx.view xIn).
+    Qed.
+
+    Lemma Any_snoc (Q : forall b, D b -> Prop) {Γ b} (E : Env Γ) (v : D b) :
+      Any Q (snoc E v) <-> Any Q E \/ Q _ v.
+    Proof.
+      split.
+      - remember (snoc E v) as E'.
+        induction 1.
+        destruct H as [xIn HQ]; subst.
+        destruct (ctx.view xIn); cbn in *; [right|left]; now repeat eexists.
+      - intros [[x [xIn HQ]]|HQ].
+        now eexists _, (ctx.in_succ xIn).
+        now eexists b, (ctx.in_zero).
+    Qed.
+
+    Fixpoint anyb (f : forall b, D b -> bool) {Γ} (E : Env Γ) : bool :=
+      match E with
+      | nil => false
+      | snoc E db => f _ db || anyb f E
+      end.
+
+    Lemma anyb_spec (Q : forall b, D b -> Prop) (f : forall b, D b -> bool)
+      (rQf : forall b (v : D b), reflect (Q _ v) (f _ v)) :
+      forall Γ (E : Env Γ), reflect (Any Q E) (anyb f E).
+    Proof.
+      induction E; cbn.
+      - constructor; eapply Any_nil.
+      - destruct IHE as [HA|HnA].
+        + rewrite orb_true_r.
+          constructor.
+          apply Any_snoc.
+          now left.
+        + destruct (rQf b db); constructor;
+            rewrite Any_snoc; intuition.
+    Qed.
+
+    Fixpoint find (f : forall b, D b -> bool) {Γ} (E : Env Γ) : option {x & x ∈ Γ}  :=
+      match E with
+      | nil => None
+      | snoc E db => if f _ db then Some (existT _ ctx.in_zero)
+                    else option.map (fun '(existT x xIn) => existT x (ctx.in_succ xIn)) (find f E)
+      end.
+
+    Lemma find_spec (Q : forall b, D b -> Prop) (f : forall b, D b -> bool)
+      (rQf : forall b (v : D b), reflect (Q _ v) (f _ v)) :
+      forall Γ (E : Env Γ), option.wlp (fun '(existT x xIn) => Q x (lookup E xIn)) (find f E).
+    Proof.
+      induction E; cbn; first now apply option.wlp_none.
+      destruct (rQf _ db).
+      - now apply option.wlp_some.
+      - apply option.wlp_map.
+        revert IHE.
+        apply option.wlp_monotonic.
+        now intros [x xIn].
+    Qed.
+
     Section HomEquality.
 
       Variable eqb : forall [b], D b -> D b -> bool.
