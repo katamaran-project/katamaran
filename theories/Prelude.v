@@ -63,7 +63,6 @@ Section Equality.
     DepElim.eq_simplification_sigma1_dep a1 a2 b1 b2
       (fun e => match e with eq_refl => fun b eb => f_equal (f a1) eb end b2).
 
-  Locate dec_eq.
   Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
              (hyp : dec_eq x y) : dec_eq (f x) (f y) :=
     match hyp with
@@ -114,7 +113,6 @@ Section Equality.
     {i1 i2} (x1 : A i1) (x2 : A i2) : dec_eq (existT i1 x1) (existT i2 x2) :=
     eq_dec (existT i1 x1) (existT i2 x2).
 
-  Print HintDb typeclass_instances.
   #[export] Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
     stdpp.base.EqDecision A | 1 := eqdec.
 
@@ -176,8 +174,6 @@ Ltac finite_from_eqdec :=
 Section Finite.
 
   Import stdpp.finite.
-
-  Locate sigT_eq_dec.
 
   #[local] Set Equations With UIP.
   #[export,program] Instance Finite_sigT (A : Type) {eqA : EqDec A} {finA : Finite A}
