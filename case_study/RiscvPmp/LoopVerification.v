@@ -79,57 +79,57 @@ Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSig
        Contracts.v? *)
 #[local] Definition sep_contract_step : SepContractFun step := sep_contract_step.
 
-(* LVars defines a record that contains all logic variables we will need for the
+(* ArchState defines a record that contains all logic variables we will need for the
    LoopVerification. These are based on the logic variables of the step contract,
    as the loop is of the form: step();; loop(). *)
-Module LVars.
+Module ArchState.
   Import env.notations.
 
-  Record LVars :=
-    mkLVars
-      { m : Privilege
-      ; h : Xlenbits
-      ; stvec : Xlenbits
-      ; entries : list (Pmpcfg_ent * Xlenbits)
-      ; mpp : Privilege
-      ; spp : Privilege
-      ; i : Xlenbits
-      ; mcause : Xlenbits
-      ; mscratch : Xlenbits
-      ; mepc : Xlenbits
-      ; scause : Xlenbits
-      ; sscratch : Xlenbits
-      ; sepc : Xlenbits
-      ; mpie : bool
-      ; mie : bool
-      ; mideleg : Minterrupts
-      ; medeleg : RMedeleg
+  Record ArchState :=
+    mkArchState
+      { m          : Privilege
+      ; mtvec      : Xlenbits
+      ; stvec      : Xlenbits
+      ; pmpentries : list (Pmpcfg_ent * Xlenbits)
+      ; mpp        : Privilege
+      ; spp        : Privilege
+      ; pc         : Xlenbits
+      ; mcause     : Xlenbits
+      ; mscratch   : Xlenbits
+      ; mepc       : Xlenbits
+      ; scause     : Xlenbits
+      ; sscratch   : Xlenbits
+      ; sepc       : Xlenbits
+      ; mpie       : bool
+      ; mie        : bool
+      ; mideleg    : Minterrupts
+      ; medeleg    : RMedeleg
       }.
 
-  Definition lvars_valuation (lvars : LVars) : Valuation (sep_contract_logic_variables sep_contract_step) :=
-    [env].["m"∷ty.enum privilege ↦ m lvars].["h"∷ty.bvec 32 ↦ h lvars]
-    .["stvec"∷ty.bvec 32 ↦ stvec lvars]
-    .["entries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ entries lvars]
-    .["mpp"∷ty.enum privilege ↦ mpp lvars].["spp"∷ty.enum privilege ↦ spp lvars]
-    .["i"∷ty.bvec 32 ↦ i lvars].["mcause"∷ty.bvec 32 ↦ mcause lvars]
-    .["mscratch"∷ty.bvec 32 ↦ mscratch lvars].["mepc"∷ty.bvec 32 ↦ mepc lvars]
-    .["scause"∷ty.bvec 32 ↦ scause lvars].["sscratch"∷ty.bvec 32 ↦ sscratch lvars]
-    .["sepc"∷ty.bvec 32 ↦ sepc lvars].["mpie"∷ty.bool ↦ mpie lvars] 
-    .["mie"∷ty.bool ↦ mie lvars]
-    .["mideleg"∷ty_Minterrupts ↦ mideleg lvars]
-    .["medeleg"∷ty_Medeleg ↦ medeleg lvars].
+  Definition archstate_valuation (archstate : ArchState) : Valuation (sep_contract_logic_variables sep_contract_step) :=
+    [env].["m"∷ty.enum privilege ↦ m archstate].["mtvec"∷ty.bvec 32 ↦ mtvec archstate]
+    .["stvec"∷ty.bvec 32 ↦ stvec archstate]
+    .["pmpentries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ pmpentries archstate]
+    .["mpp"∷ty.enum privilege ↦ mpp archstate].["spp"∷ty.enum privilege ↦ spp archstate]
+    .["pc"∷ty.bvec 32 ↦ pc archstate].["mcause"∷ty.bvec 32 ↦ mcause archstate]
+    .["mscratch"∷ty.bvec 32 ↦ mscratch archstate].["mepc"∷ty.bvec 32 ↦ mepc archstate]
+    .["scause"∷ty.bvec 32 ↦ scause archstate].["sscratch"∷ty.bvec 32 ↦ sscratch archstate]
+    .["sepc"∷ty.bvec 32 ↦ sepc archstate].["mpie"∷ty.bool ↦ mpie archstate] 
+    .["mie"∷ty.bool ↦ mie archstate]
+    .["mideleg"∷ty_Minterrupts ↦ mideleg archstate]
+    .["medeleg"∷ty_Medeleg ↦ medeleg archstate].
 
-  Definition lvars_update_i (lvars : LVars) (i' : Xlenbits) : LVars :=
-    match lvars with
-    | mkLVars m h stvec entries mpp spp i mcause mscratch mepc scause sscratch sepc mpie mie mideleg medeleg =>
-      mkLVars m h stvec entries mpp spp i' mcause mscratch mepc scause sscratch sepc mpie mie mideleg medeleg
+  Definition archstate_update_pc (archstate : ArchState) (pc' : Xlenbits) : ArchState :=
+    match archstate with
+    | mkArchState m mtvec stvec pmpentries mpp spp pc mcause mscratch mepc scause sscratch sepc mpie mie mideleg medeleg =>
+      mkArchState m mtvec stvec pmpentries mpp spp pc' mcause mscratch mepc scause sscratch sepc mpie mie mideleg medeleg
     end.
-End LVars.
+End ArchState.
 
 (* We only import the record type and the valuation conversion function.
-   Record fields will need the qualified name, for example: LVars.mepc to access
+   Record fields will need the qualified name, for example: ArchState.mepc to access
    the mepc value. This avoids naming conflicts with the registers. *)
-Import LVars (LVars, lvars_valuation, lvars_update_i).
+Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
 
 Section Loop.
   Context `{sg : sailGS Σ} {rG : trivGS Σ}.
@@ -152,8 +152,8 @@ Section Loop.
   (* For the LoopVerification, we always start with a precondition that needs to
      satisfy the precondition of the step function. We directly interpret this
      from the contract definition of step. *)
-  Definition Step_pre (lvars : LVars) : iProp Σ :=
-    asn.interpret (sep_contract_precondition sep_contract_step) (lvars_valuation lvars).
+  Definition Step_pre (archstate : ArchState) : iProp Σ :=
+    asn.interpret (sep_contract_precondition sep_contract_step) (archstate_valuation archstate).
 
   Local Notation "r '↦' val" := (reg_pointsTo r val) (at level 70).
 
@@ -188,47 +188,47 @@ Section Loop.
     Proof. by simpl. Qed.
 
     (* We now define convenient names to use later in this file, without needing
-       to talk about disjunct anymore. Each definition takes some LVars and
-       interprets the relevant disjunct with those lvars. In case the disjuncts
+       to talk about disjunct anymore. Each definition takes some ArchState and
+       interprets the relevant disjunct with those archstate. In case the disjuncts
        were not found, we simply use True. *)
-    Definition extract_disjunct (lvars : LVars) (f : Disjuncts -> Disjunct) : iProp Σ :=
+    Definition extract_disjunct (archstate : ArchState) (f : Disjuncts -> Disjunct) : iProp Σ :=
       match disjuncts with
-      | Some ds => asn.interpret (f ds) (env.snoc (lvars_valuation lvars) (_∷ty.unit) tt)
+      | Some ds => asn.interpret (f ds) (env.snoc (archstate_valuation archstate) (_∷ty.unit) tt)
       | None    => True
       end.
 
-    Definition Execution (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_Execution.
-    Definition M_CSRMod (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_M_CSRMod.
-    Definition S_CSRMod (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_S_CSRMod.
-    Definition M_Trap (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_M_Trap.
-    Definition S_Trap (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_S_Trap.
-    Definition MRET (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_MRET.
-    Definition SRET (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_SRET.
+    Definition Execution (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_Execution.
+    Definition M_CSRMod (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_M_CSRMod.
+    Definition S_CSRMod (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_S_CSRMod.
+    Definition M_Trap (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_M_Trap.
+    Definition S_Trap (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_S_Trap.
+    Definition MRET (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_MRET.
+    Definition SRET (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_SRET.
     (* Step_post is not a "TransitionTarget" but simply groups the possibilities
        back together using disjunction. *)
-    Definition Step_post (lvars : LVars) : iProp Σ :=
-      Execution lvars
-      ∨ M_CSRMod lvars
-      ∨ S_CSRMod lvars
-      ∨ M_Trap lvars
-      ∨ S_Trap lvars
-      ∨ MRET lvars
-      ∨ SRET lvars.
+    Definition Step_post (archstate : ArchState) : iProp Σ :=
+      Execution archstate
+      ∨ M_CSRMod archstate
+      ∨ S_CSRMod archstate
+      ∨ M_Trap archstate
+      ∨ S_Trap archstate
+      ∨ MRET archstate
+      ∨ SRET archstate.
 
   End TransitionTargets.
 
   Definition semTriple_step : iProp Σ :=
-    (∀ (lvars : LVars),
-        semTriple env.nil (Step_pre lvars)
+    (∀ (archstate : ArchState),
+        semTriple env.nil (Step_pre archstate)
                   (FunDef step)
-                  (fun _ _ => Step_post lvars))%I.
+                  (fun _ _ => Step_post archstate))%I.
 
   Definition semTriple_init_model : iProp Σ :=
     semTriple env.nil
@@ -265,7 +265,7 @@ Section Loop.
   Lemma valid_step_semTriple :
     ⊢ semTriple_step.
   Proof.
-    iIntros (lvars) "H".
+    iIntros (archstate) "H".
     iApply (semWP_mono with "[-]").
     iApply (valid_step_contract with "H").
     cbn. unfold Step_post.
@@ -289,25 +289,25 @@ Section Loop.
     constructor.
   Qed.
 
-  Definition loop_pre (lvars : LVars) : iProp Σ :=
-    (Step_pre lvars ∗
-     ▷ (M_CSRMod lvars -∗ WP_loop) ∗
-     ▷ (S_CSRMod lvars -∗ WP_loop) ∗
-     ▷ (M_Trap lvars -∗ WP_loop) ∗
-     ▷ (S_Trap lvars -∗ WP_loop) ∗
-     ▷ (MRET lvars -∗ WP_loop) ∗
-     ▷ (SRET lvars -∗ WP_loop))%I.
+  Definition loop_pre (archstate : ArchState) : iProp Σ :=
+    (Step_pre archstate ∗
+     ▷ (M_CSRMod archstate -∗ WP_loop) ∗
+     ▷ (S_CSRMod archstate -∗ WP_loop) ∗
+     ▷ (M_Trap archstate -∗ WP_loop) ∗
+     ▷ (S_Trap archstate -∗ WP_loop) ∗
+     ▷ (MRET archstate -∗ WP_loop) ∗
+     ▷ (SRET archstate -∗ WP_loop))%I.
 
   Definition semTriple_loop : iProp Σ :=
-    (∀ (lvars : LVars),
-        semTriple env.nil (loop_pre lvars)
+    (∀ (archstate : ArchState),
+        semTriple env.nil (loop_pre archstate)
                   (FunDef loop)
                   (fun _ _ => True))%I.
 
   Lemma valid_semTriple_loop : ⊢ semTriple_loop.
   Proof.
     iLöb as "H".
-    iIntros (lvars) "(HStep & HM_CSRMod & HS_CSRMod & HM_Trap & HS_Trap & HMRET & HSRET)".
+    iIntros (archstate) "(HStep & HM_CSRMod & HS_CSRMod & HM_Trap & HS_Trap & HMRET & HSRET)".
     unfold fun_loop.
     iApply (semWP_seq (call step) (call loop)).
     iApply semWP_call_inline_later.
@@ -318,8 +318,8 @@ Section Loop.
       iIntros "[HRes | [HRes | [HRes | [HRes | [HRes | [HRes | HRes]]]]]]";
       iApply (semWP_call_inline loop _).
     - iDestruct "HRes" as "(? & ? & ? & ? & ? & ? & (%i' & ? & ?) & ?)".
-      iApply ("H" $! (lvars_update_i lvars i')).
-      unfold loop_pre, lvars_update_i; destruct lvars; cbn.
+      iApply ("H" $! (archstate_update_pc archstate i')).
+      unfold loop_pre, archstate_update_pc; destruct archstate; cbn.
       now iFrame.
     - iSpecialize ("HM_CSRMod" with "HRes").
       iApply (semWP_mono with "HM_CSRMod").

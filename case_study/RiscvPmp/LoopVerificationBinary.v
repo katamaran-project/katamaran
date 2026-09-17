@@ -76,7 +76,7 @@ Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase Risc
 
 Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
 
-Import LVars (LVars, lvars_valuation, lvars_update_i).
+Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
 
 Section Loop.
   Context `{sg : sailGS2 Σ}.
@@ -84,8 +84,8 @@ Section Loop.
   Definition step_sem_contract :=
     Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
 
-  Definition Step_pre (lvars : LVars) : iProp Σ :=
-    asn.interpret (sep_contract_precondition sep_contract_step) (lvars_valuation lvars).
+  Definition Step_pre (archstate : ArchState) : iProp Σ :=
+    asn.interpret (sep_contract_precondition sep_contract_step) (archstate_valuation archstate).
 
   Local Notation "r '↦' val" := (reg_pointsTo21 r val) (at level 70).
   (* Some Iris Proof Mode tactics like (iFrame) try very hard to solve some
@@ -101,44 +101,44 @@ Section Loop.
   Definition PtstosPred : Type := Privilege -> Privilege -> Z -> Z -> list PmpEntry -> list PmpEntry -> Privilege -> Z -> Z -> iProp Σ.
 
   Section TransitionTargets.
-    Definition extract_disjunct (lvars : LVars) (f : Disjuncts -> Disjunct) : iProp Σ :=
+    Definition extract_disjunct (archstate : ArchState) (f : Disjuncts -> Disjunct) : iProp Σ :=
       match disjuncts with
-      | Some ds => asn.interpret (f ds) (env.snoc (lvars_valuation lvars) (_∷ty.unit) tt)
+      | Some ds => asn.interpret (f ds) (env.snoc (archstate_valuation archstate) (_∷ty.unit) tt)
       | None    => True
       end.
 
-    Definition Execution (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_Execution.
-    Definition M_CSRMod (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_M_CSRMod.
-    Definition S_CSRMod (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_S_CSRMod.
-    Definition M_Trap (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_M_Trap.
-    Definition S_Trap (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_S_Trap.
-    Definition MRET (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_MRET.
-    Definition SRET (lvars : LVars) : iProp Σ :=
-      extract_disjunct lvars D_SRET.
+    Definition Execution (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_Execution.
+    Definition M_CSRMod (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_M_CSRMod.
+    Definition S_CSRMod (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_S_CSRMod.
+    Definition M_Trap (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_M_Trap.
+    Definition S_Trap (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_S_Trap.
+    Definition MRET (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_MRET.
+    Definition SRET (archstate : ArchState) : iProp Σ :=
+      extract_disjunct archstate D_SRET.
     (* Step_post is not a "TransitionTarget" but simply groups the possibilities
        back together using disjunction. *)
-    Definition Step_post (lvars : LVars) : iProp Σ :=
-      Execution lvars
-      ∨ M_CSRMod lvars
-      ∨ S_CSRMod lvars
-      ∨ M_Trap lvars
-      ∨ S_Trap lvars
-      ∨ MRET lvars
-      ∨ SRET lvars.
+    Definition Step_post (archstate : ArchState) : iProp Σ :=
+      Execution archstate
+      ∨ M_CSRMod archstate
+      ∨ S_CSRMod archstate
+      ∨ M_Trap archstate
+      ∨ S_Trap archstate
+      ∨ MRET archstate
+      ∨ SRET archstate.
 
   End TransitionTargets.
 
   Definition semTriple_step : iProp Σ :=
-    (∀ (lvars : LVars),
-        semTriple env.nil (Step_pre lvars)
+    (∀ (archstate : ArchState),
+        semTriple env.nil (Step_pre archstate)
                   (FunDef step)
-                  (fun _ _ => Step_post lvars))%I.
+                  (fun _ _ => Step_post archstate))%I.
 
   Definition semTriple_init_model : iProp Σ :=
     semTriple env.nil
@@ -177,7 +177,7 @@ Section Loop.
   Lemma valid_step_semTriple :
     ⊢ semTriple_step.
   Proof.
-    iIntros (lvars) "H".
+    iIntros (archstate) "H".
     iApply (semWP2_mono with "[-]").
     iApply (valid_step_contract with "H").
     cbn. unfold Step_post.
@@ -202,25 +202,25 @@ Section Loop.
     constructor.
   Qed.
 
-  Definition loop_pre (lvars : LVars) : iProp Σ :=
-    (Step_pre lvars ∗
-     ▷ (M_CSRMod lvars -∗ WP2_loop) ∗
-     ▷ (S_CSRMod lvars -∗ WP2_loop) ∗
-     ▷ (M_Trap lvars -∗ WP2_loop) ∗
-     ▷ (S_Trap lvars -∗ WP2_loop) ∗
-     ▷ (MRET lvars -∗ WP2_loop) ∗
-     ▷ (SRET lvars -∗ WP2_loop))%I.
+  Definition loop_pre (archstate : ArchState) : iProp Σ :=
+    (Step_pre archstate ∗
+     ▷ (M_CSRMod archstate -∗ WP2_loop) ∗
+     ▷ (S_CSRMod archstate -∗ WP2_loop) ∗
+     ▷ (M_Trap archstate -∗ WP2_loop) ∗
+     ▷ (S_Trap archstate -∗ WP2_loop) ∗
+     ▷ (MRET archstate -∗ WP2_loop) ∗
+     ▷ (SRET archstate -∗ WP2_loop))%I.
 
   Definition semTriple_loop : iProp Σ :=
-    (∀ (lvars : LVars),
-        semTriple env.nil (loop_pre lvars)
+    (∀ (archstate : ArchState),
+        semTriple env.nil (loop_pre archstate)
                   (FunDef loop)
                   (fun _ _ => True))%I.
 
   Lemma valid_semTriple_loop : ⊢ semTriple_loop.
   Proof.
     iLöb as "H".
-    iIntros (lvars) "(HStep & HM_CSRMod & HS_CSRMod & HM_Trap & HS_Trap & HMRET & HSRET)".
+    iIntros (archstate) "(HStep & HM_CSRMod & HS_CSRMod & HM_Trap & HS_Trap & HMRET & HSRET)".
     unfold fun_loop.
     iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
     iApply semWP2_call_inline_later.
@@ -232,8 +232,8 @@ Section Loop.
     iDestruct "HRes" as "[HRes | [HRes | [HRes | [HRes | [HRes | [HRes | HRes]]]]]]";
       iApply (semWP2_call_inline loop _).
     - iDestruct "HRes" as "(? & ? & ? & ? & ? & ? & (%i' & ? & ?) & ?)".
-      iSpecialize ("H" $! (lvars_update_i lvars i') with "[-]").
-      { unfold loop_pre, lvars_update_i; destruct lvars; cbn; now iFrame. }
+      iSpecialize ("H" $! (archstate_update_pc archstate i') with "[-]").
+      { unfold loop_pre, archstate_update_pc; destruct archstate; cbn; now iFrame. }
       iApply (semWP2_mono with "H").
       iIntros (v δ v' δ') "(<- & <- & _)"; repeat iSplit; auto.
       by case_match.
