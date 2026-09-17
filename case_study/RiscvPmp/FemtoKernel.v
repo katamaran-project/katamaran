@@ -2283,9 +2283,6 @@ Module inv := invariants.
       (instrs : list AST) : Prop :=
       mem_has_instrs μ1 a instrs ∧ mem_has_instrs μ2 a instrs.
 
-    Locate RiscvPmpIrisInstancePredicates.
-    From Katamaran.RiscvPmp Require Import IrisInstance.
-
     Lemma femtokernel_splitMemory_rel `{sailGS2 Σ} {μ1 μ2 : Memory} (secret1 secret2 : Val ty_xlenbits) :
       mem_has_instrs2 μ1 μ2 (bv.of_N init_addr) (filter_AnnotInstr_AST femtokernel_init_gen) ->
       mem_has_instrs2 μ1 μ2 (bv.of_N handler_entry_addr) (filter_AnnotInstr_AST femtokernel_handler_entry) ->
