@@ -1027,11 +1027,10 @@ Module inv := invariants.
          LVars.mie := vmstatus_mpie csrs;
          LVars.mideleg := vmideleg csrs;
          LVars.medeleg := Medeleg_zero |} with "[-]") as "Hk".
-    - iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _])"; cbn in *.
-      iFrame "Hpc Hnpc Hmstatus HaccU Hgprs Hmscratch Htrap".
-      iSplitL "Hshared";
-        first by (repeat iDestruct "Hshared" as "($ & Hshared)";
-                  iFrame "Hshared").
+    - iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _])"; cbn in *.
+      unfold loop_pre; cbn - [M_CSRMod S_CSRMod M_Trap S_Trap SRET MRET].
+      iFrame "HaccU Hgprs Hpmp Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause Htrap".
+      iSplitL; first auto.
       repeat iSplitL; iModIntro; cbn.
       + now iIntros "(? & ? & ? & [%eq _] & ?)".
       + now iIntros "(? & ? & ? & [%eq _] & ?)".
@@ -1059,7 +1058,7 @@ Module inv := invariants.
     iApply (WP_loop_semTripleBlock with "Hpro Hpre H"). iClear "H".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx5)"; cbn in *.
+    iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _] & Hx5)"; cbn in *.
     iAssert (interp_gprs ∅) with "[Hgprs Hx5]" as "Hgprs".
     { iApply (interp_gprs_with_excluded (exclude := {[x5]}));
         try solve_subseteq.
@@ -1069,8 +1068,8 @@ Module inv := invariants.
     iApply femtokernel_handler_exit_safe.
     rewrite Han.
     iSpecialize ("Htrap" with "[Hinstrs]"); first by iModIntro.
-    iFrame "Hpc Hexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv"; cbn.
-    repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+    cbn. unfold femtokernel_safe_shared_pre.
+    iFrame "Hexit Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Htrap".
     now iPureIntro.
   Qed.
 
@@ -1093,7 +1092,7 @@ Module inv := invariants.
     iApply (WP_loop_semTripleBlock with "Hpro Hpre H"). iClear "H".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx1 & Haddr)"; cbn - [interp_ptstomem] in *.
+    iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _] & Hx1 & Haddr)"; cbn - [interp_ptstomem] in *.
     iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
     { iApply (interp_gprs_with_excluded (exclude := {[x1]}));
         try solve_subseteq.
@@ -1103,8 +1102,7 @@ Module inv := invariants.
     iApply femtokernel_handler_exit_safe.
     rewrite Han.
     iSpecialize ("Htrap" with "[Hinstrs] [Haddr]"); try by iModIntro.
-    iFrame "Hpc Hexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv"; cbn - [interp_ptstomem].
-    repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+    iFrame "Hexit Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Htrap".
     now iPureIntro.
   Qed.
 
@@ -1129,7 +1127,7 @@ Module inv := invariants.
     iApply (WP_loop_semTripleBlock with "Hpro Hpre H"). iClear "H".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-    iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
+    iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
     iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
     { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
         try solve_subseteq.
@@ -1142,18 +1140,16 @@ Module inv := invariants.
              only difference is in which lemma to apply (write <> secret_write),
              and how some framing introducing is done w.r.t. the ptsto_instrs (Hhsecret and Hhwrite) *)
     - iApply femtokernel_handler_write_safe; cbn - [interp_ptstomem].
-      iFrame "Hpc Hnpc Hhwrite Hmscratch HaccU".
-      repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
       iAssert (interp_gprs {[ x5 ]}) with "[Hgprs Hx1]" as "Hgprs".
       { iApply (interp_gprs_with_excluded_gen {[x5]} (exclude2 := {[x1]}));
         try solve_subseteq.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
         now iFrame "Hx1". }
-      iFrame "Hx5 Hgprs Hmstatus Hhexit Hinv".
+      iFrame "Hhwrite Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhexit Hx5".
       repeat iSplitR; auto.
       iModIntro. iIntros "Hhwrite Hhexit Htrap".
-      iDestruct "Htrap" as "(Hpaa & Hgprs & ? & [%vmie Hvmie] & [%vmip Hvmip] & ? & ? & ? & ? & ? & [%vmpie Hmstatus] & [%vmepc Hmepc] & ? & ? & ? & ? & [%vmcause Hmcause] & ? & [%vscause Hscause])".
+      iDestruct "Htrap" as "(Hpaa & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec & Hstvec & [%vmpie Hmstatus] & [%vmepc Hmepc] & Hsepc & Hmideleg & Hmedeleg & Hmscratch & [%vmcause Hmcause] & Hsscratch & [%vscause Hscause])".
       iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
         try solve_subseteq.
       reduce_big_sepS_big_sepL.
@@ -1168,24 +1164,22 @@ Module inv := invariants.
                          vmideleg      := vmideleg csrs;
                          vmedeleg      := vmedeleg csrs;
                          vscause       := vscause;
-                |}); cbn.
-      iFrame; auto.
+                |}); cbn - [interp_ptstomem].
+      now iFrame "Hinstrs Hpc Hnpc Hmscratch Hpaa Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hhwrite Hhsecret Hhexit".
     - iDestruct "Hx1" as "[% Hx1]".
       iDestruct "Hdata" as "[% Hdata]".
       iApply femtokernel_handler_secret_write_safe; cbn - [interp_ptstomem].
-      iFrame "Hpc Hnpc Hhsecret Hmscratch HaccU".
-      repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
       iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
       { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
         try solve_subseteq.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
         now iFrame "Hx5". }
-      iFrame "Hx1 Hdata Hgprs Hmstatus Hhexit Hinv".
+      iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhexit Hx1 Hdata".
       repeat iSplitR; auto.
       unfold LoopVerification.M_Trap.
       iModIntro. iIntros "Hhsecret Hdata Hhexit Htrap".
-      iDestruct "Htrap" as "(Hpaa & Hgprs & ? & [%vmie Hvmie] & [%vmip Hvmip] & ? & ? & ? & ? & ? & [%vmpie Hmstatus] & [%vmepc Hmepc] & ? & ? & ? & ? & [%vmcause Hmcause] & ? & [%vscause Hscause])".
+      iDestruct "Htrap" as "(Hpaa & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec & Hstvec & [%vmpie Hmstatus] & [%vmepc Hmepc] & Hsepc & Hmideleg & Hmedeleg & Hmscratch & [%vmcause Hmcause] & Hsscratch & [%vscause Hscause])".
       iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
         try solve_subseteq.
       reduce_big_sepS_big_sepL.
@@ -1200,8 +1194,8 @@ Module inv := invariants.
                          vmideleg      := vmideleg csrs;
                          vmedeleg      := vmedeleg csrs;
                          vscause       := vscause;
-                |}); cbn.
-      iFrame; auto.
+                |}); cbn - [interp_ptstomem].
+      now iFrame "Hinstrs Hpc Hnpc Hmscratch Hpaa Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hhwrite Hhsecret Hhexit".
   Qed.
 
   Definition ptsto_instrs_handler `{sailGS Σ} : iProp Σ :=
@@ -1257,7 +1251,7 @@ Module inv := invariants.
     iExists mpp, vmcause, vmscratch, vmepc, vscause, vsscratch, vsepc, vstvec, mpie, mie.
     unfold LoopVerification.loop_pre, LoopVerification.Step_pre, LoopVerification.Execution.
     cbn - [ptstoSthL interp_ptstomem].
-    iFrame "Hmst Hmtvec Hmcause Hmip Hmie Hmscratch Hmepc Hscause Hsscratch Hsepc Hstvec Hmideleg Hmedeleg Hcurpriv Hgprs Hpmpcfg Hpc Hnpc".
+    iFrame "Hgprs Hpmpcfg Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmst Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause".
     iModIntro.
 
     iSplitL "Hmemadv".
@@ -1277,7 +1271,7 @@ Module inv := invariants.
     (* Case: M_Trap *)
     iSplitL.
     iModIntro.
-    iIntros "(Hpaa & Hgprs & ? & [%vmie Hvmie] & [%vmip Hvmip] & ? & ? & ? & ? & ? & [%vmpie Hmstatus] & [%vmepc' Hmepc] & ? & ? & ? & ? & [%vmcause' Hmcause] & ? & [%vscause' Hscause])".
+    iIntros "(Hpaa & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec & Hstvec & [%vmpie Hmstatus] & [%vmepc' Hmepc] & Hsepc & Hmideleg & Hmedeleg & Hmscratch & [%vmcause' Hmcause] & Hsscratch & [%vscause' Hscause])".
     iPoseProof (interp_gprs_with_excluded (exclude := {[x1;x5;x10]}) with "Hgprs") as "(Hregs & Hgprs)";
       try solve_subseteq.
     reduce_big_sepS_big_sepL.
@@ -1298,7 +1292,7 @@ Module inv := invariants.
                                                vstvec        := vstvec;
                                              |}).
     cbn - [interp_ptstomem].
-    iFrame; auto.
+    now iFrame "Hhentry Hpc Hnpc Hmscratch Hpaa Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hmmio Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hhwrite Hhsecret Hhexit".
 
     (* Case: S_Trap *)
     iSplitL.
@@ -1344,8 +1338,9 @@ Module inv := invariants.
     iPoseProof (contract_femtoinit_verified (bv.of_N init_addr)) as "H".
     unfold contract_femtoinit; cbn - [asn_regs_ptsto interp_ptstomem].
     iDestruct "Hpre" as "([% _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hmideleg & Hmedeleg & Hcurpriv & Hx1 & Hpmpentries)".
-    iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hmscratch Hhandler Hadv Hgprs Hdata Hsscratch Hsepc Hstvec Hscause] H") as "Hk";
-      first (cbn - [asn_regs_ptsto]; iFrame "Hmstatus Hmtvec Hmideleg Hmedeleg Hmcause Hmip Hmie Hmepc Hcurpriv Hpmpentries Hx1"; iPureIntro; auto).
+    iPoseProof (WP_loop_semTripleBlock _ _ _ _ with "Hpro [-Hmscratch Hhandler Hadv Hgprs Hdata Hsscratch Hsepc Hstvec Hscause] H") as "Hk".
+    { cbn - [asn_regs_ptsto].
+      now iFrame "Hmtvec Hmcause Hmip Hmie Hmepc Hmstatus Hmideleg Hmedeleg Hcurpriv Hx1 Hpmpentries". }
     iApply "Hk".
     iIntros (an) "(Hpost & Hepi)".
     iDestruct "Hpost" as "([-> _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hmideleg & Hmedeleg & Hcurpriv & Hx1 & Hpmpentries)".
@@ -1357,7 +1352,7 @@ Module inv := invariants.
     iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
     rewrite ?bv.add_zero_l.
     iApply (fupd_semWP ⊤).
-    iMod (femtokernel_manualStep2 with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmideleg $Hmedeleg $Hgprs $Hcurpriv $Hpmpentries $Hpc $Hnpc $Hmepc $Hmem $Hhandler $Hadv $Hdata $Hsscratch $Hstvec $Hsepc $Hscause]") as "(%mpp & %mcause & %mscratch & %mepc & %scause & %sscratch & %sepc & %stvec & %mpie & %mie & Hlooppre)".
+    iMod (femtokernel_manualStep2 with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc  $Hscause $Hsscratch $Hsepc $Hstvec $Hmideleg $Hmedeleg $Hcurpriv $Hgprs $Hpmpentries $Hmem $Hpc $Hnpc $Hhandler $Hdata $Hadv]") as "(%mpp & %mcause & %mscratch & %mepc & %scause & %sscratch & %sepc & %stvec & %mpie & %mie & Hlooppre)".
     iModIntro.
     iPoseProof (LoopVerification.valid_semTriple_loop with "Hlooppre") as "Hk".
     iApply (semWP_mono with "Hk"); auto.
@@ -1638,7 +1633,8 @@ Module inv := invariants.
                with "[-]").
 
       #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-      iFrame "∗ #". cbn - [interp_gprs].
+      cbn - [interp_gprs interp_ptstomem].
+      iFrame "Hinit Hpc Hnpc Hhandler Hadv Hmtvec Hmcause Hmip Hmie Hmepc Hmstatus Hmideleg Hmedeleg Hcurpriv Hdata Hmscratch Hscause Hsscratch Hsepc Hstvec Hmmio".
       rewrite <- ?bi.sep_assoc.
       iSplitR; first auto.
       rewrite <- ?bi.sep_assoc.
@@ -1662,6 +1658,7 @@ Module inv := invariants.
 
   Section RelationalVerification.
     Import BinaryBlockVerifier.
+    Import LoopVerificationBinary.
     Import RiscvPmpBlockVerifIrisInstance2.
     Import IrisModelBinary.RiscvPmpIrisBase2.
     Import IrisInstanceBinary.RiscvPmpIrisInstancePredicates2.
@@ -1849,7 +1846,7 @@ Module inv := invariants.
         asn.interpret femtokernel_handler_exit_pre (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] ∗
         interp_gprs ∅ ∗
         ▷ (ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationBinary.M_Trap (M_Trap_LVars User (bv.of_N handler_entry_addr) femto_pmpentries csrs) -∗ WP2_loop)
+           M_Trap (M_Trap_LVars User (bv.of_N handler_entry_addr) femto_pmpentries csrs) -∗ WP2_loop)
         -∗
         WP2_loop.
     Proof.
@@ -1868,7 +1865,7 @@ Module inv := invariants.
       - iIntros (an) "(Hpost & Hepi)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
         iSpecialize ("Htrap" with "[Hinstrs]"); first by iModIntro.
-        iPoseProof (LoopVerificationBinary.valid_semTriple_loop $!
+        iPoseProof (valid_semTriple_loop $!
           {| LVars.m := User;
              LVars.h := bv.of_N handler_entry_addr;
              LVars.stvec := vstvec csrs;
@@ -1886,11 +1883,10 @@ Module inv := invariants.
              LVars.mie := vmstatus_mpie csrs;
              LVars.mideleg := vmideleg csrs;
              LVars.medeleg := Medeleg_zero |} with "[-]") as "Hk".
-        + iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _])"; cbn in *.
-          iFrame "Hpc Hnpc Hmstatus HaccU Hgprs Hmscratch Htrap".
-          iSplitL "Hshared";
-            first by (repeat iDestruct "Hshared" as "($ & Hshared)";
-                      iFrame "Hshared").
+        + iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _])"; cbn - [interp_ptstomem] in *.
+          unfold loop_pre; cbn - [M_CSRMod S_CSRMod M_Trap S_Trap SRET MRET].
+          iFrame "HaccU Hgprs Hpmp Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause Htrap".
+          iSplit; first auto.
           repeat iSplitL; iModIntro; cbn.
           * now iIntros "(? & ? & ? & [%eq _] & ?)".
           * now iIntros "(? & ? & ? & [%eq _] & ?)".
@@ -1907,7 +1903,7 @@ Module inv := invariants.
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
         ▷ (ptsto_instrs (bv.of_N handler_write_addr) (filter_AST femtokernel_handler_write) -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationBinary.M_Trap (M_Trap_LVars User (bv.of_N handler_entry_addr) femto_pmpentries csrs) -∗ WP2_loop)
+           M_Trap (M_Trap_LVars User (bv.of_N handler_entry_addr) femto_pmpentries csrs) -∗ WP2_loop)
         -∗
         WP2_loop.
     Proof.
@@ -1927,7 +1923,7 @@ Module inv := invariants.
         iApply (femtokernel_handler_write_post_binary_combine with "H1 H2").
       - iIntros (an) "(Hpost & Hepi)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-        iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx5)"; cbn in *.
+        iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _] & Hx5)"; cbn in *.
         iAssert (interp_gprs ∅) with "[Hgprs Hx5]" as "Hgprs".
         { iApply (interp_gprs_with_excluded (exclude := {[x5]}));
             try solve_subseteq.
@@ -1937,8 +1933,7 @@ Module inv := invariants.
         iApply femtokernel_handler_exit_safe_rel.
         rewrite Han.
         iSpecialize ("Htrap" with "[Hinstrs]"); first by iModIntro.
-        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv"; cbn.
-        repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+        iFrame "Hhexit Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Htrap".
         now iPureIntro.
     Qed.
 
@@ -1951,7 +1946,7 @@ Module inv := invariants.
         ▷ (ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
            interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationBinary.M_Trap (M_Trap_LVars User (bv.of_N handler_entry_addr) femto_pmpentries csrs) -∗ WP2_loop)
+           M_Trap (M_Trap_LVars User (bv.of_N handler_entry_addr) femto_pmpentries csrs) -∗ WP2_loop)
         -∗
         WP2_loop.
     Proof.
@@ -1972,7 +1967,7 @@ Module inv := invariants.
         iApply (femtokernel_handler_secret_write_post_binary_combine with "H1 H2").
       - iIntros (an) "(Hpost & Hepi)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-        iDestruct "Hpost" as "((Hshared & Hmstatus & [%Han _] & Hx1) & Hdata)"; cbn - [interp_ptstomem] in *.
+        iDestruct "Hpost" as "(((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _] & Hx1) & Haddr)"; cbn - [interp_ptstomem] in *.
         iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
         { iApply (interp_gprs_with_excluded (exclude := {[x1]}));
             try solve_subseteq.
@@ -1982,8 +1977,7 @@ Module inv := invariants.
         iApply femtokernel_handler_exit_safe_rel.
         rewrite Han.
         iSpecialize ("Htrap" with "[Hinstrs] [Hdata]"); try by iModIntro.
-        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv"; cbn - [interp_ptstomem].
-        repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+        iFrame "Hhexit Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Htrap".
         now iPureIntro.
     Qed.
 
@@ -2017,7 +2011,7 @@ Module inv := invariants.
         iApply (femtokernel_handler_entry_post_binary_combine with "H1 H2").
       - iIntros (an) "(Hpost & Hepi)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-        iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
+        iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
         iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
         { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
             try solve_subseteq.
@@ -2030,18 +2024,16 @@ Module inv := invariants.
              only difference is in which lemma to apply (write <> secret_write),
              and how some framing introducing is done w.r.t. the ptsto_instrs (Hhsecret and Hhwrite) *)
         + iApply femtokernel_handler_write_safe_rel; cbn - [interp_ptstomem].
-          iFrame "Hpc Hnpc Hhwrite Hmscratch HaccU".
-          repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
           iAssert (interp_gprs {[ x5 ]}) with "[Hgprs Hx1]" as "Hgprs".
           { iApply (interp_gprs_with_excluded_gen {[x5]} (exclude2 := {[x1]}));
               try solve_subseteq.
             iFrame "Hgprs".
             reduce_big_sepS_big_sepL.
             now iFrame "Hx1". }
-          iFrame "Hx5 Hgprs Hmstatus Hhexit Hinv".
+          iFrame "Hhwrite Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhexit Hx5".
           repeat iSplitR; auto.
           iModIntro. iIntros "Hhwrite Hhexit Htrap".
-          iDestruct "Htrap" as "(Hpaa & Hgprs & ? & [%vmie Hvmie] & [%vmip Hvmip] & ? & ? & ? & ? & ? & [%vmpie Hmstatus] & [%vmepc Hmepc] & ? & ? & ? & ? & [%vmcause Hmcause] & ? & [%vscause Hscause])".
+          iDestruct "Htrap" as "(Hpaa & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec & Hstvec & [%vmpie Hmstatus] & [%vmepc Hmepc] & Hsepc & Hmideleg & Hmedeleg & Hmscratch & [%vmcause Hmcause] & Hsscratch & [%vscause Hscause])".
           iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
             try solve_subseteq.
           reduce_big_sepS_big_sepL.
@@ -2057,22 +2049,20 @@ Module inv := invariants.
                          vmedeleg      := vmedeleg csrs;
                          vscause       := vscause;
                 |}); cbn.
-          iFrame; auto.
+          now iFrame "Hinstrs Hpc Hnpc Hmscratch Hpaa Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hhwrite Hhsecret Hhexit".
         + iDestruct "Hx1" as "[% Hx1]".
           iDestruct "Hdata" as "(% & % & Hdata)".
           iApply femtokernel_handler_secret_write_safe_rel; cbn - [interp_ptstomem].
-          iFrame "Hpc Hnpc Hhsecret Hmscratch HaccU".
-          repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
           iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
           { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
               try solve_subseteq.
             iFrame "Hgprs".
             reduce_big_sepS_big_sepL.
             now iFrame "Hx5". }
-          iFrame "Hx1 Hdata Hgprs Hmstatus Hhexit Hinv".
+          iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhexit Hx1 Hdata".
           repeat iSplitR; auto.
           iModIntro. iIntros "Hhsecret Hdata Hhexit Htrap".
-          iDestruct "Htrap" as "(Hpaa & Hgprs & ? & [%vmie Hvmie] & [%vmip Hvmip] & ? & ? & ? & ? & ? & [%vmpie Hmstatus] & [%vmepc Hmepc] & ? & ? & ? & ? & [%vmcause Hmcause] & ? & [%vscause Hscause])".
+          iDestruct "Htrap" as "(Hpaa & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec & Hstvec & [%vmpie Hmstatus] & [%vmepc Hmepc] & Hsepc & Hmideleg & Hmedeleg & Hmscratch & [%vmcause Hmcause] & Hsscratch & [%vscause Hscause])".
           iPoseProof (interp_gprs_with_excluded (exclude := {[x1; x5; x10]}) with "Hgprs") as "(Hregs & Hgprs)";
             try solve_subseteq.
           reduce_big_sepS_big_sepL.
@@ -2088,7 +2078,7 @@ Module inv := invariants.
                          vmedeleg      := vmedeleg csrs;
                          vscause       := vscause;
                 |}); cbn.
-          iFrame; auto.
+          now iFrame "Hinstrs Hpc Hnpc Hmscratch Hpaa Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hhwrite Hhsecret Hhexit".
     Qed.
 
     Lemma memAdv_pmpPolicy_binary `{sailGS2 Σ} :
@@ -2130,7 +2120,7 @@ Module inv := invariants.
         (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) ∗
         ptstoSthL advAddrs
         ={⊤}=∗
-        ∃ mpp mcause mscratch mepc scause sscratch sepc stvec mpie mie, LoopVerificationBinary.loop_pre 
+        ∃ mpp mcause mscratch mepc scause sscratch sepc stvec mpie mie, loop_pre 
                {| LVars.m := User;
                   LVars.h := bv.of_N handler_entry_addr;
                   LVars.stvec := stvec;
@@ -2156,10 +2146,8 @@ Module inv := invariants.
       iPoseProof (ptsto_instrs_equiv with "[$Hhexit1 $Hhexit2]") as "Hhexit".
       iPoseProof (ptsto_instrs_equiv with "[$Hhwrite1 $Hhwrite2]") as "Hhwrite".
       iExists mpp, vmcause, vmscratch, vmepc, vscause, vsscratch, vsepc, vstvec, mpie, mie.
-      unfold LoopVerificationBinary.loop_pre.
-      cbn - [LoopVerificationBinary.M_CSRMod LoopVerificationBinary.S_CSRMod
-             LoopVerificationBinary.M_Trap LoopVerificationBinary.S_Trap
-             LoopVerificationBinary.MRET LoopVerificationBinary.SRET].
+      unfold loop_pre.
+      cbn - [M_CSRMod S_CSRMod M_Trap S_Trap MRET SRET].
       iFrame "Hgprs Hpmpcfg Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmst Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hsscratch Hmcause Hscause".
       iModIntro.
 
@@ -2180,7 +2168,7 @@ Module inv := invariants.
       (* Case: M_Trap *)
       iSplitL.
       iModIntro.
-      iIntros "(Hpaa & Hgprs & ? & [%vmie Hvmie] & [%vmip Hvmip] & ? & ? & ? & ? & ? & [%vmpie Hmstatus] & [%vmepc' Hmepc] & ? & ? & ? & ? & [%vmcause' Hmcause] & ? & [%vscause' Hscause])".
+      iIntros "(Hpaa & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec & Hstvec & [%vmpie Hmstatus] & [%vmepc' Hmepc] & Hsepc & Hmideleg & Hmedeleg & Hmscratch & [%vmcause' Hmcause] & Hsscratch & [%vscause' Hscause])".
       iPoseProof (interp_gprs_with_excluded (exclude := {[x1;x5;x10]}) with "Hgprs") as "(Hregs & Hgprs)";
         try solve_subseteq.
       reduce_big_sepS_big_sepL.
@@ -2201,7 +2189,7 @@ Module inv := invariants.
                                                vstvec        := vstvec;
                                              |}).
       cbn - [interp_ptstomem].
-      iFrame; auto.
+      now iFrame "Hhentry Hpc Hnpc Hmscratch Hpaa Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hmmio Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hhwrite Hhsecret Hhexit".
 
       (* Case: S_Trap *)
       iSplitL.
@@ -2256,9 +2244,9 @@ Module inv := invariants.
       iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
       rewrite ?bv.add_zero_l.
       iApply (fupd_semWP2 ⊤).
-      iMod (femtokernel_manualStep2_rel with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmideleg $Hmedeleg $Hgprs $Hcurpriv $Hpmpentries $Hpc $Hnpc $Hmepc $Hmem $Hhandler $Hadv $Hdata $Hsscratch $Hstvec $Hsepc $Hscause]") as "(%mpp & %mcause & %mscratch & %mepc & %scause & %sscratch & %sepc & %stvec & %mpie & %mie & Hlooppre)".
+      iMod (femtokernel_manualStep2_rel with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc  $Hscause $Hsscratch $Hsepc $Hstvec $Hmideleg $Hmedeleg $Hcurpriv $Hgprs $Hpmpentries $Hmem $Hpc $Hnpc $Hhandler $Hdata $Hadv]") as "(%mpp & %mcause & %mscratch & %mepc & %scause & %sscratch & %sepc & %stvec & %mpie & %mie & Hlooppre)".
       iModIntro.
-      iPoseProof (LoopVerificationBinary.valid_semTriple_loop with "Hlooppre") as "Hk".
+      iPoseProof (valid_semTriple_loop with "Hlooppre") as "Hk".
       iApply (semWP2_mono with "Hk"); auto.
       iIntros (? ? ? ?) "(<- & <- & ?)"; iPureIntro; auto.
     Qed.
@@ -2363,11 +2351,11 @@ Module inv := invariants.
       iIntros (Σ sg).
       iSplitL.
       - iIntros "(Hmem & Hregs)".
-           iMod (@femtokernel_splitMemory_rel _ _ _ _ secret1 secret2 with "Hmem") as "(Hinit & Hhandler & Hdata & #Hmmio & Hadv)";
-             try assumption.
-           destruct (env.view δ1), (env.view δ2).
+        iMod (@femtokernel_splitMemory_rel _ _ _ _ secret1 secret2 with "Hmem") as "(Hinit & Hhandler & Hdata & #Hmmio & Hadv)";
+          try assumption.
+        destruct (env.view δ1), (env.view δ2).
 
-           iPoseProof (femtokernel_init_safe_rel {|
+        iPoseProof (femtokernel_init_safe_rel {|
                          vmtvec        := read_register γ1 mtvec;
                          vmcause       := read_register γ1 mcause;
                          vmepc         := read_register γ1 mepc;
@@ -2382,22 +2370,23 @@ Module inv := invariants.
                          vstvec        := read_register γ1 stvec;
                      |}
                     with "[-]") as "H".
-           { #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-             iFrame "∗ #". cbn - [interp_gprs].
-             rewrite <- ?γeq.
-             rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc γmideleg γmedeleg.
-             iDestruct "Hregs" as "($ & $ & Hregs)".
-             rewrite <- ?bi.sep_assoc.
-             iSplitR; first auto.
-             rewrite <- ?bi.sep_assoc.
-             repeat first [iDestruct "Hregs" as "($ & Hregs)"
-                          | iDestruct "Hregs" as "(? & Hregs)"].
-             unfold interp_gprs; reduce_big_sepS_big_sepL; cbn.
-             iAssert (□ ∀ r v, (reg_pointsTo2 r v v -∗ ∃ v, reg_pointsTo21 r v))%I as "#Heq".
-             { iModIntro. iIntros (? v) "H". iExists v. iFrame "H". }
-             repeat try (iRename select (reg_pointsTo2 _ _ _) into "Hpts";
-                         iPoseProof ("Heq" with "Hpts") as "Hpts";
-                         iFrame "Hpts"). }
+        { #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
+          cbn - [interp_gprs].
+          rewrite <- ?γeq.
+          rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc γmideleg γmedeleg.
+          iDestruct "Hregs" as "(Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmideleg & Hmedeleg & Hmtvec & Hmscratch & Hmepc & Hmcause & Hstvec & Hsscratch & Hsepc & Hscause & Hcurpriv & H')".
+          iFrame "Hinit Hpc Hnpc Hhandler Hadv Hmtvec Hmcause Hmip Hmie Hmepc Hmstatus Hmideleg Hmedeleg Hcurpriv Hdata Hmscratch Hscause Hsscratch Hsepc Hstvec Hmmio".
+          rewrite <- ?bi.sep_assoc.
+          iSplitR; first auto.
+          rewrite <- ?bi.sep_assoc.
+          repeat first [iDestruct "H'" as "($ & H')"
+                       | iDestruct "H'" as "(? & H')"].
+          unfold interp_gprs; reduce_big_sepS_big_sepL; cbn.
+          iAssert (□ ∀ r v, (reg_pointsTo2 r v v -∗ ∃ v, reg_pointsTo21 r v))%I as "#Heq".
+          { iModIntro. iIntros (? v) "H". iExists v. iFrame "H". }
+          repeat try (iRename select (reg_pointsTo2 _ _ _) into "Hpts";
+                      iPoseProof ("Heq" with "Hpts") as "Hpts";
+                      iFrame "Hpts"). }
         iApply (semWP2_mono with "H").
         iFrame "Hmmio". iPureIntro; simpl; now intros.
       - iIntros (γ2' μ2' δ2' s2' v2 steps2 Hval) "(<- & -> & Hmmio) Hmem".
