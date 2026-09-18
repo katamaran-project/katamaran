@@ -501,6 +501,13 @@ Module Type UnifLogicOn
       crushPredEntails3.
     Qed.
 
+    Lemma forgetting_or {w1 w2 : World} {ω : w1 ⊒ w2} {P1 P2 : Pred w1} :
+      (forgetting ω P1 ∨ forgetting ω P2) ⊣⊢ forgetting ω (P1 ∨ P2).
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
     Lemma assuming_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       bi_pure P ⊢ assuming ω (bi_pure P).
     Proof.
