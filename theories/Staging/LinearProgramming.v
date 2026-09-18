@@ -170,6 +170,13 @@ Module PolyRed.
   Definition Poly n := vec Z (S n).
   Hint Transparent Poly : typeclass_instances.
 
+  Definition zero {n} : vec Z n :=
+    vreplicate _ 0%Z.
+  Definition constant {n} (v : Z) : Poly n :=
+    cons v zero.
+  Definition var {n} (f : fin n) : Poly n :=
+    vadd (FS f) 1%Z zero.
+
   Fixpoint findNonZero {n} (cs : vec Z n) : option (fin n) :=
     match cs with
     | [# ] => None
@@ -179,7 +186,7 @@ Module PolyRed.
     end.
 
   Lemma findNonZero_lookup {n} (cs : vec Z n) :
-    option.spec (fun i => 0%Z <> lookup_total i cs)%ctx (cs = vreplicate _ 0%Z)
+    option.spec (fun i => 0%Z <> lookup_total i cs)%ctx (cs = zero)
       (findNonZero cs).
   Proof.
     induction cs; first eauto using option.spec.
@@ -188,7 +195,7 @@ Module PolyRed.
     - rewrite option.spec_map.
       revert IHcs.
       apply option.spec_monotonic;
-        [easy | congruence].
+        [easy | intros; now f_equal ].
     - auto using option.spec.
   Qed.
 
@@ -211,6 +218,13 @@ Module PolyRed.
   Next Obligation. cbn. lia. Qed.
   Next Obligation. cbn. lia. Qed.
   Next Obligation. cbn. lia. Qed.
+
+  Equations eval_polyp_vadd {n} a1 a2 (i : fin (S n)) (v1 v2 : vec Z n) :
+    eval_poly' (vadd i a1 v1) (vadd i a2 v2) = (a1 * a2 + eval_poly' v1 v2)%Z :=
+  | a1 | a2 | 0%fin | v1 | v2 := _
+  | a1 | a2 | FS i | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vadd a1 a2 i v1 v2)
+  .
+  Next Obligation. now lia. Qed.
 
   Definition eval_poly {n} (coeffs : Poly n) (vs : vec Z n) : Z :=
     eval_poly' coeffs (1%Z ::: vs).
@@ -248,6 +262,9 @@ Module PolyRed.
     now eapply eval_polyp_mul.
   Qed.
 
+  Definition add {n} : Poly n -> Poly n -> Poly n := vzip_with Z.add.
+  Definition sub {n} : Poly n -> Poly n -> Poly n := vzip_with Z.sub.
+
   Lemma eval_polyp_sub {n} (p1 p2 : vec Z n) (vs : vec Z n) :
     eval_poly' (vzip_with Z.sub p1 p2) vs = (eval_poly' p1 vs - eval_poly' p2 vs)%Z.
   Proof.
@@ -259,11 +276,22 @@ Module PolyRed.
   Qed.
 
   Lemma eval_poly_sub {n} (p1 p2 : Poly n) (vs : vec Z n) :
-    eval_poly (vzip_with Z.sub p1 p2) vs = (eval_poly p1 vs - eval_poly p2 vs)%Z.
+    eval_poly (sub p1 p2) vs = (eval_poly p1 vs - eval_poly p2 vs)%Z.
+  Proof. eapply eval_polyp_sub. Qed.
+
+  Lemma eval_polyp_add {n} (p1 p2 : vec Z n) (vs : vec Z n) :
+    eval_poly' (vzip_with Z.add p1 p2) vs = (eval_poly' p1 vs + eval_poly' p2 vs)%Z.
   Proof.
-    unfold eval_poly.
-    now eapply eval_polyp_sub.
+    induction vs; cbn; first lia.
+    revert p1. refine (vec_S_inv _ _); intros c11 p1.
+    revert p2. refine (vec_S_inv _ _); intros c21 p2.
+    specialize (IHvs p1 p2).
+    cbn in *; lia.
   Qed.
+
+  Lemma eval_poly_add {n} (p1 p2 : Poly n) (vs : vec Z n) :
+    eval_poly (add p1 p2) vs = (eval_poly p1 vs + eval_poly p2 vs)%Z.
+  Proof. eapply eval_polyp_add. Qed.
 
   Lemma eval_poly_vremove {n} (i : fin (S n)) (p : Poly (S n)) (vs : vec Z (S n)) :
     (eval_poly (vremove (FS i) p) (vremove i vs) = (eval_poly p vs - p !!! FS i * vs !!! i))%Z.
@@ -273,16 +301,27 @@ Module PolyRed.
     refine (eval_polyp_vremove (FS i) p (1%Z ::: vs)).
   Qed.
 
-  Lemma eval_polyp_vreplicate_zero {n} (vs : vec Z n) :
-    eval_poly' (vreplicate n 0%Z) vs = 0%Z.
+  Lemma eval_polyp_zero {n} (vs : vec Z n) :
+    eval_poly' zero vs = 0%Z.
   Proof.
+    unfold zero.
     induction vs; cbn; lia.
   Qed.
 
-  Lemma eval_poly_vreplicate_zero {n} (vs : vec Z n) :
-    eval_poly (vreplicate (S n) 0%Z) vs = 0%Z.
-  Proof.
-    eapply eval_polyp_vreplicate_zero.
+  Lemma eval_zero {n} (vs : vec Z n): eval_poly zero vs = 0%Z.
+  Proof. now apply eval_polyp_zero. Qed.
+
+  Lemma eval_constant {n c} (vs : vec Z n): eval_poly (constant c) vs = c.
+  Proof. unfold eval_poly; cbn. rewrite eval_polyp_zero. lia. Qed.
+
+  Lemma eval_var {n i} (vs : vec Z n): eval_poly (var i) vs = vs !!! i.
+  Proof. revert n i vs.
+         eapply (learnFinSucc (P := fun n i => forall vs, eval_poly (var i) vs = vs !!! i)).
+         intros.
+         change (eval_poly' (vadd f 1%Z zero) vs = vs !!! f).
+         rewrite (vadd_lookup_remove f vs) at 1.
+         rewrite eval_polyp_vadd, eval_polyp_zero.
+         now lia.
   Qed.
 
   Definition evalPolys {n} (s : list (Poly n)) (vs : vec Z n) : Prop :=
@@ -323,6 +362,7 @@ Module PolyRed.
     rewrite Z.mul_0_l, Z.sub_0_r.
     apply (f_equal (Z.mul (p2 !!! FS f `div` Z.gcd (p1 !!! FS f) (p2 !!! FS f)))) in Hp1.
     rewrite <-eval_poly_mul, Z.mul_0_r in Hp1.
+    change (vzip_with Z.sub) with (sub (n := S n)).
     rewrite eval_poly_sub, Hp1, Z.sub_0_r, eval_poly_mul.
     enough (p1 !!! FS f `div` Z.gcd (p1 !!! FS f) (p2 !!! FS f) <> 0)%Z by lia.
     rewrite Hgcdeq at 1.
@@ -480,7 +520,7 @@ Module PolyRed.
             intros Hlvs.
             eapply List.Forall_cons; last easy.
             revert a H e; refine (vec_S_inv _ _); intros a0 a H e; cbn in *; subst.
-            now apply eval_poly_vreplicate_zero.
+            now apply eval_zero.
           -- (* poly a is all-zero with zero constant: inconsistency of remaining equations unaffected by a *)
             intros Hnl vs [Ha Hl]%list.Forall_cons.
             now eapply (Hnl _ Hl).
@@ -490,7 +530,7 @@ Module PolyRed.
           revert a H n0. refine (vec_S_inv _ _); intros x v.
           cbn; intros -> Hxnz vs [Ha _]%Forall_cons_1.
           unfold eval_poly in Ha; cbn in Ha.
-          rewrite eval_polyp_vreplicate_zero in Ha.
+          rewrite eval_polyp_zero in Ha.
           now lia.
   Qed.
 End PolyRed.
@@ -762,7 +802,8 @@ Module LinearProgramming.
           destruct H as [Hpoly Hineqs].
         + cbn. constructor.
           * rewrite eval_poly_app; cbn.
-            rewrite eval_polyp_vreplicate_zero.
+            change (vreplicate ?n 0%Z) with (@zero n).
+            rewrite eval_polyp_zero.
             lia.
           * specialize (IHineqs Hineqs).
             rewrite zip_with_fmap_r.
@@ -774,14 +815,16 @@ Module LinearProgramming.
             now lia.
         + cbn. constructor.
           * rewrite eval_poly_app; cbn.
-            rewrite eval_polyp_vreplicate_zero.
+            change (vreplicate ?n 0%Z) with (@zero n).
+            rewrite eval_polyp_zero.
             cbn in Hpoly.
             lia.
           * rewrite list_fmap_id.
             intuition.
         + cbn. constructor.
           * rewrite eval_poly_app; cbn.
-            rewrite eval_polyp_vreplicate_zero.
+            change (vreplicate ?n 0%Z) with (@zero n).
+            rewrite eval_polyp_zero.
             lia.
           * specialize (IHineqs Hineqs).
             rewrite zip_with_fmap_r.
