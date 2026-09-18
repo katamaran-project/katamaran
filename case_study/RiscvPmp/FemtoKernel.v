@@ -464,7 +464,7 @@ Module inv := invariants.
       mcause ↦ term_var "mcause" ∗
       mip ↦ term_var "mip" ∗ mie ↦ term_var "mie" ∗
       mepc ↦ term_var "mepc" ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
       medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
@@ -481,7 +481,7 @@ Module inv := invariants.
           mcause ↦ term_var "mcause" ∗
           mip ↦ term_post_mip_val ∗ mie ↦ term_var "mie" ∗
           mepc ↦ term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N adv_addr) ∗
-          mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool true; term_val ty.bool true ] ∗
+          mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool true; term_val ty.bool false; term_val ty.bool true; term_val ty.bool false ] ∗
           mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
           medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
           cur_privilege ↦ term_val ty_privilege User ∗
@@ -539,7 +539,7 @@ Module inv := invariants.
       scause ↦ term_var "scause" ∗
       sscratch ↦ term_var "sscratch" ∗
       stvec ↦ term_var "stvec" ∗
-      mideleg ↦ term_var "mideleg" ∗
+      mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
       medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
       asn_pmp_entries term_femto_pmpentries ∗
       (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))) ∗ (* Different handler sizes cause different entries *) *)
@@ -555,21 +555,21 @@ Module inv := invariants.
       scause ↦ term_var "scause" ∗
       sscratch ↦ term_var "sscratch" ∗
       stvec ↦ term_var "stvec" ∗
-      mideleg ↦ term_var "mideleg" ∗
+      mideleg ↦ term_val ty_Minterrupts Minterrupts_zero ∗
       medeleg ↦ term_val ty_Medeleg Medeleg_zero ∗
       asn_pmp_entries term_femto_pmpentries.
       (* asn_pmp_entries (term_list (asn_femto_pmpentries (term_var "a" -ᵇ term_val ty_xlenbits (bv.of_N handler_entry_addr)))). (* Different handler sizes cause different entries *) *)
 
     Example femtokernel_handler_entry_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_entry_addr) (sub_up1 (sub_cat_left _)) ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       x5 ↦ term_var "x5" ∗
       x10 ↦ term_var "x10".
 
     Example femtokernel_handler_entry_post :
       Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       (if: (term_var "x10" ?= term_val ty_xlenbits (bv.of_N mmio_write_adv))
        then term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_entry_size)
        else term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_entry_size + handler_write_size))) ∗
@@ -578,38 +578,38 @@ Module inv := invariants.
 
     Example femtokernel_handler_write_pre : Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_write_addr) (sub_up1 (sub_cat_left _)) ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       x5 ↦ term_var "x5".
 
     Example femtokernel_handler_write_post :
       Assertion (Σ__csrs ▻▻ ["x5" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       term_var "an" = term_val ty_xlenbits (bv.of_N handler_exit_addr) ∗
       x5 ↦ term_val ty_xlenbits (bv.of_N 42).
 
     Example femtokernel_handler_secret_write_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       x1 ↦ term_var "x1" ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
 
     Example femtokernel_handler_secret_write_post :
       Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "secret" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
       term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
       x1 ↦ term_val ty_xlenbits bv.zero ∗
       term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
 
     Example femtokernel_handler_exit_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
       femtokernel_handler_shared_pre handler_exit_addr ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ].
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false].
 
     Example femtokernel_handler_exit_post :
       Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
       femtokernel_handler_shared_post User ∗
-      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool true; term_var "mstatus_mpie" ] ∗
+      mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_val ty.bool true; term_val ty.bool false; term_var "mstatus_mpie"; term_val ty.bool false] ∗
       term_var "an" = term_var "mepc".
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -990,8 +990,10 @@ Module inv := invariants.
       ArchState.sscratch := vsscratch csrs;
       ArchState.sepc := vsepc csrs;
       ArchState.mpie := vmstatus_mpie csrs;
+      ArchState.spie := false;
       ArchState.mie := false;
-      ArchState.mideleg := vmideleg csrs;
+      ArchState.sie := false;
+      ArchState.mideleg := Minterrupts_zero;
       ArchState.medeleg := Medeleg_zero |}.
 
   Lemma femtokernel_handler_exit_safe `{sailGS Σ} (csrs : CSRVals) :
@@ -1024,8 +1026,10 @@ Module inv := invariants.
          ArchState.sscratch := vsscratch csrs;
          ArchState.sepc := vsepc csrs;
          ArchState.mpie := true;
+         ArchState.spie := false;
          ArchState.mie := vmstatus_mpie csrs;
-         ArchState.mideleg := vmideleg csrs;
+         ArchState.sie := false;
+         ArchState.mideleg := Minterrupts_zero;
          ArchState.medeleg := Medeleg_zero |} with "[-]") as "Hk".
     - iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _])"; cbn in *.
       unfold loop_pre; cbn - [M_CSRMod S_CSRMod M_Trap S_Trap SRET MRET].
@@ -1034,7 +1038,7 @@ Module inv := invariants.
       repeat iSplitL; iModIntro; cbn.
       + now iIntros "(? & ? & ? & [%eq _] & ?)".
       + now iIntros "(? & ? & ? & [%eq _] & ?)".
-      + now iIntros "(? & ? & ? & [%eq _] & ?)".
+      + now iIntros "(? & ? & ? & [[%eq _]|[%eq _]] & ?)".
       + now iIntros "(? & ? & ? & [%eq _] & ?)".
       + now iIntros "(? & ? & ? & [[%eq _]|[%eq _]] & ?)".
     - iApply (semWP_mono with "Hk"); auto.
@@ -1206,7 +1210,7 @@ Module inv := invariants.
 
   (* TODO: this lemma feels very incremental wrt to the last one; merge? *)
   Lemma femtokernel_manualStep2 `{sailGS Σ} :
-    ⊢ (∃ mpp mpie mie, mstatus ↦ᵣ {| MPP := mpp; SPP := User; MPIE := mpie; MIE := mie |}) ∗
+    ⊢ (∃ mpp mpie mie, mstatus ↦ᵣ {| MPP := mpp; SPP := User; MPIE := mpie; SPIE := false; MIE := mie; SIE := false |}) ∗
       (mtvec ↦ᵣ (bv.of_N handler_entry_addr)) ∗
       (∃ v, mcause ↦ᵣ v) ∗
       (∃ v, mip ↦ᵣ v) ∗ (∃ v, mie ↦ᵣ v) ∗
@@ -1243,7 +1247,9 @@ Module inv := invariants.
                   ArchState.sscratch := sscratch;
                   ArchState.sepc := sepc;
                   ArchState.mpie := mpie;
+                  ArchState.spie := false;
                   ArchState.mie := mie;
+                  ArchState.sie := false;
                   ArchState.mideleg := Minterrupts_zero;
                   ArchState.medeleg := Medeleg_zero |}.
   Proof.
@@ -1297,7 +1303,7 @@ Module inv := invariants.
     (* Case: S_Trap *)
     iSplitL.
     iModIntro.
-    now iIntros "(_ & _&  _ & [%eq _] & _)".
+    now iIntros "(_ & _&  _ & [[%eq _]|[%eq _]] & _)".
 
     (* Case: MRET *)
     iSplitL.
@@ -1591,7 +1597,7 @@ Module inv := invariants.
     mem_has_instrs μ (bv.of_N handler_exit_addr) (filter_AnnotInstr_AST femtokernel_handler_exit) ->
     mem_has_word μ (bv.of_N data_addr) secret ->
     mmio_pred bytes_per_word (memory_trace μ) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
-    read_register γ mstatus = {| MPP := User; SPP := User; MPIE := false; MIE := false |} ->
+    read_register γ mstatus = {| MPP := User; SPP := User; MPIE := false; SPIE := false; MIE := false; SIE := false |} ->
     read_register γ cur_privilege = Machine ->
     read_register γ pmp0cfg = default_pmpcfg_ent ->
     read_register γ pmpaddr0 = bv.zero ->
@@ -1689,13 +1695,13 @@ Module inv := invariants.
          The difference is that we omit the data ↦ secret, since we will have two different secrets. *)
       Example femtokernel_handler_secret_write_pre_rel : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
         asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
-        mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+        mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
         x1 ↦ term_var "x1".
 
       Example femtokernel_handler_secret_write_post_rel :
         Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
         asn.sub_assertion (femtokernel_handler_shared_post Machine) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
-        mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false ] ∗
+        mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_val ty_privilege User; term_var "mstatus_mpie"; term_val ty.bool false; term_val ty.bool false; term_val ty.bool false] ∗
         term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
         x1 ↦ term_val ty_xlenbits bv.zero.
 
@@ -1880,8 +1886,10 @@ Module inv := invariants.
              ArchState.sscratch := vsscratch csrs;
              ArchState.sepc := vsepc csrs;
              ArchState.mpie := true;
+             ArchState.spie := false;
              ArchState.mie := vmstatus_mpie csrs;
-             ArchState.mideleg := vmideleg csrs;
+             ArchState.sie := false;
+             ArchState.mideleg := Minterrupts_zero;
              ArchState.medeleg := Medeleg_zero |} with "[-]") as "Hk".
         + iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _])"; cbn - [interp_ptstomem] in *.
           unfold loop_pre; cbn - [M_CSRMod S_CSRMod M_Trap S_Trap SRET MRET].
@@ -1890,7 +1898,7 @@ Module inv := invariants.
           repeat iSplitL; iModIntro; cbn.
           * now iIntros "(? & ? & ? & [%eq _] & ?)".
           * now iIntros "(? & ? & ? & [%eq _] & ?)".
-          * now iIntros "(? & ? & ? & [%eq _] & ?)".
+          * now iIntros "(? & ? & ? & [[%eq _]|[%eq _]] & ?)".
           * now iIntros "(? & ? & ? & [%eq _] & ?)".
           * now iIntros "(? & ? & ? & [[%eq _]|[%eq _]] & ?)".
         + iApply (semWP2_mono with "Hk"); iIntros; destruct_seps; auto.
@@ -2098,7 +2106,7 @@ Module inv := invariants.
     Qed.
 
     Lemma femtokernel_manualStep2_rel `{sailGS2 Σ} :
-      ⊢ (∃ mpp mpie mie, mstatus ↦ᵣ {| MPP := mpp; SPP := User; MPIE := mpie; MIE := mie |}) ∗
+      ⊢ (∃ mpp mpie mie, mstatus ↦ᵣ {| MPP := mpp; SPP := User; MPIE := mpie; SPIE := false; MIE := mie; SIE := false |}) ∗
         (mtvec ↦ᵣ (bv.of_N handler_entry_addr)) ∗
         (∃ v, mcause ↦ᵣ v) ∗
         (∃ v, mip ↦ᵣ v) ∗ (∃ v, mie ↦ᵣ v) ∗
@@ -2135,7 +2143,9 @@ Module inv := invariants.
                   ArchState.sscratch := sscratch;
                   ArchState.sepc := sepc;
                   ArchState.mpie := mpie;
+                  ArchState.spie := false;
                   ArchState.mie := mie;
+                  ArchState.sie := false;
                   ArchState.mideleg := Minterrupts_zero;
                   ArchState.medeleg := Medeleg_zero |}.
     Proof.
@@ -2194,7 +2204,7 @@ Module inv := invariants.
       (* Case: S_Trap *)
       iSplitL.
       iModIntro.
-      now iIntros "(_ & _&  _ & [%eq _] & _)".
+      now iIntros "(_ & _&  _ & [[%eq _]|[%eq _]] & _)".
 
       (* Case: MRET *)
       iSplitL.
@@ -2326,7 +2336,7 @@ Module inv := invariants.
       mmio_pred bytes_per_word (memory_trace μ1) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
       mmio_pred bytes_per_word (memory_trace μ2) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
       (∀ {σ : Ty} (r : Reg σ), read_register γ1 r = read_register γ2 r) -> (* We require that the initial values of all registers are the same, as we consider these to be public. The secrets in our verification are part of MMIO. *)
-      read_register γ1 mstatus = {| MPP := User; SPP := User; MPIE := false; MIE := false |} ->
+      read_register γ1 mstatus = {| MPP := User; SPP := User; MPIE := false; SPIE := false; MIE := false; SIE := false |} ->
       read_register γ1 cur_privilege = Machine ->
       read_register γ1 pmp0cfg = default_pmpcfg_ent ->
       read_register γ1 pmpaddr0 = bv.zero ->

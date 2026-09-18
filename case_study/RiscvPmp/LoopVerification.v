@@ -101,7 +101,9 @@ Module ArchState.
       ; sscratch   : Xlenbits
       ; sepc       : Xlenbits
       ; mpie       : bool
+      ; spie       : bool
       ; mie        : bool
+      ; sie        : bool
       ; mideleg    : Minterrupts
       ; medeleg    : RMedeleg
       }.
@@ -115,14 +117,15 @@ Module ArchState.
     .["mscratch"∷ty.bvec 32 ↦ mscratch archstate].["mepc"∷ty.bvec 32 ↦ mepc archstate]
     .["scause"∷ty.bvec 32 ↦ scause archstate].["sscratch"∷ty.bvec 32 ↦ sscratch archstate]
     .["sepc"∷ty.bvec 32 ↦ sepc archstate].["mpie"∷ty.bool ↦ mpie archstate] 
-    .["mie"∷ty.bool ↦ mie archstate]
+    .["spie"∷ty.bool ↦ spie archstate].["mie"∷ty.bool ↦ mie archstate]
+    .["sie"∷ty.bool ↦ sie archstate]
     .["mideleg"∷ty_Minterrupts ↦ mideleg archstate]
     .["medeleg"∷ty_Medeleg ↦ medeleg archstate].
 
   Definition archstate_update_pc (archstate : ArchState) (pc' : Xlenbits) : ArchState :=
     match archstate with
-    | mkArchState m mtvec stvec pmpentries mpp spp pc mcause mscratch mepc scause sscratch sepc mpie mie mideleg medeleg =>
-      mkArchState m mtvec stvec pmpentries mpp spp pc' mcause mscratch mepc scause sscratch sepc mpie mie mideleg medeleg
+    | mkArchState m mtvec stvec pmpentries mpp spp pc mcause mscratch mepc scause sscratch sepc mpie spie mie sie mideleg medeleg =>
+      mkArchState m mtvec stvec pmpentries mpp spp pc' mcause mscratch mepc scause sscratch sepc mpie spie mie sie mideleg medeleg
     end.
 End ArchState.
 

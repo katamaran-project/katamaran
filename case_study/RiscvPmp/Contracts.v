@@ -96,7 +96,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
            @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
            τ f(Δ...)*)
         Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
-          let Σ := ["m" :: ty_privilege; "mtvec" :: ty_xlenbits; "stvec" :: ty_xlenbits; "pc" :: ty_xlenbits; "pmpentries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "sscratch" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "vmip" :: ty_Minterrupts; "vmie" :: ty_Minterrupts; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
+          let Σ := ["m" :: ty_privilege; "mtvec" :: ty_xlenbits; "stvec" :: ty_xlenbits; "pc" :: ty_xlenbits; "pmpentries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "sscratch" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "vmip" :: ty_Minterrupts; "vmie" :: ty_Minterrupts; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
              sep_contract_localstore      := create_localstore Δ Σ;
              sep_contract_precondition    :=
@@ -118,7 +118,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                            scause        ↦ term_var "scause" ∗
                            mip ↦ term_var "vmip" ∗
                            mie ↦ term_var "vmie" ∗
-                           mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ] ∗
+                           mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                            asn_pmp_entries (term_var "pmpentries") ∗
                            asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
                            asn_gprs;
@@ -135,7 +135,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ v, nextpc        ↦ term_var v ∗
                        mtvec         ↦ term_var "mtvec" ∗
                        stvec         ↦ term_var "stvec" ∗
-                       mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ] ∗
+                       mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                        mepc          ↦ term_var "mepc" ∗
                        sepc          ↦ term_var "sepc" ∗
                        mideleg       ↦ term_var "mideleg" ∗
@@ -152,8 +152,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                  nextpc        ↦ term_var "npc" ∗
                   ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
                   ∃ "new_stvec", stvec         ↦ term_var "new_stvec" ∗
-                  ∃ "new_mpp", ∃ "new_spp", ∃ "new_mpie", ∃ "new_mie",
-                    mstatus       ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "new_mpie"; term_var "new_mie" ] ∗
+                  ∃ "new_mpp", ∃ "new_spp", ∃ "new_mpie", ∃ "new_spie", ∃ "new_mie", ∃ "new_sie",
+                    mstatus       ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "new_mpie"; term_var "new_spie"; term_var "new_mie"; term_var "new_sie" ] ∗
                   ∃ "new_mepc",  mepc          ↦ term_var "new_mepc" ∗
                   ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
                   ∃ "new_mideleg", mideleg ↦ term_var "new_mideleg" ∗
@@ -170,7 +170,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                  nextpc        ↦ term_var "npc" ∗
                                  mtvec         ↦ term_var "mtvec" ∗
                   ∃ "new_stvec", stvec         ↦ term_var "new_stvec" ∗
-                  ∃ "new_spp",   mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "mie" ] ∗
+                  ∃ "new_spp", ∃ "new_spie", ∃ "new_sie",
+                                 mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_var "mie"; term_var "new_sie" ] ∗
                                  mepc          ↦ term_var "mepc" ∗
                   ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
                                  mideleg ↦ term_var "mideleg" ∗
@@ -187,7 +188,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   mtvec         ↦ term_var "mtvec" ∗
                   stvec         ↦ term_var "stvec" ∗
                   ∃ "mpie",
-                    mstatus     ↦ term_record rmstatus [nenv term_var "m"; term_var "spp"; term_var "mpie"; term_val ty.bool false ] ∗
+                    mstatus     ↦ term_record rmstatus [nenv term_var "m"; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie" ] ∗
                   ∃ "mepc", mepc          ↦ term_var "mepc" ∗
                   sepc          ↦ term_var "sepc" ∗
                   mideleg ↦ term_var "mideleg" ∗
@@ -199,13 +200,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                 ∨
                   (* Trap occured -> Go into S-mode *)
                   asn_pmp_entries (term_var "pmpentries") ∗
-                  term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∗
+                  (term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∨ term_var "mideleg" != term_val ty_Minterrupts Minterrupts_zero) ∗
                   cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
                   nextpc        ↦ term_var "stvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
                   stvec         ↦ term_var "stvec" ∗
-                  ∃ "mpie", ∃ "mie",
-                    mstatus     ↦ term_record rmstatus [nenv term_var "mpp"; term_var "m"; term_var "mpie"; term_var "mie" ] ∗
+                  ∃ "spie",
+                    mstatus     ↦ term_record rmstatus [nenv term_var "mpp"; term_var "m"; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false ] ∗
                   mepc          ↦ term_var "mepc" ∗
                   ∃ "sepc", sepc ↦ term_var "sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
@@ -223,7 +224,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   mtvec         ↦ term_var "mtvec" ∗
                   stvec         ↦ term_var "stvec" ∗
                   ∃ "mie",
-                  mstatus       ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true ; term_var "mie" ] ∗
+                  mstatus       ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true ; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                   mepc          ↦ term_var "mepc" ∗
                   sepc          ↦ term_var "sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
@@ -240,8 +241,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   nextpc        ↦ term_var "sepc" ∗
                   mtvec         ↦ term_var "mtvec" ∗
                   stvec         ↦ term_var "stvec" ∗
-                  ∃ "mpie", ∃ "mie",
-                  mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_var "mie" ] ∗
+                  ∃ "sie",
+                  mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_val ty.bool true; term_var "mie"; term_var "sie" ] ∗
                   mepc          ↦ term_var "mepc" ∗
                   sepc          ↦ term_var "sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
@@ -308,10 +309,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Definition sep_contract_readCSR : SepContractFun readCSR :=
           {| sep_contract_logic_variables := [csr :: ty_csridx; "mpp" :: ty_privilege;
                                               "mtvec" :: ty_xlenbits; "mcause" :: ty_mcause;
-                                              "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits; "spp" :: ty_privilege; "stvec" :: ty_xlenbits; "sepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "mscratch" :: ty_xlenbits; "vmip" :: ty_Minterrupts; "vmie" :: ty_Minterrupts; "sscratch" :: ty_xlenbits; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg];
+                                              "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits; "spp" :: ty_privilege; "stvec" :: ty_xlenbits; "sepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "mscratch" :: ty_xlenbits; "vmip" :: ty_Minterrupts; "vmie" :: ty_Minterrupts; "sscratch" :: ty_xlenbits; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := [term_var csr];
              sep_contract_precondition    :=
-               mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
+               mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ]
                ∗ mtvec ↦ term_var "mtvec"
                ∗ mscratch ↦ term_var "mscratch"
                ∗ mepc ↦ term_var "mepc"
@@ -331,7 +332,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
              sep_contract_result          := "result_readCSR";
              sep_contract_postcondition   :=
                ∃ "result", term_var "result_readCSR" = term_var "result"
-               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
+               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ]
                ∗ mtvec ↦ term_var "mtvec"
                ∗ mscratch ↦ term_var "mscratch"
                ∗ mepc ↦ term_var "mepc"
@@ -353,7 +354,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
         Definition sep_contract_writeCSR : SepContractFun writeCSR :=
           (* The logic vars contain a few bindings that we use as read-only (ro)
              binders, to ensure certain regs/fields cannot be modified. *)
-          let Σ := [csr :: ty_csridx; value :: ty_xlenbits; "ro_cfg" :: ty_pmpcfg_ent; "ro_mpp" :: ty_privilege; "ro_mie" :: ty.bool; "ro_mpie" :: ty.bool] in
+          let Σ := [csr :: ty_csridx; value :: ty_xlenbits; "ro_cfg" :: ty_pmpcfg_ent; "ro_mpp" :: ty_privilege; "ro_mie" :: ty.bool; "ro_mpie" :: ty.bool; "ro_mideleg" :: ty_Minterrupts] in
           (* We declare default bindings for the "ro" (read-only) logic vars when
              they are not used in the resulting assertion from csr_ptsto. Each
              case in that function is accompanied with some defaults assertion
@@ -365,12 +366,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             term_var "ro_mpp"  = term_val ty_privilege User ∗
             term_var "ro_mie"  = term_val ty.bool false ∗
             term_var "ro_mpie" = term_val ty.bool false in
-          let all_defaults : Assertion Σ := default_ro_cfg ∗ default_ro_m in
+          let default_ro_mideleg : Assertion Σ := term_var "ro_mideleg" = term_val ty_Minterrupts Minterrupts_zero in
+          let all_defaults : Assertion Σ := default_ro_cfg ∗ default_ro_m ∗ default_ro_mideleg in
           (* csr_ptsto returns the assertion needed for a write to a specific csr *)
           let csr_ptsto (csr_param : CSRIdx) : Assertion Σ :=
             match csr_param in CSRIdx with
-            | MStatus   => ∃ "mpp", ∃ "spp", ∃ "mpie", ∃ "mie",
-                             mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie"]
+            | MStatus   => ∃ "mpp", ∃ "spp", ∃ "mpie", ∃ "spie", ∃ "mie", ∃ "sie",
+                             mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie"]
                              ∗ all_defaults
             | Mie       => ∃ "v", mie ↦ term_var "v" ∗ all_defaults
             | MTvec     => ∃ "v", mtvec ↦ term_var "v" ∗ all_defaults
@@ -385,17 +387,22 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
             | Mip       => ∃ "v", mip ↦ term_var "v" ∗ all_defaults
             | MPMPADDR0 =>
                 pmp0cfg ↦ term_var "ro_cfg" ∗ asn_expand_pmpcfg_ent (term_var "ro_cfg")
-                ∗ ∃ "v", pmpaddr0 ↦ term_var "v" ∗ default_ro_m
+                ∗ ∃ "v", pmpaddr0 ↦ term_var "v" ∗ default_ro_m ∗ default_ro_mideleg
             | MPMPADDR1 =>
                 pmp1cfg ↦ term_var "ro_cfg" ∗ asn_expand_pmpcfg_ent (term_var "ro_cfg")
-                ∗ ∃ "v", pmpaddr1 ↦ term_var "v" ∗ default_ro_m
+                ∗ ∃ "v", pmpaddr1 ↦ term_var "v" ∗ default_ro_m ∗ default_ro_mideleg
             | SStatus   =>
-                ∃ "v", mstatus ↦ term_record rmstatus [term_var "ro_mpp"; term_var "v"; term_var "ro_mpie"; term_var "ro_mie"]
-                ∗ default_ro_cfg
+                ∃ "v", ∃ "spie", ∃ "sie",  mstatus ↦ term_record rmstatus [term_var "ro_mpp"; term_var "v"; term_var "ro_mpie"; term_var "spie"; term_var "ro_mie"; term_var "sie"]
+                ∗ default_ro_cfg ∗ default_ro_mideleg
             | STvec     => ∃ "v", stvec ↦ term_var "v" ∗ all_defaults
             | SScratch  => ∃ "v", sscratch ↦ term_var "v" ∗ all_defaults
             | SEpc      => ∃ "v", sepc ↦ term_var "v" ∗ all_defaults
             | SCause    => ∃ "v", scause ↦ term_var "v" ∗ all_defaults
+            (* The two cases below are not very precise, since, similar to sstatus,
+               S-mode is only allowed to modify a handful of bits of the mip and mie
+               registers (which also depends on some bits of mideleg!). *)
+            | Sip       => mideleg ↦ term_var "ro_mideleg" ∗ ∃ "v", mip ↦ term_var "v" ∗ default_ro_cfg ∗ default_ro_m
+            | Sie       => mideleg ↦ term_var "ro_mideleg" ∗ ∃ "v", mie ↦ term_var "v" ∗ default_ro_cfg ∗ default_ro_m
             end in
           {| sep_contract_logic_variables := Σ;
              sep_contract_localstore      := [term_var csr; term_var value];
@@ -448,6 +455,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                             | SEpc      => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
                                                    (term_eq (term_var p) (term_val ty_privilege Supervisor))
                             | SCause    => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | Sip       => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
+                                                   (term_eq (term_var p) (term_val ty_privilege Supervisor))
+                            | Sie       => term_or (term_eq (term_var p) (term_val ty_privilege Machine))
                                                    (term_eq (term_var p) (term_val ty_privilege Supervisor))
                             end in
                           let req_priv : Term (Σ ▻ "result_is_CSR_defined" ∷ ty.bool) ty.bool := sub_term req_priv sub_wk1 in
@@ -519,7 +530,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition sep_contract_handle_mem_exception : SepContractFun handle_mem_exception :=
-          {| sep_contract_logic_variables := [addr :: ty_xlenbits; e :: ty_exception_type; "i" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "medeleg" :: ty_Medeleg];
+          {| sep_contract_logic_variables := [addr :: ty_xlenbits; e :: ty_exception_type; "i" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := [term_var addr; term_var e];
              sep_contract_precondition    :=
                              pc            ↦ term_var "i"
@@ -527,7 +538,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∗             cur_privilege ↦ term_var p
                ∗             mcause        ↦ term_var "mcause"
                ∗             scause        ↦ term_var "scause"
-               ∗             mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
+               ∗             mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ]
                ∗             medeleg       ↦ term_var "medeleg"
                ∗             mtvec         ↦ term_var tvec
                ∗             stvec         ↦ term_var "stvec"
@@ -538,7 +549,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                term_var "result_handle_mem_exception" = term_val ty.unit tt
                ∗ (( cur_privilege ↦ term_val ty_privilege Supervisor
                     ∗ mcause ↦ term_var "mcause"
-                    ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"]
+                    ∗ ∃ "spie", mstatus ↦ term_record rmstatus [term_var "mpp"; term_var p; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false]
                     ∗ medeleg ↦ term_var "medeleg"
                     ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                     ∗ mepc ↦ term_var "mepc"
@@ -550,7 +561,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∨
                     ( cur_privilege ↦ term_val ty_privilege Machine
                     ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-                    ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_val ty.bool false ]
+                    ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie" ]
                     ∗ medeleg ↦ term_var "medeleg"
                     ∗ mepc ↦ term_var "i"
                     ∗ scause ↦ term_var "scause"
@@ -562,12 +573,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition sep_contract_exception_handler : SepContractFun exception_handler :=
-          {| sep_contract_logic_variables := [cur_priv :: ty_privilege; ctl :: ty_ctl_result; "pc" :: ty_xlenbits; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "spp" :: ty_privilege; "stvec" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "medeleg" :: ty_Medeleg];
+          {| sep_contract_logic_variables := [cur_priv :: ty_privilege; ctl :: ty_ctl_result; "pc" :: ty_xlenbits; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "spp" :: ty_privilege; "stvec" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "scause" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := [term_var cur_priv; term_var ctl; term_var "pc"];
              sep_contract_precondition    :=
                              cur_privilege ↦ term_var cur_priv
                ∗             mcause        ↦ term_var "mcause"
-               ∗             mstatus       ↦ (term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ])
+               ∗             mstatus       ↦ (term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ])
                ∗             mtvec         ↦ (term_var "mtvec")
                ∗             mepc          ↦ (term_var "mepc")
                ∗             medeleg       ↦ (term_var "medeleg")
@@ -583,7 +594,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                                   ∗ cur_privilege ↦ term_val ty_privilege Supervisor
                                                   ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                                                   ∗ mcause ↦ term_var "mcause"
-                                                  ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var cur_priv; term_var "mpie"; term_var "mie"]
+                                                  ∗ ∃ "spie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var cur_priv; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false]
                                                   ∗ mepc ↦ term_var "mepc"
                                                   ∗ medeleg ↦ term_var "medeleg"
                                                   ∗ ∃ "scause", scause ↦ term_var "scause"
@@ -594,7 +605,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                                   (term_var "result_exception_handler" = term_var "mtvec"
                                                   ∗ cur_privilege ↦ term_val ty_privilege Machine
                                                   ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-                                                  ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var cur_priv; term_var "spp"; term_var "mpie"; term_val ty.bool false ]
+                                                  ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var cur_priv; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie" ]
                                                   ∗ mepc ↦ term_var "pc"
                                                   ∗ medeleg ↦ term_var "medeleg"
                                                   ∗ scause ↦ term_var "scause"
@@ -605,7 +616,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                            (term_var "result_exception_handler" = term_var "sepc"
                                             ∗             cur_privilege  ↦ term_var "spp"
                                             ∗             mcause         ↦ term_var "mcause"
-                                            ∗ ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_var "mie"  ]
+                                            ∗ ∃ "sie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_val ty.bool true; term_var "mie"; term_var "sie" ]
                                             ∗             mtvec          ↦ term_var "mtvec"
                                             ∗             mepc           ↦ term_var "mepc"
                                             ∗             medeleg        ↦ term_var "medeleg"
@@ -616,7 +627,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                            (term_var "result_exception_handler" = term_var "mepc"
                                             ∗             cur_privilege ↦ term_var "mpp"
                                             ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                                            ∗ ∃ "mie", mstatus          ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "mie"  ]
+                                            ∗ ∃ "mie", mstatus          ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "spie"; term_var "mie"; term_var "sie" ]
                                             ∗             mtvec         ↦ term_var "mtvec"
                                             ∗             mepc          ↦ term_var "mepc"
                                             ∗             medeleg       ↦ term_var "medeleg"
@@ -627,13 +638,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition sep_contract_handle_illegal : SepContractFun handle_illegal :=
-          {| sep_contract_logic_variables := [p :: ty_privilege; "pc" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "mie" :: ty.bool; "medeleg" :: ty_Medeleg];
+          {| sep_contract_logic_variables := [p :: ty_privilege; "pc" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "medeleg" :: ty_Medeleg];
              sep_contract_localstore      := env.nil;
              sep_contract_precondition    :=
                cur_privilege ↦ term_var p
                ∗ pc ↦ term_var "pc"
                ∗ ∃ "mcause_val", mcause  ↦ term_var "mcause_val"
-               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ]
+               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ]
                ∗ medeleg ↦ term_var "medeleg"
                ∗ mepc ↦ term_var "mepc"
                ∗ mtvec ↦ term_var tvec
@@ -649,13 +660,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                    ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                    ∗ mepc ↦ term_var "mepc"
                    ∗ sepc ↦ term_var "pc"
-                   ∗ mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"])
+                   ∗ ∃ "spie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false])
                  ∨
                    (cur_privilege ↦ term_val ty_privilege Machine
                    ∗ nextpc ↦ term_var tvec
                    ∗ mepc ↦ term_var "pc"
                    ∗ sepc ↦ term_var "sepc"
-                   ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [term_var p; term_var "spp"; term_var "mpie"; term_val ty.bool false]))
+                   ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie"]))
                ∗ pc ↦ term_var "pc"
                ∗ medeleg ↦ term_var "medeleg"
                ∗ ∃ "mcause", mcause ↦ term_var "mcause"
@@ -665,12 +676,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition sep_contract_trap_handler : SepContractFun trap_handler :=
-          {| sep_contract_logic_variables := [del_priv :: ty_privilege; "intr" :: ty.bool; c :: ty_exc_code; "pc" :: ty_xlenbits; p :: ty_privilege; "mcause" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "mie" :: ty.bool; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "scause" :: ty_xlenbits; "sepc" :: ty_xlenbits; "stvec" :: ty_xlenbits];
+          {| sep_contract_logic_variables := [del_priv :: ty_privilege; "intr" :: ty.bool; c :: ty_exc_code; "pc" :: ty_xlenbits; p :: ty_privilege; "mcause" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "scause" :: ty_xlenbits; "sepc" :: ty_xlenbits; "stvec" :: ty_xlenbits];
              sep_contract_localstore      := [term_var del_priv; term_var "intr"; term_var c; term_var "pc"];
              sep_contract_precondition    :=
                cur_privilege ↦ term_var p
                ∗ mcause  ↦ term_var "mcause"
-               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie"]
+               ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie"]
                ∗ mepc    ↦ term_var "mepc"
                ∗ mtvec ↦ term_var "mtvec"
                ∗ scause  ↦ term_var "scause"
@@ -684,14 +695,14 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                              | Machine    =>
                                  term_var "result_trap_handler" = term_var "mtvec"
                                  ∗ mcause ↦ term_zext (term_var c)
-                                 ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_val ty.bool false ]
+                                 ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie"]
                                  ∗ mepc ↦ term_var "pc"
                                  ∗ scause ↦ term_var "scause"
                                  ∗ sepc ↦ term_var "sepc"
                              | Supervisor =>
                                  term_var "result_trap_handler" = term_var "stvec"
                                  ∗ mcause ↦ term_var "mcause"
-                                 ∗ mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "mie"]
+                                 ∗ ∃ "spie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false]
                                  ∗ mepc ↦ term_var "mepc"
                                  ∗ scause ↦ term_zext (term_var c)
                                  ∗ sepc ↦ term_var "pc"
@@ -827,7 +838,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
           |}.
 
         Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
-          let Σ := ["m" :: ty_privilege; "mtvec" :: ty_xlenbits; "stvec" :: ty_xlenbits; "pmpentries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "pc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "sscratch" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpie" :: ty.bool; "mie" :: ty.bool; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
+          let Σ := ["m" :: ty_privilege; "mtvec" :: ty_xlenbits; "stvec" :: ty_xlenbits; "pmpentries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "spp" :: ty_privilege; "pc" :: ty_xlenbits; "mcause" :: ty_xlenbits; "mscratch" :: ty_xlenbits; "mepc" :: ty_xlenbits; "scause" :: ty_xlenbits; "sscratch" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "mideleg" :: ty_Minterrupts; "medeleg" :: ty_Medeleg] in
           {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
              sep_contract_localstore      := create_localstore Δ Σ;
              sep_contract_precondition    :=
@@ -842,7 +853,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                ∃ "npc",    nextpc        ↦ term_var "npc" ∗
                            mtvec         ↦ term_var "mtvec" ∗
                            stvec         ↦ term_var "stvec" ∗
-                           mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie" ] ∗
+                           mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                            mepc          ↦ term_var "mepc" ∗
                            sepc          ↦ term_var "sepc" ∗
                            mideleg       ↦ term_var "mideleg" ∗
@@ -864,7 +875,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                               nextpc    ↦ term_var v) ∗
                               mtvec         ↦ term_var "mtvec" ∗
                               stvec         ↦ term_var "stvec" ∗
-                              mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "mie"  ] ∗
+                              mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                               mepc          ↦ term_var "mepc" ∗
                               sepc          ↦ term_var "sepc" ∗
                               mideleg       ↦ term_var "mideleg" ∗
@@ -885,7 +896,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ v, (pc                ↦ term_var v ∗ (* tick, nextpc + 4 *)
                         nextpc            ↦ term_var v) ∗
                   ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
-                  ∃ "new_mpp", ∃ "new_spp", ∃ "new_mpie", ∃ "new_mie", mstatus       ↦ term_record rmstatus [ term_var "new_mpp"; term_var "new_spp"; term_var "new_mpie"; term_var "new_mie" ] ∗
+                  ∃ "new_mpp", ∃ "new_spp", ∃ "new_mpie", ∃ "new_spie", ∃ "new_mie", ∃ "new_sie", mstatus       ↦ term_record rmstatus [ term_var "new_mpp"; term_var "new_spp"; term_var "new_mpie"; term_var "new_spie"; term_var "new_mie"; term_var "new_sie" ] ∗
                   ∃ "new_mepc",  mepc          ↦ term_var "new_mepc" ∗
                   ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
                   ∃ "new_mideleg", mideleg       ↦ term_var "new_mideleg" ∗
@@ -906,7 +917,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ v, (pc                ↦ term_var v ∗ (* tick, nextpc + 4 *)
                         nextpc            ↦ term_var v) ∗
                   mtvec         ↦ term_var "mtvec" ∗
-                  ∃ "new_spp", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "mie" ] ∗
+                  ∃ "new_spp", ∃ "new_spie", ∃ "new_sie", mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_var "mie"; term_var "new_sie" ] ∗
                   mepc          ↦ term_var "mepc" ∗
                   ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
@@ -927,7 +938,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   nextpc        ↦ term_var "mtvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
                   stvec         ↦ term_var "stvec" ∗
-                  ∃ "mpie", mstatus       ↦ term_record rmstatus [ term_var "m"; term_var "spp"; term_var "mpie"; term_val ty.bool false  ] ∗
+                  ∃ "mpie", mstatus       ↦ term_record rmstatus [nenv term_var "m"; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie" ] ∗
                   ∃ "mepc", mepc          ↦ term_var "mepc" ∗
                   sepc          ↦ term_var "sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
@@ -941,7 +952,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
                   asn_gprs ∗
                   asn_pmp_entries (term_var "pmpentries") ∗
-                  term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∗
+                  (term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∨ term_var "mideleg" != term_val ty_Minterrupts Minterrupts_zero) ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
                   cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
@@ -949,7 +960,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   nextpc        ↦ term_var "stvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
                   stvec         ↦ term_var "stvec" ∗
-                  ∃ "mpie", ∃ "mie", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "m"; term_var "mpie"; term_var "mie" ] ∗
+                  ∃ "spie", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "m"; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false ] ∗
                   mepc          ↦ term_var "mepc" ∗
                   ∃ "sepc", sepc ↦ term_var "sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
@@ -979,7 +990,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause" ∗
-                  ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "mie" ]
+                  ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_val ty_privilege User; term_var "spp"; term_val ty.bool true; term_var "spie"; term_var "mie"; term_var "sie" ]
                 ∨
                   (* SRET = Recover *)
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
@@ -1001,7 +1012,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                   ∃ "sscratch", sscratch ↦ term_var "sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause" ∗
-                  ∃ "mpie", ∃ "mie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_var "mie" ])
+                  ∃ "sie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_val ty.bool true; term_var "mie"; term_var "sie" ])
           |}.
 
         Definition sep_contract_fetch : SepContractFun fetch :=
@@ -1686,15 +1697,6 @@ Module RiscvPmpValidContracts.
     Import asn.notations.
     Import rv_notations.
 
-  Lemma tmp : Symbolic.ValidContractWithErasureAndFuel 2 sep_contract_exception_delegatee fun_exception_delegatee.
-  Proof.
-    unfold sep_contract_exception_delegatee, fun_exception_delegatee.
-    Set Printing Depth 1000.
-    vm_compute.
-    constructor. cbn.
-    intros. repeat split; intros; intros E; inversion_clear E.
-  Qed.
-
   End Debug.
 
   (* TODO: proof with new PMP addressing mode (NA4) *)
@@ -1703,8 +1705,14 @@ Module RiscvPmpValidContracts.
     destruct H; now vm_compute.
   Qed.
 
-  Lemma valid_contract_step : ValidContractWithFuel (InlineMoreLevels 4) step.
-  Proof. now vm_compute. Qed.
+  (* TODO: investigate why we have a non-trivial VC at the end (but still quite
+           easy to solve the VC). *)
+  Lemma valid_contract_step : ValidContractDebugWithFuel (InlineMoreLevels 4) step.
+  Proof. (* now vm_compute. Qed. *)
+    apply Symbolic.validcontract_with_erasure_and_fuel_sound; vm_compute.
+    constructor; cbn; intros.
+    repeat split; intros; auto.
+  Qed.
 
   Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
   Proof. now vm_compute. Qed.
@@ -1807,7 +1815,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_readCSR : ValidContractWithFuel InlineOneLevel readCSR.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_writeCSR : ValidContract writeCSR.
+  Lemma valid_contract_writeCSR : ValidContractWithFuel (InlineMoreLevels 2) writeCSR.
   Proof. now vm_compute. Qed.
 
   (* Lemma valid_contract_check_CSR : ValidContract check_CSR.
@@ -2025,7 +2033,7 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract_debug _ H valid_contract_pmpMatchAddr).
     - refine (valid_contract _ H (@valid_contract_mem_write_value bytes H0)).
     - refine (valid_contract _ H valid_contract_init_model).
-    - refine (valid_contract_with_fuel _ _ H valid_contract_step).
+    - refine (valid_contract_debug_with_fuel _ _ H valid_contract_step).
     - refine (valid_contract _ H valid_contract_fetch).
     - refine (valid_contract _ H valid_contract_init_sys).
     - refine (valid_contract _ H valid_contract_init_pmp).
@@ -2044,7 +2052,7 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_csrPriv).
     - refine (valid_contract _ H valid_contract_check_CSR_access).
     - refine (valid_contract_with_fuel _ _ H valid_contract_readCSR).
-    - refine (valid_contract _ H valid_contract_writeCSR).
+    - refine (valid_contract_with_fuel _ _ H valid_contract_writeCSR).
     - refine (valid_contract _ H valid_contract_execute).
     - refine (valid_contract_with_fuel _ _ H valid_contract_execute_RTYPE).
     - refine (valid_contract_with_fuel _ _ H valid_contract_execute_ITYPE).

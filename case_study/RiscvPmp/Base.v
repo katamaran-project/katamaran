@@ -240,6 +240,17 @@ Definition Minterrupts_zero : Minterrupts :=
    ; SSI := false
    ; USI := false |}.
 
+Record Sinterrupts : Set :=
+  MkSinterrupts
+    (* Bit annoying S_ prefix, but otherwise we have a conflict with the SPP definition above *)
+    { S_SEI : bool
+    ; S_UEI : bool
+    ; S_STI : bool
+    ; S_UTI : bool
+    ; S_SSI : bool
+    ; S_USI : bool
+    }.
+
 (* Actual Sail type declaration is called Medeleg, we use RMedeleg to avoid
    a name clash below with the CSRIdx for Medeleg. *)
 Record RMedeleg : Set :=
@@ -351,6 +362,8 @@ Inductive CSRIdx : Set :=
 | SScratch
 | SEpc
 | SCause
+| Sip
+| Sie
 .
 
 Definition NumPmpEntries := 2.
@@ -644,12 +657,17 @@ Record Mstatus : Set :=
     { MPP  : Privilege
     ; SPP  : Privilege
     ; MPIE : bool
+    ; SPIE : bool
     ; MIE  : bool
+    ; SIE  : bool
     }.
 
 Record Sstatus : Set :=
   MkSstatus
-    { S_SPP : Privilege (* Bit annoying S_ prefix, but otherwise we have a conflict with the SPP definition above *)
+    (* Bit annoying S_ prefix, but otherwise we have a conflict with the SPP definition above *)
+    { S_SPP  : Privilege
+    ; S_SPIE : bool
+    ; S_SIE  : bool
     }.
 
 Inductive Records : Set :=
@@ -657,6 +675,7 @@ Inductive Records : Set :=
 | rmstatus
 | rsstatus
 | rminterrupts
+| rsinterrupts
 | rmedeleg
 .
 
@@ -702,6 +721,7 @@ Section TransparentObligations.
   Derive NoConfusion for Mstatus.
   Derive NoConfusion for Sstatus.
   Derive NoConfusion for Minterrupts.
+  Derive NoConfusion for Sinterrupts.
   Derive NoConfusion for RMedeleg.
   Derive NoConfusion for InterruptSet.
 End TransparentObligations.
@@ -746,6 +766,7 @@ Derive EqDec for Pmpcfg_ent.
 Derive EqDec for Mstatus.
 Derive EqDec for Sstatus.
 Derive EqDec for Minterrupts.
+Derive EqDec for Sinterrupts.
 Derive EqDec for RMedeleg.
 Derive EqDec for InterruptSet.
 
@@ -759,7 +780,7 @@ Section Finite.
     {| enum := [User;Supervisor;Machine] |}.
 
   #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip;Medeleg;Mideleg;SStatus;STvec;SScratch;SEpc;SCause] |}.
+    {| enum := [MStatus;Mie;MTvec;MScratch;MEpc;MCause;MPMP0CFG;MPMPADDR0;MPMPADDR1;Mip;Medeleg;Mideleg;SStatus;STvec;SScratch;SEpc;SCause;Sip;Sie] |}.
 
   #[export,program] Instance EventTy_finite : Finite EventTy :=
     {| enum := [IOWrite; IORead; IOShutdown] |}.
@@ -915,6 +936,7 @@ Module Export RiscvPmpBase <: Base.
   Definition ty_mstatus                        := (ty.record rmstatus).
   Definition ty_sstatus                        := (ty.record rsstatus).
   Definition ty_Minterrupts                    := (ty.record rminterrupts).
+  Definition ty_Sinterrupts                    := (ty.record rsinterrupts).
   Definition ty_Medeleg                        := (ty.record rmedeleg).
   Definition ty_pmpentry                       := (ty.prod ty_pmpcfg_ent ty_xlenbits).
   Definition ty_pmpentries                     := (ty.list (ty.prod ty_pmpcfg_ent ty_xlenbits)).
@@ -960,6 +982,7 @@ Module Export RiscvPmpBase <: Base.
     | rmstatus     => Mstatus
     | rsstatus     => Sstatus
     | rminterrupts => Minterrupts
+    | rsinterrupts => Sinterrupts
     | rmedeleg     => RMedeleg
     end.
 
@@ -1191,9 +1214,13 @@ Module Export RiscvPmpBase <: Base.
     | rmstatus    => [ "MPP" ∷ ty_privilege
                      ; "SPP" ∷ ty_privilege
                      ; "MPIE" ∷ ty.bool
+                     ; "SPIE" ∷ ty.bool
                      ; "MIE" ∷ ty.bool
+                     ; "SIE" ∷ ty.bool
                      ]
-    | rsstatus    => ["SPP" ∷ ty_privilege ]
+    | rsstatus    => ["SPP" ∷ ty_privilege
+                     ; "SPIE" ∷ ty.bool
+                     ; "SIE" ∷ ty.bool]
     | rminterrupts    => [ "MEI" ∷ ty.bool
                          ; "SEI" ∷ ty.bool
                          ; "UEI" ∷ ty.bool
@@ -1201,6 +1228,13 @@ Module Export RiscvPmpBase <: Base.
                          ; "STI" ∷ ty.bool
                          ; "UTI" ∷ ty.bool
                          ; "MSI" ∷ ty.bool
+                         ; "SSI" ∷ ty.bool
+                         ; "USI" ∷ ty.bool
+                         ]
+    | rsinterrupts    => [ "SEI" ∷ ty.bool
+                         ; "UEI" ∷ ty.bool
+                         ; "STI" ∷ ty.bool
+                         ; "UTI" ∷ ty.bool
                          ; "SSI" ∷ ty.bool
                          ; "USI" ∷ ty.bool
                          ]
@@ -1223,9 +1257,10 @@ Module Export RiscvPmpBase <: Base.
 
   Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
   | rpmpcfg_ent  | [l;a;x;w;r]%env               := MkPmpcfg_ent l a x w r
-  | rmstatus     | [mpp;spp;mpie;mie]%env        := MkMstatus mpp spp mpie mie
-  | rsstatus     | [spp]%env                     := MkSstatus spp
+  | rmstatus     | [mpp;spp;mpie;spie;mie;sie]%env        := MkMstatus mpp spp mpie spie mie sie
+  | rsstatus     | [spp;spie;sie]%env                     := MkSstatus spp spie sie
   | rminterrupts | [mei;sei;uei;mti;sti;uti;msi;ssi;usi]%env := MkMinterrupts mei sei uei mti sti uti msi ssi usi
+  | rsinterrupts | [sei;uei;sti;uti;ssi;usi]%env := MkSinterrupts sei uei sti uti ssi usi
   | rmedeleg     | [spf;lpf;fpf;mecall;secall;uecall;saf;saa;laf;laa;br;ii;faf;faa]%env :=
                      MkRMedeleg spf lpf fpf mecall secall uecall saf saa laf laa br ii faf faa.
 
@@ -1238,8 +1273,12 @@ Module Export RiscvPmpBase <: Base.
   | rmstatus     | m := [kv ("MPP" ∷ ty_privilege; MPP m)
                         ;   ("SPP" ∷ ty_privilege; SPP m)
                         ;   ("MPIE" ∷ ty.bool; MPIE m)
-                        ;   ("MIE" ∷ ty.bool; MIE m)]
-  | rsstatus     | s := [kv ("SPP" ∷ ty_privilege; S_SPP s)]
+                        ;   ("SPIE" ∷ ty.bool; SPIE m)
+                        ;   ("MIE" ∷ ty.bool; MIE m)
+                        ;   ("SIE" ∷ ty.bool; SIE m)]
+  | rsstatus     | s := [kv ("SPP" ∷ ty_privilege; S_SPP s)
+                        ;   ("SPIE" ∷ ty.bool; S_SPIE s)
+                        ;   ("SIE" ∷ ty.bool; S_SIE s)]
   | rminterrupts | m := [kv ("MEI" ∷ ty.bool; MEI m)
                          ;  ("SEI" ∷ ty.bool; SEI m)
                          ;  ("UEI" ∷ ty.bool; UEI m)
@@ -1249,6 +1288,13 @@ Module Export RiscvPmpBase <: Base.
                          ;  ("MSI" ∷ ty.bool; MSI m)
                          ;  ("SSI" ∷ ty.bool; SSI m)
                          ;  ("USI" ∷ ty.bool; USI m)
+                         ]
+  | rsinterrupts | s := [kv ("SEI" ∷ ty.bool; S_SEI s)
+                         ;  ("UEI" ∷ ty.bool; S_UEI s)
+                         ;  ("STI" ∷ ty.bool; S_STI s)
+                         ;  ("UTI" ∷ ty.bool; S_UTI s)
+                         ;  ("SSI" ∷ ty.bool; S_SSI s)
+                         ;  ("USI" ∷ ty.bool; S_USI s)
                          ]
     | rmedeleg   | m := [kv ("SAMO_Page_Fault"    ∷ ty.bool; SAMO_Page_Fault m)
                         ;   ("Load_Page_Fault"    ∷ ty.bool; Load_Page_Fault m)
