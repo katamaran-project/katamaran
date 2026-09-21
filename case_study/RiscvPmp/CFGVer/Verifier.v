@@ -99,11 +99,12 @@ Inductive Annot :=
    resumes.  This is CFGVerifierContract's data minus `cfg_instrs` -- the code
    is a plain `list AST` rather than `list AnnotInstr` -- plus `sblk_off`.
 
-   WHY `list AST` AND NOT `list AnnotInstr`.  Not a restriction on block bodies
-   so much as the only well-founded choice: AnnotInstr carries `option SBlk`,
-   so a block whose code were AnnotInstr-valued would be defined in terms of
-   itself.  A block body is therefore plain code -- no ghosts, no nested
-   blocks -- which is what every segment is today.
+   NO CODE FIELD.  A block's contract is verified against the ENCLOSING
+   program -- with `ai_block` cleared, see `clear_blk` below -- not against a
+   copy of its own instructions.  That is what every segment contract already
+   does, and it is why no separation-logic split of `ptsto_instrs` is needed:
+   clearing annotations does not change `ai_instr`, so the memory resource is
+   literally the same one.
 
    WHY NO PROOF FIELD, given that the natural design is for the annotation to
    carry its own justification.  A validity proof's TYPE is the verification
@@ -127,7 +128,6 @@ Record SBlk : Type := MkSBlk
   ; sblk_place    : Term sblk_ctx ty_xlenbits
   ; sblk_pre      : Assertion (sblk_ctx ▻ "a" ∷ ty_xlenbits)
   ; sblk_post     : Assertion (sblk_ctx ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
-  ; sblk_code     : list AST
   ; sblk_exits    : list (Term sblk_ctx ty_xlenbits)
   ; sblk_exitCond : bv xlenbits -> bool
   ; sblk_fuel     : nat
@@ -185,6 +185,28 @@ Record AnnotInstr := MkAnnotInstr
        already made for ghosts, and `strip` is the same mitigation. *)
   ; ai_block        : option SBlk
   }.
+
+(* Erase every block contract, keeping the instruction and its ghosts.
+   A block must NOT be visible to its OWN verification: a segment contract for
+   the block at v is executed from v, and if `ai_block` were still set there
+   the executor would replace the block by ITSELF, so its VC would prove
+   nothing and blocksSound would be dischargeable from thin air.  Verifying
+   against `clear_blk <$> instrs` is what rules that out.
+
+   It is also why no ptsto_instrs split is needed anywhere: `ai_instr` is
+   untouched, so `ai_instr <$> (clear_blk <$> instrs) = ai_instr <$> instrs`
+   -- the same memory, which is all the trusted layer ever sees. *)
+Definition clear_blk (ai : AnnotInstr) : AnnotInstr :=
+  {| ai_ghost_before := ai_ghost_before ai
+   ; ai_instr        := ai_instr ai
+   ; ai_ghost_after  := ai_ghost_after ai
+   ; ai_block        := None |}.
+
+Lemma ai_instr_clear_blk (ai : AnnotInstr) : ai_instr (clear_blk ai) = ai_instr ai.
+Proof. reflexivity. Qed.
+
+Lemma ai_block_clear_blk (ai : AnnotInstr) : ai_block (clear_blk ai) = None.
+Proof. reflexivity. Qed.
 
 Definition strip (instrs : list AnnotInstr) : list AST :=
   List.map (fun ai => ai_instr ai) instrs.

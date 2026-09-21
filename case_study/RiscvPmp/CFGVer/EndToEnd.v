@@ -121,6 +121,14 @@ Import IrisModel.RiscvPmpIrisBase.
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (* Every BLOCK CONTRACT in this program is justified.  Stated as
+       blocksSound rather than as "there are no blocks": the latter is false
+       exactly when the feature is used, so wiring built on it could never
+       verify a block-carrying program.  This one is vacuous today
+       (blocksSound_of_none, one line via solve_no_blocks) and dischargeable
+       from a segment's own VC when blocks are real. *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs'))
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
                      exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -155,12 +163,11 @@ Import IrisModel.RiscvPmpIrisBase.
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    (* bblks := ∅ INSTANTIATES the general lemma; it does not restrict it.
-       blocksSound_empty is vacuous, so this end-to-end theorem is exactly as
-       strong as before the block hook existed. *)
-    iApply (sound_scfg_verification_condition_myWP2 (bblks := ∅)
+    (* Hbs discharges the block premise vacuously, so this end-to-end theorem
+       is exactly as strong as before the hook existed. *)
+    iApply (sound_scfg_verification_condition_myWP2
               valid_contract _ Hif HexitsFaith
-              (fun words => blocksSound_empty words _)
+              Hbs
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
     - iSplitL "Hpriv Hregs".
@@ -188,6 +195,14 @@ Import IrisModel.RiscvPmpIrisBase.
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (* Every BLOCK CONTRACT in this program is justified.  Stated as
+       blocksSound rather than as "there are no blocks": the latter is false
+       exactly when the feature is used, so wiring built on it could never
+       verify a block-carrying program.  This one is vacuous today
+       (blocksSound_of_none, one line via solve_no_blocks) and dischargeable
+       from a segment's own VC when blocks are real. *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs'))
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
                      exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -220,6 +235,14 @@ Import IrisModel.RiscvPmpIrisBase.
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (* Every BLOCK CONTRACT in this program is justified.  Stated as
+       blocksSound rather than as "there are no blocks": the latter is false
+       exactly when the feature is used, so wiring built on it could never
+       verify a block-carrying program.  This one is vacuous today
+       (blocksSound_of_none, one line via solve_no_blocks) and dischargeable
+       from a segment's own VC when blocks are real. *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs'))
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
                      exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -257,12 +280,11 @@ Import IrisModel.RiscvPmpIrisBase.
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
       apply table_bound_of_lenAddr, Hleninstrs. }
-    (* bblks := ∅ INSTANTIATES the general lemma; it does not restrict it.
-       blocksSound_empty is vacuous, so this end-to-end theorem is exactly as
-       strong as before the block hook existed. *)
-    iApply (sound_scfg_verification_condition_myWP2 (bblks := ∅)
+    (* Hbs discharges the block premise vacuously, so this end-to-end theorem
+       is exactly as strong as before the hook existed. *)
+    iApply (sound_scfg_verification_condition_myWP2
               valid_contract _ Hif HexitsFaith
-              (fun words => blocksSound_empty words _)
+              Hbs
               $! (SyncVal (bv.of_N init_addr))
               with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs Hmem]").
     - iSplitL "Hpriv Hregs Hmem".
@@ -292,6 +314,14 @@ Import IrisModel.RiscvPmpIrisBase.
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
+    (* Every BLOCK CONTRACT in this program is justified.  Stated as
+       blocksSound rather than as "there are no blocks": the latter is false
+       exactly when the feature is used, so wiring built on it could never
+       verify a block-carrying program.  This one is vacuous today
+       (blocksSound_of_none, one line via solve_no_blocks) and dischargeable
+       from a segment's own VC when blocks are real. *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs'))
     (HexitsFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
                      exitCond (cfg_exits contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
@@ -1461,6 +1491,11 @@ Import IrisModel.RiscvPmpIrisBase.
           asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
             ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
       (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N ->
+      (* See cfg_instrs_verified.  `forall Σ GS` because this lemma concludes a
+         PURE statement and so is not itself in an Iris context -- same shape
+         ImplPre above already uses. *)
+      (forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+          ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs')) ->
       mem_has_instrs μ1 (bv.of_N init_addr) ws (strip instrs') ->
       mem_has_instrs μ2 (bv.of_N init_addr) ws (strip instrs') ->
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
@@ -1473,7 +1508,7 @@ Import IrisModel.RiscvPmpIrisBase.
         ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
         leakage_trace μ1' = leakage_trace μ2'.
     Proof.
-      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+      intros Hleninstrs Hbs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
         steps1 Htrace.
       (* Length bound in BOTH forms: some premises below are stated over
          `strip instrs'` (the trusted ones) and others over `instrs'`; ghosts
@@ -1560,6 +1595,9 @@ Import IrisModel.RiscvPmpIrisBase.
               ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
         (init_addr + 4 * N.of_nat (length instrs') +
          4 * N.of_nat (length data_specs) < lenAddr)%N →
+        (* See cfg_instrs_verified. *)
+        (forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+            ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs')) →
         mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs (strip instrs') →
         mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs (strip instrs') →
         RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
@@ -1572,7 +1610,7 @@ Import IrisModel.RiscvPmpIrisBase.
           ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
           leakage_trace μ1' = leakage_trace μ2'.
     Proof.
-      intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+      intros Hlen Hbs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
         steps1 Htrace.
       assert (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N)
         by (unfold lenAddr in *; lia).
@@ -1888,6 +1926,28 @@ Import IrisModel.RiscvPmpIrisBase.
     exact HF.
   Qed.
 
+  (* Every generator entry point below inherits cfg_instrs_endToEnd*'s
+     "no instruction carries a block contract" side condition.  This hint
+     closes it automatically for a program written as a plain list of ASTs --
+     which is every example -- so the `all: try eauto` / `eauto` already in
+     those proofs discharges it and no call site changes.  A program that DOES
+     carry blocks simply fails to match the hint and must supply the premise
+     (and, at the Adequacy level, blocksSound). *)
+  #[local] Hint Resolve ai_block_none_of_AST : core.
+
+  (* Closes the "no instruction carries a block contract" side condition.
+     TWO alternatives because a program list reaches the generators in two
+     syntactic shapes: `list_AST_AnnotInstr l` when a named `list AST` is
+     coerced wholesale, and a plain cons-list of per-element coercions when the
+     literal is written inline (Verifier.v's `Local Arguments List.cons {_} & _ _`
+     makes the coercion fire elementwise inside a bracket literal).  Only the
+     first matches ai_block_none_of_AST; `repeat constructor` handles the
+     second, since each `ai_block (AST_AnnotInstr a) = None` closes by eq_refl. *)
+  Ltac solve_no_blocks :=
+    intros;
+    apply blocksSound_of_none;
+    solve [ apply ai_block_none_of_AST | repeat constructor ].
+
   Lemma gen_contract_noninterferent_u
       (reg_specs : list reg_spec_rel)
       (word_data : list mem_spec_rel)
@@ -1912,7 +1972,9 @@ Import IrisModel.RiscvPmpIrisBase.
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_u init_addr reg_specs word_data byte_data instrs
-             extra_exit_offs bound exitCond fuel)) :
+             extra_exit_offs bound exitCond fuel))
+      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
     noninterferent_strong init_addr (strip instrs) exitCond
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
@@ -2000,7 +2062,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hbound : (init_addr + bound < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_u init_addr reg_specs word_data byte_data instrs []
-             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
     noninterferent_strong init_addr (strip instrs)
       (pcOutOfInstrs_exitCond init_addr (strip instrs))
       (map (concretize_reg init_addr) reg_specs)
@@ -2018,6 +2082,7 @@ Import IrisModel.RiscvPmpIrisBase.
     - constructor;
         [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
         | constructor].
+    - exact HBS.
   Qed.
 
   (* ------------------------------------------------------------------- *)
@@ -2071,7 +2136,9 @@ Import IrisModel.RiscvPmpIrisBase.
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs instrs extra_exit_offs
-             exitCond fuel)) :
+             exitCond fuel))
+      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
     noninterferent_strong init_addr (strip instrs) exitCond reg_specs [].
   Proof.
     rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
@@ -2102,6 +2169,11 @@ Import IrisModel.RiscvPmpIrisBase.
     - exact Hlen.
     - exact HexitOffs.
     - exact valid_contract.
+    (* HBS is _u's LAST premise -- placed there rather than first so that the
+       `(name := v)` argument forms and the numeric selectors above keep
+       working; putting a Prop binder before extra_exit_offs made the named
+       form fail with "Not enough non implicit arguments". *)
+    - exact HBS.
   Qed.
 
 
@@ -2132,7 +2204,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs instrs []
-             (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+             (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
     noninterferent_strong init_addr (strip instrs)
       (pcOutOfInstrs_exitCond init_addr (strip instrs)) reg_specs [].
   Proof.
@@ -2149,6 +2223,7 @@ Import IrisModel.RiscvPmpIrisBase.
     - constructor;
         [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
         | constructor].
+    - exact HBS.
   Qed.
 
 
@@ -2175,7 +2250,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hbound : (init_addr + bound < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
     noninterferent_strong init_addr (strip instrs)
       (pcOutOfInstrs_exitCond init_addr (strip instrs))
       (map (concretize_reg init_addr) reg_specs)
@@ -2201,6 +2278,11 @@ Import IrisModel.RiscvPmpIrisBase.
         [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
         | constructor].
     - exact valid_contract.
+    (* HBS is _u's LAST premise -- placed there rather than first so that the
+       `(name := v)` argument forms and the numeric selectors above keep
+       working; putting a Prop binder before extra_exit_offs made the named
+       form fail with "Not enough non implicit arguments". *)
+    - exact HBS.
   Qed.
 
 
@@ -2219,7 +2301,9 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hbound : (init_addr + bound < lenAddr)%N)
       (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel)) :
+             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
     noninterferent_strong init_addr (strip instrs)
       (pcOutOfInstrs_exitCond init_addr (strip instrs))
       (map (concretize_reg init_addr) reg_specs)
@@ -2242,6 +2326,11 @@ Import IrisModel.RiscvPmpIrisBase.
         [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
         | constructor].
     - exact valid_contract.
+    (* HBS is _u's LAST premise -- placed there rather than first so that the
+       `(name := v)` argument forms and the numeric selectors above keep
+       working; putting a Prop binder before extra_exit_offs made the named
+       form fail with "Not enough non implicit arguments". *)
+    - exact HBS.
   Qed.
 
   (* --------------------------------------------------------------------- *)

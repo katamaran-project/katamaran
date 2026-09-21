@@ -310,15 +310,20 @@ Section SegCompose.
              (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (cfg_exitCond c) (cfg_exits c) iota)
+    (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
+       today, and dischargeable from a segment VC once blocks are real.  See
+       cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list cbase L))
     (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
     (HPost : forall an, Fr ∗ seg_exit c iota a L cbase an -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
     iIntros "HP".
     iDestruct (HPre with "HP") as "(HF & Hpre & Hpc & Hnpc & Hinstrs)".
-    iApply (sound_scfg_verification_condition_myWP2 (bblks := ∅)
+    iApply (sound_scfg_verification_condition_myWP2
               (seg_vc c Hv) Post Hif Hef
-              (fun words => blocksSound_empty words _)
+              Hbs
               $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
     (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
     - iFrame.
@@ -357,11 +362,16 @@ Section SegCompose.
              (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (cfg_exitCond c) (cfg_exits c) iota)
+    (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
+       today, and dischargeable from a segment VC once blocks are real.  See
+       cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list cbase L))
     (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
     (HPost : Fr ∗ seg_exit_state c iota a L cbase (seg_addr ia t) -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_run c iota a L cbase Fr Hv Hif Hef HPre).
+    apply (seg_run c iota a L cbase Fr Hv Hif Hef Hbs HPre).
     iIntros (an) "H".
     destruct an as [av | a1 a2].
     2:{ iDestruct "H" as "(_ & %Hf & _)". destruct Hf. }
@@ -398,6 +408,11 @@ Section SegCompose.
              (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (cfg_exitCond c) (cfg_exits c) iota)
+    (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
+       today, and dischargeable from a segment VC once blocks are real.  See
+       cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
+    (Hbs : forall wds : bv xlenbits -> bv word,
+             ⊢ blocksSound wds (instrs_of_list cbase L))
     (Hpin : forall an : RelVal ty_xlenbits,
               asn.interpret (cfg_postcondition c)
                 ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ an])
@@ -406,7 +421,7 @@ Section SegCompose.
     (HPost : Fr ∗ seg_exit_state c iota a L cbase v -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_run c iota a L cbase Fr Hv Hif Hef HPre).
+    apply (seg_run c iota a L cbase Fr Hv Hif Hef Hbs HPre).
     iIntros (an) "(HF & %Hex & Hpc & Hnpc & Hinstrs & Hpost)".
     iAssert (⌜an = ty.SyncVal v⌝)%I as %Han; [ iApply (Hpin an); iExact "Hpost" |].
     subst an.
