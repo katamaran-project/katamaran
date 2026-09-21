@@ -656,6 +656,12 @@ Section SegCompose.
                 (4 * N.of_nat (loop_first_instr ls))%N (place_prog_extent pl)
                 [(4 * N.of_nat (loop_first_instr ls) + target)%N] = true)
       (Hv  : ValidCFGVerifierContract (gen_loop_contract ls g target post))
+      (* Every block contract in this loop's program is justified.  Vacuous
+         today (blocksSound_of_none); the premise exists because the lemma is
+         generic in the program.  See cfg_instrs_verified (EndToEnd.v). *)
+      (Hbs : forall wds : bv xlenbits -> bv word,
+               ⊢ blocksSound wds (instrs_of_list
+                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) i
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (g (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
@@ -701,7 +707,7 @@ Section SegCompose.
     iApply (seg_run_single_exit (gen_loop_contract ls g target post) i
              (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
              (@bv.of_N xlenbits (place_prog_base pl)) F (loop_head_addr ls) target
-             (gen_loop_exitCond ls g target post) Hv Hif Hef with "H").
+             (gen_loop_exitCond ls g target post) Hv Hif Hef Hbs with "H").
     - (* HPre: the invariant IS the precondition minus the branch decision and
          the pc equation, at the SAME valuation.  Since A3 the two orders
          differ (gen_seg_contract puts the code bound second and the registers
@@ -740,6 +746,10 @@ Section SegCompose.
       (n : nat)
       (HPm : P (S n) -> P n)
       (Hv  : ValidCFGVerifierContract (loop_body_contract ls))
+      (* Vacuous today; see loop_one_trip. *)
+      (Hbs : forall wds : bv xlenbits -> bv word,
+               ⊢ blocksSound wds (instrs_of_list
+                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf (S n))
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : P (S n) ->
@@ -766,7 +776,7 @@ Section SegCompose.
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
     iApply (loop_one_trip ls pl (loop_guard ls) 0%N (gen_loop_contract_post ls) (iotaf (S n))
-             (Fr (S n)) _ (place_body_table_ok pl) Hv Hpl (Hg HP) with "H").
+             (Fr (S n)) _ (place_body_table_ok pl) Hv Hbs Hpl (Hg HP) with "H").
     unfold loop_invariant, seg_exit_state.
     rewrite seg_addr_0.
     iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
@@ -784,6 +794,10 @@ Section SegCompose.
       (iotaf : nat -> Valuation R)
       (P : nat -> Prop) (HP0 : P 0)
       (Hv  : ValidCFGVerifierContract (loop_final_contract ls post))
+      (* Vacuous today; see loop_one_trip. *)
+      (Hbs : forall wds : bv xlenbits -> bv word,
+               ⊢ blocksSound wds (instrs_of_list
+                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf 0)
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
@@ -800,7 +814,7 @@ Section SegCompose.
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
     iApply (loop_one_trip ls pl (loop_exit_guard ls) (loop_exit_off ls) post (iotaf 0)
-             (Fr 0) Out (place_exit_table_ok pl) Hv Hpl Hg HOut with "H").
+             (Fr 0) Out (place_exit_table_ok pl) Hv Hbs Hpl Hg HOut with "H").
   Qed.
 
   (* ---- ENTERING A LOOP (D3) ----------------------------------------------
@@ -2104,6 +2118,10 @@ Section SegCompose.
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (Hvb : ValidCFGVerifierContract (loop_body_contract ls))
       (Hvf : ValidCFGVerifierContract (loop_final_contract ls post))
+      (* Vacuous today; see loop_one_trip. *)
+      (Hbs : forall wds : bv xlenbits -> bv word,
+               ⊢ blocksSound wds (instrs_of_list
+                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
       (Hpl : forall n, inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf n)
                        = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (HP0 : P 0) (HPm : forall n, P (S n) -> P n)
@@ -2126,8 +2144,8 @@ Section SegCompose.
   Proof.
     apply (loop_by_induction ls pl Fr Out Post iotaf P
              (fun n => loop_body_trip ls pl Fr iotaf P n (HPm n)
-                         Hvb (Hpl (S n)) (proj1 Hlatch n) (Hedge n))
-             (loop_final_trip ls post pl Fr Out iotaf P HP0 Hvf
+                         Hvb Hbs (Hpl (S n)) (proj1 Hlatch n) (Hedge n))
+             (loop_final_trip ls post pl Fr Out iotaf P HP0 Hvf Hbs
                 (Hpl 0) (proj2 Hlatch) HOut)
              Hcont).
   Qed.

@@ -74,6 +74,7 @@ Proof.
   - cbn. lia.
   - exact Hb.
   - exact (valid_cmovznz4_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* The two concrete cmovznz4 results are now corollaries of the universal-base

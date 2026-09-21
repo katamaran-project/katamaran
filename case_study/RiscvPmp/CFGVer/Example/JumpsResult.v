@@ -94,6 +94,7 @@ Proof.
             [lia | vm_compute; reflexivity]).
       rewrite (bv.bin_of_N_small Hs4) (bv.bin_of_N_small Hs8).
       lia.
+  - solve_no_blocks.
 Qed.
 
 Lemma jumpIfZero_noninterferent :
@@ -125,6 +126,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_jmp_fwd_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* jmp_fwd_exitCond is definitionally pcOutOfInstrs_exitCond 0 [JAL...; NOP]

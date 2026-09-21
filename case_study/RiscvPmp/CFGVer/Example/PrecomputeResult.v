@@ -68,6 +68,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_precompute_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* The concrete result at init_addr = 0, as a corollary. *)

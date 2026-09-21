@@ -68,6 +68,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_muladd_q_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* Concrete-base corollary at the default init_addr. *)

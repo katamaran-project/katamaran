@@ -56,6 +56,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_modpow_win_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 Lemma modpow_win_noninterferent :

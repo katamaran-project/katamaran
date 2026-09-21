@@ -69,6 +69,8 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_swap_cfg_contract_param init_addr).
+all: match goal with |- ?G => idtac "ZZGOAL:" G end.
+  - solve_no_blocks.
 Qed.
 
 Lemma swap_noninterferent :

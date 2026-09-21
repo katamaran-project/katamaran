@@ -126,7 +126,7 @@ Section Compose.
     iApply myWP2_loop_join.
     (* --- SEGMENT A, discharged with ExitCond := "keep running until the
            real exit".  This is what produces the nested loop. --- *)
-    iApply (sound_scfg_verification_condition_myWP2 HvA (myWP2_loop swapExit) Hif HefA
+    iApply (sound_scfg_verification_condition_myWP2 HvA (myWP2_loop swapExit) Hif HefA ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N 0)) with "[Hpre Hpc Hnpc Hinstrs]").
     - cbn [cfg_precondition cfg_instrs swapA] in *. iFrame.
     - (* --- THE CUT.  `Hpost` is segment A's exit assertion, delivered by the
@@ -137,7 +137,7 @@ Section Compose.
       assert (Hav : av = bv.of_N 4) by (destruct (bv.eqb_spec av (bv.of_N 4)); congruence).
       subst av.
       (* --- SEGMENT B, entered at the cut address with A's exit assertion. --- *)
-      iApply (sound_scfg_verification_condition_myWP2 HvB swapExit Hif HefB
+      iApply (sound_scfg_verification_condition_myWP2 HvB swapExit Hif HefB ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 4)) with "[Hpc Hnpc Hinstrs Hpost]").
       + iEval (cbn) in "Hpost". cbn. iFrame.
         iDestruct "Hpost" as "(H1 & H2 & H3 & Hpriv & Hinv)".

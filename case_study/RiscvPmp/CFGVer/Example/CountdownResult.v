@@ -72,6 +72,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_countdown_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* The concrete result is now a corollary of the universal-base theorem
@@ -109,6 +110,7 @@ Proof.
   - cbn. lia.
   - exact Hb.
   - exact (valid_countdown_mem_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* The concrete result is now a corollary of the universal-base theorem

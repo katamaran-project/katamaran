@@ -160,7 +160,7 @@ Section TwoLoops.
                       (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [16%N]) (iB m)).
       { constructor; [|constructor]. eexists. split; reflexivity. }
       iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
-      iApply (sound_scfg_verification_condition_myWP2 Hv tExit Hif Hef
+      iApply (sound_scfg_verification_condition_myWP2 Hv tExit Hif Hef ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -192,7 +192,7 @@ Section TwoLoops.
       { intros HH. rewrite HH in Hd. cbn in Hd. lia. }
       iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
       iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef
+      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -236,7 +236,7 @@ Section TwoLoops.
       { constructor; [|constructor]. eexists. split; reflexivity. }
       iIntros "((Hres & Hpc & Hnpc & Hinstrs) & HX2)".
       iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef
+      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -277,7 +277,7 @@ Section TwoLoops.
       { intros HH. rewrite HH in Hd. cbn in Hd. lia. }
       iIntros "((Hres & Hpc & Hnpc & Hinstrs) & HX2)".
       iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef
+      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".

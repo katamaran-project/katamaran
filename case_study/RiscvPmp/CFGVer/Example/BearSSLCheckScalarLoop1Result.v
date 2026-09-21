@@ -66,6 +66,7 @@ Proof.
   - cbn. lia.
   - exact Hb.
   - exact (valid_loop1_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* Concrete corollary at the conventional init_addr = 0. *)

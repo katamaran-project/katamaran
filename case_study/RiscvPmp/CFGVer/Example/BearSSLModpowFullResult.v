@@ -52,6 +52,7 @@ Proof.
   - cbn. lia.
   - exact Hb.
   - exact (valid_modpow_win_full_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 Lemma modpow_win_full_noninterferent :

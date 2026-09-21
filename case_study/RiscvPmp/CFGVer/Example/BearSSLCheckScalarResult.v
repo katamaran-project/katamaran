@@ -56,6 +56,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_check_scalar_cfg_contract_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 Lemma check_scalar_noninterferent :

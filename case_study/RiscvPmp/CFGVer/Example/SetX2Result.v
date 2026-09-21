@@ -71,6 +71,7 @@ Proof.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
   - exact (valid_set_X2_to_42_param init_addr).
+  - solve_no_blocks.
 Qed.
 
 (* The concrete result at init_addr = 0, as a corollary -- this was
