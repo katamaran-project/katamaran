@@ -269,10 +269,20 @@ Section CFGVerificationDerived.
     (* ===================================================================== *)
     Definition cexec_block (b : SBlk) (v : bv xlenbits) :
       CHeapSpec (RelVal ty_xlenbits) :=
-      ι <- lift_purespec (CPureSpec.angelic_ctx [ctx]) ;;
-      _ <- consume (sblk_pre b) ι ;;
-      _ <- produce (sblk_post b) ι ;;
-      pure (ty.SyncVal (bv.add v (@bv.of_N xlenbits (sblk_off b)))).
+      (* `bop.evalRel bop.bvadd`, NOT `ty.SyncVal (bv.add ..)`.  The two are
+         convertible, but instance resolution is SYNTACTIC: written the second
+         way `refine_compat_term_binop` cannot match the symbolic side's
+         `term_binop bop.bvadd ..`, and rsolve leaves the exit-pc value goal
+         open.  Mirroring the OPERATOR is what lets the existing instance fire
+         -- cfgver-refinement's "mirror structurally" rule, with a concrete
+         cost for breaking it. *)
+      let ex := bop.evalRel bop.bvadd (ty.SyncVal v)
+                  (ty.SyncVal (@bv.of_N xlenbits (sblk_off b))) in
+      ι <- lift_purespec (CPureSpec.angelic_ctx (sblk_ctx b)) ;;
+      _ <- consume (sblk_pre b) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
+      _ <- produce (sblk_post b)
+             ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ ex] ;;
+      pure ex.
 
     (* `instrs` is AnnotInstr-valued, mirroring the symbolic SInstrTable.
        Ghosts are FUSED here rather than given a separate channel: they share
@@ -284,7 +294,6 @@ Section CFGVerificationDerived.
        without the same justification.  MEMORY still speaks AST: see
        ptsto_instrs in Section Soundness, fed `ai_instr <$> instrs`. *)
     Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
-      (bblks : gmap (bv xlenbits) SBlk)
       (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool) (fuel : nat) :
       RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
       fun apc anp =>
@@ -296,43 +305,34 @@ Section CFGVerificationDerived.
             | Some v =>
                 angelic_binary
                   (if exitCond v then pure apc else error)
-                  (angelic_binary
-                     (* BLOCK branch (plans/PLAN-executor-composition.md).
-                        Angelic, NOT a rigid match on `bblks !! v` -- for
-                        exactly the reason the exit/execute choice above is
-                        angelic.  The symbolic side dispatches by a decisive
-                        `lookup_blk`, so it may be strictly MORE decisive than
-                        the concrete table; the angelic choice lets the concrete
-                        side follow whichever branch the symbolic side took.
-                        That keeps `btable_rel` ONE-WAY, mirroring `itable_rel`
-                        and `is_exit_sound`.  With a rigid match, a concrete
-                        block entry the symbolic table lacks would force the
-                        concrete side to consume/produce while the symbolic side
-                        executed instructions, and refinement would fail -- an
-                        artifact of the rigid match, not a property of blocks.
-                        A MISS is still just a miss; blocks change nothing
-                        about that. *)
-                     (match bblks !! v with
-                      | Some b =>
-                          apc' <- cexec_block b v ;;
-                          (* DEMONIC nextpc, mirroring the symbolic side: no
-                             epilogue was consumed here, so nothing forces the
-                             nextpc register's value -- see Verifier.v. *)
-                          np'  <- demonic _ ;;
-                          cexec_cfg_addr instrs bblks words exitCond n' apc' np'
-                      | None => error
-                      end)
-                     (match instrs !! v with
-                      | None    => error
-                      | Some ai =>
-                          _ <- cchunk_gc ;;
-                          _ <- cdrop_dead ;;
-                          _ <- cexec_ghosts (ai_ghost_before ai) ;;
-                          apc' <- cexec_instruction (ai_instr ai) apc anp
-                                    (ty.SyncVal (words v)) ;;
-                          _ <- cexec_ghosts (ai_ghost_after ai) ;;
-                          cexec_cfg_addr instrs bblks words exitCond n' apc' apc'
-                      end))
+                  (match instrs !! v with
+                   | None    => error
+                   | Some ai =>
+                     (* BLOCK branch.  A RIGID match, not an angelic choice:
+                        both executors read `ai_block` off the SAME `ai`
+                        (itable_rel already gives `instrs !! v = Some ai` for
+                        the matched symbolic entry), so unlike the exit/execute
+                        choice there is nothing one-way to accommodate.  That
+                        is the payoff of putting the contract in the payload
+                        instead of a parallel table. *)
+                     match ai_block ai with
+                     | Some b =>
+                         apc' <- cexec_block b v ;;
+                         (* DEMONIC nextpc, mirroring the symbolic side: no
+                            epilogue was consumed here, so nothing forces the
+                            nextpc register's value -- see Verifier.v. *)
+                         np'  <- demonic _ ;;
+                         cexec_cfg_addr instrs words exitCond n' apc' np'
+                     | None =>
+                         _ <- cchunk_gc ;;
+                         _ <- cdrop_dead ;;
+                         _ <- cexec_ghosts (ai_ghost_before ai) ;;
+                         apc' <- cexec_instruction (ai_instr ai) apc anp
+                                   (ty.SyncVal (words v)) ;;
+                         _ <- cexec_ghosts (ai_ghost_after ai) ;;
+                         cexec_cfg_addr instrs words exitCond n' apc' apc'
+                     end
+                   end)
             end
         end.
 
@@ -356,8 +356,8 @@ Section CFGVerificationDerived.
       Monotonic (MHeapSpec eq) (cexec_block b v).
     Proof. unfold cexec_block. typeclasses eauto. Qed.
 
-    #[export] Instance mono_cexec_cfg_addr {instrs bblks words exitCond fuel apc anp} :
-      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs bblks words exitCond fuel apc anp).
+    #[export] Instance mono_cexec_cfg_addr {instrs words exitCond fuel apc anp} :
+      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs words exitCond fuel apc anp).
     Proof.
       revert apc anp. induction fuel; intros apc anp.
       - typeclasses eauto.
@@ -365,7 +365,7 @@ Section CFGVerificationDerived.
         + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
           destruct (exitCond v);
             cbn [CHeapSpec.pure CHeapSpec.error bind];
-            try destruct (bblks !! v); try destruct (instrs !! v);
+            try destruct (instrs !! v) as [ai|]; try destruct (ai_block ai);
             unfold cexec_block; typeclasses eauto.
         + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
     Qed.
@@ -529,49 +529,6 @@ Section CFGVerificationDerived.
 
     (* One lookup yields BOTH the word term and the instruction, so this
        returns the gmap facts for both columns at once. *)
-    (* ===================================================================== *)
-    (* BLOCK TABLE RELATION -- the SOUNDNESS half.                            *)
-    (*                                                                       *)
-    (* Mirrors `itable_rel` exactly: every SYMBOLIC entry names an address the *)
-    (* concrete gmap maps to the same block.  Needed under either design for   *)
-    (* the completeness question below, so it is written first.                *)
-    (*                                                                       *)
-    (* ONE-WAY, exactly like `itable_rel` and `is_exit_sound`, and that is
-       sufficient: `cexec_cfg_addr_b` dispatches blocks ANGELICALLY, so where
-       the symbolic side is more decisive the concrete side simply follows it.
-       (An earlier version of this comment claimed blocks needed a two-way
-       relation because a symbolic block MISS falls through to the instruction
-       path rather than erroring.  That was a consequence of writing the
-       concrete dispatch as a rigid match, not a property of blocks.) *)
-    Definition btable_rel {w} (bblks : gmap (bv xlenbits) SBlk)
-        (btbl : SBlkTableT (wctx w)) : Pred w :=
-      fun ι => List.Forall
-        (fun p => exists v, inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι
-                            = ty.SyncVal v /\ bblks !! v = Some (snd p)) btbl.
-
-    Lemma lookup_blk_sound {w} (bblks : gmap (bv xlenbits) SBlk)
-        (btbl : SBlkTableT (wctx w))
-        (apc : STerm ty_xlenbits w) (b : SBlk) (ι : Valuation w) :
-      lookup_blk btbl apc = Some b ->
-      btable_rel bblks btbl ι ->
-      exists v, inst apc ι = ty.SyncVal v /\ bblks !! v = Some b.
-    Proof.
-      unfold lookup_blk, btable_rel.
-      intros Hlk Hrel.
-      (* the predicate must be SPELLED OUT: with a two-place tuple pattern Coq
-         cannot infer the placeholder (lookup_instr_sound's three-place one
-         happens to pin it). *)
-      destruct (List.find (fun '(t,_) => Term_eqb (peval apc) (peval t)) btbl)
-        as [[t b']|] eqn:Hfind; cbn in Hlk; [|discriminate].
-      injection Hlk as ->.
-      apply find_some in Hfind as [Hin Heqb].
-      rewrite List.Forall_forall in Hrel.
-      specialize (Hrel _ Hin) as (v & Hv & Hmap).
-      exists v. split; [| exact Hmap].
-      rewrite (peval_eqb_inst apc t ι Heqb).
-      exact Hv.
-    Qed.
-
     Lemma lookup_instr_sound {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
         (apc : STerm ty_xlenbits w) (x : Term (wctx w) ty_word) (i : AnnotInstr)
@@ -757,108 +714,6 @@ Section CFGVerificationDerived.
       now rewrite <- Ha.
     Qed.
 
-    (* ---- THE BLOCK-TABLE FAMILY -------------------------------------------
-       One lemma per itable_rel/etable_rel counterpart, same proofs.  The only
-       one with no counterpart is subst_blktable_persist, and it is what makes
-       the Σ0-indexed block table work: the executor re-derives its w-level
-       table as `subst_blktable trans btbl0` at every step, so to re-establish
-       btable_rel after a hop we must know that substituting through the
-       PERSISTED trans is the same as persisting the substituted table.  That
-       is the price of not making the block table an eighth drop_dead root --
-       one commuting square instead of six changed definitions. *)
-    Lemma forgetting_btable_rel {w1 w2} (θ : Acc w1 w2)
-        (bblks : gmap (bv xlenbits) SBlk) (btbl : SBlkTableT (wctx w1)) :
-      (forgetting θ (btable_rel bblks btbl)
-       ⊣⊢ btable_rel bblks (persist_blktable θ btbl))%I.
-    Proof.
-      constructor.
-      intros ι.
-      unfold forgetting, btable_rel, persist_blktable.
-      rewrite List.Forall_map.
-      cbn.
-      split; apply List.Forall_impl; intros [t b] (v & Hv & Hm);
-        exists v; (split; [|exact Hm]); cbn in *;
-        rewrite inst_persist in Hv + rewrite inst_persist; exact Hv.
-    Qed.
-
-    Lemma persist_blktable_refl {w} (btbl : SBlkTableT (wctx w)) :
-      persist_blktable acc_refl btbl = btbl.
-    Proof.
-      unfold persist_blktable.
-      induction btbl as [|[t b] btbl' IH]; cbn; [reflexivity|].
-      cbn in IH. f_equal. exact IH.
-    Qed.
-
-    Lemma persist_blktable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3)
-        (btbl : SBlkTableT (wctx w1)) :
-      persist_blktable θ23 (persist_blktable θ12 btbl)
-      = persist_blktable (acc_trans θ12 θ23) btbl.
-    Proof.
-      unfold persist_blktable.
-      rewrite List.map_map.
-      apply List.map_ext.
-      intros [t b].
-      now rewrite persist_trans.
-    Qed.
-
-    Lemma subst_blktable_persist {Σ0 : LCtx} {w1 w2 : World} (θ : Acc w1 w2)
-        (trans : Sub Σ0 w1) (btbl0 : SBlkTableT (wlctx Σ0)) :
-      subst_blktable (persist (A := Sub Σ0) trans θ) btbl0
-      = persist_blktable θ (subst_blktable trans btbl0).
-    Proof.
-      unfold subst_blktable, persist_blktable.
-      rewrite List.map_map.
-      apply List.map_ext.
-      intros [t b].
-      cbn. f_equal. rewrite ?persist_subst. now rewrite subst_sub_comp.
-    Qed.
-
-    (* The EMPTY block table relates to any gmap, because btable_rel is
-       one-way: it constrains the SYMBOLIC entries only.  This is what lets
-       every existing (block-free) contract keep its refinement unchanged --
-       `sexec_triple_addr` passes `[]` and this discharges the new premise. *)
-    Lemma btable_rel_nil {w : World} (bblks : gmap (bv xlenbits) SBlk) :
-      ⊢ btable_rel (w := w) bblks [].
-    Proof. constructor. intros ι Hpc _. constructor. Qed.
-
-    Lemma lookup_blk_sound_repₚ {w} (bblks : gmap (bv xlenbits) SBlk)
-        (btbl : SBlkTableT (wctx w))
-        (apc : STerm ty_xlenbits w) (b : SBlk) (a : RelVal ty_xlenbits) :
-      lookup_blk btbl apc = Some b ->
-      (btable_rel bblks btbl ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
-       ⌜exists v, a = ty.SyncVal v /\ bblks !! v = Some b⌝)%I.
-    Proof.
-      intros Hlk.
-      constructor.
-      intros ι Hpc H.
-      cbn in H.
-      destruct H as [Hrel Ha].
-      destruct (lookup_blk_sound apc Hlk Hrel) as (v & Hv & Hm).
-      exists v.
-      split; [|exact Hm].
-      now rewrite <- Ha.
-    Qed.
-
-
-    (* rexec_ghosts: refinement of the ghost interpreter, for an ARBITRARY
-       ghost list.  It must be inductive: in rexec_cfg_addr the list is
-       `ai_ghost_before ai` with `ai` opaque out of lookup_instr, so no finite
-       set of instances (a gc_binds_heap-style rewrite) can discharge it —
-       gc_binds_heap only works because chunk_gc is a CLOSED term.
-
-       The □ᵣ / unconditionally_T wrapper is REQUIRED, not stylistic: without
-       it the IH lands at the wrong world and iApply simply cannot apply it,
-       which fails in a way that looks nothing like "you need a box".  Both
-       rexec_cfg_addr below and main's rexec_annotated_block_addr open with the
-       same iAssert.  The 2026-08-20 attempt at a ghost lemma copied main's
-       TACTIC without this surrounding structure and was never made to work
-       (it hung 300 s+, root cause never found); with the structure the whole
-       thing is ~11 s and every step is an idiom already used in this file.
-       Developed in isolation first — see the ZZGhostRefineProbe.v record in
-       PLAN-annotinstr.md — precisely so a failure here would be attributable
-       to the plumbing rather than to the lemma.  Re-validated in that same
-       probe on 2026-08-24 with BOTH sides carrying a real call_lemma, which
-       is the configuration Phase 4 lands: still no hang. *)
     Lemma rexec_ghosts (gs : list Annot) {w} :
       ⊢ ℛ⟦RHeapSpec RUnit⟧ (cexec_ghosts gs) (sexec_ghosts gs (w := w)).
     Proof.
@@ -888,29 +743,28 @@ Section CFGVerificationDerived.
 
     (* ---- THE BLOCK STEP'S REFINEMENT -------------------------------------
        `sexec_block` and `cexec_block` are structural mirrors, so rsolve
-       dispatches all three binds (angelic_ctx / consume / produce) on its own.
-       What it cannot close is the RESULT, because the two sides compute the
-       exit pc differently on purpose: the concrete side adds to the CONCRETE
-       address `v` it matched on, the symbolic side to the pc TERM.  They agree
-       exactly because the branch is only reached with `a = SyncVal v`, which
-       is what the premise says -- hence refine_bvadd_val below and the
-       refine_inst_persist that transports the premise across the three binds.
+       dispatches all three binds AND -- now that the concrete exit pc is
+       written with `bop.evalRel bop.bvadd` rather than
+       `ty.SyncVal (bv.add ..)` -- the exit-pc value goals too, through
+       refine_compat_term_binop.
 
-       Stated with a WAND rather than `⊢` so it can be iApply'd at a bind the
-       way rexec_ghosts and rexec_instruction are. *)
-    Lemma refine_bvadd_val {w : World} (t : STerm ty_xlenbits w) (v c : bv xlenbits) :
-      (ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal v) t ⊢
-       ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal (bv.add v c))
-         (term_binop bop.bvadd t (term_val ty_xlenbits c)))%I.
-    Proof.
-      constructor. intros ι Hpc H.
-      (* RVal is `Arguments RVal σ : simpl never`, so cbn alone leaves both
-         sides folded and `rewrite H` finds no subterm -- unfold it (and RInst)
-         first.  Then the goal is inst-of-a-binop, which is definitionally
-         liftBinOp bv.add applied to the two instantiations. *)
-      unfold RVal, RInst in *. cbn in *. now rewrite H.
-    Qed.
+       What is left is the ENTRY pc.  It now flows through the consume's
+       ENVIRONMENT rather than only into the final `pure`, so it is needed one
+       world hop in: the goal is
+       `forgetting ω0 (ℛ⟦RInst⟧ (SyncVal v) (persist ta ω))` while `Ha` sits at
+       the composed `acc_trans ω ω0`.  forgetting_trans splits that so
+       iModIntro (forgetting is a Modality, UnifLogic.v:1121) strips the outer
+       hop off goal and hypothesis together, leaving exactly
+       refine_inst_persist's shape.
 
+       TWO DEAD ENDS, both of which look right.  `rewrite <- forgetting_repₚ`
+       fires on NOTHING -- `ℛ⟦RInst⟧` is not syntactically `repₚ`, so it
+       silently no-ops and the goals come back byte-identical.  And
+       refine_inst_persist cannot be applied directly: its conclusion is a bare
+       ℛ, not a `forgetting` of one.
+
+       Developed in Example/ZZBlkProbe.v -- pet OOMs at 7.6 GB opening THIS
+       file at any position, so the goals are unreadable in place. *)
     Lemma rexec_block (b : SBlk) (v : bv xlenbits) {w : World} (ta : STerm ty_xlenbits w) :
       ⊢ (ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal v) ta -∗
          ℛ⟦RHeapSpec (RVal ty_xlenbits)⟧ (cexec_block b v) (sexec_block b ta)).
@@ -918,8 +772,22 @@ Section CFGVerificationDerived.
       iIntros "#Ha".
       unfold cexec_block, sexec_block.
       rsolve.
-      iApply refine_bvadd_val.
-      iApply (refine_inst_persist with "Ha").
+      (* Two shapes remain, and the second reduces to the first: the ENTRY pc
+         (twice -- once per environment it is threaded through) and the EXIT
+         pc under the produce's hop.  `refine_term_binop` peels the exit pc's
+         operator, after which what is left IS the entry-pc shape again, hence
+         the nested repeat of the same three steps. *)
+      (* `solve [rsolve]` first: rsolve closes the HEAP goal on its own (the
+         value goals are the ones it cannot, since `Ha` is a hypothesis rather
+         than an instance).  Without the guard, `all:` drives the value tactic
+         into the heap goal and it fails there with an `RInst SHeap SCHeap`
+         iSpecialize error that looks unrelated to blocks. *)
+      all: first
+        [ solve [rsolve]
+        | (rewrite forgetting_trans; iModIntro;
+           try (iApply refine_term_binop; rsolve;
+                rewrite forgetting_trans; iModIntro);
+           iApply (refine_inst_persist with "Ha")) ].
     Qed.
 
 
@@ -1445,14 +1313,13 @@ Section CFGVerificationDerived.
   (* turns that into the tree equality Factors asks for. *)
   (* ================================================================== *)
   Lemma factors_drop_cont {Sg0 : LCtx} {w : World} (n' : nat) (ai : AnnotInstr)
-      (btbl0 : SBlkTableT (wlctx Sg0))
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
       (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
       (Phi : forall w2 : World, Acc w w2 -> STerm ty_xlenbits w2 -> SHeap w2 -> 𝕊 w2)
       (HPhi : Factors (dbundle trans tbl exits apc anp wd) Phi) :
     Factors (dbundle trans tbl exits apc anp wd)
       (fun w1 (om : Acc w w1) (_ : Unit w1) =>
-         step_after_drop (@sexec_cfg_addr Sg0 n' false btbl0) ai
+         step_after_drop (@sexec_cfg_addr Sg0 n' false) ai
            (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
            (persist_etable om exits) (persist__term apc om) (persist__term anp om)
            (persist__term wd om) (four Phi om)).
@@ -1464,7 +1331,7 @@ Section CFGVerificationDerived.
        is expected". *)
     exists (fun w1 (bnd : dcarrier Sg0 (wctx w1)) (_ : Unit w1) =>
               let '(q1, q2, q3, q4, q5, q6) := bnd in
-              step_after_drop (@sexec_cfg_addr Sg0 n' false btbl0) ai q1 q2 q3 q4 q5 q6
+              step_after_drop (@sexec_cfg_addr Sg0 n' false) ai q1 q2 q3 q4 q5 q6
                 (fun w' om' => g w' (persist (A := dcarrier Sg0) bnd om'))).
     intros w2 om v h.
     rewrite dbundle_persist. cbn [dbundle].
@@ -1540,14 +1407,13 @@ Section CFGVerificationDerived.
      `dcarrier Sg0`, not syntactically `fun Sg => (?A Sg * ?B Sg)`, so
      unification cannot invert it. *)
   Lemma factors_drop_at_step {Sg0 : LCtx} {w : World} (n' : nat) (ai : AnnotInstr)
-      (btbl0 : SBlkTableT (wlctx Sg0))
       (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
       (apc anp : Term (wctx w) ty_xlenbits) (wd : Term (wctx w) ty_word)
       (Phi : forall w2 : World, Acc w w2 -> STerm ty_xlenbits w2 -> SHeap w2 -> 𝕊 w2)
       (HPhi : Factors (dbundle5 trans tbl exits apc anp) Phi) :
     Factors (dbundle trans tbl exits apc anp wd)
       (fun w1 (om : Acc w w1) (_ : Unit w1) =>
-         step_after_drop (@sexec_cfg_addr Sg0 n' false btbl0) ai
+         step_after_drop (@sexec_cfg_addr Sg0 n' false) ai
            (persist (A := Sub Sg0) trans om) (persist_itableW om tbl)
            (persist_etable om exits) (persist__term apc om) (persist__term anp om)
            (persist__term wd om) (four Phi om)).
@@ -1718,24 +1584,22 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma rexF0 (instrs : gmap (bv xlenbits) AnnotInstr)
-        (bblks : gmap (bv xlenbits) SBlk)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
-        {Σ0 : LCtx} (btbl0 : SBlkTableT (wlctx Σ0)) :
+        {Σ0 : LCtx} :
       forall (first : bool) (w : World) (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w),
-      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ∗
-       btable_rel bblks (subst_blktable trans btbl0) ⊢
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
        ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_cfg_addr instrs bblks words exitCond 0 a na cΦ ch)
-            (sexec_cfg_addr 0 first btbl0 trans tbl exits ta tna sΦ sh))%I.
+            (cexec_cfg_addr instrs words exitCond 0 a na cΦ ch)
+            (sexec_cfg_addr 0 first trans tbl exits ta tna sΦ sh))%I.
     Proof.
       intros first w trans tbl exits.
-      iIntros "#(Hi & He & Hb)".
+      iIntros "#[Hi He]".
       iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
       iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
       cbn [sexec_cfg_addr cexec_cfg_addr].
@@ -1744,36 +1608,33 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma rexFS (instrs : gmap (bv xlenbits) AnnotInstr)
-        (bblks : gmap (bv xlenbits) SBlk)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
-        {Σ0 : LCtx} (btbl0 : SBlkTableT (wlctx Σ0)) (n' : nat) (first : bool)
+        {Σ0 : LCtx} (n' : nat) (first : bool)
         (IH : forall (w : World) (trans : Sub Σ0 w)
                 (tbl : SInstrTableW w) (exits : SExitTable w),
-           (itable_relW instrs words tbl ∗ etable_rel exitCond exits ∗
-            btable_rel bblks (subst_blktable trans btbl0) ⊢
+           (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
             ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
             ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
             ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
               ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
             ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
               ℛ⟦LogicalSoundness.RProp⟧
-                 (cexec_cfg_addr instrs bblks words exitCond n' a na cΦ ch)
-                 (sexec_cfg_addr n' false btbl0 trans tbl exits ta tna sΦ sh))%I) :
+                 (cexec_cfg_addr instrs words exitCond n' a na cΦ ch)
+                 (sexec_cfg_addr n' false trans tbl exits ta tna sΦ sh))%I) :
       forall (w : World) (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w),
-      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ∗
-       btable_rel bblks (subst_blktable trans btbl0) ⊢
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
        ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_cfg_addr instrs bblks words exitCond (S n') a na cΦ ch)
-            (sexec_cfg_addr (S n') first btbl0 trans tbl exits ta tna sΦ sh))%I.
+            (cexec_cfg_addr instrs words exitCond (S n') a na cΦ ch)
+            (sexec_cfg_addr (S n') first trans tbl exits ta tna sΦ sh))%I.
     Proof.
       intros w trans tbl exits.
-      iIntros "#(Hi & He & Hb)".
+      iIntros "#[Hi He]".
       iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
       iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
       cbn [sexec_cfg_addr cexec_cfg_addr].
@@ -1787,8 +1648,8 @@ Section CFGVerificationDerived.
          rprop_or.  Goals below: 1 = stop, 2 = run/lookup-hit,
          3 = run/lookup-miss. *)
       destruct (andb (negb first) (is_exit exits ta)) eqn:Hcol.
-      2: destruct (lookup_blk (subst_blktable trans btbl0) ta) as [blk|] eqn:Hblk.
-      3: destruct (lookup_instr tbl ta) as [[wd ai]|] eqn:Hlk.
+      2: destruct (lookup_instr tbl ta) as [[wd ai]|] eqn:Hlk.
+      2: destruct (ai_block ai) as [blk|] eqn:Hblk.
 
       (* ---- 4: no-exit / block-miss / lookup-miss.  The symbolic side is a
          bare error now (no angelic wrapper), so psafe is outright False. *)
@@ -1796,12 +1657,17 @@ Section CFGVerificationDerived.
            unfold LogicalSoundness.RProp; cbn;
            iIntros "%HF"; destruct HF. }
 
-      (* ---- 3: no-exit / block-miss / lookup-hit.  THE CORE -- this is the *)
+      (* ---- 3: no-exit / lookup-hit / NO block.  THE CORE -- this is the   *)
       (* branch that actually contains the drop.  Driven to the frontier below.*)
       3: { iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
              as (v) "[%Hfact #Hx]".
            destruct Hfact as (-> & Hm).
-           cbn [ty.RVToOption]. rewrite Hm.
+           (* `rewrite Hblk` is REQUIRED and is new with the payload hook: the
+              symbolic side was already reduced by the destruct, but `rewrite
+              Hm` re-introduces `ai` on the CONCRETE side, so its
+              `match ai_block ai` is still blocked.  Without it the very next
+              rewrite fails with "LHS of cgc_binds_heap does not match". *)
+           cbn [ty.RVToOption]. rewrite Hm. rewrite Hblk.
            (* Only the CONCRETE angelic_binary is left to unfold -- the
               symbolic side no longer has one -- and we take its RIGHT disjunct.
               Note this needs NOTHING about `exitCond v`: `is_exit = false` does
@@ -1809,10 +1675,7 @@ Section CFGVerificationDerived.
               so the concrete exit branch may well be `pure`; rprop_right
               ignores it. *)
            unfold CHeapSpec.angelic_binary.
-           (* TWO rprop_right now: the concrete side is
-              `exit \/ (block \/ instruction)` since the block hook landed, and
-              this branch is the innermost disjunct. *)
-           iApply rprop_right. iApply rprop_right.
+           iApply rprop_right.
            (* Eliminate both chunk_gc binds and the concrete drop bind.  After
               this the goal is EXACTLY rdrop_dead_iris's shape. *)
            rewrite cgc_binds_heap cdrop_binds gc_binds_heap.
@@ -1917,19 +1780,12 @@ Section CFGVerificationDerived.
                 backwards collapses `trans` to an acc_trans chain that then cannot
                 match F4. *)
              rewrite forgetting_itable_relW. rewrite forgetting_etable_rel.
-             rewrite forgetting_btable_rel.
              rewrite <- !persist_itableW_trans. rewrite <- !persist_etable_trans.
-             rewrite <- !persist_blktable_trans.
              rewrite !(persist_trans (A := Sub Σ0)).
-             (* The block table is DERIVED from trans rather than carried, so
-                after the four hops it must be pushed back through
-                subst_blktable_persist to match the IH's
-                `subst_blktable trans' btbl0`. *)
-             rewrite <- !subst_blktable_persist.
              (* The IH is a PLAIN COQ hypothesis applied directly -- `w` is
                 generalised in the statement and this is a plain `induction fuel`,
                 so there is no boxed IH and no forgetting_unconditionally_drastic. *)
-             iApply (IH _ _ _ _ with "[$Hi $He $Hb]").
+             iApply (IH _ _ _ _ with "[$Hi $He]").
              1: iApply (refine_inst_persist with "Hapc").
              1: iApply (refine_inst_persist with "Hapc").
              1: (iPureIntro; exact F4).
@@ -1953,15 +1809,18 @@ Section CFGVerificationDerived.
          angelic_binary), and that `is_exit = false` tells us nothing about
          `exitCond v` -- is_exit_sound runs the other way -- so the exit
          disjunct may well be `pure`; rprop_right ignores it either way. *)
-      (* Explicit args are bblks/btbl/apc/a then the lookup equation -- `b` and
-         `w` are the only implicit ones, same slotting as
-         lookup_instr_sound_repₚ's use below. *)
-      2: { iDestruct (lookup_blk_sound_repₚ bblks _ ta a Hblk with "[$Hb $Ha]")
-             as "%Hfact".
-           destruct Hfact as (v & -> & Hm).
-           cbn [ty.RVToOption]. rewrite Hm.
+      2: { (* v and `instrs !! v = Some ai` come from the SAME lookup the
+              instruction case uses -- the block rides in `ai`, so no second
+              faithfulness lemma is needed.  `rewrite Hblk` then fixes the
+              concrete side's payload match; it is RIGID on both sides, so
+              only ONE rprop_right (past the exit disjunct) is needed and no
+              rprop_left. *)
+           iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
+             as (v) "[%Hfact #Hx]".
+           destruct Hfact as (-> & Hm).
+           cbn [ty.RVToOption]. rewrite Hm. rewrite Hblk.
            unfold CHeapSpec.angelic_binary.
-           iApply rprop_right. iApply rprop_left.
+           iApply rprop_right.
            unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
            iApply (rexec_block blk v ta with "Ha").
            2: iApply "rh".
@@ -1973,10 +1832,9 @@ Section CFGVerificationDerived.
               resumed nextpc is quantified rather than read off the heap
               (Verifier.v); that is one more bind to pair here, and it is what
               keeps blocksSound at `∃ x, nextpc ↦ x` rather than demanding
-              nextpc = pc. *)
+              nextpc = pc.  QUALIFIED: a bare `refine_demonic` resolves to
+              PureSpec's and fails with an RPureSpec goal. *)
            unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
-           (* QUALIFIED: a bare `refine_demonic` resolves to PureSpec's and
-              fails with an RPureSpec goal. *)
            iApply HeapSpec.refine_demonic.
            2: iApply "rh1".
            iIntros (w2 θ2). iModIntro. iIntros (np' tnp') "#Hnp".
@@ -1992,12 +1850,9 @@ Section CFGVerificationDerived.
            rewrite !dbundle3_persist in F2.
            clear F1.
            rewrite forgetting_itable_relW. rewrite forgetting_etable_rel.
-           rewrite forgetting_btable_rel.
            rewrite <- !persist_itableW_trans. rewrite <- !persist_etable_trans.
-           rewrite <- !persist_blktable_trans.
            rewrite !(persist_trans (A := Sub Σ0)).
-           rewrite <- !subst_blktable_persist.
-           iApply (IH _ _ _ _ with "[$Hi $He $Hb]").
+           iApply (IH _ _ _ _ with "[$Hi $He]").
            1: iApply (refine_inst_persist with "Hapc").
            1: iApply "Hnp".
            1: (iPureIntro; exact F2).
@@ -2051,24 +1906,21 @@ Section CFGVerificationDerived.
        occurs-check it (PLAN-dropk.md §4bis / Verifier.v's comment on
        sexec_cfg_addr).  cexec_cfg_addr is therefore UNCHANGED. *)
     Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
-        (bblks : gmap (bv xlenbits) SBlk)
         (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
         (* `{w : World}` must be ANNOTATED: `trans : Sub Σ0 w` now precedes the
            table arguments, and `Sub` takes an LCtx, so leaving `w` to be
            inferred elaborates it as an LCtx and `SInstrTableW w` then fails. *)
-        (fuel : nat) (first : bool) {w : World} {Σ0 : LCtx}
-        (btbl0 : SBlkTableT (wlctx Σ0)) (trans : Sub Σ0 w)
+        (fuel : nat) (first : bool) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w) :
-      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ∗
-       btable_rel bblks (subst_blktable trans btbl0) ⊢
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
        ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_cfg_addr instrs bblks words exitCond fuel a na cΦ ch)
-            (sexec_cfg_addr fuel first btbl0 trans tbl exits ta tna sΦ sh))%I.
+            (cexec_cfg_addr instrs words exitCond fuel a na cΦ ch)
+            (sexec_cfg_addr fuel first trans tbl exits ta tna sΦ sh))%I.
     Proof.
       (* `first` must be REVERTED along with the rest: the goal fixes it, but
          the recursive call inside sexec_cfg_addr always passes `false`, so the
@@ -2082,7 +1934,7 @@ Section CFGVerificationDerived.
            exitCond IMPLICIT -- they are inferable from IH -- so its first
            EXPLICIT arguments are n' and first.  Passing them positionally
            mis-slots and reports "instrs ... expected to have type nat". *)
-        apply (rexFS btbl0 n' first (IH false)).
+        apply (rexFS n' first (IH false)).
     Qed.
 
     (* ------------------------------------------------------------------ *)
@@ -2118,7 +1970,6 @@ Section CFGVerificationDerived.
 
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (bblks : gmap (bv xlenbits) SBlk)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -2138,7 +1989,7 @@ Section CFGVerificationDerived.
          step.  See exec_instruction_prologue (Verifier.v). *)
       CHeapSpec.bind (CHeapSpec.demonic _) (fun np =>
       CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
-      CHeapSpec.bind (cexec_cfg_addr instrs bblks words exitCond fuel a np) (fun na =>
+      CHeapSpec.bind (cexec_cfg_addr instrs words exitCond fuel a np) (fun na =>
       CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])))))).
 
     (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
@@ -2669,7 +2520,6 @@ Section CFGVerificationDerived.
     (* the executor dispatched by rexec_cfg_addr are all unchanged.         *)
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (bblks : gmap (bv xlenbits) SBlk)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -2680,7 +2530,7 @@ Section CFGVerificationDerived.
         ℛ⟦□ᵣ (RUnit -> RHeap -> LogicalSoundness.RProp)⟧ cPhi sPhi -∗
         ∀ (ch : SCHeap) (sh : SHeap w), ℛ⟦RHeap⟧ ch sh -∗
           ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_triple_addr req instrs bblks words exitCond fuel ens tbl exits cPhi ch)
+            (cexec_triple_addr req instrs words exitCond fuel ens tbl exits cPhi ch)
             (sexec_triple_addr req tbl exits fuel ens (w := w) sPhi sh).
     Proof.
       iIntros (cPhi sPhi) "%Hoi #rPhi". iIntros (ch sh) "#rh".
@@ -2742,16 +2592,8 @@ Section CFGVerificationDerived.
                                    (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
                { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
                unfold CHeapSpec.bind. unfold SHeapSpec.bind.
-               (* DELIBERATELY substitution-free.  An earlier version took the
-                  substitution explicitly, and naming one here PINNED the
-                  executor's `trans` through the `$Hb` frame -- to the Σ-level
-                  ζ, where the executor actually runs at Σ ▻ "a"∷ty_xlenbits --
-                  so the iApply failed with the lemma looking correct.  Stated
-                  at `[]`, framing unifies `[]` with `subst_blktable ?ζ []` by
-                  delta+iota and leaves ?ζ for the executor to fix. *)
-               iPoseProof (btable_rel_nil (w := w4) bblks) as "#Hb".
-               iApply (rexec_cfg_addr instrs bblks words exitCond fuel true []
-                         _ _ _ with "[$Hi $He $Hb]").
+               iApply (rexec_cfg_addr instrs words exitCond fuel true _ _ _
+                         with "[$Hi $He]").
                (* FIVE premises: two RVal, the Factors one, then the □ᵣ/RHeap
                   pair, which the RHeapSpec-folded statement used to supply
                   automatically. *)
@@ -2779,22 +2621,20 @@ Section CFGVerificationDerived.
 
     Definition ccfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (bblks : gmap (bv xlenbits) SBlk)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : Prop :=
-      CHeapSpec.run (cexec_triple_addr req instrs bblks words exitCond fuel ens tbl exits).
+      CHeapSpec.run (cexec_triple_addr req instrs words exitCond fuel ens tbl exits).
 
     Lemma rcfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (bblks : gmap (bv xlenbits) SBlk)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
-          (ccfg_verification_condition req instrs bblks words exitCond fuel ens tbl exits)
+          (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits)
           (scfg_verification_condition req tbl exits fuel ens w).
     Proof.
       unfold ccfg_verification_condition, scfg_verification_condition.
@@ -2804,7 +2644,7 @@ Section CFGVerificationDerived.
          constant continuation `fun w1 θ1 _ h1 => block` is what makes the
          premise true, by omega_indep_block. *)
       unfold CHeapSpec.run. unfold SHeapSpec.run.
-      iApply (rexec_triple_addr req instrs bblks words exitCond fuel ens tbl exits).
+      iApply (rexec_triple_addr req instrs words exitCond fuel ens tbl exits).
       - iPureIntro. apply omega_indep_block.
       - rsolve.
       - rsolve.
@@ -2812,15 +2652,14 @@ Section CFGVerificationDerived.
 
     #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (bblks : gmap (bv xlenbits) SBlk)
       (words : bv xlenbits -> bv word)
       (exitCond : bv xlenbits -> bool) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       RefineCompat (LogicalSoundness.RProp)
-        (ccfg_verification_condition req instrs bblks words exitCond fuel ens tbl exits) w
+        (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits) w
         (scfg_verification_condition req tbl exits fuel ens w) _ :=
-      MkRefineCompat (rcfg_verification_condition req instrs bblks words exitCond fuel ens tbl exits).
+      MkRefineCompat (rcfg_verification_condition req instrs words exitCond fuel ens tbl exits).
 
   End Relational.
 
