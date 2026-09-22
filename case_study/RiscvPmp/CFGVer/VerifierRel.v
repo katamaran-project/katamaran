@@ -2715,6 +2715,24 @@ Section CFGVerificationDerived.
        ownership.  Needed by intro_ptsto_instrs, whose induction peels one
        instruction off `instrs` while the word function gains one case: the
        tail's addresses must be unaffected by the head's. *)
+    (* SPLIT INSTRUCTION OWNERSHIP ALONG A SUBMAP, and rejoin -- it is a
+       bi-entailment, so one lemma does both directions.
+
+       This is what lets a BLOCK own only its own span while the enclosing run
+       keeps the rest (PLAN-contract-ast §2c): the caller splits, hands the
+       span to the block, and rejoins from the block's postcondition.  §2c
+       listed this as "expected to be easy but unverified"; it is three
+       tactics, verified 2026-09-23. *)
+    Lemma ptsto_instrs_w_split (words : bv xlenbits -> bv word)
+        (m M : gmap (bv xlenbits) AST) :
+      m ⊆ M ->
+      ptsto_instrs_w words M ⊣⊢ ptsto_instrs_w words m ∗ ptsto_instrs_w words (M ∖ m).
+    Proof.
+      intros Hsub. unfold ptsto_instrs_w.
+      rewrite <- (map_difference_union m M Hsub) at 1.
+      apply big_sepM_union. by apply map_disjoint_difference_r.
+    Qed.
+
     Lemma ptsto_instrs_w_agree (w1 w2 : bv xlenbits -> bv word)
         (instrs : gmap (bv xlenbits) AST) :
       (forall a i, instrs !! a = Some i -> w1 a = w2 a) ->

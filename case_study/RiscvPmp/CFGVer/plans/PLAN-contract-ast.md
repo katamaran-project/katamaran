@@ -507,6 +507,84 @@ either uses that wand or passes it on, never both.
 
 So §2c is not gated on new Iris machinery. Proceed.
 
+### §2c-STATUS (2026-09-23): BOTH IRIS RISKS SETTLED, AND THE SHAPE IS VERIFIED
+
+Phase 4a landed the record swap (`fab97c31`). For 4b, the three things §2c left
+open have now been checked interactively against the real `Adequacy.v`
+environment rather than argued:
+
+| §2c open item | status |
+|---|---|
+| `myWP2_loop_frame` | derivable in 4 lines from `myWP2_loop_bind` + `exitCondImpliesMyWP2_loop` (verified over an abstract `bi`, 2026-09-22) |
+| `ptsto_instrs` split/reassembly | **DONE** — `ptsto_instrs_w_split` (`VerifierRel.v`), three tactics, a BI-ENTAILMENT so one lemma does split and rejoin |
+| the block's span is expressible | **YES, with no new machinery** — `instrs_of_list` is polymorphic (`∀ A, bv xlenbits → list A → gmap _ A`), so `instrs_of_list v (cfg_instrs (blk_contract b))` is a `gmap _ AST` directly, exactly `ptsto_instrs_w`'s argument type. No coercion, no fmap |
+
+**And the self-contained `blockSound` TYPECHECKS** (45 ms). The shape, with the
+one property that matters — it does NOT mention the enclosing `instrs`:
+
+```coq
+Definition blockSound (words : bv xlenbits -> bv word)
+    (v : bv xlenbits) (b : BlkAnnot) : iProp Σ :=
+  (∀ ι ExitCond,
+     interp (cfg_precondition (blk_contract b)) (ι.["a" ↦ SyncVal v]) ∗
+     pc ↦ᵣ SyncVal v ∗ (∃ x, nextpc ↦ᵣ x) ∗
+     ptsto_instrs_w words (instrs_of_list v (cfg_instrs (blk_contract b))) -∗
+     (interp (cfg_postcondition (blk_contract b)) … ∗ pc ↦ᵣ … ∗ (∃ x, nextpc ↦ᵣ x) ∗
+      ptsto_instrs_w words (instrs_of_list v (cfg_instrs (blk_contract b))) -∗ ExitCond) -∗
+     myWP2_loop ExitCond)%I.
+```
+
+**Dropping the `instrs` parameter is the whole point**, and it is what §2.7's
+"bonus the current design cannot express" buys: `cfg_instrs (blk_contract b)`
+names the block's own code, so the span is derivable from the annotation alone.
+`SBlk` had no field that could say this, which is why the old `blockSound` had
+to take the enclosing program and hence why it needed `clear_blk`.
+
+**THE ADAPTER IS PROVED, AND IT RETIRES §2c's "LOAD-BEARING QUESTION"
+(2026-09-23).** The step everything else rests on — recover the OLD
+whole-program interface from the NEW span-only one, given AST-level containment
+— is six tactics:
+
+```coq
+Lemma blockSound_span_to_whole words instrs v b ι ExitCond :
+  instrs_of_list v (cfg_instrs (blk_contract b)) ⊆ ai_instr <$> instrs ->
+  blockSound words v b -∗
+  (pre … ∗ pc ↦ᵣ … ∗ (∃ x, nextpc ↦ᵣ x) ∗ ptsto_instrs_w words (ai_instr <$> instrs)) -∗
+  (post … ∗ pc ↦ᵣ … ∗ (∃ x, nextpc ↦ᵣ x) ∗ ptsto_instrs_w words (ai_instr <$> instrs) -∗ ExitCond) -∗
+  myWP2_loop ExitCond.
+Proof.
+  intros Hsub. iIntros "Hb (Hpre & Hpc & Hnpc & Hinstrs) Hk".
+  rewrite (ptsto_instrs_w_split words Hsub).
+  iDestruct "Hinstrs" as "[Hspan Hrest]".
+  iApply ("Hb" $! ι ExitCond with "[$Hpre $Hpc $Hnpc $Hspan]").
+  iIntros "(Hpost & Hpc' & Hnpc' & Hspan')". iApply "Hk". iFrame.
+Qed.
+```
+
+**`myWP2_loop_frame` IS NOT NEEDED, and §2c's claim that it was the load-bearing
+question is RETRACTED.** Look at the last line: `Hrest` is discharged by a plain
+`iFrame`. The caller's continuation is an ordinary wand, so it CLOSES OVER the
+remainder from the caller's own spatial context — the remainder never has to
+travel through `myWP2_loop` at all, and there is nothing to frame across it.
+The frame rule is still derivable in four lines and may be wanted elsewhere; it
+is simply not what this design needs. §2c spent its risk budget on the wrong
+question.
+
+**WHAT REMAINS IN 4b, in order, with no unknown risks left:**
+
+1. swap `blockSound` to the shape above and re-shape `blocksSound` (its body
+   stops mentioning `instrs`; the map survives only in the lookup premise);
+2. `blockFaithful` becomes AST-level CONTAINMENT — the span is a submap of
+   `ai_instr <$> instrs` — replacing the `itable_rel` over `clear_blk <$> instrs`;
+3. the block branch of `sound_exec_cfg_addr_myWP2`: split with
+   `ptsto_instrs_w_split`, hand the span over, rejoin from the block's post.
+   **This is the only real proof work left**;
+4. `blockSound_of_vc` → `blockSound_of_contract`: the block's VC runs against
+   its OWN table and its OWN gmap, so its block premise is
+   `blocksSound words (instrs_of_list v a_b)` — a strictly smaller artifact,
+   which is what makes nesting well-founded (see the retraction above);
+5. re-do `ZZBlkAB` on the new shape; GATE 4.
+
 Secondary, expected to be easy but unverified:
 - `ptsto_instrs` splitting/reassembly — it is a `big_sepM`, so
   `big_sepM_union`/`_subseteq` should do it, given the span is a submap.
