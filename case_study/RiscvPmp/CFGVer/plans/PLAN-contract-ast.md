@@ -244,7 +244,7 @@ files. Position decides what each becomes.
 | light `Example/*.v` (18 files) | 30 | **statement** | `cfg_vc c <its own _instrs>`, Phase 2 |
 | `EndToEnd.v` | 13 | **premise** | `∀ a, strip a = … → cfg_vc c a → …`, Phase 3 |
 | `GenCompose.v` | 10 | **premise** | same, Phase 2 |
-| `Example/*Result.v` (4 files) | 9 | **application** | pass what was proved |
+| `Example/*Result.v` (4 files) | 9 | **application** | pass what was proved — but see §2.8, three of them also carry a faithfulness hypothesis that names `cfg_instrs c` |
 
 **A PREMISE MUST QUANTIFY `a`, NOT PIN IT TO THE UN-ANNOTATED PROGRAM.**
 Checked 2026-09-22: every `EndToEnd.v`/`GenCompose.v` occurrence is a hypothesis
@@ -262,6 +262,67 @@ tree-wide sed up front, or Phase 2's gate loses its meaning.
 30 example statements plus 23 premises. It is unavoidable once
 `ValidCFGVerifierContract` is annotation-free, because the light files cannot
 state an annotation-free form (§2.3) and therefore cannot keep the name.
+
+### §2.8 THE SECOND RENAME, AND IT IS THE BIGGER ONE: classifying every `cfg_instrs c`
+
+`ValidCFGVerifierContract`'s 64 sites are the *visible* half. The real work is
+the **61 occurrences of `cfg_instrs` in 9 tracked files** — `EndToEnd.v` 33,
+`GenCompose.v` 11, `Example/*Result.v` 14, `GenSegment.v` 3, `Contracts.v` 2,
+`Verifier.v` 1, `Example/PaddedLoop.v` 1 — because after the flip **each one
+means one of two different things** and only a human reading can tell which:
+
+| the use means | becomes | why |
+|---|---|---|
+| "the program that sits in MEMORY" | stays `cfg_instrs c`, now `list AST` | memory holds instructions; this is the trusted side |
+| "the list the SYMBOLIC TABLE is built from" | becomes `a` | the executor needs the annotations |
+
+Getting one wrong in the second direction is a type error and the build catches
+it. **Getting one wrong in the first direction is not**, because
+`list_AST_AnnotInstr` will coerce — the file compiles and the contract silently
+becomes a claim about the un-annotated program.
+
+**The seven sites that are certainly the TABLE side** (`table_of_list … 0
+(cfg_instrs c)`), found 2026-09-22:
+
+```
+GenCompose.v                      4   (seg_run's Hif, and three siblings)
+Example/CountdownComposedResult.v 2
+Example/SwapComposedResult.v      1
+```
+
+These are `itable_rel` faithfulness hypotheses, so three of them sit in
+`*Result.v` files that §2.6 classifies as pure "application" sites. **They are
+not.** `seg_run`'s shape shows why the confusion is easy:
+
+```coq
+Lemma seg_run {R} (c : @CFGVerifierContract R) … (L : list AnnotInstr) …
+  (Hv  : ValidCFGVerifierContract c)
+  (Hif : itable_rel (instrs_of_list cbase L)
+                    (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
+  (Hbs : ∀ wds, ⊢ blocksSound wds (instrs_of_list cbase L))
+  … : Pre -∗ myWP2_loop Post.
+```
+
+`GenCompose` **already** carries two instruction lists — `L`, the enclosing
+program, and `cfg_instrs c`, the segment's slice — tied by `Hif`. After the flip
+there are THREE: `L` (annotated, enclosing), `a` (annotated, this segment's
+table) and `cfg_instrs c` (AST, the statement). `Hif` takes `a`; the new
+`strip a = cfg_instrs c` connects `a` back to the statement.
+
+**Two things this reveals about the plan's other claims, both corrections:**
+
+- §3's "`itable_rel` and `table_of_list` are untouched" is true of their
+  DEFINITIONS and misleading about their USE SITES, which is where the work is.
+- `seg_run`'s conclusion is `Pre -∗ myWP2_loop Post` — **already the semantic
+  shape §2.1 wants**, with `seg_entry`/`seg_exit` already packaging the pre/post.
+  So `ValidCFGVerifierContract` has TWO existing models to be derived from, not
+  one: `blockSound` (§2.4) and `seg_run`'s conclusion. Check whether they can be
+  the same definition before writing a third; if they can, Phase 4 shrinks and
+  `seg_run` becomes an instance rather than a parallel path.
+
+**Method note for whoever executes this:** do the classification as an explicit
+pass with the list above in hand, file by file, and write the verdict next to
+each site in the commit message. Do NOT let the coercion decide it for you.
 
 ### §2.7 The block annotation then IS a contract
 
@@ -429,8 +490,9 @@ Secondary, expected to be easy but unverified:
 | `AST_AnnotInstr`, `list_AST_AnnotInstr`, `Local Arguments List.cons {_} & _ _.` | exist ONLY so `[MV X3 X2; …]` typechecks as `list AnnotInstr`. With an AST field, examples need no coercion. **Check before deleting** — the coercion is still wanted: §2.5 has an un-annotated example write `cfg_vc c c_instrs` with `c_instrs : list AST` riding it |
 
 **What does NOT change:** `AnnotInstr` stays the executor's payload,
-`instrs_of_list` stays `AnnotInstr`-valued, `itable_rel` and `table_of_list`
-are untouched. This removes annotations from the STATEMENT, not from the tool.
+`instrs_of_list` stays `AnnotInstr`-valued, and `itable_rel`/`table_of_list`
+keep their DEFINITIONS — but seven of their USE SITES change which list they are
+fed (§2.8), which is the bulk of the refactor. This removes annotations from the STATEMENT, not from the tool.
 
 ## §4. Phases
 
@@ -452,7 +514,8 @@ the proposition `ValidCFGVerifierContract c` denotes today — check by
 ### Phase 2 — the generators
 `GenContract.v`, `GenSegment.v` (3 `cfg_instrs` refs), `GenCompose.v` (11).
 **`gen_seg_contract`'s `prog` argument is the landmine — see §5.**
-`GenCompose.v`'s 10 validity hypotheses quantify `a` — see §2.4. Pinning them
+`GenCompose.v`'s 10 validity hypotheses quantify `a` — see §2.4 — and its four
+`table_of_list … (cfg_instrs c)` sites take `a` instead (§2.8). Pinning them
 to the un-annotated program is what would stop a generated segment being
 discharged with a block annotation inside it.
 
@@ -462,8 +525,10 @@ block, no changed tactic. If an example needs more than that, something
 upstream is wrong; fix that, not the example.
 
 ### Phase 3 — EndToEnd
-`EndToEnd.v` (33 `cfg_instrs` refs, 10 `strip` sites). The memory side takes
-`cfg_instrs c`; the table side takes `a`. Expect this file to get shorter and
+`EndToEnd.v` (33 `cfg_instrs` refs, 10 `strip` sites) **plus the three
+`table_of_list … (cfg_instrs c)` sites in `Example/*Result.v`** (§2.8). The
+memory side takes `cfg_instrs c`; the table side takes `a`; classify every one
+explicitly — the coercion will hide a mistake in the memory direction. Expect this file to get shorter and
 the `strip`-vs-no-`strip` comment at :1514 to be deleted.
 
 GATE 3: `make Results.vo` green; `./scripts/gate.sh` at `GATE_JOBS=1` green.
