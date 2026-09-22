@@ -55,7 +55,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         3.
 
     Lemma valid_jump_if_zero_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (jump_if_zero_cfg_contract_param ia).
+      cfg_vc (jump_if_zero_cfg_contract_param ia) (cfg_instrs (jump_if_zero_cfg_contract_param ia)).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)
 
@@ -79,7 +79,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         5.
 
     Lemma valid_jmp_fwd_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (jmp_fwd_cfg_contract_param ia).
+      cfg_vc (jmp_fwd_cfg_contract_param ia) (cfg_instrs (jmp_fwd_cfg_contract_param ia)).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)
 

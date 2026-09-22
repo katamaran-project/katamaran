@@ -209,6 +209,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Proof. reflexivity. Qed.
 
     Lemma valid_cmovznz4_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (cmovznz4_cfg_contract_param ia).
+      cfg_vc (cmovznz4_cfg_contract_param ia) (cfg_instrs (cmovznz4_cfg_contract_param ia)).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)

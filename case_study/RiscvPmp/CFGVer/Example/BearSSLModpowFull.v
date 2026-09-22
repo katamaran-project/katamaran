@@ -157,5 +157,5 @@ Lemma strip_id_modpow_win_full_instrs : strip modpow_win_full_instrs = modpow_wi
 Proof. reflexivity. Qed.
 
 Lemma valid_modpow_win_full_cfg_contract_param (ia : N) :
-  ValidCFGVerifierContract (modpow_win_full_cfg_contract_param ia).
+  cfg_vc (modpow_win_full_cfg_contract_param ia) (cfg_instrs (modpow_win_full_cfg_contract_param ia)).
 Proof. solve_param_vc. Qed.

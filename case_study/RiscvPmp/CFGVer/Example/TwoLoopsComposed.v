@@ -76,7 +76,7 @@ Definition tAbody : @CFGVerifierContract tCtxA :=
     t_instrs at0 3
     (X1 ↦ᵣ tdec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
-Lemma valid_tAbody : ValidCFGVerifierContract tAbody.
+Lemma valid_tAbody : cfg_vc tAbody (cfg_instrs tAbody).
 Proof.
   vm_compute. solve_vc.
 Qed.
@@ -92,7 +92,7 @@ Definition tAfinal : @CFGVerifierContract tCtxA :=
     t_instrs at8 3
     (X1 ↦ᵣ tdec (term_var "k") ∗ minimal_pre).
 
-Lemma valid_tAfinal : ValidCFGVerifierContract tAfinal.
+Lemma valid_tAfinal : cfg_vc tAfinal (cfg_instrs tAfinal).
 Proof.
   vm_compute. solve_vc.
 Qed.
@@ -109,7 +109,7 @@ Definition tBbody : @CFGVerifierContract tCtxB :=
     t_instrs at8 3
     (X2 ↦ᵣ tdec (term_var "m") ∗ secLeakvar "m" ∗ minimal_pre).
 
-Lemma valid_tBbody : ValidCFGVerifierContract tBbody.
+Lemma valid_tBbody : cfg_vc tBbody (cfg_instrs tBbody).
 Proof.
   vm_compute. solve_vc.
 Qed.
@@ -125,7 +125,7 @@ Definition tBfinal : @CFGVerifierContract tCtxB :=
     t_instrs (pcOutOfInstrs_exitCond 0 t_instrs) 3
     asn_no_post.
 
-Lemma valid_tBfinal : ValidCFGVerifierContract tBfinal.
+Lemma valid_tBfinal : cfg_vc tBfinal (cfg_instrs tBfinal).
 Proof.
   vm_compute. solve_vc.
 Qed.

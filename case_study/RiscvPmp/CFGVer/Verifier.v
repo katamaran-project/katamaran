@@ -252,6 +252,18 @@ Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
 Lemma strip_of_AST (l : list AST) : strip (list_AST_AnnotInstr l) = l.
 Proof. induction l as [|x l IH]; cbn; [reflexivity | now f_equal]. Qed.
 
+(* `strip` commutes with slicing, so a SEGMENT of the annotated program strips
+   to the same segment of the AST program.  This is what lets the soundness
+   bridge discharge `strip a = cfg_instrs c` for a generated segment contract,
+   whose cfg_instrs is `firstn take (skipn skip (strip prog))`. *)
+Lemma strip_firstn (n : nat) (l : list AnnotInstr) :
+  strip (List.firstn n l) = List.firstn n (strip l).
+Proof. unfold strip. now rewrite List.firstn_map. Qed.
+
+Lemma strip_skipn (n : nat) (l : list AnnotInstr) :
+  strip (List.skipn n l) = List.skipn n (strip l).
+Proof. unfold strip. now rewrite List.skipn_map. Qed.
+
 (* REQUIRED (same trap as Tables.v): RiscvPmp.Sig re-imports ctx.notations,
    whose `_ :: _` Binding notation hijacks list cons. Without this, pattern
    matches on AnnotInstr lists fail with "Found a constructor of inductive

@@ -132,5 +132,5 @@ Lemma strip_id_loop1_instrs : strip loop1_instrs = loop1_instrs.
 Proof. reflexivity. Qed.
 
 Lemma valid_loop1_cfg_contract_param (ia : N) :
-  ValidCFGVerifierContract (loop1_cfg_contract_param ia).
+  cfg_vc (loop1_cfg_contract_param ia) (cfg_instrs (loop1_cfg_contract_param ia)).
 Proof. solve_param_vc. Qed.

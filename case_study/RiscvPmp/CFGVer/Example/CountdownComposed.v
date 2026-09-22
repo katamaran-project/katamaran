@@ -86,7 +86,7 @@ Definition cdBody : @CFGVerifierContract cdCtx :=
     3
     (X1 ↦ᵣ dec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
-Lemma valid_cdBody : ValidCFGVerifierContract cdBody.
+Lemma valid_cdBody : cfg_vc cdBody (cfg_instrs cdBody).
 Proof.
   vm_compute. solve_vc.
 Qed.
@@ -112,7 +112,7 @@ Definition cdFinal : @CFGVerifierContract cdCtx :=
     3
     asn_no_post.
 
-Lemma valid_cdFinal : ValidCFGVerifierContract cdFinal.
+Lemma valid_cdFinal : cfg_vc cdFinal (cfg_instrs cdFinal).
 Proof.
   vm_compute. solve_vc.
 Qed.

@@ -72,7 +72,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
         (pcOutOfInstrs_exitCond ia [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]) 5.
 
     Lemma valid_countdown_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (countdown_cfg_contract_param ia).
+      cfg_vc (countdown_cfg_contract_param ia) (cfg_instrs (countdown_cfg_contract_param ia)).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 spike ===== *)
 
@@ -139,6 +139,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Proof. reflexivity. Qed.
 
     Lemma valid_countdown_mem_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (countdown_mem_cfg_contract_param ia).
+      cfg_vc (countdown_mem_cfg_contract_param ia) (cfg_instrs (countdown_mem_cfg_contract_param ia)).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)

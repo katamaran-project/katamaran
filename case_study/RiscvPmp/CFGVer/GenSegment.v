@@ -406,14 +406,21 @@ Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
     (ia head : N)
-    (* `list AnnotInstr`, NOT `list AST`: cfg_instrs is an AnnotInstr list, so
-       with `list AST` here the coercion lands OUTSIDE the slicing
-       (`list_AST_AnnotInstr (firstn take (skipn skip prog))`) and can never
-       unify with GenCompose.instr_table_ok_at's `firstn take (skipn skip L)`
-       for `L : list AnnotInstr`.  Taking the AnnotInstr list makes the two
-       syntactically identical; a caller with a `list AST` program still just
-       writes it and lets the coercion fire at the argument. *)
-    (prog : list AnnotInstr) (skip take : nat)
+    (* `list AST` since 2026-09-22 (PLAN-contract-ast Phase 2).  It used to be
+       `list AnnotInstr`, to keep `firstn take (skipn skip prog)` syntactically
+       identical to GenCompose.instr_table_ok_at's `firstn take (skipn skip L)`
+       for `L : list AnnotInstr` -- otherwise the coercion landed OUTSIDE the
+       slicing and the two could never unify.
+
+       THAT CONCERN IS GONE, and this is the plan's landmine §5.1 resolved:
+       `cfg_instrs` no longer feeds the symbolic table at all.  The table is
+       built from the ANNOTATED list `a` that `cfg_vc` takes as an argument,
+       so the `instr_table_ok_at` side stays entirely in `list AnnotInstr` and
+       never meets a coercion.  This field is now purely the SPEC: what sits
+       in memory.  The two are tied by `strip a = cfg_instrs c` at the
+       soundness bridge, which for a segment is `strip_firstn`/`strip_skipn`
+       (Verifier.v). *)
+    (prog : list AST) (skip take : nat)
     (targets : list N)
     (bound : N)
     (fl : nat)
@@ -1044,8 +1051,12 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (target : N)
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
+  (* `strip (loop_prog ls)`: LoopSpec still carries the ANNOTATED program --
+     it is what the verification and `instrs_of_list` run on -- while
+     gen_seg_contract now wants the SPEC side.  Phase 4 may split the field;
+     for now one `strip` here keeps LoopSpec untouched. *)
   gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls) 0
-    (loop_prog ls) (loop_first_instr ls) (loop_num_instrs ls) [target]
+    (strip (loop_prog ls)) (loop_first_instr ls) (loop_num_instrs ls) [target]
     (loop_code_extent ls) (loop_fuel ls) (loop_regs ls)
     (gen_loop_contract_pre ls g) post.
 
@@ -1081,7 +1092,7 @@ Section GenSegProjections.
   Context {Σ : LCtx}
     (base : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia head : N) (prog : list AnnotInstr) (skip take : nat)
+    (ia head : N) (prog : list AST) (skip take : nat)
     (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)).
@@ -1099,7 +1110,7 @@ Section GenSegProjections.
   Proof. reflexivity. Qed.
 
   Lemma gen_seg_instrs :
-    @eq (list AnnotInstr) (cfg_instrs c)
+    @eq (list AST) (cfg_instrs c)
       (List.firstn take (List.skipn skip prog)).
   Proof. reflexivity. Qed.
 
@@ -1141,8 +1152,26 @@ Lemma gen_loop_instrs {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_instrs (gen_loop_contract ls g target post)
-  = List.firstn (loop_num_instrs ls) (List.skipn (loop_first_instr ls) (loop_prog ls)).
+  = List.firstn (loop_num_instrs ls)
+      (List.skipn (loop_first_instr ls) (strip (loop_prog ls))).
 Proof. reflexivity. Qed.
+
+(* THE ANNOTATED SLICE a loop's contracts are verified against -- the same
+   segment of the program that `cfg_instrs` names in AST form.  Supplying it as
+   a PROJECTION rather than an extra parameter is what keeps every loop
+   caller's premise spelled `cfg_vc (loop_body_contract ls) (gen_loop_annot ls)`
+   with nothing new to choose. *)
+Definition gen_loop_annot {Σ : LCtx} (ls : LoopSpec Σ) : list AnnotInstr :=
+  List.firstn (loop_num_instrs ls) (List.skipn (loop_first_instr ls) (loop_prog ls)).
+
+Lemma gen_loop_annot_strip {Σ : LCtx} (ls : LoopSpec Σ)
+    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
+    (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
+  strip (gen_loop_annot ls) = cfg_instrs (gen_loop_contract ls g target post).
+Proof.
+  unfold gen_loop_annot. rewrite gen_loop_instrs.
+  now rewrite strip_firstn, strip_skipn.
+Qed.
 
 Lemma gen_loop_exits {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))

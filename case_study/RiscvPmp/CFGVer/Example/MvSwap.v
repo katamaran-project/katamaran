@@ -57,7 +57,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
         [MV X1 X0]
       @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X0] , 3 ].
 
-    Example valid_mv_zero_ex : ValidCFGVerifierContract mv_zero_ex.
+    Example valid_mv_zero_ex : cfg_vc mv_zero_ex (cfg_instrs mv_zero_ex).
     Proof. vm_compute. solve_vc. Qed.
 
     Definition mv_same_reg_ex : CFGVerifierContract :=
@@ -66,7 +66,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
       @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X1] , 3 ]
       with ["x" :: ty_xlenbits].
 
-    Example valid_mv_same_reg_ex : ValidCFGVerifierContract mv_same_reg_ex.
+    Example valid_mv_same_reg_ex : cfg_vc mv_same_reg_ex (cfg_instrs mv_same_reg_ex).
     Proof. vm_compute. solve_vc. Qed.
 
     Definition mv_ex : CFGVerifierContract :=
@@ -75,7 +75,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
       @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X2] , 3 ]
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
-    Example valid_mv_ex : ValidCFGVerifierContract mv_ex.
+    Example valid_mv_ex : cfg_vc mv_ex (cfg_instrs mv_ex).
     Proof. vm_compute. solve_vc. Qed.
 
     (* Nonzero-start demonstrator for Step 2 (init_addr parameterization):
@@ -95,7 +95,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
         (fun v => bv.ugeb v (bv.of_N 260))
         3.
 
-    Example valid_mv_nonzero_start_ex : ValidCFGVerifierContract mv_nonzero_start_ex.
+    Example valid_mv_nonzero_start_ex : cfg_vc mv_nonzero_start_ex (cfg_instrs mv_nonzero_start_ex).
     Proof. vm_compute. solve_vc. Qed.
 
     (* ===== Phase 4.2: base-parametric swap VC =====
@@ -112,6 +112,6 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
         5.
 
     Lemma valid_swap_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (swap_cfg_contract_param ia).
+      cfg_vc (swap_cfg_contract_param ia) (cfg_instrs (swap_cfg_contract_param ia)).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)

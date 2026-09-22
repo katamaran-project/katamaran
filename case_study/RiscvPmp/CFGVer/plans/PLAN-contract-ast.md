@@ -520,9 +520,22 @@ to the un-annotated program is what would stop a generated segment being
 discharged with a block annotation inside it.
 
 GATE 2: every light `Example/*.v` compiles after rewriting its statement to
-`cfg_vc c <its own _instrs>` and NO other edit — no renamed lemma, no changed `_instrs`
-block, no changed tactic. If an example needs more than that, something
-upstream is wrong; fix that, not the example.
+`cfg_vc c <its own _instrs>` and NO other edit — no changed `_instrs` block, no
+changed tactic. If an example needs more than that, something upstream is
+wrong; fix that, not the example.
+
+**ONE EXEMPTION, found by the gate itself on 2026-09-22 — a hand-written
+contract LITERAL whose `cfg_instrs` is deliberately a `list AnnotInstr`.**
+`Example/PaddedLoop.v` is the tree's only one (it is also the only example with
+a sub-table contract): `plBody`/`plFinal` set `cfg_instrs := pl_seg` with
+`pl_seg : list AnnotInstr := cd_instrs`, and no upstream default can fix that —
+the field's type genuinely changed, and this example was exercising exactly the
+distinction the plan introduces. The fix is the §2.8 classification applied by
+hand: the FIELD takes the AST list `cd_instrs`, and `cfg_vc` is applied to
+`pl_seg` — which is already the list `PaddedLoopResult.v:91` builds the table
+from, so the example gets MORE coherent, not less. Do not read this exemption
+more widely: a GENERATED contract needing an edit still means the generator is
+wrong.
 
 ### Phase 3 — EndToEnd
 `EndToEnd.v` (33 `cfg_instrs` refs, 10 `strip` sites) **plus the three

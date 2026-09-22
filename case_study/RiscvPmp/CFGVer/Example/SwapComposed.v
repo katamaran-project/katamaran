@@ -80,7 +80,7 @@ Definition swapA : @CFGVerifierContract swapCtx :=
     (X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗ X3 ↦ᵣ term_var "y"
        ∗ minimal_pre).
 
-Lemma valid_swapA : ValidCFGVerifierContract swapA.
+Lemma valid_swapA : cfg_vc swapA (cfg_instrs swapA).
 Proof. vm_compute. solve_vc. Qed.
 
 (* ---- Segment B: 4 -> 12.  Executes `MV X2 X1; MV X1 X3`. ----
@@ -97,5 +97,5 @@ Definition swapB : @CFGVerifierContract swapCtx :=
     4
     asn_no_post.
 
-Lemma valid_swapB : ValidCFGVerifierContract swapB.
+Lemma valid_swapB : cfg_vc swapB (cfg_instrs swapB).
 Proof. vm_compute. solve_vc. Qed.
