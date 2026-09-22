@@ -99,12 +99,18 @@ Inductive Annot :=
    resumes.  This is CFGVerifierContract's data minus `cfg_instrs` -- the code
    is a plain `list AST` rather than `list AnnotInstr` -- plus `blk_off`.
 
-   NO CODE FIELD.  A block's contract is verified against the ENCLOSING
-   program -- with `ai_block` cleared, see `clear_blk` below -- not against a
-   copy of its own instructions.  That is what every segment contract already
-   does, and it is why no separation-logic split of `ptsto_instrs` is needed:
-   clearing annotations does not change `ai_instr`, so the memory resource is
-   literally the same one.
+   IT DOES HAVE A CODE FIELD, and that is load-bearing (changed 2026-09-23,
+   PLAN-contract-ast §2c).  `cfg_instrs (blk_contract b)` is a `list AST`
+   naming the code the block stands for, so the block's SPAN --
+   `instrs_of_list v (cfg_instrs (blk_contract b))`, Adequacy.blk_span -- is
+   derivable from the annotation alone.  That is what lets a block own only its
+   own instruction memory, with the enclosing run keeping the rest
+   (ptsto_instrs_w_split) and rejoining after.
+
+   The OLD design verified a block against the ENCLOSING program with
+   `ai_block` cleared, which needed no ptsto_instrs split -- but it also made a
+   block's VC depend on the whole program, which foreclosed NESTING: see the
+   retraction in PLAN-contract-ast §2c.
 
    WHY NO PROOF FIELD, given that the natural design is for the annotation to
    carry its own justification.  A validity proof's TYPE is the verification
@@ -238,12 +244,15 @@ Record AnnotInstr := MkAnnotInstr
    A block must NOT be visible to its OWN verification: a segment contract for
    the block at v is executed from v, and if `ai_block` were still set there
    the executor would replace the block by ITSELF, so its VC would prove
-   nothing and blocksSound would be dischargeable from thin air.  Verifying
-   against `clear_blk <$> instrs` is what rules that out.
+   nothing and blocksSound would be dischargeable from thin air.
 
-   It is also why no ptsto_instrs split is needed anywhere: `ai_instr` is
-   untouched, so `ai_instr <$> (clear_blk <$> instrs) = ai_instr <$> instrs`
-   -- the same memory, which is all the trusted layer ever sees. *)
+   DEAD SINCE 2026-09-23 (PLAN-contract-ast §2c).  Self-containment now rules
+   that out structurally: a block's VC runs against its OWN annotated program,
+   which simply does not contain the enclosing annotation, so there is nothing
+   to clear.  `clear_blk`, `ai_instr_clear_blk`, `ai_block_clear_blk` and
+   Adequacy's `ai_instr_fmap_clear_blk` / `blocksSound_clear_blk` now have NO
+   USERS.  Kept for one commit so the change is attributable; delete in
+   Phase 5. *)
 Definition clear_blk (ai : AnnotInstr) : AnnotInstr :=
   {| ai_ghost_before := ai_ghost_before ai
    ; ai_instr        := ai_instr ai

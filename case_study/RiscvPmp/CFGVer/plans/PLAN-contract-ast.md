@@ -570,7 +570,41 @@ The frame rule is still derivable in four lines and may be wanted elsewhere; it
 is simply not what this design needs. §2c spent its risk budget on the wrong
 question.
 
-**WHAT REMAINS IN 4b, in order, with no unknown risks left:**
+**4b IS LANDED (2026-09-23), tree green.** `blockSound` is span-only and takes
+no `instrs`; `blocksSound` yields AST-level containment alongside soundness;
+`blockFaithful` is about the block's OWN annotated program; `blockSound_of_vc`
+is self-contained, its block premise `blocksSound wds (instrs_of_list v ab)`
+over a strictly smaller artifact; the block branch goes through
+`blockSound_span_to_whole`. `Adequacy.vo` built FIRST TRY.
+
+**TWO THINGS REMAIN BEFORE PHASE 4 IS COMPLETE, and neither is cosmetic:**
+
+1. **`extend_to_minimal_pre` is misaligned, so `cfg_vc c a` is NOT yet literally
+   a block's obligation.** `sexec_block` consumes `cfg_precondition
+   (blk_contract b)` RAW, while `CFG_VC_triple` — and hence `cfg_vc` — wraps its
+   precondition in `extend_to_minimal_pre`. The old `SBlk` hid this because
+   callers stored the extended pre INTO `sblk_pre` by hand
+   (`sblk_of_contract` in the ZZBlkAB probe did exactly that). Until it is
+   fixed, §2.4's "a valid contract plugs into an `ai_block`" is true in shape
+   but not on the nose, and `blockSound_of_contract` cannot be stated.
+
+   **The fix hits the SAME layering wall the record did:**
+   `extend_to_minimal_pre` is `Contracts.v:92`, BELOW `Verifier.v`, so
+   `sexec_block` cannot call it. It is two lines (`P ∗ minimal_pre`, with
+   `minimal_pre` just `cur_privilege ↦ Machine ∗ inv_leakage`) over vocabulary
+   `Verifier.v` already has, so it moves exactly as the record did — but it
+   changes the EXECUTOR, so `rexec_block` follows and it costs a build cycle.
+
+2. **Nothing exercises the new block path.** The `ZZBlkAB`/`ZZBlkBC` probes are
+   untracked and still written against `SBlk` (`sblk_of_contract`, `set_blk`,
+   `blk_at`). The tree compiling shows only that the machinery is
+   TYPE-CORRECT; no block has been verified through it. GATE 4 is therefore NOT
+   met, and this is the gap that matters most — porting the probe is what turns
+   "it typechecks" into "it works". Note `sblk_of_contract` becomes nearly
+   trivial (`BlkAnnot` IS off + ctx + contract), so the port is mostly deletion
+   — once item 1 makes the preconditions line up.
+
+**Superseded — what 4b actually needed, for the record:**
 
 1. swap `blockSound` to the shape above and re-shape `blocksSound` (its body
    stops mentioning `instrs`; the map survives only in the lookup premise);
