@@ -150,3 +150,49 @@ Why do we need pc_step_sync and where can we find that information?
 Is this a short-coming of the way myWP2_loop is phrased? Why don't we need this kind of information to go from l to nsteps?
 semWP2 has a lockstepness, but we need a certain post-condition at the end. Is that the problem, did we break the modularity, so now I have to reconstruct it myself basically.
 Would it make sense to have an invariant like the leakage invariant for the pc?
+
+- NORMAL FORMS: stop making every consumer remember to `peval`.
+	Found 2026-09-22, cost about a day to localise, and the cause is that
+	`formula_propeq` and `formula_secLeak` are OUR additions -- main lacks them,
+	see the porting note at theories/Syntax/Formulas.v:305 -- so they never got
+	the normalisation discipline the upstream arms were built with.
+	+ THE SYMPTOM. `simplify_formula`'s upstream arms all normalise their input
+	  (`formula_user` -> `pevals ts`, `formula_bool` -> `simplify_bool (peval t)`,
+	  `formula_relop` -> `simplify_relop`, which pevals in every arm INCLUDING its
+	  fall-throughs). Our two did not: propeq pevaled only for the two
+	  `try_bvadd_cancel*` rules and then fell through to `simplify_propeq` on the
+	  RAW terms, and secLeak passed the raw term straight to `simplify_secLeak`.
+	  Patched 2026-09-22 by pevaling both, but that is the third place this same
+	  obligation is written out, which is the actual problem.
+	+ WHY IT STAYED INVISIBLE FOR SO LONG. The executor normalises as it BUILDS
+	  terms (eval_exp / peval_binop'), so formulas reaching the solver from
+	  execution are already in normal form and the missing peval is a no-op.
+	  Formulas reaching it from a hand-written `asn.formula` are NOT: `consume`
+	  and `produce` apply `peval_chunk` to CHUNKS (Monads.v:833,860) but only
+	  `subst` to FORMULAS (Monads.v:1302,1335). A contract's terms therefore
+	  arrive exactly as the author wrote them. CFGVer's block hook was the first
+	  thing to feed the solver an authored assertion, which is why it surfaced
+	  there: `gen_seg_contract` writes its placement as `base + of_N 0`, that
+	  `+ 0` survived, and `try_unify_eq` -- which fires ONLY on a bare `term_var`
+	  -- could never eliminate the block's angelic variable. The failure mode is
+	  nasty: not a residual you can read, but a hard `debug_consume_chunk` error
+	  several conjuncts later, naming the CHUNK rather than the equation.
+	+ THE FUNDAMENTAL FIX, in increasing order of ambition:
+	  1. Normalise at the BOUNDARY, not at every consumer: make `consume`/
+	     `produce` peval formulas the way they already peval chunks. That closes
+	     the asymmetry exactly where it exists (same function, chunks yes /
+	     formulas no) and is a two-line change.
+	  2. Normalise once where formulas ENTER the path condition
+	     (`assume_pathcondition` / `assert_pathcondition`), then DELETE the ~10
+	     internal `peval` calls in `simplify_relop`/`simplify_formula`. Net
+	     removal of code, and no arm can forget again.
+	  3. Smart constructors: make a non-normalised `Formula` unrepresentable
+	     (`mk_propeq t1 t2 := formula_propeq (peval t1) (peval t2)`, raw
+	     constructors private). Strongest, but touches every construction site.
+	+ CHECK FIRST, because (2) depends on it: IS `peval` IDEMPOTENT
+	  (`peval (peval t) = peval t`)? If yes, the inner calls are free no-ops and
+	  can be deleted safely; if not, deleting them is a behaviour change and
+	  only (1) or (3) are safe. There is no such lemma today.
+	+ AND MEASURE: pevaling every formula on entry is not obviously free. The
+	  arms that already peval do it two to four times per formula, so (2) should
+	  be a net WIN, but that is a prediction, not a measurement.

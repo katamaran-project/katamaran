@@ -341,17 +341,37 @@ makes the failure look arbitrary from outside. **`simplify_propeq` does NOT
 decompose a `bvadd`** (measured: `0x10 + a = 0x10 + b` survives it untouched),
 so nothing else in the solver covers this shape.
 
-**Known adjacent gap, NOT fixed by that rule (open 2026-09-22).**
-`simplify_formula`'s `formula_propeq` case calls the cancellation rules on
-`peval t1`/`peval t2` but falls through to `simplify_propeq` on the
-**UN-peval'd** `t1 t2`. Since `peval` already folds `t + 0` to `t` (verified),
-`q + 0 = q.1 + 0` reaches the residual opaque and `unify_pathcondition` never
-sees the bare variable equation it could solve. Passing the peval'd terms to
-the fall-through yields `propeq a b` for that shape, and `propeq b (220 + a)`
-— variable first, ready for `unify` — for `220 + q = q.1 + 0`. The spec's peval
-bridge is three lines (`constructor; intros ι Hwco; cbn; unfold
-instpred_formula_propeq; now rewrite !peval_sound`), copied from the
-cancellation case just above.
+### Every arm must normalise its input, fall-throughs included (fixed 2026-09-22)
+
+`formula_propeq` and `formula_secLeak` are **this fork's own constructors** —
+upstream `main` has neither (see the porting note at
+`theories/Syntax/Formulas.v:305`) — and they never got the normalisation
+discipline the upstream arms were built with. Every upstream arm of
+`simplify_formula` pevals (`formula_user` → `pevals ts`, `formula_bool` →
+`simplify_bool (peval t)`, `formula_relop` → `simplify_relop`, which pevals in
+**all** its arms including the fall-throughs). The two local ones did not:
+`propeq` pevaled only for the two `try_bvadd_cancel*` rules and then fell
+through to `simplify_propeq` on RAW terms; `secLeak` passed the raw term
+straight down. Both now peval, each with a three-line spec bridge
+(`constructor; intros ι Hwco; cbn; unfold instpred_formula_*;
+now rewrite peval_sound`) copied from the cancellation case above.
+
+**Why it stayed invisible, and the rule to take away.** The executor pevals as
+it BUILDS terms (`eval_exp`/`peval_binop'`), so formulas reaching the solver
+from execution are already in normal form and a missing `peval` is a no-op.
+Formulas reaching it from a hand-written `asn.formula` are not: `consume` and
+`produce` apply `peval_chunk` to CHUNKS (`Monads.v:833,860`) but only `subst`
+to FORMULAS (`Monads.v:1302,1335`), so a contract's terms arrive exactly as
+authored. CFGVer's block hook was the first thing to feed the solver an
+authored assertion — `gen_seg_contract` writes its placement as `base + of_N 0`
+and that `+ 0` survived, so `try_unify_eq` (which fires ONLY on a bare
+`term_var`) could never eliminate the block's angelic. **If you add a formula
+constructor, peval in every branch of its arm, or the bug is invisible until
+someone writes a contract.**
+
+A more fundamental fix — normalise at the boundary rather than at every
+consumer — is `TODOS.txt`, "NORMAL FORMS", including the open question of
+whether `peval` is idempotent (no such lemma today).
 
 **1. Dump the real shapes before writing anything.** The formula you must match
 is *not* what the residual goal prints as after `solve_vc`, and it is not what

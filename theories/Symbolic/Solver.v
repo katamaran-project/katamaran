@@ -3305,10 +3305,24 @@ Module Type GenericSolverOn
                  `try_bvadd_cancel_val_propeq` above. *)
               match try_bvadd_cancel_val_propeq (peval t1) (peval t2) with
               | Some d => d
-              | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) t1 t2
+              (* PEVAL'D, like every other arm of this match and like all four
+                 arms of simplify_relop.  This branch was the ONE that passed
+                 raw terms, and the consequence is invisible in ordinary
+                 verification -- the executor pevals as it BUILDS terms
+                 (eval_exp / peval_binop'), so its formulas are already in
+                 normal form and the missing peval is a no-op.  A formula
+                 coming from a hand-written `asn.formula` is not: consume and
+                 produce apply peval_chunk to CHUNKS but only `subst` to
+                 FORMULAS, so a contract's terms reach the solver exactly as
+                 authored.  `q + 0 = q.1 + 0` (every gen_seg_contract
+                 placement, head = 0) then survives to the residual, and
+                 try_unify_eq -- which fires only on a BARE term_var -- can
+                 never eliminate the angelic. *)
+              | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2)
+                          (peval t1) (peval t2)
               end
           end
-      | formula_secLeak t      => simplify_secLeak t (* TODO *)
+      | formula_secLeak t      => simplify_secLeak (peval t)
       end.
 
     Lemma PathCondition_to_Formula_sound' [w : World] (P : PathCondition w) :
@@ -3375,8 +3389,15 @@ Module Type GenericSolverOn
           * apply try_bvadd_cancel_val_propeq_spec in Hv; rewrite Hv.
             constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
             now rewrite !peval_sound.
-          * rewrite simplify_propeq_spec. arw.
-      - apply simplify_secLeak_spec.
+          * rewrite simplify_propeq_spec.
+            (* the peval bridge, same three lines as the cancellation cases
+               above: peval_sound is stated PER-VALUATION, so it cannot be
+               rewritten under a still-unapplied `⊣⊢` -- ι must come first. *)
+            constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+            now rewrite !peval_sound.
+      - rewrite simplify_secLeak_spec.
+        constructor; intros ι Hwco; cbn; unfold instpred_formula_secLeak.
+        now rewrite peval_sound.
     Qed.
     #[export] Hint Rewrite @simplify_formula_spec : uniflogic.
 
