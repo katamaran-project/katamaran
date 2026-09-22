@@ -314,9 +314,44 @@ they use conversion.
 
 ## Adding a NEW solver rule — the recipe
 
-Three rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
-`try_bvadd_cancel_propeq` (propeq, unguarded), `try_fetch_bound` (relop le,
+Four rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
+`try_bvadd_cancel_propeq` (propeq, unguarded), `try_bvadd_cancel_val_propeq`
+(propeq, unguarded, WEAKENS rather than decides), `try_fetch_bound` (relop le,
 discharges against `wco`). Ordered by what costs time if you get it wrong.
+
+**`try_bvadd_cancel_val_propeq` is the DUAL of `bvadd_cancel_pair`, and the
+distinction is the point.** `bvadd_cancel_pair` recognises a shared TERM
+summand with differing LITERALS (`c1 + p` vs `c2 + p`) and DECIDES via
+`bop.eval_relop_val`. The mirror — a shared LITERAL with differing TERMS
+(`c + x` vs `c + y`, via `bvadd_split_val`, which matches EITHER argument
+order) — cannot be decided, but weakening it to `x = y` is what lets
+`unify_pathcondition` act: it substitutes a VARIABLE equation, and no such
+substitution exists for a `bvadd` of one. Guarded by `Term_eqb s1 s2` so that
+syntactically-equal stripped terms fall through to `simplify_propeq`, which
+closes them to `empty` outright.
+
+Why it was needed (2026-09-22): CFGVer's block hook (`sexec_block`,
+`CFGVer/Verifier.v`) instantiates a block's logic context ANGELICALLY and then
+consumes the block's precondition. A register pinned as `base + k`
+(`X2 |-> sp + 16`) yields `formula_propeq (0x10 + sp.1) (0x10 + sp)`; unsolved,
+`sp.1` stays free and the next chunk addressed from it (`ptstomem sp.1 _`)
+matches nothing — the consume FAILS OUTRIGHT with `debug_consume_chunk`, not a
+residual. A register pinned BARE (`A0 |-> xb`) is unaffected, which is what
+makes the failure look arbitrary from outside. **`simplify_propeq` does NOT
+decompose a `bvadd`** (measured: `0x10 + a = 0x10 + b` survives it untouched),
+so nothing else in the solver covers this shape.
+
+**Known adjacent gap, NOT fixed by that rule (open 2026-09-22).**
+`simplify_formula`'s `formula_propeq` case calls the cancellation rules on
+`peval t1`/`peval t2` but falls through to `simplify_propeq` on the
+**UN-peval'd** `t1 t2`. Since `peval` already folds `t + 0` to `t` (verified),
+`q + 0 = q.1 + 0` reaches the residual opaque and `unify_pathcondition` never
+sees the bare variable equation it could solve. Passing the peval'd terms to
+the fall-through yields `propeq a b` for that shape, and `propeq b (220 + a)`
+— variable first, ready for `unify` — for `220 + q = q.1 + 0`. The spec's peval
+bridge is three lines (`constructor; intros ι Hwco; cbn; unfold
+instpred_formula_propeq; now rewrite !peval_sound`), copied from the
+cancellation case just above.
 
 **1. Dump the real shapes before writing anything.** The formula you must match
 is *not* what the residual goal prints as after `solve_vc`, and it is not what

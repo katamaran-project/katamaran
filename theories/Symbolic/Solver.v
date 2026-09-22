@@ -2915,6 +2915,127 @@ Module Type GenericSolverOn
           | solve [assumption] ].
     Qed.
 
+    (* ---- the DUAL of bvadd_cancel_pair ----------------------------------
+       `bvadd_cancel_pair` recognises a shared TERM summand with differing
+       LITERALS (`c1 + p` vs `c2 + p`) and DECIDES the equation.  The mirror
+       shape -- a shared LITERAL with differing TERMS (`c + x` vs `c + y`) --
+       cannot be decided, but it can be WEAKENED to `x = y`, and that is worth
+       doing because the remaining equation is the one shape the evar
+       machinery can act on: `unify_pathcondition` substitutes a VARIABLE
+       equation, and no such substitution exists for a `bvadd` of one.
+
+       WHERE THIS BITES.  CFGVer's block-contract hook (`sexec_block`,
+       CFGVer/Verifier.v) instantiates a block's logic context ANGELICALLY and
+       then consumes the block's precondition.  A register pinned as `base + k`
+       -- `X2 |-> sp + 16`, a stack pointer -- yields exactly
+       `formula_propeq (0x10 + sp.1) (0x10 + sp)` against the caller's heap.
+       Unsolved, `sp.1` stays free, and the NEXT chunk addressed from it
+       (`ptstomem sp.1 _`, the first stack cell) then matches nothing in the
+       heap: the consume FAILS OUTRIGHT with a `debug_consume_chunk` error,
+       not a residual.  A register pinned BARE (`A0 |-> xb`) is unaffected,
+       which is what makes the failure look arbitrary from outside.  The same
+       shape with k=0 on both sides (`q + 0` vs `q.1 + 0`, which every
+       `gen_seg_contract` placement carries) is the other instance.
+
+       NO PUBLICNESS GUARD, for `try_bvadd_cancel_propeq`'s reason exactly:
+       `formula_propeq` is a STRUCTURAL equality on `RelVal` with no
+       NonSyncVal-to-False wall, so the weakening holds in the SyncVal and the
+       NonSyncVal case alike, componentwise.  Contrast `try_bvadd_cancel`,
+       wired into `formula_relop`, which does need `secLeakT`.
+
+       NEVER `error`: the returned DList is EQUIVALENT to the input formula
+       (that is the spec), never a refutation. *)
+
+    (* Split off a literal summand, in EITHER argument order -- `peval` leaves
+       both (`0x10 + sp` from a register spec, `q + 0` from a placement).  The
+       returned pair is NON-DEPENDENT apart from the shared width `n`, which is
+       what keeps Equations from having to let two type indices meet. *)
+    Equations bvadd_split_val {Σ n} (t : Term Σ (ty.bvec n))
+      : option (Val (ty.bvec n) * Term Σ (ty.bvec n)) :=
+      bvadd_split_val (term_binop bop.bvadd (term_val _ v) s) := Some (v, s);
+      bvadd_split_val (term_binop bop.bvadd s (term_val _ v)) := Some (v, s);
+      bvadd_split_val _ := None.
+
+    Lemma bvadd_split_val_spec {Σ n} (t : Term Σ (ty.bvec n)) v s :
+      bvadd_split_val t = Some (v, s) ->
+      t = term_binop bop.bvadd (term_val (ty.bvec n) v) s
+      \/ t = term_binop bop.bvadd s (term_val (ty.bvec n) v).
+    Proof.
+      funelim (bvadd_split_val t); intros Heq; try discriminate;
+        inversion Heq; subst; auto.
+    Qed.
+
+    (* The SEMANTIC form, which normalises both argument orders to ONE shape by
+       paying `bv.add_comm` once here rather than doubling the case analysis in
+       every consumer. *)
+    Lemma bvadd_split_val_inst {Σ n} (t : Term Σ (ty.bvec n)) v s :
+      bvadd_split_val t = Some (v, s) ->
+      forall ι : Valuation Σ,
+        inst t ι = bop.evalRel bop.bvadd (SyncVal v) (inst s ι).
+    Proof.
+      intros H ι. apply bvadd_split_val_spec in H as [-> | ->]; cbn; [reflexivity|].
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      destruct (inst s ι) as [a|a1 a2]; cbn; f_equal; apply bv.add_comm.
+    Qed.
+
+    Definition try_bvadd_cancel_val_propeq {w : World} {σ} (t1 t2 : STerm σ w)
+      : option (DList w) :=
+      match σ return STerm σ w -> STerm σ w -> option (DList w) with
+      | ty.bvec n =>
+          fun t1 t2 =>
+            match bvadd_split_val t1, bvadd_split_val t2 with
+            | Some (v1, s1), Some (v2, s2) =>
+                if bv.eqb v1 v2
+                then
+                  (* Fall THROUGH when the stripped terms are syntactically
+                     equal: `simplify_propeq`'s own Term_eqb check closes that
+                     to `empty`, whereas firing here would emit a redundant
+                     `propeq x x` into the path condition.  (It would be
+                     cleared by a later `combined_solver` pass rather than
+                     survive, but a rule should not manufacture work for one.) *)
+                  if Term_eqb s1 s2 then None else Some (dlist_propeq s1 s2)
+                else None
+            | _, _ => None
+            end
+      | _ => fun _ _ => None
+      end t1 t2.
+
+    Lemma try_bvadd_cancel_val_propeq_spec {w : World} {σ} (t1 t2 : STerm σ w)
+      (d : DList w) :
+      try_bvadd_cancel_val_propeq t1 t2 = Some d ->
+      instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      unfold try_bvadd_cancel_val_propeq. intros Hc.
+      destruct σ; cbn in Hc; try discriminate.
+      destruct (bvadd_split_val t1) as [[v1 s1]|] eqn:H1; try discriminate.
+      destruct (bvadd_split_val t2) as [[v2 s2]|] eqn:H2; try discriminate.
+      destruct (bv.eqb_spec v1 v2) as [Heq|Hne]; try discriminate.
+      destruct (Term_eqb s1 s2); try discriminate.
+      injection Hc as <-. subst v2.
+      rewrite instpred_dlist_singleton. rewrite !instpred_formula_propeqₚ.
+      constructor; intros ι Hwco; cbn.
+      rewrite (bvadd_split_val_inst _ H1 ι) (bvadd_split_val_inst _ H2 ι).
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      (* Both RelVal cases give the SAME answer -- the point of doing this on
+         formula_propeq rather than formula_relop.  `congruence` rather than
+         `injection`/`inversion`, which dig through `bv.add` into its
+         `bv.truncn` representation and hand back an equation that
+         `bv.add_cancel_l` no longer matches. *)
+      destruct (inst s1 ι) as [a|a1 a2]; destruct (inst s2 ι) as [b|b1 b2]; cbn;
+        split; intro HH; try discriminate; try congruence.
+      (* `bv.add` SPELLED OUT: this file does not `Import bv.notations`, so
+         `(v1 + x)%bv` elaborates `+` to something expecting a nat and fails
+         with "v1 has type Val (ty.bvec n) while it is expected to have type
+         nat" -- far from the cause. *)
+      all: f_equal;
+        match goal with
+        | |- ?x = ?y =>
+            let Hc := fresh "Hc" in
+            assert (Hc : bv.add v1 x = bv.add v1 y) by congruence;
+            exact (bv.add_cancel_l Hc)
+        end.
+    Qed.
+
     (* ---- soundness of the fetch-bound discharge --------------------------
        Everything below stays at the `instprop` (plain Prop) level and is
        lifted to `Pred w` exactly once, in `try_fetch_bound_spec`.  That is
@@ -3178,7 +3299,14 @@ Module Type GenericSolverOn
       | formula_propeq t1 t2   =>
           match try_bvadd_cancel_propeq (peval t1) (peval t2) with
           | Some d => d
-          | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) t1 t2
+          | None =>
+              (* ...and if the shared summand is the LITERAL rather than the
+                 term, WEAKEN instead of deciding: see
+                 `try_bvadd_cancel_val_propeq` above. *)
+              match try_bvadd_cancel_val_propeq (peval t1) (peval t2) with
+              | Some d => d
+              | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) t1 t2
+              end
           end
       | formula_secLeak t      => simplify_secLeak t (* TODO *)
       end.
@@ -3240,7 +3368,14 @@ Module Type GenericSolverOn
         + apply try_bvadd_cancel_propeq_spec in Hc; rewrite Hc.
           constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
           now rewrite !peval_sound.
-        + rewrite simplify_propeq_spec. arw.
+        + match goal with
+          | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
+              destruct scrut as [d|] eqn:Hv
+          end.
+          * apply try_bvadd_cancel_val_propeq_spec in Hv; rewrite Hv.
+            constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+            now rewrite !peval_sound.
+          * rewrite simplify_propeq_spec. arw.
       - apply simplify_secLeak_spec.
     Qed.
     #[export] Hint Rewrite @simplify_formula_spec : uniflogic.
