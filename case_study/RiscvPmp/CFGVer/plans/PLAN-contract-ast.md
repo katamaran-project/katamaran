@@ -567,6 +567,27 @@ not by walking the 33 occurrences. Expect this file to get shorter and
 the `strip`-vs-no-`strip` comment at :1514 to be deleted.
 
 GATE 3: `make Results.vo` green; `./scripts/gate.sh` at `GATE_JOBS=1` green.
+
+**STATUS 2026-09-22 — Phase 3 landed at `f95f32c0`, GATE 3 is 2 OF 3.**
+
+| step | result |
+|---|---|
+| 1. build target closure | **pass** (`Results.vo`, `GenCompose.vo`) |
+| 2. proof-hole scan | **pass** — the only `Admitted`/`admit`/`Axiom` hits are two COMMENTS, `Verifier.v:500` and `VerifierRel.v:2602` |
+| 3. axiom hygiene, 18 theorems | **BLOCKED, NOT FAILED** — killed twice for memory |
+
+Step 3 needs ~7 GB in ONE process; with ~5 GB held by the desktop on this 14 GB
+box it trips the low-memory monitor. **`GATE_PROBE_BATCH` does not help in
+either direction** — the ~7 GB is per-process (see `project-compile-cost`), so a
+smaller batch multiplies the count instead of shrinking the peak. Re-run it when
+the box is quiet; nothing in Phase 4 depends on it.
+
+**So this is the one thing Phase 3 has NOT established:** whether the 18 end
+theorems are still axiom-clean (expected: only `Machine.pure_decode` and
+`Base.mmioenv`). Everything structural IS established — the whole tree builds,
+and the trusted statements are unchanged, because the bridges' conclusions lost
+only the `strip` that each `Result` file was immediately undoing with
+`rewrite <- Hstrip` / `rewrite <- strip_id_X`.
 **Plus: read through the `blocksSound` premises** — with the parameterised
 form, each entry point's VC premise and its `blocksSound` premise must name the
 SAME `a`. That is what closes the §2 false-block hole, and under this design it
