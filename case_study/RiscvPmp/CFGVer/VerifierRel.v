@@ -256,7 +256,7 @@ Section CFGVerificationDerived.
     (* `cexec_block` mirrors `sexec_block` (Verifier.v) step for step:        *)
     (* instantiate the block's logic variables angelically, CONSUME its        *)
     (* precondition, PRODUCE its postcondition, resume at entry + off.  The    *)
-    (* angelic_ctx is kept even though SBlk fixes the context to [ctx] (so it  *)
+    (* angelic_ctx is kept even though Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot fixes the context to [ctx] (so it  *)
     (* yields [env]) precisely BECAUSE the symbolic side has one: refinement   *)
     (* pairs structurally, and dropping a step here would force a bespoke      *)
     (* lemma where refine_bind would otherwise dispatch.  Same reasoning as    *)
@@ -267,7 +267,7 @@ Section CFGVerificationDerived.
     (* `ty.RVToOption apc = Some v`, so `SyncVal (v + off)` is exactly what    *)
     (* the symbolic `term_binop bop.bvadd apc (term_val off)` instantiates to. *)
     (* ===================================================================== *)
-    Definition cexec_block (b : SBlk) (v : bv xlenbits) :
+    Definition cexec_block (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) :
       CHeapSpec (RelVal ty_xlenbits) :=
       (* `bop.evalRel bop.bvadd`, NOT `ty.SyncVal (bv.add ..)`.  The two are
          convertible, but instance resolution is SYNTACTIC: written the second
@@ -277,10 +277,10 @@ Section CFGVerificationDerived.
          -- cfgver-refinement's "mirror structurally" rule, with a concrete
          cost for breaking it. *)
       let ex := bop.evalRel bop.bvadd (ty.SyncVal v)
-                  (ty.SyncVal (@bv.of_N xlenbits (sblk_off b))) in
-      ι <- lift_purespec (CPureSpec.angelic_ctx (sblk_ctx b)) ;;
-      _ <- consume (sblk_pre b) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
-      _ <- produce (sblk_post b)
+                  (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) in
+      ι <- lift_purespec (CPureSpec.angelic_ctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) ;;
+      _ <- consume (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
+      _ <- produce (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
              ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ ex] ;;
       pure ex.
 
@@ -765,7 +765,7 @@ Section CFGVerificationDerived.
 
        Developed in Example/ZZBlkProbe.v -- pet OOMs at 7.6 GB opening THIS
        file at any position, so the goals are unreadable in place. *)
-    Lemma rexec_block (b : SBlk) (v : bv xlenbits) {w : World} (ta : STerm ty_xlenbits w) :
+    Lemma rexec_block (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) {w : World} (ta : STerm ty_xlenbits w) :
       ⊢ (ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal v) ta -∗
          ℛ⟦RHeapSpec (RVal ty_xlenbits)⟧ (cexec_block b v) (sexec_block b ta)).
     Proof.

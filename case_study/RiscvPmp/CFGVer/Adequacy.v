@@ -1245,7 +1245,7 @@ Section AdequacyTools.
     (* This is the `contractsSound` of executor-level composition: the    *)
     (* executor is allowed to REPLACE the instructions at address v by    *)
     (* b's contract exactly when a real execution entering at v with      *)
-    (* b's precondition reaches v + sblk_off b with b's postcondition.    *)
+    (* b's precondition reaches v + Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b with b's postcondition.    *)
     (*                                                                   *)
     (* Stated in continuation-passing form over an ARBITRARY ExitCond,    *)
     (* which is what makes it compose: the caller instantiates ExitCond   *)
@@ -1264,7 +1264,7 @@ Section AdequacyTools.
     (* block table at every step of the induction.                        *)
     (* ================================================================ *)
     (* WHAT A BLOCK PROMISES, as an Iris fact: entering at v with the block's
-       precondition, the machine reaches v + sblk_off b with its
+       precondition, the machine reaches v + Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b with its
        postcondition.  Continuation-passing over an ARBITRARY ExitCond, which
        is what makes it compose -- the caller instantiates ExitCond with
        `myWP2_loop <real exit>` and discharges the nested loop with
@@ -1282,16 +1282,16 @@ Section AdequacyTools.
        strengthening is needed anywhere. *)
     Definition blockSound (words : bv xlenbits -> bv word)
         (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk) : iProp Σ :=
-      (∀ (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b)) (ExitCond : iProp Σ),
-         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
+        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) : iProp Σ :=
+      (∀ (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) (ExitCond : iProp Σ),
+         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
          pc ↦ᵣ ty.SyncVal v ∗ (∃ x, nextpc ↦ᵣ x) ∗
          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
-         (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_post b)
+         (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
             ((ι.["a"∷ty_xlenbits ↦ ty.SyncVal v])
                .["an"∷ty_xlenbits ↦ ty.SyncVal
-                  (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b)))]) ∗
-          pc ↦ᵣ ty.SyncVal (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b))) ∗
+                  (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))]) ∗
+          pc ↦ᵣ ty.SyncVal (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) ∗
           (∃ x, nextpc ↦ᵣ x) ∗
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗ ExitCond) -∗
          myWP2_loop ExitCond)%I.
@@ -1368,19 +1368,19 @@ Section AdequacyTools.
        assert_eq_nenv a function call needs and with a fixed result.  The ONE
        angelically-chosen ι serves pre and post, which is what carries a
        block's shared logic variables across the two. *)
-    Lemma cexec_block_sound (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk) (v : bv xlenbits)
+    Lemma cexec_block_sound (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits)
         (Phi : RelVal ty_xlenbits -> SCHeap -> Prop) (h : SCHeap) :
       Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block b v Phi h ->
       (interpret_scheap h ⊢
-         ∃ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b),
-           asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
-           (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_post b)
+         ∃ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b),
+           asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
+           (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
               ((ι.["a"∷ty_xlenbits ↦ ty.SyncVal v])
                  .["an"∷ty_xlenbits ↦ bop.evalRel bop.bvadd (ty.SyncVal v)
-                     (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b)))]) -∗
+                     (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))]) -∗
             ∃ h', interpret_scheap h' ∧
               ⌜Phi (bop.evalRel bop.bvadd (ty.SyncVal v)
-                      (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b)))) h'⌝))%I.
+                      (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))) h'⌝))%I.
     Proof.
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block.
       unfold CHeapSpec.bind, CHeapSpec.lift_purespec.
@@ -1727,15 +1727,17 @@ Section AdequacyTools.
     (* ---- THE PLACEMENT PREMISE ------------------------------------------
        A block's contract is verified over a symbolic table, and whether that
        table is FAITHFUL to the program depends on the valuation: for a
-       base-relative contract (`sblk_place b = term_var "p"`) it holds only
+       base-relative contract (`cfg_placement (blk_contract b) = term_var "p"`)
+       it holds only
        when ι sends "p" to the program's actual base.  But ι is chosen
        ANGELICALLY by sexec_block, so blockSound cannot simply assume it -- as
        stated with an unconditional ∀ι it would be FALSE for every
        base-relative block.
 
        What pins ι is the PRECONDITION.  A segment contract's asn_init_pc says
-       `"a" = sblk_place b ⊕ off`, and blockSound's premise already binds "a"
-       to the entry pc, so the pre determines `inst (sblk_place b) ι`.  That
+       `"a" = cfg_placement (blk_contract b) ⊕ off`, and blockSound's premise
+       already binds "a" to the entry pc, so the pre determines
+       `inst (cfg_placement (blk_contract b)) ι`.  That
        derivation is a separation-logic entailment, which is why this premise
        is an iProp living here rather than a pure Prop in Contracts.v.
 
@@ -1743,14 +1745,14 @@ Section AdequacyTools.
        not survive the `iIntros "!>"` that introduces it. *)
     Definition blockFaithful
         (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk)
-        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))) : iProp Σ :=
-      (□ ∀ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b),
-         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) -∗
-         ⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
+        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))) : iProp Σ :=
+      (□ ∀ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b),
+         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) -∗
+         ⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
              (Katamaran.RiscvPmp.CFGVer.Verifier.clear_blk <$> instrs) tbl ι
-          /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
-               (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exitCond b) (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exits b) ι⌝)%I.
+          /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
+               (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝)%I.
 
     (* A VALID CONTRACT IS ALL YOU NEED -- the point Emiel made.  Everything
        Iris-level is already in sound_scfg_verification_condition_myWP2; this
@@ -1761,24 +1763,24 @@ Section AdequacyTools.
        memory, so the SAME ptsto_instrs_w resource serves both. *)
     Lemma blockSound_of_vc (words : bv xlenbits -> bv word)
         (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk)
-        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b)))
+        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
         (Hv : safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exits b) (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_fuel b)
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_post b) wnil)))
-        (Hexit : forall x, Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exitCond b x = true ->
-                   x = bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b))) :
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) wnil)))
+        (Hexit : forall x, Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b) x = true ->
+                   x = bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) :
       blockFaithful instrs v b tbl ⊢ blockSound words instrs v b.
     Proof.
       iIntros "#Hf" (ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
       (* Read the faithfulness facts out of the pre WITHOUT consuming it: the
          conclusion is pure, so `∧` (which duplicates the context under iSplit)
          gives both. *)
-      iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
+      iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
                    (Katamaran.RiscvPmp.CFGVer.Verifier.clear_blk <$> instrs) tbl ι
-               /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
-                    (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exitCond b) (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exits b) ι⌝
-              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b)
+               /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
+              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
                   (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
         with "[Hpre]" as "[%Hfi Hpre]".
       { iSplit; [ iApply ("Hf" $! ι with "Hpre") | iExact "Hpre" ]. }

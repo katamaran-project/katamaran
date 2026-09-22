@@ -443,6 +443,43 @@ minimised.
   Without this, blocks compose only over straight-line code and the layer above
   loops is unreachable — i.e. PLAN-muladd-composed cannot be finished.
 
+**THE NARROW FIX DOES NOT WORK — CHECKED 2026-09-22, AND THIS IS WHY §2c IS
+LOAD-BEARING RATHER THAN A NICETY.**
+
+An earlier round of this discussion concluded that the defect in
+`clear_blk <$> instrs` was *narrow*: it clears EVERY address when only the
+block's own entry, `<[v := clear_blk ai]> instrs`, needed clearing — so
+single-entry clearing would hide a block from itself while leaving nested
+annotations intact, and nesting would work. The supporting lemma is true and was
+proved in 1.2 s:
+
+```coq
+Lemma blocksSound_insert_clear words instrs v ai :
+  instrs !! v = Some ai ->
+  blocksSound words instrs ⊢ blocksSound words (<[v := clear_blk ai]> instrs).
+```
+
+**But it does not buy nesting, because it RELOCATES the circularity instead of
+removing it.** `blockSound_of_vc` currently discharges its block premise
+VACUOUSLY (`blocksSound_clear_blk`, every `ai_block` is `None` after a
+whole-map clear). With single-entry clearing that premise is no longer vacuous:
+the cleared program still carries every OTHER block, so `blockSound_of_vc` would
+have to take the enclosing `blocksSound words instrs` as a HYPOTHESIS. And
+`blocksSound` is *defined* as a `□ ∀` over `blockSound` — so at the use site you
+need `blocksSound` in order to prove `blockSound`, i.e. in order to prove
+`blocksSound`. Circular.
+
+§2c is what breaks it, and the mechanism is the SELF-CONTAINMENT, not the
+clearing: a block's VC runs against its OWN annotated list `a_b`, so its block
+premise is `blocksSound words (instrs_of_list base a_b)` over a STRICTLY SMALLER
+artifact, and the recursion is well-founded on nesting depth. The enclosing
+program never appears, so there is nothing to clear and no fixpoint to stratify.
+
+**Consequence for whoever executes Phase 4: you cannot get nesting cheaply.**
+The span split is the feature, not an optimisation of it. Keep
+`blocksSound_insert_clear` out of the tree unless something else wants it —
+it is a true lemma with no user.
+
 **THE LOAD-BEARING QUESTION — ANSWERED 2026-09-22, THE ANSWER IS YES.**
 `blockSound` currently holds `ptsto_instrs_w words (ai_instr <$> instrs)` for
 the WHOLE program, unchanged, across the block step. Under §2c it holds only

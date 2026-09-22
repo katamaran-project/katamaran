@@ -140,12 +140,12 @@ errors on the dependents.
 |------|----------|----------------|
 | `Spec.v` | `Assembly` instruction-builder synonyms; CFGVer's own leakage-aware `Specification` instance (`secLeakvar`/`inv_leakage`-annotated contracts, distinct from `../Contracts.v`); the SYMBOLIC executor. Iris-free | cfgver-contracts |
 | `SpecIris.v` | shallow executor + `RiscvPmpIrisInstanceWithContracts` (the Iris wiring split out of `Spec.v`) | cfgver-soundness |
-| `Verifier.v` | `safeE`, `sexec_cfg_addr`, `scfg_verification_condition` (`Section Symbolic`). Iris-free | cfgver-executor |
+| `Verifier.v` | `safeE`, `sexec_cfg_addr`, `scfg_verification_condition` (`Section Symbolic`); **and, since 2026-09-22, the `CFGVerifierContract` RECORD + `cfg_map` + `AnnotInstr`/`BlkAnnot`** — the record moved down from `Contracts.v` because `ai_block` carries a contract and `Contracts.v` requires this file (PLAN-contract-ast Phase 4). DATA only: the VC over it stays in `Contracts.v`. Iris-free | cfgver-executor, cfgver-contracts |
 | `VerifierRel.v` | `cexec_cfg_addr` (`Shallow`), `rexec_cfg_addr` + `RefineCompat` instances + `itable_rel`/`etable_rel` (`Relational`), `ptsto_instrs` + `sound_exec_instruction` (`Soundness`) | cfgver-refinement, cfgver-rsolve, cfgver-soundness |
 | `Noninterference.v` | trusted statement defs; requires only `Semantics`+`Machine` | cfgver-endtoend |
 | `Tables.v` | reg aliases, `instrs_of_list`, `table_of_list`/`exits_of_*`. Iris-free | cfgver-executor |
 | `TablesRel.v` | the `itable_rel`/`etable_rel` faith lemmas (statements mention `Pred w`, hence Iris). Sole consumer: `EndToEnd.v` | cfgver-executor |
-| `Contracts.v` | `CFGVerifierContract`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc` | cfgver-contracts, cfgver-solve-vc |
+| `Contracts.v` | `cfg_vc` (the VC — was `ValidCFGVerifierContract` until 2026-09-22), `CFG_VC_triple`, `Valid_CFG_VC`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc`. The RECORD itself now lives in `Verifier.v` (row above) | cfgver-contracts, cfgver-solve-vc |
 | `GenContract.v` | `gen_contract(_param/_rel)`, `param_val`, concretize maps | cfgver-gen-contract(-internals) |
 | `GenSegment.v` | **LIGHT.** The MID-PROGRAM SEGMENT (cut) contract generator: `gen_seg_contract`, the Σ-generic `gen_reg_asn_at`/`gen_regs_at`, `seg_exitCond`, `Ltac solve_seg`, and the shared `rc_*` `reg_convert` table + `reg_reduce`. Iris-free | cfgver-gen-contract-internals |
 | `GenCompose.v` | **HEAVY.** Composition combinators: `split_id`/`itable_faith_at` (sub-table faith), `seg_exitCond_hit`/`seg_exits_faith` (exit-table faith), `seg_vc`/`seg_entry`/`seg_exit`/`seg_step` (one segment, with an explicit frame), `seg_loop` | cfgver-soundness |

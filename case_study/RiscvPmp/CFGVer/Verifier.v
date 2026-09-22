@@ -97,7 +97,7 @@ Inductive Annot :=
 (* A BLOCK CONTRACT carried by an instruction: everything needed to say what
    standing in for a run of instructions PROMISES, plus where execution
    resumes.  This is CFGVerifierContract's data minus `cfg_instrs` -- the code
-   is a plain `list AST` rather than `list AnnotInstr` -- plus `sblk_off`.
+   is a plain `list AST` rather than `list AnnotInstr` -- plus `blk_off`.
 
    NO CODE FIELD.  A block's contract is verified against the ENCLOSING
    program -- with `ai_block` cleared, see `clear_blk` below -- not against a
@@ -110,7 +110,7 @@ Inductive Annot :=
    carry its own justification.  A validity proof's TYPE is the verification
    condition, and the VC runs the symbolic executor, whose instruction table is
    AnnotInstr-valued (SInstrTable, below) -- so the type mentions AnnotInstr,
-   hence `option SBlk`, hence itself.  The block's CODE is plain instructions;
+   hence `option BlkAnnot`, hence itself.  The block's CODE is plain instructions;
    it is the VC OVER that code that is annotated, and that is what closes the
    loop.  Breaking it needs the executor parameterised over its payload, and
    the payload parameter is not inferable from a signature (`SInstrTable
@@ -123,16 +123,64 @@ Inductive Annot :=
    (Contracts.v), read off exactly these fields.  The guarantee is the same --
    an unverified block cannot reach a theorem -- the difference is only that
    you are stopped when you USE a block rather than when you BUILD one. *)
-Record SBlk : Type := MkSBlk
-  { sblk_ctx      : LCtx
-  ; sblk_place    : Term sblk_ctx ty_xlenbits
-  ; sblk_pre      : Assertion (sblk_ctx ▻ "a" ∷ ty_xlenbits)
-  ; sblk_post     : Assertion (sblk_ctx ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
-  ; sblk_exits    : list (Term sblk_ctx ty_xlenbits)
-  ; sblk_exitCond : bv xlenbits -> bool
-  ; sblk_fuel     : nat
-    (* Offset from the block's entry address to where execution resumes. *)
-  ; sblk_off      : N }.
+(* THE CONTRACT RECORD.  It lives HERE, above AnnotInstr, rather than in
+   Contracts.v, because `ai_block` carries one (PLAN-contract-ast §2.4) and
+   Contracts.v requires this file.  Only the DATA is here; the verification
+   condition over it (cfg_vc) stays in Contracts.v, which is what keeps the
+   dependency acyclic: the executor reads a contract, and the VC is defined
+   by running the executor. *)
+Record CFGVerifierContract {Σ} :=
+  MkCFGVerifierContract
+  { cfg_init_addr     : N
+  ; cfg_placement     : Term Σ ty_xlenbits
+  ; cfg_exits         : list (Term Σ ty_xlenbits)
+  ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
+  (* list AST, NOT list AnnotInstr, since 2026-09-22 (PLAN-contract-ast).
+     Annotations are TOOL INPUT -- ghost hints and block contracts -- and
+     are passed to the VERIFICATION as an argument (`cfg_vc` below), not
+     carried in the specification.  This is also what breaks the
+     AnnotInstr/CFGVerifierContract circularity, so that a block
+     annotation can carry a real contract instead of a cloned SBlk (gone as of Phase 4). *)
+  ; cfg_instrs        : list AST
+  ; cfg_exitCond      : bv xlenbits -> bool
+  ; cfg_fuel          : nat
+  ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
+  }.
+
+Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
+  (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
+       Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
+       (bv xlenbits -> bool) -> nat ->
+       Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
+  match c with
+  | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
+       cfg_precondition := pre; cfg_instrs := i;
+       cfg_exitCond := ec; cfg_fuel := fl;
+       cfg_postcondition := post |} => f ia p exits pre i ec fl post
+  end.
+
+(* A BLOCK ANNOTATION: a contract, plus where execution resumes.
+
+   This replaced `SBlk` on 2026-09-22 (PLAN-contract-ast Phase 4).  SBlk was
+   CFGVerifierContract's data minus cfg_instrs and cfg_init_addr, cloned here
+   ONLY because the record could not be referenced from this file -- it carried
+   `list AnnotInstr`, so contract and annotation were mutually recursive.  With
+   cfg_instrs a `list AST` the record is well-founded and now lives just above,
+   so the clone is gone and a block carries the real thing.
+
+   `sblk_place` is NOT carried over: it was dead (its only occurrences were its
+   own declaration and three comment lines in Adequacy.v).  `cfg_placement` of
+   the contract does that job.
+
+   blk_off is the one datum a contract cannot supply: cfg_exits holds the resume
+   point inside a TERM and cfg_exitCond inside a FUNCTION, and extracting an `N`
+   from either means pattern-matching a term.  See PLAN-contract-ast §2b for the
+   sketch that removes it. *)
+Record BlkAnnot : Type := MkBlkAnnot
+  { blk_off      : N                 (* resume at pc + off *)
+  ; blk_ctx      : LCtx
+  ; blk_contract : @CFGVerifierContract blk_ctx }.
+
 
 (* One instruction together with the ghost annotations attached to it.
    A PRODUCT, not a sum (`AnnotAST i | AnnotGhost a` was reverted at
@@ -156,13 +204,13 @@ Record AnnotInstr := MkAnnotInstr
   ; ai_ghost_after  : list Annot
     (* BLOCK CONTRACT IN THE PAYLOAD (2026-09-15).  When this is `Some b`
        the executor REPLACES this instruction -- and however many follow it
-       inside the block -- by b's contract, resuming at pc + sblk_off b.
+       inside the block -- by b's contract, resuming at pc + blk_off b.
        `ai_instr` is then never executed, but it must still be the real
        instruction: MEMORY holds instructions, and `strip` / `ai_instr <$>`
        is what the trusted statements see.
 
        WHY A FIELD AND NOT A SECOND TABLE.  A parallel block table needs its
-       own persist/subst/lookup/faithfulness family (SBlkTableT,
+       own persist/subst/lookup/faithfulness family (BlkAnnotTableT,
        persist_blktable, lookup_blk, btable_rel and its five lemmas) and a
        second dispatch in the executor loop -- all of which existed here
        between 2026-09-14 and 2026-09-15 and are now deleted.  Riding in the
@@ -183,7 +231,7 @@ Record AnnotInstr := MkAnnotInstr
        Cost, stated rather than hidden: `_instrs` blocks are TRUSTED
        STATEMENT surface, and this puts proof hints into them.  Same trade
        already made for ghosts, and `strip` is the same mitigation. *)
-  ; ai_block        : option SBlk
+  ; ai_block        : option BlkAnnot
   }.
 
 (* Erase every block contract, keeping the instruction and its ghosts.
@@ -1083,7 +1131,7 @@ Section CFGVerificationDerived.
        CONSUME its precondition at the entry pc, PRODUCE its postcondition at
        the exit pc, and return that exit pc.
 
-       The single angelic_ctx over `sblk_ctx b` is what lets pre and post SHARE
+       The single angelic_ctx over `blk_ctx b` is what lets pre and post SHARE
        logic variables -- the reason the contract's context is a field rather
        than fixed at [ctx].  With `asn.exist` on both sides instead, consume
        instantiates angelically and produce demonically, so nothing links them.
@@ -1091,21 +1139,21 @@ Section CFGVerificationDerived.
        "a" is bound to the entry pc and "an" to entry + off, exactly as
        sexec_triple_addr binds them, so a block's pre/post are literally a
        segment contract's. *)
-    Definition sexec_block (b : SBlk) :
+    Definition sexec_block (b : BlkAnnot) :
       ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w apc =>
-        ⟨ θ1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id (sblk_ctx b)) ;;
+        ⟨ θ1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id (blk_ctx b)) ;;
         let apc1 := persist__term apc θ1 in
-        ⟨ θ2 ⟩ _ <- consume (sblk_pre b) evars.["a"∷ty_xlenbits ↦ apc1] ;;
-        let evars2 := persist (A := Sub (sblk_ctx b)) evars θ2 in
+        ⟨ θ2 ⟩ _ <- consume (cfg_precondition (blk_contract b)) evars.["a"∷ty_xlenbits ↦ apc1] ;;
+        let evars2 := persist (A := Sub (blk_ctx b)) evars θ2 in
         let apc2 := persist__term apc1 θ2 in
         let aex  := term_binop bop.bvadd apc2
-                      (term_val ty_xlenbits (bv.of_N (sblk_off b))) in
-        ⟨ θ3 ⟩ _ <- produce (sblk_post b)
+                      (term_val ty_xlenbits (bv.of_N (blk_off b))) in
+        ⟨ θ3 ⟩ _ <- produce (cfg_postcondition (blk_contract b))
                       evars2.["a"∷ty_xlenbits ↦ apc2].["an"∷ty_xlenbits ↦ aex] ;;
         pure (persist__term aex θ3).
 
-    Fixpoint sexec_blocks (bs : list SBlk) :
+    Fixpoint sexec_blocks (bs : list BlkAnnot) :
       ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w apc =>
         match bs with
@@ -1400,7 +1448,7 @@ Section CFGVerificationDerived.
       apply Hrec.
     Qed.
 
-    Lemma cext_sexec_block (b : SBlk) {w : World} (apc : Term (wctx w) ty_xlenbits) :
+    Lemma cext_sexec_block (b : BlkAnnot) {w : World} (apc : Term (wctx w) ty_xlenbits) :
       CExt (sexec_block b apc).
     Proof.
       unfold sexec_block.
@@ -1646,7 +1694,7 @@ Section CFGVerificationDerived.
 
     Definition sexec_triple_addr_blks {Σ : LCtx}
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (bs : list SBlk)
+      (bs : list BlkAnnot)
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
       (fuel : nat)
       (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
@@ -1680,7 +1728,7 @@ Section CFGVerificationDerived.
 
     Definition scfg_verification_condition_blks {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (bs : list SBlk)
+      (bs : list BlkAnnot)
       (tbl : SInstrTable (wlctx Σ))
       (exits : SExitTable (wlctx Σ)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=

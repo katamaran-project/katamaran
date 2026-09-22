@@ -145,35 +145,15 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
       safeE (postprocess (CFG_VC_triple p exits P i fl Q)).
 
-    Record CFGVerifierContract {Σ} :=
-      MkCFGVerifierContract
-      { cfg_init_addr     : N
-      ; cfg_placement     : Term Σ ty_xlenbits
-      ; cfg_exits         : list (Term Σ ty_xlenbits)
-      ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-      (* list AST, NOT list AnnotInstr, since 2026-09-22 (PLAN-contract-ast).
-         Annotations are TOOL INPUT -- ghost hints and block contracts -- and
-         are passed to the VERIFICATION as an argument (`cfg_vc` below), not
-         carried in the specification.  This is also what breaks the
-         AnnotInstr/CFGVerifierContract circularity, so that a block
-         annotation can carry a real contract instead of a cloned SBlk. *)
-      ; cfg_instrs        : list AST
-      ; cfg_exitCond      : bv xlenbits -> bool
-      ; cfg_fuel          : nat
-      ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
-      }.
+    (* CFGVerifierContract and cfg_map MOVED TO Verifier.v on 2026-09-22
+       (PLAN-contract-ast Phase 4).  `ai_block` must carry a real contract, and
+       ai_block lives in Verifier.v, which Contracts.v REQUIRES -- so the record
+       had to sit below AnnotInstr, not above it.  Flipping cfg_instrs to
+       `list AST` made the record well-founded as a TYPE; it did nothing about
+       FILE ORDER, and that is what this move fixes.  Both files are light, and
+       Contracts.v is not on CLAUDE.md's trusted-statement list, so nothing about
+       the audit surface changes. *)
 
-    Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-      (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
-           (bv xlenbits -> bool) -> nat ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
-      match c with
-      | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
-           cfg_precondition := pre; cfg_instrs := i;
-           cfg_exitCond := ec; cfg_fuel := fl;
-           cfg_postcondition := post |} => f ia p exits pre i ec fl post
-      end.
 
     (* THE VERIFICATION CONDITION.  This was `ValidCFGVerifierContract c`
        until 2026-09-22 (PLAN-contract-ast Phase 1).  Two changes:
