@@ -1674,6 +1674,128 @@ Section AdequacyTools.
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs. iExists words. iFrame "Hinstrs".
     Qed.
 
+    Lemma sound_scfg_verification_condition_myWP2_w {Γ pre post instrs exitCond fuel}
+        (words : bv xlenbits -> bv word)
+        (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
+           signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
+           it (five in VerifierRel.v), and every one of them silently failed to
+           track BOTH table columns added since — the word column and then
+           AnnotInstr.  The type error always surfaces far from the cause. *)
+        {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+        {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
+        (Hverif : safeE (postprocess (
+            Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+              pre tbl exits fuel post wnil)))
+        (ι : Valuation Γ) (ExitCond : iProp Σ)
+        (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι)
+        (* The block premise.  With the contract in the AnnotInstr payload this
+           is the ONLY thing the hook adds at this level: blocks ride in
+           `instrs` and hence in `tbl`, so there is no second VC entry point
+           and no second triple-level refinement.  A block-free program
+           discharges it with blocksSound_of_none. *)
+        (Hbs : forall words : bv xlenbits -> bv word,
+                 ⊢ blocksSound words instrs) :
+      ⊢ ∀ a : RelVal ty_xlenbits,
+          asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
+          pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
+          (∀ an,
+             ⌜match an with
+               | SyncVal v => exitCond v = true
+               | NonSyncVal _ _ => False
+               end⌝ ∗
+             pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
+             (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
+             asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+             ExitCond) -∗
+          myWP2_loop ExitCond.
+    Proof.
+      apply (sound_cexec_triple_addr_myWP2_w (post := post) (fuel := fuel)
+               (ι := ι) words ExitCond Hif Hef);
+        [|exact Hbs].
+      intros wds.
+      apply (safeE_safe env.nil), postprocess_sound in Hverif.
+      apply LogicalSoundness.psafe_safe in Hverif; [|done].
+      revert Hverif.
+      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
+      - easy.
+      - constructor.
+    Qed.
+
+    (* ---- THE PLACEMENT PREMISE ------------------------------------------
+       A block's contract is verified over a symbolic table, and whether that
+       table is FAITHFUL to the program depends on the valuation: for a
+       base-relative contract (`sblk_place b = term_var "p"`) it holds only
+       when ι sends "p" to the program's actual base.  But ι is chosen
+       ANGELICALLY by sexec_block, so blockSound cannot simply assume it -- as
+       stated with an unconditional ∀ι it would be FALSE for every
+       base-relative block.
+
+       What pins ι is the PRECONDITION.  A segment contract's asn_init_pc says
+       `"a" = sblk_place b ⊕ off`, and blockSound's premise already binds "a"
+       to the entry pc, so the pre determines `inst (sblk_place b) ι`.  That
+       derivation is a separation-logic entailment, which is why this premise
+       is an iProp living here rather than a pure Prop in Contracts.v.
+
+       □ because blocksSound is itself persistent: without it the premise would
+       not survive the `iIntros "!>"` that introduces it. *)
+    Definition blockFaithful
+        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk)
+        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))) : iProp Σ :=
+      (□ ∀ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b),
+         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) -∗
+         ⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
+             (Katamaran.RiscvPmp.CFGVer.Verifier.clear_blk <$> instrs) tbl ι
+          /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
+               (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exitCond b) (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exits b) ι⌝)%I.
+
+    (* A VALID CONTRACT IS ALL YOU NEED -- the point Emiel made.  Everything
+       Iris-level is already in sound_scfg_verification_condition_myWP2; this
+       lemma only specialises it at a := SyncVal v, pins the exit, and runs it
+       against the CLEARED program so the block is not visible to itself.
+
+       ai_instr_fmap_clear_blk is what makes that free: clearing changes no
+       memory, so the SAME ptsto_instrs_w resource serves both. *)
+    Lemma blockSound_of_vc (words : bv xlenbits -> bv word)
+        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.SBlk)
+        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b)))
+        (Hv : safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exits b) (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_fuel b)
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_post b) wnil)))
+        (Hexit : forall x, Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exitCond b x = true ->
+                   x = bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_off b))) :
+      blockFaithful instrs v b tbl ⊢ blockSound words instrs v b.
+    Proof.
+      iIntros "#Hf" (ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
+      (* Read the faithfulness facts out of the pre WITHOUT consuming it: the
+         conclusion is pure, so `∧` (which duplicates the context under iSplit)
+         gives both. *)
+      iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
+                   (Katamaran.RiscvPmp.CFGVer.Verifier.clear_blk <$> instrs) tbl ι
+               /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_ctx b))
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exitCond b) (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_exits b) ι⌝
+              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.sblk_pre b)
+                  (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
+        with "[Hpre]" as "[%Hfi Hpre]".
+      { iSplit; [ iApply ("Hf" $! ι with "Hpre") | iExact "Hpre" ]. }
+      destruct Hfi as [Hif Hef].
+      rewrite <- (ai_instr_fmap_clear_blk instrs).
+      iApply (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
+                (fun wds => blocksSound_clear_blk wds instrs)
+                $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
+      (* no secLeak bullet: iFrame closes `⌜secLeak (SyncVal v)⌝` on the way in,
+         as it does at every other call site of this lemma. *)
+      iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
+      destruct an as [x|x1 x2]; [|contradiction].
+      cbn in Hex. specialize (Hexit _ Hex). subst x.
+      iApply "Hk". iFrame.
+    Qed.
+
+
     Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
