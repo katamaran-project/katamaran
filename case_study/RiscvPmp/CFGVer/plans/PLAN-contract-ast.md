@@ -19,7 +19,11 @@ trusted boundary, makes `AnnotInstr` and `CFGVerifierContract` mutually
 recursive (so a block contract cannot BE a contract), and requires a coercion
 plus an elaboration hack so that ordinary programs still typecheck. Change the
 field to `list AST` and pass the annotated list as an argument to the
-VERIFICATION, and all four go away at once.
+VERIFICATION, and all four go away at once. **One qualification, established in
+§2.4:** this breaks the circularity for the RECORD, so a block annotation can
+carry a real contract — it does NOT break it for VALIDITY, which is defined by
+running the executor that reads the annotation. Validity therefore stays a side
+premise (`blocksSound`), and `SBlk`'s existence was never a pure dodge.
 
 ## §1. The diagnosis, with the evidence already in the tree
 
@@ -39,8 +43,9 @@ and it is not merely a type-theory nuisance — `Contracts.v` REQUIRES
 `Verifier.v` (line 54), so the dependency already runs contract -> annotation.
 Reusing `CFGVerifierContract` inside `ai_block` would mean inverting that, i.e.
 merging the trusted `Contracts.v` into `Verifier.v`. `SBlk` (`Verifier.v:126`)
-exists ONLY to dodge this: it is `CFGVerifierContract`'s data minus
-`cfg_instrs` and `cfg_init_addr`, plus `sblk_off`.
+exists to dodge this: it is `CFGVerifierContract`'s data minus `cfg_instrs` and
+`cfg_init_addr`, plus `sblk_off`. **But only the DATA half of the dodge is
+removable — see §2.4.**
 
 ## §2. The design
 
@@ -419,7 +424,7 @@ Secondary, expected to be easy but unverified:
 | `sblk_place` | **already dead** — occurs only in its own declaration and in three comment lines in `Adequacy.v` |
 | `sblk_exits` / `sblk_exitCond` / `sblk_fuel` | read off `blk_contract` instead of being copied into a second record |
 | `sblk_of_contract` (probe) | nothing to convert |
-| ten `strip` sites in `EndToEnd.v` | the two lists are now NAMED (`cfg_instrs c` for memory, `a` for the table) instead of one being derived from the other |
+| ten `strip` sites in `EndToEnd.v` | the two lists are now NAMED (`cfg_instrs c` for memory, `a` for the table) instead of one being derived from the other. **One `strip` survives**, as a hypothesis of the bridge (§2.2) — that is the point, not a leftover |
 | `strip_length` | no longer needed at a boundary |
 | `AST_AnnotInstr`, `list_AST_AnnotInstr`, `Local Arguments List.cons {_} & _ _.` | exist ONLY so `[MV X3 X2; …]` typechecks as `list AnnotInstr`. With an AST field, examples need no coercion. **Check before deleting** — the coercion is still wanted: §2.5 has an un-annotated example write `cfg_vc c c_instrs` with `c_instrs : list AST` riding it |
 
@@ -514,10 +519,11 @@ GATE 4: `ZZBlkAB` green again, `make Results.vo` green.
    there are genuinely TWO lists (AST for the statement, AnnotInstr for the
    table) and the segment machinery must slice BOTH consistently. Decide this
    explicitly in Phase 2; do not let the coercion float.
-2. **`Set Implicit Arguments` + the new `Ha` argument.** Coq's `(name := v)`
+2. **`Set Implicit Arguments` + the new `a` argument.** Coq's `(name := v)`
    syntax accepts implicit names only, and several call sites already use
    positional/numeric selectors (`4: exact …` in `JumpsResult.v`). Adding an
-   argument reorders goals. Put `Ha` LAST, as `HBS` was.
+   argument reorders goals. There is no `Ha` (§2.5 retracted it), but `cfg_vc`
+   gains `a` and the Phase 3 premises gain a quantifier — check those selectors.
 3. **`strip a = cfg_instrs c` must be `reflexivity`-cheap.** For a concrete
    literal it computes; for a `firstn/skipn` slice of a named program it may
    not. If it does not, the side condition becomes real work at every segment.
@@ -530,9 +536,10 @@ GATE 4: `ZZBlkAB` green again, `make Results.vo` green.
 - **Do not change `cfg_instrs` to `list AST` without adding the annotated
   argument.** It looks like it works until the first program that carries a
   block, and then there is nowhere to put it.
-- **Do not edit an example to make Phase 2 pass.** The added argument exists so
-  that examples are untouched; an example needing a change means the default is
-  wrong.
+- **Do not edit an example BEYOND its statement line in Phase 2.** Examples do
+  change — the statement becomes `cfg_vc c <its own _instrs>` (§2.6) — but that
+  is the whole edit. A changed `_instrs` block, a changed tactic, or an added
+  hypothesis means something upstream is wrong; fix that, not the example.
 - **Do not remove `AnnotInstr` from `instrs_of_list` / `table_of_list`.** The
   executor reads `ai_ghost_*` and `ai_block` off the table payload. This plan
   removes annotations from the statement only.
