@@ -62,17 +62,18 @@ Lemma cmovznz4_noninterferent_param (init_addr : N) :
     (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
 Proof.
   intros Hb.
-  (* `<- strip_id_cmovznz4` restates the goal over `strip cmovznz4_instrs`, the
-     form the bridge now concludes.  reflexivity-equal, so the theorem above is
-     literally the same statement as before the AnnotInstr migration — that is
-     the invariant, and this rewrite is where it is discharged. *)
-  rewrite <- strip_id_cmovznz4.
+  (* The `strip` restatement this proof used to open with is GONE: the
+     EndToEnd bridges now conclude over `instrs` itself, not `strip
+     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
+     Phase 3).  The annotated list enters as the bridge's `annot`
+     premise instead, discharged by strip_of_AST just below. *)
   eapply gen_contract_noninterferent_rel_classed_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
       try (inversion H; subst; cbn; f_equal; lia); try discriminate.
   - cbn. lia.
   - exact Hb.
+  - apply strip_of_AST.
   - exact (valid_cmovznz4_cfg_contract_param init_addr).
   - solve_no_blocks.
 Qed.

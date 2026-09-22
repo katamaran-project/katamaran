@@ -59,17 +59,15 @@ Lemma set_X2_to_42_noninterferent_param (init_addr : N) :
     [(X2, false, None)] [].
 Proof.
   intros Hbound.
-  (* This program builds its instruction list INLINE in the contract
-     literal, so there is no named object to hang a strip_id_* anchor
-     on (unlike the nine that have one).  Same job, done locally: the
-     goal is restated over `strip <literal>`, the form the EndToEnd
-     bridges now conclude, and it is reflexivity-equal so the theorem
-     above is unchanged. *)
-  assert (Hstrip : strip [ADDI X2 X0 (bv.of_N 42)] = [ADDI X2 X0 (bv.of_N 42)]) by reflexivity.
-  rewrite <- Hstrip.
+  (* The `strip` restatement this proof used to open with is GONE: the
+     EndToEnd bridges now conclude over `instrs` itself, not `strip
+     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
+     Phase 3).  The annotated list enters as the bridge's `annot`
+     premise instead, discharged by strip_of_AST just below. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
+  - apply strip_of_AST.
   - exact (valid_set_X2_to_42_param init_addr).
   - solve_no_blocks.
 Qed.

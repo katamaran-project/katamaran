@@ -104,12 +104,12 @@ Section Compose.
           ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N 0)]
       ∗ pc ↦ᵣ SyncVal (bv.of_N 0) ∗ (∃ v, nextpc ↦ᵣ v)
       ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-          (ai_instr <$> instrs_of_list (bv.of_N 0) (cfg_instrs swapA))
+          (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA)))
       -∗ myWP2_loop swapExit.
   Proof.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx swapCtx)
-                    (instrs_of_list (bv.of_N 0) (cfg_instrs swapA))
-                    (table_of_list (cfg_placement swapA) 0 (cfg_instrs swapA)) ι).
+                    (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA)))
+                    (table_of_list (cfg_placement swapA) 0 (list_AST_AnnotInstr (cfg_instrs swapA))) ι).
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (HefA : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
@@ -119,7 +119,7 @@ Section Compose.
                      (pcOutOfInstrs_exitCond 0 swap_instrs) (cfg_exits swapB) ι).
     { constructor; [|constructor]. eexists. split; reflexivity. }
     pose proof valid_swapA as HvA. pose proof valid_swapB as HvB.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in HvA, HvB.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in HvA, HvB.
     cbn [cfg_map swapA swapB] in HvA, HvB.
     iIntros "(Hpre & Hpc & Hnpc & Hinstrs)".
     (* ONE nested loop, collapsed by the bind lemma's corollary. *)

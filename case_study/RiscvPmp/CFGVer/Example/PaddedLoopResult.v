@@ -116,7 +116,7 @@ Section ComposePaddedLoop.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
     pose proof valid_plBody as Hv.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
     cbn [cfg_map plBody] in Hv.
     pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
@@ -154,7 +154,7 @@ Section ComposePaddedLoop.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
     pose proof valid_plFinal as Hv.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
     cbn [cfg_map plFinal] in Hv.
     pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)

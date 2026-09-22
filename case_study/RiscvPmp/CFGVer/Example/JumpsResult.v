@@ -57,17 +57,16 @@ Lemma jumpIfZero_noninterferent_param (init_addr : N) :
     (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
 Proof.
   intros Hbound.
-  (* This program builds its instruction list INLINE in the contract
-     literal, so there is no named object to hang a strip_id_* anchor
-     on (unlike the nine that have one).  Same job, done locally: the
-     goal is restated over `strip <literal>`, the form the EndToEnd
-     bridges now conclude, and it is reflexivity-equal so the theorem
-     above is unchanged. *)
-  assert (Hstrip : strip [BEQ X1 X0 true_offset] = [BEQ X1 X0 true_offset]) by reflexivity.
-  rewrite <- Hstrip.
+  (* The `strip` restatement this proof used to open with is GONE: the
+     EndToEnd bridges now conclude over `instrs` itself, not `strip
+     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
+     Phase 3).  The annotated list enters as the bridge's `annot`
+     premise instead, discharged by strip_of_AST just below. *)
   eapply gen_contract_noninterferent_param.
-  4: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
-  (* Position 4, not 5, and no vacuous-lookup bullet: stage 1 of
+  5: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+  (* Position 5, not 4: _param gained the `annot`/`Hannot` pair before
+     valid_contract (PLAN-contract-ast Phase 3), and this is a NUMERIC goal
+     selector -- §5.2's hazard.  Still no vacuous-lookup bullet: stage 1 of
      PLAN-unify-generators.md dropped _param's mem_specs and with it the
      HDataAddrs premise. *)
   - apply Prelude.nodup_fixed; reflexivity.
@@ -94,6 +93,7 @@ Proof.
             [lia | vm_compute; reflexivity]).
       rewrite (bv.bin_of_N_small Hs4) (bv.bin_of_N_small Hs8).
       lia.
+  - apply strip_of_AST.
   - solve_no_blocks.
 Qed.
 
@@ -114,17 +114,10 @@ Lemma jmp_fwd_noninterferent_param (init_addr : N) :
     (pcOutOfInstrs_exitCond init_addr [JAL X0 jmp_offset; NOP]) [] [].
 Proof.
   intros Hbound.
-  (* This program builds its instruction list INLINE in the contract
-     literal, so there is no named object to hang a strip_id_* anchor
-     on (unlike the nine that have one).  Same job, done locally: the
-     goal is restated over `strip <literal>`, the form the EndToEnd
-     bridges now conclude, and it is reflexivity-equal so the theorem
-     above is unchanged. *)
-  assert (Hstrip : strip [JAL X0 jmp_offset; NOP] = [JAL X0 jmp_offset; NOP]) by reflexivity.
-  rewrite <- Hstrip.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
+  - apply strip_of_AST.
   - exact (valid_jmp_fwd_cfg_contract_param init_addr).
   - solve_no_blocks.
 Qed.

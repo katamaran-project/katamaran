@@ -30,7 +30,7 @@
 (* ========================================================================= *)
 (* EndToEnd.v — generic end-to-end wiring.                                   *)
 (*                                                                           *)
-(* From a ValidCFGVerifierContract to noninterferent_strong: the             *)
+(* From a cfg_vc (the VC) to noninterferent_strong: the                     *)
 (* cfg_instrs_* contract lemmas, the gen_implpre / gen_implpre_mem bridges   *)
 (* from machine-level initialization to generated preconditions, the         *)
 (* cfg_instrs_endToEnd(_with_memory) wiring, and the                         *)
@@ -112,11 +112,16 @@ Import IrisModel.RiscvPmpIrisBase.
   Definition cfg_instrs_contract `{sailGS2 Σ} exitCond instrs γ1 γ2 :=
     (cfg_instrs_pre instrs γ1 γ2 -∗ exitCond_WP2_loop exitCond)%I.
 
-  Lemma cfg_instrs_verified `{sailGS2 Σ} instrs' exitCond γ1 γ2 R (ι : Valuation R)
+  Lemma cfg_instrs_verified `{sailGS2 Σ} {instrs'} exitCond γ1 γ2 R (ι : Valuation R)
     (contract : @CFGVerifierContract R)
-    (valid_contract : ValidCFGVerifierContract contract)
+    (* `cfg_vc contract instrs'` since 2026-09-22 (PLAN-contract-ast Phase 3).
+       `instrs'` IS the annotated program: the VC's table and the gmap are
+       both built from it.  The old `contractInstrs : cfg_instrs contract =
+       instrs'` premise is GONE -- with `cfg_instrs : list AST` the contract's
+       own field is the SPEC and plays no part in this lemma at all.  That is
+       the plan's "the contract you read is the program you trust" arriving. *)
+    (valid_contract : cfg_vc contract instrs')
     (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
-    (contractInstrs : cfg_instrs contract = instrs')
     (contractExitCond : cfg_exitCond contract = exitCond)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
@@ -154,10 +159,10 @@ Import IrisModel.RiscvPmpIrisBase.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct contract.
-    cbn in valid_contract, contractInitAddr, contractInstrs, contractExitCond, contractPlacement,
+    cbn in valid_contract, contractInitAddr, contractExitCond, contractPlacement,
       HexitsFaith, ImplPre.
-    subst cfg_init_addr cfg_instrs cfg_exitCond.
-    unfold Valid_CFG_VC, CFG_VC_triple in valid_contract.
+    subst cfg_init_addr cfg_exitCond.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in valid_contract.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
                     (instrs_of_list (bv.of_N init_addr) instrs')
                     (table_of_list cfg_placement 0 instrs') ι).
@@ -186,11 +191,16 @@ Import IrisModel.RiscvPmpIrisBase.
       + contradiction.
   Qed.
 
-  Lemma cfg_instrs_safe `{sailGS2 Σ} instrs' exitCond γ1 γ2 {R} {ι : Valuation R}
+  Lemma cfg_instrs_safe `{sailGS2 Σ} {instrs'} exitCond γ1 γ2 {R} {ι : Valuation R}
     (contract : @CFGVerifierContract R)
-    (valid_contract : ValidCFGVerifierContract contract)
+    (* `cfg_vc contract instrs'` since 2026-09-22 (PLAN-contract-ast Phase 3).
+       `instrs'` IS the annotated program: the VC's table and the gmap are
+       both built from it.  The old `contractInstrs : cfg_instrs contract =
+       instrs'` premise is GONE -- with `cfg_instrs : list AST` the contract's
+       own field is the SPEC and plays no part in this lemma at all.  That is
+       the plan's "the contract you read is the program you trust" arriving. *)
+    (valid_contract : cfg_vc contract instrs')
     (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
-    (contractInstrs : cfg_instrs contract = instrs')
     (contractExitCond : cfg_exitCond contract = exitCond)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
@@ -224,13 +234,18 @@ Import IrisModel.RiscvPmpIrisBase.
     iApply cfg_instrs_verified; eauto.
   Qed.
 
-  Lemma cfg_instrs_verified_with_mem `{sailGS2 Σ} instrs' exitCond γ1 γ2
+  Lemma cfg_instrs_verified_with_mem `{sailGS2 Σ} {instrs'} exitCond γ1 γ2
     {R} {ι : Valuation R}
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (contract : @CFGVerifierContract R)
-    (valid_contract : ValidCFGVerifierContract contract)
+    (* `cfg_vc contract instrs'` since 2026-09-22 (PLAN-contract-ast Phase 3).
+       `instrs'` IS the annotated program: the VC's table and the gmap are
+       both built from it.  The old `contractInstrs : cfg_instrs contract =
+       instrs'` premise is GONE -- with `cfg_instrs : list AST` the contract's
+       own field is the SPEC and plays no part in this lemma at all.  That is
+       the plan's "the contract you read is the program you trust" arriving. *)
+    (valid_contract : cfg_vc contract instrs')
     (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
-    (contractInstrs : cfg_instrs contract = instrs')
     (contractExitCond : cfg_exitCond contract = exitCond)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
@@ -271,10 +286,10 @@ Import IrisModel.RiscvPmpIrisBase.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct contract.
-    cbn in valid_contract, contractInitAddr, contractInstrs, contractExitCond, contractPlacement,
+    cbn in valid_contract, contractInitAddr, contractExitCond, contractPlacement,
       HexitsFaith, ImplPre.
-    subst cfg_init_addr cfg_instrs cfg_exitCond.
-    unfold Valid_CFG_VC, CFG_VC_triple in valid_contract.
+    subst cfg_init_addr cfg_exitCond.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in valid_contract.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
                     (instrs_of_list (bv.of_N init_addr) instrs')
                     (table_of_list cfg_placement 0 instrs') ι).
@@ -303,13 +318,18 @@ Import IrisModel.RiscvPmpIrisBase.
       + contradiction.
   Qed.
 
-  Lemma cfg_instrs_safe_with_mem `{sailGS2 Σ} instrs' exitCond γ1 γ2
+  Lemma cfg_instrs_safe_with_mem `{sailGS2 Σ} {instrs'} exitCond γ1 γ2
     {R} {ι : Valuation R}
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
     (contract : @CFGVerifierContract R)
-    (valid_contract : ValidCFGVerifierContract contract)
+    (* `cfg_vc contract instrs'` since 2026-09-22 (PLAN-contract-ast Phase 3).
+       `instrs'` IS the annotated program: the VC's table and the gmap are
+       both built from it.  The old `contractInstrs : cfg_instrs contract =
+       instrs'` premise is GONE -- with `cfg_instrs : list AST` the contract's
+       own field is the SPEC and plays no part in this lemma at all.  That is
+       the plan's "the contract you read is the program you trust" arriving. *)
+    (valid_contract : cfg_vc contract instrs')
     (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
-    (contractInstrs : cfg_instrs contract = instrs')
     (contractExitCond : cfg_exitCond contract = exitCond)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
@@ -1472,13 +1492,18 @@ Import IrisModel.RiscvPmpIrisBase.
        require abstracting mk_ι : RegStore → RegStore → Valuation R to make
        the conclusion universally quantified. *)
     Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
-      instrs' exitCond n ws {R} {ι : Valuation R}
+      {instrs'} exitCond n ws {R} {ι : Valuation R}
       public_registers
       (HpubReg : declare_public_registers γ1 γ2 public_registers)
       (contract : @CFGVerifierContract R)
-      (valid_contract : ValidCFGVerifierContract contract)
+      (* `cfg_vc contract instrs'` since 2026-09-22 (PLAN-contract-ast Phase 3).
+         `instrs'` IS the annotated program: the VC's table and the gmap are
+         both built from it.  The old `contractInstrs : cfg_instrs contract =
+         instrs'` premise is GONE -- with `cfg_instrs : list AST` the contract's
+         own field is the SPEC and plays no part in this lemma at all.  That is
+         the plan's "the contract you read is the program you trust" arriving. *)
+      (valid_contract : cfg_vc contract instrs')
       (init_addr : N)      (contractInitAddr : cfg_init_addr contract = init_addr)
-      (contractInstrs : cfg_instrs contract = instrs')
       (contractExitCond : cfg_exitCond contract = exitCond)
       (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                         = ty.SyncVal (@bv.of_N xlenbits init_addr))
@@ -1569,15 +1594,20 @@ Import IrisModel.RiscvPmpIrisBase.
   (* ------------------------------------------------------------------ *)
     Lemma cfg_instrs_endToEnd_with_memory
         {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
-        instrs' exitCond n ws_instrs {R} {ι : Valuation R}
+        {instrs'} exitCond n ws_instrs {R} {ι : Valuation R}
         public_registers
         (HpubReg : declare_public_registers γ1 γ2 public_registers)
         data_specs
         (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
         (contract : @CFGVerifierContract R)
-        (valid_contract : ValidCFGVerifierContract contract)
+        (* `cfg_vc contract instrs'` since 2026-09-22 (PLAN-contract-ast Phase 3).
+           `instrs'` IS the annotated program: the VC's table and the gmap are
+           both built from it.  The old `contractInstrs : cfg_instrs contract =
+           instrs'` premise is GONE -- with `cfg_instrs : list AST` the contract's
+           own field is the SPEC and plays no part in this lemma at all.  That is
+           the plan's "the contract you read is the program you trust" arriving. *)
+        (valid_contract : cfg_vc contract instrs')
         (init_addr : N)        (contractInitAddr : cfg_init_addr contract = init_addr)
-        (contractInstrs : cfg_instrs contract = instrs')
         (contractExitCond : cfg_exitCond contract = exitCond)
         (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                           = ty.SyncVal (@bv.of_N xlenbits init_addr))
@@ -1952,7 +1982,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (reg_specs : list reg_spec_rel)
       (word_data : list mem_spec_rel)
       (byte_data : list mem_spec_rel)
-      (instrs : list AnnotInstr)
+      (instrs : list AST)
       (extra_exit_offs : list N)
       (bound : N)
       (exitCond : bv xlenbits -> bool)
@@ -1970,12 +2000,18 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_contract : ValidCFGVerifierContract
+      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
+         to the un-annotated one, so a generated contract can still be
+         discharged with block hints inside it (PLAN-contract-ast §2.6);
+         `Hannot` is `strip_of_AST` for a caller that uses none. *)
+      (annot : list AnnotInstr)
+      (Hannot : strip annot = instrs)
+      (valid_contract : cfg_vc
           (gen_contract_u init_addr reg_specs word_data byte_data instrs
-             extra_exit_offs bound exitCond fuel))
+             extra_exit_offs bound exitCond fuel) annot)
       (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
-    noninterferent_strong init_addr (strip instrs) exitCond
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+    noninterferent_strong init_addr instrs exitCond
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
@@ -1995,16 +2031,31 @@ Import IrisModel.RiscvPmpIrisBase.
     apply declare_init_mem_app in HInitMem2.
     destruct HInitMem1 as [HInitMem1w HInitMem1b].
     destruct HInitMem2 as [HInitMem2w HInitMem2b].
+    (* `instrs` is the AST SPEC; the wiring below runs on the ANNOTATED `annot`,
+       whose memory-side premises are all over `strip annot`.  Substituting the
+       binder puts goal and premises in that one form, so the eapply's
+       `all: try eauto` keeps working unchanged (PLAN-contract-ast Phase 3).
+       It has to come AFTER the HexitsFaith assert, which names `instrs`. *)
+    subst instrs.
+    (* The wiring states its data-address and length premises over `length
+       instrs'` = `length annot`, while these are now over `length (strip
+       annot)`.  Ghosts occupy no address, so strip_length closes the gap.
+       Two rewrites, not `rewrite .. in H1, H2` -- SSReflect rejects the comma
+       form (rocq-pitfalls). *)
+    rewrite (strip_length annot) in HDataAddrs.
+    rewrite (strip_length annot) in Hlen.
     eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
-      instrs exitCond n ws
+      annot exitCond n ws
       ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
       (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
       (map mem_full_to_spec (map (concretize_mem init_addr) (word_data ++ byte_data))) HpubMem
-      (gen_contract_u init_addr reg_specs word_data byte_data instrs extra_exit_offs
+      (gen_contract_u init_addr reg_specs word_data byte_data (strip annot) extra_exit_offs
          bound exitCond fuel)
       valid_contract
       init_addr
-      eq_refl eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
+      (* THREE eq_refls, not four: contractInstrs is gone (Phase 3), since with
+         cfg_instrs a list AST the wiring no longer mentions the field. *)
+      eq_refl eq_refl eq_refl HexitsFaith HDataAddrs).
     all: try eauto.
     2: { rewrite !length_map. exact Hlen. }
     intros Σ H.
@@ -2050,7 +2101,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (reg_specs : list reg_spec_rel)
       (word_data : list mem_spec_rel)
       (byte_data : list mem_spec_rel)
-      (instrs : list AnnotInstr) (bound : N) (fuel : nat) (init_addr : N)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec
@@ -2060,28 +2111,35 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length (word_data ++ byte_data)) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
-      (valid_contract : ValidCFGVerifierContract
+      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
+         to the un-annotated one, so a generated contract can still be
+         discharged with block hints inside it (PLAN-contract-ast §2.6);
+         `Hannot` is `strip_of_AST` for a caller that uses none. *)
+      (annot : list AnnotInstr)
+      (Hannot : strip annot = instrs)
+      (valid_contract : cfg_vc
           (gen_contract_u init_addr reg_specs word_data byte_data instrs []
-             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
       (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
-    noninterferent_strong init_addr (strip instrs)
-      (pcOutOfInstrs_exitCond init_addr (strip instrs))
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
     eapply gen_contract_noninterferent_u.
-    6: exact valid_contract.
+    (* 7, not 6: Hannot was inserted before valid_contract, and this is a
+       NUMERIC goal selector -- PLAN-contract-ast §5.2's hazard exactly. *)
+    7: exact valid_contract.
     - exact HND.
     - exact HDataAddrs.
     - exact Hlen.
     - exact Hbound.
-    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
-       `strip instrs`, so it wants `length (strip instrs)` where the goal has
-       `length instrs`.  Ghosts occupy no address, so these agree. *)
-    - constructor;
-        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
-        | constructor].
+    (* The `<- strip_length` this used to open with is GONE: `instrs` is now a
+       `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
+       list the goal names and there is no strip to undo. *)
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact Hannot.
     - exact HBS.
   Qed.
 
@@ -2125,7 +2183,7 @@ Import IrisModel.RiscvPmpIrisBase.
      mem_specs, and is vacuous at []), and Hlen lost its 4*|mem_specs| term. *)
   Lemma gen_contract_noninterferent_param
       (reg_specs : list reg_spec)
-      (instrs : list AnnotInstr)
+      (instrs : list AST)
       (extra_exit_offs : list N)
       (exitCond : bv xlenbits -> bool)
       (fuel : nat)
@@ -2134,12 +2192,18 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (valid_contract : ValidCFGVerifierContract
+      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
+         to the un-annotated one, so a generated contract can still be
+         discharged with block hints inside it (PLAN-contract-ast §2.6);
+         `Hannot` is `strip_of_AST` for a caller that uses none. *)
+      (annot : list AnnotInstr)
+      (Hannot : strip annot = instrs)
+      (valid_contract : cfg_vc
           (gen_contract_param init_addr reg_specs instrs extra_exit_offs
-             exitCond fuel))
+             exitCond fuel) annot)
       (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
-    noninterferent_strong init_addr (strip instrs) exitCond reg_specs [].
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+    noninterferent_strong init_addr instrs exitCond reg_specs [].
   Proof.
     rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
     (* Every data argument of _rel_classed is IMPLICIT (each occurs in some
@@ -2168,6 +2232,7 @@ Import IrisModel.RiscvPmpIrisBase.
     - cbn. lia.
     - exact Hlen.
     - exact HexitOffs.
+    - exact Hannot.
     - exact valid_contract.
     (* HBS is _u's LAST premise -- placed there rather than first so that the
        `(name := v)` argument forms and the numeric selectors above keep
@@ -2199,30 +2264,37 @@ Import IrisModel.RiscvPmpIrisBase.
 
   (* Register-only, straight-line (fall-through exit) programs. *)
   Lemma gen_contract_noninterferent_param_simple
-      (reg_specs : list reg_spec) (instrs : list AnnotInstr) (fuel : nat) (init_addr : N)
+      (reg_specs : list reg_spec) (instrs : list AST) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx reg_specs))
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-      (valid_contract : ValidCFGVerifierContract
+      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
+         to the un-annotated one, so a generated contract can still be
+         discharged with block hints inside it (PLAN-contract-ast §2.6);
+         `Hannot` is `strip_of_AST` for a caller that uses none. *)
+      (annot : list AnnotInstr)
+      (Hannot : strip annot = instrs)
+      (valid_contract : cfg_vc
           (gen_contract_param init_addr reg_specs instrs []
-             (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+             (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
       (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
-    noninterferent_strong init_addr (strip instrs)
-      (pcOutOfInstrs_exitCond init_addr (strip instrs)) reg_specs [].
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs) reg_specs [].
   Proof.
     (* one premise fewer since stage 1: _param's HDataAddrs quantified over the
        deleted mem_specs, so the vacuous-lookup bullet is gone and the VC moved
        from position 5 to 4. *)
     eapply gen_contract_noninterferent_param.
-    4: exact valid_contract.
+    (* 5, not 4: Hannot was inserted before valid_contract (§5.2 -- a numeric
+       goal selector is exactly what an added premise breaks). *)
+    5: exact valid_contract.
     - exact HND.
     - cbn. lia.
-    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
-       `strip instrs`, so it wants `length (strip instrs)` where the goal has
-       `length instrs`.  Ghosts occupy no address, so these agree. *)
-    - constructor;
-        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
-        | constructor].
+    (* The `<- strip_length` this used to open with is GONE: `instrs` is now a
+       `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
+       list the goal names and there is no strip to undo. *)
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact Hannot.
     - exact HBS.
   Qed.
 
@@ -2239,7 +2311,7 @@ Import IrisModel.RiscvPmpIrisBase.
      statement surface. *)
   Lemma gen_contract_noninterferent_rel_classed_simple
       (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
-      (instrs : list AnnotInstr) (bound : N) (fuel : nat) (init_addr : N)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
@@ -2248,13 +2320,19 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length mem_specs) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
-      (valid_contract : ValidCFGVerifierContract
+      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
+         to the un-annotated one, so a generated contract can still be
+         discharged with block hints inside it (PLAN-contract-ast §2.6);
+         `Hannot` is `strip_of_AST` for a caller that uses none. *)
+      (annot : list AnnotInstr)
+      (Hannot : strip annot = instrs)
+      (valid_contract : cfg_vc
           (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
       (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
-    noninterferent_strong init_addr (strip instrs)
-      (pcOutOfInstrs_exitCond init_addr (strip instrs))
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) mem_specs).
   Proof.
@@ -2271,12 +2349,11 @@ Import IrisModel.RiscvPmpIrisBase.
     - rewrite app_nil_r. exact HDataAddrs.
     - rewrite app_nil_r. exact Hlen.
     - exact Hbound.
-    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
-       `strip instrs`, so it wants `length (strip instrs)` where the goal has
-       `length instrs`.  Ghosts occupy no address, so these agree. *)
-    - constructor;
-        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
-        | constructor].
+    (* The `<- strip_length` this used to open with is GONE: `instrs` is now a
+       `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
+       list the goal names and there is no strip to undo. *)
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact Hannot.
     - exact valid_contract.
     (* HBS is _u's LAST premise -- placed there rather than first so that the
        `(name := v)` argument forms and the numeric selectors above keep
@@ -2290,7 +2367,7 @@ Import IrisModel.RiscvPmpIrisBase.
      -- mirrors gen_contract_noninterferent_rel_classed_simple. *)
   Lemma gen_contract_noninterferent_rel_bytes_simple
       (reg_specs : list reg_spec_rel) (byte_mem_specs : list mem_spec_rel)
-      (instrs : list AnnotInstr) (bound : N) (fuel : nat) (init_addr : N)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
       (HDataAddrs : ∀ i spec,
           (map mem_full_to_spec (map (concretize_mem init_addr) byte_mem_specs)) !! i = Some spec →
@@ -2299,13 +2376,19 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length byte_mem_specs) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
-      (valid_contract : ValidCFGVerifierContract
+      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
+         to the un-annotated one, so a generated contract can still be
+         discharged with block hints inside it (PLAN-contract-ast §2.6);
+         `Hannot` is `strip_of_AST` for a caller that uses none. *)
+      (annot : list AnnotInstr)
+      (Hannot : strip annot = instrs)
+      (valid_contract : cfg_vc
           (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr (strip instrs)) fuel))
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
       (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs)) :
-    noninterferent_strong init_addr (strip instrs)
-      (pcOutOfInstrs_exitCond init_addr (strip instrs))
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+    noninterferent_strong init_addr instrs
+      (pcOutOfInstrs_exitCond init_addr instrs)
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) byte_mem_specs).
   Proof.
@@ -2319,12 +2402,11 @@ Import IrisModel.RiscvPmpIrisBase.
     - exact HDataAddrs.
     - exact Hlen.
     - exact Hbound.
-    (* `<- strip_length`: pcOutOfInstrs_fallthrough is instantiated at
-       `strip instrs`, so it wants `length (strip instrs)` where the goal has
-       `length instrs`.  Ghosts occupy no address, so these agree. *)
-    - constructor;
-        [rewrite <- (strip_length instrs); apply pcOutOfInstrs_fallthrough
-        | constructor].
+    (* The `<- strip_length` this used to open with is GONE: `instrs` is now a
+       `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
+       list the goal names and there is no strip to undo. *)
+    - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
+    - exact Hannot.
     - exact valid_contract.
     (* HBS is _u's LAST premise -- placed there rather than first so that the
        `(name := v)` argument forms and the numeric selectors above keep

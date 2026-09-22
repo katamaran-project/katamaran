@@ -130,7 +130,7 @@ Section TwoLoops.
 
   Definition tOwn : iProp Σ :=
     Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-      (ai_instr <$> instrs_of_list (bv.of_N 0) (cfg_instrs tAbody)).
+      (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody))).
 
   (* loop A's invariant: at head 0, counter k.  Does NOT mention X2. *)
   Definition invA (k : bv xlenbits) : iProp Σ :=
@@ -148,10 +148,10 @@ Section TwoLoops.
     induction n as [|q IH]; intros m Hm.
     - (* B's last trip -> the program exit *)
       pose proof valid_tBfinal as Hv.
-      unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
       cbn [cfg_map tBfinal] in Hv.
       assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxB)
-                      (instrs_of_list (bv.of_N 0) (cfg_instrs tAbody))
+                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
                       (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iB m)).
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
@@ -176,10 +176,10 @@ Section TwoLoops.
         unfold tExit. iExists av. iFrame "Hpc". iPureIntro. rewrite Hex. exact I.
     - (* one trip of B *)
       pose proof valid_tBbody as Hv.
-      unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
       cbn [cfg_map tBbody] in Hv.
       assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxB)
-                      (instrs_of_list (bv.of_N 0) (cfg_instrs tAbody))
+                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
                       (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iB m)).
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
@@ -224,10 +224,10 @@ Section TwoLoops.
     - (* A's LAST trip: falls through to 8, which is loop B's head.  This is
          the HAND-OFF between the two loops. *)
       pose proof valid_tAfinal as Hv.
-      unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
       cbn [cfg_map tAfinal] in Hv.
       assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxA)
-                      (instrs_of_list (bv.of_N 0) (cfg_instrs tAbody))
+                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
                       (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iA k)).
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
@@ -261,10 +261,10 @@ Section TwoLoops.
         iFrame "Hpc Hnpc Hinstrs Hpriv Hinv". iExact "HX2".
     - (* one trip of A; X2 is carried along untouched *)
       pose proof valid_tAbody as Hv.
-      unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
       cbn [cfg_map tAbody] in Hv.
       assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxA)
-                      (instrs_of_list (bv.of_N 0) (cfg_instrs tAbody))
+                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
                       (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iA k)).
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
