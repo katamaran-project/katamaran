@@ -154,8 +154,8 @@ block is a plain `list AST` riding the coercion. So
 
 ```coq
 Lemma strip_of_AST (l : list AST) : strip (list_AST_AnnotInstr l) = l.
-Definition ValidCFGVerifierContractVC {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-  ValidCFGVerifierContractA c (list_AST_AnnotInstr (cfg_instrs c)) (strip_of_AST _).
+Notation ValidCFGVerifierContractVC c :=
+  (ValidCFGVerifierContractA c (list_AST_AnnotInstr (cfg_instrs c)) (strip_of_AST _)).
 ```
 
 is the proposition every current `Lemma valid_X : …` states, unchanged in
@@ -171,7 +171,7 @@ forms are renamed out of the way:
 |---|---|---|
 | `ValidCFGVerifierContract c words base` | Iris (Phase 4) | **the conclusion.** Only `cfg_instrs c : list AST`. What a caller quotes, what plugs into an `ai_block`, what nests |
 | `ValidCFGVerifierContractA c a Ha` | light, `Contracts.v` | the proving form — the symbolic VC over the annotated list `a` |
-| `ValidCFGVerifierContractVC c` | light, `Contracts.v` | the no-hints instance of `A`; what every current example states and `vm_compute; solve_vc` discharges |
+| `ValidCFGVerifierContractVC c` | light, `Contracts.v` | **sugar only** — a `Notation` for `A` at the trivial annotation. Statement position (what `vm_compute; solve_vc` discharges), NEVER a premise; see the blast-radius note below |
 
 `…VC` is the right suffix precisely because `Valid…` now means *valid*, and the
 syntactic form is a verification CONDITION, not validity.
@@ -179,25 +179,46 @@ syntactic form is a verification CONDITION, not validity.
 **Rename blast radius, counted 2026-09-22 — 64 occurrences in 26 tracked
 files:**
 
-| site | count | becomes |
-|---|---|---|
-| `Contracts.v` (the definition) | 1 | split into `A` + `VC` |
-| `Verifier.v:270` (a comment) | 1 | reword |
-| `EndToEnd.v` | 13 | `…VC` at Phase 3 |
-| `GenCompose.v` | 10 | `…VC` at Phase 2 |
-| light `Example/*.v` (18 files) | 30 | `…VC` at Phase 2 |
-| `Example/*Result.v` (4 files) | 9 | `…VC` at Phase 3 |
+| site | count | position | becomes |
+|---|---|---|---|
+| `Contracts.v` (the definition) | 1 | — | split into `A` + `VC` |
+| `Verifier.v:270` (a comment) | 1 | — | reword |
+| light `Example/*.v` (18 files) | 30 | **statement** | `…VC` at Phase 2 |
+| `EndToEnd.v` | 13 | **premise** | `∀ a Ha, A c a Ha → …`, Phase 3 |
+| `GenCompose.v` | 10 | **premise** | `∀ a Ha, A c a Ha → …`, Phase 2 |
+| `Example/*Result.v` (4 files) | 9 | **application** | pass what was proved |
 
-All 62 non-definition sites are a literal substitution; none of them is a
-semantic change, because `…VC` is definitionally today's proposition. Do the
-substitution in the phase that already edits the file — do NOT do it as one
+Do each substitution in the phase that already edits that file — NOT as one
 tree-wide sed up front, or Phase 2's gate ("every example compiles UNCHANGED")
 loses its meaning.
 
+**`…VC` IS STATEMENT-POSITION SUGAR AND NOTHING ELSE — an earlier revision of
+this table sent all 23 premise sites to it, which was WRONG and would have
+been a real expressiveness loss.** Checked 2026-09-22: every
+`EndToEnd.v`/`GenCompose.v` occurrence is a hypothesis
+(`(Hv : ValidCFGVerifierContract c)`, `(valid_contract : … contract)`,
+`ValidCFGVerifierContract c ->`), and every light `Example/*.v` occurrence is
+the goal of a `vm_compute; solve_vc` lemma. A premise fixed at `…VC` says *"the
+contract you hand me must have been proved with NO hints"* — so a generated
+loop segment could never be discharged with a block annotation inside it, which
+is precisely the composition PLAN-muladd-composed needs. Premises take the
+`A`-form with `a` universally quantified (and, where the bridge applies, the
+matching `blocksSound` premise naming that same `a`).
+
+**Make `…VC` a `Notation`, not a `Definition`.** It has zero content — it is
+`A` at the trivial annotation — so a `Definition` buys nothing but an extra
+name to unfold, and an extra name is exactly what invited the premise-position
+mistake above.
+
+```coq
+Notation ValidCFGVerifierContractVC c :=
+  (ValidCFGVerifierContractA c (list_AST_AnnotInstr (cfg_instrs c)) (strip_of_AST _)).
+```
+
 The `*Result.v` sites are the ones to watch later: they are end-to-end entry
 points, so once Phase 4 exists some of them may want the semantic
-`ValidCFGVerifierContract` rather than `…VC`. That is a Phase 5 question, not a
-Phase 3 one — rename them mechanically first.
+`ValidCFGVerifierContract` rather than whatever they pass now. That is a
+Phase 5 question, not a Phase 3 one.
 
 **The block annotation then IS a contract:**
 
@@ -387,9 +408,15 @@ against the pre-change `.vo` or an inlined copy of the old body.)
 ### Phase 2 — the generators
 `GenContract.v`, `GenSegment.v` (3 `cfg_instrs` refs), `GenCompose.v` (11).
 **`gen_seg_contract`'s `prog` argument is the landmine — see §5.**
+`GenCompose.v`'s 10 validity hypotheses become `∀ a Ha, A c a Ha → …`, NOT
+`…VC` — see the blast-radius note in §2. Quantifying them is what lets a
+generated segment be discharged with a block annotation inside it.
 
-GATE 2: every `Example/*.v` compiles UNCHANGED. If any example needs editing,
-the no-hints default is wrong; fix the default, not the example.
+GATE 2: every light `Example/*.v` compiles after the mechanical
+`ValidCFGVerifierContract` → `ValidCFGVerifierContractVC` substitution and NO
+other edit — no changed `_instrs` block, no changed tactic, no added argument.
+If an example needs more than that, the `…VC` sugar is wrong; fix the sugar,
+not the example.
 
 ### Phase 3 — EndToEnd
 `EndToEnd.v` (33 `cfg_instrs` refs, 10 `strip` sites). The memory side takes
