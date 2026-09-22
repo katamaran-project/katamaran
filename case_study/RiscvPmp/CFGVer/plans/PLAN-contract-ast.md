@@ -148,7 +148,7 @@ of the two fixes the `∃`-form needed — universally quantifying the premise o
 all `a`, or bundling the `∃` into the Iris statement — is required. This is the
 main reason the parameterised form is better and not merely tidier.
 
-**The no-hints instance is what the ~16 tracked examples prove.** Measured
+**The no-hints instance is what the 22 tracked example files prove.** Measured
 2026-09-22: **no tracked example carries any annotation** — every `_instrs`
 block is a plain `list AST` riding the coercion. So
 
@@ -163,14 +163,41 @@ content and discharged by the same `vm_compute; solve_vc`. `strip_of_AST` is
 `map_map` + `map_id`, a real lemma rather than `reflexivity`, so it also holds
 for a symbolic `l`.
 
-**OPEN: which of the three gets the name `ValidCFGVerifierContract`.** The
-sketch above gives it to the semantic form, which is the honest reading of
-"the valid contract only talks about `list AST`" — at the price of a mechanical
-rename at ~16 example sites and ~22 `EndToEnd.v`/`GenCompose.v` premise sites,
-which would then say `ValidCFGVerifierContractVC`. The alternative is to leave
-the name on the light VC (zero churn) and give the semantic form a new name.
-**Decide before Phase 1 starts; do not start Phase 1 with this open**, since
-every later phase edits these same sites.
+**NAMING — DECIDED (Emiel, 2026-09-22): the one that talks about instructions
+is `ValidCFGVerifierContract`.** That is the SEMANTIC form. The two syntactic
+forms are renamed out of the way:
+
+| name | layer | what it is |
+|---|---|---|
+| `ValidCFGVerifierContract c words base` | Iris (Phase 4) | **the conclusion.** Only `cfg_instrs c : list AST`. What a caller quotes, what plugs into an `ai_block`, what nests |
+| `ValidCFGVerifierContractA c a Ha` | light, `Contracts.v` | the proving form — the symbolic VC over the annotated list `a` |
+| `ValidCFGVerifierContractVC c` | light, `Contracts.v` | the no-hints instance of `A`; what every current example states and `vm_compute; solve_vc` discharges |
+
+`…VC` is the right suffix precisely because `Valid…` now means *valid*, and the
+syntactic form is a verification CONDITION, not validity.
+
+**Rename blast radius, counted 2026-09-22 — 64 occurrences in 26 tracked
+files:**
+
+| site | count | becomes |
+|---|---|---|
+| `Contracts.v` (the definition) | 1 | split into `A` + `VC` |
+| `Verifier.v:270` (a comment) | 1 | reword |
+| `EndToEnd.v` | 13 | `…VC` at Phase 3 |
+| `GenCompose.v` | 10 | `…VC` at Phase 2 |
+| light `Example/*.v` (18 files) | 30 | `…VC` at Phase 2 |
+| `Example/*Result.v` (4 files) | 9 | `…VC` at Phase 3 |
+
+All 62 non-definition sites are a literal substitution; none of them is a
+semantic change, because `…VC` is definitionally today's proposition. Do the
+substitution in the phase that already edits the file — do NOT do it as one
+tree-wide sed up front, or Phase 2's gate ("every example compiles UNCHANGED")
+loses its meaning.
+
+The `*Result.v` sites are the ones to watch later: they are end-to-end entry
+points, so once Phase 4 exists some of them may want the semantic
+`ValidCFGVerifierContract` rather than `…VC`. That is a Phase 5 question, not a
+Phase 3 one — rename them mechanically first.
 
 **The block annotation then IS a contract:**
 
@@ -350,8 +377,12 @@ form is NOT part of this phase** — it is Iris-level and lands with Phase 4;
 Phase 1 must not put an Iris require into a light file (root CLAUDE.md, ~1.2 GB
 across seven examples).
 
-GATE 1: `Contracts.vo` compiles; the proposition an example states has the same
-CONTENT as today, and at most a new NAME (the open naming decision, §2).
+GATE 1: `Contracts.vo` compiles; `ValidCFGVerifierContractVC c` is
+definitionally the proposition the name `ValidCFGVerifierContract` denotes
+BEFORE this plan — check it by `reflexivity` against one example's statement,
+not by eye. (The name itself is being reused for the semantic form, so "same
+name, same meaning" is exactly the check that stops being available; do it
+against the pre-change `.vo` or an inlined copy of the old body.)
 
 ### Phase 2 — the generators
 `GenContract.v`, `GenSegment.v` (3 `cfg_instrs` refs), `GenCompose.v` (11).
