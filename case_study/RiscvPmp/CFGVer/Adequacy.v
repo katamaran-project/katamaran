@@ -1532,7 +1532,8 @@ Section AdequacyTools.
     (* `itable_rel ∧ etable_rel →` premise, discharged here by the   *)
     (* caller-supplied faithfulness facts at ι.                          *)
     (* ---------------------------------------------------------------- *)
-    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
+    Lemma sound_cexec_triple_addr_myWP2_w {Γ : LCtx} {pre post instrs exitCond fuel}
+        (words : bv xlenbits -> bv word)
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
            it (five in VerifierRel.v), and every one of them silently failed to
@@ -1561,11 +1562,11 @@ Section AdequacyTools.
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
         (∀ an,
            ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
            (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
               conjunct ("keep post in hypothesis for maximal generality, remove
               asn.interpret post from the continuation").  It is the exit
@@ -1592,7 +1593,6 @@ Section AdequacyTools.
       iIntros (Htrip Hbs a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
       (* Name the words the memory actually holds; they instantiate both the
          uniform VC and the word half of cexec_triple_addr's demonic_ctx. *)
-      iDestruct "Hinstrs" as (words) "Hinstrs".
       specialize (Htrip words).
       iPoseProof (Hbs words) as "#Hbsw".
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
@@ -1633,9 +1633,45 @@ Section AdequacyTools.
       iApply ("Hk" $! an).
       iSplit. { iPureIntro. exact Hexit. }
       iFrame "Hpc Hnpc HPOST".
-      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs.
-      iExists words.
       iFrame "Hinstrs".
+    Qed.
+
+    (* The ∃-words form, for callers that hold `ptsto_instrs`.  Everything is in
+       the _w form above; this only opens the existential on the way in and
+       closes it on the way out with the SAME words, which is the whole point --
+       the executor's frame carries `ptsto_instrs_w words` and needs that exact
+       words back for its induction hypothesis, so a caller that went through
+       the ∃ form could not continue. *)
+    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
+        {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+        {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
+        (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
+        (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+      (forall words : bv xlenbits -> bv word,
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
+      (forall words : bv xlenbits -> bv word, ⊢ blocksSound words instrs) →
+      ⊢ ∀ a : RelVal ty_xlenbits,
+        asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
+        pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
+        (∀ an,
+           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
+           asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+           ExitCondIprop) -∗
+        myWP2_loop ExitCondIprop.
+    Proof.
+      iIntros (Htrip Hbs a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
+      iDestruct "Hinstrs" as (words) "Hinstrs".
+      iApply (sound_cexec_triple_addr_myWP2_w words ExitCondIprop Hif Hef
+                Htrip Hbs $! a with "[$Hpre $Hpc $Hnpc $Hinstrs]").
+      { iPureIntro. exact HsLa. }
+      iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & HPOST)".
+      iApply ("Hk" $! an). iFrame "Hpc Hnpc HPOST".
+      iSplit. { iPureIntro. exact Hexit. }
+      unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs. iExists words. iFrame "Hinstrs".
     Qed.
 
     Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
