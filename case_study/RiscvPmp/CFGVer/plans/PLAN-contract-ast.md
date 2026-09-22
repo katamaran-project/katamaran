@@ -188,6 +188,84 @@ arithmetic step, so it does not surface. The likely closer is `try_fetch_bound`
 discharging the narrower bound against the enclosing one in `wco` once the
 angelic is substituted — MECHANISM INFERRED, NOT VERIFIED; if it reappears,
 check there first.
+## §2c. FAITHFULNESS IS AST-LEVEL; REFINEMENT KEEPS ANNOTATIONS (Emiel, 2026-09-22 — DECIDED)
+
+`itable_rel` (`VerifierRel.v:474`) is payload-EXACT today:
+
+```coq
+exists v, inst (fst p) ι = ty.SyncVal v /\ instrs !! v = Some (snd p)
+```
+
+It is doing two different jobs at once, and they should be separated:
+
+| job | between | annotations? |
+|---|---|---|
+| **REFINEMENT** — `sexec` and `cexec` take the same branch | the symbolic table and the concrete gmap OF THE SAME VERIFICATION | **YES, exact.** `cexec_cfg_addr` dispatches on `ai_block` from the gmap and `sexec_cfg_addr` on the table payload; if they disagree `rexec_cfg_addr` is false |
+| **FAITHFULNESS** — "this code really is there" | a block's span and the ENCLOSING program | **NO — project to `ai_instr`** |
+
+**Consequence: a block's VC is a SELF-CONTAINED verification.** It runs against
+its own annotated list `a_b`: table `table_of_list place 0 a_b`, gmap
+`instrs_of_list base a_b`. Their payload-exact agreement is then internal and
+provable by the existing whole-list faith lemma — no enclosing program appears,
+so the refinement obligation is discharged where it belongs.
+
+The bridge to the enclosing program is AST-level containment plus a
+SEPARATION-LOGIC SPLIT of the instruction memory: the block owns
+`ptsto_instrs` for its own span, the rest is framed across the block step and
+reassembled after. That is the "only reason about what is visible in the block"
+philosophy, and it is the point of the design rather than a cost to be
+minimised.
+
+**What this kills, all of it good:**
+
+- **`clear_blk` is not needed at all.** It existed because the enclosing gmap
+  carries the block's own annotation at `v` while the block's table does not —
+  a disagreement that only arises because the two came from different artifacts.
+  Under §2c they never do. (Keep `clear_blk` itself if something else wants it;
+  the `clear_blk <$> instrs` in `blockSound_of_vc` goes.)
+- **The stratified `blocksSound` goes.** An earlier revision of this plan
+  proposed a global annotated program with per-entry clearing and an induction
+  over a set `S` of already-proven blocks. Not needed: block F's proof never
+  mentions the enclosing program, so F-needs-L is an ordinary premise, not a
+  fixpoint over one shared artifact.
+- **NESTING IS FREE, and it is the whole point.** `a_F` may annotate the loop
+  head L, so a function-level block's VC skips the loop instead of unrolling it.
+  Without this, blocks compose only over straight-line code and the layer above
+  loops is unreachable — i.e. PLAN-muladd-composed cannot be finished.
+
+**THE LOAD-BEARING QUESTION — ANSWERED 2026-09-22, THE ANSWER IS YES.**
+`blockSound` currently holds `ptsto_instrs_w words (ai_instr <$> instrs)` for
+the WHOLE program, unchanged, across the block step. Under §2c it holds only
+the block's span and the remainder must be framed through a `myWP2_loop`. That
+frame rule does not exist but is DERIVABLE IN FOUR LINES from the two lemmas
+already in `Adequacy.v` -- `exitCondImpliesMyWP2_loop` (:149, the UNIT,
+`ExitCond ⊢ myWP2_loop ExitCond`) and `myWP2_loop_bind` (:183, the BIND):
+
+```coq
+Lemma myWP2_loop_frame (Fr E : iProp Σ) : Fr ∗ myWP2_loop E ⊢ myWP2_loop (Fr ∗ E).
+Proof.
+  iIntros "[HFr H]".
+  iApply (myWP2_loop_bind E (Fr ∗ E) with "[HFr] H").
+  iIntros "HE". iApply exitCondImpliesMyWP2_loop. iFrame.
+Qed.
+```
+
+Verified in preamble mode over an abstract `bi` with `loop`/`unit`/`bind` as
+parameters (pet OOMs opening `Adequacy.v` at any position, so the real file
+cannot be spiked in place -- restate the SHAPE, per the rocq-implementation
+skill). The derivation uses NOTHING but unit and bind, and the real statements
+match the abstract ones on the nose, so it transfers. `Fr` sits in the linear
+wand handed to `bind`, which is legitimate: `myWP2_loop_bind`'s own Löb proof
+either uses that wand or passes it on, never both.
+
+So §2c is not gated on new Iris machinery. Proceed.
+
+Secondary, expected to be easy but unverified:
+- `ptsto_instrs` splitting/reassembly — it is a `big_sepM`, so
+  `big_sepM_union`/`_subseteq` should do it, given the span is a submap.
+- the block's execution never fetches outside its span: true by construction,
+  since a lookup outside its own table is an `error`, but say so explicitly.
+
 
 ## §3. What collapses
 
@@ -241,7 +319,14 @@ whole point is that those statements should now be SIMPLER, never different.**
 Delete `SBlk`, introduce `BlkAnnot` (`off` + the packed contract, §2), have
 `blk_at` instantiate the contract at the attachment address so the author never
 writes an offset, and re-point `sexec_block`/`cexec_block`/`rexec_block`/
-`blockSound`/`blockSound_of_vc`/`blockFaithful`. Re-do the
+`blockSound`/`blockSound_of_vc`/`blockFaithful`.
+
+**Restructure per §2c while doing it, not afterwards:** faithfulness projects
+to `ai_instr`, each block's VC runs against its own annotated program, and
+`blockSound` owns only its span with the rest framed. The `myWP2_loop` frame
+rule §2c needs is already shown derivable, so this phase is not gated on new
+Iris machinery. Do NOT fall back to `clear_blk <$> instrs`: it forecloses
+nesting and therefore PLAN-muladd-composed. Re-do the
 `ZZBlkAB` probe on the new shape rather than porting it.
 
 GATE 4: `ZZBlkAB` green again, `make Results.vo` green.
