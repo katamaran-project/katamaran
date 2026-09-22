@@ -245,6 +245,13 @@ Lemma ai_block_none_of_AST (l : list AST) :
   List.Forall (fun ai => ai_block ai = None) (list_AST_AnnotInstr l).
 Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
 
+(* A program written as a plain list of ASTs strips back to itself.  Used by
+   the soundness bridge to discharge `strip a = cfg_instrs c` for the
+   un-annotated case (PLAN-contract-ast §2.2).  A real lemma rather than
+   `reflexivity`, so that it also holds for a SYMBOLIC `l`. *)
+Lemma strip_of_AST (l : list AST) : strip (list_AST_AnnotInstr l) = l.
+Proof. induction l as [|x l IH]; cbn; [reflexivity | now f_equal]. Qed.
+
 (* REQUIRED (same trap as Tables.v): RiscvPmp.Sig re-imports ctx.notations,
    whose `_ :: _` Binding notation hijacks list cons. Without this, pattern
    matches on AnnotInstr lists fail with "Found a constructor of inductive
@@ -267,7 +274,9 @@ Section CFGVerificationDerived.
 
   (* safeE P: the symbolic proposition P is "safe" — i.e., the verification
      condition holds after erasure of all metadata.  This is the notion of
-     validity used in CFGVerifierContract.ValidCFGVerifierContract.
+     validity used in Contracts.cfg_vc (the VERIFICATION CONDITION; it was
+     called ValidCFGVerifierContract until 2026-09-22, and that name now
+     belongs to the annotation-free semantic form).
      safeE_safe converts to the more basic SymProp.safe form. *)
   Definition safeE {Σ} : 𝕊 Σ -> Prop :=
     fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).

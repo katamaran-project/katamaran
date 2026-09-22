@@ -151,7 +151,13 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       ; cfg_placement     : Term Σ ty_xlenbits
       ; cfg_exits         : list (Term Σ ty_xlenbits)
       ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-      ; cfg_instrs        : list AnnotInstr
+      (* list AST, NOT list AnnotInstr, since 2026-09-22 (PLAN-contract-ast).
+         Annotations are TOOL INPUT -- ghost hints and block contracts -- and
+         are passed to the VERIFICATION as an argument (`cfg_vc` below), not
+         carried in the specification.  This is also what breaks the
+         AnnotInstr/CFGVerifierContract circularity, so that a block
+         annotation can carry a real contract instead of a cloned SBlk. *)
+      ; cfg_instrs        : list AST
       ; cfg_exitCond      : bv xlenbits -> bool
       ; cfg_fuel          : nat
       ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
@@ -159,7 +165,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
       (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AnnotInstr ->
+           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
            (bv xlenbits -> bool) -> nat ->
            Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
       match c with
@@ -169,12 +175,31 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
            cfg_postcondition := post |} => f ia p exits pre i ec fl post
       end.
 
-    Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c Valid_CFG_VC.
+    (* THE VERIFICATION CONDITION.  This was `ValidCFGVerifierContract c`
+       until 2026-09-22 (PLAN-contract-ast Phase 1).  Two changes:
 
-    Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c (fun ia p exits P i ec fl Q =>
-        VerificationCondition (postprocess (CFG_VC_triple p exits P i fl Q))).
+       - it takes the ANNOTATED instruction list `a` as an argument.  That is
+         the proof hint: the same program as `cfg_instrs c`, carrying ghost
+         annotations and block contracts;
+       - the name.  `Valid…` is now reserved for the ANNOTATION-FREE semantic
+         form, which lands in Phase 4 and is what a block premise quotes and
+         what nests.  A verification condition is not valid, it is discharged,
+         so this one is named as the plumbing it is -- next to `cfg_map`.
+
+       The record's own `cfg_instrs` is deliberately IGNORED here: it is the
+       `list AST` statement side, and `Valid_CFG_VC` has always taken its
+       instruction list as an argument anyway.  The equation tying the two
+       together, `strip a = cfg_instrs c`, is a hypothesis of the SOUNDNESS
+       BRIDGE rather than of the VC (PLAN §2.5) -- so `cfg_vc c a` does not
+       force `a` to be a version of `c`'s program.  Harmless: such a proof
+       establishes nothing, because the bridge will not accept it. *)
+    Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
+      cfg_map c (fun ia p exits P _ ec fl Q => Valid_CFG_VC ia p exits P a ec fl Q).
+
+    Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
+      (a : list AnnotInstr) : Prop :=
+      cfg_map c (fun ia p exits P _ ec fl Q =>
+        VerificationCondition (postprocess (CFG_VC_triple p exits P a fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a
        CFGVerifierContract literal lives as a Local Notation in
