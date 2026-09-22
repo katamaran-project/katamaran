@@ -47,59 +47,103 @@ exists ONLY to dodge this: it is `CFGVerifierContract`'s data minus
 **`cfg_instrs : list AST` alone does not work** and the plan must not pretend
 otherwise: a program that USES a block has to carry that block somewhere, and
 with an AST-only field there is no such place. The annotated list has to enter
-the verification. It enters as an ARGUMENT, not a field:
+the verification. It enters as an ARGUMENT, not a field.
+
+### §2.1 Two names, and only two
+
+| name | layer | reads | says |
+|---|---|---|---|
+| `CFGVerifierContractVC c a` | light, `Contracts.v`, `Prop` | `c`'s pre/post/exits/fuel/placement **and `a`** | "the symbolic VC of `c`'s spec against the annotated program `a`" — what `vm_compute; solve_vc` discharges |
+| `ValidCFGVerifierContract c` | Iris, `iProp` | `c`, **`cfg_instrs c : list AST` included** | "`c` holds" — the conclusion, annotation-free, what composes |
 
 ```coq
 Record CFGVerifierContract {Σ} := { …; cfg_instrs : list AST; … }   (* spec only *)
 
-Definition ValidCFGVerifierContractA {Σ} (c : @CFGVerifierContract Σ)
-    (a : list AnnotInstr) (Ha : strip a = cfg_instrs c) : Prop := …
+Definition CFGVerifierContractVC {Σ} (c : @CFGVerifierContract Σ)
+    (a : list AnnotInstr) : Prop := …
 ```
 
-The contract says what program and what it promises; `a` is the proof hint;
-`Ha` says the hints do not change the program. That is exactly the discipline
-`strip` already enforces — moved from ten boundary sites to one entry point,
-checked once.
+**`Valid` now means VALID, and a verification condition is not valid — it is
+DISCHARGED.** So the syntactic form drops the word. (An earlier revision of
+this section, 78fe8548–5c636a66, called the two forms
+`ValidCFGVerifierContractA` and `ValidCFGVerifierContractVC`. Both names were
+invented in this plan on 2026-09-22 and have never appeared in a `.v` file —
+`git log -S` over all of history confirms it — so nothing is owed to them.
+`ValidCFGVerifierContractVC` in particular read "valid verification condition",
+a category error, and Emiel rejected it on sight.)
 
-**THE RESULTING PROPOSITION MUST NOT MENTION THE ANNOTATIONS EITHER (Emiel,
-2026-09-22).** The form above is the PROVING form. Validity is a property of
-the CONTRACT, not of the hints used to establish it: with `a` in the statement,
-two proofs using different hints are different propositions, and everything
-downstream that quotes validity drags hints along — which is precisely what
-stops a verified contract from being dropped into an `ai_block`. So there are
-TWO propositions and an IMPLICATION between them:
+### §2.2 `CFGVerifierContractVC` does NOT read `cfg_instrs c`, and that is what removes the third name
+
+The earlier revision gave the VC a third, DEPENDENT argument
+`(Ha : strip a = cfg_instrs c)`, and then needed a named abbreviation for the
+no-hints case just to hide `(strip_of_AST _)` at ~30 example statement sites.
+All of that is unnecessary. Check what `Valid_CFG_VC` actually uses today
+(`Contracts.v:137`):
+
+```coq
+Valid_CFG_VC ia p exits P i ec fl Q := safeE (postprocess (CFG_VC_triple p exits P i fl Q))
+```
+
+`i` is the ONLY instruction-ish input, and it is the list the table is built
+from. With the field flipped to `list AST`, the VC's instruction input is `a`
+and **`cfg_instrs c` plays no role in it whatsoever**. So `strip a =
+cfg_instrs c` is not needed to STATE the VC — it is a well-formed proposition
+without it. It is needed by the BRIDGE, and that is exactly where it should
+sit: an ordinary hypothesis of the lemma that uses it, not a dependent argument
+of the thing that does not.
+
+Consequences, all of them simplifications:
+
+- **No third name.** An un-annotated example states
+  `CFGVerifierContractVC mv_ex mv_instrs` — the `list AST` rides the existing
+  coercion, and the line reads "verified with the program itself as the
+  annotated list", i.e. no hints. An annotated one states
+  `CFGVerifierContractVC mv_ex mv_annot`. Same shape, one argument.
+- **No `strip_of_AST _` noise** at any statement site. The lemma stays
+  `Lemma strip_of_AST (l : list AST) : strip (list_AST_AnnotInstr l) = l`
+  (`map_map` + `map_id`, so it holds for a symbolic `l` too), but it is now
+  discharged once inside the bridge instead of written out thirty times.
+- **`cfg_map` keeps its arity.** It still projects all eight fields; the VC
+  simply ignores the instruction one. Decide at Phase 1 whether to drop
+  `cfg_instrs` from `Valid_CFG_VC`'s signature or keep it unused, the way
+  `init_addr` and `ec` are already kept unused there (`Contracts.v:135-147`).
+
+**The one thing this gives up, stated plainly:** `CFGVerifierContractVC c a` no
+longer forces `a` to be a version of `c`'s program, so it is possible to
+discharge a VC for an unrelated `a`. That is harmless — it just proves nothing
+useful, because the bridge below will not accept it — and it is the same
+freedom `Valid_CFG_VC` already has with `init_addr`.
+
+### §2.3 The stating form, and why it is semantic
 
 ```
-  ValidCFGVerifierContractA c a Ha     PROVING form — the symbolic VC, hints visible,
-        |                              what `vm_compute; solve_vc` discharges
+  CFGVerifierContractVC c a       PROVING form — hints visible, solve_vc's job
+        |
+        |   + strip a = cfg_instrs c
         |   + the block premises for THAT SAME a
         v
-  ValidCFGVerifierContract c           STATING form — mentions only cfg_instrs c : list AST
+  ValidCFGVerifierContract c      STATING form — mentions only cfg_instrs c : list AST
 ```
 
-Annotations are then what they should be: needed to PROVE a contract, invisible
-in STATING it.
-
 **THE ∃-QUANTIFIED STATING FORM IS RETRACTED (Emiel, 2026-09-22).** An earlier
-revision of this section defined the stating form as
-`∃ a (Ha : strip a = cfg_instrs c), ValidCFGVerifierContractA c a Ha`. Two
-things are wrong with that. (i) It is still *definitionally about hints* — the
-`∃` quantifies them rather than removing them, so every consumer has to
-destruct it, and a block consumer would carry an existential across the
-Prop/iProp boundary. (ii) It opened the false-block hole this section used to
-spend twenty lines patching. A parameterised form plus an implication gives the
-"hints invisible downstream" property with neither cost.
+revision defined the stating form as `∃ a Ha, <the VC>`. Two things are wrong
+with it. (i) It is still *definitionally about hints* — the `∃` quantifies them
+rather than removing them, so every consumer has to destruct it, and a block
+consumer would carry an existential across the Prop/iProp boundary. (ii) It
+opened the false-block hole that this section used to spend twenty lines
+patching. A parameterised form plus an implication gives the "hints invisible
+downstream" property with neither cost.
 
-**WHAT THE STATING FORM CANNOT BE — and this is what decides where it lives.**
-It cannot be the un-annotated VC, i.e. *not*
-`ValidCFGVerifierContractA c (list_AST_AnnotInstr (cfg_instrs c)) (strip_of_AST _)`.
-The implication would run the WRONG WAY: an annotation only ever makes the VC
-*easier*. Measured this session — a block annotation replaced 29 of muladd's 33
-executed instructions with one consume/produce, and the un-annotated VC has to
-execute all 33 and can fail on fuel alone. So `A(a) → A(no hints)` is false for
-every hint that does any work, and the stating form is **not a syntactic VC at
-all**. It therefore cannot live in the light layer (`Contracts.v` is Iris-free
-by the layering invariant in the root CLAUDE.md).
+**WHAT THE STATING FORM CANNOT BE — and this decides where it lives.** It
+cannot be the VC at the trivial annotation, `CFGVerifierContractVC c
+(cfg_instrs c)`. The implication would run the WRONG WAY: an annotation only
+ever makes the VC *easier*. Measured this session — a block annotation replaced
+29 of muladd's 33 executed instructions with one consume/produce, and the
+un-annotated VC has to execute all 33 and can fail on fuel alone. So
+`VC(c,a) → VC(c, cfg_instrs c)` is false for every hint that does any work, and
+the stating form is **not a syntactic VC at all**. It therefore cannot live in
+the light layer (`Contracts.v` is Iris-free by the layering invariant in the
+root CLAUDE.md).
 
 **IT IS THE SEMANTIC STATEMENT — AND THE TREE ALREADY CONTAINS IT UNDER ANOTHER
 NAME.** `blockSound` (`Adequacy.v:1283`) is exactly "this code, entered at this
@@ -117,7 +161,7 @@ That is the answer to "I would expect `blocksSound` not to be needed any more
 if we can supply a valid contract instead": it is not removed, it is
 **re-indexed** — off `SBlk` and onto `CFGVerifierContract` — and promoted from
 an internal Iris premise to the thing a user proves and hands around. Shape,
-not final text (an `iProp`, like `blockSound`):
+not final text:
 
 ```coq
 Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
@@ -128,99 +172,63 @@ Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
      myWP2_loop ExitCond)%I.
 ```
 
-and the bridge is `blockSound_of_vc` with its `SBlk` swapped for a contract:
+and the bridge is `blockSound_of_vc` with its `SBlk` swapped for a contract —
+note `strip` appears here, once, and nowhere else:
 
 ```coq
-Lemma ValidCFGVerifierContract_of_A {Σ} (c : @CFGVerifierContract Σ)
-    (a : list AnnotInstr) (Ha : strip a = cfg_instrs c) (words base) :
-  ValidCFGVerifierContractA c a Ha ->
+Lemma ValidCFGVerifierContract_of_VC {Σ} (c : @CFGVerifierContract Σ)
+    (a : list AnnotInstr) (words : bv xlenbits -> bv word) (base : bv xlenbits) :
+  strip a = cfg_instrs c ->
+  CFGVerifierContractVC c a ->
   (⊢ blocksSound words (instrs_of_list base a)) ->
   ⊢ ValidCFGVerifierContract c words base.
 ```
 
 **THE FALSE-BLOCK HOLE IS CLOSED BY CONSTRUCTION, not patched.** The `∃`-form
-admitted this attack: prove `VC(a)` with a block annotation carrying a FALSE
+admitted this attack: prove the VC with a block annotation carrying a FALSE
 contract (`strip a = cfg_instrs c` still holds — only ghosts and blocks are
 free), then discharge `blocksSound` for a DIFFERENT, annotation-free `a'` via
 `blocksSound_of_none`; two different programs, one theorem. In the bridge above
-**both premises name the same `a`**, so the attack is not expressible. Neither
-of the two fixes the `∃`-form needed — universally quantifying the premise over
-all `a`, or bundling the `∃` into the Iris statement — is required. This is the
-main reason the parameterised form is better and not merely tidier.
+**all three premises name the same `a`**, so the attack is not expressible.
+Neither of the two fixes the `∃`-form needed — universally quantifying the
+premise over all `a`, or bundling the `∃` into the Iris statement — is
+required. This is the main reason the parameterised form is better and not
+merely tidier.
 
-**The no-hints instance is what the 22 tracked example files prove.** Measured
-2026-09-22: **no tracked example carries any annotation** — every `_instrs`
-block is a plain `list AST` riding the coercion. So
+### §2.4 Rename blast radius
 
-```coq
-Lemma strip_of_AST (l : list AST) : strip (list_AST_AnnotInstr l) = l.
-Notation ValidCFGVerifierContractVC c :=
-  (ValidCFGVerifierContractA c (list_AST_AnnotInstr (cfg_instrs c)) (strip_of_AST _)).
-```
-
-is the proposition every current `Lemma valid_X : …` states, unchanged in
-content and discharged by the same `vm_compute; solve_vc`. `strip_of_AST` is
-`map_map` + `map_id`, a real lemma rather than `reflexivity`, so it also holds
-for a symbolic `l`.
-
-**NAMING — DECIDED (Emiel, 2026-09-22): the one that talks about instructions
-is `ValidCFGVerifierContract`.** That is the SEMANTIC form. The two syntactic
-forms are renamed out of the way:
-
-| name | layer | what it is |
-|---|---|---|
-| `ValidCFGVerifierContract c words base` | Iris (Phase 4) | **the conclusion.** Only `cfg_instrs c : list AST`. What a caller quotes, what plugs into an `ai_block`, what nests |
-| `ValidCFGVerifierContractA c a Ha` | light, `Contracts.v` | the proving form — the symbolic VC over the annotated list `a` |
-| `ValidCFGVerifierContractVC c` | light, `Contracts.v` | **sugar only** — a `Notation` for `A` at the trivial annotation. Statement position (what `vm_compute; solve_vc` discharges), NEVER a premise; see the blast-radius note below |
-
-`…VC` is the right suffix precisely because `Valid…` now means *valid*, and the
-syntactic form is a verification CONDITION, not validity.
-
-**Rename blast radius, counted 2026-09-22 — 64 occurrences in 26 tracked
-files:**
+Counted 2026-09-22: **64 occurrences of `ValidCFGVerifierContract` in 26
+tracked files**, and the POSITION of each decides what it becomes.
 
 | site | count | position | becomes |
 |---|---|---|---|
-| `Contracts.v` (the definition) | 1 | — | split into `A` + `VC` |
+| `Contracts.v` (the definition) | 1 | — | `CFGVerifierContractVC c a` |
 | `Verifier.v:270` (a comment) | 1 | — | reword |
-| light `Example/*.v` (18 files) | 30 | **statement** | `…VC` at Phase 2 |
-| `EndToEnd.v` | 13 | **premise** | `∀ a Ha, A c a Ha → …`, Phase 3 |
-| `GenCompose.v` | 10 | **premise** | `∀ a Ha, A c a Ha → …`, Phase 2 |
+| light `Example/*.v` (18 files) | 30 | **statement** | `CFGVerifierContractVC c <its own instrs>`, Phase 2 |
+| `EndToEnd.v` | 13 | **premise** | `∀ a, strip a = … → CFGVerifierContractVC c a → …`, Phase 3 |
+| `GenCompose.v` | 10 | **premise** | same, Phase 2 |
 | `Example/*Result.v` (4 files) | 9 | **application** | pass what was proved |
 
-Do each substitution in the phase that already edits that file — NOT as one
-tree-wide sed up front, or Phase 2's gate ("every example compiles UNCHANGED")
-loses its meaning.
-
-**`…VC` IS STATEMENT-POSITION SUGAR AND NOTHING ELSE — an earlier revision of
-this table sent all 23 premise sites to it, which was WRONG and would have
-been a real expressiveness loss.** Checked 2026-09-22: every
+**A PREMISE MUST NOT BE FIXED AT THE NO-HINTS CASE — an earlier revision of
+this table did exactly that and it was WRONG.** Checked 2026-09-22: every
 `EndToEnd.v`/`GenCompose.v` occurrence is a hypothesis
 (`(Hv : ValidCFGVerifierContract c)`, `(valid_contract : … contract)`,
 `ValidCFGVerifierContract c ->`), and every light `Example/*.v` occurrence is
-the goal of a `vm_compute; solve_vc` lemma. A premise fixed at `…VC` says *"the
-contract you hand me must have been proved with NO hints"* — so a generated
-loop segment could never be discharged with a block annotation inside it, which
-is precisely the composition PLAN-muladd-composed needs. Premises take the
-`A`-form with `a` universally quantified (and, where the bridge applies, the
-matching `blocksSound` premise naming that same `a`).
+the goal of a `vm_compute; solve_vc` lemma. A premise pinned to the
+un-annotated program says *"the contract you hand me must have been proved with
+NO hints"* — so a generated loop segment could never be discharged with a block
+annotation inside it, which is precisely the composition PLAN-muladd-composed
+needs. Premises quantify `a`.
 
-**Make `…VC` a `Notation`, not a `Definition`.** It has zero content — it is
-`A` at the trivial annotation — so a `Definition` buys nothing but an extra
-name to unfold, and an extra name is exactly what invited the premise-position
-mistake above.
-
-```coq
-Notation ValidCFGVerifierContractVC c :=
-  (ValidCFGVerifierContractA c (list_AST_AnnotInstr (cfg_instrs c)) (strip_of_AST _)).
-```
+Do each substitution in the phase that already edits that file — NOT as one
+tree-wide sed up front, or Phase 2's gate loses its meaning.
 
 The `*Result.v` sites are the ones to watch later: they are end-to-end entry
 points, so once Phase 4 exists some of them may want the semantic
-`ValidCFGVerifierContract` rather than whatever they pass now. That is a
-Phase 5 question, not a Phase 3 one.
+`ValidCFGVerifierContract` rather than what they pass now. Phase 5 question,
+not a Phase 3 one.
 
-**The block annotation then IS a contract:**
+### §2.5 The block annotation then IS a contract
 
 ```coq
 Record BlkAnnot := MkBlkAnnot
@@ -238,6 +246,7 @@ Well-founded, because `CFGVerifierContract` no longer mentions `AnnotInstr`.
 the ENCLOSING program, so it is not needed for soundness — but it makes
 "does this block actually sit over that code?" a checkable proposition instead
 of an unstated convention. `SBlk` has no field that can say this.
+
 
 ## §2b. POSITION-INDEPENDENCE — the SPLIT IS RETRACTED (2026-09-22)
 
@@ -382,7 +391,7 @@ Secondary, expected to be easy but unverified:
 | `sblk_of_contract` (probe) | nothing to convert |
 | ten `strip` sites in `EndToEnd.v` | the two lists are now NAMED (`cfg_instrs c` for memory, `a` for the table) instead of one being derived from the other |
 | `strip_length` | no longer needed at a boundary |
-| `AST_AnnotInstr`, `list_AST_AnnotInstr`, `Local Arguments List.cons {_} & _ _.` | exist ONLY so `[MV X3 X2; …]` typechecks as `list AnnotInstr`. With an AST field, examples need no coercion. **Check before deleting** — the coercion may still be wanted for the `ValidCFGVerifierContractVC` default above |
+| `AST_AnnotInstr`, `list_AST_AnnotInstr`, `Local Arguments List.cons {_} & _ _.` | exist ONLY so `[MV X3 X2; …]` typechecks as `list AnnotInstr`. With an AST field, examples need no coercion. **Check before deleting** — the coercion is still wanted — §2.2 has an un-annotated example write `CFGVerifierContractVC c c_instrs` with `c_instrs : list AST` riding it |
 
 **What does NOT change:** `AnnotInstr` stays the executor's payload,
 `instrs_of_list` stays `AnnotInstr`-valued, `itable_rel` and `table_of_list`
@@ -391,32 +400,33 @@ are untouched. This removes annotations from the STATEMENT, not from the tool.
 ## §4. Phases
 
 ### Phase 1 — the record and the two light Valid forms
-`Contracts.v` only: flip the field, add `ValidCFGVerifierContractA` (proving
-form), `strip_of_AST`, and the no-hints instance `ValidCFGVerifierContractVC`
-(§2). `cfg_map`/`Valid_CFG_VC` gain the annotated list. **The SEMANTIC stating
-form is NOT part of this phase** — it is Iris-level and lands with Phase 4;
-Phase 1 must not put an Iris require into a light file (root CLAUDE.md, ~1.2 GB
-across seven examples).
+`Contracts.v` only: flip the field to `list AST`, rename
+`ValidCFGVerifierContract` to `CFGVerifierContractVC` and give it the annotated
+list `a` as its second argument, and add `strip_of_AST`. **No third form and no
+`Ha` argument** (§2.2). Decide here whether `Valid_CFG_VC` keeps an unused
+`cfg_instrs` parameter or drops it. **The SEMANTIC stating form is NOT part of
+this phase** — it is Iris-level and lands with Phase 4; Phase 1 must not put an
+Iris require into a light file (root CLAUDE.md, ~1.2 GB across seven
+examples).
 
-GATE 1: `Contracts.vo` compiles; `ValidCFGVerifierContractVC c` is
-definitionally the proposition the name `ValidCFGVerifierContract` denotes
-BEFORE this plan — check it by `reflexivity` against one example's statement,
-not by eye. (The name itself is being reused for the semantic form, so "same
-name, same meaning" is exactly the check that stops being available; do it
-against the pre-change `.vo` or an inlined copy of the old body.)
+GATE 1: `Contracts.vo` compiles, and `CFGVerifierContractVC c (cfg_instrs c)`
+is definitionally the proposition the name `ValidCFGVerifierContract` denoted
+BEFORE this plan — check by `reflexivity` against an inlined copy of the old
+body or the pre-change `.vo`, not by eye. (The name is being reused for the
+semantic form, so "same name, same meaning" is exactly the check that stops
+being available.)
 
 ### Phase 2 — the generators
 `GenContract.v`, `GenSegment.v` (3 `cfg_instrs` refs), `GenCompose.v` (11).
 **`gen_seg_contract`'s `prog` argument is the landmine — see §5.**
-`GenCompose.v`'s 10 validity hypotheses become `∀ a Ha, A c a Ha → …`, NOT
-`…VC` — see the blast-radius note in §2. Quantifying them is what lets a
-generated segment be discharged with a block annotation inside it.
+`GenCompose.v`'s 10 validity hypotheses quantify `a` — see §2.4. Pinning them
+to the un-annotated program is what would stop a generated segment being
+discharged with a block annotation inside it.
 
-GATE 2: every light `Example/*.v` compiles after the mechanical
-`ValidCFGVerifierContract` → `ValidCFGVerifierContractVC` substitution and NO
-other edit — no changed `_instrs` block, no changed tactic, no added argument.
-If an example needs more than that, the `…VC` sugar is wrong; fix the sugar,
-not the example.
+GATE 2: every light `Example/*.v` compiles after the mechanical rewrite of its
+statement to `CFGVerifierContractVC c <its own instrs>` and NO other edit — no
+changed `_instrs` block, no changed tactic. If an example needs more than that,
+something upstream is wrong; fix that, not the example.
 
 ### Phase 3 — EndToEnd
 `EndToEnd.v` (33 `cfg_instrs` refs, 10 `strip` sites). The memory side takes
@@ -438,9 +448,9 @@ writes an offset, and re-point `sexec_block`/`cexec_block`/`rexec_block`/
 **This is also where the annotation-free stating form lands**, because §2's
 finding is that it IS `blockSound` re-indexed by a `CFGVerifierContract`. So
 the phase does not add a definition so much as rename one, plus the bridge
-`ValidCFGVerifierContract_of_A` (= today's `blockSound_of_vc`, with the VC
-premise now the parameterised `ValidCFGVerifierContractA` and the
-`blocksSound` premise naming the same `a`). Once it exists, a verified contract
+`ValidCFGVerifierContract_of_VC` (= today's `blockSound_of_vc`, with the VC
+premise now `CFGVerifierContractVC c a`, the `strip` equation as an ordinary
+hypothesis, and the `blocksSound` premise naming that same `a`). Once it exists, a verified contract
 plugs into an `ai_block` with no annotation in sight, and nesting is just
 iterating that — which is what Emiel asked for and what loops need.
 
@@ -487,7 +497,7 @@ GATE 4: `ZZBlkAB` green again, `make Results.vo` green.
 - **Do not change `cfg_instrs` to `list AST` without adding the annotated
   argument.** It looks like it works until the first program that carries a
   block, and then there is nowhere to put it.
-- **Do not edit an example to make Phase 2 pass.** The no-hints default exists so
+- **Do not edit an example to make Phase 2 pass.** The statement rewrite exists so
   that examples are untouched; an example needing a change means the default is
   wrong.
 - **Do not remove `AnnotInstr` from `instrs_of_list` / `table_of_list`.** The
