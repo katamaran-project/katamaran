@@ -273,6 +273,63 @@ Note `rocq_compile_file` now warns about this itself — "N interactive session(
 in this workspace may be holding stale dependency state" — so treat that line as
 an instruction, not noise.
 
+### …and a stale pet makes every `Require` fail SILENTLY, which reads as "interactive mode is unavailable"
+
+The expensive form of the above, measured 2026-09-22: it cost four blind
+~60 s `make` cycles and a wrong conclusion about the tooling.
+
+**The symptom is an EMPTY STATE, not an error.** With a stale pet holding a
+pre-edit dependency, a preamble's `Require` fails — but `rocq_start` still
+returns `success: true`, with `goals: ""` and `proof_finished: true`. Every
+subsequent `rocq_check` then runs in an environment containing nothing but
+`Coq.Init.*`. Position-based starts on a file behave the same way. The natural
+reading is "pet cannot handle these files", and that is wrong.
+
+**Smoke-test every fresh state before trusting it.** One command distinguishes
+a working state from an empty one, and it is the check to run *first*, not
+after two builds:
+
+```
+rocq_check(from_state=…, body="Print Libraries.")   (* or Check @<something you require> *)
+```
+
+If the listing stops at `Coq.Init.Prelude`, the preamble loaded nothing.
+Re-run `rocq_start(…, force_restart=True)` and it works.
+
+To see the real error instead of the silent failure, put the `Require` in
+`rocq_check`'s **body** rather than the preamble — errors surface there:
+
+```
+Compiled library Katamaran.RiscvPmp.CFGVer.Contracts makes inconsistent
+assumptions over library Katamaran.RiscvPmp.CFGVer.Verifier
+```
+
+That message names the culprit outright. Note the `.vo` timestamps on disk were
+CONSISTENT (each newer than its source) — the inconsistency lived only in pet's
+memory, so checking timestamps does not rule this out.
+
+**Corollary worth stating on its own: an empty state is not evidence about the
+file.** Before concluding a file cannot be worked interactively, either
+`Print Libraries` or `Check` something. Once pet was restarted in that session,
+the same "unusable" file gave `Check @<lemma>` in 4 ms, five bridge signatures
+in 36 ms, and two full candidate proofs at 38–56 ms — after four ~60 s builds
+had been spent discovering the same facts one error at a time.
+
+### `rocq_compile_file` can report SUCCESS on a file `make` rejects
+
+Same session, and it is why the interactive tools looked untrustworthy in
+general. `rocq_compile_file(EndToEnd.v, mode="full")` returned
+`{"success": true, "output": ""}` on a file that `make -f Makefile.coq` failed
+on, with a genuine type error, both before and after. The `.vo` in the source
+tree was untouched (hours old); the dune fallback had compiled into
+`_build/default`, and its `vo_rebuild_warning` said it "rebuilt 1 .vo file(s) in
+workspace", which is not the file you were checking.
+
+So: **`make` is the oracle for "does this file compile"**, per the dune-fallback
+section above. `rocq_compile_file`'s green is not a substitute, and a green from
+it directly after a red `make` means the two compiled different things — check
+the `.vo` mtime in the SOURCE tree before believing either.
+
 ## 2. Route to the skill that already knows the trap
 
 The skills below are **tier 2**: they are listed without descriptions and do not
