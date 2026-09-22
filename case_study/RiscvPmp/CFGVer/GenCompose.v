@@ -218,7 +218,7 @@ Section SegCompose.
       (iota : Valuation R)
       (Hok : seg_placement_ok prog skip head bound targets = true)
       (Hp : inst (T := fun Σ => Term Σ ty_xlenbits)
-              (cfg_placement (gen_seg_contract base base_a ia head prog skip take
+              (cfg_placement (gen_seg_contract base base_a ia head (strip prog) skip take
                                 targets bound fl regs extra_pre post)) iota
             = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))).
 
@@ -226,10 +226,12 @@ Section SegCompose.
       Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
         (instrs_of_list (@bv.of_N xlenbits ia) prog)
         (table_of_list
-           (cfg_placement (gen_seg_contract base base_a ia head prog skip take
+           (cfg_placement (gen_seg_contract base base_a ia head (strip prog) skip take
                              targets bound fl regs extra_pre post)) 0
-           (cfg_instrs (gen_seg_contract base base_a ia head prog skip take
-                          targets bound fl regs extra_pre post))) iota.
+           (* the TABLE takes the ANNOTATED slice, not `cfg_instrs` -- which is
+              now the AST spec and would silently coerce.  PLAN-contract-ast
+              §2.8: this is the one direction the build does NOT catch. *)
+           (List.firstn take (List.skipn skip prog))) iota.
     Proof.
       exact (seg_instr_table_ok _ iota ia prog skip take head bound targets
                Hok Hp Hwf).
@@ -237,9 +239,9 @@ Section SegCompose.
 
     Lemma gen_seg_exit_table_ok :
       Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-        (cfg_exitCond (gen_seg_contract base base_a ia head prog skip take
+        (cfg_exitCond (gen_seg_contract base base_a ia head (strip prog) skip take
                          targets bound fl regs extra_pre post))
-        (cfg_exits (gen_seg_contract base base_a ia head prog skip take
+        (cfg_exits (gen_seg_contract base base_a ia head (strip prog) skip take
                       targets bound fl regs extra_pre post)) iota.
     Proof.
       exact (seg_exit_table_ok_at _ iota ia prog skip head bound targets Hok Hp).
@@ -251,14 +253,14 @@ Section SegCompose.
   (* ======================================================================== *)
 
   (* `cfg_map` is STUCK on an abstract record, so a combinator cannot consume
-     ValidCFGVerifierContract directly -- it has to be handed the projected
+     cfg_vc directly -- it has to be handed the projected
      form.  `destruct c` unblocks the projections and both sides become
      identical. *)
-  Lemma seg_vc {R : LCtx} (c : @CFGVerifierContract R) :
-    ValidCFGVerifierContract c ->
+  Lemma seg_vc {R : LCtx} (c : @CFGVerifierContract R) (annot : list AnnotInstr) :
+    cfg_vc c annot ->
     safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
       (extend_to_minimal_pre (cfg_precondition c))
-      (table_of_list (cfg_placement c) 0 (cfg_instrs c))
+      (table_of_list (cfg_placement c) 0 annot)
       (cfg_exits c) (cfg_fuel c) (cfg_postcondition c) wnil)).
   Proof. destruct c; exact (fun H => H). Qed.
 
@@ -304,10 +306,11 @@ Section SegCompose.
   Lemma seg_run {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
     (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
     {Pre Post : iProp Σ}
-    (Hv : ValidCFGVerifierContract c)
+    (annot : list AnnotInstr)
+    (Hv : cfg_vc c annot)
     (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
              (instrs_of_list cbase L)
-             (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
+             (table_of_list (cfg_placement c) 0 annot) iota)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (cfg_exitCond c) (cfg_exits c) iota)
     (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
@@ -322,7 +325,7 @@ Section SegCompose.
     iIntros "HP".
     iDestruct (HPre with "HP") as "(HF & Hpre & Hpc & Hnpc & Hinstrs)".
     iApply (sound_scfg_verification_condition_myWP2
-              (seg_vc c Hv) Post Hif Hef
+              (seg_vc c annot Hv) Post Hif Hef
               Hbs
               $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
     (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
@@ -356,10 +359,11 @@ Section SegCompose.
     (ia t : N)
     {Pre Post : iProp Σ}
     (Hec : cfg_exitCond c = seg_exitCond ia [t])
-    (Hv : ValidCFGVerifierContract c)
+    (annot : list AnnotInstr)
+    (Hv : cfg_vc c annot)
     (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
              (instrs_of_list cbase L)
-             (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
+             (table_of_list (cfg_placement c) 0 annot) iota)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (cfg_exitCond c) (cfg_exits c) iota)
     (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
@@ -371,7 +375,7 @@ Section SegCompose.
     (HPost : Fr ∗ seg_exit_state c iota a L cbase (seg_addr ia t) -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_run c iota a L cbase Fr Hv Hif Hef Hbs HPre).
+    apply (seg_run c iota a L cbase Fr annot Hv Hif Hef Hbs HPre).
     iIntros (an) "H".
     destruct an as [av | a1 a2].
     2:{ iDestruct "H" as "(_ & %Hf & _)". destruct Hf. }
@@ -402,10 +406,11 @@ Section SegCompose.
     (iota : Valuation R) (a : bv xlenbits) (L : list AnnotInstr)
     (cbase : bv xlenbits) (Fr : iProp Σ) (v : bv xlenbits)
     {Pre Post : iProp Σ}
-    (Hv : ValidCFGVerifierContract c)
+    (annot : list AnnotInstr)
+    (Hv : cfg_vc c annot)
     (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
              (instrs_of_list cbase L)
-             (table_of_list (cfg_placement c) 0 (cfg_instrs c)) iota)
+             (table_of_list (cfg_placement c) 0 annot) iota)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (cfg_exitCond c) (cfg_exits c) iota)
     (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
@@ -421,7 +426,7 @@ Section SegCompose.
     (HPost : Fr ∗ seg_exit_state c iota a L cbase v -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_run c iota a L cbase Fr Hv Hif Hef Hbs HPre).
+    apply (seg_run c iota a L cbase Fr annot Hv Hif Hef Hbs HPre).
     iIntros (an) "(HF & %Hex & Hpc & Hnpc & Hinstrs & Hpost)".
     iAssert (⌜an = ty.SyncVal v⌝)%I as %Han; [ iApply (Hpin an); iExact "Hpost" |].
     subst an.
@@ -655,7 +660,7 @@ Section SegCompose.
       (Hokt : seg_placement_ok (loop_prog ls) (loop_first_instr ls)
                 (4 * N.of_nat (loop_first_instr ls))%N (place_prog_extent pl)
                 [(4 * N.of_nat (loop_first_instr ls) + target)%N] = true)
-      (Hv  : ValidCFGVerifierContract (gen_loop_contract ls g target post))
+      (Hv  : cfg_vc (gen_loop_contract ls g target post) (gen_loop_annot ls))
       (* Every block contract in this loop's program is justified.  Vacuous
          today (blocksSound_of_none); the premise exists because the lemma is
          generic in the program.  See cfg_instrs_verified (EndToEnd.v). *)
@@ -685,8 +690,12 @@ Section SegCompose.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
                     (instrs_of_list (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls))
                     (table_of_list (cfg_placement (gen_loop_contract ls g target post))
-                       0 (cfg_instrs (gen_loop_contract ls g target post))) i).
-    { rewrite gen_loop_instrs.
+                       0 (gen_loop_annot ls)) i).
+    { (* was `rewrite gen_loop_instrs`, which turned `cfg_instrs (gen_loop_contract
+         ..)` into the firstn/skipn slice.  The table is now built from
+         `gen_loop_annot ls`, which IS that slice definitionally, so this is an
+         unfold. *)
+      unfold gen_loop_annot.
       (* the placement premise is BUILT, not tactic-proved: as an `ltac:(...)`
          it ran before unification had fixed seg_instr_table_ok's `place`, so
          `rewrite Hplace` found nothing to rewrite. *)
@@ -707,7 +716,8 @@ Section SegCompose.
     iApply (seg_run_single_exit (gen_loop_contract ls g target post) i
              (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
              (@bv.of_N xlenbits (place_prog_base pl)) F (loop_head_addr ls) target
-             (gen_loop_exitCond ls g target post) Hv Hif Hef Hbs with "H").
+             (gen_loop_exitCond ls g target post) (gen_loop_annot ls)
+             Hv Hif Hef Hbs with "H").
     - (* HPre: the invariant IS the precondition minus the branch decision and
          the pc equation, at the SAME valuation.  Since A3 the two orders
          differ (gen_seg_contract puts the code bound second and the registers
@@ -745,7 +755,7 @@ Section SegCompose.
       (Fr : nat -> iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (n : nat)
       (HPm : P (S n) -> P n)
-      (Hv  : ValidCFGVerifierContract (loop_body_contract ls))
+      (Hv  : cfg_vc (loop_body_contract ls) (gen_loop_annot ls))
       (* Vacuous today; see loop_one_trip. *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list
@@ -793,7 +803,7 @@ Section SegCompose.
       (pl : LoopPlace ls) (Fr : nat -> iProp Σ) (Out : iProp Σ)
       (iotaf : nat -> Valuation R)
       (P : nat -> Prop) (HP0 : P 0)
-      (Hv  : ValidCFGVerifierContract (loop_final_contract ls post))
+      (Hv  : cfg_vc (loop_final_contract ls post) (gen_loop_annot ls))
       (* Vacuous today; see loop_one_trip. *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list
@@ -2116,8 +2126,8 @@ Section SegCompose.
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (pl : LoopPlace ls) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
-      (Hvb : ValidCFGVerifierContract (loop_body_contract ls))
-      (Hvf : ValidCFGVerifierContract (loop_final_contract ls post))
+      (Hvb : cfg_vc (loop_body_contract ls) (gen_loop_annot ls))
+      (Hvf : cfg_vc (loop_final_contract ls post) (gen_loop_annot ls))
       (* Vacuous today; see loop_one_trip. *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list

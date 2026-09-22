@@ -1170,7 +1170,7 @@ Lemma gen_loop_annot_strip {Σ : LCtx} (ls : LoopSpec Σ)
   strip (gen_loop_annot ls) = cfg_instrs (gen_loop_contract ls g target post).
 Proof.
   unfold gen_loop_annot. rewrite gen_loop_instrs.
-  now rewrite strip_firstn, strip_skipn.
+  now rewrite strip_firstn strip_skipn.
 Qed.
 
 Lemma gen_loop_exits {Σ : LCtx} (ls : LoopSpec Σ)

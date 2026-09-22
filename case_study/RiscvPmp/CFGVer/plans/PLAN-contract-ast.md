@@ -541,7 +541,29 @@ wrong.
 `EndToEnd.v` (33 `cfg_instrs` refs, 10 `strip` sites) **plus the three
 `table_of_list … (cfg_instrs c)` sites in `Example/*Result.v`** (§2.8). The
 memory side takes `cfg_instrs c`; the table side takes `a`; classify every one
-explicitly — the coercion will hide a mistake in the memory direction. Expect this file to get shorter and
+explicitly — the coercion will hide a mistake in the memory direction.
+
+**GOOD NEWS, surveyed 2026-09-22: this is SIX hypotheses, not 33 sites.**
+`EndToEnd.v` already routes the whole question through one named equation,
+repeated once per top-level lemma (`:119`, `:193`, `:233`, `:312`, `:1481`,
+`:1580`):
+
+```coq
+(contractInstrs : cfg_instrs contract = instrs')
+```
+
+`instrs'` is THE program: everything else in those lemmas — `instrs_of_list`,
+`ptsto_instrs`, `blocksSound`, `mem_has_instrs` — is stated over it, not over
+`cfg_instrs contract`. So the flip is
+
+```coq
+(contractInstrs : strip instrs' = cfg_instrs contract)
+```
+
+with `instrs' : list AnnotInstr` unchanged everywhere else, and the ten `strip`
+sites in the bodies collapse because `strip instrs'` now HAS a name. Phase 3
+should start by making exactly that change to the six and reading the errors,
+not by walking the 33 occurrences. Expect this file to get shorter and
 the `strip`-vs-no-`strip` comment at :1514 to be deleted.
 
 GATE 3: `make Results.vo` green; `./scripts/gate.sh` at `GATE_JOBS=1` green.
