@@ -124,7 +124,7 @@ Section ComposeLoop.
     [env].["k"∷ty_xlenbits ↦ SyncVal k].
 
   Definition cdExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜pcOutOfInstrs_exitCond 0 cd_instrs v⌝)%I.
+    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜tail_exitCond v⌝)%I.
 
   (* The LOOP INVARIANT, as an iProp: at the loop head, counter = k. *)
   Definition cdInv (k : bv xlenbits) : iProp Σ :=
@@ -196,7 +196,7 @@ Section ComposeLoop.
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    (pcOutOfInstrs_exitCond 0 cd_instrs) (cfg_exits cdFinal) (ik k)).
+                    tail_exitCond (cfg_exits cdFinal) (ik k)).
     { constructor; [|constructor]. eexists. split; reflexivity. }
     iApply (sound_scfg_verification_condition_myWP2 Hv cdExit Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
