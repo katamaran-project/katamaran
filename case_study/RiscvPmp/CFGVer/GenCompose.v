@@ -333,6 +333,40 @@ Section SegCompose.
     - iIntros (an) "Hex". iApply HPost. iFrame.
   Qed.
 
+  (* ---- A BLOCK, FROM ITS CONTRACT -----------------------------------------
+     The acceptance criterion of PLAN-contract-ast, as a lemma: a block premise
+     is derivable from an ORDINARY verified contract "without having to redo the
+     work".  There is no work here to redo -- this is `blockSound_of_vc`
+     instantiated at the contract's OWN table, and `seg_vc` is what unblocks the
+     stuck `cfg_map` so the two VCs are literally the same term.
+
+     It lives HERE rather than in Adequacy.v for the ordinary reason that
+     Adequacy.v does not require Contracts.v, so `cfg_vc` is not in scope there;
+     and it lives here rather than in EndToEnd.v because a block is a
+     COMPOSITION device, which is this file's subject -- `seg_run` next door is
+     the same bridge for a segment that is executed rather than assumed.
+
+     `tbl` is not a parameter: a contract verified by `cfg_vc c ab` was checked
+     against `table_of_list (cfg_placement c) 0 ab` and nothing else, so pinning
+     it is what makes the statement quote a contract instead of a VC. *)
+  Lemma blockSound_of_contract (words : bv xlenbits -> bv word)
+      (v : bv xlenbits) (b : BlkAnnot) (ab : list AnnotInstr)
+      (Hv : cfg_vc (blk_contract b) ab)
+      (* the block resumes where its contract exits *)
+      (Hexit : forall x, cfg_exitCond (blk_contract b) x = true ->
+                 x = bv.add v (bv.of_N (blk_off b)))
+      (* ab really is the block's own code, annotated *)
+      (Hstrip : strip ab = cfg_instrs (blk_contract b))
+      (* everything NESTED inside is justified -- over ab, hence smaller *)
+      (Hbs : forall wds : bv xlenbits -> bv word,
+               ⊢ blocksSound wds (instrs_of_list v ab)) :
+    blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab)
+    ⊢ blockSound words v b.
+  Proof.
+    exact (blockSound_of_vc words ab b _
+             (seg_vc (blk_contract b) ab Hv) Hexit Hstrip Hbs).
+  Qed.
+
   (* ---- SINGLE-EXIT specialisation -----------------------------------------
      A segment with ONE declared target has its exit pc PINNED by the exit
      condition, so all of this can go away at the call site: the `forall an`,

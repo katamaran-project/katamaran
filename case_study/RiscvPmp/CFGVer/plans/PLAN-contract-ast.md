@@ -615,12 +615,15 @@ not being able to apply it.
 
 **WHAT IS STILL OPEN AFTER PHASE 4:**
 
-1. `blockSound_of_contract` cannot be stated in `Adequacy.v`: that file does NOT
-   require `Contracts.v` (checked — its loaded-library list has `Tables` but no
-   `Contracts`), so `cfg_vc` is not in scope there. The bridge belongs in a file
-   that sees both — `GenCompose.v` or `EndToEnd.v`. The CONTENT is done; only
-   the placement is open.
-2. `clear_blk` + its four satellites are dead (Phase 5).
+1. ~~`blockSound_of_contract` placement.~~ **DONE 2026-09-23**, in
+   `GenCompose.v`. `Adequacy.v` does not require `Contracts.v`, so `cfg_vc` is
+   out of scope there; `GenCompose.v` was the answer over `EndToEnd.v` because
+   `seg_vc` — the lemma that `destruct`s a contract to unblock the stuck
+   `cfg_map` — already lived there, and `seg_run` next door already consumes
+   `cfg_vc` directly. With `seg_vc` in hand the bridge is one `exact`: it is
+   `blockSound_of_vc` instantiated at `table_of_list (cfg_placement c) 0 ab`,
+   the only table the contract was ever checked against. 4 ms.
+2. ~~`clear_blk` + its four satellites are dead.~~ **DONE 2026-09-23** (Phase 5).
 3. GATE 3's axiom-hygiene step has still never run (memory), so axiom-cleanliness
    is unverified across Phases 3-4.
 
@@ -819,12 +822,39 @@ nesting and therefore PLAN-muladd-composed. Re-do the
 
 GATE 4: `ZZBlkAB` green again, `make Results.vo` green.
 
-### Phase 5 — the cleanup this unblocks
-- delete the dead `sexec_blocks` / `sexec_triple_addr_blk` / `_blks` /
-  `scfg_verification_condition_blk` / `_blks` cluster (`Verifier.v`), referenced
-  only by the untracked `ZZBlkSpike`/`ZZBlkChain` probes;
-- `blockSound_of_loop` (PLAN: blocks over loops without unrolling) — cheaper to
-  write once on the final shape.
+### Phase 5 — the cleanup this unblocks  **DONE 2026-09-23**
+- ~~delete the `clear_blk` cluster~~ — `clear_blk`, `ai_instr_clear_blk`,
+  `ai_block_clear_blk` (`Verifier.v`) and `ai_instr_fmap_clear_blk`,
+  `blocksSound_clear_blk` (`Adequacy.v`). §2c's self-containment made them
+  unreachable: a block's VC runs against its OWN annotated program, which does
+  not contain the enclosing annotation, so there is nothing to clear.
+- ~~delete the dead `sexec_blocks` / `sexec_triple_addr_blk` / `_blks` /
+  `scfg_verification_condition_blk` / `_blks` cluster~~ (`Verifier.v`, −77
+  lines). **They were NOT unreferenced:** the untracked probes `ZZBlkSpike`,
+  `ZZBlkChain` used them, and `ZZBlkMid` (already broken — it still named the
+  earlier `_bt` family) imported `ZZBlkChain`. All three were §7 spikes for
+  the superseded standalone-entry-point design and went with it. The design
+  rationale that sat above `sexec_triple_addr_blk` moved to `sexec_block`,
+  which is the live hook it actually describes.
+- **the falsification arm was PORTED, not dropped** — `Example/ZZBlkReject.v`.
+  `ZZBlkSpike`'s BAD arm (a block claiming `T0 = 43` when its code computes
+  42) is the only thing in the tree that distinguishes a working block hook
+  from a VACUOUS one, so it was restated against `cfg_vc` with `blk_at`. Two
+  upgrades while porting: it runs through the ordinary annotation path rather
+  than a bespoke VC call, and the arm is now `Fail solve_param_vc` instead of
+  a COMMENTED-OUT lemma — i.e. it is checked on every build. Good arm 18 ms;
+  bad arm rejected with `No applicable tactic`.
+- STILL TO WRITE (not cleanup): `blockSound_of_loop` — blocks over loops
+  without unrolling. Never existed; cheaper to write once on the final shape.
+
+**THE TRAP THIS PHASE SET, worth reading before the next dead-code sweep.**
+The first sweep said the whole cluster was unreferenced, and it was wrong: in
+Claude Code's Bash tool `grep` is a shell FUNCTION wrapping bundled `ugrep`
+with `--ignore-files`, so it honours `.gitignore` — and the `ZZ*.v` probes are
+gitignored precisely because they are deliberately untracked. From the repo
+root it saw 167 of 1224 `.v` files. Use `command grep` for any "who uses
+this" question here. Note also that THIS FILE already recorded the two probe
+users one section down; the written record was right and the tool was wrong.
 
 ## §5. Landmines
 

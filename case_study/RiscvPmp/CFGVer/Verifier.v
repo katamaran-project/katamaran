@@ -240,31 +240,6 @@ Record AnnotInstr := MkAnnotInstr
   ; ai_block        : option BlkAnnot
   }.
 
-(* Erase every block contract, keeping the instruction and its ghosts.
-   A block must NOT be visible to its OWN verification: a segment contract for
-   the block at v is executed from v, and if `ai_block` were still set there
-   the executor would replace the block by ITSELF, so its VC would prove
-   nothing and blocksSound would be dischargeable from thin air.
-
-   DEAD SINCE 2026-09-23 (PLAN-contract-ast §2c).  Self-containment now rules
-   that out structurally: a block's VC runs against its OWN annotated program,
-   which simply does not contain the enclosing annotation, so there is nothing
-   to clear.  `clear_blk`, `ai_instr_clear_blk`, `ai_block_clear_blk` and
-   Adequacy's `ai_instr_fmap_clear_blk` / `blocksSound_clear_blk` now have NO
-   USERS.  Kept for one commit so the change is attributable; delete in
-   Phase 5. *)
-Definition clear_blk (ai : AnnotInstr) : AnnotInstr :=
-  {| ai_ghost_before := ai_ghost_before ai
-   ; ai_instr        := ai_instr ai
-   ; ai_ghost_after  := ai_ghost_after ai
-   ; ai_block        := None |}.
-
-Lemma ai_instr_clear_blk (ai : AnnotInstr) : ai_instr (clear_blk ai) = ai_instr ai.
-Proof. reflexivity. Qed.
-
-Lemma ai_block_clear_blk (ai : AnnotInstr) : ai_block (clear_blk ai) = None.
-Proof. reflexivity. Qed.
-
 Definition strip (instrs : list AnnotInstr) : list AST :=
   List.map (fun ai => ai_instr ai) instrs.
 
@@ -1168,6 +1143,36 @@ Section CFGVerificationDerived.
     Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
       P ∗ minimal_pre.
 
+    (* A BLOCK, IN PLACE OF ITS INSTRUCTIONS.
+
+       This is `SHeapSpec.call_contract` (Symbolic/Monads.v:1377) at CFG-block
+       granularity: instantiate the block's logic variables angelically,
+       CONSUME its precondition, PRODUCE its postcondition, and resume the
+       ordinary executor at the block's declared exit.
+
+       Two deliberate differences from `call_contract`, both answers to
+       plans/PLAN-executor-composition.md §6.4:
+       - NO `assert_eq_nenv`.  A function call matches the callee's parameter
+         store against the caller's arguments; a block has no argument list --
+         its "arguments" are the machine state, which the precondition already
+         describes.
+       - the result is not a value but the EXIT PC, computed as entry + off.
+
+       CONSEQUENCE FOR A BLOCK CONTRACT'S PRECONDITION: the logic context is
+       instantiated ANGELICALLY here, so the block's own base arrives as an
+       unconstrained evar and nothing later in the run can pin it.  The
+       precondition must do it -- `asn_pc_eq` against the entry pc, the way
+       gen_seg_contract emits it.  Without that the VC still reduces to
+       `block`, i.e. no obligation, but with the angelic uninstantiated, and
+       solve_param_vc stops with "No applicable tactic" on a goal that is
+       true.  Example/ZZBlkReject.v is the worked case.
+
+       The precondition consumed is the EXTENDED one (2026-09-23,
+       PLAN-contract-ast Phase 4): a valid contract's VC is stated over
+       `extend_to_minimal_pre`, so consuming the bare precondition would leave
+       the two shapes one step apart and make every call site bridge it by
+       hand.  The postcondition is produced VERBATIM, so it owes minimal_pre
+       back -- see GenSegment.v:443. *)
     Definition sexec_block (b : BlkAnnot) :
       ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w apc =>
@@ -1181,14 +1186,6 @@ Section CFGVerificationDerived.
         ⟨ θ3 ⟩ _ <- produce (cfg_postcondition (blk_contract b))
                       evars2.["a"∷ty_xlenbits ↦ apc2].["an"∷ty_xlenbits ↦ aex] ;;
         pure (persist__term aex θ3).
-
-    Fixpoint sexec_blocks (bs : list BlkAnnot) :
-      ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w apc =>
-        match bs with
-        | nil      => pure apc
-        | b :: bs' => ⟨ θ ⟩ apc' <- sexec_block b apc ;; sexec_blocks bs' apc'
-        end.
 
     (* THE POST-DROP STEP BODY, HOISTED OUT OF sexec_cfg_addr.
        It is a plain let-hoist — the same chain, in the same order, with the
@@ -1665,113 +1662,18 @@ Section CFGVerificationDerived.
 
     (* scfg_verification_condition: runs sexec_triple_addr inside *)
     (* SHeapSpec.run; same wnil shape, no leakcheck. *)
-    (* ===================================================================== *)
-    (* SPIKE (plans/PLAN-executor-composition.md §7 step 1): replace the FIRST
-       block by its CONTRACT instead of executing its instructions.
-
-       This is `SHeapSpec.call_contract` (Symbolic/Monads.v:1377) at CFG-block
-       granularity: instantiate the block's logic variables angelically,
-       CONSUME its precondition, PRODUCE its postcondition, and resume the
-       ordinary executor at the block's declared exit.
-
-       Two deliberate differences from `call_contract`, both answers to
-       PLAN §6.4:
-       - NO `assert_eq_nenv`.  A function call matches the callee's parameter
-         store against the caller's arguments; a block has no argument list --
-         its "arguments" are the machine state, which the precondition already
-         describes.
-       - the result is not a value but the EXIT PC, computed as entry + off.
-
-       `first` is passed as FALSE to the resumed executor: the block has been
-       accounted for, so a declared exit at the resume address must stop.  At
-       the entry proper the flag is still true (see the `first` discussion
-       above -- a loop-body contract starts and ends at the same address). *)
-    Definition sexec_triple_addr_blk {Σ Σb : LCtx}
-      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (bpre bpost : Assertion Σb) (boff : N)
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
-      (fuel : nat)
-      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-      ⊢ SHeapSpec Unit :=
-      fun w =>
-        let n := length tbl in
-        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
-        let δ   := env.drop (words_ctx n) δw in
-        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
-        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
-        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
-        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
-        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
-        (* ---- THE BLOCK, in place of its instructions ---- *)
-        ⟨ θb1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id Σb) ;;
-        ⟨ θb2 ⟩ _     <- consume bpre evars ;;
-        let evars2 := persist (A := Sub Σb) evars θb2 in
-        ⟨ θb3 ⟩ _     <- produce bpost evars2 ;;
-        (* ---- resume the ordinary executor at the block's exit ---- *)
-        let θb  := θb1 ∘ θb2 ∘ θb3 in
-        let δ1b := persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 (θ2 ∘ θb) in
-        let a2  := persist__term a (θ1' ∘ θ2 ∘ θb) in
-        let aex := term_binop bop.bvadd a2 (term_val ty_xlenbits (bv.of_N boff)) in
-        let ζ   := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2 ∘ θb) in
-        let ws  := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2 ∘ θb)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false δ1b
-                       (zip_words (subst_itable ζ tbl) ws)
-                       (subst_etable ζ exits) aex (persist__term np (θ2 ∘ θb)) ;;
-        let δ3 := persist δ1b θ3 in
-        consume ens δ3.["an"∷ty_xlenbits ↦ na].
-
-
-    Definition sexec_triple_addr_blks {Σ : LCtx}
-      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (bs : list BlkAnnot)
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
-      (fuel : nat)
-      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-      ⊢ SHeapSpec Unit :=
-      fun w =>
-        let n := length tbl in
-        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
-        let δ   := env.drop (words_ctx n) δw in
-        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
-        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
-        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
-        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
-        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
-        ⟨ θb ⟩ aex <- sexec_blocks bs (persist__term a (θ1' ∘ θ2)) ;;
-        let δ1b := persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 (θ2 ∘ θb) in
-        let ζ   := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2 ∘ θb) in
-        let ws  := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2 ∘ θb)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel false δ1b
-                       (zip_words (subst_itable ζ tbl) ws)
-                       (subst_etable ζ exits) aex (persist__term np (θ2 ∘ θb)) ;;
-        let δ3 := persist δ1b θ3 in
-        consume ens δ3.["an"∷ty_xlenbits ↦ na].
-
-
-    (* sexec_triple_addr_bt / scfg_verification_condition_bt USED TO LIVE HERE
-       and are DELETED.  They existed only to thread a separate block table
-       into the executor; with the contract in the AnnotInstr payload the
-       ORDINARY sexec_triple_addr already carries blocks -- they ride in `tbl`
-       like any other part of an instruction -- so no second VC entry point,
-       and no second triple-level refinement, is needed at all. *)
-
-    Definition scfg_verification_condition_blks {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (bs : list BlkAnnot)
-      (tbl : SInstrTable (wlctx Σ))
-      (exits : SExitTable (wlctx Σ)) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
-      fun w =>
-        SHeapSpec.run (sexec_triple_addr_blks req bs tbl exits fuel ens (w := w)).
-
-    Definition scfg_verification_condition_blk {Σ Σb : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (bpre bpost : Assertion Σb) (boff : N)
-      (tbl : SInstrTable (wlctx Σ))
-      (exits : SExitTable (wlctx Σ)) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
-      fun w =>
-        SHeapSpec.run (sexec_triple_addr_blk req bpre bpost boff tbl exits fuel ens (w := w)).
+    (* THE STANDALONE BLOCK ENTRY POINTS USED TO LIVE HERE AND ARE DELETED --
+       sexec_triple_addr_bt / scfg_verification_condition_bt, and (2026-09-23,
+       PLAN-contract-ast Phase 5) sexec_blocks, sexec_triple_addr_blk / _blks
+       and scfg_verification_condition_blk / _blks.  They existed only to
+       thread blocks into the executor separately -- first as their own table,
+       then as arguments to a parallel triple.  With the contract in the
+       AnnotInstr payload the ORDINARY sexec_triple_addr already carries
+       blocks: they ride in `tbl` like any other part of an instruction.  So
+       no second VC entry point, and no second triple-level refinement, is
+       needed at all.  Their three spikes (ZZBlkSpike / ZZBlkChain / ZZBlkMid)
+       went with them; the falsification arm worth keeping was ported to
+       Example/ZZBlkReject.v, which runs it through `cfg_vc`. *)
 
     Definition scfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits))

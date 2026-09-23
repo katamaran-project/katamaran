@@ -1286,7 +1286,7 @@ Section AdequacyTools.
        `gmap _ AST` directly -- exactly ptsto_instrs_w's argument type, with no
        coercion and no fmap.  SBlk had no field that could say this, which is
        why the OLD blockSound had to take the enclosing program (and hence
-       needed clear_blk).  PLAN-contract-ast §2c / §2.7. *)
+       needed to clear the annotation).  PLAN-contract-ast §2c / §2.7. *)
     Definition blk_span (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         : gmap (bv xlenbits) AST :=
       Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)).
@@ -1378,28 +1378,6 @@ Section AdequacyTools.
         cbn in H. apply lookup_insert_Some in H as [[-> ->]|[Hne H]].
         + now left.
         + right. exact (IH _ _ _ H).
-    Qed.
-
-    (* Clearing every block makes the premise vacuous -- and clearing changes
-       NO memory, since `ai_instr` is untouched.  This is what a block's own
-       verification runs against, so that a block is never visible to itself:
-       its segment contract is executed from its own address, and with the
-       annotation still in place the executor would replace the block by
-       ITSELF, making its VC prove nothing. *)
-    Lemma ai_instr_fmap_clear_blk
-        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
-      ai_instr <$> (Katamaran.RiscvPmp.CFGVer.Verifier.clear_blk <$> instrs) = ai_instr <$> instrs.
-    Proof.
-      rewrite -map_fmap_compose. apply map_fmap_ext. intros i x _. reflexivity.
-    Qed.
-
-    Lemma blocksSound_clear_blk words
-        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
-      ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Verifier.clear_blk <$> instrs).
-    Proof.
-      iIntros "!>" (v ai b) "%Hlk %Hb".
-      apply lookup_fmap_Some in Hlk as (ai0 & <- & _).
-      rewrite Katamaran.RiscvPmp.CFGVer.Verifier.ai_block_clear_blk in Hb. discriminate.
     Qed.
 
     (* A program carrying no block contracts is vacuously block-sound.  With
@@ -1825,9 +1803,9 @@ Section AdequacyTools.
        not appear: the block's table is faithful to ITS gmap, its memory is ITS
        span, and its own block premise `Hbs` is over `instrs_of_list v ab` -- a
        STRICTLY SMALLER artifact, which is what makes nesting well-founded on
-       nesting depth instead of circular.  The old version ran against
-       `clear_blk <$> instrs` and was vacuous in its block premise, which is
-       exactly what foreclosed nesting. *)
+       nesting depth instead of circular.  The old version ran against the
+       ENCLOSING program with every block annotation cleared, and was vacuous
+       in its block premise -- exactly what foreclosed nesting. *)
     Lemma blockSound_of_vc (words : bv xlenbits -> bv word)
         (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
         (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
