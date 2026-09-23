@@ -1396,6 +1396,63 @@ Section AdequacyTools.
       specialize (Hall _ Hlk). rewrite Hall in Hb. discriminate.
     Qed.
 
+    (* ---- THE SPAN CONTAINMENT, ONCE ---------------------------------------
+       blocksSound's other half.  A block's span is its OWN code laid out at
+       its own address (§2c), so containment in the enclosing program is just
+       "the enclosing program STARTS with the block's code" -- which for a
+       block at the head is instrs_of_list_prefix, with fmap_instrs_of_list to
+       cross the AnnotInstr/AST boundary. *)
+    Lemma blk_span_sub (v : bv xlenbits)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (rest : list AST) :
+      Katamaran.RiscvPmp.CFGVer.Verifier.strip l
+        = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs
+            (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b) ++ rest ->
+      blk_span v b ⊆ ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v l.
+    Proof.
+      intros Hstrip. unfold blk_span.
+      rewrite Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
+      change (List.map ai_instr l)
+        with (Katamaran.RiscvPmp.CFGVer.Verifier.strip l).
+      rewrite Hstrip.
+      apply Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list_prefix.
+    Qed.
+
+    (* ---- ...AND A PROGRAM WITH ONE BLOCK, AT ITS HEAD ---------------------
+       The introduction rule blocksSound_of_none could not give.  Restricted to
+       a block on the FIRST instruction, which is what `blk_at 0` builds and
+       what the A+BC composition needs.
+
+       Why the head case is the cheap one: `instrs_of_list base (x :: l)` is
+       `<[base := x]> (instrs_of_list (base+4) l)`, so lookup_insert_Some
+       splits it into "the key IS base, hence the element IS x" and "the key is
+       not base", and the second branch dies on the Forall.  The looked-up
+       address is therefore PINNED to base with no collision reasoning at all.
+       A block at index n needs the real inversion -- that the map's keys are
+       distinct, i.e. instrs_of_list_fresh's business -- and is left until a
+       mid-program block actually needs it (ZZBlkBC, index 55). *)
+    Lemma blocksSound_of_head words (base : bv xlenbits)
+        (x : Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) :
+      Katamaran.RiscvPmp.CFGVer.Verifier.ai_block x = Some b ->
+      List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = None) l ->
+      blk_span base b ⊆ ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l) ->
+      (⊢ blockSound words base b) ->
+      ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l)).
+    Proof.
+      intros Hx Hl Hsub Hb.
+      iIntros "!>" (v ai b') "%Hlk %Hb'".
+      cbn [Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list] in Hlk.
+      apply lookup_insert_Some in Hlk as [[<- <-]|[Hne Hlk]].
+      - rewrite Hx in Hb'. injection Hb' as <-.
+        iSplitR; [iPureIntro; exact Hsub | iApply Hb].
+      - exfalso. apply instrs_of_list_elem_of in Hlk.
+        rewrite List.Forall_forall in Hl. specialize (Hl _ Hlk).
+        rewrite Hl in Hb'. discriminate.
+    Qed.
+
     (* cexec_block's shallow-to-Iris step: the exact analogue of
        call_lemma_sound (MicroSail/ShallowSoundness.v), minus the
        assert_eq_nenv a function call needs and with a fixed result.  The ONE

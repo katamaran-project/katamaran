@@ -333,6 +333,96 @@ Section SegCompose.
     - iIntros (an) "Hex". iApply HPost. iFrame.
   Qed.
 
+
+  (* ---- THE PLACEMENT FACT, READ OFF THE PRECONDITION ----------------------
+     The one thing a block needs that a segment does not.  A segment's caller
+     NAMES its valuation, so `inst place iota = ...` is an ordinary argument;
+     a block's valuation is an existential witness produced by the VC's own
+     proof (cexec_block binds it with CPureSpec.angelic_ctx), so the fact has
+     to be DERIVED, and the precondition is the only thing known about the
+     witness.  gen_seg_contract's leading `asn_pc_eq` conjunct is exactly it. *)
+  Lemma seg_pre_placement {R : LCtx}
+      (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (ia head : N) (prog : list AST) (skip take : nat)
+      (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (iota : Valuation R) (v : bv xlenbits)
+      (Hba : inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota) :
+    asn.interpret (extend_to_minimal_pre (cfg_precondition
+        (gen_seg_contract base base_a ia head prog skip take targets bound fl
+           regs extra_pre post)))
+      (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+    ⊢ ⌜ inst (T := fun Σ => Term Σ ty_xlenbits)
+          (cfg_placement (gen_seg_contract base base_a ia head prog skip take
+             targets bound fl regs extra_pre post)) iota
+        = ty.SyncVal v ⌝.
+  Proof.
+    cbn [gen_seg_contract cfg_precondition cfg_placement extend_to_minimal_pre].
+    iIntros "((Hpc & _) & _)".
+    unfold asn_pc_eq in *.
+    iDestruct "Hpc" as "[%Hpc _]".
+    iPureIntro.
+    (* `cbn`/`unfold` will NOT fire through instprop's class dispatch, even
+       though the formula is constructor-headed and `Arguments` says it should.
+       `change` goes by conversion and does -- rocq-implementation section 1,
+       "when cbn stalls on something reflexivity proves". *)
+    change (instprop (formula_propeq (term_var "a")
+              (base_a + term_val ty_xlenbits (bv.of_N head))%exp)
+              iota.["a"∷ty_xlenbits ↦ SyncVal v])
+      with (inst (T := fun Σ => Term Σ ty_xlenbits) (term_var "a")
+              iota.["a"∷ty_xlenbits ↦ SyncVal v]
+            = inst (T := fun Σ => Term Σ ty_xlenbits)
+                (base_a + term_val ty_xlenbits (bv.of_N head))%exp
+                iota.["a"∷ty_xlenbits ↦ SyncVal v]) in Hpc.
+    cbn [inst inst_term] in Hpc |- *.
+    rewrite Hba in Hpc.
+    rewrite env.lookup_snoc_zero in Hpc.
+    symmetry. exact Hpc.
+  Qed.
+
+
+  (* ---- ...AND THE WHOLE blockFaithful, FOR A GENERATED SEGMENT ------------
+     The two conjuncts have genuinely different needs, which is worth noticing:
+     `itable_rel` wants only the placement fact (itable_faith_of_list takes an
+     ARBITRARY cbase, so the concrete load address never enters), while
+     `etable_rel` additionally forces `v = ia + head`, because seg_exitCond
+     compares ABSOLUTE addresses.  So the block's tie to the concrete base is
+     an exit-side obligation, not a code-side one. *)
+  Lemma blockFaithful_of_seg {R : LCtx}
+      (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (ia head : N) (prog : list AST) (skip take : nat)
+      (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (off : N) (v : bv xlenbits) (ab : list AnnotInstr)
+      (Hba : forall iota : Valuation R,
+               inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+                 (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+               = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+      (Hv : v = bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))
+      (Hle : List.Forall (fun t => N.le head t) targets)
+      (* same obligation seg_instr_table_ok gets out of seg_fits_memory *)
+      (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N) :
+    ⊢ blockFaithful ab v
+        {| blk_off := off ; blk_ctx := R
+         ; blk_contract := gen_seg_contract base base_a ia head prog skip take
+                             targets bound fl regs extra_pre post |}
+        (table_of_list (cfg_placement (gen_seg_contract base base_a ia head prog
+                          skip take targets bound fl regs extra_pre post)) 0 ab).
+  Proof.
+    unfold blockFaithful.
+    iIntros "!>" (iota) "Hpre".
+    iDestruct (seg_pre_placement base base_a ia head prog skip take targets
+                 bound fl regs extra_pre post iota v (Hba iota) with "Hpre")
+      as "%Hp".
+    iPureIntro. cbn [blk_contract]. split.
+    - exact (itable_faith_of_list _ iota ab Hp Hrep).
+    - subst v. exact (seg_exit_table_ok _ iota ia head targets Hle Hp).
+  Qed.
+
   (* ---- A BLOCK, FROM ITS CONTRACT -----------------------------------------
      The acceptance criterion of PLAN-contract-ast, as a lemma: a block premise
      is derivable from an ORDINARY verified contract "without having to redo the
