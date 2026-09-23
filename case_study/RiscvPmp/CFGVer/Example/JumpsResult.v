@@ -60,15 +60,18 @@ Proof.
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
-     Phase 3).  The annotated list enters as the bridge's `annot`
-     premise instead, discharged by strip_of_AST just below. *)
+     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
+     at all: the hint list, the strip equation and the block obligations are
+     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
+     this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param.
-  5: exact (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
-  (* Position 5, not 4: _param gained the `annot`/`Hannot` pair before
-     valid_contract (PLAN-contract-ast Phase 3), and this is a NUMERIC goal
-     selector -- §5.2's hazard.  Still no vacuous-lookup bullet: stage 1 of
-     PLAN-unify-generators.md dropped _param's mem_specs and with it the
-     HDataAddrs premise. *)
+  4: solve_valid (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
+  (* Position 4, not 5: the `annot`/`Hannot` pair went back INSIDE
+     ValidCFGVerifierContract (2026-09-23), so the VC moved 5 -> 4.  A NUMERIC
+     goal selector is exactly what a changed premise list breaks -- §5.2's
+     hazard, now in the shrinking direction.  Still no vacuous-lookup bullet:
+     stage 1 of PLAN-unify-generators.md dropped _param's mem_specs and with
+     it the HDataAddrs premise. *)
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn. lia.
   - (* extra_exit_offs = [8%N] here (unlike every other example, whose
@@ -93,8 +96,6 @@ Proof.
             [lia | vm_compute; reflexivity]).
       rewrite (bv.bin_of_N_small Hs4) (bv.bin_of_N_small Hs8).
       lia.
-  - apply strip_of_AST.
-  - solve_no_blocks.
 Qed.
 
 Lemma jumpIfZero_noninterferent :
@@ -117,9 +118,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - apply strip_of_AST.
-  - exact (valid_jmp_fwd_cfg_contract_param init_addr).
-  - solve_no_blocks.
+  - solve_valid (valid_jmp_fwd_cfg_contract_param init_addr).
 Qed.
 
 (* jmp_fwd_exitCond is definitionally pcOutOfInstrs_exitCond 0 [JAL...; NOP]

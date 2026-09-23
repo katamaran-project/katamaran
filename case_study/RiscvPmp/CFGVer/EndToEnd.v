@@ -1978,6 +1978,76 @@ Import IrisModel.RiscvPmpIrisBase.
     apply blocksSound_of_none;
     solve [ apply ai_block_none_of_AST | repeat constructor ].
 
+  (* ====================================================================== *)
+  (* THE ANNOTATION-FREE VALIDITY -- a SEALED projection                     *)
+  (* ====================================================================== *)
+
+  (* WHY THIS IS AN EXISTENTIAL, AND WHY THAT IS NOT A DODGE.
+
+     `cfg_vc c a` implies NO annotation-free SYMBOLIC statement about `c`.  A
+     hint makes the VC strictly EASIER -- a block skips instructions, a havoc
+     discards terms -- so the un-annotated run is a different, harder
+     computation and `cfg_vc c a -> cfg_vc c (cfg_instrs c)` is false, on fuel
+     alone for a program of any size (PLAN-contract-ast §2.2).  Every symbolic
+     statement is "the executor over THIS TABLE succeeded", and the table IS
+     the annotation.  So of the three properties one must bend:
+
+       symbolic  /  annotation-free  /  derivable-without-rework
+
+     Bending "symbolic" gives the semantic form (myWP2_loop) -- correct, but it
+     drags Iris into a proposition that `ai_block` is meant to quote, which is
+     the pollution this definition exists to avoid.  Bending "derivable" gives
+     the un-annotated VC, which holds today only because no program in the tree
+     uses a hint at its entry point, and breaks the first time one does.  So
+     "annotation-free" is what bends -- and only inside the BODY.
+
+     THE SEAL is what makes that honest.  `AnnotInstr` occurs in no statement,
+     no premise and no consumer: the only ways in and out are the two lemmas
+     below, and `Opaque` stops `unfold`/`cbn`/`destruct` from reaching the
+     binder.  So a hint really does never leave the symbolic executor layer --
+     it is a proof device, sealed inside the proposition that says a proof
+     device was found.
+
+     `base` is not a parameter: a contract knows where it is loaded
+     (`cfg_init_addr`), which is what keeps this a property of `c` ALONE. *)
+  Definition ValidCFGVerifierContract {R : LCtx} (c : @CFGVerifierContract R) : Prop :=
+    exists a : list AnnotInstr,
+      cfg_vc c a
+      /\ strip a = cfg_instrs c
+      /\ (forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+             ⊢ blocksSound wds
+                 (instrs_of_list (bv.of_N (cfg_init_addr c)) a)).
+
+  (* THE ONLY WAY IN.  Order is chosen so that `exact <the example's VC>`
+     pins `a` before the other two goals are looked at. *)
+  Lemma ValidCFGVerifierContract_intro {R : LCtx} (c : @CFGVerifierContract R)
+      (a : list AnnotInstr)
+      (Hvc : cfg_vc c a)
+      (Hstrip : strip a = cfg_instrs c)
+      (Hbs : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+                ⊢ blocksSound wds (instrs_of_list (bv.of_N (cfg_init_addr c)) a)) :
+    ValidCFGVerifierContract c.
+  Proof. exists a. split; [exact Hvc | split; [exact Hstrip | exact Hbs]]. Qed.
+
+  (* THE ONLY WAY OUT. *)
+  Lemma ValidCFGVerifierContract_elim {R : LCtx} (c : @CFGVerifierContract R) :
+    ValidCFGVerifierContract c ->
+    exists a : list AnnotInstr,
+      cfg_vc c a
+      /\ strip a = cfg_instrs c
+      /\ (forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
+             ⊢ blocksSound wds
+                 (instrs_of_list (bv.of_N (cfg_init_addr c)) a)).
+  Proof. exact (fun H => H). Qed.
+
+  Global Opaque ValidCFGVerifierContract.
+
+  (* One line at a call site, and it names no annotation: the hint list is
+     recovered by unification from the example's own VC. *)
+  Ltac solve_valid H :=
+    eapply ValidCFGVerifierContract_intro;
+      [ exact H | apply strip_of_AST | solve_no_blocks ].
+
   Lemma gen_contract_noninterferent_u
       (reg_specs : list reg_spec_rel)
       (word_data : list mem_spec_rel)
@@ -2000,21 +2070,30 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
-         to the un-annotated one, so a generated contract can still be
-         discharged with block hints inside it (PLAN-contract-ast §2.6);
-         `Hannot` is `strip_of_AST` for a caller that uses none. *)
-      (annot : list AnnotInstr)
-      (Hannot : strip annot = instrs)
-      (valid_contract : cfg_vc
+      (* ANNOTATION-FREE since 2026-09-23.  The hint list, the strip equation
+         and the block obligations are all SEALED inside
+         ValidCFGVerifierContract; a caller supplies this in one line with
+         `solve_valid <its own VC>` and never names a hint. *)
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_u init_addr reg_specs word_data byte_data instrs
-             extra_exit_offs bound exitCond fuel) annot)
-      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+             extra_exit_offs bound exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
+    (* THE SEAL COMES OFF EXACTLY HERE -- once, in the only bridge that needs
+       the hint list.  `annot` exists from this line to the Qed and appears in
+       no statement anywhere in the tree.  The names are chosen to match what
+       the body below already says, so nothing else in this proof changes. *)
+    apply ValidCFGVerifierContract_elim in valid_contract.
+    destruct valid_contract as (annot & valid_contract & Hannot & HBS).
+    (* The elim delivers `strip a = cfg_instrs c` and the block obligation at
+       `cfg_init_addr c`.  Both are CONVERTIBLE to the forms this body uses --
+       gen_contract_u is a bare MkCFGVerifierContract, so the projections
+       reduce by iota -- but `subst instrs` below matches SYNTACTICALLY, so
+       say it with `change`.  HBS needs no such normalisation: it is only ever
+       CONSUMED (eapply/exact), and those go through conversion. *)
+    change (strip annot = instrs) in Hannot.
     intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
       HInitReg1 HInitReg2 HInitMem1 HInitMem2
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
@@ -2111,26 +2190,24 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length (word_data ++ byte_data)) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
-      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
-         to the un-annotated one, so a generated contract can still be
-         discharged with block hints inside it (PLAN-contract-ast §2.6);
-         `Hannot` is `strip_of_AST` for a caller that uses none. *)
-      (annot : list AnnotInstr)
-      (Hannot : strip annot = instrs)
-      (valid_contract : cfg_vc
+      (* ANNOTATION-FREE since 2026-09-23.  The hint list, the strip equation
+         and the block obligations are all SEALED inside
+         ValidCFGVerifierContract; a caller supplies this in one line with
+         `solve_valid <its own VC>` and never names a hint. *)
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_u init_addr reg_specs word_data byte_data instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
-      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
     noninterferent_strong init_addr instrs
       (pcOutOfInstrs_exitCond init_addr instrs)
       (map (concretize_reg init_addr) reg_specs)
       (map (concretize_mem init_addr) (word_data ++ byte_data)).
   Proof.
     eapply gen_contract_noninterferent_u.
-    (* 7, not 6: Hannot was inserted before valid_contract, and this is a
-       NUMERIC goal selector -- PLAN-contract-ast §5.2's hazard exactly. *)
-    7: exact valid_contract.
+    (* 6: _u's premises are HND, HDataAddrs, Hlen, Hbound, HexitOffs,
+       valid_contract.  Hannot and HBS went INSIDE ValidCFGVerifierContract
+       (2026-09-23), so this selector moved 7 -> 6 -- a numeric goal selector
+       is exactly what a changed premise list breaks, PLAN-contract-ast §5.2. *)
+    6: exact valid_contract.
     - exact HND.
     - exact HDataAddrs.
     - exact Hlen.
@@ -2139,8 +2216,6 @@ Import IrisModel.RiscvPmpIrisBase.
        `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
        list the goal names and there is no strip to undo. *)
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-    - exact Hannot.
-    - exact HBS.
   Qed.
 
   (* ------------------------------------------------------------------- *)
@@ -2192,17 +2267,13 @@ Import IrisModel.RiscvPmpIrisBase.
       (HexitOffs : List.Forall
           (fun o => exitCond (bv.add (bv.of_N init_addr) (bv.of_N o)) = true)
           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
-      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
-         to the un-annotated one, so a generated contract can still be
-         discharged with block hints inside it (PLAN-contract-ast §2.6);
-         `Hannot` is `strip_of_AST` for a caller that uses none. *)
-      (annot : list AnnotInstr)
-      (Hannot : strip annot = instrs)
-      (valid_contract : cfg_vc
+      (* ANNOTATION-FREE since 2026-09-23.  The hint list, the strip equation
+         and the block obligations are all SEALED inside
+         ValidCFGVerifierContract; a caller supplies this in one line with
+         `solve_valid <its own VC>` and never names a hint. *)
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs instrs extra_exit_offs
-             exitCond fuel) annot)
-      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+             exitCond fuel)) :
     noninterferent_strong init_addr instrs exitCond reg_specs [].
   Proof.
     rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
@@ -2232,13 +2303,7 @@ Import IrisModel.RiscvPmpIrisBase.
     - cbn. lia.
     - exact Hlen.
     - exact HexitOffs.
-    - exact Hannot.
     - exact valid_contract.
-    (* HBS is _u's LAST premise -- placed there rather than first so that the
-       `(name := v)` argument forms and the numeric selectors above keep
-       working; putting a Prop binder before extra_exit_offs made the named
-       form fail with "Not enough non implicit arguments". *)
-    - exact HBS.
   Qed.
 
 
@@ -2267,17 +2332,13 @@ Import IrisModel.RiscvPmpIrisBase.
       (reg_specs : list reg_spec) (instrs : list AST) (fuel : nat) (init_addr : N)
       (HND : NoDup (map reg_spec_idx reg_specs))
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
-         to the un-annotated one, so a generated contract can still be
-         discharged with block hints inside it (PLAN-contract-ast §2.6);
-         `Hannot` is `strip_of_AST` for a caller that uses none. *)
-      (annot : list AnnotInstr)
-      (Hannot : strip annot = instrs)
-      (valid_contract : cfg_vc
+      (* ANNOTATION-FREE since 2026-09-23.  The hint list, the strip equation
+         and the block obligations are all SEALED inside
+         ValidCFGVerifierContract; a caller supplies this in one line with
+         `solve_valid <its own VC>` and never names a hint. *)
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_param init_addr reg_specs instrs []
-             (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
-      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+             (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
     noninterferent_strong init_addr instrs
       (pcOutOfInstrs_exitCond init_addr instrs) reg_specs [].
   Proof.
@@ -2285,17 +2346,16 @@ Import IrisModel.RiscvPmpIrisBase.
        deleted mem_specs, so the vacuous-lookup bullet is gone and the VC moved
        from position 5 to 4. *)
     eapply gen_contract_noninterferent_param.
-    (* 5, not 4: Hannot was inserted before valid_contract (§5.2 -- a numeric
-       goal selector is exactly what an added premise breaks). *)
-    5: exact valid_contract.
+    (* 4: _param's premises are HND, Hlen, HexitOffs, valid_contract.  Hannot
+       went inside ValidCFGVerifierContract (2026-09-23), so this moved
+       5 -> 4 (§5.2). *)
+    4: exact valid_contract.
     - exact HND.
     - cbn. lia.
     (* The `<- strip_length` this used to open with is GONE: `instrs` is now a
        `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
        list the goal names and there is no strip to undo. *)
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-    - exact Hannot.
-    - exact HBS.
   Qed.
 
 
@@ -2320,17 +2380,13 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length mem_specs) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
-      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
-         to the un-annotated one, so a generated contract can still be
-         discharged with block hints inside it (PLAN-contract-ast §2.6);
-         `Hannot` is `strip_of_AST` for a caller that uses none. *)
-      (annot : list AnnotInstr)
-      (Hannot : strip annot = instrs)
-      (valid_contract : cfg_vc
+      (* ANNOTATION-FREE since 2026-09-23.  The hint list, the strip equation
+         and the block obligations are all SEALED inside
+         ValidCFGVerifierContract; a caller supplies this in one line with
+         `solve_valid <its own VC>` and never names a hint. *)
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel_classed init_addr reg_specs mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
-      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
     noninterferent_strong init_addr instrs
       (pcOutOfInstrs_exitCond init_addr instrs)
       (map (concretize_reg init_addr) reg_specs)
@@ -2353,13 +2409,7 @@ Import IrisModel.RiscvPmpIrisBase.
        `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
        list the goal names and there is no strip to undo. *)
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-    - exact Hannot.
     - exact valid_contract.
-    (* HBS is _u's LAST premise -- placed there rather than first so that the
-       `(name := v)` argument forms and the numeric selectors above keep
-       working; putting a Prop binder before extra_exit_offs made the named
-       form fail with "Not enough non implicit arguments". *)
-    - exact HBS.
   Qed.
 
 
@@ -2376,17 +2426,13 @@ Import IrisModel.RiscvPmpIrisBase.
       (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
                4 * N.of_nat (length byte_mem_specs) < lenAddr)%N)
       (Hbound : (init_addr + bound < lenAddr)%N)
-      (* The ANNOTATED program the VC runs on.  Quantified rather than pinned
-         to the un-annotated one, so a generated contract can still be
-         discharged with block hints inside it (PLAN-contract-ast §2.6);
-         `Hannot` is `strip_of_AST` for a caller that uses none. *)
-      (annot : list AnnotInstr)
-      (Hannot : strip annot = instrs)
-      (valid_contract : cfg_vc
+      (* ANNOTATION-FREE since 2026-09-23.  The hint list, the strip equation
+         and the block obligations are all SEALED inside
+         ValidCFGVerifierContract; a caller supplies this in one line with
+         `solve_valid <its own VC>` and never names a hint. *)
+      (valid_contract : ValidCFGVerifierContract
           (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs []
-             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel) annot)
-      (HBS : forall `{sailGS2 Σ} (wds : bv xlenbits -> bv word),
-                ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) annot)) :
+             bound (pcOutOfInstrs_exitCond init_addr instrs) fuel)) :
     noninterferent_strong init_addr instrs
       (pcOutOfInstrs_exitCond init_addr instrs)
       (map (concretize_reg init_addr) reg_specs)
@@ -2406,13 +2452,7 @@ Import IrisModel.RiscvPmpIrisBase.
        `list AST`, so pcOutOfInstrs_fallthrough is instantiated at exactly the
        list the goal names and there is no strip to undo. *)
     - constructor; [apply pcOutOfInstrs_fallthrough | constructor].
-    - exact Hannot.
     - exact valid_contract.
-    (* HBS is _u's LAST premise -- placed there rather than first so that the
-       `(name := v)` argument forms and the numeric selectors above keep
-       working; putting a Prop binder before extra_exit_offs made the named
-       form fail with "Not enough non implicit arguments". *)
-    - exact HBS.
   Qed.
 
   (* --------------------------------------------------------------------- *)
