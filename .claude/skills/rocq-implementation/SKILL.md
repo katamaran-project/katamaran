@@ -308,6 +308,23 @@ That message names the culprit outright. Note the `.vo` timestamps on disk were
 CONSISTENT (each newer than its source) — the inconsistency lived only in pet's
 memory, so checking timestamps does not rule this out.
 
+**That same string has a SECOND cause, and they need opposite fixes** (hit
+2026-09-23, an hour after the first): a genuinely stale `.vo` **on disk**.
+The discriminator is which tool reported it:
+
+| reported by | cause | fix |
+|---|---|---|
+| rocq-mcp | stale **pet**; disk is fine | `force_restart=True` |
+| `coqc` / `make` | stale **`.vo`**; pet is irrelevant | rebuild the dependency CLOSURE |
+
+The disk case has a specific trigger worth naming: **rebuilding one file
+directly** (`make Verifier.vo`, `make Adequacy.vo`) to get fast feedback, which
+leaves every *other* branch of the DAG pointing at the old artifact. That is
+fine while you keep building up the same chain, and it bites the moment you
+touch something on a sibling branch — e.g. an `Example/` file after editing
+`Verifier.v`, where the light branch was never rebuilt. Fix by building the real
+target (`make Results.vo`), not the single file.
+
 **Corollary worth stating on its own: an empty state is not evidence about the
 file.** Before concluding a file cannot be worked interactively, either
 `Print Libraries` or `Check` something. Once pet was restarted in that session,

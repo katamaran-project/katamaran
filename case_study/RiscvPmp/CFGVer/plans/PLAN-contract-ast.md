@@ -577,7 +577,54 @@ is self-contained, its block premise `blocksSound wds (instrs_of_list v ab)`
 over a strictly smaller artifact; the block branch goes through
 `blockSound_span_to_whole`. `Adequacy.vo` built FIRST TRY.
 
-**TWO THINGS REMAIN BEFORE PHASE 4 IS COMPLETE, and neither is cosmetic:**
+**BOTH REMAINING ITEMS ARE NOW DONE (2026-09-23). GATE 4 IS MET.**
+
+- `minimal_pre` / `extend_to_minimal_pre` moved to `Verifier.v` and
+  `sexec_block` (and `cexec_block`, and `blockSound`) consume the EXTENDED
+  precondition. So `blockSound_of_vc`'s `Hv` is now literally `cfg_vc
+  (blk_contract b) ab` once `tbl := table_of_list (cfg_placement …) 0 ab` —
+  §2.4's "a valid contract plugs into an `ai_block`" holds on the nose.
+  **Landing note:** they had to go INSIDE `Verifier.v`'s section rather than
+  beside the contract record, because the `↦` in `minimal_pre` is
+  `asn.notations`, imported only there (`Verifier.v:379`).
+- `ZZBlkAB` and `ZZBlkBC` ported and GREEN (22.1 s / 19.5 s), both still
+  closing with the plain `solve_param_vc`.
+
+**AND THE PORT IS THE PLAN'S THESIS, VISIBLE IN ONE LINE.** Before:
+
+```coq
+Definition ab_contract ia := gen_seg_contract … (mladAB ia) … .   (* annotated list INSIDE *)
+Lemma valid_ab ia : ValidCFGVerifierContract (ab_contract ia).
+```
+
+after:
+
+```coq
+Definition ab_contract ia := gen_seg_contract … mlad_instrs … .   (* list AST: the PROGRAM *)
+Lemma valid_ab ia : cfg_vc (ab_contract ia) (mladAB ia).          (* the block is a HINT *)
+```
+
+The contract names the plain program; the annotated one — the same code with
+A's contract attached at index 0 — is an ARGUMENT to the verification. That is
+the whole bet of §0, and the type system now enforces it.
+
+`sblk_of_contract`'s eight hand-built fields collapsed to
+`{| blk_off := off ; blk_ctx := Σ ; blk_contract := c |}`, and its hand-applied
+`extend_to_minimal_pre` vanished — it had been the workaround for the executor
+not being able to apply it.
+
+**WHAT IS STILL OPEN AFTER PHASE 4:**
+
+1. `blockSound_of_contract` cannot be stated in `Adequacy.v`: that file does NOT
+   require `Contracts.v` (checked — its loaded-library list has `Tables` but no
+   `Contracts`), so `cfg_vc` is not in scope there. The bridge belongs in a file
+   that sees both — `GenCompose.v` or `EndToEnd.v`. The CONTENT is done; only
+   the placement is open.
+2. `clear_blk` + its four satellites are dead (Phase 5).
+3. GATE 3's axiom-hygiene step has still never run (memory), so axiom-cleanliness
+   is unverified across Phases 3-4.
+
+**SUPERSEDED — the two items as they stood before this was done:**
 
 1. **`extend_to_minimal_pre` is misaligned, so `cfg_vc c a` is NOT yet literally
    a block's obligation.** `sexec_block` consumes `cfg_precondition

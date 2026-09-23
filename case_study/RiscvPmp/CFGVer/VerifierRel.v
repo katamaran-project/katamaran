@@ -279,7 +279,7 @@ Section CFGVerificationDerived.
       let ex := bop.evalRel bop.bvadd (ty.SyncVal v)
                   (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) in
       ι <- lift_purespec (CPureSpec.angelic_ctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) ;;
-      _ <- consume (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
+      _ <- consume (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
       _ <- produce (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
              ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ ex] ;;
       pure ex.

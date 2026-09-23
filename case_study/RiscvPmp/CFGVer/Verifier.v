@@ -1148,12 +1148,32 @@ Section CFGVerificationDerived.
        "a" is bound to the entry pc and "an" to entry + off, exactly as
        sexec_triple_addr binds them, so a block's pre/post are literally a
        segment contract's. *)
+    (* minimal_pre / extend_to_minimal_pre live HERE, not in Contracts.v, since
+       2026-09-23: sexec_block below must consume the EXTENDED precondition so
+       that a block's obligation is exactly what CFG_VC_triple proves, and the
+       executor is below Contracts.v.  They sit inside this section rather than
+       beside the contract record because the `↦` they use is asn.notations,
+       which is only imported here. *)
+    (* minimal_pre asserts that we start executing at address 0 in Machine mode.
+       We choose an arbitrary list for the pmp entries (pmp is not used in these
+       examples). *)
+    Definition minimal_pre {Σ} : Assertion Σ :=
+      (* asn.exist "_" _ (nextpc ↦ term_var "_")
+      ∗ *)cur_privilege ↦ term_val ty_privilege Machine
+      (* ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ; *)
+      (*                               (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]) *) ∗
+            asn.chunk (chunk_user inv_leakage [env])
+    .
+
+    Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
+      P ∗ minimal_pre.
+
     Definition sexec_block (b : BlkAnnot) :
       ⊢ STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w apc =>
         ⟨ θ1 ⟩ evars <- lift_purespec (SPureSpec.angelic_ctx id (blk_ctx b)) ;;
         let apc1 := persist__term apc θ1 in
-        ⟨ θ2 ⟩ _ <- consume (cfg_precondition (blk_contract b)) evars.["a"∷ty_xlenbits ↦ apc1] ;;
+        ⟨ θ2 ⟩ _ <- consume (extend_to_minimal_pre (cfg_precondition (blk_contract b))) evars.["a"∷ty_xlenbits ↦ apc1] ;;
         let evars2 := persist (A := Sub (blk_ctx b)) evars θ2 in
         let apc2 := persist__term apc1 θ2 in
         let aex  := term_binop bop.bvadd apc2

@@ -1299,7 +1299,7 @@ Section AdequacyTools.
     Definition blockSound (words : bv xlenbits -> bv word)
         (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) : iProp Σ :=
       (∀ (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) (ExitCond : iProp Σ),
-         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
+         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
          pc ↦ᵣ ty.SyncVal v ∗ (∃ x, nextpc ↦ᵣ x) ∗
          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) -∗
          (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
@@ -1345,7 +1345,7 @@ Section AdequacyTools.
         (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) (ExitCond : iProp Σ) :
       blk_span v b ⊆ ai_instr <$> instrs ->
       blockSound words v b -∗
-      (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+      (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
          (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
        pc ↦ᵣ ty.SyncVal v ∗ (∃ x, nextpc ↦ᵣ x) ∗
        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs)) -∗
@@ -1428,7 +1428,7 @@ Section AdequacyTools.
       Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block b v Phi h ->
       (interpret_scheap h ⊢
          ∃ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b),
-           asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
+           asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
            (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
               ((ι.["a"∷ty_xlenbits ↦ ty.SyncVal v])
                  .["an"∷ty_xlenbits ↦ bop.evalRel bop.bvadd (ty.SyncVal v)
@@ -1810,7 +1810,7 @@ Section AdequacyTools.
         (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))) : iProp Σ :=
       (□ ∀ ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b),
-         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) -∗
+         asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) -∗
          ⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
              (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
           /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
@@ -1833,7 +1833,7 @@ Section AdequacyTools.
         (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
         (Hv : safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
                  (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) wnil)))
         (Hexit : forall x, Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b) x = true ->
                    x = bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))
@@ -1854,7 +1854,7 @@ Section AdequacyTools.
                    (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
                /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
                     (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
-              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
                   (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
         with "[Hpre]" as "[%Hfi Hpre]".
       { iSplit; [ iApply ("Hf" $! ι with "Hpre") | iExact "Hpre" ]. }

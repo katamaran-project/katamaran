@@ -78,19 +78,12 @@ Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
 Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
 Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
-    (* minimal_pre asserts that we start executing at address 0 in Machine mode.
-       We choose an arbitrary list for the pmp entries (pmp is not used in these
-       examples). *)
-    Definition minimal_pre {Σ} : Assertion Σ :=
-      (* asn.exist "_" _ (nextpc ↦ term_var "_")
-      ∗ *)cur_privilege ↦ term_val ty_privilege Machine
-      (* ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ; *)
-      (*                               (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]) *) ∗
-            asn.chunk (chunk_user inv_leakage [env])
-    .
-
-    Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
-      P ∗ minimal_pre.
+    (* minimal_pre / extend_to_minimal_pre MOVED TO Verifier.v on 2026-09-23
+       (PLAN-contract-ast Phase 4).  sexec_block must consume the EXTENDED
+       precondition, so that a block's obligation is exactly what CFG_VC_triple
+       proves -- i.e. so that `cfg_vc c a` IS the block's obligation.  The
+       executor is below this file, so the definitions had to follow the
+       contract record down.  Same layering wall, same fix. *)
 
     (* The TRIVIAL exit assertion — what a whole-program contract carries,
        and what every generator below supplies.  A contract that is one
