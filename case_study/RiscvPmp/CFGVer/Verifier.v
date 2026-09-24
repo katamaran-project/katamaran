@@ -1625,6 +1625,34 @@ Section CFGVerificationDerived.
       | _ , _ => nil
       end.
 
+    (* THE FIRST STEP OF A SELF-REFERENTIAL (LOOP) VC -- PLAN-rec-loop-block.md.
+       A loop is verified as a block whose OWN head is annotated with that same
+       block, so the back edge is a consume-pre / produce-post the solver
+       discharges.  What keeps that VC from being trivially circular is this
+       step: it EXECUTES the entry instruction and never consults ai_block --
+       otherwise the block would be applied to itself at step 0.  From the next
+       step on the ordinary executor runs, blocks included.
+
+       It is step_after_drop on the looked-up entry: exactly sexec_cfg_addr's
+       non-block branch, minus chunk_gc / drop_dead (optimisations; the
+       concrete mirror omits them too) and minus the exit test (the entry of a
+       loop is never its exit, and the ordinary entry's `first` exists to skip
+       it anyway).  sexec_cfg_addr itself is untouched: ZZBlkAB's outer
+       contract STARTS at an annotated instruction and needs the block to fire
+       at step 1, so the ordinary entry must keep that behaviour. *)
+    Definition sexec_first_step {Σ0 : LCtx} (fuel : nat) :
+      ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
+        STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
+      fun w trans tbl exits apc anp =>
+        match lookup_instr tbl apc with
+        | None =>
+            error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                       debug_string_message :=
+                                         "sexec_first_step: no instruction key matches the entry pc" |})
+        | Some (wd, ai) =>
+            step_after_drop (@sexec_cfg_addr Σ0 fuel false) ai trans tbl exits apc anp wd
+        end.
+
     (* The one demonic_ctx call covers Σ AND the SINGLE wide word variable;
        δw is split back apart with env.drop / env.take.  The words are
        introduced HERE, before the execution loop, so nothing about them
@@ -1685,6 +1713,47 @@ Section CFGVerificationDerived.
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
         SHeapSpec.run (sexec_triple_addr req tbl exits fuel ens (w := w)).
+
+    (* THE SELF-REFERENTIAL (LOOP) ENTRY POINTS -- PLAN-rec-loop-block.md.
+       A deliberate SECOND triple, unlike the deleted block entry points above:
+       those threaded blocks separately and became redundant once blocks rode
+       in the payload, whereas this one changes WHICH STEP COMES FIRST, which
+       nothing in the payload can express.  Verbatim sexec_triple_addr except
+       `sexec_cfg_addr fuel true` -> `sexec_first_step fuel`.  Kept as a copy
+       rather than parameterising the original, so the ordinary triple's
+       refinement proof is untouched; merging them is a known follow-up. *)
+    Definition sexec_triple_addr_rec {Σ : LCtx}
+      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
+      (fuel : nat)
+      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
+      ⊢ SHeapSpec Unit :=
+      fun w =>
+        let n := length tbl in
+        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
+        let δ   := env.drop (words_ctx n) δw in
+        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
+        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
+        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
+        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
+        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
+        let a2 := persist__term a (θ1' ∘ θ2) in
+        let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
+        let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
+        ⟨ θ3 ⟩ na <- sexec_first_step fuel
+                       (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
+                       (zip_words (subst_itable ζ tbl) ws)
+                       (subst_etable ζ exits) a2 (persist__term np θ2) ;;
+        let δ3 := persist δ1 (θ2 ∘ θ3) in
+        consume ens δ3.["an"∷ty_xlenbits ↦ na].
+
+    Definition scfg_verification_condition_rec {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
+      (tbl : SInstrTable (wlctx Σ))
+      (exits : SExitTable (wlctx Σ)) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
+      fun w =>
+        SHeapSpec.run (sexec_triple_addr_rec req tbl exits fuel ens (w := w)).
 
   End Symbolic.
 

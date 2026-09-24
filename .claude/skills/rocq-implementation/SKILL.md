@@ -149,6 +149,14 @@ so the first failure is an error carrying Coq's message. Upstream knows the bug
 (PR #23, open, file mode only). Re-apply the patch if you ever go back to
 `uvx --from git+…`.
 
+**3. (consequence of 1's fix) `rocq_compile_file` used to DELETE `make`'s
+`.vo`.** With `keep_vo=False` its cleanup unlinked every artifact next to the
+source, pre-existing ones included — harmless while dune mode redirected output
+to `_build`, destructive once it did not (a `vos` check of `Verifier.v` deleted
+`Verifier.vo`). **Second local patch, `75b474d`:** only artifacts THIS call
+created are cleaned. If a `.vo` vanishes after a `rocq_compile_file`, the patch
+is not running.
+
 Still true, and not fixed by either: **file-mode** replay (`rocq_start` with
 `file`) is also coq-lsp-resilient, so a failing definition earlier in the file
 is dropped and shows up later as `not_found` / "reference … not found" for a

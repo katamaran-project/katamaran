@@ -753,6 +753,26 @@ and re-packs to `ptsto_instrs` only at the outer boundary.
 Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 (`Hlk : instrs !! v = Some i`, via `big_sepM_lookup_acc`; `i` is implicit).
 
+## The self-referential (loop) entry: `sexec_first_step` / `_rec` (2026-09-24)
+
+A loop can be verified as ONE block contract whose precondition is the
+invariant, with the loop head annotated by **that same block**: the back edge
+then consumes the invariant and the solver does the framing. The only
+meta-logic is a Löb induction (PLAN-rec-loop-block.md phase 4). What stops the
+VC applying the block to itself at step 0 is a separate entry point:
+
+- `sexec_first_step fuel` — look up the entry, run `step_after_drop
+  (sexec_cfg_addr fuel false) ai …` on it: EXECUTE, never consult `ai_block`.
+- `sexec_triple_addr_rec` / `scfg_verification_condition_rec` — verbatim copies
+  of the ordinary triple with `sexec_cfg_addr fuel true` → `sexec_first_step`.
+- `Contracts.v`: `CFG_VC_triple_rec`, `cfg_vc_rec` (discharge: `solve_param_vc`).
+
+`sexec_cfg_addr` is deliberately unchanged: an ordinary contract may START at an
+annotated instruction and need the block at step 1 (`ZZBlkAB`). The ordinary
+`cfg_vc` on self-annotated code is provable TRIVIALLY (block at step 0) — not
+unsound, since its bridge would demand `blocksSound` for that very program,
+but useless. Worked example with negative controls: `Example/ZZCdRec.v`.
+
 ## `scfg_verification_condition`
 
 ```coq
