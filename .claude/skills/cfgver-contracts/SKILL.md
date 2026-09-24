@@ -70,12 +70,12 @@ VC and fail there.
 
 ## Validity
 
-> **Loops as one self-referential contract (2026-09-24, in progress):**
-> `cfg_vc_rec c a` is `cfg_vc`'s shape over an entry that EXECUTES the first
-> instruction, so `a` may annotate the loop head with `c`'s own block. The
-> precondition is then the loop INVARIANT; it must be preserved, not ensure
-> termination (partial correctness). See **cfgver-executor**, "The
-> self-referential (loop) entry", and `PLAN-rec-loop-block.md`.
+> **Loops as one self-referential contract (2026-09-24):** `cfg_vc`'s entry
+> step EXECUTES the first instruction and never consults `ai_block`, so `a` may
+> annotate the loop head with `c`'s own block. The precondition is then the
+> loop INVARIANT; it must be preserved, not ensure termination (partial
+> correctness). See **cfgver-executor**, "The entry step", and
+> `PLAN-rec-loop-block.md`.
 
 ```coq
 Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=

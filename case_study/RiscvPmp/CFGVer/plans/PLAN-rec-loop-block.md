@@ -85,15 +85,27 @@ contractive safety fixpoint (Adequacy.v:125).  Confirm against
   ValidCFGVerifierContract rlink`, axiom-clean.  The spikes ZZRecStep /
   ZZRecRefine / ZZRecSound were retired once ported.
 
+- **6. UNIFIED, 2026-09-24.** The `_rec` chain was a verbatim copy of the
+  ordinary one with the entry step swapped, so the ORDINARY entry now IS
+  `sexec_first_step` (no block at step 0, for every contract) and every copy
+  is gone: `sexec/cexec/rexec_triple_addr_rec`, the `_rec` VC pair,
+  `CFG_VC_triple_rec`, `cfg_vc_rec`, `rec_vc_of`, the two rec soundness
+  bridges and `blockSound_of_rec_vc`.  The `first : bool` flag of
+  `sexec_cfg_addr` / `rexFS` / `rexec_cfg_addr` went with them (dead once the
+  entry is structural).  `Adequacy.blockSound_of_vc` now does the `iLöb`
+  itself; its nested-blocks premise is `□ blockSound words v b ⊢ blocksSound
+  …` (a non-loop block ignores it), and `blocksSound_of_head` took the Iris
+  form.  The LoopSpec-to-block door (`blockSound_of_induction` /
+  `blockSound_of_loop`, `blk_pre` / `blk_post`) was deleted as subsumed.
+  Price: a contract can no longer START at an annotated instruction and have
+  its block fire at step 1 (only the `ZZBlkAB*` probes did).  All 20 light
+  files (every example VC) stayed green unchanged.
+
 ## Open
 
 - Nothing is gate-checked yet (the probes are gitignored `ZZ*`).  To make
   the result durable a tracked example (e.g. `Example/CountdownRec.v` +
   `…Result.v`) and an end theorem through a bridge are needed.
-- The LoopSpec route (`ZZBlkLoop.v`, `blockSound_of_loop`) is now subsumed
-  for loops-as-blocks; decide whether to keep it.
-- `sexec_triple_addr_rec` / `cexec_triple_addr_rec` / `rexec_triple_addr_rec`
-  are verbatim copies of their ordinary twins.
 - A loop block at index > 0 still needs the index-n `blocksSound_of_head`.
 
 ## Out of scope

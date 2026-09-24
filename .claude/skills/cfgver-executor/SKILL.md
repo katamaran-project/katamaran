@@ -121,11 +121,13 @@ two sides' VCs correspond.
 ## A declared exit STOPS — `sexec_cfg_addr` has no `angelic_binary` (2026-09-07)
 
 ```coq
-| S n' => if andb (negb first) (is_exit exits apc) then pure apc else (execute…)
+| S n' => if is_exit exits apc then pure apc else (execute…)
 ```
 
-`first` is set by `sexec_triple_addr`, cleared on every recursive call. This
-replaced `angelic_binary (if is_exit .. then pure apc else emsg ..) (<execute>)`.
+The ENTRY step never reaches this line: `sexec_triple_addr` starts with
+`sexec_first_step`, which executes the entry and only then hands over (see
+"The entry step" below). This replaced `angelic_binary (if is_exit .. then pure
+apc else emsg ..) (<execute>)`.
 
 **Why the angelic went.** Its exit arm was DEAD on every non-exit step (it was
 `emsg`), so the old form emitted an `angelic_binary` plus a dead `error` per step
@@ -138,16 +140,20 @@ fuel was exhausted. That made cost depend on SLACK FUEL, while step 2 of
 cut segment: 74.2 M words, removed. The per-entry marginal at the exit boundary
 went 10.2 / 14.3 / 17.7 → a flat **3.01** M/entry.
 
-**`first` IS NOT REMOVABLE — do not "simplify" it away.** A loop-body segment
-contract starts and ends at the SAME ADDRESS: `exits_of_offs <base> [0]` against
-`asn_init_pc <base>` in `PaddedLoop.v`, `CountdownComposed.v`,
-`TwoLoopsComposed.v` (all gate-checked). Its trace visits that address twice —
-execute the body, then stop — and the pc is the same TERM both times, so the pc
-cannot tell them apart. Fuel cannot either: the executor sees only what remains,
-never the initial value. Dropping `first` was tried 2026-09-07 and makes
-`pbody 0` fail with residual `v = v + 0xffffffff`, the postcondition demanded at
-the entry. The old `angelic_binary` was quietly doing this disambiguation by
-letting the prover guess, and that is exactly what cost the fuel sensitivity.
+**The entry/non-entry distinction is NOT REMOVABLE — only its encoding changed.**
+A loop-body segment contract starts and ends at the SAME ADDRESS:
+`exits_of_offs <base> [0]` against `asn_init_pc <base>` in `PaddedLoop.v`,
+`CountdownComposed.v`, `TwoLoopsComposed.v` (all gate-checked). Its trace visits
+that address twice — execute the body, then stop — and the pc is the same TERM
+both times, so the pc cannot tell them apart. Fuel cannot either: the executor
+sees only what remains, never the initial value. Stopping at any declared exit
+including the entry was tried 2026-09-07 and makes `pbody 0` fail with residual
+`v = v + 0xffffffff`, the postcondition demanded at the entry. The old
+`angelic_binary` was quietly doing this disambiguation by letting the prover
+guess, and that is exactly what cost the fuel sensitivity. From 2026-09-07 to
+2026-09-24 the distinction was a `first : bool` argument of `sexec_cfg_addr`;
+it is now structural — `sexec_first_step` runs the entry, `sexec_cfg_addr`
+everything after.
 
 **Completeness cost:** a contract can no longer pass THROUGH its own declared
 exit and continue, other than at the entry. Nothing in the tree does.
@@ -753,29 +759,32 @@ and re-packs to `ptsto_instrs` only at the outer boundary.
 Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 (`Hlk : instrs !! v = Some i`, via `big_sepM_lookup_acc`; `i` is implicit).
 
-## The self-referential (loop) entry: `sexec_first_step` / `_rec` (2026-09-24)
+## The entry step: `sexec_first_step`, and loops as ONE block (2026-09-24)
 
-A loop can be verified as ONE block contract whose precondition is the
-invariant, with the loop head annotated by **that same block**: the back edge
-then consumes the invariant and the solver does the framing. The only
-meta-logic is a Löb induction, proved once: **`GenCompose.blockSound_of_rec_vc`**
-(its IH `▷ blockSound b` is enough because the block premise is only USED after
-one executed instruction). Refinement: `VerifierRel.rexec_first_step` /
-`rexec_triple_addr_rec`. Full chain worked end to end on countdown,
-axiom-clean: `Example/ZZCdRec.v` → `ZZCdRecLink.v`. What stops the VC applying
-the block to itself at step 0 is a separate entry point:
+Every triple starts with `sexec_first_step fuel`: look up the entry and run
+`step_after_drop (sexec_cfg_addr fuel) ai …` on it — EXECUTE, with no exit test
+and **no `ai_block` consultation** (and no chunk_gc/drop_dead, which the
+concrete mirror `cexec_first_step` omits too). Refinement:
+`VerifierRel.rexec_first_step`, stated exactly like `rexec_cfg_addr`.
+Soundness: `Adequacy.sound_first_step`, which needs the block premise only as
+`▷ blocksSound` — so `sound_cexec_triple_addr_myWP2_w` /
+`sound_scfg_verification_condition_myWP2_w` take it as an Iris hypothesis under
+a later, and the `∃`-words / example-facing forms still take `⊢ blocksSound`.
 
-- `sexec_first_step fuel` — look up the entry, run `step_after_drop
-  (sexec_cfg_addr fuel false) ai …` on it: EXECUTE, never consult `ai_block`.
-- `sexec_triple_addr_rec` / `scfg_verification_condition_rec` — verbatim copies
-  of the ordinary triple with `sexec_cfg_addr fuel true` → `sexec_first_step`.
-- `Contracts.v`: `CFG_VC_triple_rec`, `cfg_vc_rec` (discharge: `solve_param_vc`).
+What this buys: **a loop is ONE block contract** whose precondition is the
+invariant, with the loop head annotated by **that same block**. The back edge
+consumes the invariant and the solver does the framing; the VC is not circular
+because the block is never applied at step 0. The only meta-logic is the Löb
+induction inside **`Adequacy.blockSound_of_vc`** (quoted at a contract by
+`GenCompose.blockSound_of_contract`), whose nested-blocks premise is
+`□ blockSound words v b ⊢ blocksSound words (instrs_of_list v ab)` — it may
+assume the block itself; a block without self-reference ignores it. Partial
+correctness only: an invariant must be preserved, not ensure termination.
+Worked example with negative controls: `Example/ZZCdRec.v` → `ZZCdRecLink.v`
+(gitignored probes; `PLAN-rec-loop-block.md` lists what a tracked one needs).
 
-`sexec_cfg_addr` is deliberately unchanged: an ordinary contract may START at an
-annotated instruction and need the block at step 1 (`ZZBlkAB`). The ordinary
-`cfg_vc` on self-annotated code is provable TRIVIALLY (block at step 0) — not
-unsound, since its bridge would demand `blocksSound` for that very program,
-but useless. Worked example with negative controls: `Example/ZZCdRec.v`.
+Cost of the design: a contract cannot START at an annotated instruction and have
+its block fire immediately — it executes that instruction instead.
 
 ## `scfg_verification_condition`
 

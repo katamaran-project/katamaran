@@ -1439,15 +1439,18 @@ Section AdequacyTools.
       Katamaran.RiscvPmp.CFGVer.Verifier.ai_block x = Some b ->
       List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = None) l ->
       blk_span base b ⊆ ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l) ->
-      (⊢ blockSound words base b) ->
-      ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l)).
+      (* an Iris entailment rather than `(⊢ blockSound) -> ⊢ blocksSound`, so
+         blockSound_of_vc's Löb hypothesis can feed it; □ because blocksSound
+         is itself persistent *)
+      □ blockSound words base b ⊢
+        blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l)).
     Proof.
-      intros Hx Hl Hsub Hb.
-      iIntros "!>" (v ai b') "%Hlk %Hb'".
+      intros Hx Hl Hsub.
+      iIntros "#Hb !>" (v ai b') "%Hlk %Hb'".
       cbn [Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list] in Hlk.
       apply lookup_insert_Some in Hlk as [[<- <-]|[Hne Hlk]].
       - rewrite Hx in Hb'. injection Hb' as <-.
-        iSplitR; [iPureIntro; exact Hsub | iApply Hb].
+        iSplitR; [iPureIntro; exact Hsub | iExact "Hb"].
       - exfalso. apply instrs_of_list_elem_of in Hlk.
         rewrite List.Forall_forall in Hl. specialize (Hl _ Hlk).
         rewrite Hl in Hb'. discriminate.
@@ -1614,9 +1617,63 @@ Section AdequacyTools.
           contradiction.
     Qed.
 
+    (* The ENTRY step (cexec_first_step), given only ▷ blocksSound.  The later
+       is stripped by the instruction's own step (the iModIntro below), after
+       which sound_exec_cfg_addr_myWP2 finishes -- the block premise is only
+       ever USED from the second step on, because the entry step never consults
+       ai_block.  That is what lets blockSound_of_vc below justify a loop whose
+       head is annotated with its own block, by Löb induction. *)
+    Lemma sound_first_step
+        {instrs} {words : bv xlenbits -> bv word} {exitCond fuel}
+        (apc anp : RelVal ty_xlenbits)
+        (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_first_step instrs words exitCond fuel apc anp Φ h →
+      ▷ blocksSound words instrs ∗
+      interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+          (ai_instr <$> instrs) ⊢
+      (∀ an,
+         ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+         pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+             (ai_instr <$> instrs) ∗
+         (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
+      myWP2_loop ExitCondIprop.
+    Proof.
+      intros Hexec.
+      destruct apc as [v|v1 v2];
+        cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_first_step ty.RVToOption] in Hexec;
+        [|contradiction].
+      destruct (instrs !! v) as [i|] eqn:Hlk; [|contradiction].
+      iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
+      iDestruct (sound_cexec_ghosts _ _ _ Hexec with "Hh") as (h1) "[Hh %Hexec1]".
+      clear Hexec.
+      assert (Hlk' : (ai_instr <$> instrs) !! v = Some (ai_instr i))
+        by (rewrite lookup_fmap; rewrite Hlk; reflexivity).
+      iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
+                    words (ai_instr <$> instrs) v Hlk'
+        with "Hinstrs") as "[Hinstr Hframe]".
+      rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
+      iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
+      iIntros "Hpc_wd".
+      iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
+      { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. }
+      iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
+      2-3: iIntros "(%δ' & _ & HF)"; auto.
+      2: iIntros "_"; done.
+      iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
+      iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+      iDestruct (sound_cexec_ghosts _ _ _ Hcfg with "Hh'") as (h'') "[Hh' %Hcfg']".
+      (* the later is stripped HERE, from the goal and from ▷ blocksSound alike *)
+      iModIntro.
+      iRevert "Hk".
+      iApply (sound_exec_cfg_addr_myWP2 an an ExitCondIprop Φ h'' Hcfg').
+      iFrame "Hbs Hh' Hpc' Hinstrs' Hnpc'".
+    Qed.
+
     (* ---------------------------------------------------------------- *)
-    (* Table-based soundness bridge, built on sound_exec_cfg_addr_myWP2   *)
-    (* above (the shared gmap-based executor-loop soundness step) but     *)
+    (* Table-based soundness bridge, built on sound_first_step above      *)
+    (* (entry step, then the shared gmap-based executor loop) but         *)
     (* starting from the table VC (scfg_verification_condition over      *)
     (* address-term tables) — the only VC any CFGVer example builds, via  *)
     (* Contracts.v's CFG_VC_triple.                                       *)
@@ -1648,11 +1705,12 @@ Section AdequacyTools.
          every use site rather than inside it. *)
       (forall words : bv xlenbits -> bv word,
          Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
-      (* Quantified over `words` for the same reason the VC premise is: the
-         actual words are only read out of ptsto_instrs inside the proof.  A
-         block-free program discharges it with blocksSound_of_none. *)
-      (forall words : bv xlenbits -> bv word, ⊢ blocksSound words instrs) →
-      ⊢ ∀ a : RelVal ty_xlenbits,
+      (* The block premise, as an Iris hypothesis UNDER A LATER: the entry step
+         never consults ai_block, so blocksSound is first used one step in
+         (sound_first_step).  The later is what blockSound_of_vc's Löb
+         induction can supply; the ∃-words form below takes it from ⊢. *)
+      ⊢ ▷ blocksSound words instrs -∗
+        ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
@@ -1681,13 +1739,13 @@ Section AdequacyTools.
          the outer entry point, and that existential is exactly what
          create_resources / ImplPre provides.  It is destructed HERE and the
          witness npc handed to cexec_triple_addr's single nextpc demonic and to
-         sound_exec_cfg_addr_myWP2.  That is why threading the value inward
+         sound_first_step.  That is why threading the value inward
          costs no change to the trusted surface. *)
-      iIntros (Htrip Hbs a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
+      iIntros (Htrip) "#Hbsw".
+      iIntros (a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
       (* Name the words the memory actually holds; they instantiate both the
          uniform VC and the word half of cexec_triple_addr's demonic_ctx. *)
       specialize (Htrip words).
-      iPoseProof (Hbs words) as "#Hbsw".
       rewrite CPureSpec.wp_demonic_ctx in Htrip.
       (* env_of_words now CONCATENATES the words into one wide value, so it
          takes the plain-bv list (cws_of_bv) and the default is a bare
@@ -1713,7 +1771,7 @@ Section AdequacyTools.
                     (Katamaran.RiscvPmp.CFGVer.VerifierRel.wtable_rel_cws_of words Hif))) a npc).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iApply (sound_exec_cfg_addr_myWP2 a npc ExitCondIprop _ _ Hexec
+      iApply (sound_first_step a npc ExitCondIprop _ _ Hexec
         with "[$Hbsw $Hpc $Hnpc $Hinstrs $Hh2]").
       (* The fifth conjunct used to be DROPPED (`& _`).  It is
          `∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝`, and Φ here is
@@ -1758,8 +1816,10 @@ Section AdequacyTools.
     Proof.
       iIntros (Htrip Hbs a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
       iDestruct "Hinstrs" as (words) "Hinstrs".
-      iApply (sound_cexec_triple_addr_myWP2_w words ExitCondIprop Hif Hef
-                Htrip Hbs $! a with "[$Hpre $Hpc $Hnpc $Hinstrs]").
+      iPoseProof (sound_cexec_triple_addr_myWP2_w words ExitCondIprop Hif Hef
+                    Htrip with "[]") as "Hrun".
+      { iNext. iApply (Hbs words). }
+      iApply ("Hrun" $! a with "[$Hpre $Hpc $Hnpc $Hinstrs]").
       { iPureIntro. exact HsLa. }
       iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & HPOST)".
       iApply ("Hk" $! an). iFrame "Hpc Hnpc HPOST".
@@ -1781,15 +1841,12 @@ Section AdequacyTools.
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι)
-        (* The block premise.  With the contract in the AnnotInstr payload this
-           is the ONLY thing the hook adds at this level: blocks ride in
-           `instrs` and hence in `tbl`, so there is no second VC entry point
-           and no second triple-level refinement.  A block-free program
-           discharges it with blocksSound_of_none. *)
-        (Hbs : forall words : bv xlenbits -> bv word,
-                 ⊢ blocksSound words instrs) :
-      ⊢ ∀ a : RelVal ty_xlenbits,
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+      (* The block premise, under a later (see sound_cexec_triple_addr_myWP2_w).
+         Blocks ride in `instrs` and hence in `tbl`, so this is the ONLY thing
+         they add at this level. *)
+      ⊢ ▷ blocksSound words instrs -∗
+        ∀ a : RelVal ty_xlenbits,
           asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
@@ -1806,8 +1863,7 @@ Section AdequacyTools.
           myWP2_loop ExitCond.
     Proof.
       apply (sound_cexec_triple_addr_myWP2_w (post := post) (fuel := fuel)
-               (ι := ι) words ExitCond Hif Hef);
-        [|exact Hbs].
+               (ι := ι) words ExitCond Hif Hef).
       intros wds.
       apply (safeE_safe env.nil), postprocess_sound in Hverif.
       apply LogicalSoundness.psafe_safe in Hverif; [|done].
@@ -1875,13 +1931,21 @@ Section AdequacyTools.
         (* the block's code really is what its contract says: ab strips to
            cfg_instrs, so ai_instr <$> instrs_of_list v ab IS blk_span v b *)
         (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
-        (* every block NESTED inside this one is justified.  Over the block's
-           own program, hence smaller -- this is the well-founded recursion. *)
-        (Hbs : forall wds : bv xlenbits -> bv word,
-                 ⊢ blocksSound wds (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)) :
+        (* every block annotating the block's OWN program is justified, and
+           the premise may ASSUME THIS BLOCK: a loop is one block whose head is
+           annotated with that same block, so its VC's back edge consumes the
+           block's pre (the invariant) and produces its post.  That is not
+           circular because the entry step never consults ai_block, so the
+           block is used only from step two on, i.e. under a later -- which is
+           exactly what `iLöb` supplies.  For a block with no self-reference
+           the assumption is simply ignored (`iIntros "_"`). *)
+        (Hbs : □ blockSound words v b ⊢
+                 blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)) :
       blockFaithful ab v b tbl ⊢ blockSound words v b.
     Proof.
-      iIntros "#Hf" (ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
+      iIntros "#Hf".
+      iLöb as "IH".
+      iIntros (ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
       (* Read the faithfulness facts out of the pre WITHOUT consuming it: the
          conclusion is pure, so `∧` (which duplicates the context under iSplit)
          gives both. *)
@@ -1898,9 +1962,11 @@ Section AdequacyTools.
          instrs_of_list (Tables.fmap_instrs_of_list), and strip is that fmap. *)
       unfold blk_span. rewrite <- Hstrip.
       unfold Katamaran.RiscvPmp.CFGVer.Verifier.strip. rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
-      iApply (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
-                (fun wds => Hbs wds)
-                $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
+      (* the block premise for the block's own program, UNDER THE LATER *)
+      iPoseProof (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
+                    with "[]") as "Hrun".
+      { iNext. iApply Hbs. iModIntro. iExact "IH". }
+      iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
       (* no secLeak bullet: iFrame closes `⌜secLeak (SyncVal v)⌝` on the way in,
          as it does at every other call site of this lemma. *)
       iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".

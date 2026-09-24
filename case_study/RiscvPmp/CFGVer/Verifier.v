@@ -1221,7 +1221,7 @@ Section CFGVerificationDerived.
               (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
               (persist__term apc' θ3) (persist__term apc' θ3).
 
-    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (first : bool) :
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w trans tbl exits apc anp =>
@@ -1231,8 +1231,9 @@ Section CFGVerificationDerived.
         match fuel with
         | O    => emsg "sexec_cfg_addr: out of fuel"
         | S n' =>
-            (* A DECLARED EXIT STOPS -- except at the ENTRY step.  There is
-               no angelic choice here at all any more.
+            (* A DECLARED EXIT STOPS.  There is no angelic choice here at all
+               any more.  (The ENTRY step is not taken here: sexec_first_step
+               below executes it, so this loop is only ever entered at step 2.)
 
                This replaced `angelic_binary (if is_exit .. then pure apc else
                emsg ..) (<execute>)` on 2026-09-07.  The replacement is smaller
@@ -1262,27 +1263,20 @@ Section CFGVerificationDerived.
                rexec_cfg_addr the two branches now take `left` / `right` into the
                concrete disjunction instead of `rprop_or`.
 
-               WHY `first` IS NEEDED, and it is not optional.  A loop-body
-               segment contract STARTS AND ENDS AT THE SAME ADDRESS: `pbody`
-               (and PaddedLoop.v / CountdownComposed.v / TwoLoopsComposed.v, all
-               gate-checked) declare `exits_of_offs <base> [0]` against
-               `asn_init_pc <base>`.  Its trace visits that address twice --
-               execute the body at step 0, stop at step 2 -- and the pc is the
-               same TERM both times, so the pc cannot tell them apart.  Fuel
-               cannot either: the executor sees only what remains, never the
-               initial value.
-
-               The old `angelic_binary` was silently doing this job by letting
-               the prover guess which visit it was on, and that is what cost the
-               fuel sensitivity: an angelic choice must CONSTRUCT both branches.
-               `first` separates the two jobs -- it answers "which visit is
-               this", after which "am I done" is a decision rather than a
-               choice, and nothing gets built speculatively.
-
-               Verified empirically: dropping `first` and stopping at any
-               declared exit makes `pbody 0` fail with residual
-               `v = v + 0xffffffff`, i.e. the postcondition demanded at the
-               entry.  Do not "simplify" it away.
+               WHY THE ENTRY IS NOT TAKEN HERE.  A loop-body segment contract
+               STARTS AND ENDS AT THE SAME ADDRESS: `pbody` (and PaddedLoop.v /
+               CountdownComposed.v / TwoLoopsComposed.v, all gate-checked)
+               declare `exits_of_offs <base> [0]` against `asn_init_pc <base>`.
+               Its trace visits that address twice -- execute the body at step
+               0, stop at step 2 -- and the pc is the same TERM both times, so
+               the pc cannot tell them apart.  Fuel cannot either: the executor
+               sees only what remains, never the initial value.  So "which
+               visit is this" is answered STRUCTURALLY, by which function runs
+               the step: sexec_first_step for the entry, this loop afterwards.
+               (Until 2026-09-24 it was a `first : bool` argument here, which
+               did the same job; dropping the distinction altogether makes
+               `pbody 0` fail with residual `v = v + 0xffffffff`, i.e. the
+               postcondition demanded at the entry.)
 
                At the entry we always EXECUTE rather than offering a choice: a
                body contract's precondition carries the loop guard, so the body
@@ -1294,7 +1288,7 @@ Section CFGVerificationDerived.
                is a syntactic `Term_eqb` after `peval`, so this fires only where
                the pc term literally IS a declared exit term -- never on an
                undecided comparison. *)
-            if andb (negb first) (is_exit exits apc) then pure apc else
+            if is_exit exits apc then pure apc else
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, ai) =>
@@ -1322,14 +1316,14 @@ Section CFGVerificationDerived.
                     already concludes, so a segment's own VC discharges the
                     premise with no strengthening.
 
-                    No `first` here: a block is accounted for at the address
-                    it starts at, and its exit is reached by the arithmetic
-                    rather than by the pc matching a declared exit. *)
+                    A block is accounted for at the address it starts at, and
+                    its exit is reached by the arithmetic rather than by the pc
+                    matching a declared exit. *)
                  match ai_block ai with
                  | Some b =>
                      ⟨ θb ⟩ apc' <- sexec_block b apc ;;
                      ⟨ θn ⟩ np'  <- demonic (Some "np") _ ;;
-                     sexec_cfg_addr n' false
+                     sexec_cfg_addr n'
                        (persist (A := Sub Σ0) trans (θb ∘ θn))
                        (persist_itableW (θb ∘ θn) tbl)
                        (persist_etable  (θb ∘ θn) exits)
@@ -1359,7 +1353,7 @@ Section CFGVerificationDerived.
                    let np0 := persist__term anp θ0 in
                    let wd0 := persist__term wd  θ0 in
                    ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
-                   step_after_drop (@sexec_cfg_addr Σ0 n' false) ai
+                   step_after_drop (@sexec_cfg_addr Σ0 n') ai
                      (persist (A := Sub Σ0) tr0 θd)
                      (persist_itableW θd tb0)
                      (persist_etable  θd ex0)
@@ -1486,15 +1480,14 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
-      forall (first : bool)
-        {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
         (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
-        CExt (sexec_cfg_addr fuel first trans tbl exits apc anp).
+        CExt (sexec_cfg_addr fuel trans tbl exits apc anp).
     Proof.
-      induction fuel as [|n IH]; intros first w trans tbl exits apc anp;
+      induction fuel as [|n IH]; intros w trans tbl exits apc anp;
         cbn [sexec_cfg_addr].
       - apply cext_error.
-      - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
+      - destruct (is_exit exits apc); [apply cext_pure|].
         destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
         destruct (ai_block ai) as [b|].
         { apply cext_bind; [apply cext_sexec_block|]. intros w1 th1 apc'.
@@ -1625,21 +1618,21 @@ Section CFGVerificationDerived.
       | _ , _ => nil
       end.
 
-    (* THE FIRST STEP OF A SELF-REFERENTIAL (LOOP) VC -- PLAN-rec-loop-block.md.
-       A loop is verified as a block whose OWN head is annotated with that same
-       block, so the back edge is a consume-pre / produce-post the solver
-       discharges.  What keeps that VC from being trivially circular is this
-       step: it EXECUTES the entry instruction and never consults ai_block --
-       otherwise the block would be applied to itself at step 0.  From the next
-       step on the ordinary executor runs, blocks included.
+    (* THE ENTRY STEP of every contract's VC.  It EXECUTES the entry
+       instruction: no exit test (a loop body starts at its own exit address,
+       see sexec_cfg_addr) and no ai_block consultation.  The latter is what
+       makes a LOOP expressible as one block contract (PLAN-rec-loop-block.md):
+       the loop's own head is annotated with that same block, the back edge is
+       a consume-pre / produce-post the solver discharges, and the VC is not
+       trivially circular because the block is never applied to itself at step
+       0.  Soundness needs the block premise only UNDER A LATER, which is what
+       Adequacy.blockSound_of_vc's Löb induction supplies.  Cost: a contract
+       cannot start AT an annotated instruction and have the block fire
+       immediately; it executes that instruction instead.
 
        It is step_after_drop on the looked-up entry: exactly sexec_cfg_addr's
        non-block branch, minus chunk_gc / drop_dead (optimisations; the
-       concrete mirror omits them too) and minus the exit test (the entry of a
-       loop is never its exit, and the ordinary entry's `first` exists to skip
-       it anyway).  sexec_cfg_addr itself is untouched: ZZBlkAB's outer
-       contract STARTS at an annotated instruction and needs the block to fire
-       at step 1, so the ordinary entry must keep that behaviour. *)
+       concrete mirror omits them too), with the full fuel handed on. *)
     Definition sexec_first_step {Σ0 : LCtx} (fuel : nat) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
@@ -1650,7 +1643,7 @@ Section CFGVerificationDerived.
                                        debug_string_message :=
                                          "sexec_first_step: no instruction key matches the entry pc" |})
         | Some (wd, ai) =>
-            step_after_drop (@sexec_cfg_addr Σ0 fuel false) ai trans tbl exits apc anp wd
+            step_after_drop (@sexec_cfg_addr Σ0 fuel) ai trans tbl exits apc anp wd
         end.
 
     (* The one demonic_ctx call covers Σ AND the SINGLE wide word variable;
@@ -1681,7 +1674,7 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true
+        ⟨ θ3 ⟩ na <- sexec_first_step fuel
                        (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;
@@ -1713,47 +1706,6 @@ Section CFGVerificationDerived.
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
         SHeapSpec.run (sexec_triple_addr req tbl exits fuel ens (w := w)).
-
-    (* THE SELF-REFERENTIAL (LOOP) ENTRY POINTS -- PLAN-rec-loop-block.md.
-       A deliberate SECOND triple, unlike the deleted block entry points above:
-       those threaded blocks separately and became redundant once blocks rode
-       in the payload, whereas this one changes WHICH STEP COMES FIRST, which
-       nothing in the payload can express.  Verbatim sexec_triple_addr except
-       `sexec_cfg_addr fuel true` -> `sexec_first_step fuel`.  Kept as a copy
-       rather than parameterising the original, so the ordinary triple's
-       refinement proof is untouched; merging them is a known follow-up. *)
-    Definition sexec_triple_addr_rec {Σ : LCtx}
-      (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
-      (fuel : nat)
-      (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
-      ⊢ SHeapSpec Unit :=
-      fun w =>
-        let n := length tbl in
-        ⟨ θ0 ⟩ δw <- demonic_ctx id (Σ ▻▻ words_ctx n) ;;
-        let δ   := env.drop (words_ctx n) δw in
-        let ws0 := words_of_env_term (env.take (words_ctx n) δw) in
-        ⟨ θ1 ⟩ a <- demonic (Some "a") _ ;;
-        ⟨ θ1'⟩ np <- demonic (Some "np") _ ;;
-        let δ1 := env.snoc (persist (A := Sub Σ) δ (θ1 ∘ θ1')) _ (persist__term a θ1') in
-        ⟨ θ2 ⟩ _ <- produce req δ1 ;;
-        let a2 := persist__term a (θ1' ∘ θ2) in
-        let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
-        let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_first_step fuel
-                       (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
-                       (zip_words (subst_itable ζ tbl) ws)
-                       (subst_etable ζ exits) a2 (persist__term np θ2) ;;
-        let δ3 := persist δ1 (θ2 ∘ θ3) in
-        consume ens δ3.["an"∷ty_xlenbits ↦ na].
-
-    Definition scfg_verification_condition_rec {Σ : LCtx}
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
-      (tbl : SInstrTable (wlctx Σ))
-      (exits : SExitTable (wlctx Σ)) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
-      fun w =>
-        SHeapSpec.run (sexec_triple_addr_rec req tbl exits fuel ens (w := w)).
 
   End Symbolic.
 

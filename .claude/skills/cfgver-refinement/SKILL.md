@@ -59,8 +59,9 @@ unlike a clean structural mirror, matching the two sides here needs explicit
 
 **MIRROR (still mandatory where it applies):** fuel and the recursive step.
 **NO LONGER the exit/execute choice, deliberately (2026-09-07):**
-`sexec_cfg_addr` has no `angelic_binary` at all — it stops iff
-`negb first && is_exit` — while `cexec_cfg_addr` keeps its unconditional
+`sexec_cfg_addr` has no `angelic_binary` at all — it stops iff `is_exit`
+(the entry step is `sexec_first_step`'s, mirrored by `cexec_first_step` /
+`rexec_first_step`) — while `cexec_cfg_addr` keeps its unconditional
 `angelic_binary`. That asymmetry is SOUND and is the whole point:
 `is_exit_sound` runs one way only (`is_exit = true -> exitCond v = true`), so the
 symbolic side may be strictly MORE decisive, which makes the VC stronger. The

@@ -169,28 +169,6 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
       cfg_map c (fun ia p exits P _ ec fl Q => Valid_CFG_VC ia p exits P a ec fl Q).
 
-    (* THE SELF-REFERENTIAL (LOOP) VC -- PLAN-rec-loop-block.md.  Same shape as
-       cfg_vc, over scfg_verification_condition_rec: the entry instruction is
-       EXECUTED, never replaced by a block, so `a` may annotate the loop head
-       with the very block this VC justifies.  The back edge then CONSUMES the
-       invariant (= this contract's precondition) and the solver discharges
-       the framing; the one piece of meta-logic is the Löb induction in
-       GenCompose.blockSound_of_rec_vc.  Discharged the same way:
-       solve_param_vc. *)
-    Definition CFG_VC_triple_rec {Σ}
-      (p     : Term Σ ty_xlenbits)
-      (exits : list (Term Σ ty_xlenbits))
-      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
-      (i  : list AnnotInstr)
-      (fl : nat)
-      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition_rec (Σ := Σ)
-        (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
-
-    Definition cfg_vc_rec {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
-      cfg_map c (fun _ p exits P _ _ fl Q =>
-        safeE (postprocess (CFG_VC_triple_rec p exits P a fl Q))).
-
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
       cfg_map c (fun ia p exits P _ ec fl Q =>
