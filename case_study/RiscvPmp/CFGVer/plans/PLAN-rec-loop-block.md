@@ -102,11 +102,20 @@ contractive safety fixpoint (Adequacy.v:125).  Confirm against
   LoopSpec-to-block door (`blockSound_of_induction` / `blockSound_of_loop`,
   `blk_pre` / `blk_post`) was deleted as subsumed.
 
+- **7. Tracked + end-to-end, 2026-09-24.** The probes became
+  `Example/CountdownRec.v` (`valid_cd_rec`, `valid_cd_link`, the negative
+  controls; `rlink` renamed `cdLink`) and `Example/CountdownRecResult.v`
+  (`cdRec_blockSound`, `cd_link_blocksSound`, and
+  **`countdown_rec_noninterferent`**, `noninterferent_strong` through
+  `cfg_instrs_endToEnd`), in `_CoqProject`, `Results.v` and the gate's
+  `AXIOM_CLEAN_THMS`; axiom-clean.  Two forced choices in the statement:
+  base 0 (the block is justified at base 0), and X1 pinned to 2 (reg_specs
+  cannot express `k ≠ 0`).  `valid_rlink_contract` (the sealed
+  `ValidCFGVerifierContract`) was dropped: `cfg_instrs_endToEnd` takes the
+  VC and the block obligation directly, so nothing consumed it.
+
 ## Open
 
-- Nothing is gate-checked yet (the probes are gitignored `ZZ*`).  To make
-  the result durable a tracked example (e.g. `Example/CountdownRec.v` +
-  `…Result.v`) and an end theorem through a bridge are needed.
 - A loop block at index > 0 still needs the index-n `blocksSound_of_head`.
 
 ## Out of scope

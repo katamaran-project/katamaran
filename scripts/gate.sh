@@ -82,6 +82,11 @@ AXIOM_CLEAN_THMS=(
   # whose contract table covers a PROPER SUBSET of the program, so it is the
   # only check that itable_faith_of_segment / instrs_of_list_segment are sound.
   "pl_loop"
+  # a LOOP as one self-referential block (Löb, ai_loop) followed by an
+  # executed segment (Example/CountdownRecResult.v): the only end theorem
+  # whose VC trusts a block, so the only check on blocksSound_of_head and
+  # blockSound_of_contract.
+  "countdown_rec_noninterferent"
 )
 
 COQC="${COQC:-coqc}"

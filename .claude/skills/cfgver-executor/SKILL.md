@@ -783,10 +783,12 @@ carries `blocksSoundAt stepped ∗ ▷ blocksSound`; each executed instruction
 strips the later. `blocksSound` (= `blocksSoundAt true`, both kinds) is still
 the premise every external bridge takes. Partial correctness only.
 
-Worked example: `Example/ZZCdRec.v` (loop, `ai_loop` head, negative controls)
-→ `ZZCdRecLinkSpec.v` (outer program STARTING at the loop, `ai_block` head) →
-`ZZCdRecLink.v` (gitignored probes; `PLAN-rec-loop-block.md` lists what a
-tracked one needs).
+Worked example: `Example/CountdownRec.v` (the loop `cdRec` with an `ai_loop`
+head + negative controls, then `cdLink`: the outer program STARTING at the
+loop with an `ai_block` head, and an executed tail) →
+`Example/CountdownRecResult.v` (`cdRec_blockSound` via
+`blockSound_of_contract`, `cd_link_blocksSound` via `blocksSound_of_head`, and
+the gate-checked end theorem `countdown_rec_noninterferent`).
 
 ## `scfg_verification_condition`
 
