@@ -86,7 +86,7 @@ AXIOM_CLEAN_THMS=(
   # executed segment (Example/CountdownRecResult.v): the only end theorem
   # whose VC trusts a block, so the only check on blocksSound_of_head and
   # blockSound_of_contract.
-  "countdown_rec_noninterferent"
+  "countdown_rec_noninterferent_param"
 )
 
 COQC="${COQC:-coqc}"

@@ -106,10 +106,13 @@ contractive safety fixpoint (Adequacy.v:125).  Confirm against
   `Example/CountdownRec.v` (`valid_cd_rec`, `valid_cd_link`, the negative
   controls; `rlink` renamed `cdLink`) and `Example/CountdownRecResult.v`
   (`cdRec_blockSound`, `cd_link_blocksSound`, and
-  **`countdown_rec_noninterferent`**, `noninterferent_strong` through
+  **`countdown_rec_noninterferent_param`**, `noninterferent_strong` through
   `cfg_instrs_endToEnd`), in `_CoqProject`, `Results.v` and the gate's
-  `AXIOM_CLEAN_THMS`; axiom-clean.  Two forced choices in the statement:
-  base 0 (the block is justified at base 0), and X1 pinned to 2 (reg_specs
+  `AXIOM_CLEAN_THMS`; axiom-clean.  BASE-PARAMETRIC: `cdRec`, `cdRecBlk`,
+  the annotated lists and `cdLink` all take the load address `ia`, because
+  `gen_seg_contract`'s `ia` fixes `cfg_init_addr` and the exit condition
+  that pins where the block resumes; the VCs hold for every `ia` with no
+  computation on it.  One forced choice remains: X1 pinned to 2 (reg_specs
   cannot express `k ≠ 0`).  `valid_rlink_contract` (the sealed
   `ValidCFGVerifierContract`) was dropped: `cfg_instrs_endToEnd` takes the
   VC and the block obligation directly, so nothing consumed it.

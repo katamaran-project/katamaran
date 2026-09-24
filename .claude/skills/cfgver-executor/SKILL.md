@@ -788,7 +788,8 @@ head + negative controls, then `cdLink`: the outer program STARTING at the
 loop with an `ai_block` head, and an executed tail) →
 `Example/CountdownRecResult.v` (`cdRec_blockSound` via
 `blockSound_of_contract`, `cd_link_blocksSound` via `blocksSound_of_head`, and
-the gate-checked end theorem `countdown_rec_noninterferent`).
+the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
+load address: the contracts, the block and the annotated code all take `ia`).
 
 ## `scfg_verification_condition`
 
