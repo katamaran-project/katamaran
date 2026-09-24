@@ -26,9 +26,9 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Export
+From Stdlib Require Export
      Numbers.BinNums.
-From Coq Require Import
+From Stdlib Require Import
      Program.Tactics.
 From Katamaran Require Export
      Context

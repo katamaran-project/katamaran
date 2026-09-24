@@ -28,7 +28,7 @@
 
 (* Strongly based on https://github.com/decrn/em *)
 
-From Coq Require Import
+From Stdlib Require Import
      Classes.Morphisms
      Classes.Morphisms_Prop
      Classes.RelationClasses

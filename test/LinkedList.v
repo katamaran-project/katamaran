@@ -38,7 +38,7 @@
    memory.
   *)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Lists.List
      Program.Tactics

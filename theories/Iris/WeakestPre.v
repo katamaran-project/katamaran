@@ -42,7 +42,7 @@ From Katamaran Require Import
      Semantics
      Iris.Resources.
 
-Require Import Coq.Program.Equality.
+Require Import Stdlib.Program.Equality.
 
 Import ctx.notations.
 Import env.notations.

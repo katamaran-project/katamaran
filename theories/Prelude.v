@@ -26,9 +26,9 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Export
+From Stdlib Require Export
      Numbers.BinNums.
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      Lists.List
@@ -314,28 +314,28 @@ Export IsTrue (IsTrue).
 (* This module contains transparent copies of lemmas from the stdlib. *)
 Module transparent.
 
-  (* Coq.Arith.PeanoNat.Nat.add_0_r *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_0_r *)
   Fixpoint nat_add_0_r (n : nat) : n + O = n :=
     match n with
     | O   => eq_refl
     | S n => f_equal S (nat_add_0_r n)
     end.
 
-  (* Coq.Arith.PeanoNat.Nat.add_assoc *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_assoc *)
   Fixpoint nat_add_assoc (n m p : nat) : n + (m + p) = n + m + p :=
     match n with
     | O   => eq_refl
     | S n => f_equal S (nat_add_assoc n m p)
     end.
 
-  (* Coq.Arith.PeanoNat.Nat.add_succ_r *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_succ_r *)
   Fixpoint nat_add_succ_r (n m : nat) : n + S m = S (n + m) :=
     match n with
     | O   => eq_refl
     | S n => f_equal S (nat_add_succ_r n m)
     end.
 
-  (* Coq.Arith.PeanoNat.Nat.add_cancel_l *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_cancel_l *)
   Fixpoint nat_add_cancel_l n m p {struct p} : p + n = p + m -> n = m :=
     match p with
     | O   => fun e : n = m => e
