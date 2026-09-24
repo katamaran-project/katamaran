@@ -238,7 +238,27 @@ Record AnnotInstr := MkAnnotInstr
        STATEMENT surface, and this puts proof hints into them.  Same trade
        already made for ghosts, and `strip` is the same mitigation. *)
   ; ai_block        : option BlkAnnot
+    (* RE-ENTRY BLOCK (PLAN-rec-loop-block.md).  Like ai_block, but fires only
+       when this instruction is reached AFTER at least one instruction of the
+       current run has executed -- never at a contract's entry.  A loop is one
+       block whose own head carries `ai_loop := Some b`: its VC executes the
+       head at entry and meets b at the back edge, consuming the invariant.
+       ai_block keeps firing at every visit, including step 0, so a contract
+       may still START at a block.  Soundness needs an ai_loop block only
+       under a later, which is what Adequacy.blockSound_of_vc's Löb induction
+       supplies. *)
+  ; ai_loop         : option BlkAnnot
   }.
+
+(* Which block, if any, the executor applies at this instruction.  `stepped`
+   says whether an instruction of the current run has executed yet; both
+   executors dispatch on this one function, so their block matches stay rigid.
+   ai_block wins if both are set. *)
+Definition ai_fire (stepped : bool) (ai : AnnotInstr) : option BlkAnnot :=
+  match ai_block ai with
+  | Some b => Some b
+  | None   => if stepped then ai_loop ai else None
+  end.
 
 Definition strip (instrs : list AnnotInstr) : list AST :=
   List.map (fun ai => ai_instr ai) instrs.
@@ -263,18 +283,19 @@ Proof. apply List.length_map. Qed.
    hijacks list notation until it is). *)
 Coercion AST_AnnotInstr (a : AST) : AnnotInstr :=
   {| ai_ghost_before := nil; ai_instr := a; ai_ghost_after := nil;
-     ai_block := None |}.
+     ai_block := None; ai_loop := None |}.
 
 Local Arguments List.cons {_} & _ _.
 
 Coercion list_AST_AnnotInstr (l : list AST) : list AnnotInstr :=
   List.map AST_AnnotInstr l.
 
-(* Every program written as a plain list of ASTs carries NO block contracts.
-   This is what lets each existing example discharge blocksSound (Adequacy.v)
-   in one line without its statement being restricted. *)
+(* Every program written as a plain list of ASTs carries NO block contracts
+   of either kind (`ai_fire true` selects ai_block or ai_loop).  This is what
+   lets each existing example discharge blocksSound (Adequacy.v) in one line
+   without its statement being restricted. *)
 Lemma ai_block_none_of_AST (l : list AST) :
-  List.Forall (fun ai => ai_block ai = None) (list_AST_AnnotInstr l).
+  List.Forall (fun ai => ai_fire true ai = None) (list_AST_AnnotInstr l).
 Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
 
 (* A program written as a plain list of ASTs strips back to itself.  Used by
@@ -1221,7 +1242,12 @@ Section CFGVerificationDerived.
               (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
               (persist__term apc' θ3) (persist__term apc' θ3).
 
-    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) :
+    (* `first`   : this is the contract's entry step (gates the exit test).
+       `stepped` : an instruction of this run has executed (gates ai_loop, via
+                   ai_fire).  They differ exactly after a block fired at the
+                   entry: the exit test is live again, but nothing has run, so
+                   no later has been earned and a re-entry block may not fire. *)
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (first stepped : bool) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w trans tbl exits apc anp =>
@@ -1231,9 +1257,8 @@ Section CFGVerificationDerived.
         match fuel with
         | O    => emsg "sexec_cfg_addr: out of fuel"
         | S n' =>
-            (* A DECLARED EXIT STOPS.  There is no angelic choice here at all
-               any more.  (The ENTRY step is not taken here: sexec_first_step
-               below executes it, so this loop is only ever entered at step 2.)
+            (* A DECLARED EXIT STOPS -- except at the ENTRY step.  There is
+               no angelic choice here at all any more.
 
                This replaced `angelic_binary (if is_exit .. then pure apc else
                emsg ..) (<execute>)` on 2026-09-07.  The replacement is smaller
@@ -1263,20 +1288,27 @@ Section CFGVerificationDerived.
                rexec_cfg_addr the two branches now take `left` / `right` into the
                concrete disjunction instead of `rprop_or`.
 
-               WHY THE ENTRY IS NOT TAKEN HERE.  A loop-body segment contract
-               STARTS AND ENDS AT THE SAME ADDRESS: `pbody` (and PaddedLoop.v /
-               CountdownComposed.v / TwoLoopsComposed.v, all gate-checked)
-               declare `exits_of_offs <base> [0]` against `asn_init_pc <base>`.
-               Its trace visits that address twice -- execute the body at step
-               0, stop at step 2 -- and the pc is the same TERM both times, so
-               the pc cannot tell them apart.  Fuel cannot either: the executor
-               sees only what remains, never the initial value.  So "which
-               visit is this" is answered STRUCTURALLY, by which function runs
-               the step: sexec_first_step for the entry, this loop afterwards.
-               (Until 2026-09-24 it was a `first : bool` argument here, which
-               did the same job; dropping the distinction altogether makes
-               `pbody 0` fail with residual `v = v + 0xffffffff`, i.e. the
-               postcondition demanded at the entry.)
+               WHY `first` IS NEEDED, and it is not optional.  A loop-body
+               segment contract STARTS AND ENDS AT THE SAME ADDRESS: `pbody`
+               (and PaddedLoop.v / CountdownComposed.v / TwoLoopsComposed.v, all
+               gate-checked) declare `exits_of_offs <base> [0]` against
+               `asn_init_pc <base>`.  Its trace visits that address twice --
+               execute the body at step 0, stop at step 2 -- and the pc is the
+               same TERM both times, so the pc cannot tell them apart.  Fuel
+               cannot either: the executor sees only what remains, never the
+               initial value.
+
+               The old `angelic_binary` was silently doing this job by letting
+               the prover guess which visit it was on, and that is what cost the
+               fuel sensitivity: an angelic choice must CONSTRUCT both branches.
+               `first` separates the two jobs -- it answers "which visit is
+               this", after which "am I done" is a decision rather than a
+               choice, and nothing gets built speculatively.
+
+               Verified empirically: dropping `first` and stopping at any
+               declared exit makes `pbody 0` fail with residual
+               `v = v + 0xffffffff`, i.e. the postcondition demanded at the
+               entry.  Do not "simplify" it away.
 
                At the entry we always EXECUTE rather than offering a choice: a
                body contract's precondition carries the loop guard, so the body
@@ -1288,7 +1320,7 @@ Section CFGVerificationDerived.
                is a syntactic `Term_eqb` after `peval`, so this fires only where
                the pc term literally IS a declared exit term -- never on an
                undecided comparison. *)
-            if is_exit exits apc then pure apc else
+            if andb (negb first) (is_exit exits apc) then pure apc else
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, ai) =>
@@ -1318,12 +1350,14 @@ Section CFGVerificationDerived.
 
                     A block is accounted for at the address it starts at, and
                     its exit is reached by the arithmetic rather than by the pc
-                    matching a declared exit. *)
-                 match ai_block ai with
+                    matching a declared exit.  `stepped` passes through
+                    unchanged: a block executes no instruction of THIS run, so
+                    it earns no later (see ai_loop). *)
+                 match ai_fire stepped ai with
                  | Some b =>
                      ⟨ θb ⟩ apc' <- sexec_block b apc ;;
                      ⟨ θn ⟩ np'  <- demonic (Some "np") _ ;;
-                     sexec_cfg_addr n'
+                     sexec_cfg_addr n' false stepped
                        (persist (A := Sub Σ0) trans (θb ∘ θn))
                        (persist_itableW (θb ∘ θn) tbl)
                        (persist_etable  (θb ∘ θn) exits)
@@ -1353,7 +1387,7 @@ Section CFGVerificationDerived.
                    let np0 := persist__term anp θ0 in
                    let wd0 := persist__term wd  θ0 in
                    ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
-                   step_after_drop (@sexec_cfg_addr Σ0 n') ai
+                   step_after_drop (@sexec_cfg_addr Σ0 n' false true) ai
                      (persist (A := Sub Σ0) tr0 θd)
                      (persist_itableW θd tb0)
                      (persist_etable  θd ex0)
@@ -1480,16 +1514,17 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
-      forall {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
+      forall (first stepped : bool)
+        {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
         (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
-        CExt (sexec_cfg_addr fuel trans tbl exits apc anp).
+        CExt (sexec_cfg_addr fuel first stepped trans tbl exits apc anp).
     Proof.
-      induction fuel as [|n IH]; intros w trans tbl exits apc anp;
+      induction fuel as [|n IH]; intros first stepped w trans tbl exits apc anp;
         cbn [sexec_cfg_addr].
       - apply cext_error.
-      - destruct (is_exit exits apc); [apply cext_pure|].
+      - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
         destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
-        destruct (ai_block ai) as [b|].
+        destruct (ai_fire stepped ai) as [b|].
         { apply cext_bind; [apply cext_sexec_block|]. intros w1 th1 apc'.
           apply cext_bind; [apply cext_demonic|]. intros w2 th2 np'.
           apply IH. }
@@ -1618,34 +1653,6 @@ Section CFGVerificationDerived.
       | _ , _ => nil
       end.
 
-    (* THE ENTRY STEP of every contract's VC.  It EXECUTES the entry
-       instruction: no exit test (a loop body starts at its own exit address,
-       see sexec_cfg_addr) and no ai_block consultation.  The latter is what
-       makes a LOOP expressible as one block contract (PLAN-rec-loop-block.md):
-       the loop's own head is annotated with that same block, the back edge is
-       a consume-pre / produce-post the solver discharges, and the VC is not
-       trivially circular because the block is never applied to itself at step
-       0.  Soundness needs the block premise only UNDER A LATER, which is what
-       Adequacy.blockSound_of_vc's Löb induction supplies.  Cost: a contract
-       cannot start AT an annotated instruction and have the block fire
-       immediately; it executes that instruction instead.
-
-       It is step_after_drop on the looked-up entry: exactly sexec_cfg_addr's
-       non-block branch, minus chunk_gc / drop_dead (optimisations; the
-       concrete mirror omits them too), with the full fuel handed on. *)
-    Definition sexec_first_step {Σ0 : LCtx} (fuel : nat) :
-      ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
-        STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
-      fun w trans tbl exits apc anp =>
-        match lookup_instr tbl apc with
-        | None =>
-            error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
-                                       debug_string_message :=
-                                         "sexec_first_step: no instruction key matches the entry pc" |})
-        | Some (wd, ai) =>
-            step_after_drop (@sexec_cfg_addr Σ0 fuel) ai trans tbl exits apc anp wd
-        end.
-
     (* The one demonic_ctx call covers Σ AND the SINGLE wide word variable;
        δw is split back apart with env.drop / env.take.  The words are
        introduced HERE, before the execution loop, so nothing about them
@@ -1674,7 +1681,7 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_first_step fuel
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true false
                        (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;

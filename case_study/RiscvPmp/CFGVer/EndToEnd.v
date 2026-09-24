@@ -1972,7 +1972,7 @@ Import IrisModel.RiscvPmpIrisBase.
      literal is written inline (Verifier.v's `Local Arguments List.cons {_} & _ _`
      makes the coercion fire elementwise inside a bracket literal).  Only the
      first matches ai_block_none_of_AST; `repeat constructor` handles the
-     second, since each `ai_block (AST_AnnotInstr a) = None` closes by eq_refl. *)
+     second, since each `ai_fire true (AST_AnnotInstr a) = None` closes by eq_refl. *)
   Ltac solve_no_blocks :=
     intros;
     apply blocksSound_of_none;

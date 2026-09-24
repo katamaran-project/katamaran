@@ -85,21 +85,22 @@ contractive safety fixpoint (Adequacy.v:125).  Confirm against
   ValidCFGVerifierContract rlink`, axiom-clean.  The spikes ZZRecStep /
   ZZRecRefine / ZZRecSound were retired once ported.
 
-- **6. UNIFIED, 2026-09-24.** The `_rec` chain was a verbatim copy of the
-  ordinary one with the entry step swapped, so the ORDINARY entry now IS
-  `sexec_first_step` (no block at step 0, for every contract) and every copy
-  is gone: `sexec/cexec/rexec_triple_addr_rec`, the `_rec` VC pair,
-  `CFG_VC_triple_rec`, `cfg_vc_rec`, `rec_vc_of`, the two rec soundness
-  bridges and `blockSound_of_rec_vc`.  The `first : bool` flag of
-  `sexec_cfg_addr` / `rexFS` / `rexec_cfg_addr` went with them (dead once the
-  entry is structural).  `Adequacy.blockSound_of_vc` now does the `iLöb`
-  itself; its nested-blocks premise is `□ blockSound words v b ⊢ blocksSound
-  …` (a non-loop block ignores it), and `blocksSound_of_head` took the Iris
-  form.  The LoopSpec-to-block door (`blockSound_of_induction` /
-  `blockSound_of_loop`, `blk_pre` / `blk_post`) was deleted as subsumed.
-  Price: a contract can no longer START at an annotated instruction and have
-  its block fire at step 1 (only the `ZZBlkAB*` probes did).  All 20 light
-  files (every example VC) stayed green unchanged.
+- **6. ONE CHAIN, via a RE-ENTRY annotation, 2026-09-24.** The `_rec` chain
+  was a verbatim copy of the ordinary one with the entry step swapped.  A
+  first attempt (525be59f) made EVERY entry skip blocks, which deleted the
+  copies but stopped a contract from starting at a block -- rejected.  The
+  fix is in the annotation instead: `AnnotInstr.ai_loop`, a block that fires
+  only once an instruction of the run has executed, next to `ai_block`, which
+  fires always.  Both executors dispatch on `ai_fire stepped ai`;
+  `sexec_cfg_addr` carries `first` (exit test) and `stepped` (re-entry),
+  `cexec_cfg_addr` carries `stepped`.  Gone: `sexec/cexec/rexec_first_step`,
+  `sound_first_step`, every `_rec` definition and lemma, `rec_vc_of`,
+  `blockSound_of_rec_vc`.  `Adequacy.blockSound_of_vc` does the `iLöb` itself,
+  with premises `Hbs0 : ⊢ blocksSoundAt false …` (entry blocks, needed now)
+  and `Hbs : □ blockSound b ⊢ blocksSound …` (all blocks, under the later);
+  `blocksSound = blocksSoundAt true`, so no external bridge changed.  The
+  LoopSpec-to-block door (`blockSound_of_induction` / `blockSound_of_loop`,
+  `blk_pre` / `blk_post`) was deleted as subsumed.
 
 ## Open
 

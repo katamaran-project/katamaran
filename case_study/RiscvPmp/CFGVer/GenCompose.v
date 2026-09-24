@@ -324,9 +324,11 @@ Section SegCompose.
   Proof.
     iIntros "HP".
     iDestruct (HPre with "HP") as "(HF & Hpre & Hpc & Hnpc & Hinstrs)".
+    iPoseProof (Hbs words) as "#Hb".
     iPoseProof (sound_scfg_verification_condition_myWP2_w words
-                  (seg_vc c annot Hv) Post Hif Hef with "[]") as "Hrun".
-    { iNext. iApply (Hbs words). }
+                  (seg_vc c annot Hv) Post Hif Hef with "[] []") as "Hrun".
+    { iApply (blocksSound_at_false with "Hb"). }
+    { iNext. iExact "Hb". }
     iApply ("Hrun" $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
     (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
     - iFrame.
@@ -447,14 +449,16 @@ Section SegCompose.
                  x = bv.add v (bv.of_N (blk_off b)))
       (* ab really is the block's own code, annotated *)
       (Hstrip : strip ab = cfg_instrs (blk_contract b))
-      (* every block annotating ab is justified, possibly by THIS block
-         itself (a loop: see blockSound_of_vc) *)
+      (* ab's entry blocks (ai_block) are justified outright ... *)
+      (Hbs0 : ⊢ blocksSoundAt false words (instrs_of_list v ab))
+      (* ... and all of its blocks possibly by THIS block itself (a loop whose
+         head carries it as ai_loop: see blockSound_of_vc) *)
       (Hbs : □ blockSound words v b ⊢ blocksSound words (instrs_of_list v ab)) :
     blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab)
     ⊢ blockSound words v b.
   Proof.
     exact (blockSound_of_vc words ab b _
-             (seg_vc (blk_contract b) ab Hv) Hexit Hstrip Hbs).
+             (seg_vc (blk_contract b) ab Hv) Hexit Hstrip Hbs0 Hbs).
   Qed.
 
   (* ---- SINGLE-EXIT specialisation -----------------------------------------
