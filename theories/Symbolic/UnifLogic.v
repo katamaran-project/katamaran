@@ -1833,11 +1833,10 @@ Module Type UnifLogicOn
         ⊢ ℛ⟦RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)⟧ (w := w) env.cat env.cat.
       Proof.
         iIntros (vs1 svs1) "Hvs1 %vs2 %svs2 Hvs2".
-        (* iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := fun w => NamedEnv (Term w) Γ) (T3 := fun w => NamedEnv (Term w) (Δ ▻▻ Γ)) env.cat env.cat with "[$Hvs1 $Hvs2]"). *)
-        (* intros. *)
-        (* now rewrite inst_env_cat. *)
-        admit.
-      Admitted.
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := fun w => NamedEnv (Term w) Γ) (T3 := fun w => NamedEnv (Term w) (Δ ▻▻ Γ)) (v1 := vs1) (v2 := vs2) (vs1 := svs1) (vs2 := svs2) env.cat env.cat with "[$Hvs1 $Hvs2]").
+        intros.
+        now rewrite inst_env_cat.
+      Qed.
 
       #[export] Instance refine_compat_namedenv_cat {N} {Δ : NCtx N Ty} {Γ} {w : World} :
         RefineCompat (RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)) env.cat w env.cat emp :=
