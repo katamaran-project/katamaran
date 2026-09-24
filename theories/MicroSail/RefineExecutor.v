@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Program.Tactics
      ZArith.ZArith
@@ -37,7 +37,7 @@ From Coq Require Import
      Classes.Morphisms_Relations.
 Require Import Basics.
 
-From Coq Require Lists.List.
+From Stdlib Require Lists.List.
 
 From Equations Require Import
      Equations.
