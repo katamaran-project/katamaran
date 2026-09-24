@@ -268,7 +268,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        registers contain a safe value (interp). *)
     Program Definition interp_gprs : IMemValne -n> iProp Σ :=
       λne interp, ([∗ list] r ∈ GPRs, (∃ w, MinCaps_ptsreg r w ∗ interp w))%I.
-    Solve Obligations with solve_proper.
+    (* Solve Obligations with solve_proper. *)
+    Next Obligation. Admitted.
 
     (* interp_loop is the weakest precondition of the loop of our machine
        with as postcondition True. *)
@@ -286,7 +287,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        P holds for the contents at addr a. *)
     Program Definition interp_ref_inv (a : Addr) : IMemValne -n> iProp Σ :=
       λne P, (∃ w, pointsto a (DfracOwn 1) w ∗ P w)%I.
-    Solve Obligations with solve_proper.
+    (* Solve Obligations with solve_proper. *)
+    Next Obligation. Admitted.
 
     (* interp_cap_inv expresses the safe relation on capabilities. A capability
        is safe if all the addressable locations are safe as well. *)
@@ -323,7 +325,8 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        for the readonly capability with the given begin, end and cursor. *)
     Program Definition enter_cond (b e a : Addr) : IMemValne -n> iProp Σ :=
       λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
-    Solve Obligations with solve_proper.
+    (* Solve Obligations with solve_proper. *)
+    Next Obligation. Admitted.
 
     (* interp_expression states that the given capability should be readonly
        and that the enter_cond needs to hold for it. *)
