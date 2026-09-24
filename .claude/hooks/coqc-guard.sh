@@ -262,24 +262,71 @@ targets=$(printf '%s' "$cmd" | tr ' \t' '\n\n' \
 # dependent, so strip both.  Matches `date +%s%N` in the marker.
 mtime_ns() { stat -c '%.9Y' "$1" 2>/dev/null | tr -d '.,' ; }
 
+# CANONICAL PATH, NOT THE SPELLING (2026-09-24).  Every path below -- the
+# existence test, both mtimes, the marker key -- goes through canon_path.  Two
+# bugs had the same root, the target being used exactly as the command spelled
+# it:
+#   - FALSE DENY.  The marker hashed the path as the MCP tool received it
+#     (usually absolute), this hook hashed it as the build command spelled it
+#     (usually relative), so a real interactive check never matched.  Three
+#     denials in a row on a file checked twice.
+#   - FALSE ALLOW.  A relative target was tested with `[ -f ]` against THIS
+#     hook's cwd, not the directory the command runs in.  `cd X && coqc
+#     rel.v` with the hook elsewhere failed the test and `continue`d -- i.e.
+#     the rule silently did not apply.
+# The function is duplicated verbatim in rocq-interactive-marker.sh and the
+# two copies MUST stay identical.  Bases, in order: every `cd DIR` in the
+# command (where it actually runs), the session cwd, the project root.
+canon_path() {
+  _p=$1; shift
+  case $_p in
+    /*) realpath -m -- "$_p" 2>/dev/null || printf '%s' "$_p"; return ;;
+  esac
+  for _b in "$@"; do
+    [ -n "$_b" ] || continue
+    if [ -e "$_b/$_p" ]; then realpath -m -- "$_b/$_p" 2>/dev/null; return; fi
+  done
+  realpath -m -- "${1:-$PWD}/$_p" 2>/dev/null || printf '%s' "$_p"
+}
+cd_bases=$(printf '%s' "$cmd" | sed -E 's/&&|\|\||;|\|/\n/g' \
+           | sed -n -E 's#^[[:space:]]*cd[[:space:]]+([^[:space:]]+).*#\1#p' | tac)
+sess_cwd=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null) || sess_cwd=""
+
+# The ZZ-probe test above reads the COMMAND TEXT, so `cd .../CFGVer && coqc
+# Example/ZZFoo.v` -- the probe spelled relative to where it runs -- was not
+# recognised and spent the rate-limit budget.  Same spelling-vs-path bug as
+# the marker key; decide it from the canonical targets as well.
+while IFS= read -r _t; do
+  [ -n "$_t" ] || continue
+  # shellcheck disable=SC2086
+  _a=$(IFS='
+'; canon_path "$_t" $cd_bases "$sess_cwd" "${CLAUDE_PROJECT_DIR:-}" "$PWD")
+  case $_a in */CFGVer/Example/ZZ*) zz_probe=1 ;; esac
+done <<EOF
+$targets
+EOF
+
 if [ -n "$targets" ] && [ "${CLAUDE_COQC_GUARD_SAMETARGET:-1}" = "1" ]; then
   while IFS= read -r tgt; do
     [ -n "$tgt" ] || continue
-    [ -f "$tgt" ] || continue
-    src_mt=$(mtime_ns "$tgt"); case $src_mt in ''|*[!0-9]*) continue ;; esac
+    # shellcheck disable=SC2086  # cd_bases is newline-separated, word-split on purpose
+    atgt=$(IFS='
+'; canon_path "$tgt" $cd_bases "$sess_cwd" "${CLAUDE_PROJECT_DIR:-}" "$PWD")
+    [ -f "$atgt" ] || continue
+    src_mt=$(mtime_ns "$atgt"); case $src_mt in ''|*[!0-9]*) continue ;; esac
     vo_mt=0
-    [ -f "${tgt}o" ] && vo_mt=$(mtime_ns "${tgt}o")
+    [ -f "${atgt}o" ] && vo_mt=$(mtime_ns "${atgt}o")
     case $vo_mt in ''|*[!0-9]*) vo_mt=0 ;; esac
 
     # unchanged since its last build -> not a tweak loop, allow
     [ "$src_mt" -gt "$vo_mt" ] || continue
     # checked interactively since the change -> allow.  Per-target now: a
     # check of some OTHER file no longer counts.
-    last_check=$(marker_for "$tgt")
+    last_check=$(marker_for "$atgt")
     case $last_check in ''|*[!0-9]*) last_check=0 ;; esac
     if [ "$last_check" -gt "$src_mt" ]; then
       # a consume-on-use "any" marker is spent once it authorises a build
-      _k=$(printf '%s' "$tgt" | cksum | cut -d' ' -f1)
+      _k=$(printf '%s' "$atgt" | cksum | cut -d' ' -f1)
       [ -f "${mbase}-${_k}" ] || rm -f "${mbase}-any" 2>/dev/null || true
       continue
     fi
