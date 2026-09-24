@@ -62,19 +62,39 @@ contractive safety fixpoint (Adequacy.v:125).  Confirm against
   self-annotated code proves trivially (useless, not unsound — its bridge
   needs `blocksSound` for that program).  Debt: `sexec_triple_addr_rec` is a
   verbatim copy of `sexec_triple_addr`.
-- **2. `VerifierRel.v`** (THE RISK): concrete mirror (`cexec_first_step`,
-  `cexec_triple_addr_rec`) and refinement.  `step_after_drop`'s refinement is
-  INLINED in `rexec_cfg_addr` (~l.1309-1416, 1699), not a lemma — extract it
-  (`rstep_after_drop`) or reproduce it.  pet cannot open `VerifierRel.v`;
-  develop in a probe (cf. `ZZGhostRefineProbe.v`).
-- **3. `Adequacy.v`**: move `sound_first_step` in; triple-level
-  `sound_cexec_triple_addr_rec_myWP2` taking `▷ blocksSound` as an Iris
-  hypothesis; `sound_scfg_verification_condition_rec_myWP2`.
-- **4. `GenCompose.v`**: `blockSound_of_rec_vc` by `iLöb`; `□▷ blockSound b ⊢
-  ▷ blocksSound` for the loop's program (b at the head, nothing else, or
-  others from a premise).
-- **5. Example**: countdown as ONE rec contract; relink `ZZCdLinkSpec`/
-  `ZZCdLink` through it; delete the LoopSpec-route glue if it's subsumed.
+- **2. `VerifierRel.v`. DONE 2026-09-24.** `cexec_first_step`,
+  `rexec_first_step` (stated exactly like `rexec_cfg_addr` minus `first`; the
+  proof is `rexFS`'s case 3 minus drop/GC, handing off to `rexec_cfg_addr`),
+  `cexec_triple_addr_rec`, `rexec_triple_addr_rec`,
+  `ccfg_verification_condition_rec`, `rcfg_verification_condition_rec`.
+  Developed in a probe (pet cannot open this file — it also OOMs on any probe
+  requiring it; `coqc` peaks at 6.76 GB), compiled first try, ported
+  verbatim, `make`-green.
+- **3 + 4. `GenCompose.v` (not Adequacy.v — it already holds the other
+  blockSound doors and has `Local Unset Implicit Arguments`, so the probe
+  proofs port verbatim). DONE 2026-09-24.** Section `RecLoop`:
+  `sound_first_step`, `sound_cexec_triple_addr_rec_myWP2_w` (block premise an
+  Iris hypothesis under ▷), `sound_scfg_verification_condition_rec_myWP2_w`,
+  `blocksSound_of_head_iris` (`□ blockSound ⊢ blocksSound`), and
+  **`blockSound_of_rec_vc`** — `iLöb`; the IH `▷ blockSound b` supplies
+  `▷ blocksSound` for the loop's own program.  Plus `rec_vc_of`.
+- **5. Example. DONE 2026-09-24.** `Example/ZZCdRec.v` (the loop as ONE
+  contract, 22 ms) + `ZZCdRecLinkSpec.v` (outer VC, 15 ms) +
+  `ZZCdRecLink.v`: `cdRec_blockSound` is one `iApply` of the Löb lemma plus
+  where-the-code-sits arithmetic; `valid_rlink_contract :
+  ValidCFGVerifierContract rlink`, axiom-clean.  The spikes ZZRecStep /
+  ZZRecRefine / ZZRecSound were retired once ported.
+
+## Open
+
+- Nothing is gate-checked yet (the probes are gitignored `ZZ*`).  To make
+  the result durable a tracked example (e.g. `Example/CountdownRec.v` +
+  `…Result.v`) and an end theorem through a bridge are needed.
+- The LoopSpec route (`ZZBlkLoop.v`, `blockSound_of_loop`) is now subsumed
+  for loops-as-blocks; decide whether to keep it.
+- `sexec_triple_addr_rec` / `cexec_triple_addr_rec` / `rexec_triple_addr_rec`
+  are verbatim copies of their ordinary twins.
+- A loop block at index > 0 still needs the index-n `blocksSound_of_head`.
 
 ## Out of scope
 

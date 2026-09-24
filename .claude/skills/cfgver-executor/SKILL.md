@@ -758,8 +758,12 @@ Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 A loop can be verified as ONE block contract whose precondition is the
 invariant, with the loop head annotated by **that same block**: the back edge
 then consumes the invariant and the solver does the framing. The only
-meta-logic is a Löb induction (PLAN-rec-loop-block.md phase 4). What stops the
-VC applying the block to itself at step 0 is a separate entry point:
+meta-logic is a Löb induction, proved once: **`GenCompose.blockSound_of_rec_vc`**
+(its IH `▷ blockSound b` is enough because the block premise is only USED after
+one executed instruction). Refinement: `VerifierRel.rexec_first_step` /
+`rexec_triple_addr_rec`. Full chain worked end to end on countdown,
+axiom-clean: `Example/ZZCdRec.v` → `ZZCdRecLink.v`. What stops the VC applying
+the block to itself at step 0 is a separate entry point:
 
 - `sexec_first_step fuel` — look up the entry, run `step_after_drop
   (sexec_cfg_addr fuel false) ai …` on it: EXECUTE, never consult `ai_block`.

@@ -336,6 +336,31 @@ Section CFGVerificationDerived.
             end
         end.
 
+    (* Mirror of Verifier.sexec_first_step (PLAN-rec-loop-block.md): the
+       FIRST step of a self-referential loop VC.  Look up the entry and
+       EXECUTE it -- ai_block is not consulted -- then run the ordinary
+       executor.  cexec_cfg_addr's non-block branch minus cchunk_gc /
+       cdrop_dead and minus the exit disjunct, exactly as on the symbolic
+       side.  Developed and proved in Example/ZZRecRefine.v (pet cannot open
+       this file). *)
+    Definition cexec_first_step (instrs : gmap (bv xlenbits) AnnotInstr)
+      (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool) (fuel : nat) :
+      RelVal ty_xlenbits -> RelVal ty_xlenbits -> CHeapSpec (RelVal ty_xlenbits) :=
+      fun apc anp =>
+        match ty.RVToOption apc with
+        | None   => error
+        | Some v =>
+            match instrs !! v with
+            | None    => error
+            | Some ai =>
+                _ <- cexec_ghosts (ai_ghost_before ai) ;;
+                apc' <- cexec_instruction (ai_instr ai) apc anp
+                          (ty.SyncVal (words v)) ;;
+                _ <- cexec_ghosts (ai_ghost_after ai) ;;
+                cexec_cfg_addr instrs words exitCond fuel apc' apc'
+            end
+        end.
+
     Import (hints) CStoreSpec.
 
     #[export] Instance mono_cexec_instruction {i a np w} :
@@ -1937,6 +1962,84 @@ Section CFGVerificationDerived.
         apply (rexFS n' first (IH false)).
     Qed.
 
+    (* THE FIRST STEP OF A SELF-REFERENTIAL VC (PLAN-rec-loop-block.md),
+       stated EXACTLY like rexec_cfg_addr (minus `first`) so the triple-level
+       refinement below is rexec_triple_addr with one call replaced.  The proof
+       is rexFS's case 3 (lookup-hit, no block) MINUS the drop and the GC --
+       so no rdrop_dead_iris and one factors_four layer fewer -- with the
+       continuation handed to rexec_cfg_addr instead of an IH.  Developed in
+       Example/ZZRecRefine.v; coqc-green there first. *)
+    Lemma rexec_first_step (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (fuel : nat) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
+        (tbl : SInstrTableW w) (exits : SExitTable w) :
+      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+       ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
+       ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
+       ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
+         ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
+       ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
+         ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_first_step instrs words exitCond fuel a na cΦ ch)
+            (sexec_first_step fuel trans tbl exits ta tna sΦ sh))%I.
+    Proof.
+      iIntros "#[Hi He]".
+      iIntros (a ta) "#Ha". iIntros (na tna) "#Hna".
+      iIntros (cΦ sΦ) "%Hfac". iIntros "#rΦ". iIntros (ch sh) "#rh".
+      unfold sexec_first_step, cexec_first_step.
+      destruct (lookup_instr tbl ta) as [[wd ai]|] eqn:Hlk.
+      2: { destruct a as [va|va1 va2]; cbn [ty.RVToOption];
+           unfold LogicalSoundness.RProp; cbn;
+           iIntros "%HF"; destruct HF. }
+      iDestruct (lookup_instr_sound_repₚ instrs words _ _ a Hlk with "[$Hi $Ha]")
+        as (v) "[%Hfact #Hx]".
+      destruct Hfact as (-> & Hm).
+      cbn [ty.RVToOption]. rewrite Hm.
+      unfold step_after_drop.
+      (* ghosts-before *)
+      unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+      iApply (rexec_ghosts (ai_ghost_before ai)).
+      2: iApply "rh".
+      iIntros (w0 θ0). iModIntro. iIntros (u0 tu0) "_".
+      iIntros (ch0 sh0) "#rh0".
+      iPoseProof (forgetting_unconditionally with "rΦ") as "rQ2".
+      iClear "rΦ".
+      (* the instruction: ONE persist layer each (no drop before it) *)
+      unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+      iApply (rexec_instruction (ai_instr ai)).
+      1: iApply (refine_inst_persist with "Ha").
+      1: iApply (refine_inst_persist with "Hna").
+      1: iApply (refine_inst_persist with "Hx").
+      2: iApply "rh0".
+      iIntros (w2 θ2). iModIntro. iIntros (apc' tapc') "#Hapc".
+      iIntros (ch2 sh2) "#rh2".
+      iPoseProof (forgetting_unconditionally with "rQ2") as "rQ3".
+      iClear "rQ2".
+      (* ghosts-after *)
+      unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
+      iApply (rexec_ghosts (ai_ghost_after ai)).
+      2: iApply "rh2".
+      iIntros (w3 θ3). iModIntro. iIntros (u3 tu3) "_".
+      iIntros (ch3 sh3) "#rh3".
+      iPoseProof (forgetting_unconditionally with "rQ3") as "rQ4".
+      iClear "rQ3".
+      (* hand over to the ordinary executor -- three factors_four layers *)
+      pose proof (factors_four θ0 Hfac) as F1.
+      pose proof (factors_four θ2 F1) as F2.
+      pose proof (factors_four θ3 F2) as F3.
+      rewrite !dbundle3_persist in F3.
+      clear F1 F2.
+      rewrite forgetting_itable_relW. rewrite forgetting_etable_rel.
+      rewrite <- !persist_itableW_trans. rewrite <- !persist_etable_trans.
+      rewrite !(persist_trans (A := Sub Σ0)).
+      iApply (rexec_cfg_addr instrs words exitCond fuel false _ _ _ with "[$Hi $He]").
+      1: iApply (refine_inst_persist with "Hapc").
+      1: iApply (refine_inst_persist with "Hapc").
+      1: (iPureIntro; exact F3).
+      1: iApply "rQ4".
+      1: iApply "rh3".
+    Qed.
+
     (* ------------------------------------------------------------------ *)
     (* VC-level refinement for the term-table verifier (guarded form).     *)
     (* The concrete side cexec_triple_addr is the gmap triple with an   *)
@@ -2660,6 +2763,127 @@ Section CFGVerificationDerived.
         (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits) w
         (scfg_verification_condition req tbl exits fuel ens w) _ :=
       MkRefineCompat (rcfg_verification_condition req instrs words exitCond fuel ens tbl exits).
+
+    (* ---- THE SELF-REFERENTIAL (LOOP) TRIPLE (PLAN-rec-loop-block.md) ------
+       Verbatim cexec_triple_addr / rexec_triple_addr / the VC pair, with the
+       first run step replaced: cexec_cfg_addr -> cexec_first_step and
+       rexec_cfg_addr … true -> rexec_first_step (same statement minus
+       `first`, checked with About).  A deliberate copy, like its symbolic
+       counterpart in Verifier.v; merging them is recorded debt. *)
+    Definition cexec_triple_addr_rec {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
+      (words : bv xlenbits -> bv word)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
+      CHeapSpec.bind (CHeapSpec.demonic_ctx (Σ ▻▻ words_ctx (length tbl))) (fun lenvw =>
+      let lenv := env.drop (words_ctx (length tbl)) lenvw in
+      let cws  := words_of_env rvtake rvdrop (env.take (words_ctx (length tbl)) lenvw) in
+      CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
+          (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv
+           /\ wtable_rel words tbl cws lenv))) (fun _ =>
+      CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
+      CHeapSpec.bind (CHeapSpec.demonic _) (fun np =>
+      CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
+      CHeapSpec.bind (cexec_first_step instrs words exitCond fuel a np) (fun na =>
+      CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])))))).
+
+    Lemma rexec_triple_addr_rec {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
+      (words : bv xlenbits -> bv word)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w : World} :
+      ⊢ ∀ (cPhi : unit -> SCHeap -> Prop)
+          (sPhi : forall w1 : World, Acc w w1 -> Unit w1 -> SHeap w1 -> 𝕊 w1),
+        ⌜OmegaIndep sPhi⌝ -∗
+        ℛ⟦□ᵣ (RUnit -> RHeap -> LogicalSoundness.RProp)⟧ cPhi sPhi -∗
+        ∀ (ch : SCHeap) (sh : SHeap w), ℛ⟦RHeap⟧ ch sh -∗
+          ℛ⟦LogicalSoundness.RProp⟧
+            (cexec_triple_addr_rec req instrs words exitCond fuel ens tbl exits cPhi ch)
+            (sexec_triple_addr_rec req tbl exits fuel ens (w := w) sPhi sh).
+    Proof.
+      iIntros (cPhi sPhi) "%Hoi #rPhi". iIntros (ch sh) "#rh".
+      unfold cexec_triple_addr_rec, sexec_triple_addr_rec.
+      iApply (rbind_at (RA := RNEnv LVar (Σ ▻▻ words_ctx (length tbl))) (RB := RUnit) with "[] [] rh").
+      - rsolve.
+      - iIntros (w1 om0) "!>". iIntros (lenvw δw) "#Hδw". iIntros (ch1 sh1) "#rh1".
+        rewrite guard_reduce.
+        iApply rprop_guard. iIntros "%Hfaith".
+        destruct Hfaith as [Hif [Hef Hwg]].
+        iPoseProof (refine_env_drop with "Hδw") as "#Hδ".
+        iApply (rbind_at (RA := RVal ty_xlenbits) (RB := RUnit) with "[] [] rh1").
+        + rsolve.
+        + iIntros (w2 th1) "!>". iIntros (a ta) "#Ha". iIntros (ch2 sh2) "#rh2".
+          iApply (rbind_at (RA := RVal ty_xlenbits) (RB := RUnit) with "[] [] rh2").
+          * rsolve.
+          * iIntros (w3 th1') "!>". iIntros (np tnp) "#Hnp". iIntros (ch3 sh3) "#rh3".
+            iAssert (ℛ⟦RInst (fun Sig : LCtx => NamedEnv (Term Sig) (Σ ▻ "a"∷ty_xlenbits))
+                         (Valuation (Σ ▻ "a"∷ty_xlenbits))⟧
+                       (env.drop (words_ctx (length tbl)) lenvw).["a"∷ty_xlenbits ↦ a]
+                       (persist (env.drop (words_ctx (length tbl)) δw)
+                          (acc_trans th1 th1')).["a"∷ty_xlenbits ↦ persist__term ta th1'])
+              as "#Hd1".
+            { rsolve. }
+            iApply (rbind_at (RA := RUnit) (RB := RUnit) with "[] [] rh3").
+            -- rsolve.
+            -- iIntros (w4 th2) "!>". iIntros (u tu) "#Hu". iIntros (ch4 sh4) "#rh4".
+               iPoseProof (itable_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             (env.drop (words_ctx (length tbl)) δw) Hif with "Hδ") as "#Hi0".
+               iPoseProof (etable_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             (env.drop (words_ctx (length tbl)) δw) Hef with "Hδ") as "#He".
+               iPoseProof (wtable_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             (env.drop (words_ctx (length tbl)) δw) Hwg with "Hδ") as "#Hw0".
+               iPoseProof (words_rel_of_faith_forget (acc_trans (acc_trans th1 th1') th2)
+                             δw lenvw with "Hδw") as "#Hws".
+               iAssert (itable_relW instrs words
+                          (zip_words
+                             (subst_itable (persist (env.drop (words_ctx (length tbl)) δw)
+                                              (acc_trans (acc_trans th1 th1') th2)) tbl)
+                             (List.map (fun x => persist__term x (acc_trans (acc_trans th1 th1') th2))
+                                (words_of_env (@wterm_take _) (@wterm_drop _)
+                                   (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
+               { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
+               unfold CHeapSpec.bind. unfold SHeapSpec.bind.
+               iApply (rexec_first_step instrs words exitCond fuel _ _ _
+                         with "[$Hi $He]").
+               ++ iApply (refine_inst_persist with "Ha").
+               ++ iApply (refine_inst_persist with "Hnp").
+               ++ iPureIntro. apply factors_consume_tail.
+                  apply omega_indep_four. apply omega_indep_four.
+                  apply omega_indep_four. apply omega_indep_four. exact Hoi.
+               ++ iIntros (w5 th3) "!>". iIntros (na tna) "#Hna". iIntros (ch5 sh5) "#rh5".
+                  iApply (rconsume_at with "[] [] rh5").
+                  ** rsolve.
+                  ** iApply (refine_four5 with "rPhi").
+               ++ iApply "rh4".
+    Qed.
+
+    Definition ccfg_verification_condition_rec {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
+      (words : bv xlenbits -> bv word)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : Prop :=
+      CHeapSpec.run (cexec_triple_addr_rec req instrs words exitCond fuel ens tbl exits).
+
+    Lemma rcfg_verification_condition_rec {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
+      (words : bv xlenbits -> bv word)
+      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
+      ⊢ RSat LogicalSoundness.RProp (w := w)
+          (ccfg_verification_condition_rec req instrs words exitCond fuel ens tbl exits)
+          (scfg_verification_condition_rec req tbl exits fuel ens w).
+    Proof.
+      unfold ccfg_verification_condition_rec, scfg_verification_condition_rec.
+      unfold CHeapSpec.run. unfold SHeapSpec.run.
+      iApply (rexec_triple_addr_rec req instrs words exitCond fuel ens tbl exits).
+      - iPureIntro. apply omega_indep_block.
+      - rsolve.
+      - rsolve.
+    Qed.
 
   End Relational.
 

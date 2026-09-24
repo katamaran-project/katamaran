@@ -265,17 +265,17 @@ Section SegCompose.
   Proof. destruct c; exact (fun H => H). Qed.
 
   (* The resources the soundness bridge CONSUMES at entry. *)
-  Definition seg_entry {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+  Definition seg_entry {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
       (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) : iProp Σ :=
     ( asn.interpret (extend_to_minimal_pre (cfg_precondition c))
         (iota.["a"∷ty_xlenbits ↦ SyncVal a])
       ∗ pc ↦ᵣ SyncVal a
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
           (ai_instr <$> instrs_of_list cbase L) )%I.
 
   (* ...and the ones it HANDS BACK at the exit, for the taken exit `an`. *)
-  Definition seg_exit {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+  Definition seg_exit {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
       (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits)
       (an : RelVal ty_xlenbits) : iProp Σ :=
     ( ⌜match an with
@@ -284,7 +284,7 @@ Section SegCompose.
         end⌝
       ∗ pc ↦ᵣ an
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
           (ai_instr <$> instrs_of_list cbase L)
       ∗ asn.interpret (cfg_postcondition c)
           ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ an]) )%I.
@@ -303,7 +303,7 @@ Section SegCompose.
      Argument ORDER is load-bearing: Pre/Post are implicit (inferred from the
      conclusion) and everything the caller must choose is explicit and early,
      because only IMPLICIT arguments can be passed by name. *)
-  Lemma seg_run {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+  Lemma seg_run {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
     (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
     {Pre Post : iProp Σ}
     (annot : list AnnotInstr)
@@ -318,13 +318,13 @@ Section SegCompose.
        cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
     (Hbs : forall wds : bv xlenbits -> bv word,
              ⊢ blocksSound wds (instrs_of_list cbase L))
-    (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
-    (HPost : forall an, Fr ∗ seg_exit c iota a L cbase an -∗ Post) :
+    (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
+    (HPost : forall an, Fr ∗ seg_exit words c iota a L cbase an -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
     iIntros "HP".
     iDestruct (HPre with "HP") as "(HF & Hpre & Hpc & Hnpc & Hinstrs)".
-    iApply (sound_scfg_verification_condition_myWP2
+    iApply (sound_scfg_verification_condition_myWP2_w words
               (seg_vc c annot Hv) Post Hif Hef
               Hbs
               $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
@@ -457,6 +457,92 @@ Section SegCompose.
              (seg_vc (blk_contract b) ab Hv) Hexit Hstrip Hbs).
   Qed.
 
+  (* ======================================================================== *)
+  (* THE SECOND DOOR INTO blockSound: A META-LOGIC INDUCTION                  *)
+  (* ======================================================================== *)
+
+  (* blockSound_of_contract above discharges a VC.  This discharges an
+     INDUCTION instead, and the two are independent: the enclosing program
+     cannot tell which was used, because blockSound is the SEMANTIC form.
+
+     WHY A LOOP NEEDS THIS DOOR AT ALL.  The symbolic executor's only
+     recursion is FUEL, i.e. a finite unrolling, so `for all n` is not
+     expressible in the VC language -- there is no fixpoint rule.  A loop
+     invariant's induction is therefore irreducibly meta-logic.  What this
+     lemma buys is that it only has to happen ONCE: everything a caller
+     supplies below is either a VC (Hstep/Hexit come straight from loop_runs)
+     or the loop VARIANT (Hentry), and no caller writes Iris again.
+
+     Hentry IS the variant, and it is the one thing that cannot be
+     mechanised: it reads a starting trip count off the block's precondition.
+     Note the shape -- `blk_pre ... ⊢ ∃ n, Inv i n`, an EXISTENTIAL -- because
+     blockSound quantifies over every valuation `i` and the count depends on
+     it.  For a counted loop that is `∃ n, bin k = n+1`, i.e. exactly the
+     no-wrap fact the precondition already carries. *)
+
+  (* The two bundles blockSound consumes and produces, named so a caller can
+     state Hentry/Hexit without transcribing them.  They are to blockSound
+     what seg_entry/seg_exit are to seg_run -- and, like those, they are
+     WORD-INDEXED: blockSound hands a block one specific `words` and demands
+     the same one back, which is why the whole loop family above threads it. *)
+  Definition blk_pre (words : bv xlenbits -> bv word) (v : bv xlenbits)
+      (b : BlkAnnot) (i : Valuation (blk_ctx b)) : iProp Σ :=
+    ( asn.interpret (extend_to_minimal_pre (cfg_precondition (blk_contract b)))
+        (i.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+      ∗ pc ↦ᵣ ty.SyncVal v
+      ∗ (∃ x, nextpc ↦ᵣ x)
+      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) )%I.
+
+  Definition blk_post (words : bv xlenbits -> bv word) (v : bv xlenbits)
+      (b : BlkAnnot) (i : Valuation (blk_ctx b)) : iProp Σ :=
+    ( asn.interpret (cfg_postcondition (blk_contract b))
+        ((i.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+           .["an"∷ty_xlenbits ↦ ty.SyncVal (bv.add v (bv.of_N (blk_off b)))])
+      ∗ pc ↦ᵣ ty.SyncVal (bv.add v (bv.of_N (blk_off b)))
+      ∗ (∃ x, nextpc ↦ᵣ x)
+      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) )%I.
+
+  Lemma blockSound_of_induction (words : bv xlenbits -> bv word)
+      (v : bv xlenbits) (b : BlkAnnot)
+      (Inv : Valuation (blk_ctx b) -> nat -> iProp Σ)
+      (Hentry : forall i, blk_pre words v b i ⊢ ∃ n, Inv i n)
+      (Hstep  : forall i n, Inv i (S n) -∗ myWP2_loop (Inv i n))
+      (Hexit  : forall i, Inv i 0 -∗ myWP2_loop (blk_post words v b i)) :
+    ⊢ blockSound words v b.
+  Proof.
+    unfold blockSound.
+    iIntros (i ExitCond) "Hpre Hk".
+    iDestruct (Hentry i with "Hpre") as (n) "Hinv".
+    (* bind rather than pass Hcont to seg_loop: the continuation "Hk" is a
+       SPATIAL hypothesis, and seg_loop's Hcont is a Coq-level entailment
+       that would have to hold from nothing. *)
+    iApply (myWP2_loop_bind (blk_post words v b i) ExitCond with "[Hk] [Hinv]").
+    - iIntros "HP". iApply exitCondImpliesMyWP2_loop. iApply "Hk". iExact "HP".
+    - iApply (myWP2_loop_induction (Inv i) (blk_post words v b i)
+                (Hstep i) (Hexit i) n).
+      iExact "Hinv".
+  Qed.
+
+  (* The LoopSpec route.  `loop_runs` already packages step, exit AND the
+     continuation into one `forall n, loop_invariant ... -∗ myWP2_loop Post`,
+     so feeding a generated loop to blockSound_of_induction would mean taking
+     that apart again.  This is the form such a loop actually wants: the
+     variant, and the run.  Everything else the caller passes is a VC. *)
+  Lemma blockSound_of_loop (words : bv xlenbits -> bv word)
+      (v : bv xlenbits) (b : BlkAnnot)
+      (Inv : Valuation (blk_ctx b) -> nat -> iProp Σ)
+      (Hentry : forall i, blk_pre words v b i ⊢ ∃ n, Inv i n)
+      (Hrun   : forall i n, Inv i n -∗ myWP2_loop (blk_post words v b i)) :
+    ⊢ blockSound words v b.
+  Proof.
+    unfold blockSound.
+    iIntros (i ExitCond) "Hpre Hk".
+    iDestruct (Hentry i with "Hpre") as (n) "Hinv".
+    iApply (myWP2_loop_bind (blk_post words v b i) ExitCond with "[Hk] [Hinv]").
+    - iIntros "HP". iApply exitCondImpliesMyWP2_loop. iApply "Hk". iExact "HP".
+    - iApply (Hrun i n). iExact "Hinv".
+  Qed.
+
   (* ---- SINGLE-EXIT specialisation -----------------------------------------
      A segment with ONE declared target has its exit pc PINNED by the exit
      condition, so all of this can go away at the call site: the `forall an`,
@@ -468,17 +554,17 @@ Section SegCompose.
 
      `Hec` is `eq_refl` for any contract built by gen_seg_contract with a
      one-element `targets`. *)
-  Definition seg_exit_state {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+  Definition seg_exit_state {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
       (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits)
       (v : bv xlenbits) : iProp Σ :=
     ( pc ↦ᵣ SyncVal v
       ∗ (bi_exist (fun u => nextpc ↦ᵣ u))
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
           (ai_instr <$> instrs_of_list cbase L)
       ∗ asn.interpret (cfg_postcondition c)
           ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ SyncVal v]) )%I.
 
-  Lemma seg_run_single_exit {R : LCtx} (c : @CFGVerifierContract R) (iota : Valuation R)
+  Lemma seg_run_single_exit {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
     (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
     (ia t : N)
     {Pre Post : iProp Σ}
@@ -495,11 +581,11 @@ Section SegCompose.
        cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
     (Hbs : forall wds : bv xlenbits -> bv word,
              ⊢ blocksSound wds (instrs_of_list cbase L))
-    (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
-    (HPost : Fr ∗ seg_exit_state c iota a L cbase (seg_addr ia t) -∗ Post) :
+    (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
+    (HPost : Fr ∗ seg_exit_state words c iota a L cbase (seg_addr ia t) -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_run c iota a L cbase Fr annot Hv Hif Hef Hbs HPre).
+    apply (seg_run words c iota a L cbase Fr annot Hv Hif Hef Hbs HPre).
     iIntros (an) "H".
     destruct an as [av | a1 a2].
     2:{ iDestruct "H" as "(_ & %Hf & _)". destruct Hf. }
@@ -526,7 +612,7 @@ Section SegCompose.
      `iAssert … as %H` rather than `iDestruct`: the pin is a PURE consequence
      of the postcondition, and iDestruct would consume the postcondition to
      get it. *)
-  Lemma seg_run_pinned_exit {R : LCtx} (c : @CFGVerifierContract R)
+  Lemma seg_run_pinned_exit {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R)
     (iota : Valuation R) (a : bv xlenbits) (L : list AnnotInstr)
     (cbase : bv xlenbits) (Fr : iProp Σ) (v : bv xlenbits)
     {Pre Post : iProp Σ}
@@ -546,11 +632,11 @@ Section SegCompose.
               asn.interpret (cfg_postcondition c)
                 ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ an])
               ⊢ ⌜an = ty.SyncVal v⌝)
-    (HPre  : Pre -∗ Fr ∗ seg_entry c iota a L cbase)
-    (HPost : Fr ∗ seg_exit_state c iota a L cbase v -∗ Post) :
+    (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
+    (HPost : Fr ∗ seg_exit_state words c iota a L cbase v -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_run c iota a L cbase Fr annot Hv Hif Hef Hbs HPre).
+    apply (seg_run words c iota a L cbase Fr annot Hv Hif Hef Hbs HPre).
     iIntros (an) "(HF & %Hex & Hpc & Hnpc & Hinstrs & Hpost)".
     iAssert (⌜an = ty.SyncVal v⌝)%I as %Han; [ iApply (Hpin an); iExact "Hpost" |].
     subst an.
@@ -755,8 +841,8 @@ Section SegCompose.
   #[global] Arguments place_head_eq {R ls}.     #[global] Arguments place_fits_memory {R ls}.
   #[global] Arguments place_body_table_ok {R ls}.    #[global] Arguments place_exit_table_ok {R ls}.
 
-  Definition loop_instr_block {R : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls) : iProp Σ :=
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+  Definition loop_instr_block {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls) : iProp Σ :=
+    Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
       (ai_instr <$> instrs_of_list (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)).
 
   (* ---- ONE TRIP, EITHER KIND (A3) ----------------------------------------
@@ -775,7 +861,7 @@ Section SegCompose.
              inst_loop_base_pre;
        Hg  : the branch decision holds at this trip -- one arithmetic fact;
        HOut: what to do with the segment's exit state. *)
-  Lemma loop_one_trip {R : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_one_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
       (g : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (R ▻ "a"∷ty_xlenbits))
       (target : N)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -795,7 +881,7 @@ Section SegCompose.
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (g (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
                (i.["a"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))]))
-      (HOut : F ∗ seg_exit_state (gen_loop_contract ls g target post) i
+      (HOut : F ∗ seg_exit_state words (gen_loop_contract ls g target post) i
                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
                     (@bv.of_N xlenbits (place_prog_base pl))
                     (seg_addr (loop_head_addr ls) target)
@@ -804,7 +890,7 @@ Section SegCompose.
       (i.["a"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))])
     ∗ F ∗ pc ↦ᵣ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))
     ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
-    ∗ loop_instr_block ls pl
+    ∗ loop_instr_block words ls pl
     -∗ myWP2_loop Out.
   Proof.
     assert (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits)
@@ -837,7 +923,7 @@ Section SegCompose.
                (term_binop bop.bvadd (loop_base ls) (term_val ty_xlenbits (bv.of_N 0)))
                i (loop_head_addr ls) [target] (inst_addr_plus0 _ _ _ Hpl)). }
     iIntros "H".
-    iApply (seg_run_single_exit (gen_loop_contract ls g target post) i
+    iApply (seg_run_single_exit words (gen_loop_contract ls g target post) i
              (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
              (@bv.of_N xlenbits (place_prog_base pl)) F (loop_head_addr ls) target
              (gen_loop_exitCond ls g target post) (gen_loop_annot ls)
@@ -875,7 +961,7 @@ Section SegCompose.
      The BODY trip: guard holds, back edge to offset 0, and the continuation is
      the next trip's invariant.  `Htrans` is where a sliding footprint lives:
      the contract is trip-independent, and iotaf moves the pointers. *)
-  Lemma loop_body_trip {R : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_body_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
       (Fr : nat -> iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (n : nat)
       (HPm : P (S n) -> P n)
@@ -900,16 +986,16 @@ Section SegCompose.
              ((iotaf n).["a"∷ty_xlenbits
                 ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))])
            ∗ Fr n) :
-    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block ls pl) P (S n)
+    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls pl) P (S n)
     -∗ myWP2_loop (loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-                     (loop_instr_block ls pl) P n).
+                     (loop_instr_block words ls pl) P n).
   Proof.
     (* Peel the pure side condition FIRST: the two bullets of loop_one_trip are
        separate goals, so an iIntros inside HOut would not scope over it, and
        HOut is where P n has to be re-established. *)
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
-    iApply (loop_one_trip ls pl (loop_guard ls) 0%N (gen_loop_contract_post ls) (iotaf (S n))
+    iApply (loop_one_trip words ls pl (loop_guard ls) 0%N (gen_loop_contract_post ls) (iotaf (S n))
              (Fr (S n)) _ (place_body_table_ok pl) Hv Hbs Hpl (Hg HP) with "H").
     unfold loop_invariant, seg_exit_state.
     rewrite seg_addr_0.
@@ -922,7 +1008,7 @@ Section SegCompose.
   (* The EXIT trip: the exit guard holds, the target is the fall-through, and
      `Out` is whatever the caller hands the next segment -- the cut out of the
      loop, and genuine specification. *)
-  Lemma loop_final_trip {R : LCtx} (ls : LoopSpec R)
+  Lemma loop_final_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (pl : LoopPlace ls) (Fr : nat -> iProp Σ) (Out : iProp Σ)
       (iotaf : nat -> Valuation R)
@@ -937,17 +1023,17 @@ Section SegCompose.
       (Hg  : instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
                ((iotaf 0).["a"∷ty_xlenbits
                   ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))]))
-      (HOut : Fr 0 ∗ seg_exit_state (loop_final_contract ls post) (iotaf 0)
+      (HOut : Fr 0 ∗ seg_exit_state words (loop_final_contract ls post) (iotaf 0)
                      (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
                      (@bv.of_N xlenbits (place_prog_base pl))
                      (seg_addr (loop_head_addr ls) (loop_exit_off ls))
               -∗ Out) :
-    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block ls pl) P 0
+    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls pl) P 0
     -∗ myWP2_loop Out.
   Proof.
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
-    iApply (loop_one_trip ls pl (loop_exit_guard ls) (loop_exit_off ls) post (iotaf 0)
+    iApply (loop_one_trip words ls pl (loop_exit_guard ls) (loop_exit_off ls) post (iotaf 0)
              (Fr 0) Out (place_exit_table_ok pl) Hv Hbs Hpl Hg HOut with "H").
   Qed.
 
@@ -980,15 +1066,15 @@ Section SegCompose.
      `bv.of_N (loop_head_addr ls)`, because what a caller HAS is whatever seg_run_single_exit
      handed back -- `seg_addr ia t` for the predecessor's own base and target.
      Hv is then `f_equal; lia`, or reflexivity when both are literals. *)
-  Lemma loop_enter_from_seg {R S : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_enter_from_seg {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
       (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
       (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
       (P : nat -> Prop) (n : nat)
       (Hv : v = @bv.of_N xlenbits (loop_head_addr ls))
       (HP : P n)
       (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin Fr n) :
-    Fin ∗ seg_exit_state c j a (loop_prog ls) (@bv.of_N xlenbits (place_prog_base pl)) v
-    ⊢ loop_invariant ls iota (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block ls pl) P n.
+    Fin ∗ seg_exit_state words c j a (loop_prog ls) (@bv.of_N xlenbits (place_prog_base pl)) v
+    ⊢ loop_invariant ls iota (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls pl) P n.
   Proof.
     subst v. unfold seg_exit_state, loop_invariant, loop_instr_block.
     iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
@@ -1054,7 +1140,7 @@ Section SegCompose.
   (* Segment THEN loop, in one step: run the predecessor, land in the loop,
      run the loop.  This is `seg_then` with the cut assertion filled in, and it
      is the shape a chain into a loop actually wants. *)
-  Lemma seg_then_loop {R S : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma seg_then_loop {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
       (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
       (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
       (P : nat -> Prop) (n : nat) (Pre Post : iProp Σ)
@@ -1062,18 +1148,18 @@ Section SegCompose.
       (HP : P n)
       (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin Fr n)
       (Hpred : Pre -∗ myWP2_loop
-                 (Fin ∗ seg_exit_state c j a (loop_prog ls)
+                 (Fin ∗ seg_exit_state words c j a (loop_prog ls)
                          (@bv.of_N xlenbits (place_prog_base pl)) v))
       (Hloop : loop_invariant ls iota (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-                 (loop_instr_block ls pl) P n
+                 (loop_instr_block words ls pl) P n
                -∗ myWP2_loop Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_then Pre (Fin ∗ seg_exit_state c j a (loop_prog ls)
+    apply (seg_then Pre (Fin ∗ seg_exit_state words c j a (loop_prog ls)
                           (@bv.of_N xlenbits (place_prog_base pl)) v) Post Hpred).
     iIntros "H".
     iApply Hloop.
-    iApply (loop_enter_from_seg ls pl c j a v iota Fin Fr P n Hv HP Hent).
+    iApply (loop_enter_from_seg words ls pl c j a v iota Fin Fr P n Hv HP Hent).
     iExact "H".
   Qed.
 
@@ -1082,24 +1168,24 @@ Section SegCompose.
 
   (* seg_loop, instantiated.  Given a step for every trip and an exit, the
      loop runs to its continuation. *)
-  Lemma loop_by_induction {R : LCtx} (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_by_induction {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
       (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (Hstep : forall n,
          loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-           (loop_instr_block ls pl)
+           (loop_instr_block words ls pl)
            P (S n)
          -∗ myWP2_loop (loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-              (loop_instr_block ls pl) P n))
+              (loop_instr_block words ls pl) P n))
       (Hexit :
          loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-           (loop_instr_block ls pl)
+           (loop_instr_block words ls pl)
            P 0
          -∗ myWP2_loop Out)
       (Hcont : Out -∗ myWP2_loop Post) :
     forall n,
       loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-        (loop_instr_block ls pl)
+        (loop_instr_block words ls pl)
         P n
       -∗ myWP2_loop Post.
   Proof. apply (seg_loop _ Out Post Hstep Hexit Hcont). Qed.
@@ -2246,7 +2332,7 @@ Section SegCompose.
      Both `Hlatch`'s guard half and `Hedge` take `P (S n)`, so a loop whose
      guard needs a no-wrap bound gets it from the trip predicate rather than
      from a side hypothesis. *)
-  Lemma loop_runs {R : LCtx} (ls : LoopSpec R)
+  Lemma loop_runs {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (pl : LoopPlace ls) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
@@ -2265,7 +2351,7 @@ Section SegCompose.
       (Hlatch : loop_latch_obligation ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) P)
       (Hedge : forall n, P (S n) ->
              loop_back_edge ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr n)
-      (HOut : Fr 0 ∗ seg_exit_state (loop_final_contract ls post) (iotaf 0)
+      (HOut : Fr 0 ∗ seg_exit_state words (loop_final_contract ls post) (iotaf 0)
                      (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
                      (@bv.of_N xlenbits (place_prog_base pl))
                      (seg_addr (loop_head_addr ls) (loop_exit_off ls))
@@ -2273,18 +2359,260 @@ Section SegCompose.
       (Hcont : Out -∗ myWP2_loop Post) :
     forall n,
       loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-        (loop_instr_block ls pl) P n
+        (loop_instr_block words ls pl) P n
       -∗ myWP2_loop Post.
   Proof.
-    apply (loop_by_induction ls pl Fr Out Post iotaf P
-             (fun n => loop_body_trip ls pl Fr iotaf P n (HPm n)
+    apply (loop_by_induction words ls pl Fr Out Post iotaf P
+             (fun n => loop_body_trip words ls pl Fr iotaf P n (HPm n)
                          Hvb Hbs (Hpl (S n)) (proj1 Hlatch n) (Hedge n))
-             (loop_final_trip ls post pl Fr Out iotaf P HP0 Hvf Hbs
+             (loop_final_trip words ls post pl Fr Out iotaf P HP0 Hvf Hbs
                 (Hpl 0) (proj2 Hlatch) HOut)
              Hcont).
   Qed.
 
 End SegCompose.
+
+(* ========================================================================= *)
+(* A LOOP AS ONE SELF-REFERENTIAL BLOCK -- PLAN-rec-loop-block.md phases 3-4 *)
+(*                                                                           *)
+(* The third door into blockSound, next to blockSound_of_contract (a VC) and *)
+(* blockSound_of_loop (a LoopSpec + loop_runs).  Here the loop is ONE block  *)
+(* contract whose precondition is the invariant, verified by ONE VC          *)
+(* (cfg_vc_rec) over the loop's code with its head annotated by that same    *)
+(* block: the back edge CONSUMES the invariant and the solver does all the   *)
+(* framing.  The only meta-logic is blockSound_of_rec_vc -- a Löb induction, *)
+(* proved once, generically.  Partial correctness: an invariant must be      *)
+(* preserved, not ensure termination.                                        *)
+(*                                                                           *)
+(* Developed in Example/ZZRecStep.v (the ▷ spike) and ZZRecSound.v; worked   *)
+(* example: Example/ZZCdRec.v + ZZCdRecLink.v (axiom-clean).                 *)
+(* ========================================================================= *)
+
+(* cfg_vc_rec, unfolded to what blockSound_of_rec_vc takes (seg_vc's twin). *)
+Lemma rec_vc_of {R : LCtx} (c : @CFGVerifierContract R) (a : list AnnotInstr) :
+  cfg_vc_rec c a ->
+  safeE (postprocess (scfg_verification_condition_rec
+    (extend_to_minimal_pre (cfg_precondition c))
+    (table_of_list (cfg_placement c) 0 a)
+    (cfg_exits c) (cfg_fuel c) (cfg_postcondition c) wnil)).
+Proof. destruct c; exact (fun H => H). Qed.
+
+Section RecLoop.
+  Context {Σ} {GS : sailGS2 Σ}.
+  Import CHeapSpec.
+
+  (* The entry step, given only ▷ blocksSound.  The later is stripped by the
+     instruction's own step (the iModIntro below), after which the ORDINARY
+     sound_exec_cfg_addr_myWP2 finishes -- the block premise is only ever
+     USED from the second step on, which is exactly what the executor's
+     sexec_first_step guarantees. *)
+  Lemma sound_first_step
+      {instrs} {words : bv xlenbits -> bv word} {exitCond fuel}
+      (apc anp : RelVal ty_xlenbits)
+      (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
+    cexec_first_step instrs words exitCond fuel apc anp Φ h →
+    ▷ blocksSound words instrs ∗
+    interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+        (ai_instr <$> instrs) ⊢
+    (∀ an,
+       ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+       pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+           (ai_instr <$> instrs) ∗
+       (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
+    myWP2_loop ExitCondIprop.
+  Proof.
+    intros Hexec.
+    destruct apc as [v|v1 v2]; cbn [cexec_first_step ty.RVToOption] in Hexec;
+      [|contradiction].
+    destruct (instrs !! v) as [i|] eqn:Hlk; [|contradiction].
+    iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
+    iDestruct (sound_cexec_ghosts _ _ _ Hexec with "Hh") as (h1) "[Hh %Hexec1]".
+    clear Hexec.
+    assert (Hlk' : (ai_instr <$> instrs) !! v = Some (ai_instr i))
+      by (rewrite lookup_fmap; rewrite Hlk; reflexivity).
+    iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
+                  words (ai_instr <$> instrs) v Hlk'
+      with "Hinstrs") as "[Hinstr Hframe]".
+    rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
+    iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
+    iIntros "Hpc_wd".
+    iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
+    { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. }
+    iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
+    2-3: iIntros "(%δ' & _ & HF)"; auto.
+    2: iIntros "_"; done.
+    iIntros "(%δ' & eqδ' & %rv & eqrv & ([%an (Hnpc' & Hpc' & (%h' & Hh' & %Hcfg & _))] & Hinstr' & _))".
+    iPoseProof ("Hframe" with "Hinstr'") as "Hinstrs'".
+    iDestruct (sound_cexec_ghosts _ _ _ Hcfg with "Hh'") as (h'') "[Hh' %Hcfg']".
+    (* the later is stripped HERE, from the goal and from ▷ blocksSound alike *)
+    iModIntro.
+    iRevert "Hk".
+    iApply (sound_exec_cfg_addr_myWP2 an an ExitCondIprop Φ h'' Hcfg').
+    iFrame "Hbs Hh' Hpc' Hinstrs' Hnpc'".
+  Qed.
+
+  (* sound_cexec_triple_addr_myWP2_w, with the block premise an Iris
+     hypothesis UNDER A LATER instead of a meta-level ⊢. *)
+  Lemma sound_cexec_triple_addr_rec_myWP2_w {Γ : LCtx} {pre post instrs exitCond fuel}
+      (words : bv xlenbits -> bv word)
+      {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+      {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
+      (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
+      (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+      (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+    (forall words : bv xlenbits -> bv word,
+       cexec_triple_addr_rec pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
+    ⊢ ▷ blocksSound words instrs -∗
+      ∀ a : RelVal ty_xlenbits,
+      asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
+      pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
+      (∀ an,
+         ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+         pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
+         asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+         ExitCondIprop) -∗
+      myWP2_loop ExitCondIprop.
+  Proof.
+    cbv [cexec_triple_addr_rec bind demonic_ctx demonic
+         CPureSpec.demonic lift_purespec CPureSpec.assume_formula CPureSpec.assume_pathcondition].
+    iIntros (Htrip) "#Hbs". iIntros (a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
+    specialize (Htrip words).
+    rewrite CPureSpec.wp_demonic_ctx in Htrip.
+    specialize (Htrip (env.cat ι (Katamaran.RiscvPmp.CFGVer.VerifierRel.env_of_words
+                                    (length tbl) bv.zero
+                                    (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_bv
+                                       (w := wlctx Γ) words tbl ι)))).
+    rewrite env.drop_cat in Htrip.
+    rewrite Katamaran.RiscvPmp.CFGVer.VerifierRel.env_take_cat in Htrip.
+    rewrite (Katamaran.RiscvPmp.CFGVer.VerifierRel.words_of_env_of_words
+               (bv.zero : bv word) _
+               (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_bv_length (w := wlctx Γ) words tbl ι)) in Htrip.
+    rewrite (Katamaran.RiscvPmp.CFGVer.VerifierRel.cws_of_bv_spec (w := wlctx Γ) words tbl ι) in Htrip.
+    specialize (Htrip (conj Hif (conj Hef
+                  (Katamaran.RiscvPmp.CFGVer.VerifierRel.wtable_rel_cws_of words Hif))) a npc).
+    apply produce_sound in Htrip.
+    iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
+    iApply (sound_first_step a npc ExitCondIprop _ _ Hexec
+      with "[$Hbs $Hpc $Hnpc $Hinstrs $Hh2]").
+    iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & (%h3 & [Hh3 %Hconsume]))".
+    apply consume_sound in Hconsume.
+    iPoseProof (Hconsume with "Hh3") as "[HPOST _]".
+    iApply ("Hk" $! an).
+    iSplit. { iPureIntro. exact Hexit. }
+    iFrame "Hpc Hnpc HPOST".
+    iFrame "Hinstrs".
+  Qed.
+
+  Lemma sound_scfg_verification_condition_rec_myWP2_w {Γ pre post instrs exitCond fuel}
+      (words : bv xlenbits -> bv word)
+      {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+      {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
+      (Hverif : safeE (postprocess (
+          Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition_rec
+            pre tbl exits fuel post wnil)))
+      (ι : Valuation Γ) (ExitCond : iProp Σ)
+      (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+      (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+    ⊢ ▷ blocksSound words instrs -∗
+      ∀ a : RelVal ty_xlenbits,
+        asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
+        pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
+        (∀ an,
+           ⌜match an with
+             | SyncVal v => exitCond v = true
+             | NonSyncVal _ _ => False
+             end⌝ ∗
+           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
+           asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+           ExitCond) -∗
+        myWP2_loop ExitCond.
+  Proof.
+    apply (sound_cexec_triple_addr_rec_myWP2_w (post := post) (fuel := fuel)
+             words ι ExitCond Hif Hef).
+    intros wds.
+    apply (safeE_safe env.nil), postprocess_sound in Hverif.
+    apply LogicalSoundness.psafe_safe in Hverif; [|done].
+    revert Hverif.
+    apply rcfg_verification_condition_rec.
+    - easy.
+    - constructor.
+  Qed.
+
+  (* blocksSound_of_head with its `⊢ blockSound` premise moved INTO Iris, so
+     the Löb IH can feed it.  □ because blocksSound is itself persistent. *)
+  Lemma blocksSound_of_head_iris words (base : bv xlenbits)
+      (x : AnnotInstr) (l : list AnnotInstr) (b : BlkAnnot) :
+    ai_block x = Some b ->
+    List.Forall (fun ai => ai_block ai = None) l ->
+    blk_span base b ⊆ ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l) ->
+    □ blockSound words base b ⊢
+      blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l)).
+  Proof.
+    intros Hx Hl Hsub.
+    iIntros "#Hb !>" (v ai b') "%Hlk %Hb'".
+    cbn [Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list] in Hlk.
+    apply lookup_insert_Some in Hlk as [[<- <-]|[Hne Hlk]].
+    - rewrite Hx in Hb'. injection Hb' as <-.
+      iSplitR; [iPureIntro; exact Hsub | iExact "Hb"].
+    - exfalso. apply instrs_of_list_elem_of in Hlk.
+      rewrite List.Forall_forall in Hl. specialize (Hl _ Hlk).
+      rewrite Hl in Hb'. discriminate.
+  Qed.
+
+  (* THE LÖB LEMMA -- the only meta-logic a loop needs.  blockSound_of_vc
+     with `iLöb as "IH"` in front, and the block premise supplied by the IH:
+     the loop's own code is annotated with b ITSELF, and `▷ blockSound b` is
+     enough because sound_first_step needs the premise only under a later.
+     `Hbs` is the one structural fact (for a loop whose head is its only
+     annotation: blocksSound_of_head_iris). *)
+  Lemma blockSound_of_rec_vc (words : bv xlenbits -> bv word)
+      (ab : list AnnotInstr) (v : bv xlenbits) (b : BlkAnnot)
+      (tbl : SInstrTable (wlctx (blk_ctx b)))
+      (Hv : safeE (postprocess (scfg_verification_condition_rec
+               (extend_to_minimal_pre (cfg_precondition (blk_contract b))) tbl
+               (cfg_exits (blk_contract b)) (cfg_fuel (blk_contract b))
+               (cfg_postcondition (blk_contract b)) wnil)))
+      (Hexit : forall x, cfg_exitCond (blk_contract b) x = true ->
+                 x = bv.add v (bv.of_N (blk_off b)))
+      (Hstrip : strip ab = cfg_instrs (blk_contract b))
+      (Hbs : □ blockSound words v b ⊢
+               blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)) :
+    blockFaithful ab v b tbl ⊢ blockSound words v b.
+  Proof.
+    iIntros "#Hf".
+    iLöb as "IH".
+    iIntros (ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
+    iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (blk_ctx b))
+                 (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
+             /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (blk_ctx b))
+                  (cfg_exitCond (blk_contract b)) (cfg_exits (blk_contract b)) ι⌝
+            ∧ asn.interpret (extend_to_minimal_pre (cfg_precondition (blk_contract b)))
+                (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
+      with "[Hpre]" as "[%Hfi Hpre]".
+    { iSplit; [ iApply ("Hf" $! ι with "Hpre") | iExact "Hpre" ]. }
+    destruct Hfi as [Hif Hef].
+    (* the block premise for the loop's own program, UNDER THE LATER *)
+    iAssert (▷ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab))%I
+      as "#Hbsl".
+    { iNext. iApply Hbs. iModIntro. iExact "IH". }
+    unfold blk_span. rewrite <- Hstrip.
+    unfold strip. rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
+    (* ι EXPLICIT: GenCompose.v has `Local Unset Implicit Arguments`. *)
+    iPoseProof (sound_scfg_verification_condition_rec_myWP2_w words Hv ι ExitCond Hif Hef
+                  with "Hbsl") as "Hrun".
+    iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
+    iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
+    destruct an as [x|x1 x2]; [|contradiction].
+    cbn in Hex. specialize (Hexit _ Hex). subst x.
+    iApply "Hk". iFrame.
+  Qed.
+End RecLoop.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
    it.  They need no section variable -- a tactic is syntax. *)
