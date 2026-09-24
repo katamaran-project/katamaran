@@ -56,7 +56,7 @@
 #     is-this-a-build detection below) -- inspection commands are not builds.
 #   - `make clean`, `make -n`, `--version`, `--help`: no compilation.
 #   - A single-file ZZ*.v diagnostic probe. These are throwaway measurement
-#     probes, BY CONVENTION never added to _CoqProject/dune (see the
+#     probes, BY CONVENTION never added to _CoqProject (see the
 #     cfgver-scaling-diagnostics skill), so rocq_compile_file cannot see them
 #     at all; and sweeping several N values back-to-back is the entire point
 #     of a scaling probe, not a thrash pattern. They compile one small file

@@ -329,7 +329,10 @@ available, so neither can be waved off as conservative.
   This produced "absent" for two lemmas that certainly existed, on top of reading
   a `.vo` that the failed build had left stale. Drop `-x`, and check the artifact's
   mtime before believing either answer.
-- **`keep_vo=True` is a NO-OP in a dune project.** The artifact goes to
+- **(FIXED 2026-09-24 — `dune-project` deleted; see rocq-implementation, "The
+  tool setup".  This finding was the root cause of most interactive-mode
+  trouble and sat here, unread, for weeks; kept for the symptom.)**
+  **`keep_vo=True` is a NO-OP in a dune project.** The artifact goes to
   `_build/default`, never the source tree, and the tool says so only in a
   `dune_build_warning` field. So after changing any file, every *downstream* file
   stays unbuildable by `rocq_compile_file` until a real `make` has run — it fails

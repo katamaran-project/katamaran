@@ -1,5 +1,0 @@
-(coq.theory
- (name Katamaran)
- (package coq-katamaran))
-
-(include_subdirs qualified)

@@ -257,7 +257,8 @@ position (a guard-checker hazard) in exchange for nothing.
 `sexec_ghost` and `cexec_ghost` both call `call_lemma (RiscvPmpCFGVerifSpec.LEnv
 l) …` — qualified, because `MakeExecutor` does not re-export its Specification
 argument, and a bare `LEnv` fails under `make` while `rocq_compile_file`'s dune
-fallback accepts it. They were stubs (`error` / `pure tt`) until Phase 4, and the
+fallback accepted it (that fallback is gone since `dune-project` was deleted
+2026-09-24; not re-tested — `make` is the check either way). They were stubs (`error` / `pure tt`) until Phase 4, and the
 historical reason is still the live design rule: **making ONE side real is
 unsound-by-construction and was reverted (2026-08-21)** — a symbolic `error`
 refines anything, but `pure tt` does not, so a real concrete side with a stubbed
@@ -391,8 +392,8 @@ column and then `AnnotInstr`). The type error surfaces far from the cause.
 RiscvPmpCFGVerifSpec` (`Spec.v:720`) and the functor does NOT re-export its
 `Specification` argument — which is why `RiscvPmpSpecVerif` (`Spec.v:723`)
 imports *both*, and why `SpecIris.v` names spec members qualified. **And
-`rocq_compile_file` ACCEPTS the bare `LEnv`** — its dune fallback resolves names
-the real build cannot, so its false greens are not limited to missing sibling
+`rocq_compile_file` ACCEPTED the bare `LEnv`** — its dune fallback (removed
+2026-09-24, not re-tested since) resolved names the real build cannot, so its false greens are not limited to missing sibling
 `.vo`s. Only `make` catches this. Position-mode `rocq_start(file=…, line=…)`
 also catches it, replays through the project's real load path, works inside
 module functors where preamble mode cannot reach, and costs seconds — use it
