@@ -312,7 +312,7 @@ Module Type IrisPrelims
 
     Class sailRegGS Σ := SailRegGS {
                             (* ghost variable for tracking state of registers *)
-                            reg_inG : inG Σ regUR;
+                            reg_inG :: inG Σ regUR;
                             reg_gv_name : gname;
                           }.
     #[export] Existing Instance reg_inG.
