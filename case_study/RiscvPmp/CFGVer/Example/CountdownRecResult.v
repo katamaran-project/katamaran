@@ -105,23 +105,6 @@ Import IrisModel.RiscvPmpIrisBase.
 Lemma cd_add0 (ia : N) : @bv.of_N xlenbits ia = bv.add (bv.of_N ia) (bv.of_N 0).
 Proof. change (@bv.of_N xlenbits 0) with (@bv.zero xlenbits). now rewrite bv.add_zero_r. Qed.
 
-(* ia is representable, so bv.of_N does not truncate it *)
-Lemma cd_bin (ia : N) (Hfit : (ia + 8 < lenAddr)%N) :
-  bv.bin (@bv.of_N xlenbits ia) = ia.
-Proof.
-  assert (Hf : seg_fits_memory ia 8) by (unfold seg_fits_memory; lia).
-  exact (seg_fits_bin ia 8 Hf).
-Qed.
-
-(* the one exit of cdLink, at ia + 12 *)
-Lemma cd_exit12 (ia : N) :
-  seg_exitCond ia [12%N] (bv.add (bv.add (bv.of_N ia) (bv.of_N 0)) (bv.of_N (12 - 0))) = true.
-Proof.
-  rewrite !bv.of_N_add. cbn. rewrite N.add_0_r.
-  match goal with |- context [bv.eqb ?a ?b] => destruct (bv.eqb_spec a b) as [_|Hn] end;
-    [reflexivity | now contradiction Hn].
-Qed.
-
 Section Link.
   Context {Σ} {GS : sailGS2 Σ}.
 
@@ -137,7 +120,8 @@ Section Link.
     { intros iota. reflexivity. }
     { apply cd_add0. }
     { repeat constructor. lia. }
-    { pose proof lenAddr_rep. rewrite (cd_bin ia Hfit).
+    { pose proof lenAddr_rep.
+      rewrite (seg_fits_bin ia 8 ltac:(unfold seg_fits_memory; lia)).
       cbn [length cd_rec_annot list_AST_AnnotInstr List.map]. lia. }
     iApply (blockSound_of_contract words (@bv.of_N xlenbits ia) (cdRecBlk ia)
               (cd_rec_annot ia) (valid_cd_rec ia) with "Hf").
@@ -184,7 +168,7 @@ Proof.
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   assert (Hfit8 : (init_addr + 8 < lenAddr)%N) by lia.
-  pose proof (cd_bin init_addr Hfit8) as Hbin.
+  pose proof (seg_fits_bin init_addr 8 ltac:(unfold seg_fits_memory; lia)) as Hbin.
   (* ι: code at init_addr, counter at its pinned 2.  cfg_init_addr is
      `init_addr + 0`, which is not convertible to init_addr, hence N.add_0_r. *)
   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' (cd_link_annot init_addr)
@@ -195,11 +179,8 @@ Proof.
     (N.add_0_r init_addr) eq_refl).
   - (* placement *)
     cbn. f_equal. symmetry. apply cd_add0.
-  - (* the one exit, +12 *)
-    unfold cdLink, gen_seg_contract. cbn [cfg_exits].
-    apply etable_faith_exits_of_offs
-      with (cbase := bv.add (bv.of_N init_addr) (bv.of_N 0));
-      [reflexivity | constructor; [apply cd_exit12 | constructor]].
+  - (* the one exit, +12: the generic segment exit table (head 0 <= 12) *)
+    apply (seg_exit_table_ok _ _ init_addr 0 [12%N]); [repeat constructor; lia | reflexivity].
   - (* ImplPre: the pinned X1 and the free X2 from gen_implpre, the rest pure *)
     intros Σ' GS'.
     iIntros "(Hregs & Hpriv & #Hinv)".

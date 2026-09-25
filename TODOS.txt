@@ -14,6 +14,56 @@ TODO:
 - Clean up proof of semWP2_preservation_fwd' and figure out how to tell it to let me do these proofs
 - pc_step_sync is a very strong hypothesis, but the lockstepness of semWP2 should help us fullfill this requirement. This should be a priority.
 - Actually have an endToEnd lemma that works for each generated contract, I don't want the manual work that currently still has to happen after
+- gen_seg_contract (GenSegment.v) always places a segment at `base + of_N head`, and sets cfg_init_addr to `ia + head`, even when head = 0.
+	A whole program built with it (CountdownRec) therefore carries a `+ 0` that nothing computes away for a symbolic base:
+	CountdownRecResult.v needs cd_add0 (bv.add_zero_r behind a `change`) for the placement, three times, and `N.add_0_r` for cfg_init_addr.
+	Any head-0 segment used at top level pays the same. The same `+ 0` is what surfaced the missing peval in NORMAL FORMS below.
+	Decide at the generator, not at call sites:
+	+ drop the `+ head` when head = 0, or
+	+ make whole programs and segments one generator, placing a whole program at `base` (ties into "Remove duplicate gen_contract infrastructure"
+	  and the endToEnd-lemma item above: CountdownRec goes through cfg_instrs_endToEnd by hand because no bridge takes a gen_seg_contract).
+- Block-annotation helpers belong in the core, not in the examples.
+	BlkAnnot (Verifier.v) is the dependent pair (blk_ctx, blk_contract) plus blk_off, so blk_ctx is always determined by the contract's type,
+	yet CountdownRec.v spells it out by hand (`blk_ctx := cdRecCtx`, twice).
+	+ move `blk_of_contract` (contract + offset, Σ implicit) into Verifier.v next to the record, so authors never write blk_ctx;
+	+ move `set_blk` / `blk_at` (attach a block at index n) with it -- all three are currently copied verbatim into ~15 untracked ZZBlk*/ZZT*/ZZDmp* probes;
+	+ then use them in CountdownRec.v (and an `ai_loop` counterpart of blk_at for the loop head).
+- Add a minimal_post: the postcondition should get minimal_pre handed back centrally, the way the precondition does.
+	Today the precondition is always wrapped (extend_to_minimal_pre in CFG_VC_triple, sexec_block, blockSound), but the postcondition is
+	interpreted VERBATIM everywhere, so every author must remember `∗ minimal_pre` (cur_privilege + inv_leakage):
+	gen_seg_contract appends it by hand (GenSegment.v:449), and so do PaddedLoop, SwapComposed, TwoLoopsComposed (x3), CountdownComposed (x2).
+	Forgetting it fails late and confusingly: the block/loop body swallows the chunks and the resumed executor cannot fetch
+	(amBody_post; cdFinal's asn_no_post before 11e0a562; the warning in ZZBlkReject.v).
+	+ define `extend_to_minimal_post` and apply it wherever the post is consumed/produced/interpreted: CFG_VC_triple (the Q consumed at
+	  the exit), sexec_block (produce), blockSound, and the soundness lemmas that mirror them;
+	+ then drop the manual `∗ minimal_pre` from gen_seg_contract and the examples.
+	+ CHECK: whole-program contracts use asn_no_post, so they would newly have to hand back minimal_pre at the exit.
+	  Should hold (nothing consumes cur_privilege / inv_leakage for good), but it touches every example VC -- re-run them all.
+- The etable_rel half of blockFaithful (Adequacy.v) is a SELF-CONSISTENCY check on the block's contract, not a fact about memory:
+	etable_rel exitCond exits ι (VerifierRel.v) says each cfg_exits term, at ι, is an address where cfg_exitCond holds.
+	It depends on ι only because the exits are written over the symbolic base q and seg_exitCond over the concrete ia,
+	so it has to sit behind the precondition that pins ι. For a block it is then turned straight back into an offset (Hexit: exitCond x -> x = v + blk_off).
+	+ For BLOCKS, make it vanish: justify the block with "x is one of the exit terms at ι" as the exit condition, so etable_rel holds by
+	  construction and cfg_exitCond is never consulted; together with PLAN-contract-ast §2b (resume at the exit term instead of pc + blk_off)
+	  this also removes Hexit and the blk_off field. Design sketch, not checked against the proofs.
+	+ At the TOP LEVEL it is a real obligation (the trusted statement's exitCond vs the executor's exits: cfg_instrs_endToEnd's HexitsFaith),
+	  but it depends only on the generator, so discharge it once per generator (etable_faith_exits_of_offs for gen_contract_*,
+	  seg_exit_table_ok / gen_seg_exit_table_ok in GenCompose.v for gen_seg_contract) inside a bridge -- not per call site as
+	  CountdownRecResult.v and the *ComposedResult.v files do now (same root cause as the missing gen_seg_contract bridge above).
+- gen_seg_contract (GenSegment.v) takes the base TWICE -- `base : Term Σ` for cfg_placement and `base_a : Term (Σ ▻ "a")` for the precondition --
+	and nothing checks they agree; blockFaithful_of_seg's Hba premise is where a mismatch would finally surface.
+	Derive the second by weakening instead: base_a := subst base sub_wk1.
+	+ The old objection (GenSegment.v:380: "no subst _ sub_wk1 wrappers for iFrame to trip over") only bites in HAND-WRITTEN Iris proofs;
+	  with the goal of no manual iFrames it goes away. The VC's MEANING is unaffected (vm_compute reduces the subst), but its COST is not
+	  zero: sub_wk1 is Θ(|Σ|²) to build (diagnostics/base-k-hunt.md Part III, measured for the executor's own per-extension weakenings,
+	  3.9% and rising). Here it is one small-Σ weakening per use of the precondition -- expected negligible, but MEASURE it on a loop
+	  (where the pre is consumed at every back edge) before claiming so. PLAN-segment-generators.md ~:92 cites the same cost against it.
+	+ Hba becomes an internal fact of blockFaithful_of_seg via inst_subst + inst_sub_wk1 (theories/Symbolic/Instantiation.v:161/:258);
+	  adjust seg_pre_placement's `change` once. Rewrite with those lemmas, do not rely on cbn reducing the subst.
+	+ Same treatment for the loop generator's four hand-written copies of the counter term (GenSegment.v ~:512; sub_up1/sub_wk1 under asn.exist).
+	+ ORDER: do this AFTER the gen_seg_contract bridge above -- the per-example ImplPre proofs (e.g. the manual iFrame in CountdownRecResult.v)
+	  are where the weakened term would otherwise need rewriting by hand, and the bridge is what absorbs them.
+	+ Blast radius: CountdownRec.v (5 uses), CountdownComposed.v (1), GenCompose.v's generic lemmas, plus the untracked ZZ* probes that pass both bases.
 - First priority, make a Definition for Non-interference such that the Examples.v become readable
 - FRAMEWORK (theories/) — split the assertion language from the solver in Signature.
 	*** MEASURED 2026-07-27 AND NOT WORTH DOING. Kept as a record so nobody re-derives
