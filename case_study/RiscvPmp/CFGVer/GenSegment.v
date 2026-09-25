@@ -385,12 +385,17 @@ Qed.
    inline; passing it twice is no worse and keeps every term syntactically
    transparent (no `subst _ sub_wk1` wrappers for iFrame to trip over).
 
-   INVARIANT THE CALLER MUST RESPECT: `head = 4 * skip`.  It is not enforced in
-   the type -- head is a byte offset and skip an instruction index -- and
-   getting it wrong yields a segment placed at an address whose instructions
-   are not the ones in its sub-table.  GenCompose.instr_table_ok_at makes the
-   mismatch a PROOF OBLIGATION (`4 * skip = head`), so it cannot pass silently
-   once the segment is composed. *)
+   SELF-CONTAINED (2026-09-25, PLAN-self-contained-segments.md).  A segment's
+   contract is stated as if the segment were the whole program: its own code,
+   its own code base, its own load address `ia`, exit targets relative to
+   ITSELF.  It used to take `head prog skip take` -- a byte offset into, the
+   list of, and a slice of the ENCLOSING program -- so decisions of the bigger
+   program leaked into every segment's contract and VC.  Where a segment sits
+   in a program is now a COMPOSITION fact (GenCompose.instr_table_ok_at /
+   seg_instr_table_ok keep `skip`/`head` as their own parameters), never a
+   field of the segment.  The code bound is derived, `4 * |code|`: every call
+   site in the tree already passed exactly that (as loop_code_extent had found
+   for the loops). *)
 (* The address-space bound on ONE base, as a precondition conjunct.  Factored
    out because gen_seg_contract emits it for the code base while the loop
    invariant has to RE-establish exactly the same conjunct at the back edge:
@@ -405,39 +410,26 @@ Definition gen_base_bound {Σ : LCtx} (base : Term Σ ty_xlenbits) (bound : N)
 Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia head : N)
-    (* `list AST` since 2026-09-22 (PLAN-contract-ast Phase 2).  It used to be
-       `list AnnotInstr`, to keep `firstn take (skipn skip prog)` syntactically
-       identical to GenCompose.instr_table_ok_at's `firstn take (skipn skip L)`
-       for `L : list AnnotInstr` -- otherwise the coercion landed OUTSIDE the
-       slicing and the two could never unify.
-
-       THAT CONCERN IS GONE, and this is the plan's landmine §5.1 resolved:
-       `cfg_instrs` no longer feeds the symbolic table at all.  The table is
-       built from the ANNOTATED list `a` that `cfg_vc` takes as an argument,
-       so the `instr_table_ok_at` side stays entirely in `list AnnotInstr` and
-       never meets a coercion.  This field is now purely the SPEC: what sits
-       in memory.  The two are tied by `strip a = cfg_instrs c` at the
-       soundness bridge, which for a segment is `strip_firstn`/`strip_skipn`
-       (Verifier.v). *)
-    (prog : list AST) (skip take : nat)
-    (targets : list N)
-    (bound : N)
+    (ia : N)                      (* the SEGMENT's own load address *)
+    (* The segment's own code, as the SPEC (`list AST`): what sits in memory.
+       The table is built from the ANNOTATED list `cfg_vc` takes as an
+       argument; the two are tied by `strip a = cfg_instrs c` at the
+       soundness bridge. *)
+    (code : list AST)
+    (targets : list N)            (* exit offsets RELATIVE to the segment *)
     (fl : nat)
     (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  let place := term_binop bop.bvadd base (term_val ty_xlenbits (bv.of_N head)) in
-  @MkCFGVerifierContract Σ (ia + head)%N
-    place
-    (exits_of_offs place (List.map (fun t => (t - head)%N) targets))
-    ( asn_pc_eq (term_binop bop.bvadd base_a
-                   (term_val ty_xlenbits (bv.of_N head)))
-      ∗ gen_base_bound base_a bound
+  @MkCFGVerifierContract Σ ia
+    base
+    (exits_of_offs base targets)
+    ( asn_pc_eq base_a
+      ∗ gen_base_bound base_a (4 * N.of_nat (length code))
       ∗ extra_pre
       ∗ gen_regs_at base_a regs )
-    (List.firstn take (List.skipn skip prog))
+    code
     (seg_exitCond ia targets)
     fl
     (* minimal_pre is appended HERE rather than left to the caller, so the
@@ -851,10 +843,13 @@ Proof.
 Qed.
 
 Record LoopSpec {Σ : LCtx} : Type := MkLoopSpec
-  { loop_head_addr     : N            (* ABSOLUTE address of the loop head              *)
-  ; loop_prog   : list AnnotInstr
-  ; loop_first_instr   : nat          (* first instruction of the body, as a list index *)
-  ; loop_num_instrs   : nat          (* how many instructions the body is              *)
+  { loop_head_addr     : N            (* the LOOP's own load address (its head)         *)
+    (* The loop's OWN annotated code, and nothing else (2026-09-25,
+       PLAN-self-contained-segments.md).  Was `loop_prog` (the whole enclosing
+       program) + `loop_first_instr` (an index into it) + `loop_num_instrs`,
+       which made every loop contract name the program it sits in.  Where the
+       loop sits is now a composition fact (loop_enter_from_seg's span swap). *)
+  ; loop_code   : list AnnotInstr
   ; loop_exit_off   : N            (* fall-through target, RELATIVE to the head      *)
   ; loop_fuel   : nat
 
@@ -941,14 +936,17 @@ Lemma inst_loop_base_pre {Σ : LCtx} (ls : LoopSpec Σ) (i : Valuation Σ)
   = inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) i.
 Proof. reflexivity. Qed.
 
-(* THE LOOP'S OWN CODE EXTENT.  The body is `loop_num_instrs` instructions starting at
-   `loop_first_instr`, so it occupies 4*loop_num_instrs bytes.  This used to be written by hand
-   as the LEADING entry of loop_data_bounds_pre/loop_data_bounds_post, where it had to agree with
-   loop_num_instrs (and, for a bottom-tested loop, with loop_exit_off) and could silently
-   drift; 7/7 loops in the tree had all three equal.  It is now derived, and
-   ls_bases_* carry DATA bases only. *)
+(* THE LOOP'S OWN CODE EXTENT, 4 bytes per instruction of `loop_code`.  This
+   used to be written by hand as the LEADING entry of
+   loop_data_bounds_pre/loop_data_bounds_post, where it had to agree with the
+   instruction count and could silently drift; 7/7 loops in the tree had all
+   three equal.  It is now derived, and ls_bases_* carry DATA bases only.
+   Spelled over `strip (loop_code ls)` ON PURPOSE: that is exactly the bound
+   gen_seg_contract emits for the loop's contract (`4 * |code|` with
+   code := strip (loop_code ls)), so the invariant's bound conjunct and the
+   contract's are SYNTACTICALLY equal and frame by name. *)
 Definition loop_code_extent {Σ : LCtx} (ls : LoopSpec Σ) : N :=
-  (4 * N.of_nat (loop_num_instrs ls))%N.
+  (4 * N.of_nat (length (strip (loop_code ls))))%N.
 
 (* EVERY base the loop uses, code first.  The code entry used to be written by
    hand as the head of loop_data_bounds_pre/loop_data_bounds_post; deriving it is what lets
@@ -1041,23 +1039,21 @@ Definition gen_loop_contract_post {Σ : LCtx} (ls : LoopSpec Σ)
        moves consume-scan positions, so this was measured, not assumed --
        ZZSpikeA3.v verifies both of loop D's contracts, the shape with two
        walking pointers, two cells and three base bounds;
-     - cfg_placement is `loop_base + 0` and cfg_init_addr `loop_head_addr + 0`, neither
-       definitionally the bare form, which is why the composition lemmas pick
-       up a bv.add_zero_r / N.add_0_r;
-     - cfg_exitCond is unchanged (`seg_exitCond (loop_head_addr ls) [target]`), because
-       gen_seg_contract takes ia and head separately. *)
+     - cfg_placement is the bare `loop_base` and cfg_init_addr `loop_head_addr`
+       (since 2026-09-25: gen_seg_contract no longer adds a head offset, so
+       the `+ 0` the composition lemmas used to strip is gone);
+     - cfg_exitCond is `seg_exitCond (loop_head_addr ls) [target]`, targets
+       relative to the loop's own head. *)
 Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N)
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  (* `strip (loop_prog ls)`: LoopSpec still carries the ANNOTATED program --
-     it is what the verification and `instrs_of_list` run on -- while
-     gen_seg_contract now wants the SPEC side.  Phase 4 may split the field;
-     for now one `strip` here keeps LoopSpec untouched. *)
-  gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls) 0
-    (strip (loop_prog ls)) (loop_first_instr ls) (loop_num_instrs ls) [target]
-    (loop_code_extent ls) (loop_fuel ls) (loop_regs ls)
+  (* `strip`: gen_seg_contract wants the SPEC side, while LoopSpec carries the
+     annotated code the VC runs on. *)
+  gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls)
+    (strip (loop_code ls))
+    [target] (loop_fuel ls) (loop_regs ls)
     (gen_loop_contract_pre ls g) post.
 
 
@@ -1092,53 +1088,39 @@ Section GenSegProjections.
   Context {Σ : LCtx}
     (base : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia head : N) (prog : list AST) (skip take : nat)
-    (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+    (ia : N) (code : list AST)
+    (targets : list N) (fl : nat) (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)).
 
   Let c : @CFGVerifierContract Σ :=
-    gen_seg_contract base base_a ia head prog skip take targets bound fl regs
-      extra_pre post.
+    gen_seg_contract base base_a ia code targets fl regs extra_pre post.
 
-  Lemma gen_seg_init_addr : @eq N (cfg_init_addr c) (ia + head)%N.
+  (* All five are eq_refl since the contract became self-contained: there is
+     no head offset left to add to the placement or subtract from a target. *)
+  Lemma gen_seg_init_addr : @eq N (cfg_init_addr c) ia.
   Proof. reflexivity. Qed.
 
-  Lemma gen_seg_place :
-    cfg_placement c
-    = term_binop bop.bvadd base (term_val ty_xlenbits (bv.of_N head)).
+  Lemma gen_seg_place : cfg_placement c = base.
   Proof. reflexivity. Qed.
 
-  Lemma gen_seg_instrs :
-    @eq (list AST) (cfg_instrs c)
-      (List.firstn take (List.skipn skip prog)).
+  Lemma gen_seg_instrs : @eq (list AST) (cfg_instrs c) code.
   Proof. reflexivity. Qed.
 
   Lemma gen_seg_exitCond :
     @eq (bv xlenbits -> bool) (cfg_exitCond c) (seg_exitCond ia targets).
   Proof. reflexivity. Qed.
 
-  (* the only one that is not eq_refl, for the same reason gen_loop_exits is
-     not: gen_seg_contract subtracts the head offset from every target, and
-     `t - head` is STUCK for a variable t (N.sub matches on its FIRST
-     argument, so it cannot see that the second is zero). *)
-  Lemma gen_seg_exits :
-    cfg_exits c
-    = exits_of_offs (term_binop bop.bvadd base (term_val ty_xlenbits (bv.of_N head)))
-        (List.map (fun t => (t - head)%N) targets).
+  Lemma gen_seg_exits : cfg_exits c = exits_of_offs base targets.
   Proof. reflexivity. Qed.
 End GenSegProjections.
 
 (* THE FOUR PROJECTIONS the composition lemmas use, so they never cbn through
-   gen_seg_contract's `let place := …`.  Three are eq_refl.  Only the exit
-   table needs a rewrite: gen_seg_contract subtracts the head offset from every
-   target, and `t - 0` is STUCK for a variable t (N.sub matches on its first
-   argument, so it cannot see that the second is zero). *)
+   gen_seg_contract.  All eq_refl. *)
 Lemma gen_loop_place {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-  cfg_placement (gen_loop_contract ls g target post)
-  = term_binop bop.bvadd (loop_base ls) (term_val ty_xlenbits (bv.of_N 0)).
+  cfg_placement (gen_loop_contract ls g target post) = loop_base ls.
 Proof. reflexivity. Qed.
 
 Lemma gen_loop_exitCond {Σ : LCtx} (ls : LoopSpec Σ)
@@ -1151,38 +1133,27 @@ Proof. reflexivity. Qed.
 Lemma gen_loop_instrs {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-  cfg_instrs (gen_loop_contract ls g target post)
-  = List.firstn (loop_num_instrs ls)
-      (List.skipn (loop_first_instr ls) (strip (loop_prog ls))).
+  cfg_instrs (gen_loop_contract ls g target post) = strip (loop_code ls).
 Proof. reflexivity. Qed.
 
-(* THE ANNOTATED SLICE a loop's contracts are verified against -- the same
-   segment of the program that `cfg_instrs` names in AST form.  Supplying it as
-   a PROJECTION rather than an extra parameter is what keeps every loop
-   caller's premise spelled `cfg_vc (loop_body_contract ls) (gen_loop_annot ls)`
-   with nothing new to choose. *)
+(* THE ANNOTATED CODE a loop's contracts are verified against -- the same code
+   `cfg_instrs` names in AST form.  Kept as a PROJECTION so every loop caller's
+   premise stays spelled `cfg_vc (loop_body_contract ls) (gen_loop_annot ls)`. *)
 Definition gen_loop_annot {Σ : LCtx} (ls : LoopSpec Σ) : list AnnotInstr :=
-  List.firstn (loop_num_instrs ls) (List.skipn (loop_first_instr ls) (loop_prog ls)).
+  loop_code ls.
 
 Lemma gen_loop_annot_strip {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   strip (gen_loop_annot ls) = cfg_instrs (gen_loop_contract ls g target post).
-Proof.
-  unfold gen_loop_annot. rewrite gen_loop_instrs.
-  now rewrite strip_firstn strip_skipn.
-Qed.
+Proof. reflexivity. Qed.
 
 Lemma gen_loop_exits {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_exits (gen_loop_contract ls g target post)
-  = exits_of_offs (term_binop bop.bvadd (loop_base ls) (term_val ty_xlenbits (bv.of_N 0)))
-      [target].
-Proof.
-  unfold gen_loop_contract, gen_seg_contract.
-  cbn [cfg_exits List.map]. now rewrite N.sub_0_r.
-Qed.
+  = exits_of_offs (loop_base ls) [target].
+Proof. reflexivity. Qed.
 
 (* BODY: guard holds, back edge to the head (offset 0 -- the loop is stated
    against its own entry address). *)
@@ -1203,12 +1174,10 @@ Definition loop_final_contract {Σ : LCtx} (ls : LoopSpec Σ)
 Lemma seg_addr_0 (ia : N) : seg_addr ia 0 = @bv.of_N xlenbits ia.
 Proof. unfold seg_addr. f_equal. lia. Qed.
 
-(* A3 made every loop's cfg_placement `loop_base + 0` rather than the bare `loop_base`,
-   because gen_seg_contract always adds its head offset.  The composition
-   lemmas are handed the BARE fact (`inst (loop_base ls) iota = SyncVal q`, which is
-   reflexivity for a caller whose iota maps "q" to a literal), so these two
-   carry it across the `+ 0`.  Stated for a general offset as well, because
-   loop_enter_from_seg will want the non-zero case. *)
+(* Carrying an address fact across a `+ off`.  Until 2026-09-25 every loop's
+   cfg_placement was `loop_base + 0` (gen_seg_contract added a head offset),
+   and these were how the composition lemmas stripped it; the placement is now
+   the bare base, so they remain only as general address algebra. *)
 Lemma inst_addr_plus {R : LCtx} (t : Term R ty_xlenbits) (iota : Valuation R)
   (q : bv xlenbits) (off : N)
   (H : inst (T := fun Σ => Term Σ ty_xlenbits) t iota = ty.SyncVal q) :

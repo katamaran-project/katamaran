@@ -14,14 +14,11 @@ TODO:
 - Clean up proof of semWP2_preservation_fwd' and figure out how to tell it to let me do these proofs
 - pc_step_sync is a very strong hypothesis, but the lockstepness of semWP2 should help us fullfill this requirement. This should be a priority.
 - Actually have an endToEnd lemma that works for each generated contract, I don't want the manual work that currently still has to happen after
-- gen_seg_contract (GenSegment.v) always places a segment at `base + of_N head`, and sets cfg_init_addr to `ia + head`, even when head = 0.
-	A whole program built with it (CountdownRec) therefore carries a `+ 0` that nothing computes away for a symbolic base:
-	CountdownRecResult.v needs cd_add0 (bv.add_zero_r behind a `change`) for the placement, three times, and `N.add_0_r` for cfg_init_addr.
-	Any head-0 segment used at top level pays the same. The same `+ 0` is what surfaced the missing peval in NORMAL FORMS below.
-	Decide at the generator, not at call sites:
-	+ drop the `+ head` when head = 0, or
-	+ make whole programs and segments one generator, placing a whole program at `base` (ties into "Remove duplicate gen_contract infrastructure"
-	  and the endToEnd-lemma item above: CountdownRec goes through cfg_instrs_endToEnd by hand because no bridge takes a gen_seg_contract).
+- DONE 2026-09-25 (PLAN-self-contained-segments.md): gen_seg_contract used to place a segment at `base + of_N head` with
+	cfg_init_addr `ia + head` even for head = 0, forcing cd_add0 / N.add_0_r in CountdownRecResult.v. Segments (and LoopSpec loops)
+	are now SELF-CONTAINED -- own code, own base, own load address, targets relative to themselves, code bound derived --
+	and where a piece sits in a program is a composition fact. cd_add0 and the `+ 0`s are gone.
+	Still open from this item: no end-to-end BRIDGE takes a gen_seg_contract (CountdownRec goes through cfg_instrs_endToEnd by hand).
 - Block-annotation helpers belong in the core, not in the examples.
 	BlkAnnot (Verifier.v) is the dependent pair (blk_ctx, blk_contract) plus blk_off, so blk_ctx is always determined by the contract's type,
 	yet CountdownRec.v spells it out by hand (`blk_ctx := cdRecCtx`, twice).

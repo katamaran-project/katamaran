@@ -1,5 +1,15 @@
 # PLAN — loop automation: get the specification right, apply one lemma
 
+> **SUPERSEDED IN PART (2026-09-25) by `PLAN-self-contained-segments.md`.**
+> `gen_seg_contract` no longer takes `head prog skip take bound` (a segment is
+> stated as if it were the whole program; the code bound is derived), and
+> `LoopSpec` carries `loop_code` instead of `loop_prog`/`loop_first_instr`/
+> `loop_num_instrs`; `LoopPlace` is gone (a loop's only placement fact is
+> `Hfit`), `seg_exit_table_ok_at`/`_head` merged into the re-based
+> `seg_exit_table_ok`, and loop entry takes an explicit span swap (`Hswap`).
+> Signatures quoted below are the historical ones.
+
+
 Target: once the SPECIFICATION is written, obtaining a loop's contract and
 composing it with its neighbours is an application of a lemma plus a tactic,
 with no hand-written glue.

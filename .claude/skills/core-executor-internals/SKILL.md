@@ -363,7 +363,8 @@ Formulas reaching it from a hand-written `asn.formula` are not: `consume` and
 `produce` apply `peval_chunk` to CHUNKS (`Monads.v:833,860`) but only `subst`
 to FORMULAS (`Monads.v:1302,1335`), so a contract's terms arrive exactly as
 authored. CFGVer's block hook was the first thing to feed the solver an
-authored assertion — `gen_seg_contract` writes its placement as `base + of_N 0`
+authored assertion — `gen_seg_contract` wrote its placement as `base + of_N 0`
+(until 2026-09-25; it now places a self-contained segment at the bare base)
 and that `+ 0` survived, so `try_unify_eq` (which fires ONLY on a bare
 `term_var`) could never eliminate the block's angelic. **If you add a formula
 constructor, peval in every branch of its arm, or the bug is invisible until

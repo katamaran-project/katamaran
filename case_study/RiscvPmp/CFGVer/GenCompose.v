@@ -133,42 +133,34 @@ Section SegCompose.
      GenSegment.v, next to seg_exitCond itself -- they are pure boolean
      algebra with no Iris in them. *)
 
-  (* One lemma for all 10 call sites, replacing the copied `exit_hit` tactic.
-     No per-call offset arithmetic: the caller supplies only
-     `Forall (fun t => head <= t) targets`, by `repeat constructor; lia`. *)
-  Lemma seg_exit_table_ok {R : LCtx} (place : Term R ty_xlenbits) (iota : Valuation R)
-      (ia head : N) (targets : list N)
-      (Hle : List.Forall (fun t => N.le head t) targets)
+  (* Exit-table faithfulness for a SELF-CONTAINED segment: the contract is
+     stated at its own load address `ia` with targets relative to itself
+     (gen_seg_contract since 2026-09-25), so the placement evaluates to
+     `of_N ia` and there is no head offset to subtract.  One lemma for every
+     call site; its only premise is the placement fact.  (It replaced the
+     head-shifted `seg_exit_table_ok` / `seg_exit_table_ok_at`, which
+     inverted a `map (t - head)` no generator emits any more, and absorbed
+     the re-based `seg_exit_table_ok_head`, which WAS this lemma.) *)
+  Lemma seg_exit_table_ok {R : LCtx} (place : Term R ty_xlenbits)
+      (iota : Valuation R) (ia : N) (targets : list N)
       (* widths ANNOTATED: `bv.of_N ia` alone leaves `bv ?n` and the Inst
          instance cannot be resolved ("Could not find an instance for
          Inst (STerm ty_xlenbits) (RV (bv ?n))"). *)
       (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))) :
+            = ty.SyncVal (@bv.of_N xlenbits ia)) :
     Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-      (seg_exitCond ia targets)
-      (exits_of_offs place (List.map (fun t => (t - head)%N) targets)) iota.
+      (seg_exitCond ia targets) (exits_of_offs place targets) iota.
   Proof.
-    apply etable_faith_exits_of_offs
-      with (cbase := bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head));
+    apply etable_faith_exits_of_offs with (cbase := @bv.of_N xlenbits ia);
       [exact Hp |].
     apply List.Forall_forall. intros o Hin.
-    apply List.in_map_iff in Hin as [t [Heq Hint]].
-    subst o.
-    (* the exit address is p+head+(t-head) = p+t *)
-    rewrite !bv.of_N_add.
-    replace (ia + head + (t - head))%N with (ia + t)%N
-      by (rewrite List.Forall_forall in Hle; specialize (Hle t Hint); lia).
-    apply seg_exitCond_hit. exact Hint.
+    now apply seg_exitCond_hit0.
   Qed.
 
-  (* ---- ...and the same two obligations with every DECIDABLE side condition
-         bundled, so a call site can pass them INLINE as `eq_refl eq_refl Hwf`
-         instead of naming a lemma per (contract x table).  On segment G the
-         four named lemmas this replaces were 45 lines, of which the only
-         non-ritual content was the numbers `135 27 540 1168` and the target
-         list -- all five of which the caller had ALREADY handed to
-         gen_seg_contract.  Argument order is chosen so that every argument
-         before Hok is inferable from the conclusion. --------------------- *)
+  (* ---- WHERE A SLICE SITS IN A PROGRAM: the instruction-table fact with
+         every DECIDABLE side condition bundled into seg_placement_ok.  This
+         is a COMPOSITION lemma -- `skip`/`head` are how the enclosing
+         program lays the slice out, not anything a segment contract says. *)
   Lemma seg_instr_table_ok {R : LCtx} (place : Term R ty_xlenbits)
       (iota : Valuation R) (ia : N) (L : list AnnotInstr) (skip take : nat)
       (head bound : N) (targets : list N)
@@ -187,65 +179,45 @@ Section SegCompose.
              (seg_fits_rep ia bound L (seg_placement_size L skip head bound targets Hok) Hwf)).
   Qed.
 
-  Lemma seg_exit_table_ok_at {R : LCtx} (place : Term R ty_xlenbits)
-      (iota : Valuation R) (ia : N) (L : list AnnotInstr) (skip : nat)
-      (head bound : N) (targets : list N)
-      (Hok : seg_placement_ok L skip head bound targets = true)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-      (seg_exitCond ia targets)
-      (exits_of_offs place (List.map (fun t => (t - head)%N) targets)) iota.
-  Proof.
-    exact (seg_exit_table_ok place iota ia head targets
-             (seg_placement_targets L skip head bound targets Hok) Hp).
-  Qed.
-
-
-  (* ---- A1' : ...and the two table obligations, stated ON the generated
-         contract.  With these a hand-cut segment discharges `itable_rel` and
-         `etable_rel` exactly the way `loop_runs` does for a loop -- from the
-         `seg_placement_ok` boolean and one placement fact -- instead of
-         re-spelling gen_seg_contract's internals to reach the `_at` forms. *)
+  (* ---- A1' : the two table obligations, stated ON a generated contract.
+         Since the contract is self-contained both follow from ONE placement
+         fact (the code base evaluates to the segment's own load address) plus,
+         for the instruction table, that the segment fits in memory.  Nothing
+         about any enclosing program appears. *)
   Section GenSegTables.
     Context {R : LCtx}
       (base : Term R ty_xlenbits)
       (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia head : N) (prog : list AnnotInstr) (skip take : nat)
-      (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+      (ia : N) (code : list AST)
+      (targets : list N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (iota : Valuation R)
-      (Hok : seg_placement_ok prog skip head bound targets = true)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits)
-              (cfg_placement (gen_seg_contract base base_a ia head (strip prog) skip take
-                                targets bound fl regs extra_pre post)) iota
-            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))).
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) base iota
+            = ty.SyncVal (@bv.of_N xlenbits ia)).
 
-    Lemma gen_seg_instr_table_ok (Hwf : seg_fits_memory ia bound) :
+    (* `a` is the ANNOTATED code the VC ran on; the table takes it, not
+       `cfg_instrs` -- which is the AST spec and would silently coerce
+       (PLAN-contract-ast §2.8: the one direction the build does NOT catch). *)
+    Lemma gen_seg_instr_table_ok (a : list AnnotInstr)
+        (Hwf : seg_fits_memory ia (4 * N.of_nat (length a))) :
       Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-        (instrs_of_list (@bv.of_N xlenbits ia) prog)
+        (instrs_of_list (@bv.of_N xlenbits ia) a)
         (table_of_list
-           (cfg_placement (gen_seg_contract base base_a ia head (strip prog) skip take
-                             targets bound fl regs extra_pre post)) 0
-           (* the TABLE takes the ANNOTATED slice, not `cfg_instrs` -- which is
-              now the AST spec and would silently coerce.  PLAN-contract-ast
-              §2.8: this is the one direction the build does NOT catch. *)
-           (List.firstn take (List.skipn skip prog))) iota.
+           (cfg_placement (gen_seg_contract base base_a ia code targets fl regs
+                             extra_pre post)) 0 a) iota.
     Proof.
-      exact (seg_instr_table_ok _ iota ia prog skip take head bound targets
-               Hok Hp Hwf).
+      exact (itable_faith_of_list base iota a Hp
+               (seg_fits_rep ia _ a (N.le_refl _) Hwf)).
     Qed.
 
     Lemma gen_seg_exit_table_ok :
       Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-        (cfg_exitCond (gen_seg_contract base base_a ia head (strip prog) skip take
-                         targets bound fl regs extra_pre post))
-        (cfg_exits (gen_seg_contract base base_a ia head (strip prog) skip take
-                      targets bound fl regs extra_pre post)) iota.
-    Proof.
-      exact (seg_exit_table_ok_at _ iota ia prog skip head bound targets Hok Hp).
-    Qed.
+        (cfg_exitCond (gen_seg_contract base base_a ia code targets fl regs
+                         extra_pre post))
+        (cfg_exits (gen_seg_contract base base_a ia code targets fl regs
+                      extra_pre post)) iota.
+    Proof. exact (seg_exit_table_ok base iota ia targets Hp). Qed.
   End GenSegTables.
 
   (* ======================================================================== *)
@@ -345,8 +317,8 @@ Section SegCompose.
      witness.  gen_seg_contract's leading `asn_pc_eq` conjunct is exactly it. *)
   Lemma seg_pre_placement {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia head : N) (prog : list AST) (skip take : nat)
-      (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+      (ia : N) (code : list AST)
+      (targets : list N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (iota : Valuation R) (v : bv xlenbits)
@@ -354,12 +326,11 @@ Section SegCompose.
                (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
              = inst (T := fun Σ => Term Σ ty_xlenbits) base iota) :
     asn.interpret (extend_to_minimal_pre (cfg_precondition
-        (gen_seg_contract base base_a ia head prog skip take targets bound fl
-           regs extra_pre post)))
+        (gen_seg_contract base base_a ia code targets fl regs extra_pre post)))
       (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
     ⊢ ⌜ inst (T := fun Σ => Term Σ ty_xlenbits)
-          (cfg_placement (gen_seg_contract base base_a ia head prog skip take
-             targets bound fl regs extra_pre post)) iota
+          (cfg_placement (gen_seg_contract base base_a ia code targets fl regs
+             extra_pre post)) iota
         = ty.SyncVal v ⌝.
   Proof.
     cbn [gen_seg_contract cfg_precondition cfg_placement extend_to_minimal_pre].
@@ -371,13 +342,11 @@ Section SegCompose.
        though the formula is constructor-headed and `Arguments` says it should.
        `change` goes by conversion and does -- rocq-implementation section 1,
        "when cbn stalls on something reflexivity proves". *)
-    change (instprop (formula_propeq (term_var "a")
-              (base_a + term_val ty_xlenbits (bv.of_N head))%exp)
+    change (instprop (formula_propeq (term_var "a") base_a)
               iota.["a"∷ty_xlenbits ↦ SyncVal v])
       with (inst (T := fun Σ => Term Σ ty_xlenbits) (term_var "a")
               iota.["a"∷ty_xlenbits ↦ SyncVal v]
-            = inst (T := fun Σ => Term Σ ty_xlenbits)
-                (base_a + term_val ty_xlenbits (bv.of_N head))%exp
+            = inst (T := fun Σ => Term Σ ty_xlenbits) base_a
                 iota.["a"∷ty_xlenbits ↦ SyncVal v]) in Hpc.
     cbn [inst inst_term] in Hpc |- *.
     rewrite Hba in Hpc.
@@ -390,13 +359,14 @@ Section SegCompose.
      The two conjuncts have genuinely different needs, which is worth noticing:
      `itable_rel` wants only the placement fact (itable_faith_of_list takes an
      ARBITRARY cbase, so the concrete load address never enters), while
-     `etable_rel` additionally forces `v = ia + head`, because seg_exitCond
-     compares ABSOLUTE addresses.  So the block's tie to the concrete base is
-     an exit-side obligation, not a code-side one. *)
+     `etable_rel` additionally forces `v = ia`, because seg_exitCond
+     compares ABSOLUTE addresses built from the contract's own load address.
+     So the block's tie to the concrete address is an exit-side obligation,
+     not a code-side one. *)
   Lemma blockFaithful_of_seg {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia head : N) (prog : list AST) (skip take : nat)
-      (targets : list N) (bound : N) (fl : nat) (regs : list reg_spec_rel)
+      (ia : N) (code : list AST)
+      (targets : list N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (off : N) (v : bv xlenbits) (ab : list AnnotInstr)
@@ -404,25 +374,24 @@ Section SegCompose.
                inst (T := fun Σ => Term Σ ty_xlenbits) base_a
                  (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
                = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
-      (Hv : v = bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head))
-      (Hle : List.Forall (fun t => N.le head t) targets)
-      (* same obligation seg_instr_table_ok gets out of seg_fits_memory *)
+      (Hv : v = @bv.of_N xlenbits ia)
+      (* the block's code does not wrap around the address space *)
       (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N) :
     ⊢ blockFaithful ab v
         {| blk_off := off ; blk_ctx := R
-         ; blk_contract := gen_seg_contract base base_a ia head prog skip take
-                             targets bound fl regs extra_pre post |}
-        (table_of_list (cfg_placement (gen_seg_contract base base_a ia head prog
-                          skip take targets bound fl regs extra_pre post)) 0 ab).
+         ; blk_contract := gen_seg_contract base base_a ia code targets fl regs
+                             extra_pre post |}
+        (table_of_list (cfg_placement (gen_seg_contract base base_a ia code
+                          targets fl regs extra_pre post)) 0 ab).
   Proof.
     unfold blockFaithful.
     iIntros "!>" (iota) "Hpre".
-    iDestruct (seg_pre_placement base base_a ia head prog skip take targets
-                 bound fl regs extra_pre post iota v (Hba iota) with "Hpre")
+    iDestruct (seg_pre_placement base base_a ia code targets fl regs extra_pre
+                 post iota v (Hba iota) with "Hpre")
       as "%Hp".
     iPureIntro. cbn [blk_contract]. split.
     - exact (itable_faith_of_list _ iota ab Hp Hrep).
-    - subst v. exact (seg_exit_table_ok _ iota ia head targets Hle Hp).
+    - subst v. exact (seg_exit_table_ok _ iota ia targets Hp).
   Qed.
 
   (* ---- A BLOCK, FROM ITS CONTRACT -----------------------------------------
@@ -669,25 +638,6 @@ Section SegCompose.
   (* 6. COUNTED LOOPS                                                         *)
   (* ======================================================================== *)
 
-  (* Exit-table faithfulness for a RE-BASED segment: the contract is stated at
-     its own entry address, so head is 0 and the targets are already relative.
-     seg_exit_table_ok's head-shifted form does not apply definitionally
-     (`t - 0` and `q +b of_N 0` are both stuck on a symbolic argument). *)
-  Lemma seg_exit_table_ok_head {R : LCtx} (place : Term R ty_xlenbits)
-      (iota : Valuation R) (iq : N) (targets : list N)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (@bv.of_N xlenbits iq)) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-      (seg_exitCond iq targets) (exits_of_offs place targets) iota.
-  Proof.
-    apply etable_faith_exits_of_offs with (cbase := @bv.of_N xlenbits iq);
-      [exact Hp |].
-    (* NB: offs IS targets here -- there is no `map (.- head)` to invert, unlike
-       seg_exit_table_ok.  Copying its `in_map_iff` line does not typecheck. *)
-    apply List.Forall_forall. intros o Hin.
-    now apply seg_exitCond_hit0.
-  Qed.
-
   (* THE LOOP INVARIANT.  Generated: the counter pinned at `ls_at n` (via the
      caller's valuation family), the frame, and the four ambient resources
      every segment carries.
@@ -721,47 +671,19 @@ Section SegCompose.
 
   (* ---- ONE TRIP ---------------------------------------------------------- *)
 
-  (* ---- THE PLACEMENT BUNDLE (C5) ------------------------------------------
+  (* ---- THE LOOP'S OWN CODE ------------------------------------------------
 
-     Six of loop_runs's twenty arguments said nothing about the loop and
-     everything about WHERE THE HOST PROGRAM PUT IT.  They travel together and
-     are proved together, so they are one record.  `place_body_table_ok`/`place_exit_table_ok` stay two
-     fields rather than one because seg_placement_ok is per-target: the back edge and the
-     fall-through are different targets. *)
-  Record LoopPlace {R : LCtx} (ls : LoopSpec R) : Type := MkLoopPlace
-    { place_prog_base    : N                (* the HOST program's base address       *)
-    ; place_prog_extent : N                (* the HOST program's extent             *)
-    ; place_head_eq     : @bv.of_N xlenbits (loop_head_addr ls)
-                 = bv.add (@bv.of_N xlenbits place_prog_base)
-                     (@bv.of_N xlenbits (4 * N.of_nat (loop_first_instr ls)))
-    ; place_fits_memory    : seg_fits_memory place_prog_base place_prog_extent
-    (* NOTE THE TARGET CONVENTION, and that it was WRONG until 2026-09-14.
-       These lists used to read `[0%N]` and `[loop_exit_off ls]` -- the loop's own
-       head-relative offsets, which is the convention its EXIT table uses.
-       But seg_placement_ok's last conjunct is `forallb (fun t => head <=? t) targets`
-       with head = 4*skip, so `1056 <=? 0` made the field UNSATISFIABLE for
-       every loop at a nonzero offset, and every loop theorem that took it as
-       a hypothesis was vacuous.  seg_instr_table_ok -- the only consumer -- uses
-       only seg_placement_ok's offset/skip/size parts and ignores the targets, so the
-       fix is simply to state them program-relative. *)
-    ; place_body_table_ok    : seg_placement_ok (loop_prog ls) (loop_first_instr ls)
-                   (4 * N.of_nat (loop_first_instr ls))%N place_prog_extent
-                   [(4 * N.of_nat (loop_first_instr ls) + 0)%N] = true
-    ; place_exit_table_ok   : seg_placement_ok (loop_prog ls) (loop_first_instr ls)
-                   (4 * N.of_nat (loop_first_instr ls))%N place_prog_extent
-                   [(4 * N.of_nat (loop_first_instr ls) + loop_exit_off ls)%N] = true }.
-  (* `#[global]`, not bare `Arguments`: inside a Section an Arguments command
-     is section-LOCAL and silently reverts at `End`, so callers saw R and ls
-     as explicit and record syntax elaborated the fields before it could learn
-     `ls` from the ascribed type. *)
-  #[global] Arguments MkLoopPlace {R ls}.
-  #[global] Arguments place_prog_base {R ls}.    #[global] Arguments place_prog_extent {R ls}.
-  #[global] Arguments place_head_eq {R ls}.     #[global] Arguments place_fits_memory {R ls}.
-  #[global] Arguments place_body_table_ok {R ls}.    #[global] Arguments place_exit_table_ok {R ls}.
-
-  Definition loop_instr_block {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls) : iProp Σ :=
+     A loop owns ITS OWN instructions and nothing else (2026-09-25,
+     PLAN-self-contained-segments.md).  This used to be the whole HOST
+     program's instruction block, and a `LoopPlace` record (host base, host
+     extent, head = host base + 4*first_instr, two seg_placement_ok facts)
+     said where the host had put the loop.  None of that is the loop's
+     business: the only placement fact a loop still needs is that its own
+     code fits in memory (`Hfit` below), and handing instruction ownership
+     over at a cut is the caller's -- see loop_enter_from_seg's span swap. *)
+  Definition loop_instr_block {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) : iProp Σ :=
     Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-      (ai_instr <$> instrs_of_list (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)).
+      (ai_instr <$> instrs_of_list (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)).
 
   (* ---- ONE TRIP, EITHER KIND (A3) ----------------------------------------
 
@@ -779,71 +701,53 @@ Section SegCompose.
              inst_loop_base_pre;
        Hg  : the branch decision holds at this trip -- one arithmetic fact;
        HOut: what to do with the segment's exit state. *)
-  Lemma loop_one_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_one_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
+      (* the loop's own code fits in memory -- the ONLY placement fact left *)
+      (Hfit : seg_fits_memory (loop_head_addr ls) (loop_code_extent ls))
       (g : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (R ▻ "a"∷ty_xlenbits))
       (target : N)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (i : Valuation R) (F Out : iProp Σ)
-      (* program-relative, matching place_body_table_ok / place_exit_table_ok -- see the note there *)
-      (Hokt : seg_placement_ok (loop_prog ls) (loop_first_instr ls)
-                (4 * N.of_nat (loop_first_instr ls))%N (place_prog_extent pl)
-                [(4 * N.of_nat (loop_first_instr ls) + target)%N] = true)
       (Hv  : cfg_vc (gen_loop_contract ls g target post) (gen_loop_annot ls))
-      (* Every block contract in this loop's program is justified.  Vacuous
-         today (blocksSound_of_none); the premise exists because the lemma is
-         generic in the program.  See cfg_instrs_verified (EndToEnd.v). *)
+      (* Every block contract in this loop's code is justified.  The premise
+         exists because the lemma is generic in the code.  See
+         cfg_instrs_verified (EndToEnd.v). *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
+                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) i
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (g (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
                (i.["a"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))]))
       (HOut : F ∗ seg_exit_state words (gen_loop_contract ls g target post) i
-                    (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
-                    (@bv.of_N xlenbits (place_prog_base pl))
+                    (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+                    (@bv.of_N xlenbits (loop_head_addr ls))
                     (seg_addr (loop_head_addr ls) target)
               -∗ Out) :
     asn.interpret (gen_loop_at_head ls)
       (i.["a"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))])
     ∗ F ∗ pc ↦ᵣ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))
     ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
-    ∗ loop_instr_block words ls pl
+    ∗ loop_instr_block words ls
     -∗ myWP2_loop Out.
   Proof.
-    assert (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits)
-                       (cfg_placement (gen_loop_contract ls g target post)) i
-                     = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))).
-    { rewrite gen_loop_place. exact (inst_addr_plus0 _ _ _ Hpl). }
+    (* The loop's table is faithful to ITS OWN code at its own head -- the
+       placement is the bare code base, so Hpl IS the placement fact. *)
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-                    (instrs_of_list (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls))
+                    (instrs_of_list (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls))
                     (table_of_list (cfg_placement (gen_loop_contract ls g target post))
                        0 (gen_loop_annot ls)) i).
-    { (* was `rewrite gen_loop_instrs`, which turned `cfg_instrs (gen_loop_contract
-         ..)` into the firstn/skipn slice.  The table is now built from
-         `gen_loop_annot ls`, which IS that slice definitionally, so this is an
-         unfold. *)
-      unfold gen_loop_annot.
-      (* the placement premise is BUILT, not tactic-proved: as an `ltac:(...)`
-         it ran before unification had fixed seg_instr_table_ok's `place`, so
-         `rewrite Hplace` found nothing to rewrite. *)
-      exact (seg_instr_table_ok
-               (cfg_placement (gen_loop_contract ls g target post)) i
-               (place_prog_base pl) (loop_prog ls) (loop_first_instr ls) (loop_num_instrs ls)
-               (4 * N.of_nat (loop_first_instr ls))%N (place_prog_extent pl)
-               [(4 * N.of_nat (loop_first_instr ls) + target)%N] Hokt
-               (eq_trans Hplace (f_equal ty.SyncVal (place_head_eq pl))) (place_fits_memory pl)). }
+    { refine (itable_faith_of_list _ i (loop_code ls) Hpl _).
+      refine (seg_fits_rep _ (loop_code_extent ls) (loop_code ls) _ Hfit).
+      unfold loop_code_extent. rewrite strip_length. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
                     (cfg_exitCond (gen_loop_contract ls g target post))
-                    (cfg_exits (gen_loop_contract ls g target post)) i).
-    { rewrite gen_loop_exits. rewrite gen_loop_exitCond.
-      exact (seg_exit_table_ok_head
-               (term_binop bop.bvadd (loop_base ls) (term_val ty_xlenbits (bv.of_N 0)))
-               i (loop_head_addr ls) [target] (inst_addr_plus0 _ _ _ Hpl)). }
+                    (cfg_exits (gen_loop_contract ls g target post)) i)
+      by exact (seg_exit_table_ok (loop_base ls) i (loop_head_addr ls) [target] Hpl).
     iIntros "H".
     iApply (seg_run_single_exit words (gen_loop_contract ls g target post) i
-             (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
-             (@bv.of_N xlenbits (place_prog_base pl)) F (loop_head_addr ls) target
+             (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+             (@bv.of_N xlenbits (loop_head_addr ls)) F (loop_head_addr ls) target
              (gen_loop_exitCond ls g target post) (gen_loop_annot ls)
              Hv Hif Hef Hbs with "H").
     - (* HPre: the invariant IS the precondition minus the branch decision and
@@ -863,14 +767,12 @@ Section SegCompose.
       iDestruct "H" as "((Hk & Hsl & (Hbq & Hbs) & Hregs & Hex) & Hmin)".
       iFrame "Hk Hsl Hbq Hbs Hregs Hex Hmin".
       (* what is left is the two PURE conjuncts the invariant does not carry:
-         the pc equation (which is where the `+ 0` A3 introduced has to be
-         discharged) and the branch decision. *)
+         the pc equation and the branch decision. *)
       iSplit; [iPureIntro | iSplit; [iPureIntro; exact Hg | done]].
       (* `-[loop_base_pre]` for the same reason the latch lemmas need it: with ls a
          variable, cbn unfolds the C4 accessor and inst_loop_base_pre stops matching. *)
       cbn -[loop_base_pre]. split; [| exact I].
-      rewrite (eq_trans (inst_loop_base_pre ls i _) Hpl). cbn.
-      now rewrite bv.add_zero_r.
+      rewrite (eq_trans (inst_loop_base_pre ls i _) Hpl). reflexivity.
     - exact HOut.
   Qed.
 
@@ -879,7 +781,7 @@ Section SegCompose.
      The BODY trip: guard holds, back edge to offset 0, and the continuation is
      the next trip's invariant.  `Htrans` is where a sliding footprint lives:
      the contract is trip-independent, and iotaf moves the pointers. *)
-  Lemma loop_body_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_body_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (Hfit : seg_fits_memory (loop_head_addr ls) (loop_code_extent ls))
       (Fr : nat -> iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (n : nat)
       (HPm : P (S n) -> P n)
@@ -887,7 +789,7 @@ Section SegCompose.
       (* Vacuous today; see loop_one_trip. *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
+                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf (S n))
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : P (S n) ->
@@ -904,17 +806,17 @@ Section SegCompose.
              ((iotaf n).["a"∷ty_xlenbits
                 ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))])
            ∗ Fr n) :
-    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls pl) P (S n)
+    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls) P (S n)
     -∗ myWP2_loop (loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-                     (loop_instr_block words ls pl) P n).
+                     (loop_instr_block words ls) P n).
   Proof.
     (* Peel the pure side condition FIRST: the two bullets of loop_one_trip are
        separate goals, so an iIntros inside HOut would not scope over it, and
        HOut is where P n has to be re-established. *)
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
-    iApply (loop_one_trip words ls pl (loop_guard ls) 0%N (gen_loop_contract_post ls) (iotaf (S n))
-             (Fr (S n)) _ (place_body_table_ok pl) Hv Hbs Hpl (Hg HP) with "H").
+    iApply (loop_one_trip words ls Hfit (loop_guard ls) 0%N (gen_loop_contract_post ls) (iotaf (S n))
+             (Fr (S n)) _ Hv Hbs Hpl (Hg HP) with "H").
     unfold loop_invariant, seg_exit_state.
     rewrite seg_addr_0.
     iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
@@ -928,31 +830,31 @@ Section SegCompose.
      loop, and genuine specification. *)
   Lemma loop_final_trip {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (pl : LoopPlace ls) (Fr : nat -> iProp Σ) (Out : iProp Σ)
+      (Hfit : seg_fits_memory (loop_head_addr ls) (loop_code_extent ls)) (Fr : nat -> iProp Σ) (Out : iProp Σ)
       (iotaf : nat -> Valuation R)
       (P : nat -> Prop) (HP0 : P 0)
       (Hv  : cfg_vc (loop_final_contract ls post) (gen_loop_annot ls))
       (* Vacuous today; see loop_one_trip. *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
+                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf 0)
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
                ((iotaf 0).["a"∷ty_xlenbits
                   ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))]))
       (HOut : Fr 0 ∗ seg_exit_state words (loop_final_contract ls post) (iotaf 0)
-                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
-                     (@bv.of_N xlenbits (place_prog_base pl))
+                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+                     (@bv.of_N xlenbits (loop_head_addr ls))
                      (seg_addr (loop_head_addr ls) (loop_exit_off ls))
               -∗ Out) :
-    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls pl) P 0
+    loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls) P 0
     -∗ myWP2_loop Out.
   Proof.
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
-    iApply (loop_one_trip words ls pl (loop_exit_guard ls) (loop_exit_off ls) post (iotaf 0)
-             (Fr 0) Out (place_exit_table_ok pl) Hv Hbs Hpl Hg HOut with "H").
+    iApply (loop_one_trip words ls Hfit (loop_exit_guard ls) (loop_exit_off ls) post (iotaf 0)
+             (Fr 0) Out Hv Hbs Hpl Hg HOut with "H").
   Qed.
 
   (* ---- ENTERING A LOOP (D3) ----------------------------------------------
@@ -984,18 +886,30 @@ Section SegCompose.
      `bv.of_N (loop_head_addr ls)`, because what a caller HAS is whatever seg_run_single_exit
      handed back -- `seg_addr ia t` for the predecessor's own base and target.
      Hv is then `f_equal; lia`, or reflexivity when both are literals. *)
-  Lemma loop_enter_from_seg {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_enter_from_seg {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
-      (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
+      (* the PREDECESSOR's own code and load address -- it is self-contained,
+         so what it hands back is its own instruction span, not the loop's *)
+      (Lp : list AnnotInstr) (cp : bv xlenbits)
+      (iota : nat -> Valuation R) (Fin Fin' : iProp Σ) (Fr : nat -> iProp Σ)
       (P : nat -> Prop) (n : nat)
       (Hv : v = @bv.of_N xlenbits (loop_head_addr ls))
       (HP : P n)
-      (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin Fr n) :
-    Fin ∗ seg_exit_state words c j a (loop_prog ls) (@bv.of_N xlenbits (place_prog_base pl)) v
-    ⊢ loop_invariant ls iota (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls pl) P n.
+      (* THE SPAN SWAP -- the one place where "where does this loop sit next
+         to its predecessor" is stated.  The predecessor returns ITS code; the
+         caller's frame supplies the LOOP's code and keeps the predecessor's.
+         For two pieces of one program this is ptsto_instrs_w_split on the
+         program's instruction block. *)
+      (Hswap : Fin ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+                       (ai_instr <$> instrs_of_list cp Lp)
+               ⊢ Fin' ∗ loop_instr_block words ls)
+      (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin' Fr n) :
+    Fin ∗ seg_exit_state words c j a Lp cp v
+    ⊢ loop_invariant ls iota (@bv.of_N xlenbits (loop_head_addr ls)) Fr (loop_instr_block words ls) P n.
   Proof.
-    subst v. unfold seg_exit_state, loop_invariant, loop_instr_block.
+    subst v. unfold seg_exit_state, loop_invariant.
     iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
+    iDestruct (Hswap with "[$HF $Hinstrs]") as "(HF & Hinstrs)".
     iSplit; [iPureIntro; exact HP |].
     iDestruct (Hent with "[$Hpost $HF]") as "(Hwin & HFn)".
     iFrame.
@@ -1058,26 +972,28 @@ Section SegCompose.
   (* Segment THEN loop, in one step: run the predecessor, land in the loop,
      run the loop.  This is `seg_then` with the cut assertion filled in, and it
      is the shape a chain into a loop actually wants. *)
-  Lemma seg_then_loop {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma seg_then_loop {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
-      (iota : nat -> Valuation R) (Fin : iProp Σ) (Fr : nat -> iProp Σ)
+      (Lp : list AnnotInstr) (cp : bv xlenbits)
+      (iota : nat -> Valuation R) (Fin Fin' : iProp Σ) (Fr : nat -> iProp Σ)
       (P : nat -> Prop) (n : nat) (Pre Post : iProp Σ)
       (Hv : v = @bv.of_N xlenbits (loop_head_addr ls))
       (HP : P n)
-      (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin Fr n)
-      (Hpred : Pre -∗ myWP2_loop
-                 (Fin ∗ seg_exit_state words c j a (loop_prog ls)
-                         (@bv.of_N xlenbits (place_prog_base pl)) v))
+      (Hswap : Fin ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+                       (ai_instr <$> instrs_of_list cp Lp)
+               ⊢ Fin' ∗ loop_instr_block words ls)
+      (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin' Fr n)
+      (Hpred : Pre -∗ myWP2_loop (Fin ∗ seg_exit_state words c j a Lp cp v))
       (Hloop : loop_invariant ls iota (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-                 (loop_instr_block words ls pl) P n
+                 (loop_instr_block words ls) P n
                -∗ myWP2_loop Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
-    apply (seg_then Pre (Fin ∗ seg_exit_state words c j a (loop_prog ls)
-                          (@bv.of_N xlenbits (place_prog_base pl)) v) Post Hpred).
+    apply (seg_then Pre (Fin ∗ seg_exit_state words c j a Lp cp v) Post Hpred).
     iIntros "H".
     iApply Hloop.
-    iApply (loop_enter_from_seg words ls pl c j a v iota Fin Fr P n Hv HP Hent).
+    iApply (loop_enter_from_seg words ls c j a v Lp cp iota Fin Fin' Fr P n
+              Hv HP Hswap Hent).
     iExact "H".
   Qed.
 
@@ -1086,24 +1002,24 @@ Section SegCompose.
 
   (* seg_loop, instantiated.  Given a step for every trip and an exit, the
      loop runs to its continuation. *)
-  Lemma loop_by_induction {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) (pl : LoopPlace ls)
+  Lemma loop_by_induction {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (Hstep : forall n,
          loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-           (loop_instr_block words ls pl)
+           (loop_instr_block words ls)
            P (S n)
          -∗ myWP2_loop (loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-              (loop_instr_block words ls pl) P n))
+              (loop_instr_block words ls) P n))
       (Hexit :
          loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-           (loop_instr_block words ls pl)
+           (loop_instr_block words ls)
            P 0
          -∗ myWP2_loop Out)
       (Hcont : Out -∗ myWP2_loop Post) :
     forall n,
       loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-        (loop_instr_block words ls pl)
+        (loop_instr_block words ls)
         P n
       -∗ myWP2_loop Post.
   Proof. apply (seg_loop _ Out Post Hstep Hexit Hcont). Qed.
@@ -2233,9 +2149,9 @@ Section SegCompose.
      statements are mostly re-spelled valuations -- for every example.
 
      The arguments group as:
-       placement  pl              -- ONE `LoopPlace` record (C5): where the
-                  segment sits in the program.  Was four arguments plus two
-                  bare N's, none of them about the loop;
+       fit        Hfit            -- the loop's OWN code fits in memory.  Was a
+                  `LoopPlace` record saying where the HOST program put the
+                  loop; that is no longer the loop's business (2026-09-25);
        the VCs    Hvb/Hvf         -- `solve_param_vc` on body and final;
        the base   Hpl             -- eq_refl whenever iotaf maps "q" to a
                   literal.  Was a PAIR Hpl/Hpa until C4 made the second
@@ -2252,14 +2168,14 @@ Section SegCompose.
      from a side hypothesis. *)
   Lemma loop_runs {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (pl : LoopPlace ls) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
+      (Hfit : seg_fits_memory (loop_head_addr ls) (loop_code_extent ls)) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (Hvb : cfg_vc (loop_body_contract ls) (gen_loop_annot ls))
       (Hvf : cfg_vc (loop_final_contract ls post) (gen_loop_annot ls))
       (* Vacuous today; see loop_one_trip. *)
       (Hbs : forall wds : bv xlenbits -> bv word,
                ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (place_prog_base pl)) (loop_prog ls)))
+                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
       (Hpl : forall n, inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf n)
                        = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (HP0 : P 0) (HPm : forall n, P (S n) -> P n)
@@ -2270,20 +2186,20 @@ Section SegCompose.
       (Hedge : forall n, P (S n) ->
              loop_back_edge ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr n)
       (HOut : Fr 0 ∗ seg_exit_state words (loop_final_contract ls post) (iotaf 0)
-                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_prog ls)
-                     (@bv.of_N xlenbits (place_prog_base pl))
+                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+                     (@bv.of_N xlenbits (loop_head_addr ls))
                      (seg_addr (loop_head_addr ls) (loop_exit_off ls))
               -∗ Out)
       (Hcont : Out -∗ myWP2_loop Post) :
     forall n,
       loop_invariant ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr
-        (loop_instr_block words ls pl) P n
+        (loop_instr_block words ls) P n
       -∗ myWP2_loop Post.
   Proof.
-    apply (loop_by_induction words ls pl Fr Out Post iotaf P
-             (fun n => loop_body_trip words ls pl Fr iotaf P n (HPm n)
+    apply (loop_by_induction words ls Fr Out Post iotaf P
+             (fun n => loop_body_trip words ls Hfit Fr iotaf P n (HPm n)
                          Hvb Hbs (Hpl (S n)) (proj1 Hlatch n) (Hedge n))
-             (loop_final_trip words ls post pl Fr Out iotaf P HP0 Hvf Hbs
+             (loop_final_trip words ls post Hfit Fr Out iotaf P HP0 Hvf Hbs
                 (Hpl 0) (proj2 Hlatch) HOut)
              Hcont).
   Qed.

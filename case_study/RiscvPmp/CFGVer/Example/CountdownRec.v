@@ -70,8 +70,9 @@ Definition cd_rec_post
     : Assertion (cdRecCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( X1 ↦ᵣ term_val ty_xlenbits bv.zero )%asn.
 
-(* base q, entry at offset 0, the two instructions, one exit at +8, code
-   bound 8, fuel 4 (head, BNE, block, exit check).
+(* base q, the loop's own two instructions, one exit at +8 (relative to the
+   loop), fuel 4 (head, BNE, block, exit check).  The code bound (8 bytes) is
+   derived by gen_seg_contract.
 
    `ia`, the concrete load address, is a PARAMETER of the contract, of the
    block and of every annotated list below, because it fixes two fields the
@@ -79,8 +80,8 @@ Definition cd_rec_post
    condition (seg_exitCond ia), which pins where the block resumes -- at
    ia + 8.  The VCs hold for every ia at once, with no vm_compute on it. *)
 Definition cdRec (ia : N) : @CFGVerifierContract cdRecCtx :=
-  gen_seg_contract (term_var "q") (term_var "q") ia 0
-    cd_instrs 0 2 [8%N] 8 4 [] cd_rec_inv cd_rec_post.
+  gen_seg_contract (term_var "q") (term_var "q") ia
+    cd_instrs [8%N] 4 [] cd_rec_inv cd_rec_post.
 
 Definition cdRecBlk (ia : N) : BlkAnnot :=
   {| blk_off := 8%N ; blk_ctx := cdRecCtx ; blk_contract := cdRec ia |}.
@@ -111,8 +112,8 @@ Proof. Fail solve_param_vc. Abort.
 Goal let bad := (X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
                  ∗ asn.formula (formula_relop bop.neq (term_var "k")
                                   (term_val ty_xlenbits (bv.of_N 1))))%asn in
-     let c := gen_seg_contract (term_var "q") (term_var "q") 0 0
-                cd_instrs 0 2 [8%N] 8 4 [] bad cd_rec_post in
+     let c := gen_seg_contract (term_var "q") (term_var "q") 0
+                cd_instrs [8%N] 4 [] bad cd_rec_post in
      cfg_vc c ({| ai_ghost_before := []; ai_instr := ADDI X1 X1 neg1_12;
                       ai_ghost_after := []; ai_block := None;
                       ai_loop := Some {| blk_off := 8%N ; blk_ctx := cdRecCtx ;
@@ -155,8 +156,8 @@ Definition cd_link_post
     ∗ X2 ↦ᵣ term_val ty_xlenbits (bv.of_N 42) )%asn.
 
 Definition cdLink (ia : N) : @CFGVerifierContract cdRecCtx :=
-  gen_seg_contract (term_var "q") (term_var "q") ia 0
-    cd_link_instrs 0 3 [12%N] 12 4 [] cd_link_extra cd_link_post.
+  gen_seg_contract (term_var "q") (term_var "q") ia
+    cd_link_instrs [12%N] 4 [] cd_link_extra cd_link_post.
 
 Lemma valid_cd_link (ia : N) : cfg_vc (cdLink ia) (cd_link_annot ia).
 Proof. solve_param_vc. Qed.

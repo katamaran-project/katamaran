@@ -97,14 +97,6 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
-(* ------------------------------------------------------------------------ *)
-(* Where the code sits: base arithmetic, for every ia that fits.            *)
-(* ------------------------------------------------------------------------ *)
-
-(* the placement is `q + 0` *)
-Lemma cd_add0 (ia : N) : @bv.of_N xlenbits ia = bv.add (bv.of_N ia) (bv.of_N 0).
-Proof. change (@bv.of_N xlenbits 0) with (@bv.zero xlenbits). now rewrite bv.add_zero_r. Qed.
-
 Section Link.
   Context {Σ} {GS : sailGS2 Σ}.
 
@@ -114,12 +106,11 @@ Section Link.
     ⊢ blockSound words (@bv.of_N xlenbits ia) (cdRecBlk ia).
   Proof.
     (* where the code sits: base ia, two instructions, inside memory *)
-    iPoseProof (blockFaithful_of_seg (term_var "q") (term_var "q") ia 0
-                  cd_instrs 0 2 [8%N] 8 4 [] cd_rec_inv cd_rec_post
+    iPoseProof (blockFaithful_of_seg (term_var "q") (term_var "q") ia
+                  cd_instrs [8%N] 4 [] cd_rec_inv cd_rec_post
                   8 (@bv.of_N xlenbits ia) (cd_rec_annot ia)) as "Hf".
     { intros iota. reflexivity. }
-    { apply cd_add0. }
-    { repeat constructor. lia. }
+    { reflexivity. }
     { pose proof lenAddr_rep.
       rewrite (seg_fits_bin ia 8 ltac:(unfold seg_fits_memory; lia)).
       cbn [length cd_rec_annot list_AST_AnnotInstr List.map]. lia. }
@@ -169,18 +160,17 @@ Proof.
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   assert (Hfit8 : (init_addr + 8 < lenAddr)%N) by lia.
   pose proof (seg_fits_bin init_addr 8 ltac:(unfold seg_fits_memory; lia)) as Hbin.
-  (* ι: code at init_addr, counter at its pinned 2.  cfg_init_addr is
-     `init_addr + 0`, which is not convertible to init_addr, hence N.add_0_r. *)
+  (* ι: code at init_addr, counter at its pinned 2. *)
   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' (cd_link_annot init_addr)
     (seg_exitCond init_addr [12%N]) n ws cdRecCtx
     ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
           .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
     _ HpubReg (cdLink init_addr) (valid_cd_link init_addr) init_addr
-    (N.add_0_r init_addr) eq_refl).
-  - (* placement *)
-    cbn. f_equal. symmetry. apply cd_add0.
-  - (* the one exit, +12: the generic segment exit table (head 0 <= 12) *)
-    apply (seg_exit_table_ok _ _ init_addr 0 [12%N]); [repeat constructor; lia | reflexivity].
+    eq_refl eq_refl).
+  - (* placement: the bare code base *)
+    reflexivity.
+  - (* the one exit, +12: the generic segment exit table *)
+    apply (seg_exit_table_ok _ _ init_addr [12%N]). reflexivity.
   - (* ImplPre: the pinned X1 and the free X2 from gen_implpre, the rest pure *)
     intros Σ' GS'.
     iIntros "(Hregs & Hpriv & #Hinv)".
@@ -192,7 +182,6 @@ Proof.
     iFrame "Hpriv Hinv HX1 HX2".
     repeat iSplit; try done; iPureIntro.
     all: first [ reflexivity
-               | (f_equal; apply cd_add0)
                | (try unfold bv.unsigned; rewrite Hbin; lia)
                | (intros H; apply (f_equal (@bv.bin _)) in H; discriminate) ].
   - cbn [length cd_link_annot list_AST_AnnotInstr List.map]. lia.

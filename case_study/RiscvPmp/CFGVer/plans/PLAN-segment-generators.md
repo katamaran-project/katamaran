@@ -1,5 +1,15 @@
 # PLAN — generators and combinators for COMPOSITIONAL segment proofs
 
+> **SUPERSEDED IN PART (2026-09-25) by `PLAN-self-contained-segments.md`.**
+> `gen_seg_contract` no longer takes `head prog skip take bound` (a segment is
+> stated as if it were the whole program; the code bound is derived), and
+> `LoopSpec` carries `loop_code` instead of `loop_prog`/`loop_first_instr`/
+> `loop_num_instrs`; `LoopPlace` is gone (a loop's only placement fact is
+> `Hfit`), `seg_exit_table_ok_at`/`_head` merged into the re-based
+> `seg_exit_table_ok`, and loop entry takes an explicit span swap (`Hswap`).
+> Signatures quoted below are the historical ones.
+
+
 Status: **layers 1–3 written and tracked (2026-09-09)**, `GenSegment.v` (light)
 and `GenCompose.v` (heavy). This file records why they exist, what varies vs
 what is fixed, and — importantly — what was deliberately *not* built.
