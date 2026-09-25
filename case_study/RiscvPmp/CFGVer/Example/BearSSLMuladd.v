@@ -144,5 +144,5 @@ Lemma strip_id_muladd_q_instrs : strip muladd_q_instrs = muladd_q_instrs.
 Proof. reflexivity. Qed.
 
 Lemma valid_muladd_q_cfg_contract_param (ia : N) :
-  ValidCFGVerifierContract (muladd_q_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+  cfg_vc (muladd_q_cfg_contract_param ia) (cfg_instrs (muladd_q_cfg_contract_param ia)).
+Proof. solve_param_vc. Qed.

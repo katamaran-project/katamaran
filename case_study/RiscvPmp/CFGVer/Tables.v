@@ -105,6 +105,15 @@ Open Scope list_scope.
   Definition T4 : RegIdx := bv.of_nat 29.
   Definition T5 : RegIdx := bv.of_nat 30.
   Definition T6 : RegIdx := bv.of_nat 31.
+  (* Saved registers.  Added 2026-09-09: only S0..S3 are ever referenced, but
+     they were being re-defined LOCALLY in 163 files under Example/ because
+     they were missing here.  Same values as those copies (s0=x8, s1=x9,
+     s2=x18, s3=x19), so a file that still defines them locally merely shadows
+     these with identical bindings. *)
+  Definition S0 : RegIdx := bv.of_nat 8.
+  Definition S1 : RegIdx := bv.of_nat 9.
+  Definition S2 : RegIdx := bv.of_nat 18.
+  Definition S3 : RegIdx := bv.of_nat 19.
 
   (* Convert a contiguous instruction list into the finite map the CFG
      verifier now consumes.  Instruction k of the list is placed at the
@@ -336,7 +345,7 @@ Open Scope list_scope.
 
   (* Transit the end-to-end layer's lenAddr bound into the no-wrap bound
      itable_faith_of_list needs.  lia cannot handle bv.exp2 xlenbits (2^32)
-     directly, so bound below lenAddr = 2^10 first and transit. *)
+     directly, so bound below lenAddr first and transit. *)
   Lemma table_bound_of_lenAddr (ia : N) (len : nat) :
     (ia + 4 * N.of_nat len < lenAddr)%N ->
     (bv.bin (@bv.of_N xlenbits ia) + 4 * N.of_nat len < bv.exp2 xlenbits)%N.
@@ -344,10 +353,9 @@ Open Scope list_scope.
     intros H.
     pose proof (@bv.bin_of_N_decr xlenbits ia) as Hdec.
     set (B := bv.bin (@bv.of_N xlenbits ia)) in *; clearbody B.
-    unfold lenAddr in H.
-    assert (Hsmall : (B + 4 * N.of_nat len < 2 ^ 10)%N) by lia.
+    assert (Hsmall : (B + 4 * N.of_nat len < lenAddr)%N) by lia.
     eapply N.lt_trans; [exact Hsmall|].
-    now vm_compute.
+    exact lenAddr_rep.
   Qed.
 
     (* TODO: move into Spec.v *)

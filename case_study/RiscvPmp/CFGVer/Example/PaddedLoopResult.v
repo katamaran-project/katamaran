@@ -116,7 +116,7 @@ Section ComposePaddedLoop.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
     pose proof valid_plBody as Hv.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
     cbn [cfg_map plBody] in Hv.
     pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
@@ -126,7 +126,7 @@ Section ComposePaddedLoop.
     assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
     assert (Hne : bvdec k <> bv.zero).
     { intros HH. rewrite HH in Hdec. cbn in Hdec. lia. }
-    iApply (sound_scfg_verification_condition_myWP2 Hv (plInvN n) Hif Hef
+    iApply (sound_scfg_verification_condition_myWP2 Hv (plInvN n) Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -154,13 +154,13 @@ Section ComposePaddedLoop.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
     pose proof valid_plFinal as Hv.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
     cbn [cfg_map plFinal] in Hv.
     pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
                     (pcOutOfInstrs_exitCond 0 padded_instrs) (cfg_exits plFinal) (ik k)).
     { constructor; [|constructor]. eexists. split; reflexivity. }
-    iApply (sound_scfg_verification_condition_myWP2 Hv plExit Hif Hef
+    iApply (sound_scfg_verification_condition_myWP2 Hv plExit Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".

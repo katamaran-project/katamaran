@@ -56,7 +56,7 @@
 #     is-this-a-build detection below) -- inspection commands are not builds.
 #   - `make clean`, `make -n`, `--version`, `--help`: no compilation.
 #   - A single-file ZZ*.v diagnostic probe. These are throwaway measurement
-#     probes, BY CONVENTION never added to _CoqProject/dune (see the
+#     probes, BY CONVENTION never added to _CoqProject (see the
 #     cfgver-scaling-diagnostics skill), so rocq_compile_file cannot see them
 #     at all; and sweeping several N values back-to-back is the entire point
 #     of a scaling probe, not a thrash pattern. They compile one small file
@@ -75,8 +75,12 @@ set -u
 input=$(cat)
 
 # Cheap pure-bash prefilter: no subprocess for the vast majority of Bash calls.
+# `.sh` is in the list because a build can be HIDDEN inside a wrapper script
+# whose command line mentions neither coqc nor make (`nohup ./batch.sh ZZFoo`);
+# the script-body scan below is what decides whether it is really a build, and
+# without this the prefilter exited first and that scan never ran.
 case $input in
-  *coqc*|*make*) ;;
+  *coqc*|*make*|*.sh*) ;;
   *) exit 0 ;;
 esac
 
@@ -121,6 +125,58 @@ done <<EOF
 $(printf '%s' "$cmd" | sed -E 's/&&|\|\||;|\|/\n/g')
 EOF
 
+# BUILDS HIDDEN INSIDE A SCRIPT (2026-09-09).  The detection above looks at
+# each segment's first WORD, so `nohup ./batch.sh ZZFoo` presents as a launch of
+# `batch.sh` and not as a build -- and every coqc call inside the script is
+# invisible to a PreToolUse hook, which sees only the one Bash command.  A whole
+# session's worth of batched compiles went through that way.  So: if a segment's
+# first word is a readable script whose BODY invokes coqc or this project's
+# make, treat the command as a build and take its targets from the script.
+if [ -z "$build_kind" ]; then
+  for seg in "$@"; do :; done
+  _scan=$(printf '%s' "$cmd" | tr ' \t' '\n\n' | sed -n '/\.sh$/{s#^\./##;p;}')
+  while IFS= read -r sh; do
+    [ -n "$sh" ] || continue
+    [ -r "$sh" ] || continue
+    # NEVER treat this hook family as a build wrapper: coqc-guard.sh mentions
+    # `coqc` all over its own comments, so a command that merely names it read
+    # as a build and denied an innocent test harness.  Fourth instance in this
+    # repo of a guard matching text that only MENTIONS its trigger.
+    case $sh in */.claude/hooks/*) continue ;; esac
+    # Require an ACTUAL INVOCATION, not a mention: some line's first token --
+    # after stripping env assignments and the usual prefixes -- must be coqc,
+    # or make on this project's Makefile.coq.  Same anchoring the segment
+    # detection above uses.
+    if awk '
+      { line=$0
+        sub(/^[[:space:]]+/,"",line)
+        while (line ~ /^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|nohup|time|timeout [^[:space:]]+|exec|command|env|sudo|\/usr\/bin\/time|-f)[[:space:]]+/)
+          sub(/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|nohup|time|timeout [^[:space:]]+|exec|command|env|sudo|\/usr\/bin\/time|-f)[[:space:]]+/,"",line)
+        if (line ~ /^coqc[[:space:]]/) { found=1 }
+        if (line ~ /^make[[:space:]]/ && $0 ~ /Makefile\.coq/) { found=1 }
+      }
+      END { exit(found?0:1) }' "$sh" 2>/dev/null; then
+      build_kind="script"
+      # A wrapper usually takes the target as an ARGUMENT ("$1.v" in the body),
+      # so the script text yields no resolvable path.  Resolve the command
+      # line's bare words as STEMS instead: `batch.sh ZZFoo` -> the ZZFoo.v that
+      # exists in the tree.  Without this the rule silently passes, which is how
+      # a session of batched compiles stayed invisible.
+      for w in $cmd; do
+        case $w in -*|*/*.sh|nohup|*=*) continue ;; esac
+        for d in . case_study/RiscvPmp/CFGVer/Example case_study/RiscvPmp/CFGVer \
+                 case_study/RiscvPmp theories; do
+          [ -f "$d/$w.v" ] && cmd="$cmd $d/$w.v"
+          [ -f "$d/$w" ] && case $w in *.v) cmd="$cmd $d/$w" ;; esac
+        done
+      done
+      break
+    fi
+  done <<EOF
+$_scan
+EOF
+fi
+
 [ -n "$build_kind" ] || exit 0
 
 # Non-compiling make modes cost nothing.
@@ -130,9 +186,16 @@ if [ "$build_kind" = "make" ]; then
   esac
 fi
 
-# Single-file ZZ*.v diagnostic probe -- see NOT COUNTED in the header.
+# Single-file ZZ*.v diagnostic probe.  NARROWED 2026-09-09: this used to be a
+# blanket `exit 0`, which exempted ZZ* from BOTH rules -- and a ZZ* file
+# developed as real work over dozens of compiles is precisely the loop this
+# guard exists to stop.  One such file was iterated all session with the guard
+# never running at all.  ZZ* probes stay exempt from the RATE LIMIT (they are
+# meant to be throwaway diagnostics, and capping them would block the
+# documented dump workflow) but are now subject to the same-target rule.
+zz_probe=0
 case $cmd in
-  *CFGVer/Example/ZZ*) exit 0 ;;
+  *CFGVer/Example/ZZ*) zz_probe=1 ;;
 esac
 
 state_dir=${XDG_RUNTIME_DIR:-/tmp}
@@ -174,7 +237,18 @@ state="$state_dir/claude-coqc-guard-$(id -u)-$key"
 # ---------------------------------------------------------------------------
 sid=$(printf '%s' "$input" | jq -r '.session_id // "nosession"' 2>/dev/null) || sid=nosession
 sid=${sid//[^A-Za-z0-9_-]/}
-marker="${TMPDIR:-/tmp}/claude-rocq-interactive-${sid:-nosession}"
+mdir="${TMPDIR:-/tmp}"
+mbase="${mdir}/claude-rocq-interactive-${sid:-nosession}"
+# Per-target marker (see rocq-interactive-marker.sh).  `marker_for T` echoes the
+# newest applicable timestamp: T's own marker, else the consume-on-use "any"
+# marker written by preamble-mode work, which is DELETED when it authorises a
+# build so it cannot unlock a whole session.
+marker_for() {
+  _k=$(printf '%s' "$1" | cksum | cut -d' ' -f1)
+  if [ -f "${mbase}-${_k}" ]; then cat "${mbase}-${_k}" 2>/dev/null; return; fi
+  if [ -f "${mbase}-any" ]; then cat "${mbase}-any" 2>/dev/null; return; fi
+  echo 0
+}
 
 # Every .v the command names.  `make X.vo` and `coqc X.v` normalise to X.v.
 # Take the WHOLE whitespace-separated token -- do NOT carve it out with
@@ -188,23 +262,74 @@ targets=$(printf '%s' "$cmd" | tr ' \t' '\n\n' \
 # dependent, so strip both.  Matches `date +%s%N` in the marker.
 mtime_ns() { stat -c '%.9Y' "$1" 2>/dev/null | tr -d '.,' ; }
 
-if [ -n "$targets" ] && [ "${CLAUDE_COQC_GUARD_SAMETARGET:-1}" = "1" ]; then
-  last_check=0
-  [ -f "$marker" ] && last_check=$(cat "$marker" 2>/dev/null || echo 0)
-  case $last_check in ''|*[!0-9]*) last_check=0 ;; esac
+# CANONICAL PATH, NOT THE SPELLING (2026-09-24).  Every path below -- the
+# existence test, both mtimes, the marker key -- goes through canon_path.  Two
+# bugs had the same root, the target being used exactly as the command spelled
+# it:
+#   - FALSE DENY.  The marker hashed the path as the MCP tool received it
+#     (usually absolute), this hook hashed it as the build command spelled it
+#     (usually relative), so a real interactive check never matched.  Three
+#     denials in a row on a file checked twice.
+#   - FALSE ALLOW.  A relative target was tested with `[ -f ]` against THIS
+#     hook's cwd, not the directory the command runs in.  `cd X && coqc
+#     rel.v` with the hook elsewhere failed the test and `continue`d -- i.e.
+#     the rule silently did not apply.
+# The function is duplicated verbatim in rocq-interactive-marker.sh and the
+# two copies MUST stay identical.  Bases, in order: every `cd DIR` in the
+# command (where it actually runs), the session cwd, the project root.
+canon_path() {
+  _p=$1; shift
+  case $_p in
+    /*) realpath -m -- "$_p" 2>/dev/null || printf '%s' "$_p"; return ;;
+  esac
+  for _b in "$@"; do
+    [ -n "$_b" ] || continue
+    if [ -e "$_b/$_p" ]; then realpath -m -- "$_b/$_p" 2>/dev/null; return; fi
+  done
+  realpath -m -- "${1:-$PWD}/$_p" 2>/dev/null || printf '%s' "$_p"
+}
+cd_bases=$(printf '%s' "$cmd" | sed -E 's/&&|\|\||;|\|/\n/g' \
+           | sed -n -E 's#^[[:space:]]*cd[[:space:]]+([^[:space:]]+).*#\1#p' | tac)
+sess_cwd=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null) || sess_cwd=""
 
+# The ZZ-probe test above reads the COMMAND TEXT, so `cd .../CFGVer && coqc
+# Example/ZZFoo.v` -- the probe spelled relative to where it runs -- was not
+# recognised and spent the rate-limit budget.  Same spelling-vs-path bug as
+# the marker key; decide it from the canonical targets as well.
+while IFS= read -r _t; do
+  [ -n "$_t" ] || continue
+  # shellcheck disable=SC2086
+  _a=$(IFS='
+'; canon_path "$_t" $cd_bases "$sess_cwd" "${CLAUDE_PROJECT_DIR:-}" "$PWD")
+  case $_a in */CFGVer/Example/ZZ*) zz_probe=1 ;; esac
+done <<EOF
+$targets
+EOF
+
+if [ -n "$targets" ] && [ "${CLAUDE_COQC_GUARD_SAMETARGET:-1}" = "1" ]; then
   while IFS= read -r tgt; do
     [ -n "$tgt" ] || continue
-    [ -f "$tgt" ] || continue
-    src_mt=$(mtime_ns "$tgt"); case $src_mt in ''|*[!0-9]*) continue ;; esac
+    # shellcheck disable=SC2086  # cd_bases is newline-separated, word-split on purpose
+    atgt=$(IFS='
+'; canon_path "$tgt" $cd_bases "$sess_cwd" "${CLAUDE_PROJECT_DIR:-}" "$PWD")
+    [ -f "$atgt" ] || continue
+    src_mt=$(mtime_ns "$atgt"); case $src_mt in ''|*[!0-9]*) continue ;; esac
     vo_mt=0
-    [ -f "${tgt}o" ] && vo_mt=$(mtime_ns "${tgt}o")
+    [ -f "${atgt}o" ] && vo_mt=$(mtime_ns "${atgt}o")
     case $vo_mt in ''|*[!0-9]*) vo_mt=0 ;; esac
 
     # unchanged since its last build -> not a tweak loop, allow
     [ "$src_mt" -gt "$vo_mt" ] || continue
-    # checked interactively since the change -> allow
-    [ "$last_check" -le "$src_mt" ] || continue
+    # checked interactively since the change -> allow.  Per-target now: a
+    # check of some OTHER file no longer counts.
+    last_check=$(marker_for "$atgt")
+    case $last_check in ''|*[!0-9]*) last_check=0 ;; esac
+    if [ "$last_check" -gt "$src_mt" ]; then
+      # a consume-on-use "any" marker is spent once it authorises a build
+      _k=$(printf '%s' "$atgt" | cksum | cut -d' ' -f1)
+      [ -f "${mbase}-${_k}" ] || rm -f "${mbase}-any" 2>/dev/null || true
+      continue
+    fi
 
     msg="BLOCKED by coqc-guard: ${tgt} has changed since it was last compiled, and there has been no interactive check since.
 
@@ -228,6 +353,9 @@ fi
 # ---------------------------------------------------------------------------
 # Rate limit.
 # ---------------------------------------------------------------------------
+# ZZ* probes are exempt from the rate limit (but not the rule above).
+[ "${zz_probe:-0}" = "1" ] && exit 0
+
 WINDOW=${CLAUDE_COQC_GUARD_WINDOW:-900}
 MAX=${CLAUDE_COQC_GUARD_MAX:-3}
 

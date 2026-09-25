@@ -126,6 +126,8 @@ two sides' VCs correspond.
 
 `first` is set by `sexec_triple_addr`, cleared on every recursive call. This
 replaced `angelic_binary (if is_exit .. then pure apc else emsg ..) (<execute>)`.
+(A second flag, `stepped`, gates re-entry blocks — see "Loops as ONE block"
+below.)
 
 **Why the angelic went.** Its exit arm was DEAD on every non-exit step (it was
 `emsg`), so the old form emitted an `angelic_binary` plus a dead `error` per step
@@ -148,6 +150,9 @@ never the initial value. Dropping `first` was tried 2026-09-07 and makes
 `pbody 0` fail with residual `v = v + 0xffffffff`, the postcondition demanded at
 the entry. The old `angelic_binary` was quietly doing this disambiguation by
 letting the prover guess, and that is exactly what cost the fuel sensitivity.
+(A 2026-09-24 attempt replaced `first` with a separate entry-step function that
+never consulted blocks; it was reverted the same day because it stopped a
+contract from STARTING at a block.)
 
 **Completeness cost:** a contract can no longer pass THROUGH its own declared
 exit and continue, other than at the entry. Nothing in the tree does.
@@ -257,7 +262,8 @@ position (a guard-checker hazard) in exchange for nothing.
 `sexec_ghost` and `cexec_ghost` both call `call_lemma (RiscvPmpCFGVerifSpec.LEnv
 l) …` — qualified, because `MakeExecutor` does not re-export its Specification
 argument, and a bare `LEnv` fails under `make` while `rocq_compile_file`'s dune
-fallback accepts it. They were stubs (`error` / `pure tt`) until Phase 4, and the
+fallback accepted it (that fallback is gone since `dune-project` was deleted
+2026-09-24; not re-tested — `make` is the check either way). They were stubs (`error` / `pure tt`) until Phase 4, and the
 historical reason is still the live design rule: **making ONE side real is
 unsound-by-construction and was reverted (2026-08-21)** — a symbolic `error`
 refines anything, but `pure tt` does not, so a real concrete side with a stubbed
@@ -391,8 +397,8 @@ column and then `AnnotInstr`). The type error surfaces far from the cause.
 RiscvPmpCFGVerifSpec` (`Spec.v:720`) and the functor does NOT re-export its
 `Specification` argument — which is why `RiscvPmpSpecVerif` (`Spec.v:723`)
 imports *both*, and why `SpecIris.v` names spec members qualified. **And
-`rocq_compile_file` ACCEPTS the bare `LEnv`** — its dune fallback resolves names
-the real build cannot, so its false greens are not limited to missing sibling
+`rocq_compile_file` ACCEPTED the bare `LEnv`** — its dune fallback (removed
+2026-09-24, not re-tested since) resolved names the real build cannot, so its false greens are not limited to missing sibling
 `.vo`s. Only `make` catches this. Position-mode `rocq_start(file=…, line=…)`
 also catches it, replays through the project's real load path, works inside
 module functors where preamble mode cannot reach, and costs seconds — use it
@@ -626,7 +632,7 @@ It stops with `error` when:
 > and is ~1.8× faster at N=16, but its exponent is **1.63, steeper**. So the
 > symbolic base is a shrinking constant-factor penalty, not the driver — don't
 > chase it expecting a slope change. `solve_vc`'s residuals under a symbolic base
-> are all `0 ≤ 1024 - (4 + unsigned (p ⊕ off))`, one per instruction address plus
+> are all `0 ≤ maxAddr - (4 + unsigned (p ⊕ off))`, one per instruction address plus
 > the exit (15/22/30 at N=1/8/16, +1/trip for each iteration's store address);
 > the `SyncVal p => p | NonSyncVal _ _ => False` wrapper is just how
 > `formula_relop` prints and is NOT a secret-data wall.
@@ -751,6 +757,39 @@ The soundness chain threads `ptsto_instrs_w words instrs` for a FIXED `words`
 and re-packs to `ptsto_instrs` only at the outer boundary.
 Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 (`Hlk : instrs !! v = Some i`, via `big_sepM_lookup_acc`; `i` is implicit).
+
+## Loops as ONE block: the re-entry annotation `ai_loop` (2026-09-24)
+
+`AnnotInstr` has two block fields. `ai_block` fires at EVERY visit, including a
+contract's step 0 (so a contract may start at a block). **`ai_loop` fires only
+once an instruction of the current run has executed** — never at the entry.
+Both executors dispatch on one selector, `Verifier.ai_fire stepped ai`
+(`ai_block` wins; `ai_loop` only when `stepped`), so the block match stays
+rigid. `sexec_cfg_addr fuel first stepped`: `first` gates the exit test,
+`stepped` gates `ai_loop`; they differ after a block fired at the entry (exit
+test live again, but nothing has run). Concrete side: `cexec_cfg_addr … fuel
+stepped` (no `first` — its exit is angelic anyway).
+
+A **loop is ONE block contract** whose precondition is the invariant, with its
+own head carrying that block as `ai_loop`: the entry executes the head, the
+back edge fires the block, consuming the invariant, and the solver does the
+framing. The only meta-logic is the Löb induction inside
+**`Adequacy.blockSound_of_vc`** (quoted at a contract by
+`GenCompose.blockSound_of_contract`). Its block premises are split by WHEN they
+are needed: `Hbs0 : ⊢ blocksSoundAt false …` (the `ai_block`s, which may fire at
+step 0) and `Hbs : □ blockSound words v b ⊢ blocksSound …` (all blocks, may
+assume the block itself). The executor induction `sound_exec_cfg_addr_myWP2`
+carries `blocksSoundAt stepped ∗ ▷ blocksSound`; each executed instruction
+strips the later. `blocksSound` (= `blocksSoundAt true`, both kinds) is still
+the premise every external bridge takes. Partial correctness only.
+
+Worked example: `Example/CountdownRec.v` (the loop `cdRec` with an `ai_loop`
+head + negative controls, then `cdLink`: the outer program STARTING at the
+loop with an `ai_block` head, and an executed tail) →
+`Example/CountdownRecResult.v` (`cdRec_blockSound` via
+`blockSound_of_contract`, `cd_link_blocksSound` via `blocksSound_of_head`, and
+the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
+load address: the contracts, the block and the annotated code all take `ia`).
 
 ## `scfg_verification_condition`
 

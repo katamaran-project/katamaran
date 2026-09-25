@@ -447,5 +447,5 @@ Definition zzmuladdfulln2_cfg_contract_param (ia : N)
     (pcOutOfInstrs_exitCond ia zzmuladdfulln2_instrs) 500.
 
 Lemma valid_zzmuladdfulln2_cfg_contract_param (ia : N) :
-  ValidCFGVerifierContract (zzmuladdfulln2_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+  cfg_vc (zzmuladdfulln2_cfg_contract_param ia) (cfg_instrs (zzmuladdfulln2_cfg_contract_param ia)).
+Proof. solve_param_vc. Qed.

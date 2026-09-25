@@ -70,6 +70,12 @@ VC and fail there.
 
 ## Validity
 
+> **Loops as one self-referential contract (2026-09-24):** `a` may annotate
+> the loop head with `c`'s own block as a RE-ENTRY block (`ai_loop`), which
+> never fires at the entry. The precondition is then the loop INVARIANT; it
+> must be preserved, not ensure termination (partial correctness). See
+> **cfgver-executor**, "Loops as ONE block", and `PLAN-rec-loop-block.md`.
+
 ```coq
 Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
   cfg_map c Valid_CFG_VC.

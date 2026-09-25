@@ -3225,6 +3225,31 @@ Module bv.
       rewrite ?bin_of_N_small, ?bin_of_nat_small ; try Lia.lia.
     Qed.
 
+    (* NoDup without deciding it.  The obvious proof -- `nodup eq_dec l = l`
+       by computation, which is what Prelude.nodup_fixed needs -- is O(|l|^2)
+       in bv equality tests, so it makes the SIZE of an address space a
+       quadratic cost.  RiscvPmp/IrisInstance.v's NoDup_liveAddrs used it, and
+       raising lenAddr 2^10 -> 2^12 on 2026-09-08 (4x the list, ~16x the
+       comparisons) pushed that one lemma to 14.6 GB and past what the machine
+       has.  This proof is structural -- seqZ is NoDup, and bv.of_Z is
+       injective on the no-wrap range -- so its cost does not depend on `len`
+       at all (checked at len = 2^20). *)
+    Lemma seqBv_NoDup {n} (min : bv n) (len : N) :
+      (bv.unsigned min + Z.of_N len <= 2 ^ Z.of_nat n)%Z ->
+      base.NoDup (seqBv min len).
+    Proof.
+      intros Hnw. unfold seqBv.
+      apply list.NoDup_fmap_2_strong; [| apply list_numbers.NoDup_seqZ].
+      intros x y Hx Hy Heq.
+      apply list_numbers.elem_of_seqZ in Hx.
+      apply list_numbers.elem_of_seqZ in Hy.
+      pose proof (bv.unsigned_bounds min) as Hb.
+      apply (f_equal (@bv.unsigned n)) in Heq.
+      rewrite !bv.unsigned_of_Z in Heq.
+      unfold bv.truncz in Heq.
+      rewrite !Z.mod_small in Heq; lia.
+    Qed.
+
   Lemma seqBv_sub_list {n s s' e e'}:
     (bv.ule s s') ->
     (bv.bin s' + e' <= bv.bin s + e)%N ->

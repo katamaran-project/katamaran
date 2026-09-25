@@ -493,6 +493,21 @@ Module Type ChunksOn
       | chunk_wand c1 c2 => interpret_chunk c1 ι -∗ interpret_chunk c2 ι
       end.
 
+    (* Substituting a chunk and then interpreting is interpreting under the
+       substituted valuation.  Needed by asn.interpret_subst (Assertions.v),
+       which is what lets a CUT ASSERTION be GENERATED from its successor's
+       precondition instead of hand-written and then reconciled. *)
+    Lemma interpret_chunk_subst {Σ1 Σ2} (c : Chunk Σ1) (ζ : Sub Σ1 Σ2)
+      (ι : Valuation Σ2) :
+      interpret_chunk (subst c ζ) ι = interpret_chunk c (inst ζ ι).
+    Proof.
+      induction c; cbn.
+      - now rewrite inst_subst.
+      - now rewrite inst_subst.
+      - rewrite IHc1. now rewrite IHc2.
+      - rewrite IHc1. now rewrite IHc2.
+    Qed.
+
     Fixpoint interpret_scchunk (c : SCChunk) : HProp :=
       match c with
       | chunk_user p vs => luser p vs

@@ -1,4 +1,25 @@
 TODO:
+- PRIORITY (Emiel, 2026-09-25): REMOVE EXIT CONDITIONS; state exits as TARGET ADDRESSES.
+	`cfg_exitCond : bv -> bool` has become unwieldy, and it is not needed. It is enough to demand that the code exits at
+	specific addresses (or something like it), so drop exit conditions completely and move to target addresses.
+	+ Why they are unwieldy today: the symbolic side already works with exit TERMS (cfg_exits, is_exit), and exitCond exists only
+	  to be related back to them. That relation is etable_rel / HexitsFaith / seg_exitCond ia / seg_exit_table_ok /
+	  seg_exitCond_inv1 / Hexit in blockSound_of_contract, and it is why every contract is parameterised by the concrete
+	  load address `ia` (cdRec ia) even though the VC never reads it. The "etable_rel half of blockFaithful" item below
+	  is one symptom and is subsumed by this one.
+	+ Knock-on wins: `ia` disappears as a contract parameter; blk_off can plausibly be derived from the targets
+	  (PLAN-contract-ast §2b); PLAN-valid-blk-annot.md's risk R1 (blockSound ignoring cfg_init_addr/exitCond) mostly
+	  dissolves; the stop rule becomes "pc = target", which is what `first`/is_exit in sexec_cfg_addr already mean.
+	+ ONE TARGET, not a set (Emiel): the stop rule is `pc = target`, not `pc ∈ targets`. A contract has exactly one exit.
+	  Checked 2026-09-25: every tracked example already has a single exit offset. Only untracked muladd probes use two
+	  (segment L [56;108] in ZZ*SgL / ZZPostL_*, segment H [112;228] in ZZSegQH). Those become two contracts, or a
+	  join point, when ported. The `list N` of targets in gen_seg_contract / exits_of_offs / SExitTable collapses to one term.
+	+ TRUSTED SURFACE: the exit condition appears in the end theorems (adequacy_gen_RiscVNStepsExitCond, myWP2_loop's
+	  ExitCond, Noninterference.v, Example/*Result.v). Replacing it with "pc = target" changes what is proved, so the new
+	  statements need Emiel's review. Also settle whether targets are absolute or base-relative. After
+	  PLAN-self-contained-segments they are relative to the contract's own base, and the trusted statement needs absolute ones.
+	+ PLAN: case_study/RiscvPmp/CFGVer/plans/PLAN-exit-targets.md (DRAFT). Scheduled BEFORE PLAN-valid-blk-annot.md, so blkValid is not built around an exitCond
+	  that is about to disappear.
 - Consolidate everything in CFGVer, so we can delete BlockVer
 - Rename everything in CFGVer to remove mentions to BlockVer
 - Modularity:
@@ -14,6 +35,53 @@ TODO:
 - Clean up proof of semWP2_preservation_fwd' and figure out how to tell it to let me do these proofs
 - pc_step_sync is a very strong hypothesis, but the lockstepness of semWP2 should help us fullfill this requirement. This should be a priority.
 - Actually have an endToEnd lemma that works for each generated contract, I don't want the manual work that currently still has to happen after
+- DONE 2026-09-25 (PLAN-self-contained-segments.md): gen_seg_contract used to place a segment at `base + of_N head` with
+	cfg_init_addr `ia + head` even for head = 0, forcing cd_add0 / N.add_0_r in CountdownRecResult.v. Segments (and LoopSpec loops)
+	are now SELF-CONTAINED -- own code, own base, own load address, targets relative to themselves, code bound derived --
+	and where a piece sits in a program is a composition fact. cd_add0 and the `+ 0`s are gone.
+	Still open from this item: no end-to-end BRIDGE takes a gen_seg_contract (CountdownRec goes through cfg_instrs_endToEnd by hand).
+- Block-annotation helpers belong in the core, not in the examples.
+	BlkAnnot (Verifier.v) is the dependent pair (blk_ctx, blk_contract) plus blk_off, so blk_ctx is always determined by the contract's type,
+	yet CountdownRec.v spells it out by hand (`blk_ctx := cdRecCtx`, twice).
+	+ move `blk_of_contract` (contract + offset, Σ implicit) into Verifier.v next to the record, so authors never write blk_ctx;
+	+ move `set_blk` / `blk_at` (attach a block at index n) with it -- all three are currently copied verbatim into ~15 untracked ZZBlk*/ZZT*/ZZDmp* probes;
+	+ then use them in CountdownRec.v (and an `ai_loop` counterpart of blk_at for the loop head).
+- Add a minimal_post: the postcondition should get minimal_pre handed back centrally, the way the precondition does.
+	Today the precondition is always wrapped (extend_to_minimal_pre in CFG_VC_triple, sexec_block, blockSound), but the postcondition is
+	interpreted VERBATIM everywhere, so every author must remember `∗ minimal_pre` (cur_privilege + inv_leakage):
+	gen_seg_contract appends it by hand (GenSegment.v:449), and so do PaddedLoop, SwapComposed, TwoLoopsComposed (x3), CountdownComposed (x2).
+	Forgetting it fails late and confusingly: the block/loop body swallows the chunks and the resumed executor cannot fetch
+	(amBody_post; cdFinal's asn_no_post before 11e0a562; the warning in ZZBlkReject.v).
+	+ define `extend_to_minimal_post` and apply it wherever the post is consumed/produced/interpreted: CFG_VC_triple (the Q consumed at
+	  the exit), sexec_block (produce), blockSound, and the soundness lemmas that mirror them;
+	+ then drop the manual `∗ minimal_pre` from gen_seg_contract and the examples.
+	+ CHECK: whole-program contracts use asn_no_post, so they would newly have to hand back minimal_pre at the exit.
+	  Should hold (nothing consumes cur_privilege / inv_leakage for good), but it touches every example VC -- re-run them all.
+- The etable_rel half of blockFaithful (Adequacy.v) is a SELF-CONSISTENCY check on the block's contract, not a fact about memory:
+	etable_rel exitCond exits ι (VerifierRel.v) says each cfg_exits term, at ι, is an address where cfg_exitCond holds.
+	It depends on ι only because the exits are written over the symbolic base q and seg_exitCond over the concrete ia,
+	so it has to sit behind the precondition that pins ι. For a block it is then turned straight back into an offset (Hexit: exitCond x -> x = v + blk_off).
+	+ For BLOCKS, make it vanish: justify the block with "x is one of the exit terms at ι" as the exit condition, so etable_rel holds by
+	  construction and cfg_exitCond is never consulted; together with PLAN-contract-ast §2b (resume at the exit term instead of pc + blk_off)
+	  this also removes Hexit and the blk_off field. Design sketch, not checked against the proofs.
+	+ At the TOP LEVEL it is a real obligation (the trusted statement's exitCond vs the executor's exits: cfg_instrs_endToEnd's HexitsFaith),
+	  but it depends only on the generator, so discharge it once per generator (etable_faith_exits_of_offs for gen_contract_*,
+	  seg_exit_table_ok / gen_seg_exit_table_ok in GenCompose.v for gen_seg_contract) inside a bridge -- not per call site as
+	  CountdownRecResult.v and the *ComposedResult.v files do now (same root cause as the missing gen_seg_contract bridge above).
+- gen_seg_contract (GenSegment.v) takes the base TWICE -- `base : Term Σ` for cfg_placement and `base_a : Term (Σ ▻ "a")` for the precondition --
+	and nothing checks they agree; blockFaithful_of_seg's Hba premise is where a mismatch would finally surface.
+	Derive the second by weakening instead: base_a := subst base sub_wk1.
+	+ The old objection (GenSegment.v:380: "no subst _ sub_wk1 wrappers for iFrame to trip over") only bites in HAND-WRITTEN Iris proofs;
+	  with the goal of no manual iFrames it goes away. The VC's MEANING is unaffected (vm_compute reduces the subst), but its COST is not
+	  zero: sub_wk1 is Θ(|Σ|²) to build (diagnostics/base-k-hunt.md Part III, measured for the executor's own per-extension weakenings,
+	  3.9% and rising). Here it is one small-Σ weakening per use of the precondition -- expected negligible, but MEASURE it on a loop
+	  (where the pre is consumed at every back edge) before claiming so. PLAN-segment-generators.md ~:92 cites the same cost against it.
+	+ Hba becomes an internal fact of blockFaithful_of_seg via inst_subst + inst_sub_wk1 (theories/Symbolic/Instantiation.v:161/:258);
+	  adjust seg_pre_placement's `change` once. Rewrite with those lemmas, do not rely on cbn reducing the subst.
+	+ Same treatment for the loop generator's four hand-written copies of the counter term (GenSegment.v ~:512; sub_up1/sub_wk1 under asn.exist).
+	+ ORDER: do this AFTER the gen_seg_contract bridge above -- the per-example ImplPre proofs (e.g. the manual iFrame in CountdownRecResult.v)
+	  are where the weakened term would otherwise need rewriting by hand, and the bridge is what absorbs them.
+	+ Blast radius: CountdownRec.v (5 uses), CountdownComposed.v (1), GenCompose.v's generic lemmas, plus the untracked ZZ* probes that pass both bases.
 - First priority, make a Definition for Non-interference such that the Examples.v become readable
 - FRAMEWORK (theories/) — split the assertion language from the solver in Signature.
 	*** MEASURED 2026-07-27 AND NOT WORTH DOING. Kept as a record so nobody re-derives
@@ -150,3 +218,49 @@ Why do we need pc_step_sync and where can we find that information?
 Is this a short-coming of the way myWP2_loop is phrased? Why don't we need this kind of information to go from l to nsteps?
 semWP2 has a lockstepness, but we need a certain post-condition at the end. Is that the problem, did we break the modularity, so now I have to reconstruct it myself basically.
 Would it make sense to have an invariant like the leakage invariant for the pc?
+
+- NORMAL FORMS: stop making every consumer remember to `peval`.
+	Found 2026-09-22, cost about a day to localise, and the cause is that
+	`formula_propeq` and `formula_secLeak` are OUR additions -- main lacks them,
+	see the porting note at theories/Syntax/Formulas.v:305 -- so they never got
+	the normalisation discipline the upstream arms were built with.
+	+ THE SYMPTOM. `simplify_formula`'s upstream arms all normalise their input
+	  (`formula_user` -> `pevals ts`, `formula_bool` -> `simplify_bool (peval t)`,
+	  `formula_relop` -> `simplify_relop`, which pevals in every arm INCLUDING its
+	  fall-throughs). Our two did not: propeq pevaled only for the two
+	  `try_bvadd_cancel*` rules and then fell through to `simplify_propeq` on the
+	  RAW terms, and secLeak passed the raw term straight to `simplify_secLeak`.
+	  Patched 2026-09-22 by pevaling both, but that is the third place this same
+	  obligation is written out, which is the actual problem.
+	+ WHY IT STAYED INVISIBLE FOR SO LONG. The executor normalises as it BUILDS
+	  terms (eval_exp / peval_binop'), so formulas reaching the solver from
+	  execution are already in normal form and the missing peval is a no-op.
+	  Formulas reaching it from a hand-written `asn.formula` are NOT: `consume`
+	  and `produce` apply `peval_chunk` to CHUNKS (Monads.v:833,860) but only
+	  `subst` to FORMULAS (Monads.v:1302,1335). A contract's terms therefore
+	  arrive exactly as the author wrote them. CFGVer's block hook was the first
+	  thing to feed the solver an authored assertion, which is why it surfaced
+	  there: `gen_seg_contract` writes its placement as `base + of_N 0`, that
+	  `+ 0` survived, and `try_unify_eq` -- which fires ONLY on a bare `term_var`
+	  -- could never eliminate the block's angelic variable. The failure mode is
+	  nasty: not a residual you can read, but a hard `debug_consume_chunk` error
+	  several conjuncts later, naming the CHUNK rather than the equation.
+	+ THE FUNDAMENTAL FIX, in increasing order of ambition:
+	  1. Normalise at the BOUNDARY, not at every consumer: make `consume`/
+	     `produce` peval formulas the way they already peval chunks. That closes
+	     the asymmetry exactly where it exists (same function, chunks yes /
+	     formulas no) and is a two-line change.
+	  2. Normalise once where formulas ENTER the path condition
+	     (`assume_pathcondition` / `assert_pathcondition`), then DELETE the ~10
+	     internal `peval` calls in `simplify_relop`/`simplify_formula`. Net
+	     removal of code, and no arm can forget again.
+	  3. Smart constructors: make a non-normalised `Formula` unrepresentable
+	     (`mk_propeq t1 t2 := formula_propeq (peval t1) (peval t2)`, raw
+	     constructors private). Strongest, but touches every construction site.
+	+ CHECK FIRST, because (2) depends on it: IS `peval` IDEMPOTENT
+	  (`peval (peval t) = peval t`)? If yes, the inner calls are free no-ops and
+	  can be deleted safely; if not, deleting them is a behaviour change and
+	  only (1) or (3) are safe. There is no such lemma today.
+	+ AND MEASURE: pevaling every formula on entry is not obviously free. The
+	  arms that already peval do it two to four times per formula, so (2) should
+	  be a net WIN, but that is a prediction, not a measurement.

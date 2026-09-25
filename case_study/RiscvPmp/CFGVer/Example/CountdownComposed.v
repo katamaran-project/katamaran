@@ -71,6 +71,22 @@ Definition dec {Σ} (t : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 Definition head_exitCond : bv xlenbits -> bool :=
   fun v => bv.eqb v (bv.of_N 0).
 
+(* exit condition of the loop's FINAL trip: the fall-through address, PINNED.
+   This used to be `pcOutOfInstrs_exitCond 0 cd_instrs`, a `>=` test, and that
+   is unusable for anything that has to RETURN (2026-09-23).  The soundness
+   bridge's continuation reports only `exitCond an = true`, so with a `>=`
+   condition the resume address is not recoverable -- many addresses satisfy
+   it -- while `blockSound` demands the block resume at exactly `v + blk_off`.
+   An equality test pins it, which is the same reason gen_seg_contract's
+   `seg_exitCond` is `bv.eqb`-based.
+
+   `pcOutOfInstrs_exitCond` is NOT wrong in general and is unchanged: for a
+   WHOLE PROGRAM "ran off the end" is the right notion, and a jump past the
+   end should still count as having exited.  The two notions are simply for
+   two different jobs -- ending, versus returning. *)
+Definition tail_exitCond : bv xlenbits -> bool :=
+  fun v => bv.eqb v (bv.of_N 8).
+
 (* ---- LOOP BODY: head -> head, one trip.  Requires k-1 <> 0 so the BNE
        is taken and the fall-through path is infeasible. ---- *)
 Definition cdBody : @CFGVerifierContract cdCtx :=
@@ -86,7 +102,7 @@ Definition cdBody : @CFGVerifierContract cdCtx :=
     3
     (X1 ↦ᵣ dec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
-Lemma valid_cdBody : ValidCFGVerifierContract cdBody.
+Lemma valid_cdBody : cfg_vc cdBody (cfg_instrs cdBody).
 Proof.
   vm_compute. solve_vc.
 Qed.
@@ -108,11 +124,16 @@ Definition cdFinal : @CFGVerifierContract cdCtx :=
        ∗ asn.formula (formula_relop bop.eq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
     cd_instrs
-    (pcOutOfInstrs_exitCond 0 cd_instrs)
+    tail_exitCond
     3
-    asn_no_post.
+    (* A REAL postcondition, for the same reason: a block produces this
+       VERBATIM, so `asn_no_post` would swallow cur_privilege and the
+       leakage-invariant chunk and the resumed executor could not fetch its
+       next instruction (GenSegment.v:443).  The loop's final trip leaves
+       X1 = k-1 = 0, which the precondition pins. *)
+    (X1 ↦ᵣ term_val ty_xlenbits bv.zero ∗ minimal_pre).
 
-Lemma valid_cdFinal : ValidCFGVerifierContract cdFinal.
+Lemma valid_cdFinal : cfg_vc cdFinal (cfg_instrs cdFinal).
 Proof.
   vm_compute. solve_vc.
 Qed.

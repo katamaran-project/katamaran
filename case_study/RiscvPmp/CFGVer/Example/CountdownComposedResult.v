@@ -124,14 +124,14 @@ Section ComposeLoop.
     [env].["k"∷ty_xlenbits ↦ SyncVal k].
 
   Definition cdExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜pcOutOfInstrs_exitCond 0 cd_instrs v⌝)%I.
+    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜tail_exitCond v⌝)%I.
 
   (* The LOOP INVARIANT, as an iProp: at the loop head, counter = k. *)
   Definition cdInv (k : bv xlenbits) : iProp Σ :=
     (asn.interpret cdInvAsn (ik k)
      ∗ pc ↦ᵣ SyncVal (bv.of_N 0) ∗ (∃ v, nextpc ↦ᵣ v)
      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-         (ai_instr <$> instrs_of_list (bv.of_N 0) (cfg_instrs cdBody)))%I.
+         (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs cdBody))))%I.
 
   (* The invariant as a FAMILY indexed by trips-remaining -- the shape
      myWP2_loop_induction wants.  The counter value is existential; only its
@@ -147,11 +147,11 @@ Section ComposeLoop.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
     pose proof valid_cdBody as Hv.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
     cbn [cfg_map cdBody] in Hv.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
-                    (instrs_of_list (bv.of_N 0) (cfg_instrs cdBody))
-                    (table_of_list (cfg_placement cdBody) 0 (cfg_instrs cdBody)) (ik k)).
+                    (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs cdBody)))
+                    (table_of_list (cfg_placement cdBody) 0 (list_AST_AnnotInstr (cfg_instrs cdBody))) (ik k)).
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
@@ -161,7 +161,7 @@ Section ComposeLoop.
     assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
     assert (Hne : bvdec k <> bv.zero).
     { intros HH. rewrite HH in Hdec. cbn in Hdec. lia. }
-    iApply (sound_scfg_verification_condition_myWP2 Hv (cdInvN n) Hif Hef
+    iApply (sound_scfg_verification_condition_myWP2 Hv (cdInvN n) Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -188,17 +188,17 @@ Section ComposeLoop.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
     pose proof valid_cdFinal as Hv.
-    unfold ValidCFGVerifierContract, Valid_CFG_VC, CFG_VC_triple in Hv.
+    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
     cbn [cfg_map cdFinal] in Hv.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
-                    (instrs_of_list (bv.of_N 0) (cfg_instrs cdBody))
-                    (table_of_list (cfg_placement cdBody) 0 (cfg_instrs cdBody)) (ik k)).
+                    (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs cdBody)))
+                    (table_of_list (cfg_placement cdBody) 0 (list_AST_AnnotInstr (cfg_instrs cdBody))) (ik k)).
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    (pcOutOfInstrs_exitCond 0 cd_instrs) (cfg_exits cdFinal) (ik k)).
+                    tail_exitCond (cfg_exits cdFinal) (ik k)).
     { constructor; [|constructor]. eexists. split; reflexivity. }
-    iApply (sound_scfg_verification_condition_myWP2 Hv cdExit Hif Hef
+    iApply (sound_scfg_verification_condition_myWP2 Hv cdExit Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".

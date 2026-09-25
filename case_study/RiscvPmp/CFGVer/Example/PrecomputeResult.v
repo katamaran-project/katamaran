@@ -59,15 +59,17 @@ Lemma precompute_noninterferent_param (init_addr : N) :
     precompute_reg_specs [].
 Proof.
   intros Hbound.
-  (* Restate the goal over `strip precompute_instrs` -- the form the EndToEnd
-     bridges now conclude.  reflexivity-equal (strip_id_precompute_instrs), so
-     the theorem above is literally the same statement as before the
-     AnnotInstr migration; this rewrite is where that is discharged. *)
-  rewrite <- strip_id_precompute_instrs.
+  (* The `strip` restatement this proof used to open with is GONE: the
+     EndToEnd bridges now conclude over `instrs` itself, not `strip
+     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
+     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
+     at all: the hint list, the strip equation and the block obligations are
+     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
+     this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - exact (valid_precompute_cfg_contract_param init_addr).
+  - solve_valid (valid_precompute_cfg_contract_param init_addr).
 Qed.
 
 (* The concrete result at init_addr = 0, as a corollary. *)

@@ -153,5 +153,5 @@ Lemma strip_id_check_scalar_instrs : strip check_scalar_instrs = check_scalar_in
 Proof. reflexivity. Qed.
 
 Lemma valid_check_scalar_cfg_contract_param (ia : N) :
-  ValidCFGVerifierContract (check_scalar_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+  cfg_vc (check_scalar_cfg_contract_param ia) (cfg_instrs (check_scalar_cfg_contract_param ia)).
+Proof. solve_param_vc. Qed.

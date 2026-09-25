@@ -27,7 +27,13 @@ cd "$REPO_ROOT"
 # Build targets: the .vo whose dependency closure the gate compiles. Building the
 # end example's .vo pulls in everything the results rest on, while skipping
 # unrelated experiments (e.g. theories/Staging/) that are active in _CoqProject.
-BUILD_TARGETS=("case_study/RiscvPmp/CFGVer/Results.vo")
+# GenCompose.vo is listed EXPLICITLY: nothing in Results.vo's closure
+# Requires it yet (the compositional segment proofs that use it are still
+# untracked ZZ* probes), so without this the gate would not build it at all.
+# Its own closure pulls in GenSegment.vo.  Drop it from this list once a
+# tracked Example/*Result.v depends on it.
+BUILD_TARGETS=("case_study/RiscvPmp/CFGVer/Results.vo"
+               "case_study/RiscvPmp/CFGVer/GenCompose.vo")
 
 # Directories scanned for proof holes.
 SCOPE_DIRS=("case_study/RiscvPmp/CFGVer")
@@ -76,6 +82,11 @@ AXIOM_CLEAN_THMS=(
   # whose contract table covers a PROPER SUBSET of the program, so it is the
   # only check that itable_faith_of_segment / instrs_of_list_segment are sound.
   "pl_loop"
+  # a LOOP as one self-referential block (Löb, ai_loop) followed by an
+  # executed segment (Example/CountdownRecResult.v): the only end theorem
+  # whose VC trusts a block, so the only check on blocksSound_of_head and
+  # blockSound_of_contract.
+  "countdown_rec_noninterferent_param"
 )
 
 COQC="${COQC:-coqc}"

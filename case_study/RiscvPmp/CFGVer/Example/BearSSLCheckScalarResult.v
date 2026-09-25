@@ -47,15 +47,17 @@ Lemma check_scalar_noninterferent_param (init_addr : N) :
     check_scalar_reg_specs [].
 Proof.
   intros Hbound.
-  (* Restate the goal over `strip check_scalar_instrs` -- the form the EndToEnd
-     bridges now conclude.  reflexivity-equal (strip_id_check_scalar_instrs), so
-     the theorem above is literally the same statement as before the
-     AnnotInstr migration; this rewrite is where that is discharged. *)
-  rewrite <- strip_id_check_scalar_instrs.
+  (* The `strip` restatement this proof used to open with is GONE: the
+     EndToEnd bridges now conclude over `instrs` itself, not `strip
+     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
+     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
+     at all: the hint list, the strip equation and the block obligations are
+     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
+     this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - exact (valid_check_scalar_cfg_contract_param init_addr).
+  - solve_valid (valid_check_scalar_cfg_contract_param init_addr).
 Qed.
 
 Lemma check_scalar_noninterferent :

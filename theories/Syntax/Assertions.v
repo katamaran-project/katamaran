@@ -121,7 +121,11 @@ Module Import asn.
       | pattern_match s pat rhs =>
         pattern_match (subst s ζ) pat (fun pc => sub_assertion (rhs pc) (sub_up ζ _))
       | sep A1 A2 => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
-      | or A1 A2  => sep (sub_assertion A1 ζ) (sub_assertion A2 ζ)
+      (* was `sep` -- a copy-paste slip, fixed 2026-09-14.  interpret sends
+         `or` to a disjunction, so substituting an assertion containing one
+         CHANGED WHAT IT MEANS; asn.interpret_subst below is exactly the
+         statement that was false because of it. *)
+      | or A1 A2  => or (sub_assertion A1 ζ) (sub_assertion A2 ζ)
       | exist ς τ A => exist ς τ (sub_assertion A (sub_up1 ζ))
       | debug => debug
       end.
@@ -206,6 +210,35 @@ Module Import asn.
       | exist ς τ A => ∃ (v : RelVal τ), interpret A (ι ► (ς∷τ ↦ v))
       | debug => emp
     end%I.
+
+    (* SUBSTITUTE THEN INTERPRET = INTERPRET UNDER THE SUBSTITUTED VALUATION.
+       Substitution runs BACKWARDS on valuations (`inst ζ ι` takes a Σ2
+       valuation to a Σ1 one), which is why the two sides land in different
+       contexts.
+
+       This is what lets an intermediate CUT ASSERTION be GENERATED from its
+       successor's precondition rather than hand-written in the predecessor's
+       own vocabulary and then reconciled resource by resource: state the
+       predecessor's post as `subst <successor's entry assertion> ζ`, and the
+       cut obligation collapses to a VALUATION equality. *)
+    Lemma interpret_subst {Σ1 Σ2} (A : Assertion Σ1) (ζ : Sub Σ1 Σ2)
+      (ι : Valuation Σ2) :
+      interpret (subst A ζ) ι ⊣⊢ interpret A (inst ζ ι).
+    Proof.
+      revert Σ2 ζ ι. induction A; intros Σ2 ζ ι; cbn.
+      - apply bi.and_proper; [| reflexivity].
+        apply bi.pure_proper. apply instprop_subst.
+      - now rewrite interpret_chunk_subst.
+      - now rewrite interpret_chunk_subst.
+      - rewrite inst_subst.
+        destruct pattern_match_relval as [[pc δpc]|]; [| reflexivity].
+        rewrite H. now rewrite inst_sub_up.
+      - rewrite IHA1. now rewrite IHA2.
+      - rewrite IHA1. now rewrite IHA2.
+      - apply bi.exist_proper; intros v.
+        rewrite IHA. now rewrite inst_sub_up1.
+      - reflexivity.
+    Qed.
 
     Lemma interpret_pure_equiv {Σ} (a : Assertion Σ) (a_pure : is_pure a = true) :
       forall (ι : Valuation Σ),

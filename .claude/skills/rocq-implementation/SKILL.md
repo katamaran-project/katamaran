@@ -118,29 +118,53 @@ project's own path, and what the gate uses. Budget ~5m45s for that file. Suspect
 this whenever `rocq_compile_file` reports an error on a line your diff never
 went near; check `_CoqProject` for `-arg` before believing it.
 
-### `rocq_compile_file`'s dune-fallback can silently fail to resolve a sibling `.vo` in `case_study/RiscvPmp/CFGVer/`
+### The tool setup, and why interactive mode used to be unreliable (fixed 2026-09-24)
 
-There is no `dune` file anywhere under `case_study/RiscvPmp` — this whole
-subtree (and probably other `case_study/` trees) is `make -f Makefile.coq`
-territory only, matching what CLAUDE.md already says. When `rocq_compile_file`
-hits a file here it reports `"dune could not build '<f>.vo' (the file is not
-part of a dune stanza); compiled it directly with coqc into _build/default
-instead"` and usually that fallback is fine (see the AnnotInstr migration
-session, 2026-08-20, where it worked for several single-file checks). But it
-can ALSO fail on a file that `Require`s a SIBLING CFGVer file that was itself
-edited that session: `Contracts.v` reported `"Cannot find a physical path bound
-to logical path RiscvPmp.CFGVer.Noninterference with prefix Katamaran"` even
-immediately after a successful `rocq_compile_file(Noninterference.v,
-keep_vo=True)` — the fallback coqc invocation isn't given a load path that
-reliably includes whatever `_build/default` state (or lack of it) a PRIOR
-`rocq_compile_file`/`dune build` call left behind, and a plain `rocq_start(...,
-force_restart=True)` does not fix it either (it's a build-artifact problem, not
-a stale pet session). **Fix: `make -f Makefile.coq <target>.vo` directly**
-(optionally `-j2`/`-jN` for a batch of independent targets, e.g. a dozen
-`Example/*.v` files) — it reliably rebuilds the whole dependency closure in the
-source tree and every subsequent `rocq_compile_file` call against files that
-only need those `.vo`s on disk (not more `Require`d-and-recently-edited
-siblings) then works normally again.
+Two root causes produced almost every "interactive mode is flaky" symptom this
+skill used to catalogue. Both are now fixed; know them so you recognise a
+regression.
+
+**1. `dune-project` made rocq-mcp write where nothing reads.** The repo had an
+upstream `dune-project` (opam packaging only — nothing here builds with dune).
+rocq-mcp READ load paths from `_CoqProject` (source tree) but WROTE every
+`rocq_compile_file` artifact into `_build/default`, because the mere presence of
+`dune-project` switched on its dune mode, in which `keep_vo` is a documented
+no-op. So a green `rocq_compile_file` updated nothing pet, `coqc`, `make` or the
+next `rocq_compile_file` would load: "Cannot find a physical path … <sibling>"
+right after a successful build, and false greens (the tool checked one artifact,
+`make` another). **Fixed by deleting the dune files** (`dune-project`,
+`theories/dune`, two stale case-study stanzas) and `_build/`, plus
+`ROCQ_DUNE_BUILD=0` in the MCP config as a guard should a merge from upstream
+`main` bring `dune-project` back (resolve that modify/delete conflict by keeping
+the deletion). `Example/_CoqProject`, a workaround for coq-lsp preferring dune,
+went with it.
+
+**2. A failing preamble command returned an EMPTY SUCCESS.** rocq-mcp ran a
+preamble as a scratch document; coq-lsp skips failing sentences, and nothing
+read its diagnostics, so a stale `Require` or ill-typed `Definition` came back
+`success: true` with the command silently missing. **Fixed by a LOCAL PATCH:**
+rocq-mcp now runs from `~/src/rocq-mcp` (branch `local-coherence`, commit
+`b98208f` on upstream `6983113`), which executes preamble commands with `pet.run`
+so the first failure is an error carrying Coq's message. Upstream knows the bug
+(PR #23, open, file mode only). Re-apply the patch if you ever go back to
+`uvx --from git+…`.
+
+**3. (consequence of 1's fix) `rocq_compile_file` used to DELETE `make`'s
+`.vo`.** With `keep_vo=False` its cleanup unlinked every artifact next to the
+source, pre-existing ones included — harmless while dune mode redirected output
+to `_build`, destructive once it did not (a `vos` check of `Verifier.v` deleted
+`Verifier.vo`). **Second local patch, `75b474d`:** only artifacts THIS call
+created are cleaned. If a `.vo` vanishes after a `rocq_compile_file`, the patch
+is not running.
+
+Still true, and not fixed by either: **file-mode** replay (`rocq_start` with
+`file`) is also coq-lsp-resilient, so a failing definition earlier in the file
+is dropped and shows up later as `not_found` / "reference … not found" for a
+name that is plainly in the source. If that happens, the earlier definition
+failed — compile the file with `make`/`coqc` to see why.
+
+**`make` (or direct `coqc` for a `ZZ*` probe) is the oracle for "does this
+compile"**; rocq-mcp is for checking. Both now read and write the same `.vo`s.
 
 ### A `rocq_start(theorem=…)` timeout does NOT mean interactive mode is unavailable
 
@@ -163,6 +187,16 @@ rocq_check(from_state=…, body="…")
 Imports are content-hash-cached and stay warm across iterations, so each tactic
 check costs ~30 ms. The catch is that a preamble carries no file context, so you
 must restate your goal as a **standalone lemma**.
+
+**Which mode, when.** For a CFGVer file, prefer **file mode**
+(`rocq_start(file=…, theorem=…)`): the post-2026-07-17 files replay in seconds,
+errors point at the real source, and nothing is duplicated. Preamble mode is for
+what file mode cannot reach — a `theories/` file whose prefix replay exceeds the
+timeout, or a shape question over abstract parameters. **Keep a preamble to
+`Require`/`Import` lines plus the one lemma under test.** Do not paste a file's
+`Definition`s and helper lemmas into a preamble to stand in for the file: that
+is a second copy that drifts from the real one, and (2026-09-23) it is how a
+whole day of "verified" lemmas turned out never to have been checked.
 
 This is also the answer when pet runs out of memory rather than time: it OOMs on
 very large files (the pre-split monolithic `CFGVer/Examples.v` needed >7.6 GB).
@@ -272,6 +306,60 @@ than the proof step it interrupted.)
 Note `rocq_compile_file` now warns about this itself — "N interactive session(s)
 in this workspace may be holding stale dependency state" — so treat that line as
 an instruction, not noise.
+
+### …and a stale pet makes a `Require` fail with "inconsistent assumptions"
+
+Measured 2026-09-22. With a stale pet holding a pre-edit dependency, a
+preamble's `Require` fails with:
+
+```
+Compiled library Katamaran.RiscvPmp.CFGVer.Contracts makes inconsistent
+assumptions over library Katamaran.RiscvPmp.CFGVer.Verifier
+```
+
+**Since the 2026-09-24 local patch this is an ERROR from `rocq_start`.** Before
+it, the same failure came back as an EMPTY SUCCESS (`goals: ""`,
+`proof_finished: true`, then `exact tt.` "closing" an iProp goal and `Locate`
+finding nothing) — if you ever see that signature again, the patch is not
+running: check that the MCP config still points at `~/src/rocq-mcp`.
+
+Note the `.vo` timestamps on disk were CONSISTENT (each newer than its source)
+— the inconsistency lived only in pet's memory, so checking timestamps does not
+rule this out.
+
+**That same string has a SECOND cause, and they need opposite fixes** (hit
+2026-09-23, an hour after the first): a genuinely stale `.vo` **on disk**.
+The discriminator is which tool reported it:
+
+| reported by | cause | fix |
+|---|---|---|
+| rocq-mcp | stale **pet**; disk is fine | `force_restart=True` |
+| `coqc` / `make` | stale **`.vo`**; pet is irrelevant | rebuild the dependency CLOSURE |
+
+The disk case has a specific trigger worth naming: **rebuilding one file
+directly** (`make Verifier.vo`, `make Adequacy.vo`) to get fast feedback, which
+leaves every *other* branch of the DAG pointing at the old artifact. That is
+fine while you keep building up the same chain, and it bites the moment you
+touch something on a sibling branch — e.g. an `Example/` file after editing
+`Verifier.v`, where the light branch was never rebuilt. Fix by building the real
+target (`make Results.vo`), not the single file.
+
+**Corollary worth stating on its own: a tool failure is not evidence about the
+file.** Before concluding a file cannot be worked interactively, restart pet
+and `Check` something. Once pet was restarted in that session, the same
+"unusable" file gave `Check @<lemma>` in 4 ms, five bridge signatures in 36 ms,
+and two full candidate proofs at 38–56 ms — after four ~60 s builds had been
+spent discovering the same facts one error at a time.
+
+### `rocq_compile_file` used to report SUCCESS on a file `make` rejects (fixed)
+
+Historical, kept so the symptom is recognisable: `rocq_compile_file(EndToEnd.v,
+mode="full")` returned `{"success": true}` on a file `make` failed on, because it
+compiled into `_build/default` while `make` checked the source tree. The cause
+was `dune-project` (see "The tool setup" above), now deleted. If a
+`rocq_compile_file` result ever mentions `_build/default` or a
+`dune_build_warning` again, `dune-project` is back — most likely from a merge of
+upstream `main`.
 
 ## 2. Route to the skill that already knows the trap
 

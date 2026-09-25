@@ -57,18 +57,17 @@ Lemma swap_noninterferent_param (init_addr : N) :
     [(X1, false, None); (X2, false, None); (X3, false, None)] [].
 Proof.
   intros Hbound.
-  (* This program builds its instruction list INLINE in the contract
-     literal, so there is no named object to hang a strip_id_* anchor
-     on (unlike the nine that have one).  Same job, done locally: the
-     goal is restated over `strip <literal>`, the form the EndToEnd
-     bridges now conclude, and it is reflexivity-equal so the theorem
-     above is unchanged. *)
-  assert (Hstrip : strip [MV X3 X2; MV X2 X1; MV X1 X3] = [MV X3 X2; MV X2 X1; MV X1 X3]) by reflexivity.
-  rewrite <- Hstrip.
+  (* The `strip` restatement this proof used to open with is GONE: the
+     EndToEnd bridges now conclude over `instrs` itself, not `strip
+     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
+     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
+     at all: the hint list, the strip equation and the block obligations are
+     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
+     this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - exact (valid_swap_cfg_contract_param init_addr).
+  - solve_valid (valid_swap_cfg_contract_param init_addr).
 Qed.
 
 Lemma swap_noninterferent :

@@ -314,9 +314,65 @@ they use conversion.
 
 ## Adding a NEW solver rule — the recipe
 
-Three rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
-`try_bvadd_cancel_propeq` (propeq, unguarded), `try_fetch_bound` (relop le,
+Four rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
+`try_bvadd_cancel_propeq` (propeq, unguarded), `try_bvadd_cancel_val_propeq`
+(propeq, unguarded, WEAKENS rather than decides), `try_fetch_bound` (relop le,
 discharges against `wco`). Ordered by what costs time if you get it wrong.
+
+**`try_bvadd_cancel_val_propeq` is the DUAL of `bvadd_cancel_pair`, and the
+distinction is the point.** `bvadd_cancel_pair` recognises a shared TERM
+summand with differing LITERALS (`c1 + p` vs `c2 + p`) and DECIDES via
+`bop.eval_relop_val`. The mirror — a shared LITERAL with differing TERMS
+(`c + x` vs `c + y`, via `bvadd_split_val`, which matches EITHER argument
+order) — cannot be decided, but weakening it to `x = y` is what lets
+`unify_pathcondition` act: it substitutes a VARIABLE equation, and no such
+substitution exists for a `bvadd` of one. Guarded by `Term_eqb s1 s2` so that
+syntactically-equal stripped terms fall through to `simplify_propeq`, which
+closes them to `empty` outright.
+
+Why it was needed (2026-09-22): CFGVer's block hook (`sexec_block`,
+`CFGVer/Verifier.v`) instantiates a block's logic context ANGELICALLY and then
+consumes the block's precondition. A register pinned as `base + k`
+(`X2 |-> sp + 16`) yields `formula_propeq (0x10 + sp.1) (0x10 + sp)`; unsolved,
+`sp.1` stays free and the next chunk addressed from it (`ptstomem sp.1 _`)
+matches nothing — the consume FAILS OUTRIGHT with `debug_consume_chunk`, not a
+residual. A register pinned BARE (`A0 |-> xb`) is unaffected, which is what
+makes the failure look arbitrary from outside. **`simplify_propeq` does NOT
+decompose a `bvadd`** (measured: `0x10 + a = 0x10 + b` survives it untouched),
+so nothing else in the solver covers this shape.
+
+### Every arm must normalise its input, fall-throughs included (fixed 2026-09-22)
+
+`formula_propeq` and `formula_secLeak` are **this fork's own constructors** —
+upstream `main` has neither (see the porting note at
+`theories/Syntax/Formulas.v:305`) — and they never got the normalisation
+discipline the upstream arms were built with. Every upstream arm of
+`simplify_formula` pevals (`formula_user` → `pevals ts`, `formula_bool` →
+`simplify_bool (peval t)`, `formula_relop` → `simplify_relop`, which pevals in
+**all** its arms including the fall-throughs). The two local ones did not:
+`propeq` pevaled only for the two `try_bvadd_cancel*` rules and then fell
+through to `simplify_propeq` on RAW terms; `secLeak` passed the raw term
+straight down. Both now peval, each with a three-line spec bridge
+(`constructor; intros ι Hwco; cbn; unfold instpred_formula_*;
+now rewrite peval_sound`) copied from the cancellation case above.
+
+**Why it stayed invisible, and the rule to take away.** The executor pevals as
+it BUILDS terms (`eval_exp`/`peval_binop'`), so formulas reaching the solver
+from execution are already in normal form and a missing `peval` is a no-op.
+Formulas reaching it from a hand-written `asn.formula` are not: `consume` and
+`produce` apply `peval_chunk` to CHUNKS (`Monads.v:833,860`) but only `subst`
+to FORMULAS (`Monads.v:1302,1335`), so a contract's terms arrive exactly as
+authored. CFGVer's block hook was the first thing to feed the solver an
+authored assertion — `gen_seg_contract` wrote its placement as `base + of_N 0`
+(until 2026-09-25; it now places a self-contained segment at the bare base)
+and that `+ 0` survived, so `try_unify_eq` (which fires ONLY on a bare
+`term_var`) could never eliminate the block's angelic. **If you add a formula
+constructor, peval in every branch of its arm, or the bug is invisible until
+someone writes a contract.**
+
+A more fundamental fix — normalise at the boundary rather than at every
+consumer — is `TODOS.txt`, "NORMAL FORMS", including the open question of
+whether `peval` is idempotent (no such lemma today).
 
 **1. Dump the real shapes before writing anything.** The formula you must match
 is *not* what the residual goal prints as after `solve_vc`, and it is not what

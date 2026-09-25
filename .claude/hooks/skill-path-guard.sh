@@ -88,6 +88,29 @@ case $path in
       "how an \`assert\` is discharged against the path condition (solver_generic's stages, the wco walk, the wpathcondition world-extension) AND the \"Adding a NEW solver rule\" recipe -- where to hook, why returning \`error\` for \"cannot decide\" is unsoundness that does NOT fail the build, the Equations two-type-index refusal, and the iteration order that keeps you off ~6-minute rebuilds. On 2026-08-17 this file was edited without it and two builds were burned on a trap the recipe now documents" ;;
 esac
 
+# ---- the leakage model -------------------------------------------------------
+# CONTENT-gated, not path-gated, and deliberately so. Base.v and Machine.v are
+# large files that are overwhelmingly NOT about leakage (register decls, the
+# semantics of every instruction), so a path-only rule would deny unrelated
+# edits all day and train people to reach for the override. Fire only when the
+# edit actually writes or deletes a leakage token.
+#
+# Matched against .tool_input's own string fields, never the whole JSON payload
+# -- CLAUDE.md records four separate incidents of a guard that matched text
+# merely MENTIONING its trigger. old_string is included on purpose: REMOVING a
+# constructor or an emit site is the more dangerous direction (it silently
+# weakens every noninterference theorem, and still compiles green), and that
+# edit only mentions the token on the way out.
+case $path in
+  */RiscvPmp/Base.v|*/RiscvPmp/Machine.v)
+    leakpayload=$(printf '%s' "$input" | jq -r '[.tool_input.new_string // "", .tool_input.old_string // "", .tool_input.content // ""] | join("\n")' 2>/dev/null) || leakpayload=""
+    case $leakpayload in
+      *LeakEvent*|*KLeak*|*"stm_foreign leak"*|*leak_event*|*LeakageTrace*|*fun_leak*)
+        req leakage-model-change \
+          "you are changing WHAT THE ATTACKER CAN SEE -- the one edit in this tree that changes the MEANING of every noninterference theorem at once, without restating any of them (noninterferent_strong concludes leakage_trace equality over \`list LeakEvent\` quantified abstractly). The skill carries the six mechanical Base.v arms, the emit-placement rules, why ty.prod beats ty.tuple for a multi-value payload (simplify_secLeak splits binops but has a standing TODO on tuples), and the three-cell check that distinguishes a real strengthening from a constructor nobody emits -- which compiles green and looks identical to success" ;;
+    esac ;;
+esac
+
 # ---- the Pred/world/modality layer -------------------------------------------
 case $path in
   */theories/Symbolic/Worlds.v|*/theories/Symbolic/UnifLogic.v)
@@ -99,13 +122,16 @@ esac
 case $path in
   */CFGVer/Spec.v)         req cfgver-contracts "CFGVer's own leakage-aware Specification instance lives here (secLeakvar / inv_leakage contracts), distinct from ../Contracts.v" ;;
   */CFGVer/SpecIris.v)     req cfgver-soundness "the shallow executor + Iris wiring; also DON'T re-add an Iris require to a light file (~1.2 GB onto every example)" ;;
-  */CFGVer/Verifier.v)     req cfgver-executor "sexec_cfg_addr / scfg_verification_condition -- the symbolic decision layer" ;;
+  */CFGVer/Verifier.v)     req cfgver-executor "sexec_cfg_addr / scfg_verification_condition -- the symbolic decision layer"
+                           req cfgver-contracts "since 2026-09-22 this file ALSO holds the CFGVerifierContract record + cfg_map, moved down from Contracts.v because ai_block carries a contract (PLAN-contract-ast Phase 4). Data only -- the VC over it is still cfg_vc in Contracts.v" ;;
   */CFGVer/VerifierRel.v)  req cfgver-refinement "cexec_cfg_addr, RefineCompat instances, itable_rel/etable_rel. If rsolve itself fails/hangs/eats GB, that is cfgver-rsolve instead" ;;
   */CFGVer/Tables.v)       req cfgver-executor "table builders; note the mandatory \`Open Scope list_scope.\` trap after the imports" ;;
   */CFGVer/TablesRel.v)    req cfgver-executor "the itable_rel/etable_rel faith lemmas" ;;
-  */CFGVer/Contracts.v)    req cfgver-contracts "the CFGVerifierContract record, minimal_pre, solve_vc and the relval_fetch_* family" ;;
+  */CFGVer/Contracts.v)    req cfgver-contracts "cfg_vc (the VC -- renamed from ValidCFGVerifierContract 2026-09-22), CFG_VC_triple, minimal_pre, solve_vc and the relval_fetch_* family. The RECORD itself moved to Verifier.v" ;;
   */CFGVer/GenContract.v)  req cfgver-gen-contract-internals "you are modifying the GENERATOR itself (gen_reg_asn/gen_pre/gen_implpre). Merely USING gen_contract is cfgver-gen-contract" ;;
+  */CFGVer/GenSegment.v)   req cfgver-gen-contract-internals "the MID-PROGRAM SEGMENT generator (gen_seg_contract, gen_regs_at, solve_seg, the rc_* table). Sibling of GenContract.v; same skill" ;;
   */CFGVer/Adequacy.v)     req cfgver-soundness "myWP2_loop, create_resources, the semWP2_* / sound_*_myWP2 chain" ;;
+  */CFGVer/GenCompose.v)   req cfgver-soundness "the composition combinators (seg_step/seg_loop) wrap sound_scfg_verification_condition_myWP2 -- same chain as Adequacy.v. NOTE: a dedicated skill for compositional segment proofs is the right follow-up (see plans/PLAN-segment-generators.md)" ;;
   */CFGVer/EndToEnd.v)     req cfgver-endtoend-internals "you are modifying the WIRING lemmas themselves (cfg_instrs_endToEnd, cfg_instrs_verified/_safe, the _with_mem variants)" ;;
   */CFGVer/Noninterference.v) req cfgver-endtoend "this is the TRUSTED STATEMENT surface -- changing it changes what is being proved" ;;
 esac

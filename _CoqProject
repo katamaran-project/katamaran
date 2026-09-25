@@ -1,6 +1,6 @@
 # ===========================================================================
 # PRUNED 2026-07-27 to the dependency closure of the merge gate's build
-# target, case_study/RiscvPmp/CFGVer/Results.vo (101 files).
+# target, case_study/RiscvPmp/CFGVer/Results.vo (103 files).
 #
 # Everything outside that closure is COMMENTED OUT with a leading `#`, not
 # deleted -- restore a line by removing the `#` and re-running
@@ -62,7 +62,9 @@ case_study/RiscvPmp/CFGVer/Tables.v
 case_study/RiscvPmp/CFGVer/TablesRel.v
 case_study/RiscvPmp/CFGVer/Contracts.v
 case_study/RiscvPmp/CFGVer/GenContract.v
+case_study/RiscvPmp/CFGVer/GenSegment.v
 case_study/RiscvPmp/CFGVer/Adequacy.v
+case_study/RiscvPmp/CFGVer/GenCompose.v
 case_study/RiscvPmp/CFGVer/EndToEnd.v
 case_study/RiscvPmp/CFGVer/Example/Prelude.v
 case_study/RiscvPmp/CFGVer/Example/MvSwap.v
@@ -81,6 +83,7 @@ case_study/RiscvPmp/CFGVer/Example/SwapComposed.v
 case_study/RiscvPmp/CFGVer/Example/CountdownComposed.v
 case_study/RiscvPmp/CFGVer/Example/TwoLoopsComposed.v
 case_study/RiscvPmp/CFGVer/Example/PaddedLoop.v
+case_study/RiscvPmp/CFGVer/Example/CountdownRec.v
 case_study/RiscvPmp/CFGVer/Example/MvSwapResult.v
 case_study/RiscvPmp/CFGVer/Example/JumpsResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownResult.v
@@ -97,6 +100,7 @@ case_study/RiscvPmp/CFGVer/Example/SwapComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/TwoLoopsComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/PaddedLoopResult.v
+case_study/RiscvPmp/CFGVer/Example/CountdownRecResult.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v
 # case_study/RiscvPmp/BinaryBlockVer/Verifier.v

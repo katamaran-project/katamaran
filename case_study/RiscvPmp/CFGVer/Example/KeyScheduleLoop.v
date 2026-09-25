@@ -142,5 +142,5 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Proof. reflexivity. Qed.
 
     Lemma valid_key_schedule_loop2_cfg_contract_param (ia : N) :
-      ValidCFGVerifierContract (key_schedule_loop2_cfg_contract_param ia).
-    Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+      cfg_vc (key_schedule_loop2_cfg_contract_param ia) (cfg_instrs (key_schedule_loop2_cfg_contract_param ia)).
+    Proof. solve_param_vc. Qed.

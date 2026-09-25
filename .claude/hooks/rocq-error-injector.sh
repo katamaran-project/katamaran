@@ -64,6 +64,17 @@ case $out in
 }A compile appears to have been KILLED with no Coq error -> load rocq-compile-oom (out-of-memory / orphaned-process diagnosis). Do NOT read this as a proof bug." ;;
 esac
 
+# A STALE pet process, not a broken file.  This string is deterministic and the
+# fix is one flag, but the failure mode it usually shows up as is an EMPTY
+# interactive state with success:true -- which reads as "interactive mode is
+# unavailable here" and sends you to blind `make` cycles.  Added 2026-09-22
+# after that cost four ~60s builds and a wrong conclusion about the tooling.
+case $out in
+  *"makes inconsistent assumptions over library"*)
+    hit="${hit:+$hit
+}\"makes inconsistent assumptions over library\" = something was rebuilt and something that depends on it was NOT. It is never a broken file and never a bad load path. TWO causes, and the tool that reported it tells you which: (a) from rocq-mcp -> a STALE PET holding a pre-edit .vo; the .vo timestamps on disk can be perfectly consistent, because the staleness is in pet's memory. Fix: rocq_start(..., force_restart=True). (b) from coqc/make -> a genuinely STALE .vo ON DISK, typically because you rebuilt one file directly (make X.vo) instead of the dependency closure, so a sibling branch still points at the old one. Fix: rebuild the real target (e.g. make Results.vo), not the single file. For (a) there is a disguise to know: a failed Require in a PREAMBLE is swallowed, so rocq_start returns success:true with EMPTY goals and every later check runs in an environment holding only Coq.Init.*. Smoke-test any fresh state with 'Print Libraries.' before concluding interactive mode is unavailable. See rocq-implementation section 1." ;;
+esac
+
 case $out in
   *"still running"*|*"timed out"*|*"moved to background"*)
     hit="${hit:+$hit

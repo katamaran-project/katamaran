@@ -253,12 +253,14 @@ Import asn.notations.
     (* extra_exit_offs: base-relative byte offsets of exit addresses BEYOND
        the fall-through one (which is always included).  Needed when control
        flow can leave the program other than by falling off the end, e.g. a
-       branch whose taken target lies past the program (jump_if_zero). *)
+       branch whose taken target lies past the program.  No tracked example
+       passes a non-empty list since 2026-09-25 (jump_if_zero got a join-point
+       NOP), and plans/PLAN-exit-targets.md removes this parameter. *)
     Definition gen_contract
         (init_addr : N)
         (reg_specs : list reg_spec)
         (mem_specs : list mem_full_spec)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (ec : bv xlenbits -> bool)
         (fl : nat)
@@ -663,7 +665,7 @@ Import asn.notations.
         (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
@@ -713,7 +715,7 @@ Import asn.notations.
         (reg_specs : list reg_spec_rel)
         (word_data : list mem_spec_rel)   (* word-granular class *)
         (byte_data : list mem_spec_rel)   (* byte-granular class *)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
@@ -743,7 +745,7 @@ Import asn.notations.
         (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)
@@ -789,7 +791,7 @@ Import asn.notations.
     Definition gen_contract_param
         (init_addr : N)
         (reg_specs : list reg_spec)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (ec : bv xlenbits -> bool)
         (fl : nat)
@@ -819,7 +821,7 @@ Import asn.notations.
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (byte_mem_specs : list mem_spec_rel)
-        (instrs : list AnnotInstr)
+        (instrs : list AST)
         (extra_exit_offs : list N)
         (bound : N)
         (ec : bv xlenbits -> bool)

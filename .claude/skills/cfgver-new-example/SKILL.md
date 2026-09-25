@@ -96,7 +96,10 @@ a concrete-base VC is dead compile time.
    the general `eapply gen_contract_noninterferent_param` / `_rel*` (its **five**
    premises: NoDup, `HDataAddrs`, length bound, `HexitOffs`, the VC — and the
    "discharge the VC FIRST" gotcha) when there are extra exit offsets
-   (`jump_if_zero`) so `_simple` does not apply. Premise-by-premise table +
+   so `_simple` does not apply. **Prefer cutting at the join point instead**
+   (one exit): no tracked example has an extra exit offset since 2026-09-25,
+   when `jump_if_zero` got a join-point `NOP`, and `extra_exit_offs` is slated
+   for removal (`plans/PLAN-exit-targets.md`). Premise-by-premise table +
    both patterns: **cfgver-gen-contract**. Gotcha: `HDataAddrs` needs a case
    split on *every* index of `mem_specs`, not just index 0.
 6. **Axiom hygiene.** `Print Assumptions <prog>_noninterferent.` must show only

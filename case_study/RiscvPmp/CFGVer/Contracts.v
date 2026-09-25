@@ -78,19 +78,12 @@ Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
 Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
 Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
-    (* minimal_pre asserts that we start executing at address 0 in Machine mode.
-       We choose an arbitrary list for the pmp entries (pmp is not used in these
-       examples). *)
-    Definition minimal_pre {Σ} : Assertion Σ :=
-      (* asn.exist "_" _ (nextpc ↦ term_var "_")
-      ∗ *)cur_privilege ↦ term_val ty_privilege Machine
-      (* ∗ asn_pmp_entries (term_list [(term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero) ; *)
-      (*                               (term_val ty_pmpcfg_ent default_pmpcfg_ent ,ₜ term_val ty_xlenbits bv.zero)]) *) ∗
-            asn.chunk (chunk_user inv_leakage [env])
-    .
-
-    Definition extend_to_minimal_pre {Σ} (P : Assertion Σ) : Assertion Σ :=
-      P ∗ minimal_pre.
+    (* minimal_pre / extend_to_minimal_pre MOVED TO Verifier.v on 2026-09-23
+       (PLAN-contract-ast Phase 4).  sexec_block must consume the EXTENDED
+       precondition, so that a block's obligation is exactly what CFG_VC_triple
+       proves -- i.e. so that `cfg_vc c a` IS the block's obligation.  The
+       executor is below this file, so the definitions had to follow the
+       contract record down.  Same layering wall, same fix. *)
 
     (* The TRIVIAL exit assertion — what a whole-program contract carries,
        and what every generator below supplies.  A contract that is one
@@ -145,36 +138,41 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
       safeE (postprocess (CFG_VC_triple p exits P i fl Q)).
 
-    Record CFGVerifierContract {Σ} :=
-      MkCFGVerifierContract
-      { cfg_init_addr     : N
-      ; cfg_placement     : Term Σ ty_xlenbits
-      ; cfg_exits         : list (Term Σ ty_xlenbits)
-      ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-      ; cfg_instrs        : list AnnotInstr
-      ; cfg_exitCond      : bv xlenbits -> bool
-      ; cfg_fuel          : nat
-      ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
-      }.
+    (* CFGVerifierContract and cfg_map MOVED TO Verifier.v on 2026-09-22
+       (PLAN-contract-ast Phase 4).  `ai_block` must carry a real contract, and
+       ai_block lives in Verifier.v, which Contracts.v REQUIRES -- so the record
+       had to sit below AnnotInstr, not above it.  Flipping cfg_instrs to
+       `list AST` made the record well-founded as a TYPE; it did nothing about
+       FILE ORDER, and that is what this move fixes.  Both files are light, and
+       Contracts.v is not on CLAUDE.md's trusted-statement list, so nothing about
+       the audit surface changes. *)
 
-    Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-      (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AnnotInstr ->
-           (bv xlenbits -> bool) -> nat ->
-           Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
-      match c with
-      | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
-           cfg_precondition := pre; cfg_instrs := i;
-           cfg_exitCond := ec; cfg_fuel := fl;
-           cfg_postcondition := post |} => f ia p exits pre i ec fl post
-      end.
 
-    Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c Valid_CFG_VC.
+    (* THE VERIFICATION CONDITION.  This was `ValidCFGVerifierContract c`
+       until 2026-09-22 (PLAN-contract-ast Phase 1).  Two changes:
 
-    Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-      cfg_map c (fun ia p exits P i ec fl Q =>
-        VerificationCondition (postprocess (CFG_VC_triple p exits P i fl Q))).
+       - it takes the ANNOTATED instruction list `a` as an argument.  That is
+         the proof hint: the same program as `cfg_instrs c`, carrying ghost
+         annotations and block contracts;
+       - the name.  `Valid…` is now reserved for the ANNOTATION-FREE semantic
+         form, which lands in Phase 4 and is what a block premise quotes and
+         what nests.  A verification condition is not valid, it is discharged,
+         so this one is named as the plumbing it is -- next to `cfg_map`.
+
+       The record's own `cfg_instrs` is deliberately IGNORED here: it is the
+       `list AST` statement side, and `Valid_CFG_VC` has always taken its
+       instruction list as an argument anyway.  The equation tying the two
+       together, `strip a = cfg_instrs c`, is a hypothesis of the SOUNDNESS
+       BRIDGE rather than of the VC (PLAN §2.5) -- so `cfg_vc c a` does not
+       force `a` to be a version of `c`'s program.  Harmless: such a proof
+       establishes nothing, because the bridge will not accept it. *)
+    Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
+      cfg_map c (fun ia p exits P _ ec fl Q => Valid_CFG_VC ia p exits P a ec fl Q).
+
+    Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
+      (a : list AnnotInstr) : Prop :=
+      cfg_map c (fun ia p exits P _ ec fl Q =>
+        VerificationCondition (postprocess (CFG_VC_triple p exits P a fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a
        CFGVerifierContract literal lives as a Local Notation in
@@ -256,19 +254,21 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
       (* --- (2) Fetch-bounds discharge ---
          Probe-confirmed shapes at step k: `0 <= unsigned pc_k` and
-         `unsigned pc_k + 4 <= 1024`, where `pc_k = bv.add (bv.of_N c) a`
+         `unsigned pc_k + 4 <= maxAddr`, where `pc_k = bv.add (bv.of_N c) a`
          (c = 4k the constant offset, a the symbolic base), with `unsigned
          (c ⊕ a)` NOT distributed by the solver (decision #5: never ask the
          solver to cancel bvadd). *)
 
       (* Value-level core, exactly as specified in the plan. *)
       Lemma fetch_bound_step (a : bv xlenbits) (c X : N) :
-        (bv.bin a + X <= 1024)%N -> (c + 4 <= X)%N ->
-        (bv.bin (bv.add (bv.of_N c) a) + 4 <= 1024)%N.
+        (bv.bin a + X <= maxAddr)%N -> (c + 4 <= X)%N ->
+        (bv.bin (bv.add (bv.of_N c) a) + 4 <= maxAddr)%N.
       Proof.
         intros Hbound Hc.
-        assert (Hsum : (c + bv.bin a <= 1020)%N) by lia.
-        assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+        (* was `c + bin a <= 4092`, i.e. maxAddr - 4 spelled out; phrasing it
+           as a `+ 4 <=` keeps maxAddr symbolic and subtraction-free. *)
+        assert (Hsum : (c + bv.bin a + 4 <= maxAddr)%N) by lia.
+        pose proof maxAddr_rep as Hexp.
         assert (HcE : (c < bv.exp2 xlenbits)%N).
         { set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
         pose proof (bv.bin_of_N_small HcE) as Heq.
@@ -281,8 +281,8 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          the ty.int level the fetch-bound VC obligations are phrased at
          (term_unsigned = term_unop uop.unsigned, eval = bv.unsigned). *)
       Lemma fetch_bound_step_Z (a : bv xlenbits) (c X : N) :
-        (bv.bin a + X <= 1024)%N -> (c + 4 <= X)%N ->
-        (bv.unsigned (bv.add (bv.of_N c) a) + 4 <= 1024)%Z.
+        (bv.bin a + X <= maxAddr)%N -> (c + 4 <= X)%N ->
+        (bv.unsigned (bv.add (bv.of_N c) a) + 4 <= Z.of_N maxAddr)%Z.
       Proof.
         intros H1 H2. pose proof (@fetch_bound_step a c X H1 H2) as Hn.
         unfold bv.unsigned. set (B := bv.bin (bv.add (bv.of_N c) a)) in *. lia.
@@ -309,13 +309,13 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       Lemma instprop_fetch_bound_upper {Σ} (ι : Valuation Σ)
         (base : Term Σ ty_xlenbits) (a : Val ty_xlenbits) (c X : N)
         (Hsync : inst base ι = SyncVal a)
-        (Hwin : (bv.bin a + X <= 1024)%N) (Hc : (c + 4 <= X)%N) :
+        (Hwin : (bv.bin a + X <= maxAddr)%N) (Hc : (c + 4 <= X)%N) :
         instprop (formula_relop bop.le
           (term_binop bop.plus
              (term_unop uop.unsigned
                 (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N c)) base))
              (term_val ty.int 4%Z))
-          (term_val ty.int 1024%Z)) ι.
+          (term_val ty.int (Z.of_N maxAddr))) ι.
       Proof.
         cbn -[xlenbits]. rewrite Hsync. cbn -[xlenbits].
         exact (@fetch_bound_step_Z a c X Hwin Hc).
@@ -341,7 +341,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Goal forall (Σ : LCtx) (ι : Valuation Σ) (base : Term Σ ty_xlenbits)
       (a : Val ty_xlenbits),
       inst base ι = SyncVal a ->
-      (bv.bin a + 40 <= 1024)%N ->
+      (bv.bin a + 40 <= maxAddr)%N ->
       instprop (formula_relop bop.le (term_val ty.int 0%Z)
         (term_unop uop.unsigned
            (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 12)) base))) ι /\
@@ -350,7 +350,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
            (term_unop uop.unsigned
               (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 12)) base))
            (term_val ty.int 4%Z))
-        (term_val ty.int 1024%Z)) ι.
+        (term_val ty.int (Z.of_N maxAddr))) ι.
     Proof.
       intros Σ ι base a Hsync Hwin. split.
       - eapply instprop_fetch_bound_lower; eauto.
@@ -392,12 +392,12 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Lemma relval_fetch_upper_bare (v : RelVal ty_xlenbits) (A B : Z) :
       RiscvPmpSignature.secLeak v ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end ->
       (A <= B)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal A) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end.
     Proof.
@@ -406,27 +406,83 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Qed.
 
     (* Same generalisation, plus the `0 <= A` the no-wrap step needs: bounding
-       `bin cbv + bin a` below exp2 goes through `1024 - A`, which only stays
+       `bin cbv + bin a` below exp2 goes through `maxAddr - A`, which only stays
        under 2^32 for a non-negative A. *)
     Lemma relval_fetch_upper_add (v : RelVal ty_xlenbits) (cbv : bv xlenbits) (A B : Z) :
       RiscvPmpSignature.secLeak v ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
       with SyncVal p => p | NonSyncVal _ _ => False end ->
       (Z.of_N (bv.bin cbv) + A <= B)%Z ->
       (0 <= A)%Z ->
       match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
-        (bop.evalRel bop.minus (SyncVal 1024%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
            (bop.evalRel bop.plus (SyncVal A)
               (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
       with SyncVal p => p | NonSyncVal _ _ => False end.
     Proof.
       intros H Hb Hle HA; destruct v as [a|a b]; [| destruct H].
-      cbn in *; unfold bv.unsigned in *.
-      assert (Hexp : (1024 < bv.exp2 xlenbits)%N) by (vm_compute; reflexivity).
+      (* Every constant must reach `lia` as a CONSISTENT atom, and a bare
+         `cbn in *` gives none of them: it reduces maxAddr in Hb but not in
+         the freshly-stated Hexp, and reduces `bv.exp2 xlenbits` to
+         `bv.exp2 32` in Hexp but not in the freshly-stated Hlt (xlenbits is
+         only Opaque inside ModelBinary.v).  Either mismatch shows up as
+         `Cannot find witness`.  Blocking delta on all three keeps every
+         occurrence folded, so the atoms line up. *)
+      pose proof maxAddr_rep as Hexp.
+      cbn -[maxAddr bv.exp2 xlenbits] in *; unfold bv.unsigned in *.
       assert (Hlt : (bv.bin cbv + bv.bin a < bv.exp2 xlenbits)%N) by lia.
       rewrite (bv.bin_add_small Hlt). lia.
+    Qed.
+
+    (* The same bound for an access BELOW the base -- `lw rd, -4(rs)`, which
+       is what clang emits for any loop walking a pointer DOWNWARD (muladd's
+       memmove-down at idx 84..89, and its sibling at 113..117).  The address
+       is `cbv + v` with cbv the wrapped representation of -D, so `bv.bin`
+       WRAPS and relval_fetch_upper_add's no-overflow step does not apply.
+
+       The extra premise is a LOWER bound on the base (`D <= unsigned v`),
+       which a contract must supply -- without it `v - D` underflows and the
+       access really is out of range.  `Hc` pins cbv as the two's-complement
+       encoding of -D and is `vm_compute; reflexivity` at any concrete offset. *)
+    Lemma relval_fetch_upper_neg (v : RelVal ty_xlenbits) (cbv : bv xlenbits)
+      (A B D : Z) :
+      RiscvPmpSignature.secLeak v ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
+           (bop.evalRel bop.plus (SyncVal B) (uop.evalRel uop.unsigned v)))
+      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (uop.evalRel uop.unsigned v) (SyncVal D))
+      with SyncVal p => p | NonSyncVal _ _ => False end ->
+      (* D is a plain Z, NOT `Z.of_N D`: the goal's offset arrives as a Z
+         LITERAL, and unifying `Z.of_N ?D` with `4` would require inverting
+         Z.of_N -- the same trap as seg_fits_Z. *)
+      @eq Z (Z.add (Z.of_N (bv.bin cbv)) D) (Z.of_N (bv.exp2 xlenbits)) ->
+      (A <= B + D)%Z ->
+      match bop.eval_relop_relprop bop.le (SyncVal 0%Z)
+        (bop.evalRel bop.minus (SyncVal (Z.of_N maxAddr))
+           (bop.evalRel bop.plus (SyncVal A)
+              (uop.evalRel uop.unsigned (bop.evalRel bop.bvadd (SyncVal cbv) v))))
+      with SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros Hs Hub Hlb Hc HA; destruct v as [a | x y]; [| destruct Hs].
+      pose proof maxAddr_rep as Hexp.
+      pose proof (bv.bv_is_wf a) as Ha.
+      pose proof (bv.bv_is_wf cbv) as Hc2.
+      cbn -[maxAddr bv.exp2 xlenbits] in *; unfold bv.unsigned in *.
+      rewrite bv.bin_add.
+      (* exp2 <= bin cbv + bin a < 2 * exp2, so the mod is one subtraction.
+         `set` both atoms first and restrict the replace with `at 1`: without
+         it the rewrite also fires inside its own right-hand side. *)
+      set (E := bv.exp2 xlenbits) in *.
+      set (S := N.add (bv.bin cbv) (bv.bin a)) in *.
+      assert (HS : (E <= S)%N /\ (S < E + E)%N) by (unfold S; lia).
+      assert (Hm : @eq N (N.modulo S E) (N.sub S E)).
+      { replace S with (N.add (N.sub S E) (N.mul 1 E)) at 1 by lia.
+        rewrite N.Div0.mod_add. apply N.mod_small. lia. }
+      rewrite Hm. unfold S. lia.
     Qed.
 
     (* Loop-EXIT residual, not a fetch bound.  A loop whose exit test is a
@@ -492,7 +548,57 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
             | apply Z.leb_le; vm_compute; reflexivity
             | apply Z.leb_le; vm_compute; reflexivity ]
         | eapply relval_fetch_upper_bare; [ eassumption | eassumption | lia ]
-        | apply relval_neq_irrefl ].
+        | (* base MINUS a constant: the eassumption for the LOWER bound is what
+             fixes ?D, so it must come before the encoding check. *)
+          eapply relval_fetch_upper_neg;
+            [ eassumption | eassumption | eassumption
+            | vm_compute; reflexivity
+            | apply Z.leb_le; vm_compute; reflexivity ]
+        | apply relval_neq_irrefl
+        (* BASE MINUS A CONSTANT, with both offsets READ OFF THE GOAL.  The
+           alternative above leaves `B` and `D` as evars, and that cannot
+           work: the premises are stated over `bop.eval_relop_relprop` while
+           the hypotheses are still ERASED (`Erasure.inst_eformula' …`), so
+           what closes them is CONVERSION, not unification -- and conversion
+           needs every numeric parameter concrete before `eassumption` runs.
+           Pinning them at literals would only move the problem (`D` is the
+           program's own offset, not a fixed width), so both come from the
+           goal: `A` is the access width it already mentions, and `D` is
+           recovered from the two's-complement constant `cbv` as 2^32 - cbv.
+           `B := A` is the bound the contract registers for the pointer
+           itself, which is what the fetch/word case leaves in context.
+           Found 2026-09-13 on loop C's exit contract -- the first DESCENDING
+           pointer loop, which is what makes every access sit below its
+           base. *)
+        | match goal with
+          | |- context [ Erasure.eterm_binop bop.plus (Erasure.eterm_val ty.int ?A)
+                           (Erasure.eterm_unop uop.unsigned
+                              (Erasure.eterm_binop bop.bvadd
+                                 (Erasure.eterm_val (ty.bvec _) ?cbv) _)) ] =>
+              let d := eval vm_compute in
+                ((Z.of_N (bv.exp2 xlenbits) - Z.of_N (bv.bin cbv))%Z) in
+              eapply (relval_fetch_upper_neg _ _ A d);
+                [ eassumption | eassumption | eassumption
+                | vm_compute; reflexivity
+                | apply Z.leb_le; vm_compute; reflexivity ]
+          end ].
+
+    (* THE PARAMETRIC-BASE DISCHARGE, once.  Every contract whose base is a
+       TERM rather than a literal -- which is every `gen_contract_param` and
+       every mid-program segment, since a segment is by construction cut at a
+       symbolic base -- is discharged by exactly these four steps.  It lived in
+       GenSegment.v as `solve_param_vc` and was ALSO written out at 154 sites, so
+       there were two spellings of one tactic split by vintage rather than by
+       meaning; and the name said "segment" when the property that matters is
+       "parametric base".  It belongs here, beside the two tactics it calls.
+
+       Spelling out the stages is still the right move when one FAILS: this
+       abbreviation reports a bare `No applicable tactic`, and on 2026-09-13 a
+       failure in the last component cost a detour through the Ltac body to
+       localise.  If a VC will not close, inline the four steps and see which
+       one stops. *)
+    Ltac solve_param_vc :=
+      intros; vm_compute; solve_vc; solve_symbase_fetch.
 
     (* Definition with_regidx {Σ} (r : RegIdx) (P : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ := *)
     (*   match reg_convert r with *)

@@ -36,7 +36,13 @@ Definition pl_filler : list AST := List.repeat (MV X4 X4) 64.
 (* The whole program: 66 instructions, loop head at byte offset 256. *)
 Definition padded_instrs : list AST := pl_filler ++ cd_instrs.
 
-(* AnnotInstr-level decomposition of the SAME program.
+(* AnnotInstr-level decomposition of the SAME program.  Since 2026-09-22
+   (PLAN-contract-ast) the two levels are BOTH named here on purpose: the
+   contracts' `cfg_instrs` field is the AST list `cd_instrs` (the spec: what
+   sits in memory), while `pl_seg` is the ANNOTATED slice the symbolic table is
+   built from and is what `cfg_vc` is applied to.  They coincide today because
+   this program carries no annotations -- `pl_seg` IS `cd_instrs` through the
+   coercion -- but they are different arguments and must not be conflated.
    Needed because `list_AST_AnnotInstr` is `List.map AST_AnnotInstr`, NOT an
    identity (Verifier.v:145 -- and coqc warns about exactly that), so a
    `list AST` cannot stand in for the `list AnnotInstr` that ptsto_instrs and
@@ -64,12 +70,12 @@ Definition plBody : @CFGVerifierContract cdCtx :=
        ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.neq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
-    pl_seg
+    cd_instrs
     pl_headExitCond
     3
     (X1 ↦ᵣ dec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
-Lemma valid_plBody : ValidCFGVerifierContract plBody.
+Lemma valid_plBody : cfg_vc plBody pl_seg.
 Proof.
   vm_compute. solve_vc.
 Qed.
@@ -83,12 +89,12 @@ Definition plFinal : @CFGVerifierContract cdCtx :=
        ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.eq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
-    pl_seg
+    cd_instrs
     (pcOutOfInstrs_exitCond 0 padded_instrs)
     3
     asn_no_post.
 
-Lemma valid_plFinal : ValidCFGVerifierContract plFinal.
+Lemma valid_plFinal : cfg_vc plFinal pl_seg.
 Proof.
   vm_compute. solve_vc.
 Qed.
