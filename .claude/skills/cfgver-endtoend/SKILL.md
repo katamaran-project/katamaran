@@ -43,44 +43,49 @@ Bundles adequacy + memory splitting + `cfg_instrs_safe` so that program-specific
 proofs only supply `ImplPre`.
 
 ```coq
-Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' γ2' : RegStore} {μ1 μ2 μ1' μ2' : Memory}
-  instrs' exitCond n ws {R} {ι : Valuation R}
+Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
+  {instrs'} (exit_addr : N) n ws {R} {ι : Valuation R}
   public_registers
   (HpubReg : declare_public_registers γ1 γ2 public_registers)
   (contract : @CFGVerifierContract R)
-  (valid_contract : ValidCFGVerifierContract contract)
-  (contractInstrs : cfg_instrs contract = instrs')
-  (contractExitCond : cfg_exitCond contract = exitCond)
-  (ImplPre : forall `{sailGS2 Σ},
-      interp_gprs_with_public_registers γ1 γ2 public_registers ∗
-      cur_privilege ↦ᵣ ty.SyncVal Machine ∗
-      interp_inv_constant_time -∗
+  (valid_contract : cfg_vc contract instrs')
+  (init_addr : N) (contractInitAddr : cfg_init_addr contract = init_addr)
+  (contractPlacement : inst (cfg_placement contract) ι = ty.SyncVal (bv.of_N init_addr))
+  (HexitFaith : etable_rel (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
+  (ImplPre : forall `{sailGS2 Σ}, … -∗
       asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
         ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-  (4 * N.of_nat (length instrs') < lenAddr)%N ->
-  mem_has_instrs μ1 (bv.of_N init_addr) ws instrs' ->
-  mem_has_instrs μ2 (bv.of_N init_addr) ws instrs' ->
-  RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-  RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-  RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr ->
-  RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr ->
-  ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ ->
-  ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ->
+  (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N ->
+  (forall `{sailGS2 Σ} wds, ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs')) ->
+  mem_has_instrs μ1 (bv.of_N init_addr) ws (strip instrs') ->
+  mem_has_instrs μ2 (bv.of_N init_addr) ws (strip instrs') ->
+  (* cur_privilege = Machine and pc = bv.of_N init_addr, in both γ1 and γ2 *) … ->
+  ⟨ γ1, μ1 ⟩ -(atPc exit_addr, n)->* ⟨ γ1', μ1' ⟩ ->
   leakage_trace μ1 = leakage_trace μ2 ->
-  leakage_trace μ1' = leakage_trace μ2'.
+  ∃ γ2' μ2', ⟨ γ2, μ2 ⟩ -(atPc exit_addr, n)->* ⟨ γ2', μ2' ⟩ ∧
+             leakage_trace μ1' = leakage_trace μ2'.
 ```
 
-There is no `ImplPost` parameter — `CFGVerifierContract` has no postcondition field.
+(Abridged; exact text at `EndToEnd.v`, `Lemma cfg_instrs_endToEnd`.) The exit is
+the literal `exit_addr : N`; `atPc exit_addr` (`Noninterference.v`) is `fun v =>
+bv.eqb v (bv.of_N exit_addr)`. `HexitFaith` ties it to the contract's one exit
+term — for `cfg_exit := exit_of_off p off` discharge it with
+`etable_faith_exit_of_off` (`TablesRel.v`), or for a segment with
+`seg_exit_table_ok` (`GenCompose.v`).
 
 ## Call pattern
 
 ```coq
-eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' γ2' μ1 μ2 μ1' μ2'
-  instrs my_exitCond n ws [ctx] [env]
+eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
+  instrs (init_addr + 4 * N)%N n ws [ctx] [env]
   [existT ty_xlenbits x1] HpubReg my_cfg_contract
-  valid_my_cfg_contract eq_refl eq_refl).
+  valid_my_cfg_contract init_addr eq_refl).   (* ONE eq_refl: contractInitAddr *)
+(* contractPlacement and HexitFaith are then goals *)
 all: try eauto.
 ```
+
+Live example: `Example/CountdownRecResult.v` (placement by `reflexivity`, exit by
+`seg_exit_table_ok`).
 
 `my_cfg_contract` / `valid_my_cfg_contract` are placeholders for a **hand-written**
 concrete-base (`Σ = [ctx]`) contract. None of CFGVer's own examples supply one any
@@ -89,8 +94,7 @@ more: since the Phase 4.2 parametric migration each `Example/*.v` proves only a
 parametric theorem, so the concrete-base contracts and their VCs were removed as dead
 compile time.
 
-- `@` is required: `Set Implicit Arguments.` makes `instrs'` and `exitCond` implicit
-  (they appear in the types of `contractInstrs`/`contractExitCond`).
+- `@` is required: `instrs'` is implicit.
 - **`all: try eauto.` must come BEFORE the `-` bullets** — it discharges the routine
   goals (memory, register reads, execution steps) first, leaving only `ImplPre` and
   the length bound for the focused bullets.
@@ -106,7 +110,7 @@ pair of `⌜P⌝ ∧ emp` fragments (one per precondition conjunct) followed by
 ```coq
 assert (HpubReg : declare_public_registers γ1 γ2 []) by constructor.
 eapply (@cfg_instrs_endToEnd ... [] HpubReg jmp_fwd_cfg_contract_gen
-  valid_jmp_fwd_cfg_contract_gen eq_refl eq_refl).
+  valid_jmp_fwd_cfg_contract_gen init_addr eq_refl).
 all: try eauto.
 - intros Σ H.
   iIntros "(Hregs & Hpriv & #Hinv)".

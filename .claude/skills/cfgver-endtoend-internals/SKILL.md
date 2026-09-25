@@ -69,7 +69,7 @@ argument is `γ1 : RegStore`) but **explicit** in `cfg_instrs_safe_with_mem`
 The same applies to the `gen_contract_noninterferent_rel*` **bridges**, and it
 bites when one bridge delegates to another (as `_param` does to `_rel_classed`
 since 2026-08-18). **Every** data argument — `reg_specs`, `mem_specs`, `instrs`,
-`extra_exit_offs`, `bound`, `exitCond`, `fuel`, `init_addr` — is implicit, because
+`bound`, `fuel`, `init_addr` — is implicit, because
 each occurs in some premise's type, so the first *explicit* argument is `HND`. The
 tell is a type error naming `NoDup`:
 
@@ -80,8 +80,9 @@ while it is expected to have type "NoDup (map reg_spec_idx (map (concretize_reg 
 
 Use the `(name := v)` form (implicits accept it; explicit arguments do not).
 **Which ones you must name:** anything the *conclusion* does not mention.
-`noninterferent_strong` mentions only `init_addr`, `instrs`, `exitCond` and the two
-spec lists, so `bound`, `fuel` and `extra_exit_offs` all float — and so does
+`noninterferent_strong` mentions only `init_addr`, `instrs` (the exit is `init_addr
++ 4 * N.of_nat (length instrs)`) and the two spec lists, so `bound` and `fuel`
+float — and so does
 `mem_specs` when you are instantiating it at `[]`, for a reason worth knowing:
 
 > **Unification will not solve `map f ?l ≡ []`.** Verified in 9 ms on a scratch

@@ -37,7 +37,7 @@ symbolic VC  --(refinement: rexec_cfg_addr, this skill)-->  concrete execution
 | fuel | `match fuel` → `error` / step | identical |
 | pc probe | none — dispatch tries the table match directly | `ty.RVToOption apc` — *do both worlds agree (SyncVal)?* is a real semantic gate, not just a mirrored probe |
 | choice | `angelic_binary` exit / execute | identical |
-| exit branch | `if is_exit exits apc then pure apc else error` (peval/`Term_eqb` table match) | `if exitCond v then pure apc else error` (direct bool call) |
+| exit branch | `if is_exit ex apc then pure apc else error` (`Term_eqb (peval apc) (peval ex)` against the ONE exit term) | `if exit_hit cexit v then pure apc else error`, `cexit : RelVal ty_xlenbits`; `exit_hit (SyncVal e) v = bv.eqb v e`, `NonSyncVal` → `false` (`exit_hit_spec : exit_hit cexit v = true <-> cexit = SyncVal v`) |
 | dispatch | `lookup_instr tbl apc` → `error` / **(word term, instruction)** (peval/`Term_eqb` table match) | `instrs !! v` → `error` / instruction (gmap lookup); the word comes from `words v` |
 | step | `⟨θ1⟩ apc' <- sexec_instruction i apc anp wd ;; recurse`, persisting `tbl`/`exits` via `persist_itableW`/`persist_etable` | `apc' <- cexec_instruction i apc anp (SyncVal (words v)) ;; recurse` |
 
@@ -62,7 +62,8 @@ unlike a clean structural mirror, matching the two sides here needs explicit
 `sexec_cfg_addr` has no `angelic_binary` at all — it stops iff
 `negb first && is_exit` — while `cexec_cfg_addr` keeps its unconditional
 `angelic_binary`. That asymmetry is SOUND and is the whole point:
-`is_exit_sound` runs one way only (`is_exit = true -> exitCond v = true`), so the
+`is_exit_sound` runs one way only (`is_exit ex apc = true -> etable_rel cexit ex ι
+-> ∃ v, inst apc ι = SyncVal v ∧ cexit = SyncVal v`), so the
 symbolic side may be strictly MORE decisive, which makes the VC stronger. The
 payoff was removing a per-step dead branch (1.21× on every program) and a
 fuel-dependent overshoot past mid-program exits; see **cfgver-executor** and
@@ -105,7 +106,10 @@ this skill.
 
 The relational-correctness lemma refining `cexec_cfg_addr` by `sexec_cfg_addr`,
 proved by `iInduction` on fuel, GIVEN `itable_relW instrs words tbl` and
-`etable_rel exitCond exits`. **THREE subgoals since 2026-09-07** (was four): when the stop guard holds the
+`etable_rel cexit ex` (`:= fun ι => ∃ v, inst ex ι = SyncVal v ∧ cexit = SyncVal
+v`; one lemma `etable_faith_exit_of_off` in `TablesRel.v` proves it for
+`exit_of_off p off` given `inst p ι = SyncVal cbase`). `rexec_block`'s exit-pc goal
+is closed with `refine_inst_subst` + `refine_inst_persist` (`AT := Sub _`). **THREE subgoals since 2026-09-07** (was four): when the stop guard holds the
 symbolic side is `pure ta` and `lookup_instr` is never consulted, so the old
 exit-hit/exit-miss pair MERGES — which also deleted the old case 1, a verbatim
 58-line copy of the core case that `rprop_or` had glued on (270 → 198 lines).

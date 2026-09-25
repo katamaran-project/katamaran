@@ -26,10 +26,9 @@ Record CFGVerifierContract {Σ} :=
   MkCFGVerifierContract
   { cfg_init_addr     : N
   ; cfg_placement     : Term Σ ty_xlenbits
-  ; cfg_exits         : list (Term Σ ty_xlenbits)
+  ; cfg_exit          : Term Σ ty_xlenbits
   ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
   ; cfg_instrs        : list AnnotInstr
-  ; cfg_exitCond      : bv xlenbits -> bool
   ; cfg_fuel          : nat
   ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
   }.
@@ -54,19 +53,17 @@ every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 |---|---|
 | `Σ` | logical context: `[ctx]` for a concrete contract; `["p"∷ty_xlenbits]` for a parametric base (the base is then `term_var "p"`) |
 | `cfg_placement` | where the code sits, as a **term**: `term_val … (bv.of_N ia)` concrete, `term_var "p"` parametric |
-| `cfg_exits` | exit addresses as **terms** (built by `exits_of_offs` from base-relative offsets) — this is what the symbolic executor's exit choice checks against |
+| `cfg_exit` | the ONE exit address, as a **term** (usually `exit_of_off p off`, `Tables.v`). A run stops exactly when pc = exit (except at the entry step). Replaced `cfg_exits`/`cfg_exitCond` on 2026-09-25 (`plans/PLAN-exit-targets.md`) |
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
 | `cfg_instrs` | the program, a `list AnnotInstr` placed at `cfg_placement` (coerces transparently from a plain `list AST` — see above) |
-| `cfg_postcondition` | RE-EXPOSED 2026-09-03 (it had been hardwired to `true`). `consume`d at the moment the exit condition is hit, with `"an"` bound to whichever declared exit was taken; the soundness bridge hands it back to the caller, which is **what makes two segment contracts composable**. Pass `asn_no_post` for an ordinary whole-program contract. |
-| `cfg_init_addr`, `cfg_exitCond` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
+| `cfg_postcondition` | RE-EXPOSED 2026-09-03 (it had been hardwired to `true`). `consume`d at the moment the pc reaches the exit, with `"an"` bound to `cfg_exit`; the soundness bridge hands it back to the caller, which is **what makes two segment contracts composable**. Pass `asn_no_post` for an ordinary whole-program contract. |
+| `cfg_init_addr` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
 
-**The ignored-fields subtlety:** the VC dispatches exits against the *term table*
-`cfg_exits`, not against `cfg_exitCond`. The two are reconnected only at the
-end-to-end stage, by the `HexitOffs` premise of the `gen_contract_noninterferent_*`
-bridges
-(via `etable_faith_exits_of_offs`): every exit term must satisfy `exitCond`. A
-hand-written contract whose `cfg_exits` and `cfg_exitCond` disagree will pass the
-VC and fail there.
+The exit is stored once. The end-to-end stage relates it to the trusted
+statement's literal `exit_addr : N` through the `HexitFaith : etable_rel
+(SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι` premise (discharged by
+`etable_faith_exit_of_off`, `TablesRel.v`; the generator bridges do it
+internally).
 
 ## Validity
 
@@ -79,7 +76,7 @@ VC and fail there.
 ```coq
 Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
   cfg_map c Valid_CFG_VC.
-(* Valid_CFG_VC … := safeE (postprocess (CFG_VC_triple p exits P i fl)). *)
+(* Valid_CFG_VC ia p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
 ```
 
 Discharge pattern: `Proof. vm_compute. solve_vc. Qed.` — residual patterns and
@@ -98,12 +95,12 @@ byte offset carried in **`cfg_placement`**:
 ```coq
 cfg_placement := term_val ty_xlenbits (bv.of_N 256);   (* base + segment offset *)
 cfg_instrs    := pl_seg;                               (* the SEGMENT only *)
-cfg_exits     := exits_of_offs (term_val ty_xlenbits (bv.of_N 256)) [0%N];
+cfg_exit      := exit_of_off (term_val ty_xlenbits (bv.of_N 256)) 0%N;
 ```
 
 `table_of_list p 0 seg` then emits exactly `256, 260, …`, so **no new record
-field was needed** and `etable_faith_exits_of_offs` needs no change (it was
-already placement-relative).
+field was needed** and `etable_faith_exit_of_off` needs no change (it is
+placement-relative).
 
 **Why bother:** a segment contract whose branch condition the solver cannot
 decide by computation costs `93.81 + 4.05·P + 0.531·P²` M words in the number
@@ -192,13 +189,13 @@ trivially, so it costs nothing. Mechanism: **core-executor-internals**;
 diagnosing such a residual: **cfgver-solve-vc**.
 
 Exemplar: `cmovznz4_cfg_contract_param` (`Example/Cmovznz4.v`) — `Σ = ["p"∷ty_xlenbits]`,
-placement `term_var "p"`, exits at `bvadd p (of_N off)` terms, precondition with
+placement `term_var "p"`, exit at a `bvadd p (of_N off)` term, precondition with
 the base bound plus register/memory assertions. Two rules of thumb:
 
 - Build addresses as `bop.bvadd (term_var "p") (term_val … (bv.of_N off))` — only
   concrete offsets under `bv.of_N`; a symbolic argument to `bv.of_N` makes
   `vm_compute` diverge.
-- There is also a notation `{{ P }} i @cfg[ ec , fl ]` for concrete contracts
+- There is also a notation `{{ P }} i @cfg[ fl ]` for concrete contracts
   at `init_addr`, kept `Local` in `Example/MvSwap.v` (its only user) because it
   turns `{{`/`}}` into lexer keywords that break any other `}}` occurrence.
 

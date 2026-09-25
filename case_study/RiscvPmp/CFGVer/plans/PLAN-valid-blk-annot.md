@@ -170,6 +170,16 @@ Note that the check is on `AnnotInstr`, so it is also in force for today's
 None blocking. Q1 and Q2 were decided 2026-09-25 (see §0). Deferred: deriving
 `blk_off` from the contract's exits (§1b).
 
+**UPDATE 2026-09-25: PLAN-exit-targets.md is IMPLEMENTED** (branch
+issue/exit-targets).  Consequences for this plan, now facts rather than
+predictions: `BlkAnnot` is `(blk_ctx, blk_contract)` (no blk_off); a block
+resumes at `blk_exit b ι = inst (cfg_exit c) ι`; `blockSound_of_vc` has no
+Hexit; `blockFaithful`'s exit half is only "the exit term is SyncVal"; and
+`blockFaithful_of_seg` no longer needs `v = of_N ia`, so R1 (blockSound
+independent of the load address) is essentially answered -- only
+cfg_init_addr remains, and blockSound never reads it.  `aiv_loop` can be a
+`bool`, and R4 is moot.  Re-draft §1a/§1b against this before Phase 2.
+
 **Sequencing (decided 2026-09-25): PLAN-exit-targets.md goes FIRST.** It
 removes `cfg_exitCond` and `blk_off` (one target, and a block resumes at it), so
 after it: `BlkAnnot` = (ctx, contract), R1/R4 are moot, `aiv_loop : bool`, and

@@ -141,7 +141,7 @@ cut segment: 74.2 M words, removed. The per-entry marginal at the exit boundary
 went 10.2 / 14.3 / 17.7 → a flat **3.01** M/entry.
 
 **`first` IS NOT REMOVABLE — do not "simplify" it away.** A loop-body segment
-contract starts and ends at the SAME ADDRESS: `exits_of_offs <base> [0]` against
+contract starts and ends at the SAME ADDRESS: `exit_of_off <base> 0` against
 `asn_init_pc <base>` in `PaddedLoop.v`, `CountdownComposed.v`,
 `TwoLoopsComposed.v` (all gate-checked). Its trace visits that address twice —
 execute the body, then stop — and the pc is the same TERM both times, so the pc
@@ -160,8 +160,8 @@ exit and continue, other than at the entry. Nothing in the tree does.
 **Refinement side (cfgver-refinement).** Only the SYMBOLIC executor changed;
 `cexec_cfg_addr` keeps its unconditional `angelic_binary`, deliberately breaking
 that skill's "mirror the angelic exit/execute choice" rule. Sound because
-`is_exit_sound` runs one way only (`is_exit = true -> exitCond v = true`), so the
-symbolic side may be strictly MORE decisive. `rexFS` went 4 cases → 3 and 270 →
+`is_exit_sound` runs one way only (`is_exit = true -> ∃ v, inst apc ι = SyncVal v
+∧ cexit = SyncVal v`), so the symbolic side may be strictly MORE decisive. `rexFS` went 4 cases → 3 and 270 →
 198 lines — the exit-hit/exit-miss pair merges, deleting a verbatim 58-line copy
 of the core case — with new `rprop_left`/`rprop_right` in place of `rprop_or`.
 
@@ -434,7 +434,7 @@ each cost several wrong turns:
   not syntactically `map`, so a bare `rewrite <- fmap_instrs_of_list` finds no
   subterm.
 
-`instrs_of_list` and `exits_of_list` (`Tables.v`) are POLYMORPHIC in the element
+`instrs_of_list` (`Tables.v`) is POLYMORPHIC in the element
 type: one definition serves the executor (at `AnnotInstr`) and memory (at `AST`,
 fed `strip`), with the type inferred per use. Chosen over a second
 `annots_of_list` (duplication) and over a `Definition … := @map_of_list AST`
@@ -782,6 +782,15 @@ assume the block itself). The executor induction `sound_exec_cfg_addr_myWP2`
 carries `blocksSoundAt stepped ∗ ▷ blocksSound`; each executed instruction
 strips the later. `blocksSound` (= `blocksSoundAt true`, both kinds) is still
 the premise every external bridge takes. Partial correctness only.
+
+**Where a block resumes.** `BlkAnnot` is just `{| blk_ctx; blk_contract |}`
+(no offset field since `plans/PLAN-exit-targets.md`): a block resumes at its
+contract's one exit — symbolically `subst (cfg_exit c) evars` (`sexec_block`),
+concretely `inst (cfg_exit c) ι` (`cexec_block`); `Adequacy.v` names it
+`blk_exit b ι`. `blockSound` concludes `pc ↦ᵣ blk_exit b ι` with `"an" ↦
+blk_exit b ι`; `blockFaithful`'s exit half is `etable_rel (blk_exit b ι)
+(cfg_exit c) ι`; `blockSound_of_vc` has no exit premise (and takes `v`
+explicitly).
 
 Worked example: `Example/CountdownRec.v` (the loop `cdRec` with an `ai_loop`
 head + negative controls, then `cdLink`: the outer program STARTING at the

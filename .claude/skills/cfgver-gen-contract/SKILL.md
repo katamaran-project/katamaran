@@ -74,7 +74,7 @@ data list whose entries are read byte-wise:
 ```coq
 gen_contract_rel_bytes (init_addr) (reg_specs) (mem_specs)
                        (byte_mem_specs)      (* <-- these get 4 x ptstomem 1 each *)
-                       (instrs) (extra_exit_offs) (bound) (ec) (fl)
+                       (instrs) (bound) (fl)
 ```
 
 Both data lists are `list mem_spec_rel` — same type, same `PVExist`/`PVConst`/
@@ -119,10 +119,11 @@ gen_contract (init_addr : N)
              (reg_specs : list reg_spec)
              (mem_specs : list mem_full_spec)
              (instrs : list AnnotInstr)
-             (extra_exit_offs : list N)
-             (ec : bv xlenbits -> bool)
              (fl : nat) : CFGVerifierContract
 ```
+
+The exit is always the fall-through `base + 4*|instrs|` (`cfg_exit :=
+exit_of_off base (4 * |instrs|)`); no generator takes an exit argument.
 
 `instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
 migration (PLAN-annotinstr.md, Phase 1). This is invisible to every existing
@@ -134,13 +135,11 @@ builders (`gen_contract(_param/_rel/_u/_rel_classed/_rel_bytes)`) took the same
 change; the four that compute an exit offset or bound from `length instrs`
 switched to `length (strip instrs)`, since ghost entries occupy no address.
 
-- `extra_exit_offs`: base-relative byte offsets of exit addresses **beyond** the
-  fall-through one (always included automatically). Needed when control flow can
-  leave the program other than by falling off the end — e.g. a branch whose taken
-  target lies past the program. Straight-line programs pass `[]`. No tracked
-  example passes anything else since 2026-09-25 (`jump_if_zero` got a join-point
-  `NOP`; its two-exit version is in `JumpsResult.v` before that commit), and
-  `plans/PLAN-exit-targets.md` removes the parameter. Prefer one exit at the join point.
+- **One exit only.** A program whose control flow leaves other than by falling
+  off the end is a SEGMENT: use `gen_seg_contract` (`GenSegment.v`), which takes
+  its one `target : N`. Recommended discipline: cut at the join point so there is
+  one exit (`jump_if_zero` got a trailing `NOP` for this). History (the removed
+  `extra_exit_offs`/`ec` arguments): `plans/PLAN-exit-targets.md`.
 - `fl` (fuel) must exceed the number of instruction steps actually executed —
   with slack (→ **cfgver-solve-vc** for the tight-fuel failure mode).
 
@@ -155,8 +154,9 @@ residuals in **cfgver-solve-vc**).
 
 ### Common case: the `_simple` bridges (prefer these)
 
-For the overwhelmingly common program shape — **no extra exit offsets** and the
-standard `pcOutOfInstrs_exitCond` — use the specialised bridges in `EndToEnd.v`:
+Every generator contract exits at the fall-through, and the bridges in
+`EndToEnd.v` conclude `noninterferent_strong init_addr instrs (init_addr + 4 *
+N.of_nat (length instrs)) …`, discharging the exit fact internally:
 
 - **`gen_contract_noninterferent_param_simple`** (register-only, `mem_specs = []`):
   premises are just `HND` (`apply Prelude.nodup_fixed; reflexivity`), a
@@ -176,10 +176,9 @@ in each of its two files and never touched the trusted statement surface. Note t
 builder `gen_contract_rel` itself was KEPT: it has no example users but 26 rig
 users, and is the unclassed control arm for the `|Σ|` cost measurements.
 
-All three fix `extra_exit_offs = []` and the exit condition internally, so `HexitOffs`
-is discharged for you **and the "discharge valid_contract FIRST" ordering hazard
-below cannot arise** (only `fuel` floats, and it appears only in the VC premise —
-so premises may be discharged in any order). Typical proof:
+For these three the **"discharge valid_contract FIRST" ordering hazard below
+cannot arise** (only `fuel` floats, and it appears only in the VC premise — so
+premises may be discharged in any order). Typical proof:
 
 ```coq
 Proof.
@@ -191,50 +190,40 @@ Proof.
 Qed.
 ```
 
-Only fall back to the general bridges below when `extra_exit_offs` is non-empty,
-where `_simple` does not apply. They currently have no tracked caller (see above).
+Since `plans/PLAN-exit-targets.md` there is no difference between the general and
+`_simple` forms regarding exits: `_param_simple` / `_u_simple` are aliases of
+`_param` / `_u`, and the `_rel_*_simple` ones are thin delegations onto `_u`.
 
-### General bridges: five premises (six for `_rel`)
+### General bridges: premises
 
-The end lemma is `eapply gen_contract_noninterferent_param` (or `_rel` /
-`_rel_classed` / `_rel_bytes` for a base-relative data block) with **five** side
-premises (the `_rel*` forms add a sixth, `Hbound`, right before `valid_contract`):
+The general bridges are `gen_contract_noninterferent_param` (register-only) and
+`gen_contract_noninterferent_u` (base-relative data, word + byte lists). Their
+premises:
 
 | Premise | What it demands | Typical discharge |
 |---|---|---|
 | `HND` | `NoDup (map reg_spec_idx reg_specs)` | `repeat constructor` / `vm_compute`-style |
 | `HDataAddrs` | data word i sits at `init_addr + 4*|instrs| + 4*i` | case split per entry; `f_equal; lia` if base symbolic |
 | `Hlen` | `init_addr + 4*|instrs| + 4*|mem_specs| < lenAddr` | `unfold lenAddr; lia` |
-| *(`_rel` only)* `Hbound` | `init_addr + bound < lenAddr` | `exact` the premise you were given |
-| `HexitOffs` | `exitCond` true at fall-through + every extra exit offset | `Forall` constructors + `vm_compute` (see multi-offset note below) |
+| *(`_u` / `_rel_*` only)* `Hbound` | `init_addr + bound < lenAddr` | `exact` the premise you were given |
 | `valid_contract` | the `ValidCFGVerifierContract` VC | the one-line VC lemma — **discharge this ONE FIRST, see below** |
 
-Conclusion: `noninterferent_strong init_addr instrs exitCond reg_specs mem_specs`
-(or, for `_rel`, over `map (concretize_reg/mem init_addr) specs_rel`).
-
-`HexitOffs` is where `cfg_exitCond` (unused by the symbolic VC) gets reconnected to
-the contract's exit-term table — see **cfgver-contracts** for that design subtlety.
-If `extra_exit_offs` is non-empty (e.g. the pre-2026-09-25 `jump_if_zero`'s `[8%N]`), `HexitOffs` is a
-**multi-element** `Forall` — `constructor; [apply pcOutOfInstrs_fallthrough |
-constructor]` only closes the single-element case (`extra_exit_offs = []`, the
-common case). For each extra offset you need one more `constructor` split plus a
-hand-written exit-fact proof, e.g. for offset `8`:
-```coq
-constructor.
-+ apply pcOutOfInstrs_fallthrough.
-+ constructor; [ | constructor ].
-  unfold pcOutOfInstrs_exitCond, bv.ugeb, bv.uleb.
-  apply N.leb_le.
-  rewrite bv.of_N_add.                 (* collapses bv.add(of_N ia)(of_N o) into of_N(ia+o) — see bv-pitfalls *)
-  (* … reduce both sides to bv.bin (bv.of_N _) via bv.bin_of_N_small
-     (needs a `< bv.exp2 xlenbits` side bound, per bv-pitfalls), then lia. *)
-```
+Conclusion: `noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat
+(length instrs)) reg_specs mem_specs` (or, for `_u`, over `map
+(concretize_reg/mem init_addr) specs_rel`). There is no exit premise: the exit
+fact is discharged inside the bridge.
 
 ### CRITICAL — discharge `valid_contract` FIRST, not last
 
-`eapply gen_contract_noninterferent(_param/_rel)` leaves several existential
-metavariables shared across ALL the goals (from unifying `reg_specs`/`mem_specs`/
-`instrs`/`exitCond`/`fuel` against the conclusion). Solving the OTHER bullets
+**Scope since `plans/PLAN-exit-targets.md`:** the historical instances involved a
+floating exit condition, which no longer exists; `_param` and all `_simple`
+bridges now leave only `fuel` floating (VC premise only), so the hazard applies at
+most to a direct `eapply gen_contract_noninterferent_u` whose data lists /
+`bound` / `fuel` are not pinned by name. The advice below is kept as a cheap
+precaution.
+
+An `eapply` can leave existential metavariables shared across ALL the goals
+(from unifying spec lists / `bound` / `fuel` against the conclusion). Solving the OTHER bullets
 first lets their tactics (especially `constructor`) resolve those shared
 metavariables to the WRONG instantiation. The symptom is NOT a clean tactic
 failure — it's a `Qed` that either **hangs indefinitely** or fails with a
@@ -249,21 +238,16 @@ being traced here.
 **Fix: always discharge the LAST premise (`valid_contract`) by explicit goal
 number, before any bullet:**
 ```coq
-eapply gen_contract_noninterferent_param.
+eapply gen_contract_noninterferent_u.
 5: exact (valid_<x>_cfg_contract_param init_addr). (* MUST come first *)
-- apply Prelude.nodup_fixed; reflexivity.                        (* HND *)
-- intros ? ? Hlk; rewrite lookup_nil in Hlk; discriminate.       (* HDataAddrs *)
-- cbn. lia.                                                      (* Hlen *)
-- constructor; [apply pcOutOfInstrs_fallthrough | constructor].  (* HexitOffs *)
+- ...                                                            (* HND *)
+- ...                                                            (* HDataAddrs *)
+- ...                                                            (* Hlen *)
+- ...                                                            (* Hbound *)
 Qed.
 ```
-(`6: exact (...)` for `_rel`, since it has the extra `Hbound` premise.) This is
-not a new invention — the call sites of the old non-parametric
-`gen_contract_noninterferent` (that bridge was deleted 2026-08-18 as dead)
-already used this exact "do the last one first" ordering (with a TODO
-comment); it was simply missed when writing the new parametric lemmas. The
-last instance was `jumpIfZero_noninterferent_param` in `Example/JumpsResult.v`
-before 2026-09-25; it now uses `_simple`.
+No tracked call site needs this any more (all use `_simple` or name-pinned
+`eapply`s); history in `plans/PLAN-exit-targets.md`.
 
 ## Parametric base
 
@@ -278,7 +262,7 @@ Which name you *call* is an ergonomics choice, but a change to the contract reco
 now touches `gen_contract_u` alone.
 
 - **`gen_contract_u`** — the unified builder:
-  `init_addr reg_specs word_data byte_data instrs extra_exit_offs bound ec fl`,
+  `init_addr reg_specs word_data byte_data instrs bound fl`,
   all over the base-relative `param_val` vocabulary, classing by default.
   **Granularity is carried by WHICH LIST an entry is in** — `word_data` gets one
   `ptstomem 4` chunk per key, `byte_data` gets four `ptstomem 1`. There is
@@ -291,8 +275,8 @@ now touches `gen_contract_u` alone.
   values are BASE-INDEPENDENT, keeping the plain `reg_spec` (`None` / `Some v`)
   vocabulary rather than making you write `PVExist` / `PVConst v`. It absorbs the
   `reg_spec_to_rel` translation *and* fixes `bound = 4·|instrs|`, which is why it
-  is worth keeping. **Six arguments since 2026-08-18** — `init_addr reg_specs
-  instrs extra_exit_offs ec fl`; the `mem_full_spec` list it used to accept was
+  is worth keeping. **Four arguments** — `init_addr reg_specs instrs fl`
+  (the exit arguments went 2026-09-25); the `mem_full_spec` list it used to accept was
   removed (all 15 call sites passed `[]`). Data memory → call `gen_contract_u`.
 - **`gen_contract_rel`** — for reg/mem specs whose values are BASE-RELATIVE:
   `param_val = PVExist | PVConst v | PVBaseOff k` (meaning `p+k`), needed when a

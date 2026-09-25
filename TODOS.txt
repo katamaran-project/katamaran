@@ -1,4 +1,6 @@
 TODO:
+- DONE 2026-09-25 (branch issue/exit-targets, PLAN-exit-targets.md; merge pending the gate) except Phase 5 (drop cfg_init_addr / the ia
+	contract parameter, R-A) -- still OPEN.  Original item follows.
 - PRIORITY (Emiel, 2026-09-25): REMOVE EXIT CONDITIONS; state exits as TARGET ADDRESSES.
 	`cfg_exitCond : bv -> bool` has become unwieldy, and it is not needed. It is enough to demand that the code exits at
 	specific addresses (or something like it), so drop exit conditions completely and move to target addresses.
@@ -57,6 +59,8 @@ TODO:
 	+ then drop the manual `∗ minimal_pre` from gen_seg_contract and the examples.
 	+ CHECK: whole-program contracts use asn_no_post, so they would newly have to hand back minimal_pre at the exit.
 	  Should hold (nothing consumes cur_privilege / inv_leakage for good), but it touches every example VC -- re-run them all.
+- SUBSUMED 2026-09-25 by the exit-targets change (blockFaithful's exit half is now just "the block's exit term is SyncVal";
+	Hexit and blk_off are gone; the top-level HexitsFaith is discharged inside the generator bridges).  Original item follows.
 - The etable_rel half of blockFaithful (Adequacy.v) is a SELF-CONSISTENCY check on the block's contract, not a fact about memory:
 	etable_rel exitCond exits ι (VerifierRel.v) says each cfg_exits term, at ι, is an address where cfg_exitCond holds.
 	It depends on ι only because the exits are written over the symbolic base q and seg_exitCond over the concrete ia,

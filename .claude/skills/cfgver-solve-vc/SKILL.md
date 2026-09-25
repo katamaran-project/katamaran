@@ -170,11 +170,13 @@ the tell.
    automatically) — only for loops hand-authored like `countdown`/
    `countdown_mem`/`key_schedule_loop2`. Full convention + worked examples:
    **`cfgver/references/asm-vocabulary.md`**.
-4. **Exit mismatch:** the exit choice checks the contract's exit-*term* table; a
-   pc that should exit but matches no exit term fails the branch. Check
-   `extra_exit_offs` / `cfg_exits`.
-5. **Wrong postcondition/exitCond wiring** in hand-written contracts —
-   → **cfgver-contracts** (the ignored-fields subtlety).
+4. **Exit mismatch:** a run stops only when the pc equals the contract's ONE exit
+   term `cfg_exit` (modulo `peval`); a run that leaves by any other address
+   (e.g. a branch past the program when the exit is the fall-through) runs on
+   until it hits an unmapped pc or fuel. Cut at the join point, or make it a
+   segment (`gen_seg_contract`, one `target`).
+5. **Wrong postcondition wiring** in hand-written contracts —
+   → **cfgver-contracts**.
 
 ## When `vm_compute` itself hangs
 
