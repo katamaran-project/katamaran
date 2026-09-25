@@ -253,7 +253,9 @@ Import asn.notations.
     (* extra_exit_offs: base-relative byte offsets of exit addresses BEYOND
        the fall-through one (which is always included).  Needed when control
        flow can leave the program other than by falling off the end, e.g. a
-       branch whose taken target lies past the program (jump_if_zero). *)
+       branch whose taken target lies past the program.  No tracked example
+       passes a non-empty list since 2026-09-25 (jump_if_zero got a join-point
+       NOP), and plans/PLAN-exit-targets.md removes this parameter. *)
     Definition gen_contract
         (init_addr : N)
         (reg_specs : list reg_spec)

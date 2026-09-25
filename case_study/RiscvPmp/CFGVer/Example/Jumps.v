@@ -42,17 +42,26 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Import TermNotations.
 
     (* TODO: would rather write jump_if_zero (true_offset : bv 13) ... *)
-    (* Jumps to `true_offset` when the value of X1 is equal to zero. The
-         default offset allows one instruction between the fall-through path
-         and the branch target. X1 must be a public register (secLeak). *)
+    (* Jumps to `true_offset` when the value of X1 is equal to zero. X1 must
+       be a public register (secLeak).
+
+       ONE EXIT, AT THE JOIN POINT (2026-09-25, plans/PLAN-exit-targets.md
+       §4a).  The program used to be the lone `[BEQ X1 X0 8]`, with TWO exits:
+       the fall-through at +4 and the branch target at +8 (extra_exit_offs =
+       [8]).  The trailing NOP makes both paths meet at +8, which is now the
+       fall-through too, so extra_exit_offs = [] and the single-exit design
+       applies.  It is the same discipline as cutting a real segment at the
+       point where its paths rejoin.  To REVERT: restore
+       `[BEQ X1 X0 true_offset] [8%N] … 3` here and the HexitOffs proof in
+       JumpsResult.v from the commit before this change. *)
     (* ===== Phase 4.2: base-parametric jump_if_zero VC =====
        Supersedes the removed concrete-base pair jump_if_zero_cfg_contract /
        valid_jump_if_zero_cfg_contract (see MvSwap.v for the rationale). *)
     Definition jump_if_zero_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [(X1, true, None)]
-        [BEQ X1 X0 true_offset] [8%N]
-        (pcOutOfInstrs_exitCond ia [BEQ X1 X0 true_offset])
-        3.
+        [BEQ X1 X0 true_offset; NOP] []
+        (pcOutOfInstrs_exitCond ia [BEQ X1 X0 true_offset; NOP])
+        5.
 
     Lemma valid_jump_if_zero_cfg_contract_param (ia : N) :
       cfg_vc (jump_if_zero_cfg_contract_param ia) (cfg_instrs (jump_if_zero_cfg_contract_param ia)).

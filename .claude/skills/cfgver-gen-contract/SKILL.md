@@ -137,7 +137,10 @@ switched to `length (strip instrs)`, since ghost entries occupy no address.
 - `extra_exit_offs`: base-relative byte offsets of exit addresses **beyond** the
   fall-through one (always included automatically). Needed when control flow can
   leave the program other than by falling off the end — e.g. a branch whose taken
-  target lies past the program (`jump_if_zero`). Straight-line programs pass `[]`.
+  target lies past the program. Straight-line programs pass `[]`. No tracked
+  example passes anything else since 2026-09-25 (`jump_if_zero` got a join-point
+  `NOP`; its two-exit version is in `JumpsResult.v` before that commit), and
+  `plans/PLAN-exit-targets.md` removes the parameter. Prefer one exit at the join point.
 - `fl` (fuel) must exceed the number of instruction steps actually executed —
   with slack (→ **cfgver-solve-vc** for the tight-fuel failure mode).
 
@@ -188,8 +191,8 @@ Proof.
 Qed.
 ```
 
-Only fall back to the general bridges below when `extra_exit_offs` is non-empty
-(e.g. `jump_if_zero`), where `_simple` does not apply.
+Only fall back to the general bridges below when `extra_exit_offs` is non-empty,
+where `_simple` does not apply. They currently have no tracked caller (see above).
 
 ### General bridges: five premises (six for `_rel`)
 
@@ -211,7 +214,7 @@ Conclusion: `noninterferent_strong init_addr instrs exitCond reg_specs mem_specs
 
 `HexitOffs` is where `cfg_exitCond` (unused by the symbolic VC) gets reconnected to
 the contract's exit-term table — see **cfgver-contracts** for that design subtlety.
-If `extra_exit_offs` is non-empty (e.g. `jump_if_zero`'s `[8%N]`), `HexitOffs` is a
+If `extra_exit_offs` is non-empty (e.g. the pre-2026-09-25 `jump_if_zero`'s `[8%N]`), `HexitOffs` is a
 **multi-element** `Forall` — `constructor; [apply pcOutOfInstrs_fallthrough |
 constructor]` only closes the single-element case (`extra_exit_offs = []`, the
 common case). For each extra offset you need one more `constructor` split plus a
@@ -259,9 +262,8 @@ not a new invention — the call sites of the old non-parametric
 `gen_contract_noninterferent` (that bridge was deleted 2026-08-18 as dead)
 already used this exact "do the last one first" ordering (with a TODO
 comment); it was simply missed when writing the new parametric lemmas. The
-surviving instance is `jumpIfZero_noninterferent_param` in
-`Example/JumpsResult.v` (the end theorems moved out of `Results.v`, which is now
-just a re-export shell).
+last instance was `jumpIfZero_noninterferent_param` in `Example/JumpsResult.v`
+before 2026-09-25; it now uses `_simple`.
 
 ## Parametric base
 

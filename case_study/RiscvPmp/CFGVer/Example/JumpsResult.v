@@ -50,57 +50,29 @@ From Katamaran Require Import
 
 (* Phase 4.2: jump_if_zero verified end-to-end for a UNIVERSAL base
    address, from the single symbolic-base VC
-   valid_jump_if_zero_cfg_contract_param. *)
+   valid_jump_if_zero_cfg_contract_param.
+
+   Since 2026-09-25 the program is [BEQ; NOP] with ONE exit, at +8, which is
+   also its fall-through (see Jumps.v / plans/PLAN-exit-targets.md §4a).  So it
+   goes through the `_simple` bridge like jmp_fwd, and the two-element
+   HexitOffs proof (the fall-through +4 plus the branch target +8) it used to
+   need is gone.  It was the last tracked user of a non-empty extra_exit_offs
+   and of the general gen_contract_noninterferent_param bridge. *)
 Lemma jumpIfZero_noninterferent_param (init_addr : N) :
-  (init_addr + 4 < lenAddr)%N ->
-  noninterferent_strong init_addr [BEQ X1 X0 true_offset]
-    (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
+  (init_addr + 8 < lenAddr)%N ->
+  noninterferent_strong init_addr [BEQ X1 X0 true_offset; NOP]
+    (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset; NOP]) [(X1, true, None)] [].
 Proof.
   intros Hbound.
-  (* The `strip` restatement this proof used to open with is GONE: the
-     EndToEnd bridges now conclude over `instrs` itself, not `strip
-     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
-     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
-     at all: the hint list, the strip equation and the block obligations are
-     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
-     this example's own VC.  No statement in this file names an annotation. *)
-  eapply gen_contract_noninterferent_param.
-  4: solve_valid (valid_jump_if_zero_cfg_contract_param init_addr). (* must come first: doing the other bullets before this one lets their unification pick the wrong goal *)
-  (* Position 4, not 5: the `annot`/`Hannot` pair went back INSIDE
-     ValidCFGVerifierContract (2026-09-23), so the VC moved 5 -> 4.  A NUMERIC
-     goal selector is exactly what a changed premise list breaks -- §5.2's
-     hazard, now in the shrinking direction.  Still no vacuous-lookup bullet:
-     stage 1 of PLAN-unify-generators.md dropped _param's mem_specs and with
-     it the HDataAddrs premise. *)
+  eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn. lia.
-  - (* extra_exit_offs = [8%N] here (unlike every other example, whose
-       extra_exit_offs = []), so HexitOffs is a 2-element Forall: the
-       fall-through offset (4) plus the branch target (8). *)
-    constructor.
-    + apply pcOutOfInstrs_fallthrough.
-    + constructor; [ | constructor ].
-      unfold pcOutOfInstrs_exitCond, bv.ugeb, bv.uleb.
-      apply N.leb_le.
-      rewrite bv.of_N_add.
-      assert (Hlen1 : N.of_nat (length [BEQ X1 X0 true_offset]) = 1%N) by reflexivity.
-      rewrite Hlen1.
-      (* The two transit bounds are lenAddr and lenAddr + 4, kept SYMBOLIC.
-         Spelled as literals they were the only address-space constants
-         hiding in an Example/, and the only two the 2^10 -> 2^12 raise
-         missed. *)
-      assert (Hs4 : (init_addr + 4 * 1 < bv.exp2 xlenbits)%N)
-        by (apply N.le_lt_trans with (m := lenAddr); [lia | exact lenAddr_rep]).
-      assert (Hs8 : (init_addr + 8 < bv.exp2 xlenbits)%N)
-        by (apply N.le_lt_trans with (m := (lenAddr + 4)%N);
-            [lia | vm_compute; reflexivity]).
-      rewrite (bv.bin_of_N_small Hs4) (bv.bin_of_N_small Hs8).
-      lia.
+  - cbn; lia.
+  - solve_valid (valid_jump_if_zero_cfg_contract_param init_addr).
 Qed.
 
 Lemma jumpIfZero_noninterferent :
-  noninterferent_strong init_addr [BEQ X1 X0 true_offset]
-    (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset]) [(X1, true, None)] [].
+  noninterferent_strong init_addr [BEQ X1 X0 true_offset; NOP]
+    (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset; NOP]) [(X1, true, None)] [].
 Proof.
   apply jumpIfZero_noninterferent_param.
   unfold init_addr, lenAddr; lia.
