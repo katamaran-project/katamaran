@@ -250,27 +250,26 @@ Import asn.notations.
     Definition gen_mem_pre_bytes {Σ} (specs : list mem_full_spec) : Assertion Σ :=
       List.fold_right (fun s acc => gen_mem_asn_bytes s ∗ acc) ⊤ specs.
 
-    (* extra_exit_offs: base-relative byte offsets of exit addresses BEYOND
-       the fall-through one (which is always included).  Needed when control
-       flow can leave the program other than by falling off the end, e.g. a
-       branch whose taken target lies past the program.  No tracked example
-       passes a non-empty list since 2026-09-25 (jump_if_zero got a join-point
-       NOP), and plans/PLAN-exit-targets.md removes this parameter. *)
+    (* THE EXIT IS THE FALL-THROUGH, `base + 4·|instrs|`, for every generator
+       in this file (PLAN-exit-targets.md, decision D7).  There used to be an
+       `extra_exit_offs : list N` for exits elsewhere and an `ec` exit
+       condition; both are gone, because a contract has exactly one exit and
+       every whole program exits by falling off its end (jump_if_zero got a
+       join-point NOP for exactly this, D4).  A program that must exit
+       elsewhere is a SEGMENT: use gen_seg_contract, which takes its target. *)
     Definition gen_contract
         (init_addr : N)
         (reg_specs : list reg_spec)
         (mem_specs : list mem_full_spec)
         (instrs : list AST)
-        (extra_exit_offs : list N)
-        (ec : bv xlenbits -> bool)
         (fl : nat)
         : CFGVerifierContract :=
       @MkCFGVerifierContract [ctx] init_addr
         (term_val ty_xlenbits (bv.of_N init_addr))
-        (exits_of_offs (term_val ty_xlenbits (bv.of_N init_addr))
-           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        (exit_of_off (term_val ty_xlenbits (bv.of_N init_addr))
+           (4 * N.of_nat (length instrs)))
         (asn_init_pc (bv.of_N init_addr) ∗ gen_pre reg_specs ∗ gen_mem_pre mem_specs)
-        instrs ec fl asn_no_post.
+        instrs fl asn_no_post.
 
     (* ================================================================ *)
     (* PARAMETRIC-BASE SUPPORT — READING GUIDE (Examples.v side).        *)
@@ -290,9 +289,9 @@ Import asn.notations.
     (*    FAITHFULNESS at the concrete valuation ι = [p ↦ of_N init_addr]. *)
     (*                                                                    *)
     (* Read in this order:                                                *)
-    (*   • exits_of_offs / asn_pc_eq (above, ~176/619) — build the exit    *)
-    (*     term set `p ⊕ off` and the entry-pc assertion `pc = p`.        *)
-    (*   • itable_faith_of_list / etable_faith_exits_of_offs (~230/265) — *)
+    (*   • exit_of_off / asn_pc_eq (above, ~176/619) — build the exit     *)
+    (*     term `p ⊕ 4·len` and the entry-pc assertion `pc = p`.          *)
+    (*   • itable_faith_of_list / exit_faith_of_off (~230/265) —          *)
     (*     discharge the Verifier.v faithfulness guards at ι.             *)
     (*   • gen_contract_param (just below) — parametric contract for       *)
     (*     CONSTANT-valued specs (base bound added to the precondition).  *)
@@ -666,22 +665,19 @@ Import asn.notations.
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (instrs : list AST)
-        (extra_exit_offs : list N)
         (bound : N)
-        (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
         (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
         ( asn_pc_eq (term_var "p")
           ∗ asn.formula (formula_relop bop.le
                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
                   (term_val ty.int (Z.of_N bound)))
                (term_val ty.int (Z.of_N lenAddr)))
           ∗ gen_pre_rel reg_specs ∗ gen_mem_pre_rel mem_specs )
-        instrs ec fl asn_no_post.
+        instrs fl asn_no_post.
 
     (* ================================================================== *)
     (* THE UNIFIED BUILDER (PLAN-unify-generators.md stage 3).             *)
@@ -716,15 +712,12 @@ Import asn.notations.
         (word_data : list mem_spec_rel)   (* word-granular class *)
         (byte_data : list mem_spec_rel)   (* byte-granular class *)
         (instrs : list AST)
-        (extra_exit_offs : list N)
         (bound : N)
-        (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
         (term_var "p")
-        (exits_of_offs (term_var "p")
-           ((4 * N.of_nat (length instrs))%N :: extra_exit_offs))
+        (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
         ( asn_pc_eq (term_var "p")
           ∗ asn.formula (formula_relop bop.le
                (term_binop bop.plus (term_unop uop.unsigned (term_var "p"))
@@ -733,7 +726,7 @@ Import asn.notations.
           ∗ gen_pre_rel reg_specs
           ∗ gen_mem_pre_rel_classed word_data
           ∗ gen_mem_pre_rel_bytes_classed byte_data )
-        instrs ec fl asn_no_post.
+        instrs fl asn_no_post.
 
     (* gen_contract_rel with the data block grouped into ONE existential per
        publicness class (see gen_mem_pre_rel_classed above).  Same statement
@@ -746,9 +739,7 @@ Import asn.notations.
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (instrs : list AST)
-        (extra_exit_offs : list N)
         (bound : N)
-        (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       (* Delegates to gen_contract_u since 2026-08-18 (stage 3).  The only
@@ -757,13 +748,13 @@ Import asn.notations.
          standard `vm_compute; solve_vc; solve_symbase_fetch` line on Countdown's
          real blocks before wiring (Example/ZZUProbe3.v). *)
       gen_contract_u init_addr reg_specs mem_specs []
-        instrs extra_exit_offs bound ec fl.
+        instrs bound fl.
 
     (* Parameterized-base contract for a REGISTER-ONLY program
        (PLAN-symbolic-base.md Phase 4.2).  The base is a genuine term VARIABLE
        term_var "p" (Σ = ["p"∷ty_xlenbits]), NOT term_val (bv.of_N init_addr) --
        the latter makes the VC's vm_compute diverge on bv.of_N of a symbolic N at
-       width 32.  cfg_init_addr / cfg_exitCond are still stored (the
+       width 32.  cfg_init_addr is still stored (the
        end-to-end/memory side needs them) but are ignored by Valid_CFG_VC, so the
        VC is proved ONCE, uniformly in init_addr, and reused for every concrete
        base via the ι = ["p" ↦ SyncVal (bv.of_N init_addr)] instantiation in
@@ -792,15 +783,13 @@ Import asn.notations.
         (init_addr : N)
         (reg_specs : list reg_spec)
         (instrs : list AST)
-        (extra_exit_offs : list N)
-        (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_u init_addr
         (List.map reg_spec_to_rel reg_specs) [] []
-        instrs extra_exit_offs
+        instrs
         (4 * N.of_nat (length instrs))%N
-        ec fl.
+        fl.
 
     (* gen_contract_rel with an ADDITIONAL, byte-expanded data list
        (PLAN-byte-memory.md §5.2).  Byte expansion is opt-in PER SPEC ENTRY so
@@ -822,9 +811,7 @@ Import asn.notations.
         (mem_specs : list mem_spec_rel)
         (byte_mem_specs : list mem_spec_rel)
         (instrs : list AST)
-        (extra_exit_offs : list N)
         (bound : N)
-        (ec : bv xlenbits -> bool)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       (* Delegates to gen_contract_u since 2026-08-18 (stage 3) -- a pure rename,
@@ -836,7 +823,7 @@ Import asn.notations.
          word list, so the slot was always Top.  Verified on Loop1's real byte
          block before wiring (Example/ZZUProbe3.v). *)
       gen_contract_u init_addr reg_specs mem_specs byte_mem_specs
-        instrs extra_exit_offs bound ec fl.
+        instrs bound fl.
 
   (* ================================================================== *)
   (* Stage 2: base-RELATIVE noninterference bridge (gen_contract_rel).    *)

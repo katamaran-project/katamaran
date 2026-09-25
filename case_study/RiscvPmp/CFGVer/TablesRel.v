@@ -175,43 +175,21 @@ Import RiscvPmp.Sig.
   Qed.
 
 
-  (* Exit-table analog: the fall-through exit term is faithful to any
-     exit condition that accepts the first address past the program. *)
-  Lemma etable_faith_exits_of_list {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (instrs : list AnnotInstr) :
+  (* THE EXIT's faithfulness (PLAN-exit-targets.md): at any valuation
+     resolving the placement to `cbase`, the exit term `exit_of_off p off`
+     IS the concrete address `cbase + off`.  It replaced two list lemmas
+     (etable_faith_exits_of_list / _of_offs), which additionally had to show
+     that a separate exit CONDITION accepted each address -- there is no such
+     condition any more, the concrete exit is just this address. *)
+  Lemma etable_faith_exit_of_off {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
+      (cbase : bv xlenbits) (off : N) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    exitCond (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))) = true ->
     Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Σ)
-      exitCond (exits_of_list p instrs) ι.
+      (ty.SyncVal (bv.add cbase (bv.of_N off))) (exit_of_off p off) ι.
   Proof.
-    intros Hp Hexit.
-    constructor; [|constructor].
-    exists (bv.add cbase (bv.of_N (4 * N.of_nat (length instrs)))).
-    split.
-    - rewrite (peval_bvadd_sound
-                 (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p ι).
-      cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
-    - exact Hexit.
-  Qed.
-
-  (* Offset-list analog: every listed exit offset is a genuine exit at any
-     valuation resolving the placement term, provided the exit condition
-     accepts each concrete address base + off. *)
-  Lemma etable_faith_exits_of_offs {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
-      (cbase : bv xlenbits) (exitCond : bv xlenbits -> bool) (offs : list N) :
-    inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    List.Forall (fun o => exitCond (bv.add cbase (bv.of_N o)) = true) offs ->
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Σ)
-      exitCond (exits_of_offs p offs) ι.
-  Proof.
-    intros Hp Hoffs.
-    unfold exits_of_offs, Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel.
-    rewrite List.Forall_map.
-    eapply List.Forall_impl; [|exact Hoffs].
-    intros o Hex.
-    exists (bv.add cbase (bv.of_N o)).
-    split.
-    - rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N o)) p ι).
-      cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
-    - exact Hex.
+    intros Hp.
+    exists (bv.add cbase (bv.of_N off)). split; [|reflexivity].
+    unfold exit_of_off.
+    rewrite (peval_bvadd_sound (term_val ty_xlenbits (bv.of_N off)) p ι).
+    cbn. rewrite Hp. cbn. f_equal. apply bv.add_comm.
   Qed.

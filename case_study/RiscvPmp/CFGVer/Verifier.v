@@ -32,10 +32,9 @@
 (* Defines safeE and Section Symbolic: sexec_cfg_addr and                   *)
 (* scfg_verification_condition — address-indexed lookup (each step fetches  *)
 (* the instr at PC/bytes_per_instr rather than advancing linearly, so       *)
-(* backward and forward jumps both work), an exitCond parameter (execution  *)
-(* halts when exitCond of the current PC holds OR fuel runs out; the        *)
-(* angelic_binary at each step models that choice), and a fuel bound making *)
-(* the executor total.                                                      *)
+(* backward and forward jumps both work), ONE exit term (execution stops  *)
+(* when the pc IS the exit, except at the entry step; see `first`), and a   *)
+(* fuel bound making the executor total.                                    *)
 (*                                                                          *)
 (* DELIBERATELY Iris-free. The concrete mirror (Section Shallow), the       *)
 (* relational bridge (Section Relational, rexec_cfg_addr + RefineCompat)    *)
@@ -97,7 +96,8 @@ Inductive Annot :=
 (* A BLOCK CONTRACT carried by an instruction: everything needed to say what
    standing in for a run of instructions PROMISES, plus where execution
    resumes.  This is CFGVerifierContract's data minus `cfg_instrs` -- the code
-   is a plain `list AST` rather than `list AnnotInstr` -- plus `blk_off`.
+   is a plain `list AST` rather than `list AnnotInstr`.  It resumes at the
+   contract's single exit (cfg_exit).
 
    IT DOES HAVE A CODE FIELD, and that is load-bearing (changed 2026-09-23,
    PLAN-contract-ast §2c).  `cfg_instrs (blk_contract b)` is a `list AST`
@@ -139,7 +139,12 @@ Record CFGVerifierContract {Σ} :=
   MkCFGVerifierContract
   { cfg_init_addr     : N
   ; cfg_placement     : Term Σ ty_xlenbits
-  ; cfg_exits         : list (Term Σ ty_xlenbits)
+  (* THE EXIT (PLAN-exit-targets.md, 2026-09-25): ONE address term, over the
+     same context as the placement.  A run of this contract stops exactly when
+     the pc IS this address.  It replaced both `cfg_exits` (a list of terms)
+     and `cfg_exitCond` (a concrete `bv -> bool`), which stored the exit twice
+     and needed `etable_rel` to relate the two copies. *)
+  ; cfg_exit          : Term Σ ty_xlenbits
   ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
   (* list AST, NOT list AnnotInstr, since 2026-09-22 (PLAN-contract-ast).
      Annotations are TOOL INPUT -- ghost hints and block contracts -- and
@@ -148,21 +153,18 @@ Record CFGVerifierContract {Σ} :=
      AnnotInstr/CFGVerifierContract circularity, so that a block
      annotation can carry a real contract instead of a cloned SBlk (gone as of Phase 4). *)
   ; cfg_instrs        : list AST
-  ; cfg_exitCond      : bv xlenbits -> bool
   ; cfg_fuel          : nat
   ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
   }.
 
 Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-  (f : N -> Term Σ ty_xlenbits -> list (Term Σ ty_xlenbits) ->
-       Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST ->
-       (bv xlenbits -> bool) -> nat ->
+  (f : N -> Term Σ ty_xlenbits -> Term Σ ty_xlenbits ->
+       Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST -> nat ->
        Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
   match c with
-  | {| cfg_init_addr := ia; cfg_placement := p; cfg_exits := exits;
-       cfg_precondition := pre; cfg_instrs := i;
-       cfg_exitCond := ec; cfg_fuel := fl;
-       cfg_postcondition := post |} => f ia p exits pre i ec fl post
+  | {| cfg_init_addr := ia; cfg_placement := p; cfg_exit := ex;
+       cfg_precondition := pre; cfg_instrs := i; cfg_fuel := fl;
+       cfg_postcondition := post |} => f ia p ex pre i fl post
   end.
 
 (* A BLOCK ANNOTATION: a contract, plus where execution resumes.
@@ -178,13 +180,13 @@ Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
    own declaration and three comment lines in Adequacy.v).  `cfg_placement` of
    the contract does that job.
 
-   blk_off is the one datum a contract cannot supply: cfg_exits holds the resume
-   point inside a TERM and cfg_exitCond inside a FUNCTION, and extracting an `N`
-   from either means pattern-matching a term.  See PLAN-contract-ast §2b for the
-   sketch that removes it. *)
+   There is no resume offset any more (`blk_off`, removed 2026-09-25 by
+   PLAN-exit-targets.md): a contract has exactly ONE exit, `cfg_exit`, and a
+   block resumes there -- at the exit term instantiated by the valuation chosen
+   when the block's precondition was consumed (sexec_block).  This is
+   PLAN-contract-ast §2b. *)
 Record BlkAnnot : Type := MkBlkAnnot
-  { blk_off      : N                 (* resume at pc + off *)
-  ; blk_ctx      : LCtx
+  { blk_ctx      : LCtx
   ; blk_contract : @CFGVerifierContract blk_ctx }.
 
 
@@ -210,7 +212,7 @@ Record AnnotInstr := MkAnnotInstr
   ; ai_ghost_after  : list Annot
     (* BLOCK CONTRACT IN THE PAYLOAD (2026-09-15).  When this is `Some b`
        the executor REPLACES this instruction -- and however many follow it
-       inside the block -- by b's contract, resuming at pc + blk_off b.
+       inside the block -- by b's contract, resuming at its exit (cfg_exit).
        `ai_instr` is then never executed, but it must still be the real
        instruction: MEMORY holds instructions, and `strip` / `ai_instr <$>`
        is what the trusted statements see.
@@ -495,7 +497,7 @@ Section CFGVerificationDerived.
     (*   2. sexec_cfg_addr / scfg_verification_condition —      *)
     (*      the symbolic executor + VC.                                   *)
     (*   3. itable_rel / etable_rel (applied at w := wlctx Σ)  — "the term *)
-    (*      table faithfully mirrors the concrete gmap / exitCond at       *)
+    (*      table / exit term mirrors the concrete gmap / exit address at  *)
     (*      valuation ι".  This is the semantic bridge between the two     *)
     (*      worlds.                                                        *)
     (*   4. rexec_cfg_addr  — the gmap concrete executor is refined   *)
@@ -506,8 +508,8 @@ Section CFGVerificationDerived.
     (*      valuation ι = [p ↦ of_N init_addr].                           *)
     (*   6. rcfg_verification_condition  — VC-level refinement,     *)
     (*      the entry point the soundness chain uses.                     *)
-    (* The Examples.v side (exits_of_offs, itable_faith_of_list,          *)
-    (* etable_faith_exits_of_offs, gen_contract_param/_rel, concretize_*, *)
+    (* The Examples.v side (exit_of_off, itable_faith_of_list,            *)
+    (* etable_faith_exit_of_off, gen_contract_param/_rel, concretize_*,   *)
     (* gen_contract_noninterferent_rel) discharges the guard and builds   *)
     (* the base-relative specs; see the reading guide there.              *)
     (* ================================================================ *)
@@ -522,15 +524,16 @@ Section CFGVerificationDerived.
 
 
     (* SInstrTable / SExitTable: the symbolic analogues of the gmap `instrs` and *)
-    (* function `exitCond` above -- a table of (address term, instruction) *)
-    (* pairs, and a list of address terms marking exits.  This is the      *)
+    (* exit address -- a table of (address term, instruction) pairs, and  *)
+    (* ONE exit term (a list until PLAN-exit-targets.md).  This is the     *)
     (* CONTRACT-LEVEL shape: what table_of_list builds, what itable_rel    *)
     (* relates to the gmap, and what TablesRel.v's faith lemmas discharge. *)
     Definition SInstrTable : TYPE :=
       fun w => list (Term (wctx w) ty_xlenbits * AnnotInstr).
 
+    (* ONE exit term since PLAN-exit-targets.md (it was a list). *)
     Definition SExitTable : TYPE :=
-      fun w => list (Term (wctx w) ty_xlenbits).
+      fun w => Term (wctx w) ty_xlenbits.
 
     (* SInstrTableW: the EXECUTOR's shape — SInstrTable with a raw instruction
        WORD term added as a middle column.  sexec_cfg_addr runs on this; nothing
@@ -569,7 +572,7 @@ Section CFGVerificationDerived.
     Definition persist_itableW {w1 w2} (θ : w1 ⊒ w2) : SInstrTableW w1 -> SInstrTableW w2 :=
       List.map (fun '(t,x,i) => (persist__term t θ, persist__term x θ, i)).
     Definition persist_etable {w1 w2} (θ : w1 ⊒ w2) : SExitTable w1 -> SExitTable w2 :=
-      List.map (fun t => persist__term t θ).
+      fun t => persist__term t θ.
 
     (* Chunk GC.  Note there is NO justification test of any kind here:    *)
     (* this unconditionally drops every encodes_instr chunk.  That is safe *)
@@ -807,7 +810,7 @@ Section CFGVerificationDerived.
         (List.find (fun '(t,_,_) => Term_eqb (peval apc) (peval t)) tbl).
     Definition is_exit {w} (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) : bool :=
-      List.existsb (fun t => Term_eqb (peval apc) (peval t)) exits.
+      Term_eqb (peval apc) (peval exits).
 
     (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
     (* peval; NOT part of the soundness chain). *)
@@ -931,13 +934,7 @@ Section CFGVerificationDerived.
 
     Definition etable_free {w : World} {b} (bIn : (b ∈ w)%katamaran)
         (exits : SExitTable w) : bool :=
-      forallb_sc (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
-
-    Lemma etable_free_forallb {w : World} {b} (bIn : (b ∈ w)%katamaran)
-        (exits : SExitTable w) :
-      etable_free bIn exits =
-      List.forallb (fun t => oc_ok (AT := STerm ty_xlenbits) bIn t) exits.
-    Proof. apply forallb_sc_spec. Qed.
+      oc_ok (AT := STerm ty_xlenbits) bIn exits.
 
     (* ALL the roots.  `trans` is the one that is easy to forget and the one
        whose omission would be UNSOUND rather than merely incomplete — see
@@ -1141,7 +1138,7 @@ Section CFGVerificationDerived.
        than fixed at [ctx].  With `asn.exist` on both sides instead, consume
        instantiates angelically and produce demonically, so nothing links them.
 
-       "a" is bound to the entry pc and "an" to entry + off, exactly as
+       "a" is bound to the entry pc and "an" to the contract's exit, exactly as
        sexec_triple_addr binds them, so a block's pre/post are literally a
        segment contract's. *)
     (* minimal_pre / extend_to_minimal_pre live HERE, not in Contracts.v, since
@@ -1177,7 +1174,8 @@ Section CFGVerificationDerived.
          store against the caller's arguments; a block has no argument list --
          its "arguments" are the machine state, which the precondition already
          describes.
-       - the result is not a value but the EXIT PC, computed as entry + off.
+       - the result is not a value but the EXIT PC: the contract's cfg_exit
+         under the valuation the consume chose.
 
        CONSEQUENCE FOR A BLOCK CONTRACT'S PRECONDITION: the logic context is
        instantiated ANGELICALLY here, so the block's own base arrives as an
@@ -1202,8 +1200,11 @@ Section CFGVerificationDerived.
         ⟨ θ2 ⟩ _ <- consume (extend_to_minimal_pre (cfg_precondition (blk_contract b))) evars.["a"∷ty_xlenbits ↦ apc1] ;;
         let evars2 := persist (A := Sub (blk_ctx b)) evars θ2 in
         let apc2 := persist__term apc1 θ2 in
-        let aex  := term_binop bop.bvadd apc2
-                      (term_val ty_xlenbits (bv.of_N (blk_off b))) in
+        (* RESUME AT THE CONTRACT'S EXIT (PLAN-exit-targets.md): the exit
+           term, instantiated by the valuation the consume just chose.  It
+           replaced `apc2 + blk_off b`, which computed the same address a
+           second way and needed Hexit to show the two agreed. *)
+        let aex  := subst (cfg_exit (blk_contract b)) evars2 in
         ⟨ θ3 ⟩ _ <- produce (cfg_postcondition (blk_contract b))
                       evars2.["a"∷ty_xlenbits ↦ apc2].["an"∷ty_xlenbits ↦ aex] ;;
         pure (persist__term aex θ3).
@@ -1283,7 +1284,7 @@ Section CFGVerificationDerived.
                SOUNDNESS.  `cexec_cfg_addr` keeps its unconditional
                `angelic_binary`, deliberately breaking cfgver-refinement's
                "mirror the choice" rule.  That is the sound direction:
-               `is_exit_sound` gives `is_exit = true -> exitCond v = true`, one
+               `is_exit_sound` gives `is_exit = true -> v = exit`, one
                way only, so the symbolic side may be strictly MORE decisive.  In
                rexec_cfg_addr the two branches now take `left` / `right` into the
                concrete disjunction instead of `rprop_or`.
@@ -1291,7 +1292,7 @@ Section CFGVerificationDerived.
                WHY `first` IS NEEDED, and it is not optional.  A loop-body
                segment contract STARTS AND ENDS AT THE SAME ADDRESS: `pbody`
                (and PaddedLoop.v / CountdownComposed.v / TwoLoopsComposed.v, all
-               gate-checked) declare `exits_of_offs <base> [0]` against
+               gate-checked) declare `exit_of_off <base> 0` against
                `asn_init_pc <base>`.  Its trace visits that address twice --
                execute the body at step 0, stop at step 2 -- and the pc is the
                same TERM both times, so the pc cannot tell them apart.  Fuel
@@ -1328,7 +1329,7 @@ Section CFGVerificationDerived.
                     Read straight off the payload the lookup already returned:
                     if this instruction carries a block contract, CONSUME its
                     precondition, PRODUCE its postcondition, and resume at
-                    pc + off instead of executing anything.  `ai_block` is a
+                    its exit instead of executing anything.  `ai_block` is a
                     plain Coq value, not a world-indexed term, so there is no
                     table to persist and nothing for drop_dead to occurs-check.
 
@@ -1555,7 +1556,7 @@ Section CFGVerificationDerived.
       List.map (fun '(t,i) => (subst t ζ, i)) tbl.
     Definition subst_etable {Σ : LCtx} {w : World} (ζ : Sub Σ w)
         (exits : SExitTable (wlctx Σ)) : SExitTable w :=
-      List.map (fun t => subst t ζ) exits.
+      subst exits ζ.
 
     (* ---------------------------------------------------------------- *)
     (* The word supplier.  ONE logic variable for the whole program, of   *)

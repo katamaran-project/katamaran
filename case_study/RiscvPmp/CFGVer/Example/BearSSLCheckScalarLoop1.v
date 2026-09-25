@@ -118,8 +118,7 @@ Definition loop1_byte_specs_rel : list mem_spec_rel :=
    fall-through exit step) -- matches ZZByteLoop1Common.v's formula at n=32. *)
 Definition loop1_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
   gen_contract_rel_bytes ia loop1_reg_specs_rel [] loop1_byte_specs_rel
-    loop1_instrs [] 48
-    (pcOutOfInstrs_exitCond ia loop1_instrs) 136.
+    loop1_instrs 48 136.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
    The end theorem states noninterferent_strong over `loop1_instrs` while the

@@ -95,20 +95,14 @@ Import SmallStepNotations.
     Definition mem_full_spec : Type :=
       Val ty_xlenbits * bool * option (Val ty_xlenbits).
 
-    Definition pcOutOfInstrs_exitCond (init_addr : N) (instrs : list AST) : bv xlenbits -> bool :=
-      fun v => bv.ugeb v (bv.of_N (init_addr + 4 * N.of_nat (length instrs))).
-
-    (* The fall-through address (first address past the program) satisfies
-       pcOutOfInstrs_exitCond — the fact etable_faith_exits_of_list needs
-       to discharge the default exit table against this exit condition. *)
-    Lemma pcOutOfInstrs_fallthrough (ia : N) (instrs : list AST) :
-      pcOutOfInstrs_exitCond ia instrs
-        (bv.add (bv.of_N ia) (bv.of_N (4 * N.of_nat (length instrs)))) = true.
-    Proof.
-      unfold pcOutOfInstrs_exitCond.
-      rewrite bv.of_N_add.
-      cbn [bv.ugeb]. apply bv.uleb_ule, bv.ule_refl.
-    Qed.
+    (* THE STOP TEST (PLAN-exit-targets.md, 2026-09-25): a run stops exactly
+       when the pc IS the program's single exit address.  It replaced
+       `pcOutOfInstrs_exitCond init_addr instrs` (pc >= init_addr + 4|instrs|),
+       so a run that leaves the code anywhere else is no longer a stopping run.
+       Boolean, like the old condition, because the stepping relations below
+       test `~ exitCond pc` through the Is_true coercion. *)
+    Definition atPc (exit_addr : N) : bv xlenbits -> bool :=
+      fun v => bv.eqb v (bv.of_N exit_addr).
 
   (* Public registers for a spec list: registers whose is_pub flag is true.
      Defined outside WithAsnNotations to avoid notation-scope interference. *)
@@ -262,12 +256,12 @@ Import SmallStepNotations.
     .
 
   (* noninterferent_strong: termination-sensitive non-interference.
-     If world 1 terminates in n steps under exitCond, so does world 2 in
-     exactly n steps, and both worlds produce the same leakage trace. *)
+     If world 1 reaches the exit address `exit_addr` in n steps, so does world
+     2 in exactly n steps, and both worlds produce the same leakage trace. *)
   Definition noninterferent_strong
       (init_addr : N)
       (instrs : list AST)
-      (exitCond : bv xlenbits -> bool)
+      (exit_addr : N)
       (reg_specs : list reg_spec)
       (mem_specs : list mem_full_spec) : Prop :=
     ∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory) ws,
@@ -285,7 +279,7 @@ Import SmallStepNotations.
       RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr →
       leakage_trace μ1 = leakage_trace μ2 →
       ∀ n (γ1' : RegStore) (μ1' : Memory),
-        ⟨ γ1, μ1 ⟩ -(exitCond, n)->* ⟨ γ1', μ1' ⟩ →
+        ⟨ γ1, μ1 ⟩ -(atPc exit_addr, n)->* ⟨ γ1', μ1' ⟩ →
         ∃ γ2' μ2',
-          ⟨ γ2, μ2 ⟩ -(exitCond, n)->* ⟨ γ2', μ2' ⟩ ∧
+          ⟨ γ2, μ2 ⟩ -(atPc exit_addr, n)->* ⟨ γ2', μ2' ⟩ ∧
           leakage_trace μ1' = leakage_trace μ2'.

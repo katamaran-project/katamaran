@@ -32,7 +32,7 @@
 (*                                                                           *)
 (* Register aliases (X0–A7), assembler macros (JAL/NOP/LW/SW), the gmap      *)
 (* instruction store builder instrs_of_list, and the symbolic term-table     *)
-(* builders table_of_list / exits_of_list / exits_of_offs.                   *)
+(* builders table_of_list / exit_of_off.                                      *)
 (*                                                                           *)
 (* DELIBERATELY Iris-free. The faithfulness lemmas linking these builders to *)
 (* itable_rel / etable_rel live in TablesRel.v, because those guards are     *)
@@ -323,24 +323,15 @@ Open Scope list_scope.
         (addr, ai) :: table_of_list base (off + 4)%N rest
     end.
 
-  (* Default exit table: the single fall-through address just past the
-     program's instructions. *)
-  (* POLYMORPHIC in the element type, same reason as instrs_of_list: this only
-     reads `length instrs`, and under the PRODUCT AnnotInstr that length is the
-     instruction count either way (ghosts occupy no address), so no `strip` is
-     needed here — a sum-typed AnnotInstr would have required one. *)
-  Definition exits_of_list {A} {Σ : LCtx} (p : Term Σ ty_xlenbits) (instrs : list A)
-    : list (Term Σ ty_xlenbits) :=
-    [peval_bvadd (term_val ty_xlenbits (bv.of_N (4 * N.of_nat (length instrs)))) p].
-
-  (* General exit table from base-relative byte offsets.  Programs whose
-     control flow leaves anywhere other than the fall-through
-     address (e.g. a branch whose taken target lies past the program) list
-     ALL their exit offsets here; exits_of_list is the [4·len] special
-     case.  Keys go through peval_bvadd like the instruction table. *)
-  Definition exits_of_offs {Σ : LCtx} (p : Term Σ ty_xlenbits) (offs : list N)
-    : list (Term Σ ty_xlenbits) :=
-    List.map (fun o => peval_bvadd (term_val ty_xlenbits (bv.of_N o)) p) offs.
+  (* THE EXIT TERM, from a base-relative byte offset (PLAN-exit-targets.md).
+     A contract has exactly ONE exit, so this replaced the two list builders
+     `exits_of_list` (the fall-through, [4·len]) and `exits_of_offs` (a list
+     of offsets).  The key goes through peval_bvadd like the instruction
+     table's, so `is_exit` can match it syntactically.  For a program whose
+     only exit is its fall-through, pass `4 * length instrs`. *)
+  Definition exit_of_off {Σ : LCtx} (p : Term Σ ty_xlenbits) (off : N)
+    : Term Σ ty_xlenbits :=
+    peval_bvadd (term_val ty_xlenbits (bv.of_N off)) p.
 
 
   (* Transit the end-to-end layer's lenAddr bound into the no-wrap bound

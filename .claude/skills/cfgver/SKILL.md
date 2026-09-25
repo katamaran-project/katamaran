@@ -40,7 +40,7 @@ use the **rocq** plugin skill; generic pitfalls live in **rocq-pitfalls**,
 | **cfgver-soundness** | the VC → `myWP2_loop` → leakage chain; `WP2_loop` vs `myWP2_loop` | understanding/extending the theorem architecture |
 | **cfgver-wp2** | binary WP2 proof mechanics: `semWP2_unfold`, `stm_to_val`, `IVal`, `Result2` (library skill) | a semWP2/adequacy proof is stuck |
 | **cfgver-contracts** | the `CFGVerifierContract` record, field semantics, Σ choice, hand-written contracts, `Valid`/`Debug` | what a contract IS; writing one without the generator |
-| **cfgver-gen-contract** | the generator user guide: spec triples, `extra_exit_offs`, the 5 premises | declaring public/private/pinned registers or memory via `gen_contract` |
+| **cfgver-gen-contract** | the generator user guide: spec triples, the fall-through exit, the bridge premises | declaring public/private/pinned registers or memory via `gen_contract` |
 | **cfgver-gen-contract-internals** | `gen_reg_asn`/`gen_pre` builders, `gen_implpre` (library skill) | modifying/extending the generator machinery itself |
 | **cfgver-solve-vc** | `vm_compute. solve_vc.`, residual patterns, `DebugCFGVerifierContract`, tight-fuel `False`, vm_compute divergence | discharging or debugging a VC |
 | **cfgver-endtoend** | `cfg_instrs_endToEnd`, its call pattern, the `ImplPre` obligation | wiring a hand-written contract; debugging `ImplPre` |

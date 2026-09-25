@@ -55,7 +55,7 @@ From Katamaran Require Import
 Lemma muladd_q_noninterferent_param (init_addr : N) :
   (init_addr + 48 < lenAddr)%N ->
   noninterferent_strong init_addr muladd_q_instrs
-    (pcOutOfInstrs_exitCond init_addr muladd_q_instrs)
+    (init_addr + 48)%N
     muladd_q_reg_specs [].
 Proof.
   intros Hbound.
@@ -75,7 +75,7 @@ Qed.
 (* Concrete-base corollary at the default init_addr. *)
 Lemma muladd_q_noninterferent :
   noninterferent_strong init_addr muladd_q_instrs
-    (pcOutOfInstrs_exitCond init_addr muladd_q_instrs)
+    (init_addr + 48)%N
     muladd_q_reg_specs [].
 Proof.
   apply muladd_q_noninterferent_param.

@@ -67,38 +67,24 @@ Definition minus1 : Val ty_xlenbits := bv.of_N 4294967295.
 Definition dec {Σ} (t : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits minus1).
 
-(* exit condition of the CUT: back at the loop head (offset 0). *)
-Definition head_exitCond : bv xlenbits -> bool :=
-  fun v => bv.eqb v (bv.of_N 0).
-
-(* exit condition of the loop's FINAL trip: the fall-through address, PINNED.
-   This used to be `pcOutOfInstrs_exitCond 0 cd_instrs`, a `>=` test, and that
-   is unusable for anything that has to RETURN (2026-09-23).  The soundness
-   bridge's continuation reports only `exitCond an = true`, so with a `>=`
-   condition the resume address is not recoverable -- many addresses satisfy
-   it -- while `blockSound` demands the block resume at exactly `v + blk_off`.
-   An equality test pins it, which is the same reason gen_seg_contract's
-   `seg_exitCond` is `bv.eqb`-based.
-
-   `pcOutOfInstrs_exitCond` is NOT wrong in general and is unchanged: for a
-   WHOLE PROGRAM "ran off the end" is the right notion, and a jump past the
-   end should still count as having exited.  The two notions are simply for
-   two different jobs -- ending, versus returning. *)
-Definition tail_exitCond : bv xlenbits -> bool :=
-  fun v => bv.eqb v (bv.of_N 8).
+(* EXITS.  The cut exits back at the loop head (offset 0); the final trip at
+   the fall-through (offset 8).  Each is ONE exit term (PLAN-exit-targets.md);
+   the hand-written `head_exitCond` / `tail_exitCond` that used to restate
+   them concretely are gone.  Their comment argued for an EQUALITY test over
+   `pc >= end` because a block must resume at exactly one address -- which is
+   now how every contract works. *)
 
 (* ---- LOOP BODY: head -> head, one trip.  Requires k-1 <> 0 so the BNE
        is taken and the fall-through path is infeasible. ---- *)
 Definition cdBody : @CFGVerifierContract cdCtx :=
   @MkCFGVerifierContract cdCtx 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [0%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0)
     (asn_init_pc (bv.of_N 0)
        ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.neq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
     cd_instrs
-    head_exitCond
     3
     (X1 ↦ᵣ dec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
@@ -118,13 +104,12 @@ Definition cdInvAsn : Assertion cdCtx :=
 Definition cdFinal : @CFGVerifierContract cdCtx :=
   @MkCFGVerifierContract cdCtx 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [8%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8)
     (asn_init_pc (bv.of_N 0)
        ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.eq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
     cd_instrs
-    tail_exitCond
     3
     (* A REAL postcondition, for the same reason: a block produces this
        VERBATIM, so `asn_no_post` would swallow cur_privilege and the

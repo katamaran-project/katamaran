@@ -22,16 +22,18 @@ semWP2 proof mechanics behind the adequacy layer are in **cfgver-wp2**.
 ## The chain
 
 Every example's end lemma is
-`<prog>_noninterferent : noninterferent_strong init_addr instrs exitCond reg_specs mem_specs`,
-proved in one shot by `eapply gen_contract_noninterferent_param` (or the matching
-`_rel` / `_rel_classed` / `_rel_bytes` variant, in practice its `_simple`
-specialisation) plus its side premises
+`<prog>_noninterferent : noninterferent_strong init_addr instrs exit_addr reg_specs mem_specs`,
+with `exit_addr : N` a literal (e.g. `(init_addr + 116)%N`); runs are quantified
+at `atPc exit_addr` (`Noninterference.v`: `fun v => bv.eqb v (bv.of_N exit_addr)`).
+Proved in one shot by `eapply gen_contract_noninterferent_param` (or the matching
+`_rel_classed` / `_rel_bytes` / `_u` variant, in practice its `_simple`
+form) plus its side premises
 (→ **cfgver-gen-contract** for the premise list). Underneath:
 
 ```
 valid_<prog>_cfg_contract   (vm_compute. solve_vc.)   — the symbolic VC over the
         ↓  safeE (postprocess (scfg_verification_condition        term table
-             (extend_to_minimal_pre P) tbl exits …))     (tbl/exits, not the gmap)
+             (extend_to_minimal_pre P) tbl exit …))      (tbl/exit, not the gmap)
 sound_scfg_verification_condition_myWP2  — bridges via itable_faith/etable_faith
         ↓  → myWP2_loop ExitCondIprop
 cfg_instrs_verified / cfg_instrs_safe  →  exitCond_WP2_loop
@@ -58,7 +60,9 @@ exit-condition proposition, which is what adequacy needs in order to know *when*
 execution stops. That is why the live bridge targets `myWP2_loop` directly, via the
 table-based `sound_scfg_verification_condition_myWP2` chain in `Adequacy.v`.
 `exitCond_WP2_loop` must use the `⌜exitCond v ∨ exitCond v'⌝` (Is_true
-coercion) form to match `adequacy_gen_RiscVNStepsExitCond`'s statement.
+coercion) form to match `adequacy_gen_RiscVNStepsExitCond`'s statement. This
+generic layer still takes an arbitrary exit predicate; CFGVer instantiates it
+with `atPc exit_addr`.
 
 ---
 

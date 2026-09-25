@@ -55,7 +55,7 @@ From Katamaran Require Import
 Lemma precompute_noninterferent_param (init_addr : N) :
   (init_addr + 40 < lenAddr)%N ->
   noninterferent_strong init_addr precompute_instrs
-    (pcOutOfInstrs_exitCond init_addr precompute_instrs)
+    (init_addr + 40)%N
     precompute_reg_specs [].
 Proof.
   intros Hbound.
@@ -75,7 +75,7 @@ Qed.
 (* The concrete result at init_addr = 0, as a corollary. *)
 Lemma precompute_noninterferent :
   noninterferent_strong init_addr precompute_instrs
-    (pcOutOfInstrs_exitCond init_addr precompute_instrs) precompute_reg_specs [].
+    (init_addr + 40)%N precompute_reg_specs [].
 Proof.
   apply precompute_noninterferent_param.
   unfold init_addr, lenAddr; lia.

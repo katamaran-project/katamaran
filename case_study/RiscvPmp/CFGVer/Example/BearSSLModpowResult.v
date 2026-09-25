@@ -43,7 +43,7 @@ From Katamaran Require Import
 Lemma modpow_win_noninterferent_param (init_addr : N) :
   (init_addr + 20 < lenAddr)%N ->
   noninterferent_strong init_addr modpow_win_instrs
-    (pcOutOfInstrs_exitCond init_addr modpow_win_instrs)
+    (init_addr + 20)%N
     modpow_win_reg_specs [].
 Proof.
   intros Hbound.
@@ -62,7 +62,7 @@ Qed.
 
 Lemma modpow_win_noninterferent :
   noninterferent_strong init_addr modpow_win_instrs
-    (pcOutOfInstrs_exitCond init_addr modpow_win_instrs)
+    (init_addr + 20)%N
     modpow_win_reg_specs [].
 Proof.
   apply modpow_win_noninterferent_param.

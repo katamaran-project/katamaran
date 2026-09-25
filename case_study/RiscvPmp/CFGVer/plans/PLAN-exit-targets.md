@@ -1,6 +1,6 @@
 # PLAN: replace exit conditions by ONE exit address
 
-Status: DRAFT 2026-09-25, rev 2. Nothing implemented. Origin: the TODOS.txt
+Status: IMPLEMENTED 2026-09-25 on branch issue/exit-targets (commits 9f05f792, 9a4e303e, cfa9a762); gate PASSED (§9). Phase 5 (drop cfg_init_addr) DEFERRED (D11). Origin: the TODOS.txt
 PRIORITY item (Emiel, 2026-09-25). Goes BEFORE PLAN-valid-blk-annot.md (§7).
 
 ## 0. Decisions (Emiel)
@@ -231,3 +231,25 @@ subject line, since hashes are filled in after the fact.
 statement changed. The program gained a NOP, and the bound premise went from
 `init_addr + 4 < lenAddr` to `init_addr + 8 < lenAddr`. Checked
 axiom-clean (pure_decode, mmioenv) after the change.
+
+### Decisions taken during execution (2026-09-25)
+
+| # | decision | why | revert |
+|---|---|---|---|
+| D7 | `gen_contract*` have NO exit parameter: the exit is always the fall-through `base + 4·|instrs|`. `extra_exit_offs` and `ec` are deleted outright, not replaced by `exit_off : N`. | After D4 every standalone example exits at its fall-through; a program that exits elsewhere is a segment (gen_seg_contract keeps its `target`). Removes two arguments from every call site. | Additive: give gen_contract_u an `exit_off` defaulting to `4·len` and thread it through the bridges' conclusion. |
+| D8 | `atPc` is BOOLEAN, `fun v => bv.eqb v (bv.of_N a)`, not the Prop `pc = bv.of_N a`. | The stepping relations and adequacy lemmas already consume a bool exit condition (Is_true), so nothing downstream changed; and `atPc e v` is definitionally `exit_hit (SyncVal (bv.of_N e)) v`, the concrete executor's stop test, so the bridge needed no rewriting. Same single equation. | Change the definition in Noninterference.v; the bridges' last line (`unfold atPc; rewrite Hexit`) becomes a `bv.eqb_spec` step. |
+| D9 | The concrete exit is a `RelVal` (`cexit`), and `etable_rel cexit ex := ∃ v, inst ex ι = SyncVal v ∧ cexit = SyncVal v`. | A block passes `inst (cfg_exit c) ι` straight through (no Hexit, no sync proof at the call); the SyncVal half is needed because at a stop the symbolic side is `pure` while the concrete pc must pass RVToOption. | — |
+| D10 | `blockFaithful_of_seg` lost `Hv : v = of_N ia`; `seg_run_pinned_exit` deleted. | The exit is a term over the block's own base, so only the placement fact is needed; pinned_exit only served two-exit segments (untracked sgL probes). | Recover from git (cfa9a762^). |
+
+**Measured outcome.** All 17 light examples: VC tactic lines unchanged. The 12
+standalone Result files: statement changed, NO proof change. The prediction in
+§3 ("no VC should get harder") held for every tracked example.
+
+| D11 | 2026-09-25 | Phase 5 DEFERRED: keep `cfg_init_addr`. | Its only real reader is `ValidCFGVerifierContract`'s block obligation (`blocksSound … (instrs_of_list (bv.of_N (cfg_init_addr c)) a)`); the wiring lemmas' `contractInitAddr` is redundant with `contractPlacement`. Dropping the field would force a choice (validity parameterised by the load address, or quantified over all bases) that PLAN-valid-blk-annot.md makes moot by removing blocksSound from ValidCFGVerifierContract. Revisit after that plan. | — |
+
+### §9 Gate
+
+**PASSED 2026-09-25** on issue/exit-targets at 0b95a1a4 (`GATE_JOBS=1 ./scripts/gate.sh`):
+build clean, no holes, 19 end theorems axiom-clean (only Machine.pure_decode,
+Base.mmioenv).  An earlier run was killed by host memory pressure, not by the
+gate.

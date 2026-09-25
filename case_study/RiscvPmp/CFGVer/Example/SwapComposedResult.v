@@ -97,7 +97,7 @@ Section Compose.
   Context {Σ} {GS : sailGS2 Σ}.
 
   Definition swapExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜pcOutOfInstrs_exitCond 0 swap_instrs v⌝)%I.
+    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜atPc 12 v⌝)%I.
 
   Lemma swap_composed (ι : Valuation swapCtx) :
     ⊢ asn.interpret (extend_to_minimal_pre (cfg_precondition swapA))
@@ -113,11 +113,11 @@ Section Compose.
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (HefA : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
-                     cut_exitCond (cfg_exits swapA) ι).
-    { constructor; [|constructor]. eexists. split; reflexivity. }
+                     (SyncVal (bv.of_N 4)) (cfg_exit swapA) ι).
+    { eexists. split; reflexivity. }
     assert (HefB : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
-                     (pcOutOfInstrs_exitCond 0 swap_instrs) (cfg_exits swapB) ι).
-    { constructor; [|constructor]. eexists. split; reflexivity. }
+                     (SyncVal (bv.of_N 12)) (cfg_exit swapB) ι).
+    { eexists. split; reflexivity. }
     pose proof valid_swapA as HvA. pose proof valid_swapB as HvB.
     unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in HvA, HvB.
     cbn [cfg_map swapA swapB] in HvA, HvB.
@@ -133,9 +133,8 @@ Section Compose.
              re-threaded bridge conjunct; it is the whole reason this works. --- *)
       iIntros (an) "(%HexitA & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct an as [av|a1 a2]; [|contradiction].
-      cbn in HexitA. unfold cut_exitCond in HexitA.
-      assert (Hav : av = bv.of_N 4) by (destruct (bv.eqb_spec av (bv.of_N 4)); congruence).
-      subst av.
+      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in HexitA.
+      injection HexitA as <-.
       (* --- SEGMENT B, entered at the cut address with A's exit assertion. --- *)
       iApply (sound_scfg_verification_condition_myWP2 HvB swapExit Hif HefB ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 4)) with "[Hpc Hnpc Hinstrs Hpost]").
@@ -151,7 +150,7 @@ Section Compose.
       + iIntros (an2) "(%HexitB & Hpc & Hnpc & Hinstrs & _)".
         destruct an2 as [bv2|b1 b2]; [|contradiction].
         unfold swapExit. iExists bv2. iFrame "Hpc". iPureIntro.
-        rewrite HexitB. exact I.
+        cbn in HexitB. unfold atPc. rewrite HexitB. exact I.
   Qed.
 
 End Compose.

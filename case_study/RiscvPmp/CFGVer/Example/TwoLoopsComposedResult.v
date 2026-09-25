@@ -126,7 +126,7 @@ Section TwoLoops.
     [env].["m"∷ty_xlenbits ↦ SyncVal m].
 
   Definition tExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜pcOutOfInstrs_exitCond 0 t_instrs v⌝)%I.
+    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜atPc 16 v⌝)%I.
 
   Definition tOwn : iProp Σ :=
     Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
@@ -156,9 +156,9 @@ Section TwoLoops.
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
-                      (pcOutOfInstrs_exitCond 0 t_instrs)
-                      (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [16%N]) (iB m)).
-      { constructor; [|constructor]. eexists. split; reflexivity. }
+                      (SyncVal (bv.of_N 16))
+                      (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 16) (iB m)).
+      { eexists. split; reflexivity. }
       iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
       iApply (sound_scfg_verification_condition_myWP2 Hv tExit Hif Hef ltac:(solve_no_blocks)
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
@@ -173,7 +173,8 @@ Section TwoLoops.
         apply tdec_one. cbn in Hm. exact Hm.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
         destruct an as [av|a1 a2]; [|contradiction].
-        unfold tExit. iExists av. iFrame "Hpc". iPureIntro. rewrite Hex. exact I.
+        unfold tExit. iExists av. iFrame "Hpc". iPureIntro.
+        cbn in Hex. unfold atPc. rewrite Hex. exact I.
     - (* one trip of B *)
       pose proof valid_tBbody as Hv.
       unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
@@ -184,8 +185,8 @@ Section TwoLoops.
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
-                      at8 (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [8%N]) (iB m)).
-      { constructor; [|constructor]. eexists. split; reflexivity. }
+                      (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iB m)).
+      { eexists. split; reflexivity. }
       assert (Hm2 : bv.bin m = (N.of_nat q + 2)%N) by lia.
       assert (Hd : bv.bin (tdecv m) = (N.of_nat q + 1)%N) by (apply tdec_bin; exact Hm2).
       assert (Hne : tdecv m <> bv.zero).
@@ -204,9 +205,8 @@ Section TwoLoops.
         change ((m + bv.of_N 4294967295)%bv) with (tdecv m). exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct an as [av|a1 a2]; [|contradiction].
-        cbn in Hex. unfold at8 in Hex.
-        assert (Hav : av = bv.of_N 8) by (destruct (bv.eqb_spec av (bv.of_N 8)); congruence).
-        subst av.
+        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+        injection Hex as <-.
         iApply (IH (tdecv m) Hd).
         unfold invB, tInvB. iEval (cbn) in "Hpost". cbn.
         iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
@@ -232,8 +232,8 @@ Section TwoLoops.
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxA)
-                      at8 (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [8%N]) (iA k)).
-      { constructor; [|constructor]. eexists. split; reflexivity. }
+                      (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iA k)).
+      { eexists. split; reflexivity. }
       iIntros "((Hres & Hpc & Hnpc & Hinstrs) & HX2)".
       iApply myWP2_loop_join.
       iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
@@ -249,9 +249,8 @@ Section TwoLoops.
         apply tdec_one. cbn in Hk. exact Hk.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct an as [av|a1 a2]; [|contradiction].
-        cbn in Hex. unfold at8 in Hex.
-        assert (Hav : av = bv.of_N 8) by (destruct (bv.eqb_spec av (bv.of_N 8)); congruence).
-        subst av.
+        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+        injection Hex as <-.
         (* loop B takes over.  X2 arrives from the FRAME -- it was never fed to
            any of loop A's VCs.  X1's final value is simply dropped (affine). *)
         iApply (loopB nB m Hm).
@@ -269,8 +268,8 @@ Section TwoLoops.
       { apply itable_faith_of_list; [reflexivity|].
         apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxA)
-                      at0 (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [0%N]) (iA k)).
-      { constructor; [|constructor]. eexists. split; reflexivity. }
+                      (SyncVal (bv.of_N 0)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0) (iA k)).
+      { eexists. split; reflexivity. }
       assert (Hk2 : bv.bin k = (N.of_nat p + 2)%N) by lia.
       assert (Hd : bv.bin (tdecv k) = (N.of_nat p + 1)%N) by (apply tdec_bin; exact Hk2).
       assert (Hne : tdecv k <> bv.zero).
@@ -289,9 +288,8 @@ Section TwoLoops.
         change ((k + bv.of_N 4294967295)%bv) with (tdecv k). exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct an as [av|a1 a2]; [|contradiction].
-        cbn in Hex. unfold at0 in Hex.
-        assert (Hav : av = bv.of_N 0) by (destruct (bv.eqb_spec av (bv.of_N 0)); congruence).
-        subst av.
+        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+        injection Hex as <-.
         iApply (IH (tdecv k) nB m Hd Hm).
         unfold invA, tInvA. iEval (cbn) in "Hpost". cbn.
         iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".

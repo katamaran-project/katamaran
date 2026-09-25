@@ -61,7 +61,7 @@ From Katamaran Require Import
 Lemma jumpIfZero_noninterferent_param (init_addr : N) :
   (init_addr + 8 < lenAddr)%N ->
   noninterferent_strong init_addr [BEQ X1 X0 true_offset; NOP]
-    (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset; NOP]) [(X1, true, None)] [].
+    (init_addr + 8)%N [(X1, true, None)] [].
 Proof.
   intros Hbound.
   eapply gen_contract_noninterferent_param_simple.
@@ -72,7 +72,7 @@ Qed.
 
 Lemma jumpIfZero_noninterferent :
   noninterferent_strong init_addr [BEQ X1 X0 true_offset; NOP]
-    (pcOutOfInstrs_exitCond init_addr [BEQ X1 X0 true_offset; NOP]) [(X1, true, None)] [].
+    (init_addr + 8)%N [(X1, true, None)] [].
 Proof.
   apply jumpIfZero_noninterferent_param.
   unfold init_addr, lenAddr; lia.
@@ -84,7 +84,7 @@ Qed.
 Lemma jmp_fwd_noninterferent_param (init_addr : N) :
   (init_addr + 8 < lenAddr)%N ->
   noninterferent_strong init_addr [JAL X0 jmp_offset; NOP]
-    (pcOutOfInstrs_exitCond init_addr [JAL X0 jmp_offset; NOP]) [] [].
+    (init_addr + 8)%N [] [].
 Proof.
   intros Hbound.
   eapply gen_contract_noninterferent_param_simple.
@@ -93,11 +93,10 @@ Proof.
   - solve_valid (valid_jmp_fwd_cfg_contract_param init_addr).
 Qed.
 
-(* jmp_fwd_exitCond is definitionally pcOutOfInstrs_exitCond 0 [JAL...; NOP]
-   (both reduce to fun v => bv.ugeb v (bv.of_N 8)), so this is a corollary
-   with no rewrite needed, same as countdown_noninterferent. *)
+(* A corollary with no rewrite needed, same as countdown_noninterferent: the
+   exit address is the same `init_addr + 8`. *)
 Lemma jmp_fwd_noninterferent_cfg :
-  noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] jmp_fwd_exitCond [] [].
+  noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] (init_addr + 8)%N [] [].
 Proof.
   apply jmp_fwd_noninterferent_param.
   unfold init_addr, lenAddr; lia.

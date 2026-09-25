@@ -46,19 +46,12 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* Countdown program: X1 starts at 2 and counts down to 0.
        addr 0: ADDI X1 X1 (-1)  -- decrement X1
        addr 4: BNE X1 X0 (-4)   -- if X1 != 0, jump back to addr 0
-       addr 8: exit (exitCond satisfied)
+       addr 8: exit (the pc IS the exit address, init_addr + 8)
        Concrete execution: X1=2→1, BNE taken; X1=1→0, BNE not taken; exit.
        Backward branch actually fires, demonstrating CFGVer handles loops. *)
-    Definition countdown_exitCond : bv xlenbits -> bool :=
-      fun v => bv.ugeb v (bv.of_N 8).
-
     (* ===== Phase 4.2: base-parametric countdown VC (backward branch) =========
        Supersedes the removed concrete-base pair countdown_cfg_contract /
-       valid_countdown_cfg_contract (see MvSwap.v for the rationale).
-       countdown_exitCond is definitionally `pcOutOfInstrs_exitCond 0 instrs`
-       (both reduce to `fun v => bv.ugeb v (bv.of_N 8)`), so the parametric
-       contract reuses pcOutOfInstrs_exitCond directly -- no hand-rolled
-       exitCond needed, matching the cmovznz4/set_X2 style. This was the
+       valid_countdown_cfg_contract (see MvSwap.v for the rationale).  This was the
        untested case flagged before starting: the BNE back_offset (-4 in
        13-bit two's complement) jumps BACKWARD to the first instruction. The
        open question was whether the term-table executor's constant folding
@@ -68,8 +61,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        VC with zero changes. *)
     Definition countdown_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [(X1, true, Some (bv.of_N 2))]
-        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] []
-        (pcOutOfInstrs_exitCond ia [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]) 5.
+        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] 5.
 
     Lemma valid_countdown_cfg_contract_param (ia : N) :
       cfg_vc (countdown_cfg_contract_param ia) (cfg_instrs (countdown_cfg_contract_param ia)).
@@ -99,9 +91,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        behaviorally identical to the old X0-based program. *)
     Definition back_12_offset : bv 13 := bv.of_N 8180.
 
-    Definition countdown_mem_exitCond : bv xlenbits -> bool :=
-      fun v => bv.ugeb v (bv.of_N 16).
-
     Definition countdown_mem_instrs : list AST :=
       [ LOAD (bv.of_N 16) X2 X1 false WORD
       ; ADDI X1 X1 neg_one_12
@@ -125,8 +114,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Definition countdown_mem_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed ia countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
-        countdown_mem_instrs [] 20
-        (pcOutOfInstrs_exitCond ia countdown_mem_instrs) 10.
+        countdown_mem_instrs 20 10.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
        The end theorem states noninterferent_strong over `countdown_mem_instrs` while the

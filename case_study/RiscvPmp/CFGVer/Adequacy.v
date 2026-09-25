@@ -1245,7 +1245,7 @@ Section AdequacyTools.
     (* This is the `contractsSound` of executor-level composition: the    *)
     (* executor is allowed to REPLACE the instructions at address v by    *)
     (* b's contract exactly when a real execution entering at v with      *)
-    (* b's precondition reaches v + Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b with b's postcondition.    *)
+    (* b's precondition reaches b's exit (blk_exit) with b's postcondition. *)
     (*                                                                   *)
     (* Stated in continuation-passing form over an ARBITRARY ExitCond,    *)
     (* which is what makes it compose: the caller instantiates ExitCond   *)
@@ -1264,7 +1264,7 @@ Section AdequacyTools.
     (* block table at every step of the induction.                        *)
     (* ================================================================ *)
     (* WHAT A BLOCK PROMISES, as an Iris fact: entering at v with the block's
-       precondition, the machine reaches v + Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b with its
+       precondition, the machine reaches b's exit (blk_exit b ι) with its
        postcondition.  Continuation-passing over an ARBITRARY ExitCond, which
        is what makes it compose -- the caller instantiates ExitCond with
        `myWP2_loop <real exit>` and discharges the nested loop with
@@ -1291,6 +1291,16 @@ Section AdequacyTools.
         : gmap (bv xlenbits) AST :=
       Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)).
 
+    (* WHERE A BLOCK RESUMES: its contract's single exit, instantiated at the
+       valuation that satisfied its precondition (PLAN-exit-targets.md).  It
+       replaced `SyncVal (v + blk_off b)`, which computed the same address a
+       second way and needed Hexit to show the two agreed.  A RelVal, exactly
+       as the executors produce it (sexec_block / cexec_block). *)
+    Definition blk_exit (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) : RelVal ty_xlenbits :=
+      inst (T := fun Σ => Term Σ ty_xlenbits)
+        (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι.
+
     (* Owns ONLY its own span -- note there is no `instrs` parameter.  That is
        the whole of §2c: a block reasons about what is visible inside it, and
        the enclosing program is not visible.  The caller splits its instruction
@@ -1304,9 +1314,8 @@ Section AdequacyTools.
          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) -∗
          (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
             ((ι.["a"∷ty_xlenbits ↦ ty.SyncVal v])
-               .["an"∷ty_xlenbits ↦ ty.SyncVal
-                  (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))]) ∗
-          pc ↦ᵣ ty.SyncVal (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) ∗
+               .["an"∷ty_xlenbits ↦ blk_exit b ι]) ∗
+          pc ↦ᵣ blk_exit b ι ∗
           (∃ x, nextpc ↦ᵣ x) ∗
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) -∗ ExitCond) -∗
          myWP2_loop ExitCond)%I.
@@ -1378,8 +1387,8 @@ Section AdequacyTools.
        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs)) -∗
       (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
          ((ι.["a"∷ty_xlenbits ↦ ty.SyncVal v])
-            .["an"∷ty_xlenbits ↦ ty.SyncVal (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))]) ∗
-       pc ↦ᵣ ty.SyncVal (bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) ∗
+            .["an"∷ty_xlenbits ↦ blk_exit b ι]) ∗
+       pc ↦ᵣ blk_exit b ι ∗
        (∃ x, nextpc ↦ᵣ x) ∗
        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗ ExitCond) -∗
       myWP2_loop ExitCond.
@@ -1503,11 +1512,9 @@ Section AdequacyTools.
            asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ∗
            (asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
               ((ι.["a"∷ty_xlenbits ↦ ty.SyncVal v])
-                 .["an"∷ty_xlenbits ↦ bop.evalRel bop.bvadd (ty.SyncVal v)
-                     (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))]) -∗
+                 .["an"∷ty_xlenbits ↦ blk_exit b ι]) -∗
             ∃ h', interpret_scheap h' ∧
-              ⌜Phi (bop.evalRel bop.bvadd (ty.SyncVal v)
-                      (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))) h'⌝))%I.
+              ⌜Phi (blk_exit b ι) h'⌝))%I.
     Proof.
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block.
       unfold CHeapSpec.bind, CHeapSpec.lift_purespec.
@@ -1529,11 +1536,11 @@ Section AdequacyTools.
        later" -- which is what lets blockSound_of_vc justify a loop whose head
        carries its own block, by Löb induction. *)
     Lemma sound_exec_cfg_addr_myWP2
-        {instrs} {words : bv xlenbits -> bv word} {exitCond fuel}
+        {instrs} {words : bv xlenbits -> bv word} {cexit fuel}
         (stepped : bool)
         (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words exitCond fuel stepped apc anp Φ h →
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words cexit fuel stepped apc anp Φ h →
       blocksSoundAt stepped words instrs ∗ ▷ blocksSound words instrs ∗
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
         (* THE BOUNDARY: the executor's map is AnnotInstr-valued, MEMORY is
@@ -1543,7 +1550,7 @@ Section AdequacyTools.
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
           (ai_instr <$> instrs) ⊢
       (∀ an,
-         ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+         ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
              (ai_instr <$> instrs) ∗
@@ -1558,7 +1565,7 @@ Section AdequacyTools.
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
                CHeapSpec.angelic_binary] in Hexec.
           destruct Hexec as [Hexit | Hexec].
-          * destruct (exitCond v) eqn:Hexit_eq.
+          * destruct (Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v) eqn:Hexit_eq.
             -- cbn [CHeapSpec.pure] in Hexit.
                iIntros "(#Hb0 & #Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iApply exitCondImpliesMyWP2_loop.
@@ -1675,7 +1682,7 @@ Section AdequacyTools.
     (* `itable_rel ∧ etable_rel →` premise, discharged here by the   *)
     (* caller-supplied faithfulness facts at ι.                          *)
     (* ---------------------------------------------------------------- *)
-    Lemma sound_cexec_triple_addr_myWP2_w {Γ : LCtx} {pre post instrs exitCond fuel}
+    Lemma sound_cexec_triple_addr_myWP2_w {Γ : LCtx} {pre post instrs cexit fuel}
         (words : bv xlenbits -> bv word)
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
@@ -1686,7 +1693,7 @@ Section AdequacyTools.
         {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι) :
       (* ∀ words: the VC is UNIFORM in the instruction words, because on the
          symbolic side they are demonic.  So the caller proves it once and this
          lemma instantiates it with the actual words carried by ptsto_instrs.
@@ -1697,7 +1704,7 @@ Section AdequacyTools.
          it is what the trusted statements name — so the projection lives at
          every use site rather than inside it. *)
       (forall words : bv xlenbits -> bv word,
-         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words cexit fuel post tbl exits (λ _ _, True) []) →
       (* The block premise, split by when it is needed (see
          sound_exec_cfg_addr_myWP2): the ai_block annotations now, all of them
          UNDER A LATER.  The later is what blockSound_of_vc's Löb induction can
@@ -1708,7 +1715,7 @@ Section AdequacyTools.
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
            (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
@@ -1786,21 +1793,21 @@ Section AdequacyTools.
        the executor's frame carries `ptsto_instrs_w words` and needs that exact
        words back for its induction hypothesis, so a caller that went through
        the ∃ form could not continue. *)
-    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs exitCond fuel}
+    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs cexit fuel}
         {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
         {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι) :
       (forall words : bv xlenbits -> bv word,
-         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words exitCond fuel post tbl exits (λ _ _, True) []) →
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words cexit fuel post tbl exits (λ _ _, True) []) →
       (forall words : bv xlenbits -> bv word, ⊢ blocksSound words instrs) →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => exitCond v = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
            asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
@@ -1822,7 +1829,7 @@ Section AdequacyTools.
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs. iExists words. iFrame "Hinstrs".
     Qed.
 
-    Lemma sound_scfg_verification_condition_myWP2_w {Γ pre post instrs exitCond fuel}
+    Lemma sound_scfg_verification_condition_myWP2_w {Γ pre post instrs cexit fuel}
         (words : bv xlenbits -> bv word)
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
@@ -1836,7 +1843,7 @@ Section AdequacyTools.
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι) :
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι) :
       (* The block premise, split as in sound_cexec_triple_addr_myWP2_w.
          Blocks ride in `instrs` and hence in `tbl`, so this is the ONLY thing
          they add at this level. *)
@@ -1847,7 +1854,7 @@ Section AdequacyTools.
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
           (∀ an,
              ⌜match an with
-               | SyncVal v => exitCond v = true
+               | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
@@ -1900,11 +1907,11 @@ Section AdequacyTools.
          ⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
              (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
           /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-               (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝)%I.
+               (blk_exit b ι) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝)%I.
 
     (* A VALID CONTRACT IS ALL YOU NEED -- the point Emiel made.  Everything
        Iris-level is already in sound_scfg_verification_condition_myWP2; this
-       lemma only specialises it at a := SyncVal v, pins the exit, and runs it
+       lemma only specialises it at a := SyncVal v and runs it
        against the BLOCK'S OWN annotated program `ab`.
 
        SELF-CONTAINED, and that is the point (§2c).  The enclosing program does
@@ -1919,10 +1926,11 @@ Section AdequacyTools.
         (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
         (Hv : safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+                 (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
                  (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) wnil)))
-        (Hexit : forall x, Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b) x = true ->
-                   x = bv.add v (bv.of_N (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b)))
+        (* NO Hexit any more (PLAN-exit-targets.md): the block resumes at its
+           contract's own exit term, which is what the VC's run stops at, so
+           there is no second description of the resume point to reconcile. *)
         (* the block's code really is what its contract says: ab strips to
            cfg_instrs, so ai_instr <$> instrs_of_list v ab IS blk_span v b *)
         (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
@@ -1951,7 +1959,7 @@ Section AdequacyTools.
       iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
                    (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
                /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                    (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exitCond (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
+                    (blk_exit b ι) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
               ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
                   (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
         with "[Hpre]" as "[%Hfi Hpre]".
@@ -1972,12 +1980,13 @@ Section AdequacyTools.
          as it does at every other call site of this lemma. *)
       iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct an as [x|x1 x2]; [|contradiction].
-      cbn in Hex. specialize (Hexit _ Hex). subst x.
+      cbn in Hex. apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+      rewrite Hex.
       iApply "Hk". iFrame.
     Qed.
 
 
-    Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs exitCond fuel}
+    Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs cexit fuel}
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
            it (five in VerifierRel.v), and every one of them silently failed to
@@ -1990,7 +1999,7 @@ Section AdequacyTools.
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
-        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) exitCond exits ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι)
         (* The block premise.  With the contract in the AnnotInstr payload this
            is the ONLY thing the hook adds at this level: blocks ride in
            `instrs` and hence in `tbl`, so there is no second VC entry point
@@ -2004,7 +2013,7 @@ Section AdequacyTools.
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
           (∀ an,
              ⌜match an with
-               | SyncVal v => exitCond v = true
+               | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
                | NonSyncVal _ _ => False
                end⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗

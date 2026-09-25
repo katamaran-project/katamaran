@@ -100,8 +100,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 (*                                                                           *)
 (* Translated with tools/asm_to_ast.py; each entry carries its source line.  *)
 (* The trailing `ret` is deliberately dropped (its target is the symbolic    *)
-(* link register), exactly as in Cmovznz4 — the pcOutOfInstrs exit condition *)
-(* fires once pc has advanced past the last real instruction.                *)
+(* link register), exactly as in Cmovznz4 — the program exits at the        *)
+(* fall-through, one past the last real instruction.                        *)
 (* ------------------------------------------------------------------------ *)
 Definition muladd_q_instrs : list AST :=
   [ RTYPE A1 A0 A0 RISCV_XOR                (* xor   a0, a0, a1 *)
@@ -130,8 +130,7 @@ Definition muladd_q_reg_specs : list reg_spec :=
    load address, following the Phase 4.2 pattern used by every other example.
    Fuel 20 comfortably exceeds the 12 instruction steps plus the exit step. *)
 Definition muladd_q_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_param ia muladd_q_reg_specs muladd_q_instrs []
-    (pcOutOfInstrs_exitCond ia muladd_q_instrs) 20.
+  gen_contract_param ia muladd_q_reg_specs muladd_q_instrs 20.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
    The end theorem states noninterferent_strong over `muladd_q_instrs` while the

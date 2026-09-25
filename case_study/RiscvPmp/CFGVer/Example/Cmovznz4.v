@@ -57,9 +57,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* target is the symbolic link register `ra`, and the executor's table *)
     (* lookup needs a pc that matches a known table key at every step, so  *)
     (* it cannot step through a jump to an unconstrained destination. The  *)
-    (* exit condition below instead fires once pc has advanced past the    *)
-    (* last real instruction (the standard                                 *)
-    (* pcOutOfInstrs_exitCond pattern used by jmp_fwd/countdown/swap).       *)
+    (* program instead exits at the fall-through, one past the last real   *)
+    (* instruction -- the single exit address every generated contract has *)
+    (* (PLAN-exit-targets.md).                                             *)
     (* ------------------------------------------------------------------ *)
     Definition cmovznz4_instrs : list AST :=
       [ RTYPE A0 X0 A4 RISCV_SUB               (* neg     a4, a0 *)
@@ -195,8 +195,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* Base bound 164 = 160 (last data offset, r[3]) + 4 (word). *)
     Definition cmovznz4_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed ia cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
-        cmovznz4_instrs [] 164
-        (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
+        cmovznz4_instrs 164 35.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
        The end theorems in Cmovznz4Result.v state noninterferent_strong over

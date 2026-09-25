@@ -107,18 +107,17 @@ Section Link.
   Proof.
     (* where the code sits: base ia, two instructions, inside memory *)
     iPoseProof (blockFaithful_of_seg (term_var "q") (term_var "q") ia
-                  cd_instrs [8%N] 4 [] cd_rec_inv cd_rec_post
-                  8 (@bv.of_N xlenbits ia) (cd_rec_annot ia)) as "Hf".
+                  cd_instrs 8 4 [] cd_rec_inv cd_rec_post
+                  (@bv.of_N xlenbits ia) (cd_rec_annot ia)) as "Hf".
     { intros iota. reflexivity. }
-    { reflexivity. }
     { pose proof lenAddr_rep.
       rewrite (seg_fits_bin ia 8 ltac:(unfold seg_fits_memory; lia)).
       cbn [length cd_rec_annot list_AST_AnnotInstr List.map]. lia. }
     iApply (blockSound_of_contract words (@bv.of_N xlenbits ia) (cdRecBlk ia)
               (cd_rec_annot ia) (valid_cd_rec ia) with "Hf").
-    - (* the block resumes where its contract exits: ia + 8 *)
-      intros x Hx. apply seg_exitCond_inv1 in Hx. rewrite Hx.
-      apply seg_addr_add.
+    (* No "the block resumes where its contract exits" bullet any more: a
+       block resumes AT its contract's exit by construction
+       (PLAN-exit-targets.md). *)
     - (* the annotated code IS the contract's code *)
       reflexivity.
     - (* no ai_block in the loop's own code: nothing may fire at its entry *)
@@ -152,7 +151,7 @@ End Link.
    ordinary wiring. *)
 Lemma countdown_rec_noninterferent_param (init_addr : N) :
   (init_addr + 12 < lenAddr)%N ->
-  noninterferent_strong init_addr cd_link_instrs (seg_exitCond init_addr [12%N])
+  noninterferent_strong init_addr cd_link_instrs (init_addr + 12)%N
     [(X1, true, Some (bv.of_N 2)); (X2, false, None)] [].
 Proof.
   intros Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
@@ -162,15 +161,15 @@ Proof.
   pose proof (seg_fits_bin init_addr 8 ltac:(unfold seg_fits_memory; lia)) as Hbin.
   (* ι: code at init_addr, counter at its pinned 2. *)
   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' (cd_link_annot init_addr)
-    (seg_exitCond init_addr [12%N]) n ws cdRecCtx
+    (init_addr + 12)%N n ws cdRecCtx
     ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
           .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
     _ HpubReg (cdLink init_addr) (valid_cd_link init_addr) init_addr
-    eq_refl eq_refl).
+    eq_refl).
   - (* placement: the bare code base *)
     reflexivity.
   - (* the one exit, +12: the generic segment exit table *)
-    apply (seg_exit_table_ok _ _ init_addr [12%N]). reflexivity.
+    apply (seg_exit_table_ok _ _ init_addr 12). reflexivity.
   - (* ImplPre: the pinned X1 and the free X2 from gen_implpre, the rest pure *)
     intros Σ' GS'.
     iIntros "(Hregs & Hpriv & #Hinv)".

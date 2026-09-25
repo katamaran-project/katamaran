@@ -61,19 +61,17 @@ Definition tCtxB : LCtx := ["m" :: ty_xlenbits].
 Definition tdec {Σ} (t : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_N 4294967295)).
 
-Definition at0 : bv xlenbits -> bool := fun v => bv.eqb v (bv.of_N 0).
-Definition at8 : bv xlenbits -> bool := fun v => bv.eqb v (bv.of_N 8).
 
 (* ---- LOOP A: head 0.  Owns ONLY X1 -- X2 is framed OUTSIDE, never fed to
        these VCs, which is what keeps each segment's footprint O(1). ---- *)
 Definition tAbody : @CFGVerifierContract tCtxA :=
   @MkCFGVerifierContract tCtxA 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [0%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0)
     (asn_init_pc (bv.of_N 0) ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.neq (tdec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
-    t_instrs at0 3
+    t_instrs 3
     (X1 ↦ᵣ tdec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
 Lemma valid_tAbody : cfg_vc tAbody (cfg_instrs tAbody).
@@ -85,11 +83,11 @@ Qed.
 Definition tAfinal : @CFGVerifierContract tCtxA :=
   @MkCFGVerifierContract tCtxA 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [8%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8)
     (asn_init_pc (bv.of_N 0) ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.eq (tdec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
-    t_instrs at8 3
+    t_instrs 3
     (X1 ↦ᵣ tdec (term_var "k") ∗ minimal_pre).
 
 Lemma valid_tAfinal : cfg_vc tAfinal (cfg_instrs tAfinal).
@@ -101,12 +99,12 @@ Qed.
 Definition tBbody : @CFGVerifierContract tCtxB :=
   @MkCFGVerifierContract tCtxB 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [8%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8)
     (asn_pc_eq (term_val ty_xlenbits (bv.of_N 8))
        ∗ X2 ↦ᵣ term_var "m" ∗ secLeakvar "m"
        ∗ asn.formula (formula_relop bop.neq (tdec (term_var "m"))
                         (term_val ty_xlenbits bv.zero)))
-    t_instrs at8 3
+    t_instrs 3
     (X2 ↦ᵣ tdec (term_var "m") ∗ secLeakvar "m" ∗ minimal_pre).
 
 Lemma valid_tBbody : cfg_vc tBbody (cfg_instrs tBbody).
@@ -117,12 +115,12 @@ Qed.
 Definition tBfinal : @CFGVerifierContract tCtxB :=
   @MkCFGVerifierContract tCtxB 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [16%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 16)
     (asn_pc_eq (term_val ty_xlenbits (bv.of_N 8))
        ∗ X2 ↦ᵣ term_var "m" ∗ secLeakvar "m"
        ∗ asn.formula (formula_relop bop.eq (tdec (term_var "m"))
                         (term_val ty_xlenbits bv.zero)))
-    t_instrs (pcOutOfInstrs_exitCond 0 t_instrs) 3
+    t_instrs 3
     asn_no_post.
 
 Lemma valid_tBfinal : cfg_vc tBfinal (cfg_instrs tBfinal).

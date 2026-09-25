@@ -7,7 +7,7 @@ description: >
   synthetic program/loop from scratch when there's no real source to translate
   (e.g. a small-N feasibility spike toward a bigger not-yet-attempted example,
   such as a loop a real compiler would just fully unroll at that trip count) —
-  choosing exitCond / fuel / extra_exit_offs, building the contract with
+  choosing the exit address / fuel, building the contract with
   gen_contract, discharging the VC, and the gen_contract_noninterferent_param end
   lemma. Trigger on "verify this program", "add a new example", "prove X
   noninterferent", "write/design a small-N or synthetic version of X first",
@@ -51,8 +51,8 @@ a concrete-base VC is dead compile time.
    eaten as a directive and every branch failed with "undefined label". If a
    listing's last label sits on the dropped `ret`, translate WITHOUT `--drop-ret`
    (so the label still resolves, to one-past-the-end) and delete the trailing
-   `RISCV_JALR` entry by hand — a branch to one-past-the-end is covered by
-   `pcOutOfInstrs_exitCond` with no `extra_exit_offs`.
+   `RISCV_JALR` entry by hand — a branch to one-past-the-end lands on the
+   generator's fall-through exit.
    **Watch for full unrolling:** clang unrolls a loop whose bounds are
    compile-time constants, so a program compiled with its sizes baked in
    verifies nothing about loop control flow. Keep the bounds as runtime
@@ -66,19 +66,22 @@ a concrete-base VC is dead compile time.
    order, register aliases, and (the sharpest edge, wrong exactly once already)
    the backward-branch-immediate convention are all in
    **`cfgver/references/asm-vocabulary.md`**.
-2. **Exit condition + fuel.** Typically `pcOutOfInstrs_exitCond init_addr instrs`;
-   fuel must exceed the number of instruction steps actually executed, **with
+2. **Exit + fuel.** A generator contract has exactly one exit, the fall-through
+   `init_addr + 4*|instrs|`; the end theorem states it as a literal
+   (`noninterferent_strong init_addr instrs (init_addr + 4*N)%N …`). If control
+   flow can leave elsewhere (e.g. a forward branch past the program), cut at the
+   join point so there is one exit (`jump_if_zero` got a trailing `NOP` for
+   this), or make it a segment (`gen_seg_contract`, one `target`).
+   Fuel must exceed the number of instruction steps actually executed, **with
    slack** (tight fuel shows up as a bare `False` deep in the VC —
-   → **cfgver-solve-vc**). If control flow can exit other than by falling off the
-   end (e.g. a forward branch past the program), collect those offsets as
-   `extra_exit_offs`. **Scaling an EXISTING backward-branch loop example to a
+   → **cfgver-solve-vc**). **Scaling an EXISTING backward-branch loop example to a
    bigger trip count is NOT just a fuel-tuning exercise**: `vm_compute` itself
    can blow up exponentially in trip count (confirmed on `key_schedule_loop2`,
    N=2→8 already unfinished after minutes) — see **cfgver-executor**'s
    "Backward-branch loops" section before assuming more fuel/timeout will
    eventually get there.
-3. **Contract.** `gen_contract init_addr reg_specs mem_specs instrs extra_exit_offs
-   ec fl` — spec-triple formats and public/private/pinned semantics in
+3. **Contract.** `gen_contract init_addr reg_specs mem_specs instrs fl` (or
+   `gen_contract_param ia reg_specs instrs fuel`) — spec-triple formats and public/private/pinned semantics in
    **cfgver-gen-contract**. (Hand-written contracts instead: **cfgver-contracts**.)
 4. **VC.** `Lemma valid_<prog>_cfg_contract : ValidCFGVerifierContract ….
    Proof. vm_compute. solve_vc. Qed.` — for a PARAMETRIC-base contract
@@ -87,20 +90,12 @@ a concrete-base VC is dead compile time.
    `Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.` Residuals
    and debugging: **cfgver-solve-vc**.
 5. **End lemma.** `<prog>_noninterferent : noninterferent_strong …`. Common case
-   (register-only or straight-line, standard `pcOutOfInstrs` exit): use the
-   specialised bridge **`gen_contract_noninterferent_param_simple`** (or
+   use the bridge **`gen_contract_noninterferent_param_simple`** (or
    `_rel_classed_simple` when there is data memory — see step 3's note on
-   `gen_contract_rel_classed`, which is the default builder there) — it bakes in the mechanical
-   premises AND removes the ordering hazard below, leaving only NoDup +
-   length-bound (+ `HDataAddrs`/`Hbound` for `_rel`) + the VC. Only reach for
-   the general `eapply gen_contract_noninterferent_param` / `_rel*` (its **five**
-   premises: NoDup, `HDataAddrs`, length bound, `HexitOffs`, the VC — and the
-   "discharge the VC FIRST" gotcha) when there are extra exit offsets
-   so `_simple` does not apply. **Prefer cutting at the join point instead**
-   (one exit): no tracked example has an extra exit offset since 2026-09-25,
-   when `jump_if_zero` got a join-point `NOP`, and `extra_exit_offs` is slated
-   for removal (`plans/PLAN-exit-targets.md`). Premise-by-premise table +
-   both patterns: **cfgver-gen-contract**. Gotcha: `HDataAddrs` needs a case
+   `gen_contract_rel_classed`, which is the default builder there): premises
+   NoDup + length-bound (+ `HDataAddrs`/`Hbound` for `_rel*`) + the VC; it
+   concludes at the fall-through exit and discharges the exit fact internally.
+   Premise-by-premise table: **cfgver-gen-contract**. Gotcha: `HDataAddrs` needs a case
    split on *every* index of `mem_specs`, not just index 0.
 6. **Axiom hygiene.** `Print Assumptions <prog>_noninterferent.` must show only
    `pure_decode` and `mmioenv` (the model's inherent parameters). Anything else —
