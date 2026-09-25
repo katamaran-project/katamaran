@@ -43,7 +43,7 @@ From Katamaran Require Import
 Lemma check_scalar_noninterferent_param (init_addr : N) :
   (init_addr + 64 < lenAddr)%N ->
   noninterferent_strong init_addr check_scalar_instrs
-    (pcOutOfInstrs_exitCond init_addr check_scalar_instrs)
+    (init_addr + 64)%N
     check_scalar_reg_specs [].
 Proof.
   intros Hbound.
@@ -62,7 +62,7 @@ Qed.
 
 Lemma check_scalar_noninterferent :
   noninterferent_strong init_addr check_scalar_instrs
-    (pcOutOfInstrs_exitCond init_addr check_scalar_instrs)
+    (init_addr + 64)%N
     check_scalar_reg_specs [].
 Proof.
   apply check_scalar_noninterferent_param.

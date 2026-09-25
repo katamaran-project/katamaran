@@ -54,9 +54,8 @@
 (* A1 = base, A2 = bits, A3 = num_win, A4 = mwlen; A5/A6/A7 and T0-T6 are    *)
 (* compiler scratch.  Label positions: .LBB0_2 = instr 8 (outer latch),      *)
 (* .LBB0_3 = instr 11 (outer header), .LBB0_5 = instr 18 (inner header),     *)
-(* .LBB0_6 = instr 28 = one past the end, so both exits fall out of the      *)
-(* instruction range and pcOutOfInstrs_exitCond covers them with no          *)
-(* extra_exit_offs.                                                          *)
+(* .LBB0_6 = instr 28 = one past the end, so both exits land on the single   *)
+(* exit address init_addr + 112, the fall-through (PLAN-exit-targets.md).    *)
 (* ------------------------------------------------------------------------ *)
 
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.

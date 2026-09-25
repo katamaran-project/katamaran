@@ -53,7 +53,7 @@ From Katamaran Require Import
 Lemma swap_noninterferent_param (init_addr : N) :
   (init_addr + 12 < lenAddr)%N ->
   noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
-    (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
+    (init_addr + 12)%N
     [(X1, false, None); (X2, false, None); (X3, false, None)] [].
 Proof.
   intros Hbound.
@@ -72,7 +72,7 @@ Qed.
 
 Lemma swap_noninterferent :
   noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
-    (pcOutOfInstrs_exitCond init_addr [MV X3 X2; MV X2 X1; MV X1 X3])
+    (init_addr + 12)%N
     [(X1, false, None); (X2, false, None); (X3, false, None)] [].
 Proof.
   apply swap_noninterferent_param.

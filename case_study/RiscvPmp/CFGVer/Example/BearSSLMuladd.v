@@ -100,8 +100,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 (*                                                                           *)
 (* Translated with tools/asm_to_ast.py; each entry carries its source line.  *)
 (* The trailing `ret` is deliberately dropped (its target is the symbolic    *)
-(* link register), exactly as in Cmovznz4 — the pcOutOfInstrs exit condition *)
-(* fires once pc has advanced past the last real instruction.                *)
+(* link register), exactly as in Cmovznz4 — the program exits at the        *)
+(* fall-through, one past the last real instruction.                        *)
 (* ------------------------------------------------------------------------ *)
 Definition muladd_q_instrs : list AST :=
   [ RTYPE A1 A0 A0 RISCV_XOR                (* xor   a0, a0, a1 *)

@@ -124,7 +124,7 @@ Section ComposeLoop.
     [env].["k"∷ty_xlenbits ↦ SyncVal k].
 
   Definition cdExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜tail_exitCond v⌝)%I.
+    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜atPc 8 v⌝)%I.
 
   (* The LOOP INVARIANT, as an iProp: at the loop head, counter = k. *)
   Definition cdInv (k : bv xlenbits) : iProp Σ :=
@@ -155,8 +155,8 @@ Section ComposeLoop.
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    head_exitCond (cfg_exits cdBody) (ik k)).
-    { constructor; [|constructor]. eexists. split; reflexivity. }
+                    (SyncVal (bv.of_N 0)) (cfg_exit cdBody) (ik k)).
+    { eexists. split; reflexivity. }
     assert (Hk2 : bv.bin k = (N.of_nat n + 2)%N) by lia.
     assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
     assert (Hne : bvdec k <> bv.zero).
@@ -173,9 +173,8 @@ Section ComposeLoop.
       change ((k + minus1)%bv) with (bvdec k). exact Hne.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct an as [av|a1 a2]; [|contradiction].
-      cbn in Hex. unfold head_exitCond in Hex.
-      assert (Hav : av = bv.of_N 0) by (destruct (bv.eqb_spec av (bv.of_N 0)); congruence).
-      subst av.
+      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+      injection Hex as <-.
       iExists (bvdec k). iSplitR; [iPureIntro; exact Hdec|].
       unfold cdInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
       iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
@@ -196,8 +195,8 @@ Section ComposeLoop.
     { apply itable_faith_of_list; [reflexivity|].
       apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    tail_exitCond (cfg_exits cdFinal) (ik k)).
-    { constructor; [|constructor]. eexists. split; reflexivity. }
+                    (SyncVal (bv.of_N 8)) (cfg_exit cdFinal) (ik k)).
+    { eexists. split; reflexivity. }
     iApply (sound_scfg_verification_condition_myWP2 Hv cdExit Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
@@ -210,7 +209,8 @@ Section ComposeLoop.
       change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
       destruct an as [av|a1 a2]; [|contradiction].
-      unfold cdExit. iExists av. iFrame "Hpc". iPureIntro. rewrite Hex. exact I.
+      unfold cdExit. iExists av. iFrame "Hpc". iPureIntro.
+      cbn in Hex. unfold atPc. rewrite Hex. exact I.
   Qed.
 
   (* ===== THE LOOP CONTRACT, for free from the two above. ===== *)

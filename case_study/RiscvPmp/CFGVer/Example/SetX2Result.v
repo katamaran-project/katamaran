@@ -55,7 +55,7 @@ From Katamaran Require Import
 Lemma set_X2_to_42_noninterferent_param (init_addr : N) :
   (init_addr + 4 < lenAddr)%N ->
   noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
-    (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+    (init_addr + 4)%N
     [(X2, false, None)] [].
 Proof.
   intros Hbound.
@@ -76,7 +76,7 @@ Qed.
    missing before (set_X2 had only the parametric headline). *)
 Lemma set_X2_to_42_noninterferent :
   noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
-    (pcOutOfInstrs_exitCond init_addr [ADDI X2 X0 (bv.of_N 42)])
+    (init_addr + 4)%N
     [(X2, false, None)] [].
 Proof.
   apply set_X2_to_42_noninterferent_param.

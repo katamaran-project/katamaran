@@ -508,8 +508,8 @@ Section CFGVerificationDerived.
     (*      valuation ι = [p ↦ of_N init_addr].                           *)
     (*   6. rcfg_verification_condition  — VC-level refinement,     *)
     (*      the entry point the soundness chain uses.                     *)
-    (* The Examples.v side (exits_of_offs, itable_faith_of_list,          *)
-    (* etable_faith_exits_of_offs, gen_contract_param/_rel, concretize_*, *)
+    (* The Examples.v side (exit_of_off, itable_faith_of_list,            *)
+    (* etable_faith_exit_of_off, gen_contract_param/_rel, concretize_*,   *)
     (* gen_contract_noninterferent_rel) discharges the guard and builds   *)
     (* the base-relative specs; see the reading guide there.              *)
     (* ================================================================ *)
@@ -1292,7 +1292,7 @@ Section CFGVerificationDerived.
                WHY `first` IS NEEDED, and it is not optional.  A loop-body
                segment contract STARTS AND ENDS AT THE SAME ADDRESS: `pbody`
                (and PaddedLoop.v / CountdownComposed.v / TwoLoopsComposed.v, all
-               gate-checked) declare `exits_of_offs <base> [0]` against
+               gate-checked) declare `exit_of_off <base> 0` against
                `asn_init_pc <base>`.  Its trace visits that address twice --
                execute the body at step 0, stop at step 2 -- and the pc is the
                same TERM both times, so the pc cannot tell them apart.  Fuel

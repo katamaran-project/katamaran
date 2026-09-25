@@ -49,7 +49,7 @@ From Katamaran Require Import
 Lemma check_scalar_loop1_noninterferent_param (init_addr : N) :
   (init_addr + 48 < lenAddr)%N ->
   noninterferent_strong init_addr loop1_instrs
-    (pcOutOfInstrs_exitCond init_addr loop1_instrs)
+    (init_addr + 16)%N
     (map (concretize_reg init_addr) loop1_reg_specs_rel)
     (map (concretize_mem init_addr) loop1_byte_specs_rel).
 Proof.
@@ -73,7 +73,7 @@ Qed.
 (* Concrete corollary at the conventional init_addr = 0. *)
 Lemma check_scalar_loop1_noninterferent :
   noninterferent_strong init_addr loop1_instrs
-    (pcOutOfInstrs_exitCond init_addr loop1_instrs)
+    (init_addr + 16)%N
     (map (concretize_reg init_addr) loop1_reg_specs_rel)
     (map (concretize_mem init_addr) loop1_byte_specs_rel).
 Proof.

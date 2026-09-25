@@ -84,12 +84,7 @@ Local Notation "'{{' P '}}' i '@cfg[' fl ']' 'with' logvars" :=
        the usual 0. Exercises gen_contract's init_addr parameter (building
        asn_init_pc (bv.of_N 256)), and the executor's base<=pc load guard
        at a genuinely nonzero base (first fetch index (256-256)/4 = 0).
-       Uses a manually-correct exit condition (pc >= 256+4) rather than
-       pcOutOfInstrs_exitCond, whose threshold is still absolute-zero-
-       relative (4*|instrs|, not init_addr + 4*|instrs|) -- parameterizing
-       it is Step 4, not yet done; using it here at a nonzero start would
-       make the exit condition trivially true from the very first pc,
-       making the contract vacuously (not meaningfully) valid. *)
+       The exit is the fall-through, 256 + 4. *)
     Definition mv_nonzero_start_ex : CFGVerifierContract :=
       gen_contract (256%N) [(X1, false, None)] []
         [MV X1 X0]

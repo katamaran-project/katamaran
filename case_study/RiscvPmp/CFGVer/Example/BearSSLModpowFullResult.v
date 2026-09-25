@@ -35,7 +35,7 @@ From Katamaran Require Import
 Lemma modpow_win_full_noninterferent_param (init_addr : N) :
   (init_addr + 176 < lenAddr)%N ->
   noninterferent_strong init_addr modpow_win_full_instrs
-    (pcOutOfInstrs_exitCond init_addr modpow_win_full_instrs)
+    (init_addr + 112)%N
     (map (concretize_reg init_addr) modpow_win_full_reg_specs_rel)
     (map (concretize_mem init_addr) modpow_win_full_mem_specs_rel).
 Proof.
@@ -58,7 +58,7 @@ Qed.
 
 Lemma modpow_win_full_noninterferent :
   noninterferent_strong init_addr modpow_win_full_instrs
-    (pcOutOfInstrs_exitCond init_addr modpow_win_full_instrs)
+    (init_addr + 112)%N
     (map (concretize_reg init_addr) modpow_win_full_reg_specs_rel)
     (map (concretize_mem init_addr) modpow_win_full_mem_specs_rel).
 Proof.

@@ -95,9 +95,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       ; BNE A4 X0 key_schedule_loop2_back_offset (* bne     a4, x0, back *)
       ].
 
-    Definition key_schedule_loop2_exitCond : bv xlenbits -> bool :=
-      pcOutOfInstrs_exitCond init_addr key_schedule_loop2_instrs.
-
     (* Table lives right after the 14*4 = 56-byte code region, matching the
        countdown_mem/cmovznz4 "data hardcoded contiguously after the code"
        pattern. *)

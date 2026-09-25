@@ -55,7 +55,7 @@ From Katamaran Require Import
 Lemma countdown_noninterferent_param (init_addr : N) :
   (init_addr + 8 < lenAddr)%N ->
   noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-    (pcOutOfInstrs_exitCond init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset])
+    (init_addr + 8)%N
     [(X1, true, Some (bv.of_N 2))] [].
 Proof.
   intros Hbound.
@@ -78,12 +78,12 @@ Proof.
   - solve_valid (valid_countdown_cfg_contract_param init_addr).
 Qed.
 
-(* The concrete result is now a corollary of the universal-base theorem
-   above: countdown_exitCond is definitionally pcOutOfInstrs_exitCond at
-   init_addr = 0, so no vm_compute/rewrite is needed here at all. *)
+(* The concrete result is a corollary of the universal-base theorem above:
+   its exit address is the same `init_addr + 8`, so no vm_compute/rewrite is
+   needed here at all. *)
 Lemma countdown_noninterferent :
   noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-    countdown_exitCond [(X1, true, Some (bv.of_N 2))] [].
+    (init_addr + 8)%N [(X1, true, Some (bv.of_N 2))] [].
 Proof.
   apply countdown_noninterferent_param.
   unfold init_addr, lenAddr; lia.
@@ -98,7 +98,7 @@ Qed.
 Lemma countdown_mem_noninterferent_param (init_addr : N) :
   (init_addr + 20 < lenAddr)%N ->
   noninterferent_strong init_addr countdown_mem_instrs
-    (pcOutOfInstrs_exitCond init_addr countdown_mem_instrs)
+    (init_addr + 16)%N
     (map (concretize_reg init_addr) countdown_mem_reg_specs_rel)
     (map (concretize_mem init_addr) countdown_mem_mem_specs_rel).
 Proof.
@@ -118,7 +118,7 @@ Qed.
    behaviorally, just with the base held in an explicit register instead
    of the hardwired-zero one). *)
 Lemma countdown_mem_noninterferent :
-  noninterferent_strong init_addr countdown_mem_instrs countdown_mem_exitCond
+  noninterferent_strong init_addr countdown_mem_instrs (init_addr + 16)%N
     [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
     [(bv.of_N 16, true, Some (bv.of_N 2))].
 Proof.

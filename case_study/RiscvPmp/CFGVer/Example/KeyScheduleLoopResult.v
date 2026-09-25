@@ -59,7 +59,7 @@ From Katamaran Require Import
 Lemma key_schedule_loop2_noninterferent_param (init_addr : N) :
   (init_addr + 64 < lenAddr)%N ->
   noninterferent_strong init_addr key_schedule_loop2_instrs
-    (pcOutOfInstrs_exitCond init_addr key_schedule_loop2_instrs)
+    (init_addr + 56)%N
     (map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
     (map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel).
 Proof.
@@ -83,7 +83,7 @@ Qed.
 (* The concrete result is now a corollary of the universal-base theorem
    above. *)
 Lemma key_schedule_loop2_noninterferent :
-  noninterferent_strong init_addr key_schedule_loop2_instrs key_schedule_loop2_exitCond
+  noninterferent_strong init_addr key_schedule_loop2_instrs (init_addr + 56)%N
     key_schedule_loop2_reg_specs key_schedule_loop2_mem_specs.
 Proof.
   ni_rel_corollary key_schedule_loop2_noninterferent_param

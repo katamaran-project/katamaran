@@ -357,8 +357,7 @@ Definition zzmuladdfulln4_mem_specs_rel : list mem_spec_rel :=
 Definition zzmuladdfulln4_cfg_contract_param (ia : N)
     : @CFGVerifierContract ["p" :: ty_xlenbits] :=
   gen_contract_rel ia zzmuladdfulln4_reg_specs_rel zzmuladdfulln4_mem_specs_rel
-    zzmuladdfulln4_instrs [] 1184%N
-    (pcOutOfInstrs_exitCond ia zzmuladdfulln4_instrs) 500.
+    zzmuladdfulln4_instrs 1184%N 500.
 
 Lemma valid_zzmuladdfulln4_cfg_contract_param (ia : N) :
   cfg_vc (zzmuladdfulln4_cfg_contract_param ia) (cfg_instrs (zzmuladdfulln4_cfg_contract_param ia)).

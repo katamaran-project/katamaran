@@ -57,7 +57,7 @@ From Katamaran Require Import
 Lemma cmovznz4_noninterferent_param (init_addr : N) :
   (init_addr + 164 < lenAddr)%N ->
   noninterferent_strong init_addr cmovznz4_instrs
-    (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
+    (init_addr + 116)%N
     (map (concretize_reg init_addr) cmovznz4_reg_specs_rel)
     (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
 Proof.
@@ -84,7 +84,7 @@ Qed.
    the respective base (init_addr = 0, and cmovznz4_start = 256), so the
    conclusions coincide definitionally (checked by vm_compute). *)
 Lemma cmovznz4_noninterferent :
-  noninterferent_strong init_addr cmovznz4_instrs (pcOutOfInstrs_exitCond init_addr cmovznz4_instrs)
+  noninterferent_strong init_addr cmovznz4_instrs (init_addr + 116)%N
     cmovznz4_reg_specs cmovznz4_mem_specs.
 Proof.
   ni_rel_corollary cmovznz4_noninterferent_param
@@ -95,7 +95,7 @@ Qed.
    as a corollary of the universal-base version. *)
 Lemma cmovznz4_noninterferent_at_start :
   noninterferent_strong cmovznz4_start cmovznz4_instrs
-    (pcOutOfInstrs_exitCond cmovznz4_start cmovznz4_instrs)
+    (cmovznz4_start + 116)%N
     cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
 Proof.
   ni_rel_corollary cmovznz4_noninterferent_param

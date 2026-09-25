@@ -70,7 +70,7 @@ Section ComposePaddedLoop.
 
   (* The real exit: pc past the END OF THE WHOLE 66-instruction program. *)
   Definition plExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜pcOutOfInstrs_exitCond 0 padded_instrs v⌝)%I.
+    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜atPc 264 v⌝)%I.
 
   (* The loop invariant.  Note the instruction resource is the WHOLE program,
      not the segment -- that is the change this file exists to demonstrate. *)
@@ -120,8 +120,8 @@ Section ComposePaddedLoop.
     cbn [cfg_map plBody] in Hv.
     pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    pl_headExitCond (cfg_exits plBody) (ik k)).
-    { constructor; [|constructor]. eexists. split; reflexivity. }
+                    (SyncVal (bv.of_N pl_head)) (cfg_exit plBody) (ik k)).
+    { eexists. split; reflexivity. }
     assert (Hk2 : bv.bin k = (N.of_nat n + 2)%N) by lia.
     assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
     assert (Hne : bvdec k <> bv.zero).
@@ -138,10 +138,8 @@ Section ComposePaddedLoop.
       change ((k + minus1)%bv) with (bvdec k). exact Hne.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct an as [av|a1 a2]; [|contradiction].
-      cbn in Hex. unfold pl_headExitCond in Hex.
-      assert (Hav : av = bv.of_N pl_head)
-        by (destruct (bv.eqb_spec av (bv.of_N pl_head)); congruence).
-      subst av.
+      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+      injection Hex as <-.
       iExists (bvdec k). iSplitR; [iPureIntro; exact Hdec|].
       unfold plInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
       iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
@@ -158,8 +156,8 @@ Section ComposePaddedLoop.
     cbn [cfg_map plFinal] in Hv.
     pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    (pcOutOfInstrs_exitCond 0 padded_instrs) (cfg_exits plFinal) (ik k)).
-    { constructor; [|constructor]. eexists. split; reflexivity. }
+                    (SyncVal (bv.of_N 264)) (cfg_exit plFinal) (ik k)).
+    { eexists. split; reflexivity. }
     iApply (sound_scfg_verification_condition_myWP2 Hv plExit Hif Hef ltac:(solve_no_blocks)
               $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
@@ -172,7 +170,8 @@ Section ComposePaddedLoop.
       change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
       destruct an as [av|a1 a2]; [|contradiction].
-      unfold plExit. iExists av. iFrame "Hpc". iPureIntro. rewrite Hex. exact I.
+      unfold plExit. iExists av. iFrame "Hpc". iPureIntro.
+      cbn in Hex. unfold atPc. rewrite Hex. exact I.
   Qed.
 
   (* ===== THE LOOP, for free from the two above. ===== *)
