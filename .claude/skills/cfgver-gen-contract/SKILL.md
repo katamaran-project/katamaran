@@ -6,10 +6,10 @@ description: >
   when specifying a program via spec lists: reg_spec (RegIdx * is_public *
   option value), mem_full_spec (address * is_public * option value), the
   base-relative param_val/reg_spec_rel/mem_spec_rel vocabulary (PVBaseOff k =
-  base+k), public/private/pinned semantics, extra_exit_offs for non-fall-through
-  exits, the 7-argument gen_contract call, and the five-or-six side premises of
-  gen_contract_noninterferent(_param/_rel) (NoDup, data-address layout, length
-  bound, exit offsets, base bound, the VC). ALSO use when MIGRATING an existing
+  base+k), public/private/pinned semantics, the single fall-through exit (a program
+  exiting elsewhere is a segment), the 5-argument gen_contract call, and the side
+  premises of gen_contract_noninterferent(_param/_rel) (NoDup, data-address layout,
+  length bound, base bound, the VC). ALSO use when MIGRATING an existing
   concrete-base example/contract to a parametric (∀ init_addr) base, or planning
   that migration across several examples — this is the gen_contract_param/_rel
   recipe, not a from-scratch design question. Trigger on the "discharge

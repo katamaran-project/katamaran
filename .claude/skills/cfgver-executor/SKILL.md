@@ -3,8 +3,8 @@ name: cfgver-executor
 description: >
   Katamaran CFGVer symbolic executor & verification condition — the decision layer.
   Use when reading or writing the symbolic side of the CFG verifier: sexec_cfg_addr
-  (symbolic executor over a term-keyed instruction table), the angelic exit/execute
-  choice at each step, why execution errors on a pc that matches no table key
+  (symbolic executor over a term-keyed instruction table), the exit test at each step
+  (stop iff the pc is the contract's single exit term), why execution errors on a pc that matches no table key
   (lookup_instr/is_exit fail), ptsto_instrs / ptsto_instrs_lookup (instruction-memory
   ownership, still gmap-based on the concrete side), and scfg_verification_condition
   (how the VC is built and called). ALSO use when a backward-branch loop example's

@@ -7,7 +7,7 @@ description: >
   synthetic program/loop from scratch when there's no real source to translate
   (e.g. a small-N feasibility spike toward a bigger not-yet-attempted example,
   such as a loop a real compiler would just fully unroll at that trip count) —
-  choosing exitCond / fuel / extra_exit_offs, building the contract with
+  choosing the exit address / fuel, building the contract with
   gen_contract, discharging the VC, and the gen_contract_noninterferent_param end
   lemma. Trigger on "verify this program", "add a new example", "prove X
   noninterferent", "write/design a small-N or synthetic version of X first",

@@ -3,10 +3,10 @@ name: cfgver-contracts
 description: >
   Katamaran CFGVer contracts in general — what a CFGVerifierContract IS and how to
   write one by hand. Use when asking about the contract record and its fields
-  (cfg_init_addr, cfg_placement, cfg_exits, cfg_precondition, cfg_instrs,
-  cfg_exitCond, cfg_fuel), choosing the logical context Σ ([ctx] concrete vs
-  ["p"∷ty_xlenbits] parametric base), why the symbolic VC ignores cfg_init_addr and
-  cfg_exitCond, ValidCFGVerifierContract / Valid_CFG_VC / DebugCFGVerifierContract,
+  (cfg_init_addr, cfg_placement, cfg_exit — the single exit address term —,
+  cfg_precondition, cfg_instrs, cfg_fuel, cfg_postcondition), choosing the logical
+  context Σ ([ctx] concrete vs ["p"∷ty_xlenbits] parametric base), why the symbolic
+  VC ignores cfg_init_addr, ValidCFGVerifierContract / Valid_CFG_VC / DebugCFGVerifierContract,
   or hand-writing a contract without the generator (as for
   cmovznz4_cfg_contract_param) — including the assertion vocabulary: ↦ᵣ / ↦ₘ
   points-to, asn.exist, secLeakvar (leak permission for public values),
