@@ -1922,7 +1922,7 @@ Section AdequacyTools.
        in its block premise -- exactly what foreclosed nesting. *)
     Lemma blockSound_of_vc (words : bv xlenbits -> bv word)
         (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (v : bv xlenbits) (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
         (Hv : safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
                  (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
@@ -1937,7 +1937,7 @@ Section AdequacyTools.
            (ai_block only) are justified outright -- they may fire at step 0,
            before any later has been earned.  For a program with no ai_block,
            blocksSoundAt_of_none. *)
-        (Hbs0 : ⊢ blocksSoundAt false words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab))
+        (Hbs0 : forall v, (⊢ blocksSoundAt false words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)))
         (* ALL its blocks are justified, and this premise may ASSUME THIS
            BLOCK: a loop is one block whose head carries that same block as
            ai_loop, so its VC's back edge consumes the block's pre (the
@@ -1945,13 +1945,17 @@ Section AdequacyTools.
            once an instruction has run, i.e. under a later -- which is exactly
            what `iLöb` supplies.  For a block with no self-reference the
            assumption is simply ignored (`iIntros "_"`). *)
-        (Hbs : □ blockSound words v b ⊢
+        (* The Löb hypothesis is `□ ∀ v', blockSound words v' b` -- this
+           block at EVERY entry address (decision (c), PLAN-valid-blk-annot
+           Phase 3), not just at v: so a re-entry may fire at any address, and
+           the conclusion is exactly Adequacy.blkValid's body. *)
+        (Hbs : forall v, □ (∀ v', blockSound words v' b) ⊢
                  blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)) :
-      blockFaithful ab v b tbl ⊢ blockSound words v b.
+      (∀ v, blockFaithful ab v b tbl) ⊢ ∀ v, blockSound words v b.
     Proof.
       iIntros "#Hf".
       iLöb as "IH".
-      iIntros (ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
+      iIntros (v ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
       (* Read the faithfulness facts out of the pre WITHOUT consuming it: the
          conclusion is pure, so `∧` (which duplicates the context under iSplit)
          gives both. *)
@@ -1962,7 +1966,7 @@ Section AdequacyTools.
               ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
                   (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
         with "[Hpre]" as "[%Hfi Hpre]".
-      { iSplit; [ iApply ("Hf" $! ι with "Hpre") | iExact "Hpre" ]. }
+      { iSplit; [ iApply ("Hf" $! v ι with "Hpre") | iExact "Hpre" ]. }
       destruct Hfi as [Hif Hef].
       (* blk_span v b IS ai_instr <$> instrs_of_list v ab: fmap commutes with
          instrs_of_list (Tables.fmap_instrs_of_list), and strip is that fmap. *)
@@ -1972,8 +1976,8 @@ Section AdequacyTools.
          of them UNDER THE LATER, where the Löb hypothesis is available *)
       iPoseProof (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
                     with "[] []") as "Hrun".
-      { iApply Hbs0. }
-      { iNext. iApply Hbs. iModIntro. iExact "IH". }
+      { iApply (Hbs0 v). }
+      { iNext. iApply (Hbs v). iModIntro. iExact "IH". }
       iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
       (* no secLeak bullet: iFrame closes `⌜secLeak (SyncVal v)⌝` on the way in,
          as it does at every other call site of this lemma. *)
@@ -2053,3 +2057,47 @@ End AdequacyTools.
 Definition blkValid (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) : Prop :=
   forall Σ (GS : sailGS2 Σ) (words : bv xlenbits -> bv word) (v : bv xlenbits),
     ⊢ @blockSound Σ GS words v b.
+
+(* ---- blocksSound FROM ANNOTATIONS THAT CARRY THEIR VALIDITY --------------
+   (PLAN-valid-blk-annot.md Phase 3.)  For a program written as
+   `map (eraseV c) LV`, every block the executor can fire is justified by the
+   annotation itself: an ai_block by its vb_ok proof (blkValid, at whatever
+   address it fires -- decision B), a re-entry by the Löb hypothesis about
+   selfBlk c (at any address -- decision (c)).  A lookup only needs "this is
+   an element of the list" (instrs_of_list_elem_of), so there is no key
+   inversion, and a block may sit anywhere in the program. *)
+Section ValidAnnot.
+  Context {Σ} {GS : sailGS2 Σ}.
+
+  (* At a contract's entry only ai_block annotations fire, and each carries
+     its own proof. *)
+  Lemma blocksSoundAt_false_of_V {R} (c : @Katamaran.RiscvPmp.CFGVer.Verifier.CFGVerifierContract R)
+      (words : bv xlenbits -> bv word) (base : bv xlenbits)
+      (LV : list (Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstrV blkValid)) :
+    ⊢ blocksSoundAt false words
+        (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map (Katamaran.RiscvPmp.CFGVer.Verifier.eraseV c) LV)).
+  Proof.
+    iIntros "!>" (v ai b) "%Hlk %Hb".
+    apply instrs_of_list_elem_of, List.in_map_iff in Hlk as (a & <- & _).
+    unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire, Katamaran.RiscvPmp.CFGVer.Verifier.eraseV in Hb. cbn in Hb.
+    destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_block a) as [x|]; cbn in Hb; [|discriminate].
+    injection Hb as <-. iApply (Katamaran.RiscvPmp.CFGVer.Verifier.vb_ok x Σ GS words v).
+  Qed.
+
+  (* All blocks, re-entries included, given the Löb hypothesis about the
+     enclosing contract at every address. *)
+  Lemma blocksSound_of_V {R} (c : @Katamaran.RiscvPmp.CFGVer.Verifier.CFGVerifierContract R)
+      (words : bv xlenbits -> bv word) (base : bv xlenbits)
+      (LV : list (Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstrV blkValid)) :
+    □ (∀ v', blockSound words v' (Katamaran.RiscvPmp.CFGVer.Verifier.selfBlk c))
+    ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map (Katamaran.RiscvPmp.CFGVer.Verifier.eraseV c) LV)).
+  Proof.
+    iIntros "#IH !>" (v ai b) "%Hlk %Hb".
+    apply instrs_of_list_elem_of, List.in_map_iff in Hlk as (a & <- & _).
+    unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire, Katamaran.RiscvPmp.CFGVer.Verifier.eraseV in Hb. cbn in Hb.
+    destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_block a) as [x|]; cbn in Hb.
+    - injection Hb as <-. iApply (Katamaran.RiscvPmp.CFGVer.Verifier.vb_ok x Σ GS words v).
+    - destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_loop a); [|discriminate].
+      injection Hb as <-. iApply "IH".
+  Qed.
+End ValidAnnot.

@@ -1,7 +1,7 @@
 # PLAN: block annotations that carry their own validity (`AnnotInstrV`)
 
 Status: rev 2 (2026-09-25), IN PROGRESS on branch `issue/valid-blk-annot`.
-Phases 1-2 DONE, built and axiom-clean; gate deferred until after Phase 3 (Emiel); VC-cost measurement not yet run (§7). Rewritten after PLAN-exit-targets.md
+Phases 1-3 DONE; GATE PASSED after Phase 3 (2026-09-25, 19 end theorems axiom-clean). VC-cost measurement not yet run. Next: Phase 4. Rewritten after PLAN-exit-targets.md
 landed (branch issue/exit-targets), against the code as it now is. Rev 1 was
 written before that change; see §6 for what it settled.
 
@@ -204,6 +204,7 @@ Changes:
 | V5 | 2026-09-25 | `ai_loop` self-reference is enforced by the type: `aiv_loop : bool` (rev 1 had `option N`; exit-targets made the offset redundant). | Back to `option BlkAnnot` + a `Forall` premise in `blockSound_of_vc`. |
 | V6 | 2026-09-25 | Sequenced AFTER PLAN-exit-targets.md -- DONE, that plan is implemented. | — |
 | V7 | 2026-09-25 | `blkValid` is UNCONDITIONAL in the entry address (no no-wrap premise, revising §1a). A generated segment's precondition already carries `gen_base_bound` (`unsigned base + 4·len ≤ lenAddr`), which `GenCompose.seg_pre_bound` reads off, so `blockFaithful_of_seg` takes `strip ab = code` instead of `Hrep`. Phase 3 needs no address arithmetic at the firing site. | Restore `Hrep` on `blockFaithful_of_seg` and the premise on `blkValid`; derive the fit at the firing site from containment + the program's own fit. |
+| V8 | 2026-09-25 | Re-entry is justified at EVERY address: `blockSound_of_vc`'s Löb induction ranges over the entry address, `Hbs` may assume `□ ∀ v', blockSound words v' b`, and the lemma concludes `∀ v, blockSound words v b` (= `blkValid`'s body). So `aiv_loop` may sit on any instruction and no head-only restriction exists. Chosen over (a) a program-level re-entry flag and (b) a head-only side condition. Cost: a block's faithfulness must hold at every address (symbolic placement) -- already implied by V7. | Fixed-`v` `blockSound_of_vc` plus option (a): `AnnotInstrV` without `aiv_loop`, re-entry flag on the program, set on the head by erasure. |
 
 ## 6. What PLAN-exit-targets.md settled for this plan
 
@@ -272,4 +273,32 @@ As built, differing from §1c in three places:
   now an instance, its `Hfit` unused until Phase 4 deletes it.
 - Built through `CountdownRecResult.vo`; `countdown_rec_noninterferent_param`
   and `cdRecBlk_valid` axiom-clean.
+
+### Phase 3 -- AnnotInstrV + adequacy (2026-09-25, GATE PASSED: 16m46s at GATE_JOBS=1, 19 end theorems axiom-clean)
+
+Design as built differs from §2 in how `vb_ok` reaches the firing site: the
+concrete table stays `gmap _ AnnotInstr` and the executor induction
+(`sound_exec_cfg_addr_myWP2`) is UNCHANGED. Instead the block premises it
+already takes are DERIVED from the annotated list:
+- `Verifier.v`: `BlkAnnotV Valid`, `AnnotInstrV Valid` (with
+  `aiv_loop : bool`), `selfBlk c`, `eraseV c`, `AST_AnnotInstrV`,
+  `strip_eraseV`. Light, Iris-free.
+- `Adequacy.v`: `blockSound_of_vc` generalized per V8 (Löb `forall (v)`).
+  New `Section ValidAnnot`: `blocksSoundAt_false_of_V` (ai_block via
+  `vb_ok`) and `blocksSound_of_V` (plus ai_loop via the Löb hypothesis), for
+  `instrs_of_list base (map (eraseV c) LV)` -- a lookup only needs list
+  membership (`instrs_of_list_elem_of` + `in_map_iff`), so NO key inversion
+  and blocks may sit anywhere (ZZBlkBC's mid-program case needs nothing).
+- `GenCompose.v`: `blockSound_of_contract` generalized likewise;
+  `blkValid_of_contract` and `blkValid_of_seg` (after `End SegCompose`, since
+  `blkValid` quantifies over every Σ).
+- `Example/CountdownRecResult.v`: `cd_rec_annotV` (head `aiv_loop := true`)
+  and `cdRecBlk_valid` as ONE `exact blkValid_of_seg ...`, reusing
+  `valid_cd_rec` unchanged: `map (eraseV (cdRec ia)) cd_rec_annotV` is
+  `cd_rec_annot ia` up to conversion.
+- V-lists whose type mentions `blkValid` must live on the HEAVY side (the
+  `*Result.v` files), not in the light `Example/*.v`. Relevant for Phase 4's
+  `cd_link_annotV`.
+- Probes: `Example/ZZBlkVcAllProbe.v` (generalized Löb lemma),
+  `Example/ZZBlkVProbe.v` (step C) -- pet OOMs on Adequacy.v too.
 

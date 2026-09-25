@@ -97,26 +97,24 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
-(* THE LOOP BLOCK IS VALID ANYWHERE (PLAN-valid-blk-annot.md Phase 2), for an
-   arbitrary entry address v: blockFaithful_of_seg reads the no-wrap bound off
-   the loop's own precondition (seg_pre_bound), so there is no fit premise.
-   `ia` only fixes cfg_init_addr, which blockSound never reads (R1:
-   blockSound at cdRecBlk ia and cdRecBlk ia' are equal by reflexivity). *)
+(* THE LOOP'S CODE, ANNOTATED WITH VALIDITY (PLAN-valid-blk-annot.md): the
+   head re-enters the enclosing contract (aiv_loop), the BNE is plain.  Erasing
+   it at cdRec ia gives cd_rec_annot ia up to conversion, which is why the
+   existing VC valid_cd_rec is accepted below unchanged.  It lives here, not
+   in CountdownRec.v, because its type mentions blkValid (heavy side). *)
+Definition cd_rec_annotV : list (AnnotInstrV blkValid) :=
+  [ MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] None true
+  ; AST_AnnotInstrV (BNE X1 X0 back4) ].
+
+(* THE LOOP BLOCK IS VALID ANYWHERE: blkValid_of_seg, from the loop's own VC.
+   No fit premise (decision B: gen_base_bound in the loop's precondition) and
+   no Löb reasoning here (decision (c): inside blockSound_of_vc).  `ia` only
+   fixes cfg_init_addr, which blockSound never reads. *)
 Lemma cdRecBlk_valid (ia : N) : blkValid (cdRecBlk ia).
 Proof.
-  intros Σ GS words v.
-  iPoseProof (blockFaithful_of_seg (term_var "q") (term_var "q") ia
-                cd_instrs 8 4 [] cd_rec_inv cd_rec_post v (cd_rec_annot ia)) as "Hf".
-  { intros iota. reflexivity. }
-  { reflexivity. }
-  iApply (blockSound_of_contract words v (cdRecBlk ia)
-            (cd_rec_annot ia) (valid_cd_rec ia) with "Hf").
-  - reflexivity.
-  - apply blocksSoundAt_of_none. repeat constructor.
-  - iIntros "#Hb". unfold cd_rec_annot.
-    iApply (blocksSound_of_head with "Hb").
-    + reflexivity.
-    + repeat constructor.
+  exact (blkValid_of_seg (term_var "q") (term_var "q") ia cd_instrs 8 4 []
+           cd_rec_inv cd_rec_post cd_rec_annotV
+           (fun v iota => eq_refl) eq_refl (valid_cd_rec ia)).
 Qed.
 
 Section Link.

@@ -441,22 +441,24 @@ Section SegCompose.
      against `table_of_list (cfg_placement c) 0 ab` and nothing else, so pinning
      it is what makes the statement quote a contract instead of a VC. *)
   Lemma blockSound_of_contract (words : bv xlenbits -> bv word)
-      (v : bv xlenbits) (b : BlkAnnot) (ab : list AnnotInstr)
+      (b : BlkAnnot) (ab : list AnnotInstr)
       (Hv : cfg_vc (blk_contract b) ab)
       (* ab really is the block's own code, annotated *)
       (Hstrip : strip ab = cfg_instrs (blk_contract b))
       (* ab's entry blocks (ai_block) are justified outright ... *)
-      (Hbs0 : ⊢ blocksSoundAt false words (instrs_of_list v ab))
-      (* ... and all of its blocks possibly by THIS block itself (a loop whose
-         head carries it as ai_loop: see blockSound_of_vc) *)
-      (Hbs : □ blockSound words v b ⊢ blocksSound words (instrs_of_list v ab)) :
-    blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab)
-    ⊢ blockSound words v b.
+      (Hbs0 : forall v, (⊢ blocksSoundAt false words (instrs_of_list v ab)))
+      (* ... and all of its blocks possibly by THIS block itself, at any
+         address (a loop whose code carries it as ai_loop: see
+         blockSound_of_vc) *)
+      (Hbs : forall v, □ (∀ v', blockSound words v' b) ⊢
+               blocksSound words (instrs_of_list v ab)) :
+    (∀ v, blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab))
+    ⊢ ∀ v, blockSound words v b.
   Proof.
-    (* `v` is explicit now: it used to be inferred from Hexit's type. *)
-    exact (blockSound_of_vc words ab v b _
+    exact (blockSound_of_vc words ab b _
              (seg_vc (blk_contract b) ab Hv) Hstrip Hbs0 Hbs).
   Qed.
+
 
   (* ---- THE EXIT STATE AT A KNOWN ADDRESS ----------------------------------
      Every contract has exactly ONE exit (PLAN-exit-targets.md), so a
@@ -2180,6 +2182,55 @@ Section SegCompose.
   Qed.
 
 End SegCompose.
+
+(* ---- A VALID BLOCK, FROM A CONTRACT ANNOTATED WITH VALID BLOCKS ----------
+   OUTSIDE Section SegCompose: blkValid quantifies over every Σ, while the
+   section fixes one.
+   (PLAN-valid-blk-annot.md Phase 3.)  A contract verified over an
+   AnnotInstrV list is a valid block: its nested blocks are justified by
+   their own proofs and its re-entries by Löb (Adequacy.blocksSound_of_V),
+   so the only remaining obligation is faithfulness at every address.
+   The result goes straight into another program's annotation (vb_ok). *)
+Lemma blkValid_of_contract {R : LCtx} (c : @CFGVerifierContract R)
+    (LV : list (AnnotInstrV blkValid))
+    (Hv : cfg_vc c (List.map (eraseV c) LV))
+    (Hcode : List.map aiv_instr LV = cfg_instrs c)
+    (Hf : forall Σ (GS : sailGS2 Σ) (v : bv xlenbits),
+            ⊢ blockFaithful (List.map (eraseV c) LV) v (selfBlk c)
+                (table_of_list (cfg_placement c) 0 (List.map (eraseV c) LV))) :
+  blkValid (selfBlk c).
+Proof.
+  intros Σ GS words v.
+  iPoseProof (blockSound_of_contract words (selfBlk c) (List.map (eraseV c) LV) Hv
+                (eq_trans (strip_eraseV c LV) Hcode)) as "H".
+  - intros v'. apply blocksSoundAt_false_of_V.
+  - intros v'. apply blocksSound_of_V.
+  - iApply ("H" with "[]"); iIntros (v'); iApply Hf.
+Qed.
+
+(* ...and for a generated segment the faithfulness is blockFaithful_of_seg,
+   so a valid block is: the VC, "the annotated list is this code", and the
+   placement equation (by eq_refl when base_a does not mention "a"). *)
+Lemma blkValid_of_seg {R : LCtx}
+    (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (ia : N) (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)
+    (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    (LV : list (AnnotInstrV blkValid))
+    (Hba : forall (v : bv xlenbits) (iota : Valuation R),
+             inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+    (Hcode : List.map aiv_instr LV = code)
+    (Hv : let c := gen_seg_contract base base_a ia code target fl regs extra_pre post in
+          cfg_vc c (List.map (eraseV c) LV)) :
+  blkValid (selfBlk (gen_seg_contract base base_a ia code target fl regs extra_pre post)).
+Proof.
+  apply (blkValid_of_contract _ LV Hv Hcode).
+  intros Σ GS v.
+  apply blockFaithful_of_seg; [exact (Hba v)|].
+  rewrite strip_eraseV. exact Hcode.
+Qed.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
    it.  They need no section variable -- a tactic is syntax. *)
