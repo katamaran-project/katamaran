@@ -1,6 +1,7 @@
 TODO:
 - DONE 2026-09-25 (branch issue/exit-targets, PLAN-exit-targets.md; merge pending the gate) except Phase 5 (drop cfg_init_addr / the ia
-	contract parameter, R-A) -- still OPEN.  Original item follows.
+	contract parameter, R-A) -- DEFERRED by Emiel until after PLAN-valid-blk-annot.md, which removes its only real reader
+	(ValidCFGVerifierContract's blocksSound at cfg_init_addr).  See PLAN-exit-targets.md D11.  Original item follows.
 - PRIORITY (Emiel, 2026-09-25): REMOVE EXIT CONDITIONS; state exits as TARGET ADDRESSES.
 	`cfg_exitCond : bv -> bool` has become unwieldy, and it is not needed. It is enough to demand that the code exits at
 	specific addresses (or something like it), so drop exit conditions completely and move to target addresses.

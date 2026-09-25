@@ -1,6 +1,6 @@
 # PLAN: replace exit conditions by ONE exit address
 
-Status: IMPLEMENTED 2026-09-25 on branch issue/exit-targets (commits 9f05f792, 9a4e303e, cfa9a762); gate: see §9. Phase 5 (drop cfg_init_addr) NOT done. Origin: the TODOS.txt
+Status: IMPLEMENTED 2026-09-25 on branch issue/exit-targets (commits 9f05f792, 9a4e303e, cfa9a762); gate: see §9. Phase 5 (drop cfg_init_addr) DEFERRED (D11). Origin: the TODOS.txt
 PRIORITY item (Emiel, 2026-09-25). Goes BEFORE PLAN-valid-blk-annot.md (§7).
 
 ## 0. Decisions (Emiel)
@@ -244,6 +244,8 @@ axiom-clean (pure_decode, mmioenv) after the change.
 **Measured outcome.** All 17 light examples: VC tactic lines unchanged. The 12
 standalone Result files: statement changed, NO proof change. The prediction in
 §3 ("no VC should get harder") held for every tracked example.
+
+| D11 | 2026-09-25 | Phase 5 DEFERRED: keep `cfg_init_addr`. | Its only real reader is `ValidCFGVerifierContract`'s block obligation (`blocksSound … (instrs_of_list (bv.of_N (cfg_init_addr c)) a)`); the wiring lemmas' `contractInitAddr` is redundant with `contractPlacement`. Dropping the field would force a choice (validity parameterised by the load address, or quantified over all bases) that PLAN-valid-blk-annot.md makes moot by removing blocksSound from ValidCFGVerifierContract. Revisit after that plan. | — |
 
 ### §9 Gate
 
