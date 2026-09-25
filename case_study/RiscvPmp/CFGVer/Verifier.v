@@ -812,6 +812,29 @@ Section CFGVerificationDerived.
         (apc : STerm ty_xlenbits w) : bool :=
       Term_eqb (peval apc) (peval exits).
 
+    (* A BLOCK'S CODE IS REALLY IN THE PROGRAM (PLAN-valid-blk-annot.md §1c):
+       every instruction of the block's contract sits at its address, from
+       `apc` on in steps of 4, in this table.  Checked at the firing site, so
+       the soundness proof reads containment off the concrete run instead of
+       taking it as a per-program premise (it replaced blocksSoundAt's
+       containment conjunct and Adequacy.blk_span_sub).  The address steps as
+       `apc + 4`, the recursion instrs_of_list uses, so the concrete side is
+       `bv.add v 4` definitionally; peval reassociates it against the
+       `off + base` keys table_of_list builds.  No variables are allocated. *)
+    Fixpoint blk_code_in {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
+        (l : list AST) : bool :=
+      match l with
+      | nil     => true
+      | i :: l' =>
+          match lookup_instr tbl apc with
+          | Some (_, ai) =>
+              if eq_dec (ai_instr ai) i
+              then blk_code_in tbl (term_bvadd apc (term_val ty_xlenbits (bv.of_N 4))) l'
+              else false
+          | None => false
+          end
+      end.
+
     (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
     (* peval; NOT part of the soundness chain). *)
     Section TableLookupSelfTests.
@@ -844,6 +867,15 @@ Section CFGVerificationDerived.
         Term_eqb (peval (term_val ty_xlenbits (bv.of_N 260) : Term (wctx w1) ty_xlenbits))
           (peval (term_bvsub (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) (term_val ty_xlenbits (bv.of_N 256)))  (term_val ty_xlenbits (bv.of_N 4))))
         = true.
+      Proof. vm_compute. reflexivity. Qed.
+
+      (* blk_code_in: the code at p is [A; B]; a wrong instruction or one past
+         the table's end fails. *)
+      Example blk_code_in_hit : blk_code_in tbl1 p1 [instrA; instrB] = true.
+      Proof. vm_compute. reflexivity. Qed.
+      Example blk_code_in_miss :
+        (blk_code_in tbl1 p1 [instrA; instrA], blk_code_in tbl1 p1 [instrA; instrB; instrA])
+        = (false, false).
       Proof. vm_compute. reflexivity. Qed.
     End TableLookupSelfTests.
 
@@ -1209,6 +1241,22 @@ Section CFGVerificationDerived.
                       evars2.["a"∷ty_xlenbits ↦ apc2].["an"∷ty_xlenbits ↦ aex] ;;
         pure (persist__term aex θ3).
 
+    (* The block step behind its containment check: the block's code must BE
+       this program's code at apc (blk_code_in, PLAN-valid-blk-annot.md §1c),
+       since a block only summarises code that is actually there.  Kept a
+       wrapper around sexec_block, rather than an `if` around the whole
+       firing-site bind chain, so the step still has the shape
+       `bind <block step> k` and rexec_cfg_addr pairs it with ONE lemma
+       (rexec_block_chk).  A failed check is `error` before the bind, so the
+       VC is the same term either way. *)
+    Definition sexec_block_chk {w} (tbl : SInstrTableW w) (b : BlkAnnot)
+        (apc : STerm ty_xlenbits w) : SHeapSpec (STerm ty_xlenbits) w :=
+      if blk_code_in tbl apc (cfg_instrs (blk_contract b))
+      then sexec_block b apc
+      else error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                      debug_string_message :=
+                                        "sexec_cfg_addr: block code not in program" |}).
+
     (* THE POST-DROP STEP BODY, HOISTED OUT OF sexec_cfg_addr.
        It is a plain let-hoist — the same chain, in the same order, with the
        persist layers split at the drop instead of accumulated across it — and it
@@ -1356,7 +1404,7 @@ Section CFGVerificationDerived.
                     it earns no later (see ai_loop). *)
                  match ai_fire stepped ai with
                  | Some b =>
-                     ⟨ θb ⟩ apc' <- sexec_block b apc ;;
+                     ⟨ θb ⟩ apc' <- sexec_block_chk tbl b apc ;;
                      ⟨ θn ⟩ np'  <- demonic (Some "np") _ ;;
                      sexec_cfg_addr n' false stepped
                        (persist (A := Sub Σ0) trans (θb ∘ θn))
@@ -1514,6 +1562,14 @@ Section CFGVerificationDerived.
       apply cext_pure.
     Qed.
 
+    Lemma cext_sexec_block_chk {w : World} (tbl : SInstrTableW w) (b : BlkAnnot)
+        (apc : Term (wctx w) ty_xlenbits) :
+      CExt (sexec_block_chk tbl b apc).
+    Proof.
+      unfold sexec_block_chk.
+      destruct (blk_code_in tbl apc _); [apply cext_sexec_block|apply cext_error].
+    Qed.
+
     Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
       forall (first stepped : bool)
         {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
@@ -1526,7 +1582,7 @@ Section CFGVerificationDerived.
       - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
         destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
         destruct (ai_fire stepped ai) as [b|].
-        { apply cext_bind; [apply cext_sexec_block|]. intros w1 th1 apc'.
+        { apply cext_bind; [apply cext_sexec_block_chk|]. intros w1 th1 apc'.
           apply cext_bind; [apply cext_demonic|]. intros w2 th2 np'.
           apply IH. }
         apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.

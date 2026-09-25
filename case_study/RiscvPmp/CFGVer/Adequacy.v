@@ -1330,11 +1330,12 @@ Section AdequacyTools.
     Definition blocksSoundAt (stepped : bool) (words : bv xlenbits -> bv word)
         (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
         : iProp Σ :=
+      (* No containment conjunct any more: that the block's span really IS
+         this program's code is checked by the VC at the firing site
+         (Verifier.blk_code_in, PLAN-valid-blk-annot.md §1c) and read off the
+         concrete run (cblk_code_in_sub). *)
       (□ ∀ v ai b, ⌜instrs !! v = Some ai⌝ →
                    ⌜Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire stepped ai = Some b⌝ →
-                   (* the block's span really IS this program's code, at v --
-                      AST-level containment, §2c's faithfulness half *)
-                   ⌜blk_span v b ⊆ ai_instr <$> instrs⌝ ∗
                    blockSound words v b)%I.
 
     (* ALL of a program's blocks, of both kinds.  This is the premise every
@@ -1402,6 +1403,22 @@ Section AdequacyTools.
       iApply "Hk". iFrame.
     Qed.
 
+    (* THE CONTAINMENT, read off the concrete run: cexec_block_chk asserts
+       cblk_code_in, which is pointwise exactly the insert chain
+       instrs_of_list builds.  No key-freshness needed -- a later insert at a
+       colliding key is still a lookup the premise already covers. *)
+    Lemma cblk_code_in_sub
+        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (l : list AST) :
+      forall v, Katamaran.RiscvPmp.CFGVer.VerifierRel.cblk_code_in instrs v l ->
+      Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v l ⊆ ai_instr <$> instrs.
+    Proof.
+      induction l as [|i l IH]; intros v Hc; cbn [Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list].
+      - apply map_empty_subseteq.
+      - destruct Hc as [Hv Hc].
+        apply insert_subseteq_l; [exact Hv|exact (IH _ Hc)].
+    Qed.
+
     Lemma instrs_of_list_elem_of {A} (base : bv xlenbits) (l : list A) v x :
       Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base l !! v = Some x ->
       List.In x l.
@@ -1438,29 +1455,6 @@ Section AdequacyTools.
       ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base l).
     Proof. apply blocksSoundAt_of_none. Qed.
 
-    (* ---- THE SPAN CONTAINMENT, ONCE ---------------------------------------
-       blocksSound's other half.  A block's span is its OWN code laid out at
-       its own address (§2c), so containment in the enclosing program is just
-       "the enclosing program STARTS with the block's code" -- which for a
-       block at the head is instrs_of_list_prefix, with fmap_instrs_of_list to
-       cross the AnnotInstr/AST boundary. *)
-    Lemma blk_span_sub (v : bv xlenbits)
-        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
-        (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (rest : list AST) :
-      Katamaran.RiscvPmp.CFGVer.Verifier.strip l
-        = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs
-            (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b) ++ rest ->
-      blk_span v b ⊆ ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v l.
-    Proof.
-      intros Hstrip. unfold blk_span.
-      rewrite Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
-      change (List.map ai_instr l)
-        with (Katamaran.RiscvPmp.CFGVer.Verifier.strip l).
-      rewrite Hstrip.
-      apply Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list_prefix.
-    Qed.
-
     (* ---- ...AND A PROGRAM WITH ONE BLOCK, AT ITS HEAD ---------------------
        The introduction rule blocksSound_of_none could not give.  Restricted to
        a block on the FIRST instruction, which is what `blk_at 0` builds and
@@ -1481,19 +1475,18 @@ Section AdequacyTools.
       (* the head carries b as ai_block OR as ai_loop (a loop's own head) *)
       Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true x = Some b ->
       List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true ai = None) l ->
-      blk_span base b ⊆ ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l) ->
       (* an Iris entailment rather than `(⊢ blockSound) -> ⊢ blocksSound`, so
          blockSound_of_vc's Löb hypothesis can feed it; □ because blocksSound
          is itself persistent *)
       □ blockSound words base b ⊢
         blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l)).
     Proof.
-      intros Hx Hl Hsub.
+      intros Hx Hl.
       iIntros "#Hb !>" (v ai b') "%Hlk %Hb'".
       cbn [Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list] in Hlk.
       apply lookup_insert_Some in Hlk as [[<- <-]|[Hne Hlk]].
       - rewrite Hx in Hb'. injection Hb' as <-.
-        iSplitR; [iPureIntro; exact Hsub | iExact "Hb"].
+        iExact "Hb".
       - exfalso. apply instrs_of_list_elem_of in Hlk.
         rewrite List.Forall_forall in Hl. specialize (Hl _ Hlk).
         rewrite Hl in Hb'. discriminate.
@@ -1589,14 +1582,20 @@ Section AdequacyTools.
                     the idiom myWP2_loop_bind/join were written for, so no new
                     Iris machinery is needed. *)
                  unfold bind, CHeapSpec.bind in Hexec.
+                 (* the containment check cexec_block_chk asserted first *)
+                 unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block_chk,
+                   CHeapSpec.bind, CHeapSpec.assert_formula, CHeapSpec.lift_purespec,
+                   CPureSpec.assert_formula, CPureSpec.assert_pathcondition in Hexec.
+                 destruct Hexec as [Hcode Hexec].
+                 pose proof (cblk_code_in_sub instrs _ v Hcode) as Hsub.
                  iIntros "(#Hb0 & #Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                  iDestruct (cexec_block_sound _ _ _ _ Hexec with "Hh")
                    as (ι) "[Hpre Hpost]".
-                 iDestruct ("Hb0" $! v i b with "[//] [//]") as "[%Hsub Hb]".
+                 iDestruct ("Hb0" $! v i b with "[//] [//]") as "Hb".
                  iApply myWP2_loop_join.
-                 (* blocksSound now yields containment alongside soundness, and
-                    the adapter is what turns the block's SPAN ownership back
-                    into the whole-program ownership this loop carries. *)
+                 (* containment came from the run (Hsub above), soundness from
+                    blocksSound; the adapter turns the block's SPAN ownership
+                    back into the whole-program ownership this loop carries. *)
                  iApply (blockSound_span_to_whole words instrs v b ι
                            (myWP2_loop ExitCondIprop) Hsub
                            with "Hb [$Hpre $Hpc $Hinstrs Hnpc]").

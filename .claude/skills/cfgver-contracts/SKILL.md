@@ -28,14 +28,19 @@ Record CFGVerifierContract {Σ} :=
   ; cfg_placement     : Term Σ ty_xlenbits
   ; cfg_exit          : Term Σ ty_xlenbits
   ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-  ; cfg_instrs        : list AnnotInstr
+  ; cfg_instrs        : list AST
   ; cfg_fuel          : nat
   ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
   }.
 ```
 
-`cfg_instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
-migration (PLAN-annotinstr.md Phase 1). `AnnotInstr` is a PRODUCT record —
+`cfg_instrs` is a plain `list AST` (again) since 2026-09-22
+(`plans/PLAN-contract-ast.md` Phase 1, `da4f5b4e`): annotations are TOOL INPUT,
+passed to the verification as a separate argument — the VC is `cfg_vc c a` with
+`a : list AnnotInstr` whose `strip` must equal `cfg_instrs c` — not carried in
+the specification. (Between the AnnotInstr migration and that date the field
+WAS `list AnnotInstr`; this is also what lets `ai_block` carry a real contract
+without a circularity.) `AnnotInstr` is a PRODUCT record —
 `MkAnnotInstr { ai_ghost_before : list Annot ; ai_instr : AST ; ai_ghost_after :
 list Annot }` — NOT the sum `AnnotAST | AnnotGhost` an earlier version of this
 skill described; that sum was tried and reverted at `13eb91e0`, because it can
@@ -43,9 +48,8 @@ represent a ghost with no instruction to attach to. `Annot` is `AnnotDebugBreak`
 (a transparent per-position heap/pathcondition dump) or `AnnotLemmaInvocation`
 (a real `call_lemma`, since Phase 4 — see `cfgver-executor`).
 
-`Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so every existing
-hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs` (a plain
-`list AST`) still typechecks unedited — see **cfgver-executor** for the coercion
+`Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so a plain
+`list AST` can be passed where the annotated list `a` is expected — see **cfgver-executor** for the coercion
 mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer projection
 every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 
@@ -55,7 +59,7 @@ every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 | `cfg_placement` | where the code sits, as a **term**: `term_val … (bv.of_N ia)` concrete, `term_var "p"` parametric |
 | `cfg_exit` | the ONE exit address, as a **term** (usually `exit_of_off p off`, `Tables.v`). A run stops exactly when pc = exit (except at the entry step). Replaced `cfg_exits`/`cfg_exitCond` on 2026-09-25 (`plans/PLAN-exit-targets.md`) |
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
-| `cfg_instrs` | the program, a `list AnnotInstr` placed at `cfg_placement` (coerces transparently from a plain `list AST` — see above) |
+| `cfg_instrs` | the program, a `list AST` placed at `cfg_placement`; the annotated copy is `cfg_vc`'s second argument (see above) |
 | `cfg_postcondition` | RE-EXPOSED 2026-09-03 (it had been hardwired to `true`). `consume`d at the moment the pc reaches the exit, with `"an"` bound to `cfg_exit`; the soundness bridge hands it back to the caller, which is **what makes two segment contracts composable**. Pass `asn_no_post` for an ordinary whole-program contract. |
 | `cfg_init_addr` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
 
@@ -74,10 +78,21 @@ internally).
 > **cfgver-executor**, "Loops as ONE block", and `PLAN-rec-loop-block.md`.
 
 ```coq
-Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-  cfg_map c Valid_CFG_VC.
+(* Contracts.v -- THE VC, over an annotated copy `a` of the program *)
+Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
+  cfg_map c (fun ia p exits P _ fl Q => Valid_CFG_VC ia p exits P a fl Q).
 (* Valid_CFG_VC ia p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
+
+(* EndToEnd.v (heavy) -- the packaged property, built only via
+   ValidCFGVerifierContract_intro *)
+Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
+  exists a, cfg_vc c a /\ strip a = cfg_instrs c
+            /\ (forall `{sailGS2 Σ} wds, ⊢ blocksSound wds (instrs_of_list (bv.of_N (cfg_init_addr c)) a)).
+(* the blocksSound conjunct is removed by PLAN-valid-blk-annot.md Phase 4 *)
 ```
+
+`cfg_vc` does not force `strip a = cfg_instrs c`; that equation is a premise of
+the soundness bridge, so a VC over the wrong `a` proves nothing usable.
 
 Discharge pattern: `Proof. vm_compute. solve_vc. Qed.` — residual patterns and
 failure modes in **cfgver-solve-vc**.

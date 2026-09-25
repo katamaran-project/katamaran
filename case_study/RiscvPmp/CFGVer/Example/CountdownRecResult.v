@@ -127,7 +127,6 @@ Section Link.
       iApply (blocksSound_of_head with "Hb").
       + reflexivity.
       + repeat constructor.
-      + apply (blk_span_sub (@bv.of_N xlenbits ia) (cdRecBlk ia) _ []). reflexivity.
   Qed.
 
   (* THE LINK: the only block cdLink's VC trusted is sound. *)
@@ -140,9 +139,6 @@ Section Link.
     iApply (blocksSound_of_head with "Hb").
     - reflexivity.
     - repeat constructor.
-    - apply (blk_span_sub (@bv.of_N xlenbits ia) (cdRecBlk ia) _
-               [ADDI X2 X0 (bv.of_N 42)]).
-      reflexivity.
   Qed.
 End Link.
 

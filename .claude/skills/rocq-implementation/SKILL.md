@@ -60,12 +60,13 @@ you can extract and check in ~100 ms first (see the module-functor note
 below). One confirming compile at the end is the sanctioned use; the second
 consecutive one is the smell.
 
-This is now enforced, not just advised: `.claude/hooks/coqc-guard.sh` denies
-a build whose target's own source is newer than its `.vo` unless a
-`rocq_check` / `rocq_start` / `rocq_step_multi` has happened since that
-change. A prerequisite-only change does not trip it, so dependency rebuilds
-are unaffected. If you hit that denial, do the interactive check — the
-override exists but is the user's to set.
+This was hook-enforced by `.claude/hooks/coqc-guard.sh` (deny a build whose
+target's source is newer than its `.vo` unless an interactive check happened
+since) until **2026-09-25, when Emiel unwired it from `.claude/settings.json`**
+(the script is still on disk). It compared timestamps, so it fired on files
+stale from a merge rather than edited, and on files pet cannot open at all
+(`VerifierRel.v`), leaving no honest way through. The discipline above still
+stands; it is now yours to keep, not the hook's.
 
 ```
 rocq_compile_file(file, mode="vos")               # fast type-check, statements only

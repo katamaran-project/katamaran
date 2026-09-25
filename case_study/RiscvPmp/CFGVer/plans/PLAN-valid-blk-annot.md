@@ -1,8 +1,9 @@
 # PLAN: block annotations that carry their own validity (`AnnotInstrV`)
 
-Status: DRAFT, rev 2 (2026-09-25). Nothing implemented. Rewritten after
-PLAN-exit-targets.md landed (branch issue/exit-targets), against the code as
-it now is. Rev 1 was written before that change; see §6 for what it settled.
+Status: rev 2 (2026-09-25), IN PROGRESS on branch `issue/valid-blk-annot`.
+Phase 1 DONE, built and axiom-clean; gate + VC-cost measurement not yet run (§7). Rewritten after PLAN-exit-targets.md
+landed (branch issue/exit-targets), against the code as it now is. Rev 1 was
+written before that change; see §6 for what it settled.
 
 ## 0. Goal
 
@@ -214,3 +215,44 @@ Changes:
 - `cfg_init_addr` was kept (exit-targets D11) because
   `ValidCFGVerifierContract`'s blocksSound conjunct reads it. → This plan's
   step 4 removes that reader, and step 6 then drops the field.
+
+## 7. Progress log
+
+### Phase 1 -- containment in the VC (2026-09-25, BUILT)
+
+Built through `Example/CountdownRecResult.vo`; `countdown_rec_noninterferent_param`
+has exactly the two whitelisted axioms. `CountdownRec.vo`'s VCs (block at the
+entry of cdLink, ai_loop re-entry in cdRec) close unchanged with the check in
+place -- R2 confirmed on the real code. NOT yet run: `scripts/gate.sh`, and the
+VC-cost measurement on CountdownRec / a muladd segment. The three relational
+lemmas were developed in `Example/ZZBlkChkProbe.v` (pet cannot open
+VerifierRel.v); two needed only implicit-argument fixes.
+
+As built, differing from §1c in three places:
+- **R2 confirmed** by `vm_compute` on the symbolic-base self-test table:
+  `peval` reassociates `4 + (k 4)`, `(k 4) + 4` and `4 + p` against the
+  `table_of_list` keys `peval_bvadd (off) p` (offset 0 is bare `p`).
+- **Symbolic** (`Verifier.v`): `blk_code_in tbl apc l : bool` steps the address
+  as `term_bvadd apc 4` (the `instrs_of_list` recursion, so the concrete side
+  is `bv.add v 4` definitionally), `eq_dec` on `ai_instr`. Wrapped in
+  `sexec_block_chk tbl b apc := if blk_code_in .. then sexec_block b apc else
+  error`, NOT an `if` around the whole firing-site chain: the step keeps the
+  shape `bind <block step> k`, so `rexec_cfg_addr` case 2 changes one line
+  (`rexec_block` -> `rexec_block_chk`). Self-tests `blk_code_in_hit/_miss`.
+- **Concrete** (`VerifierRel.v`): POINTWISE `cblk_code_in instrs v l : Prop`
+  (`(ai_instr <$> instrs) !! v = Some i` per address) rather than
+  `instrs_of_list v l ⊆ ..`, because VerifierRel.v does not require Tables.v
+  and the pointwise form makes `blk_code_in_sound` a plain induction over
+  `lookup_instr_sound`. `cexec_block_chk := assert_formula (cblk_code_in ..)
+  ;; cexec_block`. Lemmas: `blk_code_in_sound(_repₚ)`, `rprop_and`,
+  `rexec_block_chk`.
+- **Adequacy**: `cblk_code_in_sub` (pointwise -> `⊆`, by `insert_subseteq_l`,
+  no key-freshness) feeds `blockSound_span_to_whole` from `Hexec`;
+  `blocksSoundAt` loses its containment conjunct; `blk_span_sub` deleted;
+  `blocksSound_of_head` loses `Hsub`. `CountdownRecResult.v` drops its two
+  `blk_span_sub` bullets (statement unchanged).
+- Not ported: `Example/ZZBlkABSound.v` (probe, not in `_CoqProject`) still
+  calls `blk_span_sub`.
+- Decision recorded: VC check over a static Coq-level prefix check on the
+  annotated list, because the VC automates it (Emiel).
+

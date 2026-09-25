@@ -783,6 +783,24 @@ carries `blocksSoundAt stepped ∗ ▷ blocksSound`; each executed instruction
 strips the later. `blocksSound` (= `blocksSoundAt true`, both kinds) is still
 the premise every external bridge takes. Partial correctness only.
 
+**The VC checks that a block's code IS the program's code (2026-09-25,
+`plans/PLAN-valid-blk-annot.md` Phase 1).** At the firing site the symbolic
+step is `sexec_block_chk tbl b apc := if blk_code_in tbl apc (cfg_instrs c)
+then sexec_block b apc else error`. `blk_code_in` looks up each block
+instruction at `apc`, `apc + 4`, … in the table (`lookup_instr`, so modulo
+`peval` — verified to match `off + p` keys at a symbolic base, offset 0
+included) and compares `ai_instr` by `eq_dec`. No variables, one lookup per
+block instruction per firing. The concrete mirror `cexec_block_chk` ASSERTS
+the pointwise `cblk_code_in instrs v l` before `cexec_block`; Adequacy turns it
+into `blk_span v b ⊆ ai_instr <$> instrs` with `cblk_code_in_sub` (plain
+induction, no key-freshness). That fact used to be a conjunct of
+`blocksSoundAt`, discharged per program by `blk_span_sub` (deleted) and only
+for a block at the program's HEAD; a mid-program block now needs nothing.
+Kept as a wrapper around `sexec_block` rather than an `if` around the whole
+firing-site chain so `rexec_cfg_addr` pairs it with one lemma
+(`rexec_block_chk`). Chosen over a static Coq-level prefix check on the
+annotated list because the VC automates it (Emiel, 2026-09-25).
+
 **Where a block resumes.** `BlkAnnot` is just `{| blk_ctx; blk_contract |}`
 (no offset field since `plans/PLAN-exit-targets.md`): a block resumes at its
 contract's one exit — symbolically `subst (cfg_exit c) evars` (`sexec_block`),
