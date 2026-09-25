@@ -143,8 +143,7 @@ Definition modpow_win_full_mem_specs_rel : list mem_spec_rel :=
    leaves slack — tight fuel surfaces as a bare False deep in the VC. *)
 Definition modpow_win_full_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
   gen_contract_rel_classed ia modpow_win_full_reg_specs_rel modpow_win_full_mem_specs_rel
-    modpow_win_full_instrs [] 176
-    (pcOutOfInstrs_exitCond ia modpow_win_full_instrs) 150.
+    modpow_win_full_instrs 176 150.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
    The end theorem states noninterferent_strong over `modpow_win_full_instrs` while the

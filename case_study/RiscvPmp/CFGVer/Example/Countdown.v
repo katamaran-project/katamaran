@@ -68,8 +68,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        VC with zero changes. *)
     Definition countdown_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [(X1, true, Some (bv.of_N 2))]
-        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] []
-        (pcOutOfInstrs_exitCond ia [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]) 5.
+        [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] 5.
 
     Lemma valid_countdown_cfg_contract_param (ia : N) :
       cfg_vc (countdown_cfg_contract_param ia) (cfg_instrs (countdown_cfg_contract_param ia)).
@@ -125,8 +124,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Definition countdown_mem_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed ia countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
-        countdown_mem_instrs [] 20
-        (pcOutOfInstrs_exitCond ia countdown_mem_instrs) 10.
+        countdown_mem_instrs 20 10.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
        The end theorem states noninterferent_strong over `countdown_mem_instrs` while the

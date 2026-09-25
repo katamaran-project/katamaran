@@ -95,14 +95,14 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       asn.formula (formula_bool (term_val ty.bool true)).
 
     (* CFGVerifierContract: unlike a plain Hoare-triple contract, the CFG
-       verifier requires an explicit exit condition and fuel bound.
+       verifier requires an explicit exit address and fuel bound.
        Postconditions are not exposed: SHeapSpec has no leakcheck, so the final
        heap state is unconstrained and any leftover resources are silently dropped.
 
        Post table-pivot (PLAN-symbolic-base.md Phase 3): the verifier side is
        the TABLE VC (scfg_verification_condition) over address-term
-       tables built from the placement term `cfg_placement` by table_of_list /
-       exits_of_list.  Concrete contracts pass term_val (bv.of_N init_addr)
+       table built from the placement term `cfg_placement` by table_of_list,
+       and ONE exit term `cfg_exit` (PLAN-exit-targets.md).  Concrete contracts pass term_val (bv.of_N init_addr)
        (the keys then fold to literals inside peval_bvadd — same behavior as
        the old gmap VC); parameterized contracts may pass a variable term.
        `cfg_init_addr : N` remains the concrete load address used by the
@@ -110,13 +110,13 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        the hypothesis  inst cfg_placement ι = SyncVal (bv.of_N init_addr). *)
     Definition CFG_VC_triple {Σ}
       (p     : Term Σ ty_xlenbits)
-      (exits : list (Term Σ ty_xlenbits))
+      (exits : Term Σ ty_xlenbits)
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AnnotInstr)
       (fl : nat)
       (* The exit assertion, RE-EXPOSED 2026-09-03 (it was hardwired to
-         `true` by 2b6c7753).  `consume`d at the moment the exit condition
-         is hit, with "an" bound to whichever declared exit was taken; the
+         `true` by 2b6c7753).  `consume`d at the moment the pc reaches the
+         exit, with "an" bound to it; the
          soundness bridge hands it back to the caller, which is what makes
          two segment contracts composable.  Pass asn_no_post for an
          ordinary whole-program contract. *)
@@ -124,16 +124,14 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
 
-    (* init_addr and ec are unused by the symbolic VC (the exit condition
-       lives in the exit TABLE now); they are kept in the signature so
+    (* init_addr is unused by the symbolic VC; it is kept in the signature so
        Valid_CFG_VC remains a direct cfg_map target. *)
     Definition Valid_CFG_VC {Σ}
       (init_addr : N)
       (p     : Term Σ ty_xlenbits)
-      (exits : list (Term Σ ty_xlenbits))
+      (exits : Term Σ ty_xlenbits)
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
       (i  : list AnnotInstr)
-      (ec : bv xlenbits -> bool)
       (fl : nat)
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
       safeE (postprocess (CFG_VC_triple p exits P i fl Q)).
@@ -167,11 +165,11 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        force `a` to be a version of `c`'s program.  Harmless: such a proof
        establishes nothing, because the bridge will not accept it. *)
     Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
-      cfg_map c (fun ia p exits P _ ec fl Q => Valid_CFG_VC ia p exits P a ec fl Q).
+      cfg_map c (fun ia p exits P _ fl Q => Valid_CFG_VC ia p exits P a fl Q).
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
-      cfg_map c (fun ia p exits P _ ec fl Q =>
+      cfg_map c (fun ia p exits P _ fl Q =>
         VerificationCondition (postprocess (CFG_VC_triple p exits P a fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a

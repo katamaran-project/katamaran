@@ -59,8 +59,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        valid_jump_if_zero_cfg_contract (see MvSwap.v for the rationale). *)
     Definition jump_if_zero_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia [(X1, true, None)]
-        [BEQ X1 X0 true_offset; NOP] []
-        (pcOutOfInstrs_exitCond ia [BEQ X1 X0 true_offset; NOP])
+        [BEQ X1 X0 true_offset; NOP]
         5.
 
     Lemma valid_jump_if_zero_cfg_contract_param (ia : N) :
@@ -83,8 +82,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        valid_jmp_fwd_cfg_contract (see MvSwap.v for the rationale). *)
     Definition jmp_fwd_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia []
-        [JAL X0 jmp_offset; NOP] []
-        (pcOutOfInstrs_exitCond ia [JAL X0 jmp_offset; NOP])
+        [JAL X0 jmp_offset; NOP]
         5.
 
     Lemma valid_jmp_fwd_cfg_contract_param (ia : N) :

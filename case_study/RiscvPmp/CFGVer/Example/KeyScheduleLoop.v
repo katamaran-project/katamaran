@@ -128,8 +128,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
     Definition key_schedule_loop2_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed ia key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel
-        key_schedule_loop2_instrs [] 64
-        (pcOutOfInstrs_exitCond ia key_schedule_loop2_instrs) 40.
+        key_schedule_loop2_instrs 64 40.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
        The end theorem states noninterferent_strong over `key_schedule_loop2_instrs` while the

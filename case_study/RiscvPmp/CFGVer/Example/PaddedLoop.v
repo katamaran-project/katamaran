@@ -57,21 +57,20 @@ Definition padded_annot : list AnnotInstr := pl_pre ++ pl_seg ++ pl_post.
 
 Definition pl_head : N := 256.
 
-(* exit condition of the CUT: back at the loop head (offset 256). *)
-Definition pl_headExitCond : bv xlenbits -> bool :=
-  fun v => bv.eqb v (bv.of_N pl_head).
+(* The cut exits back at the loop head (offset 0 from pl_head); the final
+   trip at pl_head + 8, one past the program.  ONE exit term each
+   (PLAN-exit-targets.md). *)
 
 (* ---- LOOP BODY: head -> head, one trip.  cfg_instrs is the SEGMENT. ---- *)
 Definition plBody : @CFGVerifierContract cdCtx :=
   @MkCFGVerifierContract cdCtx 0%N
     (term_val ty_xlenbits (bv.of_N pl_head))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N pl_head)) [0%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 0)
     (asn_init_pc (bv.of_N pl_head)
        ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.neq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
     cd_instrs
-    pl_headExitCond
     3
     (X1 ↦ᵣ dec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
 
@@ -84,13 +83,12 @@ Qed.
 Definition plFinal : @CFGVerifierContract cdCtx :=
   @MkCFGVerifierContract cdCtx 0%N
     (term_val ty_xlenbits (bv.of_N pl_head))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N pl_head)) [8%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 8)
     (asn_init_pc (bv.of_N pl_head)
        ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
        ∗ asn.formula (formula_relop bop.eq (dec (term_var "k"))
                         (term_val ty_xlenbits bv.zero)))
     cd_instrs
-    (pcOutOfInstrs_exitCond 0 padded_instrs)
     3
     asn_no_post.
 

@@ -110,17 +110,11 @@ Definition gen_regs_at {Σ : LCtx} (base : Term Σ ty_xlenbits)
    round of this machinery went wrong; when a segment with a fixed base-
    relative memory block actually appears, add the builder then. *)
 
-(* ========================================================================== *)
-(* 2. THE SEGMENT EXIT CONDITION                                               *)
-(* ========================================================================== *)
-
-(* From ABSOLUTE byte targets, so single- and multi-exit segments are spelled
-   the same way.  The hand-written segments used two different spellings for
-   this -- `bv.eqb v (of_N (ia + 1128))` in most, `bv.eqb v (of_N (ia + head +
-   108))` in one -- which is a latent source of exit-table mismatches. *)
-Definition seg_exitCond (ia : N) (targets : list N) : bv xlenbits -> bool :=
-  fun v => List.fold_right
-             (fun t acc => orb (bv.eqb v (bv.of_N (ia + t)%N)) acc) false targets.
+(* 2. THE SEGMENT EXIT CONDITION -- GONE (PLAN-exit-targets.md, 2026-09-25).
+   `seg_exitCond ia targets` was the concrete copy of the exit; a contract now
+   has ONE exit term (cfg_exit = exit_of_off base target) and no concrete copy,
+   so seg_exitCond, seg_exitCond_hit/_inv/_inv1 and seg_exit_table_ok went with
+   it.  The concrete exit address is `seg_addr ia target` below. *)
 
 (* ========================================================================== *)
 (* 2b. BOUNDS                                                                  *)
@@ -140,7 +134,7 @@ Definition seg_exitCond (ia : N) (targets : list N) : bv xlenbits -> bool :=
 (* The CANONICAL segment address.  Two spellings of the same thing were in use
    -- `bv.add (bv.of_N ia) (bv.of_N off)`, what `inst place iota` produces
    since a placement is `p +b of_N head`, and `bv.of_N (ia + off)`, what
-   seg_exitCond compares against (30 and 24 occurrences).  Any proof meeting
+   the old seg_exitCond compared against (30 and 24 occurrences).  Any proof meeting
    both paid a bv.of_N_add rewrite; seg_addr_add is now the ONE conversion. *)
 Definition seg_addr (ia off : N) : bv xlenbits := @bv.of_N xlenbits (ia + off).
 
@@ -265,55 +259,11 @@ Ltac bv_bound := pose proof exp2_xlenbits; lia.
 (* ---- pc ALGEBRA -----------------------------------------------------------
    Segment addresses are written TWO ways across the hand-written proofs:
    `bv.add (bv.of_N ia) (bv.of_N off)` (what `inst place iota` produces, since
-   a placement term is `p +b of_N head`) and `bv.of_N (ia + off)` (what
-   seg_exitCond compares against).  30 and 24 occurrences respectively, and
+   a placement term is `p +b of_N head`) and `bv.of_N (ia + off)` (what the
+   old seg_exitCond compared against).  30 and 24 occurrences respectively, and
    every proof that meets both pays a bv.of_N_add rewrite to reconcile them.
    `seg_addr` is the canonical form; `seg_addr_add` is the one conversion, so a
    call site never has to think about which spelling it is holding. *)
-
-(* A declared target IS hit.  (Used by GenCompose.seg_exit_table_ok.) *)
-Lemma seg_exitCond_hit (ia : N) (targets : list N) (t : N) :
-  List.In t targets -> seg_exitCond ia targets (seg_addr ia t) = true.
-Proof.
-  unfold seg_addr.
-  induction targets as [|t0 ts IH]; [contradiction|].
-  intros [Heq | Hin]; cbn [seg_exitCond List.fold_right].
-  - subst t0.
-    destruct (bv.eqb_spec (@bv.of_N xlenbits (ia + t)%N)
-                          (@bv.of_N xlenbits (ia + t)%N)); [reflexivity | congruence].
-  - (* the cbn has already unfolded seg_exitCond into its foldr, so
-       `rewrite (IH Hin)` finds no subterm; `exact` unifies up to conversion
-       where `rewrite` matches syntactically. *)
-    apply Bool.orb_true_iff. right. exact (IH Hin).
-Qed.
-
-(* ...and the CONVERSE, which is what every call site was open-coding as
-   `destruct an as [av|..]; [|contradiction]` + `unfold <seg>_exitCond` +
-   `assert (Hav : av = ...) by (destruct (bv.eqb_spec ...); congruence)`.
-   Only a declared target can be reached, so knowing the exit condition holds
-   PINS the pc. *)
-Lemma seg_exitCond_inv (ia : N) (targets : list N) (v : bv xlenbits) :
-  seg_exitCond ia targets v = true ->
-  exists t, List.In t targets /\ v = seg_addr ia t.
-Proof.
-  unfold seg_addr.
-  induction targets as [|t0 ts IH]; cbn [seg_exitCond List.fold_right].
-  - discriminate.
-  - intros Hor. apply Bool.orb_true_iff in Hor as [Heq | Hrest].
-    + exists t0. split; [now left |].
-      destruct (bv.eqb_spec v (@bv.of_N xlenbits (ia + t0)%N));
-        [assumption | discriminate].
-    + destruct (IH Hrest) as [t [Hin Hv]]. exists t. split; [now right | exact Hv].
-Qed.
-
-(* The overwhelmingly common case: ONE declared exit, so the pc is determined
-   outright and no case analysis survives at all. *)
-Lemma seg_exitCond_inv1 (ia t : N) (v : bv xlenbits) :
-  seg_exitCond ia [t] v = true -> v = seg_addr ia t.
-Proof.
-  intros H. apply seg_exitCond_inv in H as [t' [Hin Hv]].
-  destruct Hin as [-> | []]. exact Hv.
-Qed.
 
 (* ========================================================================== *)
 (* 2b. THE SEGMENT'S DECIDABLE SIDE CONDITIONS, AS ONE BOOLEAN                 *)
@@ -330,14 +280,14 @@ Qed.
    `Hoff` is the head = 4 * skip invariant gen_seg_contract documents but
    cannot enforce in its type; `Hskip`/`Hsz` are the sub-table's fit. *)
 Definition seg_placement_ok (prog : list AnnotInstr) (skip : nat)
-    (head bound : N) (targets : list N) : bool :=
+    (head bound : N) (target : N) : bool :=
   andb (andb (N.eqb (N.mul 4 (N.of_nat skip)) head)
              (Nat.leb skip (length prog)))
        (andb (N.leb (N.mul 4 (N.of_nat (length prog))) bound)
-             (List.forallb (fun t => N.leb head t) targets)).
+             (N.leb head target)).
 
 Lemma seg_placement_off (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
+  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
   @eq N (N.mul 4 (N.of_nat skip)) head.
 Proof.
   unfold seg_placement_ok in H.
@@ -346,7 +296,7 @@ Proof.
 Qed.
 
 Lemma seg_placement_skip (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
+  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
   Nat.le skip (length prog).
 Proof.
   unfold seg_placement_ok in H.
@@ -355,7 +305,7 @@ Proof.
 Qed.
 
 Lemma seg_placement_size (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
+  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
   (N.mul 4 (N.of_nat (length prog)) <= bound)%N.
 Proof.
   unfold seg_placement_ok in H.
@@ -363,14 +313,13 @@ Proof.
   now apply N.leb_le.
 Qed.
 
-Lemma seg_placement_targets (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (targets : list N) (H : seg_placement_ok prog skip head bound targets = true) :
-  List.Forall (fun t => N.le head t) targets.
+Lemma seg_placement_target (prog : list AnnotInstr) (skip : nat) (head bound : N)
+  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
+  (head <= target)%N.
 Proof.
   unfold seg_placement_ok in H.
   apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [_ H].
-  apply List.Forall_forall. intros t Hin.
-  rewrite List.forallb_forall in H. apply N.leb_le. now apply H.
+  now apply N.leb_le.
 Qed.
 
 (* ========================================================================== *)
@@ -416,7 +365,7 @@ Definition gen_seg_contract {Σ : LCtx}
        argument; the two are tied by `strip a = cfg_instrs c` at the
        soundness bridge. *)
     (code : list AST)
-    (targets : list N)            (* exit offsets RELATIVE to the segment *)
+    (target : N)                  (* THE exit offset, RELATIVE to the segment *)
     (fl : nat)
     (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
@@ -424,13 +373,12 @@ Definition gen_seg_contract {Σ : LCtx}
     : @CFGVerifierContract Σ :=
   @MkCFGVerifierContract Σ ia
     base
-    (exits_of_offs base targets)
+    (exit_of_off base target)
     ( asn_pc_eq base_a
       ∗ gen_base_bound base_a (4 * N.of_nat (length code))
       ∗ extra_pre
       ∗ gen_regs_at base_a regs )
     code
-    (seg_exitCond ia targets)
     fl
     (* minimal_pre is appended HERE rather than left to the caller, so the
        post MIRRORS the pre: CFG_VC_triple already wraps the precondition in
@@ -1042,8 +990,8 @@ Definition gen_loop_contract_post {Σ : LCtx} (ls : LoopSpec Σ)
      - cfg_placement is the bare `loop_base` and cfg_init_addr `loop_head_addr`
        (since 2026-09-25: gen_seg_contract no longer adds a head offset, so
        the `+ 0` the composition lemmas used to strip is gone);
-     - cfg_exitCond is `seg_exitCond (loop_head_addr ls) [target]`, targets
-       relative to the loop's own head. *)
+     - cfg_exit is `exit_of_off (loop_base ls) target`, the target relative
+       to the loop's own head. *)
 Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N)
@@ -1053,33 +1001,30 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
      annotated code the VC runs on. *)
   gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls)
     (strip (loop_code ls))
-    [target] (loop_fuel ls) (loop_regs ls)
+    target (loop_fuel ls) (loop_regs ls)
     (gen_loop_contract_pre ls g) post.
 
 
 (* ---- A1' : THE SEGMENT PROJECTIONS, so a hand-cut segment is solved the
        SAME WAY a loop is --------------------------------------------------
 
-   `gen_loop_contract` has had `gen_loop_place`/`_instrs`/`_exits`/`_exitCond`
+   `gen_loop_contract` has had `gen_loop_place`/`_instrs`/`_exit`
    since A3, and they are what let `loop_runs` discharge `itable_rel` and
    `etable_rel` inline -- a loop's caller never sees either obligation.  The
    SEGMENT generator had no such projections, so a hand-cut segment had to
    re-spell `gen_seg_contract`'s internals to reach `seg_instr_table_ok` /
    `seg_exit_table_ok_at`.  Same contract shape, two different ways to use it.
 
-   WHAT A1 WAS SUPPOSED TO BE, AND WHY THIS IS IT INSTEAD.  The plan scoped A1
-   as "cfg_exits and cfg_exitCond are one datum stored twice -- replace both
-   with cfg_exit_offs and derive; the agreement obligation then vanishes by
-   construction".  They are NOT one datum: `cfg_exits` is SYMBOLIC (Terms over
-   Σ, relative to a `cfg_placement` that may be `term_var "p"`) while
-   `cfg_exitCond` is CONCRETE (`bv xlenbits -> bool`).  The soundness bridge
-   relates them as `etable_rel exitCond (cfg_exits c) ι` -- under a VALUATION.
-   That is the symbolic/concrete bridge, not a redundancy, and it cannot vanish
-   by construction except where the placement is concrete.  Deriving would also
-   need `cfg_init_addr` to be the segment's entry address, and it is not
-   consistently: `Example/PaddedLoop.v`'s `plBody` has `cfg_init_addr = 0` with
-   `cfg_placement = bv.of_N pl_head`, so the derived condition would accept
-   address 0 where the hand-written `pl_headExitCond` accepts `pl_head`.
+   WHAT A1 WAS SUPPOSED TO BE.  The plan scoped A1 as "cfg_exits and
+   cfg_exitCond are one datum stored twice -- replace both and derive".  That
+   was rejected here because cfg_exits is SYMBOLIC and cfg_exitCond CONCRETE,
+   related by etable_rel under a valuation.  PLAN-exit-targets.md (2026-09-25)
+   resolved it the other way: there is no concrete copy in the contract at all.
+   Soundness speaks about `inst cfg_exit ι` inside the ∀ ι that already scopes
+   the precondition, and only the top-level bridge concretises it, at the ι it
+   chooses itself.  So cfg_exitCond, etable_rel and the agreement obligation
+   are all gone, and the PaddedLoop objection (cfg_init_addr ≠ placement) no
+   longer arises, because nothing is derived from cfg_init_addr.
 
    So the real win is not removing a field; it is that the obligation is
    already DISCHARGED ONCE for everything the generators build, and the
@@ -1089,14 +1034,14 @@ Section GenSegProjections.
     (base : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
     (ia : N) (code : list AST)
-    (targets : list N) (fl : nat) (regs : list reg_spec_rel)
+    (target : N) (fl : nat) (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)).
 
   Let c : @CFGVerifierContract Σ :=
-    gen_seg_contract base base_a ia code targets fl regs extra_pre post.
+    gen_seg_contract base base_a ia code target fl regs extra_pre post.
 
-  (* All five are eq_refl since the contract became self-contained: there is
+  (* All four are eq_refl since the contract became self-contained: there is
      no head offset left to add to the placement or subtract from a target. *)
   Lemma gen_seg_init_addr : @eq N (cfg_init_addr c) ia.
   Proof. reflexivity. Qed.
@@ -1107,11 +1052,7 @@ Section GenSegProjections.
   Lemma gen_seg_instrs : @eq (list AST) (cfg_instrs c) code.
   Proof. reflexivity. Qed.
 
-  Lemma gen_seg_exitCond :
-    @eq (bv xlenbits -> bool) (cfg_exitCond c) (seg_exitCond ia targets).
-  Proof. reflexivity. Qed.
-
-  Lemma gen_seg_exits : cfg_exits c = exits_of_offs base targets.
+  Lemma gen_seg_exit : cfg_exit c = exit_of_off base target.
   Proof. reflexivity. Qed.
 End GenSegProjections.
 
@@ -1121,13 +1062,6 @@ Lemma gen_loop_place {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
   cfg_placement (gen_loop_contract ls g target post) = loop_base ls.
-Proof. reflexivity. Qed.
-
-Lemma gen_loop_exitCond {Σ : LCtx} (ls : LoopSpec Σ)
-    (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
-    (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-  cfg_exitCond (gen_loop_contract ls g target post)
-  = seg_exitCond (loop_head_addr ls) [target].
 Proof. reflexivity. Qed.
 
 Lemma gen_loop_instrs {Σ : LCtx} (ls : LoopSpec Σ)
@@ -1148,11 +1082,11 @@ Lemma gen_loop_annot_strip {Σ : LCtx} (ls : LoopSpec Σ)
   strip (gen_loop_annot ls) = cfg_instrs (gen_loop_contract ls g target post).
 Proof. reflexivity. Qed.
 
-Lemma gen_loop_exits {Σ : LCtx} (ls : LoopSpec Σ)
+Lemma gen_loop_exit {Σ : LCtx} (ls : LoopSpec Σ)
     (g : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits -> Formula (Σ ▻ "a"∷ty_xlenbits))
     (target : N) (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) :
-  cfg_exits (gen_loop_contract ls g target post)
-  = exits_of_offs (loop_base ls) [target].
+  cfg_exit (gen_loop_contract ls g target post)
+  = exit_of_off (loop_base ls) target.
 Proof. reflexivity. Qed.
 
 (* BODY: guard holds, back edge to the head (offset 0 -- the loop is stated
@@ -1196,12 +1130,6 @@ Proof.
   rewrite (inst_addr_plus t iota q 0 H). do 2 f_equal.
   apply bv.add_zero_r.
 Qed.
-
-Lemma seg_exitCond_hit0 (iq : N) (targets : list N) (t : N)
-  (Hin : List.In t targets) :
-  seg_exitCond iq targets (bv.add (@bv.of_N xlenbits iq) (@bv.of_N xlenbits t))
-  = true.
-Proof. rewrite <- seg_addr_add. now apply seg_exitCond_hit. Qed.
 
 (* The counter step of a COUNTED loop, at the bitvector level.  `addi ctr,ctr,-s`
    assembles to an add of the wrap-around literal `2^32 - s` (RISC-V has no

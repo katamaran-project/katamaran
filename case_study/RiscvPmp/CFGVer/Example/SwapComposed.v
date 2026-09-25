@@ -55,11 +55,8 @@ Definition swap_instrs : list AST := [MV X3 X2; MV X2 X1; MV X1 X3].
 Definition swapCtx : LCtx :=
   ["x" :: ty_xlenbits; "y" :: ty_xlenbits; "z" :: ty_xlenbits].
 
-(* The CUT's exit condition: pc is exactly the cut address (offset 4).
-   Unlike a whole-program exit condition this is an equality, not a
-   past-the-end test -- the cut is in the MIDDLE of the program. *)
-Definition cut_exitCond : bv xlenbits -> bool :=
-  fun v => bv.eqb v (bv.of_N 4).
+(* Segment A exits at the cut (offset 4), segment B at the end (12): ONE exit
+   term each (PLAN-exit-targets.md). *)
 
 (* ---- Segment A: 0 -> 4.  Executes `MV X3 X2` only. ----
    Its postcondition is the state at the cut.  `minimal_pre` appears there
@@ -71,11 +68,10 @@ Definition cut_exitCond : bv xlenbits -> bool :=
 Definition swapA : @CFGVerifierContract swapCtx :=
   @MkCFGVerifierContract swapCtx 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [4%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 4)
     (asn_init_pc (bv.of_N 0)
        ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗ X3 ↦ᵣ term_var "z")
     swap_instrs
-    cut_exitCond
     3
     (X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗ X3 ↦ᵣ term_var "y"
        ∗ minimal_pre).
@@ -89,11 +85,10 @@ Proof. vm_compute. solve_vc. Qed.
 Definition swapB : @CFGVerifierContract swapCtx :=
   @MkCFGVerifierContract swapCtx 0%N
     (term_val ty_xlenbits (bv.of_N 0))
-    (exits_of_offs (term_val ty_xlenbits (bv.of_N 0)) [12%N])
+    (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 12)
     (asn_pc_eq (term_val ty_xlenbits (bv.of_N 4))
        ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" ∗ X3 ↦ᵣ term_var "y")
     swap_instrs
-    (pcOutOfInstrs_exitCond 0 swap_instrs)
     4
     asn_no_post.
 

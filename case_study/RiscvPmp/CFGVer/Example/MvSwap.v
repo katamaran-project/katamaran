@@ -39,23 +39,24 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 
 (* Contract-literal sugar (kept Local: it turns {{ / }} into lexer
    keywords, so it must not leak beyond this file). *)
-Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']'" :=
+(* The exit is the fall-through, init_addr + 4·|i| (PLAN-exit-targets.md). *)
+Local Notation "'{{' P '}}' i '@cfg[' fl ']'" :=
   (@MkCFGVerifierContract [ctx] init_addr
      (term_val ty_xlenbits (bv.of_N init_addr))
-     (exits_of_list (term_val ty_xlenbits (bv.of_N init_addr)) i)
-     P%asn i ec fl asn_no_post)
+     (exit_of_off (term_val ty_xlenbits (bv.of_N init_addr)) (4 * N.of_nat (length i)))
+     P%asn i fl asn_no_post)
   (at level 90).
-Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
+Local Notation "'{{' P '}}' i '@cfg[' fl ']' 'with' logvars" :=
   (@MkCFGVerifierContract logvars init_addr
      (term_val ty_xlenbits (bv.of_N init_addr))
-     (exits_of_list (term_val ty_xlenbits (bv.of_N init_addr)) i)
-     P%asn i ec fl asn_no_post)
+     (exit_of_off (term_val ty_xlenbits (bv.of_N init_addr)) (4 * N.of_nat (length i)))
+     P%asn i fl asn_no_post)
   (at level 90).
 
     Definition mv_zero_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ ∃ "v", X1 ↦ᵣ term_var "v" }}
         [MV X1 X0]
-      @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X0] , 3 ].
+      @cfg[ 3 ].
 
     Example valid_mv_zero_ex : cfg_vc mv_zero_ex (cfg_instrs mv_zero_ex).
     Proof. vm_compute. solve_vc. Qed.
@@ -63,7 +64,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
     Definition mv_same_reg_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ X1 ↦ᵣ term_var "x" }}
         [MV X1 X1]
-      @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X1] , 3 ]
+      @cfg[ 3 ]
       with ["x" :: ty_xlenbits].
 
     Example valid_mv_same_reg_ex : cfg_vc mv_same_reg_ex (cfg_instrs mv_same_reg_ex).
@@ -72,7 +73,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
     Definition mv_ex : CFGVerifierContract :=
       {{ asn_init_pc (bv.of_N init_addr) ∗ X1 ↦ᵣ term_var "x" ∗ X2 ↦ᵣ term_var "y" }}
         [MV X1 X2]
-      @cfg[ pcOutOfInstrs_exitCond init_addr [MV X1 X2] , 3 ]
+      @cfg[ 3 ]
       with ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
     Example valid_mv_ex : cfg_vc mv_ex (cfg_instrs mv_ex).
@@ -91,8 +92,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
        making the contract vacuously (not meaningfully) valid. *)
     Definition mv_nonzero_start_ex : CFGVerifierContract :=
       gen_contract (256%N) [(X1, false, None)] []
-        [MV X1 X0] []
-        (fun v => bv.ugeb v (bv.of_N 260))
+        [MV X1 X0]
         3.
 
     Example valid_mv_nonzero_start_ex : cfg_vc mv_nonzero_start_ex (cfg_instrs mv_nonzero_start_ex).
@@ -107,8 +107,7 @@ Local Notation "'{{' P '}}' i '@cfg[' ec ',' fl ']' 'with' logvars" :=
     Definition swap_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param ia
         [(X1, false, None); (X2, false, None); (X3, false, None)]
-        [MV X3 X2; MV X2 X1; MV X1 X3] []
-        (pcOutOfInstrs_exitCond ia [MV X3 X2; MV X2 X1; MV X1 X3])
+        [MV X3 X2; MV X2 X1; MV X1 X3]
         5.
 
     Lemma valid_swap_cfg_contract_param (ia : N) :

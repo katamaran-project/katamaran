@@ -195,8 +195,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* Base bound 164 = 160 (last data offset, r[3]) + 4 (word). *)
     Definition cmovznz4_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed ia cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
-        cmovznz4_instrs [] 164
-        (pcOutOfInstrs_exitCond ia cmovznz4_instrs) 35.
+        cmovznz4_instrs 164 35.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
        The end theorems in Cmovznz4Result.v state noninterferent_strong over
