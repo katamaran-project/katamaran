@@ -2035,3 +2035,21 @@ Section AdequacyTools.
     Qed.
 
 End AdequacyTools.
+
+(* A BLOCK THAT IS SOUND WHEREVER IT IS PLACED (PLAN-valid-blk-annot.md §1a,
+   Phase 2).  A closed Prop (∀ Σ GS, decision V4), so it can ride in an
+   annotation as a plain proof field (AnnotInstrV, Phase 3).
+
+   Address-free because blockSound never reads cfg_init_addr: a block resumes
+   at its contract's exit term, pinned by the precondition to the entry pc,
+   not by the load address.
+
+   UNCONDITIONAL in v (decision B, 2026-09-25): no no-wrap premise.  The
+   block's own precondition must rule out wrapping -- a generated segment's
+   does, via gen_base_bound (`unsigned base + 4·len ≤ lenAddr`, lenAddr = 2^12),
+   which GenCompose.seg_pre_bound reads off.  So the firing site needs no
+   address arithmetic at all.  Worked example:
+   Example/CountdownRecResult.cdRecBlk_valid. *)
+Definition blkValid (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) : Prop :=
+  forall Σ (GS : sailGS2 Σ) (words : bv xlenbits -> bv word) (v : bv xlenbits),
+    ⊢ @blockSound Σ GS words v b.

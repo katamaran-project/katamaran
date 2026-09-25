@@ -97,37 +97,38 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
+(* THE LOOP BLOCK IS VALID ANYWHERE (PLAN-valid-blk-annot.md Phase 2), for an
+   arbitrary entry address v: blockFaithful_of_seg reads the no-wrap bound off
+   the loop's own precondition (seg_pre_bound), so there is no fit premise.
+   `ia` only fixes cfg_init_addr, which blockSound never reads (R1:
+   blockSound at cdRecBlk ia and cdRecBlk ia' are equal by reflexivity). *)
+Lemma cdRecBlk_valid (ia : N) : blkValid (cdRecBlk ia).
+Proof.
+  intros Σ GS words v.
+  iPoseProof (blockFaithful_of_seg (term_var "q") (term_var "q") ia
+                cd_instrs 8 4 [] cd_rec_inv cd_rec_post v (cd_rec_annot ia)) as "Hf".
+  { intros iota. reflexivity. }
+  { reflexivity. }
+  iApply (blockSound_of_contract words v (cdRecBlk ia)
+            (cd_rec_annot ia) (valid_cd_rec ia) with "Hf").
+  - reflexivity.
+  - apply blocksSoundAt_of_none. repeat constructor.
+  - iIntros "#Hb". unfold cd_rec_annot.
+    iApply (blocksSound_of_head with "Hb").
+    + reflexivity.
+    + repeat constructor.
+Qed.
+
 Section Link.
   Context {Σ} {GS : sailGS2 Σ}.
 
-  (* THE LOOP, AS A BLOCK.  One VC, one generic Löb lemma. *)
+  (* THE LOOP, AS A BLOCK, at its load address.  An instance of
+     cdRecBlk_valid; Hfit is no longer needed and goes with this lemma in
+     Phase 4, when cd_link_blocksSound disappears. *)
   Lemma cdRec_blockSound (ia : N) (Hfit : (ia + 8 < lenAddr)%N)
       (words : bv xlenbits -> bv word) :
     ⊢ blockSound words (@bv.of_N xlenbits ia) (cdRecBlk ia).
-  Proof.
-    (* where the code sits: base ia, two instructions, inside memory *)
-    iPoseProof (blockFaithful_of_seg (term_var "q") (term_var "q") ia
-                  cd_instrs 8 4 [] cd_rec_inv cd_rec_post
-                  (@bv.of_N xlenbits ia) (cd_rec_annot ia)) as "Hf".
-    { intros iota. reflexivity. }
-    { pose proof lenAddr_rep.
-      rewrite (seg_fits_bin ia 8 ltac:(unfold seg_fits_memory; lia)).
-      cbn [length cd_rec_annot list_AST_AnnotInstr List.map]. lia. }
-    iApply (blockSound_of_contract words (@bv.of_N xlenbits ia) (cdRecBlk ia)
-              (cd_rec_annot ia) (valid_cd_rec ia) with "Hf").
-    (* No "the block resumes where its contract exits" bullet any more: a
-       block resumes AT its contract's exit by construction
-       (PLAN-exit-targets.md). *)
-    - (* the annotated code IS the contract's code *)
-      reflexivity.
-    - (* no ai_block in the loop's own code: nothing may fire at its entry *)
-      apply blocksSoundAt_of_none. repeat constructor.
-    - (* the loop's own program: its head re-enters the block, nothing else *)
-      iIntros "#Hb". unfold cd_rec_annot.
-      iApply (blocksSound_of_head with "Hb").
-      + reflexivity.
-      + repeat constructor.
-  Qed.
+  Proof. apply cdRecBlk_valid. Qed.
 
   (* THE LINK: the only block cdLink's VC trusted is sound. *)
   Lemma cd_link_blocksSound (ia : N) (Hfit : (ia + 8 < lenAddr)%N)
@@ -141,6 +142,7 @@ Section Link.
     - repeat constructor.
   Qed.
 End Link.
+
 
 (* THE END THEOREM, for every load address the program fits at.  The block
    obligation is cd_link_blocksSound above; the rest is cfg_instrs_endToEnd's

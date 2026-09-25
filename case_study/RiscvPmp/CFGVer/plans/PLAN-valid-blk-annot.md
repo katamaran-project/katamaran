@@ -1,7 +1,7 @@
 # PLAN: block annotations that carry their own validity (`AnnotInstrV`)
 
 Status: rev 2 (2026-09-25), IN PROGRESS on branch `issue/valid-blk-annot`.
-Phase 1 DONE, built and axiom-clean; gate + VC-cost measurement not yet run (§7). Rewritten after PLAN-exit-targets.md
+Phases 1-2 DONE, built and axiom-clean; gate deferred until after Phase 3 (Emiel); VC-cost measurement not yet run (§7). Rewritten after PLAN-exit-targets.md
 landed (branch issue/exit-targets), against the code as it now is. Rev 1 was
 written before that change; see §6 for what it settled.
 
@@ -203,6 +203,7 @@ Changes:
 | V4 | 2026-09-25 | `blkValid` is a closed Prop (∀ Σ GS, ⊢ …), not an iProp field, because loops cover all recursion. | Needed only if mutual recursion between blocks appears: move `AnnotInstrV` into the Σ section. |
 | V5 | 2026-09-25 | `ai_loop` self-reference is enforced by the type: `aiv_loop : bool` (rev 1 had `option N`; exit-targets made the offset redundant). | Back to `option BlkAnnot` + a `Forall` premise in `blockSound_of_vc`. |
 | V6 | 2026-09-25 | Sequenced AFTER PLAN-exit-targets.md -- DONE, that plan is implemented. | — |
+| V7 | 2026-09-25 | `blkValid` is UNCONDITIONAL in the entry address (no no-wrap premise, revising §1a). A generated segment's precondition already carries `gen_base_bound` (`unsigned base + 4·len ≤ lenAddr`), which `GenCompose.seg_pre_bound` reads off, so `blockFaithful_of_seg` takes `strip ab = code` instead of `Hrep`. Phase 3 needs no address arithmetic at the firing site. | Restore `Hrep` on `blockFaithful_of_seg` and the premise on `blkValid`; derive the fit at the firing site from containment + the program's own fit. |
 
 ## 6. What PLAN-exit-targets.md settled for this plan
 
@@ -255,4 +256,20 @@ As built, differing from §1c in three places:
   calls `blk_span_sub`.
 - Decision recorded: VC check over a static Coq-level prefix check on the
   annotated list, because the VC automates it (Emiel).
+
+### Phase 2 -- blkValid (2026-09-25, BUILT)
+
+- R1 holds by `reflexivity` (`blockSound .. (cdRecBlk ia) = blockSound ..
+  (cdRecBlk ia')`), but turned out unnecessary: `blockFaithful_of_seg` and
+  `blockSound_of_contract` were already generic in the entry address `v`.
+- `Adequacy.blkValid b := ∀ Σ GS words v, ⊢ blockSound words v b` -- no fit
+  premise, per V7. The plan's §1a premise (`bin v + 4·len < 2^32`) was the
+  first version built; replaced the same day.
+- `GenCompose.seg_pre_bound` (new) + `blockFaithful_of_seg`'s `Hrep` ->
+  `Hab : strip ab = code`. `lia` fails on the last step of `seg_pre_bound`
+  (gmap's Zify, gmap-pitfalls); closed with `N2Z.inj_le`/`inj_add`.
+- `Example/CountdownRecResult.cdRecBlk_valid` (every v); `cdRec_blockSound` is
+  now an instance, its `Hfit` unused until Phase 4 deletes it.
+- Built through `CountdownRecResult.vo`; `countdown_rec_noninterferent_param`
+  and `cdRecBlk_valid` axiom-clean.
 

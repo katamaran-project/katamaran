@@ -346,6 +346,39 @@ Section SegCompose.
     symmetry. exact Hpc.
   Qed.
 
+  (* ---- ...AND THE NO-WRAP BOUND, FROM THE SAME PRECONDITION ----------------
+     gen_seg_contract's second conjunct, gen_base_bound, says
+     `unsigned base + 4·len code ≤ lenAddr`; with the placement fact it is a
+     bound on the entry pc v itself.  This is what lets blockFaithful_of_seg
+     drop its no-wrap premise, and hence what makes Adequacy.blkValid
+     unconditional (PLAN-valid-blk-annot.md, option B).  `lia` is avoided on
+     the last step: this file imports stdpp's gmap (gmap-pitfalls). *)
+  Lemma seg_pre_bound {R : LCtx}
+      (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (ia : N) (code : list AST)
+      (target : N) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (iota : Valuation R) (v : bv xlenbits)
+      (Hba : inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) base iota = ty.SyncVal v) :
+    asn.interpret (extend_to_minimal_pre (cfg_precondition
+        (gen_seg_contract base base_a ia code target fl regs extra_pre post)))
+      (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+    ⊢ ⌜ (bv.bin v + 4 * N.of_nat (length code) <= lenAddr)%N ⌝.
+  Proof.
+    cbn [gen_seg_contract cfg_precondition extend_to_minimal_pre].
+    iIntros "((_ & Hb & _) & _)".
+    unfold gen_base_bound.
+    iDestruct "Hb" as "[%Hb _]".
+    iPureIntro.
+    cbn in Hb. rewrite Hba Hp in Hb. cbn in Hb.
+    unfold bv.unsigned in Hb.
+    apply N2Z.inj_le; rewrite N2Z.inj_add; exact Hb.
+  Qed.
+
 
   (* ---- ...AND THE WHOLE blockFaithful, FOR A GENERATED SEGMENT ------------
      The two conjuncts have genuinely different needs, which is worth noticing:
@@ -365,8 +398,9 @@ Section SegCompose.
                inst (T := fun Σ => Term Σ ty_xlenbits) base_a
                  (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
                = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
-      (* the block's code does not wrap around the address space *)
-      (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N) :
+      (* ab is this segment's code, annotated.  The no-wrap bound it used to
+         take (Hrep) now comes from the precondition (seg_pre_bound). *)
+      (Hab : strip ab = code) :
     ⊢ blockFaithful ab v
         {| blk_ctx := R
          ; blk_contract := gen_seg_contract base base_a ia code target fl regs
@@ -379,6 +413,11 @@ Section SegCompose.
     iDestruct (seg_pre_placement base base_a ia code target fl regs extra_pre
                  post iota v (Hba iota) with "Hpre")
       as "%Hp".
+    iDestruct (seg_pre_bound base base_a ia code target fl regs extra_pre
+                 post iota v (Hba iota) Hp with "Hpre")
+      as "%Hb".
+    assert (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N).
+    { rewrite <- (strip_length ab), Hab. pose proof lenAddr_rep. lia. }
     iPureIntro. cbn [blk_contract]. split.
     - exact (itable_faith_of_list _ iota ab Hp Hrep).
     - destruct (@etable_faith_exit_of_off _ base iota v target Hp) as (x & Hx & _).
