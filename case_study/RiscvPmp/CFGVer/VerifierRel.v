@@ -255,31 +255,26 @@ Section CFGVerificationDerived.
     (*                                                                       *)
     (* `cexec_block` mirrors `sexec_block` (Verifier.v) step for step:        *)
     (* instantiate the block's logic variables angelically, CONSUME its        *)
-    (* precondition, PRODUCE its postcondition, resume at entry + off.  The    *)
+    (* precondition, PRODUCE its postcondition, resume at the contract's exit. *)
+    (* The  *)
     (* angelic_ctx is kept even though Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot fixes the context to [ctx] (so it  *)
     (* yields [env]) precisely BECAUSE the symbolic side has one: refinement   *)
     (* pairs structurally, and dropping a step here would force a bespoke      *)
     (* lemma where refine_bind would otherwise dispatch.  Same reasoning as    *)
     (* cexec_ghost's `call_lemma` mirroring sexec_ghost's.                     *)
     (*                                                                       *)
-    (* The exit pc is built from the CONCRETE address `v` rather than by       *)
-    (* lifting a RelVal addition: the block branch is only reached when        *)
-    (* `ty.RVToOption apc = Some v`, so `SyncVal (v + off)` is exactly what    *)
-    (* the symbolic `term_binop bop.bvadd apc (term_val off)` instantiates to. *)
+    (* The exit pc is the contract's `cfg_exit` INSTANTIATED at the chosen    *)
+    (* valuation, mirroring the symbolic `subst (cfg_exit c) evars2`           *)
+    (* (PLAN-exit-targets.md; it was `v + blk_off`).  It is a RelVal and is    *)
+    (* returned as is: nothing here needs it to be SyncVal, because the       *)
+    (* resumed executor's own RVToOption probe is where that is decided.      *)
     (* ===================================================================== *)
     Definition cexec_block (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) :
       CHeapSpec (RelVal ty_xlenbits) :=
-      (* `bop.evalRel bop.bvadd`, NOT `ty.SyncVal (bv.add ..)`.  The two are
-         convertible, but instance resolution is SYNTACTIC: written the second
-         way `refine_compat_term_binop` cannot match the symbolic side's
-         `term_binop bop.bvadd ..`, and rsolve leaves the exit-pc value goal
-         open.  Mirroring the OPERATOR is what lets the existing instance fire
-         -- cfgver-refinement's "mirror structurally" rule, with a concrete
-         cost for breaking it. *)
-      let ex := bop.evalRel bop.bvadd (ty.SyncVal v)
-                  (ty.SyncVal (@bv.of_N xlenbits (Katamaran.RiscvPmp.CFGVer.Verifier.blk_off b))) in
       ι <- lift_purespec (CPureSpec.angelic_ctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) ;;
       _ <- consume (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
+      let ex := inst (T := fun Σ => Term Σ ty_xlenbits)
+                  (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι in
       _ <- produce (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
              ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ ex] ;;
       pure ex.
@@ -293,8 +288,26 @@ Section CFGVerificationDerived.
        whole wtable_rel/itable_relW_zip family and is not a pattern to copy
        without the same justification.  MEMORY still speaks AST: see
        ptsto_instrs in Section Soundness, fed `ai_instr <$> instrs`. *)
+    (* THE CONCRETE STOP TEST (PLAN-exit-targets.md): the pc is exactly the
+       exit.  `cexit` is a RelVal so that a block can pass its exit term's
+       instantiation through unchanged; a NonSyncVal exit is never hit. *)
+    Definition exit_hit (cexit : RelVal ty_xlenbits) (v : bv xlenbits) : bool :=
+      match cexit with
+      | ty.SyncVal e => bv.eqb v e
+      | ty.NonSyncVal _ _ => false
+      end.
+
+    Lemma exit_hit_spec (cexit : RelVal ty_xlenbits) (v : bv xlenbits) :
+      exit_hit cexit v = true <-> cexit = ty.SyncVal v.
+    Proof.
+      destruct cexit as [e | ? ?]; cbn -[bv.eqb]; [|split; discriminate].
+      split; intros H.
+      - apply (reflect_iff _ _ (bv.eqb_spec v e)) in H. now subst.
+      - injection H as ->. now apply (reflect_iff _ _ (bv.eqb_spec v v)).
+    Qed.
+
     Fixpoint cexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
-      (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (words : bv xlenbits -> bv word) (cexit : RelVal ty_xlenbits) (fuel : nat)
       (* mirrors sexec_cfg_addr's `stepped` (which block ai_fire selects); the
          symbolic `first` has no concrete counterpart, because the concrete
          exit is an unconditional angelic choice *)
@@ -308,7 +321,7 @@ Section CFGVerificationDerived.
             | None   => error
             | Some v =>
                 angelic_binary
-                  (if exitCond v then pure apc else error)
+                  (if exit_hit cexit v then pure apc else error)
                   (match instrs !! v with
                    | None    => error
                    | Some ai =>
@@ -326,7 +339,7 @@ Section CFGVerificationDerived.
                             epilogue was consumed here, so nothing forces the
                             nextpc register's value -- see Verifier.v. *)
                          np'  <- demonic _ ;;
-                         cexec_cfg_addr instrs words exitCond n' stepped apc' np'
+                         cexec_cfg_addr instrs words cexit n' stepped apc' np'
                      | None =>
                          _ <- cchunk_gc ;;
                          _ <- cdrop_dead ;;
@@ -334,7 +347,7 @@ Section CFGVerificationDerived.
                          apc' <- cexec_instruction (ai_instr ai) apc anp
                                    (ty.SyncVal (words v)) ;;
                          _ <- cexec_ghosts (ai_ghost_after ai) ;;
-                         cexec_cfg_addr instrs words exitCond n' true apc' apc'
+                         cexec_cfg_addr instrs words cexit n' true apc' apc'
                      end
                    end)
             end
@@ -360,14 +373,14 @@ Section CFGVerificationDerived.
       Monotonic (MHeapSpec eq) (cexec_block b v).
     Proof. unfold cexec_block. typeclasses eauto. Qed.
 
-    #[export] Instance mono_cexec_cfg_addr {instrs words exitCond fuel stepped apc anp} :
-      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs words exitCond fuel stepped apc anp).
+    #[export] Instance mono_cexec_cfg_addr {instrs words cexit fuel stepped apc anp} :
+      Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs words cexit fuel stepped apc anp).
     Proof.
       revert stepped apc anp. induction fuel; intros stepped apc anp.
       - typeclasses eauto.
       - destruct apc as [v | vl vr].
         + cbn [cexec_cfg_addr ty.RVToOption CHeapSpec.angelic_binary].
-          destruct (exitCond v);
+          destruct (exit_hit cexit v);
             cbn [CHeapSpec.pure CHeapSpec.error bind];
             try destruct (instrs !! v) as [ai|]; try destruct (ai_fire stepped ai);
             unfold cexec_block; typeclasses eauto.
@@ -468,7 +481,7 @@ Section CFGVerificationDerived.
     (* (sexec_cfg_addr) and the gmap-based concrete executor            *)
     (* (cexec_cfg_addr).  itable_rel/etable_rel are Pred-level premises:    *)
     (* every key term must instantiate to a SyncVal address that the gmap   *)
-    (* maps to the paired instruction (resp. that satisfies exitCond).      *)
+    (* maps to the paired instruction (resp. that IS the exit, cexit).      *)
     (* The ∃-SyncVal form is essential: with an implication form the        *)
     (* concrete executor errors at RVToOption on NonSyncVal keys while the  *)
     (* symbolic one proceeds, breaking refinement.                          *)
@@ -516,10 +529,14 @@ Section CFGVerificationDerived.
            inst (T := fun Σ => Term Σ ty_xlenbits) (fst p) ι = ty.SyncVal v
            /\ cx = ty.SyncVal (words v)) tbl cws.
 
-    Definition etable_rel {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w) : Pred w :=
-      fun ι => List.Forall
-        (fun t => exists v,
-           inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal v /\ exitCond v = true) exits.
+    (* ONE exit term, instantiating to the concrete exit (PLAN-exit-targets.md).
+       The ∃-SyncVal form is essential for the same reason as itable_rel's: at
+       a stop the symbolic side is `pure`, so the concrete pc must pass its
+       RVToOption probe, and only a SyncVal exit guarantees that.  A block
+       discharges it from its precondition (blockFaithful's exit half). *)
+    Definition etable_rel {w} (cexit : RelVal ty_xlenbits) (exits : SExitTable w) : Pred w :=
+      fun ι => exists v,
+        inst (T := fun Σ => Term Σ ty_xlenbits) exits ι = ty.SyncVal v /\ cexit = ty.SyncVal v.
 
     (* TODO: It feels like this does not belong here. Maybe in PartialEvalution or in instantiation. *)
     Lemma peval_eqb_inst {Σ : LCtx} {σ} (t1 t2 : Term Σ σ) (ι : Valuation Σ) :
@@ -555,21 +572,16 @@ Section CFGVerificationDerived.
       exact Hv.
     Qed.
 
-    Lemma is_exit_sound {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w)
+    Lemma is_exit_sound {w} (cexit : RelVal ty_xlenbits) (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) (ι : Valuation w) :
       is_exit exits apc = true ->
-      etable_rel exitCond exits ι ->
-      exists v, inst apc ι = ty.SyncVal v /\ exitCond v = true.
+      etable_rel cexit exits ι ->
+      exists v, inst apc ι = ty.SyncVal v /\ cexit = ty.SyncVal v.
     Proof.
       unfold is_exit, etable_rel.
-      intros Hex Hrel.
-      apply List.existsb_exists in Hex as (t & Hin & Heqb).
-      rewrite List.Forall_forall in Hrel.
-      specialize (Hrel _ Hin) as (v & Hv & Hcond).
-      exists v.
-      split; [|exact Hcond].
-      rewrite (peval_eqb_inst apc t ι Heqb).
-      exact Hv.
+      intros Hex (v & Hv & Hc).
+      exists v. split; [|exact Hc].
+      rewrite (peval_eqb_inst apc exits ι Hex). exact Hv.
     Qed.
 
     Lemma forgetting_itable_rel {w1 w2} (θ : Acc w1 w2)
@@ -625,17 +637,13 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma forgetting_etable_rel {w1 w2} (θ : Acc w1 w2)
-        (exitCond : bv xlenbits -> bool) (exits : SExitTable w1) :
-      (forgetting θ (etable_rel exitCond exits) ⊣⊢ etable_rel exitCond (persist_etable θ exits))%I.
+        (cexit : RelVal ty_xlenbits) (exits : SExitTable w1) :
+      (forgetting θ (etable_rel cexit exits) ⊣⊢ etable_rel cexit (persist_etable θ exits))%I.
     Proof.
       constructor.
       intros ι.
       unfold forgetting, etable_rel, persist_etable.
-      rewrite List.Forall_map.
-      cbn.
-      split; apply List.Forall_impl; intros t (v & Hv & Hc);
-        exists v; (split; [|exact Hc]); cbn in *;
-        rewrite inst_persist in Hv + rewrite inst_persist; exact Hv.
+      cbn. now rewrite inst_persist.
     Qed.
 
     Lemma persist_itable_refl {w} (tbl : SInstrTable w) :
@@ -651,11 +659,7 @@ Section CFGVerificationDerived.
     Lemma persist_etable_refl {w} (exits : SExitTable w) :
       persist_etable acc_refl exits = exits.
     Proof.
-      unfold persist_etable.
-      induction exits as [|t exits' IH]; cbn; [reflexivity|].
-      cbn in IH.
-      f_equal.
-      exact IH.
+      unfold persist_etable. reflexivity.
     Qed.
 
     Lemma persist_itable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (tbl : SInstrTable w1) :
@@ -671,11 +675,7 @@ Section CFGVerificationDerived.
     Lemma persist_etable_trans {w1 w2 w3} (θ12 : Acc w1 w2) (θ23 : Acc w2 w3) (exits : SExitTable w1) :
       persist_etable θ23 (persist_etable θ12 exits) = persist_etable (acc_trans θ12 θ23) exits.
     Proof.
-      unfold persist_etable.
-      rewrite List.map_map.
-      apply List.map_ext.
-      intros t.
-      now rewrite persist_trans.
+      unfold persist_etable. now rewrite persist_trans.
     Qed.
 
     (* The word column comes out as a repₚ rather than a pure fact: the
@@ -701,11 +701,11 @@ Section CFGVerificationDerived.
       now rewrite <- Ha.
     Qed.
 
-    Lemma is_exit_sound_repₚ {w} (exitCond : bv xlenbits -> bool) (exits : SExitTable w)
+    Lemma is_exit_sound_repₚ {w} (cexit : RelVal ty_xlenbits) (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) (a : RelVal ty_xlenbits) :
       is_exit exits apc = true ->
-      (etable_rel exitCond exits ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
-       ⌜exists v, a = ty.SyncVal v /\ exitCond v = true⌝)%I.
+      (etable_rel cexit exits ∗ repₚ (T := fun Σ => Term Σ ty_xlenbits) a apc ⊢
+       ⌜exists v, a = ty.SyncVal v /\ cexit = ty.SyncVal v⌝)%I.
     Proof.
       intros Hex.
       constructor.
@@ -713,8 +713,7 @@ Section CFGVerificationDerived.
       cbn in H.
       destruct H as [Hrel Ha].
       destruct (is_exit_sound apc Hex Hrel) as (v & Hv & Hc).
-      exists v.
-      split; [|exact Hc].
+      exists v. split; [|exact Hc].
       now rewrite <- Ha.
     Qed.
 
@@ -776,22 +775,26 @@ Section CFGVerificationDerived.
       iIntros "#Ha".
       unfold cexec_block, sexec_block.
       rsolve.
-      (* Two shapes remain, and the second reduces to the first: the ENTRY pc
-         (twice -- once per environment it is threaded through) and the EXIT
-         pc under the produce's hop.  `refine_term_binop` peels the exit pc's
-         operator, after which what is left IS the entry-pc shape again, hence
-         the nested repeat of the same three steps. *)
+      (* Two shapes remain: the ENTRY pc (once per environment it is threaded
+         through), from "Ha" by refine_inst_persist; and the EXIT pc, which
+         since PLAN-exit-targets.md is the block contract's cfg_exit
+         instantiated at the angelic valuation -- `inst e ι` against
+         `subst e ζ`, i.e. refine_inst_subst fed the (persisted) valuation
+         refinement rsolve introduced.  It used to be `v + blk_off`, peeled
+         with refine_term_binop back to the entry-pc shape. *)
       (* `solve [rsolve]` first: rsolve closes the HEAP goal on its own (the
          value goals are the ones it cannot, since `Ha` is a hypothesis rather
-         than an instance).  Without the guard, `all:` drives the value tactic
-         into the heap goal and it fails there with an `RInst SHeap SCHeap`
-         iSpecialize error that looks unrelated to blocks. *)
-      all: first
-        [ solve [rsolve]
-        | (rewrite forgetting_trans; iModIntro;
-           try (iApply refine_term_binop; rsolve;
-                rewrite forgetting_trans; iModIntro);
-           iApply (refine_inst_persist with "Ha")) ].
+         than an instance).  Developed in Example/ZZBlkExitProbe.v. *)
+      all: try solve [rsolve].
+      - rewrite forgetting_trans; iModIntro.
+        iApply (refine_inst_persist with "Ha").
+      - (* `AT := Sub _` must be given: rsolve introduced the valuation's
+           refinement at `RNEnv`, which only unifies with RInst's `Sub` once
+           the carrier is named. *)
+        rewrite !forgetting_trans; iModIntro.
+        iApply (refine_inst_subst (T := fun Σ => Term Σ ty_xlenbits)).
+        iApply (refine_inst_persist (AT := Sub (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))).
+        iAssumption.
     Qed.
 
 
@@ -918,12 +921,9 @@ Section CFGVerificationDerived.
 
   Lemma wb_etable {w : World} {x σ} (xIn : (x∷σ ∈ w)%katamaran) (l : SExitTable w) :
     etable_free xIn l = true ->
-    @WitnessBlind (fun Sg => list (Term Sg ty_xlenbits)) _ w x σ xIn l.
+    @WitnessBlind (fun Sg => Term Sg ty_xlenbits) _ w x σ xIn l.
   Proof.
-    unfold etable_free. intros H t1 t2.
-    induction l as [|t l' IH]; cbn in *; [reflexivity|].
-    apply Bool.andb_true_iff in H as [H1 H2].
-    rewrite (IH H2). f_equal. exact (wb_of_ocok xIn t H1 t1 t2).
+    unfold etable_free. intros H. exact (wb_of_ocok xIn l H).
   Qed.
 
   Lemma wb_itableW {w : World} {x σ} (xIn : (x∷σ ∈ w)%katamaran) (l : SInstrTableW w) :
@@ -947,7 +947,7 @@ Section CFGVerificationDerived.
   Definition dcarrier (Sg0 : LCtx) : LCtx -> Type :=
     fun Sg => (Sub Sg0 Sg *
                list (Term Sg ty_xlenbits * Term Sg ty_word * AnnotInstr) *
-               list (Term Sg ty_xlenbits) *
+               Term Sg ty_xlenbits *
                Term Sg ty_xlenbits *
                Term Sg ty_xlenbits *
                Term Sg ty_word)%type.
@@ -1001,13 +1001,9 @@ Section CFGVerificationDerived.
 
   Lemma zz_persist_etable_subst {w1 w2 : World} (th : Acc w1 w2) (exits : SExitTable w1) :
     persist_etable th exits
-    = subst (T := fun Sg : LCtx => list (Term Sg ty_xlenbits)) exits (sub_acc th).
+    = subst (T := fun Sg : LCtx => Term Sg ty_xlenbits) exits (sub_acc th).
   Proof.
-    unfold persist_etable. destruct th; cbn.
-    - induction exits as [|t exits' IH]; cbn; [reflexivity|].
-      rewrite IH. now rewrite !subst_sub_id.
-    - induction exits as [|t exits' IH]; cbn; [reflexivity|].
-      now rewrite IH.
+    unfold persist_etable, persist__term. destruct th; cbn; now rewrite ?subst_sub_id.
   Qed.
 
   (* CLOSURE at the value level: the bundle commutes with persisting, and the
@@ -1360,7 +1356,7 @@ Section CFGVerificationDerived.
   Definition dcarrier5 (Sg0 : LCtx) : LCtx -> Type :=
     fun Sg => (Sub Sg0 Sg *
                list (Term Sg ty_xlenbits * Term Sg ty_word * AnnotInstr) *
-               list (Term Sg ty_xlenbits) *
+               Term Sg ty_xlenbits *
                Term Sg ty_xlenbits *
                Term Sg ty_xlenbits)%type.
 
@@ -1431,7 +1427,7 @@ Section CFGVerificationDerived.
     Definition dcarrier3 (Sg0 : LCtx) : LCtx -> Type :=
       fun Sg => (Sub Sg0 Sg *
                  list (Term Sg ty_xlenbits * Term Sg ty_word * AnnotInstr) *
-                 list (Term Sg ty_xlenbits))%type.
+                 Term Sg ty_xlenbits)%type.
 
     Definition dbundle3 {Sg0 : LCtx} {w : World}
         (trans : Sub Sg0 w) (tbl : SInstrTableW w) (exits : SExitTable w)
@@ -1588,18 +1584,18 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma rexF0 (instrs : gmap (bv xlenbits) AnnotInstr)
-        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (words : bv xlenbits -> bv word) (cexit : RelVal ty_xlenbits)
         {Σ0 : LCtx} :
       forall (first stepped : bool) (w : World) (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w),
-      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+      (itable_relW instrs words tbl ∗ etable_rel cexit exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
        ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_cfg_addr instrs words exitCond 0 stepped a na cΦ ch)
+            (cexec_cfg_addr instrs words cexit 0 stepped a na cΦ ch)
             (sexec_cfg_addr 0 first stepped trans tbl exits ta tna sΦ sh))%I.
     Proof.
       intros first stepped w trans tbl exits.
@@ -1612,31 +1608,31 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma rexFS (instrs : gmap (bv xlenbits) AnnotInstr)
-        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (words : bv xlenbits -> bv word) (cexit : RelVal ty_xlenbits)
         {Σ0 : LCtx} (n' : nat) (first stepped : bool)
         (* the IH at EVERY flag pair: the block branch recurses at
            (false, stepped), the instruction branch at (false, true) *)
         (IH : forall (first' stepped' : bool) (w : World) (trans : Sub Σ0 w)
                 (tbl : SInstrTableW w) (exits : SExitTable w),
-           (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+           (itable_relW instrs words tbl ∗ etable_rel cexit exits ⊢
             ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
             ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
             ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
               ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
             ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
               ℛ⟦LogicalSoundness.RProp⟧
-                 (cexec_cfg_addr instrs words exitCond n' stepped' a na cΦ ch)
+                 (cexec_cfg_addr instrs words cexit n' stepped' a na cΦ ch)
                  (sexec_cfg_addr n' first' stepped' trans tbl exits ta tna sΦ sh))%I) :
       forall (w : World) (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w),
-      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+      (itable_relW instrs words tbl ∗ etable_rel cexit exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
        ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_cfg_addr instrs words exitCond (S n') stepped a na cΦ ch)
+            (cexec_cfg_addr instrs words cexit (S n') stepped a na cΦ ch)
             (sexec_cfg_addr (S n') first stepped trans tbl exits ta tna sΦ sh))%I.
     Proof.
       intros w trans tbl exits.
@@ -1676,8 +1672,8 @@ Section CFGVerificationDerived.
            cbn [ty.RVToOption]. rewrite Hm. rewrite Hblk.
            (* Only the CONCRETE angelic_binary is left to unfold -- the
               symbolic side no longer has one -- and we take its RIGHT disjunct.
-              Note this needs NOTHING about `exitCond v`: `is_exit = false` does
-              not imply `exitCond v = false` (is_exit_sound runs the other way),
+              Note this needs NOTHING about `cexit v`: `is_exit = false` does
+              not imply `cexit v = false` (is_exit_sound runs the other way),
               so the concrete exit branch may well be `pure`; rprop_right
               ignores it. *)
            unfold CHeapSpec.angelic_binary.
@@ -1813,7 +1809,7 @@ Section CFGVerificationDerived.
          Note the concrete side needs BOTH `rprop_right` (past the exit
          disjunct) and `rprop_left` (into the block disjunct of the inner
          angelic_binary), and that `is_exit = false` tells us nothing about
-         `exitCond v` -- is_exit_sound runs the other way -- so the exit
+         `cexit v` -- is_exit_sound runs the other way -- so the exit
          disjunct may well be `pure`; rprop_right ignores it either way. *)
       2: { (* v and `instrs !! v = Some ai` come from the SAME lookup the
               instruction case uses -- the block rides in `ai`, so no second
@@ -1867,17 +1863,18 @@ Section CFGVerificationDerived.
 
       (* ---- 1: STOP (non-entry arrival at a declared exit).  The symbolic side
          is `pure ta` outright, so this single case replaces the old exit-hit and
-         exit-miss pair -- `lookup_instr` is never consulted.  is_exit_sound_repₚ supplies `exitCond v = true`,
+         exit-miss pair -- `lookup_instr` is never consulted.  is_exit_sound_repₚ supplies `a = cexit = SyncVal v`,
          which is exactly what makes the CONCRETE exit disjunct `pure` rather
          than `error`, so rprop_left applies.  The tail is the old case 1's
          first bullet verbatim: both `pure`s bind at acc_refl, so unfolding T
          collapses the world bookkeeping and what is left is the continuation
          applied at acc_refl -- i.e. unconditionally_T. *)
       apply andb_prop in Hcol as [_ Hex].
-      iPoseProof (is_exit_sound_repₚ exitCond _ _ _ Hex with "[$He $Ha]")
+      iPoseProof (is_exit_sound_repₚ cexit _ _ _ Hex with "[$He $Ha]")
         as "%Hfact".
       destruct Hfact as (v & -> & Hcond).
-      cbn [ty.RVToOption]. rewrite Hcond.
+      cbn [ty.RVToOption].
+      rewrite (proj2 (exit_hit_spec cexit v) Hcond).
       unfold CHeapSpec.angelic_binary.
       iApply rprop_left.
       unfold CHeapSpec.pure, SHeapSpec.pure, T; cbv beta.
@@ -1912,20 +1909,20 @@ Section CFGVerificationDerived.
        occurs-check it (PLAN-dropk.md §4bis / Verifier.v's comment on
        sexec_cfg_addr).  cexec_cfg_addr is therefore UNCHANGED. *)
     Lemma rexec_cfg_addr (instrs : gmap (bv xlenbits) AnnotInstr)
-        (words : bv xlenbits -> bv word) (exitCond : bv xlenbits -> bool)
+        (words : bv xlenbits -> bv word) (cexit : RelVal ty_xlenbits)
         (* `{w : World}` must be ANNOTATED: `trans : Sub Σ0 w` now precedes the
            table arguments, and `Sub` takes an LCtx, so leaving `w` to be
            inferred elaborates it as an LCtx and `SInstrTableW w` then fails. *)
         (fuel : nat) (first stepped : bool) {w : World} {Σ0 : LCtx} (trans : Sub Σ0 w)
         (tbl : SInstrTableW w) (exits : SExitTable w) :
-      (itable_relW instrs words tbl ∗ etable_rel exitCond exits ⊢
+      (itable_relW instrs words tbl ∗ etable_rel cexit exits ⊢
        ∀ a ta, ℛ⟦RVal ty_xlenbits⟧ a ta -∗
        ∀ na tna, ℛ⟦RVal ty_xlenbits⟧ na tna -∗
        ∀ cΦ sΦ, ⌜Factors (dbundle3 trans tbl exits) sΦ⌝ -∗
          ℛ⟦□ᵣ (RVal ty_xlenbits -> RHeap -> LogicalSoundness.RProp)⟧ cΦ sΦ -∗
        ∀ ch sh, ℛ⟦RHeap⟧ ch sh -∗
          ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_cfg_addr instrs words exitCond fuel stepped a na cΦ ch)
+            (cexec_cfg_addr instrs words cexit fuel stepped a na cΦ ch)
             (sexec_cfg_addr fuel first stepped trans tbl exits ta tna sΦ sh))%I.
     Proof.
       (* The flags are REVERTED along with the rest: the goal fixes them, but
@@ -1935,7 +1932,7 @@ Section CFGVerificationDerived.
       induction fuel as [|n' IH]; intros first stepped w trans tbl exits.
       - apply rexF0.
       - (* `Set Implicit Arguments` (file top) makes rexFS's instrs/words/
-           exitCond IMPLICIT -- they are inferable from IH -- so its first
+           cexit IMPLICIT -- they are inferable from IH -- so its first
            EXPLICIT arguments are n', first and stepped.  Passing them
            positionally mis-slots and reports "instrs ... expected to have
            type nat". *)
@@ -1976,7 +1973,7 @@ Section CFGVerificationDerived.
     Definition cexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
-      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (cexit : RelVal ty_xlenbits) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
       (* Mirrors sexec_triple_addr's demonic_ctx over Σ ▻▻ words_ctx (length tbl):
@@ -1986,7 +1983,7 @@ Section CFGVerificationDerived.
       let lenv := env.drop (words_ctx (length tbl)) lenvw in
       let cws  := words_of_env rvtake rvdrop (env.take (words_ctx (length tbl)) lenvw) in
       CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
-          (itable_rel instrs tbl lenv /\ etable_rel exitCond exits lenv
+          (itable_rel instrs tbl lenv /\ etable_rel cexit exits lenv
            /\ wtable_rel words tbl cws lenv))) (fun _ =>
       CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
       (* Mirrors sexec_triple_addr's single `demonic (Some "np")`: the initial
@@ -1994,7 +1991,7 @@ Section CFGVerificationDerived.
          step.  See exec_instruction_prologue (Verifier.v). *)
       CHeapSpec.bind (CHeapSpec.demonic _) (fun np =>
       CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
-      CHeapSpec.bind (cexec_cfg_addr instrs words exitCond fuel false a np) (fun na =>
+      CHeapSpec.bind (cexec_cfg_addr instrs words cexit fuel false a np) (fun na =>
       CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])))))).
 
     (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
@@ -2138,10 +2135,10 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma etable_rel_of_faith_forget {Σ' : LCtx} {wa wb : World} (θ : Acc wa wb) (ζ : Sub Σ' wa)
-        (exitCond' : bv xlenbits -> bool) (exits' : SExitTable (wlctx Σ'))
+        (cexit' : RelVal ty_xlenbits) (exits' : SExitTable (wlctx Σ'))
         (ιΣ : NamedEnv RelVal Σ') :
-      etable_rel exitCond' exits' ιΣ ->
-      (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ etable_rel exitCond' (subst_etable (persist ζ θ) exits'))%I.
+      etable_rel cexit' exits' ιΣ ->
+      (forgetting θ (ℛ⟦RNEnv LVar Σ'⟧ ιΣ ζ) ⊢ etable_rel cexit' (subst_etable (persist ζ θ) exits'))%I.
     Proof.
       intros Hfaith.
       constructor.
@@ -2149,9 +2146,7 @@ Section CFGVerificationDerived.
       unfold forgetting, RNEnv, RInst in Hrel.
       cbn in Hrel.
       unfold etable_rel, subst_etable.
-      rewrite List.Forall_map.
-      eapply List.Forall_impl; [|exact Hfaith].
-      intros t (v & Hv & Hc).
+      destruct Hfaith as (v & Hv & Hc).
       exists v.
       split; [|exact Hc].
       rewrite inst_subst inst_persist Hrel.
@@ -2526,7 +2521,7 @@ Section CFGVerificationDerived.
     Lemma rexec_triple_addr {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
-      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (cexit : RelVal ty_xlenbits) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w : World} :
       ⊢ ∀ (cPhi : unit -> SCHeap -> Prop)
@@ -2535,7 +2530,7 @@ Section CFGVerificationDerived.
         ℛ⟦□ᵣ (RUnit -> RHeap -> LogicalSoundness.RProp)⟧ cPhi sPhi -∗
         ∀ (ch : SCHeap) (sh : SHeap w), ℛ⟦RHeap⟧ ch sh -∗
           ℛ⟦LogicalSoundness.RProp⟧
-            (cexec_triple_addr req instrs words exitCond fuel ens tbl exits cPhi ch)
+            (cexec_triple_addr req instrs words cexit fuel ens tbl exits cPhi ch)
             (sexec_triple_addr req tbl exits fuel ens (w := w) sPhi sh).
     Proof.
       iIntros (cPhi sPhi) "%Hoi #rPhi". iIntros (ch sh) "#rh".
@@ -2597,7 +2592,7 @@ Section CFGVerificationDerived.
                                    (env.take (words_ctx (length tbl)) δw))))) as "#Hi".
                { iApply (itable_relW_zip_pred with "[$Hi0 $Hws $Hw0]"). }
                unfold CHeapSpec.bind. unfold SHeapSpec.bind.
-               iApply (rexec_cfg_addr instrs words exitCond fuel true false _ _ _
+               iApply (rexec_cfg_addr instrs words cexit fuel true false _ _ _
                          with "[$Hi $He]").
                (* FIVE premises: two RVal, the Factors one, then the □ᵣ/RHeap
                   pair, which the RHeapSpec-folded statement used to supply
@@ -2627,19 +2622,19 @@ Section CFGVerificationDerived.
     Definition ccfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
-      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (cexit : RelVal ty_xlenbits) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : Prop :=
-      CHeapSpec.run (cexec_triple_addr req instrs words exitCond fuel ens tbl exits).
+      CHeapSpec.run (cexec_triple_addr req instrs words cexit fuel ens tbl exits).
 
     Lemma rcfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
-      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (cexit : RelVal ty_xlenbits) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       ⊢ RSat LogicalSoundness.RProp (w := w)
-          (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits)
+          (ccfg_verification_condition req instrs words cexit fuel ens tbl exits)
           (scfg_verification_condition req tbl exits fuel ens w).
     Proof.
       unfold ccfg_verification_condition, scfg_verification_condition.
@@ -2649,7 +2644,7 @@ Section CFGVerificationDerived.
          constant continuation `fun w1 θ1 _ h1 => block` is what makes the
          premise true, by omega_indep_block. *)
       unfold CHeapSpec.run. unfold SHeapSpec.run.
-      iApply (rexec_triple_addr req instrs words exitCond fuel ens tbl exits).
+      iApply (rexec_triple_addr req instrs words cexit fuel ens tbl exits).
       - iPureIntro. apply omega_indep_block.
       - rsolve.
       - rsolve.
@@ -2658,13 +2653,13 @@ Section CFGVerificationDerived.
     #[export] Instance refine_compat_cfg_verification_condition {Σ : LCtx}
       (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
       (words : bv xlenbits -> bv word)
-      (exitCond : bv xlenbits -> bool) (fuel : nat)
+      (cexit : RelVal ty_xlenbits) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) {w} :
       RefineCompat (LogicalSoundness.RProp)
-        (ccfg_verification_condition req instrs words exitCond fuel ens tbl exits) w
+        (ccfg_verification_condition req instrs words cexit fuel ens tbl exits) w
         (scfg_verification_condition req tbl exits fuel ens w) _ :=
-      MkRefineCompat (rcfg_verification_condition req instrs words exitCond fuel ens tbl exits).
+      MkRefineCompat (rcfg_verification_condition req instrs words cexit fuel ens tbl exits).
 
   End Relational.
 
