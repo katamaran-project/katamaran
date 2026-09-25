@@ -1,4 +1,25 @@
 TODO:
+- PRIORITY (Emiel, 2026-09-25): REMOVE EXIT CONDITIONS; state exits as TARGET ADDRESSES.
+	`cfg_exitCond : bv -> bool` has become unwieldy, and it is not needed. It is enough to demand that the code exits at
+	specific addresses (or something like it), so drop exit conditions completely and move to target addresses.
+	+ Why they are unwieldy today: the symbolic side already works with exit TERMS (cfg_exits, is_exit), and exitCond exists only
+	  to be related back to them. That relation is etable_rel / HexitsFaith / seg_exitCond ia / seg_exit_table_ok /
+	  seg_exitCond_inv1 / Hexit in blockSound_of_contract, and it is why every contract is parameterised by the concrete
+	  load address `ia` (cdRec ia) even though the VC never reads it. The "etable_rel half of blockFaithful" item below
+	  is one symptom and is subsumed by this one.
+	+ Knock-on wins: `ia` disappears as a contract parameter; blk_off can plausibly be derived from the targets
+	  (PLAN-contract-ast §2b); PLAN-valid-blk-annot.md's risk R1 (blockSound ignoring cfg_init_addr/exitCond) mostly
+	  dissolves; the stop rule becomes "pc = target", which is what `first`/is_exit in sexec_cfg_addr already mean.
+	+ ONE TARGET, not a set (Emiel): the stop rule is `pc = target`, not `pc ∈ targets`. A contract has exactly one exit.
+	  Checked 2026-09-25: every tracked example already has a single exit offset. Only untracked muladd probes use two
+	  (segment L [56;108] in ZZ*SgL / ZZPostL_*, segment H [112;228] in ZZSegQH). Those become two contracts, or a
+	  join point, when ported. The `list N` of targets in gen_seg_contract / exits_of_offs / SExitTable collapses to one term.
+	+ TRUSTED SURFACE: the exit condition appears in the end theorems (adequacy_gen_RiscVNStepsExitCond, myWP2_loop's
+	  ExitCond, Noninterference.v, Example/*Result.v). Replacing it with "pc = target" changes what is proved, so the new
+	  statements need Emiel's review. Also settle whether targets are absolute or base-relative. After
+	  PLAN-self-contained-segments they are relative to the contract's own base, and the trusted statement needs absolute ones.
+	+ PLAN: case_study/RiscvPmp/CFGVer/plans/PLAN-exit-targets.md (DRAFT). Scheduled BEFORE PLAN-valid-blk-annot.md, so blkValid is not built around an exitCond
+	  that is about to disappear.
 - Consolidate everything in CFGVer, so we can delete BlockVer
 - Rename everything in CFGVer to remove mentions to BlockVer
 - Modularity:
