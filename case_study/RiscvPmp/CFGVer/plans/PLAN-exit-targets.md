@@ -1,6 +1,6 @@
 # PLAN: replace exit conditions by ONE exit address
 
-Status: IMPLEMENTED 2026-09-25 on branch issue/exit-targets (commits 9f05f792, 9a4e303e, cfa9a762); gate: see §9. Phase 5 (drop cfg_init_addr) DEFERRED (D11). Origin: the TODOS.txt
+Status: IMPLEMENTED 2026-09-25 on branch issue/exit-targets (commits 9f05f792, 9a4e303e, cfa9a762); gate PASSED (§9). Phase 5 (drop cfg_init_addr) DEFERRED (D11). Origin: the TODOS.txt
 PRIORITY item (Emiel, 2026-09-25). Goes BEFORE PLAN-valid-blk-annot.md (§7).
 
 ## 0. Decisions (Emiel)
@@ -249,4 +249,7 @@ standalone Result files: statement changed, NO proof change. The prediction in
 
 ### §9 Gate
 
-(filled in when scripts/gate.sh finishes)
+**PASSED 2026-09-25** on issue/exit-targets at 0b95a1a4 (`GATE_JOBS=1 ./scripts/gate.sh`):
+build clean, no holes, 19 end theorems axiom-clean (only Machine.pure_decode,
+Base.mmioenv).  An earlier run was killed by host memory pressure, not by the
+gate.
