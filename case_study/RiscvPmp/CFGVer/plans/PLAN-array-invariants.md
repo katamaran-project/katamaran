@@ -349,3 +349,29 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   is a syntax error; `destruct_syminstance` does not see through a named
   `LCtx` (`cbv [clem_ctx] in ι` first); `cbn -[interp_arr]` is the right
   unfolding before applying a step lemma (plain `cbn` unfolds `bv.bin`).
+
+### Phase 2 (2026-10-02) -- GATE 2 MET
+
+`Example/ZZArrDResult.v` (untracked probe, with `Example/ZZArrD.v`):
+**`d_noninterferent`** -- `noninterferent_strong init_addr d_instrs
+(init_addr+24) (d_reg_specs init_addr) (d_mem_specs init_addr)` for every
+`init_addr` with `init_addr + 36 < lenAddr`. muladd's loop D alone, 2 trips,
+over 3 private data cells right after the code; S0 pinned to the top cell
+(`init_addr+32`) and T6 to 2, both public; S1/S2 free. coqc 39.6 s, 6.9 GB.
+
+- `dRecBlk_valid` is ONE `exact (blkValid_of_seg … valid_d_rec)`: the loop
+  block, catalogue ghosts included, is valid through the existing Löb door --
+  so `sound_cexec_ghosts`'s AnnotCLemma case and `clemSem` are exercised for
+  real.
+- `dLink` (light): the whole program starting AT the loop, the block an
+  ordinary `ai_block`, exits at +24; `valid_d_link` by `solve_param_vc`.
+- ImplPre builds the invariant's arrays from the trusted statement's
+  concrete cells AT THE IRIS LEVEL (`d_src_arr` via `interp_arr_intro`,
+  `d_moved_arr` empty) -- so a WHOLE-PROGRAM entry needs no Q1 annotation;
+  Q1 matters only for an array introduced MID-program (Phase 3).
+- Address arithmetic trick: `of_N (ia + c) = of_N ia + of_N c` (`d_split`),
+  reassociate, and the closed constant part closes by `f_equal`
+  (computation). `N.of_nat 2 < bv.exp2 xlenbits`: `vm_compute; reflexivity`,
+  not lia. `gen_implpre` leaves two shelved `?ι`s for pinned registers;
+  `Unshelve. exact [ctx]. exact …` (any valuation).
+- No routine Print Assumptions (Emiel); no Admitted in the file.
