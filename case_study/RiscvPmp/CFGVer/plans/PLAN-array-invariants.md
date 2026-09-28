@@ -375,3 +375,40 @@ over 3 private data cells right after the code; S0 pinned to the top cell
   not lia. `gen_implpre` leaves two shelved `?ι`s for pinned registers;
   `Unshelve. exact [ctx]. exact …` (any valuation).
 - No routine Print Assumptions (Emiel); no Admitted in the file.
+
+### Phase 4 (2026-10-02) -- GATE 4 MET for K, M and I
+
+All three pointer-bounded sliding loops verify as ONE `ai_loop` block each,
+at a SYMBOLIC trip count, by `solve_param_vc` alone (no residuals), each with
+three negative controls REJECTED (a false post; an invariant the back edge
+cannot preserve -- done count pinned to 0; the head without the `nonempty`
+ghost). Untracked probes, all coqc-green:
+
+| loop | probe | instrs | latch | coqc (VC + controls) |
+|---|---|---|---|---|
+| K `br_i31_add` | `Example/ZZArrK.v` | 13 | `bne T5, S0` (m ptr) | 42.8 s |
+| M `br_i31_sub` | `Example/ZZArrM.v` | 13 | `bne A4, A2` (m ptr) | 39.2 s |
+| I limb mul-acc | `Example/ZZArrI.v` | 29 | `bne A1, T1` (x ptr) | 110.0 s |
+
+(K's VC alone: 772 ms interactively.)  I contains MUL/MULHU and an SLTU
+carry on private data -- no residual.
+
+- **One new catalogue entry, `clem_arr_nonempty pub s`**
+  (`arr a n e ∗ a≠e ⊢ arr a n e ∗ n≠0`; soundness `clem_nonempty_sound`,
+  from the end fact with n = 0). It turns the pointer latch into the count
+  fact `take_first` needs; the two REMAINING arrays share the count `n`, so
+  one call covers both.
+- **No `add_last` needed** (the plan's D2 listed it): the DONE arrays walk
+  DOWN from the pointers (stride −4), so each trip adds at their FRONT with
+  the existing `add_first`, and `(ap−4)+4` folds back to `ap` (the Phase-0
+  peval fix). This also makes K's four arrays FOUR DISTINCT PREDICATES
+  (pub × stride), so every angelic ghost call has exactly one candidate --
+  the ambiguity risk of D2 never arises.
+- Invariant shape for all three: pointer registers (public) ∗ the latch
+  disequality ∗ scratch registers ∗ remaining-m `(true,4) [bp;n;·]` ∗
+  remaining-x `(false,4) [ap;n;·]` ∗ m-done `(true,−4) [bp−4;k;mE]` ∗ x-done
+  `(false,−4) [ap−4;k;xE]`; ghosts `nonempty; take_first x; take_first m`
+  at the head and `add_first x-done; add_first m-done` after the store. M and
+  I were GENERATED from K's file by register/instruction substitution.
+- Heavy chain past SpecIris.vo NOT rebuilt since `clem_arr_nonempty` (no
+  heavy edits expected: `sound_cexec_ghosts` uses `clemSem k` generically).
