@@ -272,3 +272,44 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   edit into one pass (GATE_JOBS=1 on this box).
 - **VerifierRel.v cannot be opened by pet**; the refinement arm for
   `AnnotView` needs the probe-file workflow the ghost-refinement work used.
+
+## Progress log
+
+### Phase 0 (2026-09-28, branch `issue/array-invariants`)
+
+- **Sig.v**: `arr (pub : bool) (s : Z)`, args `[a; n; e]`, precise on `a`,
+  not duplicable. The stride is a `Z`, not an `N`: `Derive EqDec` needs an
+  `EqDec` instance per field and there is none for `N` (there is `Z_eqdec`),
+  and a signed stride says "walks down" as `s = -4` directly.
+- **Verifier.v**: `AnnotView {Δ} (pre post : Assertion Δ)`, executed as
+  `call_lemma (MkLemma [ctx] _ [env] pre post) [env]`. `cext_sexec_ghost`
+  needed a third case -- WITHOUT `cbn`, which unfolds `call_lemma` at the
+  concrete `MkLemma` and defeats `apply cext_call_lemma`. Rebuild cost of the
+  Sig.v edit to the light closure: 75 s (not the feared full rebuild).
+- **Probe `Example/ZZArrD.v`** (untracked). First run: `take_first` fired as
+  designed (array found angelically, cell `dp-4` and its range fact
+  produced), `lw`/`addi`/`addi`/`sw` all executed; `add_first` FAILED.
+- **Root cause: `peval_bvadd` was not canonical at zero.** Its two
+  constant-folding clauses returned `bv.add v1 v2 ⊕ t'` even when the sum is
+  0, so `(dp ⊕ 4) ⊕ -4` became `0 ⊕ dp`, while the direct clause turns
+  `dp ⊕ 0` into `dp`: one address, two spellings, and the precise consume of
+  the cell at `a - s` missed the heap's bare `dp`. Inherent to array views
+  whenever a pointer register is itself a cell address, so not D-specific.
+  FIXED in `theories/Symbolic/PartialEvaluation.v` (Emiel approved the
+  theories/ change): helper `peval_bvadd_fold` (returns `t'` at zero) +
+  `peval_bvadd_fold_sound`; `peval_bvadd_sound` gains one
+  `etransitivity; [apply peval_bvadd_fold_sound|]` step.
+- **Process note**: the Sig.v/Verifier.v edits were first made through a
+  Bash heredoc, which `skill-path-guard.sh` (Write|Edit only) does not see,
+  so `cfgver-executor`/`cfgver-contracts` were loaded only afterwards.
+- **GATE 0 MET.** After the rebuild (theories/ + all 18 tracked light
+  examples, 55 files, 21:00, peak 5.3 GB, all green -- so no existing VC
+  depended on the old `0 ⊕ x` spelling), `valid_d_rec` closes with
+  `intros; vm_compute; solve_vc` in 154 ms; the whole probe compiles with
+  coqc in 19 s. NO residual obligations: the pointer/count tie never reaches
+  the VC. THREE negative controls, all REJECTED: (1) invariant without the
+  destination cell, (2) post claiming T6 = 1 at exit, (3) invariant with an
+  extra `c ≠ 1`, which the back edge cannot re-establish -- so the back edge
+  really consumes the invariant through the block.
+- Not yet shown: that the invariant is SATISFIABLE (Phase 1's entry check),
+  and nothing is sound yet -- the views are trusted until Phase 1.

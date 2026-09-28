@@ -538,6 +538,16 @@ Module Type PartialEvaluationOn
           (term_unop uop.bvnot t).
     Proof. reflexivity. Qed.
 
+    (* The folded constant of the two clauses below can come out ZERO, as in
+       (x ⊕ 4) ⊕ -4.  Without this check that gave `0 ⊕ x`, which is not
+       canonical: the direct `0 ⊕ t` clause already returns `t`, so the same
+       address had two spellings and a precise chunk match on it failed
+       (PLAN-array-invariants: a walking pointer's cell, re-derived from an
+       array's start as (dp ⊕ 4) ⊕ -4, against the heap's bare `dp`). *)
+    Definition peval_bvadd_fold {n} (v : Val (ty.bvec n)) (t : Term Σ (ty.bvec n))
+      : Term Σ (ty.bvec n) :=
+      if eq_dec v bv.zero then t else term_binop bop.bvadd (term_val (ty.bvec n) v) t.
+
     Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
     | term_val _ v1          , term_val _ v2          => term_val (ty.bvec _) (bv.add v1 v2)
     | term_val _ (bv.mk 0 _) , t2                     => t2
@@ -547,9 +557,9 @@ Module Type PartialEvaluationOn
        (c1+c2) ⊕ t.  Arguments are already peval-canonical (peval is bottom-up),
        so t has no constant head and the result stays canonical. *)
     | term_binop bop.bvadd (term_val _ v1) t' , term_val _ v2 =>
-        term_binop bop.bvadd (term_val (ty.bvec _) (bv.add v1 v2)) t'
+        peval_bvadd_fold (bv.add v1 v2) t'
     | term_val _ v1          , term_binop bop.bvadd (term_val _ v2) t' =>
-        term_binop bop.bvadd (term_val (ty.bvec _) (bv.add v1 v2)) t'
+        peval_bvadd_fold (bv.add v1 v2) t'
     | t1                     , term_val _ v2          => peval_bvadd_mask t1 v2
     | t1                     , t2                     => term_binop bop.bvadd t1 t2.
 
@@ -1428,10 +1438,20 @@ Module Type PartialEvaluationOn
         now rewrite bv.not_if_ones.
     Qed.
 
+    Lemma peval_bvadd_fold_sound {n} (v : Val (ty.bvec n)) (t : Term Σ (ty.bvec n)) :
+      peval_bvadd_fold v t ≡ term_binop bop.bvadd (term_val (ty.bvec n) v) t.
+    Proof.
+      unfold peval_bvadd_fold. destruct (eq_dec v bv.zero) as [->|]; [|reflexivity].
+      intros ι; cbn. destruct (inst t ι); cbn; f_equal; symmetry; apply bv.add_zero_l.
+    Qed.
+
     Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
     Proof.
       funelim (peval_bvadd t1 t2); try apply peval_bvadd_mask_sound;
+        (* the two folding clauses: strip peval_bvadd_fold, leaving the goal
+           the script below was written for *)
+        try (etransitivity; [apply peval_bvadd_fold_sound|]);
         lsolve; intros ι; cbn; auto.
       (* New constant-folding clauses: goal is
          evalRel bvadd (SyncVal (c1+c2)) r = evalRel bvadd (SyncVal c1) (evalRel bvadd (SyncVal c2) r)
