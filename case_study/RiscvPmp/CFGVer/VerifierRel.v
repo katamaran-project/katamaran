@@ -225,6 +225,10 @@ Section CFGVerificationDerived.
          neither does. *)
       | AnnotLemmaInvocation l es =>
           call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (evals es [env])
+      (* The CFGVer-local catalogue (Verifier.clem_lemma), mirroring
+         sexec_ghost's arm one-for-one; soundness is SpecIris.clemSem. *)
+      | AnnotCLemma k =>
+          call_lemma (clem_lemma k) [env]
       end.
 
     (* List.nil/List.cons spelled out rather than []/:: — ctx.notations (in

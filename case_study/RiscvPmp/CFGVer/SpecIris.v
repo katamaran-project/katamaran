@@ -67,6 +67,11 @@ From Katamaran Require Import
      RiscvPmp.Contracts.
 From Katamaran Require RiscvPmp.ModelBinary.
 From Katamaran Require Import RiscvPmp.CFGVer.Spec.
+(* For the CFGVer-local ghost-lemma catalogue (Verifier.clem_lemma), whose
+   soundness is proved below next to lemSemCFGVerif.  Light file; a bare
+   Require, names qualified (see CFGVer/CLAUDE.md on Require Import Verifier). *)
+From Katamaran Require RiscvPmp.CFGVer.Verifier.
+From Coq Require Import micromega.Lia.
 
 From iris.program_logic Require Import total_lifting.
 
@@ -383,6 +388,169 @@ Module RiscvPmpIrisInstanceWithContracts.
     - apply havoc_regs_sound.
     (* - apply close_mmio_write_sound. *)
   Qed.
+
+  (* ======================================================================= *)
+  (* SOUNDNESS OF THE CFGVer-LOCAL GHOST LEMMAS (Verifier.CLem;              *)
+  (* PLAN-array-invariants).  The counterpart of lemSemCFGVerif for the      *)
+  (* catalogue that is NOT in Machine.v's `Lem`.  Two layers:                *)
+  (*  - a STEP lemma per catalogue entry, over plain bv's, stating the       *)
+  (*    big_sepL move on IrisInstanceBinary.interp_arr (the shape of         *)
+  (*    GenCompose.loop_reservoir_peel / loop_completed_push);               *)
+  (*  - ValidLemma, which unpacks the assertion interpretation to the step   *)
+  (*    lemma (a NonSyncVal start/count/end makes interp_arr False).         *)
+  (* The pointer/count multiplication e = a + s·n lives only here, as ring   *)
+  (* identities -- never in a VC.                                            *)
+  (* ======================================================================= *)
+  Section CLemSound.
+    Add Ring bvring_xlen : (bv.ring_theory xlenbits).
+    Local Notation SV := TypeDecl.ty.SyncVal.
+
+    Lemma arr_pred_bin (n : bv xlenbits) : n <> bv.zero ->
+      bv.bin (bv.add n (bv.of_Z (-1))) = (bv.bin n - 1)%N.
+    Proof.
+      intros Hn.
+      replace (bv.of_Z (n := xlenbits) (-1)) with (bv.negate (bv.of_Z (n := xlenbits) 1))
+        by (rewrite bv.of_Z_negate; reflexivity).
+      rewrite bv.of_Z_one. fold (bv.sub n bv.one).
+      rewrite bv.bin_sub_small.
+      - rewrite bv.bin_one; [reflexivity|cbv; lia].
+      - unfold bv.ule. rewrite bv.bin_one; [|cbv; lia].
+        destruct (bv.bin n) eqn:E; [|lia].
+        exfalso. apply Hn. apply bv.bin_inj. now rewrite E.
+    Qed.
+
+    (* bin (n+1) = bin n + 1, or the count wrapped to 0 *)
+    Lemma arr_succ_bin (n : bv xlenbits) :
+      (bv.bin (bv.add n (bv.of_Z 1)) = bv.bin n + 1)%N \/ bv.bin (bv.add n (bv.of_Z 1)) = 0%N.
+    Proof.
+      rewrite bv.of_Z_one bv.bin_add bv.bin_one; [|cbv; lia].
+      pose proof (bv.bv_is_wf n) as Hw.
+      set (E := bv.exp2 xlenbits) in *. clearbody E.
+      destruct (N.lt_ge_cases (bv.bin n + 1) E) as [Hl|Hg].
+      - left. now apply N.mod_small.
+      - right. replace (bv.bin n + 1)%N with E by lia. apply N.mod_same. lia.
+    Qed.
+
+    Lemma arr_neg1 : bv.of_Z (n := xlenbits) (-1) = bv.negate bv.one.
+    Proof. rewrite <- bv.of_Z_one, bv.of_Z_negate. reflexivity. Qed.
+    Lemma arr_neg_s (s : Z) : bv.of_Z (n := xlenbits) (- s) = bv.negate (bv.of_Z s).
+    Proof. now rewrite bv.of_Z_negate. Qed.
+    Lemma arr_of_nat0 : bv.of_nat (n := xlenbits) 0 = bv.zero.
+    Proof. reflexivity. Qed.
+
+    (* Stated separately and APPLIED: `ring` refuses a goal whose carrier
+       spells the width index unfolded, while `apply` works up to conversion
+       (bv-pitfalls, "Blanket cbn unfolds the width index"). *)
+    Lemma arr_ring_zero (a s : bv xlenbits) : a = bv.add a (bv.mul s bv.zero).
+    Proof. ring. Qed.
+    Lemma arr_ring_end_take (a s n : bv xlenbits) :
+      bv.add a (bv.mul s n) = bv.add (bv.add a s) (bv.mul s (bv.add n (bv.negate bv.one))).
+    Proof. ring. Qed.
+    Lemma arr_ring_idx_take (a s x : bv xlenbits) :
+      bv.add a (bv.mul s (bv.add bv.one x)) = bv.add (bv.add a s) (bv.mul s x).
+    Proof. ring. Qed.
+    Lemma arr_ring_end_add (a s n : bv xlenbits) :
+      bv.add a (bv.mul s n) = bv.add (bv.add a (bv.negate s)) (bv.mul s (bv.add n bv.one)).
+    Proof. ring. Qed.
+    Lemma arr_ring_idx_add (a s x : bv xlenbits) :
+      bv.add (bv.add a (bv.negate s)) (bv.mul s (bv.add bv.one x)) = bv.add a (bv.mul s x).
+    Proof. ring. Qed.
+
+    Lemma interp_arr_take_first `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
+      n <> bv.zero ->
+      interp_arr pub s (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
+      interp_arr_cell pub a ∗
+      interp_arr pub s (SV (bv.add a (bv.of_Z s))) (SV (bv.add n (bv.of_Z (-1)))) (SV e).
+    Proof.
+      intros Hn. cbn [interp_arr]. iIntros "[%He Hcells]".
+      rewrite arr_pred_bin; [|exact Hn].
+      destruct (N.to_nat (bv.bin n)) as [|k] eqn:Ek.
+      { exfalso. apply Hn. apply bv.bin_inj.
+        pose proof (f_equal N.of_nat Ek) as E0. rewrite N2Nat.id in E0. exact E0. }
+      cbn [seq]. iDestruct "Hcells" as "[Hc0 Hrest]".
+      rewrite arr_of_nat0 -arr_ring_zero.
+      iFrame "Hc0". iSplit.
+      { iPureIntro. subst e. rewrite arr_neg1. apply arr_ring_end_take. }
+      replace (N.to_nat (bv.bin n - 1)) with k by lia.
+      iRevert "Hrest". rewrite -fmap_S_seq big_sepL_fmap. iIntros "Hrest".
+      iApply (big_sepL_mono with "Hrest"). intros i x _. cbn.
+      rewrite bv.of_nat_S arr_ring_idx_take. auto.
+    Qed.
+
+    (* A count that wraps to 0 leaves an empty right-hand side: the cells are
+       dropped (affine) and the end fact still holds, since then n = -1. *)
+    Lemma interp_arr_add_first `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
+      interp_arr pub s (SV a) (SV n) (SV e) ∗ interp_arr_cell pub (bv.add a (bv.of_Z (- s)))
+      ⊢@{iPropI Σ}
+      interp_arr pub s (SV (bv.add a (bv.of_Z (- s)))) (SV (bv.add n (bv.of_Z 1))) (SV e).
+    Proof.
+      cbn [interp_arr]. iIntros "[[%He Hcells] Hc]".
+      iSplit.
+      { iPureIntro. subst e. rewrite arr_neg_s bv.of_Z_one. apply arr_ring_end_add. }
+      destruct (arr_succ_bin n) as [Hs|Hz].
+      - rewrite Hs. replace (N.to_nat (bv.bin n + 1)) with (S (N.to_nat (bv.bin n))) by lia.
+        cbn [seq]. rewrite big_sepL_cons arr_of_nat0 -arr_ring_zero. iFrame "Hc".
+        rewrite -fmap_S_seq big_sepL_fmap.
+        iApply (big_sepL_mono with "Hcells"). intros i x _. cbn.
+        rewrite bv.of_nat_S arr_neg_s arr_ring_idx_add. auto.
+      - rewrite Hz. cbn. done.
+    Qed.
+
+    Lemma clem_take_first_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_take_first pub s)).
+    Proof.
+      intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+        cbn -[interp_arr]; try (iIntros "[[] _]").
+      iIntros "[Harr [%Hne _]]".
+      iDestruct (interp_arr_take_first with "Harr") as "[Hc $]"; [exact Hne|].
+      iDestruct "Hc" as "[%Hr [%w [Hw %Hs]]]".
+      iSplitL "Hw".
+      { iExists w. iFrame "Hw". destruct pub; cbn.
+        - iSplit; [iPureIntro; now apply Hs|done].
+        - iSplit; done. }
+      iSplit; [iPureIntro; exact Hr|done].
+    Qed.
+
+    Lemma clem_add_first_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_add_first pub s)).
+    Proof.
+      intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+        cbn -[interp_arr]; try (iIntros "[[] _]").
+      iIntros "[Harr [[%w [Hw Hs]] [%Hr _]]]".
+      iApply interp_arr_add_first. iFrame "Harr".
+      unfold interp_arr_cell. iSplit; [iPureIntro; exact Hr|].
+      iExists w. iFrame "Hw". destruct pub; cbn.
+      - iDestruct "Hs" as "[%Hs _]". iPureIntro. intros _. exact Hs.
+      - iPureIntro. discriminate.
+    Qed.
+
+    (* ENTRY CHECK (PLAN-array-invariants Phase 1): an arr chunk is
+       SATISFIABLE -- k concrete in-range cells at a, a+s, … ARE an array of
+       count k ending at a + s·k, as long as k fits the count's width.  So an
+       invariant stated over arr is not vacuous for want of a model (§R11's
+       lesson for loop_reservoir), and this is the Iris half of the
+       caller-side conversion Phase 3 needs. *)
+    Lemma interp_arr_intro `{sailGS2 Σ} (pub : bool) (s : Z) (a : bv xlenbits) (k : nat) :
+      (N.of_nat k < bv.exp2 xlenbits)%N ->
+      ([∗ list] i ∈ seq 0 k, interp_arr_cell pub (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))
+      ⊢@{iPropI Σ}
+      interp_arr pub s (SV a) (SV (bv.of_nat k)) (SV (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat k)))).
+    Proof.
+      intros Hk. cbn [interp_arr]. iIntros "H". iSplit; [done|].
+      rewrite bv.bin_of_nat_small; [|exact Hk]. rewrite Nat2N.id. iExact "H".
+    Qed.
+
+    (* The catalogue's lemSemCFGVerif. *)
+    Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
+    Proof.
+      destruct k; [apply clem_take_first_sound|apply clem_add_first_sound].
+    Qed.
+  End CLemSound.
 
   Import RiscvPmpCFGVerifSpec.
   Import RiscvPmpCFGVerifExecutor.Symbolic.

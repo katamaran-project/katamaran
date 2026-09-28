@@ -125,6 +125,14 @@ Definition clem_cell (pub : bool) (x : Term (clem_ctx ▻ "w"∷ty_xlenbits) ty_
              (if pub then asn.formula (formula_secLeak (term_var "w"))
               else asn.formula formula_true)).
 
+(* the cell at x is in the data address range: unsigned x + 4 ≤ maxAddr.
+   Every arr cell carries it (IrisInstanceBinary.interp_arr_cell), so a take
+   hands it out and an add must be given it. *)
+Definition clem_range {Σ} (x : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.formula (formula_relop bop.le
+    (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int 4%Z))
+    (term_val ty.int (Z.of_N maxAddr))).
+
 Definition clem_arr {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.chunk (chunk_user (arr pub s) [a; n; e]).
 
@@ -140,17 +148,14 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
            (asn.formula (formula_relop bop.neq (term_var "n")
                            (term_val ty_xlenbits bv.zero))))
         (asn.sep (clem_cell pub (term_var "a"))
-           (asn.sep
-              (asn.formula (formula_relop bop.le
-                 (term_binop bop.plus (term_unop uop.unsigned (term_var "a"))
-                    (term_val ty.int 4%Z))
-                 (term_val ty.int (Z.of_N maxAddr))))
+           (asn.sep (clem_range (term_var "a"))
               (clem_arr pub s (clem_off (term_var "a") s)
                  (clem_off (term_var "n") (-1)) (term_var "e"))))
   | clem_arr_add_first pub s =>
       MkLemma [ctx] clem_ctx [env]
         (asn.sep (clem_arr_angelic pub s)
-           (clem_cell pub (clem_off (term_var "a") (- s))))
+           (asn.sep (clem_cell pub (clem_off (term_var "a") (- s)))
+              (clem_range (clem_off (term_var "a") (- s)))))
         (clem_arr pub s (clem_off (term_var "a") (- s))
            (clem_off (term_var "n") 1) (term_var "e"))
   end.

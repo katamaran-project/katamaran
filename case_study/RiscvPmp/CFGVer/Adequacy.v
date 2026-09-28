@@ -1237,6 +1237,19 @@ Section AdequacyTools.
           iPoseProof ("Hcons" with "[Hreq]") as "H"; [by iApply lemSem|].
           iDestruct "H" as (h') "[Hh' %Hrest]".
           iApply (IH _ _ Hrest with "Hh'").
+        + (* AnnotCLemma: the same move, with the catalogue's clemSem in
+             place of lemSemCFGVerif. *)
+          unfold bind, CHeapSpec.bind in Hexec.
+          apply call_lemma_sound in Hexec.
+          pose proof (clemSem k) as lemSem.
+          remember (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k) as contractL.
+          clear HeqcontractL.
+          destruct Hexec as [Ψ pats req ens ent]; cbn in lemSem.
+          iIntros "Hh".
+          iPoseProof (ent with "Hh") as (ι Heq) "[Hreq Hcons]".
+          iPoseProof ("Hcons" with "[Hreq]") as "H"; [by iApply lemSem|].
+          iDestruct "H" as (h') "[Hh' %Hrest]".
+          iApply (IH _ _ Hrest with "Hh'").
     Qed.
 
     (* ================================================================ *)
