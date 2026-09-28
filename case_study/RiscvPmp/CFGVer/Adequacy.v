@@ -1433,65 +1433,6 @@ Section AdequacyTools.
         + right. exact (IH _ _ _ H).
     Qed.
 
-    (* A program carrying no block contracts is vacuously block-sound.  With
-       Verifier.v's ai_block_none_of_AST this discharges the premise in ONE
-       line for every example written as a plain list of ASTs -- which is all
-       of them -- so no end-to-end theorem is restricted to make room for the
-       hook. *)
-    Lemma blocksSoundAt_of_none stepped words base
-        (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
-      List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire stepped ai = None) l ->
-      ⊢ blocksSoundAt stepped words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base l).
-    Proof.
-      intros Hall. iIntros "!>" (v ai b) "%Hlk %Hb".
-      apply instrs_of_list_elem_of in Hlk.
-      rewrite List.Forall_forall in Hall.
-      specialize (Hall _ Hlk). rewrite Hall in Hb. discriminate.
-    Qed.
-
-    Lemma blocksSound_of_none words base
-        (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
-      List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true ai = None) l ->
-      ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base l).
-    Proof. apply blocksSoundAt_of_none. Qed.
-
-    (* ---- ...AND A PROGRAM WITH ONE BLOCK, AT ITS HEAD ---------------------
-       The introduction rule blocksSound_of_none could not give.  Restricted to
-       a block on the FIRST instruction, which is what `blk_at 0` builds and
-       what the A+BC composition needs.
-
-       Why the head case is the cheap one: `instrs_of_list base (x :: l)` is
-       `<[base := x]> (instrs_of_list (base+4) l)`, so lookup_insert_Some
-       splits it into "the key IS base, hence the element IS x" and "the key is
-       not base", and the second branch dies on the Forall.  The looked-up
-       address is therefore PINNED to base with no collision reasoning at all.
-       A block at index n needs the real inversion -- that the map's keys are
-       distinct, i.e. instrs_of_list_fresh's business -- and is left until a
-       mid-program block actually needs it (ZZBlkBC, index 55). *)
-    Lemma blocksSound_of_head words (base : bv xlenbits)
-        (x : Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) :
-      (* the head carries b as ai_block OR as ai_loop (a loop's own head) *)
-      Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true x = Some b ->
-      List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true ai = None) l ->
-      (* an Iris entailment rather than `(⊢ blockSound) -> ⊢ blocksSound`, so
-         blockSound_of_vc's Löb hypothesis can feed it; □ because blocksSound
-         is itself persistent *)
-      □ blockSound words base b ⊢
-        blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (x :: l)).
-    Proof.
-      intros Hx Hl.
-      iIntros "#Hb !>" (v ai b') "%Hlk %Hb'".
-      cbn [Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list] in Hlk.
-      apply lookup_insert_Some in Hlk as [[<- <-]|[Hne Hlk]].
-      - rewrite Hx in Hb'. injection Hb' as <-.
-        iExact "Hb".
-      - exfalso. apply instrs_of_list_elem_of in Hlk.
-        rewrite List.Forall_forall in Hl. specialize (Hl _ Hlk).
-        rewrite Hl in Hb'. discriminate.
-    Qed.
-
     (* cexec_block's shallow-to-Iris step: the exact analogue of
        call_lemma_sound (MicroSail/ShallowSoundness.v), minus the
        assert_eq_nenv a function call needs and with a fixed result.  The ONE
@@ -1935,8 +1876,8 @@ Section AdequacyTools.
         (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
         (* the blocks this block's OWN program may apply at its entry
            (ai_block only) are justified outright -- they may fire at step 0,
-           before any later has been earned.  For a program with no ai_block,
-           blocksSoundAt_of_none. *)
+           before any later has been earned.  From an AnnotInstrV list,
+           blocksSoundAt_false_of_V. *)
         (Hbs0 : forall v, (⊢ blocksSoundAt false words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)))
         (* ALL its blocks are justified, and this premise may ASSUME THIS
            BLOCK: a loop is one block whose head carries that same block as
@@ -2006,8 +1947,8 @@ Section AdequacyTools.
         (* The block premise.  With the contract in the AnnotInstr payload this
            is the ONLY thing the hook adds at this level: blocks ride in
            `instrs` and hence in `tbl`, so there is no second VC entry point
-           and no second triple-level refinement.  A block-free program
-           discharges it with blocksSound_of_none. *)
+           and no second triple-level refinement.  The bridges derive it from
+           the sealed contract's annotsValid (blocksSound_of_annotsValid). *)
         (Hbs : forall words : bv xlenbits -> bv word,
                  ⊢ blocksSound words instrs) :
       ⊢ ∀ a : RelVal ty_xlenbits,

@@ -130,20 +130,23 @@ Trimming recovers all of it. On a *decidable*-branch segment the same axis is
 only 1.35–1.60× on countdown but was measured at **3.03×** on real muladd (67%
 of that segment's cost). Full record: `diagnostics/prefix-length-cost.md`.
 
-**What you owe at the Iris level.** The caller owns `ptsto_instrs` of the WHOLE
-program and must supply `itable_rel <whole-program map> <segment table>`. That
-is `TablesRel.v`'s **`itable_faith_of_segment`**, over `Tables.v`'s three gmap
-containments (`instrs_of_list_prefix` / `_suffix` / `_segment`). Nothing else
-changes — `sound_scfg_verification_condition_myWP2` takes the map and the table
-as separate arguments, so no resource splitting is needed and the continuation
-hands the instruction ownership back.
+**What you owe at the Iris level.** The caller owns `ptsto_instrs P` of the
+WHOLE program (`P : gmap _ AST`) and runs the segment with
+**`GenCompose.contract_run`** (PLAN-valid-blk-annot V11), whose only table-side
+premises are the placement, a no-wrap fit, and the AST containment
+`instrs_of_list pbase (cfg_instrs c) ⊆ P` — typically from `Tables.v`'s
+`instrs_of_list_segment` lifted by `map_fmap_mono` (see
+`PaddedLoopResult.pl_contain`). `contract_run` derives table faithfulness
+itself; no resource splitting is needed and the continuation hands the
+instruction ownership back. (The annotation-level `itable_faith_of_segment` it
+replaced was deleted in Phase 5.)
 
 Worked example: `Example/PaddedLoop.v` + `Example/PaddedLoopResult.v` (the
 countdown loop inside a 66-instruction program; `pl_loop` is gate-checked
 axiom-clean, and is the tree's ONLY proof whose table is a proper subset of the
 program).
 
-Three traps, each of which cost a compile:
+Two traps, each of which cost a compile:
 
 - **`list_AST_AnnotInstr` is `List.map AST_AnnotInstr`, not an identity**
   (`Verifier.v:145`). Existing examples get away with writing a `list AST` only
@@ -151,15 +154,9 @@ Three traps, each of which cost a compile:
   not. Symptom is an unresolved-implicit error on `<$>` ("Cannot infer the
   implicit parameter M of fmap"), which reads like an Iris notation bug.
 - **Define the program AS the decomposition**: `padded_annot := pl_pre ++ pl_seg
-  ++ pl_post` with all three at `list AnnotInstr`. Then
-  `itable_faith_of_segment`'s `pre ++ seg ++ post` matches syntactically, which
-  also avoids an `app_nil_r` rewrite that would otherwise hit the `seg`
-  occurrence inside `table_of_list` too.
-- **`itable_faith_of_segment`'s `pre`/`seg`/`post` are EXPLICIT** (only `Σ`,
-  `cbase`, `off` are implicit — `length pre` is not a rigid position, and
-  `Set Implicit Arguments` marks only strict implicits). `off` is inferable from
-  nothing, and `(off := _)` fails with *"Not enough non implicit arguments"*.
-  Use the fully-`@` form: `@itable_faith_of_segment Σ p ι cbase off pre seg post`.
+  ++ pl_post` with all three named. Then `instrs_of_list_segment`'s
+  `pre ++ seg ++ post` matches syntactically, which avoids an `app_nil_r`
+  rewrite.
 
 ## Hand-writing a contract: the assertion vocabulary
 

@@ -500,7 +500,9 @@ finding.
   as a digest mismatch, not a wrong number. **Re-measure the baseline on BOTH
   arms**: the two baselines agreeing (1,441 words in 607 M) is what proves the
   import closures cost the same and the ratio is clean.
-- **A sweep loop written with a shell variable is NOT exempt from
+- **(Dormant since 2026-09-25, when `coqc-guard.sh` was unwired from
+  `.claude/settings.json`; applies only if it is re-enabled.) A sweep loop
+  written with a shell variable is NOT exempt from
   `coqc-guard.sh`.** The hook waives its 3-builds-per-15-min rate limit for
   single-file probes by matching the literal string `CFGVer/Example/ZZ` in the
   command — so `for f in ZZFooN4 ZZFooN8; do coqc … Example/$f.v; done` is

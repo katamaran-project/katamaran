@@ -98,24 +98,6 @@ Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
 
-  Definition cfg_instrs_pre `{sailGS2 Σ} instrs γ1 γ2 : iProp Σ :=
-    own_regstore2 γ1 γ2 ∗
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (* MEMORY holds instructions, not annotations.  `ai_instr <$> <map>`
-           rather than `instrs_of_list _ (strip _)` so these five sites match
-           Adequacy.v's soundness lemmas SYNTACTICALLY — Adequacy has no choice
-           in the matter, since its `instrs` is a gmap and cannot say `strip`.
-           instrsMemory / intro_ptsto_instrs produce the OTHER form, so the
-           bridge (Tables.v's fmap_instrs_of_list) is applied where those two
-           meet, inside cfg_instrs_endToEnd*.  Both directions cost exactly two
-           rewrites; this one keeps the five statements uniform with
-           Adequacy. *)
-        (ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs) ∗
-      interp_inv_constant_time.
-
-  Definition cfg_instrs_contract `{sailGS2 Σ} exitCond instrs γ1 γ2 :=
-    (cfg_instrs_pre instrs γ1 γ2 -∗ exitCond_WP2_loop exitCond)%I.
-
   Lemma cfg_instrs_verified `{sailGS2 Σ} {instrs} exit_addr γ1 γ2 R (ι : Valuation R)
     (contract : @CFGVerifierContract R)
     (* THE CONTRACT, VALID -- sealed (PLAN-valid-blk-annot.md Phase 4): no

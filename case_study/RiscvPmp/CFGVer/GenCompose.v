@@ -84,50 +84,7 @@ Section SegCompose.
   Context {Σ} {GS : sailGS2 Σ}.
 
   (* ======================================================================== *)
-  (* 1. SUB-TABLE FAITHFULNESS                                                *)
-  (* ======================================================================== *)
-
-  (* The reassembled program is LITERALLY the original -- an identity, not a
-     computation.  Every hand-written Hif instead asserted
-     `length (firstn m L ++ firstn n (skipn m L) ++ skipn (m+n) L) = length L`
-     and closed it by `vm_compute`, i.e. computed a 282-element list per call
-     site, eight times over. *)
-  Lemma split_id {A : Type} (m n : nat) (L : list A) :
-    List.firstn m L ++ List.firstn n (List.skipn m L)
-      ++ List.skipn (m + n) L = L.
-  Proof. rewrite <- drop_drop, take_drop, take_drop. reflexivity. Qed.
-
-  (* One lemma for all 20 call sites.  `Hoff : 4 * skip = head` is what makes
-     GenSegment's head/skip agreement a PROOF OBLIGATION rather than a silent
-     convention -- get it wrong and this will not apply. *)
-  Lemma instr_table_ok_at {R : LCtx} (place : Term R ty_xlenbits) (iota : Valuation R)
-      (cbase : bv xlenbits) (L : list AnnotInstr) (skip take : nat) (head : N)
-      (Hoff : @eq N (N.mul 4 (N.of_nat skip)) head)
-      (Hskip : Nat.le skip (length L))
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (bv.add cbase (bv.of_N head)))
-      (Hrep : (bv.bin cbase + 4 * N.of_nat (length L) < bv.exp2 xlenbits)%N) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-      (instrs_of_list cbase L)
-      (table_of_list place 0 (List.firstn take (List.skipn skip L))) iota.
-  Proof.
-    subst head.
-    replace (instrs_of_list cbase L)
-       with (instrs_of_list cbase
-               (List.firstn skip L ++ List.firstn take (List.skipn skip L)
-                ++ List.skipn (skip + take) L))
-       by (rewrite split_id; reflexivity).
-    apply (itable_faith_of_segment (cbase := cbase)
-             (off := (4 * N.of_nat skip)%N) place iota
-             (List.firstn skip L) (List.firstn take (List.skipn skip L))
-             (List.skipn (skip + take) L)).
-    - rewrite length_firstn. lia.
-    - exact Hp.
-    - rewrite split_id. exact Hrep.
-  Qed.
-
-  (* ======================================================================== *)
-  (* 2. EXIT-TABLE FAITHFULNESS                                               *)
+  (* 1. EXIT-TABLE FAITHFULNESS                                               *)
   (* ======================================================================== *)
 
   (* THE EXIT's faithfulness for a SELF-CONTAINED segment: the contract is
@@ -147,70 +104,8 @@ Section SegCompose.
       (ty.SyncVal (seg_addr ia target)) (exit_of_off place target) iota.
   Proof. rewrite seg_addr_add. now apply etable_faith_exit_of_off. Qed.
 
-  (* ---- WHERE A SLICE SITS IN A PROGRAM: the instruction-table fact with
-         every DECIDABLE side condition bundled into seg_placement_ok.  This
-         is a COMPOSITION lemma -- `skip`/`head` are how the enclosing
-         program lays the slice out, not anything a segment contract says. *)
-  Lemma seg_instr_table_ok {R : LCtx} (place : Term R ty_xlenbits)
-      (iota : Valuation R) (ia : N) (L : list AnnotInstr) (skip take : nat)
-      (head bound : N) (target : N)
-      (Hok : seg_placement_ok L skip head bound target = true)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head)))
-      (Hwf : seg_fits_memory ia bound) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-      (instrs_of_list (@bv.of_N xlenbits ia) L)
-      (table_of_list place 0 (List.firstn take (List.skipn skip L))) iota.
-  Proof.
-    exact (instr_table_ok_at place iota (@bv.of_N xlenbits ia) L skip take head
-             (seg_placement_off L skip head bound target Hok)
-             (seg_placement_skip L skip head bound target Hok)
-             Hp
-             (seg_fits_rep ia bound L (seg_placement_size L skip head bound target Hok) Hwf)).
-  Qed.
-
-  (* ---- A1' : the two table obligations, stated ON a generated contract.
-         Since the contract is self-contained both follow from ONE placement
-         fact (the code base evaluates to the segment's own load address) plus,
-         for the instruction table, that the segment fits in memory.  Nothing
-         about any enclosing program appears. *)
-  Section GenSegTables.
-    Context {R : LCtx}
-      (base : Term R ty_xlenbits)
-      (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
-      (target : N) (fl : nat) (regs : list reg_spec_rel)
-      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
-      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (iota : Valuation R)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) base iota
-            = ty.SyncVal (@bv.of_N xlenbits ia)).
-
-    (* `a` is the ANNOTATED code the VC ran on; the table takes it, not
-       `cfg_instrs` -- which is the AST spec and would silently coerce
-       (PLAN-contract-ast §2.8: the one direction the build does NOT catch). *)
-    Lemma gen_seg_instr_table_ok (a : list AnnotInstr)
-        (Hwf : seg_fits_memory ia (4 * N.of_nat (length a))) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-        (instrs_of_list (@bv.of_N xlenbits ia) a)
-        (table_of_list
-           (cfg_placement (gen_seg_contract base base_a ia code target fl regs
-                             extra_pre post)) 0 a) iota.
-    Proof.
-      exact (itable_faith_of_list base iota a Hp
-               (seg_fits_rep ia _ a (N.le_refl _) Hwf)).
-    Qed.
-
-    Lemma gen_seg_exit_table_ok :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-        (ty.SyncVal (seg_addr ia target))
-        (cfg_exit (gen_seg_contract base base_a ia code target fl regs
-                     extra_pre post)) iota.
-    Proof. exact (seg_exit_table_ok base iota ia target Hp). Qed.
-  End GenSegTables.
-
   (* ======================================================================== *)
-  (* 3. THE STEP COMBINATOR                                                   *)
+  (* 2. THE STEP COMBINATOR                                                   *)
   (* ======================================================================== *)
 
   (* `cfg_map` is STUCK on an abstract record, so a combinator cannot consume
@@ -660,7 +555,7 @@ Section SegCompose.
   Qed.
 
   (* ======================================================================== *)
-  (* 4. THE LOOP COMBINATOR                                                   *)
+  (* 3. THE LOOP COMBINATOR                                                   *)
   (* ======================================================================== *)
 
   (* myWP2_loop_induction, packaged so the loop's EXIT can hand off to an
@@ -683,7 +578,7 @@ Section SegCompose.
   Qed.
 
   (* ======================================================================== *)
-  (* 5. CROSSING A CUT: WHEN THE VALUATION CHANGES                            *)
+  (* 4. CROSSING A CUT: WHEN THE VALUATION CHANGES                            *)
   (* ======================================================================== *)
 
   (* A cut hands the next segment a postcondition interpreted at the valuation
@@ -732,7 +627,7 @@ Section SegCompose.
 
 
   (* ======================================================================== *)
-  (* 6. COUNTED LOOPS                                                         *)
+  (* 5. COUNTED LOOPS                                                         *)
   (* ======================================================================== *)
 
   (* THE LOOP INVARIANT.  Generated: the counter pinned at `ls_at n` (via the
@@ -773,7 +668,8 @@ Section SegCompose.
      A loop owns ITS OWN instructions and nothing else (2026-09-25,
      PLAN-self-contained-segments.md).  This used to be the whole HOST
      program's instruction block, and a `LoopPlace` record (host base, host
-     extent, head = host base + 4*first_instr, two seg_placement_ok facts)
+     extent, head = host base + 4*first_instr, two (since deleted)
+     seg_placement_ok facts)
      said where the host had put the loop.  None of that is the loop's
      business: the only placement fact a loop still needs is that its own
      code fits in memory (`Hfit` below), and handing instruction ownership

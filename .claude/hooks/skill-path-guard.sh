@@ -78,7 +78,7 @@ base=${path##*/}
 # ---- blanket rule: any Rocq source ------------------------------------------
 case $path in
   *.v) req rocq-implementation \
-    "tier-1 entry point for writing/repairing a proof here; carries the rocq-mcp preamble-mode workflow that coqc-guard.sh separately enforces, and is the ONLY route to the tier-2 library skills (bv-pitfalls, rocq-pitfalls, iris-proofmode, core-executor-internals, relval-model, pred-modalities, cfgver-rsolve, cfgver-wp2, the two -internals), which are listed WITHOUT descriptions so nothing else surfaces them" ;;
+    "tier-1 entry point for writing/repairing a proof here; carries the rocq-mcp preamble-mode workflow (no longer hook-enforced: coqc-guard.sh was unwired 2026-09-25), and is the ONLY route to the tier-2 library skills (bv-pitfalls, rocq-pitfalls, iris-proofmode, core-executor-internals, relval-model, pred-modalities, cfgver-rsolve, cfgver-wp2, the two -internals), which are listed WITHOUT descriptions so nothing else surfaces them" ;;
 esac
 
 # ---- core framework ----------------------------------------------------------
