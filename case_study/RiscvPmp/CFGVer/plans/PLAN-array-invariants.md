@@ -248,10 +248,11 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   the peval folding risk before any Iris work.
 - **1. Interpretation, view entailments, ghost soundness.** D4; the generic
   entailments; `cexec`/`rexec` arms and the ghost step's soundness; view
-  validity in the seal. GATE: `make Results.vo` green, axiom-clean; ENTRY
+  validity in the seal. GATE: `make Results.vo` green; ENTRY
   CHECK: the interpretation of D's `inv` at a concrete count is inhabited.
 - **2. D end-to-end standalone.** `ZZArrDResult.v` via `cfg_instrs_endToEnd`,
-  like CountdownRecResult. GATE: axiom-clean end theorem.
+  like CountdownRecResult. GATE: end theorem compiles (no routine
+  Print Assumptions -- Emiel 2026-09-28; the merge hook's gate still runs it).
 - **3. D inside muladd.** The caller's side: converting muladd's concrete
   cells into `arr` chunks (Q1's context-indexed views). GATE:
   `bc_run_in_muladd`-style run of D at idx 84.
@@ -313,3 +314,38 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   really consumes the invariant through the block.
 - Not yet shown: that the invariant is SATISFIABLE (Phase 1's entry check),
   and nothing is sound yet -- the views are trusted until Phase 1.
+
+### Phase 1 (2026-09-28) -- GATE 1 MET
+
+- **Design change (Emiel):** the anonymous `AnnotView pre post` became a
+  CLOSED CATALOGUE `Verifier.CLem` (`clem_arr_take_first pub s`,
+  `clem_arr_add_first pub s`) with `clem_lemma : CLem -> Lemma [ctx]`, and
+  `Annot`'s constructor is `AnnotCLemma k`. Each entry is proved valid ONCE
+  (`SpecIris.clemSem`), exactly as `lemSemCFGVerif` does for `LEnv`, so no
+  validity premise is threaded through the soundness chain or the seal --
+  Q2 is moot.
+- **`add_first` now REQUIRES the new cell's range fact**
+  (`Verifier.clem_range`): every arr cell carries one in the interpretation,
+  so an add must be given it. D's VC still closes (its invariant states
+  `range dp`).
+- **Interpretation** (`IrisInstanceBinary.interp_arr`/`interp_arr_cell`) as
+  D4. **Step lemmas** `interp_arr_take_first` / `interp_arr_add_first`
+  (SpecIris, Section CLemSound): big_sepL cons + `fmap_S_seq`, index shift
+  and end fact by `ring` at `bv xlenbits` -- stated as separate lemmas and
+  APPLIED, because `ring` refuses a goal whose carrier spells the width
+  unfolded. A count that wraps to 0 on `add` drops the cells (affine); the
+  end fact still holds since then n = -1.
+- **Entry check** `interp_arr_intro`: k concrete in-range cells ARE an arr
+  of count k (for k < 2^32), so arr invariants are satisfiable.
+- `cexec_ghost` arm (VerifierRel), `sound_cexec_ghosts` case (Adequacy);
+  `rexec_ghosts`'s `destruct a; cbn; rsolve` closed the new case UNCHANGED.
+- **Build:** SpecIris+VerifierRel 3:20 (7.1 GB), Adequacy 1:17 (6.9 GB),
+  TablesRel..GenCompose 2:13, Results.vo incl. all examples 13:19 (8.0 GB);
+  `scripts/gate.sh` PASSED (19 end theorems axiom-clean). A first attempt at
+  the whole chain in the background was reaped for low memory while the
+  session was idle: build in foreground pieces, close pet first.
+- **Traps:** `rewrite … by …` fails to parse under Iris's ssreflect `by`
+  (use `; [|tac]`); a preamble needs `From Coq Require Import Lia` or `lia`
+  is a syntax error; `destruct_syminstance` does not see through a named
+  `LCtx` (`cbv [clem_ctx] in ι` first); `cbn -[interp_arr]` is the right
+  unfolding before applying a step lemma (plain `cbn` unfolds `bv.bin`).
