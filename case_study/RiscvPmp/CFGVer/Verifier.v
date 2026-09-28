@@ -128,7 +128,10 @@ Inductive CLem : Set :=
      the same stride and the SAME count move in lockstep: a pointer-bounded
      loop's latch array ending at its end tells the caller where the OTHER
      pointer ended (s·n = 0 carries over) *)
-  | clem_arr_lockstep (pub1 pub2 : bool) (s : Z).
+  | clem_arr_lockstep (pub1 pub2 : bool) (s : Z)
+  (* arr a n e ⊢ True -- drop a spent array (affine), so a later loop's
+     angelic array match on the same predicate has one candidate *)
+  | clem_arr_drop (pub : bool) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -221,6 +224,8 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arr pub1 s (term_var "a1") (term_var "n") (term_var "e1"))
            (asn.sep (clem_arr pub2 s (term_var "a2") (term_var "n") (term_var "e2"))
               (asn.formula (formula_relop bop.eq (term_var "a2") (term_var "e2")))))
+  | clem_arr_drop pub s =>
+      MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub s) (asn.formula formula_true)
   end.
 
 Inductive Annot :=

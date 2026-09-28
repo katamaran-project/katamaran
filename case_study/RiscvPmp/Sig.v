@@ -378,7 +378,12 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
       | inv_leakage               => Some (MkPrecise ε ε eq_refl)
       (* Precise on the START address: a consume matches by it and the solver
-         equates the count and the end. *)
+         equates the count and the end.  (Tried 2026-10-02: precise on NOTHING,
+         to avoid angelic heap search in ghost lemmas.  Reverted: a BLOCK's
+         precondition then no longer rejects a wrongly seeded array by
+         address syntax -- it asserts the address equation, which is
+         satisfiable when the wrong cell has an unrelated base, so the wrong
+         branch survives as an unresolved angelic disjunction.) *)
       | arr _ _                   => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
       end.
 

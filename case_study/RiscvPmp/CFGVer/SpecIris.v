@@ -650,6 +650,12 @@ Module RiscvPmpIrisInstanceWithContracts.
       subst e1 e2. eapply arr_lockstep_eq; eassumption.
     Qed.
 
+    (* Dropping resources is sound in an affine logic. *)
+    Lemma clem_drop_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_drop pub s)).
+    Proof. intros ι. cbn -[interp_arr]. iIntros "_". iSplit; done. Qed.
+
     (* The catalogue's lemSemCFGVerif. *)
     Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
       ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
@@ -657,7 +663,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       destruct k; [apply clem_take_first_sound|apply clem_add_first_sound
                   |apply clem_nonempty_sound|apply clem_empty_sound
                   |apply clem_add_last_sound|apply clem_empty_elim_sound
-                  |apply clem_lockstep_sound].
+                  |apply clem_lockstep_sound|apply clem_drop_sound].
     Qed.
   End CLemSound.
 
