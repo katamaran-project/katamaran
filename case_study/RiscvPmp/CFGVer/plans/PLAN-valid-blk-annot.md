@@ -1,7 +1,7 @@
 # PLAN: block annotations that carry their own validity (`AnnotInstrV`)
 
-Status: rev 2 (2026-09-25), IN PROGRESS on branch `issue/valid-blk-annot`.
-Phases 1-6 DONE (2026-09-28); GATE PASSED after Phase 4; VC-cost measurement DONE (0.11-0.12%, noise). Next: gate + merge (§8.4). Rewritten after PLAN-exit-targets.md
+Status: rev 2 (2026-09-25). COMPLETE: merged into local KatamaranRel 2026-09-28 (b001d1a3, gate PASSED, 19 end theorems axiom-clean), NOT pushed.
+Phases 1-6 DONE (2026-09-28); GATE PASSED after Phase 4; VC-cost measurement DONE (0.11-0.12%, noise). Merged (§8.4). Rewritten after PLAN-exit-targets.md
 landed (branch issue/exit-targets), against the code as it now is. Rev 1 was
 written before that change; see §6 for what it settled.
 
