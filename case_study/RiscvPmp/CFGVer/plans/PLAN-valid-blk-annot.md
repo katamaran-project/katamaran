@@ -1,7 +1,7 @@
 # PLAN: block annotations that carry their own validity (`AnnotInstrV`)
 
 Status: rev 2 (2026-09-25), IN PROGRESS on branch `issue/valid-blk-annot`.
-Phases 1-4 DONE; GATE PASSED after Phase 4 (2026-09-28, 19 end theorems axiom-clean). VC-cost measurement not yet run. Next: Phase 5 (cleanup). Rewritten after PLAN-exit-targets.md
+Phases 1-6 DONE (2026-09-28); GATE PASSED after Phase 4; VC-cost measurement DONE (0.11-0.12%, noise). Next: gate + merge (§8.4). Rewritten after PLAN-exit-targets.md
 landed (branch issue/exit-targets), against the code as it now is. Rev 1 was
 written before that change; see §6 for what it settled.
 
@@ -342,6 +342,79 @@ already takes are DERIVED from the annotated list:
   skill (cfgver-endtoend-internals) was loaded afterwards and the changes
   checked against it.
 
+### Phase 5 -- cleanup (2026-09-28, dcae0fe1, Results.vo built)
+
+- 8.1a deleted as planned. 8.1b was WIDER than listed: the whole sub-table
+  chain was dead -- GenCompose `split_id` / `instr_table_ok_at` /
+  `seg_instr_table_ok` / `Section GenSegTables`, `TablesRel.itable_faith_of_segment`,
+  and GenSegment §2b (`seg_placement_ok` + four projections). Nothing
+  gate-built used any of it; ~50 gitignored ZZ probes do and stay broken
+  (Emiel: delete the whole chain). GenCompose sections renumbered 1-5.
+  `itable_faith_weaken` / `instrs_of_list_segment` / `seg_fits_rep` /
+  `seg_exit_table_ok` are still live and stay.
+- 8.1d: the "WHY NO PROOF FIELD" comment rewritten (it pointed at a
+  `blocks_valid` in Contracts.v that no longer exists); coqc-guard mentions
+  marked dormant in two skills and in skill-path-guard.sh's text; the
+  cfgver-contracts sub-table section now points at `contract_run`.
+- 8.1e (Emiel: port the muladd chain): `ZZBlkABSound.v` was stale far past
+  `blk_span_sub` -- pre-exit-targets and pre-self-contained-segments API --
+  and its block sat at index 0, so it was NOT the mid-program test.  Ported
+  ZZSegQA / ZZSegQBC / ZZBlkAB / ZZBlkBC / ZZBlkABSound (all gitignored,
+  compiled by hand): ZZBlkBC now `Require`s ZZBlkAB instead of copying it;
+  ZZBlkABSound proves two generic facts (`strip_blk_at`,
+  `annotsValid_blk_at`, by induction on the index), `blkA_valid` /
+  `blkBC_valid` by `blkValid_of_seg`, `ab_valid` / `bc_valid`, and runs both
+  inside the whole 282-instruction muladd map with `contract_run`.
+  **`bc_run_in_muladd` -- a block at index 55 -- is axiom-clean
+  (pure_decode, mmioenv).** First real mid-program block; it needed no map
+  inversion, as §4 predicted. Trap: `ValidCFGVerifierContract_intro`'s `a` is
+  implicit (inferable from `Hvc`), so use the `@`-form.
+- 8.1f: the four P1-P4 probes kept (Emiel).
+
+### Phase 6 -- drop `cfg_init_addr` (2026-09-28, 0d9f56e2, Results.vo built)
+
+Emiel chose the FULL version: not just the field, but every load-address
+parameter that becomes dead with it.
+- Removed: the field and `cfg_map`'s `ia` (Verifier.v), `Valid_CFG_VC`'s
+  unused `init_addr` (Contracts.v), the bridges' `contractInitAddr` premise
+  (six sites, EndToEnd.v; call sites lose one `eq_refl`),
+  `GenSegment.gen_seg_init_addr`, and the `ia`/`init_addr` parameter of
+  `gen_contract_rel` / `_u` / `_rel_classed` / `_param` / `_rel_bytes`,
+  `gen_seg_contract` (and `gen_loop_contract`'s call; `LoopSpec.loop_head_addr`
+  stays, it is a real address) and the four GenCompose segment lemmas.
+  `gen_contract` (concrete base) keeps `init_addr`: it builds the placement.
+- Examples: every `<prog>_cfg_contract_param`, `valid_*`, `cdRec`,
+  `cdRecBlk`, `cdLink`, `cd_*_annot` is a CLOSED term; Result proofs drop
+  the argument (`solve_valid valid_x_param`).
+- Trusted surface unchanged (diffed): Noninterference.v untouched, no
+  `*Result.v` statement and no `*_instrs`/`*_specs` block moved.
+- One miss caught by the build: CountdownRec's negative controls spelled the
+  load address as the literal `0` (`cdRec 0`), which the rewrite did not match.
+- Skills updated in the same commit (record, generator arities, call
+  patterns, `cfg_map` lambdas in two probe recipes). NOT updated:
+  cfgver-contracts' `description:` still names `cfg_init_addr` (twice) --
+  changing it needs the skill-routing-maintenance consult.
+
+### 8.3 result -- the containment check costs 0.11-0.12% (2026-09-28)
+
+Method changed from the handoff (Emiel): a ONE-AXIS ablation on the current
+tree (`sexec_block_chk`'s condition stubbed to `true`, plus the one
+`cext_sexec_block_chk` proof that destructs it), not a build of 321c42f3.
+Probes `Example/ZZChkCost{Common,Base,Link,Rec}.v`, one `Eval` per coqc,
+`SymProp.Statistics.size (postprocess (CFG_VC_triple ..))` as the consumer;
+`allocated_words` net of each arm's own baseline (612.81 M):
+
+| VC | with check | without | delta |
+|---|---|---|---|
+| `cdLink` (ai_block at entry) | 4,134,427 | 4,129,651 | 4,776 (0.12%) |
+| `cdRec` (ai_loop re-entry) | 4,763,167 | 4,757,919 | 5,248 (0.11%) |
+
+Repeat spread 953 words; baseline drift 1,386. Real but negligible -- one
+`lookup_instr` per block instruction per firing, as §1c predicted. Not
+written up in diagnostics/ (noise-level, per the plan). Trap met: the first
+ablation run silently measured the OLD .vo because Verifier.v failed to
+compile under the stub -- gate the measurement on the build succeeding.
+
 ## 8. Remaining work -- HANDOFF (written 2026-09-28, for a fresh session)
 
 **State.** Phases 1-4 are DONE on branch `issue/valid-blk-annot` (off
@@ -355,7 +428,7 @@ contract is proved valid.
 Do the items in this order; each ends with a build, and the gate runs once at
 the end (`GATE_JOBS=1 ./scripts/gate.sh` on this box, ~17 min).
 
-### 8.1 Phase 5 -- cleanup (usage re-checked 2026-09-28 with `command grep`)
+### 8.1 Phase 5 -- cleanup (usage re-checked 2026-09-28 with `command grep`) -- DONE, see §7
 
 a. **Delete, verified dead:** `Adequacy.blocksSound_of_head` (its definition is
    its only occurrence); `Adequacy.blocksSound_of_none` and
@@ -392,7 +465,7 @@ f. **Untracked probes from this work:** `Example/ZZBlkChkProbe.v`,
    `ZZBlkVcAllProbe.v`, `ZZBlkVProbe.v`, `ZZContractRun.v`. Ask Emiel whether
    to keep them.
 
-### 8.2 Phase 6 -- drop `cfg_init_addr`
+### 8.2 Phase 6 -- drop `cfg_init_addr` -- DONE, see §7
 
 P4 removed its last real reader (the old blocksSound conjunct of
 `ValidCFGVerifierContract`). 22 non-comment lines still mention it
@@ -409,7 +482,7 @@ trusted `Example/*Result.v` statement (none should; `noninterferent_strong`
 takes `init_addr` itself). Coordinate with PLAN-exit-targets.md D11, which
 deferred this step to here.
 
-### 8.3 The Phase-1 VC-cost measurement (never run)
+### 8.3 The Phase-1 VC-cost measurement -- DONE, see §7
 
 The block containment check (`Verifier.blk_code_in`, run at every block
 firing) should cost noise. Measure `allocated_words` for `valid_cd_link` and
