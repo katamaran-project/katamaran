@@ -109,7 +109,10 @@ Inductive CLem : Set :=
   (* arr a n e ∗ n≠0 ⊢ cell a ∗ range a ∗ arr (a+s) (n-1) e *)
   | clem_arr_take_first (pub : bool) (s : Z)
   (* arr a n e ∗ cell (a-s) ⊢ arr (a-s) (n+1) e *)
-  | clem_arr_add_first (pub : bool) (s : Z).
+  | clem_arr_add_first (pub : bool) (s : Z)
+  (* arr a n e ∗ a≠e ⊢ arr a n e ∗ n≠0 -- a POINTER-bounded loop's latch
+     (bne a, e) as the count fact take_first needs *)
+  | clem_arr_nonempty (pub : bool) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -158,6 +161,13 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
               (clem_range (clem_off (term_var "a") (- s)))))
         (clem_arr pub s (clem_off (term_var "a") (- s))
            (clem_off (term_var "n") 1) (term_var "e"))
+  | clem_arr_nonempty pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.formula (formula_relop bop.neq (term_var "a") (term_var "e"))))
+        (asn.sep (clem_arr pub s (term_var "a") (term_var "n") (term_var "e"))
+           (asn.formula (formula_relop bop.neq (term_var "n")
+                           (term_val ty_xlenbits bv.zero))))
   end.
 
 Inductive Annot :=

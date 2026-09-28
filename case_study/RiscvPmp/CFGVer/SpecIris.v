@@ -544,11 +544,29 @@ Module RiscvPmpIrisInstanceWithContracts.
       rewrite bv.bin_of_nat_small; [|exact Hk]. rewrite Nat2N.id. iExact "H".
     Qed.
 
+    (* An array whose start is not its end is non-empty: with n = 0 the end
+       fact gives e = a. *)
+    Lemma clem_nonempty_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_nonempty pub s)).
+    Proof.
+      intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+        cbn -[interp_arr]; try (iIntros "[[] _]").
+      iIntros "[Harr [%Hne _]]".
+      iAssert (⌜e = bv.add a (bv.mul (bv.of_Z s) n)⌝ ∗
+               interp_arr pub s (SV a) (SV n) (SV e))%I with "[Harr]" as "[%He Harr]".
+      { cbn [interp_arr]. iDestruct "Harr" as "[%He Hc]". iFrame "Hc". done. }
+      iFrame "Harr". iSplit; [|done]. iPureIntro. intros ->.
+      apply Hne. rewrite He. apply arr_ring_zero.
+    Qed.
+
     (* The catalogue's lemSemCFGVerif. *)
     Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
       ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
     Proof.
-      destruct k; [apply clem_take_first_sound|apply clem_add_first_sound].
+      destruct k; [apply clem_take_first_sound|apply clem_add_first_sound
+                  |apply clem_nonempty_sound].
     Qed.
   End CLemSound.
 
