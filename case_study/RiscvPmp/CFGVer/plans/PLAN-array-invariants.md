@@ -1,6 +1,6 @@
 # PLAN — array invariants for loop blocks, 2026-09-28
 
-Status: **DRAFT rev 2, awaiting Emiel's review.** Nothing built.
+Status: **rev 3, APPROVED 2026-09-28; Phase 0 next.** Nothing built.
 Rev 2 (same day): the ghost lemmas no longer live in `Machine.v` (trusted
 statement) but in a CFGVer-local ghost annotation; the generic iterated chunk
 was considered and rejected (see "Rejected alternatives").
@@ -43,34 +43,33 @@ because source and destination overlap.
 - **A4. Stride is a Coq-level parameter**: every predicate takes
   `(pub : bool) (s : N)`. Sig.v is the expensive rebuild, so generality is
   bought once.
-- **A5. The pointer/count tie is a pure fact, closed as a RESIDUAL by `ring`.**
-  `peval` has no linear normal form for `bvmul` (only the `bvmulx` mask
-  patterns), so `e = dp - s*c` survives the solver; the back edge leaves a
-  pure identity like `(dp-4) - 4(c-1) = dp - 4c`, closed by a new residual
-  closer in `solve_param_vc` using `bv.ring_theory` (Bitvector.v:1603). Check
-  the residual's actual shape (it may be over RelVal) in Phase 0. Upgrade
-  path, if residuals multiply: a linear bv normal form in peval/Solver.v.
-- **A6. BOTH indexings.**
-  - count-indexed `arr_dn`/`arr_up` (addr, count) for COUNTER-driven loops
-    (D): pop legality is `c ≠ 0`, free; the multiplication appears only in the
-    post's ghost tie (A5).
-  - endpoint-indexed `arr_rng lo hi` (cells lo, lo+s, ... below hi) for
-    POINTER-bounded loops (K, M latch on `bne T5, S0`): pop legality is
-    `lo ≠ hi`, exactly the latch; no count, no multiplication.
-  Either indexing alone forces the multiplication into the other loop kind.
+- **A5. ONE predicate family, `arr pub s [a; n; e]`** (rev 3; replaces rev
+  2's `arr_dn`/`arr_up`/`arr_rng`). Start address `a`, count `n`, end `e`.
+  - Direction is not a separate family: the stride is a Coq-level `N` and
+    addresses are modular, so a downward walk is stride `2^32 - 4`.
+  - Count AND end in one chunk: the multiplicative relation `e = a + s·n` is
+    stated ONLY in the Iris interpretation and proved once, in the generic view
+    entailments -- never in a contract, never by the solver. (Rev 2's A5, a
+    `ring` residual closer for `e = dp - s·c` ghost ties, is gone with it.)
+  - Why keep the count (Emiel asked whether endpoints suffice): a
+    COUNTER-driven loop (D: `addi T6,T6,-1 … bnez T6`) knows only `c ≠ 0`.
+    With the count in the chunk the invariant shares the variable
+    (`T6 ↦ᵣ c ∗ arr … (dp-4) c E`), so `c ≠ 0` IS non-emptiness. Endpoints
+    only would put `dp - 4 - E = 4c` in the contract and leave the solver
+    `dp-4 ≠ E` from `c ≠ 0` at every pop: a disequality under a symbolic
+    multiplication, needing a no-wrap bound. POINTER-bounded loops (K, M)
+    leave the count existential and pop on `a ≠ e`.
 
 ## Design
 
-### D1. Three predicate families in Sig.v
+### D1. The predicate (Sig.v)
 
-    arr_dn  pub s  [p; n]    cells p, p-s, ..., p-s(n-1)   (top, walks down)
-    arr_up  pub s  [b; n]    cells b, b+s, ..., b+s(n-1)   (base, walks up)
-    arr_rng pub s  [lo; hi]  cells lo, lo+s, ... below hi
+    arr pub s [a; n; e]   cells a, a+s, …, a+s(n-1);  e = a + s·n
 
-All args `ty_xlenbits`; precise on the first (address) argument, the second
-as output, so an ordinary consume matches by address and the solver equates
-the count/bound. Not duplicable. Every split/join moves an address by a
-CONSTANT `±s`: no `s*c` with symbolic c ever reaches an address term.
+All args `ty_xlenbits`; precise on `a` (input), `n` and `e` outputs, so a
+consume matches by start address and the solver equates count and end. Not
+duplicable. Two arrays with different flag or stride are different
+predicates (the flag and stride are part of the `Predicate` index).
 
 ### D2. The ghost annotation (CFGVer-local, replaces Katamaran ghost lemmas)
 
@@ -83,26 +82,29 @@ A new `Annot` kind in `Verifier.v`, next to `AnnotLemmaInvocation`:
 executor trusts it on the light side; its VALIDITY (`∀ ι, interpret pre ι ⊢
 interpret post ι`) rides in `AnnotInstrV` and is discharged on the heavy side,
 exactly as block validity does (PLAN-valid-blk-annot). The views used below
-are instances of a handful of GENERIC entailments proved once per family.
+are instances of a handful of GENERIC entailments, proved once.
 
-Binding (why angelic is enough for split/join): `pre` consumes the ARRAY
-chunk first, with `asn.chunk_angelic` -- only `consume_chunk_angelic`
-(Monads.v:858) has the `heap_extractions` fallback. The array is the only
-chunk of its predicate+flag+stride in the heap, so there is no real choice,
-and it binds the address; the neighbouring cell is then consumed PRECISELY at
-`a ± s`, a term after peval.
+Binding: `pre` consumes the ARRAY chunk first, with `asn.chunk_angelic` --
+only `consume_chunk_angelic` (Monads.v:858) has the `heap_extractions`
+fallback. The array is the only chunk of its predicate in the heap, so there
+is no real choice, and it binds `a`/`n`/`e`; the neighbouring cell is then
+consumed PRECISELY at `a ± s`, a term after peval.
 
 | view | statement |
 |---|---|
-| `dn_pop`    | `arr_dn p n ∗ n≠0 ⊢ (∃w, p ↦ₘ w) ∗ arr_dn (p-s) (n-1)` |
-| `dn_push`   | `arr_dn a n ∗ (∃w, (a+s) ↦ₘ w) ⊢ arr_dn (a+s) (n+1)` |
-| `up_cons`   | `arr_up a n ∗ (∃w, (a-s) ↦ₘ w) ⊢ arr_up (a-s) (n+1)` |
-| `up_uncons` | `arr_up b n ∗ n≠0 ⊢ (∃w, b ↦ₘ w) ∗ arr_up (b+s) (n-1)` |
-| `rng_pop_lo`/`_hi`, `rng_push_lo`/`_hi` | the same four over `[lo; hi)`, legality `lo ≠ hi` |
+| `take_first` | `arr a n e ∗ n≠0 ⊢ cell a ∗ arr (a+s) (n-1) e` |
+| `take_first'`| `arr a n e ∗ a≠e ⊢ cell a ∗ arr (a+s) (n-1) e` (pointer loops) |
+| `add_first`  | `arr a n e ∗ cell (a-s) ⊢ arr (a-s) (n+1) e` |
+| `take_last`  | `arr a n e ∗ n≠0 ⊢ arr a (n-1) (e-s) ∗ cell (e-s)` (+ `a≠e` variant) |
+| `add_last`   | `arr a n e ∗ cell e ⊢ arr a (n+1) (e+s)` |
+| `empty`      | `arr a 0 e ⊢ ⌜a = e⌝` |
 
-(pub variants add `secLeakvar w`.) No wrap side conditions: bv arithmetic is
-modular, so the index shift is a ring identity, and a push/cons whose count
-wraps to 0 has `emp` on the right, which holds by affinity.
+`cell x` := `∃w, x ↦ₘ w` (plus `secLeakvar w` when `pub`), and every TAKE
+also produces the taken cell's range fact `unsigned x + 4 ≤ maxAddr`: the
+memory read/write contracts demand it and nothing else supplies it for a cell
+of a symbolic array. So the interpretation carries the range (D4). Wrap: bv
+arithmetic is modular, so the index shifts are ring identities; an `add`
+whose count wraps to 0 has an `emp`-sized right-hand side (affine).
 
 ### D3. ACCUMULATOR invariant, not a recursive post
 
@@ -110,31 +112,34 @@ A recursive post ("all c+1 cells") needs a FOLD after the back edge's block
 returns -- a ghost with no instruction to hang it on (the block resumes at the
 loop's exit, outside its code), i.e. a new "ghost after firing" hook in the
 executor + refinement + soundness. Avoided by the tail-recursive shape: the
-written cells accumulate IN the invariant, the post is a trip-invariant
-function of ghost logic variables, and the back edge passes it through
-unchanged.
+written cells accumulate IN the invariant, the post is trip-invariant, and the
+back edge passes it through unchanged.
 
 Loop D (`lw S1,-4(S0); addi T6,T6,-1; addi S2,S0,-4; sw S1,0(S0); mv S0,S2;
-bnez T6`), context `q` (code base), `dp`, `c`, `k`, ghost `e`, `N`:
+bnez T6`), context `q` (code base), `dp`, `c`, `k`, `E`, `T`:
 
-    inv  := S0 ↦ᵣ dp ∗ T6 ↦ᵣ c ∗ c≠0 (public: dp, c)
-          ∗ arr_dn priv 4 (dp-4) c        -- sources not yet moved
-          ∗ (∃w, dp ↦ₘ w)                 -- the destination of this trip
-          ∗ arr_up priv 4 (dp+4) k        -- already moved
-          ∗ ⌜e = dp - 4c⌝ ∗ ⌜N = k + c⌝   -- tie the ghosts to the state
-    post := S0 ↦ᵣ e ∗ T6 ↦ᵣ 0 ∗ (∃w, e ↦ₘ w) ∗ arr_up priv 4 (e+4) N
+    inv  := S0 ↦ᵣ dp ∗ T6 ↦ᵣ c ∗ c≠0 (public: dp, c) ∗ (∃ S1, S2)
+          ∗ arr priv (-4) (dp-4) c E      -- sources not yet moved, walking DOWN
+          ∗ cell dp ∗ ⌜range dp⌝          -- the destination of this trip
+          ∗ arr priv 4 (dp+4) k T         -- already moved
+    post := ∃ f, S0 ↦ᵣ f ∗ T6 ↦ᵣ 0 ∗ cell f
+          ∗ (∃ m, arr priv 4 (f+4) m T)
+          ∗ arr priv (-4) (f-4) 0 E
 
-Views: `dn_pop` before the `lw`; `up_cons` after the `sw`. The ties are
-written in SOLVED form (`e = …`, `N = …`) so the consume at the back edge can
-instantiate the angelic ghosts; the leftover obligation is the ring identity
-of A5. `arr_dn … 0` left at exit is dropped (affine).
+`E`, `T` are the arrays' own far ends, constant across trips and fixed by
+consuming the chunks; no ghost tie. Views: `take_first` (stride −4) before
+the `lw`; `add_first` (stride 4) after the `sw`. The EMPTY source array stays
+in the post as a chunk: the executor never learns `e = a + s·n`, so it could
+not prove `f - 4 = E` at exit. A caller that wants that fact applies `empty`.
 
 ### D4. Binary interpretation
 
-`arr_dn pub s p n` := `[∗ list] i ∈ seq 0 (unsigned n), ∃ w, ptstomem (p - s·i) w`
-(`w` SyncVal when `pub`), similarly for the others; `False` when the address
-or count is a `NonSyncVal` -- the count must be public, which is exactly the
-property that makes the loop cuttable at all (PLAN-muladd-composed §2).
+    arr pub s a n e := ⌜e = a + s·n⌝ ∗ ⌜every cell in range⌝
+                     ∗ [∗ list] i ∈ seq 0 (unsigned n), ∃ w, ptstomem (a + s·i) w
+
+(`w` SyncVal when `pub`); `False` when an address or the count is a
+`NonSyncVal` -- the count must be public, which is exactly the property that
+makes the loop cuttable at all (PLAN-muladd-composed §2).
 
 ## Relation to the previous machinery (Iris-level composition)
 
@@ -143,10 +148,10 @@ level:
 
 | GenCompose (LoopSpec route) | this plan (loop-block route) |
 |---|---|
-| `loop_reservoir A iota q n` (:1081), big-sep over `seq 0 n`: trips not reached | `arr_dn` |
-| `loop_completed A iota q n N` (:1407), trips already run | `arr_up` |
+| `loop_reservoir A iota q n` (:1081), big-sep over `seq 0 n`: trips not reached | `arr` walking down (stride −4) |
+| `loop_completed A iota q n N` (:1407), trips already run | `arr` walking up (stride 4) |
 | `Fr n := loop_reservoir … n ∗ loop_completed … n N` | D3's `inv` |
-| `loop_reservoir_peel` / `loop_completed_push` | `dn_pop` / `up_cons` |
+| `loop_reservoir_peel` / `loop_completed_push` | `take_first` / `add_first` |
 | the cell trade `Hc` (`loop_cells_trade`), a hand-written Iris proof per loop | done by the executor + solver |
 
 **Why the old route needed no new predicates.** It took its trip count from
@@ -179,7 +184,7 @@ what PLAN-rec-loop-block asked for.
   width is DATA, not shape, so the mismatch does not arise.
 
 **What the old route had and this plan loses: generality.** `loop_reservoir`
-takes ANY per-trip cell shape. `arr_*` are single-word cells at a Coq-level
+takes ANY per-trip cell shape. `arr` chunks are single-word cells at a Coq-level
 stride (A4). That covers D/I/K/M (I and K's two arrays become two chunks).
 
 ## Rejected alternatives
@@ -224,7 +229,7 @@ stride (A4). That covers D/I/K/M (I and K's two arrays become two chunks).
 
 | file | change | side |
 |---|---|---|
-| `RiscvPmp/Sig.v` | three `Predicate` constructors, `𝑯_Ty`, precise, dup | forces the whole RiscvPmp rebuild |
+| `RiscvPmp/Sig.v` | one `Predicate` constructor `arr (pub : bool) (s : N)`, `𝑯_Ty`, precise, dup | forces the whole RiscvPmp rebuild |
 | `RiscvPmp/IrisInstance.v`, `ModelBinary.v` | interpretation | heavy |
 | `CFGVer/Verifier.v` | `AnnotView` + its `sexec_ghost` arm | light |
 | `CFGVer/VerifierRel.v` | `cexec_ghost` arm + refinement (pet cannot open this file: probe-file workflow) | heavy |
@@ -236,13 +241,11 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
 
 ## Phases (each ends in a GATE: reach it, report, commit, stop)
 
-- **0. Spike, light side only.** Sig.v predicates (all three families, ONE
-  pass) + `AnnotView` in Verifier.v with its symbolic arm; Iris side stubbed
+- **0. Spike, light side only.** the Sig.v predicate + `AnnotView` in Verifier.v with its symbolic arm; Iris side stubbed
   only if the build forces it. Probe `Example/ZZArrD.v`: D standalone as an
-  `ai_loop` block with D3's invariant, `solve_param_vc` (+ the ring residual
-  closer). GATE: VC green AND two negative controls REJECTED (an invariant
-  that drops `up_cons`'s cell; a wrong `N`). Settles D2's binding claim and
-  A5's residual shape before any Iris work.
+  `ai_loop` block with D3's invariant, `solve_param_vc`. GATE: VC green AND two negative controls REJECTED (an invariant
+  that drops `add_first`'s cell; a wrong `N`). Settles D2's binding claim and
+  the peval folding risk before any Iris work.
 - **1. Interpretation, view entailments, ghost soundness.** D4; the generic
   entailments; `cexec`/`rexec` arms and the ghost step's soundness; view
   validity in the seal. GATE: `make Results.vo` green, axiom-clean; ENTRY
@@ -250,9 +253,9 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
 - **2. D end-to-end standalone.** `ZZArrDResult.v` via `cfg_instrs_endToEnd`,
   like CountdownRecResult. GATE: axiom-clean end theorem.
 - **3. D inside muladd.** The caller's side: converting muladd's concrete
-  cells into `arr_*` chunks (Q1's context-indexed views). GATE:
+  cells into `arr` chunks (Q1's context-indexed views). GATE:
   `bc_run_in_muladd`-style run of D at idx 84.
-- **4. K, then I, M** on `arr_rng`. Two arrays per loop, one private (x[])
+- **4. K, then I, M**, popping on `a ≠ e`. Two arrays per loop, one private (x[])
   and one public (m[]): different flags, so each view still has one
   candidate. GATE per loop as Phase 0.
 
@@ -262,9 +265,6 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   stride give the consume an `angelic_list` choice per view. Wrong choices
   should fail at the next precise consume, but cost is unmeasured. Measure in
   Phase 0/4.
-- **Ring residuals** (A5): the residual may be stated over RelVal, where
-  `ring` does not apply directly; restating the ties over `unsigned` in
-  `ty.int` is the fallback.
 - **peval on `(dp + -4) + 4`**: invariant re-establishment needs the cons'd
   address to fold back to `dp`; `try_bvadd_cancel_*` should do it -- check in
   Phase 0 before relying on it.
