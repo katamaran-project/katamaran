@@ -496,6 +496,34 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       | SyncVal p => p | NonSyncVal _ _ => False end -> False.
     Proof. destruct X as [a|a b]; cbn; [intros H; now apply H | exact (fun H => H)]. Qed.
 
+    (* A public pointer differs from itself plus a NONZERO constant, and two
+       different constant offsets of it differ.  Left by array ghosts
+       (PLAN-array-invariants): clem_arr_nonempty asserts `a ≠ e` for an
+       array whose start and end are the same base at different offsets,
+       e.g. `dp ≠ 4 + dp`, which the solver does not decide. *)
+    Lemma relval_neq_offset (X : RelVal ty_xlenbits) (c : bv xlenbits) :
+      RiscvPmpSignature.secLeak X -> bv.bin c <> 0%N ->
+      match bop.eval_relop_relprop bop.neq X
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c) X) with
+      | SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros HX Hc. destruct X as [x|]; [|destruct HX]. cbn. intros Hx.
+      apply Hc. assert (bv.add c x = bv.add bv.zero x) as E
+        by (rewrite bv.add_zero_l; symmetry; exact Hx).
+      apply bv.add_cancel_r in E. now subst c.
+    Qed.
+
+    Lemma relval_neq_offsets (X : RelVal ty_xlenbits) (c1 c2 : bv xlenbits) :
+      RiscvPmpSignature.secLeak X -> bv.bin c1 <> bv.bin c2 ->
+      match bop.eval_relop_relprop bop.neq
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c1) X)
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c2) X) with
+      | SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros HX Hc. destruct X as [x|]; [|destruct HX]. cbn. intros Hx.
+      apply Hc. apply bv.add_cancel_r in Hx. now subst c1.
+    Qed.
+
     Ltac solve_vc :=
       (* `cbn -[Erasure.inst_symprop]`, not a bare `cbn` (2026-09-08).
          inst_symprop (Propositions.v:2297) unfolds edemonicv to
@@ -553,6 +581,8 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
             | vm_compute; reflexivity
             | apply Z.leb_le; vm_compute; reflexivity ]
         | apply relval_neq_irrefl
+        | apply relval_neq_offset; [assumption | vm_compute; discriminate]
+        | apply relval_neq_offsets; [assumption | vm_compute; discriminate]
         (* BASE MINUS A CONSTANT, with both offsets READ OFF THE GOAL.  The
            alternative above leaves `B` and `D` as evars, and that cannot
            work: the premises are stated over `bop.eval_relop_relprop` while

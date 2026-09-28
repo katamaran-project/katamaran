@@ -119,7 +119,11 @@ Inductive CLem : Set :=
   | clem_arr_empty (pub : bool) (s : Z)
   (* arr a n e ∗ cell e ∗ range e ⊢ arr a (n+1) (e+s), the cell matched
      ANGELICALLY: on a fresh seed it is what binds the address *)
-  | clem_arr_add_last (pub : bool) (s : Z).
+  | clem_arr_add_last (pub : bool) (s : Z)
+  (* arr a 0 e ⊢ ⌜a = e⌝ -- a caller's way to learn where an array ended:
+     a loop post names its exit pointer existentially, and the empty
+     remainder's start/end are the only link to the caller's addresses *)
+  | clem_arr_empty_elim (pub : bool) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -195,6 +199,11 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
               (clem_range (term_var "e"))))
         (clem_arr pub s (term_var "a") (clem_off (term_var "n") 1)
            (clem_off (term_var "e") s))
+  | clem_arr_empty_elim pub s =>
+      MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits] [env]
+        (asn.chunk_angelic (chunk_user (arr pub s)
+           [term_var "a"; term_val ty_xlenbits bv.zero; term_var "e"]))
+        (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
   end.
 
 Inductive Annot :=

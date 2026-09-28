@@ -610,13 +610,25 @@ Module RiscvPmpIrisInstanceWithContracts.
       - iPureIntro. discriminate.
     Qed.
 
+    (* An EMPTY array's start is its end: the end fact at n = 0. *)
+    Lemma clem_empty_elim_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_empty_elim pub s)).
+    Proof.
+      intros ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct e as [e|];
+        cbn -[interp_arr]; try (iIntros "[]").
+      iIntros "Harr". cbn [interp_arr]. iDestruct "Harr" as "[%He _]".
+      iSplit; [|done]. iPureIntro. subst e. apply arr_ring_zero.
+    Qed.
+
     (* The catalogue's lemSemCFGVerif. *)
     Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
       ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
     Proof.
       destruct k; [apply clem_take_first_sound|apply clem_add_first_sound
                   |apply clem_nonempty_sound|apply clem_empty_sound
-                  |apply clem_add_last_sound].
+                  |apply clem_add_last_sound|apply clem_empty_elim_sound].
     Qed.
   End CLemSound.
 
