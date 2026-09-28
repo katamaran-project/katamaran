@@ -785,8 +785,11 @@ body — so a re-entry may fire at any address, and a block's faithfulness must
 hold at every address (symbolic placement). The executor induction
 `sound_exec_cfg_addr_myWP2` carries `blocksSoundAt stepped ∗ ▷ blocksSound`;
 each executed instruction strips the later. `blocksSound` (= `blocksSoundAt
-true`, both kinds) is still the premise every external bridge takes (until
-PLAN-valid-blk-annot Phase 4). Partial correctness only.
+true`, both kinds) is now an INTERNAL premise only: since PLAN-valid-blk-annot
+Phase 4 no bridge takes it — they take the sealed `ValidCFGVerifierContract`
+(`Validity.v`) and derive it, via `blocksSound_of_annotsValid` (EndToEnd) or
+`GenCompose.contract_setup` (a contract run inside a larger program). Partial
+correctness only.
 
 **Annotations that carry their validity (2026-09-25, Phases 2–3).**
 `Verifier.AnnotInstrV Valid` is `AnnotInstr` with `aiv_block : option

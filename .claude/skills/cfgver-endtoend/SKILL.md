@@ -44,21 +44,21 @@ proofs only supply `ImplPre`.
 
 ```coq
 Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
-  {instrs'} (exit_addr : N) n ws {R} {ι : Valuation R}
+  {instrs : list AST} (exit_addr : N) n ws {R} {ι : Valuation R}
   public_registers
   (HpubReg : declare_public_registers γ1 γ2 public_registers)
   (contract : @CFGVerifierContract R)
-  (valid_contract : cfg_vc contract instrs')
+  (valid_contract : ValidCFGVerifierContract contract)   (* SEALED, Validity.v *)
+  (contractInstrs : cfg_instrs contract = instrs)         (* eq_refl *)
   (init_addr : N) (contractInitAddr : cfg_init_addr contract = init_addr)
   (contractPlacement : inst (cfg_placement contract) ι = ty.SyncVal (bv.of_N init_addr))
   (HexitFaith : etable_rel (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
   (ImplPre : forall `{sailGS2 Σ}, … -∗
       asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
         ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-  (init_addr + 4 * N.of_nat (length instrs') < lenAddr)%N ->
-  (forall `{sailGS2 Σ} wds, ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs')) ->
-  mem_has_instrs μ1 (bv.of_N init_addr) ws (strip instrs') ->
-  mem_has_instrs μ2 (bv.of_N init_addr) ws (strip instrs') ->
+  (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N ->
+  mem_has_instrs μ1 (bv.of_N init_addr) ws instrs ->
+  mem_has_instrs μ2 (bv.of_N init_addr) ws instrs ->
   (* cur_privilege = Machine and pc = bv.of_N init_addr, in both γ1 and γ2 *) … ->
   ⟨ γ1, μ1 ⟩ -(atPc exit_addr, n)->* ⟨ γ1', μ1' ⟩ ->
   leakage_trace μ1 = leakage_trace μ2 ->
@@ -73,13 +73,26 @@ term — for `cfg_exit := exit_of_off p off` discharge it with
 `etable_faith_exit_of_off` (`TablesRel.v`), or for a segment with
 `seg_exit_table_ok` (`GenCompose.v`).
 
+**No annotation appears here (PLAN-valid-blk-annot.md Phase 4).** Every bridge —
+this one, `_with_memory`, `cfg_instrs_verified`/`_safe`(`_with_mem`),
+`GenCompose.contract_run`/`seg_run`/`loop_*` — takes only the SEALED
+`ValidCFGVerifierContract contract` (`Validity.v`) and states memory over the
+plain `list AST`. The annotated list, the raw `cfg_vc`, and block validity live
+inside the seal, and are supplied only where the contract is proved valid:
+`solve_valid <the example's VC>` for a block-free program, or
+`ValidCFGVerifierContract_intro` with the annotated list, its VC, `reflexivity`
+for the strip equation and an `annotsValid` proof when it carries blocks
+(`Example/CountdownRecResult.cdLink_valid`). There is no `blocksSound` premise
+any more.
+
 ## Call pattern
 
 ```coq
 eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
   instrs (init_addr + 4 * N)%N n ws [ctx] [env]
   [existT ty_xlenbits x1] HpubReg my_cfg_contract
-  valid_my_cfg_contract init_addr eq_refl).   (* ONE eq_refl: contractInitAddr *)
+  my_cfg_contract_valid eq_refl init_addr eq_refl).
+  (* eq_refls: contractInstrs, then contractInitAddr *)
 (* contractPlacement and HexitFaith are then goals *)
 all: try eauto.
 ```
@@ -94,7 +107,7 @@ more: since the Phase 4.2 parametric migration each `Example/*.v` proves only a
 parametric theorem, so the concrete-base contracts and their VCs were removed as dead
 compile time.
 
-- `@` is required: `instrs'` is implicit.
+- `@` is required: `instrs` is implicit.
 - **`all: try eauto.` must come BEFORE the `-` bullets** — it discharges the routine
   goals (memory, register reads, execution steps) first, leaving only `ImplPre` and
   the length bound for the focused bullets.

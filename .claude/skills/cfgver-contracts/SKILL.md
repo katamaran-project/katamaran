@@ -83,13 +83,18 @@ Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Pro
   cfg_map c (fun ia p exits P _ fl Q => Valid_CFG_VC ia p exits P a fl Q).
 (* Valid_CFG_VC ia p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
 
-(* EndToEnd.v (heavy) -- the packaged property, built only via
-   ValidCFGVerifierContract_intro *)
+(* Validity.v (heavy, small; re-exported by EndToEnd.v) -- the SEALED
+   property, built only via ValidCFGVerifierContract_intro / solve_valid *)
 Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
-  exists a, cfg_vc c a /\ strip a = cfg_instrs c
-            /\ (forall `{sailGS2 Σ} wds, ⊢ blocksSound wds (instrs_of_list (bv.of_N (cfg_init_addr c)) a)).
-(* the blocksSound conjunct is removed by PLAN-valid-blk-annot.md Phase 4 *)
+  exists a, cfg_vc c a /\ strip a = cfg_instrs c /\ annotsValid a.
+(* annotsValid (Adequacy.v): every ai_block carries a blkValid proof, and
+   there is no top-level ai_loop.  Pure -- no Iris, no cfg_init_addr. *)
 ```
+
+This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /
+`seg_run` / `loop_*`): annotations appear only where the contract is proved
+valid. `solve_valid <VC>` closes it for a block-free program; a program with
+blocks uses the intro lemma with its annotated list and an `annotsValid` proof.
 
 `cfg_vc` does not force `strip a = cfg_instrs c`; that equation is a premise of
 the soundness bridge, so a VC over the wrong `a` proves nothing usable.

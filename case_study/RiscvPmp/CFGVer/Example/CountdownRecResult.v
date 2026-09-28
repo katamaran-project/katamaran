@@ -117,33 +117,26 @@ Proof.
            (fun v iota => eq_refl) eq_refl (valid_cd_rec ia)).
 Qed.
 
-Section Link.
-  Context {Σ} {GS : sailGS2 Σ}.
+(* THE LINK'S ANNOTATIONS ARE VALID: its one ai_block is the loop, which is
+   valid at every address (cdRecBlk_valid); the tail is plain code.  This and
+   the next lemma are the ONLY place cdLink's annotations appear -- the end
+   theorem below sees just the sealed validity (PLAN-valid-blk-annot Phase 4). *)
+Lemma cd_link_valid (ia : N) : annotsValid (cd_link_annot ia).
+Proof.
+  unfold cd_link_annot. constructor.
+  - split; [reflexivity|]. intros b Hb. injection Hb as <-. apply cdRecBlk_valid.
+  - apply annotsValid_of_none, ai_block_none_of_AST.
+Qed.
 
-  (* THE LOOP, AS A BLOCK, at its load address.  An instance of
-     cdRecBlk_valid; Hfit is no longer needed and goes with this lemma in
-     Phase 4, when cd_link_blocksSound disappears. *)
-  Lemma cdRec_blockSound (ia : N) (Hfit : (ia + 8 < lenAddr)%N)
-      (words : bv xlenbits -> bv word) :
-    ⊢ blockSound words (@bv.of_N xlenbits ia) (cdRecBlk ia).
-  Proof. apply cdRecBlk_valid. Qed.
-
-  (* THE LINK: the only block cdLink's VC trusted is sound. *)
-  Lemma cd_link_blocksSound (ia : N) (Hfit : (ia + 8 < lenAddr)%N)
-      (words : bv xlenbits -> bv word) :
-    ⊢ blocksSound words (instrs_of_list (@bv.of_N xlenbits ia) (cd_link_annot ia)).
-  Proof.
-    iPoseProof (cdRec_blockSound ia Hfit words) as "#Hb".
-    unfold cd_link_annot.
-    iApply (blocksSound_of_head with "Hb").
-    - reflexivity.
-    - repeat constructor.
-  Qed.
-End Link.
+Lemma cdLink_valid (ia : N) : ValidCFGVerifierContract (cdLink ia).
+Proof.
+  eapply ValidCFGVerifierContract_intro;
+    [exact (valid_cd_link ia) | reflexivity | apply cd_link_valid].
+Qed.
 
 
 (* THE END THEOREM, for every load address the program fits at.  The block
-   obligation is cd_link_blocksSound above; the rest is cfg_instrs_endToEnd's
+   obligation is sealed in cdLink_valid above; the rest is cfg_instrs_endToEnd's
    ordinary wiring. *)
 Lemma countdown_rec_noninterferent_param (init_addr : N) :
   (init_addr + 12 < lenAddr)%N ->
@@ -156,11 +149,11 @@ Proof.
   assert (Hfit8 : (init_addr + 8 < lenAddr)%N) by lia.
   pose proof (seg_fits_bin init_addr 8 ltac:(unfold seg_fits_memory; lia)) as Hbin.
   (* ι: code at init_addr, counter at its pinned 2. *)
-  eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' (cd_link_annot init_addr)
+  eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' cd_link_instrs
     (init_addr + 12)%N n ws cdRecCtx
     ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
           .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
-    _ HpubReg (cdLink init_addr) (valid_cd_link init_addr) init_addr
+    _ HpubReg (cdLink init_addr) (cdLink_valid init_addr) eq_refl init_addr
     eq_refl).
   - (* placement: the bare code base *)
     reflexivity.
@@ -179,8 +172,7 @@ Proof.
     all: first [ reflexivity
                | (try unfold bv.unsigned; rewrite Hbin; lia)
                | (intros H; apply (f_equal (@bv.bin _)) in H; discriminate) ].
-  - cbn [length cd_link_annot list_AST_AnnotInstr List.map]. lia.
-  - intros Σ' GS' wds. apply (cd_link_blocksSound init_addr Hfit8).
+  - unfold cd_link_instrs, cd_instrs. cbn [length List.app]. lia.
   - exact Hmem1.
   - exact Hmem2.
   - exact γ1curpriv.

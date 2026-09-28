@@ -62,6 +62,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.GenContract
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.GenCompose
      RiscvPmp.CFGVer.Example.TwoLoopsComposed.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -142,25 +143,48 @@ Section TwoLoops.
     (asn.interpret tInvB (iB m) ∗ pc ↦ᵣ SyncVal (bv.of_N 8)
      ∗ (∃ v, nextpc ↦ᵣ v) ∗ tOwn)%I.
 
+  (* THE FOUR SEGMENT CONTRACTS ARE VALID -- sealed, from their own VCs
+     (PLAN-valid-blk-annot.md Phase 4). *)
+  Lemma tAbody_valid : ValidCFGVerifierContract tAbody.
+  Proof. solve_valid valid_tAbody. Qed.
+  Lemma tAfinal_valid : ValidCFGVerifierContract tAfinal.
+  Proof. solve_valid valid_tAfinal. Qed.
+  Lemma tBbody_valid : ValidCFGVerifierContract tBbody.
+  Proof. solve_valid valid_tBbody. Qed.
+  Lemma tBfinal_valid : ValidCFGVerifierContract tBfinal.
+  Proof. solve_valid valid_tBfinal. Qed.
+
+  (* Every contract here runs over the WHOLE program at 0 (all four have
+     cfg_instrs = t_instrs), so containment is reflexivity after the
+     projection. *)
+  Lemma t_contain :
+    instrs_of_list (bv.of_N 0) (cfg_instrs tAbody)
+      ⊆ ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)).
+  Proof.
+    rewrite fmap_instrs_of_list.
+    change (List.map ai_instr (list_AST_AnnotInstr (cfg_instrs tAbody)))
+      with (strip (list_AST_AnnotInstr (cfg_instrs tAbody))).
+    rewrite strip_of_AST. reflexivity.
+  Qed.
+
+  Lemma t_fit :
+    (bv.bin (@bv.of_N xlenbits 0) + 4 * N.of_nat (length (cfg_instrs tAbody))
+       < bv.exp2 xlenbits)%N.
+  Proof. change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia. Qed.
+
   Lemma loopB (n : nat) : forall (m : bv xlenbits),
     bv.bin m = (N.of_nat n + 1)%N -> invB m -∗ myWP2_loop tExit.
   Proof.
     induction n as [|q IH]; intros m Hm.
     - (* B's last trip -> the program exit *)
-      pose proof valid_tBfinal as Hv.
-      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
-      cbn [cfg_map tBfinal] in Hv.
-      assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxB)
-                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
-                      (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iB m)).
-      { apply itable_faith_of_list; [reflexivity|].
-        apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
                       (SyncVal (bv.of_N 16))
                       (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 16) (iB m)).
       { eexists. split; reflexivity. }
       iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
-      iApply (sound_scfg_verification_condition_myWP2 Hv tExit Hif Hef ltac:(solve_no_blocks)
+      iApply (contract_run tBfinal tBfinal_valid (iB m) (bv.of_N 0)
+                (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody))) _ tExit
+                eq_refl t_fit t_contain Hef
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -176,14 +200,6 @@ Section TwoLoops.
         unfold tExit. iExists av. iFrame "Hpc". iPureIntro.
         cbn in Hex. unfold atPc. rewrite Hex. exact I.
     - (* one trip of B *)
-      pose proof valid_tBbody as Hv.
-      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
-      cbn [cfg_map tBbody] in Hv.
-      assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxB)
-                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
-                      (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iB m)).
-      { apply itable_faith_of_list; [reflexivity|].
-        apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
                       (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iB m)).
       { eexists. split; reflexivity. }
@@ -193,7 +209,9 @@ Section TwoLoops.
       { intros HH. rewrite HH in Hd. cbn in Hd. lia. }
       iIntros "(Hres & Hpc & Hnpc & Hinstrs)".
       iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
+      iApply (contract_run tBbody tBbody_valid (iB m) (bv.of_N 0)
+                (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody))) _ (myWP2_loop tExit)
+                eq_refl t_fit t_contain Hef
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -223,20 +241,14 @@ Section TwoLoops.
     induction nA as [|p IH]; intros k nB m Hk Hm.
     - (* A's LAST trip: falls through to 8, which is loop B's head.  This is
          the HAND-OFF between the two loops. *)
-      pose proof valid_tAfinal as Hv.
-      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
-      cbn [cfg_map tAfinal] in Hv.
-      assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxA)
-                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
-                      (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iA k)).
-      { apply itable_faith_of_list; [reflexivity|].
-        apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxA)
                       (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iA k)).
       { eexists. split; reflexivity. }
       iIntros "((Hres & Hpc & Hnpc & Hinstrs) & HX2)".
       iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
+      iApply (contract_run tAfinal tAfinal_valid (iA k) (bv.of_N 0)
+                (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody))) _ (myWP2_loop tExit)
+                eq_refl t_fit t_contain Hef
                 $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -259,14 +271,6 @@ Section TwoLoops.
         unfold tX2 in *. iEval (cbn) in "HX2".
         iFrame "Hpc Hnpc Hinstrs Hpriv Hinv". iExact "HX2".
     - (* one trip of A; X2 is carried along untouched *)
-      pose proof valid_tAbody as Hv.
-      unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
-      cbn [cfg_map tAbody] in Hv.
-      assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx tCtxA)
-                      (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody)))
-                      (table_of_list (term_val ty_xlenbits (bv.of_N 0)) 0 t_instrs) (iA k)).
-      { apply itable_faith_of_list; [reflexivity|].
-        apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxA)
                       (SyncVal (bv.of_N 0)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0) (iA k)).
       { eexists. split; reflexivity. }
@@ -276,7 +280,9 @@ Section TwoLoops.
       { intros HH. rewrite HH in Hd. cbn in Hd. lia. }
       iIntros "((Hres & Hpc & Hnpc & Hinstrs) & HX2)".
       iApply myWP2_loop_join.
-      iApply (sound_scfg_verification_condition_myWP2 Hv (myWP2_loop tExit) Hif Hef ltac:(solve_no_blocks)
+      iApply (contract_run tAbody tAbody_valid (iA k) (bv.of_N 0)
+                (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody))) _ (myWP2_loop tExit)
+                eq_refl t_fit t_contain Hef
                 $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".

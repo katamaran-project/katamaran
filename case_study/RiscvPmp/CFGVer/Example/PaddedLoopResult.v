@@ -31,6 +31,8 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.GenContract
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.GenSegment
+     RiscvPmp.CFGVer.GenCompose
      RiscvPmp.CFGVer.Example.CountdownComposed
      RiscvPmp.CFGVer.Example.CountdownComposedResult
      RiscvPmp.CFGVer.Example.PaddedLoop.
@@ -83,42 +85,40 @@ Section ComposePaddedLoop.
   Definition plInvN (n : nat) : iProp Σ :=
     (∃ k : bv xlenbits, ⌜bv.bin k = (N.of_nat n + 1)%N⌝ ∗ plInv k)%I.
 
-  (* The sub-table faithfulness fact, shared by both segment contracts:
-     the SEGMENT's table is faithful to the WHOLE program's store. *)
-  Lemma pl_itable (k : bv xlenbits) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx cdCtx)
-      (instrs_of_list (bv.of_N 0) padded_annot)
-      (table_of_list (term_val ty_xlenbits (bv.of_N pl_head)) 0 pl_seg) (ik k).
+  (* THE SEGMENT CONTRACTS ARE VALID -- sealed, from their own VCs.  The only
+     place the annotated segment `pl_seg` appears (PLAN-valid-blk-annot.md
+     Phase 4). *)
+  Lemma plBody_valid : ValidCFGVerifierContract plBody.
+  Proof. solve_valid valid_plBody. Qed.
+  Lemma plFinal_valid : ValidCFGVerifierContract plFinal.
+  Proof. solve_valid valid_plFinal. Qed.
+
+  (* The segment's code sits inside the WHOLE program at pl_head -- an
+     AST-level containment.  It replaced the annotated sub-table
+     faithfulness fact pl_itable: contract_run derives faithfulness itself. *)
+  Lemma pl_contain :
+    instrs_of_list (bv.of_N pl_head) cd_instrs
+      ⊆ ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot.
   Proof.
     unfold padded_annot.
-    (* pre/seg/post are EXPLICIT (Set Implicit Arguments marks only strict
-       implicits, and `length pre` is not a rigid position); only Σ, cbase and
-       off are implicit.  All of p, ι, cbase, pre, seg and post are determined
-       by unification against the goal, because padded_annot was DEFINED as
-       `pl_pre ++ pl_seg ++ pl_post`.  But `off` occurs in no explicit
-       argument's type, so it cannot be inferred, and the `(off := _)` form
-       needs every preceding EXPLICIT argument supplied first ("Not enough
-       non implicit arguments").  Hence the fully-@ form: Σ p ι cbase off
-       pre seg post. *)
-    apply (@itable_faith_of_segment cdCtx
-             (term_val ty_xlenbits (bv.of_N pl_head)) (ik k)
-             (@bv.of_N xlenbits 0) pl_head pl_pre pl_seg pl_post).
-    - reflexivity.
-    - reflexivity.
-    - unfold pl_pre, pl_seg, pl_post, pl_filler, cd_instrs, pl_head.
+    pose proof (instrs_of_list_segment pl_pre pl_seg pl_post (@bv.of_N xlenbits 0)) as H.
+    apply (map_fmap_mono ai_instr) in H.
+    - rewrite fmap_instrs_of_list in H. exact H.
+    - unfold pl_pre, pl_seg, pl_post, pl_filler, cd_instrs.
       cbn [List.length List.app List.repeat].
       change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia.
   Qed.
+
+  Lemma pl_fit :
+    (bv.bin (@bv.of_N xlenbits pl_head) + 4 * N.of_nat (length cd_instrs)
+       < bv.exp2 xlenbits)%N.
+  Proof. change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia. Qed.
 
   (* ===== BODY: one trip, n+1 -> n, at the loop head (offset 256). ===== *)
   Lemma pl_step (n : nat) : plInvN (S n) -∗ myWP2_loop (plInvN n).
   Proof.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
-    pose proof valid_plBody as Hv.
-    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
-    cbn [cfg_map plBody] in Hv.
-    pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
                     (SyncVal (bv.of_N pl_head)) (cfg_exit plBody) (ik k)).
     { eexists. split; reflexivity. }
@@ -126,7 +126,9 @@ Section ComposePaddedLoop.
     assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
     assert (Hne : bvdec k <> bv.zero).
     { intros HH. rewrite HH in Hdec. cbn in Hdec. lia. }
-    iApply (sound_scfg_verification_condition_myWP2 Hv (plInvN n) Hif Hef ltac:(solve_no_blocks)
+    iApply (contract_run plBody plBody_valid (ik k) (bv.of_N pl_head)
+              (ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot) _ (plInvN n)
+              eq_refl pl_fit pl_contain Hef
               $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
@@ -151,14 +153,12 @@ Section ComposePaddedLoop.
   Proof.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
-    pose proof valid_plFinal as Hv.
-    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in Hv.
-    cbn [cfg_map plFinal] in Hv.
-    pose proof (pl_itable k) as Hif.
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
                     (SyncVal (bv.of_N 264)) (cfg_exit plFinal) (ik k)).
     { eexists. split; reflexivity. }
-    iApply (sound_scfg_verification_condition_myWP2 Hv plExit Hif Hef ltac:(solve_no_blocks)
+    iApply (contract_run plFinal plFinal_valid (ik k) (bv.of_N pl_head)
+              (ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot) _ plExit
+              eq_refl pl_fit pl_contain Hef
               $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".

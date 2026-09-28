@@ -2058,6 +2058,29 @@ Definition blkValid (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) : Prop :=
   forall Σ (GS : sailGS2 Σ) (words : bv xlenbits -> bv word) (v : bv xlenbits),
     ⊢ @blockSound Σ GS words v b.
 
+(* ---- A TOP-LEVEL PROGRAM'S ANNOTATIONS ARE VALID --------------------------
+   (PLAN-valid-blk-annot.md Phase 4.)  The condition sealed inside
+   EndToEnd.ValidCFGVerifierContract, replacing its old Iris-level blocksSound
+   conjunct: every ai_block carries a valid block, and there is NO re-entry
+   (ai_loop) at top level -- a whole program re-entering itself would need
+   its own contract faithful at every address, which the bridges do not have
+   (Phase 4 Decision 1).  A pure Prop, so it says nothing about Σ, words or
+   the load address; blocksSound_of_annotsValid turns it into the executor's
+   premise at any base. *)
+Definition annotsValid (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) : Prop :=
+  List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_loop ai = None /\
+                         forall b, Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = Some b -> blkValid b) l.
+
+(* A program with no block annotations of either kind: every example written
+   as a plain list of ASTs (with Verifier.ai_block_none_of_AST). *)
+Lemma annotsValid_of_none (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
+  List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true ai = None) l -> annotsValid l.
+Proof.
+  apply List.Forall_impl. intros ai H. unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire in H.
+  destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai); [discriminate|].
+  split; [exact H | intros b Hb; discriminate].
+Qed.
+
 (* ---- blocksSound FROM ANNOTATIONS THAT CARRY THEIR VALIDITY --------------
    (PLAN-valid-blk-annot.md Phase 3.)  For a program written as
    `map (eraseV c) LV`, every block the executor can fire is justified by the
@@ -2099,5 +2122,19 @@ Section ValidAnnot.
     - injection Hb as <-. iApply (Katamaran.RiscvPmp.CFGVer.Verifier.vb_ok x Σ GS words v).
     - destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_loop a); [|discriminate].
       injection Hb as <-. iApply "IH".
+  Qed.
+
+  (* The executor's premise, from the sealed top-level condition. *)
+  Lemma blocksSound_of_annotsValid (words : bv xlenbits -> bv word)
+      (base : bv xlenbits) (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
+    annotsValid l -> ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base l).
+  Proof.
+    intros Hl. iIntros "!>" (v ai b) "%Hlk %Hb".
+    apply instrs_of_list_elem_of in Hlk.
+    unfold annotsValid in Hl. rewrite List.Forall_forall in Hl.
+    destruct (Hl _ Hlk) as [Hloop Hblk].
+    unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire in Hb. destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai) as [b'|] eqn:E.
+    - injection Hb as <-. iApply (Hblk b' eq_refl Σ GS words v).
+    - rewrite Hloop in Hb. discriminate.
   Qed.
 End ValidAnnot.

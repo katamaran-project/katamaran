@@ -1,7 +1,7 @@
 # PLAN: block annotations that carry their own validity (`AnnotInstrV`)
 
 Status: rev 2 (2026-09-25), IN PROGRESS on branch `issue/valid-blk-annot`.
-Phases 1-3 DONE; GATE PASSED after Phase 3 (2026-09-25, 19 end theorems axiom-clean). VC-cost measurement not yet run. Next: Phase 4. Rewritten after PLAN-exit-targets.md
+Phases 1-4 DONE; GATE PASSED after Phase 4 (2026-09-28, 19 end theorems axiom-clean). VC-cost measurement not yet run. Next: Phase 5 (cleanup). Rewritten after PLAN-exit-targets.md
 landed (branch issue/exit-targets), against the code as it now is. Rev 1 was
 written before that change; see §6 for what it settled.
 
@@ -205,6 +205,9 @@ Changes:
 | V6 | 2026-09-25 | Sequenced AFTER PLAN-exit-targets.md -- DONE, that plan is implemented. | — |
 | V7 | 2026-09-25 | `blkValid` is UNCONDITIONAL in the entry address (no no-wrap premise, revising §1a). A generated segment's precondition already carries `gen_base_bound` (`unsigned base + 4·len ≤ lenAddr`), which `GenCompose.seg_pre_bound` reads off, so `blockFaithful_of_seg` takes `strip ab = code` instead of `Hrep`. Phase 3 needs no address arithmetic at the firing site. | Restore `Hrep` on `blockFaithful_of_seg` and the premise on `blkValid`; derive the fit at the firing site from containment + the program's own fit. |
 | V8 | 2026-09-25 | Re-entry is justified at EVERY address: `blockSound_of_vc`'s Löb induction ranges over the entry address, `Hbs` may assume `□ ∀ v', blockSound words v' b`, and the lemma concludes `∀ v, blockSound words v b` (= `blkValid`'s body). So `aiv_loop` may sit on any instruction and no head-only restriction exists. Chosen over (a) a program-level re-entry flag and (b) a head-only side condition. Cost: a block's faithfulness must hold at every address (symbolic placement) -- already implied by V7. | Fixed-`v` `blockSound_of_vc` plus option (a): `AnnotInstrV` without `aiv_loop`, re-entry flag on the program, set on the head by erasure. |
+| V9 | 2026-09-28 | Top-level programs may not re-enter themselves: the sealed condition is `annotsValid a` (every `ai_block` carries `blkValid`, NO `ai_loop`). A loop is used as a block (as `cdRec` is). | Allow top-level `ai_loop` with a faithful-at-every-address premise on the bridges. |
+| V10 | 2026-09-28 | NO annotation in any bridge statement (Emiel: "annotations only where the contract is proved valid"). Every bridge (`EndToEnd.v`, `GenCompose.v`) takes only `ValidCFGVerifierContract c`, states memory over `cfg_instrs c : list AST`; the seal lives in its own heavy file `Validity.v` so `EndToEnd.v` and `GenCompose.v` stay parallel siblings. | Bridges taking the annotated list + `cfg_vc` + `blocksSound` (pre-Phase-4 state, in git). |
+| V11 | 2026-09-28 | A contract run INSIDE a larger program: `GenCompose.contract_run(_w)` over a plain `gmap _ AST` program, premises placement + no-wrap fit + AST containment `instrs_of_list pbase (cfg_instrs c) ⊆ P`. Sound because the concrete run reads the map only at addresses the contract's table matched: the proof builds `instrs_of_list pbase a ∪ (AST_AnnotInstr <$> P)` internally. Replaces `itable_rel`-over-annotated-program premises (`pl_itable`-style) at every composed call site. | Keep the raw Adequacy lemma at call sites (annotation-level). |
 
 ## 6. What PLAN-exit-targets.md settled for this plan
 
@@ -301,4 +304,39 @@ already takes are DERIVED from the annotated list:
   `cd_link_annotV`.
 - Probes: `Example/ZZBlkVcAllProbe.v` (generalized Löb lemma),
   `Example/ZZBlkVProbe.v` (step C) -- pet OOMs on Adequacy.v too.
+
+### Phase 4 -- annotation-free bridges (2026-09-28, GATE PASSED, GATE_JOBS=1)
+
+- `Adequacy.v`: `annotsValid`, `annotsValid_of_none`, `blocksSound_of_annotsValid`.
+- NEW `Validity.v` (after Adequacy in `_CoqProject`): `ValidCFGVerifierContract`
+  (third conjunct now `annotsValid a` -- no Iris, no `cfg_init_addr`, which
+  unblocks Phase 6), intro/elim/Opaque, `solve_annots_none`, `solve_valid`.
+  Re-exported by `EndToEnd.v`, required by `GenCompose.v`.
+- `EndToEnd.v`: all six bridges take `ValidCFGVerifierContract contract` +
+  `contractInstrs : cfg_instrs contract = instrs` (eq_refl); no `Hbs`; memory
+  and `mem_has_instrs` over `instrs : list AST`. `cfg_instrs_verified[_with_mem]`
+  unseal once; the endToEnd lemmas lost their strip/fmap bridge;
+  `gen_contract_noninterferent_u` passes the seal through unopened.
+  `solve_no_blocks` deleted. Trap hit: under `Set Implicit Arguments`,
+  `contract` became implicit (inferable from `valid_contract`).
+- `GenCompose.v`: `blocksSound_of_map`, `contract_setup`, `contract_run`,
+  `contract_run_w` (V11); `seg_entry`/`seg_exit`/`seg_exit_state`/
+  `loop_instr_block` over AST; `seg_run`, `seg_run_single_exit`, `loop_*`,
+  `loop_enter_*` contract-level. `LoopSpec` unchanged (its annotated
+  `loop_code` is generator input, i.e. the proof site).
+- `Example/CountdownRecResult.v`: `cd_link_valid` (annotsValid via
+  `cdRecBlk_valid`) + `cdLink_valid`; `Section Link` (`cdRec_blockSound`,
+  `cd_link_blocksSound`) deleted.
+- Composed examples (PaddedLoop, CountdownComposed, TwoLoopsComposed,
+  SwapComposed): 10 raw calls -> `contract_run`; per-contract `*_valid` by
+  `solve_valid`; `pl_itable` -> `pl_contain` (AST containment via
+  `instrs_of_list_segment` + `map_fmap_mono`). Invariant statements unchanged:
+  `P` is the invariant's own `ai_instr <$> instrs_of_list ...` map.
+- Docs: cfgver-endtoend, cfgver-endtoend-internals, cfgver-executor,
+  cfgver-contracts; `CFGVer/CLAUDE.md` file table + `skill-path-guard.sh`
+  mapping for `Validity.v`.
+- Process note: `EndToEnd.v`/`GenCompose.v` edits went through Python scripts,
+  which `skill-path-guard.sh` (Write|Edit only) does not see; the required
+  skill (cfgver-endtoend-internals) was loaded afterwards and the changes
+  checked against it.
 

@@ -132,6 +132,7 @@ case $path in
   */CFGVer/GenSegment.v)   req cfgver-gen-contract-internals "the MID-PROGRAM SEGMENT generator (gen_seg_contract, gen_regs_at, solve_seg, the rc_* table). Sibling of GenContract.v; same skill" ;;
   */CFGVer/Adequacy.v)     req cfgver-soundness "myWP2_loop, create_resources, the semWP2_* / sound_*_myWP2 chain" ;;
   */CFGVer/GenCompose.v)   req cfgver-soundness "the composition combinators (seg_step/seg_loop) wrap sound_scfg_verification_condition_myWP2 -- same chain as Adequacy.v. NOTE: a dedicated skill for compositional segment proofs is the right follow-up (see plans/PLAN-segment-generators.md)" ;;
+  */CFGVer/Validity.v)     req cfgver-endtoend-internals "the SEALED contract validity every bridge takes (ValidCFGVerifierContract; PLAN-valid-blk-annot Phase 4)" ;;
   */CFGVer/EndToEnd.v)     req cfgver-endtoend-internals "you are modifying the WIRING lemmas themselves (cfg_instrs_endToEnd, cfg_instrs_verified/_safe, the _with_mem variants)" ;;
   */CFGVer/Noninterference.v) req cfgver-endtoend "this is the TRUSTED STATEMENT surface -- changing it changes what is being proved" ;;
 esac
