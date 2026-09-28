@@ -56,8 +56,9 @@ From iris.proofmode Require string_ident tactics.
 Import RiscvPmpProgram.
 
 (* GenContract.v does a non-Local `Set Implicit Arguments`, which persists into
-   every file that Requires it.  It is what makes `itable_faith_of_segment`'s
-   pre/seg/post positional-only-and-unnameable (ZZMladTail.v records that trap)
+   every file that Requires it.  It is what made the (since deleted)
+   `itable_faith_of_segment`'s pre/seg/post positional-only-and-unnameable
+   (ZZMladTail.v records that trap)
    and it silently turned `iota` implicit on a first draft of seg_run.  Turn it
    off HERE so this file's own signatures are predictable; `Local` keeps the
    change from leaking on to consumers, and implicit-argument marks are baked in
@@ -165,7 +166,7 @@ Proof.
   unfold seg_fits_memory in H. lia.
 Qed.
 
-(* the form instr_table_ok_at wants.  Hsz is `reflexivity`-adjacent: bound is
+(* the no-wrap form itable_faith_of_list wants.  Hsz is `reflexivity`-adjacent: bound is
    chosen >= the program's byte length by construction. *)
 Lemma seg_fits_rep (ia bound : N) (L : list AnnotInstr)
   (Hsz : (4 * N.of_nat (length L) <= bound)%N) (H : seg_fits_memory ia bound) :
@@ -266,63 +267,6 @@ Ltac bv_bound := pose proof exp2_xlenbits; lia.
    call site never has to think about which spelling it is holding. *)
 
 (* ========================================================================== *)
-(* 2b. THE SEGMENT'S DECIDABLE SIDE CONDITIONS, AS ONE BOOLEAN                 *)
-(* ========================================================================== *)
-
-(* Every compositional call site owes three facts about the SLICING, and all
-   three are closed and decidable -- they mention only the numbers the caller
-   already handed to gen_seg_contract, never the base address or the
-   valuation.  Bundling them into one boolean is what lets the two
-   faithfulness obligations be discharged by `eq_refl` INSIDE a seg_run_single_exit
-   application, instead of by four named lemmas per segment (measured on
-   segment G: 45 lines of near-byte-identical ritual for two contracts).
-
-   `Hoff` is the head = 4 * skip invariant gen_seg_contract documents but
-   cannot enforce in its type; `Hskip`/`Hsz` are the sub-table's fit. *)
-Definition seg_placement_ok (prog : list AnnotInstr) (skip : nat)
-    (head bound : N) (target : N) : bool :=
-  andb (andb (N.eqb (N.mul 4 (N.of_nat skip)) head)
-             (Nat.leb skip (length prog)))
-       (andb (N.leb (N.mul 4 (N.of_nat (length prog))) bound)
-             (N.leb head target)).
-
-Lemma seg_placement_off (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
-  @eq N (N.mul 4 (N.of_nat skip)) head.
-Proof.
-  unfold seg_placement_ok in H.
-  apply Bool.andb_true_iff in H as [H _]. apply Bool.andb_true_iff in H as [H _].
-  now apply N.eqb_eq.
-Qed.
-
-Lemma seg_placement_skip (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
-  Nat.le skip (length prog).
-Proof.
-  unfold seg_placement_ok in H.
-  apply Bool.andb_true_iff in H as [H _]. apply Bool.andb_true_iff in H as [_ H].
-  now apply Nat.leb_le.
-Qed.
-
-Lemma seg_placement_size (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
-  (N.mul 4 (N.of_nat (length prog)) <= bound)%N.
-Proof.
-  unfold seg_placement_ok in H.
-  apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [H _].
-  now apply N.leb_le.
-Qed.
-
-Lemma seg_placement_target (prog : list AnnotInstr) (skip : nat) (head bound : N)
-  (target : N) (H : seg_placement_ok prog skip head bound target = true) :
-  (head <= target)%N.
-Proof.
-  unfold seg_placement_ok in H.
-  apply Bool.andb_true_iff in H as [_ H]. apply Bool.andb_true_iff in H as [_ H].
-  now apply N.leb_le.
-Qed.
-
-(* ========================================================================== *)
 (* 3. THE SEGMENT CONTRACT GENERATOR                                           *)
 (* ========================================================================== *)
 
@@ -340,9 +284,8 @@ Qed.
    ITSELF.  It used to take `head prog skip take` -- a byte offset into, the
    list of, and a slice of the ENCLOSING program -- so decisions of the bigger
    program leaked into every segment's contract and VC.  Where a segment sits
-   in a program is now a COMPOSITION fact (GenCompose.instr_table_ok_at /
-   seg_instr_table_ok keep `skip`/`head` as their own parameters), never a
-   field of the segment.  The code bound is derived, `4 * |code|`: every call
+   in a program is now a COMPOSITION fact (GenCompose.contract_run: placement
+   plus AST containment), never a field of the segment.  The code bound is derived, `4 * |code|`: every call
    site in the tree already passed exactly that (as loop_code_extent had found
    for the loops). *)
 (* The address-space bound on ONE base, as a precondition conjunct.  Factored
@@ -359,7 +302,6 @@ Definition gen_base_bound {Σ : LCtx} (base : Term Σ ty_xlenbits) (bound : N)
 Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia : N)                      (* the SEGMENT's own load address *)
     (* The segment's own code, as the SPEC (`list AST`): what sits in memory.
        The table is built from the ANNOTATED list `cfg_vc` takes as an
        argument; the two are tied by `strip a = cfg_instrs c` at the
@@ -371,7 +313,7 @@ Definition gen_seg_contract {Σ : LCtx}
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  @MkCFGVerifierContract Σ ia
+  @MkCFGVerifierContract Σ
     base
     (exit_of_off base target)
     ( asn_pc_eq base_a
@@ -503,7 +445,8 @@ Definition gen_loop_bounds {Σ : LCtx}
 (*  six fields.                                                               *)
 (*                                                                           *)
 (*  NOTHING HERE IS TRUSTED.  Every field this computes is re-checked         *)
-(*  downstream -- the instruction table by seg_placement_ok, the extent and   *)
+(*  downstream -- the instruction table by the call site's containment, the  *)
+(*  extent and                                                                *)
 (*  both guards by the VC itself.  A wrong derivation therefore cannot make a *)
 (*  false theorem; it can only fail to prove a true one.  That is what buys   *)
 (*  the convenience below: `loop_shape` is TOTAL, answering with an empty     *)
@@ -987,7 +930,7 @@ Definition gen_loop_contract_post {Σ : LCtx} (ls : LoopSpec Σ)
        moves consume-scan positions, so this was measured, not assumed --
        ZZSpikeA3.v verifies both of loop D's contracts, the shape with two
        walking pointers, two cells and three base bounds;
-     - cfg_placement is the bare `loop_base` and cfg_init_addr `loop_head_addr`
+     - cfg_placement is the bare `loop_base`
        (since 2026-09-25: gen_seg_contract no longer adds a head offset, so
        the `+ 0` the composition lemmas used to strip is gone);
      - cfg_exit is `exit_of_off (loop_base ls) target`, the target relative
@@ -999,7 +942,7 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     : @CFGVerifierContract Σ :=
   (* `strip`: gen_seg_contract wants the SPEC side, while LoopSpec carries the
      annotated code the VC runs on. *)
-  gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls)
+  gen_seg_contract (loop_base ls) (loop_base_pre ls)
     (strip (loop_code ls))
     target (loop_fuel ls) (loop_regs ls)
     (gen_loop_contract_pre ls g) post.
@@ -1012,7 +955,7 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
    since A3, and they are what let `loop_runs` discharge `itable_rel` and
    `etable_rel` inline -- a loop's caller never sees either obligation.  The
    SEGMENT generator had no such projections, so a hand-cut segment had to
-   re-spell `gen_seg_contract`'s internals to reach `seg_instr_table_ok` /
+   re-spell `gen_seg_contract`'s internals to reach the (since deleted) `seg_instr_table_ok` /
    `seg_exit_table_ok_at`.  Same contract shape, two different ways to use it.
 
    WHAT A1 WAS SUPPOSED TO BE.  The plan scoped A1 as "cfg_exits and
@@ -1024,7 +967,7 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
    the precondition, and only the top-level bridge concretises it, at the ι it
    chooses itself.  So cfg_exitCond, etable_rel and the agreement obligation
    are all gone, and the PaddedLoop objection (cfg_init_addr ≠ placement) no
-   longer arises, because nothing is derived from cfg_init_addr.
+   longer arises: that field is gone too (PLAN-valid-blk-annot §8.2).
 
    So the real win is not removing a field; it is that the obligation is
    already DISCHARGED ONCE for everything the generators build, and the
@@ -1033,19 +976,16 @@ Section GenSegProjections.
   Context {Σ : LCtx}
     (base : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia : N) (code : list AST)
+    (code : list AST)
     (target : N) (fl : nat) (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)).
 
   Let c : @CFGVerifierContract Σ :=
-    gen_seg_contract base base_a ia code target fl regs extra_pre post.
+    gen_seg_contract base base_a code target fl regs extra_pre post.
 
-  (* All four are eq_refl since the contract became self-contained: there is
+  (* All three are eq_refl since the contract became self-contained: there is
      no head offset left to add to the placement or subtract from a target. *)
-  Lemma gen_seg_init_addr : @eq N (cfg_init_addr c) ia.
-  Proof. reflexivity. Qed.
-
   Lemma gen_seg_place : cfg_placement c = base.
   Proof. reflexivity. Qed.
 

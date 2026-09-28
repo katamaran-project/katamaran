@@ -106,8 +106,8 @@ Definition modpow_win_reg_specs : list reg_spec :=
 
 (* Base-parametric contract (Σ = ["p"]): arbitrary 4-aligned load address.
    Fuel 12 comfortably exceeds the 5 instruction steps plus the exit step. *)
-Definition modpow_win_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_param ia modpow_win_reg_specs modpow_win_instrs 12.
+Definition modpow_win_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+  gen_contract_param modpow_win_reg_specs modpow_win_instrs 12.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
    The end theorem states noninterferent_strong over `modpow_win_instrs` while the
@@ -119,6 +119,6 @@ Definition modpow_win_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" ::
 Lemma strip_id_modpow_win_instrs : strip modpow_win_instrs = modpow_win_instrs.
 Proof. reflexivity. Qed.
 
-Lemma valid_modpow_win_cfg_contract_param (ia : N) :
-  cfg_vc (modpow_win_cfg_contract_param ia) (cfg_instrs (modpow_win_cfg_contract_param ia)).
+Lemma valid_modpow_win_cfg_contract_param :
+  cfg_vc modpow_win_cfg_contract_param (cfg_instrs modpow_win_cfg_contract_param).
 Proof. solve_param_vc. Qed.

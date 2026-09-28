@@ -776,12 +776,55 @@ back edge fires the block, consuming the invariant, and the solver does the
 framing. The only meta-logic is the Löb induction inside
 **`Adequacy.blockSound_of_vc`** (quoted at a contract by
 `GenCompose.blockSound_of_contract`). Its block premises are split by WHEN they
-are needed: `Hbs0 : ⊢ blocksSoundAt false …` (the `ai_block`s, which may fire at
-step 0) and `Hbs : □ blockSound words v b ⊢ blocksSound …` (all blocks, may
-assume the block itself). The executor induction `sound_exec_cfg_addr_myWP2`
-carries `blocksSoundAt stepped ∗ ▷ blocksSound`; each executed instruction
-strips the later. `blocksSound` (= `blocksSoundAt true`, both kinds) is still
-the premise every external bridge takes. Partial correctness only.
+are needed: `Hbs0 : ∀ v, ⊢ blocksSoundAt false …` (the `ai_block`s, which may
+fire at step 0) and `Hbs : ∀ v, □ (∀ v', blockSound words v' b) ⊢ blocksSound …`
+(all blocks, may assume the block itself AT EVERY ADDRESS). Since 2026-09-25
+(PLAN-valid-blk-annot V8) the Löb induction ranges over the entry address and
+the lemma concludes `∀ v, blockSound words v b` — exactly `Adequacy.blkValid`'s
+body — so a re-entry may fire at any address, and a block's faithfulness must
+hold at every address (symbolic placement). The executor induction
+`sound_exec_cfg_addr_myWP2` carries `blocksSoundAt stepped ∗ ▷ blocksSound`;
+each executed instruction strips the later. `blocksSound` (= `blocksSoundAt
+true`, both kinds) is now an INTERNAL premise only: since PLAN-valid-blk-annot
+Phase 4 no bridge takes it — they take the sealed `ValidCFGVerifierContract`
+(`Validity.v`) and derive it, via `blocksSound_of_annotsValid` (EndToEnd) or
+`GenCompose.contract_setup` (a contract run inside a larger program). Partial
+correctness only.
+
+**Annotations that carry their validity (2026-09-25, Phases 2–3).**
+`Verifier.AnnotInstrV Valid` is `AnnotInstr` with `aiv_block : option
+(BlkAnnotV Valid)` (a block PLUS a proof `vb_ok : Valid b`) and `aiv_loop :
+bool` ("re-enter the enclosing contract"); `eraseV c` maps it to
+`AnnotInstr` (`aiv_loop` becomes `Some (selfBlk c)`), so the executor and
+`cfg_vc` are untouched: the VC is `cfg_vc c (map (eraseV c) LV)`. `Valid` is
+instantiated on the heavy side with `Adequacy.blkValid b := ∀ Σ GS words v, ⊢
+blockSound words v b` — NO fit premise: a generated segment's precondition
+carries `gen_base_bound`, which `GenCompose.seg_pre_bound` reads off, so
+`blockFaithful_of_seg` takes `strip ab = code` instead of a no-wrap bound.
+`Adequacy.blocksSoundAt_false_of_V` / `blocksSound_of_V` derive the executor's
+block premises from such a list (list membership only, no key inversion, any
+position); `GenCompose.blkValid_of_contract` / `blkValid_of_seg` turn a verified
+contract over a V-list into `blkValid (selfBlk c)`, i.e. an annotation-ready
+proof. V-lists mention `blkValid`, so they live on the HEAVY side (`*Result.v`),
+never in a light `Example/*.v`.
+
+**The VC checks that a block's code IS the program's code (2026-09-25,
+`plans/PLAN-valid-blk-annot.md` Phase 1).** At the firing site the symbolic
+step is `sexec_block_chk tbl b apc := if blk_code_in tbl apc (cfg_instrs c)
+then sexec_block b apc else error`. `blk_code_in` looks up each block
+instruction at `apc`, `apc + 4`, … in the table (`lookup_instr`, so modulo
+`peval` — verified to match `off + p` keys at a symbolic base, offset 0
+included) and compares `ai_instr` by `eq_dec`. No variables, one lookup per
+block instruction per firing. The concrete mirror `cexec_block_chk` ASSERTS
+the pointwise `cblk_code_in instrs v l` before `cexec_block`; Adequacy turns it
+into `blk_span v b ⊆ ai_instr <$> instrs` with `cblk_code_in_sub` (plain
+induction, no key-freshness). That fact used to be a conjunct of
+`blocksSoundAt`, discharged per program by `blk_span_sub` (deleted) and only
+for a block at the program's HEAD; a mid-program block now needs nothing.
+Kept as a wrapper around `sexec_block` rather than an `if` around the whole
+firing-site chain so `rexec_cfg_addr` pairs it with one lemma
+(`rexec_block_chk`). Chosen over a static Coq-level prefix check on the
+annotated list because the VC automates it (Emiel, 2026-09-25).
 
 **Where a block resumes.** `BlkAnnot` is just `{| blk_ctx; blk_contract |}`
 (no offset field since `plans/PLAN-exit-targets.md`): a block resumes at its
@@ -789,16 +832,17 @@ contract's one exit — symbolically `subst (cfg_exit c) evars` (`sexec_block`),
 concretely `inst (cfg_exit c) ι` (`cexec_block`); `Adequacy.v` names it
 `blk_exit b ι`. `blockSound` concludes `pc ↦ᵣ blk_exit b ι` with `"an" ↦
 blk_exit b ι`; `blockFaithful`'s exit half is `etable_rel (blk_exit b ι)
-(cfg_exit c) ι`; `blockSound_of_vc` has no exit premise (and takes `v`
-explicitly).
+(cfg_exit c) ι`; `blockSound_of_vc` has no exit premise.
 
 Worked example: `Example/CountdownRec.v` (the loop `cdRec` with an `ai_loop`
 head + negative controls, then `cdLink`: the outer program STARTING at the
 loop with an `ai_block` head, and an executed tail) →
-`Example/CountdownRecResult.v` (`cdRec_blockSound` via
-`blockSound_of_contract`, `cd_link_blocksSound` via `blocksSound_of_head`, and
+`Example/CountdownRecResult.v` (`cd_rec_annotV` and `cdRecBlk_valid` — one
+`exact blkValid_of_seg …` reusing the unchanged `valid_cd_rec` —,
+`cd_link_valid` — `annotsValid` from `cdRecBlk_valid` — and `cdLink_valid`, and
 the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
-load address: the contracts, the block and the annotated code all take `ia`).
+load address: the contracts, the block and the annotated code are closed
+terms over the code-base variable `q`, with no load-address parameter).
 
 ## `scfg_verification_condition`
 

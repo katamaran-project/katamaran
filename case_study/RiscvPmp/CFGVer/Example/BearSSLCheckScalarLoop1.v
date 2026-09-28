@@ -116,8 +116,8 @@ Definition loop1_byte_specs_rel : list mem_spec_rel :=
    width-1 access bound needs unsigned p + 48 <= lenAddr.  Fuel 136 = 4*32+8
    (one demonic step per instruction per of the 32 trips, plus slack for the
    fall-through exit step) -- matches ZZByteLoop1Common.v's formula at n=32. *)
-Definition loop1_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_rel_bytes ia loop1_reg_specs_rel [] loop1_byte_specs_rel
+Definition loop1_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+  gen_contract_rel_bytes loop1_reg_specs_rel [] loop1_byte_specs_rel
     loop1_instrs 48 136.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
@@ -130,6 +130,6 @@ Definition loop1_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_x
 Lemma strip_id_loop1_instrs : strip loop1_instrs = loop1_instrs.
 Proof. reflexivity. Qed.
 
-Lemma valid_loop1_cfg_contract_param (ia : N) :
-  cfg_vc (loop1_cfg_contract_param ia) (cfg_instrs (loop1_cfg_contract_param ia)).
+Lemma valid_loop1_cfg_contract_param :
+  cfg_vc loop1_cfg_contract_param (cfg_instrs loop1_cfg_contract_param).
 Proof. solve_param_vc. Qed.

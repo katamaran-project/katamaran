@@ -59,11 +59,11 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
            run after `solve_vc` — solve_vc itself stays a general VC solver, so
            every parametric VC in every example is just
            `intros; vm_compute; solve_vc; solve_symbase_fetch`. *)
-    Definition set_X2_to_42_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia [(X2, false, None)]
+    Definition set_X2_to_42_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param [(X2, false, None)]
         [ADDI X2 X0 (bv.of_N 42)] 3.
 
-    Lemma valid_set_X2_to_42_param (ia : N) :
-      cfg_vc (set_X2_to_42_param ia) (cfg_instrs (set_X2_to_42_param ia)).
+    Lemma valid_set_X2_to_42_param :
+      cfg_vc set_X2_to_42_param (cfg_instrs set_X2_to_42_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 proof-of-concept ===== *)

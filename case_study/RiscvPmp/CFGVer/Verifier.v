@@ -112,23 +112,16 @@ Inductive Annot :=
    block's VC depend on the whole program, which foreclosed NESTING: see the
    retraction in PLAN-contract-ast §2c.
 
-   WHY NO PROOF FIELD, given that the natural design is for the annotation to
-   carry its own justification.  A validity proof's TYPE is the verification
-   condition, and the VC runs the symbolic executor, whose instruction table is
-   AnnotInstr-valued (SInstrTable, below) -- so the type mentions AnnotInstr,
-   hence `option BlkAnnot`, hence itself.  The block's CODE is plain instructions;
-   it is the VC OVER that code that is annotated, and that is what closes the
-   loop.  Breaking it needs the executor parameterised over its payload, and
-   the payload parameter is not inferable from a signature (`SInstrTable
-   (wlctx Σ)` gives unification nothing to solve it against), so it would have
-   to be written out at ~220 sites across ten files including
-   CFGVerifierContract -- the trusted statement surface.  Measured, not
-   guessed.
-
-   The justification therefore lives BESIDE the program, as `blocks_valid`
-   (Contracts.v), read off exactly these fields.  The guarantee is the same --
-   an unverified block cannot reach a theorem -- the difference is only that
-   you are stopped when you USE a block rather than when you BUILD one. *)
+   NO PROOF FIELD HERE: validity rides in AnnotInstrV (below,
+   PLAN-valid-blk-annot).  A validity proof's TYPE is the verification
+   condition, and the VC runs the symbolic executor over an AnnotInstr-valued
+   table -- so a proof field in BlkAnnot would make the type mention itself.
+   Breaking that by parameterising the executor over its payload was measured
+   at ~220 sites across ten files, including CFGVerifierContract -- the trusted
+   statement surface.  Instead `AnnotInstrV Valid` pairs each block with a
+   proof `Valid b` and ERASES to AnnotInstr (eraseV), so the executor and
+   cfg_vc never see it; the heavy side instantiates Valid with
+   Adequacy.blkValid and Validity.ValidCFGVerifierContract seals the result. *)
 (* THE CONTRACT RECORD.  It lives HERE, above AnnotInstr, rather than in
    Contracts.v, because `ai_block` carries one (PLAN-contract-ast §2.4) and
    Contracts.v requires this file.  Only the DATA is here; the verification
@@ -137,8 +130,7 @@ Inductive Annot :=
    by running the executor. *)
 Record CFGVerifierContract {Σ} :=
   MkCFGVerifierContract
-  { cfg_init_addr     : N
-  ; cfg_placement     : Term Σ ty_xlenbits
+  { cfg_placement     : Term Σ ty_xlenbits
   (* THE EXIT (PLAN-exit-targets.md, 2026-09-25): ONE address term, over the
      same context as the placement.  A run of this contract stops exactly when
      the pc IS this address.  It replaced both `cfg_exits` (a list of terms)
@@ -158,13 +150,13 @@ Record CFGVerifierContract {Σ} :=
   }.
 
 Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-  (f : N -> Term Σ ty_xlenbits -> Term Σ ty_xlenbits ->
+  (f : Term Σ ty_xlenbits -> Term Σ ty_xlenbits ->
        Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST -> nat ->
        Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
   match c with
-  | {| cfg_init_addr := ia; cfg_placement := p; cfg_exit := ex;
+  | {| cfg_placement := p; cfg_exit := ex;
        cfg_precondition := pre; cfg_instrs := i; cfg_fuel := fl;
-       cfg_postcondition := post |} => f ia p ex pre i fl post
+       cfg_postcondition := post |} => f p ex pre i fl post
   end.
 
 (* A BLOCK ANNOTATION: a contract, plus where execution resumes.
@@ -306,6 +298,60 @@ Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
    `reflexivity`, so that it also holds for a SYMBOLIC `l`. *)
 Lemma strip_of_AST (l : list AST) : strip (list_AST_AnnotInstr l) = l.
 Proof. induction l as [|x l IH]; cbn; [reflexivity | now f_equal]. Qed.
+
+(* ---- ANNOTATIONS THAT CARRY THEIR OWN VALIDITY (PLAN-valid-blk-annot.md) --
+   An `ai_block` annotation carries a proof that its block is valid (V1), in
+   a SEPARATE type that erases to AnnotInstr (V2), so the executor, cfg_vc and
+   every existing example are untouched: the VC is `cfg_vc c (map (eraseV c)
+   LV)`.  `Valid` is a PARAMETER so this file stays Iris-free (layering
+   invariant 1); the heavy side instantiates it with Adequacy.blkValid.
+
+   Re-entry needs no proof field (V1): `aiv_loop : bool` means "re-enter the
+   contract being verified", so it can only ever name `selfBlk c` (V5) and is
+   justified by the Löb induction in Adequacy.blockSound_of_vc, which since
+   decision (c) ranges over every entry address -- so aiv_loop may sit on any
+   instruction. *)
+Record BlkAnnotV (Valid : BlkAnnot -> Prop) := MkBlkAnnotV
+  { vb_blk : BlkAnnot ; vb_ok : Valid vb_blk }.
+Arguments MkBlkAnnotV {Valid} vb_blk vb_ok.
+Arguments vb_blk {Valid} _.
+Arguments vb_ok {Valid} _.
+
+Record AnnotInstrV (Valid : BlkAnnot -> Prop) := MkAnnotInstrV
+  { aiv_ghost_before : list Annot
+  ; aiv_instr        : AST
+  ; aiv_ghost_after  : list Annot
+  ; aiv_block        : option (BlkAnnotV Valid)
+  ; aiv_loop         : bool }.
+Arguments MkAnnotInstrV {Valid} _ _ _ _ _.
+Arguments aiv_ghost_before {Valid} _.
+Arguments aiv_instr {Valid} _.
+Arguments aiv_ghost_after {Valid} _.
+Arguments aiv_block {Valid} _.
+Arguments aiv_loop {Valid} _.
+
+(* The contract being verified, as a block: what an aiv_loop re-enters. *)
+Definition selfBlk {Σ} (c : @CFGVerifierContract Σ) : BlkAnnot :=
+  {| blk_ctx := Σ ; blk_contract := c |}.
+
+(* Forget the proofs.  `c` is the ENCLOSING contract, needed only to resolve
+   aiv_loop to selfBlk c. *)
+Definition eraseV {Valid : BlkAnnot -> Prop} {Σ} (c : @CFGVerifierContract Σ)
+    (a : AnnotInstrV Valid) : AnnotInstr :=
+  {| ai_ghost_before := aiv_ghost_before a
+   ; ai_instr        := aiv_instr a
+   ; ai_ghost_after  := aiv_ghost_after a
+   ; ai_block        := option_map vb_blk (aiv_block a)
+   ; ai_loop         := if aiv_loop a then Some (selfBlk c) else None |}.
+
+(* A plain instruction: no ghosts, no block, no re-entry.  eraseV takes it to
+   AST_AnnotInstr (by reflexivity). *)
+Definition AST_AnnotInstrV {Valid : BlkAnnot -> Prop} (i : AST) : AnnotInstrV Valid :=
+  MkAnnotInstrV nil i nil None false.
+
+Lemma strip_eraseV {Valid Σ} (c : @CFGVerifierContract Σ) (l : list (AnnotInstrV Valid)) :
+  strip (List.map (eraseV c) l) = List.map aiv_instr l.
+Proof. unfold strip. rewrite List.map_map. reflexivity. Qed.
 
 (* `strip` commutes with slicing, so a SEGMENT of the annotated program strips
    to the same segment of the AST program.  This is what lets the soundness
@@ -812,6 +858,29 @@ Section CFGVerificationDerived.
         (apc : STerm ty_xlenbits w) : bool :=
       Term_eqb (peval apc) (peval exits).
 
+    (* A BLOCK'S CODE IS REALLY IN THE PROGRAM (PLAN-valid-blk-annot.md §1c):
+       every instruction of the block's contract sits at its address, from
+       `apc` on in steps of 4, in this table.  Checked at the firing site, so
+       the soundness proof reads containment off the concrete run instead of
+       taking it as a per-program premise (it replaced blocksSoundAt's
+       containment conjunct and Adequacy.blk_span_sub).  The address steps as
+       `apc + 4`, the recursion instrs_of_list uses, so the concrete side is
+       `bv.add v 4` definitionally; peval reassociates it against the
+       `off + base` keys table_of_list builds.  No variables are allocated. *)
+    Fixpoint blk_code_in {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
+        (l : list AST) : bool :=
+      match l with
+      | nil     => true
+      | i :: l' =>
+          match lookup_instr tbl apc with
+          | Some (_, ai) =>
+              if eq_dec (ai_instr ai) i
+              then blk_code_in tbl (term_bvadd apc (term_val ty_xlenbits (bv.of_N 4))) l'
+              else false
+          | None => false
+          end
+      end.
+
     (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
     (* peval; NOT part of the soundness chain). *)
     Section TableLookupSelfTests.
@@ -844,6 +913,15 @@ Section CFGVerificationDerived.
         Term_eqb (peval (term_val ty_xlenbits (bv.of_N 260) : Term (wctx w1) ty_xlenbits))
           (peval (term_bvsub (term_bvadd (term_val ty_xlenbits (bv.of_N 8)) (term_val ty_xlenbits (bv.of_N 256)))  (term_val ty_xlenbits (bv.of_N 4))))
         = true.
+      Proof. vm_compute. reflexivity. Qed.
+
+      (* blk_code_in: the code at p is [A; B]; a wrong instruction or one past
+         the table's end fails. *)
+      Example blk_code_in_hit : blk_code_in tbl1 p1 [instrA; instrB] = true.
+      Proof. vm_compute. reflexivity. Qed.
+      Example blk_code_in_miss :
+        (blk_code_in tbl1 p1 [instrA; instrA], blk_code_in tbl1 p1 [instrA; instrB; instrA])
+        = (false, false).
       Proof. vm_compute. reflexivity. Qed.
     End TableLookupSelfTests.
 
@@ -1209,6 +1287,22 @@ Section CFGVerificationDerived.
                       evars2.["a"∷ty_xlenbits ↦ apc2].["an"∷ty_xlenbits ↦ aex] ;;
         pure (persist__term aex θ3).
 
+    (* The block step behind its containment check: the block's code must BE
+       this program's code at apc (blk_code_in, PLAN-valid-blk-annot.md §1c),
+       since a block only summarises code that is actually there.  Kept a
+       wrapper around sexec_block, rather than an `if` around the whole
+       firing-site bind chain, so the step still has the shape
+       `bind <block step> k` and rexec_cfg_addr pairs it with ONE lemma
+       (rexec_block_chk).  A failed check is `error` before the bind, so the
+       VC is the same term either way. *)
+    Definition sexec_block_chk {w} (tbl : SInstrTableW w) (b : BlkAnnot)
+        (apc : STerm ty_xlenbits w) : SHeapSpec (STerm ty_xlenbits) w :=
+      if blk_code_in tbl apc (cfg_instrs (blk_contract b))
+      then sexec_block b apc
+      else error (fun _ => amsg.mk {| debug_string_pathcondition := wco w;
+                                      debug_string_message :=
+                                        "sexec_cfg_addr: block code not in program" |}).
+
     (* THE POST-DROP STEP BODY, HOISTED OUT OF sexec_cfg_addr.
        It is a plain let-hoist — the same chain, in the same order, with the
        persist layers split at the drop instead of accumulated across it — and it
@@ -1356,7 +1450,7 @@ Section CFGVerificationDerived.
                     it earns no later (see ai_loop). *)
                  match ai_fire stepped ai with
                  | Some b =>
-                     ⟨ θb ⟩ apc' <- sexec_block b apc ;;
+                     ⟨ θb ⟩ apc' <- sexec_block_chk tbl b apc ;;
                      ⟨ θn ⟩ np'  <- demonic (Some "np") _ ;;
                      sexec_cfg_addr n' false stepped
                        (persist (A := Sub Σ0) trans (θb ∘ θn))
@@ -1514,6 +1608,14 @@ Section CFGVerificationDerived.
       apply cext_pure.
     Qed.
 
+    Lemma cext_sexec_block_chk {w : World} (tbl : SInstrTableW w) (b : BlkAnnot)
+        (apc : Term (wctx w) ty_xlenbits) :
+      CExt (sexec_block_chk tbl b apc).
+    Proof.
+      unfold sexec_block_chk.
+      destruct (blk_code_in tbl apc _); [apply cext_sexec_block|apply cext_error].
+    Qed.
+
     Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
       forall (first stepped : bool)
         {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
@@ -1526,7 +1628,7 @@ Section CFGVerificationDerived.
       - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
         destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
         destruct (ai_fire stepped ai) as [b|].
-        { apply cext_bind; [apply cext_sexec_block|]. intros w1 th1 apc'.
+        { apply cext_bind; [apply cext_sexec_block_chk|]. intros w1 th1 apc'.
           apply cext_bind; [apply cext_demonic|]. intros w2 th2 np'.
           apply IH. }
         apply cext_bind; [apply cext_chunk_gc|]. intros w0 th0 _.

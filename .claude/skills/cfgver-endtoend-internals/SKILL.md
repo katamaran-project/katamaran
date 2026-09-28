@@ -19,7 +19,7 @@ them (as was done for the memory variant), not when calling them.
 ## Register-path proof body (`cfg_instrs_endToEnd`)
 
 ```coq
-iApply (cfg_instrs_safe γ1 γ2 contract).
+iApply (cfg_instrs_safe γ1 γ2 valid_contract).   (* NOT `contract`: see below *)
 all: eauto.
 iIntros "(Hregs & Hpriv & #Hinv')".
 iApply ImplPre.          (* NOT iApply (ImplPre Σ') — Σ is implicit, inferred *)
@@ -27,6 +27,12 @@ iFrame "∗ #".
 by iFrame "∗ #".         (* second iFrame closes the residual after the first *)
 ```
 
+- **`contract` is IMPLICIT since 2026-09-28** (PLAN-valid-blk-annot Phase 4):
+  under `Set Implicit Arguments` it is inferable from
+  `valid_contract : ValidCFGVerifierContract contract`, so passing `contract`
+  positionally is a type error ("`contract` has type `CFGVerifierContract` while
+  it is expected to have type `ValidCFGVerifierContract ?contract`"). Pass the
+  validity instead; same for `cfg_instrs_safe_with_mem … μ2 valid_contract`.
 - `iApply (ImplPre Σ')` fails with "expected gFunctors": `Σ` is explicit in
   `forall`-with-typeclass position; apply with no argument and let the ambient
   Iris context infer it.
@@ -37,7 +43,7 @@ by iFrame "∗ #".         (* second iFrame closes the residual after the first 
 ## Memory-path proof body (`cfg_instrs_endToEnd_with_memory`)
 
 ```coq
-iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 contract).
+iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 valid_contract).
 all: eauto.
 iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
 iApply ImplPre.
@@ -142,10 +148,16 @@ unified pair, rather than where their predecessors sat.
 ## What the wiring proofs carry and materialize
 
 The chain threads the gmap instruction ownership
-`ptsto_instrs (instrs_of_list (bv.of_N init_addr) instrs')`, materialized from raw
-memory by `instrsMemory` (code only) / `instrsAndDataMemory` (code + data words) /
-`intro_ptsto_instrs` — internally via `big_sepM_insert` with side condition
-`instrs_of_list_fresh`.
+`ptsto_instrs (instrs_of_list (bv.of_N init_addr) instrs)` over the plain
+`instrs : list AST` (= `cfg_instrs contract`, via the `contractInstrs` premise),
+materialized from raw memory by `instrsMemory` (code only) / `instrsAndDataMemory`
+(code + data words) / `intro_ptsto_instrs` — internally via `big_sepM_insert` with
+side condition `instrs_of_list_fresh`. Since PLAN-valid-blk-annot Phase 4 there is
+no `strip`/`fmap` bridge in `cfg_instrs_endToEnd*` any more: that projection
+happens ONCE, where `cfg_instrs_verified[_with_mem]` unseal
+`ValidCFGVerifierContract` at the top of their proofs (the annotated `instrs'`
+exists only from there to the `Qed`; its `blocksSound` comes from
+`blocksSound_of_annotsValid`).
 
 ## The CLASSED memory `ImplPre` (`gen_implpre_mem_class`)
 

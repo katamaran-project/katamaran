@@ -75,7 +75,7 @@ Proof.
       try (inversion H; subst; cbn; f_equal; lia); try discriminate.
   - cbn. lia.
   - exact Hb.
-  - solve_valid (valid_cmovznz4_cfg_contract_param init_addr).
+  - solve_valid valid_cmovznz4_cfg_contract_param.
 Qed.
 
 (* The two concrete cmovznz4 results are now corollaries of the universal-base

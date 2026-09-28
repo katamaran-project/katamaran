@@ -24,18 +24,22 @@ What a contract *is* — independent of the `gen_contract` generator
 ```coq
 Record CFGVerifierContract {Σ} :=
   MkCFGVerifierContract
-  { cfg_init_addr     : N
-  ; cfg_placement     : Term Σ ty_xlenbits
+  { cfg_placement     : Term Σ ty_xlenbits
   ; cfg_exit          : Term Σ ty_xlenbits
   ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
-  ; cfg_instrs        : list AnnotInstr
+  ; cfg_instrs        : list AST
   ; cfg_fuel          : nat
   ; cfg_postcondition : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)
   }.
 ```
 
-`cfg_instrs` used to be `list AST`; it is `list AnnotInstr` since the AnnotInstr
-migration (PLAN-annotinstr.md Phase 1). `AnnotInstr` is a PRODUCT record —
+`cfg_instrs` is a plain `list AST` (again) since 2026-09-22
+(`plans/PLAN-contract-ast.md` Phase 1, `da4f5b4e`): annotations are TOOL INPUT,
+passed to the verification as a separate argument — the VC is `cfg_vc c a` with
+`a : list AnnotInstr` whose `strip` must equal `cfg_instrs c` — not carried in
+the specification. (Between the AnnotInstr migration and that date the field
+WAS `list AnnotInstr`; this is also what lets `ai_block` carry a real contract
+without a circularity.) `AnnotInstr` is a PRODUCT record —
 `MkAnnotInstr { ai_ghost_before : list Annot ; ai_instr : AST ; ai_ghost_after :
 list Annot }` — NOT the sum `AnnotAST | AnnotGhost` an earlier version of this
 skill described; that sum was tried and reverted at `13eb91e0`, because it can
@@ -43,9 +47,8 @@ represent a ghost with no instruction to attach to. `Annot` is `AnnotDebugBreak`
 (a transparent per-position heap/pathcondition dump) or `AnnotLemmaInvocation`
 (a real `call_lemma`, since Phase 4 — see `cfgver-executor`).
 
-`Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so every existing
-hand-written or `gen_contract`-built `cfg_instrs := <prog>_instrs` (a plain
-`list AST`) still typechecks unedited — see **cfgver-executor** for the coercion
+`Verifier.v` declares a non-Local `AST -> AnnotInstr` coercion, so a plain
+`list AST` can be passed where the annotated list `a` is expected — see **cfgver-executor** for the coercion
 mechanics and `strip : list AnnotInstr -> list AST` (the trusted-layer projection
 every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 
@@ -55,9 +58,9 @@ every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 | `cfg_placement` | where the code sits, as a **term**: `term_val … (bv.of_N ia)` concrete, `term_var "p"` parametric |
 | `cfg_exit` | the ONE exit address, as a **term** (usually `exit_of_off p off`, `Tables.v`). A run stops exactly when pc = exit (except at the entry step). Replaced `cfg_exits`/`cfg_exitCond` on 2026-09-25 (`plans/PLAN-exit-targets.md`) |
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
-| `cfg_instrs` | the program, a `list AnnotInstr` placed at `cfg_placement` (coerces transparently from a plain `list AST` — see above) |
+| `cfg_instrs` | the program, a `list AST` placed at `cfg_placement`; the annotated copy is `cfg_vc`'s second argument (see above) |
 | `cfg_postcondition` | RE-EXPOSED 2026-09-03 (it had been hardwired to `true`). `consume`d at the moment the pc reaches the exit, with `"an"` bound to `cfg_exit`; the soundness bridge hands it back to the caller, which is **what makes two segment contracts composable**. Pass `asn_no_post` for an ordinary whole-program contract. |
-| `cfg_init_addr` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
+| *(no load address)* | The old `cfg_init_addr : N` field was DROPPED 2026-09-28 (PLAN-valid-blk-annot §8.2): the VC never read it and, once `ValidCFGVerifierContract` stopped quoting it, nothing did. A contract says where its code is only through the `cfg_placement` term; the end-to-end bridges take `init_addr` themselves and link it by `inst (cfg_placement c) ι = SyncVal (bv.of_N init_addr)`. So a parametric contract is a CLOSED term (no `ia` argument) |
 
 The exit is stored once. The end-to-end stage relates it to the trusted
 statement's literal `exit_addr : N` through the `HexitFaith : etable_rel
@@ -74,10 +77,26 @@ internally).
 > **cfgver-executor**, "Loops as ONE block", and `PLAN-rec-loop-block.md`.
 
 ```coq
-Definition ValidCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ) : Prop :=
-  cfg_map c Valid_CFG_VC.
-(* Valid_CFG_VC ia p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
+(* Contracts.v -- THE VC, over an annotated copy `a` of the program *)
+Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
+  cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
+(* Valid_CFG_VC p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
+
+(* Validity.v (heavy, small; re-exported by EndToEnd.v) -- the SEALED
+   property, built only via ValidCFGVerifierContract_intro / solve_valid *)
+Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
+  exists a, cfg_vc c a /\ strip a = cfg_instrs c /\ annotsValid a.
+(* annotsValid (Adequacy.v): every ai_block carries a blkValid proof, and
+   there is no top-level ai_loop.  Pure -- no Iris, no load address. *)
 ```
+
+This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /
+`seg_run` / `loop_*`): annotations appear only where the contract is proved
+valid. `solve_valid <VC>` closes it for a block-free program; a program with
+blocks uses the intro lemma with its annotated list and an `annotsValid` proof.
+
+`cfg_vc` does not force `strip a = cfg_instrs c`; that equation is a premise of
+the soundness bridge, so a VC over the wrong `a` proves nothing usable.
 
 Discharge pattern: `Proof. vm_compute. solve_vc. Qed.` — residual patterns and
 failure modes in **cfgver-solve-vc**.
@@ -110,20 +129,23 @@ Trimming recovers all of it. On a *decidable*-branch segment the same axis is
 only 1.35–1.60× on countdown but was measured at **3.03×** on real muladd (67%
 of that segment's cost). Full record: `diagnostics/prefix-length-cost.md`.
 
-**What you owe at the Iris level.** The caller owns `ptsto_instrs` of the WHOLE
-program and must supply `itable_rel <whole-program map> <segment table>`. That
-is `TablesRel.v`'s **`itable_faith_of_segment`**, over `Tables.v`'s three gmap
-containments (`instrs_of_list_prefix` / `_suffix` / `_segment`). Nothing else
-changes — `sound_scfg_verification_condition_myWP2` takes the map and the table
-as separate arguments, so no resource splitting is needed and the continuation
-hands the instruction ownership back.
+**What you owe at the Iris level.** The caller owns `ptsto_instrs P` of the
+WHOLE program (`P : gmap _ AST`) and runs the segment with
+**`GenCompose.contract_run`** (PLAN-valid-blk-annot V11), whose only table-side
+premises are the placement, a no-wrap fit, and the AST containment
+`instrs_of_list pbase (cfg_instrs c) ⊆ P` — typically from `Tables.v`'s
+`instrs_of_list_segment` lifted by `map_fmap_mono` (see
+`PaddedLoopResult.pl_contain`). `contract_run` derives table faithfulness
+itself; no resource splitting is needed and the continuation hands the
+instruction ownership back. (The annotation-level `itable_faith_of_segment` it
+replaced was deleted in Phase 5.)
 
 Worked example: `Example/PaddedLoop.v` + `Example/PaddedLoopResult.v` (the
 countdown loop inside a 66-instruction program; `pl_loop` is gate-checked
 axiom-clean, and is the tree's ONLY proof whose table is a proper subset of the
 program).
 
-Three traps, each of which cost a compile:
+Two traps, each of which cost a compile:
 
 - **`list_AST_AnnotInstr` is `List.map AST_AnnotInstr`, not an identity**
   (`Verifier.v:145`). Existing examples get away with writing a `list AST` only
@@ -131,15 +153,9 @@ Three traps, each of which cost a compile:
   not. Symptom is an unresolved-implicit error on `<$>` ("Cannot infer the
   implicit parameter M of fmap"), which reads like an Iris notation bug.
 - **Define the program AS the decomposition**: `padded_annot := pl_pre ++ pl_seg
-  ++ pl_post` with all three at `list AnnotInstr`. Then
-  `itable_faith_of_segment`'s `pre ++ seg ++ post` matches syntactically, which
-  also avoids an `app_nil_r` rewrite that would otherwise hit the `seg`
-  occurrence inside `table_of_list` too.
-- **`itable_faith_of_segment`'s `pre`/`seg`/`post` are EXPLICIT** (only `Σ`,
-  `cbase`, `off` are implicit — `length pre` is not a rigid position, and
-  `Set Implicit Arguments` marks only strict implicits). `off` is inferable from
-  nothing, and `(off := _)` fails with *"Not enough non implicit arguments"*.
-  Use the fully-`@` form: `@itable_faith_of_segment Σ p ι cbase off pre seg post`.
+  ++ pl_post` with all three named. Then `instrs_of_list_segment`'s
+  `pre ++ seg ++ post` matches syntactically, which avoids an `app_nil_r`
+  rewrite.
 
 ## Hand-writing a contract: the assertion vocabulary
 

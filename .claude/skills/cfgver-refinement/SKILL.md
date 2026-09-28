@@ -109,7 +109,13 @@ proved by `iInduction` on fuel, GIVEN `itable_relW instrs words tbl` and
 `etable_rel cexit ex` (`:= fun ι => ∃ v, inst ex ι = SyncVal v ∧ cexit = SyncVal
 v`; one lemma `etable_faith_exit_of_off` in `TablesRel.v` proves it for
 `exit_of_off p off` given `inst p ι = SyncVal cbase`). `rexec_block`'s exit-pc goal
-is closed with `refine_inst_subst` + `refine_inst_persist` (`AT := Sub _`). **THREE subgoals since 2026-09-07** (was four): when the stop guard holds the
+is closed with `refine_inst_subst` + `refine_inst_persist` (`AT := Sub _`).
+The block case (case 2) uses `rexec_block_chk` (2026-09-25), which wraps
+`rexec_block` with the containment check: a failed symbolic `blk_code_in` is
+`error` (`HeapSpec.refine_error`); a passed one gives the concrete
+`assert_formula`'s fact through `blk_code_in_sound_repₚ` (per address it is
+`lookup_instr_sound`), supplied with `rprop_and` — a concrete-only conjunct,
+like `rprop_left`/`rprop_right` weakening only the concrete side. **THREE subgoals since 2026-09-07** (was four): when the stop guard holds the
 symbolic side is `pure ta` and `lookup_instr` is never consulted, so the old
 exit-hit/exit-miss pair MERGES — which also deleted the old case 1, a verbatim
 58-line copy of the core case that `rprop_or` had glued on (270 → 198 lines).

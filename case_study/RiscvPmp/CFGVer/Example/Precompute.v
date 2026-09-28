@@ -88,8 +88,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        there is nothing base-relative to concretize.
        Supersedes the removed concrete-base pair precompute_cfg_contract /
        valid_precompute_cfg_contract (see MvSwap.v for the rationale). *)
-    Definition precompute_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia precompute_reg_specs precompute_instrs 16.
+    Definition precompute_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param precompute_reg_specs precompute_instrs 16.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
        The end theorem states noninterferent_strong over `precompute_instrs` while the
@@ -101,6 +101,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Lemma strip_id_precompute_instrs : strip precompute_instrs = precompute_instrs.
     Proof. reflexivity. Qed.
 
-    Lemma valid_precompute_cfg_contract_param (ia : N) :
-      cfg_vc (precompute_cfg_contract_param ia) (cfg_instrs (precompute_cfg_contract_param ia)).
+    Lemma valid_precompute_cfg_contract_param :
+      cfg_vc precompute_cfg_contract_param (cfg_instrs precompute_cfg_contract_param).
     Proof. solve_param_vc. Qed.

@@ -57,7 +57,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - solve_valid (valid_check_scalar_cfg_contract_param init_addr).
+  - solve_valid valid_check_scalar_cfg_contract_param.
 Qed.
 
 Lemma check_scalar_noninterferent :

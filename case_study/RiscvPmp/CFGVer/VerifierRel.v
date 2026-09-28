@@ -279,6 +279,35 @@ Section CFGVerificationDerived.
              ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ ex] ;;
       pure ex.
 
+    (* THE CONCRETE MIRROR of Verifier.blk_code_in (PLAN-valid-blk-annot.md
+       §1c), pointwise: each block instruction is the program's instruction at
+       its address, stepping `bv.add v 4` as instrs_of_list does.  Stated
+       pointwise rather than as `instrs_of_list v l ⊆ …` so that this file
+       need not require Tables.v and so that blk_code_in_sound is a plain
+       induction; Adequacy.cblk_code_in_sub turns it into the ⊆ that
+       blockSound_span_to_whole takes. *)
+    Fixpoint cblk_code_in (instrs : gmap (bv xlenbits) AnnotInstr)
+        (v : bv xlenbits) (l : list AST) : Prop :=
+      (* List.nil/List.cons spelled out: ctx.notations' `_ :: _` hijacks
+         cons here, as for cexec_ghosts above. *)
+      match l with
+      | List.nil       => True
+      | List.cons i l' => (ai_instr <$> instrs) !! v = Some i /\
+                          cblk_code_in instrs (bv.add v (bv.of_N 4)) l'
+      end.
+
+    (* The block step WITH its containment check, mirroring
+       Verifier.sexec_block_chk: an ASSERT here where the symbolic side has an
+       `if … else error`, so the concrete run carries the containment fact the
+       soundness proof reads (Adequacy.v, the BLOCK branch). *)
+    Definition cexec_block_chk (instrs : gmap (bv xlenbits) AnnotInstr)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) :
+      CHeapSpec (RelVal ty_xlenbits) :=
+      _ <- assert_formula (cblk_code_in instrs v
+             (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs
+                (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) ;;
+      cexec_block b v.
+
     (* `instrs` is AnnotInstr-valued, mirroring the symbolic SInstrTable.
        Ghosts are FUSED here rather than given a separate channel: they share
        the AST's origin (the `list AnnotInstr` the author wrote), so splitting
@@ -334,7 +363,7 @@ Section CFGVerificationDerived.
                         instead of a parallel table. *)
                      match ai_fire stepped ai with
                      | Some b =>
-                         apc' <- cexec_block b v ;;
+                         apc' <- cexec_block_chk instrs b v ;;
                          (* DEMONIC nextpc, mirroring the symbolic side: no
                             epilogue was consumed here, so nothing forces the
                             nextpc register's value -- see Verifier.v. *)
@@ -373,6 +402,10 @@ Section CFGVerificationDerived.
       Monotonic (MHeapSpec eq) (cexec_block b v).
     Proof. unfold cexec_block. typeclasses eauto. Qed.
 
+    #[export] Instance mono_cexec_block_chk {instrs b v} :
+      Monotonic (MHeapSpec eq) (cexec_block_chk instrs b v).
+    Proof. unfold cexec_block_chk, cexec_block. typeclasses eauto. Qed.
+
     #[export] Instance mono_cexec_cfg_addr {instrs words cexit fuel stepped apc anp} :
       Monotonic (MHeapSpec eq) (cexec_cfg_addr instrs words cexit fuel stepped apc anp).
     Proof.
@@ -383,7 +416,7 @@ Section CFGVerificationDerived.
           destruct (exit_hit cexit v);
             cbn [CHeapSpec.pure CHeapSpec.error bind];
             try destruct (instrs !! v) as [ai|]; try destruct (ai_fire stepped ai);
-            unfold cexec_block; typeclasses eauto.
+            unfold cexec_block_chk, cexec_block; typeclasses eauto.
         + cbn [cexec_cfg_addr ty.RVToOption]. typeclasses eauto.
     Qed.
 
@@ -700,6 +733,48 @@ Section CFGVerificationDerived.
       split; [split; [|exact Hm]|exact Hx].
       now rewrite <- Ha.
     Qed.
+
+    (* THE BLOCK CONTAINMENT CHECK IS SOUND: a passing symbolic blk_code_in
+       gives the concrete cblk_code_in at the pc's value.  Per address it is
+       lookup_instr_sound; the address steps as `apc + 4` on both sides. *)
+    Lemma blk_code_in_sound {w} (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (tbl : SInstrTableW w) (ι : Valuation w)
+        (l : list AST) :
+      forall (apc : STerm ty_xlenbits w) (v : bv xlenbits),
+      blk_code_in tbl apc l = true ->
+      itable_relW instrs words tbl ι ->
+      inst apc ι = ty.SyncVal v ->
+      cblk_code_in instrs v l.
+    Proof.
+      induction l as [|i l IH]; intros apc v Hc Hrel Hv; [exact I|].
+      cbn [blk_code_in] in Hc. cbn [cblk_code_in].
+      destruct (lookup_instr tbl apc) as [[x ai]|] eqn:Hlk; [|discriminate].
+      destruct (eq_dec (ai_instr ai) i) as [<-|]; [|discriminate].
+      destruct (lookup_instr_sound apc Hlk Hrel) as (v' & Hv' & Hm & _).
+      rewrite Hv in Hv'. injection Hv' as <-.
+      split.
+      - rewrite lookup_fmap Hm. reflexivity.
+      - apply (IH _ _ Hc Hrel). cbn. rewrite Hv. reflexivity.
+    Qed.
+
+
+    Lemma blk_code_in_sound_repₚ {w} (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (tbl : SInstrTableW w)
+        (apc : STerm ty_xlenbits w) (v : bv xlenbits) (l : list AST) :
+      blk_code_in tbl apc l = true ->
+      (itable_relW instrs words tbl ∗
+       repₚ (T := fun Σ => Term Σ ty_xlenbits) (ty.SyncVal v) apc ⊢
+       ⌜cblk_code_in instrs v l⌝)%I.
+    Proof.
+      intros Hc.
+      constructor.
+      intros ι Hpc H.
+      cbn in H.
+      destruct H as [Hrel Ha].
+      cbn. eapply blk_code_in_sound; [exact Hc|exact Hrel|].
+      cbn in Ha. now rewrite Ha.
+    Qed.
+
 
     Lemma is_exit_sound_repₚ {w} (cexit : RelVal ty_xlenbits) (exits : SExitTable w)
         (apc : STerm ty_xlenbits w) (a : RelVal ty_xlenbits) :
@@ -1563,6 +1638,46 @@ Section CFGVerificationDerived.
       iIntros "H2 Hs". iDestruct ("H2" with "Hs") as "%Hc". iPureIntro. now right.
     Qed.
 
+    (* A concrete-only conjunct the caller can supply outright: what a
+       concrete assert_formula reduces to when the symbolic side has no
+       matching assert (cexec_block_chk against a passed blk_code_in). *)
+    Lemma rprop_and {w : World} (c1 c2 : Prop) (s : 𝕊 w) :
+      c1 ->
+      ℛ⟦LogicalSoundness.RProp⟧ c2 s -∗
+      ℛ⟦LogicalSoundness.RProp⟧ (c1 /\ c2) s.
+    Proof.
+      unfold LogicalSoundness.RProp; cbn.
+      iIntros (H1) "H2 Hs". iDestruct ("H2" with "Hs") as "%Hc". iPureIntro. now split.
+    Qed.
+
+    (* THE CHECKED BLOCK STEP.  A failed symbolic check is `error`, which
+       refines anything; a passed one yields the concrete assert's fact by
+       blk_code_in_sound_repₚ, after which the step is rexec_block. *)
+    Lemma rexec_block_chk (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits)
+        {w : World} (tbl : SInstrTableW w) (ta : STerm ty_xlenbits w) :
+      ⊢ (itable_relW instrs words tbl -∗
+         ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal v) ta -∗
+         ℛ⟦RHeapSpec (RVal ty_xlenbits)⟧ (cexec_block_chk instrs b v)
+                                          (sexec_block_chk tbl b ta)).
+    Proof.
+      iIntros "#Hi #Ha".
+      unfold cexec_block_chk, sexec_block_chk.
+      destruct (blk_code_in tbl ta _) eqn:Hc.
+      - iPoseProof (blk_code_in_sound_repₚ instrs words tbl ta v _ Hc with "[$Hi $Ha]")
+          as "%Hcode".
+        iIntros (cΦ sΦ) "rΦ %ch %sh rh".
+        (* the concrete assert_formula reduces to `Hcode ∧ cexec_block ..` *)
+        unfold CHeapSpec.bind, CHeapSpec.assert_formula, CHeapSpec.lift_purespec,
+          CPureSpec.assert_formula, CPureSpec.assert_pathcondition.
+        (* `rprop_and c2 s H1`: w and c1 are implicit *)
+        iApply (rprop_and _ _ Hcode).
+        iApply (rexec_block b v ta with "Ha rΦ rh").
+      - iApply HeapSpec.refine_error.
+    Qed.
+
+
     (* rdrop_dead is stated POINTWISE at a valuation; this lifts it to an Iris
        entailment so it can be iApply'd.  Phase 0's idiom (zz_dropk_step):
        `constructor. intros iota Hpc _. rewrite !wand_unfold.` *)
@@ -1824,7 +1939,7 @@ Section CFGVerificationDerived.
            unfold CHeapSpec.angelic_binary.
            iApply rprop_right.
            unfold CHeapSpec.bind at 1, SHeapSpec.bind at 1.
-           iApply (rexec_block blk v ta with "Ha").
+           iApply (rexec_block_chk instrs words blk v tbl ta with "Hi Ha").
            2: iApply "rh".
            iIntros (w1 θ1). iModIntro. iIntros (apc' tapc') "#Hapc".
            iIntros (ch1 sh1) "#rh1".

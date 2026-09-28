@@ -72,7 +72,7 @@ From Katamaran Require Export RiscvPmp.CFGVer.Example.Prelude.
 Definition my_contract (n : nat) : @CFGVerifierContract ["p" :: ty_xlenbits] := …
 
 Definition my_measure (n : nat) : SomeResult :=
-  cfg_map (my_contract n) (fun ia p ex P i fl Q =>
+  cfg_map (my_contract n) (fun p ex P i fl Q =>
     census (CFG_VC_triple p ex P i fl Q)).
 ```
 

@@ -42,7 +42,8 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
      RiscvPmp.CFGVer.GenSegment
-     RiscvPmp.CFGVer.Adequacy.
+     RiscvPmp.CFGVer.Adequacy
+     RiscvPmp.CFGVer.Validity.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
@@ -83,50 +84,7 @@ Section SegCompose.
   Context {Σ} {GS : sailGS2 Σ}.
 
   (* ======================================================================== *)
-  (* 1. SUB-TABLE FAITHFULNESS                                                *)
-  (* ======================================================================== *)
-
-  (* The reassembled program is LITERALLY the original -- an identity, not a
-     computation.  Every hand-written Hif instead asserted
-     `length (firstn m L ++ firstn n (skipn m L) ++ skipn (m+n) L) = length L`
-     and closed it by `vm_compute`, i.e. computed a 282-element list per call
-     site, eight times over. *)
-  Lemma split_id {A : Type} (m n : nat) (L : list A) :
-    List.firstn m L ++ List.firstn n (List.skipn m L)
-      ++ List.skipn (m + n) L = L.
-  Proof. rewrite <- drop_drop, take_drop, take_drop. reflexivity. Qed.
-
-  (* One lemma for all 20 call sites.  `Hoff : 4 * skip = head` is what makes
-     GenSegment's head/skip agreement a PROOF OBLIGATION rather than a silent
-     convention -- get it wrong and this will not apply. *)
-  Lemma instr_table_ok_at {R : LCtx} (place : Term R ty_xlenbits) (iota : Valuation R)
-      (cbase : bv xlenbits) (L : list AnnotInstr) (skip take : nat) (head : N)
-      (Hoff : @eq N (N.mul 4 (N.of_nat skip)) head)
-      (Hskip : Nat.le skip (length L))
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (bv.add cbase (bv.of_N head)))
-      (Hrep : (bv.bin cbase + 4 * N.of_nat (length L) < bv.exp2 xlenbits)%N) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-      (instrs_of_list cbase L)
-      (table_of_list place 0 (List.firstn take (List.skipn skip L))) iota.
-  Proof.
-    subst head.
-    replace (instrs_of_list cbase L)
-       with (instrs_of_list cbase
-               (List.firstn skip L ++ List.firstn take (List.skipn skip L)
-                ++ List.skipn (skip + take) L))
-       by (rewrite split_id; reflexivity).
-    apply (itable_faith_of_segment (cbase := cbase)
-             (off := (4 * N.of_nat skip)%N) place iota
-             (List.firstn skip L) (List.firstn take (List.skipn skip L))
-             (List.skipn (skip + take) L)).
-    - rewrite length_firstn. lia.
-    - exact Hp.
-    - rewrite split_id. exact Hrep.
-  Qed.
-
-  (* ======================================================================== *)
-  (* 2. EXIT-TABLE FAITHFULNESS                                               *)
+  (* 1. EXIT-TABLE FAITHFULNESS                                               *)
   (* ======================================================================== *)
 
   (* THE EXIT's faithfulness for a SELF-CONTAINED segment: the contract is
@@ -146,70 +104,8 @@ Section SegCompose.
       (ty.SyncVal (seg_addr ia target)) (exit_of_off place target) iota.
   Proof. rewrite seg_addr_add. now apply etable_faith_exit_of_off. Qed.
 
-  (* ---- WHERE A SLICE SITS IN A PROGRAM: the instruction-table fact with
-         every DECIDABLE side condition bundled into seg_placement_ok.  This
-         is a COMPOSITION lemma -- `skip`/`head` are how the enclosing
-         program lays the slice out, not anything a segment contract says. *)
-  Lemma seg_instr_table_ok {R : LCtx} (place : Term R ty_xlenbits)
-      (iota : Valuation R) (ia : N) (L : list AnnotInstr) (skip take : nat)
-      (head bound : N) (target : N)
-      (Hok : seg_placement_ok L skip head bound target = true)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
-            = ty.SyncVal (bv.add (@bv.of_N xlenbits ia) (@bv.of_N xlenbits head)))
-      (Hwf : seg_fits_memory ia bound) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-      (instrs_of_list (@bv.of_N xlenbits ia) L)
-      (table_of_list place 0 (List.firstn take (List.skipn skip L))) iota.
-  Proof.
-    exact (instr_table_ok_at place iota (@bv.of_N xlenbits ia) L skip take head
-             (seg_placement_off L skip head bound target Hok)
-             (seg_placement_skip L skip head bound target Hok)
-             Hp
-             (seg_fits_rep ia bound L (seg_placement_size L skip head bound target Hok) Hwf)).
-  Qed.
-
-  (* ---- A1' : the two table obligations, stated ON a generated contract.
-         Since the contract is self-contained both follow from ONE placement
-         fact (the code base evaluates to the segment's own load address) plus,
-         for the instruction table, that the segment fits in memory.  Nothing
-         about any enclosing program appears. *)
-  Section GenSegTables.
-    Context {R : LCtx}
-      (base : Term R ty_xlenbits)
-      (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
-      (target : N) (fl : nat) (regs : list reg_spec_rel)
-      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
-      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (iota : Valuation R)
-      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) base iota
-            = ty.SyncVal (@bv.of_N xlenbits ia)).
-
-    (* `a` is the ANNOTATED code the VC ran on; the table takes it, not
-       `cfg_instrs` -- which is the AST spec and would silently coerce
-       (PLAN-contract-ast §2.8: the one direction the build does NOT catch). *)
-    Lemma gen_seg_instr_table_ok (a : list AnnotInstr)
-        (Hwf : seg_fits_memory ia (4 * N.of_nat (length a))) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-        (instrs_of_list (@bv.of_N xlenbits ia) a)
-        (table_of_list
-           (cfg_placement (gen_seg_contract base base_a ia code target fl regs
-                             extra_pre post)) 0 a) iota.
-    Proof.
-      exact (itable_faith_of_list base iota a Hp
-               (seg_fits_rep ia _ a (N.le_refl _) Hwf)).
-    Qed.
-
-    Lemma gen_seg_exit_table_ok :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-        (ty.SyncVal (seg_addr ia target))
-        (cfg_exit (gen_seg_contract base base_a ia code target fl regs
-                     extra_pre post)) iota.
-    Proof. exact (seg_exit_table_ok base iota ia target Hp). Qed.
-  End GenSegTables.
-
   (* ======================================================================== *)
-  (* 3. THE STEP COMBINATOR                                                   *)
+  (* 2. THE STEP COMBINATOR                                                   *)
   (* ======================================================================== *)
 
   (* `cfg_map` is STUCK on an abstract record, so a combinator cannot consume
@@ -224,28 +120,156 @@ Section SegCompose.
       (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil)).
   Proof. destruct c; exact (fun H => H). Qed.
 
+  (* ======================================================================
+     A CONTRACT, RUN INSIDE A PROGRAM (PLAN-valid-blk-annot.md Phase 4).
+     The contract-level soundness lemma: premises say only that the contract
+     is valid (sealed -- no annotation list, no raw VC, no block premise),
+     where it is placed, and that its code IS the program's code there
+     (an AST-level containment).  The program is a plain `gmap _ AST`.
+
+     Why this is sound although the executor needs an ANNOTATED map: the
+     concrete run only ever reads the map at addresses the contract's own
+     table matched (itable_rel).  So contract_setup builds, inside the proof,
+     M := (the contract's annotated code at pbase) ∪ (the rest, plain), whose
+     projection is the program, which is faithful to the contract's table,
+     and whose blocks are all the contract's own (sound by annotsValid).
+     ====================================================================== *)
+  Lemma blocksSound_of_map (words : bv xlenbits -> bv word)
+      (M : gmap (bv xlenbits) AnnotInstr) :
+    (forall v ai, M !! v = Some ai ->
+       ai_loop ai = None /\ forall b, ai_block ai = Some b -> blkValid b) ->
+    ⊢ blocksSound words M.
+  Proof.
+    intros HM. iIntros "!>" (v ai b) "%Hlk %Hb".
+    destruct (HM v ai Hlk) as [Hloop Hblk].
+    unfold ai_fire in Hb. destruct (ai_block ai) as [b'|] eqn:E.
+    - injection Hb as <-. iApply (Hblk b' eq_refl Σ GS words v).
+    - rewrite Hloop in Hb. discriminate.
+  Qed.
+
+  Lemma contract_setup {R : LCtx} (c : @CFGVerifierContract R)
+      (Hc : ValidCFGVerifierContract c)
+      (ι : Valuation R) (pbase : bv xlenbits) (P : gmap (bv xlenbits) AST)
+      (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) ι = SyncVal pbase)
+      (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
+      (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P) :
+    exists (annot : list AnnotInstr) (M : gmap (bv xlenbits) AnnotInstr),
+      safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+        (extend_to_minimal_pre (cfg_precondition c))
+        (table_of_list (cfg_placement c) 0 annot)
+        (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil))
+      /\ ai_instr <$> M = P
+      /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R) M
+           (table_of_list (cfg_placement c) 0 annot) ι
+      /\ (forall words, ⊢ blocksSound words M).
+  Proof.
+    apply ValidCFGVerifierContract_elim in Hc as (annot & Hv & Hstrip & Hval).
+    exists annot, (instrs_of_list pbase annot ∪ (AST_AnnotInstr <$> P)).
+    split; [destruct c; exact Hv|].
+    split; [|split].
+    - rewrite map_fmap_union.
+      assert (E1 : ai_instr <$> instrs_of_list pbase annot = instrs_of_list pbase (cfg_instrs c)).
+      { rewrite <- Hstrip. unfold strip. now rewrite fmap_instrs_of_list. }
+      rewrite E1. rewrite <- map_fmap_compose.
+      assert (E2 : (ai_instr ∘ AST_AnnotInstr) <$> P = P)
+        by (apply map_eq; intros k; rewrite lookup_fmap; destruct (P !! k); reflexivity).
+      rewrite E2. now apply map_subseteq_union.
+    - apply (itable_faith_weaken (m := instrs_of_list pbase annot)).
+      + apply map_union_subseteq_l.
+      + apply itable_faith_of_list; [exact Hplace|].
+        rewrite <- (strip_length annot). rewrite Hstrip. exact Hfit.
+    - intros words. apply blocksSound_of_map.
+      intros v ai Hlk. apply lookup_union_Some_raw in Hlk as [Hl|[_ Hr]].
+      + apply instrs_of_list_elem_of in Hl.
+        unfold annotsValid in Hval. rewrite List.Forall_forall in Hval.
+        exact (Hval _ Hl).
+      + rewrite lookup_fmap in Hr. destruct (P !! v); cbn in Hr; [|discriminate].
+        injection Hr as <-. split; [reflexivity | discriminate].
+  Qed.
+
+  Lemma contract_run {R : LCtx} (c : @CFGVerifierContract R)
+      (Hc : ValidCFGVerifierContract c)
+      (ι : Valuation R) (pbase : bv xlenbits) (P : gmap (bv xlenbits) AST)
+      (cexit : RelVal ty_xlenbits) (ExitCond : iProp Σ)
+      (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) ι = SyncVal pbase)
+      (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
+      (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P)
+      (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R) cexit (cfg_exit c) ι) :
+    ⊢ ∀ a : RelVal ty_xlenbits,
+        asn.interpret (extend_to_minimal_pre (cfg_precondition c)) (ι.["a"∷ty_xlenbits ↦ a]) ∗
+        ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs P -∗
+        (∀ an,
+           ⌜match an with
+             | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
+             | NonSyncVal _ _ => False
+             end⌝ ∗
+           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs P ∗
+           asn.interpret (cfg_postcondition c) (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+           ExitCond) -∗
+        myWP2_loop ExitCond.
+  Proof.
+    destruct (contract_setup c Hc ι pbase P Hplace Hfit Hin) as (annot & M & Hv & HM & Hif & Hbs).
+    subst P.
+    exact (sound_scfg_verification_condition_myWP2 Hv ExitCond Hif Hef Hbs).
+  Qed.
+
+  (* The same with a FIXED instruction-word map, as the composition lemmas
+     below thread it. *)
+  Lemma contract_run_w {R : LCtx} (c : @CFGVerifierContract R)
+      (Hc : ValidCFGVerifierContract c) (words : bv xlenbits -> bv word)
+      (ι : Valuation R) (pbase : bv xlenbits) (P : gmap (bv xlenbits) AST)
+      (cexit : RelVal ty_xlenbits) (ExitCond : iProp Σ)
+      (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) ι = SyncVal pbase)
+      (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
+      (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P)
+      (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R) cexit (cfg_exit c) ι) :
+    ⊢ ∀ a : RelVal ty_xlenbits,
+        asn.interpret (extend_to_minimal_pre (cfg_precondition c)) (ι.["a"∷ty_xlenbits ↦ a]) ∗
+        ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words P -∗
+        (∀ an,
+           ⌜match an with
+             | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
+             | NonSyncVal _ _ => False
+             end⌝ ∗
+           pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words P ∗
+           asn.interpret (cfg_postcondition c) (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+           ExitCond) -∗
+        myWP2_loop ExitCond.
+  Proof.
+    destruct (contract_setup c Hc ι pbase P Hplace Hfit Hin) as (annot & M & Hv & HM & Hif & Hbs).
+    subst P.
+    iPoseProof (Hbs words) as "#Hb".
+    iApply (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef with "[] []").
+    - iApply (blocksSound_at_false with "Hb").
+    - iNext. iExact "Hb".
+  Qed.
+
   (* The resources the soundness bridge CONSUMES at entry. *)
   Definition seg_entry {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
-      (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) : iProp Σ :=
+      (a : bv xlenbits) (L : list AST) (cbase : bv xlenbits) : iProp Σ :=
     ( asn.interpret (extend_to_minimal_pre (cfg_precondition c))
         (iota.["a"∷ty_xlenbits ↦ SyncVal a])
       ∗ pc ↦ᵣ SyncVal a
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
       ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-          (ai_instr <$> instrs_of_list cbase L) )%I.
+          (instrs_of_list cbase L) )%I.
 
   (* ...and the ones it HANDS BACK at the exit.  `cexit` is the concrete exit
      address (the contract's exit term at iota, see seg_run's Hef); since
      PLAN-exit-targets.md the pc that comes back IS it, so the old `match an`
      over an exit condition is a plain equation. *)
   Definition seg_exit {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
-      (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits)
+      (a : bv xlenbits) (L : list AST) (cbase : bv xlenbits)
       (cexit an : RelVal ty_xlenbits) : iProp Σ :=
     ( ⌜an = cexit⌝
       ∗ pc ↦ᵣ an
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
       ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-          (ai_instr <$> instrs_of_list cbase L)
+          (instrs_of_list cbase L)
       ∗ asn.interpret (cfg_postcondition c)
           ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ an]) )%I.
 
@@ -264,32 +288,26 @@ Section SegCompose.
      conclusion) and everything the caller must choose is explicit and early,
      because only IMPLICIT arguments can be passed by name. *)
   Lemma seg_run {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
-    (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
+    (a : bv xlenbits) (L : list AST) (cbase : bv xlenbits) (Fr : iProp Σ)
     (cexit : RelVal ty_xlenbits)
     {Pre Post : iProp Σ}
-    (annot : list AnnotInstr)
-    (Hv : cfg_vc c annot)
-    (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-             (instrs_of_list cbase L)
-             (table_of_list (cfg_placement c) 0 annot) iota)
+    (* the contract is valid (sealed), placed at pbase, and its code IS the
+       program's code there -- nothing annotation-level (Phase 4) *)
+    (Hc : ValidCFGVerifierContract c)
+    (pbase : bv xlenbits)
+    (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) iota = SyncVal pbase)
+    (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
+    (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ instrs_of_list cbase L)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              cexit (cfg_exit c) iota)
-    (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
-       today, and dischargeable from a segment VC once blocks are real.  See
-       cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
-    (Hbs : forall wds : bv xlenbits -> bv word,
-             ⊢ blocksSound wds (instrs_of_list cbase L))
     (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
     (HPost : forall an, Fr ∗ seg_exit words c iota a L cbase cexit an -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
     iIntros "HP".
     iDestruct (HPre with "HP") as "(HF & Hpre & Hpc & Hnpc & Hinstrs)".
-    iPoseProof (Hbs words) as "#Hb".
-    iPoseProof (sound_scfg_verification_condition_myWP2_w words
-                  (seg_vc c annot Hv) Post Hif Hef with "[] []") as "Hrun".
-    { iApply (blocksSound_at_false with "Hb"). }
-    { iNext. iExact "Hb". }
+    iPoseProof (contract_run_w c Hc words iota pbase (instrs_of_list cbase L) cexit Post
+                  Hplace Hfit Hin Hef) as "Hrun".
     iApply ("Hrun" $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
     (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
     - iFrame.
@@ -309,7 +327,7 @@ Section SegCompose.
      witness.  gen_seg_contract's leading `asn_pc_eq` conjunct is exactly it. *)
   Lemma seg_pre_placement {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
+      (code : list AST)
       (target : N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -318,10 +336,10 @@ Section SegCompose.
                (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
              = inst (T := fun Σ => Term Σ ty_xlenbits) base iota) :
     asn.interpret (extend_to_minimal_pre (cfg_precondition
-        (gen_seg_contract base base_a ia code target fl regs extra_pre post)))
+        (gen_seg_contract base base_a code target fl regs extra_pre post)))
       (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
     ⊢ ⌜ inst (T := fun Σ => Term Σ ty_xlenbits)
-          (cfg_placement (gen_seg_contract base base_a ia code target fl regs
+          (cfg_placement (gen_seg_contract base base_a code target fl regs
              extra_pre post)) iota
         = ty.SyncVal v ⌝.
   Proof.
@@ -346,17 +364,50 @@ Section SegCompose.
     symmetry. exact Hpc.
   Qed.
 
+  (* ---- ...AND THE NO-WRAP BOUND, FROM THE SAME PRECONDITION ----------------
+     gen_seg_contract's second conjunct, gen_base_bound, says
+     `unsigned base + 4·len code ≤ lenAddr`; with the placement fact it is a
+     bound on the entry pc v itself.  This is what lets blockFaithful_of_seg
+     drop its no-wrap premise, and hence what makes Adequacy.blkValid
+     unconditional (PLAN-valid-blk-annot.md, option B).  `lia` is avoided on
+     the last step: this file imports stdpp's gmap (gmap-pitfalls). *)
+  Lemma seg_pre_bound {R : LCtx}
+      (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (code : list AST)
+      (target : N) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (iota : Valuation R) (v : bv xlenbits)
+      (Hba : inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+      (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) base iota = ty.SyncVal v) :
+    asn.interpret (extend_to_minimal_pre (cfg_precondition
+        (gen_seg_contract base base_a code target fl regs extra_pre post)))
+      (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+    ⊢ ⌜ (bv.bin v + 4 * N.of_nat (length code) <= lenAddr)%N ⌝.
+  Proof.
+    cbn [gen_seg_contract cfg_precondition extend_to_minimal_pre].
+    iIntros "((_ & Hb & _) & _)".
+    unfold gen_base_bound.
+    iDestruct "Hb" as "[%Hb _]".
+    iPureIntro.
+    cbn in Hb. rewrite Hba Hp in Hb. cbn in Hb.
+    unfold bv.unsigned in Hb.
+    apply N2Z.inj_le; rewrite N2Z.inj_add; exact Hb.
+  Qed.
+
 
   (* ---- ...AND THE WHOLE blockFaithful, FOR A GENERATED SEGMENT ------------
      The two conjuncts have genuinely different needs, which is worth noticing:
      Both conjuncts want only the placement fact.  The exit half used to force
      `v = ia` as well, because seg_exitCond compared ABSOLUTE addresses built
      from the contract's own load address; since PLAN-exit-targets.md the exit
-     is a term over the same base, so a block no longer depends on its
-     contract's `ia` at all. *)
+     is a term over the same base, so a block no longer depends on a load
+     address at all (and since PLAN-valid-blk-annot §8.2 a contract has none). *)
   Lemma blockFaithful_of_seg {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
+      (code : list AST)
       (target : N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -365,20 +416,26 @@ Section SegCompose.
                inst (T := fun Σ => Term Σ ty_xlenbits) base_a
                  (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
                = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
-      (* the block's code does not wrap around the address space *)
-      (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N) :
+      (* ab is this segment's code, annotated.  The no-wrap bound it used to
+         take (Hrep) now comes from the precondition (seg_pre_bound). *)
+      (Hab : strip ab = code) :
     ⊢ blockFaithful ab v
         {| blk_ctx := R
-         ; blk_contract := gen_seg_contract base base_a ia code target fl regs
+         ; blk_contract := gen_seg_contract base base_a code target fl regs
                              extra_pre post |}
-        (table_of_list (cfg_placement (gen_seg_contract base base_a ia code
+        (table_of_list (cfg_placement (gen_seg_contract base base_a code
                           target fl regs extra_pre post)) 0 ab).
   Proof.
     unfold blockFaithful.
     iIntros "!>" (iota) "Hpre".
-    iDestruct (seg_pre_placement base base_a ia code target fl regs extra_pre
+    iDestruct (seg_pre_placement base base_a code target fl regs extra_pre
                  post iota v (Hba iota) with "Hpre")
       as "%Hp".
+    iDestruct (seg_pre_bound base base_a code target fl regs extra_pre
+                 post iota v (Hba iota) Hp with "Hpre")
+      as "%Hb".
+    assert (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N).
+    { rewrite <- (strip_length ab), Hab. pose proof lenAddr_rep. lia. }
     iPureIntro. cbn [blk_contract]. split.
     - exact (itable_faith_of_list _ iota ab Hp Hrep).
     - destruct (@etable_faith_exit_of_off _ base iota v target Hp) as (x & Hx & _).
@@ -402,22 +459,24 @@ Section SegCompose.
      against `table_of_list (cfg_placement c) 0 ab` and nothing else, so pinning
      it is what makes the statement quote a contract instead of a VC. *)
   Lemma blockSound_of_contract (words : bv xlenbits -> bv word)
-      (v : bv xlenbits) (b : BlkAnnot) (ab : list AnnotInstr)
+      (b : BlkAnnot) (ab : list AnnotInstr)
       (Hv : cfg_vc (blk_contract b) ab)
       (* ab really is the block's own code, annotated *)
       (Hstrip : strip ab = cfg_instrs (blk_contract b))
       (* ab's entry blocks (ai_block) are justified outright ... *)
-      (Hbs0 : ⊢ blocksSoundAt false words (instrs_of_list v ab))
-      (* ... and all of its blocks possibly by THIS block itself (a loop whose
-         head carries it as ai_loop: see blockSound_of_vc) *)
-      (Hbs : □ blockSound words v b ⊢ blocksSound words (instrs_of_list v ab)) :
-    blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab)
-    ⊢ blockSound words v b.
+      (Hbs0 : forall v, (⊢ blocksSoundAt false words (instrs_of_list v ab)))
+      (* ... and all of its blocks possibly by THIS block itself, at any
+         address (a loop whose code carries it as ai_loop: see
+         blockSound_of_vc) *)
+      (Hbs : forall v, □ (∀ v', blockSound words v' b) ⊢
+               blocksSound words (instrs_of_list v ab)) :
+    (∀ v, blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab))
+    ⊢ ∀ v, blockSound words v b.
   Proof.
-    (* `v` is explicit now: it used to be inferred from Hexit's type. *)
-    exact (blockSound_of_vc words ab v b _
+    exact (blockSound_of_vc words ab b _
              (seg_vc (blk_contract b) ab Hv) Hstrip Hbs0 Hbs).
   Qed.
+
 
   (* ---- THE EXIT STATE AT A KNOWN ADDRESS ----------------------------------
      Every contract has exactly ONE exit (PLAN-exit-targets.md), so a
@@ -426,37 +485,34 @@ Section SegCompose.
      to need `Hec : cfg_exitCond c = seg_exitCond ia [t]` to pin the pc; the
      exit relation Hef now pins it by itself.) *)
   Definition seg_exit_state {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
-      (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits)
+      (a : bv xlenbits) (L : list AST) (cbase : bv xlenbits)
       (v : bv xlenbits) : iProp Σ :=
     ( pc ↦ᵣ SyncVal v
       ∗ (bi_exist (fun u => nextpc ↦ᵣ u))
       ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-          (ai_instr <$> instrs_of_list cbase L)
+          (instrs_of_list cbase L)
       ∗ asn.interpret (cfg_postcondition c)
           ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ SyncVal v]) )%I.
 
   Lemma seg_run_single_exit {R : LCtx} (words : bv xlenbits -> bv word) (c : @CFGVerifierContract R) (iota : Valuation R)
-    (a : bv xlenbits) (L : list AnnotInstr) (cbase : bv xlenbits) (Fr : iProp Σ)
+    (a : bv xlenbits) (L : list AST) (cbase : bv xlenbits) (Fr : iProp Σ)
     (ia t : N)
     {Pre Post : iProp Σ}
-    (annot : list AnnotInstr)
-    (Hv : cfg_vc c annot)
-    (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-             (instrs_of_list cbase L)
-             (table_of_list (cfg_placement c) 0 annot) iota)
+    (* the contract is valid (sealed), placed at pbase, and its code IS the
+       program's code there -- nothing annotation-level (Phase 4) *)
+    (Hc : ValidCFGVerifierContract c)
+    (pbase : bv xlenbits)
+    (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) iota = SyncVal pbase)
+    (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
+    (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ instrs_of_list cbase L)
     (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
              (ty.SyncVal (seg_addr ia t)) (cfg_exit c) iota)
-    (* Every BLOCK CONTRACT in this segment's program is justified -- vacuous
-       today, and dischargeable from a segment VC once blocks are real.  See
-       cfg_instrs_verified (EndToEnd.v) for why this rather than "no blocks". *)
-    (Hbs : forall wds : bv xlenbits -> bv word,
-             ⊢ blocksSound wds (instrs_of_list cbase L))
     (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
     (HPost : Fr ∗ seg_exit_state words c iota a L cbase (seg_addr ia t) -∗ Post) :
     Pre -∗ myWP2_loop Post.
   Proof.
     apply (seg_run words c iota a L cbase Fr (ty.SyncVal (seg_addr ia t))
-             annot Hv Hif Hef Hbs HPre).
+             Hc pbase Hplace Hfit Hin Hef HPre).
     iIntros (an) "(HF & -> & Hpc & Hnpc & Hinstrs & Hpost)".
     iApply HPost. unfold seg_exit_state. iFrame.
   Qed.
@@ -499,7 +555,7 @@ Section SegCompose.
   Qed.
 
   (* ======================================================================== *)
-  (* 4. THE LOOP COMBINATOR                                                   *)
+  (* 3. THE LOOP COMBINATOR                                                   *)
   (* ======================================================================== *)
 
   (* myWP2_loop_induction, packaged so the loop's EXIT can hand off to an
@@ -522,7 +578,7 @@ Section SegCompose.
   Qed.
 
   (* ======================================================================== *)
-  (* 5. CROSSING A CUT: WHEN THE VALUATION CHANGES                            *)
+  (* 4. CROSSING A CUT: WHEN THE VALUATION CHANGES                            *)
   (* ======================================================================== *)
 
   (* A cut hands the next segment a postcondition interpreted at the valuation
@@ -571,7 +627,7 @@ Section SegCompose.
 
 
   (* ======================================================================== *)
-  (* 6. COUNTED LOOPS                                                         *)
+  (* 5. COUNTED LOOPS                                                         *)
   (* ======================================================================== *)
 
   (* THE LOOP INVARIANT.  Generated: the counter pinned at `ls_at n` (via the
@@ -612,14 +668,15 @@ Section SegCompose.
      A loop owns ITS OWN instructions and nothing else (2026-09-25,
      PLAN-self-contained-segments.md).  This used to be the whole HOST
      program's instruction block, and a `LoopPlace` record (host base, host
-     extent, head = host base + 4*first_instr, two seg_placement_ok facts)
+     extent, head = host base + 4*first_instr, two (since deleted)
+     seg_placement_ok facts)
      said where the host had put the loop.  None of that is the loop's
      business: the only placement fact a loop still needs is that its own
      code fits in memory (`Hfit` below), and handing instruction ownership
      over at a cut is the caller's -- see loop_enter_from_seg's span swap. *)
   Definition loop_instr_block {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) : iProp Σ :=
     Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-      (ai_instr <$> instrs_of_list (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)).
+      (instrs_of_list (@bv.of_N xlenbits (loop_head_addr ls)) (strip (loop_code ls))).
 
   (* ---- ONE TRIP, EITHER KIND (A3) ----------------------------------------
 
@@ -644,19 +701,14 @@ Section SegCompose.
       (target : N)
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (i : Valuation R) (F Out : iProp Σ)
-      (Hv  : cfg_vc (gen_loop_contract ls g target post) (gen_loop_annot ls))
-      (* Every block contract in this loop's code is justified.  The premise
-         exists because the lemma is generic in the code.  See
-         cfg_instrs_verified (EndToEnd.v). *)
-      (Hbs : forall wds : bv xlenbits -> bv word,
-               ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
+      (* the loop's contract is valid (sealed, PLAN-valid-blk-annot Phase 4) *)
+      (Hc  : ValidCFGVerifierContract (gen_loop_contract ls g target post))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) i
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (g (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
                (i.["a"∷ty_xlenbits ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))]))
       (HOut : F ∗ seg_exit_state words (gen_loop_contract ls g target post) i
-                    (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+                    (@bv.of_N xlenbits (loop_head_addr ls)) (strip (loop_code ls))
                     (@bv.of_N xlenbits (loop_head_addr ls))
                     (seg_addr (loop_head_addr ls) target)
               -∗ Out) :
@@ -667,13 +719,11 @@ Section SegCompose.
     ∗ loop_instr_block words ls
     -∗ myWP2_loop Out.
   Proof.
-    (* The loop's table is faithful to ITS OWN code at its own head -- the
-       placement is the bare code base, so Hpl IS the placement fact. *)
-    assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-                    (instrs_of_list (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls))
-                    (table_of_list (cfg_placement (gen_loop_contract ls g target post))
-                       0 (gen_loop_annot ls)) i).
-    { refine (itable_faith_of_list _ i (loop_code ls) Hpl _).
+    (* The loop's own code, at its own head: the placement is the bare code
+       base, so Hpl IS the placement fact and containment is reflexivity. *)
+    assert (Hfit' : (bv.bin (@bv.of_N xlenbits (loop_head_addr ls))
+                     + 4 * N.of_nat (length (strip (loop_code ls))) < bv.exp2 xlenbits)%N).
+    { rewrite strip_length.
       refine (seg_fits_rep _ (loop_code_extent ls) (loop_code ls) _ Hfit).
       unfold loop_code_extent. rewrite strip_length. lia. }
     assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
@@ -682,10 +732,10 @@ Section SegCompose.
       by exact (seg_exit_table_ok (loop_base ls) i (loop_head_addr ls) target Hpl).
     iIntros "H".
     iApply (seg_run_single_exit words (gen_loop_contract ls g target post) i
-             (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+             (@bv.of_N xlenbits (loop_head_addr ls)) (strip (loop_code ls))
              (@bv.of_N xlenbits (loop_head_addr ls)) F (loop_head_addr ls) target
-             (gen_loop_annot ls)
-             Hv Hif Hef Hbs with "H").
+             Hc (@bv.of_N xlenbits (loop_head_addr ls)) Hpl Hfit' ltac:(reflexivity)
+             Hef with "H").
     - (* HPre: the invariant IS the precondition minus the branch decision and
          the pc equation, at the SAME valuation.  Since A3 the two orders
          differ (gen_seg_contract puts the code bound second and the registers
@@ -721,11 +771,7 @@ Section SegCompose.
       (Fr : nat -> iProp Σ) (iotaf : nat -> Valuation R) (P : nat -> Prop)
       (n : nat)
       (HPm : P (S n) -> P n)
-      (Hv  : cfg_vc (loop_body_contract ls) (gen_loop_annot ls))
-      (* Vacuous today; see loop_one_trip. *)
-      (Hbs : forall wds : bv xlenbits -> bv word,
-               ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
+      (Hc  : ValidCFGVerifierContract (loop_body_contract ls))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf (S n))
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : P (S n) ->
@@ -752,7 +798,7 @@ Section SegCompose.
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
     iApply (loop_one_trip words ls Hfit (loop_guard ls) 0%N (gen_loop_contract_post ls) (iotaf (S n))
-             (Fr (S n)) _ Hv Hbs Hpl (Hg HP) with "H").
+             (Fr (S n)) _ Hc Hpl (Hg HP) with "H").
     unfold loop_invariant, seg_exit_state.
     rewrite seg_addr_0.
     iIntros "(HF & Hpc & Hnpc & Hinstrs & Hpost)".
@@ -769,18 +815,14 @@ Section SegCompose.
       (Hfit : seg_fits_memory (loop_head_addr ls) (loop_code_extent ls)) (Fr : nat -> iProp Σ) (Out : iProp Σ)
       (iotaf : nat -> Valuation R)
       (P : nat -> Prop) (HP0 : P 0)
-      (Hv  : cfg_vc (loop_final_contract ls post) (gen_loop_annot ls))
-      (* Vacuous today; see loop_one_trip. *)
-      (Hbs : forall wds : bv xlenbits -> bv word,
-               ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
+      (Hc  : ValidCFGVerifierContract (loop_final_contract ls post))
       (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf 0)
              = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (Hg  : instprop (loop_exit_guard ls (counter_after_step (loop_counter_step ls) (loop_counter_pre ls)))
                ((iotaf 0).["a"∷ty_xlenbits
                   ↦ ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls))]))
       (HOut : Fr 0 ∗ seg_exit_state words (loop_final_contract ls post) (iotaf 0)
-                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+                     (@bv.of_N xlenbits (loop_head_addr ls)) (strip (loop_code ls))
                      (@bv.of_N xlenbits (loop_head_addr ls))
                      (seg_addr (loop_head_addr ls) (loop_exit_off ls))
               -∗ Out) :
@@ -790,7 +832,7 @@ Section SegCompose.
     unfold loop_invariant at 1.
     iIntros "(%HP & H)".
     iApply (loop_one_trip words ls Hfit (loop_exit_guard ls) (loop_exit_off ls) post (iotaf 0)
-             (Fr 0) Out Hv Hbs Hpl Hg HOut with "H").
+             (Fr 0) Out Hc Hpl Hg HOut with "H").
   Qed.
 
   (* ---- ENTERING A LOOP (D3) ----------------------------------------------
@@ -826,7 +868,7 @@ Section SegCompose.
       (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
       (* the PREDECESSOR's own code and load address -- it is self-contained,
          so what it hands back is its own instruction span, not the loop's *)
-      (Lp : list AnnotInstr) (cp : bv xlenbits)
+      (Lp : list AST) (cp : bv xlenbits)
       (iota : nat -> Valuation R) (Fin Fin' : iProp Σ) (Fr : nat -> iProp Σ)
       (P : nat -> Prop) (n : nat)
       (Hv : v = @bv.of_N xlenbits (loop_head_addr ls))
@@ -837,7 +879,7 @@ Section SegCompose.
          For two pieces of one program this is ptsto_instrs_w_split on the
          program's instruction block. *)
       (Hswap : Fin ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-                       (ai_instr <$> instrs_of_list cp Lp)
+                       (instrs_of_list cp Lp)
                ⊢ Fin' ∗ loop_instr_block words ls)
       (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin' Fr n) :
     Fin ∗ seg_exit_state words c j a Lp cp v
@@ -910,13 +952,13 @@ Section SegCompose.
      is the shape a chain into a loop actually wants. *)
   Lemma seg_then_loop {R S : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R)
       (c : @CFGVerifierContract S) (j : Valuation S) (a v : bv xlenbits)
-      (Lp : list AnnotInstr) (cp : bv xlenbits)
+      (Lp : list AST) (cp : bv xlenbits)
       (iota : nat -> Valuation R) (Fin Fin' : iProp Σ) (Fr : nat -> iProp Σ)
       (P : nat -> Prop) (n : nat) (Pre Post : iProp Σ)
       (Hv : v = @bv.of_N xlenbits (loop_head_addr ls))
       (HP : P n)
       (Hswap : Fin ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-                       (ai_instr <$> instrs_of_list cp Lp)
+                       (instrs_of_list cp Lp)
                ⊢ Fin' ∗ loop_instr_block words ls)
       (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin' Fr n)
       (Hpred : Pre -∗ myWP2_loop (Fin ∗ seg_exit_state words c j a Lp cp v))
@@ -2106,12 +2148,8 @@ Section SegCompose.
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
       (Hfit : seg_fits_memory (loop_head_addr ls) (loop_code_extent ls)) (Fr : nat -> iProp Σ) (Out Post : iProp Σ)
       (iotaf : nat -> Valuation R) (P : nat -> Prop)
-      (Hvb : cfg_vc (loop_body_contract ls) (gen_loop_annot ls))
-      (Hvf : cfg_vc (loop_final_contract ls post) (gen_loop_annot ls))
-      (* Vacuous today; see loop_one_trip. *)
-      (Hbs : forall wds : bv xlenbits -> bv word,
-               ⊢ blocksSound wds (instrs_of_list
-                   (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)))
+      (Hcb : ValidCFGVerifierContract (loop_body_contract ls))
+      (Hcf : ValidCFGVerifierContract (loop_final_contract ls post))
       (Hpl : forall n, inst (T := fun Σ => Term Σ ty_xlenbits) (loop_base ls) (iotaf n)
                        = ty.SyncVal (@bv.of_N xlenbits (loop_head_addr ls)))
       (HP0 : P 0) (HPm : forall n, P (S n) -> P n)
@@ -2122,7 +2160,7 @@ Section SegCompose.
       (Hedge : forall n, P (S n) ->
              loop_back_edge ls iotaf (@bv.of_N xlenbits (loop_head_addr ls)) Fr n)
       (HOut : Fr 0 ∗ seg_exit_state words (loop_final_contract ls post) (iotaf 0)
-                     (@bv.of_N xlenbits (loop_head_addr ls)) (loop_code ls)
+                     (@bv.of_N xlenbits (loop_head_addr ls)) (strip (loop_code ls))
                      (@bv.of_N xlenbits (loop_head_addr ls))
                      (seg_addr (loop_head_addr ls) (loop_exit_off ls))
               -∗ Out)
@@ -2134,13 +2172,62 @@ Section SegCompose.
   Proof.
     apply (loop_by_induction words ls Fr Out Post iotaf P
              (fun n => loop_body_trip words ls Hfit Fr iotaf P n (HPm n)
-                         Hvb Hbs (Hpl (S n)) (proj1 Hlatch n) (Hedge n))
-             (loop_final_trip words ls post Hfit Fr Out iotaf P HP0 Hvf Hbs
+                         Hcb (Hpl (S n)) (proj1 Hlatch n) (Hedge n))
+             (loop_final_trip words ls post Hfit Fr Out iotaf P HP0 Hcf
                 (Hpl 0) (proj2 Hlatch) HOut)
              Hcont).
   Qed.
 
 End SegCompose.
+
+(* ---- A VALID BLOCK, FROM A CONTRACT ANNOTATED WITH VALID BLOCKS ----------
+   OUTSIDE Section SegCompose: blkValid quantifies over every Σ, while the
+   section fixes one.
+   (PLAN-valid-blk-annot.md Phase 3.)  A contract verified over an
+   AnnotInstrV list is a valid block: its nested blocks are justified by
+   their own proofs and its re-entries by Löb (Adequacy.blocksSound_of_V),
+   so the only remaining obligation is faithfulness at every address.
+   The result goes straight into another program's annotation (vb_ok). *)
+Lemma blkValid_of_contract {R : LCtx} (c : @CFGVerifierContract R)
+    (LV : list (AnnotInstrV blkValid))
+    (Hv : cfg_vc c (List.map (eraseV c) LV))
+    (Hcode : List.map aiv_instr LV = cfg_instrs c)
+    (Hf : forall Σ (GS : sailGS2 Σ) (v : bv xlenbits),
+            ⊢ blockFaithful (List.map (eraseV c) LV) v (selfBlk c)
+                (table_of_list (cfg_placement c) 0 (List.map (eraseV c) LV))) :
+  blkValid (selfBlk c).
+Proof.
+  intros Σ GS words v.
+  iPoseProof (blockSound_of_contract words (selfBlk c) (List.map (eraseV c) LV) Hv
+                (eq_trans (strip_eraseV c LV) Hcode)) as "H".
+  - intros v'. apply blocksSoundAt_false_of_V.
+  - intros v'. apply blocksSound_of_V.
+  - iApply ("H" with "[]"); iIntros (v'); iApply Hf.
+Qed.
+
+(* ...and for a generated segment the faithfulness is blockFaithful_of_seg,
+   so a valid block is: the VC, "the annotated list is this code", and the
+   placement equation (by eq_refl when base_a does not mention "a"). *)
+Lemma blkValid_of_seg {R : LCtx}
+    (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)
+    (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    (LV : list (AnnotInstrV blkValid))
+    (Hba : forall (v : bv xlenbits) (iota : Valuation R),
+             inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+    (Hcode : List.map aiv_instr LV = code)
+    (Hv : let c := gen_seg_contract base base_a code target fl regs extra_pre post in
+          cfg_vc c (List.map (eraseV c) LV)) :
+  blkValid (selfBlk (gen_seg_contract base base_a code target fl regs extra_pre post)).
+Proof.
+  apply (blkValid_of_contract _ LV Hv Hcode).
+  intros Σ GS v.
+  apply blockFaithful_of_seg; [exact (Hba v)|].
+  rewrite strip_eraseV. exact Hcode.
+Qed.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after
    it.  They need no section variable -- a tactic is syntax. *)

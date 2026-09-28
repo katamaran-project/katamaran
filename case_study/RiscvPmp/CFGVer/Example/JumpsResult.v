@@ -67,7 +67,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - solve_valid (valid_jump_if_zero_cfg_contract_param init_addr).
+  - solve_valid valid_jump_if_zero_cfg_contract_param.
 Qed.
 
 Lemma jumpIfZero_noninterferent :
@@ -90,7 +90,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - solve_valid (valid_jmp_fwd_cfg_contract_param init_addr).
+  - solve_valid valid_jmp_fwd_cfg_contract_param.
 Qed.
 
 (* A corollary with no rewrite needed, same as countdown_noninterferent: the

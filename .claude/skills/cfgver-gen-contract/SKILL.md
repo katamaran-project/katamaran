@@ -72,7 +72,7 @@ matcher has no split rule. Use `gen_contract_rel_bytes`, which takes a THIRD
 data list whose entries are read byte-wise:
 
 ```coq
-gen_contract_rel_bytes (init_addr) (reg_specs) (mem_specs)
+gen_contract_rel_bytes (reg_specs) (mem_specs)
                        (byte_mem_specs)      (* <-- these get 4 x ptstomem 1 each *)
                        (instrs) (bound) (fl)
 ```
@@ -186,7 +186,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - exact (valid_<prog>_cfg_contract_param init_addr).
+  - exact valid_<prog>_cfg_contract_param.
 Qed.
 ```
 
@@ -239,7 +239,7 @@ being traced here.
 number, before any bullet:**
 ```coq
 eapply gen_contract_noninterferent_u.
-5: exact (valid_<x>_cfg_contract_param init_addr). (* MUST come first *)
+5: exact valid_<x>_cfg_contract_param.                  (* MUST come first *)
 - ...                                                            (* HND *)
 - ...                                                            (* HDataAddrs *)
 - ...                                                            (* Hlen *)
@@ -254,7 +254,11 @@ No tracked call site needs this any more (all use `_simple` or name-pinned
 These variants build a contract over a *symbolic* placement term
 `term_var "p"` (`Σ = ["p"∷ty_xlenbits]`) instead of a concrete
 `term_val (bv.of_N init_addr)` — the base stays a genuine variable, so the VC is
-proved ONCE for `∀ init_addr`, not per concrete address.
+proved ONCE for `∀ init_addr`, not per concrete address. **The contract takes no
+load address at all** (since PLAN-valid-blk-annot §8.2, 2026-09-28, which dropped
+the record's `cfg_init_addr` field): `<prog>_cfg_contract_param` and its
+`valid_…` lemma are closed terms, and only the BRIDGE takes `init_addr`, for
+the placement valuation and the trusted statement.
 
 **Since 2026-08-18 there is only ONE real implementation, `gen_contract_u`**
 (`PLAN-unify-generators.md` stage 3); everything below it is a one-line wrapper.
@@ -262,7 +266,7 @@ Which name you *call* is an ergonomics choice, but a change to the contract reco
 now touches `gen_contract_u` alone.
 
 - **`gen_contract_u`** — the unified builder:
-  `init_addr reg_specs word_data byte_data instrs bound fl`,
+  `reg_specs word_data byte_data instrs bound fl`,
   all over the base-relative `param_val` vocabulary, classing by default.
   **Granularity is carried by WHICH LIST an entry is in** — `word_data` gets one
   `ptstomem 4` chunk per key, `byte_data` gets four `ptstomem 1`. There is
@@ -275,8 +279,8 @@ now touches `gen_contract_u` alone.
   values are BASE-INDEPENDENT, keeping the plain `reg_spec` (`None` / `Some v`)
   vocabulary rather than making you write `PVExist` / `PVConst v`. It absorbs the
   `reg_spec_to_rel` translation *and* fixes `bound = 4·|instrs|`, which is why it
-  is worth keeping. **Four arguments** — `init_addr reg_specs instrs fl`
-  (the exit arguments went 2026-09-25); the `mem_full_spec` list it used to accept was
+  is worth keeping. **Three arguments** — `reg_specs instrs fl`
+  (the exit arguments went 2026-09-25, `init_addr` 2026-09-28); the `mem_full_spec` list it used to accept was
   removed (all 15 call sites passed `[]`). Data memory → call `gen_contract_u`.
 - **`gen_contract_rel`** — for reg/mem specs whose values are BASE-RELATIVE:
   `param_val = PVExist | PVConst v | PVBaseOff k` (meaning `p+k`), needed when a

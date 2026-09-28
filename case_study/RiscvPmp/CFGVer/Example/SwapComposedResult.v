@@ -61,6 +61,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.GenContract
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.GenCompose
      RiscvPmp.CFGVer.Example.SwapComposed.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -107,26 +108,32 @@ Section Compose.
           (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA)))
       -∗ myWP2_loop swapExit.
   Proof.
-    assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx swapCtx)
-                    (instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA)))
-                    (table_of_list (cfg_placement swapA) 0 (list_AST_AnnotInstr (cfg_instrs swapA))) ι).
-    { apply itable_faith_of_list; [reflexivity|].
-      apply table_bound_of_lenAddr. unfold lenAddr. cbn. lia. }
+    (* Both segments run over the whole program at 0: containment is
+       reflexivity after the projection (PLAN-valid-blk-annot.md Phase 4). *)
+    assert (Hin : instrs_of_list (bv.of_N 0) (cfg_instrs swapA)
+                    ⊆ ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA))).
+    { rewrite fmap_instrs_of_list.
+      change (List.map ai_instr (list_AST_AnnotInstr (cfg_instrs swapA)))
+        with (strip (list_AST_AnnotInstr (cfg_instrs swapA))).
+      rewrite strip_of_AST. reflexivity. }
+    assert (Hfit : (bv.bin (@bv.of_N xlenbits 0) + 4 * N.of_nat (length (cfg_instrs swapA))
+                      < bv.exp2 xlenbits)%N).
+    { change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia. }
+    assert (HcA : ValidCFGVerifierContract swapA) by solve_valid valid_swapA.
+    assert (HcB : ValidCFGVerifierContract swapB) by solve_valid valid_swapB.
     assert (HefA : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
                      (SyncVal (bv.of_N 4)) (cfg_exit swapA) ι).
     { eexists. split; reflexivity. }
     assert (HefB : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
                      (SyncVal (bv.of_N 12)) (cfg_exit swapB) ι).
     { eexists. split; reflexivity. }
-    pose proof valid_swapA as HvA. pose proof valid_swapB as HvB.
-    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in HvA, HvB.
-    cbn [cfg_map swapA swapB] in HvA, HvB.
     iIntros "(Hpre & Hpc & Hnpc & Hinstrs)".
     (* ONE nested loop, collapsed by the bind lemma's corollary. *)
     iApply myWP2_loop_join.
     (* --- SEGMENT A, discharged with ExitCond := "keep running until the
            real exit".  This is what produces the nested loop. --- *)
-    iApply (sound_scfg_verification_condition_myWP2 HvA (myWP2_loop swapExit) Hif HefA ltac:(solve_no_blocks)
+    iApply (contract_run swapA HcA ι (bv.of_N 0) (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA))) _ (myWP2_loop swapExit)
+              eq_refl Hfit Hin HefA
               $! (SyncVal (bv.of_N 0)) with "[Hpre Hpc Hnpc Hinstrs]").
     - cbn [cfg_precondition cfg_instrs swapA] in *. iFrame.
     - (* --- THE CUT.  `Hpost` is segment A's exit assertion, delivered by the
@@ -136,7 +143,8 @@ Section Compose.
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in HexitA.
       injection HexitA as <-.
       (* --- SEGMENT B, entered at the cut address with A's exit assertion. --- *)
-      iApply (sound_scfg_verification_condition_myWP2 HvB swapExit Hif HefB ltac:(solve_no_blocks)
+      iApply (contract_run swapB HcB ι (bv.of_N 0) (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA))) _ swapExit
+                eq_refl Hfit Hin HefB
                 $! (SyncVal (bv.of_N 4)) with "[Hpc Hnpc Hinstrs Hpost]").
       + iEval (cbn) in "Hpost". cbn. iFrame.
         iDestruct "Hpost" as "(H1 & H2 & H3 & Hpriv & Hinv)".

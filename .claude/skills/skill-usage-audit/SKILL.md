@@ -124,7 +124,7 @@ light problem or vice versa:
   test" never reaches the hook and reads as a broken hook.
 - **Don't let gates accumulate unexamined.** A denial that gets ritually
   satisfied rather than acted on is worse than no gate: on 2026-08-17 the
-  `coqc-guard` denied a build that genuinely could not be checked
+  `coqc-guard` (unwired 2026-09-25 for this reason) denied a build that genuinely could not be checked
   interactively, and the session satisfied it with a token call that told it
   nothing, then built anyway. If an audit finds that pattern, the finding is
   "thin the gates", not "add another".

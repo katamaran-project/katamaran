@@ -138,8 +138,8 @@ Definition check_scalar_reg_specs : list reg_spec :=
 
 (* Base-parametric contract (Σ = ["p"]): arbitrary 4-aligned load address.
    Fuel 24 comfortably exceeds the 16 instruction steps plus the exit step. *)
-Definition check_scalar_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_param ia check_scalar_reg_specs check_scalar_instrs 24.
+Definition check_scalar_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+  gen_contract_param check_scalar_reg_specs check_scalar_instrs 24.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
    The end theorem states noninterferent_strong over `check_scalar_instrs` while the
@@ -151,6 +151,6 @@ Definition check_scalar_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" 
 Lemma strip_id_check_scalar_instrs : strip check_scalar_instrs = check_scalar_instrs.
 Proof. reflexivity. Qed.
 
-Lemma valid_check_scalar_cfg_contract_param (ia : N) :
-  cfg_vc (check_scalar_cfg_contract_param ia) (cfg_instrs (check_scalar_cfg_contract_param ia)).
+Lemma valid_check_scalar_cfg_contract_param :
+  cfg_vc check_scalar_cfg_contract_param (cfg_instrs check_scalar_cfg_contract_param).
 Proof. solve_param_vc. Qed.

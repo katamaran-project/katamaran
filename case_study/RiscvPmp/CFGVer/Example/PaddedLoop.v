@@ -1,7 +1,7 @@
 (* ========================================================================= *)
 (* Example/PaddedLoop.v -- SUB-TABLE segment contracts (light half).          *)
 (*                                                                           *)
-(* THE REGRESSION TEST FOR itable_faith_of_segment.  This is the only proof  *)
+(* THE REGRESSION TEST FOR SUB-TABLE CONTRACTS.  This is the only proof     *)
 (* in the tree where a contract's instruction table covers a PROPER SUBSET   *)
 (* of the program, so if the sub-table path breaks, it breaks here.          *)
 (*                                                                           *)
@@ -23,8 +23,8 @@
 (* So program length is now free for a composed proof; it was 28.5x.          *)
 (*                                                                           *)
 (* Soundness is Tables.v's instrs_of_list_segment (three gmap containments)  *)
-(* plus TablesRel.v's itable_faith_of_segment; used in PaddedLoopResult.v,   *)
-(* whose pl_loop is gate-checked axiom-clean.                                *)
+(* for the AST containment pl_contain, which GenCompose.contract_run takes;  *)
+(* used in PaddedLoopResult.v, whose pl_loop is gate-checked axiom-clean.    *)
 (* ========================================================================= *)
 
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
@@ -47,9 +47,8 @@ Definition padded_instrs : list AST := pl_filler ++ cd_instrs.
    identity (Verifier.v:145 -- and coqc warns about exactly that), so a
    `list AST` cannot stand in for the `list AnnotInstr` that ptsto_instrs and
    itable_rel are stated over.  Naming pre/seg/post separately makes
-   itable_faith_of_segment's `pre ++ seg ++ post` match SYNTACTICALLY, which
-   spares the caller an `app_nil_r` rewrite that would otherwise also hit the
-   `seg` occurrence inside table_of_list. *)
+   instrs_of_list_segment's `pre ++ seg ++ post` match SYNTACTICALLY in
+   PaddedLoopResult.pl_contain, sparing an `app_nil_r` rewrite. *)
 Definition pl_pre  : list AnnotInstr := pl_filler.
 Definition pl_seg  : list AnnotInstr := cd_instrs.
 Definition pl_post : list AnnotInstr := [].
@@ -63,7 +62,7 @@ Definition pl_head : N := 256.
 
 (* ---- LOOP BODY: head -> head, one trip.  cfg_instrs is the SEGMENT. ---- *)
 Definition plBody : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx 0%N
+  @MkCFGVerifierContract cdCtx
     (term_val ty_xlenbits (bv.of_N pl_head))
     (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 0)
     (asn_init_pc (bv.of_N pl_head)
@@ -81,7 +80,7 @@ Qed.
 
 (* ---- LOOP EXIT: head -> 264 (one past the 66-instruction program). ---- *)
 Definition plFinal : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx 0%N
+  @MkCFGVerifierContract cdCtx
     (term_val ty_xlenbits (bv.of_N pl_head))
     (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 8)
     (asn_init_pc (bv.of_N pl_head)

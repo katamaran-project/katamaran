@@ -140,8 +140,8 @@ Definition modpow_win_full_mem_specs_rel : list mem_spec_rel :=
 (* Executed steps at num_win = mwlen = 4: 8 (prologue) + 3 outer iterations x
    38 (1 header + 6 setup + 3 x 9 inner + 1 j + 3 latch) = 122.  Fuel 150
    leaves slack — tight fuel surfaces as a bare False deep in the VC. *)
-Definition modpow_win_full_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-  gen_contract_rel_classed ia modpow_win_full_reg_specs_rel modpow_win_full_mem_specs_rel
+Definition modpow_win_full_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+  gen_contract_rel_classed modpow_win_full_reg_specs_rel modpow_win_full_mem_specs_rel
     modpow_win_full_instrs 176 150.
 
 (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
@@ -154,6 +154,6 @@ Definition modpow_win_full_cfg_contract_param (ia : N) : @CFGVerifierContract ["
 Lemma strip_id_modpow_win_full_instrs : strip modpow_win_full_instrs = modpow_win_full_instrs.
 Proof. reflexivity. Qed.
 
-Lemma valid_modpow_win_full_cfg_contract_param (ia : N) :
-  cfg_vc (modpow_win_full_cfg_contract_param ia) (cfg_instrs (modpow_win_full_cfg_contract_param ia)).
+Lemma valid_modpow_win_full_cfg_contract_param :
+  cfg_vc modpow_win_full_cfg_contract_param (cfg_instrs modpow_win_full_cfg_contract_param).
 Proof. solve_param_vc. Qed.
