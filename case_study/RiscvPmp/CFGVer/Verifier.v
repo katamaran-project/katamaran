@@ -91,7 +91,14 @@ Open Scope Z_scope.
    also why Annot is not world-indexed and needs no persist. *)
 Inductive Annot :=
   | AnnotDebugBreak
-  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
+  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)
+  (* A GHOST VIEW (PLAN-array-invariants D2): consume `pre`, produce `post`,
+     over its own logic context Δ, bound ANGELICALLY by the consume.  It is
+     `call_lemma` on an anonymous lemma with no program arguments and no
+     patterns -- so no `Lem` constructor, and no edit to Machine.v, which is
+     inside the trusted statement (Noninterference.v imports it).  Trusted on
+     this light side; its validity (pre ⊢ post) is the heavy side's job. *)
+  | AnnotView {Δ : LCtx} (pre post : Assertion Δ).
 
 (* A BLOCK CONTRACT carried by an instruction: everything needed to say what
    standing in for a run of instructions PROMISES, plus where execution
@@ -806,6 +813,8 @@ Section CFGVerificationDerived.
              (SpecIris.v:364), following iris_rule_stm_lemmak's three-line
              discharge (BinaryInstance.v:196). *)
           call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)
+      | AnnotView pre post =>
+          call_lemma (MkLemma [ctx] _ [env] pre post) [env]
       end.
 
     (* Recurses in list order, so the first annotation runs first.  `nil` is
@@ -1509,9 +1518,12 @@ Section CFGVerificationDerived.
 
     Lemma cext_sexec_ghost (a : Annot) {w : World} : CExt (sexec_ghost a (w := w)).
     Proof.
-      destruct a; cbn.
-      - apply cext_debug, cext_pure.
-      - apply cext_call_lemma.
+      destruct a.
+      - cbn. apply cext_debug, cext_pure.
+      - cbn. apply cext_call_lemma.
+      - (* AnnotView: an anonymous call_lemma.  NO cbn: it would unfold
+           call_lemma at the concrete MkLemma and defeat the apply. *)
+        apply cext_call_lemma.
     Qed.
 
     Lemma cext_sexec_ghosts (gs : list Annot) {w : World} :
