@@ -446,3 +446,51 @@ lemma arguments) only if it branches badly. It does not.
   no VC could have caught it. Rule: a new catalogue entry is not usable
   until its ValidLemma is proved.
 - Heavy chain past SpecIris.vo still not rebuilt (no heavy edits).
+
+### Toward the flat muladd with loop blocks (2026-10-02, in progress)
+
+Probe `Example/ZZMuladdBlk.v` (untracked): ZZMuladdFullN2's instructions and
+contract (copied -- that file is on the pre-`cfg_init_addr`-removal API and
+Requiring it would run its OOM flat VC), with deviation 3 REVERTED (both
+`li _, 32` restored, since loop blocks make the trip count irrelevant).
+
+- **All five loops verify as blocks** (probes ZZArrD/G/I/K/M.v, each with
+  three rejected controls). G added as `Example/ZZArrG.v` (register-only,
+  18.5 s). Code-equality lemmas `mb_{d,g,i,k,m}_code` pin each block's code
+  to muladd's own instructions at idx 84/135/190/237/264 (reflexivity).
+- **Step A (only G as a block): OOM at 9.4 GB after 71 s.** Cause is known
+  (diagnostics/muladd-full-cost-drivers.md): I's carry-chain term
+  duplication runs inside the flat VC unless I is a block too.
+- **Contracts made CALLER-READY** (all probes re-verified): posts hand back
+  the scratch registers the precondition consumed (else they are dropped
+  and code after the loop cannot read them); arrays EMPTY at entry (done
+  arrays, D's moved array) matched with `chunk_angelic`.
+- **Exit side needed three things** (probe `Example/ZZArrDExit.v`, cells ->
+  arrays -> D block -> cells, by `solve_param_vc`, control rejected):
+  1. `clem_arr_empty_elim` (`arr a 0 e ⊢ a = e`) so a caller learns an
+     existential exit pointer; it works only if the post names the pointer
+     BARE as an array start -- the solver substitutes `g = E` but NOT
+     `c + f = t` (found by reading the debug VC: cells stayed at `f`).
+  2. `clem_arr_lockstep` (same stride + same count: one start = end gives
+     the other) for K/I/M's NON-latch pointer; posts restated with the latch
+     pointer as its end `e` and the other bound bare by its remaining array.
+  3. residual closers `relval_neq_offset(s)` (Contracts.v, in
+     `solve_symbase_fetch`) for `x ≠ c + x` / `c1 + x ≠ c2 + x`, left by
+     `nonempty` on arrays over one base.
+  Plus `clem_arr_drop` to remove spent arrays. `clemSem` covers 8 entries.
+- **Step B (all five loops as blocks + conversion ghosts): OOM at 8.1 GB
+  after 436 s** (vs 71 s) -- the loop bodies left the VC, something else is
+  still too big. **Prefix probes** `Example/ZZMbPre{83,90,91,...}.v`:
+  - prefix 83 (before D): verifies, **4.4 s**, 4.6 GB.
+  - prefix 90 (D's build ghosts + D block): verifies, **84.5 s** -- D's
+    ENTRY costs ~80 s. Working hypothesis: angelic `heap_extractions`
+    search over a ~130-chunk heap (instruction words, registers, cells) at
+    every angelic array/cell match; unmeasured.
+  - prefix 91 (+ D's split + one instruction): FAILS (not yet diagnosed).
+- **Tried and reverted:** `arr` precise on NO inputs (so ghost lemmas match
+  by predicate, no heap search). Sound, but a block precondition then no
+  longer rejects a wrongly seeded array by address syntax: it asserts the
+  address equation, which is satisfiable for a cell at an unrelated base,
+  so the wrong branch survives as an unresolved angelic disjunction
+  (ZZArrDEntry's decoys). Ghost lemmas want "by predicate", block
+  preconditions want "by address".
