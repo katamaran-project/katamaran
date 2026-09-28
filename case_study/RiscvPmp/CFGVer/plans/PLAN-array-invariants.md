@@ -40,6 +40,26 @@ because source and destination overlap.
   variable" argument). Heavier: Annot becomes world-indexed, touches executor,
   concrete mirror, refinement and soundness.
 
+- **A3. Stride is a Coq-level parameter** (Q1, decided): every predicate and
+  lemma takes `(pub : bool) (s : N)`. Sig.v is the expensive rebuild, so
+  generality is bought now.
+- **A4. The pointer/count tie is a pure fact, closed as a RESIDUAL by `ring`**
+  (decided). `peval` has no linear normal form for `bvmul` (only the
+  `bvmulx` mask patterns), so `e = dp - s*c` survives the solver; the back
+  edge leaves a pure identity like `(dp-4) - 4(c-1) = dp - 4c`, closed by a
+  new residual closer in `solve_param_vc` using `bv.ring_theory`
+  (Bitvector.v:1603). Check the residual's actual shape (it may be over
+  RelVal) in Phase 0. Upgrade path, if residuals multiply: a linear bv
+  normal form in peval/Solver.v (theories/ change).
+- **A5. BOTH indexings** (decided):
+  - count-indexed `arr_dn`/`arr_up` (addr, count) for COUNTER-driven loops
+    (D): pop legality is `c ≠ 0`, free; the multiplication appears only in the
+    post's ghost tie (A4).
+  - endpoint-indexed `arr_rng lo hi` (cells lo, lo+s, ... below hi) for
+    POINTER-bounded loops (K, M latch on `bne T5, S0`): pop legality is
+    `lo ≠ hi`, exactly the latch; no count, no multiplication.
+  Either indexing alone forces the multiplication into the other loop kind.
+
 ## Design
 
 ### D1. Two DIRECTED predicates, count-indexed
@@ -152,11 +172,24 @@ parameter. OPEN, see Q1.
 
 ## Open questions
 
-- **Q1. A Coq-level stride parameter now?** `arr_dn (pub : bool) (stride : N)`
-  costs little in Sig.v, and Sig.v is the expensive rebuild, so adding it
-  later costs a second full rebuild. Against: no current loop needs it, and a
-  stride multiplies the address arithmetic D1 keeps at constant offsets (still
-  constant, as `stride` is a literal). Undecided.
+- **Q1. Stride parameter** -- DECIDED yes, see A3.
+- **Q2. Lemma preconditions must use `asn.chunk_angelic`.** Only
+  `consume_chunk_angelic` (Monads.v:858) has the `heap_extractions` fallback;
+  plain `consume_chunk` errors when neither exact nor precise matching
+  succeeds. Split/join lemmas consume the ARRAY chunk first (the unique
+  instance of its predicate, so no real choice), which binds the address;
+  the neighbouring cell is then found PRECISELY (`a ± s`, a term, after peval).
+- **Q3. INTRODUCING an array needs a term argument.** `⊢ arr p 0` (or
+  `cell a ⊢ arr a 1`) has no array to match: its address is either an
+  unconstrained angelic variable (which no later precise consume can equate
+  with `dp`) or an angelic choice among ALL cells in the heap (ambiguous).
+  Split/join never needs this, since every one of them consumes an existing
+  array; only the CALLER-side conversion from concrete cells does (Phase 3).
+  So Emiel's "ghost variable" suggestion is needed after all, for intro
+  lemmas only: an annotation kind whose arguments are terms over the
+  enclosing contract's logic context. Hence Phase 0's entry check moves to
+  the Iris level (Phase 1: the interpretation at a concrete count is
+  inhabited), and the ghost-variable annotation joins Phase 3.
 
 ## Files touched
 
@@ -178,11 +211,12 @@ No `theories/` change. No executor change. No trusted-surface change
   Machine.v, Spec.v); Iris interpretation stubbed only if the build forces it.
   Probe `Example/ZZArrD.v`: D standalone as an `ai_loop` block with D3's
   invariant, `solve_param_vc`. GATE: VC green AND two negative controls
-  REJECTED (an invariant that drops `arr_up_cons`'s cell; a wrong `N`)
-  AND an ENTRY CHECK: a small caller that establishes `inv` from concrete
-  cells at a concrete count (c = 2, via `arr_*_nil` + pushes) verifies, so
-  the invariant is shown satisfiable, not merely preserved (§R11's lesson,
-  see "Relation to the previous machinery").
+  REJECTED (an invariant that drops `arr_up_cons`'s cell; a wrong `N`).
+  The ENTRY CHECK (the invariant is satisfiable, not merely preserved:
+  §R11's lesson) moved to Phase 1, at the Iris level, because building an
+  array from concrete cells inside the executor needs Q3's term-argument
+  annotation. Phase 0 adds all predicates and all split/join lemma
+  contracts (count-indexed AND `arr_rng`) in ONE Sig.v/Machine.v pass.
   This settles A2 (does angelic matching resolve without branching?) and D3's
   residuals before any Iris work.
 - **1. Interpretation + lemma soundness.** D4; `*_sound` in SpecIris.v.
@@ -192,8 +226,10 @@ No `theories/` change. No executor change. No trusted-surface change
   like CountdownRecResult. GATE: axiom-clean end theorem.
 - **3. D inside muladd.** The caller's side: converting muladd's concrete
   cells into `arr_*` chunks (at mlen=2, concrete counts: `arr_*_nil` then
-  pushes, as ghosts in the preceding segment). GATE: `bc_run_in_muladd`-style
-  run of D at idx 84.
+  pushes, as ghosts in the preceding segment). Needs Q3's annotation kind
+  (lemma arguments as terms over the contract's logic context: Verifier.v
+  Annot, sexec/cexec/rexec ghost cases, sound_cexec_ghosts). GATE:
+  `bc_run_in_muladd`-style run of D at idx 84.
 - **4. K, then I, M.** Two arrays per loop, one private (x[]) and one public
   (m[]): different flags, so angelic matching still has one candidate per
   lemma. GATE per loop as Phase 0.
