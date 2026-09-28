@@ -412,3 +412,37 @@ carry on private data -- no residual.
   I were GENERATED from K's file by register/instruction substitution.
 - Heavy chain past SpecIris.vo NOT rebuilt since `clem_arr_nonempty` (no
   heavy edits expected: `sound_cexec_ghosts` uses `clemSem k` generically).
+
+### Phase 3 SPIKE (2026-10-02) -- route (A) WORKS, no new machinery
+
+Emiel chose: spike route (A) (angelic seed), fall back to (B) (named-term
+lemma arguments) only if it branches badly. It does not.
+
+- **Two new catalogue entries** (Verifier.v, proved in SpecIris, `clemSem`
+  now 5 cases): `clem_arr_empty pub s` (`secLeak a ⊢ arr a 0 a`, `a`
+  UNCONSTRAINED -- a seed) and `clem_arr_add_last pub s`
+  (`arr a n e ∗ cell e ∗ range e ⊢ arr a (n+1) (e+s)`, the cell matched with
+  `chunk_angelic`, which is what binds a fresh seed's address).
+- **Probe `Example/ZZArrDEntry.v`** (untracked): a NOP whose ghosts_after
+  build D's arrays from individual cells (two seeds, two add_last), then D's
+  loop as an ordinary `ai_block`. Its precondition holds D's three cells and
+  TWO DECOY cells at an unrelated base, so the first add_last's angelic cell
+  choice is genuinely 5-way. `valid_e`: `solve_vc` in 177 ms; the file
+  (incl. D's angelic-moved-array variant `valid_d_recA` and three controls:
+  one add_last too few, the dp-4 cell missing, T6 pinned to 3 -- all
+  REJECTED) compiles in 23 s.
+- **Why it is cheap:** the ghosts sit on the instruction RIGHT BEFORE the
+  block, so a wrong angelic choice fails one step later, at the block's
+  precondition, and is pruned; and the seed's address is substituted
+  EAGERLY once bound, so every later add_last is a precise, deterministic
+  match. Only the first choice per array branches.
+- **The one design cost:** an array that starts EMPTY at a block's entry
+  (D's moved array) must be matched with `chunk_angelic` in the block's
+  precondition, so the unconstrained seed can be bound by the match.
+- **Soundness finding:** `⊢ arr a 0 a` alone is NOT a valid lemma --
+  `ValidLemma` quantifies over every valuation and `arr` is False at a
+  NonSyncVal address. The seed needs `secLeak a` in its precondition. Found
+  by writing the soundness proof; the executor trusts catalogue entries, so
+  no VC could have caught it. Rule: a new catalogue entry is not usable
+  until its ValidLemma is proved.
+- Heavy chain past SpecIris.vo still not rebuilt (no heavy edits).
