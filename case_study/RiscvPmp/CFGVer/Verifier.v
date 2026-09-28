@@ -123,7 +123,12 @@ Inductive CLem : Set :=
   (* arr a 0 e ⊢ ⌜a = e⌝ -- a caller's way to learn where an array ended:
      a loop post names its exit pointer existentially, and the empty
      remainder's start/end are the only link to the caller's addresses *)
-  | clem_arr_empty_elim (pub : bool) (s : Z).
+  | clem_arr_empty_elim (pub : bool) (s : Z)
+  (* arr a1 n e1 ∗ arr a2 n e2 ∗ a1=e1 ⊢ both ∗ ⌜a2 = e2⌝ -- two arrays of
+     the same stride and the SAME count move in lockstep: a pointer-bounded
+     loop's latch array ending at its end tells the caller where the OTHER
+     pointer ended (s·n = 0 carries over) *)
+  | clem_arr_lockstep (pub1 pub2 : bool) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -204,6 +209,18 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.chunk_angelic (chunk_user (arr pub s)
            [term_var "a"; term_val ty_xlenbits bv.zero; term_var "e"]))
         (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
+  | clem_arr_lockstep pub1 pub2 s =>
+      MkLemma [ctx]
+        ["a1"∷ty_xlenbits; "n"∷ty_xlenbits; "e1"∷ty_xlenbits;
+         "a2"∷ty_xlenbits; "e2"∷ty_xlenbits] [env]
+        (asn.sep (asn.chunk_angelic (chunk_user (arr pub1 s)
+                    [term_var "a1"; term_var "n"; term_var "e1"]))
+           (asn.sep (asn.chunk_angelic (chunk_user (arr pub2 s)
+                       [term_var "a2"; term_var "n"; term_var "e2"]))
+              (asn.formula (formula_relop bop.eq (term_var "a1") (term_var "e1")))))
+        (asn.sep (clem_arr pub1 s (term_var "a1") (term_var "n") (term_var "e1"))
+           (asn.sep (clem_arr pub2 s (term_var "a2") (term_var "n") (term_var "e2"))
+              (asn.formula (formula_relop bop.eq (term_var "a2") (term_var "e2")))))
   end.
 
 Inductive Annot :=

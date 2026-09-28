@@ -622,13 +622,42 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplit; [|done]. iPureIntro. subst e. apply arr_ring_zero.
     Qed.
 
+    Lemma arr_lockstep_eq (a1 a2 s n : bv xlenbits) :
+      a1 = bv.add a1 (bv.mul s n) -> a2 = bv.add a2 (bv.mul s n).
+    Proof.
+      intros H. rewrite <- (bv.add_zero_r (x := a1)) in H at 1.
+      apply bv.add_cancel_l in H. rewrite <- H. symmetry. apply bv.add_zero_r.
+    Qed.
+
+    (* Same stride, same count: if one array's start is its end, s·n = 0,
+       so the other's is too. *)
+    Lemma clem_lockstep_sound `{sailGS2 Σ} (pub1 pub2 : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_lockstep pub1 pub2 s)).
+    Proof.
+      intros ι. destruct_syminstance ι.
+      destruct a1 as [a1|]; destruct n as [n|]; destruct e1 as [e1|];
+        destruct a2 as [a2|]; destruct e2 as [e2|];
+        cbn -[interp_arr]; try (iIntros "[[] _]"); try (iIntros "[_ [[] _]]").
+      iIntros "[H1 [H2 [%Heq _]]]".
+      iAssert (⌜e2 = bv.add a2 (bv.mul (bv.of_Z s) n)⌝ ∗
+               interp_arr pub2 s (SV a2) (SV n) (SV e2))%I with "[H2]" as "[%He2 H2]".
+      { cbn [interp_arr]. iDestruct "H2" as "[%He Hc]". iFrame "Hc". done. }
+      iAssert (⌜e1 = bv.add a1 (bv.mul (bv.of_Z s) n)⌝ ∗
+               interp_arr pub1 s (SV a1) (SV n) (SV e1))%I with "[H1]" as "[%He1 H1]".
+      { cbn [interp_arr]. iDestruct "H1" as "[%He Hc]". iFrame "Hc". done. }
+      iFrame "H1 H2". iSplit; [|done]. iPureIntro.
+      subst e1 e2. eapply arr_lockstep_eq; eassumption.
+    Qed.
+
     (* The catalogue's lemSemCFGVerif. *)
     Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
       ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
     Proof.
       destruct k; [apply clem_take_first_sound|apply clem_add_first_sound
                   |apply clem_nonempty_sound|apply clem_empty_sound
-                  |apply clem_add_last_sound|apply clem_empty_elim_sound].
+                  |apply clem_add_last_sound|apply clem_empty_elim_sound
+                  |apply clem_lockstep_sound].
     Qed.
   End CLemSound.
 
