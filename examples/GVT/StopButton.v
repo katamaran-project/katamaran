@@ -123,7 +123,7 @@ Module inv := invariants.
     Definition a0 : RegIdx := [bv 10].
 
     Definition pure_privilege_to_bits {n} : Privilege -> bv n :=
-      fun p => match p with | Machine => bv.of_N 3 | User => bv.zero end.
+      fun p => match p with | Machine => bv.of_N 3 | Supervisor => bv.one | User => bv.zero end.
 
     Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> bv 4 :=
       fun mt => match mt with

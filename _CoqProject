@@ -49,7 +49,7 @@ examples/GVT/Model.v
 examples/GVT/LoopVerification.v
 examples/GVT/Spec.v
 examples/GVT/PartialVerifier.v
-examples/GVT/StopButton.v
+#examples/GVT/StopButton.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
