@@ -77,7 +77,7 @@ Definition dec {Σ} (t : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 (* ---- LOOP BODY: head -> head, one trip.  Requires k-1 <> 0 so the BNE
        is taken and the fall-through path is infeasible. ---- *)
 Definition cdBody : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx 0%N
+  @MkCFGVerifierContract cdCtx
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0)
     (asn_init_pc (bv.of_N 0)
@@ -102,7 +102,7 @@ Definition cdInvAsn : Assertion cdCtx :=
 (* ---- LOOP EXIT: head -> 8, the final trip.  Requires k-1 = 0 so the BNE
        falls through. ---- *)
 Definition cdFinal : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx 0%N
+  @MkCFGVerifierContract cdCtx
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8)
     (asn_init_pc (bv.of_N 0)

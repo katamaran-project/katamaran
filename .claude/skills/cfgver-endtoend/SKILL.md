@@ -50,7 +50,7 @@ Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
   (contract : @CFGVerifierContract R)
   (valid_contract : ValidCFGVerifierContract contract)   (* SEALED, Validity.v *)
   (contractInstrs : cfg_instrs contract = instrs)         (* eq_refl *)
-  (init_addr : N) (contractInitAddr : cfg_init_addr contract = init_addr)
+  (init_addr : N)                          (* the contract has no load address *)
   (contractPlacement : inst (cfg_placement contract) ι = ty.SyncVal (bv.of_N init_addr))
   (HexitFaith : etable_rel (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
   (ImplPre : forall `{sailGS2 Σ}, … -∗
@@ -91,8 +91,8 @@ any more.
 eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1'
   instrs (init_addr + 4 * N)%N n ws [ctx] [env]
   [existT ty_xlenbits x1] HpubReg my_cfg_contract
-  my_cfg_contract_valid eq_refl init_addr eq_refl).
-  (* eq_refls: contractInstrs, then contractInitAddr *)
+  my_cfg_contract_valid eq_refl init_addr).
+  (* eq_refl: contractInstrs *)
 (* contractPlacement and HexitFaith are then goals *)
 all: try eauto.
 ```

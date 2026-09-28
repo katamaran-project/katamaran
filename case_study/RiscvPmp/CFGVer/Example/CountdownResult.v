@@ -75,7 +75,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - solve_valid (valid_countdown_cfg_contract_param init_addr).
+  - solve_valid valid_countdown_cfg_contract_param.
 Qed.
 
 (* The concrete result is a corollary of the universal-base theorem above:
@@ -109,7 +109,7 @@ Proof.
       try (inversion H; subst; cbn; f_equal; lia); discriminate.
   - cbn. lia.
   - exact Hb.
-  - solve_valid (valid_countdown_mem_cfg_contract_param init_addr).
+  - solve_valid valid_countdown_mem_cfg_contract_param.
 Qed.
 
 (* The concrete result is now a corollary of the universal-base theorem

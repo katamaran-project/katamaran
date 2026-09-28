@@ -327,7 +327,7 @@ Section SegCompose.
      witness.  gen_seg_contract's leading `asn_pc_eq` conjunct is exactly it. *)
   Lemma seg_pre_placement {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
+      (code : list AST)
       (target : N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -336,10 +336,10 @@ Section SegCompose.
                (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
              = inst (T := fun Σ => Term Σ ty_xlenbits) base iota) :
     asn.interpret (extend_to_minimal_pre (cfg_precondition
-        (gen_seg_contract base base_a ia code target fl regs extra_pre post)))
+        (gen_seg_contract base base_a code target fl regs extra_pre post)))
       (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
     ⊢ ⌜ inst (T := fun Σ => Term Σ ty_xlenbits)
-          (cfg_placement (gen_seg_contract base base_a ia code target fl regs
+          (cfg_placement (gen_seg_contract base base_a code target fl regs
              extra_pre post)) iota
         = ty.SyncVal v ⌝.
   Proof.
@@ -373,7 +373,7 @@ Section SegCompose.
      the last step: this file imports stdpp's gmap (gmap-pitfalls). *)
   Lemma seg_pre_bound {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
+      (code : list AST)
       (target : N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -383,7 +383,7 @@ Section SegCompose.
              = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
       (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) base iota = ty.SyncVal v) :
     asn.interpret (extend_to_minimal_pre (cfg_precondition
-        (gen_seg_contract base base_a ia code target fl regs extra_pre post)))
+        (gen_seg_contract base base_a code target fl regs extra_pre post)))
       (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
     ⊢ ⌜ (bv.bin v + 4 * N.of_nat (length code) <= lenAddr)%N ⌝.
   Proof.
@@ -403,11 +403,11 @@ Section SegCompose.
      Both conjuncts want only the placement fact.  The exit half used to force
      `v = ia` as well, because seg_exitCond compared ABSOLUTE addresses built
      from the contract's own load address; since PLAN-exit-targets.md the exit
-     is a term over the same base, so a block no longer depends on its
-     contract's `ia` at all. *)
+     is a term over the same base, so a block no longer depends on a load
+     address at all (and since PLAN-valid-blk-annot §8.2 a contract has none). *)
   Lemma blockFaithful_of_seg {R : LCtx}
       (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-      (ia : N) (code : list AST)
+      (code : list AST)
       (target : N) (fl : nat) (regs : list reg_spec_rel)
       (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
       (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
@@ -421,17 +421,17 @@ Section SegCompose.
       (Hab : strip ab = code) :
     ⊢ blockFaithful ab v
         {| blk_ctx := R
-         ; blk_contract := gen_seg_contract base base_a ia code target fl regs
+         ; blk_contract := gen_seg_contract base base_a code target fl regs
                              extra_pre post |}
-        (table_of_list (cfg_placement (gen_seg_contract base base_a ia code
+        (table_of_list (cfg_placement (gen_seg_contract base base_a code
                           target fl regs extra_pre post)) 0 ab).
   Proof.
     unfold blockFaithful.
     iIntros "!>" (iota) "Hpre".
-    iDestruct (seg_pre_placement base base_a ia code target fl regs extra_pre
+    iDestruct (seg_pre_placement base base_a code target fl regs extra_pre
                  post iota v (Hba iota) with "Hpre")
       as "%Hp".
-    iDestruct (seg_pre_bound base base_a ia code target fl regs extra_pre
+    iDestruct (seg_pre_bound base base_a code target fl regs extra_pre
                  post iota v (Hba iota) Hp with "Hpre")
       as "%Hb".
     assert (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N).
@@ -2210,7 +2210,7 @@ Qed.
    placement equation (by eq_refl when base_a does not mention "a"). *)
 Lemma blkValid_of_seg {R : LCtx}
     (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia : N) (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)
+    (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)
     (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
     (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     (LV : list (AnnotInstrV blkValid))
@@ -2219,9 +2219,9 @@ Lemma blkValid_of_seg {R : LCtx}
                (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
              = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
     (Hcode : List.map aiv_instr LV = code)
-    (Hv : let c := gen_seg_contract base base_a ia code target fl regs extra_pre post in
+    (Hv : let c := gen_seg_contract base base_a code target fl regs extra_pre post in
           cfg_vc c (List.map (eraseV c) LV)) :
-  blkValid (selfBlk (gen_seg_contract base base_a ia code target fl regs extra_pre post)).
+  blkValid (selfBlk (gen_seg_contract base base_a code target fl regs extra_pre post)).
 Proof.
   apply (blkValid_of_contract _ LV Hv Hcode).
   intros Σ GS v.

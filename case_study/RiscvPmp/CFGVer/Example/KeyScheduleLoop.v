@@ -123,8 +123,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition key_schedule_loop2_mem_specs_rel : list mem_spec_rel :=
       [(56%N, false, PVExist); (60%N, false, PVExist)].
 
-    Definition key_schedule_loop2_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel_classed ia key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel
+    Definition key_schedule_loop2_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_rel_classed key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel
         key_schedule_loop2_instrs 64 40.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
@@ -137,6 +137,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Lemma strip_id_key_schedule_loop2_instrs : strip key_schedule_loop2_instrs = key_schedule_loop2_instrs.
     Proof. reflexivity. Qed.
 
-    Lemma valid_key_schedule_loop2_cfg_contract_param (ia : N) :
-      cfg_vc (key_schedule_loop2_cfg_contract_param ia) (cfg_instrs (key_schedule_loop2_cfg_contract_param ia)).
+    Lemma valid_key_schedule_loop2_cfg_contract_param :
+      cfg_vc key_schedule_loop2_cfg_contract_param (cfg_instrs key_schedule_loop2_cfg_contract_param).
     Proof. solve_param_vc. Qed.

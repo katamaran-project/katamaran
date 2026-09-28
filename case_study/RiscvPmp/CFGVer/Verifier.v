@@ -112,23 +112,16 @@ Inductive Annot :=
    block's VC depend on the whole program, which foreclosed NESTING: see the
    retraction in PLAN-contract-ast §2c.
 
-   WHY NO PROOF FIELD, given that the natural design is for the annotation to
-   carry its own justification.  A validity proof's TYPE is the verification
-   condition, and the VC runs the symbolic executor, whose instruction table is
-   AnnotInstr-valued (SInstrTable, below) -- so the type mentions AnnotInstr,
-   hence `option BlkAnnot`, hence itself.  The block's CODE is plain instructions;
-   it is the VC OVER that code that is annotated, and that is what closes the
-   loop.  Breaking it needs the executor parameterised over its payload, and
-   the payload parameter is not inferable from a signature (`SInstrTable
-   (wlctx Σ)` gives unification nothing to solve it against), so it would have
-   to be written out at ~220 sites across ten files including
-   CFGVerifierContract -- the trusted statement surface.  Measured, not
-   guessed.
-
-   The justification therefore lives BESIDE the program, as `blocks_valid`
-   (Contracts.v), read off exactly these fields.  The guarantee is the same --
-   an unverified block cannot reach a theorem -- the difference is only that
-   you are stopped when you USE a block rather than when you BUILD one. *)
+   NO PROOF FIELD HERE: validity rides in AnnotInstrV (below,
+   PLAN-valid-blk-annot).  A validity proof's TYPE is the verification
+   condition, and the VC runs the symbolic executor over an AnnotInstr-valued
+   table -- so a proof field in BlkAnnot would make the type mention itself.
+   Breaking that by parameterising the executor over its payload was measured
+   at ~220 sites across ten files, including CFGVerifierContract -- the trusted
+   statement surface.  Instead `AnnotInstrV Valid` pairs each block with a
+   proof `Valid b` and ERASES to AnnotInstr (eraseV), so the executor and
+   cfg_vc never see it; the heavy side instantiates Valid with
+   Adequacy.blkValid and Validity.ValidCFGVerifierContract seals the result. *)
 (* THE CONTRACT RECORD.  It lives HERE, above AnnotInstr, rather than in
    Contracts.v, because `ai_block` carries one (PLAN-contract-ast §2.4) and
    Contracts.v requires this file.  Only the DATA is here; the verification
@@ -137,8 +130,7 @@ Inductive Annot :=
    by running the executor. *)
 Record CFGVerifierContract {Σ} :=
   MkCFGVerifierContract
-  { cfg_init_addr     : N
-  ; cfg_placement     : Term Σ ty_xlenbits
+  { cfg_placement     : Term Σ ty_xlenbits
   (* THE EXIT (PLAN-exit-targets.md, 2026-09-25): ONE address term, over the
      same context as the placement.  A run of this contract stops exactly when
      the pc IS this address.  It replaced both `cfg_exits` (a list of terms)
@@ -158,13 +150,13 @@ Record CFGVerifierContract {Σ} :=
   }.
 
 Definition cfg_map {Σ A} (c : @CFGVerifierContract Σ)
-  (f : N -> Term Σ ty_xlenbits -> Term Σ ty_xlenbits ->
+  (f : Term Σ ty_xlenbits -> Term Σ ty_xlenbits ->
        Assertion (Σ ▻ "a" ∷ ty_xlenbits) -> list AST -> nat ->
        Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) -> A) : A :=
   match c with
-  | {| cfg_init_addr := ia; cfg_placement := p; cfg_exit := ex;
+  | {| cfg_placement := p; cfg_exit := ex;
        cfg_precondition := pre; cfg_instrs := i; cfg_fuel := fl;
-       cfg_postcondition := post |} => f ia p ex pre i fl post
+       cfg_postcondition := post |} => f p ex pre i fl post
   end.
 
 (* A BLOCK ANNOTATION: a contract, plus where execution resumes.

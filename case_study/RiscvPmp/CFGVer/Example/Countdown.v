@@ -59,12 +59,12 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        the canonical offset-0 key `p` the same way it collapses forward jumps
        to `c ⊕ p` -- CONFIRMED: the existing offset-agnostic tail closes the
        VC with zero changes. *)
-    Definition countdown_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia [(X1, true, Some (bv.of_N 2))]
+    Definition countdown_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param [(X1, true, Some (bv.of_N 2))]
         [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] 5.
 
-    Lemma valid_countdown_cfg_contract_param (ia : N) :
-      cfg_vc (countdown_cfg_contract_param ia) (cfg_instrs (countdown_cfg_contract_param ia)).
+    Lemma valid_countdown_cfg_contract_param :
+      cfg_vc countdown_cfg_contract_param (cfg_instrs countdown_cfg_contract_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 spike ===== *)
 
@@ -112,8 +112,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition countdown_mem_mem_specs_rel : list mem_spec_rel :=
       [(16%N, true, PVConst (bv.of_N 2))].
 
-    Definition countdown_mem_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel_classed ia countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
+    Definition countdown_mem_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_rel_classed countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel
         countdown_mem_instrs 20 10.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
@@ -126,7 +126,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Lemma strip_id_countdown_mem_instrs : strip countdown_mem_instrs = countdown_mem_instrs.
     Proof. reflexivity. Qed.
 
-    Lemma valid_countdown_mem_cfg_contract_param (ia : N) :
-      cfg_vc (countdown_mem_cfg_contract_param ia) (cfg_instrs (countdown_mem_cfg_contract_param ia)).
+    Lemma valid_countdown_mem_cfg_contract_param :
+      cfg_vc countdown_mem_cfg_contract_param (cfg_instrs countdown_mem_cfg_contract_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)

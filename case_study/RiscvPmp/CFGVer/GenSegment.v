@@ -302,7 +302,6 @@ Definition gen_base_bound {Σ : LCtx} (base : Term Σ ty_xlenbits) (bound : N)
 Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia : N)                      (* the SEGMENT's own load address *)
     (* The segment's own code, as the SPEC (`list AST`): what sits in memory.
        The table is built from the ANNOTATED list `cfg_vc` takes as an
        argument; the two are tied by `strip a = cfg_instrs c` at the
@@ -314,7 +313,7 @@ Definition gen_seg_contract {Σ : LCtx}
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  @MkCFGVerifierContract Σ ia
+  @MkCFGVerifierContract Σ
     base
     (exit_of_off base target)
     ( asn_pc_eq base_a
@@ -931,7 +930,7 @@ Definition gen_loop_contract_post {Σ : LCtx} (ls : LoopSpec Σ)
        moves consume-scan positions, so this was measured, not assumed --
        ZZSpikeA3.v verifies both of loop D's contracts, the shape with two
        walking pointers, two cells and three base bounds;
-     - cfg_placement is the bare `loop_base` and cfg_init_addr `loop_head_addr`
+     - cfg_placement is the bare `loop_base`
        (since 2026-09-25: gen_seg_contract no longer adds a head offset, so
        the `+ 0` the composition lemmas used to strip is gone);
      - cfg_exit is `exit_of_off (loop_base ls) target`, the target relative
@@ -943,7 +942,7 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
     : @CFGVerifierContract Σ :=
   (* `strip`: gen_seg_contract wants the SPEC side, while LoopSpec carries the
      annotated code the VC runs on. *)
-  gen_seg_contract (loop_base ls) (loop_base_pre ls) (loop_head_addr ls)
+  gen_seg_contract (loop_base ls) (loop_base_pre ls)
     (strip (loop_code ls))
     target (loop_fuel ls) (loop_regs ls)
     (gen_loop_contract_pre ls g) post.
@@ -968,7 +967,7 @@ Definition gen_loop_contract {Σ : LCtx} (ls : LoopSpec Σ)
    the precondition, and only the top-level bridge concretises it, at the ι it
    chooses itself.  So cfg_exitCond, etable_rel and the agreement obligation
    are all gone, and the PaddedLoop objection (cfg_init_addr ≠ placement) no
-   longer arises, because nothing is derived from cfg_init_addr.
+   longer arises: that field is gone too (PLAN-valid-blk-annot §8.2).
 
    So the real win is not removing a field; it is that the obligation is
    already DISCHARGED ONCE for everything the generators build, and the
@@ -977,19 +976,16 @@ Section GenSegProjections.
   Context {Σ : LCtx}
     (base : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ia : N) (code : list AST)
+    (code : list AST)
     (target : N) (fl : nat) (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)).
 
   Let c : @CFGVerifierContract Σ :=
-    gen_seg_contract base base_a ia code target fl regs extra_pre post.
+    gen_seg_contract base base_a code target fl regs extra_pre post.
 
-  (* All four are eq_refl since the contract became self-contained: there is
+  (* All three are eq_refl since the contract became self-contained: there is
      no head offset left to add to the placement or subtract from a target. *)
-  Lemma gen_seg_init_addr : @eq N (cfg_init_addr c) ia.
-  Proof. reflexivity. Qed.
-
   Lemma gen_seg_place : cfg_placement c = base.
   Proof. reflexivity. Qed.
 

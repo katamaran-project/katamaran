@@ -105,9 +105,10 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        and ONE exit term `cfg_exit` (PLAN-exit-targets.md).  Concrete contracts pass term_val (bv.of_N init_addr)
        (the keys then fold to literals inside peval_bvadd — same behavior as
        the old gmap VC); parameterized contracts may pass a variable term.
-       `cfg_init_addr : N` remains the concrete load address used by the
-       memory/end-to-end side; the two are linked in the soundness chain by
-       the hypothesis  inst cfg_placement ι = SyncVal (bv.of_N init_addr). *)
+       The concrete load address is NOT part of the contract (its old field
+       cfg_init_addr was dropped, PLAN-valid-blk-annot §8.2): the end-to-end
+       side takes init_addr itself and links it through the hypothesis
+       inst cfg_placement ι = SyncVal (bv.of_N init_addr). *)
     Definition CFG_VC_triple {Σ}
       (p     : Term Σ ty_xlenbits)
       (exits : Term Σ ty_xlenbits)
@@ -127,7 +128,6 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     (* init_addr is unused by the symbolic VC; it is kept in the signature so
        Valid_CFG_VC remains a direct cfg_map target. *)
     Definition Valid_CFG_VC {Σ}
-      (init_addr : N)
       (p     : Term Σ ty_xlenbits)
       (exits : Term Σ ty_xlenbits)
       (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
@@ -165,11 +165,11 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        force `a` to be a version of `c`'s program.  Harmless: such a proof
        establishes nothing, because the bridge will not accept it. *)
     Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
-      cfg_map c (fun ia p exits P _ fl Q => Valid_CFG_VC ia p exits P a fl Q).
+      cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
-      cfg_map c (fun ia p exits P _ fl Q =>
+      cfg_map c (fun p exits P _ fl Q =>
         VerificationCondition (postprocess (CFG_VC_triple p exits P a fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a

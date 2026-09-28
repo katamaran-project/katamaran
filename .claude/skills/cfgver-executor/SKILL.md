@@ -841,7 +841,8 @@ loop with an `ai_block` head, and an executed tail) →
 `exact blkValid_of_seg …` reusing the unchanged `valid_cd_rec` —,
 `cd_link_valid` — `annotsValid` from `cdRecBlk_valid` — and `cdLink_valid`, and
 the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
-load address: the contracts, the block and the annotated code all take `ia`).
+load address: the contracts, the block and the annotated code are closed
+terms over the code-base variable `q`, with no load-address parameter).
 
 ## `scfg_verification_condition`
 

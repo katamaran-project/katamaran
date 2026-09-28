@@ -24,8 +24,7 @@ What a contract *is* — independent of the `gen_contract` generator
 ```coq
 Record CFGVerifierContract {Σ} :=
   MkCFGVerifierContract
-  { cfg_init_addr     : N
-  ; cfg_placement     : Term Σ ty_xlenbits
+  { cfg_placement     : Term Σ ty_xlenbits
   ; cfg_exit          : Term Σ ty_xlenbits
   ; cfg_precondition  : Assertion (Σ ▻ "a" ∷ ty_xlenbits)
   ; cfg_instrs        : list AST
@@ -61,7 +60,7 @@ every ghost-blind consumer, e.g. `Noninterference.v`, actually sees).
 | `cfg_precondition` | `Assertion (Σ ▻ "a"∷ty_xlenbits)` — "a" is the start pc; parametric contracts must also include the base bound `unsigned p + size ≤ lenAddr` here, or fetch bounds are unprovable |
 | `cfg_instrs` | the program, a `list AST` placed at `cfg_placement`; the annotated copy is `cfg_vc`'s second argument (see above) |
 | `cfg_postcondition` | RE-EXPOSED 2026-09-03 (it had been hardwired to `true`). `consume`d at the moment the pc reaches the exit, with `"an"` bound to `cfg_exit`; the soundness bridge hands it back to the caller, which is **what makes two segment contracts composable**. Pass `asn_no_post` for an ordinary whole-program contract. |
-| `cfg_init_addr` | **NOT used by the symbolic VC** (source comment on `Valid_CFG_VC`, `Contracts.v`) — carried for the end-to-end statement |
+| *(no load address)* | The old `cfg_init_addr : N` field was DROPPED 2026-09-28 (PLAN-valid-blk-annot §8.2): the VC never read it and, once `ValidCFGVerifierContract` stopped quoting it, nothing did. A contract says where its code is only through the `cfg_placement` term; the end-to-end bridges take `init_addr` themselves and link it by `inst (cfg_placement c) ι = SyncVal (bv.of_N init_addr)`. So a parametric contract is a CLOSED term (no `ia` argument) |
 
 The exit is stored once. The end-to-end stage relates it to the trusted
 statement's literal `exit_addr : N` through the `HexitFaith : etable_rel
@@ -80,15 +79,15 @@ internally).
 ```coq
 (* Contracts.v -- THE VC, over an annotated copy `a` of the program *)
 Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
-  cfg_map c (fun ia p exits P _ fl Q => Valid_CFG_VC ia p exits P a fl Q).
-(* Valid_CFG_VC ia p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
+  cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
+(* Valid_CFG_VC p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
 
 (* Validity.v (heavy, small; re-exported by EndToEnd.v) -- the SEALED
    property, built only via ValidCFGVerifierContract_intro / solve_valid *)
 Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
   exists a, cfg_vc c a /\ strip a = cfg_instrs c /\ annotsValid a.
 (* annotsValid (Adequacy.v): every ai_block carries a blkValid proof, and
-   there is no top-level ai_loop.  Pure -- no Iris, no cfg_init_addr. *)
+   there is no top-level ai_loop.  Pure -- no Iris, no load address. *)
 ```
 
 This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /

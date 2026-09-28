@@ -104,7 +104,7 @@ Import IrisModel.RiscvPmpIrisBase.
        annotated list, no raw VC, no block premise at this level. *)
     (valid_contract : ValidCFGVerifierContract contract)
     (contractInstrs : cfg_instrs contract = instrs)
-    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (init_addr : N)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
@@ -150,9 +150,8 @@ Import IrisModel.RiscvPmpIrisBase.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct contract.
-    cbn in valid_contract, contractInitAddr, contractPlacement,
+    cbn in valid_contract, contractPlacement,
       HexitFaith, ImplPre.
-    subst cfg_init_addr.
     unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in valid_contract.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
                     (instrs_of_list (bv.of_N init_addr) instrs')
@@ -188,7 +187,7 @@ Import IrisModel.RiscvPmpIrisBase.
        annotated list, no raw VC, no block premise at this level. *)
     (valid_contract : ValidCFGVerifierContract contract)
     (contractInstrs : cfg_instrs contract = instrs)
-    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (init_addr : N)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
@@ -221,7 +220,7 @@ Import IrisModel.RiscvPmpIrisBase.
        annotated list, no raw VC, no block premise at this level. *)
     (valid_contract : ValidCFGVerifierContract contract)
     (contractInstrs : cfg_instrs contract = instrs)
-    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (init_addr : N)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
@@ -270,9 +269,8 @@ Import IrisModel.RiscvPmpIrisBase.
     rewrite !regPstsTo_sync_is_nonsync.
     unfold exitCond_WP2_loop.
     destruct contract.
-    cbn in valid_contract, contractInitAddr, contractPlacement,
+    cbn in valid_contract, contractPlacement,
       HexitFaith, ImplPre.
-    subst cfg_init_addr.
     unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in valid_contract.
     assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
                     (instrs_of_list (bv.of_N init_addr) instrs')
@@ -310,7 +308,7 @@ Import IrisModel.RiscvPmpIrisBase.
        annotated list, no raw VC, no block premise at this level. *)
     (valid_contract : ValidCFGVerifierContract contract)
     (contractInstrs : cfg_instrs contract = instrs)
-    (init_addr : N)    (contractInitAddr : cfg_init_addr contract = init_addr)
+    (init_addr : N)
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
@@ -1472,7 +1470,7 @@ Import IrisModel.RiscvPmpIrisBase.
          annotated list, no raw VC, no block premise at this level. *)
       (valid_contract : ValidCFGVerifierContract contract)
       (contractInstrs : cfg_instrs contract = instrs)
-      (init_addr : N)      (contractInitAddr : cfg_init_addr contract = init_addr)
+      (init_addr : N)
       (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                         = ty.SyncVal (@bv.of_N xlenbits init_addr))
       (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
@@ -1549,7 +1547,7 @@ Import IrisModel.RiscvPmpIrisBase.
            annotated list, no raw VC, no block premise at this level. *)
         (valid_contract : ValidCFGVerifierContract contract)
         (contractInstrs : cfg_instrs contract = instrs)
-        (init_addr : N)        (contractInitAddr : cfg_init_addr contract = init_addr)
+        (init_addr : N)
         (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                           = ty.SyncVal (@bv.of_N xlenbits init_addr))
         (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
@@ -1901,7 +1899,7 @@ Import IrisModel.RiscvPmpIrisBase.
          ValidCFGVerifierContract; a caller supplies this in one line with
          `solve_valid <its own VC>` and never names a hint. *)
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_u init_addr reg_specs word_data byte_data instrs
+          (gen_contract_u reg_specs word_data byte_data instrs
              bound fuel)) :
     (* THE EXIT is the fall-through, the only exit a gen_contract has
        (PLAN-exit-targets.md D7). *)
@@ -1933,13 +1931,13 @@ Import IrisModel.RiscvPmpIrisBase.
       ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
       (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
       (map mem_full_to_spec (map (concretize_mem init_addr) (word_data ++ byte_data))) HpubMem
-      (gen_contract_u init_addr reg_specs word_data byte_data instrs
+      (gen_contract_u reg_specs word_data byte_data instrs
          bound fuel)
       valid_contract eq_refl
       init_addr
-      (* TWO eq_refls: contractInstrs went in Phase 3 of PLAN-contract-ast,
-         contractExitCond with PLAN-exit-targets.md. *)
-      eq_refl eq_refl HexitFaith HDataAddrs).
+      (* contractPlacement; contractInitAddr went with cfg_init_addr
+         (PLAN-valid-blk-annot §8.2). *)
+      eq_refl HexitFaith HDataAddrs).
     all: try eauto.
     2: { rewrite !length_map. exact Hlen. }
     intros Σ H.
@@ -2001,7 +1999,7 @@ Import IrisModel.RiscvPmpIrisBase.
          ValidCFGVerifierContract; a caller supplies this in one line with
          `solve_valid <its own VC>` and never names a hint. *)
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_u init_addr reg_specs word_data byte_data instrs
+          (gen_contract_u reg_specs word_data byte_data instrs
              bound fuel)) :
     noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs))
       (map (concretize_reg init_addr) reg_specs)
@@ -2059,7 +2057,7 @@ Import IrisModel.RiscvPmpIrisBase.
          ValidCFGVerifierContract; a caller supplies this in one line with
          `solve_valid <its own VC>` and never names a hint. *)
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_param init_addr reg_specs instrs fuel)) :
+          (gen_contract_param reg_specs instrs fuel)) :
     noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs)) reg_specs [].
   Proof.
     rewrite <- (map_concretize_reg_to_rel init_addr reg_specs).
@@ -2112,7 +2110,7 @@ Import IrisModel.RiscvPmpIrisBase.
          ValidCFGVerifierContract; a caller supplies this in one line with
          `solve_valid <its own VC>` and never names a hint. *)
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_param init_addr reg_specs instrs fuel)) :
+          (gen_contract_param reg_specs instrs fuel)) :
     noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs)) reg_specs [].
   Proof. exact (gen_contract_noninterferent_param HND Hlen valid_contract). Qed.
 
@@ -2142,7 +2140,7 @@ Import IrisModel.RiscvPmpIrisBase.
          ValidCFGVerifierContract; a caller supplies this in one line with
          `solve_valid <its own VC>` and never names a hint. *)
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_rel_classed init_addr reg_specs mem_specs instrs
+          (gen_contract_rel_classed reg_specs mem_specs instrs
              bound fuel)) :
     noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs))
       (map (concretize_reg init_addr) reg_specs)
@@ -2182,7 +2180,7 @@ Import IrisModel.RiscvPmpIrisBase.
          ValidCFGVerifierContract; a caller supplies this in one line with
          `solve_valid <its own VC>` and never names a hint. *)
       (valid_contract : ValidCFGVerifierContract
-          (gen_contract_rel_bytes init_addr reg_specs [] byte_mem_specs instrs
+          (gen_contract_rel_bytes reg_specs [] byte_mem_specs instrs
              bound fuel)) :
     noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs))
       (map (concretize_reg init_addr) reg_specs)

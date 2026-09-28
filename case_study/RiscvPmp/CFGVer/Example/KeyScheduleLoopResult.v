@@ -77,7 +77,7 @@ Proof.
       try (inversion H; subst; cbn; f_equal; lia); try discriminate.
   - cbn. lia.
   - exact Hb.
-  - solve_valid (valid_key_schedule_loop2_cfg_contract_param init_addr).
+  - solve_valid valid_key_schedule_loop2_cfg_contract_param.
 Qed.
 
 (* The concrete result is now a corollary of the universal-base theorem

@@ -69,7 +69,7 @@ Proof.
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - cbn; lia.
-  - solve_valid (valid_set_X2_to_42_param init_addr).
+  - solve_valid valid_set_X2_to_42_param.
 Qed.
 
 (* The concrete result at init_addr = 0, as a corollary -- this was

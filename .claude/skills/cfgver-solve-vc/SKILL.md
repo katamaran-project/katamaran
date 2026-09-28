@@ -38,9 +38,9 @@ tactic, `solve_symbase_fetch` (also in `Contracts.v`), run right after — the
 full one-liner for every parametric VC is:
 
 ```coq
-Lemma valid_<prog>_cfg_contract_param (ia : N) :
-  ValidCFGVerifierContract (<prog>_cfg_contract_param ia).
-Proof. intros; vm_compute; solve_vc; solve_symbase_fetch. Qed.
+Lemma valid_<prog>_cfg_contract_param :
+  cfg_vc <prog>_cfg_contract_param (cfg_instrs <prog>_cfg_contract_param).
+Proof. solve_param_vc. Qed.   (* = intros; vm_compute; solve_vc; solve_symbase_fetch *)
 ```
 
 `solve_vc` is deliberately NOT specialised for this — it stays a general VC

@@ -62,7 +62,7 @@ Definition pl_head : N := 256.
 
 (* ---- LOOP BODY: head -> head, one trip.  cfg_instrs is the SEGMENT. ---- *)
 Definition plBody : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx 0%N
+  @MkCFGVerifierContract cdCtx
     (term_val ty_xlenbits (bv.of_N pl_head))
     (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 0)
     (asn_init_pc (bv.of_N pl_head)
@@ -80,7 +80,7 @@ Qed.
 
 (* ---- LOOP EXIT: head -> 264 (one past the 66-instruction program). ---- *)
 Definition plFinal : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx 0%N
+  @MkCFGVerifierContract cdCtx
     (term_val ty_xlenbits (bv.of_N pl_head))
     (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 8)
     (asn_init_pc (bv.of_N pl_head)

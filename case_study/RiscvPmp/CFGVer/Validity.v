@@ -122,7 +122,7 @@ Import IrisModel.RiscvPmpIrisBase.
      Phase 4 the block condition is `annotsValid a` -- every ai_block carries
      its own blkValid proof, no top-level re-entry -- a pure Prop that no
      longer mentions Iris or cfg_init_addr (it used to be an Iris-level
-     blocksSound at `cfg_init_addr c`).  EVERY bridge below takes this and
+     blocksSound at `cfg_init_addr c`, a field since removed).  EVERY bridge below takes this and
      nothing annotation-level: annotations appear only where a contract is
      proved valid. *)
   Definition ValidCFGVerifierContract {R : LCtx} (c : @CFGVerifierContract R) : Prop :=

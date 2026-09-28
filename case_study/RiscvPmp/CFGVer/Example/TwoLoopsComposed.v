@@ -65,7 +65,7 @@ Definition tdec {Σ} (t : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 (* ---- LOOP A: head 0.  Owns ONLY X1 -- X2 is framed OUTSIDE, never fed to
        these VCs, which is what keeps each segment's footprint O(1). ---- *)
 Definition tAbody : @CFGVerifierContract tCtxA :=
-  @MkCFGVerifierContract tCtxA 0%N
+  @MkCFGVerifierContract tCtxA
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0)
     (asn_init_pc (bv.of_N 0) ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
@@ -81,7 +81,7 @@ Qed.
 
 (* A's last trip: falls through to 8, which is LOOP B's HEAD. *)
 Definition tAfinal : @CFGVerifierContract tCtxA :=
-  @MkCFGVerifierContract tCtxA 0%N
+  @MkCFGVerifierContract tCtxA
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8)
     (asn_init_pc (bv.of_N 0) ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
@@ -97,7 +97,7 @@ Qed.
 
 (* ---- LOOP B: head 8.  Owns ONLY X2.  Entered from A's fall-through. ---- *)
 Definition tBbody : @CFGVerifierContract tCtxB :=
-  @MkCFGVerifierContract tCtxB 0%N
+  @MkCFGVerifierContract tCtxB
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8)
     (asn_pc_eq (term_val ty_xlenbits (bv.of_N 8))
@@ -113,7 +113,7 @@ Proof.
 Qed.
 
 Definition tBfinal : @CFGVerifierContract tCtxB :=
-  @MkCFGVerifierContract tCtxB 0%N
+  @MkCFGVerifierContract tCtxB
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 16)
     (asn_pc_eq (term_val ty_xlenbits (bv.of_N 8))

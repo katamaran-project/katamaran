@@ -57,13 +57,13 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* ===== Phase 4.2: base-parametric jump_if_zero VC =====
        Supersedes the removed concrete-base pair jump_if_zero_cfg_contract /
        valid_jump_if_zero_cfg_contract (see MvSwap.v for the rationale). *)
-    Definition jump_if_zero_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia [(X1, true, None)]
+    Definition jump_if_zero_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param [(X1, true, None)]
         [BEQ X1 X0 true_offset; NOP]
         5.
 
-    Lemma valid_jump_if_zero_cfg_contract_param (ia : N) :
-      cfg_vc (jump_if_zero_cfg_contract_param ia) (cfg_instrs (jump_if_zero_cfg_contract_param ia)).
+    Lemma valid_jump_if_zero_cfg_contract_param :
+      cfg_vc jump_if_zero_cfg_contract_param (cfg_instrs jump_if_zero_cfg_contract_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)
 
@@ -79,13 +79,13 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* ===== Phase 4.2: base-parametric jmp_fwd VC =====
        Supersedes the removed concrete-base pair jmp_fwd_cfg_contract /
        valid_jmp_fwd_cfg_contract (see MvSwap.v for the rationale). *)
-    Definition jmp_fwd_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia []
+    Definition jmp_fwd_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param []
         [JAL X0 jmp_offset; NOP]
         5.
 
-    Lemma valid_jmp_fwd_cfg_contract_param (ia : N) :
-      cfg_vc (jmp_fwd_cfg_contract_param ia) (cfg_instrs (jmp_fwd_cfg_contract_param ia)).
+    Lemma valid_jmp_fwd_cfg_contract_param :
+      cfg_vc jmp_fwd_cfg_contract_param (cfg_instrs jmp_fwd_cfg_contract_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)
 

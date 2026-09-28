@@ -53,7 +53,7 @@ Proof.
       try (inversion H; subst; cbn; f_equal; lia); try discriminate.
   - cbn. lia.
   - exact Hb.
-  - solve_valid (valid_modpow_win_full_cfg_contract_param init_addr).
+  - solve_valid valid_modpow_win_full_cfg_contract_param.
 Qed.
 
 Lemma modpow_win_full_noninterferent :

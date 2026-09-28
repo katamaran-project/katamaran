@@ -264,7 +264,7 @@ Import asn.notations.
         (instrs : list AST)
         (fl : nat)
         : CFGVerifierContract :=
-      @MkCFGVerifierContract [ctx] init_addr
+      @MkCFGVerifierContract [ctx]
         (term_val ty_xlenbits (bv.of_N init_addr))
         (exit_of_off (term_val ty_xlenbits (bv.of_N init_addr))
            (4 * N.of_nat (length instrs)))
@@ -661,14 +661,13 @@ Import asn.notations.
     (* bound: an N ≥ (max accessed byte offset)+4, so the fetch/access upper
        bounds are dischargeable from unsigned p + bound ≤ lenAddr. *)
     Definition gen_contract_rel
-        (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (instrs : list AST)
         (bound : N)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+      @MkCFGVerifierContract ["p" :: ty_xlenbits]
         (term_var "p")
         (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
         ( asn_pc_eq (term_var "p")
@@ -707,7 +706,6 @@ Import asn.notations.
     (* hazard (consume is order-sensitive) has no live instance.  It becomes *)
     (* real the first time one block genuinely mixes pinned/public/private. *)
     Definition gen_contract_u
-        (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (word_data : list mem_spec_rel)   (* word-granular class *)
         (byte_data : list mem_spec_rel)   (* byte-granular class *)
@@ -715,7 +713,7 @@ Import asn.notations.
         (bound : N)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      @MkCFGVerifierContract ["p" :: ty_xlenbits] init_addr
+      @MkCFGVerifierContract ["p" :: ty_xlenbits]
         (term_var "p")
         (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
         ( asn_pc_eq (term_var "p")
@@ -735,7 +733,6 @@ Import asn.notations.
        cell count, which is the dominant cost driver.  Byte-identical to
        gen_contract_rel except for the final conjunct. *)
     Definition gen_contract_rel_classed
-        (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (instrs : list AST)
@@ -747,15 +744,14 @@ Import asn.notations.
          `gen_mem_pre_rel_bytes []` (= Top) conjunct; verified absorbed by the
          standard `vm_compute; solve_vc; solve_symbase_fetch` line on Countdown's
          real blocks before wiring (Example/ZZUProbe3.v). *)
-      gen_contract_u init_addr reg_specs mem_specs []
+      gen_contract_u reg_specs mem_specs []
         instrs bound fl.
 
     (* Parameterized-base contract for a REGISTER-ONLY program
        (PLAN-symbolic-base.md Phase 4.2).  The base is a genuine term VARIABLE
        term_var "p" (Σ = ["p"∷ty_xlenbits]), NOT term_val (bv.of_N init_addr) --
        the latter makes the VC's vm_compute diverge on bv.of_N of a symbolic N at
-       width 32.  cfg_init_addr is still stored (the
-       end-to-end/memory side needs them) but are ignored by Valid_CFG_VC, so the
+       width 32.  The contract does not mention init_addr at all, so the
        VC is proved ONCE, uniformly in init_addr, and reused for every concrete
        base via the ι = ["p" ↦ SyncVal (bv.of_N init_addr)] instantiation in
        gen_contract_noninterferent_param.
@@ -780,12 +776,11 @@ Import asn.notations.
        - The bridge gen_contract_noninterferent_param consumes that shape and so
          changed with it; see its ImplPre. *)
     Definition gen_contract_param
-        (init_addr : N)
         (reg_specs : list reg_spec)
         (instrs : list AST)
         (fl : nat)
         : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_u init_addr
+      gen_contract_u
         (List.map reg_spec_to_rel reg_specs) [] []
         instrs
         (4 * N.of_nat (length instrs))%N
@@ -806,7 +801,6 @@ Import asn.notations.
        refactored to delegate here: nine vm_compute VC proofs reduce through
        it, so the duplication is cheaper than the perturbation. *)
     Definition gen_contract_rel_bytes
-        (init_addr : N)
         (reg_specs : list reg_spec_rel)
         (mem_specs : list mem_spec_rel)
         (byte_mem_specs : list mem_spec_rel)
@@ -822,7 +816,7 @@ Import asn.notations.
          committed BearSSLCheckScalarLoop1 and all 28 rigs -- passes [] for the
          word list, so the slot was always Top.  Verified on Loop1's real byte
          block before wiring (Example/ZZUProbe3.v). *)
-      gen_contract_u init_addr reg_specs mem_specs byte_mem_specs
+      gen_contract_u reg_specs mem_specs byte_mem_specs
         instrs bound fl.
 
   (* ================================================================== *)

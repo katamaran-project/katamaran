@@ -74,37 +74,37 @@ Definition cd_rec_post
    loop), fuel 4 (head, BNE, block, exit check).  The code bound (8 bytes) is
    derived by gen_seg_contract.
 
-   `ia`, the concrete load address, is a PARAMETER of the contract, of the
-   block and of every annotated list below, because it fixes cfg_init_addr,
-   which the VC never reads but the soundness bridges do.  (It also used to
-   fix the concrete exit condition `seg_exitCond ia`; that is gone since
-   PLAN-exit-targets.md -- the exit is the term q + 8, and a block resumes
-   there.)  The VCs hold for every ia at once, with no vm_compute on it. *)
-Definition cdRec (ia : N) : @CFGVerifierContract cdRecCtx :=
-  gen_seg_contract (term_var "q") (term_var "q") ia
+   No concrete load address appears anywhere here: the contract used to take
+   one (`ia`) only to fill cfg_init_addr, a field dropped by
+   PLAN-valid-blk-annot §8.2, and before that the concrete exit condition
+   `seg_exitCond ia` (gone since PLAN-exit-targets.md -- the exit is the term
+   q + 8, and a block resumes there).  The code base is the variable q, so the
+   VCs hold at every load address at once, with no vm_compute on it. *)
+Definition cdRec : @CFGVerifierContract cdRecCtx :=
+  gen_seg_contract (term_var "q") (term_var "q")
     cd_instrs 8 4 [] cd_rec_inv cd_rec_post.
 
-Definition cdRecBlk (ia : N) : BlkAnnot :=
-  {| blk_ctx := cdRecCtx ; blk_contract := cdRec ia |}.
+Definition cdRecBlk : BlkAnnot :=
+  {| blk_ctx := cdRecCtx ; blk_contract := cdRec |}.
 
 (* The loop's code with its head annotated by ITS OWN block, as a RE-ENTRY
    block (ai_loop): the entry executes the head, the back edge fires it. *)
-Definition cd_rec_annot (ia : N) : list AnnotInstr :=
+Definition cd_rec_annot : list AnnotInstr :=
   {| ai_ghost_before := []
    ; ai_instr        := ADDI X1 X1 neg1_12
    ; ai_ghost_after  := []
    ; ai_block        := None
-   ; ai_loop         := Some (cdRecBlk ia) |}
+   ; ai_loop         := Some cdRecBlk |}
   :: list_AST_AnnotInstr [BNE X1 X0 back4].
 
-Lemma valid_cd_rec (ia : N) : cfg_vc (cdRec ia) (cd_rec_annot ia).
+Lemma valid_cd_rec : cfg_vc cdRec cd_rec_annot.
 Proof. solve_param_vc. Qed.
 
 (* NEGATIVE CONTROLS: the VC is not vacuous. *)
 
 (* Without the head annotation the executor must unroll a loop whose trip
    count is symbolic, and cannot. *)
-Goal cfg_vc (cdRec 0) (list_AST_AnnotInstr cd_instrs).
+Goal cfg_vc cdRec (list_AST_AnnotInstr cd_instrs).
 Proof. Fail solve_param_vc. Abort.
 
 (* An invariant that is NOT PRESERVED by the body must be rejected: with
@@ -113,7 +113,7 @@ Proof. Fail solve_param_vc. Abort.
 Goal let bad := (X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
                  ∗ asn.formula (formula_relop bop.neq (term_var "k")
                                   (term_val ty_xlenbits (bv.of_N 1))))%asn in
-     let c := gen_seg_contract (term_var "q") (term_var "q") 0
+     let c := gen_seg_contract (term_var "q") (term_var "q")
                 cd_instrs 8 4 [] bad cd_rec_post in
      cfg_vc c ({| ai_ghost_before := []; ai_instr := ADDI X1 X1 neg1_12;
                       ai_ghost_after := []; ai_block := None;
@@ -133,13 +133,13 @@ Proof. intros bad c. Fail solve_param_vc. Abort.
 
 Definition cd_link_instrs : list AST := cd_instrs ++ [ADDI X2 X0 (bv.of_N 42)].
 
-Definition cd_link_annot (ia : N) : list AnnotInstr :=
+Definition cd_link_annot : list AnnotInstr :=
   {| ai_ghost_before := []
    ; ai_instr        := ADDI X1 X1 neg1_12
    ; ai_ghost_after  := []
      (* the enclosing program STARTS at the loop: an ordinary ai_block, which
         fires at step 0 *)
-   ; ai_block        := Some (cdRecBlk ia)
+   ; ai_block        := Some cdRecBlk
    ; ai_loop         := None |}
   :: list_AST_AnnotInstr [BNE X1 X0 back4; ADDI X2 X0 (bv.of_N 42)].
 
@@ -156,9 +156,9 @@ Definition cd_link_post
   ( X1 ↦ᵣ term_val ty_xlenbits bv.zero
     ∗ X2 ↦ᵣ term_val ty_xlenbits (bv.of_N 42) )%asn.
 
-Definition cdLink (ia : N) : @CFGVerifierContract cdRecCtx :=
-  gen_seg_contract (term_var "q") (term_var "q") ia
+Definition cdLink : @CFGVerifierContract cdRecCtx :=
+  gen_seg_contract (term_var "q") (term_var "q")
     cd_link_instrs 12 4 [] cd_link_extra cd_link_post.
 
-Lemma valid_cd_link (ia : N) : cfg_vc (cdLink ia) (cd_link_annot ia).
+Lemma valid_cd_link : cfg_vc cdLink cd_link_annot.
 Proof. solve_param_vc. Qed.

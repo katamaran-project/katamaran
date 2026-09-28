@@ -31,7 +31,7 @@
 (* Example/CountdownRecResult.v -- a LOOP and a SEGMENT, combined.  HEAVY.   *)
 (*                                                                           *)
 (* cdRec_blockSound: the countdown loop earns blockSound from ONE VC         *)
-(* (valid_cd_rec) and the block door blockSound_of_contract, whose Löb       *)
+(* (valid_cd_rec) and the block door blockSound_of_contract, whose Löb     *)
 (* induction lets the loop's own head be annotated with it.                  *)
 (*                                                                           *)
 (* countdown_rec_noninterferent_param: the whole program -- loop block, then the   *)
@@ -99,7 +99,7 @@ Import IrisModel.RiscvPmpIrisBase.
 
 (* THE LOOP'S CODE, ANNOTATED WITH VALIDITY (PLAN-valid-blk-annot.md): the
    head re-enters the enclosing contract (aiv_loop), the BNE is plain.  Erasing
-   it at cdRec ia gives cd_rec_annot ia up to conversion, which is why the
+   it at cdRec gives cd_rec_annot up to conversion, which is why the
    existing VC valid_cd_rec is accepted below unchanged.  It lives here, not
    in CountdownRec.v, because its type mentions blkValid (heavy side). *)
 Definition cd_rec_annotV : list (AnnotInstrV blkValid) :=
@@ -108,30 +108,29 @@ Definition cd_rec_annotV : list (AnnotInstrV blkValid) :=
 
 (* THE LOOP BLOCK IS VALID ANYWHERE: blkValid_of_seg, from the loop's own VC.
    No fit premise (decision B: gen_base_bound in the loop's precondition) and
-   no Löb reasoning here (decision (c): inside blockSound_of_vc).  `ia` only
-   fixes cfg_init_addr, which blockSound never reads. *)
-Lemma cdRecBlk_valid (ia : N) : blkValid (cdRecBlk ia).
+   no Löb reasoning here (decision (c): inside blockSound_of_vc). *)
+Lemma cdRecBlk_valid : blkValid cdRecBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") ia cd_instrs 8 4 []
+  exact (blkValid_of_seg (term_var "q") (term_var "q") cd_instrs 8 4 []
            cd_rec_inv cd_rec_post cd_rec_annotV
-           (fun v iota => eq_refl) eq_refl (valid_cd_rec ia)).
+           (fun v iota => eq_refl) eq_refl valid_cd_rec).
 Qed.
 
 (* THE LINK'S ANNOTATIONS ARE VALID: its one ai_block is the loop, which is
    valid at every address (cdRecBlk_valid); the tail is plain code.  This and
    the next lemma are the ONLY place cdLink's annotations appear -- the end
    theorem below sees just the sealed validity (PLAN-valid-blk-annot Phase 4). *)
-Lemma cd_link_valid (ia : N) : annotsValid (cd_link_annot ia).
+Lemma cd_link_valid : annotsValid cd_link_annot.
 Proof.
   unfold cd_link_annot. constructor.
   - split; [reflexivity|]. intros b Hb. injection Hb as <-. apply cdRecBlk_valid.
   - apply annotsValid_of_none, ai_block_none_of_AST.
 Qed.
 
-Lemma cdLink_valid (ia : N) : ValidCFGVerifierContract (cdLink ia).
+Lemma cdLink_valid : ValidCFGVerifierContract cdLink.
 Proof.
   eapply ValidCFGVerifierContract_intro;
-    [exact (valid_cd_link ia) | reflexivity | apply cd_link_valid].
+    [exact valid_cd_link | reflexivity | apply cd_link_valid].
 Qed.
 
 
@@ -153,8 +152,7 @@ Proof.
     (init_addr + 12)%N n ws cdRecCtx
     ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
           .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
-    _ HpubReg (cdLink init_addr) (cdLink_valid init_addr) eq_refl init_addr
-    eq_refl).
+    _ HpubReg cdLink cdLink_valid eq_refl init_addr).
   - (* placement: the bare code base *)
     reflexivity.
   - (* the one exit, +12: the generic segment exit table *)

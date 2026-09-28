@@ -67,7 +67,7 @@ Proof.
       try (inversion H; subst; cbn; f_equal; lia); try discriminate.
   - cbn. lia.
   - exact Hb.
-  - solve_valid (valid_loop1_cfg_contract_param init_addr).
+  - solve_valid valid_loop1_cfg_contract_param.
 Qed.
 
 (* Concrete corollary at the conventional init_addr = 0. *)

@@ -381,7 +381,7 @@ the shape (1–2 instructions is enough):
 
 ```coq
 Eval vm_compute in (cfg_map <contract>
-  (fun ia p ex P i fl Q => postprocess (CFG_VC_triple p ex P i fl Q))).
+  (fun p ex P i fl Q => postprocess (CFG_VC_triple p ex P i fl Q))).
 ```
 
 That prints assumptions (i.e. `wco`) and goals *together*, which is the only way

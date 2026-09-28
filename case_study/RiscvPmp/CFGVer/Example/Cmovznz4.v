@@ -193,8 +193,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        (156%N, false, PVExist); (160%N, false, PVExist)].
 
     (* Base bound 164 = 160 (last data offset, r[3]) + 4 (word). *)
-    Definition cmovznz4_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_rel_classed ia cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
+    Definition cmovznz4_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_rel_classed cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel
         cmovznz4_instrs 164 35.
 
     (* TRUSTED-SURFACE ANCHOR (AnnotInstr migration, PLAN-annotinstr.md).
@@ -207,7 +207,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Lemma strip_id_cmovznz4 : strip cmovznz4_instrs = cmovznz4_instrs.
     Proof. reflexivity. Qed.
 
-    Lemma valid_cmovznz4_cfg_contract_param (ia : N) :
-      cfg_vc (cmovznz4_cfg_contract_param ia) (cfg_instrs (cmovznz4_cfg_contract_param ia)).
+    Lemma valid_cmovznz4_cfg_contract_param :
+      cfg_vc cmovznz4_cfg_contract_param (cfg_instrs cmovznz4_cfg_contract_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)

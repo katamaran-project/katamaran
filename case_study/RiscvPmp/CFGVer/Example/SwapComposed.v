@@ -66,7 +66,7 @@ Definition swapCtx : LCtx :=
    for.  The registers are private, so no secLeakvar is required here; a cut
    carrying public values would need those too. *)
 Definition swapA : @CFGVerifierContract swapCtx :=
-  @MkCFGVerifierContract swapCtx 0%N
+  @MkCFGVerifierContract swapCtx
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 4)
     (asn_init_pc (bv.of_N 0)
@@ -83,7 +83,7 @@ Proof. vm_compute. solve_vc. Qed.
    Entry pc pinned to the cut address by asn_pc_eq; precondition is exactly
    segment A's postcondition.  Ordinary trivial post: nothing follows it. *)
 Definition swapB : @CFGVerifierContract swapCtx :=
-  @MkCFGVerifierContract swapCtx 0%N
+  @MkCFGVerifierContract swapCtx
     (term_val ty_xlenbits (bv.of_N 0))
     (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 12)
     (asn_pc_eq (term_val ty_xlenbits (bv.of_N 4))

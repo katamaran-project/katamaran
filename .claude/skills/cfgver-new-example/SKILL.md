@@ -81,7 +81,8 @@ a concrete-base VC is dead compile time.
    "Backward-branch loops" section before assuming more fuel/timeout will
    eventually get there.
 3. **Contract.** `gen_contract init_addr reg_specs mem_specs instrs fl` (or
-   `gen_contract_param ia reg_specs instrs fuel`) — spec-triple formats and public/private/pinned semantics in
+   `gen_contract_param reg_specs instrs fuel` — no load address: a parametric
+   contract is closed, the bridge takes `init_addr`) — spec-triple formats and public/private/pinned semantics in
    **cfgver-gen-contract**. (Hand-written contracts instead: **cfgver-contracts**.)
 4. **VC.** `Lemma valid_<prog>_cfg_contract : ValidCFGVerifierContract ….
    Proof. vm_compute. solve_vc. Qed.` — for a PARAMETRIC-base contract

@@ -41,13 +41,13 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
    keywords, so it must not leak beyond this file). *)
 (* The exit is the fall-through, init_addr + 4·|i| (PLAN-exit-targets.md). *)
 Local Notation "'{{' P '}}' i '@cfg[' fl ']'" :=
-  (@MkCFGVerifierContract [ctx] init_addr
+  (@MkCFGVerifierContract [ctx]
      (term_val ty_xlenbits (bv.of_N init_addr))
      (exit_of_off (term_val ty_xlenbits (bv.of_N init_addr)) (4 * N.of_nat (length i)))
      P%asn i fl asn_no_post)
   (at level 90).
 Local Notation "'{{' P '}}' i '@cfg[' fl ']' 'with' logvars" :=
-  (@MkCFGVerifierContract logvars init_addr
+  (@MkCFGVerifierContract logvars
      (term_val ty_xlenbits (bv.of_N init_addr))
      (exit_of_off (term_val ty_xlenbits (bv.of_N init_addr)) (4 * N.of_nat (length i)))
      P%asn i fl asn_no_post)
@@ -99,13 +99,13 @@ Local Notation "'{{' P '}}' i '@cfg[' fl ']' 'with' logvars" :=
        result swap_noninterferent is a corollary of the parametric theorem
        at init_addr = 0, so proving the concrete VC separately was dead
        compile time. Same for every other example. *)
-    Definition swap_cfg_contract_param (ia : N) : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param ia
+    Definition swap_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
+      gen_contract_param
         [(X1, false, None); (X2, false, None); (X3, false, None)]
         [MV X3 X2; MV X2 X1; MV X1 X3]
         5.
 
-    Lemma valid_swap_cfg_contract_param (ia : N) :
-      cfg_vc (swap_cfg_contract_param ia) (cfg_instrs (swap_cfg_contract_param ia)).
+    Lemma valid_swap_cfg_contract_param :
+      cfg_vc swap_cfg_contract_param (cfg_instrs swap_cfg_contract_param).
     Proof. solve_param_vc. Qed.
     (* ===== end Phase 4.2 ===== *)

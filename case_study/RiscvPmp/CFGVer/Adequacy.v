@@ -1985,9 +1985,9 @@ End AdequacyTools.
    Phase 2).  A closed Prop (∀ Σ GS, decision V4), so it can ride in an
    annotation as a plain proof field (AnnotInstrV, Phase 3).
 
-   Address-free because blockSound never reads cfg_init_addr: a block resumes
-   at its contract's exit term, pinned by the precondition to the entry pc,
-   not by the load address.
+   Address-free because a contract carries no load address (its old
+   cfg_init_addr field is gone, PLAN-valid-blk-annot §8.2): a block resumes
+   at its contract's exit term, pinned by the precondition to the entry pc.
 
    UNCONDITIONAL in v (decision B, 2026-09-25): no no-wrap premise.  The
    block's own precondition must rule out wrapping -- a generated segment's
