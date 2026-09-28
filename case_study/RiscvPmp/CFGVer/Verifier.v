@@ -89,16 +89,77 @@ Open Scope Z_scope.
    AnnotLemmaInvocation's `es` lives at the EMPTY program context [ctx]
    (no program variables in scope at an instruction boundary), which is
    also why Annot is not world-indexed and needs no persist. *)
+(* ========================================================================= *)
+(* CFGVer-LOCAL GHOST LEMMAS (PLAN-array-invariants D2).                    *)
+(*                                                                           *)
+(* A small catalogue of ghost lemmas over the `arr` chunk (Sig.v), each a    *)
+(* fixed "consume pre, produce post", proved valid ONCE on the heavy side    *)
+(* (clemSem), exactly as Katamaran's own `Lem`s are by lemSemCFGVerif.  They *)
+(* are declared HERE rather than as `Lem` constructors because `Lem` lives   *)
+(* in Machine.v, which is inside the trusted statement (Noninterference.v    *)
+(* imports it) and must not change for verification purposes.               *)
+(*                                                                           *)
+(* No program arguments and no patterns: an instruction boundary has no      *)
+(* program variables.  The logic variables are bound ANGELICALLY by the      *)
+(* consume of the ARRAY chunk, which comes first and uses chunk_angelic --   *)
+(* only consume_chunk_angelic searches the heap (Monads.v).  The cell next  *)
+(* to it is then matched precisely at `a ± s`.                               *)
+(* ========================================================================= *)
+Inductive CLem : Set :=
+  (* arr a n e ∗ n≠0 ⊢ cell a ∗ range a ∗ arr (a+s) (n-1) e *)
+  | clem_arr_take_first (pub : bool) (s : Z)
+  (* arr a n e ∗ cell (a-s) ⊢ arr (a-s) (n+1) e *)
+  | clem_arr_add_first (pub : bool) (s : Z).
+
+Definition clem_ctx : LCtx :=
+  ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
+
+Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
+  term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
+
+(* ∃ w, x ↦ₘ w  (∗ secLeak w when pub), over clem_ctx *)
+Definition clem_cell (pub : bool) (x : Term (clem_ctx ▻ "w"∷ty_xlenbits) ty_xlenbits)
+    : Assertion clem_ctx :=
+  asn.exist "w" ty_xlenbits
+    (asn.sep (asn.chunk (chunk_user (ptstomem bytes_per_word) [x; term_var "w"]))
+             (if pub then asn.formula (formula_secLeak (term_var "w"))
+              else asn.formula formula_true)).
+
+Definition clem_arr {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.chunk (chunk_user (arr pub s) [a; n; e]).
+
+Definition clem_arr_angelic (pub : bool) (s : Z) : Assertion clem_ctx :=
+  asn.chunk_angelic (chunk_user (arr pub s)
+    [term_var "a"; term_var "n"; term_var "e"]).
+
+Definition clem_lemma (k : CLem) : Lemma [ctx] :=
+  match k with
+  | clem_arr_take_first pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.formula (formula_relop bop.neq (term_var "n")
+                           (term_val ty_xlenbits bv.zero))))
+        (asn.sep (clem_cell pub (term_var "a"))
+           (asn.sep
+              (asn.formula (formula_relop bop.le
+                 (term_binop bop.plus (term_unop uop.unsigned (term_var "a"))
+                    (term_val ty.int 4%Z))
+                 (term_val ty.int (Z.of_N maxAddr))))
+              (clem_arr pub s (clem_off (term_var "a") s)
+                 (clem_off (term_var "n") (-1)) (term_var "e"))))
+  | clem_arr_add_first pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (clem_cell pub (clem_off (term_var "a") (- s))))
+        (clem_arr pub s (clem_off (term_var "a") (- s))
+           (clem_off (term_var "n") 1) (term_var "e"))
+  end.
+
 Inductive Annot :=
   | AnnotDebugBreak
   | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)
-  (* A GHOST VIEW (PLAN-array-invariants D2): consume `pre`, produce `post`,
-     over its own logic context Δ, bound ANGELICALLY by the consume.  It is
-     `call_lemma` on an anonymous lemma with no program arguments and no
-     patterns -- so no `Lem` constructor, and no edit to Machine.v, which is
-     inside the trusted statement (Noninterference.v imports it).  Trusted on
-     this light side; its validity (pre ⊢ post) is the heavy side's job. *)
-  | AnnotView {Δ : LCtx} (pre post : Assertion Δ).
+  (* A CFGVer-local ghost lemma from the catalogue above. *)
+  | AnnotCLemma (k : CLem).
 
 (* A BLOCK CONTRACT carried by an instruction: everything needed to say what
    standing in for a run of instructions PROMISES, plus where execution
@@ -813,8 +874,8 @@ Section CFGVerificationDerived.
              (SpecIris.v:364), following iris_rule_stm_lemmak's three-line
              discharge (BinaryInstance.v:196). *)
           call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)
-      | AnnotView pre post =>
-          call_lemma (MkLemma [ctx] _ [env] pre post) [env]
+      | AnnotCLemma k =>
+          call_lemma (clem_lemma k) [env]
       end.
 
     (* Recurses in list order, so the first annotation runs first.  `nil` is
@@ -1521,8 +1582,8 @@ Section CFGVerificationDerived.
       destruct a.
       - cbn. apply cext_debug, cext_pure.
       - cbn. apply cext_call_lemma.
-      - (* AnnotView: an anonymous call_lemma.  NO cbn: it would unfold
-           call_lemma at the concrete MkLemma and defeat the apply. *)
+      - (* AnnotCLemma: a call_lemma.  NO cbn: it would unfold call_lemma at
+           the concrete clem_lemma and defeat the apply. *)
         apply cext_call_lemma.
     Qed.
 
