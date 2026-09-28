@@ -177,11 +177,13 @@ Changes:
    `vb_ok := cdRecBlk_valid ia`; `cd_rec_annot`'s head gets `aiv_loop := true`.
    `cd_link_blocksSound` and every `blocksSound_of_head` use disappear.
    `ValidCFGVerifierContract` loses its third conjunct.
-5. **Cleanup.** Delete `blocksSound`, `blocksSoundAt`, `blocksSound_of_head`,
+5. *(SUPERSEDED by §8.1 -- written before Phases 1-4; in particular
+   `blocksSound`/`blocksSoundAt` are NOT deletable.)*
+   **Cleanup.** Delete `blocksSound`, `blocksSoundAt`, `blocksSound_of_head`,
    `_of_none` once unused. Update the skills (`cfgver-soundness`,
    `cfgver-endtoend*`, `cfgver-executor`'s "Loops as ONE block" and "Where a
    block resumes") and the Verifier.v "WHY NO PROOF FIELD" comment.
-6. **Then** revisit exit-targets' Phase 5 (drop `cfg_init_addr`, and with it
+6. *(Current scope: §8.2.)* **Then** revisit exit-targets' Phase 5 (drop `cfg_init_addr`, and with it
    the `ia` parameter of `cdRec ia` & co): after step 4 nothing should read it.
 
 ## 4. Open questions / risks
@@ -339,4 +341,108 @@ already takes are DERIVED from the annotated list:
   which `skill-path-guard.sh` (Write|Edit only) does not see; the required
   skill (cfgver-endtoend-internals) was loaded afterwards and the changes
   checked against it.
+
+## 8. Remaining work -- HANDOFF (written 2026-09-28, for a fresh session)
+
+**State.** Phases 1-4 are DONE on branch `issue/valid-blk-annot` (off
+`KatamaranRel`; not merged, not pushed): 6a6ebfdd (P1), 765a0656 (P2),
+70f734b2 (P3), 641757ba (P4). `scripts/gate.sh` passed after P3 and after P4
+(19 end theorems axiom-clean). Read §5 (decisions V1-V11) and §7 (what each
+phase built) first. One-line summary: every bridge now takes only the sealed
+`ValidCFGVerifierContract c` (`Validity.v`); annotations appear only where a
+contract is proved valid.
+
+Do the items in this order; each ends with a build, and the gate runs once at
+the end (`GATE_JOBS=1 ./scripts/gate.sh` on this box, ~17 min).
+
+### 8.1 Phase 5 -- cleanup (usage re-checked 2026-09-28 with `command grep`)
+
+a. **Delete, verified dead:** `Adequacy.blocksSound_of_head` (its definition is
+   its only occurrence); `Adequacy.blocksSound_of_none` and
+   `blocksSoundAt_of_none` (they only reference each other);
+   `EndToEnd.cfg_instrs_pre` and `cfg_instrs_contract` (definitions only -- and
+   they still speak of an annotated `instrs`, against V10).
+b. **Check, then delete if dead:** `GenCompose.split_id` and the sub-table
+   faithfulness helpers around it (`Section GenSegTables`, lines ~100-210);
+   `TablesRel.itable_faith_of_segment` (its only real user was `pl_itable`,
+   replaced by `pl_contain` in P4; `Example/PaddedLoop.v` mentions it only in
+   comments -- update those). Use `command grep -rnw` (plain `grep` is
+   gitignore-aware and skips files) and ignore `Example/ZZ*`.
+c. **Do NOT delete** `blocksSound`, `blocksSoundAt`, `blocksSound_at_false`,
+   `blockSound_span_to_whole`, `blk_span`: the executor's soundness induction
+   (`sound_exec_cfg_addr_myWP2`) and `GenCompose.contract_setup` still use them
+   internally. (§3 item 5 predates this and is wrong on that point.)
+d. **Stale text:** Verifier.v's "WHY NO PROOF FIELD" comment near
+   `AnnotInstr`/`BlkAnnot` (validity now rides in `AnnotInstrV`); the
+   coqc-guard mentions in the cfgver-scaling-diagnostics skill (~l.504), the
+   skill-usage-audit skill (~l.127), and the rocq-implementation requirement
+   text inside `.claude/hooks/skill-path-guard.sh` (coqc-guard.sh was unwired
+   from settings.json by Emiel on 2026-09-25; the script file remains). Skill
+   BODY edits only -- a `description:` change needs the
+   skill-routing-maintenance consult. Edit skill files with the Edit tool:
+   `skill-bash-write-guard.sh` misfires on any Bash command whose text merely
+   names a skill file path (even `git add`, even a plan edit quoting one).
+e. **Probe `Example/ZZBlkABSound.v`** (not in `_CoqProject`, not gate-built)
+   still calls the deleted `blk_span_sub`. Either port it to the P3/P4 API
+   (`blkValid_of_seg` + `annotsValid` + `ValidCFGVerifierContract_intro`) --
+   which would be the FIRST real test of a block in the MIDDLE of a program
+   (the design needs no key inversion, but nothing exercises it) -- or delete
+   it. Ask Emiel which.
+f. **Untracked probes from this work:** `Example/ZZBlkChkProbe.v`,
+   `ZZBlkVcAllProbe.v`, `ZZBlkVProbe.v`, `ZZContractRun.v`. Ask Emiel whether
+   to keep them.
+
+### 8.2 Phase 6 -- drop `cfg_init_addr`
+
+P4 removed its last real reader (the old blocksSound conjunct of
+`ValidCFGVerifierContract`). 22 non-comment lines still mention it
+(`command grep -rn cfg_init_addr --include=*.v . | grep -v ZZ`), mostly the
+bridges' `contractInitAddr : cfg_init_addr contract = init_addr` premise and
+the record field itself (Verifier.v). Plan: (1) confirm no proof READS it
+beyond that premise; (2) remove the premise from the bridges (every call site
+passes `eq_refl`); (3) remove the field from `CFGVerifierContract` and
+`cfg_map`, then fix the generators (`gen_contract_*`, `gen_seg_contract` take
+`ia` to fill it) -- the `ia` parameters of `cdRec ia` / `cdRecBlk ia` /
+`cdLink ia` should then disappear. This changes the RECORD every example
+constructs: check with Emiel before touching anything that might move a
+trusted `Example/*Result.v` statement (none should; `noninterferent_strong`
+takes `init_addr` itself). Coordinate with PLAN-exit-targets.md D11, which
+deferred this step to here.
+
+### 8.3 The Phase-1 VC-cost measurement (never run)
+
+The block containment check (`Verifier.blk_code_in`, run at every block
+firing) should cost noise. Measure `allocated_words` for `valid_cd_link` and
+`valid_cd_rec` (Example/CountdownRec.v) before and after P1 -- "before" is
+commit 321c42f3 -- with the recipe in the rocq-timeout-triage skill (one heavy
+`Time Eval vm_compute` per process; `OCAMLRUNPARAM='v=0x400'`). If it is more
+than noise, write it up per the cfgver-scaling-diagnostics skill.
+
+### 8.4 Merge
+
+When 8.1-8.3 are done: `git switch KatamaranRel && git merge --no-ff
+issue/valid-blk-annot` (branch-workflow skill; the pre-merge hook runs the
+gate). Never push or merge to `main`.
+
+### 8.5 Traps met in this work (so the next session skips them)
+
+- pet (rocq-mcp file mode) runs OUT OF MEMORY opening `VerifierRel.v`,
+  `Adequacy.v` and `EndToEnd.v` at any position. Develop proofs in a `ZZ*.v`
+  probe that `Require`s the built `.vo` (ZZContractRun.v's header works; it
+  needs `From iris.base_logic Require Import ...` for `⊢` to typecheck), or
+  check by building. A "not found" from file mode right after a rebuild was
+  twice a stale pet, not a real error -- `make` the file before believing it.
+- `Set Implicit Arguments` (EndToEnd.v, VerifierRel.v, most Example files):
+  anything inferable from a later premise becomes implicit (`contract` from
+  `valid_contract`, `l` from `annotsValid l`, `c1` in `rprop_and`). Prefer
+  `@lemma` with every argument, or `assert ... by apply`. GenCompose.v does
+  NOT set it -- positional arguments there are as declared.
+- SSReflect `rewrite` is in scope in several files: no comma lists, no
+  `rewrite ... by tac`.
+- `map_fmap_compose` is stated `(f ∘ g) <$> m = f <$> (g <$> m)`.
+- `repeat constructor` on an `annotsValid` goal descends into `blkValid`'s
+  Iris body -- split explicitly (see CountdownRecResult.cd_link_valid).
+- Edits to `.v` files through Python/sed bypass `skill-path-guard.sh`
+  (Write|Edit only): load the file's required skill first anyway (CFGVer/
+  CLAUDE.md's file table), or use the Edit tool.
 
