@@ -561,12 +561,62 @@ Module RiscvPmpIrisInstanceWithContracts.
       apply Hne. rewrite He. apply arr_ring_zero.
     Qed.
 
+    Lemma arr_of_nat_bin (n : bv xlenbits) : bv.of_nat (N.to_nat (bv.bin n)) = n.
+    Proof. unfold bv.of_nat. rewrite N2Nat.id. apply bv.of_N_bin. Qed.
+    Lemma arr_ring_end_last (a s n : bv xlenbits) :
+      bv.add (bv.add a (bv.mul s n)) s = bv.add a (bv.mul s (bv.add n bv.one)).
+    Proof. ring. Qed.
+
+    (* The mirror of interp_arr_add_first at the OTHER end: the new cell is
+       the one AT the end e = a + s·n.  A wrapping count drops the cells. *)
+    Lemma interp_arr_add_last `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
+      interp_arr pub s (SV a) (SV n) (SV e) ∗ interp_arr_cell pub e
+      ⊢@{iPropI Σ}
+      interp_arr pub s (SV a) (SV (bv.add n (bv.of_Z 1))) (SV (bv.add e (bv.of_Z s))).
+    Proof.
+      cbn [interp_arr]. iIntros "[[%He Hcells] Hc]".
+      iSplit.
+      { iPureIntro. subst e. rewrite bv.of_Z_one. apply arr_ring_end_last. }
+      destruct (arr_succ_bin n) as [Hs|Hz].
+      - rewrite Hs. replace (N.to_nat (bv.bin n + 1)) with (S (N.to_nat (bv.bin n))) by lia.
+        rewrite seq_S big_sepL_app. iFrame "Hcells". cbn [big_opL].
+        rewrite arr_of_nat_bin -He. iFrame "Hc".
+      - rewrite Hz. cbn. done.
+    Qed.
+
+    Lemma clem_empty_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_empty pub s)).
+    Proof.
+      intros ι. destruct_syminstance ι.
+      (* a NonSyncVal address is ruled out by the secLeak precondition *)
+      destruct a as [a|]; cbn -[interp_arr]; [|iIntros "[[] _]"].
+      iIntros "_". cbn [interp_arr]. iSplit; [|done].
+      iPureIntro. apply arr_ring_zero.
+    Qed.
+
+    Lemma clem_add_last_sound `{sailGS2 Σ} (pub : bool) (s : Z) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_add_last pub s)).
+    Proof.
+      intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+        cbn -[interp_arr]; try (iIntros "[[] _]").
+      iIntros "[Harr [[%w [Hw Hs]] [%Hr _]]]".
+      iApply interp_arr_add_last. iFrame "Harr".
+      unfold interp_arr_cell. iSplit; [iPureIntro; exact Hr|].
+      iExists w. iFrame "Hw". destruct pub; cbn.
+      - iDestruct "Hs" as "[%Hs _]". iPureIntro. intros _. exact Hs.
+      - iPureIntro. discriminate.
+    Qed.
+
     (* The catalogue's lemSemCFGVerif. *)
     Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
       ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
     Proof.
       destruct k; [apply clem_take_first_sound|apply clem_add_first_sound
-                  |apply clem_nonempty_sound].
+                  |apply clem_nonempty_sound|apply clem_empty_sound
+                  |apply clem_add_last_sound].
     Qed.
   End CLemSound.
 

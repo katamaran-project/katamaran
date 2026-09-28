@@ -112,7 +112,14 @@ Inductive CLem : Set :=
   | clem_arr_add_first (pub : bool) (s : Z)
   (* arr a n e ∗ a≠e ⊢ arr a n e ∗ n≠0 -- a POINTER-bounded loop's latch
      (bne a, e) as the count fact take_first needs *)
-  | clem_arr_nonempty (pub : bool) (s : Z).
+  | clem_arr_nonempty (pub : bool) (s : Z)
+  (* ⊢ arr a 0 a, a UNCONSTRAINED -- the seed of an array built mid-program;
+     `a` is bound later by an angelic chunk match (PLAN-array-invariants
+     Phase 3, route (A)) *)
+  | clem_arr_empty (pub : bool) (s : Z)
+  (* arr a n e ∗ cell e ∗ range e ⊢ arr a (n+1) (e+s), the cell matched
+     ANGELICALLY: on a fresh seed it is what binds the address *)
+  | clem_arr_add_last (pub : bool) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -168,6 +175,26 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arr pub s (term_var "a") (term_var "n") (term_var "e"))
            (asn.formula (formula_relop bop.neq (term_var "n")
                            (term_val ty_xlenbits bv.zero))))
+  | clem_arr_empty pub s =>
+      (* secLeak a is REQUIRED, not decoration: ValidLemma quantifies over
+         every valuation, and arr is False at a NonSyncVal address, so
+         `⊢ arr a 0 a` alone is not a valid lemma (caught by its soundness
+         proof, not by any VC). *)
+      MkLemma [ctx] ["a"∷ty_xlenbits] [env]
+        (asn.formula (formula_secLeak (term_var "a")))
+        (clem_arr pub s (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a"))
+  | clem_arr_add_last pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.sep
+              (asn.exist "w" ty_xlenbits
+                 (asn.sep (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word)
+                                               [term_var "e"; term_var "w"]))
+                          (if pub then asn.formula (formula_secLeak (term_var "w"))
+                           else asn.formula formula_true)))
+              (clem_range (term_var "e"))))
+        (clem_arr pub s (term_var "a") (clem_off (term_var "n") 1)
+           (clem_off (term_var "e") s))
   end.
 
 Inductive Annot :=
