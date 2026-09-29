@@ -593,3 +593,23 @@ absorbs every branch -- use a trivially true post when reading residuals.
 Next: both mblr paths; the rest of the program (I/K/M entries angelic, G is
 size-free); promote the closer; the ∀-mlen bridge (cells -> arr via
 interp_arr_intro, generic HDataAddrs).
+
+### 2026-09-29 (later): mblr = 0 covered (Emiel), generic closer
+
+- Emiel chose to cover BOTH mblr paths (mblr = bitlen mod 31 = bits used in
+  m's top word; the mblr = 0 path is legal, rare: bitlen a multiple of 31).
+  That path has its own memmove (idx 113-117), a POINTER-compare loop:
+  `ZZArrD0.v` (d0Rec), loop VC proved.
+- D's parametric variant (`ZZArrDAng`) now builds its MOVED array walking
+  DOWN (fixed start = first destination = x[mlen], grown at its end by
+  add_last): the code reads x[mlen], x[mlen-1] right after the memmove and
+  the catalogue has no take_last.
+- Family needs mlen >= 3: after D the read of x[mlen-1] hits the moved array
+  for mlen >= 3 but the x[1] cell for mlen = 2 -- a heap-shape split with no
+  code branch.  (mlen = 2 is mb_noninterferent already.)
+- GENERIC CLOSER `ZZMbClose.solve_mb_vc`: walks the inst_symprop ∧/∨/∀ tree
+  (both sides of every angelic choice), leaves by `bv_lin` = bitvectors ->
+  Z via unsigned (add/shiftl/shiftr/land-ones/same-width sext), variable
+  bounds, `Z.to_euclidean_division_equations; lia`.  Closes D (3.8 s), D0
+  (5.0 s) and the prefix through D (valid_sym3, 22 s); negative control
+  still fails.  The hand lemmas (ZZMbArith) are superseded.
