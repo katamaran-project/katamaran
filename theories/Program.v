@@ -75,7 +75,7 @@ Module Type ProgramMixin (Import B : Base)
 
     #[global] Coercion mkNode : 𝑭 >-> Node.
 
-    Notation Nodes := (list Node).
+    Abbreviation Nodes := (list Node).
     Definition CallGraph : Set := Node -> Nodes.
 
     Instance 𝑭_elem_of : forall {Δ τ}, ElemOf (𝑭 Δ τ) Nodes :=

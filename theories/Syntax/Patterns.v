@@ -483,7 +483,7 @@ Module Type PatternsOn (Import TY : Types).
   End Patterns.
 
   Section Freshen.
-    Notation LCtx := (NCtx LVar Ty).
+    Abbreviation LCtx := (NCtx LVar Ty).
     Context {N : Set} (n : N -> LVar).
 
     (* Freshen the name of the variables in a given named context [Δ]. The type

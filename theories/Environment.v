@@ -888,7 +888,7 @@ Section WithBinding.
 End WithBinding.
 End envrec.
 
-Notation EnvRec := envrec.EnvRec.
+Abbreviation EnvRec := envrec.EnvRec.
 Bind Scope env_scope with EnvRec.
 
 Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : NCtx X T) : Set :=

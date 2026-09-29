@@ -180,7 +180,7 @@ Module Type SymPropOn
             SymProp (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn)))
     | debug
         (b : AMessage Σ) (k : SymProp Σ).
-    Notation 𝕊 := SymProp.
+    Abbreviation 𝕊 := SymProp.
 
     Global Arguments error {_} _.
     Global Arguments block {_}.
@@ -1060,8 +1060,8 @@ Module Type SymPropOn
     End Statistics.
 
   End SymProp.
-  Notation SymProp := SymProp.SymProp.
-  Notation 𝕊 := SymProp.SymProp.
+  Abbreviation SymProp := SymProp.SymProp.
+  Abbreviation 𝕊 := SymProp.SymProp.
   Import option.notations.
 
   Module Postprocessing.
@@ -2545,8 +2545,8 @@ Module Type SymPropOn
 
       Notation "- x" := (eterm_unop uop.neg x) (only printing).
 
-      Notation unsigned x := (eterm_unop uop.unsigned x).
-      Notation signed x := (eterm_unop uop.signed x).
+      Abbreviation unsigned x := (eterm_unop uop.unsigned x).
+      Abbreviation signed x := (eterm_unop uop.signed x).
 
     End notations.
 

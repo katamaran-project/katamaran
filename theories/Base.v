@@ -57,12 +57,12 @@ Module Type BaseMixin (Import TY : Types).
     OccursCheckOn TY <+ GenOccursCheckOn TY <+ InstantiationOn TY <+
     MessagesOn TY <+ PartialEvaluationOn TY.
 
-  Notation Ty := (@ty.Ty typedeclkit).
-  Notation LVar := (@Variables.LVar varkit).
-  Notation PVar := (@Variables.PVar varkit).
-  Notation PCtx := (NCtx PVar Ty).
-  Notation LCtx := (NCtx LVar Ty).
-  Notation Val := (@ty.Val typedeclkit typedenotekit).
+  Abbreviation Ty := (@ty.Ty typedeclkit).
+  Abbreviation LVar := (@Variables.LVar varkit).
+  Abbreviation PVar := (@Variables.PVar varkit).
+  Abbreviation PCtx := (NCtx PVar Ty).
+  Abbreviation LCtx := (NCtx LVar Ty).
+  Abbreviation Val := (@ty.Val typedeclkit typedenotekit).
 
   Notation Valuation Σ :=
     (@Env (Binding LVar Ty)

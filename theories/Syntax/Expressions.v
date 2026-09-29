@@ -52,8 +52,8 @@ Local Unset Elimination Schemes.
 
 Module Type ExpressionsOn (Import TY : Types).
 
-  Local Notation PCtx := (NCtx PVar Ty).
-  Local Notation CStore := (@NamedEnv PVar Ty Val).
+  Local Abbreviation PCtx := (NCtx PVar Ty).
+  Local Abbreviation CStore := (@NamedEnv PVar Ty Val).
 
   (* Intrinsically well-typed expressions. The context Γ of mutable variables
      contains names PVar and types Ty, but the names are not computationally
@@ -150,24 +150,24 @@ Module Type ExpressionsOn (Import TY : Types).
   Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) : CStore Δ :=
     env.map (fun xτ e => eval e δ) es.
 
-  Notation exp_int l := (@exp_val _ ty.int l%Z).
-  Notation exp_bool l := (@exp_val _ ty.bool l).
-  Notation exp_true   := (@exp_val _ ty.bool true).
-  Notation exp_false  := (@exp_val _ ty.bool false).
-  Notation exp_string s := (@exp_val _ ty.string s%string).
-  Notation exp_inl e := (exp_unop uop.inl e%exp).
-  Notation exp_inr e := (exp_unop uop.inr e%exp).
-  Notation exp_neg e := (exp_unop uop.neg e%exp).
-  Notation exp_not e := (exp_unop uop.not e%exp).
-  Notation exp_sext e := (exp_unop uop.sext e%exp).
-  Notation exp_zext e := (exp_unop uop.zext e%exp).
-  Notation exp_get_slice_int e := (exp_unop uop.get_slice_int e%exp).
-  Notation exp_signed e := (exp_unop uop.signed e%exp).
-  Notation exp_unsigned e := (exp_unop uop.unsigned e%exp).
-  Notation exp_bvapp := (exp_binop bop.bvapp).
-  Notation exp_bvdrop m := (exp_unop (uop.bvdrop m)).
-  Notation exp_bvtake m := (exp_unop (uop.bvtake m)).
-  Notation exp_negate e := (exp_unop uop.negate e%exp).
+  Abbreviation exp_int l := (@exp_val _ ty.int l%Z).
+  Abbreviation exp_bool l := (@exp_val _ ty.bool l).
+  Abbreviation exp_true   := (@exp_val _ ty.bool true).
+  Abbreviation exp_false  := (@exp_val _ ty.bool false).
+  Abbreviation exp_string s := (@exp_val _ ty.string s%string).
+  Abbreviation exp_inl e := (exp_unop uop.inl e%exp).
+  Abbreviation exp_inr e := (exp_unop uop.inr e%exp).
+  Abbreviation exp_neg e := (exp_unop uop.neg e%exp).
+  Abbreviation exp_not e := (exp_unop uop.not e%exp).
+  Abbreviation exp_sext e := (exp_unop uop.sext e%exp).
+  Abbreviation exp_zext e := (exp_unop uop.zext e%exp).
+  Abbreviation exp_get_slice_int e := (exp_unop uop.get_slice_int e%exp).
+  Abbreviation exp_signed e := (exp_unop uop.signed e%exp).
+  Abbreviation exp_unsigned e := (exp_unop uop.unsigned e%exp).
+  Abbreviation exp_bvapp := (exp_binop bop.bvapp).
+  Abbreviation exp_bvdrop m := (exp_unop (uop.bvdrop m)).
+  Abbreviation exp_bvtake m := (exp_unop (uop.bvtake m)).
+  Abbreviation exp_negate e := (exp_unop uop.negate e%exp).
 
   Notation "e1 && e2" := (exp_binop bop.and e1 e2) : exp_scope.
   Notation "e1 || e2" := (exp_binop bop.or e1 e2) : exp_scope.

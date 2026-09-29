@@ -381,7 +381,7 @@ Module inv := invariants.
     (* CODE AND CONFIG SHORTANDS*)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
-    Local Notation asn_femto_pmpentries a :=
+    Local Abbreviation asn_femto_pmpentries a :=
       ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (a +ᵇ term_val ty_xlenbits (bv.of_N adv_addr)));
         (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)))])%list.
 

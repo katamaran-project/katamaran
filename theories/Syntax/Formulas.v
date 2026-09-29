@@ -337,14 +337,14 @@ Module Type FormulasOn
   End PathCondition.
   Bind Scope ctx_scope with PathCondition.
 
-  Notation formula_eq := (formula_relop bop.eq).
-  Notation formula_neq := (formula_relop bop.neq).
-  Notation formula_le := (formula_relop bop.le).
-  Notation formula_lt := (formula_relop bop.lt).
-  Notation formula_bvsle := (formula_relop bop.bvsle).
-  Notation formula_bvslt := (formula_relop bop.bvslt).
-  Notation formula_bvule := (formula_relop bop.bvule).
-  Notation formula_bvult := (formula_relop bop.bvult).
+  Abbreviation formula_eq := (formula_relop bop.eq).
+  Abbreviation formula_neq := (formula_relop bop.neq).
+  Abbreviation formula_le := (formula_relop bop.le).
+  Abbreviation formula_lt := (formula_relop bop.lt).
+  Abbreviation formula_bvsle := (formula_relop bop.bvsle).
+  Abbreviation formula_bvslt := (formula_relop bop.bvslt).
+  Abbreviation formula_bvule := (formula_relop bop.bvule).
+  Abbreviation formula_bvult := (formula_relop bop.bvult).
 
   Section Erasure.
     Inductive EFormula : Type :=

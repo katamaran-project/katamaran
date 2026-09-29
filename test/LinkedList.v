@@ -77,8 +77,8 @@ Local Open Scope string_scope.
 (* We use this notation in every place an int represents a memory address.
    Unfortunately, this Notation is also used for integers that are not
    addreses. *)
-Notation ptr   := ty.int.
-Notation llist := (ty.option ptr).
+Abbreviation ptr   := ty.int.
+Abbreviation llist := (ty.option ptr).
 
 Module Import ExampleBase <: Base.
 

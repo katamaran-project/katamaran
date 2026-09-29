@@ -66,8 +66,8 @@ Section S.
   Qed.
 End S.
 
-Notation st_auth1 := (st_auth iostate_name).
-Notation st_frag1 := (st_frag iostate_name).
+Abbreviation st_auth1 := (st_auth iostate_name).
+Abbreviation st_frag1 := (st_frag iostate_name).
 
 
 Lemma state_alloc_names `{!iostate_preG T Σ} s :

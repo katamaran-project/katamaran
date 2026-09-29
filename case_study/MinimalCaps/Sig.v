@@ -314,17 +314,17 @@ Module Import MinCapsSignature <: Signature MinCapsBase.
     Notation "p '<=ₚ' p'" := (asn.formula (formula_user subperm (env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ p')))) (at level 70).
 
     Notation "a '↦m' t" := (asn.chunk (chunk_user ptsto (env.nil ► (ty.addr ↦ a) ► (ty.int ↦ t)))) (at level 70).
-    Notation asn_correctPC c := (asn.formula (formula_user correctPC [c])).
+    Abbreviation asn_correctPC c := (asn.formula (formula_user correctPC [c])).
     Notation "p '≠ₚ' p'" := (asn.formula (formula_user not_is_perm [p;p'])) (at level 70).
-    Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-    Notation asn_IH := (asn.chunk (chunk_user ih [])).
-    Notation asn_WP_loop := (asn.chunk (chunk_user wp_loop [])).
-    Notation asn_safe w := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
-    Notation asn_csafe c := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
-    Notation asn_csafe_angelic c := (asn.chunk_angelic (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
-    Notation asn_expr c := (asn.chunk (chunk_user expr [c])).
-    Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
-    Notation asn_match_cap c p b e a asn :=
+    Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+    Abbreviation asn_IH := (asn.chunk (chunk_user ih [])).
+    Abbreviation asn_WP_loop := (asn.chunk (chunk_user wp_loop [])).
+    Abbreviation asn_safe w := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
+    Abbreviation asn_csafe c := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
+    Abbreviation asn_csafe_angelic c := (asn.chunk_angelic (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
+    Abbreviation asn_expr c := (asn.chunk (chunk_user expr [c])).
+    Abbreviation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
+    Abbreviation asn_match_cap c p b e a asn :=
       (asn.match_record
          capability c
          (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
@@ -333,7 +333,7 @@ Module Import MinCapsSignature <: Signature MinCapsBase.
                             "cap_end" e)
             "cap_cursor" a)
          asn).
-    Notation asn_within_bounds a b e :=
+    Abbreviation asn_within_bounds a b e :=
       (asn.formula (formula_bool (term_binop bop.and
                                     (term_binop (bop.relop bop.le) b a)
                                     (term_binop (bop.relop bop.le) a e)))).

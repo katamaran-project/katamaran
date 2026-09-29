@@ -52,7 +52,7 @@ Module Type GenOccursCheckOn
   (Import TY : Types)
   (Import TM : TermsOn TY).
 
-  Local Notation LCtx := (NCtx LVar Ty).
+  Local Abbreviation LCtx := (NCtx LVar Ty).
 
   Class SubstUniv (Sb : LCtx -> LCtx -> Type) :=
     MkSubstUniv {

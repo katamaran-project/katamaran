@@ -883,7 +883,7 @@ Include ProgramMixin MinCapsBase.
   Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+  Abbreviation AccessibleFun f := (Accessible 𝑭_call_graph f).
 
   Module Import WithAccessibleTactics.
     Import AccessibleTactics.

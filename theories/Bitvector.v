@@ -171,7 +171,7 @@ Module bv.
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
 
-  #[global] Notation exp2 n := (N.pow 2%N (N.of_nat n)).
+  #[global] Abbreviation exp2 n := (N.pow 2%N (N.of_nat n)).
 
   Section Conversion.
 

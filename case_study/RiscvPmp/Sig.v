@@ -1027,21 +1027,21 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Notation "a '↦₂' t" := (asn.chunk (chunk_user (ptsto_one Right) [a; t])) (at level 70).
     Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
 
-    Notation asn_bool t := (asn.formula (formula_bool t)).
-    Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-    Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-
-    Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-    Notation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
-    Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
-    Notation asn_within_cfg a cfg prev_addr addr := (asn.formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
-    Notation asn_not_within_cfg a es := (asn.formula (formula_user not_within_cfg [a; es])).
-    Notation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
-    Notation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
-    Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-    Notation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
-    Notation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
-    Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
+    Abbreviation asn_bool t := (asn.formula (formula_bool t)).
+    Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+    Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+    Abbreviation
+    Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+    Abbreviation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
+    Abbreviation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
+    Abbreviation asn_within_cfg a cfg prev_addr addr := (asn.formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
+    Abbreviation asn_not_within_cfg a es := (asn.formula (formula_user not_within_cfg [a; es])).
+    Abbreviation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
+    Abbreviation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
+    Abbreviation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+    Abbreviation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
+    Abbreviation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
+    Abbreviation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
       (asn.formula (formula_bool (term_val ty.bool true)))).
   End rv_notations.
