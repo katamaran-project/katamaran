@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Stdlib Require Import
+From Katamaran Require Import
      MinimalCaps.Machine
      MinimalCaps.Sig
      Sep.Hoare
