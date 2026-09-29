@@ -179,13 +179,14 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        breaks any downstream occurrence of "}}" (e.g. a sigma type ending
        in "... & Reg x}}"). *)
 
-    Ltac solve_bv :=
-      repeat match goal with
-        | |- context[bv.add ?x (@bv.mk ?n 0 I)] =>
-            fold (@bv.zero n)
-        | |- context[bv.add ?x bv.zero] =>
-            rewrite bv.add_zero_r
-        end.
+    (* An `Ltac solve_bv` (rewrite `x + 0` to `x`) used to live here, and
+       solve_vc called `try solve_bv`.  That call NEVER reached it:
+       theories/Bitvector.v declares `Tactic Notation "solve_bv" :=
+       bv.bv_zify`, and a tactic notation wins over an Ltac of the same
+       name, so solve_vc ran the full bv decision procedure (zify + lia) on
+       every VC goal.  On muladd with loop blocks that was 77 of 79 s per
+       prefix (PLAN-array-invariants, 2026-09-29).  Removed both: all 18
+       tracked light examples verify without the call. *)
 
     (* ===================================================================
        Phase 0 (PLAN-symbolic-base.md, §1): helper lemmas anticipating the
@@ -524,6 +525,11 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       apply Hc. apply bv.add_cancel_r in Hx. now subst c1.
     Qed.
 
+    Ltac solve_vc_closers :=
+      try (solve [eapply secLeak_bvadd_val_compat; eauto]);
+      try (solve [eapply instprop_fetch_bound_lower; eauto]);
+      try (solve [eapply instprop_fetch_bound_upper; eauto]).
+
     Ltac solve_vc :=
       (* `cbn -[Erasure.inst_symprop]`, not a bare `cbn` (2026-09-08).
          inst_symprop (Propositions.v:2297) unfolds edemonicv to
@@ -538,7 +544,9 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          unfoldable, because the rest of the delta cost only exists inside what
          inst_symprop produces.  All 16 examples are unaffected.
          See diagnostics/vm-vs-tactic-split.md. *)
-      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros; repeat split; try solve_bv;
+      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros; repeat split;
+      (* No `try solve_bv` here any more: see the note where solve_bv used
+         to be defined (it silently ran bv.bv_zify on every goal). *)
       (* Phase 0 extension (PLAN-symbolic-base.md §1): try the compound
          secLeak / fetch-bound helpers on any residual goal before falling
          back to auto.  The `solve [...]` wrapper is required for failure
@@ -549,9 +557,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          either fully discharges the goal or is a no-op, so this is
          strictly additive -- existing (non symbolic-base) examples never
          reach these branches and fall through to `auto` exactly as before. *)
-      try (solve [eapply secLeak_bvadd_val_compat; eauto]);
-      try (solve [eapply instprop_fetch_bound_lower; eauto]);
-      try (solve [eapply instprop_fetch_bound_upper; eauto]);
+      solve_vc_closers;
       auto.
 
     (* Closes the symbolic-base fetch residuals a parametric VC leaves behind
