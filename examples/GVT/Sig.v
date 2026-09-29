@@ -1141,7 +1141,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Abbreviation asn_bool t := (asn.formula (formula_bool t)).
     Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-    Abbreviation
+
     Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
     Abbreviation asn_pmp_addr_access_without a width l m := (asn.chunk (chunk_user (pmp_addr_access_without width) [a; l; m])).
     Abbreviation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).

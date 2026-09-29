@@ -222,7 +222,7 @@ Module RiscvPmpBlockVerifSpec.
   Local Abbreviation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
   Local Abbreviation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
   Local Abbreviation asn_mmio_checked_read bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_read bytes) [a; w; s; s'])).
-        Abbreviation
+
   Local Abbreviation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
   Local Abbreviation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
   Local Abbreviation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
