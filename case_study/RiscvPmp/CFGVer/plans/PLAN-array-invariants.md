@@ -494,3 +494,37 @@ Requiring it would run its OOM flat VC), with deviation 3 REVERTED (both
   so the wrong branch survives as an unresolved angelic disjunction
   (ZZArrDEntry's decoys). Ghost lemmas want "by predicate", block
   preconditions want "by address".
+
+### 2026-09-29 -- THE FLAT MULADD VERIFIES (light-side VC)
+
+`Example/ZZMuladdBlk.v`: `valid_mb : cfg_vc mb_contract mb_annot` --
+br_i31_muladd_small whole-function, mlen = 2, clang's own instructions with
+deviation 3 reverted (both `li _, 32`), all five loops as blocks with the
+conversion ghosts around D/I/K/M. **VC 126 s, whole file 282 s, peak RSS
+8.5 GB** (needs a >11.5 GB virtual cap: the Qed's VM re-check).
+
+Two fixes got it there, neither array-specific:
+1. **Precise chunk matching compares the heap chunk's inputs NORMALISED**
+   (theories/Syntax/Chunks.v, commit c32d2d6b). A heap term holding a
+   variable substituted after the chunk was produced is not re-peval'd
+   (`4 + g`, g := 0x468 + p, stays `4 + (0x468 + p)`); the consumed chunk
+   is (`0x46c + p`), so a STORE (exact address match) missed the cell.
+   Reads hid it: they fall back to an angelic match. Prefix 91 failed on it.
+2. **solve_vc no longer calls `solve_bv`** (Contracts.v). The name resolves
+   to theories/Bitvector.v's `Tactic Notation "solve_bv" := bv.bv_zify`
+   (a tactic notation beats an Ltac), so every VC goal got the full bv
+   decision procedure: 77 of 79 s per prefix. All 18 tracked examples
+   verify without it.
+
+**My angelic-heap-search hypothesis for D's 80 s entry was REFUTED by the
+ablation**: `vm_compute` (the executor) was 3.5-4.5 s with or without the
+ghosts; the cost was entirely in the tactic. Prefix timings after both
+fixes: 90 -> 7.1 s, 163 (through G) 9.9 s, 220 (through I) 53 s / 7.0 GB,
+251 (through K) 89 s / 8.2 GB, full 126 s / 8.5 GB.
+
+Still open: (1) this is `cfg_vc`, not yet `ValidCFGVerifierContract` --
+needs `blkValid` for the five loop blocks (heavy, via `blkValid_of_seg`, as
+ZZArrDResult does for D) and `annotsValid` for the annotated list; (2) the
+end theorem (`noninterferent_strong` through the memory bridge, ImplPre
+over mlad's reg/mem specs); (3) heavy chain not rebuilt since the Chunks.v
+fix; gate before merging; (4) the probes are untracked.
