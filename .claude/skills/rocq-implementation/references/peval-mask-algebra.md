@@ -98,6 +98,24 @@ own lemmas: `land_if_ones`, `lor_if_ones`, `lxor_if_ones`, `not_if_ones`,
   at ~30 ms/attempt (`From Coq Require Import NArith Lia. From Katamaran Require
   Import Prelude Bitvector.` — `%N` needs `NArith`), then pay one compile.
 
+## Address normal form: constant floating + shift distribution (2026-09-29)
+
+Two rules make one address have ONE spelling, which chunk matching needs
+(a read whose address matches no cell syntactically falls back to an
+angelic disjunction over every cell — exponential when several reads miss;
+this is what blew up the parametric-mlen muladd merge, PLAN-array-invariants):
+
+- **`peval_bvadd_float`** (catch-all of `peval_bvadd`): a constant nested one
+  level down in either operand (`bvadd_head` = `term_val v + t'`) is floated to
+  the head, two such constants are summed by `peval_bvadd_fold`.
+- **`peval_shiftl`** (wired as `bop.shiftl` in `peval_binop`):
+  `(c + t) << k` with constant `k` becomes `(c<<k) + (t<<k)`.
+
+Together `(x + ((-1+M)<<2)) + 4` and `x + (M<<2)` peval to the same term
+(`selftest_neighbour_one_spelling`). Both are pure-term identities, sound over
+secrets without a case split. Full `Results.vo` closure rebuilt green after the
+change (every existing example still closes).
+
 ## Adding a new `BinOp`: the plumbing sites
 
 Adding a constructor to `bop.BinOp` touches five files. Append new bvec ops to

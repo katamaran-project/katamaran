@@ -548,6 +548,28 @@ Module Type PartialEvaluationOn
       : Term Σ (ty.bvec n) :=
       if eq_dec v bv.zero then t else term_binop bop.bvadd (term_val (ty.bvec n) v) t.
 
+    (* FLOAT a nested constant to the head (PLAN-array-invariants,
+       parametric mlen): one address must have ONE spelling, and the same
+       word is reached both as `x + (M << 2)` and as its neighbour plus 4,
+       `(x + ((M - 1) << 2)) + 4`, which peval_shiftl turns into
+       `x + (-4 + (M << 2)) + 4`.  Unconditional mod 2^n (assoc/comm), both
+       sides pure, so sound over secrets.  Arguments are canonical (peval is
+       bottom-up), so the remainders have no constant head.  A one-clause
+       matcher, not nested Equations patterns: those three overlapping
+       clauses made Equations fail to build a covering. *)
+    Equations bvadd_head {n} (t : Term Σ (ty.bvec n))
+      : option (Val (ty.bvec n) * Term Σ (ty.bvec n)) :=
+      bvadd_head (term_binop bop.bvadd (term_val _ v) t') := Some (v, t');
+      bvadd_head _ := None.
+
+    Definition peval_bvadd_float {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+      match bvadd_head t1, bvadd_head t2 with
+      | Some (v1, a), Some (v2, b) => peval_bvadd_fold (bv.add v1 v2) (term_binop bop.bvadd a b)
+      | Some (v1, a), None => term_binop bop.bvadd (term_val (ty.bvec n) v1) (term_binop bop.bvadd a t2)
+      | None, Some (v2, b) => term_binop bop.bvadd (term_val (ty.bvec n) v2) (term_binop bop.bvadd t1 b)
+      | None, None => term_binop bop.bvadd t1 t2
+      end.
+
     Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
     | term_val _ v1          , term_val _ v2          => term_val (ty.bvec _) (bv.add v1 v2)
     | term_val _ (bv.mk 0 _) , t2                     => t2
@@ -561,7 +583,7 @@ Module Type PartialEvaluationOn
     | term_val _ v1          , term_binop bop.bvadd (term_val _ v2) t' =>
         peval_bvadd_fold (bv.add v1 v2) t'
     | t1                     , term_val _ v2          => peval_bvadd_mask t1 v2
-    | t1                     , t2                     => term_binop bop.bvadd t1 t2.
+    | t1                     , t2                     => peval_bvadd_float t1 t2.
 
     Definition peval_bvand_val_default {m} (t : Term Σ (ty.bvec m))
       (v : Val (ty.bvec m)) : Term Σ (ty.bvec m) :=
@@ -1300,6 +1322,46 @@ Module Type PartialEvaluationOn
           (term_binop bop.shiftr zzH zzOne).
     Proof. reflexivity. Qed.
 
+    (* DISTRIBUTE a constant-shift over a constant-headed sum:
+       (c ⊕ t) << k  ~>  (c << k) ⊕ (t << k).  Unconditional mod 2^m (a left
+       shift is a multiplication by 2^k), pure on both sides, so sound over
+       secrets.  Together with peval_bvadd's floating clauses it gives an
+       array element ONE spelling: `x + ((M - 1) << 2) + 4` and `x + (M << 2)`
+       both become `x + (M << 2)` (PLAN-array-invariants, parametric mlen).
+       Built through peval_bvadd, so a zero `c << k` vanishes and the new
+       constant head can float in the enclosing sum. *)
+    Definition peval_shiftl {m n} (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n))
+      : Term Σ (ty.bvec m) :=
+      match bvadd_head t1, term_get_val t2 with
+      | Some (v, t), Some k =>
+          peval_bvadd (term_val (ty.bvec _) (bv.shiftl v k))
+            (term_binop bop.shiftl t (term_val (ty.bvec _) k))
+      | _ , _ => peval_binop' bop.shiftl t1 t2
+      end.
+
+    (* SELF-TESTS (see the mask rules' note above: a rule that never fires is
+       invisible).  X and M stand for any non-constant-headed canonical term. *)
+    Lemma selftest_shiftl_distributes (c d : Term Σ (ty.bvec 32)) :
+      let M := term_binop bop.bvxor c d in
+      peval_shiftl (term_binop bop.bvadd (term_val (ty.bvec 32) (bv.of_Z (-1))) M)
+        (term_val (ty.bvec 5) (bv.of_N 2))
+      = term_binop bop.bvadd (term_val (ty.bvec 32) (bv.shiftl (bv.of_Z (-1)) (bv.of_N (n := 5) 2)))
+          (term_binop bop.shiftl M (term_val (ty.bvec 5) (bv.of_N 2))).
+    Proof. reflexivity. Qed.
+
+    (* THE POINT: an array element's neighbour-plus-4 spelling and the code's
+       direct spelling are ONE term. *)
+    Lemma selftest_neighbour_one_spelling (a b c d : Term Σ (ty.bvec 32)) :
+      let X := term_binop bop.bvxor a b in
+      let M := term_binop bop.bvxor c d in
+      peval_bvadd
+        (peval_bvadd X (peval_shiftl
+           (term_binop bop.bvadd (term_val (ty.bvec 32) (bv.of_Z (-1))) M)
+           (term_val (ty.bvec 5) (bv.of_N 2))))
+        (term_val (ty.bvec 32) (bv.of_N 4))
+      = peval_bvadd X (peval_shiftl M (term_val (ty.bvec 5) (bv.of_N 2))).
+    Proof. reflexivity. Qed.
+
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
       Term Σ σ1 → Term Σ σ2 → Term Σ σ :=
@@ -1313,6 +1375,7 @@ Module Type PartialEvaluationOn
       | bop.bvand  => peval_bvand_mask
       | bop.bvor   => peval_bvor_mask
       | bop.bvxor  => peval_bvxor_mask
+      | bop.shiftl => peval_shiftl
       (* | bop.bvand  => peval_bvand *)
       (* | bop.bvor   => peval_bvor *)
       (* | bop.bvapp  => peval_bvapp *)
@@ -1438,6 +1501,51 @@ Module Type PartialEvaluationOn
         now rewrite bv.not_if_ones.
     Qed.
 
+    (* The RelVal shapes the constant-floating clauses of peval_bvadd and
+       peval_shiftl leave after `cbn`: plain bv identities lifted through
+       liftBinOp, no two-world case split needed beyond the destruct. *)
+    Lemma bvadd_float {n} (a c b : bv n) : bv.add a (bv.add c b) = bv.add c (bv.add a b).
+    Proof. rewrite !bv.add_assoc. f_equal. apply bv.add_comm. Qed.
+
+    Lemma rv_bvadd_assoc3 {n} (v : bv n) (A T : RelVal (ty.bvec n)) :
+      bop.evalRel bop.bvadd (SyncVal v) (bop.evalRel bop.bvadd A T)
+      = bop.evalRel bop.bvadd (bop.evalRel bop.bvadd (SyncVal v) A) T.
+    Proof. destruct A, T; cbn; f_equal; apply bv.add_assoc. Qed.
+
+    Lemma rv_bvadd_float {n} (v : bv n) (T B : RelVal (ty.bvec n)) :
+      bop.evalRel bop.bvadd (SyncVal v) (bop.evalRel bop.bvadd T B)
+      = bop.evalRel bop.bvadd T (bop.evalRel bop.bvadd (SyncVal v) B).
+    Proof. destruct T, B; cbn; f_equal; symmetry; apply bvadd_float. Qed.
+
+    Lemma rv_bvadd_4 {n} (v1 v2 : bv n) (A B : RelVal (ty.bvec n)) :
+      bop.evalRel bop.bvadd (SyncVal (bv.add v1 v2)) (bop.evalRel bop.bvadd A B)
+      = bop.evalRel bop.bvadd (bop.evalRel bop.bvadd (SyncVal v1) A)
+          (bop.evalRel bop.bvadd (SyncVal v2) B).
+    Proof.
+      destruct A, B; cbn; f_equal; rewrite <- !bv.add_assoc; f_equal;
+        rewrite (bvadd_float _ v2); reflexivity.
+    Qed.
+
+    Lemma shiftl_add_distr {m n} (c t : bv m) (k : bv n) :
+      bv.shiftl (bv.add c t) k = bv.add (bv.shiftl c k) (bv.shiftl t k).
+    Proof.
+      apply bv.unsigned_inj. unfold bv.shiftl.
+      rewrite (bv.unsigned_add (bv.of_Z _) (bv.of_Z _)).
+      rewrite !bv.unsigned_of_Z. rewrite (bv.unsigned_add c t).
+      unfold bv.truncz.
+      assert (Hk : (0 <= bv.unsigned k)%Z) by (unfold bv.unsigned; lia).
+      rewrite !Z.shiftl_mul_pow2 by exact Hk.
+      set (P := (2 ^ Z.of_nat m)%Z).
+      assert (HP : P <> 0%Z) by (unfold P; apply Z.pow_nonzero; lia).
+      rewrite Z.mul_mod_idemp_l by exact HP.
+      rewrite <- Z.add_mod by exact HP. f_equal. apply Z.mul_add_distr_r.
+    Qed.
+
+    Lemma rv_shiftl_distr {m n} (v : bv m) (k : bv n) (T : RelVal (ty.bvec m)) :
+      bop.evalRel bop.bvadd (SyncVal (bv.shiftl v k)) (bop.evalRel bop.shiftl T (SyncVal k))
+      = bop.evalRel bop.shiftl (bop.evalRel bop.bvadd (SyncVal v) T) (SyncVal k).
+    Proof. destruct T; cbn; f_equal; symmetry; apply shiftl_add_distr. Qed.
+
     Lemma peval_bvadd_fold_sound {n} (v : Val (ty.bvec n)) (t : Term Σ (ty.bvec n)) :
       peval_bvadd_fold v t ≡ term_binop bop.bvadd (term_val (ty.bvec n) v) t.
     Proof.
@@ -1445,10 +1553,32 @@ Module Type PartialEvaluationOn
       intros ι; cbn. destruct (inst t ι); cbn; f_equal; symmetry; apply bv.add_zero_l.
     Qed.
 
+    Lemma bvadd_head_spec {n} (t : Term Σ (ty.bvec n)) v t' :
+      bvadd_head t = Some (v, t') -> t = term_binop bop.bvadd (term_val _ v) t'.
+    Proof.
+      funelim (bvadd_head t); intros Heq; try discriminate.
+      inversion Heq; subst; auto.
+    Qed.
+
+    Lemma peval_bvadd_float_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
+      peval_bvadd_float t1 t2 ≡ term_binop bop.bvadd t1 t2.
+    Proof.
+      unfold peval_bvadd_float.
+      destruct (bvadd_head t1) as [[v1 a]|] eqn:H1;
+        destruct (bvadd_head t2) as [[v2 b]|] eqn:H2;
+        try (apply bvadd_head_spec in H1; subst t1);
+        try (apply bvadd_head_spec in H2; subst t2).
+      - etransitivity; [apply peval_bvadd_fold_sound|]. intros ι; cbn. apply rv_bvadd_4.
+      - intros ι; cbn. apply rv_bvadd_assoc3.
+      - intros ι; cbn. apply rv_bvadd_float.
+      - reflexivity.
+    Qed.
+
     Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
     Proof.
       funelim (peval_bvadd t1 t2); try apply peval_bvadd_mask_sound;
+        try apply peval_bvadd_float_sound;
         (* the two folding clauses: strip peval_bvadd_fold, leaving the goal
            the script below was written for *)
         try (etransitivity; [apply peval_bvadd_fold_sound|]);
@@ -2120,9 +2250,21 @@ Module Type PartialEvaluationOn
         f_equal; rewrite eval_relop_neq_bool; now rewrite bv.lxor_if_ones.
     Qed.
 
+    Lemma peval_shiftl_sound {m n} (t1 : Term Σ (ty.bvec m)) (t2 : Term Σ (ty.bvec n)) :
+      peval_shiftl t1 t2 ≡ term_binop bop.shiftl t1 t2.
+    Proof.
+      unfold peval_shiftl.
+      destruct (bvadd_head t1) as [[v t]|] eqn:H1; [|apply peval_binop'_sound].
+      destruct (term_get_val_spec t2) as [k Hk|]; [|apply peval_binop'_sound].
+      subst t2. apply bvadd_head_spec in H1. subst t1.
+      etransitivity; [apply peval_bvadd_sound|].
+      intros ι; cbn. apply rv_shiftl_distr.
+    Qed.
+
     Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
       peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound
       peval_bvand_mask_sound peval_bvor_mask_sound peval_bvxor_mask_sound
+      peval_shiftl_sound
       (* peval_bvand_sound *)
       (* peval_bvor_sound *) (* peval_bvapp_sound *) (* peval_update_vector_subrange_sound *)
       : core.
