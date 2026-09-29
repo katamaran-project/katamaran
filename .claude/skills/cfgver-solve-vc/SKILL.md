@@ -178,6 +178,19 @@ the tell.
 5. **Wrong postcondition wiring** in hand-written contracts —
    → **cfgver-contracts**.
 
+## When the TACTIC, not the executor, is slow
+
+Split the cost before guessing: `Time vm_compute` alone, then each stage of
+`solve_vc` separately (`Time all: try <stage>`). On the muladd flat program
+(2026-09-29) `vm_compute` was 4.5 s and `solve_vc` 79 s, 77 of it in one
+`try solve_bv` -- which turned out to be theories/Bitvector.v's
+`Tactic Notation "solve_bv" := bv.bv_zify` (zify + lia on every goal),
+SHADOWING Contracts.v's same-named Ltac: a tactic notation wins over an
+Ltac. The call is gone from `solve_vc` (commit bd3ff6b7; all tracked
+examples verify without it). Trap for the measurement itself: a copy of a
+tactic pasted into a probe under ANOTHER name is not the same tactic if the
+original's name is shadowed -- time the real one.
+
 ## When `vm_compute` itself hangs
 
 A symbolic (non-literal) argument reaching `bv.of_N` at width 32 does not reduce
