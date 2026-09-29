@@ -613,3 +613,27 @@ interp_arr_intro, generic HDataAddrs).
   bounds, `Z.to_euclidean_division_equations; lia`.  Closes D (3.8 s), D0
   (5.0 s) and the prefix through D (valid_sym3, 22 s); negative control
   still fails.  The hand lemmas (ZZMbArith) are superseded.
+
+### 2026-09-29 (later): BOTH mblr paths verify to the merge (idx 123)
+
+- `ZZMbSym4.valid_sym4 : cfg_vc sym4 sym4_annot` by `solve_mb_vc`: 101 s
+  (VC generation ~17 s of it), 6.0 GB.  Negative control `ZZMbSym4n`
+  (x array one limb short, mirroring ZZMbSym3n) fails, as it should.
+- What it took, in order:
+  1. Before: the closer ran 300-490 s and failed.  Cause: one address, two
+     spellings (`(x + ((M-1)<<2)) + 4` vs `x + (M<<2)`), so reads missed
+     their cell and fell back to an angelic disjunction over every cell.
+     FIX (Emiel: "two peval rules"): `peval_bvadd_float` + `peval_shiftl`
+     in `theories/Symbolic/PartialEvaluation.v`, commit 23f904fa; full
+     Results.vo closure green, every existing example unchanged.
+  2. D and D0 bind their pointer from the SOURCE array (`dp` = source
+     start, registers checked after), so the loops never hand the caller's
+     masked spelling back.  Loop VCs still close (4.4 s / 5.4 s).
+  3. The D0 entry then left an ∃ the executor could not eliminate: its
+     equation is `SyncVal a = c + ?dp`, not `?dp = t`.  `mb_search` gained
+     an ∃ case: cbn, destruct public RelVals, `eexists`, split, fix each
+     evar from its defining equation (`rv_bvadd_solve`, witness constant
+     vm_computed so it is a literal, else `bv_lin` sees `bv.negate`), then
+     the ordinary search.
+- Next: the rest of the program at symbolic mlen (G, I, K, M entries), the
+  whole-program VC, then the ∀-mlen bridge.
