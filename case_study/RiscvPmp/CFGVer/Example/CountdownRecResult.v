@@ -116,21 +116,20 @@ Proof.
            (fun v iota => eq_refl) eq_refl valid_cd_rec).
 Qed.
 
-(* THE LINK'S ANNOTATIONS ARE VALID: its one ai_block is the loop, which is
-   valid at every address (cdRecBlk_valid); the tail is plain code.  This and
-   the next lemma are the ONLY place cdLink's annotations appear -- the end
+(* THE LINK'S ANNOTATIONS, TYPED: its one block is the loop, carrying its
+   validity at every address (cdRecBlk_valid); the tail is plain code.  This
+   and the next lemma are the ONLY place cdLink's annotations appear -- the end
    theorem below sees just the sealed validity (PLAN-valid-blk-annot Phase 4). *)
-Lemma cd_link_valid : annotsValid cd_link_annot.
-Proof.
-  unfold cd_link_annot. constructor.
-  - split; [reflexivity|]. intros b Hb. injection Hb as <-. apply cdRecBlk_valid.
-  - apply annotsValid_of_none, ai_block_none_of_AST.
-Qed.
+Definition cd_link_annotV : list (AnnotInstrV blkValid) :=
+  MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid)) false
+  :: List.map AST_AnnotInstrV [BNE X1 X0 back4; ADDI X2 X0 (bv.of_N 42)].
 
+(* Its erasure is cd_link_annot by conversion, so valid_cd_link is accepted
+   as is; the block's validity rides in the list, nothing is proved about it. *)
 Lemma cdLink_valid : ValidCFGVerifierContract cdLink.
 Proof.
-  eapply ValidCFGVerifierContract_intro;
-    [exact valid_cd_link | reflexivity | apply cd_link_valid].
+  apply (@ValidCFGVerifierContract_intro _ cdLink cd_link_annotV);
+    [exact valid_cd_link | reflexivity | repeat constructor].
 Qed.
 
 

@@ -839,7 +839,7 @@ head + negative controls, then `cdLink`: the outer program STARTING at the
 loop with an `ai_block` head, and an executed tail) →
 `Example/CountdownRecResult.v` (`cd_rec_annotV` and `cdRecBlk_valid` — one
 `exact blkValid_of_seg …` reusing the unchanged `valid_cd_rec` —,
-`cd_link_valid` — `annotsValid` from `cdRecBlk_valid` — and `cdLink_valid`, and
+`cd_link_annotV` — the typed list carrying `cdRecBlk_valid` — and `cdLink_valid`, and
 the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
 load address: the contracts, the block and the annotated code are closed
 terms over the code-base variable `q`, with no load-address parameter).

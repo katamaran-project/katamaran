@@ -86,15 +86,24 @@ Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Pro
 (* Validity.v (heavy, small; re-exported by EndToEnd.v) -- the SEALED
    property, built only via ValidCFGVerifierContract_intro / solve_valid *)
 Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
-  exists a, cfg_vc c a /\ strip a = cfg_instrs c /\ annotsValid a.
-(* annotsValid (Adequacy.v): every ai_block carries a blkValid proof, and
-   there is no top-level ai_loop.  Pure -- no Iris, no load address. *)
+  exists LV : list (AnnotInstrV blkValid),
+    cfg_vc c (map (eraseV c) LV)
+    /\ map aiv_instr LV = cfg_instrs c
+    /\ Forall (fun a => aiv_loop a = false) LV.
+(* The witness is TYPED (2026-09-29): each block carries its blkValid proof
+   (vb_ok), so no validity predicate is proved about the list.  The only
+   side condition is V9's "no top-level re-entry". *)
 ```
 
 This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /
 `seg_run` / `loop_*`): annotations appear only where the contract is proved
-valid. `solve_valid <VC>` closes it for a block-free program; a program with
-blocks uses the intro lemma with its annotated list and an `annotsValid` proof.
+valid. `solve_valid <VC>` closes it for a block-free program. A program with
+blocks writes its `LV` in the heavy Result file (blocks as
+`MkBlkAnnotV b b_valid`) and uses
+`@ValidCFGVerifierContract_intro _ c LV` with `[exact <light VC> | reflexivity
+| repeat constructor]` — the light VC over the erased literal is accepted BY
+CONVERSION (`Example/CountdownRecResult.cdLink_valid`). `annotsValid` still
+exists, but only on the way out (`_elim`, via `annotsValid_of_V`).
 
 `cfg_vc` does not force `strip a = cfg_instrs c`; that equation is a premise of
 the soundness bridge, so a VC over the wrong `a` proves nothing usable.
