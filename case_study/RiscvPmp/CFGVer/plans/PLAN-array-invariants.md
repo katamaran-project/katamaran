@@ -528,3 +528,26 @@ ZZArrDResult does for D) and `annotsValid` for the annotated list; (2) the
 end theorem (`noninterferent_strong` through the memory bridge, ImplPre
 over mlad's reg/mem specs); (3) heavy chain not rebuilt since the Chunks.v
 fix; gate before merging; (4) the probes are untracked.
+
+### 2026-09-29 (later): END TO END
+
+**`mb_noninterferent` is proved** (`Example/ZZMuladdBlkResult.v`, untracked
+probe): `noninterferent_strong` for the flat muladd (mlen=2, all five loops as
+blocks), axiom-clean (pure_decode, mmioenv). File 43 s / 7.2 GB; it reuses
+`valid_mb` from the light `.vo`. Three pieces:
+1. **The seal's witness is TYPED** (commit a8367495, Emiel's call): 
+   `ValidCFGVerifierContract c := ∃ LV : list (AnnotInstrV blkValid),
+   cfg_vc c (map (eraseV c) LV) ∧ map aiv_instr LV = cfg_instrs c ∧ no aiv_loop`.
+   Blocks carry their blkValid proof; `annotsValid` is no longer proved by
+   anyone (it survives only inside `_elim`). Results.vo green (634 s).
+2. **Loop blocks valid by conversion**: `blkValid_of_seg … (map liftV
+   (x_annot_with xRecBlk)) … valid_x_rec` -- `liftV` (block-free annotation
+   -> typed list) erases back to the source list definitionally, so each
+   loop's existing VC is reused unchanged (10 ms each).
+3. **`gen_contract_noninterferent_rel` restored** (5a5ad48b): the contract
+   must stay unclassed (entry ghosts build arrays from single cells), and
+   that bridge had been deleted as callerless on 2026-08-18.
+
+Still open: gate before merging (heavy chain now rebuilt, Results.vo green);
+the probes are untracked -- promoting ZZMuladdBlk{,Result}.v and the ZZArr*
+loops means naming them and adding them to _CoqProject + AXIOM_CLEAN_THMS.
