@@ -239,7 +239,6 @@ Section BlockVerificationDerived.
     Import RiscvPmpSymbolicSoundness.
     Import RiscvPmpSymbolicSoundness.StoreSpec.
     Import RiscvPmpShallowSoundness.
-    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
