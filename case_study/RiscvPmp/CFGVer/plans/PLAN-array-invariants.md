@@ -551,3 +551,45 @@ blocks), axiom-clean (pure_decode, mmioenv). File 43 s / 7.2 GB; it reuses
 Still open: gate before merging (heavy chain now rebuilt, Results.vo green);
 the probes are untracked -- promoting ZZMuladdBlk{,Result}.v and the ZZArr*
 loops means naming them and adding them to _CoqProject + AXIOM_CLEAN_THMS.
+
+## PARAMETRIC mlen (2026-09-29, Emiel: "make it parametric")
+
+Goal: `∀ mlen` (bounded) muladd noninterference from ONE symbolic VC; the
+statement is a Coq-level ∀ over spec lists generated from mlen, so
+Noninterference.v is untouched.  Probes (untracked): ZZMbSym1/2/3/3n.v,
+ZZMbArith.v, ZZArrDAng.v.
+
+**Prefix through loop D VERIFIES at symbolic mlen** (`ZZMbSym3.valid_sym3`,
+Qed, file 36 s / 4.8 GB; negative control ZZMbSym3n -- wrong array count --
+FAILS at the closer).  What it took:
+1. m[0] = b symbolic public.  Early returns and the "mlen = 1" branch are
+   refuted by stating the code's OWN branch conditions in the precondition
+   (`sext b <> 0`, `31 <u sext b`, `((-1+M) & 0x3fffffff) <> 0`), plus an
+   upper bound `sext b <u 65536` (else 31 + b wraps).  `sext` at equal width
+   is not peval'd away (candidate peval rule; `sext_id32` closes it here).
+   mblr = 0 is a public fork; pruned in the spike, both paths needed for real.
+2. Addresses at the code's own terms: x[mlen] at `x + (M<<2)`, x[mlen-1] at
+   `x + ((-1+M)<<2)`, x[mlen-2..1] an arr; `asn_in_range` of those exact
+   terms closes the data bounds syntactically.  `x` stays a FREE public
+   variable: the layout is only the end-to-end bridge's business.
+3. THE WALL: the code names one address two ways -- index 74 uses
+   `(-1+M)`, D's count is the MASKED `C = (-1+M) & 0x3fffffff`.  Fix (b):
+   D's entry chunks (source arr, dest cell) are `chunk_angelic`
+   (ZZArrDAng.dAngRec; its own loop VC still closes, 0.18 s), so the
+   mismatch becomes asserted equalities under an angelic choice over
+   candidates.  A ghost lemma cannot help: the executor uses equalities
+   only in solved form, and catalogue lemmas take no term arguments.
+4. The closer (in ZZMbSym3, to be promoted next to solve_symbase_fetch):
+   `left` (the right candidate is first), `cbn -[Erasure.inst_symprop]`
+   (a bare cbn blows 7.6 GB -- the 2880-bit word binder), destruct the
+   public b/x, read b's bounds off the `bv.ult` hypotheses, then rewrite
+   with RelVal-level lemmas whose LHS IS the residual shape
+   (`rv_mlen_mask`, `rv_shl_pred_addr`, `rv_bvadd_comm`) over bv lemmas
+   proved in preamble mode (`mlen_mask`, `shl_pred_addr`, `sext_id32`).
+   SSReflect rewrite is in scope: no `rewrite .. by`, use bullets.
+Tooling: pet cannot hold these probes (7.6 GB cap); iterate with coqc
+(~20-35 s/run).  A deliberately WRONG post hides all residuals: its error
+absorbs every branch -- use a trivially true post when reading residuals.
+Next: both mblr paths; the rest of the program (I/K/M entries angelic, G is
+size-free); promote the closer; the ∀-mlen bridge (cells -> arr via
+interp_arr_intro, generic HDataAddrs).
