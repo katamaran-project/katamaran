@@ -2008,6 +2008,70 @@ Import IrisModel.RiscvPmpIrisBase.
     exact (gen_contract_noninterferent_u HND HDataAddrs Hlen Hbound valid_contract).
   Qed.
 
+  (* The UNCLASSED bridge, over gen_contract_rel (one existential per memory
+     cell).  Deleted 2026-08-18 as callerless (59492f5f), RESTORED 2026-09-29
+     for the flat muladd with loop blocks (Example/ZZMuladdBlk.v): classing
+     would turn its secret cells into slices of one wide variable, while the
+     loop blocks' entry ghosts build their arrays from individual cells.
+     Proof = _u's with the memory half through the concretize rewrite, which
+     IS available unclassed (gen_mem_pre_rel_concretize + gen_implpre_mem). *)
+  Lemma gen_contract_noninterferent_rel
+      (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel reg_specs mem_specs instrs bound fuel)) :
+    noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs))
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits])
+      (ty.SyncVal (bv.of_N (init_addr + 4 * N.of_nat (length instrs))))
+      (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
+    { rewrite <- bv.of_N_add. now apply etable_faith_exit_of_off. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs (init_addr + 4 * N.of_nat (length instrs)) n ws
+      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
+      (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
+      (gen_contract_rel reg_specs mem_specs instrs bound fuel)
+      valid_contract eq_refl
+      init_addr
+      eq_refl HexitFaith HDataAddrs).
+    all: try eauto.
+    2: { rewrite !length_map. exact Hlen. }
+    intros Σ H.
+    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+    cbn.
+    iFrame "Hpriv #".
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
+      pose proof lenAddr_rep as Hexp.
+      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
+      { set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+      rewrite (bv.bin_of_N_small Hib). lia. }
+    iSplitL "Hregs".
+    { rewrite gen_pre_rel_concretize.
+      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
+      iExact "Hregs". }
+    rewrite gen_mem_pre_rel_concretize.
+    iApply (gen_implpre_mem (map (concretize_mem init_addr) mem_specs) _ HInitMem1 HInitMem2).
+    iExact "Hmemdata".
+  Qed.
+
   (* ------------------------------------------------------------------- *)
   (* Thin delegations onto the unified pair above (stage 3b).  These keep    *)
   (* their callers unchanged -- all 13 Example/*Result.v proofs and every     *)
@@ -2017,7 +2081,8 @@ Import IrisModel.RiscvPmpIrisBase.
   (* remain: gen_contract_noninterferent_u and _u_simple.                     *)
   (* The three GENERAL bridges these replaced (_rel over gen_contract_rel,    *)
   (* _rel_classed, _rel_bytes) were deleted 2026-08-18 -- they had no callers *)
-  (* once the _simple forms were re-pointed here.                             *)
+  (* once the _simple forms were re-pointed here.  (_rel is back, above,     *)
+  (* since 2026-09-29, for the flat muladd with loop blocks.)                 *)
   (* ------------------------------------------------------------------- *)
 
 

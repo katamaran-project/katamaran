@@ -116,6 +116,12 @@ is deliberate: calling `_u` directly costs a goal rewrite, two mandatory named
 implicits, an ordering line and two extra bullets **at every call site**, so the
 wrappers exist to absorb that instead of exporting it to 13 `Result` files. The
 three general bridges (`_rel`, `_rel_classed`, `_rel_bytes`) were deleted.
+**`_rel` came back 2026-09-29** as a THIRD real implementation (not a
+delegation: it is unclassed, so its memory half is `gen_mem_pre_rel_concretize`
++ `gen_implpre_mem`, the pre-classing route) for the flat muladd with loop
+blocks, whose entry ghosts need one existential per cell. Its exit is
+`init_addr + 4·|instrs|`; a caller stating a literal exit must `replace` it
+into that form first, or naming `bound`/`fuel` makes the `eapply` miss.
 
 `_u` concludes over the CONCATENATION `word_data ++ byte_data`, matching the
 concatenation the trusted side already assumed. Its `ImplPre` therefore splits
