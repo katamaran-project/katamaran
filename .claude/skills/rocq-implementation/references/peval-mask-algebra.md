@@ -98,23 +98,25 @@ own lemmas: `land_if_ones`, `lor_if_ones`, `lxor_if_ones`, `not_if_ones`,
   at ~30 ms/attempt (`From Coq Require Import NArith Lia. From Katamaran Require
   Import Prelude Bitvector.` — `%N` needs `NArith`), then pay one compile.
 
-## Address normal form: constant floating + shift distribution (2026-09-29)
+## Canonical ring forms for bitvector sums (2026-09-30)
 
-Two rules make one address have ONE spelling, which chunk matching needs
-(a read whose address matches no cell syntactically falls back to an
-angelic disjunction over every cell — exponential when several reads miss;
-this is what blew up the parametric-mlen muladd merge, PLAN-array-invariants):
+`peval_bvadd`'s catch-all, `peval_shiftl` with a constant amount, `bvsub`
+and `negate` go through `canon_term` (the CANONICAL RING FORMS block near the
+top of `PartialEvaluation.v`): linear form mod 2^n, atoms merged by
+`Term_eqb`, sorted by a structural key, coefficients reduced mod 2^n, rebuilt
+with the constant leftmost, `a` / `a << j` / `negate a` / `k * a`.  It
+replaced the two ad-hoc rules of 23f904fa (constant floating, `<<`
+distribution), which it subsumes.
 
-- **`peval_bvadd_float`** (catch-all of `peval_bvadd`): a constant nested one
-  level down in either operand (`bvadd_head` = `term_val v + t'`) is floated to
-  the head, two such constants are summed by `peval_bvadd_fold`.
-- **`peval_shiftl`** (wired as `bop.shiftl` in `peval_binop`):
-  `(c + t) << k` with constant `k` becomes `(c<<k) + (t<<k)`.
-
-Together `(x + ((-1+M)<<2)) + 4` and `x + (M<<2)` peval to the same term
-(`selftest_neighbour_one_spelling`). Both are pure-term identities, sound over
-secrets without a case split. Full `Results.vo` closure rebuilt green after the
-change (every existing example still closes).
+Soundness is EXACT over RelVal (`canon_sound`), and that needs one thing
+upstream's ring normalisation did not: **a cancelled atom keeps coefficient
+0** (`x - x` becomes `0 * x`).  RelVal equality is not "both projections
+equal": a lifted op is SyncVal only if every operand is, so `x - x` is
+`NonSyncVal 0 0 <> SyncVal 0` for a secret `x`, and `secLeak` tells them
+apart.  This is why this fork disabled upstream's `TermRing_bv` (196eae12).
+Interim: PLAN-bv-arith-solver.md ports this onto main's `peval2`/`norm_aux`
+machinery (with the same atom-set rule); concrete self-tests live in
+`CFGVer/Example/ZZBvCore.v`, since inside the functor terms are abstract.
 
 ## Adding a new `BinOp`: the plumbing sites
 
