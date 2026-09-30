@@ -100,23 +100,40 @@ own lemmas: `land_if_ones`, `lor_if_ones`, `lxor_if_ones`, `not_if_ones`,
 
 ## Canonical ring forms for bitvector sums (2026-09-30)
 
-`peval_bvadd`'s catch-all, `peval_shiftl` with a constant amount, `bvsub`
-and `negate` go through `canon_term` (the CANONICAL RING FORMS block near the
-top of `PartialEvaluation.v`): linear form mod 2^n, atoms merged by
-`Term_eqb`, sorted by a structural key, coefficients reduced mod 2^n, rebuilt
-with the constant leftmost, `a` / `a << j` / `negate a` / `k * a`.  It
-replaced the two ad-hoc rules of 23f904fa (constant floating, `<<`
-distribution), which it subsumes.
+`peval` is main's architecture again: `peval t = CanonTerm_to_Term (peval2 t)`.
+`peval2` keeps ring subterms of `bvec` type (`bvadd`, `bvsub`, `bvmul`,
+`negate`, and `shiftl` by a constant as `PEmul (PEc 2^k)`) as quoted
+`PExpr`s (`Term_Quote_bin`/`Term_Quote_unop`), and normalises such an island
+only when a non-ring op consumes it. Every other op goes to the old
+`peval_binop`/`peval_unop` over already-normalised arguments. The mask rule
+`peval_bvadd_mask` now runs on the normalised result (`post_mask`), so it
+still fires.
 
-Soundness is EXACT over RelVal (`canon_sound`), and that needs one thing
-upstream's ring normalisation did not: **a cancelled atom keeps coefficient
-0** (`x - x` becomes `0 * x`).  RelVal equality is not "both projections
-equal": a lifted op is SyncVal only if every operand is, so `x - x` is
-`NonSyncVal 0 0 <> SyncVal 0` for a secret `x`, and `secLeak` tells them
-apart.  This is why this fork disabled upstream's `TermRing_bv` (196eae12).
-Interim: PLAN-bv-arith-solver.md ports this onto main's `peval2`/`norm_aux`
-machinery (with the same atom-set rule); concrete self-tests live in
-`CFGVer/Example/ZZBvCore.v`, since inside the functor terms are abstract.
+The normaliser is `canon_term`, in the CANONICAL RING FORMS block near the top:
+
+1. `quote` the term, sort the atom env by `term_key` (`isort`), and quote
+   again with the sorted env. Atom order is therefore structural. On main it
+   is first occurrence, which leaves `x + y` and `y + x` different.
+2. Run upstream `Ring_polynom`'s `norm_aux` + `Pphi_dev`.
+3. `clean` removes literal `+ 0`/`* 1` and moves constants to the left.
+4. `pad` re-adds every dropped atom as `0 * a`.
+
+Result shapes: `4 + (x + 4 * M)`, `-b + x`, `0 * x`. A shift by a constant now
+reads `4 * M`, no longer `M << 2`.
+
+Soundness is EXACT over RelVal (`canon_term_sound`, `peval2_sound`). The
+`Ring_polynom` lemmas are instantiated modulo `teq side` (equality of one
+projection), where the ring axioms hold (`norm_teq`). A computable check,
+`same_leaves` / `teq_leaves_inst`, then shows the input and output have the
+same SyncVal-ness. The padding in step 4 exists because RelVal equality is
+not "both projections equal": `x - x` is `NonSyncVal 0 0 <> SyncVal 0` for a
+secret `x`, and `secLeak` tells them apart (**relval-rewrite-over-secrets**).
+That is also why this fork disabled upstream's version in 196eae12.
+
+**`int` is NOT ring-normalised** (only `TermRing_bv` exists). The solver's
+`try_fetch_bound` matches the literal shape `L - (K + unsigned s)`.
+Self-tests over concrete terms are in `CFGVer/Example/ZZBvRing.v` (inside the
+functor, terms are abstract).
 
 ## Adding a new `BinOp`: the plumbing sites
 

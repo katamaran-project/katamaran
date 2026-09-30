@@ -131,7 +131,15 @@ Inductive CLem : Set :=
   | clem_arr_lockstep (pub1 pub2 : bool) (s : Z)
   (* arr a n e ⊢ True -- drop a spent array (affine), so a later loop's
      angelic array match on the same predicate has one candidate *)
-  | clem_arr_drop (pub : bool) (s : Z).
+  | clem_arr_drop (pub : bool) (s : Z)
+  (* arr a n e ∗ n≠0 ⊢ cell (e-s) ∗ range (e-s) ∗ arr a (n-1) (e-s) --
+     take_first at the OTHER end, so an array grown by add_first can hand
+     back its last cells without being rebuilt in the other direction *)
+  | clem_arr_take_last (pub : bool) (s : Z)
+  (* arr s a n e ⊢ arr (-s) (e-s) n (a-s) -- the same cells walked the
+     other way: a loop's DONE array (grown by add_first at stride -s) is the
+     next loop's source, which walks at stride s *)
+  | clem_arr_flip (pub : bool) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -226,6 +234,19 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
               (asn.formula (formula_relop bop.eq (term_var "a2") (term_var "e2")))))
   | clem_arr_drop pub s =>
       MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub s) (asn.formula formula_true)
+  | clem_arr_take_last pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.formula (formula_relop bop.neq (term_var "n")
+                           (term_val ty_xlenbits bv.zero))))
+        (asn.sep (clem_cell pub (clem_off (term_var "e") (- s)))
+           (asn.sep (clem_range (clem_off (term_var "e") (- s)))
+              (clem_arr pub s (term_var "a") (clem_off (term_var "n") (-1))
+                 (clem_off (term_var "e") (- s)))))
+  | clem_arr_flip pub s =>
+      MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub s)
+        (clem_arr pub (- s) (clem_off (term_var "e") (- s)) (term_var "n")
+           (clem_off (term_var "a") (- s)))
   end.
 
 Inductive Annot :=

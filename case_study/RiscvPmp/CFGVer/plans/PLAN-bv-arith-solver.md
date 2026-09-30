@@ -244,3 +244,94 @@ Phases:
   PartialEvaluation.vo + peval_sound.
 - U4: full rebuild, fallout, gate script.
 - U5: measure muladd (R4 of the previous revision).
+
+### U1 design, refined (2026-09-30): reuse upstream's PROOF with a weaker setoid
+
+- Upstream proves `evalPol_norm_aux` by instantiating Ring_polynom's generic
+  `norm_aux_spec` / `Pphi_dev_ok` over terms modulo `≡` -- false over RelVal.
+  Instantiate the SAME lemmas modulo `teq side` ("equal on projection side":
+  `∀ ι, proj side (inst t ι) = proj side (inst u ι)`): an equivalence, a
+  congruence for every op (all ops are `liftBinOp`/`liftUnOp (eval op)`,
+  checked in BinOps.v/UnOps.v), and the ring axioms DO hold modulo it (each
+  projection is a plain bv/Z ring).  So `norm(t) ~side t` for both sides,
+  with upstream's proof structure.
+- SyncVal-ness by a COMPUTABLE CERTIFICATE, not by reasoning about Pphi_dev:
+  since every op lifts, a term is SyncVal iff all its LEAVES are (a general
+  lemma by induction over binop/unop, leaves = everything else).  After
+  normalising, compare the leaf sets of input and output (Term_eqb); pad any
+  dropped leaf back as `0 * a`.  Both projections equal + same leaves =
+  exact RelVal equality.
+
+### U1 + U2 DONE in scratch (`Example/ZZBvRing.v`, no admits), 2026-09-30
+
+- `norm_teq`: upstream's `norm_aux` + `Pphi_dev` correct modulo `teq side`
+  (both sides), from Ring_polynom's own `Pphi_dev_ok` / `norm_aux_spec`
+  (instances built explicitly with `@`; SSReflect `rewrite` cannot do the
+  setoid step, it unfolds `teq`).  Needs `bv_term_ring` / `_eq_ext` /
+  `_morph` modulo teq, `teq_equiv`, and Proper for term_binop/unop.
+- Leaf certificate: `leaves`, `sync_leaves` (every op lifts, so SyncVal iff
+  all leaves are; one induction over Term), `leaf_eqb` (Ty eq_dec +
+  Term_eqb), `same_leaves`, `teq_leaves_inst` (both teq + same leaves =>
+  exact RelVal equality).
+- `canon_with env p t := let u := clean (pad env (evalPol env (normZ p))) in
+  if same_leaves t u then u else t`; `canon_with_sound` exact.  `pad` re-adds
+  an env atom the normal form lost as `0 * a`; `clean` removes literal
+  `+ 0`/`* 1` that Pphi_dev leaves and moves a literal constant LEFT (the
+  solver's rules expect `c + s`).
+- `canon_term`: quote (`<<` by a constant quoted as `* 2^k`), collect atoms,
+  SORT by structural key, re-quote with the sorted list as the starting env
+  (no permutation lemma), `canon_with`.  `canon_term_sound` exact.
+- Self-tests pass: neighbour pair one term; x + y = y + x; (M<<2) + x =
+  x + (M<<2); 4 + (x - 4) = x; x + 4 <> x; 3x + x = x << 2; idempotent.
+  Shapes: `4 + (x + 4 * M)` (NB `4 * M`, not `M << 2`: Pphi_dev's
+  spelling, as on main), `x - x` -> `0 * x`, `x - y` -> `-y + x`, mask shape
+  `negate (bvand b 1)` unchanged.
+
+### U3 design choices
+
+- main's `TermRing` requires `ring_theory` modulo ≡: change the class to
+  carry the ops plus the teq-ring facts; the RQuote / Term_Quote_* lemmas only
+  use the ops and ≡-properness (exact reconstruction), so they carry over.
+- `CanonTerm_to_Term ct := canon_term (evalPE env p)` (reconstruct, then the
+  sorted re-quote above) -- keeps main's peval2 island structure.
+- The fork's `peval_bvadd_mask` (`ones + zext b` -> expand) runs on the
+  canonical output (`c + a` shape), so the mask algebra keeps firing.
+- INT is left OUT of the ring for now (main quotes plus/minus/times too): the
+  solver's int rules match specific shapes (`int_bound_shape` =
+  `L - (K + unsigned s)` for try_fetch_bound).  bvec first, int later.
+
+### U3 DONE (PartialEvaluation.vo builds, no admits), 2026-09-30
+
+- The interim linear canon core is REPLACED by the ZZBvRing core (teq ring
+  instances, `norm_teq`, leaf certificate, clean/pad, quote, sorted
+  `canon_term`), ported verbatim (`Valuation` -> `RValuation`; the copied
+  BinList helpers dropped for the file's own Util versions).
+- `TermRing` carries OPS ONLY (its ≡ ring fields are unprovable over
+  RelVal); `TermRing_bv` instance; the ≡-based `evalPolTm` /
+  `evalPol_norm_aux` / `tmr_ring_*_peval'` / `Pphi_more_proper` removed.
+- main's `peval2` / `CanonTerm` / `CanonTermRep` / `CanonTerm_to_Term` /
+  `peval` / `peval_sound` reinstated.  CanonTerm is bvec-only (int = Term).
+  `peval2_binop` / `_unop` use a CONVOY match: ring ops quoted
+  (`Term_Quote_bin` PEadd/PEsub/PEmul, `Term_Quote_unop` PEopp), `<<` by a
+  constant quoted as `* 2^k` (`quote_shiftl_valid`, exact over RelVal), every
+  other op one generic default (normalise children, the fork's
+  `peval_binop`/`peval_unop` -- mask algebra, coalesce, mulx -- quote the
+  result as an atom), so ONE soundness lemma covers them.  `term_relval`
+  (fork-only constructor) is quoted as an atom.
+- `CanonTerm_to_Term` = `post_mask (canon_term (evalPExprTm env p))`:
+  post_mask applies `peval_bvadd_mask` to a `c + a` result, so the mask
+  algebra's `ones + indicator` rule still fires.
+- Traps: `{| ... |}` could not infer σ for the TermRing instance (use the
+  constructor); `destruct op` puts shiftl BEFORE bvadd (make the case script
+  order-independent with `first`); an `inst_val` stated at `RV (Val σ)` does
+  not rewrite goals spelled `RelVal` (pin the eq type).
+- U4 running: full Results.vo rebuild (-j1 -k).
+
+### U4 done (2026-09-30)
+
+Full `Results.vo` rebuild with the reinstated `peval2` passed with no fallout:
+97 files, `-j1`, 3597 s wall, 8.6 GB peak RSS. The new spellings (`4 * M` for
+`M << 2`, constants on the left, sorted atoms) broke no solver rule and no
+example's closer. Gate steps 1–2 (build, hole scan) passed. The axiom probes
+(step 3) were skipped at the user's request. Next: U5 (re-measure the muladd
+probes with the closer reduced).
