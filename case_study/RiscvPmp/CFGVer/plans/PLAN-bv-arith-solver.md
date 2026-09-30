@@ -335,3 +335,30 @@ Full `Results.vo` rebuild with the reinstated `peval2` passed with no fallout:
 example's closer. Gate steps 1–2 (build, hole scan) passed. The axiom probes
 (step 3) were skipped at the user's request. Next: U5 (re-measure the muladd
 probes with the closer reduced).
+
+### U5 measured (2026-09-30): what reaches the closer after ring normalisation
+
+Census (`Example/ZZMbCensus.v`, an instrumented `solve_mb_vc`) on the parametric
+muladd probes:
+
+| probe | goals after `solve_vc` | arithmetic leaves | trivial leaves |
+|---|---|---|---|
+| IA, KA, MA | 0 | 0 | 0 |
+| DAng | 1 | 1 (`v2 + v1 = 1 + v2`, closed from hypotheses) | 0 |
+| Tail | 3 | 7 | 4 |
+
+Tail's 7 arithmetic leaves all concern the word count `M = (31 + b) >> 5`, and
+NONE is a ring fact: two are `4 * M <> 0` (needs the range `1 <= M <= 2048`),
+one is the shift identity `4 * ((63+b)>>5) = 4 + 4 * ((31+b)>>5)` (needs
+`b >= 32`), and four are dead branches refuted from hypotheses.  So every
+remaining residual is `shiftr` + ranges, i.e. the deferred range layer.
+
+Fallout: the tail FAILED on the new `peval` until the closer learned `bv.mul`
+(`bv.unsigned_mul` in `bv_lin_rw`; `bv.mul` kept folded in `rv_leaf`'s cbn),
+since `M << 2` is now spelled `4 * M`.  Cost: tail stages 224 s vm_compute,
+26 s solve_vc, 10 s closer (~260 s user); ~220 s before the port, within
+noise (one run said 395 s user and did not reproduce).
+
+Still open: D0 fails on `SyncVal (v3 + v2) = SyncVal (1 + v3)` with only
+`v2 <> 0` known -- its exact-count invariant, pre-existing, not the port -- and
+blocks Sym4 / Sym6 (the whole-program caller), which import it.
