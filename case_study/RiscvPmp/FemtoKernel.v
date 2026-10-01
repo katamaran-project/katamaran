@@ -2316,19 +2316,17 @@ Module inv := invariants.
       - by iFrame "Hinv1 Hinv2".
       - unfold ptstoSthL, RiscvPmpIrisInstancePredicates.ptstoSthL,
           RiscvPmpIrisInstancePredicates.ptstoSth.
-        Locate "v ↦ₘ x".
-        Open Scope asn_scope.
-        (* TODO: wrong default scope for ptsto? *)
-        (* How to coerce GChunk (Term X) into GChunk X ? *)
-        admit.
-    Admitted.
-    (*     iPoseProof (big_sepL_impl _ (λ k v, v ↦ₘ (memory_ram μ1 v)) *)
-    (*                  with "Hadv2 []") as "Hadv2". *)
-    (*     { iModIntro. iIntros (k v HIn) "H". *)
-    (*       pose proof (Forall_lookup_1 _ _ _ _ Hadv HIn) as Heq. *)
-    (*       simpl in Heq. now rewrite Heq. } *)
-    (*     iApply (intro_ptstoSthL_binary with "[$Hadv1 $Hadv2]"). *)
-    (* Qed. *)
+        (* Denis says: I passed the memGS_right instance explicitly during the
+           version bump to 9.2. It's not clear why this was not necessary before.
+           I think if this pattern shows up regularly,
+           then we should introduce a ptsto_left and ptsto_right *)
+        iPoseProof (big_sepL_impl _ (λ k v, @RiscvPmpIrisInstancePredicates.interp_ptsto _ (memGS2_memGS_right) v (memory_ram μ1 v))
+                     with "Hadv2 []") as "Hadv2".
+        { iModIntro. iIntros (k v HIn) "H".
+          pose proof (Forall_lookup_1 _ _ _ _ Hadv HIn) as Heq.
+          simpl in Heq. now rewrite Heq. }
+        iApply (intro_ptstoSthL_binary with "[$Hadv1 $Hadv2]").
+    Qed.
 
     Lemma femtokernel_rel_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ1' μ2 : Memory}
       {δ1 δ1' δ2 : CStore [ctx]} {m1 : string} {secret1 secret2 : Val ty_xlenbits} :
