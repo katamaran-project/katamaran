@@ -130,3 +130,13 @@ Compiled through `IrisInstanceBinary.vo`.  D0's invariant gained
   to the 3 real ones (the rest were ring identities left by postprocess's
   late evar substitution) at +1% construction, but it was adopted on an
   unmeasured hypothesis about the tail's memory.  Re-measure before reviving.
+
+### 2026-10-01 (later): correction + replay adopted
+
+- CORRECTION to the revert entry above: "the I/K/M template loops pass
+  without the hook" was measured while the hook was still in the tree.
+  On the reverted tree ZZArrIN fails (`secLeak n` unprovable); the template
+  now states `secLeakvar "n"` explicitly (PLAN-array-invariants, 10-01).
+- `postprocess o replay o postprocess` is now the CFGVer pipeline
+  (cfg_postprocess, a1eb199a), adopted on a measurement this time: the
+  parametric tail's late-substituted ring identities all disappear.

@@ -637,3 +637,37 @@ interp_arr_intro, generic HDataAddrs).
      the ordinary search.
 - Next: the rest of the program at symbolic mlen (G, I, K, M entries), the
   whole-program VC, then the ∀-mlen bridge.
+
+### 2026-10-01: the n-only tail VERIFIES; replay + public-zero rule (a1eb199a)
+
+- ZZ chain rebuilt on the committed framework.  Two template fixes in
+  `ZZArrLoopN.v`, both found by the rebuild, neither by the 09-30 runs:
+  1. `secLeakvar "n"` in the invariant.  With the chunk-facts hook reverted
+     nothing says the count is public (interp_arr forces it, the executor
+     cannot know; IrisInstanceBinary.interp_arr's comment, 8015df3e).  IN
+     failed without it.  The 09-30 "I/K/M pass" was measured WITH the hook
+     live, so PLAN-chunk-facts' "pass without the hook" is wrong for IN.
+  2. The post's done count is EXACT (`k + n`), no fresh `∃ c1`, and the
+     invariant carries `secLeak k`, `k <u 2^30`, `k + n <u 2^30` (no wrap,
+     so k + n is nonzero and is the next loop's bound).  With `∃ c1` the
+     next loop's count was unconstrained: 18 closer leaves, 2 x 9, all about
+     one variable, named "c1" (probe ZZMbTailND3).  So the n-only tail had
+     NEVER verified: ZZMbTailT/U5's staged rig ran each stage as its own
+     sentence, i.e. on goal 1 of 10 only (U5's "closer 10 s" is that).
+- `valid_tail` (ZZMbTailNP, staged, real Qed), user time:
+
+  | | vm_compute | solve_vc | goals | closer | Qed | file | RSS |
+  |---|---|---|---|---|---|---|---|
+  | before | 211.4 | 47.4 | 10 | 267.7 | 239.6 | 776 | 9.11 GB |
+  | after a1eb199a | 143.6 | 36.5 | 8 | 170.1 | 150.0 | 508 | 9.14 GB |
+
+  Construction is ALL executor: raw tree 11,130 nodes -> 141 after
+  postprocess (+1.5 s); ~1,640 angelic binders, 99.4% eliminated at
+  creation (register reads rs/reg_val 197 each, fetch/decode ~83 each, pc
+  85 each), 10 survive to the closer; 3,622 angelic + 3,189 demonic binary
+  nodes pruned (ZZTailExist, ZZTailCost{Raw,PP}).  Census (ZZMbTailNCensus):
+  20 leaves, 10 ring identities substituted AFTER postprocess -> replay; 4
+  `t + 0*M = t` -> drop_pub_zero.  Qed ~ re-runs the VM cast.
+- Open: what in the executor's per-node cost (19 ms/node) dominates;
+  the remaining leaves (range facts on M, a shift identity, secLeak of an
+  evar); peak RSS (closer + Qed); Sym4/Sym6 on D0N.
