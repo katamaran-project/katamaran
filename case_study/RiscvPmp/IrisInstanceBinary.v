@@ -194,8 +194,19 @@ Module RiscvPmpIrisInstance2 <:
        cells a, a+s, …, a+s(n-1), each owned with an existential value
        (SyncVal when `pub`) and IN RANGE, plus the end fact e = a + s·n --
        the only place the pointer/count multiplication lives.  Start, count
-       and end must be PUBLIC: a NonSyncVal in any of them is False.  The
-       shape is GenCompose.loop_reservoir's, so the ghost lemmas' proofs
+       and end must be PUBLIC: a NonSyncVal in any of them is False.  That is
+       a CHOICE, not forced: interp_ptstomem is per run, so a secret shape
+       could be stated as a left-run array ∗ a right-run array.  It loses
+       little under this leakage model: a secret start makes every access
+       leak (LeakMemRead/LeakMemWrite), a secret count makes any loop that
+       walks it leak its exit (LeakPc), and every shape-changing ghost lemma
+       needs a relop on the count, which is False on a NonSyncVal.  Untouched
+       secret-shaped buffers can be framed as cells; constant-time code over a
+       public bound states the arr at that bound.  Revisit if the leakage
+       model stops observing addresses.  Consequence: owning an arr makes its
+       three arguments public, but the executor does not know it -- state
+       secLeakvar of the count in an invariant (PLAN-chunk-facts.md, revert).
+       The shape is GenCompose.loop_reservoir's, so the ghost lemmas' proofs
        are big_sepL cons/app steps. *)
     Definition interp_arr_cell (pub : bool) (x : bv xlenbits) : iProp Σ :=
       (⌜ (bv.unsigned x + 4 <= Z.of_N maxAddr)%Z ⌝ ∗
