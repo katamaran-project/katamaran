@@ -1,0 +1,424 @@
+diff --git a/case_study/RiscvPmp/CFGVer/VerifierRel.v b/case_study/RiscvPmp/CFGVer/VerifierRel.v
+index 925441b3..2fc7b90a 100644
+--- a/case_study/RiscvPmp/CFGVer/VerifierRel.v
++++ b/case_study/RiscvPmp/CFGVer/VerifierRel.v
+@@ -2883,12 +2883,16 @@ Section CFGVerificationDerived.
+     Proof.
+       cbv [cexec_instruction exec_instruction_prologue bind produce demonic
+              produce_chunk lift_purespec CPureSpec.produce_chunk CPureSpec.pure
+-             CPureSpec.demonic CStoreSpec.evalStoreSpec].
++             CPureSpec.demonic CStoreSpec.evalStoreSpec
++             (* the ptstoinstr chunk's facts (PLAN-chunk-facts.md): True *)
++             CPureSpec.bind CPureSpec.assume_formula CPureSpec.assume_pathcondition
++             scchunk_facts 𝑯_facts].
+       cbn - [consume].
+       (* No `[%npc Hnpc]` destruct and no `specialize (Hverif npc)` any more:
+          the prologue no longer produces a demonic variable for nextpc, so the
+          value arrives as the parameter np instead of being quantified here. *)
+       iIntros (Hverif) "(Hheap & Hnpc & Hpc & Hinstrs & %HsL)".
++      specialize (Hverif I).
+       apply sound_cexec in Hverif.
+       iApply (semWP2_mono with "[-]").
+       iApply (sound_stm foreignSemCFGVerif lemSemCFGVerif Hverif with "[] [$]").
+diff --git a/case_study/RiscvPmp/IrisInstanceBinary.v b/case_study/RiscvPmp/IrisInstanceBinary.v
+index fe207fd1..a6715116 100644
+--- a/case_study/RiscvPmp/IrisInstanceBinary.v
++++ b/case_study/RiscvPmp/IrisInstanceBinary.v
+@@ -304,6 +304,20 @@ Module RiscvPmpIrisInstance2 <:
+         clear Heq; cbn in *; env.destroy ts; cbn; destruct_pmp_entries; auto.
+     Qed.
+ 
++    (* PLAN-chunk-facts.md: an arr chunk states its facts (Sig.v 𝑯_facts)
++       outright; every other predicate has none. *)
++    Definition lfacts_inst2 `{sailRegGS2 Σ, invGS Σ, memGS2 Σ} :
++      forall (p : Predicate) (ts : Env RelVal (𝑯_Ty p)),
++        luser_inst2 p ts ⊢ ⌜ 𝑯_facts p ts ⌝ ∗ luser_inst2 p ts.
++    Proof.
++      destruct p; intros ts; cbn in *;
++        try (iIntros "H"; iSplitR; [done|iExact "H"]).
++      env.destroy ts. cbn.
++      destruct v, v0, v1; cbn; try (iIntros "[]").
++      iIntros "[%He H]". iSplitR; [iPureIntro; exact He|].
++      iFrame "H". iPureIntro. exact He.
++    Qed.
++
+   End RiscvPmpIrisPredicates.
+ 
+   Section RiscVPmpIrisInstanceProofs.
+diff --git a/case_study/RiscvPmp/Sig.v b/case_study/RiscvPmp/Sig.v
+index 5f495779..b52cd9c8 100644
+--- a/case_study/RiscvPmp/Sig.v
++++ b/case_study/RiscvPmp/Sig.v
+@@ -387,6 +387,19 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
+       | arr _ _                   => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
+       end.
+ 
++    (* PLAN-chunk-facts.md: the pure part of `interp_arr`
++       (IrisInstanceBinary.v), assumed whenever an arr chunk is produced --
++       start, count and end are public, and end = start + stride * count. *)
++    Definition 𝑯_facts (p : Predicate) : Env RelVal (𝑯_Ty p) -> Prop :=
++      match p with
++      | arr _ s => fun ts =>
++          match env.head (env.tail (env.tail ts)), env.head (env.tail ts), env.head ts with
++          | SyncVal a, SyncVal n, SyncVal e => e = bv.add a (bv.mul (bv.of_Z s) n)
++          | _, _, _ => False
++          end
++      | _ => fun _ => True
++      end.
++
+   End PredicateKit.
+ 
+   Include PredicateMixin RiscvPmpBase.
+@@ -1017,6 +1030,29 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
+     apply solveruseronly_to_solver_spec, simplify_user_spec.
+   Qed.
+ 
++  (* The symbolic side of `𝑯_facts` (PLAN-chunk-facts.md). *)
++  Definition user_chunk_facts {Σ} (p : 𝑯) : Env (Term Σ) (𝑯_Ty p) -> PathCondition Σ :=
++    match p with
++    | arr _ s => fun ts =>
++        let a := env.head (env.tail (env.tail ts)) in
++        let n := env.head (env.tail ts) in
++        let e := env.head ts in
++        [ctx] ▻ formula_secLeak a ▻ formula_secLeak n ▻ formula_secLeak e
++              ▻ formula_propeq e
++                  (term_binop bop.bvadd a
++                     (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_Z s)) n))
++    | _ => fun _ => [ctx]
++    end.
++
++  Lemma user_chunk_facts_spec {Σ} (p : 𝑯) (ts : Env (Term Σ) (𝑯_Ty p)) (ι : Valuation Σ) :
++    𝑯_facts p (inst ts ι) -> instprop (user_chunk_facts p ts) ι.
++  Proof.
++    destruct p; cbn; try (intros; exact I).
++    cbn in ts. env.destroy ts. cbn.
++    destruct (inst v ι), (inst v0 ι), (inst v1 ι); try contradiction.
++    intros ->. repeat split.
++  Qed.
++
+   Include SignatureMixin RiscvPmpBase.
+ 
+   Section ContractDefKit.
+diff --git a/theories/Iris/BinaryWeakestPre.v b/theories/Iris/BinaryWeakestPre.v
+index 6c0fc0ed..fbc3449f 100644
+--- a/theories/Iris/BinaryWeakestPre.v
++++ b/theories/Iris/BinaryWeakestPre.v
+@@ -87,6 +87,10 @@ Module Type IrisPredicates2
+   Parameter lduplicate_inst2 : forall `{sRG : sailRegGS2 Σ} `{invGS Σ} {mG : memGS2 Σ} (p : 𝑯) (ts : Env RelVal (𝑯_Ty p)),
+       is_duplicable p = true ->
+       luser_inst2 ts ⊢ luser_inst2 ts ∗ luser_inst2 ts.
++  (* PLAN-chunk-facts.md: a chunk justifies the pure facts assumed when it is
++     produced. *)
++  Parameter lfacts_inst2 : forall `{sRG : sailRegGS2 Σ} `{invGS Σ} {mG : memGS2 Σ} (p : 𝑯) (ts : Env RelVal (𝑯_Ty p)),
++      luser_inst2 ts ⊢ ⌜ 𝑯_facts p ts ⌝ ∗ luser_inst2 ts.
+ 
+ End IrisPredicates2.
+ 
+@@ -104,7 +108,8 @@ Module IrisBinaryWP
+     #[export] Program Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
+       {| lptsreg σ r v        := reg_pointsTo2 r v;
+         luser p ts           := luser_inst2 ts;
+-        lduplicate p ts Hdup := lduplicate_inst2 ts Hdup
++        lduplicate p ts Hdup := lduplicate_inst2 ts Hdup;
++        lfacts p ts          := lfacts_inst2 ts
+       |}.
+ 
+     (* Declare necessary OFE instances. Don't use them directly, they will be
+diff --git a/theories/Refinement/Monads.v b/theories/Refinement/Monads.v
+index 715df4b0..5f509149 100644
+--- a/theories/Refinement/Monads.v
++++ b/theories/Refinement/Monads.v
+@@ -1284,15 +1284,84 @@ Module Type RefinementMonadsOn
+       now rewrite peval_chunk_sound.
+     Qed.
+ 
++    (* PLAN-chunk-facts.md.  A chunk's facts relate ONE-WAY (the concrete
++       facts imply the symbolic ones), which is all an assume needs. *)
++    Definition RPathConditionImp : Rel PathCondition Prop :=
++      MkRel (fun P w C => (bi_pure P -∗ instpred C)%I).
++
++    Lemma chunk_facts_sound {Σ} (c : Chunk Σ) (ι : Valuation Σ) :
++      scchunk_facts (inst c ι) -> instprop (SPureSpec.chunk_facts c) ι.
++    Proof.
++      induction c; cbn; intros Hf; try exact I.
++      - now apply user_chunk_facts_spec.
++      - destruct Hf as [H1 H2]. apply instprop_cat. split; auto.
++    Qed.
++
++    Lemma refine_chunk_facts {w} :
++      ⊢ ℛ⟦RChunk -> RPathConditionImp⟧ scchunk_facts (SPureSpec.chunk_facts : Impl _ _ w).
++    Proof.
++      unfold RImpl, RChunk, RInst, RPathConditionImp. crushPredEntails3.
++      rewrite instpred_prop. subst. now apply chunk_facts_sound.
++    Qed.
++
++    (* refine_assume_pathcondition's proof, which only ever uses the
++       concrete-to-symbolic half of its RPathCondition. *)
++    Lemma refine_assume_pathcondition_imp {w} :
++      ⊢ ℛ⟦RPathConditionImp -> RPureSpec RUnit⟧
++        CPureSpec.assume_pathcondition (SPureSpec.assume_pathcondition (w := w)).
++    Proof.
++      unfold SPureSpec.assume_pathcondition, CPureSpec.assume_pathcondition.
++      iIntros "%C %Cs HC2 %Φ %Φs HΦ Hsp %HC".
++      destruct (combined_solver_spec _ Cs) as [[w1 [ζ sc1]] Hsolver|Hsolver].
++      - rewrite safe_assume_triangular.
++        rewrite safe_assume_pathcondition_without_solver.
++        iSpecialize ("HC2" $! HC).
++        rewrite <-Hsolver.
++        iSpecialize ("HΦ" $! _ (acc_trans (acc_triangular ζ) (acc_pathcondition_right w1 sc1))).
++        rewrite assuming_trans.
++        iDestruct (assuming_sepₚ with "[HΦ Hsp]") as "H".
++        { now iSplitL "HΦ". }
++        iDestruct (knowing_assuming with "[$HC2 $H]") as "H".
++        iApply knowing_pure.
++        iApply (knowing_proper with "H").
++        iIntros "(#Hsc1 & H & HΦ)".
++        iDestruct (@assuming_acc_pathcondition_right w1 with "[$Hsc1 $H]") as "H".
++        iSpecialize ("HΦ" with "Hsc1").
++        unfold RImpl, RProp; cbn.
++        repeat change (@bi_forall (@bi_pred (wpathcondition w1 sc1)) ?A ?P) with (@bi_forall (@bi_pred w1) A P).
++        repeat change (@bi_wand (@bi_pred (wpathcondition w1 sc1)) ?P ?Q) with (@bi_wand (@bi_pred w1) P Q).
++        repeat change (@repₚ ?T  ?A ?instTA ?t1 (wpathcondition w1 sc1) ?t2) with (@repₚ T A instTA t1 w1 t2).
++        iApply ("H" with "[] HΦ").
++        now iApply refine_unit.
++      - iExFalso.
++        iApply Hsolver.
++        now iApply "HC2".
++    Qed.
++
+     Lemma refine_produce_chunk {w} :
+       ⊢ ℛ⟦RChunk -> RHeap -> RPureSpec RHeap⟧
+         CPureSpec.produce_chunk  (SPureSpec.produce_chunk (w := w)).
+     Proof.
+-      iIntros (c sc) "Hc %h %sh Hh".
++      iIntros (c sc) "#Hc %h %sh #Hh".
+       unfold SPureSpec.produce_chunk, CPureSpec.produce_chunk.
+-      iApply (refine_pure (RA := RHeap)).
+-      iApply (refine_RHeap_cons with "[Hc] Hh").
+-      now iApply refine_peval_chunk.
++      iPoseProof (refine_peval_chunk with "Hc") as "#Hc1".
++      iPoseProof (refine_chunk_facts with "Hc1") as "Hf".
++      iApply (refine_purespec_mono
++        (c := CPureSpec.bind (CPureSpec.assume_formula (scchunk_facts c))
++                (fun _ => CPureSpec.pure (c :: h)))).
++      { intros Φ. destruct c; cbv; auto. }
++      destruct (SPureSpec.chunk_facts (peval_chunk sc)).
++      - iApply (refine_purespec_mono (c := CPureSpec.pure (c :: h))).
++        { intros Φ HΦ _. exact HΦ. }
++        iApply (refine_pure (RA := RHeap)).
++        now iApply (refine_RHeap_cons with "Hc1 Hh").
++      - iAssert (ℛ⟦RHeap⟧ (c :: h) (peval_chunk sc :: sh)) as "#Hr".
++        { now iApply (refine_RHeap_cons with "Hc1 Hh"). }
++        iApply (refine_bind (RA := RUnit) (RB := RHeap) with "[Hf]").
++        { now iApply (refine_assume_pathcondition_imp with "Hf"). }
++        iIntros (w2 ω2) "!> %u %su _".
++        iApply (refine_pure (RA := RHeap)).
++        rsolve.
+     Qed.
+ 
+     Lemma refine_is_duplicable {w} :
+diff --git a/theories/Shallow/Monads.v b/theories/Shallow/Monads.v
+index 1cbde742..007c843e 100644
+--- a/theories/Shallow/Monads.v
++++ b/theories/Shallow/Monads.v
+@@ -101,6 +101,25 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
+   (Import AS : AssertionsOn B P W)
+ .
+ 
++  Section ChunkFacts.
++    Import iris.bi.interface iris.proofmode.tactics.
++    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
++
++    (* What justifies assuming `scchunk_facts` when a chunk is produced. *)
++    Lemma interpret_scchunk_facts (c : SCChunk) :
++      interpret_scchunk c ⊢@{L} ⌜scchunk_facts c⌝ ∗ interpret_scchunk c.
++    Proof.
++      induction c; cbn [interpret_scchunk scchunk_facts].
++      - apply lfacts.
++      - iIntros "H". iSplitR; [done|iExact "H"].
++      - iIntros "[H1 H2]".
++        iDestruct (IHc1 with "H1") as "[%F1 H1]".
++        iDestruct (IHc2 with "H2") as "[%F2 H2]".
++        iSplitR; [iPureIntro; now split|iFrame].
++      - iIntros "H". iSplitR; [done|iExact "H"].
++    Qed.
++  End ChunkFacts.
++
+   (* This is used by potentially multiple instances, but ultimately should be
+      moved somewhere else. *)
+   Section WithBI.
+@@ -490,8 +509,14 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
+     Definition replay [Σ] (P : 𝕊 Σ) (ι : Valuation Σ) :Prop :=
+       run (replay_aux P ι).
+ 
++    (* Registers and wands carry no facts: kept a bare `pure`, so that proofs
++       unfolding a register read/write see the same shape as before. *)
+     Definition produce_chunk (c : SCChunk) (h : SCHeap) : CPureSpec SCHeap :=
+-      pure (cons c h).
++      match c with
++      | chunk_user _ _ | chunk_conj _ _ =>
++          assume_formula (scchunk_facts c) ;; pure (cons c h)
++      | _ => pure (cons c h)
++      end.
+ 
+     Definition consume_chunk (c : SCChunk) (h : SCHeap) : CPureSpec SCHeap :=
+       '(c', h') <- angelic_list (heap_extractions h) ;;
+@@ -678,7 +703,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
+ 
+     #[export] Instance mon_produce_chunk c h :
+       Monotonic (MPureSpec eq) (produce_chunk c h).
+-    Proof. firstorder. Qed.
++    Proof. unfold produce_chunk. destruct c; typeclasses eauto. Qed.
+     #[export] Instance mon_consume_chunk c h :
+       Monotonic (MPureSpec eq) (consume_chunk c h).
+     Proof. unfold consume_chunk. typeclasses eauto. Qed.
+@@ -1034,7 +1059,13 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
+         (interpret_scheap h ⊢
+          interpret_scchunk c -∗ ∃ h', interpret_scheap h' ∧ ⌜Φ h'⌝).
+       Proof.
+-        cbn. intros HΦ. apply bi.wand_intro_l.
++        intros HΦ.
++        assert (HΦ' : scchunk_facts c -> Φ (c :: h)).
++        { destruct c; cbv [produce_chunk assume_formula assume_pathcondition bind pure] in HΦ; auto. }
++        clear HΦ. rename HΦ' into HΦ. apply bi.wand_intro_l.
++        rewrite interpret_scchunk_facts -bi.sep_assoc.
++        apply (bi.pure_elim (scchunk_facts c)); [apply bi.sep_elim_l, _|].
++        intros Hf. rewrite (bi.pure_True _ Hf) bi.True_sep. specialize (HΦ Hf).
+         apply bi.exist_intro' with (c :: h).
+         apply bi.and_intro; auto.
+       Qed.
+diff --git a/theories/Symbolic/Monads.v b/theories/Symbolic/Monads.v
+index d71b5fb5..101df0d8 100644
+--- a/theories/Symbolic/Monads.v
++++ b/theories/Symbolic/Monads.v
+@@ -824,9 +824,25 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
+     Definition replay : ⊢ 𝕊 -> 𝕊 :=
+       fun w P => run (replay_aux P (sub_id w)).
+ 
++    (* The pure facts a chunk implies (PLAN-chunk-facts.md), from the case
++       study's `user_chunk_facts`; assumed when the chunk is produced. *)
++    Fixpoint chunk_facts {Σ} (c : Chunk Σ) : PathCondition Σ :=
++      match c with
++      | chunk_user p ts  => @user_chunk_facts _ p ts
++      | chunk_conj c1 c2 => ctx.cat (chunk_facts c1) (chunk_facts c2)
++      | _                => ctx.nil
++      end.
++
++    (* No facts (every register chunk, and every user chunk of a case study
++       that declares none): no assume, so no solver call. *)
+     Definition produce_chunk :
+       ⊢ Chunk -> SHeap -> SPureSpec SHeap :=
+-      fun w0 c h => pure (cons (peval_chunk c) h).
++      fun w0 c h =>
++        let c1 := peval_chunk c in
++        match chunk_facts c1 with
++        | ctx.nil => pure (cons c1 h)
++        | C => ⟨ θ ⟩ _ <- assume_pathcondition C ;; pure (cons c1 h)⟨θ⟩
++        end.
+ 
+     Definition consume_chunk : ⊢ Chunk -> SHeap -> SPureSpec SHeap :=
+       fun w0 c h =>
+@@ -1154,7 +1170,12 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
+ 
+     Lemma pext_produce_chunk {w : World} (c : Chunk w) (h : SHeap w) :
+       PExt (produce_chunk c h).
+-    Proof. unfold produce_chunk. apply pext_pure. Qed.
++    Proof.
++      unfold produce_chunk. destruct (chunk_facts (peval_chunk c)).
++      - apply pext_pure.
++      - apply pext_bind; [apply pext_assume_pathcondition|].
++        intros; apply pext_pure.
++    Qed.
+ 
+     Lemma pext_consume_chunk {w : World} (c : Chunk w) (h : SHeap w) :
+       PExt (consume_chunk c h).
+diff --git a/theories/Symbolic/Worlds.v b/theories/Symbolic/Worlds.v
+index 14272454..e30c37ba 100644
+--- a/theories/Symbolic/Worlds.v
++++ b/theories/Symbolic/Worlds.v
+@@ -1998,17 +1998,30 @@ End WorldsOn.
+ Module Type WorldsMixin (B : Base) (PK : PredicateKit B) :=
+   FormulasOn B PK <+ ChunksOn B PK <+ WorldsOn B PK.
+ 
+-Module Type SolverKit (B : Base) (P : PredicateKit B) (Import W : WorldsMixin B P).
++Module Type SolverKit (Import B : Base) (Import P : PredicateKit B) (Import W : WorldsMixin B P).
+   Local Set Implicit Arguments.
+ 
+   Parameter solver      : Solver.
+   Parameter solver_spec : SolverSpec solver.
++
++  (* The symbolic counterpart of `𝑯_facts` (PLAN-chunk-facts.md): formulas
++     assumed when a user chunk is produced.  The spec is ONE-WAY, because the
++     refinement of an assume needs only that the concrete facts imply the
++     symbolic ones; so `[]` is always a valid choice. *)
++  Parameter user_chunk_facts : forall {Σ} (p : 𝑯), Env (Term Σ) (𝑯_Ty p) -> PathCondition Σ.
++  Parameter user_chunk_facts_spec : forall {Σ} (p : 𝑯) (ts : Env (Term Σ) (𝑯_Ty p)) (ι : Valuation Σ),
++      𝑯_facts p (inst ts ι) -> instprop (@user_chunk_facts _ p ts) ι.
+ End SolverKit.
+ 
+-Module DefaultSolverKit (B : Base) (P : PredicateKit B)
++Module DefaultSolverKit (Import B : Base) (Import P : PredicateKit B)
+   (Import W : WorldsMixin B P) <: SolverKit B P W.
+ 
+   Definition solver : Solver := solver_null.
+   Definition solver_spec : SolverSpec solver := solver_null_spec.
+ 
++  Definition user_chunk_facts {Σ} (p : 𝑯) (ts : Env (Term Σ) (𝑯_Ty p)) : PathCondition Σ := [ctx].
++  Lemma user_chunk_facts_spec {Σ} (p : 𝑯) (ts : Env (Term Σ) (𝑯_Ty p)) (ι : Valuation Σ) :
++    𝑯_facts p (inst ts ι) -> instprop (@user_chunk_facts _ p ts) ι.
++  Proof. intros _. exact I. Qed.
++
+ End DefaultSolverKit.
+diff --git a/theories/Syntax/Chunks.v b/theories/Syntax/Chunks.v
+index b25a0140..c5e9b4ac 100644
+--- a/theories/Syntax/Chunks.v
++++ b/theories/Syntax/Chunks.v
+@@ -96,6 +96,15 @@ Module Type ChunksOn
+   (* Symbolic chunks *)
+   Definition Chunk (Σ : LCtx) := GChunk (Term Σ).
+ 
++  (* The pure facts a semi-concrete chunk implies (PLAN-chunk-facts.md):
++     assumed when it is produced, justified by `lfacts`. *)
++  Fixpoint scchunk_facts (c : SCChunk) : Prop :=
++    match c with
++    | chunk_user p vs  => 𝑯_facts p vs
++    | chunk_conj c1 c2 => scchunk_facts c1 /\ scchunk_facts c2
++    | _                => True
++    end.
++
+   Section TransparentObligations.
+     Local Set Transparent Obligations.
+     Derive NoConfusion for GChunk.
+diff --git a/theories/Syntax/Predicates.v b/theories/Syntax/Predicates.v
+index f4ea7db8..04185897 100644
+--- a/theories/Syntax/Predicates.v
++++ b/theories/Syntax/Predicates.v
+@@ -81,6 +81,11 @@ Module Type HeapPredicateKit (Import B : Base).
+ 
+   Parameter 𝑯_precise : forall p : 𝑯, option (Precise 𝑯_Ty p).
+ 
++  (* Pure facts implied by a chunk (PLAN-chunk-facts.md): assumed whenever the
++     chunk is produced.  Justified by `lfacts` below; the symbolic counterpart,
++     which needs `Formula`, is `user_chunk_facts` in `SolverKit`. *)
++  Parameter 𝑯_facts : forall p : 𝑯, Env RelVal (𝑯_Ty p) -> Prop.
++
+ End HeapPredicateKit.
+ 
+ Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (Import HP : HeapPredicateKit B).
+@@ -90,6 +95,8 @@ Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (I
+     lduplicate : forall (p : 𝑯) (ts : Env RelVal (𝑯_Ty p)),
+       is_duplicable p = true ->
+       @luser p ts ⊢ @luser p ts ∗ @luser p ts;
++    lfacts     : forall (p : 𝑯) (ts : Env RelVal (𝑯_Ty p)),
++      @luser p ts ⊢ ⌜ 𝑯_facts p ts ⌝ ∗ @luser p ts;
+   }.
+   Arguments luser {_ _} p _.
+ 
+@@ -122,6 +129,7 @@ Module DefaultHeapPredicateKit (Import B : Base) <: HeapPredicateKit B.
+   #[export] Instance 𝑯_eq_dec : EqDec 𝑯 := fun p => match p with end.
+   #[export] Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with end }.
+   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) := None.
++  Definition 𝑯_facts (p : 𝑯) : Env RelVal (𝑯_Ty p) -> Prop := match p with end.
+ 
+ End DefaultHeapPredicateKit.
+ 

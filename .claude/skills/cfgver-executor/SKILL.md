@@ -142,8 +142,9 @@ went 10.2 / 14.3 / 17.7 → a flat **3.01** M/entry.
 
 **`first` IS NOT REMOVABLE — do not "simplify" it away.** A loop-body segment
 contract starts and ends at the SAME ADDRESS: `exit_of_off <base> 0` against
-`asn_init_pc <base>` in `PaddedLoop.v`, `CountdownComposed.v`,
-`TwoLoopsComposed.v` (all gate-checked). Its trace visits that address twice —
+`asn_init_pc <base>` in `CountdownComposed.v` and `TwoLoopsComposed.v`
+(both gate-checked; `PaddedLoop.v` was one too until its 2026-10-01 migration
+to a loop block). Its trace visits that address twice —
 execute the body, then stop — and the pc is the same TERM both times, so the pc
 cannot tell them apart. Fuel cannot either: the executor sees only what remains,
 never the initial value. Dropping `first` was tried 2026-09-07 and makes

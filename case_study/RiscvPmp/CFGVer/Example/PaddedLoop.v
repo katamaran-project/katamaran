@@ -1,97 +1,65 @@
 (* ========================================================================= *)
-(* Example/PaddedLoop.v -- SUB-TABLE segment contracts (light half).          *)
+(* Example/PaddedLoop.v -- a LOOP BLOCK inside a longer program (light half). *)
 (*                                                                           *)
-(* THE REGRESSION TEST FOR SUB-TABLE CONTRACTS.  This is the only proof     *)
-(* in the tree where a contract's instruction table covers a PROPER SUBSET   *)
-(* of the program, so if the sub-table path breaks, it breaks here.          *)
+(* THE REGRESSION TEST FOR A BLOCK WHOSE TABLE IS A PROPER SUBSET OF THE      *)
+(* PROGRAM.  The countdown loop of Example/CountdownRec.v (cdRecBlk: one     *)
+(* self-referential block, its own table = its two instructions) sits at    *)
+(* byte offset 256 of a 66-instruction program: 64 filler no-ops, then the   *)
+(* loop.  The program runs the filler, meets the loop head, fires cdRecBlk   *)
+(* there (an ordinary ai_block), and exits at +264.  The block's code is     *)
+(* checked against the program's table at q + 256 (blk_code_in, PLAN-valid- *)
+(* blk-annot.md), and the block is valid at every address                     *)
+(* (CountdownRecResult.cdRecBlk_valid).                                       *)
 (*                                                                           *)
-(* Same countdown loop as Example/CountdownComposed.v, but sitting INSIDE a  *)
-(* 66-instruction program: 64 never-executed filler instructions, then the   *)
-(* loop at byte offset 256.  Both segment contracts carry ONLY the two       *)
-(* instructions the segment executes; the segment's byte offset lives in the *)
-(* PLACEMENT term (bv.of_N 256) rather than as a 64-entry prefix of the      *)
-(* table, so table_of_list p 0 pl_seg emits exactly addresses 256 and 260.   *)
-(* No new field on CFGVerifierContract was needed for this.                  *)
-(*                                                                           *)
-(* WHY (diagnostics/prefix-length-cost.md): a segment contract whose branch  *)
-(* condition the solver cannot decide by computation costs                    *)
-(* 93.81 + 4.05*P + 0.531*P^2 M words in the number P of NEVER-EXECUTED      *)
-(* instructions sharing its table (held out at P=64 to +0.0024% and at       *)
-(* P=128 to +0.0079%).  Measured here: this cut costs 177.21 M against       *)
-(* 177.96 M for the IDENTICAL cut in a 2-instruction program -- 0.42%        *)
-(* CHEAPER -- where the same cut with untrimmed tables would cost ~5053 M.   *)
-(* So program length is now free for a composed proof; it was 28.5x.          *)
-(*                                                                           *)
-(* Soundness is Tables.v's instrs_of_list_segment (three gmap containments)  *)
-(* for the AST containment pl_contain, which GenCompose.contract_run takes;  *)
-(* used in PaddedLoopResult.v, whose pl_loop is gate-checked axiom-clean.    *)
+(* Migrated 2026-10-01 from the earlier hand-composed version (two segment    *)
+(* contracts plBody/plFinal glued in Iris by contract_run and                 *)
+(* myWP2_loop_induction, PLAN-subtable / diagnostics/prefix-length-cost.md):  *)
+(* that Iris glue framed the whole 66-instruction memory map by hand and      *)
+(* peaked at ~9.4 GB; the loop is now one block and the solver frames.        *)
 (* ========================================================================= *)
 
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
-From Katamaran Require Export RiscvPmp.CFGVer.Example.CountdownComposed.
+From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.CountdownComposed.
+From Katamaran Require Export RiscvPmp.CFGVer.Example.CountdownRec.
 
-(* 64 never-executed filler instructions in front of the loop. *)
+(* 64 filler instructions in front of the loop, all executed. *)
 Definition pl_filler : list AST := List.repeat (MV X4 X4) 64.
 
 (* The whole program: 66 instructions, loop head at byte offset 256. *)
 Definition padded_instrs : list AST := pl_filler ++ cd_instrs.
 
-(* AnnotInstr-level decomposition of the SAME program.  Since 2026-09-22
-   (PLAN-contract-ast) the two levels are BOTH named here on purpose: the
-   contracts' `cfg_instrs` field is the AST list `cd_instrs` (the spec: what
-   sits in memory), while `pl_seg` is the ANNOTATED slice the symbolic table is
-   built from and is what `cfg_vc` is applied to.  They coincide today because
-   this program carries no annotations -- `pl_seg` IS `cd_instrs` through the
-   coercion -- but they are different arguments and must not be conflated.
-   Needed because `list_AST_AnnotInstr` is `List.map AST_AnnotInstr`, NOT an
-   identity (Verifier.v:145 -- and coqc warns about exactly that), so a
-   `list AST` cannot stand in for the `list AnnotInstr` that ptsto_instrs and
-   itable_rel are stated over.  Naming pre/seg/post separately makes
-   instrs_of_list_segment's `pre ++ seg ++ post` match SYNTACTICALLY in
-   PaddedLoopResult.pl_contain, sparing an `app_nil_r` rewrite. *)
-Definition pl_pre  : list AnnotInstr := pl_filler.
-Definition pl_seg  : list AnnotInstr := cd_instrs.
-Definition pl_post : list AnnotInstr := [].
-Definition padded_annot : list AnnotInstr := pl_pre ++ pl_seg ++ pl_post.
-
 Definition pl_head : N := 256.
 
-(* The cut exits back at the loop head (offset 0 from pl_head); the final
-   trip at pl_head + 8, one past the program.  ONE exit term each
-   (PLAN-exit-targets.md). *)
+(* The filler plain; the loop head carries cdRecBlk as an ORDINARY ai_block,
+   which fires when the head is reached. *)
+Definition padded_annot : list AnnotInstr :=
+  list_AST_AnnotInstr pl_filler
+  ++ ({| ai_ghost_before := []
+       ; ai_instr        := ADDI X1 X1 neg1_12
+       ; ai_ghost_after  := []
+       ; ai_block        := Some cdRecBlk
+       ; ai_loop         := None |}
+      :: list_AST_AnnotInstr [BNE X1 X0 back4]).
 
-(* ---- LOOP BODY: head -> head, one trip.  cfg_instrs is the SEGMENT. ---- *)
-Definition plBody : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx
-    (term_val ty_xlenbits (bv.of_N pl_head))
-    (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 0)
-    (asn_init_pc (bv.of_N pl_head)
-       ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
-       ∗ asn.formula (formula_relop bop.neq (dec (term_var "k"))
-                        (term_val ty_xlenbits bv.zero)))
-    cd_instrs
-    3
-    (X1 ↦ᵣ dec (term_var "k") ∗ secLeakvar "k" ∗ minimal_pre).
+(* The block's own conjuncts, VERBATIM at its firing address q + 256 (consume
+   is syntactic against the path condition, cf. CountdownRec.cd_link_extra):
+   its 8-byte code bound and its invariant.  The outer 264-byte bound is
+   gen_seg_contract's own.  X4 is the filler's register. *)
+Definition pl_extra : Assertion (cdRecCtx ▻ "a"∷ty_xlenbits) :=
+  ( gen_base_bound (term_binop bop.bvadd (term_var "q")
+                      (term_val ty_xlenbits (bv.of_N pl_head))) 8
+    ∗ cd_rec_inv
+    ∗ asn.exist "v" ty_xlenbits (X4 ↦ᵣ term_var "v") )%asn.
 
-Lemma valid_plBody : cfg_vc plBody pl_seg.
-Proof.
-  vm_compute. solve_vc.
-Qed.
+Definition pl_post
+    : Assertion (cdRecCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( X1 ↦ᵣ term_val ty_xlenbits bv.zero )%asn.
 
-(* ---- LOOP EXIT: head -> 264 (one past the 66-instruction program). ---- *)
-Definition plFinal : @CFGVerifierContract cdCtx :=
-  @MkCFGVerifierContract cdCtx
-    (term_val ty_xlenbits (bv.of_N pl_head))
-    (exit_of_off (term_val ty_xlenbits (bv.of_N pl_head)) 8)
-    (asn_init_pc (bv.of_N pl_head)
-       ∗ X1 ↦ᵣ term_var "k" ∗ secLeakvar "k"
-       ∗ asn.formula (formula_relop bop.eq (dec (term_var "k"))
-                        (term_val ty_xlenbits bv.zero)))
-    cd_instrs
-    3
-    asn_no_post.
+(* 64 filler steps, the block, the exit check, with slack. *)
+Definition plLink : @CFGVerifierContract cdRecCtx :=
+  gen_seg_contract (term_var "q") (term_var "q")
+    padded_instrs 264 70 [] pl_extra pl_post.
 
-Lemma valid_plFinal : cfg_vc plFinal pl_seg.
-Proof.
-  vm_compute. solve_vc.
-Qed.
+Lemma valid_plLink : cfg_vc plLink padded_annot.
+Proof. solve_param_vc. Qed.

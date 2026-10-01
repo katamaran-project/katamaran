@@ -78,10 +78,12 @@ AXIOM_CLEAN_THMS=(
   "cd_loop"
   # two sequential loops, composed: A hands off to B at its head
   "loopA"
-  # the SUB-TABLE cut (Example/PaddedLoopResult.v): the only proof in the tree
-  # whose contract table covers a PROPER SUBSET of the program, so it is the
-  # only check that itable_faith_of_segment / instrs_of_list_segment are sound.
-  "pl_loop"
+  # a loop BLOCK inside a longer program (Example/PaddedLoopResult.v, migrated
+  # 2026-10-01 from the hand-composed sub-table cut `pl_loop`): the block's
+  # table is a PROPER SUBSET of the program, checked by blk_code_in at q + 256.
+  # (itable_faith_of_segment / instrs_of_list_segment, which pl_loop exercised,
+  # are no longer reached by any end theorem.)
+  "padded_loop_noninterferent_param"
   # a LOOP as one self-referential block (Löb, ai_loop) followed by an
   # executed segment (Example/CountdownRecResult.v): the only end theorem
   # whose VC trusts a block, so the only check on blocksSound_of_head and

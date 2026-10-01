@@ -144,16 +144,24 @@ WHOLE program (`P : gmap _ AST`) and runs the segment with
 **`GenCompose.contract_run`** (PLAN-valid-blk-annot V11), whose only table-side
 premises are the placement, a no-wrap fit, and the AST containment
 `instrs_of_list pbase (cfg_instrs c) ⊆ P` — typically from `Tables.v`'s
-`instrs_of_list_segment` lifted by `map_fmap_mono` (see
-`PaddedLoopResult.pl_contain`). `contract_run` derives table faithfulness
-itself; no resource splitting is needed and the continuation hands the
-instruction ownership back. (The annotation-level `itable_faith_of_segment` it
-replaced was deleted in Phase 5.)
+`instrs_of_list_segment` lifted by `map_fmap_mono`. `contract_run` derives
+table faithfulness itself; no resource splitting is needed and the continuation
+hands the instruction ownership back. (The annotation-level
+`itable_faith_of_segment` it replaced was deleted in Phase 5.)
 
-Worked example: `Example/PaddedLoop.v` + `Example/PaddedLoopResult.v` (the
-countdown loop inside a 66-instruction program; `pl_loop` is gate-checked
-axiom-clean, and is the tree's ONLY proof whose table is a proper subset of the
-program).
+**Prefer a BLOCK to a hand-composed sub-table cut (2026-10-01).** The old worked
+example here, `PaddedLoopResult.pl_loop` (two segment contracts glued in Iris by
+`contract_run` + `myWP2_loop_induction`), was migrated to the `ai_loop` style:
+`Example/PaddedLoop.v` now runs a 66-instruction program whose loop at offset
+256 is ONE block (`CountdownRec.cdRecBlk`, valid at every address), and
+`PaddedLoopResult.padded_loop_noninterferent_param` is the gate-checked end
+theorem. The block's table is a proper subset of the program, checked by
+`blk_code_in`. The hand-written Iris version framed the whole 66-entry
+instruction map by `cbn`/`iFrame` and peaked at ~9.4 GB (170 s); the block
+version is 27 s / 7.3 GB with no hand-written Iris. No end theorem uses
+`instrs_of_list_segment` any more; `contract_run` is still exercised by the
+other composed examples (`SwapComposedResult`, `CountdownComposedResult`,
+`TwoLoopsComposedResult`).
 
 Two traps, each of which cost a compile:
 
