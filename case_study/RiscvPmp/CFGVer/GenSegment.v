@@ -1821,3 +1821,137 @@ Definition gen_reg_asn_q_post {Σ : LCtx} (s : reg_spec_q Σ)
 Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   List.fold_right (fun s acc => (gen_reg_asn_q_post s ∗ acc)%asn) ⊤%asn specs.
+
+(* ========================================================================== *)
+(* DATA LAYOUT: cells and arrays, contiguous by construction (2026-10-02)     *)
+(* ========================================================================== *)
+(* A program's data as an ORDERED list, laid out word by word from an address
+   term: a cell (DCell), an array of `count` words (DArr, an `arr` chunk
+   walking up or down), or an anchor (DAt x: "the next word is at x", a pure
+   fact, after which addresses are x-relative so the code's own x-relative
+   addresses stay intact).  The counts are TERMS, so one contract states a
+   data region whose size is symbolic -- the parametric muladd's limb arrays
+   (count M - 2 for M = (31 + b) >> 5).  The trusted statement quotes
+   `concretize_data`, which lays the cells out ascending and contiguous from
+   one absolute address, so the bridge's HDataAddrs holds by construction
+   (concretize_data_addrs); EndToEnd.gen_implpre_data is the ImplPre, once.
+
+   The builder goes in a segment's `extra_pre`; gen_seg_contract is
+   unchanged.  An existential cell's address is weakened under its binder
+   (subst _ sub_wk1), which the note above warns about for VC cost; it is
+   one weakening per such cell, not per step. *)
+
+Inductive arr_dir := ArrUp | ArrDown.
+
+Inductive data_spec (Σ : LCtx) : Type :=
+| DCell (pub : bool) (v : option (Term Σ ty_xlenbits))
+| DArr (pub : bool) (dir : arr_dir) (count : Term Σ ty_xlenbits)
+| DAt (x : Term Σ ty_xlenbits).
+Arguments DCell {Σ} pub v.
+Arguments DArr {Σ} pub dir count.
+Arguments DAt {Σ} x.
+
+Definition t_add {Σ} (t : Term Σ ty_xlenbits) (c : Z) : Term Σ ty_xlenbits :=
+  term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z c)).
+Definition t_add4n {Σ} (t n : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
+  term_binop bop.bvadd t (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 4)) n).
+
+Definition asn_in_range_at {Σ} (x : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.formula (formula_relop bop.le
+    (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int 4%Z))
+    (term_val ty.int (Z.of_N maxAddr))).
+
+Definition gen_cell_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool)
+    (v : option (Term Σ ty_xlenbits)) : Assertion Σ :=
+  match v with
+  | Some t => (a ↦ₘ t ∗ (if pub then asn.formula (formula_secLeak t) else ⊤))%asn
+  | None =>
+      let a' : Term (Σ ▻ "mv"∷ty_xlenbits) ty_xlenbits :=
+        subst a (sub_wk1 (b := "mv"∷ty_xlenbits)) in
+      asn.exist "mv" ty_xlenbits
+        (if pub then (a' ↦ₘ term_var "mv" ∗ secLeakvar "mv")%asn
+         else (a' ↦ₘ term_var "mv")%asn)
+  end.
+
+(* up: words a .. a+4(c-1);  down: the same words, the arr starting at the top *)
+Definition gen_arr_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool) (dir : arr_dir)
+    (c : Term Σ ty_xlenbits) : Assertion Σ :=
+  match dir with
+  | ArrUp => asn.chunk (chunk_user (arr pub 4) [a; c; t_add4n a c])
+  | ArrDown => asn.chunk (chunk_user (arr pub (-4))
+                 [t_add (t_add4n a c) (-4); c; t_add a (-4)])
+  end.
+
+Fixpoint gen_data_at {Σ} (a : Term Σ ty_xlenbits) (ds : list (data_spec Σ)) : Assertion Σ :=
+  match ds with
+  | nil => ⊤%asn
+  | cons (DCell pub v) ds =>
+      (gen_cell_at a pub v ∗ asn_in_range_at a ∗ gen_data_at (t_add a 4) ds)%asn
+  | cons (DArr pub dir c) ds => (gen_arr_at a pub dir c ∗ gen_data_at (t_add4n a c) ds)%asn
+  | cons (DAt x) ds => (asn.formula (formula_propeq x a) ∗ gen_data_at x ds)%asn
+  end.
+
+(* ---- the statement side ------------------------------------------------- *)
+
+Definition rv_val (r : RelVal ty_xlenbits) : bv xlenbits := ty.projLeft r.
+Definition data_count {Σ} (ι : Valuation Σ) (c : Term Σ ty_xlenbits) : nat :=
+  N.to_nat (bv.bin (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))).
+
+(* the cells, ascending from the absolute address off *)
+Fixpoint concretize_data {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spec Σ))
+    : list mem_full_spec :=
+  match ds with
+  | nil => nil
+  | cons (DCell pub v) ds =>
+      cons (bv.of_N off, pub, option_map (fun t => rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι)) v)
+        (concretize_data ι (off + 4) ds)
+  | cons (DArr pub _ c) ds =>
+      List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits)))
+        (List.seq 0 (data_count ι c))
+      ++ concretize_data ι (off + 4 * N.of_nat (data_count ι c)) ds
+  | cons (DAt _) ds => concretize_data ι off ds
+  end.
+
+(* What the ImplPre needs of the valuation: every cell in range, a pinned
+   value public and sync, a count sync, an anchor at the current address. *)
+Fixpoint data_ok {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spec Σ)) : Prop :=
+  match ds with
+  | nil => True
+  | cons (DCell pub v) ds =>
+      (off + 4 <= maxAddr)%N
+      /\ (match v with
+          | Some t => pub = true /\ inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι))
+          | None => True end)
+      /\ data_ok ι (off + 4) ds
+  | cons (DArr pub _ c) ds =>
+      inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
+      /\ (off + 4 * N.of_nat (data_count ι c) <= maxAddr)%N
+      /\ data_ok ι (off + 4 * N.of_nat (data_count ι c)) ds
+  | cons (DAt x) ds => inst (T := fun Σ => Term Σ ty_xlenbits) x ι = ty.SyncVal (@bv.of_N xlenbits off) /\ data_ok ι off ds
+  end.
+
+Lemma lookup_map_seq0 {A} (f : nat -> A) (n i : nat) : (i < n)%nat ->
+  List.map f (List.seq 0 n) !! i = Some (f i).
+Proof.
+  intros H. change (List.map f (List.seq 0 n)) with (f <$> List.seq 0 n).
+  rewrite list_lookup_fmap lookup_seq_lt; [reflexivity|exact H].
+Qed.
+
+(* HDataAddrs BY CONSTRUCTION *)
+Lemma concretize_data_addrs {Σ} (ι : Valuation Σ) (ds : list (data_spec Σ)) :
+  forall off i s, concretize_data ι off ds !! i = Some s ->
+  s.1.1 = bv.of_N (off + 4 * N.of_nat i).
+Proof.
+  induction ds as [|d ds IH]; intros off i s Hi; [discriminate|].
+  destruct d as [pub v|pub dir c|x]; cbn [concretize_data] in Hi.
+  - destruct i as [|i]; cbn in Hi.
+    + injection Hi as <-. cbn. f_equal; lia.
+    + rewrite (IH _ _ _ Hi). f_equal; lia.
+  - destruct (Nat.lt_ge_cases i (data_count ι c)) as [Hl|Hl].
+    + rewrite lookup_app_l in Hi; [|rewrite length_map length_seq; exact Hl].
+      rewrite lookup_map_seq0 in Hi; [|exact Hl]. injection Hi as <-. reflexivity.
+    + rewrite lookup_app_r in Hi; [|rewrite length_map length_seq; exact Hl].
+      rewrite length_map length_seq in Hi.
+      rewrite (IH _ _ _ Hi). f_equal; lia.
+  - exact (IH _ _ _ Hi).
+Qed.
