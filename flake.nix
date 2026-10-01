@@ -31,7 +31,6 @@
         stdpp = "1.13.0";
       };
 
-      rocqPackages900 = patchRocqPackages pkgs.coqPackages_9_0 iris45;
       rocqPackages920 = patchRocqPackages pkgs.rocqPackages_9_2 iris45;
 
       mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
@@ -39,11 +38,9 @@
     in
     rec {
       packages = rec {
-        default = rocq900;
-        rocq900 = rocqPackages900.katamaran;
+        default = rocq920;
         rocq920 = rocqPackages920.katamaran;
 
-        rocq900-deps = mkDeps rocq900;
         rocq920-deps = mkDeps rocq920;
       };
     }
