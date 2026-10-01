@@ -671,3 +671,36 @@ interp_arr_intro, generic HDataAddrs).
 - Open: what in the executor's per-node cost (19 ms/node) dominates;
   the remaining leaves (range facts on M, a shift identity, secLeak of an
   evar); peak RSS (closer + Qed); Sym4/Sym6 on D0N.
+
+### 2026-10-02: THE PARAMETRIC MULADD IS NONINTERFERENT, END TO END
+
+`ZZMbSym6GResult.sym6_noninterferent` (untracked probe), axiom-clean
+(pure_decode, mmioenv):
+
+    forall init_addr b, 64 < b < 65536 ->
+      init_addr + 1128 + 4 (2M + 6) < lenAddr ->
+      noninterferent_strong init_addr sym6_instrs (init_addr + 1128)
+        (sym_reg_specs init_addr b) (sym_mem_specs init_addr b)
+
+M = (31 + b) >> 5, i.e. every mlen >= 3 whose data fits the 4 KB address
+space.  The whole 282-instruction function, both mblr paths, ONE symbolic VC
+(ZZMbSym6GV, Qed, 652 s, 10.5 GB).  What it took, in order:
+- n-only loops IN/KN/MT (template ZZArrLoopN: secLeak n, exact done count
+  k + n), D0N, the n-only tail (ZZMbTailN, 159 instructions as one block).
+- framework: replay in the VC pipeline + public-zero atoms (a1eb199a),
+  compositional secLeakT (1c9cfee1), and blk_code_in walking an OFFSET
+  (db668dae): a block longer than 63 instructions failed its own
+  containment check -- peval's qfuel = 64 stopped normalising the nested key.
+- the closer: one hypotheses-only cbn per goal + a secLeak-evar case
+  (ZZMbClose; tail closer 124 -> 48 s).
+- DATA SPECS IN THE GENERATOR (c1078da1): GenSegment.data_spec (cells,
+  arrays with TERM counts, anchors), gen_data_at, concretize_data (the
+  statement quotes it), HDataAddrs by construction (concretize_data_addrs),
+  and EndToEnd.gen_implpre_data, the data ImplPre proved once.  Sym6G's
+  memory is generator output; its ImplPre is gen_implpre (registers, via
+  gen_pre_rel_concretize + gen_regs_at_inst) + gen_implpre_data + eight pure
+  facts about b.
+- Open: promote the probes (ZZArr*N, ZZArrD0N, ZZMbTailN(V), ZZMbSym6G(V),
+  ZZMbSym6GResult, ZZMbClose) to tracked files + AXIOM_CLEAN_THMS; the
+  examples and the heavy chain were NOT rebuilt after the framework commits
+  of 10-01/10-02 -- run the gate before merging.
