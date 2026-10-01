@@ -741,6 +741,32 @@ Section CFGVerificationDerived.
     (* THE BLOCK CONTAINMENT CHECK IS SOUND: a passing symbolic blk_code_in
        gives the concrete cblk_code_in at the pc's value.  Per address it is
        lookup_instr_sound; the address steps as `apc + 4` on both sides. *)
+    Lemma blk_code_in_at_sound {w} (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word) (tbl : SInstrTableW w) (ι : Valuation w)
+        (l : list AST) :
+      forall (apc : STerm ty_xlenbits w) (v : bv xlenbits) (k : N),
+      blk_code_in_at tbl apc k l = true ->
+      itable_relW instrs words tbl ι ->
+      inst apc ι = ty.SyncVal v ->
+      cblk_code_in instrs (bv.add v (bv.of_N k)) l.
+    Proof.
+      induction l as [|i l IH]; intros apc v k Hc Hrel Hv; [exact I|].
+      cbn [blk_code_in_at] in Hc. cbn [cblk_code_in].
+      destruct (lookup_instr tbl _) as [[x ai]|] eqn:Hlk; [|discriminate].
+      destruct (eq_dec (ai_instr ai) i) as [<-|]; [|discriminate].
+      destruct (lookup_instr_sound _ Hlk Hrel) as (v' & Hv' & Hm & _).
+      assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits)
+                     (term_bvadd apc (term_val ty_xlenbits (bv.of_N k))) ι
+                   = ty.SyncVal (bv.add v (bv.of_N k)))
+        by (cbn; rewrite Hv; reflexivity).
+      rewrite Ha in Hv'. injection Hv' as <-.
+      split.
+      - rewrite lookup_fmap Hm. reflexivity.
+      - assert (E : bv.of_N (n := xlenbits) (k + 4) = bv.add (bv.of_N k) (bv.of_N 4))
+          by now rewrite bv.of_N_add.
+        pose proof (IH _ _ _ Hc Hrel Hv) as H. rewrite E bv.add_assoc in H. exact H.
+    Qed.
+
     Lemma blk_code_in_sound {w} (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word) (tbl : SInstrTableW w) (ι : Valuation w)
         (l : list AST) :
@@ -750,15 +776,10 @@ Section CFGVerificationDerived.
       inst apc ι = ty.SyncVal v ->
       cblk_code_in instrs v l.
     Proof.
-      induction l as [|i l IH]; intros apc v Hc Hrel Hv; [exact I|].
-      cbn [blk_code_in] in Hc. cbn [cblk_code_in].
-      destruct (lookup_instr tbl apc) as [[x ai]|] eqn:Hlk; [|discriminate].
-      destruct (eq_dec (ai_instr ai) i) as [<-|]; [|discriminate].
-      destruct (lookup_instr_sound apc Hlk Hrel) as (v' & Hv' & Hm & _).
-      rewrite Hv in Hv'. injection Hv' as <-.
-      split.
-      - rewrite lookup_fmap Hm. reflexivity.
-      - apply (IH _ _ Hc Hrel). cbn. rewrite Hv. reflexivity.
+      intros apc v Hc Hrel Hv.
+      pose proof (@blk_code_in_at_sound w instrs words tbl ι l apc v 0 Hc Hrel Hv) as H.
+      change (bv.of_N (n := xlenbits) 0) with (@bv.zero xlenbits) in H.
+      rewrite bv.add_zero_r in H. exact H.
     Qed.
 
 

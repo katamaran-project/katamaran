@@ -1027,23 +1027,36 @@ Section CFGVerificationDerived.
        `apc` on in steps of 4, in this table.  Checked at the firing site, so
        the soundness proof reads containment off the concrete run instead of
        taking it as a per-program premise (it replaced blocksSoundAt's
-       containment conjunct and Adequacy.blk_span_sub).  The address steps as
-       `apc + 4`, the recursion instrs_of_list uses, so the concrete side is
-       `bv.add v 4` definitionally; peval reassociates it against the
-       `off + base` keys table_of_list builds.  No variables are allocated. *)
-    Fixpoint blk_code_in {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
-        (l : list AST) : bool :=
+       containment conjunct and Adequacy.blk_span_sub).  The k-th
+       instruction is looked up at `apc + 4k` (an offset, see below); the
+       concrete side still steps `bv.add v 4` as instrs_of_list does, and
+       blk_code_in_sound bridges the two.  peval reassociates the key against
+       the `off + base` keys table_of_list builds.  No variables are
+       allocated. *)
+    (* The walk carries a byte OFFSET k and looks up apc + k: the key is
+       depth 2 for any block length.  It used to step `apc + 4` per
+       instruction, nesting one level each time, and past 64 levels peval's
+       ring normal form (qfuel) no longer folds it -- a block longer than 63
+       instructions failed its own check (the parametric muladd tail, 159;
+       2026-10-01).  `peval` in the recursive call's ARGUMENT instead hung the
+       Fixpoint's elaboration, hence the offset. *)
+    Fixpoint blk_code_in_at {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
+        (k : N) (l : list AST) : bool :=
       match l with
       | nil     => true
       | i :: l' =>
-          match lookup_instr tbl apc with
+          match lookup_instr tbl (term_bvadd apc (term_val ty_xlenbits (bv.of_N k))) with
           | Some (_, ai) =>
               if eq_dec (ai_instr ai) i
-              then blk_code_in tbl (term_bvadd apc (term_val ty_xlenbits (bv.of_N 4))) l'
+              then blk_code_in_at tbl apc (k + 4) l'
               else false
           | None => false
           end
       end.
+
+    Definition blk_code_in {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
+        (l : list AST) : bool :=
+      blk_code_in_at tbl apc 0 l.
 
     (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
     (* peval; NOT part of the soundness chain). *)
