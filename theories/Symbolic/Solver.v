@@ -3036,6 +3036,127 @@ Module Type GenericSolverOn
         end.
     Qed.
 
+    (* ---- dropping PUBLIC zero atoms (2026-10-01) -------------------------
+       peval's ring normal form keeps a cancelled atom as `0 * a` (x - x
+       becomes `0 * x`): over RelVal that atom is what keeps a NonSyncVal
+       sum NonSyncVal, so dropping it is unsound IN GENERAL
+       (PLAN-bv-arith-solver.md).  When `a` is known PUBLIC (`secLeakT`,
+       i.e. under `wco`), `0 * a` is `SyncVal 0` and `t + 0 * a` is `t`
+       exactly, for SyncVal and NonSyncVal `t` alike -- so the atom can go.
+       Without this, `x + 0 * M = x` cannot be decided syntactically and
+       survives to the closer (four such leaves in the parametric muladd
+       tail, once replay has normalised the late-substituted identities).
+       Only peval can produce the atom, and only the solver knows `wco`,
+       hence here.  The walk is over a sum's spine; the views are
+       non-recursive Equations (a recursive one with nested patterns has
+       no covering) and the recursion carries a depth fuel, which soundness
+       does not depend on. *)
+    Equations bvmul_zero_view {Σ n} (t : Term Σ (ty.bvec n))
+      : option (Term Σ (ty.bvec n)) :=
+      bvmul_zero_view (term_binop bop.bvmul (term_val _ z) a) :=
+        if eq_dec z bv.zero then Some a else None;
+      bvmul_zero_view _ := None.
+
+    Equations bvadd_view {Σ n} (t : Term Σ (ty.bvec n))
+      : option (Term Σ (ty.bvec n) * Term Σ (ty.bvec n)) :=
+      bvadd_view (term_binop bop.bvadd l r) := Some (l, r);
+      bvadd_view _ := None.
+
+    Fixpoint drop_pub_zero_aux (fuel : nat) {w : World} {n}
+      (t : Term w (ty.bvec n)) : Term w (ty.bvec n) :=
+      match fuel with
+      | O => t
+      | S f =>
+          match bvadd_view t with
+          | Some (l, r) =>
+              match bvmul_zero_view r with
+              | Some a => if secLeakT a then drop_pub_zero_aux f l
+                          else term_binop bop.bvadd (drop_pub_zero_aux f l) r
+              | None =>
+                  match bvmul_zero_view l with
+                  | Some a => if secLeakT a then drop_pub_zero_aux f r
+                              else term_binop bop.bvadd l (drop_pub_zero_aux f r)
+                  | None => term_binop bop.bvadd (drop_pub_zero_aux f l) r
+                  end
+              end
+          | None => t
+          end
+      end.
+
+    Definition drop_pub_zero {w : World} {σ} (t : STerm σ w) : STerm σ w :=
+      match σ return STerm σ w -> STerm σ w with
+      | ty.bvec n => fun t => drop_pub_zero_aux 64 t
+      | _ => fun t => t
+      end t.
+
+    Lemma bvadd_view_spec {Σ n} (t : Term Σ (ty.bvec n)) l r :
+      bvadd_view t = Some (l, r) -> t = term_binop bop.bvadd l r.
+    Proof. funelim (bvadd_view t); intros H; try discriminate; now inversion H. Qed.
+
+    Lemma bvmul_zero_view_spec {Σ n} (t : Term Σ (ty.bvec n)) a :
+      bvmul_zero_view t = Some a ->
+      t = term_binop bop.bvmul (term_val (ty.bvec n) bv.zero) a.
+    Proof.
+      funelim (bvmul_zero_view t); intros H; try discriminate.
+      destruct eq_dec; [|discriminate]. subst. now inversion H.
+    Qed.
+
+    Lemma bv_mul_zero_l {n} (y : bv n) : bv.mul bv.zero y = bv.zero.
+    Proof.
+      apply bv.unsigned_inj; rewrite bv.unsigned_mul; cbn.
+      rewrite BinInt.Z.mul_0_l; apply Zdiv.Zmod_0_l.
+    Qed.
+
+    Lemma relval_add_pub_zero_r {n} (x v : RelVal (ty.bvec n)) : secLeak v ->
+      bop.evalRel bop.bvadd x (bop.evalRel bop.bvmul (SyncVal bv.zero) v) = x.
+    Proof.
+      destruct v as [v|v1 v2]; [|intros []]. intros _.
+      destruct x; cbn; f_equal; now rewrite ?bv_mul_zero_l ?bv.add_zero_r.
+    Qed.
+
+    Lemma relval_add_pub_zero_l {n} (x v : RelVal (ty.bvec n)) : secLeak v ->
+      bop.evalRel bop.bvadd (bop.evalRel bop.bvmul (SyncVal bv.zero) v) x = x.
+    Proof.
+      destruct v as [v|v1 v2]; [|intros []]. intros _.
+      destruct x; cbn; f_equal; now rewrite ?bv_mul_zero_l ?bv.add_zero_l.
+    Qed.
+
+    Lemma secLeakT_inst {w : World} {σ} (a : Term w σ) (ι : Valuation w) :
+      Is_true (secLeakT a) -> instprop (wco w) ι -> secLeak (inst a ι).
+    Proof.
+      intros H Hw. apply secLeakT_spec in H. destruct H as [H].
+      specialize (H ι Hw I). cbn in H. exact H.
+    Qed.
+
+    Lemma drop_pub_zero_aux_inst (f : nat) {w : World} {n}
+      (t : Term w (ty.bvec n)) (ι : Valuation w) :
+      instprop (wco w) ι -> inst (drop_pub_zero_aux f t) ι = inst t ι.
+    Proof.
+      intros Hw. revert t. induction f as [|f IH]; intros t; [reflexivity|].
+      cbn [drop_pub_zero_aux].
+      destruct (bvadd_view t) as [[l r]|] eqn:Hv; [|reflexivity].
+      apply bvadd_view_spec in Hv; subst t.
+      destruct (bvmul_zero_view r) as [a|] eqn:Hr.
+      - apply bvmul_zero_view_spec in Hr; subst r.
+        destruct (secLeakT a) eqn:Hs.
+        + rewrite IH. cbn. symmetry.
+          apply relval_add_pub_zero_r, (secLeakT_inst a ι); [now rewrite Hs|exact Hw].
+        + cbn. now rewrite IH.
+      - destruct (bvmul_zero_view l) as [a|] eqn:Hl.
+        + apply bvmul_zero_view_spec in Hl; subst l.
+          destruct (secLeakT a) eqn:Hs.
+          * rewrite IH. cbn. symmetry.
+            apply relval_add_pub_zero_l, (secLeakT_inst a ι); [now rewrite Hs|exact Hw].
+          * cbn. now rewrite IH.
+        + cbn. now rewrite IH.
+    Qed.
+
+    Lemma drop_pub_zero_inst {w : World} {σ} (t : STerm σ w) (ι : Valuation w) :
+      instprop (wco w) ι -> inst (drop_pub_zero t) ι = inst t ι.
+    Proof.
+      intros Hw. destruct σ; try reflexivity. now apply drop_pub_zero_aux_inst.
+    Qed.
+
     (* ---- soundness of the fetch-bound discharge --------------------------
        Everything below stays at the `instprop` (plain Prop) level and is
        lifted to `Pred w` exactly once, in `try_fetch_bound_spec`.  That is
@@ -3297,13 +3418,17 @@ Module Type GenericSolverOn
          equality + structural decomposition) cannot refute -- leaving one
          live dead path per trip.  See `try_bvadd_cancel_propeq` above. *)
       | formula_propeq t1 t2   =>
-          match try_bvadd_cancel_propeq (peval t1) (peval t2) with
+          (* public zero atoms dropped after peval, before every rule below:
+             see `drop_pub_zero` *)
+          let t1 := drop_pub_zero (peval t1) in
+          let t2 := drop_pub_zero (peval t2) in
+          match try_bvadd_cancel_propeq t1 t2 with
           | Some d => d
           | None =>
               (* ...and if the shared summand is the LITERAL rather than the
                  term, WEAKEN instead of deciding: see
                  `try_bvadd_cancel_val_propeq` above. *)
-              match try_bvadd_cancel_val_propeq (peval t1) (peval t2) with
+              match try_bvadd_cancel_val_propeq t1 t2 with
               | Some d => d
               (* PEVAL'D, like every other arm of this match and like all four
                  arms of simplify_relop.  This branch was the ONE that passed
@@ -3319,7 +3444,7 @@ Module Type GenericSolverOn
                  try_unify_eq -- which fires only on a BARE term_var -- can
                  never eliminate the angelic. *)
               | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2)
-                          (peval t1) (peval t2)
+                          t1 t2
               end
           end
       | formula_secLeak t      => simplify_secLeak (peval t)
@@ -3381,6 +3506,7 @@ Module Type GenericSolverOn
            under a still-unapplied [⊣⊢] -- ι must be introduced first. *)
         + apply try_bvadd_cancel_propeq_spec in Hc; rewrite Hc.
           constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+          rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
           now rewrite !peval_sound.
         + match goal with
           | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
@@ -3388,12 +3514,14 @@ Module Type GenericSolverOn
           end.
           * apply try_bvadd_cancel_val_propeq_spec in Hv; rewrite Hv.
             constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+            rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
             now rewrite !peval_sound.
           * rewrite simplify_propeq_spec.
             (* the peval bridge, same three lines as the cancellation cases
                above: peval_sound is stated PER-VALUATION, so it cannot be
                rewritten under a still-unapplied `⊣⊢` -- ι must come first. *)
             constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+            rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
             now rewrite !peval_sound.
       - rewrite simplify_secLeak_spec.
         constructor; intros ι Hwco; cbn; unfold instpred_formula_secLeak.

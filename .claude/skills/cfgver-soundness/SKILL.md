@@ -32,7 +32,7 @@ form) plus its side premises
 
 ```
 valid_<prog>_cfg_contract   (vm_compute. solve_vc.)   — the symbolic VC over the
-        ↓  safeE (postprocess (scfg_verification_condition        term table
+        ↓  safeE (cfg_postprocess (scfg_verification_condition    term table
              (extend_to_minimal_pre P) tbl exit …))      (tbl/exit, not the gmap)
 sound_scfg_verification_condition_myWP2  — bridges via itable_faith/etable_faith
         ↓  → myWP2_loop ExitCondIprop

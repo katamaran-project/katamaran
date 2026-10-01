@@ -91,8 +91,12 @@ rule and **core-executor-internals** for the mechanism.
 ### A residual that looks trivially provable may be post-`solve_evars`
 
 The single most expensive trap in reading a VC. `ValidCFGVerifierContract` is
-`safeE (postprocess …)`, and `postprocess` runs `solve_evars`/`solve_uvars`,
-which SUBSTITUTE angelic/demonic variables throughout the tree. So the formula
+`safeE (cfg_postprocess …)`, and `postprocess` runs `solve_evars`/`solve_uvars`,
+which SUBSTITUTE angelic/demonic variables throughout the tree.  Since
+2026-10-01 `cfg_postprocess` is `postprocess ∘ replay ∘ postprocess`, so the
+substituted asserts ARE re-offered to the solver once (`replay`); a residual
+that still looks trivial after that is genuinely beyond the solver, e.g. a
+ring identity whose atoms differ (see core-executor-internals, drop_pub_zero). So the formula
 you read in a residual is not necessarily the formula the solver was given. The
 tell is a residual that is obviously discharged by an `assumek` sitting directly
 above it — as `assumek (secLeak p)` / `assertk (secLeak p)` did for a year.

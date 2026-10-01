@@ -81,7 +81,8 @@ internally).
 (* Contracts.v -- THE VC, over an annotated copy `a` of the program *)
 Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
   cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
-(* Valid_CFG_VC p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
+(* Valid_CFG_VC p exit P i fl Q := safeE (cfg_postprocess (CFG_VC_triple p exit P i fl Q)),
+   cfg_postprocess = postprocess o SPureSpec.replay o postprocess (since 2026-10-01). *)
 
 (* Validity.v (heavy, small; re-exported by EndToEnd.v) -- the SEALED
    property, built only via ValidCFGVerifierContract_intro / solve_valid *)

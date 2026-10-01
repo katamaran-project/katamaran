@@ -125,6 +125,19 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
 
+    (* THE VC PIPELINE: postprocess, then REPLAY, then postprocess again --
+       MicroSail's own (SymbolicExecutor.v, ValidContractWithFuel).  The first
+       postprocess solves evars and substitutes their witnesses; replay
+       re-runs the solved tree through the solver-backed monad, so every
+       assert is re-offered to the solver in its SUBSTITUTED form.  Without
+       it, a formula built before an angelic block-entry variable was pinned
+       reached the closer as a ring identity peval never saw, e.g.
+       `-4*M + (4 + (m + 4*M)) = 4 + m` (parametric muladd tail: 20 leaves
+       -> 14, closer 398 -> 248 s, construction +1.7%; 2026-10-01).
+       Soundness: postprocess_sound + replay_sound (Adequacy.v). *)
+    Definition cfg_postprocess (s : SymProp.SymProp [ctx]) : SymProp.SymProp [ctx] :=
+      postprocess (SPureSpec.replay (w := wnil) (postprocess s)).
+
     (* init_addr is unused by the symbolic VC; it is kept in the signature so
        Valid_CFG_VC remains a direct cfg_map target. *)
     Definition Valid_CFG_VC {Σ}
@@ -134,7 +147,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (i  : list AnnotInstr)
       (fl : nat)
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      safeE (postprocess (CFG_VC_triple p exits P i fl Q)).
+      safeE (cfg_postprocess (CFG_VC_triple p exits P i fl Q)).
 
     (* CFGVerifierContract and cfg_map MOVED TO Verifier.v on 2026-09-22
        (PLAN-contract-ast Phase 4).  `ai_block` must carry a real contract, and
@@ -170,7 +183,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
       cfg_map c (fun p exits P _ fl Q =>
-        VerificationCondition (postprocess (CFG_VC_triple p exits P a fl Q))).
+        VerificationCondition (cfg_postprocess (CFG_VC_triple p exits P a fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a
        CFGVerifierContract literal lives as a Local Notation in
