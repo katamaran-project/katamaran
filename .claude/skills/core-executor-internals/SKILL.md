@@ -331,6 +331,14 @@ nested `bvmul` pattern has no covering ("Unable to build a covering"). Spec:
 `drop_pub_zero_inst` (value equality under `wco`), used as one extra `rewrite`
 in each of the arm's three endgames before `peval_sound`.
 
+**`secLeakT` is COMPOSITIONAL since 2026-10-01** (Emiel chose global over a
+local `secLeakT_deep`): a literal, a binop/unop whose operands pass, or the
+exact term in `wco`. Before, `(31 + sext b) >> 5` over a public `b` failed the
+guard, so `drop_pub_zero` never fired on the tail's four `t + 0*M = t` leaves
+(measured: they still reached the closer). After: leaves 14 -> 10, goals
+8 -> 4, `solve_vc` 36.5 -> 18 s. Its spec needs `instpred_formula_secLeak_binop`
+/`_unop`, moved above it into `Section SecLeakCompositional`.
+
 Two preamble-vs-file differences to match when prototyping (the first cost a ~5 min build):
 `Solver.v` parses `rewrite` SSReflect-style (iris.proofmode is imported), so
 `rewrite ?a, ?b` is a syntax error there — write `rewrite ?a ?b`; and a

@@ -221,20 +221,78 @@ Module Type GenericSolverOn
           Unset Printing Coercions.
     Qed.
 
-    Definition secLeakT {w : World} {σ} (t : Term w σ) : bool :=
+    (* moved up from SimplifySecLeakSpec: secLeakT's spec needs the
+       compositional direction (2026-10-01) *)
+    Section SecLeakCompositional.
+      Context [w : World].
+
+      Lemma instpred_formula_secLeak_binop {σ1 σ2 σ3} (t1 : Term w σ1) (t2 : Term w σ2) op :
+        instpred_formula_secLeak t1 ∗ instpred_formula_secLeak t2
+          ⊣⊢ instpred_formula_secLeak (σ := σ3) (term_binop op t1 t2).
+      Proof.
+        crushPredEntails2.
+        - destruct H0.
+          unfold instpred_formula_secLeak in *. cbn.
+          destruct inst, inst; try contradiction; auto.
+        - unfold instpred_formula_secLeak in *. cbn in *.
+          rewrite secLeakOtherDef in H0.
+          apply ty.liftBinOpSyncImpliesSyncArgs in H0.
+          destruct H0 as (v1 & v2 & eq1 & eq2 & H0).
+          rewrite ty.comProjLeftLiftBinOp in H0.
+          constructor.
+          destruct inst; inversion eq1. auto. exact I.
+          destruct (inst t2 ι); inversion eq2. auto. exact I.
+          (* TODO: Niet bepaald proper *)
+      Qed.
+
+      Lemma instpred_formula_secLeak_unop {σ1 σ2} (t : Term w σ1) op :
+        instpred_formula_secLeak t ⊣⊢ instpred_formula_secLeak (σ := σ2) (term_unop op t).
+      Proof.
+        crushPredEntails2.
+        - unfold instpred_formula_secLeak in *. cbn.
+          destruct inst; try contradiction; auto.
+        - unfold instpred_formula_secLeak in *. cbn in *.
+          rewrite secLeakOtherDef in H0.
+          destruct inst; cbn; inversion H0.
+          tauto.
+      Qed.
+
+    End SecLeakCompositional.
+
+    (* COMPOSITIONAL since 2026-10-01: a lifted binop/unop of public terms is
+       public (instpred_formula_secLeak_binop/_unop), so a term is accepted if
+       it is a literal, its operands are accepted, or the path condition says
+       so of the exact term.  Before, only the last two: `(31 + sext b) >> 5`
+       over a public `b` was NOT public to the solver, which kept every rule
+       guarded by secLeakT (drop_pub_zero, try_bvadd_cancel, Term_eqb_relval)
+       from firing on it -- parametric muladd tail, four `t + 0*M = t` leaves
+       reached the closer.  Cost: one wco scan per node that falls back. *)
+    Fixpoint secLeakT {w : World} {σ} (t : Term w σ) : bool :=
       match t with
       | term_val _ v => true
+      | term_binop op t1 t2 =>
+          (secLeakT t1 && secLeakT t2) || pathconditions_contains_secLeakT (wco w) t
+      | term_unop op t1 => secLeakT t1 || pathconditions_contains_secLeakT (wco w) t
       | _ => pathconditions_contains_secLeakT (wco w) t
       end.
 
     Lemma secLeakT_spec {w : World} {σ} (t : Term w σ) :
       secLeakT t -> ⊢ instpred (formula_secLeak t) .
     Proof.
-      intros H.
-      induction t;
-        try (iApply pathconditions_contains_secLeakT_spec;
-               by iPureIntro).
-      iApply instpred_formula_secLeak_val.
+      induction t; cbn [secLeakT]; intros H;
+        try (iApply pathconditions_contains_secLeakT_spec; by iPureIntro).
+      - iApply instpred_formula_secLeak_val.
+      - apply Bool.orb_prop_elim in H as [H|H].
+        + apply Bool.andb_prop_elim in H as [H1 H2].
+          change (⊢ instpred_formula_secLeak (term_binop op t1 t2)).
+          rewrite -instpred_formula_secLeak_binop.
+          iSplit; [iApply (IHt1 H1)|iApply (IHt2 H2)].
+        + iApply pathconditions_contains_secLeakT_spec; by iPureIntro.
+      - apply Bool.orb_prop_elim in H as [H|H].
+        + change (⊢ instpred_formula_secLeak (term_unop op t)).
+          rewrite -instpred_formula_secLeak_unop.
+          iApply (IHt H).
+        + iApply pathconditions_contains_secLeakT_spec; by iPureIntro.
     Qed.
 
     Definition Term_eqb_relval {w : World} [σ] (t1 t2 : Term w σ) : bool :=
@@ -2264,37 +2322,6 @@ Module Type GenericSolverOn
 
     Section SimplifySecLeakSpec.
       Context [w : World].
-
-      Lemma instpred_formula_secLeak_binop {σ1 σ2 σ3} (t1 : Term w σ1) (t2 : Term w σ2) op :
-        instpred_formula_secLeak t1 ∗ instpred_formula_secLeak t2
-          ⊣⊢ instpred_formula_secLeak (σ := σ3) (term_binop op t1 t2).
-      Proof.
-        crushPredEntails2.
-        - destruct H0.
-          unfold instpred_formula_secLeak in *. cbn.
-          destruct inst, inst; try contradiction; auto.
-        - unfold instpred_formula_secLeak in *. cbn in *.
-          rewrite secLeakOtherDef in H0.
-          apply ty.liftBinOpSyncImpliesSyncArgs in H0.
-          destruct H0 as (v1 & v2 & eq1 & eq2 & H0).
-          rewrite ty.comProjLeftLiftBinOp in H0.
-          constructor.
-          destruct inst; inversion eq1. auto. exact I.
-          destruct (inst t2 ι); inversion eq2. auto. exact I.
-          (* TODO: Niet bepaald proper *)
-      Qed.
-
-      Lemma instpred_formula_secLeak_unop {σ1 σ2} (t : Term w σ1) op :
-        instpred_formula_secLeak t ⊣⊢ instpred_formula_secLeak (σ := σ2) (term_unop op t).
-      Proof.
-        crushPredEntails2.
-        - unfold instpred_formula_secLeak in *. cbn.
-          destruct inst; try contradiction; auto.
-        - unfold instpred_formula_secLeak in *. cbn in *.
-          rewrite secLeakOtherDef in H0.
-          destruct inst; cbn; inversion H0.
-          tauto.
-      Qed.
 
       Lemma instpred_formula_secLeak_union {U : unioni} {K0 : unionk U} (t : Term w (unionk_ty U K0)) :
         instpred (formula_secLeak t) ⊣⊢ instpred_formula_secLeak (term_union U K0 t).
