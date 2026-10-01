@@ -250,7 +250,9 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
              end;
       (* Normalize away equalities. *)
       repeat match goal with
-             | H : _ ≡{_}≡ _ |-  _ => apply (discrete_iff _ _) in H
+             | H : ?a ≡{_}≡ ?b |-  _ =>
+                assert (Hd : TCOr (Discrete a) (Discrete b)) by tc_solve;
+                apply (discrete_iff _ _) in H
              | H : _ ≡ _ |-  _ => apply leibniz_equiv in H
              | _ => progress simplify_eq
              end;
@@ -269,8 +271,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        registers contain a safe value (interp). *)
     Program Definition interp_gprs : IMemValne -n> iProp Σ :=
       λne interp, ([∗ list] r ∈ GPRs, (∃ w, MinCaps_ptsreg r w ∗ interp w))%I.
-    (* Solve Obligations with solve_proper. *)
-    Next Obligation. Admitted.
+    Solve Obligations with solve_proper.
 
     (* interp_loop is the weakest precondition of the loop of our machine
        with as postcondition True. *)
@@ -288,8 +289,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        P holds for the contents at addr a. *)
     Program Definition interp_ref_inv (a : Addr) : IMemValne -n> iProp Σ :=
       λne P, (∃ w, pointsto a (DfracOwn 1) w ∗ P w)%I.
-    (* Solve Obligations with solve_proper. *)
-    Next Obligation. Admitted.
+    Solve Obligations with solve_proper.
 
     (* interp_cap_inv expresses the safe relation on capabilities. A capability
        is safe if all the addressable locations are safe as well. *)
@@ -326,8 +326,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
        for the readonly capability with the given begin, end and cursor. *)
     Program Definition enter_cond (b e a : Addr) : IMemValne -n> iProp Σ :=
       λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
-    (* Solve Obligations with solve_proper. *)
-    Next Obligation. Admitted.
+    Solve Obligations with solve_proper.
 
     (* interp_expression states that the given capability should be readonly
        and that the enter_cond needs to hold for it. *)
