@@ -75,8 +75,17 @@ is only `Adequacy.instrsAndDataMemory`'s `HDataAddrs` premise.
   `Example/ZZArrB4Probe.v` (untracked): a word behind pointer k read at byte
   offset 1 via bytes_of_words + split + take_first — VC green.  Full Results
   closure green after it (2496 s user, 7.4 GB).
-- **Still open** — B1 (`DElems w` for w ∉ {1,4}: halfwords), the reverse
-  bytes→words conversion, 8⇄4: all need a general `ptstomem (k·w)` ⇄ k × `ptstomem w`
+- **B1 / B4 closed** (`d68415d9`, 2026-10-02, branch issue/arr-regroup):
+  `clem_arr_to_bytes pub u` and `clem_arr_of_bytes pub u`, u : RgWidth
+  (2/4/8 bytes).  The general k·w ⇄ w split turned out NOT to need casts:
+  `S k * byte` reduces to `byte + k * byte`, so a k-byte cell ⇄ k byte cells
+  is a plain induction on k (`SpecIris.rg_own_split/_join`, any RelVal).
+  of_bytes keeps the leftover `m mod k` bytes as their own array, so it has
+  no divisibility side condition.  Halfwords need no generator change:
+  `DBytes` + `of_bytes RgW2`.  8 ⇄ 4 goes through bytes.  Probe
+  `Example/ZZArrRegroupProbe.v` (lw from public bytes, lhu from private
+  bytes) green.
+- (historical) B1/B4 were thought to need a general `ptstomem (k·w)` ⇄ k × `ptstomem w`
   split at the VALUE level (`bvec ((k·w)·8)` sliced into k pieces), which
   needs dependent-type casts (`(S k·w)·8` is not definitionally
   `w·8 + (k·w)·8`).  Existing: only 4 → 1 bytes (`ptstomem4_split_bytes`).
