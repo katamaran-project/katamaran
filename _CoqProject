@@ -85,6 +85,20 @@ case_study/RiscvPmp/CFGVer/Example/CountdownComposed.v
 case_study/RiscvPmp/CFGVer/Example/TwoLoopsComposed.v
 case_study/RiscvPmp/CFGVer/Example/PaddedLoop.v
 case_study/RiscvPmp/CFGVer/Example/CountdownRec.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamInstrs.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamClose.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopD.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopDAng.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopD0.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopG.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopN.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopI.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopK.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamLoopM.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamTail.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamTailVC.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParam.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamVC.v
 case_study/RiscvPmp/CFGVer/Example/MvSwapResult.v
 case_study/RiscvPmp/CFGVer/Example/JumpsResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownResult.v
@@ -102,6 +116,7 @@ case_study/RiscvPmp/CFGVer/Example/CountdownComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/TwoLoopsComposedResult.v
 case_study/RiscvPmp/CFGVer/Example/PaddedLoopResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownRecResult.v
+case_study/RiscvPmp/CFGVer/Example/MuladdParamResult.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v
 # case_study/RiscvPmp/BinaryBlockVer/Verifier.v

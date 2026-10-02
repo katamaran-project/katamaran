@@ -55,6 +55,7 @@ SCOPE_DIRS=("case_study/RiscvPmp/CFGVer")
 # directly (with an axiom or an Admitted lemma) instead of via its `_param`. If
 # you do that, add it back to this list.
 AXIOM_CLEAN_THMS=(
+  "muladd_param_noninterferent"
   "swap_noninterferent_param"
   "jumpIfZero_noninterferent_param"
   "jmp_fwd_noninterferent_param"
