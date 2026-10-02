@@ -34,6 +34,7 @@ From Stdlib Require Import
      Numbers.DecimalString
      Strings.Ascii
      Strings.String.
+From Stdlib Require Vectors.Fin.
 
 From Equations Require Import Equations.
 From Katamaran Require Import
@@ -364,6 +365,16 @@ Module Import ctx.
         | nil      => 0
         | snoc Γ _ => S (length Γ)
         end.
+
+      (* The position of a variable counted from the end of the context, i.e.
+         the most recently bound variable is at index 0. *)
+      Definition inToFin : forall {Γ} {b : B} (bIn : In b Γ), Fin.t (length Γ) :=
+        Ctx_rect (fun Γ => forall {b : B} (bIn : In b Γ), Fin.t (length Γ))
+          (fun b bIn => match view bIn with end)
+          (fun Γ IHΓ b' b bIn => match view bIn with
+                                 | isZero => Fin.F1
+                                 | isSucc bIn => Fin.FS (IHΓ _ bIn)
+                                 end).
     End Length.
 
     Section All.
