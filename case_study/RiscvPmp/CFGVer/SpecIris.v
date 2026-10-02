@@ -848,6 +848,137 @@ Module RiscvPmpIrisInstanceWithContracts.
       iApply (interp_arr_join with "[$H1 $H2]"). exact Hle.
     Qed.
 
+    (* ---- a word array read byte by byte (clem_arr_bytes_of_words) ------- *)
+    Lemma arr_word_decomp (w : RelVal (ty.bvec (4 * byte))) :
+      exists (b0 b1 b2 b3 : RelVal (ty.bvec byte)) (r : RelVal (ty.bvec (0 * byte))),
+        w = ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (3*byte)) (σ3 := ty.bvec (4*byte)) bv.app b0
+              (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (2*byte)) (σ3 := ty.bvec (3*byte)) bv.app b1
+                (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (1*byte)) (σ3 := ty.bvec (2*byte)) bv.app b2
+                  (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (0*byte)) (σ3 := ty.bvec (1*byte)) bv.app b3 r)))
+        /\ (RiscvPmpSignature.secLeak w -> RiscvPmpSignature.secLeak b0 /\ RiscvPmpSignature.secLeak b1
+              /\ RiscvPmpSignature.secLeak b2 /\ RiscvPmpSignature.secLeak b3).
+    Proof.
+      destruct w as [v|v1 v2].
+      - destruct (bv.appView byte (3*byte) v) as [b0 r0].
+        destruct (bv.appView byte (2*byte) r0) as [b1 r1].
+        destruct (bv.appView byte (1*byte) r1) as [b2 r2].
+        destruct (bv.appView byte (0*byte) r2) as [b3 r3].
+        exists (SyncVal b0), (SyncVal b1), (SyncVal b2), (SyncVal b3), (SyncVal r3).
+        split; [reflexivity|]. intros _. cbn. tauto.
+      - destruct (bv.appView byte (3*byte) v1) as [b0 r0].
+        destruct (bv.appView byte (2*byte) r0) as [b1 r1].
+        destruct (bv.appView byte (1*byte) r1) as [b2 r2].
+        destruct (bv.appView byte (0*byte) r2) as [b3 r3].
+        destruct (bv.appView byte (3*byte) v2) as [c0 s0].
+        destruct (bv.appView byte (2*byte) s0) as [c1 s1].
+        destruct (bv.appView byte (1*byte) s1) as [c2 s2].
+        destruct (bv.appView byte (0*byte) s2) as [c3 s3].
+        exists (NonSyncVal b0 c0), (NonSyncVal b1 c1), (NonSyncVal b2 c2), (NonSyncVal b3 c3), (NonSyncVal r3 s3).
+        split; [reflexivity|]. intros [].
+    Qed.
+
+    Lemma arr_ptsto_ptstomem1 `{sailGS2 Σ} (addr : RVAddr) (b : RelVal (ty.bvec byte)) :
+      interp_ptsto addr b ⊢@{iPropI Σ} ∃ v : RelVal (ty.bvec (1*byte)), interp_ptstomem (width := 1) addr v ∗ ⌜secLeak b -> secLeak v⌝.
+    Proof.
+      iIntros "H". iExists (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (0*byte)) (σ3 := ty.bvec (1*byte)) bv.app b (SyncVal bv.nil)).
+      rewrite ptstomem_bv_app. iFrame "H". iSplit.
+      - destruct addr, b; cbn; done.
+      - iPureIntro. destruct b; cbn; tauto.
+    Qed.
+
+    Lemma arr_word_cell_bytes `{sailGS2 Σ} (pub : bool) (x : bv xlenbits) :
+      interp_arr_cell pub 4 x ⊢@{iPropI Σ}
+      [∗ list] j ∈ seq 0 4, interp_arr_cell pub 1 (bv.add x (bv.mul (bv.of_Z 1) (bv.of_nat j))).
+    Proof.
+      unfold interp_arr_cell. iIntros "[%Hr [%w [Hw %Hs]]]".
+      destruct (arr_word_decomp w) as (b0&b1&b2&b3&r&->&Hsl).
+      rewrite !ptstomem_bv_app. iDestruct "Hw" as "(H0 & H1 & H2 & H3 & _)".
+      iPoseProof (arr_ptsto_ptstomem1 with "H0") as (v0) "[H0 %S0]".
+      iPoseProof (arr_ptsto_ptstomem1 with "H1") as (v1) "[H1 %S1]".
+      iPoseProof (arr_ptsto_ptstomem1 with "H2") as (v2) "[H2 %S2]".
+      iPoseProof (arr_ptsto_ptstomem1 with "H3") as (v3) "[H3 %S3]".
+      cbn [ty.liftUnOp seq big_opL].
+      assert (E0 : bv.add x (bv.mul (bv.of_Z 1) (bv.of_nat 0)) = x).
+      { change (bv.of_nat (n := xlenbits) 0) with (@bv.zero xlenbits). rewrite bv.of_Z_one.
+        assert (Er : forall y : bv xlenbits, bv.add y (bv.mul bv.one bv.zero) = y) by (intros; ring). apply Er. }
+      assert (E1 : bv.add x (bv.mul (bv.of_Z 1) (bv.of_nat 1)) = bv.add bv.one x).
+      { change (bv.of_nat (n := xlenbits) 1) with (@bv.one xlenbits). rewrite bv.of_Z_one.
+        assert (Er : forall y : bv xlenbits, bv.add y (bv.mul bv.one bv.one) = bv.add bv.one y) by (intros; ring). apply Er. }
+      assert (E2 : bv.add x (bv.mul (bv.of_Z 1) (bv.of_nat 2)) = bv.add bv.one (bv.add bv.one x)).
+      { change (bv.of_nat (n := xlenbits) 2) with (bv.add (@bv.one xlenbits) bv.one). rewrite bv.of_Z_one.
+        assert (Er : forall y : bv xlenbits, bv.add y (bv.mul bv.one (bv.add bv.one bv.one)) = bv.add bv.one (bv.add bv.one y)) by (intros; ring). apply Er. }
+      assert (E3 : bv.add x (bv.mul (bv.of_Z 1) (bv.of_nat 3)) = bv.add bv.one (bv.add bv.one (bv.add bv.one x))).
+      { change (bv.of_nat (n := xlenbits) 3) with (bv.add (@bv.one xlenbits) (bv.add bv.one bv.one)). rewrite bv.of_Z_one.
+        assert (Er : forall y : bv xlenbits, bv.add y (bv.mul bv.one (bv.add bv.one (bv.add bv.one bv.one))) = bv.add bv.one (bv.add bv.one (bv.add bv.one y))) by (intros; ring). apply Er. }
+      rewrite E0 E1 E2 E3.
+      assert (Hm : (Z.of_N maxAddr < 2 ^ Z.of_nat xlenbits)%Z) by (vm_compute; reflexivity).
+      assert (U : forall y : bv xlenbits, (bv.unsigned y + 1 < 2 ^ Z.of_nat xlenbits)%Z -> bv.unsigned (bv.add bv.one y) = (bv.unsigned y + 1)%Z).
+      { intros y Hy. rewrite bv.unsigned_add. change (bv.unsigned (@bv.one xlenbits)) with 1%Z.
+        unfold bv.truncz. pose proof (bv.unsigned_bounds y). rewrite Z.mod_small; lia. }
+      pose proof (bv.unsigned_bounds x) as Bx.
+      assert (U1 : bv.unsigned (bv.add bv.one x) = (bv.unsigned x + 1)%Z) by (apply U; lia).
+      assert (U2 : bv.unsigned (bv.add bv.one (bv.add bv.one x)) = (bv.unsigned x + 2)%Z) by (rewrite U; [rewrite U1; lia|rewrite U1; lia]).
+      assert (U3 : bv.unsigned (bv.add bv.one (bv.add bv.one (bv.add bv.one x))) = (bv.unsigned x + 3)%Z) by (rewrite U; [rewrite U2; lia|rewrite U2; lia]).
+      cbn [ty.liftUnOp] in *. rewrite U1 U2 U3.
+      iSplitL "H0"; [iSplit; [iPureIntro; lia|iExists v0; iFrame "H0"; iPureIntro; intros Hp; apply S0, Hsl, Hs, Hp]|].
+      iSplitL "H1"; [iSplit; [iPureIntro; lia|iExists v1; iFrame "H1"; iPureIntro; intros Hp; apply S1, Hsl, Hs, Hp]|].
+      iSplitL "H2"; [iSplit; [iPureIntro; lia|iExists v2; iFrame "H2"; iPureIntro; intros Hp; apply S2, Hsl, Hs, Hp]|].
+      iSplitL "H3"; [iSplit; [iPureIntro; lia|iExists v3; iFrame "H3"; iPureIntro; intros Hp; apply S3, Hsl, Hs, Hp]|].
+      done.
+    Qed.
+
+    Lemma arr_words_cells_bytes `{sailGS2 Σ} (pub : bool) (a : bv xlenbits) (m : nat) :
+      ([∗ list] i ∈ seq 0 m, interp_arr_cell pub 4 (bv.add a (bv.mul (bv.of_Z 4) (bv.of_nat i))))
+      ⊢@{iPropI Σ} [∗ list] j ∈ seq 0 (4 * m), interp_arr_cell pub 1 (bv.add a (bv.mul (bv.of_Z 1) (bv.of_nat j))).
+    Proof.
+      induction m as [|m IH]; [iIntros "_"; done|].
+      rewrite seq_S big_sepL_app. replace (4 * S m)%nat with (4 * m + 4)%nat by lia.
+      rewrite seq_app big_sepL_app. iIntros "[Hm Hl]". iSplitL "Hm"; [iApply (IH with "Hm")|].
+      cbn [big_opL]. iDestruct "Hl" as "[Hl _]".
+      iPoseProof (arr_word_cell_bytes with "Hl") as "Hb".
+      rewrite Nat.add_0_l.
+      rewrite -{1}(Nat.add_0_r (4 * m)%nat).
+      replace (0 + (4 * m + 0))%nat with (4 * m + 0)%nat by lia.
+      rewrite <- (fmap_add_seq (4 * m)%nat 0 4). rewrite big_sepL_fmap.
+      iApply (big_sepL_mono with "Hb"). intros k j _. cbv beta.
+      assert (H4 : @bv.of_nat xlenbits (4 * m) = bv.mul (bv.of_Z 4) (bv.of_nat m)).
+      { unfold bv.of_nat. rewrite Nat2N.inj_mul. rewrite -!bv.of_Z_N bv.of_Z_mul. f_equal. lia. }
+      rewrite arr_of_nat_add H4 bv.of_Z_one.
+      assert (Er : forall a0 X M : bv xlenbits, bv.add (bv.add a0 (bv.mul (bv.of_Z 4) M)) (bv.mul bv.one X)
+                    = bv.add a0 (bv.mul bv.one (bv.add (bv.mul (bv.of_Z 4) M) X))) by (intros; ring).
+      rewrite Er. done.
+    Qed.
+
+    Lemma interp_arr_bytes_of_words `{sailGS2 Σ} (pub : bool) (a n e : bv xlenbits) :
+      (bv.bin n < 1073741824)%N ->
+      interp_arr pub 4 4 (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
+      interp_arr pub 1 1 (SV a) (SV (bv.mul (bv.of_N 4) n)) (SV e).
+    Proof.
+      intros Hn. cbn [interp_arr]. iIntros "[%He Hc]".
+      assert (Hb : bv.bin (bv.mul (@bv.of_N xlenbits 4) n) = (4 * bv.bin n)%N).
+      { unfold bv.mul. change (bv.bin (@bv.of_N xlenbits 4)) with 4%N.
+        apply bv.bin_of_N_small. change (bv.exp2 xlenbits) with 4294967296%N. lia. }
+      iSplit.
+      { iPureIntro. subst e. rewrite bv.of_Z_one.
+        change (@bv.of_N xlenbits 4) with (@bv.of_Z xlenbits 4).
+        assert (Er : forall a0 X : bv xlenbits, bv.add a0 (bv.mul (bv.of_Z 4) X) = bv.add a0 (bv.mul bv.one (bv.mul (bv.of_Z 4) X))) by (intros; ring).
+        apply Er. }
+      rewrite Hb. replace (N.to_nat (4 * bv.bin n)) with (4 * N.to_nat (bv.bin n))%nat by lia.
+      iApply (arr_words_cells_bytes with "Hc").
+    Qed.
+
+    Lemma clem_bytes_of_words_sound `{sailGS2 Σ} (pub : bool) :
+      ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_bytes_of_words pub)).
+    Proof.
+      intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+        cbn -[interp_arr]; try (iIntros "[[] _]").
+      iIntros "[Harr [%Hlt _]]".
+      iApply (interp_arr_bytes_of_words with "Harr").
+      unfold bv.ult in Hlt. change (bv.bin (@bv.of_N xlenbits 1073741824)) with 1073741824%N in Hlt. exact Hlt.
+    Qed.
+
     (* The catalogue's lemSemCFGVerif. *)
     Lemma clemSem `{sailGS2 Σ} (k : Katamaran.RiscvPmp.CFGVer.Verifier.CLem) :
       ValidLemma (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k).
@@ -857,7 +988,8 @@ Module RiscvPmpIrisInstanceWithContracts.
                   |apply clem_add_last_sound|apply clem_empty_elim_sound
                   |apply clem_lockstep_sound|apply clem_drop_sound
                   |apply clem_take_last_sound|apply clem_flip_sound
-                  |apply clem_split_sound|apply clem_join_sound].
+                  |apply clem_split_sound|apply clem_join_sound
+                  |apply clem_bytes_of_words_sound].
     Qed.
   End CLemSound.
 

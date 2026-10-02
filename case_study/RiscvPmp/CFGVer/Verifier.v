@@ -147,7 +147,11 @@ Inductive CLem : Set :=
   (* arr a n e ∗ arr e n2 e2 ∗ n ≤u n + n2 ⊢ arr a (n + n2) e2 -- two
      ADJACENT arrays as one; the second is matched precisely at the first's
      end, so the join is deterministic *)
-  | clem_arr_join (pub : bool) (w : nat) (s : Z).
+  | clem_arr_join (pub : bool) (w : nat) (s : Z)
+  (* arr pub 4 4 a n e ∗ n <u 2^30 ⊢ arr pub 1 1 a (4·n) e -- a word array
+     read byte by byte (access width below cell width); the general k·w ⇄ w
+     regroup is open (PLAN-general-endtoend.md B4) *)
+  | clem_arr_bytes_of_words (pub : bool).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -267,6 +271,13 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                     (clem_off (term_var "a") (s * Z.of_N k)))
            (clem_arr pub w s (clem_off (term_var "a") (s * Z.of_N k))
               (clem_off (term_var "n") (- Z.of_N k)) (term_var "e")))
+  | clem_arr_bytes_of_words pub =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub 4 4)
+           (asn.formula (formula_relop bop.bvult (term_var "n")
+              (term_val ty_xlenbits (bv.of_N 0x40000000)))))
+        (clem_arr pub 1 1 (term_var "a")
+           (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 4)) (term_var "n")) (term_var "e"))
   | clem_arr_join pub w s =>
       MkLemma [ctx]
         ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "n2"∷ty_xlenbits; "e2"∷ty_xlenbits] [env]
