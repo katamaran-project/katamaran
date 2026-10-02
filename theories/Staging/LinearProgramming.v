@@ -33,7 +33,8 @@ From Katamaran Require Import
      Base
      Prelude
      Syntax.Predicates
-     Symbolic.Worlds.
+     Symbolic.Worlds
+     VectorUtils.
 
 Import ctx.notations.
 Import env.notations.
@@ -62,53 +63,6 @@ Module VecUtils.
     - eapply HPf.
     - eapply HPf.
   Qed.
-
-  Section AddRemove.
-
-    Context (A : Type).
-    Equations vadd {n} (i : fin (S n)) (a : A) (v : vec A n) : vec A (S n) :=
-    | 0%fin | a | v := cons a v
-    | FS i | a | h ::: v := h ::: vadd i a v
-    .
-
-    (* Note: spurious pattern match to appease type checker *)
-    Equations vremove {n} (i : fin n) (v : vec A n) : vec A (pred n) :=
-    | 0%fin | h ::: v := v
-    | FS 0%fin | h ::: v := h ::: vremove 0%fin v
-    | FS (FS i) | h ::: v := h ::: vremove (FS i) v
-    .
-
-    (* The following would be nice as a defining equation, but alas... *)
-    Lemma vremove_FS {n} (i : fin (S n)) h (v : vec A (S n)) :
-      vremove (FS i) (h ::: v) = h ::: vremove i v.
-    Proof.
-      revert i.
-      refine (fin_S_inv _ _ _); now cbn.
-    Qed.
-
-    (* Whatever would we do without Equations? *)
-    Equations vadd_lookup_remove {n} (i : fin (S n)) (v : vec A (S n)) :
-      v = vadd i (v !!! i) (vremove i v) :=
-    | 0%fin | h ::: v := _
-    | FS 0%fin | h ::: v := f_equal (cons h) (vadd_lookup_remove 0%fin v)
-    | FS (FS i) | h ::: v := f_equal (cons h) (vadd_lookup_remove (FS i) v)
-    .
-
-  End AddRemove.
-
-  Equations vmap_vremove {n A B} (i : fin n) (v : vec A n) (f : A -> B) :
-    vmap f (vremove i v) = vremove i (vmap f v) :=
-  | 0%fin | h ::: v | f:= eq_refl
-  | FS 0%fin | h ::: v | f := f_equal _ (vmap_vremove 0%fin v f)
-  | FS (FS i) | h ::: v | f := f_equal _ (vmap_vremove (FS i) v f)
-  .
-
-  Equations vzip_with_vremove {n A1 A2 B} (i : fin n) (v1 : vec A1 n) (v2 : vec A2 n) (f : A1 -> A2 -> B) :
-    vzip_with f (vremove i v1) (vremove i v2) = vremove i (vzip_with f v1 v2) :=
-  | 0%fin | h1 ::: v1 | h2 ::: v2 | f := eq_refl
-  | FS 0%fin | h1 ::: v1 | h2 ::: v2 | f := f_equal _ (vzip_with_vremove 0%fin v1 v2 f)
-  | FS (FS i) | h1 ::: v1 | h2 ::: v2 | f := f_equal _ (vzip_with_vremove (FS i) v1 v2 f)
-  .
 
   Section DecideForall2.
 

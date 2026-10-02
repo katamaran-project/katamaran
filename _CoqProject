@@ -115,6 +115,7 @@ theories/Syntax/TypeDecl.v
 theories/Syntax/UnOps.v
 theories/Syntax/Variables.v
 theories/Tactics.v
+theories/VectorUtils.v
 
 theories/Staging/CommandStep.v
 # theories/Staging/BinaryExecutor/ShallowExecutorRel.v
