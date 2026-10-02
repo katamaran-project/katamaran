@@ -155,16 +155,8 @@ Module PolyRed.
 
   #[global] Arguments findNonZero {n} cs : simpl never.
 
-  Fixpoint eval_poly' {n} : vec Z n -> vec Z n -> Z :=
-    match n with
-      0 => fun _ _ => 0%Z
-    | S n => fun vs xs =>
-               (hd vs * hd xs +
-                  eval_poly' (tl vs) (tl xs))%Z
-    end.
-
   Equations eval_polyp_vremove {n} (i : fin n) (v1 v2 : vec Z n) :
-    eval_poly' (vremove i v1) (vremove i v2) = (eval_poly' v1 v2 - (v1 !!! i * v2 !!! i))%Z :=
+    dot (vremove i v1) (vremove i v2) = (dot v1 v2 - (v1 !!! i * v2 !!! i))%Z :=
   | 0%fin | h1 ::: v1 | h2 ::: v2 := _
   | FS 0%fin | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vremove 0%fin v1 v2)
   | FS (FS i) | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vremove (FS i) v1 v2)
@@ -174,39 +166,38 @@ Module PolyRed.
   Next Obligation. cbn. lia. Qed.
 
   Equations eval_polyp_vadd {n} a1 a2 (i : fin (S n)) (v1 v2 : vec Z n) :
-    eval_poly' (vadd i a1 v1) (vadd i a2 v2) = (a1 * a2 + eval_poly' v1 v2)%Z :=
+    dot (vadd i a1 v1) (vadd i a2 v2) = (a1 * a2 + dot v1 v2)%Z :=
   | a1 | a2 | 0%fin | v1 | v2 := _
   | a1 | a2 | FS i | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vadd a1 a2 i v1 v2)
   .
-  Next Obligation. now lia. Qed.
+  Next Obligation. cbn; lia. Qed.
 
   Definition eval_poly {n} (coeffs : Poly n) (vs : vec Z n) : Z :=
-    eval_poly' coeffs (1%Z ::: vs).
+    dot coeffs (1%Z ::: vs).
   Arguments eval_poly {n} coeffs vs : simpl never.
 
   Lemma eval_polyp_app {n1 n2} (coeffs1 : vec Z n1) (coeffs2 : vec Z n2) (vs1 : vec Z n1) (vs2 : vec Z n2) :
-    eval_poly' (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (eval_poly' coeffs1 vs1 + eval_poly' coeffs2 vs2)%Z.
+    dot (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (dot coeffs1 vs1 + dot coeffs2 vs2)%Z.
   Proof.
-    induction coeffs1.
-    - destruct (eq_sym (nil_spec vs1)); cbn; lia.
-    - destruct (eq_sym (eta vs1)); cbn.
-      rewrite IHcoeffs1.
-      lia.
+    revert vs1; induction coeffs1 as [|c n coeffs1 IH]; intros vs1.
+    - inv_vec vs1. cbn. lia.
+    - inv_vec vs1; intros x vs1. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_app {n1 n2} (coeffs1 : Poly n1) (coeffs2 : vec Z n2) (vs1 : vec Z n1) (vs2 : vec Z n2) :
-    eval_poly (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (eval_poly coeffs1 vs1 + eval_poly' coeffs2 vs2)%Z.
+    eval_poly (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (eval_poly coeffs1 vs1 + dot coeffs2 vs2)%Z.
   Proof.
     now eapply (eval_polyp_app _ _ (1%Z ::: vs1)).
   Qed.
 
   Lemma eval_polyp_mul {n} (coeffs : vec Z n) (vs : vec Z n) (c : Z) :
-    eval_poly' (vmap (Z.mul c) coeffs) vs = (c * eval_poly' coeffs vs)%Z.
+    dot (vmap (Z.mul c) coeffs) vs = (c * dot coeffs vs)%Z.
   Proof.
-    induction vs; cbn; first lia.
-    revert coeffs. refine (vec_S_inv _ _); intros c1 coeffs; cbn.
-    rewrite IHvs.
-    now lia.
+    revert coeffs; induction vs as [|x n vs IH]; intros coeffs.
+    - inv_vec coeffs. cbn. lia.
+    - inv_vec coeffs; intros c1 coeffs. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_mul {n} (coeffs : Poly n) (vs : vec Z n) (c : Z) :
@@ -220,13 +211,12 @@ Module PolyRed.
   Definition sub {n} : Poly n -> Poly n -> Poly n := vzip_with Z.sub.
 
   Lemma eval_polyp_sub {n} (p1 p2 : vec Z n) (vs : vec Z n) :
-    eval_poly' (vzip_with Z.sub p1 p2) vs = (eval_poly' p1 vs - eval_poly' p2 vs)%Z.
+    dot (vzip_with Z.sub p1 p2) vs = (dot p1 vs - dot p2 vs)%Z.
   Proof.
-    induction vs; cbn; first lia.
-    revert p1. refine (vec_S_inv _ _); intros c11 p1.
-    revert p2. refine (vec_S_inv _ _); intros c21 p2.
-    specialize (IHvs p1 p2).
-    cbn in *; lia.
+    revert p1 p2; induction vs as [|x n vs IH]; intros p1 p2.
+    - inv_vec p1; inv_vec p2. cbn. lia.
+    - inv_vec p1; intros c11 p1; inv_vec p2; intros c21 p2. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_sub {n} (p1 p2 : Poly n) (vs : vec Z n) :
@@ -234,13 +224,12 @@ Module PolyRed.
   Proof. eapply eval_polyp_sub. Qed.
 
   Lemma eval_polyp_add {n} (p1 p2 : vec Z n) (vs : vec Z n) :
-    eval_poly' (vzip_with Z.add p1 p2) vs = (eval_poly' p1 vs + eval_poly' p2 vs)%Z.
+    dot (vzip_with Z.add p1 p2) vs = (dot p1 vs + dot p2 vs)%Z.
   Proof.
-    induction vs; cbn; first lia.
-    revert p1. refine (vec_S_inv _ _); intros c11 p1.
-    revert p2. refine (vec_S_inv _ _); intros c21 p2.
-    specialize (IHvs p1 p2).
-    cbn in *; lia.
+    revert p1 p2; induction vs as [|x n vs IH]; intros p1 p2.
+    - inv_vec p1; inv_vec p2. cbn. lia.
+    - inv_vec p1; intros c11 p1; inv_vec p2; intros c21 p2. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_add {n} (p1 p2 : Poly n) (vs : vec Z n) :
@@ -256,7 +245,7 @@ Module PolyRed.
   Qed.
 
   Lemma eval_polyp_zero {n} (vs : vec Z n) :
-    eval_poly' zero vs = 0%Z.
+    dot zero vs = 0%Z.
   Proof.
     unfold zero.
     induction vs; cbn; lia.
@@ -272,7 +261,7 @@ Module PolyRed.
   Proof. revert n i vs.
          eapply (learnFinSucc (P := fun n i => forall vs, eval_poly (var i) vs = vs !!! i)).
          intros.
-         change (eval_poly' (vadd f 1%Z zero) vs = vs !!! f).
+         change (dot (vadd f 1%Z zero) vs = vs !!! f).
          rewrite (vadd_lookup_remove f vs) at 1.
          rewrite eval_polyp_vadd, eval_polyp_zero.
          now lia.
@@ -529,9 +518,9 @@ Module LinearProgramming.
 
   Lemma SlacksPos_eval_pos {n} {slackvars : vec bool n} {coeffs : vec Z n} {vs : vec Z n} :
     Forall2 (λ (isSlack : bool) coeff, coeff = 0%Z ∨ isSlack ∧ (coeff >= 0)%Z) slackvars coeffs →
-    SlacksPos slackvars vs → (eval_poly' coeffs vs >= 0)%Z.
+    SlacksPos slackvars vs → (dot coeffs vs >= 0)%Z.
   Proof.
-    induction 1 as [|n s1 c1 ss cs H1 Hs]; first now cbn.
+    induction 1 as [|n s1 c1 ss cs H1 Hs]; first (inv_vec vs; now cbn).
     revert vs. refine (vec_S_inv _ _).
     intros v vs [Hsv1 Hsvs]%Forall2_cons_iff_copy; cbn.
     specialize (IHHs vs Hsvs).
@@ -545,9 +534,9 @@ Module LinearProgramming.
 
   Lemma SlacksPos_eval_neg {n} {slackvars : vec bool n} {coeffs : vec Z n} {vs : vec Z n} :
     Forall2 (λ (isSlack : bool) coeff, coeff = 0%Z ∨ isSlack ∧ (coeff <= 0)%Z) slackvars coeffs →
-    SlacksPos slackvars vs → (eval_poly' coeffs vs <= 0)%Z.
+    SlacksPos slackvars vs → (dot coeffs vs <= 0)%Z.
   Proof.
-    induction 1 as [|n s1 c1 ss cs H1 Hs]; first now cbn.
+    induction 1 as [|n s1 c1 ss cs H1 Hs]; first (inv_vec vs; now cbn).
     revert vs. refine (vec_S_inv _ _).
     intros v vs [Hsv1 Hsvs]%Forall2_cons_iff_copy; cbn.
     specialize (IHHs vs Hsvs).
@@ -570,12 +559,12 @@ Module LinearProgramming.
     - destruct (bool_decide_reflect (Forall2 (λ (isSlack : bool) (coeff : Z), coeff = 0%Z ∨ isSlack ∧ (coeff >= 0)%Z) slackvars coeffs)) as [Hscs|?]; last easy.
       intros _ vs [Heq Hsp].
       unfold eval_poly in Heq; cbn in Heq.
-      enough (eval_poly' coeffs vs >= 0)%Z by lia.
+      enough (dot coeffs vs >= 0)%Z by lia.
       now eapply (SlacksPos_eval_pos Hscs).
     - destruct (bool_decide_reflect (Forall2 (λ (isSlack : bool) (coeff : Z), coeff = 0%Z ∨ isSlack ∧ (coeff <= 0)%Z) slackvars coeffs)) as [Hscs|?]; last easy.
       intros _ vs [Heq Hsp].
       unfold eval_poly in Heq; cbn in Heq.
-      enough (eval_poly' coeffs vs <= 0)%Z by lia.
+      enough (dot coeffs vs <= 0)%Z by lia.
       now eapply (SlacksPos_eval_neg Hscs).
   Qed.
 

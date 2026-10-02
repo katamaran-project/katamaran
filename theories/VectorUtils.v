@@ -29,6 +29,7 @@
 
 From Equations Require Import Equations.
 From stdpp Require Import vector.
+From Stdlib Require Import ZArith.BinInt.
 Require Import Vector.
 
 Local Set Implicit Arguments.
@@ -82,3 +83,8 @@ Equations vzip_with_vremove {n A1 A2 B} (i : fin n) (v1 : vec A1 n) (v2 : vec A2
 | FS 0%fin | h1 ::: v1 | h2 ::: v2 | f := f_equal _ (vzip_with_vremove 0%fin v1 v2 f)
 | FS (FS i) | h1 ::: v1 | h2 ::: v2 | f := f_equal _ (vzip_with_vremove (FS i) v1 v2 f)
 .
+
+(* Dot product of two integer vectors. *)
+Equations dot {n} (c xs : vec Z n) : Z :=
+| [#] | [#] := 0%Z
+| c ::: cs | x ::: xs := (c * x + dot cs xs)%Z.
