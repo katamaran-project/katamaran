@@ -161,3 +161,91 @@ Proof.
       rewrite data_unsigned_of_N_small; [|unfold lenAddr in Hlen; lia]. lia. }
     iSplit; [iPureIntro; cbn; reflexivity|done].
 Qed.
+
+(* ---- data_layout_ok from INTERVALS -------------------------------------- *)
+(* A concretized layout is a list of contiguous RUNS of statement words (one
+   per DCell/DArr/DBytes stretch between pointers).  data_layout_runs turns
+   the bridge's data_layout_ok into interval arithmetic: each run in range
+   and clear of the code, the runs pairwise disjoint.  A caller rewrites its
+   concretized data to data_runs (concretize_run_map) and finishes with lia. *)
+
+(* the statement cells of one run: m words from off *)
+Definition data_run (off : N) (m : nat) (pub : bool) : list mem_spec :=
+  List.map (fun i => (@bv.of_N xlenbits (off + 4 * N.of_nat i), pub)) (seq 0 m).
+
+Definition data_runs (rs : list (N * nat * bool)) : list mem_spec :=
+  concat (List.map (fun '(off, m, pub) => data_run off m pub) rs).
+
+(* how concretize_data's arrays meet data_run *)
+Lemma concretize_run_map (off : N) (m : nat) (pub : bool) :
+  map mem_full_to_spec (List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits))) (seq 0 m))
+  = data_run off m pub.
+Proof. unfold data_run. rewrite map_map. reflexivity. Qed.
+
+Lemma data_run_bin (off : N) (m : nat) (pub : bool) :
+  (off + 4 * N.of_nat m <= lenAddr)%N ->
+  forall i s, data_run off m pub !! i = Some s -> bv.bin s.1 = (off + 4 * N.of_nat i)%N.
+Proof.
+  intros Hm i s Hs. unfold data_run in Hs.
+  change (List.map ?f (seq 0 m)) with (f <$> seq 0 m) in Hs.
+  rewrite list_lookup_fmap in Hs.
+  destruct (seq 0 m !! i) as [j|] eqn:E; [|discriminate]. cbn in Hs. injection Hs as <-.
+  apply lookup_seq in E as [-> Hj]. cbn. apply bv.bin_of_N_small.
+  pose proof lenAddr_small_word as HL. change word with xlenbits in HL.
+  change xlenbits with 32%nat in HL. lia.
+Qed.
+
+Lemma data_run_cells (off : N) (m : nat) (pub : bool) :
+  (off + 4 * N.of_nat m <= lenAddr)%N ->
+  Forall (fun s : mem_spec => (off <= bv.bin s.1 /\ bv.bin s.1 + 4 <= off + 4 * N.of_nat m)%N) (data_run off m pub)
+  /\ ForallOrdPairs data_cell_sep (data_run off m pub).
+Proof.
+  intros Hm. assert (Hl : length (data_run off m pub) = m) by (unfold data_run; rewrite length_map length_seq; reflexivity).
+  pose proof (contig_data_cells off (data_run off m pub)) as H. rewrite Hl in H.
+  apply H; [exact Hm|]. apply data_run_bin. exact Hm.
+Qed.
+
+Lemma ForallOrdPairs_app {A} (R : A -> A -> Prop) (l1 l2 : list A) :
+  ForallOrdPairs R l1 -> ForallOrdPairs R l2 ->
+  (forall a b, In a l1 -> In b l2 -> R a b) -> ForallOrdPairs R (l1 ++ l2).
+Proof.
+  induction l1 as [|a l1 IH]; intros H1 H2 Hx; [exact H2|].
+  inversion H1 as [|? ? Ha H1']; subst. cbn. constructor.
+  - apply List.Forall_app. split; [exact Ha|]. apply List.Forall_forall. intros b Hb. apply Hx; [left; reflexivity|exact Hb].
+  - apply IH; [exact H1'|exact H2|]. intros x y Hx' Hy. apply Hx; [right; exact Hx'|exact Hy].
+Qed.
+
+Lemma data_run_in (off : N) (m : nat) (pub : bool) s :
+  (off + 4 * N.of_nat m <= lenAddr)%N -> In s (data_run off m pub) ->
+  (off <= bv.bin s.1 /\ bv.bin s.1 + 4 <= off + 4 * N.of_nat m)%N.
+Proof.
+  intros Hm Hs. destruct (data_run_cells off m pub Hm) as [Hf _].
+  rewrite List.Forall_forall in Hf. exact (Hf s Hs).
+Qed.
+
+Lemma data_layout_runs (start : N) (ncode : nat) (rs : list (N * nat * bool)) :
+  Forall (fun '(off, m, _) => (off + 4 * N.of_nat m <= lenAddr)%N /\
+            (off + 4 * N.of_nat m <= start \/ start + 4 * N.of_nat ncode <= off)%N) rs ->
+  ForallOrdPairs (fun '(o1, m1, _) '(o2, m2, _) =>
+            (o1 + 4 * N.of_nat m1 <= o2 \/ o2 + 4 * N.of_nat m2 <= o1)%N) rs ->
+  data_layout_ok start ncode (data_runs rs).
+Proof.
+  induction rs as [|[[off m] pub] rs IH]; intros Hr Hd; [split; constructor|].
+  inversion Hr as [|? ? Hh Hr']; subst. cbn in Hh. destruct Hh as [Hm Hc].
+  inversion Hd as [|? ? Hd1 Hd']; subst.
+  destruct (IH Hr' Hd') as [IHf IHp].
+  destruct (data_run_cells off m pub Hm) as [Hf Hp].
+  unfold data_runs. cbn [List.map concat]. fold (data_runs rs).
+  split.
+  - apply List.Forall_app. split; [|exact IHf].
+    eapply Forall_impl; [exact Hf|]. intros s Hs. cbv beta in Hs |- *.
+    change (ty.Val ty_word) with (bv word) in *. lia.
+  - apply ForallOrdPairs_app; [exact Hp|exact IHp|].
+    intros a b Ha Hb. pose proof (data_run_in off m pub a Hm Ha) as Ia.
+    unfold data_runs in Hb. apply in_concat in Hb as [l [Hl Hb]].
+    apply in_map_iff in Hl as [[[o2 m2] p2] [<- Hin]].
+    rewrite List.Forall_forall in Hd1. pose proof (Hd1 _ Hin) as Hsep. cbn in Hsep.
+    rewrite List.Forall_forall in Hr'. pose proof (Hr' _ Hin) as Hm2'. cbn in Hm2'. destruct Hm2' as [Hm2 _].
+    pose proof (data_run_in o2 m2 p2 b Hm2 Hb) as Ib.
+    unfold data_cell_sep. change (ty.Val ty_word) with (bv word) in *. lia.
+Qed.
