@@ -2451,7 +2451,7 @@ Section DataImplPre.
   Proof.
     induction ds as [|d ds IH]; intros a off Ha Hok Hi1 Hi2.
     { iIntros "_". cbn. done. }
-    destruct d as [pub [t|]|pub dir c|pub c|x]; cbn [gen_data_at concretize_data data_ok] in *.
+    destruct d as [pub [t|]|pub dir c|pub c|x|x]; cbn [gen_data_at concretize_data data_ok] in *.
     - (* a pinned cell *)
       destruct Hok as [Hrng [[-> Ht] Hok]].
       unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap option_map] in Hi1, Hi2.
@@ -2517,5 +2517,11 @@ Section DataImplPre.
       destruct Hok as [Hx Hok]. iIntros "H". cbn [asn.interpret]. iSplitR.
       { cbn. iSplit; [iPureIntro; by rewrite Hx Ha|done]. }
       iApply (IH x off Hx Hok Hi1 Hi2 with "H").
+    - (* a pointer: the cells continue at x's value *)
+      destruct Hok as [Hx Hok]. iIntros "H".
+      assert (Hx' : inst (T := fun Σ => Term Σ ty_xlenbits) x ι
+                    = SyncVal (@bv.of_N xlenbits (bv.bin (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) x ι))))).
+      { rewrite bv.of_N_bin. exact Hx. }
+      iApply (IH x _ Hx' Hok Hi1 Hi2 with "H").
   Qed.
 End DataImplPre.

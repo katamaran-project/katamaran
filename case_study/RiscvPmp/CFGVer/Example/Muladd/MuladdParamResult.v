@@ -366,7 +366,7 @@ Proof.
     rewrite list_lookup_fmap in Hi.
     destruct (sym_mem_specs init_addr b !! i) as [[[a pub] o]|] eqn:E; [|discriminate].
     injection Hi as <-. rewrite Hl.
-    exact (concretize_data_addrs (sym_ι init_addr b) sym_data (init_addr + 1128) i _ E).
+    exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i _ E).
   - (* ImplPre *)
     intros Σ' GS'.
     iIntros "(Hregs & Hmem & Hpriv & #Hinv)".

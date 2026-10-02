@@ -67,6 +67,7 @@ case_study/RiscvPmp/CFGVer/Adequacy.v
 case_study/RiscvPmp/CFGVer/Validity.v
 case_study/RiscvPmp/CFGVer/GenCompose.v
 case_study/RiscvPmp/CFGVer/EndToEnd.v
+case_study/RiscvPmp/CFGVer/GenProg.v
 case_study/RiscvPmp/CFGVer/Example/Prelude.v
 case_study/RiscvPmp/CFGVer/Example/MvSwap.v
 case_study/RiscvPmp/CFGVer/Example/Jumps.v
