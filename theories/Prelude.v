@@ -26,12 +26,13 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Export
+From Stdlib Require Export
      Numbers.BinNums.
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      Lists.List
+     Lists.ListDec
      NArith.NArith
      Relations.Relation_Definitions
      Strings.String
@@ -39,14 +40,15 @@ From Coq Require Import
      ZArith.BinInt.
 From Katamaran Require Export
      Notations.
-From Equations Require Import
-     Equations.
 
 (* stdpp changes a lot of flags and changes implicit arguments of standard
    library functions and constructors. Import the module here, so that the
    changes are consistently applied over our code base. *)
-From stdpp Require
-     base countable finite list.
+From stdpp Require countable finite.
+From stdpp Require Import base list.
+
+From Equations Require Import
+  Equations.
 
 Local Set Implicit Arguments.
 
@@ -112,7 +114,7 @@ Section Equality.
     eq_dec (existT i1 x1) (existT i2 x2).
 
   #[export] Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
-    stdpp.base.EqDecision A | 10 := eqdec.
+    stdpp.base.EqDecision A | 1 := eqdec.
 
   Lemma cons_inj [A] (x y : A) (xs ys : list A) :
     x :: xs = y :: ys <-> x = y /\ xs = ys.
@@ -159,13 +161,13 @@ End Equality.
 Ltac finite_from_eqdec :=
   match goal with
   | |- base.NoDup ?xs =>
-      now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
+      now apply (@decidable.bool_decide_unpack _ (NoDup_dec xs))
   | |- forall x : ?T, base.elem_of x _ =>
       lazymatch T with
       | sigT _ => intros [? []]
       | _      => intros []
       end;
-      apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _));
+      apply (@decidable.bool_decide_unpack _ (list_elem_of_dec _ _));
       auto
   end.
 
@@ -190,7 +192,7 @@ Section Finite.
       + apply NoDup_fmap. intros x y Heq.
         now dependent elimination Heq.
         apply NoDup_enum.
-      + intros [a' b'] (b & Heq & HbIn)%elem_of_list_fmap.
+      + intros [a' b'] (b & Heq & HbIn)%list_elem_of_fmap.
         dependent elimination Heq.
         intros HxIn. apply HaIn.
         { clear - HxIn.
@@ -198,7 +200,7 @@ Section Finite.
           - inversion HxIn.
           - apply elem_of_app in HxIn.
             destruct HxIn as [HxIn|HxIn].
-            + apply elem_of_list_fmap in HxIn.
+            + apply list_elem_of_fmap in HxIn.
               destruct HxIn as (b & Heq & HbIn).
               dependent elimination Heq.
               constructor.
@@ -218,7 +220,7 @@ Section Finite.
     - intros [Ha|Ha]%elem_of_cons.
       + clear - Ha.
         apply elem_of_app. left. subst.
-        apply elem_of_list_fmap_1.
+        apply list_elem_of_fmap_2.
         apply elem_of_enum.
       + apply elem_of_app. right.
         now apply IHxs.
@@ -312,28 +314,28 @@ Export IsTrue (IsTrue).
 (* This module contains transparent copies of lemmas from the stdlib. *)
 Module transparent.
 
-  (* Coq.Arith.PeanoNat.Nat.add_0_r *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_0_r *)
   Fixpoint nat_add_0_r (n : nat) : n + O = n :=
     match n with
     | O   => eq_refl
     | S n => f_equal S (nat_add_0_r n)
     end.
 
-  (* Coq.Arith.PeanoNat.Nat.add_assoc *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_assoc *)
   Fixpoint nat_add_assoc (n m p : nat) : n + (m + p) = n + m + p :=
     match n with
     | O   => eq_refl
     | S n => f_equal S (nat_add_assoc n m p)
     end.
 
-  (* Coq.Arith.PeanoNat.Nat.add_succ_r *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_succ_r *)
   Fixpoint nat_add_succ_r (n m : nat) : n + S m = S (n + m) :=
     match n with
     | O   => eq_refl
     | S n => f_equal S (nat_add_succ_r n m)
     end.
 
-  (* Coq.Arith.PeanoNat.Nat.add_cancel_l *)
+  (* Stdlib.Arith.PeanoNat.Nat.add_cancel_l *)
   Fixpoint nat_add_cancel_l n m p {struct p} : p + n = p + m -> n = m :=
     match p with
     | O   => fun e : n = m => e
@@ -772,7 +774,7 @@ Proof.
     specialize (IHi (prefix ++ cons a nil)).
     rewrite <-app_assoc in IHi.
     apply IHi.
-    rewrite list.length_app, Hlenpref; cbn.
+    rewrite length_app, Hlenpref; cbn.
     now rewrite <-plus_n_Sm, plus_n_O.
 Qed.
 

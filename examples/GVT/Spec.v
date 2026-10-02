@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Strings.String
      Lists.List.
@@ -101,8 +101,8 @@ Module RiscvPmpBlockVerifSpec.
   Section ContractDefKit.
 
   Import asn.notations.
-  Notation asn_bool t := (asn.formula (formula_bool t)).
-  Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+  Abbreviation asn_bool t := (asn.formula (formula_bool t)).
+  Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
@@ -110,12 +110,12 @@ Module RiscvPmpBlockVerifSpec.
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-  Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-  Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Notation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
-  Notation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
+  Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+  Abbreviation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+  Abbreviation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
+  Abbreviation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
+  Abbreviation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
@@ -210,22 +210,22 @@ Module RiscvPmpBlockVerifSpec.
   Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
-  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Local Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+  Local Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+  Local Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  Local Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+  Local Abbreviation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   (* TODO: clean up above notations to get rid of the following one *)
-  Local Notation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
-  Local Notation asn_bool t := (asn.formula (formula_bool t)).
-  Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
-  Local Notation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
-  Local Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
-  Local Notation asn_mmio_checked_read bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_read bytes) [a; w; s; s'])).
+  Local Abbreviation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
+  Local Abbreviation asn_bool t := (asn.formula (formula_bool t)).
+  Local Abbreviation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
+  Local Abbreviation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
+  Local Abbreviation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
+  Local Abbreviation asn_mmio_checked_read bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_read bytes) [a; w; s; s'])).
 
-  Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Local Notation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
-  Local Notation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
+  Local Abbreviation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
+  Local Abbreviation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
+  Local Abbreviation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
 
   Import bv.notations.
 
@@ -869,7 +869,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.program_logic.total_weakestpre.
   Import iris.base_logic.lib.gen_heap.
   Import iris.proofmode.string_ident.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Lemma read_ram_sound `{sailGS Σ} {rG : iostateG IOState Σ} {bytes} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).

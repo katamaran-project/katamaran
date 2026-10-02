@@ -51,7 +51,7 @@ Module Type OccursCheckOn
   (Import TY : Types)
   (Import TM : TermsOn TY).
 
-  Local Notation LCtx := (NCtx LVar Ty).
+  Local Abbreviation LCtx := (NCtx LVar Ty).
 
   Class OccursCheck (T : LCtx -> Type) : Type :=
     occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)).

@@ -46,7 +46,7 @@ Module Type MessagesOn
   (Import OC : OccursCheckOn TY TM)
   (Import GOC : GenOccursCheckOn TY TM).
 
-  #[local] Notation LCtx := (NCtx LVar Ty).
+  #[local] Abbreviation LCtx := (NCtx LVar Ty).
 
   Module amsg.
     Inductive CloseMessage (M : LCtx -> Type) (Σ : LCtx) : Type :=

@@ -43,7 +43,7 @@ From Katamaran Require Import
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 From stdpp Require namespaces.
 Module ns := stdpp.namespaces.
 
@@ -337,7 +337,7 @@ Module RiscvPmpIrisInstance2 <:
       apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
       unfold liveAddrs, bv.seqBv.
       rewrite -(bv.of_Z_unsigned y).
-      apply elem_of_list_fmap_1.
+      apply list_elem_of_fmap_2.
       rewrite elem_of_seqZ.
       subst y.
       unfold maxAddr in HmaxOK.

@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Lists.List
      micromega.Lia
@@ -58,7 +58,7 @@ From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 From Katamaran Require Import RiscvPmp.LoopVerification.
 
@@ -66,7 +66,7 @@ Module Examples.
   Import RiscvPmpExecutor.
   Import Assembly.
   Import RiscvPmp.Sig.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
   Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
   Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
   Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.

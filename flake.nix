@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = inputs: inputs.flake-utils.lib.eachDefaultSystem (system:
@@ -26,25 +26,22 @@
               versions
         );
 
-      iris43 = {
-        iris = "4.3.0";
-        stdpp = "1.11.0";
+      iris45 = {
+        iris = "4.5.0";
+        stdpp = "1.13.0";
       };
 
-      rocqPackages820 = patchRocqPackages pkgs.coqPackages_8_20 iris43;
-      rocqPackages900 = patchRocqPackages pkgs.coqPackages_9_0 iris43;
+      rocqPackages920 = patchRocqPackages pkgs.rocqPackages_9_2 iris45;
 
       mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
         (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
     in
     rec {
       packages = rec {
-        default = rocq820;
-        rocq820 = rocqPackages820.katamaran;
-        rocq900 = rocqPackages900.katamaran;
+        default = rocq920;
+        rocq920 = rocqPackages920.katamaran;
 
-        rocq820-deps = mkDeps rocq820;
-        rocq900-deps = mkDeps rocq900;
+        rocq920-deps = mkDeps rocq920;
       };
     }
   );

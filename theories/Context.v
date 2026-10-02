@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
@@ -617,7 +617,7 @@ Module Import ctx.
   End notations.
   Import notations.
 
-  Local Notation NCtx N T := (Ctx (Binding N T)).
+  Local Abbreviation NCtx N T := (Ctx (Binding N T)).
 
   Section Resolution.
 
@@ -715,7 +715,7 @@ End ctx.
 Export ctx (Ctx).
 #[export] Existing Instance ctx.eq_dec_ctx.
 
-Notation NCtx N T := (Ctx (Binding N T)).
+Abbreviation NCtx N T := (Ctx (Binding N T)).
 Bind Scope ctx_scope with Ctx.
 Bind Scope ctx_scope with NCtx.
 

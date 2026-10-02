@@ -27,7 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      Unicode.Utf8
@@ -55,8 +55,8 @@ Local Unset Elimination Schemes.
 
 Module Type TermsOn (Import TY : Types).
 
-  Local Notation PCtx := (NCtx PVar Ty).
-  Local Notation LCtx := (NCtx LVar Ty).
+  Local Abbreviation PCtx := (NCtx PVar Ty).
+  Local Abbreviation LCtx := (NCtx LVar Ty).
 
   Inductive Term (Σ : LCtx) : Ty → Set :=
   | term_var     (l : LVar) (σ : Ty) {lIn : l∷σ ∈ Σ} : Term Σ σ
@@ -75,54 +75,54 @@ Module Type TermsOn (Import TY : Types).
   Derive NoConfusion Signature for Term.
 
   (* Abbreviations  *)
-  Notation term_var_in lIn := (@term_var _ _ _ lIn) (only parsing).
+  Abbreviation term_var_in lIn := (@term_var _ _ _ lIn) (only parsing).
 
   (* BinOp *)
-  Notation term_plus := (term_binop bop.plus).
-  Notation term_times := (term_binop bop.times).
-  Notation term_minus := (term_binop bop.minus).
-  Notation term_land := (term_binop bop.land).
-  Notation term_and := (term_binop bop.and).
-  Notation term_or := (term_binop bop.or).
-  Notation term_pair := (term_binop bop.pair).
-  Notation term_cons := (term_binop bop.cons).
-  Notation term_append := (term_binop bop.append).
-  Notation term_shiftr := (term_binop bop.shiftr).
-  Notation term_shiftl := (term_binop bop.shiftl).
-  Notation term_bvadd := (term_binop bop.bvadd).
-  Notation term_bvsub := (term_binop bop.bvsub).
-  Notation term_bvmul := (term_binop bop.bvmul).
-  Notation term_bvand := (term_binop bop.bvand).
-  Notation term_bvor := (term_binop bop.bvor).
-  Notation term_bvxor := (term_binop bop.bvxor).
-  Notation term_bvapp := (term_binop bop.bvapp).
-  Notation term_bvcons := (term_binop bop.bvcons).
+  Abbreviation term_plus := (term_binop bop.plus).
+  Abbreviation term_times := (term_binop bop.times).
+  Abbreviation term_minus := (term_binop bop.minus).
+  Abbreviation term_land := (term_binop bop.land).
+  Abbreviation term_and := (term_binop bop.and).
+  Abbreviation term_or := (term_binop bop.or).
+  Abbreviation term_pair := (term_binop bop.pair).
+  Abbreviation term_cons := (term_binop bop.cons).
+  Abbreviation term_append := (term_binop bop.append).
+  Abbreviation term_shiftr := (term_binop bop.shiftr).
+  Abbreviation term_shiftl := (term_binop bop.shiftl).
+  Abbreviation term_bvadd := (term_binop bop.bvadd).
+  Abbreviation term_bvsub := (term_binop bop.bvsub).
+  Abbreviation term_bvmul := (term_binop bop.bvmul).
+  Abbreviation term_bvand := (term_binop bop.bvand).
+  Abbreviation term_bvor := (term_binop bop.bvor).
+  Abbreviation term_bvxor := (term_binop bop.bvxor).
+  Abbreviation term_bvapp := (term_binop bop.bvapp).
+  Abbreviation term_bvcons := (term_binop bop.bvcons).
 
   (* RelOp *)
-  Notation term_eq := (term_binop (bop.relop bop.eq)).
-  Notation term_neq := (term_binop (bop.relop bop.neq)).
-  Notation term_le := (term_binop (bop.relop bop.le)).
-  Notation term_lt := (term_binop (bop.relop bop.lt)).
-  Notation term_bvsle := (term_binop (bop.relop bop.bvsle)).
-  Notation term_bvslt := (term_binop (bop.relop bop.bvslt)).
-  Notation term_bvule := (term_binop (bop.relop bop.bvule)).
-  Notation term_bvult := (term_binop (bop.relop bop.bvult)).
+  Abbreviation term_eq := (term_binop (bop.relop bop.eq)).
+  Abbreviation term_neq := (term_binop (bop.relop bop.neq)).
+  Abbreviation term_le := (term_binop (bop.relop bop.le)).
+  Abbreviation term_lt := (term_binop (bop.relop bop.lt)).
+  Abbreviation term_bvsle := (term_binop (bop.relop bop.bvsle)).
+  Abbreviation term_bvslt := (term_binop (bop.relop bop.bvslt)).
+  Abbreviation term_bvule := (term_binop (bop.relop bop.bvule)).
+  Abbreviation term_bvult := (term_binop (bop.relop bop.bvult)).
 
   (* UnOp *)
-  Notation term_inl := (term_unop uop.inl).
-  Notation term_inr := (term_unop uop.inr).
-  Notation term_neg := (term_unop uop.neg).
-  Notation term_not := (term_unop uop.not).
-  Notation term_rev := (term_unop uop.rev).
-  Notation term_sext := (term_unop uop.sext).
-  Notation term_zext := (term_unop uop.zext).
-  Notation term_get_slice_int := (term_unop uop.get_slice_int).
-  Notation term_signed := (term_unop uop.signed).
-  Notation term_unsigned := (term_unop uop.unsigned).
-  Notation term_bvnot := (term_unop uop.bvnot).
-  Notation term_bvdrop m := (term_unop (uop.bvdrop m)).
-  Notation term_bvtake m := (term_unop (uop.bvtake m)).
-  Notation term_negate := (term_unop uop.negate).
+  Abbreviation term_inl := (term_unop uop.inl).
+  Abbreviation term_inr := (term_unop uop.inr).
+  Abbreviation term_neg := (term_unop uop.neg).
+  Abbreviation term_not := (term_unop uop.not).
+  Abbreviation term_rev := (term_unop uop.rev).
+  Abbreviation term_sext := (term_unop uop.sext).
+  Abbreviation term_zext := (term_unop uop.zext).
+  Abbreviation term_get_slice_int := (term_unop uop.get_slice_int).
+  Abbreviation term_signed := (term_unop uop.signed).
+  Abbreviation term_unsigned := (term_unop uop.unsigned).
+  Abbreviation term_bvnot := (term_unop uop.bvnot).
+  Abbreviation term_bvdrop m := (term_unop (uop.bvdrop m)).
+  Abbreviation term_bvtake m := (term_unop (uop.bvtake m)).
+  Abbreviation term_negate := (term_unop uop.negate).
 
   Section DerivedConstructions.
 

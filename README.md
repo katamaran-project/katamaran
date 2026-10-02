@@ -5,7 +5,8 @@ Katamaran
 =========
 
 Katamaran is a verification framework for instruction set architectures in the
-Coq proof assistant. It provides the deeply-embedded language μSail, a variant
+[Rocq proof assistant](https://rocq-prover.org/).
+It provides the deeply-embedded language μSail, a variant
 of the [Sail](https://github.com/rems-project/sail) language, for the
 specification of instructions sets and provides furthermore facilities for the
 specification of separation logic-based contracts and for semi-automatically
@@ -18,22 +19,22 @@ Dependencies
 
 The development version of Katamaran has the following lower bounds:
 ```
-coq            >= 8.20
-coq-equations  >= 1.3
-coq-iris       >= 4.3
-coq-stdpp      >= 1.11
+rocq-core         9.2
+rocq-equations >= 1.3.2+9.2
+rocq-iris      >= 4.5
+rocq-stdpp     >= 1.13
 ```
-and has also been tested with coq 9.0.
 
 ### Using opam
 
-An easy way to setup your system is to create a fresh opam switch, pin the Coq and Iris versions and install equations (stdpp will be installed as a dependency of Iris):
+An easy way to setup your system is to create a fresh opam switch, pin the Rocq and Iris versions and install equations (stdpp will be installed as a dependency of Iris):
 ```
-opam switch create katamaran ocaml-base-compiler.4.14.2
-opam repo add coq-released https://coq.inria.fr/opam/released
-opam pin add coq 8.20.1
-opam pin add coq-iris 4.3.0
-opam install coq-equations
+opam switch create katamaran ocaml-base-compiler.5.2.1
+opam repo add rocq-released https://rocq-prover.org/opam/released
+opam pin add rocq-core 9.2.0
+opam pin add rocq-iris 4.5.0
+opam pin add rocq-equations 1.3.2+9.2
+
 ```
 
 ### Using nix

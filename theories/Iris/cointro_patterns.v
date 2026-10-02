@@ -34,7 +34,7 @@ Inductive stack_item :=
   | StPat : cointro_pat → stack_item
   | StFrame : string → stack_item
   | StList : stack_item.
-Notation stack := (list stack_item).
+Abbreviation stack := (list stack_item).
 
 Fixpoint close (k : stack) (ps : list cointro_pat) : option (list cointro_pat) :=
   match k with

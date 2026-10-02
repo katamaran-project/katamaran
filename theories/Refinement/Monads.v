@@ -27,7 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Classes.Morphisms
      Classes.Morphisms_Prop.
 From Equations Require Import
@@ -69,7 +69,7 @@ Module Type RefinementMonadsOn
   Import SymProp RSolve.
 
   Import logicalrelation logicalrelation.notations proofmode.
-  Import iris.bi.interface iris.proofmode.tactics.
+  Import iris.bi.interface iris.proofmode.proofmode.
 
   Definition RPureSpec [SA CA] (RA : Rel SA CA) :
     Rel (SPureSpec SA) (CPureSpec CA) := □ᵣ(RA -> ℙ) -> ℙ.

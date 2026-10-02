@@ -27,7 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
@@ -118,8 +118,8 @@ Module Type PartialEvaluationOn
   (Import TM : TermsOn TY)
   (Import IN : InstantiationOn TY TM).
 
-  Local Notation LCtx := (NCtx LVar Ty).
-  Local Notation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
+  Local Abbreviation LCtx := (NCtx LVar Ty).
+  Local Abbreviation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
 
   Section WithLCtx.
     Context {Σ : LCtx}.
@@ -142,7 +142,7 @@ Module Type PartialEvaluationOn
         ; tmr_ring_morph : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
                              (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus)
                              (term_unop tmr_negate) base.equiv 0%Z 1%Z
-                             Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c))
+                             Z.add Z.mul Z.sub Z.opp Z.eqb (λ c : Z, term_val σ (tmr_of_Z c))
         ; tmr_ring_theory : ring_theory (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one) (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus) (term_unop tmr_negate) base.equiv
         ; tmr_ring_eq_ext : ring_eq_ext (term_binop (Σ := Σ) tmr_plus) (term_binop tmr_times) (term_unop tmr_negate) base.equiv
         }.
@@ -161,7 +161,7 @@ Module Type PartialEvaluationOn
     Next Obligation.
       constructor; try reflexivity; intros;
         rewrite ?term_binop_val, ?term_unop_val; try reflexivity.
-      now apply Zbool.Zeq_bool_eq in H.
+      now apply Z.eqb_eq in H.
     Qed.
 
     #[program, export] Instance TermRing_bv {n} : TermRing (ty.bvec n) := {
@@ -182,7 +182,7 @@ Module Type PartialEvaluationOn
       - rewrite term_binop_val; cbn; now rewrite bv.of_Z_sub.
       - rewrite term_binop_val; cbn; now rewrite bv.of_Z_mul.
       - rewrite term_unop_val; cbn; now rewrite bv.of_Z_negate.
-      - apply Zbool.Zeq_bool_eq in H; now subst.
+      - apply Z.eqb_eq in H; now subst.
     Qed.
 
     Definition evalPExprTm `{TermRing σ} : list (Term Σ σ) -> PExpr Z -> Term Σ σ :=
@@ -259,7 +259,7 @@ Module Type PartialEvaluationOn
       - rewrite !List.app_assoc, <-List.app_assoc.
         apply Hl2.
         subst.
-        now rewrite plusNatPos_of_succ_nat, app_length, Nat.add_comm.
+        now rewrite plusNatPos_of_succ_nat, length_app, Nat.add_comm.
     Qed.
 
     Definition CanonTerm σ : Type :=
@@ -744,20 +744,20 @@ Module Type PartialEvaluationOn
       peval_and t1 t2 ≡ term_binop bop.and t1 t2.
     Proof with lsolve.
       depelim t1.
-      - depelim t2... apply peval_and_val_sound.
+      - depelim t2; lsolve. apply peval_and_val_sound.
       - now destruct v.
-      - depelim t2... apply peval_and_val_sound.
-      - depelim t2... apply peval_and_val_sound.
+      - depelim t2; lsolve. apply peval_and_val_sound.
+      - depelim t2; lsolve. apply peval_and_val_sound.
     Qed.
 
     Lemma peval_or_sound (t1 t2 : Term Σ ty.bool) :
       peval_or t1 t2 ≡ term_binop bop.or t1 t2.
     Proof with lsolve.
       depelim t1.
-      - depelim t2... apply peval_or_val_sound.
+      - depelim t2; lsolve. apply peval_or_val_sound.
       - now destruct v.
-      - depelim t2... apply peval_or_val_sound.
-      - depelim t2... apply peval_or_val_sound.
+      - depelim t2; lsolve. apply peval_or_val_sound.
+      - depelim t2; lsolve. apply peval_or_val_sound.
     Qed.
 
     Lemma peval_plus_sound (t1 t2 : Term Σ ty.int) :
@@ -1151,7 +1151,7 @@ Module Type PartialEvaluationOn
         (peval_binop' tmr_times)
         (peval_binop' tmr_minus)
         (peval_unop' tmr_negate)
-        0%Z 1%Z Zbool.Zeq_bool
+        0%Z 1%Z Z.eqb
         (fun c => term_val σ (tmr_of_Z c))
         get_signZ.
 
@@ -1160,12 +1160,12 @@ Module Type PartialEvaluationOn
       | ty.bvec n => fun ct =>
                        match ct nil 1%positive with
                        | (pexpr , env) =>
-                           evalPolTm (H := TermRing_bv) env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
+                           evalPolTm (H := TermRing_bv) env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Z.eqb pexpr)
                        end
       | ty.int => fun ct =>
                     match ct nil 1%positive with
                     | (pexpr , env) =>
-                        evalPolTm env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool pexpr)
+                        evalPolTm env (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Z.eqb pexpr)
                     end
       | _σ => fun t => t
       end.
@@ -1276,11 +1276,11 @@ Module Type PartialEvaluationOn
       {rm : ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
          (term_binop tmr_plus) (term_binop tmr_times) (term_binop tmr_minus)
          (term_unop tmr_negate) base.equiv 0%Z 1%Z
-         Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c))} :
+         Z.add Z.mul Z.sub Z.opp Z.eqb (λ c : Z, term_val σ (tmr_of_Z c))} :
       ring_morph (term_val (Σ := Σ) σ tmr_zero) (term_val σ tmr_one)
         (peval_binop' tmr_plus) (peval_binop' tmr_times) (peval_binop' tmr_minus)
         (peval_unop' tmr_negate) base.equiv 0%Z 1%Z
-        Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool (λ c : Z, term_val σ (tmr_of_Z c)).
+        Z.add Z.mul Z.sub Z.opp Z.eqb (λ c : Z, term_val σ (tmr_of_Z c)).
     Proof.
       constructor; intros; rewrite ?peval_binop'_sound, ?peval_unop'_sound.
       - apply (morph0 rm).
@@ -1338,7 +1338,7 @@ Module Type PartialEvaluationOn
     Qed.
 
     Lemma evalPol_norm_aux `{tmr : TermRing σ} {p : PExpr Z} (l : list (Term Σ σ)) :
-      evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Zbool.Zeq_bool p) ≡ evalPExprTm l p.
+      evalPolTm l (norm_aux 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Z.eqb p) ≡ evalPExprTm l p.
     Proof.
       unfold evalPolTm, evalPExprTm.
       rewrite Pphi_dev_ok;

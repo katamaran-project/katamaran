@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Lists.List
      Program.Tactics
@@ -138,7 +138,7 @@ Module Import ReplayProgram <: Program DefaultBase.
   Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+  Abbreviation AccessibleFun f := (Accessible 𝑭_call_graph f).
 
   Module Import WithAccessibleTactics.
     Import AccessibleTactics.
@@ -417,9 +417,9 @@ Module Import ReplaySpecification.
   Section ContractDefKit.
 
     Import asn.notations.
-    Notation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
-    Notation asn_P xs := (asn.chunk (chunk_user P [xs])).
-    Notation asn_Q xs := (asn.formula (formula_user Q [xs])).
+    Abbreviation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
+    Abbreviation asn_P xs := (asn.chunk (chunk_user P [xs])).
+    Abbreviation asn_Q xs := (asn.formula (formula_user Q [xs])).
 
     Definition sep_contract_main : SepContract ["xs" :: ty_X] ty.unit :=
       {| sep_contract_logic_variables := ["xs" :: ty_X];
@@ -505,8 +505,8 @@ Section ReplayExamples.
   Import ctx.resolution.
   Import asn.notations.
 
-  #[local] Notation P := (interp_Pₐ).
-  #[local] Notation Q := (interp_Qₐ).
+  #[local] Abbreviation P := (interp_Pₐ).
+  #[local] Abbreviation Q := (interp_Qₐ).
   #[local] Notation "a <= b" := ((term_binop (bop.relop bop.le) a b = term_val ty.bool true)).
 
   Definition ValidContractWithoutReplay {Δ τ} (c : SepContract Δ τ)

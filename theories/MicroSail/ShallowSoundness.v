@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Strings.String
      ZArith.BinInt.
 From Katamaran Require Import
@@ -53,7 +53,7 @@ Module Type Soundness
 
   Section Soundness.
 
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Context {L} {biA : BiAffine L} {PI : PredicateDef L} {SPEC : Specification}.
 

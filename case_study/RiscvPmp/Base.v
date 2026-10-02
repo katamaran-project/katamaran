@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Strings.String
      Bool
      Lia
@@ -39,7 +39,7 @@ From stdpp Require Import
 From stdpp Require
      finite strings.
 From iris.proofmode Require Import
-     tactics.
+     proofmode.
 From Katamaran Require Import
      Base
      Bitvector

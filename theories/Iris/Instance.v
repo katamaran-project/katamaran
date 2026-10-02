@@ -43,7 +43,7 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Iris.Base
@@ -1303,7 +1303,7 @@ Module IrisInstanceWithContracts
           ⊢ TValidContractEnvSem CEnv.
         Proof.
           iIntros (extSem lemSem cenv n Hwf).
-          apply Coq.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
+          apply Stdlib.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
           iInduction Hwf as [n _ IH].
           unfold HasValidContract at 2.
           destruct (CEnv _) as [c|] eqn:Ec; last trivial.

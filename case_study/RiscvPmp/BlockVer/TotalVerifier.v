@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Classes.Morphisms_Prop
      ZArith.ZArith
      Lists.List
@@ -62,7 +62,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -235,7 +235,7 @@ Section BlockVerificationDerived.
 
   Section Relational.
 
-    Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
+  Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
     Import RiscvPmpSymbolicSoundness.
     Import RiscvPmpSymbolicSoundness.StoreSpec.
     Import RiscvPmpShallowSoundness.
@@ -301,7 +301,7 @@ Section BlockVerificationDerived.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpProgramLogic.
     Import RiscvPmpShallowSoundness.
@@ -758,7 +758,7 @@ Section AnnotatedBlockVerification.
     Import RiscvPmpIrisInstanceWithContracts.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve.
 
@@ -805,7 +805,7 @@ Section AnnotatedBlockVerification.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpModel2.
     Import RiscvPmpShallowSoundness.

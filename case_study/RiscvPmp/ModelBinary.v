@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Program.Tactics
      Lists.List.
 From Katamaran Require Import
@@ -53,7 +53,7 @@ From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ListNotations.
@@ -149,13 +149,13 @@ Module RiscvPmpModel2.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "(HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
       iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
-      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_left _ _ _ _ _ HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l".
+      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_left _ _ _ _ _ HmapL with "[$HmemL $Hmem]") as "%eq_fun_read_ram_l".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
       inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
       iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
       iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
-      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_right _ _ _ _ _ HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r".
+      iPoseProof (@RiscvPmpModel2.fun_read_ram_works _ sailGS2_sailGS_right _ _ _ _ _ HmapR with "[$HmemR $Hmem]") as "%eq_fun_read_ram_r".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
       inversion Hf2; subst. iMod "Hclose" as "_". iModIntro.

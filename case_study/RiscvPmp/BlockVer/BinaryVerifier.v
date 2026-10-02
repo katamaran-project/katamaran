@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Strings.String
      Lists.List.
@@ -73,7 +73,7 @@ Module Import BinaryBlockVerifierNotations.
 End BinaryBlockVerifierNotations.
 
 Module BinaryBlockVerifier.
-  Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+  Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
   Import RiscvPmpIrisInstance2.
 
   (* TODO: annoying, but not inj in general (illegal instructions...)

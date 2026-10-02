@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      Lists.List
@@ -82,19 +82,19 @@ Module Type ShallowExecOn
   Definition ExecFail := forall Γ τ (s : Val ty.string), CStoreSpec Γ Γ (Val τ).
   Definition Exec := forall Γ τ (s : Stm Γ τ), CStoreSpec Γ Γ (Val τ).
 
-  Notation MonotonicExecCall exec_call :=
+  Abbreviation MonotonicExecCall exec_call :=
     (forall Δ τ (f : 𝑭 Δ τ) (δ : CStore Δ),
        Monotonic (MHeapSpec eq) (exec_call Δ τ f δ)).
-  Notation MonotonicExecCallForeign exec_call_foreign :=
+  Abbreviation MonotonicExecCallForeign exec_call_foreign :=
     (forall Δ τ (f : 𝑭𝑿 Δ τ) (δ : CStore Δ),
        Monotonic (MHeapSpec eq) (exec_call_foreign Δ τ f δ)).
-  Notation MonotonicExecLemma exec_lemma :=
+  Abbreviation MonotonicExecLemma exec_lemma :=
     (forall Δ (l : 𝑳 Δ) (δ : CStore Δ),
        Monotonic (MHeapSpec eq) (exec_lemma Δ l δ)).
-  Notation MonotonicExecFail exec_fail :=
+  Abbreviation MonotonicExecFail exec_fail :=
     (forall Γ τ (s : Val ty.string),
        Monotonic (MStoreSpec Γ Γ eq) (exec_fail Γ τ s)).
-  Notation MonotonicExec exec :=
+  Abbreviation MonotonicExec exec :=
     (forall Γ τ (s : Stm Γ τ),
        Monotonic (MStoreSpec Γ Γ eq) (exec Γ τ s)).
 

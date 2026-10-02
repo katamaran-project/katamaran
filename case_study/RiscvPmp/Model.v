@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Program.Tactics
      Lists.List.
 From Katamaran Require Import
@@ -55,7 +55,7 @@ From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre total_weakestpre adequacy.
 From iris.program_logic Require lifting.
 From iris.program_logic Require total_lifting.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ListNotations.

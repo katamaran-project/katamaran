@@ -35,14 +35,14 @@ From iris Require Import
      algebra.gmap
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Prelude
      Semantics
      Iris.Resources.
 
-Require Import Coq.Program.Equality.
+Require Import Stdlib.Program.Equality.
 
 Import ctx.notations.
 Import env.notations.

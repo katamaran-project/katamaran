@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Lists.List
      Strings.String.
@@ -52,7 +52,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -70,7 +70,7 @@ Module inv := invariants.
   Import ctx.notations.
   Import env.notations.
   Import iris.program_logic.weakestpre.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Import MicroSail.ShallowExecutor.
 

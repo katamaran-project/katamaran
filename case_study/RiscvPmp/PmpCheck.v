@@ -26,14 +26,14 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Lists.List.
 From Katamaran Require Import
      Bitvector
      RiscvPmp.Base.
 From iris.proofmode Require Import
-     tactics.
+     proofmode.
 
 Import ListNotations.
 Import bv.notations.

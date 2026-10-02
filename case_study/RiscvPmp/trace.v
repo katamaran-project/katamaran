@@ -1,6 +1,6 @@
 From iris.algebra Require Import auth excl.
 From iris.base_logic Require Import lib.own.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 
 Class traceG (Trace : Type) Σ := TraceG {
     trace_inG :: inG Σ (authR (optionUR (exclR (leibnizO Trace))));
@@ -67,8 +67,8 @@ Section S.
   Qed.
 End S.
 
-Notation tr_auth1 := (tr_auth trace_name).
-Notation tr_frag1 := (tr_frag trace_name).
+Abbreviation tr_auth1 := (tr_auth trace_name).
+Abbreviation tr_frag1 := (tr_frag trace_name).
 
 Lemma trace_alloc_names `{!trace_preG T Σ} t :
   ⊢ |==> ∃ γ, tr_auth γ t ∗ tr_frag γ t.

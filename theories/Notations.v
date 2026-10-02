@@ -76,7 +76,7 @@ Reserved Infix "∘" (at level 40, left associativity).
 Reserved Infix "<$>" (at level 61, left associativity).
 Reserved Infix "<*>" (at level 61, left associativity).
 
-(* Logic notations. These were chosen to be compatible with Coq.Unicode.Utf8, stdpp and iris. *)
+(* Logic notations. These were chosen to be compatible with Stdlib.Unicode.Utf8, stdpp and iris. *)
 Reserved Notation "P ⊢ Q" (at level 99, Q at level 200, right associativity).
 Reserved Notation "P '⊢@{' L } Q" (at level 99, Q at level 200, right associativity).
 Reserved Notation "P ⊢f f" (at level 99, f at level 200, no associativity).

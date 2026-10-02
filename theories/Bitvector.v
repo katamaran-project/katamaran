@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      NArith.BinNat
@@ -43,7 +43,7 @@ From Equations Require Import
 From Katamaran Require Import
      Notations Prelude.
 From Ltac2 Require Ltac2.
-Require Import stdpp.base.
+From stdpp Require Import base list.
 Local Set Implicit Arguments.
 
 Declare Scope bv_scope.
@@ -171,7 +171,7 @@ Module bv.
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
 
-  #[global] Notation exp2 n := (N.pow 2%N (N.of_nat n)).
+  #[global] Abbreviation exp2 n := (N.pow 2%N (N.of_nat n)).
 
   Section Conversion.
 
@@ -520,7 +520,7 @@ Module bv.
       view (app x y) = cvapp (view x) y.
     Proof.
       destruct (view x).
-      rewrite <- (f_equal_dep _ view (eq_sym (app_cons b xs y))).
+      rewrite <- (Logic.f_equal_dep _ view (eq_sym (app_cons b xs y))).
       cbn. now rewrite view_cons.
     Qed.
 
@@ -1791,20 +1791,20 @@ Module bv.
 
     Lemma length_seq n s l :
       length (@seq n s l) = Z.to_nat l.
-    Proof. unfold seq. now rewrite length_map, list_numbers.length_seqZ. Qed.
+    Proof. unfold seq. now rewrite length_map, length_seqZ. Qed.
 
     Lemma elem_of_seq {n} (s : bv n) l a :
       a ∈ seq s l ↔
       (∃ k, a = add s (of_Z k) /\ 0 <= k < l)%Z.
     Proof.
       split.
-      - intros (k & -> & Hk%elem_of_seqZ)%elem_of_list_fmap.
+      - intros (k & -> & Hk%elem_of_seqZ)%list_elem_of_fmap.
         assert (exists i, k = unsigned s + i /\ 0 <= i < l)%Z.
         { exists (k - unsigned s)%Z. lia. }
         destruct H as (i & -> & Hb). clear Hk.
         exists i.
         by rewrite <- of_Z_add, of_Z_unsigned.
-      - intros (k & Heq & Hlt). apply elem_of_list_fmap.
+      - intros (k & Heq & Hlt). apply list_elem_of_fmap.
         exists (unsigned s + k)%Z. split.
         + subst. by rewrite <-of_Z_add, of_Z_unsigned.
         + apply elem_of_seqZ. lia.
@@ -2083,11 +2083,11 @@ Module bv.
       (c_inj : forall k b1 b2 v1 v2, c k b1 v1 = c k b2 v2 -> b1 = b2 /\ v1 = v2)
       (n1 n2 : V O) (Heq : n1 <> n2) (m : nat) :
       forall (x : V m),
-        elem_of_list x (enumV c n1 m) ->
-        elem_of_list x (enumV c n2 m) -> False.
+        list_elem_of x (enumV c n1 m) ->
+        list_elem_of x (enumV c n2 m) -> False.
     Proof.
       revert V c c_inj n1 n2 Heq. induction m; intros V c c_inj n1 n2 Heq; cbn [enumV].
-      - intros x xIn1%list.elem_of_list_singleton xIn2% list.elem_of_list_singleton.
+      - intros x xIn1%list.list_elem_of_singleton xIn2% list.list_elem_of_singleton.
         congruence.
       - specialize (IHm (fun k => V (S k)) (fun k => c (S k)) (fun k => c_inj (S k))).
         intros x [in1|in1]%list.elem_of_app [in2|in2]%list.elem_of_app;
@@ -2113,7 +2113,7 @@ Module bv.
         elem_of (c m b x) (enumV c n (S m)).
     Proof.
       revert V c n. induction m; cbn; intros V c n b x xIn.
-      - apply list.elem_of_list_singleton in xIn. subst x.
+      - apply list.list_elem_of_singleton in xIn. subst x.
         destruct b; repeat constructor.
       - rewrite ?list.elem_of_app. rewrite list.elem_of_app in xIn.
         destruct xIn as [xIn|xIn];
@@ -2130,7 +2130,7 @@ Module bv.
     Lemma elem_of_enum (m : nat) (x : bv m) : base.elem_of x (enum m).
     Proof.
       induction x using bv_rect.
-      - now apply list.elem_of_list_singleton.
+      - now apply list.list_elem_of_singleton.
       - now apply elem_of_enumV.
     Qed.
 
@@ -2850,18 +2850,18 @@ Module bv.
     Import ListNotations.
 
     (* why do we have both bv_seq and seqBv? *)
-    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_N len)).
+    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (seqZ (bv.unsigned min) (Z.of_N len)).
 
     Lemma seqBv_zero {n} m : @seqBv n m 0 = nil.
     Proof. unfold seqBv. now cbv. Qed.
     Lemma seqBv_one {n} m : @seqBv n m 1 = cons m nil.
     Proof.
       unfold seqBv.
-      rewrite list_numbers.seqZ_cons; [|lia]. cbn.
+      rewrite seqZ_cons; [|lia]. cbn.
       f_equal. now rewrite of_Z_unsigned. Qed.
 
     Lemma seqBv_len n base width : length (@seqBv n base width) = N.to_nat width.
-    Proof. unfold seqBv. rewrite length_map, list_numbers.length_seqZ. lia. Qed.
+    Proof. unfold seqBv. rewrite length_map, length_seqZ. lia. Qed.
 
     Lemma seqBv_width_at_least {n width} base k y :
       base.lookup k (@seqBv n base width) = Some y -> exists p , width = N.of_nat (k + S p)%nat.
@@ -2879,8 +2879,8 @@ Module bv.
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_N n1)) n2.
     Proof.
       unfold seqBv.
-      rewrite Znat.N2Z.inj_add, list_numbers.seqZ_app, map_app; try lia.
-      f_equal. unfold list_numbers.seqZ. rewrite <- !list.list_fmap_compose.
+      rewrite Znat.N2Z.inj_add, seqZ_app, map_app; try lia.
+      f_equal. unfold seqZ. rewrite <- !list.list_fmap_compose.
       apply list.list_fmap_ext. intros _ x _. cbn.
       now rewrite <- !of_Z_add, !of_Z_unsigned, !of_Z_N.
     Qed.
@@ -2915,8 +2915,8 @@ Module bv.
     Proof.
       unfold bv.ule, seqBv.
       intros mla alm.
-      apply (list.elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
-      - apply list_numbers.elem_of_seqZ.
+      apply (list.list_elem_of_fmap_2' bv.of_Z _ (bv.unsigned v)).
+      - apply elem_of_seqZ.
         unfold unsigned, Z.of_nat.
         destruct len; Lia.lia.
       - now rewrite bv.of_Z_unsigned.
@@ -2945,7 +2945,7 @@ Module bv.
       False.
     Proof.
       intros Hrep Hlt Hain Hbin.
-      rewrite !list.elem_of_list_lookup in Hain, Hbin.
+      rewrite !list.list_elem_of_lookup in Hain, Hbin.
       destruct Hain as (ai & Hain).
       destruct Hbin as (bi & Hbin).
       apply list.lookup_lt_Some in Hain as Halen.
@@ -2989,7 +2989,7 @@ Module bv.
     and (min <=ᵘ v) (bv.bin v < bv.bin min + len)%N.
   Proof.
      unfold bv.ule, bv.ult, seqBv.
-     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%list.elem_of_list_fmap_2.
+     intros Hflow [y [-> Hel%elem_of_seqZ]]%list.list_elem_of_fmap_1.
      unfold bv.of_Z.
      rewrite <-(Znat.Z2N.id y); last bv_zify.
      rewrite bv.to_N_truncz.
@@ -3003,9 +3003,9 @@ Module bv.
     base.NoDup (@seqBv n min len).
   Proof.
     intros Hof.
-    apply list.NoDup_fmap_2_strong; last apply list_numbers.NoDup_seqZ.
+    apply list.NoDup_fmap_2_strong; last apply NoDup_seqZ.
     intros x y Hxin Hyin Heq.
-    rewrite !list_numbers.elem_of_seqZ in Hxin, Hyin.
+    rewrite !elem_of_seqZ in Hxin, Hyin.
     rewrite <-(Znat.Z2N.id y) in Heq; last bv_zify.
     rewrite <-(Znat.Z2N.id x) in Heq; last bv_zify.
     unfold bv.unsigned, bv.of_Z in *.

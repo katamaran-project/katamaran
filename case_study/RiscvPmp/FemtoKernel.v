@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Lists.List
      Strings.String.
@@ -55,7 +55,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -73,7 +73,7 @@ Module inv := invariants.
   Import ctx.notations.
   Import env.notations.
   Import iris.program_logic.weakestpre.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Import MicroSail.ShallowExecutor.
 
@@ -381,7 +381,7 @@ Module inv := invariants.
     (* CODE AND CONFIG SHORTANDS*)
     Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     (* Shorthand for the pmp entries in both Katamaran and Iris *)
-    Local Notation asn_femto_pmpentries a :=
+    Local Abbreviation asn_femto_pmpentries a :=
       ([(term_val ty_pmpcfg_ent femto_pmpcfg_ent0 ,ₜ (a +ᵇ term_val ty_xlenbits (bv.of_N adv_addr)));
         (term_val ty_pmpcfg_ent femto_pmpcfg_ent1 ,ₜ (term_val ty_xlenbits (bv.of_N adv_addr_end)))])%list.
 
@@ -858,7 +858,7 @@ Module inv := invariants.
     - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
       now cbn -[xlenbits].
     - apply bv.NoDup_seqbv. now compute.
-    - intros x. rewrite elem_of_list_filter.
+    - intros x. rewrite list_elem_of_filter.
       split.
       + now intros [? ?].
       + split; [auto | apply addr_in_all_addrs].
@@ -893,7 +893,7 @@ Module inv := invariants.
     rewrite -> (big_opL_permutation _ _ _ allAddr_filter_advAddr).
     iApply (big_sepL_mono with "Hadv"). iIntros (? ? Hsom) "Hptsto".
     unfold interp_addr_access_byte.
-    apply elem_of_list_lookup_2, adv_is_live in Hsom.
+    apply list_elem_of_lookup_2, adv_is_live in Hsom.
     repeat case_decide; auto.
     iPureIntro. eapply mmio_ram_False; eauto.
   Qed.
@@ -931,8 +931,8 @@ Module inv := invariants.
     end.
 
   Ltac solve_elem_of :=
-    repeat (try apply elem_of_list_here;
-            try apply elem_of_list_further).
+    repeat (try apply list_elem_of_here;
+            try apply list_elem_of_further).
 
   Ltac solve_list_subseteq :=
     repeat
@@ -1491,7 +1491,7 @@ Module inv := invariants.
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
     rewrite /= /not; apply mmio_ram_False.
-    apply elem_of_list_lookup_2 in Hsom.
+    apply list_elem_of_lookup_2 in Hsom.
     refine (bv.seqBv_sub_elem_of _ _ Hsom).
     - solve_bv.
     - rewrite bv.bin_of_N_small; last apply minAddr_rep. lia.
@@ -2101,7 +2101,7 @@ Module inv := invariants.
       rewrite -> (big_opL_permutation _ _ _ allAddr_filter_advAddr).
       iApply (big_sepL_mono with "Hadv"). iIntros (? ? Hsom) "Hptsto".
       unfold interp_addr_access_byte.
-      apply elem_of_list_lookup_2, adv_is_live in Hsom.
+      apply list_elem_of_lookup_2, adv_is_live in Hsom.
       repeat case_decide; auto.
       iPureIntro. eapply mmio_ram_False; eauto.
     Qed.
@@ -2316,7 +2316,11 @@ Module inv := invariants.
       - by iFrame "Hinv1 Hinv2".
       - unfold ptstoSthL, RiscvPmpIrisInstancePredicates.ptstoSthL,
           RiscvPmpIrisInstancePredicates.ptstoSth.
-        iPoseProof (big_sepL_impl _ (λ k v, v ↦ₘ (memory_ram μ1 v))
+        (* Denis says: I passed the memGS_right instance explicitly during the
+           version bump to 9.2. It's not clear why this was not necessary before.
+           I think if this pattern shows up regularly,
+           then we should introduce a ptsto_left and ptsto_right *)
+        iPoseProof (big_sepL_impl _ (λ k v, @RiscvPmpIrisInstancePredicates.interp_ptsto _ (memGS2_memGS_right) v (memory_ram μ1 v))
                      with "Hadv2 []") as "Hadv2".
         { iModIntro. iIntros (k v HIn) "H".
           pose proof (Forall_lookup_1 _ _ _ _ Hadv HIn) as Heq.

@@ -35,7 +35,7 @@ From Katamaran Require Import
      Syntax.Predicates
      Base.
 From stdpp Require Import base.
-From iris Require proofmode.tactics.
+From iris Require proofmode.proofmode.
 
 Import ctx.notations.
 Import env.notations.
@@ -512,10 +512,10 @@ Module Type WorldsOn
 
   End Persistence.
 
-  Notation WProd A B := (fun w : World => A w * B w)%type.
-  Notation WList A := (fun w : World => list (A w)).
-  Notation WTerm σ := (fun w : World => Term (wctx w) σ).
-  Notation STerm σ := (fun Σ => Term Σ σ).
+  Abbreviation WProd A B := (fun w : World => A w * B w)%type.
+  Abbreviation WList A := (fun w : World => list (A w)).
+  Abbreviation WTerm σ := (fun w : World => Term (wctx w) σ).
+  Abbreviation STerm σ := (fun Σ => Term Σ σ).
 
   (* A Notation for Terms because this seems to always gets messed up because of
      the [WTerm] / [STerm] Schizophrenia, *)
@@ -1225,7 +1225,7 @@ Module Type WorldsOn
     Section SimplifyAllSpec.
       Import option.notations.
       Import iris.bi.interface.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
       Context {w : World} (g : Formula w -> PathCondition w -> option (PathCondition w)).
       Context (g_spec : forall F k,
                   option.spec
@@ -1295,7 +1295,7 @@ Module Type WorldsOn
       Context (user_spec : SolverUserOnlySpec user).
 
       Import iris.bi.interface.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Lemma solveruseronly_simplify_formula_spec {w : World} (F : Formula w) (k : PathCondition w) :
         option.spec
@@ -1417,14 +1417,14 @@ Module Type WorldsOn
       Defined.
       #[local] Arguments cat {Σ} !_ !_ /.
 
-      Notation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
-      Notation dlist_neq t1 t2 := (singleton (formula_neq t1 t2)).
-      Notation dlist_le t1 t2 := (singleton (formula_le t1 t2)).
-      Notation dlist_lt t1 t2 := (singleton (formula_lt t1 t2)).
-      Notation dlist_bvsle t1 t2 := (singleton (formula_bvsle t1 t2)).
-      Notation dlist_bvslt t1 t2 := (singleton (formula_bvslt t1 t2)).
-      Notation dlist_bvule t1 t2 := (singleton (formula_bvule t1 t2)).
-      Notation dlist_bvult t1 t2 := (singleton (formula_bvult t1 t2)).
+      Abbreviation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
+      Abbreviation dlist_neq t1 t2 := (singleton (formula_neq t1 t2)).
+      Abbreviation dlist_le t1 t2 := (singleton (formula_le t1 t2)).
+      Abbreviation dlist_lt t1 t2 := (singleton (formula_lt t1 t2)).
+      Abbreviation dlist_bvsle t1 t2 := (singleton (formula_bvsle t1 t2)).
+      Abbreviation dlist_bvslt t1 t2 := (singleton (formula_bvslt t1 t2)).
+      Abbreviation dlist_bvule t1 t2 := (singleton (formula_bvule t1 t2)).
+      Abbreviation dlist_bvult t1 t2 := (singleton (formula_bvult t1 t2)).
 
       Import iris.bi.interface iris.bi.derived_laws.
 

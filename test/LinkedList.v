@@ -38,7 +38,7 @@
    memory.
   *)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Lists.List
      Program.Tactics
@@ -66,7 +66,7 @@ From Katamaran Require Import
      MicroSail.Soundness.
 
 From stdpp Require Import decidable finite list fin_maps infinite.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -77,8 +77,8 @@ Local Open Scope string_scope.
 (* We use this notation in every place an int represents a memory address.
    Unfortunately, this Notation is also used for integers that are not
    addreses. *)
-Notation ptr   := ty.int.
-Notation llist := (ty.option ptr).
+Abbreviation ptr   := ty.int.
+Abbreviation llist := (ty.option ptr).
 
 Module Import ExampleBase <: Base.
 
@@ -274,7 +274,7 @@ Module Import ExampleProgram <: Program ExampleBase.
   (* In this section we define the foreign functions. *)
   Section ForeignKit.
 
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     (* This defines a "stepping relation" for the foreign functions. Since all
        these functions are deterministic, we write them in a functional instead
@@ -843,7 +843,7 @@ Module ExampleModel.
       Import iris.bi.big_op.
       Import iris.base_logic.lib.iprop.
       Import iris.base_logic.lib.gen_heap.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Class mcMemGS Σ :=
         McMemGS {
@@ -883,7 +883,7 @@ Module ExampleModel.
 
   Module ExampleIrisAdeqParams <: IrisAdeqParameters ExampleBase ExampleIrisBase.
     Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
     Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
@@ -920,7 +920,7 @@ Module ExampleModel.
     Import iris.base_logic.lib.iprop.
     Import iris.bi.big_op.
     Import iris.bi.interface.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     (* This is the interpretation of the points to pair predicate in Iris. *)
     Definition ptstocons_interp `{mG : mcMemGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
@@ -990,7 +990,7 @@ Module ExampleModel.
       Import iris.program_logic.weakestpre.
       Import iris.base_logic.lib.gen_heap.
       Import iris.proofmode.string_ident.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Ltac destruct_syminstance ι :=
         repeat

@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Lists.List
      micromega.Lia
@@ -59,7 +59,7 @@ From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 From Katamaran Require Import RiscvPmp.LoopVerification.
 From Katamaran Require Import RiscvPmp.LoopVerificationBinary.
@@ -190,7 +190,7 @@ Module RunningExample.
 
     Section WithIris.
       Import iris.program_logic.weakestpre.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Lemma contract_step_verified : ∀ `{sailGS Σ} (a : Val ty_xlenbits), ⊢ contract_step a.
       Proof.
@@ -205,7 +205,7 @@ Module RunningExample.
 
   Section WithIris.
     Import iris.program_logic.weakestpre.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RiscvPmpIrisBase2.
     Import RiscvPmpIrisInstance2.
 

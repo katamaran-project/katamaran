@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      Classes.Morphisms_Prop
@@ -64,7 +64,7 @@ Module Type NewShallowExecOn
   (Import PROG : Program B)
   (Import PLOG : ProgramLogic B SIG PROG).
 
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Module CPureSpec.
   Section WithProp.
