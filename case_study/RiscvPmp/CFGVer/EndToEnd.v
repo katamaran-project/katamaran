@@ -99,120 +99,6 @@ Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
 
-  Lemma cfg_instrs_verified `{sailGS2 Σ} {instrs} exit_addr γ1 γ2 R (ι : Valuation R)
-    (contract : @CFGVerifierContract R)
-    (* THE CONTRACT, VALID -- sealed (PLAN-valid-blk-annot.md Phase 4): no
-       annotated list, no raw VC, no block premise at this level. *)
-    (valid_contract : ValidCFGVerifierContract contract)
-    (contractInstrs : cfg_instrs contract = instrs)
-    (init_addr : N)
-    (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
-                      = ty.SyncVal (@bv.of_N xlenbits init_addr))
-    (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-    (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-                     (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
-    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
-               cur_privilege ↦ᵣ ty.SyncVal Machine ∗
-               interp_inv_constant_time -∗
-               asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
-                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
-    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-    ⊢ own_regstore2 γ1 γ2 ∗
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs) ∗
-      interp_inv_constant_time
-    -∗ exitCond_WP2_loop (atPc exit_addr).
-  Proof.
-    (* THE SEAL COMES OFF HERE, once per chain (PLAN-valid-blk-annot.md
-       Phase 4): the annotated program `instrs'` exists only inside this
-       proof.  Memory is stated over the spec `instrs`, which is `strip
-       instrs'`; the executor-level lemmas want the projection of the map over
-       instrs' (fmap_instrs_of_list; `unfold strip` because strip is not
-       syntactically `map`). *)
-    apply ValidCFGVerifierContract_elim in valid_contract.
-    destruct valid_contract as (instrs' & valid_contract & Hstrip & Hval).
-    subst instrs.
-    rewrite <- Hstrip in Hleninstrs. rewrite strip_length in Hleninstrs.
-    assert (Hbridge : instrs_of_list (bv.of_N init_addr) (cfg_instrs contract)
-                    = ai_instr <$> instrs_of_list (bv.of_N init_addr) instrs')
-      by (rewrite <- Hstrip; unfold strip; now rewrite fmap_instrs_of_list).
-    rewrite Hbridge. clear Hbridge Hstrip.
-    assert (Hbs : forall wds : bv xlenbits -> bv word,
-                   ⊢ blocksSound wds (instrs_of_list (bv.of_N init_addr) instrs'))
-      by (intros wds; apply blocksSound_of_annotsValid, Hval).
-    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "Hpre".
-    iDestruct "Hpre" as "(Hregs & Hinstrs & #Hinv)".
-    cbn.
-    iDestruct "Hregs" as "(Hpc & Hnpc & Hstatus & Htvec & Hcause & Hepc & Hpriv & Hregs)".
-    rewrite γ1curpriv γ1pc γ2curpriv γ2pc.
-    rewrite !regPstsTo_sync_is_nonsync.
-    unfold exitCond_WP2_loop.
-    destruct contract.
-    cbn in valid_contract, contractPlacement,
-      HexitFaith, ImplPre.
-    unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in valid_contract.
-    assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
-                    (instrs_of_list (bv.of_N init_addr) instrs')
-                    (table_of_list cfg_placement 0 instrs') ι).
-    { apply itable_faith_of_list; [exact contractPlacement|].
-      apply table_bound_of_lenAddr, Hleninstrs. }
-    (* Hbs discharges the block premise vacuously, so this end-to-end theorem
-       is exactly as strong as before the hook existed. *)
-    iApply (sound_scfg_verification_condition_myWP2
-              valid_contract _ Hif HexitFaith
-              Hbs
-              $! (SyncVal (bv.of_N init_addr))
-              with "[Hpc Hnpc Hstatus Htvec Hcause Hepc Hpriv Hregs Hinstrs]").
-    - iSplitL "Hpriv Hregs".
-      + iApply ImplPre. iFrame "Hinv Hpriv".
-        rewrite gprs_with_registers_equiv. cbn.
-        repeat (iDestruct "Hregs" as "($ & Hregs)").
-      + iSplit. { done. }
-        iFrame.
-    (* `& _` absorbs the re-threaded exit assertion (Adequacy.v,
-         sound_cexec_triple_addr_myWP2).  These callers want only pc-in-exit,
-         and CFG_VC_triple still passes a trivial post, so there is nothing to
-         use here — but the conjunct has to be introduced. *)
-    - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
-      destruct an as [v | v1 v2].
-      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. unfold atPc. rewrite Hexit. exact I.
-      + contradiction.
-  Qed.
-
-  Lemma cfg_instrs_safe `{sailGS2 Σ} {instrs} exit_addr γ1 γ2 {R} {ι : Valuation R}
-    (contract : @CFGVerifierContract R)
-    (* THE CONTRACT, VALID -- sealed (PLAN-valid-blk-annot.md Phase 4): no
-       annotated list, no raw VC, no block premise at this level. *)
-    (valid_contract : ValidCFGVerifierContract contract)
-    (contractInstrs : cfg_instrs contract = instrs)
-    (init_addr : N)
-    (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
-                      = ty.SyncVal (@bv.of_N xlenbits init_addr))
-    (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-    (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
-                     (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
-    (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
-               cur_privilege ↦ᵣ ty.SyncVal Machine ∗
-               interp_inv_constant_time -∗
-               asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
-                 ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
-    RiscvPmpProgram.read_register γ1 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ2 cur_privilege = Machine ->
-    RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
-    RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
-    ⊢ own_regstore2 γ1 γ2 ∗
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-        (instrs_of_list (bv.of_N init_addr) instrs) ∗
-      interp_inv_constant_time
-    -∗ exitCond_WP2_loop (atPc exit_addr).
-  Proof.
-    iIntros (γ1curpriv γ2curpriv γ1pc γ2pc) "H".
-    iApply cfg_instrs_verified; eauto.
-  Qed.
-
   Lemma cfg_instrs_verified_with_mem `{sailGS2 Σ} {instrs} exit_addr γ1 γ2
     {R} {ι : Valuation R}
     (data_specs : list mem_spec) (μ1 μ2 : Memory)
@@ -1462,6 +1348,93 @@ Import IrisModel.RiscvPmpIrisBase.
        because ImplPre closes over γ1/γ2 via the valuation ι, which would
        require abstracting mk_ι : RegStore → RegStore → Valuation R to make
        the conclusion universally quantified. *)
+  (* ------------------------------------------------------------------ *)
+  (* cfg_instrs_endToEnd_gen -- THE end-to-end theorem                    *)
+  (* (PLAN-general-endtoend.md A2).  Data memory at any addresses         *)
+  (* data_layout_ok allows; every other end-to-end lemma is a corollary:  *)
+  (* cfg_instrs_endToEnd (no data) and cfg_instrs_endToEnd_with_memory    *)
+  (* (data contiguous right after the code).                              *)
+    Lemma cfg_instrs_endToEnd_gen
+        {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
+        {instrs} exit_addr n ws_instrs {R} {ι : Valuation R}
+        public_registers
+        (HpubReg : declare_public_registers γ1 γ2 public_registers)
+        data_specs
+        (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs))
+        (contract : @CFGVerifierContract R)
+        (* THE CONTRACT, VALID -- sealed (PLAN-valid-blk-annot.md Phase 4): no
+           annotated list, no raw VC, no block premise at this level. *)
+        (valid_contract : ValidCFGVerifierContract contract)
+        (contractInstrs : cfg_instrs contract = instrs)
+        (init_addr : N)
+        (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
+                          = ty.SyncVal (@bv.of_N xlenbits init_addr))
+        (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+                         (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
+        (* the data cells ANYWHERE: in range, clear of the code, pairwise
+           disjoint (Adequacy.data_layout_ok) *)
+        (HLayout : data_layout_ok init_addr (length instrs) data_specs)
+        (ImplPre : forall `{sailGS2 Σ},
+            interp_gprs_with_public_registers γ1 γ2 public_registers ∗
+            interp_mem_with_public_memory μ1 μ2 data_specs ∗
+            cur_privilege ↦ᵣ ty.SyncVal Machine ∗
+            interp_inv_constant_time -∗
+            asn.interpret (extend_to_minimal_pre (cfg_precondition contract))
+              ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]) :
+        (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N →
+        mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs →
+        mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs →
+        RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
+        RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
+        RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
+        RiscvPmpProgram.read_register γ2 pc = bv.of_N init_addr →
+        ⟨ γ1, μ1 ⟩ -(atPc exit_addr, n)->* ⟨ γ1', μ1' ⟩ →
+        leakage_trace μ1 = leakage_trace μ2 →
+        ∃ γ2' μ2',
+          ⟨ γ2, μ2 ⟩ -(atPc exit_addr, n)->* ⟨ γ2', μ2' ⟩ ∧
+          leakage_trace μ1' = leakage_trace μ2'.
+    Proof.
+      intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
+        steps1 Htrace.
+      assert (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
+        by exact Hlen.
+      apply (adequacy_gen_RiscVNStepsExitCond_strong
+        (μ21 := μ2) (γ21 := γ2)
+        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
+        steps1).
+      iIntros (Σ' H').
+      iIntros "(Hmem & H')".
+      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
+      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
+        as "Hinv"; auto.
+      iMod "Hinv" as "#Hinv".
+      (* Extract instruction + data memory from raw byte ownership *)
+      iMod (@instrsAndDataMemory_at _ _ μ1 μ2 init_addr ws_instrs data_specs instrs
+              Hlen μinit1 μinit2 HLayout with "Hmem") as "[H Hmemdata]".
+      (* Convert all-NonSyncVal to public form *)
+      rewrite (something_memory data_specs HpubMem).
+      iSplitR "".
+      - iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 valid_contract).
+        all: eauto.
+        iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
+        iApply ImplPre.
+        rewrite <- (something_registers HpubReg).
+        iFrame "Hmem ∗ #".
+        by iFrame "∗ #".
+      - iModIntro.
+        iIntros (γ22 μ22) "Rmem".
+        iInv "Hinv" as "Hleak".
+        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
+        unfold mem_inv_only_leak.
+        iMod "Hleak".
+        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
+        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
+        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
+        iModIntro. iFrame.
+        iApply fupd_mask_intro; first set_solver.
+        now iIntros "_".
+    Qed.
+
     Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}
       {instrs} exit_addr n ws {R} {ι : Valuation R}
       public_registers
@@ -1495,38 +1468,13 @@ Import IrisModel.RiscvPmpIrisBase.
         ⟨ γ2, μ2 ⟩ -(atPc exit_addr, n)->* ⟨ γ2', μ2' ⟩ ∧
         leakage_trace μ1' = leakage_trace μ2'.
     Proof.
-      intros Hleninstrs μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
-        steps1 Htrace.
-      apply (adequacy_gen_RiscVNStepsExitCond_strong
-        (μ21 := μ2) (γ21 := γ2)
-        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
-        steps1).
-      iIntros (Σ' H').
-      iIntros "(Hmem & H')".
-      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
-      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
-        as "Hinv"; auto.
-      iMod "Hinv" as "#Hinv".
-      iMod (instrsMemory init_addr with "Hmem") as "H"; eauto.
-      iSplitR "".
-      - iApply (cfg_instrs_safe γ1 γ2 valid_contract).
-        all: eauto.
-        iIntros "(Hregs & Hpriv & #Hinv')".
-        iApply ImplPre.
-        iFrame "∗ #".
-        by iFrame "∗ #".
-      - iModIntro.
-        iIntros (γ22 μ22) "Rmem".
-        iInv "Hinv" as "Hleak".
-        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
-        unfold mem_inv_only_leak.
-        iMod "Hleak".
-        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
-        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
-        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
-        iModIntro. iFrame.
-        iApply fupd_mask_intro; first set_solver.
-        now iIntros "_".
+      intros Hleninstrs.
+      refine (@cfg_instrs_endToEnd_gen γ1 γ2 γ1' μ1 μ2 μ1' instrs exit_addr n ws R ι
+                public_registers HpubReg [] _ contract valid_contract
+                contractInstrs init_addr contractPlacement HexitFaith _ _ Hleninstrs).
+      - constructor.
+      - split; constructor.
+      - intros Σ' H'. iIntros "(Hregs & _ & Hpriv & Hinv)". iApply ImplPre. iFrame.
     Qed.
 
   (* ------------------------------------------------------------------ *)
@@ -1577,45 +1525,12 @@ Import IrisModel.RiscvPmpIrisBase.
           ⟨ γ2, μ2 ⟩ -(atPc exit_addr, n)->* ⟨ γ2', μ2' ⟩ ∧
           leakage_trace μ1' = leakage_trace μ2'.
     Proof.
-      intros Hlen μinit1 μinit2 γ1curpriv γ2curpriv γ1pc γ2pc
-        steps1 Htrace.
-      assert (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-        by (unfold lenAddr in *; lia).
-      apply (adequacy_gen_RiscVNStepsExitCond_strong
-        (μ21 := μ2) (γ21 := γ2)
-        (fun _ μ2' => leakage_trace μ1' = leakage_trace μ2')
-        steps1).
-      iIntros (Σ' H').
-      iIntros "(Hmem & H')".
-      iPoseProof (mem_res2_split_leak with "Hmem") as "(Hmem & Hleak)".
-      iPoseProof (constant_time_from_mem_res2_only_leak with "Hleak")
-        as "Hinv"; auto.
-      iMod "Hinv" as "#Hinv".
-      (* Extract instruction + data memory from raw byte ownership *)
-      iMod (instrsAndDataMemory init_addr ws_instrs data_specs instrs with "Hmem") as "[H Hmemdata]";
-        [exact Hlen | exact μinit1 | exact μinit2 | exact HDataAddrs |].
-      (* Convert all-NonSyncVal to public form *)
-      rewrite (something_memory data_specs HpubMem).
-      iSplitR "".
-      - iApply (cfg_instrs_safe_with_mem γ1 γ2 data_specs μ1 μ2 valid_contract).
-        all: eauto.
-        iIntros "(Hregs & Hmem & Hpriv & #Hinv')".
-        iApply ImplPre.
-        rewrite <- (something_registers HpubReg).
-        iFrame "Hmem ∗ #".
-        by iFrame "∗ #".
-      - iModIntro.
-        iIntros (γ22 μ22) "Rmem".
-        iInv "Hinv" as "Hleak".
-        iPoseProof (mem_inv2_split_leak with "Rmem") as "(Rmem & [Htr1 Htr2])".
-        unfold mem_inv_only_leak.
-        iMod "Hleak".
-        iDestruct "Hleak" as "[%t [Hfrag1 Hfrag2]]".
-        iDestruct (trace.trace_full_frag_eq with "Htr1 Hfrag1") as "->".
-        iDestruct (trace.trace_full_frag_eq with "Htr2 Hfrag2") as "->".
-        iModIntro. iFrame.
-        iApply fupd_mask_intro; first set_solver.
-        now iIntros "_".
+      intros Hlen.
+      refine (@cfg_instrs_endToEnd_gen γ1 γ2 γ1' μ1 μ2 μ1' instrs exit_addr n ws_instrs R ι
+                public_registers HpubReg data_specs HpubMem contract valid_contract
+                contractInstrs init_addr contractPlacement HexitFaith
+                (contig_data_layout init_addr instrs data_specs Hlen HDataAddrs) ImplPre _).
+      lia.
     Qed.
 
   (* gen_contract_noninterferent_param is defined further down, with the other

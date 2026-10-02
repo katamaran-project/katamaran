@@ -1019,67 +1019,211 @@ Section AdequacyTools.
     - change (3%nat : Z) with (Z.of_N 3). now rewrite bv.of_Z_N.
   Qed.
 
-  (* Assembles interp_mem_with_memory from raw byte ownership, by induction
-     over the spec list.  Direct analog of intro_ptsto_instrs for data memory. *)
-  Lemma intro_mem_with_memory `{sailGS2 Σ} {μ1 μ2 : Memory} (a : bv word)
-      (specs : list mem_spec) :
-    (∀ i spec, specs !! i = Some spec →
-      spec.1 = bv.add a (bv.of_N (4 * N.of_nat i))) →
-    ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length specs)),
+
+  (* ---- DATA AT ARBITRARY ADDRESSES (PLAN-general-endtoend.md A1) ------- *)
+  (* The data cells may sit ANYWHERE in the address space: each in range,
+     each disjoint from the code, pairwise disjoint.  The contiguous layout
+     right after the code is one instance (contig_data_layout).  The proof
+     does not slice liveAddrs into consecutive ranges: the code bytes plus
+     the data bytes are NoDup and live, hence a sub-multiset of liveAddrs,
+     and big_sepL_submseteq peels their ownership off (affine). *)
+  Lemma exp2_Z (n : nat) : Z.of_N (bv.exp2 n) = (2 ^ Z.of_nat n)%Z.
+  Proof. rewrite N2Z.inj_pow nat_N_Z. reflexivity. Qed.
+
+  Lemma elem_seqBv_bin {n} (a x : bv n) (len : N) :
+    (bv.bin a + len <= bv.exp2 n)%N ->
+    x ∈ bv.seqBv a len -> (bv.bin a <= bv.bin x < bv.bin a + len)%N.
+  Proof.
+    intros Hb Hx. unfold bv.seqBv in Hx.
+    apply list.elem_of_list_fmap_2 in Hx as [z [-> Hz]].
+    apply list_numbers.elem_of_seqZ in Hz.
+    pose proof (bv.unsigned_bounds a) as Ba. pose proof (exp2_Z n) as Ee.
+    assert (E : bv.unsigned (@bv.of_Z n z) = z).
+    { rewrite bv.unsigned_of_Z. unfold bv.truncz. apply Z.mod_small. unfold bv.unsigned in *. lia. }
+    unfold bv.unsigned in E, Hz. lia.
+  Qed.
+
+  Lemma lenAddr_small_word : (lenAddr <= bv.exp2 word)%N.
+  Proof. vm_compute. discriminate. Qed.
+
+  (* two data cells do not overlap *)
+  Definition data_cell_sep (s t : mem_spec) : Prop :=
+    (bv.bin s.1 + 4 <= bv.bin t.1 \/ bv.bin t.1 + 4 <= bv.bin s.1)%N.
+
+  (* THE premise: every cell in range and clear of the code
+     [start, start + 4·ncode), the cells pairwise disjoint *)
+  Definition data_layout_ok (start : N) (ncode : nat) (specs : list mem_spec) : Prop :=
+    Forall (fun s => (bv.bin s.1 + 4 <= lenAddr)%N /\
+                     (bv.bin s.1 + 4 <= start \/ start + 4 * N.of_nat ncode <= bv.bin s.1)%N) specs
+    /\ ForallOrdPairs data_cell_sep specs.
+
+  Definition data_bytes (specs : list mem_spec) : list (bv word) :=
+    concat (List.map (fun s => bv.seqBv s.1 4) specs).
+
+  Lemma data_bytes_elem (specs : list mem_spec) x :
+    Forall (fun s => (bv.bin s.1 + 4 <= lenAddr)%N) specs ->
+    x ∈ data_bytes specs -> exists s, In s specs /\ (bv.bin s.1 <= bv.bin x < bv.bin s.1 + 4)%N.
+  Proof.
+    pose proof lenAddr_small_word.
+    induction specs as [|s ss IH]; intros Hr Hx; [inversion Hx|].
+    inversion Hr as [|? ? Hs Hss]; subst.
+    unfold data_bytes in Hx. cbn [List.map concat] in Hx.
+    apply elem_of_app in Hx as [Hx|Hx].
+    - exists s. split; [left; reflexivity|].
+      change (ty.Val ty_word) with (bv word) in *.
+      apply elem_seqBv_bin; [lia|exact Hx].
+    - destruct (IH Hss Hx) as [t [Ht Hb]]. exists t. split; [right; exact Ht|exact Hb].
+  Qed.
+
+  Lemma data_bytes_NoDup (specs : list mem_spec) :
+    Forall (fun s => (bv.bin s.1 + 4 <= lenAddr)%N) specs ->
+    ForallOrdPairs data_cell_sep specs ->
+    NoDup (data_bytes specs).
+  Proof.
+    pose proof lenAddr_small_word.
+    induction specs as [|s ss IH]; intros Hr Hp; [constructor|].
+    inversion Hr as [|? ? Hs Hss]; subst. inversion Hp as [|? ? Hsep Hps]; subst.
+    unfold data_bytes. cbn [List.map concat]. apply NoDup_app. split; [|split].
+    - apply bv.seqBv_NoDup. pose proof (exp2_Z word). unfold bv.unsigned.
+      change (ty.Val ty_word) with (bv word) in *. lia.
+    - intros x Hx1 Hx2.
+      change (ty.Val ty_word) with (bv word) in *.
+      apply elem_seqBv_bin in Hx1; [|lia].
+      destruct (data_bytes_elem Hss Hx2) as [t [Ht Hb]].
+      rewrite Forall_forall in Hsep.
+      pose proof (Hsep t ltac:(apply elem_of_list_In; exact Ht)) as Hst.
+      unfold data_cell_sep in Hst.
+      change (ty.Val ty_word) with (bv word) in *. lia.
+    - apply IH; assumption.
+  Qed.
+
+  (* intro_mem_with_memory without the contiguity: the bytes of each cell *)
+  Lemma intro_mem_with_memory_at `{sailGS2 Σ} {μ1 μ2 : Memory} (specs : list mem_spec) :
+    ([∗ list] a' ∈ data_bytes specs,
       @pointsto _ _ _ _ _
         (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a'
         (DfracOwn 1) (memory_ram μ1 a')) ∗
-    ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length specs)),
+    ([∗ list] a' ∈ data_bytes specs,
       @pointsto _ _ _ _ _
         (@mc_ghGS Σ (@memGS2_memGS_right Σ (@sailGS2_memGS Σ H))) a'
         (DfracOwn 1) (memory_ram μ2 a'))
     ⊢ interp_mem_with_memory μ1 μ2 specs.
   Proof.
-    iIntros (Haddrs) "[H1 H2]".
-    iInduction specs as [| spec specs] "IH" forall (a Haddrs).
-    { done. }
-    destruct spec as [a_s pub].
-    assert (Hlen : (4 * N.of_nat (length ((a_s, pub) :: specs)) =
-                   4 + 4 * N.of_nat (length specs))%N).
-    { cbn [length]. rewrite Nat2N.inj_succ. rewrite N.mul_succ_r. apply N.add_comm. }
-    rewrite Hlen.
-    rewrite (bv.seqBv_app (n := 32) a 4).
+    iIntros "[H1 H2]".
+    iInduction specs as [| [a pub] specs] "IH"; [done|].
+    unfold data_bytes. cbn [List.map concat fst].
     rewrite !big_opL_app.
-    iDestruct "H1" as "[H1h H1t]".
-    iDestruct "H2" as "[H2h H2t]".
+    iDestruct "H1" as "[H1h H1t]". iDestruct "H2" as "[H2h H2t]".
     cbn [interp_mem_with_memory big_opL].
     iSplitL "H1h H2h".
-    { have Ha_s := Haddrs 0 (a_s, pub) eq_refl.
-      cbn in Ha_s. rewrite bv.add_zero_r in Ha_s. subst a_s.
-      iApply (intro_ptstomem_word2_nonsync (get_word_is_mem_has_word μ1 a)
+    { iApply (intro_ptstomem_word2_nonsync (get_word_is_mem_has_word μ1 a)
                                             (get_word_is_mem_has_word μ2 a)).
       iFrame. }
-    iApply ("IH" $! (a + bv.of_N 4)%bv with "[%] H1t H2t").
-    intros i spec Hlook.
-    pose proof (Haddrs (S i) spec Hlook) as Hsi.
-    assert (H4 : (4 * N.of_nat (S i) = 4 + 4 * N.of_nat i)%N).
-    { rewrite Nat2N.inj_succ. rewrite N.mul_succ_r. apply N.add_comm. }
-    rewrite H4 in Hsi. rewrite <- bv.of_N_add in Hsi. rewrite bv.add_assoc in Hsi.
-    exact Hsi.
+    iApply ("IH" with "H1t H2t").
   Qed.
 
-  (* Extract both instruction memory AND data memory from mem_res2_without_leak.
-     Data words must occupy the 4*|data_specs| bytes immediately following
-     the instruction region (contiguous layout: instructions at [0, 4*n),
-     data at [4*n, 4*n + 4*m)).
+  (* Extract instruction memory AND data memory from mem_res2_without_leak,
+     the data cells anywhere data_layout_ok allows.  The result is the
+     all-NonSyncVal form interp_mem_with_memory; something_memory (outside
+     AdequacyTools) converts it to interp_mem_with_public_memory. *)
+  Lemma instrsAndDataMemory_at `{sailGS2 Σ} {μ1 μ2 : Memory} (start : N) ws_instrs data_specs instrs :
+    (start + 4 * N.of_nat (length instrs) < lenAddr)%N →
+    mem_has_instrs μ1 (bv.of_N start) ws_instrs instrs →
+    mem_has_instrs μ2 (bv.of_N start) ws_instrs instrs →
+    data_layout_ok start (length instrs) data_specs →
+    @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (instrs_of_list (bv.of_N start) instrs) ∗
+      interp_mem_with_memory μ1 μ2 data_specs.
+  Proof.
+    iIntros (Hlen HMem1 HMem2 [Hr Hp]) "Hmem".
+    pose proof lenAddr_small_word as HL.
+    assert (Hrng : Forall (fun s : mem_spec => (bv.bin s.1 + 4 <= lenAddr)%N) data_specs).
+    { eapply Forall_impl; [exact Hr|]. intros s [Hs _]. exact Hs. }
+    assert (Hst : bv.bin (@bv.of_N word start) = start).
+    { apply bv.bin_of_N_small. lia. }
+    set (C := bv.seqBv (n := word) (bv.of_N start) (4 * N.of_nat (length instrs))).
+    assert (HC : forall x, x ∈ C -> (start <= bv.bin x < start + 4 * N.of_nat (length instrs))%N).
+    { intros x Hx. apply elem_seqBv_bin in Hx; [lia|lia]. }
+    assert (Hsub : C ++ data_bytes data_specs ⊆+ liveAddrs).
+    { apply NoDup_submseteq.
+      - apply NoDup_app. split; [|split].
+        + apply bv.seqBv_NoDup. pose proof (exp2_Z word). unfold bv.unsigned. rewrite Hst. lia.
+        + intros x Hx1 Hx2. apply HC in Hx1.
+          destruct (data_bytes_elem Hrng Hx2) as [t [Ht Hb]].
+          rewrite Forall_forall in Hr.
+          destruct (Hr t ltac:(apply elem_of_list_In; exact Ht)) as [_ Hd].
+          change (ty.Val ty_word) with (bv word) in *. lia.
+        + apply data_bytes_NoDup; assumption.
+      - intros x Hx. unfold liveAddrs. apply bv.in_seqBv'.
+        + unfold bv.ule. unfold minAddr; change (bv.bin (bv.of_N 0)) with 0%N. lia.
+        + unfold minAddr. change (bv.bin (bv.of_N 0)) with 0%N. rewrite N.add_0_l.
+          apply elem_of_app in Hx as [Hx|Hx].
+          * apply HC in Hx. change (@bv.bin xlenbits) with (@bv.bin word) in *. lia.
+          * destruct (data_bytes_elem Hrng Hx) as [t [Ht Hb]].
+            rewrite Forall_forall in Hr.
+            destruct (Hr t ltac:(apply elem_of_list_In; exact Ht)) as [Hd _].
+            change (ty.Val ty_word) with (bv word) in *.
+            change (@bv.bin xlenbits) with (@bv.bin word) in *. lia. }
+    unfold mem_res2_without_leak, IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_without_leak.
+    iDestruct "Hmem" as "[[H1 Htr1] [H2 Htr2]]".
+    iPoseProof (big_sepL_submseteq _ _ _ Hsub with "H1") as "H1".
+    iPoseProof (big_sepL_submseteq _ _ _ Hsub with "H2") as "H2".
+    rewrite !big_opL_app.
+    iDestruct "H1" as "[Hinst1 Hdata1]". iDestruct "H2" as "[Hinst2 Hdata2]".
+    iModIntro. iSplitL "Hinst1 Hinst2".
+    - iExists (words_of_list (bv.of_N start) ws_instrs).
+      iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
+      { rewrite Hst. lia. }
+      iFrame.
+    - iApply intro_mem_with_memory_at. iFrame.
+  Qed.
 
-     The result is the "all-NonSyncVal" form interp_mem_with_memory.
-     Use something_memory (outside AdequacyTools) to convert to the
-     interp_mem_with_public_memory form.
+  (* the contiguous layout right after the code satisfies data_layout_ok *)
+  Lemma contig_data_cells (base : N) (specs : list mem_spec) :
+    (base + 4 * N.of_nat (length specs) <= lenAddr)%N ->
+    (forall i s, specs !! i = Some s -> bv.bin s.1 = (base + 4 * N.of_nat i)%N) ->
+    Forall (fun s : mem_spec => (base <= bv.bin s.1 /\ bv.bin s.1 + 4 <= base + 4 * N.of_nat (length specs))%N) specs
+    /\ ForallOrdPairs data_cell_sep specs.
+  Proof.
+    revert base. induction specs as [|s ss IH]; intros base Hb Hi; [split; constructor|].
+    assert (H0 : bv.bin s.1 = base) by (rewrite (Hi 0%nat s eq_refl); lia).
+    assert (Hi' : forall i t, ss !! i = Some t -> bv.bin t.1 = ((base + 4) + 4 * N.of_nat i)%N).
+    { intros i t Ht. rewrite (Hi (S i) t Ht). lia. }
+    cbn [length] in Hb.
+    destruct (IH (base + 4)%N ltac:(lia) Hi') as [Hf Hp].
+    split.
+    - constructor.
+      { cbn [length]. change (ty.Val ty_word) with (bv word) in *. lia. }
+      eapply Forall_impl; [exact Hf|]. intros t Ht. cbn [length].
+      change (ty.Val ty_word) with (bv word) in *. cbv beta in Ht |- *. lia.
+    - constructor; [|exact Hp].
+      eapply Forall_impl; [exact Hf|]. intros t Ht. cbv beta in Ht. unfold data_cell_sep.
+      change (ty.Val ty_word) with (bv word) in *. lia.
+  Qed.
 
-     Uses intro_mem_with_memory (proved by induction over data_specs) for
-     the data region, after a two-way bv.seqBv_app split. *)
+  Lemma contig_data_layout (start : N) (instrs : list AST) (specs : list mem_spec) :
+    (start + 4 * N.of_nat (length instrs) + 4 * N.of_nat (length specs) < lenAddr)%N ->
+    (forall i s, specs !! i = Some s ->
+       s.1 = bv.of_N (start + 4 * N.of_nat (length instrs) + 4 * N.of_nat i)) ->
+    data_layout_ok start (length instrs) specs.
+  Proof.
+    intros Hl Ha.
+    destruct (contig_data_cells (start + 4 * N.of_nat (length instrs)) specs) as [Hf Hp]; [lia| |].
+    { intros i s Hs. rewrite (Ha i s Hs). apply bv.bin_of_N_small.
+      pose proof lenAddr_small_word. apply lookup_lt_Some in Hs.
+      change (@Datatypes.length (prod (bv word) bool)) with (@Datatypes.length mem_spec) in Hs. lia. }
+    split; [|exact Hp].
+    eapply Forall_impl; [exact Hf|]. intros s Hs. cbv beta in Hs |- *.
+    change (ty.Val ty_word) with (bv word) in *. lia.
+  Qed.
+
+  (* The contiguous layout (data words at start + 4·|instrs| + 4·i), as a
+     corollary of instrsAndDataMemory_at. *)
   Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2 : Memory} (start : N) ws_instrs data_specs instrs :
     (start + 4 * N.of_nat (length instrs) +
      4 * N.of_nat (length data_specs) < lenAddr)%N →
     mem_has_instrs μ1 (bv.of_N start) ws_instrs instrs →
     mem_has_instrs μ2 (bv.of_N start) ws_instrs instrs →
-    (* data words are at start + 4*|instrs|, start + 4*|instrs| + 4, … *)
     (∀ i spec, data_specs !! i = Some spec →
       spec.1 = bv.of_N (start + 4 * N.of_nat (length instrs)
                          + 4 * N.of_nat i)) →
@@ -1087,45 +1231,9 @@ Section AdequacyTools.
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (instrs_of_list (bv.of_N start) instrs) ∗
       interp_mem_with_memory μ1 μ2 data_specs.
   Proof.
-    iIntros (Hlen HMem1 HMem2 HDataAddrs) "Hmem".
-    unfold mem_res2_without_leak,
-      IrisInstance.RiscvPmpIrisAdeqParameters.mem_res_without_leak.
-    replace liveAddrs with
-      (bv.seqBv (n := 32) (bv.of_N minAddr) start ++
-       bv.seqBv (n := 32) (bv.of_N start) (4 * N.of_nat (length instrs)) ++
-       bv.seqBv (n := 32) (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs)))
-                (4 * N.of_nat (length data_specs)) ++
-       bv.seqBv (n := 32)
-                (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs))
-                  + bv.of_N (4 * N.of_nat (length data_specs)))%bv
-                (lenAddr - start - 4 * N.of_nat (length instrs)
-                  - 4 * N.of_nat (length data_specs))).
-    2: {
-      assert (Heq : (bv.of_N minAddr + bv.of_N start : bv 32)%bv = bv.of_N start).
-      { rewrite bv.of_N_add. f_equal. }
-      rewrite <- Heq.
-      rewrite <- !bv.seqBv_app.
-      apply f_equal. lia.
-    }
-    iDestruct "Hmem" as
-      "[[[Hbefore1 [Hinst1 [Hdata1 Hrest1]]] Htr1]
-        [[Hbefore2 [Hinst2 [Hdata2 Hrest2]]] Htr2]]".
-    iModIntro.
-    iSplitL "Hinst1 Hinst2".
-    - iExists (words_of_list (bv.of_N start) ws_instrs).
-      iApply (intro_ptsto_instrs (μ1 := μ1) (μ2 := μ2)); eauto.
-      { match goal with
-        | |- (_ + bv.bin ?a < _)%N =>
-            assert (Hb : (bv.bin a <= start)%N) by apply bv.bin_of_N_decr
-        end.
-        set (B := bv.bin (bv.of_N start)) in *; clearbody B. lia. }
-      iFrame.
-    - iApply (intro_mem_with_memory
-        (a := (bv.of_N start + bv.of_N (4 * N.of_nat (length instrs)))%bv)).
-      { intros i spec Hlook.
-        have HDA := HDataAddrs i spec Hlook. rewrite HDA.
-        rewrite !bv.of_N_add; f_equal; lia. }
-      iFrame "Hdata1 Hdata2".
+    intros Hlen HMem1 HMem2 HDataAddrs.
+    eapply instrsAndDataMemory_at; [lia|exact HMem1|exact HMem2|].
+    apply contig_data_layout; assumption.
   Qed.
 
   (* Definition pcOutOfInstrs_WP2_loop `{sailGS2 Σ} instrs := *)
