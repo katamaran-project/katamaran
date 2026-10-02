@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamTail.v -- ZZMbTail.v with loops I, K, M on the n-only       *)
+(* Example/Muladd/MuladdParamTail.v -- ZZMbTail.v with loops I, K, M on the n-only       *)
 (* template MuladdParamLoopN.v (2026-09-30).  Was: ZZMbTail.v -- muladd from       *)
 (* the mblr merge (idx 123, .LBB3_15) to the end, as ONE block contract that  *)
 (* both mblr paths call.  Without the cut, symbolic execution carries this    *)
@@ -14,12 +14,12 @@
 (* ========================================================================= *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamInstrs.
-From Katamaran Require RiscvPmp.CFGVer.Example.MuladdParamLoopG
-  RiscvPmp.CFGVer.Example.MuladdParamLoopI RiscvPmp.CFGVer.Example.MuladdParamLoopK
-  RiscvPmp.CFGVer.Example.MuladdParamLoopM.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamLoopN.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamInstrs.
+From Katamaran Require RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopG
+  RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopI RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopK
+  RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopM.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopN.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
 Definition t_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).

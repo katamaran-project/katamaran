@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamLoopG.v -- muladd's loop G (br_divrem's k-loop, idx 135-161, 27  *)
+(* Example/Muladd/MuladdParamLoopG.v -- muladd's loop G (br_divrem's k-loop, idx 135-161, 27  *)
 (* instructions, 31 real trips) as ONE self-referential loop block.          *)
 (* REGISTER-ONLY, like countdown: the invariant is register publicness.      *)
 (*   T4 = k, public, decremented at the head; T5 pinned to 1 (the latch      *)

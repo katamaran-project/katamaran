@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamLoopDAng.v -- PARAMETRIC-mlen line: loop D with its ENTRY chunks  *)
+(* Example/Muladd/MuladdParamLoopDAng.v -- PARAMETRIC-mlen line: loop D with its ENTRY chunks  *)
 (* (source array, destination cell) matched ANGELICALLY .    *)
 (* A caller at symbolic mlen names these addresses in the code's other         *)
 (* syntactic form (masked count), so a precise match would miss them; the      *)
@@ -8,8 +8,8 @@
 (* ========================================================================= *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamLoopD.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopD.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
 (* The MOVED array walks UP (stride 4): its END T is fixed (one past the
    first destination, x[mlen] + 4 for a caller) and it grows at its START,

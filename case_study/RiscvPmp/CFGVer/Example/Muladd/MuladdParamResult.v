@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamResult.v -- PLAN-array-invariants: the PARAMETRIC muladd*)
+(* Example/Muladd/MuladdParamResult.v -- PLAN-array-invariants: the PARAMETRIC muladd*)
 (* (symbolic mlen, Sym6N) -- validity + seal; end theorem.  Untracked probe.*)
 (*                                                                           *)
 (* The only annotation-level content is the TYPED list mb_annotV: each of    *)
@@ -26,7 +26,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.GenCompose
      RiscvPmp.CFGVer.EndToEnd
-     RiscvPmp.CFGVer.Example.MuladdParam.
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParam.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
@@ -56,12 +56,12 @@ Import IrisModelBinary.RiscvPmpIrisBase2.
 Import iris.algebra.excl.
 Import iris.algebra.gmap.
 From Katamaran Require
-     RiscvPmp.CFGVer.Example.MuladdParamLoopDAng RiscvPmp.CFGVer.Example.MuladdParamLoopD0
-     RiscvPmp.CFGVer.Example.MuladdParamLoopG RiscvPmp.CFGVer.Example.MuladdParamLoopN
-     RiscvPmp.CFGVer.Example.MuladdParamLoopI RiscvPmp.CFGVer.Example.MuladdParamLoopK
-     RiscvPmp.CFGVer.Example.MuladdParamLoopM RiscvPmp.CFGVer.Example.MuladdParamTail
-     RiscvPmp.CFGVer.Example.MuladdParamTailVC RiscvPmp.CFGVer.Example.MuladdParamVC
-     RiscvPmp.CFGVer.Example.MuladdParamClose.
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopDAng RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopD0
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopG RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopN
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopI RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopK
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopM RiscvPmp.CFGVer.Example.Muladd.MuladdParamTail
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamTailVC RiscvPmp.CFGVer.Example.Muladd.MuladdParamVC
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
 (* A block-free annotation (a loop body) as a typed list; erases back to the
    source list by conversion (see ZZMuladdBlkResult.liftV). *)

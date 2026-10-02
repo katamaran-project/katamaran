@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParam.v -- ZZMbSym6N.v with its data THROUGH THE GENERATOR      *)
+(* Example/Muladd/MuladdParam.v -- ZZMbSym6N.v with its data THROUGH THE GENERATOR      *)
 (* (GenSegment.gen_data_at, 2026-10-02).                                     *)
 (* The WHOLE function at symbolic mlen, cut at the mblr merge: both mblr      *)
 (* paths (D at 84, D0 at 113) run to idx 123, where ONE block (ZZMbTail, the  *)
@@ -9,11 +9,11 @@
 (* ========================================================================= *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamInstrs.
-From Katamaran Require RiscvPmp.CFGVer.Example.MuladdParamLoopD
-  RiscvPmp.CFGVer.Example.MuladdParamLoopDAng RiscvPmp.CFGVer.Example.MuladdParamLoopD0
-  RiscvPmp.CFGVer.Example.MuladdParamTail.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamInstrs.
+From Katamaran Require RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopD
+  RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopDAng RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopD0
+  RiscvPmp.CFGVer.Example.Muladd.MuladdParamTail.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
 Definition t_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).

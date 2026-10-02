@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamLoopD.v -- PLAN-array-invariants Phase 0 probe (untracked).      *)
+(* Example/Muladd/MuladdParamLoopD.v -- PLAN-array-invariants Phase 0 probe (untracked).      *)
 (*                                                                           *)
 (* muladd's loop D (idx 84-89, the in-place memmove), ON ITS OWN, as ONE     *)
 (* self-referential loop block over `arr` chunks:                            *)

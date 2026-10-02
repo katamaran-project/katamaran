@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamClose.v -- PARAMETRIC-mlen line: a GENERIC closer for the      *)
+(* Example/Muladd/MuladdParamClose.v -- PARAMETRIC-mlen line: a GENERIC closer for the      *)
 (* residuals angelic block entries leave .                   *)
 (*                                                                            *)
 (*   bv_lin    a bitvector (in)equation -> Z via bv.unsigned (add, shiftl,    *)

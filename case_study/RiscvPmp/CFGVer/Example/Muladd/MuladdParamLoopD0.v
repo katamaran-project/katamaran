@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamLoopD0.v -- ZZArrD0.v (muladd's second memmove on the mblr = 0   *)
+(* Example/Muladd/MuladdParamLoopD0.v -- ZZArrD0.v (muladd's second memmove on the mblr = 0   *)
 (* path, idx 113-117) restated with the REMAINING COUNT `c` as its varying    *)
 (* logic variable (promoted 2026-10-02 from the ZZ probes, 2026-10-01).  Every address is written    *)
 (* from the FIXED end t0 (the source array ends at t0 - 4) and c:             *)
@@ -12,8 +12,8 @@
 (* ========================================================================= *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamLoopD.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopD.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
 Definition d0_instrs : list AST :=
   [ LOAD (bv.of_Z (-4)) T1 T2 false WORD

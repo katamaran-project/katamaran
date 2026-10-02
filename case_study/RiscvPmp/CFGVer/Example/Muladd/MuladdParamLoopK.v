@@ -1,9 +1,9 @@
-(* Example/MuladdParamLoopK.v -- loop K (ZZArrKA.v) on the n-only template MuladdParamLoopN.v
+(* Example/Muladd/MuladdParamLoopK.v -- loop K (ZZArrKA.v) on the n-only template MuladdParamLoopN.v
    (promoted 2026-10-02 from the ZZ probes, 2026-09-30).  Instructions and scratch copied from ZZArrKA.v. *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamLoopN.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamLoopN.
 
 Definition k_mask31 : Val ty_xlenbits := bv.of_N 2147483647.
 

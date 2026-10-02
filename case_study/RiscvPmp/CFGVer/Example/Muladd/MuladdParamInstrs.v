@@ -1,4 +1,4 @@
-(* Example/MuladdParamInstrs.v -- muladd's instructions only (promoted 2026-10-02 from the ZZ probes data),
+(* Example/Muladd/MuladdParamInstrs.v -- muladd's instructions only (promoted 2026-10-02 from the ZZ probes data),
    split out of ZZMuladdBlk.v so the symbolic-mlen probes need not rebuild
    that file's flat whole-program VC (347 s, 8.9 GB). *)
 (* ---- ZZMuladdFullN2.v's definitions, VERBATIM (not Required: that file

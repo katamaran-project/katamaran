@@ -1,5 +1,5 @@
 (* ========================================================================= *)
-(* Example/MuladdParamLoopN.v -- the muladd tail's "two arrays in lockstep" loop     *)
+(* Example/Muladd/MuladdParamLoopN.v -- the muladd tail's "two arrays in lockstep" loop     *)
 (* (I, K, M) as ONE template, stated with the REMAINING COUNT `n` as the only  *)
 (* varying logic variable (promoted 2026-10-02 from the ZZ probes, 2026-09-30; hand-written first as  *)
 (* ZZArrMN.v).  Every address is FIXED END - 4n: no current-pointer variable,  *)
@@ -14,7 +14,7 @@
 (* ========================================================================= *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
 Definition lnCtx : LCtx :=
   ["q"∷ty_xlenbits; "eM"∷ty_xlenbits; "eX"∷ty_xlenbits; "n"∷ty_xlenbits;

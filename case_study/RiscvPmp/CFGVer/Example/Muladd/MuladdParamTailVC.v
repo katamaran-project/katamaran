@@ -1,7 +1,7 @@
-(* Example/MuladdParamTailVC.v -- the tail block's own VC (probe). *)
+(* Example/Muladd/MuladdParamTailVC.v -- the tail block's own VC (probe). *)
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamClose.
-From Katamaran Require Import RiscvPmp.CFGVer.Example.MuladdParamTail.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
+From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamTail.
 
 Lemma valid_tail : cfg_vc tailRec tail_annot.
 Proof.
