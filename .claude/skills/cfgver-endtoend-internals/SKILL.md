@@ -16,7 +16,15 @@ description: >
 How `cfg_instrs_endToEnd(_with_memory)` are proved inside — needed when extending
 them (as was done for the memory variant), not when calling them.
 
-## Register-path proof body (`cfg_instrs_endToEnd`)
+> **Since 2026-10-02 only `cfg_instrs_endToEnd_gen` has a real proof body**
+> (data at any disjoint addresses, `Adequacy.instrsAndDataMemory_at`).
+> `cfg_instrs_endToEnd` (data = `[]`) and `cfg_instrs_endToEnd_with_memory`
+> (contiguous data, via `contig_data_layout`) are short `refine`s of it, and
+> the non-memory `cfg_instrs_verified`/`cfg_instrs_safe` were DELETED as dead.
+> The register-path body below is historical (the idioms still apply inside
+> `_gen`, which uses `cfg_instrs_safe_with_mem`).
+
+## Register-path proof body (historical `cfg_instrs_endToEnd`)
 
 ```coq
 iApply (cfg_instrs_safe γ1 γ2 valid_contract).   (* NOT `contract`: see below *)

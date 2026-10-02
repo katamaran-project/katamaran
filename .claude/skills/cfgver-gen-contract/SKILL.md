@@ -249,6 +249,37 @@ Qed.
 No tracked call site needs this any more (all use `_simple` or name-pinned
 `eapply`s); history in `plans/PLAN-exit-targets.md`.
 
+## Whole-program generator form: `gen_prog_contract` + data specs (2026-10-02)
+
+The newest and most general form, for programs with pointer arguments,
+symbolic sizes, or arrays (`GenSegment.v` defs, `GenProg.v` bridge):
+
+```coq
+gen_prog_contract "p" _ regs facts doff data instrs fuel post
+```
+- `regs : list (reg_spec_q Σ)` — `PQExist`, `PQConst v`, `PVVar "x"` (register
+  holds logic variable x), `PVOff "x" k` (x + k; ra = `PVOff "p" (4*|instrs|)`).
+- `facts` — any extra precondition the caller proves at the valuation.
+- `data : list data_spec` laid out from `p + doff`:
+  `DCell pub (Some t | None)` one word; `DArr pub ArrUp|ArrDown count` an
+  `arr pub 4 (±4)` of `count` words (count a TERM — symbolic sizes);
+  `DBytes pub count` an `arr pub 1 1` of `count` bytes stored as ⌈count/4⌉
+  statement words; `DAt x` pure fact "next word is at x" (contiguous);
+  `DPtr x` the following data lives AT x, anywhere (pointer argument).
+- Statement side: `concretize_reg_q ι regs` and `concretize_data ι off data`.
+
+End theorem: `apply (gen_prog_noninterferent "p" _ regs facts doff data
+instrs fuel post ι init_addr)`; premises `reflexivity` (base lookup),
+`repeat constructor` (sync of PVVar vars), `Prelude.nodup_fixed`, facts,
+`data_ok` (`repeat split; lia` after rewriting counts), `data_layout_ok`
+(via `GenProg.data_layout_runs`, see **cfgver-memory**), length bound, validity.
+Worked example: `Example/CheckScalar/CheckScalarPtr{,VC,Result}.v`. Discharge
+the VC with `solve_mb_vc` (`Example/Muladd/MuladdParamClose.v`), which handles
+angelic array matches on pointer variables.
+
+The older `gen_contract*` builders and their 7 bridges stay (kept 2026-10-02
+for their perf work, e.g. classed existentials).
+
 ## Parametric base
 
 These variants build a contract over a *symbolic* placement term
