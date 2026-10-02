@@ -57,6 +57,7 @@ SCOPE_DIRS=("case_study/RiscvPmp/CFGVer")
 AXIOM_CLEAN_THMS=(
   "muladd_param_noninterferent"
   "check_scalar_param_noninterferent"
+  "check_scalar_ptr_noninterferent"
   "swap_noninterferent_param"
   "jumpIfZero_noninterferent_param"
   "jmp_fwd_noninterferent_param"

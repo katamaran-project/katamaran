@@ -50,3 +50,26 @@ is only `Adequacy.instrsAndDataMemory`'s `HDataAddrs` premise.
 - each with a small probe proving the form works.
 
 ## Log
+
+### 2026-10-02 — A done, B2 + B3 done; B1 + B4 open
+
+- **A1/A2** (`fcc9b428`): `Adequacy.instrsAndDataMemory_at` (data anywhere
+  `data_layout_ok` allows: in range, clear of the code, pairwise disjoint;
+  proof by `big_sepL_submseteq`, not by slicing `liveAddrs`); the contiguous
+  version is a corollary (`contig_data_layout`).  `EndToEnd.cfg_instrs_endToEnd_gen`
+  is THE core; `cfg_instrs_endToEnd` (no data) and `_with_memory` (contiguous)
+  are corollaries; the non-memory `cfg_instrs_verified/_safe` were dead and
+  went.  Every generator bridge reaches the core through `_with_memory`.
+- **A3** (`51fb58e6`, `98779311`): `GenSegment.DPtr` (data behind a pointer
+  argument), `gen_prog_contract` (reg_spec_q registers incl. `PVVar`, facts,
+  `gen_data_at`); `GenProg.v` (new): `gen_prog_noninterferent` (ImplPre once)
+  and `data_layout_runs` (layout from interval arithmetic).  Probe:
+  `Example/CheckScalar/CheckScalarPtr*` — check_scalar with k at ANY address,
+  end theorem = one apply of the bridge.  Closer: `mb_search` now fixes all
+  evars from all equations before searching; `mb_eq_evar` solves `a = t + ?v`.
+- **B2** (`440f05c4`): `arr pub w s` — explicit cell width.
+- **B3** (`197b7143`): `clem_arr_split` (constant index), `clem_arr_join`.
+- **B1/B4 open**: both need a general `ptstomem (k·w)` ⇄ k × `ptstomem w`
+  split at the VALUE level (`bvec ((k·w)·8)` sliced into k pieces), which
+  needs dependent-type casts (`(S k·w)·8` is not definitionally
+  `w·8 + (k·w)·8`).  Existing: only 4 → 1 bytes (`ptstomem4_split_bytes`).
