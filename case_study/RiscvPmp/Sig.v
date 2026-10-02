@@ -96,10 +96,15 @@ Inductive Predicate : Set :=
 (* PLAN-array-invariants (CFGVer): a run of word cells a, a+s, …, a+s(n-1)
    with EXISTENTIAL values (`pub` = every value is SyncVal), arguments
    [a; n; e], and e = a + s·n stated only in the Iris interpretation.  The
-   stride is a signed Coq-level Z (a downward walk is s = -4).  Used only by
+   stride is a signed Coq-level Z (a downward walk is s = -4).  A cell is
+   |s| bytes wide (arr_width): s = ±4 walks words, s = ±1 bytes.  Used only by
    CFGVer loop invariants, through CFGVer-local ghost views. *)
 | arr (pub : bool) (s : Z)
 .
+
+(* the cell width of `arr pub s`, in bytes: |s|, so cells tile without gaps
+   and a flip (s -> -s) keeps it *)
+Definition arr_width (s : Z) : nat := Z.to_nat (Z.abs s).
 
 Section TransparentObligations.
   Local Set Transparent Obligations.

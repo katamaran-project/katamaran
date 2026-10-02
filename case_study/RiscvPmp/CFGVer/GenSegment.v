@@ -1846,15 +1846,25 @@ Inductive arr_dir := ArrUp | ArrDown.
 Inductive data_spec (Σ : LCtx) : Type :=
 | DCell (pub : bool) (v : option (Term Σ ty_xlenbits))
 | DArr (pub : bool) (dir : arr_dir) (count : Term Σ ty_xlenbits)
+(* `count` BYTES walking up (an `arr pub 1`), stored as ⌈count/4⌉ words:
+   the trusted statement's memory is word-granular, so the bytes past
+   `count` in the last word are owned by the statement and dropped by the
+   ImplPre.  The next item starts at the next word. *)
+| DBytes (pub : bool) (count : Term Σ ty_xlenbits)
 | DAt (x : Term Σ ty_xlenbits).
 Arguments DCell {Σ} pub v.
 Arguments DArr {Σ} pub dir count.
+Arguments DBytes {Σ} pub count.
 Arguments DAt {Σ} x.
 
 Definition t_add {Σ} (t : Term Σ ty_xlenbits) (c : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z c)).
 Definition t_add4n {Σ} (t n : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 4)) n).
+
+(* ⌈c/4⌉, the word count of c bytes: (c + 3) >> 2 *)
+Definition t_ceil4 {Σ} (c : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
+  term_binop bop.shiftr (t_add c 3) (term_val (ty.bvec 5) (bv.of_N 2)).
 
 Definition asn_in_range_at {Σ} (x : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.formula (formula_relop bop.le
@@ -1888,6 +1898,9 @@ Fixpoint gen_data_at {Σ} (a : Term Σ ty_xlenbits) (ds : list (data_spec Σ)) :
   | cons (DCell pub v) ds =>
       (gen_cell_at a pub v ∗ asn_in_range_at a ∗ gen_data_at (t_add a 4) ds)%asn
   | cons (DArr pub dir c) ds => (gen_arr_at a pub dir c ∗ gen_data_at (t_add4n a c) ds)%asn
+  | cons (DBytes pub c) ds =>
+      (asn.chunk (chunk_user (arr pub 1) [a; c; term_binop bop.bvadd a c])
+       ∗ gen_data_at (t_add4n a (t_ceil4 c)) ds)%asn
   | cons (DAt x) ds => (asn.formula (formula_propeq x a) ∗ gen_data_at x ds)%asn
   end.
 
@@ -1909,6 +1922,10 @@ Fixpoint concretize_data {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spe
       List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits)))
         (List.seq 0 (data_count ι c))
       ++ concretize_data ι (off + 4 * N.of_nat (data_count ι c)) ds
+  | cons (DBytes pub c) ds =>
+      List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits)))
+        (List.seq 0 (data_count ι (t_ceil4 c)))
+      ++ concretize_data ι (off + 4 * N.of_nat (data_count ι (t_ceil4 c))) ds
   | cons (DAt _) ds => concretize_data ι off ds
   end.
 
@@ -1927,6 +1944,11 @@ Fixpoint data_ok {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spec Σ)) :
       inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
       /\ (off + 4 * N.of_nat (data_count ι c) <= maxAddr)%N
       /\ data_ok ι (off + 4 * N.of_nat (data_count ι c)) ds
+  | cons (DBytes pub c) ds =>
+      inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
+      /\ (off + N.of_nat (data_count ι c) <= maxAddr)%N
+      /\ (off + 4 * N.of_nat (data_count ι (t_ceil4 c)) <= maxAddr)%N
+      /\ data_ok ι (off + 4 * N.of_nat (data_count ι (t_ceil4 c))) ds
   | cons (DAt x) ds => inst (T := fun Σ => Term Σ ty_xlenbits) x ι = ty.SyncVal (@bv.of_N xlenbits off) /\ data_ok ι off ds
   end.
 
@@ -1943,11 +1965,17 @@ Lemma concretize_data_addrs {Σ} (ι : Valuation Σ) (ds : list (data_spec Σ)) 
   s.1.1 = bv.of_N (off + 4 * N.of_nat i).
 Proof.
   induction ds as [|d ds IH]; intros off i s Hi; [discriminate|].
-  destruct d as [pub v|pub dir c|x]; cbn [concretize_data] in Hi.
+  destruct d as [pub v|pub dir c|pub c|x]; cbn [concretize_data] in Hi.
   - destruct i as [|i]; cbn in Hi.
     + injection Hi as <-. cbn. f_equal; lia.
     + rewrite (IH _ _ _ Hi). f_equal; lia.
   - destruct (Nat.lt_ge_cases i (data_count ι c)) as [Hl|Hl].
+    + rewrite lookup_app_l in Hi; [|rewrite length_map length_seq; exact Hl].
+      rewrite lookup_map_seq0 in Hi; [|exact Hl]. injection Hi as <-. reflexivity.
+    + rewrite lookup_app_r in Hi; [|rewrite length_map length_seq; exact Hl].
+      rewrite length_map length_seq in Hi.
+      rewrite (IH _ _ _ Hi). f_equal; lia.
+  - destruct (Nat.lt_ge_cases i (data_count ι (t_ceil4 c))) as [Hl|Hl].
     + rewrite lookup_app_l in Hi; [|rewrite length_map length_seq; exact Hl].
       rewrite lookup_map_seq0 in Hi; [|exact Hl]. injection Hi as <-. reflexivity.
     + rewrite lookup_app_r in Hi; [|rewrite length_map length_seq; exact Hl].

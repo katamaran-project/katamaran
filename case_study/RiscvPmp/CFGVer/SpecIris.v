@@ -459,7 +459,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     Lemma interp_arr_take_first `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
       n <> bv.zero ->
       interp_arr pub s (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
-      interp_arr_cell pub a ∗
+      interp_arr_cell pub (arr_width s) a ∗
       interp_arr pub s (SV (bv.add a (bv.of_Z s))) (SV (bv.add n (bv.of_Z (-1)))) (SV e).
     Proof.
       intros Hn. cbn [interp_arr]. iIntros "[%He Hcells]".
@@ -480,7 +480,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     (* A count that wraps to 0 leaves an empty right-hand side: the cells are
        dropped (affine) and the end fact still holds, since then n = -1. *)
     Lemma interp_arr_add_first `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
-      interp_arr pub s (SV a) (SV n) (SV e) ∗ interp_arr_cell pub (bv.add a (bv.of_Z (- s)))
+      interp_arr pub s (SV a) (SV n) (SV e) ∗ interp_arr_cell pub (arr_width s) (bv.add a (bv.of_Z (- s)))
       ⊢@{iPropI Σ}
       interp_arr pub s (SV (bv.add a (bv.of_Z (- s)))) (SV (bv.add n (bv.of_Z 1))) (SV e).
     Proof.
@@ -536,7 +536,7 @@ Module RiscvPmpIrisInstanceWithContracts.
        caller-side conversion Phase 3 needs. *)
     Lemma interp_arr_intro `{sailGS2 Σ} (pub : bool) (s : Z) (a : bv xlenbits) (k : nat) :
       (N.of_nat k < bv.exp2 xlenbits)%N ->
-      ([∗ list] i ∈ seq 0 k, interp_arr_cell pub (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))
+      ([∗ list] i ∈ seq 0 k, interp_arr_cell pub (arr_width s) (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))
       ⊢@{iPropI Σ}
       interp_arr pub s (SV a) (SV (bv.of_nat k)) (SV (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat k)))).
     Proof.
@@ -570,7 +570,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     (* The mirror of interp_arr_add_first at the OTHER end: the new cell is
        the one AT the end e = a + s·n.  A wrapping count drops the cells. *)
     Lemma interp_arr_add_last `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
-      interp_arr pub s (SV a) (SV n) (SV e) ∗ interp_arr_cell pub e
+      interp_arr pub s (SV a) (SV n) (SV e) ∗ interp_arr_cell pub (arr_width s) e
       ⊢@{iPropI Σ}
       interp_arr pub s (SV a) (SV (bv.add n (bv.of_Z 1))) (SV (bv.add e (bv.of_Z s))).
     Proof.
@@ -666,7 +666,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     Lemma interp_arr_take_last `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
       n <> bv.zero ->
       interp_arr pub s (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
-      interp_arr_cell pub (bv.add e (bv.of_Z (- s))) ∗
+      interp_arr_cell pub (arr_width s) (bv.add e (bv.of_Z (- s))) ∗
       interp_arr pub s (SV a) (SV (bv.add n (bv.of_Z (-1)))) (SV (bv.add e (bv.of_Z (- s)))).
     Proof.
       intros Hn. cbn [interp_arr]. iIntros "[%He Hcells]".
@@ -733,14 +733,17 @@ Module RiscvPmpIrisInstanceWithContracts.
       = bv.add (bv.add (bv.add a (bv.mul S n)) (bv.negate S)) (bv.mul (bv.negate S) n).
     Proof. ring. Qed.
 
+    Lemma arr_width_opp (s : Z) : arr_width (- s) = arr_width s.
+    Proof. unfold arr_width. now rewrite Z.abs_opp. Qed.
+
     Lemma interp_arr_flip `{sailGS2 Σ} (pub : bool) (s : Z) (a n e : bv xlenbits) :
       interp_arr pub s (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
       interp_arr pub (- s) (SV (bv.add e (bv.of_Z (- s)))) (SV n) (SV (bv.add a (bv.of_Z (- s)))).
     Proof.
       cbn [interp_arr]. iIntros "[%He Hcells]". subst e. rewrite !arr_neg_s.
       iSplit; [iPureIntro; apply arr_ring_flip_end|].
-      iPoseProof (big_sepL_flip (interp_arr_cell pub) with "Hcells") as "H".
-      rewrite arr_of_nat_bin. iExact "H".
+      iPoseProof (big_sepL_flip (interp_arr_cell pub (arr_width s)) with "Hcells") as "H".
+      rewrite arr_of_nat_bin arr_width_opp. iExact "H".
     Qed.
 
     Lemma clem_flip_sound `{sailGS2 Σ} (pub : bool) (s : Z) :

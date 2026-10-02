@@ -2312,7 +2312,7 @@ Section DataImplPre.
   Proof. change (-4)%Z with (- 4)%Z. exact (RiscvPmpIrisInstanceWithContracts.arr_neg_s 4). Qed.
 
   Lemma data_arr_down `{sailGS2 Σ} (pub : bool) (lo : bv xlenbits) (k : nat) :
-    ([∗ list] i ∈ seq 0 k, interp_arr_cell pub (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat i))))
+    ([∗ list] i ∈ seq 0 k, interp_arr_cell pub 4 (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat i))))
     ⊢@{iPropI Σ}
     interp_arr pub (-4) (SyncVal (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))))
       (SyncVal (bv.of_nat k)) (SyncVal (bv.add lo (bv.of_Z (-4)))).
@@ -2382,7 +2382,7 @@ Section DataImplPre.
        | (a, true) => interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
        | (a, false) => interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a))
        end)
-    ⊢@{iPropI Σ} [∗ list] i ∈ seq 0 k, interp_arr_cell pub (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat i))).
+    ⊢@{iPropI Σ} [∗ list] i ∈ seq 0 k, interp_arr_cell pub 4 (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat i))).
   Proof.
     intros Hk. rewrite List.map_map.
     change (List.map ?f (seq 0 k)) with (f <$> seq 0 k). rewrite big_sepL_fmap.
@@ -2394,6 +2394,130 @@ Section DataImplPre.
     destruct pub.
     - iExists _. iFrame "Hc". iPureIntro. intros _. exact I.
     - iExists _. iFrame "Hc". iPureIntro. discriminate.
+  Qed.
+
+  (* ONE word cell of the statement as its four byte cells (width 1) *)
+  Lemma data_word_bytes `{sailGS2 Σ} (pub : bool) (o : N) (μ1 μ2 : Memory) :
+    (o + 4 <= maxAddr)%N ->
+    match (bv.of_N (n := xlenbits) o, pub) with
+    | (a, true) => interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
+    | (a, false) => interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a))
+    end
+    ⊢@{iPropI Σ} [∗ list] j ∈ seq 0 4, interp_arr_cell pub 1 (bv.of_N (o + N.of_nat j)).
+  Proof.
+    intros Ho.
+    assert (Hr : forall j : N, (j < 4)%N ->
+              (bv.unsigned (@bv.of_N xlenbits (o + j)) + Z.of_nat 1 <= Z.of_N maxAddr)%Z).
+    { intros j Hj. rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Ho; lia].
+      unfold maxAddr, minAddr in *. lia. }
+    destruct pub; iIntros "H";
+      [ iPoseProof (ptstomem4_split_bytes_sync with "H") as "(H0 & H1 & H2 & H3)"
+      | iPoseProof (ptstomem4_split_bytes with "H") as "(H0 & H1 & H2 & H3)" ];
+      rewrite !bv.of_N_add;
+      change (N.of_nat 0) with 0%N; change (N.of_nat 1) with 1%N;
+      change (N.of_nat 2) with 2%N; change (N.of_nat 3) with 3%N;
+      cbn [seq big_opL]; unfold interp_arr_cell;
+      (iSplitL "H0"; [|iSplitL "H1"; [|iSplitL "H2"; [|iSplitL "H3"; [|done]]]]);
+      (iSplit; [iPureIntro; apply Hr; lia|]); iExists _; iFrame; iPureIntro.
+    all: first [intros _; exact I | discriminate].
+  Qed.
+
+  (* m statement words from off as the 4m byte cells from off *)
+  Lemma data_words_bytes `{sailGS2 Σ} (pub : bool) (off : N) (m : nat) (μ1 μ2 : Memory) :
+    (off + 4 * N.of_nat m <= maxAddr)%N ->
+    ([∗ list] spec ∈ map mem_full_to_spec
+                      (List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits))) (seq 0 m)),
+       match spec with
+       | (a, true) => interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
+       | (a, false) => interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a))
+       end)
+    ⊢@{iPropI Σ} [∗ list] j ∈ seq 0 (4 * m), interp_arr_cell pub 1 (bv.of_N (off + N.of_nat j)).
+  Proof.
+    induction m as [|m IH]; intros Hm; [iIntros "_"; done|].
+    rewrite seq_S List.map_app map_app big_sepL_app.
+    replace (4 * S m)%nat with (4 * m + 4)%nat by lia.
+    rewrite seq_app big_sepL_app.
+    iIntros "[Hm Hl]". iSplitL "Hm"; [iApply (IH with "Hm"); lia|].
+    cbn [List.map map mem_full_to_spec big_opL]. iDestruct "Hl" as "[Hl _]".
+    iPoseProof (data_word_bytes pub (off + 4 * N.of_nat m) μ1 μ2 with "[Hl]") as "Hb".
+    { lia. }
+    { destruct pub; iExact "Hl". }
+    replace (0 + 4 * m)%nat with (4 * m + 0)%nat by lia.
+    rewrite <- (fmap_add_seq (4 * m)%nat 0 4). rewrite big_sepL_fmap.
+    iApply (big_sepL_mono with "Hb"). intros k j _. cbv beta.
+    replace (off + 4 * N.of_nat m + N.of_nat j)%N with (off + N.of_nat (4 * m + j))%N by lia.
+    done.
+  Qed.
+
+  (* ⌈k/4⌉ words ARE an `arr pub 1` of k bytes; the tail bytes are dropped *)
+  Lemma data_bytes_arr `{sailGS2 Σ} (pub : bool) (off : N) (k m : nat) (μ1 μ2 : Memory) :
+    (k <= 4 * m)%nat -> (off + 4 * N.of_nat m <= maxAddr)%N ->
+    ([∗ list] spec ∈ map mem_full_to_spec
+                      (List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits))) (seq 0 m)),
+       match spec with
+       | (a, true) => interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
+       | (a, false) => interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a))
+       end)
+    ⊢@{iPropI Σ} interp_arr pub 1 (SyncVal (bv.of_N off)) (SyncVal (bv.of_nat k))
+                    (SyncVal (bv.add (bv.of_N off) (bv.of_nat k))).
+  Proof.
+    intros Hk Hm. iIntros "H".
+    iPoseProof (data_words_bytes with "H") as "H"; [exact Hm|].
+    replace (4 * m)%nat with (k + (4 * m - k))%nat by lia.
+    rewrite seq_app big_sepL_app. iDestruct "H" as "[H _]".
+    assert (Ee : bv.add (bv.of_N (n := xlenbits) off) (bv.of_nat k)
+                 = bv.add (bv.of_N off) (bv.mul (bv.of_Z 1) (bv.of_nat k))).
+    { rewrite bv.of_Z_one. ring. }
+    rewrite Ee.
+    iApply (RiscvPmpIrisInstanceWithContracts.interp_arr_intro pub 1 (bv.of_N off) k with "[H]").
+    { change (bv.exp2 xlenbits) with 4294967296%N. unfold maxAddr, minAddr, lenAddr in Hm. lia. }
+    iApply (big_sepL_mono with "H"). intros i j _. cbv beta.
+    assert (Ej : bv.of_N (n := xlenbits) (off + N.of_nat j)
+                 = bv.add (bv.of_N off) (bv.mul (bv.of_Z 1) (bv.of_nat j))).
+    { rewrite bv.of_Z_one -bv.of_N_add. unfold bv.of_nat. ring. }
+    rewrite Ej. done.
+  Qed.
+
+  (* data_count of ⌈c/4⌉: (c + 3) / 4, for a c far from overflow *)
+  Lemma data_count_ceil4_eq {Σc} (ι : Valuation Σc) (c : Term Σc ty_xlenbits) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) c ι = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι)) ->
+    (N.of_nat (data_count ι c) + 3 < 4294967296)%N ->
+    data_count ι (t_ceil4 c) = ((data_count ι c + 3) / 4)%nat.
+  Proof.
+    intros Hc Hb. unfold data_count in *.
+    set (v := rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι)) in *.
+    unfold t_ceil4, t_add. cbn [inst inst_term]. rewrite Hc.
+    cbn [ty.liftBinOp rv_val ty.projLeft bop.eval].
+    match goal with |- context [bv.bin (rv_val ?X)] =>
+      change (rv_val X) with (bv.shiftr (bv.add v (@bv.of_Z xlenbits 3)) (@bv.of_N 5 2)) end.
+    assert (E : bv.unsigned (bv.shiftr (bv.add v (@bv.of_Z xlenbits 3)) (@bv.of_N 5 2))
+                = ((bv.unsigned v + 3) / 4)%Z).
+    { pose proof (bv.unsigned_bounds v) as Bv.
+      assert (Hv : (bv.unsigned v + 3 < 4294967296)%Z) by (unfold bv.unsigned; lia).
+      unfold bv.shiftr. rewrite bv.unsigned_of_Z bv.unsigned_add.
+      change (bv.unsigned (@bv.of_Z xlenbits 3)) with 3%Z. change (bv.unsigned (@bv.of_N 5 2)) with 2%Z.
+      change xlenbits with 32%nat in *. unfold bv.truncz. cbn [Z.of_nat Z.pow].
+      rewrite (Z.mod_small (bv.unsigned v + 3)); [|lia].
+      rewrite Z.shiftr_div_pow2; [|lia]. change (2 ^ 2)%Z with 4%Z.
+      rewrite Z.mod_small; [reflexivity|]. split; [apply Z.div_pos; lia|]. apply Z.div_lt_upper_bound; lia. }
+    unfold bv.unsigned in E.
+    set (x := bv.bin v) in *. set (y := bv.bin (bv.shiftr (v + bv.of_Z 3) (bv.of_N 2))) in *.
+    clearbody x y.
+    pose proof (Z.div_mod (Z.of_N x + 3) 4 ltac:(lia)).
+    pose proof (Z.mod_pos_bound (Z.of_N x + 3) 4 ltac:(lia)).
+    pose proof (Nat.div_mod (N.to_nat x + 3) 4 ltac:(lia)).
+    pose proof (Nat.mod_upper_bound (N.to_nat x + 3) 4 ltac:(lia)).
+    lia.
+  Qed.
+
+  Lemma data_count_ceil4 {Σc} (ι : Valuation Σc) (c : Term Σc ty_xlenbits) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) c ι = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι)) ->
+    (N.of_nat (data_count ι c) + 3 < 4294967296)%N ->
+    (data_count ι c <= 4 * data_count ι (t_ceil4 c))%nat.
+  Proof.
+    intros Hc Hb. rewrite (data_count_ceil4_eq ι c Hc Hb).
+    pose proof (Nat.div_mod (data_count ι c + 3) 4 ltac:(lia)).
+    pose proof (Nat.mod_upper_bound (data_count ι c + 3) 4 ltac:(lia)). lia.
   Qed.
 
   Lemma gen_init_mem_none_app (g : nat -> bv xlenbits) (pub : bool) (l : list nat) (rest : list mem_full_spec) :
@@ -2412,7 +2536,7 @@ Section DataImplPre.
   Proof.
     induction ds as [|d ds IH]; intros a off Ha Hok Hi1 Hi2.
     { iIntros "_". cbn. done. }
-    destruct d as [pub [t|]|pub dir c|x]; cbn [gen_data_at concretize_data data_ok] in *.
+    destruct d as [pub [t|]|pub dir c|pub c|x]; cbn [gen_data_at concretize_data data_ok] in *.
     - (* a pinned cell *)
       destruct Hok as [Hrng [[-> Ht] Hok]].
       unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap option_map] in Hi1, Hi2.
@@ -2459,6 +2583,21 @@ Section DataImplPre.
           iApply (data_arr_down with "Hcells"). }
       iApply (IH (t_add4n a c) (off + 4 * N.of_nat (data_count ι c))%N
                  (@inst_t_add4n Σc ι a c off Ha Hc) Hok Hi1 Hi2 with "Hrest").
+    - (* a byte array *)
+      destruct Hok as [Hc [Hbr [Hrng Hok]]].
+      assert (Hc4 : inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 c) ι
+                    = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 c) ι))).
+      { cbn. rewrite Hc. reflexivity. }
+      unfold declare_init_memory in Hi1, Hi2. rewrite gen_init_mem_none_app in Hi1, Hi2.
+      unfold interp_mem_with_public_memory. rewrite List.map_app big_sepL_app.
+      iIntros "[Hcells Hrest]".
+      iSplitL "Hcells".
+      { cbn [asn.interpret interpret_chunk]. cbn. rewrite Ha Hc. cbn. rewrite -data_count_spec.
+        iApply (data_bytes_arr with "Hcells").
+        - apply data_count_ceil4; [exact Hc|]. unfold maxAddr, minAddr, lenAddr in Hbr. lia.
+        - exact Hrng. }
+      iApply (IH (t_add4n a (t_ceil4 c)) (off + 4 * N.of_nat (data_count ι (t_ceil4 c)))%N
+                 (@inst_t_add4n Σc ι a (t_ceil4 c) off Ha Hc4) Hok Hi1 Hi2 with "Hrest").
     - (* an anchor *)
       destruct Hok as [Hx Hok]. iIntros "H". cbn [asn.interpret]. iSplitR.
       { cbn. iSplit; [iPureIntro; by rewrite Hx Ha|done]. }

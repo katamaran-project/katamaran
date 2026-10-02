@@ -147,20 +147,24 @@ Definition clem_ctx : LCtx :=
 Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
 
-(* ∃ w, x ↦ₘ w  (∗ secLeak w when pub), over clem_ctx *)
-Definition clem_cell (pub : bool) (x : Term (clem_ctx ▻ "w"∷ty_xlenbits) ty_xlenbits)
-    : Assertion clem_ctx :=
-  asn.exist "w" ty_xlenbits
-    (asn.sep (asn.chunk (chunk_user (ptstomem bytes_per_word) [x; term_var "w"]))
+(* the value type of a cell of `arr pub s`: arr_width s bytes (Sig.v) *)
+Definition clem_cell_ty (s : Z) : Ty := ty.bvec (arr_width s * byte).
+
+(* ∃ w, x ↦ₘ[|s|] w  (∗ secLeak w when pub), over clem_ctx *)
+Definition clem_cell (pub : bool) (s : Z)
+    (x : Term (clem_ctx ▻ "w"∷clem_cell_ty s) ty_xlenbits) : Assertion clem_ctx :=
+  asn.exist "w" (clem_cell_ty s)
+    (asn.sep (asn.chunk (chunk_user (ptstomem (arr_width s)) [x; term_var "w"]))
              (if pub then asn.formula (formula_secLeak (term_var "w"))
               else asn.formula formula_true)).
+Arguments clem_cell pub s x : clear implicits.
 
-(* the cell at x is in the data address range: unsigned x + 4 ≤ maxAddr.
+(* the cell at x is in the data address range: unsigned x + |s| ≤ maxAddr.
    Every arr cell carries it (IrisInstanceBinary.interp_arr_cell), so a take
    hands it out and an add must be given it. *)
-Definition clem_range {Σ} (x : Term Σ ty_xlenbits) : Assertion Σ :=
+Definition clem_range {Σ} (s : Z) (x : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.formula (formula_relop bop.le
-    (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int 4%Z))
+    (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int (Z.of_nat (arr_width s))))
     (term_val ty.int (Z.of_N maxAddr))).
 
 Definition clem_arr {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
@@ -177,15 +181,15 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arr_angelic pub s)
            (asn.formula (formula_relop bop.neq (term_var "n")
                            (term_val ty_xlenbits bv.zero))))
-        (asn.sep (clem_cell pub (term_var "a"))
-           (asn.sep (clem_range (term_var "a"))
+        (asn.sep (clem_cell pub s (term_var "a"))
+           (asn.sep (clem_range s (term_var "a"))
               (clem_arr pub s (clem_off (term_var "a") s)
                  (clem_off (term_var "n") (-1)) (term_var "e"))))
   | clem_arr_add_first pub s =>
       MkLemma [ctx] clem_ctx [env]
         (asn.sep (clem_arr_angelic pub s)
-           (asn.sep (clem_cell pub (clem_off (term_var "a") (- s)))
-              (clem_range (clem_off (term_var "a") (- s)))))
+           (asn.sep (clem_cell pub s (clem_off (term_var "a") (- s)))
+              (clem_range s (clem_off (term_var "a") (- s)))))
         (clem_arr pub s (clem_off (term_var "a") (- s))
            (clem_off (term_var "n") 1) (term_var "e"))
   | clem_arr_nonempty pub s =>
@@ -207,12 +211,12 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
       MkLemma [ctx] clem_ctx [env]
         (asn.sep (clem_arr_angelic pub s)
            (asn.sep
-              (asn.exist "w" ty_xlenbits
-                 (asn.sep (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word)
+              (asn.exist "w" (clem_cell_ty s)
+                 (asn.sep (asn.chunk_angelic (chunk_user (ptstomem (arr_width s))
                                                [term_var "e"; term_var "w"]))
                           (if pub then asn.formula (formula_secLeak (term_var "w"))
                            else asn.formula formula_true)))
-              (clem_range (term_var "e"))))
+              (clem_range s (term_var "e"))))
         (clem_arr pub s (term_var "a") (clem_off (term_var "n") 1)
            (clem_off (term_var "e") s))
   | clem_arr_empty_elim pub s =>
@@ -239,8 +243,8 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arr_angelic pub s)
            (asn.formula (formula_relop bop.neq (term_var "n")
                            (term_val ty_xlenbits bv.zero))))
-        (asn.sep (clem_cell pub (clem_off (term_var "e") (- s)))
-           (asn.sep (clem_range (clem_off (term_var "e") (- s)))
+        (asn.sep (clem_cell pub s (clem_off (term_var "e") (- s)))
+           (asn.sep (clem_range s (clem_off (term_var "e") (- s)))
               (clem_arr pub s (term_var "a") (clem_off (term_var "n") (-1))
                  (clem_off (term_var "e") (- s)))))
   | clem_arr_flip pub s =>
