@@ -124,3 +124,4 @@ theories/Staging/NewShallow/Soundness.v
 theories/Staging/WorldInstance.v
 # theories/Staging/WorldIsomorphisms.v
 theories/Staging/LinearProgramming.v
+theories/Staging/Quote.v
