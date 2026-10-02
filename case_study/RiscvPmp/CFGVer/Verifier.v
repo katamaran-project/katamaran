@@ -139,7 +139,15 @@ Inductive CLem : Set :=
   (* arr s a n e ⊢ arr (-s) (e-s) n (a-s) -- the same cells walked the
      other way: a loop's DONE array (grown by add_first at stride -s) is the
      next loop's source, which walks at stride s *)
-  | clem_arr_flip (pub : bool) (w : nat) (s : Z).
+  | clem_arr_flip (pub : bool) (w : nat) (s : Z)
+  (* arr a n e ∗ k ≤u n ⊢ arr a k (a + s·k) ∗ arr (a + s·k) (n - k) e -- split
+     at a CONSTANT index k: a header, a fixed field, the cell an access at a
+     known offset needs (take_first on the second part then hands it out) *)
+  | clem_arr_split (pub : bool) (w : nat) (s : Z) (k : N)
+  (* arr a n e ∗ arr e n2 e2 ∗ n ≤u n + n2 ⊢ arr a (n + n2) e2 -- two
+     ADJACENT arrays as one; the second is matched precisely at the first's
+     end, so the join is deterministic *)
+  | clem_arr_join (pub : bool) (w : nat) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -251,6 +259,25 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
       MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub w s)
         (clem_arr pub w (- s) (clem_off (term_var "e") (- s)) (term_var "n")
            (clem_off (term_var "a") (- s)))
+  | clem_arr_split pub w s k =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub w s)
+           (asn.formula (formula_relop bop.bvule (term_val ty_xlenbits (bv.of_N k)) (term_var "n"))))
+        (asn.sep (clem_arr pub w s (term_var "a") (term_val ty_xlenbits (bv.of_N k))
+                    (clem_off (term_var "a") (s * Z.of_N k)))
+           (clem_arr pub w s (clem_off (term_var "a") (s * Z.of_N k))
+              (clem_off (term_var "n") (- Z.of_N k)) (term_var "e")))
+  | clem_arr_join pub w s =>
+      MkLemma [ctx]
+        ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "n2"∷ty_xlenbits; "e2"∷ty_xlenbits] [env]
+        (asn.sep (asn.chunk_angelic (chunk_user (arr pub w s)
+                    [term_var "a"; term_var "n"; term_var "e"]))
+           (asn.sep (asn.chunk (chunk_user (arr pub w s)
+                       [term_var "e"; term_var "n2"; term_var "e2"]))
+              (asn.formula (formula_relop bop.bvule (term_var "n")
+                 (term_binop bop.bvadd (term_var "n") (term_var "n2"))))))
+        (clem_arr pub w s (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
+           (term_var "e2"))
   end.
 
 Inductive Annot :=
