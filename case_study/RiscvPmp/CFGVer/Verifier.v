@@ -105,6 +105,14 @@ Open Scope Z_scope.
 (* only consume_chunk_angelic searches the heap (Monads.v).  The cell next  *)
 (* to it is then matched precisely at `a ± s`.                               *)
 (* ========================================================================= *)
+(* a power-of-two cell width for the regroup lemmas (clem_arr_to_bytes /
+   clem_arr_of_bytes): halfwords, words, doublewords *)
+Inductive RgWidth : Set := RgW2 | RgW4 | RgW8.
+Definition rg_sh (u : RgWidth) : nat := match u with RgW2 => 1 | RgW4 => 2 | RgW8 => 3 end.
+Definition rg_k (u : RgWidth) : nat := 2 ^ rg_sh u.
+(* the largest cell count whose byte count still fits 32 bits *)
+Definition rg_bound (u : RgWidth) : N := 2 ^ (32 - N.of_nat (rg_sh u)).
+
 Inductive CLem : Set :=
   (* arr a n e ∗ n≠0 ⊢ cell a ∗ range a ∗ arr (a+s) (n-1) e *)
   | clem_arr_take_first (pub : bool) (w : nat) (s : Z)
@@ -151,7 +159,15 @@ Inductive CLem : Set :=
   (* arr pub 4 4 a n e ∗ n <u 2^30 ⊢ arr pub 1 1 a (4·n) e -- a word array
      read byte by byte (access width below cell width); the general k·w ⇄ w
      regroup is open (PLAN-general-endtoend.md B4) *)
-  | clem_arr_bytes_of_words (pub : bool).
+  | clem_arr_bytes_of_words (pub : bool)
+  (* arr pub k k a n e ∗ n <u 2^32/k ⊢ arr pub 1 1 a (k·n) e, k = rg_k u: any
+     power-of-two cell array read byte by byte (bytes_of_words is u = RgW4) *)
+  | clem_arr_to_bytes (pub : bool) (u : RgWidth)
+  (* arr pub 1 1 a m e ⊢ arr pub k k a (m >> sh) e' ∗ arr pub 1 1 e' (m & (k-1)) e,
+     e' = a + k·(m >> sh): bytes regrouped into k-byte cells, the leftover
+     bytes kept as their own array (empty when k divides m).  No side
+     condition.  Halfwords from bytes: u = RgW2 *)
+  | clem_arr_of_bytes (pub : bool) (u : RgWidth).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -271,6 +287,26 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                     (clem_off (term_var "a") (s * Z.of_N k)))
            (clem_arr pub w s (clem_off (term_var "a") (s * Z.of_N k))
               (clem_off (term_var "n") (- Z.of_N k)) (term_var "e")))
+  | clem_arr_to_bytes pub u =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub (rg_k u) (Z.of_nat (rg_k u)))
+           (asn.formula (formula_relop bop.bvult (term_var "n")
+              (term_val ty_xlenbits (bv.of_N (rg_bound u))))))
+        (clem_arr pub 1 1 (term_var "a")
+           (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N (N.of_nat (rg_k u)))) (term_var "n"))
+           (term_var "e"))
+  | clem_arr_of_bytes pub u =>
+      let q := term_binop bop.shiftr (term_var "n")
+                 (term_val (ty.bvec 5) (bv.of_N (N.of_nat (rg_sh u)))) in
+      let e' := term_binop bop.bvadd (term_var "a")
+                  (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_Z (Z.of_nat (rg_k u)))) q) in
+      MkLemma [ctx] clem_ctx [env]
+        (clem_arr_angelic pub 1 1)
+        (asn.sep (clem_arr pub (rg_k u) (Z.of_nat (rg_k u)) (term_var "a") q e')
+           (clem_arr pub 1 1 e'
+              (term_binop bop.bvand (term_var "n")
+                 (term_val ty_xlenbits (bv.of_N (2 ^ N.of_nat (rg_sh u) - 1))))
+              (term_var "e")))
   | clem_arr_bytes_of_words pub =>
       MkLemma [ctx] clem_ctx [env]
         (asn.sep (clem_arr_angelic pub 4 4)
