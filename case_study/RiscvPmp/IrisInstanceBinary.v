@@ -190,7 +190,7 @@ Module RiscvPmpIrisInstance2 <:
       (@interp_ptstomem 4 addr w ∗ ⌜ ty.liftUnOpRV pure_decode w = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak w ⌝)%I.
     Arguments interp_ptsto_instr addr w instr : simpl never.
 
-    (* `arr pub s [a; n; e]` (Sig.v; PLAN-array-invariants D4): the word
+    (* `arr pub w s [a; n; e]` (Sig.v; PLAN-array-invariants D4): the w-byte
        cells a, a+s, …, a+s(n-1), each owned with an existential value
        (SyncVal when `pub`) and IN RANGE, plus the end fact e = a + s·n --
        the only place the pointer/count multiplication lives.  Start, count
@@ -208,17 +208,18 @@ Module RiscvPmpIrisInstance2 <:
        secLeakvar of the count in an invariant (PLAN-chunk-facts.md, revert).
        The shape is GenCompose.loop_reservoir's, so the ghost lemmas' proofs
        are big_sepL cons/app steps. *)
-    Definition interp_arr_cell (pub : bool) (x : bv xlenbits) : iProp Σ :=
-      (⌜ (bv.unsigned x + 4 <= Z.of_N maxAddr)%Z ⌝ ∗
-       ∃ w : RelVal (ty.bvec (4 * byte)),
-         @interp_ptstomem 4 (SyncVal x) w ∗ ⌜ pub = true -> secLeak w ⌝)%I.
+    (* a cell `width` bytes wide *)
+    Definition interp_arr_cell (pub : bool) (width : nat) (x : bv xlenbits) : iProp Σ :=
+      (⌜ (bv.unsigned x + Z.of_nat width <= Z.of_N maxAddr)%Z ⌝ ∗
+       ∃ w : RelVal (ty.bvec (width * byte)),
+         @interp_ptstomem width (SyncVal x) w ∗ ⌜ pub = true -> secLeak w ⌝)%I.
 
-    Definition interp_arr (pub : bool) (s : Z) (a n e : RelVal ty_xlenbits) : iProp Σ :=
+    Definition interp_arr (pub : bool) (w : nat) (s : Z) (a n e : RelVal ty_xlenbits) : iProp Σ :=
       match a, n, e with
       | SyncVal a, SyncVal n, SyncVal e =>
           (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
            [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
-             interp_arr_cell pub (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I
+             interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I
       | _, _, _ => False%I
       end.
   End WithMemory.
@@ -293,7 +294,7 @@ Module RiscvPmpIrisInstance2 <:
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | inv_leakage              | _                    => interp_inv_constant_time
-    | arr pub s                | [ a; n; e ]          => interp_arr pub s a n e
+    | arr pub w s              | [ a; n; e ]          => interp_arr pub w s a n e
     .
 
     Ltac destruct_pmp_entries :=

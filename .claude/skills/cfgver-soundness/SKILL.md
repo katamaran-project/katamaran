@@ -36,9 +36,11 @@ valid_<prog>_cfg_contract   (vm_compute. solve_vc.)   — the symbolic VC over t
              (extend_to_minimal_pre P) tbl exit …))      (tbl/exit, not the gmap)
 sound_scfg_verification_condition_myWP2  — bridges via itable_faith/etable_faith
         ↓  → myWP2_loop ExitCondIprop
-cfg_instrs_verified / cfg_instrs_safe  →  exitCond_WP2_loop
-cfg_instrs_endToEnd(_with_memory)  →  gen_contract_noninterferent_{param,rel,…}
-        ↓  adequacy_gen_RiscVNStepsExitCond + memory (instrsAndDataMemory)
+cfg_instrs_verified_with_mem / cfg_instrs_safe_with_mem  →  exitCond_WP2_loop
+cfg_instrs_endToEnd_gen  (THE core; _with_memory and the register-only
+        ↓                 cfg_instrs_endToEnd are corollaries)
+        ↓  adequacy_gen_RiscVNStepsExitCond + memory (instrsAndDataMemory_at)
+gen_contract_noninterferent_{param,rel,…} / GenProg.gen_prog_noninterferent
         → concrete leakage equivalence
 ```
 

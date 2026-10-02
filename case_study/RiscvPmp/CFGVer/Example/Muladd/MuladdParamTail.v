@@ -85,14 +85,14 @@ Definition tail_pre : Assertion (tailCtx ▻ "a"∷ty_xlenbits) :=
        between the two mblr paths, so they are matched ANGELICALLY *)
     ∗ asn.exist "x1" ty_xlenbits
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word) [t_off (term_var "x") 4; term_var "x1"]))
-    ∗ asn.chunk_angelic (chunk_user (arr false 4)
+    ∗ asn.chunk_angelic (chunk_user (arr false 4 4)
         [t_off (term_var "x") 8; t_cnt (-3) (term_var "b"); t_mlen_addr (term_var "x") (term_var "b") (-1)])
     ∗ asn.exist "xu" ty_xlenbits
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word) [t_mlen_addr (term_var "x") (term_var "b") (-1); term_var "xu"]))
     ∗ asn.exist "xt" ty_xlenbits
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word) [t_mlen_addr (term_var "x") (term_var "b") 0; term_var "xt"]))
     (* m (public), as the caller has it: m[1..mlen-2] walking UP, two cells *)
-    ∗ asn.chunk (chunk_user (arr true 4)
+    ∗ asn.chunk (chunk_user (arr true 4 4)
         [t_off (term_var "m") 4; t_cnt (-2) (term_var "b"); t_mlen_addr (term_var "m") (term_var "b") (-1)])
     ∗ asn.exist "mu" ty_xlenbits (t_mlen_addr (term_var "m") (term_var "b") (-1) ↦ₘ term_var "mu" ∗ secLeakvar "mu")
     ∗ asn.exist "mt" ty_xlenbits (t_mlen_addr (term_var "m") (term_var "b") 0 ↦ₘ term_var "mt" ∗ secLeakvar "mt")
@@ -117,19 +117,19 @@ Definition cl (k : CLem) : Annot := AnnotCLemma k.
 (* before I: x = x[1] ++ moved ++ x[mlen-1] ++ x[mlen], m = arr ++ m[mlen-1]
    ++ m[mlen], and I's two done seeds *)
 Definition build_i : list Annot :=
-  [ cl (clem_arr_add_first false 4)
-  ; cl (clem_arr_add_last false 4); cl (clem_arr_add_last false 4)
-  ; cl (clem_arr_add_last true 4); cl (clem_arr_add_last true 4)
-  ; cl (clem_arr_empty true (-4)); cl (clem_arr_empty false (-4)) ].
+  [ cl (clem_arr_add_first false 4 4)
+  ; cl (clem_arr_add_last false 4 4); cl (clem_arr_add_last false 4 4)
+  ; cl (clem_arr_add_last true 4 4); cl (clem_arr_add_last true 4 4)
+  ; cl (clem_arr_empty true 4 (-4)); cl (clem_arr_empty false 4 (-4)) ].
 (* after a loop: learn where the other pointer ended, drop the two empty
    remainders, turn the two done arrays around (the next loop's sources),
    and seed the next loop's done arrays *)
 (* The n-only loop posts state BOTH pointers (end - 4c, c = 0), so the old
    clem_arr_lockstep step (learn where the other pointer ended) is gone. *)
 Definition hand_over : list Annot :=
-  [ cl (clem_arr_drop true 4); cl (clem_arr_drop false 4)
-  ; cl (clem_arr_flip true (-4)); cl (clem_arr_flip false (-4))
-  ; cl (clem_arr_empty true (-4)); cl (clem_arr_empty false (-4)) ].
+  [ cl (clem_arr_drop true 4 4); cl (clem_arr_drop false 4 4)
+  ; cl (clem_arr_flip true 4 (-4)); cl (clem_arr_flip false 4 (-4))
+  ; cl (clem_arr_empty true 4 (-4)); cl (clem_arr_empty false 4 (-4)) ].
 
 (* local indices: program index - 123 *)
 Definition tail_before (i : nat) : list Annot :=

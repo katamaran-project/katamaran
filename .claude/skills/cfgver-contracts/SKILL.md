@@ -176,6 +176,27 @@ Two traps, each of which cost a compile:
   `pre ++ seg ++ post` matches syntactically, which avoids an `app_nil_r`
   rewrite.
 
+## Arrays: the `arr` chunk and the CFGVer ghost-lemma catalogue
+
+`arr pub w s [a; n; e]` (`Sig.v`): n cells of **w bytes** at a, a+s, …,
+a+s(n-1), existential values (SyncVal when `pub`), and e = a + s·n.
+w = |s| tiles (words `4 4`/`4 (-4)`, bytes `1 1`); |s| > w is an array of
+structs. a, n, e must be public (interp is False on NonSyncVal) — state
+`secLeakvar` of the count in a loop invariant; the executor does not infer it.
+
+Ghost lemmas (`Verifier.CLem`, used as `AnnotCLemma (...)` in
+`ai_ghost_before/after`; soundness `SpecIris.clemSem`): `take_first`,
+`take_last`, `add_first`, `add_last`, `nonempty` (a≠e ⊢ n≠0), `empty`,
+`empty_elim`, `lockstep`, `drop`, `flip` (walk the other way), `split k`
+(constant index), `join` (adjacent arrays), `bytes_of_words` (word array read
+bytewise, n <u 2^30). Every constructor takes `pub w s` (lockstep `p1 p2 w s`;
+bytes_of_words only `pub`). The array argument is matched ANGELICALLY, so two
+live arrays with the same `arr pub w s` predicate are ambiguous — place each
+`take_first` right before its own load, or use distinct strides.
+Loop template: `Example/Muladd/MuladdParamLoopN.v` (remaining count n the only
+varying variable, addresses END − s·n). Open: halfword regrouping,
+bytes→words (PLAN-general-endtoend.md).
+
 ## Hand-writing a contract: the assertion vocabulary
 
 A hand-written precondition is built from exactly what the generator would emit

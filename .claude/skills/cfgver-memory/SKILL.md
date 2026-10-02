@@ -74,11 +74,26 @@ Usage: `rewrite (something_memory data_specs HpubMem)` rewrites `interp_mem_with
 to `interp_mem_with_public_memory` in the current Iris proof state (including hypothesis
 types, since Iris environments are Coq terms).
 
-## `instrsAndDataMemory`
+## `instrsAndDataMemory_at` (data ANYWHERE) and `instrsAndDataMemory`
 
-Extracts `ptsto_instrs ∗ interp_mem_with_memory` from the raw `mem_res2_without_leak`.
-Data words must occupy the `4*|data_specs|` bytes immediately following the instruction
-region.
+`instrsAndDataMemory_at` (2026-10-02) is the general form: its data premise is
+`data_layout_ok start (length instrs) data_specs` — every cell in range, clear
+of the code `[start, start+4|instrs|)`, cells pairwise disjoint
+(`ForallOrdPairs data_cell_sep`). Proof: code bytes ++ data bytes are NoDup and
+live, so a sub-multiset of `liveAddrs`; `big_sepL_submseteq` peels them off.
+`contig_data_layout` derives `data_layout_ok` from the old contiguous premise,
+and `instrsAndDataMemory` (below) is now that corollary. To prove
+`data_layout_ok` for a layout of contiguous RUNS (e.g. code-adjacent data plus
+an array behind a pointer), rewrite the cells to `GenProg.data_runs` with
+`concretize_run_map` and apply `GenProg.data_layout_runs` — interval
+conditions, closed by `lia` (worked example: `CheckScalarPtrResult.v`).
+
+**The contiguity restriction was never in the trusted statement**
+(`noninterferent_strong` takes `mem_specs` at arbitrary addresses) — only in
+this lemma's old premise. Real pointer arguments need no trusted change.
+
+The contiguous form: data words occupy the `4*|data_specs|` bytes immediately
+following the instruction region.
 
 ```coq
 Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2} ws_instrs data_specs instrs :
@@ -94,7 +109,7 @@ Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2} ws_instrs data_specs instrs :
 
 ## `cfg_instrs_verified_with_mem` / `cfg_instrs_safe_with_mem`
 
-Memory-aware variants of `cfg_instrs_verified` / `cfg_instrs_safe`. The `ImplPre`
+Memory-aware variants of the (deleted 2026-10-02) register-only `cfg_instrs_verified` / `cfg_instrs_safe`; with `data_specs = []` they cover that case. The `ImplPre`
 parameter also receives `interp_mem_with_public_memory μ1 μ2 data_specs` — they
 exist because `ImplPre`'s Iris spatial context starts empty, so memory ownership
 must be threaded through as a conjunct rather than framed from outside.
@@ -112,4 +127,8 @@ memory. Requires:
 - `ImplPre` now also takes `interp_mem_with_public_memory μ1 μ2 data_specs`
 
 The length bound is `4 * |instrs| + 4 * |data_specs| < lenAddr` (combined).
-`instrsAndDataMemory` is proved.
+
+It is a corollary of **`cfg_instrs_endToEnd_gen`**, the one core end-to-end
+theorem: same shape, but `HLayout : data_layout_ok init_addr (length instrs)
+data_specs` instead of `HDataAddrs`, and the length bound covers the code only.
+Use `_gen` directly for data that is not contiguous after the code.

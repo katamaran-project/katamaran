@@ -37,10 +37,23 @@ example and rig users) but its bridge `gen_contract_noninterferent` was **delete
 > **cfgver-endtoend-internals**. The register predicates in the premises are
 > documented in `.claude/skills/cfgver/references/registers.md`.
 
+## Which end-to-end lemma (2026-10-02)
+
+- **`cfg_instrs_endToEnd_gen`** is THE core: data memory anywhere
+  (`data_layout_ok`, see **cfgver-memory**). Every other end-to-end lemma is a
+  corollary of it.
+- **`GenProg.gen_prog_noninterferent`** is the generic whole-program BRIDGE for
+  a contract in `gen_prog_contract` form (see **cfgver-gen-contract**,
+  "Whole-program generator form"): ImplPre is done once inside; premises are a
+  valuation, sync-ness, NoDup, facts, `data_ok`, `data_layout_ok`, the length
+  bound, validity. Prefer it for a new example with data or pointer arguments.
+- `cfg_instrs_endToEnd` (below, register-only) and `_with_memory`
+  (contiguous data) remain for existing callers.
+
 ## `cfg_instrs_endToEnd`
 
-Bundles adequacy + memory splitting + `cfg_instrs_safe` so that program-specific
-proofs only supply `ImplPre`.
+A corollary of `cfg_instrs_endToEnd_gen` at `data_specs = []`, so that
+program-specific proofs only supply `ImplPre`.
 
 ```coq
 Lemma cfg_instrs_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ2 μ1' : Memory}

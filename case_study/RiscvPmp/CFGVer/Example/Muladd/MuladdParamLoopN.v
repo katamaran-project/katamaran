@@ -5,7 +5,7 @@
 (* ZZArrMN.v).  Every address is FIXED END - 4n: no current-pointer variable,  *)
 (* so arr chunks' end facts (PLAN-chunk-facts.md) cannot respell anything.     *)
 (*                                                                           *)
-(* Arrays: m (public, `arr true 4`, end eM) and x (private, `arr false 4`,    *)
+(* Arrays: m (public, `arr true 4 4`, end eM) and x (private, `arr false 4 4`,    *)
 (* end eX) are read from their starts; the two DONE arrays (stride -4) grow at *)
 (* their start by add_first after the store.  The latch compares one of the   *)
 (* two pointers against its array's end.  The post is phrased in the          *)
@@ -27,10 +27,10 @@ Definition ln_back {Σ} (end_ cnt : Term Σ ty_xlenbits) (off : Z) : Term Σ ty_
        (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_Z (-4))) cnt)
        (term_val ty_xlenbits (bv.of_Z off))).
 
-Definition ln_arr {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
-  asn.chunk (chunk_user (arr pub s) [a; n; e]).
-Definition ln_arr_ang {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
-  asn.chunk_angelic (chunk_user (arr pub s) [a; n; e]).
+Definition ln_arr {Σ} (pub : bool) (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.chunk (chunk_user (arr pub w s) [a; n; e]).
+Definition ln_arr_ang {Σ} (pub : bool) (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.chunk_angelic (chunk_user (arr pub w s) [a; n; e]).
 
 Record LoopN := MkLoopN
   { ln_rx      : RegIdx          (* x pointer register *)
@@ -52,10 +52,10 @@ Section Template.
   (* the loop's state, `cnt` elements still to go *)
   Definition ln_state {Σ} (cnt : Term Σ ty_xlenbits) (done : Term Σ ty_xlenbits)
       (eM eX mE xE : Term Σ ty_xlenbits) (latch : Term Σ ty_xlenbits) : Assertion Σ :=
-    ( ln_arr_ang true 4 (ln_back eM cnt 0) cnt eM
-      ∗ ln_arr_ang false 4 (ln_back eX cnt 0) cnt eX
-      ∗ ln_arr_ang true (-4) (ln_back eM cnt (-4)) done mE
-      ∗ ln_arr_ang false (-4) (ln_back eX cnt (-4)) done xE
+    ( ln_arr_ang true 4 4 (ln_back eM cnt 0) cnt eM
+      ∗ ln_arr_ang false 4 4 (ln_back eX cnt 0) cnt eX
+      ∗ ln_arr_ang true 4 (-4) (ln_back eM cnt (-4)) done mE
+      ∗ ln_arr_ang false 4 (-4) (ln_back eX cnt (-4)) done xE
       ∗ ln_rx L ↦ᵣ ln_back eX cnt 0
       ∗ ln_rm L ↦ᵣ ln_back eM cnt 0
       ∗ ln_rlatch L ↦ᵣ latch )%asn.
@@ -102,14 +102,14 @@ Section Template.
     | cons x r =>
         cons
           (if Nat.eqb i 0 then
-             {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 4)
-                                   ; AnnotCLemma (clem_arr_take_first true 4) ]
+             {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 4 4)
+                                   ; AnnotCLemma (clem_arr_take_first true 4 4) ]
               ; ai_instr := x ; ai_ghost_after := []
               ; ai_block := None ; ai_loop := Some lnBlk |}
            else if Nat.eqb i (ln_store L) then
              {| ai_ghost_before := [] ; ai_instr := x
-              ; ai_ghost_after := [ AnnotCLemma (clem_arr_add_first false (-4))
-                                  ; AnnotCLemma (clem_arr_add_first true (-4)) ]
+              ; ai_ghost_after := [ AnnotCLemma (clem_arr_add_first false 4 (-4))
+                                  ; AnnotCLemma (clem_arr_add_first true 4 (-4)) ]
               ; ai_block := None ; ai_loop := None |}
            else AST_AnnotInstr x)
           (ln_annot_go (S i) r)

@@ -95,9 +95,9 @@ Definition sym_post : Assertion (symCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlen
 
 Definition cl (k : CLem) : Annot := AnnotCLemma k.
 Definition take_top : list Annot :=
-  [ cl (clem_arr_nonempty false 4); cl (clem_arr_take_last false 4) ].
+  [ cl (clem_arr_nonempty false 4 4); cl (clem_arr_take_last false 4 4) ].
 Definition sym6_before (i : nat) : list Annot :=
-  if Nat.eqb i 90 then [cl (clem_arr_empty_elim false (-4))]
+  if Nat.eqb i 90 then [cl (clem_arr_empty_elim false 4 (-4))]
   else if Nat.eqb i 91 then take_top
   else if Nat.eqb i 92 then take_top
   (* the mblr = 0 path reads only x[M]; take x[M-1] too, so both paths
@@ -105,8 +105,8 @@ Definition sym6_before (i : nat) : list Annot :=
   else if Nat.eqb i 119 then List.app take_top take_top
   else nil.
 Definition sym6_after (i : nat) : list Annot :=
-  if Nat.eqb i 83 then [cl (clem_arr_add_first false (-4)); cl (clem_arr_empty false 4)]
-  else if Nat.eqb i 112 then [cl (clem_arr_add_first false (-4)); cl (clem_arr_empty false 4)]
+  if Nat.eqb i 83 then [cl (clem_arr_add_first false 4 (-4)); cl (clem_arr_empty false 4 4)]
+  else if Nat.eqb i 112 then [cl (clem_arr_add_first false 4 (-4)); cl (clem_arr_empty false 4 4)]
   else nil.
 Definition sym6_block (i : nat) : option BlkAnnot :=
   if Nat.eqb i 84 then Some MuladdParamLoopDAng.dAngBlk

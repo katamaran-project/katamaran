@@ -1,6 +1,11 @@
 # PLAN-check-scalar-full — BearSSL `check_scalar` to a whole-function end theorem
 
-Status: **IN PROGRESS, written 2026-08-07, updated 2026-08-10.**
+Status: **DONE 2026-10-02 by a different route — see §9.** The whole
+function is verified at EVERY klen (`check_scalar_param_noninterferent`,
+`Example/CheckScalar/`), via loop blocks over byte arrays, not by the flat
+N=32 VC this plan was built around.  §1–§8 are the historical record.
+
+(Original status: IN PROGRESS, written 2026-08-07, updated 2026-08-10.)
 **Phase 1 (§2) is DONE and committed (`0eb02b36`).**
 **Phase 2 (§3) is DONE, gate green, 14th axiom-clean end theorem
 `check_scalar_loop1_noninterferent_param` — see §3's Outcome.**
@@ -796,3 +801,45 @@ indexing result (≤7%), drop the idea.
   The period form runs the second tactic on the first goal only.
 - **Never quote a growth exponent from one doubling, or from a series ending at
   N=8.** That error has been made twice in this project, two sessions apart.
+
+---
+
+## §9. Outcome — 2026-10-02: the whole function, every klen, via loop blocks
+
+Route: the muladd machinery (`PLAN-array-invariants.md`: `arr` chunks, the
+CFGVer ghost-lemma catalogue, the n-only loop template, generator data
+specs), plus ONE framework extension:
+
+- **byte arrays.** An `arr pub s` cell is now |s| bytes wide
+  (`Sig.arr_width`): stride ±4 is a word array as before, stride ±1 a byte
+  array.  `interp_arr_cell` takes the width; `clem_cell`/`clem_range` take
+  the stride.  No muladd file changed.  `GenSegment.DBytes pub count`
+  states `count` bytes stored as ⌈count/4⌉ statement words
+  (`t_ceil4 c = (c+3) >> 2`); `EndToEnd.data_bytes_arr` splits the words
+  (`ptstomem4_split_bytes`) and drops the tail bytes.
+
+The program (`Example/CheckScalar/`): the real 36-instruction clang output
+with BOTH `ret`s kept and ra pinned to the exit (p+144), so every path is
+live — klen > 32 (early return), klen = 0, klen ≠ 32, klen = 32.  Loop 1
+(`z |= k[u]`) is a block over `arr false 1` handing its bytes to a done
+array `arr false (-1)` (distinct stride ⇒ unambiguous angelic matches),
+flipped back into k for loop 2; loop 2 walks k and P256_N in lockstep (both
+`arr false 1`; each take_first sits right before its own load so a wrong
+angelic pick dies at once).  P256_N and k are PRIVATE.
+
+| VC | user CPU |
+|---|---|
+| loop 1 block | 10.1 s |
+| loop 2 block | 11.8 s |
+| whole function, symbolic klen | 9.0 s |
+
+against 368.8 s for the FLAT VC at N=16 (§5) and no result at N=32.  All
+three VCs and the three byte-array ImplPre lemmas went through on the first
+attempt (the ImplPre lemmas developed in preamble mode).
+
+**What the statement does and does not say.**  k is a symbolic pointer in
+the contract, but the trusted statement (`noninterferent_strong`) fixes the
+layout: P256_N right after the code, k right after it — HDataAddrs'
+contiguity, the same restriction muladd has.  An arbitrary k pointer needs
+a change to the trusted statement, not attempted.
+

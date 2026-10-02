@@ -96,9 +96,12 @@ Inductive Predicate : Set :=
 (* PLAN-array-invariants (CFGVer): a run of word cells a, a+s, …, a+s(n-1)
    with EXISTENTIAL values (`pub` = every value is SyncVal), arguments
    [a; n; e], and e = a + s·n stated only in the Iris interpretation.  The
-   stride is a signed Coq-level Z (a downward walk is s = -4).  Used only by
-   CFGVer loop invariants, through CFGVer-local ghost views. *)
-| arr (pub : bool) (s : Z)
+   stride is a signed Coq-level Z (a downward walk is s = -4).  A cell is
+   w bytes wide, independently of the stride: w = |s| tiles without gaps
+   (words: w = 4, s = ±4; bytes: w = 1, s = ±1), |s| > w is an array of
+   structs read one field at a time.  Used only by CFGVer loop invariants,
+   through CFGVer-local ghost views. *)
+| arr (pub : bool) (w : nat) (s : Z)
 .
 
 Section TransparentObligations.
@@ -332,7 +335,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
          Full rationale: CFGVer/PLAN-encoded-instr.md. *)
       | ptstoinstr                    => [ty_xlenbits; ty_word; ty_ast]
       | inv_leakage                   => ctx.nil
-      | arr _ _                       => [ty_xlenbits; ty_xlenbits; ty_xlenbits]
+      | arr _ _ _                     => [ty_xlenbits; ty_xlenbits; ty_xlenbits]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -351,7 +354,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptstomem _                 => false
         | ptstoinstr                 => false
         | inv_leakage                => true
-        | arr _ _                    => false
+        | arr _ _ _                  => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -384,7 +387,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
          address syntax -- it asserts the address equation, which is
          satisfiable when the wrong cell has an unrelated base, so the wrong
          branch survives as an unresolved angelic disjunction.) *)
-      | arr _ _                   => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
+      | arr _ _ _                 => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
       end.
 
   End PredicateKit.

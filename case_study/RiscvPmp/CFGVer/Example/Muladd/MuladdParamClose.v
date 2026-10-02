@@ -183,6 +183,22 @@ Ltac mb_eq_evar :=
   | |- ?a = bop.evalRel bop.bvadd (ty.SyncVal ?c) ?v =>
       is_evar v; let d := eval vm_compute in (bv.negate c) in
       apply (@rv_bvadd_solve_rel _ a c d); vm_compute; reflexivity
+  (* `a = t + ?v`, t NOT a literal (an angelic arr match against
+     [e - n; n; e] with k a pointer variable gives `k = -n + ?e`): ?v := a - t.
+     Guarded by `a` not an evar, so the generic cases below keep their old
+     behaviour; the equation is left as an ordinary leaf (it holds once the
+     public variables are destructed, not before: SyncVal + NonSyncVal is a
+     NonSyncVal).  -1 is computed to a literal at the evar's width, which
+     bv_lin needs. *)
+  | |- ?a = bop.evalRel bop.bvadd ?t ?v =>
+      tryif is_evar a then reflexivity else
+      (is_evar v;
+       let T := type of v in let T' := eval cbn in T in
+       lazymatch T' with
+       | RelVal (ty.bvec ?n) =>
+           let m1 := eval vm_compute in (bv.negate (@bv.one n)) in
+           unify v (bop.evalRel bop.bvadd a (bop.evalRel bop.bvmul (ty.SyncVal m1) t))
+       end)
   | |- ?x = ?t => is_evar x; reflexivity
   | |- ?t = ?x => is_evar x; reflexivity
   end.
@@ -192,11 +208,15 @@ Ltac mb_search :=
   | |- exists _, _ =>
       (* no `cbn in *` and no destructs: the goal holds the whole rest
          of the program.  Only the ∃'s small erasure atoms are reduced *)
-      repeat eexists; repeat split;
-      try (lazymatch goal with
-           | |- Erasure.inst_eformula' _ _ => cbn -[Erasure.inst_symprop]
-           | |- Erasure.inst_eq _ _ => cbn -[Erasure.inst_symprop] end);
-      try mb_eq_evar; mb_search
+      (* fix the evars from ALL defining equations before searching any
+         conjunct: an equation can mention evars only LATER conjuncts
+         define (an angelic arr match against [e - n; n; e] yields
+         `k = -n + e` before `n = l` and `e = k + l`), 2026-10-02 *)
+      (repeat eexists; repeat split;
+       try (lazymatch goal with
+            | |- Erasure.inst_eformula' _ _ => cbn -[Erasure.inst_symprop]
+            | |- Erasure.inst_eq _ _ => cbn -[Erasure.inst_symprop] end);
+       try mb_eq_evar); mb_search
   | |- _ /\ _ => split; mb_search
   | |- True => exact I
   | |- forall _, _ => intro; mb_search
