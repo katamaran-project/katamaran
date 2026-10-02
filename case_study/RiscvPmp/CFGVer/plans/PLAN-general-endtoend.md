@@ -69,7 +69,14 @@ is only `Adequacy.instrsAndDataMemory`'s `HDataAddrs` premise.
   evars from all equations before searching; `mb_eq_evar` solves `a = t + ?v`.
 - **B2** (`440f05c4`): `arr pub w s` — explicit cell width.
 - **B3** (`197b7143`): `clem_arr_split` (constant index), `clem_arr_join`.
-- **B1/B4 open**: both need a general `ptstomem (k·w)` ⇄ k × `ptstomem w`
+- **B4, common case** (`31630db5`): `clem_arr_bytes_of_words pub` —
+  `arr pub 4 4 [a;n;e]`, n <u 2^30, is `arr pub 1 1 [a;4n;e]` (any RelVal
+  word value: split by `bv.appView`, ownership by `ptstomem_bv_app`).  Probe
+  `Example/ZZArrB4Probe.v` (untracked): a word behind pointer k read at byte
+  offset 1 via bytes_of_words + split + take_first — VC green.  Full Results
+  closure green after it (2496 s user, 7.4 GB).
+- **Still open** — B1 (`DElems w` for w ∉ {1,4}: halfwords), the reverse
+  bytes→words conversion, 8⇄4: all need a general `ptstomem (k·w)` ⇄ k × `ptstomem w`
   split at the VALUE level (`bvec ((k·w)·8)` sliced into k pieces), which
   needs dependent-type casts (`(S k·w)·8` is not definitionally
   `w·8 + (k·w)·8`).  Existing: only 4 → 1 bytes (`ptstomem4_split_bytes`).
