@@ -2229,7 +2229,7 @@ Section DataImplPre.
   Lemma data_arr_down `{sailGS2 Σ} (pub : bool) (lo : bv xlenbits) (k : nat) :
     ([∗ list] i ∈ seq 0 k, interp_arr_cell pub 4 (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat i))))
     ⊢@{iPropI Σ}
-    interp_arr pub (-4) (SyncVal (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))))
+    interp_arr pub 4 (-4) (SyncVal (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))))
       (SyncVal (bv.of_nat k)) (SyncVal (bv.add lo (bv.of_Z (-4)))).
   Proof.
     induction k as [|k IH].
@@ -2373,7 +2373,7 @@ Section DataImplPre.
        | (a, true) => interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
        | (a, false) => interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a))
        end)
-    ⊢@{iPropI Σ} interp_arr pub 1 (SyncVal (bv.of_N off)) (SyncVal (bv.of_nat k))
+    ⊢@{iPropI Σ} interp_arr pub 1 1 (SyncVal (bv.of_N off)) (SyncVal (bv.of_nat k))
                     (SyncVal (bv.add (bv.of_N off) (bv.of_nat k))).
   Proof.
     intros Hk Hm. iIntros "H".
@@ -2384,7 +2384,7 @@ Section DataImplPre.
                  = bv.add (bv.of_N off) (bv.mul (bv.of_Z 1) (bv.of_nat k))).
     { rewrite bv.of_Z_one. ring. }
     rewrite Ee.
-    iApply (RiscvPmpIrisInstanceWithContracts.interp_arr_intro pub 1 (bv.of_N off) k with "[H]").
+    iApply (RiscvPmpIrisInstanceWithContracts.interp_arr_intro pub 1 1 (bv.of_N off) k with "[H]").
     { change (bv.exp2 xlenbits) with 4294967296%N. unfold maxAddr, minAddr, lenAddr in Hm. lia. }
     iApply (big_sepL_mono with "H"). intros i j _. cbv beta.
     assert (Ej : bv.of_N (n := xlenbits) (off + N.of_nat j)

@@ -1892,8 +1892,8 @@ Definition gen_cell_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool)
 Definition gen_arr_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool) (dir : arr_dir)
     (c : Term Σ ty_xlenbits) : Assertion Σ :=
   match dir with
-  | ArrUp => asn.chunk (chunk_user (arr pub 4) [a; c; t_add4n a c])
-  | ArrDown => asn.chunk (chunk_user (arr pub (-4))
+  | ArrUp => asn.chunk (chunk_user (arr pub 4 4) [a; c; t_add4n a c])
+  | ArrDown => asn.chunk (chunk_user (arr pub 4 (-4))
                  [t_add (t_add4n a c) (-4); c; t_add a (-4)])
   end.
 
@@ -1904,7 +1904,7 @@ Fixpoint gen_data_at {Σ} (a : Term Σ ty_xlenbits) (ds : list (data_spec Σ)) :
       (gen_cell_at a pub v ∗ asn_in_range_at a ∗ gen_data_at (t_add a 4) ds)%asn
   | cons (DArr pub dir c) ds => (gen_arr_at a pub dir c ∗ gen_data_at (t_add4n a c) ds)%asn
   | cons (DBytes pub c) ds =>
-      (asn.chunk (chunk_user (arr pub 1) [a; c; term_binop bop.bvadd a c])
+      (asn.chunk (chunk_user (arr pub 1 1) [a; c; term_binop bop.bvadd a c])
        ∗ gen_data_at (t_add4n a (t_ceil4 c)) ds)%asn
   | cons (DAt x) ds => (asn.formula (formula_propeq x a) ∗ gen_data_at x ds)%asn
   | cons (DPtr x) ds => gen_data_at x ds

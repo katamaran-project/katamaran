@@ -25,7 +25,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
    so every later read would miss its cell.  This way the mismatch is two
    residual equalities at the entry, once. *)
 Definition d_inv_ang : Assertion (dCtx ▻ "a"∷ty_xlenbits) :=
-  ( asn.chunk_angelic (chunk_user (arr false (-4))
+  ( asn.chunk_angelic (chunk_user (arr false 4 (-4))
         [term_var "dp"; term_var "c"; term_var "E"])
     ∗ S0 ↦ᵣ t_off (term_var "dp") 4 ∗ secLeakvar "dp"
     ∗ T6 ↦ᵣ term_var "c" ∗ secLeakvar "c" ∗ asn_ne0 (term_var "c")
@@ -35,7 +35,7 @@ Definition d_inv_ang : Assertion (dCtx ▻ "a"∷ty_xlenbits) :=
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word)
            [t_off (term_var "dp") 4; term_var "w"]))
     ∗ asn_in_range (t_off (term_var "dp") 4)
-    ∗ asn.chunk_angelic (chunk_user (arr false 4)
+    ∗ asn.chunk_angelic (chunk_user (arr false 4 4)
         [t_off (term_var "dp") 8; term_var "k"; term_var "T"])
     (* an array's count is public (interp_arr is False otherwise); stated,
        so the post's exact count k + c is arithmetic on public values *)
@@ -44,14 +44,14 @@ Definition d_inv_ang : Assertion (dCtx ▻ "a"∷ty_xlenbits) :=
 Definition d_post_ang
     : Assertion (dCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( asn.exist "g" ty_xlenbits
-      ( asn.chunk_angelic (chunk_user (arr false (-4))
+      ( asn.chunk_angelic (chunk_user (arr false 4 (-4))
           [term_var "g"; term_val ty_xlenbits bv.zero; term_var "E"])
         ∗ S0 ↦ᵣ t_off (term_var "g") 4
         ∗ T6 ↦ᵣ term_val ty_xlenbits bv.zero
         ∗ asn.exist "w" ty_xlenbits (t_off (term_var "g") 4 ↦ₘ term_var "w")
         (* the count EXACTLY: moved so far + still to move, which a
            re-entry preserves; a caller gets 0 + its source count *)
-        ∗ asn_arr false 4 (t_off (term_var "g") 8)
+        ∗ asn_arr false 4 4 (t_off (term_var "g") 8)
             (term_binop bop.bvadd (term_var "k") (term_var "c")) (term_var "T")
         ∗ asn.exist "v1" ty_xlenbits (S1 ↦ᵣ term_var "v1")
         ∗ asn.exist "v2" ty_xlenbits (S2 ↦ᵣ term_var "v2") ) )%asn.
@@ -61,7 +61,7 @@ Definition dAngRec : @CFGVerifierContract dCtx :=
 Definition dAngBlk : BlkAnnot := {| blk_ctx := dCtx ; blk_contract := dAngRec |}.
 
 Definition d_ang_annot_with (blk : BlkAnnot) : list AnnotInstr :=
-  [ {| ai_ghost_before := [AnnotCLemma (clem_arr_take_first false (-4))]
+  [ {| ai_ghost_before := [AnnotCLemma (clem_arr_take_first false 4 (-4))]
      ; ai_instr        := LOAD (bv.of_Z (-4)) S0 S1 false WORD
      ; ai_ghost_after  := []
      ; ai_block        := None
@@ -70,7 +70,7 @@ Definition d_ang_annot_with (blk : BlkAnnot) : list AnnotInstr :=
   ; AST_AnnotInstr (ITYPE (bv.of_Z (-4)) S0 S2 RISCV_ADDI)
   ; {| ai_ghost_before := []
      ; ai_instr        := STORE (bv.of_Z 0) S1 S0 WORD
-     ; ai_ghost_after  := [AnnotCLemma (clem_arr_add_first false 4)]
+     ; ai_ghost_after  := [AnnotCLemma (clem_arr_add_first false 4 4)]
      ; ai_block        := None
      ; ai_loop         := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 0) S2 S0 RISCV_ADDI)

@@ -1,7 +1,7 @@
 (* ========================================================================= *)
 (* Example/CheckScalar/CheckScalarParamLoop2.v -- check_scalar's loop 2,     *)
 (* `c |= -EQ0(c) & CMP(k[u], P256_N[u])` (cs_instrs 20..32), as a loop      *)
-(* block over BYTES: k and P256_N walked in lockstep, both `arr false 1`,    *)
+(* block over BYTES: k and P256_N walked in lockstep, both `arr false 1 1`,    *)
 (* latched on P256_N's end.  The read bytes are left as cells (dropped).    *)
 (*                                                                           *)
 (* Both arrays have the same predicate, so each take_first sits right       *)
@@ -32,8 +32,8 @@ Definition l2_instrs : list AST :=
   ; BTYPE (bv.of_Z (-48)) A4 A1 RISCV_BNE ].
 
 Definition l2_state {Σ} (cnt eK eN : Term Σ ty_xlenbits) : Assertion Σ :=
-  ( cs_arr_ang false 1 (bk eK cnt 0) cnt eK
-    ∗ cs_arr_ang false 1 (bk eN cnt 0) cnt eN
+  ( cs_arr_ang false 1 1 (bk eK cnt 0) cnt eK
+    ∗ cs_arr_ang false 1 1 (bk eN cnt 0) cnt eN
     ∗ A0 ↦ᵣ bk eK cnt 0
     ∗ A1 ↦ᵣ bk eN cnt 0
     ∗ A4 ↦ᵣ eN )%asn.
@@ -65,10 +65,10 @@ Definition l2Blk : BlkAnnot := {| blk_ctx := l2Ctx ; blk_contract := l2Rec |}.
 Definition l2_annot : list AnnotInstr :=
   match l2_instrs with
   | cons i0 (cons i1 rest) =>
-      cons {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1) ]
+      cons {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1 1) ]
             ; ai_instr := i0 ; ai_ghost_after := []
             ; ai_block := None ; ai_loop := Some l2Blk |}
-        (cons {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1) ]
+        (cons {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1 1) ]
                ; ai_instr := i1 ; ai_ghost_after := []
                ; ai_block := None ; ai_loop := None |}
            (List.map AST_AnnotInstr rest))

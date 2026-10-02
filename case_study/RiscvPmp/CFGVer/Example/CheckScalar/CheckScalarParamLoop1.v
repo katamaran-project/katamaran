@@ -4,8 +4,8 @@
 (* of Muladd/MuladdParamLoopN.v: the remaining count `n` is the only         *)
 (* varying logic variable and every address is END - n.                       *)
 (*                                                                           *)
-(* k's remaining bytes are an `arr false 1` read from its start; each read   *)
-(* byte joins a DONE array `arr false (-1)` (grown at its start by           *)
+(* k's remaining bytes are an `arr false 1 1` read from its start; each read   *)
+(* byte joins a DONE array `arr false 1 (-1)` (grown at its start by           *)
 (* add_first), which the caller flips back into k for loop 2.  The two      *)
 (* arrays differ in stride, so every angelic array match has one candidate. *)
 (* ========================================================================= *)
@@ -24,8 +24,8 @@ Definition bk {Σ} (end_ cnt : Term Σ ty_xlenbits) (off : Z) : Term Σ ty_xlenb
        (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_Z (-1))) cnt)
        (term_val ty_xlenbits (bv.of_Z off))).
 
-Definition cs_arr_ang {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
-  asn.chunk_angelic (chunk_user (arr pub s) [a; n; e]).
+Definition cs_arr_ang {Σ} (pub : bool) (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.chunk_angelic (chunk_user (arr pub w s) [a; n; e]).
 
 Definition l1_instrs : list AST :=
   [ LOAD (bv.of_Z 0) A5 A6 true BYTE
@@ -35,8 +35,8 @@ Definition l1_instrs : list AST :=
 
 (* `cnt` bytes still to go, `done` read *)
 Definition l1_state {Σ} (cnt done e kE : Term Σ ty_xlenbits) : Assertion Σ :=
-  ( cs_arr_ang false 1 (bk e cnt 0) cnt e
-    ∗ cs_arr_ang false (-1) (bk e cnt (-1)) done kE
+  ( cs_arr_ang false 1 1 (bk e cnt 0) cnt e
+    ∗ cs_arr_ang false 1 (-1) (bk e cnt (-1)) done kE
     ∗ A5 ↦ᵣ bk e cnt 0
     ∗ A4 ↦ᵣ e )%asn.
 
@@ -69,9 +69,9 @@ Definition l1Rec : @CFGVerifierContract l1Ctx :=
 Definition l1Blk : BlkAnnot := {| blk_ctx := l1Ctx ; blk_contract := l1Rec |}.
 
 Definition l1_annot : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1 1) ]
      ; ai_instr := LOAD (bv.of_Z 0) A5 A6 true BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arr_add_first false (-1)) ]
+     ; ai_ghost_after := [ AnnotCLemma (clem_arr_add_first false 1 (-1)) ]
      ; ai_block := None ; ai_loop := Some l1Blk |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A5 A5 RISCV_ADDI)
   ; AST_AnnotInstr (RTYPE A6 A2 A2 RISCV_OR)

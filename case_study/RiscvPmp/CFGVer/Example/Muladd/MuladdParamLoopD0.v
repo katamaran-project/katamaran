@@ -37,7 +37,7 @@ Definition d0_inv : Assertion (d0Ctx ▻ "a"∷ty_xlenbits) :=
   ( (* t0 FIRST, bare, from its register *)
     T0 ↦ᵣ term_var "t0" ∗ secLeakvar "t0"
     (* the source array: its angelic match binds c *)
-    ∗ asn.chunk_angelic (chunk_user (arr false (-4))
+    ∗ asn.chunk_angelic (chunk_user (arr false 4 (-4))
         [d0_at (term_var "t0") (term_var "c") (-4); term_var "c"; t_off (term_var "t0") (-4)])
     ∗ T1 ↦ᵣ d0_at (term_var "t0") (term_var "c") 0
     ∗ asn.exist "v2" ty_xlenbits (T2 ↦ᵣ term_var "v2")
@@ -46,7 +46,7 @@ Definition d0_inv : Assertion (d0Ctx ▻ "a"∷ty_xlenbits) :=
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word)
            [d0_at (term_var "t0") (term_var "c") 0; term_var "w"]))
     ∗ asn_in_range (d0_at (term_var "t0") (term_var "c") 0)
-    ∗ asn.chunk_angelic (chunk_user (arr false 4)
+    ∗ asn.chunk_angelic (chunk_user (arr false 4 4)
         [d0_at (term_var "t0") (term_var "c") 4; term_var "k"; term_var "T"])
     (* counts are public (an arr's count must be, interp_arr is False otherwise) *)
     ∗ secLeakvar "c" ∗ secLeakvar "k"
@@ -57,7 +57,7 @@ Definition d0_inv : Assertion (d0Ctx ▻ "a"∷ty_xlenbits) :=
 Definition d0_post : Assertion (d0Ctx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( asn.exist "c'" ty_xlenbits
       ( (* the remaining source, matched angelically: binds c' := c - 1 *)
-        asn.chunk_angelic (chunk_user (arr false (-4))
+        asn.chunk_angelic (chunk_user (arr false 4 (-4))
           [d0_at (term_var "t0") (term_var "c'") (-4); term_var "c'"; t_off (term_var "t0") (-4)])
         (* ... and it is empty: arithmetic, for the closer *)
         ∗ asn.formula (formula_propeq (term_var "c'") (term_val ty_xlenbits bv.zero))
@@ -67,7 +67,7 @@ Definition d0_post : Assertion (d0Ctx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbi
             (d0_at (term_var "t0") (term_var "c'") 0 ↦ₘ term_var "w")
         (* the count exactly: moved so far + still to move, which a re-entry
            preserves; a caller gets 0 + its source count *)
-        ∗ asn_arr false 4 (d0_at (term_var "t0") (term_var "c'") 4)
+        ∗ asn_arr false 4 4 (d0_at (term_var "t0") (term_var "c'") 4)
             (term_binop bop.bvadd (term_var "k") (term_var "c")) (term_var "T")
         ∗ asn.exist "v2" ty_xlenbits (T2 ↦ᵣ term_var "v2")
         ∗ asn.exist "v3" ty_xlenbits (T3 ↦ᵣ term_var "v3") ))%asn.
@@ -77,7 +77,7 @@ Definition d0Rec : @CFGVerifierContract d0Ctx :=
 Definition d0Blk : BlkAnnot := {| blk_ctx := d0Ctx ; blk_contract := d0Rec |}.
 
 Definition d0_annot_with (blk : BlkAnnot) : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false (-4)) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 4 (-4)) ]
      ; ai_instr        := LOAD (bv.of_Z (-4)) T1 T2 false WORD
      ; ai_ghost_after  := []
      ; ai_block        := None
@@ -85,7 +85,7 @@ Definition d0_annot_with (blk : BlkAnnot) : list AnnotInstr :=
   ; AST_AnnotInstr (ITYPE (bv.of_Z (-4)) T1 T3 RISCV_ADDI)
   ; {| ai_ghost_before := []
      ; ai_instr        := STORE (bv.of_Z 0) T2 T1 WORD
-     ; ai_ghost_after  := [AnnotCLemma (clem_arr_add_first false 4)]
+     ; ai_ghost_after  := [AnnotCLemma (clem_arr_add_first false 4 4)]
      ; ai_block        := None
      ; ai_loop         := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 0) T3 T1 RISCV_ADDI)
