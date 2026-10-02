@@ -142,8 +142,9 @@ went 10.2 / 14.3 / 17.7 → a flat **3.01** M/entry.
 
 **`first` IS NOT REMOVABLE — do not "simplify" it away.** A loop-body segment
 contract starts and ends at the SAME ADDRESS: `exit_of_off <base> 0` against
-`asn_init_pc <base>` in `PaddedLoop.v`, `CountdownComposed.v`,
-`TwoLoopsComposed.v` (all gate-checked). Its trace visits that address twice —
+`asn_init_pc <base>` in `CountdownComposed.v` and `TwoLoopsComposed.v`
+(both gate-checked; `PaddedLoop.v` was one too until its 2026-10-01 migration
+to a loop block). Its trace visits that address twice —
 execute the body, then stop — and the pc is the same TERM both times, so the pc
 cannot tell them apart. Fuel cannot either: the executor sees only what remains,
 never the initial value. Dropping `first` was tried 2026-09-07 and makes
@@ -839,7 +840,7 @@ head + negative controls, then `cdLink`: the outer program STARTING at the
 loop with an `ai_block` head, and an executed tail) →
 `Example/CountdownRecResult.v` (`cd_rec_annotV` and `cdRecBlk_valid` — one
 `exact blkValid_of_seg …` reusing the unchanged `valid_cd_rec` —,
-`cd_link_valid` — `annotsValid` from `cdRecBlk_valid` — and `cdLink_valid`, and
+`cd_link_annotV` — the typed list carrying `cdRecBlk_valid` — and `cdLink_valid`, and
 the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
 load address: the contracts, the block and the annotated code are closed
 terms over the code-base variable `q`, with no load-address parameter).

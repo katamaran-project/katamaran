@@ -189,6 +189,38 @@ Module RiscvPmpIrisInstance2 <:
     Definition interp_ptsto_instr (addr : RVAddr) (w : RelVal ty_word) (instr : RV AST) : iProp Σ :=
       (@interp_ptstomem 4 addr w ∗ ⌜ ty.liftUnOpRV pure_decode w = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak w ⌝)%I.
     Arguments interp_ptsto_instr addr w instr : simpl never.
+
+    (* `arr pub s [a; n; e]` (Sig.v; PLAN-array-invariants D4): the word
+       cells a, a+s, …, a+s(n-1), each owned with an existential value
+       (SyncVal when `pub`) and IN RANGE, plus the end fact e = a + s·n --
+       the only place the pointer/count multiplication lives.  Start, count
+       and end must be PUBLIC: a NonSyncVal in any of them is False.  That is
+       a CHOICE, not forced: interp_ptstomem is per run, so a secret shape
+       could be stated as a left-run array ∗ a right-run array.  It loses
+       little under this leakage model: a secret start makes every access
+       leak (LeakMemRead/LeakMemWrite), a secret count makes any loop that
+       walks it leak its exit (LeakPc), and every shape-changing ghost lemma
+       needs a relop on the count, which is False on a NonSyncVal.  Untouched
+       secret-shaped buffers can be framed as cells; constant-time code over a
+       public bound states the arr at that bound.  Revisit if the leakage
+       model stops observing addresses.  Consequence: owning an arr makes its
+       three arguments public, but the executor does not know it -- state
+       secLeakvar of the count in an invariant (PLAN-chunk-facts.md, revert).
+       The shape is GenCompose.loop_reservoir's, so the ghost lemmas' proofs
+       are big_sepL cons/app steps. *)
+    Definition interp_arr_cell (pub : bool) (x : bv xlenbits) : iProp Σ :=
+      (⌜ (bv.unsigned x + 4 <= Z.of_N maxAddr)%Z ⌝ ∗
+       ∃ w : RelVal (ty.bvec (4 * byte)),
+         @interp_ptstomem 4 (SyncVal x) w ∗ ⌜ pub = true -> secLeak w ⌝)%I.
+
+    Definition interp_arr (pub : bool) (s : Z) (a n e : RelVal ty_xlenbits) : iProp Σ :=
+      match a, n, e with
+      | SyncVal a, SyncVal n, SyncVal e =>
+          (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
+           [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
+             interp_arr_cell pub (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I
+      | _, _, _ => False%I
+      end.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.
@@ -261,6 +293,7 @@ Module RiscvPmpIrisInstance2 <:
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | inv_leakage              | _                    => interp_inv_constant_time
+    | arr pub s                | [ a; n; e ]          => interp_arr pub s a n e
     .
 
     Ltac destruct_pmp_entries :=

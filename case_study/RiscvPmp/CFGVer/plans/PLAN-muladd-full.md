@@ -545,3 +545,29 @@ as the fifth candidate, not as the answer.**
 Probes: `Example/ZZSeg1.v`, `ZZSeg2.v` (symbolic base), `ZZSeg2C.v` (concrete),
 `ZZSeg3C.v` (shorter), `ZZSeg3T.v` (tight fuel), `ZZSeg3D/E.v` (goal dumps),
 baseline `ZZSegBase.v`.
+
+## 2026-09-29: the unhardened binary, re-checked (closes GATE 1's TODO)
+
+Upstream BearSSL HEAD `7bea48e` (2026-04-06); `git diff 79c060e HEAD` (the
+paper's pinned commit) is EMPTY for `src/int` and `inner.h` -- the muladd,
+add, sub and MUX/EQ/GT sources are unchanged since 2019. Compiled unmodified,
+one TU (`i32_div32.c i31_add.c i31_sub.c i31_muladd.c`), with a declarations-
+only `string.h` stub:
+
+    clang-18 --target=riscv32 -march=rv32im -mabi=ilp32 -ffreestanding -O2 -S
+
+THREE secret-dependent branches (the earlier header's "two" undercounted; its
+fix list already covered all three):
+
+| source | compiled (18.1.3) | secret operand |
+|---|---|---|
+| `q = MUX(EQ(a0,b0), 0x7FFFFFFF, ...)` | `bne s6, a2, .LBB3_23` | a0 (top of x) |
+| `tb = MUX(EQ(nxw,mw), tb, GT(nxw,mw))`, q*m loop | `beq a6, t1, .LBB3_25` per word | nxw (new x[u]) |
+| `MUX(ctl, naw & 0x7FFFFFFF, aw)`, inlined br_i31_add | `bgez a5, .LBB3_15` per word | ctl (add-back) |
+
+The inlined br_i31_sub loop stays branch-free; every other branch is on a
+public loop bound or m_bitlen. The first row is Breaking Bad's A.5.3
+(Table 11, godbolt.org/z/qM9KT31vz); the other two need the whole-function
+inline. **The paper proposes no code-level fix**: it disclosed to BearSSL
+("two [libraries] have provided fixes", unnamed; none landed in BearSSL) and
+recommends verified compilers, binary certification, and wider testing.

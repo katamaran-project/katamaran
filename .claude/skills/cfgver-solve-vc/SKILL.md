@@ -91,8 +91,12 @@ rule and **core-executor-internals** for the mechanism.
 ### A residual that looks trivially provable may be post-`solve_evars`
 
 The single most expensive trap in reading a VC. `ValidCFGVerifierContract` is
-`safeE (postprocess …)`, and `postprocess` runs `solve_evars`/`solve_uvars`,
-which SUBSTITUTE angelic/demonic variables throughout the tree. So the formula
+`safeE (cfg_postprocess …)`, and `postprocess` runs `solve_evars`/`solve_uvars`,
+which SUBSTITUTE angelic/demonic variables throughout the tree.  Since
+2026-10-01 `cfg_postprocess` is `postprocess ∘ replay ∘ postprocess`, so the
+substituted asserts ARE re-offered to the solver once (`replay`); a residual
+that still looks trivial after that is genuinely beyond the solver, e.g. a
+ring identity whose atoms differ (see core-executor-internals, drop_pub_zero). So the formula
 you read in a residual is not necessarily the formula the solver was given. The
 tell is a residual that is obviously discharged by an `assumek` sitting directly
 above it — as `assumek (secLeak p)` / `assertk (secLeak p)` did for a year.
@@ -177,6 +181,19 @@ the tell.
    segment (`gen_seg_contract`, one `target`).
 5. **Wrong postcondition wiring** in hand-written contracts —
    → **cfgver-contracts**.
+
+## When the TACTIC, not the executor, is slow
+
+Split the cost before guessing: `Time vm_compute` alone, then each stage of
+`solve_vc` separately (`Time all: try <stage>`). On the muladd flat program
+(2026-09-29) `vm_compute` was 4.5 s and `solve_vc` 79 s, 77 of it in one
+`try solve_bv` -- which turned out to be theories/Bitvector.v's
+`Tactic Notation "solve_bv" := bv.bv_zify` (zify + lia on every goal),
+SHADOWING Contracts.v's same-named Ltac: a tactic notation wins over an
+Ltac. The call is gone from `solve_vc` (commit bd3ff6b7; all tracked
+examples verify without it). Trap for the measurement itself: a copy of a
+tactic pasted into a probe under ANOTHER name is not the same tactic if the
+original's name is shadowed -- time the real one.
 
 ## When `vm_compute` itself hangs
 

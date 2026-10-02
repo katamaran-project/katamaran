@@ -93,6 +93,12 @@ Inductive Predicate : Set :=
 | ptstomem (bytes : nat)
 | ptstoinstr
 | inv_leakage
+(* PLAN-array-invariants (CFGVer): a run of word cells a, a+s, …, a+s(n-1)
+   with EXISTENTIAL values (`pub` = every value is SyncVal), arguments
+   [a; n; e], and e = a + s·n stated only in the Iris interpretation.  The
+   stride is a signed Coq-level Z (a downward walk is s = -4).  Used only by
+   CFGVer loop invariants, through CFGVer-local ghost views. *)
+| arr (pub : bool) (s : Z)
 .
 
 Section TransparentObligations.
@@ -326,6 +332,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
          Full rationale: CFGVer/PLAN-encoded-instr.md. *)
       | ptstoinstr                    => [ty_xlenbits; ty_word; ty_ast]
       | inv_leakage                   => ctx.nil
+      | arr _ _                       => [ty_xlenbits; ty_xlenbits; ty_xlenbits]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -344,6 +351,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptstomem _                 => false
         | ptstoinstr                 => false
         | inv_leakage                => true
+        | arr _ _                    => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -369,6 +377,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstoinstr                => Some (MkPrecise [ty_xlenbits] [ty_word; ty_ast] eq_refl)
       | encodes_instr             => Some (MkPrecise [ty_word] [ty_ast] eq_refl)
       | inv_leakage               => Some (MkPrecise ε ε eq_refl)
+      (* Precise on the START address: a consume matches by it and the solver
+         equates the count and the end.  (Tried 2026-10-02: precise on NOTHING,
+         to avoid angelic heap search in ghost lemmas.  Reverted: a BLOCK's
+         precondition then no longer rejects a wrongly seeded array by
+         address syntax -- it asserts the address equation, which is
+         satisfiable when the wrong cell has an unrelated base, so the wrong
+         branch survives as an unresolved angelic disjunction.) *)
+      | arr _ _                   => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
       end.
 
   End PredicateKit.

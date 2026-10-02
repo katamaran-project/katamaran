@@ -125,6 +125,19 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
 
+    (* THE VC PIPELINE: postprocess, then REPLAY, then postprocess again --
+       MicroSail's own (SymbolicExecutor.v, ValidContractWithFuel).  The first
+       postprocess solves evars and substitutes their witnesses; replay
+       re-runs the solved tree through the solver-backed monad, so every
+       assert is re-offered to the solver in its SUBSTITUTED form.  Without
+       it, a formula built before an angelic block-entry variable was pinned
+       reached the closer as a ring identity peval never saw, e.g.
+       `-4*M + (4 + (m + 4*M)) = 4 + m` (parametric muladd tail: 20 leaves
+       -> 14, closer 398 -> 248 s, construction +1.7%; 2026-10-01).
+       Soundness: postprocess_sound + replay_sound (Adequacy.v). *)
+    Definition cfg_postprocess (s : SymProp.SymProp [ctx]) : SymProp.SymProp [ctx] :=
+      postprocess (SPureSpec.replay (w := wnil) (postprocess s)).
+
     (* init_addr is unused by the symbolic VC; it is kept in the signature so
        Valid_CFG_VC remains a direct cfg_map target. *)
     Definition Valid_CFG_VC {Σ}
@@ -134,7 +147,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (i  : list AnnotInstr)
       (fl : nat)
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      safeE (postprocess (CFG_VC_triple p exits P i fl Q)).
+      safeE (cfg_postprocess (CFG_VC_triple p exits P i fl Q)).
 
     (* CFGVerifierContract and cfg_map MOVED TO Verifier.v on 2026-09-22
        (PLAN-contract-ast Phase 4).  `ai_block` must carry a real contract, and
@@ -170,7 +183,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
       cfg_map c (fun p exits P _ fl Q =>
-        VerificationCondition (postprocess (CFG_VC_triple p exits P a fl Q))).
+        VerificationCondition (cfg_postprocess (CFG_VC_triple p exits P a fl Q))).
 
     (* NOTE: the sugar  {{ P }} i @cfg[ ec , fl ]  for building a
        CFGVerifierContract literal lives as a Local Notation in
@@ -179,13 +192,14 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        breaks any downstream occurrence of "}}" (e.g. a sigma type ending
        in "... & Reg x}}"). *)
 
-    Ltac solve_bv :=
-      repeat match goal with
-        | |- context[bv.add ?x (@bv.mk ?n 0 I)] =>
-            fold (@bv.zero n)
-        | |- context[bv.add ?x bv.zero] =>
-            rewrite bv.add_zero_r
-        end.
+    (* An `Ltac solve_bv` (rewrite `x + 0` to `x`) used to live here, and
+       solve_vc called `try solve_bv`.  That call NEVER reached it:
+       theories/Bitvector.v declares `Tactic Notation "solve_bv" :=
+       bv.bv_zify`, and a tactic notation wins over an Ltac of the same
+       name, so solve_vc ran the full bv decision procedure (zify + lia) on
+       every VC goal.  On muladd with loop blocks that was 77 of 79 s per
+       prefix (PLAN-array-invariants, 2026-09-29).  Removed both: all 18
+       tracked light examples verify without the call. *)
 
     (* ===================================================================
        Phase 0 (PLAN-symbolic-base.md, §1): helper lemmas anticipating the
@@ -496,6 +510,39 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       | SyncVal p => p | NonSyncVal _ _ => False end -> False.
     Proof. destruct X as [a|a b]; cbn; [intros H; now apply H | exact (fun H => H)]. Qed.
 
+    (* A public pointer differs from itself plus a NONZERO constant, and two
+       different constant offsets of it differ.  Left by array ghosts
+       (PLAN-array-invariants): clem_arr_nonempty asserts `a ≠ e` for an
+       array whose start and end are the same base at different offsets,
+       e.g. `dp ≠ 4 + dp`, which the solver does not decide. *)
+    Lemma relval_neq_offset (X : RelVal ty_xlenbits) (c : bv xlenbits) :
+      RiscvPmpSignature.secLeak X -> bv.bin c <> 0%N ->
+      match bop.eval_relop_relprop bop.neq X
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c) X) with
+      | SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros HX Hc. destruct X as [x|]; [|destruct HX]. cbn. intros Hx.
+      apply Hc. assert (bv.add c x = bv.add bv.zero x) as E
+        by (rewrite bv.add_zero_l; symmetry; exact Hx).
+      apply bv.add_cancel_r in E. now subst c.
+    Qed.
+
+    Lemma relval_neq_offsets (X : RelVal ty_xlenbits) (c1 c2 : bv xlenbits) :
+      RiscvPmpSignature.secLeak X -> bv.bin c1 <> bv.bin c2 ->
+      match bop.eval_relop_relprop bop.neq
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c1) X)
+              (bop.evalRel bop.bvadd (ty.valToRelVal (σ := ty_xlenbits) c2) X) with
+      | SyncVal p => p | NonSyncVal _ _ => False end.
+    Proof.
+      intros HX Hc. destruct X as [x|]; [|destruct HX]. cbn. intros Hx.
+      apply Hc. apply bv.add_cancel_r in Hx. now subst c1.
+    Qed.
+
+    Ltac solve_vc_closers :=
+      try (solve [eapply secLeak_bvadd_val_compat; eauto]);
+      try (solve [eapply instprop_fetch_bound_lower; eauto]);
+      try (solve [eapply instprop_fetch_bound_upper; eauto]).
+
     Ltac solve_vc :=
       (* `cbn -[Erasure.inst_symprop]`, not a bare `cbn` (2026-09-08).
          inst_symprop (Propositions.v:2297) unfolds edemonicv to
@@ -510,7 +557,9 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          unfoldable, because the rest of the delta cost only exists inside what
          inst_symprop produces.  All 16 examples are unaffected.
          See diagnostics/vm-vs-tactic-split.md. *)
-      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros; repeat split; try solve_bv;
+      vm_compute; constructor; cbn -[Erasure.inst_symprop]; intros; repeat split;
+      (* No `try solve_bv` here any more: see the note where solve_bv used
+         to be defined (it silently ran bv.bv_zify on every goal). *)
       (* Phase 0 extension (PLAN-symbolic-base.md §1): try the compound
          secLeak / fetch-bound helpers on any residual goal before falling
          back to auto.  The `solve [...]` wrapper is required for failure
@@ -521,9 +570,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          either fully discharges the goal or is a no-op, so this is
          strictly additive -- existing (non symbolic-base) examples never
          reach these branches and fall through to `auto` exactly as before. *)
-      try (solve [eapply secLeak_bvadd_val_compat; eauto]);
-      try (solve [eapply instprop_fetch_bound_lower; eauto]);
-      try (solve [eapply instprop_fetch_bound_upper; eauto]);
+      solve_vc_closers;
       auto.
 
     (* Closes the symbolic-base fetch residuals a parametric VC leaves behind
@@ -553,6 +600,8 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
             | vm_compute; reflexivity
             | apply Z.leb_le; vm_compute; reflexivity ]
         | apply relval_neq_irrefl
+        | apply relval_neq_offset; [assumption | vm_compute; discriminate]
+        | apply relval_neq_offsets; [assumption | vm_compute; discriminate]
         (* BASE MINUS A CONSTANT, with both offsets READ OFF THE GOAL.  The
            alternative above leaves `B` and `D` as evars, and that cannot
            work: the premises are stated over `bop.eval_relop_relprop` while

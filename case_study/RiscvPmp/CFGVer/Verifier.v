@@ -89,9 +89,171 @@ Open Scope Z_scope.
    AnnotLemmaInvocation's `es` lives at the EMPTY program context [ctx]
    (no program variables in scope at an instruction boundary), which is
    also why Annot is not world-indexed and needs no persist. *)
+(* ========================================================================= *)
+(* CFGVer-LOCAL GHOST LEMMAS (PLAN-array-invariants D2).                    *)
+(*                                                                           *)
+(* A small catalogue of ghost lemmas over the `arr` chunk (Sig.v), each a    *)
+(* fixed "consume pre, produce post", proved valid ONCE on the heavy side    *)
+(* (clemSem), exactly as Katamaran's own `Lem`s are by lemSemCFGVerif.  They *)
+(* are declared HERE rather than as `Lem` constructors because `Lem` lives   *)
+(* in Machine.v, which is inside the trusted statement (Noninterference.v    *)
+(* imports it) and must not change for verification purposes.               *)
+(*                                                                           *)
+(* No program arguments and no patterns: an instruction boundary has no      *)
+(* program variables.  The logic variables are bound ANGELICALLY by the      *)
+(* consume of the ARRAY chunk, which comes first and uses chunk_angelic --   *)
+(* only consume_chunk_angelic searches the heap (Monads.v).  The cell next  *)
+(* to it is then matched precisely at `a ± s`.                               *)
+(* ========================================================================= *)
+Inductive CLem : Set :=
+  (* arr a n e ∗ n≠0 ⊢ cell a ∗ range a ∗ arr (a+s) (n-1) e *)
+  | clem_arr_take_first (pub : bool) (s : Z)
+  (* arr a n e ∗ cell (a-s) ⊢ arr (a-s) (n+1) e *)
+  | clem_arr_add_first (pub : bool) (s : Z)
+  (* arr a n e ∗ a≠e ⊢ arr a n e ∗ n≠0 -- a POINTER-bounded loop's latch
+     (bne a, e) as the count fact take_first needs *)
+  | clem_arr_nonempty (pub : bool) (s : Z)
+  (* ⊢ arr a 0 a, a UNCONSTRAINED -- the seed of an array built mid-program;
+     `a` is bound later by an angelic chunk match (PLAN-array-invariants
+     Phase 3, route (A)) *)
+  | clem_arr_empty (pub : bool) (s : Z)
+  (* arr a n e ∗ cell e ∗ range e ⊢ arr a (n+1) (e+s), the cell matched
+     ANGELICALLY: on a fresh seed it is what binds the address *)
+  | clem_arr_add_last (pub : bool) (s : Z)
+  (* arr a 0 e ⊢ ⌜a = e⌝ -- a caller's way to learn where an array ended:
+     a loop post names its exit pointer existentially, and the empty
+     remainder's start/end are the only link to the caller's addresses *)
+  | clem_arr_empty_elim (pub : bool) (s : Z)
+  (* arr a1 n e1 ∗ arr a2 n e2 ∗ a1=e1 ⊢ both ∗ ⌜a2 = e2⌝ -- two arrays of
+     the same stride and the SAME count move in lockstep: a pointer-bounded
+     loop's latch array ending at its end tells the caller where the OTHER
+     pointer ended (s·n = 0 carries over) *)
+  | clem_arr_lockstep (pub1 pub2 : bool) (s : Z)
+  (* arr a n e ⊢ True -- drop a spent array (affine), so a later loop's
+     angelic array match on the same predicate has one candidate *)
+  | clem_arr_drop (pub : bool) (s : Z)
+  (* arr a n e ∗ n≠0 ⊢ cell (e-s) ∗ range (e-s) ∗ arr a (n-1) (e-s) --
+     take_first at the OTHER end, so an array grown by add_first can hand
+     back its last cells without being rebuilt in the other direction *)
+  | clem_arr_take_last (pub : bool) (s : Z)
+  (* arr s a n e ⊢ arr (-s) (e-s) n (a-s) -- the same cells walked the
+     other way: a loop's DONE array (grown by add_first at stride -s) is the
+     next loop's source, which walks at stride s *)
+  | clem_arr_flip (pub : bool) (s : Z).
+
+Definition clem_ctx : LCtx :=
+  ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
+
+Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
+  term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
+
+(* ∃ w, x ↦ₘ w  (∗ secLeak w when pub), over clem_ctx *)
+Definition clem_cell (pub : bool) (x : Term (clem_ctx ▻ "w"∷ty_xlenbits) ty_xlenbits)
+    : Assertion clem_ctx :=
+  asn.exist "w" ty_xlenbits
+    (asn.sep (asn.chunk (chunk_user (ptstomem bytes_per_word) [x; term_var "w"]))
+             (if pub then asn.formula (formula_secLeak (term_var "w"))
+              else asn.formula formula_true)).
+
+(* the cell at x is in the data address range: unsigned x + 4 ≤ maxAddr.
+   Every arr cell carries it (IrisInstanceBinary.interp_arr_cell), so a take
+   hands it out and an add must be given it. *)
+Definition clem_range {Σ} (x : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.formula (formula_relop bop.le
+    (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int 4%Z))
+    (term_val ty.int (Z.of_N maxAddr))).
+
+Definition clem_arr {Σ} (pub : bool) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.chunk (chunk_user (arr pub s) [a; n; e]).
+
+Definition clem_arr_angelic (pub : bool) (s : Z) : Assertion clem_ctx :=
+  asn.chunk_angelic (chunk_user (arr pub s)
+    [term_var "a"; term_var "n"; term_var "e"]).
+
+Definition clem_lemma (k : CLem) : Lemma [ctx] :=
+  match k with
+  | clem_arr_take_first pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.formula (formula_relop bop.neq (term_var "n")
+                           (term_val ty_xlenbits bv.zero))))
+        (asn.sep (clem_cell pub (term_var "a"))
+           (asn.sep (clem_range (term_var "a"))
+              (clem_arr pub s (clem_off (term_var "a") s)
+                 (clem_off (term_var "n") (-1)) (term_var "e"))))
+  | clem_arr_add_first pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.sep (clem_cell pub (clem_off (term_var "a") (- s)))
+              (clem_range (clem_off (term_var "a") (- s)))))
+        (clem_arr pub s (clem_off (term_var "a") (- s))
+           (clem_off (term_var "n") 1) (term_var "e"))
+  | clem_arr_nonempty pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.formula (formula_relop bop.neq (term_var "a") (term_var "e"))))
+        (asn.sep (clem_arr pub s (term_var "a") (term_var "n") (term_var "e"))
+           (asn.formula (formula_relop bop.neq (term_var "n")
+                           (term_val ty_xlenbits bv.zero))))
+  | clem_arr_empty pub s =>
+      (* secLeak a is REQUIRED, not decoration: ValidLemma quantifies over
+         every valuation, and arr is False at a NonSyncVal address, so
+         `⊢ arr a 0 a` alone is not a valid lemma (caught by its soundness
+         proof, not by any VC). *)
+      MkLemma [ctx] ["a"∷ty_xlenbits] [env]
+        (asn.formula (formula_secLeak (term_var "a")))
+        (clem_arr pub s (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a"))
+  | clem_arr_add_last pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.sep
+              (asn.exist "w" ty_xlenbits
+                 (asn.sep (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word)
+                                               [term_var "e"; term_var "w"]))
+                          (if pub then asn.formula (formula_secLeak (term_var "w"))
+                           else asn.formula formula_true)))
+              (clem_range (term_var "e"))))
+        (clem_arr pub s (term_var "a") (clem_off (term_var "n") 1)
+           (clem_off (term_var "e") s))
+  | clem_arr_empty_elim pub s =>
+      MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits] [env]
+        (asn.chunk_angelic (chunk_user (arr pub s)
+           [term_var "a"; term_val ty_xlenbits bv.zero; term_var "e"]))
+        (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
+  | clem_arr_lockstep pub1 pub2 s =>
+      MkLemma [ctx]
+        ["a1"∷ty_xlenbits; "n"∷ty_xlenbits; "e1"∷ty_xlenbits;
+         "a2"∷ty_xlenbits; "e2"∷ty_xlenbits] [env]
+        (asn.sep (asn.chunk_angelic (chunk_user (arr pub1 s)
+                    [term_var "a1"; term_var "n"; term_var "e1"]))
+           (asn.sep (asn.chunk_angelic (chunk_user (arr pub2 s)
+                       [term_var "a2"; term_var "n"; term_var "e2"]))
+              (asn.formula (formula_relop bop.eq (term_var "a1") (term_var "e1")))))
+        (asn.sep (clem_arr pub1 s (term_var "a1") (term_var "n") (term_var "e1"))
+           (asn.sep (clem_arr pub2 s (term_var "a2") (term_var "n") (term_var "e2"))
+              (asn.formula (formula_relop bop.eq (term_var "a2") (term_var "e2")))))
+  | clem_arr_drop pub s =>
+      MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub s) (asn.formula formula_true)
+  | clem_arr_take_last pub s =>
+      MkLemma [ctx] clem_ctx [env]
+        (asn.sep (clem_arr_angelic pub s)
+           (asn.formula (formula_relop bop.neq (term_var "n")
+                           (term_val ty_xlenbits bv.zero))))
+        (asn.sep (clem_cell pub (clem_off (term_var "e") (- s)))
+           (asn.sep (clem_range (clem_off (term_var "e") (- s)))
+              (clem_arr pub s (term_var "a") (clem_off (term_var "n") (-1))
+                 (clem_off (term_var "e") (- s)))))
+  | clem_arr_flip pub s =>
+      MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub s)
+        (clem_arr pub (- s) (clem_off (term_var "e") (- s)) (term_var "n")
+           (clem_off (term_var "a") (- s)))
+  end.
+
 Inductive Annot :=
   | AnnotDebugBreak
-  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ).
+  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)
+  (* A CFGVer-local ghost lemma from the catalogue above. *)
+  | AnnotCLemma (k : CLem).
 
 (* A BLOCK CONTRACT carried by an instruction: everything needed to say what
    standing in for a run of instructions PROMISES, plus where execution
@@ -806,6 +968,8 @@ Section CFGVerificationDerived.
              (SpecIris.v:364), following iris_rule_stm_lemmak's three-line
              discharge (BinaryInstance.v:196). *)
           call_lemma (RiscvPmpCFGVerifSpec.LEnv l) (seval_exps [env] es)
+      | AnnotCLemma k =>
+          call_lemma (clem_lemma k) [env]
       end.
 
     (* Recurses in list order, so the first annotation runs first.  `nil` is
@@ -863,23 +1027,36 @@ Section CFGVerificationDerived.
        `apc` on in steps of 4, in this table.  Checked at the firing site, so
        the soundness proof reads containment off the concrete run instead of
        taking it as a per-program premise (it replaced blocksSoundAt's
-       containment conjunct and Adequacy.blk_span_sub).  The address steps as
-       `apc + 4`, the recursion instrs_of_list uses, so the concrete side is
-       `bv.add v 4` definitionally; peval reassociates it against the
-       `off + base` keys table_of_list builds.  No variables are allocated. *)
-    Fixpoint blk_code_in {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
-        (l : list AST) : bool :=
+       containment conjunct and Adequacy.blk_span_sub).  The k-th
+       instruction is looked up at `apc + 4k` (an offset, see below); the
+       concrete side still steps `bv.add v 4` as instrs_of_list does, and
+       blk_code_in_sound bridges the two.  peval reassociates the key against
+       the `off + base` keys table_of_list builds.  No variables are
+       allocated. *)
+    (* The walk carries a byte OFFSET k and looks up apc + k: the key is
+       depth 2 for any block length.  It used to step `apc + 4` per
+       instruction, nesting one level each time, and past 64 levels peval's
+       ring normal form (qfuel) no longer folds it -- a block longer than 63
+       instructions failed its own check (the parametric muladd tail, 159;
+       2026-10-01).  `peval` in the recursive call's ARGUMENT instead hung the
+       Fixpoint's elaboration, hence the offset. *)
+    Fixpoint blk_code_in_at {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
+        (k : N) (l : list AST) : bool :=
       match l with
       | nil     => true
       | i :: l' =>
-          match lookup_instr tbl apc with
+          match lookup_instr tbl (term_bvadd apc (term_val ty_xlenbits (bv.of_N k))) with
           | Some (_, ai) =>
               if eq_dec (ai_instr ai) i
-              then blk_code_in tbl (term_bvadd apc (term_val ty_xlenbits (bv.of_N 4))) l'
+              then blk_code_in_at tbl apc (k + 4) l'
               else false
           | None => false
           end
       end.
+
+    Definition blk_code_in {w} (tbl : SInstrTableW w) (apc : STerm ty_xlenbits w)
+        (l : list AST) : bool :=
+      blk_code_in_at tbl apc 0 l.
 
     (* --- Self-tests (cheap sanity anchors for lookup_instr / is_exit /   *)
     (* peval; NOT part of the soundness chain). *)
@@ -1509,9 +1686,12 @@ Section CFGVerificationDerived.
 
     Lemma cext_sexec_ghost (a : Annot) {w : World} : CExt (sexec_ghost a (w := w)).
     Proof.
-      destruct a; cbn.
-      - apply cext_debug, cext_pure.
-      - apply cext_call_lemma.
+      destruct a.
+      - cbn. apply cext_debug, cext_pure.
+      - cbn. apply cext_call_lemma.
+      - (* AnnotCLemma: a call_lemma.  NO cbn: it would unfold call_lemma at
+           the concrete clem_lemma and defeat the apply. *)
+        apply cext_call_lemma.
     Qed.
 
     Lemma cext_sexec_ghosts (gs : list Annot) {w : World} :

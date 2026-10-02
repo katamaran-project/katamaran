@@ -59,7 +59,7 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.EndToEnd.
 
-(* The 25 end-to-end theorems, one file per program. *)
+(* The 26 end-to-end theorems, one file per program. *)
 From Katamaran Require Export
      RiscvPmp.CFGVer.Example.MvSwapResult
      RiscvPmp.CFGVer.Example.JumpsResult
@@ -77,4 +77,5 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Example.CountdownComposedResult
      RiscvPmp.CFGVer.Example.TwoLoopsComposedResult
      RiscvPmp.CFGVer.Example.PaddedLoopResult
-     RiscvPmp.CFGVer.Example.CountdownRecResult.
+     RiscvPmp.CFGVer.Example.CountdownRecResult
+     RiscvPmp.CFGVer.Example.Muladd.MuladdParamResult.

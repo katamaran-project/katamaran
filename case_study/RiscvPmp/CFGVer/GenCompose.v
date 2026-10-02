@@ -114,7 +114,7 @@ Section SegCompose.
      identical. *)
   Lemma seg_vc {R : LCtx} (c : @CFGVerifierContract R) (annot : list AnnotInstr) :
     cfg_vc c annot ->
-    safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+    safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
       (extend_to_minimal_pre (cfg_precondition c))
       (table_of_list (cfg_placement c) 0 annot)
       (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil)).
@@ -154,7 +154,7 @@ Section SegCompose.
       (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
       (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P) :
     exists (annot : list AnnotInstr) (M : gmap (bv xlenbits) AnnotInstr),
-      safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+      safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
         (extend_to_minimal_pre (cfg_precondition c))
         (table_of_list (cfg_placement c) 0 annot)
         (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil))

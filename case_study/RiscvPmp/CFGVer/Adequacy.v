@@ -56,6 +56,8 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.Noninterference
      RiscvPmp.CFGVer.Tables.
+(* bare Require, qualified use: only cfg_postprocess (the VC pipeline) *)
+From Katamaran Require RiscvPmp.CFGVer.Contracts.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
@@ -1237,6 +1239,19 @@ Section AdequacyTools.
           iPoseProof ("Hcons" with "[Hreq]") as "H"; [by iApply lemSem|].
           iDestruct "H" as (h') "[Hh' %Hrest]".
           iApply (IH _ _ Hrest with "Hh'").
+        + (* AnnotCLemma: the same move, with the catalogue's clemSem in
+             place of lemSemCFGVerif. *)
+          unfold bind, CHeapSpec.bind in Hexec.
+          apply call_lemma_sound in Hexec.
+          pose proof (clemSem k) as lemSem.
+          remember (Katamaran.RiscvPmp.CFGVer.Verifier.clem_lemma k) as contractL.
+          clear HeqcontractL.
+          destruct Hexec as [Ψ pats req ens ent]; cbn in lemSem.
+          iIntros "Hh".
+          iPoseProof (ent with "Hh") as (ι Heq) "[Hreq Hcons]".
+          iPoseProof ("Hcons" with "[Hreq]") as "H"; [by iApply lemSem|].
+          iDestruct "H" as (h') "[Hh' %Hrest]".
+          iApply (IH _ _ Hrest with "Hh'").
     Qed.
 
     (* ================================================================ *)
@@ -1769,6 +1784,18 @@ Section AdequacyTools.
       unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs. iExists words. iFrame "Hinstrs".
     Qed.
 
+    (* the VC pipeline postprocess o replay o postprocess (Contracts.v) is
+       sound: each stage is, replay by the refinement layer's replay_sound *)
+    Lemma cfg_postprocess_sound (s : SymProp.SymProp [ctx]) :
+      SymProp.safe (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess s) [env] ->
+      SymProp.safe s [env].
+    Proof.
+      unfold Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess.
+      intros H. apply postprocess_sound in H.
+      apply RiscvPmpIrisInstanceWithContracts.replay_sound in H.
+      now apply postprocess_sound in H.
+    Qed.
+
     Lemma sound_scfg_verification_condition_myWP2_w {Γ pre post instrs cexit fuel}
         (words : bv xlenbits -> bv word)
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
@@ -1778,7 +1805,7 @@ Section AdequacyTools.
            AnnotInstr.  The type error always surfaces far from the cause. *)
         {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
         {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
-        (Hverif : safeE (postprocess (
+        (Hverif : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (
             Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
@@ -1807,8 +1834,11 @@ Section AdequacyTools.
       apply (sound_cexec_triple_addr_myWP2_w (post := post) (fuel := fuel)
                (ι := ι) words ExitCond Hif Hef).
       intros wds.
-      apply (safeE_safe env.nil), postprocess_sound in Hverif.
-      apply LogicalSoundness.psafe_safe in Hverif; [|done].
+      apply (safeE_safe env.nil), cfg_postprocess_sound in Hverif.
+      (* the world pinned: cfg_postprocess is stated at [ctx], from which
+         `apply` cannot recover wnil (MicroSail's symbolic_vcgen_fuel_soundness
+         does the same) *)
+      apply (LogicalSoundness.psafe_safe (w := wnil)) in Hverif; [|done].
       revert Hverif.
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
       - easy.
@@ -1865,7 +1895,7 @@ Section AdequacyTools.
         (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
         (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
-        (Hv : safeE (postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+        (Hv : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
                  (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
                  (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) wnil)))
         (* NO Hexit any more (PLAN-exit-targets.md): the block resumes at its
@@ -1938,7 +1968,7 @@ Section AdequacyTools.
            AnnotInstr.  The type error always surfaces far from the cause. *)
         {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
         {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
-        (Hverif : safeE (postprocess (
+        (Hverif : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (
             Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
               pre tbl exits fuel post wnil)))
         (ι : Valuation Γ) (ExitCond : iProp Σ)
@@ -1971,8 +2001,11 @@ Section AdequacyTools.
                (ι := ι) ExitCond Hif Hef);
         [|exact Hbs].
       intros words.
-      apply (safeE_safe env.nil), postprocess_sound in Hverif.
-      apply LogicalSoundness.psafe_safe in Hverif; [|done].
+      apply (safeE_safe env.nil), cfg_postprocess_sound in Hverif.
+      (* the world pinned: cfg_postprocess is stated at [ctx], from which
+         `apply` cannot recover wnil (MicroSail's symbolic_vcgen_fuel_soundness
+         does the same) *)
+      apply (LogicalSoundness.psafe_safe (w := wnil)) in Hverif; [|done].
       revert Hverif.
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
       - easy.

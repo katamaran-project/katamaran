@@ -16,35 +16,52 @@ description: >
 
 # Rewrite soundness over secrets
 
-**Bottom line:** a Term-rewrite rule proved as an ordinary `Val`/`bv` identity
-(`∀ concrete args, lhs = rhs`) is sound relationally over *all* `RelVal` inputs,
-including `NonSyncVal`. You never case-split `SyncVal` vs `NonSyncVal` for a
-pure-term rewrite.
+> **CORRECTED 2026-09-30.** This skill used to say `RelVal` equality is
+> "exactly both projections equal", so that every `Val` identity lifts.
+> **That is false.** The ring-normalisation port (`PartialEvaluation.v`,
+> `PLAN-bv-arith-solver.md` U3) ran into it: `x - x ~> 0` is a true `bv`
+> identity, but an UNSOUND rewrite when `x` is secret. (The description above
+> still states the old claim; fixing it needs a `skill-routing-maintenance`
+> consult.)
 
-## Why (the homomorphism argument)
+**Bottom line:** a Term rewrite proved as a `Val`/`bv` identity is sound over
+all `RelVal` inputs, secrets included, **provided both sides mention the same
+set of leaves** (term variables and `term_relval` constants). Under that
+condition you never case-split `SyncVal` vs `NonSyncVal`. Without it, the
+rewrite can make a secret look public.
 
-Term equivalence `t1 ≡ t2` means `∀ ι, inst t1 ι = inst t2 ι` as `RelVal`s, and
-`RelVal` equality is exactly *both projections equal*. Because `inst` and the
-lifting operators (`liftUnOpRV`/`liftBinOpRV`, see **`relval-model`**) are
-homomorphic — `projLeft (liftBinOp f a b) = f (projLeft a) (projLeft b)`
-(TypeDecl.v:372), and the `projRight` twin — this reduces to:
+## Why
 
-> the underlying **Val-level functions agree on `projLeft` and on `projRight`**.
+`RelVal = RV (Val σ)` has two constructors, and `SyncVal v <> NonSyncVal v v`.
+Every lifted op (`liftBinOp`/`liftUnOp`, `TypeDecl.v:374`, see
+**`relval-model`**) returns `SyncVal` iff **all** its operands are `SyncVal`.
+So `inst t ι` carries two pieces of information:
 
-So proving the plain Val/bv identity discharges the relational obligation on every
-input shape at once. A `SyncVal` is just the case where both projections coincide;
-a `NonSyncVal` applies the same identity independently to each side.
+1. **its two projections.** These are homomorphic
+   (`comProjLeftLiftBinOp`/`comProjRightLiftBinOp`, `TypeDecl.v:385`), so a
+   `Val` identity makes them agree on both sides;
+2. **its SyncVal-ness.** `inst t ι` is `SyncVal` iff every leaf of `t` is
+   `SyncVal` under `ι`. A `Val` identity says nothing about this.
+
+Point 2 is observable: `secLeak` is `False` on every `NonSyncVal`, so
+`NonSyncVal 0 0` (`x - x`, `x` secret) and `SyncVal 0` (the literal `0`) can be
+told apart. Two terms are equal as `RelVal`s iff both points hold, and the
+same-leaves condition supplies point 2.
 
 ## In practice
 
-This is why the existing peval simplifiers are discharged by peeling to a `bv`
-fact: e.g. `peval_bvadd_sound` (PartialEvaluation.v:839) proves
-`peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2` via `intros ι; cbn; …` down to a
-`bv.add` associativity/commutativity fact — no `RelVal` case analysis appears.
-
-When you add a new pure-term rewrite (a `peval_*` case, a fold rule, a
-normalizer step): state and prove it as a `Val`/`bv` equation, then lift with the
-homomorphism lemmas. Secrets require no extra work.
+- **Rules that keep every operand** (associativity, commutativity, folding
+  literal constants, the mask-algebra rules) have the same leaves on both
+  sides. Prove the `bv` fact and lift it, with no RelVal case split. Example:
+  `peval_bvadd_sound`.
+- **Rules that can DROP an operand** (cancellation `x - x`, `0 * x`, `x & 0`,
+  ring normalisation in general) must either keep the dropped atom or fire only
+  when the dropped operand is a literal. The ring normaliser keeps it: `pad`
+  re-adds it as `0 * x`, and `same_leaves` checks the result, both in
+  `PartialEvaluation.v`.
+- **Proof pattern for the general case:** first prove equality on each
+  projection. This is `teq side`, and the ring axioms hold there. Then show the
+  SyncVal-ness agrees, using the computable leaf-set check (`teq_leaves_inst`).
 
 ## The one caveat
 

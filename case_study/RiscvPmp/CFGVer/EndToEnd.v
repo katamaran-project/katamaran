@@ -61,6 +61,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
+     RiscvPmp.CFGVer.GenSegment
      RiscvPmp.CFGVer.Adequacy.
 (* The sealed validity every bridge below takes (PLAN-valid-blk-annot.md
    Phase 4).  Re-exported so that the Result files keep seeing solve_valid. *)
@@ -2008,6 +2009,70 @@ Import IrisModel.RiscvPmpIrisBase.
     exact (gen_contract_noninterferent_u HND HDataAddrs Hlen Hbound valid_contract).
   Qed.
 
+  (* The UNCLASSED bridge, over gen_contract_rel (one existential per memory
+     cell).  Deleted 2026-08-18 as callerless (59492f5f), RESTORED 2026-09-29
+     for the flat muladd with loop blocks (Example/ZZMuladdBlk.v): classing
+     would turn its secret cells into slices of one wide variable, while the
+     loop blocks' entry ghosts build their arrays from individual cells.
+     Proof = _u's with the memory half through the concretize rewrite, which
+     IS available unclassed (gen_mem_pre_rel_concretize + gen_implpre_mem). *)
+  Lemma gen_contract_noninterferent_rel
+      (reg_specs : list reg_spec_rel) (mem_specs : list mem_spec_rel)
+      (instrs : list AST) (bound : N) (fuel : nat) (init_addr : N)
+      (HND : NoDup (map reg_spec_idx (map (concretize_reg init_addr) reg_specs)))
+      (HDataAddrs : ∀ i spec,
+          (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) !! i = Some spec →
+          spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs)
+                             + 4 * N.of_nat i))
+      (Hlen : (init_addr + 4 * N.of_nat (length instrs) +
+               4 * N.of_nat (length mem_specs) < lenAddr)%N)
+      (Hbound : (init_addr + bound < lenAddr)%N)
+      (valid_contract : ValidCFGVerifierContract
+          (gen_contract_rel reg_specs mem_specs instrs bound fuel)) :
+    noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs))
+      (map (concretize_reg init_addr) reg_specs)
+      (map (concretize_mem init_addr) mem_specs).
+  Proof.
+    intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+      HInitReg1 HInitReg2 HInitMem1 HInitMem2
+      γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+    assert (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits])
+      (ty.SyncVal (bv.of_N (init_addr + 4 * N.of_nat (length instrs))))
+      (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
+      ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
+    { rewrite <- bv.of_N_add. now apply etable_faith_exit_of_off. }
+    eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1'
+      instrs (init_addr + 4 * N.of_nat (length instrs)) n ws
+      ["p"∷ty_xlenbits] ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
+      (gen_public_regs (map (concretize_reg init_addr) reg_specs)) HpubReg
+      (map mem_full_to_spec (map (concretize_mem init_addr) mem_specs)) HpubMem
+      (gen_contract_rel reg_specs mem_specs instrs bound fuel)
+      valid_contract eq_refl
+      init_addr
+      eq_refl HexitFaith HDataAddrs).
+    all: try eauto.
+    2: { rewrite !length_map. exact Hlen. }
+    intros Σ H.
+    iIntros "(Hregs & Hmemdata & Hpriv & #Hinv)".
+    cbn.
+    iFrame "Hpriv #".
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. cbn [ty.valToRelVal]. reflexivity. }
+    iSplitL "".
+    { iSplit; [iPureIntro | done]. unfold bv.unsigned.
+      pose proof lenAddr_rep as Hexp.
+      assert (Hib : (init_addr < bv.exp2 xlenbits)%N).
+      { set (E := bv.exp2 xlenbits) in *; clearbody E. lia. }
+      rewrite (bv.bin_of_N_small Hib). lia. }
+    iSplitL "Hregs".
+    { rewrite gen_pre_rel_concretize.
+      iApply (gen_implpre (map (concretize_reg init_addr) reg_specs) _ HpubReg HND HInitReg1 HInitReg2).
+      iExact "Hregs". }
+    rewrite gen_mem_pre_rel_concretize.
+    iApply (gen_implpre_mem (map (concretize_mem init_addr) mem_specs) _ HInitMem1 HInitMem2).
+    iExact "Hmemdata".
+  Qed.
+
   (* ------------------------------------------------------------------- *)
   (* Thin delegations onto the unified pair above (stage 3b).  These keep    *)
   (* their callers unchanged -- all 13 Example/*Result.v proofs and every     *)
@@ -2017,7 +2082,8 @@ Import IrisModel.RiscvPmpIrisBase.
   (* remain: gen_contract_noninterferent_u and _u_simple.                     *)
   (* The three GENERAL bridges these replaced (_rel over gen_contract_rel,    *)
   (* _rel_classed, _rel_bytes) were deleted 2026-08-18 -- they had no callers *)
-  (* once the _simple forms were re-pointed here.                             *)
+  (* once the _simple forms were re-pointed here.  (_rel is back, above,     *)
+  (* since 2026-09-29, for the flat muladd with loop blocks.)                 *)
   (* ------------------------------------------------------------------- *)
 
 
@@ -2228,3 +2294,174 @@ Import IrisModel.RiscvPmpIrisBase.
         apply param_lemma;
         unfold base_def, lenAddr; lia
     end.
+
+(* ========================================================================== *)
+(* gen_implpre_data: the ImplPre for GenSegment.gen_data_at, ONCE (2026-10-02) *)
+(* ========================================================================== *)
+(* The trusted statement quotes `concretize_data ι off ds` (the cells,
+   ascending from `off`); this turns those cells into the contract's
+   `gen_data_at a ds` at ι whenever `a` denotes `off` and `data_ok` holds:
+   a pinned cell from the init-memory facts, an existential cell from its own
+   value, an up-array by interp_arr_intro, a down-array by induction on
+   interp_arr_add_first (data_arr_down), an anchor from data_ok.  Developed
+   interactively against this file's own context (pet holds it). *)
+Section DataImplPre.
+  Add Ring bvring_xlen_data : (bv.ring_theory xlenbits).
+
+  Lemma data_neg4 : bv.of_Z (n := xlenbits) (-4) = bv.negate (bv.of_Z 4).
+  Proof. change (-4)%Z with (- 4)%Z. exact (RiscvPmpIrisInstanceWithContracts.arr_neg_s 4). Qed.
+
+  Lemma data_arr_down `{sailGS2 Σ} (pub : bool) (lo : bv xlenbits) (k : nat) :
+    ([∗ list] i ∈ seq 0 k, interp_arr_cell pub (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat i))))
+    ⊢@{iPropI Σ}
+    interp_arr pub (-4) (SyncVal (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))))
+      (SyncVal (bv.of_nat k)) (SyncVal (bv.add lo (bv.of_Z (-4)))).
+  Proof.
+    induction k as [|k IH].
+    - iIntros "_". cbn [interp_arr]. iSplit; [iPureIntro|done].
+      change (bv.of_nat (n := xlenbits) 0) with (@bv.zero xlenbits). rewrite !data_neg4.
+      match goal with |- ?a = ?b => change (@eq (bv xlenbits) a b) end. ring.
+    - rewrite seq_S big_sepL_app. cbn [big_opL Nat.add]. iIntros "[Hk [Hc _]]".
+      iPoseProof (IH with "Hk") as "Harr".
+      assert (Ea : bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))
+                   = bv.add (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))) (bv.of_Z (- -4))).
+      { change (bv.of_Z (n := xlenbits) (- -4)) with (bv.of_Z (n := xlenbits) 4). rewrite data_neg4. ring. }
+      rewrite {1}Ea.
+      iPoseProof (RiscvPmpIrisInstanceWithContracts.interp_arr_add_first with "[$Harr $Hc]") as "H".
+      assert (Eb : bv.add (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))) (bv.of_Z (- -4))
+                   = bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat (S k)))) (bv.of_Z (-4))).
+      { change (bv.of_Z (n := xlenbits) (- -4)) with (bv.of_Z (n := xlenbits) 4). rewrite bv.of_nat_S data_neg4. ring. }
+      assert (Ec : bv.add (bv.of_nat (n := xlenbits) k) (bv.of_Z 1) = bv.of_nat (S k)).
+      { rewrite bv.of_nat_S bv.of_Z_one. ring. }
+      rewrite Eb Ec. iExact "H".
+  Qed.
+
+  Lemma data_ofN_4i (i : nat) :
+    bv.of_N (n := xlenbits) (4 * N.of_nat i) = bv.mul (bv.of_Z 4) (bv.of_nat i).
+  Proof.
+    induction i as [|i IH].
+    - change (bv.of_N (n := xlenbits) (4 * N.of_nat 0)) with (@bv.zero xlenbits).
+      change (bv.of_nat (n := xlenbits) 0) with (@bv.zero xlenbits). ring.
+    - rewrite bv.of_nat_S. replace (4 * N.of_nat (S i))%N with (4 * N.of_nat i + 4)%N by lia.
+      rewrite -bv.of_N_add IH. change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4). ring.
+  Qed.
+
+  Lemma data_ofN_lin (off : N) (i : nat) :
+    bv.of_N (n := xlenbits) (off + 4 * N.of_nat i)
+    = bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat i)).
+  Proof. rewrite -bv.of_N_add data_ofN_4i. reflexivity. Qed.
+
+  Lemma data_unsigned_of_N_small (e : N) : (e < 4294967296)%N ->
+    bv.unsigned (@bv.of_N xlenbits e) = Z.of_N e.
+  Proof. change xlenbits with 32%nat in *. intros He. unfold bv.unsigned. f_equal. apply bv.bin_of_N_small. exact He. Qed.
+
+  Lemma inst_t_add4 {Σc} (ι : Valuation Σc) (a : Term Σc ty_xlenbits) (off : N) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) a ι = SyncVal (@bv.of_N xlenbits off) ->
+    inst (T := fun Σ => Term Σ ty_xlenbits) (t_add a 4) ι = SyncVal (@bv.of_N xlenbits (off + 4)).
+  Proof. intros Ha. cbn. rewrite Ha. cbn. f_equal. rewrite -bv.of_N_add. reflexivity. Qed.
+
+  Lemma data_count_spec {Σc} (ι : Valuation Σc) (c : Term Σc ty_xlenbits) :
+    bv.of_nat (n := xlenbits) (data_count ι c) = rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι).
+  Proof. unfold data_count. apply RiscvPmpIrisInstanceWithContracts.arr_of_nat_bin. Qed.
+
+  Lemma inst_t_add4n {Σc} (ι : Valuation Σc) (a c : Term Σc ty_xlenbits) (off : N) :
+    inst (T := fun Σ => Term Σ ty_xlenbits) a ι = SyncVal (@bv.of_N xlenbits off) ->
+    inst (T := fun Σ => Term Σ ty_xlenbits) c ι = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι)) ->
+    inst (T := fun Σ => Term Σ ty_xlenbits) (t_add4n a c) ι
+    = SyncVal (@bv.of_N xlenbits (off + 4 * N.of_nat (data_count ι c))).
+  Proof.
+    intros Ha Hc. cbn. rewrite Ha Hc. cbn. f_equal. rewrite data_ofN_lin data_count_spec.
+    change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4). reflexivity.
+  Qed.
+
+  Lemma data_cells_arrcells `{sailGS2 Σ} (pub : bool) (off : N) (k : nat) (μ1 μ2 : Memory) :
+    (off + 4 * N.of_nat k <= maxAddr)%N ->
+    ([∗ list] spec ∈ map mem_full_to_spec
+                      (List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits))) (seq 0 k)),
+       match spec with
+       | (a, true) => interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
+       | (a, false) => interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a))
+       end)
+    ⊢@{iPropI Σ} [∗ list] i ∈ seq 0 k, interp_arr_cell pub (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat i))).
+  Proof.
+    intros Hk. rewrite List.map_map.
+    change (List.map ?f (seq 0 k)) with (f <$> seq 0 k). rewrite big_sepL_fmap.
+    iIntros "H". iApply (big_sepL_impl with "H"). iIntros "!>" (j i Hi) "Hc".
+    apply lookup_seq in Hi as [-> Hlt]. rewrite -data_ofN_lin. unfold interp_arr_cell.
+    iSplit.
+    { iPureIntro. rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hk; lia].
+      unfold maxAddr, minAddr in *. lia. }
+    destruct pub.
+    - iExists _. iFrame "Hc". iPureIntro. intros _. exact I.
+    - iExists _. iFrame "Hc". iPureIntro. discriminate.
+  Qed.
+
+  Lemma gen_init_mem_none_app (g : nat -> bv xlenbits) (pub : bool) (l : list nat) (rest : list mem_full_spec) :
+    gen_init_mem (List.map (fun i => (g i, pub, @None (bv xlenbits))) l ++ rest) = gen_init_mem rest.
+  Proof. unfold gen_init_mem. rewrite omap_app. induction l as [|i l IH]; [reflexivity|]. exact IH. Qed.
+
+  Lemma gen_implpre_data `{sailGS2 Σ} {Σc} (ι : Valuation Σc) (μ1 μ2 : Memory)
+      (ds : list (data_spec Σc)) :
+    forall (a : Term Σc ty_xlenbits) (off : N),
+    inst (T := fun Σ => Term Σ ty_xlenbits) a ι = SyncVal (@bv.of_N xlenbits off) ->
+    data_ok ι off ds ->
+    declare_init_memory μ1 (gen_init_mem (concretize_data ι off ds)) ->
+    declare_init_memory μ2 (gen_init_mem (concretize_data ι off ds)) ->
+    interp_mem_with_public_memory μ1 μ2 (map mem_full_to_spec (concretize_data ι off ds))
+    ⊢@{iPropI Σ} asn.interpret (gen_data_at a ds) ι.
+  Proof.
+    induction ds as [|d ds IH]; intros a off Ha Hok Hi1 Hi2.
+    { iIntros "_". cbn. done. }
+    destruct d as [pub [t|]|pub dir c|x]; cbn [gen_data_at concretize_data data_ok] in *.
+    - (* a pinned cell *)
+      destruct Hok as [Hrng [[-> Ht] Hok]].
+      unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap option_map] in Hi1, Hi2.
+      apply Forall_cons in Hi1 as [Hv1 Hi1]. apply Forall_cons in Hi2 as [Hv2 Hi2]. cbn in Hv1, Hv2.
+      unfold interp_mem_with_public_memory. cbn [map mem_full_to_spec big_opL].
+      iIntros "[Hc Hrest]". cbn [asn.interpret gen_cell_at interpret_chunk].
+      iSplitL "Hc".
+      { cbn. rewrite Ha Ht -Hv1. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | rewrite Ht; exact I]. }
+      iSplitR.
+      { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
+        rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
+        unfold maxAddr, minAddr in *. lia. }
+      iApply (IH (t_add a 4) (off + 4)%N (@inst_t_add4 Σc ι a off Ha) Hok Hi1 Hi2 with "Hrest").
+    - (* an existential cell *)
+      destruct Hok as [Hrng [_ Hok]].
+      unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap option_map] in Hi1, Hi2.
+      unfold interp_mem_with_public_memory. cbn [map mem_full_to_spec big_opL].
+      iIntros "[Hc Hrest]". cbn [asn.interpret gen_cell_at].
+      iSplitL "Hc".
+      { destruct pub.
+        - iExists (SyncVal (get_word μ1 (bv.of_N off))). cbn [asn.interpret interpret_chunk].
+          cbn. rewrite inst_subst inst_sub_wk1 Ha. iFrame "Hc". iSplit; [iPureIntro; exact I|done].
+        - iExists (NonSyncVal (get_word μ1 (bv.of_N off)) (get_word μ2 (bv.of_N off))). cbn.
+          rewrite inst_subst inst_sub_wk1 Ha. iExact "Hc". }
+      iSplitR.
+      { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
+        rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
+        unfold maxAddr, minAddr in *. lia. }
+      iApply (IH (t_add a 4) (off + 4)%N (@inst_t_add4 Σc ι a off Ha) Hok Hi1 Hi2 with "Hrest").
+    - (* an array *)
+      destruct Hok as [Hc [Hrng Hok]].
+      unfold declare_init_memory in Hi1, Hi2. rewrite gen_init_mem_none_app in Hi1, Hi2.
+      unfold interp_mem_with_public_memory. rewrite List.map_app big_sepL_app.
+      iIntros "[Hcells Hrest]".
+      iPoseProof (data_cells_arrcells pub off (data_count ι c) μ1 μ2 Hrng with "Hcells") as "Hcells".
+      iSplitL "Hcells".
+      { destruct dir; cbn [gen_arr_at asn.interpret interpret_chunk]; cbn.
+        - rewrite Ha Hc. cbn. rewrite -data_count_spec.
+          change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4).
+          iApply (RiscvPmpIrisInstanceWithContracts.interp_arr_intro with "Hcells").
+          change (bv.exp2 xlenbits) with 4294967296%N. unfold maxAddr, minAddr, lenAddr in Hrng. lia.
+        - rewrite Ha Hc. cbn. rewrite -data_count_spec.
+          change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4).
+          iApply (data_arr_down with "Hcells"). }
+      iApply (IH (t_add4n a c) (off + 4 * N.of_nat (data_count ι c))%N
+                 (@inst_t_add4n Σc ι a c off Ha Hc) Hok Hi1 Hi2 with "Hrest").
+    - (* an anchor *)
+      destruct Hok as [Hx Hok]. iIntros "H". cbn [asn.interpret]. iSplitR.
+      { cbn. iSplit; [iPureIntro; by rewrite Hx Ha|done]. }
+      iApply (IH x off Hx Hok Hi1 Hi2 with "H").
+  Qed.
+End DataImplPre.

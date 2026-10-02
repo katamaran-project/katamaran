@@ -118,56 +118,84 @@ Import IrisModel.RiscvPmpIrisBase.
      it is a proof device, sealed inside the proposition that says a proof
      device was found.
 
-     A property of `c` ALONE: no base, no Σ.  Since PLAN-valid-blk-annot
-     Phase 4 the block condition is `annotsValid a` -- every ai_block carries
-     its own blkValid proof, no top-level re-entry -- a pure Prop that no
-     longer mentions Iris or cfg_init_addr (it used to be an Iris-level
-     blocksSound at `cfg_init_addr c`, a field since removed).  EVERY bridge below takes this and
-     nothing annotation-level: annotations appear only where a contract is
-     proved valid. *)
+     A property of `c` ALONE: no base, no Σ.  EVERY bridge below takes this
+     and nothing annotation-level: annotations appear only where a contract
+     is proved valid.
+
+     THE LIST IS TYPED (2026-09-29).  The witness is an
+     `AnnotInstrV blkValid` list, so every block annotation CARRIES its
+     validity proof (vb_ok) and no validity predicate is ever proved about a
+     list: the VC runs over its erasure `map (eraseV c) LV`.  The one
+     remaining condition is the top-level no-re-entry rule (decision V9):
+     every aiv_loop is `false`, which on a literal list is `repeat
+     constructor`.  (Until 2026-09-29 the witness was an erased
+     `list AnnotInstr` plus a hand-proved `annotsValid`; that predicate now
+     only appears on the way OUT, as annotsValid_of_V.) *)
   Definition ValidCFGVerifierContract {R : LCtx} (c : @CFGVerifierContract R) : Prop :=
-    exists a : list AnnotInstr,
-      cfg_vc c a
-      /\ strip a = cfg_instrs c
-      /\ annotsValid a.
+    exists LV : list (AnnotInstrV blkValid),
+      cfg_vc c (List.map (eraseV c) LV)
+      /\ List.map aiv_instr LV = cfg_instrs c
+      /\ List.Forall (fun a => aiv_loop a = false) LV.
 
-  (* THE ONLY WAY IN.  Order is chosen so that `exact <the example's VC>`
-     pins `a` before the other two goals are looked at. *)
+  (* THE ONLY WAY IN.  `LV` is explicit: it cannot be recovered from the VC
+     by unification (the VC mentions only its erasure), and the call site
+     has it by name anyway.  Hvc is typically `exact <the example's VC>`,
+     which holds by CONVERSION: the erasure of a literal list reduces to the
+     literal erased list the light file verified. *)
   Lemma ValidCFGVerifierContract_intro {R : LCtx} (c : @CFGVerifierContract R)
-      (a : list AnnotInstr)
-      (Hvc : cfg_vc c a)
-      (Hstrip : strip a = cfg_instrs c)
-      (Hval : annotsValid a) :
+      (LV : list (AnnotInstrV blkValid))
+      (Hvc : cfg_vc c (List.map (eraseV c) LV))
+      (Hcode : List.map aiv_instr LV = cfg_instrs c)
+      (Hnl : List.Forall (fun a => aiv_loop a = false) LV) :
     ValidCFGVerifierContract c.
-  Proof. exists a. split; [exact Hvc | split; [exact Hstrip | exact Hval]]. Qed.
+  Proof. exists LV. split; [exact Hvc | split; [exact Hcode | exact Hnl]]. Qed.
 
-  (* THE ONLY WAY OUT. *)
+  (* Erasing a typed list with no re-entry gives valid annotations: each
+     block's proof is its own vb_ok, and ai_loop reduces to None. *)
+  Lemma annotsValid_of_V {R : LCtx} (c : @CFGVerifierContract R)
+      (LV : list (AnnotInstrV blkValid)) :
+    List.Forall (fun a => aiv_loop a = false) LV ->
+    annotsValid (List.map (eraseV c) LV).
+  Proof.
+    intros Hnl. apply List.Forall_map. revert Hnl. apply List.Forall_impl.
+    intros a Ha. unfold eraseV; cbn. rewrite Ha. split; [reflexivity|].
+    intros b Hb. destruct (aiv_block a) as [x|]; cbn in Hb; [|discriminate].
+    injection Hb as <-. exact (vb_ok x).
+  Qed.
+
+  (* THE ONLY WAY OUT, in the erased form the bridges consume. *)
   Lemma ValidCFGVerifierContract_elim {R : LCtx} (c : @CFGVerifierContract R) :
     ValidCFGVerifierContract c ->
     exists a : list AnnotInstr,
       cfg_vc c a
       /\ strip a = cfg_instrs c
       /\ annotsValid a.
-  Proof. exact (fun H => H). Qed.
+  Proof.
+    intros (LV & Hvc & Hcode & Hnl). exists (List.map (eraseV c) LV).
+    split; [exact Hvc|]. split; [rewrite strip_eraseV; exact Hcode|].
+    now apply annotsValid_of_V.
+  Qed.
 
   Global Opaque ValidCFGVerifierContract.
 
-  (* One line at a call site, and it names no annotation: the hint list is
-     recovered by unification from the example's own VC. *)
-  (* Closes `annotsValid a` for a program with no block annotations.  TWO
-     alternatives because a program list reaches here in two syntactic shapes:
-     `list_AST_AnnotInstr l` when a named `list AST` is coerced wholesale, and
-     a plain cons-list of per-element coercions when the literal is written
-     inline (Verifier.v's `Local Arguments List.cons {_} & _ _` makes the
-     coercion fire elementwise inside a bracket literal).  Only the first
-     matches ai_block_none_of_AST; `repeat constructor` handles the second,
-     since each `ai_fire true (AST_AnnotInstr a) = None` closes by eq_refl.
-     (Replaced EndToEnd's solve_no_blocks, which closed the old Iris-level
-     blocksSound premise the same way.) *)
-  Ltac solve_annots_none :=
-    apply annotsValid_of_none;
-    solve [ apply ai_block_none_of_AST | repeat constructor ].
+  (* A plain program as a typed list: no ghosts, no blocks, no re-entry. *)
+  Lemma map_aiv_instr_AST (l : list AST) :
+    List.map aiv_instr (List.map (@AST_AnnotInstrV blkValid) l) = l.
+  Proof. induction l as [|i l IH]; [reflexivity|]. cbn. f_equal. exact IH. Qed.
 
+  Lemma noloop_AST (l : list AST) :
+    List.Forall (fun a => aiv_loop a = false) (List.map (@AST_AnnotInstrV blkValid) l).
+  Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
+
+  (* One line at a call site for a program with NO block annotations, and it
+     names no annotation: the typed list is the plain code, and the
+     example's VC matches its erasure by conversion (eraseV of an
+     AST_AnnotInstrV is AST_AnnotInstr, by reflexivity).  Pinning LV to
+     `cfg_instrs c` before `exact H` is what keeps unification out of it. *)
   Ltac solve_valid H :=
-    eapply ValidCFGVerifierContract_intro;
-      [ exact H | apply strip_of_AST | solve_annots_none ].
+    lazymatch goal with
+    | |- ValidCFGVerifierContract ?c =>
+        apply (@ValidCFGVerifierContract_intro _ c
+                 (List.map (@AST_AnnotInstrV blkValid) (cfg_instrs c)));
+        [ exact H | apply map_aiv_instr_AST | apply noloop_AST ]
+    end.

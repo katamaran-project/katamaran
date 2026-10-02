@@ -1,19 +1,45 @@
-(* ========================================================================= *)
-(* Example/ZZPaddedLoopResult.v -- SUB-TABLE loop cut (heavy half).           *)
-(*                                                                           *)
-(* Mirrors Example/CountdownComposedResult.v, with ONE difference that is    *)
-(* the whole point: the Iris side owns `ptsto_instrs` of the WHOLE            *)
-(* 66-instruction program, while each segment contract's table holds only    *)
-(* the two instructions it executes.  The gap is closed by the AST          *)
-(* containment `pl_contain` (Tables.v's `instrs_of_list_segment`), which      *)
-(* GenCompose.contract_run turns into table faithfulness itself -- sound      *)
-(* precisely because `itable_rel` is indexed by the TABLE and only asks that  *)
-(* the map CONTAIN each entry.                                                *)
-(*                                                                           *)
-(* Reuses bvdec / bvdec_one / bvdec_bin / ik / cdInvAsn from                  *)
-(* CountdownComposedResult.v -- none of them mention the instruction list.    *)
-(* ========================================================================= *)
+(******************************************************************************)
+(* Copyright (c) 2020 Steven Keuchel, Dominique Devriese, Sander Huyghebaert  *)
+(* All rights reserved.                                                       *)
+(*                                                                            *)
+(* Redistribution and use in source and binary forms, with or without         *)
+(* modification, are permitted provided that the following conditions are     *)
+(* met:                                                                       *)
+(*                                                                            *)
+(* 1. Redistributions of source code must retain the above copyright notice,  *)
+(*    this list of conditions and the following disclaimer.                   *)
+(*                                                                            *)
+(* 2. Redistributions in binary form must reproduce the above copyright       *)
+(*    notice, this list of conditions and the following disclaimer in the     *)
+(*    documentation and/or other materials provided with the distribution.    *)
+(*                                                                            *)
+(* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS        *)
+(* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED  *)
+(* TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR *)
+(* PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR          *)
+(* CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,      *)
+(* EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,        *)
+(* PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR         *)
+(* PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF     *)
+(* LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING       *)
+(* NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS         *)
+(* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
+(******************************************************************************)
 
+
+(* ========================================================================= *)
+(* Example/PaddedLoopResult.v -- a loop block inside a longer program (HEAVY) *)
+(*                                                                           *)
+(* padded_loop_noninterferent_param: the 66-instruction program of           *)
+(* PaddedLoop.v -- 64 executed filler no-ops, then the countdown loop as ONE  *)
+(* block (cdRecBlk, valid at every address: CountdownRecResult) -- end to    *)
+(* end, via cfg_instrs_endToEnd, for every load address it fits at.  As in    *)
+(* CountdownRecResult, X1 is PINNED to 2 (the loop needs k <> 0).            *)
+(*                                                                           *)
+(* Replaced 2026-10-01 the hand-written Iris composition (pl_step / pl_exit / *)
+(* myWP2_loop_induction over two segment contracts), whose framing of the     *)
+(* whole instruction map peaked at ~9.4 GB.                                    *)
+(* ========================================================================= *)
 From Coq Require Import
      ZArith.ZArith Lists.List micromega.Lia Strings.String.
 From Katamaran Require Import
@@ -29,12 +55,13 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
-     RiscvPmp.CFGVer.Adequacy
-     RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.GenSegment
+     RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.GenCompose
+     RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.Example.CountdownComposed
-     RiscvPmp.CFGVer.Example.CountdownComposedResult
+     RiscvPmp.CFGVer.Example.CountdownRec
+     RiscvPmp.CFGVer.Example.CountdownRecResult
      RiscvPmp.CFGVer.Example.PaddedLoop.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -46,7 +73,6 @@ From Equations Require Import Equations.
 
 Import RiscvPmpProgram.
 
-Set Implicit Arguments.
 Import ctx.resolution.
 Import ctx.notations.
 Import bv.notations.
@@ -67,121 +93,57 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
-Section ComposePaddedLoop.
-  Context {Σ} {GS : sailGS2 Σ}.
 
-  (* The real exit: pc past the END OF THE WHOLE 66-instruction program. *)
-  Definition plExit : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜atPc 264 v⌝)%I.
+(* THE ANNOTATIONS, TYPED: the filler plain, the loop head carrying cdRecBlk
+   with its validity.  Its erasure is padded_annot by conversion. *)
+Definition padded_annotV : list (AnnotInstrV blkValid) :=
+  List.map AST_AnnotInstrV pl_filler
+  ++ (MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid)) false
+      :: List.map AST_AnnotInstrV [BNE X1 X0 back4]).
 
-  (* The loop invariant.  Note the instruction resource is the WHOLE program,
-     not the segment -- that is the change this file exists to demonstrate. *)
-  Definition plInv (k : bv xlenbits) : iProp Σ :=
-    (asn.interpret cdInvAsn (ik k)
-     ∗ pc ↦ᵣ SyncVal (bv.of_N pl_head) ∗ (∃ v, nextpc ↦ᵣ v)
-     ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
-         (ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot))%I.
+Lemma plLink_valid : ValidCFGVerifierContract plLink.
+Proof.
+  apply (@ValidCFGVerifierContract_intro _ plLink padded_annotV);
+    [exact valid_plLink | reflexivity | repeat constructor].
+Qed.
 
-  Definition plInvN (n : nat) : iProp Σ :=
-    (∃ k : bv xlenbits, ⌜bv.bin k = (N.of_nat n + 1)%N⌝ ∗ plInv k)%I.
-
-  (* THE SEGMENT CONTRACTS ARE VALID -- sealed, from their own VCs.  The only
-     place the annotated segment `pl_seg` appears (PLAN-valid-blk-annot.md
-     Phase 4). *)
-  Lemma plBody_valid : ValidCFGVerifierContract plBody.
-  Proof. solve_valid valid_plBody. Qed.
-  Lemma plFinal_valid : ValidCFGVerifierContract plFinal.
-  Proof. solve_valid valid_plFinal. Qed.
-
-  (* The segment's code sits inside the WHOLE program at pl_head -- an
-     AST-level containment.  It replaced the annotated sub-table
-     faithfulness fact pl_itable: contract_run derives faithfulness itself. *)
-  Lemma pl_contain :
-    instrs_of_list (bv.of_N pl_head) cd_instrs
-      ⊆ ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot.
-  Proof.
-    unfold padded_annot.
-    pose proof (instrs_of_list_segment pl_pre pl_seg pl_post (@bv.of_N xlenbits 0)) as H.
-    apply (map_fmap_mono ai_instr) in H.
-    - rewrite fmap_instrs_of_list in H. exact H.
-    - unfold pl_pre, pl_seg, pl_post, pl_filler, cd_instrs.
-      cbn [List.length List.app List.repeat].
-      change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia.
-  Qed.
-
-  Lemma pl_fit :
-    (bv.bin (@bv.of_N xlenbits pl_head) + 4 * N.of_nat (length cd_instrs)
-       < bv.exp2 xlenbits)%N.
-  Proof. change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia. Qed.
-
-  (* ===== BODY: one trip, n+1 -> n, at the loop head (offset 256). ===== *)
-  Lemma pl_step (n : nat) : plInvN (S n) -∗ myWP2_loop (plInvN n).
-  Proof.
-    iIntros "(%k & %Hk & Hres0)".
-    iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    (SyncVal (bv.of_N pl_head)) (cfg_exit plBody) (ik k)).
-    { eexists. split; reflexivity. }
-    assert (Hk2 : bv.bin k = (N.of_nat n + 2)%N) by lia.
-    assert (Hdec : bv.bin (bvdec k) = (N.of_nat n + 1)%N) by (apply bvdec_bin; exact Hk2).
-    assert (Hne : bvdec k <> bv.zero).
-    { intros HH. rewrite HH in Hdec. cbn in Hdec. lia. }
-    iApply (contract_run plBody plBody_valid (ik k) (bv.of_N pl_head)
-              (ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot) _ (plInvN n)
-              eq_refl pl_fit pl_contain Hef
-              $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
-    - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
-      iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
-      iSplitR "Hpriv Hinv"; [| iFrame].
-      iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
-      iSplitL "H1"; [iExact "H1"|].
-      iSplitR; [iSplit; [done|done]|].
-      iSplit; [|done]. iPureIntro.
-      change ((k + minus1)%bv) with (bvdec k). exact Hne.
-    - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [av|a1 a2]; [|contradiction].
-      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-      injection Hex as <-.
-      iExists (bvdec k). iSplitR; [iPureIntro; exact Hdec|].
-      unfold plInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
-      iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
-      iFrame "Hpc Hnpc Hinstrs Hpriv Hinv". iExact "H1".
-  Qed.
-
-  (* ===== EXIT: the guard fails, leave the loop at 264. ===== *)
-  Lemma pl_exit : plInvN 0 -∗ myWP2_loop plExit.
-  Proof.
-    iIntros "(%k & %Hk & Hres0)".
-    iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
-                    (SyncVal (bv.of_N 264)) (cfg_exit plFinal) (ik k)).
-    { eexists. split; reflexivity. }
-    iApply (contract_run plFinal plFinal_valid (ik k) (bv.of_N pl_head)
-              (ai_instr <$> instrs_of_list (bv.of_N 0) padded_annot) _ plExit
-              eq_refl pl_fit pl_contain Hef
-              $! (SyncVal (bv.of_N pl_head)) with "[Hres Hpc Hnpc Hinstrs]").
-    - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
-      iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
-      iSplitR "Hpriv Hinv"; [| iFrame].
-      iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
-      iSplitL "H1"; [iExact "H1"|].
-      iSplitR; [iSplit; [done|done]|].
-      iSplit; [|done]. iPureIntro.
-      change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
-    - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
-      destruct an as [av|a1 a2]; [|contradiction].
-      unfold plExit. iExists av. iFrame "Hpc". iPureIntro.
-      cbn in Hex. unfold atPc. rewrite Hex. exact I.
-  Qed.
-
-  (* ===== THE LOOP, for free from the two above. ===== *)
-  Lemma pl_loop (n : nat) : plInvN n -∗ myWP2_loop plExit.
-  Proof. apply (myWP2_loop_induction plInvN plExit pl_step pl_exit). Qed.
-
-  Corollary pl_loop_from_2 : plInv (bv.of_N 2) -∗ myWP2_loop plExit.
-  Proof.
-    iIntros "H". iApply (pl_loop 1). iExists (bv.of_N 2).
-    iSplitR; [iPureIntro; reflexivity|]. iExact "H".
-  Qed.
-
-End ComposePaddedLoop.
+Lemma padded_loop_noninterferent_param (init_addr : N) :
+  (init_addr + 264 < lenAddr)%N ->
+  noninterferent_strong init_addr padded_instrs (init_addr + 264)%N
+    [(X1, true, Some (bv.of_N 2)); (X4, false, None)] [].
+Proof.
+  intros Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+    HInitReg1 HInitReg2 HInitMem1 HInitMem2
+    γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+  pose proof (seg_fits_bin init_addr 264 ltac:(unfold seg_fits_memory; lia)) as Hbin.
+  pose proof (seg_fits_bin (init_addr + pl_head) 8 ltac:(unfold seg_fits_memory, pl_head; lia)) as Hbin2.
+  eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' padded_instrs
+    (init_addr + 264)%N n ws cdRecCtx
+    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+          .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
+    _ HpubReg plLink plLink_valid eq_refl init_addr).
+  - reflexivity.
+  - apply (seg_exit_table_ok _ _ init_addr 264). reflexivity.
+  - intros Σ' GS'.
+    iIntros "(Hregs & Hpriv & #Hinv)".
+    iPoseProof (gen_implpre [(X1, true, Some (bv.of_N 2)); (X4, false, None)]
+                  _ HpubReg ltac:(apply Prelude.nodup_fixed; reflexivity)
+                  HInitReg1 HInitReg2 with "Hregs") as "Hpre".
+    cbn -[bv.of_N].
+    iDestruct "Hpre" as "(HX1 & HX4 & _)".
+    iFrame "Hpriv Hinv HX1 HX4".
+    repeat iSplit; try done; iPureIntro.
+    all: first [ reflexivity
+               | (try unfold bv.unsigned; rewrite Hbin; lia)
+               | (rewrite bv.of_N_add; unfold bv.unsigned; rewrite Hbin2; unfold pl_head; lia)
+               | (intros H; apply (f_equal (@bv.bin _)) in H; discriminate) ].
+  - unfold padded_instrs, pl_filler, cd_instrs. cbn [length List.app List.repeat]. lia.
+  - exact Hmem1.
+  - exact Hmem2.
+  - exact γ1curpriv.
+  - exact γ2curpriv.
+  - exact γ1pc.
+  - exact γ2pc.
+  - exact steps1.
+  - exact Htrace.
+Qed.

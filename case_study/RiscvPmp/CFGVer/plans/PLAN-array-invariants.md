@@ -248,10 +248,11 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   the peval folding risk before any Iris work.
 - **1. Interpretation, view entailments, ghost soundness.** D4; the generic
   entailments; `cexec`/`rexec` arms and the ghost step's soundness; view
-  validity in the seal. GATE: `make Results.vo` green, axiom-clean; ENTRY
+  validity in the seal. GATE: `make Results.vo` green; ENTRY
   CHECK: the interpretation of D's `inv` at a concrete count is inhabited.
 - **2. D end-to-end standalone.** `ZZArrDResult.v` via `cfg_instrs_endToEnd`,
-  like CountdownRecResult. GATE: axiom-clean end theorem.
+  like CountdownRecResult. GATE: end theorem compiles (no routine
+  Print Assumptions -- Emiel 2026-09-28; the merge hook's gate still runs it).
 - **3. D inside muladd.** The caller's side: converting muladd's concrete
   cells into `arr` chunks (Q1's context-indexed views). GATE:
   `bc_run_in_muladd`-style run of D at idx 84.
@@ -272,3 +273,434 @@ No `theories/` change. No `Machine.v` change. No trusted-surface change
   edit into one pass (GATE_JOBS=1 on this box).
 - **VerifierRel.v cannot be opened by pet**; the refinement arm for
   `AnnotView` needs the probe-file workflow the ghost-refinement work used.
+
+## Progress log
+
+### Phase 0 (2026-09-28, branch `issue/array-invariants`)
+
+- **Sig.v**: `arr (pub : bool) (s : Z)`, args `[a; n; e]`, precise on `a`,
+  not duplicable. The stride is a `Z`, not an `N`: `Derive EqDec` needs an
+  `EqDec` instance per field and there is none for `N` (there is `Z_eqdec`),
+  and a signed stride says "walks down" as `s = -4` directly.
+- **Verifier.v**: `AnnotView {Δ} (pre post : Assertion Δ)`, executed as
+  `call_lemma (MkLemma [ctx] _ [env] pre post) [env]`. `cext_sexec_ghost`
+  needed a third case -- WITHOUT `cbn`, which unfolds `call_lemma` at the
+  concrete `MkLemma` and defeats `apply cext_call_lemma`. Rebuild cost of the
+  Sig.v edit to the light closure: 75 s (not the feared full rebuild).
+- **Probe `Example/ZZArrD.v`** (untracked). First run: `take_first` fired as
+  designed (array found angelically, cell `dp-4` and its range fact
+  produced), `lw`/`addi`/`addi`/`sw` all executed; `add_first` FAILED.
+- **Root cause: `peval_bvadd` was not canonical at zero.** Its two
+  constant-folding clauses returned `bv.add v1 v2 ⊕ t'` even when the sum is
+  0, so `(dp ⊕ 4) ⊕ -4` became `0 ⊕ dp`, while the direct clause turns
+  `dp ⊕ 0` into `dp`: one address, two spellings, and the precise consume of
+  the cell at `a - s` missed the heap's bare `dp`. Inherent to array views
+  whenever a pointer register is itself a cell address, so not D-specific.
+  FIXED in `theories/Symbolic/PartialEvaluation.v` (Emiel approved the
+  theories/ change): helper `peval_bvadd_fold` (returns `t'` at zero) +
+  `peval_bvadd_fold_sound`; `peval_bvadd_sound` gains one
+  `etransitivity; [apply peval_bvadd_fold_sound|]` step.
+- **Process note**: the Sig.v/Verifier.v edits were first made through a
+  Bash heredoc, which `skill-path-guard.sh` (Write|Edit only) does not see,
+  so `cfgver-executor`/`cfgver-contracts` were loaded only afterwards.
+- **GATE 0 MET.** After the rebuild (theories/ + all 18 tracked light
+  examples, 55 files, 21:00, peak 5.3 GB, all green -- so no existing VC
+  depended on the old `0 ⊕ x` spelling), `valid_d_rec` closes with
+  `intros; vm_compute; solve_vc` in 154 ms; the whole probe compiles with
+  coqc in 19 s. NO residual obligations: the pointer/count tie never reaches
+  the VC. THREE negative controls, all REJECTED: (1) invariant without the
+  destination cell, (2) post claiming T6 = 1 at exit, (3) invariant with an
+  extra `c ≠ 1`, which the back edge cannot re-establish -- so the back edge
+  really consumes the invariant through the block.
+- Not yet shown: that the invariant is SATISFIABLE (Phase 1's entry check),
+  and nothing is sound yet -- the views are trusted until Phase 1.
+
+### Phase 1 (2026-09-28) -- GATE 1 MET
+
+- **Design change (Emiel):** the anonymous `AnnotView pre post` became a
+  CLOSED CATALOGUE `Verifier.CLem` (`clem_arr_take_first pub s`,
+  `clem_arr_add_first pub s`) with `clem_lemma : CLem -> Lemma [ctx]`, and
+  `Annot`'s constructor is `AnnotCLemma k`. Each entry is proved valid ONCE
+  (`SpecIris.clemSem`), exactly as `lemSemCFGVerif` does for `LEnv`, so no
+  validity premise is threaded through the soundness chain or the seal --
+  Q2 is moot.
+- **`add_first` now REQUIRES the new cell's range fact**
+  (`Verifier.clem_range`): every arr cell carries one in the interpretation,
+  so an add must be given it. D's VC still closes (its invariant states
+  `range dp`).
+- **Interpretation** (`IrisInstanceBinary.interp_arr`/`interp_arr_cell`) as
+  D4. **Step lemmas** `interp_arr_take_first` / `interp_arr_add_first`
+  (SpecIris, Section CLemSound): big_sepL cons + `fmap_S_seq`, index shift
+  and end fact by `ring` at `bv xlenbits` -- stated as separate lemmas and
+  APPLIED, because `ring` refuses a goal whose carrier spells the width
+  unfolded. A count that wraps to 0 on `add` drops the cells (affine); the
+  end fact still holds since then n = -1.
+- **Entry check** `interp_arr_intro`: k concrete in-range cells ARE an arr
+  of count k (for k < 2^32), so arr invariants are satisfiable.
+- `cexec_ghost` arm (VerifierRel), `sound_cexec_ghosts` case (Adequacy);
+  `rexec_ghosts`'s `destruct a; cbn; rsolve` closed the new case UNCHANGED.
+- **Build:** SpecIris+VerifierRel 3:20 (7.1 GB), Adequacy 1:17 (6.9 GB),
+  TablesRel..GenCompose 2:13, Results.vo incl. all examples 13:19 (8.0 GB);
+  `scripts/gate.sh` PASSED (19 end theorems axiom-clean). A first attempt at
+  the whole chain in the background was reaped for low memory while the
+  session was idle: build in foreground pieces, close pet first.
+- **Traps:** `rewrite … by …` fails to parse under Iris's ssreflect `by`
+  (use `; [|tac]`); a preamble needs `From Coq Require Import Lia` or `lia`
+  is a syntax error; `destruct_syminstance` does not see through a named
+  `LCtx` (`cbv [clem_ctx] in ι` first); `cbn -[interp_arr]` is the right
+  unfolding before applying a step lemma (plain `cbn` unfolds `bv.bin`).
+
+### Phase 2 (2026-10-02) -- GATE 2 MET
+
+`Example/ZZArrDResult.v` (untracked probe, with `Example/ZZArrD.v`):
+**`d_noninterferent`** -- `noninterferent_strong init_addr d_instrs
+(init_addr+24) (d_reg_specs init_addr) (d_mem_specs init_addr)` for every
+`init_addr` with `init_addr + 36 < lenAddr`. muladd's loop D alone, 2 trips,
+over 3 private data cells right after the code; S0 pinned to the top cell
+(`init_addr+32`) and T6 to 2, both public; S1/S2 free. coqc 39.6 s, 6.9 GB.
+
+- `dRecBlk_valid` is ONE `exact (blkValid_of_seg … valid_d_rec)`: the loop
+  block, catalogue ghosts included, is valid through the existing Löb door --
+  so `sound_cexec_ghosts`'s AnnotCLemma case and `clemSem` are exercised for
+  real.
+- `dLink` (light): the whole program starting AT the loop, the block an
+  ordinary `ai_block`, exits at +24; `valid_d_link` by `solve_param_vc`.
+- ImplPre builds the invariant's arrays from the trusted statement's
+  concrete cells AT THE IRIS LEVEL (`d_src_arr` via `interp_arr_intro`,
+  `d_moved_arr` empty) -- so a WHOLE-PROGRAM entry needs no Q1 annotation;
+  Q1 matters only for an array introduced MID-program (Phase 3).
+- Address arithmetic trick: `of_N (ia + c) = of_N ia + of_N c` (`d_split`),
+  reassociate, and the closed constant part closes by `f_equal`
+  (computation). `N.of_nat 2 < bv.exp2 xlenbits`: `vm_compute; reflexivity`,
+  not lia. `gen_implpre` leaves two shelved `?ι`s for pinned registers;
+  `Unshelve. exact [ctx]. exact …` (any valuation).
+- No routine Print Assumptions (Emiel); no Admitted in the file.
+
+### Phase 4 (2026-10-02) -- GATE 4 MET for K, M and I
+
+All three pointer-bounded sliding loops verify as ONE `ai_loop` block each,
+at a SYMBOLIC trip count, by `solve_param_vc` alone (no residuals), each with
+three negative controls REJECTED (a false post; an invariant the back edge
+cannot preserve -- done count pinned to 0; the head without the `nonempty`
+ghost). Untracked probes, all coqc-green:
+
+| loop | probe | instrs | latch | coqc (VC + controls) |
+|---|---|---|---|---|
+| K `br_i31_add` | `Example/ZZArrK.v` | 13 | `bne T5, S0` (m ptr) | 42.8 s |
+| M `br_i31_sub` | `Example/ZZArrM.v` | 13 | `bne A4, A2` (m ptr) | 39.2 s |
+| I limb mul-acc | `Example/ZZArrI.v` | 29 | `bne A1, T1` (x ptr) | 110.0 s |
+
+(K's VC alone: 772 ms interactively.)  I contains MUL/MULHU and an SLTU
+carry on private data -- no residual.
+
+- **One new catalogue entry, `clem_arr_nonempty pub s`**
+  (`arr a n e ∗ a≠e ⊢ arr a n e ∗ n≠0`; soundness `clem_nonempty_sound`,
+  from the end fact with n = 0). It turns the pointer latch into the count
+  fact `take_first` needs; the two REMAINING arrays share the count `n`, so
+  one call covers both.
+- **No `add_last` needed** (the plan's D2 listed it): the DONE arrays walk
+  DOWN from the pointers (stride −4), so each trip adds at their FRONT with
+  the existing `add_first`, and `(ap−4)+4` folds back to `ap` (the Phase-0
+  peval fix). This also makes K's four arrays FOUR DISTINCT PREDICATES
+  (pub × stride), so every angelic ghost call has exactly one candidate --
+  the ambiguity risk of D2 never arises.
+- Invariant shape for all three: pointer registers (public) ∗ the latch
+  disequality ∗ scratch registers ∗ remaining-m `(true,4) [bp;n;·]` ∗
+  remaining-x `(false,4) [ap;n;·]` ∗ m-done `(true,−4) [bp−4;k;mE]` ∗ x-done
+  `(false,−4) [ap−4;k;xE]`; ghosts `nonempty; take_first x; take_first m`
+  at the head and `add_first x-done; add_first m-done` after the store. M and
+  I were GENERATED from K's file by register/instruction substitution.
+- Heavy chain past SpecIris.vo NOT rebuilt since `clem_arr_nonempty` (no
+  heavy edits expected: `sound_cexec_ghosts` uses `clemSem k` generically).
+
+### Phase 3 SPIKE (2026-10-02) -- route (A) WORKS, no new machinery
+
+Emiel chose: spike route (A) (angelic seed), fall back to (B) (named-term
+lemma arguments) only if it branches badly. It does not.
+
+- **Two new catalogue entries** (Verifier.v, proved in SpecIris, `clemSem`
+  now 5 cases): `clem_arr_empty pub s` (`secLeak a ⊢ arr a 0 a`, `a`
+  UNCONSTRAINED -- a seed) and `clem_arr_add_last pub s`
+  (`arr a n e ∗ cell e ∗ range e ⊢ arr a (n+1) (e+s)`, the cell matched with
+  `chunk_angelic`, which is what binds a fresh seed's address).
+- **Probe `Example/ZZArrDEntry.v`** (untracked): a NOP whose ghosts_after
+  build D's arrays from individual cells (two seeds, two add_last), then D's
+  loop as an ordinary `ai_block`. Its precondition holds D's three cells and
+  TWO DECOY cells at an unrelated base, so the first add_last's angelic cell
+  choice is genuinely 5-way. `valid_e`: `solve_vc` in 177 ms; the file
+  (incl. D's angelic-moved-array variant `valid_d_recA` and three controls:
+  one add_last too few, the dp-4 cell missing, T6 pinned to 3 -- all
+  REJECTED) compiles in 23 s.
+- **Why it is cheap:** the ghosts sit on the instruction RIGHT BEFORE the
+  block, so a wrong angelic choice fails one step later, at the block's
+  precondition, and is pruned; and the seed's address is substituted
+  EAGERLY once bound, so every later add_last is a precise, deterministic
+  match. Only the first choice per array branches.
+- **The one design cost:** an array that starts EMPTY at a block's entry
+  (D's moved array) must be matched with `chunk_angelic` in the block's
+  precondition, so the unconstrained seed can be bound by the match.
+- **Soundness finding:** `⊢ arr a 0 a` alone is NOT a valid lemma --
+  `ValidLemma` quantifies over every valuation and `arr` is False at a
+  NonSyncVal address. The seed needs `secLeak a` in its precondition. Found
+  by writing the soundness proof; the executor trusts catalogue entries, so
+  no VC could have caught it. Rule: a new catalogue entry is not usable
+  until its ValidLemma is proved.
+- Heavy chain past SpecIris.vo still not rebuilt (no heavy edits).
+
+### Toward the flat muladd with loop blocks (2026-10-02, in progress)
+
+Probe `Example/ZZMuladdBlk.v` (untracked): ZZMuladdFullN2's instructions and
+contract (copied -- that file is on the pre-`cfg_init_addr`-removal API and
+Requiring it would run its OOM flat VC), with deviation 3 REVERTED (both
+`li _, 32` restored, since loop blocks make the trip count irrelevant).
+
+- **All five loops verify as blocks** (probes ZZArrD/G/I/K/M.v, each with
+  three rejected controls). G added as `Example/ZZArrG.v` (register-only,
+  18.5 s). Code-equality lemmas `mb_{d,g,i,k,m}_code` pin each block's code
+  to muladd's own instructions at idx 84/135/190/237/264 (reflexivity).
+- **Step A (only G as a block): OOM at 9.4 GB after 71 s.** Cause is known
+  (diagnostics/muladd-full-cost-drivers.md): I's carry-chain term
+  duplication runs inside the flat VC unless I is a block too.
+- **Contracts made CALLER-READY** (all probes re-verified): posts hand back
+  the scratch registers the precondition consumed (else they are dropped
+  and code after the loop cannot read them); arrays EMPTY at entry (done
+  arrays, D's moved array) matched with `chunk_angelic`.
+- **Exit side needed three things** (probe `Example/ZZArrDExit.v`, cells ->
+  arrays -> D block -> cells, by `solve_param_vc`, control rejected):
+  1. `clem_arr_empty_elim` (`arr a 0 e ⊢ a = e`) so a caller learns an
+     existential exit pointer; it works only if the post names the pointer
+     BARE as an array start -- the solver substitutes `g = E` but NOT
+     `c + f = t` (found by reading the debug VC: cells stayed at `f`).
+  2. `clem_arr_lockstep` (same stride + same count: one start = end gives
+     the other) for K/I/M's NON-latch pointer; posts restated with the latch
+     pointer as its end `e` and the other bound bare by its remaining array.
+  3. residual closers `relval_neq_offset(s)` (Contracts.v, in
+     `solve_symbase_fetch`) for `x ≠ c + x` / `c1 + x ≠ c2 + x`, left by
+     `nonempty` on arrays over one base.
+  Plus `clem_arr_drop` to remove spent arrays. `clemSem` covers 8 entries.
+- **Step B (all five loops as blocks + conversion ghosts): OOM at 8.1 GB
+  after 436 s** (vs 71 s) -- the loop bodies left the VC, something else is
+  still too big. **Prefix probes** `Example/ZZMbPre{83,90,91,...}.v`:
+  - prefix 83 (before D): verifies, **4.4 s**, 4.6 GB.
+  - prefix 90 (D's build ghosts + D block): verifies, **84.5 s** -- D's
+    ENTRY costs ~80 s. Working hypothesis: angelic `heap_extractions`
+    search over a ~130-chunk heap (instruction words, registers, cells) at
+    every angelic array/cell match; unmeasured.
+  - prefix 91 (+ D's split + one instruction): FAILS (not yet diagnosed).
+- **Tried and reverted:** `arr` precise on NO inputs (so ghost lemmas match
+  by predicate, no heap search). Sound, but a block precondition then no
+  longer rejects a wrongly seeded array by address syntax: it asserts the
+  address equation, which is satisfiable for a cell at an unrelated base,
+  so the wrong branch survives as an unresolved angelic disjunction
+  (ZZArrDEntry's decoys). Ghost lemmas want "by predicate", block
+  preconditions want "by address".
+
+### 2026-09-29 -- THE FLAT MULADD VERIFIES (light-side VC)
+
+`Example/ZZMuladdBlk.v`: `valid_mb : cfg_vc mb_contract mb_annot` --
+br_i31_muladd_small whole-function, mlen = 2, clang's own instructions with
+deviation 3 reverted (both `li _, 32`), all five loops as blocks with the
+conversion ghosts around D/I/K/M. **VC 126 s, whole file 282 s, peak RSS
+8.5 GB** (needs a >11.5 GB virtual cap: the Qed's VM re-check).
+
+Two fixes got it there, neither array-specific:
+1. **Precise chunk matching compares the heap chunk's inputs NORMALISED**
+   (theories/Syntax/Chunks.v, commit c32d2d6b). A heap term holding a
+   variable substituted after the chunk was produced is not re-peval'd
+   (`4 + g`, g := 0x468 + p, stays `4 + (0x468 + p)`); the consumed chunk
+   is (`0x46c + p`), so a STORE (exact address match) missed the cell.
+   Reads hid it: they fall back to an angelic match. Prefix 91 failed on it.
+2. **solve_vc no longer calls `solve_bv`** (Contracts.v). The name resolves
+   to theories/Bitvector.v's `Tactic Notation "solve_bv" := bv.bv_zify`
+   (a tactic notation beats an Ltac), so every VC goal got the full bv
+   decision procedure: 77 of 79 s per prefix. All 18 tracked examples
+   verify without it.
+
+**My angelic-heap-search hypothesis for D's 80 s entry was REFUTED by the
+ablation**: `vm_compute` (the executor) was 3.5-4.5 s with or without the
+ghosts; the cost was entirely in the tactic. Prefix timings after both
+fixes: 90 -> 7.1 s, 163 (through G) 9.9 s, 220 (through I) 53 s / 7.0 GB,
+251 (through K) 89 s / 8.2 GB, full 126 s / 8.5 GB.
+
+Still open: (1) this is `cfg_vc`, not yet `ValidCFGVerifierContract` --
+needs `blkValid` for the five loop blocks (heavy, via `blkValid_of_seg`, as
+ZZArrDResult does for D) and `annotsValid` for the annotated list; (2) the
+end theorem (`noninterferent_strong` through the memory bridge, ImplPre
+over mlad's reg/mem specs); (3) heavy chain not rebuilt since the Chunks.v
+fix; gate before merging; (4) the probes are untracked.
+
+### 2026-09-29 (later): END TO END
+
+**`mb_noninterferent` is proved** (`Example/ZZMuladdBlkResult.v`, untracked
+probe): `noninterferent_strong` for the flat muladd (mlen=2, all five loops as
+blocks), axiom-clean (pure_decode, mmioenv). File 43 s / 7.2 GB; it reuses
+`valid_mb` from the light `.vo`. Three pieces:
+1. **The seal's witness is TYPED** (commit a8367495, Emiel's call): 
+   `ValidCFGVerifierContract c := ∃ LV : list (AnnotInstrV blkValid),
+   cfg_vc c (map (eraseV c) LV) ∧ map aiv_instr LV = cfg_instrs c ∧ no aiv_loop`.
+   Blocks carry their blkValid proof; `annotsValid` is no longer proved by
+   anyone (it survives only inside `_elim`). Results.vo green (634 s).
+2. **Loop blocks valid by conversion**: `blkValid_of_seg … (map liftV
+   (x_annot_with xRecBlk)) … valid_x_rec` -- `liftV` (block-free annotation
+   -> typed list) erases back to the source list definitionally, so each
+   loop's existing VC is reused unchanged (10 ms each).
+3. **`gen_contract_noninterferent_rel` restored** (5a5ad48b): the contract
+   must stay unclassed (entry ghosts build arrays from single cells), and
+   that bridge had been deleted as callerless on 2026-08-18.
+
+Still open: gate before merging (heavy chain now rebuilt, Results.vo green);
+the probes are untracked -- promoting ZZMuladdBlk{,Result}.v and the ZZArr*
+loops means naming them and adding them to _CoqProject + AXIOM_CLEAN_THMS.
+
+## PARAMETRIC mlen (2026-09-29, Emiel: "make it parametric")
+
+Goal: `∀ mlen` (bounded) muladd noninterference from ONE symbolic VC; the
+statement is a Coq-level ∀ over spec lists generated from mlen, so
+Noninterference.v is untouched.  Probes (untracked): ZZMbSym1/2/3/3n.v,
+ZZMbArith.v, ZZArrDAng.v.
+
+**Prefix through loop D VERIFIES at symbolic mlen** (`ZZMbSym3.valid_sym3`,
+Qed, file 36 s / 4.8 GB; negative control ZZMbSym3n -- wrong array count --
+FAILS at the closer).  What it took:
+1. m[0] = b symbolic public.  Early returns and the "mlen = 1" branch are
+   refuted by stating the code's OWN branch conditions in the precondition
+   (`sext b <> 0`, `31 <u sext b`, `((-1+M) & 0x3fffffff) <> 0`), plus an
+   upper bound `sext b <u 65536` (else 31 + b wraps).  `sext` at equal width
+   is not peval'd away (candidate peval rule; `sext_id32` closes it here).
+   mblr = 0 is a public fork; pruned in the spike, both paths needed for real.
+2. Addresses at the code's own terms: x[mlen] at `x + (M<<2)`, x[mlen-1] at
+   `x + ((-1+M)<<2)`, x[mlen-2..1] an arr; `asn_in_range` of those exact
+   terms closes the data bounds syntactically.  `x` stays a FREE public
+   variable: the layout is only the end-to-end bridge's business.
+3. THE WALL: the code names one address two ways -- index 74 uses
+   `(-1+M)`, D's count is the MASKED `C = (-1+M) & 0x3fffffff`.  Fix (b):
+   D's entry chunks (source arr, dest cell) are `chunk_angelic`
+   (ZZArrDAng.dAngRec; its own loop VC still closes, 0.18 s), so the
+   mismatch becomes asserted equalities under an angelic choice over
+   candidates.  A ghost lemma cannot help: the executor uses equalities
+   only in solved form, and catalogue lemmas take no term arguments.
+4. The closer (in ZZMbSym3, to be promoted next to solve_symbase_fetch):
+   `left` (the right candidate is first), `cbn -[Erasure.inst_symprop]`
+   (a bare cbn blows 7.6 GB -- the 2880-bit word binder), destruct the
+   public b/x, read b's bounds off the `bv.ult` hypotheses, then rewrite
+   with RelVal-level lemmas whose LHS IS the residual shape
+   (`rv_mlen_mask`, `rv_shl_pred_addr`, `rv_bvadd_comm`) over bv lemmas
+   proved in preamble mode (`mlen_mask`, `shl_pred_addr`, `sext_id32`).
+   SSReflect rewrite is in scope: no `rewrite .. by`, use bullets.
+Tooling: pet cannot hold these probes (7.6 GB cap); iterate with coqc
+(~20-35 s/run).  A deliberately WRONG post hides all residuals: its error
+absorbs every branch -- use a trivially true post when reading residuals.
+Next: both mblr paths; the rest of the program (I/K/M entries angelic, G is
+size-free); promote the closer; the ∀-mlen bridge (cells -> arr via
+interp_arr_intro, generic HDataAddrs).
+
+### 2026-09-29 (later): mblr = 0 covered (Emiel), generic closer
+
+- Emiel chose to cover BOTH mblr paths (mblr = bitlen mod 31 = bits used in
+  m's top word; the mblr = 0 path is legal, rare: bitlen a multiple of 31).
+  That path has its own memmove (idx 113-117), a POINTER-compare loop:
+  `ZZArrD0.v` (d0Rec), loop VC proved.
+- D's parametric variant (`ZZArrDAng`) now builds its MOVED array walking
+  DOWN (fixed start = first destination = x[mlen], grown at its end by
+  add_last): the code reads x[mlen], x[mlen-1] right after the memmove and
+  the catalogue has no take_last.
+- Family needs mlen >= 3: after D the read of x[mlen-1] hits the moved array
+  for mlen >= 3 but the x[1] cell for mlen = 2 -- a heap-shape split with no
+  code branch.  (mlen = 2 is mb_noninterferent already.)
+- GENERIC CLOSER `ZZMbClose.solve_mb_vc`: walks the inst_symprop ∧/∨/∀ tree
+  (both sides of every angelic choice), leaves by `bv_lin` = bitvectors ->
+  Z via unsigned (add/shiftl/shiftr/land-ones/same-width sext), variable
+  bounds, `Z.to_euclidean_division_equations; lia`.  Closes D (3.8 s), D0
+  (5.0 s) and the prefix through D (valid_sym3, 22 s); negative control
+  still fails.  The hand lemmas (ZZMbArith) are superseded.
+
+### 2026-09-29 (later): BOTH mblr paths verify to the merge (idx 123)
+
+- `ZZMbSym4.valid_sym4 : cfg_vc sym4 sym4_annot` by `solve_mb_vc`: 101 s
+  (VC generation ~17 s of it), 6.0 GB.  Negative control `ZZMbSym4n`
+  (x array one limb short, mirroring ZZMbSym3n) fails, as it should.
+- What it took, in order:
+  1. Before: the closer ran 300-490 s and failed.  Cause: one address, two
+     spellings (`(x + ((M-1)<<2)) + 4` vs `x + (M<<2)`), so reads missed
+     their cell and fell back to an angelic disjunction over every cell.
+     FIX (Emiel: "two peval rules"): `peval_bvadd_float` + `peval_shiftl`
+     in `theories/Symbolic/PartialEvaluation.v`, commit 23f904fa; full
+     Results.vo closure green, every existing example unchanged.
+  2. D and D0 bind their pointer from the SOURCE array (`dp` = source
+     start, registers checked after), so the loops never hand the caller's
+     masked spelling back.  Loop VCs still close (4.4 s / 5.4 s).
+  3. The D0 entry then left an ∃ the executor could not eliminate: its
+     equation is `SyncVal a = c + ?dp`, not `?dp = t`.  `mb_search` gained
+     an ∃ case: cbn, destruct public RelVals, `eexists`, split, fix each
+     evar from its defining equation (`rv_bvadd_solve`, witness constant
+     vm_computed so it is a literal, else `bv_lin` sees `bv.negate`), then
+     the ordinary search.
+- Next: the rest of the program at symbolic mlen (G, I, K, M entries), the
+  whole-program VC, then the ∀-mlen bridge.
+
+### 2026-10-01: the n-only tail VERIFIES; replay + public-zero rule (a1eb199a)
+
+- ZZ chain rebuilt on the committed framework.  Two template fixes in
+  `ZZArrLoopN.v`, both found by the rebuild, neither by the 09-30 runs:
+  1. `secLeakvar "n"` in the invariant.  With the chunk-facts hook reverted
+     nothing says the count is public (interp_arr forces it, the executor
+     cannot know; IrisInstanceBinary.interp_arr's comment, 8015df3e).  IN
+     failed without it.  The 09-30 "I/K/M pass" was measured WITH the hook
+     live, so PLAN-chunk-facts' "pass without the hook" is wrong for IN.
+  2. The post's done count is EXACT (`k + n`), no fresh `∃ c1`, and the
+     invariant carries `secLeak k`, `k <u 2^30`, `k + n <u 2^30` (no wrap,
+     so k + n is nonzero and is the next loop's bound).  With `∃ c1` the
+     next loop's count was unconstrained: 18 closer leaves, 2 x 9, all about
+     one variable, named "c1" (probe ZZMbTailND3).  So the n-only tail had
+     NEVER verified: ZZMbTailT/U5's staged rig ran each stage as its own
+     sentence, i.e. on goal 1 of 10 only (U5's "closer 10 s" is that).
+- `valid_tail` (ZZMbTailNP, staged, real Qed), user time:
+
+  | | vm_compute | solve_vc | goals | closer | Qed | file | RSS |
+  |---|---|---|---|---|---|---|---|
+  | before | 211.4 | 47.4 | 10 | 267.7 | 239.6 | 776 | 9.11 GB |
+  | after a1eb199a | 143.6 | 36.5 | 8 | 170.1 | 150.0 | 508 | 9.14 GB |
+
+  Construction is ALL executor: raw tree 11,130 nodes -> 141 after
+  postprocess (+1.5 s); ~1,640 angelic binders, 99.4% eliminated at
+  creation (register reads rs/reg_val 197 each, fetch/decode ~83 each, pc
+  85 each), 10 survive to the closer; 3,622 angelic + 3,189 demonic binary
+  nodes pruned (ZZTailExist, ZZTailCost{Raw,PP}).  Census (ZZMbTailNCensus):
+  20 leaves, 10 ring identities substituted AFTER postprocess -> replay; 4
+  `t + 0*M = t` -> drop_pub_zero.  Qed ~ re-runs the VM cast.
+- Open: what in the executor's per-node cost (19 ms/node) dominates;
+  the remaining leaves (range facts on M, a shift identity, secLeak of an
+  evar); peak RSS (closer + Qed); Sym4/Sym6 on D0N.
+
+### 2026-10-02: THE PARAMETRIC MULADD IS NONINTERFERENT, END TO END
+
+`ZZMbSym6GResult.sym6_noninterferent` (untracked probe), axiom-clean
+(pure_decode, mmioenv):
+
+    forall init_addr b, 64 < b < 65536 ->
+      init_addr + 1128 + 4 (2M + 6) < lenAddr ->
+      noninterferent_strong init_addr sym6_instrs (init_addr + 1128)
+        (sym_reg_specs init_addr b) (sym_mem_specs init_addr b)
+
+M = (31 + b) >> 5, i.e. every mlen >= 3 whose data fits the 4 KB address
+space.  The whole 282-instruction function, both mblr paths, ONE symbolic VC
+(ZZMbSym6GV, Qed, 652 s, 10.5 GB).  What it took, in order:
+- n-only loops IN/KN/MT (template ZZArrLoopN: secLeak n, exact done count
+  k + n), D0N, the n-only tail (ZZMbTailN, 159 instructions as one block).
+- framework: replay in the VC pipeline + public-zero atoms (a1eb199a),
+  compositional secLeakT (1c9cfee1), and blk_code_in walking an OFFSET
+  (db668dae): a block longer than 63 instructions failed its own
+  containment check -- peval's qfuel = 64 stopped normalising the nested key.
+- the closer: one hypotheses-only cbn per goal + a secLeak-evar case
+  (ZZMbClose; tail closer 124 -> 48 s).
+- DATA SPECS IN THE GENERATOR (c1078da1): GenSegment.data_spec (cells,
+  arrays with TERM counts, anchors), gen_data_at, concretize_data (the
+  statement quotes it), HDataAddrs by construction (concretize_data_addrs),
+  and EndToEnd.gen_implpre_data, the data ImplPre proved once.  Sym6G's
+  memory is generator output; its ImplPre is gen_implpre (registers, via
+  gen_pre_rel_concretize + gen_regs_at_inst) + gen_implpre_data + eight pure
+  facts about b.
+- Open: promote the probes (ZZArr*N, ZZArrD0N, ZZMbTailN(V), ZZMbSym6G(V),
+  ZZMbSym6GResult, ZZMbClose) to tracked files + AXIOM_CLEAN_THMS; the
+  examples and the heavy chain were NOT rebuilt after the framework commits
+  of 10-01/10-02 -- run the gate before merging.

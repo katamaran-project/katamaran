@@ -81,20 +81,30 @@ internally).
 (* Contracts.v -- THE VC, over an annotated copy `a` of the program *)
 Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
   cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
-(* Valid_CFG_VC p exit P i fl Q := safeE (postprocess (CFG_VC_triple p exit P i fl Q)). *)
+(* Valid_CFG_VC p exit P i fl Q := safeE (cfg_postprocess (CFG_VC_triple p exit P i fl Q)),
+   cfg_postprocess = postprocess o SPureSpec.replay o postprocess (since 2026-10-01). *)
 
 (* Validity.v (heavy, small; re-exported by EndToEnd.v) -- the SEALED
    property, built only via ValidCFGVerifierContract_intro / solve_valid *)
 Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
-  exists a, cfg_vc c a /\ strip a = cfg_instrs c /\ annotsValid a.
-(* annotsValid (Adequacy.v): every ai_block carries a blkValid proof, and
-   there is no top-level ai_loop.  Pure -- no Iris, no load address. *)
+  exists LV : list (AnnotInstrV blkValid),
+    cfg_vc c (map (eraseV c) LV)
+    /\ map aiv_instr LV = cfg_instrs c
+    /\ Forall (fun a => aiv_loop a = false) LV.
+(* The witness is TYPED (2026-09-29): each block carries its blkValid proof
+   (vb_ok), so no validity predicate is proved about the list.  The only
+   side condition is V9's "no top-level re-entry". *)
 ```
 
 This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /
 `seg_run` / `loop_*`): annotations appear only where the contract is proved
-valid. `solve_valid <VC>` closes it for a block-free program; a program with
-blocks uses the intro lemma with its annotated list and an `annotsValid` proof.
+valid. `solve_valid <VC>` closes it for a block-free program. A program with
+blocks writes its `LV` in the heavy Result file (blocks as
+`MkBlkAnnotV b b_valid`) and uses
+`@ValidCFGVerifierContract_intro _ c LV` with `[exact <light VC> | reflexivity
+| repeat constructor]` — the light VC over the erased literal is accepted BY
+CONVERSION (`Example/CountdownRecResult.cdLink_valid`). `annotsValid` still
+exists, but only on the way out (`_elim`, via `annotsValid_of_V`).
 
 `cfg_vc` does not force `strip a = cfg_instrs c`; that equation is a premise of
 the soundness bridge, so a VC over the wrong `a` proves nothing usable.
@@ -135,16 +145,24 @@ WHOLE program (`P : gmap _ AST`) and runs the segment with
 **`GenCompose.contract_run`** (PLAN-valid-blk-annot V11), whose only table-side
 premises are the placement, a no-wrap fit, and the AST containment
 `instrs_of_list pbase (cfg_instrs c) ⊆ P` — typically from `Tables.v`'s
-`instrs_of_list_segment` lifted by `map_fmap_mono` (see
-`PaddedLoopResult.pl_contain`). `contract_run` derives table faithfulness
-itself; no resource splitting is needed and the continuation hands the
-instruction ownership back. (The annotation-level `itable_faith_of_segment` it
-replaced was deleted in Phase 5.)
+`instrs_of_list_segment` lifted by `map_fmap_mono`. `contract_run` derives
+table faithfulness itself; no resource splitting is needed and the continuation
+hands the instruction ownership back. (The annotation-level
+`itable_faith_of_segment` it replaced was deleted in Phase 5.)
 
-Worked example: `Example/PaddedLoop.v` + `Example/PaddedLoopResult.v` (the
-countdown loop inside a 66-instruction program; `pl_loop` is gate-checked
-axiom-clean, and is the tree's ONLY proof whose table is a proper subset of the
-program).
+**Prefer a BLOCK to a hand-composed sub-table cut (2026-10-01).** The old worked
+example here, `PaddedLoopResult.pl_loop` (two segment contracts glued in Iris by
+`contract_run` + `myWP2_loop_induction`), was migrated to the `ai_loop` style:
+`Example/PaddedLoop.v` now runs a 66-instruction program whose loop at offset
+256 is ONE block (`CountdownRec.cdRecBlk`, valid at every address), and
+`PaddedLoopResult.padded_loop_noninterferent_param` is the gate-checked end
+theorem. The block's table is a proper subset of the program, checked by
+`blk_code_in`. The hand-written Iris version framed the whole 66-entry
+instruction map by `cbn`/`iFrame` and peaked at ~9.4 GB (170 s); the block
+version is 27 s / 7.3 GB with no hand-written Iris. No end theorem uses
+`instrs_of_list_segment` any more; `contract_run` is still exercised by the
+other composed examples (`SwapComposedResult`, `CountdownComposedResult`,
+`TwoLoopsComposedResult`).
 
 Two traps, each of which cost a compile:
 

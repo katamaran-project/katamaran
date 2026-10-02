@@ -287,7 +287,12 @@ Two consequences worth internalising:
   which re-runs a finished `SymProp` tree back through the solver-backed monad so
   every assert is re-offered in its substituted form; caveats are that its
   `pattern_match` cases are commented out as NOT IMPLEMENTED and it costs another
-  full traversal. Neither has been attempted.
+  full traversal. **`replay` is now CFGVer's pipeline (2026-10-01):**
+  `Contracts.cfg_postprocess = postprocess ∘ SPureSpec.replay ∘ postprocess`
+  (MicroSail's own VC already did this), sound by `Adequacy.cfg_postprocess_sound`.
+  Measured on the parametric muladd tail: construction +1.7%, residual leaves
+  20 → 14, every late-substituted ring identity gone; the consume reordering is
+  still not attempted.
 
 The authoring-side rule, and the one case where reordering is UNSOUND (crossing a
 pattern match on the same variable eliminates it, weakening the precondition),
@@ -311,6 +316,34 @@ matches a lemma stated over `instpred hyp`. Rewrite with
 `instpred_formula_and'`/`smart_and_spec` instead. And `tauto` cannot see through
 `∗` (cf. the explicit `change` at `Worlds.v:1850`); `exact`/`apply` work, since
 they use conversion.
+
+### Added 2026-10-01: dropping PUBLIC zero atoms (`drop_pub_zero`)
+
+`peval`'s ring normal form keeps a cancelled atom as `0 * a` (`x - x` is
+`0 * x`, PLAN-bv-arith-solver): over RelVal the atom is what keeps a NonSyncVal
+sum NonSyncVal, so it cannot go in general, and `x + 0*M = x` is then not
+decidable syntactically. When `secLeakT a` holds, `t + 0*a` IS `t` exactly
+(both RelVal cases), so `simplify_formula`'s `propeq` arm runs
+`drop_pub_zero ∘ peval` on both sides before every other rule. The walk is over
+a sum's spine via two NON-recursive `Equations` views (`bvadd_view`,
+`bvmul_zero_view`) plus a fuelled `Fixpoint` — a recursive `Equations` with the
+nested `bvmul` pattern has no covering ("Unable to build a covering"). Spec:
+`drop_pub_zero_inst` (value equality under `wco`), used as one extra `rewrite`
+in each of the arm's three endgames before `peval_sound`.
+
+**`secLeakT` is COMPOSITIONAL since 2026-10-01** (Emiel chose global over a
+local `secLeakT_deep`): a literal, a binop/unop whose operands pass, or the
+exact term in `wco`. Before, `(31 + sext b) >> 5` over a public `b` failed the
+guard, so `drop_pub_zero` never fired on the tail's four `t + 0*M = t` leaves
+(measured: they still reached the closer). After: leaves 14 -> 10, goals
+8 -> 4, `solve_vc` 36.5 -> 18 s. Its spec needs `instpred_formula_secLeak_binop`
+/`_unop`, moved above it into `Section SecLeakCompositional`.
+
+Two preamble-vs-file differences to match when prototyping (the first cost a ~5 min build):
+`Solver.v` parses `rewrite` SSReflect-style (iris.proofmode is imported), so
+`rewrite ?a, ?b` is a syntax error there — write `rewrite ?a ?b`; and a
+`RiscvPmp.Sig` preamble WITHOUT `From iris.proofmode Require Import tactics`
+accepts the comma form, so load it to match the file.
 
 ## Adding a NEW solver rule — the recipe
 
@@ -381,8 +414,11 @@ the shape (1–2 instructions is enough):
 
 ```coq
 Eval vm_compute in (cfg_map <contract>
-  (fun p ex P i fl Q => postprocess (CFG_VC_triple p ex P i fl Q))).
+  (fun p ex P i fl Q => cfg_postprocess (CFG_VC_triple p ex P i fl Q))).
 ```
+
+(`cfg_postprocess`, the real pipeline including `replay` — a bare `postprocess`
+shows formulas the solver is re-offered in a different, substituted form.)
 
 That prints assumptions (i.e. `wco`) and goals *together*, which is the only way
 to see whether the hypothesis you plan to use is even in the path condition, and

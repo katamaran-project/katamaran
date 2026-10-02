@@ -314,7 +314,16 @@ Module Type ChunksOn
             match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) :=
               match env.catView (rew prec in ts') with
               | env.isCat tsI' tsO' =>
-                  if env.eqb_hom Term_eqb tsI tsI'
+                  (* The HEAP chunk's inputs are compared NORMALISED.  A heap
+                     term containing a variable the solver substituted after
+                     the chunk was produced is not re-peval'd by that
+                     substitution (e.g. `4 + g` with g := 0x468 + p stays
+                     `4 + (0x468 + p)`), while the consumed chunk is peval'd
+                     (`0x46c + p`), so a raw comparison missed a chunk that
+                     is plainly there (PLAN-array-invariants, muladd prefix
+                     91).  Sound by pevals_sound: the inputs still agree
+                     under every valuation. *)
+                  if env.eqb_hom Term_eqb tsI (pevals tsI')
                   then Some (formula_eqs_ctx tsO tsO')
                   else None
               end;
@@ -349,11 +358,11 @@ Module Type ChunksOn
           destruct (eq_dec p p0); cbn in Heqo; try discriminate Heqo. destruct e.
           remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'.
           destruct (env.catView ts') as [tsI' tsO'].
-          destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
+          destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI (pevals tsI')); try discriminate.
           apply noConfusion_inv in Heqo. cbn in Heqo. subst.
           apply instprop_formula_eqs_ctx in Heqs.
           rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env RelVal)).
-          rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
+          rewrite inst_env_cat. rewrite Heqs. rewrite pevals_sound. rewrite <- inst_env_cat.
           change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
           rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env RelVal)).
           rewrite rew_opp_l. now destruct is_duplicable.
