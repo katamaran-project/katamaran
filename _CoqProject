@@ -70,7 +70,6 @@ theories/Iris/BinaryResources.v
 theories/Iris/BinaryWeakestPre.v
 theories/Iris/BinaryAdequacy.v
 theories/Iris/BinaryInstance.v
-theories/Iris/cointro_patterns.v
 theories/MicroSail/RefineExecutor.v
 theories/MicroSail/ShallowExecutor.v
 theories/MicroSail/ShallowSoundness.v
