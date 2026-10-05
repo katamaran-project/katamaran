@@ -1,5 +1,5 @@
 # Case Study: RISC-V with PMP 
-Case study for (base) RISC-V with Physical Memory Protection (PMP).
+Case study for (base) RISC-V with Physical Memory Protection (PMP), currently based on commit `9f71c756484a4aac7c211d5ea266f45b0b3942e7` of the [RISC-V Sail Repository](https://github.com/riscv/sail-riscv/tree/9f71c756484a4aac7c211d5ea266f45b0b3942e7)
 
 Focus is on RV32I, with the PMP extension.
 Remarks/Comments/Info:
@@ -42,6 +42,6 @@ Ignoring instructions that rely on bitvector operations (like shift operations),
 This machine is based on a minimal model of the official RISC-V Sail model.
 
 The machine that this case study represents is based on the official RISC-V code, more specifically, (parts of) the following files:
-- [Base Instructions](https://github.com/rems-project/sail-riscv/blob/master/model/riscv_insts_base.sail)
-- [PMP Configuration](https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_regs.sail)
-- [PMP](https://github.com/rems-project/sail-riscv/blob/master/model/riscv_pmp_control.sail)
+- [Base Instructions](https://github.com/riscv/sail-riscv/blob/9f71c756484a4aac7c211d5ea266f45b0b3942e7/model/riscv_insts_base.sail)
+- [PMP Configuration](https://github.com/riscv/sail-riscv/blob/9f71c756484a4aac7c211d5ea266f45b0b3942e7/model/riscv_pmp_regs.sail)
+- [PMP](https://github.com/riscv/sail-riscv/blob/9f71c756484a4aac7c211d5ea266f45b0b3942e7/model/riscv_pmp_control.sail)
