@@ -56,6 +56,7 @@ examples/GVT/PartialVerifier.v
 test/Example.v
 test/LinkedList.v
 test/SumMaxLen.v
+test/LPSolver.v
 test/Replay.v
 theories/Base.v
 theories/Bitvector.v
