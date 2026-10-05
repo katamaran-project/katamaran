@@ -11,11 +11,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rocq: [rocq920]
+        rocq: [rocq920,rocq930]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
-      - uses: cachix/cachix-action@v16
+      - uses: cachix/cachix-action@v17
         with:
           name: katamaran
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'

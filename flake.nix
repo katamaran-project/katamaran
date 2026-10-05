@@ -32,6 +32,7 @@
       };
 
       rocqPackages920 = patchRocqPackages pkgs.rocqPackages_9_2 iris45;
+      rocqPackages930 = patchRocqPackages pkgs.rocqPackages_9_3 iris45;
 
       mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
         (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
@@ -40,8 +41,10 @@
       packages = rec {
         default = rocq920;
         rocq920 = rocqPackages920.katamaran;
+        rocq930 = rocqPackages930.katamaran;
 
         rocq920-deps = mkDeps rocq920;
+        rocq930-deps = mkDeps rocq930;
       };
     }
   );
