@@ -1948,7 +1948,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         then let: new_val := match: op in csrop with
                              | CSRRW => rs1_val
                              | CSRRS => exp_binop bop.bvor csr_val rs1_val
-                             | CSRRC => exp_binop bop.bvand csr_val (exp_negate rs1_val)
+                             | CSRRC => exp_binop bop.bvand csr_val (exp_unop uop.bvnot rs1_val)
                              end in
                  call writeCSR csr new_val
         else stm_val ty.unit tt) ;;
