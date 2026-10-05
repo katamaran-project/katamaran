@@ -830,6 +830,180 @@ Module LinearProgramming.
 
 End LinearProgramming.
 
+Module Type LPSolverOn
+  (Import B : Base)
+  (Import P : PredicateKit B)
+  (Import W : WorldsMixin B P).
+
+  Import LinearProgramming.
+
+  (* A solver that discharges path conditions containing an inconsistent set
+   * of linear integer (in)equalities. The (in)equalities are collected from the
+   * path condition, quoted into linear expressions over a shared context of
+   * opaque integer terms using quoteTerm, normalized to polynomials, and then
+   * checked for infeasibility using slackify and checkInfeasible. *)
+
+  Section CollectIneqs.
+    (* An integer term t together with the (in)equality it is known to satisfy,
+     * i.e. t >= 0, t = 0 or t <= 0. *)
+    Definition TermIneq Σ : Type := (Term Σ ty.int * Ineq)%type.
+
+    Definition TermIneqHolds {Σ} (ι : Valuation Σ) (ti : TermIneq Σ) : Prop :=
+      evalIneq (snd ti) (inst (A := Val ty.int) (fst ti) ι).
+
+    Definition relopIneqs {Σ σ} (op : RelOp σ) : Term Σ σ -> Term Σ σ -> list (TermIneq Σ) :=
+      match op in RelOp σ return Term Σ σ -> Term Σ σ -> list (TermIneq Σ) with
+      | @bop.eq _ σ => match σ return Term Σ σ -> Term Σ σ -> list (TermIneq Σ) with
+                  | ty.int => fun t1 t2 => [(term_binop bop.minus t1 t2, Eq0)]%list
+                  | _ => fun _ _ => []%list
+                  end
+      | bop.le => fun t1 t2 => [(term_binop bop.minus t2 t1, Geq0)]%list
+      | bop.lt => fun t1 t2 =>
+                    [(term_binop bop.minus (term_binop bop.minus t2 t1) (term_val ty.int 1%Z), Geq0)]%list
+      | _ => fun _ _ => []%list
+      end.
+
+    Fixpoint formulaIneqs {Σ} (F : Formula Σ) : list (TermIneq Σ) :=
+      match F with
+      | formula_relop op t1 t2 => relopIneqs op t1 t2
+      | formula_and F1 F2 => formulaIneqs F1 ++ formulaIneqs F2
+      | _ => []
+      end.
+
+    Fixpoint pathConditionIneqs {Σ} (C : PathCondition Σ) : list (TermIneq Σ) :=
+      match C with
+      | [ctx] => []
+      | C ▻ F => formulaIneqs F ++ pathConditionIneqs C
+      end.
+
+    Lemma relopIneqs_sound {Σ σ} (op : RelOp σ) (t1 t2 : Term Σ σ) (ι : Valuation Σ) :
+      bop.eval_relop_prop op (inst t1 ι) (inst t2 ι) ->
+      List.Forall (TermIneqHolds ι) (relopIneqs op t1 t2).
+    Proof.
+      destruct op; try destruct σ; cbn; intros H; repeat constructor;
+        unfold TermIneqHolds; cbn; lia.
+    Qed.
+
+    Lemma formulaIneqs_sound {Σ} (F : Formula Σ) (ι : Valuation Σ) :
+      instprop F ι -> List.Forall (TermIneqHolds ι) (formulaIneqs F).
+    Proof.
+      induction F; cbn; try constructor.
+      - apply relopIneqs_sound.
+      - intros [H1 H2]. apply List.Forall_app. auto.
+    Qed.
+
+    Lemma pathConditionIneqs_sound {Σ} (C : PathCondition Σ) (ι : Valuation Σ) :
+      instprop C ι -> List.Forall (TermIneqHolds ι) (pathConditionIneqs C).
+    Proof.
+      induction C as [|C IHC F]; cbn [pathConditionIneqs]; first constructor.
+      intros [HC HF]%instprop_snoc.
+      apply List.Forall_app. auto using formulaIneqs_sound.
+    Qed.
+  End CollectIneqs.
+
+  Section QuoteIneqs.
+    (* Quote a list of (in)equalities into linear expressions over a common
+     * context of integer variables Σ2, which abstract the opaque subterms. *)
+    Fixpoint quoteIneqs {Σ} (ts : list (TermIneq Σ)) {Σ1} (iΣ1 : AllInts Σ1) (ζ1 : Sub Σ1 Σ) :
+      { Σ2 & (AllInts Σ2 * WeakensTo Σ1 Σ2 * Sub Σ2 Σ * list (MonoTm LinExpr Σ2 * Ineq))%type } :=
+      match ts with
+      | []%list => existT Σ1 (iΣ1 , wkRefl , ζ1 , []%list)
+      | ((t , ineq) :: ts)%list =>
+          match quoteTerm (σ := ty.int) t Σ1 iΣ1 ζ1 with
+          | existT Σ2 (iΣ2 , ζ12 , ζ2 , e) =>
+              match quoteIneqs ts iΣ2 ζ2 with
+              | existT Σ3 (iΣ3 , ζ23 , ζ3 , es) =>
+                  existT Σ3 (iΣ3 , transSU ζ12 ζ23 , ζ3 , ((substSU e ζ23 , ineq) :: es)%list)
+              end
+          end
+      end.
+
+    Definition readBackIneq {Σ2 Σ} (ζ : Sub Σ2 Σ) (ei : MonoTm LinExpr Σ2 * Ineq) : TermIneq Σ :=
+      (linToTermTm (fst ei) ζ , snd ei).
+
+    Lemma quoteIneqs_spec {Σ} (ts : list (TermIneq Σ)) {Σ1} (iΣ1 : AllInts Σ1) (ζ1 : Sub Σ1 Σ) :
+      let '(existT Σ2 (_ , ζ12 , ζ2 , es)) := quoteIneqs ts iΣ1 ζ1 in
+      subst (interpWk ζ12) ζ2 = ζ1 /\ List.map (readBackIneq ζ2) es = ts.
+    Proof.
+      revert Σ1 iΣ1 ζ1; induction ts as [|[t ineq] ts IHts]; intros Σ1 iΣ1 ζ1; cbn.
+      - split; last reflexivity.
+        now rewrite interpWk_wkRefl, sub_comp_id_left.
+      - pose proof (quoteTerm_refines t Σ1 iΣ1 ζ1) as Hq.
+        destruct (quoteTerm (σ := ty.int) t Σ1 iΣ1 ζ1) as (Σ2 & [[[iΣ2 ζ12] ζ2] e]).
+        destruct Hq as [Hζ2 He].
+        specialize (IHts Σ2 iΣ2 ζ2).
+        destruct (quoteIneqs ts iΣ2 ζ2) as (Σ3 & [[[iΣ3 ζ23] ζ3] es]).
+        destruct IHts as [Hζ3 Hes].
+        split.
+        + rewrite <-Hζ2. exact (interpWk_trans_extends ζ12 _ _ Hζ3).
+        + cbn. rewrite Hes. unfold readBackIneq; cbn.
+          now rewrite linToTermTm_substSU, Hζ3, He.
+    Qed.
+
+    Definition toIneqPoly {Σ} (ei : MonoTm LinExpr Σ * Ineq) : IneqPoly (ctx.length Σ) :=
+      match ei with
+      | (MkMonoTm _ _ e , ineq) => {| ineqPolyPoly := normalize e; ineqPolyIneq := ineq |}
+      end.
+
+    Lemma eval_poly_normalize {n} (e : LinExpr n) (vs : vec Z n) :
+      PolyRed.eval_poly (normalize e) vs = evalLin e vs.
+    Proof.
+      rewrite <-normalize_sound. generalize (normalize e).
+      refine (vec_S_inv _ _); intros c p.
+      unfold PolyRed.eval_poly; cbn. lia.
+    Qed.
+
+    Lemma toIneqPoly_sound {Σ2 Σ} (ζ : Sub Σ2 Σ) (ι : Valuation Σ) (ei : MonoTm LinExpr Σ2 * Ineq) :
+      TermIneqHolds ι (readBackIneq ζ ei) -> IneqSolves (intVals (inst ζ ι)) (toIneqPoly ei).
+    Proof.
+      destruct ei as [[e] ineq]; unfold TermIneqHolds, readBackIneq; cbn.
+      now rewrite inst_linToTerm, eval_poly_normalize.
+    Qed.
+  End QuoteIneqs.
+
+  Section Solver.
+    Import iris.bi.interface.
+
+    Definition lpInfeasible {Σ} (C : PathCondition Σ) : bool :=
+      match quoteIneqs (pathConditionIneqs C) (ctx.all_nil _) [env] with
+      | existT Σ2 (_ , _ , _ , es) =>
+          checkInfeasible (slackify (List.map toIneqPoly es))
+      end.
+
+    Lemma lpInfeasible_sound {Σ} (C : PathCondition Σ) :
+      lpInfeasible C = true -> forall ι : Valuation Σ, ~ instprop C ι.
+    Proof.
+      unfold lpInfeasible.
+      pose proof (quoteIneqs_spec (pathConditionIneqs C) (ctx.all_nil _) [env]) as Hq.
+      destruct quoteIneqs as (Σ2 & [[[iΣ2 ζ12] ζ2] es]).
+      destruct Hq as [_ Hes].
+      intros Hinf ι HC.
+      refine (slackify_sound (ineqs := List.map toIneqPoly es) (checkInfeasible_sound _) _);
+        first now rewrite Hinf.
+      exists (intVals (inst ζ2 ι)).
+      apply pathConditionIneqs_sound in HC.
+      rewrite <-Hes, List.Forall_map in HC.
+      rewrite List.Forall_map.
+      revert HC. apply List.Forall_impl.
+      apply toIneqPoly_sound.
+    Qed.
+
+    Definition solver_lp : Solver :=
+      fun w C => if lpInfeasible C then None else Some (existT w (tri_id , C)).
+
+    Lemma solver_lp_spec : SolverSpec solver_lp.
+    Proof.
+      intros w C. unfold solver_lp.
+      destruct lpInfeasible eqn:Hinf.
+      - constructor. constructor. intros ι _ HC.
+        rewrite instpred_prop in HC.
+        exact (lpInfeasible_sound C Hinf ι HC).
+      - exact (solver_null_spec w C).
+    Qed.
+  End Solver.
+
+End LPSolverOn.
+
 (* Module Type LPKatamaran *)
 (*   (Import B : Base) *)
 (*   (Import P : PredicateKit B) *)
