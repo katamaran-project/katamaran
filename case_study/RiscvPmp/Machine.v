@@ -1950,7 +1950,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                              | CSRRS => exp_binop bop.bvor csr_val rs1_val
                              | CSRRC => exp_binop bop.bvand csr_val (exp_negate rs1_val)
                              end in
-                 call writeCSR csr rs1_val
+                 call writeCSR csr new_val
         else stm_val ty.unit tt) ;;
        use lemma close_pmp_entries ;;
        call wX rd csr_val ;;
