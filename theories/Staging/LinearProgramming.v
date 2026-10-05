@@ -990,16 +990,19 @@ Module Type LPSolverOn
       apply toIneqPoly_sound.
     Qed.
 
+    (* The new formulas C are checked together with the path condition of the
+     * world, so that inconsistencies between them are also detected. *)
     Definition solver_lp : Solver :=
-      fun w C => if lpInfeasible C then None else Some (existT w (tri_id , C)).
+      fun w C => if lpInfeasible (wco w ▻▻ C) then None else Some (existT w (tri_id , C)).
 
     Lemma solver_lp_spec : SolverSpec solver_lp.
     Proof.
       intros w C. unfold solver_lp.
       destruct lpInfeasible eqn:Hinf.
-      - constructor. constructor. intros ι _ HC.
+      - constructor. constructor. intros ι Hwco HC.
         rewrite instpred_prop in HC.
-        exact (lpInfeasible_sound C Hinf ι HC).
+        apply (lpInfeasible_sound _ Hinf ι).
+        now apply instprop_cat.
       - exact (solver_null_spec w C).
     Qed.
   End Solver.

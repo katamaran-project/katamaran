@@ -36,8 +36,8 @@
 
    The function [cycle_sep] is similar, but the inequalities x <= y and y <= z
    come from the precondition, and only z < x is assumed by the branch. The
-   solver is only passed the newly assumed formulas, so it currently does not
-   find the contradiction and this test fails. *)
+   solver finds the contradiction by also taking the path condition of the
+   world into account. *)
 
 From Stdlib Require Import
      Strings.String
@@ -230,11 +230,10 @@ Module Import ExampleExecutor :=
 Lemma valid_contract_cycle : Symbolic.ValidContractReflect sep_contract_cycle fun_cycle.
 Proof. reflexivity. Qed.
 
-(* TODO: this currently fails, because the solver does not take the formulas
-   x <= y and y <= z from the path condition into account when assuming z < x.
-   Replace by [Proof. reflexivity. Qed.] once it does. *)
+(* This requires combining the formulas x <= y and y <= z from the path
+   condition with the newly assumed z < x. *)
 Lemma valid_contract_cycle_sep : Symbolic.ValidContractReflect sep_contract_cycle_sep fun_cycle_sep.
-Proof. Fail reflexivity. Abort.
+Proof. reflexivity. Qed.
 
 (* As a sanity check, the same contract does not verify by computation alone
    with the default solver. *)
