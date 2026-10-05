@@ -31,7 +31,6 @@ From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      NArith.BinNat
-     NArith.Nnat
      Numbers.DecimalString
      Strings.Ascii
      Strings.String.
@@ -374,20 +373,6 @@ Module Import ctx.
         - intros _. apply Nat.lt_0_succ.
         - intros H. now apply (proj1 (Nat.succ_lt_mono _ _)), IHΓ.
       Qed.
-
-      Lemma in_at_lt_length {Γ} {b : B} (bIn : In b Γ) :
-        (N.of_nat (in_at bIn) < lengthN Γ)%N.
-      Proof.
-        unfold N.lt, lengthN. rewrite <- Nat2N.inj_compare.
-        apply Nat.compare_lt_iff, (nth_is_lt_length (in_valid bIn)).
-      Qed.
-
-      (* The position of a variable counted from the end of the context, i.e.
-         the most recently bound variable is at index 0, as a number bounded
-         by the length of the context. *)
-      Definition inToBoundedN {Γ} {b : B} (bIn : In b Γ) :
-        { n : N | (n < lengthN Γ)%N } :=
-        exist _ (N.of_nat (in_at bIn)) (in_at_lt_length bIn).
     End Length.
 
     Section All.
