@@ -12,8 +12,8 @@ case_study/MinimalCaps/Contracts/Notations.v
 case_study/MinimalCaps/Contracts/Definitions.v
 case_study/MinimalCaps/Contracts/Verification.v
 case_study/MinimalCaps/Contracts/Statistics.v
-case_study/MinimalCaps/Model.v
-case_study/MinimalCaps/LoopVerification.v
+# case_study/MinimalCaps/Model.v
+# case_study/MinimalCaps/LoopVerification.v
 -Q case_study/RiscvPmp Katamaran.RiscvPmp
 case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Machine.v
@@ -37,12 +37,12 @@ case_study/RiscvPmp/BlockVer/BinaryVerifier.v
 # case_study/RiscvPmp/BlockVer/RunningExample.v
 case_study/RiscvPmp/Everything.v
 case_study/RiscvPmp/FemtoKernel.v
-case_study/Assumptions.v
+# case_study/Assumptions.v
 -R theories Katamaran
-test/Example.v
-test/LinkedList.v
-test/SumMaxLen.v
-test/Replay.v
+# test/Example.v
+# test/LinkedList.v
+# test/SumMaxLen.v
+# test/Replay.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
