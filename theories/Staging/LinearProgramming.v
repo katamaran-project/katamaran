@@ -33,6 +33,7 @@ From Katamaran Require Import
      Base
      Prelude
      Syntax.Predicates
+     Staging.Quote
      Symbolic.Worlds
      VectorUtils.
 
@@ -833,7 +834,8 @@ End LinearProgramming.
 Module Type LPSolverOn
   (Import B : Base)
   (Import P : PredicateKit B)
-  (Import W : WorldsMixin B P).
+  (Import W : WorldsMixin B P)
+  (Import Q : QuoteOn B B B B).
 
   Import LinearProgramming.
 
