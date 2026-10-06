@@ -80,4 +80,5 @@ From Katamaran Require Export
      RiscvPmp.CFGVer.Example.CountdownRecResult
      RiscvPmp.CFGVer.Example.Muladd.MuladdParamResult
      RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParamResult
-     RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarPtrResult.
+     RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarPtrResult
+     RiscvPmp.CFGVer.Example.Aes.InvMixColumnsResult.

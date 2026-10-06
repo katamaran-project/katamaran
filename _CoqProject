@@ -107,6 +107,7 @@ case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParam.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamVC.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarPtr.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarPtrVC.v
+case_study/RiscvPmp/CFGVer/Example/Aes/InvMixColumns.v
 case_study/RiscvPmp/CFGVer/Example/MvSwapResult.v
 case_study/RiscvPmp/CFGVer/Example/JumpsResult.v
 case_study/RiscvPmp/CFGVer/Example/CountdownResult.v
@@ -127,6 +128,7 @@ case_study/RiscvPmp/CFGVer/Example/CountdownRecResult.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamResult.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamResult.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarPtrResult.v
+case_study/RiscvPmp/CFGVer/Example/Aes/InvMixColumnsResult.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v
 # case_study/RiscvPmp/BinaryBlockVer/Verifier.v

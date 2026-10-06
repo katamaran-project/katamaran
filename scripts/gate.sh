@@ -58,6 +58,8 @@ AXIOM_CLEAN_THMS=(
   "muladd_param_noninterferent"
   "check_scalar_param_noninterferent"
   "check_scalar_ptr_noninterferent"
+  "imc_linux_noninterferent_param"
+  "imc_alg7_noninterferent_param"
   "swap_noninterferent_param"
   "jumpIfZero_noninterferent_param"
   "jmp_fwd_noninterferent_param"
