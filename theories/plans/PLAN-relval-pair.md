@@ -256,3 +256,24 @@ Light check per phase (build the touched closure with `make -f Makefile.coq
 - Going to two valuations or a unary executor (discussed 2026-10-06; rejected in
   favour of keeping the lift).
 - Changing lockstep `semWP2` itself. It is already tag-free.
+
+## 10. Phase 0 baseline (DONE 2026-10-06, commit 936ec9a3)
+
+Forced `-j1` rebuild (`make -B`, `TIMED=1 TIMING=1`) of the gate closure
+(`Results.vo` + `GenCompose.vo`), then `GATE_JOBS=1 ./scripts/gate.sh`.
+Data in `theories/plans/relval-pair-baseline/`: `per-file.tsv` (146 files: user /
+real / sys seconds, peak RSS), `per-sentence-timing.tar.gz` (every `.v.timing`),
+`build.time`, `gate.time`, `gate.log`.
+
+- **Compare on USER CPU time**, not wall clock: the box swapped (wall 3h41 for
+  4,135 s user + 473 s sys); peak-RSS figures of the heaviest files are also
+  pressure-affected.
+- Build: **4,135 s user** total. Heaviest: `MuladdParamVC` 651 s / 10.5 GB,
+  `MuladdParamTailVC` 357 s, `Solver.v` 345 s, `InvMixColumns` 137 s,
+  `BearSSLCheckScalarLoop1` 128 s, `Refinement/Monads.v` 127 s.
+- Gate: PASSED, 24 end theorems axiom-clean; axiom probe 332 s user, 10.4 GB.
+- Trusted surface: 22 files (`Noninterference.v` + 21 `Example/*Result.v`), 78
+  lemma/theorem declarations, at commit 936ec9a3.
+
+Phase 8 comparison: same command, same targets, then diff `per-file.tsv` and the
+per-sentence timings (`make` can diff `.v.timing` files directly).
