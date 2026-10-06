@@ -1,0 +1,72 @@
+{
+  "date": "2026-09-11",
+  "method": "One independent routing-judge subagent per query (subagent_type routing-judge), listing INLINED in the prompt (never a file path), skillOverrides applied so the 11 name-only tier-2 skills appear as bare names. 37 entries, ~28k chars. Every verdict carried a correct TOTAL=37 checksum, so none discarded. tool_uses=0 on all six is EXPECTED here and not the 2026-07-28 guessing signature: that signature is tool_uses=0 when the judge was handed a PATH and had to read it; an inlined listing requires no tool use, and TOTAL is what validates the read.",
+  "note": "Scoped run after adding the new tier-1 skill `leakage-model-change` (drafted via skill-creator; conversation 2026-09-08..11, the LeakMul leakage-model change on branch issue/mul-leaks-args). 6 queries = the 3 new should-trigger entries plus 3 adversarial near-neighbours, NOT a sweep -- per this skill's own cost rule. The follow-through half is covered by a content-gated rule in skill-path-guard.sh (Base.v/Machine.v + a leak token in the edit payload), tested by .claude/hooks/test-skill-path-guard-leakage.sh (11 cases). These 6 queries are the INTENT category the skill names as the one place wording is genuinely the only lever -- all are asked before any file is touched.",
+  "cost_tokens_total": 99812,
+  "results": [
+    {
+      "id": 109,
+      "kind": "should-trigger",
+      "expected": "leakage-model-change",
+      "verdict": "leakage-model-change",
+      "pass": true,
+      "total_checksum": 37,
+      "tokens": 17839
+    },
+    {
+      "id": 110,
+      "kind": "should-trigger",
+      "expected": "leakage-model-change",
+      "verdict": "leakage-model-change",
+      "pass": true,
+      "total_checksum": 37,
+      "tokens": 16767
+    },
+    {
+      "id": 111,
+      "kind": "should-trigger",
+      "expected": "leakage-model-change",
+      "verdict": "leakage-model-change",
+      "pass": true,
+      "total_checksum": 37,
+      "tokens": 16326
+    },
+    {
+      "id": 112,
+      "kind": "adversarial",
+      "expected": "cfgver-solve-vc",
+      "verdict": "cfgver-solve-vc",
+      "pass": true,
+      "total_checksum": 37,
+      "tokens": 16542,
+      "why": "shares 'secLeak' with the new skill; must stay operational-VC territory"
+    },
+    {
+      "id": 113,
+      "kind": "adversarial",
+      "expected": "secret-data-walls",
+      "verdict": "secret-data-walls",
+      "pass": true,
+      "total_checksum": 37,
+      "tokens": 16024,
+      "why": "shares 'secret'/'leak' vocabulary; the new skill's NOT-clause names this skill explicitly"
+    },
+    {
+      "id": 114,
+      "kind": "adversarial",
+      "expected": "cfgver-new-example",
+      "verdict": "cfgver-new-example",
+      "pass": true,
+      "total_checksum": 37,
+      "tokens": 16314,
+      "why": "'prove it noninterferent' under an UNCHANGED model; the new skill's NOT-clause names this skill explicitly"
+    }
+  ],
+  "summary": {
+    "run": 6,
+    "passed": 6,
+    "failed": 0,
+    "discarded": 0
+  },
+  "conclusion": "leakage-model-change wins all three of its own intent framings and steals none of the three near-neighbours. No description edit needed; no regression observed in cfgver-solve-vc, secret-data-walls or cfgver-new-example. NOT a full-family sweep -- only these six were run, so this says nothing about the other 108 entries."
+}

@@ -22,6 +22,14 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   auto-sound over secrets, no `NonSyncVal` case-split (library skill)
 > - **`secret-data-walls`** — the three `NonSyncVal ⇒ False` walls (`formula_bool`/
 >   `formula_relop`/`secLeak`), `term_eq` danger, prefer pure-`bv` forms (library skill)
+> - **`leakage-model-change`** — changing WHAT the machine observes: adding/
+>   removing a `LeakEvent` constructor and its `stm_foreign leak` emit sites.
+>   The six mechanical `Base.v` arms, the "only leak statements may change"
+>   discipline for the trusted `Machine.v` surface, and which proofs actually
+>   need re-proving (normally NONE — `leak_sound` is generic in the event and
+>   arithmetic instructions have no `CEnv` contract — plus the three cases where
+>   that stops holding). Hook-gated on a leak token in a `Base.v`/`Machine.v`
+>   edit; worked example in `diagnostics/mul-leakage-model.md`
 > - **`cfgver-refinement`** — concrete mirror `cexec_cfg_addr` (what to mirror), `RefineCompat`, `rexec_cfg_addr`
 > - **`cfgver-rsolve`** — driving/debugging the `rsolve` tactic (library skill)
 > - **`cfgver-soundness`** — the soundness chain (VC → myWP2_loop → leakage)
@@ -56,7 +64,7 @@ The active development area is `case_study/RiscvPmp/CFGVer/`.
 >   deliberately TIER-1** — it keeps its description.
 > - **Tier-1 peers that must fire on their own** (do NOT route them through the
 >   parent): `cfgver` (hub), `cfgver-new-example`, `cfgver-solve-vc`,
->   `secret-data-walls`, `gmap-pitfalls`, and for a step running way longer than
+>   `secret-data-walls`, `leakage-model-change`, `gmap-pitfalls`, and for a step running way longer than
 >   expected **`rocq-timeout-triage`** (the general "figure out why before
 >   waiting longer" entry point), which routes to **`rocq-compile-oom`** for the
 >   silently-killed/OOM signature, and **`cfgver-scaling-diagnostics`** for
@@ -224,7 +232,21 @@ split, and re-described skills directly, bypassing both meta-skills);**
 guard.sh` (a blocking `PreToolUse` hook) *denies* a `Write` of a new `SKILL.md`
 without a `skill-creator` consult, and denies an `Edit` whose diff touches a
 `description:` without a `skill-routing-maintenance` consult; skill *body* edits
-stay ungated. If you hit that denial, do the consult rather than looking for a
+stay ungated. **`skill-edit-guard.sh` matches `Write|Edit` only, so a Bash
+heredoc used to walk straight past it** — found 2026-09-11 by doing exactly
+that while authoring `leakage-model-change`, with auto-mode's own reminder
+steering file edits toward Bash. Closed by the companion
+`.claude/hooks/skill-bash-write-guard.sh` (PreToolUse Bash), which applies the
+same two requirements to a Bash WRITE whose target is a `SKILL.md` (`>`/`>>`,
+`tee`, `cp`/`mv`, `sed -i`, `dd of=`, an interpreter opening it for writing) —
+and, the hard part, stays silent on every READ of one. Kept a separate file
+because `skill-edit-guard.sh` is load-bearing and a syntax error in it blocks
+all skill authoring; shares the `CLAUDE_SKILL_GUARD_OFF=1` override, one rule
+one switch. 20-case suite: `.claude/hooks/test-skill-bash-write-guard.sh`.
+Known limit, stated rather than papered over: a write through a shell variable
+(`f=.../SKILL.md; cat > "$f"`) is not detectable by inspection and is not
+caught — this raises the cost of bypassing from accidental to deliberate, it is
+not airtight. If you hit either denial, do the consult rather than looking for a
 way around it — the override (`CLAUDE_SKILL_GUARD_OFF=1`) is only settable in
 the environment Claude Code was launched with, i.e. by the user, not from a
 session. A sibling hook `.claude/hooks/agent-guard.sh` denies routing-judge
@@ -256,7 +278,16 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   but not the blanket one; `plans/*.md` is deliberately ungated (no skill
   governs "what we intend to build"). All missing skills are reported in ONE
   denial, and each fires at most once per session. Override:
-  `CLAUDE_V_GUARD_OFF=1`.
+  `CLAUDE_V_GUARD_OFF=1`. **One rule is CONTENT-gated rather than
+  path-gated, and is NOT from that table:** `Base.v`/`Machine.v` require
+  `leakage-model-change` only when the edit payload actually carries a leak
+  token (`LeakEvent`, `KLeak`, `stm_foreign leak`, `leak_event`,
+  `LeakageTrace`, `fun_leak`) — those two files are overwhelmingly NOT about
+  leakage, so a path-only rule would deny unrelated edits and train people to
+  reach for the override. `old_string` is matched too, so REMOVING an emit is
+  caught: that direction silently weakens every noninterference theorem and
+  still compiles green. Test suite:
+  `.claude/hooks/test-skill-path-guard-leakage.sh` (11 cases).
 - **deny** — `.claude/hooks/git-workflow-guard.sh` (PreToolUse Bash), now TWO
   mechanisms. (1) A **hard deny**: `main` is never a push or merge TARGET —
   `git push` naming `main`, `git push --all/--mirror`, a bare `git push` or any
