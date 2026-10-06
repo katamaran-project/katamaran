@@ -566,8 +566,14 @@ fix list already covered all three):
 | `MUX(ctl, naw & 0x7FFFFFFF, aw)`, inlined br_i31_add | `bgez a5, .LBB3_15` per word | ctl (add-back) |
 
 The inlined br_i31_sub loop stays branch-free; every other branch is on a
-public loop bound or m_bitlen. The first row is Breaking Bad's A.5.3
-(Table 11, godbolt.org/z/qM9KT31vz); the other two need the whole-function
-inline. **The paper proposes no code-level fix**: it disclosed to BearSSL
+public loop bound or m_bitlen. **The SECOND row (`tb`) is Breaking Bad's
+A.5.3** (Table 11, godbolt.org/z/qM9KT31vz) — corrected 2026-10-02, this
+sentence previously said the first row. The Godbolt reproducer is x86-i386
+clang 13 `-O2 -m32 -march=i386` with `q` a parameter and only the q*m loop
+left, and its `je` tests `mw - nxw`; the paper's text names "MUX, EQ, and
+GT", which only the `tb` line uses. The first row (`q`) is a separate finding
+of ours, already standalone in `muladd_q` (`Example/BearSSLMuladd.v`); only
+the third needs the whole-function inline. **The paper proposes no code-level
+fix** (re-checked against the arXiv text 2026-10-02): it disclosed to BearSSL
 ("two [libraries] have provided fixes", unnamed; none landed in BearSSL) and
 recommends verified compilers, binary certification, and wider testing.
