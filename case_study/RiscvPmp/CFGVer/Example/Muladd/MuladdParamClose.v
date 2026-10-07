@@ -144,6 +144,14 @@ Ltac rv_leaf :=
   repeat match goal with v : RelVal _ |- _ =>
     is_var v; let l := fresh "l" in let r := fresh "r" in destruct v as [l r] end;
   cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
+  (* a relop/bool hypothesis is pointwise too, `P_l /\ P_r`: bv_lin only
+     reads top-level facts, so split them (2026-10-07) *)
+  repeat match goal with H : _ /\ _ |- _ => destruct H end;
+  (* likewise a RelVal equality hypothesis, into its projections; NOT
+     ty.rv_split, whose bare cbn unfolds the bv operations bv_lin needs *)
+  repeat match goal with H : @eq (RelVal _) _ _ |- _ =>
+    pose proof (f_equal ty.projLeftRV H); pose proof (f_equal ty.projRightRV H); clear H end;
+  cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
   (* relops and bool formulas hold pointwise: one leaf per projection *)
   repeat match goal with |- _ /\ _ => split end;
   first [ exact I
@@ -157,6 +165,11 @@ Ltac rv_leaf :=
               is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
           end
         | assumption | reflexivity | (f_equal; bv_lin) | bv_lin
+        (* a RelVal equality whose side f_equal cannot open (a folded
+           ty.valToRelVal): per projection *)
+        | (apply ty.RV_ext;
+           cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule];
+           bv_lin)
         (* a dead branch: refute its hypotheses *)
         | (exfalso; bv_lin) ].
 
