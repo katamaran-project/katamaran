@@ -168,6 +168,59 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
         ).
   End SharedBinaryInvariant.
 
+  Section WithMemory.
+    Context {Σ : gFunctors} {mG : mcMemGS Σ}.
+
+    (* TODO: change back to words instead of bytes... might be an easier first version
+             and most likely still convenient in the future *)
+    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
+      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
+    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
+    Definition ptstoSthL : list Addr -> iProp Σ :=
+      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
+
+    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      [∗ list] offset ∈ seq 0 width,
+        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
+      match width with
+      | O   => fun _ => True
+      | S w =>
+          fun bytes =>
+            let (byte, bytes) := bv.appView byte (w * byte) bytes in
+            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
+      end%I.
+
+    (* TODO: introduce constant for nr of word bytes (replace 4) *)
+    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+
+    Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
+      match instrs with
+      | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
+      | nil => True%I
+      end.
+    (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
+
+    Lemma ptsto_instrs_app {a : Val ty_xlenbits} {instrs1 instrs2 : list AST} :
+      ptsto_instrs a (instrs1 ++ instrs2)
+        ⊣⊢ ptsto_instrs a instrs1 ∗ ptsto_instrs (bv.add a (bv.of_nat (length instrs1 * bytes_per_instr))) instrs2.
+    Proof.
+      iRevert (a).
+      iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; iSplit.
+      - rewrite <- bv.add_of_nat_0_r. now iIntros "$".
+      - rewrite <- bv.add_of_nat_0_r. now iIntros "(_ & $)".
+      - iIntros "($ & H)".
+        iDestruct ("IHinstrs1" with "H") as "($ & H)".
+        rewrite <- bv.add_assoc.
+        now rewrite bv.of_nat_add.
+      - iIntros "(($ & Hinstrs1) & Hinstrs2)".
+        iSpecialize ("IHinstrs1" with "[$Hinstrs1 Hinstrs2]").
+        { rewrite <- bv.add_assoc. now rewrite bv.of_nat_add. }
+        done.
+    Qed.
+
+  End WithMemory.
 
 End RiscvPmpIrisBaseCommon.
 

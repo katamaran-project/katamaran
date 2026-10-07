@@ -232,26 +232,6 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
   Section WithMemory.
     Context {Σ : gFunctors} {mG : mcMemGS Σ}.
 
-    (* TODO: change back to words instead of bytes... might be an easier first version
-             and most likely still convenient in the future *)
-    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
-      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
-    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
-    Definition ptstoSthL : list Addr -> iProp Σ :=
-      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
-
-    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
-      [∗ list] offset ∈ seq 0 width,
-        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
-    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
-      match width with
-      | O   => fun _ => True
-      | S w =>
-          fun bytes =>
-            let (byte, bytes) := bv.appView byte (w * byte) bytes in
-            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
-      end%I.
-
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
     (* Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ := *)
     (*   inv femto_inv_mmio_ns (∃ t, tr_frag1 t ∗ ⌜mmio_pred width t⌝). *)
@@ -284,10 +264,6 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
       Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
     End WithAddrs.
-
-    (* TODO: introduce constant for nr of word bytes (replace 4) *)
-    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
   End WithMemory.
 
   Section WithSailGS.

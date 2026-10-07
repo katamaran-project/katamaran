@@ -158,8 +158,8 @@ Module Type RiscvPmpIrisInstancePredicates2
 
     Definition interp_ptsto_one (k : Exec) (addr : Addr) (b : Byte) : iProp Σ :=
       match k with
-      | Left  => RVPPREDl.interp_ptsto (mG := mc_ghGS2_left) addr b
-      | Right => RVPPREDr.interp_ptsto (mG := mc_ghGS2_right) addr b
+      | Left  => interp_ptsto (mG := mc_ghGS2_left) addr b
+      | Right => interp_ptsto (mG := mc_ghGS2_right) addr b
       end.
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
@@ -172,8 +172,8 @@ Module Type RiscvPmpIrisInstancePredicates2
     Proof. eapply big_sepL_app. Qed.
 
     Definition interp_ptstomem {width : nat} (addr : Addr) (v : bv (width * byte)) : iProp Σ :=
-      RVPPREDl.interp_ptstomem (mG := mc_ghGS2_left) addr v ∗
-        RVPPREDr.interp_ptstomem (mG := mc_ghGS2_right) addr v.
+      interp_ptstomem (mG := mc_ghGS2_left) addr v ∗
+      interp_ptstomem (mG := mc_ghGS2_right) addr v.
 
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
       RVPPREDl.interp_ptstomem_readonly (mG := mc_ghGS2_left) addr b ∗
@@ -468,4 +468,11 @@ Module Type RiscvPmpIrisInstance2 (FL : FailLogic)
 
   Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
     semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝)%I.
+
+  #[export] Instance sailGS2_to_memGS2 `{sG : sailGS2 Σ} : memGS2 Σ :=
+    sailGS2_memGS.
+  #[export] Instance sailGS2_to_sailGS_left `{sG2 : sailGS2 Σ} : RVPBASEl.sailGS Σ :=
+    sailGS2_sailGS_left.
+  #[export] Instance sailGS2_to_sailGS_right `{sG2 : sailGS2 Σ} : RVPBASEr.sailGS Σ :=
+    sailGS2_sailGS_right.
 End RiscvPmpIrisInstance2.

@@ -313,31 +313,6 @@ Module Type RiscvPmpBlockVerifTotalVerifier
 
       Context {Σ} {GS : sailGS Σ}.
 
-      Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
-        match instrs with
-        | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
-        | nil => True%I
-        end.
-      (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
-
-      Lemma ptsto_instrs_app {a : Val ty_xlenbits} {instrs1 instrs2 : list AST} :
-        ptsto_instrs a (instrs1 ++ instrs2)
-        ⊣⊢ ptsto_instrs a instrs1 ∗ ptsto_instrs (bv.add a (bv.of_nat (length instrs1 * bytes_per_instr))) instrs2.
-      Proof.
-        iRevert (a).
-        iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; iSplit.
-        - rewrite <- bv.add_of_nat_0_r. now iIntros "$".
-        - rewrite <- bv.add_of_nat_0_r. now iIntros "(_ & $)".
-        - iIntros "($ & H)".
-          iDestruct ("IHinstrs1" with "H") as "($ & H)".
-          rewrite <- bv.add_assoc.
-          now rewrite bv.of_nat_add.
-        - iIntros "(($ & Hinstrs1) & Hinstrs2)".
-          iSpecialize ("IHinstrs1" with "[$Hinstrs1 Hinstrs2]").
-          { rewrite <- bv.add_assoc. now rewrite bv.of_nat_add. }
-          done.
-      Qed.
-
       Definition exec_instructions_prologue (a : Val ty_xlenbits) (l : list AST) : iProp Σ :=
         pc ↦ a ∗
         ptsto_instrs a l ∗

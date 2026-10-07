@@ -110,8 +110,8 @@ Module BinaryBlockVerifier
 
     Lemma ptsto_instrs_equiv {a : Val ty_xlenbits} {instrs : list AST} :
       ptsto_instrs a instrs ⊣⊢
-        @RVPTVl.ptsto_instrs _ sailGS2_sailGS_left a instrs
-        ∗ @RVPTVr.ptsto_instrs _ sailGS2_sailGS_right a instrs.
+        @RVPCOM.ptsto_instrs _ memGS_left a instrs
+        ∗ @RVPCOM.ptsto_instrs _ memGS_right a instrs.
     Proof.
       revert a.
       iInduction instrs as [|instr instrs] "IH";
