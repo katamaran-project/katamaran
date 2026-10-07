@@ -2222,6 +2222,38 @@ Module Type GenericSolverOn
     #[export] Notation dlist_secLeak t := (singleton (formula_secLeak t)).
     #[export] Notation dlist_true := (singleton (formula_true)).
 
+    (* Split off a literal summand, in EITHER argument order -- `peval` leaves
+       both (`0x10 + sp` from a register spec, `q + 0` from a placement).  The
+       returned pair is NON-DEPENDENT apart from the shared width `n`, which is
+       what keeps Equations from having to let two type indices meet. *)
+    Equations bvadd_split_val {Σ n} (t : Term Σ (ty.bvec n))
+      : option (Val (ty.bvec n) * Term Σ (ty.bvec n)) :=
+      bvadd_split_val (term_binop bop.bvadd (term_val _ v) s) := Some (v, s);
+      bvadd_split_val (term_binop bop.bvadd s (term_val _ v)) := Some (v, s);
+      bvadd_split_val _ := None.
+
+    Lemma bvadd_split_val_spec {Σ n} (t : Term Σ (ty.bvec n)) v s :
+      bvadd_split_val t = Some (v, s) ->
+      t = term_binop bop.bvadd (term_val (ty.bvec n) v) s
+      \/ t = term_binop bop.bvadd s (term_val (ty.bvec n) v).
+    Proof.
+      funelim (bvadd_split_val t); intros Heq; try discriminate;
+        inversion Heq; subst; auto.
+    Qed.
+
+    (* The SEMANTIC form, which normalises both argument orders to ONE shape by
+       paying `bv.add_comm` once here rather than doubling the case analysis in
+       every consumer. *)
+    Lemma bvadd_split_val_inst {Σ n} (t : Term Σ (ty.bvec n)) v s :
+      bvadd_split_val t = Some (v, s) ->
+      forall ι : Valuation Σ,
+        inst t ι = bop.evalRel bop.bvadd (SyncVal v) (inst s ι).
+    Proof.
+      intros H ι. apply bvadd_split_val_spec in H as [-> | ->]; cbn; [reflexivity|].
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      destruct (inst s ι) as [a1 a2]; cbn; f_equal; apply bv.add_comm.
+    Qed.
+
     Section SimplifySecLeak.
       Context [w : World].
 
@@ -2232,7 +2264,7 @@ Module Type GenericSolverOn
          decomposition would assume publicness that was never established.
          Instead the whole formula is discharged when [secLeakT] proves it from
          the path condition, and kept as is otherwise. *)
-      Definition simplify_secLeak [σ] (t : Term w σ) : DList w :=
+      Definition simplify_secLeak_core [σ] (t : Term w σ) : DList w :=
         match t with
         | term_var x          => dlist_secLeak t
         | term_val _ v        => dlist_true
@@ -2244,7 +2276,24 @@ Module Type GenericSolverOn
         | term_record R tls   => dlist_secLeak t (* TODO: Same as for tuples *)
         end.
 
+      (* The one decomposition that IS exact: adding a literal is injective
+         per projection, so [secLeak (c + s) <-> secLeak s] holds on
+         assumptions and goals alike.  Strips ONE literal summand (peval folds
+         literals, so a normal form has at most one).  Needed when the path
+         condition knows [secLeak (0x8 + q)] and the goal is
+         [secLeak (0xc + q)]: both become [secLeak q]. *)
+      Definition simplify_secLeak [σ] (t : Term w σ) : DList w :=
+        match σ return Term w σ -> DList w with
+        | ty.bvec n => fun t =>
+            match bvadd_split_val t with
+            | Some (_, s) => simplify_secLeak_core s
+            | None        => simplify_secLeak_core t
+            end
+        | _ => fun t => simplify_secLeak_core t
+        end t.
+
     End SimplifySecLeak.
+    #[global] Arguments simplify_secLeak_core [w] [σ] t.
     #[global] Arguments simplify_secLeak [w] [σ] t.
 
     Section SimplifySecLeakSpec.
@@ -2260,8 +2309,8 @@ Module Type GenericSolverOn
           apply Eqdep_dec.inj_pair2_eq_dec in H0; [exact H0|intros x y; apply eq_dec].
       Qed.
 
-      Lemma simplify_secLeak_spec [σ] (t : Term w σ) :
-        instpred (simplify_secLeak t) ⊣⊢ instpred (formula_secLeak t).
+      Lemma simplify_secLeak_core_spec [σ] (t : Term w σ) :
+        instpred (simplify_secLeak_core t) ⊣⊢ instpred (formula_secLeak t).
       Proof.
         induction t; cbn; arw.
         - rewrite ?instpred_dlist_singleton.
@@ -2282,6 +2331,20 @@ Module Type GenericSolverOn
           apply secLeakT_spec in Hs'.
           iSplit; [iIntros "_"; iApply Hs'|iIntros "_"; done].
         - apply instpred_formula_secLeak_union.
+      Qed.
+
+      Lemma simplify_secLeak_spec [σ] (t : Term w σ) :
+        instpred (simplify_secLeak t) ⊣⊢ instpred (formula_secLeak t).
+      Proof.
+        destruct σ; cbn [simplify_secLeak]; try apply simplify_secLeak_core_spec.
+        destruct (bvadd_split_val t) as [[v s]|] eqn:Hsplit;
+          [|apply simplify_secLeak_core_spec].
+        rewrite simplify_secLeak_core_spec.
+        constructor; intros ι _; cbn. unfold instpred_formula_secLeak; cbn.
+        rewrite (bvadd_split_val_inst t Hsplit ι).
+        destruct (inst s ι) as [a b]. unfold secLeak; cbn. split; intros H.
+        - now rewrite H.
+        - eapply bv.add_cancel_l; exact H.
       Qed.
     End SimplifySecLeakSpec.
 
@@ -2883,38 +2946,6 @@ Module Type GenericSolverOn
 
        NEVER `error`: the returned DList is EQUIVALENT to the input formula
        (that is the spec), never a refutation. *)
-
-    (* Split off a literal summand, in EITHER argument order -- `peval` leaves
-       both (`0x10 + sp` from a register spec, `q + 0` from a placement).  The
-       returned pair is NON-DEPENDENT apart from the shared width `n`, which is
-       what keeps Equations from having to let two type indices meet. *)
-    Equations bvadd_split_val {Σ n} (t : Term Σ (ty.bvec n))
-      : option (Val (ty.bvec n) * Term Σ (ty.bvec n)) :=
-      bvadd_split_val (term_binop bop.bvadd (term_val _ v) s) := Some (v, s);
-      bvadd_split_val (term_binop bop.bvadd s (term_val _ v)) := Some (v, s);
-      bvadd_split_val _ := None.
-
-    Lemma bvadd_split_val_spec {Σ n} (t : Term Σ (ty.bvec n)) v s :
-      bvadd_split_val t = Some (v, s) ->
-      t = term_binop bop.bvadd (term_val (ty.bvec n) v) s
-      \/ t = term_binop bop.bvadd s (term_val (ty.bvec n) v).
-    Proof.
-      funelim (bvadd_split_val t); intros Heq; try discriminate;
-        inversion Heq; subst; auto.
-    Qed.
-
-    (* The SEMANTIC form, which normalises both argument orders to ONE shape by
-       paying `bv.add_comm` once here rather than doubling the case analysis in
-       every consumer. *)
-    Lemma bvadd_split_val_inst {Σ n} (t : Term Σ (ty.bvec n)) v s :
-      bvadd_split_val t = Some (v, s) ->
-      forall ι : Valuation Σ,
-        inst t ι = bop.evalRel bop.bvadd (SyncVal v) (inst s ι).
-    Proof.
-      intros H ι. apply bvadd_split_val_spec in H as [-> | ->]; cbn; [reflexivity|].
-      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
-      destruct (inst s ι) as [a1 a2]; cbn; f_equal; apply bv.add_comm.
-    Qed.
 
     Definition try_bvadd_cancel_val_propeq {w : World} {σ} (t1 t2 : STerm σ w)
       : option (DList w) :=
