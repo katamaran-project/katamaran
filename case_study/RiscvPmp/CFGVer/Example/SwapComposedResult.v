@@ -147,6 +147,9 @@ Section Compose.
                 eq_refl Hfit Hin HefB
                 $! (SyncVal (bv.of_N 4)) with "[Hpc Hnpc Hinstrs Hpost]").
       + iEval (cbn) in "Hpost". cbn. iFrame.
+        (* the pre's trailing ⌜secLeak (SyncVal 4)⌝ is `4 = 4` now, not True:
+           iFrame leaves it, so strip it before the shape-sensitive splits *)
+        iSplitL; [| done].
         iDestruct "Hpost" as "(H1 & H2 & H3 & Hpriv & Hinv)".
         iSplitR "Hpriv Hinv"; [| iFrame].
         (* A's post is interpreted at ι.["a"↦0].["an"↦4] and B's pre at
@@ -156,9 +159,10 @@ Section Compose.
         iSplitL "H1"; [iExact "H1"|].
         iSplitL "H2"; [iExact "H2"| iExact "H3"].
       + iIntros (an2) "(%HexitB & Hpc & Hnpc & Hinstrs & _)".
-        destruct an2 as [bv2|b1 b2]; [|contradiction].
+        destruct HexitB as (bv2 & -> & HexitB).
         unfold swapExit. iExists bv2. iFrame "Hpc". iPureIntro.
-        cbn in HexitB. unfold atPc. rewrite HexitB. exact I.
+        cbn in HexitB. apply andb_prop in HexitB as [HexitB _].
+        unfold atPc. rewrite HexitB. exact I.
   Qed.
 
 End Compose.

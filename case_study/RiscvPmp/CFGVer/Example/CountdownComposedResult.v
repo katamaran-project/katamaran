@@ -183,12 +183,13 @@ Section ComposeLoop.
               $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+      iSplitL; [| done].  (* trailing ⌜secLeak (SyncVal _)⌝, no longer framed away *)
       iSplitR "Hpriv Hinv"; [| iFrame].
       iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
       iSplitL "H1"; [iExact "H1"|].
       iSplitR; [iSplit; [done|done]|].
       iSplit; [|done]. iPureIntro.
-      change ((k + minus1)%bv) with (bvdec k). exact Hne.
+      change ((k + minus1)%bv) with (bvdec k). split; exact Hne.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct Hex as (av & -> & Hex).
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
@@ -212,12 +213,13 @@ Section ComposeLoop.
               $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+      iSplitL; [| done].  (* trailing ⌜secLeak (SyncVal _)⌝, no longer framed away *)
       iSplitR "Hpriv Hinv"; [| iFrame].
       iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
       iSplitL "H1"; [iExact "H1"|].
       iSplitR; [iSplit; [done|done]|].
       iSplit; [|done]. iPureIntro.
-      change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
+      change ((k + minus1)%bv) with (bvdec k). cbn in Hk. split; apply bvdec_one; exact Hk.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
       destruct Hex as (av & -> & Hex).
       unfold cdExit. iExists av. iFrame "Hpc". iPureIntro.

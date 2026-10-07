@@ -188,13 +188,14 @@ Section TwoLoops.
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+        iSplitL; [| done].  (* trailing ⌜secLeak (SyncVal _)⌝, no longer framed away *)
         iSplitR "Hpriv Hinv"; [| iFrame].
         iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
         change ((m + bv.of_N 4294967295)%bv) with (tdecv m).
-        apply tdec_one. cbn in Hm. exact Hm.
+        cbn in Hm. split; apply tdec_one; exact Hm.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
         destruct Hex as (av & -> & Hex).
         unfold tExit. iExists av. iFrame "Hpc". iPureIntro.
@@ -216,12 +217,13 @@ Section TwoLoops.
                 $! (SyncVal (bv.of_N 8)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+        iSplitL; [| done].  (* trailing ⌜secLeak (SyncVal _)⌝, no longer framed away *)
         iSplitR "Hpriv Hinv"; [| iFrame].
         iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
-        change ((m + bv.of_N 4294967295)%bv) with (tdecv m). exact Hne.
+        change ((m + bv.of_N 4294967295)%bv) with (tdecv m). split; exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct Hex as (av & -> & Hex).
         apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
@@ -253,13 +255,14 @@ Section TwoLoops.
                 $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+        iSplitL; [| done].  (* trailing ⌜secLeak (SyncVal _)⌝, no longer framed away *)
         iSplitR "Hpriv Hinv"; [| iFrame].
         iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
         change ((k + bv.of_N 4294967295)%bv) with (tdecv k).
-        apply tdec_one. cbn in Hk. exact Hk.
+        cbn in Hk. split; apply tdec_one; exact Hk.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct Hex as (av & -> & Hex).
         apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
@@ -287,12 +290,13 @@ Section TwoLoops.
                 $! (SyncVal (bv.of_N 0)) with "[Hres Hpc Hnpc Hinstrs]").
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
+        iSplitL; [| done].  (* trailing ⌜secLeak (SyncVal _)⌝, no longer framed away *)
         iSplitR "Hpriv Hinv"; [| iFrame].
         iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
-        change ((k + bv.of_N 4294967295)%bv) with (tdecv k). exact Hne.
+        change ((k + bv.of_N 4294967295)%bv) with (tdecv k). split; exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct Hex as (av & -> & Hex).
         apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
