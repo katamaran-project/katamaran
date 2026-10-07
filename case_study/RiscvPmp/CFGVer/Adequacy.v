@@ -705,6 +705,17 @@ Import iris.algebra.gmap.
 Section AdequacyTools.
 
   Context {Σ} {GS : sailGS2 Σ}.
+
+  (* RVToOption is an agreement test on the pair: Some v means both sides
+     are v (relval-pair). *)
+  Lemma RVToOption_some (rv : RelVal ty_xlenbits) (v : bv xlenbits) :
+    ty.RVToOption rv = Some v -> rv = ty.SyncVal v.
+  Proof.
+    destruct rv as [l r]. unfold ty.RVToOption; cbn.
+    match goal with |- context[if ?d then _ else _] => destruct d as [<-|] end;
+      intros H; [|discriminate H].
+    injection H as ->. reflexivity.
+  Qed.
   Lemma regPstsTo_sync_is_nonsync `{sailGS2 Σ} σ r (v : Val σ) : r ↦ᵣ NonSyncVal v v ⊣⊢ r ↦ᵣ SyncVal v.
   Proof.
     unfold reg_pointsTo2. auto.
@@ -1607,7 +1618,7 @@ Section AdequacyTools.
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
           (ai_instr <$> instrs) ⊢
       (∀ an,
-         ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
+         ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
              (ai_instr <$> instrs) ∗
@@ -1618,16 +1629,17 @@ Section AdequacyTools.
       induction fuel as [|n' IH]; intros stepped apc anp h Hexec.
       - cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr CHeapSpec.error] in Hexec.
         contradiction.
-      - destruct apc as [v|v1 v2].
-        + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
-               CHeapSpec.angelic_binary] in Hexec.
+      - cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr] in Hexec.
+        revert Hexec. destruct (ty.RVToOption apc) as [v|] eqn:Hapc; intros Hexec.
+        + apply RVToOption_some in Hapc. subst apc.
+          cbn [CHeapSpec.angelic_binary] in Hexec.
           destruct Hexec as [Hexit | Hexec].
           * destruct (Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v) eqn:Hexit_eq.
             -- cbn [CHeapSpec.pure] in Hexit.
                iIntros "(#Hb0 & #Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iApply exitCondImpliesMyWP2_loop.
                iApply ("Hk" $! (SyncVal v)).
-               iSplit. { iPureIntro. exact Hexit_eq. }
+               iSplit. { iPureIntro. exists v. split; [reflexivity|exact Hexit_eq]. }
                iFrame. iPureIntro. exact Hexit.
             -- cbn [CHeapSpec.error] in Hexit. contradiction.
           * (* Execute branch: the instruction is looked up at address v
@@ -1706,7 +1718,7 @@ Section AdequacyTools.
                iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
-               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. }
+               { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. iPureIntro. reflexivity. }
                iIntros ([v1|m1] δ1 [v2|m2] δ2); cbn.
                2-3: iIntros "(%δ' & _ & HF)"; auto.
                2: iIntros "_"; done.
@@ -1729,8 +1741,7 @@ Section AdequacyTools.
                iSplitR. { iNext. iExact "Hbs". }
                iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
-        + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
-               CHeapSpec.error] in Hexec.
+        + cbn [CHeapSpec.error] in Hexec.
           contradiction.
     Qed.
 
@@ -1778,7 +1789,7 @@ Section AdequacyTools.
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
            (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
@@ -1870,7 +1881,7 @@ Section AdequacyTools.
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
            asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
@@ -1928,10 +1939,7 @@ Section AdequacyTools.
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
           (∀ an,
-             ⌜match an with
-               | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
-               | NonSyncVal _ _ => False
-               end⌝ ∗
+             ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
              Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
              (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
@@ -2058,11 +2066,12 @@ Section AdequacyTools.
       { iApply (Hbs0 v). }
       { iNext. iApply (Hbs v). iModIntro. iExact "IH". }
       iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
-      (* no secLeak bullet: iFrame closes `⌜secLeak (SyncVal v)⌝` on the way in,
-         as it does at every other call site of this lemma. *)
+      (* `⌜secLeak (SyncVal v)⌝` is `v = v` now, not `True`: iFrame no longer
+         closes it on the way in (relval-pair). *)
+      { iPureIntro. reflexivity. }
       iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [x|x1 x2]; [|contradiction].
-      cbn in Hex. apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+      destruct Hex as (x & -> & Hex).
+      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
       rewrite Hex.
       iApply "Hk". iFrame.
     Qed.
@@ -2094,10 +2103,7 @@ Section AdequacyTools.
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
           (∀ an,
-             ⌜match an with
-               | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
-               | NonSyncVal _ _ => False
-               end⌝ ∗
+             ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
              pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
              Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
              (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
