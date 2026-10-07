@@ -165,51 +165,51 @@ Module ty.
       | record R => recordt R
       end%type.
 
-    #[universes(template)]
-      (* Set Universe Polymorphism. *)
-      Inductive RV (A : Type) : Type :=
-    | SyncVal : A -> RV A
-    | NonSyncVal : A -> A -> RV A
-    .
-    Global Arguments SyncVal {A}.
-    Global Arguments NonSyncVal {A}.
+    (* A relational value is a plain PAIR: the value in the left and in the
+       right execution. There is no tag: [SyncVal a] is just a name for the
+       diagonal [NonSyncVal a a], so "public" means "both projections are
+       equal" (see [secLeak]), never "built a certain way". Primitive
+       projections give eta definitionally:
+       [NonSyncVal (projLeftRV rv) (projRightRV rv) ≡ rv]. *)
+    #[universes(template), projections(primitive)]
+    Record RV (A : Type) : Type :=
+      NonSyncVal { projLeftRV : A ; projRightRV : A }.
+    Global Arguments NonSyncVal {A} _ _.
+    Global Arguments projLeftRV {A} _.
+    Global Arguments projRightRV {A} _.
+
+    Definition SyncVal {A} (a : A) : RV A := NonSyncVal a a.
+    Global Arguments SyncVal {A} a /.
 
     Section NoConfRV.
       Set Transparent Obligations.
       Derive NoConfusion for RV.
     End NoConfRV.
 
-    Definition RVToOption {A} (rv : RV A) : Datatypes.option A :=
-      match rv with
-      | SyncVal v => Some v
-      | NonSyncVal _ _ => None
-      end.
-    
-    Definition projLeftRV {A} (rv : RV A) : A :=
-      match rv with
-      | SyncVal v => v
-      | NonSyncVal vl _ => vl
-      end.
-    Global Arguments projLeftRV {A} !rv.
+    (* [Some v] iff both executions agree on [v]. *)
+    Definition RVToOption {A} {eqA : EqDec A} (rv : RV A) : Datatypes.option A :=
+      if eq_dec (projLeftRV rv) (projRightRV rv)
+      then Some (projLeftRV rv) else None.
 
-    Definition projRightRV {A} (rv : RV A) : A :=
-      match rv with
-      | SyncVal v => v
-      | NonSyncVal _ vr => vr
-      end.
-    Global Arguments projRightRV {A} !rv.
+    Lemma RV_eta {A} (rv : RV A) : NonSyncVal (projLeftRV rv) (projRightRV rv) = rv.
+    Proof. reflexivity. Qed.
+
+    Lemma RV_ext {A} (rv1 rv2 : RV A) :
+      projLeftRV rv1 = projLeftRV rv2 -> projRightRV rv1 = projRightRV rv2 -> rv1 = rv2.
+    Proof. destruct rv1, rv2; cbn; intros -> ->; reflexivity. Qed.
+
+    Lemma RV_sync_iff {A} (rv : RV A) :
+      projLeftRV rv = projRightRV rv <-> rv = SyncVal (projLeftRV rv).
+    Proof.
+      destruct rv as [l r]; cbn; split.
+      - now intros ->.
+      - intros H. now injection H.
+    Qed.
+
 
     Definition RelVal {TDC : TypeDeclKit} {TDN : TypeDenoteKit TDC} (τ : Ty) : Set :=
       RV (Val τ)
     .
-
-    Ltac destructRVs :=
-      repeat match goal with
-          |- context[match ?b with
-                     | SyncVal _ => _
-                     | _ => _
-                     end] => destruct b; cbn
-        end.
 
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
@@ -223,79 +223,55 @@ Module ty.
     Global Arguments projRight {A} !rv.
 
     Definition liftUnOpRV {A B} (f : A -> B) (rv : RV A) : RV B :=
-      match rv with
-      | (SyncVal v) => SyncVal (f v)
-      | (NonSyncVal vl vr) => NonSyncVal (f vl) (f vr)
-      end.
-    Global Arguments liftUnOpRV {A B} f !rv.
+      NonSyncVal (f (projLeftRV rv)) (f (projRightRV rv)).
+    Global Arguments liftUnOpRV {A B} f !rv /.
 
     #[export] Instance proper_liftUnOpRV {A B : Type} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOpRV A B).
     Proof.
-      intros f g Rfg rv rv' eq.
-      destruct rv, rv'; cbn; inversion eq;
-        rewrite Rfg; auto.
+      intros f g Rfg rv rv' <-. unfold liftUnOpRV. now rewrite !Rfg.
     Qed.
 
     Lemma liftUnOpRVId {A} (rv : RV A) :
       liftUnOpRV id rv = rv.
-    Proof.
-      destruct rv; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma comProjLeftRVLiftUnOpRV {A B} (f : A -> B) (rv : RV A) :
       projLeftRV (liftUnOpRV f rv) = f (projLeftRV rv).
-    Proof.
-      destruct rv; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma comProjRightRVLiftUnOpRV {A B} (f : A -> B) (rv : RV A) :
       projRightRV (liftUnOpRV f rv) = f (projRightRV rv).
-    Proof.
-      destruct rv; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma liftUnOpRV_inj {A B} (f : A -> B) rv1 rv2 (f_inj : ∀ a b, f a = f b -> a = b) :
       liftUnOpRV f rv1 = liftUnOpRV f rv2 ->
       rv1 = rv2.
     Proof.
-      destruct rv1, rv2; cbn in *; intro H; try discriminate;
-        inversion H.
-      - apply f_inj in H1. now subst.
-      - apply f_inj in H1, H2. now subst.
+      intros H. apply RV_ext; apply f_inj.
+      - exact (f_equal projLeftRV H).
+      - exact (f_equal projRightRV H).
     Qed.
 
-    
     Definition liftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) : RV C :=
-      match (rv1 , rv2) with
-      | (SyncVal v1 , SyncVal v2) => SyncVal (f v1 v2)
-      | (_ , _) => NonSyncVal (f (projLeftRV rv1) (projLeftRV rv2)) (f (projRightRV rv1) (projRightRV rv2))
-      end.
-    Global Arguments liftBinOpRV {A B C} f !rv1 !rv2.
+      NonSyncVal (f (projLeftRV rv1) (projLeftRV rv2)) (f (projRightRV rv1) (projRightRV rv2)).
+    Global Arguments liftBinOpRV {A B C} f !rv1 !rv2 /.
 
     Instance proper_liftBinOpRV {A B C : Type} : Proper (pointwise_relation _ (pointwise_relation _ eq) ==> eq ==> eq ==> eq) (@liftBinOpRV A B C).
     Proof.
-      intros f g Rfg rv1 rv1' eq1 rv2 rv2' eq2.
-      destruct rv1, rv2, rv1', rv2'; cbn; inversion eq1; inversion eq2;
-        rewrite Rfg; auto.
+      intros f g Rfg rv1 rv1' <- rv2 rv2' <-. unfold liftBinOpRV. now rewrite !Rfg.
     Qed.
 
     Lemma liftBinOpRVNonSync2 {A B C} (f : A -> B -> C) (rv : RV A) v1 v2 :
       liftBinOpRV f rv (NonSyncVal v1 v2) = NonSyncVal (f (projLeftRV rv) v1) (f (projRightRV rv) v2).
-    Proof.
-      destruct rv; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma comProjLeftRVLiftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
       projLeftRV (liftBinOpRV f rv1 rv2) = f (projLeftRV rv1) (projLeftRV rv2).
-    Proof.
-      destruct rv1, rv2; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma comProjRightRVLiftBinOpRV {A B C} (f : A -> B -> C) (rv1 : RV A) (rv2 : RV B) :
       projRightRV (liftBinOpRV f rv1 rv2) = f (projRightRV rv1) (projRightRV rv2).
-    Proof.
-      destruct rv1, rv2; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Definition rv_eq {A} (rv1 rv2 : RV A) : Prop :=
       let rvp := liftBinOpRV (fun x y => x = y) rv1 rv2 in
@@ -304,10 +280,7 @@ Module ty.
 
     Lemma rv_eq_to_eq {A} (rv1 rv2 : RV A) :
       rv_eq rv1 rv2 <-> (projLeftRV rv1 = projLeftRV rv2 /\ projRightRV rv1 = projRightRV rv2).
-    Proof.
-      unfold rv_eq.
-      now rewrite comProjLeftRVLiftBinOpRV, comProjRightRVLiftBinOpRV.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Ltac remove_rv_eq :=
       repeat match goal with
@@ -319,67 +292,46 @@ Module ty.
 
     Definition liftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) : RelVal σ2 :=
       liftUnOpRV f rv.
-    Global Arguments liftUnOp {σ1 σ2} f !rv.
+    Global Arguments liftUnOp {σ1 σ2} f !rv /.
 
     Instance proper_liftUnOp {σ1 σ2 : Ty} : Proper ((pointwise_relation _ eq) ==> eq ==> eq) (@liftUnOp σ1 σ2).
     Proof.
-      intros f g Rfg rv rv' eq.
-      destruct rv, rv'; cbn; inversion eq;
-        rewrite Rfg; auto.
+      intros f g Rfg rv rv' <-. unfold liftUnOp, liftUnOpRV. now rewrite !Rfg.
     Qed.
 
     Lemma liftUnOpRVSyncVal {A B} (f : A -> B) (rv : RV A) (v : B) :
       liftUnOpRV f rv = SyncVal v ->
-      ∃ v', rv = SyncVal v' /\ f v' = v. 
-    Proof.
-      intros.
-      destruct rv.
-      - eexists; intuition. cbn in *. now inversion H.
-      - cbn in H. inversion H.
-    Qed.
+      f (projLeftRV rv) = v /\ f (projRightRV rv) = v.
+    Proof. intros H. now injection H. Qed.
 
     Lemma liftUnOpRVNonSyncVal {A B} (f : A -> B) (rv : RV A) (v1 v2 : B) :
       liftUnOpRV f rv = NonSyncVal v1 v2 ->
-      ∃ v1' v2', rv = NonSyncVal v1' v2' /\ f v1' = v1 /\ f v2' = v2. 
+      ∃ v1' v2', rv = NonSyncVal v1' v2' /\ f v1' = v1 /\ f v2' = v2.
     Proof.
-      intros.
-      destruct rv.
-      - exists a; intuition. cbn in *. now inversion H.
-      - cbn in H. inversion H.
-        now exists a, a0.
+      intros H. injection H as <- <-.
+      now exists (projLeftRV rv), (projRightRV rv).
     Qed.
 
     Lemma comProjLeftLiftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) :
       projLeft (liftUnOp f rv) = f (projLeft rv).
-    Proof.
-      destruct rv; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma comProjRightLiftUnOp {σ1 σ2} (f : Val σ1 -> Val σ2) (rv : RelVal σ1) :
       projRight (liftUnOp f rv) = f (projRight rv).
-    Proof.
-      destruct rv; auto.
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma liftUnOp_inj {σ1 σ2} (f : Val σ1 -> Val σ2) (rv1 rv2 : RelVal σ1)  (f_inj : ∀ a b, f a = f b -> a = b) :
       liftUnOp f rv1 = liftUnOp f rv2 ->
       rv1 = rv2.
-    Proof.
-      destruct rv1, rv2; cbn in *; intro H; try discriminate;
-        inversion H.
-      - apply f_inj in H1. now subst.
-      - apply f_inj in H1, H2. now subst.
-    Qed.
+    Proof. apply liftUnOpRV_inj, f_inj. Qed.
 
     Definition liftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) : RelVal σ3 :=
       liftBinOpRV f rv1 rv2.
-    Global Arguments liftBinOp {σ1 σ2 σ3} f !rv1 !rv2.
+    Global Arguments liftBinOp {σ1 σ2 σ3} f !rv1 !rv2 /.
 
     Instance proper_liftBinOp {σ1 σ2 σ3 : Ty} : Proper (pointwise_relation _ (pointwise_relation _ eq) ==> eq ==> eq ==> eq) (@liftBinOp σ1 σ2 σ3).
     Proof.
-      intros f g Rfg rv1 rv1' eq1 rv2 rv2' eq2.
-      destruct rv1, rv2, rv1', rv2'; cbn; inversion eq1; inversion eq2;
-      rewrite Rfg; auto.
+      intros f g Rfg rv1 rv1' <- rv2 rv2' <-. unfold liftBinOp, liftBinOpRV. now rewrite !Rfg.
     Qed.
 
     Lemma comProjLeftLiftBinOp {σ1 σ2 σ3} (f : Val σ1 -> Val σ2 -> Val σ3) (rv1 : RelVal σ1) (rv2 : RelVal σ2) :
@@ -454,12 +406,8 @@ Module ty.
 
     Lemma liftBinOpSyncImpliesSyncArgs {σ1 σ2 σ3 : Ty} (f : Val σ1 -> Val σ2 -> Val σ3) rv1 rv2 v :
       liftBinOp f rv1 rv2 = SyncVal v
-      -> ∃ v1 v2, rv1 = SyncVal v1 /\ rv2 = SyncVal v2 /\ f v1 v2 = v.
-    Proof.
-      destruct rv1, rv2; cbn.
-      all: intros H; inversion H.
-      exists v0, v1. tauto.
-    Qed.
+      -> f (projLeft rv1) (projLeft rv2) = v /\ f (projRight rv1) (projRight rv2) = v.
+    Proof. intros H. now injection H. Qed.
 
     Ltac removeLiftBinOp :=
     repeat match goal with
@@ -561,10 +509,7 @@ Module ty.
 
     Definition RVtoRelValNamedEnv
       {N : Set} {Γ : NCtx N Ty} (nenv : RV (NamedEnv Val Γ)) : NamedEnv RelVal Γ :=
-      match nenv with
-      | SyncVal nenv           => syncNamedEnv nenv
-      | NonSyncVal nenv1 nenv2 => nonsyncNamedEnv nenv1 nenv2
-      end.
+      nonsyncNamedEnv (projLeftRV nenv) (projRightRV nenv).
 
 
     Lemma projLeftRVunliftNamedEnv {N : Set} {Γ : NCtx N Ty}
@@ -608,15 +553,16 @@ Module ty.
     Lemma unliftIsSyncImpliesAllSync {N Γ} (vs : NamedEnv RelVal Γ) (n : NamedEnv Val Γ) (Hvs : unliftNamedEnv vs = SyncVal n) :
       env.map (λ b : N∷Ty, SyncVal) n = vs.
     Proof.
-      induction vs.
-      - inversion Hvs. auto.
-      - env.destroy n.
-        depelim Hvs.
-        destruct db.
-        + destruct (unliftNamedEnv vs); cbn in *; try congruence.
-          depelim H.
-          rewrite IHvs; auto.
-        + destruct (unliftNamedEnv vs); cbn in *; try congruence.
+      pose proof (projLeftRVunliftNamedEnv vs) as HL.
+      pose proof (projRightRVunliftNamedEnv vs) as HR.
+      rewrite Hvs in HL, HR. cbn in HL, HR.
+      apply env.lookup_extensional. intros [x σ] xIn.
+      rewrite env.lookup_map.
+      assert (EL := f_equal (fun e => env.lookup e xIn) HL).
+      assert (ER := f_equal (fun e => env.lookup e xIn) HR).
+      cbn in EL, ER. rewrite env.lookup_map in EL, ER.
+      unfold projLeft, projRight in EL, ER.
+      rewrite <- (RV_eta vs.[? x∷σ]). rewrite <- EL, <- ER. reflexivity.
     Qed.
 
     Fixpoint listOfRVToRVOfList {A} (rv_list : (Datatypes.list (RV A))) : RV (Datatypes.list A) :=
@@ -628,26 +574,17 @@ Module ty.
     Definition listOfRelValToRelValOfList {A} (rv_list : (Datatypes.list (RelVal A))) : RelVal (list A) :=
       listOfRVToRVOfList rv_list.
 
-    Fixpoint RVOfListToListOfRV {A} (rv_list : RV (Datatypes.list A)) : (Datatypes.list (RV A)) :=
-      match rv_list with
-      | SyncVal l => map SyncVal l
-      | NonSyncVal l1 l2 => zip_with NonSyncVal l1 l2
-      end.
+    Definition RVOfListToListOfRV {A} (rv_list : RV (Datatypes.list A)) : (Datatypes.list (RV A)) :=
+      zip_with NonSyncVal (projLeftRV rv_list) (projRightRV rv_list).
 
     Definition RelValOfListToListOfRelVal {A} (rv_list : RelVal (list A)) : (Datatypes.list (RelVal A)) :=
       RVOfListToListOfRV rv_list.
 
     Definition RVOfPairToPairOfRV {σ1 σ2} (rv : RV (σ1 * σ2)) : RV σ1 * RV σ2 :=
-      match rv with
-      | SyncVal (a , b) => (SyncVal a, SyncVal b)
-      | NonSyncVal (a1, b1) (a2, b2) => (NonSyncVal a1 a2, NonSyncVal b1 b2)
-      end.
+      (liftUnOpRV fst rv, liftUnOpRV snd rv).
 
     Definition pairOfRVToRVOfPair {σ1 σ2} (rv_pair : RV σ1 * RV σ2) : RV (σ1 * σ2) :=
-      match rv_pair with
-      | (SyncVal v1 , SyncVal v2) => SyncVal (v1, v2)
-      | (rv1, rv2) => NonSyncVal (projLeftRV rv1, projLeftRV rv2) (projRightRV rv1, projRightRV rv2)
-      end.
+      liftBinOpRV pair (fst rv_pair) (snd rv_pair).
 
     Definition RelValOfPairToPairOfRelVal {σ1 σ2} (rv : RelVal (prod σ1 σ2)) : RelVal σ1 * RelVal σ2 :=
       RVOfPairToPairOfRV rv.
@@ -655,20 +592,12 @@ Module ty.
     Definition pairOfRelValToRelValOfPair {σ1 σ2} (rv_pair : RelVal σ1 * RelVal σ2) : RelVal (prod σ1 σ2) :=
       pairOfRVToRVOfPair rv_pair.
 
-    Definition isSyncValRV {σ} (rv : RV σ) : Datatypes.bool :=
-      match rv with
-      | SyncVal _ => true
-      | NonSyncVal _ _ => false
-      end.
-
-    Definition isSyncVal {σ} : RelVal σ -> Datatypes.bool :=
-      isSyncValRV.
+    (* "Both executions agree" -- on values, not on how they were built. *)
+    Definition isSyncValRV {σ} {eqσ : EqDec σ} (rv : RV σ) : Datatypes.bool :=
+      if eq_dec (projLeftRV rv) (projRightRV rv) then true else false.
 
     Definition isSyncValPropRV {σ} (v : RV σ) : Prop :=
-      match v with
-      | SyncVal _ => True
-      | NonSyncVal _ _ => False
-      end.
+      projLeftRV v = projRightRV v.
 
     Definition isSyncValProp {σ} : RelVal σ -> Prop :=
       isSyncValPropRV.
@@ -870,15 +799,9 @@ Module ty.
 
     #[export] Instance RV_eq_dec : forall A, EqDec A -> EqDec (RV A).
     Proof.
-      intros.
-      intros x y.
-      destruct x; destruct y.
-      - destruct (X a a0). left. subst. auto.
-        right. intros F. inversion F. subst. contradiction.
-      - right. intros. congruence.
-      - right. intros. congruence.
-      - destruct (X a a1); destruct (X a0 a2); try (now subst; left; auto);
-        right; intros F; inversion F; subst; contradiction.
+      intros A eqA [l1 r1] [l2 r2].
+      destruct (eq_dec l1 l2) as [<-|Hl]; [|right; intros F; now inversion F].
+      destruct (eq_dec r1 r2) as [<-|Hr]; [now left|right; intros F; now inversion F].
     Qed.
 
       #[export] Instance RelVal_eq_dec : forall σ, EqDec (RelVal σ) :=
@@ -900,9 +823,8 @@ Module ty.
       apply (f_equal (unionv_unfold_rel U)) in H.
       setoid_rewrite unionv_unfold_fold_rel in H.
       depelim v1. depelim v2.
-      destruct r, r0; cbn in *; try congruence.
-      - inversion H. now depelim H2.
-      - inversion H. depelim H2. now depelim H4.
+      destruct r, r0; cbn in *.
+      inversion H. depelim H2. now depelim H4.
     Qed.
     Unset Equations With UIP.
 
@@ -944,9 +866,8 @@ Module ty.
     Proof.
       split; intro H; [|now f_equal].
       unfold recordv_unfold_rel in H.
-      destruct v1; destruct v2; try discriminate; cbn in *; inversion H.
-      - apply recordv_unfold_inj in H1. now subst.
-      - apply recordv_unfold_inj in H1, H2. now subst.
+      destruct v1; destruct v2; cbn in *; inversion H.
+      apply recordv_unfold_inj in H1, H2. now subst.
     Qed.
 
     Lemma K (σ : Ty) (p : σ = σ) : p = eq_refl.
@@ -976,6 +897,23 @@ Module ty.
       end.
 
   End WithTypeDef.
+
+  (* Split every RelVal equality, in the hypotheses and the goal, into its
+     two projection equalities.  The workhorse for any pointwise fact. *)
+  Ltac rv_split_hyp H :=
+    let HL := fresh "HL" in let HR := fresh "HR" in
+    pose proof (f_equal projLeftRV H) as HL;
+    pose proof (f_equal projRightRV H) as HR;
+    cbn in HL, HR; clear H.
+  Ltac rv_split :=
+    repeat match goal with
+    | H : @eq (RV _) _ _ |- _ => rv_split_hyp H
+    | H : @eq (@RelVal _ _ _) _ _ |- _ => rv_split_hyp H
+    | |- @eq (RV _) _ _ => apply RV_ext; cbn
+    | |- @eq (@RelVal _ _ _) _ _ => apply RV_ext; cbn
+    end.
+  Tactic Notation "ty.rv_split" := rv_split.
+
   #[global] Arguments int {TK}.
   #[global] Arguments bool {TK}.
   #[global] Arguments string {TK}.

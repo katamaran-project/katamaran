@@ -948,10 +948,8 @@ Module Type WorldsOn
     Arguments instpred_formula_prop [w] [Σ] ζ P ι /.
 
     Definition instpred_formula_relop {w : World} {σ : Ty} (op : RelOp σ) (t1 t2 : Term w σ) : Pred w :=
-      fun ι => match bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) with
-               | SyncVal p => p
-               | NonSyncVal _ _ => False
-               end.
+      fun ι => let rp := bop.eval_relop_relprop op (inst t1 ι) (inst t2 ι) in
+               ty.projLeftRV rp /\ ty.projRightRV rp.
     Arguments instpred_formula_relop [w] {σ} op t1 t2 ι /.
 
     #[export] Instance proper_instpred_formula_relop {w : World} {σ} :
@@ -1006,10 +1004,9 @@ Module Type WorldsOn
         unfold instpred_formula, repₚ, eqₚ;
         rewrite ?bi_sep_unfold ?bi_or_unfold;
         crushPredEntails2.
-      by rewrite H.
-      destruct inst; cbn in *; subst.
-      - auto.
-      - contradiction.
+      - now rewrite H.
+      - now rewrite H.
+      - apply ty.RV_ext; assumption.
     Qed.
 
     #[export] Program Instance instpred_inst_formula : InstPred Formula :=
@@ -1026,7 +1023,7 @@ Module Type WorldsOn
         instpred_formula_relop bop.eq t2 t1.
     Proof.
       crushPredEntails2; cbn in *;
-        destruct inst, inst; cbn in *; by try contradiction.
+        destruct inst, inst; cbn in *; intuition.
     Qed.
     
     Lemma instpred_formula_eq_com {w : World} {σ} (t1 t2 : STerm σ w) :
@@ -1042,8 +1039,7 @@ Module Type WorldsOn
       crushPredEntails2.
       constructor.
       intros. cbn in *.
-      destruct inst, inst; cbn in *; subst; try contradiction.
-      auto.
+      destruct inst, inst; cbn in *; destruct H0; subst; auto.
     Qed.
 
     Lemma instpred_formula_relop_eq {w : World} {σ} (t1 t2 : STerm σ w) :
@@ -1052,14 +1048,19 @@ Module Type WorldsOn
     Proof.
       constructor. intros ι Hwco. cbn.
       unfold instpred_formula_relop.
-      repeat destruct inst; cbn in *; destruct Classes.eq_dec; by subst.
+      repeat destruct inst; cbn in *.
+      split.
+      - intros [-> ->].
+        repeat destruct Classes.eq_dec; try congruence; reflexivity.
+      - intros H. injection H.
+        repeat destruct Classes.eq_dec; cbn; intros; try discriminate; by subst.
     Qed.
 
     Lemma instpred_formula_relop_eq_val {w : World} {σ} {t1 : STerm σ w} v :
       instpred (formula_relop bop.eq t1 (term_val _ v)) ⊣⊢ repₚ (SyncVal v) t1.
     Proof.
       crushPredEntails2.
-      - cbn in *. destruct inst; cbn in *; try contradiction; by subst.
+      - cbn in *. destruct inst; cbn in *; destruct H0; by subst.
       - cbn in *. destruct inst; cbn in *; by inversion H0.
     Qed.
 
@@ -1124,7 +1125,7 @@ Module Type WorldsOn
     Lemma instpred_formula_secLeak_val {w : World} σ v :
       ⊢ instpred (w := w) (formula_secLeak (term_val σ v)).
     Proof.
-      crushPredEntails2.
+      crushPredEntails2. constructor. intros ι _. reflexivity.
     Qed.
     
     Lemma instpred_formula_secLeak_val' {w : World} σ v :
@@ -1136,7 +1137,7 @@ Module Type WorldsOn
     Lemma instpred_formula_secLeak_relval {w : World} σ v :
       ⊢ instpred (w := w) (formula_secLeak (term_relval σ (SyncVal v))).
     Proof.
-      crushPredEntails2.
+      crushPredEntails2. constructor. intros ι _. reflexivity.
     Qed.
     
     Lemma instpred_formula_secLeak_relval' {w : World} σ v :
@@ -1149,10 +1150,10 @@ Module Type WorldsOn
       instpred (w := w) (formula_relop op t1 t2) ⊣⊢
         repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) true) (term_binop (bop.relop op) t1 t2).
     Proof. crushPredEntails2; unfold instpred_formula_relop in *.
-           - cbn in *. destruct inst, inst; cbn in *; try contradiction.
-             rewrite bop.eval_relop_equiv in H0. by  rewrite H0.
-           - cbn in *. destruct inst, inst; cbn in *; inversion H0.
-             now eapply bop.eval_relop_equiv.
+           - cbn in *. destruct inst, inst; cbn in *. destruct H0 as [H0 H1].
+             rewrite bop.eval_relop_equiv in H0. rewrite bop.eval_relop_equiv in H1. by rewrite H0 H1.
+           - cbn in *. destruct inst, inst; cbn in *. injection H0 as H0 H1.
+             split; now eapply bop.eval_relop_equiv.
     Qed.
 
     Lemma formula_relop_term' {w : World} {σ} (t1 t2 : STerm σ w) op :
@@ -1164,10 +1165,9 @@ Module Type WorldsOn
       repₚ (T := STerm ty.bool) b (term_binop (bop.relop bop.neq) t1 t2) ⊣⊢
         repₚ (T := STerm ty.bool) (w := w) (ty.liftUnOp (σ1 := ty.bool) (σ2 := ty.bool) negb b) (term_binop (bop.relop bop.eq) t1 t2).
     Proof.
-      unfold repₚ; crushPredEntails2; destruct b; cbn in *.
+      unfold repₚ; crushPredEntails2; destruct b as [[] []]; cbn in *.
       all: destruct inst , inst; cbn in *.
-      all: repeat destruct Classes.eq_dec; inversion H0; try reflexivity.
-      all: rewrite (negb_involutive_reverse v); try rewrite (negb_involutive_reverse v0); rewrite <- H2; try rewrite <- H3; try reflexivity.
+      all: ty.rv_split; repeat destruct Classes.eq_dec; cbn in *; congruence.
     Qed.
 
     Lemma eq_val_rep_l [w : World] {σ} (t : Term w σ) v :
@@ -1181,23 +1181,17 @@ Module Type WorldsOn
     Lemma rep_eq_val_true [w : World] {σ} (t : Term w σ) v :
       repₚ (T := STerm ty.bool) (SyncVal true) (term_binop (bop.relop bop.eq) t (term_val σ v)) ⊣⊢
         repₚ (T := STerm σ) (w := w) (SyncVal v) t.
-    Proof. unfold repₚ; crushPredEntails2.
-           - destruct inst; cbn in *.
-             + destruct Classes.eq_dec. by subst. inversion H0.
-             + repeat destruct Classes.eq_dec; try by subst.
-           - destruct inst; inversion H0. cbn. by destruct Classes.eq_dec.
+    Proof. unfold repₚ; crushPredEntails2; destruct inst; cbn in *;
+           ty.rv_split; repeat destruct Classes.eq_dec; cbn in *; congruence.
     Qed.
 
     Lemma rep_eq_relval_true [w : World] {σ} (t : Term w σ) rv :
       repₚ (T := STerm ty.bool) (SyncVal true) (term_eq t (term_relval σ rv)) ⊣⊢
         instpred (formula_eq t (term_relval σ rv)).
     Proof.
-      unfold repₚ; crushPredEntails2.
-      - unfold instpred_formula_relop.
-        destruct inst, rv; cbn in *; inversion H0.
-        destruct Classes.eq_dec; auto. congruence.
-      - cbn in H0. destruct inst, rv; try contradiction; cbn in *.
-        destruct Classes.eq_dec; auto. congruence.
+      unfold repₚ; crushPredEntails2; unfold instpred_formula_relop in *;
+        destruct inst, rv; cbn in *; ty.rv_split; intuition;
+        repeat destruct Classes.eq_dec; cbn in *; congruence.
     Qed.
 
     Lemma rep_eq_terms_true [w : World] {σ} (t1 t2 : Term w σ) :
@@ -1208,10 +1202,8 @@ Module Type WorldsOn
       constructor.
       intros.
       unfold eqₚ.
-      destruct inst; destruct inst; cbn in *;
-        repeat destruct Classes.eq_dec.
-      all: inversion H0.
-      by subst.
+      destruct inst; destruct inst; cbn in *; ty.rv_split;
+        repeat destruct Classes.eq_dec; cbn in *; congruence.
     Qed.
 
     Lemma rep_eq_terms_com [w : World] {σ} (t1 t2 : Term w σ):
@@ -1219,15 +1211,16 @@ Module Type WorldsOn
         ⊣⊢ repₚ (ty.valToRelVal (σ := ty.bool) true) (term_eq t2 t1).
     Proof.
       constructor; intros ι _; cbn.
-      repeat destruct inst; split; intro H; inversion H; cbn in *;
-        try apply (f_equal SyncVal); repeat destruct Classes.eq_dec; subst; auto.
+      repeat destruct inst; cbn; split; intro H; ty.rv_split;
+        repeat destruct Classes.eq_dec; cbn in *; congruence.
     Qed.
 
     Lemma rep_neq_nil_cons {w : World} {σ : Ty} {t1 : Term w σ} {t2 : Term w (ty.list σ)} :
       repₚ (T := STerm (ty.list σ)) (SyncVal [] : RelVal (ty.list σ)) (term_binop bop.cons t1 t2) ⊣⊢  False.
     Proof.
-      unfold repₚ. crushPredEntails2; inversion H0.
-      destruct inst, inst; cbn in *; inversion H0.
+      unfold repₚ. crushPredEntails2.
+      - destruct inst, inst; cbn in *; ty.rv_split; discriminate.
+      - inversion H0.
     Qed.
 
     Lemma repₚ_term_and {w : World} {t1 t2 : STerm ty.bool w} :
@@ -1236,14 +1229,12 @@ Module Type WorldsOn
     Proof.
       unfold repₚ, bi_pred, bi_sep, sepₚ.
       crushPredEntails2.
-      + destruct inst, inst; inversion H0.
-        apply andb_true_iff in H2.
-        destruct H2 as [vtrue v0true].
-        by subst.
-      + destruct inst, inst; inversion H0.
-        apply andb_true_iff in H2.
-        destruct H2 as [vtrue v0true].
-        by subst.
+      + destruct inst, inst; cbn in *; ty.rv_split;
+          apply andb_true_iff in HL as [? ?]; apply andb_true_iff in HR as [? ?];
+          by subst.
+      + destruct inst, inst; cbn in *; ty.rv_split;
+          apply andb_true_iff in HL as [? ?]; apply andb_true_iff in HR as [? ?];
+          by subst.
       + by rewrite H0 H1.
     Qed.
 
@@ -1251,9 +1242,8 @@ Module Type WorldsOn
       eqₚ (T := STerm ty.bool) s (term_not t) ⊣⊢
       eqₚ (T := STerm ty.bool) (term_not s) t.
     Proof.
-      unfold eqₚ. crushPredEntails2.
-      - destruct inst, inst; cbn in *; inversion H0; by rewrite !negb_involutive.
-      - destruct inst, inst; cbn in *; inversion H0; by rewrite !negb_involutive.
+      unfold eqₚ. crushPredEntails2;
+        destruct inst, inst; cbn in *; ty.rv_split; subst; now rewrite ?negb_involutive.
     Qed.
 
     Lemma repₚ_term_eq_not {w : World} {t1 t2 : STerm ty.bool w} :
@@ -1263,51 +1253,39 @@ Module Type WorldsOn
       constructor. intros ι Hwco.
       cbn.
       repeat destruct inst; cbn in *;
-        split; intro H; inversion H;
-      repeat destruct Classes.eq_dec; subst; auto;
-      rewrite negb_involutive in n; congruence.      
+        split; intro H; ty.rv_split;
+        repeat match goal with b : Datatypes.bool |- _ => destruct b end;
+        repeat destruct Classes.eq_dec; cbn in *; congruence.
     Qed.
       
     Lemma repₚ_term_not {w : World} {t : STerm ty.bool w} b :
       repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) (negb b)) (term_not t) ⊣⊢
         repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) b) t.
     Proof.
-      unfold repₚ. crushPredEntails2; destruct b, inst; cbn in *.
-      all: inversion H0; try rewrite negb_false_iff in H2; try by subst.
-      rewrite negb_true_iff in H2. by subst.
+      unfold repₚ. crushPredEntails2; destruct b, inst; cbn in *; ty.rv_split;
+        repeat match goal with b : Datatypes.bool |- _ => destruct b end; cbn in *; congruence.
     Qed.
 
     Lemma repₚ_term_not' {w : World} {t : STerm ty.bool w} b :
       repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) b) (term_not t) ⊣⊢
         repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) (negb b)) t.
     Proof.
-      unfold repₚ. crushPredEntails2; destruct b, inst; cbn in *.
-      all: inversion H0; try rewrite negb_false_iff in H2; try by subst.
-      rewrite negb_true_iff in H2. by subst.
+      unfold repₚ. crushPredEntails2; destruct b, inst; cbn in *; ty.rv_split;
+        repeat match goal with b : Datatypes.bool |- _ => destruct b end; cbn in *; congruence.
     Qed.
 
     Lemma repₚ_term_neg {w : World} {t : STerm ty.int w} rv :
       repₚ (T := STerm ty.int) (ty.liftUnOp (σ1 := ty.int) (σ2 := ty.int) Z.opp rv) (term_neg t) ⊣⊢
         repₚ (T := STerm ty.int) rv t.
     Proof.
-      unfold repₚ. crushPredEntails2.
-      - destruct inst, rv; cbn in *; inversion H0.
-        + f_equal. lia.
-        + f_equal; lia.
-      - destruct inst, rv; cbn in *; inversion H0.
-        + by subst.
-        + by subst.
+      unfold repₚ. crushPredEntails2; destruct inst, rv; cbn in *; ty.rv_split; lia.
     Qed.
 
     Lemma repₚ_term_neg' {w : World} {t : STerm ty.int w} rv :
       repₚ (T := STerm ty.int) rv (term_neg t) ⊣⊢
         repₚ (T := STerm ty.int) (ty.liftUnOp (σ1 := ty.int) (σ2 := ty.int) Z.opp rv)  t.
     Proof.
-      unfold repₚ. crushPredEntails2.
-      - destruct inst, rv; cbn in *; inversion H0.
-        + f_equal. lia.
-        + f_equal; lia.
-      - destruct inst, rv; cbn in *; inversion H0; rewrite !Z.opp_involutive; auto.
+      unfold repₚ. crushPredEntails2; destruct inst, rv; cbn in *; ty.rv_split; lia.
     Qed.
 
     Lemma eqₚ_term_inl {w : World} {σ1 σ2} {t1 t2 : STerm σ1 w} :
@@ -1353,8 +1331,7 @@ Module Type WorldsOn
       eqₚ (T := STerm (ty.sum σ1 σ2)) (term_inl t2) (term_inr t1) ⊣⊢ False.
     Proof.
       crushPredEntails2; try (now subst); inversion H0.
-      cbn in H2.
-      destruct inst, inst; cbn in *; now inversion H0.
+      all: cbn in *; destruct inst, inst; cbn in *; now inversion H0.
     Qed.
 
     Lemma repₚ_term_inl_inr {w : World} {σ1 σ2}{t : STerm σ1 w} v :
@@ -1376,13 +1353,8 @@ Module Type WorldsOn
       eqₚ (T := STerm (ty.bvec n)) t1 t2.
     Proof. unfold eqₚ. crushPredEntails2.
            - destruct inst, inst; inversion H0.
-             Search bv.unsigned.
-             +   apply bv.unsigned_inj in H2.
-                 by subst.
-             + apply bv.unsigned_inj in H2, H3. by subst.
-           - destruct inst, inst; cbn in *; inversion H0.
-             + by subst.
-             + by subst.
+             apply bv.unsigned_inj in H2, H3. by subst.
+           - destruct inst, inst; cbn in *; inversion H0. by subst.
     Qed.
 
     Lemma repₚ_term_unsigned {w : World} {n} {t : STerm (ty.bvec n) w} (rv : RelVal (ty.bvec n)) :
@@ -1391,9 +1363,8 @@ Module Type WorldsOn
     Proof.
       unfold repₚ. crushPredEntails2.
       - destruct inst, rv; cbn in *; inversion H0.
-        + apply bv.unsigned_inj in H2. by subst.
-        + apply bv.unsigned_inj in H2, H3. by subst.
-      - destruct inst, rv; cbn in *; inversion H0; by subst. 
+        apply bv.unsigned_inj in H2, H3. by subst.
+      - destruct inst, rv; cbn in *; inversion H0; by subst.
     Qed.
 
     Lemma eqₚ_term_signed {w : World} {n} {t1 t2 : STerm (ty.bvec n) w} :
@@ -1402,9 +1373,8 @@ Module Type WorldsOn
     Proof.
       unfold eqₚ. crushPredEntails2.
       - destruct inst, inst; cbn in *; inversion H0.
-        + apply bv.signed_inj in H2. by subst.
-        + apply bv.signed_inj in H2, H3. by subst.
-      - destruct inst, inst; cbn in *; inversion H0; by subst. 
+        apply bv.signed_inj in H2, H3. by subst.
+      - destruct inst, inst; cbn in *; inversion H0; by subst.
     Qed.
 
     Lemma repₚ_term_signed {w : World} {n} {t : STerm (ty.bvec n) w} (rv : RelVal (ty.bvec n)) :
@@ -1413,9 +1383,8 @@ Module Type WorldsOn
     Proof.
       unfold repₚ. crushPredEntails2.
       - destruct inst, rv; cbn in *; inversion H0.
-        + apply bv.signed_inj in H2. by subst.
-        + apply bv.signed_inj in H2, H3. by subst.
-      - destruct inst, rv; cbn in *; inversion H0; by subst. 
+        apply bv.signed_inj in H2, H3. by subst.
+      - destruct inst, rv; cbn in *; inversion H0; by subst.
     Qed.
 
     Lemma repₚ_term_or_false {w : World} {t1 t2 : STerm ty.bool w} :
@@ -1423,16 +1392,11 @@ Module Type WorldsOn
         repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) false) t1 ∗ repₚ (T := STerm ty.bool) (ty.valToRelVal (σ := ty.bool) false) t2.
     Proof.
       unfold repₚ, bi_pred, bi_sep, sepₚ. crushPredEntails2.
-      + destruct inst, inst; cbn in *; inversion H0.
-        rewrite orb_false_iff in H2.
-        destruct H2.
-        by subst.
-      + destruct inst, inst; cbn in *; inversion H0.
-        rewrite orb_false_iff in H2.
-        destruct H2.
-        by subst.
-      + destruct inst, inst; cbn in *; inversion H0;
-        auto.
+      + destruct inst, inst; cbn in *; ty.rv_split;
+          apply orb_false_iff in HL as [? ?]; apply orb_false_iff in HR as [? ?]; by subst.
+      + destruct inst, inst; cbn in *; ty.rv_split;
+          apply orb_false_iff in HL as [? ?]; apply orb_false_iff in HR as [? ?]; by subst.
+      + destruct inst, inst; cbn in *; ty.rv_split; subst; reflexivity.
     Qed.
 
     Lemma repₚ_term_tuple_snoc [w : World] [Γ : Ctx Ty] [E : Env (Term w) Γ] [σ : Ty] (d : Term w σ) (vs : EnvRec Val Γ) (v : Val σ) :
@@ -1455,9 +1419,8 @@ Module Type WorldsOn
       unfold instpred_formula_relop, bi_pred, bi_sep, sepₚ; crushPredEntails2; unfold ty.envToRelValTuple in *;
         change ((env.map (λ (b : Ty) (s : Term w b), inst s ι) ts1)) with (inst ts1 ι) in *;
         change ((env.map (λ (b : Ty) (s : Term w b), inst s ι) ts2)) with (inst ts2 ι) in *.
-      + destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *; now inversion H0.
-      + destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *; now inversion H0.
-      + destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *; now f_equal.
+      all: destruct (ty.unliftEnv (inst ts1 ι)), (ty.unliftEnv (inst ts2 ι)), inst, inst; cbn in *.
+      all: first [ now inversion H0 | now inversion H1 | now f_equal ].
     Qed.
 
     Lemma repₚ_term_bvapp {w : World} {m n : nat} {t1 : STerm (ty.bvec m) w} {t2 : STerm (ty.bvec n) w}
@@ -1508,13 +1471,13 @@ Module Type WorldsOn
     Lemma repₚ_term_record {w : World} {R : recordi} {vs : NamedEnv Val (recordf_ty R)} {svs : NamedEnv (Term w) (recordf_ty R)} :
       repₚ (T := STerm _) (SyncVal (ty.recordv_fold R vs)) (term_record R svs) ⊣⊢ repₚ (ty.syncNamedEnv vs) svs.
     Proof. unfold repₚ; crushPredEntails2; [|].
-           apply (f_equal (ty.recordv_unfold_rel R)) in H0.
-           rewrite !ty.recordv_unfold_fold_rel in H0.
-           cbn in H0.
-           rewrite recordv_unfold_fold in H0.
-           now apply unliftIsSyncValImpliesAllSync in H0.
-           rewrite H0. unfold ty.recordv_fold_rel.
-           now rewrite ty.unliftSyncNamedEnvIsSync.
+           - apply (f_equal (ty.recordv_unfold_rel R)) in H0.
+             rewrite !ty.recordv_unfold_fold_rel in H0.
+             unfold ty.recordv_unfold_rel in H0. cbn in H0.
+             rewrite !recordv_unfold_fold in H0.
+             now apply unliftIsSyncValImpliesAllSync in H0.
+           - rewrite H0. unfold ty.recordv_fold_rel.
+             now rewrite ty.unliftSyncNamedEnvIsSync.
     Qed.
 
     Equations(noeqns) formula_eqs_nctx_sync {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
@@ -1533,26 +1496,21 @@ Module Type WorldsOn
     Qed.
 
     Lemma instprop_formula_eqs_nctx_sync {N : Set} {Δ : NCtx N Ty} {Σ} (xs ys : NamedEnv (Term Σ) Δ) ι :
-      instprop (formula_eqs_nctx_sync xs ys) ι <-> ty.unliftNamedEnv (inst xs ι) = ty.unliftNamedEnv (inst ys ι) /\ ty.isSyncValRV (ty.unliftNamedEnv (inst xs ι)).
+      instprop (formula_eqs_nctx_sync xs ys) ι <-> ty.unliftNamedEnv (inst xs ι) = ty.unliftNamedEnv (inst ys ι).
     Proof.
       induction xs; env.destroy ys; cbn; [easy|].
       specialize (IHxs ys).
       change (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst s ι) xs) with (inst xs ι).
       change (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst s ι) ys) with (inst ys ι).
       change (instprop (formula_eqs_nctx_sync xs ys) ι) with (instprop_ctx (formula_eqs_nctx_sync xs ys) ι) in IHxs.
-      rewrite IHxs.
-      unfold inst, inst_env, inst.
-      destruct (ty.unliftNamedEnv (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst_term s ι) xs)),
-        (ty.unliftNamedEnv (env.map (λ (b0 : N∷Ty) (s : Term Σ (type b0)), inst_term s ι) ys)); destruct inst_term, inst_term; intuition;
-        try inversion H3; try now inversion H2; try discriminate.
-      all: cbn in *. now inversion H0.
-      all: try inversion H1; try inversion H0; try done.
-      + rewrite helper_syncVal_inj in H2.
-        apply env.inversion_eq_snoc in H2.
-        intuition. now subst.
-      + rewrite helper_syncVal_inj in H2.
-        apply env.inversion_eq_snoc in H2.
-        intuition.
+      rewrite IHxs. unfold ty.liftBinOpRV.
+      split.
+      - intros [E [EL ER]]. rewrite E.
+        cbn in EL, ER. unfold ty.projLeft, ty.projRight in *. rewrite EL ER. reflexivity.
+      - intros E. ty.rv_split.
+        apply env.inversion_eq_snoc in HL as [HL1 HL2].
+        apply env.inversion_eq_snoc in HR as [HR1 HR2].
+        split; [now apply ty.RV_ext|]. cbn. now split.
     Qed.
 
     Lemma instpred_formula_eq_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} :
@@ -1561,39 +1519,10 @@ Module Type WorldsOn
     Proof.
       constructor. intros. rewrite instpred_prop.
       rewrite instprop_formula_eqs_nctx_sync.
-      crushPredEntails2.
-      - unfold ty.recordv_fold_rel in H0.
-        destruct (ty.unliftNamedEnv
-                 (@inst _ _
-                    (@inst_env _ _ _
-                       (λ xt : @recordf typedeclkit typedenotekit typedefkit∷Ty,
-                          @inst_term (@type _ _ xt))
-                       _) _ _ _)) as [|] eqn:eq1;
-        destruct 
-              (ty.unliftNamedEnv
-                 (@inst _ _
-                    (@inst_env _ _ _
-                       (λ xt : @recordf typedeclkit typedenotekit typedefkit∷Ty,
-                          @inst_term (@type _ _ xt))
-                       _) _ ts2 _)) as [|] eqn:eq2; cbn in *;
-          try contradiction.
-        apply unliftIsSyncValImpliesAllSync in eq1, eq2.
-        unfold inst in *.
-        rewrite <- eq1, <- eq2.
-        apply recordv_fold_inj in H0.
-        now subst.
-      - unfold ty.recordv_fold_rel in *.
-        destruct (ty.unliftNamedEnv (inst ts1 ι)) as [|] eqn:eq.
-        + auto.
-        + now rewrite eq in H0.
-      - unfold ty.recordv_fold_rel in *.
-        destruct (ty.unliftNamedEnv (inst ts1 ι)) as [|] eqn:eq1.
-        + rewrite eq1. destruct (ty.unliftNamedEnv (inst ts2 ι)) as [|] eqn:eq2;
-            rewrite eq2;
-            cbn.
-          * by inversion H0.
-          * congruence.
-        + contradiction.
+      unfold instpred_formula_relop, bop.eval_relop_relprop, ty.recordv_fold_rel, ty.liftBinOpRV, ty.liftUnOpRV; cbn.
+      split.
+      - intros [HL HR]. apply recordv_fold_inj in HL, HR. now apply ty.RV_ext.
+      - intros E. unfold ty.recordv_fold_rel. rewrite E. auto.
     Qed.
 
     Lemma eqₚ_term_record {w : World} {R : recordi} {ts1 ts2 : NamedEnv (Term w) (recordf_ty R)} ι :
@@ -1674,12 +1603,12 @@ Module Type WorldsOn
     Lemma instpred_formula_relop_val {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
         instpred (w := w) (formula_relop op (term_val _ v1) (term_val _ v2)) ⊣⊢
           ⌜ bop.eval_relop_prop op v1 v2 ⌝.
-    Proof. crushPredEntails2. Qed.
+    Proof. crushPredEntails2; cbn in *; unfold instpred_formula_relop in *; cbn in *; tauto. Qed.
 
     Lemma instpred_formula_relop_val' {w : World} {σ} (op : RelOp σ) (v1 v2 : Val σ) :
         instpred_formula_relop (w := w) op (term_val _ v1) (term_val _ v2) ⊣⊢
           ⌜ bop.eval_relop_prop op v1 v2 ⌝.
-    Proof. crushPredEntails2. Qed.
+    Proof. crushPredEntails2; cbn in *; unfold instpred_formula_relop in *; cbn in *; tauto. Qed.
 
     Lemma instpred_formula_relop_neg {w : World} {σ} (op : RelOp σ) (t1 t2 : Term w σ) :
           instpred (formula_relop_neg op t1 t2) ⊣⊢

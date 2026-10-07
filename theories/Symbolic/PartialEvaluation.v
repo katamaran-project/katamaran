@@ -246,17 +246,11 @@ Section Norm.
 End Norm.
 
 (* ========================================================================= *)
-(* Part 2: SyncVal-ness by a leaf certificate.  Every op lifts, so a term is  *)
-(* SyncVal iff all its LEAVES (the non-operator subterms) are.  After         *)
-(* normalising, compare the leaf sets of input and output.                    *)
+(* Part 2: leaf sets.  Under the old TAGGED RelVal a term was SyncVal iff all *)
+(* its leaves were, so a rewrite also had to preserve the leaf set.  RelVal  *)
+(* is now a plain pair: equality on both projections IS equality, and the    *)
+(* leaf certificate is no longer needed for soundness (removal: repair R1).  *)
 (* ========================================================================= *)
-Definition is_sync {σ} (v : RelVal σ) : bool :=
-  match v with ty.SyncVal _ => true | ty.NonSyncVal _ _ => false end.
-
-Lemma relval_ext {σ} (u v : RelVal σ) :
-  is_sync u = is_sync v -> ty.projLeft u = ty.projLeft v -> ty.projRight u = ty.projRight v -> u = v.
-Proof. destruct u, v; cbn; intros; try discriminate; subst; reflexivity. Qed.
-
 Section Leaves.
   Context {Σ : LCtx}.
   Local Notation Leaf := {σ : Ty & Term Σ σ}.
@@ -268,17 +262,6 @@ Section Leaves.
     | term_val _ _ => nil
     | t => cons (existT _ t) nil
     end.
-
-  Definition leaf_sync (ι : RValuation Σ) (x : Leaf) : bool := is_sync (inst (projT2 x) ι).
-
-  Lemma sync_leaves (ι : RValuation Σ) {σ} (t : Term Σ σ) :
-    is_sync (inst t ι) = List.forallb (leaf_sync ι) (leaves t).
-  Proof.
-    induction t; cbn [leaves]; try (unfold leaf_sync; cbn; rewrite ?Bool.andb_true_r; reflexivity).
-    - rewrite List.forallb_app. rewrite <- IHt1. rewrite <- IHt2. cbn.
-      unfold bop.evalRel. destruct (inst t1 ι), (inst t2 ι); reflexivity.
-    - rewrite <- IHt. cbn. unfold uop.evalRel. destruct (inst t ι); reflexivity.
-  Qed.
 
   Definition leaf_eqb (x y : Leaf) : bool :=
     match x, y with
@@ -299,39 +282,15 @@ Section Leaves.
   Definition leaves_incl (xs ys : list Leaf) : bool :=
     List.forallb (fun x => List.existsb (leaf_eqb x) ys) xs.
 
-  Lemma leaves_incl_sync ι xs ys :
-    leaves_incl xs ys = true -> List.forallb (leaf_sync ι) ys = true -> List.forallb (leaf_sync ι) xs = true.
-  Proof.
-    unfold leaves_incl. intros Hi Hy. apply List.forallb_forall. intros x Hx.
-    apply List.forallb_forall with (x := x) in Hi; [|exact Hx].
-    apply List.existsb_exists in Hi. destruct Hi as [y [Hy' Hxy]].
-    apply leaf_eqb_spec in Hxy. subst y.
-    apply List.forallb_forall with (x := x) in Hy; [exact Hy|exact Hy'].
-  Qed.
-
   (* the certificate: same leaf SET both ways => same SyncVal-ness *)
   Definition same_leaves {σ} (t u : Term Σ σ) : bool :=
     andb (leaves_incl (leaves t) (leaves u)) (leaves_incl (leaves u) (leaves t)).
-
-  Lemma same_leaves_sync ι {σ} (t u : Term Σ σ) :
-    same_leaves t u = true -> is_sync (inst t ι) = is_sync (inst u ι).
-  Proof.
-    unfold same_leaves. intros H. apply andb_prop in H. destruct H as [H1 H2].
-    rewrite !sync_leaves.
-    destruct (List.forallb (leaf_sync ι) (leaves u)) eqn:Eu.
-    - apply (leaves_incl_sync ι _ _ H1) in Eu. exact Eu.
-    - destruct (List.forallb (leaf_sync ι) (leaves t)) eqn:Et; [|reflexivity].
-      apply (leaves_incl_sync ι _ _ H2) in Et. congruence.
-  Qed.
 
   (* both projections agree + same leaves: EXACT RelVal equality *)
   Lemma teq_leaves_inst {σ} (t u : Term Σ σ) :
     teq true t u -> teq false t u -> same_leaves t u = true -> forall ι, inst t ι = inst u ι.
   Proof.
-    intros HL HR HS ι. apply relval_ext.
-    - apply same_leaves_sync. exact HS.
-    - exact (HL ι).
-    - exact (HR ι).
+    intros HL HR _ ι. apply ty.RV_ext; [exact (HL ι)|exact (HR ι)].
   Qed.
 End Leaves.
 
@@ -978,7 +937,6 @@ End CanonTerm.
       destruct v; cbn; intros ι; cbn.
       - destructInsts; cbn; now repeat rewrite andb_true_r.
       - destructInsts; cbn. now repeat rewrite andb_false_r.
-        auto.
     Qed.
 
     Lemma peval_or_val_sound (t : Term Σ ty.bool)
@@ -2007,9 +1965,9 @@ End CanonTerm.
     Proof. funelim (peval_plus t1 t2); lsolve; intros ι; cbn;
            match goal with
            | |- context[bop.evalRel ?op ?a ?b] =>
-               (destruct a; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+               (destruct a; cbn; (f_equal; lia))
                                  ||
-                                 (destruct b; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                                 (destruct b; cbn; (f_equal; lia))
            end.
     Qed.
 
@@ -2018,9 +1976,9 @@ End CanonTerm.
     Proof. funelim (peval_minus t1 t2); lsolve; intros ι; cbn;
              match goal with
              | |- context[bop.evalRel ?op ?a ?b] =>
-                 (destruct a; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                 (destruct a; cbn; (f_equal; lia))
                  ||
-                 (destruct b; cbn; (apply f_equal; lia) || (apply f_equal2; lia; lia))
+                 (destruct b; cbn; (f_equal; lia))
              end.
     Qed.
 
@@ -2047,11 +2005,7 @@ End CanonTerm.
       peval_bvadd_val_default t v ≡ term_binop bop.bvadd t (term_val (ty.bvec n) v).
     Proof.
       unfold peval_bvadd_val_default. intros ι; cbn.
-      match goal with
-      | |- context[bop.evalRel bop.bvadd _ ?r] =>
-          destruct r; cbn; (apply f_equal; now apply bv.add_comm)
-                           || (apply f_equal2; now apply bv.add_comm)
-      end.
+      destruct (inst t ι); cbn; f_equal; apply bv.add_comm.
     Qed.
 
     Lemma peval_bvadd_mask_sound {n} (t : Term Σ (ty.bvec n)) (v : Val (ty.bvec n)) :
@@ -2163,28 +2117,14 @@ End CanonTerm.
               destruct r; cbn; f_equal; rewrite <- !bv.add_assoc;
               (reflexivity || (f_equal; apply bv.add_comm))
           end).
-      all: match goal with
-           | |- context[bop.evalRel ?op ?a ?b] =>
-               (destruct a; cbn; (apply f_equal; first
-                                                   [ symmetry; apply bv.add_zero_l
-                                                   | symmetry; apply bv.add_zero_r
-                                                   | now apply bv.add_comm
-                                 ]) || (apply f_equal2; first
-                                                          [ symmetry; apply bv.add_zero_l
-                                                          | symmetry; apply bv.add_zero_r
-                                                          | now apply bv.add_comm
-               ]))
-               ||
-               (destruct b; cbn; (apply f_equal; first
-                                                   [ symmetry; apply bv.add_zero_l
-                                                   | symmetry; apply bv.add_zero_r
-                                                   | now apply bv.add_comm
-                                 ]) || (apply f_equal2; first
-                                                          [ symmetry; apply bv.add_zero_l
-                                                          | symmetry; apply bv.add_zero_r
-                                                          | now apply bv.add_comm
-               ]))
-           end.
+      all: unfold bop.evalRel, uop.evalRel, ty.liftBinOp, ty.liftUnOp, ty.liftBinOpRV,
+             ty.liftUnOpRV, ty.valToRelVal, SyncVal;
+           apply ty.RV_ext; cbn;
+           first [ symmetry; apply bv.add_zero_l
+                 | symmetry; apply bv.add_zero_r
+                 | now apply bv.add_comm
+                 | rewrite <- !bv.add_assoc; reflexivity
+                 | rewrite <- !bv.add_assoc; f_equal; apply bv.add_comm ].
         (* first *)
         (*   [ symmetry; apply bv.add_zero_l *)
         (*   | symmetry; apply bv.add_zero_r *)

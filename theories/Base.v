@@ -411,14 +411,6 @@ Module Type BaseMixin (Import TY : Types).
     NamedEnv (X := N) (Exp Γ) Δ -> NamedEnv (Term Σ) Δ
       := env.map (fun b (e : Exp Γ (type b)) => peval (seval_exp δ e)).
 
-  Ltac destructRVs :=
-    repeat match goal with
-        |- context[match ?b with
-                   | SyncVal _ => _
-                   | _ => _
-                   end] => destruct b; cbn
-      end.
-
   Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
     eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
   Proof.

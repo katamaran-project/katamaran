@@ -2237,20 +2237,13 @@ Module Type SymPropOn
       match f with
       | @eformula_user p ts     => vs <- inst_env ι ts ;; Some (env.uncurry (𝑷_inst p) vs)
       | eformula_bool t         => b  <- inst_eterm ι t ;;
-                                   Some (match b with
-                                         | SyncVal b => b = true
-                                         | _ => False
-                                         end
-                                     )
+                                   Some (ty.projLeftRV b = true /\ ty.projRightRV b = true)
       | @eformula_prop Σ' ζ P   => vs <- inst_namedenv ι ζ ;;
                                    Some (uncurry_named P vs)
       | eformula_relop op t1 t2 => v1 <- inst_eterm ι t1 ;;
                                    v2 <- inst_eterm ι t2 ;;
-                                   Some (match bop.eval_relop_relprop op v1 v2 with
-                                         | SyncVal p => p
-                                         | _ => False
-                                         end
-                                     )
+                                   Some (let rp := bop.eval_relop_relprop op v1 v2 in
+                                         ty.projLeftRV rp /\ ty.projRightRV rp)
       | eformula_true           => Some True
       | eformula_false          => Some False
       | eformula_and F1 F2      => p1 <- inst_eformula ι F1;;

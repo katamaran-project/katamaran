@@ -419,18 +419,6 @@ Module Type PatternsOn (Import TY : Types).
 
 
 
-    (* Canonicalizing combine (kept for METHOD X — the deferred uniform-
-       canonicalization design; see .claude/TODO.md "METHOD X vs METHOD Y").
-       [relValOfVals]: SyncVal when the two worlds agree, NonSyncVal only when
-       they genuinely differ — never creates NonSyncVal v v.  NOT used by the
-       (raw, METHOD Y) [pattern_match_relval] below. *)
-    Definition relValOfVals {σ} (v1 v2 : Val σ) : RelVal σ :=
-      if eq_dec v1 v2 then SyncVal v1 else NonSyncVal v1 v2.
-
-    Definition canonNamedEnv {Δ : NCtx N Ty} (δ1 δ2 : NamedEnv Val Δ) :
-      NamedEnv RelVal Δ :=
-      env.zipWith (fun b v1 v2 => relValOfVals v1 v2) δ1 δ2.
-
     (* Pattern match on a relational value (METHOD Y — RAW). The result is a
        [PatternCase] together with an environment mapping the pattern variables
        to relational values. For a NonSyncVal we match both worlds; if they take
@@ -440,20 +428,16 @@ Module Type PatternsOn (Import TY : Types).
        the raw payloads produced by the symbolic fast-path. *)
     Definition pattern_match_relval {σ} (p : Pattern σ) (rv : RelVal σ) :
       option (MatchResultRel p) :=
-      match rv with
-      | SyncVal v => Some (matchResultToMatchResultRel (pattern_match_val p v))
-      | NonSyncVal v1 v2 =>
-          let '(existT pc1 δ1) := pattern_match_val p v1 in
-          let '(existT pc2 δ2) := pattern_match_val p v2 in
-          match eq_dec pc1 pc2 with
-          | left e =>
-              Some (existT pc1
-                (ty.nonsyncNamedEnv δ1
-                   (eq_rect_r (fun pc => NamedEnv Val (PatternCaseCtx pc)) δ2 e)))
-          | right _ => None
-          end
+      let '(existT pc1 δ1) := pattern_match_val p (ty.projLeft rv) in
+      let '(existT pc2 δ2) := pattern_match_val p (ty.projRight rv) in
+      match eq_dec pc1 pc2 with
+      | left e =>
+          Some (existT pc1
+            (ty.nonsyncNamedEnv δ1
+               (eq_rect_r (fun pc => NamedEnv Val (PatternCaseCtx pc)) δ2 e)))
+      | right _ => None
       end.
-    #[global] Arguments pattern_match_relval {σ} p !rv.
+    #[global] Arguments pattern_match_relval {σ} p rv.
 
     (* Projection lemmas (METHOD Y): if [pattern_match_relval] succeeds with case
        [pc] and relational payload [δpc], then matching each world's projection
@@ -465,16 +449,9 @@ Module Type PatternsOn (Import TY : Types).
       pattern_match_val pat (ty.projLeft rv) =
         existT pc (env.map (fun b => ty.projLeft (A := type b)) δpc).
     Proof.
-      destruct rv as [v | v1 v2]; cbn [ty.projLeft ty.projLeftRV].
-      - unfold pattern_match_relval, matchResultToMatchResultRel.
-        destruct (pattern_match_val pat v) as [pcv δv]; cbn.
-        intros H. injection H as H. subst pcv.
-        apply Eqdep_dec.inj_pair2_eq_dec in H0; [| intros x y; apply eq_dec].
-        subst δpc. f_equal.
-        rewrite env.map_map. cbn. now rewrite env.map_id_eq.
-      - unfold pattern_match_relval.
-        destruct (pattern_match_val pat v1) as [pc1 δ1] eqn:E1.
-        destruct (pattern_match_val pat v2) as [pc2 δ2] eqn:E2.
+      unfold pattern_match_relval.
+        destruct (pattern_match_val pat (ty.projLeft rv)) as [pc1 δ1] eqn:E1.
+        destruct (pattern_match_val pat (ty.projRight rv)) as [pc2 δ2] eqn:E2.
         destruct (eq_dec pc1 pc2) as [e|ne]; [| discriminate].
         destruct e. intros H. injection H as H. subst pc1.
         apply Eqdep_dec.inj_pair2_eq_dec in H0; [| intros x y; apply eq_dec].
@@ -489,16 +466,9 @@ Module Type PatternsOn (Import TY : Types).
       pattern_match_val pat (ty.projRight rv) =
         existT pc (env.map (fun b => ty.projRight (A := type b)) δpc).
     Proof.
-      destruct rv as [v | v1 v2]; cbn [ty.projRight ty.projRightRV].
-      - unfold pattern_match_relval, matchResultToMatchResultRel.
-        destruct (pattern_match_val pat v) as [pcv δv]; cbn.
-        intros H. injection H as H. subst pcv.
-        apply Eqdep_dec.inj_pair2_eq_dec in H0; [| intros x y; apply eq_dec].
-        subst δpc. f_equal.
-        rewrite env.map_map. cbn. now rewrite env.map_id_eq.
-      - unfold pattern_match_relval.
-        destruct (pattern_match_val pat v1) as [pc1 δ1] eqn:E1.
-        destruct (pattern_match_val pat v2) as [pc2 δ2] eqn:E2.
+      unfold pattern_match_relval.
+        destruct (pattern_match_val pat (ty.projLeft rv)) as [pc1 δ1] eqn:E1.
+        destruct (pattern_match_val pat (ty.projRight rv)) as [pc2 δ2] eqn:E2.
         destruct (eq_dec pc1 pc2) as [e|ne]; [| discriminate].
         destruct e. intros H. injection H as H. subst pc1.
         apply Eqdep_dec.inj_pair2_eq_dec in H0; [| intros x y; apply eq_dec].
@@ -530,44 +500,28 @@ Module Type PatternsOn (Import TY : Types).
     Lemma unliftIsSyncValImpliesAllSync {c} {n : NamedEnv RelVal c} {n0 : NamedEnv Val c}
       (H : ty.unliftNamedEnv n = SyncVal n0) :
       env.map (λ b : N∷Ty, SyncVal) n0 = n.
-    Proof.
-      induction n0.
-      + destruct (env.view n).
-        auto.
-      + destruct (env.view n). cbn. specialize (IHn0 E).
-        destruct v; cbn in H.
-        * destruct ty.unliftNamedEnv; try discriminate H; cbn in *.
-            dependent elimination H. f_equal. auto.
-        * destruct (ty.unliftNamedEnv E); discriminate H.
-    Qed.
+    Proof. exact (ty.unliftIsSyncImpliesAllSync n n0 H). Qed.
       
-    Definition canonMatchResultRel {σ} {p : Pattern σ}
-      (r : MatchResultRel p) : MatchResultRel p :=
-      existT (projT1 r)
-        (canonNamedEnv (env.map (fun b rv => ty.projLeft (A := type b) rv) (projT2 r))
-                       (env.map (fun b rv => ty.projRight (A := type b) rv) (projT2 r))).
+    (* Every relational payload is the pair of its projections. *)
+    Lemma nonsyncNamedEnv_proj {Δ : NCtx N Ty} (δ : NamedEnv RelVal Δ) :
+      ty.nonsyncNamedEnv (env.map (fun b => ty.projLeft (A := type b)) δ)
+                         (env.map (fun b => ty.projRight (A := type b)) δ) = δ.
+    Proof. induction δ; cbn; [reflexivity|]. f_equal. exact IHδ. Qed.
 
-    (* RAW inverse-right (METHOD Y): reverse then re-match recovers the payload
-       exactly when it is all-sync, and otherwise the fully-nonsync
-       representative of its two projections. *)
+    (* Inverse-right: reverse then re-match recovers the payload exactly. *)
     Lemma pattern_match_relval_inverse_right {σ} (pat : Pattern σ)
       (pc : PatternCase pat) (δpc : NamedEnv RelVal (PatternCaseCtx pc)) :
       pattern_match_relval pat (pattern_match_relval_reverse pat pc δpc) =
-        match ty.unliftNamedEnv δpc with
-        | SyncVal _        => Some (existT pc δpc)
-        | NonSyncVal δL δR => Some (existT pc (ty.nonsyncNamedEnv δL δR))
-        end.
+        Some (existT pc δpc).
     Proof.
-      unfold pattern_match_relval_reverse.
-      destruct (ty.unliftNamedEnv δpc) as [δ|δL δR] eqn:Hu; cbn.
-      - rewrite (pattern_match_val_inverse_right pat pc δ).
-        unfold matchResultToMatchResultRel; cbn.
-        f_equal. f_equal. now apply unliftIsSyncValImpliesAllSync.
-      - rewrite (pattern_match_val_inverse_right pat pc δL),
-                (pattern_match_val_inverse_right pat pc δR); cbn.
-        destruct (eq_dec pc pc) as [e|C]; [| now contradiction C].
-        rewrite (Eqdep_dec.UIP_dec (fun x y => eq_dec x y) e eq_refl); cbn.
-        reflexivity.
+      unfold pattern_match_relval, pattern_match_relval_reverse; cbn.
+      unfold ty.projLeft, ty.projRight, ty.liftUnOpRV; cbn.
+      rewrite (pattern_match_val_inverse_right pat pc (ty.projLeftRV (ty.unliftNamedEnv δpc))),
+              (pattern_match_val_inverse_right pat pc (ty.projRightRV (ty.unliftNamedEnv δpc))); cbn.
+      destruct (eq_dec pc pc) as [e|C]; [| now contradiction C].
+      rewrite (Eqdep_dec.UIP_dec (fun x y => eq_dec x y) e eq_refl); cbn.
+      rewrite ty.projLeftRVunliftNamedEnv, ty.projRightRVunliftNamedEnv.
+      exact (f_equal (fun x => Some (existT pc x)) (nonsyncNamedEnv_proj δpc)).
     Qed.
 
     (* Matching a union with a statically-known constructor K reduces to matching
@@ -580,114 +534,33 @@ Module Type PatternsOn (Import TY : Types).
                     (existT (existT K (projT1 r)) (projT2 r) : MatchResultRel (pat_union U p)))
         (pattern_match_relval (p K) t).
     Proof.
-      unfold ty.unionv_fold_rel; cbn.
-      destruct t as [tv | t1 t2]; cbn.
-      - rewrite unionv_unfold_fold; cbn.
-        destruct (pattern_match_val (p K) tv) as [pc' δ']; cbn. reflexivity.
-      - rewrite !unionv_unfold_fold; cbn.
-        destruct (pattern_match_val (p K) t1) as [pc1 δ1] eqn:E1.
-        destruct (pattern_match_val (p K) t2) as [pc2 δ2] eqn:E2.
-        destruct (eq_dec pc1 pc2) as [e|ne].
-        + destruct e.
-          match goal with
-          | |- context [ match ?d with left _ => _ | right _ => _ end = _ ] =>
-              destruct d as [E|NE]
-          end.
-          * rewrite (Eqdep_dec.UIP_dec (fun x y => eq_dec x y) E eq_refl); reflexivity.
-          * exfalso. apply NE. reflexivity.
-        + match goal with
-          | |- context [ match ?d with left _ => _ | right _ => _ end = _ ] =>
-              destruct d as [E|NE]
-          end.
-          * exfalso. apply ne.
-            exact (Eqdep_dec.inj_pair2_eq_dec _ (fun x y : unionk U => eq_dec x y) _ K pc1 pc2 E).
-          * reflexivity.
-    Qed.
-
-    (* RelVal-level canonicalization: SyncVal when the two worlds agree. *)
-    Definition canonRelVal {σ} (rv : RelVal σ) : RelVal σ :=
-      relValOfVals (ty.projLeft rv) (ty.projRight rv).
-
-    (* Key structural fact: unlift ∘ canon, mapped by an injective f, behaves
-       like the canonicalizing combine of the two mapped envs. *)
-    Lemma liftUnOp_unlift_canon {Δ : NCtx N Ty} {σ'}
-      (f : NamedEnv Val Δ -> Val σ')
-      (Hinj : forall a b, f a = f b -> a = b) (δ1 δ2 : NamedEnv Val Δ) :
-      ty.liftUnOpRV f (ty.unliftNamedEnv (canonNamedEnv δ1 δ2))
-        = relValOfVals (f δ1) (f δ2).
-    Proof.
-      assert (Hdiag : forall (Δ0 : NCtx N Ty) (δ : NamedEnv Val Δ0),
-        canonNamedEnv δ δ = ty.syncNamedEnv δ).
-      { intros Δ0 δ; unfold canonNamedEnv, ty.syncNamedEnv; induction δ; cbn;
-          [reflexivity|]. f_equal; [apply IHδ|]; unfold relValOfVals;
-          match goal with |- context[eq_dec ?a ?a] => now destruct (eq_dec a a) end. }
-      assert (HpL : forall (Δ0 : NCtx N Ty) (a c : NamedEnv Val Δ0),
-        env.map (fun b rv => ty.projLeft (A := type b) rv) (canonNamedEnv a c) = a).
-      { intros Δ0 a; induction a; intro c; env.destroy c; cbn;
-          [reflexivity|]. unfold canonNamedEnv in *; cbn; f_equal; [apply IHa|];
-          unfold relValOfVals;
-          match goal with |- context[eq_dec ?x ?y] => now destruct (eq_dec x y) end. }
-      assert (HpR : forall (Δ0 : NCtx N Ty) (a c : NamedEnv Val Δ0),
-        env.map (fun b rv => ty.projRight (A := type b) rv) (canonNamedEnv a c) = c).
-      { intros Δ0 a; induction a; intro c; env.destroy c; cbn;
-          [reflexivity|]. unfold canonNamedEnv in *; cbn; f_equal; [apply IHa|];
-          unfold relValOfVals;
-          match goal with |- context[eq_dec ?x ?y] => now destruct (eq_dec x y) end. }
-      pose proof (ty.projLeftRVunliftNamedEnv (canonNamedEnv δ1 δ2)) as PL.
-      pose proof (ty.projRightRVunliftNamedEnv (canonNamedEnv δ1 δ2)) as PR.
-      rewrite HpL in PL. rewrite HpR in PR.
-      destruct (ty.unliftNamedEnv (canonNamedEnv δ1 δ2)) as [w | a b] eqn:Eu; cbn in *.
-      - subst δ1 δ2. unfold relValOfVals; now destruct (eq_dec (f w) (f w)).
-      - subst a b.
-        assert (Hne : δ1 <> δ2).
-        { intro Heq; subst δ2; rewrite Hdiag, ty.unliftSyncNamedEnvIsSync in Eu;
-            discriminate. }
-        unfold relValOfVals; destruct (eq_dec (f δ1) (f δ2)) as [Hfe|_];
-          [exfalso; apply Hne, Hinj, Hfe | reflexivity].
+      unfold ty.unionv_fold_rel, pattern_match_relval; cbn.
+      destruct t as [t1 t2]; cbn.
+      rewrite !unionv_unfold_fold; cbn.
+      destruct (pattern_match_val (p K) t1) as [pc1 δ1] eqn:E1.
+      destruct (pattern_match_val (p K) t2) as [pc2 δ2] eqn:E2.
+      destruct (eq_dec pc1 pc2) as [e|ne].
+      + destruct e.
+        match goal with
+        | |- context [ match ?d with left _ => _ | right _ => _ end = _ ] =>
+            destruct d as [E|NE]
+        end.
+        * rewrite (Eqdep_dec.UIP_dec (fun x y => eq_dec x y) E eq_refl); reflexivity.
+        * exfalso. apply NE. reflexivity.
+      + match goal with
+        | |- context [ match ?d with left _ => _ | right _ => _ end = _ ] =>
+            destruct d as [E|NE]
+        end.
+        * exfalso. apply ne.
+          exact (Eqdep_dec.inj_pair2_eq_dec _ (fun x y : unionk U => eq_dec x y) _ K pc1 pc2 E).
+        * reflexivity.
     Qed.
 
     Lemma unliftNamedEnvOfEnvMapValToRelValIsSyncVal {Γ} {nenv : NamedEnv Val Γ} :
       ty.unliftNamedEnv (env.map (λ b : N∷Ty, ty.valToRelVal) nenv) = SyncVal nenv.
     Proof.
-      induction nenv.
-      - auto.
-      - cbn. destruct (ty.unliftNamedEnv (env.map (λ b0 : N∷Ty, ty.valToRelVal) nenv)).
-        + inversion IHnenv. auto.
-        + inversion IHnenv.
-    Qed.
-
-    (* (METHOD X's canonicalizing [pattern_match_relval_inverse_left] lived here;
-       under the raw METHOD-Y def it would need a SyncVal/NonSyncVal case split
-       and is not needed for the refinement, so it is omitted. Re-add a raw form
-       if ShallowSoundness needs it.) *)
-
-    (* --- Canonicalization support (kept for METHOD X; see .claude/TODO.md) --- *)
-
-    (* canonNamedEnv on a diagonal is the sync embedding. *)
-    Lemma canonNamedEnv_diag {Δ : NCtx N Ty} (δ : NamedEnv Val Δ) :
-      canonNamedEnv δ δ = ty.syncNamedEnv δ.
-    Proof.
-      unfold canonNamedEnv, ty.syncNamedEnv; induction δ; cbn; [reflexivity|].
-      f_equal; [apply IHδ|]; unfold relValOfVals;
-        match goal with |- context[eq_dec ?a ?a] => now destruct (eq_dec a a) end.
-    Qed.
-
-    Lemma projLeft_map_canonNamedEnv {Δ : NCtx N Ty} (a c : NamedEnv Val Δ) :
-      env.map (fun b rv => ty.projLeft (A := type b) rv) (canonNamedEnv a c) = a.
-    Proof.
-      revert c; induction a; intro c; env.destroy c; cbn; [reflexivity|].
-      unfold canonNamedEnv in *; cbn; f_equal; [apply IHa|];
-        unfold relValOfVals;
-        match goal with |- context[eq_dec ?x ?y] => now destruct (eq_dec x y) end.
-    Qed.
-
-    Lemma projRight_map_canonNamedEnv {Δ : NCtx N Ty} (a c : NamedEnv Val Δ) :
-      env.map (fun b rv => ty.projRight (A := type b) rv) (canonNamedEnv a c) = c.
-    Proof.
-      revert c; induction a; intro c; env.destroy c; cbn; [reflexivity|].
-      unfold canonNamedEnv in *; cbn; f_equal; [apply IHa|];
-        unfold relValOfVals;
-        match goal with |- context[eq_dec ?x ?y] => now destruct (eq_dec x y) end.
+      induction nenv; cbn; [reflexivity|].
+      unfold ty.liftBinOpRV. now rewrite IHnenv.
     Qed.
 
     Lemma projLeft_map_valToRelVal {Δ : NCtx N Ty} (δ : NamedEnv Val Δ) :
@@ -699,32 +572,6 @@ Module Type PatternsOn (Import TY : Types).
       env.map (fun b rv => ty.projRight (A := type b) rv)
         (env.map (fun b => ty.valToRelVal) δ) = δ.
     Proof. induction δ; cbn; [reflexivity | now f_equal]. Qed.
-
-    (* canonRelVal is idempotent: its output is always canonical. *)
-    Lemma canonRelVal_idem {σ} (rv : RelVal σ) :
-      canonRelVal (canonRelVal rv) = canonRelVal rv.
-    Proof.
-      unfold canonRelVal, relValOfVals; destruct rv as [v|v1 v2]; cbn.
-      - destruct (eq_dec v v) as [e|n]; [cbn|congruence].
-        destruct (eq_dec v v); congruence.
-      - destruct (eq_dec v1 v2) as [e|n]; cbn.
-        + destruct (eq_dec v1 v1); congruence.
-        + destruct (eq_dec v1 v2); congruence.
-    Qed.
-
-    (* Canonicalization is the identity on an all-sync payload. *)
-    Lemma canonMatchResultRel_allsync {σ} {p : Pattern σ}
-      (r : MatchResultRel p) (δ : NamedEnv Val (PatternCaseCtx (projT1 r))) :
-      ty.unliftNamedEnv (projT2 r) = SyncVal δ ->
-      canonMatchResultRel r = r.
-    Proof.
-      destruct r as [pc onenv]; cbn; intros H.
-      unfold canonMatchResultRel; cbn. f_equal.
-      rewrite <- ty.projLeftRVunliftNamedEnv, <- ty.projRightRVunliftNamedEnv, H;
-        cbn.
-      rewrite canonNamedEnv_diag.
-      exact (unliftIsSyncValImpliesAllSync H).
-    Qed.
 
     (* The intendend use case of the above definitions is in the declaration of
        inductive types for AST that represent pattern matches. This will

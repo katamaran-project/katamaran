@@ -698,9 +698,8 @@ Module Type UnifLogicOn
     Proof.
       unfold repₚ. crushPredEntails3; try (now subst).
       { by rewrite H0 H1. }
-      all: apply (ty.liftBinOpSyncImpliesSyncArgs (σ3 := ty.list _)) in H0.
-      + destruct H0 as (v1 & v2 & -> & _ & H0). by inversion H0.
-      + destruct H0 as (v1 & v2 & _ & -> & H0). by inversion H0.
+      all: revert H0; cbn; generalize (inst t ι), (inst ts ι); intros [] [] H0; cbn in *; ty.rv_split;
+           injection HL as -> ->; injection HR as -> ->; reflexivity.
     Qed.
 
     Lemma eq_term_cons {w : World} {σ : Ty} {t1 t2 : STerm σ w} {ts1 ts2 : STerm (ty.list σ) w} :
@@ -714,10 +713,9 @@ Module Type UnifLogicOn
       repₚ (T := STerm _) (ty.valToRelVal (σ := ty.union _) (unionv_fold U (existT K v))) (term_union U K t) ⊣⊢ repₚ (T := STerm _) (ty.valToRelVal v) t.
     Proof.
       unfold repₚ; crushPredEntails3; try (now subst).
-      - destruct inst; cbn in *; try discriminate.
-        inversion H0.
-        apply unionv_fold_inj in H2.
-        by dependent elimination H2.
+      - destruct inst; cbn in *. ty.rv_split.
+        all: apply unionv_fold_inj in HL, HR; dependent elimination HL;
+             dependent elimination HR; reflexivity.
       - by rewrite H0.
     Qed.
     
@@ -748,11 +746,10 @@ Module Type UnifLogicOn
     Proof.
       intros HKneq.
       unfold repₚ; crushPredEntails3; try (now subst).
-      destruct inst; cbn in *; try discriminate.
-      inversion H0.
-      apply (f_equal (ty.unionv_unfold U)) in H2.
-      rewrite !ty.unionv_unfold_fold in H2.
-      dependent elimination H2.      
+      destruct inst; cbn in *. ty.rv_split.
+      apply (f_equal (ty.unionv_unfold U)) in HL.
+      rewrite !ty.unionv_unfold_fold in HL.
+      dependent elimination HL.
       tauto.
     Qed.
 
@@ -834,10 +831,8 @@ Module Type UnifLogicOn
     Proof.
       unfold repₚ.
       destruct v; crushPredEntails3.
-      + cbn. destruct inst; cbn in *; inversion H0.
-        eexists. intuition. constructor.
-      + cbn. destruct inst; cbn in *; inversion H0.
-        eexists. intuition. constructor.
+      cbn. destruct inst; cbn in *; inversion H0.
+      eexists. intuition. constructor.
     Qed.
 
     Lemma repₚ_inversion_term_inr {σ τ} (v : RelVal (ty.sum σ τ)) {w : World} (svr : STerm τ w) :
@@ -845,10 +840,8 @@ Module Type UnifLogicOn
     Proof.
       unfold repₚ.
       destruct v; crushPredEntails3.
-      + cbn. destruct inst; cbn in *; inversion H0.
-        eexists. intuition. constructor.
-      + cbn. destruct inst; cbn in *; inversion H0.
-        eexists. intuition. constructor.
+      cbn. destruct inst; cbn in *; inversion H0.
+      eexists. intuition. constructor.
     Qed.
 
     Lemma repₚ_inversion_term_unsigned {n} (v : RelVal ty.int) {w : World} (sbv : STerm (ty.bvec n) w) :
@@ -1836,18 +1829,19 @@ Module Type UnifLogicOn
 
     Lemma refine_formula_bool {w : World} {v} {sv : Term w ty.bool} :
       ℛ⟦RVal ty.bool⟧ v sv ⊢ ℛ⟦RFormula⟧ (v = ty.valToRelVal (σ := ty.bool) true) (formula_bool sv).
-    Proof. unfold RVal, RInst. crushPredEntails3; cbn in *; now subst. Qed.
+    Proof. unfold RVal, RInst. crushPredEntails3; cbn in *.
+           unfold RFormula; cbn. crushPredEntails3; congruence.
+    Qed.
 
     Lemma refine_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ}:
       ℛ⟦ RVal σ ⟧ v1 sv1 ∗ ℛ⟦ RVal σ ⟧ v2 sv2 ⊢
         ℛ⟦RFormula⟧
-        (match bop.eval_relop_relprop relop v1 v2 with
-         | SyncVal p => p
-         | _ => False%type
-         end)
+        (let rp := bop.eval_relop_relprop relop v1 v2 in
+         ty.projLeftRV rp /\ ty.projRightRV rp)
         (formula_relop relop sv1 sv2).
     Proof.
-      unfold RFormula, RVal, RInst. crushPredEntails3; now subst.
+      unfold RFormula, RVal, RInst. crushPredEntails3;
+        subst; cbn in *; unfold instpred_formula_relop in *; cbn in *; tauto.
     Qed.
 
     Lemma refine_formula_propeq {w : World} {σ v1 v2} {sv1 sv2 : Term w σ} :
@@ -2254,10 +2248,8 @@ Module Type UnifLogicOn
 
   Definition refine_compat_formula_relop {w : World} {σ v1 v2} {sv1 sv2 : Term w σ}  {relop : RelOp σ} :
     RefineCompat RFormula
-      (match bop.eval_relop_relprop relop v1 v2 with
-       | SyncVal p => p
-       | _ => False
-       end)
+      (let rp := bop.eval_relop_relprop relop v1 v2 in
+       ty.projLeftRV rp /\ ty.projRightRV rp)
       w
       (formula_relop relop sv1 sv2) _ :=
     MkRefineCompat refine_formula_relop.

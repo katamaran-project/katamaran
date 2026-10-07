@@ -569,28 +569,28 @@ Module Type InstantiationOn
     Lemma term_eq_true_r [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) t (term_val ty.bool true) ≡ t.
     Proof.
-      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+      intro ι. cbn. destructInsts; destruct projLeftRV, projRightRV; cbn;
       reflexivity.
     Qed.
 
     Lemma term_eq_true_l [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) (term_val ty.bool true) t ≡ t.
     Proof.
-      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+      intro ι. cbn. destructInsts; destruct projLeftRV, projRightRV; cbn;
         reflexivity.
     Qed.
 
     Lemma term_eq_false_r [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) t (term_val ty.bool false) ≡ term_not t.
     Proof.
-      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+      intro ι. cbn. destructInsts; destruct projLeftRV, projRightRV; cbn;
         reflexivity.
     Qed.
 
     Lemma term_eq_false_l [Σ] (t : Term Σ ty.bool) :
       term_binop (bop.relop bop.eq) (term_val ty.bool false) t ≡ term_not t.
     Proof.
-      intro ι. cbn. destructInsts; destruct v; try destruct v0; cbn;
+      intro ι. cbn. destructInsts; destruct projLeftRV, projRightRV; cbn;
         reflexivity.
     Qed.
 
@@ -621,22 +621,19 @@ Module Type InstantiationOn
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { (* SyncVal *) apply f_equal. now Lia.lia. }
-      all: (* NonSyncVals *) apply f_equal2; now Lia.lia.      
+      apply f_equal2; now Lia.lia.
     Qed.
 
     Lemma term_plus_zero_l {Σ} {t1} : term_binop (Σ := Σ) bop.plus (term_val ty.int 0%Z) t1 ≡ t1.
     Proof.
       intro ι; cbn. destructInsts; cbn.
-      - apply f_equal. now Lia.lia.
-      - apply f_equal2; now Lia.lia.
+      apply f_equal2; now Lia.lia.
     Qed.
 
     Lemma term_minus_plus_neg {Σ} {t1 t2} : term_binop (Σ := Σ) bop.minus t1 t2 ≡ term_binop bop.plus t1 (term_unop uop.neg t2).
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { apply f_equal. now Lia.lia. }
       all: apply f_equal2; now Lia.lia.
     Qed.
 
@@ -653,7 +650,6 @@ Module Type InstantiationOn
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { apply f_equal. now Lia.lia. }
       all: apply f_equal2; cbn; now Lia.lia.
     Qed.
 
@@ -661,7 +657,6 @@ Module Type InstantiationOn
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { apply f_equal. now Lia.lia. }
       all: apply f_equal2; cbn; now Lia.lia.
     Qed.
 
@@ -669,7 +664,6 @@ Module Type InstantiationOn
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { apply f_equal. now Lia.lia. }
       all: apply f_equal2; cbn; now Lia.lia.
       Qed.
 
@@ -677,7 +671,6 @@ Module Type InstantiationOn
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { apply f_equal. now Lia.lia. }
       all: apply f_equal2; cbn; now Lia.lia.
     Qed.
 
@@ -685,7 +678,6 @@ Module Type InstantiationOn
     Proof.
       intro ι; cbn.
       destructInsts; cbn.
-      { apply f_equal. now Lia.lia. }
       all: apply f_equal2; cbn; now Lia.lia.
     Qed.
 

@@ -202,7 +202,7 @@ Module uop.
 
     Definition evalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) : RelVal σ1 -> RelVal σ2 :=
       liftUnOp (eval op).
-    Global Arguments evalRel {σ1} {σ2} !op !rv.
+    Global Arguments evalRel {σ1} {σ2} !op !rv /.
 
     Lemma comProjLeftRVEvalRel {σ1 σ2 : Ty} (op : UnOp σ1 σ2) (rv : RelVal σ1) :
       projLeftRV (evalRel op rv) = eval op (projLeftRV rv).
