@@ -288,8 +288,9 @@ The whole gate closure builds (`Results.vo` + `GenCompose.vo`, commit aa795710):
 all of theories/, RiscvPmp, every CFGVer file, every example and `*Result.v`.
 The trusted statements (`Noninterference.v`, every `Example/**/*Result.v`) are
 TEXTUALLY unchanged vs 936ec9a3: every diff line in them lies inside a
-`Proof. ... Qed.` (checked mechanically). The full gate was started on aa795710;
-see the commit after it for the result.
+`Proof. ... Qed.` (checked mechanically). **Full gate PASSED on aa795710**
+(GATE_JOBS=1): build clean, no holes, 24 end theorems axiom-clean (only
+Machine.pure_decode, Base.mmioenv); axiom pass 323 s user vs 332 s baseline.
 
 Key commits today: 411d1c89 solver rule `secLeak (c + t) <-> secLeak t`
 (`simplify_secLeak` strips one literal summand; CountdownRec closes);
@@ -313,7 +314,7 @@ perf fix; 9028e9ce + aa795710 Result files / GenProg.
   closure built), with census probes `ZZLoopICensus.v`/`ZZLoopIStage2.v`.
 
 ### Remaining
-- Gate result (see above) and, per D3, the LIST of trusted statements whose
+- Per D3, the LIST of trusted statements whose
   MEANING changed (relop/bool preconditions over non-secLeak variables now
   cover runs where the sides differ). Not done yet.
 - Phase 8 timing comparison vs §10 baseline (per-file numbers: TIMED logs).
