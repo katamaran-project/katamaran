@@ -49,7 +49,8 @@ From Katamaran Require Import
   RiscvPmp.BlockVer.Spec
   RiscvPmp.BlockVer.TotalVerifier
   RiscvPmp.BlockVer.BinaryVerifier
-  RiscvPmp.ModelBinary.
+  RiscvPmp.ModelBinary
+  RiscvPmp.LoopVerificationBinary.
 
 (* Combine all the modules without duplication. *)
 
@@ -62,6 +63,11 @@ End RVPBASEl.
 Module RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl.
   Include RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl.
 End RVPPREDl.
+(* We need both an instance with the default fail logic, and the BlockVerifier
+   fail logic, so we define RVPINSTl_ISA (default fail) and RVPINSTl (blockverifier). *)
+Module RVPINSTl_ISA : RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl.
+  Include RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl.
+End RVPINSTl_ISA.
 Module RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl.
   Include RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl.
 End RVPINSTl.
@@ -77,6 +83,9 @@ End RVPBASEr.
 Module RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr.
   Include RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr.
 End RVPPREDr.
+Module RVPINSTr_ISA : RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr.
+  Include RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr.
+End RVPINSTr_ISA.
 Module RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr.
   Include RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr.
 End RVPINSTr.
@@ -98,4 +107,11 @@ End RVPADEQ2.
 Module RVPINST2 : RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2.
   Include RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2.
 End RVPINST2.
+Module RVPMOD2 : RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
+  Include RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
+End RVPMOD2.
+Module LoopVerificationBinary : LoopVerificationBinary.LoopVerificationBinary RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2 RVPMOD2.
+  Include LoopVerificationBinary.LoopVerificationBinary RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2 RVPMOD2.
+End LoopVerificationBinary.
+
 Module Export RVPV2 := BinaryBlockVerifier RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl RVPTVl RVPBASEr RVPPREDr RVPINSTr RVPCONTRr RVPTVr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
