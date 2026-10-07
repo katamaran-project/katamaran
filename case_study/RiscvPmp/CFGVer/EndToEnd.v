@@ -182,9 +182,10 @@ Import IrisModel.RiscvPmpIrisBase.
          and CFG_VC_triple still passes a trivial post, so there is nothing to
          use here — but the conjunct has to be introduced. *)
     - iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & _)".
-      destruct an as [v | v1 v2].
-      + cbn in Hexit. iExists v. iFrame "Hpc". iPureIntro. unfold atPc. rewrite Hexit. exact I.
-      + contradiction.
+      destruct Hexit as (v & -> & Hexit).
+      (* exit_hit on a pair tests both sides: keep the left test *)
+      cbn in Hexit. apply andb_prop in Hexit as [Hexit _].
+      iExists v. iFrame "Hpc". iPureIntro. unfold atPc. rewrite Hexit. exact I.
   Qed.
 
   Lemma cfg_instrs_safe_with_mem `{sailGS2 Σ} {instrs} exit_addr γ1 γ2
@@ -493,6 +494,12 @@ Import IrisModel.RiscvPmpIrisBase.
   Lemma bv_zero_eq_of_N {n} : @bv.zero n = bv.of_N 0.
   Proof. destruct n; vm_compute; reflexivity. Qed.
 
+  (* SyncVal is a definition now (relval-pair), so cbn [ty.liftUnOp] no
+     longer reduces a lift applied to it: rewrite instead. *)
+  Lemma liftUnOp_SyncVal {σ1 σ2} (f : Val σ1 -> Val σ2) (a : Val σ1) :
+    ty.liftUnOp f (SyncVal a) = SyncVal (f a).
+  Proof. reflexivity. Qed.
+
   (* get_word's own nested bv.app, restated as a RelVal identity so
      ptstomem_bv_app applies directly -- holds by REFLEXIVITY in both the
      SyncVal and NonSyncVal case, since liftBinOpRV's (SyncVal,SyncVal)
@@ -526,7 +533,7 @@ Import IrisModel.RiscvPmpIrisBase.
   (* app with an empty tail is the identity, at the RelVal level. *)
   Lemma relval_app_nil (b : RelVal (ty.bvec byte)) :
     ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec 0) (σ3 := ty.bvec byte) bv.app b (SyncVal bv.nil) = b.
-  Proof. destruct b as [v|v1 v2]; cbn; rewrite ?bv.app_nil_r; reflexivity. Qed.
+  Proof. destruct b as [l r]; cbn; rewrite ?bv.app_nil_r; reflexivity. Qed.
 
   (* A single byte is (up to the trivial width-0 True remainder)
      the same ownership as a width-1 ptstomem. *)
@@ -607,12 +614,12 @@ Import IrisModel.RiscvPmpIrisBase.
             (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
     ⊢ asn.interpret (gen_mem_asn_bytes (a, is_pub, opt_v)) ι.
   Proof.
-    destruct opt_v as [v|]; destruct is_pub; cbn.
+    destruct opt_v as [v|]; destruct is_pub; cbn -[ty.SyncVal].
     - (* PVConst, is_pub = true *)
       have Hv1 := HInitMem1 v eq_refl. rewrite <- Hv1.
       rewrite get_word_sync_app.
       rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-      cbn [ty.liftUnOp ty.liftUnOpRV].
+      rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
       rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
       change (1+2)%N with 3%N.
       rewrite bv.add_assoc. rewrite bv.of_N_add.
@@ -637,7 +644,7 @@ Import IrisModel.RiscvPmpIrisBase.
       have Hv1 := HInitMem1 v eq_refl. have Hv2 := HInitMem2 v eq_refl.
       rewrite get_word_nonsync_app.
       rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-      cbn [ty.liftUnOp ty.liftUnOpRV].
+      rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
       rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
       change (1+2)%N with 3%N.
       rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -664,12 +671,12 @@ Import IrisModel.RiscvPmpIrisBase.
     - (* PVExist, is_pub = true *)
       iIntros "H".
       iExists (SyncVal (get_word μ1 a)).
-      unfold uop.evalRel. cbn [ty.liftUnOp ty.liftUnOpRV uop.eval].
+      unfold uop.evalRel. rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV uop.eval ty.projLeftRV ty.projRightRV].
       iSplitL "H".
       { iRevert "H".
         rewrite get_word_sync_app.
         rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-        cbn [ty.liftUnOp ty.liftUnOpRV].
+        rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
         rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
         change (1+2)%N with 3%N.
         rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -692,12 +699,12 @@ Import IrisModel.RiscvPmpIrisBase.
     - (* PVExist, is_pub = false *)
       iIntros "H".
       iExists (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
-      unfold uop.evalRel. cbn [ty.liftUnOp ty.liftUnOpRV uop.eval].
+      unfold uop.evalRel. rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV uop.eval ty.projLeftRV ty.projRightRV].
       iSplitL "H".
       { iRevert "H".
         rewrite get_word_nonsync_app.
         rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-        cbn [ty.liftUnOp ty.liftUnOpRV].
+        rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
         rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
         change (1+2)%N with 3%N.
         rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -902,7 +909,7 @@ Import IrisModel.RiscvPmpIrisBase.
   Proof.
     rewrite get_word_nonsync_app.
     rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-    cbn [ty.liftUnOp ty.liftUnOpRV].
+    rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
     rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
     change (1+2)%N with 3%N.
     rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -953,7 +960,7 @@ Import IrisModel.RiscvPmpIrisBase.
        block of four byte rewrites rather than two -- one side to convert. *)
     rewrite get_word_sync_app.
     rewrite ptstomem_bv_app. rewrite ptstomem_bv_app. rewrite ptstomem_bv_app.
-    cbn [ty.liftUnOp ty.liftUnOpRV].
+    rewrite ?liftUnOp_SyncVal; cbn [ty.liftUnOp ty.liftUnOpRV].
     rewrite bv_one_eq_of_N. rewrite bv.add_assoc. rewrite bv.of_N_add.
     change (1+2)%N with 3%N.
     rewrite <- (bv.add_zero_r (x:=a)) at 1 2.
@@ -1552,7 +1559,7 @@ Import IrisModel.RiscvPmpIrisBase.
     - reflexivity.
     - unfold asn_regidx_pts.
       destruct (reg_convert r) as [reg|]; cbn; [|reflexivity].
-      cbn [ty.valToRelVal]. do 2 f_equal. apply bv.of_N_add.
+      rewrite <- bv.of_N_add. reflexivity.
   Qed.
 
   Lemma gen_mem_pre_rel_concretize `{sailGS2 Σ}
@@ -1566,8 +1573,8 @@ Import IrisModel.RiscvPmpIrisBase.
     cbn [gen_mem_pre_rel gen_mem_pre map List.fold_right].
     cbn [asn.interpret]. f_equal; [|exact IH].
     destruct pv; cbn.
-    2: { cbn [ty.valToRelVal]. do 2 f_equal. apply bv.of_N_add. }
-    2: { cbn [ty.valToRelVal]. f_equal; (f_equal; apply bv.of_N_add). }
+    2: { rewrite <- ?bv.of_N_add. reflexivity. }
+    2: { rewrite <- ?bv.of_N_add. reflexivity. }
     destruct pub; cbn.
     all: cbn [ty.valToRelVal]; rewrite bv.of_N_add; reflexivity.
   Qed.
@@ -2233,7 +2240,7 @@ Section DataImplPre.
       (SyncVal (bv.of_nat k)) (SyncVal (bv.add lo (bv.of_Z (-4)))).
   Proof.
     induction k as [|k IH].
-    - iIntros "_". cbn [interp_arr]. iSplit; [iPureIntro|done].
+    - iIntros "_". rewrite interp_arr_SV. unfold interp_arr_body. iSplit; [iPureIntro|done].
       change (bv.of_nat (n := xlenbits) 0) with (@bv.zero xlenbits). rewrite !data_neg4.
       match goal with |- ?a = ?b => change (@eq (bv xlenbits) a b) end. ring.
     - rewrite seq_S big_sepL_app. cbn [big_opL Nat.add]. iIntros "[Hk [Hc _]]".
@@ -2273,7 +2280,7 @@ Section DataImplPre.
   Lemma inst_t_add4 {Σc} (ι : Valuation Σc) (a : Term Σc ty_xlenbits) (off : N) :
     inst (T := fun Σ => Term Σ ty_xlenbits) a ι = SyncVal (@bv.of_N xlenbits off) ->
     inst (T := fun Σ => Term Σ ty_xlenbits) (t_add a 4) ι = SyncVal (@bv.of_N xlenbits (off + 4)).
-  Proof. intros Ha. cbn. rewrite Ha. cbn. f_equal. rewrite -bv.of_N_add. reflexivity. Qed.
+  Proof. intros Ha. cbn. rewrite Ha. cbn. f_equal; rewrite -bv.of_N_add; reflexivity. Qed.
 
   Lemma data_count_spec {Σc} (ι : Valuation Σc) (c : Term Σc ty_xlenbits) :
     bv.of_nat (n := xlenbits) (data_count ι c) = rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι).
@@ -2285,8 +2292,8 @@ Section DataImplPre.
     inst (T := fun Σ => Term Σ ty_xlenbits) (t_add4n a c) ι
     = SyncVal (@bv.of_N xlenbits (off + 4 * N.of_nat (data_count ι c))).
   Proof.
-    intros Ha Hc. cbn. rewrite Ha Hc. cbn. f_equal. rewrite data_ofN_lin data_count_spec.
-    change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4). reflexivity.
+    intros Ha Hc. cbn. rewrite Ha Hc. cbn. f_equal; rewrite data_ofN_lin data_count_spec;
+    change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4); reflexivity.
   Qed.
 
   Lemma data_cells_arrcells `{sailGS2 Σ} (pub : bool) (off : N) (k : nat) (μ1 μ2 : Memory) :
@@ -2307,7 +2314,7 @@ Section DataImplPre.
     { iPureIntro. rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hk; lia].
       unfold maxAddr, minAddr in *. lia. }
     destruct pub.
-    - iExists _. iFrame "Hc". iPureIntro. intros _. exact I.
+    - iExists _. iFrame "Hc". iPureIntro. intros _. reflexivity.
     - iExists _. iFrame "Hc". iPureIntro. discriminate.
   Qed.
 
@@ -2334,7 +2341,7 @@ Section DataImplPre.
       cbn [seq big_opL]; unfold interp_arr_cell;
       (iSplitL "H0"; [|iSplitL "H1"; [|iSplitL "H2"; [|iSplitL "H3"; [|done]]]]);
       (iSplit; [iPureIntro; apply Hr; lia|]); iExists _; iFrame; iPureIntro.
-    all: first [intros _; exact I | discriminate].
+    all: first [intros _; first [exact I | reflexivity] | discriminate].
   Qed.
 
   (* m statement words from off as the 4m byte cells from off *)
@@ -2459,7 +2466,7 @@ Section DataImplPre.
       unfold interp_mem_with_public_memory. cbn [map mem_full_to_spec big_opL].
       iIntros "[Hc Hrest]". cbn [asn.interpret gen_cell_at interpret_chunk].
       iSplitL "Hc".
-      { cbn. rewrite Ha Ht -Hv1. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | rewrite Ht; exact I]. }
+      { cbn. rewrite Ha Ht -Hv1. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | reflexivity | rewrite Ht; first [exact I | reflexivity]]. }
       iSplitR.
       { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
         rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
@@ -2473,7 +2480,7 @@ Section DataImplPre.
       iSplitL "Hc".
       { destruct pub.
         - iExists (SyncVal (get_word μ1 (bv.of_N off))). cbn [asn.interpret interpret_chunk].
-          cbn. rewrite inst_subst inst_sub_wk1 Ha. iFrame "Hc". iSplit; [iPureIntro; exact I|done].
+          cbn. rewrite inst_subst inst_sub_wk1 Ha. iFrame "Hc". iSplit; [iPureIntro; first [exact I | reflexivity]|done].
         - iExists (NonSyncVal (get_word μ1 (bv.of_N off)) (get_word μ2 (bv.of_N off))). cbn.
           rewrite inst_subst inst_sub_wk1 Ha. iExact "Hc". }
       iSplitR.
