@@ -285,3 +285,18 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	+ This will reduce boilerplate significantly once we've fully moved away from
 	  branching on SyncVal/NonSyncVal — the abstraction becomes clearer with every
 	  such site unified under pure pair reasoning.
+- Syntax/TypeDecl.v (2026-10-07, DEFERRED by Emiel until after the relval-pair port): a "SyncVal kit".
+	The port (branch issue/relval-pair) patched the same five breakages locally, site by site. A shared kit in TypeDecl
+	would let most old proofs compile unchanged. Costs a full rebuild (TypeDecl is at the bottom), so do it in ONE commit,
+	then simplify the local workarounds. Counts are from porting TablesRel/Adequacy/EndToEnd/GenCompose + Result files:
+	+ secLeak (SyncVal v) is `v = v`, no longer True (~10 sites): iFrame/done/exact I stopped closing it. Add
+	  `secLeak_SyncVal` and a Hint Extern so `done` (hence iFrame's leftovers) closes it again.
+	+ A relop/bool over public values is `P /\ P` (~14 sites + 6 of 7 rv_leaf failures): proj1 / split / destruct
+	  everywhere. Add an `eval_relop_relprop` lemma for SyncVal arguments giving a single P, or a shared tactic that
+	  dedups `A /\ A` in hyps and goal.
+	+ f_equal on `SyncVal x = SyncVal y` gives TWO goals (~5 sites). Add `SyncVal_congr : x = y -> SyncVal x = SyncVal y`.
+	+ cbn no longer reduces a lift of SyncVal (SyncVal is a Definition with `/`), and primitive projections need
+	  ty.projLeftRV/projRightRV in explicit cbn lists (~4 sites, incl. the hardest EndToEnd one). Add
+	  liftUnOp_SyncVal / liftBinOp_SyncVal (EndToEnd has a local liftUnOp_SyncVal) + an autorewrite db.
+	+ Agreement helpers are scattered: RVToOption_sync (VerifierRel), RVToOption_some (Adequacy); a bv-safe RelVal
+	  equality split lives in MuladdParamClose's rv_leaf (ty.rv_split's bare cbn unfolds bv ops). Move to TypeDecl.
