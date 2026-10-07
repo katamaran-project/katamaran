@@ -135,13 +135,13 @@ Section Compose.
     iApply (contract_run swapA HcA ι (bv.of_N 0) (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA))) _ (myWP2_loop swapExit)
               eq_refl Hfit Hin HefA
               $! (SyncVal (bv.of_N 0)) with "[Hpre Hpc Hnpc Hinstrs]").
-    - cbn [cfg_precondition cfg_instrs swapA] in *. iFrame.
+    - cbn [cfg_precondition cfg_instrs swapA] in *. iFrame; try (iPureIntro; reflexivity).
     - (* --- THE CUT.  `Hpost` is segment A's exit assertion, delivered by the
              re-threaded bridge conjunct; it is the whole reason this works. --- *)
       iIntros (an) "(%HexitA & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [av|a1 a2]; [|contradiction].
+      destruct HexitA as (av & -> & HexitA).
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in HexitA.
-      injection HexitA as <-.
+      injection HexitA as <- _.
       (* --- SEGMENT B, entered at the cut address with A's exit assertion. --- *)
       iApply (contract_run swapB HcB ι (bv.of_N 0) (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA))) _ swapExit
                 eq_refl Hfit Hin HefB
@@ -152,7 +152,7 @@ Section Compose.
         (* A's post is interpreted at ι.["a"↦0].["an"↦4] and B's pre at
            ι.["a"↦4].  Those are CONVERTIBLE but not syntactically equal, so
            iFrame (syntactic) cannot place them and iExact (conversion) can. *)
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+        iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitL "H2"; [iExact "H2"| iExact "H3"].
       + iIntros (an2) "(%HexitB & Hpc & Hnpc & Hinstrs & _)".

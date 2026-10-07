@@ -184,15 +184,15 @@ Section ComposeLoop.
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
       iSplitR "Hpriv Hinv"; [| iFrame].
-      iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+      iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
       iSplitL "H1"; [iExact "H1"|].
       iSplitR; [iSplit; [done|done]|].
       iSplit; [|done]. iPureIntro.
       change ((k + minus1)%bv) with (bvdec k). exact Hne.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [av|a1 a2]; [|contradiction].
+      destruct Hex as (av & -> & Hex).
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-      injection Hex as <-.
+      injection Hex as <- _.
       iExists (bvdec k). iSplitR; [iPureIntro; exact Hdec|].
       unfold cdInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
       iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
@@ -213,15 +213,16 @@ Section ComposeLoop.
     - unfold cdInvAsn. iEval (cbn) in "Hres". cbn. iFrame.
       iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
       iSplitR "Hpriv Hinv"; [| iFrame].
-      iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+      iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
       iSplitL "H1"; [iExact "H1"|].
       iSplitR; [iSplit; [done|done]|].
       iSplit; [|done]. iPureIntro.
       change ((k + minus1)%bv) with (bvdec k). apply bvdec_one. cbn in Hk. exact Hk.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
-      destruct an as [av|a1 a2]; [|contradiction].
+      destruct Hex as (av & -> & Hex).
       unfold cdExit. iExists av. iFrame "Hpc". iPureIntro.
-      cbn in Hex. unfold atPc. rewrite Hex. exact I.
+      cbn in Hex. apply andb_prop in Hex as [Hex _].
+      unfold atPc. rewrite Hex. exact I.
   Qed.
 
   (* ===== THE LOOP CONTRACT, for free from the two above. ===== *)
@@ -232,7 +233,7 @@ Section ComposeLoop.
   Corollary cd_loop_from_2 : cdInv (bv.of_N 2) -∗ myWP2_loop cdExit.
   Proof.
     iIntros "H". iApply (cd_loop 1). iExists (bv.of_N 2).
-    iSplitR; [iPureIntro; reflexivity|]. iExact "H".
+    iSplitR; [iPureIntro; repeat split; reflexivity|]. iExact "H".
   Qed.
 
 End ComposeLoop.

@@ -189,16 +189,17 @@ Section TwoLoops.
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
         iSplitR "Hpriv Hinv"; [| iFrame].
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+        iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
         change ((m + bv.of_N 4294967295)%bv) with (tdecv m).
         apply tdec_one. cbn in Hm. exact Hm.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & _)".
-        destruct an as [av|a1 a2]; [|contradiction].
+        destruct Hex as (av & -> & Hex).
         unfold tExit. iExists av. iFrame "Hpc". iPureIntro.
-        cbn in Hex. unfold atPc. rewrite Hex. exact I.
+        cbn in Hex. apply andb_prop in Hex as [Hex _].
+        unfold atPc. rewrite Hex. exact I.
     - (* one trip of B *)
       assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
                       (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iB m)).
@@ -216,15 +217,15 @@ Section TwoLoops.
       + unfold tInvB. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
         iSplitR "Hpriv Hinv"; [| iFrame].
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+        iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
         change ((m + bv.of_N 4294967295)%bv) with (tdecv m). exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-        destruct an as [av|a1 a2]; [|contradiction].
+        destruct Hex as (av & -> & Hex).
         apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-        injection Hex as <-.
+        injection Hex as <- _.
         iApply (IH (tdecv m) Hd).
         unfold invB, tInvB. iEval (cbn) in "Hpost". cbn.
         iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
@@ -253,16 +254,16 @@ Section TwoLoops.
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
         iSplitR "Hpriv Hinv"; [| iFrame].
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+        iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
         change ((k + bv.of_N 4294967295)%bv) with (tdecv k).
         apply tdec_one. cbn in Hk. exact Hk.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-        destruct an as [av|a1 a2]; [|contradiction].
+        destruct Hex as (av & -> & Hex).
         apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-        injection Hex as <-.
+        injection Hex as <- _.
         (* loop B takes over.  X2 arrives from the FRAME -- it was never fed to
            any of loop A's VCs.  X1's final value is simply dropped (affine). *)
         iApply (loopB nB m Hm).
@@ -287,15 +288,15 @@ Section TwoLoops.
       + unfold tInvA. iEval (cbn) in "Hres". cbn. iFrame.
         iDestruct "Hres" as "(H1 & Hpriv & Hinv)".
         iSplitR "Hpriv Hinv"; [| iFrame].
-        iSplitR; [iSplit; [iPureIntro; reflexivity | done]|].
+        iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity | done]|].
         iSplitL "H1"; [iExact "H1"|].
         iSplitR; [iSplit; [done|done]|].
         iSplit; [|done]. iPureIntro.
         change ((k + bv.of_N 4294967295)%bv) with (tdecv k). exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-        destruct an as [av|a1 a2]; [|contradiction].
+        destruct Hex as (av & -> & Hex).
         apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-        injection Hex as <-.
+        injection Hex as <- _.
         iApply (IH (tdecv k) nB m Hd Hm).
         unfold invA, tInvA. iEval (cbn) in "Hpost". cbn.
         iDestruct "Hpost" as "(H1 & _ & Hpriv & Hinv)".
