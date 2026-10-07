@@ -200,10 +200,7 @@ Section SegCompose.
         ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs P -∗
         (∀ an,
-           ⌜match an with
-             | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
-             | NonSyncVal _ _ => False
-             end⌝ ∗
+           ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs P ∗
            asn.interpret (cfg_postcondition c) (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
@@ -230,10 +227,7 @@ Section SegCompose.
         ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words P -∗
         (∀ an,
-           ⌜match an with
-             | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
-             | NonSyncVal _ _ => False
-             end⌝ ∗
+           ⌜∃ v, an = SyncVal v ∧ Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words P ∗
            asn.interpret (cfg_postcondition c) (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
@@ -309,11 +303,11 @@ Section SegCompose.
     iPoseProof (contract_run_w c Hc words iota pbase (instrs_of_list cbase L) cexit Post
                   Hplace Hfit Hin Hef) as "Hrun".
     iApply ("Hrun" $! (SyncVal a) with "[Hpre Hpc Hnpc Hinstrs]").
-    (* iFrame also closes the `secLeak (SyncVal a)` conjunct. *)
-    - iFrame.
+    (* `secLeak (SyncVal a)` is `a = a` (relval-pair): iFrame leaves it. *)
+    - iFrame. iPureIntro. reflexivity.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       iApply HPost. iFrame. iPureIntro.
-      destruct an as [x|]; [|contradiction].
+      destruct Hex as (x & -> & Hex).
       now apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
   Qed.
 
@@ -394,7 +388,8 @@ Section SegCompose.
     iPureIntro.
     cbn in Hb. rewrite Hba Hp in Hb. cbn in Hb.
     unfold bv.unsigned in Hb.
-    apply N2Z.inj_le; rewrite N2Z.inj_add; exact Hb.
+    (* a relop is pointwise now: one conjunct per side *)
+    apply N2Z.inj_le; rewrite N2Z.inj_add; exact (proj1 Hb).
   Qed.
 
 
@@ -1045,9 +1040,9 @@ Section SegCompose.
     unfold gen_loop_at_head, gen_loop_state, gen_loop_contract_post.
     iIntros "(((Hex & Hfr) & Hmin) & HFS)".
     iDestruct "Hex" as (v) "(Hc & (%Heq & _) & (%Hsl & _))".
-    destruct v as [w' | va vb]; [| destruct Hsl].
+    destruct v as [w' r']; hnf in Hsl; cbn in Hsl; subst r'.
     cbn -[loop_counter_post_ex] in Heq. rewrite (Hk (ty.SyncVal w')) in Heq. cbn in Heq.
-    rewrite Hstep in Heq. subst w'.
+    rewrite Hstep in Heq. destruct Heq as [Heq _]. subst w'.
     cbn [asn.interpret].
     assert (Hc2 : inst (T := fun Σ => Term Σ ty_xlenbits) (term_var "c")
                     (((iS.["a"∷ty_xlenbits ↦ ty.SyncVal q]).["an"∷ty_xlenbits ↦ ty.SyncVal q])
@@ -1108,7 +1103,7 @@ Section SegCompose.
   Proof.
     induction bs as [| b bs IH];
       cbn [gen_loop_bounds List.fold_right asn.interpret].
-    - iSplit; [iPureIntro; cbn; reflexivity | done].
+    - iSplit; [iPureIntro; cbn; split; reflexivity | done].
     - inversion H as [| ?? Hb Hbs]; subst.
       iSplitR; [iSplit; [iPureIntro; exact Hb | done] |].
       iApply IH. exact Hbs.
@@ -1308,7 +1303,7 @@ Section SegCompose.
     (Hy : inst (T := fun Σ => Term Σ ty_xlenbits) (@term_var _ v _ vIn) i
           = ty.SyncVal (@bv.of_N xlenbits y)) :
     instprop (formula_secLeak (@term_var _ v _ vIn)) i.
-  Proof. cbn. cbn in Hy. rewrite Hy. exact I. Qed.
+  Proof. cbn. cbn in Hy. rewrite Hy. reflexivity. Qed.
 
   Lemma gen_walk_step {R : LCtx} (ws : list (walk_reg R)) (iS iN : Valuation R)
     (q : bv xlenbits)
@@ -1327,7 +1322,7 @@ Section SegCompose.
     ⊢ asn.interpret (gen_walk_pre ws) (iN.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
   Proof.
     induction ws as [| w ws IH]; cbn [gen_walk_post gen_walk_pre List.fold_right].
-    - iIntros "_". iSplit; [iPureIntro; cbn; reflexivity | done].
+    - iIntros "_". iSplit; [iPureIntro; cbn; split; reflexivity | done].
     - inversion Hw as [| ?? Hh Ht]; subst.
       destruct Hh as (x & Hx & Hy).
       destruct (walk_is_public w); cbn [asn.interpret].
@@ -1500,7 +1495,7 @@ Section SegCompose.
     unfold mem_word.
     cbn [gen_cells_pre List.fold_right asn.interpret].
     rewrite Hex. rewrite Hpub.
-    iIntros "H". iSplitL "H"; [| iSplit; [iPureIntro; cbn; reflexivity | done]].
+    iIntros "H". iSplitL "H"; [| iSplit; [iPureIntro; cbn; repeat split; reflexivity | done]].
     iApply (bi.equiv_entails_1_1 _ _
               (asn_cell_inst "w" (cell_binder c) (term_var "p")
                  (addr_off (@term_var _ (cell_base_var c) _ (ctx.in_succ (ctx.in_succ (cell_base_in c))))
@@ -1633,7 +1628,7 @@ Section SegCompose.
   Proof.
     induction cs as [| c cs IH];
       cbn [gen_cells_pre List.fold_right asn.interpret].
-    - iIntros "_". iSplit; [iPureIntro; cbn; reflexivity | done].
+    - iIntros "_". iSplit; [iPureIntro; cbn; repeat split; reflexivity | done].
     - inversion H as [| ?? Haddr Ht]; subst.
       rewrite big_sepL_cons.
       iIntros "(Hc & Hrest)". iSplitL "Hc".
@@ -1803,10 +1798,9 @@ Section SegCompose.
      caller is one fact: every cell's base is a public address at every trip. *)
   Definition cell_addr_of {R : LCtx} (i : Valuation R) (c : cell_spec R)
       : bv xlenbits :=
-    match env.lookup i (cell_base_in c) with
-    | ty.SyncVal b => cell_addr_at b (cell_offset c)
-    | _ => bv.zero
-    end.
+    (* the left side; only ever used at a synced base (cell_base_sync), where
+       both sides agree (relval-pair: SyncVal is no longer a pattern) *)
+    cell_addr_at (ty.projLeftRV (env.lookup i (cell_base_in c))) (cell_offset c).
 
   (* `@eq` spelled out: a bare `=` here elaborates against `Term _ ty.int`. *)
   Definition cell_base_sync {R : LCtx} (i : Valuation R) (c : cell_spec R) : Prop :=
