@@ -139,7 +139,7 @@ Proof.
     { unfold t_add. cbn [inst inst_term].
       change (env.lookup (ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]) (ctx.in_succ pIn))
         with (env.lookup ι pIn).
-      rewrite Hp. cbn. f_equal. rewrite bv.of_Z_N -bv.of_N_add. reflexivity. }
+      rewrite Hp. cbn. f_equal; rewrite bv.of_Z_N -bv.of_N_add; reflexivity. }
     iPoseProof (@gen_implpre_data _ _ _ ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)] μ1 μ2 data _
                   (init_addr + doff)%N Ha Hok HInitMem1 HInitMem2 with "Hmem") as "Hdata".
     iPoseProof (Hfacts Σ' GS') as "Hf".
@@ -159,7 +159,7 @@ Proof.
       change (env.lookup (ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]) (ctx.in_succ pIn)) with (env.lookup ι pIn).
       rewrite Hp. cbn.
       rewrite data_unsigned_of_N_small; [|unfold lenAddr in Hlen; lia]. lia. }
-    iSplit; [iPureIntro; cbn; reflexivity|done].
+    iSplit; [iPureIntro; cbn; repeat split; reflexivity|done].
 Qed.
 
 (* ---- data_layout_ok from INTERVALS -------------------------------------- *)

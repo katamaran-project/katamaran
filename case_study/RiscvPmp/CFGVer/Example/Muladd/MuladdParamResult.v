@@ -307,8 +307,8 @@ Lemma inst_mm2 (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
 Proof.
   intros Hb. pose proof (mlen_bounds b Hb) as HM.
   cbn -[bv.sext bv.shiftr bv.add bv.of_N bv.of_Z].
-  rewrite sext_idx (mlen_shiftr b Hb). f_equal.
-  apply (negZ_add 2 (N.of_nat (mlenN b)) (-2)); [reflexivity|lia|lia].
+  rewrite sext_idx (mlen_shiftr b Hb).
+  f_equal; (apply (negZ_add 2 (N.of_nat (mlenN b)) (-2)); [reflexivity|lia|lia]).
 Qed.
 
 Lemma data_count_mm2 (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
@@ -335,7 +335,7 @@ Proof.
   unfold sym_data. cbn [data_ok]. rewrite !data_count_mm2; try exact Hb.
   rewrite !inst_mm2; try exact Hb.
   repeat split; try (unfold maxAddr, minAddr in *; lia); try reflexivity.
-  cbn. f_equal. f_equal. unfold x_off. lia.
+  cbn. f_equal; f_equal; unfold x_off; lia.
 Qed.
 
 (* THE END THEOREM: the whole parametric muladd, for every header b of the
@@ -384,8 +384,8 @@ Proof.
     (* the data, by the generator's ImplPre *)
     assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits) (t_off (term_var "p") 1128) (sym_ι init_addr b)
                  = SyncVal (@bv.of_N xlenbits (init_addr + 1128))).
-    { cbn -[bv.of_N bv.of_Z bv.add]. f_equal.
-      rewrite (ofZ_ofN32 1128 1128); [|reflexivity|lia]. apply ofN_add32. }
+    { cbn -[bv.of_N bv.of_Z bv.add].
+      f_equal; (rewrite (ofZ_ofN32 1128 1128); [|reflexivity|lia]; apply ofN_add32). }
     iPoseProof (@gen_implpre_data _ _ _ (sym_ι init_addr b) μ1 μ2 sym_data
                   (t_off (term_var "p") 1128) (init_addr + 1128)%N Ha
                   (sym_data_ok init_addr b Hb ltac:(unfold maxAddr, minAddr; lia))
@@ -424,10 +424,10 @@ Proof.
     { rewrite unsigned_of_N_small; [unfold lenAddr; lia|lia]. }
     assert (P8 : (bv.unsigned (@bv.of_N xlenbits init_addr) + 1148 <= Z.of_N lenAddr)%Z).
     { rewrite unsigned_of_N_small; [unfold lenAddr; lia|lia]. }
-    iSplitR; [iSplit; [iPureIntro; reflexivity|done]|].
-    iSplitR; [iSplit; [iPureIntro; exact P7|done]|].
+    iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity|done]|].
+    iSplitR; [iSplit; [iPureIntro; split; exact P7|done]|].
     iSplitL "HA0"; [cbn; iExact "HA0"|].
-    repeat iSplit; try done; iPureIntro; first [assumption | exact I].
+    repeat iSplit; try done; iPureIntro; first [assumption | exact I | reflexivity | (split; assumption) | (repeat split; reflexivity)].
   - rewrite List.map_length sym_mem_len; [|exact Hb]. rewrite Hl. lia.
   - exact Hmem1.
   - exact Hmem2.

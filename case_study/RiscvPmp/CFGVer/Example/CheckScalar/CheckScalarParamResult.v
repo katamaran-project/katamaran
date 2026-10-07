@@ -180,7 +180,7 @@ Proof.
   rewrite cs_count_l cs_count_ceil; [|exact Hl].
   unfold klen_words in *.
   repeat split; try reflexivity; try (unfold maxAddr, minAddr in *; lia).
-  cbn. f_equal. f_equal. lia.
+  cbn. f_equal; f_equal; lia.
 Qed.
 
 (* THE END THEOREM: the whole check_scalar, at every klen whose data fits,
@@ -230,7 +230,7 @@ Proof.
     rewrite -Hcz.
     assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits) (t_add (term_var "p") 144) (cs_ι init_addr l)
                  = SyncVal (@bv.of_N xlenbits (init_addr + 144))).
-    { cbn -[bv.of_N bv.of_Z bv.add]. f_equal. rewrite -bv.of_N_add. reflexivity. }
+    { cbn -[bv.of_N bv.of_Z bv.add]. f_equal; rewrite -bv.of_N_add; reflexivity. }
     iPoseProof (@gen_implpre_data _ _ _ (cs_ι init_addr l) μ1 μ2 cs_data
                   (t_add (term_var "p") 144) (init_addr + 144)%N Ha
                   (cs_data_ok init_addr l ltac:(unfold maxAddr, minAddr; lia))
@@ -248,12 +248,12 @@ Proof.
     iFrame "Hpriv Hinv Hdata Hregs".
     assert (P7 : (bv.unsigned (@bv.of_N xlenbits init_addr) + Z.of_N (4 * N.of_nat 36) <= Z.of_N lenAddr)%Z).
     { rewrite data_unsigned_of_N_small; [unfold lenAddr in *; lia|unfold lenAddr in *; lia]. }
-    iSplitR; [iSplit; [iPureIntro; reflexivity|done]|].
-    iSplitR; [iSplit; [iPureIntro; exact P7|done]|].
+    iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity|done]|].
+    iSplitR; [iSplit; [iPureIntro; split; exact P7|done]|].
     iSplitL "HA0"; [cbn; iExact "HA0"|].
-    iSplitR; [iSplit; [iPureIntro; exact I|done]|].
+    iSplitR; [iSplit; [iPureIntro; first [exact I | reflexivity | repeat split; reflexivity]|done]|].
     iSplitL "HA1"; [cbn; iExact "HA1"|].
-    repeat iSplit; try done; iPureIntro; first [assumption | exact I].
+    repeat iSplit; try done; iPureIntro; first [assumption | exact I | reflexivity | (split; assumption) | (repeat split; reflexivity)].
   - rewrite List.map_length cs_mem_len; [|exact Hlb]. rewrite Hl. lia.
   - exact Hmem1.
   - exact Hmem2.
