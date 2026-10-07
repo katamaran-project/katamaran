@@ -277,3 +277,93 @@ real / sys seconds, peak RSS), `per-sentence-timing.tar.gz` (every `.v.timing`),
 
 Phase 8 comparison: same command, same targets, then diff `per-file.tsv` and the
 per-sentence timings (`make` can diff `.v.timing` files directly).
+
+## 11. STATUS / HANDOFF (2026-10-07) — read this first in a new session
+
+Branch `issue/relval-pair`. Commits so far: 218c9ce0 (theories/ up to Solver),
+5cd39076 (monads, Iris instance, ModelBinary, SpecIris), plus the handoff commit
+that adds this section (VerifierRel + MuladdParamClose). Soundness-relevant
+decisions taken during the port are logged in
+`theories/plans/relval-pair-baseline/AUDIT.md`. Keep appending to it.
+
+### What compiles
+- ALL of `theories/` in the gate closure (TypeDecl, BinOps, Formulas, Patterns,
+  Instantiation, PartialEvaluation, Worlds, UnifLogic, Propositions, Solver,
+  Shallow/Refinement/Symbolic Monads, Sep/Hoare, ShallowSoundness, Iris/Binary*).
+- RiscvPmp: IrisInstanceBinary, ModelBinary.
+- CFGVer: Spec, Verifier, Tables, Contracts (Emiel's edits), GenContract,
+  GenSegment, SpecIris, VerifierRel, and these light examples (VCs re-proved under
+  the pair semantics): MvSwap, Jumps, Countdown, SetX2, Cmovznz4, Precompute,
+  KeyScheduleLoop, BearSSLMuladd, BearSSLModpow, BearSSLModpowFull,
+  BearSSLCheckScalar, BearSSLCheckScalarLoop1, SwapComposed, CountdownComposed,
+  TwoLoopsComposed, Aes/InvMixColumns, Muladd/{MuladdParamInstrs, LoopD, LoopG,
+  MuladdParamClose}, CheckScalar/CheckScalarParamInstrs.
+- NOT yet attempted (blocked or not reached): TablesRel, Adequacy, EndToEnd,
+  GenCompose, every `*Result.v`, Results.v, the Muladd/CheckScalar `*VC.v` files
+  and other muladd loop files, and CountdownRec (see below).
+
+### The current blocker (decision taken: SOLVER RULE)
+`Example/CountdownRec.v:164` (`valid_cd_link`, `solve_param_vc`) leaves the
+residual `secLeak (0xc + q)` with only `secLeak (0x8 + q)` assumed (plus
+`secLeak k`, `k <> 0`, a bound on q). The OLD `simplify_secLeak` split
+`secLeak (op t1 t2)` into `secLeak t1 /\ secLeak t2`, which was exact under the
+tag but is UNSOUND as an equivalence under pairs, so it was replaced by
+"discharge via secLeakT, else keep whole" (AUDIT.md). Emiel decided
+(2026-10-07): put the missing knowledge in the SOLVER. Adding a constant is
+injective, so `secLeak (c + t) <-> secLeak t` exactly (sound on assumptions and
+goals). TODO:
+1. In `theories/Symbolic/Solver.v`, `Section SimplifySecLeak` (~line 2225):
+   for `term_binop`, if the term is `c + s` / `s + c` with `c` a literal, return
+   `simplify_secLeak s`; otherwise keep the current
+   `if secLeakT t then dlist_true else dlist_secLeak t`. The recognizer
+   `bvadd_split_val` + `bvadd_split_val_inst` already exist (~line 2891) but are
+   defined LATER: move them (and `bvadd_split_val_spec`) above SimplifySecLeak.
+   `simplify_secLeak` is currently a non-recursive `Definition`; making the
+   bvadd case recurse needs it to become a `Fixpoint` on the term (recursing on
+   the structurally smaller `s` from the match, not on bvadd_split_val's output),
+   or just strip ONE layer.
+   Optional extra injective cases: bvsub/bvxor with a literal, unop
+   negate/bvnot/not, inl/inr.
+2. Spec (`simplify_secLeak_spec`): the bvadd case needs
+   `secLeak (c + s) <-> secLeak s` at the RelVal level (bv.add_cancel_l per
+   projection). Prove it in preamble mode first (skill rocq-implementation).
+   Solver.v takes ~6 min to build and invalidates EVERYTHING downstream (a
+   rebuild to where we are is ~1 h CPU; use `make -j2`, the box has 15 GB).
+3. Then rebuild downstream with
+   `make -j2 -k -f Makefile.coq case_study/RiscvPmp/CFGVer/Results.vo case_study/RiscvPmp/CFGVer/GenCompose.vo`
+   and read ONLY the `^Error` lines. Do not trust ".vo newer than .v" as a
+   success check: stale baseline .vo files make failed files look OK.
+
+### Remaining after that (Phase 5 continuation)
+- CFGVer heavy branch: TablesRel, Adequacy (~53 old-constructor sites), EndToEnd
+  (~161), GenCompose (~198). Mostly mechanical: two-constructor destructs
+  `[v|v1 v2]` become `[l r]`; `exact I` for `secLeak (SyncVal _)` becomes
+  `reflexivity`; relop/bool facts are now `P_l /\ P_r` conjunctions; `injection`
+  on a SyncVal equality now yields TWO equations (`as <- _`).
+- The Muladd/CheckScalar `*VC.v` files exercise MuladdParamClose's ported
+  `rv_leaf`/`mb_search`/`mb_eq_evar` (untested so far). They are the expensive
+  ones (MuladdParamVC 651 s / 10.5 GB, run ALONE). If `mb_eq_evar` stops
+  matching, look at whether `ty.SyncVal` got unfolded by a `cbn` (it now has a `/`
+  Arguments flag); mb_search's cbn excludes it for that reason.
+- Then: every `*Result.v`, Results.v, the full gate (`GATE_JOBS=1`), the
+  trusted-surface diff against 936ec9a3 (D3: list every statement whose meaning
+  changed), and the Phase 8 timing comparison (§10).
+- Emiel's TODO in TODOS.txt (2026-10-07): pair-lifting lemmas to dedupe the
+  per-projection proof copies in Contracts.v relval_* lemmas.
+
+### Porting recipes learnt (reuse them)
+- `ty.rv_split` (TypeDecl, module level) splits every RelVal equality in
+  hyps/goal into projection equalities.
+- `lift*`/`evalRel` carry `/` in Arguments: they unfold on concrete pairs.
+- A `secLeak` hyp: `hnf in H; cbn in H` gives `l = r`. `unfold secLeak` can pick
+  the wrong constant (RiscvPmpSignature.secLeak vs Formulas), so use `hnf`.
+- `RVToOption` is now an eq_dec test and does not `cbn` on `SyncVal v`: use
+  `RVToOption_sync` (VerifierRel.v).
+- `interp_arr` = `⌜secLeak a /\ secLeak n /\ secLeak e⌝ ∗ interp_arr_body (projL ..)`;
+  bridges: `interp_arr_SV`, `_SV_l`, `_SV_r`, `_agree` (IrisInstanceBinary);
+  SpecIris tactics `arr_sync`/`pdup`.
+- `arr_secLeak_app` (SpecIris): `secLeak (x ++ y) <-> secLeak x /\ secLeak y`
+  (repair R3, now required).
+- Interactive pet OOMs (>7.6 GB) on ModelBinary/SpecIris/VerifierRel: iterate by
+  compile, inserting `idtac "ZZ" G` goal dumps; position-mode `rocq_start` works
+  for Solver.v/UnifLogic.v/Worlds.v (theorem mode cannot find functor lemmas).

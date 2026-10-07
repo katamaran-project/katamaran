@@ -135,16 +135,26 @@ Ltac bv_lin :=
 
 Ltac rv_leaf :=
   cbn -[Erasure.inst_symprop] in *;
+  (* a public RelVal is a pair whose sides agree: substitute that *)
   repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
-    is_var v; destruct v; [|destruct H] end;
+    is_var v; let l := fresh "l" in let r := fresh "r" in
+    destruct v as [l r]; hnf in H; cbn in H; subst r end;
+  (* every other RelVal is a pair too (one constructor: no case split), so
+     evalRel reduces on it *)
+  repeat match goal with v : RelVal _ |- _ =>
+    is_var v; let l := fresh "l" in let r := fresh "r" in destruct v as [l r] end;
   cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
+  (* relops and bool formulas hold pointwise: one leaf per projection *)
+  repeat match goal with |- _ /\ _ => split end;
   first [ exact I
         (* an evar constrained only by publicness: any public value (the
            final Unshelve gives SyncVal 0 too).  f_equal; bv_lin found it in
            ~26 s per leaf on the parametric muladd tail (2026-10-01) *)
         | lazymatch goal with
           | |- RiscvPmpSignature.secLeak ?v =>
-              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); exact I
+              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
+          | |- ty.projLeftRV ?v = ty.projRightRV ?v =>
+              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
           end
         | assumption | reflexivity | (f_equal; bv_lin) | bv_lin
         (* a dead branch: refute its hypotheses *)
@@ -157,8 +167,8 @@ Lemma rv_bvadd_solve {n} (a c d : bv n) : bv.add c d = bv.zero ->
   @ty.SyncVal (bv n) a = bop.evalRel (σ1 := ty.bvec n) (σ2 := ty.bvec n) bop.bvadd
     (ty.SyncVal c) (ty.SyncVal (bv.add a d)).
 Proof.
-  intros Hd. cbn. f_equal. rewrite (@bv.add_comm _ a). rewrite bv.add_assoc.
-  rewrite Hd. by rewrite bv.add_zero_l.
+  intros Hd. cbn. f_equal;
+    (rewrite (@bv.add_comm _ a); rewrite bv.add_assoc; rewrite Hd; by rewrite bv.add_zero_l).
 Qed.
 
 (* The same for any RelVal on the left, NonSyncVal included: the ∃ case
@@ -171,7 +181,7 @@ Proof.
   intros Hd.
   assert (E : forall x : bv n, x = bv.add c (bv.add x d)).
   { intros x. rewrite (@bv.add_comm _ x). rewrite bv.add_assoc. rewrite Hd. by rewrite bv.add_zero_l. }
-  destruct a as [x|x y]; cbn; f_equal; apply E.
+  destruct a as [x y]; cbn; f_equal; apply E.
 Qed.
 
 (* the witness constant is computed here, so the evar gets a literal *)
@@ -214,8 +224,8 @@ Ltac mb_search :=
          `k = -n + e` before `n = l` and `e = k + l`), 2026-10-02 *)
       (repeat eexists; repeat split;
        try (lazymatch goal with
-            | |- Erasure.inst_eformula' _ _ => cbn -[Erasure.inst_symprop]
-            | |- Erasure.inst_eq _ _ => cbn -[Erasure.inst_symprop] end);
+            | |- Erasure.inst_eformula' _ _ => cbn -[Erasure.inst_symprop ty.SyncVal]
+            | |- Erasure.inst_eq _ _ => cbn -[Erasure.inst_symprop ty.SyncVal] end);
        try mb_eq_evar); mb_search
   | |- _ /\ _ => split; mb_search
   | |- True => exact I
