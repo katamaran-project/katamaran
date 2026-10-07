@@ -146,12 +146,18 @@ Ltac rv_leaf :=
   cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
   (* a relop/bool hypothesis is pointwise too, `P_l /\ P_r`: bv_lin only
      reads top-level facts, so split them (2026-10-07) *)
-  repeat match goal with H : _ /\ _ |- _ => destruct H end;
+  repeat match goal with H : ?A /\ ?A |- _ => destruct H as [H _]
+                       | H : _ /\ _ |- _ => destruct H end;
   (* likewise a RelVal equality hypothesis, into its projections; NOT
      ty.rv_split, whose bare cbn unfolds the bv operations bv_lin needs *)
   repeat match goal with H : @eq (RelVal _) _ _ |- _ =>
     pose proof (f_equal ty.projLeftRV H); pose proof (f_equal ty.projRightRV H); clear H end;
   cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
+  (* the destructs above turn EVERY RelVal into two bv variables, most of them
+     unused here (two are 928 bits wide); bv_lin bounds every bv in context,
+     so drop the unused ones: per-leaf lia 2.1 s -> 0.59 s on LoopI, the
+     pre-pair cost (2026-10-07) *)
+  repeat match goal with x : bv _ |- _ => clear x end;
   (* relops and bool formulas hold pointwise: one leaf per projection *)
   repeat match goal with |- _ /\ _ => split end;
   first [ exact I
