@@ -1127,10 +1127,15 @@ Proof.
      C4 accessor into `term_var (loop_counter_var ls) …` and Hk -- stated against the
      folded form -- then matches nothing. *)
   rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. rewrite He. cbn. rewrite Hstep.
-  intros Hc. apply Hne.
-  apply (f_equal (@bv.bin xlenbits)) in Hc.
-  rewrite (bv.bin_of_N_small Hw) in Hc.
-  rewrite (bv.bin_of_N_small Hev) in Hc. exact Hc.
+  split.
+  - intros Hc. apply Hne.
+    apply (f_equal (@bv.bin xlenbits)) in Hc.
+    rewrite (bv.bin_of_N_small Hw) in Hc.
+    rewrite (bv.bin_of_N_small Hev) in Hc. exact Hc.
+  - intros Hc. apply Hne.
+    apply (f_equal (@bv.bin xlenbits)) in Hc.
+    rewrite (bv.bin_of_N_small Hw) in Hc.
+    rewrite (bv.bin_of_N_small Hev) in Hc. exact Hc.
 Qed.
 
 Lemma loop_latch_eq {R : LCtx} (ls : LoopSpec R)
@@ -1165,7 +1170,7 @@ Lemma loop_latch_ult {R : LCtx} (ls : LoopSpec R)
 Proof.
   rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ult.
   rewrite (bv.bin_of_N_small Hb).
-  rewrite (bv.bin_of_N_small Hw). exact Hlt.
+  rewrite (bv.bin_of_N_small Hw). split; exact Hlt.
 Qed.
 
 Lemma loop_latch_ule {R : LCtx} (ls : LoopSpec R)
@@ -1181,7 +1186,7 @@ Lemma loop_latch_ule {R : LCtx} (ls : LoopSpec R)
 Proof.
   rewrite Hg. cbn -[loop_counter_pre]. rewrite Hk. cbn. rewrite Hstep. unfold bv.ule.
   rewrite (bv.bin_of_N_small Hb).
-  rewrite (bv.bin_of_N_small Hw). exact Hle.
+  rewrite (bv.bin_of_N_small Hw). split; exact Hle.
 Qed.
 
 (* ---- THE LATCH, AS ONE OBLIGATION ---------------------------------------

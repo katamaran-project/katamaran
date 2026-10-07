@@ -214,14 +214,47 @@ Module RiscvPmpIrisInstance2 <:
        ∃ w : RelVal (ty.bvec (width * byte)),
          @interp_ptstomem width (SyncVal x) w ∗ ⌜ pub = true -> secLeak w ⌝)%I.
 
+    (* The array proper, over public (single-valued) start, count and end. *)
+    Definition interp_arr_body (pub : bool) (w : nat) (s : Z) (a n e : bv xlenbits) : iProp Σ :=
+      (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
+       [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
+         interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I.
+
+    (* Owning an arr makes its three arguments public: the two executions agree
+       on them.  (Under the old tagged RelVal this was a match on SyncVal with a
+       False catch-all; [secLeak] is the same requirement, stated on values.) *)
     Definition interp_arr (pub : bool) (w : nat) (s : Z) (a n e : RelVal ty_xlenbits) : iProp Σ :=
-      match a, n, e with
-      | SyncVal a, SyncVal n, SyncVal e =>
-          (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
-           [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
-             interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I
-      | _, _, _ => False%I
-      end.
+      (⌜ secLeak a /\ secLeak n /\ secLeak e ⌝ ∗
+       interp_arr_body pub w s (ty.projLeft a) (ty.projLeft n) (ty.projLeft e))%I.
+
+    Lemma interp_arr_SV (pub : bool) (w : nat) (s : Z) (a n e : bv xlenbits) :
+      interp_arr pub w s (SyncVal a) (SyncVal n) (SyncVal e) ⊣⊢ interp_arr_body pub w s a n e.
+    Proof.
+      unfold interp_arr. iSplit.
+      - iIntros "[_ H]". iExact "H".
+      - iIntros "H". iSplit; [iPureIntro; repeat split | iExact "H"].
+    Qed.
+
+    Lemma interp_arr_SV_l (pub : bool) (w : nat) (s : Z) (a n e : bv xlenbits) :
+      interp_arr pub w s (SyncVal a) (SyncVal n) (SyncVal e) ⊢
+      ⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
+      [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
+        interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))).
+    Proof. by rewrite interp_arr_SV. Qed.
+
+    Lemma interp_arr_SV_r (pub : bool) (w : nat) (s : Z) (a n e : bv xlenbits) :
+      (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
+       [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
+         interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))
+      ⊢ interp_arr pub w s (SyncVal a) (SyncVal n) (SyncVal e).
+    Proof. by rewrite interp_arr_SV. Qed.
+
+    (* Owning an arr makes its arguments agree across the two executions. *)
+    Lemma interp_arr_agree (pub : bool) (w : nat) (s : Z) (a a' n n' e e' : bv xlenbits) :
+      interp_arr pub w s (NonSyncVal a a') (NonSyncVal n n') (NonSyncVal e e')
+        ⊢ ⌜ a = a' /\ n = n' /\ e = e' ⌝ ∗
+          interp_arr pub w s (NonSyncVal a a') (NonSyncVal n n') (NonSyncVal e e').
+    Proof. unfold interp_arr. iIntros "[%H Hb]". iFrame "Hb". iPureIntro. split; exact H. Qed.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.

@@ -269,3 +269,19 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	+ AND MEASURE: pevaling every formula on entry is not obviously free. The
 	  arms that already peval do it two to four times per formula, so (2) should
 	  be a net WIN, but that is a prediction, not a measurement.
+
+- CFGVer/Contracts.v (2026-10-07): Abstract element-wise reasoning in relval_* lemmas
+	The lemmas discharged from symbolic-base VCs (`relval_secLeak_bvadd` through
+	`relval_neq_offsets`, lines 388–558) repeatedly destructure RelVal pairs and apply
+	identical reasoning to both components a and b. Most obviously, `relval_neq_offset`
+	and `relval_neq_offsets` split on the conjunction and run verbatim identical proof
+	code on each side. This repetition is the natural consequence of the SyncVal/NonSyncVal
+	→ plain pair refactor: the pair structure makes the "apply reasoning element-wise"
+	pattern explicit and repetitive.
+	+ Extract a family of pair-lifting lemmas (one per operation shape: neq, secLeak,
+	  fetch_bound_*) that unify the two-case proof code. E.g., a lemma stating
+	  "if a property P holds for both pair components, then the relational predicate
+	  holds for the pair."
+	+ This will reduce boilerplate significantly once we've fully moved away from
+	  branching on SyncVal/NonSyncVal — the abstraction becomes clearer with every
+	  such site unified under pure pair reasoning.

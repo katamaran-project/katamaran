@@ -739,8 +739,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         + intros [vs ?]. now destruct (env.view vs).
       - destruct b as [x σ]. cbv [angelicSecLeak angelic bind pure]. split.
         + intros (vs & v & (sL & Hwp))%IHΔ.
-          destruct v; cbn in sL; try contradiction.
-          now exists (env.snoc vs (x∷σ) v).
+          apply secLeakOtherDef in sL. rewrite sL in Hwp.
+          now exists (env.snoc vs (x∷σ) (ty.projLeft v)).
         + intros [vs Hwp]. destruct (env.view vs) as [vs v].
           apply IHΔ. now exists vs, (ty.valToRelVal v).
     Qed.
@@ -757,10 +757,10 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         + intros Hwp vs.
           rewrite IHΔ in Hwp.
           destruct (env.view vs) as [vs v].
-          specialize (Hwp vs (ty.valToRelVal v)). cbn in Hwp. auto.
+          specialize (Hwp vs (ty.valToRelVal v)). cbn in Hwp. now apply Hwp.
         + intros HPost. apply IHΔ. intros vs v sLv.
-          destruct v; cbn; try contradiction.
-          specialize (HPost (vs.[x::σ ↦ v])).
+          apply secLeakOtherDef in sLv. rewrite sLv.
+          specialize (HPost (vs.[x::σ ↦ ty.projLeft v])).
           apply HPost.
     Qed.
 
@@ -826,7 +826,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       destruct (pattern_match_val pat v0) as [pc δ]; cbn.
       destruct (eq_dec pc pc) as [e|C]; [|now contradiction C].
       rewrite (Eqdep_dec.UIP_dec (fun x y => eq_dec x y) e eq_refl); cbn.
-      do 2 f_equal. induction δ; cbn; [reflexivity|]. now rewrite IHδ.
+      do 2 f_equal. induction δ; cbn; [reflexivity|]. f_equal. exact IHδ.
     Qed.
 
     (* METHOD Y: the shallow pattern match on a *concrete* relational value is
@@ -869,11 +869,11 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       split.
       - intros (sLv & (pc & Hin & δpc & <- & Hwp)).
         split; [exact sLv|].
-        rewrite pattern_match_relval_inverse_right, option.wp_some. exact Hwp.
+        rewrite pattern_match_relval_inverse_right option.wp_some. exact Hwp.
       - intros (sLv & HΦ).
         split; [exact sLv|].
         apply secLeakOtherDef in sLv. rewrite sLv in HΦ |- *.
-        rewrite pattern_match_relval_sync, option.wp_some in HΦ.
+        rewrite pattern_match_relval_sync option.wp_some in HΦ.
         destruct (pattern_match_val pat (ty.projLeft v)) as [pc δpc] eqn:Epm.
         cbn in HΦ.
         exists pc. split.
@@ -881,9 +881,8 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         exists (env.map (fun b => ty.valToRelVal) δpc). split.
         { unfold pattern_match_relval_reverse.
           rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal. cbn.
-          f_equal.
-          pose proof (pattern_match_val_inverse_left pat (ty.projLeft v)) as Hinv.
-          rewrite Epm in Hinv. exact Hinv. }
+          f_equal; pose proof (pattern_match_val_inverse_left pat (ty.projLeft v)) as Hinv;
+            rewrite Epm in Hinv; exact Hinv. }
         exact HΦ.
     Qed.
 
@@ -898,7 +897,7 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
       split.
       - intros (sLv & HΦ). split; [exact sLv|].
         apply secLeakOtherDef in sLv. rewrite sLv in HΦ |- *.
-        rewrite pattern_match_relval_sync, option.wp_some.
+        rewrite pattern_match_relval_sync option.wp_some.
         destruct (pattern_match_val pat (ty.projLeft v)) as [pc δpc] eqn:Epm. cbn.
         specialize (HΦ pc).
         rewrite <- base.elem_of_list_In in HΦ.
@@ -906,13 +905,12 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
         apply HΦ.
         unfold pattern_match_relval_reverse.
         rewrite unliftNamedEnvOfEnvMapValToRelValIsSyncVal. cbn.
-        f_equal.
-        pose proof (pattern_match_val_inverse_left pat (ty.projLeft v)) as Hinv.
-        rewrite Epm in Hinv. exact Hinv.
+        f_equal; pose proof (pattern_match_val_inverse_left pat (ty.projLeft v)) as Hinv;
+          rewrite Epm in Hinv; exact Hinv.
       - intros (sLv & HΦ). split; [exact sLv|].
         intros pc HIn δpc Heq.
         pose proof (pattern_match_relval_inverse_right pat pc δpc) as Hinv.
-        rewrite Heq in Hinv. rewrite Hinv, option.wp_some in HΦ. exact HΦ.
+        rewrite Heq in Hinv. rewrite Hinv option.wp_some in HΦ. exact HΦ.
     Qed.
 
     (* The sync-only pattern matches entail the canonicalizing ones: secLeak

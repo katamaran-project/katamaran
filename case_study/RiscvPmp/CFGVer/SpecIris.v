@@ -132,7 +132,8 @@ Module RiscvPmpIrisInstanceWithContracts.
          the [Some] branch collapses to a plain boolean [b] (the [SyncVal] and
          coinciding-[NonSyncVal] cases are then literally identical), and the
          [None] branch gives a [False] precondition. *)
-      destruct (pattern_match_relval pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn.
+      destruct (pattern_match_relval (N := string) pat_bool inv) as [[b δpc]|] eqn:Hpm; cbn;
+        cbn in Hpm; rewrite Hpm.
       2: { iDestruct "H" as "%HF". contradiction. }
       destruct (env.view δpc).
       destruct b.
@@ -148,18 +149,12 @@ Module RiscvPmpIrisInstanceWithContracts.
         iApply semWP2_val. do 2 iModIntro.
         iExists δ. iSplitR; first auto.
         destruct ram_val.
-        + iExists (SyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
+        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first auto.
           iFrame "H".
           iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL.
+          iSplitR; cbn; first auto.
+          rewrite eq_fun_read_ramL. by rewrite eq_fun_read_ramR.
           auto. (* TODO: How to dispatch emp goal, also several admits for this below *)
-        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iFrame "H".
-          iSplitR; try auto.
-          iSplitR; first auto.
-          by rewrite eq_fun_read_ramL eq_fun_read_ramR.
-          auto.
       - (* old case *)
         iModIntro.
         iDestruct "H" as "(HL & HR)".
@@ -171,15 +166,9 @@ Module RiscvPmpIrisInstanceWithContracts.
         iFrame "HL". iFrame "HR".
         iExists δ. iModIntro. iSplitR; first auto.
         destruct ram_val.
-        + iExists (SyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr))).
-          iSplitR; first by rewrite eq_fun_read_ramR.
-          iSplitR; try auto.
-          iSplitR; first by rewrite eq_fun_read_ramL.
-          auto.
-        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))). iSplitR; first by rewrite eq_fun_read_ramR.
-          iSplitR; try auto.
+        + iExists (NonSyncVal (fun_read_ram μ1 bytes (ty.projLeft paddr)) (fun_read_ram μ2 bytes (ty.projRight paddr))).
           iSplitR; first auto.
-          by rewrite eq_fun_read_ramL eq_fun_read_ramR.
+          iSplitR; first (rewrite eq_fun_read_ramR; by rewrite eq_fun_read_ramL).
           auto.
   Qed.
 
@@ -245,11 +234,11 @@ Module RiscvPmpIrisInstanceWithContracts.
     iFrame "Hregs1 Hregs2 HmemL HmemR".
     destruct code; destruct instr; cbn in *;
     destruct (pure_decode _); inversion Hdecode.
-    + rewrite semWP2_val.
-      iExists δ. iSplitR; first auto. iExists (SyncVal v0). auto.
     + destruct (pure_decode); inversion Hdecode.
       rewrite semWP2_val.
-      iExists δ. iSplitR; first auto. iExists (NonSyncVal v1 v2). auto.
+      iExists δ. iSplitR; first auto. iExists (NonSyncVal a a0).
+      iSplitR; first auto.
+      iSplitR; first (by subst). auto.
   Qed.
 
   (* Lemma within_mmio_sound `{!sailGS Σ} `(H: restrict_bytes bytes): *)
@@ -404,6 +393,20 @@ Module RiscvPmpIrisInstanceWithContracts.
   Section CLemSound.
     Add Ring bvring_xlen : (bv.ring_theory xlenbits).
     Local Notation SV := TypeDecl.ty.SyncVal.
+    (* RelVal is a pair: owning an arr makes its arguments agree; substitute
+       that, then collapse the duplicated (one per projection) pure facts. *)
+    Local Ltac arr_eq1 E :=
+      match type of E with
+      | ?x = ?y => first [ is_var y; subst y | is_var x; subst x | clear E ]
+      end.
+    Local Ltac arr_eqs H :=
+      let E1 := fresh "E" in let E2 := fresh "E" in let E3 := fresh "E" in
+      destruct H as (E1 & E2 & E3); arr_eq1 E1; arr_eq1 E2; arr_eq1 E3.
+    Local Ltac pdup := repeat match goal with H : ?P /\ ?P |- _ => destruct H as [H _] end.
+    Local Ltac arr_sync H :=
+      iDestruct (interp_arr_agree with H) as "[%Hag Harr_sync_tmp]";
+      iRename "Harr_sync_tmp" into H;
+      match goal with Hx : _ = _ /\ _ = _ /\ _ = _ |- _ => arr_eqs Hx end.
 
     Lemma arr_pred_bin (n : bv xlenbits) : n <> bv.zero ->
       bv.bin (bv.add n (bv.of_Z (-1))) = (bv.bin n - 1)%N.
@@ -462,7 +465,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arr_cell pub w a ∗
       interp_arr pub w s (SV (bv.add a (bv.of_Z s))) (SV (bv.add n (bv.of_Z (-1)))) (SV e).
     Proof.
-      intros Hn. cbn [interp_arr]. iIntros "[%He Hcells]".
+      intros Hn. rewrite !interp_arr_SV. unfold interp_arr_body. iIntros "[%He Hcells]".
       rewrite arr_pred_bin; [|exact Hn].
       destruct (N.to_nat (bv.bin n)) as [|k] eqn:Ek.
       { exfalso. apply Hn. apply bv.bin_inj.
@@ -484,7 +487,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       ⊢@{iPropI Σ}
       interp_arr pub w s (SV (bv.add a (bv.of_Z (- s)))) (SV (bv.add n (bv.of_Z 1))) (SV e).
     Proof.
-      cbn [interp_arr]. iIntros "[[%He Hcells] Hc]".
+      rewrite !interp_arr_SV. unfold interp_arr_body. iIntros "[[%He Hcells] Hc]".
       iSplit.
       { iPureIntro. subst e. rewrite arr_neg_s bv.of_Z_one. apply arr_ring_end_add. }
       destruct (arr_succ_bin n) as [Hs|Hz].
@@ -501,16 +504,16 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_take_first pub w s)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hne _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [%Hne _]]". arr_sync "Harr". pdup.
       iDestruct (interp_arr_take_first with "Harr") as "[Hc $]"; [exact Hne|].
       iDestruct "Hc" as "[%Hr [%v [Hw %Hs]]]".
       iSplitL "Hw".
       { iExists v. iFrame "Hw". destruct pub; cbn.
         - iSplit; [iPureIntro; now apply Hs|done].
         - iSplit; done. }
-      iSplit; [iPureIntro; exact Hr|done].
+      iSplit; [iPureIntro; split; exact Hr|done].
     Qed.
 
     Lemma clem_add_first_sound `{sailGS2 Σ} (pub : bool) (w : nat) (s : Z) :
@@ -518,9 +521,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_add_first pub w s)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [[%v [Hw Hs]] [%Hr _]]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [[%v [Hw Hs]] [%Hr _]]]". arr_sync "Harr". pdup.
       iApply interp_arr_add_first. iFrame "Harr".
       unfold interp_arr_cell. iSplit; [iPureIntro; exact Hr|].
       iExists v. iFrame "Hw". destruct pub; cbn.
@@ -540,7 +543,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       ⊢@{iPropI Σ}
       interp_arr pub w s (SV a) (SV (bv.of_nat k)) (SV (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat k)))).
     Proof.
-      intros Hk. cbn [interp_arr]. iIntros "H". iSplit; [done|].
+      intros Hk. rewrite interp_arr_SV. unfold interp_arr_body. iIntros "H". iSplit; [done|].
       rewrite bv.bin_of_nat_small; [|exact Hk]. rewrite Nat2N.id. iExact "H".
     Qed.
 
@@ -551,14 +554,15 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_nonempty pub w s)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hne _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [%Hne _]]". arr_sync "Harr". pdup.
       iAssert (⌜e = bv.add a (bv.mul (bv.of_Z s) n)⌝ ∗
                interp_arr pub w s (SV a) (SV n) (SV e))%I with "[Harr]" as "[%He Harr]".
-      { cbn [interp_arr]. iDestruct "Harr" as "[%He Hc]". iFrame "Hc". done. }
-      iFrame "Harr". iSplit; [|done]. iPureIntro. intros ->.
-      apply Hne. rewrite He. apply arr_ring_zero.
+      { iDestruct (interp_arr_SV_l with "Harr") as "[%He Hc]". iSplitR; [done|].
+        iApply interp_arr_SV_r. iFrame "Hc". done. }
+      iFrame "Harr". iSplit; [|done]. iPureIntro.
+      split; intros ->; apply Hne; rewrite He; apply arr_ring_zero.
     Qed.
 
     Lemma arr_of_nat_bin (n : bv xlenbits) : bv.of_nat (N.to_nat (bv.bin n)) = n.
@@ -574,7 +578,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       ⊢@{iPropI Σ}
       interp_arr pub w s (SV a) (SV (bv.add n (bv.of_Z 1))) (SV (bv.add e (bv.of_Z s))).
     Proof.
-      cbn [interp_arr]. iIntros "[[%He Hcells] Hc]".
+      rewrite !interp_arr_SV. unfold interp_arr_body. iIntros "[[%He Hcells] Hc]".
       iSplit.
       { iPureIntro. subst e. rewrite bv.of_Z_one. apply arr_ring_end_last. }
       destruct (arr_succ_bin n) as [Hs|Hz].
@@ -590,8 +594,9 @@ Module RiscvPmpIrisInstanceWithContracts.
     Proof.
       intros ι. destruct_syminstance ι.
       (* a NonSyncVal address is ruled out by the secLeak precondition *)
-      destruct a as [a|]; cbn -[interp_arr]; [|iIntros "[[] _]"].
-      iIntros "_". cbn [interp_arr]. iSplit; [|done].
+      destruct a as [a a']; cbn -[interp_arr].
+      iIntros "[%Ha _]". hnf in Ha. cbn in Ha. subst a'.
+      iApply interp_arr_SV_r. iSplit; [|done].
       iPureIntro. apply arr_ring_zero.
     Qed.
 
@@ -600,9 +605,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_add_last pub w s)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [[%v [Hw Hs]] [%Hr _]]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [[%v [Hw Hs]] [%Hr _]]]". arr_sync "Harr". pdup.
       iApply interp_arr_add_last. iFrame "Harr".
       unfold interp_arr_cell. iSplit; [iPureIntro; exact Hr|].
       iExists v. iFrame "Hw". destruct pub; cbn.
@@ -616,10 +621,10 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_empty_elim pub w s)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[]").
-      iIntros "Harr". cbn [interp_arr]. iDestruct "Harr" as "[%He _]".
-      iSplit; [|done]. iPureIntro. subst e. apply arr_ring_zero.
+      destruct a as [a a']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "Harr". arr_sync "Harr". iDestruct (interp_arr_SV_l with "Harr") as "[%He _]".
+      iSplit; [|done]. iPureIntro. subst e. split; apply arr_ring_zero.
     Qed.
 
     Lemma arr_lockstep_eq (a1 a2 s n : bv xlenbits) :
@@ -636,18 +641,20 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_lockstep pub1 pub2 w s)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a1 as [a1|]; destruct n as [n|]; destruct e1 as [e1|];
-        destruct a2 as [a2|]; destruct e2 as [e2|];
-        cbn -[interp_arr]; try (iIntros "[[] _]"); try (iIntros "[_ [[] _]]").
-      iIntros "[H1 [H2 [%Heq _]]]".
+      destruct a1 as [a1 a1']; destruct n as [n n']; destruct e1 as [e1 e1'];
+        destruct a2 as [a2 a2']; destruct e2 as [e2 e2'];
+        cbn -[interp_arr].
+      iIntros "[H1 [H2 [%Heq _]]]". arr_sync "H1". arr_sync "H2". pdup.
       iAssert (⌜e2 = bv.add a2 (bv.mul (bv.of_Z s) n)⌝ ∗
                interp_arr pub2 w s (SV a2) (SV n) (SV e2))%I with "[H2]" as "[%He2 H2]".
-      { cbn [interp_arr]. iDestruct "H2" as "[%He Hc]". iFrame "Hc". done. }
+      { iDestruct (interp_arr_SV_l with "H2") as "[%He Hc]". iSplitR; [done|].
+        iApply interp_arr_SV_r. iFrame "Hc". done. }
       iAssert (⌜e1 = bv.add a1 (bv.mul (bv.of_Z s) n)⌝ ∗
                interp_arr pub1 w s (SV a1) (SV n) (SV e1))%I with "[H1]" as "[%He1 H1]".
-      { cbn [interp_arr]. iDestruct "H1" as "[%He Hc]". iFrame "Hc". done. }
+      { iDestruct (interp_arr_SV_l with "H1") as "[%He Hc]". iSplitR; [done|].
+        iApply interp_arr_SV_r. iFrame "Hc". done. }
       iFrame "H1 H2". iSplit; [|done]. iPureIntro.
-      subst e1 e2. eapply arr_lockstep_eq; eassumption.
+      subst e1 e2. split; eapply arr_lockstep_eq; eassumption.
     Qed.
 
     (* Dropping resources is sound in an affine logic. *)
@@ -669,7 +676,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arr_cell pub w (bv.add e (bv.of_Z (- s))) ∗
       interp_arr pub w s (SV a) (SV (bv.add n (bv.of_Z (-1)))) (SV (bv.add e (bv.of_Z (- s)))).
     Proof.
-      intros Hn. cbn [interp_arr]. iIntros "[%He Hcells]".
+      intros Hn. rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[%He Hcells]".
       assert (Hk : bv.of_nat (N.to_nat (bv.bin n - 1)) = bv.add n (bv.of_Z (-1))).
       { rewrite <- (arr_pred_bin Hn). apply arr_of_nat_bin. }
       rewrite (arr_pred_bin Hn).
@@ -691,16 +698,16 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_take_last pub w s)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hne _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [%Hne _]]". arr_sync "Harr". pdup.
       iDestruct (interp_arr_take_last with "Harr") as "[Hc $]"; [exact Hne|].
       iDestruct "Hc" as "[%Hr [%v [Hw %Hs]]]".
       iSplitL "Hw".
       { iExists v. iFrame "Hw". destruct pub; cbn.
         - iSplit; [iPureIntro; now apply Hs|done].
         - iSplit; done. }
-      iSplit; [iPureIntro; exact Hr|done].
+      iSplit; [iPureIntro; split; exact Hr|done].
     Qed.
 
     (* The cells a + s·i (i < N), walked from the other end: start at the
@@ -737,7 +744,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arr pub w s (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
       interp_arr pub w (- s) (SV (bv.add e (bv.of_Z (- s)))) (SV n) (SV (bv.add a (bv.of_Z (- s)))).
     Proof.
-      cbn [interp_arr]. iIntros "[%He Hcells]". subst e. rewrite !arr_neg_s.
+      rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[%He Hcells]". subst e. rewrite !arr_neg_s.
       iSplit; [iPureIntro; apply arr_ring_flip_end|].
       iPoseProof (big_sepL_flip (interp_arr_cell pub w) with "Hcells") as "H".
       rewrite arr_of_nat_bin. iExact "H".
@@ -748,9 +755,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_flip pub w s)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[]").
-      iIntros "Harr". by iApply interp_arr_flip.
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "Harr". arr_sync "Harr". by iApply interp_arr_flip.
     Qed.
 
     Lemma arr_add_nowrap (n n2 : bv xlenbits) : (bv.bin n <= bv.bin (bv.add n n2))%N ->
@@ -784,7 +791,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arr pub w s (SV a) (SV n) (SV e) ∗ interp_arr pub w s (SV e) (SV n2) (SV e2)
       ⊢@{iPropI Σ} interp_arr pub w s (SV a) (SV (bv.add n n2)) (SV e2).
     Proof.
-      intros Hnw. cbn [interp_arr]. iIntros "[[%He H1] [%He2 H2]]".
+      intros Hnw. rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[[%He H1] [%He2 H2]]".
       iSplit.
       { iPureIntro. subst e2 e. match goal with |- ?x = ?y => change (@eq (bv xlenbits) x y) end. ring. }
       rewrite (arr_add_nowrap n n2 Hnw) N2Nat.inj_add seq_app big_sepL_app. iFrame "H1".
@@ -810,7 +817,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       { unfold K. rewrite -bv.of_Z_negate bv.of_Z_N. reflexivity. }
       assert (Hb : bv.bin (bv.sub n K) = (bv.bin n - bv.bin K)%N).
       { apply bv.bin_sub_small. unfold bv.ule. exact Hk. }
-      rewrite EsK EnK. cbn [interp_arr]. iIntros "[%He Hc]".
+      rewrite EsK EnK. rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[%He Hc]".
       replace (N.to_nat (bv.bin n)) with (N.to_nat (bv.bin K) + N.to_nat (bv.bin (bv.sub n K)))%nat
         by (rewrite Hb; lia).
       rewrite seq_app big_sepL_app. iDestruct "Hc" as "[H1 H2]".
@@ -829,9 +836,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_split pub w s k)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hle _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [%Hle _]]". arr_sync "Harr". pdup.
       iDestruct (interp_arr_split pub w s k with "Harr") as "[H1 H2]"; [exact Hle|].
       iFrame "H1 H2".
     Qed.
@@ -841,14 +848,25 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_join pub w s)).
     Proof.
       intros ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        destruct n2 as [n2|]; destruct e2 as [e2|];
-        cbn -[interp_arr]; try (iIntros "[[] _]"); try (iIntros "[_ [[] _]]").
-      iIntros "[H1 [H2 [%Hle _]]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        destruct n2 as [n2 n2']; destruct e2 as [e2 e2'];
+        cbn -[interp_arr].
+      iIntros "[H1 [H2 [%Hle _]]]". arr_sync "H1". arr_sync "H2". pdup.
       iApply (interp_arr_join with "[$H1 $H2]"). exact Hle.
     Qed.
 
     (* ---- a word array read byte by byte (clem_arr_bytes_of_words) ------- *)
+    (* Publicness is componentwise on a concatenation: [bv.app] is injective. *)
+    Lemma arr_secLeak_app {m n} (x : RelVal (ty.bvec m)) (y : RelVal (ty.bvec n)) :
+      secLeak (ty.liftBinOp (σ1 := ty.bvec m) (σ2 := ty.bvec n) (σ3 := ty.bvec (m + n)) bv.app x y)
+      <-> secLeak x /\ secLeak y.
+    Proof.
+      destruct x as [x1 x2], y as [y1 y2]. split.
+      - intros H. hnf in H. cbn in H. apply bv.app_inj in H as [H1 H2].
+        split; hnf; cbn; assumption.
+      - intros [H1 H2]. hnf in H1, H2 |- *. cbn in *. subst. reflexivity.
+    Qed.
+
     Lemma arr_word_decomp (w : RelVal (ty.bvec (4 * byte))) :
       exists (b0 b1 b2 b3 : RelVal (ty.bvec byte)) (r : RelVal (ty.bvec (0 * byte))),
         w = ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (3*byte)) (σ3 := ty.bvec (4*byte)) bv.app b0
@@ -858,23 +876,24 @@ Module RiscvPmpIrisInstanceWithContracts.
         /\ (RiscvPmpSignature.secLeak w -> RiscvPmpSignature.secLeak b0 /\ RiscvPmpSignature.secLeak b1
               /\ RiscvPmpSignature.secLeak b2 /\ RiscvPmpSignature.secLeak b3).
     Proof.
-      destruct w as [v|v1 v2].
-      - destruct (bv.appView byte (3*byte) v) as [b0 r0].
-        destruct (bv.appView byte (2*byte) r0) as [b1 r1].
-        destruct (bv.appView byte (1*byte) r1) as [b2 r2].
-        destruct (bv.appView byte (0*byte) r2) as [b3 r3].
-        exists (SyncVal b0), (SyncVal b1), (SyncVal b2), (SyncVal b3), (SyncVal r3).
-        split; [reflexivity|]. intros _. cbn. tauto.
-      - destruct (bv.appView byte (3*byte) v1) as [b0 r0].
-        destruct (bv.appView byte (2*byte) r0) as [b1 r1].
-        destruct (bv.appView byte (1*byte) r1) as [b2 r2].
-        destruct (bv.appView byte (0*byte) r2) as [b3 r3].
-        destruct (bv.appView byte (3*byte) v2) as [c0 s0].
-        destruct (bv.appView byte (2*byte) s0) as [c1 s1].
-        destruct (bv.appView byte (1*byte) s1) as [c2 s2].
-        destruct (bv.appView byte (0*byte) s2) as [c3 s3].
-        exists (NonSyncVal b0 c0), (NonSyncVal b1 c1), (NonSyncVal b2 c2), (NonSyncVal b3 c3), (NonSyncVal r3 s3).
-        split; [reflexivity|]. intros [].
+      destruct w as [v1 v2].
+      destruct (bv.appView byte (3*byte) v1) as [b0 r0].
+      destruct (bv.appView byte (2*byte) r0) as [b1 r1].
+      destruct (bv.appView byte (1*byte) r1) as [b2 r2].
+      destruct (bv.appView byte (0*byte) r2) as [b3 r3].
+      destruct (bv.appView byte (3*byte) v2) as [c0 s0].
+      destruct (bv.appView byte (2*byte) s0) as [c1 s1].
+      destruct (bv.appView byte (1*byte) s1) as [c2 s2].
+      destruct (bv.appView byte (0*byte) s2) as [c3 s3].
+      exists (NonSyncVal b0 c0), (NonSyncVal b1 c1), (NonSyncVal b2 c2), (NonSyncVal b3 c3), (NonSyncVal r3 s3).
+      split; [reflexivity|].
+      (* publicness of the word is publicness of each byte *)
+      intros Hs. hnf in Hs. cbn in Hs.
+      apply (proj1 (@bv.app_inj byte (3*byte) _ _ _ _)) in Hs as [E0 Hs].
+      apply (proj1 (@bv.app_inj byte (2*byte) _ _ _ _)) in Hs as [E1 Hs].
+      apply (proj1 (@bv.app_inj byte (1*byte) _ _ _ _)) in Hs as [E2 Hs].
+      apply (proj1 (@bv.app_inj byte (0*byte) _ _ _ _)) in Hs as [E3 _].
+      repeat split; hnf; cbn; assumption.
     Qed.
 
     Lemma arr_ptsto_ptstomem1 `{sailGS2 Σ} (addr : RVAddr) (b : RelVal (ty.bvec byte)) :
@@ -883,7 +902,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "H". iExists (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (0*byte)) (σ3 := ty.bvec (1*byte)) bv.app b (SyncVal bv.nil)).
       rewrite ptstomem_bv_app. iFrame "H". iSplit.
       - destruct addr, b; cbn; done.
-      - iPureIntro. destruct b; cbn; tauto.
+      - iPureIntro. destruct b as [b1 b2]. intros Hb. hnf in Hb |- *. cbn in *. subst. reflexivity.
     Qed.
 
     Lemma arr_word_cell_bytes `{sailGS2 Σ} (pub : bool) (x : bv xlenbits) :
@@ -954,7 +973,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arr pub 4 4 (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
       interp_arr pub 1 1 (SV a) (SV (bv.mul (bv.of_N 4) n)) (SV e).
     Proof.
-      intros Hn. cbn [interp_arr]. iIntros "[%He Hc]".
+      intros Hn. rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[%He Hc]".
       assert (Hb : bv.bin (bv.mul (@bv.of_N xlenbits 4) n) = (4 * bv.bin n)%N).
       { unfold bv.mul. change (bv.bin (@bv.of_N xlenbits 4)) with 4%N.
         apply bv.bin_of_N_small. change (bv.exp2 xlenbits) with 4294967296%N. lia. }
@@ -972,9 +991,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_bytes_of_words pub)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr]; try (iIntros "[[] _]").
-      iIntros "[Harr [%Hlt _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr].
+      iIntros "[Harr [%Hlt _]]". arr_sync "Harr". pdup.
       iApply (interp_arr_bytes_of_words with "Harr").
       unfold bv.ult in Hlt. change (bv.bin (@bv.of_N xlenbits 1073741824)) with 1073741824%N in Hlt. exact Hlt.
     Qed.
@@ -989,15 +1008,15 @@ Module RiscvPmpIrisInstanceWithContracts.
         v = ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (k*byte)) (σ3 := ty.bvec (S k*byte)) bv.app B Bs
         /\ (secLeak v <-> secLeak B /\ secLeak Bs).
     Proof.
-      destruct v as [x|x1 x2].
-      - destruct (bv.appView byte (k*byte) x) as [b bs]. exists (SV b), (SV bs). split; [reflexivity|cbn; tauto].
-      - destruct (bv.appView byte (k*byte) x1) as [b1 bs1]. destruct (bv.appView byte (k*byte) x2) as [b2 bs2].
-        exists (NonSyncVal b1 b2), (NonSyncVal bs1 bs2). split; [reflexivity|cbn; tauto].
+      destruct v as [x1 x2].
+      destruct (bv.appView byte (k*byte) x1) as [b1 bs1]. destruct (bv.appView byte (k*byte) x2) as [b2 bs2].
+      exists (NonSyncVal b1 b2), (NonSyncVal bs1 bs2). split; [reflexivity|].
+      exact (arr_secLeak_app (NonSyncVal b1 b2) (NonSyncVal bs1 bs2)).
     Qed.
     Lemma rg_app_leak (k : nat) (B : RelVal (ty.bvec byte)) (Bs : RelVal (ty.bvec (k * byte))) :
       secLeak B -> secLeak Bs ->
       secLeak (ty.liftBinOp (σ1 := ty.bvec byte) (σ2 := ty.bvec (k*byte)) (σ3 := ty.bvec (S k*byte)) bv.app B Bs).
-    Proof. destruct B, Bs; cbn; tauto. Qed.
+    Proof. intros H1 H2. exact (proj2 (arr_secLeak_app B Bs) (conj H1 H2)). Qed.
     Lemma rg_of_nat_S (x : bv xlenbits) (j : nat) : bv.add (bv.add bv.one x) (bv.of_nat j) = bv.add x (bv.of_nat (S j)).
     Proof. rewrite bv.of_nat_S. ring. Qed.
     Lemma rg_of_nat_0 (x : bv xlenbits) : bv.add x (bv.of_nat 0) = x.
@@ -1031,7 +1050,7 @@ Module RiscvPmpIrisInstanceWithContracts.
 
     Lemma rg_own0 `{sailGS2 Σ} (pub : bool) (x : bv xlenbits) : ⊢@{iPropI Σ} rg_own pub 0 x.
     Proof.
-      iExists (SV bv.nil). iSplit; [|iPureIntro; intros; exact I].
+      iExists (SV bv.nil). iSplit; [|iPureIntro; intros; reflexivity].
       unfold interp_ptstomem. cbn. done.
     Qed.
 
@@ -1155,7 +1174,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       interp_arr pub k (Z.of_nat k) (SV a) (SV n) (SV e) ⊢@{iPropI Σ}
       interp_arr pub 1 1 (SV a) (SV (bv.mul (bv.of_N (N.of_nat k)) n)) (SV e).
     Proof.
-      intros Hk Hn. cbn [interp_arr]. iIntros "[%He Hc]".
+      intros Hk Hn. rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[%He Hc]".
       iSplit.
       { iPureIntro. subst e. rewrite bv.of_Z_one -bv.of_Z_N nat_N_Z.
         assert (Er : forall a0 K X : bv xlenbits, bv.add a0 (bv.mul K X) = bv.add a0 (bv.mul bv.one (bv.mul K X))) by (intros; ring).
@@ -1173,7 +1192,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       ∗ interp_arr pub 1 1 (SV (bv.add a (bv.mul (bv.of_Z (Z.of_nat k)) q))) (SV r) (SV e).
     Proof.
       intros Hk1 Hk2 Hm. pose proof (@rg_mv k m q r Hk2 Hm) as Hmv.
-      cbn [interp_arr]. iIntros "[%He Hc]".
+      rewrite !interp_arr_SV; unfold interp_arr_body. iIntros "[%He Hc]".
       rewrite Hm. replace (N.to_nat (N.of_nat k * bv.bin q + bv.bin r)) with (k * N.to_nat (bv.bin q) + N.to_nat (bv.bin r))%nat by lia.
       rewrite seq_app big_sepL_app. iDestruct "Hc" as "[H1 H2]".
       iSplitL "H1".
@@ -1236,10 +1255,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_to_bytes pub u)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr Katamaran.RiscvPmp.CFGVer.Verifier.rg_k Katamaran.RiscvPmp.CFGVer.Verifier.rg_bound];
-        try (iIntros "[[] _]").
-      iIntros "[Harr [%Hlt _]]".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr Katamaran.RiscvPmp.CFGVer.Verifier.rg_k Katamaran.RiscvPmp.CFGVer.Verifier.rg_bound].
+      iIntros "[Harr [%Hlt _]]". arr_sync "Harr". pdup.
       iApply (rg_arr_to_bytes with "Harr").
       - destruct u; cbn; lia.
       - unfold bv.ult in Hlt.
@@ -1258,10 +1276,9 @@ Module RiscvPmpIrisInstanceWithContracts.
                     (Katamaran.RiscvPmp.CFGVer.Verifier.clem_arr_of_bytes pub u)).
     Proof.
       intros ι. cbv [Katamaran.RiscvPmp.CFGVer.Verifier.clem_ctx] in ι. destruct_syminstance ι.
-      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
-        cbn -[interp_arr Katamaran.RiscvPmp.CFGVer.Verifier.rg_k Katamaran.RiscvPmp.CFGVer.Verifier.rg_sh];
-        try (iIntros "[]").
-      iIntros "Harr".
+      destruct a as [a a']; destruct n as [n n']; destruct e as [e e'];
+        cbn -[interp_arr Katamaran.RiscvPmp.CFGVer.Verifier.rg_k Katamaran.RiscvPmp.CFGVer.Verifier.rg_sh].
+      iIntros "Harr". arr_sync "Harr".
       iApply (rg_arr_of_bytes with "Harr").
       - destruct u; cbn; lia.
       - destruct u; cbn; lia.
