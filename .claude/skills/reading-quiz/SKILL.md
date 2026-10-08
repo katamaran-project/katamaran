@@ -63,7 +63,39 @@ One question per turn, then stop and wait. After his answer:
 - **Mostly don't explain.** "hint" → a nudge toward the right lines. "tell me"
   → explain. Exception: when he says he never understood a piece (e.g. "decode
   is axiomatized, I never looked"), check the code and explain it — then ask
-  the question that depends on it.
+  the question that depends on it. When he wants a whole area explained, switch
+  to explain-first mode (§2b).
+
+## 2b. Explain-first mode
+
+The Socratic loop is slow when the code is not just unfamiliar but
+convoluted — he cannot reason about what he cannot yet parse. Then he asks to
+have it explained first and reads it himself afterwards ("I think it's faster
+if you explain this to me and then I plow through afterwards"). Switch to this
+mode when he says so, or when he answers a question with a batch of his own
+"why is X like this?" questions about the same area.
+
+1. **Verify every point before explaining it** — the standard is higher here,
+   because he will build on your account instead of on his own reading. Read
+   the definitions; for anything that looks odd, find out WHY it is that way:
+   `git log -S'<snippet>'`, the PLAN that introduced it (`plans/*.md`), the
+   file's header. A patch-of-a-patch (muladd's `set_nth` reverting an earlier
+   immediate patch) is only explicable from its history.
+2. **Answer each of his questions under its own heading**, in his order, each
+   with `file:line`. Lead with the direct answer, then the mechanism, then the
+   history if it is the real reason.
+3. **Correct misreadings plainly** (e.g. "1128 is the exit address, not the
+   start: the third argument of `noninterferent_strong` is `exit_addr`").
+4. **Name the smells** — what makes it hard to read (statement-level no-ops,
+   hand-concretized specs, literal constants that should be expressions,
+   stale headers) — and record them in `.claude/TODO.md` (§4). He is reading
+   to audit; the smells are findings.
+5. **Hand back with a reading path**: the lines to read now that the map is in
+   place, and one concrete thing to confirm while reading. Then stop.
+
+When he comes back ("continue"), return to the Socratic loop — the next
+question can test the area just explained, which shows whether the
+explanation landed.
 
 Never assert something you have not checked. A wrong confident correction in a
 learning dialogue does more damage than none: grep, `rocq_query`
