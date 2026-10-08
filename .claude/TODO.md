@@ -260,6 +260,23 @@ the notes below are its source material:**
   - `A0` is hand-concretized and consed onto the rest (`sym_reg_specs`,
     `MuladdParamResult.v:299`) because `PVBaseOff k` only takes a CONSTANT k,
     and x's address `x_off b = 1148 + 4·mlenN b` depends on m's length.
+  - `b` is BearSSL's ENCODED announced bit length, not a bit length
+    (reading quiz 3; BearSSL `inner.h`: k is stored as
+    `((k / 31) << 5) + (k % 31)`; checked via a GitHub mirror, not in-repo).
+    So M = (b+31)>>5 is the limb count and mblr = b & 31 = k mod 31. Repo
+    comments call it "bitlen" (`MuladdParamInstrs.v:317,325`,
+    PLAN-muladd-full). The flat specs pin it to 63, whose low 5 bits are 31:
+    NOT a valid encoding (no k produces it) — only in leftover definitions
+    (`zzmuladdfulln2_{x,m}_specs_rel`) and the ZZ probe, no tracked end
+    theorem. The parametric `64 < b < 65536` also admits invalid encodings:
+    a harmless over-approximation (strictly more inputs), but worth a comment.
+  - The verified property is WEAKER than BearSSL's documented contract for
+    muladd (`inner.h`: "CT: only the common announced bit length of x and m
+    leaks, not the values of x, z or m"). Ours makes m's limbs PUBLIC
+    (`DArr true …`, `MuladdParam.v:72–73`). Options, Emiel decides: keep
+    (modulus public is the usual threat model; say so in the Result
+    header), or try m's limbs secret (b0 = m's top limbs feeds br_divrem —
+    expect the secret-data walls).
   - x's address is stated THREE times (reading quiz 3, 2026-10-08):
     `DAt (term_var "x")` in `sym_data` (`MuladdParam.v:74`), `x ↦ ia + x_off b`
     in `sym_ι` (`MuladdParamResult.v:294`), and `(A0, true, Some (ia + x_off b))`
