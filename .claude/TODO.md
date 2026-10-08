@@ -163,7 +163,18 @@ session, planned WITH Emiel — design decisions are his):**
   "r secret" but is effectively public (both worlds are forced to `v`,
   `:272–273`). Goal per Emiel: as few confusing conversions as possible on the
   trusted statement, which must stay easily readable — consider a spec shape
-  where this misleading combination is unrepresentable.
+  where this misleading combination is unrepresentable. Emiel's constraint: a
+  well-formedness PREMISE is no fix — a spec failing it makes the end theorem
+  vacuously true. Candidates: (a) a sum type `Secret | Public | Known v`
+  (nothing to check), (b) a decidable check proved as a CONJUNCT of the end
+  theorem (`wf_specs = true ∧ noninterferent_strong …`, closed by
+  `reflexivity`) so a bad spec makes it unprovable, not vacuous.
+- **Doc fix, same file:** the comment on `noninterferent_strong` (`:258–260`)
+  says "if world 1 reaches the exit address in n steps", but
+  `RiscVNStepsWithExitCond` has a `refl` constructor and only checks the exit
+  test BEFORE each step, so the theorem covers EVERY n-step prefix that has
+  not yet hit the exit — including prefixes of non-terminating runs. The
+  statement is stronger than its comment; the comment should say so.
 
 **Priority 1 — pointer-argument memory ownership (init_addr parameterization**
 **itself is done; see `project-init-addr-param`/`project-cfgver-symbolic-base-poc`**
