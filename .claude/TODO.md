@@ -260,6 +260,11 @@ the notes below are its source material:**
   - `A0` is hand-concretized and consed onto the rest (`sym_reg_specs`,
     `MuladdParamResult.v:299`) because `PVBaseOff k` only takes a CONSTANT k,
     and x's address `x_off b = 1148 + 4·mlenN b` depends on m's length.
+  - x's address is stated THREE times (reading quiz 3, 2026-10-08):
+    `DAt (term_var "x")` in `sym_data` (`MuladdParam.v:74`), `x ↦ ia + x_off b`
+    in `sym_ι` (`MuladdParamResult.v:294`), and `(A0, true, Some (ia + x_off b))`
+    in `sym_reg_specs` (`:300`). Only `data_ok`'s `DAt` case ties them
+    together (proved in `sym_data_ok`); the statement shows the last two.
   - Statement-level no-ops: `DAt x` (skipped by `concretize_data`, means
     something only in `data_ok`) and `arr_dir` (`DArr pub _ c`). A reader
     sees them in the trusted spec list and assumes they constrain something.
