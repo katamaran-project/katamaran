@@ -263,7 +263,7 @@ the notes below are its source material:**
   - Statement-level no-ops: `DAt x` (skipped by `concretize_data`, means
     something only in `data_ok`) and `arr_dir` (`DArr pub _ c`). A reader
     sees them in the trusted spec list and assumes they constrain something.
-  - `data_ok` (`GenSegment.v:1946`) mixes six concerns: per-cell range,
+  - `data_ok` (`GenSegment.v:1941` on KatamaranRel) mixes six concerns: per-cell range,
     pinned ⇒ public, pinned value and counts Sync, the `DAt` anchor, `DPtr`
     continuation, byte-vs-word bound. It is a bridge premise (`GenProg.v:111`)
     proved per Result, so `DCell false (Some t)` is UNPROVABLE (good, not
