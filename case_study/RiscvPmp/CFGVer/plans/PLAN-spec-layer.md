@@ -1,6 +1,6 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 2 (2026-10-08), NOT STARTED. Based on `KatamaranRel` (D8);
+Status: rev 2 (2026-10-08), Phase S DONE, Phase 0 next. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
 `/reading-quiz` sessions (`Noninterference.v`; the spec front-ends) whose
 findings are in `.claude/TODO.md` (Priority 0 and the A–G list). Phase 0
@@ -129,11 +129,15 @@ baseline CPU and investigate.
 
 **Phase S — set-up (first session, ~15 min, before Phase 0).**
 - Confirm the plugins loaded: `/vibe-wise:learn`, `/vibe-learn:learn` and
-  `/reading-quiz` should all autocomplete; `.vibe-learn/session-log.jsonl`
-  appears after the first file edit.
+  `/reading-quiz` should all autocomplete. (`/vibe-wise:learn`, `/vibe-wise:reset`
+  and `/reading-quiz` are `disable-model-invocation` — only YOU can start
+  them, Claude never sees them as skills.) `.vibe-learn/session-log.jsonl`
+  starts logging at the first prompt, not the first edit.
 - Start while-you-wait in a terminal split (§5) and leave it running.
-- Decide: `.claude/wyw.json` committed or gitignored (needed before any quiz
-  deck).
+- DECIDED (2026-10-08): `.claude/wyw.json` AND `.claude/decks/` are
+  **gitignored** (Emiel; against the plugin's commit-it design — decks are
+  private study material). Decks go in `.claude/decks/`, the plugin's
+  default; a fresh clone regenerates them from the TODO/this plan.
 - **Learning:** none yet — just confirm all four tools respond.
 
 **Phase 0 — design (Emiel leads; no code).**
@@ -242,7 +246,7 @@ start/compaction while active.
 **while-you-wait** (while Claude works). `alias wyw='node ~/.claude/plugins/cache/anthropic-plugin-directory/while-you-wait/0.1.0-3c9582a8fbe8/bin/wyw.mjs'`;
 `wyw tui` in a split, or `wyw web`. Live review (hunks as they are written;
 flag to discuss), quiz decks (config in `.claude/wyw.json`, path fixed by the
-plugin — do NOT run `wyw init` before the Phase S decision), info cards,
+plugin, gitignored per Phase S; decks in `.claude/decks/`), info cards,
 games. AVOID the `repo-chat`/`quiz-from-diff` examples: each message is a
 billed `claude -p` (~30–40k tokens). Stop with `pkill -f while-you-wait`.
 Cost: two node processes per tool call; ~100 MB steady (node is 43 MB here).
