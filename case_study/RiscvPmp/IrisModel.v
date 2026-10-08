@@ -193,18 +193,22 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
              non-filtered one is stronger, since it also says something about
              secret MMIO events (unary version). *)
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
+
+    (* The state of a single execution w.r.t. the adversary-observable trace
+       `t` that both executions agree on. Either the observable part of this
+       execution's trace is exactly `t`, or this execution is ahead by exactly
+       one (observable) event `e`, which is recorded in the `written` ghost
+       state until both executions are resynchronized. *)
+    Definition side_inv (mGs : mcMemGS Σ) (t : Trace) : iProp Σ :=
+      ∃ ts, @tr_frag _ _ (@mc_gtGS _ mGs) ts ∗
+              ((⌜filter_adv_observable ts = t⌝ ∗ @nothingPending_auth _ (@mc_wpGS _ mGs))
+               ∨ ∃ e, ⌜filter_adv_observable ts = e :: t⌝ ∗ @written_auth _ (@mc_wpGS _ mGs) e).
+
+    #[export] Instance side_inv_Timeless mGs t : Timeless (side_inv mGs t).
+    Proof. unfold side_inv. apply _. Qed.
+
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t1 t2,
-            @tr_frag _ _ (@mc_gtGS _ mc_ghGS2_left) t1 ∗
-              @tr_frag _ _ (@mc_gtGS _ mc_ghGS2_right) t2 ∗
-              ∃ t, ( let mgl := mc_ghGS2_left in
-                     ((⌜filter_adv_observable t1 = t⌝ ∗ nothingPending_auth)
-                      ∨ ∃ e1, ⌜filter_adv_observable t1 = e1 :: t⌝ ∗ written_auth e1)
-                   ∗ let mgr := mc_ghGS2_right in
-                    ((⌜filter_adv_observable t2 = t⌝ ∗ nothingPending_auth)
-                    ∨ ∃ e2, ⌜filter_adv_observable t2 = e2 :: t⌝ ∗ written_auth e2)
-             )
-        ).
+      inv femto_inv_mmio_ns (∃ t, side_inv mc_ghGS2_left t ∗ side_inv mc_ghGS2_right t).
   End SharedBinaryInvariant.
 
   Section WithMemory.
