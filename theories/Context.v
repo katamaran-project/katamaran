@@ -178,7 +178,7 @@ Module Import ctx.
        as possible and define case analysis and elimination schemes for the
        record that coincide with the ones that would be derived for the
        inductive type. *)
-    #[projections(primitive)]
+    #[mode="- -", projections(primitive)]
     Class In (b : B) (Γ : Ctx B) : Set :=
       MkIn { in_at: nat; in_valid: nth_is Γ in_at b }.
     #[global] Arguments MkIn [_ _] _ _.

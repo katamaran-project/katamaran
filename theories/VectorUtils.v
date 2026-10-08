@@ -30,7 +30,7 @@
 From Equations Require Import Equations.
 From stdpp Require Import vector.
 From Stdlib Require Import ZArith.BinInt.
-Require Import Vector.
+From Stdlib Require Import Vector.
 
 Local Set Implicit Arguments.
 Local Set Equations Transparent.

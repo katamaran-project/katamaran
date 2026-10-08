@@ -2275,11 +2275,11 @@ Module bv.
        printing only notations for the constructors that achieve the same result
        as printing the number notation. *)
     Notation "" := (bitstring.bN)
-      (at level 0, right associativity, only printing) : bv_bitstring_scope.
+      (at level 1, right associativity, only printing) : bv_bitstring_scope.
     Notation "1 b" := (bitstring.bI b)
-      (at level 0, right associativity, format "1 b", only printing) : bv_bitstring_scope.
+      (at level 1, right associativity, format "1 b", only printing) : bv_bitstring_scope.
     Notation "0 b" := (bitstring.bO b)
-      (at level 0, right associativity, format "0 b", only printing) : bv_bitstring_scope.
+      (at level 1, right associativity, format "0 b", only printing) : bv_bitstring_scope.
 
     Notation "[ 'bits' x ]" := (of_bitstring x%bits)
       (format "[ 'bits'  x ]") : bv_scope.
@@ -2506,7 +2506,7 @@ Module bv.
     Qed.
 
     Lemma ultb_antisym : forall {n} (x y : bv n),
-        y <ᵘ? x = negb (x <=ᵘ? y).
+        (y <ᵘ? x) = negb (x <=ᵘ? y).
     Proof. intros; unfold bv.uleb, bv.ultb; apply N.ltb_antisym. Qed.
 
     Lemma ult_ule_incl : forall {n} (x y : bv n),
@@ -2533,23 +2533,23 @@ Module bv.
     Proof. intros; unfold bv.ult, bv.zero; cbn; Lia.lia. Qed.
 
     Lemma uleb_ugt : forall {n} (x y : bv n),
-        x <=ᵘ? y = false <-> y <ᵘ x.
+        (x <=ᵘ? y) = false <-> y <ᵘ x.
     Proof. intros; unfold bv.uleb, bv.ule; now apply N.leb_gt. Qed.
 
     Lemma uleb_ule : forall {n} (x y : bv n),
-        x <=ᵘ? y = true <-> x <=ᵘ y.
+        (x <=ᵘ? y) = true <-> x <=ᵘ y.
     Proof. intros; unfold bv.uleb; now apply N.leb_le. Qed.
 
     Lemma ultb_uge : forall {n} (x y : bv n),
-        x <ᵘ? y = false <-> y <=ᵘ x.
+        (x <ᵘ? y) = false <-> y <=ᵘ x.
     Proof. intros; unfold bv.ultb; now apply N.ltb_ge. Qed.
 
     Lemma ultb_ult : forall {n} (x y : bv n),
-        x <ᵘ? y = true <-> x <ᵘ y.
+        (x <ᵘ? y) = true <-> x <ᵘ y.
     Proof. intros; unfold bv.ultb; now apply N.ltb_lt. Qed.
 
     Lemma ultb_uleb : forall {n} (x y : bv n),
-        x <ᵘ? y = true -> x <=ᵘ? y = true.
+        (x <ᵘ? y) = true -> (x <=ᵘ? y) = true.
     Proof.
       intros n x y.
       rewrite ultb_ult, uleb_ule.

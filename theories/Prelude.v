@@ -257,7 +257,20 @@ Definition proof_irrelevance_is_true {b : bool} :
 (* We define our own variant of a boolean 'is true' predicate to turn it into
    a typeclass and fill it in automatically during typechecking. *)
 Module IsTrue.
-  Class IsTrue (b : bool) : Prop := mk { from : Is_true b }.
+  (* Set the Hint Mode for IsTrue, so that it will only use the Hint Extern
+     below if whatever b is unified with does not contain any existential
+     variables anymore. This is mostly used in statically checking bitvector
+     sizes. Essentially we want to delay checking the constraints until it is
+     fully known, in particular when type information flows from a later program
+     position to an earlier one, e.g. for sign extension from the type
+     information from a variable reference flows to the variable declaration. *)
+  #[mode="+"] Class IsTrue (b : bool) : Prop := mk { from : Is_true b }.
+  #[export] Hint Extern 10 (IsTrue ?b) =>
+    refine (@mk true I) : typeclass_instances.
+
+  (* Test the behaviour of the Hint Mode. *)
+  Goal exists b, IsTrue b. Proof. eexists. Fail typeclasses eauto. Abort.
+
   Definition proof_irrelevance {b} (p q : IsTrue b) : p = q :=
     match p , q with
       mk _ p , mk _ q => f_equal (mk b) (proof_irrelevance_is_true p q)
@@ -277,19 +290,6 @@ Module IsTrue.
 
   #[global] Arguments mk [b] _, {b _}.
   #[global] Arguments from [b] _.
-  (* Set the Hint Mode for IsTrue, so that it will only use the Hint Extern
-     below if whatever b is unified with does not contain any existential
-     variables anymore. This is mostly used in statically checking bitvector
-     sizes. Essentially we want to delay checking the constraints until it is
-     fully known, in particular when type information flows from a later program
-     position to an earlier one, e.g. for sign extension from the type
-     information from a variable reference flows to the variable declaration. *)
-  #[export] Hint Mode IsTrue + : typeclass_instances.
-  #[export] Hint Extern 10 (IsTrue ?b) =>
-    refine (@mk true I) : typeclass_instances.
-
-  (* Test the behaviour of the Hint Mode. *)
-  Goal exists b, IsTrue b. Proof. eexists. Fail typeclasses eauto. Abort.
 
   (* The following two definition should never be added as instances themselves
      because they will easily lead to exponential blowup in proof search. Only
@@ -803,6 +803,7 @@ Definition empty_stats : Stats :=
   {| branches := 0; pruned   := 0|}.
 
 Create HintDb katamaran.
+Create Rewrite HintDb katamaran.
 #[global] Hint Rewrite
   andb_true_iff andb_false_iff negb_true_iff negb_false_iff orb_true_iff
   orb_false_iff cons_inj inl_inj inr_inj some_inj pair_equal_spec

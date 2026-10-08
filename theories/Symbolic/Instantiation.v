@@ -313,7 +313,7 @@ Module Type InstantiationOn
   Qed.
 
   Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Val (type b)) :
-    inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = inst ζ12 ι2 ► (b ↦ v).
+    inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = (inst ζ12 ι2) ► (b ↦ v).
   Proof.
     destruct b; unfold sub_up1.
     now rewrite inst_sub_snoc, inst_subst, inst_sub_wk1.

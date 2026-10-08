@@ -286,7 +286,7 @@ Module Type OccursCheckOn
                 | Succ _ _ t0 => Succ (fun Σ => Env (T Σ) _) xIn (ts' ► (b ↦ t0))
                 | Fail _ t0 => Fail xIn
                                  (* Same as above. *)
-                                 (subst ts' (sub_shift xIn) ► (b ↦ t0))
+                                 ((subst ts' (sub_shift xIn)) ► (b ↦ t0))
                 end
             | Fail _ ts => Fail xIn (ts ► (b ↦ t))
             end

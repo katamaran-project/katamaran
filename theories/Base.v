@@ -64,12 +64,12 @@ Module Type BaseMixin (Import TY : Types).
   Abbreviation LCtx := (NCtx LVar Ty).
   Abbreviation Val := (@ty.Val typedeclkit typedenotekit).
 
-  Notation Valuation Σ :=
+  Abbreviation Valuation Σ :=
     (@Env (Binding LVar Ty)
        (fun xt : Binding LVar Ty =>
           Val (@type _ _ xt)) Σ).
 
-  Notation CStore := (@NamedEnv PVar Ty Val).
+  Abbreviation CStore := (@NamedEnv PVar Ty Val).
 
   Definition SMatchResult {N σ} (pat : Pattern (N:=N) σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.

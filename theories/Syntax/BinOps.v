@@ -287,16 +287,10 @@ Module bop.
 
     Lemma eval_relop_val_spec {σ} (op : RelOp σ) (v1 v2 : Val σ) :
       reflect (eval_relop_prop op v1 v2) (eval_relop_val op v1 v2).
-    Proof with constructor; auto.
-      destruct op; cbn.
-      - destruct eq_dec...
-      - destruct eq_dec...
-      - apply Z.leb_spec0.
-      - apply Z.ltb_spec0.
-      - apply bv.sle_spec.
-      - apply bv.slt_spec.
-      - apply bv.ule_spec.
-      - apply bv.ult_spec.
+    Proof.
+      destruct op; cbn; auto using Z.leb_spec0, Z.ltb_spec0, bv.sle_spec,
+                 bv.slt_spec, bv.ule_spec, bv.ult_spec.
+      all: destruct eq_dec; constructor; auto.
     Qed.
 
     Lemma eval_relop_equiv {σ} (op : RelOp σ) (v1 v2 : Val σ) :

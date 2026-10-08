@@ -68,7 +68,7 @@ Module Type PatternsOn (Import TY : Types).
         | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
             fun EΔ => let (E,v) := env.view EΔ in
-                      pattern_match p E ► (_ ↦ v)
+                      (pattern_match p E) ► (_ ↦ v)
         end.
 
     Definition tuple_pattern_match_env_reverse {T : Ty -> Set} :
@@ -79,7 +79,7 @@ Module Type PatternsOn (Import TY : Types).
         | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
           fun EΔ => let (E,v) := env.view EΔ in
-                    pattern_match p E ► (_ ↦ v)
+                    (pattern_match p E) ► (_ ↦ v)
         end.
 
     Definition tuple_pattern_match_val {σs : Ctx Ty} {Δ : NCtx N Ty}

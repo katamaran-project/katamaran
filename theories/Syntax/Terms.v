@@ -916,7 +916,7 @@ Module Type TermsOn (Import TY : Types).
     Proof. now rewrite sub_comp_wk1_tail. Qed.
 
     Lemma sub_snoc_comp {Σ1 Σ2 Σ3 x τ v} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) :
-      subst ζ1 ζ2 ► (x∷τ ↦ v) =
+      (subst ζ1 ζ2) ► (x∷τ ↦ v) =
       subst (sub_up1 ζ1) (ζ2 ► (x∷τ ↦ v)).
     Proof.
       unfold sub_up1, subst, SubstEnv; cbn.
