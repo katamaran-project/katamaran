@@ -134,6 +134,47 @@ use it for future examples instead of hand-transcribing.
 
 ## TODO list
 
+**Open items from the 2026-10-08 learning session, grouped (Emiel asked which
+belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
+G and the rest of F anywhere.**
+- **A. Spec-layer redesign — ONE pass** (`plans/PLAN-spec-layer.md`): sum type,
+  `Reg` keys, mem plumbing, one word predicate, `concretize_data`/`data_ok`,
+  visible checks, trusted-file comments. Together because the design
+  decisions interlock and every item rewrites `Noninterference.v`, the
+  `EndToEnd.v` bridges, the front-ends and all 21 Result statements.
+- **B. Trusted-program readability — bundled into A's Phase 4**: literal
+  `sym6_instrs` (no `set_nth` patch-of-a-patch, no `zz` name), exit as
+  `init_addr + 4 * length instrs`, stale `MuladdParamResult.v` header.
+  Logically orthogonal, but each changes a Result statement and A reviews
+  them all anyway — a separate pass costs a second review + gate.
+- **C. End-theorem proof automation — AFTER A**: `_simple` bridge for mixed
+  front-ends + `data_spec`, one generic bv tactic, what the ~60 lines of
+  `check_scalar_ptr_noninterferent` do. After, because A's Phase 2 rewrites
+  these bridges.
+- **D. Audit of past changes — independent** (agent findings, UNVERIFIED;
+  `.claude/learning/commit-groups.md`): `1236c880` `fun_bool_to_bits`
+  deviates from Sail (`Machine.v:620`); `27a2fd1a`/`af2a1187` changed example
+  PROGRAMS; `0bc112da` changed swap/jmp_fwd/countdown_mem statements
+  (`scripts/stmtdiff.py` confirms they changed; possibly just register
+  aliases — check); 3 `Admitted` in `theories/` from the unquantify port;
+  composed Result files are Iris-level statements on the axiom-clean list.
+  relval-pair's "meaning changed" list stays with that branch (Emiel,
+  2026-10-08: relval-pair parked on its branch; A is based on KatamaranRel).
+- **E. Docs — in A's last commit**: CFGVer/CLAUDE.md's trusted-surface list
+  misses `Tables.v` register names and `GenSegment`'s `concretize_*`
+  (both are in end-theorem statements, per dpdgraph); grep skills for names
+  A renames. Anytime: delete the dead `declare_public_registers` in
+  `BlockVer/Examples.v:1477`.
+- **F. Learning tooling**: merge-time comprehension gate (after A, its first
+  use; touches load-bearing `git-workflow-guard.sh`); PocketFlow-style pilot
+  on loop invariants (measure tokens first); decide whether
+  `.claude/wyw.json` is committed or gitignored before writing a deck.
+- **G. Small suspicions (UNVERIFIED)**: `.gitignore` ignores `Example/ZZ*`
+  but not `Example/Muladd/ZZ*` / `Example/CheckScalar/ZZ*` (untracked probes
+  show in `git status`); if `scripts/gate.sh`'s hole scan reads subdirectories
+  of the filesystem, an untracked `Admitted` probe there could block the gate.
+  The rocq `guardrails.sh` false positive on `checkout -- .` recurred.
+
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
 session, planned WITH Emiel — design decisions are his). NOW A PLAN:
