@@ -184,7 +184,22 @@ session, planned WITH Emiel — design decisions are his):**
   a different value, a register/address given two different init values, and
   overlaps at BYTE level (a word spec at `a` and one at `a+2` share bytes), not
   just equal addresses. Consider a consistency check proved as a conjunct (same
-  shape as option (b) above) or a per-Result non-vacuity witness.
+  shape as option (b) above) or a per-Result non-vacuity witness. Emiel: an
+  over-strict check is fine ("not allowing some legitimate but fishy
+  behaviour"). Simplest: require every memory spec 4-aligned — then byte
+  overlap = equal address, and the check is distinct addresses + disjoint from
+  `[init_addr, init_addr + 4·|instrs|)`.
+- **X0 unrepresentable by type (Emiel):** key register specs by the machine's
+  `Reg ty_xlenbits` (x1..x31, no x0) instead of `RegIdx`. That also removes
+  `reg_convert` from the statement — same change as the plumbing cleanup.
+  Cost: `Tables.v`'s `A0`/`T0`/… aliases are `RegIdx`; spec authors need
+  `Reg`-level names.
+- **State the decode trust assumption:** `pure_decode` is an `Axiom`
+  (`Machine.v:147`, allow-listed in `scripts/gate.sh:277`), so nothing in Coq
+  says a hand-written `instrs` is in the real decoder's image; if one AST has
+  no encoding, no `ws` satisfies `:268` and the end theorem is vacuous for the
+  real machine. Unfixable while decode is axiomatized — say it in a comment
+  next to `noninterferent_strong`, so the trusted file states its assumptions.
 - **Doc fix, same file:** the comment on `noninterferent_strong` (`:258–260`)
   says "if world 1 reaches the exit address in n steps", but
   `RiscVNStepsWithExitCond` has a `refl` constructor and only checks the exit
