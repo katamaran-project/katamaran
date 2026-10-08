@@ -68,6 +68,7 @@ Module Type RiscvPmpIrisAdeqParams2
   Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
     fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
              tr_frag (memory_trace μ) ∗
+             nothingPending_auth ∗
              nothingPending
           )%I.
 
@@ -121,12 +122,11 @@ Module Type RiscvPmpIrisAdeqParams2
     iMod writePending_alloc as (gP2) "[HauthPend2 HfragPend2]".
     iModIntro.
     iExists (McMemGS2 (McMemGS gH1 gT1 gP1) (McMemGS gH2 gT2 gP2)).
-    iSplitL "Hinv1 Hinv2 Hauth1 Hauth2 HauthPend1 HauthPend2".
+    iSplitL "Hinv1 Hinv2 Hauth1 Hauth2".
     - iFrame "Hinv1 Hinv2 Hauth1 Hauth2".
       iPureIntro; split; apply initMemMap_works.
-      (* HauthPend*? *)
     - unfold mem_res2, mem_res, initMemMap in *.
-      iFrame "Hfrag1 Hfrag2 HfragPend1 HfragPend2".
+      iFrame "Hfrag1 Hfrag2 HauthPend1 HauthPend2 HfragPend1 HfragPend2".
       iSplitL "Hmapsto1".
       + iPoseProof (big_sepM_list_to_map with "Hmapsto1") as "Hm".
         { eapply NoDup_liveAddrs. }
