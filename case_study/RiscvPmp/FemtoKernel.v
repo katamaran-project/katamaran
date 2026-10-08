@@ -1722,7 +1722,7 @@ Module inv := invariants.
       repeat (iRename select (_ ∗ _)%I into "H'";
               iDestruct "H'" as "(? & ?)").
 
-    #[local] Ltac solve_split :=
+    #[local] Ltac solve_split_generic :=
       iIntros; cbn - [RiscvPmpIrisInstancePredicates.interp_ptstomem];
       unfold reg_pointsTo21, reg_pointsTo2, interp_ptstomem2;
       destruct_seps;
@@ -1740,44 +1740,124 @@ Module inv := invariants.
               iDestruct "Heq" as "->");
       auto.
 
+    Lemma sep_sep_swap {PROP : bi} (A B C D : PROP) :
+      ((A ∗ C) ∗ (B ∗ D) ⊢ (A ∗ B) ∗ (C ∗ D))%I.
+    Proof. iIntros "[[$ $] [$ $]]". Qed.
+
+    #[local] Ltac solve_split_leaf :=
+      first
+        [ solve [ solve_split_generic ]
+        | solve [ solve_split_generic; case_match; solve_split_generic ] ].
+
+    #[local] Ltac solve_leaf :=
+      first [ reflexivity | refine (bi.sep_elim_l _ _) | solve_split_leaf ].
+
+    (* The binary assertion is a tree of pairs, while the goal is a pair of
+       trees. We transpose the two trees node by node instead of framing
+       each individual resource. *)
+    #[local] Ltac split_tree :=
+      first
+        [ lazymatch goal with
+          | |- ((?T1 ∗ ?T2) ⊢ (?L1 ∗ ?L2) ∗ (?R1 ∗ ?R2))%I =>
+              transitivity ((L1 ∗ R1) ∗ (L2 ∗ R2))%I;
+              [ apply bi.sep_mono | apply sep_sep_swap ]
+          end; split_tree
+        | solve_leaf ].
+
+    #[local] Ltac combine_tree :=
+      first
+        [ lazymatch goal with
+          | |- ((?L1 ∗ ?L2) ∗ (?R1 ∗ ?R2) ⊢ ?B1 ∗ ?B2)%I =>
+              transitivity ((L1 ∗ R1) ∗ (L2 ∗ R2))%I;
+              [ apply sep_sep_swap | apply bi.sep_mono ]
+          end; combine_tree
+        | solve_leaf ].
+
+    #[local] Ltac extract_leaf :=
+      first
+        [ (etrans; [refine (bi.sep_elim_l _ _) |]; extract_leaf)
+        | (etrans; [refine (bi.sep_elim_r _ _) |]; extract_leaf)
+        | reflexivity
+        | apply bi.and_elim_l ].
+
+    #[local] Ltac find_eq x T :=
+      lazymatch T with
+      | context [(⌜x = ?X⌝ ∧ emp)%I] => X
+      end.
+
+    #[local] Ltac solve_binary_split :=
+      iIntros; cbn - [RiscvPmpIrisInstancePredicates.interp_ptstomem];
+      iStopProof; split_tree.
+
+    #[local] Ltac solve_persistent_preds :=
+      iIntros; cbn - [RiscvPmpIrisInstancePredicates.interp_ptstomem];
+      unfold femto_inv_mmio; iStopProof;
+      first
+        [ apply bi.persistent_entails_l; [ unfold interp_inv_mmio, RiscvPmpIrisInstancePredicates.interp_inv_mmio; apply _
+          | extract_leaf ]
+        | solve_split_leaf ].
+
+    #[local] Ltac combine_attempt :=
+      lazymatch goal with
+      | |- ((?L ∗ ?R) ⊢ ⌜?x = ?y⌝ ∗ ?B)%I =>
+          let X := find_eq x L in
+          let Y := find_eq y R in
+          let T := type of L in
+          transitivity (⌜x = y⌝ ∗ (L ∗ R))%I;
+          [ apply bi.persistent_entails_l; [ apply _ |];
+            transitivity ((⌜x = X⌝ ∗ ⌜y = Y⌝)%I : T);
+            [ apply bi.sep_mono; extract_leaf
+            | iIntros "[%E1 %E2]"; iPureIntro; congruence ]
+          | iIntros "[%Heq [HL HR]]"; subst;
+            iSplitL ""; [ iPureIntro; reflexivity | iStopProof; combine_tree ] ]
+      end.
+
+    #[local] Ltac solve_binary_combine :=
+      intros; iIntros "HL HR"; cbn - [RiscvPmpIrisInstancePredicates.interp_ptstomem];
+      iStopProof;
+      first
+        [ combine_attempt
+        | case_match; cbn - [RiscvPmpIrisInstancePredicates.interp_ptstomem]; combine_attempt
+        | solve_split_leaf ].
+
     Lemma femtokernel_handler_entry_pre_persistent_preds `{sailGS2 Σ} (x5 x10 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_entry_addr] in
       asn.interpret femtokernel_handler_entry_pre Σ -∗
       femto_inv_mmio ∗ asn.interpret femtokernel_handler_entry_pre Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_persistent_preds. Qed.
 
     Lemma femtokernel_handler_write_pre_persistent_preds `{sailGS2 Σ} (x5 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["a" ∷ ty_xlenbits ↦ bv.of_N handler_write_addr] in
       asn.interpret femtokernel_handler_write_pre Σ -∗
       femto_inv_mmio ∗ asn.interpret femtokernel_handler_write_pre Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_persistent_preds. Qed.
 
     Lemma femtokernel_handler_secret_write_pre_persistent_preds `{sailGS2 Σ} (x1 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["x1" ∷ ty_xlenbits ↦ x1].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr] in
       asn.interpret femtokernel_handler_secret_write_pre_rel Σ -∗
       femto_inv_mmio ∗ asn.interpret femtokernel_handler_secret_write_pre_rel Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_persistent_preds. Qed.
 
     Lemma femtokernel_init_pre_binary_split `{sailGS2 Σ} (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N init_addr] in
       asn.interpret femtokernel_init_pre Σ -∗
       asn_interpret_left femtokernel_init_pre Σ ∗
       asn_interpret_right femtokernel_init_pre Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_binary_split. Qed.
 
     Lemma femtokernel_handler_entry_pre_binary_split `{sailGS2 Σ} (x5 x10 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_entry_addr] in
       asn.interpret femtokernel_handler_entry_pre Σ -∗
       asn_interpret_left femtokernel_handler_entry_pre Σ ∗
       asn_interpret_right femtokernel_handler_entry_pre Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_binary_split. Qed.
 
     Lemma femtokernel_handler_write_pre_binary_split `{sailGS2 Σ} (x5 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["x5" ∷ ty_xlenbits ↦ x5].["a" ∷ ty_xlenbits ↦ bv.of_N handler_write_addr] in
       asn.interpret femtokernel_handler_write_pre Σ -∗
       asn_interpret_left femtokernel_handler_write_pre Σ ∗
       asn_interpret_right femtokernel_handler_write_pre Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_binary_split. Qed.
 
     Lemma femtokernel_handler_secret_write_pre_binary_split `{sailGS2 Σ} (x1 secret1 secret2 : Val ty_xlenbits) (csrs : CSRVals) :
       let Σ__csrs := (CSRVals_Valuation csrs) in
@@ -1788,14 +1868,14 @@ Module inv := invariants.
       interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
       asn_interpret_left femtokernel_handler_secret_write_pre (Σ__secret secret1) ∗
       asn_interpret_right femtokernel_handler_secret_write_pre (Σ__secret secret2).
-    Proof. solve_split. Qed.
+    Proof. solve_split_leaf. Qed.
 
     Lemma femtokernel_handler_exit_pre_binary_split `{sailGS2 Σ} (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] in
       asn.interpret femtokernel_handler_exit_pre Σ -∗
       asn_interpret_left femtokernel_handler_exit_pre Σ ∗
       asn_interpret_right femtokernel_handler_exit_pre Σ.
-    Proof. solve_split. Qed.
+    Proof. solve_binary_split. Qed.
 
     Lemma femtokernel_init_post_binary_combine `{sailGS2 Σ} (na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
@@ -1803,7 +1883,7 @@ Module inv := invariants.
       asn_interpret_left femtokernel_init_post (Σ na1) -∗
       asn_interpret_right femtokernel_init_post (Σ na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_init_post (Σ na1).
-    Proof. solve_split. Qed.
+    Proof. solve_binary_combine. Qed.
 
     Lemma femtokernel_handler_entry_post_binary_combine `{sailGS2 Σ} (x5 x10 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
@@ -1811,7 +1891,7 @@ Module inv := invariants.
       asn_interpret_left femtokernel_handler_entry_post (Σ na1) -∗
       asn_interpret_right femtokernel_handler_entry_post (Σ na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_entry_post (Σ na1).
-    Proof. solve_split; case_match; solve_split. Qed.
+    Proof. solve_binary_combine. Qed.
 
     Lemma femtokernel_handler_write_post_binary_combine `{sailGS2 Σ} (x5 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
@@ -1819,7 +1899,7 @@ Module inv := invariants.
       asn_interpret_left femtokernel_handler_write_post (Σ na1) -∗
       asn_interpret_right femtokernel_handler_write_post (Σ na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_write_post (Σ na1).
-    Proof. solve_split. Qed.
+    Proof. solve_binary_combine. Qed.
 
     Lemma femtokernel_handler_secret_write_post_binary_combine `{sailGS2 Σ} (x1 secret1 secret2 na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
@@ -1829,7 +1909,7 @@ Module inv := invariants.
       asn_interpret_right femtokernel_handler_secret_write_post (Σ secret2 na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_secret_write_post_rel (Σ__rel na1)
       ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2.
-    Proof. solve_split. Qed.
+    Proof. solve_split_leaf. Qed.
 
     Lemma femtokernel_handler_exit_post_binary_combine `{sailGS2 Σ} (na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
@@ -1837,7 +1917,7 @@ Module inv := invariants.
       asn_interpret_left femtokernel_handler_exit_post (Σ na1) -∗
       asn_interpret_right femtokernel_handler_exit_post (Σ na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_exit_post (Σ na1).
-    Proof. solve_split. Qed.
+    Proof. solve_binary_combine. Qed.
 
     Definition ptsto_instrs_handler2 `{sailGS2 Σ} : iProp Σ :=
       @ptsto_instrs_handler _ sailGS2_sailGS_left
