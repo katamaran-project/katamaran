@@ -1,6 +1,7 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 1 (2026-10-08), NOT STARTED. Written right after Emiel's reading
+Status: rev 1.1 (2026-10-08; §2 extended with reading quiz 2 on the
+front-ends: D7, existing checks, deep vs shallow), NOT STARTED. Written right after Emiel's reading
 session on `Noninterference.v` (the first `/reading-quiz`), from the findings
 in `.claude/TODO.md` Priority 0. Phase 0 (design, with Emiel) must run before
 anything is implemented: §2 lists what is decided and what is still open.
@@ -83,13 +84,40 @@ types don't say so.
   unnecessary by types.
 - **D6. Over-strict checks are acceptable** ("not allowing some legitimate
   but fishy behaviour").
+- **D7. `concretize_data` is in scope** (reading quiz 2): it is on the trusted
+  surface and "a mess, the same as data_ok" — clean it up in this pass.
+
+**Findings from reading quiz 2 (front-ends) that reshape the open questions:**
+- **The checks already exist, as bridge premises.** `gen_prog_noninterferent`
+  (`GenProg.v:105–116`) requires `NoDup` of the register indices (`HND`), the
+  byte-level layout check `data_layout_ok` (`HLayout`; `Adequacy.v:1066`:
+  in range, clear of code, cells pairwise disjoint as 4-byte ranges — NO
+  alignment), and `SyncVal` wherever `rv_val` (= `ty.projLeft`,
+  `GenSegment.v:1920`) is used (`data_ok`'s Sync conjuncts, `reg_q_sync`,
+  `Hp`). But a bridge premise is NOT part of the trusted surface: a reader
+  auditing the statement cannot rely on how it was proved, and a vacuous
+  theorem proved some other way would look identical. So Q4 is not "invent a
+  check" but "make the existing ones visible" (statement conjunct, or types).
+- **Statement-level no-ops / silent conversions**: `DAt` and `arr_dir` do
+  nothing in `concretize_data`; `rv_val` silently takes world 1's value of a
+  `NonSyncVal`; `A0` in muladd is hand-concretized because `PVBaseOff` takes
+  only a constant offset.
+- **Deep vs shallow**: the deep form (`Term`s + a `Valuation` of `RelVal`s)
+  is what the GENERATOR needs (independent pointers via `DPtr`, symbolic
+  sizes). The STATEMENT could take a shallow spec (Coq functions of the
+  parameters) with a proved correspondence — no `RelVal` on the trusted
+  surface at all, which also removes the `rv_val` question.
 
 **OPEN — settle in Phase 0, with Emiel proposing first (VibeWise, §5):**
 - **Q1. The sum type's shape.** e.g. `Secret | Public | Known v` for cells and
   registers; arrays/bytes only `Secret | Public` (they have no init). One
   shared type, or separate register/memory types? How do the front-ends
   mirror it: does `param_val` become `PVSecret | PVPublic | PVConst v |
-  PVBaseOff k` (`PVBaseOff` = known, base-relative)?
+  PVBaseOff k` (`PVBaseOff` = known, base-relative)? And deep or SHALLOW
+  specs in the statement (findings above)? Readability targets: cmovznz4
+  (A1–A3 flagged secret but known), muladd (`A0` consed on by hand,
+  `sym6_instrs` as a patch-of-a-patch, literal exit `+ 1128`), CheckScalarPtr
+  (valuation + `concretize_data`).
 - **Q2. Register keys.** `Reg ty_xlenbits` (no x0, and `reg_convert` leaves
   the statement), or a `RegIdx` sub-type excluding 0? `Tables.v`'s
   `A0`/`T0`/… aliases are `RegIdx` today, so spec authors need `Reg`-level
@@ -99,7 +127,8 @@ types don't say so.
   Which of `get_word` / `mem_has_word` survives, and how is the byte order
   settled (check `bv.app`'s bit order against RISC-V little-endian)?
 - **Q4. The overlap / vacuity check (brainstorm — D3, D5, D6 constrain it).**
-  Candidates: (a) a decidable byte-range disjointness check over all data
+  Start from `data_layout_ok` + `NoDup` (they exist, see the findings above);
+  the question is mainly WHERE they become visible. Candidates: (a) a decidable byte-range disjointness check over all data
   words plus the code range, proved as a conjunct of each end theorem
   (`spec_ok … = true ∧ noninterferent_strong …`, by `reflexivity`); (b) a
   per-Result non-vacuity witness lemma; (c) promote the bridge's existing
