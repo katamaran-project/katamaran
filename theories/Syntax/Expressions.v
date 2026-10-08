@@ -127,6 +127,10 @@ Module Type ExpressionsOn (Import TY : Types).
   Definition Exp_rec {Γ} (P : forall σ, Exp Γ σ -> Set) := Exp_rect P.
   Definition Exp_ind {Γ} (P : forall σ, Exp Γ σ -> Prop) := Exp_rect P.
 
+  Register Scheme Exp_rect as rect_dep for Exp.
+  Register Scheme Exp_rec as rec_dep for Exp.
+  Register Scheme Exp_ind as ind_dep for Exp.
+
   Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Val σ :=
     match e in (Exp _ t) return (Val t) with
     | exp_var x           => δ.[??x]

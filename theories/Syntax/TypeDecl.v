@@ -122,6 +122,10 @@ Module ty.
     Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
     Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
+    Register Scheme Ty_rect as rect_dep for Ty.
+    Register Scheme Ty_rec as rec_dep for Ty.
+    Register Scheme Ty_ind as ind_dep for Ty.
+
   End WithTypeDecl.
 
   Class TypeDenoteKit (TDC : TypeDeclKit) : Type :=

@@ -219,6 +219,10 @@ Module Type TermsOn (Import TY : Types).
   Definition Term_rec Σ (P : ∀ σ, Term Σ σ → Set) := @Term_rect _ P.
   Definition Term_ind Σ (P : ∀ σ, Term Σ σ → Prop) := @Term_rect _ P.
 
+  Register Scheme Term_rect as rect_dep for Term.
+  Register Scheme Term_rec as rec_dep for Term.
+  Register Scheme Term_ind as ind_dep for Term.
+
   Section Term_int_case.
 
     Context {Σ : LCtx} (P : Term Σ ty.int → Type).

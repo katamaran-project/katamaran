@@ -409,6 +409,13 @@ Module bv.
       fix rect [n] (xs : bv n) {struct n} : P n xs :=
         bv_case P PO (fun n b x => PS n b x (rect x)) xs.
 
+    Definition bv_rec (P : ∀ n, bv n → Set) := @bv_rect P.
+    Definition bv_ind (P : ∀ n, bv n → Prop) := @bv_rect P.
+
+    Register Scheme bv_rect as rect_dep for bv.
+    Register Scheme bv_rec as rec_dep for bv.
+    Register Scheme bv_ind as ind_dep for bv.
+
     Fixpoint fold_right (A : forall n : nat, Type)
       (c : forall n, bool -> A n -> A (S n)) (n : A O) [m] (xs : bv m) : A m :=
       bv_case (fun k _ => A k) n
