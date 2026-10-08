@@ -186,9 +186,10 @@ session, planned WITH Emiel — design decisions are his):**
   just equal addresses. Consider a consistency check proved as a conjunct (same
   shape as option (b) above) or a per-Result non-vacuity witness. Emiel: an
   over-strict check is fine ("not allowing some legitimate but fishy
-  behaviour"). Simplest: require every memory spec 4-aligned — then byte
-  overlap = equal address, and the check is distinct addresses + disjoint from
-  `[init_addr, init_addr + 4·|instrs|)`.
+  behaviour"). NOT an alignment requirement — Emiel removed one before and
+  does not want it back; BRAINSTORM the overlap check with him. Likely reason
+  for the removal (unconfirmed): byte-granular data cells,
+  `plans/PLAN-byte-memory.md` (1c69aa4b) — check_scalar's byte arrays.
 - **X0 unrepresentable by type (Emiel):** key register specs by the machine's
   `Reg ty_xlenbits` (x1..x31, no x0) instead of `RegIdx`. That also removes
   `reg_convert` from the statement — same change as the plumbing cleanup.
