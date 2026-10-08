@@ -179,6 +179,16 @@ Module Type RiscvPmpIrisInstancePredicates2
       RVPPREDl.interp_ptstomem_readonly (mG := mc_ghGS2_left) addr b ∗
         RVPPREDr.interp_ptstomem_readonly (mG := mc_ghGS2_right) addr b.
 
+    (* Both executions are in sync w.r.t. the adversary-observable trace. *)
+    Definition nothingPending2 : iProp Σ :=
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_left) ∗
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_right).
+
+    (* Both executions are ahead by the same observable event `e`. *)
+    Definition written2 (e : Event) : iProp Σ :=
+      @written _ (@mc_wpGS _ mc_ghGS2_left) e ∗
+      @written _ (@mc_wpGS _ mc_ghGS2_right) e.
+
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ := ⌜addr = write_addr ∧ bytes = (bv.of_N 42)⌝.
@@ -282,10 +292,10 @@ Module Type RiscvPmpIrisInstance2 (FL : FailLogic)
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
-    (* notWritten and Written are only used for the unary verification, we will not
-       reason using Katamaran with them in the binary verification. *)
-    | Sig.nothingPending       | _                    => False
-    | Sig.written width        | [ addr; val ]        => False.
+    (* The binary versions of the pending-write predicates own the ghost state
+       of both executions, so that they can be split into the unary versions. *)
+    | Sig.nothingPending       | _                    => nothingPending2
+    | Sig.written width        | [ addr; val ]        => written2 (mkEvent IOWrite addr width val).
 
     Ltac destruct_pmp_entries :=
       repeat match goal with
