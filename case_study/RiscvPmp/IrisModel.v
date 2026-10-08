@@ -114,6 +114,45 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
     apply exclusive_local_update. constructor.
   Qed.
 
+  Lemma writePending_agree `{writePendingG Σ} (s s' : WritePendingState) :
+    own writePendingG_gname (● (Some (excl.Excl s) : optionUR (excl.exclR (leibnizO WritePendingState)))) -∗
+    own writePendingG_gname (◯ (Some (excl.Excl s') : optionUR (excl.exclR (leibnizO WritePendingState)))) -∗
+    ⌜s = s'⌝.
+  Proof.
+    iIntros "H1 H2".
+    iDestruct (own_valid_2 with "H1 H2") as %[Hi _]%auth_both_valid_discrete.
+    rewrite excl.Excl_included in Hi. apply leibniz_equiv in Hi. by subst.
+  Qed.
+
+  Lemma written_auth_nothingPending `{writePendingG Σ} e :
+    written_auth e -∗ nothingPending -∗ False.
+  Proof.
+    iIntros "H1 H2".
+    by iDestruct (writePending_agree with "H1 H2") as %?.
+  Qed.
+
+  Lemma nothingPending_auth_written `{writePendingG Σ} e :
+    nothingPending_auth -∗ written e -∗ False.
+  Proof.
+    iIntros "H1 H2".
+    by iDestruct (writePending_agree with "H1 H2") as %?.
+  Qed.
+
+  Lemma written_auth_written `{writePendingG Σ} e e' :
+    written_auth e -∗ written e' -∗ ⌜e = e'⌝.
+  Proof.
+    iIntros "H1 H2".
+    by iDestruct (writePending_agree with "H1 H2") as %[= ->].
+  Qed.
+
+  #[export] Instance nothingPending_auth_Timeless `{writePendingG Σ} :
+    Timeless nothingPending_auth.
+  Proof. unfold nothingPending_auth. apply _. Qed.
+
+  #[export] Instance written_auth_Timeless `{writePendingG Σ} e :
+    Timeless (written_auth e).
+  Proof. unfold written_auth. apply _. Qed.
+
   (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
   Class mcMemGS Σ :=
     McMemGS {
