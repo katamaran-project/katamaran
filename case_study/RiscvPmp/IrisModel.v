@@ -209,6 +209,31 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
 
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
       inv femto_inv_mmio_ns (∃ t, side_inv mc_ghGS2_left t ∗ side_inv mc_ghGS2_right t).
+
+    (* If both executions have performed the same observable write, they can
+       be resynchronized: the common observable trace is extended with that
+       write and both executions return to the `nothingPending` state. *)
+    Lemma written_nothingPending2 `{invGS Σ} (width : nat) (e : Event) E :
+      ↑femto_inv_mmio_ns ⊆ E →
+      interp_inv_mmio width -∗
+      @written _ (@mc_wpGS _ mc_ghGS2_left) e -∗
+      @written _ (@mc_wpGS _ mc_ghGS2_right) e ={E}=∗
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_left) ∗
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_right).
+    Proof.
+      iIntros (HE) "#Hinv Hl Hr".
+      iInv "Hinv" as ">(%t & (%t1 & Hf1 & H1) & (%t2 & Hf2 & H2))" "Hclose".
+      iDestruct "H1" as "[[_ Ha1] | (%e1 & %Ht1 & Ha1)]".
+      { iDestruct (nothingPending_auth_written with "Ha1 Hl") as "[]". }
+      iDestruct "H2" as "[[_ Ha2] | (%e2 & %Ht2 & Ha2)]".
+      { iDestruct (nothingPending_auth_written with "Ha2 Hr") as "[]". }
+      iDestruct (written_auth_written with "Ha1 Hl") as %->.
+      iDestruct (written_auth_written with "Ha2 Hr") as %->.
+      iMod (written_nothingPending with "[$Ha1 $Hl]") as "[Ha1 $]".
+      iMod (written_nothingPending with "[$Ha2 $Hr]") as "[Ha2 $]".
+      iApply "Hclose". iExists (e :: t).
+      iSplitL "Hf1 Ha1"; iExists _; iFrame; by iLeft; iFrame.
+    Qed.
   End SharedBinaryInvariant.
 
   Section WithMemory.
