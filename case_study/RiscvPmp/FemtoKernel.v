@@ -1694,13 +1694,17 @@ Import RVPPRED2.
               iDestruct "H'" as "(? & ?)").
 
     #[local] Ltac solve_split :=
-      iIntros; cbn;
-      unfold reg_pointsTo21, reg_pointsTo2, interp_ptstomem2;
+      iIntros; cbn - [RVPCOM.interp_ptstomem];
+      unfold reg_pointsTo21, reg_pointsTo2, interp_ptstomem2, nothingPending2, written2;
       destruct_seps;
       repeat (iRename select (reg_pointsTo _ _)%I into "H'";
               iFrame "H'");
-      (* repeat (iRename select (RiscvPmpIrisInstancePredicates.interp_ptstomem _ _)%I into "H'"; *)
-      (*         iFrame "H'"); *)
+      repeat (iRename select (RVPCOM.nothingPending)%I into "H'";
+              iFrame "H'");
+      repeat (iRename select (RVPCOM.written _)%I into "H'";
+              iFrame "H'");
+      repeat (iRename select (RVPCOM.interp_ptstomem _ _)%I into "H'";
+              iFrame "H'");
       repeat (iRename select (⌜_⌝ ∧ emp)%I into "H'";
               iDestruct "H'" as "[#H' _]";
               try iFrame "H'"; try iDestruct "H'" as "?");
@@ -1758,7 +1762,7 @@ Import RVPPRED2.
       interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
       asn_interpret_left femtokernel_handler_secret_write_pre (Σ__secret secret1) ∗
       asn_interpret_right femtokernel_handler_secret_write_pre (Σ__secret secret2).
-    Proof. (* solve_split. Qed. *) Admitted.
+    Proof. solve_split. Qed.
 
     Lemma femtokernel_handler_exit_pre_binary_split `{sailGS2 Σ} (csrs : CSRVals) :
       let Σ := (CSRVals_Valuation csrs).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] in
@@ -1799,7 +1803,7 @@ Import RVPPRED2.
       asn_interpret_right femtokernel_handler_secret_write_post (Σ secret2 na2) -∗
       ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_secret_write_post_rel (Σ__rel na1)
       ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2.
-    Proof. solve_split. Admitted.
+    Proof. solve_split. Qed.
 
     Lemma femtokernel_handler_exit_post_binary_combine `{sailGS2 Σ} (na1 na2 : Val ty_xlenbits) (csrs : CSRVals) :
       let ι__csrs := CSRVals_Valuation csrs in
