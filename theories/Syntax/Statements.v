@@ -733,7 +733,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
   Notation "s1 ;; s2" := (stm_seq s1 s2) : exp_scope.
   Notation "x <- s" := (stm_assign x s)
-    (at level 80, s at next level) : exp_scope.
+    (at level 20, s at next level) : exp_scope.
   Notation "'fail' s" := (stm_fail _ s)
     (at level 10, no associativity) : exp_scope.
 End StatementsOn.

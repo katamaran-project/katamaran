@@ -754,7 +754,8 @@ Module Import ExampleExecutor :=
 Section DebugExample.
   Import SymProp.notations.
   Notation "x '∷' σ . P" := (@amsg.there _ (x ∷ σ) P)
-    (at level 200, right associativity, only printing, format "x '∷' σ .  '/' P").
+    (at level 49, P at level 200, right associativity, only printing,
+       format "x '∷' σ .  '/' P").
   Notation "'error' x" := (SymProp.error x) (at level 200, only printing, format "'error'  x").
   Notation "P" := (amsg.mk P) (only printing).
   Import ListNotations.

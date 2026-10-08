@@ -436,13 +436,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Module Import notations.
       Notation "⟨ θ ⟩ ' x <- ma ;; mb" :=
         (bind ma (fun _ θ x => mb))
-          (at level 80, x pattern,
-             ma at next level, mb at level 200,
+          (at level 0, x pattern,
+             ma at level 19, mb at level 200,
                right associativity).
       Notation "⟨ θ ⟩ x <- ma ;; mb" :=
         (bind ma (fun _ θ x => mb))
-          (at level 80, x at next level,
-             ma at next level, mb at level 200,
+          (at level 0, x at next level,
+             ma at level 19, mb at level 200,
                right associativity).
       Notation "x ⟨ θ ⟩" := (persist x θ).
     End notations.
@@ -1110,13 +1110,13 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Module Import notations.
       Notation "⟨ ω ⟩ ' x <- ma ;; mb" :=
         (bind ma (fun _ ω x => mb))
-          (at level 80, x pattern,
-             ma at next level, mb at level 200,
+          (at level 0, x pattern,
+             ma at level 19, mb at level 200,
                right associativity).
       Notation "⟨ ω ⟩ x <- ma ;; mb" :=
         (bind ma (fun _ ω x => mb))
-          (at level 80, x at next level,
-             ma at next level, mb at level 200,
+          (at level 0, x at next level,
+             ma at level 19, mb at level 200,
                right associativity).
       Notation "x ⟨ ω ⟩" := (persist x ω).
     End notations.

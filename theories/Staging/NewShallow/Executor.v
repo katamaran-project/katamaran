@@ -163,7 +163,7 @@ Module Type NewShallowExecOn
     End Basic.
     Local Notation "x <- ma ;; mb" :=
       (bind ma (fun x => mb))
-        (at level 80, ma at level 90, mb at level 200, right associativity).
+        (at level 20, ma at next level, mb at level 200, right associativity).
     Local Notation "ma ;; mb" := (bind ma (fun _ => mb)).
 
     Section Nondeterminism.
@@ -555,11 +555,11 @@ Module Type NewShallowExecOn
 
     Notation "' x <- ma ;; mb" :=
       (bind ma (fun x => mb))
-        (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+        (at level 20, x pattern, ma at next level, mb at level 200, right associativity,
            format "' x  <-  ma  ;;  mb") : mut_scope.
     Notation "x <- ma ;; mb" :=
       (bind ma (fun x => mb))
-        (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
+        (at level 20, ma at next level, mb at level 200, right associativity) : mut_scope.
       (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope. *)
 
   End notations.
@@ -640,7 +640,7 @@ Module Type NewShallowExecOn
     End Basic.
     #[local] Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
+          (at level 20, ma at next level, mb at level 200, right associativity) : mut_scope.
     #[local] Notation "ma ;; mb" := (bind_right ma mb) : mut_scope.
     #[local] Infix "⊗" := demonic_binary (at level 40, left associativity) : mut_scope.
     #[local] Infix "⊕" := angelic_binary (at level 50, left associativity) : mut_scope.
@@ -766,11 +766,11 @@ Module Type NewShallowExecOn
 
       Notation "' x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+          (at level 20, x pattern, ma at next level, mb at level 200, right associativity,
            format "' x  <-  ma  ;;  mb") : mut_scope.
       Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
+          (at level 20, ma at next level, mb at level 200, right associativity) : mut_scope.
       (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope. *)
       Notation "ma ;; mb" := (bind_right ma mb) : mut_scope.
 

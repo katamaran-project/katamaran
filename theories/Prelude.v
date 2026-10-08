@@ -436,11 +436,11 @@ Module option.
 
     Notation "' x <- ma ;; mb" :=
       (bind ma (fun x => mb))
-        (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+        (at level 20, x pattern, ma at next level, mb at level 200, right associativity,
           format "' x  <-  ma  ;;  mb").
     Notation "x <- ma ;; mb" :=
       (bind ma (fun x => mb))
-        (at level 80, ma at next level, mb at level 200, right associativity).
+        (at level 20, ma at next level, mb at level 200, right associativity).
     Notation "f <$> a" := (map f a).
     Notation "f <*> a" := (match f with Some g => map g a | None => None end).
 

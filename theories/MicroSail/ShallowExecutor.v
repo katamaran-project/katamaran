@@ -209,11 +209,11 @@ Module Type ShallowExecOn
 
       Notation "' x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+          (at level 20, x pattern, ma at next level, mb at level 200, right associativity,
            format "' x  <-  ma  ;;  mb") : mut_scope.
       Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
+          (at level 20, ma at next level, mb at level 200, right associativity) : mut_scope.
       Notation "ma ;; mb" := (bind ma (fun _ => mb)) : mut_scope.
 
     End CStoreSpecNotations.

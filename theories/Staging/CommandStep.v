@@ -97,7 +97,7 @@ Module Type CProgram (B : Base) := FunDeclKit B <+ CommandsOn B <+ CFunDefKit B.
 
 Module SmallStepOn (Import B : Base) (Import P : CProgram B).
 
-  Reserved Notation "⟨ γ1 , μ1 , c1 ⟩ ---> ⟨ γ2 , μ2 , s2 ⟩" (at level 75, no associativity).
+  Reserved Notation "⟨ γ1 , μ1 , c1 ⟩ ---> ⟨ γ2 , μ2 , s2 ⟩" (at level 0, no associativity).
 
   Inductive Step {A} (γ : RegStore) (μ : Memory) :
     forall (γ2 : RegStore) (μ2 : Memory) (c1 c2 : Command A), Prop :=
@@ -175,7 +175,7 @@ Module CInterpreter (Import B : Base)
 
   Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
-      (at level 80, ma at level 90, mb at level 200, right associativity).
+      (at level 20, ma at next level, mb at level 200, right associativity).
   Notation "m1 ;; m2" := (bind_right m1 m2).
 
   Fixpoint exec {Γ τ} (s : Stm Γ τ) : M Γ Γ (Val τ) :=

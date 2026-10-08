@@ -55,7 +55,7 @@ Reserved Notation "[ x ; y ; .. ; z ]".
 Reserved Notation "δ ► ( x ↦ v )"  (at level 50, x at level 50, left associativity,
  format "δ  ►  ( x  ↦  v )").
 Reserved Notation "δ1 ►► δ2"       (at level 50, left associativity).
-Reserved Notation "δ ⟪ x ↦ v ⟫"    (at level 90, x at level 0, v at level 0, left associativity).
+Reserved Notation "δ ⟪ x ↦ v ⟫"    (x at level 0, v at level 0, left associativity).
 Reserved Notation "δ ‼ x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 0, no associativity).
@@ -69,7 +69,7 @@ Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity
 Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
 
 (* Subst / persist / inst notations. *)
-Reserved Notation "a ⟨ ζ ⟩" (at level 7, left associativity, format "a ⟨ ζ ⟩").
+Reserved Notation "a ⟨ ζ ⟩" (left associativity, format "a ⟨ ζ ⟩").
 Reserved Infix "∘" (at level 40, left associativity).
 
 (* Functor notations. Compatible with stdpp. *)

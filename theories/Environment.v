@@ -727,13 +727,13 @@ Module notations.
   Notation "δ ⟪ x ↦ v ⟫" := (@update _ _ _ δ (x∷_) _ v) : env_scope.
   (* Based on and compatible with ssrnotations, also used in math-comp finmap.  *)
   Notation "e .[ i ]" := (@lookup _ _ _ e _ i)
-    (at level 2, left associativity, format "e .[ i ]").
+    (i at level 50, left associativity, format "e .[ i ]").
   (* Based on and compatible with the math-comp finmap notation. *)
   Notation "e .[? k ]" := (@lookup _ _ _ e k _)
-    (at level 2, k at level 200, format "e .[?  k ]").
+    (format "e .[?  k ]").
   (* Variant of the above if you don't want to specify the type. *)
   Notation "e .[?? x ]" := (@lookup _ _ _ e (x∷_) _)
-    (at level 2, x at level 200, only parsing).
+    (only parsing).
 
   (* #[deprecated(since="20220528", note="Use the specific [env] notation instead.")] *)
   Notation "[ ]" := nil (only parsing) : env_scope.
@@ -766,7 +766,7 @@ Module notations.
      define non-recursive notations. *)
   Notation "E .[ k ↦ v ]" :=
     (@env.snoc (Binding _ _) _ _ E k v)
-    (at level 2, k at level 50, left associativity, format "E '/' .[ k  ↦  v ]") : env_scope.
+    (k at level 50, left associativity, format "E '/' .[ k  ↦  v ]") : env_scope.
 
   (* Sometimes it is necessary to specify both, the element of the context and
      of the environment in cases where the type-checker would otherwise be

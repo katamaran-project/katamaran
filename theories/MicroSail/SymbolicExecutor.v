@@ -507,13 +507,13 @@ Module Type SymbolicExecOn
 
       Notation "⟨ ω ⟩ x <- ma ;; mb" :=
         (bind ma (fun _ ω x => mb))
-          (at level 80, x at next level,
-            ma at next level, mb at level 200,
+          (at level 0, x at next level,
+            ma at level 19, mb at level 200,
             right associativity) : mut_scope.
       Notation "⟨ ω ⟩ ' x <- ma ;; mb" :=
         (bind ma (fun _ ω x => mb))
-          (at level 80, x pattern,
-           ma at next level, mb at level 200,
+          (at level 0, x pattern,
+           ma at level 19, mb at level 200,
            right associativity) : mut_scope.
       Notation "x ⟨ ω ⟩" := (persist x ω).
 

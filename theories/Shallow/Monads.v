@@ -166,11 +166,11 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Module Import notations.
       Notation "' x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+          (at level 20, x pattern, ma at next level, mb at level 200, right associativity,
              format "' x  <-  ma  ;;  mb").
       Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, ma at level 90, mb at level 200, right associativity).
+          (at level 20, ma at next level, mb at level 200, right associativity).
       Notation "ma ;; mb" := (bind ma (fun _ => mb)).
     End notations.
 
@@ -826,11 +826,11 @@ Module Type ShallowMonadsOn (Import B : Base) (Import P : PredicateKit B)
     Module Import notations.
       Notation "' x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+          (at level 20, x pattern, ma at next level, mb at level 200, right associativity,
              format "' x  <-  ma  ;;  mb").
       Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
-          (at level 80, ma at level 90, mb at level 200, right associativity).
+          (at level 20, ma at next level, mb at level 200, right associativity).
       Notation "ma ;; mb" := (bind ma (fun _ => mb)).
     End notations.
 
