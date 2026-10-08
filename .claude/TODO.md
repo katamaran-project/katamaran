@@ -134,6 +134,37 @@ use it for future examples instead of hand-transcribing.
 
 ## TODO list
 
+**Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
+from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
+session, planned WITH Emiel — design decisions are his):**
+- **Registers (urgent).** `noninterferent_strong` (`Noninterference.v:261`)
+  goes spec `RegIdx` → `reg_convert` (`Base.v:1019`, `option (Reg ty_xlenbits)`)
+  → `existT` into `{x : Ty & Reg x}` (`gen_public_regs`, `:109`) → unpacked
+  again in `declare_public_registers` (`:250`). The sigma-typed list is BlockVer
+  heritage; every CFGVer register here is `ty_xlenbits`. `reg_convert 00000 =
+  None`, so an `X0` spec is silently dropped by both `gen_public_regs` and
+  `gen_init_regs` (safe direction — drops a hypothesis — but invisible).
+  Users: `Noninterference.v`, `EndToEnd.v` only. Dead duplicate
+  `declare_public_registers` in `BlockVer/Examples.v:1477` (outside
+  `_CoqProject`) — delete or ignore, it confuses grep.
+- **Memory (less urgent).** `mem_spec = (addr, pub)` (`:140`) survives only so
+  `gen_full_public_addrs` can drop `mem_full_spec`'s init field and call the
+  old `gen_public_addrs` (`:179`). WIDER reach than the register side: the
+  proof chain is stated in `mem_spec` (`EndToEnd.v`, `Adequacy.v`,
+  `GenProg.v`, `GenContract.v`, `Example/BearSSLCheckScalarLoop1.v`, and the
+  proof bodies of `MuladdParamResult`/`CheckScalarParamResult` pass
+  `map mem_full_to_spec`).
+- **Shared implications** (decide whether to bundle): both change the trusted
+  `Noninterference.v` and the `EndToEnd.v` bridges, so both need the same
+  statement review + full gate; the Result statements name only
+  `noninterferent_strong` + spec lists, so they likely stay textually
+  unchanged — CHECK (a `reg_spec` type change would show there).
+- **Design question for the same pass:** a spec `(r, false, Some v)` reads as
+  "r secret" but is effectively public (both worlds are forced to `v`,
+  `:272–273`). Goal per Emiel: as few confusing conversions as possible on the
+  trusted statement, which must stay easily readable — consider a spec shape
+  where this misleading combination is unrepresentable.
+
 **Priority 1 — pointer-argument memory ownership (init_addr parameterization**
 **itself is done; see `project-init-addr-param`/`project-cfgver-symbolic-base-poc`**
 **memory — this is a separate, still-open problem):**
