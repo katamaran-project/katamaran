@@ -941,6 +941,26 @@ Module Type RiscvPmpIrisInstanceWithContracts
     a ≠ mmioShutdownAddr <-> ~ isShutdownAddr a.
   Proof. by unfold isShutdownAddr. Qed.
 
+  Lemma write_addr_neq_write_addr_adv : write_addr ≠ write_addr_adv.
+  Proof. by vm_compute. Qed.
+
+  (* Writes to the M-mode only MMIO address are not observable by the adversary. *)
+  Lemma filter_adv_observable_private n (v : bv (n * byte)) t :
+    filter_adv_observable (mkEvent IOWrite write_addr n v :: t) = filter_adv_observable t.
+  Proof.
+    unfold filter_adv_observable; cbn.
+    by destruct (bv.eqb_spec write_addr write_addr).
+  Qed.
+
+  Lemma filter_adv_observable_adv n (v : bv (n * byte)) t :
+    filter_adv_observable (mkEvent IOWrite write_addr_adv n v :: t) =
+      mkEvent IOWrite write_addr_adv n v :: filter_adv_observable t.
+  Proof.
+    unfold filter_adv_observable; cbn.
+    destruct (bv.eqb_spec write_addr_adv write_addr) as [Heq|]; last done.
+    by apply eq_sym, write_addr_neq_write_addr_adv in Heq.
+  Qed.
+
   Lemma mmio_write_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
@@ -956,31 +976,34 @@ Module Type RiscvPmpIrisInstanceWithContracts
     inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     iFrame "Hregs Hmem %".
-    (* iInv "Hinv" as (t) " [>Htrf >%Hpred]" "Hclose". *)
-    (* iDestruct (trace.trace_full_frag_eq with "Htr Htrf") as "%Heqt". subst t. *)
-    (* (* The updated trace depends on what kind of MMIO write was performed, *)
-    (*    we first destruct Hmmio_checked so we know whether a M-mode mmio write *)
-    (*    is being performed (in which case data can be written as part of the *)
-    (*    MMIO write event, or if an MMIO write on behalf of U-mode is requested. *)
-    (*    In that case, the only possible write event is with value 42. *) *)
-    (* destruct Hmmio_checked as [-> |[-> ->]]; *)
-    (*   iMod (trace.trace_update _ _ (cons _ _) with "[$Htr $Htrf]") as "[Htr Htrf]". *)
-    (* - iMod ("Hclose" with "[Htrf]") as "_". *)
-    (*   {(* Instantiate evars *) *)
-    (*     iExists _; iFrame. iPureIntro. *)
-    (*     apply mmio_pred_cons; [|eauto]. *)
-    (*     left. now exists data. } *)
-    (*   now iFrame "Htr". *)
-    (* - iMod ("Hclose" with "[Htrf]") as "_". *)
-    (*   {(* Instantiate evars *) *)
-    (*     iExists _; iFrame. iPureIntro. *)
-    (*     apply mmio_pred_cons; [|eauto]. *)
-    (*     now right. } *)
-    (*   iMod (nothingPending_written _ with "[$Hwp $Hnp]") as "[Hwp Hnp]". *)
-    (*   simpl. iFrame "Htr Hnp". *)
-    (*   iSplitL; last done. *)
-  (* Qed. *)
-  Admitted.
+    (* Open the shared invariant and look at it from the perspective of this execution. *)
+    iInv "Hinv" as ">(%t & Hsides)" "Hclose".
+    rewrite inv_mmio_body_own_other.
+    iDestruct "Hsides" as "[(%ts & Hfrag & Hown) Hother]".
+    iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as %<-.
+    iMod (trace.trace_update _ (cons _ _) with "[$Htr $Hfrag]") as "[$ Hfrag]".
+    destruct Hmmio_checked as [-> | [-> ->]].
+    - (* M-mode only write: the observable trace does not change. *)
+      destruct (eq_dec write_addr write_addr_adv) as [Hcontra|_];
+        first by apply write_addr_neq_write_addr_adv in Hcontra.
+      iMod ("Hclose" with "[Hfrag Hown Hother]") as "_".
+      { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
+        iExists _. iFrame "Hfrag". rewrite filter_adv_observable_private.
+        iExact "Hown". }
+      by iModIntro.
+    - (* Observable write: this execution moves ahead by one event. *)
+      destruct (eq_dec write_addr_adv write_addr_adv) as [_|]; last done. cbn.
+      iDestruct "Hown" as "[[%Ht Hauth] | (% & _ & Hauth)]";
+        last by iDestruct (written_auth_nothingPending with "Hauth Hnp") as "[]".
+      iMod (nothingPending_written with "[$Hauth $Hnp]") as "[Hauth $]".
+      iMod ("Hclose" with "[Hfrag Hauth Hother]") as "_".
+      { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
+        iExists _. iFrame "Hfrag". iRight. iExists _. iFrame "Hauth".
+        rewrite filter_adv_observable_adv.
+        change (memory_trace (memory_update_state ?μ _)) with (memory_trace μ).
+        by rewrite Ht. }
+      by iModIntro.
+  Qed.
 
   Lemma decode_sound `{sailGS Σ} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_decode RiscvPmpProgram.decode.
