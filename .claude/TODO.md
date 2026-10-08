@@ -136,7 +136,9 @@ use it for future examples instead of hand-transcribing.
 
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
-session, planned WITH Emiel — design decisions are his):**
+session, planned WITH Emiel — design decisions are his). NOW A PLAN:
+`case_study/RiscvPmp/CFGVer/plans/PLAN-spec-layer.md` — start at its Phase 0;
+the notes below are its source material:**
 - **Registers (urgent).** `noninterferent_strong` (`Noninterference.v:261`)
   goes spec `RegIdx` → `reg_convert` (`Base.v:1019`, `option (Reg ty_xlenbits)`)
   → `existT` into `{x : Ty & Reg x}` (`gen_public_regs`, `:109`) → unpacked
