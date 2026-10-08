@@ -31,3 +31,7 @@ rocq_mcp_cache_*.v
 # committing them blocks the merge gate outright. That happened twice
 # (2026-08-13's ZZKsl* set, and once before), hence this rule.
 case_study/RiscvPmp/CFGVer/Example/ZZ*
+
+# Per-user state of the learning plugins (VibeWise, vibe-learn).
+.vibe-wise/
+.vibe-learn/
