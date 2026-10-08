@@ -281,8 +281,7 @@ Module Type ChunksOn
       - cbn -[is_duplicable].
         destruct (chunk_eqb_spec _ (@Term_eqb_spec _) c c').
         + constructor. left. subst.
-          remember (is_duplicable c') as dup.
-          destruct dup; reflexivity.
+          now destruct is_duplicable.
         + apply option.wlp_map. revert IHh.
           apply option.wlp_monotonic; auto.
           intros h' HIn. right.
@@ -342,7 +341,7 @@ Module Type ChunksOn
           f_equal; first f_equal.
           + change (env.map (fun Σ v => inst v ?ι) ?ts) with (inst ts ι).
             rewrite (@inst_eq_rect_indexed_r (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
-            rewrite inst_env_cat. rewrite Heqs. rewrite <- inst_env_cat.
+            rewrite inst_env_cat, Heqs, <- inst_env_cat.
             change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
             rewrite (@inst_eq_rect_indexed (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
             now rewrite rew_opp_l.

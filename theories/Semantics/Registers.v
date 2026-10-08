@@ -81,9 +81,7 @@ Module DefaultRegStoreKit (Import B : Base) <: RegStoreKit B.
     read_register (write_register γ r v) k = read_register γ k.
   Proof.
     intros ?; unfold read_register, write_register.
-    destruct (eq_dec_het r k).
-    - congruence.
-    - reflexivity.
+    destruct (eq_dec_het r k); congruence.
   Qed.
 
   Lemma write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :
@@ -103,7 +101,7 @@ Module DefaultRegStoreKit (Import B : Base) <: RegStoreKit B.
       write_register γ r v2 r'.
   Proof.
     intros ? ?.
-    unfold write_register, read_register.
+    unfold write_register.
     destruct (eq_dec_het r r'); reflexivity.
   Qed.
 

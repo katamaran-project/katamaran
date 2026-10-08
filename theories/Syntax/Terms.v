@@ -804,18 +804,10 @@ Module Type TermsOn (Import TY : Types).
     Proof.
       constructor.
       { intros ? t.
-        induction t; cbn.
-        - reflexivity.
-        - f_equal.
-          + apply IHt.
-          + apply subst_sub_id.
+        induction t; cbn; f_equal; auto using subst_sub_id.
       }
       { intros ? ? ? ? ? t.
-        induction t; cbn.
-        - reflexivity.
-        - f_equal.
-          + apply IHt.
-          + apply subst_sub_comp.
+        induction t; cbn; f_equal; auto using subst_sub_comp.
       }
     Qed.
 
@@ -910,8 +902,7 @@ Module Type TermsOn (Import TY : Types).
       apply env.lookup_extensional; intros.
       destruct (ctx.view bInΓ); first easy.
       cbn -[env.tabulate].
-      rewrite lookup_sub_comp.
-      rewrite lookup_sub_shift.
+      rewrite lookup_sub_comp, lookup_sub_shift.
       destruct b0 as [x0 τ0].
       change (ctx.snoc (ctx.remove bIn) b') with
         (ctx.remove (ctx.in_succ (b' := b') bIn)).
@@ -946,12 +937,8 @@ Module Type TermsOn (Import TY : Types).
       subst (sub_shift xIn) (sub_single xIn t) = sub_id _.
     Proof.
       apply env.lookup_extensional. intros [y τ] yIn.
-      rewrite lookup_sub_id.
-      rewrite lookup_sub_comp.
-      rewrite lookup_sub_shift.
-      cbn.
-      rewrite lookup_sub_single_neq.
-      reflexivity.
+      rewrite lookup_sub_id, lookup_sub_comp, lookup_sub_shift. cbn.
+      now rewrite lookup_sub_single_neq.
     Qed.
 
     Lemma sub_up1_id {Σ x} : sub_up1 (sub_id Σ) = sub_id (Σ ▻ x).
@@ -1024,14 +1011,8 @@ Module Type TermsOn (Import TY : Types).
     #[export] Instance SubstLawsOption {A} `{SubstLaws A} : SubstLaws (Option A).
     Proof.
       constructor.
-      { intros ? [t|]; cbn.
-        - f_equal; apply subst_sub_id.
-        - reflexivity.
-      }
-      { intros ? ? ? ? ? [t|]; cbn.
-        - f_equal; apply subst_sub_comp.
-        - reflexivity.
-      }
+      { intros ? [t|]; cbn; f_equal; apply subst_sub_id. }
+      { intros ? ? ? ? ? [t|]; cbn; f_equal; apply subst_sub_comp. }
     Qed.
 
 

@@ -182,10 +182,8 @@ Section WithBinding.
       Any Q (snoc E v) <-> Any Q E \/ Q _ v.
     Proof.
       split.
-      - remember (snoc E v) as E'.
-        induction 1.
-        destruct H as [xIn HQ]; subst.
-        destruct (ctx.view xIn); cbn in *; [right|left]; now repeat eexists.
+      - intros (x & xIn & HQ).
+        destruct (ctx.view xIn); cbn in HQ; [right|left]; now repeat eexists.
       - intros [[x [xIn HQ]]|HQ].
         now eexists _, (ctx.in_succ xIn).
         now eexists b, (ctx.in_zero).
@@ -203,13 +201,8 @@ Section WithBinding.
     Proof.
       induction E; cbn.
       - constructor; eapply Any_nil.
-      - destruct IHE as [HA|HnA].
-        + rewrite orb_true_r.
-          constructor.
-          apply Any_snoc.
-          now left.
-        + destruct (rQf b db); constructor;
-            rewrite Any_snoc; intuition.
+      - destruct IHE, (rQf b db); constructor;
+          rewrite Any_snoc; intuition.
     Qed.
 
     Fixpoint find (f : forall b, D b -> bool) {Γ} (E : Env Γ) : option {x & x ∈ Γ}  :=
@@ -383,10 +376,7 @@ Section WithBinding.
     Lemma lookup_update {Γ} (E : Env Γ) :
       forall {b} (bInΓ : b ∈ Γ) (db : D b),
         lookup (update E bInΓ db) bInΓ = db.
-    Proof.
-      induction E; intros ? [n e]; try destruct e;
-        destruct n; cbn in *; subst; auto.
-    Qed.
+    Proof. induction E; intros ? bIn; destroy bIn; cbn; auto. Qed.
 
     Lemma drop_cat {Γ Δ} (δΔ : Env Δ) (δΓ : Env Γ) :
       drop Δ (cat δΓ δΔ) = δΓ.
@@ -406,18 +396,14 @@ Section WithBinding.
         update (update E bInΓ d1) bInΓ d2 =
         update E bInΓ d2.
     Proof.
-      induction E; intros ? [n e]; [ contradiction e | destruct n ].
-      - destruct e; reflexivity.
-      - cbn. intros. f_equal. auto.
+      induction E; intros ? bIn; destroy bIn; cbn; intros; f_equal; auto.
     Qed.
 
     Lemma update_lookup {Γ} (E : Env Γ) :
       forall {b} (bInΓ : b ∈ Γ),
         update E bInΓ (lookup E bInΓ) = E.
     Proof.
-      induction E; intros ? [n e]; [ contradiction e | destruct n ].
-      - destruct e; reflexivity.
-      - cbn. intros. f_equal. auto.
+      induction E; intros ? bIn; destroy bIn; cbn; f_equal; auto.
     Qed.
 
     Lemma lookup_extensional {Γ} (E1 E2 : Env Γ) :
@@ -622,44 +608,27 @@ Section WithBinding.
     Lemma map_drop {Γ Δ} (EΓΔ : Env D1 (Γ ▻▻ Δ)) :
       map (drop Δ EΓΔ) = drop Δ (map EΓΔ).
     Proof.
-      induction Δ; intros; cbn in *.
-      - reflexivity.
-      - dependent elimination EΓΔ; apply IHΔ.
+      induction Δ; [easy|].
+      dependent elimination EΓΔ; apply IHΔ.
     Qed.
 
     Lemma map_update {Γ} (E : Env D1 Γ) :
       forall {b} (bInΓ : b ∈ Γ) (db : D1 b),
         map (update E bInΓ db) = update (map E) bInΓ (f db).
-    Proof.
-      induction E; intros ? [n e]; try destruct e.
-      destruct n; cbn in *; subst; cbn; congruence.
-    Qed.
+    Proof. induction E; intros ? bIn; destruct (ctx.view bIn); cbn; congruence. Qed.
 
     Lemma map_tabulate {Γ} (g : forall b, b ∈ Γ -> D1 b) :
       map (tabulate g) = tabulate (fun b bInΓ => f (g b bInΓ)).
-    Proof.
-      induction Γ; intros; cbn in *.
-      - reflexivity.
-      - f_equal; apply IHΓ.
-    Qed.
+    Proof. induction Γ; cbn; [easy|]. f_equal; apply IHΓ. Qed.
 
     Lemma lookup_map {Γ} (E : Env D1 Γ) :
       forall {b} (bInΓ : b ∈ Γ),
         lookup (map E) bInΓ = f (lookup E bInΓ).
-    Proof.
-      induction E; intros ? [n e]; try destruct e;
-        destruct n; cbn in *; subst; auto.
-    Qed.
+    Proof. induction E; intros ? bIn; destruct (ctx.view bIn); cbn; auto. Qed.
 
     Lemma remove_map {b Γ} (E : Env D1 Γ) (bIn : b ∈ Γ) :
       map (remove b E bIn) = remove b (map E) bIn.
-    Proof.
-      rewrite !remove_remove'.
-      unfold remove'.
-      apply lookup_extensional.
-      intros.
-      now rewrite lookup_map, !lookup_tabulate, lookup_map.
-    Qed.
+    Proof. induction E; destruct (ctx.view bIn); cbn; f_equal; auto. Qed.
 
   End Map.
 
@@ -699,12 +668,7 @@ Section WithBinding.
 
   Lemma map_ext {D1 D2 : B -> Set} (f1 f2 : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
     (forall b d, f1 b d = f2 b d) -> map f1 E = map f2 E.
-  Proof.
-    intros HYP.
-    apply lookup_extensional.
-    intros.
-    now rewrite ?lookup_map.
-  Qed.
+  Proof. intros HYP. induction E; cbn; congruence. Qed.
 
 End WithBinding.
 

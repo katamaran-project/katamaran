@@ -59,9 +59,7 @@ Module VecUtils.
     (forall {n} (f : fin (S n)), P f (H n f)) ->
     forall {n} (f : fin n), P f (learnFinSucc H f).
   Proof.
-    intros HPf n [|f]; cbn.
-    - eapply HPf.
-    - eapply HPf.
+    intros HPf n [|f]; cbn; eapply HPf.
   Qed.
 
   Section DecideForall2.

@@ -210,7 +210,7 @@ Module Type IrisTotalWeakestPre
         iMod "Hclose" as "_". iMod ("IH" with "[]") as "IH"; first easy.
         iMod "IH". iModIntro. iMod "IH". iModIntro.
         iDestruct "IH" as "($ & [IH _])".
-        iApply "IH"; done.
+        by iApply "IH".
     Qed.
 
     Lemma semTWP_call_frame {Γ τ Δ} (δΔ : CStore Δ) (s : Stm Δ τ) :
@@ -477,14 +477,13 @@ Module Type IrisTotalWeakestPre
         iPureIntro. apply step_refl.
       - iSpecialize ("IH" $! γ1 μ1 with "Hres").
         pose proof (progress s1) as [H|H].
-        + destruct s1; cbn in H; try discriminate; try contradiction.
+        + by apply stm_to_val_not_Final in Es1.
         + iMod "IH". destruct (H γ1 μ1 δ1) as (γ2 & μ2 & δ2 & s2 & Hs).
           iMod ("IH" $! s2 δ2 _ _ Hs) as "IH". iMod "IH" as "(Hres & [IH _])".
           iMod ("IH" with "Hres") as "IH".
           iDestruct "IH" as "(%γ3 & %μ3 & %δ3 & %s3 & %v' & IH)".
           iExists γ3, μ3, δ3, s3, v'. iDestruct "IH" as "(%Hs2 & $)".
-          iPureIntro. eapply Steps_trans; last apply Hs2.
-          apply (step_trans Hs). apply step_refl.
+          iPureIntro. exact (step_trans Hs Hs2).
     Qed.
 
   End TotalWeakestPre.

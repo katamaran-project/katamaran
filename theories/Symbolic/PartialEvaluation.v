@@ -305,25 +305,19 @@ Module Type PartialEvaluationOn
       Proper ((base.equiv ==> base.equiv ==> base.equiv) ==> base.equiv ==> eq ==> base.equiv) (@pow_pos A).
     Proof.
       intros m1 m2 Hm x1 x2 Hx n ? <-.
-      revert m1 m2 Hm x1 x2 Hx.
       induction n; cbn.
-      - intros m1 m2 Hm x1 x2 Hx.
-        apply Hm; [easy|].
+      - apply Hm; [easy|].
         apply Hm; now apply IHn.
-      - intros m1 m2 Hm x1 x2 Hx.
-        apply Hm; now apply IHn.
-      - now intros.
+      - apply Hm; now apply IHn.
+      - easy.
     Qed.
 
     Lemma proper_pow_N `{base.Equiv A} :
       Proper (base.equiv ==> (base.equiv ==> base.equiv ==> base.equiv) ==> base.equiv ==> eq ==> base.equiv) (@pow_N A).
     Proof.
       intros o1 o2 Ho m1 m2 Hm x1 x2 Hx n ? <-.
-      revert o1 o2 Ho m1 m2 Hm x1 x2 Hx.
-      destruct n; cbn.
-      - now intros.
-      - intros o1 o2 Ho m1 m2 Hm x1 x2 Hx.
-        now apply proper_pow_pos.
+      destruct n; cbn; [easy|].
+      now apply proper_pow_pos.
     Qed.
 
     #[export] Instance proper_nth_equiv `{base.Equiv A} :
@@ -1345,12 +1339,9 @@ Module Type PartialEvaluationOn
         try eauto using tmr_ring_morph_peval', tmr_ring_theory_peval', tmr_ring_eq_ext_peval', tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th with typeclass_instances.
       rewrite norm_aux_spec;
         try eauto using tmr_ring_eq_ext, Rth_ARth, tmr_ring_theory, tmr_ring_morph, get_signZ_th, pow_N_th with typeclass_instances.
-      apply Pphi_more_proper; try easy.
-      - repeat intros ? ? ?.
-        rewrite peval_binop'_sound.
-        now apply proper_term_binop.
-      - repeat intros ? ? ?.
-        rewrite peval_binop'_sound.
+      apply Pphi_more_proper; try easy;
+        repeat intros ? ? ?;
+        rewrite peval_binop'_sound;
         now apply proper_term_binop.
     Qed.
 

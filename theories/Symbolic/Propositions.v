@@ -556,8 +556,7 @@ Module Type SymPropOn
       induction ζ; cbn in *.
       - rewrite inst_sub_id. intuition.
       - rewrite IHζ. clear IHζ.
-        rewrite <- inst_sub_shift.
-        rewrite inst_subst.
+        rewrite <- inst_sub_shift, inst_subst.
         intuition.
     Qed.
 
@@ -570,10 +569,8 @@ Module Type SymPropOn
       - cbn. rewrite inst_sub_id, subst_sub_id. intuition.
       - cbn [wsafe assert_triangular inst_triangular].
         rewrite obligation_equiv. cbn.
-        rewrite subst_sub_comp.
-        rewrite IHζ. clear IHζ.
-        rewrite <- inst_sub_shift.
-        rewrite ?inst_subst.
+        rewrite subst_sub_comp, IHζ. clear IHζ.
+        rewrite <- inst_sub_shift, ?inst_subst.
         intuition.
     Qed.
 
@@ -1237,21 +1234,8 @@ Module Type SymPropOn
       safe (demonic_binary_prune p1 p2) ι <-> safe (demonic_binary p1 p2) ι.
     Proof.
       destruct p1; cbn; auto.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - intuition.
-      - destruct p2; cbn; auto;
-          rewrite ?obligation_equiv; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto;
-          rewrite ?obligation_equiv; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
+      4: intuition.
+      all: destruct p2; cbn; auto; rewrite ?obligation_equiv; intuition.
     Qed.
 
     Lemma prune_assertk_sound {Σ} fml msg (p : 𝕊 Σ) (ι : Valuation Σ) :
@@ -1442,7 +1426,7 @@ Module Type SymPropOn
           rewrite instprop_subst, inst_eq_rect in Hpc.
           now rewrite inst_sub_single2 in Hpc.
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
-          cbn in Hp. cbn in Hp. destruct Hp as [Ht Hp].
+          cbn in Hp. destruct Hp as [Ht Hp].
           rewrite env.remove_cat_right in Hp.
           exists (env.remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.
@@ -1636,10 +1620,7 @@ Module Type SymPropOn
         rewrite safe_assume_pathcondition. cbn.
         rewrite forall_impl.
         apply all_iff_morphism. intros v.
-        rewrite safe_assume_pathcondition.
-        rewrite instprop_subst.
-        rewrite inst_sub_wk1.
-        reflexivity.
+        now rewrite safe_assume_pathcondition, instprop_subst, inst_sub_wk1.
       Qed.
 
       Lemma plug_eq_rect {Σ1 Σ2 Σ2'} (eq : Σ2 = Σ2') (ec : UCtx Σ1 Σ2) (p : 𝕊 Σ2') :

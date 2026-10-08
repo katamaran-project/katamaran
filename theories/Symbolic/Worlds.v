@@ -222,7 +222,7 @@ Module Type WorldsOn
       instprop (wco w1) (inst (sub_triangular_inv ν) ι0).
     Proof.
       induction ν; cbn.
-      - cbn. rewrite inst_sub_id. auto.
+      - now rewrite inst_sub_id.
       - rewrite <- inst_sub_shift, inst_subst. intros [Heqx Heq'] Hpc0.
         apply IHν; cbn; auto.
         rewrite instprop_subst, inst_sub_single_shift; auto.
@@ -232,15 +232,10 @@ Module Type WorldsOn
       inst_triangular ζ01 (inst (sub_triangular ζ01) ι1).
     Proof.
       induction ζ01; cbn; auto.
-      rewrite <- inst_lookup, lookup_sub_comp. rewrite lookup_sub_single_eq.
-      rewrite <- inst_sub_shift. rewrite <- ?inst_subst.
-      rewrite subst_sub_comp.
-      rewrite subst_shift_single.
+      rewrite <- inst_lookup, lookup_sub_comp, lookup_sub_single_eq,
+        <- inst_sub_shift, <- ?inst_subst, subst_sub_comp, subst_shift_single.
       split; auto.
-      rewrite <- ?sub_comp_assoc.
-      rewrite sub_comp_shift_single.
-      rewrite sub_comp_id_left.
-      auto.
+      now rewrite <- ?sub_comp_assoc, sub_comp_shift_single, sub_comp_id_left.
     Qed.
 
     Lemma inst_tri_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) (ι0 : Valuation w0) :
@@ -1268,11 +1263,7 @@ Module Type WorldsOn
 
       Lemma solver_null_spec : SolverSpec solver_null.
       Proof.
-        intros w C. constructor.
-        unfold knowing; crushPredEntails2.
-        - rewrite inst_sub_id in H0.
-          now subst.
-        - now rewrite inst_sub_id.
+        intros w C. constructor. apply knowing_id.
       Qed.
     End SolverSpec.
 

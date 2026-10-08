@@ -91,10 +91,7 @@ Module Type RefinementMonadsOn
     Lemma refine_pure `{RA : Rel SA CA} {w} :
       ⊢ ℛ⟦RA -> RPureSpec RA⟧ CPureSpec.pure (SPureSpec.pure (w := w)).
     Proof.
-      iIntros (v va) "Hv".
-      iIntros (k K) "Hk".
-      iMod "Hk".
-      unfold CPureSpec.pure.
+      iIntros (v va) "Hv %k %K >Hk".
       now iApply "Hk".
     Qed.
 
@@ -169,8 +166,7 @@ Module Type RefinementMonadsOn
       ⊢ ℛ⟦RPureSpec (RVal σ)⟧ (CPureSpec.demonic σ) (SPureSpec.demonic (w := w) x σ).
     Proof.
       unfold CPureSpec.demonic, SPureSpec.demonic.
-      iIntros (k K) "HK HSP".
-      iIntros (v).
+      iIntros (k K) "HK HSP %v".
       iSpecialize ("HK" $! _ (acc_snoc_right (b := fresh_lvar w x∷σ)) v term_var_zero).
       cbn.
       rewrite assuming_acc_snoc_right2.
@@ -317,8 +313,7 @@ Module Type RefinementMonadsOn
           iApply ("HΦ" with "[] HsΦ").
           now iApply refine_unit.
       - cbn.
-        iDestruct "HΦ" as "%fls".
-        destruct fls.
+        by iDestruct "HΦ" as %[].
     Qed.
 
     #[export, refine] Instance refine_compat_assert_pathcondition {w msg} :
@@ -983,8 +978,7 @@ Module Type RefinementMonadsOn
     Proof.
       iIntros "(Huser & Hptsreg & Hconj & Hwand) %c %sc #Hsc".
       iApply (RChunk_ind P with "[Huser Hptsreg Hconj Hwand] Hsc").
-      iSplitL "Huser". { iExact "Huser". }
-      iSplitL "Hptsreg". { iExact "Hptsreg". }
+      iFrame "Huser Hptsreg".
       iSplitL "Hconj".
       - iIntros (c1 sc1 c2 sc2) "Hc1 Hc2 _ _". 
         now iApply ("Hconj" with "Hc1 Hc2").
@@ -1289,8 +1283,7 @@ Module Type RefinementMonadsOn
         { iDestruct (eval_ex sh') as "(%h' & Heqh')".
           now iExists h'. }
         match goal with | |- context[amsg.mk ?m] => generalize (amsg.mk m) end.
-        iIntros (msg).
-        iIntros (K sK) "HK HSP".
+        iIntros (msg K sK) "HK HSP".
         iAssert (⌜eq /\ K h'⌝)%I with "[HK HSP]" as "%HeqKh'".
         { iPoseProof (refine_assert_pathcondition $! msg eq eqs with "Heq") as "Hapc".
           iApply ("Hapc" $! (fun _ => K h') with "[HK] HSP").

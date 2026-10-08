@@ -1022,10 +1022,10 @@ Module Type GenericSolverOn
        end.
 
     Lemma True_bientails [w : World] (P : Pred w) : (⊢ P) -> True ⊣⊢ P.
-    Proof. intros HP. constructor. intros ι Hpc. destruct HP as [HP]. now specialize (HP ι Hpc). Qed.
+    Proof. intros [HP]. constructor. intros ι Hpc. now specialize (HP ι Hpc). Qed.
 
     Lemma False_bientails [w : World] (P : Pred w) : (⊢ ¬ P) -> False ⊣⊢ P.
-    Proof. intros HP. constructor. intros ι Hpc. destruct HP as [HP]. now specialize (HP ι Hpc I). Qed.
+    Proof. intros [HP]. constructor. intros ι Hpc. now specialize (HP ι Hpc I). Qed.
 
     Lemma simplify_bvule_spec [w : World] [n] (s t : Term w (ty.bvec n)) :
       instpred (simplify_bvule s t) ⊣⊢ instpred (formula_relop bop.bvule s t).

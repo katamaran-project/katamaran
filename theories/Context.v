@@ -335,11 +335,9 @@ Module Import ctx.
       intros ? ? ? [m p] [n q] e; intros.
       destruct e.
       destruct Γ; cbn in *. contradiction.
-      destruct m, n.
+      destruct m.
       - destruct p. cbn. now rewrite EqDec.uip_refl_refl.
-      - destruct p. cbn. now rewrite EqDec.uip_refl_refl.
-      - cbn. rewrite proof_irrelevance_nth_is_refl. reflexivity.
-      - cbn. rewrite proof_irrelevance_nth_is_refl. reflexivity.
+      - cbn. now rewrite proof_irrelevance_nth_is_refl.
     Qed.
 
     (* Two proofs of context membership are equal of the deBruijn indices are equal *)

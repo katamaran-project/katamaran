@@ -107,18 +107,12 @@ Module RefineExecOn
            CStoreSpec.evalStoreSpec (fun w => SStoreSpec.evalStoreSpec w) : Pred w).
     Proof.
       unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec.
-      iIntros (ss tss) "Hss".
-      iIntros (s ts) "Hs".
-      iIntros (k ks) "Hk".
-      iIntros (h hs) "Hh".
-      iIntros "Hsym".
+      iIntros (ss tss) "Hss %s %ts Hs %k %ks Hk %h %hs Hh Hsym".
       iApply ("Hss" with "[Hk] Hs Hh Hsym").
       iIntros (w' ω).
       iSpecialize ("Hk" $! _ ω).
       iModIntro.
-      iIntros (a ta) "Ha".
-      iIntros (s2 ts2) "Hs2".
-      iIntros (h2 th2) "Hh2".
+      iIntros (a ta) "Ha %s2 %ts2 Hs2 %h2 %th2 Hh2".
       now iApply ("Hk" with "Ha Hh2").
     Qed.
 
@@ -127,10 +121,7 @@ Module RefineExecOn
         CStoreSpec.lift_purespec (SStoreSpec.lift_purespec (w := w)).
     Proof.
       unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purespec, CStoreSpec.lift_purespec.
-      iIntros (p ps) "Hp".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh".
+      iIntros (p ps) "Hp %k %ks Hk %s %ss Hs %h %hs Hh".
       iApply "Hp".
       iIntros (w' ω).
       iSpecialize ("Hk" $! _ ω).
@@ -144,10 +135,7 @@ Module RefineExecOn
           CStoreSpec.lift_heapspec (SStoreSpec.lift_heapspec (w := w)).
     Proof.
       unfold RHeapSpec, RStoreSpec, SStoreSpec.lift_heapspec, CStoreSpec.lift_heapspec.
-      iIntros (p ps) "Hp".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh".
+      iIntros (p ps) "Hp %k %ks Hk %s %ss Hs %h %hs Hh".
       iApply ("Hp" with "[Hk Hs] Hh").
       iIntros (w1 θ1).
       iSpecialize ("Hk" $! _ θ1).
@@ -159,9 +147,7 @@ Module RefineExecOn
     Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
       ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R⟧ CStoreSpec.block (SStoreSpec.block (w := w)).
     Proof.
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh _".
+      iIntros (k ks) "Hk %s %ss Hs %h %hs Hh _".
       now iPureIntro.
     Qed.
 
@@ -169,9 +155,7 @@ Module RefineExecOn
       forall (cm : CStoreSpec Γ1 Γ2 A),
         ⊢ ℛ⟦RMsg _ (RStoreSpec Γ1 Γ2 R)⟧ cm (SStoreSpec.error (w := w)).
     Proof.
-      iIntros (cm msg k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh []".
+      iIntros (cm msg k ks) "Hk %s %ss Hs %h %hs Hh []".
     Qed.
 
     (* Disable refine_compat_msg because it gets spuriously searched very often during instance search and is only used in refine_compat_error.
@@ -202,10 +186,7 @@ Module RefineExecOn
       ⊢ ℛ⟦R -> RStoreSpec Γ Γ R⟧ CStoreSpec.pure (SStoreSpec.pure (w := w)).
     Proof.
       unfold SStoreSpec.pure, CStoreSpec.pure.
-      iIntros (r rs) "Hr".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh HPS".
+      iIntros (r rs) "Hr %k %ks Hk %s %ss Hs %h %hs Hh HPS".
       iMod "Hk".
       now iApply ("Hk" with "Hr Hs Hh HPS").
     Qed.
@@ -215,17 +196,11 @@ Module RefineExecOn
         CStoreSpec.bind (SStoreSpec.bind (w := w)).
     Proof.
       unfold SStoreSpec.bind, CStoreSpec.bind.
-      iIntros (m ms) "Hm".
-      iIntros (c cs) "Hc".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh HPS".
+      iIntros (m ms) "Hm %c %cs Hc %k %ks Hk %s %ss Hs %h %hs Hh HPS".
       iApply ("Hm" with "[Hk Hc] Hs Hh HPS").
       iIntros (w' ω).
       iModIntro.
-      iIntros (a aas) "Ha".
-      iIntros (s2 s2s) "Hs".
-      iIntros (h2 h2s) "Hh".
+      iIntros (a aas) "Ha %s2 %s2s Hs %h2 %h2s Hh".
       iApply ("Hc" with "Ha [Hk] Hs Hh").
       now iApply (refine_four with "Hk").
     Qed.

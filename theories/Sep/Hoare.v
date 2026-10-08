@@ -291,8 +291,8 @@ Module Type ProgramLogic
     #[export] Instance proper_triple_entails {Γ δ τ} :
       Proper (Basics.flip (⊢) ==> eq ==> pointwise_relation _ (pointwise_relation _ (⊢)) ==> Basics.impl) (@Triple Γ δ τ).
     Proof.
-      intros P Q qp s s' eq__s R S rs H; subst s'.
-      eapply rule_consequence. apply qp. apply rs. apply H.
+      intros P Q qp s ? <- R S rs H.
+      exact (rule_consequence δ qp rs H).
     Qed.
 
     #[export] Instance proper_triple_equiv {Γ δ τ} :

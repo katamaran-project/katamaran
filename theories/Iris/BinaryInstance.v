@@ -223,8 +223,7 @@ Module IrisInstanceWithContracts2
     destruct (CEnv f) as [[]|];[|trivial].
     iIntros (ι).
     specialize (vcenv _ eq_refl ι).
-    iApply (sound_stm extSem lemSem); [|trivial].
-    apply vcenv.
+    now iApply (sound_stm extSem lemSem vcenv).
   Qed.
 
   End WithSailGS.

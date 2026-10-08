@@ -238,10 +238,10 @@ Module Type IrisPrelims
       reducible_no_obs {| conf_stm := s; conf_store := δ |} σ.
     Proof.
       intros δ [γ μ] H. pose proof (progress s) as [Hs|Hs].
-      - apply stm_to_val_not_Final in H. contradiction.
+      - now apply stm_to_val_not_Final in H.
       - destruct (Hs γ μ δ) as (γ' & μ' & δ' & s' & Hstep).
         exists (MkConf s' δ'), (γ', μ'), nil.
-        constructor. simpl. auto.
+        now constructor.
     Qed.
 
     Lemma reducible_not_val {Γ τ} {s : Stm Γ τ} :

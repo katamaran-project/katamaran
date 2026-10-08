@@ -358,11 +358,9 @@ Module Type InstantiationOn
     (sub_single ctx.in_zero t) = env.snoc (sub_id Σ) x t.
   Proof.
     eapply env.lookup_extensional.
-    intros [x' σ'] ([|n] & eq).
-    - cbn in *.
-      now subst.
-    - cbn in *.
-      rewrite env.lookup_tabulate; cbn.
+    intros [x' σ'] ([|n] & eq); cbn in *.
+    - now subst.
+    - rewrite env.lookup_tabulate; cbn.
       now rewrite lookup_sub_id.
   Qed.
 

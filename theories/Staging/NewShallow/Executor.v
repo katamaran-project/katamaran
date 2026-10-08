@@ -85,7 +85,8 @@ Module Type NewShallowExecOn
     #[export] Instance monotonic_transitive {A} : Transitive (@Monotonic A).
     Proof.
       intros f g h fg gh P Q PQ. transitivity (g Q).
-      apply fg. assumption. apply gh. reflexivity.
+      - now apply fg.
+      - now apply gh.
     Qed.
 
     (* For counting the different execution paths of the shallow executor we use

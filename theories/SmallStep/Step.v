@@ -303,11 +303,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, s3 ⟩.
   Proof.
     intros γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3 s1 s2 s3 Hs1s2 Hs2s3.
-    revert γ3 μ3 δ3 s3 Hs2s3.
-    induction Hs1s2; first auto.
-    intros γ4 μ4 δ4 s4 Hs3s4.
-    eapply step_trans. eassumption.
-    now apply IHHs1s2.
+    induction Hs1s2; eauto using step_trans.
   Qed.
 
   Lemma Steps_bind {Γ σ τ} :
@@ -317,9 +313,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   Proof.
     intros γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 k H.
     induction H; first apply step_refl.
-    eapply Steps_trans; last eauto.
-    eapply step_trans. apply st_bind_step. eauto.
-    apply step_refl.
+    eapply step_trans; last apply IHSteps. constructor. auto.
   Qed.
 
   Lemma Steps_block {Γ τ} :
