@@ -169,6 +169,22 @@ session, planned WITH Emiel — design decisions are his):**
   (nothing to check), (b) a decidable check proved as a CONJUNCT of the end
   theorem (`wf_specs = true ∧ noninterferent_strong …`, closed by
   `reflexivity`) so a bad spec makes it unprovable, not vacuous.
+- **DECIDED (Emiel, 2026-10-08): sum type, for BOTH registers and memory, done
+  in the same pass as the register + memory plumbing cleanups** (one statement
+  review, one gate).
+- **Duplicate machinery (Emiel):** `get_word` (`:133`, functional) and
+  `mem_has_word` (`:118`, existential over 4 bytes via `bv.seqBv a 4`) serve
+  the same purpose — public/init memory uses the first, code uses the second.
+  Unify. The trusted file still carries an unanswered `(* byte order correct? *)`
+  at `:121`; settle it in the same pass (the end-to-end proof forces
+  consistency with the model's fetch; whether that is real RISC-V
+  little-endian is a model question — check `bv.app`'s bit order).
+- **Vacuity (from the reading session):** hypotheses that can be jointly
+  unsatisfiable make an end theorem true for free — data overlapping code with
+  a different value, a register/address given two different init values, and
+  overlaps at BYTE level (a word spec at `a` and one at `a+2` share bytes), not
+  just equal addresses. Consider a consistency check proved as a conjunct (same
+  shape as option (b) above) or a per-Result non-vacuity witness.
 - **Doc fix, same file:** the comment on `noninterferent_strong` (`:258–260`)
   says "if world 1 reaches the exit address in n steps", but
   `RiscVNStepsWithExitCond` has a `refl` constructor and only checks the exit
