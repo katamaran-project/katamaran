@@ -231,7 +231,10 @@ the notes below are its source material:**
     validity + seal (heavy, so cannot live in the light example file), ~75
     lines of bv arithmetic for the symbolic sizes, and a manual `eapply` with
     an explicit valuation because no `_simple` bridge exists for mixed
-    front-ends + `data_spec`. The last two are automation gaps.
+    front-ends + `data_spec`. The last two are automation gaps. Emiel: the bv
+    arithmetic "should be easy to resolve by using ring or by transporting it
+    to a domain where lia works" — i.e. one generic tactic, not ~13
+    hand-proved lemmas (check bv-pitfalls for the existing lia/2^32 traps).
   - Stale header: `MuladdParamResult.v:3` still says "Untracked probe".
 - **Doc fix, same file:** the comment on `noninterferent_strong` (`:258–260`)
   says "if world 1 reaches the exit address in n steps", but
