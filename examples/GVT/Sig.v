@@ -115,7 +115,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     | SGo
     | SStop.
 
-    #[export] Definition iostate_bits := 1%nat.
+    Definition iostate_bits := 1%nat.
     Class bv_rize (A : Set) (n : nat) : Set := {
         s2bv : A -> bv n;
         bv2s : bv n -> A ;

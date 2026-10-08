@@ -161,11 +161,11 @@ Module Type IrisWeakestPre
     Qed.
 
     Lemma semWP_val {Γ τ} (v : Val τ) (Q : Post Γ τ) (δ : CStore Γ) :
-      semWP δ (stm_val τ v) Q ⊣⊢ |={⊤}=> Q (inl v) δ.
+      semWP δ (stm_val τ v) Q ⊣⊢ (|={⊤}=> Q (inl v) δ).
     Proof. rewrite semWP_unfold. reflexivity. Qed.
 
     Lemma semWP_fail {Γ τ s} (Q : Post Γ τ) (δ : CStore Γ) :
-      semWP δ (stm_fail _ s) Q ⊣⊢ |={⊤}=> Q (inr s) δ.
+      semWP δ (stm_fail _ s) Q ⊣⊢ (|={⊤}=> Q (inr s) δ).
     Proof. rewrite semWP_unfold. reflexivity. Qed.
 
     Lemma semWP_exp {Γ τ} (e : Exp Γ τ) :

@@ -215,7 +215,7 @@ Module Type GenOccursCheckOn
 
   Class SubstUnivVar (Sb : LCtx -> LCtx -> Type) :=
     suVar : forall {x Σ} (xIn : x ∈ Σ), Sb [ x ]%ctx  Σ.
-  Arguments SubstUnivVar Sb.
+  (* Arguments SubstUnivVar Sb. *)
 
   Class SubstUnivVarUp Sb `{SubstUnivVar Sb} :=
     upSU : forall {Σ1 Σ2 x}, Sb Σ1 Σ2 -> Sb (Σ1 ▻ x) (Σ2 ▻ x)

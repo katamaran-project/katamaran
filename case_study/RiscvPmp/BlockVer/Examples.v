@@ -67,12 +67,12 @@ Module Examples.
   Import Assembly.
   Import RiscvPmp.Sig.
   Import iris.proofmode.proofmode.
-  Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
-  Local Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
-  Local Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
-  Local Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
-  Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
-  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  #[local] Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
+  #[local] Notation "x - y" := (term_binop bop.bvsub x y) : exp_scope.
+  #[local] Notation "a <=ᵘ b" := (term_binop (bop.relop bop.bvule) a b) : exp_scope.
+  #[local] Notation "a = b" := (term_binop (bop.relop bop.eq) a b) : exp_scope.
+  #[local] Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
+  #[local] Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
   Definition X0 : RegIdx := bv.zero.
   Definition X1 : RegIdx := bv.one.
@@ -175,7 +175,7 @@ Module Examples.
     Definition asn_pc_eq {Σ} {aIn : ("a"∷ty_xlenbits ∈ Σ)%katamaran} (t : Term Σ ty_xlenbits) : Assertion Σ :=
       term_var "a" = t.
 
-    Local Notation term_pc_val := (term_var "a").
+    #[local] Abbreviation term_pc_val := (term_var "a").
 
     Definition asn_next_pc_eq {Σ} {anIn : ("an"∷ty_xlenbits ∈ Σ)%katamaran} (t : Term Σ ty_xlenbits) : Assertion Σ :=
       term_var "an" = t.

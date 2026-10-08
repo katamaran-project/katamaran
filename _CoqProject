@@ -2,10 +2,21 @@
 -arg "-w -disj-pattern-notation"
 -arg "-w -notation-overridden"
 -arg "-w -redundant-canonical-projection"
+-arg "-w -warn-library-file-stdlib-vector"
 -arg "-w -warn-transitive-library-file-stdlib-vector"
 -arg "-w -deprecated-transitive-library-file"
 -arg "-w -bad-template-constraint"
 -arg "-w -using-fallback-loc"
+# Silencing these warnings by explicitly repeating the default hint mode on
+# every class would not improve instance search. We should only specify
+# modes where they meaningfully constrain search. Keep the default implicit.
+-arg "-w -class-declaration-default-mode"
+# The level tolerance warnings should be fixed to be forward compatible
+# with future Rocq versions. However, this requires changing some notations
+# (symbolic bind or transition relation) in a cross cutting way. Silence
+# it here for now.
+-arg "-w -level-tolerance"
+
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Logic.v

@@ -2,6 +2,7 @@ From iris.algebra Require Import auth excl.
 From iris.base_logic Require Import lib.own.
 From iris.proofmode Require Import proofmode.
 
+#[universes(template=no)]
 Class iostateG (IOStateG : Type) Σ := IOStateG {
    iostate_inG :: inG Σ (authR (optionUR (exclR (leibnizO IOStateG))));
    iostate_name : gname
@@ -10,6 +11,7 @@ Class iostateG (IOStateG : Type) Σ := IOStateG {
 
 Definition iostatePreΣ (IOStateG : Type) : gFunctors := #[GFunctor (authR (optionUR (exclR (leibnizO IOStateG))))].
 
+#[universes(template=no)]
 Class iostate_preG (IOState: Type) Σ := {
     iostate_preG_inG :: inG Σ (authR (optionUR (exclR (leibnizO IOState))));
   }.

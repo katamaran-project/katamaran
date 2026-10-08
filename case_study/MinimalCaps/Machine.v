@@ -178,7 +178,7 @@ Section FunDefKit.
        "cap_begin" beg)
        "cap_end" en)
        "cap_cursor" cur)
-    s) (at level 10) : exp_scope.
+    s) (at level 200) : exp_scope.
 
   Definition lemma_correctPC_not_E {Γ} (cap : Stm Γ ty.cap) : Stm Γ ty.unit :=
     let: "c" := cap in

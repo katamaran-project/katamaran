@@ -36,14 +36,15 @@ From Katamaran Require Import
      Symbolic.Worlds
      VectorUtils.
 
+From Stdlib Require Import Vector.
+
 Import ctx.notations.
 Import env.notations.
 
 Local Set Implicit Arguments.
 Local Set Equations Transparent.
 
-Module VecUtils.
-  Require Import Vector.
+Module Import VecUtils.
 
   Definition learnFinSucc {P : forall {n}, fin n -> Type} :
     (forall {n} (f : fin (S n)), P f) -> forall {n} (f : fin n), P f :=
@@ -113,11 +114,8 @@ Module VecUtils.
   Qed.
 End VecUtils.
 
-Module PolyRed.
+Module Import PolyRed.
   (* simple Gauss elimination to upper triangular form *)
-
-  Import Vector.
-  Import VecUtils.
 
   Definition Poly n := vec Z (S n).
   Hint Transparent Poly : typeclass_instances.
@@ -483,9 +481,6 @@ Module LinearProgramming.
    * The only goal is to efficiently and soundly discharge very common
    * inconsistent systems of inequalities, with absolutely no ambition of completeness.
    *)
-  Import PolyRed.
-  Import Vector.
-  Import VecUtils.
 
   Record Problem (n : nat) : Set :=
     MkProblem {

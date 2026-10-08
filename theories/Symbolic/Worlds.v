@@ -512,9 +512,9 @@ Module Type WorldsOn
   Abbreviation WTerm σ := (fun w : World => Term (wctx w) σ).
   Abbreviation STerm σ := (fun Σ => Term Σ σ).
 
-  (* A Notation for Terms because this seems to always gets messed up because of
-     the [WTerm] / [STerm] Schizophrenia, *)
-  Notation persist__term t :=
+  (* An abbreviation for Terms because this seems to always gets messed up
+     because of the [WTerm] / [STerm] Schizophrenia, *)
+  Abbreviation persist__term t :=
     (@persist (WTerm _) (@persistent_subst (STerm _) (@SubstTerm _)) _ t).
 
   Definition Pred : TYPE := fun w => (Valuation w -> Prop)%type.

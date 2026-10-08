@@ -339,7 +339,7 @@ Module inv := invariants.
        blocks, but with the address each block is located at. An initial address
        needs to be given for the first block, and all other blocks will be
        placed in sequence after another. *)
-    Fixpoint addrs_for_blocks (bs : list (Label * list AST)) (init_addr : N) : list (Label * N) :=
+    Definition addrs_for_blocks (bs : list (Label * list AST)) (init_addr : N) : list (Label * N) :=
       let f (acc : list (Label * N) * N) (b : Label * list AST) : list (Label * N) * N :=
         let '(label, b) := b in
         let '(addrs, curr) := acc in
@@ -406,9 +406,9 @@ Module inv := invariants.
 
     Import asn.notations.
     Import RiscvPmp.Sig.
-    Local Notation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])). (* Fix word length at 4 for this example, as we do not perform any other writes*)
-    Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-    Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+    #[local] Abbreviation asn_inv_mmio := (asn.chunk (chunk_user (inv_mmio bytes_per_word) [env])). (* Fix word length at 4 for this example, as we do not perform any other writes*)
+    #[local] Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+    #[local] Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
     Definition post_mip_val : Val ty_Minterrupts :=
       MkMinterrupts false false false false false false false false false.
@@ -914,7 +914,7 @@ Module inv := invariants.
 
   Ltac set_subseteq_to_list :=
     match goal with
-    | |- (?s1 : gset _) ⊆ (?s2 : gset _) =>
+    | |- ?s1 ⊆@{gset _} ?s2 =>
         let l1 := fresh "l" in
         let l2 := fresh "l" in
         let Hl1 := fresh "Hl" in

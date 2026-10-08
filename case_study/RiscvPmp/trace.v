@@ -2,6 +2,7 @@ From iris.algebra Require Import auth excl.
 From iris.base_logic Require Import lib.own.
 From iris.proofmode Require Import proofmode.
 
+#[universes(template=no)]
 Class traceG (Trace : Type) Σ := TraceG {
     trace_inG :: inG Σ (authR (optionUR (exclR (leibnizO Trace))));
     trace_name : gname
@@ -9,6 +10,7 @@ Class traceG (Trace : Type) Σ := TraceG {
 
 Definition tracePreΣ (Trace : Type) : gFunctors := #[GFunctor (authR (optionUR (exclR (leibnizO Trace))))].
 
+#[universes(template=no)]
 Class trace_preG (Trace : Type) Σ := {
   trace_preG_inG :: inG Σ (authR (optionUR (exclR (leibnizO Trace))));
 }.

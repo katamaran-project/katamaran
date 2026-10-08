@@ -50,6 +50,10 @@ From iris Require bi.derived_connectives bi.interface proofmode.proofmode.
 Declare Scope pred_scope.
 Delimit Scope pred_scope with P.
 
+Create Rewrite HintDb obligation.
+Create Rewrite HintDb punfold.
+Create Rewrite HintDb uniflogic.
+
 Module Type UnifLogicOn
   (Import B : Base)
   (Import P : PredicateKit B)
