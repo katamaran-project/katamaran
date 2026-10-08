@@ -207,6 +207,32 @@ the notes below are its source material:**
   no encoding, no `ws` satisfies `:268` and the end theorem is vacuous for the
   real machine. Unfixable while decode is axiomatized — say it in a comment
   next to `noninterferent_strong`, so the trusted file states its assumptions.
+- **Muladd's statement is not readable (reading quiz 2, 2026-10-08).** Feeds
+  PLAN-spec-layer Phase 0; options only, Emiel decides:
+  - `sym6_instrs := mb_instrs := set_nth 13 … (set_nth 132 … zzmuladdfulln2_instrs)`
+    (`Example/Muladd/MuladdParamInstrs.v:356`): the probe-era list had two
+    loop-count immediates patched 32→3 (PLAN-muladd-full deviation 3), and
+    `set_nth` patches them BACK (PLAN-muladd-composed.md:90–95). The trusted
+    program should be one literal list, with a non-`zz` name.
+  - The exit address is the literal `init_addr + 1128`; CheckScalarPtrResult
+    writes `init_addr + 4 * N.of_nat (length cs_instrs)`, which explains itself.
+  - `A0` is hand-concretized and consed onto the rest (`sym_reg_specs`,
+    `MuladdParamResult.v:299`) because `PVBaseOff k` only takes a CONSTANT k,
+    and x's address `x_off b = 1148 + 4·mlenN b` depends on m's length.
+  - Statement-level no-ops: `DAt x` (skipped by `concretize_data`, means
+    something only in `data_ok`) and `arr_dir` (`DArr pub _ c`). A reader
+    sees them in the trusted spec list and assumes they constrain something.
+  - `data_ok` (`GenSegment.v:1946`) mixes six concerns: per-cell range,
+    pinned ⇒ public, pinned value and counts Sync, the `DAt` anchor, `DPtr`
+    continuation, byte-vs-word bound. It is a bridge premise (`GenProg.v:111`)
+    proved per Result, so `DCell false (Some t)` is UNPROVABLE (good, not
+    vacuous) — the rule the rel/q front-ends lack, but enforced late.
+  - Proof size vs `InvMixColumnsResult.v` (72 lines): ~140 lines of block
+    validity + seal (heavy, so cannot live in the light example file), ~75
+    lines of bv arithmetic for the symbolic sizes, and a manual `eapply` with
+    an explicit valuation because no `_simple` bridge exists for mixed
+    front-ends + `data_spec`. The last two are automation gaps.
+  - Stale header: `MuladdParamResult.v:3` still says "Untracked probe".
 - **Doc fix, same file:** the comment on `noninterferent_strong` (`:258–260`)
   says "if world 1 reaches the exit address in n steps", but
   `RiscVNStepsWithExitCond` has a `refl` constructor and only checks the exit
