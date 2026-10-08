@@ -165,7 +165,11 @@ the notes below are its source material:**
   "r secret" but is effectively public (both worlds are forced to `v`,
   `:272–273`). Goal per Emiel: as few confusing conversions as possible on the
   trusted statement, which must stay easily readable — consider a spec shape
-  where this misleading combination is unrepresentable. Emiel's constraint: a
+  where this misleading combination is unrepresentable. LIVE INSTANCE in a
+  trusted statement: `cmovznz4_reg_specs_rel` (`Example/Cmovznz4.v:181–183`)
+  flags the pointer registers A1–A3 `false` with `PVBaseOff 116/132/148` —
+  public (init_addr + k in both worlds) while reading as secret. Use it as
+  PLAN-spec-layer's Phase 0 before/after example. Emiel's constraint: a
   well-formedness PREMISE is no fix — a spec failing it makes the end theorem
   vacuously true. Candidates: (a) a sum type `Secret | Public | Known v`
   (nothing to check), (b) a decidable check proved as a CONJUNCT of the end
