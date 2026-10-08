@@ -320,6 +320,19 @@ Module Type RiscvPmpIrisBase (Import leftOrRight : LeftOrRight)
       if leftOrRight then mc_ghGS2_left else mc_ghGS2_right.
     #[export] Existing Instance leftOrRightInstance.
 
+    (* The ghost state of the other execution. *)
+    Definition otherInstance `{mcMemGS2 Σ} : mcMemGS Σ :=
+      if leftOrRight then mc_ghGS2_right else mc_ghGS2_left.
+
+    (* View the body of the shared invariant from the perspective of this execution. *)
+    Lemma inv_mmio_body_own_other `{mcMemGS2 Σ} t :
+      side_inv mc_ghGS2_left t ∗ side_inv mc_ghGS2_right t ⊣⊢
+      side_inv leftOrRightInstance t ∗ side_inv otherInstance t.
+    Proof.
+      unfold leftOrRightInstance, otherInstance.
+      destruct leftOrRight; [done | apply bi.sep_comm].
+    Qed.
+
     Definition mem_inv : forall {Σ}, mcMemGS2 Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
