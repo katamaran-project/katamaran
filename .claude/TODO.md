@@ -236,6 +236,22 @@ the notes below are its source material:**
     to a domain where lia works" — i.e. one generic tactic, not ~13
     hand-proved lemmas (check bv-pitfalls for the existing lia/2^32 traps).
   - Stale header: `MuladdParamResult.v:3` still says "Untracked probe".
+  - **check_scalar too** (reading quiz 2): `CheckScalarPtrResult.v` 149 lines
+    (end theorem ~60, `:87–149`), `CheckScalarParamResult.v` 266 — ~20× the
+    InvMixColumns pattern although Ptr already uses the generator bridge.
+    Find what the remaining 60 lines do; aim for the `_simple` shape.
+  - **Deep vs shallow specs in the STATEMENT (Emiel: "valuation +
+    concretize_data is very complex"):** the deep form (`Term`s + a
+    `Valuation` of `RelVal`s, `csp_ι`) IS needed by the generator — it is what
+    expresses an independent pointer (`DPtr`, `ka`) and symbolic sizes, which
+    `PVBaseOff` (constant offset from the one base) cannot. But the trusted
+    statement could take a SHALLOW spec (Coq functions of `ia`, `ka`, `l`)
+    with a proved correspondence to the deep one. Candidate for
+    PLAN-spec-layer Q1.
+  - Outer premises on parameters (CheckScalarPtr's `ka … ≤ init_addr ∨
+    init_addr + 176 ≤ ka`) are LEGITIMATE scope, unlike D5's premise on
+    fixed specs: visible, checkable as satisfiable, and exactly the
+    code+P256_N region. Evidence for Q4 option (c).
 - **Doc fix, same file:** the comment on `noninterferent_strong` (`:258–260`)
   says "if world 1 reaches the exit address in n steps", but
   `RiscVNStepsWithExitCond` has a `refl` constructor and only checks the exit
