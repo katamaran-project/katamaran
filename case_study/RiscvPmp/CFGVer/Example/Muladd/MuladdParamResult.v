@@ -358,7 +358,12 @@ Definition muladd_regs (ia : N) (b : bv xlenbits) : list reg_spec :=
     (T6, Secret); (S0, Secret); (S1, Secret); (S2, Secret); (S3, Secret) ].
 
 Lemma M_mlenN (b : bv xlenbits) : N.of_nat (mlenN b) = M b.
-Proof. unfold mlenN, M, bv.unsigned. lia. Qed.
+Proof.
+  unfold mlenN, M, bv.unsigned.
+  replace ((Z.of_N (bv.bin b) + 31) / 32)%Z with (Z.of_N ((bv.bin b + 31) / 32))
+    by (rewrite N2Z.inj_div; f_equal; lia).
+  generalize ((bv.bin b + 31) / 32)%N. intros y. lia.
+Qed.
 
 (* D12: the statement's cells are exactly the generator's. *)
 Lemma muladd_cells (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
@@ -371,13 +376,14 @@ Proof.
   rewrite !data_count_mm2; try exact Hb.
   unfold compile, cells, muladd_data.
   cbn [blocks place region_words region_size List.map concat blk_addr blk_words].
-  rewrite HMb. rewrite !repeat_length.
-  replace (mlenN b) with ((mlenN b - 2) + 2)%nat at 1 3 by lia.
-  rewrite !repeat_app. rewrite !words_at_app. rewrite !words_at_repeat.
-  rewrite !repeat_length.
+  rewrite ?HMb. rewrite ?repeat_length.
+  rewrite !words_at_repeat. rewrite ?repeat_length. rewrite ?HMb.
   change (length sym6_instrs) with 282%nat.
-  cbn [words_at repeat length app val_spec_map pub_spec].
-  rewrite <- !app_assoc. cbn [app].
+  replace (seq 0 (mlenN b)) with (seq 0 (mlenN b - 2) ++ seq (mlenN b - 2) 2)
+    by (rewrite <- seq_app; f_equal; lia).
+  rewrite !List.map_app.
+  simpl.
+  rewrite <- !app_assoc. simpl.
   solve_cells_eq.
 Qed.
 
@@ -396,9 +402,9 @@ Proof.
   assert (Hl : length sym6_instrs = 282) by (vm_compute; reflexivity).
   pose proof (mlen_bounds b Hb) as HM0.
   assert (Hfit : (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < lenAddr)%N).
-  { unfold fits, layout_size in Hfit0. cbn [fold_right region_size region_words] in Hfit0.
-    rewrite !repeat_length in Hfit0. rewrite Hl in Hfit0.
-    rewrite !N2Nat.id in Hfit0. rewrite <- !M_mlenN in Hfit0. cbn in Hfit0. lia. }
+  { unfold fits, layout_size in Hfit0. unfold muladd_data in Hfit0. simpl in Hfit0.
+    rewrite !repeat_length in Hfit0. rewrite !N2Nat.id in Hfit0.
+    rewrite <- !M_mlenN in Hfit0. rewrite ?Hl in Hfit0. lia. }
   apply (ni_of_cells (regs' := sym_reg_specs init_addr b) (cs := sym_mem_specs init_addr b));
     [ apply compile_clear; lia
     | apply perm_of_eq; unfold muladd_regs, sym_reg_specs, x_off;
