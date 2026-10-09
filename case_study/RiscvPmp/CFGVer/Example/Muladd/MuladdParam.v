@@ -43,16 +43,16 @@ Definition t_mlen_addr {Σ} (base b : Term Σ ty_xlenbits) (k : Z) : Term Σ ty_
 Definition symCtx : LCtx := ["p"∷ty_xlenbits; "b"∷ty_xlenbits; "x"∷ty_xlenbits].
 
 Definition sym_regs : list reg_spec_rel :=
-  [ (A1, false, PVExist)
-  ; (A2, true,  PVBaseOff 1144)
-  ; (X2, true,  PVBaseOff 1144)
-  ; (A3, false, PVExist); (A4, false, PVExist); (A5, false, PVExist)
-  ; (A6, false, PVExist); (A7, false, PVExist)
-  ; (T0, false, PVExist); (T1, false, PVExist); (T2, false, PVExist)
-  ; (T3, false, PVExist); (T4, false, PVExist); (T5, false, PVExist)
-  ; (T6, false, PVExist)
-  ; (S0, false, PVExist); (S1, false, PVExist); (S2, false, PVExist)
-  ; (S3, false, PVExist) ].
+  [ (A1, Secret)
+  ; (A2, Known (PVBaseOff 1144))
+  ; (X2, Known (PVBaseOff 1144))
+  ; (A3, Secret); (A4, Secret); (A5, Secret)
+  ; (A6, Secret); (A7, Secret)
+  ; (T0, Secret); (T1, Secret); (T2, Secret)
+  ; (T3, Secret); (T4, Secret); (T5, Secret)
+  ; (T6, Secret)
+  ; (S0, Secret); (S1, Secret); (S2, Secret)
+  ; (S3, Secret) ].
 
 Definition bvult_c {Σ} (lo : N) (t : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.formula (formula_relop bop.bvult (term_val ty_xlenbits (bv.of_N lo)) t).
@@ -67,14 +67,14 @@ Definition t_mm2 {Σ} (b : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
    m[M-1], m[M] as cells; then x (anchored at the variable x) with its header
    b, the private limbs x[1..M-2] as an array walking down and x[M-1], x[M]. *)
 Definition sym_data : list (data_spec (symCtx ▻ "a"∷ty_xlenbits)) :=
-  [ DCell false None; DCell false None; DCell false None; DCell false None
-  ; DCell true (Some (term_var "b"))
+  [ DCell Secret; DCell Secret; DCell Secret; DCell Secret
+  ; DCell (Known (term_var "b"))
   ; DArr true ArrUp (t_mm2 (term_var "b"))
-  ; DCell true None; DCell true None
+  ; DCell Public; DCell Public
   ; DAt (term_var "x")
-  ; DCell true (Some (term_var "b"))
+  ; DCell (Known (term_var "b"))
   ; DArr false ArrDown (t_mm2 (term_var "b"))
-  ; DCell false None; DCell false None ]%list.
+  ; DCell Secret; DCell Secret ]%list.
 
 Definition sym_pre : Assertion (symCtx ▻ "a"∷ty_xlenbits) :=
   ( A0 ↦ᵣ term_var "x" ∗ secLeakvar "x" ∗ secLeakvar "b"

@@ -9,9 +9,6 @@
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
 
-Definition S1 : RegIdx := bv.of_nat 9.
-Definition S2 : RegIdx := bv.of_nat 18.
-Definition S3 : RegIdx := bv.of_nat 19.
 
 Definition g_instrs : list AST :=
   [ ITYPE (bv.of_Z (-1)) T4 T4 RISCV_ADDI

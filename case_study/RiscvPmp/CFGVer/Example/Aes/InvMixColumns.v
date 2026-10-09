@@ -111,8 +111,8 @@ Definition imc_linux_instrs : list AST :=
 (* A0: the secret input column (and output).  Everything else is scratch,
    private, and arbitrary on entry. *)
 Definition imc_linux_reg_specs : list reg_spec :=
-  [(A0, false, None); (A1, false, None); (A2, false, None);
-   (A3, false, None); (A4, false, None); (A5, false, None)].
+  [(A0, Secret); (A1, Secret); (A2, Secret);
+   (A3, Secret); (A4, Secret); (A5, Secret)].
 
 Definition imc_linux_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
   gen_contract_param imc_linux_reg_specs imc_linux_instrs 44.
@@ -186,9 +186,9 @@ Definition imc_alg7_instrs : list AST :=
   ].
 
 Definition imc_alg7_reg_specs : list reg_spec :=
-  [(A0, false, None); (A1, false, None); (A2, false, None);
-   (A3, false, None); (A4, false, None); (A5, false, None);
-   (A6, false, None); (A7, false, None)].
+  [(A0, Secret); (A1, Secret); (A2, Secret);
+   (A3, Secret); (A4, Secret); (A5, Secret);
+   (A6, Secret); (A7, Secret)].
 
 Definition imc_alg7_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
   gen_contract_param imc_alg7_reg_specs imc_alg7_instrs 68.

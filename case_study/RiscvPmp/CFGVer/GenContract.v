@@ -83,11 +83,9 @@ Import asn.notations.
     (*   Public  → register holds an existential, secLeak'd (SyncVal)      *)
     (*   Secret  → register holds an existential                           *)
     (*                                                                      *)
-    (* mem_cell: (address, val_spec) -- one word of a mem_layout's cells,  *)
-    (*   same three cases as a register.                                    *)
+    (* mem_cell (Noninterference.v): (address, val_spec) -- one word of a  *)
+    (*   mem_layout's cells, same three cases as a register.               *)
     (* ------------------------------------------------------------------ *)
-
-    Definition mem_cell : Type := N * val_spec (Val ty_word).
 
     Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
       let '(r, sp) := s in

@@ -100,12 +100,12 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        (4*29 = 116), laid out contiguously as x[0..3], y[0..3], r[0..3]
        to match the HDataAddrs assumption in gen_contract_noninterferent. *)
     Definition cmovznz4_reg_specs : list reg_spec :=
-      [(A0, false, None);
-       (A1, false, Some (bv.of_N 116));   (* x base *)
-       (A2, false, Some (bv.of_N 132));   (* y base *)
-       (A3, false, Some (bv.of_N 148));   (* r base *)
-       (A4, false, None); (A5, false, None); (A6, false, None);
-       (A7, false, None); (T0, false, None); (T1, false, None)].
+      [(A0, Secret);
+       (A1, Known (bv.of_N 116));   (* x base *)
+       (A2, Known (bv.of_N 132));   (* y base *)
+       (A3, Known (bv.of_N 148));   (* r base *)
+       (A4, Secret); (A5, Secret); (A6, Secret);
+       (A7, Secret); (T0, Secret); (T1, Secret)].
 
     (* All of cin (A0), x and y are secret here: this is the genuine
        LOAD-of-secret case that method-Y unlocks. The loaded secret words
@@ -116,13 +116,8 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        still holds because the addresses touched (fixed 116/132/148 bases)
        are data-independent -- only the values are secret. r[0..3] is
        private as before. x[0..3]/y[0..3]/r[0..3] all private. *)
-    Definition cmovznz4_mem_specs : list mem_full_spec :=
-      [(bv.of_N 116, false, None); (bv.of_N 120, false, None);
-       (bv.of_N 124, false, None); (bv.of_N 128, false, None);
-       (bv.of_N 132, false, None); (bv.of_N 136, false, None);
-       (bv.of_N 140, false, None); (bv.of_N 144, false, None);
-       (bv.of_N 148, false, None); (bv.of_N 152, false, None);
-       (bv.of_N 156, false, None); (bv.of_N 160, false, None)].
+    (* cmovznz4_mem_specs: removed (PLAN-spec-layer D20) -- the fixed-address
+       sanity corollary now instantiates the parametric statement. *)
 
     (* Step 5 (init_addr parameterization): the SAME cmovznz4 program, loaded at
        a genuinely nonzero, 4-aligned start address instead of 0. cmovznz4 is a
@@ -134,26 +129,15 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     Definition cmovznz4_start : N := 256%N.
 
     Definition cmovznz4_reg_specs_at_start : list reg_spec :=
-      [(A0, false, None);
-       (A1, false, Some (bv.of_N (cmovznz4_start + 116)));   (* x base *)
-       (A2, false, Some (bv.of_N (cmovznz4_start + 132)));   (* y base *)
-       (A3, false, Some (bv.of_N (cmovznz4_start + 148)));   (* r base *)
-       (A4, false, None); (A5, false, None); (A6, false, None);
-       (A7, false, None); (T0, false, None); (T1, false, None)].
+      [(A0, Secret);
+       (A1, Known (bv.of_N (cmovznz4_start + 116)));   (* x base *)
+       (A2, Known (bv.of_N (cmovznz4_start + 132)));   (* y base *)
+       (A3, Known (bv.of_N (cmovznz4_start + 148)));   (* r base *)
+       (A4, Secret); (A5, Secret); (A6, Secret);
+       (A7, Secret); (T0, Secret); (T1, Secret)].
 
-    Definition cmovznz4_mem_specs_at_start : list mem_full_spec :=
-      [(bv.of_N (cmovznz4_start + 116), false, None);
-       (bv.of_N (cmovznz4_start + 120), false, None);
-       (bv.of_N (cmovznz4_start + 124), false, None);
-       (bv.of_N (cmovznz4_start + 128), false, None);
-       (bv.of_N (cmovznz4_start + 132), false, None);
-       (bv.of_N (cmovznz4_start + 136), false, None);
-       (bv.of_N (cmovznz4_start + 140), false, None);
-       (bv.of_N (cmovznz4_start + 144), false, None);
-       (bv.of_N (cmovznz4_start + 148), false, None);
-       (bv.of_N (cmovznz4_start + 152), false, None);
-       (bv.of_N (cmovznz4_start + 156), false, None);
-       (bv.of_N (cmovznz4_start + 160), false, None)].
+    (* cmovznz4_mem_specs_at_start: removed (PLAN-spec-layer D20) -- the fixed-address
+       sanity corollary now instantiates the parametric statement. *)
 
     (* ===== Phase 4.2: base-parametric cmovznz4 VC ========================
        This supersedes BOTH removed concrete-base contract/VC pairs
@@ -177,20 +161,20 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        (no-overflow) then lia + an exp2 transit.  See memory
        project-cfgver-symbolic-base-poc. *)
     Definition cmovznz4_reg_specs_rel : list reg_spec_rel :=
-      [(A0, false, PVExist);
-       (A1, false, PVBaseOff 116);   (* x base *)
-       (A2, false, PVBaseOff 132);   (* y base *)
-       (A3, false, PVBaseOff 148);   (* r base *)
-       (A4, false, PVExist); (A5, false, PVExist); (A6, false, PVExist);
-       (A7, false, PVExist); (T0, false, PVExist); (T1, false, PVExist)].
+      [(A0, Secret);
+       (A1, Known (PVBaseOff 116));   (* x base *)
+       (A2, Known (PVBaseOff 132));   (* y base *)
+       (A3, Known (PVBaseOff 148));   (* r base *)
+       (A4, Secret); (A5, Secret); (A6, Secret);
+       (A7, Secret); (T0, Secret); (T1, Secret)].
 
     Definition cmovznz4_mem_specs_rel : list mem_spec_rel :=
-      [(116%N, false, PVExist); (120%N, false, PVExist);
-       (124%N, false, PVExist); (128%N, false, PVExist);
-       (132%N, false, PVExist); (136%N, false, PVExist);
-       (140%N, false, PVExist); (144%N, false, PVExist);
-       (148%N, false, PVExist); (152%N, false, PVExist);
-       (156%N, false, PVExist); (160%N, false, PVExist)].
+      [(116%N, Secret); (120%N, Secret);
+       (124%N, Secret); (128%N, Secret);
+       (132%N, Secret); (136%N, Secret);
+       (140%N, Secret); (144%N, Secret);
+       (148%N, Secret); (152%N, Secret);
+       (156%N, Secret); (160%N, Secret)].
 
     (* Base bound 164 = 160 (last data offset, r[3]) + 4 (word). *)
     Definition cmovznz4_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=

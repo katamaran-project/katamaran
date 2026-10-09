@@ -60,7 +60,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        to `c ⊕ p` -- CONFIRMED: the existing offset-agnostic tail closes the
        VC with zero changes. *)
     Definition countdown_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param [(X1, true, Some (bv.of_N 2))]
+      gen_contract_param [(X1, Known (bv.of_N 2))]
         [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset] 5.
 
     Lemma valid_countdown_cfg_contract_param :
@@ -107,10 +107,10 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        data pointers, not the constant-only gen_contract_param. Bound = 20
        (last accessed byte offset 16 + 4 = the data word's own width). *)
     Definition countdown_mem_reg_specs_rel : list reg_spec_rel :=
-      [(X1, false, PVExist); (X2, false, PVBaseOff 0)].
+      [(X1, Secret); (X2, Known (PVBaseOff 0))].
 
     Definition countdown_mem_mem_specs_rel : list mem_spec_rel :=
-      [(16%N, true, PVConst (bv.of_N 2))].
+      [(16%N, Known (PVConst (bv.of_N 2)))].
 
     Definition countdown_mem_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel

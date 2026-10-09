@@ -215,15 +215,18 @@ Import SmallStepNotations.
       blocks_ok : blocks_disjoint blocks
     }.
 
+    (* One word of a layout: its address and its spec. *)
+    Definition mem_cell : Type := N * val_spec (Val ty_word).
+
     (* The words of a block, each at its own address: a, a+4, a+8, ... *)
     Fixpoint words_at (a : N) (ws : list (val_spec (Val ty_word))) :
-        list (N * val_spec (Val ty_word)) :=
+        list mem_cell :=
       match ws with
       | nil       => nil
       | cons w ws => cons (a, w) (words_at (a + 4) ws)
       end.
 
-    Definition cells (m : mem_layout) : list (N * val_spec (Val ty_word)) :=
+    Definition cells (m : mem_layout) : list mem_cell :=
       concat (List.map (fun b => words_at (blk_addr b) (blk_words b)) (blocks m)).
 
     (* Every block lies entirely below or entirely above the code. *)

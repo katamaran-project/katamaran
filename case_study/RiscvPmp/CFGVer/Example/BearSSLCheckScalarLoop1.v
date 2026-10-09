@@ -95,10 +95,10 @@ Definition loop1_instrs : list AST :=
    pinned to 0 on entry; it becomes secret as soon as the first byte is OR'd
    in.  A3 receives the loaded byte, so it is private. *)
 Definition loop1_reg_specs_rel : list reg_spec_rel :=
-  [ (A0, true,  PVBaseOff 16)
-  ; (A1, true,  PVBaseOff 48)
-  ; (A2, true,  PVConst (bv.of_N 0))
-  ; (A3, false, PVExist)
+  [ (A0, Known (PVBaseOff 16))
+  ; (A1, Known (PVBaseOff 48))
+  ; (A2, Known (PVConst (bv.of_N 0)))
+  ; (A3, Secret)
   ].
 
 (* 8 byte-expanded word entries at offsets 16, 20, ..., 44 -- covering k[0..31]
@@ -106,10 +106,10 @@ Definition loop1_reg_specs_rel : list reg_spec_rel :=
    though the chunks handed to the executor are bytes -- that is what keeps
    the trusted layer (Noninterference.v's mem_spec) untouched. *)
 Definition loop1_byte_specs_rel : list mem_spec_rel :=
-  [ (16%N, false, PVExist); (20%N, false, PVExist)
-  ; (24%N, false, PVExist); (28%N, false, PVExist)
-  ; (32%N, false, PVExist); (36%N, false, PVExist)
-  ; (40%N, false, PVExist); (44%N, false, PVExist)
+  [ (16%N, Secret); (20%N, Secret)
+  ; (24%N, Secret); (28%N, Secret)
+  ; (32%N, Secret); (36%N, Secret)
+  ; (40%N, Secret); (44%N, Secret)
   ].
 
 (* Base bound 48: the last declared byte (k[31]) sits at offset 47, so the
