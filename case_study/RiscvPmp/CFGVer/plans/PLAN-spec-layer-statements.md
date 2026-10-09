@@ -22,13 +22,10 @@ Inductive spec (V : Type) := Secret | Public | Known (v : V).
 starting at the END OF THE CODE. A gap is a region of its own.
 
 ```coq
-Inductive arr := Secret (n : N) | Public (n : N) | Known (vs : list word).
-                                   (* same words as `spec`, count included;
-                                      constructor names clash in Coq (P) *)
-Inductive region :=
-| Word  (s : spec word)            (* one word                          *)
-| Array (a : arr)                  (* consecutive words                 *)
-| Bytes (a : arr_byte)             (* consecutive bytes, same idea      *)
+Inductive region :=                (* arrays reuse `spec` (D14): count  *)
+| Word  (s : spec word)            (* outside, length enforced by `vec` *)
+| Array (n : N) (s : spec (vec word n))   (* n consecutive words       *)
+| Bytes (n : N) (s : spec (vec byte n))   (* n consecutive bytes       *)
 | Gap   (n : N).                   (* n bytes the program does not own  *)
 ```
 
@@ -74,9 +71,9 @@ Traps: A1–A3 read "secret" but are public; `+164` is unexplained; two
 ```coq
 (* code: ia .. ia+115 (29 instructions) *)
 Definition cmovznz4_data : list region :=
-  [ Array (Secret 4)        (* x[0..3]  at ia+116 *)
-  ; Array (Secret 4)        (* y[0..3]  at ia+132 *)
-  ; Array (Secret 4) ].     (* r[0..3]  at ia+148 *)
+  [ Array 4 Secret        (* x[0..3]  at ia+116 *)
+  ; Array 4 Secret        (* y[0..3]  at ia+132 *)
+  ; Array 4 Secret ].     (* r[0..3]  at ia+148 *)
 
 Definition cmovznz4_regs (ia : N) :=
   [ (A0, Secret);                                        (* cin *)
@@ -122,9 +119,9 @@ Definition M (b : bv xlenbits) : N := (bv.bin b + 31) / 32.     (* limb count *)
 
 (* code: ia .. ia+1127 (282 instructions) *)
 Definition muladd_data (b : bv xlenbits) : list region :=
-  [ Array (Secret 4)                            (* S0–S3 spill slots, ia+1128   *)
-  ; Word (Known b) ; Array (Public (M b))       (* m = sp, ia+1144: header, limbs *)
-  ; Word (Known b) ; Array (Secret (M b)) ].    (* x, ia+1148+4·M: header, limbs *)
+  [ Array 4 Secret                            (* S0–S3 spill slots, ia+1128   *)
+  ; Word (Known b) ; Array (M b) Public       (* m = sp, ia+1144: header, limbs *)
+  ; Word (Known b) ; Array (M b) Secret ].    (* x, ia+1148+4·M: header, limbs *)
 
 Definition muladd_regs (ia : N) (b : bv xlenbits) :=
   [ (A0, Known (bv.of_N (ia + 1148 + 4 * M b)));    (* &x[0]       *)
@@ -169,9 +166,9 @@ csp_data := [ DBytes false 32; DPtr (term_var "k"); DBytes false (term_var "l") 
 ```coq
 (* code: ia .. ia+143 (36 instructions) *)
 Definition cs_data (g : N) (l : bv xlenbits) : list region :=
-  [ Bytes (Secret 32)             (* P256_N, ia+144 (unpinned: stronger) *)
+  [ Bytes 32 Secret             (* P256_N, ia+144 (unpinned: stronger) *)
   ; Gap g
-  ; Bytes (Secret (bv.bin l)) ].  (* k[0 .. l-1], ia+176+g                 *)
+  ; Bytes (bv.bin l) Secret ].  (* k[0 .. l-1], ia+176+g                 *)
 
 Definition cs_regs (ia g : N) (l : bv xlenbits) :=
   [ (A0, Known (bv.of_N (ia + 176 + g)));     (* k     *)
@@ -191,8 +188,8 @@ directly; the parameter premise feeds the disjointness proof (D11):
 ```coq
 Definition cs_mem (ia ka : N) (l : bv xlenbits)
     (H : ka + 4 * klen_words l <= ia \/ ia + 176 <= ka) : memory ia cs_instrs :=
-  blocks [ (ia + 144, Bytes (Secret 32))            (* P256_N *)
-         ; (ka,       Bytes (Secret (bv.bin l))) ]  (* k      *)
+  blocks [ (ia + 144, Bytes 32 Secret)            (* P256_N *)
+         ; (ka,       Bytes (bv.bin l) Secret) ]  (* k      *)
          (cs_disjoint ia ka l H).
 
 Theorem check_scalar_anywhere_noninterferent (ia ka : N) (l : bv xlenbits)
@@ -203,8 +200,7 @@ Theorem check_scalar_anywhere_noninterferent (ia ka : N) (l : bv xlenbits)
 
 ## 5. Open points raised by the drafts
 
-1. Constructor names: `Secret`/`Public`/`Known` for both `spec` and `arr`
-   clash in one Coq module — modules, a shared parameter, or new names.
+1. RESOLVED (D14): arrays reuse `spec` via `vec`, no second constructor set.
 2. Each Result proves "shallow data = the generator's deep specs" (D12).
    With symbolic b / l that is a proof (cbn + lia), not vm_compute — watch
    the per-example cost (cf. TODO: muladd's ~75 lines of bv lemmas).

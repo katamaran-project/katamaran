@@ -133,6 +133,10 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   derived addresses (Emiel: hides crucial information) — register specs use
   literal address expressions. Proof-only structure (`dir`, `DAt`,
   muladd's top-limb split) never appears in a statement.
+  Arrays use the ONE parametric `spec` (D10) with the count outside:
+  `Array (n : N) (s : spec (vec word n))` (`Bytes` likewise with `vec byte
+  n`), so `Array 4 Secret` / `Array (M b) Public` read like words and a
+  `Known` array of the wrong length cannot be written (Emiel, 2026-10-09).
 - **D15 (= Q2). Register keys are GPR-only** (x1–x31, no `X0` by type),
   not `Reg ty_xlenbits` (which also holds `pc`, `mtvec`, `pmpaddr0`, …).
   Same pass as the memory change (D2: one statement review, one gate);
