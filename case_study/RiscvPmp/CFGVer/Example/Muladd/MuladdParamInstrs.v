@@ -1,12 +1,17 @@
 (* Example/Muladd/MuladdParamInstrs.v -- muladd's instructions only (promoted 2026-10-02 from the ZZ probes data),
    split out of ZZMuladdBlk.v so the symbolic-mlen probes need not rebuild
    that file's flat whole-program VC (347 s, 8.9 GB). *)
-(* ---- ZZMuladdFullN2.v's definitions, VERBATIM (not Required: that file
-   runs the flat VC, the known out-of-memory case) ---- *)
+(* ---- ZZMuladdFullN2.v's definitions (not Required: that file runs the
+   flat VC, the known out-of-memory case), with ONE difference: the program
+   below is the compiled br_i31_muladd_small itself.  ZZMuladdFullN2.v's copy
+   loads the limb-loop constant as `li A4, 3` / `li T4, 3` (its fixed N=2
+   test); here both are the real `li ..., 32`.  (Until 2026-10-09 this file
+   kept the N=2 copy and reverted the two entries with a set_nth patch --
+   PLAN-spec-layer group B.) ---- *)
 From Katamaran Require Export RiscvPmp.CFGVer.Example.Prelude.
 
 
-Definition zzmuladdfulln2_instrs : list AST :=
+Definition mb_instrs : list AST :=
   [ LOAD (bv.of_Z 0) A2 T0 false WORD   (* lw	T0, 0(A2) *)
   ; BTYPE (bv.of_Z 212) X0 T0 RISCV_BEQ   (* beqz	T0, .LBB3_5 *)
   ; ITYPE (bv.of_Z 31) X0 A3 RISCV_ADDI   (* li	A3, 31 *)
@@ -20,7 +25,7 @@ Definition zzmuladdfulln2_instrs : list AST :=
   ; ITYPE (bv.of_Z 1) A3 A3 RISCV_SLTIU   (* seqz	A3, A3 *)
   ; ITYPE (bv.of_Z (-1)) A3 A3 RISCV_ADDI   (* addi	A3, A3, -1 *)
   ; RTYPE A4 A3 A3 RISCV_AND   (* and	A3, A3, A4 *)
-  ; ITYPE (bv.of_Z 3) X0 A4 RISCV_ADDI   (* li	A4, 3 *)
+  ; ITYPE (bv.of_Z 32) X0 A4 RISCV_ADDI   (* li	A4, 32 *)
   ; ITYPE (bv.of_Z 1) X0 A5 RISCV_ADDI   (* li	A5, 1 *)
   ; ITYPE (bv.of_Z 1) X0 A6 RISCV_ADDI   (* li	A6, 1 *)
   ; ITYPE (bv.of_Z (-1)) A4 A4 RISCV_ADDI   (* addi	A4, A4, -1 *)
@@ -139,7 +144,7 @@ Definition zzmuladdfulln2_instrs : list AST :=
   ; ITYPE (bv.of_Z 1) T2 T2 RISCV_SLTIU   (* seqz	T2, T2 *)
   ; ITYPE (bv.of_Z (-1)) T2 T2 RISCV_ADDI   (* addi	T2, T2, -1 *)
   ; RTYPE T4 T2 T2 RISCV_AND   (* and	T2, T2, T4 *)
-  ; ITYPE (bv.of_Z 3) X0 T4 RISCV_ADDI   (* li	T4, 3 *)
+  ; ITYPE (bv.of_Z 32) X0 T4 RISCV_ADDI   (* li	T4, 32 *)
   ; ITYPE (bv.of_Z 1) X0 T5 RISCV_ADDI   (* li	T5, 1 *)
   ; ITYPE (bv.of_Z 1) X0 T6 RISCV_ADDI   (* li	T6, 1 *)
   ; ITYPE (bv.of_Z (-1)) T4 T4 RISCV_ADDI   (* addi	T4, T4, -1 *)
@@ -342,13 +347,4 @@ Definition zzmuladdfulln2_mem_specs_rel : list mem_spec_rel :=
 (* ---- end of the copy ---- *)
 
 
-Fixpoint set_nth {A} (n : nat) (x : A) (l : list A) : list A :=
-  match n, l with
-  | O, cons _ l' => cons x l'
-  | S n', cons y l' => cons y (set_nth n' x l')
-  | _, nil => nil
-  end.
 
-Definition mb_instrs : list AST :=
-  set_nth 13 (ITYPE (bv.of_Z 32) X0 A4 RISCV_ADDI)
-    (set_nth 132 (ITYPE (bv.of_Z 32) X0 T4 RISCV_ADDI) zzmuladdfulln2_instrs).
