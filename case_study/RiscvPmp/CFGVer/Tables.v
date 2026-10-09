@@ -56,7 +56,8 @@ From Katamaran Require Import
      RiscvPmp.Sig.
 From stdpp Require Import gmap.
 From Katamaran Require Import
-     RiscvPmp.CFGVer.Verifier.
+     RiscvPmp.CFGVer.Verifier
+     RiscvPmp.CFGVer.Noninterference.
 
 Import RiscvPmpProgram.
 
@@ -81,39 +82,71 @@ Import ListNotations.
    order-independent, unlike relying on which Import happens to come last. *)
 Open Scope list_scope.
 
+  (* Register names are `gpr`s (PLAN-spec-layer D15): statements use them as
+     register keys, and instructions -- which take a 5-bit RegIdx -- get the
+     index back through the coercion gpr_idx.  X0 is NOT a gpr (it is
+     hardwired to zero), so it stays a bare RegIdx and can never be a key. *)
+  Definition reg_idx_of {t} (r : Reg t) : RegIdx :=
+    match r with
+    | x1 => bv.of_nat 1 | x2 => bv.of_nat 2 | x3 => bv.of_nat 3 | x4 => bv.of_nat 4
+    | x5 => bv.of_nat 5 | x6 => bv.of_nat 6 | x7 => bv.of_nat 7 | x8 => bv.of_nat 8
+    | x9 => bv.of_nat 9 | x10 => bv.of_nat 10 | x11 => bv.of_nat 11 | x12 => bv.of_nat 12
+    | x13 => bv.of_nat 13 | x14 => bv.of_nat 14 | x15 => bv.of_nat 15 | x16 => bv.of_nat 16
+    | x17 => bv.of_nat 17 | x18 => bv.of_nat 18 | x19 => bv.of_nat 19 | x20 => bv.of_nat 20
+    | x21 => bv.of_nat 21 | x22 => bv.of_nat 22 | x23 => bv.of_nat 23 | x24 => bv.of_nat 24
+    | x25 => bv.of_nat 25 | x26 => bv.of_nat 26 | x27 => bv.of_nat 27 | x28 => bv.of_nat 28
+    | x29 => bv.of_nat 29 | x30 => bv.of_nat 30 | x31 => bv.of_nat 31
+    | _ => bv.zero
+    end.
+
+  Definition gpr_idx (g : gpr) : RegIdx := reg_idx_of (gpr_reg g).
+  Coercion gpr_idx : gpr >-> RegIdx.
+
+  (* The machine's own register decoding agrees with the gpr a key names. *)
+  Lemma reg_convert_gpr_idx (g : gpr) : reg_convert (gpr_idx g) = Some (gpr_reg g).
+  Proof.
+    destruct g as [r H]. unfold gpr_idx, gpr_reg; cbn [proj1_sig].
+    unfold is_gpr in H. apply decidable.bool_decide_eq_true in H.
+    apply list.elem_of_list_fmap in H as [r' [Heq Hin]].
+    apply Eqdep_dec.inj_pair2_eq_dec in Heq; [|intros; apply Classes.eq_dec]. subst r'.
+    cbn [gpr_list] in Hin.
+    repeat (apply list.elem_of_cons in Hin as [->|Hin]; [reflexivity|]).
+    apply list.elem_of_nil in Hin as [].
+  Qed.
+
   Definition X0 : RegIdx := bv.zero.
-  Definition X1 : RegIdx := bv.one.
-  Definition X2 : RegIdx := bv.of_nat 2.
-  Definition X3 : RegIdx := bv.of_nat 3.
-  Definition X4 : RegIdx := bv.of_nat 4.
+  Definition X1 : gpr := exist _ x1 eq_refl.
+  Definition X2 : gpr := exist _ x2 eq_refl.
+  Definition X3 : gpr := exist _ x3 eq_refl.
+  Definition X4 : gpr := exist _ x4 eq_refl.
 
   (* RISC-V ABI register names, needed for examples translated straight
      from compiler-generated assembly (e.g. cmovznz4) instead of
      hand-picked X0..X4. *)
-  Definition T0 : RegIdx := bv.of_nat 5.
-  Definition T1 : RegIdx := bv.of_nat 6.
-  Definition T2 : RegIdx := bv.of_nat 7.
-  Definition A0 : RegIdx := bv.of_nat 10.
-  Definition A1 : RegIdx := bv.of_nat 11.
-  Definition A2 : RegIdx := bv.of_nat 12.
-  Definition A3 : RegIdx := bv.of_nat 13.
-  Definition A4 : RegIdx := bv.of_nat 14.
-  Definition A5 : RegIdx := bv.of_nat 15.
-  Definition A6 : RegIdx := bv.of_nat 16.
-  Definition A7 : RegIdx := bv.of_nat 17.
-  Definition T3 : RegIdx := bv.of_nat 28.
-  Definition T4 : RegIdx := bv.of_nat 29.
-  Definition T5 : RegIdx := bv.of_nat 30.
-  Definition T6 : RegIdx := bv.of_nat 31.
+  Definition T0 : gpr := exist _ x5 eq_refl.
+  Definition T1 : gpr := exist _ x6 eq_refl.
+  Definition T2 : gpr := exist _ x7 eq_refl.
+  Definition A0 : gpr := exist _ x10 eq_refl.
+  Definition A1 : gpr := exist _ x11 eq_refl.
+  Definition A2 : gpr := exist _ x12 eq_refl.
+  Definition A3 : gpr := exist _ x13 eq_refl.
+  Definition A4 : gpr := exist _ x14 eq_refl.
+  Definition A5 : gpr := exist _ x15 eq_refl.
+  Definition A6 : gpr := exist _ x16 eq_refl.
+  Definition A7 : gpr := exist _ x17 eq_refl.
+  Definition T3 : gpr := exist _ x28 eq_refl.
+  Definition T4 : gpr := exist _ x29 eq_refl.
+  Definition T5 : gpr := exist _ x30 eq_refl.
+  Definition T6 : gpr := exist _ x31 eq_refl.
   (* Saved registers.  Added 2026-09-09: only S0..S3 are ever referenced, but
      they were being re-defined LOCALLY in 163 files under Example/ because
      they were missing here.  Same values as those copies (s0=x8, s1=x9,
      s2=x18, s3=x19), so a file that still defines them locally merely shadows
      these with identical bindings. *)
-  Definition S0 : RegIdx := bv.of_nat 8.
-  Definition S1 : RegIdx := bv.of_nat 9.
-  Definition S2 : RegIdx := bv.of_nat 18.
-  Definition S3 : RegIdx := bv.of_nat 19.
+  Definition S0 : gpr := exist _ x8 eq_refl.
+  Definition S1 : gpr := exist _ x9 eq_refl.
+  Definition S2 : gpr := exist _ x18 eq_refl.
+  Definition S3 : gpr := exist _ x19 eq_refl.
 
   (* Convert a contiguous instruction list into the finite map the CFG
      verifier now consumes.  Instruction k of the list is placed at the

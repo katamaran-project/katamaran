@@ -111,12 +111,12 @@ Import SmallStepNotations.
 (* ---- Register keys: the 31 general-purpose registers (D15) ----------------
    x0 is hardwired to zero, and pc / cur_privilege / mtvec / pmp* are not
    general-purpose, so none of them can be written as a key. *)
-    Definition gprs : list (Reg ty_xlenbits) :=
+    Definition gpr_list : list (Reg ty_xlenbits) :=
       [x1; x2; x3; x4; x5; x6; x7; x8; x9; x10; x11; x12; x13; x14; x15; x16;
        x17; x18; x19; x20; x21; x22; x23; x24; x25; x26; x27; x28; x29; x30; x31].
 
     Definition is_gpr (r : Reg ty_xlenbits) : bool :=
-      bool_decide (existT ty_xlenbits r ∈ List.map (existT ty_xlenbits) gprs).
+      bool_decide (existT ty_xlenbits r ∈ List.map (existT ty_xlenbits) gpr_list).
 
     Definition gpr : Type := { r : Reg ty_xlenbits | is_gpr r = true }.
 
