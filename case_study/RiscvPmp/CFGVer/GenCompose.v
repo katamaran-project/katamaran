@@ -1531,11 +1531,11 @@ Section SegCompose.
      one lemma serves every loop, for any number of cells, at any publicness.
 
      Publicness is a FIELD of `cell_spec`, so the reservoir's per-cell resource
-     has to branch on it too: `mem_cell true` additionally knows its contents
+     has to branch on it too: `mem_cell_res true` additionally knows its contents
      are public, which is what a loop reading a public array (muladd's I, K, M
-     all read one) needs.  `mem_cell false` IS `mem_word`, by conversion. *)
+     all read one) needs.  `mem_cell_res false` IS `mem_word`, by conversion. *)
 
-  Definition mem_cell (val : option (Val ty_xlenbits)) (pub : bool) (a : bv xlenbits)
+  Definition mem_cell_res (val : option (Val ty_xlenbits)) (pub : bool) (a : bv xlenbits)
       : iProp Σ :=
     match val with
     | Some v =>
@@ -1552,7 +1552,7 @@ Section SegCompose.
           ([env].["p"∷ty_xlenbits ↦ ty.SyncVal a])
     end.
 
-  Lemma mem_cell_false (a : bv xlenbits) : mem_cell None false a = mem_word a.
+  Lemma mem_cell_false (a : bv xlenbits) : mem_cell_res None false a = mem_word a.
   Proof. reflexivity. Qed.
 
   (* the public twin of `asn_cell_inst`.  The `secLeak` conjunct mentions only
@@ -1632,7 +1632,7 @@ Section SegCompose.
   Lemma gen_cells_pre_intro {R : LCtx} (cs : list (cell_spec R))
     (i : Valuation R) (q : bv xlenbits) (addr : cell_spec R -> bv xlenbits)
     (H : List.Forall (fun c => cell_addr_ok c i q (addr c)) cs) :
-    ([∗ list] c ∈ cs, mem_cell (cell_value c) (cell_is_public c) (addr c))
+    ([∗ list] c ∈ cs, mem_cell_res (cell_value c) (cell_is_public c) (addr c))
     ⊢ asn.interpret (gen_cells_pre cs) (i.["a"∷ty_xlenbits ↦ ty.SyncVal q]).
   Proof.
     induction cs as [| c cs IH];
@@ -1641,7 +1641,7 @@ Section SegCompose.
     - inversion H as [| ?? Haddr Ht]; subst.
       rewrite big_sepL_cons.
       iIntros "(Hc & Hrest)". iSplitL "Hc".
-      + unfold mem_cell, cell_addr_ok in *.
+      + unfold mem_cell_res, cell_addr_ok in *.
         destruct (cell_value c) as [cv |].
         { iApply (bi.equiv_entails_1_1 _ _
                     (asn_cell_inst_const (term_var "p")
@@ -1680,7 +1680,7 @@ Section SegCompose.
     (iota : nat -> Valuation R) (q : bv xlenbits) (n : nat)
     (addr : nat -> cell_spec R -> bv xlenbits)
     (H : forall i, List.Forall (fun c => cell_addr_ok c (iota i) q (addr i c)) cs) :
-    ([∗ list] i ∈ seq 0 n, [∗ list] c ∈ cs, mem_cell (cell_value c) (cell_is_public c) (addr i c))
+    ([∗ list] i ∈ seq 0 n, [∗ list] c ∈ cs, mem_cell_res (cell_value c) (cell_is_public c) (addr i c))
     ⊢ loop_reservoir (gen_cells_pre cs) iota q n.
   Proof.
     apply loop_reservoir_intro. intros i.
@@ -1725,7 +1725,7 @@ Section SegCompose.
     (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat)
     (addr : nat -> cell_spec R -> bv xlenbits)
     (H : forall i, List.Forall (fun c => cell_addr_ok c (iota i) q (addr i c)) cs) :
-    ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs, mem_cell (cell_value c) (cell_is_public c) (addr i c))
+    ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs, mem_cell_res (cell_value c) (cell_is_public c) (addr i c))
     ⊢ loop_carry (gen_cells_pre cs) iota q N N.
   Proof.
     iIntros "H". iApply loop_carry_entry.
@@ -1829,7 +1829,7 @@ Section SegCompose.
     (iota : nat -> Valuation R) (q : bv xlenbits) (N : nat)
     (H : forall i, List.Forall (cell_base_sync (iota i)) cs) :
     ([∗ list] i ∈ seq 0 N, [∗ list] c ∈ cs,
-       mem_cell (cell_value c) (cell_is_public c) (cell_addr_of (iota i) c))
+       mem_cell_res (cell_value c) (cell_is_public c) (cell_addr_of (iota i) c))
     ⊢ loop_carry (gen_cells_pre cs) iota q N N.
   Proof.
     apply (loop_carry_cells cs iota q N (fun i c => cell_addr_of (iota i) c)).

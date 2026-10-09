@@ -72,24 +72,25 @@ Lemma gen_regs_q_concretize `{sailGS2 Σ'} {Σ} (ι : Valuation Σ) (va : RelVal
   asn.interpret (gen_pre (map (concretize_reg_q ι) specs)) ι.["a"∷ty_xlenbits ↦ va]
   ⊢ asn.interpret (gen_regs_q specs) ι.["a"∷ty_xlenbits ↦ va].
 Proof.
-  induction specs as [|[[r pub] pv] rest IH]; intros Hs; [done|].
+  induction specs as [|[r sp] rest IH]; intros Hs; [done|].
   inversion Hs as [|? ? Hh Ht]; subst.
   cbn [gen_pre gen_regs_q map List.fold_right asn.interpret].
   iIntros "[Hh Hr]". iSplitL "Hh"; [|iApply (IH Ht with "Hr")].
-  destruct pv as [|v|b bIn k]; cbn [concretize_reg_q gen_reg_asn gen_reg_asn_q].
-  - destruct pub; cbn; iExact "Hh".
+  destruct sp as [| |[v|b bIn k]]; cbn [concretize_reg_q gen_reg_asn gen_reg_asn_q val_spec_map].
+  - cbn; iExact "Hh".
+  - cbn; iExact "Hh".
   - iExact "Hh".
   - cbn in Hh. unfold addr_off.
     assert (Hreg : forall {Γ} (ι0 : Valuation Γ) (t1 t2 : Term Γ ty_xlenbits),
         inst (T := fun Σ => Term Σ ty_xlenbits) t1 ι0 = inst (T := fun Σ => Term Σ ty_xlenbits) t2 ι0 ->
         asn.interpret (asn_regidx_pts r t1) ι0 ⊣⊢ asn.interpret (asn_regidx_pts r t2) ι0).
     { intros Γ ι0 t1 t2 E. unfold asn_regidx_pts. destruct (reg_convert r); cbn; [rewrite E|]; reflexivity. }
-    match goal with |- context [asn_regidx_pts r ?t] => remember t as T eqn:ET end.
+    match goal with |- context [asn_regidx_pts (gpr_idx r) ?t] => remember t as T eqn:ET end.
     assert (Hi : inst (T := fun Σ => Term Σ ty_xlenbits) T ι.["a"∷ty_xlenbits ↦ va]
                  = SyncVal (if bv.eqb (@bv.of_N xlenbits k) bv.zero then rv_val (env.lookup ι bIn)
                             else bv.add (rv_val (env.lookup ι bIn)) (bv.of_N k))).
     { subst T. destruct (bv.eqb (bv.of_N k) bv.zero); cbn [inst inst_term env.lookup]; rewrite Hh; reflexivity. }
-    match goal with |- context [asn_regidx_pts r (if ?c then ?x else ?y)] =>
+    match goal with |- context [asn_regidx_pts (gpr_idx r) (if ?c then ?x else ?y)] =>
       remember (if c then x else y) as T2 eqn:ET2 end.
     assert (Hi2 : inst (T := fun Σ => Term Σ ty_xlenbits) T2 ι.["a"∷ty_xlenbits ↦ va]
                   = SyncVal (if bv.eqb (@bv.of_N xlenbits k) bv.zero then rv_val (env.lookup ι bIn)
@@ -98,7 +99,7 @@ Proof.
       change (env.lookup (ι.["a"∷ty_xlenbits ↦ va]) (ctx.in_succ bIn)) with (env.lookup ι bIn);
       rewrite Hh; cbn [rv_val ty.projLeft]; reflexivity. }
     iPoseProof (proj1 (proj1 (bi.equiv_entails _ _) (Hreg _ _ T T2 (eq_trans Hi (eq_sym Hi2)))) with "Hh") as "Hh".
-    destruct pub; cbn [asn.interpret]; [iFrame "Hh"; cbn; rewrite Hi2; done|iExact "Hh"].
+    cbn [asn.interpret]. iFrame "Hh". cbn. rewrite Hi2. done.
 Qed.
 
 
@@ -192,7 +193,7 @@ Proof.
   destruct (seq 0 m !! i) as [j|] eqn:E; [|discriminate]. cbn in Hs. injection Hs as <-.
   apply lookup_seq in E as [-> Hj]. unfold cell_addr. cbn [fst]. apply bv.bin_of_N_small.
   pose proof lenAddr_small_word as HL. change word with xlenbits in HL.
-  change xlenbits with 32%nat in HL. lia.
+  change xlenbits with 32%nat in HL. change word with 32%nat. lia.
 Qed.
 
 Lemma data_run_cells (off : N) (m : nat) (pub : bool) :
