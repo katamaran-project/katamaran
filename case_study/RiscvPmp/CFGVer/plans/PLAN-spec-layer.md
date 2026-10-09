@@ -2,7 +2,10 @@
 
 Status: rev 5 (2026-10-09): Phases 1-4 + group B IMPLEMENTED on
 `issue/spec-layer` (all 18 Result files compile); decisions taken during
-implementation are in §2a.7 for the audit. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
+implementation are in §2a.7 for the audit. FULL GATE PASSED 2026-10-09
+(GATE_JOBS=1, at 4b8ca7d8: build clean, no holes, 24 end theorems
+axiom-clean -- only Machine.pure_decode, Base.mmioenv). Left: Emiel's
+read-through/audit, the two skill descriptions, merge + comprehension check. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
 scope check done (§1a, D20–D23); Phases 1–4 rewritten for D10–D26
 (Phases 2 and 3 swapped, Phase 5 removed). Next: Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
