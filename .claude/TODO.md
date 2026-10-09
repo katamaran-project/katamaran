@@ -180,6 +180,31 @@ G and the rest of F anywhere.**
   show in `git status`); if `scripts/gate.sh`'s hole scan reads subdirectories
   of the filesystem, an untracked `Admitted` probe there could block the gate.
   The rocq `guardrails.sh` false positive on `checkout -- .` recurred.
+- **H. Spec-layer readability — reading quiz 4 (2026-10-09, Emiel, on
+  `issue/spec-layer`). Options only, NOT decided:**
+  - `is_gpr` (`Noninterference.v:118`) packs into `existT` only because the
+    sole register EqDec is `𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg)` (`Base.v:1064`).
+    Options: an `EqDecision (Reg ty_xlenbits)` instance outside the kernel; a
+    direct `match` rejecting pc/nextpc/mtvec/...; a 31-constructor `gpr` enum.
+  - `mem_cell` (`:219`) should carry an `Addr` (`Base.v:74`), not N — every
+    consumer does `bv.of_N` (`:247`, `:273`); N is only needed for the block
+    overlap test (`:198`).
+  - Merge `gen_public_addrs`/`gen_init_mem` (and the reg pair); count `Known`
+    as public too (already implied, make it said).
+  - De-clutter `noninterferent_strong` (`:355–360`): replace the 8
+    `declare_*`/`gen_*` premises by two relational predicates
+    (`regs_agree γ1 γ2 reg_specs`, `mem_agree μ1 μ2 mem`, matching on
+    Secret/Public/Known directly) so no `gen_*` is on the trusted surface.
+  - **Split statement data from proof data** (reopens D12): `Secret` entries
+    are statement-level no-ops (registers: exactly; memory: they only feed
+    `fits` and placement — cmovznz4's layout says only "code+48 bytes fits").
+    They exist so D12's EQUALITY with the generator's specs holds. Option:
+    statement lists only Public/Known; proof shows generator ⊇ statement with
+    the rest Secret. Open (unverified): the proof likely still needs the
+    working area below lenAddr, so a footprint/size premise may remain.
+  - Register pointers are literals independent of the layout (cmovznz4
+    `A2 := ia+132`; muladd `A2/X2 := ia+1144` must hit m's `Known b` header):
+    only the proof-side `*_cells` lemma ties them; the statement does not.
 
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
