@@ -53,8 +53,8 @@ Definition set_X2_to_42_instrs : list AST := [ADDI X2 X0 (bv.of_N 42)].
 
 (* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
    address, from the single symbolic-base VC valid_set_X2_to_42_param — no
-   per-address vm_compute.  The (init_addr + 4 < lenAddr) premise is the base
-   bound the fetch obligations need; it is the `(bound)` the plan anticipated. *)
+   per-address vm_compute.  The `fits` premise (the code ends below lenAddr)
+   is the base bound the fetch obligations need. *)
 Lemma set_X2_to_42_noninterferent_param (init_addr : N) :
   fits (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs)) [] ->
   noninterferent_strong init_addr set_X2_to_42_instrs (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs))

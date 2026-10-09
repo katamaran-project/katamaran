@@ -2224,35 +2224,6 @@ Import IrisModel.RiscvPmpIrisBase.
     - exact valid_contract.
   Qed.
 
-  (* --------------------------------------------------------------------- *)
-  (* Concrete corollary of a `_rel` parametric theorem.                     *)
-  (*                                                                        *)
-  (* A `gen_contract_rel` example proves its noninterference ONCE for a     *)
-  (* symbolic base (`<prog>_noninterferent_param`), concluding over         *)
-  (* `map (concretize_reg base) specs_rel` / `map (concretize_mem base) …`. *)
-  (* The concrete end theorem in Results.v is stated over literal spec      *)
-  (* lists, so deriving it is a fixed ritual: prove the literal lists equal *)
-  (* the concretized ones (a `vm_compute`-decidable equality), rewrite, and *)
-  (* apply the parametric lemma, discharging its base bound.  This tactic   *)
-  (* folds that ritual.  The concrete base is read from the goal, so the    *)
-  (* SAME invocation serves both the init_addr = 0 corollary and a nonzero  *)
-  (* one (e.g. cmovznz4_start = 256) -- only the base-definition to unfold  *)
-  (* for the final `lia` differs, hence the `base_def` argument.            *)
-  Tactic Notation "ni_rel_corollary"
-      constr(param_lemma) constr(reg_specs_rel) constr(mem_specs_rel)
-      reference(base_def) :=
-    match goal with
-    | |- noninterferent_strong ?base _ _ ?rs ?ms =>
-        let Hr := fresh "Hr" in
-        let Hm := fresh "Hm" in
-        assert (Hr : rs = map (concretize_reg base) reg_specs_rel)
-          by (vm_compute; reflexivity);
-        assert (Hm : ms = map (concretize_mem base) mem_specs_rel)
-          by (vm_compute; reflexivity);
-        rewrite Hr Hm;
-        apply param_lemma;
-        unfold base_def, lenAddr; lia
-    end.
 
 (* ========================================================================== *)
 (* gen_implpre_data: the ImplPre for GenSegment.gen_data_at, ONCE (2026-10-02) *)

@@ -294,8 +294,10 @@ Definition sym_ι (ia : N) (b : bv xlenbits) : Valuation (symCtx ▻ "a"∷ty_xl
        .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + x_off b))]
        .["a"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].
 
-(* THE TRUSTED SPECS: x's pointer, then the contract's own register specs
-   concretized at the load address; the data as the generator lays it out *)
+(* THE GENERATOR'S SPECS (proof side -- the statement below uses its own
+   shallow data, PLAN-spec-layer D12, and muladd_cells proves the two agree):
+   x's pointer, then the contract's register specs concretized at the load
+   address; the data as the generator lays it out *)
 Definition sym_reg_specs (ia : N) (b : bv xlenbits) : list reg_spec :=
   (A0, Known (bv.of_N (ia + x_off b))) :: map (concretize_reg ia) sym_regs.
 Definition sym_mem_specs (ia : N) (b : bv xlenbits) : list mem_cell :=

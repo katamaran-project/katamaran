@@ -26,7 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-
 (* ========================================================================= *)
 (* Example/KeyScheduleLoop.v — small-N (N=2) feasibility spike toward the    *)
 (* full Botan GHASH::key_schedule loop (src/lib/utils/ghash/ghash.cpp,       *)
@@ -98,15 +97,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* Table lives right after the 14*4 = 56-byte code region, matching the
        countdown_mem/cmovznz4 "data hardcoded contiguously after the code"
        pattern. *)
-    Definition key_schedule_loop2_reg_specs : list reg_spec :=
-      [(A0, Secret); (A1, Secret); (A2, Secret);
-       (A3, Known (bv.of_N 56));
-       (A4, Known (bv.of_N 2))].
 
     (* Table words are private (their value is derived from the secret H,
        and may legitimately differ between worlds), addresses are fixed. *)
-    (* key_schedule_loop2_mem_specs: removed (PLAN-spec-layer D20) -- the fixed-address
-       sanity corollary now instantiates the parametric statement. *)
 
     (* Parametric-base version: the table is base-relative (p+56/p+60), so
        this needs gen_contract_rel_classed (like cmovznz4_param /

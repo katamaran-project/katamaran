@@ -128,9 +128,10 @@ Definition cs_ι (ia : N) (l : bv xlenbits) : Valuation (csCtx ▻ "a"∷ty_xlen
        .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + 176))]
        .["a"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].
 
-(* THE TRUSTED SPECS: k's pointer and klen, public; the contract's own
-   register specs concretized at the load address (ra = the exit); the data
-   as the generator lays it out *)
+(* THE GENERATOR'S SPECS (proof side -- the statement below uses its own
+   shallow data, PLAN-spec-layer D12, and check_scalar_cells proves the two
+   agree): k's pointer and klen; the contract's register specs concretized
+   at the load address (ra = the exit); the data as the generator lays it out *)
 Definition cs_reg_specs (ia : N) (l : bv xlenbits) : list reg_spec :=
   (A0, Known (bv.of_N (ia + 176))) :: (A1, Known l) :: map (concretize_reg ia) cs_regs.
 Definition cs_mem_specs (ia : N) (l : bv xlenbits) : list mem_cell :=

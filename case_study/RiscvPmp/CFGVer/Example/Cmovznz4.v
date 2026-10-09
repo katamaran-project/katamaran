@@ -26,7 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-
 (* ========================================================================= *)
 (* Example/Cmovznz4.v — HACL* cmovznz4 (clang -O2 RV32I), all variants.     *)
 (*                                                                           *)
@@ -93,20 +92,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
       ; STORE (bv.of_Z 12) A0 A3 WORD          (* sw      a0, 12(a3) *)
       ].
 
-    (* A0 (cin) and the scratch registers only ever influence *values*,
-       never which addresses are touched, so they can stay private
-       (arbitrary, independent per world). A1/A2/A3 (x/y/r) are fixed to
-       concrete addresses right after the 29-instruction code region
-       (4*29 = 116), laid out contiguously as x[0..3], y[0..3], r[0..3]
-       to match the HDataAddrs assumption in gen_contract_noninterferent. *)
-    Definition cmovznz4_reg_specs : list reg_spec :=
-      [(A0, Secret);
-       (A1, Known (bv.of_N 116));   (* x base *)
-       (A2, Known (bv.of_N 132));   (* y base *)
-       (A3, Known (bv.of_N 148));   (* r base *)
-       (A4, Secret); (A5, Secret); (A6, Secret);
-       (A7, Secret); (T0, Secret); (T1, Secret)].
-
     (* All of cin (A0), x and y are secret here: this is the genuine
        LOAD-of-secret case that method-Y unlocks. The loaded secret words
        (x[i], y[i]) flow through fun_extend_value's union match
@@ -116,9 +101,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        still holds because the addresses touched (fixed 116/132/148 bases)
        are data-independent -- only the values are secret. r[0..3] is
        private as before. x[0..3]/y[0..3]/r[0..3] all private. *)
-    (* cmovznz4_mem_specs: removed (PLAN-spec-layer D20) -- the fixed-address
-       sanity corollary now instantiates the parametric statement. *)
-
     (* Step 5 (init_addr parameterization): the SAME cmovznz4 program, loaded at
        a genuinely nonzero, 4-aligned start address instead of 0. cmovznz4 is a
        straight-line program (no jumps/branches) and every LOAD/STORE is
@@ -127,17 +109,6 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        values and data addresses (previously hardcoded right after the
        instruction region at 0+116/132/148) shift by cmovznz4_start. *)
     Definition cmovznz4_start : N := 256%N.
-
-    Definition cmovznz4_reg_specs_at_start : list reg_spec :=
-      [(A0, Secret);
-       (A1, Known (bv.of_N (cmovznz4_start + 116)));   (* x base *)
-       (A2, Known (bv.of_N (cmovznz4_start + 132)));   (* y base *)
-       (A3, Known (bv.of_N (cmovznz4_start + 148)));   (* r base *)
-       (A4, Secret); (A5, Secret); (A6, Secret);
-       (A7, Secret); (T0, Secret); (T1, Secret)].
-
-    (* cmovznz4_mem_specs_at_start: removed (PLAN-spec-layer D20) -- the fixed-address
-       sanity corollary now instantiates the parametric statement. *)
 
     (* ===== Phase 4.2: base-parametric cmovznz4 VC ========================
        This supersedes BOTH removed concrete-base contract/VC pairs
