@@ -173,7 +173,7 @@ those terms grows with the trip count `N`:
   lookup, so composing two substitutions is `O(|Σ|²)` and the executor composes
   one per world extension — per-mint `tabulate`/`ctx.fresh` are only `O(|Σ|)` and
   cannot produce the quadratic. Sources of `|Σ|` growth: one
-  `asn.exist` per unpinned (`PVExist`) spec entry, and per-step demonic
+  `asn.exist` per unpinned (`PVExist`; `Secret`/`Public` since 2026-10-09) spec entry, and per-step demonic
   variables. **A THIRD source, one demonic variable per instruction ADDRESS
   (the instruction words), was closed 2026-08-24** by slicing them all off one
   wide `bv (word*n)` variable — worth **2.86×** on a term-flat rig

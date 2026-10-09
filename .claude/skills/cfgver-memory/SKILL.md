@@ -25,34 +25,46 @@ mechanics: → **cfgver-endtoend-internals**).
 ## Types and definitions (statement-level in `Noninterference.v`; Iris-level in `Adequacy.v`/`EndToEnd.v`)
 
 ```coq
-(* mem_spec: (word-address, is_public) *)
-Definition mem_spec : Type := Val ty_word * bool.
+(* Noninterference.v (since PLAN-spec-layer, 2026-10-09): one word of a
+   mem_layout's cells; the statement passes `cells mem`. *)
+Definition mem_cell : Type := N * val_spec (Val ty_word).
 
 (* Prop: μ1 and μ2 agree on every address in the public subset of specs *)
 Definition declare_public_memory (μ1 μ2 : Memory) (addrs : list (Val ty_word)) : Prop :=
   Forall (fun a => get_word μ1 a = get_word μ2 a) addrs.
 
-(* The public addresses from a spec list *)
-Definition gen_public_addrs (specs : list mem_spec) : list (Val ty_word) :=
-  base.omap (fun '(a, pub) => if pub then Some a else None) specs.
+(* The Public cells' addresses *)
+Definition gen_public_addrs (cs : list mem_cell) : list (Val ty_word) :=
+  base.omap (fun '(a, s) => match s with Public => Some (bv.of_N a) | _ => None end) cs.
+
+(* Adequacy.v: a cell's address as a word, and whether it is Public.  Known and
+   Secret cells take the per-run (NonSyncVal) route. *)
+Definition cell_addr (s : mem_cell) : bv word := bv.of_N s.1.
+Definition cell_pub (s : mem_cell) : bool := match s.2 with Public => true | _ => false end.
 
 (* Two-world memory ownership — all entries as NonSyncVal (raw form) *)
 Definition interp_mem_with_memory `{sailGS2 Σ} (μ1 μ2 : Memory)
-    (specs : list mem_spec) : iProp Σ :=
+    (specs : list mem_cell) : iProp Σ :=
   [∗ list] spec ∈ specs,
-    let '(a, _) := spec in
+    let a := cell_addr spec in
     interp_ptstomem (width := 4) (SyncVal a)
       (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
 
-(* Two-world memory ownership — public entries as SyncVal, private as NonSyncVal *)
+(* Two-world memory ownership — Public cells as SyncVal, the rest as NonSyncVal *)
 Definition interp_mem_with_public_memory `{sailGS2 Σ} (μ1 μ2 : Memory)
-    (specs : list mem_spec) : iProp Σ :=
+    (specs : list mem_cell) : iProp Σ :=
   [∗ list] spec ∈ specs,
-    let '(a, pub) := (spec : mem_spec) in
-    if pub
+    let a := cell_addr spec in
+    if cell_pub spec
     then interp_ptstomem (width := 4) (SyncVal a) (SyncVal (get_word μ1 a))
     else interp_ptstomem (width := 4) (SyncVal a)
            (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
+```
+
+The old `mem_spec := Val ty_word * bool` pair is gone (PLAN-spec-layer D18);
+`cell_addr`/`cell_pub` are its two projections.
+
+```coq
 ```
 
 Note this body **ignores the list index** (and, in the public branch, `μ2`). Both
@@ -64,7 +76,7 @@ the value slot. See `gen_implpre_mem_class` in **cfgver-endtoend-internals**.
 ## `something_memory` equivalence
 
 ```coq
-Lemma something_memory `{sailGS2 Σ} μ1 μ2 (specs : list mem_spec)
+Lemma something_memory `{sailGS2 Σ} μ1 μ2 (specs : list mem_cell)
     (HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs specs)) :
   interp_mem_with_memory μ1 μ2 specs ⊣⊢
   interp_mem_with_public_memory μ1 μ2 specs.
@@ -89,8 +101,8 @@ an array behind a pointer), rewrite the cells to `GenProg.data_runs` with
 conditions, closed by `lia` (worked example: `CheckScalarPtrResult.v`).
 
 **The contiguity restriction was never in the trusted statement**
-(`noninterferent_strong` takes `mem_specs` at arbitrary addresses) — only in
-this lemma's old premise. Real pointer arguments need no trusted change.
+(`noninterferent_strong` takes a `mem_layout` of blocks at arbitrary addresses)
+— only in this lemma's old premise. Real pointer arguments need no trusted change.
 
 The contiguous form: data words occupy the `4*|data_specs|` bytes immediately
 following the instruction region.
@@ -101,7 +113,7 @@ Lemma instrsAndDataMemory `{sailGS2 Σ} {μ1 μ2} ws_instrs data_specs instrs :
   mem_has_instrs μ1 (bv.of_N init_addr) ws_instrs instrs →
   mem_has_instrs μ2 (bv.of_N init_addr) ws_instrs instrs →
   (∀ i spec, data_specs !! i = Some spec →
-    spec.1 = bv.of_N (init_addr + 4 * N.of_nat (length instrs) + 4 * N.of_nat i)) →
+    spec.1 = (init_addr + 4 * N.of_nat (length instrs) + 4 * N.of_nat i)%N) →
   mem_res2_without_leak μ1 μ2 ⊢ |={⊤}=>
     ptsto_instrs (SyncVal (bv.of_N init_addr)) instrs ∗
     interp_mem_with_memory μ1 μ2 data_specs.
@@ -121,7 +133,7 @@ Their call patterns, implicit-argument asymmetry, and proof-body idioms are in t
 
 Extension of `cfg_instrs_endToEnd` (→ **cfgver-endtoend** skill) for programs with data
 memory. Requires:
-- `data_specs : list mem_spec`
+- `data_specs : list mem_cell`
 - `HpubMem : declare_public_memory μ1 μ2 (gen_public_addrs data_specs)`
 - `HDataAddrs` mapping spec indices to concrete addresses (contiguous after instruction region)
 - `ImplPre` now also takes `interp_mem_with_public_memory μ1 μ2 data_specs`

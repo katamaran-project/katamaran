@@ -38,7 +38,7 @@ Both go in `_CoqProject` before `Results.v`, the `Result` file is added to
 (and so `Adequacy`) into the example, serializing that ~85 s chain ahead of every
 example instead of letting it build in their parallel shadow — ~40 s of wall time
 per -j2 gate build. Only write a `_param` contract/VC; the concrete-base result
-is a corollary (`gen_contract_noninterferent_*_simple` / `ni_rel_corollary`), so
+is a corollary (a sanity check at a fixed address, PLAN-spec-layer D20), so
 a concrete-base VC is dead compile time.
 
 1. **Instructions.** Translate the RV32I assembly (e.g. Compiler Explorer output of

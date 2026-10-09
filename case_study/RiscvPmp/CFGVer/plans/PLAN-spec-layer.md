@@ -1,7 +1,8 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 4 (2026-10-09): §2a migration mechanics added and accepted;
-Phase 1 started. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
+Status: rev 5 (2026-10-09): Phases 1-4 + group B IMPLEMENTED on
+`issue/spec-layer` (all 18 Result files compile); decisions taken during
+implementation are in §2a.7 for the audit. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
 scope check done (§1a, D20–D23); Phases 1–4 rewritten for D10–D26
 (Phases 2 and 3 swapped, Phase 5 removed). Next: Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
@@ -446,6 +447,37 @@ are the choices made without him, each small and reversible:
 10. Tooling note: `.claude/hooks/coqc-guard.sh` is ACTIVE (3 builds / 15 min,
     interactive check before building an edited file) although CLAUDE.md
     says it was unwired 2026-09-25 — CLAUDE.md is stale there.
+11. **`fits` is strict** (`start + layout_size rs < lenAddr`), as every bridge
+    needs; `fits_nil` gives the code-only bound.
+12. **Inline programs are named in their Result file** (`set_X2_to_42_instrs`,
+    `countdown_instrs`, `jumpIfZero_instrs`, `jmp_fwd_instrs`, `swap_instrs`)
+    so statements read `ia + 4 * N.of_nat (length …_instrs)` (D23) instead
+    of repeating the list four times. `length` is `nat`, hence `N.of_nat`.
+13. **Proof-side helpers** in `EndToEnd.v`: `perm_of_eq`, `solve_cells_eq`
+    (cell lists equal address-by-address with `lia`), `words_at_repeat`,
+    `words_at_app`. D12's per-Result cost turned out SMALL: one line at fixed
+    sizes; `check_scalar_cells` and `muladd_cells` ~15 lines each at symbolic
+    sizes (split `seq 0 M` as `(M-2) + 2` to meet the generator).
+14. **Name clashes fixed**: `GenCompose`'s iProp `mem_cell` → `mem_cell_res`
+    (it shadowed the kernel's in every importer); Ltac patterns do not insert
+    the `gpr → RegIdx` coercion (`asn_regidx_pts (gpr_idx r)` spelled out).
+15. **Deleted**: `ni_rel_corollary` (corollaries now state the same shallow
+    data, nothing to prove equal) and the concrete `*_reg_specs` lists it used.
+16. **Group B**: muladd's program list is the compiled code itself
+    (`li A4/T4, 32`); `set_nth` is gone. Checked: the `vm_compute`d
+    `mb_instrs` is byte-identical before and after.
+17. **Docs**: skill BODIES updated (gen-contract, gen-contract-internals,
+    memory, endtoend-internals, solve-vc, new-example, scaling-diagnostics,
+    reading-quiz) — NOTE these went through Bash from inside `.claude/skills`
+    with relative paths, which `skill-bash-write-guard.sh` does not match: a
+    gap in that guard (it should resolve the path against the cwd), found by
+    accident; body edits are allowed via Edit, so the content is within the
+    rules. `skill-path-guard.sh` gained `Layout.v → cfgver-endtoend` (its
+    11-case suite passes). **NOT done — needs Emiel:** the frontmatter
+    `description:` of `cfgver-gen-contract` and `cfgver-memory` still name
+    `mem_full_spec`/`mem_spec`/`(RegIdx * is_public * option value)`;
+    description edits are hook-gated on a `skill-routing-maintenance` consult
+    (a paid judge eval), not started without his go-ahead.
 
 ## 3. Phases
 

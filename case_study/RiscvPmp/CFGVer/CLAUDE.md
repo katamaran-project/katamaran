@@ -26,7 +26,7 @@ Post 2026-07-17 split of the old monolithic `Examples.v`:
 target, so its closure is every result).
 
 `Noninterference.v` sits outside both branches: it depends only on `Semantics` +
-`RiscvPmp.Machine`, so it builds in parallel with everything above.
+`RiscvPmp.Machine`, so it builds in parallel with everything above. `Layout.v` (the statement front-end) sits beside it and requires only it.
 
 ### The light/heavy split (2026-07-27) — DON'T UNDO IT
 
@@ -45,7 +45,7 @@ probes, peak RSS — the only metric worth tuning on here, see below):
 intuition that the symbolic executor is the expensive part is measured false.
 **`Verifier`/`Contracts`/`GenContract` cost +0.00 on top of `Spec`**, so no split
 among those three can move the number. And the executor cannot be dropped by any
-file except `Noninterference.v`: every other file names `ValidCFGVerifierContract`
+file except `Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v`: every other file names `ValidCFGVerifierContract`
 or `gen_contract_param` in a *statement*, whose type must typecheck, so its
 closure is mandatory whether or not `vm_compute` reduces it.
 
@@ -128,7 +128,7 @@ section and `theories/CLAUDE.md` on why `Require` transitivity bounds this.)
   proof work — `rsolve` at `VerifierRel:198` (9.4 s), `consume_sound` at
   `VerifierRel:706` (6.4 s) — that no file arrangement touches.
 
-`Noninterference.v` is the trusted statement layer (step relations,
+`Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v` is the trusted statement layer (step relations,
 `declare_*`, `noninterferent_strong`, spec types) and genuinely does not depend
 on the verifier — it requires neither `CFGVer.Spec` nor `RiscvPmp.Sig`.
 
@@ -142,7 +142,8 @@ errors on the dependents.
 | `SpecIris.v` | shallow executor + `RiscvPmpIrisInstanceWithContracts` (the Iris wiring split out of `Spec.v`) | cfgver-soundness |
 | `Verifier.v` | `safeE`, `sexec_cfg_addr`, `scfg_verification_condition` (`Section Symbolic`); **and, since 2026-09-22, the `CFGVerifierContract` RECORD + `cfg_map` + `AnnotInstr`/`BlkAnnot`** — the record moved down from `Contracts.v` because `ai_block` carries a contract and `Contracts.v` requires this file (PLAN-contract-ast Phase 4). DATA only: the VC over it stays in `Contracts.v`. Iris-free | cfgver-executor, cfgver-contracts |
 | `VerifierRel.v` | `cexec_cfg_addr` (`Shallow`), `rexec_cfg_addr` + `RefineCompat` instances + `itable_rel`/`etable_rel` (`Relational`), `ptsto_instrs` + `sound_exec_instruction` (`Soundness`) | cfgver-refinement, cfgver-rsolve, cfgver-soundness |
-| `Noninterference.v` | trusted statement defs; requires only `Semantics`+`Machine` | cfgver-endtoend |
+| `Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v` | the trusted KERNEL (PLAN-spec-layer): `val_spec`, `gpr` keys, `reg_spec`, `mem_block`/`mem_layout` (disjointness in the type), `cells`/`mem_cell`, `clear_of_code`, `noninterferent_strong`; `get_word_read_ram` (byte order = the machine's load). Requires only `Semantics`+`Machine` | cfgver-endtoend |
+| `Layout.v` | the statement FRONT-END (D25): `region` (`Word`/`Array`/`Bytes`/`Gap`), `compile` (regions back to back → `mem_layout`, disjoint by shape), `fits`, `compile_clear`. Requires only `Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v` | cfgver-endtoend |
 | `Tables.v` | reg aliases, `instrs_of_list`, `table_of_list`/`exit_of_off` (the single exit term). Iris-free | cfgver-executor |
 | `TablesRel.v` | the `itable_rel`/`etable_rel` faith lemmas (statements mention `Pred w`, hence Iris). Sole consumer: `EndToEnd.v` | cfgver-executor |
 | `Contracts.v` | `cfg_vc` (the VC — was `ValidCFGVerifierContract` until 2026-09-22), `CFG_VC_triple`, `Valid_CFG_VC`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc`. The RECORD itself now lives in `Verifier.v` (row above) | cfgver-contracts, cfgver-solve-vc |
@@ -151,10 +152,10 @@ errors on the dependents.
 | `GenCompose.v` | **HEAVY.** Composition combinators: `contract_run(_w)` (a sealed contract run inside a larger AST program: placement + fit + AST containment), `seg_exit_table_ok` (the exit term is `seg_addr ia target`), `seg_vc`/`seg_entry`/`seg_exit`/`seg_step` (one segment, with an explicit frame), `seg_loop` | cfgver-soundness |
 | `Adequacy.v` | `myWP2_loop`, `create_resources`, `semWP2_*`, `sound_*_myWP2` | cfgver-soundness, cfgver-wp2 |
 | `Validity.v` | **HEAVY, small.** `ValidCFGVerifierContract c` (sealed `∃ LV : list (AnnotInstrV blkValid), cfg_vc c (map (eraseV c) LV) ∧ map aiv_instr LV = cfg_instrs c ∧ no aiv_loop` -- blocks carry their own validity, since 2026-09-29), its intro/elim, `annotsValid_of_V`, `solve_valid`. The ONLY place annotations cross into the bridges: `EndToEnd.v` (re-exports it) and `GenCompose.v` both take it. Own file so those two siblings stay parallel (PLAN-valid-blk-annot Phase 4) | cfgver-endtoend, cfgver-soundness |
-| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` (incl. the `_simple`/`_rel_simple` common-case bridges + the `ni_rel_corollary` tactic notation that folds the `_rel` concrete-corollary ritual) | cfgver-endtoend(-internals), cfgver-memory |
+| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` (incl. the `_simple`/`_rel_simple` common-case bridges; every bridge concludes the internal `ni_cells`, and `ni_of_cells` turns it into `noninterferent_strong` given `clear_of_code` and the two `≡ₚ` correspondences; `perm_of_eq`/`solve_cells_eq`/`words_at_repeat`/`words_at_app` for proving those) | cfgver-endtoend(-internals), cfgver-memory |
 | `Example/Prelude.v` | shared `Require Export`/`Import` preamble every example re-imports (no defs) | cfgver-new-example |
-| `Example/<Prog>.v` | per-program instrs+specs (statement-relevant), parametric contract, `valid_*_param` VC. Only the `_param` form exists — the concrete-base contracts/VCs were removed as dead in 2026-07-27 | cfgver-new-example |
-| `Example/<Prog>Result.v` | that program's end-to-end `*_noninterferent[_param]` theorems (trusted statement surface, gate-checked) | cfgver-endtoend |
+| `Example/<Prog>.v` | per-program instrs (statement-relevant) + the GENERATOR's spec lists (proof-side since PLAN-spec-layer), parametric contract, `valid_*_param` VC. Only the `_param` form exists — the concrete-base contracts/VCs were removed as dead in 2026-07-27 | cfgver-new-example |
+| `Example/<Prog>Result.v` | that program's end-to-end `*_noninterferent[_param]` theorems over its OWN shallow `<x>_data : list region` / `<x>_regs` (`fits … → noninterferent_strong … (compile … <x>_data)`), the `≡ₚ` proof that these equal the generator's specs, and fixed-address SANITY-CHECK corollaries (trusted statement surface, gate-checked) | cfgver-endtoend |
 | `Results.v` | re-export shell over the `<Prog>Result.v` files; no proofs | cfgver-endtoend |
 
 ## Importing CFGVer.Verifier downstream

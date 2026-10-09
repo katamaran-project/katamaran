@@ -24,28 +24,31 @@ Assertion builders and `gen_contract*` live in `GenContract.v`; the
 
 ```coq
 Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
-  let '(r, is_pub, opt_v) := s in
-  match opt_v with
-  | Some v => r ↦ᵣ term_val ty_xlenbits v
-  | None =>
-    asn.exist "v" ty_xlenbits
-      (if is_pub then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
-                 else r ↦ᵣ term_var "v")
+  let '(r, sp) := s in
+  match sp with
+  | Known v => r ↦ᵣ term_val ty_xlenbits v
+  | Public  => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v" ∗ secLeakvar "v")
+  | Secret  => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v")
   end.
 
 Definition gen_pre {Σ} (specs : list reg_spec) : Assertion Σ :=
   List.fold_right (fun s acc => gen_reg_asn s ∗ acc) ⊤ specs.
 ```
 
-`gen_mem_asn` / `gen_mem_pre` follow the same shape over `mem_full_spec` with `↦ₘ`.
+`gen_mem_asn` / `gen_mem_pre` follow the same shape over `mem_cell`
+(`N * val_spec word`, address `term_val (bv.of_N a)`) with `↦ₘ`. `r : gpr`
+reaches `↦ᵣ` (which takes a `RegIdx`) through the coercion `gpr_idx`
+(`Tables.v`). **An Ltac `match goal` pattern does NOT insert that coercion**:
+write `asn_regidx_pts (gpr_idx r) ?t`, not `asn_regidx_pts r ?t` (the latter
+silently never matches — `GenProg.gen_regs_q_concretize`).
 `gen_pre [] = ⊤`, so the empty-spec case degenerates gracefully.
 
 ```coq
-(* Public register list: entries with is_public = true, converted to Reg *)
-Definition gen_public_regs (specs : list reg_spec) : list {x : Ty & 𝑹𝑬𝑮 x} :=
-  base.omap (fun '(r, pub, _) =>
-    if pub then option_map (@existT Ty 𝑹𝑬𝑮 ty_xlenbits) (reg_convert r)
-    else None) specs.
+(* Noninterference.v: the Public entries' registers.  The Iris layer
+   (IrisInstanceBinary.v, shared) still wants a sigma list; EndToEnd.v's
+   pub_regs_sig converts at the bridges. *)
+Definition gen_public_regs (specs : list reg_spec) : list (Reg ty_xlenbits) :=
+  base.omap (fun '(r, s) => match s with Public => Some (gpr_reg r) | _ => None end) specs.
 ```
 
 ## `gen_implpre` — the once-and-for-all `ImplPre`
@@ -55,8 +58,9 @@ Lemma gen_implpre `{sailGS2 Σ}
     (specs : list reg_spec) (γ1 γ2 : RegStore)
     {Σ0} (ι : Valuation (Σ0 ▻ "a"∷ty_xlenbits))
     (HpubReg : declare_public_registers γ1 γ2 (gen_public_regs specs))
-    (HND : NoDup (map reg_spec_idx specs)) :
-  interp_gprs_with_public_registers γ1 γ2 (gen_public_regs specs) ⊢
+    (HND : NoDup (map reg_spec_idx specs))          (* reg_spec_idx := gpr_idx ∘ fst *)
+    (HInitRegs1 : …) (HInitRegs2 : …) :
+  interp_gprs_with_public_registers γ1 γ2 (pub_regs_sig (gen_public_regs specs)) ⊢
   asn.interpret (gen_pre specs) ι.
 ```
 
