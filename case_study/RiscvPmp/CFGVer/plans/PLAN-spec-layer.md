@@ -1,6 +1,7 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
+Status: rev 4 (2026-10-09): §2a migration mechanics added (PROPOSED,
+awaiting Emiel's OK). rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
 scope check done (§1a, D20–D23); Phases 1–4 rewritten for D10–D26
 (Phases 2 and 3 swapped, Phase 5 removed). Next: Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
@@ -264,6 +265,149 @@ type), D19 (clear of code), D5 (parameter premises); Q6 → D13.
 - **Q6. The decode assumption**: a comment, or also a named `decodable
   instrs` the reader can see?
 
+## 2a. Migration mechanics (PROPOSED by Claude, 2026-10-09 — needs Emiel's OK)
+
+Written after Phase 0 with VibeWise paused. Every choice Phase 0 did NOT
+make is tagged **[proposal]**; nothing tagged so is decided until Emiel
+says so.
+
+**Fact that shapes everything (`Noninterference.v:261–285`):** the memory
+specs only produce two premises — public words equal
+(`declare_public_memory`) and known words have their value
+(`declare_init_memory`). A Secret cell or register produces NO premise.
+So in the statement a `Secret` region means nothing by itself; it matters
+only through disjointness (D11) and clear-of-code (D19), which can only make
+the theorem HARDER to prove, never weaker.
+
+### 2a.1 Approach: in place, layer by layer, in import order
+
+Each phase rewrites its files in place, in the build order of §3. There is
+NO parallel `_v2` copy: GenSegment (1837 lines) and EndToEnd (2405) are
+too big to duplicate. Consequence: the branch is red from Phase 1 to
+Phase 4. Mitigations: every file is compiled with `keep_vo` before its
+dependents; one `WIP (LLM)` commit per file once it compiles; the old
+statements stay in git for Phase 6's `stmtdiff`. **Out of scope:**
+merging the bridge families (`_u`/`_rel`/`_param`/`_classed`/`_bytes`/
+`gen_prog`). Each is rewritten as it stands — rewrite, don't redesign.
+
+### 2a.2 Kernel, `Noninterference.v` (Phase 1)
+
+| old | new |
+|---|---|
+| `reg_spec := RegIdx * bool * option (Val ty_xlenbits)` | `reg_spec := gpr * vspec (Val ty_xlenbits)` |
+| `gen_public_regs : … → list {x : Ty & Reg x}` (omap + `existT` + `reg_convert`) | `public_regs : list reg_spec → list (Reg ty_xlenbits)` through the total `gpr_reg` |
+| `declare_public_registers` over `list {x & Reg x}` | over `list (Reg ty_xlenbits)` |
+| `gen_init_regs` | same role: `Known v` ↦ `(gpr_reg r, v)` |
+| `mem_full_spec`, `mem_spec`, `mem_full_to_spec`, `gen_public_addrs`, `gen_full_public_addrs` | REMOVED (D18) |
+| — | `block := {| blk_addr : N; blk_words : list (vspec word) |}`, `memory := {| blocks : list block; blocks_ok : blocks_disjoint blocks |}`, `cells : memory → list (N * vspec word)` |
+| `gen_init_mem`, `declare_public_memory`, `declare_init_memory` | the same premises, over `cells m` (address `bv.of_N`) |
+| `get_word` + `mem_has_word` (two readers) | `get_word` is THE data reader; `mem_has_word` stays for instructions only, with a proved lemma `mem_has_word μ a w ↔ get_word μ a = w` (one meaning) |
+| `noninterferent_strong ia instrs exit regs (mems : list mem_full_spec)` | `… (m : memory) := clear_of_code ia instrs m ∧ ∀ …` (D19) |
+
+- **[proposal] P1 — a kernel block is an address + a LIST of per-word
+  `vspec`s.** No `vec`, no `Bytes`, no dependent types in the kernel:
+  `Word`/`Array`/`Bytes` are front-end and compile to word lists, so D22's
+  rounding (and its TODO) lives in `compile`, not in the kernel. D21's
+  CheckScalarPtr base then reads
+  `{| blk_addr := ka; blk_words := repeat Secret (klen_words l) |}`.
+  Knock-on, amends D14: with rounding, the pad bytes of a `Known` byte
+  string have no value, so **front-end `Bytes` takes only `Secret |
+  Public` until D22's TODO is resolved** (no Result uses a `Known` `Bytes`).
+- **[proposal] P2 — `gpr := { r : Reg ty_xlenbits | is_gpr r = true }`**,
+  with `is_gpr` membership in `[x1; …; x31]` (Base.v's own registers). Then
+  `gpr_reg := proj1_sig`: the kernel needs no `reg_convert` at all, and
+  `X0`/`pc`/`mtvec` are unrepresentable. Statements keep writing `A0`:
+  `Tables.v`'s aliases become `gpr` constants (`exist _ x10 eq_refl`), with
+  `Coercion gpr_idx : gpr >-> RegIdx` so `ADDI A0 A0 …` still typechecks.
+  `X0` stays a bare `RegIdx`. Internal agreement lemma (Tables, 31 cases):
+  `reg_convert (gpr_idx g) = Some (gpr_reg g)`. Rejected:
+  `{ i : RegIdx | i ≠ 0 }` (it keeps `reg_convert` in the kernel, with an
+  unreachable default branch).
+- **[proposal] Names.** `vspec`, not `spec`: `Katamaran.Prelude` already
+  defines `spec` (`theories/Prelude.v:475`), and statements only ever write
+  the constructors. The front-end file (D25) is `Layout.v`. `block` is
+  also an executor op in `theories/Staging`, but that is never imported
+  here. The draft's `memory ia cs_instrs` indexing is stale: under D19
+  clear-of-code is a conjunct, not part of the type, so `memory` is not
+  indexed.
+- `vspec_map : (A → B) → vspec A → vspec B` sits next to `vspec`. Every
+  `concretize_*` becomes a `vspec_map` (D10's guarantee: Secret stays
+  Secret).
+- Byte order (D18): prove `get_word` against the machine's 4-byte read (the
+  `lw` path in `Machine.v`). If it disagrees, STOP and report — that would
+  be a finding about every memory theorem proved so far, not a Phase 1 detail.
+
+### 2a.3 Front-end, `Layout.v` (Phase 1, D25)
+
+`region` exactly as D14 (with `Bytes` per P1). `compile (start : N) (rs :
+list region) : memory` places regions back to back from `start`; `Gap n`
+emits no block; `blocks_ok` is discharged INSIDE `compile` by one generic
+lemma (`place_disjoint`), so no statement or Result ever proves
+disjointness for a compiled layout. Two more generic lemmas:
+`compile_clear : clear_of_code ia instrs (compile (ia + 4 * length instrs) rs)`
+(by shape, D19) and `size`/`fits`. Statements read (D16, D23):
+`fits … → noninterferent_strong ia instrs (ia + 4 * length instrs) regs
+(compile (ia + 4 * length instrs) data)`.
+
+### 2a.4 Generators, `GenContract.v` / `GenSegment.v` (Phase 2)
+
+- Register keys are `gpr` in every front-end (`_param`, `_rel`, `_q`); the
+  generators drop to `RegIdx` through `gpr_idx` (D15: internal).
+- `(r, pub, PVExist | PVConst v | PVBaseOff k)` → `(r, vspec rel_val)` with
+  `rel_val := RConst v | RBaseOff k`: `PVExist` ↦ `Public`/`Secret` by
+  `pub`, `PVConst`/`PVBaseOff` ↦ `Known` (the flag was ignored there
+  anyway). `param_val_q` likewise. `concretize_*` = `vspec_map`.
+- `data_spec`: `DCell pub (option term)` → `DCell (vspec (Term Σ))`.
+  **[proposal] `DArr`/`DBytes` keep their `bool` and `dir`, `DAt` stays —
+  D17 resolved by D12:** shallow statements never show `data_spec`, so it
+  already IS the "variant read only by the contract generator" D17 asks for.
+  Nothing to remove.
+- Generators emit lists in the SAME order `compile`/the statements use
+  where that is free, so concrete-size correspondences close by
+  `reflexivity` (2a.5).
+
+### 2a.5 Bridges (Phase 3, D24)
+
+- **Every bridge takes the statement's own data plus correspondence
+  premises** (this is where D12 lands): `regs ≡ₚ <generator's concretized
+  regs>` and `cells m ≡ₚ <generator's concretized cells>`. Permutation, not
+  equality, because the kernel premises are `Forall`s (order-free) and
+  `NoDup` survives permutation.
+- The obligations that used to be premises: pairwise disjointness from
+  `blocks_ok m` (lemma `cells_disjoint`); clear-of-code is now part of the
+  CONCLUSION (D19), proved by `compile_clear` or, for D21, from the
+  parameter premise; in range from `fits`. `data_layout_ok` shrinks to
+  what is left.
+- Rewrite order (each file committed once it compiles): `Adequacy.v`
+  (`data_layout_ok`, `contig_data_layout`, `intro_mem_with_memory_at`,
+  `instrsAndDataMemory_at`) → `EndToEnd.v` (`declare_init_mem_*`,
+  `gen_init_mem_*`, `interp_mem_*`, `filter_*_concretize*`,
+  `gen_implpre{,_mem,_mem_class,_mem_bytes,_mem_bytes_class,_data}`,
+  `cfg_instrs_endToEnd_gen`, `gen_contract_noninterferent_{u,u_simple,rel,param,param_simple,rel_classed_simple,rel_bytes_simple}`,
+  the `ni_rel_corollary` tactic) → `GenCompose.v` (4 uses) → `GenProg.v`
+  (`gen_prog_noninterferent`, `data_layout_runs`).
+- Generic correspondence lemmas, one per front-end constructor
+  (`compile [Array n s]` vs `concretize_data [DArr …]`, etc.), so a symbolic-
+  size Result folds lemmas instead of doing induction itself. Then the
+  pricing run on cmovznz4 and muladd (§3 Phase 3).
+
+### 2a.6 Results (Phase 4) — the per-file recipe
+
+1. Data: `<prog>_data : list region` and `<prog>_regs ia : list reg_spec`,
+   shallow (D12), from §1a's table.
+2. Statement: as in 2a.3. Exit per D23.
+3. Proof: the bridge, then the two `≡ₚ` facts — `reflexivity` /
+   `vm_compute` at fixed sizes, the Phase 3 lemmas at symbolic sizes.
+4. Sanity corollary at a fixed `init_addr` (D20), labelled as such.
+
+Order: the 10 register-only files (memory `compile _ []`) → the fixed-size
+memory files (Loop1, ModpowFull, Countdown mem, KeyScheduleLoop; Cmovznz4
+was done in Phase 3) → symbolic sizes (CheckScalarParam, MuladdParam +
+group B) → CheckScalarPtr (D21, base by hand) last. The four Results whose
+proofs `intros` the definition directly (CheckScalarParam, MuladdParam,
+PaddedLoop, CountdownRec) need their intro pattern split for D19's
+conjunct.
+
 ## 3. Phases
 
 One session per phase is the intended rhythm (`/clear` between, the plan
@@ -310,12 +454,9 @@ covers only its own files.
 
 **Phase 1 — trusted kernel + statement front-end.** Create
 `issue/spec-layer` from `KatamaranRel` (branch-workflow skill).
-- **Design first (VibeWise ON; Emiel proposes):** (P1) the kernel's own
-  block-content type — D11 says address-keyed blocks, but the draft's
-  `cs_mem` puts `region` values in them, and regions live in the front-end
-  file (D25); it must fit D18 (word-granular) and D22 (`Bytes` rounding).
-  (P2) the GPR key type's name and representation (D15; drafts say
-  `RegKey`). (P3) the front-end file's name.
+- **Mechanics: §2a.2 (kernel) and §2a.3 (front-end).** P1 (block
+  content), P2 (GPR key type) and P3 (names) are PROPOSED there; Emiel
+  signs them off before Phase 1 starts.
 - **Kernel, `Noninterference.v`:** `spec V` (D10); GPR keys, `X0`
   unrepresentable, one total map to `Reg ty_xlenbits` — no `reg_convert`,
   no `existT` sigma list on the statement path (D15); base memory = blocks
@@ -345,20 +486,20 @@ covers only its own files.
   whether it took over a question `rocq-implementation` should have
   answered (the skipped routing check). *Landed when:* you can say where
   `/explain` is accurate and where `/reading-quiz` is the better tool.
-- **VibeWise:** ON — (P1)–(P3) are design.
+- **VibeWise:** paused (design closed 2026-10-09, Emiel); resume only if a
+  §2a proposal turns out wrong in contact with the code.
 
 **Phase 2 — generator front-ends (`GenContract.v`, `GenSegment.v`).**
 (Was Phase 3.) `param_val`, `param_val_q` and `data_spec`'s cells become
 instances of `spec` (D10), so every `concretize_*` is a map over `Known`;
 spell out the `_rel`/`_q` constructors D10 left open. `data_ok` (D7).
-D17: drop `dir`/`DAt` from the generator if at all possible, else a
-hint-carrying variant read only by the generator — decided here, with
-Emiel. Move `Example/Cmovznz4.v`'s specs to the new constructors (the rest
+D17: per §2a.4's proposal, `dir`/`DAt` stay in `data_spec`, which shallow
+statements (D12) never show. Mechanics: §2a.4. Move `Example/Cmovznz4.v`'s specs to the new constructors (the rest
 waits for Phase 4) and measure its VC cost before/after: the generator must
 not add per-spec case splits (§4).
 - **Check:** both files compile (`keep_vo`); `valid_cmovznz4_*_param`
   still discharges, at a cost within 1.5× of before.
-- **VibeWise: ON** — front-end shape is design.
+- **VibeWise:** paused unless a §2a.4 proposal fails.
 - **while-you-wait:** live review again; compare with Phase 1 — is it still
   worth the per-tool-call overhead (§5)?
 - **vibe-learn:** `/explain GenSegment.v` (a file you now know well — a good
@@ -366,7 +507,7 @@ not add per-spec case splits (§4).
 
 **Phase 3 — bridges, REWRITTEN (D24) (`Adequacy.v`, `EndToEnd.v`,
 `GenProg.v`; `GenCompose.v` where it touches the spec types).** (Was
-Phase 2.) Re-prove the `gen_implpre*`/extraction lemmas and
+Phase 2.) Mechanics and lemma order: §2a.5. Re-prove the `gen_implpre*`/extraction lemmas and
 `gen_prog_noninterferent` over the kernel types. Disjointness now comes
 from the base's proof field and clear-of-code is a bridge OBLIGATION
 (D19), so `data_layout_ok` shrinks to what the types do not give; `NoDup`
@@ -396,7 +537,7 @@ its disjointness proved from the parameter premise (D21); exit
 `ia + 4 * length instrs` wherever the exit is the end of the code (D23);
 fixed-address corollaries kept, rewritten, labelled sanity checks (D20);
 group B: muladd's `set_nth` revert and the "Untracked probe" header.
-Mechanical, except D21.
+Mechanical, except D21. Per-file recipe and order: §2a.6.
 - **VibeWise: PAUSE** (resume for D21 if its disjointness proof raises a
   statement question). **while-you-wait:** live review of every Result
   STATEMENT (trusted) — skim the rest. **vibe-learn:** `/learn`.
