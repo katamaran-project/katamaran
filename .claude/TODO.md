@@ -137,6 +137,12 @@ use it for future examples instead of hand-transcribing.
 **Open items from the 2026-10-08 learning session, grouped (Emiel asked which
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
+- **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
+  18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
+  and the merge comprehension check). Implementation-time decisions:
+  PLAN-spec-layer §2a.7. Still open from A: the frontmatter descriptions of
+  `cfgver-gen-contract`/`cfgver-memory` (hook-gated). Decode assumption: no
+  action (D13). The Priority-0 notes below are now HISTORY.
 - **A. Spec-layer redesign — ONE pass** (`plans/PLAN-spec-layer.md`): sum type,
   `Reg` keys, mem plumbing, one word predicate, `concretize_data`/`data_ok`,
   visible checks, trusted-file comments. Together because the design
