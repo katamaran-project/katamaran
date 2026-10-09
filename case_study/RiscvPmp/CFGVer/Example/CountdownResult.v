@@ -92,7 +92,7 @@ Lemma countdown_noninterferent :
     [(X1, Known (bv.of_N 2))] (compile (init_addr + 4 * N.of_nat (length countdown_instrs)) []).
 Proof.
   apply countdown_noninterferent_param.
-  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.
 
 (* code: init_addr .. init_addr+15 (4 instructions); the counter follows. *)
@@ -113,14 +113,14 @@ Proof.
                      (cs := map (concretize_mem init_addr) countdown_mem_mem_specs_rel)).
   - apply compile_clear; lia.
   - apply perm_of_eq; cbn; rewrite N.add_0_r; reflexivity.
-  - apply perm_of_eq. cbn. solve_cells_eq.
-  - unfold fits, layout_size, lenAddr in Hfit. cbn in Hfit.
-    eapply gen_contract_noninterferent_rel_classed_simple.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 20)).
     + apply Prelude.nodup_fixed; reflexivity.
     + intros [|i] spec H; cbn in H;
         try (inversion H; subst; cbn; lia); try discriminate.
-    + unfold lenAddr. cbn. lia.
-    + unfold lenAddr. cbn. lia.
+    + simpl. lia.
+    + simpl. lia.
     + solve_valid valid_countdown_mem_cfg_contract_param.
 Qed.
 
@@ -133,5 +133,5 @@ Lemma countdown_mem_noninterferent :
     (compile (init_addr + 4 * N.of_nat (length countdown_mem_instrs)) countdown_mem_data).
 Proof.
   apply countdown_mem_noninterferent_param.
-  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.

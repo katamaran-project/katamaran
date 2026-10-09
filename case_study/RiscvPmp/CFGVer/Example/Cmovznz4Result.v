@@ -76,14 +76,14 @@ Proof.
                      (cs := map (concretize_mem init_addr) cmovznz4_mem_specs_rel)).
   - apply compile_clear; lia.
   - reflexivity.
-  - apply perm_of_eq. cbn. solve_cells_eq.
-  - unfold fits, layout_size, lenAddr in Hfit. cbn in Hfit.
-    eapply gen_contract_noninterferent_rel_classed_simple.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 164)).
     + apply Prelude.nodup_fixed; reflexivity.
     + intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
         try (inversion H; subst; cbn; lia); try discriminate.
-    + unfold lenAddr. cbn. lia.
-    + unfold lenAddr. cbn. lia.
+    + simpl. lia.
+    + simpl. lia.
     + solve_valid valid_cmovznz4_cfg_contract_param.
 Qed.
 
@@ -97,7 +97,7 @@ Lemma cmovznz4_noninterferent :
     (compile (init_addr + 4 * N.of_nat (length cmovznz4_instrs)) cmovznz4_data).
 Proof.
   apply cmovznz4_noninterferent_param.
-  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.
 
 Lemma cmovznz4_noninterferent_at_start :
@@ -107,5 +107,5 @@ Lemma cmovznz4_noninterferent_at_start :
     (compile (cmovznz4_start + 4 * N.of_nat (length cmovznz4_instrs)) cmovznz4_data).
 Proof.
   apply cmovznz4_noninterferent_param.
-  unfold fits, layout_size, cmovznz4_start, lenAddr. cbn. lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.

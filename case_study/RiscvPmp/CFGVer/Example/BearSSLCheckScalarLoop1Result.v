@@ -66,14 +66,14 @@ Proof.
                      (cs := map (concretize_mem init_addr) loop1_byte_specs_rel)).
   - apply compile_clear; lia.
   - reflexivity.
-  - apply perm_of_eq. cbn. solve_cells_eq.
-  - unfold fits, layout_size, lenAddr in Hfit. cbn in Hfit.
-    eapply gen_contract_noninterferent_rel_bytes_simple.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_bytes_simple (bound := 48)).
     + apply Prelude.nodup_fixed; reflexivity.
     + intros [|[|[|[|[|[|[|[|i]]]]]]]] spec H; cbn in H;
         try (inversion H; subst; cbn; lia); try discriminate.
-    + unfold lenAddr. cbn. lia.
-    + unfold lenAddr. cbn. lia.
+    + simpl. lia.
+    + simpl. lia.
     + solve_valid valid_loop1_cfg_contract_param.
 Qed.
 
@@ -86,5 +86,5 @@ Lemma check_scalar_loop1_noninterferent :
     (compile (init_addr + 4 * N.of_nat (length loop1_instrs)) check_scalar_loop1_data).
 Proof.
   apply check_scalar_loop1_noninterferent_param.
-  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.

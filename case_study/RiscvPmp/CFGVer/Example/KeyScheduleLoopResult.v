@@ -75,14 +75,14 @@ Proof.
                      (cs := map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel)).
   - apply compile_clear; lia.
   - reflexivity.
-  - apply perm_of_eq. cbn. solve_cells_eq.
-  - unfold fits, layout_size, lenAddr in Hfit. cbn in Hfit.
-    eapply gen_contract_noninterferent_rel_classed_simple.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 64)).
     + apply Prelude.nodup_fixed; reflexivity.
     + intros [|[|i]] spec H; cbn in H;
         try (inversion H; subst; cbn; lia); try discriminate.
-    + unfold lenAddr. cbn. lia.
-    + unfold lenAddr. cbn. lia.
+    + simpl. lia.
+    + simpl. lia.
     + solve_valid valid_key_schedule_loop2_cfg_contract_param.
 Qed.
 
@@ -95,5 +95,5 @@ Lemma key_schedule_loop2_noninterferent :
     (compile (init_addr + 4 * N.of_nat (length key_schedule_loop2_instrs)) key_schedule_loop2_data).
 Proof.
   apply key_schedule_loop2_noninterferent_param.
-  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.
