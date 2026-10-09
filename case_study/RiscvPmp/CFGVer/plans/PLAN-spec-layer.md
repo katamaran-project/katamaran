@@ -1,8 +1,8 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 2 (2026-10-08), Phase S DONE, Phase 0 decisions DONE
-(2026-10-09, D10–D19); Phases 1–4 below predate them and must be rewritten
-before Phase 1. Based on `KatamaranRel` (D8);
+Status: rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
+scope check done (§1a, D20–D23); Phases 1–4 rewritten for D10–D26
+(Phases 2 and 3 swapped, Phase 5 removed). Next: Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
 `/reading-quiz` sessions (`Noninterference.v`; the spec front-ends) whose
 findings are in `.claude/TODO.md` (Priority 0 and the A–G list). Phase 0
@@ -70,6 +70,31 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
 `GenCompose`, `IrisInstance*`). `gen_*`/`declare_*`: only
 `Noninterference.v` + `EndToEnd.v`. 21 tracked Result files.
 
+### 1a. D11 scope check (2026-10-09, from source; example `.vo`s were stale)
+
+**18 of the 21 Result files state `noninterferent_strong`;** the three
+composed files (CountdownComposed, SwapComposed, TwoLoopsComposed) stop at
+`myWP2_loop` and are out of scope. **10 are register-only** (memory `[]`):
+InvMixColumns, BearSSLCheckScalar, BearSSLModpow, BearSSLMuladd, Countdown
+(register theorem), CountdownRec, Jumps, MvSwap, PaddedLoop, Precompute,
+SetX2. **8 have memory, and every one places it right at the end of the
+code with no gaps:**
+
+| Result | data at (instrs) | regions (D14) |
+|---|---|---|
+| Cmovznz4 | +116 (29) | `Array 4 Secret` ×3 |
+| BearSSLCheckScalarLoop1 | +16 (4) | 8 words, byte-accessed: `Bytes 32 Secret` or `Array 8 Secret` |
+| BearSSLModpowFull | +112 (28) | `Array 4 Secret; Array 12 Secret` (t2, base) |
+| Countdown (mem theorem) | +16 (4) | `Word (Known 2)` |
+| KeyScheduleLoop | +56 (14) | `Array 2 Secret` |
+| CheckScalarParam | +144 (36) | `Bytes 32 Secret; Bytes (bv.bin l) Secret` |
+| MuladdParam | +1128 (282) | as in the statement draft |
+| CheckScalarPtr | +144; k anywhere | base directly (D21) |
+
+So the base fits all 18 and only CheckScalarPtr needs it written by hand.
+D15 holds: no Result register spec uses `X0`. More §0.1 instances:
+countdown_mem `(X2, false, PVBaseOff 0)`, modpow_full `A0`/`A1`.
+
 ## 2. Decisions
 
 **DECIDED (Emiel, 2026-10-08):**
@@ -111,7 +136,7 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   into the base with disjointness by shape (one generic lemma). `arr_dir` and
   `DAt` leave every statement-facing type (proof-only). The proof field is
   value-level only: the contract side already gets disjointness from `∗`.
-  Before Phase 1: check that all 21 Result files' memory fits the base.
+  Scope check DONE (§1a): the base fits all 18 statement-bearing Results.
   Still open: where `dir` and `DAt`'s address-matching job live on the
   contract side.
 - **D12 (= Q1b). Shallow statements:** end theorems take plain Coq data
@@ -147,7 +172,7 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
 - **D17. `dir` / `DAt` on the contract side:** do without them if at all
   possible; if not, a hint-carrying variant of the region type (e.g. an
   adjusted `Array`) read only by the contract generator. Investigate in
-  Phase 3.
+  Phase 2 (the generator phase since the 2026-10-09 swap).
 - **D18 (= Q3). Granularity: word-level wherever possible** (Emiel: for
   performance — do NOT make everything byte-granular). `Word`/`Array` are
   word blocks; only `Bytes` regions are byte-level. Instructions keep
@@ -164,7 +189,43 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   are readable — Phase 0's exit criterion for readability is met.
 - **TODO (deferred, Emiel):** the per-Result proof that the shallow
   statement data equals the generator's deep specs (D12) — cost unknown
-  with symbolic sizes; revisit in Phase 2/4.
+  with symbolic sizes; priced at the end of Phase 3, before Phase 4.
+
+**DECIDED after the D11 scope check (Emiel, 2026-10-09; §1a):**
+- **D20. Fixed-address corollaries stay, as SANITY CHECKS** (Emiel: "these
+  are sanity checks, so keep them as sanity checks"). ~15 statements in 12
+  Result files restate a parametric theorem at a fixed `init_addr`
+  (`ni_rel_corollary`, or `apply …_param; unfold init_addr`). Phase 4
+  rewrites them in the new types and labels them sanity checks, not end
+  results.
+- **D21. CheckScalarPtr is written in the BASE, with blocks** — the
+  "k anywhere" form only, no front-end variant. Disjointness is proved from
+  the parameter premise (D11: `cs_mem ia ka l H`). This is the test that a
+  hand-written base layout works.
+- **D22. `Bytes` regions round up to whole words, for now** — as
+  `concretize_data` does today (the statement owns the pad bytes; fit uses
+  `4 * klen_words l`). **TODO (Emiel): look into byte-exact ownership** —
+  mark it at the definition of the rounding in the trusted file, not only
+  here. Affects CheckScalarParam / CheckScalarPtr when `l mod 4 ≠ 0`.
+- **D23. Exit = `ia + 4 * length instrs`** in every statement whose exit is
+  the address right after the last instruction (Emiel: more readable than
+  a literal); group B's muladd fix is one instance. A program exiting
+  elsewhere keeps its literal.
+
+**DECIDED while rewriting Phases 1–4 (Emiel, 2026-10-09):**
+- **D24. The bridges are REWRITTEN over the new types** (`EndToEnd.v`,
+  `Adequacy.v`, `GenProg.v`), not wrapped by a boundary lemma from the old
+  statement (Emiel: "we will vet the end result thoroughly"). D18 stands:
+  `mem_spec` goes everywhere. Only `RegIdx`/`reg_convert` may stay internal
+  (D15). The vetting is Phase 6's statement review + comprehension check.
+- **D25. Kernel and front-end are separate files.** `Noninterference.v` is
+  the semantic kernel (`spec`, GPR keys, base memory, `noninterferent_strong`);
+  `region`/`compile`/`fits`/the shape lemma go in a NEW file (name open,
+  Phase 1) that requires only `Noninterference.v` (Emiel: the front-end is
+  "the user interface — very important, but not the kernel"). It is on the
+  statement-READING surface (statements write `compile`, D16), so it is
+  listed with the trusted files, marked as front-end.
+- **D26. Phase 5 is removed** — Q4 is covered by D11, D19 and D5.
 
 **Already established (the checks exist):** `gen_prog_noninterferent`
 (`GenProg.v:105–116`) requires `NoDup` of register indices (`HND`), the
@@ -175,10 +236,10 @@ wherever `rv_val` is used (`data_ok`, `GenSegment.v:1941`; `reg_q_sync`;
 
 **FORMERLY OPEN — all resolved 2026-10-09** (kept for the record): Q1 →
 D10, D11, D12, D14 (front-end constructors of `_rel`/`_q` still to be
-spelled out in Phase 3); Q2 → D15; Q3 → D18; Q4 → D11 (disjointness in the
+spelled out in Phase 2); Q2 → D15; Q3 → D18; Q4 → D11 (disjointness in the
 type), D19 (clear of code), D5 (parameter premises); Q6 → D13.
 
-**OPEN — settled in Phase 0, Emiel proposes first:**
+**Phase 0 questions as originally posed** (all resolved — see above):
 - **Q1. The spec types.** Shape of the sum type (e.g. `Secret | Public |
   Known v` for cells/registers; arrays only `Secret | Public`); one shared
   type or separate register/memory types; how `param_val`, `param_val_q`,
@@ -239,24 +300,83 @@ baseline CPU and investigate.
   `/quiz`. A design session has few edits, so expect a thin log — that tells
   you what vibe-learn is (and is not) good for.
 
-**Phase 1 — trusted layer (`Noninterference.v`).** Create `issue/spec-layer`
-from `KatamaranRel`. New spec types and `gen_*`/`declare_*`, no
-`reg_convert`, no sigma list, one memory-word predicate, the three comment
-fixes. Check: compiles.
+**Build order (why Phases 2 and 3 swapped, 2026-10-09):** `GenContract.v`
+and `GenSegment.v` state their generators over the trusted spec types, and
+`EndToEnd.v` requires both, so nothing past the kernel compiles until the
+generators do: `Noninterference.v` → front-end file → `GenContract` →
+`GenSegment` → `Adequacy` … `EndToEnd` → `GenCompose` → `GenProg` → Results.
+The branch is red from Phase 1 until Phase 4; each phase's light check
+covers only its own files.
+
+**Phase 1 — trusted kernel + statement front-end.** Create
+`issue/spec-layer` from `KatamaranRel` (branch-workflow skill).
+- **Design first (VibeWise ON; Emiel proposes):** (P1) the kernel's own
+  block-content type — D11 says address-keyed blocks, but the draft's
+  `cs_mem` puts `region` values in them, and regions live in the front-end
+  file (D25); it must fit D18 (word-granular) and D22 (`Bytes` rounding).
+  (P2) the GPR key type's name and representation (D15; drafts say
+  `RegKey`). (P3) the front-end file's name.
+- **Kernel, `Noninterference.v`:** `spec V` (D10); GPR keys, `X0`
+  unrepresentable, one total map to `Reg ty_xlenbits` — no `reg_convert`,
+  no `existT` sigma list on the statement path (D15); base memory = blocks
+  at `N` addresses + a disjointness proof in the type (D11); ONE data-word
+  reader replacing `get_word`/`mem_has_word`, legacy `mem_spec` removed,
+  instructions keep `mem_has_instrs` (D18); the clear-of-code conjunct
+  inside `noninterferent_strong` (D19); `noninterferent_strong` over all of
+  these. Settle `(* byte order correct? *)` (`:121`, D18): a `Word (Known
+  w)` must mean what `lw` reads — a lemma, or a recorded argument. Fix the
+  `noninterferent_strong` comment (`:258–260`). Still requires only
+  `Semantics` + `Machine`.
+- **Front-end file (D25), requires only `Noninterference.v`:** `region`
+  (D14), `compile` (D16: data start + regions → base memory), `fits`, the
+  ONE generic disjointness-by-shape lemma (D11) and clear-of-code by shape.
+  The D22 rounding of `Bytes`, with its TODO at the definition.
+- **Check:** both files compile (`keep_vo`). The three statements of
+  `PLAN-spec-layer-statements.md` (cmovznz4, muladd, check_scalar — the
+  latter in D21's base form) typecheck in a `ZZ` probe with `Admitted`
+  bodies, and Emiel re-reads them against the REAL definitions:
+  readability is re-checked before any proof depends on it.
 - **Learning — while-you-wait live review.** Before Claude starts, open
-  Live review. Every hunk to the trusted file appears as it is written; flag
-  the ones to discuss. *Landed when:* your review of the trusted diff is
-  done by the time the phase ends, from the flags, not from a re-read.
+  Live review. Every hunk to the two files appears as it is written; flag
+  the ones to discuss. *Landed when:* your review of the diff is done by
+  the time the phase ends, from the flags, not from a re-read.
 - **Learning — `/explain`.** After: `/vibe-learn:explain Noninterference.v`
   and compare it with your own understanding from reading quiz 1. Note
   whether it took over a question `rocq-implementation` should have
   answered (the skipped routing check). *Landed when:* you can say where
   `/explain` is accurate and where `/reading-quiz` is the better tool.
-- **VibeWise:** keep it ON — Phase 1 is still design-heavy.
+- **VibeWise:** ON — (P1)–(P3) are design.
 
-**Phase 2 — bridges (`EndToEnd.v`, `Adequacy.v`, `GenProg.v`).** Re-prove
-the `gen_implpre*`/extraction lemmas over the new types; `mem_spec` per Q3.
-The bulk of the proof work.
+**Phase 2 — generator front-ends (`GenContract.v`, `GenSegment.v`).**
+(Was Phase 3.) `param_val`, `param_val_q` and `data_spec`'s cells become
+instances of `spec` (D10), so every `concretize_*` is a map over `Known`;
+spell out the `_rel`/`_q` constructors D10 left open. `data_ok` (D7).
+D17: drop `dir`/`DAt` from the generator if at all possible, else a
+hint-carrying variant read only by the generator — decided here, with
+Emiel. Move `Example/Cmovznz4.v`'s specs to the new constructors (the rest
+waits for Phase 4) and measure its VC cost before/after: the generator must
+not add per-spec case splits (§4).
+- **Check:** both files compile (`keep_vo`); `valid_cmovznz4_*_param`
+  still discharges, at a cost within 1.5× of before.
+- **VibeWise: ON** — front-end shape is design.
+- **while-you-wait:** live review again; compare with Phase 1 — is it still
+  worth the per-tool-call overhead (§5)?
+- **vibe-learn:** `/explain GenSegment.v` (a file you now know well — a good
+  test of its accuracy); `/quiz`.
+
+**Phase 3 — bridges, REWRITTEN (D24) (`Adequacy.v`, `EndToEnd.v`,
+`GenProg.v`; `GenCompose.v` where it touches the spec types).** (Was
+Phase 2.) Re-prove the `gen_implpre*`/extraction lemmas and
+`gen_prog_noninterferent` over the kernel types. Disjointness now comes
+from the base's proof field and clear-of-code is a bridge OBLIGATION
+(D19), so `data_layout_ok` shrinks to what the types do not give; `NoDup`
+is over GPR keys. `RegIdx`/`reg_convert` may stay below the boundary
+(D15). The bulk of the proof work. Last: price the deferred D12
+correspondence proof (shallow statement data = the generator's deep specs)
+on cmovznz4 (fixed sizes) and muladd (symbolic `b`), BEFORE Phase 4
+commits 18 files to it.
+- **Check:** these files compile (`keep_vo`); `Cmovznz4Result.v` goes
+  through end to end.
 - **Learning — `/reading-quiz`, explain-first mode, BEFORE starting:** on
   `EndToEnd.v`'s `gen_implpre*` bridges — you are about to have them
   rewritten, so understand what they do first.
@@ -266,31 +386,32 @@ The bulk of the proof work.
 - **while-you-wait:** during long compiles, try a quiz deck of the reading
   quizzes' findings (vacuity sources, the `(false, Some v)` trap, `rv_val`).
 - **vibe-learn:** `/learn` at the end; `/quiz review` (shaky concepts from
-  Phase 0/1 come back here — that is the spaced-repetition ledger working).
+  Phases 0–2 come back here — that is the spaced-repetition ledger working).
 
-**Phase 3 — front-ends (`GenContract.v`, `GenSegment.v`).** `param_val`,
-`param_val_q`, `data_spec`, `concretize_*`, `data_ok` per Q1. Measure one
-example's VC cost before/after (the generated contract may change shape).
-- **VibeWise: ON** — front-end shape is design.
-- **while-you-wait:** live review again; compare with Phase 1 — is it still
-  worth the per-tool-call overhead (§5)?
-- **vibe-learn:** `/explain GenSegment.v` (a file you now know well — a good
-  test of its accuracy); `/quiz`.
-
-**Phase 4 — examples and Result files (+ group B).** 21 Result files, the
-example data, muladd's literal program and exit expression, stale header.
-Mechanical.
-- **VibeWise: PAUSE.** **while-you-wait:** live review of every Result
+**Phase 4 — examples and Result files (+ group B).** The 18 Result files
+of §1a (the three composed files are untouched) and their example data.
+Shallow statements (D12) with the per-Result correspondence proof priced in
+Phase 3; regions as in §1a's table; CheckScalarPtr in the base with blocks,
+its disjointness proved from the parameter premise (D21); exit
+`ia + 4 * length instrs` wherever the exit is the end of the code (D23);
+fixed-address corollaries kept, rewritten, labelled sanity checks (D20);
+group B: muladd's `set_nth` revert and the "Untracked probe" header.
+Mechanical, except D21.
+- **VibeWise: PAUSE** (resume for D21 if its disjointness proof raises a
+  statement question). **while-you-wait:** live review of every Result
   STATEMENT (trusted) — skim the rest. **vibe-learn:** `/learn`.
 
-**Phase 5 — the visible checks (Q4).**
-- **VibeWise: ON.** A design phase again.
+**Phase 5 — REMOVED (D26, 2026-10-09).** Its subject, Q4's visible checks,
+is covered by D11 (disjointness in the type), D19 (clear-of-code conjunct,
+Phase 1) and D5 (parameter premises). Numbering kept so Phase 6 stays
+Phase 6.
 
 **Phase 6 — full gate, statement review, merge.** `scripts/gate.sh` (end
 theorems axiom-clean: only `pure_decode`, `Base.mmioenv`). Statement diff of
 every Result file: `python3 scripts/stmtdiff.py 'Result\.v$|Noninterference\.v$' <commits>`.
-Update CFGVer/CLAUDE.md's trusted-surface list (group E: also `Tables.v`
-register names, which are already in statements) and grep the skills for
+Update CFGVer/CLAUDE.md's trusted-surface list, file table and compile
+order (the D25 front-end file; group E: also `Tables.v` register names,
+which are already in statements) and grep the skills for
 renamed names, in the last commit.
 - **Learning — closing the loop.** `/reading-quiz` on the NEW
   `Noninterference.v` (Socratic mode — tests whether the redesign is
@@ -304,11 +425,15 @@ renamed names, in the last commit.
 
 - **Proof churn in `EndToEnd.v`** — rewritten, not edited (`gen_init_mem`
   alone has 43 occurrences).
-- **VC cost** (Phase 3): the generator must not add per-spec case splits.
-- **Symbolic sizes** make a decidable conjunct (Q4) non-trivial.
+- **VC cost** (Phase 2): the generator must not add per-spec case splits.
+- **Symbolic sizes** make D12's per-Result correspondence proof
+  (shallow = deep) of unknown cost — priced at the end of Phase 3.
+- **The branch is red from Phase 1 to Phase 4** — a light check proves only
+  that phase's files; Phase 3's `Cmovznz4Result.v` is the first end-to-end
+  signal.
 - **Readability is the acceptance criterion**, Emiel's call (Phase 0
   sign-off), not a green build.
-- **Tool friction**: VibeWise left ON through Phases 2/4 will slow proof work
+- **Tool friction**: VibeWise left ON through Phases 3/4 will slow proof work
   badly; while-you-wait adds ~50–100 ms to every tool call and its daemon
   never exits; vibe-learn 0.13.0 can emit invalid SessionStart JSON when the
   previous summary contains `/\` or `\/`. None blocks the refactor — if one
