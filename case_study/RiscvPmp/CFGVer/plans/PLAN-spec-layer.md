@@ -1,7 +1,7 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 4 (2026-10-09): §2a migration mechanics added (PROPOSED,
-awaiting Emiel's OK). rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
+Status: rev 4 (2026-10-09): §2a migration mechanics added and accepted;
+Phase 1 started. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
 scope check done (§1a, D20–D23); Phases 1–4 rewritten for D10–D26
 (Phases 2 and 3 swapped, Phase 5 removed). Next: Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
@@ -265,7 +265,7 @@ type), D19 (clear of code), D5 (parameter premises); Q6 → D13.
 - **Q6. The decode assumption**: a comment, or also a named `decodable
   instrs` the reader can see?
 
-## 2a. Migration mechanics (PROPOSED by Claude, 2026-10-09 — needs Emiel's OK)
+## 2a. Migration mechanics (Claude, 2026-10-09 — ALL ACCEPTED by Emiel the same day)
 
 Written after Phase 0 with VibeWise paused. Every choice Phase 0 did NOT
 make is tagged **[proposal]**; nothing tagged so is decided until Emiel
@@ -308,7 +308,7 @@ statement over the NON-front-end (base) expression of memory (Emiel,
 | `get_word` + `mem_has_word` (two readers) | `get_word` is THE data reader; `mem_has_word` stays for instructions only, with a proved lemma `mem_has_word μ a w ↔ get_word μ a = w` (one meaning) |
 | `noninterferent_strong ia instrs exit regs (mems : list mem_full_spec)` | `… (m : mem_layout) := clear_of_code ia instrs m ∧ ∀ …` (D19) |
 
-- **[proposal] P1 — a kernel block is an address + a LIST of per-word
+- **P1 — ACCEPTED. A kernel block is an address + a LIST of per-word
   `val_spec`s.** No `vec`, no `Bytes`, no dependent types in the kernel:
   `Word`/`Array`/`Bytes` are front-end and compile to word lists, so D22's
   rounding (and its TODO) lives in `compile`, not in the kernel. D21's
@@ -333,8 +333,7 @@ statement over the NON-front-end (base) expression of memory (Emiel,
   `gpr * val_spec word`; `mem_block` = address + `list (val_spec word)`;
   `mem_layout` = blocks + disjointness proof (was `list mem_full_spec`).
   `mem_spec` is NOT reused: the old `(addr, bool)` meaning survives in git
-  history and docs. Front-end file (D25): `Layout.v` (P3 proposal, not yet
-  confirmed). The draft's `memory ia cs_instrs` indexing is stale: under
+  history and docs. Front-end file (D25): `Layout.v` (accepted). The draft's `memory ia cs_instrs` indexing is stale: under
   D19 clear-of-code is a conjunct, so `mem_layout` is not indexed.
 - `val_spec_map : (A → B) → val_spec A → val_spec B` sits next to `val_spec`. Every
   `concretize_*` becomes a `val_spec_map` (D10's guarantee: Secret stays
@@ -364,7 +363,7 @@ disjointness for a compiled layout. Two more generic lemmas:
   `pub`, `PVConst`/`PVBaseOff` ↦ `Known` (the flag was ignored there
   anyway). `param_val_q` likewise. `concretize_*` = `val_spec_map`.
 - `data_spec`: `DCell pub (option term)` → `DCell (val_spec (Term Σ))`.
-  **[proposal] `DArr`/`DBytes` keep their `bool` and `dir`, `DAt` stays —
+  **ACCEPTED: `DArr`/`DBytes` keep their `bool` and `dir`, `DAt` stays —
   D17 resolved by D12:** shallow statements never show `data_spec`, so it
   already IS the "variant read only by the contract generator" D17 asks for.
   Nothing to remove.
