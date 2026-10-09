@@ -349,6 +349,13 @@ convoluted area explained before you read it. Findings go to the TODO.
 
 ## 6. End-of-plan review (Learning)
 
+Notes collected per phase (input for item 1):
+- **Phase 0, VibeWise (2026-10-09, Emiel):** "felt like a little too much
+  friction, but I think it's actually good, because I immediately noticed
+  weird decisions I didn't agree on when we turned it off." Evidence: ON,
+  Emiel originated most of D10/D11; PAUSED, Claude slipped in `run_at`
+  derived addresses + undefined notation, rejected at once.
+
 After Phase 6, one short session:
 1. For each tool: did it earn its cost? Keep, change how it is used, or
    uninstall (`claude plugin uninstall <name> --scope local`). while-you-wait
