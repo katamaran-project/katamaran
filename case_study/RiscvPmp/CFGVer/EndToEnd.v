@@ -239,13 +239,7 @@ Import IrisModel.RiscvPmpIrisBase.
       iSplit;
         iApply big_sepS_mono;
         intros x Hx;
-        destruct (reg_convert x) as [r|]; auto;
-        (destruct (decide (existT ty_xlenbits r ∈ pub_regs_sig public_registers)) as [Hin|]; [|auto]);
-        unfold pub_regs_sig in Hin; apply list.elem_of_list_fmap in Hin as [r' [Heq Hr']];
-        apply Eqdep_dec.inj_pair2_eq_dec in Heq; [|intros; apply Classes.eq_dec|intros; apply Classes.eq_dec]; subst r';
-        unfold declare_public_registers in HpubReg; rewrite Forall_forall in HpubReg;
-        rewrite <- (HpubReg r (proj1 (elem_of_list_In _ _) Hr'));
-        unfold reg_pointsTo21; rewrite regPstsTo_sync_is_nonsync; auto.
+        destruct (reg_convert x); auto.
     Qed.
 
   (* ------------------------------------------------------------------ *)
@@ -580,7 +574,8 @@ Import IrisModel.RiscvPmpIrisBase.
   Proof.
     destruct s as [n sp]. unfold gen_mem_asn_bytes, cell_pub.
     cbn [fst snd] in *. unfold cell_addr in *. cbn [fst] in *.
-    generalize dependent (@bv.of_N word n). intros a HInitMem1 HInitMem2.
+    change (@bv.of_N word n) with (@bv.of_N xlenbits n) in *.
+    generalize dependent (@bv.of_N xlenbits n). intros a HInitMem1 HInitMem2.
     destruct sp as [| |v]; cbn.
     - (* Secret *)
       iIntros "H".
@@ -1794,9 +1789,16 @@ Import IrisModel.RiscvPmpIrisBase.
   Proof.
     intros Hclear Hr Hc Hni. split; [exact Hclear|].
     intros γ1 γ2 μ1 μ2 ws Hm1 Hm2 Hpr Hpm Hir1 Hir2 Him1 Him2.
-    apply Hni; try assumption;
-      first [ eapply Forall_perm; [apply omap_perm; exact Hr|]; assumption
-            | eapply Forall_perm; [apply omap_perm; exact Hc|]; assumption ].
+    unfold gen_public_regs, gen_public_addrs, gen_init_regs, gen_init_mem,
+      declare_public_registers, declare_public_memory,
+      declare_init_registers, declare_init_memory in *.
+    apply (Hni γ1 γ2 μ1 μ2 ws Hm1 Hm2).
+    - eapply Forall_perm; [apply omap_perm; exact Hr | exact Hpr].
+    - eapply Forall_perm; [apply omap_perm; exact Hc | exact Hpm].
+    - eapply Forall_perm; [apply omap_perm; exact Hr | exact Hir1].
+    - eapply Forall_perm; [apply omap_perm; exact Hr | exact Hir2].
+    - eapply Forall_perm; [apply omap_perm; exact Hc | exact Him1].
+    - eapply Forall_perm; [apply omap_perm; exact Hc | exact Him2].
   Qed.
 
   (* Equal lists are permutations: the per-Result cell correspondence is an
@@ -2339,14 +2341,14 @@ Section DataImplPre.
        else interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
     ⊢@{iPropI Σ} [∗ list] i ∈ seq 0 k, interp_arr_cell pub 4 (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat i))).
   Proof.
-    intros Hk. rewrite List.map_map.
+    intros Hk.
     change (List.map ?f (seq 0 k)) with (f <$> seq 0 k). rewrite big_sepL_fmap.
     iIntros "H". iApply (big_sepL_impl with "H"). iIntros "!>" (j i Hi) "Hc".
     apply lookup_seq in Hi as [-> Hlt]. rewrite -data_ofN_lin. unfold interp_arr_cell.
     iSplit.
     { iPureIntro. rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hk; lia].
       unfold maxAddr, minAddr in *. lia. }
-    destruct pub.
+    destruct pub; iEval (unfold cell_pub, cell_addr, pub_spec; cbn [fst snd]) in "Hc".
     - iExists _. iFrame "Hc". iPureIntro. intros _. exact I.
     - iExists _. iFrame "Hc". iPureIntro. discriminate.
   Qed.
@@ -2386,14 +2388,14 @@ Section DataImplPre.
     ⊢@{iPropI Σ} [∗ list] j ∈ seq 0 (4 * m), interp_arr_cell pub 1 (bv.of_N (off + N.of_nat j)).
   Proof.
     induction m as [|m IH]; intros Hm; [iIntros "_"; done|].
-    rewrite seq_S List.map_app map_app big_sepL_app.
+    rewrite seq_S List.map_app big_sepL_app.
     replace (4 * S m)%nat with (4 * m + 4)%nat by lia.
     rewrite seq_app big_sepL_app.
     iIntros "[Hm Hl]". iSplitL "Hm"; [iApply (IH with "Hm"); lia|].
     cbn [List.map big_opL]. iDestruct "Hl" as "[Hl _]".
     iPoseProof (data_word_bytes pub (off + 4 * N.of_nat m) μ1 μ2 with "[Hl]") as "Hb".
     { lia. }
-    { destruct pub; iExact "Hl". }
+    { destruct pub; iEval (unfold cell_pub, cell_addr, pub_spec; cbn [fst snd]) in "Hl"; iExact "Hl". }
     replace (0 + 4 * m)%nat with (4 * m + 0)%nat by lia.
     rewrite <- (fmap_add_seq (4 * m)%nat 0 4). rewrite big_sepL_fmap.
     iApply (big_sepL_mono with "Hb"). intros k j _. cbv beta.
@@ -2536,7 +2538,7 @@ Section DataImplPre.
     - (* an array *)
       destruct Hok as [Hc [Hrng Hok]].
       unfold declare_init_memory in Hi1, Hi2. rewrite gen_init_mem_none_app in Hi1, Hi2.
-      unfold interp_mem_with_public_memory. rewrite List.map_app big_sepL_app.
+      unfold interp_mem_with_public_memory. rewrite big_sepL_app.
       iIntros "[Hcells Hrest]".
       iPoseProof (data_cells_arrcells pub off (data_count ι c) μ1 μ2 Hrng with "Hcells") as "Hcells".
       iSplitL "Hcells".
@@ -2556,7 +2558,7 @@ Section DataImplPre.
                     = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 c) ι))).
       { cbn. rewrite Hc. reflexivity. }
       unfold declare_init_memory in Hi1, Hi2. rewrite gen_init_mem_none_app in Hi1, Hi2.
-      unfold interp_mem_with_public_memory. rewrite List.map_app big_sepL_app.
+      unfold interp_mem_with_public_memory. rewrite big_sepL_app.
       iIntros "[Hcells Hrest]".
       iSplitL "Hcells".
       { cbn [asn.interpret interpret_chunk]. cbn. rewrite Ha Hc. cbn. rewrite -data_count_spec.
