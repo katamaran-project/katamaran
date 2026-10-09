@@ -190,12 +190,12 @@ G and the rest of F anywhere.**
   - [LOW] `mem_cell` (`:219`) should carry an `Addr` (`Base.v:74`), not N — every
     consumer does `bv.of_N` (`:247`, `:273`); N is only needed for the block
     overlap test (`:198`).
-  - [LOW] Merge `gen_public_addrs`/`gen_init_mem` (and the reg pair); count `Known`
-    as public too (already implied, make it said).
   - **[HIGH]** De-clutter `noninterferent_strong` (`:355–360`): replace the 8
     `declare_*`/`gen_*` premises by two relational predicates
     (`regs_agree γ1 γ2 reg_specs`, `mem_agree μ1 μ2 mem`, matching on
-    Secret/Public/Known directly) so no `gen_*` is on the trusted surface.
+    Secret/Public/Known directly) so no `gen_*` is on the trusted surface. Folded in (Emiel): this also
+    merges `gen_public_addrs`/`gen_init_mem` (and the reg pair) and counts
+    `Known` as public (already implied — make it said).
   - [LOW] **Split statement data from proof data** (reopens D12): `Secret` entries
     are statement-level no-ops (registers: exactly; memory: they only feed
     `fits` and placement — cmovznz4's layout says only "code+48 bytes fits").
