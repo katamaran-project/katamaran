@@ -198,7 +198,7 @@ Definition check_scalar_regs (ia : N) (l : bv xlenbits) : list reg_spec :=
 
 Lemma klen_words_N (l : bv xlenbits) : N.of_nat (klen_words l) = ((bv.bin l + 3) / 4)%N.
 Proof.
-  unfold klen_words. rewrite Nat2N.inj_div, Nat2N.inj_add, N2Nat.id. reflexivity.
+  unfold klen_words. rewrite Nat2N.inj_div. rewrite Nat2N.inj_add. rewrite N2Nat.id. reflexivity.
 Qed.
 
 (* D12: the statement's cells are exactly the generator's. *)
@@ -218,10 +218,7 @@ Proof.
   change (length cs_instrs) with 36%nat.
   rewrite app_nil_r.
   cbn [val_spec_map pub_spec].
-  f_equal.
-  - apply List.map_ext. intros i. f_equal. lia.
-  - rewrite repeat_length. change (N.to_nat ((32 + 3) / 4)) with 8%nat.
-    apply List.map_ext. intros i. f_equal. lia.
+  reflexivity.
 Qed.
 
 (* THE END THEOREM: the whole check_scalar, at every klen whose data fits,
@@ -234,13 +231,13 @@ Lemma check_scalar_param_noninterferent (init_addr : N) (l : bv xlenbits) :
 Proof.
   intros Hfit0.
   assert (Hl : length cs_instrs = 36) by (vm_compute; reflexivity).
-  assert (Hlb : (bv.bin l + 3 < 4294967296)%N) by (pose proof (bv.bin_bounded l) as Hb;
-    change (bv.exp2 xlenbits) with 4294967296%N in Hb; unfold fits, layout_size in Hfit0; cbn in Hfit0;
-    rewrite !repeat_length in Hfit0; unfold lenAddr in Hfit0; lia).
   assert (Hfit : (init_addr + 176 + 4 * N.of_nat (klen_words l) < lenAddr)%N).
-  { unfold fits, layout_size in Hfit0. cbn [fold_right region_size region_words] in Hfit0.
-    rewrite !repeat_length in Hfit0. rewrite Hl in Hfit0.
-    rewrite !N2Nat.id in Hfit0. rewrite klen_words_N. change ((32 + 3) / 4)%N with 8%N in Hfit0. lia. }
+  { unfold fits, layout_size in Hfit0. unfold check_scalar_data in Hfit0. simpl in Hfit0.
+    rewrite repeat_length in Hfit0. rewrite N2Nat.id in Hfit0. rewrite klen_words_N. lia. }
+  assert (Hlb : (bv.bin l + 3 < 4294967296)%N).
+  { rewrite klen_words_N in Hfit. unfold lenAddr in Hfit. change (2 ^ 12)%N with 4096%N in Hfit.
+    pose proof (N.div_mod (bv.bin l + 3) 4 ltac:(lia)).
+    pose proof (N.mod_lt (bv.bin l + 3) 4 ltac:(lia)). lia. }
   apply (ni_of_cells (regs' := cs_reg_specs init_addr l) (cs := cs_mem_specs init_addr l));
     [ apply compile_clear; lia | reflexivity
     | apply perm_of_eq; apply check_scalar_cells; exact Hlb | ].

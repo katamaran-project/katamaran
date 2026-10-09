@@ -145,9 +145,10 @@ Proof.
     [ | | | ].
   { (* clear of the code: P256_N right after it, k by the premise *)
     unfold clear_of_code, check_scalar_ptr_mem, check_scalar_ptr_blocks, blk_end.
-    cbn [blocks blk_addr blk_words]. rewrite !repeat_length.
+    cbn [blocks blk_addr blk_words].
     change (length cs_instrs) with 36%nat.
-    repeat constructor; cbn [N.of_nat Pos.of_succ_nat Pos.succ]; lia. }
+    constructor; [|constructor; [|constructor]]; cbn [blk_addr blk_words];
+      rewrite repeat_length; cbn [N.of_nat Pos.of_succ_nat Pos.succ]; lia. }
   { (* the registers: ra's value is p + 144 *)
     apply perm_of_eq. cbn. rewrite bv.of_N_add. reflexivity. }
   { (* D12: the statement's cells are exactly the generator's *)
@@ -184,9 +185,9 @@ Proof.
       with (bv.bin (@bv.of_N xlenbits ka)).
     rewrite Hka Hc.
     rewrite !concretize_run_map app_nil_r.
-    replace (data_run (init_addr + 144) 8 false ++ data_run ka (klen_words l) false)
-      with (data_runs [(init_addr + 144, 8%nat, false); (ka, klen_words l, false)]%N)
-      by (unfold data_runs; cbn; rewrite app_nil_r; reflexivity).
+    rewrite <- (app_nil_r (data_run ka (klen_words l) false)).
+    change (data_run (init_addr + 144) 8 false ++ data_run ka (klen_words l) false ++ [])
+      with (data_runs [(init_addr + 144, 8%nat, false); (ka, klen_words l, false)]%N).
     change (length cs_instrs) with 36%nat.
     apply data_layout_runs.
     + apply List.Forall_cons; [cbn -[lenAddr]; lia|]. apply List.Forall_cons; [cbn -[lenAddr klen_words]; lia|]. apply List.Forall_nil.
