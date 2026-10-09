@@ -82,18 +82,43 @@ Definition csp_ι (ia ka : N) (l : bv xlenbits) : Valuation csCtx :=
        .["l"∷ty_xlenbits ↦ SyncVal l]
        .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N ka)].
 
+(* ---- THE STATEMENT'S OWN DATA (PLAN-spec-layer D21) --------------------
+   Written in the kernel's terms, not the region front-end: k may sit on
+   EITHER side of the code, which back-to-back regions cannot express.  The
+   two blocks are disjoint by the parameter premise, proved once below. *)
+Definition check_scalar_ptr_blocks (ia ka : N) (l : bv xlenbits) : list mem_block :=
+  [ {| blk_addr := ia + 144; blk_words := repeat Secret 8 |}                   (* P256_N *)
+  ; {| blk_addr := ka;       blk_words := repeat Secret (klen_words l) |} ].   (* k *)
+
+Lemma check_scalar_ptr_disjoint (ia ka : N) (l : bv xlenbits)
+    (H : (ka + 4 * N.of_nat (klen_words l) <= ia \/ ia + 176 <= ka)%N) :
+  blocks_disjoint (check_scalar_ptr_blocks ia ka l).
+Proof.
+  unfold blocks_disjoint, check_scalar_ptr_blocks, blk_end. cbn [blk_addr blk_words].
+  constructor; [constructor; [|constructor] | constructor; constructor].
+  cbn [blk_addr blk_words]. rewrite !repeat_length. cbn [N.of_nat Pos.of_succ_nat Pos.succ]. lia.
+Qed.
+
+Definition check_scalar_ptr_mem (ia ka : N) (l : bv xlenbits)
+    (H : (ka + 4 * N.of_nat (klen_words l) <= ia \/ ia + 176 <= ka)%N) : mem_layout :=
+  {| blocks := check_scalar_ptr_blocks ia ka l; blocks_ok := check_scalar_ptr_disjoint ia ka l H |}.
+
+Definition check_scalar_ptr_regs (ia ka : N) (l : bv xlenbits) : list reg_spec :=
+  [ (A0, Known (bv.of_N ka));             (* k             *)
+    (A1, Known l);                        (* klen          *)
+    (X1, Known (bv.of_N (ia + 144)));     (* ra = the exit *)
+    (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret) ].
+
 (* THE END THEOREM: k at ANY address ka whose ⌈klen/4⌉ words are in range
    and clear of the code and P256_N ([ia, ia + 176)). *)
-Lemma check_scalar_ptr_noninterferent (init_addr ka : N) (l : bv xlenbits) :
+Lemma check_scalar_ptr_noninterferent (init_addr ka : N) (l : bv xlenbits)
+    (Hdis : (ka + 4 * N.of_nat (klen_words l) <= init_addr \/ init_addr + 176 <= ka)%N) :
   (init_addr + 176 < lenAddr)%N ->
   (ka + 4 * N.of_nat (klen_words l) < lenAddr)%N ->
-  (ka + 4 * N.of_nat (klen_words l) <= init_addr \/ init_addr + 176 <= ka)%N ->
-  noninterferent_strong init_addr cs_instrs (init_addr + 4 * N.of_nat (length cs_instrs))%N
-    (map (concretize_reg_q (csp_ι init_addr ka l)) csp_regs)
-    (concretize_data (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-       (init_addr + 144) csp_data).
+  noninterferent_strong init_addr cs_instrs (init_addr + 4 * N.of_nat (length cs_instrs))
+    (check_scalar_ptr_regs init_addr ka l) (check_scalar_ptr_mem init_addr ka l Hdis).
 Proof.
-  intros Hfit Hk Hdis.
+  intros Hfit Hk.
   pose proof lenAddr_small_word as HL. change word with xlenbits in HL. change xlenbits with 32%nat in HL.
   assert (Hka : bv.bin (@bv.of_N xlenbits ka) = ka) by (apply bv.bin_of_N_small; cbn; lia).
   assert (Hlb : (bv.bin l + 3 < 4294967296)%N).
@@ -113,6 +138,29 @@ Proof.
     change (data_count _ (term_var "l")) with (N.to_nat (bv.bin l)). lia. }
   pose proof (Nat.div_mod (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
   pose proof (Nat.mod_upper_bound (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
+  apply (ni_of_cells
+           (regs' := map (concretize_reg_q (csp_ι init_addr ka l)) csp_regs)
+           (cs := concretize_data (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+                    (init_addr + 144) csp_data));
+    [ | | | ].
+  { (* clear of the code: P256_N right after it, k by the premise *)
+    unfold clear_of_code, check_scalar_ptr_mem, check_scalar_ptr_blocks, blk_end.
+    cbn [blocks blk_addr blk_words]. rewrite !repeat_length.
+    change (length cs_instrs) with 36%nat.
+    repeat constructor; cbn [N.of_nat Pos.of_succ_nat Pos.succ]; lia. }
+  { (* the registers: ra's value is p + 144 *)
+    apply perm_of_eq. cbn. rewrite bv.of_N_add. reflexivity. }
+  { (* D12: the statement's cells are exactly the generator's *)
+    apply perm_of_eq.
+    unfold csp_data. cbn [concretize_data].
+    change (data_count _ (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
+    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])))
+      with (bv.bin (@bv.of_N xlenbits ka)).
+    rewrite Hka Hc.
+    unfold cells, check_scalar_ptr_mem, check_scalar_ptr_blocks.
+    cbn [blocks List.map concat blk_addr blk_words].
+    rewrite !words_at_repeat. rewrite !app_nil_r. cbn [pub_spec].
+    reflexivity. }
   apply (gen_prog_noninterferent "p" _ csp_regs (asn.formula formula_true) 144 csp_data cs_instrs 40
            (asn.formula formula_true) (csp_ι init_addr ka l) init_addr).
   - reflexivity.
@@ -135,7 +183,7 @@ Proof.
     change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])))
       with (bv.bin (@bv.of_N xlenbits ka)).
     rewrite Hka Hc.
-    rewrite !map_app !concretize_run_map app_nil_r.
+    rewrite !concretize_run_map app_nil_r.
     replace (data_run (init_addr + 144) 8 false ++ data_run ka (klen_words l) false)
       with (data_runs [(init_addr + 144, 8%nat, false); (ka, klen_words l, false)]%N)
       by (unfold data_runs; cbn; rewrite app_nil_r; reflexivity).

@@ -413,6 +413,40 @@ proofs `intros` the definition directly (CheckScalarParam, MuladdParam,
 PaddedLoop, CountdownRec) need their intro pattern split for D19's
 conjunct.
 
+### 2a.7 Decided DURING implementation (Claude, 2026-10-09) — for the audit
+
+Emiel asked for the implementation to run and be audited afterwards; these
+are the choices made without him, each small and reversible:
+1. Kernel `gprs` → **`gpr_list`**: `Sig.gprs` (a heap predicate) shadows it
+   in every file importing both.
+2. **`mem_cell` lives in the kernel** (`cells : mem_layout → list mem_cell`),
+   and `gen_public_addrs` / `gen_init_mem` take a `list mem_cell`; the
+   statement passes `cells mem`. Same meaning; the bridges reuse them on
+   plain cell lists.
+3. **`param_val` keeps `PVConst`/`PVBaseOff`** and loses `PVExist`
+   (= `Secret`/`Public`); `param_val_q` likewise loses `PQExist`.
+4. **A `Known` `PQAt` register and a pinned `DCell` are always public**
+   (secLeak'd). Before, a flag allowed a non-public one; no build file used
+   it, so every contract reduces to the same assertion as before (checked:
+   cmovznz4's VC 22.93 s / 4.77 GB vs 22.6 s / 4.73 GB baseline).
+5. **Adequacy/EndToEnd: a `Known` cell takes the per-run (`NonSyncVal`)
+   route**, converted to `SyncVal` where the contract needs it from the two
+   init-memory facts — as a `(a, false, Some v)` cell did before.
+6. **Every bridge concludes an internal `ni_cells`** (the kernel's ∀-part
+   over a cell LIST); one lemma `ni_of_cells` gives `noninterferent_strong`
+   from `clear_of_code`, `regs ≡ₚ regs'` and `cells m ≡ₚ cs` (D12 lands
+   there). Bridge proofs keep their old shape.
+7. **The Iris layer keeps its `sigT` register list** (`IrisInstanceBinary.v`
+   is shared with BlockVer and untouched); `pub_regs_sig` converts at the
+   bridges.
+8. `reg_spec_idx := gpr_idx ∘ fst` now lives in `EndToEnd.v` (internal).
+9. Removed: local `S0`–`S3 : RegIdx` copies in three Muladd files (Tables'
+   `gpr` ones are identical), and the concrete `mem_full_spec` lists in
+   `Cmovznz4.v`/`KeyScheduleLoop.v` (their corollaries become instances, D20).
+10. Tooling note: `.claude/hooks/coqc-guard.sh` is ACTIVE (3 builds / 15 min,
+    interactive check before building an edited file) although CLAUDE.md
+    says it was unwired 2026-09-25 — CLAUDE.md is stale there.
+
 ## 3. Phases
 
 One session per phase is the intended rhythm (`/clear` between, the plan

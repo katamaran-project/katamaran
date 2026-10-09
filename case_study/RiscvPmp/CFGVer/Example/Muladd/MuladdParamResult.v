@@ -1,6 +1,6 @@
 (* ========================================================================= *)
 (* Example/Muladd/MuladdParamResult.v -- PLAN-array-invariants: the PARAMETRIC muladd*)
-(* (symbolic mlen, Sym6N) -- validity + seal; end theorem.  Untracked probe.*)
+(* (symbolic mlen, Sym6N) -- validity + seal; end theorem.                 *)
 (*                                                                           *)
 (* The only annotation-level content is the TYPED list mb_annotV: each of    *)
 (* the five blocks carries its own blkValid proof, so nothing is proved      *)
@@ -297,8 +297,8 @@ Definition sym_ι (ia : N) (b : bv xlenbits) : Valuation (symCtx ▻ "a"∷ty_xl
 (* THE TRUSTED SPECS: x's pointer, then the contract's own register specs
    concretized at the load address; the data as the generator lays it out *)
 Definition sym_reg_specs (ia : N) (b : bv xlenbits) : list reg_spec :=
-  (A0, true, Some (bv.of_N (ia + x_off b))) :: map (concretize_reg ia) sym_regs.
-Definition sym_mem_specs (ia : N) (b : bv xlenbits) : list mem_full_spec :=
+  (A0, Known (bv.of_N (ia + x_off b))) :: map (concretize_reg ia) sym_regs.
+Definition sym_mem_specs (ia : N) (b : bv xlenbits) : list mem_cell :=
   concretize_data (sym_ι ia b) (ia + 1128) sym_data.
 
 Lemma inst_mm2 (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
@@ -338,35 +338,89 @@ Proof.
   cbn. f_equal. f_equal. unfold x_off. lia.
 Qed.
 
+(* ---- 5. THE STATEMENT'S OWN DATA (PLAN-spec-layer D12/D14) ------------- *)
+
+Definition M (b : bv xlenbits) : N := (bv.bin b + 31) / 32.     (* limb count *)
+
+(* code: init_addr .. init_addr+1127 (282 instructions); the data follows. *)
+Definition muladd_data (b : bv xlenbits) : list region :=
+  [ Array 4 Secret                            (* S0-S3 spill slots, init_addr+1128 *)
+  ; Word (Known b) ; Array (M b) Public       (* m = sp, init_addr+1144: header, limbs *)
+  ; Word (Known b) ; Array (M b) Secret ].    (* x, init_addr+1148+4·M: header, limbs *)
+
+Definition muladd_regs (ia : N) (b : bv xlenbits) : list reg_spec :=
+  [ (A0, Known (bv.of_N (ia + 1148 + 4 * M b)));    (* &x[0] *)
+    (A1, Secret);                                   (* z     *)
+    (A2, Known (bv.of_N (ia + 1144)));              (* &m[0] *)
+    (X2, Known (bv.of_N (ia + 1144)));              (* sp    *)
+    (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret);
+    (T0, Secret); (T1, Secret); (T2, Secret); (T3, Secret); (T4, Secret); (T5, Secret);
+    (T6, Secret); (S0, Secret); (S1, Secret); (S2, Secret); (S3, Secret) ].
+
+Lemma M_mlenN (b : bv xlenbits) : N.of_nat (mlenN b) = M b.
+Proof. unfold mlenN, M, bv.unsigned. lia. Qed.
+
+(* D12: the statement's cells are exactly the generator's. *)
+Lemma muladd_cells (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
+  cells (compile (ia + 4 * N.of_nat (length sym6_instrs)) (muladd_data b))
+  = sym_mem_specs ia b.
+Proof.
+  intros Hb. pose proof (mlen_bounds b Hb) as HM.
+  assert (HMb : N.to_nat (M b) = mlenN b) by (rewrite <- M_mlenN; apply Nat2N.id).
+  unfold sym_mem_specs, sym_data. cbn [concretize_data].
+  rewrite !data_count_mm2; try exact Hb.
+  unfold compile, cells, muladd_data.
+  cbn [blocks place region_words region_size List.map concat blk_addr blk_words].
+  rewrite HMb. rewrite !repeat_length.
+  replace (mlenN b) with ((mlenN b - 2) + 2)%nat at 1 3 by lia.
+  rewrite !repeat_app. rewrite !words_at_app. rewrite !words_at_repeat.
+  rewrite !repeat_length.
+  change (length sym6_instrs) with 282%nat.
+  cbn [words_at repeat length app val_spec_map pub_spec].
+  rewrite <- !app_assoc. cbn [app].
+  solve_cells_eq.
+Qed.
+
 (* THE END THEOREM: the whole parametric muladd, for every header b of the
-   family (64 < b < 65536) whose data fits, at every load address. *)
+   family (64 < b < 65536) whose data fits, at every load address.  The
+   b-range premise is the PROOF's (the code's own branches); the layout is
+   disjoint for every b. *)
 Lemma muladd_param_noninterferent (init_addr : N) (b : bv xlenbits) :
   (64 < bv.unsigned b < 65536)%Z ->
-  (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < lenAddr)%N ->
-  noninterferent_strong init_addr sym6_instrs (init_addr + 1128)%N
-    (sym_reg_specs init_addr b) (sym_mem_specs init_addr b).
+  fits (init_addr + 4 * N.of_nat (length sym6_instrs)) (muladd_data b) ->
+  noninterferent_strong init_addr sym6_instrs (init_addr + 4 * N.of_nat (length sym6_instrs))
+    (muladd_regs init_addr b)
+    (compile (init_addr + 4 * N.of_nat (length sym6_instrs)) (muladd_data b)).
 Proof.
-  intros Hb Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+  intros Hb Hfit0.
+  assert (Hl : length sym6_instrs = 282) by (vm_compute; reflexivity).
+  pose proof (mlen_bounds b Hb) as HM0.
+  assert (Hfit : (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < lenAddr)%N).
+  { unfold fits, layout_size in Hfit0. cbn [fold_right region_size region_words] in Hfit0.
+    rewrite !repeat_length in Hfit0. rewrite Hl in Hfit0.
+    rewrite !N2Nat.id in Hfit0. rewrite <- !M_mlenN in Hfit0. cbn in Hfit0. lia. }
+  apply (ni_of_cells (regs' := sym_reg_specs init_addr b) (cs := sym_mem_specs init_addr b));
+    [ apply compile_clear; lia
+    | apply perm_of_eq; unfold muladd_regs, sym_reg_specs, x_off;
+      rewrite <- M_mlenN; replace (init_addr + 1148 + 4 * N.of_nat (mlenN b))%N
+        with (init_addr + (1148 + 4 * N.of_nat (mlenN b)))%N by lia; reflexivity
+    | apply perm_of_eq; apply muladd_cells; exact Hb | ].
+  rewrite Hl. change (4 * N.of_nat 282)%N with 1128%N.
+  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-  assert (Hl : length sym6_instrs = 282) by (vm_compute; reflexivity).
   eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1' sym6_instrs
     (init_addr + 1128)%N n ws symCtx
     ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
           .["b"∷ty_xlenbits ↦ SyncVal b]
           .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (init_addr + x_off b))])
-    _ HpubReg (map mem_full_to_spec (sym_mem_specs init_addr b)) HpubMem
+    _ HpubReg (sym_mem_specs init_addr b) HpubMem
     sym6 sym6_valid eq_refl init_addr).
   - reflexivity.
   - apply (seg_exit_table_ok _ _ init_addr 1128). reflexivity.
   - (* HDataAddrs, by construction *)
-    intros i spec Hi.
-    change (map mem_full_to_spec (sym_mem_specs init_addr b))
-      with (mem_full_to_spec <$> sym_mem_specs init_addr b) in Hi.
-    rewrite list_lookup_fmap in Hi.
-    destruct (sym_mem_specs init_addr b !! i) as [[[a pub] o]|] eqn:E; [|discriminate].
-    injection Hi as <-. rewrite Hl.
-    exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i _ E).
+    intros i spec Hi. rewrite Hl.
+    exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i _ Hi).
   - (* ImplPre *)
     intros Σ' GS'.
     iIntros "(Hregs & Hmem & Hpriv & #Hinv)".
@@ -428,7 +482,7 @@ Proof.
     iSplitR; [iSplit; [iPureIntro; exact P7|done]|].
     iSplitL "HA0"; [cbn; iExact "HA0"|].
     repeat iSplit; try done; iPureIntro; first [assumption | exact I].
-  - rewrite List.map_length sym_mem_len; [|exact Hb]. rewrite Hl. lia.
+  - rewrite sym_mem_len; [|exact Hb]. rewrite Hl. lia.
   - exact Hmem1.
   - exact Hmem2.
   - exact γ1curpriv.

@@ -105,9 +105,13 @@ Qed.
 Definition compile (start : N) (rs : list region) : mem_layout :=
   {| blocks := place start rs; blocks_ok := place_disjoint start rs |}.
 
-(* The layout stays inside memory: the statement's own premise (D11). *)
+(* The code and the layout after it stay strictly below lenAddr: the
+   statement's own premise (D11).  Strict, as every bridge needs. *)
 Definition fits (start : N) (rs : list region) : Prop :=
-  (start + layout_size rs <= lenAddr)%N.
+  (start + layout_size rs < lenAddr)%N.
+
+Lemma fits_nil (start : N) : fits start [] -> (start < lenAddr)%N.
+Proof. unfold fits, layout_size. cbn. lia. Qed.
 
 (* Placed at or after the end of the code, a layout is clear of it (D19). *)
 Lemma compile_clear (init_addr : N) (instrs : list AST) (start : N) (rs : list region) :

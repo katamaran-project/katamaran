@@ -41,12 +41,13 @@ From Katamaran Require Import
 
 (* Bound: 5 instructions * 4 bytes = 20. *)
 Lemma modpow_win_noninterferent_param (init_addr : N) :
-  (init_addr + 20 < lenAddr)%N ->
-  noninterferent_strong init_addr modpow_win_instrs
-    (init_addr + 20)%N
-    modpow_win_reg_specs [].
+  fits (init_addr + 4 * N.of_nat (length modpow_win_instrs)) [] ->
+  noninterferent_strong init_addr modpow_win_instrs (init_addr + 4 * N.of_nat (length modpow_win_instrs))
+    modpow_win_reg_specs (compile (init_addr + 4 * N.of_nat (length modpow_win_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := modpow_win_reg_specs) (cs := []));
+    [apply compile_clear; lia | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -56,15 +57,16 @@ Proof.
      this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_modpow_win_cfg_contract_param.
 Qed.
 
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma modpow_win_noninterferent :
-  noninterferent_strong init_addr modpow_win_instrs
-    (init_addr + 20)%N
-    modpow_win_reg_specs [].
+  noninterferent_strong init_addr modpow_win_instrs (init_addr + 4 * N.of_nat (length modpow_win_instrs))
+    modpow_win_reg_specs (compile (init_addr + 4 * N.of_nat (length modpow_win_instrs)) []).
 Proof.
   apply modpow_win_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.

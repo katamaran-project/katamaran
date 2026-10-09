@@ -1203,10 +1203,14 @@ Section SegCompose.
     induction specs as [| s specs IH];
       cbn [gen_regs_at List.fold_right asn.interpret].
     - reflexivity.
-    - destruct s as [[r pub] pv]; destruct pv;
+    - destruct s as [r sp]; destruct sp as [| |[v0|k]];
         cbn [gen_reg_asn_at asn.interpret].
       + apply bi.sep_proper; [| exact IH].
-        destruct pub; cbn [asn.interpret];
+        cbn [asn.interpret];
+          apply bi.exist_proper; intros v;
+          unfold asn_regidx_pts; destruct (reg_convert r); cbn; reflexivity.
+      + apply bi.sep_proper; [| exact IH].
+        cbn [asn.interpret];
           apply bi.exist_proper; intros v;
           unfold asn_regidx_pts; destruct (reg_convert r); cbn; reflexivity.
       + apply bi.sep_proper; [| exact IH].

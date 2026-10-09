@@ -41,12 +41,13 @@ From Katamaran Require Import
 
 (* Bound: 16 instructions * 4 bytes = 64. *)
 Lemma check_scalar_noninterferent_param (init_addr : N) :
-  (init_addr + 64 < lenAddr)%N ->
-  noninterferent_strong init_addr check_scalar_instrs
-    (init_addr + 64)%N
-    check_scalar_reg_specs [].
+  fits (init_addr + 4 * N.of_nat (length check_scalar_instrs)) [] ->
+  noninterferent_strong init_addr check_scalar_instrs (init_addr + 4 * N.of_nat (length check_scalar_instrs))
+    check_scalar_reg_specs (compile (init_addr + 4 * N.of_nat (length check_scalar_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := check_scalar_reg_specs) (cs := []));
+    [apply compile_clear; lia | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -56,15 +57,16 @@ Proof.
      this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_check_scalar_cfg_contract_param.
 Qed.
 
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma check_scalar_noninterferent :
-  noninterferent_strong init_addr check_scalar_instrs
-    (init_addr + 64)%N
-    check_scalar_reg_specs [].
+  noninterferent_strong init_addr check_scalar_instrs (init_addr + 4 * N.of_nat (length check_scalar_instrs))
+    check_scalar_reg_specs (compile (init_addr + 4 * N.of_nat (length check_scalar_instrs)) []).
 Proof.
   apply check_scalar_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.

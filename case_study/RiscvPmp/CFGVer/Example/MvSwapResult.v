@@ -48,15 +48,19 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.Example.MvSwap.
 
+(* The program, named once so the statements below read as text. *)
+Definition swap_instrs : list AST := [MV X3 X2; MV X2 X1; MV X1 X3].
+
 (* Phase 4.2: swap verified end-to-end for a UNIVERSAL base address, from
    the single symbolic-base VC valid_swap_cfg_contract_param. *)
 Lemma swap_noninterferent_param (init_addr : N) :
-  (init_addr + 12 < lenAddr)%N ->
-  noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
-    (init_addr + 12)%N
-    [(X1, false, None); (X2, false, None); (X3, false, None)] [].
+  fits (init_addr + 4 * N.of_nat (length swap_instrs)) [] ->
+  noninterferent_strong init_addr swap_instrs (init_addr + 4 * N.of_nat (length swap_instrs))
+    [(X1, Secret); (X2, Secret); (X3, Secret)] (compile (init_addr + 4 * N.of_nat (length swap_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := [(X1, Secret); (X2, Secret); (X3, Secret)]) (cs := []));
+    [apply compile_clear; lia | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -66,16 +70,17 @@ Proof.
      this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_swap_cfg_contract_param.
 Qed.
 
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma swap_noninterferent :
-  noninterferent_strong init_addr [MV X3 X2; MV X2 X1; MV X1 X3]
-    (init_addr + 12)%N
-    [(X1, false, None); (X2, false, None); (X3, false, None)] [].
+  noninterferent_strong init_addr swap_instrs (init_addr + 4 * N.of_nat (length swap_instrs))
+    [(X1, Secret); (X2, Secret); (X3, Secret)] (compile (init_addr + 4 * N.of_nat (length swap_instrs)) []).
 Proof.
   apply swap_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.
 

@@ -108,11 +108,18 @@ Proof.
 Qed.
 
 Lemma padded_loop_noninterferent_param (init_addr : N) :
-  (init_addr + 264 < lenAddr)%N ->
-  noninterferent_strong init_addr padded_instrs (init_addr + 264)%N
-    [(X1, true, Some (bv.of_N 2)); (X4, false, None)] [].
+  fits (init_addr + 4 * N.of_nat (length padded_instrs)) [] ->
+  noninterferent_strong init_addr padded_instrs (init_addr + 4 * N.of_nat (length padded_instrs))
+    [(X1, Known (bv.of_N 2)); (X4, Secret)] (compile (init_addr + 4 * N.of_nat (length padded_instrs)) []).
 Proof.
-  intros Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+  intros Hfit0.
+  assert (Hl : length padded_instrs = 66%nat) by reflexivity.
+  assert (Hfit : (init_addr + 264 < lenAddr)%N)
+    by (apply fits_nil in Hfit0; rewrite Hl in Hfit0; exact Hfit0).
+  apply (ni_of_cells (regs' := [(X1, Known (bv.of_N 2)); (X4, Secret)]) (cs := []));
+    [apply compile_clear; lia | reflexivity | reflexivity |].
+  rewrite Hl. change (4 * N.of_nat 66)%N with 264%N.
+  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   pose proof (seg_fits_bin init_addr 264 ltac:(unfold seg_fits_memory; lia)) as Hbin.
@@ -126,7 +133,7 @@ Proof.
   - apply (seg_exit_table_ok _ _ init_addr 264). reflexivity.
   - intros Σ' GS'.
     iIntros "(Hregs & Hpriv & #Hinv)".
-    iPoseProof (gen_implpre [(X1, true, Some (bv.of_N 2)); (X4, false, None)]
+    iPoseProof (gen_implpre [(X1, Known (bv.of_N 2)); (X4, Secret)]
                   _ HpubReg ltac:(apply Prelude.nodup_fixed; reflexivity)
                   HInitReg1 HInitReg2 with "Hregs") as "Hpre".
     cbn -[bv.of_N].

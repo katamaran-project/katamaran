@@ -137,11 +137,18 @@ Qed.
    obligation is sealed in cdLink_valid above; the rest is cfg_instrs_endToEnd's
    ordinary wiring. *)
 Lemma countdown_rec_noninterferent_param (init_addr : N) :
-  (init_addr + 12 < lenAddr)%N ->
-  noninterferent_strong init_addr cd_link_instrs (init_addr + 12)%N
-    [(X1, true, Some (bv.of_N 2)); (X2, false, None)] [].
+  fits (init_addr + 4 * N.of_nat (length cd_link_instrs)) [] ->
+  noninterferent_strong init_addr cd_link_instrs (init_addr + 4 * N.of_nat (length cd_link_instrs))
+    [(X1, Known (bv.of_N 2)); (X2, Secret)] (compile (init_addr + 4 * N.of_nat (length cd_link_instrs)) []).
 Proof.
-  intros Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+  intros Hfit0.
+  assert (Hl : length cd_link_instrs = 3%nat) by reflexivity.
+  assert (Hfit : (init_addr + 12 < lenAddr)%N)
+    by (apply fits_nil in Hfit0; rewrite Hl in Hfit0; exact Hfit0).
+  apply (ni_of_cells (regs' := [(X1, Known (bv.of_N 2)); (X2, Secret)]) (cs := []));
+    [apply compile_clear; lia | reflexivity | reflexivity |].
+  rewrite Hl. change (4 * N.of_nat 3)%N with 12%N.
+  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   assert (Hfit8 : (init_addr + 8 < lenAddr)%N) by lia.
@@ -159,7 +166,7 @@ Proof.
   - (* ImplPre: the pinned X1 and the free X2 from gen_implpre, the rest pure *)
     intros Σ' GS'.
     iIntros "(Hregs & Hpriv & #Hinv)".
-    iPoseProof (gen_implpre [(X1, true, Some (bv.of_N 2)); (X2, false, None)]
+    iPoseProof (gen_implpre [(X1, Known (bv.of_N 2)); (X2, Secret)]
                   _ HpubReg ltac:(apply Prelude.nodup_fixed; reflexivity)
                   HInitReg1 HInitReg2 with "Hregs") as "Hpre".
     cbn -[bv.of_N].

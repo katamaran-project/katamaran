@@ -242,9 +242,9 @@ Import SmallStepNotations.
       List.Forall (fun a => get_word μ1 a = get_word μ2 a) public_addrs.
 
     (* Words both runs must agree on: the Public cells. *)
-    Definition gen_public_addrs (m : mem_layout) : list (Val ty_word) :=
+    Definition gen_public_addrs (cs : list mem_cell) : list (Val ty_word) :=
       base.omap (fun '(a, s) =>
-        match s with Public => Some (bv.of_N a) | _ => None end) (cells m).
+        match s with Public => Some (bv.of_N a) | _ => None end) cs.
 
     (* reg_init_spec: a register with its required initial value in both worlds *)
     Definition reg_init_spec : Type := 𝑹𝑬𝑮 ty_xlenbits * Val ty_xlenbits.
@@ -268,9 +268,9 @@ Import SmallStepNotations.
         match s with Known v => Some (gpr_reg r, v) | _ => None end) specs.
 
     (* The Known words, with their values. *)
-    Definition gen_init_mem (m : mem_layout) : list mem_init_spec :=
+    Definition gen_init_mem (cs : list mem_cell) : list mem_init_spec :=
       base.omap (fun '(a, s) =>
-        match s with Known v => Some (bv.of_N a, v) | _ => None end) (cells m).
+        match s with Known v => Some (bv.of_N a, v) | _ => None end) cs.
 
     Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=
@@ -353,11 +353,11 @@ Import SmallStepNotations.
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs →
       mem_has_instrs μ2 (bv.of_N init_addr) ws instrs →
       declare_public_registers γ1 γ2 (gen_public_regs reg_specs) →
-      declare_public_memory μ1 μ2 (gen_public_addrs mem) →
+      declare_public_memory μ1 μ2 (gen_public_addrs (cells mem)) →
       declare_init_registers γ1 (gen_init_regs reg_specs) →
       declare_init_registers γ2 (gen_init_regs reg_specs) →
-      declare_init_memory μ1 (gen_init_mem mem) →
-      declare_init_memory μ2 (gen_init_mem mem) →
+      declare_init_memory μ1 (gen_init_mem (cells mem)) →
+      declare_init_memory μ2 (gen_init_mem (cells mem)) →
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
