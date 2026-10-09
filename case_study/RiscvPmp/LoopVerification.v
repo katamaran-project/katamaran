@@ -62,11 +62,14 @@ Set Implicit Arguments.
 Import ListNotations.
 
 
+(* Unary loop verification, for either the left or the right execution. *)
 Module Type LoopVerification
+  (LOR : LeftOrRight)
   (Import RVPCOM : RiscvPmpIrisBaseCommon)
-  (Import RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
-  (Import RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
-  (Import RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl).
+  (Import RVPBASE : RiscvPmpIrisBase LOR RVPCOM)
+  (Import RVPPRED : RiscvPmpIrisInstancePredicates LOR RVPCOM RVPBASE)
+  (Import RVPINST : RiscvPmpIrisInstance LOR DefaultFailLogic RVPCOM RVPBASE RVPPRED)
+  (Import RVPMOD : RiscvPmpModel LOR RVPCOM RVPBASE RVPPRED RVPINST).
 
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
@@ -80,6 +83,8 @@ Module Type LoopVerification
   Module Import RiscvPmpShallowSoundness := MakeShallowSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpProgramLogic.
 
   Module Import RiscvPmpSymbolic := MakeSymbolicSoundness RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification RiscvPmpShallowExecutor RiscvPmpExecutor.
+
+  Import RiscvPmpProgramLogic.
 
   Section Loop.
     Context `{sg : sailGS Σ}.
@@ -115,7 +120,7 @@ Module Type LoopVerification
       (                   pc            ↦ i                ∗
        (∃ npc : Xlenbits, nextpc        ↦ npc)             ∗
        (∃ mpie mie,       mstatus       ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
-                          interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
+                          interp_pmp_addr_access (mG := @leftOrRightInstance _ sailGS_memGS) liveAddrs mmioAddrs entries m ∗
                           interp_gprs ∅ ∗
                           cur_privilege ↦ m                ∗
                           mtvec         ↦ h                ∗
@@ -130,7 +135,7 @@ Module Type LoopVerification
       ((∃ v, pc ↦ v ∗
              nextpc ↦ v) ∗
        (∃ mpie mie, mstatus ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
-       interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
+       interp_pmp_addr_access (mG := @leftOrRightInstance _ sailGS_memGS) liveAddrs mmioAddrs entries m ∗
        interp_gprs ∅ ∗
        cur_privilege ↦ m ∗
        mtvec ↦ h ∗
@@ -145,7 +150,7 @@ Module Type LoopVerification
       ((∃ v, pc ↦ v ∗
              nextpc ↦ v) ∗
        (∃ mpp mpie mie, mstatus ↦ {| MPP := mpp; MPIE := mpie; MIE := mie |}) ∗
-       interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
+       interp_pmp_addr_access (mG := @leftOrRightInstance _ sailGS_memGS) liveAddrs mmioAddrs entries m ∗
        interp_gprs ∅ ∗
        ⌜m = Machine⌝ ∗
        cur_privilege ↦ Machine ∗
@@ -161,7 +166,7 @@ Module Type LoopVerification
       (pc ↦ h ∗
        nextpc ↦ h ∗
        (∃ mpie , mstatus ↦ {| MPP := m; MPIE := mpie; MIE := false |}) ∗
-       interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
+       interp_pmp_addr_access (mG := @leftOrRightInstance _ sailGS_memGS) liveAddrs mmioAddrs entries m ∗
        interp_gprs ∅ ∗
        cur_privilege ↦ Machine ∗
        mtvec ↦ h ∗
@@ -177,7 +182,7 @@ Module Type LoopVerification
          pc     ↦ mepc_v ∗
          nextpc ↦ mepc_v ∗
          (∃ mpie mie, mstatus ↦ {| MPP := User; MPIE := mpie; MIE := mie |}) ∗
-         interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs mmioAddrs entries m ∗
+         interp_pmp_addr_access (mG := @leftOrRightInstance _ sailGS_memGS) liveAddrs mmioAddrs entries m ∗
          interp_gprs ∅ ∗
          ⌜m = Machine⌝ ∗
          cur_privilege ↦ mpp ∗
@@ -321,3 +326,4 @@ Module Type LoopVerification
         iIntros ([] ?); auto.
     Qed.
   End Loop.
+End LoopVerification.

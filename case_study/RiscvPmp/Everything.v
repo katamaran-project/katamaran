@@ -49,7 +49,9 @@ From Katamaran Require Import
   RiscvPmp.BlockVer.Spec
   RiscvPmp.BlockVer.TotalVerifier
   RiscvPmp.BlockVer.BinaryVerifier
+  RiscvPmp.Model
   RiscvPmp.ModelBinary
+  RiscvPmp.LoopVerification
   RiscvPmp.LoopVerificationBinary.
 
 (* Combine all the modules without duplication. *)
@@ -68,6 +70,12 @@ End RVPPREDl.
 Module RVPINSTl_ISA : RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl.
   Include RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl.
 End RVPINSTl_ISA.
+Module RVPMODl : RiscvPmpModel LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA.
+  Include RiscvPmpModel LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA.
+End RVPMODl.
+Module LoopVerificationl : LoopVerification.LoopVerification LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPMODl.
+  Include LoopVerification.LoopVerification LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPMODl.
+End LoopVerificationl.
 Module RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl.
   Include RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl.
 End RVPINSTl.
@@ -86,6 +94,12 @@ End RVPPREDr.
 Module RVPINSTr_ISA : RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr.
   Include RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr.
 End RVPINSTr_ISA.
+Module RVPMODr : RiscvPmpModel LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA.
+  Include RiscvPmpModel LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA.
+End RVPMODr.
+Module LoopVerificationr : LoopVerification.LoopVerification LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA RVPMODr.
+  Include LoopVerification.LoopVerification LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA RVPMODr.
+End LoopVerificationr.
 Module RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr.
   Include RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr.
 End RVPINSTr.
