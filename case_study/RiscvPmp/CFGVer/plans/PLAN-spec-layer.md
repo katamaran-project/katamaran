@@ -1,6 +1,8 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 2 (2026-10-08), Phase S DONE, Phase 0 next. Based on `KatamaranRel` (D8);
+Status: rev 2 (2026-10-08), Phase S DONE, Phase 0 decisions DONE
+(2026-10-09, D10–D19); Phases 1–4 below predate them and must be rewritten
+before Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
 `/reading-quiz` sessions (`Noninterference.v`; the spec front-ends) whose
 findings are in `.claude/TODO.md` (Priority 0 and the A–G list). Phase 0
@@ -133,7 +135,8 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   muladd's top-limb split) never appears in a statement.
 - **D15 (= Q2). Register keys are GPR-only** (x1–x31, no `X0` by type),
   not `Reg ty_xlenbits` (which also holds `pc`, `mtvec`, `pmpaddr0`, …).
-  Timing (same pass as the memory change or after): pending.
+  Same pass as the memory change (D2: one statement review, one gate);
+  `RegIdx`/`reg_convert` may stay internal, converted at the boundary.
 - **D16. Statements write `compile` explicitly** — no `noninterferent`
   wrapper yet; `compile` takes the data's start address and regions, NOT
   the code (code stays separate, D14).
@@ -141,6 +144,17 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   possible; if not, a hint-carrying variant of the region type (e.g. an
   adjusted `Array`) read only by the contract generator. Investigate in
   Phase 3.
+- **D18 (= Q3). Granularity: word-level wherever possible** (Emiel: for
+  performance — do NOT make everything byte-granular). `Word`/`Array` are
+  word blocks; only `Bytes` regions are byte-level. Instructions keep
+  `mem_has_word` / `mem_has_instrs`. Legacy `mem_spec` goes; one word
+  reader for data. Phase 1 must settle `(* byte order correct? *)`
+  (`Noninterference.v:121`): does the statement's word assembly agree with
+  the machine's own load (a `Word (Known w)` must mean what a `lw` sees)?
+- **D19 (part of Q4). Clear of the code = a conjunct inside
+  `noninterferent_strong`'s definition**, so an overlap makes the theorem
+  unprovable, not vacuous, and nothing extra appears on the page (code is
+  outside `compile`, D16, so it is not guaranteed by shape).
 - **Sign-off (2026-10-09):** the after-statements in
   `PLAN-spec-layer-statements.md` rev 2 (cmovznz4, muladd, check_scalar)
   are readable — Phase 0's exit criterion for readability is met.
@@ -154,6 +168,11 @@ byte-level `data_layout_ok` (`HLayout`; `Adequacy.v:1055`: in range, clear of
 code, cells pairwise disjoint as 4-byte ranges, NO alignment), and Sync
 wherever `rv_val` is used (`data_ok`, `GenSegment.v:1941`; `reg_q_sync`;
 `Hp`). Q4 is therefore about making them VISIBLE, not inventing them.
+
+**FORMERLY OPEN — all resolved 2026-10-09** (kept for the record): Q1 →
+D10, D11, D12, D14 (front-end constructors of `_rel`/`_q` still to be
+spelled out in Phase 3); Q2 → D15; Q3 → D18; Q4 → D11 (disjointness in the
+type), D19 (clear of code), D5 (parameter premises); Q6 → D13.
 
 **OPEN — settled in Phase 0, Emiel proposes first:**
 - **Q1. The spec types.** Shape of the sum type (e.g. `Secret | Public |
