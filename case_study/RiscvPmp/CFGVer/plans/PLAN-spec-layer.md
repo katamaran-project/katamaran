@@ -118,6 +118,19 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   generator's deep specs. Drafts: `PLAN-spec-layer-statements.md`.
 - **D13 (= Q6). Decode: no action.** Emiel: not a real issue — every program
   is defined as `AST`s first, so it is decodable by construction.
+- **D14. Front-end data layout = regions back to back** (refines D11's
+  shape B): `Word (spec word) | Array (Secret n | Public n | Known vs) |
+  Bytes … | Gap n`, placed contiguously from the END OF THE CODE; a gap is
+  its own region. Compiles to the D11 base (explicit blocks + disjointness
+  proof); disjointness, incl. clear-of-code, by shape. Layouts the front-end
+  cannot express (check_scalar's k on either side of the code) are written
+  in the base directly. The CODE STAYS SEPARATE as today (`init_addr`,
+  `instrs`, `mem_has_instrs`; Emiel: "let's not do too many things at
+  once") — code as a region would need a real decoder, since
+  `pure_decode` is an Axiom (`Machine.v:147`). REJECTED: `run_at`-style
+  derived addresses (Emiel: hides crucial information) — register specs use
+  literal address expressions. Proof-only structure (`dir`, `DAt`,
+  muladd's top-limb split) never appears in a statement.
 
 **Already established (the checks exist):** `gen_prog_noninterferent`
 (`GenProg.v:105–116`) requires `NoDup` of register indices (`HND`), the

@@ -1,48 +1,56 @@
 # PLAN-spec-layer — Phase 0 statement drafts (before / after)
 
-Status: DRAFT 2026-10-09, for Emiel's readability sign-off (PLAN-spec-layer
-Phase 0 exit criterion). Applies D10 (parametric spec), D11 (proof-carrying
-layout + shape-B front-end) and Q1b = SHALLOW (plain Coq data + a proved
-correspondence to the generator's deep specs). Everything not in D1–D11 is a
-PROPOSAL, marked (P). Names are placeholders. Nothing here compiles yet.
+Status: DRAFT rev 2, 2026-10-09, for Emiel's readability sign-off (Phase 0
+exit criterion). Applies D10 (parametric `spec`), D11 (proof-carrying base),
+D12 (shallow statements) and D14 (region layout, code separate). Anything not
+decided is marked (P). Names are placeholders; nothing here compiles yet.
+rev 1 (gaps per run, `run_at` derived addresses) was REJECTED: it hid the
+addresses.
 
-## 1. Trusted vocabulary (sketch, `Noninterference.v`)
+## 1. Vocabulary
 
-```coq
-Inductive spec (V : Type) := Secret | Public | Known (v : V).        (* D10 *)
-Inductive vis := VSecret | VPublic.        (* arrays: no Known — Q1a open (P) *)
-
-Inductive item :=                                   (* one contiguous run *)
-| Word  (s : spec (bv 32))                          (* 1 word              *)
-| Words (n : N) (v : vis)                           (* n words             *)
-| Bytes (n : N) (v : vis).                          (* n bytes, word-padded *)
-
-Record program := {                                  (* D11, code bundled (P) *)
-  load_at : N;  code : list AST;
-  data    : list (N * list item);                    (* absolute start, run  *)
-  wf      : layout_ok load_at code data }.           (* Prop: code + runs
-                                                        pairwise disjoint, N *)
-Definition code_end P := load_at P + 4 * length (code P).
-Definition fits P : Prop := (* every run ends below lenAddr *) …
-Definition run_at P i : bv xlenbits := (* start of data run i *) …
-
-Definition noninterferent_strong
-  (P : program) (exit_addr : N) (regs : list (RegKey * spec (bv xlenbits)))
-  : Prop := …        (* RegKey: Q2 open *)
-```
-
-Shape-B builder (front-end, NOT trusted, proved once) (P):
+**Values of a single word / register (D10):**
 
 ```coq
-(* runs packed after the code, each after the previous one + its gap *)
-Definition program_of (ia : N) (c : list AST) (rs : list (N * list item)) : program
-  := {| load_at := ia; code := c; data := place (ia + 4 * length c) rs;
-        wf := place_ok ia c rs |}.       (* place_ok: by shape, NO hypotheses *)
+Inductive spec (V : Type) := Secret | Public | Known (v : V).
+(* Secret: unconstrained, may differ between the two runs
+   Public: equal in both runs, value unknown
+   Known v: exactly v in both runs                                   *)
 ```
+
+**Front-end data layout (D14):** a list of regions, placed back to back
+starting at the END OF THE CODE. A gap is a region of its own.
+
+```coq
+Inductive arr := Secret (n : N) | Public (n : N) | Known (vs : list word).
+                                   (* same words as `spec`, count included;
+                                      constructor names clash in Coq (P) *)
+Inductive region :=
+| Word  (s : spec word)            (* one word                          *)
+| Array (a : arr)                  (* consecutive words                 *)
+| Bytes (a : arr_byte)             (* consecutive bytes, same idea      *)
+| Gap   (n : N).                   (* n bytes the program does not own  *)
+```
+
+**Trusted statement:** unchanged in shape — load address, instructions
+(`mem_has_instrs`, D14: code stays separate), exit address, registers — but
+memory is a D11 base value (blocks at explicit addresses + a disjointness
+proof, clear of the code). A front-end layout gets there through `compile`,
+proved disjoint once, by shape. (P) a front-end wrapper so statements need
+not write `compile`:
+
+```coq
+Definition noninterferent (ia : N) (code : list AST) (exit : N)
+    (regs : list (RegKey * spec word)) (data : list region) : Prop :=
+  noninterferent_strong ia code exit regs (compile ia code data).
+Definition fits ia code data : Prop := ia + 4 * length code + size data <= lenAddr.
+```
+
+`RegKey`: Q2, open.
 
 ## 2. cmovznz4
 
-**Before** (`Cmovznz4Result.v:57–62` + `Cmovznz4.v:179–193`):
+**Before** (`Cmovznz4Result.v:57–62`, `Cmovznz4.v:179–193`):
 
 ```coq
 Lemma cmovznz4_noninterferent_param (init_addr : N) :
@@ -55,35 +63,36 @@ cmovznz4_reg_specs_rel :=
   [(A0, false, PVExist); (A1, false, PVBaseOff 116); (A2, false, PVBaseOff 132);
    (A3, false, PVBaseOff 148); (A4, false, PVExist); … (T1, false, PVExist)].
 cmovznz4_mem_specs_rel :=
-  [(116%N, false, PVExist); (120%N, false, PVExist); … 12 entries … (160%N, …)].
+  [(116%N, false, PVExist); (120%N, false, PVExist); … 12 entries … (160%N, false, PVExist)].
 ```
 
-Reader traps: A1–A3 read "secret" but are public; `+116` and `+164` are
-unexplained literals; two `concretize_*` maps to understand.
+Traps: A1–A3 read "secret" but are public; `+164` is unexplained; two
+`concretize_*` maps.
 
 **After:**
 
 ```coq
-Definition cmovznz4_prog (ia : N) : program :=
-  program_of ia cmovznz4_instrs
-    [ (0, [Words 4 VSecret])                   (* x *)
-    ; (0, [Words 4 VSecret])                   (* y *)
-    ; (0, [Words 4 VSecret]) ].                (* r *)
+(* code: ia .. ia+115 (29 instructions) *)
+Definition cmovznz4_data : list region :=
+  [ Array (Secret 4)        (* x[0..3]  at ia+116 *)
+  ; Array (Secret 4)        (* y[0..3]  at ia+132 *)
+  ; Array (Secret 4) ].     (* r[0..3]  at ia+148 *)
 
 Definition cmovznz4_regs (ia : N) :=
-  let P := cmovznz4_prog ia in
-  [ (A0, Secret);                                         (* cin *)
-    (A1, Known (run_at P 0)); (A2, Known (run_at P 1)); (A3, Known (run_at P 2));
+  [ (A0, Secret);                                        (* cin *)
+    (A1, Known (bv.of_N (ia + 116)));                    (* &x  *)
+    (A2, Known (bv.of_N (ia + 132)));                    (* &y  *)
+    (A3, Known (bv.of_N (ia + 148)));                    (* &r  *)
     (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret); (T0, Secret); (T1, Secret) ].
 
 Theorem cmovznz4_noninterferent (ia : N) :
-  fits (cmovznz4_prog ia) ->
-  noninterferent_strong (cmovznz4_prog ia) (code_end (cmovznz4_prog ia)) (cmovznz4_regs ia).
+  fits ia cmovznz4_instrs cmovznz4_data ->
+  noninterferent ia cmovznz4_instrs (ia + 116) (cmovznz4_regs ia) cmovznz4_data.
 ```
 
 ## 3. muladd (BearSSL `br_i31_muladd_small`, every header b)
 
-**Before** (`MuladdParamResult.v:291–302`, end theorem; `MuladdParam.v:42–77`):
+**Before** (`MuladdParamResult.v:291–302` + end theorem; `MuladdParam.v:42–77`):
 
 ```coq
 Lemma muladd_param_noninterferent (init_addr : N) (b : bv xlenbits) :
@@ -102,44 +111,41 @@ sym_data := [ DCell false None ×4; DCell true (Some (term_var "b"));
               DArr false ArrDown (t_mm2 (term_var "b")); DCell false None ×2 ].
 ```
 
-Reader traps: Terms + valuation + `rv_val`; `DAt`/`ArrUp`/`ArrDown` mean
-nothing in the statement; x's address stated three times; literal `+1128`;
-A0 consed on by hand.
+Traps: Terms + valuation + `rv_val`; `DAt`/`ArrUp`/`ArrDown` mean nothing
+in the statement; x's address stated three times; literal `+1128`; A0
+consed on by hand.
 
 **After:**
 
 ```coq
-Definition M (b : bv xlenbits) : N := (bv.bin b + 31) / 32.   (* limb count *)
+Definition M (b : bv xlenbits) : N := (bv.bin b + 31) / 32.     (* limb count *)
 
-Definition muladd_prog (ia : N) (b : bv xlenbits) : program :=
-  program_of ia muladd_instrs
-    [ (0, [Word Secret; Word Secret; Word Secret; Word Secret])   (* S0–S3 spills *)
-    ; (0, [Word (Known b); Words (M b - 2) VPublic;               (* m: header b, *)
-           Word Public; Word Public])                             (*   M limbs    *)
-    ; (0, [Word (Known b); Words (M b - 2) VSecret;               (* x: header b, *)
-           Word Secret; Word Secret]) ].                          (*   M limbs    *)
+(* code: ia .. ia+1127 (282 instructions) *)
+Definition muladd_data (b : bv xlenbits) : list region :=
+  [ Array (Secret 4)                            (* S0–S3 spill slots, ia+1128   *)
+  ; Word (Known b) ; Array (Public (M b))       (* m = sp, ia+1144: header, limbs *)
+  ; Word (Known b) ; Array (Secret (M b)) ].    (* x, ia+1148+4·M: header, limbs *)
 
 Definition muladd_regs (ia : N) (b : bv xlenbits) :=
-  let P := muladd_prog ia b in
-  [ (A0, Known (run_at P 2));                  (* &x[0] *)
-    (A1, Secret);                              (* z     *)
-    (A2, Known (run_at P 1)); (X2, Known (run_at P 1));   (* &m[0] = sp *)
-    (A3, Secret); … (S3, Secret) ].
+  [ (A0, Known (bv.of_N (ia + 1148 + 4 * M b)));    (* &x[0]       *)
+    (A1, Secret);                                   (* z           *)
+    (A2, Known (bv.of_N (ia + 1144)));              (* &m[0]       *)
+    (X2, Known (bv.of_N (ia + 1144)));              (* sp          *)
+    (A3, Secret); … (T6, Secret); (S0, Secret); … (S3, Secret) ].
 
 Theorem muladd_noninterferent (ia : N) (b : bv xlenbits) :
   (64 < bv.unsigned b < 65536)%Z ->
-  fits (muladd_prog ia b) ->
-  noninterferent_strong (muladd_prog ia b) (code_end (muladd_prog ia b)) (muladd_regs ia b).
+  fits ia muladd_instrs (muladd_data b) ->
+  noninterferent ia muladd_instrs (ia + 4 * length muladd_instrs) (muladd_regs ia b) (muladd_data b).
 ```
 
-The b-range premise stays: it is what the PROOF needs (the code's own
-branches), not disjointness — x's start is DERIVED (`run_at P 2`), so the
-layout is disjoint for every b. Written with `x_off b = 1148 + 4M` instead,
-it would overlap for M < 2 (`M - 2` truncates in N) and need the premise in
-the type. Also fixes group B's literal exit (`code_end`) and the
-three-times-stated x.
+m and x are now "header + M limbs". The old split into `M − 2` limbs plus
+two top cells was a proof need (the code reads the top limbs individually)
+and stays in the contract, like `dir` and `DAt`. The b-range premise is the
+PROOF's (the code's own branches); the layout is disjoint for every b. Exit:
+group B's `+1128` literal becomes `4 * length muladd_instrs`.
 
-## 4. check_scalar with k a pointer argument (CheckScalarPtr)
+## 4. check_scalar with k a pointer argument
 
 **Before** (`CheckScalarPtrResult.v:80–94`, `CheckScalarPtr.v:14–23`):
 
@@ -158,43 +164,54 @@ csp_regs := [ (A0, true, PVVar "k"); (A1, true, PVVar "l"); (X1, true, PVOff "p"
 csp_data := [ DBytes false 32; DPtr (term_var "k"); DBytes false (term_var "l") ].
 ```
 
-**After, order 1 (k above the code and P256_N; its position is a gap g):**
+**After, front-end (k above P256_N, g bytes further):**
 
 ```coq
-Definition cs_prog (ia g : N) (l : bv xlenbits) : program :=
-  program_of ia cs_instrs
-    [ (0, [Bytes 32 VSecret])                  (* P256_N (unpinned: stronger) *)
-    ; (g, [Bytes (bv.bin l) VSecret]) ].       (* k[0 .. l-1], g bytes further *)
+(* code: ia .. ia+143 (36 instructions) *)
+Definition cs_data (g : N) (l : bv xlenbits) : list region :=
+  [ Bytes (Secret 32)             (* P256_N, ia+144 (unpinned: stronger) *)
+  ; Gap g
+  ; Bytes (Secret (bv.bin l)) ].  (* k[0 .. l-1], ia+176+g                 *)
 
 Definition cs_regs (ia g : N) (l : bv xlenbits) :=
-  let P := cs_prog ia g l in
-  [ (A0, Known (run_at P 1));                  (* k    *)
-    (A1, Known l);                             (* klen *)
-    (X1, Known (bv.of_N (code_end P)));        (* ra = the exit *)
+  [ (A0, Known (bv.of_N (ia + 176 + g)));     (* k     *)
+    (A1, Known l);                            (* klen  *)
+    (X1, Known (bv.of_N (ia + 144)));         (* ra = the exit *)
     (A2, Secret); … (A7, Secret) ].
 
 Theorem check_scalar_noninterferent (ia g : N) (l : bv xlenbits) :
-  fits (cs_prog ia g l) ->
-  noninterferent_strong (cs_prog ia g l) (code_end (cs_prog ia g l)) (cs_regs ia g l).
+  fits ia cs_instrs (cs_data g l) ->
+  noninterferent ia cs_instrs (ia + 144) (cs_regs ia g l) (cs_data g l).
 ```
 
-Three premises → one; the disjunction disappears into the shape. Order 2
-(k BELOW the code) is a second program value and theorem from the same VC
-and bridge — but `program_of` puts the code first, so it needs a builder
-where the code is any run (P).
+**After, base (k anywhere, either side of the code):** the front-end
+cannot place data below the code, so this one is written in the D11 base
+directly; the parameter premise feeds the disjointness proof (D11):
+
+```coq
+Definition cs_mem (ia ka : N) (l : bv xlenbits)
+    (H : ka + 4 * klen_words l <= ia \/ ia + 176 <= ka) : memory ia cs_instrs :=
+  blocks [ (ia + 144, Bytes (Secret 32))            (* P256_N *)
+         ; (ka,       Bytes (Secret (bv.bin l))) ]  (* k      *)
+         (cs_disjoint ia ka l H).
+
+Theorem check_scalar_anywhere_noninterferent (ia ka : N) (l : bv xlenbits)
+    (H : ka + 4 * klen_words l <= ia \/ ia + 176 <= ka) :
+  ia + 176 < lenAddr -> ka + 4 * klen_words l < lenAddr ->
+  noninterferent_strong ia cs_instrs (ia + 144) (cs_regs' ia ka l) (cs_mem ia ka l H).
+```
 
 ## 5. Open points raised by the drafts
 
-1. Bundling the code into `program` (P): one argument instead of
-   `init_addr instrs`, and "clear of the code" is part of `wf`.
-2. Arrays' spec (`vis`, no `Known`) — the Known-free part of D10; naming.
-3. Q2 key type (`RegKey`): `Reg ty_xlenbits` also contains `pc`, `mtvec`,
-   `pmpaddr0`… (`Base.v:973–1015`), not only x1–x31.
-4. `Bytes` in a word-granular trusted memory (today's statement owns the
+1. Constructor names: `Secret`/`Public`/`Known` for both `spec` and `arr`
+   clash in one Coq module — modules, a shared parameter, or new names.
+2. Each Result proves "shallow data = the generator's deep specs" (D12).
+   With symbolic b / l that is a proof (cbn + lia), not vm_compute — watch
+   the per-example cost (cf. TODO: muladd's ~75 lines of bv lemmas).
+3. `Bytes` in a word-granular trusted memory (today the statement owns the
    pad bytes of the last word) — interacts with Q3.
-5. Each Result needs `prog/regs = translation of the generator's deep specs`;
-   with symbolic b/l that equality is a proof (cbn + lia), not vm_compute.
-   Risk: per-example proof cost (cf. TODO: muladd's ~75 lines of bv lemmas).
-6. Registers mention layout positions (`run_at P i`), so registers and
-   memory cannot drift apart; a register pointing INTO a run (m = sp) is why
-   muladd's spills are their own run.
+4. Q2 key type (`RegKey`): `Reg ty_xlenbits` also contains `pc`, `mtvec`,
+   `pmpaddr0`… (`Base.v:973–1015`), not only x1–x31.
+5. `noninterferent` wrapper vs `compile` written in every statement.
+6. Register addresses are literal (`ia + 1148 + 4 * M b`) and must agree
+   with the layout; a mismatch makes the theorem unprovable (not unsound).
