@@ -112,6 +112,12 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   Before Phase 1: check that all 21 Result files' memory fits the base.
   Still open: where `dir` and `DAt`'s address-matching job live on the
   contract side.
+- **D12 (= Q1b). Shallow statements:** end theorems take plain Coq data
+  (N/bv expressions in the theorem's parameters), never `Term`s, a
+  `Valuation` or `rv_val`; each Result proves once that its data equals the
+  generator's deep specs. Drafts: `PLAN-spec-layer-statements.md`.
+- **D13 (= Q6). Decode: no action.** Emiel: not a real issue — every program
+  is defined as `AST`s first, so it is decodable by construction.
 
 **Already established (the checks exist):** `gen_prog_noninterferent`
 (`GenProg.v:105–116`) requires `NoDup` of register indices (`HND`), the
