@@ -88,6 +88,31 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   the gate.
 - **D9.** Group B (muladd program/exit/header) is part of Phase 4.
 
+**DECIDED in Phase 0 (Emiel, 2026-10-09; VibeWise design checkpoints):**
+- **D10. Spec type is parametric:** `spec V := Secret | Public | Known (v : V)`,
+  one type instantiated per layer (trusted: `Val`; `_rel`: const / base
+  offset; `_q`: const / named base + offset; data cells: `Term Σ`), so every
+  `concretize_*` is a map over the `Known` payload and cannot turn `Secret`
+  into `Public`. Reason (Emiel): "easier to understand what each new version
+  adds". Still open: the front-end constructors and `data_spec`'s fit.
+- **D11. Memory layout: proof-carrying base + shape-B front-end.** Order
+  chosen: settle the layout BEFORE the rest of Q1. Trusted base = a record of
+  address-keyed blocks (N addresses, so no bitvector wrap) and a
+  disjointness proof IN THE TYPE; the code is one of the blocks. End
+  theorems only NAME a layout value (`muladd_layout ia b`): disjointness is
+  an obligation where the value is defined, never in the statement (Emiel:
+  clutter), and an overlapping layout cannot be written (closes §0.3's
+  overlap vacuity). Fits-in-memory stays a parameter premise; a layout may
+  take a parameter premise as an argument (`csp_layout ia ka l Hka`).
+  Front-end shape B — ordered contiguous runs separated by gaps ≥ 0, a
+  pointer's position given as a gap, one layout per memory order — translates
+  into the base with disjointness by shape (one generic lemma). `arr_dir` and
+  `DAt` leave every statement-facing type (proof-only). The proof field is
+  value-level only: the contract side already gets disjointness from `∗`.
+  Before Phase 1: check that all 21 Result files' memory fits the base.
+  Still open: where `dir` and `DAt`'s address-matching job live on the
+  contract side.
+
 **Already established (the checks exist):** `gen_prog_noninterferent`
 (`GenProg.v:105–116`) requires `NoDup` of register indices (`HND`), the
 byte-level `data_layout_ok` (`HLayout`; `Adequacy.v:1055`: in range, clear of
