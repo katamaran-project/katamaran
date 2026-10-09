@@ -99,6 +99,7 @@ Import SmallStepNotations.
     | Known (v : V).
     Arguments Secret {V}.
     Arguments Public {V}.
+    Arguments Known {V} v.
 
     Definition val_spec_map {A B} (f : A -> B) (s : val_spec A) : val_spec B :=
       match s with

@@ -477,6 +477,18 @@ covers only its own files.
   (D14), `compile` (D16: data start + regions → base memory), `fits`, the
   ONE generic disjointness-by-shape lemma (D11) and clear-of-code by shape.
   The D22 rounding of `Bytes`, with its TODO at the definition.
+- **STATUS 2026-10-09: implemented** (`af32d3ac` kernel, then `Layout.v`).
+  Both compile; `ZZSpecLayerDrafts.v` (untracked probe, CFGVer/) typechecks
+  all four draft statements against the real definitions and PROVES D21's
+  `cs_disjoint` (5 lines). Findings: (1) byte order is CORRECT —
+  `get_word_read_ram` proves `get_word = fun_read_ram μ 4` (the machine's
+  load); (2) `length` is `nat`, so statements read
+  `ia + 4 * N.of_nat (length instrs)`, not the drafts' `4 * length instrs`;
+  (3) `repeat constructor` picks the wrong disjunct in a disjointness proof
+  — spell the `ForallOrdPairs` steps out; (4) `Tables.v`'s `gpr` aliases +
+  `gpr_idx` coercion MOVED to the start of Phase 2: `Tables.v` is in the
+  verifier chain and the coercion changes how every instruction list
+  elaborates. Awaiting Emiel's re-read of the probe.
 - **Check:** both files compile (`keep_vo`). The three statements of
   `PLAN-spec-layer-statements.md` (cmovznz4, muladd, check_scalar — the
   latter in D21's base form) typecheck in a `ZZ` probe with `Admitted`
