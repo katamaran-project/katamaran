@@ -87,13 +87,42 @@ Import SmallStepNotations.
      theorems in Results.v use it as their default init_addr). *)
   Definition init_addr     : N := 0.
 
-(* reg_spec: (register, is_public, optional_init_value) — the register-side
-   spec vocabulary shared by the statements below and the contract generator
-   (GenContract.v).  mem_full_spec is the memory-side analog. *)
-    Definition reg_spec : Type := RegIdx * bool * option (Val ty_xlenbits).
+(* ---- What a statement says about ONE value (PLAN-spec-layer D10) ----------
+   One type for every register and memory word, instantiated per layer (the
+   front-ends map it with val_spec_map, which cannot turn Secret into Public):
+     Secret  : unconstrained -- the two runs may differ.  Produces NO premise.
+     Public  : equal in both runs, value unknown.
+     Known v : exactly v in both runs.                                       *)
+    Inductive val_spec (V : Type) : Type :=
+    | Secret
+    | Public
+    | Known (v : V).
+    Arguments Secret {V}.
+    Arguments Public {V}.
 
-    Definition mem_full_spec : Type :=
-      Val ty_xlenbits * bool * option (Val ty_xlenbits).
+    Definition val_spec_map {A B} (f : A -> B) (s : val_spec A) : val_spec B :=
+      match s with
+      | Secret  => Secret
+      | Public  => Public
+      | Known v => Known (f v)
+      end.
+
+(* ---- Register keys: the 31 general-purpose registers (D15) ----------------
+   x0 is hardwired to zero, and pc / cur_privilege / mtvec / pmp* are not
+   general-purpose, so none of them can be written as a key. *)
+    Definition gprs : list (Reg ty_xlenbits) :=
+      [x1; x2; x3; x4; x5; x6; x7; x8; x9; x10; x11; x12; x13; x14; x15; x16;
+       x17; x18; x19; x20; x21; x22; x23; x24; x25; x26; x27; x28; x29; x30; x31].
+
+    Definition is_gpr (r : Reg ty_xlenbits) : bool :=
+      bool_decide (existT ty_xlenbits r ∈ List.map (existT ty_xlenbits) gprs).
+
+    Definition gpr : Type := { r : Reg ty_xlenbits | is_gpr r = true }.
+
+    Definition gpr_reg (g : gpr) : Reg ty_xlenbits := proj1_sig g.
+
+    (* A register entry of a statement. *)
+    Definition reg_spec : Type := gpr * val_spec (Val ty_xlenbits).
 
     (* THE STOP TEST (PLAN-exit-targets.md, 2026-09-25): a run stops exactly
        when the pc IS the program's single exit address.  It replaced
@@ -104,21 +133,54 @@ Import SmallStepNotations.
     Definition atPc (exit_addr : N) : bv xlenbits -> bool :=
       fun v => bv.eqb v (bv.of_N exit_addr).
 
-  (* Public registers for a spec list: registers whose is_pub flag is true.
-     Defined outside WithAsnNotations to avoid notation-scope interference. *)
-  Definition gen_public_regs (specs : list reg_spec) : list {x : Ty & 𝑹𝑬𝑮 x} :=
-    base.omap (fun (spec : reg_spec) =>
-      let '(r, pub, _) := spec in
-      if pub then option_map (@existT Ty 𝑹𝑬𝑮 ty_xlenbits) (reg_convert r)
-      else None) specs.
+  (* Registers both runs must agree on: the Public entries. *)
+  Definition gen_public_regs (specs : list reg_spec) : list (Reg ty_xlenbits) :=
+    base.omap (fun '(r, s) =>
+      match s with Public => Some (gpr_reg r) | _ => None end) specs.
 
-  Definition reg_spec_idx (s : reg_spec) : RegIdx :=
-    let '(r, _, _) := s in r.
+(* ---- Reading memory -------------------------------------------------------
+   get_word is THE data-word reader.  It assembles the bytes at a, a+1, a+2,
+   a+3 with the byte at a in the LOW position -- exactly what the machine's
+   own load reads (get_word_read_ram; Base.v tests read_ram to be little
+   endian).  mem_has_word is the same fact, phrased for instructions
+   (mem_has_word_get_word). *)
+    Definition get_word (μ : Memory) (a : Val ty_word) : Val ty_word :=
+      bv.app (memory_ram μ a)
+        (bv.app (memory_ram μ (bv.add bv.one a))
+          (bv.app (memory_ram μ (bv.add (bv.of_N 2) a))
+            (bv.app (memory_ram μ (bv.add (bv.of_N 3) a)) bv.nil))).
+
+    Lemma get_word_read_ram (μ : Memory) (a : Val ty_word) :
+      get_word μ a = fun_read_ram μ 4 a.
+    Proof.
+      unfold get_word. cbn [fun_read_ram].
+      rewrite !bv.add_assoc.
+      change (bv.add bv.one bv.one) with (@bv.of_N xlenbits 2).
+      change (bv.add bv.one (@bv.of_N xlenbits 2)) with (@bv.of_N xlenbits 3).
+      reflexivity.
+    Qed.
 
     Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
       exists v0 v1 v2 v3, List.map (memory_ram μ) (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
 
-    (* byte order correct? *)
+    Lemma mem_has_word_get_word (μ : Memory) (a w : Val ty_word) :
+      mem_has_word μ a w <-> get_word μ a = w.
+    Proof.
+      assert (Hseq : bv.seqBv a 4 = [a; bv.add bv.one a; bv.add (bv.of_N 2) a; bv.add (bv.of_N 3) a]%list).
+      { unfold bv.seqBv, seqZ.
+        change (Z.to_nat (Z.of_N 4)) with 4%nat.
+        cbn [seq fmap list_fmap List.map].
+        repeat f_equal.
+        all: rewrite <- bv.of_Z_add, bv.of_Z_unsigned.
+        - apply bv.add_zero_l.
+        - change (Z.of_nat 1) with (Z.of_N 1). now rewrite bv.of_Z_N.
+        - change (Z.of_nat 2) with (Z.of_N 2). now rewrite bv.of_Z_N.
+        - change (Z.of_nat 3) with (Z.of_N 3). now rewrite bv.of_Z_N. }
+      unfold mem_has_word, get_word. rewrite Hseq. cbn [List.map]. split.
+      - intros (v0 & v1 & v2 & v3 & Hm & <-). injection Hm as E0 E1 E2 E3. subst. reflexivity.
+      - intros <-. eauto 10.
+    Qed.
+
     Definition mem_has_instr (μ : Memory) (a : Val ty_word) w (instr : AST) : Prop :=
       mem_has_word μ a w /\ pure_decode w = inr instr.
 
@@ -129,15 +191,45 @@ Import SmallStepNotations.
       | _ , _ => False
       end.
 
-    (* Word extraction: assemble 4 consecutive bytes into a 32-bit word *)
-    Definition get_word (μ : Memory) (a : Val ty_word) : Val ty_word :=
-      bv.app (memory_ram μ a)
-        (bv.app (memory_ram μ (bv.add bv.one a))
-          (bv.app (memory_ram μ (bv.add (bv.of_N 2) a))
-            (bv.app (memory_ram μ (bv.add (bv.of_N 3) a)) bv.nil))).
+(* ---- Data memory: a layout of disjoint blocks (D11, P1) -------------------
+   A block is a start address and the spec of each consecutive WORD from
+   there.  A layout is a list of blocks plus a proof that no two overlap, so
+   an overlapping layout cannot be written at all.  Addresses are N, so the
+   overlap test cannot wrap around; staying below lenAddr is the statement's
+   own premise.  Clear of the code is a conjunct of noninterferent_strong
+   (D19), not part of the type. *)
+    Record mem_block : Type := {
+      blk_addr  : N;
+      blk_words : list (val_spec (Val ty_word))
+    }.
 
-    (* mem_spec: a word address paired with a public/private flag *)
-    Definition mem_spec : Type := Val ty_word * bool.
+    Definition blk_end (b : mem_block) : N :=
+      blk_addr b + 4 * N.of_nat (length (blk_words b)).
+
+    Definition blocks_disjoint (bs : list mem_block) : Prop :=
+      ForallOrdPairs (fun b c => blk_end b <= blk_addr c \/ blk_end c <= blk_addr b)%N bs.
+
+    Record mem_layout : Type := {
+      blocks    : list mem_block;
+      blocks_ok : blocks_disjoint blocks
+    }.
+
+    (* The words of a block, each at its own address: a, a+4, a+8, ... *)
+    Fixpoint words_at (a : N) (ws : list (val_spec (Val ty_word))) :
+        list (N * val_spec (Val ty_word)) :=
+      match ws with
+      | nil       => nil
+      | cons w ws => cons (a, w) (words_at (a + 4) ws)
+      end.
+
+    Definition cells (m : mem_layout) : list (N * val_spec (Val ty_word)) :=
+      concat (List.map (fun b => words_at (blk_addr b) (blk_words b)) (blocks m)).
+
+    (* Every block lies entirely below or entirely above the code. *)
+    Definition clear_of_code (init_addr : N) (instrs : list AST) (m : mem_layout) : Prop :=
+      Forall (fun b => blk_end b <= init_addr \/
+                       init_addr + 4 * N.of_nat (length instrs) <= blk_addr b)%N
+        (blocks m).
 
     (* declare_public_memory: the two worlds agree on the word value at
        every address listed as public *)
@@ -145,10 +237,10 @@ Import SmallStepNotations.
         (public_addrs : list (Val ty_word)) : Prop :=
       List.Forall (fun a => get_word μ1 a = get_word μ2 a) public_addrs.
 
-    (* gen_public_addrs: filter a mem_spec list to keep only public addresses *)
-    Definition gen_public_addrs (specs : list mem_spec) : list (Val ty_word) :=
-      base.omap (fun s : mem_spec => let '(a, pub) := s in
-        if pub then Some a else None) specs.
+    (* Words both runs must agree on: the Public cells. *)
+    Definition gen_public_addrs (m : mem_layout) : list (Val ty_word) :=
+      base.omap (fun '(a, s) =>
+        match s with Public => Some (bv.of_N a) | _ => None end) (cells m).
 
     (* reg_init_spec: a register with its required initial value in both worlds *)
     Definition reg_init_spec : Type := 𝑹𝑬𝑮 ty_xlenbits * Val ty_xlenbits.
@@ -166,26 +258,15 @@ Import SmallStepNotations.
         (specs : list mem_init_spec) : Prop :=
       List.Forall (fun s => get_word μ s.1 = s.2) specs.
 
+    (* The Known registers, with their values. *)
     Definition gen_init_regs (specs : list reg_spec) : list reg_init_spec :=
-      base.omap (fun '(r, _, opt_v) =>
-        match opt_v with
-        | Some v => option_map (fun x => (x, v)) (reg_convert r)
-        | None => None
-        end) specs.
+      base.omap (fun '(r, s) =>
+        match s with Known v => Some (gpr_reg r, v) | _ => None end) specs.
 
-    Definition mem_full_to_spec (s : mem_full_spec) : mem_spec :=
-      let '(a, pub, _) := s in (a, pub).
-
-    Definition gen_full_public_addrs (specs : list mem_full_spec) :
-        list (Val ty_word) :=
-      gen_public_addrs (map mem_full_to_spec specs).
-
-    Definition gen_init_mem (specs : list mem_full_spec) : list mem_init_spec :=
-      base.omap (fun '(a, _, opt_v) =>
-        match opt_v with
-        | Some v => Some (a, v)
-        | None => None
-        end) specs.
+    (* The Known words, with their values. *)
+    Definition gen_init_mem (m : mem_layout) : list mem_init_spec :=
+      base.omap (fun '(a, s) =>
+        match s with Known v => Some (bv.of_N a, v) | _ => None end) (cells m).
 
     Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=
@@ -247,32 +328,32 @@ Import SmallStepNotations.
     Notation "⟨ γ1 , μ1 ⟩ -l( l )->* ⟨ γ2 , μ2 ⟩" := (@RiscVlistNSteps γ1 μ1 γ2 μ2 l)
                                                       (at level 75, only parsing, right associativity).
 
-    Definition declare_public_registers γ1 γ2 (public_registers : list {x : Ty & Reg x}) :=
-      List.Forall
-        (fun x => match x with
-                  |existT x0 r => read_register γ1 r = read_register γ2 r
-                  end)
-        public_registers
-    .
+    Definition declare_public_registers γ1 γ2 (public_registers : list (Reg ty_xlenbits)) :=
+      List.Forall (fun r => read_register γ1 r = read_register γ2 r) public_registers.
 
   (* noninterferent_strong: termination-sensitive non-interference.
-     If world 1 reaches the exit address `exit_addr` in n steps, so does world
-     2 in exactly n steps, and both worlds produce the same leakage trace. *)
+     For EVERY n: if world 1 takes n steps without being at the exit before
+     any of them, world 2 takes the same n steps, and both produce the same
+     leakage trace.  This covers every prefix of a run, including prefixes of
+     runs that never reach `exit_addr` -- stronger than "if world 1 reaches
+     the exit".  The data layout must lie clear of the code (first conjunct,
+     D19): an overlap makes the theorem unprovable, not vacuous. *)
   Definition noninterferent_strong
       (init_addr : N)
       (instrs : list AST)
       (exit_addr : N)
       (reg_specs : list reg_spec)
-      (mem_specs : list mem_full_spec) : Prop :=
+      (mem : mem_layout) : Prop :=
+    clear_of_code init_addr instrs mem /\
     ∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory) ws,
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs →
       mem_has_instrs μ2 (bv.of_N init_addr) ws instrs →
       declare_public_registers γ1 γ2 (gen_public_regs reg_specs) →
-      declare_public_memory μ1 μ2 (gen_full_public_addrs mem_specs) →
+      declare_public_memory μ1 μ2 (gen_public_addrs mem) →
       declare_init_registers γ1 (gen_init_regs reg_specs) →
       declare_init_registers γ2 (gen_init_regs reg_specs) →
-      declare_init_memory μ1 (gen_init_mem mem_specs) →
-      declare_init_memory μ2 (gen_init_mem mem_specs) →
+      declare_init_memory μ1 (gen_init_mem mem) →
+      declare_init_memory μ2 (gen_init_mem mem) →
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →
