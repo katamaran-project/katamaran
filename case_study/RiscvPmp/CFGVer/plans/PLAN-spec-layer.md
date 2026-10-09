@@ -292,20 +292,24 @@ merging the bridge families (`_u`/`_rel`/`_param`/`_classed`/`_bytes`/
 
 ### 2a.2 Kernel, `Noninterference.v` (Phase 1)
 
+Kernel = everything currently in `Noninterference.v`: the noninterference
+statement over the NON-front-end (base) expression of memory (Emiel,
+2026-10-09). The front-end (`compile` and friends) is outside it (D25).
+
 | old | new |
 |---|---|
-| `reg_spec := RegIdx * bool * option (Val ty_xlenbits)` | `reg_spec := gpr * vspec (Val ty_xlenbits)` |
+| `reg_spec := RegIdx * bool * option (Val ty_xlenbits)` | `reg_spec := gpr * val_spec (Val ty_xlenbits)` |
 | `gen_public_regs : … → list {x : Ty & Reg x}` (omap + `existT` + `reg_convert`) | `public_regs : list reg_spec → list (Reg ty_xlenbits)` through the total `gpr_reg` |
 | `declare_public_registers` over `list {x & Reg x}` | over `list (Reg ty_xlenbits)` |
 | `gen_init_regs` | same role: `Known v` ↦ `(gpr_reg r, v)` |
 | `mem_full_spec`, `mem_spec`, `mem_full_to_spec`, `gen_public_addrs`, `gen_full_public_addrs` | REMOVED (D18) |
-| — | `block := {| blk_addr : N; blk_words : list (vspec word) |}`, `memory := {| blocks : list block; blocks_ok : blocks_disjoint blocks |}`, `cells : memory → list (N * vspec word)` |
+| — | `mem_block := {| blk_addr : N; blk_words : list (val_spec word) |}`, `mem_layout := {| blocks : list mem_block; blocks_ok : blocks_disjoint blocks |}`, `cells : mem_layout → list (N * val_spec word)` |
 | `gen_init_mem`, `declare_public_memory`, `declare_init_memory` | the same premises, over `cells m` (address `bv.of_N`) |
 | `get_word` + `mem_has_word` (two readers) | `get_word` is THE data reader; `mem_has_word` stays for instructions only, with a proved lemma `mem_has_word μ a w ↔ get_word μ a = w` (one meaning) |
-| `noninterferent_strong ia instrs exit regs (mems : list mem_full_spec)` | `… (m : memory) := clear_of_code ia instrs m ∧ ∀ …` (D19) |
+| `noninterferent_strong ia instrs exit regs (mems : list mem_full_spec)` | `… (m : mem_layout) := clear_of_code ia instrs m ∧ ∀ …` (D19) |
 
 - **[proposal] P1 — a kernel block is an address + a LIST of per-word
-  `vspec`s.** No `vec`, no `Bytes`, no dependent types in the kernel:
+  `val_spec`s.** No `vec`, no `Bytes`, no dependent types in the kernel:
   `Word`/`Array`/`Bytes` are front-end and compile to word lists, so D22's
   rounding (and its TODO) lives in `compile`, not in the kernel. D21's
   CheckScalarPtr base then reads
@@ -313,7 +317,7 @@ merging the bridge families (`_u`/`_rel`/`_param`/`_classed`/`_bytes`/
   Knock-on, amends D14: with rounding, the pad bytes of a `Known` byte
   string have no value, so **front-end `Bytes` takes only `Secret |
   Public` until D22's TODO is resolved** (no Result uses a `Known` `Bytes`).
-- **[proposal] P2 — `gpr := { r : Reg ty_xlenbits | is_gpr r = true }`**,
+- **P2 — ACCEPTED (Emiel, 2026-10-09: "should be easy to change afterwards"). `gpr := { r : Reg ty_xlenbits | is_gpr r = true }`**,
   with `is_gpr` membership in `[x1; …; x31]` (Base.v's own registers). Then
   `gpr_reg := proj1_sig`: the kernel needs no `reg_convert` at all, and
   `X0`/`pc`/`mtvec` are unrepresentable. Statements keep writing `A0`:
@@ -323,15 +327,17 @@ merging the bridge families (`_u`/`_rel`/`_param`/`_classed`/`_bytes`/
   `reg_convert (gpr_idx g) = Some (gpr_reg g)`. Rejected:
   `{ i : RegIdx | i ≠ 0 }` (it keeps `reg_convert` in the kernel, with an
   unreachable default branch).
-- **[proposal] Names.** `vspec`, not `spec`: `Katamaran.Prelude` already
-  defines `spec` (`theories/Prelude.v:475`), and statements only ever write
-  the constructors. The front-end file (D25) is `Layout.v`. `block` is
-  also an executor op in `theories/Staging`, but that is never imported
-  here. The draft's `memory ia cs_instrs` indexing is stale: under D19
-  clear-of-code is a conjunct, not part of the type, so `memory` is not
-  indexed.
-- `vspec_map : (A → B) → vspec A → vspec B` sits next to `vspec`. Every
-  `concretize_*` becomes a `vspec_map` (D10's guarantee: Secret stays
+- **Names — DECIDED (Emiel, 2026-10-09).** One family: `val_spec V` =
+  `Secret | Public | Known v` (the D10 value level; plain `spec` clashes
+  with `theories/Prelude.v:475`); `reg_spec` KEEPS its name, now
+  `gpr * val_spec word`; `mem_block` = address + `list (val_spec word)`;
+  `mem_layout` = blocks + disjointness proof (was `list mem_full_spec`).
+  `mem_spec` is NOT reused: the old `(addr, bool)` meaning survives in git
+  history and docs. Front-end file (D25): `Layout.v` (P3 proposal, not yet
+  confirmed). The draft's `memory ia cs_instrs` indexing is stale: under
+  D19 clear-of-code is a conjunct, so `mem_layout` is not indexed.
+- `val_spec_map : (A → B) → val_spec A → val_spec B` sits next to `val_spec`. Every
+  `concretize_*` becomes a `val_spec_map` (D10's guarantee: Secret stays
   Secret).
 - Byte order (D18): prove `get_word` against the machine's 4-byte read (the
   `lw` path in `Machine.v`). If it disagrees, STOP and report — that would
@@ -340,7 +346,7 @@ merging the bridge families (`_u`/`_rel`/`_param`/`_classed`/`_bytes`/
 ### 2a.3 Front-end, `Layout.v` (Phase 1, D25)
 
 `region` exactly as D14 (with `Bytes` per P1). `compile (start : N) (rs :
-list region) : memory` places regions back to back from `start`; `Gap n`
+list region) : mem_layout` places regions back to back from `start`; `Gap n`
 emits no block; `blocks_ok` is discharged INSIDE `compile` by one generic
 lemma (`place_disjoint`), so no statement or Result ever proves
 disjointness for a compiled layout. Two more generic lemmas:
@@ -353,11 +359,11 @@ disjointness for a compiled layout. Two more generic lemmas:
 
 - Register keys are `gpr` in every front-end (`_param`, `_rel`, `_q`); the
   generators drop to `RegIdx` through `gpr_idx` (D15: internal).
-- `(r, pub, PVExist | PVConst v | PVBaseOff k)` → `(r, vspec rel_val)` with
+- `(r, pub, PVExist | PVConst v | PVBaseOff k)` → `(r, val_spec rel_val)` with
   `rel_val := RConst v | RBaseOff k`: `PVExist` ↦ `Public`/`Secret` by
   `pub`, `PVConst`/`PVBaseOff` ↦ `Known` (the flag was ignored there
-  anyway). `param_val_q` likewise. `concretize_*` = `vspec_map`.
-- `data_spec`: `DCell pub (option term)` → `DCell (vspec (Term Σ))`.
+  anyway). `param_val_q` likewise. `concretize_*` = `val_spec_map`.
+- `data_spec`: `DCell pub (option term)` → `DCell (val_spec (Term Σ))`.
   **[proposal] `DArr`/`DBytes` keep their `bool` and `dir`, `DAt` stays —
   D17 resolved by D12:** shallow statements never show `data_spec`, so it
   already IS the "variant read only by the contract generator" D17 asks for.

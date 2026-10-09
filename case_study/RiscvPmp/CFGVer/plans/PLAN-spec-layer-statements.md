@@ -1,7 +1,10 @@
 # PLAN-spec-layer — Phase 0 statement drafts (before / after)
 
-Status: DRAFT rev 2, 2026-10-09, for Emiel's readability sign-off (Phase 0
-exit criterion). Applies D10 (parametric `spec`), D11 (proof-carrying base),
+Status: rev 3, 2026-10-09 — rev 2 was signed off as readable (Phase 0 exit
+criterion); rev 3 only applies the later decisions D15 (`gpr` keys), D16
+(`compile` written out, no wrapper), D23 (exit = `ia + 4 * length instrs`)
+and the §2a names (`val_spec`, `mem_block`, `mem_layout`) of
+`PLAN-spec-layer.md`. Applies D10 (parametric `val_spec`), D11 (proof-carrying base),
 D12 (shallow statements) and D14 (region layout, code separate). Anything not
 decided is marked (P). Names are placeholders; nothing here compiles yet.
 rev 1 (gaps per run, `run_at` derived addresses) was REJECTED: it hid the
@@ -12,7 +15,7 @@ addresses.
 **Values of a single word / register (D10):**
 
 ```coq
-Inductive spec (V : Type) := Secret | Public | Known (v : V).
+Inductive val_spec (V : Type) := Secret | Public | Known (v : V).
 (* Secret: unconstrained, may differ between the two runs
    Public: equal in both runs, value unknown
    Known v: exactly v in both runs                                   *)
@@ -22,28 +25,28 @@ Inductive spec (V : Type) := Secret | Public | Known (v : V).
 starting at the END OF THE CODE. A gap is a region of its own.
 
 ```coq
-Inductive region :=                (* arrays reuse `spec` (D14): count  *)
-| Word  (s : spec word)            (* outside, length enforced by `vec` *)
-| Array (n : N) (s : spec (vec word n))   (* n consecutive words       *)
-| Bytes (n : N) (s : spec (vec byte n))   (* n consecutive bytes       *)
-| Gap   (n : N).                   (* n bytes the program does not own  *)
+Inductive region :=                               (* arrays reuse `val_spec` (D14): *)
+| Word  (s : val_spec word)                       (* count outside, length by `vec` *)
+| Array (n : N) (s : val_spec (vec word n))       (* n consecutive words            *)
+| Bytes (n : N) (s : val_spec (vec byte n))       (* n consecutive bytes            *)
+| Gap   (n : N).                                   (* n bytes the program does not own *)
 ```
 
-**Trusted statement:** unchanged in shape — load address, instructions
-(`mem_has_instrs`, D14: code stays separate), exit address, registers — but
-memory is a D11 base value (blocks at explicit addresses + a disjointness
-proof, clear of the code). A front-end layout gets there through `compile`,
-proved disjoint once, by shape. (P) a front-end wrapper so statements need
-not write `compile`:
+**Trusted statement (the kernel, `Noninterference.v`):** unchanged in shape —
+load address, instructions (`mem_has_instrs`, D14: code stays separate),
+exit address, registers — but register keys are `gpr` (x1–x31, D15) and
+memory is a `mem_layout` (D11): `mem_block`s at explicit addresses plus a
+disjointness proof, clear of the code by a conjunct of `noninterferent_strong`
+(D19). A front-end layout gets there through `compile` (in `Layout.v`,
+D25), which proves disjointness once, by shape. Statements write `compile`
+explicitly (D16):
 
 ```coq
-Definition noninterferent (ia : N) (code : list AST) (exit : N)
-    (regs : list (RegKey * spec word)) (data : list region) : Prop :=
-  noninterferent_strong ia code exit regs (compile ia code data).
-Definition fits ia code data : Prop := ia + 4 * length code + size data <= lenAddr.
+Definition fits (start : N) (data : list region) : Prop := start + size data <= lenAddr.
+(* every statement below:
+   fits … -> noninterferent_strong ia code (ia + 4 * length code) regs
+                                   (compile (ia + 4 * length code) data)  *)
 ```
-
-`RegKey`: Q2, open.
 
 ## 2. cmovznz4
 
@@ -83,8 +86,9 @@ Definition cmovznz4_regs (ia : N) :=
     (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret); (T0, Secret); (T1, Secret) ].
 
 Theorem cmovznz4_noninterferent (ia : N) :
-  fits ia cmovznz4_instrs cmovznz4_data ->
-  noninterferent ia cmovznz4_instrs (ia + 116) (cmovznz4_regs ia) cmovznz4_data.
+  fits (ia + 4 * length cmovznz4_instrs) cmovznz4_data ->
+  noninterferent_strong ia cmovznz4_instrs (ia + 4 * length cmovznz4_instrs) (cmovznz4_regs ia)
+    (compile (ia + 4 * length cmovznz4_instrs) cmovznz4_data).
 ```
 
 ## 3. muladd (BearSSL `br_i31_muladd_small`, every header b)
@@ -132,8 +136,9 @@ Definition muladd_regs (ia : N) (b : bv xlenbits) :=
 
 Theorem muladd_noninterferent (ia : N) (b : bv xlenbits) :
   (64 < bv.unsigned b < 65536)%Z ->
-  fits ia muladd_instrs (muladd_data b) ->
-  noninterferent ia muladd_instrs (ia + 4 * length muladd_instrs) (muladd_regs ia b) (muladd_data b).
+  fits (ia + 4 * length muladd_instrs) (muladd_data b) ->
+  noninterferent_strong ia muladd_instrs (ia + 4 * length muladd_instrs) (muladd_regs ia b)
+    (compile (ia + 4 * length muladd_instrs) (muladd_data b)).
 ```
 
 m and x are now "header + M limbs". The old split into `M − 2` limbs plus
@@ -177,8 +182,9 @@ Definition cs_regs (ia g : N) (l : bv xlenbits) :=
     (A2, Secret); … (A7, Secret) ].
 
 Theorem check_scalar_noninterferent (ia g : N) (l : bv xlenbits) :
-  fits ia cs_instrs (cs_data g l) ->
-  noninterferent ia cs_instrs (ia + 144) (cs_regs ia g l) (cs_data g l).
+  fits (ia + 4 * length cs_instrs) (cs_data g l) ->
+  noninterferent_strong ia cs_instrs (ia + 4 * length cs_instrs) (cs_regs ia g l)
+    (compile (ia + 4 * length cs_instrs) (cs_data g l)).
 ```
 
 **After, base (k anywhere, either side of the code):** the front-end
@@ -187,27 +193,27 @@ directly; the parameter premise feeds the disjointness proof (D11):
 
 ```coq
 Definition cs_mem (ia ka : N) (l : bv xlenbits)
-    (H : ka + 4 * klen_words l <= ia \/ ia + 176 <= ka) : memory ia cs_instrs :=
-  blocks [ (ia + 144, Bytes 32 Secret)            (* P256_N *)
-         ; (ka,       Bytes (bv.bin l) Secret) ]  (* k      *)
-         (cs_disjoint ia ka l H).
+    (H : ka + 4 * klen_words l <= ia \/ ia + 176 <= ka) : mem_layout :=
+  {| blocks := [ {| blk_addr := ia + 144; blk_words := repeat Secret 8 |}               (* P256_N *)
+               ; {| blk_addr := ka;       blk_words := repeat Secret (klen_words l) |} ] (* k *)
+   ; blocks_ok := cs_disjoint ia ka l H |}.
 
 Theorem check_scalar_anywhere_noninterferent (ia ka : N) (l : bv xlenbits)
     (H : ka + 4 * klen_words l <= ia \/ ia + 176 <= ka) :
   ia + 176 < lenAddr -> ka + 4 * klen_words l < lenAddr ->
-  noninterferent_strong ia cs_instrs (ia + 144) (cs_regs' ia ka l) (cs_mem ia ka l H).
+  noninterferent_strong ia cs_instrs (ia + 4 * length cs_instrs) (cs_regs' ia ka l) (cs_mem ia ka l H).
 ```
 
 ## 5. Open points raised by the drafts
 
-1. RESOLVED (D14): arrays reuse `spec` via `vec`, no second constructor set.
-2. Each Result proves "shallow data = the generator's deep specs" (D12).
-   With symbolic b / l that is a proof (cbn + lia), not vm_compute — watch
-   the per-example cost (cf. TODO: muladd's ~75 lines of bv lemmas).
-3. `Bytes` in a word-granular trusted memory (today the statement owns the
-   pad bytes of the last word) — interacts with Q3.
-4. Q2 key type (`RegKey`): `Reg ty_xlenbits` also contains `pc`, `mtvec`,
-   `pmpaddr0`… (`Base.v:973–1015`), not only x1–x31.
-5. `noninterferent` wrapper vs `compile` written in every statement.
+1. RESOLVED (D14): arrays reuse `val_spec` via `vec`, no second constructor set.
+2. Each Result proves "shallow data = the generator's deep specs" (D12) —
+   as the two `≡ₚ` premises of the bridge (`PLAN-spec-layer.md` §2a.5);
+   priced at the end of Phase 3.
+3. RESOLVED for now (D22): `Bytes` rounds up to whole words; TODO on
+   byte-exact ownership. Knock-on (§2a.2 P1, proposal): `Bytes` takes only
+   `Secret | Public` meanwhile.
+4. RESOLVED (D15, P2): keys are `gpr`, a subset of `Reg ty_xlenbits`.
+5. RESOLVED (D16): no wrapper; `compile` is written out.
 6. Register addresses are literal (`ia + 1148 + 4 * M b`) and must agree
    with the layout; a mismatch makes the theorem unprovable (not unsound).
