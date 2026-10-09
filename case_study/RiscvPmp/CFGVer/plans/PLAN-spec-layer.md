@@ -131,6 +131,22 @@ Reach (files, excluding `ZZ*` probes): `reg_spec` 13, `reg_spec_rel` 13,
   derived addresses (Emiel: hides crucial information) — register specs use
   literal address expressions. Proof-only structure (`dir`, `DAt`,
   muladd's top-limb split) never appears in a statement.
+- **D15 (= Q2). Register keys are GPR-only** (x1–x31, no `X0` by type),
+  not `Reg ty_xlenbits` (which also holds `pc`, `mtvec`, `pmpaddr0`, …).
+  Timing (same pass as the memory change or after): pending.
+- **D16. Statements write `compile` explicitly** — no `noninterferent`
+  wrapper yet; `compile` takes the data's start address and regions, NOT
+  the code (code stays separate, D14).
+- **D17. `dir` / `DAt` on the contract side:** do without them if at all
+  possible; if not, a hint-carrying variant of the region type (e.g. an
+  adjusted `Array`) read only by the contract generator. Investigate in
+  Phase 3.
+- **Sign-off (2026-10-09):** the after-statements in
+  `PLAN-spec-layer-statements.md` rev 2 (cmovznz4, muladd, check_scalar)
+  are readable — Phase 0's exit criterion for readability is met.
+- **TODO (deferred, Emiel):** the per-Result proof that the shallow
+  statement data equals the generator's deep specs (D12) — cost unknown
+  with symbolic sizes; revisit in Phase 2/4.
 
 **Already established (the checks exist):** `gen_prog_noninterferent`
 (`GenProg.v:105–116`) requires `NoDup` of register indices (`HND`), the
