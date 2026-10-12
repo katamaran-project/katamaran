@@ -53,7 +53,7 @@ Lemma imc_linux_noninterferent_param (init_addr : N) :
 Proof.
   intros Hbound.
   apply (ni_of_cells (regs' := imc_linux_reg_specs) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - exact (fits_nil Hbound).
@@ -68,7 +68,7 @@ Lemma imc_alg7_noninterferent_param (init_addr : N) :
 Proof.
   intros Hbound.
   apply (ni_of_cells (regs' := imc_alg7_reg_specs) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - exact (fits_nil Hbound).

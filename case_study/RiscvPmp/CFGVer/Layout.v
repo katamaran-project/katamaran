@@ -105,8 +105,9 @@ Qed.
 Definition compile (start : N) (rs : list region) : mem_layout :=
   {| blocks := place start rs; blocks_ok := place_disjoint start rs |}.
 
-(* The code and the layout after it stay strictly below lenAddr: the
-   statement's own premise (D11).  Strict, as every bridge needs. *)
+(* The code and the layout after it stay strictly below lenAddr.  A Result
+   assumes it of its load address; it gives the kernel's in_range conjunct
+   (compile_in_range).  Strict, as every bridge needs. *)
 Definition fits (start : N) (rs : list region) : Prop :=
   (start + layout_size rs < lenAddr)%N.
 
@@ -120,4 +121,15 @@ Lemma compile_clear (init_addr : N) (instrs : list AST) (start : N) (rs : list r
 Proof.
   intros H. unfold clear_of_code, compile. cbn [blocks].
   eapply Forall_impl; [apply place_bounds|]. cbn beta. intros b Hb. right. lia.
+Qed.
+
+(* ... and it is in range (the kernel's in_range conjunct). *)
+Lemma compile_in_range (init_addr : N) (instrs : list AST) (start : N) (rs : list region) :
+  (init_addr + 4 * N.of_nat (length instrs) <= start)%N ->
+  fits start rs ->
+  in_range init_addr instrs (compile start rs).
+Proof.
+  intros H Hf. unfold fits in Hf. split; [lia|].
+  unfold compile. cbn [blocks].
+  eapply Forall_impl; [apply place_bounds|]. cbn beta. intros b Hb. lia.
 Qed.

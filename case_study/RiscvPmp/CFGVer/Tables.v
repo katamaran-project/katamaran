@@ -106,9 +106,7 @@ Open Scope list_scope.
   Lemma reg_convert_gpr_idx (g : gpr) : reg_convert (gpr_idx g) = Some (gpr_reg g).
   Proof.
     destruct g as [r H]. unfold gpr_idx, gpr_reg; cbn [proj1_sig].
-    unfold is_gpr in H. apply decidable.bool_decide_eq_true in H.
-    apply list.elem_of_list_fmap in H as [r' [Heq Hin]].
-    apply Eqdep_dec.inj_pair2_eq_dec in Heq; [|intros; apply Classes.eq_dec]. subst r'.
+    unfold is_gpr in H. apply decidable.bool_decide_eq_true in H as Hin.
     cbn [gpr_list] in Hin.
     repeat (apply list.elem_of_cons in Hin as [->|Hin]; [reflexivity|]).
     apply list.elem_of_nil in Hin as [].

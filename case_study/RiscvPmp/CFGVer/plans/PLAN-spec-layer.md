@@ -482,6 +482,27 @@ are the choices made without him, each small and reversible:
     description edits are hook-gated on a `skill-routing-maintenance` consult
     (a paid judge eval), not started without his go-ahead.
 
+### 2a.8 Post-audit changes (Emiel, reading quiz 4, 2026-10-12)
+
+Decided by Emiel (all four "Recommended" options); TODO item H:
+- **De-clutter** (HIGH): the eight `declare_*`/`gen_*` premises of
+  `noninterferent_strong` are now `regs_sat γ1 γ2 reg_specs` and
+  `mem_sat μ1 μ2 mem`, both built on one `val_sat x1 x2 s`
+  (Secret ⇒ True, Public ⇒ x1 = x2, Known v ⇒ x1 = v ∧ x2 = v).
+- **`is_gpr`** = `bool_decide (r ∈ gpr_list)` over a kernel
+  `EqDecision (Reg ty_xlenbits)` instance (the `existT` moved into it).
+- **`Addr`**: the kernel reads memory per block at `Addr`s
+  (`words_sat`, `bv.add a (bv.of_N 4)`); it has NO cell type any more.
+  **Reverses §2a.7 item 2**: `mem_cell`/`words_at`/`cells` and all
+  `gen_*`/`declare_*` moved to the new proof-side `SpecLists.v` (light,
+  requires only the kernel), with `regs_sat_declare`/`mem_sat_declare`.
+- **Wrap-around guard**: `in_range` (code end and every `blk_end` <
+  lenAddr) is a CONJUNCT of `noninterferent_strong`, next to
+  `clear_of_code`; `Layout.compile_in_range` gives it from `fits`.
+  CheckScalarPtr's two raw `< lenAddr` premises became one
+  `in_range … (check_scalar_ptr_mem …)` premise.
+- `ni_of_cells` gained an `in_range` premise; every bridge unchanged.
+
 ## 3. Phases
 
 One session per phase is the intended rhythm (`/clear` between, the plan

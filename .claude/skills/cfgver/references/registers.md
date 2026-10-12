@@ -6,7 +6,8 @@ ownership predicates used across the contract generator and the end-to-end wirin
 
 ## Predicates
 
-- `declare_public_registers γ1 γ2 public_registers : Prop` — a `Forall` stating the
+- `declare_public_registers γ1 γ2 public_registers : Prop` (`SpecLists.v`, proof side —
+  the statement itself says `regs_sat`, and `regs_sat_declare` gets this) — a `Forall` stating the
   two register stores agree on every register in the public list. This is the
   *hypothesis* the caller provides about the initial states.
 - `interp_gprs_with_public_registers γ1 γ2 public_registers : iProp` — Iris

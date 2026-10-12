@@ -146,7 +146,7 @@ Proof.
   assert (Hfit : (init_addr + 12 < lenAddr)%N)
     by (apply fits_nil in Hfit0; rewrite Hl in Hfit0; exact Hfit0).
   apply (ni_of_cells (regs' := [(X1, Known (bv.of_N 2)); (X2, Secret)]) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   rewrite Hl. change (4 * N.of_nat 3)%N with 12%N.
   intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2

@@ -45,7 +45,7 @@ probes, peak RSS — the only metric worth tuning on here, see below):
 intuition that the symbolic executor is the expensive part is measured false.
 **`Verifier`/`Contracts`/`GenContract` cost +0.00 on top of `Spec`**, so no split
 among those three can move the number. And the executor cannot be dropped by any
-file except `Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v`: every other file names `ValidCFGVerifierContract`
+file except `Noninterference.v`: every other file names `ValidCFGVerifierContract`
 or `gen_contract_param` in a *statement*, whose type must typecheck, so its
 closure is mandatory whether or not `vm_compute` reduces it.
 
@@ -128,8 +128,8 @@ section and `theories/CLAUDE.md` on why `Require` transitivity bounds this.)
   proof work — `rsolve` at `VerifierRel:198` (9.4 s), `consume_sound` at
   `VerifierRel:706` (6.4 s) — that no file arrangement touches.
 
-`Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v` is the trusted statement layer (step relations,
-`declare_*`, `noninterferent_strong`, spec types) and genuinely does not depend
+`Noninterference.v` is the trusted statement layer (step relations,
+spec types, `regs_sat`/`mem_sat`/`in_range`, `noninterferent_strong`) and genuinely does not depend
 on the verifier — it requires neither `CFGVer.Spec` nor `RiscvPmp.Sig`.
 
 **When modifying a file, recompile it with `keep_vo=True` before compiling
@@ -142,8 +142,9 @@ errors on the dependents.
 | `SpecIris.v` | shallow executor + `RiscvPmpIrisInstanceWithContracts` (the Iris wiring split out of `Spec.v`) | cfgver-soundness |
 | `Verifier.v` | `safeE`, `sexec_cfg_addr`, `scfg_verification_condition` (`Section Symbolic`); **and, since 2026-09-22, the `CFGVerifierContract` RECORD + `cfg_map` + `AnnotInstr`/`BlkAnnot`** — the record moved down from `Contracts.v` because `ai_block` carries a contract and `Contracts.v` requires this file (PLAN-contract-ast Phase 4). DATA only: the VC over it stays in `Contracts.v`. Iris-free | cfgver-executor, cfgver-contracts |
 | `VerifierRel.v` | `cexec_cfg_addr` (`Shallow`), `rexec_cfg_addr` + `RefineCompat` instances + `itable_rel`/`etable_rel` (`Relational`), `ptsto_instrs` + `sound_exec_instruction` (`Soundness`) | cfgver-refinement, cfgver-rsolve, cfgver-soundness |
-| `Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v` | the trusted KERNEL (PLAN-spec-layer): `val_spec`, `gpr` keys, `reg_spec`, `mem_block`/`mem_layout` (disjointness in the type), `cells`/`mem_cell`, `clear_of_code`, `noninterferent_strong`; `get_word_read_ram` (byte order = the machine's load). Requires only `Semantics`+`Machine` | cfgver-endtoend |
-| `Layout.v` | the statement FRONT-END (D25): `region` (`Word`/`Array`/`Bytes`/`Gap`), `compile` (regions back to back → `mem_layout`, disjoint by shape), `fits`, `compile_clear`. Requires only `Noninterference. `Layout.v` (the statement front-end) sits beside it and requires only it.v` | cfgver-endtoend |
+| `Noninterference.v` | the trusted KERNEL (PLAN-spec-layer): `val_spec`, `gpr` keys, `reg_spec`, `mem_block`/`mem_layout` (disjointness in the type), `val_sat`/`regs_sat`/`mem_sat` (what a spec says about two runs; addresses read as `Addr`), `clear_of_code` + `in_range` (both CONJUNCTS of the statement: overlap / wrap-around ⇒ unprovable, not vacuous), `noninterferent_strong`; `get_word_read_ram` (byte order = the machine's load). Requires only `Semantics`+`Machine` | cfgver-endtoend |
+| `Layout.v` | the statement FRONT-END (D25): `region` (`Word`/`Array`/`Bytes`/`Gap`), `compile` (regions back to back → `mem_layout`, disjoint by shape), `fits`, `compile_clear`, `compile_in_range`. Requires only `Noninterference.v` | cfgver-endtoend |
+| `SpecLists.v` | PROOF-SIDE list forms of the specs (NOT on the statement surface): `mem_cell`/`words_at`/`cells`, `gen_public_*`/`gen_init_*`, `declare_*`, and `regs_sat_declare`/`mem_sat_declare` taking the kernel's predicates to them. Light; requires only the kernel | cfgver-endtoend-internals |
 | `Tables.v` | reg aliases, `instrs_of_list`, `table_of_list`/`exit_of_off` (the single exit term). Iris-free | cfgver-executor |
 | `TablesRel.v` | the `itable_rel`/`etable_rel` faith lemmas (statements mention `Pred w`, hence Iris). Sole consumer: `EndToEnd.v` | cfgver-executor |
 | `Contracts.v` | `cfg_vc` (the VC — was `ValidCFGVerifierContract` until 2026-09-22), `CFG_VC_triple`, `Valid_CFG_VC`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc`. The RECORD itself now lives in `Verifier.v` (row above) | cfgver-contracts, cfgver-solve-vc |

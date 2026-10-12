@@ -60,7 +60,7 @@ Lemma swap_noninterferent_param (init_addr : N) :
 Proof.
   intros Hbound.
   apply (ni_of_cells (regs' := [(X1, Secret); (X2, Secret); (X3, Secret)]) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast

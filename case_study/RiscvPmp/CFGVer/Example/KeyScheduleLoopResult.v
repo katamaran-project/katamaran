@@ -74,6 +74,7 @@ Proof.
   apply (ni_of_cells (regs' := map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
                      (cs := map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel)).
   - apply compile_clear; lia.
+  - apply compile_in_range; [lia | assumption].
   - reflexivity.
   - apply perm_of_eq. cbn. simpl. solve_cells_eq.
   - unfold fits, layout_size in Hfit. simpl in Hfit.

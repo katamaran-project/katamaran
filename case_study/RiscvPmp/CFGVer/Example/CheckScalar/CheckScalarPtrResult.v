@@ -17,6 +17,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.TablesRel
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
@@ -109,16 +110,23 @@ Definition check_scalar_ptr_regs (ia ka : N) (l : bv xlenbits) : list reg_spec :
     (X1, Known (bv.of_N (ia + 144)));     (* ra = the exit *)
     (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret) ].
 
-(* THE END THEOREM: k at ANY address ka whose ⌈klen/4⌉ words are in range
-   and clear of the code and P256_N ([ia, ia + 176)). *)
+(* THE END THEOREM: k at ANY address ka whose ⌈klen/4⌉ words are clear of
+   the code and P256_N ([ia, ia + 176)), the whole layout in range. *)
 Lemma check_scalar_ptr_noninterferent (init_addr ka : N) (l : bv xlenbits)
     (Hdis : (ka + 4 * N.of_nat (klen_words l) <= init_addr \/ init_addr + 176 <= ka)%N) :
-  (init_addr + 176 < lenAddr)%N ->
-  (ka + 4 * N.of_nat (klen_words l) < lenAddr)%N ->
+  in_range init_addr cs_instrs (check_scalar_ptr_mem init_addr ka l Hdis) ->
   noninterferent_strong init_addr cs_instrs (init_addr + 4 * N.of_nat (length cs_instrs))
     (check_scalar_ptr_regs init_addr ka l) (check_scalar_ptr_mem init_addr ka l Hdis).
 Proof.
-  intros Hfit Hk.
+  intros Hrange.
+  assert (Hfit : (init_addr + 176 < lenAddr)%N /\ (ka + 4 * N.of_nat (klen_words l) < lenAddr)%N).
+  { destruct Hrange as [_ Hb].
+    unfold check_scalar_ptr_mem, check_scalar_ptr_blocks, blk_end in Hb.
+    cbn [blocks] in Hb.
+    inversion Hb as [|? ? H1 Hb']; subst. inversion Hb' as [|? ? H2 _]; subst.
+    cbn [blk_addr blk_words length] in H1, H2. rewrite repeat_length in H2.
+    cbn [N.of_nat Pos.of_succ_nat Pos.succ] in H1. lia. }
+  destruct Hfit as [Hfit Hk].
   pose proof lenAddr_small_word as HL. change word with xlenbits in HL. change xlenbits with 32%nat in HL.
   assert (Hka : bv.bin (@bv.of_N xlenbits ka) = ka) by (apply bv.bin_of_N_small; cbn; lia).
   assert (Hlb : (bv.bin l + 3 < 4294967296)%N).
@@ -142,13 +150,14 @@ Proof.
            (regs' := map (concretize_reg_q (csp_ι init_addr ka l)) csp_regs)
            (cs := concretize_data (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
                     (init_addr + 144) csp_data));
-    [ | | | ].
+    [ | | | | ].
   { (* clear of the code: P256_N right after it, k by the premise *)
     unfold clear_of_code, check_scalar_ptr_mem, check_scalar_ptr_blocks, blk_end.
     cbn [blocks blk_addr blk_words].
     change (length cs_instrs) with 36%nat.
     constructor; [|constructor; [|constructor]]; cbn [blk_addr blk_words];
       rewrite repeat_length; cbn [N.of_nat Pos.of_succ_nat Pos.succ]; lia. }
+  { exact Hrange. }
   { (* the registers: ra's value is p + 144 *)
     apply perm_of_eq. cbn. rewrite bv.of_N_add. reflexivity. }
   { (* D12: the statement's cells are exactly the generator's *)

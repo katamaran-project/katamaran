@@ -55,6 +55,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.VerifierRel
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables.
 (* bare Require, qualified use: only cfg_postprocess (the VC pipeline) *)
 From Katamaran Require RiscvPmp.CFGVer.Contracts.

@@ -22,11 +22,15 @@ data memory. Read **cfgver-endtoend** first for the register-only base lemma.
 ownership (`ptsto_instrs`) plus the data-word ownership for you (their proof
 mechanics: → **cfgver-endtoend-internals**).
 
-## Types and definitions (statement-level in `Noninterference.v`; Iris-level in `Adequacy.v`/`EndToEnd.v`)
+## Types and definitions (proof-side lists in `SpecLists.v`; Iris-level in `Adequacy.v`/`EndToEnd.v`)
+
+The STATEMENT (`Noninterference.v`) does not mention any of these: it says
+`mem_sat μ1 μ2 mem` (each block read word by word at `Addr`s). `ni_of_cells`
+turns that into the cell-list form below via `SpecLists.mem_sat_declare`.
 
 ```coq
-(* Noninterference.v (since PLAN-spec-layer, 2026-10-09): one word of a
-   mem_layout's cells; the statement passes `cells mem`. *)
+(* SpecLists.v: one word of a mem_layout's cells (`cells mem`); the
+   bridges work on these lists. *)
 Definition mem_cell : Type := N * val_spec (Val ty_word).
 
 (* Prop: μ1 and μ2 agree on every address in the public subset of specs *)

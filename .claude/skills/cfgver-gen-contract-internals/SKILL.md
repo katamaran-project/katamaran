@@ -44,7 +44,7 @@ silently never matches — `GenProg.gen_regs_q_concretize`).
 `gen_pre [] = ⊤`, so the empty-spec case degenerates gracefully.
 
 ```coq
-(* Noninterference.v: the Public entries' registers.  The Iris layer
+(* SpecLists.v (proof side; the kernel states regs_sat): the Public entries' registers.  The Iris layer
    (IrisInstanceBinary.v, shared) still wants a sigma list; EndToEnd.v's
    pub_regs_sig converts at the bridges. *)
 Definition gen_public_regs (specs : list reg_spec) : list (Reg ty_xlenbits) :=

@@ -58,7 +58,7 @@ only for hand-written contracts — see **cfgver-contracts**.
 ## Memory-word specs (contract side)
 
 ```coq
-Definition mem_cell : Type := N * val_spec (Val ty_word).   (* Noninterference.v *)
+Definition mem_cell : Type := N * val_spec (Val ty_word).   (* SpecLists.v, proof side *)
 ```
 
 Same three cases for the data word at the given (N) address; this is the
@@ -190,7 +190,7 @@ premises may be discharged in any order). Typical proof:
 Proof.
   intros Hbound.
   apply (ni_of_cells (regs' := <regs>) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - exact (fits_nil Hbound).
@@ -243,6 +243,7 @@ Proof.
   apply (ni_of_cells (regs' := map (concretize_reg init_addr) <x>_reg_specs_rel)
                      (cs := map (concretize_mem init_addr) <x>_mem_specs_rel)).
   - apply compile_clear; lia.                         (* clear of the code, D19 *)
+  - apply compile_in_range; [lia | assumption].      (* in range: from fits *)
   - reflexivity.                                      (* regs: definitional *)
   - apply perm_of_eq. cbn. simpl. solve_cells_eq.     (* D12: cells agree *)
   - unfold fits, layout_size in Hfit. simpl in Hfit.
@@ -250,7 +251,8 @@ Proof.
 Qed.
 ```
 
-`ni_of_cells` needs `clear_of_code`, `regs ≡ₚ regs'` and `cells m ≡ₚ cs`.
+`ni_of_cells` needs `clear_of_code`, `in_range` (both from `Layout.v`: `compile_clear`,
+`compile_in_range` with the `fits` hypothesis), `regs ≡ₚ regs'` and `cells m ≡ₚ cs`.
 `solve_cells_eq` (`EndToEnd.v`) closes cell-list equalities address by address
 with `lia`; at SYMBOLIC sizes rewrite with `words_at_repeat` / `words_at_app`
 first (worked: `CheckScalarParamResult.check_scalar_cells`,

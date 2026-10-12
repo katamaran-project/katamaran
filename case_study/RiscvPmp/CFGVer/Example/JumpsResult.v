@@ -69,7 +69,7 @@ Lemma jumpIfZero_noninterferent_param (init_addr : N) :
 Proof.
   intros Hbound.
   apply (ni_of_cells (regs' := [(X1, Public)]) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - exact (fits_nil Hbound).
@@ -96,7 +96,7 @@ Lemma jmp_fwd_noninterferent_param (init_addr : N) :
 Proof.
   intros Hbound.
   apply (ni_of_cells (regs' := []) (cs := []));
-    [apply compile_clear; lia | reflexivity | reflexivity |].
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
   - exact (fits_nil Hbound).

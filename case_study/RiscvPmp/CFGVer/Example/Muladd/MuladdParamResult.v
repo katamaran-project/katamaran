@@ -19,6 +19,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.TablesRel
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
@@ -408,7 +409,7 @@ Proof.
     rewrite !repeat_length in Hfit0. rewrite !N2Nat.id in Hfit0.
     rewrite <- !M_mlenN in Hfit0. rewrite ?Hl in Hfit0. lia. }
   apply (ni_of_cells (regs' := sym_reg_specs init_addr b) (cs := sym_mem_specs init_addr b));
-    [ apply compile_clear; lia
+    [ apply compile_clear; lia | apply compile_in_range; [lia | assumption]
     | apply perm_of_eq; unfold muladd_regs, sym_reg_specs, x_off;
       rewrite <- M_mlenN; replace (init_addr + 1148 + 4 * N.of_nat (mlenN b))%N
         with (init_addr + (1148 + 4 * N.of_nat (mlenN b)))%N by lia; reflexivity

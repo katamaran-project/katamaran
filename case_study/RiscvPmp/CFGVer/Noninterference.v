@@ -31,8 +31,8 @@
 (* Noninterference.v — the TRUSTED STATEMENT layer of CFGVer.                *)
 (*                                                                           *)
 (* Everything the concrete end-to-end theorems (Results.v) mention in their  *)
-(* STATEMENTS lives here: the machine-level step relations, the memory/      *)
-(* register initialization and publicness predicates, the spec types, and    *)
+(* STATEMENTS lives here: the machine-level step relations, the spec types,  *)
+(* what a spec says about two runs (val_sat / regs_sat / mem_sat), and       *)
 (* noninterferent_strong itself.  This file deliberately does NOT depend on  *)
 (* the verifier (CFGVer.Verifier), the contract layer, or the Iris model:    *)
 (* the meaning of the end-to-end theorems can be audited from this file,     *)
@@ -48,7 +48,7 @@ From Coq Require Import
 (* This file deliberately requires NEITHER RiscvPmp.CFGVer.Spec NOR RiscvPmp.Sig,
    and so pulls in no symbolic executor, no predicate signature and no (binary)
    Iris model. It is the trusted STATEMENT layer: small-step relations,
-   declare_*, spec types and noninterferent_strong, all expressible with the
+   spec types, the sat-predicates and noninterferent_strong, all expressible with the
    operational semantics alone.
 
    This is worth 2.5 GB of peak RSS (3.63 -> 1.15 GB) and 6.5 s (9.6 -> 3.0 s),
@@ -108,6 +108,16 @@ Import SmallStepNotations.
       | Known v => Known (f v)
       end.
 
+    (* The two runs SATISFY a spec: what a spec says about the value x1 in
+       run 1 and x2 in run 2.  Not "they agree": only Public makes them equal;
+       Secret lets them differ, Known initialises each run (so is public too). *)
+    Definition val_sat {V} (x1 x2 : V) (s : val_spec V) : Prop :=
+      match s with
+      | Secret  => True              (* unconstrained *)
+      | Public  => x1 = x2           (* equal in both runs *)
+      | Known v => x1 = v /\ x2 = v  (* initialised in each run *)
+      end.
+
 (* ---- Register keys: the 31 general-purpose registers (D15) ----------------
    x0 is hardwired to zero, and pc / cur_privilege / mtvec / pmp* are not
    general-purpose, so none of them can be written as a key. *)
@@ -115,8 +125,18 @@ Import SmallStepNotations.
       [x1; x2; x3; x4; x5; x6; x7; x8; x9; x10; x11; x12; x13; x14; x15; x16;
        x17; x18; x19; x20; x21; x22; x23; x24; x25; x26; x27; x28; x29; x30; x31].
 
+    (* Decidable equality of xlen-wide registers.  The machine only provides
+       it on the sigma type ({ τ & Reg τ }); this unpacks it.  Any instance
+       gives the same is_gpr: bool_decide P = true <-> P. *)
+    #[export] Instance reg_xlen_eq_dec : EqDecision (Reg ty_xlenbits) :=
+      fun r1 r2 =>
+        match Classes.eq_dec (existT ty_xlenbits r1) (existT ty_xlenbits r2) with
+        | left e  => left (Eqdep_dec.inj_pair2_eq_dec _ Classes.eq_dec _ _ _ _ e)
+        | right n => right (fun e => n (f_equal _ e))
+        end.
+
     Definition is_gpr (r : Reg ty_xlenbits) : bool :=
-      bool_decide (existT ty_xlenbits r ∈ List.map (existT ty_xlenbits) gpr_list).
+      bool_decide (r ∈ gpr_list).
 
     Definition gpr : Type := { r : Reg ty_xlenbits | is_gpr r = true }.
 
@@ -124,6 +144,11 @@ Import SmallStepNotations.
 
     (* A register entry of a statement. *)
     Definition reg_spec : Type := gpr * val_spec (Val ty_xlenbits).
+
+    (* The two register stores satisfy every entry. *)
+    Definition regs_sat (γ1 γ2 : RegStore) (specs : list reg_spec) : Prop :=
+      Forall (fun e => val_sat (read_register γ1 (gpr_reg e.1))
+                                 (read_register γ2 (gpr_reg e.1)) e.2) specs.
 
     (* THE STOP TEST (PLAN-exit-targets.md, 2026-09-25): a run stops exactly
        when the pc IS the program's single exit address.  It replaced
@@ -133,11 +158,6 @@ Import SmallStepNotations.
        test `~ exitCond pc` through the Is_true coercion. *)
     Definition atPc (exit_addr : N) : bv xlenbits -> bool :=
       fun v => bv.eqb v (bv.of_N exit_addr).
-
-  (* Registers both runs must agree on: the Public entries. *)
-  Definition gen_public_regs (specs : list reg_spec) : list (Reg ty_xlenbits) :=
-    base.omap (fun '(r, s) =>
-      match s with Public => Some (gpr_reg r) | _ => None end) specs.
 
 (* ---- Reading memory -------------------------------------------------------
    get_word is THE data-word reader.  It assembles the bytes at a, a+1, a+2,
@@ -196,9 +216,9 @@ Import SmallStepNotations.
    A block is a start address and the spec of each consecutive WORD from
    there.  A layout is a list of blocks plus a proof that no two overlap, so
    an overlapping layout cannot be written at all.  Addresses are N, so the
-   overlap test cannot wrap around; staying below lenAddr is the statement's
-   own premise.  Clear of the code is a conjunct of noninterferent_strong
-   (D19), not part of the type. *)
+   overlap test cannot wrap around; the blocks stay below lenAddr, and clear
+   of the code, by two conjuncts of noninterferent_strong (in_range, D19's
+   clear_of_code), not by the type. *)
     Record mem_block : Type := {
       blk_addr  : N;
       blk_words : list (val_spec (Val ty_word))
@@ -215,62 +235,32 @@ Import SmallStepNotations.
       blocks_ok : blocks_disjoint blocks
     }.
 
-    (* One word of a layout: its address and its spec. *)
-    Definition mem_cell : Type := N * val_spec (Val ty_word).
-
-    (* The words of a block, each at its own address: a, a+4, a+8, ... *)
-    Fixpoint words_at (a : N) (ws : list (val_spec (Val ty_word))) :
-        list mem_cell :=
-      match ws with
-      | nil       => nil
-      | cons w ws => cons (a, w) (words_at (a + 4) ws)
-      end.
-
-    Definition cells (m : mem_layout) : list mem_cell :=
-      concat (List.map (fun b => words_at (blk_addr b) (blk_words b)) (blocks m)).
-
     (* Every block lies entirely below or entirely above the code. *)
     Definition clear_of_code (init_addr : N) (instrs : list AST) (m : mem_layout) : Prop :=
       Forall (fun b => blk_end b <= init_addr \/
                        init_addr + 4 * N.of_nat (length instrs) <= blk_addr b)%N
         (blocks m).
 
-    (* declare_public_memory: the two worlds agree on the word value at
-       every address listed as public *)
-    Definition declare_public_memory (μ1 μ2 : Memory)
-        (public_addrs : list (Val ty_word)) : Prop :=
-      List.Forall (fun a => get_word μ1 a = get_word μ2 a) public_addrs.
+    (* The code and every block end below lenAddr (< 2^32), so no address
+       below wraps around when read as a machine word: blocks disjoint in N
+       are disjoint in memory. *)
+    Definition in_range (init_addr : N) (instrs : list AST) (m : mem_layout) : Prop :=
+      (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N /\
+      Forall (fun b => blk_end b < lenAddr)%N (blocks m).
 
-    (* Words both runs must agree on: the Public cells. *)
-    Definition gen_public_addrs (cs : list mem_cell) : list (Val ty_word) :=
-      base.omap (fun '(a, s) =>
-        match s with Public => Some (bv.of_N a) | _ => None end) cs.
+    (* The two memories satisfy every word of a block, starting at address a
+       (a machine word); then of every block of a layout. *)
+    Fixpoint words_sat (μ1 μ2 : Memory) (a : Addr)
+        (ws : list (val_spec (Val ty_word))) : Prop :=
+      match ws with
+      | nil       => True
+      | cons w ws => val_sat (get_word μ1 a) (get_word μ2 a) w /\
+                     words_sat μ1 μ2 (bv.add a (bv.of_N 4)) ws
+      end.
 
-    (* reg_init_spec: a register with its required initial value in both worlds *)
-    Definition reg_init_spec : Type := 𝑹𝑬𝑮 ty_xlenbits * Val ty_xlenbits.
-
-    (* mem_init_spec: a word address with its required initial value in both worlds *)
-    Definition mem_init_spec : Type := Val ty_word * Val ty_word.
-
-    (* Each register r in specs holds value v in γ *)
-    Definition declare_init_registers (γ : RegStore)
-        (specs : list reg_init_spec) : Prop :=
-      List.Forall (fun s => read_register γ s.1 = s.2) specs.
-
-    (* Each address a in specs holds word value v in μ *)
-    Definition declare_init_memory (μ : Memory)
-        (specs : list mem_init_spec) : Prop :=
-      List.Forall (fun s => get_word μ s.1 = s.2) specs.
-
-    (* The Known registers, with their values. *)
-    Definition gen_init_regs (specs : list reg_spec) : list reg_init_spec :=
-      base.omap (fun '(r, s) =>
-        match s with Known v => Some (gpr_reg r, v) | _ => None end) specs.
-
-    (* The Known words, with their values. *)
-    Definition gen_init_mem (cs : list mem_cell) : list mem_init_spec :=
-      base.omap (fun '(a, s) =>
-        match s with Known v => Some (bv.of_N a, v) | _ => None end) cs.
+    Definition mem_sat (μ1 μ2 : Memory) (m : mem_layout) : Prop :=
+      Forall (fun b => words_sat μ1 μ2 (bv.of_N (blk_addr b)) (blk_words b))
+        (blocks m).
 
     Definition RiscVStep (γ1 : RegStore) (μ1 : Memory) :
       forall (γ2 : RegStore) (μ2 : Memory), Prop :=
@@ -332,16 +322,14 @@ Import SmallStepNotations.
     Notation "⟨ γ1 , μ1 ⟩ -l( l )->* ⟨ γ2 , μ2 ⟩" := (@RiscVlistNSteps γ1 μ1 γ2 μ2 l)
                                                       (at level 75, only parsing, right associativity).
 
-    Definition declare_public_registers γ1 γ2 (public_registers : list (Reg ty_xlenbits)) :=
-      List.Forall (fun r => read_register γ1 r = read_register γ2 r) public_registers.
-
   (* noninterferent_strong: termination-sensitive non-interference.
      For EVERY n: if world 1 takes n steps without being at the exit before
      any of them, world 2 takes the same n steps, and both produce the same
      leakage trace.  This covers every prefix of a run, including prefixes of
      runs that never reach `exit_addr` -- stronger than "if world 1 reaches
-     the exit".  The data layout must lie clear of the code (first conjunct,
-     D19): an overlap makes the theorem unprovable, not vacuous. *)
+     the exit".  The data layout must lie clear of the code (D19) and, with
+     the code, below lenAddr (in_range): the first two conjuncts, so an
+     overlap or a wrap-around makes the theorem unprovable, not vacuous. *)
   Definition noninterferent_strong
       (init_addr : N)
       (instrs : list AST)
@@ -349,15 +337,12 @@ Import SmallStepNotations.
       (reg_specs : list reg_spec)
       (mem : mem_layout) : Prop :=
     clear_of_code init_addr instrs mem /\
+    in_range init_addr instrs mem /\
     ∀ (γ1 γ2 : RegStore) (μ1 μ2 : Memory) ws,
       mem_has_instrs μ1 (bv.of_N init_addr) ws instrs →
       mem_has_instrs μ2 (bv.of_N init_addr) ws instrs →
-      declare_public_registers γ1 γ2 (gen_public_regs reg_specs) →
-      declare_public_memory μ1 μ2 (gen_public_addrs (cells mem)) →
-      declare_init_registers γ1 (gen_init_regs reg_specs) →
-      declare_init_registers γ2 (gen_init_regs reg_specs) →
-      declare_init_memory μ1 (gen_init_mem (cells mem)) →
-      declare_init_memory μ2 (gen_init_mem (cells mem)) →
+      regs_sat γ1 γ2 reg_specs →
+      mem_sat μ1 μ2 mem →
       RiscvPmpProgram.read_register γ1 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ2 cur_privilege = Machine →
       RiscvPmpProgram.read_register γ1 pc = bv.of_N init_addr →

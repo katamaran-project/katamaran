@@ -58,6 +58,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.TablesRel
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
@@ -1782,13 +1783,16 @@ Import IrisModel.RiscvPmpIrisBase.
   Lemma ni_of_cells (init_addr : N) (instrs : list AST) (exit_addr : N)
       (regs regs' : list reg_spec) (m : mem_layout) (cs : list mem_cell) :
     clear_of_code init_addr instrs m →
+    in_range init_addr instrs m →
     regs ≡ₚ regs' →
     cells m ≡ₚ cs →
     ni_cells init_addr instrs exit_addr regs' cs →
     noninterferent_strong init_addr instrs exit_addr regs m.
   Proof.
-    intros Hclear Hr Hc Hni. split; [exact Hclear|].
-    intros γ1 γ2 μ1 μ2 ws Hm1 Hm2 Hpr Hpm Hir1 Hir2 Him1 Him2.
+    intros Hclear Hrange Hr Hc Hni. split; [exact Hclear|]. split; [exact Hrange|].
+    intros γ1 γ2 μ1 μ2 ws Hm1 Hm2 Hregs Hmem.
+    destruct (regs_sat_declare Hregs) as (Hpr & Hir1 & Hir2).
+    destruct (mem_sat_declare Hmem) as (Hpm & Him1 & Him2).
     unfold gen_public_regs, gen_public_addrs, gen_init_regs, gen_init_mem,
       declare_public_registers, declare_public_memory,
       declare_init_registers, declare_init_memory in *.
