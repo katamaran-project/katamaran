@@ -193,10 +193,15 @@ G and the rest of F anywhere.**
     overlap test (`:198`).
   - **[HIGH]** De-clutter `noninterferent_strong` (`:355–360`): replace the 8
     `declare_*`/`gen_*` premises by two relational predicates
-    (`regs_agree γ1 γ2 reg_specs`, `mem_agree μ1 μ2 mem`, matching on
+    (`regs_sat γ1 γ2 reg_specs`, `mem_sat μ1 μ2 mem`, matching on
     Secret/Public/Known directly) so no `gen_*` is on the trusted surface. Folded in (Emiel): this also
     merges `gen_public_addrs`/`gen_init_mem` (and the reg pair) and counts
     `Known` as public (already implied — make it said).
+  - [LOW] (quiz 5, 2026-10-12) `words_sat` reads words with the kernel's own
+    `get_word`; `get_word_read_ram` (`Noninterference.v:154`) proves it equals
+    the machine's load `fun_read_ram μ 4 a`. Option: state `words_sat` with
+    `fun_read_ram` directly, so the statement trusts the Sail-derived reader
+    instead of a second definition.
   - [LOW] **Split statement data from proof data** (reopens D12): `Secret` entries
     are statement-level no-ops (registers: exactly; memory: they only feed
     `fits` and placement — cmovznz4's layout says only "code+48 bytes fits").
