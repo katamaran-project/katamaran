@@ -155,7 +155,8 @@ G and the rest of F anywhere.**
   them all anyway — a separate pass costs a second review + gate.
 - **C. End-theorem proof automation — AFTER A**: `_simple` bridge for mixed
   front-ends + `data_spec`, one generic bv tactic, what the ~60 lines of
-  `check_scalar_ptr_noninterferent` do. After, because A's Phase 2 rewrites
+  `check_scalar_ptr_noninterferent` do (85 lines on issue/spec-layer;
+  Emiel 2026-10-09: "still way too long, we should clean this up"). After, because A's Phase 2 rewrites
   these bridges.
 - **D. Audit of past changes — independent** (agent findings, UNVERIFIED;
   `.claude/learning/commit-groups.md`): `1236c880` `fun_bool_to_bits`
@@ -206,6 +207,21 @@ G and the rest of F anywhere.**
   - [LOW] Register pointers are literals independent of the layout (cmovznz4
     `A2 := ia+132`; muladd `A2/X2 := ia+1144` must hit m's `Known b` header):
     only the proof-side `*_cells` lemma ties them; the statement does not.
+  - [LOW] Registers as a PARTIAL MAP `gpr ⇀ val_spec` (Emiel), absent =
+    Secret: duplicate keys become unwritable (today `[(A0, Known 1); (A0,
+    Known 2)]` is a writable VACUOUS statement — the bridges' NoDup premise
+    does not protect the statement, a hand proof could exploit it; memory
+    already has `blocks_ok`) and the all-Secret padding disappears.
+  - [LOW] Wrap-around (quiz Q3): `blocks_disjoint`/`clear_of_code` are in N
+    but memory is read via `bv.of_N` (mod 2^32), so blocks at a and a+2^32
+    alias; conflicting Known words there (or vs. the code) = VACUOUS. Today
+    prevented only by each Result's own lenAddr premises — `fits`, or in
+    CheckScalarPtr two raw `< lenAddr` lines (`CheckScalarPtrResult.v:116-117`),
+    which Emiel finds uninsightful: use a fits-style predicate there. Option:
+    a kernel-level in-range predicate over a `mem_layout` (every block_end
+    and the code end < lenAddr) — as a CONJUNCT of `noninterferent_strong`
+    (D19 style: out of range ⇒ unprovable, not vacuous), with `Layout.fits`
+    implying it.
 
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
