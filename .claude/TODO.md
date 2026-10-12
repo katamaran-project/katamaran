@@ -222,6 +222,21 @@ G and the rest of F anywhere.**
     and the code end < lenAddr) — as a CONJUNCT of `noninterferent_strong`
     (D19 style: out of range ⇒ unprovable, not vacuous), with `Layout.fits`
     implying it.
+  - [LOW] `Bytes (n) (s : val_spec Empty_set)` + `match e with end`
+    (`Layout.v:38,56`) is a typing trick for "Secret|Public only"; a
+    dedicated 2-constructor type would say it directly. Also P256_N is
+    `Bytes 32 Secret` in CheckScalarParam but `repeat Secret 8` words in
+    CheckScalarPtr — one footprint, two spellings.
+  - [LOW] Real NON-VACUITY check (Emiel, quiz Q5): the `_noninterferent` /
+    `_at_start` instances only show the `fits` premise is satisfiable (sanity
+    for the parametric base — their comment "so it is not vacuous"
+    OVERCLAIMS). Option: a lemma `∃ γ1 γ2 μ1 μ2 ws, <all premises>`. Blocked
+    in part by `Axiom pure_decode` (`Machine.v:147`): `mem_has_instrs` is
+    unprovable in Coq without it, so state it RELATIVE to
+    `Forall (fun i => ∃ w, pure_decode w = inr i) instrs` — which makes D13's
+    informal "decodable by construction" an explicit hypothesis. Satisfiable
+    premises still allow a trivial theorem (world 1 takes 0 steps); a run
+    reaching the exit cannot be exhibited while decode is an axiom.
 
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
