@@ -202,6 +202,12 @@ G and the rest of F anywhere.**
     the machine's load `fun_read_ram μ 4 a`. Option: state `words_sat` with
     `fun_read_ram` directly, so the statement trusts the Sail-derived reader
     instead of a second definition.
+  - (quiz 5 Q2, 2026-10-12) `check_scalar_ptr_noninterferent` has shape
+    `in_range … → in_range … ∧ NI`, so its conjunct guards nothing, and unlike
+    cmovznz4 (`_noninterferent`/`_at_start` at ia = 0/256) it has NO
+    premise-free sanity instance: nothing shows its premise is ever
+    satisfiable. Add one (e.g. ia = 0, ka = 176, l = 32). General rule: a
+    parametric Result's conjuncts only guard in its premise-free instances.
   - [LOW] **Split statement data from proof data** (reopens D12): `Secret` entries
     are statement-level no-ops (registers: exactly; memory: they only feed
     `fits` and placement — cmovznz4's layout says only "code+48 bytes fits").
