@@ -197,12 +197,20 @@ G and the rest of F anywhere.**
     Secret/Public/Known directly) so no `gen_*` is on the trusted surface. Folded in (Emiel): this also
     merges `gen_public_addrs`/`gen_init_mem` (and the reg pair) and counts
     `Known` as public (already implied — make it said).
-  - [LOW] (quiz 5, 2026-10-12) `words_sat` reads words with the kernel's own
+  - **TODO** (quiz 5, 2026-10-12) Make `ni_cells` (`EndToEnd.v:1747`)
+    consistent with `noninterferent_strong`: it still states the OLD shape
+    (eight `declare_*`/`gen_*` premises) and every bridge concludes it
+    (8 `gen_contract_noninterferent_*` + `GenProg.gen_prog_noninterferent`);
+    `ni_of_cells` translates at all 21 Result call sites. Option: restate it
+    with `regs_sat γ1 γ2 regs'` / `cells_sat μ1 μ2 cs`, so `ni_of_cells` only
+    permutes (+ `mem_sat_cells`) and the `declare_*` conversion moves inside
+    the bridges (where the Iris side needs it anyway).
+  - **TODO** [LOW] (quiz 5, 2026-10-12) `words_sat` reads words with the kernel's own
     `get_word`; `get_word_read_ram` (`Noninterference.v:154`) proves it equals
     the machine's load `fun_read_ram μ 4 a`. Option: state `words_sat` with
     `fun_read_ram` directly, so the statement trusts the Sail-derived reader
     instead of a second definition.
-  - (quiz 5 Q2, 2026-10-12) `check_scalar_ptr_noninterferent` has shape
+  - **TODO** (quiz 5 Q2, 2026-10-12) `check_scalar_ptr_noninterferent` has shape
     `in_range … → in_range … ∧ NI`, so its conjunct guards nothing, and unlike
     cmovznz4 (`_noninterferent`/`_at_start` at ia = 0/256) it has NO
     premise-free sanity instance: nothing shows its premise is ever
