@@ -883,6 +883,34 @@ Module IrisBinaryWP
         eapply step_trans. constructor. auto.
     Qed.
 
+    Lemma semWP2_call_inline_left {Γ1 Γ2 τ Δ} (f : 𝑭 Δ τ)
+      (es : NamedEnv (Exp Γ1) Δ) (s2 : Stm Γ2 τ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
+          semWP2 (evals es δ1) δ2 (FunDef f) s2 (λ v1 _ v2 δ2', Q v1 δ1 v2 δ2') -∗
+          semWP2 δ1 δ2 (stm_call f es) s2 Q.
+    Proof.
+      iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iApply IBleft.semWP_call_inline. iApply ("H" with "Hres").
+    Qed.
+
+    Lemma semWP2_call_inline_right {Γ1 Γ2 τ Δ} (f : 𝑭 Δ τ)
+      (s1 : Stm Γ1 τ) (es : NamedEnv (Exp Γ2) Δ) :
+      ⊢ ∀ (Q : Post2 Γ1 Γ2 τ) (δ1 : CStore Γ1) (δ2 : CStore Γ2),
+          semWP2 δ1 (evals es δ2) s1 (FunDef f) (λ v1 δ1' v2 _, Q v1 δ1' v2 δ2) -∗
+          semWP2 δ1 δ2 s1 (stm_call f es) Q.
+    Proof.
+      iIntros (Q δ1 δ2) "H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iSpecialize ("H" with "Hres").
+      iApply (IBleft.semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hf2 & %Hval & H)".
+      iExists γ22, μ22, δ2, (of_ival v2), v2.
+      iFrame "H". iPureIntro. split; last apply stm_to_val_of_ival.
+      eapply step_trans. constructor. eapply Steps_trans.
+      apply (Steps_call_frame Hf2). rewrite (stm_to_val_eq Hval).
+      destruct (stm_to_val_Some_cases Hval) as [(? & -> & ->)|(? & -> & ->)];
+        simpl; eapply step_trans; constructor.
+    Qed.
+
   End WithSailGS2.
 End IrisBinaryWP.
 
