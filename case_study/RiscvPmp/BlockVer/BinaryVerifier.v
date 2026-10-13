@@ -357,18 +357,20 @@ Module BinaryBlockVerifier
       iIntros (? δ1 ? δ2) "($ & _)". now destruct (env.view δ1), (env.view δ2).
     Qed.
 
-    (* Like the unary epilogue, but remembering that nextpc equals pc. This is
-       needed to recombine both executions after they ran asynchronously. *)
-    Definition exec_instructions_epilogue_left (a an : Val ty_xlenbits) (l : list AST) : iProp Σ :=
-      @reg_pointsTo _ sailRegGS2_sailRegGS_left _ pc an ∗
-      @RVPCOM.ptsto_instrs _ memGS_left a l ∗
-      @reg_pointsTo _ sailRegGS2_sailRegGS_left _ nextpc an.
+    (* Like the unary epilogue of a single execution, but remembering that
+       nextpc equals pc. This is needed to recombine both executions after they
+       ran asynchronously. *)
+    Definition exec_instructions_epilogue_unary (srGS : sailRegGS Σ) (mG : mcMemGS Σ)
+      (a an : Val ty_xlenbits) (l : list AST) : iProp Σ :=
+      @reg_pointsTo _ srGS _ pc an ∗
+      @RVPCOM.ptsto_instrs _ mG a l ∗
+      @reg_pointsTo _ srGS _ nextpc an.
 
     Lemma WP2_loop_step_n_left (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
       (POST : Val ty_xlenbits -> iProp Σ) :
       @RVPTVl.exec_instructions_epilogue _ sailGS2_sailGS_left a apc (instr :: instrs) -∗
       @RVPTVl.step_n _ sailGS2_sailGS_left (instr :: instrs) a apc POST -∗
-      (∀ an, POST an ∗ exec_instructions_epilogue_left a an (instr :: instrs) -∗ WP2_loop) -∗
+      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an (instr :: instrs) -∗ WP2_loop) -∗
       WP2_loop.
     Proof.
       iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
@@ -387,18 +389,11 @@ Module BinaryBlockVerifier
           iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc]").
     Qed.
 
-    (* Like the unary epilogue, but remembering that nextpc equals pc. This is
-       needed to recombine both executions after they ran asynchronously. *)
-    Definition exec_instructions_epilogue_right (a an : Val ty_xlenbits) (l : list AST) : iProp Σ :=
-      @reg_pointsTo _ sailRegGS2_sailRegGS_right _ pc an ∗
-      @RVPCOM.ptsto_instrs _ memGS_right a l ∗
-      @reg_pointsTo _ sailRegGS2_sailRegGS_right _ nextpc an.
-
     Lemma WP2_loop_step_n_right (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
       (POST : Val ty_xlenbits -> iProp Σ) :
       @RVPTVr.exec_instructions_epilogue _ sailGS2_sailGS_right a apc (instr :: instrs) -∗
       @RVPTVr.step_n _ sailGS2_sailGS_right (instr :: instrs) a apc POST -∗
-      (∀ an, POST an ∗ exec_instructions_epilogue_right a an (instr :: instrs) -∗ WP2_loop) -∗
+      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an (instr :: instrs) -∗ WP2_loop) -∗
       WP2_loop.
     Proof.
       iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
@@ -422,7 +417,7 @@ Module BinaryBlockVerifier
       ⊢ @RVPTVl.exec_instructions_prologue _ sailGS2_sailGS_left a instrs -∗
         PRE a -∗
         @RVPTVl.semTripleBlock _ sailGS2_sailGS_left PRE a instrs POST -∗
-        (∀ an, POST a an ∗ exec_instructions_epilogue_left a an instrs -∗ WP2_loop) -∗
+        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an instrs -∗ WP2_loop) -∗
         WP2_loop.
     Proof.
       iIntros (PRE a [|instr instrs] POST Hne) "Hpro HPRE Htrip Hk"; first done.
@@ -435,7 +430,7 @@ Module BinaryBlockVerifier
       ⊢ @RVPTVr.exec_instructions_prologue _ sailGS2_sailGS_right a instrs -∗
         PRE a -∗
         @RVPTVr.semTripleBlock _ sailGS2_sailGS_right PRE a instrs POST -∗
-        (∀ an, POST a an ∗ exec_instructions_epilogue_right a an instrs -∗ WP2_loop) -∗
+        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an instrs -∗ WP2_loop) -∗
         WP2_loop.
     Proof.
       iIntros (PRE a [|instr instrs] POST Hne) "Hpro HPRE Htrip Hk"; first done.
