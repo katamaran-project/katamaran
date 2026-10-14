@@ -248,6 +248,16 @@ during proof phases; resume if a design question comes up.
   24 ms, L1 4.3 s, L2 9.5 s, D 0.2 s, DAng 1.1 s, I/K/M 15/12/11 s; muladd
   tail VC 210 s.
 
+- **Phase 5 DONE** (99aaad4c muladd): all 8 loops on the loop rule;
+  MuladdParamResult, CheckScalarPtrResult green. 85 untracked ZZ probes
+  still name the removed machinery (not built, left as is).
+- **Phase 6 DONE** (ac2b7f07): skills/CLAUDE.md/archive.
+- **Phase 7: GATE PASSED 2026-10-14** (GATE_JOBS=1, 19m21s): build clean, no
+  holes, 24 end theorems axiom-clean (pure_decode, mmioenv). stmtdiff over
+  the branch: no end-theorem statement, Noninterference.v, Layout.v or
+  `*_instrs` change -- only proof-side annotation lists/erase lemmas in the
+  Result files. NOT MERGED: awaits Emiel's comprehension check.
+
 ## 6. Decision log
 
 | # | Date | Decision | Revert path |
