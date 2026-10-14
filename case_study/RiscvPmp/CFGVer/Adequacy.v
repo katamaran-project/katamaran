@@ -2324,17 +2324,16 @@ Qed.
 
 (* ---- blocksSound FROM ANNOTATIONS THAT CARRY THEIR VALIDITY --------------
    (PLAN-valid-blk-annot.md Phase 3.)  For a program written as
-   `map (eraseV c) LV`, every block is justified by its own vb_ok proof
+   `map eraseV LV`, every block is justified by its own vb_ok proof
    (blkValid, at whatever address it fires -- decision B).  A lookup only
    needs "this is an element of the list" (instrs_of_list_elem_of), so there
    is no key inversion, and a block may sit anywhere in the program. *)
 Section ValidAnnot.
   Context {Σ} {GS : sailGS2 Σ}.
 
-  Lemma blocksSound_of_V {R} (c : @Katamaran.RiscvPmp.CFGVer.Verifier.CFGVerifierContract R)
-      (words : bv xlenbits -> bv word) (base : bv xlenbits)
+  Lemma blocksSound_of_V (words : bv xlenbits -> bv word) (base : bv xlenbits)
       (LV : list (Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstrV blkValid)) :
-    ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map (Katamaran.RiscvPmp.CFGVer.Verifier.eraseV c) LV)).
+    ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map Katamaran.RiscvPmp.CFGVer.Verifier.eraseV LV)).
   Proof.
     iIntros "!>" (v ai b) "%Hlk %Hb".
     apply instrs_of_list_elem_of, List.in_map_iff in Hlk as (a & <- & _).

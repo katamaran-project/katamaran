@@ -472,16 +472,10 @@ Record AnnotInstr := MkAnnotInstr
        STATEMENT surface, and this puts proof hints into them.  Same trade
        already made for ghosts, and `strip` is the same mitigation. *)
   ; ai_block        : option BlkAnnot
-    (* RE-ENTRY BLOCK (PLAN-rec-loop-block.md).  Like ai_block, but fires only
-       when this instruction is reached AFTER at least one instruction of the
-       current run has executed -- never at a contract's entry.  A loop is one
-       block whose own head carries `ai_loop := Some b`: its VC executes the
-       head at entry and meets b at the back edge, consuming the invariant.
-       ai_block keeps firing at every visit, including step 0, so a contract
-       may still START at a block.  Soundness needs an ai_loop block only
-       under a later, which is what Adequacy.blockSound_of_vc's Löb induction
-       supplies. *)
-  ; ai_loop         : option BlkAnnot
+    (* (A second field, `ai_loop`, carried a loop's own block as a RE-ENTRY
+       annotation at its head until PLAN-loop-rule.md.  A loop is now a loop
+       contract with its own VC, Contracts.cfg_vc_loop, and needs no
+       annotation at all.) *)
   }.
 
 Definition strip (instrs : list AnnotInstr) : list AST :=
@@ -507,7 +501,7 @@ Proof. apply List.length_map. Qed.
    hijacks list notation until it is). *)
 Coercion AST_AnnotInstr (a : AST) : AnnotInstr :=
   {| ai_ghost_before := nil; ai_instr := a; ai_ghost_after := nil;
-     ai_block := None; ai_loop := None |}.
+     ai_block := None |}.
 
 Local Arguments List.cons {_} & _ _.
 
@@ -531,15 +525,9 @@ Proof. induction l as [|x l IH]; cbn; [reflexivity | now f_equal]. Qed.
 (* ---- ANNOTATIONS THAT CARRY THEIR OWN VALIDITY (PLAN-valid-blk-annot.md) --
    An `ai_block` annotation carries a proof that its block is valid (V1), in
    a SEPARATE type that erases to AnnotInstr (V2), so the executor, cfg_vc and
-   every existing example are untouched: the VC is `cfg_vc c (map (eraseV c)
-   LV)`.  `Valid` is a PARAMETER so this file stays Iris-free (layering
-   invariant 1); the heavy side instantiates it with Adequacy.blkValid.
-
-   Re-entry needs no proof field (V1): `aiv_loop : bool` means "re-enter the
-   contract being verified", so it can only ever name `selfBlk c` (V5) and is
-   justified by the Löb induction in Adequacy.blockSound_of_vc, which since
-   decision (c) ranges over every entry address -- so aiv_loop may sit on any
-   instruction. *)
+   every existing example are untouched: the VC is `cfg_vc c (map eraseV LV)`.
+   `Valid` is a PARAMETER so this file stays Iris-free (layering invariant
+   1); the heavy side instantiates it with Adequacy.blkValid. *)
 Record BlkAnnotV (Valid : BlkAnnot -> Prop) := MkBlkAnnotV
   { vb_blk : BlkAnnot ; vb_ok : Valid vb_blk }.
 Arguments MkBlkAnnotV {Valid} vb_blk vb_ok.
@@ -550,36 +538,32 @@ Record AnnotInstrV (Valid : BlkAnnot -> Prop) := MkAnnotInstrV
   { aiv_ghost_before : list Annot
   ; aiv_instr        : AST
   ; aiv_ghost_after  : list Annot
-  ; aiv_block        : option (BlkAnnotV Valid)
-  ; aiv_loop         : bool }.
-Arguments MkAnnotInstrV {Valid} _ _ _ _ _.
+  ; aiv_block        : option (BlkAnnotV Valid) }.
+Arguments MkAnnotInstrV {Valid} _ _ _ _.
 Arguments aiv_ghost_before {Valid} _.
 Arguments aiv_instr {Valid} _.
 Arguments aiv_ghost_after {Valid} _.
 Arguments aiv_block {Valid} _.
-Arguments aiv_loop {Valid} _.
 
-(* The contract being verified, as a block: what an aiv_loop re-enters. *)
+(* A contract, as a block: what blkValid_of_contract (GenCompose.v) proves
+   valid. *)
 Definition selfBlk {Σ} (c : @CFGVerifierContract Σ) : BlkAnnot :=
   {| blk_ctx := Σ ; blk_contract := c |}.
 
-(* Forget the proofs.  `c` is the ENCLOSING contract, needed only to resolve
-   aiv_loop to selfBlk c. *)
-Definition eraseV {Valid : BlkAnnot -> Prop} {Σ} (c : @CFGVerifierContract Σ)
-    (a : AnnotInstrV Valid) : AnnotInstr :=
+(* Forget the proofs. *)
+Definition eraseV {Valid : BlkAnnot -> Prop} (a : AnnotInstrV Valid) : AnnotInstr :=
   {| ai_ghost_before := aiv_ghost_before a
    ; ai_instr        := aiv_instr a
    ; ai_ghost_after  := aiv_ghost_after a
-   ; ai_block        := option_map vb_blk (aiv_block a)
-   ; ai_loop         := if aiv_loop a then Some (selfBlk c) else None |}.
+   ; ai_block        := option_map vb_blk (aiv_block a) |}.
 
-(* A plain instruction: no ghosts, no block, no re-entry.  eraseV takes it to
+(* A plain instruction: no ghosts, no block.  eraseV takes it to
    AST_AnnotInstr (by reflexivity). *)
 Definition AST_AnnotInstrV {Valid : BlkAnnot -> Prop} (i : AST) : AnnotInstrV Valid :=
-  MkAnnotInstrV nil i nil None false.
+  MkAnnotInstrV nil i nil None.
 
-Lemma strip_eraseV {Valid Σ} (c : @CFGVerifierContract Σ) (l : list (AnnotInstrV Valid)) :
-  strip (List.map (eraseV c) l) = List.map aiv_instr l.
+Lemma strip_eraseV {Valid} (l : list (AnnotInstrV Valid)) :
+  strip (List.map eraseV l) = List.map aiv_instr l.
 Proof. unfold strip. rewrite List.map_map. reflexivity. Qed.
 
 (* `strip` commutes with slicing, so a SEGMENT of the annotated program strips

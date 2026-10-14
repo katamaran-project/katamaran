@@ -121,6 +121,16 @@ Section SegCompose.
       (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil)).
   Proof. destruct c; exact (fun H => H). Qed.
 
+  (* The same for a LOOP contract's VC (PLAN-loop-rule.md). *)
+  Lemma seg_vc_loop {R : LCtx} (c : @CFGVerifierContract R) (annot : list AnnotInstr) :
+    cfg_vc_loop c annot ->
+    safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition
+      (extend_to_minimal_pre (cfg_precondition c))
+      (table_of_list (cfg_placement c) 0 annot)
+      (cfg_exit c) (cfg_fuel c)
+      (loop_post (cfg_placement c) (cfg_exit c) (cfg_precondition c) (cfg_postcondition c)) wnil)).
+  Proof. destruct c; exact (fun H => H). Qed.
+
   (* ======================================================================
      A CONTRACT, RUN INSIDE A PROGRAM (PLAN-valid-blk-annot.md Phase 4).
      The contract-level soundness lemma: premises say only that the contract
@@ -138,14 +148,11 @@ Section SegCompose.
   Lemma blocksSound_of_map (words : bv xlenbits -> bv word)
       (M : gmap (bv xlenbits) AnnotInstr) :
     (forall v ai, M !! v = Some ai ->
-       ai_loop ai = None /\ forall b, ai_block ai = Some b -> blkValid b) ->
+       forall b, ai_block ai = Some b -> blkValid b) ->
     ⊢ blocksSound words M.
   Proof.
     intros HM. iIntros "!>" (v ai b) "%Hlk %Hb".
-    destruct (HM v ai Hlk) as [Hloop Hblk].
-    unfold ai_fire in Hb. destruct (ai_block ai) as [b'|] eqn:E.
-    - injection Hb as <-. iApply (Hblk b' eq_refl Σ GS words v).
-    - rewrite Hloop in Hb. discriminate.
+    iApply (HM v ai Hlk b Hb Σ GS words v).
   Qed.
 
   Lemma contract_setup {R : LCtx} (c : @CFGVerifierContract R)
@@ -185,7 +192,7 @@ Section SegCompose.
         unfold annotsValid in Hval. rewrite List.Forall_forall in Hval.
         exact (Hval _ Hl).
       + rewrite lookup_fmap in Hr. destruct (P !! v); cbn in Hr; [|discriminate].
-        injection Hr as <-. split; [reflexivity | discriminate].
+        injection Hr as <-. discriminate.
   Qed.
 
   Lemma contract_run {R : LCtx} (c : @CFGVerifierContract R)
@@ -244,9 +251,9 @@ Section SegCompose.
     destruct (contract_setup c Hc ι pbase P Hplace Hfit Hin) as (annot & M & Hv & HM & Hif & Hbs).
     subst P.
     iPoseProof (Hbs words) as "#Hb".
-    iApply (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef with "[] []").
-    - iApply (blocksSound_at_false with "Hb").
-    - iNext. iExact "Hb".
+    iIntros (a) "Hpre Hk". iApply myWP2_step_loop.
+    iApply (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
+              with "Hb Hpre Hk").
   Qed.
 
   (* The resources the soundness bridge CONSUMES at entry. *)
@@ -464,18 +471,32 @@ Section SegCompose.
       (Hv : cfg_vc (blk_contract b) ab)
       (* ab really is the block's own code, annotated *)
       (Hstrip : strip ab = cfg_instrs (blk_contract b))
-      (* ab's entry blocks (ai_block) are justified outright ... *)
-      (Hbs0 : forall v, (⊢ blocksSoundAt false words (instrs_of_list v ab)))
-      (* ... and all of its blocks possibly by THIS block itself, at any
-         address (a loop whose code carries it as ai_loop: see
-         blockSound_of_vc) *)
-      (Hbs : forall v, □ (∀ v', blockSound words v' b) ⊢
-               blocksSound words (instrs_of_list v ab)) :
+      (* the blocks ab carries are sound *)
+      (Hbs : forall v, ⊢ blocksSound words (instrs_of_list v ab)) :
     (∀ v, blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab))
     ⊢ ∀ v, blockSound words v b.
   Proof.
     exact (blockSound_of_vc words ab b _
-             (seg_vc (blk_contract b) ab Hv) Hstrip Hbs0 Hbs).
+             (seg_vc (blk_contract b) ab Hv) Hstrip Hbs).
+  Qed.
+
+  (* ...and a LOOP block from its loop VC, through the loop rule.  `Hpl`: the
+     invariant pins the placement to the entry address. *)
+  Lemma blockSound_of_loop_contract (words : bv xlenbits -> bv word)
+      (b : BlkAnnot) (ab : list AnnotInstr)
+      (Hv : cfg_vc_loop (blk_contract b) ab)
+      (Hstrip : strip ab = cfg_instrs (blk_contract b))
+      (Hbs : forall v, ⊢ blocksSound words (instrs_of_list v ab))
+      (Hpl : forall v (ι : Valuation (blk_ctx b)),
+          asn.interpret (extend_to_minimal_pre (cfg_precondition (blk_contract b)))
+            (ι.["a"∷ty_xlenbits ↦ SyncVal v]) ⊢
+          ⌜inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement (blk_contract b)) ι
+           = SyncVal v⌝) :
+    (∀ v, blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab))
+    ⊢ ∀ v, blockSound words v b.
+  Proof.
+    exact (blockSound_of_loop_vc words ab b _
+             (seg_vc_loop (blk_contract b) ab Hv) Hstrip Hbs Hpl).
   Qed.
 
 
@@ -2190,23 +2211,46 @@ End SegCompose.
    section fixes one.
    (PLAN-valid-blk-annot.md Phase 3.)  A contract verified over an
    AnnotInstrV list is a valid block: its nested blocks are justified by
-   their own proofs and its re-entries by Löb (Adequacy.blocksSound_of_V),
-   so the only remaining obligation is faithfulness at every address.
-   The result goes straight into another program's annotation (vb_ok). *)
+   their own proofs (Adequacy.blocksSound_of_V), so the only remaining
+   obligation is faithfulness at every address.  The result goes straight
+   into another program's annotation (vb_ok). *)
 Lemma blkValid_of_contract {R : LCtx} (c : @CFGVerifierContract R)
     (LV : list (AnnotInstrV blkValid))
-    (Hv : cfg_vc c (List.map (eraseV c) LV))
+    (Hv : cfg_vc c (List.map eraseV LV))
     (Hcode : List.map aiv_instr LV = cfg_instrs c)
     (Hf : forall Σ (GS : sailGS2 Σ) (v : bv xlenbits),
-            ⊢ blockFaithful (List.map (eraseV c) LV) v (selfBlk c)
-                (table_of_list (cfg_placement c) 0 (List.map (eraseV c) LV))) :
+            ⊢ blockFaithful (List.map eraseV LV) v (selfBlk c)
+                (table_of_list (cfg_placement c) 0 (List.map eraseV LV))) :
   blkValid (selfBlk c).
 Proof.
   intros Σ GS words v.
-  iPoseProof (blockSound_of_contract words (selfBlk c) (List.map (eraseV c) LV) Hv
-                (eq_trans (strip_eraseV c LV) Hcode)) as "H".
-  - intros v'. apply blocksSoundAt_false_of_V.
+  iPoseProof (blockSound_of_contract words (selfBlk c) (List.map eraseV LV) Hv
+                (eq_trans (strip_eraseV LV) Hcode)) as "H".
   - intros v'. apply blocksSound_of_V.
+  - iApply ("H" with "[]"); iIntros (v'); iApply Hf.
+Qed.
+
+(* A LOOP contract (PLAN-loop-rule.md) is a valid block too, from its loop
+   VC: the loop rule (Adequacy.blockSound_of_loop_vc) does the induction.
+   `Hpl`: the invariant pins the placement to the entry address. *)
+Lemma blkValid_of_loop_contract {R : LCtx} (c : @CFGVerifierContract R)
+    (LV : list (AnnotInstrV blkValid))
+    (Hv : cfg_vc_loop c (List.map eraseV LV))
+    (Hcode : List.map aiv_instr LV = cfg_instrs c)
+    (Hf : forall Σ (GS : sailGS2 Σ) (v : bv xlenbits),
+            ⊢ blockFaithful (List.map eraseV LV) v (selfBlk c)
+                (table_of_list (cfg_placement c) 0 (List.map eraseV LV)))
+    (Hpl : forall Σ (GS : sailGS2 Σ) (v : bv xlenbits) (ι : Valuation R),
+        asn.interpret (extend_to_minimal_pre (cfg_precondition c))
+          (ι.["a"∷ty_xlenbits ↦ SyncVal v]) ⊢
+        ⌜inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) ι = SyncVal v⌝) :
+  blkValid (selfBlk c).
+Proof.
+  intros Σ GS words v.
+  iPoseProof (blockSound_of_loop_contract words (selfBlk c) (List.map eraseV LV) Hv
+                (eq_trans (strip_eraseV LV) Hcode)) as "H".
+  - intros v'. apply blocksSound_of_V.
+  - intros v' ι. apply (Hpl Σ GS v' ι).
   - iApply ("H" with "[]"); iIntros (v'); iApply Hf.
 Qed.
 
@@ -2225,13 +2269,40 @@ Lemma blkValid_of_seg {R : LCtx}
              = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
     (Hcode : List.map aiv_instr LV = code)
     (Hv : let c := gen_seg_contract base base_a code target fl regs extra_pre post in
-          cfg_vc c (List.map (eraseV c) LV)) :
+          cfg_vc c (List.map eraseV LV)) :
   blkValid (selfBlk (gen_seg_contract base base_a code target fl regs extra_pre post)).
 Proof.
   apply (blkValid_of_contract _ LV Hv Hcode).
   intros Σ GS v.
   apply blockFaithful_of_seg; [exact (Hba v)|].
   rewrite strip_eraseV. exact Hcode.
+Qed.
+
+(* A generated LOOP segment: the placement premise is seg_pre_placement, so
+   the loop's caller supplies exactly what blkValid_of_seg asks for, with
+   the loop VC in place of the ordinary one.  For a loop whose code has no
+   blocks, LV is `map AST_AnnotInstrV code` and Hcode is map_aiv_instr_AST. *)
+Lemma blkValid_of_loop_seg {R : LCtx}
+    (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)
+    (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    (LV : list (AnnotInstrV blkValid))
+    (Hba : forall (v : bv xlenbits) (iota : Valuation R),
+             inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+    (Hcode : List.map aiv_instr LV = code)
+    (Hv : let c := gen_seg_contract base base_a code target fl regs extra_pre post in
+          cfg_vc_loop c (List.map eraseV LV)) :
+  blkValid (selfBlk (gen_seg_contract base base_a code target fl regs extra_pre post)).
+Proof.
+  apply (blkValid_of_loop_contract _ LV Hv Hcode).
+  - intros Σ GS v.
+    apply blockFaithful_of_seg; [exact (Hba v)|].
+    rewrite strip_eraseV. exact Hcode.
+  - intros Σ GS v iota. exact (seg_pre_placement base base_a code target fl regs
+                                 extra_pre post iota v (Hba v iota)).
 Qed.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after

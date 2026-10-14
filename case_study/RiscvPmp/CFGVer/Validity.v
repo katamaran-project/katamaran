@@ -125,17 +125,15 @@ Import IrisModel.RiscvPmpIrisBase.
      THE LIST IS TYPED (2026-09-29).  The witness is an
      `AnnotInstrV blkValid` list, so every block annotation CARRIES its
      validity proof (vb_ok) and no validity predicate is ever proved about a
-     list: the VC runs over its erasure `map (eraseV c) LV`.  The one
-     remaining condition is the top-level no-re-entry rule (decision V9):
-     every aiv_loop is `false`, which on a literal list is `repeat
-     constructor`.  (Until 2026-09-29 the witness was an erased
-     `list AnnotInstr` plus a hand-proved `annotsValid`; that predicate now
-     only appears on the way OUT, as annotsValid_of_V.) *)
+     list: the VC runs over its erasure `map eraseV LV`.  (Until 2026-09-29
+     the witness was an erased `list AnnotInstr` plus a hand-proved
+     `annotsValid`; that predicate now only appears on the way OUT, as
+     annotsValid_of_V.  Until PLAN-loop-rule.md a third conjunct banned
+     top-level re-entry annotations, which no longer exist.) *)
   Definition ValidCFGVerifierContract {R : LCtx} (c : @CFGVerifierContract R) : Prop :=
     exists LV : list (AnnotInstrV blkValid),
-      cfg_vc c (List.map (eraseV c) LV)
-      /\ List.map aiv_instr LV = cfg_instrs c
-      /\ List.Forall (fun a => aiv_loop a = false) LV.
+      cfg_vc c (List.map eraseV LV)
+      /\ List.map aiv_instr LV = cfg_instrs c.
 
   (* THE ONLY WAY IN.  `LV` is explicit: it cannot be recovered from the VC
      by unification (the VC mentions only its erasure), and the call site
@@ -144,22 +142,19 @@ Import IrisModel.RiscvPmpIrisBase.
      literal erased list the light file verified. *)
   Lemma ValidCFGVerifierContract_intro {R : LCtx} (c : @CFGVerifierContract R)
       (LV : list (AnnotInstrV blkValid))
-      (Hvc : cfg_vc c (List.map (eraseV c) LV))
-      (Hcode : List.map aiv_instr LV = cfg_instrs c)
-      (Hnl : List.Forall (fun a => aiv_loop a = false) LV) :
+      (Hvc : cfg_vc c (List.map eraseV LV))
+      (Hcode : List.map aiv_instr LV = cfg_instrs c) :
     ValidCFGVerifierContract c.
-  Proof. exists LV. split; [exact Hvc | split; [exact Hcode | exact Hnl]]. Qed.
+  Proof. exists LV. split; [exact Hvc | exact Hcode]. Qed.
 
-  (* Erasing a typed list with no re-entry gives valid annotations: each
-     block's proof is its own vb_ok, and ai_loop reduces to None. *)
-  Lemma annotsValid_of_V {R : LCtx} (c : @CFGVerifierContract R)
-      (LV : list (AnnotInstrV blkValid)) :
-    List.Forall (fun a => aiv_loop a = false) LV ->
-    annotsValid (List.map (eraseV c) LV).
+  (* Erasing a typed list gives valid annotations: each block's proof is
+     its own vb_ok. *)
+  Lemma annotsValid_of_V (LV : list (AnnotInstrV blkValid)) :
+    annotsValid (List.map eraseV LV).
   Proof.
-    intros Hnl. apply List.Forall_map. revert Hnl. apply List.Forall_impl.
-    intros a Ha. unfold eraseV; cbn. rewrite Ha. split; [reflexivity|].
-    intros b Hb. destruct (aiv_block a) as [x|]; cbn in Hb; [|discriminate].
+    apply List.Forall_map, List.Forall_forall.
+    intros a _ b Hb. unfold eraseV in Hb; cbn in Hb.
+    destruct (aiv_block a) as [x|]; cbn in Hb; [|discriminate].
     injection Hb as <-. exact (vb_ok x).
   Qed.
 
@@ -171,21 +166,17 @@ Import IrisModel.RiscvPmpIrisBase.
       /\ strip a = cfg_instrs c
       /\ annotsValid a.
   Proof.
-    intros (LV & Hvc & Hcode & Hnl). exists (List.map (eraseV c) LV).
+    intros (LV & Hvc & Hcode). exists (List.map eraseV LV).
     split; [exact Hvc|]. split; [rewrite strip_eraseV; exact Hcode|].
-    now apply annotsValid_of_V.
+    apply annotsValid_of_V.
   Qed.
 
   Global Opaque ValidCFGVerifierContract.
 
-  (* A plain program as a typed list: no ghosts, no blocks, no re-entry. *)
+  (* A plain program as a typed list: no ghosts, no blocks. *)
   Lemma map_aiv_instr_AST (l : list AST) :
     List.map aiv_instr (List.map (@AST_AnnotInstrV blkValid) l) = l.
   Proof. induction l as [|i l IH]; [reflexivity|]. cbn. f_equal. exact IH. Qed.
-
-  Lemma noloop_AST (l : list AST) :
-    List.Forall (fun a => aiv_loop a = false) (List.map (@AST_AnnotInstrV blkValid) l).
-  Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
 
   (* One line at a call site for a program with NO block annotations, and it
      names no annotation: the typed list is the plain code, and the
@@ -197,5 +188,5 @@ Import IrisModel.RiscvPmpIrisBase.
     | |- ValidCFGVerifierContract ?c =>
         apply (@ValidCFGVerifierContract_intro _ c
                  (List.map (@AST_AnnotInstrV blkValid) (cfg_instrs c)));
-        [ exact H | apply map_aiv_instr_AST | apply noloop_AST ]
+        [ exact H | apply map_aiv_instr_AST ]
     end.
