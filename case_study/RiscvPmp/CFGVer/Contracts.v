@@ -220,6 +220,37 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) ex fl (loop_post p ex P Q) wnil.
 
+    Lemma inst_wk_a_an {Γ : LCtx} (ι : Valuation Γ) (x y : RelVal ty_xlenbits) :
+      inst (T := Sub Γ) wk_a_an (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y]) = ι.
+    Proof. unfold wk_a_an. rewrite inst_subst. rewrite !inst_sub_wk1. reflexivity. Qed.
+
+    Lemma inst_wk_a_an_term {Γ : LCtx} (ι : Valuation Γ) (x y : RelVal ty_xlenbits)
+        (t : Term Γ ty_xlenbits) :
+      inst (T := fun Σ => Term Σ ty_xlenbits)
+        (subst (T := fun Σ => Term Σ ty_xlenbits) t wk_a_an)
+        (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y]) = inst t ι.
+    Proof. rewrite inst_subst. now rewrite inst_wk_a_an. Qed.
+
+    (* What the loop post SAYS, at a valuation: the post at the exit, or the
+       invariant at the head with "a" rebound to the pc reached. *)
+    Lemma loop_post_interpret {PROP : bi} {PI : PredicateDef PROP} {Σ : LCtx}
+        (p ex : Term Σ ty_xlenbits) (P : Assertion (Σ ▻ "a"∷ty_xlenbits))
+        (Q : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+        (ι : Valuation Σ) (x y : RelVal ty_xlenbits) :
+      asn.interpret (loop_post p ex P Q) (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y]) ⊣⊢
+      ((⌜y = inst (T := fun Σ => Term Σ ty_xlenbits) ex ι⌝ ∧ emp) ∗
+         asn.interpret Q (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y])) ∨
+      ((⌜y = inst (T := fun Σ => Term Σ ty_xlenbits) p ι⌝ ∧ emp) ∗
+         asn.interpret (extend_to_minimal_pre P) (ι.["a"∷ty_xlenbits ↦ y]))%I.
+    Proof.
+      unfold loop_post. cbn [asn.interpret].
+      rewrite asn.interpret_subst.
+      cbn [instprop instprop_formula].
+      rewrite !inst_wk_a_an_term.
+      rewrite inst_sub_snoc inst_wk_a_an.
+      now cbn.
+    Qed.
+
     (* The loop contract's VC.  `c`'s placement is the loop head. *)
     Definition cfg_vc_loop {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
       cfg_map c (fun p ex P _ fl Q =>
