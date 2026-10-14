@@ -30,7 +30,7 @@
 (* ========================================================================= *)
 (* GenContract.v — the contract GENERATOR.                                   *)
 (*                                                                           *)
-(* Builds CFGVerifierContracts from reg_spec / mem_full_spec lists           *)
+(* Builds CFGVerifierContracts from reg_spec / mem_cell lists           *)
 (* (gen_contract), their constant-value parametric-base variant              *)
 (* (gen_contract_param), and the base-RELATIVE variant (gen_contract_rel     *)
 (* over param_val / reg_spec_rel / mem_spec_rel), plus the concretize maps   *)
@@ -55,6 +55,7 @@ From stdpp Require Import gmap.
 From Katamaran Require Import
      RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts.
 
@@ -78,42 +79,38 @@ Import asn.notations.
     (* ------------------------------------------------------------------ *)
     (* Contract generator                                                   *)
     (*                                                                      *)
-    (* reg_spec: (register, is_public, optional_init_value)                 *)
-    (*   is_public = true  → secLeak assertion added (register is SyncVal) *)
-    (*   optional_init_value = Some v → register holds concrete value v    *)
-    (*                        = None  → register holds an existential       *)
+    (* reg_spec (Noninterference.v): (register, val_spec)                 *)
+    (*   Known v → register holds concrete value v                         *)
+    (*   Public  → register holds an existential, secLeak'd (SyncVal)      *)
+    (*   Secret  → register holds an existential                           *)
     (*                                                                      *)
-    (* mem_full_spec: (address, is_public, optional_init_value)             *)
-    (*   is_public = true  → memory word at address is same in both worlds  *)
-    (*   optional_init_value = Some v → memory word holds concrete value v  *)
-    (*                        = None  → memory word holds an existential     *)
+    (* mem_cell (Noninterference.v): (address, val_spec) -- one word of a  *)
+    (*   mem_layout's cells, same three cases as a register.               *)
     (* ------------------------------------------------------------------ *)
 
     Definition gen_reg_asn {Σ} (s : reg_spec) : Assertion Σ :=
-      let '(r, is_pub, opt_v) := s in
-      match opt_v with
-      | Some v => r ↦ᵣ term_val ty_xlenbits v
-      | None =>
-        asn.exist "v" ty_xlenbits
-          (if is_pub
-           then r ↦ᵣ term_var "v" ∗ secLeakvar "v"
-           else r ↦ᵣ term_var "v")
+      let '(r, sp) := s in
+      match sp with
+      | Known v => r ↦ᵣ term_val ty_xlenbits v
+      | Public  => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v" ∗ secLeakvar "v")
+      | Secret  => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v")
       end.
 
     Definition gen_pre {Σ} (specs : list reg_spec) : Assertion Σ :=
       List.fold_right (fun s acc => gen_reg_asn s ∗ acc) ⊤ specs.
 
-    Definition gen_mem_asn {Σ} (s : mem_full_spec) : Assertion Σ :=
-      let '(a, is_pub, opt_v) := s in
-      match opt_v with
-      | Some v => term_val ty_xlenbits a ↦ₘ term_val ty_xlenbits v
-      | None =>
+    Definition gen_mem_asn {Σ} (s : mem_cell) : Assertion Σ :=
+      let '(a, sp) := s in
+      match sp with
+      | Known v => term_val ty_xlenbits (bv.of_N a) ↦ₘ term_val ty_xlenbits v
+      | Public  =>
         asn.exist "mv" ty_xlenbits
-          (if is_pub then term_val ty_xlenbits a ↦ₘ term_var "mv" ∗ secLeakvar "mv"
-                     else term_val ty_xlenbits a ↦ₘ term_var "mv")
+          (term_val ty_xlenbits (bv.of_N a) ↦ₘ term_var "mv" ∗ secLeakvar "mv")
+      | Secret  =>
+        asn.exist "mv" ty_xlenbits (term_val ty_xlenbits (bv.of_N a) ↦ₘ term_var "mv")
       end.
 
-    Definition gen_mem_pre {Σ} (specs : list mem_full_spec) : Assertion Σ :=
+    Definition gen_mem_pre {Σ} (specs : list mem_cell) : Assertion Σ :=
       List.fold_right (fun s acc => gen_mem_asn s ∗ acc) ⊤ specs.
 
     (* ------------------------------------------------------------------ *)
@@ -127,7 +124,7 @@ Import asn.notations.
     (*                                                                      *)
     (* The DECLARATION UNIT STAYS A WORD: a byte-expanded entry still       *)
     (* describes the 4 bytes at a word-aligned address, so stride stays 4   *)
-    (* and the trusted statement layer (mem_full_spec, gen_init_mem,        *)
+    (* and the trusted statement layer (mem_cell, gen_init_mem,        *)
     (* gen_public_addrs, declare_*, HDataAddrs) is untouched.  Only the     *)
     (* chunk count changes (1 -> 4 per entry).                              *)
     (*                                                                      *)
@@ -212,18 +209,19 @@ Import asn.notations.
         : Term Σ ty_xlenbits :=
       term_val ty_xlenbits (bv.add a (bv.of_N j)).
 
-    (* Byte-expanded reading of ONE mem_full_spec (concrete-base family). *)
-    Definition gen_mem_asn_bytes {Σ} (s : mem_full_spec) : Assertion Σ :=
-      let '(a, is_pub, opt_v) := s in
-      match opt_v with
-      | Some v =>
+    (* Byte-expanded reading of ONE mem_cell (concrete-base family). *)
+    Definition gen_mem_asn_bytes {Σ} (s : mem_cell) : Assertion Σ :=
+      let '(n, sp) := s in
+      let a : Val ty_xlenbits := bv.of_N n in
+      match sp with
+      | Known v =>
           (* pinned: split the literal word into four literal bytes *)
           byte_chunks (byte_addr_val a)
             (term_val (ty_bytes 1) (word_byte 0 v))
             (term_val (ty_bytes 1) (word_byte 1 v))
             (term_val (ty_bytes 1) (word_byte 2 v))
             (term_val (ty_bytes 1) (word_byte 3 v))
-      | None =>
+      | Public | Secret =>
           (* existential: ONE word variable, each chunk a byte projection of it.
              Equally general (word <-> its four bytes is a bijection) but it
              costs ONE logic variable per entry instead of four.  MEASURED: at
@@ -244,10 +242,10 @@ Import asn.notations.
                (term_word_byte 1 (term_var "mw"))
                (term_word_byte 2 (term_var "mw"))
                (term_word_byte 3 (term_var "mw"))
-             ∗ (if is_pub then secLeakvar "mw" else ⊤))
+             ∗ (match sp with Public => secLeakvar "mw" | _ => ⊤ end))
       end.
 
-    Definition gen_mem_pre_bytes {Σ} (specs : list mem_full_spec) : Assertion Σ :=
+    Definition gen_mem_pre_bytes {Σ} (specs : list mem_cell) : Assertion Σ :=
       List.fold_right (fun s acc => gen_mem_asn_bytes s ∗ acc) ⊤ specs.
 
     (* THE EXIT IS THE FALL-THROUGH, `base + 4·|instrs|`, for every generator
@@ -260,7 +258,7 @@ Import asn.notations.
     Definition gen_contract
         (init_addr : N)
         (reg_specs : list reg_spec)
-        (mem_specs : list mem_full_spec)
+        (mem_specs : list mem_cell)
         (instrs : list AST)
         (fl : nat)
         : CFGVerifierContract :=
@@ -317,21 +315,23 @@ Import asn.notations.
 
     (* ------------------------------------------------------------------ *)
     (* Stage 2: base-RELATIVE parametric-value specs.  Unlike reg_spec /   *)
-    (* mem_full_spec (constant Val), the register init value and memory     *)
+    (* mem_cell (constant Val), the register init value and memory     *)
     (* address here may depend on the symbolic base p (PVBaseOff k = p+k).  *)
     (* This is what cmovznz4 needs — data pointers p+116/132/148 and data   *)
     (* words at p+116..p+160 — and cannot be expressed with gen_contract_   *)
     (* param's constant term_val values (of_N (init_addr+k) would also make *)
     (* vm_compute diverge).  A concretize map (below, outside the section)  *)
-    (* sends these to ordinary reg_spec/mem_full_spec at ι=[p↦of_N ia], so  *)
+    (* sends these to ordinary reg_spec/mem_cell at ι=[p↦of_N ia], so  *)
     (* the noninterference bridge reuses gen_implpre / gen_implpre_mem.     *)
+    (* The KNOWN value of a base-relative spec (PLAN-spec-layer D10): a
+       val_spec over param_val, so Secret/Public are the existential cases
+       and Known carries one of these. *)
     Inductive param_val : Type :=
-    | PVExist                          (* existential (private/public per is_pub) *)
     | PVConst (v : Val ty_xlenbits)    (* base-independent constant *)
     | PVBaseOff (k : N).               (* base p + k *)
 
-    Definition reg_spec_rel : Type := RegIdx * bool * param_val.
-    Definition mem_spec_rel : Type := N * bool * param_val.   (* address = p + k *)
+    Definition reg_spec_rel : Type := gpr * val_spec param_val.
+    Definition mem_spec_rel : Type := N * val_spec param_val.   (* address = p + k *)
 
     (* A constant-value register spec is exactly the base-INDEPENDENT special
        case of a base-relative one: an absent value is the existential class, a
@@ -342,21 +342,16 @@ Import asn.notations.
        PVBaseOff-free subset, inverted by concretize_reg at any base
        (concretize_reg_to_rel below). *)
     Definition reg_spec_to_rel (s : reg_spec) : reg_spec_rel :=
-      let '(r, is_pub, ov) := s in
-      (r, is_pub, match ov with
-                  | None => PVExist
-                  | Some v => PVConst v
-                  end).
+      let '(r, sp) := s in (r, val_spec_map PVConst sp).
 
     Definition gen_reg_asn_rel (s : reg_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      let '(r, is_pub, pv) := s in
-      match pv with
-      | PVExist =>
-          asn.exist "v" ty_xlenbits
-            (if is_pub then r ↦ᵣ term_var "v" ∗ secLeakvar "v" else r ↦ᵣ term_var "v")
-      | PVConst v => r ↦ᵣ term_val ty_xlenbits v
-      | PVBaseOff k =>
+      let '(r, sp) := s in
+      match sp with
+      | Public => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v" ∗ secLeakvar "v")
+      | Secret => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v")
+      | Known (PVConst v) => r ↦ᵣ term_val ty_xlenbits v
+      | Known (PVBaseOff k) =>
           r ↦ᵣ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k))
       end.
 
@@ -366,16 +361,17 @@ Import asn.notations.
 
     Definition gen_mem_asn_rel (s : mem_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      let '(k, is_pub, pv) := s in
+      let '(k, sp) := s in
       let addr := term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) in
-      match pv with
-      | PVExist =>
+      match sp with
+      | Public =>
           asn.exist "mv" ty_xlenbits
-            (if is_pub
-             then term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) ↦ₘ term_var "mv" ∗ secLeakvar "mv"
-             else term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) ↦ₘ term_var "mv")
-      | PVConst v => addr ↦ₘ term_val ty_xlenbits v
-      | PVBaseOff k2 =>
+            (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) ↦ₘ term_var "mv" ∗ secLeakvar "mv")
+      | Secret =>
+          asn.exist "mv" ty_xlenbits
+            (term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k)) ↦ₘ term_var "mv")
+      | Known (PVConst v) => addr ↦ₘ term_val ty_xlenbits v
+      | Known (PVBaseOff k2) =>
           addr ↦ₘ term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k2))
       end.
 
@@ -386,7 +382,7 @@ Import asn.notations.
     (* ------------------------------------------------------------------ *)
     (* ONE EXISTENTIAL PER PUBLICNESS CLASS (2026-08-18).                   *)
     (*                                                                      *)
-    (* gen_mem_pre_rel emits one `asn.exist` per PVExist entry, so |Sigma|  *)
+    (* gen_mem_pre_rel emits one `asn.exist` per Secret/Public entry, so |Sigma|  *)
     (* grows with the declared cell count.  That is the dominant cost       *)
     (* driver: measured QUADRATIC in |Sigma| and ~30-46x more expensive per *)
     (* unit than a chunk, against a chunk axis that is exactly linear       *)
@@ -438,26 +434,26 @@ Import asn.notations.
           ∗ gen_mem_cells_class r addr_of (term_unop (uop.bvdrop xlenbits) mw)
       end mw.
 
-    (* Classification, on both spec forms.  concretize_mem maps PVExist to
-       None and preserves the publicness bit, so these two agree under it --
+    (* Classification, on both spec forms.  concretize_mem keeps Secret and
+       Public as they are (val_spec_map), so these two agree under it --
        which is what lets the classed concretize lemma commute the filters
        with the map. *)
     Definition mem_spec_is_exist (s : mem_spec_rel) : bool :=
-      let '(_, _, pv) := s in match pv with PVExist => true | _ => false end.
+      let '(_, sp) := s in match sp with Known _ => false | _ => true end.
     Definition mem_spec_is_pub (s : mem_spec_rel) : bool :=
-      let '(_, b, _) := s in b.
-    (* The mem_full_spec classifiers are for the ImplPre bridge, which has to
+      let '(_, sp) := s in match sp with Public => true | _ => false end.
+    (* The mem_cell classifiers are for the ImplPre bridge, which has to
        partition the CONCRETE resource list by the same classes; nothing in the
        symbolic precondition uses them. *)
-    Definition mem_full_is_exist (s : mem_full_spec) : bool :=
-      let '(_, _, ov) := s in match ov with None => true | _ => false end.
-    Definition mem_full_is_pub (s : mem_full_spec) : bool :=
-      let '(_, b, _) := s in b.
+    Definition mem_full_is_exist (s : mem_cell) : bool :=
+      let '(_, sp) := s in match sp with Known _ => false | _ => true end.
+    Definition mem_full_is_pub (s : mem_cell) : bool :=
+      let '(_, sp) := s in match sp with Public => true | _ => false end.
 
     Definition mem_rel_keys (specs : list mem_spec_rel) : list N :=
-      List.map (fun s => let '(k, _, _) := s in k) specs.
-    Definition mem_full_keys (specs : list mem_full_spec) : list (Val ty_xlenbits) :=
-      List.map (fun s => let '(a, _, _) := s in a) specs.
+      List.map (fun s => let '(k, _) := s in k) specs.
+    Definition mem_full_keys (specs : list mem_cell) : list N :=
+      List.map (fun s => let '(a, _) := s in a) specs.
 
     (* Empty classes emit NOTHING -- an `asn.exist` of width 0 would cost a
        logic variable for no cells, which is exactly what this builder exists
@@ -503,7 +499,7 @@ Import asn.notations.
       gen_mem_priv_class_ks (mem_rel_keys specs).
 
     (* PVConst / PVBaseOff entries mint no variable already, so they keep
-       gen_mem_asn_rel's treatment verbatim and only PVExist entries are
+       gen_mem_asn_rel's treatment verbatim and only Secret/Public entries are
        grouped.  NOTE the resulting HEAP ORDER differs from gen_mem_pre_rel's
        (pinned entries first, then public, then private) -- sound, since ∗ is
        commutative, but it can move consume-scan positions and hence residual
@@ -516,7 +512,7 @@ Import asn.notations.
       ∗ gen_mem_priv_class_rel
           (List.filter (fun s => andb (mem_spec_is_exist s) (negb (mem_spec_is_pub s))) specs).
 
-    (* NO concrete (mem_full_spec) counterpart is defined, deliberately.  The
+    (* NO concrete (mem_cell) counterpart is defined, deliberately.  The
        obvious architecture -- mirror gen_mem_pre_rel_concretize, i.e. rewrite
        the rel assertion into a concrete classed one and then bridge -- does
        NOT typecheck: the two sides' existential widths are
@@ -545,25 +541,25 @@ Import asn.notations.
        See the byte-order note at gen_mem_asn_bytes above. *)
     Definition gen_mem_asn_rel_bytes (s : mem_spec_rel)
         : Assertion (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) :=
-      let '(k, is_pub, pv) := s in
-      match pv with
-      | PVConst v =>
+      let '(k, sp) := s in
+      match sp with
+      | Known (PVConst v) =>
           byte_chunks (byte_addr_rel (term_var "p") k)
             (term_val (ty_bytes 1) (word_byte 0 v))
             (term_val (ty_bytes 1) (word_byte 1 v))
             (term_val (ty_bytes 1) (word_byte 2 v))
             (term_val (ty_bytes 1) (word_byte 3 v))
-      | PVBaseOff k2 =>
+      | Known (PVBaseOff k2) =>
           (* UNTESTED path: the stored word is the symbolic address p+k2, so
              its bytes stay symbolic subranges.  check_scalar does not need
-             this (its arrays are PVExist/PVConst); kept only for uniformity.
+             this (its arrays are Secret/Public/PVConst); kept only for uniformity.
              A wrong reading here can never be unsound -- it can only make the
              VC or the ImplPre unprovable. *)
           let w := term_binop bop.bvadd (term_var "p") (term_val ty_xlenbits (bv.of_N k2)) in
           byte_chunks (byte_addr_rel (term_var "p") k)
             (term_word_byte 0 w) (term_word_byte 1 w)
             (term_word_byte 2 w) (term_word_byte 3 w)
-      | PVExist =>
+      | Public | Secret =>
           (* ONE word variable per entry, not four byte ones — see the measured
              justification at gen_mem_asn_bytes above. *)
           asn.exist "mw" ty_xlenbits
@@ -572,7 +568,7 @@ Import asn.notations.
                (term_word_byte 1 (term_var "mw"))
                (term_word_byte 2 (term_var "mw"))
                (term_word_byte 3 (term_var "mw"))
-             ∗ (if is_pub then secLeakvar "mw" else ⊤))
+             ∗ (match sp with Public => secLeakvar "mw" | _ => ⊤ end))
       end.
 
     Definition gen_mem_pre_rel_bytes (specs : list mem_spec_rel)
@@ -763,7 +759,7 @@ Import asn.notations.
        hardcoded.  Three consequences worth knowing:
 
        - There is NO mem_specs parameter any more.  It was a
-         list mem_full_spec -- ABSOLUTE addresses -- which cannot be translated to
+         list mem_cell -- ABSOLUTE addresses -- which cannot be translated to
          the base-relative mem_spec_rel the classed block needs without knowing the
          base.  Every one of its 15 call sites passed [], so nothing was lost; a
          register-only program is the only shape this builder ever served.  For
@@ -822,29 +818,25 @@ Import asn.notations.
   (* ================================================================== *)
   (* Stage 2: base-RELATIVE noninterference bridge (gen_contract_rel).    *)
   (* Sends the base-relative param specs to ordinary reg_spec /           *)
-  (* mem_full_spec at the concrete base ia via concretize_*, so the       *)
+  (* mem_cell at the concrete base ia via concretize_*, so the       *)
   (* interpretation of the symbolic precondition (gen_pre_rel /           *)
   (* gen_mem_pre_rel) matches gen_pre / gen_mem_pre of the concretized     *)
   (* specs (concretize lemmas below) — letting us REUSE gen_implpre /      *)
   (* gen_implpre_mem unchanged.                                            *)
   (* ================================================================== *)
 
-  Definition concretize_reg (ia : N) (s : reg_spec_rel) : reg_spec :=
-    let '(r, pub, pv) := s in
-    (r, pub, match pv with
-             | PVExist => None
-             | PVConst v => Some v
-             | PVBaseOff k => Some (bv.of_N (ia + k))
-             end).
+  (* The value a param_val denotes at base ia. *)
+  Definition pv_at (ia : N) (pv : param_val) : Val ty_xlenbits :=
+    match pv with
+    | PVConst v    => v
+    | PVBaseOff k  => bv.of_N (ia + k)
+    end.
 
-  Definition concretize_mem (ia : N) (s : mem_spec_rel) : mem_full_spec :=
-    let '(k, pub, pv) := s in
-    (bv.of_N (ia + k), pub,
-     match pv with
-     | PVExist => None
-     | PVConst v => Some v
-     | PVBaseOff k2 => Some (bv.of_N (ia + k2))
-     end).
+  Definition concretize_reg (ia : N) (s : reg_spec_rel) : reg_spec :=
+    let '(r, sp) := s in (r, val_spec_map (pv_at ia) sp).
+
+  Definition concretize_mem (ia : N) (s : mem_spec_rel) : mem_cell :=
+    let '(k, sp) := s in ((ia + k)%N, val_spec_map (pv_at ia) sp).
 
   (* reg_spec_to_rel lands in the PVBaseOff-free subset of param_val, and there
      concretize_reg inverts it AT EVERY BASE -- note `ia` does not occur on the
@@ -855,7 +847,7 @@ Import asn.notations.
      (PLAN-unify-generators.md stage 1). *)
   Lemma concretize_reg_to_rel (ia : N) (s : reg_spec) :
     concretize_reg ia (reg_spec_to_rel s) = s.
-  Proof. destruct s as [[r pub] ov]; destruct ov; reflexivity. Qed.
+  Proof. destruct s as [r sp]; destruct sp; reflexivity. Qed.
 
   Lemma map_concretize_reg_to_rel (ia : N) (specs : list reg_spec) :
     List.map (concretize_reg ia) (List.map reg_spec_to_rel specs) = specs.

@@ -144,7 +144,7 @@ comparison in every other CFGVer example is instead used as an actual (public)
 branch predicate, which is a different, already-supported code path.
 
 **What to do:** if the compared value can legitimately be marked public in the
-`reg_spec`/`mem_full_spec`, do that — the residual disappears. If it genuinely
+`reg_spec`/`mem_spec_rel` (`Public`, or pinned with `Known`), do that — the residual disappears. If it genuinely
 must stay private (the whole point of the proof), this is **not** closable by
 any known tactic combination; it needs the executor/`solve_vc` model extended
 with a rule for "case-split on the relop, then show non-interference holds

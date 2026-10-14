@@ -86,7 +86,7 @@ Local Notation "'{{' P '}}' i '@cfg[' fl ']' 'with' logvars" :=
        at a genuinely nonzero base (first fetch index (256-256)/4 = 0).
        The exit is the fall-through, 256 + 4. *)
     Definition mv_nonzero_start_ex : CFGVerifierContract :=
-      gen_contract (256%N) [(X1, false, None)] []
+      gen_contract (256%N) [(X1, Secret)] []
         [MV X1 X0]
         3.
 
@@ -101,7 +101,7 @@ Local Notation "'{{' P '}}' i '@cfg[' fl ']' 'with' logvars" :=
        compile time. Same for every other example. *)
     Definition swap_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_param
-        [(X1, false, None); (X2, false, None); (X3, false, None)]
+        [(X1, Secret); (X2, Secret); (X3, Secret)]
         [MV X3 X2; MV X2 X1; MV X1 X3]
         5.
 

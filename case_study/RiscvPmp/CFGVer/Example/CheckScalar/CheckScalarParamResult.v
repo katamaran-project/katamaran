@@ -19,6 +19,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.TablesRel
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
@@ -128,12 +129,13 @@ Definition cs_ι (ia : N) (l : bv xlenbits) : Valuation (csCtx ▻ "a"∷ty_xlen
        .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + 176))]
        .["a"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].
 
-(* THE TRUSTED SPECS: k's pointer and klen, public; the contract's own
-   register specs concretized at the load address (ra = the exit); the data
-   as the generator lays it out *)
+(* THE GENERATOR'S SPECS (proof side -- the statement below uses its own
+   shallow data, PLAN-spec-layer D12, and check_scalar_cells proves the two
+   agree): k's pointer and klen; the contract's register specs concretized
+   at the load address (ra = the exit); the data as the generator lays it out *)
 Definition cs_reg_specs (ia : N) (l : bv xlenbits) : list reg_spec :=
-  (A0, true, Some (bv.of_N (ia + 176))) :: (A1, true, Some l) :: map (concretize_reg ia) cs_regs.
-Definition cs_mem_specs (ia : N) (l : bv xlenbits) : list mem_full_spec :=
+  (A0, Known (bv.of_N (ia + 176))) :: (A1, Known l) :: map (concretize_reg ia) cs_regs.
+Definition cs_mem_specs (ia : N) (l : bv xlenbits) : list mem_cell :=
   concretize_data (cs_ι ia l) (ia + 144) cs_data.
 
 Lemma cs_count_l (ia : N) (l : bv xlenbits) :
@@ -183,38 +185,80 @@ Proof.
   cbn. f_equal. f_equal. lia.
 Qed.
 
+(* ---- 4. THE STATEMENT'S OWN DATA (PLAN-spec-layer D12/D14) ------------- *)
+
+(* code: init_addr .. init_addr+143 (36 instructions); the data follows. *)
+Definition check_scalar_data (l : bv xlenbits) : list region :=
+  [ Bytes 32 Secret                 (* P256_N,      at init_addr+144 *)
+  ; Bytes (bv.bin l) Secret ].      (* k[0 .. l-1], at init_addr+176 *)
+
+Definition check_scalar_regs (ia : N) (l : bv xlenbits) : list reg_spec :=
+  [ (A0, Known (bv.of_N (ia + 176)));     (* k             *)
+    (A1, Known l);                        (* klen          *)
+    (X1, Known (bv.of_N (ia + 144)));     (* ra = the exit *)
+    (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret) ].
+
+Lemma klen_words_N (l : bv xlenbits) : N.of_nat (klen_words l) = ((bv.bin l + 3) / 4)%N.
+Proof.
+  unfold klen_words. rewrite Nat2N.inj_div. rewrite Nat2N.inj_add. rewrite N2Nat.id. reflexivity.
+Qed.
+
+(* D12: the statement's cells are exactly the generator's. *)
+Lemma check_scalar_cells (ia : N) (l : bv xlenbits) : (bv.bin l + 3 < 4294967296)%N ->
+  cells (compile (ia + 4 * N.of_nat (length cs_instrs)) (check_scalar_data l))
+  = cs_mem_specs ia l.
+Proof.
+  intros Hl.
+  assert (Hk : N.to_nat ((bv.bin l + 3) / 4) = klen_words l)
+    by (rewrite <- klen_words_N; apply Nat2N.id).
+  unfold cs_mem_specs, cs_data. cbn [concretize_data].
+  rewrite cs_count_ceil; [|exact Hl].
+  change (data_count (cs_ι ia l) (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
+  unfold compile, cells, check_scalar_data. cbn [blocks place region_words region_size].
+  cbn [List.map concat blk_addr blk_words].
+  rewrite !words_at_repeat. rewrite Hk.
+  change (length cs_instrs) with 36%nat.
+  rewrite app_nil_r.
+  cbn [val_spec_map pub_spec].
+  reflexivity.
+Qed.
+
 (* THE END THEOREM: the whole check_scalar, at every klen whose data fits,
    at every load address. *)
 Lemma check_scalar_param_noninterferent (init_addr : N) (l : bv xlenbits) :
-  (init_addr + 176 + 4 * N.of_nat (klen_words l) < lenAddr)%N ->
-  noninterferent_strong init_addr cs_instrs (init_addr + 144)%N
-    (cs_reg_specs init_addr l) (cs_mem_specs init_addr l).
+  fits (init_addr + 4 * N.of_nat (length cs_instrs)) (check_scalar_data l) ->
+  noninterferent_strong init_addr cs_instrs (init_addr + 4 * N.of_nat (length cs_instrs))
+    (check_scalar_regs init_addr l)
+    (compile (init_addr + 4 * N.of_nat (length cs_instrs)) (check_scalar_data l)).
 Proof.
-  intros Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+  intros Hfit0.
+  assert (Hl : length cs_instrs = 36) by (vm_compute; reflexivity).
+  assert (Hfit : (init_addr + 176 + 4 * N.of_nat (klen_words l) < lenAddr)%N).
+  { unfold fits, layout_size in Hfit0. unfold check_scalar_data in Hfit0. simpl in Hfit0.
+    rewrite repeat_length in Hfit0. rewrite N2Nat.id in Hfit0. rewrite klen_words_N. lia. }
+  assert (Hlb : (bv.bin l + 3 < 4294967296)%N).
+  { rewrite klen_words_N in Hfit. unfold lenAddr in Hfit. change (2 ^ 12)%N with 4096%N in Hfit.
+    pose proof (N.div_mod (bv.bin l + 3) 4 ltac:(lia)).
+    pose proof (N.mod_lt (bv.bin l + 3) 4 ltac:(lia)). lia. }
+  apply (ni_of_cells (regs' := cs_reg_specs init_addr l) (cs := cs_mem_specs init_addr l));
+    [ apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity
+    | apply perm_of_eq; apply check_scalar_cells; exact Hlb | ].
+  rewrite Hl. change (4 * N.of_nat 36)%N with 144%N.
+  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-  assert (Hl : length cs_instrs = 36) by (vm_compute; reflexivity).
-  assert (Hlb : (bv.bin l + 3 < 4294967296)%N).
-  { unfold klen_words, lenAddr in *.
-    pose proof (Nat.div_mod (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
-    pose proof (Nat.mod_upper_bound (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)). lia. }
   eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1' cs_instrs
     (init_addr + 144)%N n ws csCtx
     ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
           .["l"∷ty_xlenbits ↦ SyncVal l]
           .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N (init_addr + 176))])
-    _ HpubReg (map mem_full_to_spec (cs_mem_specs init_addr l)) HpubMem
+    _ HpubReg (cs_mem_specs init_addr l) HpubMem
     cs cs_valid eq_refl init_addr).
   - reflexivity.
   - apply (seg_exit_table_ok _ _ init_addr 144). reflexivity.
   - (* HDataAddrs, by construction *)
-    intros i spec Hi.
-    change (map mem_full_to_spec (cs_mem_specs init_addr l))
-      with (mem_full_to_spec <$> cs_mem_specs init_addr l) in Hi.
-    rewrite list_lookup_fmap in Hi.
-    destruct (cs_mem_specs init_addr l !! i) as [[[a pub] o]|] eqn:E; [|discriminate].
-    injection Hi as <-. rewrite Hl.
-    exact (concretize_data_addrs (cs_ι init_addr l) cs_data I (init_addr + 144) i _ E).
+    intros i spec Hi. rewrite Hl.
+    exact (concretize_data_addrs (cs_ι init_addr l) cs_data I (init_addr + 144) i _ Hi).
   - (* ImplPre *)
     intros Σ' GS'.
     iIntros "(Hregs & Hmem & Hpriv & #Hinv)".
@@ -254,7 +298,7 @@ Proof.
     iSplitR; [iSplit; [iPureIntro; exact I|done]|].
     iSplitL "HA1"; [cbn; iExact "HA1"|].
     repeat iSplit; try done; iPureIntro; first [assumption | exact I].
-  - rewrite List.map_length cs_mem_len; [|exact Hlb]. rewrite Hl. lia.
+  - rewrite cs_mem_len; [|exact Hlb]. rewrite Hl. lia.
   - exact Hmem1.
   - exact Hmem2.
   - exact γ1curpriv.

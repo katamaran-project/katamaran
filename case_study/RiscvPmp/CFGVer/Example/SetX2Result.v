@@ -48,17 +48,21 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.Example.SetX2.
 
+(* The program, named once so the statements below read as text. *)
+Definition set_X2_to_42_instrs : list AST := [ADDI X2 X0 (bv.of_N 42)].
+
 (* Phase 4.2 headline: set_X2_to_42 verified end-to-end for a UNIVERSAL base
    address, from the single symbolic-base VC valid_set_X2_to_42_param — no
-   per-address vm_compute.  The (init_addr + 4 < lenAddr) premise is the base
-   bound the fetch obligations need; it is the `(bound)` the plan anticipated. *)
+   per-address vm_compute.  The `fits` premise (the code ends below lenAddr)
+   is the base bound the fetch obligations need. *)
 Lemma set_X2_to_42_noninterferent_param (init_addr : N) :
-  (init_addr + 4 < lenAddr)%N ->
-  noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
-    (init_addr + 4)%N
-    [(X2, false, None)] [].
+  fits (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs)) [] ->
+  noninterferent_strong init_addr set_X2_to_42_instrs (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs))
+    [(X2, Secret)] (compile (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := [(X2, Secret)]) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -68,18 +72,19 @@ Proof.
      this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_set_X2_to_42_param.
 Qed.
 
 (* The concrete result at init_addr = 0, as a corollary -- this was
    missing before (set_X2 had only the parametric headline). *)
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma set_X2_to_42_noninterferent :
-  noninterferent_strong init_addr [ADDI X2 X0 (bv.of_N 42)]
-    (init_addr + 4)%N
-    [(X2, false, None)] [].
+  noninterferent_strong init_addr set_X2_to_42_instrs (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs))
+    [(X2, Secret)] (compile (init_addr + 4 * N.of_nat (length set_X2_to_42_instrs)) []).
 Proof.
   apply set_X2_to_42_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.
 

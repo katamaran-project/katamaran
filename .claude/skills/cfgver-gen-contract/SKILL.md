@@ -36,16 +36,20 @@ generator. What a contract *is* (the record, hand-writing one) is
 ## Register specs
 
 ```coq
-Definition reg_spec : Type := RegIdx * bool * option (Val ty_xlenbits).
+Inductive val_spec (V : Type) := Secret | Public | Known (v : V).   (* Noninterference.v *)
+Definition reg_spec : Type := gpr * val_spec (Val ty_xlenbits).
 ```
 
-Per register `(r, is_public, opt_v)`:
-- `opt_v = Some v` — the register is **pinned**: it holds exactly `v` (no leak
-  permission).
-- `opt_v = None, is_public = true` — **public**: arbitrary value, attacker-visible /
-  allowed to influence leakage.
-- `opt_v = None, is_public = false` — **private**: arbitrary secret; must NOT
-  influence leakage — that is what the verifier checks.
+Per register `(r, s)` (since PLAN-spec-layer, 2026-10-09; `r : gpr` is x1–x31 —
+`A0`, `T1`, `S0`… from `Tables.v`; `X0` cannot be written as a key):
+- `Known v` — the register is **pinned**: it holds exactly `v` in both runs.
+- `Public` — arbitrary value, the same in both runs (attacker-visible / allowed to
+  influence leakage).
+- `Secret` — arbitrary, may differ between the runs; must NOT influence leakage —
+  that is what the verifier checks.
+
+The old `(r, is_public, option v)` triple is gone: `(r, false, Some v)` read as
+"secret" but was public, which is the trap `val_spec` closes.
 
 You never write assertions here — the generator emits them (public compiles to a
 `secLeakvar` conjunct under the hood). For the assertion-level vocabulary — needed
@@ -54,11 +58,12 @@ only for hand-written contracts — see **cfgver-contracts**.
 ## Memory-word specs (contract side)
 
 ```coq
-Definition mem_full_spec : Type :=
-  Val ty_xlenbits * bool * option (Val ty_xlenbits).
+Definition mem_cell : Type := N * val_spec (Val ty_word).   (* SpecLists.v, proof side *)
 ```
 
-Same triple semantics for a data word at the given address. These become the
+Same three cases for the data word at the given (N) address; this is the
+concrete-level type, which the base-relative generators reach through
+`concretize_mem`. These become the
 contract's memory precondition (assembled for you). Data words must sit
 **contiguously right after the instruction region** (see the `HDataAddrs` premise
 below and **cfgver-memory** for the proof-time counterpart).
@@ -77,17 +82,16 @@ gen_contract_rel_bytes (reg_specs) (mem_specs)
                        (instrs) (bound) (fl)
 ```
 
-Both data lists are `list mem_spec_rel` — same type, same `PVExist`/`PVConst`/
-`PVBaseOff` vocabulary. **Byte expansion is opt-in PER ENTRY** so the 4× chunk
+Both data lists are `list mem_spec_rel` — same type, same `Secret`/`Public`/
+`Known (PVConst v)`/`Known (PVBaseOff k)` vocabulary. **Byte expansion is opt-in PER ENTRY** so the 4× chunk
 multiplier is paid only where a byte access needs it, and **the declaration unit
 stays a WORD**: a byte-expanded entry still describes the 4 bytes at a word-aligned
-address, so stride stays 4, `HDataAddrs` is unchanged, and the trusted statement
-layer (`mem_full_spec`, `gen_init_mem`, `declare_*`) is untouched — on that side
+address, so stride stays 4, `HDataAddrs` is unchanged, and on the concrete side
 the two lists are just concatenated, `mem_specs ++ byte_mem_specs` (keep
 `mem_specs` first and both blocks contiguous). So 32 secret bytes are **8 spec
 entries**, not 32.
 
-An existential (`PVExist`) entry costs **one** logic variable, not four: the entry
+An existential (`Secret`/`Public`) entry costs **one** logic variable, not four: the entry
 declares one `ty_xlenbits` variable and the four chunks are byte projections
 (`term_word_byte j`) of it. This is a performance decision, measured — four
 independent byte variables cost +43% `vm_compute` and +56% `Qed` at 32 bytes, and
@@ -117,7 +121,7 @@ would give a byte program a noninterference END theorem is **not written yet**
 ```coq
 gen_contract (init_addr : N)
              (reg_specs : list reg_spec)
-             (mem_specs : list mem_full_spec)
+             (mem_specs : list mem_cell)
              (instrs : list AnnotInstr)
              (fl : nat) : CFGVerifierContract
 ```
@@ -155,8 +159,10 @@ residuals in **cfgver-solve-vc**).
 ### Common case: the `_simple` bridges (prefer these)
 
 Every generator contract exits at the fall-through, and the bridges in
-`EndToEnd.v` conclude `noninterferent_strong init_addr instrs (init_addr + 4 *
-N.of_nat (length instrs)) …`, discharging the exit fact internally:
+`EndToEnd.v` conclude `ni_cells init_addr instrs (init_addr + 4 * N.of_nat
+(length instrs)) regs cells` — the kernel statement's ∀-part over a cell LIST —
+discharging the exit fact internally. The end theorem itself is reached through
+`ni_of_cells` (see "The end theorem" below):
 
 - **`gen_contract_noninterferent_param_simple`** (register-only, `mem_specs = []`):
   premises are just `HND` (`apply Prelude.nodup_fixed; reflexivity`), a
@@ -183,12 +189,20 @@ premises may be discharged in any order). Typical proof:
 ```coq
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := <regs>) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
-  - exact valid_<prog>_cfg_contract_param.
+  - exact (fits_nil Hbound).
+  - solve_valid valid_<prog>_cfg_contract_param.
 Qed.
 ```
+
+**For the `_rel_*` bridges name the bound:** `eapply
+(gen_contract_noninterferent_rel_classed_simple (bound := 164))`. Without it
+`?bound` floats until `solve_valid` (last bullet) and the `Hbound` bullet sees an
+evar — the old proofs pinned it with `exact Hb` against a literal premise, which
+the `fits` premise no longer provides.
 
 Since `plans/PLAN-exit-targets.md` there is no difference between the general and
 `_simple` forms regarding exits: `_param_simple` / `_u_simple` are aliases of
@@ -203,15 +217,50 @@ premises:
 | Premise | What it demands | Typical discharge |
 |---|---|---|
 | `HND` | `NoDup (map reg_spec_idx reg_specs)` | `repeat constructor` / `vm_compute`-style |
-| `HDataAddrs` | data word i sits at `init_addr + 4*|instrs| + 4*i` | case split per entry; `f_equal; lia` if base symbolic |
+| `HDataAddrs` | data word i sits at `(init_addr + 4*|instrs| + 4*i)%N` | case split per entry; `inversion H; subst; cbn; lia` |
 | `Hlen` | `init_addr + 4*|instrs| + 4*|mem_specs| < lenAddr` | `unfold lenAddr; lia` |
 | *(`_u` / `_rel_*` only)* `Hbound` | `init_addr + bound < lenAddr` | `exact` the premise you were given |
 | `valid_contract` | the `ValidCFGVerifierContract` VC | the one-line VC lemma — **discharge this ONE FIRST, see below** |
 
-Conclusion: `noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat
-(length instrs)) reg_specs mem_specs` (or, for `_u`, over `map
-(concretize_reg/mem init_addr) specs_rel`). There is no exit premise: the exit
-fact is discharged inside the bridge.
+Conclusion: `ni_cells init_addr instrs (init_addr + 4 * N.of_nat (length
+instrs)) reg_specs cells` (for `_u`, over `map (concretize_reg/mem init_addr)
+specs_rel`). There is no exit premise: the exit fact is discharged inside the
+bridge.
+
+### The end theorem (statement side, PLAN-spec-layer 2026-10-09)
+
+A Result file states its own SHALLOW data, not the generator's specs: a region
+list (`Layout.v`: `Word s | Array n s | Bytes n s | Gap n`) and a register list
+over `gpr` keys, then
+
+```coq
+Lemma <x>_noninterferent_param (init_addr : N) :
+  fits (init_addr + 4 * N.of_nat (length <x>_instrs)) <x>_data ->
+  noninterferent_strong init_addr <x>_instrs (init_addr + 4 * N.of_nat (length <x>_instrs))
+    (<x>_regs init_addr) (compile (init_addr + 4 * N.of_nat (length <x>_instrs)) <x>_data).
+Proof.
+  intros Hfit.
+  apply (ni_of_cells (regs' := map (concretize_reg init_addr) <x>_reg_specs_rel)
+                     (cs := map (concretize_mem init_addr) <x>_mem_specs_rel)).
+  - apply compile_clear; lia.                         (* clear of the code, D19 *)
+  - apply compile_in_range; [lia | assumption].      (* in range: from fits *)
+  - reflexivity.                                      (* regs: definitional *)
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.     (* D12: cells agree *)
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := <b>)). …
+Qed.
+```
+
+`ni_of_cells` needs `clear_of_code`, `in_range` (both from `Layout.v`: `compile_clear`,
+`compile_in_range` with the `fits` hypothesis), `regs ≡ₚ regs'` and `cells m ≡ₚ cs`.
+`solve_cells_eq` (`EndToEnd.v`) closes cell-list equalities address by address
+with `lia`; at SYMBOLIC sizes rewrite with `words_at_repeat` / `words_at_app`
+first (worked: `CheckScalarParamResult.check_scalar_cells`,
+`MuladdParamResult.muladd_cells`). A layout the region front-end cannot express
+is written as a `mem_layout` directly, with its own disjointness proof
+(`CheckScalarPtrResult.check_scalar_ptr_mem`). The fixed-address corollaries are
+SANITY CHECKS: `apply <x>_noninterferent_param. unfold fits; vm_compute;
+reflexivity.` (`cbn; lia` fails: `lenAddr` stays `2 ^ 12`).
 
 ### CRITICAL — discharge `valid_contract` FIRST, not last
 
@@ -257,16 +306,19 @@ symbolic sizes, or arrays (`GenSegment.v` defs, `GenProg.v` bridge):
 ```coq
 gen_prog_contract "p" _ regs facts doff data instrs fuel post
 ```
-- `regs : list (reg_spec_q Σ)` — `PQExist`, `PQConst v`, `PVVar "x"` (register
-  holds logic variable x), `PVOff "x" k` (x + k; ra = `PVOff "p" (4*|instrs|)`).
+- `regs : list (reg_spec_q Σ)` — `(r, Secret | Public)`, `(r, Known (PQConst v))`,
+  `(r, Known (PVVar "x"))` (register holds logic variable x), `(r, Known (PVOff "x"
+  k))` (x + k; ra = `PVOff "p" (4*|instrs|)`). A Known register is public.
 - `facts` — any extra precondition the caller proves at the valuation.
 - `data : list data_spec` laid out from `p + doff`:
-  `DCell pub (Some t | None)` one word; `DArr pub ArrUp|ArrDown count` an
+  `DCell (Secret | Public | Known t)` one word (a Known cell is public); `DArr pub ArrUp|ArrDown count` an
   `arr pub 4 (±4)` of `count` words (count a TERM — symbolic sizes);
   `DBytes pub count` an `arr pub 1 1` of `count` bytes stored as ⌈count/4⌉
   statement words; `DAt x` pure fact "next word is at x" (contiguous);
   `DPtr x` the following data lives AT x, anywhere (pointer argument).
-- Statement side: `concretize_reg_q ι regs` and `concretize_data ι off data`.
+- Generator side of the D12 correspondence: `concretize_reg_q ι regs` and
+  `concretize_data ι off data` (a `list mem_cell`); the statement states its own
+  shallow data and proves the cells equal (see "The end theorem").
 
 End theorem: `apply (gen_prog_noninterferent "p" _ regs facts doff data
 instrs fuel post ι init_addr)`; premises `reflexivity` (base lookup),
@@ -307,21 +359,22 @@ now touches `gen_contract_u` alone.
   width-index trap, `core-executor-internals` §6). Keep word cells first; the
   trusted side sees `word_data ++ byte_data`.
 - **`gen_contract_param`** — wrapper for a **register-only** program whose register
-  values are BASE-INDEPENDENT, keeping the plain `reg_spec` (`None` / `Some v`)
-  vocabulary rather than making you write `PVExist` / `PVConst v`. It absorbs the
+  values are BASE-INDEPENDENT, keeping the plain `reg_spec` (`Secret` / `Public` /
+  `Known v`) vocabulary rather than making you write `Known (PVConst v)`. It absorbs the
   `reg_spec_to_rel` translation *and* fixes `bound = 4·|instrs|`, which is why it
   is worth keeping. **Three arguments** — `reg_specs instrs fl`
-  (the exit arguments went 2026-09-25, `init_addr` 2026-09-28); the `mem_full_spec` list it used to accept was
-  removed (all 15 call sites passed `[]`). Data memory → call `gen_contract_u`.
+  (the exit arguments went 2026-09-25, `init_addr` 2026-09-28); the concrete
+  memory list it used to accept was removed (all 15 call sites passed `[]`). Data memory → call `gen_contract_u`.
 - **`gen_contract_rel`** — for reg/mem specs whose values are BASE-RELATIVE:
-  `param_val = PVExist | PVConst v | PVBaseOff k` (meaning `p+k`), needed when a
+  entries `(x, val_spec param_val)` with `param_val = PVConst v | PVBaseOff k`
+  (meaning `p+k`) under `Known`, needed when a
   register holds a base-relative address (e.g. cmovznz4's `A1 = p+116`) or a
   data word's OWN address shifts with the base (e.g. countdown_mem's counter at
   `p+16`). Takes an extra `bound : N` param (≥ max accessed byte offset + 4) and
   builds `reg_spec_rel`/`mem_spec_rel` lists instead of the plain ones.
 - **`gen_contract_rel_classed`** — same signature and same statement strength as
   `gen_contract_rel`, but the data block emits **one existential per publicness
-  class** instead of one per `PVExist` entry: an N-cell class becomes a single
+  class** instead of one per `Secret`/`Public` entry: an N-cell class becomes a single
   `bv (xlenbits * N)` variable whose cells are `bvtake`/`bvdrop` slices. This is
   *equivalent*, not weaker (N independent words are in bijection with one N-word
   vector), and it exists because `|Σ|` is the dominant VC cost driver — measured
@@ -334,7 +387,7 @@ now touches `gen_contract_u` alone.
   wash. And **the heap order changes** to pinned, then public, then private,
   rather than spec order; `consume` is order-sensitive, so a VC residual shape
   can in principle move. In practice it did not for any of the four migrated
-  examples, because their data blocks are homogeneous (all-private `PVExist`),
+  examples, because their data blocks are homogeneous (all `Secret`),
   which makes the reordering the identity. Expect to have to look only when a
   data block genuinely MIXES pinned/public/private cells.
 
@@ -342,13 +395,13 @@ now touches `gen_contract_u` alone.
   For `gen_contract_param` the situation CHANGED on 2026-08-18: it is now itself a
   classed builder, delegating to `gen_contract_rel_classed` at `mem_specs = []`
   (`PLAN-unify-generators.md` stage 1). What stays impossible is classing a
-  **non-empty concrete `mem_full_spec` block** — the two sides' existential widths
+  **non-empty concrete `mem_cell` block** — the two sides' existential widths
   are `mem_class_width (mem_rel_keys L)` and
   `mem_class_width (mem_full_keys (map (concretize_mem ia) L))`, equal only
   propositionally, so the bridge would need a dependent transport across a type
   index (`core-executor-internals` §6; note at `GenContract.v:536`). That case is
   now *unrepresentable* rather than merely unimplemented, since the parameter is
-  gone. The deeper reason it could never have worked: `mem_full_spec` carries
+  gone. The deeper reason it could never have worked: a `mem_cell` carries
   ABSOLUTE addresses and the classed block needs base-relative `mem_spec_rel`
   offsets, and you cannot translate one to the other without knowing the base.
 
@@ -356,31 +409,19 @@ now touches `gen_contract_u` alone.
 premises in the table above and instantiate the
 placement valuation at `ι = ["p" ↦ SyncVal (bv.of_N init_addr)]`. For `_rel`, the
 conclusion is stated over `map (concretize_reg/concretize_mem init_addr)
-specs_rel` (`concretize_reg`/`concretize_mem` send a `PVBaseOff k` to
-`Some (bv.of_N (init_addr+k))` at a chosen concrete base).
+specs_rel` (`concretize_*` = `val_spec_map (pv_at init_addr)`, sending
+`Known (PVBaseOff k)` to `Known (bv.of_N (init_addr+k))`; Secret/Public stay).
 
 **Concrete corollaries are free once the parametric lemma is proved** — no new
-`vm_compute`. Plain `gen_contract_param` case (statement identical to the
-concrete target, e.g. `countdown_noninterferent`):
+`vm_compute` of the VC; they are SANITY CHECKS that the `fits` premise is
+satisfiable (PLAN-spec-layer D20):
 ```coq
 apply <x>_noninterferent_param.
-unfold init_addr, lenAddr; lia.
+unfold fits; vm_compute; reflexivity.
 ```
-`gen_contract_rel` case (concrete specs need proving equal to the concretized
-`_rel` specs first, via a `vm_compute`-computable equality — e.g.
-`cmovznz4_noninterferent`/`countdown_mem_noninterferent`): use the
-**`ni_rel_corollary`** tactic notation (in `EndToEnd.v`), which folds the whole
-prove-equal / rewrite / apply / discharge-bound ritual:
-```coq
-ni_rel_corollary <x>_noninterferent_param <x>_reg_specs_rel <x>_mem_specs_rel init_addr.
-```
-It reads the concrete base from the goal, so the LAST argument is just the
-base-*definition* to unfold for the final `lia` — pass `init_addr` for the
-`= 0` corollary or a nonzero base def (e.g. `cmovznz4_start`) for a
-fixed-address one (`cmovznz4_noninterferent_at_start`); the parametric lemma is
-the same. Under the hood it still does the two `vm_compute; reflexivity`
-spec-equalities, `rewrite`, `apply <x>_noninterferent_param`, then
-`unfold <base_def>, lenAddr; lia`.
+(The `ni_rel_corollary` tactic that used to fold a spec-equality ritual here was
+deleted 2026-10-09: the corollary now states the same shallow data as the
+parametric theorem, so there is nothing to prove equal.)
 
 **Register choice for base-relative memory addressing.** RISC-V's `X0` is
 architecturally hardwired to the constant `0` (`Machine.v`'s `rX`/`wX` special-
@@ -390,6 +431,6 @@ where the program is loaded, and CANNOT be made base-relative by any contract-
 level trick. To make a data word move WITH the base (so `gen_contract_rel`'s
 contiguous-layout `HDataAddrs` premise can hold at any base), the address must
 instead be computed off a general register pre-initialized to the base
-(`reg_spec_rel` entry with `PVBaseOff 0`) — a genuine INSTRUCTION-STREAM change
+(`reg_spec_rel` entry `Known (PVBaseOff 0)`) — a genuine INSTRUCTION-STREAM change
 (not just a contract/proof-layer one) when migrating a program originally
 written against `X0` (done for `countdown_mem`: `X0` → a dedicated `X2`).

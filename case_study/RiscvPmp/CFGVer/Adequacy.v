@@ -55,6 +55,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.VerifierRel
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables.
 (* bare Require, qualified use: only cfg_postprocess (the VC pipeline) *)
 From Katamaran Require RiscvPmp.CFGVer.Contracts.
@@ -979,21 +980,28 @@ Section AdequacyTools.
   (* Public memory Iris predicates                                       *)
   (* ------------------------------------------------------------------ *)
 
-  (* All data specs as NonSyncVal regardless of public flag.
+  (* A data cell's address as a machine word, and whether it is Public
+     (shared between the runs).  Known and Secret cells take the per-run
+     (NonSyncVal) route; a Known cell's two words agree by declare_init_memory. *)
+  Definition cell_addr (s : mem_cell) : bv word := bv.of_N s.1.
+  Definition cell_pub (s : mem_cell) : bool :=
+    match s.2 with Public => true | _ => false end.
+
+  (* All data cells as NonSyncVal regardless of publicness.
      Used as the intermediate form produced by extracting raw bytes. *)
   Definition interp_mem_with_memory `{sailGS2 Σ}
-      (μ1 μ2 : Memory) (specs : list mem_spec) : iProp Σ :=
+      (μ1 μ2 : Memory) (specs : list mem_cell) : iProp Σ :=
     [∗ list] spec ∈ specs,
-      let '(a, _) := spec in
+      let a := cell_addr spec in
       interp_ptstomem (width := 4) (SyncVal a)
         (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
 
-  (* Public specs use SyncVal (words must agree); private specs use NonSyncVal *)
+  (* Public cells use SyncVal (words must agree); the others use NonSyncVal *)
   Definition interp_mem_with_public_memory `{sailGS2 Σ}
-      (μ1 μ2 : Memory) (specs : list mem_spec) : iProp Σ :=
+      (μ1 μ2 : Memory) (specs : list mem_cell) : iProp Σ :=
     [∗ list] spec ∈ specs,
-      let '(a, pub) := (spec : mem_spec) in
-      if pub
+      let a := cell_addr spec in
+      if cell_pub spec
       then interp_ptstomem (width := 4) (SyncVal a) (SyncVal (get_word μ1 a))
       else interp_ptstomem (width := 4) (SyncVal a)
              (NonSyncVal (get_word μ1 a) (get_word μ2 a)).
@@ -1047,22 +1055,22 @@ Section AdequacyTools.
   Proof. vm_compute. discriminate. Qed.
 
   (* two data cells do not overlap *)
-  Definition data_cell_sep (s t : mem_spec) : Prop :=
-    (bv.bin s.1 + 4 <= bv.bin t.1 \/ bv.bin t.1 + 4 <= bv.bin s.1)%N.
+  Definition data_cell_sep (s t : mem_cell) : Prop :=
+    (bv.bin (cell_addr s) + 4 <= bv.bin (cell_addr t) \/ bv.bin (cell_addr t) + 4 <= bv.bin (cell_addr s))%N.
 
   (* THE premise: every cell in range and clear of the code
      [start, start + 4·ncode), the cells pairwise disjoint *)
-  Definition data_layout_ok (start : N) (ncode : nat) (specs : list mem_spec) : Prop :=
-    Forall (fun s => (bv.bin s.1 + 4 <= lenAddr)%N /\
-                     (bv.bin s.1 + 4 <= start \/ start + 4 * N.of_nat ncode <= bv.bin s.1)%N) specs
+  Definition data_layout_ok (start : N) (ncode : nat) (specs : list mem_cell) : Prop :=
+    Forall (fun s => (bv.bin (cell_addr s) + 4 <= lenAddr)%N /\
+                     (bv.bin (cell_addr s) + 4 <= start \/ start + 4 * N.of_nat ncode <= bv.bin (cell_addr s))%N) specs
     /\ ForallOrdPairs data_cell_sep specs.
 
-  Definition data_bytes (specs : list mem_spec) : list (bv word) :=
-    concat (List.map (fun s => bv.seqBv s.1 4) specs).
+  Definition data_bytes (specs : list mem_cell) : list (bv word) :=
+    concat (List.map (fun s => bv.seqBv (cell_addr s) 4) specs).
 
-  Lemma data_bytes_elem (specs : list mem_spec) x :
-    Forall (fun s => (bv.bin s.1 + 4 <= lenAddr)%N) specs ->
-    x ∈ data_bytes specs -> exists s, In s specs /\ (bv.bin s.1 <= bv.bin x < bv.bin s.1 + 4)%N.
+  Lemma data_bytes_elem (specs : list mem_cell) x :
+    Forall (fun s => (bv.bin (cell_addr s) + 4 <= lenAddr)%N) specs ->
+    x ∈ data_bytes specs -> exists s, In s specs /\ (bv.bin (cell_addr s) <= bv.bin x < bv.bin (cell_addr s) + 4)%N.
   Proof.
     pose proof lenAddr_small_word.
     induction specs as [|s ss IH]; intros Hr Hx; [inversion Hx|].
@@ -1075,8 +1083,8 @@ Section AdequacyTools.
     - destruct (IH Hss Hx) as [t [Ht Hb]]. exists t. split; [right; exact Ht|exact Hb].
   Qed.
 
-  Lemma data_bytes_NoDup (specs : list mem_spec) :
-    Forall (fun s => (bv.bin s.1 + 4 <= lenAddr)%N) specs ->
+  Lemma data_bytes_NoDup (specs : list mem_cell) :
+    Forall (fun s => (bv.bin (cell_addr s) + 4 <= lenAddr)%N) specs ->
     ForallOrdPairs data_cell_sep specs ->
     NoDup (data_bytes specs).
   Proof.
@@ -1098,7 +1106,7 @@ Section AdequacyTools.
   Qed.
 
   (* intro_mem_with_memory without the contiguity: the bytes of each cell *)
-  Lemma intro_mem_with_memory_at `{sailGS2 Σ} {μ1 μ2 : Memory} (specs : list mem_spec) :
+  Lemma intro_mem_with_memory_at `{sailGS2 Σ} {μ1 μ2 : Memory} (specs : list mem_cell) :
     ([∗ list] a' ∈ data_bytes specs,
       @pointsto _ _ _ _ _
         (@mc_ghGS Σ (@memGS2_memGS_left Σ (@sailGS2_memGS Σ H))) a'
@@ -1110,14 +1118,14 @@ Section AdequacyTools.
     ⊢ interp_mem_with_memory μ1 μ2 specs.
   Proof.
     iIntros "[H1 H2]".
-    iInduction specs as [| [a pub] specs] "IH"; [done|].
+    iInduction specs as [| s specs] "IH"; [done|].
     unfold data_bytes. cbn [List.map concat fst].
     rewrite !big_opL_app.
     iDestruct "H1" as "[H1h H1t]". iDestruct "H2" as "[H2h H2t]".
     cbn [interp_mem_with_memory big_opL].
     iSplitL "H1h H2h".
-    { iApply (intro_ptstomem_word2_nonsync (get_word_is_mem_has_word μ1 a)
-                                            (get_word_is_mem_has_word μ2 a)).
+    { iApply (intro_ptstomem_word2_nonsync (get_word_is_mem_has_word μ1 (cell_addr s))
+                                            (get_word_is_mem_has_word μ2 (cell_addr s))).
       iFrame. }
     iApply ("IH" with "H1t H2t").
   Qed.
@@ -1137,7 +1145,7 @@ Section AdequacyTools.
   Proof.
     iIntros (Hlen HMem1 HMem2 [Hr Hp]) "Hmem".
     pose proof lenAddr_small_word as HL.
-    assert (Hrng : Forall (fun s : mem_spec => (bv.bin s.1 + 4 <= lenAddr)%N) data_specs).
+    assert (Hrng : Forall (fun s : mem_cell => (bv.bin (cell_addr s) + 4 <= lenAddr)%N) data_specs).
     { eapply Forall_impl; [exact Hr|]. intros s [Hs _]. exact Hs. }
     assert (Hst : bv.bin (@bv.of_N word start) = start).
     { apply bv.bin_of_N_small. lia. }
@@ -1179,15 +1187,15 @@ Section AdequacyTools.
   Qed.
 
   (* the contiguous layout right after the code satisfies data_layout_ok *)
-  Lemma contig_data_cells (base : N) (specs : list mem_spec) :
+  Lemma contig_data_cells (base : N) (specs : list mem_cell) :
     (base + 4 * N.of_nat (length specs) <= lenAddr)%N ->
-    (forall i s, specs !! i = Some s -> bv.bin s.1 = (base + 4 * N.of_nat i)%N) ->
-    Forall (fun s : mem_spec => (base <= bv.bin s.1 /\ bv.bin s.1 + 4 <= base + 4 * N.of_nat (length specs))%N) specs
+    (forall i s, specs !! i = Some s -> bv.bin (cell_addr s) = (base + 4 * N.of_nat i)%N) ->
+    Forall (fun s : mem_cell => (base <= bv.bin (cell_addr s) /\ bv.bin (cell_addr s) + 4 <= base + 4 * N.of_nat (length specs))%N) specs
     /\ ForallOrdPairs data_cell_sep specs.
   Proof.
     revert base. induction specs as [|s ss IH]; intros base Hb Hi; [split; constructor|].
-    assert (H0 : bv.bin s.1 = base) by (rewrite (Hi 0%nat s eq_refl); lia).
-    assert (Hi' : forall i t, ss !! i = Some t -> bv.bin t.1 = ((base + 4) + 4 * N.of_nat i)%N).
+    assert (H0 : bv.bin (cell_addr s) = base) by (rewrite (Hi 0%nat s eq_refl); lia).
+    assert (Hi' : forall i t, ss !! i = Some t -> bv.bin (cell_addr t) = ((base + 4) + 4 * N.of_nat i)%N).
     { intros i t Ht. rewrite (Hi (S i) t Ht). lia. }
     cbn [length] in Hb.
     destruct (IH (base + 4)%N ltac:(lia) Hi') as [Hf Hp].
@@ -1201,17 +1209,16 @@ Section AdequacyTools.
       change (ty.Val ty_word) with (bv word) in *. lia.
   Qed.
 
-  Lemma contig_data_layout (start : N) (instrs : list AST) (specs : list mem_spec) :
+  Lemma contig_data_layout (start : N) (instrs : list AST) (specs : list mem_cell) :
     (start + 4 * N.of_nat (length instrs) + 4 * N.of_nat (length specs) < lenAddr)%N ->
     (forall i s, specs !! i = Some s ->
-       s.1 = bv.of_N (start + 4 * N.of_nat (length instrs) + 4 * N.of_nat i)) ->
+       s.1 = (start + 4 * N.of_nat (length instrs) + 4 * N.of_nat i)%N) ->
     data_layout_ok start (length instrs) specs.
   Proof.
     intros Hl Ha.
     destruct (contig_data_cells (start + 4 * N.of_nat (length instrs)) specs) as [Hf Hp]; [lia| |].
-    { intros i s Hs. rewrite (Ha i s Hs). apply bv.bin_of_N_small.
-      pose proof lenAddr_small_word. apply lookup_lt_Some in Hs.
-      change (@Datatypes.length (prod (bv word) bool)) with (@Datatypes.length mem_spec) in Hs. lia. }
+    { intros i s Hs. unfold cell_addr. rewrite (Ha i s Hs). apply bv.bin_of_N_small.
+      pose proof lenAddr_small_word. apply lookup_lt_Some in Hs. lia. }
     split; [|exact Hp].
     eapply Forall_impl; [exact Hf|]. intros s Hs. cbv beta in Hs |- *.
     change (ty.Val ty_word) with (bv word) in *. lia.
@@ -1225,8 +1232,8 @@ Section AdequacyTools.
     mem_has_instrs μ1 (bv.of_N start) ws_instrs instrs →
     mem_has_instrs μ2 (bv.of_N start) ws_instrs instrs →
     (∀ i spec, data_specs !! i = Some spec →
-      spec.1 = bv.of_N (start + 4 * N.of_nat (length instrs)
-                         + 4 * N.of_nat i)) →
+      spec.1 = (start + 4 * N.of_nat (length instrs)
+                + 4 * N.of_nat i)%N) →
     @mem_res2_without_leak _ sailGS2_memGS μ1 μ2 ⊢ |={⊤}=>
       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (instrs_of_list (bv.of_N start) instrs) ∗
       interp_mem_with_memory μ1 μ2 data_specs.

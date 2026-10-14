@@ -1,16 +1,17 @@
 (* Example/Muladd/MuladdParamInstrs.v -- muladd's instructions only (promoted 2026-10-02 from the ZZ probes data),
    split out of ZZMuladdBlk.v so the symbolic-mlen probes need not rebuild
    that file's flat whole-program VC (347 s, 8.9 GB). *)
-(* ---- ZZMuladdFullN2.v's definitions, VERBATIM (not Required: that file
-   runs the flat VC, the known out-of-memory case) ---- *)
+(* ---- ZZMuladdFullN2.v's definitions (not Required: that file runs the
+   flat VC, the known out-of-memory case), with ONE difference: the program
+   below is the compiled br_i31_muladd_small itself.  ZZMuladdFullN2.v's copy
+   loads the limb-loop constant as `li A4, 3` / `li T4, 3` (its fixed N=2
+   test); here both are the real `li ..., 32`.  (Until 2026-10-09 this file
+   kept the N=2 copy and reverted the two entries with a set_nth patch --
+   PLAN-spec-layer group B.) ---- *)
 From Katamaran Require Export RiscvPmp.CFGVer.Example.Prelude.
 
-Definition S0 : RegIdx := bv.of_nat 8.
-Definition S1 : RegIdx := bv.of_nat 9.
-Definition S2 : RegIdx := bv.of_nat 18.
-Definition S3 : RegIdx := bv.of_nat 19.
 
-Definition zzmuladdfulln2_instrs : list AST :=
+Definition mb_instrs : list AST :=
   [ LOAD (bv.of_Z 0) A2 T0 false WORD   (* lw	T0, 0(A2) *)
   ; BTYPE (bv.of_Z 212) X0 T0 RISCV_BEQ   (* beqz	T0, .LBB3_5 *)
   ; ITYPE (bv.of_Z 31) X0 A3 RISCV_ADDI   (* li	A3, 31 *)
@@ -24,7 +25,7 @@ Definition zzmuladdfulln2_instrs : list AST :=
   ; ITYPE (bv.of_Z 1) A3 A3 RISCV_SLTIU   (* seqz	A3, A3 *)
   ; ITYPE (bv.of_Z (-1)) A3 A3 RISCV_ADDI   (* addi	A3, A3, -1 *)
   ; RTYPE A4 A3 A3 RISCV_AND   (* and	A3, A3, A4 *)
-  ; ITYPE (bv.of_Z 3) X0 A4 RISCV_ADDI   (* li	A4, 3 *)
+  ; ITYPE (bv.of_Z 32) X0 A4 RISCV_ADDI   (* li	A4, 32 *)
   ; ITYPE (bv.of_Z 1) X0 A5 RISCV_ADDI   (* li	A5, 1 *)
   ; ITYPE (bv.of_Z 1) X0 A6 RISCV_ADDI   (* li	A6, 1 *)
   ; ITYPE (bv.of_Z (-1)) A4 A4 RISCV_ADDI   (* addi	A4, A4, -1 *)
@@ -143,7 +144,7 @@ Definition zzmuladdfulln2_instrs : list AST :=
   ; ITYPE (bv.of_Z 1) T2 T2 RISCV_SLTIU   (* seqz	T2, T2 *)
   ; ITYPE (bv.of_Z (-1)) T2 T2 RISCV_ADDI   (* addi	T2, T2, -1 *)
   ; RTYPE T4 T2 T2 RISCV_AND   (* and	T2, T2, T4 *)
-  ; ITYPE (bv.of_Z 3) X0 T4 RISCV_ADDI   (* li	T4, 3 *)
+  ; ITYPE (bv.of_Z 32) X0 T4 RISCV_ADDI   (* li	T4, 32 *)
   ; ITYPE (bv.of_Z 1) X0 T5 RISCV_ADDI   (* li	T5, 1 *)
   ; ITYPE (bv.of_Z 1) X0 T6 RISCV_ADDI   (* li	T6, 1 *)
   ; ITYPE (bv.of_Z (-1)) T4 T4 RISCV_ADDI   (* addi	T4, T4, -1 *)
@@ -301,38 +302,38 @@ Definition zzmuladdfulln2_instrs : list AST :=
    block, so -- like ZZCheckScalarFullN2.v's own X1 -- it needs no entry
    here at all). *)
 Definition zzmuladdfulln2_reg_specs_rel : list reg_spec_rel :=
-  [ (A0, true,  PVBaseOff 1128)
-  ; (A1, false, PVExist)
-  ; (A2, true,  PVBaseOff 1140)
-  ; (X2, true,  PVBaseOff 1168)
-  ; (A3, false, PVExist); (A4, false, PVExist); (A5, false, PVExist)
-  ; (A6, false, PVExist); (A7, false, PVExist)
-  ; (T0, false, PVExist); (T1, false, PVExist); (T2, false, PVExist)
-  ; (T3, false, PVExist); (T4, false, PVExist); (T5, false, PVExist)
-  ; (T6, false, PVExist)
-  ; (S0, false, PVExist); (S1, false, PVExist); (S2, false, PVExist)
-  ; (S3, false, PVExist)
+  [ (A0, Known (PVBaseOff 1128))
+  ; (A1, Secret)
+  ; (A2, Known (PVBaseOff 1140))
+  ; (X2, Known (PVBaseOff 1168))
+  ; (A3, Secret); (A4, Secret); (A5, Secret)
+  ; (A6, Secret); (A7, Secret)
+  ; (T0, Secret); (T1, Secret); (T2, Secret)
+  ; (T3, Secret); (T4, Secret); (T5, Secret)
+  ; (T6, Secret)
+  ; (S0, Secret); (S1, Secret); (S2, Secret)
+  ; (S3, Secret)
   ].
 
 (* x[]: x[0]=bitlen PINNED 63 (PUBLIC, matches m[0] -- see header comment);
    x[1],x[2] SECRET, existentially quantified (the value being reduced). *)
 Definition zzmuladdfulln2_x_specs_rel : list mem_spec_rel :=
-  [ (1128%N, true,  PVConst (bv.of_N 63))
-  ; (1132%N, false, PVExist)
-  ; (1136%N, false, PVExist)
+  [ (1128%N, Known (PVConst (bv.of_N 63)))
+  ; (1132%N, Secret)
+  ; (1136%N, Secret)
   ].
 
 (* m[]: m[0]=bitlen PINNED 63 (PUBLIC); m[1],m[2] PUBLIC-but-unpinned. *)
 Definition zzmuladdfulln2_m_specs_rel : list mem_spec_rel :=
-  [ (1140%N, true, PVConst (bv.of_N 63))
-  ; (1144%N, true, PVExist)
-  ; (1148%N, true, PVExist)
+  [ (1140%N, Known (PVConst (bv.of_N 63)))
+  ; (1144%N, Public)
+  ; (1148%N, Public)
   ].
 
 (* Stack spill slots for S0-S3 (save/restore only, never branched on). *)
 Definition zzmuladdfulln2_stack_specs_rel : list mem_spec_rel :=
-  [ (1152%N, false, PVExist); (1156%N, false, PVExist)
-  ; (1160%N, false, PVExist); (1164%N, false, PVExist)
+  [ (1152%N, Secret); (1156%N, Secret)
+  ; (1160%N, Secret); (1164%N, Secret)
   ].
 
 Definition zzmuladdfulln2_mem_specs_rel : list mem_spec_rel :=
@@ -346,13 +347,4 @@ Definition zzmuladdfulln2_mem_specs_rel : list mem_spec_rel :=
 (* ---- end of the copy ---- *)
 
 
-Fixpoint set_nth {A} (n : nat) (x : A) (l : list A) : list A :=
-  match n, l with
-  | O, cons _ l' => cons x l'
-  | S n', cons y l' => cons y (set_nth n' x l')
-  | _, nil => nil
-  end.
 
-Definition mb_instrs : list AST :=
-  set_nth 13 (ITYPE (bv.of_Z 32) X0 A4 RISCV_ADDI)
-    (set_nth 132 (ITYPE (bv.of_Z 32) X0 T4 RISCV_ADDI) zzmuladdfulln2_instrs).

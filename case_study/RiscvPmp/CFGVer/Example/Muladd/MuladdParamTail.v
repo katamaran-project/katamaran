@@ -61,13 +61,13 @@ Definition tailCtx : LCtx :=
 (* the registers the tail only needs to own (their values are dead, or
    carried as existentials); A0 A2 A3 A5 A6 X2 are stated in tail_pre *)
 Definition tail_regs : list reg_spec_rel :=
-  [ (A1, false, PVExist); (A4, false, PVExist); (A7, false, PVExist)
-  ; (T0, true,  PVExist)                     (* m[mlen], G's public d *)
-  ; (T1, false, PVExist); (T2, false, PVExist)
-  ; (T3, false, PVExist); (T4, false, PVExist); (T5, false, PVExist)
-  ; (T6, false, PVExist)
-  ; (S0, false, PVExist); (S1, false, PVExist); (S2, false, PVExist)
-  ; (S3, false, PVExist) ].
+  [ (A1, Secret); (A4, Secret); (A7, Secret)
+  ; (T0, Public)                     (* m[mlen], G's public d *)
+  ; (T1, Secret); (T2, Secret)
+  ; (T3, Secret); (T4, Secret); (T5, Secret)
+  ; (T6, Secret)
+  ; (S0, Secret); (S1, Secret); (S2, Secret)
+  ; (S3, Secret) ].
 
 Definition tail_pre : Assertion (tailCtx ▻ "a"∷ty_xlenbits) :=
   ( A0 ↦ᵣ term_var "x" ∗ secLeakvar "x"

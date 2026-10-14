@@ -135,6 +135,8 @@ case $path in
   */CFGVer/Validity.v)     req cfgver-endtoend-internals "the SEALED contract validity every bridge takes (ValidCFGVerifierContract; PLAN-valid-blk-annot Phase 4)" ;;
   */CFGVer/EndToEnd.v)     req cfgver-endtoend-internals "you are modifying the WIRING lemmas themselves (cfg_instrs_endToEnd, cfg_instrs_verified/_safe, the _with_mem variants)" ;;
   */CFGVer/Noninterference.v) req cfgver-endtoend "this is the TRUSTED STATEMENT surface -- changing it changes what is being proved" ;;
+  */CFGVer/Layout.v)       req cfgver-endtoend "the statement FRONT-END (region/compile/fits) every Result statement writes -- changing it changes what the statements say" ;;
+  */CFGVer/SpecLists.v)    req cfgver-endtoend-internals "the PROOF-SIDE list forms of the specs (cells, gen_*, declare_*) the bridges reason over; regs_sat_declare/mem_sat_declare connect them to the kernel" ;;
 esac
 
 # ---- CFGVer examples ---------------------------------------------------------

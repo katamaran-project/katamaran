@@ -60,7 +60,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
            every parametric VC in every example is just
            `intros; vm_compute; solve_vc; solve_symbase_fetch`. *)
     Definition set_X2_to_42_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param [(X2, false, None)]
+      gen_contract_param [(X2, Secret)]
         [ADDI X2 X0 (bv.of_N 42)] 3.
 
     Lemma valid_set_X2_to_42_param :

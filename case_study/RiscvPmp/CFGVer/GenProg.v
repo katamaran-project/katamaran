@@ -20,6 +20,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.TablesRel
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
@@ -72,24 +73,25 @@ Lemma gen_regs_q_concretize `{sailGS2 Σ'} {Σ} (ι : Valuation Σ) (va : RelVal
   asn.interpret (gen_pre (map (concretize_reg_q ι) specs)) ι.["a"∷ty_xlenbits ↦ va]
   ⊢ asn.interpret (gen_regs_q specs) ι.["a"∷ty_xlenbits ↦ va].
 Proof.
-  induction specs as [|[[r pub] pv] rest IH]; intros Hs; [done|].
+  induction specs as [|[r sp] rest IH]; intros Hs; [done|].
   inversion Hs as [|? ? Hh Ht]; subst.
   cbn [gen_pre gen_regs_q map List.fold_right asn.interpret].
   iIntros "[Hh Hr]". iSplitL "Hh"; [|iApply (IH Ht with "Hr")].
-  destruct pv as [|v|b bIn k]; cbn [concretize_reg_q gen_reg_asn gen_reg_asn_q].
-  - destruct pub; cbn; iExact "Hh".
+  destruct sp as [| |[v|b bIn k]]; cbn [concretize_reg_q gen_reg_asn gen_reg_asn_q val_spec_map].
+  - cbn; iExact "Hh".
+  - cbn; iExact "Hh".
   - iExact "Hh".
   - cbn in Hh. unfold addr_off.
     assert (Hreg : forall {Γ} (ι0 : Valuation Γ) (t1 t2 : Term Γ ty_xlenbits),
         inst (T := fun Σ => Term Σ ty_xlenbits) t1 ι0 = inst (T := fun Σ => Term Σ ty_xlenbits) t2 ι0 ->
         asn.interpret (asn_regidx_pts r t1) ι0 ⊣⊢ asn.interpret (asn_regidx_pts r t2) ι0).
     { intros Γ ι0 t1 t2 E. unfold asn_regidx_pts. destruct (reg_convert r); cbn; [rewrite E|]; reflexivity. }
-    match goal with |- context [asn_regidx_pts r ?t] => remember t as T eqn:ET end.
+    match goal with |- context [asn_regidx_pts (gpr_idx r) ?t] => remember t as T eqn:ET end.
     assert (Hi : inst (T := fun Σ => Term Σ ty_xlenbits) T ι.["a"∷ty_xlenbits ↦ va]
                  = SyncVal (if bv.eqb (@bv.of_N xlenbits k) bv.zero then rv_val (env.lookup ι bIn)
                             else bv.add (rv_val (env.lookup ι bIn)) (bv.of_N k))).
     { subst T. destruct (bv.eqb (bv.of_N k) bv.zero); cbn [inst inst_term env.lookup]; rewrite Hh; reflexivity. }
-    match goal with |- context [asn_regidx_pts r (if ?c then ?x else ?y)] =>
+    match goal with |- context [asn_regidx_pts (gpr_idx r) (if ?c then ?x else ?y)] =>
       remember (if c then x else y) as T2 eqn:ET2 end.
     assert (Hi2 : inst (T := fun Σ => Term Σ ty_xlenbits) T2 ι.["a"∷ty_xlenbits ↦ va]
                   = SyncVal (if bv.eqb (@bv.of_N xlenbits k) bv.zero then rv_val (env.lookup ι bIn)
@@ -98,7 +100,7 @@ Proof.
       change (env.lookup (ι.["a"∷ty_xlenbits ↦ va]) (ctx.in_succ bIn)) with (env.lookup ι bIn);
       rewrite Hh; cbn [rv_val ty.projLeft]; reflexivity. }
     iPoseProof (proj1 (proj1 (bi.equiv_entails _ _) (Hreg _ _ T T2 (eq_trans Hi (eq_sym Hi2)))) with "Hh") as "Hh".
-    destruct pub; cbn [asn.interpret]; [iFrame "Hh"; cbn; rewrite Hi2; done|iExact "Hh"].
+    cbn [asn.interpret]. iFrame "Hh". cbn. rewrite Hi2. done.
 Qed.
 
 
@@ -110,10 +112,10 @@ Lemma gen_prog_noninterferent {R : LCtx} (pb : string) (pIn : (pb∷ty_xlenbits 
     (Hfacts : forall `{sailGS2 Σ}, ⊢ asn.interpret facts ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
     (Hok : data_ok ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data)
     (HLayout : data_layout_ok init_addr (length instrs)
-       (map mem_full_to_spec (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data)))
+       (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data))
     (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
     (valid : ValidCFGVerifierContract (gen_prog_contract pb pIn regs facts doff data instrs fuel post)) :
-  noninterferent_strong init_addr instrs (init_addr + 4 * N.of_nat (length instrs))%N
+  ni_cells init_addr instrs (init_addr + 4 * N.of_nat (length instrs))%N
     (map (concretize_reg_q ι) regs)
     (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data).
 Proof.
@@ -122,7 +124,7 @@ Proof.
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   eapply (@cfg_instrs_endToEnd_gen γ1 γ2 γ1' μ1 μ2 μ1' instrs
     (init_addr + 4 * N.of_nat (length instrs))%N n ws R ι
-    _ HpubReg (map mem_full_to_spec (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data)) HpubMem
+    _ HpubReg (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data) HpubMem
     _ valid eq_refl init_addr).
   all: try assumption.
   - unfold gen_prog_contract, gen_seg_contract. cbn [cfg_exit].
@@ -170,34 +172,34 @@ Qed.
    concretized data to data_runs (concretize_run_map) and finishes with lia. *)
 
 (* the statement cells of one run: m words from off *)
-Definition data_run (off : N) (m : nat) (pub : bool) : list mem_spec :=
-  List.map (fun i => (@bv.of_N xlenbits (off + 4 * N.of_nat i), pub)) (seq 0 m).
+Definition data_run (off : N) (m : nat) (pub : bool) : list mem_cell :=
+  List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 m).
 
-Definition data_runs (rs : list (N * nat * bool)) : list mem_spec :=
+Definition data_runs (rs : list (N * nat * bool)) : list mem_cell :=
   concat (List.map (fun '(off, m, pub) => data_run off m pub) rs).
 
 (* how concretize_data's arrays meet data_run *)
 Lemma concretize_run_map (off : N) (m : nat) (pub : bool) :
-  map mem_full_to_spec (List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits))) (seq 0 m))
+  List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 m)
   = data_run off m pub.
-Proof. unfold data_run. rewrite map_map. reflexivity. Qed.
+Proof. reflexivity. Qed.
 
 Lemma data_run_bin (off : N) (m : nat) (pub : bool) :
   (off + 4 * N.of_nat m <= lenAddr)%N ->
-  forall i s, data_run off m pub !! i = Some s -> bv.bin s.1 = (off + 4 * N.of_nat i)%N.
+  forall i s, data_run off m pub !! i = Some s -> bv.bin (cell_addr s) = (off + 4 * N.of_nat i)%N.
 Proof.
   intros Hm i s Hs. unfold data_run in Hs.
   change (List.map ?f (seq 0 m)) with (f <$> seq 0 m) in Hs.
   rewrite list_lookup_fmap in Hs.
   destruct (seq 0 m !! i) as [j|] eqn:E; [|discriminate]. cbn in Hs. injection Hs as <-.
-  apply lookup_seq in E as [-> Hj]. cbn. apply bv.bin_of_N_small.
+  apply lookup_seq in E as [-> Hj]. unfold cell_addr. cbn [fst]. apply bv.bin_of_N_small.
   pose proof lenAddr_small_word as HL. change word with xlenbits in HL.
-  change xlenbits with 32%nat in HL. lia.
+  change xlenbits with 32%nat in HL. change word with 32%nat. lia.
 Qed.
 
 Lemma data_run_cells (off : N) (m : nat) (pub : bool) :
   (off + 4 * N.of_nat m <= lenAddr)%N ->
-  Forall (fun s : mem_spec => (off <= bv.bin s.1 /\ bv.bin s.1 + 4 <= off + 4 * N.of_nat m)%N) (data_run off m pub)
+  Forall (fun s : mem_cell => (off <= bv.bin (cell_addr s) /\ bv.bin (cell_addr s) + 4 <= off + 4 * N.of_nat m)%N) (data_run off m pub)
   /\ ForallOrdPairs data_cell_sep (data_run off m pub).
 Proof.
   intros Hm. assert (Hl : length (data_run off m pub) = m) by (unfold data_run; rewrite length_map length_seq; reflexivity).
@@ -217,7 +219,7 @@ Qed.
 
 Lemma data_run_in (off : N) (m : nat) (pub : bool) s :
   (off + 4 * N.of_nat m <= lenAddr)%N -> In s (data_run off m pub) ->
-  (off <= bv.bin s.1 /\ bv.bin s.1 + 4 <= off + 4 * N.of_nat m)%N.
+  (off <= bv.bin (cell_addr s) /\ bv.bin (cell_addr s) + 4 <= off + 4 * N.of_nat m)%N.
 Proof.
   intros Hm Hs. destruct (data_run_cells off m pub Hm) as [Hf _].
   rewrite List.Forall_forall in Hf. exact (Hf s Hs).

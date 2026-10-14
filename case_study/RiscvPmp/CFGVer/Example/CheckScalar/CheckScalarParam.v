@@ -17,9 +17,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarPar
 Definition csCtx : LCtx := ["p"∷ty_xlenbits; "l"∷ty_xlenbits; "k"∷ty_xlenbits].
 
 Definition cs_regs : list reg_spec_rel :=
-  [ (X1, true,  PVBaseOff 144)                 (* ra: the exit *)
-  ; (A2, false, PVExist); (A3, false, PVExist); (A4, false, PVExist)
-  ; (A5, false, PVExist); (A6, false, PVExist); (A7, false, PVExist) ].
+  [ (X1, Known (PVBaseOff 144))                 (* ra: the exit *)
+  ; (A2, Secret); (A3, Secret); (A4, Secret)
+  ; (A5, Secret); (A6, Secret); (A7, Secret) ].
 
 Definition cs_data : list (data_spec (csCtx ▻ "a"∷ty_xlenbits)) :=
   [ DBytes false (term_val ty_xlenbits (bv.of_N 32))   (* P256_N *)

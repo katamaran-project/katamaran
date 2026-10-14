@@ -32,36 +32,51 @@ From Katamaran Require Import
    table base[] may differ arbitrarily between the two worlds.  In particular
    the trace is independent of `bits`, which is precisely the quantity the
    "Breaking Bad" finding (Table 10) is about. *)
+(* code: init_addr .. init_addr+111 (28 instructions); the data follows. *)
+Definition modpow_win_full_data : list region :=
+  [ Array 4 Secret        (* t2[0..3]    at init_addr+112 *)
+  ; Array 12 Secret ].    (* base[0..11] at init_addr+128 *)
+Definition modpow_win_full_regs (ia : N) : list reg_spec :=
+  [ (A0, Known (bv.of_N (ia + 112)));           (* &t2[0]   *)
+    (A1, Known (bv.of_N (ia + 128)));           (* &base[0] *)
+    (A2, Secret);                               (* bits     *)
+    (A3, Known (bv.of_N 4));                    (* num_win = 1 << k *)
+    (A4, Known (bv.of_N 4));                    (* mwlen    *)
+    (A5, Secret); (A6, Secret); (A7, Secret);
+    (T0, Secret); (T1, Secret); (T2, Secret); (T3, Secret);
+    (T4, Secret); (T5, Secret); (T6, Secret) ].
 Lemma modpow_win_full_noninterferent_param (init_addr : N) :
-  (init_addr + 176 < lenAddr)%N ->
+  fits (init_addr + 4 * N.of_nat (length modpow_win_full_instrs)) modpow_win_full_data ->
   noninterferent_strong init_addr modpow_win_full_instrs
-    (init_addr + 112)%N
-    (map (concretize_reg init_addr) modpow_win_full_reg_specs_rel)
-    (map (concretize_mem init_addr) modpow_win_full_mem_specs_rel).
+    (init_addr + 4 * N.of_nat (length modpow_win_full_instrs))
+    (modpow_win_full_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length modpow_win_full_instrs)) modpow_win_full_data).
 Proof.
-  intros Hb.
-  (* The `strip` restatement this proof used to open with is GONE: the
-     EndToEnd bridges now conclude over `instrs` itself, not `strip
-     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
-     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
-     at all: the hint list, the strip equation and the block obligations are
-     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
-     this example's own VC.  No statement in this file names an annotation. *)
-  eapply gen_contract_noninterferent_rel_classed_simple.
-  - apply Prelude.nodup_fixed; reflexivity.
-  - intros [|[|[|[|[|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]]]]]] spec H; cbn in H;
-      try (inversion H; subst; cbn; f_equal; lia); try discriminate.
-  - cbn. lia.
-  - exact Hb.
-  - solve_valid valid_modpow_win_full_cfg_contract_param.
+  intros Hfit.
+  apply (ni_of_cells (regs' := map (concretize_reg init_addr) modpow_win_full_reg_specs_rel)
+                     (cs := map (concretize_mem init_addr) modpow_win_full_mem_specs_rel)).
+  - apply compile_clear; lia.
+  - apply compile_in_range; [lia | assumption].
+  - reflexivity.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 176)).
+    + apply Prelude.nodup_fixed; reflexivity.
+    + intros [|[|[|[|[|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]]]]]] spec H; cbn in H;
+        try (inversion H; subst; cbn; lia); try discriminate.
+    + simpl. lia.
+    + simpl. lia.
+    + solve_valid valid_modpow_win_full_cfg_contract_param.
 Qed.
 
+(* SANITY CHECK (PLAN-spec-layer D20): the universal theorem at the
+   default load address init_addr = 0 -- its premise is satisfiable there. *)
 Lemma modpow_win_full_noninterferent :
   noninterferent_strong init_addr modpow_win_full_instrs
-    (init_addr + 112)%N
-    (map (concretize_reg init_addr) modpow_win_full_reg_specs_rel)
-    (map (concretize_mem init_addr) modpow_win_full_mem_specs_rel).
+    (init_addr + 4 * N.of_nat (length modpow_win_full_instrs))
+    (modpow_win_full_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length modpow_win_full_instrs)) modpow_win_full_data).
 Proof.
   apply modpow_win_full_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.

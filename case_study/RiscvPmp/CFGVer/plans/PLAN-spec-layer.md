@@ -1,7 +1,11 @@
 # PLAN: a readable spec layer for `noninterferent_strong`
 
-Status: rev 4 (2026-10-09): §2a migration mechanics added and accepted;
-Phase 1 started. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
+Status: rev 5 (2026-10-09): Phases 1-4 + group B IMPLEMENTED on
+`issue/spec-layer` (all 18 Result files compile); decisions taken during
+implementation are in §2a.7 for the audit. FULL GATE PASSED 2026-10-09
+(GATE_JOBS=1, at 4b8ca7d8: build clean, no holes, 24 end theorems
+axiom-clean -- only Machine.pure_decode, Base.mmioenv). Left: Emiel's
+read-through/audit, the two skill descriptions, merge + comprehension check. rev 3 (2026-10-09), Phase S DONE, Phase 0 DONE (D10–D19); D11
 scope check done (§1a, D20–D23); Phases 1–4 rewritten for D10–D26
 (Phases 2 and 3 swapped, Phase 5 removed). Next: Phase 1. Based on `KatamaranRel` (D8);
 every `file:line` below was re-checked there on 2026-10-08. Written from two
@@ -413,6 +417,92 @@ proofs `intros` the definition directly (CheckScalarParam, MuladdParam,
 PaddedLoop, CountdownRec) need their intro pattern split for D19's
 conjunct.
 
+### 2a.7 Decided DURING implementation (Claude, 2026-10-09) — for the audit
+
+Emiel asked for the implementation to run and be audited afterwards; these
+are the choices made without him, each small and reversible:
+1. Kernel `gprs` → **`gpr_list`**: `Sig.gprs` (a heap predicate) shadows it
+   in every file importing both.
+2. **`mem_cell` lives in the kernel** (`cells : mem_layout → list mem_cell`),
+   and `gen_public_addrs` / `gen_init_mem` take a `list mem_cell`; the
+   statement passes `cells mem`. Same meaning; the bridges reuse them on
+   plain cell lists.
+3. **`param_val` keeps `PVConst`/`PVBaseOff`** and loses `PVExist`
+   (= `Secret`/`Public`); `param_val_q` likewise loses `PQExist`.
+4. **A `Known` `PQAt` register and a pinned `DCell` are always public**
+   (secLeak'd). Before, a flag allowed a non-public one; no build file used
+   it, so every contract reduces to the same assertion as before (checked:
+   cmovznz4's VC 22.93 s / 4.77 GB vs 22.6 s / 4.73 GB baseline).
+5. **Adequacy/EndToEnd: a `Known` cell takes the per-run (`NonSyncVal`)
+   route**, converted to `SyncVal` where the contract needs it from the two
+   init-memory facts — as a `(a, false, Some v)` cell did before.
+6. **Every bridge concludes an internal `ni_cells`** (the kernel's ∀-part
+   over a cell LIST); one lemma `ni_of_cells` gives `noninterferent_strong`
+   from `clear_of_code`, `regs ≡ₚ regs'` and `cells m ≡ₚ cs` (D12 lands
+   there). Bridge proofs keep their old shape.
+7. **The Iris layer keeps its `sigT` register list** (`IrisInstanceBinary.v`
+   is shared with BlockVer and untouched); `pub_regs_sig` converts at the
+   bridges.
+8. `reg_spec_idx := gpr_idx ∘ fst` now lives in `EndToEnd.v` (internal).
+9. Removed: local `S0`–`S3 : RegIdx` copies in three Muladd files (Tables'
+   `gpr` ones are identical), and the concrete `mem_full_spec` lists in
+   `Cmovznz4.v`/`KeyScheduleLoop.v` (their corollaries become instances, D20).
+10. Tooling note: `.claude/hooks/coqc-guard.sh` is ACTIVE (3 builds / 15 min,
+    interactive check before building an edited file) although CLAUDE.md
+    says it was unwired 2026-09-25 — CLAUDE.md is stale there.
+11. **`fits` is strict** (`start + layout_size rs < lenAddr`), as every bridge
+    needs; `fits_nil` gives the code-only bound.
+12. **Inline programs are named in their Result file** (`set_X2_to_42_instrs`,
+    `countdown_instrs`, `jumpIfZero_instrs`, `jmp_fwd_instrs`, `swap_instrs`)
+    so statements read `ia + 4 * N.of_nat (length …_instrs)` (D23) instead
+    of repeating the list four times. `length` is `nat`, hence `N.of_nat`.
+13. **Proof-side helpers** in `EndToEnd.v`: `perm_of_eq`, `solve_cells_eq`
+    (cell lists equal address-by-address with `lia`), `words_at_repeat`,
+    `words_at_app`. D12's per-Result cost turned out SMALL: one line at fixed
+    sizes; `check_scalar_cells` and `muladd_cells` ~15 lines each at symbolic
+    sizes (split `seq 0 M` as `(M-2) + 2` to meet the generator).
+14. **Name clashes fixed**: `GenCompose`'s iProp `mem_cell` → `mem_cell_res`
+    (it shadowed the kernel's in every importer); Ltac patterns do not insert
+    the `gpr → RegIdx` coercion (`asn_regidx_pts (gpr_idx r)` spelled out).
+15. **Deleted**: `ni_rel_corollary` (corollaries now state the same shallow
+    data, nothing to prove equal) and the concrete `*_reg_specs` lists it used.
+16. **Group B**: muladd's program list is the compiled code itself
+    (`li A4/T4, 32`); `set_nth` is gone. Checked: the `vm_compute`d
+    `mb_instrs` is byte-identical before and after.
+17. **Docs**: skill BODIES updated (gen-contract, gen-contract-internals,
+    memory, endtoend-internals, solve-vc, new-example, scaling-diagnostics,
+    reading-quiz) — NOTE these went through Bash from inside `.claude/skills`
+    with relative paths, which `skill-bash-write-guard.sh` does not match: a
+    gap in that guard (it should resolve the path against the cwd), found by
+    accident; body edits are allowed via Edit, so the content is within the
+    rules. `skill-path-guard.sh` gained `Layout.v → cfgver-endtoend` (its
+    11-case suite passes). **NOT done — needs Emiel:** the frontmatter
+    `description:` of `cfgver-gen-contract` and `cfgver-memory` still name
+    `mem_full_spec`/`mem_spec`/`(RegIdx * is_public * option value)`;
+    description edits are hook-gated on a `skill-routing-maintenance` consult
+    (a paid judge eval), not started without his go-ahead.
+
+### 2a.8 Post-audit changes (Emiel, reading quiz 4, 2026-10-12)
+
+Decided by Emiel (all four "Recommended" options); TODO item H:
+- **De-clutter** (HIGH): the eight `declare_*`/`gen_*` premises of
+  `noninterferent_strong` are now `regs_sat γ1 γ2 reg_specs` and
+  `mem_sat μ1 μ2 mem`, both built on one `val_sat x1 x2 s`
+  (Secret ⇒ True, Public ⇒ x1 = x2, Known v ⇒ x1 = v ∧ x2 = v).
+- **`is_gpr`** = `bool_decide (r ∈ gpr_list)` over a kernel
+  `EqDecision (Reg ty_xlenbits)` instance (the `existT` moved into it).
+- **`Addr`**: the kernel reads memory per block at `Addr`s
+  (`words_sat`, `bv.add a (bv.of_N 4)`); it has NO cell type any more.
+  **Reverses §2a.7 item 2**: `mem_cell`/`words_at`/`cells` and all
+  `gen_*`/`declare_*` moved to the new proof-side `SpecLists.v` (light,
+  requires only the kernel), with `regs_sat_declare`/`mem_sat_declare`.
+- **Wrap-around guard**: `in_range` (code end and every `blk_end` <
+  lenAddr) is a CONJUNCT of `noninterferent_strong`, next to
+  `clear_of_code`; `Layout.compile_in_range` gives it from `fits`.
+  CheckScalarPtr's two raw `< lenAddr` premises became one
+  `in_range … (check_scalar_ptr_mem …)` premise.
+- `ni_of_cells` gained an `in_range` premise; every bridge unchanged.
+
 ## 3. Phases
 
 One session per phase is the intended rhythm (`/clear` between, the plan
@@ -477,6 +567,18 @@ covers only its own files.
   (D14), `compile` (D16: data start + regions → base memory), `fits`, the
   ONE generic disjointness-by-shape lemma (D11) and clear-of-code by shape.
   The D22 rounding of `Bytes`, with its TODO at the definition.
+- **STATUS 2026-10-09: implemented** (`af32d3ac` kernel, then `Layout.v`).
+  Both compile; `ZZSpecLayerDrafts.v` (untracked probe, CFGVer/) typechecks
+  all four draft statements against the real definitions and PROVES D21's
+  `cs_disjoint` (5 lines). Findings: (1) byte order is CORRECT —
+  `get_word_read_ram` proves `get_word = fun_read_ram μ 4` (the machine's
+  load); (2) `length` is `nat`, so statements read
+  `ia + 4 * N.of_nat (length instrs)`, not the drafts' `4 * length instrs`;
+  (3) `repeat constructor` picks the wrong disjunct in a disjointness proof
+  — spell the `ForallOrdPairs` steps out; (4) `Tables.v`'s `gpr` aliases +
+  `gpr_idx` coercion MOVED to the start of Phase 2: `Tables.v` is in the
+  verifier chain and the coercion changes how every instruction list
+  elaborates. Awaiting Emiel's re-read of the probe.
 - **Check:** both files compile (`keep_vo`). The three statements of
   `PLAN-spec-layer-statements.md` (cmovznz4, muladd, check_scalar — the
   latter in D21's base form) typecheck in a `ZZ` probe with `Admitted`

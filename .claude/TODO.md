@@ -137,6 +137,12 @@ use it for future examples instead of hand-transcribing.
 **Open items from the 2026-10-08 learning session, grouped (Emiel asked which
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
+- **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
+  18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
+  and the merge comprehension check). Implementation-time decisions:
+  PLAN-spec-layer §2a.7. Still open from A: the frontmatter descriptions of
+  `cfgver-gen-contract`/`cfgver-memory` (hook-gated). Decode assumption: no
+  action (D13). The Priority-0 notes below are now HISTORY.
 - **A. Spec-layer redesign — ONE pass** (`plans/PLAN-spec-layer.md`): sum type,
   `Reg` keys, mem plumbing, one word predicate, `concretize_data`/`data_ok`,
   visible checks, trusted-file comments. Together because the design
@@ -149,7 +155,8 @@ G and the rest of F anywhere.**
   them all anyway — a separate pass costs a second review + gate.
 - **C. End-theorem proof automation — AFTER A**: `_simple` bridge for mixed
   front-ends + `data_spec`, one generic bv tactic, what the ~60 lines of
-  `check_scalar_ptr_noninterferent` do. After, because A's Phase 2 rewrites
+  `check_scalar_ptr_noninterferent` do (85 lines on issue/spec-layer;
+  Emiel 2026-10-09: "still way too long, we should clean this up"). After, because A's Phase 2 rewrites
   these bridges.
 - **D. Audit of past changes — independent** (agent findings, UNVERIFIED;
   `.claude/learning/commit-groups.md`): `1236c880` `fun_bool_to_bits`
@@ -174,6 +181,81 @@ G and the rest of F anywhere.**
   show in `git status`); if `scripts/gate.sh`'s hole scan reads subdirectories
   of the filesystem, an untracked `Admitted` probe there could block the gate.
   The rocq `guardrails.sh` false positive on `checkout -- .` recurred.
+- **H. Spec-layer readability — reading quiz 4 (2026-10-09, Emiel, on
+  `issue/spec-layer`). Options only, NOT decided. Priority (Emiel): the
+  DE-CLUTTER item is HIGH; every other bullet here is LOW:**
+  - [LOW] `is_gpr` (`Noninterference.v:118`) packs into `existT` only because the
+    sole register EqDec is `𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg)` (`Base.v:1064`).
+    Options: an `EqDecision (Reg ty_xlenbits)` instance outside the kernel; a
+    direct `match` rejecting pc/nextpc/mtvec/...; a 31-constructor `gpr` enum.
+  - [LOW] `mem_cell` (`:219`) should carry an `Addr` (`Base.v:74`), not N — every
+    consumer does `bv.of_N` (`:247`, `:273`); N is only needed for the block
+    overlap test (`:198`).
+  - **[HIGH]** De-clutter `noninterferent_strong` (`:355–360`): replace the 8
+    `declare_*`/`gen_*` premises by two relational predicates
+    (`regs_sat γ1 γ2 reg_specs`, `mem_sat μ1 μ2 mem`, matching on
+    Secret/Public/Known directly) so no `gen_*` is on the trusted surface. Folded in (Emiel): this also
+    merges `gen_public_addrs`/`gen_init_mem` (and the reg pair) and counts
+    `Known` as public (already implied — make it said).
+  - **TODO** (quiz 5, 2026-10-12) Make `ni_cells` (`EndToEnd.v:1747`)
+    consistent with `noninterferent_strong`: it still states the OLD shape
+    (eight `declare_*`/`gen_*` premises) and every bridge concludes it
+    (8 `gen_contract_noninterferent_*` + `GenProg.gen_prog_noninterferent`);
+    `ni_of_cells` translates at all 21 Result call sites. Option: restate it
+    with `regs_sat γ1 γ2 regs'` / `cells_sat μ1 μ2 cs`, so `ni_of_cells` only
+    permutes (+ `mem_sat_cells`) and the `declare_*` conversion moves inside
+    the bridges (where the Iris side needs it anyway).
+  - **TODO** [LOW] (quiz 5, 2026-10-12) `words_sat` reads words with the kernel's own
+    `get_word`; `get_word_read_ram` (`Noninterference.v:154`) proves it equals
+    the machine's load `fun_read_ram μ 4 a`. Option: state `words_sat` with
+    `fun_read_ram` directly, so the statement trusts the Sail-derived reader
+    instead of a second definition.
+  - **TODO** (quiz 5 Q2, 2026-10-12) `check_scalar_ptr_noninterferent` has shape
+    `in_range … → in_range … ∧ NI`, so its conjunct guards nothing, and unlike
+    cmovznz4 (`_noninterferent`/`_at_start` at ia = 0/256) it has NO
+    premise-free sanity instance: nothing shows its premise is ever
+    satisfiable. Add one (e.g. ia = 0, ka = 176, l = 32). General rule: a
+    parametric Result's conjuncts only guard in its premise-free instances.
+  - [LOW] **Split statement data from proof data** (reopens D12): `Secret` entries
+    are statement-level no-ops (registers: exactly; memory: they only feed
+    `fits` and placement — cmovznz4's layout says only "code+48 bytes fits").
+    They exist so D12's EQUALITY with the generator's specs holds. Option:
+    statement lists only Public/Known; proof shows generator ⊇ statement with
+    the rest Secret. Open (unverified): the proof likely still needs the
+    working area below lenAddr, so a footprint/size premise may remain.
+  - [LOW] Register pointers are literals independent of the layout (cmovznz4
+    `A2 := ia+132`; muladd `A2/X2 := ia+1144` must hit m's `Known b` header):
+    only the proof-side `*_cells` lemma ties them; the statement does not.
+  - [LOW] Registers as a PARTIAL MAP `gpr ⇀ val_spec` (Emiel), absent =
+    Secret: duplicate keys become unwritable (today `[(A0, Known 1); (A0,
+    Known 2)]` is a writable VACUOUS statement — the bridges' NoDup premise
+    does not protect the statement, a hand proof could exploit it; memory
+    already has `blocks_ok`) and the all-Secret padding disappears.
+  - [LOW] Wrap-around (quiz Q3): `blocks_disjoint`/`clear_of_code` are in N
+    but memory is read via `bv.of_N` (mod 2^32), so blocks at a and a+2^32
+    alias; conflicting Known words there (or vs. the code) = VACUOUS. Today
+    prevented only by each Result's own lenAddr premises — `fits`, or in
+    CheckScalarPtr two raw `< lenAddr` lines (`CheckScalarPtrResult.v:116-117`),
+    which Emiel finds uninsightful: use a fits-style predicate there. Option:
+    a kernel-level in-range predicate over a `mem_layout` (every block_end
+    and the code end < lenAddr) — as a CONJUNCT of `noninterferent_strong`
+    (D19 style: out of range ⇒ unprovable, not vacuous), with `Layout.fits`
+    implying it.
+  - [LOW] `Bytes (n) (s : val_spec Empty_set)` + `match e with end`
+    (`Layout.v:38,56`) is a typing trick for "Secret|Public only"; a
+    dedicated 2-constructor type would say it directly. Also P256_N is
+    `Bytes 32 Secret` in CheckScalarParam but `repeat Secret 8` words in
+    CheckScalarPtr — one footprint, two spellings.
+  - [LOW] Real NON-VACUITY check (Emiel, quiz Q5): the `_noninterferent` /
+    `_at_start` instances only show the `fits` premise is satisfiable (sanity
+    for the parametric base — their comment "so it is not vacuous"
+    OVERCLAIMS). Option: a lemma `∃ γ1 γ2 μ1 μ2 ws, <all premises>`. Blocked
+    in part by `Axiom pure_decode` (`Machine.v:147`): `mem_has_instrs` is
+    unprovable in Coq without it, so state it RELATIVE to
+    `Forall (fun i => ∃ w, pure_decode w = inr i) instrs` — which makes D13's
+    informal "decodable by construction" an explicit hypothesis. Satisfiable
+    premises still allow a trivial theorem (world 1 takes 0 steps); a run
+    reaching the exit cannot be exhibited while decode is an axiom.
 
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that

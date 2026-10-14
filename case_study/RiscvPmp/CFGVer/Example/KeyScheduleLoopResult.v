@@ -56,37 +56,45 @@ From Katamaran Require Import
    branch whose body both re-runs secret arithmetic AND stores to an
    advancing (base-relative) table address works with the same reusable
    bridge and offset-agnostic tail as every other example. *)
+(* code: init_addr .. init_addr+55 (14 instructions); the table follows. *)
+Definition key_schedule_loop2_data : list region :=
+  [ Array 2 Secret ].     (* table[0..1] at init_addr+56 *)
+Definition key_schedule_loop2_regs (ia : N) : list reg_spec :=
+  [ (A0, Secret); (A1, Secret); (A2, Secret);   (* H and two scratch registers *)
+    (A3, Known (bv.of_N (ia + 56)));            (* &table[0] *)
+    (A4, Known (bv.of_N 2)) ].                  (* trip count *)
 Lemma key_schedule_loop2_noninterferent_param (init_addr : N) :
-  (init_addr + 64 < lenAddr)%N ->
+  fits (init_addr + 4 * N.of_nat (length key_schedule_loop2_instrs)) key_schedule_loop2_data ->
   noninterferent_strong init_addr key_schedule_loop2_instrs
-    (init_addr + 56)%N
-    (map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
-    (map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel).
+    (init_addr + 4 * N.of_nat (length key_schedule_loop2_instrs))
+    (key_schedule_loop2_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length key_schedule_loop2_instrs)) key_schedule_loop2_data).
 Proof.
-  intros Hb.
-  (* The `strip` restatement this proof used to open with is GONE: the
-     EndToEnd bridges now conclude over `instrs` itself, not `strip
-     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
-     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
-     at all: the hint list, the strip equation and the block obligations are
-     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
-     this example's own VC.  No statement in this file names an annotation. *)
-  eapply gen_contract_noninterferent_rel_classed_simple.
-  - apply Prelude.nodup_fixed; reflexivity.
-  - intros [|[|i]] spec H; cbn in H;
-      try (inversion H; subst; cbn; f_equal; lia); try discriminate.
-  - cbn. lia.
-  - exact Hb.
-  - solve_valid valid_key_schedule_loop2_cfg_contract_param.
+  intros Hfit.
+  apply (ni_of_cells (regs' := map (concretize_reg init_addr) key_schedule_loop2_reg_specs_rel)
+                     (cs := map (concretize_mem init_addr) key_schedule_loop2_mem_specs_rel)).
+  - apply compile_clear; lia.
+  - apply compile_in_range; [lia | assumption].
+  - reflexivity.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 64)).
+    + apply Prelude.nodup_fixed; reflexivity.
+    + intros [|[|i]] spec H; cbn in H;
+        try (inversion H; subst; cbn; lia); try discriminate.
+    + simpl. lia.
+    + simpl. lia.
+    + solve_valid valid_key_schedule_loop2_cfg_contract_param.
 Qed.
 
-(* The concrete result is now a corollary of the universal-base theorem
-   above. *)
+(* SANITY CHECK (PLAN-spec-layer D20): the universal theorem at the
+   default load address init_addr = 0 -- its premise is satisfiable there. *)
 Lemma key_schedule_loop2_noninterferent :
-  noninterferent_strong init_addr key_schedule_loop2_instrs (init_addr + 56)%N
-    key_schedule_loop2_reg_specs key_schedule_loop2_mem_specs.
+  noninterferent_strong init_addr key_schedule_loop2_instrs
+    (init_addr + 4 * N.of_nat (length key_schedule_loop2_instrs))
+    (key_schedule_loop2_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length key_schedule_loop2_instrs)) key_schedule_loop2_data).
 Proof.
-  ni_rel_corollary key_schedule_loop2_noninterferent_param
-    key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel init_addr.
+  apply key_schedule_loop2_noninterferent_param.
+  unfold fits; vm_compute; reflexivity.
 Qed.
-
