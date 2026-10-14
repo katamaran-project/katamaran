@@ -63,20 +63,19 @@ From Katamaran Require RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParamVC.
 
 (* A block-free annotation (a loop body) as a typed list *)
 Definition liftV (ai : AnnotInstr) : AnnotInstrV blkValid :=
-  MkAnnotInstrV (ai_ghost_before ai) (ai_instr ai) (ai_ghost_after ai) None
-    (if ai_loop ai then true else false).
+  MkAnnotInstrV (ai_ghost_before ai) (ai_instr ai) (ai_ghost_after ai) None.
 
 (* ---- 1. THE LOOP BLOCKS ARE VALID ---------------------------------------- *)
 
 Lemma l1_valid : blkValid l1Blk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") l1_instrs 16 12 [] l1_inv l1_post
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") l1_instrs 16 12 [] l1_inv l1_post
            (List.map liftV l1_annot) (fun v iota => eq_refl) eq_refl valid_l1).
 Qed.
 
 Lemma l2_valid : blkValid l2Blk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") l2_instrs 52 30 [] l2_inv l2_post
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") l2_instrs 52 30 [] l2_inv l2_post
            (List.map liftV l2_annot) (fun v iota => eq_refl) eq_refl valid_l2).
 Qed.
 
@@ -88,14 +87,14 @@ Definition cs_blockV (i : nat) : option (BlkAnnotV blkValid) :=
   else None.
 
 Definition cs_annotV : list (AnnotInstrV blkValid) :=
-  List.map (fun '(i, ins) => MkAnnotInstrV (cs_before i) ins (cs_after i) (cs_blockV i) false)
+  List.map (fun '(i, ins) => MkAnnotInstrV (cs_before i) ins (cs_after i) (cs_blockV i))
     (List.combine (List.seq 0 (length cs_instrs)) cs_instrs).
 
 Lemma map_snd_combine_seq {A} (l : list A) k :
   List.map snd (List.combine (List.seq k (length l)) l) = l.
 Proof. revert k; induction l as [|x l IH]; intros k; cbn; [reflexivity | f_equal; apply IH]. Qed.
 
-Lemma cs_erase : List.map (eraseV cs) cs_annotV = cs_annot.
+Lemma cs_erase : List.map eraseV cs_annotV = cs_annot.
 Proof.
   unfold cs_annotV, cs_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV, cs_blockV, cs_block. cbn.
@@ -115,7 +114,6 @@ Proof.
   apply (@ValidCFGVerifierContract_intro _ cs cs_annotV).
   - rewrite cs_erase. exact CheckScalarParamVC.valid_cs.
   - exact cs_code.
-  - unfold cs_annotV. apply List.Forall_map, List.Forall_forall. intros [i ins] _. reflexivity.
 Qed.
 
 (* ---- 3. THE END THEOREM, FOR EVERY klen ---------------------------------- *)

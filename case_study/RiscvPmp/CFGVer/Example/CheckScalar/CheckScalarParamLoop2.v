@@ -13,8 +13,11 @@ From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 From Katamaran Require Import RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParamLoop1.
 
+(* The PARAMETERS: the code base and the two arrays' ends.  The count n
+   changes, so it is existential in the invariant (PLAN-loop-rule.md, L2);
+   the post needs no total, both arrays being walked to their fixed ends. *)
 Definition l2Ctx : LCtx :=
-  ["q"∷ty_xlenbits; "eK"∷ty_xlenbits; "eN"∷ty_xlenbits; "n"∷ty_xlenbits].
+  ["q"∷ty_xlenbits; "eK"∷ty_xlenbits; "eN"∷ty_xlenbits].
 
 Definition l2_instrs : list AST :=
   [ LOAD (bv.of_Z 0) A0 A5 true BYTE
@@ -45,11 +48,13 @@ Definition l2_scratch {Σ} : Assertion Σ :=
     ∗ asn.exist "v7" ty_xlenbits (A7 ↦ᵣ term_var "v7") )%asn.
 
 Definition l2_inv : Assertion (l2Ctx ▻ "a"∷ty_xlenbits) :=
-  ( l2_state (term_var "n") (term_var "eK") (term_var "eN")
-    ∗ secLeakvar "eK" ∗ secLeakvar "eN" ∗ secLeakvar "n"
-    ∗ asn.formula (formula_relop bop.neq (term_var "n") (term_val ty_xlenbits bv.zero))
-    ∗ asn.formula (formula_relop bop.bvult (term_var "n")
-        (term_val ty_xlenbits (bv.of_N 0x40000000)))
+  ( asn.exist "n" ty_xlenbits
+      ( l2_state (term_var "n") (term_var "eK") (term_var "eN")
+        ∗ secLeakvar "n"
+        ∗ asn.formula (formula_relop bop.neq (term_var "n") (term_val ty_xlenbits bv.zero))
+        ∗ asn.formula (formula_relop bop.bvult (term_var "n")
+            (term_val ty_xlenbits (bv.of_N 0x40000000))))
+    ∗ secLeakvar "eK" ∗ secLeakvar "eN"
     ∗ l2_scratch )%asn.
 
 Definition l2_post : Assertion (l2Ctx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
@@ -67,13 +72,13 @@ Definition l2_annot : list AnnotInstr :=
   | cons i0 (cons i1 rest) =>
       cons {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1 1) ]
             ; ai_instr := i0 ; ai_ghost_after := []
-            ; ai_block := None ; ai_loop := Some l2Blk |}
+            ; ai_block := None |}
         (cons {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 1 1) ]
                ; ai_instr := i1 ; ai_ghost_after := []
-               ; ai_block := None ; ai_loop := None |}
+               ; ai_block := None |}
            (List.map AST_AnnotInstr rest))
   | _ => nil
   end.
 
-Lemma valid_l2 : cfg_vc l2Rec l2_annot.
+Lemma valid_l2 : cfg_vc_loop l2Rec l2_annot.
 Proof. Time solve_mb_vc. Qed.

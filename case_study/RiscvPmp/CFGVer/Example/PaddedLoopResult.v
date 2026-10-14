@@ -98,13 +98,13 @@ Import IrisModel.RiscvPmpIrisBase.
    with its validity.  Its erasure is padded_annot by conversion. *)
 Definition padded_annotV : list (AnnotInstrV blkValid) :=
   List.map AST_AnnotInstrV pl_filler
-  ++ (MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid)) false
+  ++ (MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid))
       :: List.map AST_AnnotInstrV [BNE X1 X0 back4]).
 
 Lemma plLink_valid : ValidCFGVerifierContract plLink.
 Proof.
   apply (@ValidCFGVerifierContract_intro _ plLink padded_annotV);
-    [exact valid_plLink | reflexivity | repeat constructor].
+    [exact valid_plLink | reflexivity].
 Qed.
 
 Lemma padded_loop_noninterferent_param (init_addr : N) :
@@ -126,8 +126,7 @@ Proof.
   pose proof (seg_fits_bin (init_addr + pl_head) 8 ltac:(unfold seg_fits_memory, pl_head; lia)) as Hbin2.
   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' padded_instrs
     (init_addr + 264)%N n ws cdRecCtx
-    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-          .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
+    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
     _ HpubReg plLink plLink_valid eq_refl init_addr).
   - reflexivity.
   - apply (seg_exit_table_ok _ _ init_addr 264). reflexivity.
