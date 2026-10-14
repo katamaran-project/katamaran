@@ -484,16 +484,6 @@ Record AnnotInstr := MkAnnotInstr
   ; ai_loop         : option BlkAnnot
   }.
 
-(* Which block, if any, the executor applies at this instruction.  `stepped`
-   says whether an instruction of the current run has executed yet; both
-   executors dispatch on this one function, so their block matches stay rigid.
-   ai_block wins if both are set. *)
-Definition ai_fire (stepped : bool) (ai : AnnotInstr) : option BlkAnnot :=
-  match ai_block ai with
-  | Some b => Some b
-  | None   => if stepped then ai_loop ai else None
-  end.
-
 Definition strip (instrs : list AnnotInstr) : list AST :=
   List.map (fun ai => ai_instr ai) instrs.
 
@@ -524,12 +514,11 @@ Local Arguments List.cons {_} & _ _.
 Coercion list_AST_AnnotInstr (l : list AST) : list AnnotInstr :=
   List.map AST_AnnotInstr l.
 
-(* Every program written as a plain list of ASTs carries NO block contracts
-   of either kind (`ai_fire true` selects ai_block or ai_loop).  This is what
-   lets each existing example discharge blocksSound (Adequacy.v) in one line
-   without its statement being restricted. *)
+(* Every program written as a plain list of ASTs carries NO block contracts.
+   This is what lets each existing example discharge blocksSound (Adequacy.v)
+   in one line without its statement being restricted. *)
 Lemma ai_block_none_of_AST (l : list AST) :
-  List.Forall (fun ai => ai_fire true ai = None) (list_AST_AnnotInstr l).
+  List.Forall (fun ai => ai_block ai = None) (list_AST_AnnotInstr l).
 Proof. apply List.Forall_map, List.Forall_forall. reflexivity. Qed.
 
 (* A program written as a plain list of ASTs strips back to itself.  Used by
@@ -1100,6 +1089,19 @@ Section CFGVerificationDerived.
         (apc : STerm ty_xlenbits w) : bool :=
       Term_eqb (peval apc) (peval exits).
 
+    (* THE LOOP HEAD (PLAN-loop-rule.md, decision L7): the address a loop VC
+       also stops at, i.e. its back edge.  It is the table's FIRST key, the
+       contract's placement at offset 0 (table_of_list builds the table in
+       order from offset 0), compared exactly as lookup_instr compares keys.
+       Read off the table rather than passed separately, so it is persisted
+       with the table and needs no relation of its own. *)
+    Definition is_head {w} (tbl : SInstrTableW w)
+        (apc : STerm ty_xlenbits w) : bool :=
+      match tbl with
+      | (t,_,_) :: _ => Term_eqb (peval apc) (peval t)
+      | nil          => false
+      end.
+
     (* A BLOCK'S CODE IS REALLY IN THE PROGRAM (PLAN-valid-blk-annot.md §1c):
        every instruction of the block's contract sits at its address, from
        `apc` on in steps of 4, in this table.  Checked at the firing site, so
@@ -1592,12 +1594,11 @@ Section CFGVerificationDerived.
               (persist_etable  (θ1 ∘ θ2 ∘ θ3) exits)
               (persist__term apc' θ3) (persist__term apc' θ3).
 
-    (* `first`   : this is the contract's entry step (gates the exit test).
-       `stepped` : an instruction of this run has executed (gates ai_loop, via
-                   ai_fire).  They differ exactly after a block fired at the
-                   entry: the exit test is live again, but nothing has run, so
-                   no later has been earned and a re-entry block may not fire. *)
-    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (first stepped : bool) :
+    (* `loop`  : this is a LOOP VC (PLAN-loop-rule.md): the run also stops at
+                 the loop head, i.e. at its back edge.  Constant for a run.
+       `first` : this is the contract's entry step, where neither the exit nor
+                 the head stops the run -- the run STARTS at the head. *)
+    Fixpoint sexec_cfg_addr {Σ0 : LCtx} (fuel : nat) (loop first : bool) :
       ⊢ Sub Σ0 -> SInstrTableW -> SExitTable -> STerm ty_xlenbits ->
         STerm ty_xlenbits -> SHeapSpec (STerm ty_xlenbits) :=
       fun w trans tbl exits apc anp =>
@@ -1669,8 +1670,14 @@ Section CFGVerificationDerived.
                declared exit and continue, other than at the entry.  `is_exit`
                is a syntactic `Term_eqb` after `peval`, so this fires only where
                the pc term literally IS a declared exit term -- never on an
-               undecided comparison. *)
-            if andb (negb first) (is_exit exits apc) then pure apc else
+               undecided comparison.
+
+               A LOOP VC STOPS AT ITS HEAD TOO (PLAN-loop-rule.md).  The back
+               edge returns the pc like an exit does; which of the two was
+               reached is the loop post's business (Contracts.loop_post), not
+               the executor's.  `first` is what lets the run start there. *)
+            if andb (negb first) (is_exit exits apc || (loop && is_head tbl apc))
+            then pure apc else
               (match lookup_instr tbl apc with
                | None         => emsg "sexec_cfg_addr: no instruction key matches this pc term"
                | Some (wd, ai) =>
@@ -1700,14 +1707,12 @@ Section CFGVerificationDerived.
 
                     A block is accounted for at the address it starts at, and
                     its exit is reached by the arithmetic rather than by the pc
-                    matching a declared exit.  `stepped` passes through
-                    unchanged: a block executes no instruction of THIS run, so
-                    it earns no later (see ai_loop). *)
-                 match ai_fire stepped ai with
+                    matching a declared exit. *)
+                 match ai_block ai with
                  | Some b =>
                      ⟨ θb ⟩ apc' <- sexec_block_chk tbl b apc ;;
                      ⟨ θn ⟩ np'  <- demonic (Some "np") _ ;;
-                     sexec_cfg_addr n' false stepped
+                     sexec_cfg_addr n' loop false
                        (persist (A := Sub Σ0) trans (θb ∘ θn))
                        (persist_itableW (θb ∘ θn) tbl)
                        (persist_etable  (θb ∘ θn) exits)
@@ -1737,7 +1742,7 @@ Section CFGVerificationDerived.
                    let np0 := persist__term anp θ0 in
                    let wd0 := persist__term wd  θ0 in
                    ⟨ θd ⟩ _    <- drop_dead drop_fuel tr0 tb0 ex0 pc0 np0 wd0 ;;
-                   step_after_drop (@sexec_cfg_addr Σ0 n' false true) ai
+                   step_after_drop (@sexec_cfg_addr Σ0 n' loop false) ai
                      (persist (A := Sub Σ0) tr0 θd)
                      (persist_itableW θd tb0)
                      (persist_etable  θd ex0)
@@ -1875,17 +1880,18 @@ Section CFGVerificationDerived.
     Qed.
 
     Lemma cext_sexec_cfg_addr {Sg0 : LCtx} (fuel : nat) :
-      forall (first stepped : bool)
+      forall (loop first : bool)
         {w : World} (trans : Sub Sg0 w) (tbl : SInstrTableW w)
         (exits : SExitTable w) (apc anp : Term (wctx w) ty_xlenbits),
-        CExt (sexec_cfg_addr fuel first stepped trans tbl exits apc anp).
+        CExt (sexec_cfg_addr fuel loop first trans tbl exits apc anp).
     Proof.
-      induction fuel as [|n IH]; intros first stepped w trans tbl exits apc anp;
+      induction fuel as [|n IH]; intros loop first w trans tbl exits apc anp;
         cbn [sexec_cfg_addr].
       - apply cext_error.
-      - destruct (andb (negb first) (is_exit exits apc)); [apply cext_pure|].
+      - destruct (andb (negb first) (is_exit exits apc || (loop && is_head tbl apc)));
+          [apply cext_pure|].
         destruct (lookup_instr tbl apc) as [[wd ai]|]; [|apply cext_error].
-        destruct (ai_fire stepped ai) as [b|].
+        destruct (ai_block ai) as [b|].
         { apply cext_bind; [apply cext_sexec_block_chk|]. intros w1 th1 apc'.
           apply cext_bind; [apply cext_demonic|]. intros w2 th2 np'.
           apply IH. }
@@ -2019,7 +2025,9 @@ Section CFGVerificationDerived.
        introduced HERE, before the execution loop, so nothing about them
        depends on the trip count — and since 2026-08-24 they cost ONE binder
        for the whole program rather than one per instruction. *)
-    Definition sexec_triple_addr {Σ : LCtx}
+    (* `loop` : run as a LOOP VC (PLAN-loop-rule.md): the run also stops at
+       the head, and `ens` is the loop post saying which stop was reached. *)
+    Definition sexec_triple_addr {Σ : LCtx} (loop : bool)
       (req : Assertion (Σ ▻ ("a"::ty_xlenbits)))
       (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ))
       (fuel : nat)
@@ -2042,7 +2050,7 @@ Section CFGVerificationDerived.
         let a2 := persist__term a (θ1' ∘ θ2) in
         let ζ := persist (A := Sub Σ) δ (θ1 ∘ θ1' ∘ θ2) in
         let ws := List.map (fun x => persist__term x (θ1 ∘ θ1' ∘ θ2)) ws0 in
-        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel true false
+        ⟨ θ3 ⟩ na <- sexec_cfg_addr fuel loop true
                        (persist (A := Sub (Σ ▻ ("a"::ty_xlenbits))) δ1 θ2)
                        (zip_words (subst_itable ζ tbl) ws)
                        (subst_etable ζ exits) a2 (persist__term np θ2) ;;
@@ -2073,7 +2081,18 @@ Section CFGVerificationDerived.
       (exits : SExitTable (wlctx Σ)) (fuel : nat)
       (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
       fun w =>
-        SHeapSpec.run (sexec_triple_addr req tbl exits fuel ens (w := w)).
+        SHeapSpec.run (sexec_triple_addr false req tbl exits fuel ens (w := w)).
+
+    (* THE LOOP VC's run (PLAN-loop-rule.md): the same, but stopping at the
+       loop head as well as at the exit.  `ens` must say which one was reached
+       -- Contracts.loop_post. *)
+    Definition scfg_loop_verification_condition {Σ : LCtx}
+      (req : Assertion (Σ ▻ "a"∷ty_xlenbits))
+      (tbl : SInstrTable (wlctx Σ))
+      (exits : SExitTable (wlctx Σ)) (fuel : nat)
+      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : ⊢ 𝕊 :=
+      fun w =>
+        SHeapSpec.run (sexec_triple_addr true req tbl exits fuel ens (w := w)).
 
   End Symbolic.
 

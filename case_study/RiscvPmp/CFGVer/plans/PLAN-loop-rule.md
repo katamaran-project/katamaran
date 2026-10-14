@@ -62,6 +62,14 @@ any trusted statement (Noninterference.v, Layout.v, `*Result.v` statements,
   step, so a block — e.g. a separately verified body segment — may sit at the
   loop head. Emiel's reason: "Preprocessing the loop body separately if
   needed." Rejected alternative (i): forbid a block at a loop's head.
+- **L7** (Emiel, 2026-10-14, at implementation) Head test as option **B**:
+  the executor only gains a SECOND STOP ADDRESS (the head = the loop table's
+  first key, `Verifier.is_head`, under a constant `loop` flag); the loop VC's
+  post is `Contracts.loop_post` = `(an = exit ∗ post) ∨ (an = head ∗ Inv[a:=an])`.
+  The invariant never enters the executor and no "end the path" primitive is
+  needed (R2 dissolved). Concretely the loop-mode executor may stop anywhere
+  (angelic); the loop post's pc equations carry which stop it was. Supersedes
+  §3b/§3c's `head` parameter.
 - **L6** Accepted additions (Claude-proposed, confirmed at the design
   checkpoint): a loop-specific VC entry; use sites unchanged (`ai_block`);
   head detection by the comparison `lookup_instr` already uses; scratch
@@ -200,6 +208,24 @@ during proof phases; resume if a design question comes up.
 - **R7** Out of scope, unchanged: the LoopSpec machinery (GenSegment.v §4,
   `myWP2_loop_induction`) used by the muladd composed segments.
 
+## 6b. Progress
+
+- **Phase 1 DONE (2026-10-14).** `Verifier.v`: `ai_fire`/`stepped` gone,
+  `sexec_cfg_addr fuel loop first`, `is_head`, `sexec_triple_addr loop`,
+  `scfg_loop_verification_condition`. `Contracts.v`: `wk_a_an`, `loop_post`,
+  `CFG_VC_loop_triple`, `cfg_vc_loop`. Witness `Example/CountdownRec.v`:
+  context `[q]`, counter ∃ in the invariant, NO annotation;
+  `valid_cd_rec : cfg_vc_loop …` by `solve_param_vc` in 24 ms; both negative
+  controls (ordinary `cfg_vc`; non-preserved `k ≠ 1`) `Fail`; dropping
+  `k ≠ 0` still verifies (partial correctness, checked); `valid_cd_link`
+  unchanged and green. Trap: an UNANNOTATED `subst` in `loop_post` made
+  `Contracts.v` run >600 s / 9.7 GB; every `subst` names its instance now.
+- **Baseline NOT recorded**: `coqc-guard.sh` blocked the build in a fresh
+  `KatamaranRel` worktree (sources newer than any compile -- a false
+  positive; the hook says to ask Emiel). Measurable from `KatamaranRel` at
+  any time. Note: rocq-implementation §1 says the hook was unwired
+  2026-09-25 -- it is wired again; fix that skill in Phase 6.
+
 ## 6. Decision log
 
 | # | Date | Decision | Revert path |
@@ -210,3 +236,4 @@ during proof phases; resume if a design question comes up.
 | L4 | 2026-10-14 | induction only in the meta loop rule | — |
 | L5 | 2026-10-14 | blocks earn a step (ii), not (i) | (i): forbid a block at a loop head |
 | L6 | 2026-10-14 | accepted additions (§2) | — |
+| L7 | 2026-10-14 | head test = second stop + two-case loop post (B) | A: executor consumes Inv at the head |

@@ -180,6 +180,51 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
     Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
       cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
 
+    (* ---- THE LOOP VC (PLAN-loop-rule.md) ----------------------------------
+       A LOOP CONTRACT's precondition is the invariant: its parameters are the
+       logic variables that never change, and everything that changes across
+       trips is existential INSIDE the precondition (decision L2).  Its VC runs
+       the body ONCE from the invariant, and the run stops either at the exit
+       or back at the head (Verifier.is_head).  `loop_post` says what each stop
+       owes: the post at the exit; the (extended) precondition -- the
+       invariant -- at the head, with "a" rebound to the pc reached.  The pc
+       equations decide which disjunct applies.  The induction over the trips
+       happens only in the meta-level loop rule (Adequacy.v), never here.
+
+       Every `subst` below names its instance (`T :=` / `Subst :=`).  Left to
+       inference, elaborating loop_post ran past 600 s and 9.7 GB (measured
+       2026-10-14); annotated it takes milliseconds. *)
+    Definition wk_a_an {Σ : LCtx} : Sub Σ (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+      subst (T := Sub Σ) (sub_wk1 (b := "a" ∷ ty_xlenbits)) (sub_wk1 (b := "an" ∷ ty_xlenbits)).
+
+    Definition loop_post {Σ : LCtx}
+      (p ex : Term Σ ty_xlenbits)
+      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :
+      Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+      let wk (t : Term Σ ty_xlenbits) := subst (T := fun Σ => Term Σ ty_xlenbits) t wk_a_an in
+      asn.or
+        (* stopped at the exit: the loop's post *)
+        (asn.sep (asn.formula (formula_propeq (term_var "an") (wk ex))) Q)
+        (* stopped back at the head: the invariant, at the pc reached *)
+        (asn.sep (asn.formula (formula_propeq (term_var "an") (wk p)))
+           (subst (Subst := asn.sub_assertion) (extend_to_minimal_pre P)
+              (env.snoc wk_a_an ("a" ∷ ty_xlenbits) (term_var "an")))).
+
+    Definition CFG_VC_loop_triple {Σ}
+      (p ex : Term Σ ty_xlenbits)
+      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
+      (i  : list AnnotInstr)
+      (fl : nat)
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
+      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition (Σ := Σ)
+        (extend_to_minimal_pre P) (table_of_list p 0 i) ex fl (loop_post p ex P Q) wnil.
+
+    (* The loop contract's VC.  `c`'s placement is the loop head. *)
+    Definition cfg_vc_loop {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
+      cfg_map c (fun p ex P _ fl Q =>
+        safeE (cfg_postprocess (CFG_VC_loop_triple p ex P a fl Q))).
+
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
       cfg_map c (fun p exits P _ fl Q =>
