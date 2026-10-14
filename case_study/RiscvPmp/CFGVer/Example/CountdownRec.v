@@ -123,8 +123,7 @@ Definition cd_link_annot : list AnnotInstr :=
    ; ai_ghost_after  := []
      (* the enclosing program STARTS at the loop: an ordinary ai_block, which
         fires at step 0 *)
-   ; ai_block        := Some cdRecBlk
-   ; ai_loop         := None |}
+   ; ai_block        := Some cdRecBlk |}
   :: list_AST_AnnotInstr [BNE X1 X0 back4; ADDI X2 X0 (bv.of_N 42)].
 
 (* The loop block's own conjuncts, VERBATIM (consume is syntactic against the
