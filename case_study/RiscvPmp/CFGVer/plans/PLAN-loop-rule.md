@@ -226,6 +226,28 @@ during proof phases; resume if a design question comes up.
   any time. Note: rocq-implementation §1 says the hook was unwired
   2026-09-25 -- it is wired again; fix that skill in Phase 6.
 
+- **Phase 2 DONE** (de4cd57e; commit message lost its backticked snippets to
+  shell expansion -- see the stop arm in cexec_cfg_addr). Trap: the Factors
+  lemmas hard-coded `sexec_cfg_addr n' false true`; unifying that against
+  `n' loop false` unfolded the fixpoint and ran to 9.6 GB.
+- **Phase 3 DONE** (a3a1fa2e): myWP2_step / myWP2_from, blockSound step-first,
+  one blocksSound premise, blockSound_of_vc without Löb, NEW
+  blockSound_of_loop_vc (the loop rule) with premise Hpl (the invariant pins
+  the placement to the entry). Adequacy.v builds in ~62 s of sentences.
+- **Phase 4 DONE** (b2d108da): ai_loop / aiv_loop / eraseV's contract
+  argument gone; seal has two conjuncts; GenCompose gains seg_vc_loop,
+  blockSound_of_loop_contract, blkValid_of_loop_contract / _seg.
+- **Phase 5** (1c5b5f2b countdown, 7f02bad7 check_scalar + PaddedLoop, muladd
+  in progress): every loop fits L2. Parameters after migration --
+  countdown `[q]`; check_scalar L1 `[q e kE T]` (T = d + n), L2 `[q eK eN]`;
+  muladd D `[q E T]`, DAng `D + N` (N = k + c), D0 `[q t0 T N]` (N = k + c),
+  G `[q]`, N-template `[q eM eX mE xE T]` (T = k + n). Every loop VC closes
+  with its old tactic; every enclosing VC still closes, i.e. a TOTAL
+  parameter is pinned at the firing site by its equation (R3 and the
+  pinning worry: resolved, no fallback needed). Loop-VC times: countdown
+  24 ms, L1 4.3 s, L2 9.5 s, D 0.2 s, DAng 1.1 s, I/K/M 15/12/11 s; muladd
+  tail VC 210 s.
+
 ## 6. Decision log
 
 | # | Date | Decision | Revert path |

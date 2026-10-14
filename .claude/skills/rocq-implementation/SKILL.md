@@ -60,13 +60,16 @@ you can extract and check in ~100 ms first (see the module-functor note
 below). One confirming compile at the end is the sanctioned use; the second
 consecutive one is the smell.
 
-This was hook-enforced by `.claude/hooks/coqc-guard.sh` (deny a build whose
+This is hook-enforced by `.claude/hooks/coqc-guard.sh` (deny a build whose
 target's source is newer than its `.vo` unless an interactive check happened
-since) until **2026-09-25, when Emiel unwired it from `.claude/settings.json`**
-(the script is still on disk). It compared timestamps, so it fired on files
-stale from a merge rather than edited, and on files pet cannot open at all
-(`VerifierRel.v`), leaving no honest way through. The discipline above still
-stands; it is now yours to keep, not the hook's.
+since). It was unwired on 2026-09-25 and is **wired again** in
+`.claude/settings.json` (checked 2026-10-14). It compares timestamps, so it
+fires on files stale from a merge rather than edited, and on a freshly
+checked-out worktree (every source newer than every copied `.vo`) -- a false
+positive it tells you to raise with Emiel rather than work around. In
+practice (2026-10-14) builds of files pet cannot open (`VerifierRel.v`,
+`Adequacy.v`, both OOM pet) went through after a failed `rocq_start` attempt.
+The discipline above stands either way.
 
 ```
 rocq_compile_file(file, mode="vos")               # fast type-check, statements only

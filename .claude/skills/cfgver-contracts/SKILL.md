@@ -71,11 +71,14 @@ internally).
 
 ## Validity
 
-> **Loops as one self-referential contract (2026-09-24):** `a` may annotate
-> the loop head with `c`'s own block as a RE-ENTRY block (`ai_loop`), which
-> never fires at the entry. The precondition is then the loop INVARIANT; it
-> must be preserved, not ensure termination (partial correctness). See
-> **cfgver-executor**, "Loops as ONE block", and `PLAN-rec-loop-block.md`.
+> **Loops (PLAN-loop-rule.md, 2026-10-14):** a loop is a LOOP CONTRACT,
+> proved by its own VC `cfg_vc_loop c a` — one run of the body from the
+> invariant (the precondition), stopping at the exit (owing the post) or back
+> at the head (owing the invariant). Parameters = what never changes; every
+> changing variable is existential inside the invariant; the post mentions
+> parameters only. No annotation marks the loop. Partial correctness: the
+> invariant must be preserved, not ensure termination. See **cfgver-executor**,
+> "Loops: the LOOP VC".
 
 ```coq
 (* Contracts.v -- THE VC, over an annotated copy `a` of the program *)
@@ -88,12 +91,10 @@ Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Pro
    property, built only via ValidCFGVerifierContract_intro / solve_valid *)
 Definition ValidCFGVerifierContract {R} (c : @CFGVerifierContract R) : Prop :=
   exists LV : list (AnnotInstrV blkValid),
-    cfg_vc c (map (eraseV c) LV)
-    /\ map aiv_instr LV = cfg_instrs c
-    /\ Forall (fun a => aiv_loop a = false) LV.
+    cfg_vc c (map eraseV LV)
+    /\ map aiv_instr LV = cfg_instrs c.
 (* The witness is TYPED (2026-09-29): each block carries its blkValid proof
-   (vb_ok), so no validity predicate is proved about the list.  The only
-   side condition is V9's "no top-level re-entry". *)
+   (vb_ok), so no validity predicate is proved about the list. *)
 ```
 
 This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /
@@ -101,8 +102,8 @@ This is what EVERY bridge takes (`EndToEnd.v`, `GenCompose.contract_run` /
 valid. `solve_valid <VC>` closes it for a block-free program. A program with
 blocks writes its `LV` in the heavy Result file (blocks as
 `MkBlkAnnotV b b_valid`) and uses
-`@ValidCFGVerifierContract_intro _ c LV` with `[exact <light VC> | reflexivity
-| repeat constructor]` — the light VC over the erased literal is accepted BY
+`@ValidCFGVerifierContract_intro _ c LV` with `[exact <light VC> | reflexivity]`
+— the light VC over the erased literal is accepted BY
 CONVERSION (`Example/CountdownRecResult.cdLink_valid`). `annotsValid` still
 exists, but only on the way out (`_elim`, via `annotsValid_of_V`).
 
@@ -152,7 +153,7 @@ hands the instruction ownership back. (The annotation-level
 
 **Prefer a BLOCK to a hand-composed sub-table cut (2026-10-01).** The old worked
 example here, `PaddedLoopResult.pl_loop` (two segment contracts glued in Iris by
-`contract_run` + `myWP2_loop_induction`), was migrated to the `ai_loop` style:
+`contract_run` + `myWP2_loop_induction`), was migrated to a loop block:
 `Example/PaddedLoop.v` now runs a 66-instruction program whose loop at offset
 256 is ONE block (`CountdownRec.cdRecBlk`, valid at every address), and
 `PaddedLoopResult.padded_loop_noninterferent_param` is the gate-checked end
