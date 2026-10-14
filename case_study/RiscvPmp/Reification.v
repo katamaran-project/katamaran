@@ -406,18 +406,14 @@ Ltac2 rec reflect_sp (ctx : constr list) (sp : symprop) : constr :=
 (* Tactic                                                                    *)
 (* ------------------------------------------------------------------------ *)
 
-(* Reify the erased symbolic proposition of the goal and replace the goal
-   with the reflected Prop (checked by conversion). *)
-Ltac2 reify_vc_goal () :=
+(* The Ltac1 entry point. Control.enter is needed for this to work with all:
+   and ; on multiple goals. *)
+Ltac reify_vc := ltac2:(Control.enter (fun () =>
   match! goal with
   | [ |- VerificationConditionWithErasure ?p ] =>
       let r := reflect_sp [] (reify_sp p) in
       constructor; change $r
-  end.
-
-(* The Ltac1 entry point. Control.enter is needed for this to work with all:
-   and ; on multiple goals. *)
-Ltac reify_vc := ltac2:(Control.enter reify_vc_goal).
+  end)).
 
 Module Tests.
   (* Tests: reify_vc succeeds iff the reflected Prop is convertible to the
