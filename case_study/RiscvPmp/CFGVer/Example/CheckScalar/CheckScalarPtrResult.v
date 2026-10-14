@@ -62,7 +62,7 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 From Katamaran Require RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarPtrVC.
 
-Lemma csp_erase : List.map (eraseV csp) cs_annotV = cs_annot.
+Lemma csp_erase : List.map eraseV cs_annotV = cs_annot.
 Proof.
   unfold cs_annotV, cs_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV, cs_blockV, cs_block. cbn.
@@ -74,7 +74,6 @@ Proof.
   apply (@ValidCFGVerifierContract_intro _ csp cs_annotV).
   - rewrite csp_erase. exact CheckScalarPtrVC.valid_csp.
   - exact cs_code.
-  - unfold cs_annotV. apply List.Forall_map, List.Forall_forall. intros [i ins] _. reflexivity.
 Qed.
 
 (* the statement's valuation: the load address, klen, and k's address *)

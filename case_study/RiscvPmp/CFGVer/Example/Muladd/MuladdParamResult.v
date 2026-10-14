@@ -67,65 +67,65 @@ From Katamaran Require
 (* A block-free annotation (a loop body) as a typed list; erases back to the
    source list by conversion (see ZZMuladdBlkResult.liftV). *)
 Definition liftV (ai : AnnotInstr) : AnnotInstrV blkValid :=
-  MkAnnotInstrV (ai_ghost_before ai) (ai_instr ai) (ai_ghost_after ai) None
-    (if ai_loop ai then true else false).
+  MkAnnotInstrV (ai_ghost_before ai) (ai_instr ai) (ai_ghost_after ai) None.
 
-(* ---- 1. THE LOOP BLOCKS ARE VALID ---------------------------------------- *)
+(* ---- 1. THE LOOP BLOCKS ARE VALID ----------------------------------------
+   Each from its own LOOP VC, through the loop rule (PLAN-loop-rule.md). *)
 
 Lemma dAng_valid : blkValid MuladdParamLoopDAng.dAngBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamLoopD.d_instrs 24 10 []
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamLoopD.d_instrs 24 10 []
            MuladdParamLoopDAng.d_inv_ang MuladdParamLoopDAng.d_post_ang
-           (List.map liftV (MuladdParamLoopDAng.d_ang_annot_with MuladdParamLoopDAng.dAngBlk))
+           (List.map liftV MuladdParamLoopDAng.d_ang_annot)
            (fun v iota => eq_refl) eq_refl MuladdParamLoopDAng.valid_d_ang_rec).
 Qed.
 
 Lemma d0_valid : blkValid MuladdParamLoopD0.d0Blk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamLoopD0.d0_instrs 20 10 []
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamLoopD0.d0_instrs 20 10 []
            MuladdParamLoopD0.d0_inv MuladdParamLoopD0.d0_post
-           (List.map liftV (MuladdParamLoopD0.d0_annot_with MuladdParamLoopD0.d0Blk))
+           (List.map liftV MuladdParamLoopD0.d0_annot)
            (fun v iota => eq_refl) eq_refl MuladdParamLoopD0.valid_d0_rec).
 Qed.
 
 Lemma g_valid : blkValid MuladdParamLoopG.gRecBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamLoopG.g_instrs 108 35 []
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamLoopG.g_instrs 108 35 []
            MuladdParamLoopG.g_inv MuladdParamLoopG.g_post
-           (List.map liftV (MuladdParamLoopG.g_annot_with MuladdParamLoopG.gRecBlk))
+           (List.map liftV MuladdParamLoopG.g_annot)
            (fun v iota => eq_refl) eq_refl MuladdParamLoopG.valid_g_rec).
 Qed.
 
 Lemma in_valid : blkValid (MuladdParamLoopN.lnBlk MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch)).
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q")
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q")
            (MuladdParamLoopN.ln_instrs MuladdParamLoopI.lnIN) (MuladdParamLoopN.ln_exit MuladdParamLoopI.lnIN)
            (MuladdParamLoopN.ln_fuel MuladdParamLoopI.lnIN) []
            (MuladdParamLoopN.ln_inv MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch))
            (MuladdParamLoopN.ln_post MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch))
-           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch)))
+           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopI.lnIN))
            (fun v iota => eq_refl) eq_refl MuladdParamLoopI.valid_in).
 Qed.
 
 Lemma kn_valid : blkValid (MuladdParamLoopN.lnBlk MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch)).
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q")
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q")
            (MuladdParamLoopN.ln_instrs MuladdParamLoopK.lnKN) (MuladdParamLoopN.ln_exit MuladdParamLoopK.lnKN)
            (MuladdParamLoopN.ln_fuel MuladdParamLoopK.lnKN) []
            (MuladdParamLoopN.ln_inv MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch))
            (MuladdParamLoopN.ln_post MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch))
-           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch)))
+           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopK.lnKN))
            (fun v iota => eq_refl) eq_refl MuladdParamLoopK.valid_kn).
 Qed.
 
 Lemma mt_valid : blkValid (MuladdParamLoopN.lnBlk MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch)).
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q")
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q")
            (MuladdParamLoopN.ln_instrs MuladdParamLoopM.lnMT) (MuladdParamLoopN.ln_exit MuladdParamLoopM.lnMT)
            (MuladdParamLoopN.ln_fuel MuladdParamLoopM.lnMT) []
            (MuladdParamLoopN.ln_inv MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch))
            (MuladdParamLoopN.ln_post MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch))
-           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch)))
+           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopM.lnMT))
            (fun v iota => eq_refl) eq_refl MuladdParamLoopM.valid_mt).
 Qed.
 
@@ -140,14 +140,14 @@ Definition tail_blockV (i : nat) : option (BlkAnnotV blkValid) :=
 
 Definition tail_annotV : list (AnnotInstrV blkValid) :=
   List.map (fun '(i, ins) => MkAnnotInstrV (MuladdParamTail.tail_before i) ins
-                               (MuladdParamTail.tail_after i) (tail_blockV i) false)
+                               (MuladdParamTail.tail_after i) (tail_blockV i))
     (List.combine (List.seq 0 (length MuladdParamTail.tail_instrs)) MuladdParamTail.tail_instrs).
 
 Lemma map_snd_combine_seq {A} (l : list A) k :
   List.map snd (List.combine (List.seq k (length l)) l) = l.
 Proof. revert k; induction l as [|x l IH]; intros k; cbn; [reflexivity | f_equal; apply IH]. Qed.
 
-Lemma tail_erase : List.map (eraseV MuladdParamTail.tailRec) tail_annotV = MuladdParamTail.tail_annot.
+Lemma tail_erase : List.map eraseV tail_annotV = MuladdParamTail.tail_annot.
 Proof.
   unfold tail_annotV, MuladdParamTail.tail_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV, tail_blockV, MuladdParamTail.tail_block. cbn.
@@ -179,10 +179,10 @@ Definition sym6_blockV (i : nat) : option (BlkAnnotV blkValid) :=
   else None.
 
 Definition sym6_annotV : list (AnnotInstrV blkValid) :=
-  List.map (fun '(i, ins) => MkAnnotInstrV (sym6_before i) ins (sym6_after i) (sym6_blockV i) false)
+  List.map (fun '(i, ins) => MkAnnotInstrV (sym6_before i) ins (sym6_after i) (sym6_blockV i))
     (List.combine (List.seq 0 (length sym6_instrs)) sym6_instrs).
 
-Lemma sym6_erase : List.map (eraseV sym6) sym6_annotV = sym6_annot.
+Lemma sym6_erase : List.map eraseV sym6_annotV = sym6_annot.
 Proof.
   unfold sym6_annotV, sym6_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV, sym6_blockV, sym6_block. cbn.
@@ -202,7 +202,6 @@ Proof.
   apply (@ValidCFGVerifierContract_intro _ sym6 sym6_annotV).
   - rewrite sym6_erase. exact MuladdParamVC.valid_sym6.
   - exact sym6_code.
-  - unfold sym6_annotV. apply List.Forall_map, List.Forall_forall. intros [i ins] _. reflexivity.
 Qed.
 
 

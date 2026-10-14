@@ -153,7 +153,7 @@ Definition tail_annot : list AnnotInstr :=
   List.map (fun '(i, ins) =>
               {| ai_ghost_before := tail_before i; ai_instr := ins
                ; ai_ghost_after := tail_after i
-               ; ai_block := tail_block i; ai_loop := None |})
+               ; ai_block := tail_block i |})
     (List.combine (List.seq 0 (length tail_instrs)) tail_instrs).
 
 Definition tailRec : @CFGVerifierContract tailCtx :=
