@@ -288,23 +288,26 @@ Module Type LoopVerificationBinary
       constructor.
     Qed.
 
-    Definition loop_pre (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)) : iProp Σ :=
+    (* Parameterized by an iProp R that is maintained at each step of the loop.
+       This gives some flexibility when doing known code verification, where we
+       can hand off some knowledge that will not be violated (or invalidated)
+       by unknown code when invoking the universal contract. *)
+    Definition loop_pre (R : iProp Σ) (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)) : iProp Σ :=
       (Step_pre m h i mpp entries ∗
-         ▷ (CSRMod m entries -∗ WP2_loop) ∗
-         ▷ (Trap m h entries -∗ WP2_loop) ∗
-         ▷ (Recover m h mpp entries -∗ WP2_loop))%I.
+         R ∗
+         ▷ (CSRMod m entries ∗ R -∗ WP2_loop R) ∗
+         ▷ (Trap m h entries ∗ R -∗ WP2_loop R) ∗
+         ▷ (Recover m h mpp entries ∗ R -∗ WP2_loop R))%I.
 
     Definition semTriple_loop : iProp Σ :=
-      (∀ (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)),
-          semTriple env.nil (loop_pre m h i mpp entries)
-            (FunDef loop)
-            (fun _ _ => True))%I.
+      (∀ (R : iProp Σ) (m : Privilege) (h i : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Addr)),
+          loop_pre R m h i mpp entries -∗ WP2_loop R)%I.
 
     Lemma valid_semTriple_loop : ⊢ semTriple_loop.
     Proof.
       iLöb as "H".
-      iIntros (m h i mpp entries) "(HStep & HMod & HTrap & HRec)".
-      cbn.
+      iIntros (R m h i mpp entries) "(HStep & HR & HMod & HTrap & HRec)".
+      unfold WP2_loop. cbn [FunDef].
       unfold fun_loop.
       iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
       iApply semWP2_call_inline_later.
@@ -313,29 +316,22 @@ Module Type LoopVerificationBinary
       Unshelve. 2: auto.
       iModIntro.
       iIntros ([v1|m1] δ1 v2 δ2) "(<- & <- & HRes)";
-        last now iApply semWP2_fail.
+        last (iApply semWP2_fail; iModIntro; by iFrame "HR").
       iDestruct "HRes" as "[HRes | [HRes | [HRes | HRes]]]";
         iApply (semWP2_call_inline loop _).
       - iDestruct "HRes" as "([%i' (? & ?)] & ?)".
-        iSpecialize ("H" $! m h i' mpp entries with "[-]"); first iFrame.
+        iSpecialize ("H" $! R m h i' mpp entries with "[-]"); first iFrame.
         iApply (semWP2_mono with "H").
-        iIntros (v δ v' δ') "(<- & <- & _)"; repeat iSplit; auto.
-        by case_match.
-      - iSpecialize ("HMod" with "HRes").
+        iIntros (v δ v' δ') "(<- & _ & $)"; auto.
+      - iSpecialize ("HMod" with "[$HRes $HR]").
         iApply (semWP2_mono with "HMod").
-        iIntros (v δ v' δ') "(<- & <-)".
-        repeat iSplit; auto.
-        by case_match.
-      - iSpecialize ("HTrap" with "HRes").
+        iIntros (v δ v' δ') "(<- & _ & $)"; auto.
+      - iSpecialize ("HTrap" with "[$HRes $HR]").
         iApply (semWP2_mono with "HTrap").
-        iIntros (v δ v' δ') "(<- & <-)".
-        repeat iSplit; auto.
-        by case_match.
-      - iSpecialize ("HRec" with "HRes").
+        iIntros (v δ v' δ') "(<- & _ & $)"; auto.
+      - iSpecialize ("HRec" with "[$HRes $HR]").
         iApply (semWP2_mono with "HRec").
-        iIntros (v δ v' δ') "(<- & <-)".
-        repeat iSplit; auto.
-        by case_match.
+        iIntros (v δ v' δ') "(<- & _ & $)"; auto.
     Qed.
   End Loop.
 

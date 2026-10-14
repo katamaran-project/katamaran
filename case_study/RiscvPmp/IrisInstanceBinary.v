@@ -476,8 +476,8 @@ Module Type RiscvPmpIrisInstance2 (FL : FailLogic)
       now iApply ("IH" with "H").
   Qed.
 
-  Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
-    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝)%I.
+  Definition WP2_loop `{sailGS2 Σ} (R : iProp Σ) : iProp Σ :=
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ R)%I.
 
   #[export] Instance sailGS2_to_memGS2 `{sG : sailGS2 Σ} : memGS2 Σ :=
     sailGS2_memGS.
