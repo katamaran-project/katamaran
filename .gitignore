@@ -37,5 +37,7 @@ case_study/RiscvPmp/CFGVer/Example/ZZ*
 # Phase S) -- against the plugin's own advice; decks are private study material.
 .vibe-wise/
 .vibe-learn/
-.claude/wyw.json
-.claude/decks/
+**/.claude/wyw.json
+**/.claude/decks/
+**/.claude/wyw/
+**/.claude/wyw-review*.md
