@@ -2139,6 +2139,31 @@ Section AdequacyTools.
       iApply "Hk". iFrame.
     Qed.
 
+    (* Read a pure fact off a resource WITHOUT consuming it. *)
+    Lemma pure_keep (P : iProp Σ) (φ : Prop) :
+      ⊢ (P -∗ ⌜φ⌝) -∗ P -∗ ⌜φ⌝ ∧ P.
+    Proof. iIntros "W P". iSplit; [iApply ("W" with "P") | iExact "P"]. Qed.
+
+    (* WHERE ONE BODY RUN OF A LOOP STOPS: some synced pc, the instruction
+       memory unchanged, and the loop post (Contracts.loop_post) -- the
+       post at the exit, or the invariant back at the head. *)
+    Definition loop_stopped (words : bv xlenbits -> bv word) (v : bv xlenbits)
+        (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) : iProp Σ :=
+      let c := Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b in
+      (∃ an, ⌜match an with SyncVal _ => True | NonSyncVal _ _ => False end⌝ ∗
+         pc ↦ᵣ an ∗ (∃ x, nextpc ↦ᵣ x) ∗
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+           (ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) ∗
+         asn.interpret
+           (Katamaran.RiscvPmp.CFGVer.Contracts.loop_post
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_placement c)
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit c)
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition c)
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition c))
+           (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ an]))%I.
+
     (* ---- THE LOOP RULE (PLAN-loop-rule.md) -------------------------------
        A LOOP contract is sound from its LOOP VC: one run of the body from the
        invariant (the contract's precondition), stopping at the exit (owing
@@ -2176,52 +2201,35 @@ Section AdequacyTools.
       iIntros "#Hf".
       iLöb as "IH".
       iIntros (v ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
-      (* the placement IS the entry address (Hpl), read without consuming *)
-      iAssert (⌜inst (T := fun Σ => Term Σ ty_xlenbits) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_placement (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι
-               = ty.SyncVal v⌝
-              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
-                  (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
-        with "[Hpre]" as "[%Hp Hpre]".
-      { iSplit; [ iApply (Hpl v ι with "Hpre") | iExact "Hpre" ]. }
-      iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                   (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
-               /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                    (blk_exit b ι) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
-              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
-                  (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
-        with "[Hpre]" as "[%Hfi Hpre]".
-      { iSplit; [ iApply ("Hf" $! v ι with "Hpre") | iExact "Hpre" ]. }
+      (* 1. The invariant pins the placement to the entry address v (Hpl). *)
+      iPoseProof (Hpl v ι) as "Hplace".
+      iDestruct (pure_keep with "Hplace Hpre") as "[%Hp Hpre]".
+      (* 2. The loop's table is faithful to its code at v (Hf). *)
+      iPoseProof ("Hf" $! v ι) as "Hfaith".
+      iDestruct (pure_keep with "Hfaith Hpre") as "[%Hfi Hpre]".
       destruct Hfi as [Hif Hef].
+      (* 3. One run of the body, by the loop VC, stopping in loop_stopped. *)
       iDestruct (span_to_run words v b ab Hstrip with "Hinstrs") as "Hinstrs".
-      iPoseProof (sound_scfg_loop_vc_myWP2_w words Hv
-                    (∃ an, ⌜match an with SyncVal _ => True | NonSyncVal _ _ => False end⌝ ∗
-                       pc ↦ᵣ an ∗ (∃ x, nextpc ↦ᵣ x) ∗
-                       Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
-                         (ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) ∗
-                       asn.interpret
-                         (Katamaran.RiscvPmp.CFGVer.Contracts.loop_post
-                            (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_placement (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
-                            (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
-                         (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ an]))%I
+      iPoseProof (sound_scfg_loop_vc_myWP2_w words Hv (loop_stopped words v ab b ι)
                     Hif Hef with "[]") as "Hrun".
       { iApply (Hbs v). }
-      (* one run of the body; what follows its stop is needed only AFTER a
-         step, i.e. under the later that also strips the induction hypothesis *)
+      (* 4. The run takes at least one step, so what follows its stop sits
+         under a later -- the same later that strips the induction hypothesis. *)
       iApply (myWP2_step_bind with "[Hk] [Hpre Hpc Hnpc Hinstrs]");
         [| iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]");
            iIntros (an) "H"; iExists an; iExact "H" ].
       iNext. iIntros "(%an & %Hsync & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct an as [y|y1 y2]; [|contradiction].
+      (* 5. Which stop: the loop post's pc equations decide. *)
       rewrite Katamaran.RiscvPmp.CFGVer.Contracts.loop_post_interpret.
+      iDestruct (run_to_span words v b ab Hstrip with "Hinstrs") as "Hinstrs".
       iDestruct "Hpost" as "[[[%Hex _] HQ] | [[%Hhd _] HP]]".
-      - (* stopped at the EXIT: the loop's post, handed to the caller *)
+      - (* at the EXIT: the loop's post, handed to the caller *)
         iApply exitCondImpliesMyWP2_loop.
-        iDestruct (run_to_span words v b ab Hstrip with "Hinstrs") as "Hinstrs".
         iApply "Hk". unfold blk_exit. rewrite <- Hex. iFrame.
-      - (* stopped back at the HEAD: the invariant holds again, at the same
-           entry address -- the induction hypothesis finishes the run *)
+      - (* back at the HEAD, which is v (Hp): the invariant holds again, and
+           the induction hypothesis finishes the run *)
         rewrite Hp in Hhd. injection Hhd as ->.
-        iDestruct (run_to_span words v b ab Hstrip with "Hinstrs") as "Hinstrs".
         iApply myWP2_step_loop.
         iApply ("IH" $! v ι ExitCond with "[$HP $Hpc $Hnpc $Hinstrs] Hk").
     Qed.
