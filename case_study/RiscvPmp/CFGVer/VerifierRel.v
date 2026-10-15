@@ -2139,29 +2139,37 @@ Section CFGVerificationDerived.
     Definition rvdrop (m k : nat) : RelVal (ty.bvec (m + k)) -> RelVal (ty.bvec k) :=
       uop.evalRel (uop.bvdrop m).
 
-    Definition cexec_triple_addr {Σ : LCtx} (loop : bool)
-      (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
-      (words : bv xlenbits -> bv word)
-      (cexit : RelVal ty_xlenbits) (fuel : nat)
-      (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-      (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
-      (* Mirrors sexec_triple_addr's demonic_ctx over Σ ▻▻ words_ctx (length tbl):
-         the per-address instruction words are demonically chosen here, ONCE,
-         and split back out with env.drop / env.take. *)
-      CHeapSpec.bind (CHeapSpec.demonic_ctx (Σ ▻▻ words_ctx (length tbl))) (fun lenvw =>
-      let lenv := env.drop (words_ctx (length tbl)) lenvw in
-      let cws  := words_of_env rvtake rvdrop (env.take (words_ctx (length tbl)) lenvw) in
-      CHeapSpec.bind (CHeapSpec.lift_purespec (CPureSpec.assume_formula
-          (itable_rel instrs tbl lenv /\ etable_rel cexit exits lenv
-           /\ wtable_rel words tbl cws lenv))) (fun _ =>
-      CHeapSpec.bind (CHeapSpec.demonic _) (fun a =>
-      (* Mirrors sexec_triple_addr's single `demonic (Some "np")`: the initial
-         nextpc value, quantified ONCE for the whole run rather than once per
-         step.  See exec_instruction_prologue (Verifier.v). *)
-      CHeapSpec.bind (CHeapSpec.demonic _) (fun np =>
-      CHeapSpec.bind (CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a]) (fun _ =>
-      CHeapSpec.bind (cexec_cfg_addr instrs words cexit fuel loop true a np) (fun na =>
-      CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])))))).
+    (* The monad notation is imported in this small section only, so it does
+       not reach the refinement lemmas below.  It expands to exactly the
+       CHeapSpec.bind chain those lemmas unfold. *)
+    Section ConcreteTriple.
+      Import CHeapSpec.notations.
+
+      Definition cexec_triple_addr {Σ : LCtx} (loop : bool)
+        (req : Assertion (Σ ▻ "a"∷ty_xlenbits)) (instrs : gmap (bv xlenbits) AnnotInstr)
+        (words : bv xlenbits -> bv word)
+        (cexit : RelVal ty_xlenbits) (fuel : nat)
+        (ens : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+        (tbl : SInstrTable (wlctx Σ)) (exits : SExitTable (wlctx Σ)) : CHeapSpec unit :=
+        (* Mirrors sexec_triple_addr's demonic_ctx over Σ ▻▻ words_ctx (length tbl):
+           the per-address instruction words are demonically chosen here, ONCE,
+           and split back out with env.drop / env.take. *)
+        lenvw <- CHeapSpec.demonic_ctx (Σ ▻▻ words_ctx (length tbl)) ;;
+        let lenv := env.drop (words_ctx (length tbl)) lenvw in
+        let cws  := words_of_env rvtake rvdrop (env.take (words_ctx (length tbl)) lenvw) in
+        _  <- CHeapSpec.lift_purespec (CPureSpec.assume_formula
+                (itable_rel instrs tbl lenv /\ etable_rel cexit exits lenv
+                 /\ wtable_rel words tbl cws lenv)) ;;
+        a  <- CHeapSpec.demonic _ ;;
+        (* Mirrors sexec_triple_addr's single `demonic (Some "np")`: the initial
+           nextpc value, quantified ONCE for the whole run rather than once per
+           step.  See exec_instruction_prologue (Verifier.v). *)
+        np <- CHeapSpec.demonic _ ;;
+        _  <- CHeapSpec.produce req lenv.["a"∷ty_xlenbits ↦ a] ;;
+        na <- cexec_cfg_addr instrs words cexit fuel loop true a np ;;
+        CHeapSpec.consume ens lenv.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na].
+
+    End ConcreteTriple.
 
     (* refine_guard: a concrete-side-only assume step.  Assuming more on   *)
     (* the concrete side weakens the concrete claim, which is the sound    *)
