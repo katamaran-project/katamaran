@@ -109,10 +109,13 @@ Import iris.algebra.gmap.
     Definition myWp2 `{sailGS2 Σ} :=
         iProp Σ.
 
-    Definition myWP2_loop_fix `{sailGS2 Σ} (ExitCond : iProp Σ) (wp : myWp2) :
-      myWp2 :=
-      (ExitCond ∨
-        ∃ v, pc ↦ᵣ SyncVal v ∗
+    (* ONE MACHINE STEP, then `wp` under a later.  The step half of
+       myWP2_loop_fix, named once so that myWP2_step (below) is visibly the
+       same thing rather than a copy of it.  pc ↦ᵣ SyncVal v witnesses that
+       the pc is in sync at the step; the wand avoids duplicating the
+       resource for the semWP2 body. *)
+    Definition step_then `{sailGS2 Σ} (wp : myWp2) : myWp2 :=
+      (∃ v, pc ↦ᵣ SyncVal v ∗
         (pc ↦ᵣ SyncVal v -∗
          semWP2 env.nil env.nil (FunDef step) (FunDef step)
            (fun v1 _ v2 _ =>
@@ -121,14 +124,17 @@ Import iris.algebra.gmap.
               | inl v1 , inl v2 => ▷ wp
               | _ , _ => False
               end
-           )%I))%I.
-    (* non-exit branch: pc ↦ᵣ SyncVal v witnesses PC sync at loop boundary;
-       wand avoids duplicating the resource for the semWP2 body *)
+           )))%I.
+
+    (* Stop now (ExitCond), or take one step and continue. *)
+    Definition myWP2_loop_fix `{sailGS2 Σ} (ExitCond : iProp Σ) (wp : myWp2) :
+      myWp2 :=
+      (ExitCond ∨ step_then wp)%I.
   
   Global Instance myWP2_loop_fix_Contractive `{sailGS2 Σ} (ExitCond : iProp Σ) :
     Contractive (myWP2_loop_fix ExitCond).
   Proof.
-    rewrite /myWP2_loop_fix /= => n wp wp' Hwp.
+    rewrite /myWP2_loop_fix /step_then /= => n wp wp' Hwp.
     f_equiv.
     f_equiv => v.
     f_equiv.
@@ -188,10 +194,10 @@ Import iris.algebra.gmap.
   Proof.
     iLöb as "IH". iIntros "HE H".
     iDestruct (myWP2_loop_unfold with "H") as "H".
-    iEval (rewrite /myWP2_loop_fix) in "H".
+    iEval (rewrite /myWP2_loop_fix /step_then) in "H".
     iDestruct "H" as "[HE1 | H]".
     - by iApply "HE".
-    - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix). iRight.
+    - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix /step_then). iRight.
       iDestruct "H" as (v) "[Hpc Hcont]".
       iExists v. iFrame "Hpc". iIntros "Hpc".
       iDestruct ("Hcont" with "Hpc") as "Hwp".
@@ -216,15 +222,7 @@ Import iris.algebra.gmap.
      instruction, leaves the rest of the run under a later.  That later is
      what the loop rule's induction spends when the run is back at the head. *)
   Definition myWP2_step `{sailGS2 Σ} (E : iProp Σ) : iProp Σ :=
-    (∃ v, pc ↦ᵣ SyncVal v ∗
-      (pc ↦ᵣ SyncVal v -∗
-       semWP2 env.nil env.nil (FunDef step) (FunDef step)
-         (fun v1 _ v2 _ =>
-            match v1 , v2 with
-            | inr _ , inr _ => True
-            | inl v1 , inl v2 => ▷ myWP2_loop E
-            | _ , _ => False
-            end)))%I.
+    step_then (myWP2_loop E).
 
   Lemma myWP2_step_loop `{sailGS2 Σ} (E : iProp Σ) :
     myWP2_step E ⊢ myWP2_loop E.
@@ -236,6 +234,7 @@ Import iris.algebra.gmap.
   Lemma myWP2_step_bind `{sailGS2 Σ} (E1 E2 : iProp Σ) :
     ⊢ ▷ (E1 -∗ myWP2_loop E2) -∗ myWP2_step E1 -∗ myWP2_step E2.
   Proof.
+    rewrite /myWP2_step /step_then.
     iIntros "HE H". iDestruct "H" as (v) "[Hpc Hcont]".
     iExists v. iFrame "Hpc". iIntros "Hpc".
     iDestruct ("Hcont" with "Hpc") as "Hwp".
@@ -586,7 +585,7 @@ Import iris.algebra.gmap.
       rename H1 into Hstep2. rename H4 into Hevaln2. rename H0 into nEC2.
       specialize (IHl1 _ _ _ _ _ eq_refl Hevaln1 Hevaln2).
       rewrite fixpoint_myWP2_loop_eq.
-      unfold myWP2_loop_fix.
+      unfold myWP2_loop_fix, step_then.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
       + iDestruct "H" as (v) "(Hpc & %Hec)".
         unfold reg_pointsTo2.
@@ -698,7 +697,7 @@ Import iris.algebra.gmap.
     - inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1].
       clear Heval1. subst.
       rewrite fixpoint_myWP2_loop_eq.
-      unfold myWP2_loop_fix.
+      unfold myWP2_loop_fix, step_then.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
       + iDestruct "H" as (v) "(Hpc & %Hec)".
         unfold reg_pointsTo2.
@@ -1745,7 +1744,7 @@ Section AdequacyTools.
                              words (ai_instr <$> instrs) v Hlk'
                  with "Hinstrs") as "[Hinstr Hframe]".
                (* the step itself: exactly myWP2_step's one disjunct *)
-               unfold myWP2_step.
+               unfold myWP2_step, step_then.
                iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
