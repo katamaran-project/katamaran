@@ -795,8 +795,11 @@ never stops (`first`), and **`blockSound` concludes `myWP2_step`** — a fired
 block earns a step just like an instruction (decision L5), so a separately
 verified block may sit at a loop's head. Premise `Hpl`: the invariant pins
 the placement to the entry address (`seg_pre_placement` for a generated
-segment). An ordinary block goes through `blockSound_of_vc`, which has no
-induction at all. The executor induction `sound_exec_cfg_addr_myWP2 loop first`
+segment). **Every block is verified by its loop VC** (TODO I7, 2026-10-15):
+the ordinary-block path (`blockSound_of_vc` and its wrappers) is gone, since
+a block whose run never returns to its head never takes the head stop. The
+muladd tail, the one former ordinary block, costs 227 s as a loop VC against
+210 s before. Top-level programs stay on `cfg_vc` (the seal). The executor induction `sound_exec_cfg_addr_myWP2 loop first`
 concludes `myWP2_from first` (step-first at the entry, the loop after) and
 takes ONE `blocksSound` premise (`ai_block`s only). Partial correctness only.
 
@@ -811,8 +814,8 @@ carries `gen_base_bound`, which `GenCompose.seg_pre_bound` reads off, so
 `blockFaithful_of_seg` takes `strip ab = code` instead of a no-wrap bound.
 `Adequacy.blocksSound_of_V` derives the executor's block premise from such a
 list (list membership only, no key inversion, any position);
-`GenCompose.blkValid_of_contract` / `blkValid_of_seg` (and the `_loop_`
-versions) turn a verified contract over a V-list into `blkValid (selfBlk c)`,
+`GenCompose.blkValid_of_loop_contract` / `blkValid_of_loop_seg` turn a
+contract verified by its loop VC over a V-list into `blkValid (selfBlk c)`,
 i.e. an annotation-ready proof. V-lists mention `blkValid`, so they live on the
 HEAVY side (`*Result.v`), never in a light `Example/*.v`.
 
@@ -840,7 +843,7 @@ contract's one exit — symbolically `subst (cfg_exit c) evars` (`sexec_block`),
 concretely `inst (cfg_exit c) ι` (`cexec_block`); `Adequacy.v` names it
 `blk_exit b ι`. `blockSound` concludes `pc ↦ᵣ blk_exit b ι` with `"an" ↦
 blk_exit b ι`; `blockFaithful`'s exit half is `etable_rel (blk_exit b ι)
-(cfg_exit c) ι`; `blockSound_of_vc` has no exit premise.
+(cfg_exit c) ι`; `blockSound_of_loop_vc` has no exit premise.
 
 Worked example: `Example/CountdownRec.v` (the loop `cdRec`: parameters `[q]`,
 the counter existential in the invariant, `valid_cd_rec : cfg_vc_loop …` with

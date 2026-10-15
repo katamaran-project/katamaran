@@ -164,10 +164,10 @@ Qed.
 
 Lemma tail_valid : blkValid MuladdParamTail.tailBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamTail.tail_instrs 636 250
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamTail.tail_instrs 636 250
            MuladdParamTail.tail_regs MuladdParamTail.tail_pre MuladdParamTail.tail_post tail_annotV
            (fun v iota => eq_refl) tail_code
-           (eq_ind_r (fun l => cfg_vc MuladdParamTail.tailRec l) MuladdParamTailVC.valid_tail tail_erase)).
+           (eq_ind_r (fun l => cfg_vc_loop MuladdParamTail.tailRec l) MuladdParamTailVC.valid_tail tail_erase)).
 Qed.
 
 (* ---- 3. THE WHOLE FUNCTION: TYPED ANNOTATIONS AND THE SEAL --------------- *)

@@ -110,18 +110,11 @@ Section SegCompose.
   (* ======================================================================== *)
 
   (* `cfg_map` is STUCK on an abstract record, so a combinator cannot consume
-     cfg_vc directly -- it has to be handed the projected
-     form.  `destruct c` unblocks the projections and both sides become
-     identical. *)
-  Lemma seg_vc {R : LCtx} (c : @CFGVerifierContract R) (annot : list AnnotInstr) :
-    cfg_vc c annot ->
-    safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
-      (extend_to_minimal_pre (cfg_precondition c))
-      (table_of_list (cfg_placement c) 0 annot)
-      (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil)).
-  Proof. destruct c; exact (fun H => H). Qed.
-
-  (* The same for a LOOP contract's VC (PLAN-loop-rule.md). *)
+     cfg_vc_loop directly -- it has to be handed the projected form.
+     `destruct c` unblocks the projections and both sides become identical.
+     Every block is verified by its LOOP VC (PLAN-loop-rule.md, TODO I7): a
+     block whose run never comes back to its head simply never takes the
+     head stop. *)
   Lemma seg_vc_loop {R : LCtx} (c : @CFGVerifierContract R) (annot : list AnnotInstr) :
     cfg_vc_loop c annot ->
     safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition
@@ -451,37 +444,18 @@ Section SegCompose.
   Qed.
 
   (* ---- A BLOCK, FROM ITS CONTRACT -----------------------------------------
-     The acceptance criterion of PLAN-contract-ast, as a lemma: a block premise
-     is derivable from an ORDINARY verified contract "without having to redo the
-     work".  There is no work here to redo -- this is `blockSound_of_vc`
-     instantiated at the contract's OWN table, and `seg_vc` is what unblocks the
-     stuck `cfg_map` so the two VCs are literally the same term.
+     A block premise is derivable from a verified contract "without having to
+     redo the work": this is the loop rule (Adequacy.blockSound_of_loop_vc)
+     instantiated at the contract's OWN table, and `seg_vc_loop` unblocks the
+     stuck `cfg_map` so the two VCs are literally the same term.  Every block
+     goes through the loop VC (TODO I7); one whose run never returns to its
+     head just never uses the induction.
 
-     It lives HERE rather than in Adequacy.v for the ordinary reason that
-     Adequacy.v does not require Contracts.v, so `cfg_vc` is not in scope there;
-     and it lives here rather than in EndToEnd.v because a block is a
-     COMPOSITION device, which is this file's subject -- `seg_run` next door is
-     the same bridge for a segment that is executed rather than assumed.
-
-     `tbl` is not a parameter: a contract verified by `cfg_vc c ab` was checked
-     against `table_of_list (cfg_placement c) 0 ab` and nothing else, so pinning
-     it is what makes the statement quote a contract instead of a VC. *)
-  Lemma blockSound_of_contract (words : bv xlenbits -> bv word)
-      (b : BlkAnnot) (ab : list AnnotInstr)
-      (Hv : cfg_vc (blk_contract b) ab)
-      (* ab really is the block's own code, annotated *)
-      (Hstrip : strip ab = cfg_instrs (blk_contract b))
-      (* the blocks ab carries are sound *)
-      (Hbs : forall v, ⊢ blocksSound words (instrs_of_list v ab)) :
-    (∀ v, blockFaithful ab v b (table_of_list (cfg_placement (blk_contract b)) 0 ab))
-    ⊢ ∀ v, blockSound words v b.
-  Proof.
-    exact (blockSound_of_vc words ab b _
-             (seg_vc (blk_contract b) ab Hv) Hstrip Hbs).
-  Qed.
-
-  (* ...and a LOOP block from its loop VC, through the loop rule.  `Hpl`: the
-     invariant pins the placement to the entry address. *)
+     It lives HERE rather than in Adequacy.v because Adequacy.v does not
+     require Contracts.v, so `cfg_vc_loop` is not in scope there.  `tbl` is
+     not a parameter: the VC was checked against `table_of_list (cfg_placement
+     c) 0 ab` and nothing else.  `Hpl`: the precondition pins the placement to
+     the entry address. *)
   Lemma blockSound_of_loop_contract (words : bv xlenbits -> bv word)
       (b : BlkAnnot) (ab : list AnnotInstr)
       (Hv : cfg_vc_loop (blk_contract b) ab)
@@ -2211,28 +2185,11 @@ End SegCompose.
    section fixes one.
    (PLAN-valid-blk-annot.md Phase 3.)  A contract verified over an
    AnnotInstrV list is a valid block: its nested blocks are justified by
-   their own proofs (Adequacy.blocksSound_of_V), so the only remaining
-   obligation is faithfulness at every address.  The result goes straight
-   into another program's annotation (vb_ok). *)
-Lemma blkValid_of_contract {R : LCtx} (c : @CFGVerifierContract R)
-    (LV : list (AnnotInstrV blkValid))
-    (Hv : cfg_vc c (List.map eraseV LV))
-    (Hcode : List.map aiv_instr LV = cfg_instrs c)
-    (Hf : forall Σ (GS : sailGS2 Σ) (v : bv xlenbits),
-            ⊢ blockFaithful (List.map eraseV LV) v (selfBlk c)
-                (table_of_list (cfg_placement c) 0 (List.map eraseV LV))) :
-  blkValid (selfBlk c).
-Proof.
-  intros Σ GS words v.
-  iPoseProof (blockSound_of_contract words (selfBlk c) (List.map eraseV LV) Hv
-                (eq_trans (strip_eraseV LV) Hcode)) as "H".
-  - intros v'. apply blocksSound_of_V.
-  - iApply ("H" with "[]"); iIntros (v'); iApply Hf.
-Qed.
-
-(* A LOOP contract (PLAN-loop-rule.md) is a valid block too, from its loop
-   VC: the loop rule (Adequacy.blockSound_of_loop_vc) does the induction.
-   `Hpl`: the invariant pins the placement to the entry address. *)
+   their own proofs (Adequacy.blocksSound_of_V), so what remains is
+   faithfulness at every address and the placement premise `Hpl`.  The VC is
+   the loop VC (PLAN-loop-rule.md, TODO I7): the loop rule
+   (Adequacy.blockSound_of_loop_vc) does the induction, if any.  The result
+   goes straight into another program's annotation (vb_ok). *)
 Lemma blkValid_of_loop_contract {R : LCtx} (c : @CFGVerifierContract R)
     (LV : list (AnnotInstrV blkValid))
     (Hv : cfg_vc_loop c (List.map eraseV LV))
@@ -2254,34 +2211,11 @@ Proof.
   - iApply ("H" with "[]"); iIntros (v'); iApply Hf.
 Qed.
 
-(* ...and for a generated segment the faithfulness is blockFaithful_of_seg,
-   so a valid block is: the VC, "the annotated list is this code", and the
-   placement equation (by eq_refl when base_a does not mention "a"). *)
-Lemma blkValid_of_seg {R : LCtx}
-    (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)
-    (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
-    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
-    (LV : list (AnnotInstrV blkValid))
-    (Hba : forall (v : bv xlenbits) (iota : Valuation R),
-             inst (T := fun Σ => Term Σ ty_xlenbits) base_a
-               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
-             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
-    (Hcode : List.map aiv_instr LV = code)
-    (Hv : let c := gen_seg_contract base base_a code target fl regs extra_pre post in
-          cfg_vc c (List.map eraseV LV)) :
-  blkValid (selfBlk (gen_seg_contract base base_a code target fl regs extra_pre post)).
-Proof.
-  apply (blkValid_of_contract _ LV Hv Hcode).
-  intros Σ GS v.
-  apply blockFaithful_of_seg; [exact (Hba v)|].
-  rewrite strip_eraseV. exact Hcode.
-Qed.
-
-(* A generated LOOP segment: the placement premise is seg_pre_placement, so
-   the loop's caller supplies exactly what blkValid_of_seg asks for, with
-   the loop VC in place of the ordinary one.  For a loop whose code has no
-   blocks, LV is `map AST_AnnotInstrV code` and Hcode is map_aiv_instr_AST. *)
+(* ...and for a generated segment the faithfulness is blockFaithful_of_seg
+   and the placement premise is seg_pre_placement, so a valid block is: the
+   VC, "the annotated list is this code", and the placement equation (by
+   eq_refl when base_a does not mention "a").  For code with no blocks, LV
+   is `map AST_AnnotInstrV code` and Hcode is map_aiv_instr_AST. *)
 Lemma blkValid_of_loop_seg {R : LCtx}
     (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
     (code : list AST) (target : N) (fl : nat) (regs : list reg_spec_rel)

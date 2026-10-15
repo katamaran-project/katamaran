@@ -2087,58 +2087,6 @@ Section AdequacyTools.
       now rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
     Qed.
 
-    (* A VALID CONTRACT IS ALL YOU NEED -- the point Emiel made.  Everything
-       Iris-level is already in sound_scfg_verification_condition_myWP2_w;
-       this lemma only specialises it at a := SyncVal v and runs it against
-       the BLOCK'S OWN annotated program `ab`.
-
-       SELF-CONTAINED (§2c): the enclosing program does not appear.  The
-       block's table is faithful to ITS gmap, its memory is ITS span, and its
-       own block premise `Hbs` is over `instrs_of_list v ab` -- a STRICTLY
-       SMALLER artifact, which is what makes nesting well-founded on nesting
-       depth.  No induction here: a block that is a LOOP goes through
-       blockSound_of_loop_vc below instead (PLAN-loop-rule.md). *)
-    Lemma blockSound_of_vc (words : bv xlenbits -> bv word)
-        (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
-        (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
-        (Hv : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) wnil)))
-        (* the block's code really is what its contract says: ab strips to
-           cfg_instrs, so ai_instr <$> instrs_of_list v ab IS blk_span v b *)
-        (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
-        (* the blocks this block's OWN program carries are sound *)
-        (Hbs : forall v, ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)) :
-      (∀ v, blockFaithful ab v b tbl) ⊢ ∀ v, blockSound words v b.
-    Proof.
-      iIntros "#Hf" (v ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
-      iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                   (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
-               /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                    (blk_exit b ι) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
-              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
-                  (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
-        with "[Hpre]" as "[%Hfi Hpre]".
-      { iSplit; [ iApply ("Hf" $! v ι with "Hpre") | iExact "Hpre" ]. }
-      destruct Hfi as [Hif Hef].
-      (* blk_span v b IS ai_instr <$> instrs_of_list v ab: fmap commutes with
-         instrs_of_list (Tables.fmap_instrs_of_list), and strip is that fmap. *)
-      unfold blk_span. rewrite <- Hstrip.
-      unfold Katamaran.RiscvPmp.CFGVer.Verifier.strip. rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
-      iPoseProof (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
-                    with "[]") as "Hrun".
-      { iApply (Hbs v). }
-      iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
-      (* no secLeak bullet: iFrame closes `⌜secLeak (SyncVal v)⌝` on the way in,
-         as it does at every other call site of this lemma. *)
-      iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [x|x1 x2]; [|contradiction].
-      cbn in Hex. apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-      rewrite Hex.
-      iApply "Hk". iFrame.
-    Qed.
-
     (* Read a pure fact off a resource WITHOUT consuming it. *)
     Lemma pure_keep (P : iProp Σ) (φ : Prop) :
       ⊢ (P -∗ ⌜φ⌝) -∗ P -∗ ⌜φ⌝ ∧ P.

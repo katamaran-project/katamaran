@@ -545,8 +545,8 @@ Arguments aiv_instr {Valid} _.
 Arguments aiv_ghost_after {Valid} _.
 Arguments aiv_block {Valid} _.
 
-(* A contract, as a block: what blkValid_of_contract (GenCompose.v) proves
-   valid. *)
+(* A contract, as a block: what blkValid_of_loop_contract (GenCompose.v)
+   proves valid. *)
 Definition selfBlk {Σ} (c : @CFGVerifierContract Σ) : BlkAnnot :=
   {| blk_ctx := Σ ; blk_contract := c |}.
 
