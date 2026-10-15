@@ -137,6 +137,100 @@ use it for future examples instead of hand-transcribing.
 **Open items from the 2026-10-08 learning session, grouped (Emiel asked which
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
+- **I. Loop-rule audit findings (2026-10-15 reading quiz, branch
+  `issue/loop-rule`, before merge).** Emiel, 2026-10-15: "Do A" -- fix
+  I1/I3/I4/I5/I7 on the branch, merge, then I6 on its own branch.
+  DECIDED (AskUserQuestion): I1 keep the first-key test + a lemma proving
+  it is `pc = p` for `table_of_list p 0 i`; I3 names `sub_to_post_ctx` /
+  `to_post` / `sub_a_to_an`; I4 a shared step combinator; I7 collapse if
+  every block's VC passes as a loop VC, else keep both and report.
+  - **I1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
+    takes the head to be the table's FIRST key. That is the placement only
+    because `CFG_VC_loop_triple` builds the table as `table_of_list p 0 i`
+    (`Contracts.v:221`), and offset 0 comes first and collapses to `p`
+    (`Tables.v:337`). Emiel: "brittle ... there is no real guarantee that the
+    first instruction is the head, except that we always do it this way."
+    Soundness does NOT depend on it: `rexFS` only uses that a head hit is a
+    lookup hit (`is_head_lookup`), and the meaning "head = placement" comes
+    from `loop_post`'s pc equation `an = p`; a wrong head makes the VC fail,
+    never pass. So it is a readability/robustness issue. Options: (a) pass
+    the head term (the placement) to `sexec_cfg_addr` explicitly instead of
+    reading it off the table, persisted like `exits`; (b) compare against the
+    entry pc `"a"` (might also make the `Hpl` placement premise of
+    `blockSound_of_loop_vc` unnecessary, since `loop_post` could then say
+    `an = a`; unverified); (c) keep, with a stronger comment.
+  - **I2. "Where did the run stop" is carried two ways.** An ordinary
+    contract carries it in the executor: the concrete stop guard
+    `negb first && (loop || exit_hit cexit v)` (`VerifierRel.v:356–358`) and
+    the fact `(loop || exit_hit ..) = true` that `sound_exec_cfg_addr_myWP2`
+    hands its continuation (`Adequacy.v:1647`). A loop contract carries it in
+    its post: `loop_post`'s pc equations `an = ex` / `an = p`
+    (`Contracts.v:200–212`), read back in `blockSound_of_loop_vc` as
+    `%Hex`/`%Hhd`; there the executor's fact is just `true`. Option: one
+    mechanism for both, i.e. every contract's VC consumes a post carrying
+    `an = exit`, and `exit_hit` leaves the concrete stop guard (which becomes
+    `negb first`). Larger change, touches the non-loop soundness chain;
+    unverified. Option: keep (two mechanisms, each local).
+  - **I3. `loop_post`'s substitutions are unreadable.** Emiel: "I have no
+    idea what wk or wk_a_an are." `wk_a_an : Sub Σ (Σ ▻ a ▻ an)` is the
+    weakening into the post's context (`Contracts.v:197`), `wk t` applies it
+    (`:205`), and `env.snoc wk_a_an "a" (term_var "an")` (`:211–212`) is
+    "rebind a to an", i.e. Inv[a := an]; none of the three is explained at
+    the point of use. Options: rename (e.g. `to_post_ctx`, `a_to_an`) and
+    name the second substitution; a one-line comment per substitution;
+    check whether the framework already has a two-step weakening to reuse.
+  - **I4. `myWP2_step` duplicates `myWP2_loop_fix`'s step disjunct.** Emiel:
+    "Why does myWP2_step exist? Is it not just the same as myWP2_loop?"
+    `myWP2_step E` (`Adequacy.v:218`) copies the right disjunct of
+    `myWP2_loop_fix` (`:111–124`) with `wp := myWP2_loop E`, so the reader
+    must diff them by eye. Options: define one step combinator
+    (`step_then wp`) and write `myWP2_loop_fix E wp := E ∨ step_then wp` and
+    `myWP2_step E := step_then (myWP2_loop E)` (the Contractive proof must
+    still go through); or keep, with a comment at both definitions naming
+    the other.
+  - **I5. The loop rule's proof is hard to read.** Emiel: "The proof of the
+    loop rule is a little bit too chaotic." `blockSound_of_loop_vc`
+    (`Adequacy.v:2158–2230`): its signature is mostly fully qualified paths
+    (`Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition
+    (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)` ...), and the proof
+    restates the precondition in two `iAssert`s just to read a pure fact
+    without consuming it. Options: short local names for the contract's
+    fields (`pre b`, `post b`, `exit b`, `place b`) or importing the modules
+    so the paths shrink; a lemma "pure fact from a persistent wand, keep the
+    hypothesis" instead of the two `iAssert`s; the five-step outline
+    (placement, faithfulness, run once, bind under ▷, case split) as
+    comments at each step. The qualified-path part is now I6.
+  - **I6. DECIDED (direction): import properly, no fully qualified
+    prefixes, codebase-wide.** Emiel, 2026-10-15: "for readibility, we should
+    avoid using things like this an instead import them properly. This
+    holds for the whole codebase actually." Census (non-ZZ `.v`,
+    `Katamaran.RiscvPmp.CFGVer.{Verifier,VerifierRel,Tables,Contracts,
+    TablesRel}.`): Adequacy 192, SpecIris 51, GenCompose 23, VerifierRel 12,
+    EndToEnd 10, TwoLoopsComposedResult 8, TablesRel 6, Swap/Countdown-
+    ComposedResult 4 each, Contracts 2; `theories/` not yet surveyed. The
+    original reason for qualifying is `CFGVer/CLAUDE.md` "Importing
+    CFGVer.Verifier downstream": a name clash with BlockVer. BlockVer is out
+    of the build (`_CoqProject:10–19`, zero active BlockVer lines), and the
+    note itself says to switch to `Require Import` once BlockVer is gone, so
+    the clash is moot; delete that note (and the skills' copies) with the
+    fix. Watch for: new clashes between CFGVer modules once imported
+    together, and the light/heavy layering (an Import never adds a Require,
+    so layering is unaffected). Plan with Emiel before starting.
+  - **I7. Three loop/non-loop wrapper pairs could collapse into one.**
+    `blockSound_of_[loop_]contract` (`GenCompose.v:469/485`),
+    `blkValid_of_[loop_]contract` (`:2217/2236`), `blkValid_of_[loop_]seg`
+    (`:2260/2285`) differ only in the VC (`cfg_vc` vs `cfg_vc_loop`) and the
+    loop's `Hpl` placement premise (free for generated segments, via
+    `seg_pre_placement`). Emiel: "This collapsing would definitely be
+    useful." Option: verify every BLOCK with `cfg_vc_loop` and drop the
+    non-loop half. Sound for every contract (the loop rule is its proof).
+    Price: a block whose run passes back through its own first instruction
+    with the pre FALSE there (a loop verified by unrolling, pre pinning the
+    trip count) is rejected by `cfg_vc_loop` and accepted by `cfg_vc`.
+    UNVERIFIED: whether any current block relies on that; check by running
+    each block's VC as a loop VC. Top-level programs stay on `cfg_vc` (the
+    seal, `Validity.v`). Also price the disjunctive post (`asn.or`) and the
+    per-step `is_head` test on the large blocks (muladd tail, `sym6`).
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:

@@ -109,10 +109,13 @@ Import iris.algebra.gmap.
     Definition myWp2 `{sailGS2 Σ} :=
         iProp Σ.
 
-    Definition myWP2_loop_fix `{sailGS2 Σ} (ExitCond : iProp Σ) (wp : myWp2) :
-      myWp2 :=
-      (ExitCond ∨
-        ∃ v, pc ↦ᵣ SyncVal v ∗
+    (* ONE MACHINE STEP, then `wp` under a later.  The step half of
+       myWP2_loop_fix, named once so that myWP2_step (below) is visibly the
+       same thing rather than a copy of it.  pc ↦ᵣ SyncVal v witnesses that
+       the pc is in sync at the step; the wand avoids duplicating the
+       resource for the semWP2 body. *)
+    Definition step_then `{sailGS2 Σ} (wp : myWp2) : myWp2 :=
+      (∃ v, pc ↦ᵣ SyncVal v ∗
         (pc ↦ᵣ SyncVal v -∗
          semWP2 env.nil env.nil (FunDef step) (FunDef step)
            (fun v1 _ v2 _ =>
@@ -121,14 +124,17 @@ Import iris.algebra.gmap.
               | inl v1 , inl v2 => ▷ wp
               | _ , _ => False
               end
-           )%I))%I.
-    (* non-exit branch: pc ↦ᵣ SyncVal v witnesses PC sync at loop boundary;
-       wand avoids duplicating the resource for the semWP2 body *)
+           )))%I.
+
+    (* Stop now (ExitCond), or take one step and continue. *)
+    Definition myWP2_loop_fix `{sailGS2 Σ} (ExitCond : iProp Σ) (wp : myWp2) :
+      myWp2 :=
+      (ExitCond ∨ step_then wp)%I.
   
   Global Instance myWP2_loop_fix_Contractive `{sailGS2 Σ} (ExitCond : iProp Σ) :
     Contractive (myWP2_loop_fix ExitCond).
   Proof.
-    rewrite /myWP2_loop_fix /= => n wp wp' Hwp.
+    rewrite /myWP2_loop_fix /step_then /= => n wp wp' Hwp.
     f_equiv.
     f_equiv => v.
     f_equiv.
@@ -188,10 +194,10 @@ Import iris.algebra.gmap.
   Proof.
     iLöb as "IH". iIntros "HE H".
     iDestruct (myWP2_loop_unfold with "H") as "H".
-    iEval (rewrite /myWP2_loop_fix) in "H".
+    iEval (rewrite /myWP2_loop_fix /step_then) in "H".
     iDestruct "H" as "[HE1 | H]".
     - by iApply "HE".
-    - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix). iRight.
+    - iApply myWP2_loop_fold. iEval (rewrite /myWP2_loop_fix /step_then). iRight.
       iDestruct "H" as (v) "[Hpc Hcont]".
       iExists v. iFrame "Hpc". iIntros "Hpc".
       iDestruct ("Hcont" with "Hpc") as "Hwp".
@@ -207,6 +213,51 @@ Import iris.algebra.gmap.
     myWP2_loop (myWP2_loop E) ⊢ myWP2_loop E.
   Proof.
     iIntros "H". iApply (myWP2_loop_bind (myWP2_loop E) E with "[] H"). auto.
+  Qed.
+
+  (* AT LEAST ONE MACHINE STEP, then the loop (PLAN-loop-rule.md, L5): the
+     non-exit disjunct of myWP2_loop_fix.  A contract's run concludes this
+     rather than myWP2_loop, because its entry step never stops (`first`), and
+     so does a block's soundness: firing a block, like executing an
+     instruction, leaves the rest of the run under a later.  That later is
+     what the loop rule's induction spends when the run is back at the head. *)
+  Definition myWP2_step `{sailGS2 Σ} (E : iProp Σ) : iProp Σ :=
+    step_then (myWP2_loop E).
+
+  Lemma myWP2_step_loop `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_step E ⊢ myWP2_loop E.
+  Proof.
+    iIntros "H". iApply myWP2_loop_fold. rewrite /myWP2_loop_fix. iRight. iExact "H".
+  Qed.
+
+  (* The continuation is only needed AFTER the step, hence only under a later. *)
+  Lemma myWP2_step_bind `{sailGS2 Σ} (E1 E2 : iProp Σ) :
+    ⊢ ▷ (E1 -∗ myWP2_loop E2) -∗ myWP2_step E1 -∗ myWP2_step E2.
+  Proof.
+    rewrite /myWP2_step /step_then.
+    iIntros "HE H". iDestruct "H" as (v) "[Hpc Hcont]".
+    iExists v. iFrame "Hpc". iIntros "Hpc".
+    iDestruct ("Hcont" with "Hpc") as "Hwp".
+    iApply (semWP2_mono with "Hwp").
+    iIntros (v1 ? v2 ?) "Hm".
+    destruct v1 as [v1|m1]; destruct v2 as [v2|m2]; try done.
+    iNext. iApply (myWP2_loop_bind with "HE Hm").
+  Qed.
+
+  (* What a run owes from a given step: at least one step at the entry
+     (`first`, which never stops), the plain loop afterwards. *)
+  Definition myWP2_from `{sailGS2 Σ} (first : bool) (E : iProp Σ) : iProp Σ :=
+    if first then myWP2_step E else myWP2_loop E.
+
+  Lemma myWP2_from_step `{sailGS2 Σ} (first : bool) (E : iProp Σ) :
+    myWP2_step E ⊢ myWP2_from first E.
+  Proof. destruct first; [done|apply myWP2_step_loop]. Qed.
+
+  Lemma myWP2_step_join `{sailGS2 Σ} (E : iProp Σ) :
+    myWP2_step (myWP2_loop E) ⊢ myWP2_step E.
+  Proof.
+    iIntros "H". iApply (myWP2_step_bind (myWP2_loop E) E with "[] H").
+    iNext. auto.
   Qed.
 
   (* ---------------------------------------------------------------- *)
@@ -534,7 +585,7 @@ Import iris.algebra.gmap.
       rename H1 into Hstep2. rename H4 into Hevaln2. rename H0 into nEC2.
       specialize (IHl1 _ _ _ _ _ eq_refl Hevaln1 Hevaln2).
       rewrite fixpoint_myWP2_loop_eq.
-      unfold myWP2_loop_fix.
+      unfold myWP2_loop_fix, step_then.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
       + iDestruct "H" as (v) "(Hpc & %Hec)".
         unfold reg_pointsTo2.
@@ -646,7 +697,7 @@ Import iris.algebra.gmap.
     - inversion Heval1 as [ | ? ? γ1 ? μ1 ? nEC1 Hstep1 Hevaln1].
       clear Heval1. subst.
       rewrite fixpoint_myWP2_loop_eq.
-      unfold myWP2_loop_fix.
+      unfold myWP2_loop_fix, step_then.
       iMod "Hwp2" as "([H | Hwp2] & Hφ)".
       + iDestruct "H" as (v) "(Hpc & %Hec)".
         unfold reg_pointsTo2.
@@ -1448,53 +1499,32 @@ Section AdequacyTools.
           pc ↦ᵣ blk_exit b ι ∗
           (∃ x, nextpc ↦ᵣ x) ∗
           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) -∗ ExitCond) -∗
-         myWP2_loop ExitCond)%I.
+         (* myWP2_step, not myWP2_loop: a block takes at least one machine
+            step (PLAN-loop-rule.md, L5), so a block may sit at a loop's head *)
+         myWP2_step ExitCond)%I.
 
     (* Indexed by `instrs` ALONE: the block contract rides in the AnnotInstr
        payload, so there is no second table to index by.  That is also why no
        btable_rel exists -- itable_rel already ties `instrs !! v = Some ai` to
        the matched symbolic entry, and the block comes with it. *)
-    (* Every block the executor can apply at `stepped` (Verifier.ai_fire) is
-       sound: at `false` only the ai_block annotations, at `true` the ai_loop
-       (re-entry) ones as well. *)
-    Definition blocksSoundAt (stepped : bool) (words : bv xlenbits -> bv word)
-        (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
-        : iProp Σ :=
-      (* No containment conjunct any more: that the block's span really IS
-         this program's code is checked by the VC at the firing site
-         (Verifier.blk_code_in, PLAN-valid-blk-annot.md §1c) and read off the
-         concrete run (cblk_code_in_sub). *)
-      (□ ∀ v ai b, ⌜instrs !! v = Some ai⌝ →
-                   ⌜Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire stepped ai = Some b⌝ →
-                   blockSound words v b)%I.
-
-    (* ALL of a program's blocks, of both kinds.  This is the premise every
-       external bridge takes; only the executor-level lemmas below split it
-       into `blocksSoundAt false` (needed now) and `▷ blocksSound` (needed only
-       once an instruction has run), which is what lets a loop's re-entry
-       block be justified by Löb induction. *)
+    (* Every block a program carries is sound.  ONE premise, needed at once:
+       a block is proved before the program that uses it, so nothing here
+       waits for a later -- the loop's own induction lives in the loop rule
+       (blockSound_of_loop_vc), not in this premise (PLAN-loop-rule.md, L4). *)
     Definition blocksSound (words : bv xlenbits -> bv word)
         (instrs : gmap (bv xlenbits) Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
         : iProp Σ :=
-      blocksSoundAt true words instrs.
-
-    #[export] Instance blocksSoundAt_persistent stepped words instrs :
-      Persistent (blocksSoundAt stepped words instrs).
-    Proof. apply _. Qed.
+      (* No containment conjunct: that the block's span really IS this
+         program's code is checked by the VC at the firing site
+         (Verifier.blk_code_in, PLAN-valid-blk-annot.md §1c) and read off the
+         concrete run (cblk_code_in_sub). *)
+      (□ ∀ v ai b, ⌜instrs !! v = Some ai⌝ →
+                   ⌜Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = Some b⌝ →
+                   blockSound words v b)%I.
 
     #[export] Instance blocksSound_persistent words instrs :
       Persistent (blocksSound words instrs).
     Proof. apply _. Qed.
-
-    (* ai_fire false selects a subset of what ai_fire true does. *)
-    Lemma blocksSound_at_false words instrs :
-      blocksSound words instrs ⊢ blocksSoundAt false words instrs.
-    Proof.
-      iIntros "#H !>" (v ai b) "%Hlk %Hb".
-      iApply ("H" $! v ai b with "[//] [%]").
-      unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire in *.
-      destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai); [exact Hb|discriminate].
-    Qed.
 
     (* RECOVER THE WHOLE-PROGRAM INTERFACE from the span-only one, given
        containment.  This is the ONLY place the two views meet.
@@ -1522,7 +1552,7 @@ Section AdequacyTools.
        pc ↦ᵣ blk_exit b ι ∗
        (∃ x, nextpc ↦ᵣ x) ∗
        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗ ExitCond) -∗
-      myWP2_loop ExitCond.
+      myWP2_step ExitCond.
     Proof.
       intros Hsub.
       iIntros "Hb (Hpre & Hpc & Hnpc & Hinstrs) Hk".
@@ -1592,20 +1622,20 @@ Section AdequacyTools.
       apply CHeapSpec.produce_sound.
     Qed.
 
-    (* The block premise is split by WHEN it is needed.  `blocksSoundAt
-       stepped` pays for the blocks this step may apply; `▷ blocksSound` for
-       everything from the next instruction on, because each executed
-       instruction strips one later (the iModIntro in the instruction branch).
-       At the entry (`stepped = false`) that is exactly "ai_block now, ai_loop
-       later" -- which is what lets blockSound_of_vc justify a loop whose head
-       carries its own block, by Löb induction. *)
+    (* THE EXECUTOR'S SOUNDNESS.  At the entry step (`first`) the run never
+       stops, so it takes at least one machine step -- an instruction, or a
+       block, which earns one by blockSound -- and the conclusion is the
+       step-first myWP2_step; afterwards it is the plain loop (myWP2_from).
+       A loop VC (`loop`) may stop at any address, so the stop only tells the
+       continuation `loop || exit_hit`; which address it was is the loop
+       post's business (Contracts.loop_post). *)
     Lemma sound_exec_cfg_addr_myWP2
         {instrs} {words : bv xlenbits -> bv word} {cexit fuel}
-        (stepped : bool)
+        (loop first : bool)
         (apc anp : RelVal ty_xlenbits)
         (ExitCondIprop : iProp Σ) Φ (h : SCHeap) :
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words cexit fuel stepped apc anp Φ h →
-      blocksSoundAt stepped words instrs ∗ ▷ blocksSound words instrs ∗
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr instrs words cexit fuel loop first apc anp Φ h →
+      blocksSound words instrs ∗
       interpret_scheap h ∗ pc ↦ᵣ apc ∗ nextpc ↦ᵣ anp ∗
         (* THE BOUNDARY: the executor's map is AnnotInstr-valued, MEMORY is
            AST-valued — memory holds instructions, not annotations.  This is
@@ -1614,24 +1644,27 @@ Section AdequacyTools.
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
           (ai_instr <$> instrs) ⊢
       (∀ an,
-         ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
+         ⌜match an with SyncVal v => (loop || Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v) = true | NonSyncVal _ _ => False end⌝ ∗
          pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
              (ai_instr <$> instrs) ∗
          (∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝) -∗ ExitCondIprop) -∗
-      myWP2_loop ExitCondIprop.
+      myWP2_from first ExitCondIprop.
     Proof.
-      revert stepped apc anp h.
-      induction fuel as [|n' IH]; intros stepped apc anp h Hexec.
+      revert first apc anp h.
+      induction fuel as [|n' IH]; intros first apc anp h Hexec.
       - cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr CHeapSpec.error] in Hexec.
         contradiction.
       - destruct apc as [v|v1 v2].
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
                CHeapSpec.angelic_binary] in Hexec.
           destruct Hexec as [Hexit | Hexec].
-          * destruct (Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v) eqn:Hexit_eq.
+          * destruct (negb first && (loop || Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v)) eqn:Hstop.
             -- cbn [CHeapSpec.pure] in Hexit.
-               iIntros "(#Hb0 & #Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
+               (* a stop is never the entry step *)
+               apply andb_prop in Hstop as [Hfirst Hexit_eq].
+               apply negb_true_iff in Hfirst; subst first.
+               iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iApply exitCondImpliesMyWP2_loop.
                iApply ("Hk" $! (SyncVal v)).
                iSplit. { iPureIntro. exact Hexit_eq. }
@@ -1640,8 +1673,10 @@ Section AdequacyTools.
           * (* Execute branch: the instruction is looked up at address v
                directly (instrs !! v).  No alignment / base guard / index
                arithmetic: the gmap key IS the current PC. *)
+            (* every branch here takes a step, whichever `first` is *)
+            iIntros "H Hk". iApply myWP2_from_step. iRevert "H Hk".
             destruct (instrs !! v) as [i|] eqn:Hlk.
-            ++ destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire stepped i) as [b|] eqn:Hbl.
+            ++ destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_block i) as [b|] eqn:Hbl.
                { (* ---- BLOCK branch.  The executor replaced this instruction
                     (and however many the block spans) by b's contract, and
                     blocksSound is what pays for that.
@@ -1649,9 +1684,8 @@ Section AdequacyTools.
                     The step: read `pre ∗ rest` out of the heap
                     (cexec_block_sound), hand `pre` plus the machine resources
                     to blocksSound with ExitCond := myWP2_loop <real exit>, and
-                    join the nested loop away.  That instantiation is exactly
-                    the idiom myWP2_loop_bind/join were written for, so no new
-                    Iris machinery is needed. *)
+                    join the nested loop away (myWP2_step_join: the block's
+                    step is this run's step). *)
                  unfold bind, CHeapSpec.bind in Hexec.
                  (* the containment check cexec_block_chk asserted first *)
                  unfold Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_block_chk,
@@ -1659,11 +1693,11 @@ Section AdequacyTools.
                    CPureSpec.assert_formula, CPureSpec.assert_pathcondition in Hexec.
                  destruct Hexec as [Hcode Hexec].
                  pose proof (cblk_code_in_sub instrs _ v Hcode) as Hsub.
-                 iIntros "(#Hb0 & #Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
+                 iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                  iDestruct (cexec_block_sound _ _ _ _ Hexec with "Hh")
                    as (ι) "[Hpre Hpost]".
-                 iDestruct ("Hb0" $! v i b with "[//] [//]") as "Hb".
-                 iApply myWP2_loop_join.
+                 iDestruct ("Hbs" $! v i b with "[//] [//]") as "Hb".
+                 iApply myWP2_step_join.
                  (* containment came from the run (Hsub above), soundness from
                     blocksSound; the adapter turns the block's SPAN ownership
                     back into the whole-program ownership this loop carries. *)
@@ -1679,8 +1713,8 @@ Section AdequacyTools.
                     block actually left. *)
                  iDestruct "Hnpc'" as (x) "Hnpc'".
                  iRevert "Hk".
-                 iApply (IH stepped _ x h' (Hrest x)).
-                 iFrame "Hb0 Hbs Hh' Hpc' Hinstrs' Hnpc'". }
+                 iApply (IH false _ x h' (Hrest x)).
+                 iFrame "Hbs Hh' Hpc' Hinstrs' Hnpc'". }
                unfold bind, CHeapSpec.bind in Hexec.
                (* Phase 4 (chunk GC): Hexec now carries the extra cchunk_gc
                   bind cexec_cfg_addr's step inserts before cexec_instruction.
@@ -1689,7 +1723,7 @@ Section AdequacyTools.
                   Hh to match via interpret_scheap_gc_heap (§4: sound because
                   iProp Σ is affine). *)
                apply Katamaran.RiscvPmp.CFGVer.VerifierRel.cgc_binds_heap_fwd in Hexec.
-               iIntros "(#Hb0 & #Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
+               iIntros "(#Hbs & Hh & Hpc & Hnpc & Hinstrs) Hk".
                iDestruct (interpret_scheap_gc_heap h with "Hh") as "Hh".
                (* Absorb the BEFORE-ghosts.  This used to be a rewrite with
                   cexec_ghosts_pure; with a real call_lemma the ghosts have a
@@ -1709,8 +1743,9 @@ Section AdequacyTools.
                iPoseProof (Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_lookup
                              words (ai_instr <$> instrs) v Hlk'
                  with "Hinstrs") as "[Hinstr Hframe]".
-               rewrite {1}fixpoint_myWP2_loop_eq. unfold myWP2_loop_fix.
-               iRight; iExists v; iSplitL "Hpc". { iExact "Hpc". }
+               (* the step itself: exactly myWP2_step's one disjunct *)
+               unfold myWP2_step, step_then.
+               iExists v; iSplitL "Hpc". { iExact "Hpc". }
                iIntros "Hpc_wd".
                iApply (semWP2_mono with "[Hh Hnpc Hpc_wd Hinstr]").
                { iApply (Katamaran.RiscvPmp.CFGVer.VerifierRel.sound_exec_instruction Hexec1). iFrame. }
@@ -1728,12 +1763,8 @@ Section AdequacyTools.
                   and the incoming nextpc, which is exactly what the epilogue
                   established (pc = nextpc = an).  Hnpc' is framed directly —
                   no `iExists`, since the PRE now names the value. *)
-               (* An instruction has now run: the later on "Hbs" was stripped by
-                  the iModIntro above, so every block -- ai_loop included -- is
-                  available from here on (stepped = true). *)
-               iApply (IH true an an h'' Hcfg').
+               iApply (IH false an an h'' Hcfg').
                iSplitR. { iExact "Hbs". }
-               iSplitR. { iNext. iExact "Hbs". }
                iFrame "Hh' Hpc' Hinstrs' Hnpc'".
             ++ cbn [CHeapSpec.error] in Hexec. contradiction.
         + cbn [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_cfg_addr ty.RVToOption
@@ -1752,7 +1783,7 @@ Section AdequacyTools.
     (* `itable_rel ∧ etable_rel →` premise, discharged here by the   *)
     (* caller-supplied faithfulness facts at ι.                          *)
     (* ---------------------------------------------------------------- *)
-    Lemma sound_cexec_triple_addr_myWP2_w {Γ : LCtx} {pre post instrs cexit fuel}
+    Lemma sound_cexec_triple_addr_myWP2_w {Γ : LCtx} {pre post instrs cexit fuel loop}
         (words : bv xlenbits -> bv word)
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
            signature caught with a literal `list (Term _ ty_xlenbits * AST)` in
@@ -1774,18 +1805,14 @@ Section AdequacyTools.
          it is what the trusted statements name — so the projection lives at
          every use site rather than inside it. *)
       (forall words : bv xlenbits -> bv word,
-         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words cexit fuel post tbl exits (λ _ _, True) []) →
-      (* The block premise, split by when it is needed (see
-         sound_exec_cfg_addr_myWP2): the ai_block annotations now, all of them
-         UNDER A LATER.  The later is what blockSound_of_vc's Löb induction can
-         supply; the ∃-words form below takes both from ⊢ blocksSound. *)
-      ⊢ blocksSoundAt false words instrs -∗ ▷ blocksSound words instrs -∗
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr loop pre instrs words cexit fuel post tbl exits (λ _ _, True) []) →
+      ⊢ blocksSound words instrs -∗
         ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜match an with SyncVal v => (loop || Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v) = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
            (* RE-THREADED 2026-09-03; commit 2b6c7753 removed exactly this
@@ -1801,7 +1828,7 @@ Section AdequacyTools.
               shallow continuation stays `(fun _ _ => True)`. *)
            asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
            ExitCondIprop) -∗
-        myWP2_loop ExitCondIprop.
+        myWP2_step ExitCondIprop.
     Proof.
       cbv [Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr bind demonic_ctx demonic
            CPureSpec.demonic lift_purespec CPureSpec.assume_formula CPureSpec.assume_pathcondition].
@@ -1811,7 +1838,7 @@ Section AdequacyTools.
          witness npc handed to cexec_triple_addr's single nextpc demonic and to
          sound_exec_cfg_addr_myWP2.  That is why threading the value inward
          costs no change to the trusted surface. *)
-      iIntros (Htrip) "#Hb0 #Hbsw".
+      iIntros (Htrip) "#Hbsw".
       iIntros (a) "(Hpre & %HsLa & Hpc & [%npc Hnpc] & Hinstrs) Hk".
       (* Name the words the memory actually holds; they instantiate both the
          uniform VC and the word half of cexec_triple_addr's demonic_ctx. *)
@@ -1841,8 +1868,8 @@ Section AdequacyTools.
                     (Katamaran.RiscvPmp.CFGVer.VerifierRel.wtable_rel_cws_of words Hif))) a npc).
       apply produce_sound in Htrip.
       iPoseProof (Htrip with "[$] Hpre") as "(%h2 & [Hh2 %Hexec])". clear Htrip.
-      iApply (sound_exec_cfg_addr_myWP2 false a npc ExitCondIprop _ _ Hexec
-        with "[$Hb0 $Hbsw $Hpc $Hnpc $Hinstrs $Hh2]").
+      iApply (sound_exec_cfg_addr_myWP2 loop true a npc ExitCondIprop _ _ Hexec
+        with "[$Hbsw $Hpc $Hnpc $Hinstrs $Hh2]").
       (* The fifth conjunct used to be DROPPED (`& _`).  It is
          `∃ h', interpret_scheap h' ∧ ⌜Φ an h'⌝`, and Φ here is
          cexec_triple_addr's `consume ens ι.["a"↦a].["an"↦na]` — so
@@ -1863,34 +1890,33 @@ Section AdequacyTools.
        the executor's frame carries `ptsto_instrs_w words` and needs that exact
        words back for its induction hypothesis, so a caller that went through
        the ∃ form could not continue. *)
-    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs cexit fuel}
+    Lemma sound_cexec_triple_addr_myWP2 {Γ : LCtx} {pre post instrs cexit fuel loop}
         {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
         {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
         (ι : Valuation Γ) (ExitCondIprop : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
         (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι) :
       (forall words : bv xlenbits -> bv word,
-         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr pre instrs words cexit fuel post tbl exits (λ _ _, True) []) →
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr loop pre instrs words cexit fuel post tbl exits (λ _ _, True) []) →
       (forall words : bv xlenbits -> bv word, ⊢ blocksSound words instrs) →
       ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret pre ι.["a"∷ty_xlenbits ↦ a] ∗ ⌜secLeak a⌝ ∗
         pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) -∗
         (∀ an,
-           ⌜match an with SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true | NonSyncVal _ _ => False end⌝ ∗
+           ⌜match an with SyncVal v => (loop || Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v) = true | NonSyncVal _ _ => False end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
            Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs (ai_instr <$> instrs) ∗
            asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
            ExitCondIprop) -∗
-        myWP2_loop ExitCondIprop.
+        myWP2_step ExitCondIprop.
     Proof.
       iIntros (Htrip Hbs a) "(Hpre & %HsLa & Hpc & Hnpc & Hinstrs) Hk".
       iDestruct "Hinstrs" as (words) "Hinstrs".
       iPoseProof (Hbs words) as "#Hbsw".
       iPoseProof (sound_cexec_triple_addr_myWP2_w words ExitCondIprop Hif Hef
-                    Htrip with "[] []") as "Hrun".
-      { iApply (blocksSound_at_false with "Hbsw"). }
-      { iNext. iExact "Hbsw". }
+                    Htrip with "[]") as "Hrun".
+      { iExact "Hbsw". }
       iApply ("Hrun" $! a with "[$Hpre $Hpc $Hnpc $Hinstrs]").
       { iPureIntro. exact HsLa. }
       iIntros (an) "(%Hexit & Hpc & Hnpc & Hinstrs & HPOST)".
@@ -1926,10 +1952,9 @@ Section AdequacyTools.
         (ι : Valuation Γ) (ExitCond : iProp Σ)
         (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
         (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι) :
-      (* The block premise, split as in sound_cexec_triple_addr_myWP2_w.
-         Blocks ride in `instrs` and hence in `tbl`, so this is the ONLY thing
-         they add at this level. *)
-      ⊢ blocksSoundAt false words instrs -∗ ▷ blocksSound words instrs -∗
+      (* The block premise.  Blocks ride in `instrs` and hence in `tbl`, so
+         this is the ONLY thing they add at this level. *)
+      ⊢ blocksSound words instrs -∗
         ∀ a : RelVal ty_xlenbits,
           asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
           pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
@@ -1944,9 +1969,9 @@ Section AdequacyTools.
              (* the exit assertion — see sound_cexec_triple_addr_myWP2 *)
              asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
              ExitCond) -∗
-          myWP2_loop ExitCond.
+          myWP2_step ExitCond.
     Proof.
-      apply (sound_cexec_triple_addr_myWP2_w (post := post) (fuel := fuel)
+      apply (sound_cexec_triple_addr_myWP2_w (loop := false) (post := post) (fuel := fuel)
                (ι := ι) words ExitCond Hif Hef).
       intros wds.
       apply (safeE_safe env.nil), cfg_postprocess_sound in Hverif.
@@ -1958,6 +1983,51 @@ Section AdequacyTools.
       apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
       - easy.
       - constructor.
+    Qed.
+
+    (* THE LOOP VC's soundness (PLAN-loop-rule.md): as above, but the run may
+       also stop back at the head, so the continuation learns only that the
+       pc is synchronised; which stop it was is in `post` -- a loop VC's post
+       is Contracts.loop_post. *)
+    Lemma sound_scfg_loop_vc_myWP2_w {Γ pre post instrs cexit fuel}
+        (words : bv xlenbits -> bv word)
+        {tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Γ)}
+        {exits : Katamaran.RiscvPmp.CFGVer.Verifier.SExitTable (wlctx Γ)}
+        (Hverif : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (
+            Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition
+              pre tbl exits fuel post wnil)))
+        (ι : Valuation Γ) (ExitCond : iProp Σ)
+        (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Γ) instrs tbl ι)
+        (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Γ) cexit exits ι) :
+      ⊢ blocksSound words instrs -∗
+        ∀ a : RelVal ty_xlenbits,
+          asn.interpret pre (ι.["a"∷ty_xlenbits ↦ a]) ∗ ⌜secLeak a⌝ ∗
+          pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
+          Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) -∗
+          (∀ an,
+             ⌜match an with SyncVal _ => True | NonSyncVal _ _ => False end⌝ ∗
+             pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
+             Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (ai_instr <$> instrs) ∗
+             asn.interpret post (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
+             ExitCond) -∗
+          myWP2_step ExitCond.
+    Proof.
+      assert (Htrip : forall wds : bv xlenbits -> bv word,
+                 Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr true pre instrs wds
+                   cexit fuel post tbl exits (λ _ _, True) []).
+      { intros wds.
+        apply (safeE_safe env.nil), cfg_postprocess_sound in Hverif.
+        apply (LogicalSoundness.psafe_safe (w := wnil)) in Hverif; [|done].
+        revert Hverif.
+        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_loop_verification_condition.
+        - easy.
+        - constructor. }
+      iIntros "#Hbs" (a) "Hpre Hk".
+      iPoseProof (sound_cexec_triple_addr_myWP2_w words ExitCond Hif Hef Htrip with "Hbs")
+        as "Hrun".
+      iApply ("Hrun" $! a with "Hpre").
+      iIntros (an) "[%Hf H]". iApply "Hk". iFrame "H". iPureIntro.
+      destruct an; [exact I | exact Hf].
     Qed.
 
     (* ---- THE PLACEMENT PREMISE ------------------------------------------
@@ -1994,86 +2064,123 @@ Section AdequacyTools.
           /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
                (blk_exit b ι) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝)%I.
 
-    (* A VALID CONTRACT IS ALL YOU NEED -- the point Emiel made.  Everything
-       Iris-level is already in sound_scfg_verification_condition_myWP2; this
-       lemma only specialises it at a := SyncVal v and runs it
-       against the BLOCK'S OWN annotated program `ab`.
+    (* A block's span, and the same memory as its own run sees it. *)
+    Lemma span_to_run (words : bv xlenbits -> bv word) (v : bv xlenbits)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) :
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b) ⊢
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+        (ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab).
+    Proof.
+      unfold blk_span. rewrite <- Hstrip. unfold Katamaran.RiscvPmp.CFGVer.Verifier.strip.
+      now rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
+    Qed.
 
-       SELF-CONTAINED, and that is the point (§2c).  The enclosing program does
-       not appear: the block's table is faithful to ITS gmap, its memory is ITS
-       span, and its own block premise `Hbs` is over `instrs_of_list v ab` -- a
-       STRICTLY SMALLER artifact, which is what makes nesting well-founded on
-       nesting depth instead of circular.  The old version ran against the
-       ENCLOSING program with every block annotation cleared, and was vacuous
-       in its block premise -- exactly what foreclosed nesting. *)
-    Lemma blockSound_of_vc (words : bv xlenbits -> bv word)
+    Lemma run_to_span (words : bv xlenbits -> bv word) (v : bv xlenbits)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) :
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+        (ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) ⊢
+      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words (blk_span v b).
+    Proof.
+      unfold blk_span. rewrite <- Hstrip. unfold Katamaran.RiscvPmp.CFGVer.Verifier.strip.
+      now rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
+    Qed.
+
+    (* Read a pure fact off a resource WITHOUT consuming it. *)
+    Lemma pure_keep (P : iProp Σ) (φ : Prop) :
+      ⊢ (P -∗ ⌜φ⌝) -∗ P -∗ ⌜φ⌝ ∧ P.
+    Proof. iIntros "W P". iSplit; [iApply ("W" with "P") | iExact "P"]. Qed.
+
+    (* WHERE ONE BODY RUN OF A LOOP STOPS: some synced pc, the instruction
+       memory unchanged, and the loop post (Contracts.loop_post) -- the
+       post at the exit, or the invariant back at the head. *)
+    Definition loop_stopped (words : bv xlenbits -> bv word) (v : bv xlenbits)
+        (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
+        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
+        (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) : iProp Σ :=
+      let c := Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b in
+      (∃ an, ⌜match an with SyncVal _ => True | NonSyncVal _ _ => False end⌝ ∗
+         pc ↦ᵣ an ∗ (∃ x, nextpc ↦ᵣ x) ∗
+         Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+           (ai_instr <$> Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) ∗
+         asn.interpret
+           (Katamaran.RiscvPmp.CFGVer.Contracts.loop_post
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_placement c)
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit c)
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition c)
+              (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition c))
+           (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ an]))%I.
+
+    (* ---- THE LOOP RULE (PLAN-loop-rule.md) -------------------------------
+       A LOOP contract is sound from its LOOP VC: one run of the body from the
+       invariant (the contract's precondition), stopping at the exit (owing
+       the post) or back at the head (owing the invariant again) -- see
+       Contracts.loop_post.  This is the ONLY place the loop's induction
+       happens.  It is Löb induction, i.e. induction over the remaining steps
+       of the run: every stop back at the head comes after at least one
+       machine step (myWP2_step -- the entry step never stops), so the rest
+       of the run is under a later, and the hypothesis "this loop, from any
+       state satisfying the invariant" is available exactly there.
+
+       `Hpl`: the invariant pins the placement to the entry address, so the
+       head the run came back to IS the block's own entry, and its span is the
+       same instruction memory.  For a generated segment this is
+       GenCompose.seg_pre_placement. *)
+    Lemma blockSound_of_loop_vc (words : bv xlenbits -> bv word)
         (ab : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr)
         (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot)
         (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)))
-        (Hv : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+        (Hv : safeE (Katamaran.RiscvPmp.CFGVer.Contracts.cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition
                  (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) tbl (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_fuel (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
-                 (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) wnil)))
-        (* NO Hexit any more (PLAN-exit-targets.md): the block resumes at its
-           contract's own exit term, which is what the VC's run stops at, so
-           there is no second description of the resume point to reconcile. *)
-        (* the block's code really is what its contract says: ab strips to
-           cfg_instrs, so ai_instr <$> instrs_of_list v ab IS blk_span v b *)
+                 (Katamaran.RiscvPmp.CFGVer.Contracts.loop_post
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_placement (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+                    (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
+                 wnil)))
         (Hstrip : Katamaran.RiscvPmp.CFGVer.Verifier.strip ab = Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
-        (* the blocks this block's OWN program may apply at its entry
-           (ai_block only) are justified outright -- they may fire at step 0,
-           before any later has been earned.  From an AnnotInstrV list,
-           blocksSoundAt_false_of_V. *)
-        (Hbs0 : forall v, (⊢ blocksSoundAt false words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)))
-        (* ALL its blocks are justified, and this premise may ASSUME THIS
-           BLOCK: a loop is one block whose head carries that same block as
-           ai_loop, so its VC's back edge consumes the block's pre (the
-           invariant) and produces its post.  Not circular: ai_loop fires only
-           once an instruction has run, i.e. under a later -- which is exactly
-           what `iLöb` supplies.  For a block with no self-reference the
-           assumption is simply ignored (`iIntros "_"`). *)
-        (* The Löb hypothesis is `□ ∀ v', blockSound words v' b` -- this
-           block at EVERY entry address (decision (c), PLAN-valid-blk-annot
-           Phase 3), not just at v: so a re-entry may fire at any address, and
-           the conclusion is exactly Adequacy.blkValid's body. *)
-        (Hbs : forall v, □ (∀ v', blockSound words v' b) ⊢
-                 blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab)) :
+        (Hbs : forall v, ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab))
+        (Hpl : forall v (ι : Valuation (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)),
+            asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
+              (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]) ⊢
+            ⌜inst (T := fun Σ => Term Σ ty_xlenbits) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_placement (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι
+             = ty.SyncVal v⌝) :
       (∀ v, blockFaithful ab v b tbl) ⊢ ∀ v, blockSound words v b.
     Proof.
       iIntros "#Hf".
       iLöb as "IH".
       iIntros (v ι ExitCond) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
-      (* Read the faithfulness facts out of the pre WITHOUT consuming it: the
-         conclusion is pure, so `∧` (which duplicates the context under iSplit)
-         gives both. *)
-      iAssert (⌜Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                   (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list v ab) tbl ι
-               /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))
-                    (blk_exit b ι) (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι⌝
-              ∧ asn.interpret (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)))
-                  (ι.["a"∷ty_xlenbits ↦ ty.SyncVal v]))%I
-        with "[Hpre]" as "[%Hfi Hpre]".
-      { iSplit; [ iApply ("Hf" $! v ι with "Hpre") | iExact "Hpre" ]. }
+      (* 1. The invariant pins the placement to the entry address v (Hpl). *)
+      iPoseProof (Hpl v ι) as "Hplace".
+      iDestruct (pure_keep with "Hplace Hpre") as "[%Hp Hpre]".
+      (* 2. The loop's table is faithful to its code at v (Hf). *)
+      iPoseProof ("Hf" $! v ι) as "Hfaith".
+      iDestruct (pure_keep with "Hfaith Hpre") as "[%Hfi Hpre]".
       destruct Hfi as [Hif Hef].
-      (* blk_span v b IS ai_instr <$> instrs_of_list v ab: fmap commutes with
-         instrs_of_list (Tables.fmap_instrs_of_list), and strip is that fmap. *)
-      unfold blk_span. rewrite <- Hstrip.
-      unfold Katamaran.RiscvPmp.CFGVer.Verifier.strip. rewrite <- Katamaran.RiscvPmp.CFGVer.Tables.fmap_instrs_of_list.
-      (* the block premise for the block's own program: entry blocks now, all
-         of them UNDER THE LATER, where the Löb hypothesis is available *)
-      iPoseProof (sound_scfg_verification_condition_myWP2_w words Hv ExitCond Hif Hef
-                    with "[] []") as "Hrun".
-      { iApply (Hbs0 v). }
-      { iNext. iApply (Hbs v). iModIntro. iExact "IH". }
-      iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]").
-      (* no secLeak bullet: iFrame closes `⌜secLeak (SyncVal v)⌝` on the way in,
-         as it does at every other call site of this lemma. *)
-      iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
-      destruct an as [x|x1 x2]; [|contradiction].
-      cbn in Hex. apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
-      rewrite Hex.
-      iApply "Hk". iFrame.
+      (* 3. One run of the body, by the loop VC, stopping in loop_stopped. *)
+      iDestruct (span_to_run words v b ab Hstrip with "Hinstrs") as "Hinstrs".
+      iPoseProof (sound_scfg_loop_vc_myWP2_w words Hv (loop_stopped words v ab b ι)
+                    Hif Hef with "[]") as "Hrun".
+      { iApply (Hbs v). }
+      (* 4. The run takes at least one step, so what follows its stop sits
+         under a later -- the same later that strips the induction hypothesis. *)
+      iApply (myWP2_step_bind with "[Hk] [Hpre Hpc Hnpc Hinstrs]");
+        [| iApply ("Hrun" $! (ty.SyncVal v) with "[$Hpre $Hpc $Hnpc $Hinstrs]");
+           iIntros (an) "H"; iExists an; iExact "H" ].
+      iNext. iIntros "(%an & %Hsync & Hpc & Hnpc & Hinstrs & Hpost)".
+      destruct an as [y|y1 y2]; [|contradiction].
+      (* 5. Which stop: the loop post's pc equations decide. *)
+      rewrite Katamaran.RiscvPmp.CFGVer.Contracts.loop_post_interpret.
+      iDestruct (run_to_span words v b ab Hstrip with "Hinstrs") as "Hinstrs".
+      iDestruct "Hpost" as "[[[%Hex _] HQ] | [[%Hhd _] HP]]".
+      - (* at the EXIT: the loop's post, handed to the caller *)
+        iApply exitCondImpliesMyWP2_loop.
+        iApply "Hk". unfold blk_exit. rewrite <- Hex. iFrame.
+      - (* back at the HEAD, which is v (Hp): the invariant holds again, and
+           the induction hypothesis finishes the run *)
+        rewrite Hp in Hhd. injection Hhd as ->.
+        iApply myWP2_step_loop.
+        iApply ("IH" $! v ι ExitCond with "[$HP $Hpc $Hnpc $Hinstrs] Hk").
     Qed.
-
 
     Lemma sound_scfg_verification_condition_myWP2 {Γ pre post instrs cexit fuel}
         (* the ALIASES, never a spelled-out tuple.  This is now the SIXTH
@@ -2112,19 +2219,23 @@ Section AdequacyTools.
              ExitCond) -∗
           myWP2_loop ExitCond.
     Proof.
-      apply (sound_cexec_triple_addr_myWP2 (post := post) (fuel := fuel)
-               (ι := ι) ExitCond Hif Hef);
-        [|exact Hbs].
-      intros words.
-      apply (safeE_safe env.nil), cfg_postprocess_sound in Hverif.
-      (* the world pinned: cfg_postprocess is stated at [ctx], from which
-         `apply` cannot recover wnil (MicroSail's symbolic_vcgen_fuel_soundness
-         does the same) *)
-      apply (LogicalSoundness.psafe_safe (w := wnil)) in Hverif; [|done].
-      revert Hverif.
-      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
-      - easy.
-      - constructor.
+      assert (Htrip : forall wds : bv xlenbits -> bv word,
+                 Katamaran.RiscvPmp.CFGVer.VerifierRel.cexec_triple_addr false pre instrs wds
+                   cexit fuel post tbl exits (λ _ _, True) []).
+      { intros wds.
+        apply (safeE_safe env.nil), cfg_postprocess_sound in Hverif.
+        (* the world pinned: cfg_postprocess is stated at [ctx], from which
+           `apply` cannot recover wnil (MicroSail's symbolic_vcgen_fuel_soundness
+           does the same) *)
+        apply (LogicalSoundness.psafe_safe (w := wnil)) in Hverif; [|done].
+        revert Hverif.
+        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.rcfg_verification_condition.
+        - easy.
+        - constructor. }
+      (* the run takes a step first; a whole-program bridge only needs the loop *)
+      iIntros (a) "Hpre Hk". iApply myWP2_step_loop.
+      iApply (sound_cexec_triple_addr_myWP2 ExitCond Hif Hef Htrip Hbs $! a
+                with "Hpre Hk").
     Qed.
 
 End AdequacyTools.
@@ -2147,70 +2258,43 @@ Definition blkValid (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) : Prop :=
   forall Σ (GS : sailGS2 Σ) (words : bv xlenbits -> bv word) (v : bv xlenbits),
     ⊢ @blockSound Σ GS words v b.
 
-(* ---- A TOP-LEVEL PROGRAM'S ANNOTATIONS ARE VALID --------------------------
+(* ---- A PROGRAM'S ANNOTATIONS ARE VALID ------------------------------------
    (PLAN-valid-blk-annot.md Phase 4.)  The condition sealed inside
-   EndToEnd.ValidCFGVerifierContract, replacing its old Iris-level blocksSound
-   conjunct: every ai_block carries a valid block, and there is NO re-entry
-   (ai_loop) at top level -- a whole program re-entering itself would need
-   its own contract faithful at every address, which the bridges do not have
-   (Phase 4 Decision 1).  A pure Prop, so it says nothing about Σ, words or
-   the load address; blocksSound_of_annotsValid turns it into the executor's
-   premise at any base. *)
+   EndToEnd.ValidCFGVerifierContract: every ai_block carries a valid block.
+   (Until PLAN-loop-rule.md it also banned top-level re-entry blocks; a loop
+   is now a contract of its own, proved by the loop rule, so there is nothing
+   left to ban.)  A pure Prop, so it says nothing about Σ, words or the load
+   address; blocksSound_of_annotsValid turns it into the executor's premise
+   at any base. *)
 Definition annotsValid (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) : Prop :=
-  List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_loop ai = None /\
-                         forall b, Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = Some b -> blkValid b) l.
+  List.Forall (fun ai => forall b, Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = Some b -> blkValid b) l.
 
-(* A program with no block annotations of either kind: every example written
-   as a plain list of ASTs (with Verifier.ai_block_none_of_AST). *)
+(* A program with no block annotations: every example written as a plain
+   list of ASTs (with Verifier.ai_block_none_of_AST). *)
 Lemma annotsValid_of_none (l : list Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr) :
-  List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire true ai = None) l -> annotsValid l.
+  List.Forall (fun ai => Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai = None) l -> annotsValid l.
 Proof.
-  apply List.Forall_impl. intros ai H. unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire in H.
-  destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai); [discriminate|].
-  split; [exact H | intros b Hb; discriminate].
+  apply List.Forall_impl. intros ai H b Hb. rewrite H in Hb. discriminate.
 Qed.
 
 (* ---- blocksSound FROM ANNOTATIONS THAT CARRY THEIR VALIDITY --------------
    (PLAN-valid-blk-annot.md Phase 3.)  For a program written as
-   `map (eraseV c) LV`, every block the executor can fire is justified by the
-   annotation itself: an ai_block by its vb_ok proof (blkValid, at whatever
-   address it fires -- decision B), a re-entry by the Löb hypothesis about
-   selfBlk c (at any address -- decision (c)).  A lookup only needs "this is
-   an element of the list" (instrs_of_list_elem_of), so there is no key
-   inversion, and a block may sit anywhere in the program. *)
+   `map eraseV LV`, every block is justified by its own vb_ok proof
+   (blkValid, at whatever address it fires -- decision B).  A lookup only
+   needs "this is an element of the list" (instrs_of_list_elem_of), so there
+   is no key inversion, and a block may sit anywhere in the program. *)
 Section ValidAnnot.
   Context {Σ} {GS : sailGS2 Σ}.
 
-  (* At a contract's entry only ai_block annotations fire, and each carries
-     its own proof. *)
-  Lemma blocksSoundAt_false_of_V {R} (c : @Katamaran.RiscvPmp.CFGVer.Verifier.CFGVerifierContract R)
-      (words : bv xlenbits -> bv word) (base : bv xlenbits)
+  Lemma blocksSound_of_V (words : bv xlenbits -> bv word) (base : bv xlenbits)
       (LV : list (Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstrV blkValid)) :
-    ⊢ blocksSoundAt false words
-        (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map (Katamaran.RiscvPmp.CFGVer.Verifier.eraseV c) LV)).
+    ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map Katamaran.RiscvPmp.CFGVer.Verifier.eraseV LV)).
   Proof.
     iIntros "!>" (v ai b) "%Hlk %Hb".
     apply instrs_of_list_elem_of, List.in_map_iff in Hlk as (a & <- & _).
-    unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire, Katamaran.RiscvPmp.CFGVer.Verifier.eraseV in Hb. cbn in Hb.
+    unfold Katamaran.RiscvPmp.CFGVer.Verifier.eraseV in Hb. cbn in Hb.
     destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_block a) as [x|]; cbn in Hb; [|discriminate].
     injection Hb as <-. iApply (Katamaran.RiscvPmp.CFGVer.Verifier.vb_ok x Σ GS words v).
-  Qed.
-
-  (* All blocks, re-entries included, given the Löb hypothesis about the
-     enclosing contract at every address. *)
-  Lemma blocksSound_of_V {R} (c : @Katamaran.RiscvPmp.CFGVer.Verifier.CFGVerifierContract R)
-      (words : bv xlenbits -> bv word) (base : bv xlenbits)
-      (LV : list (Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstrV blkValid)) :
-    □ (∀ v', blockSound words v' (Katamaran.RiscvPmp.CFGVer.Verifier.selfBlk c))
-    ⊢ blocksSound words (Katamaran.RiscvPmp.CFGVer.Tables.instrs_of_list base (List.map (Katamaran.RiscvPmp.CFGVer.Verifier.eraseV c) LV)).
-  Proof.
-    iIntros "#IH !>" (v ai b) "%Hlk %Hb".
-    apply instrs_of_list_elem_of, List.in_map_iff in Hlk as (a & <- & _).
-    unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire, Katamaran.RiscvPmp.CFGVer.Verifier.eraseV in Hb. cbn in Hb.
-    destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_block a) as [x|]; cbn in Hb.
-    - injection Hb as <-. iApply (Katamaran.RiscvPmp.CFGVer.Verifier.vb_ok x Σ GS words v).
-    - destruct (Katamaran.RiscvPmp.CFGVer.Verifier.aiv_loop a); [|discriminate].
-      injection Hb as <-. iApply "IH".
   Qed.
 
   (* The executor's premise, from the sealed top-level condition. *)
@@ -2221,9 +2305,6 @@ Section ValidAnnot.
     intros Hl. iIntros "!>" (v ai b) "%Hlk %Hb".
     apply instrs_of_list_elem_of in Hlk.
     unfold annotsValid in Hl. rewrite List.Forall_forall in Hl.
-    destruct (Hl _ Hlk) as [Hloop Hblk].
-    unfold Katamaran.RiscvPmp.CFGVer.Verifier.ai_fire in Hb. destruct (Katamaran.RiscvPmp.CFGVer.Verifier.ai_block ai) as [b'|] eqn:E.
-    - injection Hb as <-. iApply (Hblk b' eq_refl Σ GS words v).
-    - rewrite Hloop in Hb. discriminate.
+    iApply (Hl _ Hlk b Hb Σ GS words v).
   Qed.
 End ValidAnnot.

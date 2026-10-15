@@ -51,5 +51,5 @@ Definition k_scratch {Σ} : Assertion Σ :=
 Definition lnIN : LoopN :=
   MkLoopN A1 A7 T1 true k_instrs 15 116 40.
 
-Lemma valid_in : cfg_vc (lnRec lnIN (@k_scratch)) (ln_annot lnIN (@k_scratch)).
+Lemma valid_in : cfg_vc_loop (lnRec lnIN (@k_scratch)) (ln_annot lnIN).
 Proof. Time solve_mb_vc. Qed.

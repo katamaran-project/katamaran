@@ -52,7 +52,7 @@ Definition cs_annot : list AnnotInstr :=
   List.map (fun '(i, ins) =>
               {| ai_ghost_before := cs_before i; ai_instr := ins
                ; ai_ghost_after := cs_after i
-               ; ai_block := cs_block i; ai_loop := None |})
+               ; ai_block := cs_block i |})
     (List.combine (List.seq 0 (length cs_instrs)) cs_instrs).
 
 Lemma cs_len : length cs_instrs = 36.

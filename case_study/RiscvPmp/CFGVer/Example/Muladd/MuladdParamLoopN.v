@@ -16,9 +16,13 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
 
+(* The PARAMETERS (PLAN-loop-rule.md, L2): the code base, the four arrays'
+   ends, and the TOTAL count T.  The counts n (to go) and k (done) change,
+   so they are existential in the invariant, with T = k + n: that is what
+   lets the post hand the done count to the next loop. *)
 Definition lnCtx : LCtx :=
-  ["q"∷ty_xlenbits; "eM"∷ty_xlenbits; "eX"∷ty_xlenbits; "n"∷ty_xlenbits;
-   "k"∷ty_xlenbits; "mE"∷ty_xlenbits; "xE"∷ty_xlenbits].
+  ["q"∷ty_xlenbits; "eM"∷ty_xlenbits; "eX"∷ty_xlenbits;
+   "mE"∷ty_xlenbits; "xE"∷ty_xlenbits; "T"∷ty_xlenbits].
 
 (* end - 4 * cnt + off *)
 Definition ln_back {Σ} (end_ cnt : Term Σ ty_xlenbits) (off : Z) : Term Σ ty_xlenbits :=
@@ -61,7 +65,8 @@ Section Template.
       ∗ ln_rlatch L ↦ᵣ latch )%asn.
 
   Definition ln_inv : Assertion (lnCtx ▻ "a"∷ty_xlenbits) :=
-    ( ln_state (term_var "n") (term_var "k") (term_var "eM") (term_var "eX")
+    ( asn.exist "n" ty_xlenbits (asn.exist "k" ty_xlenbits (
+      ln_state (term_var "n") (term_var "k") (term_var "eM") (term_var "eX")
         (term_var "mE") (term_var "xE") (ln_latch_end (term_var "eM") (term_var "eX"))
       ∗ secLeakvar "eM" ∗ secLeakvar "eX"
       (* the count is public: stated here, the reverted chunk-facts hook
@@ -78,14 +83,16 @@ Section Template.
       ∗ asn.formula (formula_relop bop.bvult
           (term_binop bop.bvadd (term_var "k") (term_var "n"))
           (term_val ty_xlenbits (bv.of_N 0x40000000)))
-      ∗ scratch _ )%asn.
+      ∗ asn.formula (formula_propeq (term_var "T")
+          (term_binop bop.bvadd (term_var "k") (term_var "n")))
+      ∗ scratch _ )))%asn.
 
   Definition ln_post : Assertion (lnCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
     ( asn.exist "c" ty_xlenbits
-        ( (* the done count exactly: done so far + still to go, which a re-entry
-             preserves.  Was a fresh ∃ c1: the next loop, taking the done
-             array as its source, then had a count nothing constrained *)
-          ln_state (term_var "c") (term_binop bop.bvadd (term_var "k") (term_var "n"))
+        ( (* the done count exactly: the total T.  Was a fresh ∃ c1: the next
+             loop, taking the done array as its source, then had a count
+             nothing constrained *)
+          ln_state (term_var "c") (term_var "T")
             (term_var "eM") (term_var "eX")
             (term_var "mE") (term_var "xE") (ln_latch_end (term_var "eM") (term_var "eX"))
           ∗ asn.formula (formula_propeq (term_var "c") (term_val ty_xlenbits bv.zero))
@@ -105,12 +112,12 @@ Section Template.
              {| ai_ghost_before := [ AnnotCLemma (clem_arr_take_first false 4 4)
                                    ; AnnotCLemma (clem_arr_take_first true 4 4) ]
               ; ai_instr := x ; ai_ghost_after := []
-              ; ai_block := None ; ai_loop := Some lnBlk |}
+              ; ai_block := None |}
            else if Nat.eqb i (ln_store L) then
              {| ai_ghost_before := [] ; ai_instr := x
               ; ai_ghost_after := [ AnnotCLemma (clem_arr_add_first false 4 (-4))
                                   ; AnnotCLemma (clem_arr_add_first true 4 (-4)) ]
-              ; ai_block := None ; ai_loop := None |}
+              ; ai_block := None |}
            else AST_AnnotInstr x)
           (ln_annot_go (S i) r)
     end.

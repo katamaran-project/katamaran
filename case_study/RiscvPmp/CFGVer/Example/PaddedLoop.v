@@ -38,8 +38,7 @@ Definition padded_annot : list AnnotInstr :=
   ++ ({| ai_ghost_before := []
        ; ai_instr        := ADDI X1 X1 neg1_12
        ; ai_ghost_after  := []
-       ; ai_block        := Some cdRecBlk
-       ; ai_loop         := None |}
+       ; ai_block        := Some cdRecBlk |}
       :: list_AST_AnnotInstr [BNE X1 X0 back4]).
 
 (* The block's own conjuncts, VERBATIM at its firing address q + 256 (consume

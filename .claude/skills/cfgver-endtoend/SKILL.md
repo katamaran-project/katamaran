@@ -95,7 +95,7 @@ inside the seal, and are supplied only where the contract is proved valid:
 `solve_valid <the example's VC>` for a block-free program, or
 `@ValidCFGVerifierContract_intro _ c LV` with a TYPED list
 `LV : list (AnnotInstrV blkValid)` (each block carries its own validity), the
-VC by `exact` (conversion), `reflexivity` and `repeat constructor` when it
+VC by `exact` (conversion) and `reflexivity` when it
 carries blocks (`Example/CountdownRecResult.cdLink_valid`). There is no `blocksSound` premise
 any more.
 

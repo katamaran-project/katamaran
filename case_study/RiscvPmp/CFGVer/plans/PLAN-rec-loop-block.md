@@ -1,5 +1,10 @@
 # PLAN — a loop as a SELF-REFERENTIAL block (Löb), 2026-09-24
 
+> **SUPERSEDED 2026-10-14 by `PLAN-loop-rule.md`.** The re-entry annotation
+> (`ai_loop`), the `stepped` flag and the self-block at the back edge are
+> gone: a loop is a loop contract with its own VC (`cfg_vc_loop`), and the
+> induction lives only in `Adequacy.blockSound_of_loop_vc`. Kept as history.
+
 ## Goal (user's words)
 
 "Only the induction should happen in the meta-logic, but you should try to get

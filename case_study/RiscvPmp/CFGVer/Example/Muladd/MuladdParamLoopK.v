@@ -32,5 +32,5 @@ Definition k_scratch {Σ} : Assertion Σ :=
 Definition lnKN : LoopN :=
   MkLoopN T6 T5 S0 false k_instrs 9 52 20.
 
-Lemma valid_kn : cfg_vc (lnRec lnKN (@k_scratch)) (ln_annot lnKN (@k_scratch)).
+Lemma valid_kn : cfg_vc_loop (lnRec lnKN (@k_scratch)) (ln_annot lnKN).
 Proof. Time solve_mb_vc. Qed.

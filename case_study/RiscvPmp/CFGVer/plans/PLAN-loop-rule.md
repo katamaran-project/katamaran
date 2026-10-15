@@ -62,6 +62,14 @@ any trusted statement (Noninterference.v, Layout.v, `*Result.v` statements,
   step, so a block — e.g. a separately verified body segment — may sit at the
   loop head. Emiel's reason: "Preprocessing the loop body separately if
   needed." Rejected alternative (i): forbid a block at a loop's head.
+- **L7** (Emiel, 2026-10-14, at implementation) Head test as option **B**:
+  the executor only gains a SECOND STOP ADDRESS (the head = the loop table's
+  first key, `Verifier.is_head`, under a constant `loop` flag); the loop VC's
+  post is `Contracts.loop_post` = `(an = exit ∗ post) ∨ (an = head ∗ Inv[a:=an])`.
+  The invariant never enters the executor and no "end the path" primitive is
+  needed (R2 dissolved). Concretely the loop-mode executor may stop anywhere
+  (angelic); the loop post's pc equations carry which stop it was. Supersedes
+  §3b/§3c's `head` parameter.
 - **L6** Accepted additions (Claude-proposed, confirmed at the design
   checkpoint): a loop-specific VC entry; use sites unchanged (`ai_block`);
   head detection by the comparison `lookup_instr` already uses; scratch
@@ -200,6 +208,56 @@ during proof phases; resume if a design question comes up.
 - **R7** Out of scope, unchanged: the LoopSpec machinery (GenSegment.v §4,
   `myWP2_loop_induction`) used by the muladd composed segments.
 
+## 6b. Progress
+
+- **Phase 1 DONE (2026-10-14).** `Verifier.v`: `ai_fire`/`stepped` gone,
+  `sexec_cfg_addr fuel loop first`, `is_head`, `sexec_triple_addr loop`,
+  `scfg_loop_verification_condition`. `Contracts.v`: `wk_a_an`, `loop_post`,
+  `CFG_VC_loop_triple`, `cfg_vc_loop`. Witness `Example/CountdownRec.v`:
+  context `[q]`, counter ∃ in the invariant, NO annotation;
+  `valid_cd_rec : cfg_vc_loop …` by `solve_param_vc` in 24 ms; both negative
+  controls (ordinary `cfg_vc`; non-preserved `k ≠ 1`) `Fail`; dropping
+  `k ≠ 0` still verifies (partial correctness, checked); `valid_cd_link`
+  unchanged and green. Trap: an UNANNOTATED `subst` in `loop_post` made
+  `Contracts.v` run >600 s / 9.7 GB; every `subst` names its instance now.
+- **Baseline NOT recorded**: `coqc-guard.sh` blocked the build in a fresh
+  `KatamaranRel` worktree (sources newer than any compile -- a false
+  positive; the hook says to ask Emiel). Measurable from `KatamaranRel` at
+  any time. Note: rocq-implementation §1 says the hook was unwired
+  2026-09-25 -- it is wired again; fix that skill in Phase 6.
+
+- **Phase 2 DONE** (de4cd57e; commit message lost its backticked snippets to
+  shell expansion -- see the stop arm in cexec_cfg_addr). Trap: the Factors
+  lemmas hard-coded `sexec_cfg_addr n' false true`; unifying that against
+  `n' loop false` unfolded the fixpoint and ran to 9.6 GB.
+- **Phase 3 DONE** (a3a1fa2e): myWP2_step / myWP2_from, blockSound step-first,
+  one blocksSound premise, blockSound_of_vc without Löb, NEW
+  blockSound_of_loop_vc (the loop rule) with premise Hpl (the invariant pins
+  the placement to the entry). Adequacy.v builds in ~62 s of sentences.
+- **Phase 4 DONE** (b2d108da): ai_loop / aiv_loop / eraseV's contract
+  argument gone; seal has two conjuncts; GenCompose gains seg_vc_loop,
+  blockSound_of_loop_contract, blkValid_of_loop_contract / _seg.
+- **Phase 5** (1c5b5f2b countdown, 7f02bad7 check_scalar + PaddedLoop, muladd
+  in progress): every loop fits L2. Parameters after migration --
+  countdown `[q]`; check_scalar L1 `[q e kE T]` (T = d + n), L2 `[q eK eN]`;
+  muladd D `[q E T]`, DAng `D + N` (N = k + c), D0 `[q t0 T N]` (N = k + c),
+  G `[q]`, N-template `[q eM eX mE xE T]` (T = k + n). Every loop VC closes
+  with its old tactic; every enclosing VC still closes, i.e. a TOTAL
+  parameter is pinned at the firing site by its equation (R3 and the
+  pinning worry: resolved, no fallback needed). Loop-VC times: countdown
+  24 ms, L1 4.3 s, L2 9.5 s, D 0.2 s, DAng 1.1 s, I/K/M 15/12/11 s; muladd
+  tail VC 210 s.
+
+- **Phase 5 DONE** (99aaad4c muladd): all 8 loops on the loop rule;
+  MuladdParamResult, CheckScalarPtrResult green. 85 untracked ZZ probes
+  still name the removed machinery (not built, left as is).
+- **Phase 6 DONE** (ac2b7f07): skills/CLAUDE.md/archive.
+- **Phase 7: GATE PASSED 2026-10-14** (GATE_JOBS=1, 19m21s): build clean, no
+  holes, 24 end theorems axiom-clean (pure_decode, mmioenv). stmtdiff over
+  the branch: no end-theorem statement, Noninterference.v, Layout.v or
+  `*_instrs` change -- only proof-side annotation lists/erase lemmas in the
+  Result files. NOT MERGED: awaits Emiel's comprehension check.
+
 ## 6. Decision log
 
 | # | Date | Decision | Revert path |
@@ -210,3 +268,4 @@ during proof phases; resume if a design question comes up.
 | L4 | 2026-10-14 | induction only in the meta loop rule | — |
 | L5 | 2026-10-14 | blocks earn a step (ii), not (i) | (i): forbid a block at a loop head |
 | L6 | 2026-10-14 | accepted additions (§2) | — |
+| L7 | 2026-10-14 | head test = second stop + two-case loop post (B) | A: executor consumes Inv at the head |

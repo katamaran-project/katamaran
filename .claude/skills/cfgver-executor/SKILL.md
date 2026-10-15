@@ -126,8 +126,8 @@ two sides' VCs correspond.
 
 `first` is set by `sexec_triple_addr`, cleared on every recursive call. This
 replaced `angelic_binary (if is_exit .. then pure apc else emsg ..) (<execute>)`.
-(A second flag, `stepped`, gates re-entry blocks — see "Loops as ONE block"
-below.)
+(A second flag, `loop`, makes a LOOP VC also stop at the loop head — see
+"Loops: the LOOP VC" below.)
 
 **Why the angelic went.** Its exit arm was DEAD on every non-exit step (it was
 `emsg`), so the old form emitted an `angelic_binary` plus a dead `error` per step
@@ -759,55 +759,65 @@ and re-packs to `ptsto_instrs` only at the outer boundary.
 Access one instruction with `ptsto_instrs_lookup words instrs v Hlk`
 (`Hlk : instrs !! v = Some i`, via `big_sepM_lookup_acc`; `i` is implicit).
 
-## Loops as ONE block: the re-entry annotation `ai_loop` (2026-09-24)
+## Loops: the LOOP VC (PLAN-loop-rule.md, 2026-10-14)
 
-`AnnotInstr` has two block fields. `ai_block` fires at EVERY visit, including a
-contract's step 0 (so a contract may start at a block). **`ai_loop` fires only
-once an instruction of the current run has executed** — never at the entry.
-Both executors dispatch on one selector, `Verifier.ai_fire stepped ai`
-(`ai_block` wins; `ai_loop` only when `stepped`), so the block match stays
-rigid. `sexec_cfg_addr fuel first stepped`: `first` gates the exit test,
-`stepped` gates `ai_loop`; they differ after a block fired at the entry (exit
-test live again, but nothing has run). Concrete side: `cexec_cfg_addr … fuel
-stepped` (no `first` — its exit is angelic anyway).
+A loop is a **loop contract**: its precondition is the INVARIANT, its
+parameters (`blk_ctx`) are exactly the logic variables that do not change
+across trips, and every variable that changes is existential INSIDE the
+invariant (decision L2). Its post mentions parameters only (plus its own
+existentials). Where the post must say how much was done, a TOTAL parameter
+carries it (`T = d + n` in check_scalar loop 1, `N = k + c` in muladd D0/DAng,
+`T = k + n` in loop N); the solver pins it at a firing site from that equation.
 
-A **loop is ONE block contract** whose precondition is the invariant, with its
-own head carrying that block as `ai_loop`: the entry executes the head, the
-back edge fires the block, consuming the invariant, and the solver does the
-framing. The only meta-logic is the Löb induction inside
-**`Adequacy.blockSound_of_vc`** (quoted at a contract by
-`GenCompose.blockSound_of_contract`). Its block premises are split by WHEN they
-are needed: `Hbs0 : ∀ v, ⊢ blocksSoundAt false …` (the `ai_block`s, which may
-fire at step 0) and `Hbs : ∀ v, □ (∀ v', blockSound words v' b) ⊢ blocksSound …`
-(all blocks, may assume the block itself AT EVERY ADDRESS). Since 2026-09-25
-(PLAN-valid-blk-annot V8) the Löb induction ranges over the entry address and
-the lemma concludes `∀ v, blockSound words v b` — exactly `Adequacy.blkValid`'s
-body — so a re-entry may fire at any address, and a block's faithfulness must
-hold at every address (symbolic placement). The executor induction
-`sound_exec_cfg_addr_myWP2` carries `blocksSoundAt stepped ∗ ▷ blocksSound`;
-each executed instruction strips the later. `blocksSound` (= `blocksSoundAt
-true`, both kinds) is now an INTERNAL premise only: since PLAN-valid-blk-annot
-Phase 4 no bridge takes it — they take the sealed `ValidCFGVerifierContract`
-(`Validity.v`) and derive it, via `blocksSound_of_annotsValid` (EndToEnd) or
-`GenCompose.contract_setup` (a contract run inside a larger program). Partial
-correctness only.
+Its VC is **`Contracts.cfg_vc_loop c a`**: one run of the body from the
+invariant, with the executor in loop mode. `sexec_cfg_addr fuel loop first`
+stops when `negb first && (is_exit exits apc || (loop && is_head tbl apc))` —
+`is_head` compares against the table's FIRST key (the placement at offset 0),
+exactly as `lookup_instr` compares keys; `Contracts.is_head_table_of_list`
+proves that for the loop VC's own table this test is exactly "pc =
+placement". Which stop was reached is the loop post's business:
+`Contracts.loop_post p ex P Q = (an = exit ∗ Q) ∨ (an = head ∗ P[a := an])`
+(`loop_post_interpret` reads it at a valuation; `to_post` reads a Σ-term in the
+post's context, `sub_a_to_an` rebinds "a" to "an"). The invariant
+never enters the executor. **No annotation marks the loop** — `ai_loop`,
+`ai_fire` and the `stepped` flag are gone (archive:
+`.claude/archive/loop-rule-2026-10-14.md`). Concrete side: `cexec_cfg_addr …
+fuel loop first`, whose stop arm is `negb first && (loop || exit_hit …)` — in
+loop mode it may stop anywhere; the loop post's pc equations carry where.
+
+**The induction lives ONLY in the loop rule `Adequacy.blockSound_of_loop_vc`**
+(quoted at a contract by `GenCompose.blockSound_of_loop_contract`, at a block by
+`blkValid_of_loop_contract` / `blkValid_of_loop_seg`). It is Löb, i.e.
+induction over the remaining steps of the run, and it works because every
+stop back at the head comes after at least one machine step: `myWP2_step E`
+(Adequacy.v) is "one step, then `myWP2_loop E`", the executor's entry step
+never stops (`first`), and **`blockSound` concludes `myWP2_step`** — a fired
+block earns a step just like an instruction (decision L5), so a separately
+verified block may sit at a loop's head. Premise `Hpl`: the invariant pins
+the placement to the entry address (`seg_pre_placement` for a generated
+segment). **Every block is verified by its loop VC** (TODO I7, 2026-10-15):
+the ordinary-block path (`blockSound_of_vc` and its wrappers) is gone, since
+a block whose run never returns to its head never takes the head stop. The
+muladd tail, the one former ordinary block, costs 227 s as a loop VC against
+210 s before. Top-level programs stay on `cfg_vc` (the seal). The executor induction `sound_exec_cfg_addr_myWP2 loop first`
+concludes `myWP2_from first` (step-first at the entry, the loop after) and
+takes ONE `blocksSound` premise (`ai_block`s only). Partial correctness only.
 
 **Annotations that carry their validity (2026-09-25, Phases 2–3).**
 `Verifier.AnnotInstrV Valid` is `AnnotInstr` with `aiv_block : option
-(BlkAnnotV Valid)` (a block PLUS a proof `vb_ok : Valid b`) and `aiv_loop :
-bool` ("re-enter the enclosing contract"); `eraseV c` maps it to
-`AnnotInstr` (`aiv_loop` becomes `Some (selfBlk c)`), so the executor and
-`cfg_vc` are untouched: the VC is `cfg_vc c (map (eraseV c) LV)`. `Valid` is
+(BlkAnnotV Valid)` (a block PLUS a proof `vb_ok : Valid b`); `eraseV` maps it to
+`AnnotInstr`, so the executor and `cfg_vc` are untouched: the VC is
+`cfg_vc c (map eraseV LV)`. `Valid` is
 instantiated on the heavy side with `Adequacy.blkValid b := ∀ Σ GS words v, ⊢
 blockSound words v b` — NO fit premise: a generated segment's precondition
 carries `gen_base_bound`, which `GenCompose.seg_pre_bound` reads off, so
 `blockFaithful_of_seg` takes `strip ab = code` instead of a no-wrap bound.
-`Adequacy.blocksSoundAt_false_of_V` / `blocksSound_of_V` derive the executor's
-block premises from such a list (list membership only, no key inversion, any
-position); `GenCompose.blkValid_of_contract` / `blkValid_of_seg` turn a verified
-contract over a V-list into `blkValid (selfBlk c)`, i.e. an annotation-ready
-proof. V-lists mention `blkValid`, so they live on the HEAVY side (`*Result.v`),
-never in a light `Example/*.v`.
+`Adequacy.blocksSound_of_V` derives the executor's block premise from such a
+list (list membership only, no key inversion, any position);
+`GenCompose.blkValid_of_loop_contract` / `blkValid_of_loop_seg` turn a
+contract verified by its loop VC over a V-list into `blkValid (selfBlk c)`,
+i.e. an annotation-ready proof. V-lists mention `blkValid`, so they live on the
+HEAVY side (`*Result.v`), never in a light `Example/*.v`.
 
 **The VC checks that a block's code IS the program's code (2026-09-25,
 `plans/PLAN-valid-blk-annot.md` Phase 1).** At the firing site the symbolic
@@ -833,17 +843,17 @@ contract's one exit — symbolically `subst (cfg_exit c) evars` (`sexec_block`),
 concretely `inst (cfg_exit c) ι` (`cexec_block`); `Adequacy.v` names it
 `blk_exit b ι`. `blockSound` concludes `pc ↦ᵣ blk_exit b ι` with `"an" ↦
 blk_exit b ι`; `blockFaithful`'s exit half is `etable_rel (blk_exit b ι)
-(cfg_exit c) ι`; `blockSound_of_vc` has no exit premise.
+(cfg_exit c) ι`; `blockSound_of_loop_vc` has no exit premise.
 
-Worked example: `Example/CountdownRec.v` (the loop `cdRec` with an `ai_loop`
-head + negative controls, then `cdLink`: the outer program STARTING at the
-loop with an `ai_block` head, and an executed tail) →
-`Example/CountdownRecResult.v` (`cd_rec_annotV` and `cdRecBlk_valid` — one
-`exact blkValid_of_seg …` reusing the unchanged `valid_cd_rec` —,
-`cd_link_annotV` — the typed list carrying `cdRecBlk_valid` — and `cdLink_valid`, and
-the gate-checked end theorem `countdown_rec_noninterferent_param`, for every
-load address: the contracts, the block and the annotated code are closed
-terms over the code-base variable `q`, with no load-address parameter).
+Worked example: `Example/CountdownRec.v` (the loop `cdRec`: parameters `[q]`,
+the counter existential in the invariant, `valid_cd_rec : cfg_vc_loop …` with
+NO annotation, plus negative controls; then `cdLink`: the outer program
+STARTING at the loop with an `ai_block` head, and an executed tail) →
+`Example/CountdownRecResult.v` (`cdRecBlk_valid` — one `exact
+blkValid_of_loop_seg …` over the plain code —, `cd_link_annotV` — the typed
+list carrying `cdRecBlk_valid` — and `cdLink_valid`, and the gate-checked end
+theorem `countdown_rec_noninterferent_param`, whose valuation is just the code
+base: `iFrame` instantiates the invariant's existential counter).
 
 ## `scfg_verification_condition`
 

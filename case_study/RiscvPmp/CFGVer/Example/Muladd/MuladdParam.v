@@ -119,7 +119,7 @@ Definition sym6_annot : list AnnotInstr :=
   List.map (fun '(i, ins) =>
               {| ai_ghost_before := sym6_before i; ai_instr := ins
                ; ai_ghost_after := sym6_after i
-               ; ai_block := sym6_block i; ai_loop := None |})
+               ; ai_block := sym6_block i |})
     (List.combine (List.seq 0 (length sym6_instrs)) sym6_instrs).
 
 Lemma sym6_len : length sym6_instrs = 282.

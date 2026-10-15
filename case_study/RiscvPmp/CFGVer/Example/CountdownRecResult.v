@@ -30,9 +30,8 @@
 (* ========================================================================= *)
 (* Example/CountdownRecResult.v -- a LOOP and a SEGMENT, combined.  HEAVY.   *)
 (*                                                                           *)
-(* cdRec_blockSound: the countdown loop earns blockSound from ONE VC         *)
-(* (valid_cd_rec) and the block door blockSound_of_contract, whose Löb     *)
-(* induction lets the loop's own head be annotated with it.                  *)
+(* cdRecBlk_valid: the countdown loop is a valid block from ONE loop VC      *)
+(* (valid_cd_rec), through the loop rule (PLAN-loop-rule.md).              *)
 (*                                                                           *)
 (* countdown_rec_noninterferent_param: the whole program -- loop block, then the   *)
 (* executed tail -- end to end, via cfg_instrs_endToEnd.                     *)
@@ -97,23 +96,16 @@ Import iris.algebra.excl.
 Import iris.algebra.gmap.
 Import IrisModel.RiscvPmpIrisBase.
 
-(* THE LOOP'S CODE, ANNOTATED WITH VALIDITY (PLAN-valid-blk-annot.md): the
-   head re-enters the enclosing contract (aiv_loop), the BNE is plain.  Erasing
-   it at cdRec gives cd_rec_annot up to conversion, which is why the
-   existing VC valid_cd_rec is accepted below unchanged.  It lives here, not
-   in CountdownRec.v, because its type mentions blkValid (heavy side). *)
-Definition cd_rec_annotV : list (AnnotInstrV blkValid) :=
-  [ MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] None true
-  ; AST_AnnotInstrV (BNE X1 X0 back4) ].
-
-(* THE LOOP BLOCK IS VALID ANYWHERE: blkValid_of_seg, from the loop's own VC.
-   No fit premise (decision B: gen_base_bound in the loop's precondition) and
-   no Löb reasoning here (decision (c): inside blockSound_of_vc). *)
+(* THE LOOP BLOCK IS VALID ANYWHERE: blkValid_of_loop_seg, from the loop's
+   own LOOP VC (PLAN-loop-rule.md).  The loop's code carries no annotation, so
+   its typed list is the plain code.  No fit premise (decision B:
+   gen_base_bound in the loop's precondition) and no induction here: that is
+   the loop rule, inside blkValid_of_loop_seg. *)
 Lemma cdRecBlk_valid : blkValid cdRecBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") cd_instrs 8 4 []
-           cd_rec_inv cd_rec_post cd_rec_annotV
-           (fun v iota => eq_refl) eq_refl valid_cd_rec).
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") cd_instrs 8 4 []
+           cd_rec_inv cd_rec_post (List.map AST_AnnotInstrV cd_instrs)
+           (fun v iota => eq_refl) (map_aiv_instr_AST _) valid_cd_rec).
 Qed.
 
 (* THE LINK'S ANNOTATIONS, TYPED: its one block is the loop, carrying its
@@ -121,7 +113,7 @@ Qed.
    and the next lemma are the ONLY place cdLink's annotations appear -- the end
    theorem below sees just the sealed validity (PLAN-valid-blk-annot Phase 4). *)
 Definition cd_link_annotV : list (AnnotInstrV blkValid) :=
-  MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid)) false
+  MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid))
   :: List.map AST_AnnotInstrV [BNE X1 X0 back4; ADDI X2 X0 (bv.of_N 42)].
 
 (* Its erasure is cd_link_annot by conversion, so valid_cd_link is accepted
@@ -129,7 +121,7 @@ Definition cd_link_annotV : list (AnnotInstrV blkValid) :=
 Lemma cdLink_valid : ValidCFGVerifierContract cdLink.
 Proof.
   apply (@ValidCFGVerifierContract_intro _ cdLink cd_link_annotV);
-    [exact valid_cd_link | reflexivity | repeat constructor].
+    [exact valid_cd_link | reflexivity].
 Qed.
 
 
@@ -153,11 +145,11 @@ Proof.
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   assert (Hfit8 : (init_addr + 8 < lenAddr)%N) by lia.
   pose proof (seg_fits_bin init_addr 8 ltac:(unfold seg_fits_memory; lia)) as Hbin.
-  (* ι: code at init_addr, counter at its pinned 2. *)
+  (* ι: the code base.  The counter is existential in the loop's invariant,
+     and iFrame instantiates it with the pinned X1 below. *)
   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' cd_link_instrs
     (init_addr + 12)%N n ws cdRecCtx
-    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-          .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
+    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
     _ HpubReg cdLink cdLink_valid eq_refl init_addr).
   - (* placement: the bare code base *)
     reflexivity.
