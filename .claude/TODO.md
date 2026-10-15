@@ -183,6 +183,18 @@ G and the rest of F anywhere.**
     `myWP2_step E := step_then (myWP2_loop E)` (the Contractive proof must
     still go through); or keep, with a comment at both definitions naming
     the other.
+  - **H5. The loop rule's proof is hard to read.** Emiel: "The proof of the
+    loop rule is a little bit too chaotic." `blockSound_of_loop_vc`
+    (`Adequacy.v:2158–2230`): its signature is mostly fully qualified paths
+    (`Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition
+    (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)` ...), and the proof
+    restates the precondition in two `iAssert`s just to read a pure fact
+    without consuming it. Options: short local names for the contract's
+    fields (`pre b`, `post b`, `exit b`, `place b`) or importing the modules
+    so the paths shrink; a lemma "pure fact from a persistent wand, keep the
+    hypothesis" instead of the two `iAssert`s; the five-step outline
+    (placement, faithfulness, run once, bind under ▷, case split) as
+    comments at each step.
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
