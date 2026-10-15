@@ -211,6 +211,21 @@ G and the rest of F anywhere.**
     fix. Watch for: new clashes between CFGVer modules once imported
     together, and the light/heavy layering (an Import never adds a Require,
     so layering is unaffected). Plan with Emiel before starting.
+  - **H7. Three loop/non-loop wrapper pairs could collapse into one.**
+    `blockSound_of_[loop_]contract` (`GenCompose.v:469/485`),
+    `blkValid_of_[loop_]contract` (`:2217/2236`), `blkValid_of_[loop_]seg`
+    (`:2260/2285`) differ only in the VC (`cfg_vc` vs `cfg_vc_loop`) and the
+    loop's `Hpl` placement premise (free for generated segments, via
+    `seg_pre_placement`). Emiel: "This collapsing would definitely be
+    useful." Option: verify every BLOCK with `cfg_vc_loop` and drop the
+    non-loop half. Sound for every contract (the loop rule is its proof).
+    Price: a block whose run passes back through its own first instruction
+    with the pre FALSE there (a loop verified by unrolling, pre pinning the
+    trip count) is rejected by `cfg_vc_loop` and accepted by `cfg_vc`.
+    UNVERIFIED: whether any current block relies on that; check by running
+    each block's VC as a loop VC. Top-level programs stay on `cfg_vc` (the
+    seal, `Validity.v`). Also price the disjunctive post (`asn.or`) and the
+    per-step `is_head` test on the large blocks (muladd tail, `sym6`).
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
