@@ -154,6 +154,18 @@ G and the rest of F anywhere.**
     entry pc `"a"` (might also make the `Hpl` placement premise of
     `blockSound_of_loop_vc` unnecessary, since `loop_post` could then say
     `an = a`; unverified); (c) keep, with a stronger comment.
+  - **H2. "Where did the run stop" is carried two ways.** An ordinary
+    contract carries it in the executor: the concrete stop guard
+    `negb first && (loop || exit_hit cexit v)` (`VerifierRel.v:356–358`) and
+    the fact `(loop || exit_hit ..) = true` that `sound_exec_cfg_addr_myWP2`
+    hands its continuation (`Adequacy.v:1647`). A loop contract carries it in
+    its post: `loop_post`'s pc equations `an = ex` / `an = p`
+    (`Contracts.v:200–212`), read back in `blockSound_of_loop_vc` as
+    `%Hex`/`%Hhd`; there the executor's fact is just `true`. Option: one
+    mechanism for both, i.e. every contract's VC consumes a post carrying
+    `an = exit`, and `exit_hit` leaves the concrete stop guard (which becomes
+    `negb first`). Larger change, touches the non-loop soundness chain;
+    unverified. Option: keep (two mechanisms, each local).
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
