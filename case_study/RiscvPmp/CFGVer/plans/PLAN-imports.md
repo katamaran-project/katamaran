@@ -1,6 +1,8 @@
 # PLAN — import, don't qualify (TODO I6, 2026-10-15)
 
-Status: **IMPLEMENTED, build pending.** Branch `issue/imports`, off
+Status: **DONE 2026-10-15** on `issue/imports` (not merged): `make -j1
+Results.vo` green (50m37s), hole scan 0, zero `Katamaran.RiscvPmp.CFGVer.<File>.`
+left in CFGVer. Branch `issue/imports`, off
 `KatamaranRel` once `issue/loop-rule` is merged.
 
 ## 0. Goal (Emiel's words)

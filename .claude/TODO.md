@@ -204,7 +204,8 @@ G and the rest of F anywhere.**
     hypothesis" instead of the two `iAssert`s; the five-step outline
     (placement, faithfulness, run once, bind under ▷, case split) as
     comments at each step. The qualified-path part is now I6.
-  - **I6. DECIDED (direction): import properly, no fully qualified
+  - **I6. DONE 2026-10-15 on `issue/imports` (PLAN-imports.md; build green,
+    not merged).** DECIDED (direction): import properly, no fully qualified
     prefixes, codebase-wide.** Emiel, 2026-10-15: "for readibility, we should
     avoid using things like this an instead import them properly. This
     holds for the whole codebase actually." Census (non-ZZ `.v`,
