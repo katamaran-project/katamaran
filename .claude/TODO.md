@@ -137,9 +137,9 @@ use it for future examples instead of hand-transcribing.
 **Open items from the 2026-10-08 learning session, grouped (Emiel asked which
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
-- **H. Loop-rule audit findings (2026-10-15 reading quiz, branch
+- **I. Loop-rule audit findings (2026-10-15 reading quiz, branch
   `issue/loop-rule`, before merge).** Options, not decisions.
-  - **H1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
+  - **I1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
     takes the head to be the table's FIRST key. That is the placement only
     because `CFG_VC_loop_triple` builds the table as `table_of_list p 0 i`
     (`Contracts.v:221`), and offset 0 comes first and collapses to `p`
@@ -154,7 +154,7 @@ G and the rest of F anywhere.**
     entry pc `"a"` (might also make the `Hpl` placement premise of
     `blockSound_of_loop_vc` unnecessary, since `loop_post` could then say
     `an = a`; unverified); (c) keep, with a stronger comment.
-  - **H2. "Where did the run stop" is carried two ways.** An ordinary
+  - **I2. "Where did the run stop" is carried two ways.** An ordinary
     contract carries it in the executor: the concrete stop guard
     `negb first && (loop || exit_hit cexit v)` (`VerifierRel.v:356–358`) and
     the fact `(loop || exit_hit ..) = true` that `sound_exec_cfg_addr_myWP2`
@@ -166,7 +166,7 @@ G and the rest of F anywhere.**
     `an = exit`, and `exit_hit` leaves the concrete stop guard (which becomes
     `negb first`). Larger change, touches the non-loop soundness chain;
     unverified. Option: keep (two mechanisms, each local).
-  - **H3. `loop_post`'s substitutions are unreadable.** Emiel: "I have no
+  - **I3. `loop_post`'s substitutions are unreadable.** Emiel: "I have no
     idea what wk or wk_a_an are." `wk_a_an : Sub Σ (Σ ▻ a ▻ an)` is the
     weakening into the post's context (`Contracts.v:197`), `wk t` applies it
     (`:205`), and `env.snoc wk_a_an "a" (term_var "an")` (`:211–212`) is
@@ -174,7 +174,7 @@ G and the rest of F anywhere.**
     the point of use. Options: rename (e.g. `to_post_ctx`, `a_to_an`) and
     name the second substitution; a one-line comment per substitution;
     check whether the framework already has a two-step weakening to reuse.
-  - **H4. `myWP2_step` duplicates `myWP2_loop_fix`'s step disjunct.** Emiel:
+  - **I4. `myWP2_step` duplicates `myWP2_loop_fix`'s step disjunct.** Emiel:
     "Why does myWP2_step exist? Is it not just the same as myWP2_loop?"
     `myWP2_step E` (`Adequacy.v:218`) copies the right disjunct of
     `myWP2_loop_fix` (`:111–124`) with `wp := myWP2_loop E`, so the reader
@@ -183,7 +183,7 @@ G and the rest of F anywhere.**
     `myWP2_step E := step_then (myWP2_loop E)` (the Contractive proof must
     still go through); or keep, with a comment at both definitions naming
     the other.
-  - **H5. The loop rule's proof is hard to read.** Emiel: "The proof of the
+  - **I5. The loop rule's proof is hard to read.** Emiel: "The proof of the
     loop rule is a little bit too chaotic." `blockSound_of_loop_vc`
     (`Adequacy.v:2158–2230`): its signature is mostly fully qualified paths
     (`Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition
@@ -194,8 +194,8 @@ G and the rest of F anywhere.**
     so the paths shrink; a lemma "pure fact from a persistent wand, keep the
     hypothesis" instead of the two `iAssert`s; the five-step outline
     (placement, faithfulness, run once, bind under ▷, case split) as
-    comments at each step. The qualified-path part is now H6.
-  - **H6. DECIDED (direction): import properly, no fully qualified
+    comments at each step. The qualified-path part is now I6.
+  - **I6. DECIDED (direction): import properly, no fully qualified
     prefixes, codebase-wide.** Emiel, 2026-10-15: "for readibility, we should
     avoid using things like this an instead import them properly. This
     holds for the whole codebase actually." Census (non-ZZ `.v`,
@@ -211,7 +211,7 @@ G and the rest of F anywhere.**
     fix. Watch for: new clashes between CFGVer modules once imported
     together, and the light/heavy layering (an Import never adds a Require,
     so layering is unaffected). Plan with Emiel before starting.
-  - **H7. Three loop/non-loop wrapper pairs could collapse into one.**
+  - **I7. Three loop/non-loop wrapper pairs could collapse into one.**
     `blockSound_of_[loop_]contract` (`GenCompose.v:469/485`),
     `blkValid_of_[loop_]contract` (`:2217/2236`), `blkValid_of_[loop_]seg`
     (`:2260/2285`) differ only in the VC (`cfg_vc` vs `cfg_vc_loop`) and the
