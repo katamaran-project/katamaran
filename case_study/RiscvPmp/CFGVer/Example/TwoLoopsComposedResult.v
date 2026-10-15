@@ -130,7 +130,7 @@ Section TwoLoops.
     (∃ v, pc ↦ᵣ SyncVal v ∗ ⌜atPc 16 v⌝)%I.
 
   Definition tOwn : iProp Σ :=
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+    ptsto_instrs
       (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs tAbody))).
 
   (* loop A's invariant: at head 0, counter k.  Does NOT mention X2. *)
@@ -177,7 +177,7 @@ Section TwoLoops.
   Proof.
     induction n as [|q IH]; intros m Hm.
     - (* B's last trip -> the program exit *)
-      assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
+      assert (Hef : etable_rel (w := wlctx tCtxB)
                       (SyncVal (bv.of_N 16))
                       (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 16) (iB m)).
       { eexists. split; reflexivity. }
@@ -200,7 +200,7 @@ Section TwoLoops.
         unfold tExit. iExists av. iFrame "Hpc". iPureIntro.
         cbn in Hex. unfold atPc. rewrite Hex. exact I.
     - (* one trip of B *)
-      assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxB)
+      assert (Hef : etable_rel (w := wlctx tCtxB)
                       (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iB m)).
       { eexists. split; reflexivity. }
       assert (Hm2 : bv.bin m = (N.of_nat q + 2)%N) by lia.
@@ -223,7 +223,7 @@ Section TwoLoops.
         change ((m + bv.of_N 4294967295)%bv) with (tdecv m). exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct an as [av|a1 a2]; [|contradiction].
-        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+        apply exit_hit_spec in Hex.
         injection Hex as <-.
         iApply (IH (tdecv m) Hd).
         unfold invB, tInvB. iEval (cbn) in "Hpost". cbn.
@@ -241,7 +241,7 @@ Section TwoLoops.
     induction nA as [|p IH]; intros k nB m Hk Hm.
     - (* A's LAST trip: falls through to 8, which is loop B's head.  This is
          the HAND-OFF between the two loops. *)
-      assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxA)
+      assert (Hef : etable_rel (w := wlctx tCtxA)
                       (SyncVal (bv.of_N 8)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 8) (iA k)).
       { eexists. split; reflexivity. }
       iIntros "((Hres & Hpc & Hnpc & Hinstrs) & HX2)".
@@ -261,7 +261,7 @@ Section TwoLoops.
         apply tdec_one. cbn in Hk. exact Hk.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct an as [av|a1 a2]; [|contradiction].
-        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+        apply exit_hit_spec in Hex.
         injection Hex as <-.
         (* loop B takes over.  X2 arrives from the FRAME -- it was never fed to
            any of loop A's VCs.  X1's final value is simply dropped (affine). *)
@@ -271,7 +271,7 @@ Section TwoLoops.
         unfold tX2 in *. iEval (cbn) in "HX2".
         iFrame "Hpc Hnpc Hinstrs Hpriv Hinv". iExact "HX2".
     - (* one trip of A; X2 is carried along untouched *)
-      assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx tCtxA)
+      assert (Hef : etable_rel (w := wlctx tCtxA)
                       (SyncVal (bv.of_N 0)) (exit_of_off (term_val ty_xlenbits (bv.of_N 0)) 0) (iA k)).
       { eexists. split; reflexivity. }
       assert (Hk2 : bv.bin k = (N.of_nat p + 2)%N) by lia.
@@ -294,7 +294,7 @@ Section TwoLoops.
         change ((k + bv.of_N 4294967295)%bv) with (tdecv k). exact Hne.
       + iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
         destruct an as [av|a1 a2]; [|contradiction].
-        apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+        apply exit_hit_spec in Hex.
         injection Hex as <-.
         iApply (IH (tdecv k) nB m Hd Hm).
         unfold invA, tInvA. iEval (cbn) in "Hpost". cbn.

@@ -115,7 +115,7 @@ Import IrisModel.RiscvPmpIrisBase.
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-    (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+    (HexitFaith : etable_rel (w := wlctx R)
                      (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                interp_mem_with_public_memory μ1 μ2 data_specs ∗
@@ -128,7 +128,7 @@ Import IrisModel.RiscvPmpIrisBase.
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⊢ own_regstore2 γ1 γ2 ∗
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+      ptsto_instrs
         (instrs_of_list (bv.of_N init_addr) instrs) ∗
       interp_mem_with_public_memory μ1 μ2 data_specs ∗
       interp_inv_constant_time
@@ -163,7 +163,7 @@ Import IrisModel.RiscvPmpIrisBase.
     cbn in valid_contract, contractPlacement,
       HexitFaith, ImplPre.
     unfold cfg_vc, Valid_CFG_VC, CFG_VC_triple in valid_contract.
-    assert (Hif : Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R)
+    assert (Hif : itable_rel (w := wlctx R)
                     (instrs_of_list (bv.of_N init_addr) instrs')
                     (table_of_list cfg_placement 0 instrs') ι).
     { apply itable_faith_of_list; [exact contractPlacement|].
@@ -203,7 +203,7 @@ Import IrisModel.RiscvPmpIrisBase.
     (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                       = ty.SyncVal (@bv.of_N xlenbits init_addr))
     (Hleninstrs : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
-    (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+    (HexitFaith : etable_rel (w := wlctx R)
                      (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
     (ImplPre : interp_gprs_with_registers γ1 γ2 ∗
                interp_mem_with_public_memory μ1 μ2 data_specs ∗
@@ -216,7 +216,7 @@ Import IrisModel.RiscvPmpIrisBase.
     RiscvPmpProgram.read_register γ1 pc = (bv.of_N init_addr) ->
     RiscvPmpProgram.read_register γ2 pc = (bv.of_N init_addr) ->
     ⊢ own_regstore2 γ1 γ2 ∗
-      Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+      ptsto_instrs
         (instrs_of_list (bv.of_N init_addr) instrs) ∗
       interp_mem_with_public_memory μ1 μ2 data_specs ∗
       interp_inv_constant_time
@@ -1311,7 +1311,7 @@ Import IrisModel.RiscvPmpIrisBase.
         (init_addr : N)
         (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                           = ty.SyncVal (@bv.of_N xlenbits init_addr))
-        (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+        (HexitFaith : etable_rel (w := wlctx R)
                          (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
         (* the data cells ANYWHERE: in range, clear of the code, pairwise
            disjoint (Adequacy.data_layout_ok) *)
@@ -1389,7 +1389,7 @@ Import IrisModel.RiscvPmpIrisBase.
       (init_addr : N)
       (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                         = ty.SyncVal (@bv.of_N xlenbits init_addr))
-      (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+      (HexitFaith : etable_rel (w := wlctx R)
                        (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
       (ImplPre : forall `{sailGS2 Σ},
           interp_gprs_with_public_registers γ1 γ2 (pub_regs_sig public_registers) ∗
@@ -1441,7 +1441,7 @@ Import IrisModel.RiscvPmpIrisBase.
         (init_addr : N)
         (contractPlacement : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement contract) ι
                           = ty.SyncVal (@bv.of_N xlenbits init_addr))
-        (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+        (HexitFaith : etable_rel (w := wlctx R)
                          (ty.SyncVal (bv.of_N exit_addr)) (cfg_exit contract) ι)
         (HDataAddrs : ∀ i spec, data_specs !! i = Some spec →
             spec.1 = (init_addr + 4 * N.of_nat (length instrs)
@@ -1879,7 +1879,7 @@ Import IrisModel.RiscvPmpIrisBase.
        This used to be HexitOffs, a caller-supplied premise relating a
        separate exit condition to every exit offset; it is now a fact about
        the generator, proved here once. *)
-    assert (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits])
+    assert (HexitFaith : etable_rel (w := wlctx ["p"∷ty_xlenbits])
       (ty.SyncVal (bv.of_N (init_addr + 4 * N.of_nat (length instrs))))
       (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
       ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).
@@ -1999,7 +1999,7 @@ Import IrisModel.RiscvPmpIrisBase.
     intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
       HInitReg1 HInitReg2 HInitMem1 HInitMem2
       γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-    assert (HexitFaith : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx ["p"∷ty_xlenbits])
+    assert (HexitFaith : etable_rel (w := wlctx ["p"∷ty_xlenbits])
       (ty.SyncVal (bv.of_N (init_addr + 4 * N.of_nat (length instrs))))
       (exit_of_off (term_var "p") (4 * N.of_nat (length instrs)))
       ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])).

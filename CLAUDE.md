@@ -135,8 +135,8 @@ accident:** (1) the light files (`Spec`, `Verifier`, `Tables`, `Contracts`,
 examples; (2) `Example/Prelude.v` must stay free of `EndToEnd`, or the 85 s
 `Adequacy`→`EndToEnd` chain serializes ahead of every example instead of
 alongside them. Fuller detail (per-file skill pointers, the light/heavy split
-table, the `Tables.v` `Open Scope list_scope` trap, the
-`Require`-vs-`Require Import Verifier` landmine) lives in
+table, the `Tables.v` `Open Scope list_scope` trap, how CFGVer files import
+each other) lives in
 `case_study/RiscvPmp/CFGVer/CLAUDE.md`, loaded automatically when touching
 that subtree.
 

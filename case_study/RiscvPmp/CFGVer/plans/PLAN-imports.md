@@ -1,6 +1,6 @@
 # PLAN — import, don't qualify (TODO I6, 2026-10-15)
 
-Status: **DRAFT for Emiel's review.** Branch `issue/imports`, off
+Status: **IMPLEMENTED, build pending.** Branch `issue/imports`, off
 `KatamaranRel` once `issue/loop-rule` is merged.
 
 ## 0. Goal (Emiel's words)
@@ -99,4 +99,17 @@ zero active BlockVer lines), and the note itself says to switch to
 
 ## 6. Decisions taken during implementation
 
-(empty)
+- **R1 resolved by census, no hand cases.** Every qualified short name is
+  defined once in the build. The only second definitions found
+  (`cexec_triple_addr`, `ptsto_instrs`, `sound_exec_instruction`) are in
+  `BinaryBlockVer/Verifier.v`, which is out of `_CoqProject` and required
+  by no CFGVer file. Record fields and constructors (`blk_contract`,
+  `cfg_exit`, `clem_arr_*`, ...) exist only in CFGVer.
+- **Phases 1-4 done in one scripted pass** (348 occurrences, 10 files),
+  since all but two files already `Require Import` what they qualified.
+  Exceptions: `SpecIris.v` switched its bare `Require` of `Verifier` to
+  `Require Import`; `Adequacy.v` keeps `Contracts` bare (R2) and writes
+  `Contracts.x`.
+- Edited in the worktree `../katamaran-imports` while `issue/loop-rule`'s
+  Results build ran; compiled only afterwards (RAM).
+- Removed doc text archived verbatim: `.claude/archive/imports-2026-10-15.md`.

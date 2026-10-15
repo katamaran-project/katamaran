@@ -261,7 +261,7 @@ Section CFGVerificationDerived.
     (* instantiate the block's logic variables angelically, CONSUME its        *)
     (* precondition, PRODUCE its postcondition, resume at the contract's exit. *)
     (* The  *)
-    (* angelic_ctx is kept even though Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot fixes the context to [ctx] (so it  *)
+    (* angelic_ctx is kept even though BlkAnnot fixes the context to [ctx] (so it  *)
     (* yields [env]) precisely BECAUSE the symbolic side has one: refinement   *)
     (* pairs structurally, and dropping a step here would force a bespoke      *)
     (* lemma where refine_bind would otherwise dispatch.  Same reasoning as    *)
@@ -273,13 +273,13 @@ Section CFGVerificationDerived.
     (* returned as is: nothing here needs it to be SyncVal, because the       *)
     (* resumed executor's own RVToOption probe is where that is decided.      *)
     (* ===================================================================== *)
-    Definition cexec_block (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) :
+    Definition cexec_block (b : BlkAnnot) (v : bv xlenbits) :
       CHeapSpec (RelVal ty_xlenbits) :=
-      ι <- lift_purespec (CPureSpec.angelic_ctx (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b)) ;;
-      _ <- consume (Katamaran.RiscvPmp.CFGVer.Verifier.extend_to_minimal_pre (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
+      ι <- lift_purespec (CPureSpec.angelic_ctx (blk_ctx b)) ;;
+      _ <- consume (extend_to_minimal_pre (cfg_precondition (blk_contract b))) ι.["a"∷ty_xlenbits ↦ ty.SyncVal v] ;;
       let ex := inst (T := fun Σ => Term Σ ty_xlenbits)
-                  (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_exit (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)) ι in
-      _ <- produce (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_postcondition (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))
+                  (cfg_exit (blk_contract b)) ι in
+      _ <- produce (cfg_postcondition (blk_contract b))
              ι.["a"∷ty_xlenbits ↦ ty.SyncVal v].["an"∷ty_xlenbits ↦ ex] ;;
       pure ex.
 
@@ -305,11 +305,11 @@ Section CFGVerificationDerived.
        `if … else error`, so the concrete run carries the containment fact the
        soundness proof reads (Adequacy.v, the BLOCK branch). *)
     Definition cexec_block_chk (instrs : gmap (bv xlenbits) AnnotInstr)
-        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) :
+        (b : BlkAnnot) (v : bv xlenbits) :
       CHeapSpec (RelVal ty_xlenbits) :=
       _ <- assert_formula (cblk_code_in instrs v
-             (Katamaran.RiscvPmp.CFGVer.Verifier.cfg_instrs
-                (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b))) ;;
+             (cfg_instrs
+                (blk_contract b))) ;;
       cexec_block b v.
 
     (* `instrs` is AnnotInstr-valued, mirroring the symbolic SInstrTable.
@@ -881,7 +881,7 @@ Section CFGVerificationDerived.
 
        Developed in Example/ZZBlkProbe.v -- pet OOMs at 7.6 GB opening THIS
        file at any position, so the goals are unreadable in place. *)
-    Lemma rexec_block (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits) {w : World} (ta : STerm ty_xlenbits w) :
+    Lemma rexec_block (b : BlkAnnot) (v : bv xlenbits) {w : World} (ta : STerm ty_xlenbits w) :
       ⊢ (ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal v) ta -∗
          ℛ⟦RHeapSpec (RVal ty_xlenbits)⟧ (cexec_block b v) (sexec_block b ta)).
     Proof.
@@ -906,7 +906,7 @@ Section CFGVerificationDerived.
            the carrier is named. *)
         rewrite !forgetting_trans; iModIntro.
         iApply (refine_inst_subst (T := fun Σ => Term Σ ty_xlenbits)).
-        iApply (refine_inst_persist (AT := Sub (Katamaran.RiscvPmp.CFGVer.Verifier.blk_ctx b))).
+        iApply (refine_inst_persist (AT := Sub (blk_ctx b))).
         iAssumption.
     Qed.
 
@@ -1693,7 +1693,7 @@ Section CFGVerificationDerived.
        blk_code_in_sound_repₚ, after which the step is rexec_block. *)
     Lemma rexec_block_chk (instrs : gmap (bv xlenbits) AnnotInstr)
         (words : bv xlenbits -> bv word)
-        (b : Katamaran.RiscvPmp.CFGVer.Verifier.BlkAnnot) (v : bv xlenbits)
+        (b : BlkAnnot) (v : bv xlenbits)
         {w : World} (tbl : SInstrTableW w) (ta : STerm ty_xlenbits w) :
       ⊢ (itable_relW instrs words tbl -∗
          ℛ⟦RVal ty_xlenbits⟧ (ty.SyncVal v) ta -∗
