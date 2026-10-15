@@ -773,9 +773,12 @@ Its VC is **`Contracts.cfg_vc_loop c a`**: one run of the body from the
 invariant, with the executor in loop mode. `sexec_cfg_addr fuel loop first`
 stops when `negb first && (is_exit exits apc || (loop && is_head tbl apc))` —
 `is_head` compares against the table's FIRST key (the placement at offset 0),
-exactly as `lookup_instr` compares keys. Which stop was reached is the loop
-post's business: `Contracts.loop_post p ex P Q = (an = exit ∗ Q) ∨ (an = head ∗
-P[a := an])` (`loop_post_interpret` reads it at a valuation). The invariant
+exactly as `lookup_instr` compares keys; `Contracts.is_head_table_of_list`
+proves that for the loop VC's own table this test is exactly "pc =
+placement". Which stop was reached is the loop post's business:
+`Contracts.loop_post p ex P Q = (an = exit ∗ Q) ∨ (an = head ∗ P[a := an])`
+(`loop_post_interpret` reads it at a valuation; `to_post` reads a Σ-term in the
+post's context, `sub_a_to_an` rebinds "a" to "an"). The invariant
 never enters the executor. **No annotation marks the loop** — `ai_loop`,
 `ai_fire` and the `stepped` flag are gone (archive:
 `.claude/archive/loop-rule-2026-10-14.md`). Concrete side: `cexec_cfg_addr …

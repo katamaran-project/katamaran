@@ -1078,7 +1078,9 @@ Section CFGVerificationDerived.
        contract's placement at offset 0 (table_of_list builds the table in
        order from offset 0), compared exactly as lookup_instr compares keys.
        Read off the table rather than passed separately, so it is persisted
-       with the table and needs no relation of its own. *)
+       with the table and needs no relation of its own.  That this first key
+       IS the placement for the loop VC's table is a lemma, not a
+       convention: Contracts.is_head_table_of_list. *)
     Definition is_head {w} (tbl : SInstrTableW w)
         (apc : STerm ty_xlenbits w) : bool :=
       match tbl with

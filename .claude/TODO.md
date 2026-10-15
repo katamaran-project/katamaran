@@ -138,7 +138,12 @@ use it for future examples instead of hand-transcribing.
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
 - **I. Loop-rule audit findings (2026-10-15 reading quiz, branch
-  `issue/loop-rule`, before merge).** Options, not decisions.
+  `issue/loop-rule`, before merge).** Emiel, 2026-10-15: "Do A" -- fix
+  I1/I3/I4/I5/I7 on the branch, merge, then I6 on its own branch.
+  DECIDED (AskUserQuestion): I1 keep the first-key test + a lemma proving
+  it is `pc = p` for `table_of_list p 0 i`; I3 names `sub_to_post_ctx` /
+  `to_post` / `sub_a_to_an`; I4 a shared step combinator; I7 collapse if
+  every block's VC passes as a loop VC, else keep both and report.
   - **I1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
     takes the head to be the table's FIRST key. That is the placement only
     because `CFG_VC_loop_triple` builds the table as `table_of_list p 0 i`
