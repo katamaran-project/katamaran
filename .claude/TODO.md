@@ -166,6 +166,14 @@ G and the rest of F anywhere.**
     `an = exit`, and `exit_hit` leaves the concrete stop guard (which becomes
     `negb first`). Larger change, touches the non-loop soundness chain;
     unverified. Option: keep (two mechanisms, each local).
+  - **H3. `loop_post`'s substitutions are unreadable.** Emiel: "I have no
+    idea what wk or wk_a_an are." `wk_a_an : Sub Σ (Σ ▻ a ▻ an)` is the
+    weakening into the post's context (`Contracts.v:197`), `wk t` applies it
+    (`:205`), and `env.snoc wk_a_an "a" (term_var "an")` (`:211–212`) is
+    "rebind a to an", i.e. Inv[a := an]; none of the three is explained at
+    the point of use. Options: rename (e.g. `to_post_ctx`, `a_to_an`) and
+    name the second substitution; a one-line comment per substitution;
+    check whether the framework already has a two-step weakening to reuse.
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
