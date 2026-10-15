@@ -122,7 +122,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          two segment contracts composable.  Pass asn_no_post for an
          ordinary whole-program contract. *)
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
+      scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
 
     (* THE VC PIPELINE: postprocess, then REPLAY, then postprocess again --
@@ -231,7 +231,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
       (i  : list AnnotInstr)
       (fl : nat)
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition (Σ := Σ)
+      scfg_loop_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) ex fl (loop_post p ex P Q) wnil.
 
     (* THE HEAD IS THE PLACEMENT.  The executor's head test (Verifier.is_head)

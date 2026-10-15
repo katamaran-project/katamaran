@@ -144,6 +144,10 @@ G and the rest of F anywhere.**
   it is `pc = p` for `table_of_list p 0 i`; I3 names `sub_to_post_ctx` /
   `to_post` / `sub_a_to_an`; I4 a shared step combinator; I7 collapse if
   every block's VC passes as a loop VC, else keep both and report.
+  **DONE 2026-10-15: I1 I3 I4 I5 I7 merged into KatamaranRel (425b5b21); I7
+  passed (the muladd tail, the one ordinary block, verifies as a loop VC,
+  227 s vs 210 s), so every block now goes through its loop VC.  I2 open.
+  I6 on `issue/imports` (PLAN-imports.md).**
   - **I1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
     takes the head to be the table's FIRST key. That is the placement only
     because `CFG_VC_loop_triple` builds the table as `table_of_list p 0 i`
@@ -200,7 +204,8 @@ G and the rest of F anywhere.**
     hypothesis" instead of the two `iAssert`s; the five-step outline
     (placement, faithfulness, run once, bind under ▷, case split) as
     comments at each step. The qualified-path part is now I6.
-  - **I6. DECIDED (direction): import properly, no fully qualified
+  - **I6. DONE 2026-10-15 on `issue/imports` (PLAN-imports.md; build green,
+    not merged).** DECIDED (direction): import properly, no fully qualified
     prefixes, codebase-wide.** Emiel, 2026-10-15: "for readibility, we should
     avoid using things like this an instead import them properly. This
     holds for the whole codebase actually." Census (non-ZZ `.v`,

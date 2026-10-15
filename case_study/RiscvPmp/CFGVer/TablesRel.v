@@ -75,11 +75,11 @@ Import RiscvPmp.Sig.
   Lemma itable_faith_weaken {Σ : LCtx} (m m' : gmap (bv xlenbits) AnnotInstr)
       (* the ALIAS, never a spelled-out tuple — five signatures in VerifierRel.v
          silently missed both new table columns that way *)
-      (tbl : Katamaran.RiscvPmp.CFGVer.Verifier.SInstrTable (wlctx Σ))
+      (tbl : SInstrTable (wlctx Σ))
       (ι : Valuation Σ) :
     m ⊆ m' ->
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ) m tbl ι ->
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ) m' tbl ι.
+    itable_rel (w := wlctx Σ) m tbl ι ->
+    itable_rel (w := wlctx Σ) m' tbl ι.
   Proof.
     intros Hsub. apply List.Forall_impl. intros [t i] (v & Hv & Hm).
     exists v. split; [exact Hv|]. eapply lookup_weaken; eauto.
@@ -93,7 +93,7 @@ Import RiscvPmp.Sig.
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     forall off : N,
     (bv.bin cbase + off + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ)
+    itable_rel (w := wlctx Σ)
       (instrs_of_list (bv.add cbase (bv.of_N off)) instrs)
       (table_of_list p off instrs) ι.
   Proof.
@@ -127,7 +127,7 @@ Import RiscvPmp.Sig.
       (cbase : bv xlenbits) (instrs : list AnnotInstr) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
     (bv.bin cbase + 4 * N.of_nat (length instrs) < bv.exp2 xlenbits)%N ->
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx Σ)
+    itable_rel (w := wlctx Σ)
       (instrs_of_list cbase instrs) (table_of_list p 0 instrs) ι.
   Proof.
     intros Hp Hbound.
@@ -146,7 +146,7 @@ Import RiscvPmp.Sig.
   Lemma etable_faith_exit_of_off {Σ : LCtx} (p : Term Σ ty_xlenbits) (ι : Valuation Σ)
       (cbase : bv xlenbits) (off : N) :
     inst (T := fun Σ => Term Σ ty_xlenbits) p ι = ty.SyncVal cbase ->
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx Σ)
+    etable_rel (w := wlctx Σ)
       (ty.SyncVal (bv.add cbase (bv.of_N off))) (exit_of_off p off) ι.
   Proof.
     intros Hp.

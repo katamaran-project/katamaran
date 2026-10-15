@@ -19,8 +19,8 @@ description: >
 Entry point for the CFG verifier (`case_study/RiscvPmp/CFGVer/`). The reference is
 split into focused skills so only the relevant one loads.
 
-> **Directory-wide facts (file layout/compile order, the `Require`-vs-
-> `Require Import Verifier` landmine) now live in
+> **Directory-wide facts (file layout/compile order, how CFGVer files
+> import each other) now live in
 > `case_study/RiscvPmp/CFGVer/CLAUDE.md`** — that file loads automatically
 > whenever a CFGVer file is touched, so it isn't repeated here. This skill
 > covers *which sub-skill to read*, not those directory-wide facts.

@@ -159,42 +159,21 @@ errors on the dependents.
 | `Example/<Prog>Result.v` | that program's end-to-end `*_noninterferent[_param]` theorems over its OWN shallow `<x>_data : list region` / `<x>_regs` (`fits … → noninterferent_strong … (compile … <x>_data)`), the `≡ₚ` proof that these equal the generator's specs, and fixed-address SANITY-CHECK corollaries (trusted statement surface, gate-checked) | cfgver-endtoend |
 | `Results.v` | re-export shell over the `<Prog>Result.v` files; no proofs | cfgver-endtoend |
 
-## Importing CFGVer.Verifier downstream
+## Importing CFGVer modules
 
-```coq
-(* At top level, after the main Require Import block: *)
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
-```
+Import, do not qualify (Emiel, 2026-10-15, PLAN-imports.md): no
+`Katamaran.RiscvPmp.CFGVer.<File>.name` in code. The pattern is `main`'s:
 
-Then use qualified names (`Katamaran.RiscvPmp.CFGVer.Verifier.foo`). Do NOT
-`Require Import` — it clashes with BlockVer's identically-named definitions.
-The other CFGVer files (`Noninterference`, `Tables`, `Contracts`, …) are safe
-to plain `Require Import`.
+1. one `From Katamaran Require Import …` block at the top listing the
+   sibling files used (`RiscvPmp.CFGVer.Verifier`, `RiscvPmp.CFGVer.Tables`, …);
+2. top-level `Import <instance>.` for the module instances the file works in
+   (`Import RiscvPmpProgram.`);
+3. notation modules imported locally, inside the `Section` that needs them;
+4. a bare `Require` only for a module used for a handful of names, which are
+   then written with a SHORT path: `Adequacy.v` requires `Contracts` this way
+   (its assertion notations `↦ᵣ`/`↦ₘ` would clash with the Iris ones) and
+   writes `Contracts.loop_post`.
 
-> **BlockVer-contingent.** This idiom exists only because BlockVer shares names
-> with CFGVer. Once BlockVer is consolidated away (see TODO.md cleanup items),
-> switch the downstream files to a plain `Require Import` and delete this note.
-
-**Currently violated in `Tables.v`/`Contracts.v`/`GenContract.v` (2026-08-20,
-AnnotInstr migration, commit 323db24c) — flagged, not yet fixed.** All three do
-`Require Import RiscvPmp.CFGVer.Verifier` and reference `AnnotInstr`
-unqualified, because qualifying it hit a confusing `rocq_compile_file`
-dune-fallback resolution failure mid-session (see **rocq-implementation**'s
-tooling-caveat entry) that was mistaken for the name genuinely not existing. It
-compiles today (`make -f Makefile.coq`, verified) ONLY because BlockVer is fully
-commented out of `_CoqProject` on this branch, so there is no live BlockVer
-module to clash with. **This is latent, not inert**: reactivating BlockVer
-alongside these files without reverting this first will reproduce exactly the
-clash this note exists to prevent.
-
-To fix: revert the three `Require Import` back to bare `Require`, and qualify
-every bare `AnnotInstr` occurrence as
-`Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr` — 3 in `Tables.v`, 4 in
-`Contracts.v`, 6 in `GenContract.v`, and **nothing else**: the product-type
-redesign means these files no longer name `Annot`, `strip`, or any constructor
-(the two coercions do the work implicitly and need no name). Confirm the
-qualified path actually resolves with a plain `rocq_check`/`rocq_start` probe
-FIRST (not `Locate`, which reported false negatives on stale state during that
-session), then re-run GATE 1 (`plans/PLAN-annotinstr.md`) to confirm nothing
-broke.
+The old rule (bare `Require` + full paths for `Verifier`) existed only for a
+name clash with BlockVer, which is out of the build. Reviving BlockVer
+alongside CFGVer would bring that clash back.

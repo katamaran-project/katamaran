@@ -101,7 +101,7 @@ Section SegCompose.
          Inst (STerm ty_xlenbits) (RV (bv ?n))"). *)
       (Hp : inst (T := fun Σ => Term Σ ty_xlenbits) place iota
             = ty.SyncVal (@bv.of_N xlenbits ia)) :
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+    etable_rel (w := wlctx R)
       (ty.SyncVal (seg_addr ia target)) (exit_of_off place target) iota.
   Proof. rewrite seg_addr_add. now apply etable_faith_exit_of_off. Qed.
 
@@ -117,7 +117,7 @@ Section SegCompose.
      head stop. *)
   Lemma seg_vc_loop {R : LCtx} (c : @CFGVerifierContract R) (annot : list AnnotInstr) :
     cfg_vc_loop c annot ->
-    safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_loop_verification_condition
+    safeE (cfg_postprocess (scfg_loop_verification_condition
       (extend_to_minimal_pre (cfg_precondition c))
       (table_of_list (cfg_placement c) 0 annot)
       (cfg_exit c) (cfg_fuel c)
@@ -155,12 +155,12 @@ Section SegCompose.
       (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
       (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P) :
     exists (annot : list AnnotInstr) (M : gmap (bv xlenbits) AnnotInstr),
-      safeE (cfg_postprocess (Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition
+      safeE (cfg_postprocess (scfg_verification_condition
         (extend_to_minimal_pre (cfg_precondition c))
         (table_of_list (cfg_placement c) 0 annot)
         (cfg_exit c) (cfg_fuel c) (cfg_postcondition c) wnil))
       /\ ai_instr <$> M = P
-      /\ Katamaran.RiscvPmp.CFGVer.VerifierRel.itable_rel (w := wlctx R) M
+      /\ itable_rel (w := wlctx R) M
            (table_of_list (cfg_placement c) 0 annot) ι
       /\ (forall words, ⊢ blocksSound words M).
   Proof.
@@ -195,18 +195,18 @@ Section SegCompose.
       (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) ι = SyncVal pbase)
       (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
       (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P)
-      (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R) cexit (cfg_exit c) ι) :
+      (Hef : etable_rel (w := wlctx R) cexit (cfg_exit c) ι) :
     ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret (extend_to_minimal_pre (cfg_precondition c)) (ι.["a"∷ty_xlenbits ↦ a]) ∗
         ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs P -∗
+        ptsto_instrs P -∗
         (∀ an,
            ⌜match an with
-             | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
+             | SyncVal v => exit_hit cexit v = true
              | NonSyncVal _ _ => False
              end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs P ∗
+           ptsto_instrs P ∗
            asn.interpret (cfg_postcondition c) (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
            ExitCond) -∗
         myWP2_loop ExitCond.
@@ -225,18 +225,18 @@ Section SegCompose.
       (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) ι = SyncVal pbase)
       (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
       (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ P)
-      (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R) cexit (cfg_exit c) ι) :
+      (Hef : etable_rel (w := wlctx R) cexit (cfg_exit c) ι) :
     ⊢ ∀ a : RelVal ty_xlenbits,
         asn.interpret (extend_to_minimal_pre (cfg_precondition c)) (ι.["a"∷ty_xlenbits ↦ a]) ∗
         ⌜secLeak a⌝ ∗ pc ↦ᵣ a ∗ (∃ v, nextpc ↦ᵣ v) ∗
-        Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words P -∗
+        ptsto_instrs_w words P -∗
         (∀ an,
            ⌜match an with
-             | SyncVal v => Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit cexit v = true
+             | SyncVal v => exit_hit cexit v = true
              | NonSyncVal _ _ => False
              end⌝ ∗
            pc ↦ᵣ an ∗ (∃ v, nextpc ↦ᵣ v) ∗
-           Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words P ∗
+           ptsto_instrs_w words P ∗
            asn.interpret (cfg_postcondition c) (ι.["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ an]) -∗
            ExitCond) -∗
         myWP2_loop ExitCond.
@@ -256,7 +256,7 @@ Section SegCompose.
         (iota.["a"∷ty_xlenbits ↦ SyncVal a])
       ∗ pc ↦ᵣ SyncVal a
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+      ∗ ptsto_instrs_w words
           (instrs_of_list cbase L) )%I.
 
   (* ...and the ones it HANDS BACK at the exit.  `cexit` is the concrete exit
@@ -269,7 +269,7 @@ Section SegCompose.
     ( ⌜an = cexit⌝
       ∗ pc ↦ᵣ an
       ∗ (bi_exist (fun v => nextpc ↦ᵣ v))
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+      ∗ ptsto_instrs_w words
           (instrs_of_list cbase L)
       ∗ asn.interpret (cfg_postcondition c)
           ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ an]) )%I.
@@ -299,7 +299,7 @@ Section SegCompose.
     (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) iota = SyncVal pbase)
     (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
     (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ instrs_of_list cbase L)
-    (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+    (Hef : etable_rel (w := wlctx R)
              cexit (cfg_exit c) iota)
     (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
     (HPost : forall an, Fr ∗ seg_exit words c iota a L cbase cexit an -∗ Post) :
@@ -315,7 +315,7 @@ Section SegCompose.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       iApply HPost. iFrame. iPureIntro.
       destruct an as [x|]; [|contradiction].
-      now apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+      now apply exit_hit_spec in Hex.
   Qed.
 
 
@@ -485,7 +485,7 @@ Section SegCompose.
       (v : bv xlenbits) : iProp Σ :=
     ( pc ↦ᵣ SyncVal v
       ∗ (bi_exist (fun u => nextpc ↦ᵣ u))
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+      ∗ ptsto_instrs_w words
           (instrs_of_list cbase L)
       ∗ asn.interpret (cfg_postcondition c)
           ((iota.["a"∷ty_xlenbits ↦ SyncVal a]).["an"∷ty_xlenbits ↦ SyncVal v]) )%I.
@@ -501,7 +501,7 @@ Section SegCompose.
     (Hplace : inst (T := fun Σ => Term Σ ty_xlenbits) (cfg_placement c) iota = SyncVal pbase)
     (Hfit : (bv.bin pbase + 4 * N.of_nat (length (cfg_instrs c)) < bv.exp2 xlenbits)%N)
     (Hin : instrs_of_list pbase (cfg_instrs c) ⊆ instrs_of_list cbase L)
-    (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+    (Hef : etable_rel (w := wlctx R)
              (ty.SyncVal (seg_addr ia t)) (cfg_exit c) iota)
     (HPre  : Pre -∗ Fr ∗ seg_entry words c iota a L cbase)
     (HPost : Fr ∗ seg_exit_state words c iota a L cbase (seg_addr ia t) -∗ Post) :
@@ -671,7 +671,7 @@ Section SegCompose.
      code fits in memory (`Hfit` below), and handing instruction ownership
      over at a cut is the caller's -- see loop_enter_from_seg's span swap. *)
   Definition loop_instr_block {R : LCtx} (words : bv xlenbits -> bv word) (ls : LoopSpec R) : iProp Σ :=
-    Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+    ptsto_instrs_w words
       (instrs_of_list (@bv.of_N xlenbits (loop_head_addr ls)) (strip (loop_code ls))).
 
   (* ---- ONE TRIP, EITHER KIND (A3) ----------------------------------------
@@ -722,7 +722,7 @@ Section SegCompose.
     { rewrite strip_length.
       refine (seg_fits_rep _ (loop_code_extent ls) (loop_code ls) _ Hfit).
       unfold loop_code_extent. rewrite strip_length. lia. }
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx R)
+    assert (Hef : etable_rel (w := wlctx R)
                     (ty.SyncVal (seg_addr (loop_head_addr ls) target))
                     (cfg_exit (gen_loop_contract ls g target post)) i)
       by exact (seg_exit_table_ok (loop_base ls) i (loop_head_addr ls) target Hpl).
@@ -874,7 +874,7 @@ Section SegCompose.
          caller's frame supplies the LOOP's code and keeps the predecessor's.
          For two pieces of one program this is ptsto_instrs_w_split on the
          program's instruction block. *)
-      (Hswap : Fin ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+      (Hswap : Fin ∗ ptsto_instrs_w words
                        (instrs_of_list cp Lp)
                ⊢ Fin' ∗ loop_instr_block words ls)
       (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin' Fr n) :
@@ -953,7 +953,7 @@ Section SegCompose.
       (P : nat -> Prop) (n : nat) (Pre Post : iProp Σ)
       (Hv : v = @bv.of_N xlenbits (loop_head_addr ls))
       (HP : P n)
-      (Hswap : Fin ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs_w words
+      (Hswap : Fin ∗ ptsto_instrs_w words
                        (instrs_of_list cp Lp)
                ⊢ Fin' ∗ loop_instr_block words ls)
       (Hent : loop_entry_obligation ls c j a (@bv.of_N xlenbits (loop_head_addr ls)) iota Fin' Fr n)
