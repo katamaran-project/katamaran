@@ -174,6 +174,15 @@ G and the rest of F anywhere.**
     the point of use. Options: rename (e.g. `to_post_ctx`, `a_to_an`) and
     name the second substitution; a one-line comment per substitution;
     check whether the framework already has a two-step weakening to reuse.
+  - **H4. `myWP2_step` duplicates `myWP2_loop_fix`'s step disjunct.** Emiel:
+    "Why does myWP2_step exist? Is it not just the same as myWP2_loop?"
+    `myWP2_step E` (`Adequacy.v:218`) copies the right disjunct of
+    `myWP2_loop_fix` (`:111–124`) with `wp := myWP2_loop E`, so the reader
+    must diff them by eye. Options: define one step combinator
+    (`step_then wp`) and write `myWP2_loop_fix E wp := E ∨ step_then wp` and
+    `myWP2_step E := step_then (myWP2_loop E)` (the Contractive proof must
+    still go through); or keep, with a comment at both definitions naming
+    the other.
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
