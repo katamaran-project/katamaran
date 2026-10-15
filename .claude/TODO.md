@@ -194,7 +194,23 @@ G and the rest of F anywhere.**
     so the paths shrink; a lemma "pure fact from a persistent wand, keep the
     hypothesis" instead of the two `iAssert`s; the five-step outline
     (placement, faithfulness, run once, bind under ▷, case split) as
-    comments at each step.
+    comments at each step. The qualified-path part is now H6.
+  - **H6. DECIDED (direction): import properly, no fully qualified
+    prefixes, codebase-wide.** Emiel, 2026-10-15: "for readibility, we should
+    avoid using things like this an instead import them properly. This
+    holds for the whole codebase actually." Census (non-ZZ `.v`,
+    `Katamaran.RiscvPmp.CFGVer.{Verifier,VerifierRel,Tables,Contracts,
+    TablesRel}.`): Adequacy 192, SpecIris 51, GenCompose 23, VerifierRel 12,
+    EndToEnd 10, TwoLoopsComposedResult 8, TablesRel 6, Swap/Countdown-
+    ComposedResult 4 each, Contracts 2; `theories/` not yet surveyed. The
+    original reason for qualifying is `CFGVer/CLAUDE.md` "Importing
+    CFGVer.Verifier downstream": a name clash with BlockVer. BlockVer is out
+    of the build (`_CoqProject:10–19`, zero active BlockVer lines), and the
+    note itself says to switch to `Require Import` once BlockVer is gone, so
+    the clash is moot; delete that note (and the skills' copies) with the
+    fix. Watch for: new clashes between CFGVer modules once imported
+    together, and the light/heavy layering (an Import never adds a Require,
+    so layering is unaffected). Plan with Emiel before starting.
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
