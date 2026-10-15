@@ -137,6 +137,23 @@ use it for future examples instead of hand-transcribing.
 **Open items from the 2026-10-08 learning session, grouped (Emiel asked which
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
+- **H. Loop-rule audit findings (2026-10-15 reading quiz, branch
+  `issue/loop-rule`, before merge).** Options, not decisions.
+  - **H1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
+    takes the head to be the table's FIRST key. That is the placement only
+    because `CFG_VC_loop_triple` builds the table as `table_of_list p 0 i`
+    (`Contracts.v:221`), and offset 0 comes first and collapses to `p`
+    (`Tables.v:337`). Emiel: "brittle ... there is no real guarantee that the
+    first instruction is the head, except that we always do it this way."
+    Soundness does NOT depend on it: `rexFS` only uses that a head hit is a
+    lookup hit (`is_head_lookup`), and the meaning "head = placement" comes
+    from `loop_post`'s pc equation `an = p`; a wrong head makes the VC fail,
+    never pass. So it is a readability/robustness issue. Options: (a) pass
+    the head term (the placement) to `sexec_cfg_addr` explicitly instead of
+    reading it off the table, persisted like `exits`; (b) compare against the
+    entry pc `"a"` (might also make the `Hpl` placement premise of
+    `blockSound_of_loop_vc` unnecessary, since `loop_post` could then say
+    `an = a`; unverified); (c) keep, with a stronger comment.
 - **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
   18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
   and the merge comprehension check). Implementation-time decisions:
