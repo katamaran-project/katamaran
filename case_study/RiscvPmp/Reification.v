@@ -322,10 +322,10 @@ Ltac2 rec reflect_term (ctx : constr list) (t : term) : constr :=
   | Binop op a b =>
       let ra := reflect_term ctx a in
       let rb := reflect_term ctx b in
-      constr:(bop.eval $op $ra $rb)
+      Std.eval_unfold [(reference:(bop.eval), Std.AllOccurrences)] constr:(bop.eval $op $ra $rb)
   | Unop op a =>
       let ra := reflect_term ctx a in
-      constr:(uop.eval $op $ra)
+      Std.eval_unfold [(reference:(uop.eval), Std.AllOccurrences)] constr:(uop.eval $op $ra)
   | Tuple e =>
       let vs := reflect_env ctx e in
       constr:(envrec.of_env _ $vs)
@@ -358,7 +358,7 @@ Ltac2 rec reflect_formula (ctx : constr list) (f : formula) : constr :=
   | Relop op a b =>
       let ra := reflect_term ctx a in
       let rb := reflect_term ctx b in
-      constr:(bop.eval_relop_prop $op $ra $rb)
+      Std.eval_unfold [(reference:(bop.eval_relop_prop), Std.AllOccurrences)] constr:(bop.eval_relop_prop $op $ra $rb)
   | FTrue => constr:(True)
   | FFalse => constr:(False)
   | And a b =>
@@ -507,14 +507,14 @@ Module Tests.
        eblock).
   Proof. reify_vc. ltac2:(goal_is constr:(true = true -> True)). Abort.
 
-  (* Integer operators are folded too (the relation itself is left alone). *)
+  (* Integer operators are folded too; the relation is unfolded but not computed. *)
   Goal VerificationConditionWithErasure
     (eassumek
        (eformula_relop bop.eq
           (eterm_binop bop.plus (eterm_val ty.int 1%Z) (eterm_val ty.int 2%Z))
           (eterm_val ty.int 3%Z))
        eblock).
-  Proof. reify_vc. ltac2:(goal_is constr:(bop.eval_relop_prop (σ := ty.int) bop.eq 3%Z 3%Z -> True)). Abort.
+  Proof. reify_vc. ltac2:(goal_is constr:(@eq (Val ty.int) 3%Z 3%Z -> True)). Abort.
 
   (* Operators with a variable argument are kept, but constant subterms
      below them are folded. *)
@@ -525,7 +525,7 @@ Module Tests.
           eblock)).
   Proof.
     reify_vc.
-    ltac2:(goal_is constr:(forall y : Val ty.bool, bop.eval bop.and y true = true -> True)).
+    ltac2:(goal_is constr:(forall y : Val ty.bool, andb y true = true -> True)).
   Abort.
 
   Goal VerificationConditionWithErasure
@@ -538,6 +538,40 @@ Module Tests.
           eblock)).
   Proof.
     reify_vc.
-    ltac2:(goal_is constr:(forall y : Val ty.bool, bop.eval bop.and false y = true -> True)).
+    ltac2:(goal_is constr:(forall y : Val ty.bool, andb false y = true -> True)).
+  Abort.
+
+  (* Operators and relations applied to variables are unfolded to the functions
+     and relations they denote. *)
+  Goal VerificationConditionWithErasure
+    (edemonicv (MkB "x" ty.int) (edemonicv (MkB "y" ty.int)
+       (eassumek
+          (eformula_relop bop.lt
+             (eterm_binop bop.plus (@eterm_var "x" ty.int 1) (@eterm_var "y" ty.int 0))
+             (eterm_val ty.int 10%Z))
+          eblock))).
+  Proof.
+    reify_vc.
+    ltac2:(goal_is constr:(forall (x y : Val ty.int), (Z.add x y < 10)%Z -> True)).
+  Abort.
+
+  Goal VerificationConditionWithErasure
+    (edemonicv (MkB "x" ty.int) (edemonicv (MkB "y" ty.int)
+       (eassumek
+          (eformula_relop bop.eq (@eterm_var "x" ty.int 1) (@eterm_var "y" ty.int 0))
+          eblock))).
+  Proof.
+    reify_vc.
+    ltac2:(goal_is constr:(forall (x y : Val ty.int), x = y -> True)).
+  Abort.
+
+  Goal VerificationConditionWithErasure
+    (edemonicv (MkB "y" ty.bool)
+       (eassumek
+          (eformula_bool (eterm_unop uop.not (@eterm_var "y" ty.bool 0)))
+          eblock)).
+  Proof.
+    reify_vc.
+    ltac2:(goal_is constr:(forall y : Val ty.bool, negb y = true -> True)).
   Abort.
 End Tests.
