@@ -237,12 +237,25 @@ Ltac2 split_binder (b : constr) : constr * constr :=
   | _ => Control.zero (Tactic_failure (Some (fprintf "reify: unexpected binder '%t'" b)))
   end.
 
+(* Evaluate binops on two Vals directly. *)
+Ltac2 mk_binop (op : constr) (a : term) (b : term) : term :=
+  match a, b with
+  | Val v1, Val v2 => Val (Std.eval_vm None constr:(bop.eval $op $v1 $v2))
+  | _, _ => Binop op a b
+  end.
+
+Ltac2 mk_unop (op : constr) (a : term) : term :=
+  match a with
+  | Val v => Val (Std.eval_vm None constr:(uop.eval $op $v))
+  | _ => Unop op a
+  end.
+
 Ltac2 rec reify_term (st : constr) : term :=
   lazy_match! st with
   | @eterm_var _ _ ?n => Var (nat_to_int n)
   | eterm_val _ ?v => Val v
-  | @eterm_binop _ _ _ ?op ?t1 ?t2 => Binop op (reify_term t1) (reify_term t2)
-  | @eterm_unop _ _ ?op ?t => Unop op (reify_term t)
+  | @eterm_binop _ _ _ ?op ?t1 ?t2 => mk_binop op (reify_term t1) (reify_term t2)
+  | @eterm_unop _ _ ?op ?t => mk_unop op (reify_term t)
   | @eterm_tuple _ ?ts => Tuple (reify_env ts)
   | @eterm_union ?u ?k ?t => Union u k (reify_term t)
   | eterm_record ?r ?ts => Record r (reify_env ts)
