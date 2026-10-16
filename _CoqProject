@@ -58,6 +58,7 @@ test/Example.v
 test/LinkedList.v
 test/SumMaxLen.v
 test/Replay.v
+test/Reification.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
