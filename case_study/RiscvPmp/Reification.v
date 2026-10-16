@@ -429,6 +429,8 @@ Ltac reify_vc := ltac2:(Control.enter (fun () =>
   end)).
 
 Module Tests.
+  (* Only for the integer literals below. *)
+  From Stdlib Require Import ZArith.ZArith.
   (* Tests: reify_vc succeeds iff the reflected Prop is convertible to the
      goal, and the variables keep (freshened) names. *)
   Ltac2 has_hyps (ids : ident list) : unit :=
@@ -476,4 +478,66 @@ Module Tests.
                    (@eterm_var "L" ty.bool 2) (@eterm_var "L.2" ty.bool 0)))
              eblock)))).
   Proof. reify_vc. intros. ltac2:(has_hyps [@L; @L1]). Abort.
+
+  (* Constr.equal ensures syntactic equality (not just convertibility through the `change` tactic) *)
+  Ltac2 goal_is (c : constr) : unit :=
+    if Constr.equal (Control.goal ()) c then ()
+    else Control.throw (Tactic_failure (Some (fprintf "expected '%t' but the goal is '%t'" c (Control.goal ())))).
+
+  Goal VerificationConditionWithErasure
+    (eassumek
+       (eformula_bool
+          (eterm_binop bop.and (eterm_val ty.bool true) (eterm_val ty.bool false)))
+       eblock).
+  Proof. reify_vc. ltac2:(goal_is constr:(false = true -> True)). Abort.
+
+  Goal VerificationConditionWithErasure
+    (eassumek
+       (eformula_bool (eterm_unop uop.not (eterm_val ty.bool true)))
+       eblock).
+  Proof. reify_vc. ltac2:(goal_is constr:(false = true -> True)). Abort.
+
+  (* Nested constant expressions are folded completely. *)
+  Goal VerificationConditionWithErasure
+    (eassumek
+       (eformula_bool
+          (eterm_binop bop.or
+             (eterm_unop uop.not (eterm_val ty.bool false))
+             (eterm_binop bop.and (eterm_val ty.bool false) (eterm_val ty.bool true))))
+       eblock).
+  Proof. reify_vc. ltac2:(goal_is constr:(true = true -> True)). Abort.
+
+  (* Integer operators are folded too (the relation itself is left alone). *)
+  Goal VerificationConditionWithErasure
+    (eassumek
+       (eformula_relop bop.eq
+          (eterm_binop bop.plus (eterm_val ty.int 1%Z) (eterm_val ty.int 2%Z))
+          (eterm_val ty.int 3%Z))
+       eblock).
+  Proof. reify_vc. ltac2:(goal_is constr:(bop.eval_relop_prop (σ := ty.int) bop.eq 3%Z 3%Z -> True)). Abort.
+
+  (* Operators with a variable argument are kept, but constant subterms
+     below them are folded. *)
+  Goal VerificationConditionWithErasure
+    (edemonicv (MkB "y" ty.bool)
+       (eassumek
+          (eformula_bool (eterm_binop bop.and (@eterm_var "y" ty.bool 0) (eterm_val ty.bool true)))
+          eblock)).
+  Proof.
+    reify_vc.
+    ltac2:(goal_is constr:(forall y : Val ty.bool, bop.eval bop.and y true = true -> True)).
+  Abort.
+
+  Goal VerificationConditionWithErasure
+    (edemonicv (MkB "y" ty.bool)
+       (eassumek
+          (eformula_bool
+             (eterm_binop bop.and
+                (eterm_binop bop.and (eterm_val ty.bool true) (eterm_val ty.bool false))
+                (@eterm_var "y" ty.bool 0)))
+          eblock)).
+  Proof.
+    reify_vc.
+    ltac2:(goal_is constr:(forall y : Val ty.bool, bop.eval bop.and false y = true -> True)).
+  Abort.
 End Tests.
