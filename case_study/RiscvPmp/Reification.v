@@ -76,6 +76,7 @@ From Ltac2 Require Import Ltac2.
 End StringToIdent.
 
 From Katamaran Require Import
+     Bitvector
      Context
      Environment
      Syntax.BinOps
@@ -358,7 +359,11 @@ Ltac2 rec reflect_formula (ctx : constr list) (f : formula) : constr :=
   | Relop op a b =>
       let ra := reflect_term ctx a in
       let rb := reflect_term ctx b in
-      Std.eval_unfold [(reference:(bop.eval_relop_prop), Std.AllOccurrences)] constr:(bop.eval_relop_prop $op $ra $rb)
+      Std.eval_unfold
+        [(reference:(bop.eval_relop_prop), Std.AllOccurrences); (* RelOps are unfolded to their denotation as functions *)
+         (reference:(bv.slt), Std.AllOccurrences); (* Signed bv <= additionally unfolds another step to Rocq.Z *)
+         (reference:(bv.sle), Std.AllOccurrences)] (* Signed bv < idem as above.. *)
+        constr:(bop.eval_relop_prop $op $ra $rb)
   | FTrue => constr:(True)
   | FFalse => constr:(False)
   | And a b =>
@@ -436,6 +441,11 @@ Module Tests.
   Ltac2 has_hyps (ids : ident list) : unit :=
     List.iter (fun i => let _ := Control.hyp i in ()) ids.
 
+  (* Constr.equal ensures syntactic equality (not just convertibility through the `change` tactic) *)
+  Ltac2 goal_is (c : constr) : unit :=
+    if Constr.equal (Control.goal ()) c then ()
+    else Control.throw (Tactic_failure (Some (fprintf "expected '%t' but the goal is '%t'" c (Control.goal ())))).
+
   Goal VerificationConditionWithErasure
     (edemonicv (MkB "y" ty.bool)
        (eassumek (eformula_bool (@eterm_var "y" ty.bool 0)) eblock)).
@@ -478,11 +488,6 @@ Module Tests.
                    (@eterm_var "L" ty.bool 2) (@eterm_var "L.2" ty.bool 0)))
              eblock)))).
   Proof. reify_vc. intros. ltac2:(has_hyps [@L; @L1]). Abort.
-
-  (* Constr.equal ensures syntactic equality (not just convertibility through the `change` tactic) *)
-  Ltac2 goal_is (c : constr) : unit :=
-    if Constr.equal (Control.goal ()) c then ()
-    else Control.throw (Tactic_failure (Some (fprintf "expected '%t' but the goal is '%t'" c (Control.goal ())))).
 
   Goal VerificationConditionWithErasure
     (eassumek
@@ -573,5 +578,16 @@ Module Tests.
   Proof.
     reify_vc.
     ltac2:(goal_is constr:(forall y : Val ty.bool, negb y = true -> True)).
+  Abort.
+
+  (* Signed comparisons become comparisons of [bv.signed] on Z. *)
+  Goal VerificationConditionWithErasure
+    (edemonicv (MkB "x" (ty.bvec 8)) (edemonicv (MkB "y" (ty.bvec 8))
+       (eassumek
+          (eformula_relop bop.bvslt (@eterm_var "x" (ty.bvec 8) 1) (@eterm_var "y" (ty.bvec 8) 0))
+          eblock))).
+  Proof.
+    reify_vc.
+    ltac2:(goal_is constr:(forall (x y : Val (ty.bvec 8)), (bv.signed x < bv.signed y)%Z -> True)).
   Abort.
 End Tests.
