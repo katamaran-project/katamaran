@@ -1871,7 +1871,7 @@ Module RiscvPmpValidContracts.
   Lemma valid_contract_execute_RISCV_JALR : ValidContract execute_RISCV_JALR.
   Proof. now vm_compute. Qed.
 
-  Lemma valid_contract_execute_ECALL : ValidContractDebug execute_ECALL.
+  Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
   Proof. now vm_compute. Qed.
 
   Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
@@ -2017,7 +2017,7 @@ Module RiscvPmpValidContracts.
     - refine (valid_contract _ H valid_contract_execute_RISCV_JALR).
     - refine (valid_contract_with_fuel _ _ H valid_contract_execute_LOAD).
     - refine (valid_contract _ H valid_contract_execute_STORE).
-    - refine (valid_contract_debug _ H valid_contract_execute_ECALL).
+    - refine (valid_contract _ H valid_contract_execute_ECALL).
     - refine (valid_contract_debug _ H valid_contract_execute_EBREAK).
     - refine (valid_contract _ H valid_contract_execute_SRET).
     - refine (valid_contract _ H valid_contract_execute_MRET).
