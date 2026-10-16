@@ -528,6 +528,7 @@ Module Import RiscvPmpSpecification.
              sep_contract_postcondition   :=
                term_var "result_handle_mem_exception" = term_val ty.unit tt
                ∗ (( cur_privilege ↦ term_val ty_privilege Supervisor
+                    ∗ term_var p != term_val ty_privilege Machine
                     ∗ mcause ↦ term_var "mcause"
                     ∗ ∃ "spie", mstatus ↦ term_record rmstatus [term_var "mpp"; term_var p; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false]
                     ∗ medeleg ↦ term_var "medeleg"
@@ -572,6 +573,7 @@ Module Import RiscvPmpSpecification.
                           | KCTL_TRAP => MkAlt (pat_var e)
                                                   ((term_var "result_exception_handler" = term_var "stvec"
                                                   ∗ cur_privilege ↦ term_val ty_privilege Supervisor
+                                                  ∗ term_var cur_priv != term_val ty_privilege Machine
                                                   ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                                                   ∗ mcause ↦ term_var "mcause"
                                                   ∗ ∃ "spie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var cur_priv; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false]
@@ -594,6 +596,7 @@ Module Import RiscvPmpSpecification.
                                                   ∗ stvec ↦ term_var "stvec"))
                           | KCTL_SRET => MkAlt pat_unit
                                            (term_var "result_exception_handler" = term_var "sepc"
+                                            ∗             term_var "spp" != term_val ty_privilege Machine
                                             ∗             cur_privilege  ↦ term_var "spp"
                                             ∗             mcause         ↦ term_var "mcause"
                                             ∗ ∃ "sie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_val ty_privilege User; term_var "mpie"; term_val ty.bool true; term_var "mie"; term_var "sie" ]
@@ -636,6 +639,7 @@ Module Import RiscvPmpSpecification.
              sep_contract_postcondition   :=
                term_var "result_handle_illegal" = term_val ty.unit tt
                ∗ ((cur_privilege ↦ term_val ty_privilege Supervisor
+                   ∗ term_var p != term_val ty_privilege Machine
                    ∗ nextpc ↦ term_var "stvec"
                    ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                    ∗ mepc ↦ term_var "mepc"
@@ -659,7 +663,8 @@ Module Import RiscvPmpSpecification.
           {| sep_contract_logic_variables := [del_priv :: ty_privilege; "intr" :: ty.bool; c :: ty_exc_code; "pc" :: ty_xlenbits; p :: ty_privilege; "mcause" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "mepc" :: ty_xlenbits; "mtvec" :: ty_xlenbits; "scause" :: ty_xlenbits; "sepc" :: ty_xlenbits; "stvec" :: ty_xlenbits];
              sep_contract_localstore      := [term_var del_priv; term_var "intr"; term_var c; term_var "pc"];
              sep_contract_precondition    :=
-               cur_privilege ↦ term_var p
+               term_var del_priv != term_val ty_privilege User
+               ∗ cur_privilege ↦ term_var p
                ∗ mcause  ↦ term_var "mcause"
                ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie"]
                ∗ mepc    ↦ term_var "mepc"
@@ -681,6 +686,7 @@ Module Import RiscvPmpSpecification.
                                  ∗ sepc ↦ term_var "sepc"
                              | Supervisor =>
                                  term_var "result_trap_handler" = term_var "stvec"
+                                 ∗ term_var "p" != term_val ty_privilege Machine
                                  ∗ mcause ↦ term_var "mcause"
                                  ∗ ∃ "spie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false]
                                  ∗ mepc ↦ term_var "mepc"
