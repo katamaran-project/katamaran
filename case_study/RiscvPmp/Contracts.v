@@ -133,19 +133,33 @@ Module Import RiscvPmpSpecification.
                ∃ "mie", mie ↦ term_var "mie" ∗
                (  (* Executing normally *)
                        asn_pmp_entries (term_var "pmpentries") ∗
-                       cur_privilege ↦ term_var "m" ∗
                   ∃ v, nextpc        ↦ term_var v ∗
                        mtvec         ↦ term_var "mtvec" ∗
-                       stvec         ↦ term_var "stvec" ∗
-                       mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                        mepc          ↦ term_var "mepc" ∗
-                       sepc          ↦ term_var "sepc" ∗
                        mideleg       ↦ term_var "mideleg" ∗
                        medeleg       ↦ term_var "medeleg" ∗
                        mscratch      ↦ term_var "mscratch" ∗
                        mcause        ↦ term_var "mcause" ∗
-                       sscratch      ↦ term_var "sscratch" ∗
-                       scause        ↦ term_var "scause"
+                  (  (* Executing normally in M-mode. Nothing changes, no transitions, those are handled by the other disjuncts, so we rule them out here. *)
+                                 term_var "m" = term_val ty_privilege Machine ∗
+                                 cur_privilege ↦ term_val ty_privilege Machine ∗
+                                 stvec         ↦ term_var "stvec" ∗
+                                 mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
+                                 sepc          ↦ term_var "sepc" ∗
+                                 sscratch      ↦ term_var "sscratch" ∗
+                                 scause        ↦ term_var "scause"
+                   ∨
+                     (* Executing normally in U/S-mode. We do allow Supervisor accessible CSRs to be modified here. *)
+                                 term_var "m" != term_val ty_privilege Machine ∗
+                    asn.exist "new_m" ty_privilege (
+                                 cur_privilege ↦ term_var "new_m" ∗
+                                 term_var "new_m" != term_val ty_privilege Machine ∗
+                    ∃ "new_stvec", stvec       ↦ term_var "new_stvec" ∗
+                    ∃ "new_spp", ∃ "new_spie", ∃ "new_sie",
+                                 mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_var "mie"; term_var "new_sie" ] ∗
+                    ∃ "new_sepc", sepc         ↦ term_var "new_sepc" ∗
+                    ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
+                    ∃ "new_scause", scause     ↦ term_var "new_scause"))
                 ∨
                   (* Modified CSRs, Machine mode case (access to all CSRs) *)
                                  term_var "m"  =  term_val ty_privilege Machine ∗
@@ -165,24 +179,6 @@ Module Import RiscvPmpSpecification.
                   ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
                   ∃ "new_scause", scause ↦ term_var "new_scause"
                 ∨
-                  (* Modified CSRs, Supervisor mode case *)
-                                 term_var "m"  =  term_val ty_privilege Supervisor ∗
-                                 asn_pmp_entries (term_var "pmpentries") ∗
-                                 cur_privilege ↦ term_val ty_privilege Supervisor ∗
-                                 nextpc        ↦ term_var "npc" ∗
-                                 mtvec         ↦ term_var "mtvec" ∗
-                  ∃ "new_stvec", stvec         ↦ term_var "new_stvec" ∗
-                  ∃ "new_spp", ∃ "new_spie", ∃ "new_sie",
-                                 mstatus       ↦ term_record rmstatus [nenv term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_var "mie"; term_var "new_sie" ] ∗
-                                 mepc          ↦ term_var "mepc" ∗
-                  ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
-                                 mideleg ↦ term_var "mideleg" ∗
-                                 medeleg ↦ term_var "medeleg" ∗
-                                 mscratch ↦ term_var "mscratch" ∗
-                                 mcause ↦ term_var "mcause" ∗
-                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
-                  ∃ "new_scause", scause ↦ term_var "new_scause"
-                ∨
                   (* Trap occured -> Go into M-mode *)
                   asn_pmp_entries (term_var "pmpentries") ∗
                   cur_privilege ↦ (term_val ty_privilege Machine) ∗
@@ -198,24 +194,6 @@ Module Import RiscvPmpSpecification.
                   ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                               sscratch ↦ term_var "sscratch" ∗
-                  ∃ "scause", scause ↦ term_var "scause"
-                ∨
-                  (* Trap occured -> Go into S-mode *)
-                  asn_pmp_entries (term_var "pmpentries") ∗
-                  (term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∨ term_var "mideleg" != term_val ty_Minterrupts Minterrupts_zero) ∗
-                  cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
-                  nextpc        ↦ term_var "stvec" ∗
-                  mtvec         ↦ term_var "mtvec" ∗
-                  stvec         ↦ term_var "stvec" ∗
-                  ∃ "spie",
-                    mstatus     ↦ term_record rmstatus [nenv term_var "mpp"; term_var "m"; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false ] ∗
-                  mepc          ↦ term_var "mepc" ∗
-                  ∃ "sepc", sepc ↦ term_var "sepc" ∗
-                  mideleg       ↦ term_var "mideleg" ∗
-                  medeleg       ↦ term_var "medeleg" ∗
-                  mscratch ↦ term_var "mscratch" ∗
-                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
-                  sscratch ↦ term_var "sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause"
                 ∨
                   (* MRET = Recover *)
@@ -238,7 +216,7 @@ Module Import RiscvPmpSpecification.
                 ∨
                   (* SRET = Recover *)
                   asn_pmp_entries (term_var "pmpentries") ∗
-                  (term_var "m"  =  term_val ty_privilege Supervisor ∨ term_var "m" = term_val ty_privilege Machine) ∗
+                  term_var "m" = term_val ty_privilege Machine ∗
                   cur_privilege ↦ term_var "spp" ∗
                   nextpc        ↦ term_var "sepc" ∗
                   mtvec         ↦ term_var "mtvec" ∗
@@ -872,20 +850,34 @@ Module Import RiscvPmpSpecification.
                               asn_pmp_entries (term_var "pmpentries") ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
-                              cur_privilege ↦ term_var "m" ∗
                   ∃ v,       (pc        ↦ term_var v ∗
                               nextpc    ↦ term_var v) ∗
                               mtvec         ↦ term_var "mtvec" ∗
-                              stvec         ↦ term_var "stvec" ∗
-                              mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
                               mepc          ↦ term_var "mepc" ∗
-                              sepc          ↦ term_var "sepc" ∗
                               mideleg       ↦ term_var "mideleg" ∗
                               medeleg       ↦ term_var "medeleg" ∗
                               mscratch ↦ term_var "mscratch" ∗
                               mcause ↦ term_var "mcause" ∗
-                              sscratch ↦ term_var "sscratch" ∗
-                              scause ↦ term_var "scause"
+                  (  (* Executing normally in M-mode. Nothing changes, no transitions, those are handled by the other disjuncts, so we rule them out here. *)
+                                 term_var "m" = term_val ty_privilege Machine ∗
+                                 cur_privilege ↦ term_val ty_privilege Machine ∗
+                                 stvec         ↦ term_var "stvec" ∗
+                                 mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ] ∗
+                                 sepc          ↦ term_var "sepc" ∗
+                                 sscratch ↦ term_var "sscratch" ∗
+                                 scause ↦ term_var "scause"
+                   ∨
+                     (* Executing normally in U/S-mode. We do allow Supervisor accessible CSRs to be modified here. *)
+                                 term_var "m" != term_val ty_privilege Machine ∗
+                    asn.exist "new_m" ty_privilege (
+                                 cur_privilege ↦ term_var "new_m" ∗
+                                 term_var "new_m" != term_val ty_privilege Machine ∗
+                    ∃ "new_stvec", stvec       ↦ term_var "new_stvec" ∗
+                    ∃ "new_spp", ∃ "new_spie", ∃ "new_sie",
+                                 mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_var "mie"; term_var "new_sie" ] ∗
+                    ∃ "new_sepc", sepc         ↦ term_var "new_sepc" ∗
+                    ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
+                    ∃ "new_scause", scause     ↦ term_var "new_scause"))
                 ∨
                   (* Modified CSRs, Machine mode case (access to all CSRs) *)
                                  asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
@@ -908,27 +900,6 @@ Module Import RiscvPmpSpecification.
                   ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
                   ∃ "new_scause", scause ↦ term_var "new_scause"
                 ∨
-                  (* Modified CSRs, Supervisor mode case *)
-                                 asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
-                                 asn_gprs ∗
-                                 asn_pmp_entries (term_var "pmpentries") ∗
-                                 term_var "m"  =  term_val ty_privilege Supervisor ∗
-                  ∃ "mie",       mie           ↦ term_var "mie" ∗
-                  ∃ "mip",       mip           ↦ term_var "mip" ∗
-                                 cur_privilege ↦ term_val ty_privilege Supervisor ∗
-                  ∃ v, (pc                ↦ term_var v ∗ (* tick, nextpc + 4 *)
-                        nextpc            ↦ term_var v) ∗
-                  mtvec         ↦ term_var "mtvec" ∗
-                  ∃ "new_spp", ∃ "new_spie", ∃ "new_sie", mstatus ↦ term_record rmstatus [ term_var "mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_var "mie"; term_var "new_sie" ] ∗
-                  mepc          ↦ term_var "mepc" ∗
-                  ∃ "new_sepc",  sepc          ↦ term_var "new_sepc" ∗
-                  mideleg       ↦ term_var "mideleg" ∗
-                  medeleg       ↦ term_var "medeleg" ∗
-                  mscratch ↦ term_var "mscratch" ∗
-                  mcause ↦ term_var "mcause" ∗
-                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
-                  ∃ "new_scause", scause ↦ term_var "new_scause"
-                ∨
                   (* Trap occured -> Go into M-mode *)
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
                   asn_gprs ∗
@@ -946,28 +917,6 @@ Module Import RiscvPmpSpecification.
                   mideleg       ↦ term_var "mideleg" ∗
                   medeleg       ↦ term_var "medeleg" ∗
                   ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
-                  ∃ "mcause", mcause ↦ term_var "mcause" ∗
-                              sscratch ↦ term_var "sscratch" ∗
-                  ∃ "scause", scause ↦ term_var "scause"
-                ∨
-                  (* Trap occured -> Go into S-mode *)
-                  asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
-                  asn_gprs ∗
-                  asn_pmp_entries (term_var "pmpentries") ∗
-                  (term_var "medeleg" != term_val ty_Medeleg Medeleg_zero ∨ term_var "mideleg" != term_val ty_Minterrupts Minterrupts_zero) ∗
-                  ∃ "mie",    mie           ↦ term_var "mie" ∗
-                  ∃ "mip",    mip           ↦ term_var "mip" ∗
-                  cur_privilege ↦ (term_val ty_privilege Supervisor) ∗
-                  pc            ↦ term_var "stvec" ∗
-                  nextpc        ↦ term_var "stvec" ∗
-                  mtvec         ↦ term_var "mtvec" ∗
-                  stvec         ↦ term_var "stvec" ∗
-                  ∃ "spie", mstatus       ↦ term_record rmstatus [ term_var "mpp"; term_var "m"; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false ] ∗
-                  mepc          ↦ term_var "mepc" ∗
-                  ∃ "sepc", sepc ↦ term_var "sepc" ∗
-                  mideleg       ↦ term_var "mideleg" ∗
-                  medeleg       ↦ term_var "medeleg" ∗
-                  mscratch ↦ term_var "mscratch" ∗
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
                               sscratch ↦ term_var "sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause"
@@ -998,7 +947,7 @@ Module Import RiscvPmpSpecification.
                   asn_pmp_addr_access (term_var "pmpentries") (term_var "m") ∗
                   asn_gprs ∗
                   asn_pmp_entries (term_var "pmpentries") ∗
-                  (term_var "m" = term_val ty_privilege Supervisor ∨ term_var "m"  =  term_val ty_privilege Machine) ∗
+                  term_var "m"  =  term_val ty_privilege Machine ∗
                   ∃ "mie",    mie           ↦ term_var "mie" ∗
                   ∃ "mip",    mip           ↦ term_var "mip" ∗
                   cur_privilege ↦ term_var "spp" ∗
@@ -1707,13 +1656,9 @@ Module RiscvPmpValidContracts.
     destruct H; now vm_compute.
   Qed.
 
-  (* TODO: investigate why we have a non-trivial VC at the end (but still quite
-           easy to solve the VC). *)
   Lemma valid_contract_step : ValidContractDebugWithFuel (InlineMoreLevels 4) step.
   Proof. (* now vm_compute. Qed. *)
-    apply Symbolic.validcontract_with_erasure_and_fuel_sound; vm_compute.
-    constructor; cbn; intros.
-    repeat split; intros; auto.
+    apply Symbolic.validcontract_with_erasure_and_fuel_sound; now vm_compute.
   Qed.
 
   Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
