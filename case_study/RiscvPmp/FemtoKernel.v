@@ -507,8 +507,7 @@ Module inv := invariants.
      *)
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      Time vm_compute.
-      Import Erasure.notations.
+      vm_compute.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual.
     Qed.
