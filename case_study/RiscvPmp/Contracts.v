@@ -621,12 +621,12 @@ Module Import RiscvPmpSpecification.
           |}.
 
         Definition sep_contract_handle_illegal : SepContractFun handle_illegal :=
-          {| sep_contract_logic_variables := [p :: ty_privilege; "pc" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "medeleg" :: ty_Medeleg];
+          {| sep_contract_logic_variables := [p :: ty_privilege; "pc" :: ty_xlenbits; tvec :: ty_xlenbits; "stvec" :: ty_xlenbits; "mepc" :: ty_xlenbits; "sepc" :: ty_xlenbits; "mpp" :: ty_privilege; "spp" :: ty_privilege; "mpie" :: ty.bool; "spie" :: ty.bool; "mie" :: ty.bool; "sie" :: ty.bool; "medeleg" :: ty_Medeleg; "mcause" :: ty_xlenbits];
              sep_contract_localstore      := env.nil;
              sep_contract_precondition    :=
                cur_privilege ↦ term_var p
                ∗ pc ↦ term_var "pc"
-               ∗ ∃ "mcause_val", mcause  ↦ term_var "mcause_val"
+               ∗ mcause  ↦ term_var "mcause"
                ∗ mstatus ↦ term_record rmstatus [term_var "mpp"; term_var "spp"; term_var "mpie"; term_var "spie"; term_var "mie"; term_var "sie" ]
                ∗ medeleg ↦ term_var "medeleg"
                ∗ mepc ↦ term_var "mepc"
@@ -644,16 +644,17 @@ Module Import RiscvPmpSpecification.
                    ∗ term_var "medeleg" != term_val ty_Medeleg Medeleg_zero
                    ∗ mepc ↦ term_var "mepc"
                    ∗ sepc ↦ term_var "pc"
+                   ∗ mcause ↦ term_var "mcause"
                    ∗ ∃ "spie", mstatus ↦ term_record rmstatus [nenv term_var "mpp"; term_var p; term_var "mpie"; term_var "spie"; term_var "mie"; term_val ty.bool false])
                  ∨
                    (cur_privilege ↦ term_val ty_privilege Machine
                    ∗ nextpc ↦ term_var tvec
                    ∗ mepc ↦ term_var "pc"
                    ∗ sepc ↦ term_var "sepc"
+                   ∗ ∃ "mcause", mcause ↦ term_var "mcause"
                    ∗ ∃ "mpie", mstatus ↦ term_record rmstatus [nenv term_var p; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie"]))
                ∗ pc ↦ term_var "pc"
                ∗ medeleg ↦ term_var "medeleg"
-               ∗ ∃ "mcause", mcause ↦ term_var "mcause"
                ∗ mtvec ↦ term_var tvec
                ∗ stvec ↦ term_var "stvec"
                ∗ ∃ "scause", scause ↦ term_var "scause"
