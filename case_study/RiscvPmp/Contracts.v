@@ -184,16 +184,16 @@ Module Import RiscvPmpSpecification.
                   cur_privilege ↦ (term_val ty_privilege Machine) ∗
                   nextpc        ↦ term_var "mtvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
-                  stvec         ↦ term_var "stvec" ∗
-                  ∃ "mpie",
-                    mstatus     ↦ term_record rmstatus [nenv term_var "m"; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie" ] ∗
+                  ∃ "new_stvec", stvec ↦ term_var "new_stvec" ∗
+                  ∃ "new_spp", ∃ "mpie", ∃ "new_spie", ∃ "new_sie", ∃ "new_mpp", (
+                    mstatus ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ]) ∗
                   ∃ "mepc", mepc          ↦ term_var "mepc" ∗
-                  sepc          ↦ term_var "sepc" ∗
+                  ∃ "new_sepc", sepc ↦ term_var "new_sepc" ∗
                   mideleg ↦ term_var "mideleg" ∗
                   medeleg ↦ term_var "medeleg" ∗
                   ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
-                              sscratch ↦ term_var "sscratch" ∗
+                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause"
                 ∨
                   (* MRET = Recover *)
@@ -917,15 +917,16 @@ Module Import RiscvPmpSpecification.
                   pc            ↦ term_var "mtvec" ∗
                   nextpc        ↦ term_var "mtvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
-                  stvec         ↦ term_var "stvec" ∗
-                  ∃ "mpie", mstatus       ↦ term_record rmstatus [nenv term_var "m"; term_var "spp"; term_var "mpie"; term_var "spie"; term_val ty.bool false; term_var "sie" ] ∗
+                  ∃ "new_stvec", stvec ↦ term_var "new_stvec" ∗
+                  ∃ "new_spp", ∃ "mpie", ∃ "new_spie", ∃ "new_sie", ∃ "new_mpp", (
+                    mstatus ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ]) ∗
                   ∃ "mepc", mepc          ↦ term_var "mepc" ∗
-                  sepc          ↦ term_var "sepc" ∗
+                  ∃ "new_sepc", sepc ↦ term_var "new_sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
                   medeleg       ↦ term_var "medeleg" ∗
                   ∃ "mscratch", mscratch ↦ term_var "mscratch" ∗
                   ∃ "mcause", mcause ↦ term_var "mcause" ∗
-                              sscratch ↦ term_var "sscratch" ∗
+                  ∃ "new_sscratch", sscratch ↦ term_var "new_sscratch" ∗
                   ∃ "scause", scause ↦ term_var "scause"
                 ∨
                   (* MRET = Recover *)
