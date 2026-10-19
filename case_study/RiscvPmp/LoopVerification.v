@@ -80,54 +80,66 @@ Import RiscvPmpProgramLogic.
 Module ArchState.
   Import env.notations.
 
-  Record ArchState :=
-    mkArchState
-      { m          : Privilege
-      ; mtvec      : Xlenbits
-      ; stvec      : Xlenbits
+  Record MState :=
+    mkMState
+      { mtvec      : Xlenbits
       ; pmpentries : list (Pmpcfg_ent * Xlenbits)
       ; mpp        : Privilege
-      ; spp        : Privilege
-      ; pc         : Xlenbits
       ; mcause     : Xlenbits
       ; mscratch   : Xlenbits
       ; mepc       : Xlenbits
-      ; scause     : Xlenbits
-      ; sscratch   : Xlenbits
-      ; sepc       : Xlenbits
       ; mpie       : bool
-      ; spie       : bool
       ; mie        : bool
-      ; sie        : bool
       ; mideleg    : Minterrupts
       ; medeleg    : RMedeleg
       }.
 
+  Record SState :=
+    mkSState
+      { stvec    : Xlenbits
+      ; spp      : Privilege
+      ; scause   : Xlenbits
+      ; sscratch : Xlenbits
+      ; sepc     : Xlenbits
+      ; spie     : bool
+      ; sie      : bool
+      }.
+
+  Record ArchState :=
+    mkArchState
+      { m      : Privilege
+      ; mstate : MState
+      ; sstate : SState
+      ; pc     : Xlenbits
+      }.
+
   Definition archstate_valuation (archstate : ArchState) : Valuation (sep_contract_logic_variables sep_contract_step) :=
-    [env].["m"∷ty.enum privilege ↦ m archstate].["mtvec"∷ty.bvec 32 ↦ mtvec archstate]
-    .["stvec"∷ty.bvec 32 ↦ stvec archstate]
-    .["pmpentries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ pmpentries archstate]
-    .["mpp"∷ty.enum privilege ↦ mpp archstate].["spp"∷ty.enum privilege ↦ spp archstate]
-    .["pc"∷ty.bvec 32 ↦ pc archstate].["mcause"∷ty.bvec 32 ↦ mcause archstate]
-    .["mscratch"∷ty.bvec 32 ↦ mscratch archstate].["mepc"∷ty.bvec 32 ↦ mepc archstate]
-    .["scause"∷ty.bvec 32 ↦ scause archstate].["sscratch"∷ty.bvec 32 ↦ sscratch archstate]
-    .["sepc"∷ty.bvec 32 ↦ sepc archstate].["mpie"∷ty.bool ↦ mpie archstate] 
-    .["spie"∷ty.bool ↦ spie archstate].["mie"∷ty.bool ↦ mie archstate]
-    .["sie"∷ty.bool ↦ sie archstate]
-    .["mideleg"∷ty_Minterrupts ↦ mideleg archstate]
-    .["medeleg"∷ty_Medeleg ↦ medeleg archstate].
+    let ms := mstate archstate in
+    let ss := sstate archstate in
+    [env].["m"∷ty.enum privilege ↦ m archstate].["mtvec"∷ty.bvec 32 ↦ mtvec ms]
+    .["stvec"∷ty.bvec 32 ↦ stvec ss]
+    .["pmpentries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ pmpentries ms]
+    .["mpp"∷ty.enum privilege ↦ mpp ms].["spp"∷ty.enum privilege ↦ spp ss]
+    .["pc"∷ty.bvec 32 ↦ pc archstate].["mcause"∷ty.bvec 32 ↦ mcause ms]
+    .["mscratch"∷ty.bvec 32 ↦ mscratch ms].["mepc"∷ty.bvec 32 ↦ mepc ms]
+    .["scause"∷ty.bvec 32 ↦ scause ss].["sscratch"∷ty.bvec 32 ↦ sscratch ss]
+    .["sepc"∷ty.bvec 32 ↦ sepc ss].["mpie"∷ty.bool ↦ mpie ms]
+    .["spie"∷ty.bool ↦ spie ss].["mie"∷ty.bool ↦ mie ms]
+    .["sie"∷ty.bool ↦ sie ss]
+    .["mideleg"∷ty_Minterrupts ↦ mideleg ms]
+    .["medeleg"∷ty_Medeleg ↦ medeleg ms].
 
   Definition archstate_update_pc (archstate : ArchState) (pc' : Xlenbits) : ArchState :=
-    match archstate with
-    | mkArchState m mtvec stvec pmpentries mpp spp pc mcause mscratch mepc scause sscratch sepc mpie spie mie sie mideleg medeleg =>
-      mkArchState m mtvec stvec pmpentries mpp spp pc' mcause mscratch mepc scause sscratch sepc mpie spie mie sie mideleg medeleg
-    end.
+    mkArchState (m archstate) (mstate archstate) (sstate archstate) pc'.
+
+  Definition archstate_update_m (archstate : ArchState) (m' : Privilege) : ArchState :=
+    mkArchState m' (mstate archstate) (sstate archstate) (pc archstate).
 End ArchState.
 
 (* We only import the record type and the valuation conversion function.
    Record fields will need the qualified name, for example: ArchState.mepc to access
    the mepc value. This avoids naming conflicts with the registers. *)
-Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
+Import ArchState (ArchState, archstate_valuation, archstate_update_pc, archstate_update_m).
 
 Section Loop.
   Context `{sg : sailGS Σ} {rG : trivGS Σ}.
