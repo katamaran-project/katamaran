@@ -185,8 +185,17 @@ Module Import RiscvPmpSpecification.
                   nextpc        ↦ term_var "mtvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
                   ∃ "new_stvec", stvec ↦ term_var "new_stvec" ∗
-                  ∃ "new_spp", ∃ "mpie", ∃ "new_spie", ∃ "new_sie", ∃ "new_mpp", (
-                    mstatus ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ]) ∗
+                  ∃ "new_spp", ∃ "mpie", ∃ "new_spie", ∃ "new_sie",
+                    asn.match_enum privilege (term_var "m")
+                    (fun K => match K with
+                              (* Trap from M-mode: MPP is M-mode (reentrant trap M->M) *)
+                              | Machine =>
+                                mstatus ↦ term_record rmstatus [nenv term_val ty_privilege Machine; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ]
+                              (* Trap from S/U-mode: MPP is some S/U privilege level *)
+                              | _       => ∃ "new_mpp", (
+                                mstatus ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ] ∗
+                                term_var "new_mpp" != term_val ty_privilege Machine)
+                              end) ∗
                   ∃ "mepc", mepc          ↦ term_var "mepc" ∗
                   ∃ "new_sepc", sepc ↦ term_var "new_sepc" ∗
                   mideleg ↦ term_var "mideleg" ∗
@@ -918,8 +927,17 @@ Module Import RiscvPmpSpecification.
                   nextpc        ↦ term_var "mtvec" ∗
                   mtvec         ↦ term_var "mtvec" ∗
                   ∃ "new_stvec", stvec ↦ term_var "new_stvec" ∗
-                  ∃ "new_spp", ∃ "mpie", ∃ "new_spie", ∃ "new_sie", ∃ "new_mpp", (
-                    mstatus ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ]) ∗
+                  ∃ "new_spp", ∃ "mpie", ∃ "new_spie", ∃ "new_sie",
+                    asn.match_enum privilege (term_var "m")
+                    (fun K => match K with
+                              (* Trap from M-mode: MPP is M-mode (reentrant trap M->M) *)
+                              | Machine =>
+                                mstatus ↦ term_record rmstatus [nenv term_val ty_privilege Machine; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ]
+                              (* Trap from S/U-mode: MPP is some S/U privilege level *)
+                              | _       => ∃ "new_mpp", (
+                                mstatus ↦ term_record rmstatus [nenv term_var "new_mpp"; term_var "new_spp"; term_var "mpie"; term_var "new_spie"; term_val ty.bool false; term_var "new_sie" ] ∗
+                                term_var "new_mpp" != term_val ty_privilege Machine)
+                              end) ∗
                   ∃ "mepc", mepc          ↦ term_var "mepc" ∗
                   ∃ "new_sepc", sepc ↦ term_var "new_sepc" ∗
                   mideleg       ↦ term_var "mideleg" ∗
