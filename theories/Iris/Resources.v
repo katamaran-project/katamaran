@@ -41,8 +41,6 @@ From Katamaran Require Import
      Prelude
      Semantics.
 
-Require Import Stdlib.Program.Equality.
-
 Import ctx.notations.
 Import env.notations.
 Set Implicit Arguments.
