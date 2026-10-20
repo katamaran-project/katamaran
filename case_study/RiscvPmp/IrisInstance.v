@@ -348,6 +348,14 @@ Module RiscvPmpIrisInstancePredicates.
         - now rewrite pmp_check_aux_s_u_eq in Hpmp.
       Qed.
 
+      Lemma interp_pmp_addr_access_not_machine (entries : list PmpEntryCfg) (m m' : Privilege) :
+        m ≠ Machine -> m' ≠ Machine ->
+        interp_pmp_addr_access entries m ⊢ interp_pmp_addr_access entries m'.
+      Proof.
+        intros Hm Hm'; destruct m, m'; try congruence;
+          by rewrite ?interp_pmp_addr_access_s_u_eq.
+      Qed.
+
       Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
     End WithAddrs.
