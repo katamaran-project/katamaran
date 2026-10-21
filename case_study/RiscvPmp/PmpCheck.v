@@ -164,6 +164,38 @@ Section Implementation.
     pmp_check_aux a width bv.zero entries p acc.
 End Implementation.
 
+Section PmpCheckPrivilege.
+  (* This section contains lemmas that reason about the privileges used for the
+     PMP check algorithm. Essentially, we know that Supervisor and User mode
+     exhibit the same authority, and only Machine mode can have more authority. *)
+
+  Lemma pmp_get_RWX_s_u_eq : ∀ (cfg : Pmpcfg_ent),
+      pmp_get_RWX cfg User = pmp_get_RWX cfg Supervisor.
+  Proof. reflexivity. Qed.
+
+  Lemma pmp_match_entry_priv_irrelevant :
+    ∀ (a width : Xlenbits) (p1 p2 : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits),
+      pmp_match_entry a width p1 cfg lo hi = pmp_match_entry a width p2 cfg lo hi.
+  Proof. reflexivity. Qed.
+
+  Lemma pmp_check_rec_s_u_eq :
+    ∀ (a width lo : Xlenbits) (entries : list PmpEntryCfg) (acc : AccessType),
+      pmp_check_rec a width lo entries User acc = pmp_check_rec a width lo entries Supervisor acc.
+  Proof.
+    intros a width lo entries. revert a width lo.
+    induction entries as [|[cfg0 addr0] entries IHentries];
+      intros a width lo acc; cbn; auto.
+    rewrite (pmp_match_entry_priv_irrelevant _ _ User Supervisor _ _ _).
+    destruct pmp_match_entry; auto.
+  Qed.
+
+  Lemma pmp_check_aux_s_u_eq :
+    ∀ (a width lo : Xlenbits) (entries : list PmpEntryCfg) (acc : AccessType),
+      pmp_check_aux a width lo entries User acc = pmp_check_aux a width lo entries Supervisor acc.
+  Proof. now apply pmp_check_rec_s_u_eq. Qed.
+
+End PmpCheckPrivilege.
+
 Section AddrMatchType.
   Lemma addr_match_type_neq_off_cases :
     ∀ a, a ≠ OFF -> a = TOR.
