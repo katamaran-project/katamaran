@@ -168,6 +168,27 @@ gate at the end (feedback: light gates).
 - GATE 0: both listings committed; the unmodified/hardened diff in branches is
   exactly the known `muladd_small` sites (or the new ones are listed).
 
+**GATE 0 PASSED, 2026-10-21** (branch `issue/rsa`). Delivered:
+`tools/bearssl/build.sh` (pins `7bea48e`, both variants, `.s` + `.o`),
+`tools/bearssl/hardening.patch` (reconstructed from PLAN-muladd-full GATE 1's
+prose: `opaque()` in `inner.h`; `q`'s two `EQ`s, `tb`'s `EQ`, `over`/`under`
+in `i31_muladd.c`; `ctl = opaque(ctl)` in `i31_add.c`/`i31_sub.c`),
+`tools/bearssl/listings/{unmodified,hardened}/`, and `asm_to_ast.py --objdump`
+(translates `llvm-objdump -d --no-show-raw-insn` of a LINKED ELF; labels per
+address; emits `<name>_<fn>_off : N`) plus the `MUL` naming fix.
+Only `i31_muladd/add/sub.s` differ between the variants. Branches:
+- `muladd_small` unmodified 7 → hardened 5. The two removed are BOTH secret:
+  `bne s8, s3` = `EQ(a0, b0)` in the q-step (our old `muladd_q` site) and
+  `beq a4, a7` (`unmodified/i31_muladd.s:185`) = `tb = MUX(EQ(nxw, mw), …)`
+  in the q·m loop — the paper's own Table-11 site. So BOTH reproduce on
+  clang 18 rv32im -O2. The 5 left are public (`m_bitlen == 0`,
+  `m_bitlen <= 31`, `mblr == 0`, two loop edges).
+- `add`/`sub`: 2 branches each in both variants (header test, back-edge);
+  the barrier changes no instruction count (29 → 29).
+- Link check (spike S1's program, `ld.lld --relax`): the first call became
+  `jal`, the SECOND became a tail call `j br_i31_sub` — so S1 also exercises a
+  callee returning to its caller's `ra`, not to the call site.
+
 ### Phase 1 — Spike S1: call-as-block (the risk everything rests on)
 - Target: the real tail of `br_i31_montymul`,
   `br_i31_sub(d, m, NEQ(dh,0) | NOT(br_i31_sub(d, m, 0)))` — two calls to a
@@ -280,3 +301,8 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-21 | decisions D1–D4 | 18:18:52 | ~18:27 | ~8 | — | — | — | — | — | user time |
 | 2026-10-21 | byte-memory status + write plan | ~18:27 | 18:31:02 | ~4 | 0 | ~4 | — | — | — | |
 | | **planning total** | 18:13:32 | 18:31:02 | 17.5 | ~0.2 | ~9 | | | | + ~8 min user |
+| 2026-10-21 | Phase 0 (build script, patch, listings, `--objdump`, GATE 0) | 18:34:12 | 22:37:29 | 243 | <0.5 | **not measured** | — | ~60 tool + ~70 script, 71 patch | 0 | an idle gap of unknown length (approval prompt or pause) sits inside this step; ~25 tool calls. From here on: a `date` stamp every few calls, so a gap is bounded |
+
+Protocol amendment (2026-10-21): wall time between two stamps is only
+attributable to authoring if no idle gap can hide in it, so stamp at least
+every ~5 tool calls and before/after anything that may wait on approval.

@@ -319,6 +319,47 @@ def parse(text):
     return canon
 
 
+OBJDUMP_SYM_RE = re.compile(r'^([0-9a-f]+) <([^>]+)>:$')
+OBJDUMP_INSN_RE = re.compile(r'^\s*([0-9a-f]+):\s+(\S+)\s*(.*)$')
+OBJDUMP_TARGET_RE = re.compile(r'(?:^|,\s*)(0x[0-9a-f]+|[0-9a-f]+) <[^>]+>$')
+HEX_RE = re.compile(r'(-?)0x([0-9a-f]+)')
+
+
+def objdump_to_asm(text):
+    """Rewrite `llvm-objdump -d --no-show-raw-insn` of a LINKED program into
+    the listing syntax `parse` reads: a label `L_<addr>:` before every
+    instruction, each branch/jump target `0x7c <.LBB0_2>` replaced by its
+    label, hex immediates made decimal.  Returns (listing, functions) where
+    functions maps each non-local symbol to its byte offset from the first
+    instruction.  Working from the linked binary rather than per-function .s
+    files means the linker's call relaxation (`call` -> `jal`, `tail` -> `j`)
+    has already decided the real instructions."""
+    out, functions, base = [], {}, None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        msym = OBJDUMP_SYM_RE.match(line)
+        if msym:
+            if not msym.group(2).startswith('.L'):
+                functions[msym.group(2)] = int(msym.group(1), 16)
+            continue
+        mi = OBJDUMP_INSN_RE.match(line)
+        if not mi:
+            continue
+        addr, mnem, ops = int(mi.group(1), 16), mi.group(2), mi.group(3).strip()
+        if base is None:
+            base = addr
+        mt = OBJDUMP_TARGET_RE.search(ops)
+        if mt:
+            label = f"L_{int(mt.group(1), 16):x}"
+            ops = ops[:mt.start(1)] + label
+        ops = HEX_RE.sub(lambda m: str(int(m.group(1) + m.group(2), 16)), ops)
+        out.append(f"L_{addr:x}:")
+        out.append(f"\t{mnem}\t{ops}\t# {addr:#x}: {mi.group(2)} {mi.group(3).strip()}")
+    if base is None:
+        raise AsmError("no instructions found in objdump input")
+    return '\n'.join(out), {f: a - base for f, a in functions.items()}
+
+
 def bv(n):
     # Parenthesize negative literals: `bv.of_Z -1` parses in Coq as the
     # infix expression `bv.of_Z - 1`, not application to a negative literal.
@@ -347,9 +388,12 @@ def emit_instr(instr):
     if k == 'STORE':
         return f"STORE {bv(instr['imm'])} {instr['rs2']} {instr['rs1']} {instr['width']}"
     if k == 'MUL':
-        b = lambda x: 'true' if x else 'false'
-        return (f"MUL {instr['rs2']} {instr['rs1']} {instr['rd']} "
-                f"{b(instr['high'])} {b(instr['signed1'])} {b(instr['signed2'])}")
+        # Spec.v's `Assembly` (exported by Example/Prelude.v) SHADOWS Base.MUL
+        # with 3-argument per-opcode constructors, `rd rs1 rs2` like the
+        # assembly; emit those (PLAN-muladd-full.md GATE 2).
+        names = {v: k for k, v in MUL_OPS.items()}
+        op = names[(instr['high'], instr['signed1'], instr['signed2'])].upper()
+        return f"{op} {instr['rd']} {instr['rs1']} {instr['rs2']}"
     if k == 'NULLARY':
         return instr['op']
     raise AssertionError(k)
@@ -364,7 +408,7 @@ def used_registers(canon):
     return sorted(regs, key=lambda r: NAME_TO_X[r])
 
 
-def render(canon, name, drop_ret):
+def render(canon, name, drop_ret, functions=None):
     if drop_ret and canon and canon[-1][0] == {'kind': 'JALR', 'rd': 'zero', 'rs1': 'ra', 'imm': 0}:
         canon = canon[:-1]
 
@@ -385,6 +429,11 @@ def render(canon, name, drop_ret):
         prefix = '  [ ' if i == 0 else '  ; '
         lines.append(f"{prefix}{emit_instr(instr)}   (* {comment} *)")
     lines.append("  ].")
+    if functions:
+        lines.append("")
+        lines.append(f"(* Byte offset of each function's first instruction in {name}_instrs. *)")
+        for f, off in sorted(functions.items(), key=lambda kv: kv[1]):
+            lines.append(f"Definition {name}_{f}_off : N := {off}.")
     return '\n'.join(lines)
 
 
@@ -398,16 +447,24 @@ def main():
                           "sexec_cfg_addr can't step through a symbolic jump target, "
                           "so straight-line blocks are usually verified up to the ret "
                           "instead of through it")
+    ap.add_argument('--objdump', action='store_true',
+                     help="input is `llvm-objdump -d --no-show-raw-insn` of a "
+                          "LINKED program (several functions, calls resolved "
+                          "to jal/j by the linker); also emits each "
+                          "function's byte offset")
     args = ap.parse_args()
 
     text = open(args.input).read() if args.input else sys.stdin.read()
+    functions = None
     try:
+        if args.objdump:
+            text, functions = objdump_to_asm(text)
         canon = parse(text)
     except AsmError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(render(canon, args.name, args.drop_ret))
+    print(render(canon, args.name, args.drop_ret, functions))
 
 
 if __name__ == '__main__':
