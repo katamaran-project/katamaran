@@ -1,3 +1,5 @@
+(dump-nanosail-ast)
+
 (pretty-print-lists)
 
 ;(annotate-functions-with-ast)
@@ -22,8 +24,12 @@
     (= "reverse_bits_in_byte" identifier)
     (= "log2" identifier)
     (= "zeros_implicit" identifier)
+    (= "ones" identifier)
     (contains? '(
                  "sep"
+                 "sail_zeros"
+                 "sail_ones"
+                 "slice_mask"
                  )
                identifier))))
 
