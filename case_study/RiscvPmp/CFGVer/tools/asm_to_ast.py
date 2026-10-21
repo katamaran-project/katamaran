@@ -357,6 +357,9 @@ def objdump_to_asm(text):
         out.append(f"\t{mnem}\t{ops}\t# {addr:#x}: {mi.group(2)} {mi.group(3).strip()}")
     if base is None:
         raise AsmError("no instructions found in objdump input")
+    # one past the last instruction: the generator's fall-through exit, so a
+    # `j _etext` (a harness leaving the program) resolves to it
+    out.append(f"L_{addr + 4:x}:")
     return '\n'.join(out), {f: a - base for f, a in functions.items()}
 
 
@@ -408,7 +411,15 @@ def used_registers(canon):
     return sorted(regs, key=lambda r: NAME_TO_X[r])
 
 
-def render(canon, name, drop_ret, functions=None):
+# Tables.v's register aliases (X1 is ra, X2 is sp); the rest by ABI name.
+TABLES_ALIAS = {'zero': 'X0', 'ra': 'X1', 'sp': 'X2', 'gp': 'X3', 'tp': 'X4'}
+
+
+def tables_alias(r):
+    return TABLES_ALIAS.get(r, r.upper())
+
+
+def render(canon, name, drop_ret, functions=None, aliases=False):
     if drop_ret and canon and canon[-1][0] == {'kind': 'JALR', 'rd': 'zero', 'rs1': 'ra', 'imm': 0}:
         canon = canon[:-1]
 
@@ -421,8 +432,14 @@ def render(canon, name, drop_ret, functions=None):
     lines.append("   first; otherwise bare numerals fall back to Bitvector's `bitstring`")
     lines.append("   Number Notation and fail to elaborate. *)")
     lines.append("")
-    for r in used_registers(canon):
-        lines.append(f"Definition {r} : RegIdx := bv.of_nat {NAME_TO_X[r]}.")
+    if aliases:
+        # use Tables.v's names instead of defining our own (S4..S11 are not
+        # there yet: add them to Tables.v when a listing needs them)
+        canon = [({k: (tables_alias(v) if k in ('rd', 'rs1', 'rs2') else v)
+                   for k, v in instr.items()}, c) for instr, c in canon]
+    else:
+        for r in used_registers(canon):
+            lines.append(f"Definition {r} : RegIdx := bv.of_nat {NAME_TO_X[r]}.")
     lines.append("")
     lines.append(f"Definition {name}_instrs : list AST :=")
     for i, (instr, comment) in enumerate(canon):
@@ -452,6 +469,9 @@ def main():
                           "LINKED program (several functions, calls resolved "
                           "to jal/j by the linker); also emits each "
                           "function's byte offset")
+    ap.add_argument('--tables-aliases', action='store_true',
+                     help="name registers by Tables.v's aliases (X0, X1 = ra, "
+                          "X2 = sp, A0, T0, S0, ...) and define none")
     args = ap.parse_args()
 
     text = open(args.input).read() if args.input else sys.stdin.read()
@@ -464,7 +484,7 @@ def main():
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(render(canon, args.name, args.drop_ret, functions))
+    print(render(canon, args.name, args.drop_ret, functions, args.tables_aliases))
 
 
 if __name__ == '__main__':

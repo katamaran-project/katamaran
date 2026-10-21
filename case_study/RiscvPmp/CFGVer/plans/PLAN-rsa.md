@@ -203,6 +203,34 @@ Only `i31_muladd/add/sub.s` differ between the variants. Branches:
 - GATE 1: green + axiom-clean, OR a written reason it cannot work (then STOP
   and revisit D1 with Emiel — the fallback is `-flto`).
 
+**Status 2026-10-21 (in progress, `issue/rsa`).** Split into S1a (harness
+`[jal ra, br_i31_sub ; j _etext]` + the real hardened `br_i31_sub`, no
+caller frame) and S1b (the real `rsa_spike_sub2` caller: frame, callee-saved
+registers, a TAIL call). Done so far:
+- Facts checked: `Machine.v`'s JALR is `pc := rs1 + sext imm` (no `& ~1`, no
+  alignment check), and `is_exit` is a syntactic `Term_eqb` after `peval`, so
+  a callee stops exactly at `ret` and its VC needs NO "r ∉ code" premise.
+  `blockSound`/`blkValid_of_loop_contract` accept any exit term; the only
+  exit-specific obligation is `etable_rel` (the exit is a SyncVal).
+- `GenSegment.gen_callee_contract` (exit := the return-address term, `secLeak
+  ret` put in front of `extra_pre`, defined THROUGH gen_seg_contract so its
+  precondition is a segment's by conversion) and
+  `GenCompose.{callee_pre_ret, blockFaithful_of_callee, blkValid_of_callee}`.
+  Compiled (heavy chain rebuilt: its `.vo`s predated the 10-15 imports merge).
+- `Example/Rsa/RsaSpikeSub.v`: `valid_sub_loop` (the word loop on muladd's
+  LoopN template, unchanged) **green first try, 9.2 s**.
+- **OPEN, blocking:** `valid_sub` (the callee VC) fails at the loop block's
+  entry: the angelic match of LoopN's PRIVATE source array
+  `[4 + (eX − 4·mw); T; eX]` errors for every heap alternative, although the
+  heap holds `arr false 4 4 [4 + xa; T; xa + 4·mw]` (dump: the
+  `DebugCFGVerifierContract` recipe, scratchpad `dbg1.log`). Found on the way:
+  the solver, given `4 + (eX − 4mw) = 4 + xa`, eliminates the PARAMETER `xa`
+  (`tri_cons "xa" (eX − 4mw)`) rather than the evar `eX`. Four hypotheses
+  tested and REFUTED in a preamble `combined_solver` harness: `sext h` vs `h`
+  (fixed anyway, muladd's spelling), refutation of the start equation, of the
+  end equation, and interference from the public array's residual
+  `−4(−1+mw) + (xb + 4mw) = 4 + xb` (which the solver keeps undecided).
+
 ### Phase 2 — byte memory, the remaining parts (D3)
 - `sb` at width 1 (`sep_contract_mem_write_value`, untested at width 1).
 - Mixed width: a word array touched by `lw` in `montymul` and byte-wise in
@@ -302,6 +330,12 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-21 | byte-memory status + write plan | ~18:27 | 18:31:02 | ~4 | 0 | ~4 | — | — | — | |
 | | **planning total** | 18:13:32 | 18:31:02 | 17.5 | ~0.2 | ~9 | | | | + ~8 min user |
 | 2026-10-21 | Phase 0 (build script, patch, listings, `--objdump`, GATE 0) | 18:34:12 | 22:37:29 | 243 | <0.5 | **not measured** | — | ~60 tool + ~70 script, 71 patch | 0 | an idle gap of unknown length (approval prompt or pause) sits inside this step; ~25 tool calls. From here on: a `date` stamp every few calls, so a gap is bounded |
+
+| 2026-10-21 | Phase 1: read executor/soundness for calls (JALR, is_exit, blockSound, etable_rel) | 22:37:53 | 22:43:00 | 5 | 0 | 5 | — | — | — | |
+| 2026-10-21 | Phase 1: `gen_callee_contract` + 3 GenCompose lemmas | 22:43:00 | 22:47:58 | 5 | 0.1 | 5 | heavy-chain rebuild 459 s wall / 356 s user / 7.4 GB (stale `.vo`s, one-off) | GenSegment +33, GenCompose +109 | 3 (name, `[%H _]` pattern, notation in `change`) | interactive checks 0.1 s each; pet OOMs replaying GenCompose to line 2300 |
+| 2026-10-21 | Phase 1: S1a link + `--tables-aliases` + spike file | 22:38 | 22:51:21 | ~10 (interleaved with the above) | 0 | ~10 | deps 35 s / 4.6 GB | spike 181 lines (31 generated instrs), tool +~30 | 0 | |
+| 2026-10-21 | Phase 1: loop VC | 22:57:05 | 22:57:51 | 1 | 0.15 | 0.6 | `valid_sub_loop` 9.2 s | — | 0 | green first try |
+| 2026-10-21 | Phase 1: callee VC debugging (OPEN) | 22:57:51 | 23:09:42 | 12 | ~2 (2 debug compiles ~1 min each) | ~10 | VC construction ~11 s | — | 4 hypotheses refuted | stopped to report |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least

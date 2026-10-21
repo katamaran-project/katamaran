@@ -443,6 +443,81 @@ Section SegCompose.
       exists x. split; [exact Hx | unfold blk_exit; exact Hx].
   Qed.
 
+  (* ---- A CALLEE'S RETURN ADDRESS IS A SyncVal (PLAN-rsa.md D1) -------------
+     gen_callee_contract puts `secLeak ret_a` first in the segment's
+     extra_pre, i.e. in the precondition's THIRD conjunct. *)
+  Lemma callee_pre_ret {R : LCtx}
+      (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (ret : Term R ty_xlenbits) (ret_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (code : list AST) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (iota : Valuation R) (v : bv xlenbits)
+      (Hra : inst (T := fun Σ => Term Σ ty_xlenbits) ret_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) ret iota) :
+    asn.interpret (extend_to_minimal_pre (cfg_precondition
+        (gen_callee_contract base base_a ret ret_a code fl regs extra_pre post)))
+      (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+    ⊢ ⌜ exists x, inst (T := fun Σ => Term Σ ty_xlenbits) ret iota = ty.SyncVal x ⌝.
+  Proof.
+    cbn [gen_callee_contract gen_seg_contract cfg_precondition extend_to_minimal_pre].
+    iIntros "((_ & _ & (Hs & _) & _) & _)".
+    iDestruct "Hs" as "[%Hs _]".
+    iPureIntro.
+    change (instprop (formula_secLeak ret_a) iota.["a"∷ty_xlenbits ↦ SyncVal v])
+      with (secLeak (inst (T := fun Σ => Term Σ ty_xlenbits) ret_a
+                       iota.["a"∷ty_xlenbits ↦ SyncVal v])) in Hs.
+    rewrite Hra in Hs.
+    destruct (inst (T := fun Σ => Term Σ ty_xlenbits) ret iota); [eauto | contradiction].
+  Qed.
+
+  (* ---- ...AND THE WHOLE blockFaithful, FOR A CALLEE ------------------------
+     The instruction half is the segment's: same placement, same code.  The
+     exit half is the return address, a SyncVal by callee_pre_ret. *)
+  Lemma blockFaithful_of_callee {R : LCtx}
+      (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (ret : Term R ty_xlenbits) (ret_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+      (code : list AST) (fl : nat) (regs : list reg_spec_rel)
+      (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+      (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+      (v : bv xlenbits) (ab : list AnnotInstr)
+      (Hba : forall iota : Valuation R,
+               inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+                 (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+               = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+      (Hra : forall iota : Valuation R,
+               inst (T := fun Σ => Term Σ ty_xlenbits) ret_a
+                 (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+               = inst (T := fun Σ => Term Σ ty_xlenbits) ret iota)
+      (Hab : strip ab = code) :
+    ⊢ blockFaithful ab v
+        {| blk_ctx := R
+         ; blk_contract := gen_callee_contract base base_a ret ret_a code fl
+                             regs extra_pre post |}
+        (table_of_list (cfg_placement (gen_callee_contract base base_a ret ret_a
+                          code fl regs extra_pre post)) 0 ab).
+  Proof.
+    unfold blockFaithful.
+    iIntros "!>" (iota) "Hpre".
+    iDestruct (callee_pre_ret base base_a ret ret_a code fl regs extra_pre post
+                 iota v (Hra iota) with "Hpre") as "%Hr".
+    (* the rest of the precondition IS a segment's (target 0, its extra_pre
+       the secLeak conjunct and the callee's own), by conversion *)
+    cbn [blk_contract] in *.
+    iDestruct (seg_pre_placement base base_a code 0 fl regs
+                 (asn.sep (asn.formula (formula_secLeak ret_a)) extra_pre) post
+                 iota v (Hba iota) with "Hpre") as "%Hp".
+    iDestruct (seg_pre_bound base base_a code 0 fl regs
+                 (asn.sep (asn.formula (formula_secLeak ret_a)) extra_pre) post
+                 iota v (Hba iota) Hp with "Hpre") as "%Hb".
+    assert (Hrep : (bv.bin v + 4 * N.of_nat (length ab) < bv.exp2 xlenbits)%N).
+    { rewrite <- (strip_length ab), Hab. pose proof lenAddr_rep. lia. }
+    iPureIntro. split.
+    - exact (itable_faith_of_list _ iota ab Hp Hrep).
+    - destruct Hr as (x & Hx). exists x. split; [exact Hx | unfold blk_exit; exact Hx].
+  Qed.
+
   (* ---- A BLOCK, FROM ITS CONTRACT -----------------------------------------
      A block premise is derivable from a verified contract "without having to
      redo the work": this is the loop rule (Adequacy.blockSound_of_loop_vc)
@@ -2237,6 +2312,40 @@ Proof.
     rewrite strip_eraseV. exact Hcode.
   - intros Σ GS v iota. exact (seg_pre_placement base base_a code target fl regs
                                  extra_pre post iota v (Hba v iota)).
+Qed.
+
+(* ...and for a CALLEE (PLAN-rsa.md D1): the same three things plus `Hra`,
+   the return address's placement equation (eq_refl when ret_a does not
+   mention "a", like Hba).  The VC is the loop VC, as for any block; a
+   function never comes back to its own entry, so it stops only at `ret`. *)
+Lemma blkValid_of_callee {R : LCtx}
+    (base : Term R ty_xlenbits) (base_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (ret : Term R ty_xlenbits) (ret_a : Term (R ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (code : list AST) (fl : nat) (regs : list reg_spec_rel)
+    (extra_pre : Assertion (R ▻ "a"∷ty_xlenbits))
+    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    (LV : list (AnnotInstrV blkValid))
+    (Hba : forall (v : bv xlenbits) (iota : Valuation R),
+             inst (T := fun Σ => Term Σ ty_xlenbits) base_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) base iota)
+    (Hra : forall (v : bv xlenbits) (iota : Valuation R),
+             inst (T := fun Σ => Term Σ ty_xlenbits) ret_a
+               (iota.["a"∷ty_xlenbits ↦ ty.SyncVal v])
+             = inst (T := fun Σ => Term Σ ty_xlenbits) ret iota)
+    (Hcode : List.map aiv_instr LV = code)
+    (Hv : let c := gen_callee_contract base base_a ret ret_a code fl regs extra_pre post in
+          cfg_vc_loop c (List.map eraseV LV)) :
+  blkValid (selfBlk (gen_callee_contract base base_a ret ret_a code fl regs extra_pre post)).
+Proof.
+  apply (blkValid_of_loop_contract _ LV Hv Hcode).
+  - intros Σ GS v.
+    apply blockFaithful_of_callee; [exact (Hba v) | exact (Hra v) |].
+    rewrite strip_eraseV. exact Hcode.
+  - intros Σ GS v iota.
+    exact (seg_pre_placement base base_a code 0 fl regs
+             (asn.sep (asn.formula (formula_secLeak ret_a)) extra_pre) post
+             iota v (Hba v iota)).
 Qed.
 
 (* Ltac defined INSIDE a Section does not survive `End`, so these live after

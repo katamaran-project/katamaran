@@ -102,6 +102,7 @@ case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamTail.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamTailVC.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParam.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamVC.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSub.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamInstrs.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop1.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop2.v
