@@ -1275,7 +1275,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let: "tmp1" := stm_read_register mstatus in
       match: exp_var "tmp1" in rmstatus with
         ["MPP"; "SPP"; "MPIE"; "SPIE"; "MIE"; "SIE"] =>
-          stm_write_register mstatus (exp_record rmstatus ([nenv exp_var "MPP"; tmp; exp_var "MPIE"; exp_var "SIE"; exp_var "MIE"; exp_val ty.bool false]))
+          stm_write_register mstatus (exp_record rmstatus ([nenv exp_var "MPP"; exp_var "tmp_SPP"; exp_var "MPIE"; exp_var "SIE"; exp_var "MIE"; exp_val ty.bool false]))
       end ;;
       (* TODO: stval           = tval(info); *)
       stm_write_register sepc (exp_var "pc") ;;
