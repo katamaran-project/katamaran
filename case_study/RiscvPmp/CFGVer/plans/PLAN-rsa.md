@@ -230,6 +230,20 @@ registers, a TAIL call). Done so far:
   (fixed anyway, muladd's spelling), refutation of the start equation, of the
   end equation, and interference from the public array's residual
   `−4(−1+mw) + (xb + 4mw) = 4 + xb` (which the solver keeps undecided).
+- **ROOT CAUSE (2026-10-21 23:40, preamble harness, all checks < 0.2 s):**
+  the consume itself SUCCEEDS at construction; it emits
+  `assert_vareq "xa" (eX − 4·mw)` -- the solver, given
+  `4 + (eX − 4mw) = 4 + xa`, cancels the shared literal 4 and eliminates the
+  one bare variable, which is the callee's ∀-PARAMETER `xa`, not the
+  loop's angelic `eX`.  An assert_vareq on a demonic variable survives
+  `cfg_postprocess` undischarged (`∀xa ∃eX. assert_vareq xa (eX − 4h)` stays;
+  the eX-oriented `assert_vareq eX (xa + 4h)` postprocesses to `block`).
+  The literal 4 appears on BOTH sides because the limb count is `mw − 1`, so
+  `end − 4·count = end + 4 − 4mw`.  Muladd's tail never hits this by luck of
+  literals: its counts are `mlen − 3` etc., so the constants differ, nothing
+  cancels, no variable is bare, and the end argument binds eX first.
+  Probes: `Example/Rsa/ZZCmpMuladdI.v`, `ZZCmpSub.v` (the latter has a
+  `List.app` typo, unused).
 
 ### Phase 2 — byte memory, the remaining parts (D3)
 - `sb` at width 1 (`sep_contract_mem_write_value`, untested at width 1).
@@ -336,6 +350,7 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-21 | Phase 1: S1a link + `--tables-aliases` + spike file | 22:38 | 22:51:21 | ~10 (interleaved with the above) | 0 | ~10 | deps 35 s / 4.6 GB | spike 181 lines (31 generated instrs), tool +~30 | 0 | |
 | 2026-10-21 | Phase 1: loop VC | 22:57:05 | 22:57:51 | 1 | 0.15 | 0.6 | `valid_sub_loop` 9.2 s | — | 0 | green first try |
 | 2026-10-21 | Phase 1: callee VC debugging (OPEN) | 22:57:51 | 23:09:42 | 12 | ~2 (2 debug compiles ~1 min each) | ~10 | VC construction ~11 s | — | 4 hypotheses refuted | stopped to report |
+| 2026-10-21 | Phase 1: root cause (muladd comparison + harness) | 23:19:13 | 23:40:33 | 21 | ~14 (muladd tail rebuild + 2 probes, 23:20→23:37) | ~7 | — | probes only | 0 | waiting dominated |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
