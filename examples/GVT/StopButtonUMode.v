@@ -229,7 +229,7 @@ Module inv := invariants.
     (* dispatch *)
     Example femtokernel_mmio_handler_asm_block0 (mmio_handler_start_block2 : N) : list ASM :=
       [
-        CSR MCause t1 zero false CSRRW (* t1 <- mcause *)
+        CSR MCause zero t1 false CSRRS (* t1 <- mcause *)
         ; UTYPE (bv.drop 12 (bv.of_N 0x80000000)) t0 RISCV_LUI   (* load upper 20 bits of immediate *)
         ; ITYPE (@bv.take 12 xlenbits (bv.of_N 0x80000000)) t0 t0 RISCV_ADDI    (* load lower 12 bits of immediate *)
         ; RTYPE t0 t1 t1 RISCV_AND (* t1 <- mask mcause with msb *)
@@ -288,12 +288,12 @@ Module inv := invariants.
         ; LOAD bv.zero t0 t2 true WORD (* t2 <- data *)
         ; ITYPE (bv.one) t2 t2 RISCV_ANDI (* set all irrelevant bits to 0 *)
 
-        (* setup t2 as an inverted bitmask for bit 4 (LED) *)
+        (* setup t2 as an inverted bitmask for bit 5 (LED) *)
         ; ITYPE bv.one t2 t2 RISCV_XORI (* invert IOSTATE because SGo = 0 and SStop = 1 *)
-        ; SHIFTIOP (bv.of_N 4) t2 t2 RISCV_SLLI (* t2 << 4, mask bit 4 *)
+        ; SHIFTIOP (bv.of_N 5) t2 t2 RISCV_SLLI (* t2 << 5, mask bit 5 *)
 
 
-        (* apply bitmask to a0 ensuring that bit 4 (LED) is only set to 1 if IOSTATE is 0 *)
+        (* apply bitmask to a0 ensuring that bit 5 (LED) is only set to 1 if IOSTATE is 0 *)
         ; RTYPE a0 t2 a0 RISCV_AND (* [a0 <- t2 /\ a0] *)
 
         (* store a0 to mmio_dev_addr *)
@@ -301,9 +301,9 @@ Module inv := invariants.
         ; ITYPE (@bv.take 12 xlenbits (bv.of_N mmio_dev_addr)) t0 t0 RISCV_ADDI    (* load lower 12 bits of mmio_dev_addr *)
         ; STORE bv.zero a0 t0 WORD (* MMIO@t0 <- a0 *)
 
-        ; CSR MEpc ra zero false CSRRS (* ra <- pc of calling instruction *)
-        ; ITYPE (bv.of_N 4) ra ra RISCV_ADDI    (* t2 <- t2 + 4 *)
-        ; CSR MEpc ra zero false CSRRW (* ra <- pc of calling instruction *)
+        ; CSR MEpc zero ra false CSRRS (* ra <- pc of calling instruction *)
+        ; ITYPE (bv.of_N 4) ra ra RISCV_ADDI    (* ra <- ra + 4 *)
+        ; CSR MEpc ra zero false CSRRW (* mepc <- ra *)
 
         ; MRET (* return one instruction further to where we left of *)
       ].
@@ -659,7 +659,7 @@ Module inv := invariants.
   Import Erasure.notations.
   Lemma sat__femtohandler_block2 : safeE (vc__femtohandler_block2).
   Proof.
-    vm_compute. (* diverges *)
+    vm_compute.
     constructor; cbn. right. exists (bv.take 1 v1).
     intuition.
     1-4: eapply bv.in_seqBv'; now vm_compute.
