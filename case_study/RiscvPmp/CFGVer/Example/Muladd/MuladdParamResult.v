@@ -460,7 +460,7 @@ Proof.
     iPoseProof (bi.equiv_entails_1_1 _ _
                   (gen_regs_at_inst _ _ ι0 (sym_ι init_addr b) sym_regs Hp) with "Hregs") as "Hregs".
     unfold sym_ι in *.
-    cbn [extend_to_minimal_pre cfg_precondition sym6 gen_seg_contract asn.interpret sym_pre].
+    cbn [extend_to_minimal_pre cfg_precondition sym6 gen_seg_contract gen_seg_contract_at asn.interpret sym_pre].
     cbn -[gen_data_at gen_regs_at bv.of_N bv.of_Z bv.add bv.shiftr bv.sext bv.land bv.unsigned bv.ult mlenN x_off].
     iFrame "Hpriv Hinv Hdata Hregs".
     (* what remains: x's pointer register, and pure facts about b and p *)

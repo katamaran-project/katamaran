@@ -299,15 +299,24 @@ Definition gen_base_bound {Σ : LCtx} (base : Term Σ ty_xlenbits) (bound : N)
         (term_val ty.int (Z.of_N bound)))
      (term_val ty.int (Z.of_N lenAddr))).
 
-Definition gen_seg_contract {Σ : LCtx}
+Definition gen_seg_contract_at {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (* THE exit, as a term over Σ (PLAN-rsa.md, 2026-10-22).  Usually an
+       offset into the segment's own code (gen_seg_contract below); for a
+       FUNCTION it is the return address, a variable the precondition binds to
+       X1 -- entered from every call site with whatever X1 holds there,
+       because sexec_block instantiates Σ angelically and resumes at
+       `subst cfg_exit`.  Either way the exit must be a SyncVal under the
+       precondition (etable_rel): an offset exit gets that from the placement,
+       a variable one from a `secLeak` conjunct the author writes
+       (GenCompose.seg_exit_sync_off / seg_exit_sync_pub). *)
+    (ex : Term Σ ty_xlenbits)
     (* The segment's own code, as the SPEC (`list AST`): what sits in memory.
        The table is built from the ANNOTATED list `cfg_vc` takes as an
        argument; the two are tied by `strip a = cfg_instrs c` at the
        soundness bridge. *)
     (code : list AST)
-    (target : N)                  (* THE exit offset, RELATIVE to the segment *)
     (fl : nat)
     (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
@@ -315,7 +324,7 @@ Definition gen_seg_contract {Σ : LCtx}
     : @CFGVerifierContract Σ :=
   @MkCFGVerifierContract Σ
     base
-    (exit_of_off base target)
+    ex
     ( asn_pc_eq base_a
       ∗ gen_base_bound base_a (4 * N.of_nat (length code))
       ∗ extra_pre
@@ -330,38 +339,19 @@ Definition gen_seg_contract {Σ : LCtx}
        what happened to amBody_post, and it fails late and confusingly. *)
     (post ∗ minimal_pre)%asn.
 
-(* A CALLEE: one C function, entered by `jal ra, f` and left by `ret`
-   (PLAN-rsa.md §0, D1).  Exactly gen_seg_contract, except that the exit is
-   the RETURN ADDRESS `ret` -- normally a variable of Σ which `regs` or
-   `extra_pre` binds to X1 -- instead of an offset into the function's own
-   code.  Used as a block on the function's first instruction, it is entered
-   from every call site with whatever X1 holds there (sexec_block instantiates
-   Σ angelically and resumes at `subst cfg_exit`).
-
-   `ret` and `ret_a` are the same term at two contexts, as `base`/`base_a`.
-   The return address is control flow, so the contract REQUIRES it public:
-   `secLeak ret_a` is put in front of `extra_pre`.  That is also what makes
-   the exit a SyncVal (etable_rel), see GenCompose.blockFaithful_of_callee.
-
-   Defined THROUGH gen_seg_contract (target 0, which only the overridden exit
-   reads), so the precondition, code, fuel and postcondition are a segment's
-   literally and every gen_seg_contract lemma about them applies. *)
-Definition gen_callee_contract {Σ : LCtx}
+(* The common case: the exit is an offset `target` RELATIVE to the segment. *)
+Definition gen_seg_contract {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
-    (ret    : Term Σ ty_xlenbits)
-    (ret_a  : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
     (code : list AST)
+    (target : N)                  (* THE exit offset, RELATIVE to the segment *)
     (fl : nat)
     (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
     (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
     : @CFGVerifierContract Σ :=
-  let c := gen_seg_contract base base_a code 0 fl regs
-             (secLeak ret_a ∗ extra_pre)%asn post in
-  @MkCFGVerifierContract Σ
-    (cfg_placement c) ret (cfg_precondition c) (cfg_instrs c) (cfg_fuel c)
-    (cfg_postcondition c).
+  gen_seg_contract_at base base_a (exit_of_off base target) code fl regs
+    extra_pre post.
 
 (* `solve_param_vc` lived here and is GONE: it was character-for-character the
    standard parametric-base discharge, which ~150 other sites wrote out.  One

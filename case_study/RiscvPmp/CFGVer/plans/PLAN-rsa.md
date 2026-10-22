@@ -264,9 +264,26 @@ registers, a TAIL call). Done so far:
   3.0 s, `valid_s1a` (the whole program, callee as a block entered by the
   real `jal`) 0.1 s, under coqc; file 40.8 s / 4.9 GB. Two negative controls
   in the file (no block ⇒ fails; a post publishing a's secret limbs ⇒
-  fails). OPEN: the end theorem (Result file: `blkValid_of_callee` +
-  `ValidCFGVerifierContract_intro` + a bridge with array memory), the gate
-  (the solver rule fires in every example), S1b.
+  fails). The gate PASSED with the solver rule (2026-10-22 10:49, 24 end
+  theorems axiom-clean, 76 min wall at GATE_JOBS=1). OPEN: the end theorem
+  (Result file: `blkValid_of_seg_at` + `ValidCFGVerifierContract_intro` + a
+  bridge with array memory), S1b.
+
+- **ONE GENERATOR, 2026-10-22 (Emiel: "you should be able to do everything
+  with the same contracts").** The separate callee API is GONE. There is one
+  generator, `GenSegment.gen_seg_contract_at base base_a ex code fl regs
+  extra_pre post`, with the exit a TERM; `gen_seg_contract … target …` is
+  its abbreviation at `exit_of_off base target` (all 20 call sites
+  unchanged; 5 `cbn [gen_seg_contract …]` lists gained `gen_seg_contract_at`).
+  One faithfulness/validity pair, `GenCompose.blockFaithful_of_seg_at` /
+  `blkValid_of_seg_at`, with a premise `Hex`: the precondition makes the
+  exit a SyncVal -- the only exit-specific obligation (etable_rel), and not
+  special to functions. Two lemmas discharge it: `seg_exit_sync_off` (offset
+  exit, from the placement) and `seg_exit_sync_pub` (an exit made public by a
+  leading `secLeak ex_a` in extra_pre, e.g. a return address).
+  `blockFaithful_of_seg` and `blkValid_of_loop_seg` keep their signatures,
+  re-proved through these. A function is just `gen_seg_contract_at … (term_var
+  "r") … (secLeakvar "r" ∗ pre) …`. Spike VCs unchanged (14.0 / 3.1 / 0.1 s).
 
 ### Phase 2 — byte memory, the remaining parts (D3)
 - `sb` at width 1 (`sep_contract_mem_write_value`, untested at width 1).
@@ -380,6 +397,10 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | Phase 1: deps rebuild killed by the low-memory reaper; restarted at -j1 | 08:58:20 | 09:08:03 | 10 | ~8 | — | deps -j1 216 s / 4.9 GB | — | — | user approval in between |
 | 2026-10-22 | Phase 1: still red -- 2nd cause (ghosts on a block instr are skipped), `(−1)·s` output form, v3 | 09:08:03 | 09:30:36 | 22 | 13 (debug dump 117 s, Solver.vo 365 s, deps 418 s) | 9 | `valid_sub` 6.2 s | Solver.v +~40, spike 4 lines | 2 (ARopp argument order, numeral `-1`) | |
 | 2026-10-22 | Phase 1: whole-program VC + negative controls + file compile | 09:30:36 | 09:32:33 | 2 | 0.7 | 1.3 | file 40.8 s / 4.9 GB; VCs 13.4 / 3.0 / 0.1 s | spike +~70 | 0 | `valid_s1a` green first try |
+| 2026-10-22 | gate #1 (solver rule) | 09:33:23 | 10:49:33 | 76 | 76 | 0 | 4569 s wall / 3442 s user / 10.0 GB (axiom probes) | — | — | PASSED, 24 theorems axiom-clean |
+| 2026-10-22 | explain "why callee contracts differ" to Emiel | ~10:00 | ~10:20 | — | — | — | — | — | — | user time; Emiel: do it with one contract |
+| 2026-10-22 | unify generators (gen_seg_contract_at, one lemma family) | 10:21:23 | 10:55:53 | 35 | 1.5 (GenCompose 34 s, spike 46 s) | ~33 | spike VCs 14.0 / 3.1 / 0.1 s, unchanged | GenSegment +~20 net, GenCompose ±~150 (callee lemmas deleted), 5 cbn lists, spike 6 lines | 0 | GenCompose and spike green FIRST try |
+| 2026-10-22 | gate #2–#4 (unified generator): two reaper kills (MuladdParamVC 10 GB; axiom probes), heavy file built in between, last stage in the foreground | 10:54:51 | 13:19:41 | 145 | ~120 | — | MuladdParamVC 698 s / 9.1 GB; final gate 344 s / 9.8 GB | — | — | PASSED, 24 theorems axiom-clean; ~60 min of the window was a usage-limit pause |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least

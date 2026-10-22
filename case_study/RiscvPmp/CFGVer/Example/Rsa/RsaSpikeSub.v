@@ -9,9 +9,10 @@
 (*                                                                           *)
 (* Three VCs, innermost first:                                               *)
 (*  - valid_sub_loop: the word loop, a LOOP VC on the LoopN template.        *)
-(*  - valid_sub: br_i31_sub as a CALLEE (gen_callee_contract): from its      *)
-(*    entry to whichever `ret` -- its exit is the RETURN ADDRESS r, the      *)
-(*    value X1 holds on entry.  The loop is a block inside it.               *)
+(*  - valid_sub: br_i31_sub, from its entry to whichever `ret`: an ordinary *)
+(*    segment contract (gen_seg_contract_at) whose exit is the RETURN        *)
+(*    ADDRESS r, the value X1 holds on entry, made public in its             *)
+(*    precondition.  The loop is a block inside it.                          *)
 (*  - valid_s1a: the whole program; the `jal` lands on br_i31_sub's first    *)
 (*    instruction, which carries the callee as a block, so the call is ONE   *)
 (*    step and the run resumes at the jal's return address.                  *)
@@ -86,7 +87,7 @@ Lemma valid_sub_loop : cfg_vc_loop (lnRec lnSub (@sub_scratch)) (ln_annot lnSub)
 Proof. Time solve_mb_vc. Qed.
 
 (* ------------------------------------------------------------------------ *)
-(* 2. br_i31_sub AS A CALLEE                                                *)
+(* 2. br_i31_sub, ITS EXIT THE RETURN ADDRESS                              *)
 (* ------------------------------------------------------------------------ *)
 
 (* q: the function's code base; r: the return address (X1 on entry); xa, xb:
@@ -147,9 +148,13 @@ Definition sub_post : Assertion (subCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlen
     ∗ asn.exist "w6" ty_xlenbits (A6 ↦ᵣ term_var "w6")
     ∗ asn.exist "w7" ty_xlenbits (A7 ↦ᵣ term_var "w7") )%asn.
 
+(* The same generator as every loop and segment; only the exit differs: the
+   term `r`, not an offset.  `secLeak r` comes first in the precondition --
+   the return address is control flow, and it is what makes the exit a
+   SyncVal (GenCompose.seg_exit_sync_pub). *)
 Definition subRec : @CFGVerifierContract subCtx :=
-  gen_callee_contract (term_var "q") (term_var "q") (term_var "r") (term_var "r")
-    sub_instrs 30 sub_regs sub_pre sub_post.
+  gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r")
+    sub_instrs 30 sub_regs (secLeakvar "r" ∗ sub_pre)%asn sub_post.
 Definition subBlk : BlkAnnot := {| blk_ctx := subCtx ; blk_contract := subRec |}.
 
 Definition cl (k : CLem) : Annot := AnnotCLemma k.

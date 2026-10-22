@@ -285,7 +285,7 @@ Proof.
     iPoseProof (bi.equiv_entails_1_1 _ _
                   (gen_regs_at_inst _ _ ι0 (cs_ι init_addr l) cs_regs Hp) with "Hregs") as "Hregs".
     unfold cs_ι in *.
-    cbn [extend_to_minimal_pre cfg_precondition cs gen_seg_contract asn.interpret cs_pre].
+    cbn [extend_to_minimal_pre cfg_precondition cs gen_seg_contract gen_seg_contract_at asn.interpret cs_pre].
     cbn -[gen_data_at gen_regs_at bv.of_N bv.of_Z bv.add bv.unsigned].
     iFrame "Hpriv Hinv Hdata Hregs".
     assert (P7 : (bv.unsigned (@bv.of_N xlenbits init_addr) + Z.of_N (4 * N.of_nat 36) <= Z.of_N lenAddr)%Z).
