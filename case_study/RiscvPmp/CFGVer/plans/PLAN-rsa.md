@@ -1,8 +1,8 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
 Status: **IN PROGRESS on branch `issue/rsa` (not merged, not pushed).**
-Phase 0 done; Phase 1 spike S1a VC side green; last commit `4af3dd9e`,
-gate PASSED there. Survey (§1), decisions (§2), phases (§4), timing log (§5).
+Phase 0 done; Phase 1 spike S1a DONE end to end (2026-10-22), S1b next;
+gate last PASSED at `4af3dd9e` (the S1a end theorem is not yet through it). Survey (§1), decisions (§2), phases (§4), timing log (§5).
 
 ## HANDOFF (2026-10-22) — read this first
 
@@ -24,31 +24,23 @@ gate PASSED there. Survey (§1), decisions (§2), phases (§4), timing log (§5)
   on `llvm-objdump-18 -d --no-show-raw-insn` of an `ld.lld --relax -Ttext=0`
   link. Recipe for S1a's listing: header comment of `RsaSpikeSub.v`.
 
-**Next step 1 — the S1a end theorem** (new heavy file
-`Example/Rsa/RsaSpikeSubResult.v`, add to `_CoqProject` after the spike):
-1. the loop block valid: `blkValid_of_loop_seg` over LoopN's `lnRec`,
-   exactly as `Example/Muladd/MuladdParamResult.v:101–123` does for loops
-   I/K/M (same template);
-2. `subBlk` valid: `blkValid_of_seg_at (term_var "q") (term_var "q")
-   (term_var "r") sub_instrs 30 sub_regs (secLeakvar "r" ∗ sub_pre) sub_post
-   LV (fun _ _ => eq_refl) Hex Hcode valid_sub`, with `LV` = `sub_annot`
-   typed (the loop block at index 11 carrying step 1's proof, as
-   `CountdownRecResult.cd_link_annotV`) and `Hex` from
-   `seg_exit_sync_pub … (fun … => eq_refl)`;
-3. `ValidCFGVerifierContract s1aRec` via `ValidCFGVerifierContract_intro`
-   with the typed `s1a_annot` (block at index 2 carrying step 2) and
-   `valid_s1a` — as `CountdownRecResult.cdLink_valid`;
-4. the end theorem. **Decision for Emiel before writing it:** the
-   statement's memory picture. The arguments are POINTERS (A0, A1), so the
-   natural bridge is `GenProg.gen_prog_noninterferent` with `DPtr` specs
-   (template `Example/CheckScalar/CheckScalarPtr*.v`) — but `s1aRec` is a
-   hand-built `gen_seg_contract`, so either restate it via
-   `gen_prog_contract` (same block annotation) or wire
-   `cfg_instrs_endToEnd` by hand (CountdownRecResult + cfgver-memory). And
-   the layout needs a size: fix h (e.g. 2 limbs) or quantify. Propose both
-   with the literal memory picture (feedback: define before use).
+**Step 1 — the S1a end theorem: DONE 2026-10-22** (Emiel chose route A,
+h quantified). `Example/Rsa/RsaSpikeSubResult.v` (in `_CoqProject`,
+`Results.v`, and the gate's `AXIOM_CLEAN_THMS`): `sub_loop_valid` →
+`sub_valid` (`blkValid_of_seg_at`, exit `r`, `Hex` by `seg_exit_sync_pub`) →
+`s1a_valid` → `sub_call_noninterferent`, ONE application of
+`GenProg.gen_prog_noninterferent`; axiom-clean (pure_decode, mmioenv). To
+get there `s1aRec` was restated as `gen_prog_contract` (A0/A1 `PVVar`
+pointers; data `[DPtr xa; DCell (Known h); DArr false; DPtr (xb+4); DArr
+true]`) -- its VC stays 0.1 s: the solver equates the generator's array end
+`a + 4·c` with the callee's `xa + (mw<<2)` at the block consume. Statement:
+for every h with 0 < h < 2^16, a at ANY xa (header Known h, then
+L = (h+31)/32 secret limbs), b's L public limbs at ANY xb + 4, the three
+ranges pairwise disjoint, the layout in range. New helper
+`data_layout_cell_cons` (local to the Result file; move to GenProg.v when a
+second i31 header needs it -- every i31 integer has one).
 
-**Next step 2 — S1b** (§4 Phase 1): the real caller
+**Next step — S1b** (§4 Phase 1): the real caller
 `tools/bearssl/spike/sub2.c` = `br_i31_montymul`'s last line, linked with
 `i31_sub.o` (listing in the session's `sub2.dis` shape: frame
 `addi sp,-16; sw ra,s0,s1,s2`, one `jal`, then a TAIL `j br_i31_sub` after
@@ -467,6 +459,8 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | explain "why callee contracts differ" to Emiel | ~10:00 | ~10:20 | — | — | — | — | — | — | user time; Emiel: do it with one contract |
 | 2026-10-22 | unify generators (gen_seg_contract_at, one lemma family) | 10:21:23 | 10:55:53 | 35 | 1.5 (GenCompose 34 s, spike 46 s) | ~33 | spike VCs 14.0 / 3.1 / 0.1 s, unchanged | GenSegment +~20 net, GenCompose ±~150 (callee lemmas deleted), 5 cbn lists, spike 6 lines | 0 | GenCompose and spike green FIRST try |
 | 2026-10-22 | gate #2–#4 (unified generator): two reaper kills (MuladdParamVC 10 GB; axiom probes), heavy file built in between, last stage in the foreground | 10:54:51 | 13:19:41 | 145 | ~120 | — | MuladdParamVC 698 s / 9.1 GB; final gate 344 s / 9.8 GB | — | — | PASSED, 24 theorems axiom-clean; ~60 min of the window was a usage-limit pause |
+| 2026-10-22 | Phase 1: S1a end theorem -- read handoff + templates, probe route A (VC via gen_prog_contract) | 13:24:55 | 13:28:06 | 3 | <0.1 | 3 | probe VC 0.2 s | — | 1 (missing solve_mb_vc import) | then the two decisions to Emiel |
+| 2026-10-22 | Phase 1: S1a end theorem -- restate s1aRec, validity steps, statement, end theorem, gate list | ~13:29 | 13:46:14 | ~17 | ~2 (spike 46 s, Result compiles) | ~15 | spike file 29.4 s user / 4.9 GB; Result file 18.7 s user / 7.5 GB; VCs 13.5 / 3.0 / 0.1 s | spike ±~20, Result 330 lines (~200 proof) | 6 (notation `∗` out of scope, `secLeakvar` notation, `repeat_length` in two hyps, two `lia` on mismatched `bv.bin` width index -- fixed by `exact` up to conversion) | end theorem green on its FIRST full compile; axiom-clean |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least

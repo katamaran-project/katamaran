@@ -195,19 +195,25 @@ Proof. Time solve_mb_vc. Qed.
 Definition s1aCtx : LCtx :=
   ["q"∷ty_xlenbits; "xa"∷ty_xlenbits; "xb"∷ty_xlenbits; "h"∷ty_xlenbits].
 
-Definition s1a_regs : list reg_spec_rel :=
-  [ (X1, Secret); (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret)
-  ; (A6, Secret); (A7, Secret) ].
+(* The precondition in GENERATOR form (gen_prog_contract), so the end theorem
+   is one application of GenProg.gen_prog_noninterferent: A0/A1 hold the two
+   POINTER arguments, X1 and the scratch registers are secret. *)
+Definition s1a_regs : list (reg_spec_q s1aCtx) :=
+  [ (A0, Known (PVVar "xa")); (A1, Known (PVVar "xb")); (X1, Secret)
+  ; (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret) ].
 
-Definition s1a_pre : Assertion (s1aCtx ▻ "a"∷ty_xlenbits) :=
-  ( A0 ↦ᵣ term_var "xa" ∗ secLeakvar "xa"
-    ∗ A1 ↦ᵣ term_var "xb" ∗ secLeakvar "xb"
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") ∗ secLeakvar "h"
-    ∗ asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
-    ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536)))
-    ∗ asn.formula (formula_relop bop.le
-        (term_binop bop.plus (term_unop uop.unsigned (term_var "xa")) (term_val ty.int 4%Z))
-        (term_val ty.int (Z.of_N maxAddr))) )%asn.
+(* 0 < h < 2^16: at least one limb, and nothing wraps *)
+Definition s1a_facts : Assertion (s1aCtx ▻ "a"∷ty_xlenbits) :=
+  ( asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
+    ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536))) )%asn.
+
+(* a at xa: its header h (public) and its limbs (secret); b's limbs at xb + 4
+   (public; b's header is not read).  The generator ends each array at
+   a + 4*c, the callee at xa + (mw << 2): the solver equates the two at the
+   block's consume. *)
+Definition s1a_data : list (data_spec (s1aCtx ▻ "a"∷ty_xlenbits)) :=
+  [ DPtr (term_var "xa"); DCell (Known (term_var "h")); DArr false ArrUp (t_limbs (term_var "h"))
+  ; DPtr (t_off4 (term_var "xb")); DArr true ArrUp (t_limbs (term_var "h")) ]%list.
 
 (* the memory back, every register with any value *)
 Definition s1a_post : Assertion (s1aCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
@@ -222,10 +228,10 @@ Definition s1a_post : Assertion (s1aCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlen
     ∗ asn.exist "w6" ty_xlenbits (A6 ↦ᵣ term_var "w6")
     ∗ asn.exist "w7" ty_xlenbits (A7 ↦ᵣ term_var "w7") )%asn.
 
-(* exit: the fall-through end, +124 = 4 * 31 *)
+(* exit: the fall-through end, +124 = 4 * 31; no data after the code (both
+   arrays are behind pointers), so the data offset is unused *)
 Definition s1aRec : @CFGVerifierContract s1aCtx :=
-  gen_seg_contract (term_var "q") (term_var "q") s1a_instrs 124 10 s1a_regs
-    s1a_pre s1a_post.
+  gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10 s1a_post.
 
 (* the callee is a block on ITS first instruction, index 2; the rest is code *)
 Definition s1a_annot : list AnnotInstr :=
@@ -246,7 +252,7 @@ Proof. Fail solve_mb_vc. Abort.
 
 (* A post claiming a's SECRET limbs public is rejected -- so the precondition
    is not inconsistent. *)
-Goal cfg_vc (gen_seg_contract (term_var "q") (term_var "q") s1a_instrs 124 10 s1a_regs s1a_pre
+Goal cfg_vc (gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10
    (( term_var "xa" ↦ₘ term_var "h"
       ∗ asn.chunk (chunk_user (arr true 4 4)
           [t_off4 (term_var "xa"); t_limbs (term_var "h"); t_end (term_var "xa") (term_var "h")])
