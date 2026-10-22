@@ -164,18 +164,88 @@ Definition sub_hand_back : list Annot :=
   [ cl (clem_arr_drop true 4 4); cl (clem_arr_drop false 4 4)
   ; cl (clem_arr_flip true 4 (-4)); cl (clem_arr_flip false 4 (-4)) ].
 
+(* The seeds go AFTER instruction 10, not before 11: an instruction that
+   carries a block runs the block INSTEAD of itself, ghosts included
+   (Verifier.v, the `Some b` branch of the step) -- muladd's tail places its
+   build_i the same way. *)
 Definition sub_annot : list AnnotInstr :=
   List.map (fun '(i, ins) =>
-              {| ai_ghost_before := if Nat.eqb i 11 then sub_seeds
-                                    else if Nat.eqb i 25 then sub_hand_back
-                                    else nil
-               ; ai_instr := ins ; ai_ghost_after := nil
+              {| ai_ghost_before := if Nat.eqb i 25 then sub_hand_back else nil
+               ; ai_instr := ins
+               ; ai_ghost_after := if Nat.eqb i 10 then sub_seeds else nil
                ; ai_block := if Nat.eqb i 11 then Some (lnBlk lnSub (@sub_scratch))
                              else None |})
     (List.combine (List.seq 0 (length sub_instrs)) sub_instrs).
 
 Lemma valid_sub : cfg_vc_loop subRec sub_annot.
-Proof.
-  Time solve_mb_vc.
-  Unshelve. all: exact (ty.SyncVal bv.zero).
-Qed.
+Proof. Time solve_mb_vc. Qed.
+
+(* ------------------------------------------------------------------------ *)
+(* 3. THE WHOLE PROGRAM: the harness calls br_i31_sub                       *)
+(* ------------------------------------------------------------------------ *)
+
+(* q: the program's code base (the harness at +0, br_i31_sub at +8); the
+   arguments as for the callee.  X1 is owned with any value: the `jal`
+   overwrites it with the return address q + 4. *)
+Definition s1aCtx : LCtx :=
+  ["q"∷ty_xlenbits; "xa"∷ty_xlenbits; "xb"∷ty_xlenbits; "h"∷ty_xlenbits].
+
+Definition s1a_regs : list reg_spec_rel :=
+  [ (X1, Secret); (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret)
+  ; (A6, Secret); (A7, Secret) ].
+
+Definition s1a_pre : Assertion (s1aCtx ▻ "a"∷ty_xlenbits) :=
+  ( A0 ↦ᵣ term_var "xa" ∗ secLeakvar "xa"
+    ∗ A1 ↦ᵣ term_var "xb" ∗ secLeakvar "xb"
+    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") ∗ secLeakvar "h"
+    ∗ asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
+    ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536)))
+    ∗ asn.formula (formula_relop bop.le
+        (term_binop bop.plus (term_unop uop.unsigned (term_var "xa")) (term_val ty.int 4%Z))
+        (term_val ty.int (Z.of_N maxAddr))) )%asn.
+
+(* the memory back, every register with any value *)
+Definition s1a_post : Assertion (s1aCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( sub_mem (term_var "xa") (term_var "xb") (term_var "h")
+    ∗ asn.exist "w1" ty_xlenbits (X1 ↦ᵣ term_var "w1")
+    ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
+    ∗ asn.exist "w8" ty_xlenbits (A1 ↦ᵣ term_var "w8")
+    ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
+    ∗ asn.exist "w3" ty_xlenbits (A3 ↦ᵣ term_var "w3")
+    ∗ asn.exist "w4" ty_xlenbits (A4 ↦ᵣ term_var "w4")
+    ∗ asn.exist "w5" ty_xlenbits (A5 ↦ᵣ term_var "w5")
+    ∗ asn.exist "w6" ty_xlenbits (A6 ↦ᵣ term_var "w6")
+    ∗ asn.exist "w7" ty_xlenbits (A7 ↦ᵣ term_var "w7") )%asn.
+
+(* exit: the fall-through end, +124 = 4 * 31 *)
+Definition s1aRec : @CFGVerifierContract s1aCtx :=
+  gen_seg_contract (term_var "q") (term_var "q") s1a_instrs 124 10 s1a_regs
+    s1a_pre s1a_post.
+
+(* the callee is a block on ITS first instruction, index 2; the rest is code *)
+Definition s1a_annot : list AnnotInstr :=
+  List.map (fun '(i, ins) =>
+              {| ai_ghost_before := nil ; ai_instr := ins ; ai_ghost_after := nil
+               ; ai_block := if Nat.eqb i 2 then Some subBlk else None |})
+    (List.combine (List.seq 0 (length s1a_instrs)) s1a_instrs).
+
+Lemma valid_s1a : cfg_vc s1aRec s1a_annot.
+Proof. Time solve_mb_vc. Qed.
+
+(* NEGATIVE CONTROLS: valid_s1a is not vacuous (it closes in ~0.2 s). *)
+
+(* Without the block the callee's body runs inline, and its word loop has a
+   symbolic trip count the executor cannot unroll. *)
+Goal cfg_vc s1aRec (list_AST_AnnotInstr s1a_instrs).
+Proof. Fail solve_mb_vc. Abort.
+
+(* A post claiming a's SECRET limbs public is rejected -- so the precondition
+   is not inconsistent. *)
+Goal cfg_vc (gen_seg_contract (term_var "q") (term_var "q") s1a_instrs 124 10 s1a_regs s1a_pre
+   (( term_var "xa" ↦ₘ term_var "h"
+      ∗ asn.chunk (chunk_user (arr true 4 4)
+          [t_off4 (term_var "xa"); t_limbs (term_var "h"); t_end (term_var "xa") (term_var "h")])
+      ∗ asn.chunk (chunk_user (arr true 4 4)
+          [t_off4 (term_var "xb"); t_limbs (term_var "h"); t_end (term_var "xb") (term_var "h")]) )%asn))
+  s1a_annot.
+Proof. Fail solve_mb_vc. Abort.

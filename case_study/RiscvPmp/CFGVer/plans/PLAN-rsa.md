@@ -244,6 +244,29 @@ registers, a TAIL call). Done so far:
   cancels, no variable is bare, and the end argument binds eX first.
   Probes: `Example/Rsa/ZZCmpMuladdI.v`, `ZZCmpSub.v` (the latter has a
   `List.app` typo, unused).
+- **FIXED 2026-10-22, two independent causes** (Emiel chose the solver fix):
+  1. `Solver.v`: new `formula_propeq` rule `try_isolate_inner`: `x + s = y`
+     (also under a shared literal `c + l = c + r`), x and y variables, x
+     INNERMOST (smaller `ctx.in_at`), `secLeakT s` ⟶ `x = y + (−1)·s`.
+     A completeness rule (both orientations state the same equation); the
+     `secLeakT` guard is load-bearing (RelVal never normalises NonSyncVal v v,
+     so `x + s = y ⇔ x = y − s` FAILS for a secret s; `relval_isolate`).
+     Two placement/form lessons, each measured: it must run BEFORE
+     `try_bvadd_cancel_val_propeq` (solver_generic unifies in the same pass
+     as it simplifies, so a rule on that rule's OUTPUT never sees the
+     equation), and it must emit `(−1)·s`, peval's ring normal form -- `bvsub`
+     survives peval and the closers as a residual.
+  2. Contract: an instruction carrying a block runs the block INSTEAD of
+     itself, ghosts included (`Verifier.v`, the `Some b` branch), so the done
+     seeds go in `ghost_after` of index 10, not `ghost_before` of 11 --
+     muladd's tail places `build_i` the same way.
+- **S1a VC side GREEN:** `valid_sub_loop` 13.4 s, `valid_sub` (the callee)
+  3.0 s, `valid_s1a` (the whole program, callee as a block entered by the
+  real `jal`) 0.1 s, under coqc; file 40.8 s / 4.9 GB. Two negative controls
+  in the file (no block ⇒ fails; a post publishing a's secret limbs ⇒
+  fails). OPEN: the end theorem (Result file: `blkValid_of_callee` +
+  `ValidCFGVerifierContract_intro` + a bridge with array memory), the gate
+  (the solver rule fires in every example), S1b.
 
 ### Phase 2 — byte memory, the remaining parts (D3)
 - `sb` at width 1 (`sep_contract_mem_write_value`, untested at width 1).
@@ -351,6 +374,12 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-21 | Phase 1: loop VC | 22:57:05 | 22:57:51 | 1 | 0.15 | 0.6 | `valid_sub_loop` 9.2 s | — | 0 | green first try |
 | 2026-10-21 | Phase 1: callee VC debugging (OPEN) | 22:57:51 | 23:09:42 | 12 | ~2 (2 debug compiles ~1 min each) | ~10 | VC construction ~11 s | — | 4 hypotheses refuted | stopped to report |
 | 2026-10-21 | Phase 1: root cause (muladd comparison + harness) | 23:19:13 | 23:40:33 | 21 | ~14 (muladd tail rebuild + 2 probes, 23:20→23:37) | ~7 | — | probes only | 0 | waiting dominated |
+| 2026-10-22 | Phase 1: explain the rule to Emiel | 07:42:40 | ~08:28 | — | — | — | — | — | — | user time |
+| 2026-10-22 | Phase 1: solver rule v1 (prototype + port + build) | 08:28:27 | 08:41:17 | 13 | 5.75 (Solver.vo 345 s) | 7 | Solver.vo 345 s / 3.66 GB | Solver.v +161 | ~8 preamble attempts (Equations bullets, `&&` notation, implicit args) | prototyped under `zz_` names, all proofs checked before the build |
+| 2026-10-22 | Phase 1: v1 does not fire -- diagnose, v2 (shared literal, hook before val-cancel) | 08:41:17 | 08:58:20 | 17 | 13 (deps 389 s + Solver.vo 388 s) | 4 | — | +~45 | 1 (`ring` not declared at generic width) | |
+| 2026-10-22 | Phase 1: deps rebuild killed by the low-memory reaper; restarted at -j1 | 08:58:20 | 09:08:03 | 10 | ~8 | — | deps -j1 216 s / 4.9 GB | — | — | user approval in between |
+| 2026-10-22 | Phase 1: still red -- 2nd cause (ghosts on a block instr are skipped), `(−1)·s` output form, v3 | 09:08:03 | 09:30:36 | 22 | 13 (debug dump 117 s, Solver.vo 365 s, deps 418 s) | 9 | `valid_sub` 6.2 s | Solver.v +~40, spike 4 lines | 2 (ARopp argument order, numeral `-1`) | |
+| 2026-10-22 | Phase 1: whole-program VC + negative controls + file compile | 09:30:36 | 09:32:33 | 2 | 0.7 | 1.3 | file 40.8 s / 4.9 GB; VCs 13.4 / 3.0 / 0.1 s | spike +~70 | 0 | `valid_s1a` green first try |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
