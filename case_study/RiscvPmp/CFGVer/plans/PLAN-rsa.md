@@ -1,8 +1,9 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
 Status: **IN PROGRESS on branch `issue/rsa` (not merged, not pushed).**
-Phase 0 done; Phase 1 spike S1a DONE end to end (2026-10-22), S1b next;
-gate last PASSED at `4af3dd9e` (the S1a end theorem is not yet through it). Survey (§1), decisions (§2), phases (§4), timing log (§5).
+Phase 0 done; Phase 1 spikes S1a AND S1b DONE end to end (2026-10-22);
+gate last PASSED at `4af3dd9e` -- NOT yet run on the S1a/S1b end theorems
+nor on the peval_sext rule (theories/), so GATE 1 is pending the gate. Survey (§1), decisions (§2), phases (§4), timing log (§5).
 
 ## HANDOFF (2026-10-22) — read this first
 
@@ -40,13 +41,29 @@ ranges pairwise disjoint, the layout in range. New helper
 `data_layout_cell_cons` (local to the Result file; move to GenProg.v when a
 second i31 header needs it -- every i31 integer has one).
 
-**Next step — S1b** (§4 Phase 1): the real caller
-`tools/bearssl/spike/sub2.c` = `br_i31_montymul`'s last line, linked with
-`i31_sub.o` (listing in the session's `sub2.dis` shape: frame
-`addi sp,-16; sw ra,s0,s1,s2`, one `jal`, then a TAIL `j br_i31_sub` after
-restoring ra). New over S1a: a stack region below `sp` in the caller's pre,
-callee-saved s0–s2 pinned across the call, and `subBlk` reached twice (once
-with r = caller+4·k, once with r = the caller's own return address).
+**Step 2 — S1b: DONE 2026-10-22.** `Example/Rsa/RsaSpikeSub2.v` (light) +
+`RsaSpikeSub2Result.v` (heavy; in `Results.v` and the gate list):
+the real `rsa_spike_sub2` (`sub2.c`, hardened) linked as
+`[jal ra, sub2; j end] ++ sub2 ++ br_i31_sub` (51 instrs, exit +204).
+`sub2Rec` = `gen_seg_contract_at … (term_var "r")` over the caller AND its
+callee as linked (a block's table must hold every pc it reaches), S1a's
+`subBlk` reused unchanged as a block at index 20, entered twice (`jal`: exit
+q+40; tail `j`: exit the caller's own `r`). `sp`, `s0..s2` pinned (same
+logic variable in pre and post), the frame owned as four `gen_data_at`
+DCells. Whole program `s1bRec` = `gen_prog_contract` with `DPtr (sp − 16)` +
+four secret cells. VCs: `valid_sub2` 6.8 s, `valid_s1b` 0.3 s; two negative
+controls (s0 handed back wrong; a's limbs published). End theorem
+`sub_call2_noninterferent` (∀ h, a / b / frame anywhere disjoint), one
+`gen_prog_noninterferent`, axiom-clean.
+**Framework change it needed (Emiel's choice): `peval` drops a same-width
+`sext`** (`PartialEvaluation.peval_sext`, `width_cast`, `bv.sext_same`).
+Every RV32 `lw` produces `sext v` at 32→32 (Machine.v `extend_value`), so a
+reloaded `ra` returned to `sext r` and missed the syntactic exit `r` ("no
+instruction key matches this pc term"). S1a re-verified unchanged with it.
+**The full gate has NOT run since this theories/ change** — muladd's
+`t_mlen` (which spells `sext`) and every other example are unchecked.
+
+**Next step — GATE 1**: run the gate (theories/ changed), then Phase 2.
 
 **Known traps (each cost time this session).**
 - Ghosts on an instruction carrying a block never run — put seeds on the
@@ -461,6 +478,13 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | gate #2–#4 (unified generator): two reaper kills (MuladdParamVC 10 GB; axiom probes), heavy file built in between, last stage in the foreground | 10:54:51 | 13:19:41 | 145 | ~120 | — | MuladdParamVC 698 s / 9.1 GB; final gate 344 s / 9.8 GB | — | — | PASSED, 24 theorems axiom-clean; ~60 min of the window was a usage-limit pause |
 | 2026-10-22 | Phase 1: S1a end theorem -- read handoff + templates, probe route A (VC via gen_prog_contract) | 13:24:55 | 13:28:06 | 3 | <0.1 | 3 | probe VC 0.2 s | — | 1 (missing solve_mb_vc import) | then the two decisions to Emiel |
 | 2026-10-22 | Phase 1: S1a end theorem -- restate s1aRec, validity steps, statement, end theorem, gate list | ~13:29 | 13:46:14 | ~17 | ~2 (spike 46 s, Result compiles) | ~15 | spike file 29.4 s user / 4.9 GB; Result file 18.7 s user / 7.5 GB; VCs 13.5 / 3.0 / 0.1 s | spike ±~20, Result 330 lines (~200 proof) | 6 (notation `∗` out of scope, `secLeakvar` notation, `repeat_length` in two hyps, two `lia` on mismatched `bv.bin` width index -- fixed by `exact` up to conversion) | end theorem green on its FIRST full compile; axiom-clean |
+| 2026-10-22 | Phase 1: S1b listing (clone, build, link, asm_to_ast) + caller contract + first VC run | 13:48:14 | ~14:05 | ~17 | ~1 | ~16 | — | spike2 ~120 | 1 (VC red) | |
+| 2026-10-22 | Phase 1: S1b diagnosis (two coqc dumps: residual False, then DebugCFGVerifierContract → `sext r` exit miss) | ~14:05 | ~14:20 | ~15 | ~5 | ~10 | debug compiles ~1 min each | — | — | then explain to Emiel (3 options, then "why is the sext there") |
+| 2026-10-22 | explain sext + options to Emiel | ~14:20 | 14:54:36 | — | — | — | — | — | — | user time |
+| 2026-10-22 | peval_sext rule (preamble prototypes, Bitvector + PartialEvaluation edits) | 14:54:36 | 15:00:04 | 5.5 | 2.6 (3 builds) | 3 | PartialEvaluation.vo 46 s | Bitvector +15, PartialEvaluation +53 | 3 (Z_scope `m n : Z`, `I` for IsTrue, none in the proofs) | proofs first try after preamble |
+| 2026-10-22 | rebuild light chain (Solver.v etc.) -j2 | 15:00:27 | 15:16:12 | 16 | 16 | 0 | 945 s wall / 1025 s user / 4.9 GB | — | — | S1a VCs unchanged 13.9 / 2.9 / 0.1 s |
+| 2026-10-22 | S1b VCs green + negative controls; harness contract written during the rebuild | 15:00:51 | ~15:20 | — | ~0.3 | — | valid_sub2 6.8 s, valid_s1b 0.3 s; file 37.8 s user / 5.0 GB | spike2 ~210 total (51 generated instrs) | 0 | both VCs green FIRST try after the rule |
+| 2026-10-22 | heavy chain rebuild -j1 (in background) + S1b Result file | 15:19:23 | 15:44:22 | 25 | ~19 (rebuild 1119 s) | ~6 interleaved | Result 21.5 s user / 7.5 GB | Result ~280 lines | 4 (`repeat constructor` overshoot, `repeat f_equal` on N, bv.unsigned_of_N_small missing, rewrite comma syntax) | axiom-clean |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least

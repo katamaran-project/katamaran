@@ -97,8 +97,9 @@ Definition subCtx : LCtx :=
    "h"∷ty_xlenbits].
 
 (* the word count the code computes: m = (h + 63) >> 5, so m - 1 limbs.
-   `sext h`, not `h`: that is the term `lw` produces (a same-width sign
-   extension, the identity, but a different term -- muladd's t_mlen) *)
+   `sext h`: the term `lw` produced before peval_sext (2026-10-22) dropped
+   that same-width sign extension; kept, since the solver normalizes both
+   spellings and the VCs are unchanged -- muladd's t_mlen likewise *)
 Definition t_mw {Σ} (h : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
   term_binop bop.shiftr
     (term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 63)) (term_unop uop.sext h))

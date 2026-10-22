@@ -98,6 +98,29 @@ own lemmas: `land_if_ones`, `lor_if_ones`, `lxor_if_ones`, `not_if_ones`,
   at ~30 ms/attempt (`From Coq Require Import NArith Lia. From Katamaran Require
   Import Prelude Bitvector.` — `%N` needs `NArith`), then pay one compile.
 
+## Same-width `sext` is dropped (2026-10-22, `peval_sext`)
+
+Every RV32 `lw` produces `term_unop (@uop.sext 32 32 _) v` (Machine.v's
+`extend_value` widens 4 bytes to `xlenbytes = 4`), the identity on values but
+not on terms — a saved-then-reloaded `ra` no longer matched a syntactic exit.
+`peval_unop`'s `uop.sext` case returns the argument when the widths are equal.
+Two lessons that transfer to any width-indexed rule:
+
+- **Decide width equality by computation, not by a proof.** An `eq_rect`
+  along an opaque `Nat.eqb_eq`-style proof does not reduce under
+  `vm_compute`, so the rule silently never fires. `width_cast` (top of the
+  file, `Section Util`) is a structural `Fixpoint` returning the identity cast
+  as `option (forall A, A m -> A n)`, with `width_cast_spec` linking it to
+  `eq_rect`. Reuse it.
+- **A same-index `leview` cannot be destructed** (`leview m m`): state the bv
+  fact for any `n = m` and destruct `leview m n` (`bv.unsigned_sext_same`,
+  then `bv.sext_same`).
+
+Contract terms that spelled `sext h` to match the old loaded term: S1a's
+`t_mw` kept verifying unchanged (same VC times). Muladd's `t_mlen` and the
+rest of the tree were NOT re-checked when this landed — the gate is the
+check; if a muladd VC breaks there, a `sext` spelling is the first suspect.
+
 ## Canonical ring forms for bitvector sums (2026-09-30)
 
 `peval` is main's architecture again: `peval t = CanonTerm_to_Term (peval2 t)`.

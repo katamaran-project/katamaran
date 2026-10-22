@@ -88,6 +88,21 @@ corollary. Worked case: `Example/Rsa/RsaSpikeSub.v` (`br_i31_sub`). The
 model's JALR is `pc := rs1 + imm` (no `& ~1`), and `is_exit` is syntactic, so
 a function's VC needs no "return address outside the code" premise.
 
+A NON-LEAF function (worked case `Example/Rsa/RsaSpikeSub2.v`, a caller with
+a frame and a tail call): its `code` is ITSELF AND ITS CALLEES as linked —
+a block's table must hold every pc its run reaches, and a callee is reached
+through a block on the callee's first instruction, so it must be in the
+table. Pin `sp` and the callee-saved `s_i` to the SAME logic variable in pre
+and post (that is what lets the caller keep its pointers across the call),
+and own the frame as `gen_data_at (t_add sp (-16)) [DCell Secret; …]` — the
+generator's cell form, so a whole-program `gen_prog_contract` stating
+`DPtr (sp − 16)` + the same cells hands them over unchanged. A tail call's
+block exit is the caller's own `r` reloaded by `lw ra`; that only matches
+the caller's exit because `peval` drops the same-width `sext` every `lw`
+produces (`PartialEvaluation.peval_sext`, 2026-10-22). Without it the
+symptom is `"sexec_cfg_addr: no instruction key matches this pc term"` with
+`secLeak (sext r)` in the dumped path condition.
+
 ## Register machinery
 
 The two-world register predicates `gen_implpre` builds on

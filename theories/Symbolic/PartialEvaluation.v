@@ -115,6 +115,30 @@ Section Util.
 
   Lemma plusNatPos_of_succ_nat {n m} : plusNatPos n (Pos.of_succ_nat m) = Pos.of_succ_nat (n + m).
   Proof. induction n; cbn; now f_equal. Qed.
+
+  (* The identity cast between two equal widths, by structural recursion
+     rather than an equality proof, so it reduces under vm_compute with no
+     opaque proof term in the way (peval_sext). *)
+  Fixpoint width_cast (m n : nat) : option (forall A : nat -> Type, A m -> A n) :=
+    match m, n with
+    | O, O => Some (fun A x => x)
+    | S m', S n' =>
+        match width_cast m' n' with
+        | Some f => Some (fun A x => f (fun k => A (S k)) x)
+        | None => None
+        end
+    | _, _ => None
+    end.
+
+  Lemma width_cast_spec m n f : width_cast m n = Some f ->
+    exists e : m = n, forall A x, f A x = eq_rect m A x n e.
+  Proof.
+    revert n f. induction m as [|m IH]; intros [|n] f; cbn; try discriminate.
+    - intros [= <-]. exists eq_refl. reflexivity.
+    - destruct (width_cast m n) as [g|] eqn:E; [|discriminate]. intros [= <-].
+      destruct (IH n g E) as [e He]. subst n. exists eq_refl. intros A x.
+      cbn. exact (He (fun k => A (S k)) x).
+  Qed.
 End Util.
 
 Module Type PartialEvaluationOn
@@ -2915,10 +2939,27 @@ End CanonTerm.
       peval_bvnot (term_val (ty.bvec n) v) = term_val (ty.bvec n) (bv.not v).
     Proof. reflexivity. Qed.
 
+    (* A same-width sign extension is the identity (bv.sext_same).  A RISC-V
+       `lw` on RV32 produces one on every load (Machine.v's extend_value widens
+       4 bytes to xlenbytes = 4), so without this rule a return address saved
+       with `sw ra` and restored with `lw ra` comes back as `sext r`, and the
+       syntactic exit test against `r` misses (PLAN-rsa.md, spike S1b). *)
+    Definition peval_sext {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
+        Term Σ (ty.bvec n) :=
+      match width_cast m n with
+      | Some f => f (fun k => Term Σ (ty.bvec k)) t
+      | None   => peval_unop' (uop.sext (m := m) (n := n) (p := p)) t
+      end.
+
+    Lemma selftest_sext_same (t : Term Σ (ty.bvec 32)) p :
+      peval_sext (m := 32) (n := 32) (p := p) t = t.
+    Proof. reflexivity. Qed.
+
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
       | uop.bvnot                     => peval_bvnot
+      | @uop.sext _ m n p             => @peval_sext m n p
       | uop.negate                    => fun t => canon_term (term_unop uop.negate t)
       (* | uop.unsigned                  => peval_unsigned *)
       (* | uop.vector_subrange start len => peval_vector_subrange start len *)
@@ -2990,11 +3031,21 @@ End CanonTerm.
         f_equal; now rewrite bv.not_if_ones.
     Qed.
 
+    Lemma peval_sext_sound {m n} {p : IsTrue (m <=? n)} (t : Term Σ (ty.bvec m)) :
+      peval_sext (p := p) t ≡ term_unop (uop.sext (m := m) (n := n) (p := p)) t.
+    Proof.
+      unfold peval_sext.
+      destruct (width_cast m n) as [f|] eqn:E; [|apply peval_unop'_sound].
+      destruct (width_cast_spec E) as [e He]. rewrite He. subst n. cbn.
+      intros ι; cbn. destruct (inst t ι) as [v|v1 v2]; cbn;
+        f_equal; try f_equal; symmetry; apply bv.sext_same.
+    Qed.
+
     Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
-        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound, canon_term_equiv(* , peval_unsigned_sound, *)
+        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound, peval_sext_sound, canon_term_equiv(* , peval_unsigned_sound, *)
                  (* peval_bvdrop_sound, peval_bvtake_sound, *)
                  (*   peval_vector_subrange_sound *).
     Qed.

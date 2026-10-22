@@ -837,6 +837,21 @@ Module bv.
                   Znat.Nat2Z.inj_succ, Z.pow_succ_r; lia.
     Qed.
 
+    (* A sign extension to the SAME width is the identity (a RISC-V `lw` on
+       RV32 produces one: extend_value widens 4 bytes to xlenbytes = 4).
+       Stated for any n = m because `leview m m` cannot be destructed with its
+       index fixed. *)
+    Lemma unsigned_sext_same {m n : nat} {p : IsTrue (m <=? n)%nat} (v : bv m) :
+      n = m -> unsigned (@sext m v n p) = unsigned v.
+    Proof.
+      intros H. unfold sext. destruct (leview m n) as [k].
+      assert (k = 0%nat) by Lia.lia. subst k. unfold sext'. rewrite unsigned_app.
+      destruct (msb v); cbn; Lia.lia.
+    Qed.
+
+    Lemma sext_same {m : nat} {p : IsTrue (m <=? m)%nat} (v : bv m) : @sext m v m p = v.
+    Proof. apply unsigned_inj, unsigned_sext_same. reflexivity. Qed.
+
     Lemma unsigned_zero {m} :
       unsigned (@zero m) = 0.
     Proof. reflexivity. Qed.

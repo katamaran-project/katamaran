@@ -99,6 +99,10 @@ AXIOM_CLEAN_THMS=(
   # made public by its precondition (seg_exit_sync_pub) -- the only end
   # theorem whose block exit is not an offset.
   "sub_call_noninterferent"
+  # a caller that is itself a function (RsaSpikeSub2Result.v, spike S1b):
+  # frame, callee-saved s0-s2 pinned, a tail call whose block exit is the
+  # caller's own return address reloaded by `lw` (peval_sext)
+  "sub_call2_noninterferent"
 )
 
 COQC="${COQC:-coqc}"
