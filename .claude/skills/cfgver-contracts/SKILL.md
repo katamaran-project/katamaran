@@ -205,6 +205,22 @@ Loop template: `Example/Muladd/MuladdParamLoopN.v` (remaining count n the only
 varying variable, addresses END − s·n). The general proofs (a k-byte cell
 is k byte cells for any RelVal value, and back) are `SpecIris.rg_*`.
 
+**Ghosts on an instruction that carries a block NEVER RUN** (`Verifier.v`,
+the `Some b` branch of the step: the block fires INSTEAD of the instruction,
+ghosts included). Seeds for a loop block's done arrays (`clem_arr_empty`) go
+in `ai_ghost_after` of the instruction BEFORE the block — muladd's tail puts
+`build_i` after index 66 for its block at 67. Symptom of getting it wrong: the
+loop block's entry fails to match a done array that is simply absent from
+the heap (found 2026-10-22, PLAN-rsa.md Phase 1). Ghosts AFTER a block's exit
+go on the instruction at the exit (`ai_ghost_before`), which is not a block.
+
+**Entering LoopN from a precondition whose count is `m − 1`** used to fail
+outright: the source-array start `end − 4·count` then carries the SAME literal
+(+4) as a heap start `4 + x`, the solver cancelled it and eliminated the
+PARAMETER x instead of the loop's evar. Fixed in the solver
+(`try_isolate_inner`, core-executor-internals); muladd's counts (`mlen − 3`)
+never hit it by luck of literals.
+
 ## Hand-writing a contract: the assertion vocabulary
 
 A hand-written precondition is built from exactly what the generator would emit

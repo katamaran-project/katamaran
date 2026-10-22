@@ -71,6 +71,23 @@ registers it uses `regPstsTo_sync_is_nonsync` to unify `NonSyncVal v v` into
 induction — extensions should reuse it (cf. the concretize trick in the `_rel`
 bridge) rather than re-prove it.
 
+## The segment generator: one generator, the exit a TERM (2026-10-22)
+
+`GenSegment.gen_seg_contract_at base base_a ex code fl regs extra_pre post`
+is the ONE block generator — loops, straight segments and FUNCTIONS alike.
+`gen_seg_contract … target …` is its abbreviation at `exit_of_off base target`
+(a proof that `cbn`s through it needs `gen_seg_contract_at` in the list too).
+A function is `gen_seg_contract_at … (term_var "r") … (secLeakvar "r" ∗ pre) …`
+with `X1 ↦ᵣ term_var "r"` in pre: the block is entered from every call site
+with whatever X1 holds and resumes at `subst cfg_exit`. Validity:
+`GenCompose.blkValid_of_seg_at`, whose ONLY exit-specific premise `Hex` is
+"the precondition makes the exit a SyncVal" (`etable_rel`), discharged by
+`seg_exit_sync_off` (offset exit, from the placement) or `seg_exit_sync_pub`
+(a leading `secLeak ex_a` in extra_pre). `blkValid_of_loop_seg` is the offset
+corollary. Worked case: `Example/Rsa/RsaSpikeSub.v` (`br_i31_sub`). The
+model's JALR is `pc := rs1 + imm` (no `& ~1`), and `is_exit` is syntactic, so
+a function's VC needs no "return address outside the code" premise.
+
 ## Register machinery
 
 The two-world register predicates `gen_implpre` builds on

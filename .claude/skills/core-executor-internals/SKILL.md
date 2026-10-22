@@ -345,6 +345,35 @@ Two preamble-vs-file differences to match when prototyping (the first cost a ~5 
 `RiscvPmp.Sig` preamble WITHOUT `From iris.proofmode Require Import tactics`
 accepts the comma form, so load it to match the file.
 
+### Added 2026-10-22: ISOLATE THE INNERMOST VARIABLE (`try_isolate_inner`)
+
+`try_unify_eq` solves only a BARE `var = term`, so on `x + s = y` it can only
+eliminate y. In an ASSERT that is the wrong variable when x is an angelic one
+a consume introduced (a contract's/block's logic variables are bound AFTER
+the state they are matched against) and y a universally bound variable of
+that state: `assert_vareq y (x + s)` survives `cfg_postprocess` undischarged
+(postprocess would have to invert the term), while `assert_vareq x …` is a
+witness. Rule (`formula_propeq` arm): `x + s = y`, also under a shared
+literal `c + l = c + r`, x and y variables, x INNERMOST (smaller
+`ctx.in_at`), `secLeakT s` ⟶ `x = y + (−1)·s`. A completeness rule (both
+orientations state the same equation). The `secLeakT` guard is load-bearing:
+RelVal lifting never normalises `NonSyncVal v v` to `SyncVal v`, so
+`x + s = y ⇔ x = y − s` is FALSE for a secret s (`relval_isolate`). Two
+lessons, each measured by a rule that compiled green and did nothing:
+- **It must run BEFORE `try_bvadd_cancel_val_propeq`, not on its output.**
+  `solver_generic` simplifies and UNIFIES in the same pass, so the weakened
+  equation reaches `try_unify_eq` before any later simplify pass could
+  rewrite it.
+- **Emit peval's normal form.** `bvsub` survives peval AND the closers
+  (`bv_lin` has no case for it) as a residual; `y + (−1)·s` folds
+  (`xa + (−1)·(−4·m)` is `xa + 4·m`). `bv_mul_m1` proves `(−1)·c = −c` via the
+  stdlib almost-ring lemmas (`Ring_theory.Rth_ARth`/`ARopp_mul_l`) — `bv`
+  has no `ring` declared at a generic width.
+Diagnosis recipe that found it in seconds: rebuild the world + heap in a
+`Prelude` preamble and `Eval vm_compute` `SPureSpec.consume_chunk_angelic`
+and `cfg_postprocess` on hand-built `SymProp`s (`demonicv`/`angelicv`/
+`@SymProp.assert_vareq Σ x σ _ t amsg.empty k`).
+
 ## Adding a NEW solver rule — the recipe
 
 Four rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),

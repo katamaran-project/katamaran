@@ -1,8 +1,74 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
-Status: **DRAFT, 2026-10-21. Not started.** Survey (§1) done and the four
-top-level decisions (§2) taken by Emiel. Phases below are proposals; each
-gate is a checkpoint with Emiel before the next phase starts.
+Status: **IN PROGRESS on branch `issue/rsa` (not merged, not pushed).**
+Phase 0 done; Phase 1 spike S1a VC side green; last commit `4af3dd9e`,
+gate PASSED there. Survey (§1), decisions (§2), phases (§4), timing log (§5).
+
+## HANDOFF (2026-10-22) — read this first
+
+**Where things stand.**
+- `Example/Rsa/RsaSpikeSub.v` (in `_CoqProject`, NOT in `Results.v`): the
+  linked program `[jal ra, br_i31_sub ; j end] ++ <hardened br_i31_sub>`
+  (31 instrs, exit +124) with three green VCs — `valid_sub_loop` (the word
+  loop, LoopN template), `valid_sub` (`br_i31_sub`, exit = return address
+  `r`), `valid_s1a` (whole program, `br_i31_sub` a block on instruction 2) —
+  plus two negative controls. ~46 s / 4.9 GB to compile.
+- Framework added on this branch (gate-checked): `Solver.v`
+  `try_isolate_inner`; `GenSegment.gen_seg_contract_at` (the ONE generator,
+  exit a term); `GenCompose.blkValid_of_seg_at` + `seg_exit_sync_off/pub`.
+  See Phase 1 status below, and the skill notes (cfgver-contracts "Arrays",
+  core-executor-internals, cfgver-gen-contract-internals).
+- Tooling: `tools/bearssl/build.sh <BearSSL checkout> <out>` (re-clone
+  BearSSL into the scratchpad, pinned `7bea48e`), `tools/bearssl/spike/`
+  (harness `.s` + `sub2.c`), `asm_to_ast.py --objdump --tables-aliases`
+  on `llvm-objdump-18 -d --no-show-raw-insn` of an `ld.lld --relax -Ttext=0`
+  link. Recipe for S1a's listing: header comment of `RsaSpikeSub.v`.
+
+**Next step 1 — the S1a end theorem** (new heavy file
+`Example/Rsa/RsaSpikeSubResult.v`, add to `_CoqProject` after the spike):
+1. the loop block valid: `blkValid_of_loop_seg` over LoopN's `lnRec`,
+   exactly as `Example/Muladd/MuladdParamResult.v:101–123` does for loops
+   I/K/M (same template);
+2. `subBlk` valid: `blkValid_of_seg_at (term_var "q") (term_var "q")
+   (term_var "r") sub_instrs 30 sub_regs (secLeakvar "r" ∗ sub_pre) sub_post
+   LV (fun _ _ => eq_refl) Hex Hcode valid_sub`, with `LV` = `sub_annot`
+   typed (the loop block at index 11 carrying step 1's proof, as
+   `CountdownRecResult.cd_link_annotV`) and `Hex` from
+   `seg_exit_sync_pub … (fun … => eq_refl)`;
+3. `ValidCFGVerifierContract s1aRec` via `ValidCFGVerifierContract_intro`
+   with the typed `s1a_annot` (block at index 2 carrying step 2) and
+   `valid_s1a` — as `CountdownRecResult.cdLink_valid`;
+4. the end theorem. **Decision for Emiel before writing it:** the
+   statement's memory picture. The arguments are POINTERS (A0, A1), so the
+   natural bridge is `GenProg.gen_prog_noninterferent` with `DPtr` specs
+   (template `Example/CheckScalar/CheckScalarPtr*.v`) — but `s1aRec` is a
+   hand-built `gen_seg_contract`, so either restate it via
+   `gen_prog_contract` (same block annotation) or wire
+   `cfg_instrs_endToEnd` by hand (CountdownRecResult + cfgver-memory). And
+   the layout needs a size: fix h (e.g. 2 limbs) or quantify. Propose both
+   with the literal memory picture (feedback: define before use).
+
+**Next step 2 — S1b** (§4 Phase 1): the real caller
+`tools/bearssl/spike/sub2.c` = `br_i31_montymul`'s last line, linked with
+`i31_sub.o` (listing in the session's `sub2.dis` shape: frame
+`addi sp,-16; sw ra,s0,s1,s2`, one `jal`, then a TAIL `j br_i31_sub` after
+restoring ra). New over S1a: a stack region below `sp` in the caller's pre,
+callee-saved s0–s2 pinned across the call, and `subBlk` reached twice (once
+with r = caller+4·k, once with r = the caller's own return address).
+
+**Known traps (each cost time this session).**
+- Ghosts on an instruction carrying a block never run — put seeds on the
+  instruction before.
+- Memory: the background-shell reaper kills the gate at `MuladdParamVC`
+  (~10 GB) or the axiom probes when RAM is short. Build `MuladdParamVC.vo`
+  first, run the gate's last stage in the foreground (`GATE_JOBS=1
+  GATE_PROBE_BATCH=18`). pet OOMs replaying `GenCompose.v` past line ~2300:
+  check its lemmas by `make`, the rest interactively.
+- LoopN hard-codes the `m` array PUBLIC; in RSA the modulus is secret —
+  Phase 3 needs a LoopN variant with both publicness flags.
+- `Tables.v` has no `S4`–`S11` aliases yet (needed by montymul's listing).
+- Solver.v builds take ~6 min and invalidate everything downstream (~7 min
+  `-j1` to get back to the examples).
 
 Source: BearSSL `git clone https://www.bearssl.org/git/BearSSL`, HEAD
 `7bea48e` (2026-04-06). The `src/int/i31_*` and `src/rsa/rsa_i31_priv.c`
