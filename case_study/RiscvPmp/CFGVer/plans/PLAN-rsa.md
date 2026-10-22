@@ -62,12 +62,18 @@ build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
 `RsaSpikeSub.v` / `RsaSpikeSub2.v`.
 
 **Next step — Phase 2 (byte memory, D3), §4.** Concretely, in order:
-1. **Ask Emiel O1 first** (§3): which memcpy/memset/memmove — textbook
-   byte loops in a local `mem.c` with `-fno-builtin` (proposal) or
-   picolibc's. Do not pick.
-2. Smallest test of `sb` at width 1 (`sep_contract_mem_write_value`, never
-   exercised at width 1): a 2–3 instruction program storing a secret byte
-   into an `arr _ 1 1` chunk, VC + negative control.
+1. ~~Ask Emiel O1~~ DONE 2026-10-22: picolibc 1.8.12's `-Os` RISC-V
+   assembly (§3 O1, `tools/bearssl/picolibc.sh`).
+2. ~~`sb` at width 1~~ DONE 2026-10-22, NO framework change:
+   `Example/Rsa/RsaSpikeSb.v` (light) — memset's body (`sb; addi`) into a
+   secret and into a public `arr _ 1 1` (take_first / store / add_first),
+   memcpy's body (`lbu; sb`) between two PUBLIC stride-1 byte arrays (the
+   angelic `arr` match copes with two same-shape candidates); VCs 0.08 /
+   0.04 / 0.10 s, file 15.9 s user / 4.7 GB. Controls: secret byte → public
+   array rejected; secret source → public destination rejected; both green
+   VCs fail with `p ≠ p` / `d ≠ d` added to the post (not vacuous). Trap:
+   a post `arr true` after a secret store is NOT a secrecy control —
+   `arr true`/`arr false` are different predicates, it fails on the name.
 3. Spike S2, the mixed-width view change: `br_ccopy` (byte-wise,
    `tools/bearssl/listings/hardened/ccopy.s`) over a word array that a
    caller touches with `lw`. Decide WHERE word⇄4-bytes happens — a ghost
@@ -240,10 +246,26 @@ leakage model = current `KatamaranRel` (no MUL leak); `-O2`.
 
 ## §3. Open — proposals, to decide at the named gate
 
-- **O1 (Phase 2)** — which memcpy/memset/memmove. Proposal: the textbook
-  byte loops in a local `mem.c`, compiled with `-fno-builtin` so clang does
-  not turn them back into calls. Alternative: picolibc's (word fast path,
-  alignment branches on public pointers — more realistic, more code).
+- **O1 (Phase 2) — DECIDED 2026-10-22 (Emiel): picolibc 1.8.12's
+  size-optimised RISC-V assembly.** BearSSL ships no memcpy/memset/memmove
+  (it includes `<string.h>`; our freestanding build only declares them,
+  `stubinc/string.h`), so the bodies are a choice. picolibc's
+  `libc/machine/riscv/rv_string.h` picks, under `-Os` /
+  `__PREFER_SIZE_OVER_SPEED`, hand-written byte loops; under plain `-O2`
+  it picks C with a word fast path + alignment handling (and vector code
+  with V). We take the `-Os` ones: real libc code, one loop each, byte
+  access only. `tools/bearssl/picolibc.sh` assembles them (clang `-Os`
+  rv32im; `LPAD` is empty without Zicfilp). Shapes:
+  - `memset` (5): `mv a3,a0; beqz a2,done; L: sb a1,0(a3); addi a2,-1;
+    addi a3,1; bnez a2,L; done: ret`
+  - `memcpy` (7): same with `lbu a4,0(a1); sb a4,0(a3)` and `a1 += 1`
+  - `memmove` (13): ONE loop, stride `a3 = ±1` chosen by `bltu a0,a1`
+    (public pointers); the backward case first adds `n` to both pointers.
+    The loop is ROTATED — entered at `.Lcopy` (`lbu; addi a2; sb; bnez`),
+    back edge to `.Lincrement` (both pointers `+= a3`) — so its header is
+    not its entry. Either one loop contract with a ±1 stride variable, or
+    two (one per direction); decide when we get there.
+  Writeup: "linked against picolibc's size-optimised mem*".
 - **O2 (Phase 7)** — how the top-level statement ends. The kernel's statement
   exits at a literal address; a function returns to `ra`. Proposal: a
   2-instruction harness `jal ra, br_rsa_i31_private; <exit>` in the program
@@ -520,6 +542,8 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | rebuild light chain (Solver.v etc.) -j2 | 15:00:27 | 15:16:12 | 16 | 16 | 0 | 945 s wall / 1025 s user / 4.9 GB | — | — | S1a VCs unchanged 13.9 / 2.9 / 0.1 s |
 | 2026-10-22 | S1b VCs green + negative controls; harness contract written during the rebuild | 15:00:51 | ~15:20 | — | ~0.3 | — | valid_sub2 6.8 s, valid_s1b 0.3 s; file 37.8 s user / 5.0 GB | spike2 ~210 total (51 generated instrs) | 0 | both VCs green FIRST try after the rule |
 | 2026-10-22 | heavy chain rebuild -j1 (in background) + S1b Result file | 15:19:23 | 15:44:22 | 25 | ~19 (rebuild 1119 s) | ~6 interleaved | Result 21.5 s user / 7.5 GB | Result ~280 lines | 4 (`repeat constructor` overshoot, `repeat f_equal` on N, bv.unsigned_of_N_small missing, rewrite comma syntax) | axiom-clean |
+| 2026-10-22 | Phase 2: O1 (explain + survey picolibc, pin 1.8.12, `picolibc.sh`, plan) | ~16:00 | 16:19:11 | ~19 | <0.5 | ~7 | — | script 30 | 0 | ~15 min of it user time (3 clarifying rounds: BearSSL has no mem*, which libc, why byte loops) |
+| 2026-10-22 | Phase 2 step 2: `sb` width 1 (RsaSpikeSb.v: 3 VCs + 4 controls) | 16:19:11 | 16:23:53 | 4.7 | 0.5 (full compile 22 s) | 4.2 | VCs 0.08 / 0.04 / 0.10 s; file 15.9 s user / 4.7 GB | ~110 | 0 failed VCs; 1 control replaced (name-mismatch, not secrecy) | all green first try; one coqc-guard block (file appended after session start) |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
