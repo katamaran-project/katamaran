@@ -1,83 +1,114 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
 Status: **IN PROGRESS on branch `issue/rsa` (not merged, not pushed).**
-Phase 0 done; Phase 1 spikes S1a AND S1b DONE end to end (2026-10-22);
-gate last PASSED at `4af3dd9e` -- NOT yet run on the S1a/S1b end theorems
-nor on the peval_sext rule (theories/), so GATE 1 is pending the gate. Survey (§1), decisions (§2), phases (§4), timing log (§5).
+Phase 0 done; Phase 1 CLOSED (2026-10-22: spikes S1a and S1b end to end,
+axiom-clean; GATE 1 closed on light checks by Emiel, merge gate deferred to
+the end of the plan). Next: Phase 2. Survey (§1), decisions (§2), phases (§4), timing log (§5).
 
-## HANDOFF (2026-10-22) — read this first
+## HANDOFF (2026-10-22, end of day) — read this first
 
-**Where things stand.**
-- `Example/Rsa/RsaSpikeSub.v` (in `_CoqProject`, NOT in `Results.v`): the
-  linked program `[jal ra, br_i31_sub ; j end] ++ <hardened br_i31_sub>`
-  (31 instrs, exit +124) with three green VCs — `valid_sub_loop` (the word
-  loop, LoopN template), `valid_sub` (`br_i31_sub`, exit = return address
-  `r`), `valid_s1a` (whole program, `br_i31_sub` a block on instruction 2) —
-  plus two negative controls. ~46 s / 4.9 GB to compile.
-- Framework added on this branch (gate-checked): `Solver.v`
-  `try_isolate_inner`; `GenSegment.gen_seg_contract_at` (the ONE generator,
-  exit a term); `GenCompose.blkValid_of_seg_at` + `seg_exit_sync_off/pub`.
-  See Phase 1 status below, and the skill notes (cfgver-contracts "Arrays",
-  core-executor-internals, cfgver-gen-contract-internals).
-- Tooling: `tools/bearssl/build.sh <BearSSL checkout> <out>` (re-clone
-  BearSSL into the scratchpad, pinned `7bea48e`), `tools/bearssl/spike/`
-  (harness `.s` + `sub2.c`), `asm_to_ast.py --objdump --tables-aliases`
-  on `llvm-objdump-18 -d --no-show-raw-insn` of an `ld.lld --relax -Ttext=0`
-  link. Recipe for S1a's listing: header comment of `RsaSpikeSub.v`.
+**Where things stand: Phase 1 is CLOSED.** Both call-as-block spikes are
+verified end to end and axiom-clean (last commit `bbbba2ad`). Emiel closed
+GATE 1 on the light checks (VCs + negative controls + end theorems +
+`Print Assumptions`) and said NOT to run the merge gate for it; the gate
+last ran at `4af3dd9e`, before the S1a/S1b Result files and the
+`peval_sext` rule. It runs once at the end of the plan (feedback: light
+gates) — if a muladd VC breaks there, suspect a contract term that spells
+`sext` (`t_mlen`), see the rule below.
 
-**Step 1 — the S1a end theorem: DONE 2026-10-22** (Emiel chose route A,
-h quantified). `Example/Rsa/RsaSpikeSubResult.v` (in `_CoqProject`,
-`Results.v`, and the gate's `AXIOM_CLEAN_THMS`): `sub_loop_valid` →
-`sub_valid` (`blkValid_of_seg_at`, exit `r`, `Hex` by `seg_exit_sync_pub`) →
-`s1a_valid` → `sub_call_noninterferent`, ONE application of
-`GenProg.gen_prog_noninterferent`; axiom-clean (pure_decode, mmioenv). To
-get there `s1aRec` was restated as `gen_prog_contract` (A0/A1 `PVVar`
-pointers; data `[DPtr xa; DCell (Known h); DArr false; DPtr (xb+4); DArr
-true]`) -- its VC stays 0.1 s: the solver equates the generator's array end
-`a + 4·c` with the callee's `xa + (mw<<2)` at the block consume. Statement:
-for every h with 0 < h < 2^16, a at ANY xa (header Known h, then
-L = (h+31)/32 secret limbs), b's L public limbs at ANY xb + 4, the three
-ranges pairwise disjoint, the layout in range. New helper
-`data_layout_cell_cons` (local to the Result file; move to GenProg.v when a
-second i31 header needs it -- every i31 integer has one).
+| file | what | cost |
+|---|---|---|
+| `Example/Rsa/RsaSpikeSub.v` | S1a, light: `[jal ra, br_i31_sub; j end] ++ br_i31_sub` (31 instrs). `valid_sub_loop` (LoopN), `valid_sub` (function, exit `r`), `valid_s1a` (whole program, `gen_prog_contract`); 2 negative controls | 29 s user / 4.9 GB; VCs 13.9 / 2.9 / 0.1 s |
+| `Example/Rsa/RsaSpikeSubResult.v` | S1a, heavy: `sub_loop_valid` → `sub_valid` → `s1a_valid` → `sub_call_noninterferent` (∀ h; a, b's limbs anywhere disjoint). Also `limbs`, `limbs_bv`, `data_layout_cell_cons` (reused by S1b) | 19 s / 7.5 GB |
+| `Example/Rsa/RsaSpikeSub2.v` | S1b, light: `[jal ra, sub2; j end] ++ rsa_spike_sub2 ++ br_i31_sub` (51 instrs). `valid_sub2` (non-leaf function: frame, s0–s2 pinned, `br_i31_sub` a block entered twice, the 2nd a TAIL call), `valid_s1b`; 2 negative controls | 38 s / 5.0 GB; VCs 6.8 / 0.3 s |
+| `Example/Rsa/RsaSpikeSub2Result.v` | S1b, heavy: `sub2_valid` → `s1b_valid` → `sub_call2_noninterferent` (∀ h; a, b, the stack frame anywhere disjoint) | 22 s / 7.5 GB |
 
-**Step 2 — S1b: DONE 2026-10-22.** `Example/Rsa/RsaSpikeSub2.v` (light) +
-`RsaSpikeSub2Result.v` (heavy; in `Results.v` and the gate list):
-the real `rsa_spike_sub2` (`sub2.c`, hardened) linked as
-`[jal ra, sub2; j end] ++ sub2 ++ br_i31_sub` (51 instrs, exit +204).
-`sub2Rec` = `gen_seg_contract_at … (term_var "r")` over the caller AND its
-callee as linked (a block's table must hold every pc it reaches), S1a's
-`subBlk` reused unchanged as a block at index 20, entered twice (`jal`: exit
-q+40; tail `j`: exit the caller's own `r`). `sp`, `s0..s2` pinned (same
-logic variable in pre and post), the frame owned as four `gen_data_at`
-DCells. Whole program `s1bRec` = `gen_prog_contract` with `DPtr (sp − 16)` +
-four secret cells. VCs: `valid_sub2` 6.8 s, `valid_s1b` 0.3 s; two negative
-controls (s0 handed back wrong; a's limbs published). End theorem
-`sub_call2_noninterferent` (∀ h, a / b / frame anywhere disjoint), one
-`gen_prog_noninterferent`, axiom-clean.
-**Framework change it needed (Emiel's choice): `peval` drops a same-width
-`sext`** (`PartialEvaluation.peval_sext`, `width_cast`, `bv.sext_same`).
-Every RV32 `lw` produces `sext v` at 32→32 (Machine.v `extend_value`), so a
-reloaded `ra` returned to `sext r` and missed the syntactic exit `r` ("no
-instruction key matches this pc term"). S1a re-verified unchanged with it.
-**The full gate has NOT run since this theories/ change** — muladd's
-`t_mlen` (which spells `sext`) and every other example are unchecked.
+All four are in `_CoqProject`; both Result files are in `Results.v` and in
+`scripts/gate.sh`'s `AXIOM_CLEAN_THMS`.
 
-**Next step — GATE 1**: run the gate (theories/ changed), then Phase 2.
+**The function-contract recipe these establish** (also in skill
+cfgver-gen-contract-internals, "The segment generator"):
+- a function is `gen_seg_contract_at q q (term_var "r") code fl regs
+  (secLeakvar "r" ∗ pre) post` with `X1 ↦ᵣ r` in pre and post; valid by
+  `blkValid_of_seg_at` + `seg_exit_sync_pub`; it is a block on its first
+  instruction in every caller (typed `MkBlkAnnotV blk valid` in the
+  caller's annotation, as in the Result files);
+- a NON-LEAF function's `code` is itself AND its callees as linked (a
+  block's table must hold every pc the run reaches);
+- pin `sp`, `s_i` to the SAME logic variable in pre and post; own the frame
+  as `gen_data_at (t_add sp (-k)) [DCell Secret; …]` so a whole-program
+  `gen_prog_contract` with `DPtr (sp − k)` + the same cells hands it over;
+- the top level is ALWAYS `gen_prog_contract` (pointer args `PVVar`, arrays
+  `DPtr`/`DCell (Known h)`/`DArr`), so the end theorem is one
+  `gen_prog_noninterferent`; its proof is the Result files' template
+  (pointer facts `Hxa`/`Hxb`/`Hf`, `Hc` the limb count, cells by
+  `perm_of_eq`, layout by `data_layout_cell_cons` + `data_layout_runs`).
 
-**Known traps (each cost time this session).**
-- Ghosts on an instruction carrying a block never run — put seeds on the
-  instruction before.
+**Framework added on this branch** (all used by the spikes):
+`Solver.v` `try_isolate_inner`; `GenSegment.gen_seg_contract_at` (the ONE
+generator, exit a term); `GenCompose.blkValid_of_seg_at` +
+`seg_exit_sync_off/pub`; **`PartialEvaluation.peval_sext`** (+ `width_cast`,
+`bv.sext_same`/`unsigned_sext_same` in `Bitvector.v`): `peval` drops a
+same-width `sext`. Every RV32 `lw` yields `sext v` at 32→32 (Machine.v
+`extend_value`); without the rule a reloaded `ra` misses the syntactic exit.
+
+**Tooling.** `tools/bearssl/build.sh <BearSSL checkout> <out>` (clone
+BearSSL into the scratchpad, pinned `7bea48e`); `tools/bearssl/spike/`
+(`harness_sub.s`, `harness_sub2.s`, `sub2.c` — compile `sub2.c` with
+build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
+`hardening.patch`); link `ld.lld --relax -Ttext=0 harness … callees…`,
+`llvm-objdump-18 -d --no-show-raw-insn`, `asm_to_ast.py --objdump
+--tables-aliases --name <x>`. Exact recipe: the header comments of
+`RsaSpikeSub.v` / `RsaSpikeSub2.v`.
+
+**Next step — Phase 2 (byte memory, D3), §4.** Concretely, in order:
+1. **Ask Emiel O1 first** (§3): which memcpy/memset/memmove — textbook
+   byte loops in a local `mem.c` with `-fno-builtin` (proposal) or
+   picolibc's. Do not pick.
+2. Smallest test of `sb` at width 1 (`sep_contract_mem_write_value`, never
+   exercised at width 1): a 2–3 instruction program storing a secret byte
+   into an `arr _ 1 1` chunk, VC + negative control.
+3. Spike S2, the mixed-width view change: `br_ccopy` (byte-wise,
+   `tools/bearssl/listings/hardened/ccopy.s`) over a word array that a
+   caller touches with `lw`. Decide WHERE word⇄4-bytes happens — a ghost
+   split/join annotation at the call site, or the callee contract stated
+   over words with the split inside its own VC — and bring the two options
+   to Emiel before building (feedback: involve in planning). Read
+   `PLAN-byte-memory.md` §9 first (ghost lemmas were rejected there FOR
+   LOADS; check whether the reasons carry over to a call boundary).
+4. GATE 2 (§4): `br_ccopy` over a word array, called from a word-accessing
+   caller, end to end — a Result file on the S1b template.
+
+**Known traps (each cost time).**
+- An instruction carrying a block runs the block INSTEAD of itself, ghosts
+  included — put seeds in `ghost_after` of the instruction before.
+- Debugging a red function/segment VC: `cfg_vc` erases to a bare `False`;
+  dump `DebugCFGVerifierContract c annot` after `vm_compute` with `Set
+  Printing Depth 100000` via a one-off `coqc` (proof temporarily replaced by
+  `match goal with |- ?G => idtac "ZZ:" G end`), and grep the `amsg`
+  `debug_string_message` + its path condition. That is how the `sext r`
+  exit miss was found in two runs.
 - Memory: the background-shell reaper kills the gate at `MuladdParamVC`
-  (~10 GB) or the axiom probes when RAM is short. Build `MuladdParamVC.vo`
-  first, run the gate's last stage in the foreground (`GATE_JOBS=1
-  GATE_PROBE_BATCH=18`). pet OOMs replaying `GenCompose.v` past line ~2300:
-  check its lemmas by `make`, the rest interactively.
+  (~10 GB) or the axiom probes when RAM is short — build
+  `MuladdParamVC.vo` first, run the gate's last stage in the foreground
+  (`GATE_JOBS=1 GATE_PROBE_BATCH=18`). pet OOMs replaying `GenCompose.v`
+  past line ~2300.
+- Rebuild costs after a `theories/` edit: light chain to `RsaSpikeSub.vo`
+  ~16 min at `-j2`, heavy chain to `RsaSpikeSubResult.vo` ~19 min at `-j1`.
+  Prototype in preamble mode (`From Katamaran Require Import
+  RiscvPmp.CFGVer.Example.Prelude` gives `Term`/`inst`/`≡`; name implicit
+  arguments of `uop.sext` as `(m:=…) (n:=…) (p:=…)`).
+- `Bitvector.v`'s `Section Integers` opens `Z_scope`: write `{m n : nat}`
+  and `%nat` in any new width lemma there.
+- Result-file proofs: `repeat constructor` overshoots on `ForallOrdPairs`
+  of disjunctions, use `repeat (first [apply FOP_cons | apply FOP_nil |
+  apply List.Forall_cons | apply List.Forall_nil])`; a goal's `bv.bin h`
+  can carry a differently spelled width index than the hypothesis — close
+  with `exact` (conversion), not `lia`.
 - LoopN hard-codes the `m` array PUBLIC; in RSA the modulus is secret —
   Phase 3 needs a LoopN variant with both publicness flags.
 - `Tables.v` has no `S4`–`S11` aliases yet (needed by montymul's listing).
-- Solver.v builds take ~6 min and invalidate everything downstream (~7 min
-  `-j1` to get back to the examples).
+- Solver.v builds take ~6 min and invalidate everything downstream.
 
 Source: BearSSL `git clone https://www.bearssl.org/git/BearSSL`, HEAD
 `7bea48e` (2026-04-06). The `src/int/i31_*` and `src/rsa/rsa_i31_priv.c`
@@ -359,6 +390,10 @@ registers, a TAIL call). Done so far:
   `blockFaithful_of_seg` and `blkValid_of_loop_seg` keep their signatures,
   re-proved through these. A function is just `gen_seg_contract_at … (term_var
   "r") … (secLeakvar "r" ∗ pre) …`. Spike VCs unchanged (14.0 / 3.1 / 0.1 s).
+
+**GATE 1 CLOSED 2026-10-22** (Emiel): green + axiom-clean on light checks
+(`sub_call_noninterferent`, `sub_call2_noninterferent`); the merge gate was
+NOT run after `peval_sext` -- deferred to the plan's single final gate.
 
 ### Phase 2 — byte memory, the remaining parts (D3)
 - `sb` at width 1 (`sep_contract_mem_write_value`, untested at width 1).
