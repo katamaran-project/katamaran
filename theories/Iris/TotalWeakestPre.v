@@ -42,8 +42,6 @@ From Katamaran Require Import
      Semantics
      Iris.Resources.
 
-Require Import Stdlib.Program.Equality.
-
 Import ctx.notations.
 Import env.notations.
 Set Implicit Arguments.

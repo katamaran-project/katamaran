@@ -26,8 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Stdlib Require Import
-  Program.Equality.
 From Equations Require Import
      Equations Signature.
 Require Import Equations.Prop.EqDec.
