@@ -227,14 +227,16 @@ Module RiscvPmpIrisInstance2 <:
        NAMED.  Cell i holds the i-th element of each run's list.  Only the
        PROJECTIONS of vs are read, so the non-canonical NonSyncVal l l means
        the same as SyncVal l -- which is what makes the shape lemmas sound
-       for any split of vs into terms (lifted cons is not injective). *)
+       for any split of vs into terms (lifted cons is not injective).  The
+       count is the length MODULO 2^32 (bv.of_nat), so n + 1 wraps the way
+       the list grows and add_first/add_last need no premise. *)
     Definition interp_arrv (w : nat) (s : Z) (a n e : RelVal ty_xlenbits)
         (vs : RelVal (ty.list (ty.bvec (w * byte)))) : iProp Σ :=
       match a, n, e with
       | SyncVal a, SyncVal n, SyncVal e =>
           (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
-           ⌜ length (ty.projLeft vs) = N.to_nat (bv.bin n) ⌝ ∗
-           ⌜ length (ty.projRight vs) = N.to_nat (bv.bin n) ⌝ ∗
+           ⌜ length (ty.projLeft vs) = length (ty.projRight vs) ⌝ ∗
+           ⌜ bv.of_nat (length (ty.projLeft vs)) = n ⌝ ∗
            [∗ list] i ↦ lr ∈ zip (ty.projLeft vs) (ty.projRight vs),
              let x := bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i)) in
              ⌜ (bv.unsigned x + Z.of_nat w <= Z.of_N maxAddr)%Z ⌝ ∗

@@ -129,19 +129,34 @@ build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
   whose address is a block variable (a plain chunk cannot search the heap);
   the stock `solve_mb_vc` already finds `take_cons`'s witnesses (cbn turns
   `cons ?x ?r = cons h ls` into a Coq unification).
-- **OPEN, and the heavy chain is RED until done:** `SpecIris.v` soundness
-  of the 4 CLems + their `clemSem` cases (big_sepL over `zip` of the two
-  projections). Then: memcpy's FUNCTION contract (entry seeds of empty
+- **Soundness DONE (2026-10-23):** `SpecIris.v` step lemmas
+  `interp_arrv_take_first/_take_cons/_add_first/_add_last` (big_sepL
+  cons/snoc over `zip`; `arrv_cons_split` picks SyncVal parts for a SyncVal
+  list) + the 4 `clem_arrv_*_sound` + `clemSem` cases; `SpecIris.v`
+  compiles (rocq_compile_file, full). `interp_arrv` now states the count
+  as `bv.of_nat (length L) = n` and `length L = length R`, so `n + 1`
+  wraps with the list and no add lemma needs a premise. Proved in PREAMBLE
+  mode (pet OOMs on SpecIris.v at >7.6 GB): `From Katamaran Require Import
+  Base Bitvector Iris.BinaryWeakestPre Iris.BinaryAdequacy
+  Iris.BinaryInstance Syntax.Predicates RiscvPmp.Base RiscvPmp.Machine
+  RiscvPmp.IrisModelBinary RiscvPmp.IrisInstance RiscvPmp.Sig
+  RiscvPmp.IrisInstanceBinary` + iris proofmode, `Import RiscvPmpIrisBase2
+  RiscvPmpIrisInstance2`. Trap: SpecIris.v has implicit arguments ON —
+  call helpers with `@`. **NOT YET BUILT:** the heavy chain past SpecIris
+  (VerifierRel … EndToEnd, GenCompose, the RSA Result files): a -j1
+  rebuild was killed by the low-memory reaper before its first file
+  finished; rerun when RAM is free (close pet sessions first).
+- Then: memcpy's FUNCTION contract (entry seeds of empty
   done arrays — needs an `arrv` empty-seed lemma, `[] ++ vs` — and the
   exit glue: drop/pad the empty rests; the `n = 0` path); the word⇄byte
   regroup WITH values (`bytes_of_words` as a list UnOp + a cancelling peval
   rule); memmove's rotated ±1-stride loop; ccopy's MUX (`MUX c x x ~> x`
   would make an equal header public again even under a secret ctl).
-- Questions for Emiel before the plan: (Q1) replace `arr` everywhere, or
-  keep a value-free view for invariants that never need values (|Σ| cost:
-  one more existential per array per invariant — measure on muladd
-  first?); (Q2) word arrays: values as `list (bvec 32)` with a
-  `bytes_of_words` UnOp, or bytes everywhere.
+- Decided (Emiel, 2026-10-23): (Q1) MIGRATE DIRECTLY — replace `arr`
+  everywhere, no cost probe first (the extra value existential per array
+  is accepted; deal with a slowdown afterwards). (Q2) word arrays hold
+  `list (bvec 32)`; the call-site regroup goes through a new list UnOp
+  `bytes_of_words` with a peval rule cancelling the round trip.
 
 **Known traps (each cost time).**
 - An instruction carrying a block runs the block INSTEAD of itself, ghosts
@@ -605,6 +620,7 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | Phase 2 S2: options + explanations (view change, mixed publicness, framing, value-carrying arrays) | 16:24 | ~16:45 | — | — | — | — | — | — | user time; decisions (a) call site, (b) arrv replacing arr, spike first |
 | 2026-10-22 | S2-arrv v1+v4: Sig/IrisInstanceBinary arrv, 4 CLems, caller VC | 19:19:44 | 19:35 | ~16 (a gap 16:45→19:19 is idle, not counted) | ~8 (Sig→IrisInstanceBinary 188 s, Spec 44 s, light chain 76+94 s) | ~8 | v4 VC 0.56 s | Sig +12, IrisInstanceBinary +20, Verifier +75, spike ~110 | 4 (implicit `w`, block pre needs chunk_angelic, take_cons n≠0 premise, one `vos` round) | framing works; stock solve_mb_vc finds the cons witnesses |
 | 2026-10-23 | S2-arrv v2+v3: bv lemmas + 2 peval rules (preamble prototypes), memcpy loop VC | ~13:50 | 14:27:29 | ~37 | ~17 (PartialEvaluation compile ~1 min, rebuild theories→light 889 s wall / 975 s user / 4.96 GB, spike files 58 s) | ~20 | valid_mc_loop 0.40 s, valid_cl 3.6 s (0.56 s interactively); files 44.5 s user / 4.9 GB | Bitvector +18, PartialEvaluation +70, spike +110 | 6 (Stdlib path, IsTrue import, noeqns blocks funelim, existT injectivity, cbn unfolds peval_binop', 3 paren-count rounds) | v3 green FIRST try once the rules existed; heavy chain red (clemSem) |
+| 2026-10-23 | S2-arrv Iris soundness (4 step lemmas in preamble, 4 ValidLemma wrappers, interp count via of_nat) | 14:27:29 | 14:57 | ~30 | ~13 (IrisInstanceBinary chain 508 s user / 7.1 GB, Soundness deps 145 s, ShallowSoundness 28 s, SpecIris compile ×3 ~2 min each) | ~17 | — | SpecIris +230, IrisInstanceBinary ±4 | 7 (Stdlib/notation preamble ×3, cbn `in` syntax, of_Z_negate direction, length_zip name, skill-path-guard block, implicit args ×2) | pet OOM on SpecIris.v → preamble; heavy rebuild past SpecIris killed by the memory reaper |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
