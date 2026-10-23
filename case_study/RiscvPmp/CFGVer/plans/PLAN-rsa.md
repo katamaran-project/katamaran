@@ -142,10 +142,14 @@ build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
   RiscvPmp.IrisModelBinary RiscvPmp.IrisInstance RiscvPmp.Sig
   RiscvPmp.IrisInstanceBinary` + iris proofmode, `Import RiscvPmpIrisBase2
   RiscvPmpIrisInstance2`. Trap: SpecIris.v has implicit arguments ON —
-  call helpers with `@`. **NOT YET BUILT:** the heavy chain past SpecIris
-  (VerifierRel … EndToEnd, GenCompose, the RSA Result files): a -j1
-  rebuild was killed by the low-memory reaper before its first file
-  finished; rerun when RAM is free (close pet sessions first).
+  call helpers with `@`. Heavy chain BUILT 2026-10-23 15:33 through
+  `RsaSpikeSubResult`/`RsaSpikeSub2Result` (a first -j1 background run was
+  reaped mid-`EndToEnd` after building up to GenCompose — its piped grep
+  output was lost, so it LOOKED like nothing built; check .vo timestamps;
+  rerun in the FOREGROUND in <10 min steps). S1 VCs after the peval rules:
+  13.9→16.9 / 2.9→3.7 / 6.8→7.1 s — NOT a matched comparison (different
+  RAM state), recorded, not concluded. muladd/check_scalar VCs not rerun
+  (merge gate at the plan's end).
 - Then: memcpy's FUNCTION contract (entry seeds of empty
   done arrays — needs an `arrv` empty-seed lemma, `[] ++ vs` — and the
   exit glue: drop/pad the empty rests; the `n = 0` path); the word⇄byte
@@ -621,6 +625,7 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | S2-arrv v1+v4: Sig/IrisInstanceBinary arrv, 4 CLems, caller VC | 19:19:44 | 19:35 | ~16 (a gap 16:45→19:19 is idle, not counted) | ~8 (Sig→IrisInstanceBinary 188 s, Spec 44 s, light chain 76+94 s) | ~8 | v4 VC 0.56 s | Sig +12, IrisInstanceBinary +20, Verifier +75, spike ~110 | 4 (implicit `w`, block pre needs chunk_angelic, take_cons n≠0 premise, one `vos` round) | framing works; stock solve_mb_vc finds the cons witnesses |
 | 2026-10-23 | S2-arrv v2+v3: bv lemmas + 2 peval rules (preamble prototypes), memcpy loop VC | ~13:50 | 14:27:29 | ~37 | ~17 (PartialEvaluation compile ~1 min, rebuild theories→light 889 s wall / 975 s user / 4.96 GB, spike files 58 s) | ~20 | valid_mc_loop 0.40 s, valid_cl 3.6 s (0.56 s interactively); files 44.5 s user / 4.9 GB | Bitvector +18, PartialEvaluation +70, spike +110 | 6 (Stdlib path, IsTrue import, noeqns blocks funelim, existT injectivity, cbn unfolds peval_binop', 3 paren-count rounds) | v3 green FIRST try once the rules existed; heavy chain red (clemSem) |
 | 2026-10-23 | S2-arrv Iris soundness (4 step lemmas in preamble, 4 ValidLemma wrappers, interp count via of_nat) | 14:27:29 | 14:57 | ~30 | ~13 (IrisInstanceBinary chain 508 s user / 7.1 GB, Soundness deps 145 s, ShallowSoundness 28 s, SpecIris compile ×3 ~2 min each) | ~17 | — | SpecIris +230, IrisInstanceBinary ±4 | 7 (Stdlib/notation preamble ×3, cbn `in` syntax, of_Z_negate direction, length_zip name, skill-path-guard block, implicit args ×2) | pet OOM on SpecIris.v → preamble; heavy rebuild past SpecIris killed by the memory reaper |
+| 2026-10-23 | heavy-chain rebuild (foreground, after the reaper kill) | 15:28:27 | 15:33:21 | 5 | 5 | 0 | EndToEnd 45 s / 7.6 GB; RSA Results 151 s user / 7.6 GB | — | 0 | green; VerifierRel..GenCompose had already been built by the reaped run |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
