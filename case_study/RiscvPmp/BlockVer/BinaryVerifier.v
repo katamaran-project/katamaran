@@ -88,23 +88,20 @@ Module BinaryBlockVerifier
     Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
   End BinaryBlockVerifierNotations.
 
-  (* TODO: annoying, but not inj in general (illegal instructions...)
-           Decode (at least the Sail one) does seem to be injective
-           for legal instructions. Another option would be to
-           change interp_ptsto_instr to talk about the *encoding* of an
-           instruction and no longer have the existential there.
-           Also requires that ∀ i, (decode ∘ encode) i = i *)
-  Axiom pure_decode_inr_inj : forall {v1 v2 : bv 32} {instr : AST},
-    pure_decode v1 = inr instr ->
-    pure_decode v2 = inr instr ->
-    v1 = v2.
-
   Section WithSailGS2.
     Context {Σ} {GS : sailGS2 Σ}.
 
+    (* Main difference with interp_ptsto_instr is that we get two existentials
+       with this definition, instead of a single one. The two existentials work
+       better when we split the verification into two unary ones (each will
+       produce/require its own existentials too). *)
+    Definition ptsto_instr (a : Val ty_xlenbits) (instr : AST) : iProp Σ :=
+      @RVPCOM.interp_ptsto_instr _ memGS_left a instr
+      ∗ @RVPCOM.interp_ptsto_instr _ memGS_right a instr.
+
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
-      | cons inst insts => (interp_ptsto_instr (mG := sailGS2_memGS) a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
+      | cons inst insts => (ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
 
@@ -117,18 +114,12 @@ Module BinaryBlockVerifier
       iInduction instrs as [|instr instrs] "IH";
         cbn; auto.
       iIntros (a). iSplit.
-      - iIntros "(Hinstr & Hinstrs)".
-        iDestruct ("IH" with "Hinstrs") as "($ & $)".
-        iDestruct "Hinstr" as "(% & [Hl Hr] & %Hdecode)".
-        iSplitL "Hl".
-        + iExists _; iFrame "Hl"; auto.
-        + iExists _; iFrame "Hr"; auto.
-      - iIntros "([Hinstrl Hinstrsl] & [Hinstrr Hinstrsr])".
+      - iIntros "([Hl Hr] & Hinstrs)".
+        iDestruct ("IH" with "Hinstrs") as "[$ $]".
+        iFrame "Hl Hr".
+      - iIntros "([Hl Hinstrsl] & [Hr Hinstrsr])".
         iDestruct ("IH" with "[$Hinstrsl $Hinstrsr]") as "$".
-        iDestruct "Hinstrl" as "(%vl & Hl & %Hdecodel)".
-        iDestruct "Hinstrr" as "(%vr & Hr & %Hdecoder)".
-        pose proof (pure_decode_inr_inj Hdecodel Hdecoder) as <-.
-        iExists _; iFrame "Hl Hr"; auto.
+        iFrame "Hl Hr".
     Qed.
 
     Definition exec_instructions_prologue (a : Val ty_xlenbits) (l : list AST) : iProp Σ :=
@@ -141,28 +132,31 @@ Module BinaryBlockVerifier
       ptsto_instrs a l ∗
       ∃ v, nextpc ↦ v.
 
-    (* The pro- and epilogue in the binary verifier can be defined using the
-       unary definitions. These just define an Assertion, which we can
-       interpret in the binary program logic when using asn.interpret.
-       It doesn't matter if we use the RVPTVl one or RVPTVr, as they are
-       the same assertions. *)
-    Definition exec_instruction_prologue : AST -> Assertion ["a" ∷ ty_xlenbits] :=
-      RVPTVl.exec_instruction_prologue.
-    Definition exec_instruction_epilogue : AST -> Assertion ["a" ∷ ty_xlenbits; "an" ∷ ty_xlenbits] :=
-      RVPTVl.exec_instruction_epilogue.
+    (* The binary counterparts of RVPTVl.exec_instruction_prologue and
+       RVPTVl.exec_instruction_epilogue. We cannot interpret those assertions
+       in the binary program logic, as the binary interpretation of ptstoinstr
+       requires the same instruction word on both sides, but we only care about
+       having the same decoding of those words (again, ptsto_instr above vs interp_ptsto_instr!). *)
+    Definition exec_instruction_prologue (i : AST) (a : Val ty_xlenbits) : iProp Σ :=
+      reg_pointsTo2 pc a a ∗
+      ptsto_instr a i ∗
+      ∃ an, reg_pointsTo2 nextpc an an.
+    Definition exec_instruction_epilogue (i : AST) (a an : Val ty_xlenbits) : iProp Σ :=
+      reg_pointsTo2 pc an an ∗
+      ptsto_instr a i ∗
+      reg_pointsTo2 nextpc an an.
 
     Fixpoint step_n (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST : Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       match instrs with
       | []   => POST apc
       | i :: instrs =>
-          let Σ := [env].["a"∷ty_xlenbits ↦ ainstr] in
           ⌜ainstr = apc⌝
-          ∗ (asn.interpret (exec_instruction_prologue i) Σ  -∗
+          ∗ (exec_instruction_prologue i ainstr -∗
                semWP2 [env] [env] fun_step fun_step
                  (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
                      match v1 with
                      | inl v =>
-                         ∃ na, asn.interpret (exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
+                         ∃ na, exec_instruction_epilogue i ainstr na
                                ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                      | inr _ =>
                        if RiscvPmpBlockVerifFailLogic.fail_rule_pre
@@ -297,11 +291,9 @@ Module BinaryBlockVerifier
       - cbn.
         iDestruct "H1" as "(<- & H1)".
         iDestruct "H2" as "($ & H2)".
-        iIntros "([Hpc1 Hpc2] & (% & [Hinstr1 Hinstr2] & %) & (%npc & Hnpc1 & Hnpc2))".
-        iSpecialize ("H1" with "[$Hpc1 Hinstr1 $Hnpc1]").
-        { iExists _; now iFrame "Hinstr1". }
-        iSpecialize ("H2" with "[$Hpc2 Hinstr2 $Hnpc2]").
-        { iExists _; now iFrame "Hinstr2". }
+        iIntros "([Hpc1 Hpc2] & [Hinstr1 Hinstr2] & (%npc & Hnpc1 & Hnpc2))".
+        iSpecialize ("H1" with "[$Hpc1 $Hinstr1 $Hnpc1]").
+        iSpecialize ("H2" with "[$Hpc2 $Hinstr2 $Hnpc2]").
         iApply (semWP2_focus with "H1 H2").
         iIntros ([v1|] δ1 [v2|] δ2) "(H1 & H2)"; auto.
         destruct v1, v2, (env.view δ1), (env.view δ2).
@@ -311,22 +303,11 @@ Module BinaryBlockVerifier
           iDestruct "H1" as "(%na' & (Hpc1 & Hinstr1 & Hnpc1) & HPOST1)".
           iDestruct "H2" as "(% & (Hpc2 & Hinstr2 & Hnpc2) & HPOST2)".
           iDestruct ("HPOST" with "[$HPOST1 $HPOST2]") as "(<- & HPOST)".
-          iExists na'. iFrame "Hpc1 Hpc2 Hnpc1 Hnpc2 HPOST".
-          unfold interp_ptsto_instr.
-          iDestruct "Hinstr1" as "(%v1 & Hinstr1 & %Hdec1)".
-          iDestruct "Hinstr2" as "(%v2 & Hinstr2 & %Hdec2)".
-          pose proof (pure_decode_inr_inj Hdec1 Hdec2) as <-.
-          iExists v1. now iFrame "Hinstr1 Hinstr2".
+          iExists na'. now iFrame "Hpc1 Hpc2 Hinstr1 Hinstr2 Hnpc1 Hnpc2 HPOST".
         + iDestruct "H1" as "(% & (Hpc1 & Hinstr1 & Hnpc1) & <- & H1)".
           iDestruct "H2" as "(% & (Hpc2 & Hinstr2 & Hnpc2) & <- & H2)".
           iExists (bv.add ainstr bv_instrsize).
-          iFrame "Hpc1 Hpc2 Hnpc1 Hnpc2".
-          iSplitL "Hinstr1 Hinstr2".
-          { unfold interp_ptsto_instr.
-            iDestruct "Hinstr1" as "(%v1 & Hinstr1 & %Hdec1)".
-            iDestruct "Hinstr2" as "(%v2 & Hinstr2 & %Hdec2)".
-            pose proof (pure_decode_inr_inj Hdec1 Hdec2) as <-.
-            iExists v1. now iFrame "Hinstr1 Hinstr2". }
+          iFrame "Hpc1 Hpc2 Hinstr1 Hinstr2 Hnpc1 Hnpc2".
           iApply ("IH" with "[$H1] [$H2]"); auto.
     Qed.
 
