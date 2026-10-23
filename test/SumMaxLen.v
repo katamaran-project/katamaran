@@ -358,18 +358,20 @@ Module Import ExampleModel.
 
   (* There is no memory, so use trivial definitions to instantiate the ghost
      state and its requirements. *)
-  Module Import ExampleIrisBase <: IrisBase DefaultBase ExampleProgram ExampleSemantics.
-
+  Module Import ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSemantics.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics.
+  End ExampleIrisPrelims.
+
+  Module Import ExampleIrisBase <: IrisBase DefaultBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
 
     Definition memGS : gFunctors -> Set := fun Σ => True.
     Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
 
     (* Combine the memory and register ghost states. *)
-    Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
-    Include IrisWeakestPre DefaultBase ExampleProgram ExampleSemantics.
-    Include IrisTotalWeakestPre DefaultBase ExampleProgram ExampleSemantics.
-    Include IrisTotalPartialWeakestPre DefaultBase ExampleProgram ExampleSemantics.
+    Include IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
+    Include IrisWeakestPre DefaultBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
+    Include IrisTotalWeakestPre DefaultBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
+    Include IrisTotalPartialWeakestPre DefaultBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
 
   End ExampleIrisBase.
 
@@ -391,7 +393,7 @@ Module Import ExampleModel.
      logic, and the Iris implementation of the axioms. *)
   Module Import ExampleIrisInstance <:
     IrisInstance DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSemantics
-      ExampleIrisBase ExampleIrisAdeqParams.
+      ExampleIrisPrelims ExampleIrisBase.
 
     (* There are no user-defined spatial predicates, also use trivial definitions
        here. *)
@@ -405,12 +407,12 @@ Module Import ExampleModel.
     End ExampleIrisPredicates.
 
     Include IrisSignatureRules DefaultBase ExampleSig ExampleProgram
-      DefaultFailLogic ExampleSemantics ExampleIrisBase.
+      DefaultFailLogic ExampleSemantics ExampleIrisPrelims ExampleIrisBase.
     Include IrisAdequacy DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSemantics
-      ExampleIrisBase ExampleIrisAdeqParams.
+      ExampleIrisPrelims ExampleIrisBase ExampleIrisAdeqParams.
     Include ProgramLogicOn DefaultBase ExampleSig ExampleProgram DefaultFailLogic ExampleSpecification.
     Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleProgram
-      DefaultFailLogic ExampleSemantics ExampleSpecification ExampleIrisBase ExampleIrisAdeqParams.
+      DefaultFailLogic ExampleSemantics ExampleIrisPrelims ExampleSpecification ExampleIrisBase.
 
     (* Verification of the absent foreign functions. *)
     Lemma foreignSem `{sailGS Σ} : ForeignSem.

@@ -59,6 +59,7 @@ Set Implicit Arguments.
 Import ListNotations.
 Import MinCapsSpecification.
 Import MinCapsProgram.
+Import MinCapsIrisPrelims.
 Import MinCapsIrisBase.
 Import MinCapsIrisInstance.
 Import MinCapsIrisInstanceWithContracts.
@@ -68,9 +69,11 @@ Import MinCapsSignature.
 Module Import MinCapsShallowExecutor :=
   MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
 
-Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsIrisInstanceWithContracts.
+Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsProgramLogic.
 
 Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsExecutor.
+
+Import MinCapsProgramLogic.
 
 Section Loop.
   Context `{sg : sailGS Σ}.
