@@ -205,6 +205,22 @@ Loop template: `Example/Muladd/MuladdParamLoopN.v` (remaining count n the only
 varying variable, addresses END − s·n). The general proofs (a k-byte cell
 is k byte cells for any RelVal value, and back) are `SpecIris.rg_*`.
 
+**`arrv w s [a; n; e; vs]` — the array with its VALUES named (PLAN-arrv,
+replacing `arr`).** `vs : list (bvec 8w)`, no publicness flag: a public
+array is `arrv … vs ∗ secLeak vs`, and a plain take hands publicness to the
+parts (the take's `vs = x :: r` is `formula_propeq`, Leibniz on RelVal, and a
+lifted op is SyncVal iff its arguments are), so there are no `_pub` lemma
+variants. Catalogue (`clem_arrv_*`): `take_first` (equation, for a variable
+value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
+(`vs = r ++ [x]`), `add_first` (`x :: vs`), `add_last` (`vs ++ [x]`),
+`nonempty`, `empty` (`⊢ arrv a 0 a []`, `a` bound later by an ANGELIC match),
+`empty_elim` (`a = e` only — never `vs = []`: `NonSyncVal [] []` exists),
+`lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
+`join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),
+`pad` (`arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ …`, w ≥ 1),
+`split k` (`vs = v1 ++ v2`). Worked probe with negative controls:
+`Example/Rsa/ZZArrvCatalogue.v`; soundness: `SpecIris.clem_arrv_*_sound`.
+
 **Ghosts on an instruction that carries a block NEVER RUN** (`Verifier.v`,
 the `Some b` branch of the step: the block fires INSTEAD of the instruction,
 ghosts included). Seeds for a loop block's done arrays (`clem_arr_empty`) go

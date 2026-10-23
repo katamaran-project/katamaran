@@ -1,6 +1,8 @@
 # PLAN-arrv — arrays whose contents are NAMED (`arrv`), replacing `arr`
 
-Status: **DRAFT 2026-10-23, not started.** Branch `issue/rsa` (the spike
+Status: **Phase A DONE 2026-10-23, GATE A PASSED** (heavy chain VerifierRel →
+EndToEnd → GenProg + both RSA end theorems + RsaSpikeArrv/Sb rebuilt green,
+508 s / 7.7 GB). Next: Phase B. Branch `issue/rsa` (the spike
 landed there: `138d2df9`, `dd9672f3`, `ab321701`; not merged, not pushed).
 Part of PLAN-rsa.md Phase 2 (byte memory / mem* callees); log timings in
 **PLAN-rsa.md §5** (same protocol: stamps, wait vs authoring, VC CPU/RSS,
@@ -51,7 +53,7 @@ D5 (2026-10-23, §5): O1 keep flip + `rev` peval; O2 no public-take lemma
 (framing + the plain take suffice, §1.2 corrected and measured); O3 a
 top-level `DArr` value is always a named contract variable.
 
-**Next step:** Phase A (O1–O3 answered, §5).
+**Next step:** Phase B (words ⇄ bytes with values, D3) — Phase A done.
 
 ---
 
@@ -130,16 +132,16 @@ split/join/bytes_of_words/to_bytes/of_bytes **0** (catalogue only).
 | — | ~~`arrv_take_first_pub`~~ | — | NOT NEEDED: the plain take already gives public parts (§1.2) |
 | add_first | `arrv_add_first` | `x :: vs` | DONE |
 | add_last | `arrv_add_last` | `vs ++ [x]` | DONE |
-| take_last | `arrv_take_last` (equation) | `vs = r ++ [x]` | NEW; snoc analogue of `arrv_cons_split` |
-| nonempty | `arrv_nonempty` | unchanged | NEW, value-agnostic |
-| empty | `arrv_empty` | `⊢ arrv a 0 a []` (needs `secLeak a`) | NEW; `[]` here is SOUND (we choose it) |
-| empty_elim | `arrv_empty_elim` | gives `⌜a = e⌝` ONLY — never `vs = []` | NEW (§1.1) |
-| lockstep | `arrv_lockstep` | address fact only | NEW |
-| drop | `arrv_drop` | — | NEW |
-| flip | `arrv_flip` | `rev vs` (`uop.rev` exists) | NEW + peval rules for rev — see O1 |
-| join | `arrv_join` | `v1 ++ v2`; with n2 = 0 it is the "absorb an empty remainder" step | NEW |
-| — | `arrv_pad` | `arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ arrv b 0 c ws` | NEW (memcpy exit: dst gets src's empty rest) |
-| split (constant k) | `arrv_split` (equation: `∃ v1 v2, vs = v1 ++ v2`) | | NEW, low priority (0 users) |
+| take_last | `arrv_take_last` (equation) | `vs = r ++ [x]` | DONE A (`arrv_snoc_split`) |
+| nonempty | `arrv_nonempty` | unchanged | DONE A |
+| empty | `arrv_empty` | `⊢ arrv a 0 a []` (needs `secLeak a`) | DONE A; `[]` here is SOUND (we choose it); `a` is bound by a later ANGELIC match |
+| empty_elim | `arrv_empty_elim` | gives `⌜a = e⌝` ONLY — never `vs = []` | DONE A (control: `vs = []` rejected) |
+| lockstep | `arrv_lockstep` | address fact only | DONE A |
+| drop | `arrv_drop` | — | DONE A |
+| flip | `arrv_flip` | `rev vs` (`uop.rev` exists) | DONE A + `peval_rev` (PartialEvaluation.v): `rev (x::t) ~> rev t ++ [x]`, `rev (a++b) ~> rev b ++ rev a`, `rev (rev v) ~> v` |
+| join | `arrv_join` | `v1 ++ v2`; with n2 = 0 it is the "absorb an empty remainder" step | DONE A; NO overflow premise (count is length mod 2^32) |
+| — | `arrv_pad` | `arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ arrv b 0 c ws` | DONE A (memcpy exit). Needs w ≥ 1 (pre is False at w = 0): soundness bounds the LENGTH by pigeonhole (`interp_arrv_length`: disjoint in-range cells) so count 0 ⇒ length 0 (`interp_arrv_count0`) — Emiel's choice over an exact count |
+| split (constant k) | `arrv_split` (equation: `∃ v1 v2, vs = v1 ++ v2`) | | DONE A (`arrv_app_split`) |
 | bytes_of_words / to_bytes / of_bytes | value versions over `bytes_of_words` | words ⇄ bytes | Phase B (D3) |
 
 ## §4. Phases
@@ -155,6 +157,18 @@ ONE full merge gate at the end (feedback: light gates).
 - Any peval rule a lemma needs (rev if O1 keeps flip) in
   `PartialEvaluation.v`, self-tested.
 - GATE A: every new lemma used once in a green VC; heavy chain builds.
+- **Status 2026-10-23:** all 10 lemmas in `Verifier.v` + `SpecIris.v`
+  (`clemSem` complete); probe `Example/Rsa/ZZArrvCatalogue.v`: one VC per
+  lemma + a negative control each (swapped value order, no ghost, secret
+  vs, `vs = []` after empty_elim) + `peval_rev` self-test, all as expected.
+  The probe uses plain `cfg_vc`: in a LOOP VC the exit-or-head disjunction
+  hides the seed's angelic `a = p` from postprocessing (`mb_search` has no
+  ∃ case) — a probe artifact, not a lemma problem.
+  Proof traps met: `lia` fails on `length`s whose hidden type index
+  differs (use `Nat.add_cancel_r` / `f_equal`); `ring` refuses goals
+  typed at `Val ty_xlenbits` (state a `bv xlenbits` ring lemma, rewrite);
+  `Set Implicit Arguments` in SpecIris makes helper list args implicit
+  (call with `@`).
 
 ### Phase B — words ⇄ bytes with values (D3)
 - New list UnOp `bytes_of_words : list (bvec 32) → list (bvec 8)`

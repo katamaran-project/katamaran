@@ -3012,6 +3012,21 @@ End CanonTerm.
       peval_bvtake_zext 8 (n := 24) (term_unop (uop.zext (m := 8) (n := 32)) x) = x.
     Proof. reflexivity. Qed.
 
+    (* List reversal pushed to the leaves, in peval_append's snoc form:
+         rev (x :: t) ~> rev t ++ [x],  rev (a ++ b) ~> rev b ++ rev a,
+         rev (rev v) ~> v.
+       A DONE array built by add_first at stride -s and then flipped holds
+       `rev done` (CFGVer `arrv_flip`, PLAN-arrv.md O1); after one more
+       add_first, rev (x :: done) must meet rev done ++ [x] syntactically.
+       Same leaves on both sides, so sound over secrets without a case
+       split.  Self-tests on concrete terms: CFGVer/Example/Rsa/. *)
+    Equations peval_rev {σ} (t : Term Σ (ty.list σ)) : Term Σ (ty.list σ) by struct t :=
+    | term_binop bop.cons x t   => peval_append (peval_rev t)
+                                     (term_binop bop.cons x (term_val (ty.list σ) nil))
+    | term_binop bop.append a b => peval_append (peval_rev b) (peval_rev a)
+    | term_unop uop.rev v       => v
+    | t                         => peval_unop' uop.rev t.
+
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
@@ -3022,6 +3037,7 @@ End CanonTerm.
       (* | uop.vector_subrange start len => peval_vector_subrange start len *)
       (* | uop.bvdrop m                  => peval_bvdrop m *)
       | uop.bvtake m                  => peval_bvtake_zext m
+      | uop.rev                       => peval_rev
       | op                            => peval_unop' op
       end.
 
@@ -3123,11 +3139,22 @@ End CanonTerm.
       intros ι; cbn. destruct (inst x ι); cbn; f_equal; symmetry; apply bv.take_zext.
     Qed.
 
+    Lemma peval_rev_sound {σ} (t : Term Σ (ty.list σ)) :
+      peval_rev t ≡ term_unop uop.rev t.
+    Proof.
+      funelim (peval_rev t); try apply peval_unop'_sound; intros ι.
+      - rewrite (peval_append_sound _ _ ι). cbn. rewrite H. cbn.
+        destruct (inst x ι), (inst t ι); reflexivity.
+      - rewrite (peval_append_sound _ _ ι). cbn. rewrite H; rewrite H0. cbn.
+        destruct (inst a ι), (inst b ι); cbn; f_equal; rewrite ?rev_app_distr; reflexivity.
+      - cbn. destruct (inst v ι); cbn; f_equal; rewrite ?rev_involutive; reflexivity.
+    Qed.
+
     Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
-        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound, peval_sext_sound, peval_bvtake_zext_sound, canon_term_equiv(* , peval_unsigned_sound, *)
+        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound, peval_sext_sound, peval_bvtake_zext_sound, peval_rev_sound, canon_term_equiv(* , peval_unsigned_sound, *)
                  (* peval_bvdrop_sound, peval_bvtake_sound, *)
                  (*   peval_vector_subrange_sound *).
     Qed.
