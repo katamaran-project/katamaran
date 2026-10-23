@@ -47,8 +47,11 @@ word⇄byte view change at a call site goes through a new list UnOp
 `bytes_of_words` with a cancelling peval rule (2026-10-23), D4 the view
 change happens at the CALL SITE, callee contracts over bytes (2026-10-22).
 
-**Next step:** Phase A, starting with the open question O1 below — ASK
-Emiel before building (feedback: involve in planning; do not pick).
+D5 (2026-10-23, §5): O1 keep flip + `rev` peval; O2 no public-take lemma
+(framing + the plain take suffice, §1.2 corrected and measured); O3 a
+top-level `DArr` value is always a named contract variable.
+
+**Next step:** Phase A (O1–O3 answered, §5).
 
 ---
 
@@ -60,12 +63,18 @@ Emiel before building (feedback: involve in planning; do not pick).
    UNSOUND** (`NonSyncVal [] []`). Never state it; absorb empty
    remainders instead (§3, `pad`/`join`).
 2. **Publicness of a list is all-or-nothing** (`secLeak vs` iff vs is
-   SyncVal), and it does NOT pass to parts by the solver: from `secLeak vs`
-   and `vs = x :: r` nothing derives `secLeak x` (x could be `NonSyncVal h h`).
-   A take from a PUBLIC array therefore needs its own lemma that promises
-   `secLeak x ∗ secLeak r` (sound: the witness choice in
-   `arrv_cons_split` picks SyncVal parts for a SyncVal list). Building up
-   is fine: `secLeak` of a cons/append of public leaves is SyncVal.
+   SyncVal), and it DOES pass to parts by the solver alone — no extra
+   lemma. CORRECTED 2026-10-23 (the draft said the opposite, reasoning
+   from projections): the take's equation is `formula_propeq`, which is
+   LEIBNIZ on RelVal (`Formulas.v:155`), and a lifted op is SyncVal only
+   if every argument is (`liftBinOpRV`, `TypeDecl.v:268`), so
+   `cons (NonSyncVal h h) r` is NonSyncVal and cannot equal a public vs;
+   the solver already has `secLeak (op t1 t2) ⊣⊢ secLeak t1 ∗ secLeak t2`
+   (`simplify_secLeak`). Measured: `Example/Rsa/ZZArrvPubTake.v` — plain
+   `take_first` from `arrv … vs ∗ secLeak vs` proves `secLeak x ∗ secLeak
+   r` (0.05 s); secret vs rejected; non-vacuity control rejected. So
+   framing keeps `secLeak vs` and the take's equation hands it to the
+   parts (Emiel's O2 answer: "framing should do all the publicness").
 3. **The solver/peval sees values only through terms.** Invariant
    equations re-establish only if both sides normalize to the same term:
    that is what `peval_append` and `peval_bvtake_zext` are for. Every new
@@ -118,7 +127,7 @@ split/join/bytes_of_words/to_bytes/of_bytes **0** (catalogue only).
 | arr lemma | arrv version | value effect | status / new machinery |
 |---|---|---|---|
 | take_first | `arrv_take_first` (equation) / `arrv_take_cons` (pattern) | `vs = x :: r` | DONE |
-| — | `arrv_take_first_pub` | + `secLeak x ∗ secLeak r` from `secLeak vs` | NEW (§1.2) |
+| — | ~~`arrv_take_first_pub`~~ | — | NOT NEEDED: the plain take already gives public parts (§1.2) |
 | add_first | `arrv_add_first` | `x :: vs` | DONE |
 | add_last | `arrv_add_last` | `vs ++ [x]` | DONE |
 | take_last | `arrv_take_last` (equation) | `vs = r ++ [x]` | NEW; snoc analogue of `arrv_cons_split` |
@@ -139,7 +148,7 @@ Light check per phase (VCs + negative controls + the files touched build);
 ONE full merge gate at the end (feedback: light gates).
 
 ### Phase A — complete the catalogue (no example changes yet)
-- Answer O1 (flip) and O2 (public takes) with Emiel first.
+- O1/O2 answered (§5).
 - Add the NEW rows of §3 (except Phase B's) to `Verifier.v` + soundness in
   `SpecIris.v`, each with a 2–3-instruction VC + negative control in a
   probe on the `RsaSpikeArrv.v` template.
@@ -160,9 +169,8 @@ ONE full merge gate at the end (feedback: light gates).
   limbs and a BYTE memcpy, header public after the call.
 
 ### Phase C — generators and the bridge
-- `GenSegment`/`GenProg` `DArr pub …` → `∃ vs, arrv … vs ∗ (if pub then
-  secLeak vs)` (or a named contract variable where a caller must refer to
-  the value — decide per use, O3).
+- `GenSegment`/`GenProg` `DArr pub …` → `arrv … vs ∗ (if pub then
+  secLeak vs)` with `vs` a NAMED contract variable (O3).
 - LoopN-style loop specs (`MuladdParamLoopN.v`) over arrv.
 - `EndToEnd.v`: `interp_arrv_intro` (cells → arrv with the list of their
   values: `NonSyncVal (left list) (right list)`) replacing
@@ -174,9 +182,8 @@ ONE full merge gate at the end (feedback: light gates).
 - Order: RSA spikes (small, known) → check_scalar (byte loops) → muladd
   (largest, most hand-overs). Per file: record VC CPU before (from
   PLAN-rsa §5 / the file's Time lines) and after.
-- For each `arr true` site, check whether cell publicness is CONSUMED (a
-  branch or address uses a cell value) — if so it needs
-  `arrv_take_first_pub`; if not, plain take.
+- An `arr true` site becomes `arrv … vs ∗ secLeak vs`; takes stay plain
+  (§1.2: the parts come out public).
 - GATE D: every migrated end theorem green.
 
 ### Phase E — delete `arr`
@@ -198,7 +205,17 @@ glue (`pad` + `join`/`empty_elim`), memmove's ROTATED ±1-stride loop
 `MUX c x x ~> x` peval rule so br_ccopy keeps an equal header public under
 a secret ctl.
 
-## §5. Open questions — ASK Emiel, do not pick
+## §5. Open questions — ANSWERED 2026-10-23
+
+- **O1 → keep flip + rev** (the proposal): old shapes keep `add_first` at
+  −s + `arrv_flip` with peval rules for `rev`; new code uses `add_last`.
+- **O2 → neither option; framing does it.** Emiel: "this should be solved
+  in a principled way, such that framing does all the publicness stuff".
+  It already is — §1.2 was wrong; no `_pub` lemma, no conditional post.
+- **O3 → always a named contract variable** for a top-level `DArr`'s value
+  (uniform; posts can always refer to it).
+
+The original questions, for the record:
 
 - **O1 (flip).** muladd/check_scalar build DONE arrays backwards
   (`add_first` at stride −s) and then `flip` them — the different stride
