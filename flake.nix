@@ -1,5 +1,6 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  # Pinned to NixOS/nixpkgs#573940 (vsrocq 2.5.0) until it reaches nixos-unstable.
+  inputs.nixpkgs.url = "github:Zimmi48/nixpkgs/15aabc6e8d56a08f7d2f8dcc94c9b0a251aa1e45";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = inputs: inputs.flake-utils.lib.eachDefaultSystem (system:
@@ -36,6 +37,46 @@
 
       mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
         (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
+
+      # rocq-lsp (provides `pet`); nixpkgs only has it up to Rocq 9.1.
+      rocqLsp920 =
+        let ocamlPackages = rocqPackages920.rocq-core.ocamlPackages; in
+        ocamlPackages.buildDunePackage {
+          pname = "coq-lsp";
+          version = "0.2.5-unstable-v9.2";
+          src = pkgs.fetchFromGitHub {
+            owner = "rocq-community";
+            repo = "rocq-lsp";
+            rev = "f49d7b391c8dc6599a00d126d7bfedc9efbdc2e7"; # branch v9.2
+            hash = "sha256-VJLe7zNcvbUN0QsA/cKuhyr6kHKGWDf9Wp8uFhHQGvw=";
+          };
+          nativeBuildInputs = [ ocamlPackages.menhir ];
+          buildInputs = [ rocqPackages920.rocq-core ];
+          propagatedBuildInputs = with ocamlPackages; [
+            cmdliner
+            dune-build-info
+            findlib
+            logs
+            lwt
+            ppx_compare
+            ppx_deriving
+            ppx_deriving_yojson
+            ppx_hash
+            ppx_import
+            ppx_inline_test
+            ppx_sexp_conv
+            sexplib
+            tyxml
+            uri
+            yojson
+            zarith
+          ];
+          meta = {
+            description = "Language server and petanque (pet) for the Rocq prover";
+            homepage = "https://github.com/rocq-community/rocq-lsp";
+            license = pkgs.lib.licenses.lgpl21Plus;
+          };
+        };
     in
     rec {
       packages = rec {
@@ -45,6 +86,19 @@
 
         rocq920-deps = mkDeps rocq920;
         rocq930-deps = mkDeps rocq930;
+
+        rocq-lsp-rocq920 = rocqLsp920;
+      };
+
+      # Editor/agent tooling. No default dev shell on purpose, so plain
+      # `nix develop` stays the build environment.
+      devShells.lsp = pkgs.mkShell {
+        inputsFrom = [ rocqPackages920.katamaran ];
+        packages = [
+          rocqPackages920.rocq-core
+          rocqPackages920.vsrocq-language-server
+          rocqLsp920
+        ];
       };
     }
   );

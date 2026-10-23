@@ -19,4 +19,5 @@ Makefile.coq.conf
 .direnv/
 .vscode/
 _build/
+rocq_mcp_cache_*
 .envrc.local
