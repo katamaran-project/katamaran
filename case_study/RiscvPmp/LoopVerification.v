@@ -79,17 +79,21 @@ Import RiscvPmpProgramLogic.
    as the loop is of the form: step();; loop(). *)
 Module ArchState.
   Import env.notations.
+  (* For ArchState, we choose to have Sstatus as part of SState and having the non-S mode bits
+     of mstatus part of MState. Normally, sstatus is a projection of S-mode accessible bits from
+     mstatus. We opt do have this differently here, as the universal contract allows Sstatus to
+     change arbitrarily and it would be cumbersome to state this using Mstatus as a field. *)
 
   Record MState :=
     mkMState
       { mtvec      : Xlenbits
       ; pmpentries : list (Pmpcfg_ent * Xlenbits)
       ; mpp        : Privilege
+      ; mpie       : bool
+      ; mie        : bool      (* mstatus.MIE *)
       ; mcause     : Xlenbits
       ; mscratch   : Xlenbits
       ; mepc       : Xlenbits
-      ; mpie       : bool
-      ; mie        : bool
       ; mideleg    : Minterrupts
       ; medeleg    : RMedeleg
       }.
@@ -97,12 +101,10 @@ Module ArchState.
   Record SState :=
     mkSState
       { stvec    : Xlenbits
-      ; spp      : Privilege
+      ; sstatus  : Sstatus
       ; scause   : Xlenbits
       ; sscratch : Xlenbits
       ; sepc     : Xlenbits
-      ; spie     : bool
-      ; sie      : bool
       }.
 
   Record ArchState :=
@@ -119,13 +121,13 @@ Module ArchState.
     [env].["m"∷ty.enum privilege ↦ m archstate].["mtvec"∷ty.bvec 32 ↦ mtvec ms]
     .["stvec"∷ty.bvec 32 ↦ stvec ss]
     .["pmpentries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ pmpentries ms]
-    .["mpp"∷ty.enum privilege ↦ mpp ms].["spp"∷ty.enum privilege ↦ spp ss]
+    .["mpp"∷ty.enum privilege ↦ mpp ms].["spp"∷ty.enum privilege ↦ S_SPP (sstatus ss)]
     .["pc"∷ty.bvec 32 ↦ pc archstate].["mcause"∷ty.bvec 32 ↦ mcause ms]
     .["mscratch"∷ty.bvec 32 ↦ mscratch ms].["mepc"∷ty.bvec 32 ↦ mepc ms]
     .["scause"∷ty.bvec 32 ↦ scause ss].["sscratch"∷ty.bvec 32 ↦ sscratch ss]
     .["sepc"∷ty.bvec 32 ↦ sepc ss].["mpie"∷ty.bool ↦ mpie ms]
-    .["spie"∷ty.bool ↦ spie ss].["mie"∷ty.bool ↦ mie ms]
-    .["sie"∷ty.bool ↦ sie ss]
+    .["spie"∷ty.bool ↦ S_SPIE (sstatus ss)].["mie"∷ty.bool ↦ mie ms]
+    .["sie"∷ty.bool ↦ S_SIE (sstatus ss)]
     .["mideleg"∷ty_Minterrupts ↦ mideleg ms]
     .["medeleg"∷ty_Medeleg ↦ medeleg ms].
 
@@ -383,7 +385,7 @@ Section Loop.
         cbn in Hm, Hm'.
         iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
         destruct archstate as [? ms ? ?].
-        iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' spp' scause' sscratch' sepc' spie' sie') i')).
+        iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
         iSplitR "HM_CSRMod HM_Trap HMRET HSRET".
         { unfold Step_pre; cbn.
           now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }

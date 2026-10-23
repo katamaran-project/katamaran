@@ -288,7 +288,7 @@ Section Loop.
         iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
         destruct archstate as [? ms ? ?].
         iApply (semWP2_mono with "[-]").
-        { iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' spp' scause' sscratch' sepc' spie' sie') i')).
+        { iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
           iSplitR "HM_CSRMod HM_Trap HMRET HSRET".
           { unfold Step_pre; cbn.
             now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
