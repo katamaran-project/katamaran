@@ -188,3 +188,27 @@ without shifting a bullet, because the leading `auto` /
 
 A new opaque constructor is a **solver completeness risk everywhere**, not just
 at its own rule — run the full gate, not just the file you edited.
+
+## Adding a new LIST-valued `UnOp` (2026-10-24, `uop.regroup`)
+
+**Its element types must be GENERIC.** `Terms.v`'s `Term_list_case` and
+`ListView` are Equations/inductive definitions over `Term Σ (ty.list σ)` at a
+generic `σ`; an op whose result has a FIXED element type (e.g.
+`UnOp (list (bvec 32)) (list (bvec 8))`) forces `σ := bvec 8` there and
+Equations fails with "Unable to build a covering" (reproduced on a 10-line
+toy before touching the file). `regroup {σ τ} : UnOp (list σ) (list τ)` fits
+like `rev`; its eval decides the meaningful type pair itself and is `[]`
+(junk) elsewhere. Sites, all positional/arm additions:
+
+| file | what |
+|---|---|
+| `Bitvector.v` | the `Val`-level function (`bv.le_bytes`) |
+| `Syntax/UnOps.v` | constructor (append LAST), `tel_eq_dec` clause (`with eq_dec σ1 σ2`, like `sext`), `eval` arm |
+| `Syntax/Terms.v` | `Term_list_case` hypothesis + clause; `ListView` constructor (no sub-view: the argument's element type differs); `view_unop` arm |
+| `Symbolic/Solver.v` | the two `Term_list_case` callers (`(fun (*regroup*) _ _ => default)`); the three exhaustive unop matches (`simplify_eq_unop_val`, `simplify_eq_unop`, `simplify_propeq_unop`) |
+
+`PartialEvaluation.v` and Solver's soundness proofs absorbed it untouched.
+`UnOps.v`/`Terms.v` have `Local Set Implicit Arguments`, which silently made
+the helper's and the hypothesis's type arguments implicit (`@regroup_val`,
+`pregroup t`) — and file-mode replay SKIPS a failing sentence, so the symptom
+is a later "reference eval was not found".

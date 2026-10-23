@@ -343,6 +343,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (pcons : ∀ (t1 : Term Σ σ) (t2 : Term Σ (ty.list σ)), P (term_binop bop.cons t1 t2)).
     Hypothesis (pappend : ∀ (t1 : Term Σ (ty.list σ)) (t2 : Term Σ (ty.list σ)), P (term_binop bop.append t1 t2)).
     Hypothesis (prev : ∀ (t : Term Σ (ty.list σ)), P (term_unop uop.rev t)).
+    Hypothesis (pregroup : ∀ τ (t : Term Σ (ty.list τ)), P (term_unop uop.regroup t)).
 
     Equations(noeqns) Term_list_case (t : Term Σ (ty.list σ)) : P t :=
     | term_var_in lIn             => pvar lIn
@@ -350,7 +351,8 @@ Module Type TermsOn (Import TY : Types).
     | term_relval _ rv             => prelval rv
     | term_binop bop.cons t1 t2   => pcons t1 t2
     | term_binop bop.append t1 t2 => pappend t1 t2
-    | term_unop uop.rev t         => prev t.
+    | term_unop uop.rev t         => prev t
+    | term_unop uop.regroup t     => pregroup t.
 
   End Term_list_case.
 
@@ -594,7 +596,10 @@ Module Type TermsOn (Import TY : Types).
     | term_list_append {t1 t2} (lv1 : ListView t1) (lv2 : ListView t2) :
       ListView (term_binop bop.append t1 t2)
     | term_list_rev t (lv : ListView t) :
-      ListView (term_unop uop.rev t).
+      ListView (term_unop uop.rev t)
+    (* no sub-view: the argument's element type differs *)
+    | term_list_regroup {τ} (t : Term Σ (ty.list τ)) :
+      ListView (term_unop uop.regroup t).
     #[global] Arguments term_list_var {Σ σ} ς {ςInΣ}.
     #[global] Arguments term_list_append {Σ σ} [t1 t2] lv1 lv2.
 
@@ -636,6 +641,7 @@ Module Type TermsOn (Import TY : Types).
       ∀ {t : Term Σ σ1}, View t → View (term_unop op t) :=
     match op with
       | uop.rev => term_list_rev
+      | uop.regroup => fun t _ => term_list_regroup t
       | _ => fun _ _ => tt
       end.
 

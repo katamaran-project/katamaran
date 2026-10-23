@@ -211,7 +211,16 @@ Inductive CLem : Set :=
   | clem_arrv_pad (w : nat) (s : Z)
   (* arrv a n e vs ∗ k ≤u n ⊢ ∃ v1 v2, arrv a k (a+s·k) v1 ∗
      arrv (a+s·k) (n-k) e v2 ∗ ⌜vs = v1 ++ v2⌝ *)
-  | clem_arrv_split (w : nat) (s : Z) (k : N).
+  | clem_arrv_split (w : nat) (s : Z) (k : N)
+  (* PLAN-arrv Phase B: the word ⇄ byte view of a VALUE (D3/D6/D7/D8).
+     arrv 4 4 a n e ws ⊢ arrv 1 1 a (4·n) e (regroup ws) -- no overflow
+     premise: both counts are lengths mod 2^32 *)
+  | clem_arrv_to_bytes
+  (* arrv 1 1 a (4·k) e (regroup v) ∗ k <u 2^30 ⊢ arrv 4 4 a k e v --
+     PATTERN form on both the value and the count (D6/D7): what a to_bytes
+     made comes back.  The bound is NEEDED: ·4 is not injective mod 2^32, so
+     without it k could be length v + 2^30 *)
+  | clem_arrv_of_bytes.
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -257,6 +266,10 @@ Definition clem_ptsto {Σ} (w : nat) (x : Term Σ ty_xlenbits)
   asn.chunk (chunk_user (ptstomem w) [x; v]).
 Definition clem_nonzero {Σ} (n : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.formula (formula_relop bop.neq n (term_val ty_xlenbits bv.zero)).
+(* 4·n, spelled as peval normalises it (a program's `slli n,2` gives the
+   same term), so a byte count made by to_bytes is matched by of_bytes *)
+Definition clem_x4 {Σ} (n : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
+  term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 4)) n.
 Arguments clem_arrv {Σ} w s a n e vs.
 Arguments clem_arrv_angelic {Σ} w s a n e vs.
 Arguments clem_ptsto {Σ} w x v.
@@ -506,6 +519,18 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                           (clem_off (term_var "n") (- Z.of_N k)) (term_var "e") (term_var "v2"))
                  (asn.formula (formula_propeq (term_var "vs")
                     (term_binop bop.append (term_var "v1") (term_var "v2"))))))))
+  | clem_arrv_to_bytes =>
+      MkLemma [ctx] (clemv_ctx 4) [env]
+        (clem_arrv_angelic 4 4 (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (clem_arrv 1 1 (term_var "a") (clem_x4 (term_var "n")) (term_var "e")
+           (term_unop uop.regroup (term_var "vs")))
+  | clem_arrv_of_bytes =>
+      MkLemma [ctx] ["a"∷ty_xlenbits; "k"∷ty_xlenbits; "e"∷ty_xlenbits; "v"∷clemv_ty 4] [env]
+        (asn.sep (clem_arrv_angelic 1 1 (term_var "a") (clem_x4 (term_var "k")) (term_var "e")
+                    (term_unop uop.regroup (term_var "v")))
+           (asn.formula (formula_relop bop.bvult (term_var "k")
+              (term_val ty_xlenbits (bv.of_N 0x40000000)))))
+        (clem_arrv 4 4 (term_var "a") (term_var "k") (term_var "e") (term_var "v"))
   end.
 
 Inductive Annot :=

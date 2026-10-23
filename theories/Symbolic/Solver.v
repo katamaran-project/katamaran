@@ -526,6 +526,7 @@ Module Type GenericSolverOn
           | uop.bvtake m => simplify_eq_unop_default_val (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default_val uop.negate
           | uop.expand => simplify_eq_unop_default_val uop.expand
+          | uop.regroup => simplify_eq_unop_default_val uop.regroup
           end.
 
         Definition simplify_eq_tuple_val {σs} (ts : Env (Term Σ) σs)
@@ -717,6 +718,7 @@ Module Type GenericSolverOn
             (fun (*cons*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
             (fun (*append*) _ _ => dlist_eq (term_cons t1 t2) t)
             (fun (*rev*) _ => dlist_eq (term_cons t1 t2) t)
+            (fun (*regroup*) _ _ => dlist_eq (term_cons t1 t2) t)
             t.
 
         Definition simplify_eq_binop_append {σ} (tl1 : Term Σ (ty.list σ))
@@ -732,6 +734,7 @@ Module Type GenericSolverOn
                  if Term_eqb tl2 tr2 then simplify_eq tl1 tr1 else
                    dlist_eq (term_append tl1 tl2) tr)
             (fun (*rev*) _ => dlist_eq (term_append tl1 tl2) tr)
+            (fun (*regroup*) _ _ => dlist_eq (term_append tl1 tl2) tr)
             tr.
 
         Definition simplify_eq_binop_bvapp' {m n} (t1 : Term Σ (ty.bvec m))
@@ -983,6 +986,7 @@ Module Type GenericSolverOn
           | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default uop.negate
           | uop.expand => simplify_eq_unop_default uop.expand
+          | uop.regroup => simplify_eq_unop_default uop.regroup
           end.
 
         Definition simplify_propeq_unop {σ1 σ2} (op : UnOp σ1 σ2) :
@@ -1005,6 +1009,7 @@ Module Type GenericSolverOn
           | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default uop.negate
           | uop.expand => simplify_eq_unop_default uop.expand
+          | uop.regroup => simplify_eq_unop_default uop.regroup
           end.
 
         Equations(noeqns) formula_eqs_ctx {Δ}

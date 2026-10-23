@@ -53,7 +53,35 @@ D5 (2026-10-23, §5): O1 keep flip + `rev` peval; O2 no public-take lemma
 (framing + the plain take suffice, §1.2 corrected and measured); O3 a
 top-level `DArr` value is always a named contract variable.
 
-**Next step:** Phase B (words ⇄ bytes with values, D3) — Phase A done.
+D6 (2026-10-23, Phase B): of_bytes is PATTERN-form only — one new op
+`bytes_of_words`; `of_bytes` matches a syntactic `bytes_of_words v` and
+gives back the word array holding `v`, no leftover. No `words_of_bytes`, no
+cancel rule; regrouping arbitrary bytes waits for a program that needs it.
+(A "leftover of bytes_of_words v ~> []" rule would be UNSOUND: NonSyncVal
+[] [] for a secret v, §1.1.)
+
+D7 (2026-10-23): the word count. `to_bytes` gives the byte array count
+`4 *ᵇ n`; `of_bytes` MATCHES `4 *ᵇ k` (and value `bytes_of_words v`) and
+gives back count `k`. Byte counts are ring-normalised: `4·c` stays `4 *ᵇ c`
+and a program's `slli c,2` normalises to the same term, but `4·(n+1)`
+becomes `4 + 4·n` — for a word count that is a ring SUM the caller names it
+(∃ c, c = n+1). AMENDED while proving it: `of_bytes` also needs
+`k <u 2^30` — ·4 is not injective mod 2^32, so from count 4·k = 4·len the
+word count k could be len + 2^30 (unsound without the bound; arr's byte
+view had the same premise). Rejected: `m >> 2` (arr's form; `(4+4n)>>2` is not `n+1`
+mod 2^32, so the caller could not use it).
+
+D8 (2026-10-23): the op is GENERIC, `uop.regroup {σ τ} : UnOp (list σ)
+(list τ)` — eval splits each `bvec m` cell into its little-endian bytes
+(`bv.le_bytes`, the same `appView 8` recursion as `interp_ptstomem`) when
+τ = bvec 8, and is `[]` (junk) for other type pairs. Reason: a list op with
+a FIXED element type (`list (bvec 32) → list (bvec 8)`) makes Terms.v's
+`Term_list_case`/`ListView` (Equations, generic σ) unbuildable — "unable
+to build a covering", reproduced on a toy; a generic op fits like `rev`.
+Covers every power-of-two width for free. `bytes_of_words` below means
+`regroup` at σ = bvec 32.
+
+**Next step:** Phase C (generators and the bridge) — Phases A, B done.
 
 ---
 
@@ -181,6 +209,15 @@ ONE full merge gate at the end (feedback: light gates).
   their own array).
 - GATE B: the v4 caller of `RsaSpikeArrv.v` redone with a WORD header + word
   limbs and a BYTE memcpy, header public after the call.
+- **Status 2026-10-24:** DONE as decided in D6–D8 (the bullets above are the
+  pre-decision sketch: no `words_of_bytes`, no cancel rule, no leftover
+  array). `uop.regroup` (UnOps/Terms/Solver/Bitvector `bv.le_bytes`),
+  `clem_arrv_to_bytes` / `clem_arrv_of_bytes` (with `k <u 2^30`, see D7's
+  amendment), soundness in SpecIris (`arrv_cell_bytes`: a k-byte cell IS
+  its le_bytes byte cells, by induction on k; `arrv_words_bytes`, both
+  directions). GATE B probe `Example/Rsa/ZZArrvWords.v`: `valid_w` 4.6 s
+  (a public header WORD survives a BYTE memcpy), controls secret-h and
+  no-bound rejected, to_bytes;of_bytes round trip is the identity.
 
 ### Phase C — generators and the bridge
 - `GenSegment`/`GenProg` `DArr pub …` → `arrv … vs ∗ (if pub then

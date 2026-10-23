@@ -477,6 +477,17 @@ Module bv.
                  end
       end.
 
+    (* The bytes of x, least significant first: the same `appView 8`
+       recursion a case study's points-to over `k * 8` bits uses, so these
+       are x's bytes in memory order.  Bits past the last whole byte are
+       dropped.  The eval of `uop.regroup` (CFGVer `arrv`, PLAN-arrv D8). *)
+    Fixpoint le_bytes {m} : bv m -> list (bv 8) :=
+      match m with
+      | S (S (S (S (S (S (S (S m'))))))) => fun x =>
+          let (b, r) := appView 8 m' x in Datatypes.cons b (le_bytes r)
+      | _ => fun _ => Datatypes.nil
+      end.
+
     Definition rev_append {m n} (x : bv m) (y : bv n) : bv (m + n) :=
       fold_left (A := fun k => bv (k + n)) (fun k (z : bv (k + n)) b => cons b z) y x.
     Definition rev {m} (x : bv m) : bv m :=

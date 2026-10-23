@@ -218,8 +218,17 @@ value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
 `lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
 `join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),
 `pad` (`arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ …`, w ≥ 1),
-`split k` (`vs = v1 ++ v2`). Worked probe with negative controls:
-`Example/Rsa/ZZArrvCatalogue.v`; soundness: `SpecIris.clem_arrv_*_sound`.
+`split k` (`vs = v1 ++ v2`), and the word ⇄ byte VIEW of a value:
+`to_bytes` (`arrv 4 4 a n e ws ⊢ arrv 1 1 a (4 *ᵇ n) e (regroup ws)`) and
+`of_bytes` (PATTERN form: `arrv 1 1 a (4 *ᵇ k) e (regroup v) ∗ k <u 2^30 ⊢
+arrv 4 4 a k e v` — the bound is needed, ·4 is not injective mod 2^32).
+`uop.regroup` splits each cell into its little-endian bytes (`bv.le_bytes`,
+memory order). The byte count must stay syntactically `4 *ᵇ k`: a program's
+`slli k,2` normalises to it, but a word count that is a ring SUM (n+1) does
+not survive (`4·(n+1)` becomes `4 + 4·n`) — name such a count. Worked probes
+with negative controls: `Example/Rsa/ZZArrvCatalogue.v`,
+`Example/Rsa/ZZArrvWords.v` (a public header WORD survives a BYTE memcpy);
+soundness: `SpecIris.clem_arrv_*_sound`.
 
 **Ghosts on an instruction that carries a block NEVER RUN** (`Verifier.v`,
 the `Some b` branch of the step: the block fires INSTEAD of the instruction,
