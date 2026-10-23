@@ -354,12 +354,9 @@ Module Type RiscvPmpIrisInstance2 (FL : FailLogic)
     Proof.
       intros.
       unfold interp_ptstomem, interp_ptsto, interp_ptsto_one.
-      rewrite ?ptstomem_bv_app.
-      (* rewrite ?Right.ptstomem_bv_app. *)
-      rewrite <- ?bi.sep_assoc.
-    (*   iSplit; iIntros "($ & $ & $ & $)". *)
-    (* Qed. *)
-    Admitted.
+      cbn [RVPCOM.interp_ptstomem]. rewrite bv.appView_app.
+      iSplit; iIntros "[[$ $] [$ $]]".
+    Qed.
 
     Lemma interp_ptstomem_big_sepS (bytes : nat) (paddr : Addr):
       (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ⊣⊢
