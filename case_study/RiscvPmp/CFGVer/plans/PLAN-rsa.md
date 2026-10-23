@@ -1,6 +1,8 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
 Status: **IN PROGRESS on branch `issue/rsa` (not merged, not pushed).**
+**2026-10-23: Phase 2 is paused on `plans/PLAN-arrv.md` (arrays with named
+values replace `arr`) — read that plan's HANDOFF next.**
 Phase 0 done; Phase 1 CLOSED (2026-10-22: spikes S1a and S1b end to end,
 axiom-clean; GATE 1 closed on light checks by Emiel, merge gate deferred to
 the end of the plan). Next: Phase 2. Survey (§1), decisions (§2), phases (§4), timing log (§5).
@@ -84,9 +86,10 @@ build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
    erase it — so arrays carry their VALUES and a contract's post names
    them (no ∃): **`arrv`**, which will REPLACE `arr` (Emiel's choice), via
    a spike first, then a plan. See "Spike S2-arrv" below.
-4. Write the `arrv` plan (replace `arr` in 14 files; the remaining ghost
-   lemmas; word⇄byte regroup with values = a new list UnOp) — ask Emiel the
-   open questions below first.
+4. ~~Write the `arrv` plan~~ DRAFTED 2026-10-23: **`plans/PLAN-arrv.md`**
+   — the migration arr → arrv in phases A–E (catalogue, words⇄bytes,
+   generators + bridge, examples, delete arr). Start there; its O1–O3 go to
+   Emiel first.
 5. GATE 2 (§4): `br_ccopy` over a word array, called from a word-accessing
    caller, end to end — a Result file on the S1b template.
 
