@@ -994,6 +994,24 @@ Module bv.
       - now rewrite app_cons, take_cons; f_equal.
     Qed.
 
+    (* `leview m (m + k)` cannot be destructed (its index is not a variable),
+       but it computes to `is_le k` by induction on m: the statement is
+       well-typed as written. *)
+    Lemma leview_is_le (m k : nat) (p : IsTrue (m <=? m + k)%nat) :
+      leview m (m + k) (p := p) = @is_le m k.
+    Proof.
+      induction m as [|m IH]; cbn.
+      - reflexivity.
+      - rewrite (IH p). reflexivity.
+    Qed.
+
+    (* Truncating a zero extension back to its source width is the identity:
+       a RISC-V `lbu` (extend_value zext 8 -> 32) followed by `sb` (truncate
+       32 -> 8) stores the byte it loaded (PartialEvaluation.peval_bvtake_zext). *)
+    Lemma take_zext {m k : nat} (p : IsTrue (m <=? m + k)%nat) (x : bv m) :
+      take m (@zext m x (m + k) p) = x.
+    Proof. unfold zext. rewrite leview_is_le. unfold zext'. apply take_app. Qed.
+
     Lemma take_take {m n o} (x : bv ((m+n)+o)) :
       take m (take (m + n) x) =
       take m (eq_rect_r bv x (nat_add_assoc m n o)).

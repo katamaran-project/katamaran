@@ -167,7 +167,21 @@ Inductive CLem : Set :=
      e' = a + k·(m >> sh): bytes regrouped into k-byte cells, the leftover
      bytes kept as their own array (empty when k divides m).  No side
      condition.  Halfwords from bytes: u = RgW2 *)
-  | clem_arr_of_bytes (pub : bool) (u : RgWidth).
+  | clem_arr_of_bytes (pub : bool) (u : RgWidth)
+  (* SPIKE (PLAN-rsa.md Phase 2): the same shapes for `arrv`, the array whose
+     contents are NAMED (Sig.v).  Lifted cons is not injective on RelVal, so
+     taking a cell comes in two forms: by EQUATION for a value that is a
+     variable (a loop's remainder), by PATTERN for one that is syntactically
+     a cons (a caller's own array handed back). *)
+  (* arrv a n e vs ∗ n≠0 ⊢ ∃ x r, a ↦ₘ x ∗ range a ∗ arrv (a+s) (n-1) e r ∗ ⌜vs = x :: r⌝ *)
+  | clem_arrv_take_first (w : nat) (s : Z)
+  (* arrv a n e (x :: r) ⊢ a ↦ₘ x ∗ range a ∗ arrv (a+s) (n-1) e r -- no
+     n≠0 premise: a cons value has length ≥ 1, and the length is n *)
+  | clem_arrv_take_cons (w : nat) (s : Z)
+  (* arrv a n e vs ∗ (a-s) ↦ₘ x ∗ range (a-s) ⊢ arrv (a-s) (n+1) e (x :: vs) *)
+  | clem_arrv_add_first (w : nat) (s : Z)
+  (* arrv a n e vs ∗ e ↦ₘ x ∗ range e ⊢ arrv a (n+1) (e+s) (vs ++ [x]) *)
+  | clem_arrv_add_last (w : nat) (s : Z).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -197,6 +211,25 @@ Definition clem_range {Σ} (w : nat) (x : Term Σ ty_xlenbits) : Assertion Σ :=
 
 Definition clem_arr {Σ} (pub : bool) (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.chunk (chunk_user (arr pub w s) [a; n; e]).
+
+(* arrv's value type, its lemma context, and a points-to with a NAMED value *)
+Definition clemv_ty (w : nat) : Ty := ty.list (clem_cell_ty w).
+Definition clemv_ctx (w : nat) : LCtx :=
+  ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w].
+Definition clem_arrv {Σ} (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits)
+    (vs : Term Σ (clemv_ty w)) : Assertion Σ :=
+  asn.chunk (chunk_user (arrv w s) [a; n; e; vs]).
+Definition clem_arrv_angelic {Σ} (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits)
+    (vs : Term Σ (clemv_ty w)) : Assertion Σ :=
+  asn.chunk_angelic (chunk_user (arrv w s) [a; n; e; vs]).
+Definition clem_ptsto {Σ} (w : nat) (x : Term Σ ty_xlenbits)
+    (v : Term Σ (clem_cell_ty w)) : Assertion Σ :=
+  asn.chunk (chunk_user (ptstomem w) [x; v]).
+Definition clem_nonzero {Σ} (n : Term Σ ty_xlenbits) : Assertion Σ :=
+  asn.formula (formula_relop bop.neq n (term_val ty_xlenbits bv.zero)).
+Arguments clem_arrv {Σ} w s a n e vs.
+Arguments clem_arrv_angelic {Σ} w s a n e vs.
+Arguments clem_ptsto {Σ} w x v.
 
 Definition clem_arr_angelic (pub : bool) (w : nat) (s : Z) : Assertion clem_ctx :=
   asn.chunk_angelic (chunk_user (arr pub w s)
@@ -325,6 +358,41 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                  (term_binop bop.bvadd (term_var "n") (term_var "n2"))))))
         (clem_arr pub w s (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
            (term_var "e2"))
+  | clem_arrv_take_first w s =>
+      MkLemma [ctx] (clemv_ctx w) [env]
+        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+           (clem_nonzero (term_var "n")))
+        (asn.exist "x" (clem_cell_ty w) (asn.exist "r" (clemv_ty w)
+           (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
+              (asn.sep (clem_range w (term_var "a"))
+                 (asn.sep (clem_arrv w s (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
+                             (term_var "e") (term_var "r"))
+                    (asn.formula (formula_propeq (term_var "vs")
+                       (term_binop bop.cons (term_var "x") (term_var "r")))))))))
+  | clem_arrv_take_cons w s =>
+      MkLemma [ctx]
+        ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "x"∷clem_cell_ty w; "r"∷clemv_ty w] [env]
+        (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e")
+           (term_binop bop.cons (term_var "x") (term_var "r")))
+        (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
+           (asn.sep (clem_range w (term_var "a"))
+              (clem_arrv w s (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
+                 (term_var "e") (term_var "r"))))
+  | clem_arrv_add_first w s =>
+      MkLemma [ctx] (clemv_ctx w ▻ "x"∷clem_cell_ty w) [env]
+        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+           (asn.sep (clem_ptsto w (clem_off (term_var "a") (- s)) (term_var "x"))
+              (clem_range w (clem_off (term_var "a") (- s)))))
+        (clem_arrv w s (clem_off (term_var "a") (- s)) (clem_off (term_var "n") 1) (term_var "e")
+           (term_binop bop.cons (term_var "x") (term_var "vs")))
+  | clem_arrv_add_last w s =>
+      MkLemma [ctx] (clemv_ctx w ▻ "x"∷clem_cell_ty w) [env]
+        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+           (asn.sep (clem_ptsto w (term_var "e") (term_var "x"))
+              (clem_range w (term_var "e"))))
+        (clem_arrv w s (term_var "a") (clem_off (term_var "n") 1) (clem_off (term_var "e") s)
+           (term_binop bop.append (term_var "vs")
+              (term_binop bop.cons (term_var "x") (term_val (clemv_ty w) nil))))
   end.
 
 Inductive Annot :=

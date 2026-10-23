@@ -74,16 +74,74 @@ build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
    VCs fail with `p ≠ p` / `d ≠ d` added to the post (not vacuous). Trap:
    a post `arr true` after a secret store is NOT a secrecy control —
    `arr true`/`arr false` are different predicates, it fails on the name.
-3. Spike S2, the mixed-width view change: `br_ccopy` (byte-wise,
-   `tools/bearssl/listings/hardened/ccopy.s`) over a word array that a
-   caller touches with `lw`. Decide WHERE word⇄4-bytes happens — a ghost
-   split/join annotation at the call site, or the callee contract stated
-   over words with the split inside its own VC — and bring the two options
-   to Emiel before building (feedback: involve in planning). Read
-   `PLAN-byte-memory.md` §9 first (ghost lemmas were rejected there FOR
-   LOADS; check whether the reasons carry over to a call boundary).
-4. GATE 2 (§4): `br_ccopy` over a word array, called from a word-accessing
+3. Spike S2. **Decided (Emiel, 2026-10-22):** (a) the word⇄bytes view
+   change happens AT THE CALL SITE (callee contracts over bytes; the
+   `clem_arr_to_bytes`/`of_bytes` regroup ghosts around the call; §9's
+   rejection was about `SepLemma`s in trusted `Machine.v`, not proof-side
+   `AnnotCLemma`s). (b) Mixed publicness: every copy moves a PUBLIC header
+   word + SECRET limbs, and `arr` has one flag. Emiel: framing should keep
+   what the caller knew — a callee that does not need publicness must not
+   erase it — so arrays carry their VALUES and a contract's post names
+   them (no ∃): **`arrv`**, which will REPLACE `arr` (Emiel's choice), via
+   a spike first, then a plan. See "Spike S2-arrv" below.
+4. Write the `arrv` plan (replace `arr` in 14 files; the remaining ghost
+   lemmas; word⇄byte regroup with values = a new list UnOp) — ask Emiel the
+   open questions below first.
+5. GATE 2 (§4): `br_ccopy` over a word array, called from a word-accessing
    caller, end to end — a Result file on the S1b template.
+
+**Spike S2-arrv (2026-10-22/23) — VC side DONE, Iris side OPEN.**
+- `Sig.v` `arrv (w : nat) (s : Z)`, args `[a; n; e; vs]`,
+  `vs : list (bvec 8w)`, precise on `[a]`. `IrisInstanceBinary.interp_arrv`:
+  cell i holds `NonSyncVal l_i r_i` of the two runs' lists, lengths = n.
+  It reads only PROJECTIONS of vs, so the non-canonical `NonSyncVal v v`
+  means the same as `SyncVal v` — required, because lifted `cons` is NOT
+  injective (`cons x r = cons h ls` does not give `x = h`), and a lemma
+  like "an empty arrv's value is nil" would be UNSOUND (`NonSyncVal [] []`).
+- `Verifier.v` CLems (light): `clem_arrv_take_first` (by EQUATION, for a
+  variable value: `∃ x r, … ∗ ⌜vs = x :: r⌝`), `clem_arrv_take_cons` (by
+  PATTERN on a value that is syntactically `x :: r`, so `x` is bound to
+  the caller's term; no `n≠0` premise — the length gives it),
+  `clem_arrv_add_first` (`x :: vs`), `clem_arrv_add_last` (`vs ++ [x]`).
+  Helpers `clemv_ty`/`clemv_ctx`/`clem_arrv(_angelic)`/`clem_ptsto`/
+  `clem_nonzero`; `Verifier.v` has implicit arguments ON, so each helper
+  needs `Arguments … w …` or `w` silently becomes implicit.
+- `theories/`: `bv.leview_is_le` (`leview m (m+k) = is_le k`, by induction
+  — `leview` with a non-variable index cannot be destructed) and
+  `bv.take_zext`; `PartialEvaluation.peval_bvtake_zext` (`bvtake 8 (zext x)
+  ~> x`: `lbu` then `sb` stores the byte it loaded) and `peval_append`
+  (`[] ++ t`, `(x :: t) ++ u`, `(a ++ b) ++ u` right-associated; two values
+  still fold), both proved sound with no NonSyncVal split (same leaves).
+  The old general `peval_bvtake` stays unwired.
+- `Example/Rsa/RsaSpikeArrv.v` (light), all green, file 44 s user / 4.9 GB:
+  **v4** `valid_cl` — a public header byte h joined onto secret limbs ls
+  (`add_first` → `h :: ls`), memcpy as a block with the VALUE contract
+  `src ↦ vs ∗ dst ↦ ws ⊢ src ↦ vs ∗ dst ↦ vs` (a stand-in body), then
+  `take_cons` on the destination: its first cell holds `h`, public by the
+  FRAMED `secLeak h`. Controls: h secret → rejected; memcpy post with an
+  ∃ value → rejected. **v3** `valid_mc_loop` — picolibc's real memcpy loop
+  (`lbu; sb; addi ×3; bnez`) as a loop VC with invariant src = done ++
+  rest, dst = done ++ old, `vs = done ++ rest`; 0.40 s, green FIRST try
+  once the two peval rules existed. Controls: `vs = rest ++ done` in the
+  post → rejected; post ∗ `s ≠ s` → rejected. Self-test: `peval`
+  re-associates `(d ++ [x]) ++ r` to `d ++ (x :: r)` under vm_compute.
+- Traps found: a BLOCK's precondition must use `chunk_angelic` for arrays
+  whose address is a block variable (a plain chunk cannot search the heap);
+  the stock `solve_mb_vc` already finds `take_cons`'s witnesses (cbn turns
+  `cons ?x ?r = cons h ls` into a Coq unification).
+- **OPEN, and the heavy chain is RED until done:** `SpecIris.v` soundness
+  of the 4 CLems + their `clemSem` cases (big_sepL over `zip` of the two
+  projections). Then: memcpy's FUNCTION contract (entry seeds of empty
+  done arrays — needs an `arrv` empty-seed lemma, `[] ++ vs` — and the
+  exit glue: drop/pad the empty rests; the `n = 0` path); the word⇄byte
+  regroup WITH values (`bytes_of_words` as a list UnOp + a cancelling peval
+  rule); memmove's rotated ±1-stride loop; ccopy's MUX (`MUX c x x ~> x`
+  would make an equal header public again even under a secret ctl).
+- Questions for Emiel before the plan: (Q1) replace `arr` everywhere, or
+  keep a value-free view for invariants that never need values (|Σ| cost:
+  one more existential per array per invariant — measure on muladd
+  first?); (Q2) word arrays: values as `list (bvec 32)` with a
+  `bytes_of_words` UnOp, or bytes everywhere.
 
 **Known traps (each cost time).**
 - An instruction carrying a block runs the block INSTEAD of itself, ghosts
@@ -544,6 +602,9 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-22 | heavy chain rebuild -j1 (in background) + S1b Result file | 15:19:23 | 15:44:22 | 25 | ~19 (rebuild 1119 s) | ~6 interleaved | Result 21.5 s user / 7.5 GB | Result ~280 lines | 4 (`repeat constructor` overshoot, `repeat f_equal` on N, bv.unsigned_of_N_small missing, rewrite comma syntax) | axiom-clean |
 | 2026-10-22 | Phase 2: O1 (explain + survey picolibc, pin 1.8.12, `picolibc.sh`, plan) | ~16:00 | 16:19:11 | ~19 | <0.5 | ~7 | — | script 30 | 0 | ~15 min of it user time (3 clarifying rounds: BearSSL has no mem*, which libc, why byte loops) |
 | 2026-10-22 | Phase 2 step 2: `sb` width 1 (RsaSpikeSb.v: 3 VCs + 4 controls) | 16:19:11 | 16:23:53 | 4.7 | 0.5 (full compile 22 s) | 4.2 | VCs 0.08 / 0.04 / 0.10 s; file 15.9 s user / 4.7 GB | ~110 | 0 failed VCs; 1 control replaced (name-mismatch, not secrecy) | all green first try; one coqc-guard block (file appended after session start) |
+| 2026-10-22 | Phase 2 S2: options + explanations (view change, mixed publicness, framing, value-carrying arrays) | 16:24 | ~16:45 | — | — | — | — | — | — | user time; decisions (a) call site, (b) arrv replacing arr, spike first |
+| 2026-10-22 | S2-arrv v1+v4: Sig/IrisInstanceBinary arrv, 4 CLems, caller VC | 19:19:44 | 19:35 | ~16 (a gap 16:45→19:19 is idle, not counted) | ~8 (Sig→IrisInstanceBinary 188 s, Spec 44 s, light chain 76+94 s) | ~8 | v4 VC 0.56 s | Sig +12, IrisInstanceBinary +20, Verifier +75, spike ~110 | 4 (implicit `w`, block pre needs chunk_angelic, take_cons n≠0 premise, one `vos` round) | framing works; stock solve_mb_vc finds the cons witnesses |
+| 2026-10-23 | S2-arrv v2+v3: bv lemmas + 2 peval rules (preamble prototypes), memcpy loop VC | ~13:50 | 14:27:29 | ~37 | ~17 (PartialEvaluation compile ~1 min, rebuild theories→light 889 s wall / 975 s user / 4.96 GB, spike files 58 s) | ~20 | valid_mc_loop 0.40 s, valid_cl 3.6 s (0.56 s interactively); files 44.5 s user / 4.9 GB | Bitvector +18, PartialEvaluation +70, spike +110 | 6 (Stdlib path, IsTrue import, noeqns blocks funelim, existT injectivity, cbn unfolds peval_binop', 3 paren-count rounds) | v3 green FIRST try once the rules existed; heavy chain red (clemSem) |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least

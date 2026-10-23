@@ -1953,11 +1953,28 @@ End CanonTerm.
        x - x, idempotence, the mask shapes) live in CFGVer/Example/ZZBvCore.v:
        inside this functor the terms are abstract, so they cannot compute. *)
 
+    (* List append, right-associated with conses pulled out:
+         [] ++ t ~> t,  (x :: t) ++ u ~> x :: (t ++ u),  (a ++ b) ++ u ~> a ++ (b ++ u).
+       A value-carrying array's loop invariant `vs = done ++ rest` is
+       re-established after one step only if (done ++ [x]) ++ rest' and
+       done ++ (x :: rest') meet syntactically (CFGVer `arrv`, PLAN-rsa.md,
+       Phase 2).  Same leaves on both sides; two values still fold through
+       peval_binop'.  Self-tests over concrete terms are in
+       CFGVer/Example/Rsa/RsaSpikeArrv.v (here the terms are abstract). *)
+    Equations peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) by struct t1 :=
+    | term_val _ v, t2 => match v with
+                          | nil => t2
+                          | _   => peval_binop' bop.append (term_val (ty.list σ) v) t2
+                          end
+    | term_binop bop.cons x t, t2      => term_binop bop.cons x (peval_append t t2)
+    | term_binop bop.append a b, t2    => peval_append a (peval_append b t2)
+    | t1, t2                           => term_binop bop.append t1 t2.
+
     (* TODO: Comment out some stuff because I am too lazy to prove their soundness *)
     Definition peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
       Term Σ σ1 → Term Σ σ2 → Term Σ σ :=
       match op with
-      (* | bop.append => peval_append *)
+      | bop.append => peval_append
       | bop.and    => peval_and
       | bop.or     => peval_or
       | bop.plus   => peval_plus
@@ -2857,7 +2874,20 @@ End CanonTerm.
       peval_bvsub t1 t2 ≡ term_binop bop.bvsub t1 t2.
     Proof. apply canon_term_equiv. Qed.
 
-    Hint Resolve peval_binop'_sound (* peval_append_sound *) peval_and_sound
+    Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
+      peval_append t1 t2 ≡ term_binop bop.append t1 t2.
+    Proof.
+      funelim (peval_append t1 t2); intros ι; try reflexivity.
+      - (* before any cbn: it would unfold peval_binop' *)
+        destruct v; [|exact (peval_binop'_sound _ _ _ ι)].
+        cbn. destruct (inst t2 ι); reflexivity.
+      - cbn. rewrite H. cbn. destruct (inst x ι), (inst t ι), (inst t2 ι); reflexivity.
+      - cbn. rewrite H0. cbn. rewrite H. cbn.
+        destruct (inst a ι), (inst b ι), (inst t2 ι); cbn; f_equal; try apply app_assoc;
+          f_equal; apply app_assoc.
+    Qed.
+
+    Hint Resolve peval_binop'_sound peval_append_sound peval_and_sound
       peval_or_sound peval_plus_sound peval_minus_sound peval_bvadd_sound
       peval_bvand_mask_sound peval_bvor_mask_sound peval_bvxor_mask_sound
       peval_shiftl_sound peval_bvsub_sound
@@ -2955,6 +2985,33 @@ End CanonTerm.
       peval_sext (m := 32) (n := 32) (p := p) t = t.
     Proof. reflexivity. Qed.
 
+    (* Truncating a zero extension back to its source width is the identity
+       (bv.take_zext).  A RISC-V `lbu` widens the byte with zext 8 -> 32 and
+       `sb` truncates with bvtake 8, so a byte copied by lbu; sb (memcpy,
+       memmove, br_ccopy) would otherwise be stored as `bvtake 8 (zext x)`,
+       not `x`, and a value-carrying array (CFGVer `arrv`) would not see the
+       copy as the same value (PLAN-rsa.md, Phase 2).  Same leaves on both
+       sides, so sound over secrets with no case split.  Distinct from the
+       unwired general peval_bvtake above. *)
+    Equations peval_zext_arg {k} (t : Term Σ (ty.bvec k)) :
+        option {m' & {p : IsTrue (m' <=? k) & Term Σ (ty.bvec m')}} :=
+    | term_unop (@uop.zext m' _ p) x => Some (existT m' (existT p x))
+    | _ => None.
+
+    Definition peval_bvtake_zext m {n} (t : Term Σ (ty.bvec (m + n))) : Term Σ (ty.bvec m) :=
+      match peval_zext_arg t with
+      | Some (existT m' (existT _ x)) =>
+          match width_cast m' m with
+          | Some f => f (fun k => Term Σ (ty.bvec k)) x
+          | None   => peval_unop' (uop.bvtake m) t
+          end
+      | None => peval_unop' (uop.bvtake m) t
+      end.
+
+    Lemma selftest_bvtake_zext (x : Term Σ (ty.bvec 8)) :
+      peval_bvtake_zext 8 (n := 24) (term_unop (uop.zext (m := 8) (n := 32)) x) = x.
+    Proof. reflexivity. Qed.
+
     Definition peval_unop {σ1 σ2} (op : UnOp σ1 σ2) : Term Σ σ1 -> Term Σ σ2 :=
       match op with
       | uop.not                       => peval_not
@@ -2964,7 +3021,7 @@ End CanonTerm.
       (* | uop.unsigned                  => peval_unsigned *)
       (* | uop.vector_subrange start len => peval_vector_subrange start len *)
       (* | uop.bvdrop m                  => peval_bvdrop m *)
-      (* | uop.bvtake m                  => peval_bvtake m *)
+      | uop.bvtake m                  => peval_bvtake_zext m
       | op                            => peval_unop' op
       end.
 
@@ -3041,11 +3098,36 @@ End CanonTerm.
         f_equal; try f_equal; symmetry; apply bv.sext_same.
     Qed.
 
+    (* IsTrue b wraps Is_true b, which is True or False: one proof at most *)
+    Lemma istrue_irr {b} (p q : IsTrue b) : p = q.
+    Proof. destruct p as [p], q as [q]. destruct b; [destruct p, q|destruct p]; reflexivity. Qed.
+
+    Lemma peval_zext_arg_inv {k} (t : Term Σ (ty.bvec k)) m' p x :
+      peval_zext_arg t = Some (existT m' (existT p x)) ->
+      t = term_unop (uop.zext (m := m') (n := k) (p := p)) x.
+    Proof.
+      funelim (peval_zext_arg t); intros Heq; try discriminate.
+      injection Heq as Heq. subst m'0.
+      apply Eqdep_dec.inj_pair2_eq_dec in H; [|exact Nat.eq_dec]. subst x0.
+      rewrite (istrue_irr p p0). reflexivity.
+    Qed.
+
+    Lemma peval_bvtake_zext_sound m {n} (t : Term Σ (ty.bvec (m + n))) :
+      peval_bvtake_zext m t ≡ term_unop (uop.bvtake m) t.
+    Proof.
+      unfold peval_bvtake_zext.
+      destruct (peval_zext_arg t) as [[m' [p x]]|] eqn:Hz; [|apply peval_unop'_sound].
+      destruct (width_cast m' m) as [f|] eqn:Hw; [|apply peval_unop'_sound].
+      apply peval_zext_arg_inv in Hz. subst t.
+      destruct (width_cast_spec Hw) as [e Hf]. subst m'. rewrite Hf. cbn.
+      intros ι; cbn. destruct (inst x ι); cbn; f_equal; symmetry; apply bv.take_zext.
+    Qed.
+
     Lemma peval_unop_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop op t ≡ term_unop op t.
     Proof.
       destruct op; cbn [peval_unop];
-        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound, peval_sext_sound, canon_term_equiv(* , peval_unsigned_sound, *)
+        auto using peval_unop'_sound, peval_not_sound, peval_bvnot_sound, peval_sext_sound, peval_bvtake_zext_sound, canon_term_equiv(* , peval_unsigned_sound, *)
                  (* peval_bvdrop_sound, peval_bvtake_sound, *)
                  (*   peval_vector_subrange_sound *).
     Qed.

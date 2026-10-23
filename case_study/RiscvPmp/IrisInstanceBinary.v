@@ -222,6 +222,25 @@ Module RiscvPmpIrisInstance2 <:
              interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I
       | _, _, _ => False%I
       end.
+
+    (* `arrv w s [a; n; e; vs]` (Sig.v, SPIKE): interp_arr with the values
+       NAMED.  Cell i holds the i-th element of each run's list.  Only the
+       PROJECTIONS of vs are read, so the non-canonical NonSyncVal l l means
+       the same as SyncVal l -- which is what makes the shape lemmas sound
+       for any split of vs into terms (lifted cons is not injective). *)
+    Definition interp_arrv (w : nat) (s : Z) (a n e : RelVal ty_xlenbits)
+        (vs : RelVal (ty.list (ty.bvec (w * byte)))) : iProp Σ :=
+      match a, n, e with
+      | SyncVal a, SyncVal n, SyncVal e =>
+          (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
+           ⌜ length (ty.projLeft vs) = N.to_nat (bv.bin n) ⌝ ∗
+           ⌜ length (ty.projRight vs) = N.to_nat (bv.bin n) ⌝ ∗
+           [∗ list] i ↦ lr ∈ zip (ty.projLeft vs) (ty.projRight vs),
+             let x := bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i)) in
+             ⌜ (bv.unsigned x + Z.of_nat w <= Z.of_N maxAddr)%Z ⌝ ∗
+             @interp_ptstomem w (SyncVal x) (NonSyncVal lr.1 lr.2))%I
+      | _, _, _ => False%I
+      end.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.
@@ -295,6 +314,7 @@ Module RiscvPmpIrisInstance2 <:
     | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | inv_leakage              | _                    => interp_inv_constant_time
     | arr pub w s              | [ a; n; e ]          => interp_arr pub w s a n e
+    | arrv w s                 | [ a; n; e; vs ]      => interp_arrv w s a n e vs
     .
 
     Ltac destruct_pmp_entries :=
