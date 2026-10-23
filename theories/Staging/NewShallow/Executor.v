@@ -248,11 +248,26 @@ Module Type NewShallowExecOn
 
       Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (Φ : NamedEnv Val Δ -> L) :
         angelic_ctx Δ Φ ⊣⊢ ∃ vs : NamedEnv Val Δ, Φ vs.
-      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Admitted.
+      Proof.
+        revert Φ; induction Δ as [|Δ IHΔ [x σ]]; intros Φ; cbn; [|rewrite IHΔ].
+        - iSplit; [iIntros "H"; now iExists [env]|].
+          iIntros "(%vs & H)". now destruct (env.view vs).
+        - iSplit.
+          + iIntros "(%vs & %v & H)". now iExists (vs ► (x∷σ ↦ v)).
+          + iIntros "(%vs & H)". destruct (env.view vs) as [vs v].
+            now iExists vs, v.
+      Qed.
 
       Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (Φ : NamedEnv Val Δ -> L) :
         demonic_ctx Δ Φ ⊣⊢ ∀ vs : NamedEnv Val Δ, Φ vs.
-      Proof. induction Δ; cbn; [|rewrite IHΔ]; solve_wp. Admitted.
+      Proof.
+        revert Φ; induction Δ as [|Δ IHΔ [x σ]]; intros Φ; cbn; [|rewrite IHΔ].
+        - iSplit; [iIntros "H %vs"; now destruct (env.view vs)|].
+          iIntros "H". iApply "H".
+        - iSplit.
+          + iIntros "H %vs". destruct (env.view vs) as [vs v]. iApply "H".
+          + iIntros "H %vs %v". iApply "H".
+      Qed.
 
       Lemma wp_angelic_list' {A} (xs : list A) (Φ : A -> L) :
         ∀ d, angelic_list' d xs Φ ⊣⊢

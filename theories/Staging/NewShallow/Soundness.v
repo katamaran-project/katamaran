@@ -72,19 +72,44 @@ Module Type Soundness
       now rewrite CPureSpec.equiv_call_lemma.
     Qed.
 
+    Import CStoreSpec.
+
+    Context {SPEC : Specification}.
+
+    Definition SoundExecCall (exec_call : ExecCall (L := L)) : Prop :=
+      forall Γ τ Δ (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+        (POST : Val τ -> CStore Γ -> L) (δ : CStore Γ),
+        ⦃ exec_call _ _ f (evals es δ) (fun v => POST v δ) ⦄
+          stm_call f es ; δ
+        ⦃ POST ⦄.
+
+    Definition SoundExecCallForeign (exec_call_foreign : ExecCallForeign (L := L)) : Prop :=
+      forall Δ τ (f : 𝑭𝑿 Δ τ) (args : CStore Δ) (POST : Val τ -> L),
+        CTriple (exec_call_foreign _ _ f args POST) (CEnvEx f) args POST.
+
+    Definition SoundExecLemma (exec_lemma : ExecLemma (L := L)) : Prop :=
+      forall Δ (l : 𝑳 Δ) (args : CStore Δ) (POST : unit -> L),
+        LTriple args (exec_lemma _ l args POST) (POST tt) (LEnv l).
+
+    Definition SoundExecFail (exec_fail : ExecFail (L := L)) : Prop :=
+      forall Γ τ (s : Val ty.string) (POST : Val τ -> CStore Γ -> L) (δ : CStore Γ),
+        ⦃ exec_fail _ _ s POST δ ⦄ stm_fail τ s ; δ ⦃ POST ⦄.
+
+    Definition SoundExec (exec : Exec (L := L)) : Prop :=
+      forall Γ σ (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L) (δ1 : CStore Γ),
+        ⦃ exec _ _ s POST δ1 ⦄ s ; δ1 ⦃ POST ⦄.
+
     Section ExecAux.
 
-      Import CStoreSpec.
-
-      Context {SPEC : Specification}.
       Variable exec_call_foreign : ExecCallForeign (L := L).
       Variable exec_lemma : ExecLemma (L := L).
       Variable exec_call : ExecCall (L := L).
       Variable exec_fail : ExecFail (L := L).
 
-      Definition SoundExec {SPEC : Specification} (rec : Exec) : Prop :=
-        forall Γ σ (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L) (δ1 : CStore Γ),
-          ⦃ rec _ _ s POST δ1 ⦄ s ; δ1 ⦃ POST ⦄.
+      Hypothesis sound_exec_call_foreign : SoundExecCallForeign exec_call_foreign.
+      Hypothesis sound_exec_lemma : SoundExecLemma exec_lemma.
+      Hypothesis sound_exec_call : SoundExecCall exec_call.
+      Hypothesis sound_exec_fail : SoundExecFail exec_fail.
 
       Lemma exec_aux_sound :
         SoundExec (exec_aux exec_call_foreign exec_lemma exec_call exec_fail).
@@ -108,28 +133,16 @@ Module Type Soundness
           now apply rule_stm_assign, IHs.
 
         - (* stm_call *)
-          admit.
-          (* destruct (CEnv f) as [c|] eqn:Heq. *)
-          (* + apply rule_stm_call with c. *)
-          (*   assumption. *)
-          (*   now apply call_contract_sound. *)
-          (* + apply rule_stm_call_inline. *)
-          (*   apply rec_sound. *)
+          apply sound_exec_call.
 
         - (* stm_call_frame *)
           now apply rule_stm_call_frame, IHs.
 
         - (* stm_foreign *)
-          admit.
-          (* apply rule_stm_foreign. *)
-          (* apply call_contract_sound. *)
+          apply rule_stm_foreign, sound_exec_call_foreign.
 
         - (* stm_lemmak *)
-          admit.
-          (* unfold eval_exps. *)
-          (* eapply rule_stm_lemmak. *)
-          (* apply call_lemma_sound. *)
-          (* apply IHs. *)
+          eapply rule_stm_lemmak. apply sound_exec_lemma. apply IHs.
 
         - (* stm_seq *)
           eapply rule_stm_seq. apply IHs1. intros δ2. apply IHs2.
@@ -141,10 +154,7 @@ Module Type Soundness
           now apply entails_apply, bi.pure_intro.
 
         - (* stm_fail *)
-          admit.
-          (* eapply rule_consequence_left. *)
-          (* apply rule_stm_fail. *)
-          (* reflexivity. *)
+          apply sound_exec_fail.
 
         - (* stm_pattern_match *)
           eapply rule_stm_pattern_match. apply IHs. cbn.
@@ -161,38 +171,68 @@ Module Type Soundness
 
         - (* stm_bind *)
           eapply rule_stm_bind. apply IHs. intros v2 δ2; cbn. apply H.
-        - constructor. auto.
-      Admitted.
-
-      Lemma cexec_sound n : SoundExec (cexec n).
-      Proof.
-        (* induction n; cbn. *)
-        (* - unfold cexec. cbn. unfold SoundExec. intros. apply rule_false. *)
-        (* - apply exec_aux_sound; auto using exec_monotonic. *)
-      Admitted.
-
-      Lemma vcgen_sound n {Δ τ} (c : SepContract Δ τ)
-        (body : Stm Δ τ) :
-        (⊢ vcgen n c body) ->
-        ProgLog.ValidContract c body.
-      Proof.
-        unfold vcgen, ValidContract.
-        unfold inst_contract_localstore.
-        destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
-        eapply rule_consequence_left.
-        apply cexec_sound.
-        admit.
-      Admitted.
-
-      Lemma shallow_vcgen_soundness {Δ τ}
-        (c : SepContract Δ τ) (body : Stm Δ τ) :
-        Shallow.ValidContract c body ->
-        ProgLog.ValidContract c body.
-      Proof. apply vcgen_sound. Qed.
-
-      (* Print Assumptions shallow_vcgen_soundness. *)
+        - (* stm_debugk *)
+          constructor. auto.
+      Qed.
 
     End ExecAux.
+
+    Lemma sound_cexec_call_foreign : SoundExecCallForeign cexec_call_foreign.
+    Proof. intros Δ τ f args POST. apply (call_contract_sound (CEnvEx f)). Qed.
+
+    Lemma sound_cexec_lemma : SoundExecLemma cexec_lemma.
+    Proof. intros Δ l args POST. apply call_lemma_sound. Qed.
+
+    Lemma sound_cexec_fail : SoundExecFail cexec_fail.
+    Proof.
+      intros Γ τ s POST δ. unfold cexec_fail.
+      eapply rule_consequence_left. apply rule_stm_fail.
+      now destruct fail_rule_pre.
+    Qed.
+
+    Lemma sound_cexec_call (fuel : nat) : SoundExecCall (cexec_call fuel).
+    Proof.
+      induction fuel; intros Γ τ Δ f es POST δ; cbn [cexec_call];
+        cbv [CPureSpec.bind debug_call CPureSpec.pure];
+        destruct (CEnv f) as [c|] eqn:Heq.
+      - eapply rule_stm_call; [exact Heq|apply (call_contract_sound c)].
+      - eapply rule_consequence_left. apply rule_false. easy.
+      - eapply rule_stm_call; [exact Heq|apply (call_contract_sound c)].
+      - apply rule_stm_call_inline. unfold evalStoreSpec.
+        apply exec_aux_sound; auto using sound_cexec_call_foreign,
+          sound_cexec_lemma, sound_cexec_fail.
+    Qed.
+
+    Lemma sound_cexec (fuel : nat) : SoundExec (cexec fuel).
+    Proof.
+      apply exec_aux_sound; auto using sound_cexec_call_foreign,
+        sound_cexec_lemma, sound_cexec_call, sound_cexec_fail.
+    Qed.
+
+    Lemma vcgen_sound fuel {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      (⊢ vcgen fuel c body) ->
+      ProgLog.ValidContract c body.
+    Proof.
+      destruct c as [Σ δΣ req result ens].
+      cbv [vcgen CPureSpec.run exec_contract CPureSpec.bind evalStoreSpec].
+      rewrite CPureSpec.wp_demonic_ctx. intros HYP ι. cbn.
+      rewrite (bi.forall_elim ι) CPureSpec.wp_produce in HYP.
+      apply bi.wand_entails in HYP.
+      refine (rule_consequence_left _
+                (rule_consequence_right _ (sound_cexec _ _ _ _) _) HYP).
+      intros v δ'. cbn. rewrite CPureSpec.wp_consume.
+      apply bi.sep_elim_l, _.
+    Qed.
+
+    Lemma shallow_vcgen_soundness {Δ τ}
+      (c : SepContract Δ τ) (body : Stm Δ τ) :
+      Shallow.ValidContract c body ->
+      ProgLog.ValidContract c body.
+    Proof. apply vcgen_sound. Qed.
+
+    Lemma shallow_vcgen_soundness_cenv :
+      Shallow.ValidContractCEnv -> ProgLog.ValidContractCEnv.
+    Proof. intros H Δ τ f c Hf. now apply shallow_vcgen_soundness, H. Qed.
 
   End Soundness.
 
