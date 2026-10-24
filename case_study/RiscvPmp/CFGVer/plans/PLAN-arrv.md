@@ -81,7 +81,16 @@ to build a covering", reproduced on a toy; a generic op fits like `rev`.
 Covers every power-of-two width for free. `bytes_of_words` below means
 `regroup` at σ = bvec 32.
 
-**Next step:** Phase C (generators and the bridge) — Phases A, B done.
+D9–D11 (2026-10-24, Phase C, Emiel): O3 stands for TOP-LEVEL arrays too —
+the bridge is CHANGED so it can name them (D9: `gen_prog_noninterferent`
+fixes ι before the runs, so the array values must be chosen AFTER them);
+`DArr` (and `DBytes`) are REPLACED IN PLACE, examples red until Phase D
+(D10); the contract context is SPLIT `S ▻▻ V`, V = the arrays' value
+variables, so no premise can mention a value — independence by typing
+(D11).
+
+**Next step:** Phase C (generators and the bridge) — Phases A, B done;
+design in §4 Phase C "Design (D9–D11)".
 
 ---
 
@@ -220,6 +229,29 @@ ONE full merge gate at the end (feedback: light gates).
   no-bound rejected, to_bytes;of_bytes round trip is the identity.
 
 ### Phase C — generators and the bridge
+
+**Design (D9–D11, 2026-10-24) — supersedes the bullets below where they differ.**
+- `data_spec S V`: counts, addresses, anchors, pointers and cell terms are
+  `Term S`; `DArr pub dir count (v : vIn)` and `DBytes pub count (v : vIn)`
+  name their VALUE by a variable of V (`v∷clemv_ty 4 ∈ V`, resp.
+  `clemv_ty 1`). `gen_data_at` works at `S ▻▻ V`, weakening the S terms;
+  an array is `arrv … (term_var v) ∗ (if pub then secLeak (term_var v))`.
+  ArrDown's value lists cells from the TOP (descending addresses).
+- `concretize_data`/`data_ok` read only `ιS` — unchanged in meaning.
+- Bridge: `gen_prog_noninterferent` keeps `ι : Valuation S`; inside the runs
+  it builds `ιV := data_vals ι off data μ1 μ2 : Valuation V` (each value
+  `SyncVal L` if both runs' lists agree, else `NonSyncVal L R`; a public
+  array's lists agree by HpubMem, so its secLeak holds) and runs the
+  executor at `ι ▻▻ ιV`. Premises other than `valid` are about ιS only.
+- `EndToEnd.gen_implpre_data` → arrv: an `interp_arrv_intro` from the cells
+  (public cells via `ptstomem_sync_is_nonsync`), down-arrays by
+  `interp_arrv_add_first` induction, byte arrays by `arrv_words_bytes`
+  then a take of the first `count` bytes (value `firstn`).
+- Users to port: GenSegment, GenProg, EndToEnd (+ Adequacy's data_spec
+  mention), RsaSpikeSub/Sub2(+Result), MuladdParam(+Result),
+  CheckScalarParam/Ptr(+Result).
+
+Original sketch:
 - `GenSegment`/`GenProg` `DArr pub …` → `arrv … vs ∗ (if pub then
   secLeak vs)` with `vs` a NAMED contract variable (O3).
 - LoopN-style loop specs (`MuladdParamLoopN.v`) over arrv.
