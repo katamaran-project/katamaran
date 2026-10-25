@@ -94,7 +94,7 @@ Proof. Time solve_mb_vc. Qed.
    the two array arguments (A0, A1); h: a[0], the header, public. *)
 Definition subCtx : LCtx :=
   ["q"∷ty_xlenbits; "r"∷ty_xlenbits; "xa"∷ty_xlenbits; "xb"∷ty_xlenbits;
-   "h"∷ty_xlenbits].
+   "h"∷ty_xlenbits; "va"∷clemv_ty 4; "vb"∷clemv_ty 4].
 
 (* the word count the code computes: m = (h + 63) >> 5, so m - 1 limbs.
    `sext h`: the term `lw` produced before peval_sext (2026-10-22) dropped
@@ -113,12 +113,22 @@ Definition t_end {Σ} (p h : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 Definition t_off4 {Σ} (p : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd p (term_val ty_xlenbits (bv.of_N 4)).
 
-(* a's header and limbs (private), b's limbs (public: LoopN fixes m public;
-   a secret m is Phase 3), at the arguments' addresses *)
-Definition sub_mem {Σ} (xa xb h : Term Σ ty_xlenbits) : Assertion Σ :=
+(* a's header and limbs (values va), b's limbs (values vb), at the
+   arguments' addresses.  No publicness: the callee does not branch on
+   either; a caller that knows b public keeps that by framing (PLAN-arrv D13) *)
+Definition sub_mem {Σ} (xa xb h : Term Σ ty_xlenbits) (va vb : Term Σ (clemv_ty 4)) : Assertion Σ :=
   ( xa ↦ₘ h
-    ∗ asn.chunk (chunk_user (arr false 4 4) [t_off4 xa; t_limbs h; t_end xa h])
-    ∗ asn.chunk (chunk_user (arr true 4 4) [t_off4 xb; t_limbs h; t_end xb h]) )%asn.
+    ∗ clem_arrv 4 4 (t_off4 xa) (t_limbs h) (t_end xa h) va
+    ∗ clem_arrv 4 4 (t_off4 xb) (t_limbs h) (t_end xb h) vb )%asn.
+
+(* the memory a call hands back: a's header, NEW limbs for a (any value), b's
+   limbs with their own value vb -- b is only read *)
+Definition sub_mem_out {Σ} (xa xb h : Term Σ ty_xlenbits) (vb : Term Σ (clemv_ty 4)) : Assertion Σ :=
+  ( xa ↦ₘ h
+    ∗ asn.exist "va'" (clemv_ty 4)
+        (clem_arrv 4 4 (subst (t_off4 xa) sub_wk1) (subst (t_limbs h) sub_wk1)
+           (subst (t_end xa h) sub_wk1) (term_var "va'"))
+    ∗ clem_arrv 4 4 (t_off4 xb) (t_limbs h) (t_end xb h) vb )%asn.
 
 Definition sub_regs : list reg_spec_rel :=
   [ (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret) ].
@@ -127,7 +137,8 @@ Definition sub_pre : Assertion (subCtx ▻ "a"∷ty_xlenbits) :=
   ( X1 ↦ᵣ term_var "r"
     ∗ A0 ↦ᵣ term_var "xa" ∗ secLeakvar "xa"
     ∗ A1 ↦ᵣ term_var "xb" ∗ secLeakvar "xb"
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") ∗ secLeakvar "h"
+    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") (term_var "va") (term_var "vb")
+    ∗ secLeakvar "h"
     (* 0 < h < 2^16: at least one limb, and nothing wraps *)
     ∗ asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
     ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536)))
@@ -135,11 +146,12 @@ Definition sub_pre : Assertion (subCtx ▻ "a"∷ty_xlenbits) :=
         (term_binop bop.plus (term_unop uop.unsigned (term_var "xa")) (term_val ty.int 4%Z))
         (term_val ty.int (Z.of_N maxAddr))) )%asn.
 
-(* the same memory back, X1 unchanged; A0 (the borrow) and the scratch are
-   handed back with any value *)
+(* the same memory back, X1 unchanged: b with its value vb (it is only
+   read), a with new limbs; A0 (the borrow) and the scratch are handed back
+   with any value *)
 Definition sub_post : Assertion (subCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( X1 ↦ᵣ term_var "r"
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h")
+    ∗ sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
     ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
@@ -160,15 +172,16 @@ Definition subBlk : BlkAnnot := {| blk_ctx := subCtx ; blk_contract := subRec |}
 
 Definition cl (k : CLem) : Annot := AnnotCLemma k.
 
-(* before the loop: seed its two DONE arrays (empty, address bound by the
-   loop's angelic entry); after it: drop the emptied sources and turn the
-   done arrays back into forward arrays (muladd's hand_over, without the
-   next loop's seeds) *)
+(* before the loop: seed its two DONE arrays (empty, holding [], address
+   bound by the loop's angelic entry); after it: turn the done arrays back
+   into forward arrays (flip: value rev d) and JOIN each with its emptied
+   source (value rev d ++ r) -- for b that is LoopN's VM, so b comes back
+   with its own value (PLAN-arrv D13) *)
 Definition sub_seeds : list Annot :=
-  [ cl (clem_arr_empty true 4 (-4)); cl (clem_arr_empty false 4 (-4)) ].
+  [ cl (clem_arrv_empty 4 (-4)); cl (clem_arrv_empty 4 (-4)) ].
 Definition sub_hand_back : list Annot :=
-  [ cl (clem_arr_drop true 4 4); cl (clem_arr_drop false 4 4)
-  ; cl (clem_arr_flip true 4 (-4)); cl (clem_arr_flip false 4 (-4)) ].
+  [ cl (clem_arrv_flip 4 (-4)); cl (clem_arrv_flip 4 (-4))
+  ; cl (clem_arrv_join 4 4); cl (clem_arrv_join 4 4) ].
 
 (* The seeds go AFTER instruction 10, not before 11: an instruction that
    carries a block runs the block INSTEAD of itself, ghosts included
@@ -212,13 +225,18 @@ Definition s1a_facts : Assertion (s1aCtx ▻ "a"∷ty_xlenbits) :=
    (public; b's header is not read).  The generator ends each array at
    a + 4*c, the callee at xa + (mw << 2): the solver equates the two at the
    block's consume. *)
-Definition s1a_data : list (data_spec (s1aCtx ▻ "a"∷ty_xlenbits)) :=
-  [ DPtr (term_var "xa"); DCell (Known (term_var "h")); DArr false ArrUp (t_limbs (term_var "h"))
-  ; DPtr (t_off4 (term_var "xb")); DArr true ArrUp (t_limbs (term_var "h")) ]%list.
+Definition s1a_data : list (data_spec s1aCtx) :=
+  [ DPtr (term_var "xa"); DCell (Known (term_var "h")); DArr false ArrUp (t_limbs (term_var "h")) "va"
+  ; DPtr (t_off4 (term_var "xb")); DArr true ArrUp (t_limbs (term_var "h")) "vb" ]%list.
 
-(* the memory back, every register with any value *)
-Definition s1a_post : Assertion (s1aCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( sub_mem (term_var "xa") (term_var "xb") (term_var "h")
+(* the contract's context: s1aCtx and the arrays' values *)
+Definition s1aCtxV : LCtx := s1aCtx ▻▻ data_vctx s1a_data.
+
+(* the memory back -- b with its OWN value vb (so a caller keeps knowing b,
+   publicness included, by framing), a with new limbs -- and every register
+   with any value *)
+Definition s1a_post : Assertion (s1aCtxV ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ asn.exist "w1" ty_xlenbits (X1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
     ∗ asn.exist "w8" ty_xlenbits (A1 ↦ᵣ term_var "w8")
@@ -231,7 +249,7 @@ Definition s1a_post : Assertion (s1aCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlen
 
 (* exit: the fall-through end, +124 = 4 * 31; no data after the code (both
    arrays are behind pointers), so the data offset is unused *)
-Definition s1aRec : @CFGVerifierContract s1aCtx :=
+Definition s1aRec : @CFGVerifierContract s1aCtxV :=
   gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10 s1a_post.
 
 (* the callee is a block on ITS first instruction, index 2; the rest is code *)
@@ -255,9 +273,22 @@ Proof. Fail solve_mb_vc. Abort.
    is not inconsistent. *)
 Goal cfg_vc (gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10
    (( term_var "xa" ↦ₘ term_var "h"
-      ∗ asn.chunk (chunk_user (arr true 4 4)
-          [t_off4 (term_var "xa"); t_limbs (term_var "h"); t_end (term_var "xa") (term_var "h")])
-      ∗ asn.chunk (chunk_user (arr true 4 4)
-          [t_off4 (term_var "xb"); t_limbs (term_var "h"); t_end (term_var "xb") (term_var "h")]) )%asn))
+      ∗ asn.exist "va'" (clemv_ty 4)
+          (clem_arrv 4 4 (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
+             (t_end (term_var "xa") (term_var "h")) (term_var "va'") ∗ secLeakvar "va'")
+      ∗ clem_arrv 4 4 (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
+          (t_end (term_var "xb") (term_var "h")) (term_var "vb") )%asn))
+  s1a_annot.
+Proof. Fail solve_mb_vc. Abort.
+
+(* A post claiming a UNCHANGED (its pre value va) is rejected: the value
+   tracking is not vacuous -- only b, which the callee only reads, comes
+   back with its own value. *)
+Goal cfg_vc (gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10
+   (( term_var "xa" ↦ₘ term_var "h"
+      ∗ clem_arrv 4 4 (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
+          (t_end (term_var "xa") (term_var "h")) (term_var "va")
+      ∗ clem_arrv 4 4 (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
+          (t_end (term_var "xb") (term_var "h")) (term_var "vb") )%asn))
   s1a_annot.
 Proof. Fail solve_mb_vc. Abort.

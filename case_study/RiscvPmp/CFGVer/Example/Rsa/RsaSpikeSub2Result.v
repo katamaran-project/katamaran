@@ -196,22 +196,22 @@ Proof.
   destruct Hfit as (Hfit & Hfa & Hfb & Hfs).
   pose proof lenAddr_small_word as HL. change word with xlenbits in HL. change xlenbits with 32%nat in HL.
   (* the generator's data at the valuation: three pointers and the count *)
-  assert (Hc : data_count (sub2_call_ι init_addr xa xb sp h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+  assert (Hc : data_count (sub2_call_ι init_addr xa xb sp h)
                  (t_limbs (term_var "h")) = limbs h).
   { unfold data_count. cbn -[bv.add bv.shiftr bv.of_N bv.of_Z bv.sext limbs].
     rewrite (MuladdParamClose.sext_id32 h) (limbs_bv h ltac:(lia)).
     rewrite bv.bin_of_N_small; [apply Nat2N.id|].
     unfold limbs. change (bv.exp2 xlenbits) with 4294967296%N.
     rewrite N2Nat.id. apply N.div_lt_upper_bound; lia. }
-  assert (Hxa : bv.bin (rv_val (inst (term_var "xa" : Term (s1bCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (sub2_call_ι init_addr xa xb sp h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])) = xa).
+  assert (Hxa : bv.bin (rv_val (inst (term_var "xa" : Term s1bCtx ty_xlenbits)
+                   (sub2_call_ι init_addr xa xb sp h))) = xa).
   { cbn. apply bv.bin_of_N_small. change (bv.exp2 xlenbits) with 4294967296%N in *. lia. }
-  assert (Hxb : bv.bin (rv_val (inst (t_off4 (term_var "xb") : Term (s1bCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (sub2_call_ι init_addr xa xb sp h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])) = (xb + 4)%N).
+  assert (Hxb : bv.bin (rv_val (inst (t_off4 (term_var "xb") : Term s1bCtx ty_xlenbits)
+                   (sub2_call_ι init_addr xa xb sp h))) = (xb + 4)%N).
   { cbn -[bv.add bv.of_N]. rewrite bv.of_N_add. apply bv.bin_of_N_small.
     change (bv.exp2 xlenbits) with 4294967296%N in *. lia. }
-  assert (Hf : bv.bin (rv_val (inst (t_add (term_var "sp") (-16) : Term (s1bCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (sub2_call_ι init_addr xa xb sp h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])) = (sp - 16)%N).
+  assert (Hf : bv.bin (rv_val (inst (t_add (term_var "sp") (-16) : Term s1bCtx ty_xlenbits)
+                   (sub2_call_ι init_addr xa xb sp h))) = (sp - 16)%N).
   { cbn -[bv.add bv.of_N bv.of_Z]. change xlenbits with 32%nat in *.
     apply N2Z.inj. f_equal.
     assert (E : @bv.add 32 (bv.of_N sp) (bv.of_Z (-16)) = bv.of_N (sp - 16)).
@@ -232,7 +232,7 @@ Proof.
     reflexivity. }
   apply (ni_of_cells
            (regs' := map (concretize_reg_q (sub2_call_ι init_addr xa xb sp h)) s1b_regs)
-           (cs := concretize_data (sub2_call_ι init_addr xa xb sp h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+           (cs := concretize_data (sub2_call_ι init_addr xa xb sp h)
                     (init_addr + 204) s1b_data));
     [ | | | | ].
   { (* clear of the code: the three premises *)

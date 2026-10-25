@@ -1,8 +1,8 @@
 # PLAN-arrv — arrays whose contents are NAMED (`arrv`), replacing `arr`
 
-Status: **Phase A DONE 2026-10-23, GATE A PASSED** (heavy chain VerifierRel →
-EndToEnd → GenProg + both RSA end theorems + RsaSpikeArrv/Sb rebuilt green,
-508 s / 7.7 GB). Next: Phase B. Branch `issue/rsa` (the spike
+Status: **Phases A, B, C DONE; GATE C PASSED 2026-10-24** (both RSA end
+theorems green over arrv with value tracking). Next: Phase D — the examples
+still on `arr`/old `DArr` are RED by design (D10), list in the HANDOFF. Branch `issue/rsa` (the spike
 landed there: `138d2df9`, `dd9672f3`, `ab321701`; not merged, not pushed).
 Part of PLAN-rsa.md Phase 2 (byte memory / mem* callees); log timings in
 **PLAN-rsa.md §5** (same protocol: stamps, wait vs authoring, VC CPU/RSS,
@@ -89,8 +89,31 @@ fixes ι before the runs, so the array values must be chosen AFTER them);
 variables, so no premise can mention a value — independence by typing
 (D11).
 
-**Next step:** Phase C (generators and the bridge) — Phases A, B done;
-design in §4 Phase C "Design (D9–D11)".
+D12 (2026-10-24, Phase C start, Emiel): V is POSITIONAL, not a parameter —
+`DArr pub dir count (v : string)` / `DBytes pub count v` carry a NAME and
+`V := data_vctx data` (one `v∷clemv_ty 4` / `clemv_ty 1` per array, list
+order) is computed, so ιV is built by recursion over the data with no
+premise and no default values (there is no generic inhabitant of `Val σ`,
+which is what killed the membership form: a free V forces a "the arrays
+enumerate V exactly" premise). `gen_data_at {S Σ} (ζ : Sub S Σ) (ν : Sub
+(data_vctx ds) Σ)` so a block can point the arrays at its own variables.
+Data terms are over R (was `R ▻ "a"`; no user mentioned "a"); the contract
+is `@CFGVerifierContract (R ▻▻ data_vctx data)`.
+
+D13 (2026-10-24, Gate C, Emiel): the ported spikes TRACK VALUES now, not
+arr-parity ∃s: a read-only array comes back with its pre value (LoopN:
+`VM = rev dM ++ rM`, a contract variable; the hand-back flips the done
+array and JOINS it with the emptied source, so the post sees `rev dM ++ rM`),
+only an overwritten array's value is ∃.  No secLeak inside LoopN/the callee
+unless the code needs it — the caller keeps publicness by framing.
+
+**Next step:** Phase D. RED until ported (D10; none builds against the new
+GenSegment/LoopN): `Example/Muladd/MuladdParam{,Result}.v`,
+`MuladdParamLoop{I,K,M,D0}.v` + `MuladdParamTail.v` (they use LoopN, now
+arrv with `VM`), `Example/CheckScalar/CheckScalar{Param,Ptr}{,Result}.v` +
+`CheckScalarParamLoop1.v`, `Example/Rsa/RsaSpikeSb.v` (and anything else on
+`clem_arr_*`: grep).  Before muladd, decide the angelic-ambiguity cost (§4
+Phase C status).
 
 ---
 
@@ -260,6 +283,29 @@ Original sketch:
   `interp_arr_intro` at the three sites.
 - GATE C: the two RSA end theorems (`sub_call_noninterferent`,
   `sub_call2_noninterferent`) green over arrv.
+- **Status 2026-10-24: DONE, GATE C PASSED.** As designed (D9–D12), plus:
+  `gen_data_at {S Σ} ζ a ds ν`; `EndToEnd.data_vals` (public array =
+  `SyncVal` of run 1's list, secret = `NonSyncVal L R`; down = `rev`, bytes =
+  `firstn count` of `le_bytes`), `data_cells_arrv{,_down,_bytes}` (down by
+  `interp_arrv_flip`, bytes by `interp_arrv_to_bytes` + `big_sepL_take_drop`),
+  `gen_implpre_data` re-proved for ζ/ν; the five `arr` data helpers deleted
+  (dead). `gen_prog_noninterferent` builds ιV after the intros and runs the
+  core at `ι ►► ιV`. LoopN (D13) tracks m's value (`VM = rev dM ++ rM`),
+  hand-back flip + join. RsaSpikeSub/Sub2 ported (`sub_mem_out`: a ∃, b keeps
+  `vb`), new control: a claimed unchanged is rejected. Traps: GenSegment's
+  `gen_prog_contract` HANGS coqc (>10 min, pet OOM) without `#[local]
+  Existing Instance asn.sub_assertion` — an unresolved `Subst Assertion`
+  instance search; `Set Implicit Arguments` in EndToEnd makes `k m` of
+  `data_cells_arrv_bytes` implicit; the goal's `inst` carries a different
+  instance than an `Ha : inst a ι = …` (rewrite fails) — restate with
+  `pose proof (Ha : A = _)` at the goal's own term `A`.
+- **Cost (Emiel: accept for now, 2026-10-24).** `valid_sub_loop` 13.0 →
+  36.6 s, `valid_sub` 3.2 → 22.4 s, `valid_s1a` 0.1, `valid_sub2` 6.8 → 6.7,
+  `valid_s1b` 0.3 (matched baseline: old arr LoopN/callee in the same build,
+  `Example/Rsa/ZZArrvCost.v`, 13.0 / 3.2). Ablation: arrv LoopN WITHOUT the
+  VM equation 30.7 s — value tracking is ~6 s, arr→arrv itself 2.4×.
+  Suspected (NOT confirmed): no `pub` index, so same-stride angelic matches
+  (two `take_first`s, four arrays at the latch, flip/join) branch the VC.
 
 ### Phase D — migrate the examples (D2: directly)
 - Order: RSA spikes (small, known) → check_scalar (byte loops) → muladd

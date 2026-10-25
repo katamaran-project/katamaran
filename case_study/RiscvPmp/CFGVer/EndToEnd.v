@@ -2236,39 +2236,12 @@ Import IrisModel.RiscvPmpIrisBase.
    ascending from `off`); this turns those cells into the contract's
    `gen_data_at a ds` at ι whenever `a` denotes `off` and `data_ok` holds:
    a pinned cell from the init-memory facts, an existential cell from its own
-   value, an up-array by interp_arr_intro, a down-array by induction on
-   interp_arr_add_first (data_arr_down), an anchor from data_ok.  Developed
+   value, an array as an arrv holding the two runs' lists (data_vals, chosen
+   by the bridge after the runs -- PLAN-arrv D9/D12): up by data_cells_arrv,
+   down by its flip, bytes by to_bytes and a take; an anchor from data_ok.  Developed
    interactively against this file's own context (pet holds it). *)
 Section DataImplPre.
   Add Ring bvring_xlen_data : (bv.ring_theory xlenbits).
-
-  Lemma data_neg4 : bv.of_Z (n := xlenbits) (-4) = bv.negate (bv.of_Z 4).
-  Proof. change (-4)%Z with (- 4)%Z. exact (RiscvPmpIrisInstanceWithContracts.arr_neg_s 4). Qed.
-
-  Lemma data_arr_down `{sailGS2 Σ} (pub : bool) (lo : bv xlenbits) (k : nat) :
-    ([∗ list] i ∈ seq 0 k, interp_arr_cell pub 4 (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat i))))
-    ⊢@{iPropI Σ}
-    interp_arr pub 4 (-4) (SyncVal (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))))
-      (SyncVal (bv.of_nat k)) (SyncVal (bv.add lo (bv.of_Z (-4)))).
-  Proof.
-    induction k as [|k IH].
-    - iIntros "_". cbn [interp_arr]. iSplit; [iPureIntro|done].
-      change (bv.of_nat (n := xlenbits) 0) with (@bv.zero xlenbits). rewrite !data_neg4.
-      match goal with |- ?a = ?b => change (@eq (bv xlenbits) a b) end. ring.
-    - rewrite seq_S big_sepL_app. cbn [big_opL Nat.add]. iIntros "[Hk [Hc _]]".
-      iPoseProof (IH with "Hk") as "Harr".
-      assert (Ea : bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))
-                   = bv.add (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))) (bv.of_Z (- -4))).
-      { change (bv.of_Z (n := xlenbits) (- -4)) with (bv.of_Z (n := xlenbits) 4). rewrite data_neg4. ring. }
-      rewrite {1}Ea.
-      iPoseProof (RiscvPmpIrisInstanceWithContracts.interp_arr_add_first with "[$Harr $Hc]") as "H".
-      assert (Eb : bv.add (bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))) (bv.of_Z (- -4))
-                   = bv.add (bv.add lo (bv.mul (bv.of_Z 4) (bv.of_nat (S k)))) (bv.of_Z (-4))).
-      { change (bv.of_Z (n := xlenbits) (- -4)) with (bv.of_Z (n := xlenbits) 4). rewrite bv.of_nat_S data_neg4. ring. }
-      assert (Ec : bv.add (bv.of_nat (n := xlenbits) k) (bv.of_Z 1) = bv.of_nat (S k)).
-      { rewrite bv.of_nat_S bv.of_Z_one. ring. }
-      rewrite Eb Ec. iExact "H".
-  Qed.
 
   Lemma data_ofN_4i (i : nat) :
     bv.of_N (n := xlenbits) (4 * N.of_nat i) = bv.mul (bv.of_Z 4) (bv.of_nat i).
@@ -2306,103 +2279,6 @@ Section DataImplPre.
   Proof.
     intros Ha Hc. cbn. rewrite Ha Hc. cbn. f_equal. rewrite data_ofN_lin data_count_spec.
     change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4). reflexivity.
-  Qed.
-
-  Lemma data_cells_arrcells `{sailGS2 Σ} (pub : bool) (off : N) (k : nat) (μ1 μ2 : Memory) :
-    (off + 4 * N.of_nat k <= maxAddr)%N ->
-    ([∗ list] spec ∈ (List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 k)),
-       let a := cell_addr spec in
-       if cell_pub spec then interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
-       else interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
-    ⊢@{iPropI Σ} [∗ list] i ∈ seq 0 k, interp_arr_cell pub 4 (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat i))).
-  Proof.
-    intros Hk.
-    change (List.map ?f (seq 0 k)) with (f <$> seq 0 k). rewrite big_sepL_fmap.
-    iIntros "H". iApply (big_sepL_impl with "H"). iIntros "!>" (j i Hi) "Hc".
-    apply lookup_seq in Hi as [-> Hlt]. rewrite -data_ofN_lin. unfold interp_arr_cell.
-    iSplit.
-    { iPureIntro. rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hk; lia].
-      unfold maxAddr, minAddr in *. lia. }
-    destruct pub; iEval (unfold cell_pub, cell_addr, pub_spec; cbn [fst snd]) in "Hc".
-    - iExists _. iFrame "Hc". iPureIntro. intros _. exact I.
-    - iExists _. iFrame "Hc". iPureIntro. discriminate.
-  Qed.
-
-  (* ONE word cell of the statement as its four byte cells (width 1) *)
-  Lemma data_word_bytes `{sailGS2 Σ} (pub : bool) (o : N) (μ1 μ2 : Memory) :
-    (o + 4 <= maxAddr)%N ->
-    (let a := bv.of_N (n := xlenbits) o in
-     if pub then interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
-     else interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
-    ⊢@{iPropI Σ} [∗ list] j ∈ seq 0 4, interp_arr_cell pub 1 (bv.of_N (o + N.of_nat j)).
-  Proof.
-    intros Ho.
-    assert (Hr : forall j : N, (j < 4)%N ->
-              (bv.unsigned (@bv.of_N xlenbits (o + j)) + Z.of_nat 1 <= Z.of_N maxAddr)%Z).
-    { intros j Hj. rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Ho; lia].
-      unfold maxAddr, minAddr in *. lia. }
-    destruct pub; iIntros "H";
-      [ iPoseProof (ptstomem4_split_bytes_sync with "H") as "(H0 & H1 & H2 & H3)"
-      | iPoseProof (ptstomem4_split_bytes with "H") as "(H0 & H1 & H2 & H3)" ];
-      rewrite !bv.of_N_add;
-      change (N.of_nat 0) with 0%N; change (N.of_nat 1) with 1%N;
-      change (N.of_nat 2) with 2%N; change (N.of_nat 3) with 3%N;
-      cbn [seq big_opL]; unfold interp_arr_cell;
-      (iSplitL "H0"; [|iSplitL "H1"; [|iSplitL "H2"; [|iSplitL "H3"; [|done]]]]);
-      (iSplit; [iPureIntro; apply Hr; lia|]); iExists _; iFrame; iPureIntro.
-    all: first [intros _; exact I | discriminate].
-  Qed.
-
-  (* m statement words from off as the 4m byte cells from off *)
-  Lemma data_words_bytes `{sailGS2 Σ} (pub : bool) (off : N) (m : nat) (μ1 μ2 : Memory) :
-    (off + 4 * N.of_nat m <= maxAddr)%N ->
-    ([∗ list] spec ∈ (List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 m)),
-       let a := cell_addr spec in
-       if cell_pub spec then interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
-       else interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
-    ⊢@{iPropI Σ} [∗ list] j ∈ seq 0 (4 * m), interp_arr_cell pub 1 (bv.of_N (off + N.of_nat j)).
-  Proof.
-    induction m as [|m IH]; intros Hm; [iIntros "_"; done|].
-    rewrite seq_S List.map_app big_sepL_app.
-    replace (4 * S m)%nat with (4 * m + 4)%nat by lia.
-    rewrite seq_app big_sepL_app.
-    iIntros "[Hm Hl]". iSplitL "Hm"; [iApply (IH with "Hm"); lia|].
-    cbn [List.map big_opL]. iDestruct "Hl" as "[Hl _]".
-    iPoseProof (data_word_bytes pub (off + 4 * N.of_nat m) μ1 μ2 with "[Hl]") as "Hb".
-    { lia. }
-    { destruct pub; iEval (unfold cell_pub, cell_addr, pub_spec; cbn [fst snd]) in "Hl"; iExact "Hl". }
-    replace (0 + 4 * m)%nat with (4 * m + 0)%nat by lia.
-    rewrite <- (fmap_add_seq (4 * m)%nat 0 4). rewrite big_sepL_fmap.
-    iApply (big_sepL_mono with "Hb"). intros k j _. cbv beta.
-    replace (off + 4 * N.of_nat m + N.of_nat j)%N with (off + N.of_nat (4 * m + j))%N by lia.
-    done.
-  Qed.
-
-  (* ⌈k/4⌉ words ARE an `arr pub 1` of k bytes; the tail bytes are dropped *)
-  Lemma data_bytes_arr `{sailGS2 Σ} (pub : bool) (off : N) (k m : nat) (μ1 μ2 : Memory) :
-    (k <= 4 * m)%nat -> (off + 4 * N.of_nat m <= maxAddr)%N ->
-    ([∗ list] spec ∈ (List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 m)),
-       let a := cell_addr spec in
-       if cell_pub spec then interp_ptstomem (SyncVal a) (SyncVal (get_word μ1 a))
-       else interp_ptstomem (SyncVal a) (NonSyncVal (get_word μ1 a) (get_word μ2 a)))
-    ⊢@{iPropI Σ} interp_arr pub 1 1 (SyncVal (bv.of_N off)) (SyncVal (bv.of_nat k))
-                    (SyncVal (bv.add (bv.of_N off) (bv.of_nat k))).
-  Proof.
-    intros Hk Hm. iIntros "H".
-    iPoseProof (data_words_bytes with "H") as "H"; [exact Hm|].
-    replace (4 * m)%nat with (k + (4 * m - k))%nat by lia.
-    rewrite seq_app big_sepL_app. iDestruct "H" as "[H _]".
-    assert (Ee : bv.add (bv.of_N (n := xlenbits) off) (bv.of_nat k)
-                 = bv.add (bv.of_N off) (bv.mul (bv.of_Z 1) (bv.of_nat k))).
-    { rewrite bv.of_Z_one. ring. }
-    rewrite Ee.
-    iApply (RiscvPmpIrisInstanceWithContracts.interp_arr_intro pub 1 1 (bv.of_N off) k with "[H]").
-    { change (bv.exp2 xlenbits) with 4294967296%N. unfold maxAddr, minAddr, lenAddr in Hm. lia. }
-    iApply (big_sepL_mono with "H"). intros i j _. cbv beta.
-    assert (Ej : bv.of_N (n := xlenbits) (off + N.of_nat j)
-                 = bv.add (bv.of_N off) (bv.mul (bv.of_Z 1) (bv.of_nat j))).
-    { rewrite bv.of_Z_one -bv.of_N_add. unfold bv.of_nat. ring. }
-    rewrite Ej. done.
   Qed.
 
   (* data_count of ⌈c/4⌉: (c + 3) / 4, for a c far from overflow *)
@@ -2454,19 +2330,138 @@ Section DataImplPre.
     induction l as [|i l IH]; [reflexivity|]. destruct pub; exact IH.
   Qed.
 
-  Lemma gen_implpre_data `{sailGS2 Σ} {Σc} (ι : Valuation Σc) (μ1 μ2 : Memory)
-      (ds : list (data_spec Σc)) :
-    forall (a : Term Σc ty_xlenbits) (off : N),
-    inst (T := fun Σ => Term Σ ty_xlenbits) a ι = SyncVal (@bv.of_N xlenbits off) ->
+  (* ---- the arrays' VALUES (PLAN-arrv D9/D12) ------------------------- *)
+  (* k statement words from off, as one run's list *)
+  Definition data_words (μ : Memory) (off : N) (k : nat) : list (bv (4 * byte)) :=
+    List.map (fun i => get_word μ (bv.of_N (off + 4 * N.of_nat i))) (seq 0 k).
+
+  (* a public array's value is ONE list (its secLeak holds); a secret one's
+     is the pair of the two runs' lists *)
+  Definition data_rv {σ} (pub : bool) (L R : list (Val σ)) : RelVal (ty.list σ) :=
+    if pub then SyncVal L else NonSyncVal L R.
+
+  Definition data_dir {A} (dir : arr_dir) (L : list A) : list A :=
+    match dir with ArrUp => L | ArrDown => rev L end.
+
+  (* the value valuation the bridge chooses AFTER the runs: walks the data as
+     concretize_data does, one value per array *)
+  Fixpoint data_vals {S} (ι : Valuation S) (off : N) (μ1 μ2 : Memory)
+      (ds : list (data_spec S)) : Valuation (data_vctx ds) :=
+    match ds return Valuation (data_vctx ds) with
+    | nil => [env]
+    | cons (DCell _) ds => data_vals ι (off + 4) μ1 μ2 ds
+    | cons (DArr pub dir c v) ds =>
+        env.snoc (data_vals ι (off + 4 * N.of_nat (data_count ι c)) μ1 μ2 ds) (v∷clemv_ty 4)
+          (data_rv (σ := clem_cell_ty 4) pub (data_dir dir (data_words μ1 off (data_count ι c)))
+                       (data_dir dir (data_words μ2 off (data_count ι c))))
+    | cons (DBytes pub c v) ds =>
+        env.snoc (data_vals ι (off + 4 * N.of_nat (data_count ι (t_ceil4 c))) μ1 μ2 ds) (v∷clemv_ty 1)
+          (data_rv (σ := clem_cell_ty 1) pub (firstn (data_count ι c) (flat_map bv.le_bytes (data_words μ1 off (data_count ι (t_ceil4 c)))))
+                       (firstn (data_count ι c) (flat_map bv.le_bytes (data_words μ2 off (data_count ι (t_ceil4 c))))))
+    | cons (DAt _) ds => data_vals ι off μ1 μ2 ds
+    | cons (DPtr x) ds =>
+        data_vals ι (bv.bin (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) x ι))) μ1 μ2 ds
+    end.
+
+  (* k statement words ARE an up-arrv holding the two runs' lists *)
+  Lemma data_cells_arrv `{sailGS2 Σ} (pub : bool) (off : N) (k : nat) (μ1 μ2 : Memory) :
+    (off + 4 * N.of_nat k <= maxAddr)%N ->
+    interp_mem_with_public_memory μ1 μ2 (List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 k))
+    ⊢@{iPropI Σ} interp_arrv 4 4 (SyncVal (bv.of_N off)) (SyncVal (bv.of_nat k))
+                   (SyncVal (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat k))))
+                   (data_rv (σ := clem_cell_ty 4) pub (data_words μ1 off k) (data_words μ2 off k)).
+  Proof.
+    intros Hk. iIntros "H". cbn [interp_arrv].
+    assert (HL : forall μ, length (data_words μ off k) = k)
+      by (intros; unfold data_words; rewrite length_map length_seq; reflexivity).
+    destruct pub; cbn [data_rv]; cbv [ty.projLeft ty.projRight ty.projLeftRV ty.projRightRV].
+    all: iSplit; [done|]; iSplit; [iPureIntro; rewrite !HL; reflexivity|];
+      iSplit; [iPureIntro; rewrite HL; reflexivity|].
+    all: unfold interp_mem_with_public_memory, data_words.
+    all: change (List.map ?f (seq 0 k)) with (f <$> seq 0 k).
+    all: assert (Hz : forall {A B C} (f : A -> B) (g : A -> C) (l : list A),
+                   zip (f <$> l) (g <$> l) = (fun x => (f x, g x)) <$> l)
+           by (intros A B C f g l; induction l as [|x l IH]; [reflexivity|cbn; f_equal; exact IH]).
+    all: rewrite big_sepL_fmap Hz big_sepL_fmap.
+    all: iApply (big_sepL_impl with "H"); iIntros "!>" (j i Hi) "Hc";
+      apply lookup_seq in Hi as [-> Hlt]; cbn [fst snd].
+    all: unfold cell_addr, cell_pub, pub_spec; cbn [fst snd]; rewrite Nat.add_0_l -data_ofN_lin.
+    all: iSplit; [iPureIntro; rewrite data_unsigned_of_N_small;
+                  [|unfold maxAddr, minAddr, lenAddr in Hk; lia]; unfold maxAddr, minAddr in *; lia|].
+    - rewrite ptstomem_sync_is_nonsync. iExact "Hc".
+    - iExact "Hc".
+  Qed.
+
+  (* ... and, flipped, a down-arrv from the top holding the reversed lists *)
+  Lemma data_cells_arrv_down `{sailGS2 Σ} (pub : bool) (off : N) (k : nat) (μ1 μ2 : Memory) :
+    (off + 4 * N.of_nat k <= maxAddr)%N ->
+    interp_mem_with_public_memory μ1 μ2 (List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 k))
+    ⊢@{iPropI Σ} interp_arrv 4 (-4)
+                   (SyncVal (bv.add (bv.add (bv.of_N off) (bv.mul (bv.of_Z 4) (bv.of_nat k))) (bv.of_Z (-4))))
+                   (SyncVal (bv.of_nat k)) (SyncVal (bv.add (bv.of_N off) (bv.of_Z (-4))))
+                   (data_rv (σ := clem_cell_ty 4) pub (rev (data_words μ1 off k)) (rev (data_words μ2 off k))).
+  Proof.
+    intros Hk. iIntros "H".
+    iPoseProof (data_cells_arrv pub off k μ1 μ2 Hk with "H") as "H".
+    iPoseProof (RiscvPmpIrisInstanceWithContracts.interp_arrv_flip with "H") as "H".
+    iApply (RiscvPmpIrisInstanceWithContracts.interp_arrv_proj with "H"); destruct pub; reflexivity.
+  Qed.
+
+  (* m statement words ARE an arrv of their first k ≤ 4m bytes; the tail
+     bytes are dropped *)
+  Lemma data_cells_arrv_bytes `{sailGS2 Σ} (pub : bool) (off : N) (k m : nat) (μ1 μ2 : Memory) :
+    (k <= 4 * m)%nat -> (off + 4 * N.of_nat m <= maxAddr)%N ->
+    interp_mem_with_public_memory μ1 μ2 (List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub)) (seq 0 m))
+    ⊢@{iPropI Σ} interp_arrv 1 1 (SyncVal (bv.of_N off)) (SyncVal (bv.of_nat k))
+                   (SyncVal (bv.add (bv.of_N off) (bv.of_nat k)))
+                   (data_rv (σ := clem_cell_ty 1) pub
+                      (firstn k (flat_map bv.le_bytes (data_words μ1 off m)))
+                      (firstn k (flat_map bv.le_bytes (data_words μ2 off m)))).
+  Proof.
+    intros Hkm Hm. iIntros "H".
+    iPoseProof (data_cells_arrv pub off m μ1 μ2 Hm with "H") as "H".
+    iPoseProof (RiscvPmpIrisInstanceWithContracts.interp_arrv_to_bytes with "H") as "H".
+    destruct (RiscvPmpIrisInstanceWithContracts.arrv_proj_regroup
+                (data_rv (σ := clem_cell_ty 4) pub (data_words μ1 off m) (data_words μ2 off m))) as [EL ER].
+    cbn [interp_arrv]. rewrite EL ER.
+    iDestruct "H" as "(_ & %HLR & _ & H)".
+    assert (Hlen : forall μ, length (flat_map bv.le_bytes (data_words μ off m)) = 4 * m).
+    { intros μ. rewrite RiscvPmpIrisInstanceWithContracts.arrv_flat_length.
+      unfold data_words. rewrite length_map length_seq. reflexivity. }
+    destruct pub; cbn [data_rv] in *; cbv [ty.projLeft ty.projRight ty.projLeftRV ty.projRightRV] in *.
+    all: assert (E1 : forall X : bv xlenbits, bv.mul bv.one X = X) by (intros; ring).
+    all: iSplit; [iPureIntro; rewrite bv.of_Z_one E1; reflexivity|].
+    all: iSplit; [iPureIntro; rewrite !length_take !Hlen; reflexivity|].
+    all: iSplit; [iPureIntro; rewrite length_take Hlen; f_equal; lia|].
+    all: assert (Hzt : forall {A B} (l : list A) (r : list B), zip (take k l) (take k r) = take k (zip l r))
+           by (intros; symmetry; apply zip_with_take).
+    all: rewrite Hzt.
+    all: rewrite (big_sepL_take_drop _ _ k); iDestruct "H" as "[H _]"; iExact "H".
+  Qed.
+
+  Lemma gen_implpre_data `{sailGS2 Σ} {S Σc} (ζ : Sub S Σc) (ιc : Valuation Σc) (ι : Valuation S)
+      (Hζ : inst ζ ιc = ι) (μ1 μ2 : Memory) (ds : list (data_spec S)) :
+    forall (a : Term Σc ty_xlenbits) (off : N) (ν : Sub (data_vctx ds) Σc),
+    inst (T := fun Σ => Term Σ ty_xlenbits) a ιc = SyncVal (@bv.of_N xlenbits off) ->
+    inst ν ιc = data_vals ι off μ1 μ2 ds ->
     data_ok ι off ds ->
     declare_init_memory μ1 (gen_init_mem (concretize_data ι off ds)) ->
     declare_init_memory μ2 (gen_init_mem (concretize_data ι off ds)) ->
-    interp_mem_with_public_memory μ1 μ2 ((concretize_data ι off ds))
-    ⊢@{iPropI Σ} asn.interpret (gen_data_at a ds) ι.
+    interp_mem_with_public_memory μ1 μ2 (concretize_data ι off ds)
+    ⊢@{iPropI Σ} asn.interpret (gen_data_at ζ a ds ν) ιc.
   Proof.
-    induction ds as [|d ds IH]; intros a off Ha Hok Hi1 Hi2.
+    assert (Hs : forall t : Term S ty_xlenbits,
+               inst (T := fun Σ => Term Σ ty_xlenbits) (subst t ζ) ιc = inst t ι)
+      by (intros t; rewrite inst_subst Hζ; reflexivity).
+    (* `t_add x z` at ιc, for the down-array's shifted bounds *)
+    assert (Hta : forall (x : Term Σc ty_xlenbits) (vx : bv xlenbits) (z : Z),
+              inst (T := fun Σ => Term Σ ty_xlenbits) x ιc = SyncVal vx ->
+              inst (T := fun Σ => Term Σ ty_xlenbits) (t_add x z) ιc = SyncVal (bv.add vx (bv.of_Z z)))
+      by (intros x vx z Hx; cbn; rewrite Hx; reflexivity).
+    induction ds as [|d ds IH]; intros a off ν Ha Hν Hok Hi1 Hi2.
     { iIntros "_". cbn. done. }
-    destruct d as [[| |t]|pub dir c|pub c|x|x]; cbn [gen_data_at concretize_data data_ok] in *.
+    destruct d as [[| |t]|pub dir c v|pub c v|x|x];
+      cbn [gen_data_at concretize_data data_ok data_vals data_vctx val_spec_map] in *.
     3: { (* a pinned (Known) cell: per-run route, both words are the value *)
       destruct Hok as [Hrng [Ht Hok]].
       unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap val_spec_map] in Hi1, Hi2.
@@ -2476,12 +2471,12 @@ Section DataImplPre.
       iIntros "[Hc Hrest]". cbn [asn.interpret gen_cell_at interpret_chunk].
       rewrite Hv1 Hv2. rewrite ptstomem_sync_is_nonsync.
       iSplitL "Hc".
-      { cbn. rewrite Ha Ht. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | rewrite Ht; exact I]. }
+      { cbn. rewrite !Hs Ha Ht. iFrame "Hc". iSplit; [iPureIntro|done]. cbn. first [exact I | rewrite Ht; exact I]. }
       iSplitR.
       { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
         rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
         unfold maxAddr, minAddr in *. lia. }
-      iApply (IH (t_add a 4) (off + 4)%N (@inst_t_add4 Σc ι a off Ha) Hok Hi1 Hi2 with "Hrest"). }
+      iApply (IH (t_add a 4) (off + 4)%N ν (@inst_t_add4 Σc ιc a off Ha) Hν Hok Hi1 Hi2 with "Hrest"). }
     - (* a Secret cell *)
       destruct Hok as [Hrng [_ Hok]].
       unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap val_spec_map] in Hi1, Hi2.
@@ -2495,7 +2490,7 @@ Section DataImplPre.
       { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
         rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
         unfold maxAddr, minAddr in *. lia. }
-      iApply (IH (t_add a 4) (off + 4)%N (@inst_t_add4 Σc ι a off Ha) Hok Hi1 Hi2 with "Hrest").
+      iApply (IH (t_add a 4) (off + 4)%N ν (@inst_t_add4 Σc ιc a off Ha) Hν Hok Hi1 Hi2 with "Hrest").
     - (* a Public cell *)
       destruct Hok as [Hrng [_ Hok]].
       unfold declare_init_memory in Hi1, Hi2. cbn [gen_init_mem base.omap list_omap val_spec_map] in Hi1, Hi2.
@@ -2509,48 +2504,100 @@ Section DataImplPre.
       { cbn. rewrite Ha. iSplit; [iPureIntro|done]. cbn.
         rewrite data_unsigned_of_N_small; [|unfold maxAddr, minAddr, lenAddr in Hrng; lia].
         unfold maxAddr, minAddr in *. lia. }
-      iApply (IH (t_add a 4) (off + 4)%N (@inst_t_add4 Σc ι a off Ha) Hok Hi1 Hi2 with "Hrest").
-    - (* an array *)
+      iApply (IH (t_add a 4) (off + 4)%N ν (@inst_t_add4 Σc ιc a off Ha) Hν Hok Hi1 Hi2 with "Hrest").
+    - (* a word array: its value is ν's head *)
       destruct Hok as [Hc [Hrng Hok]].
+      destruct (env.view ν) as [ν' tv].
+      change (inst (env.snoc ν' (v∷clemv_ty 4) tv) ιc)
+        with (env.snoc (inst ν' ιc) (v∷clemv_ty 4) (inst (T := fun Σ => Term Σ (clemv_ty 4)) tv ιc)) in Hν.
+      apply env.inversion_eq_snoc in Hν as [Hν Htv].
+      cbn [env.head env.tail].
+      assert (Hcz : inst (T := fun Σ => Term Σ ty_xlenbits) (subst c ζ) ιc
+                    = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) (subst c ζ) ιc)))
+        by (rewrite Hs; exact Hc).
+      assert (Hdc : data_count ιc (subst c ζ) = data_count ι c) by (unfold data_count; rewrite Hs; reflexivity).
+      assert (Ha' : inst (T := fun Σ => Term Σ ty_xlenbits) (t_add4n a (subst c ζ)) ιc
+                    = SyncVal (@bv.of_N xlenbits (off + 4 * N.of_nat (data_count ι c)))).
+      { rewrite -Hdc. exact (@inst_t_add4n Σc ιc a (subst c ζ) off Ha Hcz). }
       unfold declare_init_memory in Hi1, Hi2. rewrite gen_init_mem_none_app in Hi1, Hi2.
-      unfold interp_mem_with_public_memory. rewrite big_sepL_app.
+      unfold interp_mem_with_public_memory at 1. rewrite big_sepL_app.
       iIntros "[Hcells Hrest]".
-      iPoseProof (data_cells_arrcells pub off (data_count ι c) μ1 μ2 Hrng with "Hcells") as "Hcells".
       iSplitL "Hcells".
-      { destruct dir; cbn [gen_arr_at asn.interpret interpret_chunk]; cbn.
-        - rewrite Ha Hc. cbn. rewrite -data_count_spec.
-          change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4).
-          iApply (RiscvPmpIrisInstanceWithContracts.interp_arr_intro with "Hcells").
-          change (bv.exp2 xlenbits) with 4294967296%N. unfold maxAddr, minAddr, lenAddr in Hrng. lia.
-        - rewrite Ha Hc. cbn. rewrite -data_count_spec.
-          change (bv.of_N (n := xlenbits) 4) with (bv.of_Z (n := xlenbits) 4).
-          iApply (data_arr_down with "Hcells"). }
-      iApply (IH (t_add4n a c) (off + 4 * N.of_nat (data_count ι c))%N
-                 (@inst_t_add4n Σc ι a c off Ha Hc) Hok Hi1 Hi2 with "Hrest").
+      2: { iApply (IH (t_add4n a (subst c ζ)) (off + 4 * N.of_nat (data_count ι c))%N ν' Ha' Hν Hok Hi1 Hi2
+                     with "Hrest"). }
+      assert (Hcv : inst (T := fun Σ => Term Σ ty_xlenbits) (subst c ζ) ιc
+                    = SyncVal (bv.of_nat (n := xlenbits) (data_count ι c)))
+        by (rewrite Hs Hc data_count_spec; reflexivity).
+      rewrite data_ofN_lin in Ha'.
+      (* the chunk's arguments carry instances other than these equations';
+         `pose proof (H : A = _)` re-states each at the goal's own term *)
+      destruct dir, pub; cbn [gen_arr_at gen_pub_at clem_arrv interpret_chunk data_dir];
+        cbn [luser inst inst_env env.map instprop instprop_formula].
+      all: match goal with |- context [luser (arrv ?w ?s) [?A; ?C; ?E; ?T]] =>
+             change (luser (arrv w s) [A; C; E; T]) with (interp_arrv w s A C E T);
+             pose proof (Hcv : C = _) as EC; pose proof (Htv : T = _) as ET; rewrite EC ET
+           end.
+      1-2: match goal with |- context [interp_arrv ?w ?s ?A ?C ?E ?T] =>
+             pose proof (Ha : A = _) as EA; pose proof (Ha' : E = _) as EE; rewrite EA EE end.
+      3-4: match goal with |- context [interp_arrv ?w ?s ?A ?C ?E ?T] =>
+             pose proof (Hta _ _ (-4)%Z Ha' : A = _) as EA; pose proof (Hta _ _ (-4)%Z Ha : E = _) as EE;
+             rewrite EA EE end.
+      all: cbn [data_dir].
+      + iSplitL; [iApply (data_cells_arrv true off (data_count ι c) μ1 μ2 Hrng with "Hcells")
+                 |iSplit; [iPureIntro; exact I|done]].
+      + iApply (data_cells_arrv false off (data_count ι c) μ1 μ2 Hrng with "Hcells").
+      + iSplitL; [iApply (data_cells_arrv_down true off (data_count ι c) μ1 μ2 Hrng with "Hcells")
+                 |iSplit; [iPureIntro; exact I|done]].
+      + iApply (data_cells_arrv_down false off (data_count ι c) μ1 μ2 Hrng with "Hcells").
     - (* a byte array *)
       destruct Hok as [Hc [Hbr [Hrng Hok]]].
-      assert (Hc4 : inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 c) ι
-                    = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 c) ι))).
-      { cbn. rewrite Hc. reflexivity. }
+      destruct (env.view ν) as [ν' tv].
+      change (inst (env.snoc ν' (v∷clemv_ty 1) tv) ιc)
+        with (env.snoc (inst ν' ιc) (v∷clemv_ty 1) (inst (T := fun Σ => Term Σ (clemv_ty 1)) tv ιc)) in Hν.
+      apply env.inversion_eq_snoc in Hν as [Hν Htv].
+      cbn [env.head env.tail].
+      assert (Hcv : inst (T := fun Σ => Term Σ ty_xlenbits) (subst c ζ) ιc
+                    = SyncVal (bv.of_nat (n := xlenbits) (data_count ι c)))
+        by (rewrite Hs Hc data_count_spec; reflexivity).
+      assert (Hc4 : inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 (subst c ζ)) ιc
+                    = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) (t_ceil4 (subst c ζ)) ιc))).
+      { change (t_ceil4 (subst c ζ)) with (subst (t_ceil4 c) ζ). rewrite Hs. cbn. rewrite Hc. reflexivity. }
+      assert (Hdc : data_count ιc (t_ceil4 (subst c ζ)) = data_count ι (t_ceil4 c)).
+      { unfold data_count. change (t_ceil4 (subst c ζ)) with (subst (t_ceil4 c) ζ). rewrite Hs. reflexivity. }
+      assert (Ha' : inst (T := fun Σ => Term Σ ty_xlenbits) (t_add4n a (t_ceil4 (subst c ζ))) ιc
+                    = SyncVal (@bv.of_N xlenbits (off + 4 * N.of_nat (data_count ι (t_ceil4 c))))).
+      { rewrite -Hdc. exact (@inst_t_add4n Σc ιc a (t_ceil4 (subst c ζ)) off Ha Hc4). }
+      assert (He : inst (T := fun Σ => Term Σ ty_xlenbits) (term_binop bop.bvadd a (subst c ζ)) ιc
+                   = SyncVal (bv.add (bv.of_N off) (bv.of_nat (n := xlenbits) (data_count ι c)))).
+      { cbn [inst inst_term]. rewrite Ha Hcv. reflexivity. }
       unfold declare_init_memory in Hi1, Hi2. rewrite gen_init_mem_none_app in Hi1, Hi2.
-      unfold interp_mem_with_public_memory. rewrite big_sepL_app.
+      unfold interp_mem_with_public_memory at 1. rewrite big_sepL_app.
       iIntros "[Hcells Hrest]".
       iSplitL "Hcells".
-      { cbn [asn.interpret interpret_chunk]. cbn. rewrite Ha Hc. cbn. rewrite -data_count_spec.
-        iApply (data_bytes_arr with "Hcells").
-        - apply data_count_ceil4; [exact Hc|]. unfold maxAddr, minAddr, lenAddr in Hbr. lia.
-        - exact Hrng. }
-      iApply (IH (t_add4n a (t_ceil4 c)) (off + 4 * N.of_nat (data_count ι (t_ceil4 c)))%N
-                 (@inst_t_add4n Σc ι a (t_ceil4 c) off Ha Hc4) Hok Hi1 Hi2 with "Hrest").
+      2: { iApply (IH (t_add4n a (t_ceil4 (subst c ζ))) (off + 4 * N.of_nat (data_count ι (t_ceil4 c)))%N
+                     ν' Ha' Hν Hok Hi1 Hi2 with "Hrest"). }
+      assert (Hkm : (data_count ι c <= 4 * data_count ι (t_ceil4 c))%nat).
+      { apply data_count_ceil4; [exact Hc|]. unfold maxAddr, minAddr, lenAddr in Hbr. lia. }
+      destruct pub; cbn [gen_pub_at clem_arrv interpret_chunk];
+        cbn [luser inst inst_env env.map instprop instprop_formula].
+      all: match goal with |- context [luser (arrv ?w ?s) [?A; ?C; ?E; ?T]] =>
+             change (luser (arrv w s) [A; C; E; T]) with (interp_arrv w s A C E T);
+             pose proof (Ha : A = _) as EA; pose proof (Hcv : C = _) as EC; pose proof (He : E = _) as EE;
+             pose proof (Htv : T = _) as ET; rewrite EA EC EE ET
+           end.
+      + iSplitL; [iApply (@data_cells_arrv_bytes _ _ true off _ _ μ1 μ2 Hkm Hrng with "Hcells")
+                 |iSplit; [iPureIntro; exact I|done]].
+      + iApply (@data_cells_arrv_bytes _ _ false off _ _ μ1 μ2 Hkm Hrng with "Hcells").
     - (* an anchor *)
       destruct Hok as [Hx Hok]. iIntros "H". cbn [asn.interpret]. iSplitR.
-      { cbn. iSplit; [iPureIntro; by rewrite Hx Ha|done]. }
-      iApply (IH x off Hx Hok Hi1 Hi2 with "H").
+      { cbn. iSplit; [iPureIntro|done]. rewrite Hs Hx Ha. reflexivity. }
+      iApply (IH (subst x ζ) off ν (eq_trans (Hs x) Hx) Hν Hok Hi1 Hi2 with "H").
     - (* a pointer: the cells continue at x's value *)
       destruct Hok as [Hx Hok]. iIntros "H".
-      assert (Hx' : inst (T := fun Σ => Term Σ ty_xlenbits) x ι
+      assert (Hx' : inst (T := fun Σ => Term Σ ty_xlenbits) (subst x ζ) ιc
                     = SyncVal (@bv.of_N xlenbits (bv.bin (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) x ι))))).
-      { rewrite bv.of_N_bin. exact Hx. }
-      iApply (IH x _ Hx' Hok Hi1 Hi2 with "H").
+      { rewrite Hs bv.of_N_bin. exact Hx. }
+      iApply (IH (subst x ζ) _ ν Hx' Hν Hok Hi1 Hi2 with "H").
   Qed.
+
 End DataImplPre.

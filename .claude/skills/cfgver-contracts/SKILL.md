@@ -230,9 +230,25 @@ with negative controls: `Example/Rsa/ZZArrvCatalogue.v`,
 `Example/Rsa/ZZArrvWords.v` (a public header WORD survives a BYTE memcpy);
 soundness: `SpecIris.clem_arrv_*_sound`.
 
+**Tracking a read-only array's value through a loop** (PLAN-arrv D13,
+`MuladdParamLoopN.v` since 2026-10-24): the loop's done array (stride −s,
+grown by `add_first`) and the remaining source satisfy `VM = rev dM ++ rM`
+with `VM` a CONTRACT variable (instantiated angelically at entry: `[]` seed,
+`rM := vb`); after the loop, `flip` the done array (`rev dM`, forward) and
+`join` it with the emptied source (`rev dM ++ rM`), and the post can state
+the array with its pre value. An overwritten array's value is just ∃. Worked
+case with negative controls (a cannot come back unchanged, nor public):
+`Example/Rsa/RsaSpikeSub.v` (`sub_mem_out`). **Cost, measured, cause NOT
+confirmed:** porting LoopN arr→arrv made its VC 13.0 → 30.7 s with values
+untracked (36.6 s tracked; the callee with its flip/join hand-back 3.2 →
+22.4 s), matched baseline `Example/Rsa/ZZArrvCost.v`. Suspected: `arrv` has no
+`pub` index, so every angelic match among same-stride arrays is ambiguous and
+the VC branches per candidate. Emiel accepted the cost for now (2026-10-24);
+revisit before porting muladd.
+
 **Ghosts on an instruction that carries a block NEVER RUN** (`Verifier.v`,
 the `Some b` branch of the step: the block fires INSTEAD of the instruction,
-ghosts included). Seeds for a loop block's done arrays (`clem_arr_empty`) go
+ghosts included). Seeds for a loop block's done arrays (`clem_arrv_empty`) go
 in `ai_ghost_after` of the instruction BEFORE the block — muladd's tail puts
 `build_i` after index 66 for its block at 67. Symptom of getting it wrong: the
 loop block's entry fails to match a done array that is simply absent from

@@ -310,15 +310,29 @@ gen_prog_contract "p" _ regs facts doff data instrs fuel post
   `(r, Known (PVVar "x"))` (register holds logic variable x), `(r, Known (PVOff "x"
   k))` (x + k; ra = `PVOff "p" (4*|instrs|)`). A Known register is public.
 - `facts` — any extra precondition the caller proves at the valuation.
-- `data : list data_spec` laid out from `p + doff`:
-  `DCell (Secret | Public | Known t)` one word (a Known cell is public); `DArr pub ArrUp|ArrDown count` an
-  `arr pub 4 (±4)` of `count` words (count a TERM — symbolic sizes);
-  `DBytes pub count` an `arr pub 1 1` of `count` bytes stored as ⌈count/4⌉
-  statement words; `DAt x` pure fact "next word is at x" (contiguous);
-  `DPtr x` the following data lives AT x, anywhere (pointer argument).
+- `data : list (data_spec R)` (terms over the contract's own R, NOT `R ▻ "a"`)
+  laid out from `p + doff`:
+  `DCell (Secret | Public | Known t)` one word (a Known cell is public);
+  `DArr pub ArrUp|ArrDown count "v"` an `arrv 4 (±4)` of `count` words holding
+  the list `v` (count a TERM — symbolic sizes; ArrDown's list starts at the TOP
+  word), `∗ secLeak v` when pub; `DBytes pub count "v"` an `arrv 1 1` of
+  `count` bytes holding `v`, stored as ⌈count/4⌉ statement words; `DAt x` pure
+  fact "next word is at x" (contiguous); `DPtr x` the following data lives AT
+  x, anywhere (pointer argument).
+- **Array values are contract variables** (PLAN-arrv D9–D12): each `DArr`/
+  `DBytes` names ONE variable of `data_vctx data` (the first array is the
+  LAST variable), and the contract is `@CFGVerifierContract (R ▻▻ data_vctx
+  data)`, so the `post` (over `R ▻▻ data_vctx data ▻ "a" ▻ "an"`) can say an
+  array comes back with its own value — that is how a caller keeps what it
+  knew (publicness included) across a callee. Define `Ctx' := R ▻▻ data_vctx
+  data` and type the post with it; `term_var "v"` resolves by name. The bridge
+  CHOOSES the values itself after the runs (`EndToEnd.data_vals`): no premise
+  mentions them, and `gen_data_at` in a block takes `ζ`/`ν` explicitly
+  (`gen_data_at (sub_id Σ) a cells [env]` for cells only).
 - Generator side of the D12 correspondence: `concretize_reg_q ι regs` and
-  `concretize_data ι off data` (a `list mem_cell`); the statement states its own
-  shallow data and proves the cells equal (see "The end theorem").
+  `concretize_data ι off data` with `ι : Valuation R` (a `list mem_cell`; the
+  values do not occur); the statement states its own shallow data and proves
+  the cells equal (see "The end theorem").
 
 End theorem: `apply (gen_prog_noninterferent "p" _ regs facts doff data
 instrs fuel post ι init_addr)`; premises `reflexivity` (base lookup),

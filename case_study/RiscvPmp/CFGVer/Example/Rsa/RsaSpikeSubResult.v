@@ -259,23 +259,23 @@ Proof.
   destruct Hfit as (Hfit & Hfa & Hfb).
   pose proof lenAddr_small_word as HL. change word with xlenbits in HL. change xlenbits with 32%nat in HL.
   (* the generator's data at the valuation: the two pointers and the count *)
-  assert (Hc : data_count (sub_call_ι init_addr xa xb h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+  assert (Hc : data_count (sub_call_ι init_addr xa xb h)
                  (t_limbs (term_var "h")) = limbs h).
   { unfold data_count. cbn -[bv.add bv.shiftr bv.of_N bv.of_Z bv.sext limbs].
     rewrite (MuladdParamClose.sext_id32 h) (limbs_bv h ltac:(lia)).
     rewrite bv.bin_of_N_small; [apply Nat2N.id|].
     unfold limbs. change (bv.exp2 xlenbits) with 4294967296%N.
     rewrite N2Nat.id. apply N.div_lt_upper_bound; lia. }
-  assert (Hxa : bv.bin (rv_val (inst (term_var "xa" : Term (s1aCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (sub_call_ι init_addr xa xb h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])) = xa).
+  assert (Hxa : bv.bin (rv_val (inst (term_var "xa" : Term s1aCtx ty_xlenbits)
+                   (sub_call_ι init_addr xa xb h))) = xa).
   { cbn. apply bv.bin_of_N_small. change (bv.exp2 xlenbits) with 4294967296%N in *. lia. }
-  assert (Hxb : bv.bin (rv_val (inst (t_off4 (term_var "xb") : Term (s1aCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (sub_call_ι init_addr xa xb h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])) = (xb + 4)%N).
+  assert (Hxb : bv.bin (rv_val (inst (t_off4 (term_var "xb") : Term s1aCtx ty_xlenbits)
+                   (sub_call_ι init_addr xa xb h))) = (xb + 4)%N).
   { cbn -[bv.add bv.of_N]. rewrite bv.of_N_add. apply bv.bin_of_N_small.
     change (bv.exp2 xlenbits) with 4294967296%N in *. lia. }
   apply (ni_of_cells
            (regs' := map (concretize_reg_q (sub_call_ι init_addr xa xb h)) s1a_regs)
-           (cs := concretize_data (sub_call_ι init_addr xa xb h).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+           (cs := concretize_data (sub_call_ι init_addr xa xb h)
                     (init_addr + 124) s1a_data));
     [ | | | | ].
   { (* clear of the code: the two premises *)

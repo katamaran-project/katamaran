@@ -1853,8 +1853,8 @@ Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
 (* DATA LAYOUT: cells and arrays, contiguous by construction (2026-10-02)     *)
 (* ========================================================================== *)
 (* A program's data as an ORDERED list, laid out word by word from an address
-   term: a cell (DCell), an array of `count` words (DArr, an `arr` chunk
-   walking up or down), or an anchor (DAt x: "the next word is at x", a pure
+   term: a cell (DCell), an array of `count` words (DArr, an `arrv` chunk
+   walking up or down, its value a NAMED variable -- PLAN-arrv D12), or an anchor (DAt x: "the next word is at x", a pure
    fact, after which addresses are x-relative so the code's own x-relative
    addresses stay intact).  The counts are TERMS, so one contract states a
    data region whose size is symbolic -- the parametric muladd's limb arrays
@@ -1870,24 +1870,42 @@ Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
 
 Inductive arr_dir := ArrUp | ArrDown.
 
-Inductive data_spec (Σ : LCtx) : Type :=
-| DCell (s : val_spec (Term Σ ty_xlenbits))
-| DArr (pub : bool) (dir : arr_dir) (count : Term Σ ty_xlenbits)
-(* `count` BYTES walking up (an `arr pub 1`), stored as ⌈count/4⌉ words:
-   the trusted statement's memory is word-granular, so the bytes past
+(* The data's terms (cells, counts, anchors, pointers) are over S; an array's
+   VALUE is not a term but a NAME (PLAN-arrv D12): each DArr/DBytes owns one
+   variable of the VALUE context `data_vctx ds`, which the contract appends
+   to its own (R ▻▻ data_vctx data), so no count, address or premise can
+   mention a value -- independence by typing (D11) -- and the bridge chooses
+   the values after the runs (EndToEnd.data_vals, D9). *)
+Inductive data_spec (S : LCtx) : Type :=
+| DCell (s : val_spec (Term S ty_xlenbits))
+(* `count` words walking up or down, holding the list `v` -- for ArrDown
+   listed from the array's start, the TOP word *)
+| DArr (pub : bool) (dir : arr_dir) (count : Term S ty_xlenbits) (v : string)
+(* `count` BYTES walking up (an `arrv 1`) holding `v`, stored as ⌈count/4⌉
+   words: the trusted statement's memory is word-granular, so the bytes past
    `count` in the last word are owned by the statement and dropped by the
    ImplPre.  The next item starts at the next word. *)
-| DBytes (pub : bool) (count : Term Σ ty_xlenbits)
-| DAt (x : Term Σ ty_xlenbits)
+| DBytes (pub : bool) (count : Term S ty_xlenbits) (v : string)
+| DAt (x : Term S ty_xlenbits)
 (* a POINTER: the following cells are at x, wherever that is -- no
    contiguity with what came before.  The statement lays them out at x's
    value; disjointness is the bridge's data_layout_ok premise. *)
-| DPtr (x : Term Σ ty_xlenbits).
-Arguments DCell {Σ} s.
-Arguments DArr {Σ} pub dir count.
-Arguments DBytes {Σ} pub count.
-Arguments DAt {Σ} x.
-Arguments DPtr {Σ} x.
+| DPtr (x : Term S ty_xlenbits).
+Arguments DCell {S} s.
+Arguments DArr {S} pub dir count v.
+Arguments DBytes {S} pub count v.
+Arguments DAt {S} x.
+Arguments DPtr {S} x.
+
+(* one value variable per array; the FIRST array is the LAST variable, so a
+   recursion over the data peels the context with env.head / env.tail *)
+Fixpoint data_vctx {S} (ds : list (data_spec S)) : LCtx :=
+  match ds with
+  | nil => ctx.nil
+  | cons (DArr _ _ _ v) ds => data_vctx ds ▻ v∷clemv_ty 4
+  | cons (DBytes _ _ v) ds => data_vctx ds ▻ v∷clemv_ty 1
+  | cons _ ds => data_vctx ds
+  end.
 
 Definition t_add {Σ} (t : Term Σ ty_xlenbits) (c : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z c)).
@@ -1917,26 +1935,40 @@ Definition gen_cell_at {Σ} (a : Term Σ ty_xlenbits)
       asn.exist "mv" ty_xlenbits (a' ↦ₘ term_var "mv")%asn
   end.
 
-(* up: words a .. a+4(c-1);  down: the same words, the arr starting at the top *)
-Definition gen_arr_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool) (dir : arr_dir)
-    (c : Term Σ ty_xlenbits) : Assertion Σ :=
-  match dir with
-  | ArrUp => asn.chunk (chunk_user (arr pub 4 4) [a; c; t_add4n a c])
-  | ArrDown => asn.chunk (chunk_user (arr pub 4 (-4))
-                 [t_add (t_add4n a c) (-4); c; t_add a (-4)])
-  end.
+(* a public array: its whole value is public (secLeak of a list is
+   all-or-nothing, PLAN-arrv §1.2) *)
+Definition gen_pub_at {Σ σ} (pub : bool) (A : Assertion Σ) (v : Term Σ σ) : Assertion Σ :=
+  if pub then (A ∗ asn.formula (formula_secLeak v))%asn else A.
 
-Fixpoint gen_data_at {Σ} (a : Term Σ ty_xlenbits) (ds : list (data_spec Σ)) : Assertion Σ :=
-  match ds with
-  | nil => ⊤%asn
-  | cons (DCell sp) ds =>
-      (gen_cell_at a sp ∗ asn_in_range_at a ∗ gen_data_at (t_add a 4) ds)%asn
-  | cons (DArr pub dir c) ds => (gen_arr_at a pub dir c ∗ gen_data_at (t_add4n a c) ds)%asn
-  | cons (DBytes pub c) ds =>
-      (asn.chunk (chunk_user (arr pub 1 1) [a; c; term_binop bop.bvadd a c])
-       ∗ gen_data_at (t_add4n a (t_ceil4 c)) ds)%asn
-  | cons (DAt x) ds => (asn.formula (formula_propeq x a) ∗ gen_data_at x ds)%asn
-  | cons (DPtr x) ds => gen_data_at x ds
+(* up: words a .. a+4(c-1);  down: the same words, the arrv starting at the top *)
+Definition gen_arr_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool) (dir : arr_dir)
+    (c : Term Σ ty_xlenbits) (vs : Term Σ (clemv_ty 4)) : Assertion Σ :=
+  gen_pub_at pub
+    match dir with
+    | ArrUp => clem_arrv 4 4 a c (t_add4n a c) vs
+    | ArrDown => clem_arrv 4 (-4) (t_add (t_add4n a c) (-4)) c (t_add a (-4)) vs
+    end vs.
+
+(* The data at `a`, its S terms read through ζ and its values through ν.  A
+   whole program uses ζ/ν = the two halves of R ▻▻ data_vctx data
+   (gen_prog_contract); a block points ν at its own variables. *)
+Fixpoint gen_data_at {S Σ} (ζ : Sub S Σ) (a : Term Σ ty_xlenbits) (ds : list (data_spec S))
+    : Sub (data_vctx ds) Σ -> Assertion Σ :=
+  match ds return Sub (data_vctx ds) Σ -> Assertion Σ with
+  | nil => fun _ => ⊤%asn
+  | cons (DCell sp) ds => fun ν =>
+      (gen_cell_at a (val_spec_map (fun t => subst t ζ) sp) ∗ asn_in_range_at a
+       ∗ gen_data_at ζ (t_add a 4) ds ν)%asn
+  | cons (DArr pub dir c _) ds => fun ν =>
+      (gen_arr_at a pub dir (subst c ζ) (env.head ν)
+       ∗ gen_data_at ζ (t_add4n a (subst c ζ)) ds (env.tail ν))%asn
+  | cons (DBytes pub c _) ds => fun ν =>
+      (gen_pub_at pub (clem_arrv 1 1 a (subst c ζ) (term_binop bop.bvadd a (subst c ζ)) (env.head ν))
+         (env.head ν)
+       ∗ gen_data_at ζ (t_add4n a (t_ceil4 (subst c ζ))) ds (env.tail ν))%asn
+  | cons (DAt x) ds => fun ν =>
+      (asn.formula (formula_propeq (subst x ζ) a) ∗ gen_data_at ζ (subst x ζ) ds ν)%asn
+  | cons (DPtr x) ds => fun ν => gen_data_at ζ (subst x ζ) ds ν
   end.
 
 (* ---- the statement side ------------------------------------------------- *)
@@ -1957,11 +1989,11 @@ Fixpoint concretize_data {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spe
   | cons (DCell sp) ds =>
       cons (off, val_spec_map (fun t => rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι)) sp)
         (concretize_data ι (off + 4) ds)
-  | cons (DArr pub _ c) ds =>
+  | cons (DArr pub _ c _) ds =>
       List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub))
         (List.seq 0 (data_count ι c))
       ++ concretize_data ι (off + 4 * N.of_nat (data_count ι c)) ds
-  | cons (DBytes pub c) ds =>
+  | cons (DBytes pub c _) ds =>
       List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub))
         (List.seq 0 (data_count ι (t_ceil4 c)))
       ++ concretize_data ι (off + 4 * N.of_nat (data_count ι (t_ceil4 c))) ds
@@ -1980,11 +2012,11 @@ Fixpoint data_ok {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spec Σ)) :
           | Known t => inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι))
           | _ => True end)
       /\ data_ok ι (off + 4) ds
-  | cons (DArr pub _ c) ds =>
+  | cons (DArr pub _ c _) ds =>
       inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
       /\ (off + 4 * N.of_nat (data_count ι c) <= maxAddr)%N
       /\ data_ok ι (off + 4 * N.of_nat (data_count ι c)) ds
-  | cons (DBytes pub c) ds =>
+  | cons (DBytes pub c _) ds =>
       inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
       /\ (off + N.of_nat (data_count ι c) <= maxAddr)%N
       /\ (off + 4 * N.of_nat (data_count ι (t_ceil4 c)) <= maxAddr)%N
@@ -2017,7 +2049,7 @@ Lemma concretize_data_addrs {Σ} (ι : Valuation Σ) (ds : list (data_spec Σ)) 
   s.1 = (off + 4 * N.of_nat i)%N.
 Proof.
   induction ds as [|d ds IH]; intros Hnp off i s Hi; [discriminate|].
-  destruct d as [sp|pub dir c|pub c|x|x]; cbn [concretize_data data_no_ptr] in Hi, Hnp;
+  destruct d as [sp|pub dir c v|pub c v|x|x]; cbn [concretize_data data_no_ptr] in Hi, Hnp;
     [| | | |contradiction].
   all: specialize (IH Hnp).
   - destruct i as [|i]; cbn in Hi.
@@ -2057,12 +2089,30 @@ Definition reg_q_sync {Σ} (ι : Valuation Σ) (s : reg_spec_q Σ) : Prop :=
   | _ => True
   end.
 
+(* The contract lives at R ▻▻ data_vctx data: the arrays' values are
+   contract variables (so the post can name them), the rest is over R.
+   regs and facts are over R ▻ "a" and weakened past the values. *)
+Definition gen_prog_ζ {R : LCtx} (V : LCtx) : Sub R (R ▻▻ V ▻ "a"∷ty_xlenbits) :=
+  subst (sub_cat_left V) sub_wk1.
+Definition gen_prog_ν {R : LCtx} (V : LCtx) : Sub V (R ▻▻ V ▻ "a"∷ty_xlenbits) :=
+  subst (sub_cat_right V) sub_wk1.
+
+(* The `Subst Assertion` instance lives inside `Module Import asn` and is not
+   found from here; unresolved, the definition below does not fail but makes
+   coqc's instance search run for >10 min (2026-10-24).  As GenCompose. *)
+#[local] Existing Instance asn.sub_assertion.
+
 Definition gen_prog_contract {R : LCtx} (pb : string) (pIn : (pb∷ty_xlenbits ∈ R)%katamaran)
     (regs : list (reg_spec_q R)) (facts : Assertion (R ▻ "a"∷ty_xlenbits)) (doff : N)
-    (data : list (data_spec (R ▻ "a"∷ty_xlenbits))) (instrs : list AST) (fuel : nat)
-    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : @CFGVerifierContract R :=
-  gen_seg_contract (@term_var R pb _ pIn) (@term_var _ pb _ (ctx.in_succ pIn))
+    (data : list (data_spec R)) (instrs : list AST) (fuel : nat)
+    (post : Assertion (R ▻▻ data_vctx data ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    : @CFGVerifierContract (R ▻▻ data_vctx data) :=
+  let V := data_vctx data in
+  gen_seg_contract (subst (@term_var R pb _ pIn) (sub_cat_left V))
+    (subst (@term_var R pb _ pIn) (gen_prog_ζ V))
     instrs (4 * N.of_nat (length instrs)) fuel []
-    (asn.sep (gen_regs_q regs) (asn.sep facts
-       (gen_data_at (t_add (@term_var _ pb _ (ctx.in_succ pIn)) (Z.of_N doff)) data))) post.
+    (asn.sep (subst (gen_regs_q regs) (sub_up1 (sub_cat_left V)))
+       (asn.sep (subst facts (sub_up1 (sub_cat_left V)))
+          (gen_data_at (gen_prog_ζ V) (subst (t_add (@term_var R pb _ pIn) (Z.of_N doff)) (gen_prog_ζ V))
+             data (gen_prog_ν V)))) post.
 

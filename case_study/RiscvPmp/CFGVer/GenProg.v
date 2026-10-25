@@ -63,7 +63,10 @@ Import IrisModelBinary.RiscvPmpIrisBase2.
    The bridge concludes noninterferent_strong at the statement the generator
    determines; its premises are a valuation, sync-ness of the register
    variables, NoDup, data_ok, and data_layout_ok (the cells disjoint from
-   each other and from the code) -- no hand-written ImplPre. *)
+   each other and from the code) -- no hand-written ImplPre.  The valuation
+   is of R only: the arrays' VALUES (the contract's data_vctx variables) are
+   chosen by the bridge itself, after the runs, from the two memories
+   (EndToEnd.data_vals, PLAN-arrv D9), so no premise can mention them. *)
 
 
 
@@ -104,63 +107,73 @@ Proof.
 Qed.
 
 
+#[local] Existing Instance asn.sub_assertion.
+
 Lemma gen_prog_noninterferent {R : LCtx} (pb : string) (pIn : (pb∷ty_xlenbits ∈ R)%katamaran)
     regs facts doff data instrs fuel post (ι : Valuation R) (init_addr : N)
     (Hp : env.lookup ι pIn = SyncVal (bv.of_N init_addr))
     (Hsync : Forall (reg_q_sync ι) regs)
     (HND : NoDup (map reg_spec_idx (map (concretize_reg_q ι) regs)))
     (Hfacts : forall `{sailGS2 Σ}, ⊢ asn.interpret facts ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
-    (Hok : data_ok ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data)
-    (HLayout : data_layout_ok init_addr (length instrs)
-       (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data))
+    (Hok : data_ok ι (init_addr + doff) data)
+    (HLayout : data_layout_ok init_addr (length instrs) (concretize_data ι (init_addr + doff) data))
     (Hlen : (init_addr + 4 * N.of_nat (length instrs) < lenAddr)%N)
     (valid : ValidCFGVerifierContract (gen_prog_contract pb pIn regs facts doff data instrs fuel post)) :
   ni_cells init_addr instrs (init_addr + 4 * N.of_nat (length instrs))%N
-    (map (concretize_reg_q ι) regs)
-    (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data).
+    (map (concretize_reg_q ι) regs) (concretize_data ι (init_addr + doff) data).
 Proof.
   intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+  (* the arrays' values, chosen now that the runs are fixed (PLAN-arrv D9) *)
+  set (V := data_vctx data).
+  set (ιV := data_vals ι (init_addr + doff) μ1 μ2 data : Valuation V).
+  assert (Hpl : inst (T := fun Σ => Term Σ ty_xlenbits) (subst (@term_var R pb _ pIn) (sub_cat_left V)) (ι ►► ιV)
+                = SyncVal (@bv.of_N xlenbits init_addr)).
+  { rewrite inst_subst inst_sub_cat_left. exact Hp. }
   eapply (@cfg_instrs_endToEnd_gen γ1 γ2 γ1' μ1 μ2 μ1' instrs
-    (init_addr + 4 * N.of_nat (length instrs))%N n ws R ι
-    _ HpubReg (concretize_data ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)] (init_addr + doff) data) HpubMem
+    (init_addr + 4 * N.of_nat (length instrs))%N n ws (R ▻▻ V) (ι ►► ιV)
+    _ HpubReg (concretize_data ι (init_addr + doff) data) HpubMem
     _ valid eq_refl init_addr).
   all: try assumption.
   - unfold gen_prog_contract, gen_seg_contract. cbn [cfg_exit].
-    apply (seg_exit_table_ok _ _ init_addr (4 * N.of_nat (length instrs))). exact Hp.
+    apply (seg_exit_table_ok _ _ init_addr (4 * N.of_nat (length instrs))). exact Hpl.
   - intros Σ' GS'.
+    set (ιa := (ι ►► ιV).["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]).
+    assert (Hup : inst (sub_up1 (b := "a"∷ty_xlenbits) (sub_cat_left V)) ιa
+                  = ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]).
+    { unfold ιa. rewrite inst_sub_up1 inst_sub_cat_left. reflexivity. }
+    assert (Hζ : inst (gen_prog_ζ V) ιa = ι).
+    { unfold gen_prog_ζ, ιa. rewrite inst_subst inst_sub_wk1 inst_sub_cat_left. reflexivity. }
+    assert (Hν : inst (gen_prog_ν V) ιa = ιV).
+    { unfold gen_prog_ν, ιa. rewrite inst_subst inst_sub_wk1 inst_sub_cat_right. reflexivity. }
     iIntros "(Hregs & Hmem & Hpriv & #Hinv)".
     iPoseProof (gen_implpre (map (concretize_reg_q ι) regs) ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
                   HpubReg HND HInitReg1 HInitReg2 with "Hregs") as "Hpre".
     iPoseProof (gen_regs_q_concretize ι _ regs Hsync with "Hpre") as "Hregs".
     assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (t_add (@term_var _ pb _ (ctx.in_succ pIn)) (Z.of_N doff))
-                   ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
+                   (subst (t_add (@term_var R pb _ pIn) (Z.of_N doff)) (gen_prog_ζ V)) ιa
                  = SyncVal (@bv.of_N xlenbits (init_addr + doff))).
-    { unfold t_add. cbn [inst inst_term].
-      change (env.lookup (ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]) (ctx.in_succ pIn))
-        with (env.lookup ι pIn).
+    { rewrite inst_subst Hζ. unfold t_add. cbn [inst inst_term].
       rewrite Hp. cbn. f_equal. rewrite bv.of_Z_N -bv.of_N_add. reflexivity. }
-    iPoseProof (@gen_implpre_data _ _ _ ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)] μ1 μ2 data _
-                  (init_addr + doff)%N Ha Hok HInitMem1 HInitMem2 with "Hmem") as "Hdata".
+    iPoseProof (@gen_implpre_data _ _ _ _ (gen_prog_ζ V) ιa ι Hζ μ1 μ2 data _
+                  (init_addr + doff)%N (gen_prog_ν V) Ha Hν Hok HInitMem1 HInitMem2 with "Hmem") as "Hdata".
     iPoseProof (Hfacts Σ' GS') as "Hf".
-    unfold gen_prog_contract, gen_seg_contract, extend_to_minimal_pre.
+    unfold gen_prog_contract, gen_seg_contract, gen_seg_contract_at, extend_to_minimal_pre.
     cbn [cfg_precondition asn.interpret].
+    rewrite !asn.interpret_subst Hup.
     iFrame "Hpriv Hinv Hdata Hregs Hf".
-    assert (Hpa : inst (T := fun Σ => Term Σ ty_xlenbits) (@term_var _ pb _ (ctx.in_succ pIn))
-                   ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)] = SyncVal (@bv.of_N xlenbits init_addr)).
-    { cbn [inst inst_term].
-      change (env.lookup (ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]) (ctx.in_succ pIn))
-        with (env.lookup ι pIn). exact Hp. }
+    assert (Hpa : inst (T := fun Σ => Term Σ ty_xlenbits) (subst (@term_var R pb _ pIn) (gen_prog_ζ V)) ιa
+                  = SyncVal (@bv.of_N xlenbits init_addr)) by (rewrite inst_subst Hζ; exact Hp).
     unfold asn_pc_eq, gen_base_bound, gen_regs_at. cbn [asn.interpret List.fold_right].
     iSplitR; [iSplit; [iPureIntro|done]|].
-    { cbn [instprop instprop_formula]. rewrite Hpa. reflexivity. }
+    { cbn [instprop instprop_formula].
+      transitivity (SyncVal (@bv.of_N xlenbits init_addr)); [reflexivity|symmetry; exact Hpa]. }
     iSplitR; [iSplit; [iPureIntro|done]|].
-    { cbn [instprop instprop_formula]. cbn [inst inst_term].
-      change (env.lookup (ι.["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]) (ctx.in_succ pIn)) with (env.lookup ι pIn).
-      rewrite Hp. cbn.
-      rewrite data_unsigned_of_N_small; [|unfold lenAddr in Hlen; lia]. lia. }
+    { cbn [instprop instprop_formula inst inst_term].
+      (* the base's inst carries the chunk's instance, not Hpa's: restate Hpa at it *)
+      match goal with |- context [uop.evalRel uop.unsigned ?X] => pose proof (Hpa : X = _) as EX; rewrite EX end.
+      cbn. rewrite data_unsigned_of_N_small; [|unfold lenAddr in Hlen; lia]. lia. }
     iSplit; [iPureIntro; cbn; reflexivity|done].
 Qed.
 

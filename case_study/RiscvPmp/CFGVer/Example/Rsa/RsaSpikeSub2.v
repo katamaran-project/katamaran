@@ -99,12 +99,13 @@ Definition sub2_instrs : list AST := List.skipn 2 s1b_instrs.
 Definition sub2Ctx : LCtx :=
   ["q"∷ty_xlenbits; "r"∷ty_xlenbits; "sp"∷ty_xlenbits;
    "v0"∷ty_xlenbits; "v1"∷ty_xlenbits; "v2"∷ty_xlenbits;
-   "xa"∷ty_xlenbits; "xb"∷ty_xlenbits; "h"∷ty_xlenbits].
+   "xa"∷ty_xlenbits; "xb"∷ty_xlenbits; "h"∷ty_xlenbits;
+   "va"∷clemv_ty 4; "vb"∷clemv_ty 4].
 
 (* the frame: the four words below sp, any value -- the generator's cell
    form, so a caller that states them with gen_data_at hands them over as is *)
 Definition sub2_frame {Σ} (sp : Term Σ ty_xlenbits) : Assertion Σ :=
-  gen_data_at (t_add sp (-16)) [DCell Secret; DCell Secret; DCell Secret; DCell Secret].
+  gen_data_at (sub_id Σ) (t_add sp (-16)) [DCell Secret; DCell Secret; DCell Secret; DCell Secret] [env].
 
 (* the callee-saved registers and sp, at the same logic variables in pre and
    post: what lets a caller keep its own pointers across the call *)
@@ -121,7 +122,8 @@ Definition sub2_pre : Assertion (sub2Ctx ▻ "a"∷ty_xlenbits) :=
     ∗ secLeakvar "sp" ∗ sub2_frame (term_var "sp")
     ∗ A0 ↦ᵣ term_var "xa" ∗ secLeakvar "xa"
     ∗ A1 ↦ᵣ term_var "xb" ∗ secLeakvar "xb"
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") ∗ secLeakvar "h"
+    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") (term_var "va") (term_var "vb")
+    ∗ secLeakvar "h"
     ∗ asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
     ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536)))
     ∗ asn.formula (formula_relop bop.le
@@ -132,7 +134,7 @@ Definition sub2_post : Assertion (sub2Ctx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xl
   ( X1 ↦ᵣ term_var "r"
     ∗ sub2_saved (term_var "sp") (term_var "v0") (term_var "v1") (term_var "v2")
     ∗ sub2_frame (term_var "sp")
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h")
+    ∗ sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
     ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
@@ -177,14 +179,18 @@ Definition s1b_facts : Assertion (s1bCtx ▻ "a"∷ty_xlenbits) :=
     ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536))) )%asn.
 
 (* S1a's two arrays, then the callee's frame: four words below sp *)
-Definition s1b_data : list (data_spec (s1bCtx ▻ "a"∷ty_xlenbits)) :=
-  [ DPtr (term_var "xa"); DCell (Known (term_var "h")); DArr false ArrUp (t_limbs (term_var "h"))
-  ; DPtr (t_off4 (term_var "xb")); DArr true ArrUp (t_limbs (term_var "h"))
+Definition s1b_data : list (data_spec s1bCtx) :=
+  [ DPtr (term_var "xa"); DCell (Known (term_var "h")); DArr false ArrUp (t_limbs (term_var "h")) "va"
+  ; DPtr (t_off4 (term_var "xb")); DArr true ArrUp (t_limbs (term_var "h")) "vb"
   ; DPtr (t_add (term_var "sp") (-16)); DCell Secret; DCell Secret; DCell Secret; DCell Secret ]%list.
 
-(* the memory back, every register with any value *)
-Definition s1b_post : Assertion (s1bCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( sub_mem (term_var "xa") (term_var "xb") (term_var "h")
+(* the contract's context: s1bCtx and the arrays' values *)
+Definition s1bCtxV : LCtx := s1bCtx ▻▻ data_vctx s1b_data.
+
+(* the memory back (b with its own value, PLAN-arrv D13), every register
+   with any value *)
+Definition s1b_post : Assertion (s1bCtxV ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ sub2_frame (term_var "sp")
     ∗ asn.exist "w1" ty_xlenbits (X1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w9" ty_xlenbits (X2 ↦ᵣ term_var "w9")
@@ -201,7 +207,7 @@ Definition s1b_post : Assertion (s1bCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlen
     ∗ asn.exist "s2" ty_xlenbits (S2 ↦ᵣ term_var "s2") )%asn.
 
 (* exit: the fall-through end, +204 = 4 * 51 *)
-Definition s1bRec : @CFGVerifierContract s1bCtx :=
+Definition s1bRec : @CFGVerifierContract s1bCtxV :=
   gen_prog_contract "q" _ s1b_regs s1b_facts 204 s1b_data s1b_instrs 10 s1b_post.
 
 (* the caller is a block on ITS first instruction, index 2 *)
@@ -222,7 +228,7 @@ Goal cfg_vc_loop (gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r
     ( X1 ↦ᵣ term_var "r"
       ∗ sub2_saved (term_var "sp") (term_var "v1") (term_var "v1") (term_var "v2")
       ∗ sub2_frame (term_var "sp")
-      ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h")
+      ∗ sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
       ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
       ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
       ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
@@ -241,10 +247,11 @@ Goal cfg_vc_loop (gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r
       ∗ sub2_saved (term_var "sp") (term_var "v0") (term_var "v1") (term_var "v2")
       ∗ sub2_frame (term_var "sp")
       ∗ term_var "xa" ↦ₘ term_var "h"
-      ∗ asn.chunk (chunk_user (arr true 4 4)
-          [t_off4 (term_var "xa"); t_limbs (term_var "h"); t_end (term_var "xa") (term_var "h")])
-      ∗ asn.chunk (chunk_user (arr true 4 4)
-          [t_off4 (term_var "xb"); t_limbs (term_var "h"); t_end (term_var "xb") (term_var "h")])
+      ∗ asn.exist "va'" (clemv_ty 4)
+          (clem_arrv 4 4 (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
+             (t_end (term_var "xa") (term_var "h")) (term_var "va'") ∗ secLeakvar "va'")
+      ∗ clem_arrv 4 4 (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
+          (t_end (term_var "xb") (term_var "h")) (term_var "vb")
       ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
       ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
       ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")

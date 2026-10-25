@@ -94,7 +94,7 @@ a block's table must hold every pc its run reaches, and a callee is reached
 through a block on the callee's first instruction, so it must be in the
 table. Pin `sp` and the callee-saved `s_i` to the SAME logic variable in pre
 and post (that is what lets the caller keep its pointers across the call),
-and own the frame as `gen_data_at (t_add sp (-16)) [DCell Secret; …]` — the
+and own the frame as `gen_data_at (sub_id Σ) (t_add sp (-16)) [DCell Secret; …] [env]` — the
 generator's cell form, so a whole-program `gen_prog_contract` stating
 `DPtr (sp − 16)` + the same cells hands them over unchanged. A tail call's
 block exit is the caller's own `r` reloaded by `lw ra`; that only matches
