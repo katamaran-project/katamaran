@@ -110,11 +110,13 @@ variant — nine `vm_compute` VC proofs reduce through it, so the duplication is
 cheaper than the perturbation.
 
 `Tables.v` supplies `LBU rd rs imm` (= `LOAD imm rs rd true BYTE`; the `true` is
-the zero-extend flag, and `LW` passes `false`). Status: the VC side works —
-`check_scalar` loop 1 verifies at N = 32 — but the `EndToEnd.v` Iris wiring that
-would give a byte program a noninterference END theorem is **not written yet**
-(`PLAN-byte-memory.md` §5.3, §10). Residual shapes a byte program leaves →
-**cfgver-solve-vc**.
+the zero-extend flag, and `LW` passes `false`). Byte programs DO have end
+theorems: the whole `check_scalar` at every klen, via `DBytes` data and ONE
+`GenProg.gen_prog_noninterferent` application each
+(`CheckScalarParamResult.check_scalar_param_noninterferent` with `DAt`,
+`CheckScalarPtrResult.check_scalar_ptr_noninterferent` with `DPtr`; since
+2026-10-25 both contracts are `gen_prog_contract`, no hand-written ImplPre).
+Residual shapes a byte program leaves → **cfgver-solve-vc**.
 
 ## The generator call
 

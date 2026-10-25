@@ -30,7 +30,8 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParamInstrs
      RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParamLoop1
      RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParamLoop2
-     RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParam.
+     RiscvPmp.CFGVer.Example.CheckScalar.CheckScalarParam
+     RiscvPmp.CFGVer.GenProg.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
@@ -116,23 +117,21 @@ Proof.
   - exact cs_code.
 Qed.
 
-(* ---- 3. THE END THEOREM, FOR EVERY klen ---------------------------------- *)
+(* ---- 3. THE GENERATOR'S SIDE, FOR EVERY klen --------------------------- *)
 
 (* ⌈klen/4⌉, k's word count *)
 Definition klen_words (l : bv xlenbits) : nat := ((N.to_nat (bv.bin l) + 3) / 4)%nat.
 
-Definition cs_ι (ia : N) (l : bv xlenbits) : Valuation (csCtx ▻ "a"∷ty_xlenbits) :=
+(* the contract's parameters: the load address, klen, and k's address --
+   right after P256_N (the arrays' values are chosen by the bridge) *)
+Definition cs_ι (ia : N) (l : bv xlenbits) : Valuation csCtx :=
   [env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)]
        .["l"∷ty_xlenbits ↦ SyncVal l]
-       .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + 176))]
-       .["a"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].
+       .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + 176))].
 
 (* THE GENERATOR'S SPECS (proof side -- the statement below uses its own
    shallow data, PLAN-spec-layer D12, and check_scalar_cells proves the two
-   agree): k's pointer and klen; the contract's register specs concretized
-   at the load address (ra = the exit); the data as the generator lays it out *)
-Definition cs_reg_specs (ia : N) (l : bv xlenbits) : list reg_spec :=
-  (A0, Known (bv.of_N (ia + 176))) :: (A1, Known l) :: map (concretize_reg ia) cs_regs.
+   agree) *)
 Definition cs_mem_specs (ia : N) (l : bv xlenbits) : list mem_cell :=
   concretize_data (cs_ι ia l) (ia + 144) cs_data.
 
@@ -145,22 +144,12 @@ Lemma cs_count_ceil (ia : N) (l : bv xlenbits) : (bv.bin l + 3 < 4294967296)%N -
 Proof.
   intros Hl.
   assert (Hc : inst (T := fun Σ => Term Σ ty_xlenbits)
-                 (term_var "l" : Term (csCtx ▻ "a"∷ty_xlenbits) ty_xlenbits) (cs_ι ia l)
+                 (term_var "l" : Term csCtx ty_xlenbits) (cs_ι ia l)
                = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits)
-                 (term_var "l" : Term (csCtx ▻ "a"∷ty_xlenbits) ty_xlenbits) (cs_ι ia l))))
+                 (term_var "l" : Term csCtx ty_xlenbits) (cs_ι ia l))))
     by reflexivity.
   rewrite (data_count_ceil4_eq (cs_ι ia l) _ Hc); [reflexivity|].
   rewrite cs_count_l. lia.
-Qed.
-
-Lemma cs_mem_len (ia : N) (l : bv xlenbits) : (bv.bin l + 3 < 4294967296)%N ->
-  length (cs_mem_specs ia l) = (8 + klen_words l)%nat.
-Proof.
-  intros Hl. unfold cs_mem_specs, cs_data.
-  cbn [concretize_data]. rewrite !length_app !length_map !length_seq.
-  rewrite cs_count_ceil; [|exact Hl].
-  change (data_count (cs_ι ia l) (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
-  cbn [length]. lia.
 Qed.
 
 Lemma cs_data_ok (ia : N) (l : bv xlenbits) :
@@ -222,7 +211,7 @@ Proof.
 Qed.
 
 (* THE END THEOREM: the whole check_scalar, at every klen whose data fits,
-   at every load address. *)
+   at every load address -- one application of the generic bridge. *)
 Lemma check_scalar_param_noninterferent (init_addr : N) (l : bv xlenbits) :
   fits (init_addr + 4 * N.of_nat (length cs_instrs)) (check_scalar_data l) ->
   noninterferent_strong init_addr cs_instrs (init_addr + 4 * N.of_nat (length cs_instrs))
@@ -238,71 +227,35 @@ Proof.
   { rewrite klen_words_N in Hfit. unfold lenAddr in Hfit. change (2 ^ 12)%N with 4096%N in Hfit.
     pose proof (N.div_mod (bv.bin l + 3) 4 ltac:(lia)).
     pose proof (N.mod_lt (bv.bin l + 3) 4 ltac:(lia)). lia. }
-  apply (ni_of_cells (regs' := cs_reg_specs init_addr l) (cs := cs_mem_specs init_addr l));
-    [ apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity
+  apply (ni_of_cells (regs' := map (concretize_reg_q (cs_ι init_addr l)) cs_regs)
+                     (cs := cs_mem_specs init_addr l));
+    [ apply compile_clear; lia | apply compile_in_range; [lia | assumption]
+    | apply perm_of_eq; cbn; rewrite bv.of_N_add; reflexivity
     | apply perm_of_eq; apply check_scalar_cells; exact Hlb | ].
-  rewrite Hl. change (4 * N.of_nat 36)%N with 144%N.
-  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
-    HInitReg1 HInitReg2 HInitMem1 HInitMem2
-    γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-  eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1' cs_instrs
-    (init_addr + 144)%N n ws csCtx
-    ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-          .["l"∷ty_xlenbits ↦ SyncVal l]
-          .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N (init_addr + 176))])
-    _ HpubReg (cs_mem_specs init_addr l) HpubMem
-    cs cs_valid eq_refl init_addr).
+  apply (gen_prog_noninterferent "p" _ cs_regs (asn.formula formula_true) 144 cs_data cs_instrs 40
+           (asn.formula formula_true) (cs_ι init_addr l) init_addr).
   - reflexivity.
-  - apply (seg_exit_table_ok _ _ init_addr 144). reflexivity.
-  - (* HDataAddrs, by construction *)
-    intros i spec Hi. rewrite Hl.
-    exact (concretize_data_addrs (cs_ι init_addr l) cs_data I (init_addr + 144) i _ Hi).
-  - (* ImplPre *)
-    intros Σ' GS'.
-    iIntros "(Hregs & Hmem & Hpriv & #Hinv)".
-    set (ι0 := [env].["p"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
-                    .["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
-               : Valuation (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits)).
-    iPoseProof (gen_implpre (cs_reg_specs init_addr l) ι0 HpubReg
-                  ltac:(apply Prelude.nodup_fixed; reflexivity)
-                  HInitReg1 HInitReg2 with "Hregs") as "Hpre".
-    cbn [cs_reg_specs gen_pre List.fold_right asn.interpret].
-    iDestruct "Hpre" as "[HA0 [HA1 Hregs]]".
-    pose proof (gen_pre_rel_concretize (Σ := Σ') cs_regs init_addr (SyncVal (@bv.of_N xlenbits init_addr))) as Hcz.
-    rewrite -Hcz.
-    assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits) (t_add (term_var "p") 144) (cs_ι init_addr l)
-                 = SyncVal (@bv.of_N xlenbits (init_addr + 144))).
-    { cbn -[bv.of_N bv.of_Z bv.add]. f_equal. rewrite -bv.of_N_add. reflexivity. }
-    iPoseProof (@gen_implpre_data _ _ _ (cs_ι init_addr l) μ1 μ2 cs_data
-                  (t_add (term_var "p") 144) (init_addr + 144)%N Ha
-                  (cs_data_ok init_addr l ltac:(unfold maxAddr, minAddr; lia))
-                  HInitMem1 HInitMem2 with "Hmem") as "Hdata".
-    assert (Hp : inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "p" : Term (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) ty_xlenbits) ι0
-                 = inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "p" : Term (csCtx ▻ "a"∷ty_xlenbits) ty_xlenbits) (cs_ι init_addr l))
-      by (cbn; reflexivity).
-    iPoseProof (bi.equiv_entails_1_1 _ _
-                  (gen_regs_at_inst _ _ ι0 (cs_ι init_addr l) cs_regs Hp) with "Hregs") as "Hregs".
-    unfold cs_ι in *.
-    cbn [extend_to_minimal_pre cfg_precondition cs gen_seg_contract gen_seg_contract_at asn.interpret cs_pre].
-    cbn -[gen_data_at gen_regs_at bv.of_N bv.of_Z bv.add bv.unsigned].
-    iFrame "Hpriv Hinv Hdata Hregs".
-    assert (P7 : (bv.unsigned (@bv.of_N xlenbits init_addr) + Z.of_N (4 * N.of_nat 36) <= Z.of_N lenAddr)%Z).
-    { rewrite data_unsigned_of_N_small; [unfold lenAddr in *; lia|unfold lenAddr in *; lia]. }
-    iSplitR; [iSplit; [iPureIntro; reflexivity|done]|].
-    iSplitR; [iSplit; [iPureIntro; exact P7|done]|].
-    iSplitL "HA0"; [cbn; iExact "HA0"|].
-    iSplitR; [iSplit; [iPureIntro; exact I|done]|].
-    iSplitL "HA1"; [cbn; iExact "HA1"|].
-    repeat iSplit; try done; iPureIntro; first [assumption | exact I].
-  - rewrite cs_mem_len; [|exact Hlb]. rewrite Hl. lia.
-  - exact Hmem1.
-  - exact Hmem2.
-  - exact γ1curpriv.
-  - exact γ2curpriv.
-  - exact γ1pc.
-  - exact γ2pc.
-  - exact steps1.
-  - exact Htrace.
+  - repeat constructor.
+  - apply Prelude.nodup_fixed. reflexivity.
+  - intros Σ' H'. iPureIntro. split; exact I.
+  - apply cs_data_ok. unfold maxAddr, minAddr in *. lia.
+  - (* the layout: one run, P256_N then k, right after the code *)
+    pose proof (Nat.div_mod (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
+    pose proof (Nat.mod_upper_bound (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
+    unfold cs_data. cbn [concretize_data].
+    change (data_count _ (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
+    rewrite cs_count_ceil; [|exact Hlb].
+    rewrite !concretize_run_map app_nil_r.
+    rewrite <- (app_nil_r (data_run (init_addr + 144 + 4 * N.of_nat 8) (klen_words l) false)).
+    change (data_run (init_addr + 144) 8 false
+              ++ data_run (init_addr + 144 + 4 * N.of_nat 8) (klen_words l) false ++ [])
+      with (data_runs [(init_addr + 144, 8%nat, false);
+                       (init_addr + 144 + 4 * N.of_nat 8, klen_words l, false)]%N).
+    rewrite Hl.
+    apply data_layout_runs.
+    + apply List.Forall_cons; [cbn -[lenAddr]; lia|]. apply List.Forall_cons; [cbn -[lenAddr klen_words]; lia|]. apply List.Forall_nil.
+    + apply FOP_cons; [apply List.Forall_cons; [cbn -[lenAddr klen_words]; lia|]; apply List.Forall_nil|].
+      apply FOP_cons; [apply List.Forall_nil|]. apply FOP_nil.
+  - rewrite Hl. lia.
+  - exact cs_valid.
 Qed.

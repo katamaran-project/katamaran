@@ -122,21 +122,27 @@ by grep 2026-10-25:
   the rule is cost-neutral and does NOT touch the open LoopN cost
   question below (2.8x loop, 8.1x callee on these numbers). Examples
   outside this set still have not seen it (Gate D/E).
+- DONE 2026-10-25: check_scalar — `CheckScalarParamLoop{1,2}.v`,
+  `CheckScalar{Param,Ptr}{,VC,Result}.v`, all green. Array values are ∃
+  (no post mentions them; recipe step 1). `CheckScalarParam.cs` is now a
+  `gen_prog_contract` (Emiel): its end theorem is one
+  `gen_prog_noninterferent` like the Ptr one, hand-written ImplPre gone;
+  trusted statement unchanged. valid_l1 9.83 → 9.83 s, valid_l2 14.05 →
+  17.25 s (matched).
 - uses the old `arr`/`clem_arr_*`/unnamed `DArr`/`DBytes`:
-  `Example/CheckScalar/CheckScalar{Param,Ptr}.v`,
-  `CheckScalarParamLoop{1,2}.v`; `Example/Muladd/MuladdParam.v`,
+  `Example/Muladd/MuladdParam.v`,
   `MuladdParamLoop{D,D0,DAng}.v`, `MuladdParamTail.v`;
 - old valuation form (`ι.["a" ↦ …]` in `concretize_data`/`data_ok`, data
-  typed over `Ctx ▻ "a"`): `CheckScalarParam.v`, `CheckScalarPtr{,Result}.v`,
-  `MuladdParam.v`;
+  typed over `Ctx ▻ "a"`): `MuladdParam.v`;
 - calls `gen_implpre_data` with the OLD signature (now `@gen_implpre_data _ _
   _ _ ζ ιc ι Hζ μ1 μ2 data a off ν Ha Hν Hok Hi1 Hi2`, see GenProg's bridge
-  for the instantiation): `MuladdParamResult.v`, `CheckScalarParamResult.v`;
+  for the instantiation): `MuladdParamResult.v` (check_scalar avoided this
+  by restating its contract as `gen_prog_contract` -- an option here too);
 - built on the changed LoopN (only the hand-overs / seeds around it may need
   edits; re-run): `MuladdParamLoop{I,K,M}.v`; then everything importing the
   above, up to `Results.v`.
 
-Order (plan §4 Phase D): RsaSpikeSb (DONE) → check_scalar → muladd. Recipe, from
+Order (plan §4 Phase D): RsaSpikeSb (DONE) → check_scalar (DONE) → muladd. Recipe, from
 the RSA port (worked example `RsaSpikeSub.v`, diff `2d660f2f`):
 1. `chunk_user (arr pub w s) [a;n;e]` → `clem_arrv w s a n e vs`; a value is
    a contract variable if a post must mention it, else `asn.exist`; public →
