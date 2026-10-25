@@ -107,13 +107,55 @@ array and JOINS it with the emptied source, so the post sees `rev dM ++ rM`),
 only an overwritten array's value is ∃.  No secLeak inside LoopN/the callee
 unless the code needs it — the caller keeps publicness by framing.
 
-**Next step:** Phase D. RED until ported (D10; none builds against the new
-GenSegment/LoopN): `Example/Muladd/MuladdParam{,Result}.v`,
-`MuladdParamLoop{I,K,M,D0}.v` + `MuladdParamTail.v` (they use LoopN, now
-arrv with `VM`), `Example/CheckScalar/CheckScalar{Param,Ptr}{,Result}.v` +
-`CheckScalarParamLoop1.v`, `Example/Rsa/RsaSpikeSb.v` (and anything else on
-`clem_arr_*`: grep).  Before muladd, decide the angelic-ambiguity cost (§4
-Phase C status).
+**Next step: Phase D** (state at `2d660f2f`, 2026-10-25). GREEN on the new
+API: GenSegment, EndToEnd, GenCompose, GenProg, `MuladdParamLoopN.v` (arrv +
+VM), `Example/Rsa/RsaSpikeSub{,2}{,Result}.v`. RED by design (D10), checked
+by grep 2026-10-25:
+- uses the old `arr`/`clem_arr_*`/unnamed `DArr`/`DBytes`:
+  `Example/Rsa/RsaSpikeSb.v`; `Example/CheckScalar/CheckScalar{Param,Ptr}.v`,
+  `CheckScalarParamLoop{1,2}.v`; `Example/Muladd/MuladdParam.v`,
+  `MuladdParamLoop{D,D0,DAng}.v`, `MuladdParamTail.v`;
+- old valuation form (`ι.["a" ↦ …]` in `concretize_data`/`data_ok`, data
+  typed over `Ctx ▻ "a"`): `CheckScalarParam.v`, `CheckScalarPtr{,Result}.v`,
+  `MuladdParam.v`;
+- calls `gen_implpre_data` with the OLD signature (now `@gen_implpre_data _ _
+  _ _ ζ ιc ι Hζ μ1 μ2 data a off ν Ha Hν Hok Hi1 Hi2`, see GenProg's bridge
+  for the instantiation): `MuladdParamResult.v`, `CheckScalarParamResult.v`;
+- built on the changed LoopN (only the hand-overs / seeds around it may need
+  edits; re-run): `MuladdParamLoop{I,K,M}.v`; then everything importing the
+  above, up to `Results.v`.
+
+Order (plan §4 Phase D): RsaSpikeSb → check_scalar → muladd. Recipe, from
+the RSA port (worked example `RsaSpikeSub.v`, diff `2d660f2f`):
+1. `chunk_user (arr pub w s) [a;n;e]` → `clem_arrv w s a n e vs`; a value is
+   a contract variable if a post must mention it, else `asn.exist`; public →
+   `∗ secLeak vs` ONLY where the code itself needs it (caller frames the rest).
+2. `clem_arr_<op> pub w s` → `clem_arrv_<op> w s` (no `pub`); the old
+   `drop` of an emptied source after a loop becomes `flip` + `join` when the
+   array's value must come back (D13), `drop` otherwise.
+3. top-level data: `DArr pub dir c "v"` (data over the contract's own ctx),
+   define `CtxV := Ctx ▻▻ data_vctx data`, type the post and the record with
+   it; Result files drop the `.["a" ↦ …]` from the valuation and
+   `Term (Ctx ▻ "a")` annotations.
+4. compile with `rocq_compile_file(…, timing=True)` (pet OOMs on example
+   files; preamble mode for proof iteration) and record VC before/after.
+Baselines: take them MATCHED, as `Example/Rsa/ZZArrvCost.v` does (the
+HEAD~1 versions of loop/callee files compile in a probe module against the
+new build as long as they use only CLems + LoopN-free contracts; a file
+whose contract uses the old `DArr` cannot). Known baselines: check_scalar
+VCs ~31 s total, MuladdParamVC 657 s / 10.4 GB (memory `project_compile_cost`,
+`project_check_scalar_param`).
+
+OPEN before muladd (Emiel accepted the cost for now, §4 Phase C status):
+arrv LoopN is 2.4× (36.6 s vs 13.0 s), its callee 7×. Suspected angelic
+ambiguity (no `pub` index); fix options raised: confirm first by ablation,
+register-anchored CLems (array start from a pointer register → precise
+lookup), or a meaningless tag index on `arrv`. Ask Emiel again before
+porting the muladd loops — they are the same LoopN at a larger scale.
+
+Then Phase E (delete `arr`, its 15 CLems and sound lemmas, skills) and the
+ONE full merge gate (`scripts/gate.sh`, `GATE_JOBS=1`, MuladdParamVC built
+first).
 
 ---
 
