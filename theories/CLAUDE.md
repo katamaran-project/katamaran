@@ -60,7 +60,11 @@ edit; these four are here because they apply to *any* change to that file.
 3. **So prove the semantics in preamble mode first.** `Bitvector` and
    `Syntax.TypeDecl` load standalone, and `ty.liftBinOpRV`/`liftUnOpRV` are what
    `bop.evalRel`/`uop.evalRel` reduce to — the real RelVal argument restates
-   there in ~100 ms. `RiscvPmp.Sig` does **not** load in a preamble.
+   there in ~100 ms. `RiscvPmp.Sig` DOES load in a preamble (corrected; used
+   2026-10-25 to prove a whole solver change before the build): `From
+   Katamaran Require Import Context RiscvPmp.Base RiscvPmp.Sig. Import
+   RiscvPmpBase RiscvPmpSignature GenericSolver DList.` plus iris
+   proofmode, and `Local Set Implicit Arguments.` to match the file.
 4. **A wrong rule does not fail loudly.** A rule that discharges to `empty`
    claims a formula holds; only `./scripts/gate.sh`'s `Print Assumptions` pass
    catches it, via the end theorems. Run the gate at **`GATE_JOBS=1`** on a

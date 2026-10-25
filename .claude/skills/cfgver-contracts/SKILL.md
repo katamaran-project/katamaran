@@ -210,7 +210,12 @@ replacing `arr`).** `vs : list (bvec 8w)`, no publicness flag: a public
 array is `arrv … vs ∗ secLeak vs`, and a plain take hands publicness to the
 parts (the take's `vs = x :: r` is `formula_propeq`, Leibniz on RelVal, and a
 lifted op is SyncVal iff its arguments are), so there are no `_pub` lemma
-variants. Catalogue (`clem_arrv_*`): `take_first` (equation, for a variable
+variants. That hand-off is done by the SOLVER (`Solver.v` `ResimpSecLeak`,
+2026-10-25): when a unification substitutes `vs := x :: r`, the old
+`secLeak vs` is re-split into `secLeak x`, `secLeak r`. Before it, the split
+happened only by luck of tree shape (a `replay` of a hoisted var-eq) and
+failed after a load or under an angelic choice between same-shape arrays
+(`Example/Rsa/RsaSpikeSb.v` `valid_cpy`). Catalogue (`clem_arrv_*`): `take_first` (equation, for a variable
 value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
 (`vs = r ++ [x]`), `add_first` (`x :: vs`), `add_last` (`vs ++ [x]`),
 `nonempty`, `empty` (`⊢ arrv a 0 a []`, `a` bound later by an ANGELIC match),
@@ -305,8 +310,12 @@ it, `secLeakvar "inv"` says only "this literal is public", and the precondition
 genuinely weakens. `checked_mem_read` / `mem_read` therefore keep their
 `secLeakvar "inv"` in front — moving it makes `valid_checked_mem_read`
 unprovable against its own body (all three `restrict_bytes` cases reduce to
-`false = true`). Their leftover is `secLeak <literal>`, which `solve_vc` closes
-trivially, so it costs nothing. Mechanism: **core-executor-internals**;
+`false = true`). Their leftover is `secLeak <literal>` (after `solve_evars`),
+which `solve_vc` closes trivially — but it is NOT free: as an `assertk` in the
+tree it stops `postprocess` hoisting a later var-eq above earlier assumes, so
+every LOAD changes which facts `replay` can re-simplify (this is what hid the
+unsplit-`secLeak` bug fixed by `ResimpSecLeak`, 2026-10-25, see the arrv
+paragraph above). Mechanism: **core-executor-internals**;
 diagnosing such a residual: **cfgver-solve-vc**.
 
 Exemplar: `cmovznz4_cfg_contract_param` (`Example/Cmovznz4.v`) — `Σ = ["p"∷ty_xlenbits]`,

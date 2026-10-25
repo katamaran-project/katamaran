@@ -2357,6 +2357,105 @@ Module Type GenericSolverOn
       Qed.
     End SimplifySecLeakSpec.
 
+    (* RE-SPLITTING a public variable after the unifier substitutes it
+       (PLAN-arrv Phase D, 2026-10-25).  `wsubst` rewrites the OLD path
+       condition by plain substitution, so `secLeak vs` becomes
+       `secLeak (x :: r)` once `vs := x :: r`, and nothing simplifies it: a
+       later `secLeak r` is not found (assumption_formula is syntactic).
+       solver_generic therefore appends, after a non-trivial unification, the
+       split of every `secLeak (term_var x)` of the old path condition whose x
+       the substitution replaced by a non-variable.  Each appended formula is
+       implied by the new path condition, so SolverSpec is unchanged.  Only
+       secLeak, by decision: publicness must pass to the parts by framing. *)
+    Section ResimpSecLeak.
+
+      Definition resimp_secLeak1 {w : World} {σ} (t : Term w σ) : PathCondition w :=
+        match run (simplify_secLeak (w := w) (peval t)) with
+        | Some D => D
+        | None => ctx.nil
+        end.
+
+      Definition resimp_secLeak_term {w : World} {σ} (R : PathCondition w)
+        (u : Term w σ) : PathCondition w :=
+        match u with
+        | term_var _ => R
+        | _ => ctx.cat R (resimp_secLeak1 u)
+        end.
+
+      Fixpoint resimp_secLeak {Σ0} {w1 : World} (ζ : Sub Σ0 w1)
+        (C : PathCondition Σ0) : PathCondition w1 :=
+        match C with
+        | ctx.nil => ctx.nil
+        | ctx.snoc C F =>
+            let R := resimp_secLeak ζ C in
+            match F with
+            | formula_secLeak (term_var _ as t) => resimp_secLeak_term R (subst t ζ)
+            | _ => R
+            end
+        end.
+
+      Definition tri_is_id {w0 w1 : World} (ν : Tri w0 w1) : bool :=
+        match ν with tri_id => true | _ => false end.
+
+      Definition resimp_secLeak_tri {w0 w1 : World} (ν : Tri w0 w1) : PathCondition w1 :=
+        if tri_is_id ν then ctx.nil else resimp_secLeak (sub_triangular ν) (wco w0).
+
+      Lemma resimp_secLeak1_sound {w : World} {σ} (t : Term w σ) :
+        instpred (formula_secLeak t) ⊢ instpred (resimp_secLeak1 t).
+      Proof.
+        unfold resimp_secLeak1.
+        pose proof (instpred_run (simplify_secLeak (w := w) (peval t))) as Hrun.
+        rewrite simplify_secLeak_spec in Hrun.
+        assert (Hp : instpred (formula_secLeak (peval t)) ⊣⊢ instpred (w := w) (formula_secLeak t)).
+        { constructor; intros ι Hwco; cbn; unfold instpred_formula_secLeak.
+          now rewrite peval_sound. }
+        rewrite Hp in Hrun.
+        destruct run as [D|]; cbn in *.
+        - apply (bi.equiv_entails_1_2 _ _ Hrun).
+        - rewrite -Hrun. iIntros "[]".
+      Qed.
+
+      (* for a VARIABLE t: with a constructor, unification reduces
+         resimp_secLeak1 and times out *)
+      Lemma resimp_secLeak_cat {w : World} {τ} (t : Term w τ) (R : PathCondition w)
+        (P : Pred w) :
+        (P ⊢ instpred R) ->
+        P ∗ instpred (formula_secLeak t) ⊢ instpred (ctx.cat R (resimp_secLeak1 t)).
+      Proof.
+        intros HR. rewrite instpred_cat.
+        apply bi.sep_mono; [exact HR | apply resimp_secLeak1_sound].
+      Qed.
+
+      Lemma resimp_secLeak_term_sound {w : World} {τ} (u : Term w τ)
+        (R : PathCondition w) (P : Pred w) :
+        (P ⊢ instpred R) ->
+        P ∗ instpred (formula_secLeak u) ⊢ instpred (resimp_secLeak_term R u).
+      Proof.
+        intros HR. destruct u; unfold resimp_secLeak_term;
+          [iIntros "[H _]"; by iApply HR|..];
+          exact (@resimp_secLeak_cat _ _ _ R P HR).
+      Qed.
+
+      Lemma resimp_secLeak_sound {Σ0} {w1 : World} (ζ : Sub Σ0 w1) (C : PathCondition Σ0) :
+        instpred (w := w1) (subst C ζ) ⊢ instpred (resimp_secLeak ζ C).
+      Proof.
+        induction C as [|C IH F]; cbn -[resimp_secLeak_term].
+        - iIntros "_"; done.
+        - destruct F; cbn -[resimp_secLeak_term]; try (iIntros "[H _]"; by iApply IH).
+          destruct t; cbn -[resimp_secLeak_term]; try (iIntros "[H _]"; by iApply IH).
+          now apply resimp_secLeak_term_sound.
+      Qed.
+
+      Lemma resimp_secLeak_tri_valid {w0 w1 : World} (ν : Tri w0 w1) :
+        ⊢ instpred (resimp_secLeak_tri ν).
+      Proof.
+        unfold resimp_secLeak_tri. destruct tri_is_id; [cbn; done|].
+        rewrite -resimp_secLeak_sound -sub_acc_triangular.
+        constructor. intros ι Hwco _. apply instpred_prop.
+        now apply (ent_acc_sub (acc_triangular ν)).
+      Qed.
+
+    End ResimpSecLeak.
 
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
@@ -4462,7 +4561,11 @@ Module Type GenericSolverOn
     Definition solver_generic : Solver :=
       fun w0 C0 =>
         match DList.run (simplify_pathcondition C0) with
-        | Some C1 => Some (unify_pathcondition (assumption_pathcondition (wco w0) C1 ctx.nil))
+        | Some C1 =>
+            let '(existT w1 (ν, C2)) :=
+              unify_pathcondition (assumption_pathcondition (wco w0) C1 ctx.nil) in
+            (* the split of each substituted public variable (ResimpSecLeak) *)
+            Some (existT w1 (ν, ctx.cat C2 (resimp_secLeak_tri ν)))
         | None => None
         end
     .
@@ -4471,9 +4574,14 @@ Module Type GenericSolverOn
     Proof.
       unfold solver_generic. intros w C0.
       pose proof (simplify_pathcondition_spec C0) as Hequiv.
-      destruct run as [C0'|]; constructor; cbn.
+      destruct run as [C0'|]; cbn.
       - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w) C0' ctx.nil)) as Hunify.
         destruct (unify_pathcondition (assumption_pathcondition (wco w) C0' ctx.nil)) as (w1 & ν01 & C1).
+        constructor.
+        assert (Hcat : instpred (ctx.cat C1 (resimp_secLeak_tri ν01)) ⊣⊢ instpred C1).
+        { rewrite instpred_cat. pose proof (@resimp_secLeak_tri_valid _ _ ν01) as HE.
+          iSplit; [iIntros "[$ _]" | iIntros "$"; iApply HE]. }
+        rewrite Hcat.
         rewrite <-Hunify.
         rewrite <-Hequiv.
         pose proof (assumption_pathcondition_spec (wco w) C0' ctx.nil) as Hassumption.
@@ -4481,7 +4589,7 @@ Module Type GenericSolverOn
         iDestruct (Hassumption with "Hwco") as "Hassumption".
         rewrite bi.emp_sep.
         now iApply (bi.wand_iff_sym with "Hassumption").
-      - now rewrite <-Hequiv.
+      - constructor. now rewrite <-Hequiv.
     Qed.
 
   End GenericSolver.

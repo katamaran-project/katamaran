@@ -111,8 +111,16 @@ unless the code needs it — the caller keeps publicness by framing.
 API: GenSegment, EndToEnd, GenCompose, GenProg, `MuladdParamLoopN.v` (arrv +
 VM), `Example/Rsa/RsaSpikeSub{,2}{,Result}.v`. RED by design (D10), checked
 by grep 2026-10-25:
+- DONE 2026-10-25: `Example/Rsa/RsaSpikeSb.v` (green, controls rejected).
+  It needed a SOLVER fix (`Solver.v` `ResimpSecLeak`, §1.2 correction):
+  after a load, or with two same-shape arrays, `secLeak vs` was not
+  passed to the parts of a take. Only the closure up to RsaSpikeSb was
+  rebuilt — every other file (incl. the GREEN ones above: GenProg, LoopN,
+  the RSA spikes) has NOT yet been recompiled against the new solver;
+  do that (and re-time LoopN against ZZArrvCost) before trusting old
+  numbers.
 - uses the old `arr`/`clem_arr_*`/unnamed `DArr`/`DBytes`:
-  `Example/Rsa/RsaSpikeSb.v`; `Example/CheckScalar/CheckScalar{Param,Ptr}.v`,
+  `Example/CheckScalar/CheckScalar{Param,Ptr}.v`,
   `CheckScalarParamLoop{1,2}.v`; `Example/Muladd/MuladdParam.v`,
   `MuladdParamLoop{D,D0,DAng}.v`, `MuladdParamTail.v`;
 - old valuation form (`ι.["a" ↦ …]` in `concretize_data`/`data_ok`, data
@@ -125,7 +133,7 @@ by grep 2026-10-25:
   edits; re-run): `MuladdParamLoop{I,K,M}.v`; then everything importing the
   above, up to `Results.v`.
 
-Order (plan §4 Phase D): RsaSpikeSb → check_scalar → muladd. Recipe, from
+Order (plan §4 Phase D): RsaSpikeSb (DONE) → check_scalar → muladd. Recipe, from
 the RSA port (worked example `RsaSpikeSub.v`, diff `2d660f2f`):
 1. `chunk_user (arr pub w s) [a;n;e]` → `clem_arrv w s a n e vs`; a value is
    a contract variable if a post must mention it, else `asn.exist`; public →
@@ -179,6 +187,20 @@ first).
    r` (0.05 s); secret vs rejected; non-vacuity control rejected. So
    framing keeps `secLeak vs` and the take's equation hands it to the
    parts (Emiel's O2 answer: "framing should do all the publicness").
+   **CORRECTED 2026-10-25 (Phase D, RsaSpikeSb `valid_cpy`):** that held
+   only by luck of tree shape. The take's `vs = x :: r` is a var-eq; the
+   unifier's `wsubst` substitutes the OLDER `secLeak vs` into
+   `secLeak (x :: r)` WITHOUT re-simplifying it, and a later `secLeak r` is
+   then not found (assumption check is syntactic). ZZArrvPubTake passed
+   because postprocess hoisted the var-eq above the older assume and
+   `replay` re-assumed the substituted formula; a LOAD before the take
+   (mem_read's deliberate `secLeak inv` becomes an `assert secLeak false`
+   after solve_evars) blocks that hoist, and so does an angelic choice
+   between two same-shape arrays (the var-eq sits inside the branch). A
+   second replay fixes the first case only. FIXED in the solver:
+   `solver_generic` appends the split of every `secLeak (var x)` whose x a
+   unification replaced by a non-variable (`Solver.v`, `ResimpSecLeak`,
+   secLeak only by decision).
 3. **The solver/peval sees values only through terms.** Invariant
    equations re-establish only if both sides normalize to the same term:
    that is what `peval_append` and `peval_bvtake_zext` are for. Every new

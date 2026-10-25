@@ -374,6 +374,41 @@ Diagnosis recipe that found it in seconds: rebuild the world + heap in a
 and `cfg_postprocess` on hand-built `SymProp`s (`demonicv`/`angelicv`/
 `@SymProp.assert_vareq Σ x σ _ t amsg.empty k`).
 
+### Added 2026-10-25: RE-SPLIT a substituted public variable (`ResimpSecLeak`)
+
+`unify_pathcondition` eliminates a variable with `tri_cons`, and the new
+world is `wsubst`: the OLD path condition is substituted, NEVER
+re-simplified. So `wco ∋ secLeak vs` followed by an assumed
+`vs = x :: r` leaves `secLeak (x :: r)` in `wco`, and a later assert
+`secLeak r` fails (`assumption_formula` is syntactic). `solver_generic` now
+returns `C2 ▻▻ resimp_secLeak_tri ν`: after a NON-trivial `ν` (`tri_is_id`
+guard, so calls without a substitution pay nothing), one walk of the old
+`wco` emits `run (simplify_secLeak (peval (ζ x)))` for every
+`secLeak (term_var x)` whose image under `sub_triangular ν` is not a
+variable. Soundness: the appended formulas are implied by `wco w1`
+(`resimp_secLeak_sound` + `ent_acc_sub`), so `C2 ▻▻ E ⊣⊢ C2` and only
+`solver_generic_spec` changed. secLeak ONLY, by Emiel's decision (other
+substituted formulas could now decide/refute too; not attempted).
+
+Why it stayed hidden: `replay` (CFGVer's pipeline) re-assumes a SUBSTITUTED
+formula when postprocess has hoisted the var-eq above it, which splits it.
+Two things block that hoist: an `assertk` in between (every LOAD leaves
+mem_read's `secLeak inv` as `assert secLeak false` after `solve_evars`), and
+an `angelic_binary` (an angelic chunk match between two same-shape arrays).
+A second replay fixes only the first. Diagnosis that found it: count node
+kinds per postprocess stage with a throwaway `Fixpoint` over `SymProp`
+(`@SymProp.assert_vareq` takes 7 args incl. Σ; use `Nat.add`, `+` is
+hijacked) — `solve_evars` was the stage that created the literal assert.
+
+Two prototype-vs-file traps when moving preamble-proved code into
+`Solver.v`: the file has `Local Set Implicit Arguments` (line 67), so a
+lemma applied POSITIONALLY in the preamble (`lem _ R P HR`) breaks — put the
+same `Set` in the preamble, or apply with `@`; and `now` on a `⊣⊢`-rewritten
+entailment can time out in pet where `apply (bi.equiv_entails_1_2 _ _ H)` is
+instant. Also: unifying under a definition that runs `peval`/`simplify` on a
+CONSTRUCTOR-headed term reduces it and times out — prove the lemma for a
+variable term and `exact` it per branch.
+
 ## Adding a NEW solver rule — the recipe
 
 Four rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
