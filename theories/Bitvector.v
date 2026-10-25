@@ -1516,6 +1516,15 @@ Module bv.
     Lemma of_nat_add {n} x y : @add n (of_nat x) (of_nat y) = of_nat (x + y).
     Proof. now rewrite <- ?of_Z_nat, of_Z_add, Nat2Z.inj_add. Qed.
 
+    Lemma of_N_one {n} : of_N 1 = @one n.
+    Proof. apply bin_inj_eq2n. now destruct n. Qed.
+
+    Lemma of_Z_one {n} : of_Z 1 = @one n.
+    Proof.
+      apply unsigned_inj. rewrite unsigned_of_Z. destruct n; [easy|].
+      apply Z.mod_1_l. rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
+    Qed.
+
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
       intros n x y. unfold eq2n.
@@ -1812,6 +1821,22 @@ Module bv.
         split. done. lia.
     Qed.
 
+    Lemma elem_of_seq_bounds {n} (s v : bv n) l :
+      (unsigned s + l <= 2 ^ Z.of_nat n)%Z ->
+      v ∈ seq s l <-> (unsigned s <= unsigned v < unsigned s + l)%Z.
+    Proof.
+      intros Hb. rewrite elem_of_seq'. split.
+      - intros (k & -> & Hk).
+        pose proof (unsigned_add_small s k).
+        pose proof (unsigned_bounds k). lia.
+      - intros Hbnd. exists (sub v s). split.
+        + unfold sub.
+          by rewrite <- add_comm, <- add_assoc,
+            add_negate, add_zero_r.
+        + pose proof (unsigned_bounds s).
+          rewrite unsigned_sub, truncz_small; lia.
+    Qed.
+
     Lemma seq_no_overlap {n} (s1 s2 : bv n) (l1 l2 : Z) a :
       (unsigned s1 + l1 <= unsigned s2)%Z ->
       (unsigned s2 + l2 < 2 ^ Z.of_nat n)%Z ->
@@ -1841,6 +1866,46 @@ Module bv.
       apply add_cancel_l in Heq. clear s.
       apply (f_equal unsigned) in Heq.
       rewrite !unsigned_of_Z, !truncz_small in Heq; lia.
+    Qed.
+
+    Lemma seq_succ {n} (s : bv n) (l : Z) :
+      (0 <= l)%Z ->
+      seq s (Z.succ l) = s :: seq (add one s) l.
+    Proof.
+      intros Hl. unfold seq. rewrite seqZ_cons by lia. cbn.
+      rewrite of_Z_unsigned. f_equal.
+      unfold seqZ. rewrite <- !list_fmap_compose, Z.pred_succ.
+      apply list_fmap_ext. intros _ x _. cbn.
+      rewrite <- of_Z_add, of_Z_nat.
+      replace (Z.succ (unsigned s)) with (unsigned s + 1)%Z by lia.
+      rewrite <- of_Z_add, of_Z_unsigned, of_Z_one.
+      rewrite <- of_Z_add, of_Z_nat, of_Z_unsigned.
+      now rewrite (@add_comm n s one).
+    Qed.
+
+    Lemma seq_add {n} (s : bv n) (l1 l2 : Z) :
+      (0 <= l1)%Z -> (0 <= l2)%Z ->
+      seq s (l1 + l2) =
+      seq s l1 ++ seq (add s (of_Z l1)) l2.
+    Proof.
+      intros Hl1 Hl2. unfold seq. rewrite seqZ_app by lia.
+      rewrite fmap_app. f_equal. unfold seqZ. rewrite <- !list_fmap_compose.
+      apply list_fmap_ext. intros _ x _. cbn.
+      rewrite <- of_Z_add, of_Z_nat.
+      rewrite <- of_Z_add, of_Z_unsigned.
+      now rewrite <- of_Z_add, of_Z_nat, of_Z_unsigned.
+    Qed.
+
+    Lemma lookup_seq {n} (s : bv n) l k y :
+      seq s l !! k = Some y <->
+      y = add s (of_nat k) /\ (Z.of_nat k < l)%Z.
+    Proof.
+      unfold seq. rewrite list_lookup_fmap_Some. split.
+      - intros (z & -> & Hz). apply lookup_seqZ in Hz as [-> Hk].
+        by rewrite <- of_Z_add, of_Z_unsigned, of_Z_nat.
+      - intros [-> Hk]. exists (unsigned s + Z.of_nat k)%Z. split.
+        + by rewrite <- of_Z_add, of_Z_unsigned, of_Z_nat.
+        + apply lookup_seqZ. auto.
     Qed.
 
   End Sequencing.
@@ -2364,15 +2429,6 @@ Module bv.
     Lemma bin_of_N_small {n x} : (x < exp2 n)%N -> @bin n (of_N x) = x.
     Proof.
       now apply truncn_small.
-    Qed.
-
-    Lemma of_N_one {n} : of_N 1 = @one n.
-    Proof. apply bin_inj_eq2n. now destruct n. Qed.
-
-    Lemma of_Z_one {n} : of_Z 1 = @one n.
-    Proof.
-      apply unsigned_inj. rewrite unsigned_of_Z. destruct n; [easy|].
-      apply Z.mod_1_l. rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
     Qed.
 
     Lemma bin_of_nat_small {n x} : (N.of_nat x < exp2 n)%N ->
