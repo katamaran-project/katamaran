@@ -114,11 +114,14 @@ by grep 2026-10-25:
 - DONE 2026-10-25: `Example/Rsa/RsaSpikeSb.v` (green, controls rejected).
   It needed a SOLVER fix (`Solver.v` `ResimpSecLeak`, §1.2 correction):
   after a load, or with two same-shape arrays, `secLeak vs` was not
-  passed to the parts of a take. Only the closure up to RsaSpikeSb was
-  rebuilt — every other file (incl. the GREEN ones above: GenProg, LoopN,
-  the RSA spikes) has NOT yet been recompiled against the new solver;
-  do that (and re-time LoopN against ZZArrvCost) before trusting old
-  numbers.
+  passed to the parts of a take. The GREEN set above was rebuilt against
+  it on 2026-10-25 (heavy chain incl.; both RSA Results, RsaSpikeArrv,
+  the four ZZArrv probes): all green, all Fail controls still rejected,
+  and every VC time UNCHANGED within noise (matched, same build:
+  arr 13.2 / 2.9 s, arrv untracked 31.7 s, tracked 36.9 / 23.6 s). So
+  the rule is cost-neutral and does NOT touch the open LoopN cost
+  question below (2.8x loop, 8.1x callee on these numbers). Examples
+  outside this set still have not seen it (Gate D/E).
 - uses the old `arr`/`clem_arr_*`/unnamed `DArr`/`DBytes`:
   `Example/CheckScalar/CheckScalar{Param,Ptr}.v`,
   `CheckScalarParamLoop{1,2}.v`; `Example/Muladd/MuladdParam.v`,
