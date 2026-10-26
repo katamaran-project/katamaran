@@ -36,7 +36,7 @@ From Katamaran Require Import
 
 Module Type FunDeclKit (Import T : Types).
 
-  Local Notation PCtx := (NCtx PVar ty.Ty).
+  Local Abbreviation PCtx := (NCtx PVar ty.Ty).
 
   (* Names of functions. *)
   Parameter Inline 𝑭 : PCtx -> Ty -> Set.

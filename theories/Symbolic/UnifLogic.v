@@ -28,7 +28,7 @@
 
 (* Strongly based on https://github.com/decrn/em *)
 
-From Coq Require Import
+From Stdlib Require Import
      Classes.Morphisms
      Classes.Morphisms_Prop
      Classes.RelationClasses
@@ -45,10 +45,14 @@ From Katamaran Require Import
      Symbolic.Worlds
      Syntax.Predicates
 .
-From iris Require bi.derived_connectives bi.interface proofmode.tactics.
+From iris Require bi.derived_connectives bi.interface proofmode.proofmode.
 
 Declare Scope pred_scope.
 Delimit Scope pred_scope with P.
+
+Create Rewrite HintDb obligation.
+Create Rewrite HintDb punfold.
+Create Rewrite HintDb uniflogic.
 
 Module Type UnifLogicOn
   (Import B : Base)
@@ -436,7 +440,7 @@ Module Type UnifLogicOn
 
     Import iris.proofmode.modalities.
     Import iris.proofmode.classes.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Lemma knowing_pure {w1 w2 : World} (ω : w2 ⊒ w1) {P} :
       knowing ω (bi_pure P) ⊢ bi_pure P.
@@ -496,6 +500,13 @@ Module Type UnifLogicOn
 
     Lemma forgetting_sep {w1 w2 : World} (ω : w2 ⊒ w1) {P Q}:
       forgetting ω (P ∗ Q) ⊣⊢ forgetting ω P ∗ forgetting ω Q.
+    Proof.
+      unfold forgetting.
+      crushPredEntails3.
+    Qed.
+
+    Lemma forgetting_or {w1 w2 : World} {ω : w1 ⊒ w2} {P1 P2 : Pred w1} :
+      (forgetting ω P1 ∨ forgetting ω P2) ⊣⊢ forgetting ω (P1 ∨ P2).
     Proof.
       unfold forgetting.
       crushPredEntails3.
@@ -1244,7 +1255,7 @@ Module Type UnifLogicOn
     Import ModalNotations.
     Import iris.bi.interface.
     Import iris.proofmode.classes.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Record Rel (AT : TYPE) (A : Type) : Type :=
       MkRel { RSat : A -> (⊢ AT -> Pred)%modal }.
     Bind Scope rel_scope with Rel.
@@ -1307,8 +1318,8 @@ Module Type UnifLogicOn
     Definition RNEnv (N : Set) (Δ : NCtx N Ty) : Rel _ _ :=
       RInst (fun Σ => NamedEnv (Term Σ) Δ) (NamedEnv Val Δ).
     Definition REnv (Δ : Ctx Ty) : Rel _ _ :=
-        RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
-    Definition RUnit : Rel Unit unit := RInst Unit unit.
+      RInst (fun Σ : LCtx => Env (Term Σ) Δ) (Env Val Δ).
+    Definition RUnit : Rel B.Unit unit := RInst B.Unit unit.
 
     Definition RPathCondition : Rel PathCondition Prop := RInstPropIff PathCondition.
     Arguments RPathCondition : simpl never.
@@ -1383,7 +1394,7 @@ Module Type UnifLogicOn
 
 
   Module RSolve.
-    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations iris.proofmode.tactics iris.proofmode.environments.
+    Import logicalrelation logicalrelation.notations iris.bi.interface notations ModalNotations iris.proofmode.proofmode iris.proofmode.environments.
 
     Class RefineCompat `(R : Rel AT A) (v : A)  w (vs : AT w) (Ob : Pred w) :=
       MkRefineCompat {
@@ -1533,7 +1544,7 @@ Module Type UnifLogicOn
     Import logicalrelation.
     Import logicalrelation.notations.
     (* Import ModalNotations. *)
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RSolve.
     
     Lemma refine_RMatchResult_existT_eq {N σ} {p : Pattern (N:=N) σ} {w} {pc args1 args2}:
@@ -1833,7 +1844,7 @@ Module Type UnifLogicOn
         ⊢ ℛ⟦RNEnv N Δ -> RNEnv N Γ -> RNEnv N (Δ ▻▻ Γ)⟧ (w := w) env.cat env.cat.
       Proof.
         iIntros (vs1 svs1) "Hvs1 %vs2 %svs2 Hvs2".
-        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := fun w => NamedEnv (Term w) Γ) (T3 := fun w => NamedEnv (Term w) (Δ ▻▻ Γ)) env.cat env.cat with "[$Hvs1 $Hvs2]").
+        iApply (repₚ_cong₂ (T1 := fun w => NamedEnv (Term w) Δ) (T2 := fun w => NamedEnv (Term w) Γ) (T3 := fun w => NamedEnv (Term w) (Δ ▻▻ Γ)) (v1 := vs1) (v2 := vs2) (vs1 := svs1) (vs2 := svs2) env.cat env.cat with "[$Hvs1 $Hvs2]").
         intros.
         now rewrite inst_env_cat.
       Qed.
@@ -2106,7 +2117,7 @@ Module Type UnifLogicOn
   (*   MkRefineCompat refine_namedenv_sub_acc. *)
 
 
-  Import notations logicalrelation.notations logicalrelation iris.proofmode.tactics.
+  Import notations logicalrelation.notations logicalrelation iris.proofmode.proofmode.
   Global Hint Extern 0 (environments.envs_entails _ (ℛ⟦ RUnit ⟧ _ _)) => iApply refine_unit : core.
 
   #[export] Instance instpredsubst_ctx `{InstPredSubst A, !SubstLaws A} : InstPredSubst (fun Σ => Ctx (A Σ)).

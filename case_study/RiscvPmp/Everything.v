@@ -32,7 +32,6 @@ From Katamaran Require Import
   Notations
   Bitvector
   Sep.Hoare
-  Specification
   MicroSail.ShallowExecutor
   MicroSail.ShallowSoundness
   MicroSail.SymbolicExecutor
@@ -65,20 +64,17 @@ End RVPBASEl.
 Module RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl.
   Include RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl.
 End RVPPREDl.
-(* We need both an instance with the default fail logic, and the BlockVerifier
-   fail logic, so we define RVPINSTl_ISA (default fail) and RVPINSTl (blockverifier). *)
-Module RVPINSTl_ISA : RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl.
-  Include RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl.
-End RVPINSTl_ISA.
-Module RVPMODl : RiscvPmpModel LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA.
-  Include RiscvPmpModel LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA.
-End RVPMODl.
-Module LoopVerificationl : LoopVerification.LoopVerification LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPMODl.
-  Include LoopVerification.LoopVerification LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPMODl.
-End LoopVerificationl.
-Module RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl.
-  Include RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl.
+(* The failure logic is no longer part of the Iris instance: it is determined
+   by the Specification record (universal contract vs. block verifier) in scope. *)
+Module RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl.
+  Include RiscvPmpIrisInstance LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl.
 End RVPINSTl.
+Module RVPMODl : RiscvPmpModel LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl.
+  Include RiscvPmpModel LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl.
+End RVPMODl.
+Module LoopVerificationl : LoopVerification.LoopVerification LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPMODl.
+  Include LoopVerification.LoopVerification LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPMODl.
+End LoopVerificationl.
 Module RVPCONTRl : RiscvPmpIrisInstanceWithContracts LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl.
   Include RiscvPmpIrisInstanceWithContracts LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl.
 End RVPCONTRl.
@@ -91,18 +87,17 @@ End RVPBASEr.
 Module RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr.
   Include RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr.
 End RVPPREDr.
-Module RVPINSTr_ISA : RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr.
-  Include RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr.
-End RVPINSTr_ISA.
-Module RVPMODr : RiscvPmpModel LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA.
-  Include RiscvPmpModel LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA.
-End RVPMODr.
-Module LoopVerificationr : LoopVerification.LoopVerification LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA RVPMODr.
-  Include LoopVerification.LoopVerification LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr_ISA RVPMODr.
-End LoopVerificationr.
-Module RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr.
-  Include RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr.
+(* The failure logic is no longer part of the Iris instance: it is determined
+   by the Specification record (universal contract vs. block verifier) in scope. *)
+Module RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RVPCOM RVPBASEr RVPPREDr.
+  Include RiscvPmpIrisInstance LeftOrRightRight RVPCOM RVPBASEr RVPPREDr.
 End RVPINSTr.
+Module RVPMODr : RiscvPmpModel LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr.
+  Include RiscvPmpModel LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr.
+End RVPMODr.
+Module LoopVerificationr : LoopVerification.LoopVerification LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr RVPMODr.
+  Include LoopVerification.LoopVerification LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr RVPMODr.
+End LoopVerificationr.
 Module RVPCONTRr : RiscvPmpIrisInstanceWithContracts LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr.
   Include RiscvPmpIrisInstanceWithContracts LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr.
 End RVPCONTRr.
@@ -118,14 +113,14 @@ End RVPPRED2.
 Module RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2.
   Include RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2.
 End RVPADEQ2.
-Module RVPINST2 : RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2.
-  Include RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2.
+Module RVPINST2 : RiscvPmpIrisInstance2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2.
+  Include RiscvPmpIrisInstance2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2.
 End RVPINST2.
-Module RVPMOD2 : RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
-  Include RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
+Module RVPMOD2 : RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPBASEr RVPPREDr RVPINSTr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
+  Include RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPBASEr RVPPREDr RVPINSTr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.
 End RVPMOD2.
-Module LoopVerificationBinary : LoopVerificationBinary.LoopVerificationBinary RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2 RVPMOD2.
-  Include LoopVerificationBinary.LoopVerificationBinary RVPCOM RVPBASEl RVPPREDl RVPINSTl_ISA RVPBASEr RVPPREDr RVPINSTr_ISA RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2 RVPMOD2.
+Module LoopVerificationBinary : LoopVerificationBinary.LoopVerificationBinary RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPBASEr RVPPREDr RVPINSTr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2 RVPMOD2.
+  Include LoopVerificationBinary.LoopVerificationBinary RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPBASEr RVPPREDr RVPINSTr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2 RVPMOD2.
 End LoopVerificationBinary.
 
 Module Export RVPV2 := BinaryBlockVerifier RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl RVPTVl RVPBASEr RVPPREDr RVPINSTr RVPCONTRr RVPTVr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2.

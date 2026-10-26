@@ -35,7 +35,7 @@ From Katamaran Require Import
      Syntax.Predicates
      Base.
 From stdpp Require Import base.
-From iris Require proofmode.tactics.
+From iris Require proofmode.proofmode.
 
 Import ctx.notations.
 Import env.notations.
@@ -222,7 +222,7 @@ Module Type WorldsOn
       instprop (wco w1) (inst (sub_triangular_inv ν) ι0).
     Proof.
       induction ν; cbn.
-      - cbn. rewrite inst_sub_id. auto.
+      - now rewrite inst_sub_id.
       - rewrite <- inst_sub_shift, inst_subst. intros [Heqx Heq'] Hpc0.
         apply IHν; cbn; auto.
         rewrite instprop_subst, inst_sub_single_shift; auto.
@@ -232,15 +232,10 @@ Module Type WorldsOn
       inst_triangular ζ01 (inst (sub_triangular ζ01) ι1).
     Proof.
       induction ζ01; cbn; auto.
-      rewrite <- inst_lookup, lookup_sub_comp. rewrite lookup_sub_single_eq.
-      rewrite <- inst_sub_shift. rewrite <- ?inst_subst.
-      rewrite subst_sub_comp.
-      rewrite subst_shift_single.
+      rewrite <- inst_lookup, lookup_sub_comp, lookup_sub_single_eq,
+        <- inst_sub_shift, <- ?inst_subst, subst_sub_comp, subst_shift_single.
       split; auto.
-      rewrite <- ?sub_comp_assoc.
-      rewrite sub_comp_shift_single.
-      rewrite sub_comp_id_left.
-      auto.
+      now rewrite <- ?sub_comp_assoc, sub_comp_shift_single, sub_comp_id_left.
     Qed.
 
     Lemma inst_tri_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) (ι0 : Valuation w0) :
@@ -512,14 +507,14 @@ Module Type WorldsOn
 
   End Persistence.
 
-  Notation WProd A B := (fun w : World => A w * B w)%type.
-  Notation WList A := (fun w : World => list (A w)).
-  Notation WTerm σ := (fun w : World => Term (wctx w) σ).
-  Notation STerm σ := (fun Σ => Term Σ σ).
+  Abbreviation WProd A B := (fun w : World => A w * B w)%type.
+  Abbreviation WList A := (fun w : World => list (A w)).
+  Abbreviation WTerm σ := (fun w : World => Term (wctx w) σ).
+  Abbreviation STerm σ := (fun Σ => Term Σ σ).
 
-  (* A Notation for Terms because this seems to always gets messed up because of
-     the [WTerm] / [STerm] Schizophrenia, *)
-  Notation persist__term t :=
+  (* An abbreviation for Terms because this seems to always gets messed up
+     because of the [WTerm] / [STerm] Schizophrenia, *)
+  Abbreviation persist__term t :=
     (@persist (WTerm _) (@persistent_subst (STerm _) (@SubstTerm _)) _ t).
 
   Definition Pred : TYPE := fun w => (Valuation w -> Prop)%type.
@@ -1225,7 +1220,7 @@ Module Type WorldsOn
     Section SimplifyAllSpec.
       Import option.notations.
       Import iris.bi.interface.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
       Context {w : World} (g : Formula w -> PathCondition w -> option (PathCondition w)).
       Context (g_spec : forall F k,
                   option.spec
@@ -1268,11 +1263,7 @@ Module Type WorldsOn
 
       Lemma solver_null_spec : SolverSpec solver_null.
       Proof.
-        intros w C. constructor.
-        unfold knowing; crushPredEntails2.
-        - rewrite inst_sub_id in H0.
-          now subst.
-        - now rewrite inst_sub_id.
+        intros w C. constructor. apply knowing_id.
       Qed.
     End SolverSpec.
 
@@ -1295,7 +1286,7 @@ Module Type WorldsOn
       Context (user_spec : SolverUserOnlySpec user).
 
       Import iris.bi.interface.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Lemma solveruseronly_simplify_formula_spec {w : World} (F : Formula w) (k : PathCondition w) :
         option.spec
@@ -1417,14 +1408,14 @@ Module Type WorldsOn
       Defined.
       #[local] Arguments cat {Σ} !_ !_ /.
 
-      Notation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
-      Notation dlist_neq t1 t2 := (singleton (formula_neq t1 t2)).
-      Notation dlist_le t1 t2 := (singleton (formula_le t1 t2)).
-      Notation dlist_lt t1 t2 := (singleton (formula_lt t1 t2)).
-      Notation dlist_bvsle t1 t2 := (singleton (formula_bvsle t1 t2)).
-      Notation dlist_bvslt t1 t2 := (singleton (formula_bvslt t1 t2)).
-      Notation dlist_bvule t1 t2 := (singleton (formula_bvule t1 t2)).
-      Notation dlist_bvult t1 t2 := (singleton (formula_bvult t1 t2)).
+      Abbreviation dlist_eq t1 t2 := (singleton (formula_eq t1 t2)).
+      Abbreviation dlist_neq t1 t2 := (singleton (formula_neq t1 t2)).
+      Abbreviation dlist_le t1 t2 := (singleton (formula_le t1 t2)).
+      Abbreviation dlist_lt t1 t2 := (singleton (formula_lt t1 t2)).
+      Abbreviation dlist_bvsle t1 t2 := (singleton (formula_bvsle t1 t2)).
+      Abbreviation dlist_bvslt t1 t2 := (singleton (formula_bvslt t1 t2)).
+      Abbreviation dlist_bvule t1 t2 := (singleton (formula_bvule t1 t2)).
+      Abbreviation dlist_bvult t1 t2 := (singleton (formula_bvult t1 t2)).
 
       Import iris.bi.interface iris.bi.derived_laws.
 

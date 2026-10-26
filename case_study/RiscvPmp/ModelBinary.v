@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Program.Tactics
      Lists.List.
 From Katamaran Require Import
@@ -36,9 +36,9 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Specification
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Contracts
      RiscvPmp.Model
      RiscvPmp.IrisModel
@@ -54,7 +54,7 @@ From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ListNotations.
@@ -81,24 +81,21 @@ Module Type RiscvPmpModel2
   (Import RVPCOM : RiscvPmpIrisBaseCommon)
   (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
   (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
-  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft DefaultFailLogic RVPCOM RVPBASEl RVPPREDl)
+  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl)
   (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
   (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
-  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight DefaultFailLogic RVPCOM RVPBASEr RVPPREDr)
+  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RVPCOM RVPBASEr RVPPREDr)
   (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
   (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
   (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
-  (Import RVPINST2 : RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
+  (Import RVPINST2 : RiscvPmpIrisInstance2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
 
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-  End RiscvPmpProgramLogic.
-
-  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic
-    RiscvPmpSemantics RVPCOM RVPBASEl RVPBASEr RiscvPmpSpecification RVPBASE2 RVPADEQ2 RVPINST2 RiscvPmpProgramLogic.
+  Include IrisInstanceWithContracts2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpProgramLogic
+    RVPCOM RVPBASEl RVPBASEr RVPBASE2 RVPADEQ2 RVPINST2.
 
   Section ForeignProofs.
     Context `{sg : sailGS2 Σ}.
@@ -167,13 +164,13 @@ Module Type RiscvPmpModel2
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι. cbn.
       iIntros "(HmemL & HmemR)". cbn in *. iApply semWP2_foreign.
       iIntros (? ?) "(Hreg & %memmapL & Hmem & %HmapL & Htr)".
-      iPoseProof (RVPINSTl.fun_read_ram_works (sr := sailGS2_sailGS_left) HmapL with "[$HmemL $Hmem $Htr]") as "%eq_fun_read_ram_l".
+      iPoseProof (RVPINSTl.fun_read_ram_works (sr := sailGS2_sailGS_left) HmapL with "[$HmemL $Hmem]") as "%eq_fun_read_ram_l".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res1 ? ? Hf1). rewrite Heq in Hf1. cbn in Hf1.
       inversion Hf1; subst. iIntros "!> !> !>". iMod "Hclose" as "_". iModIntro.
       iFrame "Hreg Hmem Htr". iSplitR; first by iPureIntro.
       iIntros (? ?) "(Hreg & %memmapR & Hmem & %HmapR & Htr)".
-      iPoseProof (RVPINSTr.fun_read_ram_works (sr := sailGS2_sailGS_right) HmapR with "[$HmemR $Hmem $Htr]") as "%eq_fun_read_ram_r".
+      iPoseProof (RVPINSTr.fun_read_ram_works (sr := sailGS2_sailGS_right) HmapR with "[$HmemR $Hmem]") as "%eq_fun_read_ram_r".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
       inversion Hf2; subst. iMod "Hclose" as "_". iModIntro.
@@ -603,7 +600,7 @@ Module Type RiscvPmpModel2
 
     Lemma lemSem : LemmaSem.
     Proof.
-      intros Δ [];
+      intros Δ []; cbn - [ValidLemma];
         eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound,
         close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound.
     Qed.

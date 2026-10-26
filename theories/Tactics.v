@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import Bool.Bool PeanoNat.
+From Stdlib Require Import Bool.Bool PeanoNat.
 From Equations Require Import Equations.
 From stdpp Require base decidable finite list.
 From Katamaran Require Import Context Environment Prelude.

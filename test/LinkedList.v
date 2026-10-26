@@ -38,7 +38,7 @@
    memory.
   *)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Lists.List
      Program.Tactics
@@ -58,7 +58,6 @@ From Katamaran Require Import
      Semantics.Registers
      Sep.Hoare
      Signature
-     Specification
      Symbolic.Solver
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
@@ -67,7 +66,7 @@ From Katamaran Require Import
      MicroSail.Soundness.
 
 From stdpp Require Import decidable finite list fin_maps infinite.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -78,8 +77,8 @@ Local Open Scope string_scope.
 (* We use this notation in every place an int represents a memory address.
    Unfortunately, this Notation is also used for integers that are not
    addreses. *)
-Notation ptr   := ty.int.
-Notation llist := (ty.option ptr).
+Abbreviation ptr   := ty.int.
+Abbreviation llist := (ty.option ptr).
 
 Module Import ExampleBase <: Base.
 
@@ -275,7 +274,7 @@ Module Import ExampleProgram <: Program ExampleBase.
   (* In this section we define the foreign functions. *)
   Section ForeignKit.
 
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     (* This defines a "stepping relation" for the foreign functions. Since all
        these functions are deterministic, we write them in a functional instead
@@ -530,9 +529,12 @@ Module Import ExampleSignature <: Signature ExampleBase.
   Include SignatureMixin ExampleBase.
 End ExampleSignature.
 
+Module Import ExampleProgramLogic :=
+  MakeProgramLogic ExampleBase ExampleSignature ExampleProgram.
+
 (* The specification module contains the contracts for all μSail and foreign functions. *)
-Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature ExampleProgram.
-  Include SpecificationMixin ExampleBase ExampleSignature ExampleProgram.
+Module Import ExampleSpecification.
+
   Section ContractDefKit.
 
     Import ctx.resolution.
@@ -700,7 +702,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature
 
 
     (* The following maps μSail function names to their contracts. *)
-    Definition CEnv : SepContractEnv :=
+    Definition contract_environment : SepContractEnv :=
       fun Δ τ f =>
         match f with
         | append     => Some (sep_contract_append)
@@ -712,7 +714,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature
         end.
 
     (* And this definition maps foreign functions to their contracts. *)
-    Definition CEnvEx : SepContractEnvEx :=
+    Definition contract_environment_foreign : SepContractEnvEx :=
       fun Δ τ f =>
         match f with
         | mkcons => sep_contract_mkcons
@@ -723,7 +725,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature
         end.
 
     (* And finally a mapping from ghost lemmas to the entailments they encode. *)
-    Definition LEnv : LemmaEnv :=
+    Definition lemma_environment : LemmaEnv :=
       fun Δ l =>
         match l with
         | open_nil => sep_lemma_open_nil
@@ -734,18 +736,26 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSignature
 
   End ContractDefKit.
 
+  #[export] Instance example_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
+
 End ExampleSpecification.
 
 
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSpecification.
+  MakeExecutor ExampleBase ExampleSignature ExampleProgram ExampleProgramLogic.
 
 Section DebugExample.
   Import SymProp.notations.
   Notation "x '∷' σ . P" := (@amsg.there _ (x ∷ σ) P)
-    (at level 200, right associativity, only printing, format "x '∷' σ .  '/' P").
+    (at level 49, P at level 200, right associativity, only printing,
+       format "x '∷' σ .  '/' P").
   Notation "'error' x" := (SymProp.error x) (at level 200, only printing, format "'error'  x").
   Notation "P" := (amsg.mk P) (only printing).
   Import ListNotations.
@@ -802,7 +812,7 @@ End ContractVerification.
 (* Also instantiate the shallow executor for the soundness proofs and the
    statistics. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSpecification.
+  MakeShallowExecutor ExampleBase ExampleSignature ExampleProgram ExampleProgramLogic.
 
 (* Instantiate the operational semantics which is an input to the Iris model. *)
 Module ExampleSemantics <: Semantics ExampleBase ExampleProgram :=
@@ -836,7 +846,7 @@ Module ExampleModel.
       Import iris.bi.big_op.
       Import iris.base_logic.lib.iprop.
       Import iris.base_logic.lib.gen_heap.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Class mcMemGS Σ :=
         McMemGS {
@@ -876,7 +886,7 @@ Module ExampleModel.
 
   Module ExampleIrisAdeqParams <: IrisAdeqParameters ExampleBase ExampleIrisBase.
     Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
     Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
@@ -906,14 +916,14 @@ Module ExampleModel.
      this logic. This is then provided to the library as part of the
      [IrisInstance] module. *)
   Module Import ExampleIrisInstance <:
-    IrisInstance ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSemantics
-      ExampleIrisPrelims ExampleIrisBase.
+    IrisInstance ExampleBase ExampleSignature ExampleProgram ExampleSemantics
+      ExampleProgramLogic ExampleIrisPrelims ExampleIrisBase.
 
     Import iris.base_logic.lib.gen_heap.
     Import iris.base_logic.lib.iprop.
     Import iris.bi.big_op.
     Import iris.bi.interface.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     (* This is the interpretation of the points to pair predicate in Iris. *)
     Definition ptstocons_interp `{mG : mcMemGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
@@ -949,8 +959,8 @@ Module ExampleModel.
 
     (* At this point we have enough information to instantiate the program logic
        rules of Iris that do not refer to specific contracts. *)
-    Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSemantics ExampleIrisPrelims ExampleIrisBase.
-    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram DefaultFailLogic ExampleSemantics ExampleIrisPrelims ExampleIrisBase ExampleIrisAdeqParams.
+    Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisPrelims ExampleIrisBase.
+    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisPrelims ExampleIrisBase ExampleIrisAdeqParams.
 
   End ExampleIrisInstance.
 
@@ -964,17 +974,15 @@ Module ExampleModel.
     (* Include our axiomatic program logic. Note that the program logic is
        parameterized over a given set of contracts so it is included here
        instead of [IrisInstance].  *)
-    Include ProgramLogicOn ExampleBase ExampleSignature ExampleProgram
-      DefaultFailLogic ExampleSpecification.
     Include IrisInstanceWithContracts ExampleBase ExampleSignature
-      ExampleProgram DefaultFailLogic ExampleSemantics ExampleIrisPrelims ExampleSpecification
+      ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisPrelims
       ExampleIrisBase ExampleIrisInstance.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include MicroSail.ShallowSoundness.Soundness ExampleBase ExampleSignature
-      ExampleProgram DefaultFailLogic ExampleSpecification ExampleShalExec.
+      ExampleProgram ExampleProgramLogic ExampleShalExec.
     Include MicroSail.RefineExecutor.RefineExecOn ExampleBase ExampleSignature
-      ExampleProgram DefaultFailLogic ExampleSpecification ExampleShalExec ExampleExecutor.
+      ExampleProgram ExampleProgramLogic ExampleShalExec ExampleExecutor.
 
     (* In this section we verify the contracts of the foreign functions defined in
        Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)
@@ -985,7 +993,7 @@ Module ExampleModel.
       Import iris.program_logic.weakestpre.
       Import iris.base_logic.lib.gen_heap.
       Import iris.proofmode.string_ident.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Ltac destruct_syminstance ι :=
         repeat

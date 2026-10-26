@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
   Program.Equality.
 From Equations Require Import
      Equations Signature.
@@ -45,7 +45,7 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Iris.Model
@@ -56,7 +56,6 @@ From Katamaran Require Import
      Sep.Logic
      Signature
      SmallStep.Step
-     Specification
      BinaryModel.
 
 Import ctx.notations.

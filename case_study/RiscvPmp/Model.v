@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Program.Tactics
      Lists.List.
 From Katamaran Require Import
@@ -37,9 +37,9 @@ From Katamaran Require Import
      Program
      Semantics
      Sep.Hoare
-     Specification
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Contracts
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
@@ -55,7 +55,7 @@ From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre total_weakestpre adequacy.
 From iris.program_logic Require lifting.
 From iris.program_logic Require total_lifting.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ListNotations.
@@ -83,15 +83,11 @@ Module Type RiscvPmpModel
   (Import RVPCOM : RiscvPmpIrisBaseCommon)
   (Import RVPBASE : RiscvPmpIrisBase LOR RVPCOM)
   (Import RVPPRED : RiscvPmpIrisInstancePredicates LOR RVPCOM RVPBASE)
-  (Import RVPINST : RiscvPmpIrisInstance LOR DefaultFailLogic RVPCOM RVPBASE RVPPRED).
+  (Import RVPINST : RiscvPmpIrisInstance LOR RVPCOM RVPBASE RVPPRED).
   Import RiscvPmpSpecification.
 
-  Module RiscvPmpProgramLogic <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic RiscvPmpSpecification.
-  End RiscvPmpProgramLogic.
-
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpProgram DefaultFailLogic
-    RiscvPmpSemantics RVPCOM RiscvPmpSpecification RVPBASE RVPINST RiscvPmpProgramLogic.
+  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
+    RiscvPmpSemantics RiscvPmpProgramLogic RVPCOM RVPBASE RVPINST.
 
   Section ForeignProofs.
     Context `{sg : sailGS Σ} {rG : trivGS Σ}.
@@ -196,9 +192,8 @@ Module Type RiscvPmpModel
 
     Lemma TforeignSem : TForeignSem.
     Proof.
-      intros Δ τ f; destruct f;
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound,
-                    within_mmio_sound, decode_sound, externalWorldUpdates_sound.
+      intros Δ τ f; destruct f; cbn - [TValidContractForeign];
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
     Qed.
 
     Lemma foreignSem : ForeignSem.
@@ -295,7 +290,7 @@ Module Type RiscvPmpModel
 
     Lemma lemSem : LemmaSem.
     Proof.
-      intros Δ [];
+      intros Δ []; cbn - [ValidLemma];
         eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound, close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound.
     Qed.
   End LemProofs.

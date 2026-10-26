@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Program.Tactics
      ZArith.ZArith
@@ -37,14 +37,13 @@ From Coq Require Import
      Classes.Morphisms_Relations.
 Require Import Basics.
 
-From Coq Require Lists.List.
+From Stdlib Require Lists.List.
 
 From Equations Require Import
      Equations.
 
 From Katamaran Require Import
      Signature
-     Specification
      Program
      Tactics
      Hoare
@@ -61,10 +60,10 @@ Module RefineExecOn
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG FL SPEC)
-  (Import SYMB : SymbolicExecOn B SIG PROG FL SPEC).
+  (Import PLOG : ProgramLogic B SIG PROG)
+
+  (Import SHAL : ShallowExecOn B SIG PROG PLOG)
+  (Import SYMB : SymbolicExecOn B SIG PROG PLOG).
 
   Import ModalNotations.
   Import SymProp.
@@ -72,7 +71,7 @@ Module RefineExecOn
   Import LogicalSoundness.
   Import proofmode.
   Import iris.proofmode.environments.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
   Import RSolve.
 
   Definition RStore (Γ : PCtx) : Rel (SStore Γ) (CStore Γ) :=
@@ -108,18 +107,12 @@ Module RefineExecOn
            CStoreSpec.evalStoreSpec (fun w => SStoreSpec.evalStoreSpec w) : Pred w).
     Proof.
       unfold SStoreSpec.evalStoreSpec, CStoreSpec.evalStoreSpec.
-      iIntros (ss tss) "Hss".
-      iIntros (s ts) "Hs".
-      iIntros (k ks) "Hk".
-      iIntros (h hs) "Hh".
-      iIntros "Hsym".
+      iIntros (ss tss) "Hss %s %ts Hs %k %ks Hk %h %hs Hh Hsym".
       iApply ("Hss" with "[Hk] Hs Hh Hsym").
       iIntros (w' ω).
       iSpecialize ("Hk" $! _ ω).
       iModIntro.
-      iIntros (a ta) "Ha".
-      iIntros (s2 ts2) "Hs2".
-      iIntros (h2 th2) "Hh2".
+      iIntros (a ta) "Ha %s2 %ts2 Hs2 %h2 %th2 Hh2".
       now iApply ("Hk" with "Ha Hh2").
     Qed.
 
@@ -128,10 +121,7 @@ Module RefineExecOn
         CStoreSpec.lift_purespec (SStoreSpec.lift_purespec (w := w)).
     Proof.
       unfold RPureSpec, RStoreSpec, SStoreSpec.lift_purespec, CStoreSpec.lift_purespec.
-      iIntros (p ps) "Hp".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh".
+      iIntros (p ps) "Hp %k %ks Hk %s %ss Hs %h %hs Hh".
       iApply "Hp".
       iIntros (w' ω).
       iSpecialize ("Hk" $! _ ω).
@@ -145,10 +135,7 @@ Module RefineExecOn
           CStoreSpec.lift_heapspec (SStoreSpec.lift_heapspec (w := w)).
     Proof.
       unfold RHeapSpec, RStoreSpec, SStoreSpec.lift_heapspec, CStoreSpec.lift_heapspec.
-      iIntros (p ps) "Hp".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh".
+      iIntros (p ps) "Hp %k %ks Hk %s %ss Hs %h %hs Hh".
       iApply ("Hp" with "[Hk Hs] Hh").
       iIntros (w1 θ1).
       iSpecialize ("Hk" $! _ θ1).
@@ -160,9 +147,7 @@ Module RefineExecOn
     Lemma refine_block {Γ1 Γ2} `{R : Rel AT A} {w : World} :
       ⊢ ℛ⟦RStoreSpec Γ1 Γ2 R⟧ CStoreSpec.block (SStoreSpec.block (w := w)).
     Proof.
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh _".
+      iIntros (k ks) "Hk %s %ss Hs %h %hs Hh _".
       now iPureIntro.
     Qed.
 
@@ -170,9 +155,7 @@ Module RefineExecOn
       forall (cm : CStoreSpec Γ1 Γ2 A),
         ⊢ ℛ⟦RMsg _ (RStoreSpec Γ1 Γ2 R)⟧ cm (SStoreSpec.error (w := w)).
     Proof.
-      iIntros (cm msg k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh []".
+      iIntros (cm msg k ks) "Hk %s %ss Hs %h %hs Hh []".
     Qed.
 
     (* Disable refine_compat_msg because it gets spuriously searched very often during instance search and is only used in refine_compat_error.
@@ -203,10 +186,7 @@ Module RefineExecOn
       ⊢ ℛ⟦R -> RStoreSpec Γ Γ R⟧ CStoreSpec.pure (SStoreSpec.pure (w := w)).
     Proof.
       unfold SStoreSpec.pure, CStoreSpec.pure.
-      iIntros (r rs) "Hr".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh HPS".
+      iIntros (r rs) "Hr %k %ks Hk %s %ss Hs %h %hs Hh HPS".
       iMod "Hk".
       now iApply ("Hk" with "Hr Hs Hh HPS").
     Qed.
@@ -216,17 +196,11 @@ Module RefineExecOn
         CStoreSpec.bind (SStoreSpec.bind (w := w)).
     Proof.
       unfold SStoreSpec.bind, CStoreSpec.bind.
-      iIntros (m ms) "Hm".
-      iIntros (c cs) "Hc".
-      iIntros (k ks) "Hk".
-      iIntros (s ss) "Hs".
-      iIntros (h hs) "Hh HPS".
+      iIntros (m ms) "Hm %c %cs Hc %k %ks Hk %s %ss Hs %h %hs Hh HPS".
       iApply ("Hm" with "[Hk Hc] Hs Hh HPS").
       iIntros (w' ω).
       iModIntro.
-      iIntros (a aas) "Ha".
-      iIntros (s2 s2s) "Hs".
-      iIntros (h2 h2s) "Hh".
+      iIntros (a aas) "Ha %s2 %s2s Hs %h2 %h2s Hh".
       iApply ("Hc" with "Ha [Hk] Hs Hh").
       now iApply (refine_four with "Hk").
     Qed.
@@ -562,8 +536,8 @@ Module RefineExecOn
       Context `(rexec_call : RefineExecCall c_exec_call s_exec_call).
       Context `(rexec_fail : RefineExecFail c_exec_fail s_exec_fail).
 
-      Lemma refine_exec_aux :
-        RefineExec (@CStoreSpec.exec_aux c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreSpec.exec_aux s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
+      Lemma refine_exec_aux {SPEC : Specification} :
+        RefineExec (@CStoreSpec.exec_aux _ c_exec_call_foreign c_exec_lemma c_exec_call c_exec_fail) (@SStoreSpec.exec_aux _ s_exec_call_foreign s_exec_lemma s_exec_call s_exec_fail).
       Proof.
         intros ? ? s. induction s; cbn; intros w; rsolve.
         - now iApply rexec_call.
@@ -612,6 +586,8 @@ Module RefineExecOn
       unfold SHAL.exec_call_error_no_fuel, SYMB.exec_call_error_no_fuel.
       iApply HeapSpec.refine_error.
     Qed.
+
+    Context {SPEC : Specification}.
 
     Lemma refine_exec_call_foreign :
       RefineExecCallForeign cexec_call_foreign sexec_call_foreign.
@@ -707,7 +683,8 @@ Module RefineExecOn
     now apply (fromEntails H0 [env]).
   Qed.
 
-  Lemma symbolic_vcgen_fuel_soundness {Γ τ} (fuel : nat) (c : SepContract Γ τ) (body : Stm Γ τ) :
+  Lemma symbolic_vcgen_fuel_soundness {SPEC : Specification} {Γ τ} (fuel : nat)
+    (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContractWithFuel fuel c body ->
     Shallow.ValidContractWithFuel fuel c body.
   Proof.
@@ -720,7 +697,8 @@ Module RefineExecOn
     apply refine_vcgen; try done.
   Qed.
 
-  Lemma symbolic_vcgen_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+  Lemma symbolic_vcgen_soundness {SPEC : Specification} {Γ τ}
+    (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContract c body ->
     Shallow.ValidContract c body.
   Proof.

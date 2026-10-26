@@ -26,12 +26,11 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
   Strings.String.
 From Katamaran Require Import
   MinimalCaps.Machine
-  MinimalCaps.Sig
-  Specification.
+  MinimalCaps.Sig.
 
 Import ctx.notations.
 Import ctx.resolution.

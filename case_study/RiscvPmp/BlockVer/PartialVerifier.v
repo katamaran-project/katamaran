@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Classes.Morphisms_Prop
      ZArith.ZArith
      Lists.List
@@ -42,7 +42,6 @@ From Katamaran Require Import
      Bitvector
      Refinement.Monads
      Sep.Hoare
-     Specification
      Symbolic.Propositions
      Symbolic.Solver
      Symbolic.Worlds
@@ -51,17 +50,19 @@ From Katamaran Require Import
      MicroSail.SymbolicExecutor
      MicroSail.RefineExecutor
      MicroSail.Soundness
+     RiscvPmp.Model
      RiscvPmp.BlockVer.Spec
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.trace
      RiscvPmp.Sig.
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -80,13 +81,16 @@ Module RiscvPmpBlockVerifPartialVerifier
   (Import RVPCOM : RiscvPmpIrisBaseCommon)
   (Import RVPBASE : RiscvPmpIrisBase LOR RVPCOM)
   (Import RVPPRED : RiscvPmpIrisInstancePredicates LOR RVPCOM RVPBASE)
-  (Import RVPINST : RiscvPmpIrisInstance LOR RiscvPmpBlockVerifFailLogic RVPCOM RVPBASE RVPPRED)
+  (Import RVPINST : RiscvPmpIrisInstance LOR RVPCOM RVPBASE RVPPRED)
   (Import RVPCONTR : RiscvPmpIrisInstanceWithContracts LOR RVPCOM RVPBASE RVPPRED RVPINST).
 
   Section BlockVerificationDerived.
 
-    Import RiscvPmpBlockVerifExecutor.
-    Import RiscvPmpBlockVerifShalExecutor.
+    Import RiscvPmpExecutor.
+
+    Import RiscvPmpShallowExec.
+
+    Import RiscvPmpBlockVerifSpec.
 
     Definition safeE {Σ} : 𝕊 Σ -> Prop :=
       fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
@@ -251,8 +255,9 @@ Module RiscvPmpBlockVerifPartialVerifier
 
     Section Relational.
 
-      Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
-      Import RiscvPmpBlockVerifRefineExecOn.
+      Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
+      Import RiscvPmpSymbolicSoundness.
+      Import RiscvPmpShallowSoundness.
       Import StoreSpec.
       Import RSolve HeapSpec.
 
@@ -314,9 +319,10 @@ Module RiscvPmpBlockVerifPartialVerifier
 
     Section Soundness.
 
-      Import iris.base_logic.lib.iprop iris.proofmode.tactics.
-      Import RiscvPmpBlockVerifProgramLogic.
-      Import ProgramLogic.
+      Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
+      Import RiscvPmpProgramLogic.
+      Import RiscvPmpProgramLogic.ProgLog.
+      Import RiscvPmpShallowSoundness.
       Import CHeapSpec.
 
       Context {Σ} {GS : sailGS Σ}.
@@ -547,7 +553,7 @@ Module RiscvPmpBlockVerifPartialVerifier
                     (pure apc)
               | AnnotLemmaInvocation l es =>
                   let args := seval_exps [env] es in
-                  ⟨ θ1 ⟩ _ <- call_lemma (LEnv l) args ;;
+                  ⟨ θ1 ⟩ _ <- call_lemma (lemma_environment l) args ;;
                   sexec_annotated_block_addr b'
                     (persist__term ainstr θ1)
                     (persist__term apc θ1)
@@ -596,7 +602,7 @@ Module RiscvPmpBlockVerifPartialVerifier
               | AnnotDebugBreak => debug (pure apc)
               | AnnotLemmaInvocation l es =>
                   let args := evals es [env] in
-                  _ <- call_lemma (LEnv l) args ;;
+                  _ <- call_lemma (lemma_environment l) args ;;
                   cexec_annotated_block_addr b' ainstr apc
               end
           end.
@@ -629,11 +635,13 @@ Module RiscvPmpBlockVerifPartialVerifier
 
     Section Relational.
 
-      Import RiscvPmpBlockVerifRefineExecOn.
+      Import RiscvPmpSymbolicSoundness.
+
+      Import RiscvPmpShallowSoundness.
       Import StoreSpec.
       Import logicalrelation logicalrelation.notations.
       Import proofmode.
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
       Import RiscvPmpSignature.HeapSpec.
       Import RSolve.
 
@@ -680,9 +688,10 @@ Module RiscvPmpBlockVerifPartialVerifier
 
     Section Soundness.
 
-      Import iris.base_logic.lib.iprop iris.proofmode.tactics.
-      Import RiscvPmpBlockVerifProgramLogic.
-      Import ProgramLogic.
+      Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
+      Import RiscvPmpProgramLogic.
+      Import RiscvPmpProgramLogic.ProgLog.
+      Import RiscvPmpShallowSoundness.
       Import CHeapSpec.
 
       Context {Σ} {GS : sailGS Σ} {rG : trivGS Σ}.
@@ -721,7 +730,7 @@ Module RiscvPmpBlockVerifPartialVerifier
             iIntros (->) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
             now iApply ("Hk" with "[$Hpc $Hnpc $Hinstrs Hh]").
           + iIntros (Hlemcall) "(Hh & Hpc & Hnpc & Hinstrs) Hk".
-            pose proof (Hlem := lemSem _ lem).
+            pose proof (Hlem := lemSem _ lem). cbn in Hlem.
             apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
             iPoseProof (H with "Hh") as "(%ι & %Heq & Hreq & Hk2)". clear H.
             iPoseProof (Hlem with "Hreq") as "Hens".

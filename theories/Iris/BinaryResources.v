@@ -39,17 +39,16 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
+     Base
      Iris.Base
      Iris.Instance
-     Prelude
      Semantics
      Sep.Hoare
      Signature
-     SmallStep.Step
-     Specification.
+     SmallStep.Step.
 
 Import ctx.notations.
 Import env.notations.

@@ -26,8 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
-  Program.Equality.
 From Equations Require Import
      Equations Signature.
 Require Import Equations.Prop.EqDec.
@@ -45,7 +43,7 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Iris.Base
@@ -56,7 +54,6 @@ From Katamaran Require Import
      Sep.Logic
      Signature
      SmallStep.Step
-     Specification
      BinaryResources.
 
 Import ctx.notations.
@@ -376,19 +373,14 @@ Module IrisBinaryWP
         iFrame "Hregs Hmem H". iPureIntro. split; last apply stm_to_val_of_ival.
         destruct (env.view δ2'').
         eapply step_trans. constructor. apply (Steps_trans (Steps_bind Hsteps)).
-        destruct (stm_to_val_Some_cases Hval) as [(? & -> & Hv2)|(? & -> & Hm2)],
-                 (stm_to_val_Some_cases Hval') as [(? & -> & Hv2')|(? & -> & Hm2')];
+        rewrite (stm_to_val_eq Hval') in Hsteps'.
+        destruct (stm_to_val_Some_cases Hval) as [(? & -> & Hv2)|(? & -> & Hm2)];
           simpl in *; try discriminate.
-        + eapply step_trans. constructor. eapply Steps_trans.
-          eapply Steps_block.
-          assert (E.[x∷σ ↦ v] = E ►► [env].[x∷σ ↦ v]) as <- by reflexivity.
-          cbn. inversion Hv2; subst. eassumption. eapply step_trans.
-          constructor. subst. simpl. apply step_refl.
-        + eapply step_trans. constructor. eapply Steps_trans.
-          eapply Steps_block.
-          assert (E.[x∷σ ↦ v] = E ►► [env].[x∷σ ↦ v]) as <- by reflexivity.
-          cbn. inversion Hv2; subst. eassumption. eapply step_trans.
-          constructor. subst. simpl. apply step_refl.
+        eapply step_trans. constructor. eapply Steps_trans.
+        eapply Steps_block.
+        assert (E.[x∷σ ↦ v] = E ►► [env].[x∷σ ↦ v]) as <- by reflexivity.
+        cbn. inversion Hv2; subst. eassumption.
+        destruct v2'; eapply step_trans; constructor.
       - iSpecialize ("H" with "[$Hregs $Hmem]"). iApply (IBleft.semWP_mono with "H").
         iIntros (v1' δ1'') "(%γ23 & %μ23 & %δ2'' & %s2'' & %v2' & %Hsteps' & %Hval' & Hregs & Hmem & H)".
         pose proof (stm_to_val_Some_inr Hval) as Hs2'.
@@ -918,9 +910,9 @@ Module Type IrisSignatureRules2
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
-  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
-  (Import IPre : IrisPrelims B PROG SEM)
+  (Import PLOG  : ProgramLogic B SIG PROG)
+  (Import IPre  : IrisPrelims B PROG SEM)
   (IBleft : IrisBase B PROG SEM IPre)
   (IBright : IrisBase B PROG SEM IPre)
   (Import IB2   : IrisBase2 B PROG SEM IPre IBleft IBright)
@@ -932,6 +924,8 @@ Module Type IrisSignatureRules2
   Context `{sG : sailGS2 Σ}.
 
 Section Soundness.
+
+  Context {SPEC : Specification}.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
@@ -1037,8 +1031,7 @@ Section Soundness.
     iApply (semWP2_mono with "Hs").
     iIntros (v1 δ1 v2 δ2) "(<- & <- & Q)".
     destruct v1 as [v1|m1].
-    - iSpecialize ("Hk" $! v1 δ1).
-      iSpecialize ("Hk" with "Q").
+    - iSpecialize ("Hk" $! v1 δ1 with "Q").
       iApply (semWP2_mono with "Hk").
       iIntros (? ? ? ?) "(<- & <- & R)".
       by iFrame "R".
@@ -1087,8 +1080,7 @@ Section Soundness.
         iIntros (H1 H2); rewrite Ee1 in H1, H2; try discriminate.
       destruct fail_rule_pre.
       + now iApply semWP2_fail.
-      + iDestruct "Hf" as "%Hf".
-        contradiction.
+      + by iDestruct "Hf" as "%Hf".
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)

@@ -34,7 +34,7 @@ From iris Require Import
      program_logic.adequacy
      program_logic.total_weakestpre
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Export
      Iris.Resources

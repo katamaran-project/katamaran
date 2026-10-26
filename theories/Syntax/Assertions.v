@@ -27,7 +27,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool.
 From iris Require bi.interface.
 From Katamaran Require Import
@@ -167,7 +167,7 @@ Module Import asn.
     (* Import iris.bi.interface. *)
     (* Import iris.bi.derived_laws. *)
     (* Import iris.bi.extensions. *)
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
 
     Fixpoint interpret_pure {Σ} (a : Assertion Σ) (ι : Valuation Σ) : Prop :=
       match a with
@@ -209,15 +209,11 @@ Module Import asn.
       - now rewrite bi.and_emp.
       - destruct pattern_match_val.
         apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
-        apply base.elem_of_list_In. apply finite.elem_of_enum.
+        apply base.list_elem_of_In. apply finite.elem_of_enum.
       - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
-        rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
-        + iIntros ([H1 H2]). now iPureIntro.
-        + iIntros (H). iSplit; now iPureIntro.
+        now rewrite (IHa1 H1) (IHa2 H2) -bi.persistent_and_sep bi.pure_and.
       - apply andb_true_iff in a_pure. destruct a_pure as [H1 H2].
-        rewrite (IHa1 H1) (IHa2 H2). clear. iSplit.
-        + iIntros ([H|H]); iPureIntro; [left|right]; easy.
-        + iIntros ([H|H]); [iLeft|iRight]; now iPureIntro.
+        now rewrite (IHa1 H1) (IHa2 H2) bi.pure_or.
       - setoid_rewrite IHa; auto. now rewrite -bi.pure_exist.
       - now rewrite bi.True_emp.
     Qed.

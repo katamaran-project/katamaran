@@ -2,10 +2,24 @@
 -arg "-w -disj-pattern-notation"
 -arg "-w -notation-overridden"
 -arg "-w -redundant-canonical-projection"
+-arg "-w -warn-library-file-stdlib-vector"
 -arg "-w -warn-transitive-library-file-stdlib-vector"
 -arg "-w -deprecated-transitive-library-file"
+-arg "-w -bad-template-constraint"
+-arg "-w -using-fallback-loc"
+# Silencing these warnings by explicitly repeating the default hint mode on
+# every class would not improve instance search. We should only specify
+# modes where they meaningfully constrain search. Keep the default implicit.
+-arg "-w -class-declaration-default-mode"
+# The level tolerance warnings should be fixed to be forward compatible
+# with future Rocq versions. However, this requires changing some notations
+# (symbolic bind or transition relation) in a cross cutting way. Silence
+# it here for now.
+-arg "-w -level-tolerance"
+
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
+case_study/MinimalCaps/Logic.v
 case_study/MinimalCaps/Machine.v
 case_study/MinimalCaps/Sig.v
 case_study/MinimalCaps/Contracts/Notations.v
@@ -19,6 +33,7 @@ case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
+case_study/RiscvPmp/Logic.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/trace.v
 case_study/RiscvPmp/iostate.v
@@ -41,6 +56,7 @@ case_study/RiscvPmp/FemtoKernel.v
 case_study/Assumptions.v
 -Q examples/GVT Katamaran.RiscvPmp.GVT
 examples/GVT/Sig.v
+examples/GVT/Logic.v
 examples/GVT/Contracts.v
 #examples/GVT/IrisInstance.v
 #examples/GVT/Model.v
@@ -66,7 +82,6 @@ theories/Iris/BinaryResources.v
 theories/Iris/BinaryWeakestPre.v
 theories/Iris/BinaryAdequacy.v
 theories/Iris/BinaryInstance.v
-theories/Iris/cointro_patterns.v
 theories/MicroSail/RefineExecutor.v
 theories/MicroSail/ShallowExecutor.v
 theories/MicroSail/ShallowSoundness.v
@@ -85,7 +100,6 @@ theories/Signature.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
-theories/Specification.v
 theories/Symbolic/Instantiation.v
 theories/Symbolic/Monads.v
 theories/Symbolic/OccursCheck.v
@@ -112,6 +126,7 @@ theories/Syntax/TypeDecl.v
 theories/Syntax/UnOps.v
 theories/Syntax/Variables.v
 theories/Tactics.v
+theories/VectorUtils.v
 
 theories/Staging/CommandStep.v
 # theories/Staging/BinaryExecutor/ShallowExecutorRel.v

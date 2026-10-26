@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Classes.Morphisms_Prop
      ZArith.ZArith
      Lists.List
@@ -42,7 +42,6 @@ From Katamaran Require Import
      Bitvector
      Refinement.Monads
      Sep.Hoare
-     Specification
      Symbolic.Propositions
      Symbolic.Solver
      Symbolic.Worlds
@@ -51,10 +50,12 @@ From Katamaran Require Import
      MicroSail.SymbolicExecutor
      MicroSail.RefineExecutor
      MicroSail.Soundness
+     RiscvPmp.GVT.Model
      RiscvPmp.GVT.Spec
      RiscvPmp.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.GVT.Logic
      RiscvPmp.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
@@ -62,7 +63,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -76,12 +77,13 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpBlockVerifIrisInstance.
+Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpIrisInstance.
 
 Section BlockVerificationDerived.
 
-  Import RiscvPmpBlockVerifExecutor.
-  Import RiscvPmpBlockVerifShalExecutor.
+  Import RiscvPmpExecutor.
+  Import RiscvPmpShallowExec.
+  Import RiscvPmpBlockVerifSpec.
 
   Definition safeE {Σ} : 𝕊 Σ -> Prop :=
     fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
@@ -246,8 +248,10 @@ Section BlockVerificationDerived.
 
   Section Relational.
 
-    Import iris.proofmode.tactics logicalrelation logicalrelation.notations.
-    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
+    Import iris.proofmode.proofmode logicalrelation logicalrelation.notations.
+    Import RiscvPmpSymbolicSoundness.
+    Import RiscvPmpSymbolicSoundness.StoreSpec.
+    Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve HeapSpec.
@@ -310,9 +314,13 @@ Section BlockVerificationDerived.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import ProgramLogic.
+    Import RiscvPmpProgramLogic.
+    Import RiscvPmpProgramLogic.ProgLog.
+    Import RiscvPmpShallowSoundness.
+    Locate RiscvPmpModel2.
+    Import RiscvPmpModel2.
     Import CHeapSpec.
 
     Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
@@ -552,7 +560,7 @@ Section AnnotatedBlockVerification.
                   (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := seval_exps [env] es in
-                ⟨ θ1 ⟩ _ <- call_lemma (LEnv l) args ;;
+                ⟨ θ1 ⟩ _ <- call_lemma (lemma_environment l) args ;;
                 sexec_annotated_block_addr b'
                   (persist__term ainstr θ1)
                   (persist__term apc θ1)
@@ -601,7 +609,7 @@ Section AnnotatedBlockVerification.
             | AnnotDebugBreak => debug (pure apc)
             | AnnotLemmaInvocation l es =>
                 let args := evals es [env] in
-                _ <- call_lemma (LEnv l) args ;;
+                _ <- call_lemma (lemma_environment l) args ;;
                 cexec_annotated_block_addr b' ainstr apc
             end
         end.
@@ -634,11 +642,13 @@ Section AnnotatedBlockVerification.
 
   Section Relational.
 
+    Import RiscvPmpSymbolicSoundness.
+    Import RiscvPmpSymbolicSoundness.StoreSpec.
+    Import RiscvPmpShallowSoundness.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import RiscvPmpIrisInstanceWithContracts.StoreSpec.
     Import logicalrelation logicalrelation.notations.
     Import proofmode.
-    Import iris.proofmode.tactics.
+    Import iris.proofmode.proofmode.
     Import RiscvPmpSignature.HeapSpec.
     Import RSolve.
 
@@ -685,9 +695,12 @@ Section AnnotatedBlockVerification.
 
   Section Soundness.
 
-    Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+    Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
     Import RiscvPmpIrisInstanceWithContracts.
-    Import ProgramLogic.
+    Import RiscvPmpProgramLogic.
+    Import RiscvPmpProgramLogic.ProgLog.
+    Import RiscvPmpShallowSoundness.
+    Import RiscvPmpModel2.
     Import CHeapSpec.
 
     Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
@@ -734,7 +747,7 @@ Section AnnotatedBlockVerification.
           iIntros (->) "(Hh & Hblockver & Hinstrs) Hk".
           now iApply ("Hk" with "[$Hblockver $Hinstrs Hh]").
         + iIntros (Hlemcall) "(Hh & Hblockver & Hinstrs) Hk".
-          pose proof (Hlem := lemSem _ lem).
+          pose proof (Hlem := lemSem _ lem). cbn in Hlem.
           apply call_lemma_sound in Hlemcall. destruct Hlemcall. cbn in *.
           iPoseProof (H with "Hh") as "(%ι & %Heq & Hreq & Hk2)". clear H.
           iPoseProof (Hlem with "Hreq") as "Hens".

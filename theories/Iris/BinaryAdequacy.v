@@ -26,8 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
-  Program.Equality.
 From Equations Require Import
      Equations Signature.
 Require Import Equations.Prop.EqDec.
@@ -45,7 +43,7 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Iris.Base
@@ -55,7 +53,6 @@ From Katamaran Require Import
      Sep.Hoare
      Signature
      SmallStep.Step
-     Specification
      BinaryResources
      BinaryWeakestPre.
 
@@ -92,27 +89,27 @@ Module Type IrisAdequacy2
   (Import B       : Base)
   (Import SIG     : Signature B)
   (Import PROG    : Program B)
-  (Import FL      : FailLogic)
   (Import SEM     : Semantics B PROG)
+  (Import PLOG    : ProgramLogic B SIG PROG)
   (Import IPre    : IrisPrelims B PROG SEM)
   (IBleft         : IrisBase B PROG SEM IPre)
   (IBright        : IrisBase B PROG SEM IPre)
   (Import IB2     : IrisBase2 B PROG SEM IPre IBleft IBright)
   (Import IAP2    : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2)
   (Import IPred2  : IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2)
-  (Import IRules2 : IrisSignatureRules2 B SIG PROG FL SEM IPre IBleft IBright IB2 IPred2).
+  (Import IRules2 : IrisSignatureRules2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IPred2).
 
   Import SmallStepNotations.
 
   Class sailGpreS2 Σ := SailGpreS2 { (* resources for the implementation side *)
-                       sailGpresS_invGpreS2 : invGpreS Σ; (* for fancy updates, invariants... *)
+                       sailGpresS_invGpreS2 :: invGpreS Σ; (* for fancy updates, invariants... *)
 
                        (* ghost variables for tracking state of registers *)
-                       reg_pre_inG2_left : inG Σ regUR;
-                       reg_pre_inG2_right : inG Σ regUR;
+                       reg_pre_inG2_left :: inG Σ regUR;
+                       reg_pre_inG2_right :: inG Σ regUR;
 
                        (* ghost variable for tracking state of memory cells *)
-                       sailPreG_gen_memGpreS2 : memGpreS2 Σ
+                       sailPreG_gen_memGpreS2 :: memGpreS2 Σ
                      }.
 
   #[local] Existing Instance sailGpresS_invGpreS2.
@@ -260,14 +257,14 @@ Module Type IrisAdequacy2
   Proof.
     intros Hwp.
     destruct (steps_to_nsteps Hsteps) as [n steps].
-    eapply (uPred.pure_soundness (M := iResUR sailΣ2)).
+    eapply (sbi.pure_soundness (PROP := uPredI (iResUR sailΣ2))).
     eapply (step_fupdN_soundness_gen _ HasLc n n).
     iIntros (Hinv) "Hlc".
     assert (regsmapv1 := RegStore_to_map_valid γ1).
     assert (regsmapv2 := RegStore_to_map_valid γ2).
-    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
+    iMod (own_alloc (i := reg_pre_inG2_left) ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
       first by apply auth_both_valid.
-    iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
+    iMod (own_alloc (i := reg_pre_inG2_right) ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
       first by apply auth_both_valid.
     pose proof (memΣ_GpreS2 (Σ := sailΣ2) _) as mGS.
     iMod (mem_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
@@ -315,7 +312,7 @@ Module Type IrisAdequacy2
     iIntros (Hinv ?).
     assert (regsmapv1 := RegStore_to_map_valid γ1).
     assert (regsmapv2 := RegStore_to_map_valid γ2).
-    iMod (own_alloc ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
+    iMod (own_alloc (i := reg_pre_inG2_left) ((● RegStore_to_map γ1 ⋅ ◯ RegStore_to_map γ1 ) : regUR)) as (spec_name1) "[H1γ1 H2γ1]";
       first by apply auth_both_valid.
     iMod (own_alloc ((● RegStore_to_map γ2 ⋅ ◯ RegStore_to_map γ2 ) : regUR)) as (spec_name2) "[H1γ2 H2γ2]";
       first by apply auth_both_valid.

@@ -38,7 +38,7 @@ From iris Require Import
   algebra.auth
      base_logic.lib.gen_heap
      base_logic.lib.invariants
-     proofmode.tactics.
+     proofmode.proofmode.
 
 Set Implicit Arguments.
 

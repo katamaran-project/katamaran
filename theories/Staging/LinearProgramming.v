@@ -33,7 +33,10 @@ From Katamaran Require Import
      Base
      Prelude
      Syntax.Predicates
-     Symbolic.Worlds.
+     Symbolic.Worlds
+     VectorUtils.
+
+From Stdlib Require Import Vector.
 
 Import ctx.notations.
 Import env.notations.
@@ -41,8 +44,7 @@ Import env.notations.
 Local Set Implicit Arguments.
 Local Set Equations Transparent.
 
-Module VecUtils.
-  Require Import Vector.
+Module Import VecUtils.
 
   Definition learnFinSucc {P : forall {n}, fin n -> Type} :
     (forall {n} (f : fin (S n)), P f) -> forall {n} (f : fin n), P f :=
@@ -58,57 +60,8 @@ Module VecUtils.
     (forall {n} (f : fin (S n)), P f (H n f)) ->
     forall {n} (f : fin n), P f (learnFinSucc H f).
   Proof.
-    intros HPf n [|f]; cbn.
-    - eapply HPf.
-    - eapply HPf.
+    intros HPf n [|f]; cbn; eapply HPf.
   Qed.
-
-  Section AddRemove.
-
-    Context (A : Type).
-    Equations vadd {n} (i : fin (S n)) (a : A) (v : vec A n) : vec A (S n) :=
-    | 0%fin | a | v := cons a v
-    | FS i | a | h ::: v := h ::: vadd i a v
-    .
-
-    (* Note: spurious pattern match to appease type checker *)
-    Equations vremove {n} (i : fin n) (v : vec A n) : vec A (pred n) :=
-    | 0%fin | h ::: v := v
-    | FS 0%fin | h ::: v := h ::: vremove 0%fin v
-    | FS (FS i) | h ::: v := h ::: vremove (FS i) v
-    .
-
-    (* The following would be nice as a defining equation, but alas... *)
-    Lemma vremove_FS {n} (i : fin (S n)) h (v : vec A (S n)) :
-      vremove (FS i) (h ::: v) = h ::: vremove i v.
-    Proof.
-      revert i.
-      refine (fin_S_inv _ _ _); now cbn.
-    Qed.
-
-    (* Whatever would we do without Equations? *)
-    Equations vadd_lookup_remove {n} (i : fin (S n)) (v : vec A (S n)) :
-      v = vadd i (v !!! i) (vremove i v) :=
-    | 0%fin | h ::: v := _
-    | FS 0%fin | h ::: v := f_equal (cons h) (vadd_lookup_remove 0%fin v)
-    | FS (FS i) | h ::: v := f_equal (cons h) (vadd_lookup_remove (FS i) v)
-    .
-
-  End AddRemove.
-
-  Equations vmap_vremove {n A B} (i : fin n) (v : vec A n) (f : A -> B) :
-    vmap f (vremove i v) = vremove i (vmap f v) :=
-  | 0%fin | h ::: v | f:= eq_refl
-  | FS 0%fin | h ::: v | f := f_equal _ (vmap_vremove 0%fin v f)
-  | FS (FS i) | h ::: v | f := f_equal _ (vmap_vremove (FS i) v f)
-  .
-
-  Equations vzip_with_vremove {n A1 A2 B} (i : fin n) (v1 : vec A1 n) (v2 : vec A2 n) (f : A1 -> A2 -> B) :
-    vzip_with f (vremove i v1) (vremove i v2) = vremove i (vzip_with f v1 v2) :=
-  | 0%fin | h1 ::: v1 | h2 ::: v2 | f := eq_refl
-  | FS 0%fin | h1 ::: v1 | h2 ::: v2 | f := f_equal _ (vzip_with_vremove 0%fin v1 v2 f)
-  | FS (FS i) | h1 ::: v1 | h2 ::: v2 | f := f_equal _ (vzip_with_vremove (FS i) v1 v2 f)
-  .
 
   Section DecideForall2.
 
@@ -161,14 +114,18 @@ Module VecUtils.
   Qed.
 End VecUtils.
 
-Module PolyRed.
+Module Import PolyRed.
   (* simple Gauss elimination to upper triangular form *)
-
-  Import Vector.
-  Import VecUtils.
 
   Definition Poly n := vec Z (S n).
   Hint Transparent Poly : typeclass_instances.
+
+  Definition zero {n} : vec Z n :=
+    vreplicate _ 0%Z.
+  Definition constant {n} (v : Z) : Poly n :=
+    cons v zero.
+  Definition var {n} (f : fin n) : Poly n :=
+    vadd (FS f) 1%Z zero.
 
   Fixpoint findNonZero {n} (cs : vec Z n) : option (fin n) :=
     match cs with
@@ -179,7 +136,7 @@ Module PolyRed.
     end.
 
   Lemma findNonZero_lookup {n} (cs : vec Z n) :
-    option.spec (fun i => 0%Z <> lookup_total i cs)%ctx (cs = vreplicate _ 0%Z)
+    option.spec (fun i => 0%Z <> lookup_total i cs)%ctx (cs = zero)
       (findNonZero cs).
   Proof.
     induction cs; first eauto using option.spec.
@@ -188,22 +145,14 @@ Module PolyRed.
     - rewrite option.spec_map.
       revert IHcs.
       apply option.spec_monotonic;
-        [easy | congruence].
+        [easy | intros; now f_equal ].
     - auto using option.spec.
   Qed.
 
   #[global] Arguments findNonZero {n} cs : simpl never.
 
-  Fixpoint eval_poly' {n} : vec Z n -> vec Z n -> Z :=
-    match n with
-      0 => fun _ _ => 0%Z
-    | S n => fun vs xs =>
-               (hd vs * hd xs +
-                  eval_poly' (tl vs) (tl xs))%Z
-    end.
-
   Equations eval_polyp_vremove {n} (i : fin n) (v1 v2 : vec Z n) :
-    eval_poly' (vremove i v1) (vremove i v2) = (eval_poly' v1 v2 - (v1 !!! i * v2 !!! i))%Z :=
+    dot (vremove i v1) (vremove i v2) = (dot v1 v2 - (v1 !!! i * v2 !!! i))%Z :=
   | 0%fin | h1 ::: v1 | h2 ::: v2 := _
   | FS 0%fin | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vremove 0%fin v1 v2)
   | FS (FS i) | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vremove (FS i) v1 v2)
@@ -212,33 +161,39 @@ Module PolyRed.
   Next Obligation. cbn. lia. Qed.
   Next Obligation. cbn. lia. Qed.
 
+  Equations eval_polyp_vadd {n} a1 a2 (i : fin (S n)) (v1 v2 : vec Z n) :
+    dot (vadd i a1 v1) (vadd i a2 v2) = (a1 * a2 + dot v1 v2)%Z :=
+  | a1 | a2 | 0%fin | v1 | v2 := _
+  | a1 | a2 | FS i | h1 ::: v1 | h2 ::: v2 := _ (eval_polyp_vadd a1 a2 i v1 v2)
+  .
+  Next Obligation. cbn; lia. Qed.
+
   Definition eval_poly {n} (coeffs : Poly n) (vs : vec Z n) : Z :=
-    eval_poly' coeffs (1%Z ::: vs).
+    dot coeffs (1%Z ::: vs).
   Arguments eval_poly {n} coeffs vs : simpl never.
 
   Lemma eval_polyp_app {n1 n2} (coeffs1 : vec Z n1) (coeffs2 : vec Z n2) (vs1 : vec Z n1) (vs2 : vec Z n2) :
-    eval_poly' (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (eval_poly' coeffs1 vs1 + eval_poly' coeffs2 vs2)%Z.
+    dot (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (dot coeffs1 vs1 + dot coeffs2 vs2)%Z.
   Proof.
-    induction coeffs1.
-    - destruct (eq_sym (nil_spec vs1)); cbn; lia.
-    - destruct (eq_sym (eta vs1)); cbn.
-      rewrite IHcoeffs1.
-      lia.
+    revert vs1; induction coeffs1 as [|c n coeffs1 IH]; intros vs1.
+    - inv_vec vs1. cbn. lia.
+    - inv_vec vs1; intros x vs1. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_app {n1 n2} (coeffs1 : Poly n1) (coeffs2 : vec Z n2) (vs1 : vec Z n1) (vs2 : vec Z n2) :
-    eval_poly (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (eval_poly coeffs1 vs1 + eval_poly' coeffs2 vs2)%Z.
+    eval_poly (coeffs1 +++ coeffs2) (vs1 +++ vs2) = (eval_poly coeffs1 vs1 + dot coeffs2 vs2)%Z.
   Proof.
     now eapply (eval_polyp_app _ _ (1%Z ::: vs1)).
   Qed.
 
   Lemma eval_polyp_mul {n} (coeffs : vec Z n) (vs : vec Z n) (c : Z) :
-    eval_poly' (vmap (Z.mul c) coeffs) vs = (c * eval_poly' coeffs vs)%Z.
+    dot (vmap (Z.mul c) coeffs) vs = (c * dot coeffs vs)%Z.
   Proof.
-    induction vs; cbn; first lia.
-    revert coeffs. refine (vec_S_inv _ _); intros c1 coeffs; cbn.
-    rewrite IHvs.
-    now lia.
+    revert coeffs; induction vs as [|x n vs IH]; intros coeffs.
+    - inv_vec coeffs. cbn. lia.
+    - inv_vec coeffs; intros c1 coeffs. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_mul {n} (coeffs : Poly n) (vs : vec Z n) (c : Z) :
@@ -248,22 +203,34 @@ Module PolyRed.
     now eapply eval_polyp_mul.
   Qed.
 
+  Definition add {n} : Poly n -> Poly n -> Poly n := vzip_with Z.add.
+  Definition sub {n} : Poly n -> Poly n -> Poly n := vzip_with Z.sub.
+
   Lemma eval_polyp_sub {n} (p1 p2 : vec Z n) (vs : vec Z n) :
-    eval_poly' (vzip_with Z.sub p1 p2) vs = (eval_poly' p1 vs - eval_poly' p2 vs)%Z.
+    dot (vzip_with Z.sub p1 p2) vs = (dot p1 vs - dot p2 vs)%Z.
   Proof.
-    induction vs; cbn; first lia.
-    revert p1. refine (vec_S_inv _ _); intros c11 p1.
-    revert p2. refine (vec_S_inv _ _); intros c21 p2.
-    specialize (IHvs p1 p2).
-    cbn in *; lia.
+    revert p1 p2; induction vs as [|x n vs IH]; intros p1 p2.
+    - inv_vec p1; inv_vec p2. cbn. lia.
+    - inv_vec p1; intros c11 p1; inv_vec p2; intros c21 p2. cbn.
+      rewrite IH. lia.
   Qed.
 
   Lemma eval_poly_sub {n} (p1 p2 : Poly n) (vs : vec Z n) :
-    eval_poly (vzip_with Z.sub p1 p2) vs = (eval_poly p1 vs - eval_poly p2 vs)%Z.
+    eval_poly (sub p1 p2) vs = (eval_poly p1 vs - eval_poly p2 vs)%Z.
+  Proof. eapply eval_polyp_sub. Qed.
+
+  Lemma eval_polyp_add {n} (p1 p2 : vec Z n) (vs : vec Z n) :
+    dot (vzip_with Z.add p1 p2) vs = (dot p1 vs + dot p2 vs)%Z.
   Proof.
-    unfold eval_poly.
-    now eapply eval_polyp_sub.
+    revert p1 p2; induction vs as [|x n vs IH]; intros p1 p2.
+    - inv_vec p1; inv_vec p2. cbn. lia.
+    - inv_vec p1; intros c11 p1; inv_vec p2; intros c21 p2. cbn.
+      rewrite IH. lia.
   Qed.
+
+  Lemma eval_poly_add {n} (p1 p2 : Poly n) (vs : vec Z n) :
+    eval_poly (add p1 p2) vs = (eval_poly p1 vs + eval_poly p2 vs)%Z.
+  Proof. eapply eval_polyp_add. Qed.
 
   Lemma eval_poly_vremove {n} (i : fin (S n)) (p : Poly (S n)) (vs : vec Z (S n)) :
     (eval_poly (vremove (FS i) p) (vremove i vs) = (eval_poly p vs - p !!! FS i * vs !!! i))%Z.
@@ -273,16 +240,27 @@ Module PolyRed.
     refine (eval_polyp_vremove (FS i) p (1%Z ::: vs)).
   Qed.
 
-  Lemma eval_polyp_vreplicate_zero {n} (vs : vec Z n) :
-    eval_poly' (vreplicate n 0%Z) vs = 0%Z.
+  Lemma eval_polyp_zero {n} (vs : vec Z n) :
+    dot zero vs = 0%Z.
   Proof.
+    unfold zero.
     induction vs; cbn; lia.
   Qed.
 
-  Lemma eval_poly_vreplicate_zero {n} (vs : vec Z n) :
-    eval_poly (vreplicate (S n) 0%Z) vs = 0%Z.
-  Proof.
-    eapply eval_polyp_vreplicate_zero.
+  Lemma eval_zero {n} (vs : vec Z n): eval_poly zero vs = 0%Z.
+  Proof. now apply eval_polyp_zero. Qed.
+
+  Lemma eval_constant {n c} (vs : vec Z n): eval_poly (constant c) vs = c.
+  Proof. unfold eval_poly; cbn. rewrite eval_polyp_zero. lia. Qed.
+
+  Lemma eval_var {n i} (vs : vec Z n): eval_poly (var i) vs = vs !!! i.
+  Proof. revert n i vs.
+         eapply (learnFinSucc (P := fun n i => forall vs, eval_poly (var i) vs = vs !!! i)).
+         intros.
+         change (dot (vadd f 1%Z zero) vs = vs !!! f).
+         rewrite (vadd_lookup_remove f vs) at 1.
+         rewrite eval_polyp_vadd, eval_polyp_zero.
+         now lia.
   Qed.
 
   Definition evalPolys {n} (s : list (Poly n)) (vs : vec Z n) : Prop :=
@@ -323,6 +301,7 @@ Module PolyRed.
     rewrite Z.mul_0_l, Z.sub_0_r.
     apply (f_equal (Z.mul (p2 !!! FS f `div` Z.gcd (p1 !!! FS f) (p2 !!! FS f)))) in Hp1.
     rewrite <-eval_poly_mul, Z.mul_0_r in Hp1.
+    change (vzip_with Z.sub) with (sub (n := S n)).
     rewrite eval_poly_sub, Hp1, Z.sub_0_r, eval_poly_mul.
     enough (p1 !!! FS f `div` Z.gcd (p1 !!! FS f) (p2 !!! FS f) <> 0)%Z by lia.
     rewrite Hgcdeq at 1.
@@ -480,7 +459,7 @@ Module PolyRed.
             intros Hlvs.
             eapply List.Forall_cons; last easy.
             revert a H e; refine (vec_S_inv _ _); intros a0 a H e; cbn in *; subst.
-            now apply eval_poly_vreplicate_zero.
+            now apply eval_zero.
           -- (* poly a is all-zero with zero constant: inconsistency of remaining equations unaffected by a *)
             intros Hnl vs [Ha Hl]%list.Forall_cons.
             now eapply (Hnl _ Hl).
@@ -490,7 +469,7 @@ Module PolyRed.
           revert a H n0. refine (vec_S_inv _ _); intros x v.
           cbn; intros -> Hxnz vs [Ha _]%Forall_cons_1.
           unfold eval_poly in Ha; cbn in Ha.
-          rewrite eval_polyp_vreplicate_zero in Ha.
+          rewrite eval_polyp_zero in Ha.
           now lia.
   Qed.
 End PolyRed.
@@ -502,9 +481,6 @@ Module LinearProgramming.
    * The only goal is to efficiently and soundly discharge very common
    * inconsistent systems of inequalities, with absolutely no ambition of completeness.
    *)
-  Import PolyRed.
-  Import Vector.
-  Import VecUtils.
 
   Record Problem (n : nat) : Set :=
     MkProblem {
@@ -535,9 +511,9 @@ Module LinearProgramming.
 
   Lemma SlacksPos_eval_pos {n} {slackvars : vec bool n} {coeffs : vec Z n} {vs : vec Z n} :
     Forall2 (λ (isSlack : bool) coeff, coeff = 0%Z ∨ isSlack ∧ (coeff >= 0)%Z) slackvars coeffs →
-    SlacksPos slackvars vs → (eval_poly' coeffs vs >= 0)%Z.
+    SlacksPos slackvars vs → (dot coeffs vs >= 0)%Z.
   Proof.
-    induction 1 as [|n s1 c1 ss cs H1 Hs]; first now cbn.
+    induction 1 as [|n s1 c1 ss cs H1 Hs]; first (inv_vec vs; now cbn).
     revert vs. refine (vec_S_inv _ _).
     intros v vs [Hsv1 Hsvs]%Forall2_cons_iff_copy; cbn.
     specialize (IHHs vs Hsvs).
@@ -551,9 +527,9 @@ Module LinearProgramming.
 
   Lemma SlacksPos_eval_neg {n} {slackvars : vec bool n} {coeffs : vec Z n} {vs : vec Z n} :
     Forall2 (λ (isSlack : bool) coeff, coeff = 0%Z ∨ isSlack ∧ (coeff <= 0)%Z) slackvars coeffs →
-    SlacksPos slackvars vs → (eval_poly' coeffs vs <= 0)%Z.
+    SlacksPos slackvars vs → (dot coeffs vs <= 0)%Z.
   Proof.
-    induction 1 as [|n s1 c1 ss cs H1 Hs]; first now cbn.
+    induction 1 as [|n s1 c1 ss cs H1 Hs]; first (inv_vec vs; now cbn).
     revert vs. refine (vec_S_inv _ _).
     intros v vs [Hsv1 Hsvs]%Forall2_cons_iff_copy; cbn.
     specialize (IHHs vs Hsvs).
@@ -576,12 +552,12 @@ Module LinearProgramming.
     - destruct (bool_decide_reflect (Forall2 (λ (isSlack : bool) (coeff : Z), coeff = 0%Z ∨ isSlack ∧ (coeff >= 0)%Z) slackvars coeffs)) as [Hscs|?]; last easy.
       intros _ vs [Heq Hsp].
       unfold eval_poly in Heq; cbn in Heq.
-      enough (eval_poly' coeffs vs >= 0)%Z by lia.
+      enough (dot coeffs vs >= 0)%Z by lia.
       now eapply (SlacksPos_eval_pos Hscs).
     - destruct (bool_decide_reflect (Forall2 (λ (isSlack : bool) (coeff : Z), coeff = 0%Z ∨ isSlack ∧ (coeff <= 0)%Z) slackvars coeffs)) as [Hscs|?]; last easy.
       intros _ vs [Heq Hsp].
       unfold eval_poly in Heq; cbn in Heq.
-      enough (eval_poly' coeffs vs <= 0)%Z by lia.
+      enough (dot coeffs vs <= 0)%Z by lia.
       now eapply (SlacksPos_eval_neg Hscs).
   Qed.
 
@@ -762,7 +738,8 @@ Module LinearProgramming.
           destruct H as [Hpoly Hineqs].
         + cbn. constructor.
           * rewrite eval_poly_app; cbn.
-            rewrite eval_polyp_vreplicate_zero.
+            change (vreplicate ?n 0%Z) with (@zero n).
+            rewrite eval_polyp_zero.
             lia.
           * specialize (IHineqs Hineqs).
             rewrite zip_with_fmap_r.
@@ -774,14 +751,16 @@ Module LinearProgramming.
             now lia.
         + cbn. constructor.
           * rewrite eval_poly_app; cbn.
-            rewrite eval_polyp_vreplicate_zero.
+            change (vreplicate ?n 0%Z) with (@zero n).
+            rewrite eval_polyp_zero.
             cbn in Hpoly.
             lia.
           * rewrite list_fmap_id.
             intuition.
         + cbn. constructor.
           * rewrite eval_poly_app; cbn.
-            rewrite eval_polyp_vreplicate_zero.
+            change (vreplicate ?n 0%Z) with (@zero n).
+            rewrite eval_polyp_zero.
             lia.
           * specialize (IHineqs Hineqs).
             rewrite zip_with_fmap_r.

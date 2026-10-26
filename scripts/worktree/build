@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Run make quietly and print a short summary.
+#
+# Usage: scripts/worktree/build [TARGET.vo...]
+#
+# Without arguments, builds the whole project. Otherwise builds the given
+# targets (and their dependencies) with Makefile.coq.
+#
+# The full output goes to build.log in this worktree's git directory, so it is
+# never committed. On failure, the first errors are printed with some context.
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+log="$(git rev-parse --absolute-git-dir)/build.log"
+start=$(date +%s)
+if [ "$#" -eq 0 ]; then
+  make >"$log" 2>&1
+else
+  make Makefile.coq >"$log" 2>&1 && make -f Makefile.coq "$@" >>"$log" 2>&1
+fi
+status=$?
+secs=$(( $(date +%s) - start ))
+compiled=$(grep -c 'ROCQ compile' "$log")
+
+if [ "$status" -eq 0 ]; then
+  echo "build OK: $compiled files compiled in ${secs}s. Log: $log"
+else
+  echo "build FAILED (exit $status) after ${secs}s, $compiled files compiled. Log: $log"
+  grep -n -B2 -A20 -E '^Error|\*\*\* |Error:' "$log" | head -n 80
+fi
+exit "$status"

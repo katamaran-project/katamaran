@@ -1,7 +1,8 @@
 From iris.algebra Require Import auth excl.
 From iris.base_logic Require Import lib.own.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 
+#[universes(template=no)]
 Class iostateG (IOStateG : Type) Σ := IOStateG {
    iostate_inG :: inG Σ (authR (optionUR (exclR (leibnizO IOStateG))));
    iostate_name : gname
@@ -10,6 +11,7 @@ Class iostateG (IOStateG : Type) Σ := IOStateG {
 
 Definition iostatePreΣ (IOStateG : Type) : gFunctors := #[GFunctor (authR (optionUR (exclR (leibnizO IOStateG))))].
 
+#[universes(template=no)]
 Class iostate_preG (IOState: Type) Σ := {
     iostate_preG_inG :: inG Σ (authR (optionUR (exclR (leibnizO IOState))));
   }.
@@ -66,8 +68,8 @@ Section S.
   Qed.
 End S.
 
-Notation st_auth1 := (st_auth iostate_name).
-Notation st_frag1 := (st_frag iostate_name).
+Abbreviation st_auth1 := (st_auth iostate_name).
+Abbreviation st_frag1 := (st_frag iostate_name).
 
 
 Lemma state_alloc_names `{!iostate_preG T Σ} s :

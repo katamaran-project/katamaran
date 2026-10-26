@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Strings.String
      ZArith.ZArith.
@@ -178,7 +178,7 @@ Section FunDefKit.
        "cap_begin" beg)
        "cap_end" en)
        "cap_cursor" cur)
-    s) (at level 10) : exp_scope.
+    s) (at level 200) : exp_scope.
 
   Definition lemma_correctPC_not_E {Γ} (cap : Stm Γ ty.cap) : Stm Γ ty.unit :=
     let: "c" := cap in
@@ -883,7 +883,7 @@ Include ProgramMixin MinCapsBase.
   Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+  Abbreviation AccessibleFun f := (Accessible 𝑭_call_graph f).
 
   Module Import WithAccessibleTactics.
     Import AccessibleTactics.

@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Seed this worktree's build with compiled files from another checkout.
+
+Usage: scripts/worktree/seed-build [--force] [SRC]
+
+SRC defaults to the main clone. It must have been built with the Rocq that is
+currently on PATH. For every file in _CoqProject whose .v is
+byte-identical in SRC and here, and whose compiled files in SRC are up to date
+(checked transitively, like make does), the .vo/.vos/.vok/.glob/.aux files are
+copied. Modification times are then set so that make treats the copies as up
+to date and rebuilds everything else, plus whatever depends on it:
+
+  reused .v files     now - 120s
+  copied artifacts    now - 60s
+  all other .v files  now
+
+Git checkouts give every .v file a fresh mtime, so without this step make
+would rebuild almost everything.
+"""
+
+import filecmp
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+ARTIFACT_EXTS = (".vo", ".vos", ".vok", ".glob")
+
+
+def git(*args, cwd=None):
+    return subprocess.check_output(["git", *args], cwd=cwd, text=True).strip()
+
+
+def vfiles(root):
+    with open(os.path.join(root, "_CoqProject")) as f:
+        return [l.strip() for l in f
+                if l.strip().endswith(".v") and not l.lstrip().startswith("#")]
+
+
+def deps(root, files):
+    """Map each .v file to the project .v files it depends on.
+
+    Also returns the Rocq runtime paths that coqdep lists as dependencies."""
+    out = subprocess.check_output(["coqdep", "-f", "_CoqProject", *files],
+                                  cwd=root, text=True, stderr=subprocess.DEVNULL)
+    project = set(files)
+    runtime = {w for w in out.split() if w.endswith("/rocqworker")}
+    result = {}
+    for line in out.splitlines():
+        if ":" not in line:
+            continue
+        targets, prereqs = line.split(":", 1)
+        vo = targets.split()[0]
+        if not vo.endswith(".vo"):
+            continue
+        result[vo[:-1]] = [d[:-1] for d in prereqs.split()
+                           if d.endswith(".vo") and d[:-1] in project]
+    return result, runtime
+
+
+def artifacts(v):
+    base = v[:-2]
+    d, n = os.path.split(base)
+    return [base + e for e in ARTIFACT_EXTS] + [os.path.join(d, "." + n + ".aux")]
+
+
+def mtime(path):
+    try:
+        return os.stat(path).st_mtime
+    except FileNotFoundError:
+        return None
+
+
+def main():
+    args = sys.argv[1:]
+    force = "--force" in args
+    args = [a for a in args if a != "--force"]
+    dst = git("rev-parse", "--show-toplevel")
+    src = (os.path.abspath(args[0]) if args else
+           os.path.dirname(git("rev-parse", "--path-format=absolute",
+                               "--git-common-dir", cwd=dst)))
+    if os.path.samefile(src, dst):
+        sys.exit("seed-build: source and destination are the same checkout")
+
+    src_files = vfiles(src)
+    src_deps, runtime = deps(src, src_files)
+
+    # Compiled files are only valid for the Rocq that built them. coqdep
+    # records the Rocq runtime's (nix store) path in .Makefile.coq.d, so
+    # compare the one SRC was built with against the current one.
+    try:
+        with open(os.path.join(src, ".Makefile.coq.d")) as f:
+            built_with = {w for w in f.read().split() if w.endswith("/rocqworker")}
+    except FileNotFoundError:
+        built_with = set()
+    if not force and built_with != runtime:
+        sys.exit("seed-build: cannot confirm that %s was built with the current "
+                 "Rocq (%s). Not seeding (use --force to override)."
+                 % (src, " ".join(sorted(runtime)) or "unknown"))
+
+    fresh_memo = {}
+
+    def fresh(v):
+        """Whether v's .vo in src is up to date with its source and deps."""
+        if v not in fresh_memo:
+            fresh_memo[v] = False  # guard against cycles
+            vo = mtime(os.path.join(src, v + "o"))
+            ok = (vo is not None and vo >= mtime(os.path.join(src, v)))
+            for d in src_deps.get(v, []):
+                if not ok:
+                    break
+                dvo = mtime(os.path.join(src, d + "o"))
+                ok = fresh(d) and dvo is not None and vo >= dvo
+            fresh_memo[v] = ok
+        return fresh_memo[v]
+
+    src_set = set(src_files)
+    reused, rebuilt = [], []
+    for v in vfiles(dst):
+        if (v in src_set and os.path.exists(os.path.join(dst, v)) and fresh(v)
+                and filecmp.cmp(os.path.join(src, v), os.path.join(dst, v),
+                                shallow=False)):
+            reused.append(v)
+        else:
+            rebuilt.append(v)
+
+    now = time.time()
+    t_src, t_art = now - 120, now - 60
+    for v in reused:
+        for a in artifacts(v):
+            s = os.path.join(src, a)
+            if os.path.exists(s):
+                shutil.copyfile(s, os.path.join(dst, a))
+                os.utime(os.path.join(dst, a), (t_art, t_art))
+        os.utime(os.path.join(dst, v), (t_src, t_src))
+    for v in rebuilt:
+        if os.path.exists(os.path.join(dst, v)):
+            os.utime(os.path.join(dst, v), (now, now))
+    for cache in (".lia.cache", ".nia.cache"):
+        s, d = os.path.join(src, cache), os.path.join(dst, cache)
+        if os.path.exists(s) and not os.path.exists(d):
+            shutil.copyfile(s, d)
+
+    print("seed-build: reused %d of %d files from %s; %d not seeded "
+          "(dependents of these are rebuilt too)."
+          % (len(reused), len(reused) + len(rebuilt), src, len(rebuilt)))
+    for v in rebuilt[:10]:
+        print("  " + v)
+    if len(rebuilt) > 10:
+        print("  ... and %d more" % (len(rebuilt) - 10))
+
+
+if __name__ == "__main__":
+    main()

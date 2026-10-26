@@ -26,14 +26,13 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Lists.List
      Strings.String.
 From Katamaran Require Import
+     Base
      Bitvector
-     Notations
-     Specification
      SmallStep.Step
      RiscvPmp.PmpCheck
      RiscvPmp.GVT.Spec
@@ -41,6 +40,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.GVT.Logic
      RiscvPmp.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
@@ -52,7 +52,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
-From iris.proofmode Require string_ident tactics.
+From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
@@ -70,18 +70,17 @@ Module inv := invariants.
   Import ctx.notations.
   Import env.notations.
   Import iris.program_logic.weakestpre.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Import MicroSail.ShallowExecutor.
 
   Import RiscvPmp.GVT.Contracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstancePredicates.
-  Import RiscvPmpBlockVerifIrisInstance.
+  Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpIrisInstanceWithContracts.
-  Import RiscvPmpBlockVerifShalExecutor.
-
+  Import RiscvPmpShallowExec.
 
   Section FemtoKernel.
     Import bv.notations.
@@ -124,7 +123,7 @@ Module inv := invariants.
     Definition a0 : RegIdx := [bv 10].
 
     Definition pure_privilege_to_bits {n} : Privilege -> bv n :=
-      fun p => match p with | Machine => bv.of_N 3 | User => bv.zero end.
+      fun p => match p with | Machine => bv.of_N 3 | Supervisor => bv.one | User => bv.zero end.
 
     Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> bv 4 :=
       fun mt => match mt with

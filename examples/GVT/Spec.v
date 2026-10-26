@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Strings.String
      Lists.List.
@@ -38,7 +38,6 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.SymbolicExecutor
@@ -49,6 +48,8 @@ From Katamaran Require Import
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.GVT.Sig
+     RiscvPmp.GVT.Logic
+     RiscvPmp.GVT.Model
      RiscvPmp.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Contracts.
@@ -57,19 +58,16 @@ From Katamaran Require RiscvPmp.GVT.Model.
 From iris.program_logic Require Import total_lifting.
 
 Import RiscvPmpProgram.
+Import RiscvPmpProgramLogic.
 Import RiscvPmpIrisInstancePredicates.
+Import RiscvPmpShallowSoundness.
+Import RiscvPmpSymbolicSoundness.
 Import ListNotations.
 
 Set Implicit Arguments.
 Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
-
-Module RiscvPmpBlockVerifFailLogic <: FailLogic.
-  Definition fail_rule_pre : bool := false.
-End RiscvPmpBlockVerifFailLogic.
-
-Module RiscvPmpBlockVerifIrisInstance := RiscvPmpIrisInstance RiscvPmpBlockVerifFailLogic.
 
 Module Assembly.
   (* Instruction synonyms. *)
@@ -99,13 +97,12 @@ Module Assembly.
     Base.MUL rs2 rs1 rd true false false.
 End Assembly.
 
-Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpSignature RiscvPmpProgram.
+Module RiscvPmpBlockVerifSpec.
   Section ContractDefKit.
 
   Import asn.notations.
-  Notation asn_bool t := (asn.formula (formula_bool t)).
-  Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+  Abbreviation asn_bool t := (asn.formula (formula_bool t)).
+  Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user (@ptstomem bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user (@ptstomem_readonly bytes_per_word) [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
@@ -113,12 +110,12 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-  Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
-  Notation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Notation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
-  Notation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
+  Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+  Abbreviation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+  Abbreviation asn_mmio_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
+  Abbreviation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
+  Abbreviation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop (bop.relop bop.eq) e1 e2.
@@ -213,22 +210,22 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
   Local Notation "x + y" := (term_binop bop.bvadd x y) : exp_scope.
-  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
-  Local Notation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
+  Local Abbreviation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+  Local Abbreviation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+  Local Abbreviation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+  Local Abbreviation asn_pmp_access addr width es m p := (asn.formula (formula_user pmp_access [addr;width;es;m;p])).
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   (* TODO: clean up above notations to get rid of the following one *)
-  Local Notation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
-  Local Notation asn_bool t := (asn.formula (formula_bool t)).
-  Local Notation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
-  Local Notation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
-  Local Notation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
-  Local Notation asn_mmio_checked_read bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_read bytes) [a; w; s; s'])).
+  Local Abbreviation asn_cur_privilege val := (asn.chunk (chunk_ptsreg cur_privilege val)).
+  Local Abbreviation asn_bool t := (asn.formula (formula_bool t)).
+  Local Abbreviation asn_in_mmio n l := (asn.formula (formula_user (in_mmio n) [l])).
+  Local Abbreviation asn_mmio_state_pred bytes s := (asn.chunk (chunk_user (mmio_state bytes) [s])).
+  Local Abbreviation asn_mmio_checked_write bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_write bytes) [a; w; s; s'])).
+  Local Abbreviation asn_mmio_checked_read bytes a w s s' := (asn.chunk (chunk_user (mmio_state_checked_read bytes) [a; w; s; s'])).
 
-  Local Notation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
-  Local Notation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
-  Local Notation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
+  Local Abbreviation asn_mmio_trace_pred bytes := (asn.chunk (chunk_user (mmio_state_trace bytes) [env])).
+  Local Abbreviation asn_mmio_read_valid bytes a s :=  (asn.formula (formula_user (mmio_read_valid bytes) [a; s])).
+  Local Abbreviation asn_mmio_event bytes a w t s s' :=  (asn.formula (formula_user (mmio_event bytes) [a; w; t; s; s'])).
 
   Import bv.notations.
 
@@ -479,7 +476,7 @@ sep_contract_result         :=  "result_mem_read";
   Definition sep_contract_execute_EBREAK : SepContractFun execute_EBREAK :=
     RiscvPmpExecutor.Symbolic.Statistics.extend_postcond_with_debug sep_contract_execute_EBREAK.
 
-  Definition CEnv : SepContractEnv :=
+  Definition contract_environment : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | rX                         => Some sep_contract_rX
@@ -499,9 +496,9 @@ sep_contract_result         :=  "result_mem_read";
       | _                         => None
       end.
 
-  Lemma linted_cenv :
+  Lemma linted_contract_environment :
     forall Δ τ (f : Fun Δ τ),
-      match CEnv f with
+    match contract_environment f with
       | Some c => Linted c
       | None   => True
       end.
@@ -530,7 +527,7 @@ sep_contract_result         :=  "result_mem_read";
     {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits];
         sep_contract_localstore      := [term_var "paddr"];
         sep_contract_precondition    :=
-         asn.match_bool (term_var "inv")
+        asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))))
           ((term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗ (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
@@ -581,7 +578,7 @@ sep_contract_result         :=  "result_mem_read";
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
-  Definition CEnvEx : SepContractEnvEx :=
+  Definition contract_environment_foreign : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
       | read_ram bytes       => sep_contract_read_ram
@@ -593,9 +590,9 @@ sep_contract_result         :=  "result_mem_read";
       | externalWorldUpdates => sep_contract_externalWorldUpdates
       end.
 
-  Lemma linted_cenvex :
+  Lemma linted_contract_environment_foreign :
     forall Δ τ (f : FunX Δ τ),
-      Linted (CEnvEx f).
+      Linted (contract_environment_foreign f).
   Proof.
     intros ? ? []; try constructor.
   Qed.
@@ -657,7 +654,7 @@ sep_contract_result         :=  "result_mem_read";
 
   Import TermNotations.
 
-   Definition LEnv : LemmaEnv :=
+   Definition lemma_environment : LemmaEnv :=
      fun Δ l =>
        match l with
        | open_gprs                    => lemma_open_gprs
@@ -670,16 +667,21 @@ sep_contract_result         :=  "result_mem_read";
        | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes
        | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
       end.
+
+   #[export] Instance riscvpmp_blockverif_specification : Specification :=
+     {| CEnv   := contract_environment;
+        CEnvEx := contract_environment_foreign;
+        LEnv   := lemma_environment;
+        fail_rule_pre := false;
+     |}.
+
 End RiscvPmpBlockVerifSpec.
 
-Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
-Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
-
 Module RiscvPmpSpecVerif.
+  (* Import RiscvPmpSpecification. *)
   Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.Symbolic.
+  Import RiscvPmpExecutor.
+  Import RiscvPmpExecutor.Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -733,8 +735,6 @@ Module RiscvPmpSpecVerif.
     vm_compute;
     constructor;
     cbn.
-
-  Import RiscvPmpBlockVerifExecutor.
 
   Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof. destruct H; vm_compute; constructor; cbn; intros; eexists; eauto. Qed.
@@ -801,7 +801,7 @@ Module RiscvPmpSpecVerif.
   Proof. now symbolic_simpl. Qed.
 
   Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
-      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      CEnv f = Some c ->
       ValidContract f ->
       Symbolic.ValidContract c (FunDef f).
   Proof.
@@ -813,7 +813,7 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_contract_with_fuel_debug : forall {Δ τ} (fuel : nat) (f : Fun Δ τ) (c : SepContract Δ τ),
-      RiscvPmpBlockVerifSpec.CEnv f = Some c ->
+      CEnv f = Some c ->
       ValidContractWithFuelDebug fuel f ->
       Symbolic.ValidContractWithFuel fuel c (FunDef f).
   Proof.
@@ -856,21 +856,11 @@ Module RiscvPmpSpecVerif.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec.
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpSemantics RiscvPmpBlockVerifSpec RiscvPmpIrisBase
-    RiscvPmpIrisAdeqParameters
-    RiscvPmpBlockVerifIrisInstance.
-  Include MicroSail.ShallowSoundness.Soundness RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
-  Include MicroSail.RefineExecutor.RefineExecOn RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpBlockVerifFailLogic RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor
-    RiscvPmpBlockVerifExecutor.
 
   Import RiscvPmpIrisBase.
-  Import RiscvPmpBlockVerifIrisInstance.
-  Import RiscvPmp.GVT.Model.
+  Import RiscvPmpIrisInstance.
+  Import RiscvPmpBlockVerifSpec.
+  Import RiscvPmpModel2.
 
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -879,7 +869,7 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.program_logic.total_weakestpre.
   Import iris.base_logic.lib.gen_heap.
   Import iris.proofmode.string_ident.
-  Import iris.proofmode.tactics.
+  Import iris.proofmode.proofmode.
 
   Lemma read_ram_sound `{sailGS Σ} {rG : iostateG IOState Σ} {bytes} :
     TValidContractForeign RiscvPmpBlockVerifSpec.sep_contract_read_ram (read_ram bytes).
@@ -1157,9 +1147,8 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpBlockVerifExecutor.Symbolic.
 
-  Lemma TcontractsSound `{sailGS Σ} {rG : iostateG IOState Σ} : ⊢ TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma TcontractsSound `{sailGS Σ} {rG : iostateG IOState Σ} : ⊢ TValidContractEnvSem CEnv.
   Proof.
     apply (tsound TforeignSemBlockVerif lemSemBlockVerif).
     intros Γ τ f c Heq.
@@ -1169,18 +1158,18 @@ Module RiscvPmpIrisInstanceWithContracts.
   Qed.
 
   Lemma TValidContractEnvSem_ValidContractEnvSem `{sailGS Σ} {rG : iostateG IOState Σ} :
-    TValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv ⊢
-    ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+    TValidContractEnvSem CEnv ⊢
+    ValidContractEnvSem CEnv.
   Proof.
     unfold TValidContractEnvSem, TValidContractEnvN, HasValidContract, ValidContractEnvSem.
     iIntros "H" (σs σ f). iSpecialize ("H" $! (callgraph.mkNode f)). simpl.
-    destruct (CEnv f) eqn:Ef; auto.
+    destruct (contract_environment f) eqn:Ef; auto.
     iApply TValidContractSem_ValidContractSem.
     iApply "H". iPureIntro.
     destruct f; try discriminate Ef; typeclasses eauto.
   Qed.
 
-  Lemma contractsSound `{sailGS Σ} {rG : iostateG IOState Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
+  Lemma contractsSound `{sailGS Σ} {rG : iostateG IOState Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.
     iApply (TValidContractEnvSem_ValidContractEnvSem $! TcontractsSound).
   Qed.

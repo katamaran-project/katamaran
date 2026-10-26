@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      NArith.BinNat
@@ -43,7 +43,7 @@ From Equations Require Import
 From Katamaran Require Import
      Notations Prelude.
 From Ltac2 Require Ltac2.
-Require Import stdpp.base.
+From stdpp Require Import base list.
 Local Set Implicit Arguments.
 
 Declare Scope bv_scope.
@@ -171,7 +171,7 @@ Module bv.
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
 
-  #[global] Notation exp2 n := (N.pow 2%N (N.of_nat n)).
+  #[global] Abbreviation exp2 n := (N.pow 2%N (N.of_nat n)).
 
   Section Conversion.
 
@@ -254,12 +254,10 @@ Module bv.
       not (Is_true (at_most n p)) -> (trunc n p < N.pos p)%N.
     Proof. generalize dependent p. induction n as [| n]; cbn.
      - Lia.lia.
-     - intros p Hp. destruct p.
-       * specialize (IHn _ Hp).
-         now apply (N.succ_double_lt_mono) in IHn.
-       * specialize (IHn _ Hp).
-         now apply (N.double_lt_mono) in IHn.
-       * cbn in Hp. now exfalso.
+     - intros [p|p|] Hp; cbn in Hp.
+       * now apply IHn, N.succ_double_lt_mono in Hp.
+       * now apply IHn, N.double_lt_mono in Hp.
+       * now exfalso.
     Qed.
 
     Definition truncn_succ_double (n : nat) (x : N) : truncn (S n) (N.succ_double x) = N.succ_double (truncn n x) :=
@@ -298,9 +296,9 @@ Module bv.
       destruct x; cbn; auto using trunc_illf. contradiction.
     Qed.
     Lemma truncn_le {n x} : (truncn n x <= x)%N.
-    Proof. destruct (decide (Is_true (is_wf n x))) eqn:Wf.
+    Proof. destruct (decide (Is_true (is_wf n x))).
     - rewrite truncn_wf; auto.
-    - apply N.lt_le_incl. apply truncn_illf; auto.
+    - apply N.lt_le_incl, truncn_illf; auto.
     Qed.
     Lemma bin_of_N_decr {n} x : (@bin n (of_N x) <= x)%N.
     Proof. unfold bin, of_N. apply truncn_le. Qed.
@@ -411,6 +409,13 @@ Module bv.
       fix rect [n] (xs : bv n) {struct n} : P n xs :=
         bv_case P PO (fun n b x => PS n b x (rect x)) xs.
 
+    Definition bv_rec (P : ∀ n, bv n → Set) := @bv_rect P.
+    Definition bv_ind (P : ∀ n, bv n → Prop) := @bv_rect P.
+
+    Register Scheme bv_rect as rect_dep for bv.
+    Register Scheme bv_rec as rec_dep for bv.
+    Register Scheme bv_ind as ind_dep for bv.
+
     Fixpoint fold_right (A : forall n : nat, Type)
       (c : forall n, bool -> A n -> A (S n)) (n : A O) [m] (xs : bv m) : A m :=
       bv_case (fun k _ => A k) n
@@ -520,7 +525,7 @@ Module bv.
       view (app x y) = cvapp (view x) y.
     Proof.
       destruct (view x).
-      rewrite <- (f_equal_dep _ view (eq_sym (app_cons b xs y))).
+      rewrite <- (Logic.f_equal_dep _ view (eq_sym (app_cons b xs y))).
       cbn. now rewrite view_cons.
     Qed.
 
@@ -1199,22 +1204,13 @@ Module bv.
     Proof. now intros x y ->. Qed.
 
     Lemma trunc_eq2n {n p} : eq2n n (trunc n p) (N.pos p).
-    Proof.
-      unfold eq2n.
-      now rewrite truncn_trunc.
-    Qed.
+    Proof. apply truncn_trunc. Qed.
 
     Lemma truncn_eq2n {n x} : eq2n n (truncn n x) x.
-    Proof.
-      unfold eq2n.
-      now apply truncn_idemp.
-    Qed.
+    Proof. apply truncn_idemp. Qed.
 
     Lemma truncz_eq2nz {n x} : eq2nz n (truncz n x) x.
-    Proof.
-      unfold eq2nz.
-      now apply truncz_idemp.
-    Qed.
+    Proof. apply truncz_idemp. Qed.
 
     #[export] Instance truncn_Proper {n : nat} : Proper (eq2n n ==> eq) (truncn n).
     Proof. now intros x y H. Qed.
@@ -1382,10 +1378,7 @@ Module bv.
       of_N (N.mul (bin x) (bin y)).
 
     Lemma bin_of_N_eq2n {n x} : eq2n n (@bin n (@of_N n x)) x.
-    Proof.
-      destruct x; cbn;
-        now auto using trunc_eq2n.
-    Qed.
+    Proof. apply truncn_eq2n. Qed.
 
     Lemma truncn_add : forall {n x y}, eq2n n (x + y) (truncn n x + truncn n y).
     Proof.
@@ -1483,9 +1476,7 @@ Module bv.
       rewrite ?truncn_eq2n.
       rewrite N.sub_add.
       - now apply eq2n_exp2.
-      - enough (bin y < exp2 n)%N by Lia.lia.
-        apply is_wf_spec.
-        now destruct y.
+      - pose proof (bv_is_wf y). Lia.lia.
     Qed.
 
     Lemma add_negate2 {n} {y} : @add n y (negate y) = zero.
@@ -1524,6 +1515,15 @@ Module bv.
 
     Lemma of_nat_add {n} x y : @add n (of_nat x) (of_nat y) = of_nat (x + y).
     Proof. now rewrite <- ?of_Z_nat, of_Z_add, Nat2Z.inj_add. Qed.
+
+    Lemma of_N_one {n} : of_N 1 = @one n.
+    Proof. apply bin_inj_eq2n. now destruct n. Qed.
+
+    Lemma of_Z_one {n} : of_Z 1 = @one n.
+    Proof.
+      apply unsigned_inj. rewrite unsigned_of_Z. destruct n; [easy|].
+      apply Z.mod_1_l. rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
+    Qed.
 
     Lemma truncn_mul : forall {n x y}, eq2n n (x * y) (truncn n x * truncn n y).
     Proof.
@@ -1602,11 +1602,7 @@ Module bv.
     Lemma add_of_nat_0_l :
       forall {n} (v : bv n), v = add (of_nat 0) v.
     Proof.
-      intros.
-      unfold of_nat.
-      simpl.
-      symmetry.
-      apply add_zero_l.
+      intros. symmetry. apply add_zero_l.
     Qed.
 
     Lemma add_of_nat_0_r :
@@ -1791,20 +1787,20 @@ Module bv.
 
     Lemma length_seq n s l :
       length (@seq n s l) = Z.to_nat l.
-    Proof. unfold seq. now rewrite length_map, list_numbers.length_seqZ. Qed.
+    Proof. unfold seq. now rewrite length_map, length_seqZ. Qed.
 
     Lemma elem_of_seq {n} (s : bv n) l a :
       a ∈ seq s l ↔
       (∃ k, a = add s (of_Z k) /\ 0 <= k < l)%Z.
     Proof.
       split.
-      - intros (k & -> & Hk%elem_of_seqZ)%elem_of_list_fmap.
-        assert (exists i, k = unsigned s + i /\ 0 <= i < l)%Z.
+      - intros (k & -> & Hk%elem_of_seqZ)%list_elem_of_fmap.
+        assert (exists i, k = unsigned s + i /\ 0 <= i < l)%Z as (i & -> & Hb).
         { exists (k - unsigned s)%Z. lia. }
-        destruct H as (i & -> & Hb). clear Hk.
+        clear Hk.
         exists i.
         by rewrite <- of_Z_add, of_Z_unsigned.
-      - intros (k & Heq & Hlt). apply elem_of_list_fmap.
+      - intros (k & Heq & Hlt). apply list_elem_of_fmap.
         exists (unsigned s + k)%Z. split.
         + subst. by rewrite <-of_Z_add, of_Z_unsigned.
         + apply elem_of_seqZ. lia.
@@ -1823,6 +1819,22 @@ Module bv.
         exists (unsigned k). rewrite of_Z_unsigned.
         pose proof (bv.unsigned_bounds k).
         split. done. lia.
+    Qed.
+
+    Lemma elem_of_seq_bounds {n} (s v : bv n) l :
+      (unsigned s + l <= 2 ^ Z.of_nat n)%Z ->
+      v ∈ seq s l <-> (unsigned s <= unsigned v < unsigned s + l)%Z.
+    Proof.
+      intros Hb. rewrite elem_of_seq'. split.
+      - intros (k & -> & Hk).
+        pose proof (unsigned_add_small s k).
+        pose proof (unsigned_bounds k). lia.
+      - intros Hbnd. exists (sub v s). split.
+        + unfold sub.
+          by rewrite <- add_comm, <- add_assoc,
+            add_negate, add_zero_r.
+        + pose proof (unsigned_bounds s).
+          rewrite unsigned_sub, truncz_small; lia.
     Qed.
 
     Lemma seq_no_overlap {n} (s1 s2 : bv n) (l1 l2 : Z) a :
@@ -1854,6 +1866,46 @@ Module bv.
       apply add_cancel_l in Heq. clear s.
       apply (f_equal unsigned) in Heq.
       rewrite !unsigned_of_Z, !truncz_small in Heq; lia.
+    Qed.
+
+    Lemma seq_succ {n} (s : bv n) (l : Z) :
+      (0 <= l)%Z ->
+      seq s (Z.succ l) = s :: seq (add one s) l.
+    Proof.
+      intros Hl. unfold seq. rewrite seqZ_cons by lia. cbn.
+      rewrite of_Z_unsigned. f_equal.
+      unfold seqZ. rewrite <- !list_fmap_compose, Z.pred_succ.
+      apply list_fmap_ext. intros _ x _. cbn.
+      rewrite <- of_Z_add, of_Z_nat.
+      replace (Z.succ (unsigned s)) with (unsigned s + 1)%Z by lia.
+      rewrite <- of_Z_add, of_Z_unsigned, of_Z_one.
+      rewrite <- of_Z_add, of_Z_nat, of_Z_unsigned.
+      now rewrite (@add_comm n s one).
+    Qed.
+
+    Lemma seq_add {n} (s : bv n) (l1 l2 : Z) :
+      (0 <= l1)%Z -> (0 <= l2)%Z ->
+      seq s (l1 + l2) =
+      seq s l1 ++ seq (add s (of_Z l1)) l2.
+    Proof.
+      intros Hl1 Hl2. unfold seq. rewrite seqZ_app by lia.
+      rewrite fmap_app. f_equal. unfold seqZ. rewrite <- !list_fmap_compose.
+      apply list_fmap_ext. intros _ x _. cbn.
+      rewrite <- of_Z_add, of_Z_nat.
+      rewrite <- of_Z_add, of_Z_unsigned.
+      now rewrite <- of_Z_add, of_Z_nat, of_Z_unsigned.
+    Qed.
+
+    Lemma lookup_seq {n} (s : bv n) l k y :
+      seq s l !! k = Some y <->
+      y = add s (of_nat k) /\ (Z.of_nat k < l)%Z.
+    Proof.
+      unfold seq. rewrite list_lookup_fmap_Some. split.
+      - intros (z & -> & Hz). apply lookup_seqZ in Hz as [-> Hk].
+        by rewrite <- of_Z_add, of_Z_unsigned, of_Z_nat.
+      - intros [-> Hk]. exists (unsigned s + Z.of_nat k)%Z. split.
+        + by rewrite <- of_Z_add, of_Z_unsigned, of_Z_nat.
+        + apply lookup_seqZ. auto.
     Qed.
 
   End Sequencing.
@@ -2083,11 +2135,11 @@ Module bv.
       (c_inj : forall k b1 b2 v1 v2, c k b1 v1 = c k b2 v2 -> b1 = b2 /\ v1 = v2)
       (n1 n2 : V O) (Heq : n1 <> n2) (m : nat) :
       forall (x : V m),
-        elem_of_list x (enumV c n1 m) ->
-        elem_of_list x (enumV c n2 m) -> False.
+        list_elem_of x (enumV c n1 m) ->
+        list_elem_of x (enumV c n2 m) -> False.
     Proof.
       revert V c c_inj n1 n2 Heq. induction m; intros V c c_inj n1 n2 Heq; cbn [enumV].
-      - intros x xIn1%list.elem_of_list_singleton xIn2% list.elem_of_list_singleton.
+      - intros x xIn1%list.list_elem_of_singleton xIn2% list.list_elem_of_singleton.
         congruence.
       - specialize (IHm (fun k => V (S k)) (fun k => c (S k)) (fun k => c_inj (S k))).
         intros x [in1|in1]%list.elem_of_app [in2|in2]%list.elem_of_app;
@@ -2113,7 +2165,7 @@ Module bv.
         elem_of (c m b x) (enumV c n (S m)).
     Proof.
       revert V c n. induction m; cbn; intros V c n b x xIn.
-      - apply list.elem_of_list_singleton in xIn. subst x.
+      - apply list.list_elem_of_singleton in xIn. subst x.
         destruct b; repeat constructor.
       - rewrite ?list.elem_of_app. rewrite list.elem_of_app in xIn.
         destruct xIn as [xIn|xIn];
@@ -2130,7 +2182,7 @@ Module bv.
     Lemma elem_of_enum (m : nat) (x : bv m) : base.elem_of x (enum m).
     Proof.
       induction x using bv_rect.
-      - now apply list.elem_of_list_singleton.
+      - now apply list.list_elem_of_singleton.
       - now apply elem_of_enumV.
     Qed.
 
@@ -2295,11 +2347,11 @@ Module bv.
        printing only notations for the constructors that achieve the same result
        as printing the number notation. *)
     Notation "" := (bitstring.bN)
-      (at level 0, right associativity, only printing) : bv_bitstring_scope.
+      (at level 1, right associativity, only printing) : bv_bitstring_scope.
     Notation "1 b" := (bitstring.bI b)
-      (at level 0, right associativity, format "1 b", only printing) : bv_bitstring_scope.
+      (at level 1, right associativity, format "1 b", only printing) : bv_bitstring_scope.
     Notation "0 b" := (bitstring.bO b)
-      (at level 0, right associativity, format "0 b", only printing) : bv_bitstring_scope.
+      (at level 1, right associativity, format "0 b", only printing) : bv_bitstring_scope.
 
     Notation "[ 'bits' x ]" := (of_bitstring x%bits)
       (format "[ 'bits'  x ]") : bv_scope.
@@ -2379,15 +2431,6 @@ Module bv.
       now apply truncn_small.
     Qed.
 
-    Lemma of_N_one {n} : of_N 1 = @one n.
-    Proof. apply bin_inj_eq2n. now destruct n; easy. Qed.
-
-    Lemma of_Z_one {n} : of_Z 1 = @one n.
-    Proof.
-      apply unsigned_inj. rewrite unsigned_of_Z. destruct n; [easy|].
-      apply Z.mod_1_l. rewrite Nat2Z.inj_succ, Z.pow_succ_r; lia.
-    Qed.
-
     Lemma bin_of_nat_small {n x} : (N.of_nat x < exp2 n)%N ->
                                    @bin n (of_nat x) = N.of_nat x.
     Proof.
@@ -2418,7 +2461,7 @@ Module bv.
     Lemma Z_shiftr_unsigned_bounds {m n} (x : bv m) (y : bv n) : (0 <= (Z.shiftr (@unsigned m x) (@unsigned n y)) < 2 ^ Z.of_nat (m))%Z.
       Proof.
         split.
-        { rewrite Z.shiftr_div_pow2. apply Z.div_pos. 2: apply Z.pow_pos_nonneg; try lia. all : try apply bv.unsigned_bounds. }
+        { apply Z.shiftr_nonneg, unsigned_bounds. }
         unfold Z.shiftr, Z.shiftl.
         destruct (unsigned y) eqn: Y; simpl. { apply unsigned_bounds. }
         - rewrite <- Pos.iter_swap_gen with (g := λ (x : bv m), (@shiftr m 1 x one)). apply unsigned_bounds.
@@ -2431,8 +2474,7 @@ Module bv.
           apply truncn_small. rewrite N.div2_div. apply N.Div0.div_lt_upper_bound.
           pose proof @bv_is_wf m a.
           transitivity (exp2 m); try lia.
-        - unfold unsigned in *. pose proof N2Z.is_nonneg (bin y). pose proof Pos2Z.neg_is_neg p. rewrite <- Y in H0.
-          apply Z.lt_gt in H0. contradiction.
+        - pose proof (unsigned_bounds y). lia.
     Qed.
 
     Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) : (N.succ (bin y) < exp2 n)%N ->
@@ -2527,7 +2569,7 @@ Module bv.
     Qed.
 
     Lemma ultb_antisym : forall {n} (x y : bv n),
-        y <ᵘ? x = negb (x <=ᵘ? y).
+        (y <ᵘ? x) = negb (x <=ᵘ? y).
     Proof. intros; unfold bv.uleb, bv.ultb; apply N.ltb_antisym. Qed.
 
     Lemma ult_ule_incl : forall {n} (x y : bv n),
@@ -2539,7 +2581,7 @@ Module bv.
     Proof.
       intros n x y.
       unfold bv.ule, bv.ult.
-      rewrite N.lt_eq_cases; now rewrite bv.bin_inj_equiv.
+      now rewrite N.lt_eq_cases, bv.bin_inj_equiv.
     Qed.
 
     Lemma ule_refl : forall {n} (x : bv n),
@@ -2554,23 +2596,23 @@ Module bv.
     Proof. intros; unfold bv.ult, bv.zero; cbn; Lia.lia. Qed.
 
     Lemma uleb_ugt : forall {n} (x y : bv n),
-        x <=ᵘ? y = false <-> y <ᵘ x.
+        (x <=ᵘ? y) = false <-> y <ᵘ x.
     Proof. intros; unfold bv.uleb, bv.ule; now apply N.leb_gt. Qed.
 
     Lemma uleb_ule : forall {n} (x y : bv n),
-        x <=ᵘ? y = true <-> x <=ᵘ y.
+        (x <=ᵘ? y) = true <-> x <=ᵘ y.
     Proof. intros; unfold bv.uleb; now apply N.leb_le. Qed.
 
     Lemma ultb_uge : forall {n} (x y : bv n),
-        x <ᵘ? y = false <-> y <=ᵘ x.
+        (x <ᵘ? y) = false <-> y <=ᵘ x.
     Proof. intros; unfold bv.ultb; now apply N.ltb_ge. Qed.
 
     Lemma ultb_ult : forall {n} (x y : bv n),
-        x <ᵘ? y = true <-> x <ᵘ y.
+        (x <ᵘ? y) = true <-> x <ᵘ y.
     Proof. intros; unfold bv.ultb; now apply N.ltb_lt. Qed.
 
     Lemma ultb_uleb : forall {n} (x y : bv n),
-        x <ᵘ? y = true -> x <=ᵘ? y = true.
+        (x <ᵘ? y) = true -> (x <=ᵘ? y) = true.
     Proof.
       intros n x y.
       rewrite ultb_ult, uleb_ule.
@@ -2604,12 +2646,8 @@ Module bv.
         (N.of_nat (S x) < bv.exp2 n)%N ->
         (bv.bin (@bv.one n) + (@bv.bin n (bv.of_nat x)) < bv.exp2 n)%N.
     Proof.
-      destruct n.
-      simpl; Lia.lia.
-      assert (bv.bin (@bv.one (S n)) = 1%N) by auto.
-      rewrite H.
-      intros.
-      rewrite bv.bin_of_nat_small; Lia.lia.
+      destruct n; intros; [cbn; Lia.lia|].
+      rewrite bv.bin_one, bv.bin_of_nat_small; Lia.lia.
     Qed.
 
   End Comparison.
@@ -2850,18 +2888,18 @@ Module bv.
     Import ListNotations.
 
     (* why do we have both bv_seq and seqBv? *)
-    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (list_numbers.seqZ (bv.unsigned min) (Z.of_N len)).
+    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (seqZ (bv.unsigned min) (Z.of_N len)).
 
     Lemma seqBv_zero {n} m : @seqBv n m 0 = nil.
     Proof. unfold seqBv. now cbv. Qed.
     Lemma seqBv_one {n} m : @seqBv n m 1 = cons m nil.
     Proof.
       unfold seqBv.
-      rewrite list_numbers.seqZ_cons; [|lia]. cbn.
+      rewrite seqZ_cons; [|lia]. cbn.
       f_equal. now rewrite of_Z_unsigned. Qed.
 
     Lemma seqBv_len n base width : length (@seqBv n base width) = N.to_nat width.
-    Proof. unfold seqBv. rewrite length_map, list_numbers.length_seqZ. lia. Qed.
+    Proof. unfold seqBv. rewrite length_map, length_seqZ. lia. Qed.
 
     Lemma seqBv_width_at_least {n width} base k y :
       base.lookup k (@seqBv n base width) = Some y -> exists p , width = N.of_nat (k + S p)%nat.
@@ -2879,8 +2917,8 @@ Module bv.
       @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_N n1)) n2.
     Proof.
       unfold seqBv.
-      rewrite Znat.N2Z.inj_add, list_numbers.seqZ_app, map_app; try lia.
-      f_equal. unfold list_numbers.seqZ. rewrite <- !list.list_fmap_compose.
+      rewrite Znat.N2Z.inj_add, seqZ_app, map_app; try lia.
+      f_equal. unfold seqZ. rewrite <- !list.list_fmap_compose.
       apply list.list_fmap_ext. intros _ x _. cbn.
       now rewrite <- !of_Z_add, !of_Z_unsigned, !of_Z_N.
     Qed.
@@ -2915,8 +2953,8 @@ Module bv.
     Proof.
       unfold bv.ule, seqBv.
       intros mla alm.
-      apply (list.elem_of_list_fmap_1_alt bv.of_Z _ (bv.unsigned v)).
-      - apply list_numbers.elem_of_seqZ.
+      apply (list.list_elem_of_fmap_2' bv.of_Z _ (bv.unsigned v)).
+      - apply elem_of_seqZ.
         unfold unsigned, Z.of_nat.
         destruct len; Lia.lia.
       - now rewrite bv.of_Z_unsigned.
@@ -2945,7 +2983,7 @@ Module bv.
       False.
     Proof.
       intros Hrep Hlt Hain Hbin.
-      rewrite !list.elem_of_list_lookup in Hain, Hbin.
+      rewrite !list.list_elem_of_lookup in Hain, Hbin.
       destruct Hain as (ai & Hain).
       destruct Hbin as (bi & Hbin).
       apply list.lookup_lt_Some in Hain as Halen.
@@ -2989,7 +3027,7 @@ Module bv.
     and (min <=ᵘ v) (bv.bin v < bv.bin min + len)%N.
   Proof.
      unfold bv.ule, bv.ult, seqBv.
-     intros Hflow [y [-> Hel%list_numbers.elem_of_seqZ]]%list.elem_of_list_fmap_2.
+     intros Hflow [y [-> Hel%elem_of_seqZ]]%list.list_elem_of_fmap_1.
      unfold bv.of_Z.
      rewrite <-(Znat.Z2N.id y); last bv_zify.
      rewrite bv.to_N_truncz.
@@ -3003,9 +3041,9 @@ Module bv.
     base.NoDup (@seqBv n min len).
   Proof.
     intros Hof.
-    apply list.NoDup_fmap_2_strong; last apply list_numbers.NoDup_seqZ.
+    apply list.NoDup_fmap_2_strong; last apply NoDup_seqZ.
     intros x y Hxin Hyin Heq.
-    rewrite !list_numbers.elem_of_seqZ in Hxin, Hyin.
+    rewrite !elem_of_seqZ in Hxin, Hyin.
     rewrite <-(Znat.Z2N.id y) in Heq; last bv_zify.
     rewrite <-(Znat.Z2N.id x) in Heq; last bv_zify.
     unfold bv.unsigned, bv.of_Z in *.

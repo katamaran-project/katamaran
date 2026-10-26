@@ -28,7 +28,6 @@
 
 From Katamaran Require Import
   Signature
-  Specification
   Program
   Tactics
   Hoare
@@ -40,10 +39,9 @@ Module MakeSymbolicSoundness
   (Import B    : Base)
   (Import SIG  : Signature B)
   (Import PROG : Program B)
-  (Import FL   : FailLogic)
-  (Import SPEC : Specification B SIG PROG)
-  (Import SHAL : ShallowExecOn B SIG PROG FL SPEC)
-  (Import SYMB : SymbolicExecOn B SIG PROG FL SPEC).
+  (Import PLOG : ProgramLogic B SIG PROG)
+  (Import SHAL : ShallowExecOn B SIG PROG PLOG)
+  (Import SYMB : SymbolicExecOn B SIG PROG PLOG).
 
-Include RefineExecOn B SIG PROG FL SPEC SHAL SYMB.
+Include RefineExecOn B SIG PROG PLOG SHAL SYMB.
 End MakeSymbolicSoundness.

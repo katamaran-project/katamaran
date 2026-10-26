@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool.
 From Equations Require Import Equations.
 From Katamaran Require Import
@@ -168,6 +168,63 @@ Section WithBinding.
       forall b (bIn : b ∈ Γ), Q (lookup E bIn).
     Proof. induction HE; intros x xIn; destruct (ctx.view xIn); cbn; auto. Defined.
 
+    Definition Any (Q : forall b, D b -> Prop) : forall {Γ}, Env Γ -> Prop :=
+      fun {Γ} E => exists x, exists xIn : x ∈ Γ, Q _ (lookup E xIn).
+
+    Lemma Any_nil (Q : forall b, D b -> Prop) :
+      ~ Any Q nil.
+    Proof.
+      intros [x [xIn _]].
+      destruct (ctx.view xIn).
+    Qed.
+
+    Lemma Any_snoc (Q : forall b, D b -> Prop) {Γ b} (E : Env Γ) (v : D b) :
+      Any Q (snoc E v) <-> Any Q E \/ Q _ v.
+    Proof.
+      split.
+      - intros (x & xIn & HQ).
+        destruct (ctx.view xIn); cbn in HQ; [right|left]; now repeat eexists.
+      - intros [[x [xIn HQ]]|HQ].
+        now eexists _, (ctx.in_succ xIn).
+        now eexists b, (ctx.in_zero).
+    Qed.
+
+    Fixpoint anyb (f : forall b, D b -> bool) {Γ} (E : Env Γ) : bool :=
+      match E with
+      | nil => false
+      | snoc E db => f _ db || anyb f E
+      end.
+
+    Lemma anyb_spec (Q : forall b, D b -> Prop) (f : forall b, D b -> bool)
+      (rQf : forall b (v : D b), reflect (Q _ v) (f _ v)) :
+      forall Γ (E : Env Γ), reflect (Any Q E) (anyb f E).
+    Proof.
+      induction E; cbn.
+      - constructor; eapply Any_nil.
+      - destruct IHE, (rQf b db); constructor;
+          rewrite Any_snoc; intuition.
+    Qed.
+
+    Fixpoint find (f : forall b, D b -> bool) {Γ} (E : Env Γ) : option {x & x ∈ Γ}  :=
+      match E with
+      | nil => None
+      | snoc E db => if f _ db then Some (existT _ ctx.in_zero)
+                    else option.map (fun '(existT x xIn) => existT x (ctx.in_succ xIn)) (find f E)
+      end.
+
+    Lemma find_spec (Q : forall b, D b -> Prop) (f : forall b, D b -> bool)
+      (rQf : forall b (v : D b), reflect (Q _ v) (f _ v)) :
+      forall Γ (E : Env Γ), option.wlp (fun '(existT x xIn) => Q x (lookup E xIn)) (find f E).
+    Proof.
+      induction E; cbn; first now apply option.wlp_none.
+      destruct (rQf _ db).
+      - now apply option.wlp_some.
+      - apply option.wlp_map.
+        revert IHE.
+        apply option.wlp_monotonic.
+        now intros [x xIn].
+    Qed.
+
     Section HomEquality.
 
       Variable eqb : forall [b], D b -> D b -> bool.
@@ -278,7 +335,7 @@ Section WithBinding.
       insert bIn (remove b E bIn) (lookup E bIn) = E.
     Proof. induction E; destroy bIn; cbn; now f_equal. Qed.
 
-    Lemma lookup_insert {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
+    Lemma lookup_insert_eq {b Γ} (bIn : b ∈ Γ) (v : D b) (E : Env (Γ - b)) :
       lookup (insert bIn E v) bIn = v.
     Proof. induction Γ; destroy bIn; destroy E; cbn; auto. Qed.
 
@@ -286,7 +343,7 @@ Section WithBinding.
       lookup (drop Σ E) bIn = lookup E (ctx.in_cat_left Σ bIn).
     Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
 
-    Lemma lookup_take {b Σ Γ} (bIn : b ∈ Σ) (E : Env (Γ ▻▻ Σ)) :
+    Lemma lookup_take_lt {b Σ Γ} (bIn : b ∈ Σ) (E : Env (Γ ▻▻ Σ)) :
       lookup (take Σ E) bIn = lookup E (ctx.in_cat_right bIn).
     Proof. induction Σ; destroy bIn; destroy E; cbn; auto. Qed.
 
@@ -319,10 +376,7 @@ Section WithBinding.
     Lemma lookup_update {Γ} (E : Env Γ) :
       forall {b} (bInΓ : b ∈ Γ) (db : D b),
         lookup (update E bInΓ db) bInΓ = db.
-    Proof.
-      induction E; intros ? [n e]; try destruct e;
-        destruct n; cbn in *; subst; auto.
-    Qed.
+    Proof. induction E; intros ? bIn; destroy bIn; cbn; auto. Qed.
 
     Lemma drop_cat {Γ Δ} (δΔ : Env Δ) (δΓ : Env Γ) :
       drop Δ (cat δΓ δΔ) = δΓ.
@@ -342,18 +396,14 @@ Section WithBinding.
         update (update E bInΓ d1) bInΓ d2 =
         update E bInΓ d2.
     Proof.
-      induction E; intros ? [n e]; [ contradiction e | destruct n ].
-      - destruct e; reflexivity.
-      - cbn. intros. f_equal. auto.
+      induction E; intros ? bIn; destroy bIn; cbn; intros; f_equal; auto.
     Qed.
 
     Lemma update_lookup {Γ} (E : Env Γ) :
       forall {b} (bInΓ : b ∈ Γ),
         update E bInΓ (lookup E bInΓ) = E.
     Proof.
-      induction E; intros ? [n e]; [ contradiction e | destruct n ].
-      - destruct e; reflexivity.
-      - cbn. intros. f_equal. auto.
+      induction E; intros ? bIn; destroy bIn; cbn; f_equal; auto.
     Qed.
 
     Lemma lookup_extensional {Γ} (E1 E2 : Env Γ) :
@@ -384,12 +434,12 @@ Section WithBinding.
       - f_equal. apply IHE.
     Qed.
 
-    Lemma insert_insert' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)) (v : D x) :
+    Lemma insert_insert_eq' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)) (v : D x) :
       insert xIn E v = insert' xIn E v.
     Proof.
       unfold insert'. eapply lookup_extensional. intros b' bIn.
       rewrite lookup_tabulate. destruct ctx.occurs_check_view.
-      - now rewrite lookup_insert.
+      - now rewrite lookup_insert_eq.
       - now rewrite lookup_insert_shift.
     Qed.
 
@@ -558,44 +608,27 @@ Section WithBinding.
     Lemma map_drop {Γ Δ} (EΓΔ : Env D1 (Γ ▻▻ Δ)) :
       map (drop Δ EΓΔ) = drop Δ (map EΓΔ).
     Proof.
-      induction Δ; intros; cbn in *.
-      - reflexivity.
-      - dependent elimination EΓΔ; apply IHΔ.
+      induction Δ; [easy|].
+      dependent elimination EΓΔ; apply IHΔ.
     Qed.
 
     Lemma map_update {Γ} (E : Env D1 Γ) :
       forall {b} (bInΓ : b ∈ Γ) (db : D1 b),
         map (update E bInΓ db) = update (map E) bInΓ (f db).
-    Proof.
-      induction E; intros ? [n e]; try destruct e.
-      destruct n; cbn in *; subst; cbn; congruence.
-    Qed.
+    Proof. induction E; intros ? bIn; destruct (ctx.view bIn); cbn; congruence. Qed.
 
     Lemma map_tabulate {Γ} (g : forall b, b ∈ Γ -> D1 b) :
       map (tabulate g) = tabulate (fun b bInΓ => f (g b bInΓ)).
-    Proof.
-      induction Γ; intros; cbn in *.
-      - reflexivity.
-      - f_equal; apply IHΓ.
-    Qed.
+    Proof. induction Γ; cbn; [easy|]. f_equal; apply IHΓ. Qed.
 
     Lemma lookup_map {Γ} (E : Env D1 Γ) :
       forall {b} (bInΓ : b ∈ Γ),
         lookup (map E) bInΓ = f (lookup E bInΓ).
-    Proof.
-      induction E; intros ? [n e]; try destruct e;
-        destruct n; cbn in *; subst; auto.
-    Qed.
+    Proof. induction E; intros ? bIn; destruct (ctx.view bIn); cbn; auto. Qed.
 
     Lemma remove_map {b Γ} (E : Env D1 Γ) (bIn : b ∈ Γ) :
       map (remove b E bIn) = remove b (map E) bIn.
-    Proof.
-      rewrite !remove_remove'.
-      unfold remove'.
-      apply lookup_extensional.
-      intros.
-      now rewrite lookup_map, !lookup_tabulate, lookup_map.
-    Qed.
+    Proof. induction E; destruct (ctx.view bIn); cbn; f_equal; auto. Qed.
 
   End Map.
 
@@ -635,12 +668,7 @@ Section WithBinding.
 
   Lemma map_ext {D1 D2 : B -> Set} (f1 f2 : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
     (forall b d, f1 b d = f2 b d) -> map f1 E = map f2 E.
-  Proof.
-    intros HYP.
-    apply lookup_extensional.
-    intros.
-    now rewrite ?lookup_map.
-  Qed.
+  Proof. intros HYP. induction E; cbn; congruence. Qed.
 
 End WithBinding.
 
@@ -663,13 +691,13 @@ Module notations.
   Notation "δ ⟪ x ↦ v ⟫" := (@update _ _ _ δ (x∷_) _ v) : env_scope.
   (* Based on and compatible with ssrnotations, also used in math-comp finmap.  *)
   Notation "e .[ i ]" := (@lookup _ _ _ e _ i)
-    (at level 2, left associativity, format "e .[ i ]").
+    (i at level 50, left associativity, format "e .[ i ]").
   (* Based on and compatible with the math-comp finmap notation. *)
   Notation "e .[? k ]" := (@lookup _ _ _ e k _)
-    (at level 2, k at level 200, format "e .[?  k ]").
+    (format "e .[?  k ]").
   (* Variant of the above if you don't want to specify the type. *)
   Notation "e .[?? x ]" := (@lookup _ _ _ e (x∷_) _)
-    (at level 2, x at level 200, only parsing).
+    (only parsing).
 
   (* #[deprecated(since="20220528", note="Use the specific [env] notation instead.")] *)
   Notation "[ ]" := nil (only parsing) : env_scope.
@@ -702,7 +730,7 @@ Module notations.
      define non-recursive notations. *)
   Notation "E .[ k ↦ v ]" :=
     (@env.snoc (Binding _ _) _ _ E k v)
-    (at level 2, k at level 50, left associativity, format "E '/' .[ k  ↦  v ]") : env_scope.
+    (k at level 50, left associativity, format "E '/' .[ k  ↦  v ]") : env_scope.
 
   (* Sometimes it is necessary to specify both, the element of the context and
      of the environment in cases where the type-checker would otherwise be
@@ -824,7 +852,7 @@ Section WithBinding.
 End WithBinding.
 End envrec.
 
-Notation EnvRec := envrec.EnvRec.
+Abbreviation EnvRec := envrec.EnvRec.
 Bind Scope env_scope with EnvRec.
 
 Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : NCtx X T) : Set :=

@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Classes.Morphisms
      Lists.List
@@ -44,8 +44,7 @@ From Katamaran Require Import
      Prelude
      Signature
      Symbolic.Propositions
-     Syntax.BinOps
-     Specification.
+     Syntax.BinOps.
 
 From stdpp Require base list option.
 
@@ -438,7 +437,7 @@ Module Type ShallowExecRelOn
 
     Section WithBI.
 
-      Import iris.proofmode.tactics.
+      Import iris.proofmode.proofmode.
 
       Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
 

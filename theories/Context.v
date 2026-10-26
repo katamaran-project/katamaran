@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
@@ -178,7 +178,7 @@ Module Import ctx.
        as possible and define case analysis and elimination schemes for the
        record that coincide with the ones that would be derived for the
        inductive type. *)
-    #[projections(primitive)]
+    #[mode="- -", projections(primitive)]
     Class In (b : B) (Γ : Ctx B) : Set :=
       MkIn { in_at: nat; in_valid: nth_is Γ in_at b }.
     #[global] Arguments MkIn [_ _] _ _.
@@ -335,11 +335,9 @@ Module Import ctx.
       intros ? ? ? [m p] [n q] e; intros.
       destruct e.
       destruct Γ; cbn in *. contradiction.
-      destruct m, n.
+      destruct m.
       - destruct p. cbn. now rewrite EqDec.uip_refl_refl.
-      - destruct p. cbn. now rewrite EqDec.uip_refl_refl.
-      - cbn. rewrite proof_irrelevance_nth_is_refl. reflexivity.
-      - cbn. rewrite proof_irrelevance_nth_is_refl. reflexivity.
+      - cbn. now rewrite proof_irrelevance_nth_is_refl.
     Qed.
 
     (* Two proofs of context membership are equal of the deBruijn indices are equal *)
@@ -364,6 +362,15 @@ Module Import ctx.
         | nil      => 0
         | snoc Γ _ => S (length Γ)
         end.
+
+      Definition lengthN (Γ : Ctx B) : N := N.of_nat (length Γ).
+
+      Lemma nth_is_lt_length {Γ n b} : nth_is Γ n b -> n < length Γ.
+      Proof.
+        revert n; induction Γ as [|Γ IHΓ b']; intros [|n]; cbn; try easy.
+        - intros _. apply Nat.lt_0_succ.
+        - intros H. now apply (proj1 (Nat.succ_lt_mono _ _)), IHΓ.
+      Qed.
     End Length.
 
     Section All.
@@ -617,7 +624,7 @@ Module Import ctx.
   End notations.
   Import notations.
 
-  Local Notation NCtx N T := (Ctx (Binding N T)).
+  Local Abbreviation NCtx N T := (Ctx (Binding N T)).
 
   Section Resolution.
 
@@ -715,7 +722,7 @@ End ctx.
 Export ctx (Ctx).
 #[export] Existing Instance ctx.eq_dec_ctx.
 
-Notation NCtx N T := (Ctx (Binding N T)).
+Abbreviation NCtx N T := (Ctx (Binding N T)).
 Bind Scope ctx_scope with Ctx.
 Bind Scope ctx_scope with NCtx.
 

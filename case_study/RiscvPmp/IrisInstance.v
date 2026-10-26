@@ -36,12 +36,13 @@ From Katamaran Require Import
      RiscvPmp.Base
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.IrisModel
      RiscvPmp.trace
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 From stdpp Require namespaces.
 Module ns := stdpp.namespaces.
 
@@ -223,7 +224,7 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
     destruct (reg_convert_to_idx r) as [rid|] eqn:E; auto.
     apply NoDup_cons. split; auto.
     intros Helem.
-    apply elem_of_list_omap in Helem.
+    apply list_elem_of_omap in Helem.
     destruct Helem as (? & Hin & Heq).
     pose proof (reg_convert_to_idx_Some_inj _ _ E Heq) as ?; subst.
     apply (Hr Hin).
@@ -260,6 +261,23 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
       Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         [∗ list] a ∈ all_addrs,
           (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
+
+      Lemma interp_pmp_addr_access_s_u_eq (entries : list PmpEntryCfg) :
+        interp_pmp_addr_access entries User ⊣⊢ interp_pmp_addr_access entries Supervisor.
+      Proof.
+        iSplit; iApply big_sepL_mono; iIntros (k addr Hk) "H [%p %Hpmp]";
+          iApply "H"; iExists p; iPureIntro; unfold Pmp_access, Gen_Pmp_access in *.
+        - now rewrite pmp_check_aux_s_u_eq.
+        - now rewrite pmp_check_aux_s_u_eq in Hpmp.
+      Qed.
+
+      Lemma interp_pmp_addr_access_not_machine (entries : list PmpEntryCfg) (m m' : Privilege) :
+        m ≠ Machine -> m' ≠ Machine ->
+        interp_pmp_addr_access entries m ⊢ interp_pmp_addr_access entries m'.
+      Proof.
+        intros Hm Hm'; destruct m, m'; try congruence;
+          by rewrite ?interp_pmp_addr_access_s_u_eq.
+      Qed.
 
       Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
@@ -349,11 +367,11 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
   End WithSailGS.
 End RiscvPmpIrisInstancePredicates.
 
-Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
+Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
   (Import RVPCOM : RiscvPmpIrisBaseCommon)
   (Import RVPBASE : RiscvPmpIrisBase LOR RVPCOM)
   (Import RVPPRED : RiscvPmpIrisInstancePredicates LOR RVPCOM RVPBASE)
-<: IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram FL RiscvPmpSemantics RVPCOM RVPBASE.
+<: IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics RiscvPmpProgramLogic RVPCOM RVPBASE.
 
   Import RiscvPmpProgram.
 
@@ -657,7 +675,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
       apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
       unfold liveAddrs, bv.seqBv.
       rewrite -(bv.of_Z_unsigned y).
-      apply elem_of_list_fmap_1.
+      apply list_elem_of_fmap_2.
       rewrite elem_of_seqZ.
       subst y.
       unfold maxAddr in HmaxOK.
@@ -691,9 +709,9 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
 
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    FL RiscvPmpSemantics RVPCOM RVPBASE.
+    RiscvPmpSemantics RiscvPmpProgramLogic RVPCOM RVPBASE.
   (* Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram *)
-  (*   FL RiscvPmpSemantics RiscvPmpIrisBase RiscvPmpIrisAdeqParameters. *)
+  (*   RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase RiscvPmpIrisAdeqParameters. *)
 
   Lemma gprs_equiv `{sailGS Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢

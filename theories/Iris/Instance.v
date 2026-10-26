@@ -43,7 +43,7 @@ From iris Require Import
      bi.interface
      program_logic.adequacy
      program_logic.weakestpre
-     proofmode.tactics.
+     proofmode.proofmode.
 
 From Katamaran Require Import
      Iris.Base
@@ -52,8 +52,7 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Signature
-     SmallStep.Step
-     Specification.
+     SmallStep.Step.
 
 Import ctx.notations.
 Import env.notations.
@@ -101,8 +100,8 @@ Module Type IrisSignatureRules
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
-  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
+  (Import PLOG  : ProgramLogic B SIG PROG)
   (Import IPre  : IrisPrelims B PROG SEM)
   (Import IB    : IrisBase B PROG SEM IPre)
   (Import IPred : IrisPredicates B SIG PROG SEM IPre IB).
@@ -131,6 +130,9 @@ Section Soundness.
     end.
 
   Section PartialTriple.
+
+    Context {SPEC : Specification}.
+
     (* semTriple currently wraps the given POST, if we end up with fail, we get
         True, otherwise we do POST v δ. *)
     Definition semTriple {Γ τ} (δ : CStore Γ)
@@ -446,6 +448,9 @@ Section Soundness.
   End PartialTriple.
 
   Section TotalTriple.
+
+    Context {SPEC : Specification}.
+
     (* semTriple currently wraps the given POST, if we end up with fail, we get
         True, otherwise we do POST v δ. *)
     Definition semTTriple {Γ τ} (δ : CStore Γ)
@@ -791,13 +796,13 @@ Module Type IrisAdequacy
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
-  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
+  (Import PLOG  : ProgramLogic B SIG PROG)
   (Import IPre  : IrisPrelims B PROG SEM)
   (Import IB    : IrisBase B PROG SEM IPre)
   (Import IAP   : IrisAdeqParameters B IB)
   (Import IPred : IrisPredicates B SIG PROG SEM IPre IB)
-  (Import IRules : IrisSignatureRules B SIG PROG FL SEM IPre IB IPred).
+  (Import IRules : IrisSignatureRules B SIG PROG SEM PLOG IPre IB IPred).
 
   Import SmallStepNotations.
 
@@ -865,7 +870,7 @@ Module Type IrisAdequacy
     - right. apply reducible_not_val. auto.
   Qed.
 
-  Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
+  Lemma adequacy {SPEC : Specification} {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
     (forall `{sailGS Σ'}, ⊢ semTriple δ (mem_res μ ∗ own_regstore γ) s (fun v _ => ⌜ Q v ⌝)) ->
@@ -943,8 +948,8 @@ Module Type IrisAdequacy
 
 End IrisAdequacy.
 
-Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (FL : FailLogic) (SEM : Semantics B PROG) (IPre : IrisPrelims B PROG SEM) (IB : IrisBase B PROG SEM IPre) :=
-  IrisPredicates B SIG PROG SEM IPre IB <+ IrisSignatureRules B SIG PROG FL SEM IPre IB.
+Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (SEM : Semantics B PROG) (PLOG : ProgramLogic B SIG PROG) (IPre : IrisPrelims B PROG SEM) (IB : IrisBase B PROG SEM IPre) :=
+  IrisPredicates B SIG PROG SEM IPre IB <+ IrisSignatureRules B SIG PROG SEM PLOG IPre IB.
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
@@ -954,19 +959,19 @@ Module IrisInstanceWithContracts
   (Import B     : Base)
   (Import SIG   : Signature B)
   (Import PROG  : Program B)
-  (Import FL    : FailLogic)
   (Import SEM   : Semantics B PROG)
-  (Import IPre : IrisPrelims B PROG SEM)
-  (Import SPEC  : Specification B SIG PROG)
+  (Import PLOG  : ProgramLogic B SIG PROG)
+  (Import IPre  : IrisPrelims B PROG SEM)
   (Import IB    : IrisBase B PROG SEM IPre)
-  (Import II    : IrisInstance B SIG PROG FL SEM IPre IB)
-  (Import PLOG  : ProgramLogicOn B SIG PROG FL SPEC).
+  (Import II    : IrisInstance B SIG PROG SEM PLOG IPre IB).
 
   Section WithSailGS.
-    Import ProgramLogic.
+    Import ProgLog.
     Context {Σ} {sG : sailGS Σ} {rG : resGS Σ}.
 
     Section PartialTriple.
+      Context {SPEC : Specification}.
+
         Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
             (∀ σs σ (f : 𝑭 σs σ),
             match cenv σs σ f with
@@ -1103,11 +1108,14 @@ Module IrisInstanceWithContracts
     Import callgraph.
 
     Section TotalTriple.
-        Definition HasValidContract (n : Node) : iProp Σ :=
-          match CEnv (f n) with
-          | Some c => TValidContractSem (FunDef (f n)) c
-          | None => True
-          end.
+
+      Context {SPEC : Specification}.
+
+      Definition HasValidContract (n : Node) : iProp Σ :=
+        match CEnv (f n) with
+        | Some c => TValidContractSem (FunDef (f n)) c
+        | None => True
+        end.
 
       Definition TValidContractEnvN (cenv : SepContractEnv) (n : Node) : iProp Σ :=
         ⌜ Accessible 𝑭_call_graph n ⌝ -∗ HasValidContract n.
@@ -1298,7 +1306,7 @@ Module IrisInstanceWithContracts
           ⊢ TValidContractEnvSem CEnv.
         Proof.
           iIntros (extSem lemSem cenv n Hwf).
-          apply Coq.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
+          apply Stdlib.Wellfounded.Transitive_Closure.Acc_clos_trans in Hwf.
           iInduction Hwf as [n _ IH].
           unfold HasValidContract at 2.
           destruct (CEnv _) as [c|] eqn:Ec; last trivial.

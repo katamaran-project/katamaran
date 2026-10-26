@@ -68,7 +68,7 @@ Module Type PatternsOn (Import TY : Types).
         | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
             fun EΔ => let (E,v) := env.view EΔ in
-                      pattern_match p E ► (_ ↦ v)
+                      (pattern_match p E) ► (_ ↦ v)
         end.
 
     Definition tuple_pattern_match_env_reverse {T : Ty -> Set} :
@@ -79,7 +79,7 @@ Module Type PatternsOn (Import TY : Types).
         | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
           fun EΔ => let (E,v) := env.view EΔ in
-                    pattern_match p E ► (_ ↦ v)
+                    (pattern_match p E) ► (_ ↦ v)
         end.
 
     Definition tuple_pattern_match_val {σs : Ctx Ty} {Δ : NCtx N Ty}
@@ -198,7 +198,7 @@ Module Type PatternsOn (Import TY : Types).
       forall {σ} (pat : Pattern σ),
         finite.Finite (PatternCase pat) :=
       fix fin {σ} pat :=
-        match pat with
+        match pat as pat return finite.Finite (PatternCase pat) with
         | pat_var _              => finite.unit_finite
         | pat_bool               => Finite_bool
         | pat_list _ _ _         => Finite_bool
@@ -483,7 +483,7 @@ Module Type PatternsOn (Import TY : Types).
   End Patterns.
 
   Section Freshen.
-    Notation LCtx := (NCtx LVar Ty).
+    Abbreviation LCtx := (NCtx LVar Ty).
     Context {N : Set} (n : N -> LVar).
 
     (* Freshen the name of the variables in a given named context [Δ]. The type

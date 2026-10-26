@@ -73,7 +73,7 @@ Module Type UnusedWorldInstance
     WInstance (wsubst w x t) :=
     @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
   Next Obligation.
-    intros * p. cbn. rewrite instprop_subst, <- inst_sub_shift in *.
+    intros *. cbn. rewrite instprop_subst, <- inst_sub_shift in *.
     rewrite inst_sub_single_shift; auto using ιvalid.
   Qed.
 

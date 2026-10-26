@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Lists.List.
 From Katamaran Require Import
      Bitvector
@@ -41,7 +41,6 @@ From Katamaran Require Import
      Semantics
      Sep.Hoare
      Sep.Logic
-     Specification
      MinimalCaps.Machine
      MinimalCaps.Sig
      MinimalCaps.Model
@@ -53,7 +52,7 @@ From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ListNotations.
@@ -66,14 +65,6 @@ Import MinCapsIrisInstanceWithContracts.
 Import MinCapsValidContracts.
 
 Import MinCapsSignature.
-Module Import MinCapsShallowExecutor :=
-  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification.
-
-Module Import MinCapsShallowSoundness := MakeShallowSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsProgramLogic.
-
-Module Import MinCapsSymbolic := MakeSymbolicSoundness MinCapsBase MinCapsSignature MinCapsProgram DefaultFailLogic MinCapsSpecification MinCapsShallowExecutor MinCapsExecutor.
-
-Import MinCapsProgramLogic.
 
 Section Loop.
   Context `{sg : sailGS Σ}.

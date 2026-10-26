@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Lists.List
      Program.Tactics
@@ -40,10 +40,10 @@ From Equations Require Import
 From Katamaran Require Import
      Signature
      Bitvector
+     Sep.Hoare
      Semantics.Registers
      MicroSail.SymbolicExecutor
      Symbolic.Solver
-     Specification
      Program.
 
 From stdpp Require Import decidable finite.
@@ -393,7 +393,7 @@ Module Import ExampleProgram <: Program ExampleBase.
   Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Notation AccessibleFun f := (Accessible 𝑭_call_graph f).
+  Abbreviation AccessibleFun f := (Accessible 𝑭_call_graph f).
 
   Module Import WithAccessibleTactics.
     Import AccessibleTactics.
@@ -439,14 +439,17 @@ Module Import ExampleSig <: Signature ExampleBase.
   Include SignatureMixin ExampleBase.
 End ExampleSig.
 
-Module Import ExampleSpecification <: Specification ExampleBase ExampleSig ExampleProgram.
-  Include SpecificationMixin ExampleBase ExampleSig ExampleProgram.
+Module Import ExampleProgramLogic :=
+  MakeProgramLogic ExampleBase ExampleSig ExampleProgram.
+
+Module Import ExampleSpecification.
+
   Import ctx.resolution.
 
   Section ContractDefKit.
 
     Import asn.notations.
-    Notation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
+    Abbreviation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
 
     Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int];
@@ -541,7 +544,7 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         sep_contract_postcondition   := term_var "result" = term_val ty.int 0%Z
       |}.
 
-    Definition CEnv : SepContractEnv :=
+    Definition contract_environment : SepContractEnv :=
       fun Δ τ f =>
         match f with
         | abs        => Some sep_contract_abs
@@ -559,20 +562,27 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig Examp
         | pevaltest1 => Some sep_contract_pevaltest1
         end.
 
-    Definition CEnvEx : SepContractEnvEx :=
+    Definition contract_environment_foreign : SepContractEnvEx :=
       fun Δ τ f =>
         match f with end.
 
-    Definition LEnv : LemmaEnv :=
+    Definition lemma_environment : LemmaEnv :=
       fun Δ l =>
         match l with end.
 
   End ContractDefKit.
 
+  #[export] Instance example_specification : Specification :=
+    {| CEnv   := contract_environment;
+       CEnvEx := contract_environment_foreign;
+       LEnv   := lemma_environment;
+       fail_rule_pre := true;
+    |}.
+
 End ExampleSpecification.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleProgram Hoare.DefaultFailLogic ExampleSpecification.
+  MakeExecutor ExampleBase ExampleSig ExampleProgram ExampleProgramLogic.
 
 Local Ltac solve :=
   repeat

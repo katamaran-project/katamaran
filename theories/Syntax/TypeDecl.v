@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Bool.Bool
      Strings.String
      ZArith.BinInt.
@@ -36,7 +36,7 @@ From Katamaran Require Import
      Bitvector
      Context
      Prelude.
-From Coq Require Import
+From Stdlib Require Import
      Strings.String
      ZArith.BinInt.
 From Katamaran Require Import
@@ -121,6 +121,10 @@ Module ty.
 
     Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
     Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
+
+    Register Scheme Ty_rect as rect_dep for Ty.
+    Register Scheme Ty_rec as rec_dep for Ty.
+    Register Scheme Ty_ind as ind_dep for Ty.
 
   End WithTypeDecl.
 

@@ -52,10 +52,10 @@ Reserved Notation "[ x ; y ; .. ; z ]".
    x in this notation has to bind at least tighter than that. Also it should
    allow for x being a typed binding (y ∷ t) which is at level 49, so looser
    than that. *)
-Reserved Notation "δ ► ( x ↦ v )"  (at level 50, x at level 50, left associativity,
+Reserved Notation "δ ► ( x ↦ v )"  (x at level 50, left associativity,
  format "δ  ►  ( x  ↦  v )").
 Reserved Notation "δ1 ►► δ2"       (at level 50, left associativity).
-Reserved Notation "δ ⟪ x ↦ v ⟫"    (at level 90, x at level 0, v at level 0, left associativity).
+Reserved Notation "δ ⟪ x ↦ v ⟫"    (x at level 0, v at level 0, left associativity).
 Reserved Notation "δ ‼ x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 0, no associativity).
@@ -66,17 +66,21 @@ Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 �
 Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity,
   format "'[v' s1 ;; '/' s2 ']'").
 
+(* Keep this notation at level 75 rather than the usual level 0 for closed *)
+(* notations. At level 0, the postcondition opener ⦃ can be *)
+(* parsed as the start of a new triple passed as an argument to δ. *)
+#[warnings="-closed-notation-not-level-0"]
 Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
 
 (* Subst / persist / inst notations. *)
-Reserved Notation "a ⟨ ζ ⟩" (at level 7, left associativity, format "a ⟨ ζ ⟩").
+Reserved Notation "a ⟨ ζ ⟩" (left associativity, format "a ⟨ ζ ⟩").
 Reserved Infix "∘" (at level 40, left associativity).
 
 (* Functor notations. Compatible with stdpp. *)
 Reserved Infix "<$>" (at level 61, left associativity).
 Reserved Infix "<*>" (at level 61, left associativity).
 
-(* Logic notations. These were chosen to be compatible with Coq.Unicode.Utf8, stdpp and iris. *)
+(* Logic notations. These were chosen to be compatible with Stdlib.Unicode.Utf8, stdpp and iris. *)
 Reserved Notation "P ⊢ Q" (at level 99, Q at level 200, right associativity).
 Reserved Notation "P '⊢@{' L } Q" (at level 99, Q at level 200, right associativity).
 Reserved Notation "P ⊢f f" (at level 99, f at level 200, no associativity).

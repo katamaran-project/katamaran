@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      ZArith.ZArith
      Strings.String
      Lists.List.
@@ -38,7 +38,6 @@ From Katamaran Require Import
      Notations
      Bitvector
      Sep.Hoare
-     Specification
      MicroSail.ShallowExecutor
      MicroSail.ShallowSoundness
      MicroSail.SymbolicExecutor
@@ -50,6 +49,7 @@ From Katamaran Require Import
      RiscvPmp.IrisInstance
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Machine
+     RiscvPmp.Logic
      RiscvPmp.Sig
      RiscvPmp.Contracts
      RiscvPmp.BlockVer.Spec
@@ -57,6 +57,8 @@ From Katamaran Require Import
 From Katamaran Require RiscvPmp.ModelBinary.
 
 Import RiscvPmpProgram.
+Import RiscvPmpProgramLogic.
+Import RiscvPmpBlockVerifSpec.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -69,19 +71,19 @@ Module BinaryBlockVerifier
   (Import RVPCOM : RiscvPmpIrisBaseCommon)
   (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
   (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
-  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEl RVPPREDl)
+  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl)
   (RVPCONTRl : RiscvPmpIrisInstanceWithContracts LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl)
   (RVPTVl : RiscvPmpBlockVerifTotalVerifier LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl)
   (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
   (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
-  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RiscvPmpBlockVerifFailLogic RVPCOM RVPBASEr RVPPREDr)
+  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RVPCOM RVPBASEr RVPPREDr)
   (RVPCONTRr : RiscvPmpIrisInstanceWithContracts LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr)
   (RVPTVr : RiscvPmpBlockVerifTotalVerifier LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr RVPCONTRr)
   (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
   (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
   (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
-  (Import RVPINST2 : RiscvPmpIrisInstance2 DefaultFailLogic RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
-  Import iris.base_logic.lib.iprop iris.proofmode.tactics.
+  (Import RVPINST2 : RiscvPmpIrisInstance2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
+  Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
 
   Module Import BinaryBlockVerifierNotations.
     Notation "a '↦' t" := (reg_pointsTo21 a t) (at level 70).
@@ -159,7 +161,7 @@ Module BinaryBlockVerifier
                          ∃ na, exec_instruction_epilogue i ainstr na
                                ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                      | inr _ =>
-                       if RiscvPmpBlockVerifFailLogic.fail_rule_pre
+                       if fail_rule_pre
                        then True
                        else False
                       end)%I)

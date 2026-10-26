@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
+From Stdlib Require Import
      Arith.PeanoNat
      Bool.Bool
      Classes.Morphisms
@@ -180,7 +180,7 @@ Module Type SymPropOn
             SymProp (ctx.remove (ctx.in_cat_left (PatternCaseCtx pc) xIn)))
     | debug
         (b : AMessage Σ) (k : SymProp Σ).
-    Notation 𝕊 := SymProp.
+    Abbreviation 𝕊 := SymProp.
 
     Global Arguments error {_} _.
     Global Arguments block {_}.
@@ -556,8 +556,7 @@ Module Type SymPropOn
       induction ζ; cbn in *.
       - rewrite inst_sub_id. intuition.
       - rewrite IHζ. clear IHζ.
-        rewrite <- inst_sub_shift.
-        rewrite inst_subst.
+        rewrite <- inst_sub_shift, inst_subst.
         intuition.
     Qed.
 
@@ -570,10 +569,8 @@ Module Type SymPropOn
       - cbn. rewrite inst_sub_id, subst_sub_id. intuition.
       - cbn [wsafe assert_triangular inst_triangular].
         rewrite obligation_equiv. cbn.
-        rewrite subst_sub_comp.
-        rewrite IHζ. clear IHζ.
-        rewrite <- inst_sub_shift.
-        rewrite ?inst_subst.
+        rewrite subst_sub_comp, IHζ. clear IHζ.
+        rewrite <- inst_sub_shift, ?inst_subst.
         intuition.
     Qed.
 
@@ -863,7 +860,7 @@ Module Type SymPropOn
         now rewrite <- Hmatch, pattern_match_val_inverse_right.
       - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
         destruct pattern_match_val as [pc ιpat]. intros Hsafe.
-        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists pc. split. apply base.list_elem_of_In, finite.elem_of_enum.
         exists ιpat. split. exact Hmatch. exact Hsafe.
     Qed.
 
@@ -891,7 +888,7 @@ Module Type SymPropOn
         f_equal. f_equal. symmetry. apply inst_sub_cat_right.
       - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
         destruct pattern_match_val as [pc ιpat]. intros Hsafe.
-        exists pc. split. apply base.elem_of_list_In, finite.elem_of_enum.
+        exists pc. split. apply base.list_elem_of_In, finite.elem_of_enum.
         exists ιpat. split; auto. clear Hsafe.
         rewrite env.remove_cat_left, eq_rect_sym2.
         symmetry. etransitivity; [|exact Hmatch].
@@ -914,7 +911,7 @@ Module Type SymPropOn
       split.
       - pose proof (pattern_match_val_inverse_left pat (inst s ι)) as Hmatch.
         destruct pattern_match_val as [pc ιpat]. intros HYP. apply HYP; auto.
-        apply base.elem_of_list_In, finite.elem_of_enum.
+        apply base.list_elem_of_In, finite.elem_of_enum.
       - intros Heq pc HIn ιpat Hmatch. rewrite <- Hmatch in Heq.
         now rewrite pattern_match_val_inverse_right in Heq.
     Qed.
@@ -934,7 +931,7 @@ Module Type SymPropOn
       split.
       - pose proof (pattern_match_val_inverse_left pat ι.[? x∷σ]) as Hmatch.
         destruct pattern_match_val as [pc ιpat].
-        intros HYP. apply HYP. apply base.elem_of_list_In, finite.elem_of_enum.
+        intros HYP. apply HYP. apply base.list_elem_of_In, finite.elem_of_enum.
         rewrite <- Hmatch. unfold pattern_match_val_reverse'. cbn.
         f_equal. rewrite env.remove_cat_left. rewrite eq_rect_sym2.
         symmetry. apply inst_sub_cat_right.
@@ -960,14 +957,14 @@ Module Type SymPropOn
 
       Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
       Notation "s = t" := (formula_relop bop.eq s t) (only printing, s in scope term, t in scope term).
-      Notation "' t" := (@formula_bool _ t) (at level 10, only printing, format "' t").
+      Notation "t" := (@formula_bool _ t) (only printing).
       Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (only printing).
       Notation "F → P" := (@SymProp.assumek _ F P) (only printing).
       Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
       Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
       Notation "⊤" := (@SymProp.block _).
-      Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
-      Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
+      Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 70, t at next level, right associativity, only printing).
+      Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 70, t at next level, right associativity, only printing).
       Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
       Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
       Notation "x >= y" := (formula_relop bop.le y x) (only printing, x in scope term, y in scope term).
@@ -1060,8 +1057,8 @@ Module Type SymPropOn
     End Statistics.
 
   End SymProp.
-  Notation SymProp := SymProp.SymProp.
-  Notation 𝕊 := SymProp.SymProp.
+  Abbreviation SymProp := SymProp.SymProp.
+  Abbreviation 𝕊 := SymProp.SymProp.
   Import option.notations.
 
   Module Postprocessing.
@@ -1237,21 +1234,8 @@ Module Type SymPropOn
       safe (demonic_binary_prune p1 p2) ι <-> safe (demonic_binary p1 p2) ι.
     Proof.
       destruct p1; cbn; auto.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - intuition.
-      - destruct p2; cbn; auto;
-          rewrite ?obligation_equiv; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto;
-          rewrite ?obligation_equiv; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
-      - destruct p2; cbn; auto; intuition.
+      4: intuition.
+      all: destruct p2; cbn; auto; rewrite ?obligation_equiv; intuition.
     Qed.
 
     Lemma prune_assertk_sound {Σ} fml msg (p : 𝕊 Σ) (ι : Valuation Σ) :
@@ -1436,13 +1420,13 @@ Module Type SymPropOn
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
           exists (env.insert bIn ιe (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe))).
           rewrite safe_assert_msgs_formulas. cbn.
-          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert_eq.
           rewrite ?inst_eq_rect.
           split; auto.
           rewrite instprop_subst, inst_eq_rect in Hpc.
           now rewrite inst_sub_single2 in Hpc.
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
-          cbn in Hp. cbn in Hp. destruct Hp as [Ht Hp].
+          cbn in Hp. destruct Hp as [Ht Hp].
           rewrite env.remove_cat_right in Hp.
           exists (env.remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.
@@ -1636,10 +1620,7 @@ Module Type SymPropOn
         rewrite safe_assume_pathcondition. cbn.
         rewrite forall_impl.
         apply all_iff_morphism. intros v.
-        rewrite safe_assume_pathcondition.
-        rewrite instprop_subst.
-        rewrite inst_sub_wk1.
-        reflexivity.
+        now rewrite safe_assume_pathcondition, instprop_subst, inst_sub_wk1.
       Qed.
 
       Lemma plug_eq_rect {Σ1 Σ2 Σ2'} (eq : Σ2 = Σ2') (ec : UCtx Σ1 Σ2) (p : 𝕊 Σ2') :
@@ -1669,7 +1650,7 @@ Module Type SymPropOn
           rewrite safe_assume_pathcondition, instprop_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
           rewrite safe_assume_pathcondition in HYP. cbn in HYP.
-          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert in HYP.
+          rewrite env.insert_cat_right, env.remove_insert, env.lookup_insert_eq in HYP.
           rewrite inst_eq_rect in HYP.
           rewrite inst_sub_single2 in Hpc.
           now apply HYP.
@@ -1757,7 +1738,7 @@ Module Type SymPropOn
     End Experimental.
 
     Section Unquantify.
-      Import iris.bi.interface iris.proofmode.tactics.
+      Import iris.bi.interface iris.proofmode.proofmode.
 
       Fixpoint weaken_symprop {Σ1} (P : SymProp Σ1) {Σ2} (ζ : WeakensTo Σ1 Σ2) {struct P} : SymProp Σ2 :=
         match P with
@@ -2522,8 +2503,8 @@ Module Type SymPropOn
       Notation "F → P" := (eassumek F P) (only printing, format "'[v' F  → '/ ' P ']'").
       Notation "'∃' x '∷' σ , P" := (eangelicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∃'  x '∷' σ ']' ,  '/' P ']'").
       Notation "'∀' x '∷' σ , P" := (edemonicv (x ∷ σ) P) (at level 10, P at level 200, only printing, format "'[  ' '[  ' '∀'  x '∷' σ ']' ,  '/' P ']'").
-      Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 99, right associativity, only printing).
-      Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 99, right associativity, only printing).
+      Notation "x ↦ t ∧ k" := (eassert_vareq x _ t k) (at level 70, t at next level, right associativity, only printing).
+      Notation "x ↦ t → k" := (eassume_vareq x _ t k) (at level 70, t at next level, right associativity, only printing).
       Notation "P ∧ Q" := (edemonic_binary P Q) (at level 80, right associativity, only printing).
       Notation "P ∧ Q" := (eformula_and P Q) (at level 80, right associativity, only printing).
       Notation "P ∨ Q" := (eangelic_binary P Q) (at level 85, right associativity, only printing).
@@ -2545,8 +2526,8 @@ Module Type SymPropOn
 
       Notation "- x" := (eterm_unop uop.neg x) (only printing).
 
-      Notation unsigned x := (eterm_unop uop.unsigned x).
-      Notation signed x := (eterm_unop uop.signed x).
+      Abbreviation unsigned x := (eterm_unop uop.unsigned x).
+      Abbreviation signed x := (eterm_unop uop.signed x).
 
     End notations.
 
@@ -2562,7 +2543,7 @@ Module Type LogSymPropOn
   (Import UL : UnifLogicOn B P W).
 
   Module LogicalSoundness.
-    Import iris.bi.interface iris.proofmode.tactics.
+    Import iris.bi.interface iris.proofmode.proofmode.
     Import SymProp.
     Import ModalNotations.
     Import proofmode logicalrelation.
@@ -2760,7 +2741,7 @@ Module Type LogSymPropOn
         pose proof (f_equal (fun ι => env.lookup ι xIn) H2) as Hlkp.
         rewrite inst_sub_single2 -inst_lookup env.lookup_tabulate in Hlkp.
         cbn in Hlkp.
-        rewrite env.lookup_insert inst_pattern_match_term_reverse in Hlkp.
+        rewrite env.lookup_insert_eq inst_pattern_match_term_reverse in Hlkp.
         apply (f_equal (pattern_match_val pat)) in Hlkp.
         rewrite pattern_match_val_inverse_right Hpmv in Hlkp.
         dependent elimination Hlkp.

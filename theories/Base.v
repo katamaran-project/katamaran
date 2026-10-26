@@ -26,9 +26,9 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Export
+From Stdlib Require Export
      Numbers.BinNums.
-From Coq Require Import
+From Stdlib Require Import
      Program.Tactics.
 From Katamaran Require Export
      Context
@@ -57,19 +57,19 @@ Module Type BaseMixin (Import TY : Types).
     OccursCheckOn TY <+ GenOccursCheckOn TY <+ InstantiationOn TY <+
     MessagesOn TY <+ PartialEvaluationOn TY.
 
-  Notation Ty := (@ty.Ty typedeclkit).
-  Notation LVar := (@Variables.LVar varkit).
-  Notation PVar := (@Variables.PVar varkit).
-  Notation PCtx := (NCtx PVar Ty).
-  Notation LCtx := (NCtx LVar Ty).
-  Notation Val := (@ty.Val typedeclkit typedenotekit).
+  Abbreviation Ty := (@ty.Ty typedeclkit).
+  Abbreviation LVar := (@Variables.LVar varkit).
+  Abbreviation PVar := (@Variables.PVar varkit).
+  Abbreviation PCtx := (NCtx PVar Ty).
+  Abbreviation LCtx := (NCtx LVar Ty).
+  Abbreviation Val := (@ty.Val typedeclkit typedenotekit).
 
-  Notation Valuation Σ :=
+  Abbreviation Valuation Σ :=
     (@Env (Binding LVar Ty)
        (fun xt : Binding LVar Ty =>
           Val (@type _ _ xt)) Σ).
 
-  Notation CStore := (@NamedEnv PVar Ty Val).
+  Abbreviation CStore := (@NamedEnv PVar Ty Val).
 
   Definition SMatchResult {N σ} (pat : Pattern (N:=N) σ) (Σ : LCtx) : Type :=
     { pc : PatternCase pat & NamedEnv (Term Σ) (PatternCaseCtx pc) }.
