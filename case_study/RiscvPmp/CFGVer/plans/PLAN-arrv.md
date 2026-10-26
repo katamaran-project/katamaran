@@ -1,11 +1,11 @@
 # PLAN-arrv — arrays whose contents are NAMED (`arrv`), replacing `arr`
 
 Status: **Phases A, B, C DONE; GATE C PASSED 2026-10-24** (both RSA end
-theorems green over arrv with value tracking). Phase D steps 1–2 (RSA
-spikes, check_scalar) DONE; **Phase D′ (the tag, D14–D17) DONE
-2026-10-26** — prediction confirmed, LoopN ≈1.13× arr warm. Next: muladd
-(Phase D step 3), still on `arr`/old `DArr` and RED by design (D10), list
-in the HANDOFF. Branch `issue/rsa` (the spike
+theorems green over arrv with value tracking). **Phase D DONE 2026-10-26**
+(RSA spikes, check_scalar, muladd — every example on tagged arrv, every end
+theorem green; muladd restated via gen_prog_contract); **Phase D′ (the tag,
+D14–D17) DONE 2026-10-26** — prediction confirmed, LoopN ≈1.13× arr warm.
+Next: Phase E (delete `arr`) and the ONE full merge gate. Branch `issue/rsa` (the spike
 landed there: `138d2df9`, `dd9672f3`, `ab321701`; not merged, not pushed).
 Part of PLAN-rsa.md Phase 2 (byte memory / mem* callees); log timings in
 **PLAN-rsa.md §5** (same protocol: stamps, wait vs authoring, VC CPU/RSS,
@@ -134,23 +134,25 @@ by grep 2026-10-25:
   `gen_prog_noninterferent` like the Ptr one, hand-written ImplPre gone;
   trusted statement unchanged. valid_l1 9.83 → 9.83 s, valid_l2 14.05 →
   17.25 s (matched).
-- uses the old `arr`/`clem_arr_*`/unnamed `DArr`/`DBytes`:
-  `Example/Muladd/MuladdParam.v`,
-  `MuladdParamLoop{D,D0,DAng}.v`, `MuladdParamTail.v`;
-- old valuation form (`ι.["a" ↦ …]` in `concretize_data`/`data_ok`, data
-  typed over `Ctx ▻ "a"`): `MuladdParam.v`;
-- calls `gen_implpre_data` with the OLD signature (now `@gen_implpre_data _ _
-  _ _ ζ ιc ι Hζ μ1 μ2 data a off ν Ha Hν Hok Hi1 Hi2`, see GenProg's bridge
-  for the instantiation): `MuladdParamResult.v` (check_scalar avoided this
-  by restating its contract as `gen_prog_contract` -- an option here too);
-- built on the changed LoopN (only the hand-overs / seeds around it may need
-  edits; re-run): `MuladdParamLoop{I,K,M}.v` — their positional `MkLoopN`
-  also needs the FOUR new tag fields appended (`ln_tm ln_tx ln_tdm ln_tdx`,
-  Phase D′; e.g. the source arrays' value names, own tags for the done
-  arrays); then everything importing the
-  above, up to `Results.v`.
+- DONE 2026-10-26: muladd — `MuladdParamLoop{D,DAng,D0,I,K,M}.v`,
+  `MuladdParamTail{,VC}.v`, `MuladdParam{,VC,Result}.v`, all green, trusted
+  statement unchanged. Values ∃ throughout (no post mentions one; LoopN's VM
+  is instantiated by the caller). Tags: "vm"/"vx" (the data's value names,
+  D15), D's moved array "Dx", I/K/M's done arrays "Im"/"Ix" → "Km"/"Kx" →
+  "Mm"/"Mx"; the tail reads every tag off the LoopN records (`hand_over L
+  L'`), so caller and loops cannot drift. `sym6` is now a `gen_prog_contract`
+  (Emiel; facts = b public + the code's branch conditions + the 1148 base
+  bound), so `muladd_param_noninterferent` is one `gen_prog_noninterferent`
+  (layout by `contig_data_layout` + `concretize_data_addrs`), hand-written
+  ImplPre gone. Tail's m array no longer states `pub`: nothing in the tail
+  branches on m's limbs, the caller keeps it by framing. VC CPU, matched
+  cold (old arr template in `Example/Muladd/ZZLoop{I,K,M}Arr.v`):
+  D 0.53 s, DAng 5.77 → 5.76, D0 8.66 → 8.89, I 17.63 → 18.65, K 13.46 →
+  14.45, M 13.34 → 14.20 s (≈×1.06). Unmatched (record 2026-10-13):
+  TailVC file 365 → 388 s / 7.5 → 8.1 GB; MuladdParamVC solve 483 → 366 s,
+  file 657 → 533 s / 10.4 → 9.4 GB; Result 21 s / 7.7 GB.
 
-Order (plan §4 Phase D): RsaSpikeSb (DONE) → check_scalar (DONE) → muladd. Recipe, from
+Order (plan §4 Phase D): RsaSpikeSb → check_scalar → muladd, all DONE. Recipe, from
 the RSA port (worked example `RsaSpikeSub.v`, diff `2d660f2f`):
 1. `chunk_user (arr pub w s) [a;n;e]` → `clem_arrv w s t a n e vs` (tag `t`:
    the value name for a top-level array, D15; a template parameter or own

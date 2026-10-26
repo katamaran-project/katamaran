@@ -27,6 +27,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.GenCompose
      RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.GenProg
      RiscvPmp.CFGVer.Example.Muladd.MuladdParam.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -264,12 +265,6 @@ Lemma add_negZ (j k : N) (z : Z) : z = (- Z.of_N j)%Z -> (j <= k)%N -> (k < 4294
   bv.add (bv.of_N k) (@bv.of_Z xlenbits z) = bv.of_N (k - j).
 Proof. intros. rewrite bv.add_comm. now apply negZ_add. Qed.
 
-Lemma ofZ_ofN32 (z : Z) (c : N) : z = Z.of_N c -> (c < 4294967296)%N -> @bv.of_Z xlenbits z = bv.of_N c.
-Proof. change xlenbits with 32%nat in *.
-  intros -> Hc. apply bv.unsigned_inj. rewrite bv.unsigned_of_Z unsigned_of_N_small; [|lia].
-  unfold bv.truncz. cbn [Z.of_nat Z.pow]. rewrite Z.mod_small; lia.
-Qed.
-
 Lemma land_mask_nz (k : N) : (k < 4294967296)%N -> (N.modulo k 1073741824 <> 0)%N ->
   bv.land (@bv.of_N xlenbits k) (bv.of_N 1073741823) <> bv.zero.
 Proof.
@@ -287,19 +282,16 @@ Proof. exact (MuladdParamClose.sext_id32 b p). Qed.
 (* ---- 4. THE END THEOREM, FOR EVERY HEADER b ------------------------------ *)
 
 
-(* the valuation the statement concretizes the data at *)
-Definition sym_ι (ia : N) (b : bv xlenbits) : Valuation (symCtx ▻ "a"∷ty_xlenbits) :=
+(* the contract's parameters: the load address, the header b, and x's
+   address (the arrays' values are chosen by the bridge, PLAN-arrv D9) *)
+Definition sym_ι (ia : N) (b : bv xlenbits) : Valuation symCtx :=
   [env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)]
        .["b"∷ty_xlenbits ↦ SyncVal b]
-       .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + x_off b))]
-       .["a"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].
+       .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + x_off b))].
 
 (* THE GENERATOR'S SPECS (proof side -- the statement below uses its own
    shallow data, PLAN-spec-layer D12, and muladd_cells proves the two agree):
-   x's pointer, then the contract's register specs concretized at the load
-   address; the data as the generator lays it out *)
-Definition sym_reg_specs (ia : N) (b : bv xlenbits) : list reg_spec :=
-  (A0, Known (bv.of_N (ia + x_off b))) :: map (concretize_reg ia) sym_regs.
+   the data as the generator lays it out *)
 Definition sym_mem_specs (ia : N) (b : bv xlenbits) : list mem_cell :=
   concretize_data (sym_ι ia b) (ia + 1128) sym_data.
 
@@ -407,67 +399,21 @@ Proof.
   { unfold fits, layout_size in Hfit0. unfold muladd_data in Hfit0. simpl in Hfit0.
     rewrite !repeat_length in Hfit0. rewrite !N2Nat.id in Hfit0.
     rewrite <- !M_mlenN in Hfit0. rewrite ?Hl in Hfit0. lia. }
-  apply (ni_of_cells (regs' := sym_reg_specs init_addr b) (cs := sym_mem_specs init_addr b));
+  apply (ni_of_cells (regs' := map (concretize_reg_q (sym_ι init_addr b)) sym_regs)
+                     (cs := sym_mem_specs init_addr b));
     [ apply compile_clear; lia | apply compile_in_range; [lia | assumption]
-    | apply perm_of_eq; unfold muladd_regs, sym_reg_specs, x_off;
-      rewrite <- M_mlenN; replace (init_addr + 1148 + 4 * N.of_nat (mlenN b))%N
+    | apply perm_of_eq; unfold muladd_regs; cbn -[mlenN M x_off bv.add];
+      rewrite !ofN_add32; unfold x_off; rewrite -M_mlenN;
+      replace (init_addr + 1148 + 4 * N.of_nat (mlenN b))%N
         with (init_addr + (1148 + 4 * N.of_nat (mlenN b)))%N by lia; reflexivity
     | apply perm_of_eq; apply muladd_cells; exact Hb | ].
-  rewrite Hl. change (4 * N.of_nat 282)%N with 1128%N.
-  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
-    HInitReg1 HInitReg2 HInitMem1 HInitMem2
-    γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
-  eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1' sym6_instrs
-    (init_addr + 1128)%N n ws symCtx
-    ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-          .["b"∷ty_xlenbits ↦ SyncVal b]
-          .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (init_addr + x_off b))])
-    _ HpubReg (sym_mem_specs init_addr b) HpubMem
-    sym6 sym6_valid eq_refl init_addr).
+  apply (gen_prog_noninterferent "p" _ sym_regs sym_facts 1128 sym_data sym6_instrs 250
+           (asn.formula formula_true) (sym_ι init_addr b) init_addr).
   - reflexivity.
-  - apply (seg_exit_table_ok _ _ init_addr 1128). reflexivity.
-  - (* HDataAddrs, by construction *)
-    intros i spec Hi. rewrite Hl.
-    exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i _ Hi).
-  - (* ImplPre *)
-    intros Σ' GS'.
-    iIntros "(Hregs & Hmem & Hpriv & #Hinv)".
-    pose proof (mlen_bounds b Hb) as HM.
-    set (ι0 := [env].["p"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
-                    .["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
-               : Valuation (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits)).
-    iPoseProof (gen_implpre (sym_reg_specs init_addr b) ι0 HpubReg
-                  ltac:(apply Prelude.nodup_fixed; reflexivity)
-                  HInitReg1 HInitReg2 with "Hregs") as "Hpre".
-    cbn [sym_reg_specs gen_pre List.fold_right asn.interpret].
-    iDestruct "Hpre" as "[HA0 Hregs]".
-    pose proof (gen_pre_rel_concretize (Σ := Σ') sym_regs init_addr (SyncVal (@bv.of_N xlenbits init_addr))) as Hcz.
-    rewrite -Hcz.
-    (* the data, by the generator's ImplPre *)
-    assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits) (t_off (term_var "p") 1128) (sym_ι init_addr b)
-                 = SyncVal (@bv.of_N xlenbits (init_addr + 1128))).
-    { cbn -[bv.of_N bv.of_Z bv.add]. f_equal.
-      rewrite (ofZ_ofN32 1128 1128); [|reflexivity|lia]. apply ofN_add32. }
-    iPoseProof (@gen_implpre_data _ _ _ (sym_ι init_addr b) μ1 μ2 sym_data
-                  (t_off (term_var "p") 1128) (init_addr + 1128)%N Ha
-                  (sym_data_ok init_addr b Hb ltac:(unfold maxAddr, minAddr; lia))
-                  HInitMem1 HInitMem2 with "Hmem") as "Hdata".
-    assert (Hp : inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "p" : Term (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) ty_xlenbits) ι0
-                 = inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "p" : Term (symCtx ▻ "a"∷ty_xlenbits) ty_xlenbits) (sym_ι init_addr b))
-      by (cbn; reflexivity).
-    iPoseProof (bi.equiv_entails_1_1 _ _
-                  (gen_regs_at_inst _ _ ι0 (sym_ι init_addr b) sym_regs Hp) with "Hregs") as "Hregs".
-    unfold sym_ι in *.
-    cbn [extend_to_minimal_pre cfg_precondition sym6 gen_seg_contract gen_seg_contract_at asn.interpret sym_pre].
-    cbn -[gen_data_at gen_regs_at bv.of_N bv.of_Z bv.add bv.shiftr bv.sext bv.land bv.unsigned bv.ult mlenN x_off].
-    iFrame "Hpriv Hinv Hdata Hregs".
-    (* what remains: x's pointer register, and pure facts about b and p *)
-    rewrite !sext_idx (mlen_shiftr b Hb).
-    rewrite (negZ_add 1 (N.of_nat (mlenN b)) (-1) eq_refl ltac:(lia) ltac:(lia)) ofN_add32.
-    assert (Hfit' : (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < 4096)%N)
-      by (unfold lenAddr in Hfit; exact Hfit).
+  - repeat constructor.
+  - apply Prelude.nodup_fixed. reflexivity.
+  - (* the facts: b public, the code's branch conditions, the base bound *)
+    intros Σ' H'.
     assert (P1 : b <> bv.zero).
     { intros E. apply (f_equal bv.unsigned) in E. change (bv.unsigned (@bv.zero xlenbits)) with 0%Z in E. lia. }
     assert (P2 : bv.ult (@bv.of_N xlenbits 31) b).
@@ -482,21 +428,19 @@ Proof.
     { apply land_mask_nz; [lia|].
       replace (1073741823 + N.of_nat (mlenN b))%N with ((N.of_nat (mlenN b) - 1) + 1 * 1073741824)%N by lia.
       rewrite N.Div0.mod_add N.mod_small; lia. }
-    assert (P7 : (bv.unsigned (@bv.of_N xlenbits init_addr) + Z.of_N (4 * N.of_nat 282) <= Z.of_N lenAddr)%Z).
-    { rewrite unsigned_of_N_small; [unfold lenAddr; lia|lia]. }
     assert (P8 : (bv.unsigned (@bv.of_N xlenbits init_addr) + 1148 <= Z.of_N lenAddr)%Z).
-    { rewrite unsigned_of_N_small; [unfold lenAddr; lia|lia]. }
-    iSplitR; [iSplit; [iPureIntro; reflexivity|done]|].
-    iSplitR; [iSplit; [iPureIntro; exact P7|done]|].
-    iSplitL "HA0"; [cbn; iExact "HA0"|].
+    { rewrite unsigned_of_N_small; [unfold lenAddr in *; lia|unfold lenAddr in *; lia]. }
+    unfold sym_facts, sym_ι.
+    cbn -[bv.of_N bv.of_Z bv.add bv.shiftr bv.sext bv.land bv.unsigned bv.ult mlenN x_off].
+    rewrite !sext_idx (mlen_shiftr b Hb).
+    rewrite (negZ_add 1 (N.of_nat (mlenN b)) (-1) eq_refl ltac:(lia) ltac:(lia)) ofN_add32.
     repeat iSplit; try done; iPureIntro; first [assumption | exact I].
-  - rewrite sym_mem_len; [|exact Hb]. rewrite Hl. lia.
-  - exact Hmem1.
-  - exact Hmem2.
-  - exact γ1curpriv.
-  - exact γ2curpriv.
-  - exact γ1pc.
-  - exact γ2pc.
-  - exact steps1.
-  - exact Htrace.
+  - apply sym_data_ok; [exact Hb|unfold maxAddr, minAddr; lia].
+  - (* the layout: contiguous right after the code *)
+    apply contig_data_layout.
+    + rewrite sym_mem_len; [|exact Hb]. rewrite Hl. lia.
+    + intros i s Hi. rewrite Hl.
+      exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i s Hi).
+  - rewrite Hl. lia.
+  - exact sym6_valid.
 Qed.

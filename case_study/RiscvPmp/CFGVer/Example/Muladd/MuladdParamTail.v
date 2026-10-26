@@ -81,19 +81,27 @@ Definition tail_pre : Assertion (tailCtx ▻ "a"∷ty_xlenbits) :=
     ∗ A5 ↦ᵣ term_binop bop.shiftl (t_mlen (term_var "b")) (term_val (ty.bvec 5) (bv.of_N 2))
     ∗ A6 ↦ᵣ term_binop bop.bvadd (term_val ty_xlenbits (bv.of_N 31)) (term_unop uop.sext (term_var "b"))
     (* x: x[1] (the new limb), the moved limbs x[2..mlen-2] as an array walking
-       UP, and x[mlen-1], x[mlen] as cells.  Their address terms differ
-       between the two mblr paths, so they are matched ANGELICALLY *)
+       UP (loop D's done array, tag "Dx"), and x[mlen-1], x[mlen] as cells.
+       Their address terms differ between the two mblr paths, so they are
+       matched ANGELICALLY.  Array values are ∃ (PLAN-arrv): nothing here
+       mentions them *)
     ∗ asn.exist "x1" ty_xlenbits
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word) [t_off (term_var "x") 4; term_var "x1"]))
-    ∗ asn.chunk_angelic (chunk_user (arr false 4 4)
-        [t_off (term_var "x") 8; t_cnt (-3) (term_var "b"); t_mlen_addr (term_var "x") (term_var "b") (-1)])
+    ∗ asn.exist "vx" (clemv_ty 4)
+        (clem_arrv_angelic 4 4 (ln_tx MuladdParamLoopI.lnIN) (t_off (term_var "x") 8)
+           (t_cnt (-3) (term_var "b")) (t_mlen_addr (term_var "x") (term_var "b") (-1))
+           (term_var "vx"))
     ∗ asn.exist "xu" ty_xlenbits
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word) [t_mlen_addr (term_var "x") (term_var "b") (-1); term_var "xu"]))
     ∗ asn.exist "xt" ty_xlenbits
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word) [t_mlen_addr (term_var "x") (term_var "b") 0; term_var "xt"]))
-    (* m (public), as the caller has it: m[1..mlen-2] walking UP, two cells *)
-    ∗ asn.chunk (chunk_user (arr true 4 4)
-        [t_off (term_var "m") 4; t_cnt (-2) (term_var "b"); t_mlen_addr (term_var "m") (term_var "b") (-1)])
+    (* m, as the caller has it: m[1..mlen-2] walking UP (tag "vm"), two
+       cells.  Its limbs' publicness is the caller's, kept by framing: the
+       tail never branches on them *)
+    ∗ asn.exist "vm" (clemv_ty 4)
+        (clem_arrv 4 4 (ln_tm MuladdParamLoopI.lnIN) (t_off (term_var "m") 4)
+           (t_cnt (-2) (term_var "b")) (t_mlen_addr (term_var "m") (term_var "b") (-1))
+           (term_var "vm"))
     ∗ asn.exist "mu" ty_xlenbits (t_mlen_addr (term_var "m") (term_var "b") (-1) ↦ₘ term_var "mu" ∗ secLeakvar "mu")
     ∗ asn.exist "mt" ty_xlenbits (t_mlen_addr (term_var "m") (term_var "b") 0 ↦ₘ term_var "mt" ∗ secLeakvar "mt")
     ∗ asn_in_range (term_var "x") ∗ asn_in_range (t_off (term_var "x") 4)
@@ -114,27 +122,33 @@ Definition tail_post : Assertion (tailCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xl
 
 Definition cl (k : CLem) : Annot := AnnotCLemma k.
 
+(* Every array's TAG is read off the LoopN records (PLAN-arrv D16): a loop's
+   done arrays keep their tags through the flip and are the next loop's
+   sources, so the records chain (I's tdm/tdx = K's tm/tx, and so on). *)
+Definition lI := MuladdParamLoopI.lnIN.
+Definition lK := MuladdParamLoopK.lnKN.
+Definition lM := MuladdParamLoopM.lnMT.
+
 (* before I: x = x[1] ++ moved ++ x[mlen-1] ++ x[mlen], m = arr ++ m[mlen-1]
    ++ m[mlen], and I's two done seeds *)
 Definition build_i : list Annot :=
-  [ cl (clem_arr_add_first false 4 4)
-  ; cl (clem_arr_add_last false 4 4); cl (clem_arr_add_last false 4 4)
-  ; cl (clem_arr_add_last true 4 4); cl (clem_arr_add_last true 4 4)
-  ; cl (clem_arr_empty true 4 (-4)); cl (clem_arr_empty false 4 (-4)) ].
-(* after a loop: learn where the other pointer ended, drop the two empty
-   remainders, turn the two done arrays around (the next loop's sources),
-   and seed the next loop's done arrays *)
+  [ cl (clem_arrv_add_first 4 4 (ln_tx lI))
+  ; cl (clem_arrv_add_last 4 4 (ln_tx lI)); cl (clem_arrv_add_last 4 4 (ln_tx lI))
+  ; cl (clem_arrv_add_last 4 4 (ln_tm lI)); cl (clem_arrv_add_last 4 4 (ln_tm lI))
+  ; cl (clem_arrv_empty 4 (-4) (ln_tdm lI)); cl (clem_arrv_empty 4 (-4) (ln_tdx lI)) ].
+(* after loop L, before loop L': drop L's two empty sources, turn L's done
+   arrays around (L''s sources), and seed L''s done arrays *)
 (* The n-only loop posts state BOTH pointers (end - 4c, c = 0), so the old
    clem_arr_lockstep step (learn where the other pointer ended) is gone. *)
-Definition hand_over : list Annot :=
-  [ cl (clem_arr_drop true 4 4); cl (clem_arr_drop false 4 4)
-  ; cl (clem_arr_flip true 4 (-4)); cl (clem_arr_flip false 4 (-4))
-  ; cl (clem_arr_empty true 4 (-4)); cl (clem_arr_empty false 4 (-4)) ].
+Definition hand_over (L L' : LoopN) : list Annot :=
+  [ cl (clem_arrv_drop 4 4 (ln_tm L)); cl (clem_arrv_drop 4 4 (ln_tx L))
+  ; cl (clem_arrv_flip 4 (-4) (ln_tdm L)); cl (clem_arrv_flip 4 (-4) (ln_tdx L))
+  ; cl (clem_arrv_empty 4 (-4) (ln_tdm L')); cl (clem_arrv_empty 4 (-4) (ln_tdx L')) ].
 
 (* local indices: program index - 123 *)
 Definition tail_before (i : nat) : list Annot :=
-  if Nat.eqb i 96 then hand_over          (* 219 *)
-  else if Nat.eqb i 127 then hand_over    (* 250 *)
+  if Nat.eqb i 96 then hand_over lI lK          (* 219 *)
+  else if Nat.eqb i 127 then hand_over lK lM    (* 250 *)
   else nil.
 Definition tail_after (i : nat) : list Annot :=
   if Nat.eqb i 66 then build_i else nil.                                    (* 189 *)

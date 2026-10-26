@@ -49,7 +49,8 @@ Definition k_scratch {Σ} : Assertion Σ :=
     ∗ asn.exist "v7" ty_xlenbits (T5 ↦ᵣ term_var "v7") )%asn.
 
 Definition lnIN : LoopN :=
-  MkLoopN A1 A7 T1 true k_instrs 15 116 40.
+  (* tags: m, the moved x (loop D's done array), I's own done arrays *)
+  MkLoopN A1 A7 T1 true k_instrs 15 116 40 "vm" "Dx" "Im" "Ix".
 
 Lemma valid_in : cfg_vc_loop (lnRec lnIN (@k_scratch)) (ln_annot lnIN).
 Proof. Time solve_mb_vc. Qed.
