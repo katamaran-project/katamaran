@@ -245,3 +245,136 @@ Goal cfg_vc_loop (gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r
       ∗ clem_arrv 1 1 "dv" (term_var "d") (term_var "n") (t_end (term_var "d") (term_var "n")) (term_var "dv") )%asn)
   (mvf_annot "vs" "dv").
 Proof. Fail solve_mb_vc. Abort.
+
+(* ======================================================================== *)
+(* 4. CONTRACT (b): the OVERLAPPING shift by one word (i31_muladd.c:86,93,  *)
+(*    memmove(x + 2, x + 1, (mlen - 1) * 4)): dst = src + 4.  Values are    *)
+(*    unnamed (D5: the limbs moved are secret; the caller overwrites the    *)
+(*    low word next).                                                        *)
+(*                                                                           *)
+(* Memory: L = the n bytes moved, at s; M = the 4 bytes above them, at s+n. *)
+(* The walk is downward, so the 4-byte WINDOW just above the read cursor is *)
+(* kept flipped (stride -1, top cell first): each step reads L's top byte   *)
+(* and appends it at the window's bottom, then writes the window's TOP byte *)
+(* into T, the destination's done array (stride -1 from d+n-1 down), seeded *)
+(* by empty_at on the flipped M -- the top byte, where T begins.  After the *)
+(* loop L is empty, the window is the low 4 bytes, T is the destination;    *)
+(* flip both back.  No two arrays share a tag.                              *)
+(* ======================================================================== *)
+Definition t_off {Σ} (a : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits := clem_off a z.
+
+(* Parameters: the region's base s, T's top byte Top (= d+n-1), the count n.
+   State: cursor p (one above L's top byte = the window's bottom), c to go,
+   k done. *)
+Definition mwlCtx : LCtx := ["q"∷ty_xlenbits; "s"∷ty_xlenbits; "Top"∷ty_xlenbits; "n"∷ty_xlenbits].
+
+Definition mwl_annot (ts tg td : string) : list AnnotInstr :=
+  [ AST_AnnotInstr (RTYPE A3 A4 A4 RISCV_ADD)
+  ; AST_AnnotInstr (RTYPE A3 A1 A1 RISCV_ADD)
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_last 1 1 ts) ]
+     ; ai_instr := LOAD (bv.of_Z 0) A1 A5 true BYTE
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 (-1) tg) ]; ai_block := None |}
+  ; AST_AnnotInstr (ITYPE (bv.of_Z (-1)) A2 A2 RISCV_ADDI)
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 (-1) tg) ]
+     ; ai_instr := STORE (bv.of_Z 0) A5 A4 BYTE
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 (-1) td) ]; ai_block := None |}
+  ; AST_AnnotInstr (BTYPE (bv.of_Z (-20)) X0 A2 RISCV_BNE) ].
+
+Definition mwl_state {Σ} (ts tg td : string) (s Top n c k p : Term Σ ty_xlenbits)
+    (vl vm vt : Term Σ (clemv_ty 1)) : Assertion Σ :=
+  ( clem_arrv_angelic 1 1 ts s c p vl
+    ∗ clem_arrv_angelic 1 (-1) tg (t_off p 3) (term_val ty_xlenbits (bv.of_N 4)) (t_off p (-1)) vm
+    ∗ clem_arrv_angelic 1 (-1) td Top k (t_off p 3) vt
+    ∗ A1 ↦ᵣ p ∗ A4 ↦ᵣ t_off p 4 ∗ A2 ↦ᵣ c ∗ A3 ↦ᵣ term_val ty_xlenbits (bv.of_Z (-1))
+    ∗ asn.formula (formula_relop bop.eq (term_binop bop.bvadd k c) n) )%asn.
+
+Definition mwl_inv (ts tg td : string) : Assertion (mwlCtx ▻ "a"∷ty_xlenbits) :=
+  ( asn.exist "c" ty_xlenbits (asn.exist "k" ty_xlenbits (asn.exist "p" ty_xlenbits
+    (asn.exist "vl" (clemv_ty 1) (asn.exist "vm" (clemv_ty 1) (asn.exist "vt" (clemv_ty 1)
+      ( mwl_state ts tg td (term_var "s") (term_var "Top") (term_var "n") (term_var "c")
+          (term_var "k") (term_var "p") (term_var "vl") (term_var "vm") (term_var "vt")
+        ∗ secLeakvar "c" ∗ secLeakvar "p"
+        ∗ clem_nonzero (term_var "c")))))))
+    ∗ asn.exist "v5" ty_xlenbits (A5 ↦ᵣ term_var "v5") )%asn.
+
+Definition mwl_post (ts tg td : string) : Assertion (mwlCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( asn.exist "k" ty_xlenbits (asn.exist "p" ty_xlenbits
+    (asn.exist "vl" (clemv_ty 1) (asn.exist "vm" (clemv_ty 1) (asn.exist "vt" (clemv_ty 1)
+      (mwl_state ts tg td (term_var "s") (term_var "Top") (term_var "n")
+         (term_val ty_xlenbits bv.zero) (term_var "k") (term_var "p")
+         (term_var "vl") (term_var "vm") (term_var "vt"))))))
+    ∗ asn.exist "v5" ty_xlenbits (A5 ↦ᵣ term_var "v5") )%asn.
+
+Definition mwlRec (ts tg td : string) : @CFGVerifierContract mwlCtx :=
+  gen_seg_contract (term_var "q") (term_var "q") mvl_instrs 24 16 [] (mwl_inv ts tg td) (mwl_post ts tg td).
+Definition mwlBlk (ts tg td : string) : BlkAnnot := {| blk_ctx := mwlCtx ; blk_contract := mwlRec ts tg td |}.
+
+Lemma valid_mwl_loop : cfg_vc_loop (mwlRec "vs" "vg" "vd") (mwl_annot "vs" "vg" "vd").
+Proof. Time solve_mb_vc. Qed.
+
+(* the function: s (A1), dst s+4 (A0), n (A2); L at s, M at s+n *)
+Definition mwfCtx : LCtx :=
+  ["q"∷ty_xlenbits; "r"∷ty_xlenbits; "s"∷ty_xlenbits; "n"∷ty_xlenbits;
+   "vs"∷clemv_ty 1; "vg"∷clemv_ty 1].
+
+Definition mwf_pre (ts tg : string) : Assertion (mwfCtx ▻ "a"∷ty_xlenbits) :=
+  ( X1 ↦ᵣ term_var "r"
+    ∗ A1 ↦ᵣ term_var "s" ∗ secLeakvar "s"
+    ∗ A0 ↦ᵣ t_off (term_var "s") 4
+    ∗ A2 ↦ᵣ term_var "n" ∗ secLeakvar "n"
+    (* backward, and s + 4 does not wrap *)
+    ∗ asn.formula (formula_relop bop.bvult (term_var "s") (t_off (term_var "s") 4))
+    ∗ clem_arrv 1 1 ts (term_var "s") (term_var "n") (t_end (term_var "s") (term_var "n")) (term_var "vs")
+    ∗ clem_arrv 1 1 tg (t_end (term_var "s") (term_var "n")) (term_val ty_xlenbits (bv.of_N 4))
+        (t_off (t_end (term_var "s") (term_var "n")) 4) (term_var "vg") )%asn.
+
+(* the low 4 bytes (tg) and the destination s+4 .. s+4+n (td), values unnamed *)
+Definition mwf_post (tg td : string) : Assertion (mwfCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( X1 ↦ᵣ term_var "r"
+    ∗ A0 ↦ᵣ t_off (term_var "s") 4
+    ∗ asn.exist "wl" (clemv_ty 1)
+        (clem_arrv 1 1 tg (term_var "s") (term_val ty_xlenbits (bv.of_N 4))
+           (t_off (term_var "s") 4) (term_var "wl"))
+    ∗ asn.exist "wd" (clemv_ty 1)
+        (clem_arrv 1 1 td (t_off (term_var "s") 4) (term_var "n")
+           (t_end (t_off (term_var "s") 4) (term_var "n")) (term_var "wd"))
+    ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
+    ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
+    ∗ asn.exist "w3" ty_xlenbits (A3 ↦ᵣ term_var "w3")
+    ∗ asn.exist "w4" ty_xlenbits (A4 ↦ᵣ term_var "w4")
+    ∗ asn.exist "w5" ty_xlenbits (A5 ↦ᵣ term_var "w5") )%asn.
+
+Definition mwfRec (ts tg td : string) : @CFGVerifierContract mwfCtx :=
+  gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r")
+    memmove_instrs 14 mvf_regs (secLeakvar "r" ∗ mwf_pre ts tg)%asn (mwf_post tg td).
+Definition mwfBlk (ts tg td : string) : BlkAnnot := {| blk_ctx := mwfCtx ; blk_contract := mwfRec ts tg td |}.
+
+(* Entry, BEFORE the beqz (both paths): flip the window, seed T at its top
+   byte.  Exit, before the ret: L is empty; flip the window and T back. *)
+Definition mwf_entry (tg td : string) : list Annot :=
+  [ cl (clem_arrv_flip 1 1 tg); cl (clem_arrv_empty_at 1 (-1) tg td) ].
+Definition mwf_glue (ts tg td : string) : list Annot :=
+  [ cl (clem_arrv_empty_elim 1 1 ts); cl (clem_arrv_flip 1 (-1) tg); cl (clem_arrv_flip 1 (-1) td) ].
+
+Definition mwf_annot (ts tg td : string) : list AnnotInstr :=
+  List.map (fun '(i, ins) =>
+              {| ai_ghost_before := if Nat.eqb i 0 then mwf_entry tg td
+                                    else if Nat.eqb i 13 then mwf_glue ts tg td else nil
+               ; ai_instr := ins
+               ; ai_ghost_after := nil
+               ; ai_block := if Nat.eqb i 7 then Some (mwlBlk ts tg td) else None |})
+    (List.combine (List.seq 0 (length memmove_instrs)) memmove_instrs).
+
+Lemma valid_mwf : cfg_vc_loop (mwfRec "vs" "vg" "vd") (mwf_annot "vs" "vg" "vd").
+Proof. Time solve_mb_vc. Qed.
+
+(* NEGATIVE CONTROL: the move really happens -- the window is not handed
+   back where M was (s+n), it is the LOW 4 bytes *)
+Goal cfg_vc_loop (gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r")
+    memmove_instrs 14 mvf_regs (secLeakvar "r" ∗ mwf_pre "vs" "vg")%asn
+    ( X1 ↦ᵣ term_var "r"
+      ∗ asn.exist "wl" (clemv_ty 1)
+          (clem_arrv 1 1 "vg" (t_end (term_var "s") (term_var "n")) (term_val ty_xlenbits (bv.of_N 4))
+             (t_off (t_end (term_var "s") (term_var "n")) 4) (term_var "wl")) )%asn)
+  (mwf_annot "vs" "vg" "vd").
+Proof. Fail solve_mb_vc. Abort.
