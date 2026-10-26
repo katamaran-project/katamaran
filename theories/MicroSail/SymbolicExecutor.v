@@ -901,6 +901,33 @@ Module Type SymbolicExecOn
         | None   => None
         end.
 
+      (* VC sizes before and after each postprocessing step of [ValidContractWithFuel]. *)
+      Record VCStats : Set :=
+        { vc_raw         : VCCount  (* output of the executor *)
+        ; vc_postprocess : VCCount  (* after postprocess *)
+        ; vc_replay      : VCCount  (* after postprocess; replay; postprocess *)
+        }.
+
+      Definition vc_stats {SPEC : Specification} {Δ τ} (fuel : nat) (f : 𝑭 Δ τ) :
+        option VCStats :=
+        match CEnv f with
+        | Some c =>
+            let vc := vcgen default_config fuel c (FunDef f) wnil in
+            Some {| vc_raw         := vc_count vc vc_count_empty;
+                    vc_postprocess := vc_count (postprocess vc) vc_count_empty;
+                    vc_replay      := vc_count (postprocess (SPureSpec.replay (postprocess vc)))
+                                        vc_count_empty |}
+        | None => None
+        end.
+
+      (* [raw; postprocess; replay], each as [vc_count_to_list]. *)
+      Definition vc_stats_to_list (o : option VCStats) : list (list N) :=
+        match o with
+        | Some s => vc_count_to_list (vc_raw s) :: vc_count_to_list (vc_postprocess s) ::
+                      vc_count_to_list (vc_replay s) :: nil
+        | None => nil
+        end.
+
     End Statistics.
 
   End Symbolic.
