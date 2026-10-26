@@ -1,12 +1,12 @@
 # PLAN-arrv — arrays whose contents are NAMED (`arrv`), replacing `arr`
 
-Status: **Phases A, B, C DONE; GATE C PASSED 2026-10-24** (both RSA end
-theorems green over arrv with value tracking). **Phase D DONE 2026-10-26**
-(RSA spikes, check_scalar, muladd — every example on tagged arrv, every end
-theorem green; muladd restated via gen_prog_contract); **Phase D′ (the tag,
-D14–D17) DONE 2026-10-26** — prediction confirmed, LoopN ≈1.13× arr warm.
-Next: Phase E (delete `arr`) and the ONE full merge gate. Branch `issue/rsa` (the spike
-landed there: `138d2df9`, `dd9672f3`, `ab321701`; not merged, not pushed).
+Status: **COMPLETE 2026-10-26** — Phases A–E DONE (D′ the tag, D the
+examples, E `arr` deleted, 4428b1db). Gate E: full build of the gate's
+target closure (75 files) + hole scan PASSED; the axiom-probe step was
+killed by the memory reaper and NOT rerun — Emiel had the branch merged
+into local KatamaranRel without it (2026-10-26). Next: PLAN-rsa Phase 2
+(mem* function contracts, see "Then, back in PLAN-rsa Phase 2" below). Branch `issue/rsa` (the spike
+landed there: `138d2df9`, `dd9672f3`, `ab321701`; merged into local KatamaranRel 2026-10-26, not pushed).
 Part of PLAN-rsa.md Phase 2 (byte memory / mem* callees); log timings in
 **PLAN-rsa.md §5** (same protocol: stamps, wait vs authoring, VC CPU/RSS,
 annot LOC, attempts).
