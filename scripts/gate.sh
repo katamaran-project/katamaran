@@ -94,6 +94,15 @@ AXIOM_CLEAN_THMS=(
   # whose VC trusts a block, so the only check on blocksSound_of_head and
   # blockSound_of_contract.
   "countdown_rec_noninterferent_param"
+  # a FUNCTION CALL as a block (Example/Rsa/RsaSpikeSubResult.v, PLAN-rsa
+  # spike S1a): the callee's exit is its return address, a logic variable
+  # made public by its precondition (seg_exit_sync_pub) -- the only end
+  # theorem whose block exit is not an offset.
+  "sub_call_noninterferent"
+  # a caller that is itself a function (RsaSpikeSub2Result.v, spike S1b):
+  # frame, callee-saved s0-s2 pinned, a tail call whose block exit is the
+  # caller's own return address reloaded by `lw` (peval_sext)
+  "sub_call2_noninterferent"
 )
 
 COQC="${COQC:-coqc}"

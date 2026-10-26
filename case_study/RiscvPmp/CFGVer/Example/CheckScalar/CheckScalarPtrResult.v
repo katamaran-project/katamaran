@@ -132,14 +132,14 @@ Proof.
   { unfold klen_words in *.
     pose proof (Nat.div_mod (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
     pose proof (Nat.mod_upper_bound (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)). lia. }
-  assert (Hc : data_count (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+  assert (Hc : data_count (csp_ι init_addr ka l)
                  (t_ceil4 (term_var "l")) = klen_words l).
   { assert (Hs : inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "l" : Term (csCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+                   (term_var "l" : Term csCtx ty_xlenbits)
+                   (csp_ι init_addr ka l)
                  = SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "l" : Term (csCtx ▻ "a"∷ty_xlenbits) ty_xlenbits)
-                   (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])))
+                   (term_var "l" : Term csCtx ty_xlenbits)
+                   (csp_ι init_addr ka l))))
       by reflexivity.
     rewrite (data_count_ceil4_eq _ _ Hs); [reflexivity|].
     change (data_count _ (term_var "l")) with (N.to_nat (bv.bin l)). lia. }
@@ -147,7 +147,7 @@ Proof.
   pose proof (Nat.mod_upper_bound (N.to_nat (bv.bin l) + 3) 4 ltac:(lia)).
   apply (ni_of_cells
            (regs' := map (concretize_reg_q (csp_ι init_addr ka l)) csp_regs)
-           (cs := concretize_data (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
+           (cs := concretize_data (csp_ι init_addr ka l)
                     (init_addr + 144) csp_data));
     [ | | | | ].
   { (* clear of the code: P256_N right after it, k by the premise *)
@@ -163,7 +163,7 @@ Proof.
     apply perm_of_eq.
     unfold csp_data. cbn [concretize_data].
     change (data_count _ (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
-    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])))
+    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l))))
       with (bv.bin (@bv.of_N xlenbits ka)).
     rewrite Hka Hc.
     unfold cells, check_scalar_ptr_mem, check_scalar_ptr_blocks.
@@ -180,7 +180,7 @@ Proof.
     unfold csp_data. cbn [data_ok].
     change (data_count _ (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
     change (data_count _ (term_val ty_xlenbits (bv.of_N 32))) with 32%nat.
-    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])))
+    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l))))
       with (bv.bin (@bv.of_N xlenbits ka)).
     rewrite Hka Hc.
     change (data_count _ (term_var "l")) with (N.to_nat (bv.bin l)).
@@ -189,7 +189,7 @@ Proof.
   - (* the layout: two runs, P256_N after the code and k at ka *)
     unfold csp_data. cbn [concretize_data].
     change (data_count _ (t_ceil4 (term_val ty_xlenbits (bv.of_N 32)))) with 8%nat.
-    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l).["a"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])))
+    change (bv.bin (rv_val (inst (term_var "k") (csp_ι init_addr ka l))))
       with (bv.bin (@bv.of_N xlenbits ka)).
     rewrite Hka Hc.
     rewrite !concretize_run_map app_nil_r.

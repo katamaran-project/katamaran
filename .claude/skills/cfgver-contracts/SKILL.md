@@ -177,33 +177,93 @@ Two traps, each of which cost a compile:
   `pre ++ seg ++ post` matches syntactically, which avoids an `app_nil_r`
   rewrite.
 
-## Arrays: the `arr` chunk and the CFGVer ghost-lemma catalogue
+## Arrays: the `arrv` chunk and the CFGVer ghost-lemma catalogue
 
-`arr pub w s [a; n; e]` (`Sig.v`): n cells of **w bytes** at a, a+s, …,
-a+s(n-1), existential values (SyncVal when `pub`), and e = a + s·n.
+`arrv w s t [a; n; e; vs]` (`Sig.v`): n cells of **w bytes** at a, a+s, …,
+a+s(n-1), cell i holding the i-th element of `vs`, and e = a + s·n.
 w = |s| tiles (words `4 4`/`4 (-4)`, bytes `1 1`); |s| > w is an array of
 structs. a, n, e must be public (interp is False on NonSyncVal) — state
 `secLeakvar` of the count in a loop invariant; the executor does not infer it.
+Ghost lemmas are `Verifier.CLem` constructors (`clem_arrv_*`), used as
+`AnnotCLemma (...)` in `ai_ghost_before/after`; soundness `SpecIris.clemSem`.
+The array argument is matched ANGELICALLY. Loop template:
+`Example/Muladd/MuladdParamLoopN.v` (remaining count n the only varying
+variable, addresses END − s·n). It replaced `arr pub w s [a; n; e]` (a `pub`
+flag, existential values), deleted 2026-10-26 (PLAN-arrv Phase E; old text
+in `.claude/archive/arr-removal-2026-10-26.md`) — with it went the
+halfword/doubleword regroups (`RgWidth`): `arrv` regroups words only.
 
-Ghost lemmas (`Verifier.CLem`, used as `AnnotCLemma (...)` in
-`ai_ghost_before/after`; soundness `SpecIris.clemSem`): `take_first`,
-`take_last`, `add_first`, `add_last`, `nonempty` (a≠e ⊢ n≠0), `empty`,
-`empty_elim`, `lockstep`, `drop`, `flip` (walk the other way), `split k`
-(constant index), `join` (adjacent arrays), `bytes_of_words` (word array read
-bytewise, n <u 2^30), and the regroups for any power-of-two width
-`u : RgWidth` (`RgW2`/`RgW4`/`RgW8`, k = 2/4/8): `to_bytes pub u`
-(`arr k k [a;n;e]`, n <u 2^32/k ⊢ `arr 1 1 [a; k·n; e]`) and `of_bytes pub u`
-(`arr 1 1 [a;m;e]` ⊢ `arr k k [a; m>>sh; e'] ∗ arr 1 1 [e'; m & (k−1); e]`,
-e' = a + k·(m>>sh) — no side condition, leftover bytes kept, empty for a
-literal multiple of k). Halfword data = `DBytes` + `of_bytes _ RgW2`;
-bytes→words = `of_bytes _ RgW4`. Worked probe: `Example/ZZArrRegroupProbe.v`
-(untracked). Every other constructor takes `pub w s` (lockstep `p1 p2 w s`;
-bytes_of_words only `pub`). The array argument is matched ANGELICALLY, so two
-live arrays with the same `arr pub w s` predicate are ambiguous — place each
-`take_first` right before its own load, or use distinct strides.
-Loop template: `Example/Muladd/MuladdParamLoopN.v` (remaining count n the only
-varying variable, addresses END − s·n). The general proofs (a k-byte cell
-is k byte cells for any RelVal value, and back) are `SpecIris.rg_*`.
+**The values and the tag (PLAN-arrv).** `t : string` is a TAG (D14): a Coq-level index the Iris
+interpretation ignores, whose only job is to tell same-shape arrays apart in
+the executor's angelic chunk match (without it, every match among same-shape
+arrays branched per candidate, `diagnostics/arrv-loop-cost-drivers.md`). It
+is NOT a logic variable — a callee would bind that angelically and the
+ambiguity would return. Conventions: a top-level `DArr`/`DBytes` array's tag
+is its value name (D15, `gen_data_at`); a template takes its arrays' tags as
+Coq parameters (D16: `LoopN`'s `ln_tm ln_tx ln_tdm ln_tdx`, RSA's
+`sub_mem ta tb`); every lemma names the tag of EACH array it matches (D17):
+`join w s t1 t2 t` (result `t`), `lockstep w s t1 t2`, `pad w s t t'`, all
+others one `t`, kept — `flip` included, so a done array keeps its tag until a
+`join` gives the result the source's (`join "db" "vb" "vb"`, RsaSpikeSub).
+A tag mismatch is a FAILED match, not an ambiguity: the ghost or block
+consume errors. `vs : list (bvec 8w)`, no publicness flag: a public
+array is `arrv … vs ∗ secLeak vs`, and a plain take hands publicness to the
+parts (the take's `vs = x :: r` is `formula_propeq`, Leibniz on RelVal, and a
+lifted op is SyncVal iff its arguments are), so there are no `_pub` lemma
+variants. That hand-off is done by the SOLVER (`Solver.v` `ResimpSecLeak`,
+2026-10-25): when a unification substitutes `vs := x :: r`, the old
+`secLeak vs` is re-split into `secLeak x`, `secLeak r`. Before it, the split
+happened only by luck of tree shape (a `replay` of a hoisted var-eq) and
+failed after a load or under an angelic choice between same-shape arrays
+(`Example/Rsa/RsaSpikeSb.v` `valid_cpy`). Catalogue (`clem_arrv_*`): `take_first` (equation, for a variable
+value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
+(`vs = r ++ [x]`), `add_first` (`x :: vs`), `add_last` (`vs ++ [x]`),
+`nonempty`, `empty` (`⊢ arrv a 0 a []`, `a` bound later by an ANGELIC match),
+`empty_elim` (`a = e` only — never `vs = []`: `NonSyncVal [] []` exists),
+`lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
+`join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),
+`pad` (`arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ …`, w ≥ 1),
+`split k` (`vs = v1 ++ v2`), and the word ⇄ byte VIEW of a value:
+`to_bytes` (`arrv 4 4 a n e ws ⊢ arrv 1 1 a (4 *ᵇ n) e (regroup ws)`) and
+`of_bytes` (PATTERN form: `arrv 1 1 a (4 *ᵇ k) e (regroup v) ∗ k <u 2^30 ⊢
+arrv 4 4 a k e v` — the bound is needed, ·4 is not injective mod 2^32).
+`uop.regroup` splits each cell into its little-endian bytes (`bv.le_bytes`,
+memory order). The byte count must stay syntactically `4 *ᵇ k`: a program's
+`slli k,2` normalises to it, but a word count that is a ring SUM (n+1) does
+not survive (`4·(n+1)` becomes `4 + 4·n`) — name such a count. Worked probes
+with negative controls: `Example/Rsa/ZZArrvCatalogue.v`,
+`Example/Rsa/ZZArrvWords.v` (a public header WORD survives a BYTE memcpy);
+soundness: `SpecIris.clem_arrv_*_sound`.
+
+**Tracking a read-only array's value through a loop** (PLAN-arrv D13,
+`MuladdParamLoopN.v` since 2026-10-24): the loop's done array (stride −s,
+grown by `add_first`) and the remaining source satisfy `VM = rev dM ++ rM`
+with `VM` a CONTRACT variable (instantiated angelically at entry: `[]` seed,
+`rM := vb`); after the loop, `flip` the done array (`rev dM`, forward) and
+`join` it with the emptied source (`rev dM ++ rM`), and the post can state
+the array with its pre value. An overwritten array's value is just ∃. Worked
+case with negative controls (a cannot come back unchanged, nor public):
+`Example/Rsa/RsaSpikeSub.v` (`sub_mem_out`). **Cost: back to `arr`'s with
+the tag** — untagged, angelic ambiguity between same-shape arrays made LoopN
+≈3.7× arr warm and trapped the value ∃s under the choice; tagged it is
+≈1.13× (9.7 vs 8.6 s warm, 0 surviving ∃), the callee 23.6 → 3.4 s cold.
+`diagnostics/arrv-loop-cost-drivers.md` §7.
+
+**Ghosts on an instruction that carries a block NEVER RUN** (`Verifier.v`,
+the `Some b` branch of the step: the block fires INSTEAD of the instruction,
+ghosts included). Seeds for a loop block's done arrays (`clem_arrv_empty`) go
+in `ai_ghost_after` of the instruction BEFORE the block — muladd's tail puts
+`build_i` after index 66 for its block at 67. Symptom of getting it wrong: the
+loop block's entry fails to match a done array that is simply absent from
+the heap (found 2026-10-22, PLAN-rsa.md Phase 1). Ghosts AFTER a block's exit
+go on the instruction at the exit (`ai_ghost_before`), which is not a block.
+
+**Entering LoopN from a precondition whose count is `m − 1`** used to fail
+outright: the source-array start `end − 4·count` then carries the SAME literal
+(+4) as a heap start `4 + x`, the solver cancelled it and eliminated the
+PARAMETER x instead of the loop's evar. Fixed in the solver
+(`try_isolate_inner`, core-executor-internals); muladd's counts (`mlen − 3`)
+never hit it by luck of literals.
 
 ## Hand-writing a contract: the assertion vocabulary
 
@@ -248,8 +308,12 @@ it, `secLeakvar "inv"` says only "this literal is public", and the precondition
 genuinely weakens. `checked_mem_read` / `mem_read` therefore keep their
 `secLeakvar "inv"` in front — moving it makes `valid_checked_mem_read`
 unprovable against its own body (all three `restrict_bytes` cases reduce to
-`false = true`). Their leftover is `secLeak <literal>`, which `solve_vc` closes
-trivially, so it costs nothing. Mechanism: **core-executor-internals**;
+`false = true`). Their leftover is `secLeak <literal>` (after `solve_evars`),
+which `solve_vc` closes trivially — but it is NOT free: as an `assertk` in the
+tree it stops `postprocess` hoisting a later var-eq above earlier assumes, so
+every LOAD changes which facts `replay` can re-simplify (this is what hid the
+unsplit-`secLeak` bug fixed by `ResimpSecLeak`, 2026-10-25, see the arrv
+paragraph above). Mechanism: **core-executor-internals**;
 diagnosing such a residual: **cfgver-solve-vc**.
 
 Exemplar: `cmovznz4_cfg_contract_param` (`Example/Cmovznz4.v`) — `Σ = ["p"∷ty_xlenbits]`,

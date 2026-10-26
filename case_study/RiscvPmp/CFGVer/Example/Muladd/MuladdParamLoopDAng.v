@@ -31,8 +31,7 @@ Definition dAngCtx : LCtx := dCtx ▻ "N"∷ty_xlenbits.
 
 Definition d_inv_ang : Assertion (dAngCtx ▻ "a"∷ty_xlenbits) :=
   asn.exist "dp" ty_xlenbits (asn.exist "c" ty_xlenbits (asn.exist "k" ty_xlenbits
-  ( asn.chunk_angelic (chunk_user (arr false 4 (-4))
-        [term_var "dp"; term_var "c"; term_var "E"])
+  ( asn_arr_angelic 4 (-4) "vx" (term_var "dp") (term_var "c") (term_var "E")
     ∗ S0 ↦ᵣ t_off (term_var "dp") 4 ∗ secLeakvar "dp"
     ∗ T6 ↦ᵣ term_var "c" ∗ secLeakvar "c" ∗ asn_ne0 (term_var "c")
     ∗ asn.exist "v1" ty_xlenbits (S1 ↦ᵣ term_var "v1")
@@ -41,9 +40,8 @@ Definition d_inv_ang : Assertion (dAngCtx ▻ "a"∷ty_xlenbits) :=
         (asn.chunk_angelic (chunk_user (ptstomem bytes_per_word)
            [t_off (term_var "dp") 4; term_var "w"]))
     ∗ asn_in_range (t_off (term_var "dp") 4)
-    ∗ asn.chunk_angelic (chunk_user (arr false 4 4)
-        [t_off (term_var "dp") 8; term_var "k"; term_var "T"])
-    (* an array's count is public (interp_arr is False otherwise); stated,
+    ∗ asn_arr_angelic 4 4 "Dx" (t_off (term_var "dp") 8) (term_var "k") (term_var "T")
+    (* an array's count is public (interp_arrv is False otherwise); stated,
        so the post's exact count N = k + c is arithmetic on public values *)
     ∗ secLeakvar "k"
     ∗ asn.formula (formula_propeq (term_var "N")
@@ -52,13 +50,12 @@ Definition d_inv_ang : Assertion (dAngCtx ▻ "a"∷ty_xlenbits) :=
 Definition d_post_ang
     : Assertion (dAngCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( asn.exist "g" ty_xlenbits
-      ( asn.chunk_angelic (chunk_user (arr false 4 (-4))
-          [term_var "g"; term_val ty_xlenbits bv.zero; term_var "E"])
+      ( asn_arr_angelic 4 (-4) "vx" (term_var "g") (term_val ty_xlenbits bv.zero) (term_var "E")
         ∗ S0 ↦ᵣ t_off (term_var "g") 4
         ∗ T6 ↦ᵣ term_val ty_xlenbits bv.zero
         ∗ asn.exist "w" ty_xlenbits (t_off (term_var "g") 4 ↦ₘ term_var "w")
         (* the count EXACTLY: the total N; a caller gets 0 + its source count *)
-        ∗ asn_arr false 4 4 (t_off (term_var "g") 8)
+        ∗ asn_arr 4 4 "Dx" (t_off (term_var "g") 8)
             (term_var "N") (term_var "T")
         ∗ asn.exist "v1" ty_xlenbits (S1 ↦ᵣ term_var "v1")
         ∗ asn.exist "v2" ty_xlenbits (S2 ↦ᵣ term_var "v2") ) )%asn.
@@ -68,7 +65,7 @@ Definition dAngRec : @CFGVerifierContract dAngCtx :=
 Definition dAngBlk : BlkAnnot := {| blk_ctx := dAngCtx ; blk_contract := dAngRec |}.
 
 Definition d_ang_annot : list AnnotInstr :=
-  [ {| ai_ghost_before := [AnnotCLemma (clem_arr_take_first false 4 (-4))]
+  [ {| ai_ghost_before := [AnnotCLemma (clem_arrv_take_first 4 (-4) "vx")]
      ; ai_instr        := LOAD (bv.of_Z (-4)) S0 S1 false WORD
      ; ai_ghost_after  := []
      ; ai_block        := None |}
@@ -76,7 +73,7 @@ Definition d_ang_annot : list AnnotInstr :=
   ; AST_AnnotInstr (ITYPE (bv.of_Z (-4)) S0 S2 RISCV_ADDI)
   ; {| ai_ghost_before := []
      ; ai_instr        := STORE (bv.of_Z 0) S1 S0 WORD
-     ; ai_ghost_after  := [AnnotCLemma (clem_arr_add_first false 4 4)]
+     ; ai_ghost_after  := [AnnotCLemma (clem_arrv_add_first 4 4 "Dx")]
      ; ai_block        := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 0) S2 S0 RISCV_ADDI)
   ; AST_AnnotInstr (BTYPE (bv.of_Z (-20)) X0 T6 RISCV_BNE) ].

@@ -617,7 +617,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     (* A public pointer differs from itself plus a NONZERO constant, and two
        different constant offsets of it differ.  Left by array ghosts
-       (PLAN-array-invariants): clem_arr_nonempty asserts `a ≠ e` for an
+       (PLAN-array-invariants): clem_arrv_nonempty asserts `a ≠ e` for an
        array whose start and end are the same base at different offsets,
        e.g. `dp ≠ 4 + dp`, which the solver does not decide. *)
     Lemma relval_neq_offset (X : RelVal ty_xlenbits) (c : bv xlenbits) :

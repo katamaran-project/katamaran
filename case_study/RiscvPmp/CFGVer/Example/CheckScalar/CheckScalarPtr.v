@@ -17,11 +17,11 @@ Definition csp_regs : list (reg_spec_q csCtx) :=
   ; (A5, Secret); (A6, Secret); (A7, Secret) ].
 
 (* P256_N right after the code; k's bytes wherever k points *)
-Definition csp_data : list (data_spec (csCtx ▻ "a"∷ty_xlenbits)) :=
-  [ DBytes false (term_val ty_xlenbits (bv.of_N 32))
+Definition csp_data : list (data_spec csCtx) :=
+  [ DBytes false (term_val ty_xlenbits (bv.of_N 32)) "vN"
   ; DPtr (term_var "k")
-  ; DBytes false (term_var "l") ]%list.
+  ; DBytes false (term_var "l") "vK" ]%list.
 
-Definition csp : @CFGVerifierContract csCtx :=
+Definition csp : @CFGVerifierContract (csCtx ▻▻ data_vctx csp_data) :=
   gen_prog_contract "p" _ csp_regs (asn.formula formula_true) 144 csp_data cs_instrs 40
     (asn.formula formula_true).

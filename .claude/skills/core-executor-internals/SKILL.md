@@ -345,6 +345,70 @@ Two preamble-vs-file differences to match when prototyping (the first cost a ~5 
 `RiscvPmp.Sig` preamble WITHOUT `From iris.proofmode Require Import tactics`
 accepts the comma form, so load it to match the file.
 
+### Added 2026-10-22: ISOLATE THE INNERMOST VARIABLE (`try_isolate_inner`)
+
+`try_unify_eq` solves only a BARE `var = term`, so on `x + s = y` it can only
+eliminate y. In an ASSERT that is the wrong variable when x is an angelic one
+a consume introduced (a contract's/block's logic variables are bound AFTER
+the state they are matched against) and y a universally bound variable of
+that state: `assert_vareq y (x + s)` survives `cfg_postprocess` undischarged
+(postprocess would have to invert the term), while `assert_vareq x …` is a
+witness. Rule (`formula_propeq` arm): `x + s = y`, also under a shared
+literal `c + l = c + r`, x and y variables, x INNERMOST (smaller
+`ctx.in_at`), `secLeakT s` ⟶ `x = y + (−1)·s`. A completeness rule (both
+orientations state the same equation). The `secLeakT` guard is load-bearing:
+RelVal lifting never normalises `NonSyncVal v v` to `SyncVal v`, so
+`x + s = y ⇔ x = y − s` is FALSE for a secret s (`relval_isolate`). Two
+lessons, each measured by a rule that compiled green and did nothing:
+- **It must run BEFORE `try_bvadd_cancel_val_propeq`, not on its output.**
+  `solver_generic` simplifies and UNIFIES in the same pass, so the weakened
+  equation reaches `try_unify_eq` before any later simplify pass could
+  rewrite it.
+- **Emit peval's normal form.** `bvsub` survives peval AND the closers
+  (`bv_lin` has no case for it) as a residual; `y + (−1)·s` folds
+  (`xa + (−1)·(−4·m)` is `xa + 4·m`). `bv_mul_m1` proves `(−1)·c = −c` via the
+  stdlib almost-ring lemmas (`Ring_theory.Rth_ARth`/`ARopp_mul_l`) — `bv`
+  has no `ring` declared at a generic width.
+Diagnosis recipe that found it in seconds: rebuild the world + heap in a
+`Prelude` preamble and `Eval vm_compute` `SPureSpec.consume_chunk_angelic`
+and `cfg_postprocess` on hand-built `SymProp`s (`demonicv`/`angelicv`/
+`@SymProp.assert_vareq Σ x σ _ t amsg.empty k`).
+
+### Added 2026-10-25: RE-SPLIT a substituted public variable (`ResimpSecLeak`)
+
+`unify_pathcondition` eliminates a variable with `tri_cons`, and the new
+world is `wsubst`: the OLD path condition is substituted, NEVER
+re-simplified. So `wco ∋ secLeak vs` followed by an assumed
+`vs = x :: r` leaves `secLeak (x :: r)` in `wco`, and a later assert
+`secLeak r` fails (`assumption_formula` is syntactic). `solver_generic` now
+returns `C2 ▻▻ resimp_secLeak_tri ν`: after a NON-trivial `ν` (`tri_is_id`
+guard, so calls without a substitution pay nothing), one walk of the old
+`wco` emits `run (simplify_secLeak (peval (ζ x)))` for every
+`secLeak (term_var x)` whose image under `sub_triangular ν` is not a
+variable. Soundness: the appended formulas are implied by `wco w1`
+(`resimp_secLeak_sound` + `ent_acc_sub`), so `C2 ▻▻ E ⊣⊢ C2` and only
+`solver_generic_spec` changed. secLeak ONLY, by Emiel's decision (other
+substituted formulas could now decide/refute too; not attempted).
+
+Why it stayed hidden: `replay` (CFGVer's pipeline) re-assumes a SUBSTITUTED
+formula when postprocess has hoisted the var-eq above it, which splits it.
+Two things block that hoist: an `assertk` in between (every LOAD leaves
+mem_read's `secLeak inv` as `assert secLeak false` after `solve_evars`), and
+an `angelic_binary` (an angelic chunk match between two same-shape arrays).
+A second replay fixes only the first. Diagnosis that found it: count node
+kinds per postprocess stage with a throwaway `Fixpoint` over `SymProp`
+(`@SymProp.assert_vareq` takes 7 args incl. Σ; use `Nat.add`, `+` is
+hijacked) — `solve_evars` was the stage that created the literal assert.
+
+Two prototype-vs-file traps when moving preamble-proved code into
+`Solver.v`: the file has `Local Set Implicit Arguments` (line 67), so a
+lemma applied POSITIONALLY in the preamble (`lem _ R P HR`) breaks — put the
+same `Set` in the preamble, or apply with `@`; and `now` on a `⊣⊢`-rewritten
+entailment can time out in pet where `apply (bi.equiv_entails_1_2 _ _ H)` is
+instant. Also: unifying under a definition that runs `peval`/`simplify` on a
+CONSTRUCTOR-headed term reduces it and times out — prove the lemma for a
+variable term and `exact` it per branch.
+
 ## Adding a NEW solver rule — the recipe
 
 Four rules exist to copy from: `try_bvadd_cancel` (relop eq/neq, guarded),
