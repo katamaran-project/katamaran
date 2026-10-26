@@ -1258,6 +1258,17 @@ Module RiscvPmpIrisInstanceWithContracts.
       exact Hk.
     Qed.
 
+    (* the array is handed back; an EMPTY one at its (public) start costs
+       nothing -- interp_arrv is False at a NonSyncVal address *)
+    Lemma clem_arrv_empty_at_sound `{sailGS2 Σ} (w : nat) (s : Z) (t t' : string) :
+      ValidLemma (clem_lemma (clem_arrv_empty_at w s t t')).
+    Proof.
+      intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+        cbn -[interp_arrv]; try (iIntros "[]").
+      iIntros "Harr". iFrame "Harr". iApply interp_arrv_empty.
+    Qed.
+
     Lemma clemSem `{sailGS2 Σ} (k : CLem) :
       ValidLemma (clem_lemma k).
     Proof.
@@ -1268,7 +1279,8 @@ Module RiscvPmpIrisInstanceWithContracts.
                   |apply clem_arrv_lockstep_sound|apply clem_arrv_drop_sound
                   |apply clem_arrv_flip_sound|apply clem_arrv_join_sound
                   |apply clem_arrv_pad_sound|apply clem_arrv_split_sound
-                  |apply clem_arrv_to_bytes_sound|apply clem_arrv_of_bytes_sound].
+                  |apply clem_arrv_to_bytes_sound|apply clem_arrv_of_bytes_sound
+                  |apply clem_arrv_empty_at_sound].
     Qed.
   End CLemSound.
 

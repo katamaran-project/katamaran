@@ -160,7 +160,12 @@ Inductive CLem : Set :=
      PATTERN form on both the value and the count (D6/D7): what a to_bytes
      made comes back.  The bound is NEEDED: ·4 is not injective mod 2^32, so
      without it k could be length v + 2^30 *)
-  | clem_arrv_of_bytes (t : string).
+  | clem_arrv_of_bytes (t : string)
+  (* PLAN-rsa D5: arrv t a n e vs ⊢ arrv t a n e vs ∗ arrv t' a 0 a [] -- an
+     empty array at an EXISTING array's start.  Unlike clem_arrv_empty, its
+     address is bound (by the angelic match), so a seed made on a path that
+     skips the loop it is meant for still sits at a known address. *)
+  | clem_arrv_empty_at (w : nat) (s : Z) (t t' : string).
 
 Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
@@ -330,6 +335,12 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
            (asn.formula (formula_relop bop.bvult (term_var "k")
               (term_val ty_xlenbits (bv.of_N 0x40000000)))))
         (clem_arrv 4 4 t (term_var "a") (term_var "k") (term_var "e") (term_var "v"))
+  | clem_arrv_empty_at w s t t' =>
+      MkLemma [ctx] (clemv_ctx w) [env]
+        (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+           (clem_arrv w s t' (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
+              (term_val (clemv_ty w) nil)))
   end.
 
 Inductive Annot :=

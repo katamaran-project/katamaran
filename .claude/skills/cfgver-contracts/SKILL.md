@@ -219,6 +219,10 @@ failed after a load or under an angelic choice between same-shape arrays
 value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
 (`vs = r ++ [x]`), `add_first` (`x :: vs`), `add_last` (`vs ++ [x]`),
 `nonempty`, `empty` (`⊢ arrv a 0 a []`, `a` bound later by an ANGELIC match),
+`empty_at t t'` (`arrv t a … ⊢ itself ∗ arrv t' a 0 a []` — a seed at an
+existing array's start; use it when the seed is also made on a path that
+SKIPS the loop, e.g. memcpy's `beqz n, ret`: there `empty`'s address is never
+pinned and a later `join`'s plain match fails, `Example/Rsa/RsaMemcpy.v`),
 `empty_elim` (`a = e` only — never `vs = []`: `NonSyncVal [] []` exists),
 `lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
 `join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),
