@@ -120,7 +120,9 @@ by grep 2026-10-25:
   and every VC time UNCHANGED within noise (matched, same build:
   arr 13.2 / 2.9 s, arrv untracked 31.7 s, tracked 36.9 / 23.6 s). So
   the rule is cost-neutral and does NOT touch the open LoopN cost
-  question below (2.8x loop, 8.1x callee on these numbers). Examples
+  question below (RETRACTED 2026-10-26: "2.8x loop, 8.1x callee" compared
+  a cold arr baseline with warm arrv VCs -- warm-vs-warm the loop is ≈3.7x,
+  diagnostics/arrv-loop-cost-drivers.md; never requote). Examples
   outside this set still have not seen it (Gate D/E).
 - DONE 2026-10-25: check_scalar — `CheckScalarParamLoop{1,2}.v`,
   `CheckScalar{Param,Ptr}{,VC,Result}.v`, all green. Array values are ∃
@@ -163,12 +165,26 @@ whose contract uses the old `DArr` cannot). Known baselines: check_scalar
 VCs ~31 s total, MuladdParamVC 657 s / 10.4 GB (memory `project_compile_cost`,
 `project_check_scalar_param`).
 
-OPEN before muladd (Emiel accepted the cost for now, §4 Phase C status):
-arrv LoopN is 2.4× (36.6 s vs 13.0 s), its callee 7×. Suspected angelic
-ambiguity (no `pub` index); fix options raised: confirm first by ablation,
-register-anchored CLems (array start from a pointer register → precise
-lookup), or a meaningless tag index on `arrv`. Ask Emiel again before
-porting the muladd loops — they are the same LoopN at a larger scale.
+~~OPEN before muladd: arrv LoopN is 2.4× (36.6 s vs 13.0 s), its callee 7×.~~
+RETRACTED 2026-10-26 (cold baseline vs warm arrv; never requote). DIAGNOSED
+2026-10-26 (`diagnostics/arrv-loop-cost-drivers.md`): warm, LoopN is ≈3.7×
+arr = angelic AMBIGUITY between same-shape arrays ×2.27, and the values ×1.63
+ONLY BECAUSE of it (their equations sit inside the angelic choice, so 64
+value ∃ survive solve_evars; with unambiguous arrays values cost ×1.00,
+check_scalar Loop1). Decided (Emiel, 2026-10-26):
+- **D14** `arrv w s (t : string)`: a Coq-level TAG index, ignored by the
+  interpretation, so same-shape arrays are told apart as `arr`'s `pub` did.
+  (Not a logic variable: a callee would bind it angelically and the
+  ambiguity would come back.)
+- **D15** a top-level `DArr`/`DBytes` array's tag is its value name.
+- **D16** loop/callee templates take their arrays' tags as Coq parameters
+  (e.g. LoopN record fields); a loop's internal done arrays get their own.
+**Phase D′ (next, before muladd):** Sig + IrisInstanceBinary (tag ignored) →
+Verifier CLems take `t` (join/pad/lockstep: both arrays the same tag;
+flip/split/to_bytes/of_bytes keep it) → SpecIris clemSem dispatch → GenSegment
+`gen_data_at` (tag = value name) → EndToEnd/GenProg → ported examples (RSA
+spikes, RsaSpikeSb, check_scalar, LoopN) → re-run the diagnostic rigs: the
+prediction is 0 surviving value ∃ and LoopN at ≈arr cost (8.6 s warm).
 
 Then Phase E (delete `arr`, its 15 CLems and sound lemmas, skills) and the
 ONE full merge gate (`scripts/gate.sh`, `GATE_JOBS=1`, MuladdParamVC built
@@ -376,9 +392,11 @@ Original sketch:
   36.6 s, `valid_sub` 3.2 → 22.4 s, `valid_s1a` 0.1, `valid_sub2` 6.8 → 6.7,
   `valid_s1b` 0.3 (matched baseline: old arr LoopN/callee in the same build,
   `Example/Rsa/ZZArrvCost.v`, 13.0 / 3.2). Ablation: arrv LoopN WITHOUT the
-  VM equation 30.7 s — value tracking is ~6 s, arr→arrv itself 2.4×.
-  Suspected (NOT confirmed): no `pub` index, so same-stride angelic matches
-  (two `take_first`s, four arrays at the latch, flip/join) branch the VC.
+  VM equation 30.7 s — value tracking is ~6 s, arr→arrv itself 2.4×
+  (RETRACTED 2026-10-26: cold-vs-warm; ≈3.7× warm). Suspected (CONFIRMED
+  2026-10-26, diagnostics/arrv-loop-cost-drivers.md): no `pub` index, so
+  same-stride angelic matches (two `take_first`s, four arrays at the latch,
+  flip/join) branch the VC.
 
 ### Phase D — migrate the examples (D2: directly)
 - Order: RSA spikes (small, known) → check_scalar (byte loops) → muladd
