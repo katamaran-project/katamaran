@@ -752,7 +752,7 @@ Module Type SymbolicExecOn
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
-    Fixpoint sexec_call {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
+    Fixpoint sexec_call {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
       fun Δ τ f w0 args0 =>
         ⟨ θ1 ⟩ _ <- debug_call f args0 ;;
         (* Let's first see if we have a contract defined for function [f]
@@ -770,12 +770,12 @@ Module Type SymbolicExecOn
               (persist args0 θ1)
         end.
 
-    Definition sexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
+    Definition sexec {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) : Exec :=
       @SStoreSpec.exec_aux SPEC sexec_call_foreign sexec_lemma
         (sexec_call inline_fuel) sexec_fail.
-    #[global] Arguments sexec {_} _ [_ _] s _ _ _ _ : simpl never.
+    #[global] Arguments sexec {_ _} _ [_ _] s _ _ _ _ : simpl never.
 
-    Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ}
+    Definition vcgen {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) {Δ τ}
       (c : SepContract Δ τ) (s : Stm Δ τ) : ⊢ 𝕊 :=
       fun w => SHeapSpec.run (exec_contract (sexec inline_fuel) c s (w := w)).
 
@@ -783,12 +783,12 @@ Module Type SymbolicExecOn
 
   Module Symbolic.
 
-    Definition ValidContractWithFuel {SPEC : Specification} {Δ τ} (fuel : nat)
+    Definition ValidContractWithFuel {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (fuel : nat)
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition
         (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
-    Definition ValidContract {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
+    Definition ValidContract {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
       (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
       ValidContractWithFuel 1 c body.
@@ -813,15 +813,15 @@ Module Type SymbolicExecOn
       induction q; try discriminate; cbn; intuition.
     Qed.
 
-    Definition ValidContractReflectWithFuel {SPEC : Specification} {Δ τ}
+    Definition ValidContractReflectWithFuel {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       is_true (ok (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil))))).
 
-    Definition ValidContractReflect {SPEC : Specification} {Δ τ}
+    Definition ValidContractReflect {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ValidContractReflectWithFuel 1 c body.
 
-    Lemma validcontract_reflect_fuel_sound {SPEC : Specification} {Δ τ}
+    Lemma validcontract_reflect_fuel_sound {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflectWithFuel fuel c body ->
       ValidContractWithFuel fuel c body.
@@ -830,7 +830,7 @@ Module Type SymbolicExecOn
       apply (ok_sound _ env.nil) in Hok. now constructor.
     Qed.
 
-    Lemma validcontract_reflect_sound {SPEC : Specification} {Δ τ}
+    Lemma validcontract_reflect_sound {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
       ValidContract c body.
@@ -839,19 +839,19 @@ Module Type SymbolicExecOn
       now apply validcontract_reflect_fuel_sound.
     Qed.
 
-    Definition VcGenErasureFuel {SPEC : Specification} {Δ τ} (fuel : nat)
+    Definition VcGenErasureFuel {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (fuel : nat)
       (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
       Erasure.erase_symprop (postprocess (SPureSpec.replay (postprocess (vcgen default_config fuel c body wnil)))).
 
-    Definition ValidContractWithErasureAndFuel {SPEC : Specification} {Δ τ}
+    Definition ValidContractWithErasureAndFuel {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (fuel : nat) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasureFuel fuel c body).
 
-    Definition VcGenErasure {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
+    Definition VcGenErasure {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
       (body : Stm Δ τ) : Erasure.ESymProp :=
       VcGenErasureFuel 1 c body.
 
-    Definition ValidContractWithErasure {SPEC : Specification} {Δ τ}
+    Definition ValidContractWithErasure {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationConditionWithErasure (VcGenErasure c body).
 
@@ -860,13 +860,13 @@ Module Type SymbolicExecOn
       VerificationCondition p.
     Proof. intros [H]. constructor. now rewrite <- Erasure.erase_safe. Qed.
 
-    Lemma validcontract_with_erasure_sound {SPEC : Specification} {Δ τ}
+    Lemma validcontract_with_erasure_sound {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasure c body ->
       ValidContract c body.
     Proof. apply verification_condition_with_erasure_sound. Qed.
 
-    Lemma validcontract_with_erasure_and_fuel_sound {SPEC : Specification} {Δ τ}
+    Lemma validcontract_with_erasure_and_fuel_sound {PDEF : ProgramDef} {SPEC : Specification} {Δ τ}
       {fuel} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractWithErasureAndFuel fuel c body ->
       ValidContractWithFuel fuel c body.
@@ -891,7 +891,7 @@ Module Type SymbolicExecOn
                 |}
         end.
 
-      Definition calc {SPEC : Specification} {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
+      Definition calc {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (f : 𝑭 Δ τ) : option (Stats) :=
         match CEnv f with
         | Some contract =>
             let contract' := extend_postcond_with_debug contract in

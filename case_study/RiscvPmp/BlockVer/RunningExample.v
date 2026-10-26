@@ -269,8 +269,8 @@ Module RunningExample.
 
       Lemma semWP2_S_n_twp_seq {Σ} {sG : sailGS2 Σ} {Γ τ} (n : nat) {s1 : Stm Γ τ} {s2 : Stm Γ τ} :
         ⊢ ∀ Q δ1 δ2,
-            @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1',
-                @semTWP _ sailGS2_sailGS_right _ _ δ2 s2 (λ v2 δ2',
+            @semTWP _ sailGS2_sailGS_left _ _ _ _ δ1 s1 (λ v1 δ1',
+                @semTWP _ sailGS2_sailGS_right _ _ _ _ δ2 s2 (λ v2 δ2',
                     ⌜v1 = v2⌝ ∗ ⌜δ1' = δ2'⌝ ∗
                     semWP2_n n δ1 δ2 s1 s2 Q)) -∗
           semWP2_n (S n) δ1 δ2 s1 s2 Q.

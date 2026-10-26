@@ -38,22 +38,9 @@ From Katamaran Require Import
 Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
   Include RegStoreKit B.
 
-  (* Step relation for calling an external function. The complete function call
-     is done in one step. The result of an external call is either a failure
-     with an error message msg (res = inl msg) or a successful computation with
-     a result value v (res = inr v).
-   *)
-  Parameter ForeignCall :
-    forall
-      {Δ σ} (f : 𝑭𝑿 Δ σ)
-      (args : CStore Δ)
-      (res  : string + Val σ)
-      (γ γ' : RegStore)
-      (μ μ' : Memory), Prop.
-  Parameter ForeignProgress :
-    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : CStore Δ) γ μ,
-    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-
-  Parameter FunDef : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
+  (* The function definitions themselves are not part of this module type.
+     They are collected in the [ProgramDef] record in [Program.v]. Similarly,
+     the semantics of the foreign functions is collected in the [ForeignDef]
+     record. *)
 
 End FunDefKit.

@@ -151,6 +151,10 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
 
   End WithIrisNotations.
 
+  Definition Memory : Type := Memory.
+  #[export] Instance iris_memory : IrisMemory Memory memGS :=
+    @MkIrisMemory Memory memGS (@mem_state_interp).
+
   Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisTotalWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
@@ -184,6 +188,9 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
     iPureIntro.
     apply initMemMap_works.
   Qed.
+
+  #[export] Instance iris_adeq_memory : IrisAdeqMemory iris_memory memGpreS :=
+    @MkIrisAdeqMemory _ _ iris_memory memGpreS memΣ (@memΣ_GpreS) (@mem_res) (@mem_init).
 
 End MinCapsIrisAdeqParameters.
 

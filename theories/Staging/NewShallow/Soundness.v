@@ -54,7 +54,7 @@ Module Type Soundness
 
   Section Soundness.
 
-    Context {L} {biA : BiAffine L} {PI : PredicateDef L}.
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L} {PDEF : ProgramDef}.
 
     Lemma call_contract_sound {Δ τ}
       (c : SepContract Δ τ) (δΔ : CStore Δ) (POST : Val τ -> L) :

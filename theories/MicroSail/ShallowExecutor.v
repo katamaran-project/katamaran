@@ -419,7 +419,7 @@ Module Type ShallowExecOn
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
-    Fixpoint cexec_call {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
+    Fixpoint cexec_call {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
       fun Δ τ f args =>
         _ <- debug_call f args ;;
         (* Let's first see if we have a contract defined for function [f]
@@ -437,12 +437,12 @@ Module Type ShallowExecOn
               args
         end.
 
-    Definition cexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
+    Definition cexec {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) : Exec :=
       @CStoreSpec.exec_aux SPEC cexec_call_foreign cexec_lemma
         (cexec_call inline_fuel) cexec_fail.
-    #[global] Arguments cexec {_} _ [_ _] s _ _ _ : simpl never.
+    #[global] Arguments cexec {_ _} _ [_ _] s _ _ _ : simpl never.
 
-    Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition vcgen {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       CHeapSpec.run (exec_contract (cexec inline_fuel) c body).
 
     Import (hints) CStoreSpec.
@@ -461,7 +461,7 @@ Module Type ShallowExecOn
     Lemma mon_cexec_fail {SPEC : Specification} : MonotonicExecFail cexec_fail.
     Proof. unfold cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
 
-    #[export] Instance mon_cexec_call {SPEC : Specification} (fuel : nat) :
+    #[export] Instance mon_cexec_call {PDEF : ProgramDef} {SPEC : Specification} (fuel : nat) :
       MonotonicExecCall (cexec_call fuel).
     Proof.
       induction fuel; intros; cbn; destruct CEnv;
@@ -469,7 +469,7 @@ Module Type ShallowExecOn
         typeclasses eauto.
     Qed.
 
-    Lemma mon_cexec {SPEC : Specification} (fuel : nat) :
+    Lemma mon_cexec {PDEF : ProgramDef} {SPEC : Specification} (fuel : nat) :
       MonotonicExec (cexec fuel).
     Proof. unfold cexec, cexec_fail; destruct fail_rule_pre; typeclasses eauto. Qed.
 
@@ -477,11 +477,11 @@ Module Type ShallowExecOn
 
   Module Shallow.
 
-    Definition ValidContractWithFuel {SPEC : Specification} {Δ τ} (fuel : nat)
+    Definition ValidContractWithFuel {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (fuel : nat)
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       vcgen fuel c body.
 
-    Definition ValidContract {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
+    Definition ValidContract {PDEF : ProgramDef} {SPEC : Specification} {Δ τ} (c : SepContract Δ τ)
       (body : Stm Δ τ) : Prop :=
       (* Use inline_fuel = 1 by default. *)
       ValidContractWithFuel 1 c body.

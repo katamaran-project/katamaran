@@ -44,7 +44,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
   Import ctx.notations.
   Import env.notations.
 
-  Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
+  Inductive Step {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory} {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ τ), Prop :=
 
   | st_exp
@@ -151,7 +151,15 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟩
 
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" :=
-    (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
+    (@Step _ _ _ _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
+
+  (* [ForeignCall] is a projection of the [ForeignDef] instance, so automatic
+     implicit argument detection does not see through it. *)
+  #[global] Arguments st_foreign {Memory PDEF FDEF Γ τ γ μ} δ {Δ f} es {res γ' μ'} _.
+
+  Section WithProgramDef.
+
+  Context {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   (* Implement small inversions for the operational semantics. This considers
      only the cases where the starting statement is constructed with exactly one
@@ -286,15 +294,21 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   End SmallInversions.
 
-  Inductive Steps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
+  End WithProgramDef.
+
+  Inductive Steps {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory} {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : CStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> CStore Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1
   | step_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : CStore Γ} {s2 s3 : Stm Γ σ} :
       Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> Steps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 -> Steps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
 
   Module Import SmallStepNotations.
-    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
-    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
+    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ _ _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
+    Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ _ _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
   End SmallStepNotations.
+
+  Section WithProgramDef.
+
+  Context {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   Lemma Steps_trans {Γ τ} :
     forall {γ1 γ2 γ3 μ1 μ2 μ3 δ1 δ2 δ3} {s1 s2 s3 : Stm Γ τ},
@@ -406,6 +420,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         microsail_stm_primitive_step s1'; constructor
       end; fail.
     Abort.
+
+  End WithProgramDef.
 
   Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
     match s with

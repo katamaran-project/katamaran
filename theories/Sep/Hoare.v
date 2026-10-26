@@ -79,7 +79,7 @@ Module Type ProgramLogic
   Module ProgLog.
   Section Triples.
 
-    Context {L : bi} {PI : PredicateDef L} {SPEC : Specification}.
+    Context {L : bi} {PI : PredicateDef L} {PDEF : ProgramDef} {SPEC : Specification}.
 
     (* Hoare triples for SepContract *)
 
@@ -360,7 +360,7 @@ Module Type ProgramLogic
 
   End Triples.
 
-  Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ _ δ _ P%I s Q%I).
+  Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ _ _ δ _ P%I s Q%I).
 
 End ProgLog.
 End ProgramLogic.

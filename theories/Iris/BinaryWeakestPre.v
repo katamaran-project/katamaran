@@ -96,7 +96,7 @@ Module IrisBinaryWP
   (Import IPred : IrisPredicates2 B SIG PROG SEM IB2).
 
   Section WithSailGS2.
-    Context `{sG : sailGS2 Σ}.
+    Context `{sG : sailGS2 Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
     #[export] Program Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
       {| lptsreg σ r v        := reg_pointsTo2 r v v;
@@ -758,8 +758,8 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q1 Q2 Q δ1 δ2,
-          @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 Q1 -∗
-          @semTWP _ sailGS2_sailGS_right _ _ δ2 s2 Q2 -∗
+          @semTWP _ sailGS2_sailGS_left _ _ _ _ δ1 s1 Q1 -∗
+          @semTWP _ sailGS2_sailGS_right _ _ _ _ δ2 s2 Q2 -∗
           (∀ v1 δ1 v2 δ2, Q1 v1 δ1 ∗ Q2 v2 δ2 -∗ Q v1 δ1 v2 δ2) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
@@ -778,8 +778,8 @@ Module IrisBinaryWP
 
     Lemma semWP2_focus_seq {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
-          @semTWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
-              @semTWP _ sailGS2_sailGS_right _ _ δ2 s2
+          @semTWP _ sailGS2_sailGS_left _ _ _ _ δ1 s1 (λ v1 δ1,
+              @semTWP _ sailGS2_sailGS_right _ _ _ _ δ2 s2
                 (λ v2 δ2, Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
@@ -791,8 +791,8 @@ Module IrisBinaryWP
 
     Lemma semWP2_anaglyph {Γ1 Γ2 τ} {s1 : Stm Γ1 τ} {s2 : Stm Γ2 τ} :
       ⊢ ∀ Q δ1 δ2,
-          @semWP _ sailGS2_sailGS_left _ _ δ1 s1 (λ v1 δ1,
-              @semTWP _ sailGS2_sailGS_right _ _ δ2 s2
+          @semWP _ sailGS2_sailGS_left _ _ _ _ δ1 s1 (λ v1 δ1,
+              @semTWP _ sailGS2_sailGS_right _ _ _ _ δ2 s2
                       (λ v2 δ2, Q v1 δ1 v2 δ2)) -∗
           semWP2 δ1 δ2 s1 s2 Q.
     Proof.
@@ -810,7 +810,7 @@ Module IrisBinaryWP
       £ 1 -∗
       semWP2 δ1 δ2 s1 s2 Q ={⊤,∅}=∗
       ▷ |={∅,⊤}=> (@regs_inv _ sailRegGS2_sailRegGS_left γ1' ∗ @mem_state_interp _ memGS2_memGS_left μ1')
-                  ∗ @semWP _ sailGS2_sailGS_left _ _ δ1' s1' (λ (v1 : IVal τ) (δ1'0 : CStore Γ1),
+                  ∗ @semWP _ sailGS2_sailGS_left _ _ _ _ δ1' s1' (λ (v1 : IVal τ) (δ1'0 : CStore Γ1),
                     ∃ (γ22 : RegStore) (μ22 : Memory) (δ2' : CStore Γ2) (s2' : Stm Γ2 τ) (v2 : IVal τ),
                       ⌜⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ22, μ22, δ2', s2' ⟩⌝
                         ∗ ⌜stm_to_val s2' = Some v2⌝ ∗ @regs_inv _ sailRegGS2_sailRegGS_right γ22 ∗ @mem_state_interp _ memGS2_memGS_right μ22 ∗ Q v1 δ1'0 v2 δ2').
@@ -838,7 +838,7 @@ Module Type IrisSignatureRules2
   Module Export IWP := IrisBinaryWP B SIG PROG SEM IB2 IPred.
 
   Section WithSailGS2.
-  Context `{sG : sailGS2 Σ}.
+  Context `{sG : sailGS2 Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
 Section Soundness.
 

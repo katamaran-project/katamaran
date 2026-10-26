@@ -107,7 +107,7 @@ Section Soundness.
 
   Import SmallStepNotations.
 
-  Context `{sG : sailGS Σ, rG : resGS Σ}.
+  Context `{sG : sailGS Σ, rG : resGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   #[export] Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo r v;
@@ -777,17 +777,33 @@ Section Soundness.
 End Soundness.
 End IrisSignatureRules.
 
+(* The parts of the memory ghost state that are only needed for adequacy. *)
+Class IrisAdeqMemory {Memory memGS} (IM : IrisMemory Memory memGS)
+  (memGpreS : gFunctors -> Set) : Type :=
+  MkIrisAdeqMemory {
+      memΣ : gFunctors;
+      memΣ_GpreS : forall Σ, subG memΣ Σ -> memGpreS Σ;
+      mem_res : forall Σ (mG : memGS Σ), Memory -> iProp Σ;
+      mem_init : forall Σ (mGS : memGpreS Σ) (μ : Memory),
+          ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp (mG := mG) μ ∗ @mem_res Σ mG μ)%I;
+    }.
+#[global] Arguments memΣ {_ _ _ _ _}.
+#[global] Arguments memΣ_GpreS {_ _ _ _ _ Σ} _.
+#[global] Arguments mem_res {_ _ _ _ _ Σ mG} μ.
+#[global] Arguments mem_init {_ _ _ _ _ Σ mGS} μ.
+
 Module Type IrisAdeqParameters
   (Import B : Base)
   (Import IP : IrisParameters B).
 
   Parameter Inline memGpreS : gFunctors -> Set.
-  Parameter memΣ : gFunctors.
-  Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
-  Parameter mem_res : forall `{mG : memGS Σ}, Memory -> iProp Σ.
-  Parameter mem_init : forall `{mGS : memGpreS Σ} (μ : Memory),
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp (mG := mG) μ ∗ mem_res (mG := mG) μ)%I.
+  Parameter Inline iris_adeq_memory : IrisAdeqMemory iris_memory memGpreS.
+  #[export] Existing Instance iris_adeq_memory.
 
+  Abbreviation memΣ := (@memΣ Memory memGS iris_memory memGpreS iris_adeq_memory).
+  Abbreviation memΣ_GpreS := (@memΣ_GpreS Memory memGS iris_memory memGpreS iris_adeq_memory).
+  Abbreviation mem_res := (@mem_res Memory memGS iris_memory memGpreS iris_adeq_memory).
+  Abbreviation mem_init := (@mem_init Memory memGS iris_memory memGpreS iris_adeq_memory).
 End IrisAdeqParameters.
 
 Module Type IrisAdequacy
@@ -829,6 +845,10 @@ Module Type IrisAdequacy
     split; eauto using memΣ_GpreS, subG_invΣ.
     solve_inG.
   Qed.
+
+  Section WithProgramDef.
+
+  Context {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
@@ -943,6 +963,8 @@ Module Type IrisAdequacy
       now iApply "Hφ".
   Qed.
 
+  End WithProgramDef.
+
 End IrisAdequacy.
 
 Module Type IrisInstance (B : Base) (SIG : Signature B) (PROG : Program B) (SEM : Semantics B PROG) (PLOG : ProgramLogic B SIG PROG) (IB : IrisBase B PROG SEM) (IAP : IrisAdeqParameters B IB) :=
@@ -964,7 +986,7 @@ Module IrisInstanceWithContracts
 
   Section WithSailGS.
     Import ProgLog.
-    Context {Σ} {sG : sailGS Σ} {rG : resGS Σ}.
+    Context {Σ} {sG : sailGS Σ} {rG : resGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
     Section PartialTriple.
       Context {SPEC : Specification}.

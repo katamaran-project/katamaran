@@ -53,7 +53,7 @@ Module Type IrisTotalPartialWeakestPre
   (Import ITWP : IrisTotalWeakestPre B PROG SEM IPre IP IR).
 
   Section WithSailGS.
-    Context `{sG : sailGS Σ}.
+    Context `{sG : sailGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
     Lemma semTWP_semWP {Γ τ} {s : Stm Γ τ} {δ Q} : 
       semTWP δ s Q ⊢ semWP δ s Q.

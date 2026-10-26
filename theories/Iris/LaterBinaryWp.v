@@ -147,7 +147,7 @@ Module IrisBinaryWP
   (Import IWP   : IrisBinaryWPParameters B SIG PROG SEM IP IB IPred).
 
   Section WithSailGS2.
-  Context `{sG : sailGS2 Σ, resGS2}.
+  Context `{sG : sailGS2 Σ, resGS2} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   #[export] Program Instance PredicateDefIProp : PredicateDef (iProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo2 r v v;
@@ -322,7 +322,7 @@ Module IrisBinaryWPAsymmetricLaws
   Module Export IWP := IrisBinaryWP B SIG PROG SEM IP IB IPred IWPP.
 
   Section WithSailGS2.
-  Context `{sG : sailGS2 Σ}.
+  Context `{sG : sailGS2 Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   Import SmallStepNotations.
 
@@ -852,7 +852,7 @@ Module Type IrisSignatureRules2
   Module Export IWPLaws := IrisBinaryWPAsymmetricLaws B SIG PROG SEM IB IPred.
 
   Section WithSailGS2.
-  Context `{sG : sailGS2 Σ}.
+  Context `{sG : sailGS2 Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
 Section Soundness.
 

@@ -82,12 +82,6 @@ Abbreviation llist := (ty.option ptr).
 
 Module Import ExampleBase <: Base.
 
-  Section MemoryModel.
-    (* The type of memory we use for this example. A mapping from addresses
-       represented as integers to pairs. *)
-    Definition Memory : Set := gmap.gmap Z (Z * (Z + unit)).
-  End MemoryModel.
-
   (* We use default instances because this example does not use any types other
      than the standard ones already available. We also don't make any use of
      registers (global variables). *)
@@ -100,6 +94,11 @@ Module Import ExampleBase <: Base.
   Include BaseMixin.
 End ExampleBase.
 
+Section MemoryModel.
+  (* The type of memory we use for this example. A mapping from addresses
+     represented as integers to pairs. *)
+  Definition Memory : Set := gmap.gmap Z (Z * (Z + unit)).
+End MemoryModel.
 
 (* The [Program] module contains the declaration and definition of the functions
    that make up the program. *)
@@ -256,7 +255,7 @@ Module Import ExampleProgram <: Program ExampleBase.
 
     (* Combine all the separately-defined function bodies into a single map from
        function names to their bodies. *)
-    Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    Definition fundef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       match f in Fun Δ τ return Stm Δ τ with
       | append     => fun_append
       | appendloop => fun_appendloop
@@ -279,41 +278,41 @@ Module Import ExampleProgram <: Program ExampleBase.
     (* This defines a "stepping relation" for the foreign functions. Since all
        these functions are deterministic, we write them in a functional instead
        of a relational style. *)
-    Equations(noeqns) ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
+    Equations(noeqns) foreign_call {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
       (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
       (* mkcons allocates a new pair and initializes it with the given values
          [x] and [xs]*)
-      ForeignCall mkcons (env.snoc (env.snoc env.nil _ x) _ xs) res γ γ' μ μ' :=
+      foreign_call mkcons (env.snoc (env.snoc env.nil _ x) _ xs) res γ γ' μ μ' :=
         (* Determinate the next free address. *)
         let next := infinite_fresh (elements (dom μ)) in
         γ' = γ /\
         (* Allocate the pair at [next]. *)
         μ' = (<[next := (x, xs)]> μ) /\
         res = inr next;
-      ForeignCall fst (env.snoc env.nil _ z) res γ γ' μ μ' :=
+      foreign_call fst (env.snoc env.nil _ z) res γ γ' μ μ' :=
         match μ !! z with
         | None          => res = inl "Invalid pointer"
         | Some (head,_) => γ' = γ /\ μ' = μ /\ res = inr head
         end;
-      ForeignCall snd (env.snoc env.nil _ z) res γ γ' μ μ' :=
+      foreign_call snd (env.snoc env.nil _ z) res γ γ' μ μ' :=
         match μ !! z with
         | None          => res = inl "Invalid pointer"
         | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
         end;
-      ForeignCall setfst (env.snoc (env.snoc env.nil _ z) _ x) res γ γ' μ μ' :=
+      foreign_call setfst (env.snoc (env.snoc env.nil _ z) _ x) res γ γ' μ μ' :=
         match (μ !! z) with
         | None => res = inl "Invalid pointer"
         | Some (_, xs) => γ' = γ /\  μ' = <[z := (x, xs)]> μ /\ res = inr tt
         end;
-      ForeignCall setsnd (env.snoc (env.snoc env.nil _ z) _ xs) res γ γ' μ μ' :=
+      foreign_call setsnd (env.snoc (env.snoc env.nil _ z) _ xs) res γ γ' μ μ' :=
         match (μ !! z) with
         | None => res = inl "Invalid pointer"
         | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, xs)]> μ /\ res = inr tt
         end.
 
     (* Show the progress of the foreign function stepping relation. *)
-    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
-      exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
+    Lemma foreign_progress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
+      exists γ' μ' res, foreign_call f args res γ γ' μ μ'.
     Proof.
       destruct f; env.destroy args; cbn;
         try match goal with
@@ -338,15 +337,27 @@ Module Import ExampleProgram <: Program ExampleBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    stm_bindfree (FunDef f).
+    stm_bindfree (fundef f).
   Proof. destruct f; now vm_compute. Qed.
 
-  Definition 𝑭_call_graph := generic_call_graph.
-  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Definition call_graph := generic_call_graph (@fundef).
+  Lemma call_graph_wellformed : CallGraphWellFormed (@fundef) call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible 𝑭_call_graph f) :=
+  Definition fun_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible call_graph f) :=
     None.
+
+  #[export] Instance example_program : ProgramDef :=
+    {| FunDef                  := @fundef;
+       𝑭_call_graph            := call_graph;
+       𝑭_call_graph_wellformed := call_graph_wellformed;
+       𝑭_accessible            := @fun_accessible;
+    |}.
+
+  #[export] Instance example_foreign : ForeignDef Memory :=
+    {| ForeignCall     := @foreign_call;
+       ForeignProgress := @foreign_progress;
+    |}.
 
 End ExampleProgram.
 
@@ -875,6 +886,10 @@ Module ExampleModel.
         fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
     End ExampleIrisParameters.
 
+    Definition Memory : Type := Memory.
+    #[export] Instance iris_memory : IrisMemory Memory memGS :=
+      @MkIrisMemory Memory memGS (@mem_state_interp).
+
     Include IrisResources ExampleBase ExampleProgram ExampleSemantics.
     Include IrisWeakestPre ExampleBase ExampleProgram ExampleSemantics.
     Include IrisTotalWeakestPre ExampleBase ExampleProgram ExampleSemantics.
@@ -907,6 +922,9 @@ Module ExampleModel.
       iExists (McMemGS gH (nroot .@ "mem_state_interp")).
       iFrame.
     Qed.
+
+    #[export] Instance iris_adeq_memory : IrisAdeqMemory iris_memory memGpreS :=
+      @MkIrisAdeqMemory _ _ iris_memory memGpreS memΣ (@memΣ_GpreS) (@mem_res) (@mem_init).
   End ExampleIrisAdeqParams.
 
   (* After instantiating [IrisBase] we have access to the Iris base logic

@@ -61,6 +61,22 @@ Import env.notations.
 
 Set Implicit Arguments.
 
+(* The parts of the binary memory ghost state that are only needed for
+   adequacy. *)
+Class IrisAdeqMemory2 {Memory memGS} {IM : IrisMemory Memory memGS} {memGS2}
+  (IM2 : IrisMemory2 IM memGS2) (memGpreS2 : gFunctors -> Set) : Type :=
+  MkIrisAdeqMemory2 {
+      memΣ2 : gFunctors;
+      memΣ_GpreS2 : forall Σ, subG memΣ2 Σ -> memGpreS2 Σ;
+      mem_res2 : forall Σ (mG : memGS2 Σ), Memory -> Memory -> iProp Σ;
+      mem_init2 : forall Σ (mGS : memGpreS2 Σ) (μ1 μ2 : Memory),
+          ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 (mG := mG) μ1 μ2 ∗ @mem_res2 Σ mG μ1 μ2)%I;
+    }.
+#[global] Arguments memΣ2 {_ _ _ _ _ _ _}.
+#[global] Arguments memΣ_GpreS2 {_ _ _ _ _ _ _ Σ} _.
+#[global] Arguments mem_res2 {_ _ _ _ _ _ _ Σ mG} μ1 μ2.
+#[global] Arguments mem_init2 {_ _ _ _ _ _ _ Σ mGS} μ1 μ2.
+
 Module Type IrisAdeqParameters2
   (Import B    : Base)
   (Import PROG : Program B)
@@ -70,17 +86,17 @@ Module Type IrisAdeqParameters2
   (Import IPP  : IrisParameters2 B IP).
 
   Parameter Inline memGpreS2 : gFunctors -> Set.
-  Parameter memΣ2 : gFunctors.
-  Parameter memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ.
-  Parameter mem_res2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
+  Parameter Inline iris_adeq_memory2 : IrisAdeqMemory2 iris_memory2 memGpreS2.
+  #[export] Existing Instance iris_adeq_memory2.
 
-    (* Definition mem_state_interp `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
-    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
-    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
-    (*   )%I. *)
-
-  Parameter mem_init2 : forall `{mGS : memGpreS2 Σ} (μ1 μ2 : Memory),
-                                         ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 (mG := mG) μ1 μ2 ∗ mem_res2 (mG := mG) μ1 μ2)%I.
+  Abbreviation memΣ2 :=
+    (@memΣ2 Memory memGS iris_memory memGS2 iris_memory2 memGpreS2 iris_adeq_memory2).
+  Abbreviation memΣ_GpreS2 :=
+    (@memΣ_GpreS2 Memory memGS iris_memory memGS2 iris_memory2 memGpreS2 iris_adeq_memory2).
+  Abbreviation mem_res2 :=
+    (@mem_res2 Memory memGS iris_memory memGS2 iris_memory2 memGpreS2 iris_adeq_memory2).
+  Abbreviation mem_init2 :=
+    (@mem_init2 Memory memGS iris_memory memGS2 iris_memory2 memGpreS2 iris_adeq_memory2).
 
 End IrisAdeqParameters2.
 
@@ -125,6 +141,10 @@ Module Type IrisAdequacy2
     - clear s2. solve_inG.
     - clear s1. solve_inG.
  Qed.
+
+  Section WithProgramDef.
+
+  Context {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
@@ -336,5 +356,7 @@ Module Type IrisAdequacy2
       repeat iSplitR; auto.
       now iApply H.
   Qed.
+
+  End WithProgramDef.
 
 End IrisAdequacy2.

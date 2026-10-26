@@ -1710,114 +1710,114 @@ Module Export RiscvPmpBase <: Base.
 
   End Inhabited.
 
-  Section MemoryModel.
-    Import Bitvector.bv.notations.
-
-    Definition RAM : Type := Addr -> Byte.
-
-    (* Memory *)
-    Record MemoryType : Type :=
-      mkMem {
-        memory_ram : RAM;
-        memory_trace : Trace;
-        memory_state : State;
-      } .
-    Definition Memory := MemoryType.
-
-    Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
-    Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
-    Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
-    Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
-
-    Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : 
-      Val (ty_bytes data_size) :=
-      match data_size with
-      | O   => bv.zero
-      | S n => bv.app ((memory_ram μ) addr) (fun_read_ram μ n (bv.one + addr))
-      end.
-
-    (* Small test to show that read_ram reads bitvectors in little
-       endian order. *)
-    Goal ∀ μ : Memory,
-      let μ': Memory := memory_update_ram μ (fun a =>
-        if eq_dec a [bv 0x0] then [bv 0xEF] else
-        if eq_dec a [bv 0x1] then [bv 0xBE] else
-        if eq_dec a [bv 0x2] then [bv 0xAD] else
-        if eq_dec a [bv 0x3] then [bv 0xDE] else
-        [bv 0])
-      in fun_read_ram μ' 4 [bv 0] = [bv 0xDEADBEEF].
-    Proof. reflexivity. Qed.
-
-    Definition write_byte (r : RAM) (addr : Val ty_xlenbits) (data : Byte) : RAM :=
-      (fun a => if eq_dec addr a then data else r a).
-
-    Fixpoint fun_write_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
-      Val (ty_bytes data_size) -> Memory :=
-      match data_size as n return (Val (ty_bytes n) → Memory) with
-      | O   => fun _data => μ
-      | S n => fun data : Val (ty_bytes (S n)) =>
-                 let (byte , bytes) := bv.appView 8 (n * 8) data in
-                 let μ' := (memory_update_ram μ (write_byte (memory_ram μ) addr byte)) in
-                 fun_write_ram μ' (bv.one + addr) bytes
-      end.
-    #[global] Arguments fun_write_ram : clear implicits.
-
-    (* Separated into a read and a write function in the sail model *)
-    (* NOTE: we have to check overflow here, because the PMP model does not...*)
-    Definition fun_within_mmio (data_size : nat) (addr : Val ty_xlenbits) : bool :=
-      bool_decide (withinMMIO addr data_size ∧
-      bv.bin addr + N.of_nat data_size < (bv.exp2 xlenbits))%N.
-
-    (* TODO: in principle, restricted bytes don't need a zero-case *)
-    Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
-      Memory * Val (ty_bytes data_size) :=
-      match data_size with
-      | O   => (μ , bv.zero)
-      | S n => let (s' , readv) := state_tra_read (memory_state μ) addr data_size in
-               let mmioev := mkEvent IORead addr data_size readv in
-               let μ' := memory_append_trace (memory_update_state μ s') mmioev in
-                (μ' , readv)%type
-      end.
-
-    Definition fun_externalWorldUpdates (μ : Memory)  :
-      Minterrupts * Memory :=
-      (* DOMI: temporarily disabled interrupts until I know how to fix the relational model *)
-      (MkMinterrupts false false false false false false false false false , μ).
-      (* let '(vmip , s') := state_tra_world_updates (memory_state μ) in *)
-      (* let μ' := memory_update_state μ s' in *)
-      (* (vmip , μ'). *)
-
-    Definition fun_write_mmio (μ : Memory) (e : EventTy) (data_size : nat) (addr : Val ty_xlenbits) :
-      Val (ty_bytes data_size) -> Memory :=
-      match data_size as n return (Val (ty_bytes n) → Memory) with
-      | O   => fun _data => μ
-      | S n => fun data : Val (ty_bytes (S n)) =>
-                let s' := state_tra_write (memory_state μ) addr (S n) data in
-                let mmioev := mkEvent e addr (S n) data in
-                let μ' := memory_append_trace (memory_update_state μ s') mmioev in
-                μ'
-      end.
-
-    (* fun_handle_write_mmio dispatches an mmio write for special cases to the
-       appropriate handler, i.e., writes to the mmioShutdownAddr result in a
-       different MMIO event. All other cases are the general IOWrite event.
-       The function returns a product, with the bool indicating that the
-       machine can keep executing (true), or needs to halt (false). The other
-       component is the resulting Memory of the operation. *)
-    Definition fun_handle_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits)
-      : Val (ty_bytes data_size) -> bool * Memory :=
-      match data_size with
-      | O => fun _ => (true, μ) (* No data to write, making this a no-op *)
-      | S n =>
-          fun (data : Val (ty_bytes (S n))) =>
-            let (power, event) := if decide (isShutdownAddr addr)
-                                  then (false, IOShutdown)
-                                  else (true , IOWrite) in
-            (power, fun_write_mmio μ event addr data)
-      end.
-
-  End MemoryModel.
-
   Include BaseMixin.
 
 End RiscvPmpBase.
+
+Section MemoryModel.
+  Import Bitvector.bv.notations.
+
+  Definition RAM : Type := Addr -> Byte.
+
+  (* Memory *)
+  Record MemoryType : Type :=
+    mkMem {
+      memory_ram : RAM;
+      memory_trace : Trace;
+      memory_state : State;
+    } .
+  Definition Memory := MemoryType.
+
+  Definition memory_update_ram (μ : Memory) (r : RAM) := mkMem r (memory_trace μ) (memory_state μ).
+  Definition memory_update_trace (μ : Memory) (t : Trace) := mkMem (memory_ram μ) t (memory_state μ).
+  Definition memory_append_trace (μ : Memory) (e : Event) := memory_update_trace μ (cons e (memory_trace μ)).
+  Definition memory_update_state (μ : Memory) (s : State) := mkMem (memory_ram μ) (memory_trace μ) s.
+
+  Fixpoint fun_read_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) : 
+    Val (ty_bytes data_size) :=
+    match data_size with
+    | O   => bv.zero
+    | S n => bv.app ((memory_ram μ) addr) (fun_read_ram μ n (bv.one + addr))
+    end.
+
+  (* Small test to show that read_ram reads bitvectors in little
+     endian order. *)
+  Goal ∀ μ : Memory,
+    let μ': Memory := memory_update_ram μ (fun a =>
+      if eq_dec a [bv 0x0] then [bv 0xEF] else
+      if eq_dec a [bv 0x1] then [bv 0xBE] else
+      if eq_dec a [bv 0x2] then [bv 0xAD] else
+      if eq_dec a [bv 0x3] then [bv 0xDE] else
+      [bv 0])
+    in fun_read_ram μ' 4 [bv 0] = [bv 0xDEADBEEF].
+  Proof. reflexivity. Qed.
+
+  Definition write_byte (r : RAM) (addr : Val ty_xlenbits) (data : Byte) : RAM :=
+    (fun a => if eq_dec addr a then data else r a).
+
+  Fixpoint fun_write_ram (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Val (ty_bytes data_size) -> Memory :=
+    match data_size as n return (Val (ty_bytes n) → Memory) with
+    | O   => fun _data => μ
+    | S n => fun data : Val (ty_bytes (S n)) =>
+               let (byte , bytes) := bv.appView 8 (n * 8) data in
+               let μ' := (memory_update_ram μ (write_byte (memory_ram μ) addr byte)) in
+               fun_write_ram μ' (bv.one + addr) bytes
+    end.
+  #[global] Arguments fun_write_ram : clear implicits.
+
+  (* Separated into a read and a write function in the sail model *)
+  (* NOTE: we have to check overflow here, because the PMP model does not...*)
+  Definition fun_within_mmio (data_size : nat) (addr : Val ty_xlenbits) : bool :=
+    bool_decide (withinMMIO addr data_size ∧
+    bv.bin addr + N.of_nat data_size < (bv.exp2 xlenbits))%N.
+
+  (* TODO: in principle, restricted bytes don't need a zero-case *)
+  Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :
+    Memory * Val (ty_bytes data_size) :=
+    match data_size with
+    | O   => (μ , bv.zero)
+    | S n => let (s' , readv) := state_tra_read (memory_state μ) addr data_size in
+             let mmioev := mkEvent IORead addr data_size readv in
+             let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+              (μ' , readv)%type
+    end.
+
+  Definition fun_externalWorldUpdates (μ : Memory)  :
+    Minterrupts * Memory :=
+    (* DOMI: temporarily disabled interrupts until I know how to fix the relational model *)
+    (MkMinterrupts false false false false false false false false false , μ).
+    (* let '(vmip , s') := state_tra_world_updates (memory_state μ) in *)
+    (* let μ' := memory_update_state μ s' in *)
+    (* (vmip , μ'). *)
+
+  Definition fun_write_mmio (μ : Memory) (e : EventTy) (data_size : nat) (addr : Val ty_xlenbits) :
+    Val (ty_bytes data_size) -> Memory :=
+    match data_size as n return (Val (ty_bytes n) → Memory) with
+    | O   => fun _data => μ
+    | S n => fun data : Val (ty_bytes (S n)) =>
+              let s' := state_tra_write (memory_state μ) addr (S n) data in
+              let mmioev := mkEvent e addr (S n) data in
+              let μ' := memory_append_trace (memory_update_state μ s') mmioev in
+              μ'
+    end.
+
+  (* fun_handle_write_mmio dispatches an mmio write for special cases to the
+     appropriate handler, i.e., writes to the mmioShutdownAddr result in a
+     different MMIO event. All other cases are the general IOWrite event.
+     The function returns a product, with the bool indicating that the
+     machine can keep executing (true), or needs to halt (false). The other
+     component is the resulting Memory of the operation. *)
+  Definition fun_handle_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits)
+    : Val (ty_bytes data_size) -> bool * Memory :=
+    match data_size with
+    | O => fun _ => (true, μ) (* No data to write, making this a no-op *)
+    | S n =>
+        fun (data : Val (ty_bytes (S n))) =>
+          let (power, event) := if decide (isShutdownAddr addr)
+                                then (false, IOShutdown)
+                                else (true , IOWrite) in
+          (power, fun_write_mmio μ event addr data)
+    end.
+
+End MemoryModel.

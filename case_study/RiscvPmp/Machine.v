@@ -1966,36 +1966,36 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Import bv.notations.
 
   #[derive(equations=no)]
-  Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
-    ForeignCall (read_ram width) [addr] res γ γ' μ μ' :=
+  Equations foreign_call {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
+    foreign_call (read_ram width) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ width addr));
-    ForeignCall (write_ram width) [addr; data] res γ γ' μ μ' :=
+    foreign_call (write_ram width) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_ram μ width addr data , inr true);
-    ForeignCall (@mmio_read width H) [addr] res γ γ' μ μ' :=
+    foreign_call (@mmio_read width H) [addr] res γ γ' μ μ' :=
       let (μupd,readv) := fun_read_mmio μ width addr in
       (γ' , μ' , res) = (γ , μupd , inr readv);
-    ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
+    foreign_call (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
       let (power, μ'') := @fun_handle_write_mmio μ width addr data in
       let res' := if power then inr true else inl "Shutdown" in
       (γ' , μ' , res) = (γ , μ'', res');
-    ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
+    foreign_call (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
-    ForeignCall decode [code] res γ γ' μ μ' :=
+    foreign_call decode [code] res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , pure_decode code);
-    ForeignCall externalWorldUpdates [] res γ γ' μ μ' :=
+    foreign_call externalWorldUpdates [] res γ γ' μ μ' :=
       let '(vmip' , μ'') := fun_externalWorldUpdates μ in
       (* The external world may arbitrarily change the interrupts pending register (mip)
          but will leave other state untouched. *)
       (γ' , μ' , res) = (write_register γ mip vmip' , μ'' , inr ()).
 
-  Local Arguments ForeignCall {_ _} f /.
-  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
-    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
+  Local Arguments foreign_call {_ _} f /.
+  Lemma foreign_progress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
+    exists γ' μ' res, foreign_call f args res γ γ' μ μ'.
   Proof. destruct f; env.destroy args; [| | cbn; destruct fun_read_mmio | cbn; repeat case_match | ..]; repeat econstructor.
   Qed.
   End ForeignKit.
 
-  Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+  Definition fundef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
     | rX                      => fun_rX
     | wX                      => fun_wX
@@ -2087,18 +2087,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    stm_bindfree (FunDef f).
+    stm_bindfree (fundef f).
   Proof. destruct f; now vm_compute. Qed.
 
   Include ProgramMixin RiscvPmpBase.
 
   Import callgraph.
 
-  Definition 𝑭_call_graph := generic_call_graph.
-  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Definition call_graph := generic_call_graph (@fundef).
+  Lemma call_graph_wellformed : CallGraphWellFormed (@fundef) call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Abbreviation AccessibleFun f := (Accessible 𝑭_call_graph f).
+  Abbreviation AccessibleFun f := (Accessible call_graph f).
 
   Module Export WithAccessibleTactics.
     Import AccessibleTactics.
@@ -2282,12 +2282,24 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Proof. accessible_proof. Qed.
   End WithAccessibleTactics.
 
-  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+  Definition fun_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
     match f with
     | main => None
     | loop => None
     | _ => Some _
     end.
+
+  #[export] Instance riscvpmp_program : ProgramDef :=
+    {| FunDef                  := @fundef;
+       𝑭_call_graph            := call_graph;
+       𝑭_call_graph_wellformed := call_graph_wellformed;
+       𝑭_accessible            := @fun_accessible;
+    |}.
+
+  #[export] Instance riscvpmp_foreign : ForeignDef Memory :=
+    {| ForeignCall     := @foreign_call;
+       ForeignProgress := @foreign_progress;
+    |}.
 
 End RiscvPmpProgram.
 

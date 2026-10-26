@@ -136,8 +136,9 @@ Module Import ExampleProgram <: Program DefaultBase.
              end
          end).
 
-    (* The library expects a map [FunDef] from function names to function bodies. *)
-    Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    (* The library expects a map [FunDef] from function names to function bodies,
+       which is collected in the [ProgramDef] instance below. *)
+    Definition fundef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       match f in Fun Δ τ return Stm Δ τ with
       | summaxlen => fun_summaxlen
       end.
@@ -151,10 +152,10 @@ Module Import ExampleProgram <: Program DefaultBase.
      instantiate the library with some dummy definitions. *)
   Section ForeignKit.
     Definition Memory : Set := unit.
-    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
+    Definition foreign_call {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
       (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
-      exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
+    Lemma foreign_progress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
+      exists γ' μ' res, foreign_call f args res γ γ' μ μ'.
     Proof. destruct f. Qed.
   End ForeignKit.
 
@@ -163,17 +164,29 @@ Module Import ExampleProgram <: Program DefaultBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    stm_bindfree (FunDef f).
+    stm_bindfree (fundef f).
   Proof. destruct f; now vm_compute. Qed.
 
-  Definition 𝑭_call_graph := generic_call_graph.
-  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Definition call_graph := generic_call_graph (@fundef).
+  Lemma call_graph_wellformed : CallGraphWellFormed (@fundef) call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible 𝑭_call_graph f) :=
+  Definition fun_accessible {Δ τ} (f : 𝑭 Δ τ) : option (Accessible call_graph f) :=
     match f with
     | summaxlen => None
     end.
+
+  #[export] Instance example_program : ProgramDef :=
+    {| FunDef                  := @fundef;
+       𝑭_call_graph            := call_graph;
+       𝑭_call_graph_wellformed := call_graph_wellformed;
+       𝑭_accessible            := @fun_accessible;
+    |}.
+
+  #[export] Instance example_foreign : ForeignDef Memory :=
+    {| ForeignCall     := @foreign_call;
+       ForeignProgress := @foreign_progress;
+    |}.
 
 End ExampleProgram.
 
@@ -371,6 +384,9 @@ Module Import ExampleModel.
 
     Definition memGS : gFunctors -> Set := fun Σ => True.
     Definition mem_state_interp : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
+    Definition Memory : Type := Memory.
+    #[export] Instance iris_memory : IrisMemory Memory memGS :=
+      @MkIrisMemory Memory memGS (@mem_state_interp).
 
     (* Combine the memory and register ghost states. *)
     Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
@@ -391,6 +407,9 @@ Module Import ExampleModel.
     Lemma mem_init `{gHP : memGpreS Σ} (μ : Memory) :
       ⊢ |==> ∃ mG : memGS Σ, (mem_state_interp mG μ ∗ mem_res mG μ)%I.
     Proof. now iStartProof. Qed.
+
+    #[export] Instance iris_adeq_memory : IrisAdeqMemory iris_memory memGpreS :=
+      @MkIrisAdeqMemory _ _ iris_memory memGpreS memΣ (@memΣ_GpreS) (@mem_res) (@mem_init).
   End ExampleIrisAdeqParams.
 
 

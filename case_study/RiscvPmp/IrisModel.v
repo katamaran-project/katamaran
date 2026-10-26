@@ -74,6 +74,10 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
 
   End RiscvPmpIrisParams.
 
+  Definition Memory : Type := Memory.
+  #[export] Instance iris_memory : IrisMemory Memory memGS :=
+    @MkIrisMemory Memory memGS (@mem_state_interp).
+
   Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   Include IrisWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
   Include IrisTotalWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
@@ -87,7 +91,7 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
     semTWP env.nil (FunDef loop) (fun _ _ => True%I).
 
   (* Useful instance for some of the Iris proofs *)
-  #[export] Instance state_inhabited : Inhabited State.
+  #[export] Instance state_inhabited : Inhabited (@State Memory).
   Proof. repeat constructor.
           - intros ty reg. apply val_inhabited.
           - intro. apply bv.bv_inhabited.

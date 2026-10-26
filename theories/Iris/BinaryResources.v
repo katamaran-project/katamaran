@@ -87,17 +87,40 @@ Class irisGS2 (Λ1 Λ2 : language) (Σ : gFunctors) := IrisG {
 }.
 Global Opaque iris_invGS2.
 
+(* The memory ghost state for the binary model, see [IrisMemory]. *)
+Class IrisMemory2 {Memory memGS} (IM : IrisMemory Memory memGS)
+  (memGS2 : gFunctors -> Set) : Type :=
+  MkIrisMemory2 {
+      memGS2_memGS_left : forall Σ (mG : memGS2 Σ), memGS Σ;
+      memGS2_memGS_right : forall Σ (mG : memGS2 Σ), memGS Σ;
+      mem_state_interp2 : forall Σ (mG : memGS2 Σ), Memory -> Memory -> iProp Σ;
+      mem_state_interp2_mem_state_interp : forall Σ (mG : memGS2 Σ) (μ1 μ2 : Memory),
+        @mem_state_interp2 Σ mG μ1 μ2 ⊣⊢
+          mem_state_interp (mG := @memGS2_memGS_left Σ mG) μ1 ∗
+          mem_state_interp (mG := @memGS2_memGS_right Σ mG) μ2;
+    }.
+#[global] Arguments memGS2_memGS_left {_ _ _ _ _ Σ mG}.
+#[global] Arguments memGS2_memGS_right {_ _ _ _ _ Σ mG}.
+#[global] Arguments mem_state_interp2 {_ _ _ _ _ Σ mG} μ1 μ2.
+#[global] Arguments mem_state_interp2_mem_state_interp {_ _ _ _ _ Σ mG} μ1 μ2.
+
 Module Type IrisParameters2
   (Import B    : Base)
   (Import IB   : IrisParameters B).
 
   Parameter memGS2 : gFunctors -> Set.
   Existing Class memGS2.
-  Parameter memGS2_memGS_left : forall `{memGS2 Σ}, memGS Σ.
-  Parameter memGS2_memGS_right : forall `{memGS2 Σ}, memGS Σ.
-  Parameter mem_state_interp2 : forall `{mG : memGS2 Σ}, Memory -> Memory -> iProp Σ.
-  Parameter mem_state_interp2_mem_state_interp : forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
-      mem_state_interp2 μ1 μ2 ⊣⊢ @mem_state_interp _ memGS2_memGS_left μ1 ∗ @mem_state_interp _ memGS2_memGS_right μ2.
+  Parameter Inline iris_memory2 : IrisMemory2 iris_memory memGS2.
+  #[export] Existing Instance iris_memory2.
+
+  Abbreviation memGS2_memGS_left :=
+    (@memGS2_memGS_left Memory memGS iris_memory memGS2 iris_memory2).
+  Abbreviation memGS2_memGS_right :=
+    (@memGS2_memGS_right Memory memGS iris_memory memGS2 iris_memory2).
+  Abbreviation mem_state_interp2 :=
+    (@mem_state_interp2 Memory memGS iris_memory memGS2 iris_memory2).
+  Abbreviation mem_state_interp2_mem_state_interp :=
+    (@mem_state_interp2_mem_state_interp Memory memGS iris_memory memGS2 iris_memory2).
 End IrisParameters2.
 
 Module Type IrisResources2
@@ -143,7 +166,7 @@ Module Type IrisResources2
        sailGS_memGS     := memGS2_memGS_right;
     |}.
 
-  #[export] Program Instance sailGS2_irisGS2 `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
+  #[export] Program Instance sailGS2_irisGS2 {PDEF : ProgramDef} {FDEF : ForeignDef Memory} `{sailGS2 Σ} {Γ1 Γ2 τ} : irisGS2 (microsail_lang Γ1 τ) (microsail_lang Γ2 τ) Σ :=
     {|
       iris_invGS2 := sailGS2_invGS;
       state_interp2 σ1 σ2 κ := (regs_inv2 σ1.1 σ2.1 ∗ mem_state_interp2_sail σ1.2 σ2.2)%I;

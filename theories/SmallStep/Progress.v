@@ -35,6 +35,10 @@ From Katamaran Require Import
 
 Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallStepOn B P).
 
+  Section WithProgramDef.
+
+  Context {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
+
   Local Ltac progress_can_form :=
     match goal with
     | [ H: CStore (ctx.cat _ _) |- _ ] => destruct (env.catView H)
@@ -84,5 +88,7 @@ Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallS
   Lemma progress {Γ σ} (s : Stm Γ σ) :
     Final s \/ forall γ μ δ, exists γ' μ' δ' s', ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩.
   Proof. induction s; intros; try progress_tac. Qed.
+
+  End WithProgramDef.
 
 End ProgressOn.

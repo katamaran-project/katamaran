@@ -83,7 +83,7 @@ Module IrisInstanceWithContracts2
 
   Section WithSailGS.
   Import ProgLog.
-  Context `{sG : sailGS2 Σ} {SPEC : Specification}.
+  Context `{sG : sailGS2 Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory} {SPEC : Specification}.
 
   Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),

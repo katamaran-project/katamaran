@@ -55,7 +55,7 @@ Module Type Soundness
 
     Import iris.proofmode.proofmode.
 
-    Context {L} {biA : BiAffine L} {PI : PredicateDef L} {SPEC : Specification}.
+    Context {L} {biA : BiAffine L} {PI : PredicateDef L} {PDEF : ProgramDef} {SPEC : Specification}.
 
     (* liftP converts the "proof theoretic" predicates (CStore Γ -> L), with L
        being a type of separation logic propositions, to the "model theoretic"

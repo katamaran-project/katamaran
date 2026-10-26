@@ -54,10 +54,10 @@ Module Type IrisTotalWeakestPre
   (Import IP   : IrisParameters B)
   (Import IR   : IrisResources B PROG SEM IPre IP).
 
-  Definition semTWP {Σ} `{sG : sailGS Σ} [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
+  Definition semTWP {Σ} `{sG : sailGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory} [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
     (Q : Post Γ τ) : iProp Σ :=
     WP (MkConf s δ) [{ v, Q (valconf_val v) (valconf_store v) }].
-  Global Arguments semTWP {Σ} {sG} [Γ] [τ] δ s%_exp Q%_I.
+  Global Arguments semTWP {Σ} {sG} {PDEF} {FDEF} [Γ] [τ] δ s%_exp Q%_I.
 
   Ltac fold_semTWP :=
     first
@@ -78,7 +78,7 @@ Module Type IrisTotalWeakestPre
 
   Section TotalWeakestPre.
 
-    Context `{sG : sailGS Σ}.
+    Context `{sG : sailGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
     Definition semTWP_pre {Σ} `{sG : sailGS Σ} [Γ τ]
                           (wp : CStore Γ -> Stm Γ τ -> Post Γ τ -> iProp Σ) :
@@ -95,7 +95,7 @@ Module Type IrisTotalWeakestPre
 
     Lemma semTWP_unfold [Γ τ] (s : Stm Γ τ)
       (Q : Post Γ τ) (δ : CStore Γ) :
-      semTWP δ s Q ⊣⊢ semTWP_pre (@semTWP _ _ Γ τ) δ s Q.
+      semTWP δ s Q ⊣⊢ semTWP_pre (@semTWP _ _ _ _ Γ τ) δ s Q.
     Proof.
       rewrite /semTWP /semTWP_pre twp_unfold /twp_pre. cbn.
       destruct (stm_to_val s) eqn:Es; cbn; [easy|].

@@ -833,7 +833,7 @@ Module Type NewShallowExecOn
     (* If a function does not have a contract, we continue executing the body of
        the called function. A parameter [inline_fuel] bounds the number of
        allowed levels before failing execution. *)
-    Fixpoint cexec_call {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
+    Fixpoint cexec_call {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) : ExecCall :=
       fun Δ τ f args =>
         _ <- debug_call f args ;;
         (* Let's first see if we have a contract defined for function [f]
@@ -852,12 +852,12 @@ Module Type NewShallowExecOn
               args
         end.
 
-    Definition cexec {SPEC : Specification} (inline_fuel : nat) : Exec :=
+    Definition cexec {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) : Exec :=
       @CStoreSpec.exec_aux _ _ SPEC cexec_call_foreign cexec_lemma
         (cexec_call inline_fuel) cexec_fail.
-    #[global] Arguments cexec {_} _ [_ _] s _ _ : simpl never.
+    #[global] Arguments cexec {_ _} _ [_ _] s _ _ : simpl never.
 
-    Definition vcgen {SPEC : Specification} (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : L :=
+    Definition vcgen {PDEF : ProgramDef} {SPEC : Specification} (inline_fuel : nat) {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : L :=
       CPureSpec.run (exec_contract (cexec inline_fuel) c body).
 
     Import (hints) CStoreSpec.
@@ -1037,7 +1037,7 @@ Module Type NewShallowExecOn
   Module Shallow.
 
     Section Soundness.
-      Context {L} {biA : BiAffine L} {PI : PredicateDef L} {SPEC : Specification}.
+      Context {L} {biA : BiAffine L} {PI : PredicateDef L} {PDEF : ProgramDef} {SPEC : Specification}.
 
       Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
         (* Use inline_fuel = 1 by default. *)

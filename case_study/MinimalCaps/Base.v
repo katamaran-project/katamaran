@@ -429,10 +429,10 @@ Module Export MinCapsBase <: Base.
 
   End RegDeclKit.
 
-  Section MemoryModel.
-    Definition Memory := Addr -> (Z + Capability).
-  End MemoryModel.
-
   Include BaseMixin.
 
 End MinCapsBase.
+
+Section MemoryModel.
+  Definition Memory := Addr -> (Z + Capability).
+End MemoryModel.

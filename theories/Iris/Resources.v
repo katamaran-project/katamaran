@@ -52,8 +52,22 @@ Section TransparentObligations.
   Derive NoConfusion for iris.algebra.excl.excl.
 End TransparentObligations.
 
+(* The connection between the physical memory and the memory ghost state
+   [memGS]. This only depends on the memory and its ghost state, not on the
+   program or the language. Katamaran case studies instantiate this record to
+   extend the generic Iris model's state_interp with extra conditions they need
+   to connect case-study-specific physical state (often memory and other
+   extra-architectural state) to logical state. *)
+Class IrisMemory (Memory : Type) (memGS : gFunctors -> Set) : Type :=
+  MkIrisMemory {
+      mem_state_interp : forall Σ (mG : memGS Σ), Memory -> iProp Σ;
+    }.
+#[global] Arguments mem_state_interp {_ _ _ Σ mG} μ.
+
 Module Type IrisParameters
   (Import B    : Base).
+
+  Parameter Inline Memory : Type.
 
   (* The memGS field will normally always be instantiated to a type class. We
      inline this field, so that instances declared by the library, e.g. the
@@ -63,12 +77,11 @@ Module Type IrisParameters
      aliases completely. *)
   Parameter Inline memGS : gFunctors -> Set.
 
-  (**
-   * Katamaran case studies can instantiate these parameters to extend the generic Iris model's
-   * state_interp with extra conditions they need to connect case-study-specific physical state
-   * (often memory and other extra-architectural state) to logical state.
-   *)
-  Parameter mem_state_interp : forall `{mG : memGS Σ}, Memory -> iProp Σ.
+  Parameter Inline iris_memory : IrisMemory Memory memGS.
+  #[export] Existing Instance iris_memory.
+
+  (* Fix the instance, so that the class of [mG] is known during elaboration. *)
+  Abbreviation mem_state_interp := (@mem_state_interp Memory memGS iris_memory).
 End IrisParameters.
 
 (* TODO: export, back to module instead of module type *)
@@ -80,6 +93,8 @@ Module Type IrisPrelims
   Import SmallStepNotations.
 
   Section Language.
+
+    Context {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
     (* IVal designates the values in our language, allowing for succesful
        termination with a value, or failure termination with a string. *)
@@ -461,7 +476,7 @@ Module Type IrisResources
   Existing Class memGS.
   #[export] Existing Instance sailGS_memGS.
 
-  #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
+  #[export] Instance sailGS_irisGS {PDEF : ProgramDef} {FDEF : ForeignDef Memory} {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
     iris_invGS := sailGS_invGS;
     state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_state_interp σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)

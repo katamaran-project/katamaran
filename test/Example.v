@@ -210,11 +210,11 @@ Module Import ExampleBase <: Base.
 
   Include DefaultRegDeclKit.
 
-  Definition Memory : Set := unit.
-
   Include BaseMixin.
 
 End ExampleBase.
+
+Definition Memory : Set := unit.
 
 (*** PROGRAM ***)
 
@@ -338,7 +338,7 @@ Module Import ExampleProgram <: Program ExampleBase.
       exp_var "y" + exp_unop uop.unsigned (exp_var "sign" -ᵇ exp_var "sign") - exp_var "y"
     .
 
-    Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    Definition fundef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
       | abs => if: exp_int 0 <= x then x else - x
@@ -374,10 +374,10 @@ Module Import ExampleProgram <: Program ExampleBase.
   Include DefaultRegStoreKit ExampleBase.
 
   Section ForeignKit.
-    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
+    Definition foreign_call {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
       (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-    Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
-      exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
+    Lemma foreign_progress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
+      exists γ' μ' res, foreign_call f args res γ γ' μ μ'.
     Proof. destruct f. Qed.
   End ForeignKit.
 
@@ -386,14 +386,14 @@ Module Import ExampleProgram <: Program ExampleBase.
   Import callgraph.
 
   Lemma fundef_bindfree (Δ : PCtx) (τ : Ty) (f : Fun Δ τ) :
-    stm_bindfree (FunDef f).
+    stm_bindfree (fundef f).
   Proof. destruct f; now vm_compute. Qed.
 
-  Definition 𝑭_call_graph := generic_call_graph.
-  Lemma 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
+  Definition call_graph := generic_call_graph (@fundef).
+  Lemma call_graph_wellformed : CallGraphWellFormed (@fundef) call_graph.
   Proof. apply generic_call_graph_wellformed, fundef_bindfree. Qed.
 
-  Abbreviation AccessibleFun f := (Accessible 𝑭_call_graph f).
+  Abbreviation AccessibleFun f := (Accessible call_graph f).
 
   Module Import WithAccessibleTactics.
     Import AccessibleTactics.
@@ -421,13 +421,25 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   End WithAccessibleTactics.
 
-  Definition 𝑭_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
+  Definition fun_accessible {Δ τ} (f : 𝑭 Δ τ) : option (AccessibleFun f) :=
     match f with
     | gcd     => None
     | gcdloop => None
     | length  => None
     | _       => Some _
     end.
+
+  #[export] Instance example_program : ProgramDef :=
+    {| FunDef                  := @fundef;
+       𝑭_call_graph            := call_graph;
+       𝑭_call_graph_wellformed := call_graph_wellformed;
+       𝑭_accessible            := @fun_accessible;
+    |}.
+
+  #[export] Instance example_foreign : ForeignDef Memory :=
+    {| ForeignCall     := @foreign_call;
+       ForeignProgress := @foreign_progress;
+    |}.
 
 End ExampleProgram.
 

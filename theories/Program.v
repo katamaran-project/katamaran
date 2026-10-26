@@ -41,6 +41,10 @@ Module Type ProgramMixin (Import B : Base)
   (Import FDecl : FunDecl B)
   (Import FDK : FunDefKit B FDecl).
 
+  (* The type of the definitions of all functions of a program. *)
+  Definition FunDefEnv : Type :=
+    forall Δ τ (f : 𝑭 Δ τ), Stm Δ τ.
+
   (* We use callgraphs of Sail programs to define a very coarse termination
      metric on functions, e.g. all non-recursive functions or said differently
      all functions not on a loop in the call graph are terminating. This is used
@@ -56,7 +60,7 @@ Module Type ProgramMixin (Import B : Base)
        for each possible instantiation of the meta-parameters. Call graphs
        are representation using an association lists per node.
 
-       To instantiate the [Program] module the user has to provide a standalone
+       To instantiate the [ProgramDef] record the user has to provide a standalone
        definition of a call graph, i.e. that is a priori not linked to the
        function definitions. We then also ask the user to provide a proof
        that the two are consistent (well-formed). This setup ensures that we
@@ -202,24 +206,61 @@ Module Type ProgramMixin (Import B : Base)
     Proof. intros; now apply InvokedByStmList_WellFormed_aux. Qed.
 
     (* Finally, this predicate enforces compatibility of the call graph with
-       the function definitions in [funDef], i.e. the call graph correctly
+       the function definitions [fd], i.e. the call graph correctly
        stipulates upper bounds for each defined function. *)
-    Definition CallGraphWellFormed (g : CallGraph) : Prop :=
+    Definition CallGraphWellFormed (fd : FunDefEnv) (g : CallGraph) : Prop :=
       forall Δ τ (f : 𝑭 Δ τ),
-        StmWellFormed (g f) (FunDef f).
+        StmWellFormed (g f) (fd Δ τ f).
 
   End callgraph.
 
   (* A generic definition of a call graph calculation that can be used for
      bind-free programs. *)
-  Definition generic_call_graph : CallGraph :=
-    fun '(mkNode f) => InvokedByStmList (FunDef f).
+  Definition generic_call_graph (fd : FunDefEnv) : CallGraph :=
+    fun '(mkNode f) => InvokedByStmList (fd _ _ f).
 
   (* For bind-free programs the generic computation is correct. *)
-  Lemma generic_call_graph_wellformed
-    (H: forall Δ τ (f : 𝑭 Δ τ), stm_bindfree (FunDef f)) :
-    CallGraphWellFormed generic_call_graph.
+  Lemma generic_call_graph_wellformed (fd : FunDefEnv)
+    (H: forall Δ τ (f : 𝑭 Δ τ), stm_bindfree (fd Δ τ f)) :
+    CallGraphWellFormed fd (generic_call_graph fd).
   Proof. intros Δ τ f. now apply InvokedByStmList_WellFormed. Qed.
+
+  (* A program collects the definitions of all functions, together with a
+     call graph that is well-formed w.r.t. these definitions. The user can
+     single out a subset of the functions to be available for total weakest
+     pre reasoning, in which case the user also has to provide evidence for
+     termination in form of a coarse accessibility witness of the function in
+     the call graph. *)
+  Class ProgramDef : Type :=
+    MkProgramDef {
+        FunDef                  : FunDefEnv;
+        𝑭_call_graph            : CallGraph;
+        𝑭_call_graph_wellformed : CallGraphWellFormed FunDef 𝑭_call_graph;
+        𝑭_accessible            : forall Δ τ (f : 𝑭 Δ τ),
+                                    option (Accessible 𝑭_call_graph f);
+      }.
+
+  #[global] Arguments FunDef {_} [Δ τ] f.
+  #[global] Arguments 𝑭_accessible {_} [Δ τ] f.
+
+  (* The semantics of the foreign functions, i.e. the step relation for
+     calling an external function, which operates on the register store and
+     a memory of type [Memory]. The complete function call is done in one
+     step. The result of an external call is either a failure with an error
+     message msg (res = inl msg) or a successful computation with a result
+     value v (res = inr v). Every foreign function has to make progress. *)
+  Class ForeignDef (Memory : Type) : Type :=
+    MkForeignDef {
+        ForeignCall :
+          forall Δ σ (f : 𝑭𝑿 Δ σ) (args : CStore Δ) (res : String.string + Val σ)
+            (γ γ' : RegStore) (μ μ' : Memory), Prop;
+        ForeignProgress :
+          forall Δ σ (f : 𝑭𝑿 Δ σ) (args : CStore Δ) (γ : RegStore) (μ : Memory),
+            exists γ' μ' res, ForeignCall Δ σ f args res γ γ' μ μ';
+      }.
+
+  #[global] Arguments ForeignCall {_ _} [Δ σ] f args res γ γ' μ μ'.
+  #[global] Arguments ForeignProgress {_ _} [Δ σ] f args γ μ.
 
   Module AccessibleTactics.
     Ltac accessible_proof :=
@@ -237,26 +278,5 @@ Module Type ProgramMixin (Import B : Base)
   End AccessibleTactics.
 End ProgramMixin.
 
-Module Type WellFoundedKit (B : Base) (Import FDecl : FunDecl B)
-  (Import FDK : FunDefKit B FDecl)
-  (Import PM : ProgramMixin B FDecl FDK).
-
-  Import callgraph.
-
-  (* The user-provided call graph and the proof of well-formedness w.r.t the
-     function definitions. *)
-  Parameter 𝑭_call_graph : CallGraph.
-  Parameter 𝑭_call_graph_wellformed : CallGraphWellFormed 𝑭_call_graph.
-
-  (* The user can single out a subset of the functions to be available for
-     total weakest pre reasoning, in which case the user also has to provide
-     evidence for termination in form of a coarse accessibility witness
-     of the funcition in the call graph. *)
-  Parameter 𝑭_accessible :
-    forall Δ τ (f : 𝑭 Δ τ),
-      option (Accessible 𝑭_call_graph f).
-
-End WellFoundedKit.
-
 Module Type Program (B : Base) :=
-  FunDeclKit B <+ FunDeclMixin B <+ FunDefKit B <+ ProgramMixin B <+ WellFoundedKit B.
+  FunDeclKit B <+ FunDeclMixin B <+ FunDefKit B <+ ProgramMixin B.

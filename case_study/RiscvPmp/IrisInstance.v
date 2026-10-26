@@ -126,6 +126,9 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
       iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]").
       eapply NoDup_liveAddrs.
   Qed.
+
+  #[export] Instance iris_adeq_memory : IrisAdeqMemory iris_memory memGpreS :=
+    @MkIrisAdeqMemory _ _ iris_memory memGpreS memΣ (@memΣ_GpreS) (@mem_res) (@mem_init).
 End RiscvPmpIrisAdeqParameters.
 
 Module RiscvPmpIrisInstancePredicates.

@@ -43,6 +43,10 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
 
   Import SmallStepNotations.
 
+  Section WithProgramDef.
+
+  Context {Memory : Type} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
+
   Section StepInversionFinal.
 
     Lemma step_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
@@ -354,5 +358,7 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       left. steps_inversion_solve. auto.
     - right. steps_inversion_solve; auto.
   Qed.
+
+  End WithProgramDef.
 
 End InversionOn.

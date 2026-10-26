@@ -334,7 +334,7 @@ Section Loop.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.
   Proof.
-    iApply (@iris_rule_consequence _ _ _ _ _ env.nil
+    iApply (@iris_rule_consequence _ _ _ _ _ _ _ env.nil
              ((∃ p : Privilege, cur_privilege ↦ p) ∗
               (∃ es : list PmpEntryCfg, interp_pmp_entries es))
              _ _ _ fun_init_model _ _)%I.

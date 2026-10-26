@@ -54,10 +54,10 @@ Module Type IrisWeakestPre
   (Import IP   : IrisParameters B)
   (Import IR   : IrisResources B PROG SEM IPre IP).
 
-  Definition semWP {Σ} `{sG : sailGS Σ} [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
+  Definition semWP {Σ} `{sG : sailGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory} [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
     (Q : Post Γ τ) : iProp Σ :=
     WP {| conf_stm := s; conf_store := δ |} {{ v, Q (valconf_val v) (valconf_store v) }}.
-  Global Arguments semWP {Σ} {sG} [Γ] [τ] δ s%_exp Q%_I.
+  Global Arguments semWP {Σ} {sG} {PDEF} {FDEF} [Γ] [τ] δ s%_exp Q%_I.
 
   Ltac fold_semWP :=
     first
@@ -78,7 +78,7 @@ Module Type IrisWeakestPre
 
   Section WeakestPre.
 
-    Context `{sG : sailGS Σ}.
+    Context `{sG : sailGS Σ} {PDEF : ProgramDef} {FDEF : ForeignDef Memory}.
 
     Lemma semWP_unfold [Γ τ] (δ : CStore Γ) (s : Stm Γ τ)
       (Q : Post Γ τ) :

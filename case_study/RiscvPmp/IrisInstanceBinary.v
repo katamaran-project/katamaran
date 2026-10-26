@@ -80,6 +80,8 @@ Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgr
     iSplitL "inv1 inv2"; iFrame.
   Qed.
 
+  #[export] Instance iris_adeq_memory2 : IrisAdeqMemory2 iris_memory2 memGpreS2 :=
+    @MkIrisAdeqMemory2 _ _ iris_memory memGS2 iris_memory2 memGpreS2 memΣ2 (@memΣ_GpreS2) (@mem_res2) (@mem_init2).
 End RiscvPmpIrisAdeqParams2.
 
 Module RiscvPmpIrisInstancePredicates2.

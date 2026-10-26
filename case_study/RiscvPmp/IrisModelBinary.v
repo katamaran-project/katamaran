@@ -81,6 +81,10 @@ Module RiscvPmpIrisBase2 <: IrisBase2 RiscvPmpBase RiscvPmpProgram RiscvPmpSeman
       @mc_gtGS _ memGS2_memGS_right.
   End RiscvPmpIrisParams2.
 
+  #[export] Instance iris_memory2 : IrisMemory2 iris_memory memGS2 :=
+    @MkIrisMemory2 _ _ iris_memory memGS2 (@memGS2_memGS_left) (@memGS2_memGS_right)
+      (@mem_state_interp2) (@mem_state_interp2_mem_state_interp).
+
   Include IrisResources2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 End RiscvPmpIrisBase2.
 

@@ -587,7 +587,7 @@ Module RefineExecOn
       iApply HeapSpec.refine_error.
     Qed.
 
-    Context {SPEC : Specification}.
+    Context {PDEF : ProgramDef} {SPEC : Specification}.
 
     Lemma refine_exec_call_foreign :
       RefineExecCallForeign cexec_call_foreign sexec_call_foreign.
@@ -683,7 +683,7 @@ Module RefineExecOn
     now apply (fromEntails H0 [env]).
   Qed.
 
-  Lemma symbolic_vcgen_fuel_soundness {SPEC : Specification} {Γ τ} (fuel : nat)
+  Lemma symbolic_vcgen_fuel_soundness {PDEF : ProgramDef} {SPEC : Specification} {Γ τ} (fuel : nat)
     (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContractWithFuel fuel c body ->
     Shallow.ValidContractWithFuel fuel c body.
@@ -697,7 +697,7 @@ Module RefineExecOn
     apply refine_vcgen; try done.
   Qed.
 
-  Lemma symbolic_vcgen_soundness {SPEC : Specification} {Γ τ}
+  Lemma symbolic_vcgen_soundness {PDEF : ProgramDef} {SPEC : Specification} {Γ τ}
     (c : SepContract Γ τ) (body : Stm Γ τ) :
     Symbolic.ValidContract c body ->
     Shallow.ValidContract c body.
