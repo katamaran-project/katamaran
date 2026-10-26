@@ -318,7 +318,8 @@ gen_prog_contract "p" _ regs facts doff data instrs fuel post
   `DArr pub ArrUp|ArrDown count "v"` an `arrv 4 (±4)` of `count` words holding
   the list `v` (count a TERM — symbolic sizes; ArrDown's list starts at the TOP
   word), `∗ secLeak v` when pub; `DBytes pub count "v"` an `arrv 1 1` of
-  `count` bytes holding `v`, stored as ⌈count/4⌉ statement words; `DAt x` pure
+  `count` bytes holding `v`, (both TAGGED `"v"`, PLAN-arrv D15 — a loop or
+  ghost that touches the array names that tag), stored as ⌈count/4⌉ statement words; `DAt x` pure
   fact "next word is at x" (contiguous); `DPtr x` the following data lives AT
   x, anywhere (pointer argument).
 - **Array values are contract variables** (PLAN-arrv D9–D12): each `DArr`/

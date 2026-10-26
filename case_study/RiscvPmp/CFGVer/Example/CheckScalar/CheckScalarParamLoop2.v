@@ -37,8 +37,8 @@ Definition l2_instrs : list AST :=
 
 Definition l2_state {Σ} (cnt eK eN : Term Σ ty_xlenbits)
     (rK rN : Term Σ (clemv_ty 1)) : Assertion Σ :=
-  ( clem_arrv_angelic 1 1 (bk eK cnt 0) cnt eK rK
-    ∗ clem_arrv_angelic 1 1 (bk eN cnt 0) cnt eN rN
+  ( clem_arrv_angelic 1 1 "dK" (bk eK cnt 0) cnt eK rK
+    ∗ clem_arrv_angelic 1 1 "vN" (bk eN cnt 0) cnt eN rN
     ∗ A0 ↦ᵣ bk eK cnt 0
     ∗ A1 ↦ᵣ bk eN cnt 0
     ∗ A4 ↦ᵣ eN )%asn.
@@ -76,10 +76,10 @@ Definition l2Blk : BlkAnnot := {| blk_ctx := l2Ctx ; blk_contract := l2Rec |}.
 Definition l2_annot : list AnnotInstr :=
   match l2_instrs with
   | cons i0 (cons i1 rest) =>
-      cons {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+      cons {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "dK") ]
             ; ai_instr := i0 ; ai_ghost_after := []
             ; ai_block := None |}
-        (cons {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+        (cons {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "vN") ]
                ; ai_instr := i1 ; ai_ghost_after := []
                ; ai_block := None |}
            (List.map AST_AnnotInstr rest))

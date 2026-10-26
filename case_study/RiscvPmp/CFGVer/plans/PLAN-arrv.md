@@ -1,8 +1,11 @@
 # PLAN-arrv — arrays whose contents are NAMED (`arrv`), replacing `arr`
 
 Status: **Phases A, B, C DONE; GATE C PASSED 2026-10-24** (both RSA end
-theorems green over arrv with value tracking). Next: Phase D — the examples
-still on `arr`/old `DArr` are RED by design (D10), list in the HANDOFF. Branch `issue/rsa` (the spike
+theorems green over arrv with value tracking). Phase D steps 1–2 (RSA
+spikes, check_scalar) DONE; **Phase D′ (the tag, D14–D17) DONE
+2026-10-26** — prediction confirmed, LoopN ≈1.13× arr warm. Next: muladd
+(Phase D step 3), still on `arr`/old `DArr` and RED by design (D10), list
+in the HANDOFF. Branch `issue/rsa` (the spike
 landed there: `138d2df9`, `dd9672f3`, `ab321701`; not merged, not pushed).
 Part of PLAN-rsa.md Phase 2 (byte memory / mem* callees); log timings in
 **PLAN-rsa.md §5** (same protocol: stamps, wait vs authoring, VC CPU/RSS,
@@ -141,15 +144,22 @@ by grep 2026-10-25:
   for the instantiation): `MuladdParamResult.v` (check_scalar avoided this
   by restating its contract as `gen_prog_contract` -- an option here too);
 - built on the changed LoopN (only the hand-overs / seeds around it may need
-  edits; re-run): `MuladdParamLoop{I,K,M}.v`; then everything importing the
+  edits; re-run): `MuladdParamLoop{I,K,M}.v` — their positional `MkLoopN`
+  also needs the FOUR new tag fields appended (`ln_tm ln_tx ln_tdm ln_tdx`,
+  Phase D′; e.g. the source arrays' value names, own tags for the done
+  arrays); then everything importing the
   above, up to `Results.v`.
 
 Order (plan §4 Phase D): RsaSpikeSb (DONE) → check_scalar (DONE) → muladd. Recipe, from
 the RSA port (worked example `RsaSpikeSub.v`, diff `2d660f2f`):
-1. `chunk_user (arr pub w s) [a;n;e]` → `clem_arrv w s a n e vs`; a value is
+1. `chunk_user (arr pub w s) [a;n;e]` → `clem_arrv w s t a n e vs` (tag `t`:
+   the value name for a top-level array, D15; a template parameter or own
+   name otherwise, D16); a value is
    a contract variable if a post must mention it, else `asn.exist`; public →
    `∗ secLeak vs` ONLY where the code itself needs it (caller frames the rest).
-2. `clem_arr_<op> pub w s` → `clem_arrv_<op> w s` (no `pub`); the old
+2. `clem_arr_<op> pub w s` → `clem_arrv_<op> w s t` (no `pub`; one tag per
+   matched array, D17: `join w s t1 t2 t`, `lockstep w s t1 t2`, `pad w s t
+   t'`); the old
    `drop` of an emptied source after a loop becomes `flip` + `join` when the
    array's value must come back (D13), `drop` otherwise.
 3. top-level data: `DArr pub dir c "v"` (data over the contract's own ctx),
@@ -179,12 +189,26 @@ check_scalar Loop1). Decided (Emiel, 2026-10-26):
 - **D15** a top-level `DArr`/`DBytes` array's tag is its value name.
 - **D16** loop/callee templates take their arrays' tags as Coq parameters
   (e.g. LoopN record fields); a loop's internal done arrays get their own.
-**Phase D′ (next, before muladd):** Sig + IrisInstanceBinary (tag ignored) →
-Verifier CLems take `t` (join/pad/lockstep: both arrays the same tag;
-flip/split/to_bytes/of_bytes keep it) → SpecIris clemSem dispatch → GenSegment
-`gen_data_at` (tag = value name) → EndToEnd/GenProg → ported examples (RSA
-spikes, RsaSpikeSb, check_scalar, LoopN) → re-run the diagnostic rigs: the
-prediction is 0 surviving value ∃ and LoopN at ≈arr cost (8.6 s warm).
+- **D17** (2026-10-26, Emiel) every lemma names the tag of EACH array it
+  matches: `join w s t1 t2 t` (inputs t1, t2, result t), `lockstep w s t1
+  t2`, `pad w s t t'` (each keeps its own); every single-array lemma takes
+  one `t` and keeps it (flip/split/to_bytes/of_bytes included). No retag
+  lemma. Supersedes this list's earlier "join/pad/lockstep: one shared
+  tag", which would have made lockstep ambiguous by construction and could
+  not express the RSA hand-back (`join "db" "vb" "vb"`).
+**Phase D′ DONE 2026-10-26:** Sig + IrisInstanceBinary (tag ignored) →
+Verifier CLems take tags (D17) → SpecIris (16 `_sound` lemmas gain tag
+binders, proofs unchanged) → GenSegment `gen_data_at` (tag = value name) →
+EndToEnd (two `change` patterns) / GenProg → ported examples (RSA spikes,
+RsaSpikeSb, check_scalar, LoopN: four tag fields `ln_tm ln_tx ln_tdm
+ln_tdx`; RSA `sub_mem ta tb`, hand-back `join "db" "vb" "vb"`;
+check_scalar `"vN"`/`"vK"`, loop 1's done array `"dK"` kept through flip
+into loop 2). Every Fail control still rejected; heavy chain through
+GenProg and all four Result files green (each ~7.7 GB). PREDICTION
+CONFIRMED (`diagnostics/arrv-loop-cost-drivers.md` §7, rig
+`Example/Rsa/ZZArrvTagged.v`): surviving value ∃ 72 → 0, branch counts
+back to arr's exactly, LoopN warm 9.7 s vs arr 8.6 s (≈1.13×, was ≈3.7×);
+cold as shipped `valid_sub_loop` 36.9 → 14.8 s, `valid_sub` 23.6 → 3.4 s.
 
 Then Phase E (delete `arr`, its 15 CLems and sound lemmas, skills) and the
 ONE full merge gate (`scripts/gate.sh`, `GATE_JOBS=1`, MuladdParamVC built

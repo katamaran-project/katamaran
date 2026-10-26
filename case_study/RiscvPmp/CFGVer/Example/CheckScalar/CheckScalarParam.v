@@ -36,11 +36,11 @@ Definition cl (k : CLem) : Annot := AnnotCLemma k.
 Definition cs_before (i : nat) : list Annot :=
   (* loop 1 is done: drop k's empty remainder, turn the done bytes back
      into k for loop 2 *)
-  if Nat.eqb i 13 then [cl (clem_arrv_drop 1 1); cl (clem_arrv_flip 1 (-1))]
+  if Nat.eqb i 13 then [cl (clem_arrv_drop 1 1 "vK"); cl (clem_arrv_flip 1 (-1) "dK")]
   else nil.
 Definition cs_after (i : nat) : list Annot :=
   (* loop 1's done array, empty *)
-  if Nat.eqb i 8 then [cl (clem_arrv_empty 1 (-1))] else nil.
+  if Nat.eqb i 8 then [cl (clem_arrv_empty 1 (-1) "dK")] else nil.
 Definition cs_block (i : nat) : option BlkAnnot :=
   if Nat.eqb i 9 then Some l1Blk
   else if Nat.eqb i 20 then Some l2Blk

@@ -172,55 +172,57 @@ Inductive CLem : Set :=
      contents are NAMED (Sig.v).  Lifted cons is not injective on RelVal, so
      taking a cell comes in two forms: by EQUATION for a value that is a
      variable (a loop's remainder), by PATTERN for one that is syntactically
-     a cons (a caller's own array handed back). *)
+     a cons (a caller's own array handed back).  Every arrv lemma names the
+     TAG of each array it matches (PLAN-arrv D14/D17): one per array for
+     join/lockstep/pad (join's result has its own); the rest keep theirs. *)
   (* arrv a n e vs ∗ n≠0 ⊢ ∃ x r, a ↦ₘ x ∗ range a ∗ arrv (a+s) (n-1) e r ∗ ⌜vs = x :: r⌝ *)
-  | clem_arrv_take_first (w : nat) (s : Z)
+  | clem_arrv_take_first (w : nat) (s : Z) (t : string)
   (* arrv a n e (x :: r) ⊢ a ↦ₘ x ∗ range a ∗ arrv (a+s) (n-1) e r -- no
      n≠0 premise: a cons value has length ≥ 1, and the length is n *)
-  | clem_arrv_take_cons (w : nat) (s : Z)
+  | clem_arrv_take_cons (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ (a-s) ↦ₘ x ∗ range (a-s) ⊢ arrv (a-s) (n+1) e (x :: vs) *)
-  | clem_arrv_add_first (w : nat) (s : Z)
+  | clem_arrv_add_first (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ e ↦ₘ x ∗ range e ⊢ arrv a (n+1) (e+s) (vs ++ [x]) *)
-  | clem_arrv_add_last (w : nat) (s : Z)
+  | clem_arrv_add_last (w : nat) (s : Z) (t : string)
   (* PLAN-arrv Phase A: the rest of the arr catalogue with values.  None
      needs a publicness variant: `secLeak vs` is framed, and an equation
      `vs = t` hands it to t's leaves (lifted ops are SyncVal iff all their
      arguments are; PLAN-arrv §1.2). *)
   (* arrv a n e vs ∗ n≠0 ⊢ ∃ x r, (e-s) ↦ₘ x ∗ range (e-s) ∗ arrv a (n-1) (e-s) r
      ∗ ⌜vs = r ++ [x]⌝ *)
-  | clem_arrv_take_last (w : nat) (s : Z)
+  | clem_arrv_take_last (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ a≠e ⊢ arrv a n e vs ∗ n≠0 *)
-  | clem_arrv_nonempty (w : nat) (s : Z)
+  | clem_arrv_nonempty (w : nat) (s : Z) (t : string)
   (* secLeak a ⊢ arrv a 0 a [] -- `[]` is sound HERE because we choose it;
      never conclude `vs = []` from a count of 0 (NonSyncVal [] [] exists) *)
-  | clem_arrv_empty (w : nat) (s : Z)
+  | clem_arrv_empty (w : nat) (s : Z) (t : string)
   (* arrv a 0 e vs ⊢ ⌜a = e⌝ -- and nothing about vs *)
-  | clem_arrv_empty_elim (w : nat) (s : Z)
+  | clem_arrv_empty_elim (w : nat) (s : Z) (t : string)
   (* arrv a1 n e1 v1 ∗ arrv a2 n e2 v2 ∗ a1=e1 ⊢ both ∗ ⌜a2 = e2⌝ *)
-  | clem_arrv_lockstep (w : nat) (s : Z)
+  | clem_arrv_lockstep (w : nat) (s : Z) (t1 t2 : string)
   (* arrv a n e vs ⊢ True *)
-  | clem_arrv_drop (w : nat) (s : Z)
+  | clem_arrv_drop (w : nat) (s : Z) (t : string)
   (* arrv s a n e vs ⊢ arrv (-s) (e-s) n (a-s) (rev vs) *)
-  | clem_arrv_flip (w : nat) (s : Z)
+  | clem_arrv_flip (w : nat) (s : Z) (t : string)
   (* arrv a n e v1 ∗ arrv e n2 e2 v2 ⊢ arrv a (n+n2) e2 (v1 ++ v2) -- no
      overflow premise: the count is the length mod 2^32 and wraps with it *)
-  | clem_arrv_join (w : nat) (s : Z)
+  | clem_arrv_join (w : nat) (s : Z) (t1 t2 t : string)
   (* arrv a n e vs ∗ arrv b 0 c ws ⊢ arrv a n e (vs ++ ws) ∗ arrv b 0 c ws --
      absorb an empty remainder's (unknown, length-0) value without
      claiming it is [] *)
-  | clem_arrv_pad (w : nat) (s : Z)
+  | clem_arrv_pad (w : nat) (s : Z) (t t' : string)
   (* arrv a n e vs ∗ k ≤u n ⊢ ∃ v1 v2, arrv a k (a+s·k) v1 ∗
      arrv (a+s·k) (n-k) e v2 ∗ ⌜vs = v1 ++ v2⌝ *)
-  | clem_arrv_split (w : nat) (s : Z) (k : N)
+  | clem_arrv_split (w : nat) (s : Z) (t : string) (k : N)
   (* PLAN-arrv Phase B: the word ⇄ byte view of a VALUE (D3/D6/D7/D8).
      arrv 4 4 a n e ws ⊢ arrv 1 1 a (4·n) e (regroup ws) -- no overflow
      premise: both counts are lengths mod 2^32 *)
-  | clem_arrv_to_bytes
+  | clem_arrv_to_bytes (t : string)
   (* arrv 1 1 a (4·k) e (regroup v) ∗ k <u 2^30 ⊢ arrv 4 4 a k e v --
      PATTERN form on both the value and the count (D6/D7): what a to_bytes
      made comes back.  The bound is NEEDED: ·4 is not injective mod 2^32, so
      without it k could be length v + 2^30 *)
-  | clem_arrv_of_bytes.
+  | clem_arrv_of_bytes (t : string).
 
 Definition clem_ctx : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
@@ -255,12 +257,12 @@ Definition clem_arr {Σ} (pub : bool) (w : nat) (s : Z) (a n e : Term Σ ty_xlen
 Definition clemv_ty (w : nat) : Ty := ty.list (clem_cell_ty w).
 Definition clemv_ctx (w : nat) : LCtx :=
   ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w].
-Definition clem_arrv {Σ} (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits)
+Definition clem_arrv {Σ} (w : nat) (s : Z) (t : string) (a n e : Term Σ ty_xlenbits)
     (vs : Term Σ (clemv_ty w)) : Assertion Σ :=
-  asn.chunk (chunk_user (arrv w s) [a; n; e; vs]).
-Definition clem_arrv_angelic {Σ} (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits)
+  asn.chunk (chunk_user (arrv w s t) [a; n; e; vs]).
+Definition clem_arrv_angelic {Σ} (w : nat) (s : Z) (t : string) (a n e : Term Σ ty_xlenbits)
     (vs : Term Σ (clemv_ty w)) : Assertion Σ :=
-  asn.chunk_angelic (chunk_user (arrv w s) [a; n; e; vs]).
+  asn.chunk_angelic (chunk_user (arrv w s t) [a; n; e; vs]).
 Definition clem_ptsto {Σ} (w : nat) (x : Term Σ ty_xlenbits)
     (v : Term Σ (clem_cell_ty w)) : Assertion Σ :=
   asn.chunk (chunk_user (ptstomem w) [x; v]).
@@ -270,8 +272,8 @@ Definition clem_nonzero {Σ} (n : Term Σ ty_xlenbits) : Assertion Σ :=
    same term), so a byte count made by to_bytes is matched by of_bytes *)
 Definition clem_x4 {Σ} (n : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
   term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 4)) n.
-Arguments clem_arrv {Σ} w s a n e vs.
-Arguments clem_arrv_angelic {Σ} w s a n e vs.
+Arguments clem_arrv {Σ} w s t a n e vs.
+Arguments clem_arrv_angelic {Σ} w s t a n e vs.
 Arguments clem_ptsto {Σ} w x v.
 
 Definition clem_arr_angelic (pub : bool) (w : nat) (s : Z) : Assertion clem_ctx :=
@@ -401,136 +403,136 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                  (term_binop bop.bvadd (term_var "n") (term_var "n2"))))))
         (clem_arr pub w s (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
            (term_var "e2"))
-  | clem_arrv_take_first w s =>
+  | clem_arrv_take_first w s t =>
       MkLemma [ctx] (clemv_ctx w) [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_nonzero (term_var "n")))
         (asn.exist "x" (clem_cell_ty w) (asn.exist "r" (clemv_ty w)
            (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
               (asn.sep (clem_range w (term_var "a"))
-                 (asn.sep (clem_arrv w s (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
+                 (asn.sep (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
                              (term_var "e") (term_var "r"))
                     (asn.formula (formula_propeq (term_var "vs")
                        (term_binop bop.cons (term_var "x") (term_var "r")))))))))
-  | clem_arrv_take_cons w s =>
+  | clem_arrv_take_cons w s t =>
       MkLemma [ctx]
         ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "x"∷clem_cell_ty w; "r"∷clemv_ty w] [env]
-        (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e")
+        (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e")
            (term_binop bop.cons (term_var "x") (term_var "r")))
         (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
            (asn.sep (clem_range w (term_var "a"))
-              (clem_arrv w s (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
+              (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
                  (term_var "e") (term_var "r"))))
-  | clem_arrv_add_first w s =>
+  | clem_arrv_add_first w s t =>
       MkLemma [ctx] (clemv_ctx w ▻ "x"∷clem_cell_ty w) [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (asn.sep (clem_ptsto w (clem_off (term_var "a") (- s)) (term_var "x"))
               (clem_range w (clem_off (term_var "a") (- s)))))
-        (clem_arrv w s (clem_off (term_var "a") (- s)) (clem_off (term_var "n") 1) (term_var "e")
+        (clem_arrv w s t (clem_off (term_var "a") (- s)) (clem_off (term_var "n") 1) (term_var "e")
            (term_binop bop.cons (term_var "x") (term_var "vs")))
-  | clem_arrv_add_last w s =>
+  | clem_arrv_add_last w s t =>
       MkLemma [ctx] (clemv_ctx w ▻ "x"∷clem_cell_ty w) [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (asn.sep (clem_ptsto w (term_var "e") (term_var "x"))
               (clem_range w (term_var "e"))))
-        (clem_arrv w s (term_var "a") (clem_off (term_var "n") 1) (clem_off (term_var "e") s)
+        (clem_arrv w s t (term_var "a") (clem_off (term_var "n") 1) (clem_off (term_var "e") s)
            (term_binop bop.append (term_var "vs")
               (term_binop bop.cons (term_var "x") (term_val (clemv_ty w) nil))))
-  | clem_arrv_take_last w s =>
+  | clem_arrv_take_last w s t =>
       MkLemma [ctx] (clemv_ctx w) [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_nonzero (term_var "n")))
         (asn.exist "x" (clem_cell_ty w) (asn.exist "r" (clemv_ty w)
            (asn.sep (clem_ptsto w (clem_off (term_var "e") (- s)) (term_var "x"))
               (asn.sep (clem_range w (clem_off (term_var "e") (- s)))
-                 (asn.sep (clem_arrv w s (term_var "a") (clem_off (term_var "n") (-1))
+                 (asn.sep (clem_arrv w s t (term_var "a") (clem_off (term_var "n") (-1))
                              (clem_off (term_var "e") (- s)) (term_var "r"))
                     (asn.formula (formula_propeq (term_var "vs")
                        (term_binop bop.append (term_var "r")
                           (term_binop bop.cons (term_var "x") (term_val (clemv_ty w) nil))))))))))
-  | clem_arrv_nonempty w s =>
+  | clem_arrv_nonempty w s t =>
       MkLemma [ctx] (clemv_ctx w) [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (asn.formula (formula_relop bop.neq (term_var "a") (term_var "e"))))
-        (asn.sep (clem_arrv w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_nonzero (term_var "n")))
-  | clem_arrv_empty w s =>
+  | clem_arrv_empty w s t =>
       (* secLeak a REQUIRED, as for clem_arr_empty: arrv is False at a
          NonSyncVal address *)
       MkLemma [ctx] ["a"∷ty_xlenbits] [env]
         (asn.formula (formula_secLeak (term_var "a")))
-        (clem_arrv w s (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
+        (clem_arrv w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
            (term_val (clemv_ty w) nil))
-  | clem_arrv_empty_elim w s =>
+  | clem_arrv_empty_elim w s t =>
       MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w] [env]
-        (clem_arrv_angelic w s (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "e")
+        (clem_arrv_angelic w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "e")
            (term_var "vs"))
         (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
-  | clem_arrv_lockstep w s =>
+  | clem_arrv_lockstep w s t1 t2 =>
       MkLemma [ctx]
         ["a1"∷ty_xlenbits; "n"∷ty_xlenbits; "e1"∷ty_xlenbits; "v1"∷clemv_ty w;
          "a2"∷ty_xlenbits; "e2"∷ty_xlenbits; "v2"∷clemv_ty w] [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a1") (term_var "n") (term_var "e1") (term_var "v1"))
-           (asn.sep (clem_arrv_angelic w s (term_var "a2") (term_var "n") (term_var "e2") (term_var "v2"))
+        (asn.sep (clem_arrv_angelic w s t1 (term_var "a1") (term_var "n") (term_var "e1") (term_var "v1"))
+           (asn.sep (clem_arrv_angelic w s t2 (term_var "a2") (term_var "n") (term_var "e2") (term_var "v2"))
               (asn.formula (formula_relop bop.eq (term_var "a1") (term_var "e1")))))
-        (asn.sep (clem_arrv w s (term_var "a1") (term_var "n") (term_var "e1") (term_var "v1"))
-           (asn.sep (clem_arrv w s (term_var "a2") (term_var "n") (term_var "e2") (term_var "v2"))
+        (asn.sep (clem_arrv w s t1 (term_var "a1") (term_var "n") (term_var "e1") (term_var "v1"))
+           (asn.sep (clem_arrv w s t2 (term_var "a2") (term_var "n") (term_var "e2") (term_var "v2"))
               (asn.formula (formula_relop bop.eq (term_var "a2") (term_var "e2")))))
-  | clem_arrv_drop w s =>
+  | clem_arrv_drop w s t =>
       MkLemma [ctx] (clemv_ctx w) [env]
-        (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
         (asn.formula formula_true)
-  | clem_arrv_flip w s =>
+  | clem_arrv_flip w s t =>
       MkLemma [ctx] (clemv_ctx w) [env]
-        (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
-        (clem_arrv w (- s) (clem_off (term_var "e") (- s)) (term_var "n")
+        (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (clem_arrv w (- s) t (clem_off (term_var "e") (- s)) (term_var "n")
            (clem_off (term_var "a") (- s)) (term_unop uop.rev (term_var "vs")))
-  | clem_arrv_join w s =>
+  | clem_arrv_join w s t1 t2 t =>
       MkLemma [ctx]
         ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "v1"∷clemv_ty w;
          "n2"∷ty_xlenbits; "e2"∷ty_xlenbits; "v2"∷clemv_ty w] [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "v1"))
-           (clem_arrv w s (term_var "e") (term_var "n2") (term_var "e2") (term_var "v2")))
-        (clem_arrv w s (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
+        (asn.sep (clem_arrv_angelic w s t1 (term_var "a") (term_var "n") (term_var "e") (term_var "v1"))
+           (clem_arrv w s t2 (term_var "e") (term_var "n2") (term_var "e2") (term_var "v2")))
+        (clem_arrv w s t (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
            (term_var "e2") (term_binop bop.append (term_var "v1") (term_var "v2")))
-  | clem_arrv_pad w s =>
+  | clem_arrv_pad w s t t' =>
       (* w ≥ 1 is what makes it sound: then cells are disjoint, in-range
          memory, so a count of 0 (taken mod 2^32) means length 0 (SpecIris
          interp_arrv_count0).  For w = 0 the precondition is False. *)
       MkLemma [ctx]
         ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty w;
          "b"∷ty_xlenbits; "c"∷ty_xlenbits; "ws"∷clemv_ty w] [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
-           (asn.sep (clem_arrv_angelic w s (term_var "b") (term_val ty_xlenbits bv.zero) (term_var "c")
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+           (asn.sep (clem_arrv_angelic w s t' (term_var "b") (term_val ty_xlenbits bv.zero) (term_var "c")
                        (term_var "ws"))
               (asn.formula (match w with O => formula_false | S _ => formula_true end))))
-        (asn.sep (clem_arrv w s (term_var "a") (term_var "n") (term_var "e")
+        (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e")
                     (term_binop bop.append (term_var "vs") (term_var "ws")))
-           (clem_arrv w s (term_var "b") (term_val ty_xlenbits bv.zero) (term_var "c")
+           (clem_arrv w s t' (term_var "b") (term_val ty_xlenbits bv.zero) (term_var "c")
               (term_var "ws")))
-  | clem_arrv_split w s k =>
+  | clem_arrv_split w s t k =>
       MkLemma [ctx] (clemv_ctx w) [env]
-        (asn.sep (clem_arrv_angelic w s (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (asn.formula (formula_relop bop.bvule (term_val ty_xlenbits (bv.of_N k)) (term_var "n"))))
         (asn.exist "v1" (clemv_ty w) (asn.exist "v2" (clemv_ty w)
-           (asn.sep (clem_arrv w s (term_var "a") (term_val ty_xlenbits (bv.of_N k))
+           (asn.sep (clem_arrv w s t (term_var "a") (term_val ty_xlenbits (bv.of_N k))
                        (clem_off (term_var "a") (s * Z.of_N k)) (term_var "v1"))
-              (asn.sep (clem_arrv w s (clem_off (term_var "a") (s * Z.of_N k))
+              (asn.sep (clem_arrv w s t (clem_off (term_var "a") (s * Z.of_N k))
                           (clem_off (term_var "n") (- Z.of_N k)) (term_var "e") (term_var "v2"))
                  (asn.formula (formula_propeq (term_var "vs")
                     (term_binop bop.append (term_var "v1") (term_var "v2"))))))))
-  | clem_arrv_to_bytes =>
+  | clem_arrv_to_bytes t =>
       MkLemma [ctx] (clemv_ctx 4) [env]
-        (clem_arrv_angelic 4 4 (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
-        (clem_arrv 1 1 (term_var "a") (clem_x4 (term_var "n")) (term_var "e")
+        (clem_arrv_angelic 4 4 t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+        (clem_arrv 1 1 t (term_var "a") (clem_x4 (term_var "n")) (term_var "e")
            (term_unop uop.regroup (term_var "vs")))
-  | clem_arrv_of_bytes =>
+  | clem_arrv_of_bytes t =>
       MkLemma [ctx] ["a"∷ty_xlenbits; "k"∷ty_xlenbits; "e"∷ty_xlenbits; "v"∷clemv_ty 4] [env]
-        (asn.sep (clem_arrv_angelic 1 1 (term_var "a") (clem_x4 (term_var "k")) (term_var "e")
+        (asn.sep (clem_arrv_angelic 1 1 t (term_var "a") (clem_x4 (term_var "k")) (term_var "e")
                     (term_unop uop.regroup (term_var "v")))
            (asn.formula (formula_relop bop.bvult (term_var "k")
               (term_val ty_xlenbits (bv.of_N 0x40000000)))))
-        (clem_arrv 4 4 (term_var "a") (term_var "k") (term_var "e") (term_var "v"))
+        (clem_arrv 4 4 t (term_var "a") (term_var "k") (term_var "e") (term_var "v"))
   end.
 
 Inductive Annot :=

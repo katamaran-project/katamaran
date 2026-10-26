@@ -1940,13 +1940,14 @@ Definition gen_cell_at {Σ} (a : Term Σ ty_xlenbits)
 Definition gen_pub_at {Σ σ} (pub : bool) (A : Assertion Σ) (v : Term Σ σ) : Assertion Σ :=
   if pub then (A ∗ asn.formula (formula_secLeak v))%asn else A.
 
-(* up: words a .. a+4(c-1);  down: the same words, the arrv starting at the top *)
+(* up: words a .. a+4(c-1);  down: the same words, the arrv starting at the
+   top.  `t` is the arrv's tag (PLAN-arrv D15: the value's name) *)
 Definition gen_arr_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool) (dir : arr_dir)
-    (c : Term Σ ty_xlenbits) (vs : Term Σ (clemv_ty 4)) : Assertion Σ :=
+    (c : Term Σ ty_xlenbits) (t : string) (vs : Term Σ (clemv_ty 4)) : Assertion Σ :=
   gen_pub_at pub
     match dir with
-    | ArrUp => clem_arrv 4 4 a c (t_add4n a c) vs
-    | ArrDown => clem_arrv 4 (-4) (t_add (t_add4n a c) (-4)) c (t_add a (-4)) vs
+    | ArrUp => clem_arrv 4 4 t a c (t_add4n a c) vs
+    | ArrDown => clem_arrv 4 (-4) t (t_add (t_add4n a c) (-4)) c (t_add a (-4)) vs
     end vs.
 
 (* The data at `a`, its S terms read through ζ and its values through ν.  A
@@ -1959,11 +1960,11 @@ Fixpoint gen_data_at {S Σ} (ζ : Sub S Σ) (a : Term Σ ty_xlenbits) (ds : list
   | cons (DCell sp) ds => fun ν =>
       (gen_cell_at a (val_spec_map (fun t => subst t ζ) sp) ∗ asn_in_range_at a
        ∗ gen_data_at ζ (t_add a 4) ds ν)%asn
-  | cons (DArr pub dir c _) ds => fun ν =>
-      (gen_arr_at a pub dir (subst c ζ) (env.head ν)
+  | cons (DArr pub dir c v) ds => fun ν =>
+      (gen_arr_at a pub dir (subst c ζ) v (env.head ν)
        ∗ gen_data_at ζ (t_add4n a (subst c ζ)) ds (env.tail ν))%asn
-  | cons (DBytes pub c _) ds => fun ν =>
-      (gen_pub_at pub (clem_arrv 1 1 a (subst c ζ) (term_binop bop.bvadd a (subst c ζ)) (env.head ν))
+  | cons (DBytes pub c v) ds => fun ν =>
+      (gen_pub_at pub (clem_arrv 1 1 v a (subst c ζ) (term_binop bop.bvadd a (subst c ζ)) (env.head ν))
          (env.head ν)
        ∗ gen_data_at ζ (t_add4n a (t_ceil4 (subst c ζ))) ds (env.tail ν))%asn
   | cons (DAt x) ds => fun ν =>

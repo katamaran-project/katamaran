@@ -81,7 +81,7 @@ Definition sub_scratch {Σ} : Assertion Σ :=
     ∗ asn.exist "v4" ty_xlenbits (A6 ↦ᵣ term_var "v4")
     ∗ asn.exist "v5" ty_xlenbits (A7 ↦ᵣ term_var "v5") )%asn.
 
-Definition lnSub : LoopN := MkLoopN A0 A4 A1 false sub_loop_instrs 10 56 20.
+Definition lnSub : LoopN := MkLoopN A0 A4 A1 false sub_loop_instrs 10 56 20 "vb" "va" "db" "da".
 
 Lemma valid_sub_loop : cfg_vc_loop (lnRec lnSub (@sub_scratch)) (ln_annot lnSub).
 Proof. Time solve_mb_vc. Qed.
@@ -116,19 +116,21 @@ Definition t_off4 {Σ} (p : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 (* a's header and limbs (values va), b's limbs (values vb), at the
    arguments' addresses.  No publicness: the callee does not branch on
    either; a caller that knows b public keeps that by framing (PLAN-arrv D13) *)
-Definition sub_mem {Σ} (xa xb h : Term Σ ty_xlenbits) (va vb : Term Σ (clemv_ty 4)) : Assertion Σ :=
+Definition sub_mem {Σ} (ta tb : string) (xa xb h : Term Σ ty_xlenbits)
+    (va vb : Term Σ (clemv_ty 4)) : Assertion Σ :=
   ( xa ↦ₘ h
-    ∗ clem_arrv 4 4 (t_off4 xa) (t_limbs h) (t_end xa h) va
-    ∗ clem_arrv 4 4 (t_off4 xb) (t_limbs h) (t_end xb h) vb )%asn.
+    ∗ clem_arrv 4 4 ta (t_off4 xa) (t_limbs h) (t_end xa h) va
+    ∗ clem_arrv 4 4 tb (t_off4 xb) (t_limbs h) (t_end xb h) vb )%asn.
 
 (* the memory a call hands back: a's header, NEW limbs for a (any value), b's
    limbs with their own value vb -- b is only read *)
-Definition sub_mem_out {Σ} (xa xb h : Term Σ ty_xlenbits) (vb : Term Σ (clemv_ty 4)) : Assertion Σ :=
+Definition sub_mem_out {Σ} (ta tb : string) (xa xb h : Term Σ ty_xlenbits)
+    (vb : Term Σ (clemv_ty 4)) : Assertion Σ :=
   ( xa ↦ₘ h
     ∗ asn.exist "va'" (clemv_ty 4)
-        (clem_arrv 4 4 (subst (t_off4 xa) sub_wk1) (subst (t_limbs h) sub_wk1)
+        (clem_arrv 4 4 ta (subst (t_off4 xa) sub_wk1) (subst (t_limbs h) sub_wk1)
            (subst (t_end xa h) sub_wk1) (term_var "va'"))
-    ∗ clem_arrv 4 4 (t_off4 xb) (t_limbs h) (t_end xb h) vb )%asn.
+    ∗ clem_arrv 4 4 tb (t_off4 xb) (t_limbs h) (t_end xb h) vb )%asn.
 
 Definition sub_regs : list reg_spec_rel :=
   [ (A2, Secret); (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret) ].
@@ -137,7 +139,7 @@ Definition sub_pre : Assertion (subCtx ▻ "a"∷ty_xlenbits) :=
   ( X1 ↦ᵣ term_var "r"
     ∗ A0 ↦ᵣ term_var "xa" ∗ secLeakvar "xa"
     ∗ A1 ↦ᵣ term_var "xb" ∗ secLeakvar "xb"
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") (term_var "va") (term_var "vb")
+    ∗ sub_mem "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "va") (term_var "vb")
     ∗ secLeakvar "h"
     (* 0 < h < 2^16: at least one limb, and nothing wraps *)
     ∗ asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
@@ -151,7 +153,7 @@ Definition sub_pre : Assertion (subCtx ▻ "a"∷ty_xlenbits) :=
    with any value *)
 Definition sub_post : Assertion (subCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( X1 ↦ᵣ term_var "r"
-    ∗ sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
+    ∗ sub_mem_out "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
     ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
@@ -178,10 +180,10 @@ Definition cl (k : CLem) : Annot := AnnotCLemma k.
    source (value rev d ++ r) -- for b that is LoopN's VM, so b comes back
    with its own value (PLAN-arrv D13) *)
 Definition sub_seeds : list Annot :=
-  [ cl (clem_arrv_empty 4 (-4)); cl (clem_arrv_empty 4 (-4)) ].
+  [ cl (clem_arrv_empty 4 (-4) "db"); cl (clem_arrv_empty 4 (-4) "da") ].
 Definition sub_hand_back : list Annot :=
-  [ cl (clem_arrv_flip 4 (-4)); cl (clem_arrv_flip 4 (-4))
-  ; cl (clem_arrv_join 4 4); cl (clem_arrv_join 4 4) ].
+  [ cl (clem_arrv_flip 4 (-4) "db"); cl (clem_arrv_flip 4 (-4) "da")
+  ; cl (clem_arrv_join 4 4 "db" "vb" "vb"); cl (clem_arrv_join 4 4 "da" "va" "va") ].
 
 (* The seeds go AFTER instruction 10, not before 11: an instruction that
    carries a block runs the block INSTEAD of itself, ghosts included
@@ -236,7 +238,7 @@ Definition s1aCtxV : LCtx := s1aCtx ▻▻ data_vctx s1a_data.
    publicness included, by framing), a with new limbs -- and every register
    with any value *)
 Definition s1a_post : Assertion (s1aCtxV ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
+  ( sub_mem_out "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ asn.exist "w1" ty_xlenbits (X1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
     ∗ asn.exist "w8" ty_xlenbits (A1 ↦ᵣ term_var "w8")
@@ -274,9 +276,9 @@ Proof. Fail solve_mb_vc. Abort.
 Goal cfg_vc (gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10
    (( term_var "xa" ↦ₘ term_var "h"
       ∗ asn.exist "va'" (clemv_ty 4)
-          (clem_arrv 4 4 (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
+          (clem_arrv 4 4 "va" (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
              (t_end (term_var "xa") (term_var "h")) (term_var "va'") ∗ secLeakvar "va'")
-      ∗ clem_arrv 4 4 (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
+      ∗ clem_arrv 4 4 "vb" (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
           (t_end (term_var "xb") (term_var "h")) (term_var "vb") )%asn))
   s1a_annot.
 Proof. Fail solve_mb_vc. Abort.
@@ -286,9 +288,9 @@ Proof. Fail solve_mb_vc. Abort.
    back with its own value. *)
 Goal cfg_vc (gen_prog_contract "q" _ s1a_regs s1a_facts 124 s1a_data s1a_instrs 10
    (( term_var "xa" ↦ₘ term_var "h"
-      ∗ clem_arrv 4 4 (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
+      ∗ clem_arrv 4 4 "va" (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
           (t_end (term_var "xa") (term_var "h")) (term_var "va")
-      ∗ clem_arrv 4 4 (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
+      ∗ clem_arrv 4 4 "vb" (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
           (t_end (term_var "xb") (term_var "h")) (term_var "vb") )%asn))
   s1a_annot.
 Proof. Fail solve_mb_vc. Abort.

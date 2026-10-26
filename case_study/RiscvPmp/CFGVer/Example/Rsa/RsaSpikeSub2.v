@@ -122,7 +122,7 @@ Definition sub2_pre : Assertion (sub2Ctx ▻ "a"∷ty_xlenbits) :=
     ∗ secLeakvar "sp" ∗ sub2_frame (term_var "sp")
     ∗ A0 ↦ᵣ term_var "xa" ∗ secLeakvar "xa"
     ∗ A1 ↦ᵣ term_var "xb" ∗ secLeakvar "xb"
-    ∗ sub_mem (term_var "xa") (term_var "xb") (term_var "h") (term_var "va") (term_var "vb")
+    ∗ sub_mem "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "va") (term_var "vb")
     ∗ secLeakvar "h"
     ∗ asn.formula (formula_relop bop.bvult (term_val ty_xlenbits bv.zero) (term_var "h"))
     ∗ asn.formula (formula_relop bop.bvult (term_var "h") (term_val ty_xlenbits (bv.of_N 65536)))
@@ -134,7 +134,7 @@ Definition sub2_post : Assertion (sub2Ctx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xl
   ( X1 ↦ᵣ term_var "r"
     ∗ sub2_saved (term_var "sp") (term_var "v0") (term_var "v1") (term_var "v2")
     ∗ sub2_frame (term_var "sp")
-    ∗ sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
+    ∗ sub_mem_out "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
     ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
@@ -190,7 +190,7 @@ Definition s1bCtxV : LCtx := s1bCtx ▻▻ data_vctx s1b_data.
 (* the memory back (b with its own value, PLAN-arrv D13), every register
    with any value *)
 Definition s1b_post : Assertion (s1bCtxV ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
+  ( sub_mem_out "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
     ∗ sub2_frame (term_var "sp")
     ∗ asn.exist "w1" ty_xlenbits (X1 ↦ᵣ term_var "w1")
     ∗ asn.exist "w9" ty_xlenbits (X2 ↦ᵣ term_var "w9")
@@ -228,7 +228,7 @@ Goal cfg_vc_loop (gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r
     ( X1 ↦ᵣ term_var "r"
       ∗ sub2_saved (term_var "sp") (term_var "v1") (term_var "v1") (term_var "v2")
       ∗ sub2_frame (term_var "sp")
-      ∗ sub_mem_out (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
+      ∗ sub_mem_out "va" "vb" (term_var "xa") (term_var "xb") (term_var "h") (term_var "vb")
       ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
       ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
       ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
@@ -248,9 +248,9 @@ Goal cfg_vc_loop (gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r
       ∗ sub2_frame (term_var "sp")
       ∗ term_var "xa" ↦ₘ term_var "h"
       ∗ asn.exist "va'" (clemv_ty 4)
-          (clem_arrv 4 4 (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
+          (clem_arrv 4 4 "va" (t_off4 (term_var "xa")) (t_limbs (term_var "h"))
              (t_end (term_var "xa") (term_var "h")) (term_var "va'") ∗ secLeakvar "va'")
-      ∗ clem_arrv 4 4 (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
+      ∗ clem_arrv 4 4 "vb" (t_off4 (term_var "xb")) (t_limbs (term_var "h"))
           (t_end (term_var "xb") (term_var "h")) (term_var "vb")
       ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
       ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")

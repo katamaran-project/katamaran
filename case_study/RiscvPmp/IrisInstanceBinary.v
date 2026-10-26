@@ -316,7 +316,7 @@ Module RiscvPmpIrisInstance2 <:
     | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | inv_leakage              | _                    => interp_inv_constant_time
     | arr pub w s              | [ a; n; e ]          => interp_arr pub w s a n e
-    | arrv w s                 | [ a; n; e; vs ]      => interp_arrv w s a n e vs
+    | arrv w s _               | [ a; n; e; vs ]      => interp_arrv w s a n e vs
     .
 
     Ltac destruct_pmp_entries :=

@@ -100,6 +100,31 @@ over angelic choice in postprocess (removes only the ×1.63). Re-measure this
 record's rigs after the fix; the prediction is falsifiable by the surviving
 ∃ count (should be 0) and Amb-level cost.
 
+## 7. After the fix: the tag (2026-10-26, PREDICTION CONFIRMED)
+
+Phase D′ gave `arrv` a Coq-level string tag (D14–D17); LoopN's four arrays
+are tagged by `LoopN` record fields. Same rig as §2 (one warm-up VC first,
+then census and split), `Example/Rsa/ZZArrvTagged.v`, on the shipped
+tagged LoopN with values TRACKED (`VM = rev dM ++ rM`):
+
+| | Old (arr) | NV (untagged) | **Tagged** |
+|---|---|---|---|
+| raw: nodes / angelic_binary / assertk / angelicv | 3281 / 629 / 20 / 244 | 8852 / 1606 / 145 / 819 | 3330 / 629 / 20 / 264 |
+| postprocessed: same | 50 / 2 / 12 / 0 | 413 / 29 / 114 / 72 | **53 / 2 / 12 / 0** |
+| `vm_compute` + `solve_vc` | 1.9 s | 4.9 s | 2.2 s |
+| closer: `cbn` + `mb_search` | 0.8 + 5.9 s | 4.7 + 20.4 s | 0.9 + 6.6 s |
+| `Qed` | 2.0 s | 9.3 s | 2.4 s |
+| whole `solve_mb_vc`, warm | 8.6 s | 31.7 s | **9.7 s** |
+
+Both predicted outcomes hold: ZERO surviving value ∃ (72 → 0) and the
+branch structure back to Old's exactly (629 / 20 raw, 2 / 12
+postprocessed), so the values are free again (§3's interaction).
+Tagged LoopN is ≈**1.13×** arr warm (was ≈3.7×); the residual is the value
+tracking itself (+20 raw angelicv, +3 postprocessed nodes). Cold, as
+shipped (`RsaSpikeSub.v`, first VC in the process): `valid_sub_loop` 36.9 →
+**14.8 s** (arr 13.1 s), and the callee with its flip/join hand-back
+`valid_sub` 23.6 → **3.4 s** (arr ≈2.9 s).
+
 ## 6. Reproduction
 
 Probes (untracked-by-build, `ZZ*.v`), compiled with
@@ -107,4 +132,6 @@ Probes (untracked-by-build, `ZZ*.v`), compiled with
 0f27b507..a4d3d8d2: `Example/Rsa/ZZArrvAmbig.v`, `ZZArrvAmbigSwap.v`,
 `ZZArrvSplit.v` (needs `RsaSpikeSub.vo`), `Example/CheckScalar/ZZArrvInteract.v`
 (needs the ported `CheckScalarParamLoop{1,2}.vo`; embeds the pre-port loops
-from `a4d3d8d2~1`).
+from `a4d3d8d2~1`). Those four predate the tag: their untagged `arrv` arms
+(NV, Loop{1,2} new) no longer compile after Phase D′ — rerun them at
+`a0611e8a`. §7's rig `Example/Rsa/ZZArrvTagged.v` runs on the current tree.

@@ -39,16 +39,16 @@ Definition sb_instrs : list AST :=
   ; ITYPE (bv.of_Z 1) A0 A0 RISCV_ADDI ].     (* addi a0, a0, 1 *)
 
 Definition sb_annot : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "vs") ]
      ; ai_instr := STORE (bv.of_Z 0) A1 A0 BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1) ]
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1 "vs") ]
      ; ai_block := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A0 A0 RISCV_ADDI) ].
 
 (* the array at p keeps its shape, its value is overwritten; a0 moved one
    byte on *)
 Definition sb_pre (pub vpub : bool) : Assertion (sbCtx ▻ "a"∷ty_xlenbits) :=
-  ( clem_arrv 1 1 (term_var "p") (term_var "n") (term_var "e") (term_var "vs")
+  ( clem_arrv 1 1 "vs" (term_var "p") (term_var "n") (term_var "e") (term_var "vs")
     ∗ pub_val pub (term_var "vs")
     ∗ asn.formula (formula_relop bop.neq (term_var "n") (term_val ty_xlenbits bv.zero))
     ∗ secLeakvar "p" ∗ secLeakvar "n" ∗ secLeakvar "e"
@@ -57,7 +57,7 @@ Definition sb_pre (pub vpub : bool) : Assertion (sbCtx ▻ "a"∷ty_xlenbits) :=
 
 Definition sb_post (pub : bool) : Assertion (sbCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
   ( asn.exist "ws" (clemv_ty 1)
-      (clem_arrv 1 1 (term_var "p") (term_var "n") (term_var "e") (term_var "ws")
+      (clem_arrv 1 1 "vs" (term_var "p") (term_var "n") (term_var "e") (term_var "ws")
        ∗ pub_val pub (term_var "ws"))
     ∗ A0 ↦ᵣ t_inc (term_var "p") ∗ A1 ↦ᵣ term_var "v" )%asn.
 
@@ -95,19 +95,19 @@ Definition cpy_instrs : list AST :=
   ; STORE (bv.of_Z 0) A4 A3 BYTE ].            (* sb   a4, 0(a3) *)
 
 Definition cpy_annot : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "vs") ]
      ; ai_instr := LOAD (bv.of_Z 0) A1 A4 true BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1) ]
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1 "vs") ]
      ; ai_block := None |}
-  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "ws") ]
      ; ai_instr := STORE (bv.of_Z 0) A4 A3 BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1) ]
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1 "ws") ]
      ; ai_block := None |} ].
 
 Definition cpy_pre (spub : bool) : Assertion (cpyCtx ▻ "a"∷ty_xlenbits) :=
-  ( clem_arrv 1 1 (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
+  ( clem_arrv 1 1 "vs" (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
     ∗ pub_val spub (term_var "vs")
-    ∗ clem_arrv 1 1 (term_var "d") (term_var "m") (term_var "f") (term_var "ws")
+    ∗ clem_arrv 1 1 "ws" (term_var "d") (term_var "m") (term_var "f") (term_var "ws")
     ∗ secLeakvar "ws"
     ∗ asn.formula (formula_relop bop.neq (term_var "n") (term_val ty_xlenbits bv.zero))
     ∗ asn.formula (formula_relop bop.neq (term_var "m") (term_val ty_xlenbits bv.zero))
@@ -119,9 +119,9 @@ Definition cpy_pre (spub : bool) : Assertion (cpyCtx ▻ "a"∷ty_xlenbits) :=
 (* the source comes back with its own value; the destination's is ∃ but
    public *)
 Definition cpy_post : Assertion (cpyCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( clem_arrv 1 1 (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
+  ( clem_arrv 1 1 "vs" (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
     ∗ asn.exist "ws2" (clemv_ty 1)
-        (clem_arrv 1 1 (term_var "d") (term_var "m") (term_var "f") (term_var "ws2")
+        (clem_arrv 1 1 "ws" (term_var "d") (term_var "m") (term_var "f") (term_var "ws2")
          ∗ secLeakvar "ws2")
     ∗ A1 ↦ᵣ term_var "s" ∗ A3 ↦ᵣ term_var "d"
     ∗ asn.exist "v4" ty_xlenbits (A4 ↦ᵣ term_var "v4") )%asn.
@@ -134,8 +134,8 @@ Lemma valid_cpy : cfg_vc_loop (cpyRec true) cpy_annot.
 Proof. Time solve_mb_vc. Qed.
 
 (* NEGATIVE CONTROL: copying out of a SECRET array into the public one is
-   rejected -- the loaded byte really reaches the store, and the angelic arrv
-   match cannot dodge it by picking the other array. *)
+   rejected -- the loaded byte really reaches the store (the take is by tag,
+   so the store cannot pick the source array instead). *)
 Goal cfg_vc_loop (cpyRec false) cpy_annot.
 Proof. Fail solve_mb_vc. Abort.
 

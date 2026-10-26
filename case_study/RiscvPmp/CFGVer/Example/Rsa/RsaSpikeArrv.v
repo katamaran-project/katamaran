@@ -30,19 +30,19 @@ Definition cpCtx : LCtx :=
 
 (* angelic: the block's variables are bound by the heap search *)
 Definition cp_pre : Assertion (cpCtx ▻ "a"∷ty_xlenbits) :=
-  ( clem_arrv_angelic 1 1 (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
-    ∗ clem_arrv_angelic 1 1 (term_var "d") (term_var "n") (term_var "f") (term_var "ws") )%asn.
+  ( clem_arrv_angelic 1 1 "src" (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
+    ∗ clem_arrv_angelic 1 1 "dst" (term_var "d") (term_var "n") (term_var "f") (term_var "ws") )%asn.
 
 (* the destination now holds the SAME term vs -- no existential *)
 Definition cp_post : Assertion (cpCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( clem_arrv 1 1 (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
-    ∗ clem_arrv 1 1 (term_var "d") (term_var "n") (term_var "f") (term_var "vs") )%asn.
+  ( clem_arrv 1 1 "src" (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
+    ∗ clem_arrv 1 1 "dst" (term_var "d") (term_var "n") (term_var "f") (term_var "vs") )%asn.
 
 (* NEGATIVE: the usual existential post *)
 Definition cp_post_ex : Assertion (cpCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( clem_arrv 1 1 (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
+  ( clem_arrv 1 1 "src" (term_var "s") (term_var "n") (term_var "e") (term_var "vs")
     ∗ asn.exist "ws2" (clemv_ty 1)
-        (clem_arrv 1 1 (term_var "d") (term_var "n") (term_var "f") (term_var "ws2")) )%asn.
+        (clem_arrv 1 1 "dst" (term_var "d") (term_var "n") (term_var "f") (term_var "ws2")) )%asn.
 
 Definition cpBlk (post : Assertion (cpCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : BlkAnnot :=
   {| blk_ctx := cpCtx
@@ -63,29 +63,29 @@ Definition cl_instrs : list AST := [NOP; NOP; NOP].
    take the destination's first cell back before instruction 2 *)
 Definition cl_annot (post : Assertion (cpCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : list AnnotInstr :=
   [ {| ai_ghost_before := []; ai_instr := NOP
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1) ]; ai_block := None |}
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 1 "src") ]; ai_block := None |}
   ; {| ai_ghost_before := []; ai_instr := NOP; ai_ghost_after := []
      ; ai_block := Some (cpBlk post) |}
-  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_cons 1 1) ]; ai_instr := NOP
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_cons 1 1 "dst") ]; ai_instr := NOP
      ; ai_ghost_after := []; ai_block := None |} ].
 
 (* h at p, then n limbs; a destination of n+1 cells *)
 Definition cl_pre (hpub : bool) : Assertion (clCtx ▻ "a"∷ty_xlenbits) :=
   ( clem_ptsto 1 (term_var "p") (term_var "h")
     ∗ clem_range 1 (term_var "p")
-    ∗ clem_arrv 1 1 (t_inc (term_var "p")) (term_var "n") (term_var "e") (term_var "ls")
-    ∗ clem_arrv 1 1 (term_var "d") (t_inc (term_var "n")) (term_var "f") (term_var "ws")
+    ∗ clem_arrv 1 1 "src" (t_inc (term_var "p")) (term_var "n") (term_var "e") (term_var "ls")
+    ∗ clem_arrv 1 1 "dst" (term_var "d") (t_inc (term_var "n")) (term_var "f") (term_var "ws")
     ∗ asn.formula (formula_relop bop.bvult (term_var "n")
         (term_val ty_xlenbits (bv.of_N 0x40000000)))
     ∗ (if hpub then secLeakvar "h" else ⊤) )%asn.
 
 (* the copy's first cell is PUBLIC; the source is still h :: ls *)
 Definition cl_post : Assertion (clCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  ( clem_arrv 1 1 (term_var "p") (t_inc (term_var "n")) (term_var "e")
+  ( clem_arrv 1 1 "src" (term_var "p") (t_inc (term_var "n")) (term_var "e")
       (term_binop bop.cons (term_var "h") (term_var "ls"))
     ∗ asn.exist "v" (clem_cell_ty 1)
         (clem_ptsto 1 (term_var "d") (term_var "v") ∗ asn.formula (formula_secLeak (term_var "v")))
-    ∗ clem_arrv 1 1 (t_inc (term_var "d")) (term_var "n") (term_var "f") (term_var "ls") )%asn.
+    ∗ clem_arrv 1 1 "dst" (t_inc (term_var "d")) (term_var "n") (term_var "f") (term_var "ls") )%asn.
 
 Definition clRec (hpub : bool) : @CFGVerifierContract clCtx :=
   gen_seg_contract (term_var "q") (term_var "q") cl_instrs 12 8 [] (cl_pre hpub) cl_post.
@@ -127,12 +127,12 @@ Definition mc_instrs : list AST :=
   ; BTYPE (bv.of_Z (-20)) X0 A2 RISCV_BNE ].     (* bnez a2, .Ltmp1 *)
 
 Definition mc_annot : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "srest") ]
      ; ai_instr := LOAD (bv.of_Z 0) A1 A4 true BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 1) ]; ai_block := None |}
-  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 1 "sdone") ]; ai_block := None |}
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "drest") ]
      ; ai_instr := STORE (bv.of_Z 0) A4 A3 BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 1) ]; ai_block := None |}
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 1 "ddone") ]; ai_block := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z (-1)) A2 A2 RISCV_ADDI)
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A3 A3 RISCV_ADDI)
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A1 A1 RISCV_ADDI)
@@ -141,8 +141,8 @@ Definition mc_annot : list AnnotInstr :=
 (* the loop state with c bytes to go, k done, cursors p (source) r (dest) *)
 Definition mc_state {Σ} (s d e f c k p r : Term Σ ty_xlenbits)
     (done rest drest : Term Σ (clemv_ty 1)) : Assertion Σ :=
-  ( clem_arrv 1 1 s k p done ∗ clem_arrv 1 1 p c e rest
-    ∗ clem_arrv 1 1 d k r done ∗ clem_arrv 1 1 r c f drest
+  ( clem_arrv 1 1 "sdone" s k p done ∗ clem_arrv 1 1 "srest" p c e rest
+    ∗ clem_arrv 1 1 "ddone" d k r done ∗ clem_arrv 1 1 "drest" r c f drest
     ∗ A1 ↦ᵣ p ∗ A3 ↦ᵣ r ∗ A2 ↦ᵣ c )%asn.
 
 Definition mc_inv : Assertion (mcCtx ▻ "a"∷ty_xlenbits) :=

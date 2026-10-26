@@ -38,8 +38,8 @@ Definition l1_instrs : list AST :=
 (* `cnt` bytes still to go (holding rK), `done` read (holding dK) *)
 Definition l1_state {Σ} (cnt done e kE : Term Σ ty_xlenbits)
     (rK dK : Term Σ (clemv_ty 1)) : Assertion Σ :=
-  ( clem_arrv_angelic 1 1 (bk e cnt 0) cnt e rK
-    ∗ clem_arrv_angelic 1 (-1) (bk e cnt (-1)) done kE dK
+  ( clem_arrv_angelic 1 1 "vK" (bk e cnt 0) cnt e rK
+    ∗ clem_arrv_angelic 1 (-1) "dK" (bk e cnt (-1)) done kE dK
     ∗ A5 ↦ᵣ bk e cnt 0
     ∗ A4 ↦ᵣ e )%asn.
 
@@ -79,9 +79,9 @@ Definition l1Rec : @CFGVerifierContract l1Ctx :=
 Definition l1Blk : BlkAnnot := {| blk_ctx := l1Ctx ; blk_contract := l1Rec |}.
 
 Definition l1_annot : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 "vK") ]
      ; ai_instr := LOAD (bv.of_Z 0) A5 A6 true BYTE
-     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 (-1)) ]
+     ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 1 (-1) "dK") ]
      ; ai_block := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A5 A5 RISCV_ADDI)
   ; AST_AnnotInstr (RTYPE A6 A2 A2 RISCV_OR)

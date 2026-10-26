@@ -106,8 +106,10 @@ Inductive Predicate : Set :=
    arguments [a; n; e; vs], vs the list of cell values (length n, stated in
    the Iris interpretation).  No publicness flag: a value is public iff the
    caller knows secLeak of it, and that fact survives a call by framing
-   when the callee's post names the same value term. *)
-| arrv (w : nat) (s : Z)
+   when the callee's post names the same value term.  The string `t` is a
+   TAG (PLAN-arrv D14) that only tells same-shape arrays apart for the
+   executor's chunk matching; the interpretation ignores it. *)
+| arrv (w : nat) (s : Z) (t : string)
 .
 
 Section TransparentObligations.
@@ -342,7 +344,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstoinstr                    => [ty_xlenbits; ty_word; ty_ast]
       | inv_leakage                   => ctx.nil
       | arr _ _ _                     => [ty_xlenbits; ty_xlenbits; ty_xlenbits]
-      | arrv w _                      => [ty_xlenbits; ty_xlenbits; ty_xlenbits; ty.list (ty.bvec (w * byte))]
+      | arrv w _ _                    => [ty_xlenbits; ty_xlenbits; ty_xlenbits; ty.list (ty.bvec (w * byte))]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -362,7 +364,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptstoinstr                 => false
         | inv_leakage                => true
         | arr _ _ _                  => false
-        | arrv _ _                   => false
+        | arrv _ _ _                 => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -396,7 +398,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
          satisfiable when the wrong cell has an unrelated base, so the wrong
          branch survives as an unresolved angelic disjunction.) *)
       | arr _ _ _                 => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
-      | arrv w _                  => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits; ty.list (ty.bvec (w * byte))] eq_refl)
+      | arrv w _ _                => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits; ty.list (ty.bvec (w * byte))] eq_refl)
       end.
 
   End PredicateKit.

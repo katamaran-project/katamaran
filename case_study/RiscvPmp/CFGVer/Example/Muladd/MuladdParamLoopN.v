@@ -49,6 +49,12 @@ Record LoopN := MkLoopN
   ; ln_store   : nat             (* index of the store (add_first after it) *)
   ; ln_exit    : N               (* exit offset *)
   ; ln_fuel    : nat
+  (* the four arrays' TAGS (PLAN-arrv D14/D16): the sources m and x, and the
+     done arrays the caller seeds before the loop and hands back after it *)
+  ; ln_tm      : string
+  ; ln_tx      : string
+  ; ln_tdm     : string
+  ; ln_tdx     : string
   }.
 
 Section Template.
@@ -62,10 +68,10 @@ Section Template.
   Definition ln_state {Σ} (cnt : Term Σ ty_xlenbits) (done : Term Σ ty_xlenbits)
       (eM eX mE xE : Term Σ ty_xlenbits) (latch : Term Σ ty_xlenbits)
       (rM rX dM dX : Term Σ (clemv_ty 4)) : Assertion Σ :=
-    ( clem_arrv_angelic 4 4 (ln_back eM cnt 0) cnt eM rM
-      ∗ clem_arrv_angelic 4 4 (ln_back eX cnt 0) cnt eX rX
-      ∗ clem_arrv_angelic 4 (-4) (ln_back eM cnt (-4)) done mE dM
-      ∗ clem_arrv_angelic 4 (-4) (ln_back eX cnt (-4)) done xE dX
+    ( clem_arrv_angelic 4 4 (ln_tm L) (ln_back eM cnt 0) cnt eM rM
+      ∗ clem_arrv_angelic 4 4 (ln_tx L) (ln_back eX cnt 0) cnt eX rX
+      ∗ clem_arrv_angelic 4 (-4) (ln_tdm L) (ln_back eM cnt (-4)) done mE dM
+      ∗ clem_arrv_angelic 4 (-4) (ln_tdx L) (ln_back eX cnt (-4)) done xE dX
       ∗ ln_rx L ↦ᵣ ln_back eX cnt 0
       ∗ ln_rm L ↦ᵣ ln_back eM cnt 0
       ∗ ln_rlatch L ↦ᵣ latch )%asn.
@@ -123,14 +129,14 @@ Section Template.
     | cons x r =>
         cons
           (if Nat.eqb i 0 then
-             {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 4 4)
-                                   ; AnnotCLemma (clem_arrv_take_first 4 4) ]
+             {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 4 4 (ln_tm L))
+                                   ; AnnotCLemma (clem_arrv_take_first 4 4 (ln_tx L)) ]
               ; ai_instr := x ; ai_ghost_after := []
               ; ai_block := None |}
            else if Nat.eqb i (ln_store L) then
              {| ai_ghost_before := [] ; ai_instr := x
-              ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 4 (-4))
-                                  ; AnnotCLemma (clem_arrv_add_first 4 (-4)) ]
+              ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_first 4 (-4) (ln_tdm L))
+                                  ; AnnotCLemma (clem_arrv_add_first 4 (-4) (ln_tdx L)) ]
               ; ai_block := None |}
            else AST_AnnotInstr x)
           (ln_annot_go (S i) r)

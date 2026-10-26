@@ -2533,8 +2533,8 @@ Section DataImplPre.
          `pose proof (H : A = _)` re-states each at the goal's own term *)
       destruct dir, pub; cbn [gen_arr_at gen_pub_at clem_arrv interpret_chunk data_dir];
         cbn [luser inst inst_env env.map instprop instprop_formula].
-      all: match goal with |- context [luser (arrv ?w ?s) [?A; ?C; ?E; ?T]] =>
-             change (luser (arrv w s) [A; C; E; T]) with (interp_arrv w s A C E T);
+      all: match goal with |- context [luser (arrv ?w ?s ?t) [?A; ?C; ?E; ?T]] =>
+             change (luser (arrv w s t) [A; C; E; T]) with (interp_arrv w s A C E T);
              pose proof (Hcv : C = _) as EC; pose proof (Htv : T = _) as ET; rewrite EC ET
            end.
       1-2: match goal with |- context [interp_arrv ?w ?s ?A ?C ?E ?T] =>
@@ -2580,8 +2580,8 @@ Section DataImplPre.
       { apply data_count_ceil4; [exact Hc|]. unfold maxAddr, minAddr, lenAddr in Hbr. lia. }
       destruct pub; cbn [gen_pub_at clem_arrv interpret_chunk];
         cbn [luser inst inst_env env.map instprop instprop_formula].
-      all: match goal with |- context [luser (arrv ?w ?s) [?A; ?C; ?E; ?T]] =>
-             change (luser (arrv w s) [A; C; E; T]) with (interp_arrv w s A C E T);
+      all: match goal with |- context [luser (arrv ?w ?s ?t) [?A; ?C; ?E; ?T]] =>
+             change (luser (arrv w s t) [A; C; E; T]) with (interp_arrv w s A C E T);
              pose proof (Ha : A = _) as EA; pose proof (Hcv : C = _) as EC; pose proof (He : E = _) as EE;
              pose proof (Htv : T = _) as ET; rewrite EA EC EE ET
            end.

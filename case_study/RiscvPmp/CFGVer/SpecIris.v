@@ -1424,8 +1424,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplit; [done|]. iApply (arrv_ptstomem_proj with "Hc"); cbn; reflexivity.
     Qed.
 
-    Lemma clem_arrv_take_first_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_take_first w s)).
+    Lemma clem_arrv_take_first_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_take_first w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1436,8 +1436,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iExists x, r. iFrame "Hc Harr". auto.
     Qed.
 
-    Lemma clem_arrv_take_cons_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_take_cons w s)).
+    Lemma clem_arrv_take_cons_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_take_cons w s t)).
     Proof.
       intros ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1447,8 +1447,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iFrame "Hc Harr". auto.
     Qed.
 
-    Lemma clem_arrv_add_first_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_add_first w s)).
+    Lemma clem_arrv_add_first_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_add_first w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1457,8 +1457,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iApply interp_arrv_add_first. iFrame "Harr Hc". auto.
     Qed.
 
-    Lemma clem_arrv_add_last_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_add_last w s)).
+    Lemma clem_arrv_add_last_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_add_last w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1763,8 +1763,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       rewrite (@arrv_zip_length _ _ _ _ (eq_trans HtL (eq_sym HtR))) HtL arr_of_nat_add EK arr_ring_split_idx. done.
     Qed.
 
-    Lemma clem_arrv_take_last_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_take_last w s)).
+    Lemma clem_arrv_take_last_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_take_last w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1775,8 +1775,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iExists x, r. iFrame "Hc Harr". auto.
     Qed.
 
-    Lemma clem_arrv_nonempty_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_nonempty w s)).
+    Lemma clem_arrv_nonempty_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_nonempty w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1786,8 +1786,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iFrame "Harr". iSplit; [|done]. iPureIntro. exact Hn.
     Qed.
 
-    Lemma clem_arrv_empty_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_empty w s)).
+    Lemma clem_arrv_empty_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_empty w s t)).
     Proof.
       intros ι. destruct_syminstance ι.
       (* a NonSyncVal address is ruled out by the secLeak precondition *)
@@ -1796,8 +1796,8 @@ Module RiscvPmpIrisInstanceWithContracts.
     Qed.
 
     (* count 0 gives start = end, and NOTHING about the value *)
-    Lemma clem_arrv_empty_elim_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_empty_elim w s)).
+    Lemma clem_arrv_empty_elim_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_empty_elim w s t)).
     Proof.
       intros ι. destruct_syminstance ι.
       destruct a as [a|]; destruct e as [e|];
@@ -1806,8 +1806,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplit; [|done]. iPureIntro. exact Hae.
     Qed.
 
-    Lemma clem_arrv_lockstep_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_lockstep w s)).
+    Lemma clem_arrv_lockstep_sound `{sailGS2 Σ} (w : nat) (s : Z) (t1 t2 : string) :
+      ValidLemma (clem_lemma (clem_arrv_lockstep w s t1 t2)).
     Proof.
       intros ι. destruct_syminstance ι.
       destruct a1 as [a1|]; destruct n as [n|]; destruct e1 as [e1|];
@@ -1819,12 +1819,12 @@ Module RiscvPmpIrisInstanceWithContracts.
       iFrame "H1 H2". iSplit; [|done]. iPureIntro. exact He2.
     Qed.
 
-    Lemma clem_arrv_drop_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_drop w s)).
+    Lemma clem_arrv_drop_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_drop w s t)).
     Proof. intros ι. cbn -[interp_arrv]. iIntros "_". iSplit; done. Qed.
 
-    Lemma clem_arrv_flip_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_flip w s)).
+    Lemma clem_arrv_flip_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_flip w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1832,8 +1832,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "Harr". by iApply interp_arrv_flip.
     Qed.
 
-    Lemma clem_arrv_join_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_join w s)).
+    Lemma clem_arrv_join_sound `{sailGS2 Σ} (w : nat) (s : Z) (t1 t2 t : string) :
+      ValidLemma (clem_lemma (clem_arrv_join w s t1 t2 t)).
     Proof.
       intros ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -1844,8 +1844,8 @@ Module RiscvPmpIrisInstanceWithContracts.
 
     (* w = 0: the precondition is False (cells own no bytes, so a count of
        0 mod 2^32 says nothing about the length) *)
-    Lemma clem_arrv_pad_sound `{sailGS2 Σ} (w : nat) (s : Z) :
-      ValidLemma (clem_lemma (clem_arrv_pad w s)).
+    Lemma clem_arrv_pad_sound `{sailGS2 Σ} (w : nat) (s : Z) (t t' : string) :
+      ValidLemma (clem_lemma (clem_arrv_pad w s t t')).
     Proof.
       intros ι. destruct_syminstance ι. destruct w as [|w].
       { cbn -[interp_arrv]. iIntros "(_ & _ & %Hf & _)". done. }
@@ -1855,8 +1855,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "[Ha [Hb _]]". iApply (interp_arrv_pad with "[$Ha $Hb]").
     Qed.
 
-    Lemma clem_arrv_split_sound `{sailGS2 Σ} (w : nat) (s : Z) (k : N) :
-      ValidLemma (clem_lemma (clem_arrv_split w s k)).
+    Lemma clem_arrv_split_sound `{sailGS2 Σ} (w : nat) (s : Z) (t : string) (k : N) :
+      ValidLemma (clem_lemma (clem_arrv_split w s t k)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -2072,8 +2072,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iApply (bi.equiv_entails_1_2 _ _ (arrv_words_bytes a _ _ HlT) with "Hc").
     Qed.
 
-    Lemma clem_arrv_to_bytes_sound `{sailGS2 Σ} :
-      ValidLemma (clem_lemma clem_arrv_to_bytes).
+    Lemma clem_arrv_to_bytes_sound `{sailGS2 Σ} (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_to_bytes t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
       destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
@@ -2081,8 +2081,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "Harr". by iApply interp_arrv_to_bytes.
     Qed.
 
-    Lemma clem_arrv_of_bytes_sound `{sailGS2 Σ} :
-      ValidLemma (clem_lemma clem_arrv_of_bytes).
+    Lemma clem_arrv_of_bytes_sound `{sailGS2 Σ} (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_of_bytes t)).
     Proof.
       intros ι. destruct_syminstance ι.
       destruct a as [a|]; destruct k as [k|]; destruct e as [e|];

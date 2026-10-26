@@ -205,8 +205,21 @@ Loop template: `Example/Muladd/MuladdParamLoopN.v` (remaining count n the only
 varying variable, addresses END − s·n). The general proofs (a k-byte cell
 is k byte cells for any RelVal value, and back) are `SpecIris.rg_*`.
 
-**`arrv w s [a; n; e; vs]` — the array with its VALUES named (PLAN-arrv,
-replacing `arr`).** `vs : list (bvec 8w)`, no publicness flag: a public
+**`arrv w s t [a; n; e; vs]` — the array with its VALUES named (PLAN-arrv,
+replacing `arr`).** `t : string` is a TAG (D14): a Coq-level index the Iris
+interpretation ignores, whose only job is to tell same-shape arrays apart in
+the executor's angelic chunk match (without it, every match among same-shape
+arrays branched per candidate, `diagnostics/arrv-loop-cost-drivers.md`). It
+is NOT a logic variable — a callee would bind that angelically and the
+ambiguity would return. Conventions: a top-level `DArr`/`DBytes` array's tag
+is its value name (D15, `gen_data_at`); a template takes its arrays' tags as
+Coq parameters (D16: `LoopN`'s `ln_tm ln_tx ln_tdm ln_tdx`, RSA's
+`sub_mem ta tb`); every lemma names the tag of EACH array it matches (D17):
+`join w s t1 t2 t` (result `t`), `lockstep w s t1 t2`, `pad w s t t'`, all
+others one `t`, kept — `flip` included, so a done array keeps its tag until a
+`join` gives the result the source's (`join "db" "vb" "vb"`, RsaSpikeSub).
+A tag mismatch is a FAILED match, not an ambiguity: the ghost or block
+consume errors. `vs : list (bvec 8w)`, no publicness flag: a public
 array is `arrv … vs ∗ secLeak vs`, and a plain take hands publicness to the
 parts (the take's `vs = x :: r` is `formula_propeq`, Leibniz on RelVal, and a
 lifted op is SyncVal iff its arguments are), so there are no `_pub` lemma
@@ -243,13 +256,11 @@ with `VM` a CONTRACT variable (instantiated angelically at entry: `[]` seed,
 `join` it with the emptied source (`rev dM ++ rM`), and the post can state
 the array with its pre value. An overwritten array's value is just ∃. Worked
 case with negative controls (a cannot come back unchanged, nor public):
-`Example/Rsa/RsaSpikeSub.v` (`sub_mem_out`). **Cost, measured, cause NOT
-confirmed:** porting LoopN arr→arrv made its VC 13.0 → 30.7 s with values
-untracked (36.6 s tracked; the callee with its flip/join hand-back 3.2 →
-22.4 s), matched baseline `Example/Rsa/ZZArrvCost.v`. Suspected: `arrv` has no
-`pub` index, so every angelic match among same-stride arrays is ambiguous and
-the VC branches per candidate. Emiel accepted the cost for now (2026-10-24);
-revisit before porting muladd.
+`Example/Rsa/RsaSpikeSub.v` (`sub_mem_out`). **Cost: back to `arr`'s with
+the tag** — untagged, angelic ambiguity between same-shape arrays made LoopN
+≈3.7× arr warm and trapped the value ∃s under the choice; tagged it is
+≈1.13× (9.7 vs 8.6 s warm, 0 surviving ∃), the callee 23.6 → 3.4 s cold.
+`diagnostics/arrv-loop-cost-drivers.md` §7.
 
 **Ghosts on an instruction that carries a block NEVER RUN** (`Verifier.v`,
 the `Some b` branch of the step: the block fires INSTEAD of the instruction,
