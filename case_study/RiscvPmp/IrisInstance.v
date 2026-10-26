@@ -30,7 +30,6 @@ From Katamaran Require Import
      Base
      Hoare
      Bitvector
-     trace
      Iris.Instance
      Iris.Base
      Syntax.Predicates
@@ -38,6 +37,7 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.IrisModel
+     RiscvPmp.trace
      RiscvPmp.Sig.
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
@@ -368,7 +368,10 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst
+    (* We don't need additional ghost state beyond what we already have for the WP. *)
+    Definition resGS := trivGS.
+
+    Equations(noeqns) luser_inst {rG : trivGS Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
@@ -396,7 +399,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
             destruct x; auto
         end.
 
-    Definition lduplicate_inst :
+    Definition lduplicate_inst {rG : trivGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
@@ -488,12 +491,12 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
         f_equal; auto.
     Qed.
 
-    Lemma mem_inv_not_modified `{sailGS Σ} :
+    Lemma mem_state_interp_not_modified `{sailGS Σ} :
       ∀ (μ : Memory) (memmap : gmap Addr MemVal),
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
                                                                                gen_heap.gen_heap_interp memmap -∗
                                                                                                                   trace.tr_auth (memory_trace μ) -∗
-                                                                                                                                                    mem_inv sailGS_memGS μ.
+                                                                                                                                                    mem_state_interp sailGS_memGS μ.
     Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
@@ -517,13 +520,13 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight) (FL : FailLogic)
       map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
       interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗
         trace.tr_auth (memory_trace μ) ={⊤}=∗
-      mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
+      mem_state_interp sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
         iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
       - iModIntro. iSplitL; last done.
-        now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
+        now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].

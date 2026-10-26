@@ -55,6 +55,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
+     RiscvPmp.trace
      RiscvPmp.Sig.
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -781,7 +782,7 @@ Module Type RiscvPmpBlockVerifTotalVerifier
       Import RiscvPmpBlockVerifProgramLogic.
       Import CHeapSpec.
 
-      Context {Σ} {GS : sailGS Σ}.
+      Context {Σ} {GS : sailGS Σ} {rG : trivGS Σ}.
 
       Lemma sound_exec_annotated_block_addr {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> iProp Σ) :
         LemmaSem ->

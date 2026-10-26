@@ -44,7 +44,7 @@ From Katamaran Require Import
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Sig
-     trace.
+     RiscvPmp.trace.
 From Equations Require Import
      Equations.
 
@@ -94,7 +94,7 @@ Module Type RiscvPmpModel
     RiscvPmpSemantics RVPCOM RiscvPmpSpecification RVPBASE RVPINST RiscvPmpProgramLogic.
 
   Section ForeignProofs.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ} {rG : trivGS Σ}.
 
     Lemma read_ram_sound (bytes : nat) :
       TValidContractForeign (sep_contract_read_ram bytes) (read_ram bytes).
@@ -106,7 +106,7 @@ Module Type RiscvPmpModel
       iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iMod "Hclose" as "_". iModIntro.
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+      iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
       iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
     Qed.
 
@@ -123,12 +123,13 @@ Module Type RiscvPmpModel
       rewrite semTWP_val. now iFrame "Hregs H".
     Qed.
 
-    Lemma mmio_read_sound (bytes : nat) :
-      TValidContractForeign (sep_contract_mmio_read bytes) (mmio_read bytes).
+    Lemma mmio_read_sound `(H: restrict_bytes bytes) :
+      TValidContractForeign (sep_contract_mmio_read H) (mmio_read H).
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
       now iIntros "[%HFalse _]".
     Qed.
+
 
     Lemma mmio_write_sound `(H: restrict_bytes bytes) :
       TValidContractForeign (sep_contract_mmio_write H) (mmio_write H).
@@ -205,7 +206,7 @@ Module Type RiscvPmpModel
   End ForeignProofs.
 
   Section LemProofs.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ, rG : trivGS Σ}.
 
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
@@ -285,19 +286,17 @@ Module Type RiscvPmpModel
       now iIntros.
     Qed.
 
-    Lemma close_mmio_write_mem_sound (imm : bv 12) (width : WordWidth) :
-      ValidLemma (RiscvPmpSpecification.lemma_close_mmio_write_mem imm width).
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      now iIntros.
-    Qed.
+    (* Lemma close_mmio_write_mem (imm : bv 12) (width : WordWidth): *)
+    (*   ValidLemma (RiscvPmpSpecification.lemma_close_mmio_write_mem imm width). *)
+    (* Proof. *)
+    (*   intros ι; destruct_syminstance ι; cbn. *)
+    (*   now iIntros. *)
+    (* Qed. *)
 
     Lemma lemSem : LemmaSem.
     Proof.
       intros Δ [];
-        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound,
-                    open_pmp_entries_sound, close_pmp_entries_sound, extract_pmp_ptsto_sound,
-                    return_pmp_ptsto_sound, close_mmio_write_sound, close_mmio_write_mem_sound.
+        eauto using open_gprs_sound, close_gprs_sound, open_ptsto_instr_sound, close_ptsto_instr_sound, open_pmp_entries_sound, close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound, close_mmio_write_sound.
     Qed.
   End LemProofs.
 End RiscvPmpModel.

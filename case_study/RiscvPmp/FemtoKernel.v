@@ -224,7 +224,7 @@ Import RVPPRED2.
     Example femtokernel_handler_asm : list ASM :=
       [
         ITYPE (bv.of_N 42) zero t0 RISCV_ADDI
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 42)]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero;  exp_val ty_regno t0]%env (* TODO: notation to avoid lemma call copying LOAD instruction/internalize immediate as well?*)
       ; STORE (bv.of_N mmio_write_addr) t0 zero WORD (* works because mmio_write_addr fits into 12 bits. *)
       ; MRET
       ].
@@ -278,11 +278,11 @@ Import RVPPRED2.
     (* First performs the public write, then the private write. *)
     Example femtokernel_handler_not_zero_asm' (data_addr exit_addr : N) : list ASM :=
       [ ADDI t0 zero (bv.of_N 42)
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 42)]%env
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env
       ; STORE (bv.of_N mmio_write_adv) t0 zero WORD (* works because mmio_write_adv fits into 12 bits. *)
       ; UTYPE bv.zero ra RISCV_AUIPC
       ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-      ; AnnotLemmaInvocation (close_mmio_write_mem (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N data_addr)]%env
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno ra]%env
       ; STORE (bv.of_N mmio_write_addr) ra zero WORD
       ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
       ; RISCV_JALR (bv.of_N exit_addr) zero zero (* works because the exit block addr fits into 12 bits *)
@@ -294,10 +294,10 @@ Import RVPPRED2.
     Example femtokernel_handler_is_zero_asm' (data_addr exit_addr : N) : list ASM :=
       [ UTYPE bv.zero ra RISCV_AUIPC
       ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-      ; AnnotLemmaInvocation (close_mmio_write_mem (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N data_addr)]%env
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno ra]%env
       ; STORE (bv.of_N mmio_write_addr) ra zero WORD
       ; ADDI t0 zero (bv.of_N 42)
-      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N 42)]%env
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_adv) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env
       ; STORE (bv.of_N mmio_write_adv) t0 zero WORD
       ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
       ; RISCV_JALR (bv.of_N exit_addr) zero zero
@@ -311,7 +311,7 @@ Import RVPPRED2.
     Example femtokernel_handler_secret_write_asm' (data_addr : N) : list ASM :=
       [ UTYPE bv.zero ra RISCV_AUIPC
       ; Λ x, LOAD (bv.of_N (data_addr - (x - 4))) ra ra false WORD
-      ; AnnotLemmaInvocation (close_mmio_write_mem (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_xlenbits (bv.of_N data_addr)]%env 
+      ; AnnotLemmaInvocation (close_mmio_write (bv.of_N mmio_write_addr) WORD) [nenv exp_val ty_xlenbits bv.zero; exp_val ty_regno t0]%env 
       ; STORE (bv.of_N mmio_write_addr) ra zero WORD (* works because mmio_write_adv fits into 12 bits. *)
       ; ADD ra zero zero (* We need to clear ra, as it contains the secret *)
       ].
@@ -743,6 +743,7 @@ Import RVPPRED2.
       vm_compute.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
+      all: try (eexists _, _; intuition).
       all: eapply bv.in_seqBv'; now vm_compute.
     Qed.
 
@@ -751,6 +752,7 @@ Import RVPPRED2.
       vm_compute.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
+      all: try (eexists _, _; intuition).
       all: eapply bv.in_seqBv'; now vm_compute.
     Qed.
 
@@ -758,9 +760,8 @@ Import RVPPRED2.
     Proof.
       vm_compute.
       constructor; cbn.
-      intuition bv_solve_Ltac.solveBvManual.
+      intuition bv_solve_Ltac.solveBvManual. eexists _, _. intuition.
       1-4: eapply bv.in_seqBv'; now vm_compute.
-      now rewrite sext'_zero.
     Qed.
 
     Lemma sat__femtohandler_exit : RVPTVl.safeE vc__femtohandler_exit.
@@ -810,7 +811,7 @@ Import RVPPRED2.
         (POST : Assertion (Σ__csrs ▻▻ Γ ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]))
         : ContractTy Σ :=
         contract_femtohandler_builder_gen
-          (@RVPINSTl.PredicateDefIProp _ sG)
+          (@RVPINSTl.PredicateDefIProp _ sG Instance.trivTrivGS)
           (@RVPTVl.semTripleBlock _ sG)
           ι PRE b POST.
 
@@ -821,7 +822,7 @@ Import RVPPRED2.
         (POST : Assertion (Σ__csrs ▻▻ Γ ▻▻ ["a" :: ty_xlenbits; "an" :: ty_xlenbits]))
         : ContractTy Σ :=
         contract_femtohandler_builder_gen
-          (@RVPINSTr.PredicateDefIProp _ sG)
+          (@RVPINSTr.PredicateDefIProp _ sG Instance.trivTrivGS)
           (@RVPTVr.semTripleBlock _ sG)
           ι PRE b POST.
 
@@ -1707,9 +1708,9 @@ Import RVPPRED2.
   Qed.
 
   (* Lemma interp_ptsto_valid `{sailGS Σ} {μ a v} : *)
-  (*   ⊢ mem_inv _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝. *)
+  (*   ⊢ mem_state_interp _ μ -∗ interp_ptsto a v -∗ ⌜(memory_ram μ) a = v⌝. *)
   (* Proof. *)
-  (*   unfold interp_ptsto, mem_inv. *)
+  (*   unfold interp_ptsto, mem_state_interp. *)
   (*   iIntros "(%memmap & Hinv & %link & Htr) [Hptsto %Hmmio]". *)
   (*   iDestruct (gen_heap.gen_heap_valid with "Hinv Hptsto") as "%x". *)
   (*   iPureIntro. *)
@@ -1726,7 +1727,7 @@ Import RVPPRED2.
 
   (* (* TODO: use this lemma in earlier proofs, like `read_ram_works`? *) *)
   (* Lemma interp_ptstomem_valid `{sailGS Σ} {μ a v} : *)
-  (*   ⊢ mem_inv _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝. *)
+  (*   ⊢ mem_state_interp _ μ -∗ interp_ptstomem a v -∗ ⌜mem_has_word μ a v⌝. *)
   (* Proof. *)
   (*   iIntros "Hinv Hptstomem". *)
 
@@ -1822,9 +1823,9 @@ Import RVPPRED2.
     Let femto_inv_mmio `{sailGS2 Σ} := interp_inv_mmio bytes_per_word.
 
     Definition UnaryPredicateDefIProp__l {Σ} (sG : RVPBASEl.sailGS Σ) :=
-      @RVPINSTl.PredicateDefIProp _ sG.
+      @RVPINSTl.PredicateDefIProp _ sG Instance.trivTrivGS.
     Definition UnaryPredicateDefIProp__r {Σ} (sG : RVPBASEr.sailGS Σ) :=
-      @RVPINSTr.PredicateDefIProp _ sG.
+      @RVPINSTr.PredicateDefIProp _ sG Instance.trivTrivGS.
 
     Definition asn_interpret_left `{sailGS2 Σ} : ∀ {Γ : LCtx}, Assertion Γ -> Valuation Γ -> iProp Σ :=
       @asn.interpret _ (UnaryPredicateDefIProp__l sailGS2_sailGS_left).

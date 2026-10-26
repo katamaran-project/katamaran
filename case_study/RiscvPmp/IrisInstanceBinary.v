@@ -33,7 +33,7 @@ From Katamaran Require Import
      Iris.BinaryWeakestPre
      Iris.BinaryAdequacy
      Iris.BinaryInstance
-     trace
+     RiscvPmp.trace
      Syntax.Predicates
      RiscvPmp.Base
      RiscvPmp.Machine
@@ -76,8 +76,8 @@ Module Type RiscvPmpIrisAdeqParams2
     fun μ1 μ2 => (mem_res (hG := @mc_ghGS2_left _ hG) μ1 ∗
                  mem_res (hG := @mc_ghGS2_right _ hG) μ2)%I.
 
-  (* Lemma mem_inv_init `{gHP : !mcMemPreGS Σ} (μ : Memory) : *)
-  (*   ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_inv mG μ ∗ mem_res μ)%I. *)
+  (* Lemma mem_init `{gHP : !mcMemPreGS Σ} (μ : Memory) : *)
+  (*   ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_state_interp mG μ ∗ mem_res μ)%I. *)
   (* Proof. *)
   (*   iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]". *)
   (*   iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]". *)
@@ -108,8 +108,8 @@ Module Type RiscvPmpIrisAdeqParams2
     by destruct el as (a' & <- & _).
   Qed.
 
-  Lemma mem_inv_init2 `{gHP : memGpreS Σ} (μ1 μ2 : Memory) :
-    ⊢ |==> ∃ mG : memGS2 Σ, (mem_inv2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
+  Lemma mem_init2 `{gHP : memGpreS Σ} (μ1 μ2 : Memory) :
+    ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
   Proof.
     unfold memGpreS in gHP.
     pose (memmap1 := initMemMap μ1).

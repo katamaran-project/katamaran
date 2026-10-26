@@ -89,10 +89,10 @@ Module Type IrisTotalWeakestPre
         match stm_to_val s with
         | Some v => |={⊤}=> Q v δ
         | None   => ∀ (γ1 : RegStore) (μ1 : Memory),
-                       regs_inv γ1 ∗ mem_inv μ1 ={⊤,∅}=∗
+                       regs_inv γ1 ∗ mem_state_interp μ1 ={⊤,∅}=∗
                        (∀ (s2 : Stm Γ τ) (δ2 : CStore Γ) (γ2 : RegStore) (μ2 : Memory),
                           ⌜⟨ γ1, μ1, δ , s ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩⌝ ={∅}=∗
-                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_inv μ2) ∗ wp δ2 s2 Q)
+                          |={∅,⊤}=> (regs_inv γ2 ∗ mem_state_interp μ2) ∗ wp δ2 s2 Q)
         end)%I.
 
     Lemma semTWP_unfold [Γ τ] (s : Stm Γ τ)
@@ -417,12 +417,12 @@ Module Type IrisTotalWeakestPre
 
     Lemma semTWP_foreign {Γ Δ τ} {f : 𝑭𝑿 Δ τ} {es : NamedEnv (Exp Γ) Δ} {Q δ} :
       ⊢ (∀ γ μ,
-            (regs_inv γ ∗ mem_inv μ)
+            (regs_inv γ ∗ mem_state_interp μ)
             ={⊤,∅}=∗
         (∀ res γ' μ' ,
           ⌜ ForeignCall f (evals es δ) res γ γ' μ μ' ⌝
            -∗
-           |={∅,⊤}=> (regs_inv γ' ∗ mem_inv μ') ∗
+           |={∅,⊤}=> (regs_inv γ' ∗ mem_state_interp μ') ∗
                       semTWP δ (match res with inr v => stm_val _ v
                                        | inl s => stm_fail _ s
                              end) Q)) -∗
@@ -457,11 +457,11 @@ Module Type IrisTotalWeakestPre
 
     Lemma semTWP_Steps {Γ τ} {s1 : Stm Γ τ} {Q δ1} :
       ∀ {γ1 : RegStore} {μ1 : Memory},
-        regs_inv γ1 ∗ mem_inv μ1 -∗
+        regs_inv γ1 ∗ mem_state_interp μ1 -∗
         semTWP δ1 s1 Q ={⊤}=∗
         ∃ γ2 μ2 δ2 s2 v, ⌜⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s2 ⟩ ⌝
                         ∗ ⌜stm_to_val s2 = Some v⌝
-                        ∗ regs_inv γ2 ∗ mem_inv μ2 ∗ Q v δ2.
+                        ∗ regs_inv γ2 ∗ mem_state_interp μ2 ∗ Q v δ2.
     Proof.
       iIntros (γ1 μ1) "Hres HTWP".
       iRevert (γ1 μ1) "Hres". iRevert (δ1 s1 Q) "HTWP". iApply semTWP_ind.

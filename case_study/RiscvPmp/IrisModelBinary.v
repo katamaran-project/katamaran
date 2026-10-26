@@ -29,7 +29,7 @@
 From Katamaran Require Import
      Bitvector
      Environment
-     trace
+     RiscvPmp.trace
      Iris.Base
      Iris.BinaryResources
      RiscvPmp.Machine
@@ -64,14 +64,14 @@ Module Type RiscvPmpIrisBase2
     Definition memGS_right : forall `{mG : memGS2 Σ}, mcMemGS Σ := @mc_ghGS2_right.
     Definition memGS2_memGS_left `{mG : memGS2 Σ} : RVPBASEl.memGS Σ := mG.
     Definition memGS2_memGS_right `{mG : memGS2 Σ} : RVPBASEr.memGS Σ := mG.
-    Definition mem_inv2 : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
+    Definition mem_state_interp2 : forall {Σ}, memGS2 Σ -> Memory -> Memory -> iProp Σ :=
       fun {Σ} hG μ1 μ2 =>
-        (RVPBASEl.mem_inv hG μ1 ∗ RVPBASEr.mem_inv hG μ2
+        (RVPBASEl.mem_state_interp hG μ1 ∗ RVPBASEr.mem_state_interp hG μ2
         )%I.
-    Lemma mem_inv2_mem_inv :
+    Lemma mem_state_interp2_mem_inv :
       forall `{mG : memGS2 Σ} (μ1 μ2 : Memory),
-        mem_inv2 mG μ1 μ2 ⊣⊢ RVPBASEl.mem_inv mG μ1 ∗ RVPBASEr.mem_inv mG μ2.
-    Proof. by unfold mem_inv2. Qed.
+        mem_state_interp2 mG μ1 μ2 ⊣⊢ RVPBASEl.mem_state_interp mG μ1 ∗ RVPBASEr.mem_state_interp mG μ2.
+    Proof. by unfold mem_state_interp2. Qed.
 
     Definition memGS2_gtGS2_left `{mG : memGS2 Σ} : traceG Trace Σ :=
       @mc_gtGS _ memGS_left.

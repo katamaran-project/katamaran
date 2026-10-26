@@ -31,7 +31,7 @@ From Katamaran Require Import
      Environment
      Iris.Base
      RiscvPmp.Machine
-     trace.
+     RiscvPmp.trace.
 From stdpp Require Import namespaces.
 Module ns := stdpp.namespaces.
 From iris Require Import
@@ -333,7 +333,7 @@ Module Type RiscvPmpIrisBase (Import leftOrRight : LeftOrRight)
       destruct leftOrRight; [done | apply bi.sep_comm].
     Qed.
 
-    Definition mem_inv : forall {Σ}, mcMemGS2 Σ -> Memory -> iProp Σ :=
+    Definition mem_state_interp : forall {Σ}, mcMemGS2 Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
                      ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝

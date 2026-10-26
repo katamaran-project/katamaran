@@ -618,8 +618,8 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
   Import TermNotations.
 
   Definition lemma_close_mmio_write (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write immm widthh) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
-       lemma_patterns        := [term_var "paddr"; term_var "w"];
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "r" :: ty_regno; "w" :: ty_word];
+       lemma_patterns        := [term_var "paddr"; term_var "r"];
        lemma_precondition    :=
         (term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∨
           ((term_val ty_xlenbits write_addr_adv) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
@@ -628,32 +628,18 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpSignature Ri
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
 
-  Definition lemma_close_mmio_write_mem (immm : bv 12) (widthh : WordWidth): SepLemma (close_mmio_write_mem immm widthh) :=
-    {| lemma_logic_variables := ["paddr" :: ty_xlenbits; "w_addr" :: ty_xlenbits; "w" :: ty_xlenbits];
-       lemma_patterns        := [term_var "paddr"; term_var "w_addr"];
-       lemma_precondition    :=
-        asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "w_addr"; term_var "w"]) ∗
-          ((term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∨
-             ((term_val ty_xlenbits write_addr_adv) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
-          (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42))));
-       lemma_postcondition   :=
-        asn.chunk (chunk_user (ptstomem bytes_per_word) [term_var "w_addr"; term_var "w"]) ∗
-        asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
-    |}.
-
    Definition LEnv : LemmaEnv :=
      fun Δ l =>
        match l with
-       | open_gprs                        => lemma_open_gprs
-       | close_gprs                       => lemma_close_gprs
-       | open_ptsto_instr                 => lemma_open_ptsto_instr
-       | close_ptsto_instr                => lemma_close_ptsto_instr
-       | open_pmp_entries                 => lemma_open_pmp_entries
-       | close_pmp_entries                => lemma_close_pmp_entries
-       | extract_pmp_ptsto bytes          => lemma_extract_pmp_ptsto bytes
-       | return_pmp_ptsto bytes           => lemma_return_pmp_ptsto bytes
-       | close_mmio_write immm widthh     => lemma_close_mmio_write immm widthh
-       | close_mmio_write_mem immm widthh => lemma_close_mmio_write_mem immm widthh
+       | open_gprs                    => lemma_open_gprs
+       | close_gprs                   => lemma_close_gprs
+       | open_ptsto_instr             => lemma_open_ptsto_instr
+       | close_ptsto_instr            => lemma_close_ptsto_instr
+       | open_pmp_entries             => lemma_open_pmp_entries
+       | close_pmp_entries            => lemma_close_pmp_entries
+       | extract_pmp_ptsto bytes      => lemma_extract_pmp_ptsto bytes
+       | return_pmp_ptsto bytes       => lemma_return_pmp_ptsto bytes
+       | close_mmio_write immm widthh => lemma_close_mmio_write immm widthh
       end.
 End RiscvPmpBlockVerifSpec.
 
@@ -887,20 +873,20 @@ Module Type RiscvPmpIrisInstanceWithContracts
       - (* old case *)
         iModIntro.
         iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
         iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
   Qed.
 
   Lemma fun_write_ram_works μ bytes paddr data memmap `{sailGS Σ} {w : bv (bytes * byte)} :
     map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
     interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ trace.tr_auth (memory_trace μ) ={⊤}=∗
-                                                                                                 mem_inv sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
+                                                                                                 mem_state_interp sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
   Proof.
     iRevert (data w paddr μ memmap).
     iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
       iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
     - iModIntro. iSplitL; last done.
-      now iApply (mem_inv_not_modified $! Hmap with "Hmem Htr").
+      now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr").
     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
        destruct (bv.appView byte (bytes * byte) data) as [bd data].
        destruct (bv.appView byte (bytes * byte) w) as [bw w].
@@ -930,8 +916,8 @@ Module Type RiscvPmpIrisInstanceWithContracts
   Lemma mmio_pred_cons {bytes : nat} t e: event_pred bytes e → mmio_pred bytes t → mmio_pred bytes (cons e t).
   Proof. now apply List.Forall_cons. Qed.
 
-  Lemma mmio_read_sound `{!sailGS Σ} (bytes : nat) :
-    TValidContractForeign (RiscvPmpSpecification.sep_contract_mmio_read bytes) (mmio_read bytes).
+  Lemma mmio_read_sound `{!sailGS Σ} `(H: restrict_bytes bytes) :
+    TValidContractForeign (RiscvPmpSpecification.sep_contract_mmio_read H) (mmio_read H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
     now iIntros "[%HFalse _]".
@@ -1015,7 +1001,7 @@ Module Type RiscvPmpIrisInstanceWithContracts
     iIntros (? ? ? Hf). iMod "Hclose" as "_".
     rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     destruct (pure_decode _); inversion Hdecode.
-    iPoseProof (mem_inv_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+    iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
     rewrite semTWP_val. now iFrame "Hregs Hmem".
   Qed.
 
@@ -1109,23 +1095,12 @@ Module Type RiscvPmpIrisInstanceWithContracts
     now iFrame.
   Qed.
 
-  Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth) :
+  Lemma close_mmio_write_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth):
     ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write imm width).
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     unfold interp_mmio_checked_write.
     iIntros "[[<- _] | ([<- _] & [-> _])]"; iPureIntro; intuition.
-    right.
-    split; auto.
-    destruct width; now compute.
-  Qed.
-
-  Lemma close_mmio_write_mem_sound `{sailGS Σ} (imm : bv 12) (width : WordWidth) :
-    ValidLemma (RiscvPmpBlockVerifSpec.lemma_close_mmio_write_mem imm width).
-  Proof.
-    intros ι; destruct_syminstance ι; cbn.
-    unfold interp_mmio_checked_write.
-    iIntros "($ & [[<- _] | ([<- _] & [-> _])])"; iPureIntro; intuition.
     right.
     split; auto.
     destruct width; now compute.
@@ -1153,7 +1128,6 @@ Module Type RiscvPmpIrisInstanceWithContracts
     - apply open_ptsto_instr_sound.
     - apply close_ptsto_instr_sound.
     - apply close_mmio_write_sound.
-    - apply close_mmio_write_mem_sound.
   Qed.
 
   Import RiscvPmpBlockVerifSpec.

@@ -49,6 +49,7 @@ From Katamaran Require Import
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Model
      RiscvPmp.ModelBinary
+     RiscvPmp.trace
      RiscvPmp.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
@@ -87,7 +88,7 @@ Module Type LoopVerification
   Import RiscvPmpProgramLogic.
 
   Section Loop.
-    Context `{sg : sailGS Σ}.
+    Context `{sg : sailGS Σ} {rG : trivGS Σ}.
     Definition step_sem_contract :=
       Eval simpl in ValidContractSemCurried fun_step sep_contract_step.
 

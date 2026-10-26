@@ -119,6 +119,7 @@ Module RiscvNotations.
   Notation "'hi'"           := "hi" : string_scope.
   Notation "'f'"            := "f" : string_scope.
   Notation "'w'"            := "w" : string_scope.
+  Notation "'r'"            := "r" : string_scope.
   Notation "'tvec'"         := "tvec" : string_scope.
   Notation "'epc'"          := "epc" : string_scope.
   Notation "'prev_priv'"    := "prev_priv" : string_scope.
@@ -236,7 +237,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Inductive FunX : PCtx -> Ty -> Set :=
   | read_ram (bytes : nat)                 : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
   | write_ram (bytes : nat)                : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
-  | mmio_read (bytes : nat)                : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
+  | mmio_read `(H: restrict_bytes bytes)   : FunX [paddr ∷ ty_xlenbits] (ty_bytes bytes)
   | mmio_write `(H: restrict_bytes bytes)  : FunX [paddr ∷ ty_xlenbits; data ∷ (ty_bytes bytes)] ty.bool
   | within_mmio `(H: restrict_bytes bytes) : FunX [paddr ∷ ty_xlenbits] ty.bool
   | decode                                 : FunX [bv ∷ ty_word] ty_ast
@@ -257,8 +258,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | return_pmp_ptsto  (bytes : nat) : Lem [paddr :: ty_xlenbits]
   | open_ptsto_instr                : Lem [paddr :: ty_xlenbits]
   | close_ptsto_instr               : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits]
-  | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; w :: ty_xlenbits] (* Statically known quantities; lemma is called in between instructions! *)
-  | close_mmio_write_mem (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; "w_addr" :: ty_xlenbits] (* Statically known quantities; lemma is called in between instructions! *)
+  | close_mmio_write (imm : Bitvector.bv.bv 12) (width : WordWidth) : Lem [paddr :: ty_xlenbits; r :: ty_regno] (* Statically known quantities; lemma is called in between instructions! *)
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -628,7 +628,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := stm_foreign (within_mmio H) [paddr] in
     if: tmp
     then
-      let: tmp := stm_foreign (mmio_read bytes) [paddr] in
+      let: tmp := stm_foreign (mmio_read H) [paddr] in
       stm_exp (exp_union (memory_op_result bytes) KMemValue tmp)
     else
       let: tmp := call within_phys_mem paddr (exp_int (Z.of_nat bytes)) in
@@ -1461,7 +1461,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ width addr));
     ForeignCall (write_ram width) [addr; data] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , @fun_write_ram μ width addr data , inr true);
-    ForeignCall (mmio_read width) [addr] res γ γ' μ μ' :=
+    ForeignCall (@mmio_read width H) [addr] res γ γ' μ μ' :=
       let (μupd,readv) := fun_read_mmio μ width addr in
       (γ' , μ' , res) = (γ , μupd , inr readv);
     ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=

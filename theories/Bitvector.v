@@ -114,6 +114,10 @@ Module bv.
     - now intros ->.
   Qed.
 
+  Lemma bin_eq_rec {n m} (H : n = m) (x : bv n) :
+    bv.bin (eq_rec n bv x m H) = bv.bin x.
+  Proof. now subst. Qed.
+
   Section Equality.
 
     Definition eqb {n : nat} (x y : bv n) : bool :=
@@ -371,6 +375,10 @@ Module bv.
           else mk (N.double bs) (wf_double n bs wf)
       end.
 
+    Lemma bin_cons n b (x : bv n) :
+      bin (cons b x) = (N.b2n b + 2 * bin x)%N.
+    Proof. destruct b, x; cbn; Lia.lia. Qed.
+
     Definition bv_case (P : forall n : nat, bv n -> Type) (PO : P O nil)
       (PS : forall n (b : bool) (x : bv n), P (S n) (cons b x)) :
       forall [n] (xs : bv n), P n xs :=
@@ -407,6 +415,11 @@ Module bv.
       (c : forall n, bool -> A n -> A (S n)) (n : A O) [m] (xs : bv m) : A m :=
       bv_case (fun k _ => A k) n
         (fun k b x => c k b (fold_right A c n x)) xs.
+
+    Lemma fold_right_cons {A : forall n : nat, Type} {c : forall n, bool -> A n -> A (S n)} {n : A O}
+      {m b} (xs : bv m) :
+      fold_right A c n (cons b xs) = c m b (fold_right A c n xs).
+    Proof. unfold fold_right. now rewrite bv_case_cons. Qed.
 
     Fixpoint fold_left {A : forall n : nat, Type}
       (c : forall n, A n -> bool -> A (S n)) (n : A O) [m] (xs : bv m) : A m :=
@@ -739,6 +752,17 @@ Module bv.
     (* Zero extension. Equally as awkward. *)
     Definition zext' {m} (v : bv m) n : bv (m + n) :=
       app v zero.
+
+    Lemma bin_zext' {m n} (x : bv m) :
+      bv.bin (zext' x n) = bv.bin x.
+    Proof.
+      unfold zext', bv.app.
+      induction x using bv.bv_rect; first auto.
+      rewrite fold_right_cons; cbn.
+      rewrite !bv.bin_cons.
+      now rewrite IHx.
+    Qed.
+
 
     Variant LeView (m : nat) : nat -> Set :=
       is_le k : LeView m (m + k).
@@ -1118,14 +1142,6 @@ Module bv.
 
   End Update.
 
-  Section Shift.
-    Definition shiftr {m n} (x : bv m) (y : bv n) : bv m :=
-      of_Z (Z.shiftr (unsigned x) (unsigned y)).
-
-    Definition shiftl {m n} (x : bv m) (y : bv n) : bv m :=
-      of_Z (Z.shiftl (unsigned x) (unsigned y)).
-  End Shift.
-
   Section EqMod2N.
     Definition eq2np (n : nat) := fun x y => trunc n x = trunc n y.
     #[global] Arguments eq2np n x y : simpl never.
@@ -1352,6 +1368,7 @@ Module bv.
       now intros x y <-.
     Qed.
   End EqMod2N.
+
   Section Arithmetic.
 
     Definition add {n} (x y : bv n) : bv n :=
@@ -2386,6 +2403,68 @@ Module bv.
         destruct n; cbn in *; Lia.lia.
     Qed.
   End DropTruncs.
+
+  Section Shift.
+    Definition shiftr {m n} (x : bv m) (y : bv n) : bv m :=
+      of_Z (Z.shiftr (unsigned x) (unsigned y)).
+
+    Definition shiftl {m n} (x : bv m) (y : bv n) : bv m :=
+      of_Z (Z.shiftl (unsigned x) (unsigned y)).
+
+    Lemma shiftr_zero: forall m  y (x : bv m),
+        @shiftr m y x (of_nat 0) =  x.
+    Proof. intros. unfold shiftr. rewrite Z.shiftr_0_r. apply of_Z_unsigned. Qed.
+
+    Lemma Z_shiftr_unsigned_bounds {m n} (x : bv m) (y : bv n) : (0 <= (Z.shiftr (@unsigned m x) (@unsigned n y)) < 2 ^ Z.of_nat (m))%Z.
+      Proof.
+        split.
+        { rewrite Z.shiftr_div_pow2. apply Z.div_pos. 2: apply Z.pow_pos_nonneg; try lia. all : try apply bv.unsigned_bounds. }
+        unfold Z.shiftr, Z.shiftl.
+        destruct (unsigned y) eqn: Y; simpl. { apply unsigned_bounds. }
+        - rewrite <- Pos.iter_swap_gen with (g := λ (x : bv m), (@shiftr m 1 x one)). apply unsigned_bounds.
+          intros. unfold shiftr. cbn. rewrite <- Z.div2_spec.
+          pose proof Z.div2_nonneg (unsigned a).
+          unfold unsigned. simpl.
+          rewrite to_N_truncz2. 2 : { apply H. apply unsigned_bounds. } rewrite truncn_idemp.
+          rewrite Z2N.inj_div2.
+          rewrite N2Z.id. rewrite <- N2Z.inj_div2. rewrite N2Z.inj_iff.
+          apply truncn_small. rewrite N.div2_div. apply N.Div0.div_lt_upper_bound.
+          pose proof @bv_is_wf m a.
+          transitivity (exp2 m); try lia.
+        - unfold unsigned in *. pose proof N2Z.is_nonneg (bin y). pose proof Pos2Z.neg_is_neg p. rewrite <- Y in H0.
+          apply Z.lt_gt in H0. contradiction.
+    Qed.
+
+    Lemma shiftr_cons {m n b} (xs : bv m) (y : bv n) : (N.succ (bin y) < exp2 n)%N ->
+      @shiftr (S m) n (cons b xs) (add one y) =
+        eq_rec _ bv (zext' (@shiftr m n xs y) 1) _ (Nat.add_1_r m).
+    Proof.
+      intros.
+      unfold shiftr.
+      rewrite unsigned_cons.
+      rewrite <-unsigned_succ_small, <-Z.add_1_l.
+      2: {  apply N2Z.inj_lt in H. rewrite N2Z.inj_succ in H.
+            rewrite N2Z.inj_pow in H. rewrite <-nat_N_Z. auto. }
+      rewrite <-Z.shiftr_shiftr.
+      2: { destruct y using bv_rect; unfold unsigned; simpl; try lia. }
+      rewrite <-Z.div2_spec.
+      rewrite Z.div2_div.
+      rewrite (Z.mul_comm 2 (unsigned xs)).
+      rewrite Z_div_plus_full ; last lia.
+      rewrite Z.b2z_div2, Z.add_0_l.
+      set (x := Z.shiftr (@unsigned m xs) (@unsigned n y)) in *.
+      apply bin_inj. rewrite bin_eq_rec. rewrite bin_zext'.
+      unfold shiftr in *.
+      simpl. clear b.
+      pose proof @Z_shiftr_unsigned_bounds m n xs y as [Zbl Zbr]; auto.
+      rewrite !to_N_truncz2; auto.
+      rewrite !truncn_idemp.
+      assert (N_Z_shiftr_bound: (Z.to_N x < exp2 m)%N). rewrite Z2N.inj_lt in Zbr; simpl; auto; try lia.
+      rewrite !truncn_small; auto.
+      transitivity (exp2 m); auto. unfold exp2. destruct m; simpl; try lia. rewrite Pos.pow_succ_r. lia.
+    Qed.
+
+  End Shift.
 
   Section Comparison.
     Lemma ule_nat_one_S : forall {w} (n : nat),
