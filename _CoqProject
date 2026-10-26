@@ -61,7 +61,7 @@ examples/GVT/IrisInstance.v
 examples/GVT/Model.v
 examples/GVT/LoopVerification.v
 examples/GVT/Spec.v
-examples/GVT/PartialVerifier.v
+examples/GVT/TotalVerifier.v
 examples/GVT/StopButtonUMode.v
 -R theories Katamaran
 test/Example.v
