@@ -80,54 +80,66 @@ Import RiscvPmpProgramLogic.
 Module ArchState.
   Import env.notations.
 
-  Record ArchState :=
-    mkArchState
-      { m          : Privilege
-      ; mtvec      : Xlenbits
-      ; stvec      : Xlenbits
+  Record MState :=
+    mkMState
+      { mtvec      : Xlenbits
       ; pmpentries : list (Pmpcfg_ent * Xlenbits)
       ; mpp        : Privilege
-      ; spp        : Privilege
-      ; pc         : Xlenbits
       ; mcause     : Xlenbits
       ; mscratch   : Xlenbits
       ; mepc       : Xlenbits
-      ; scause     : Xlenbits
-      ; sscratch   : Xlenbits
-      ; sepc       : Xlenbits
       ; mpie       : bool
-      ; spie       : bool
       ; mie        : bool
-      ; sie        : bool
       ; mideleg    : Minterrupts
       ; medeleg    : RMedeleg
       }.
 
+  Record SState :=
+    mkSState
+      { stvec    : Xlenbits
+      ; spp      : Privilege
+      ; scause   : Xlenbits
+      ; sscratch : Xlenbits
+      ; sepc     : Xlenbits
+      ; spie     : bool
+      ; sie      : bool
+      }.
+
+  Record ArchState :=
+    mkArchState
+      { m      : Privilege
+      ; mstate : MState
+      ; sstate : SState
+      ; pc     : Xlenbits
+      }.
+
   Definition archstate_valuation (archstate : ArchState) : Valuation (sep_contract_logic_variables sep_contract_step) :=
-    [env].["m"∷ty.enum privilege ↦ m archstate].["mtvec"∷ty.bvec 32 ↦ mtvec archstate]
-    .["stvec"∷ty.bvec 32 ↦ stvec archstate]
-    .["pmpentries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ pmpentries archstate]
-    .["mpp"∷ty.enum privilege ↦ mpp archstate].["spp"∷ty.enum privilege ↦ spp archstate]
-    .["pc"∷ty.bvec 32 ↦ pc archstate].["mcause"∷ty.bvec 32 ↦ mcause archstate]
-    .["mscratch"∷ty.bvec 32 ↦ mscratch archstate].["mepc"∷ty.bvec 32 ↦ mepc archstate]
-    .["scause"∷ty.bvec 32 ↦ scause archstate].["sscratch"∷ty.bvec 32 ↦ sscratch archstate]
-    .["sepc"∷ty.bvec 32 ↦ sepc archstate].["mpie"∷ty.bool ↦ mpie archstate] 
-    .["spie"∷ty.bool ↦ spie archstate].["mie"∷ty.bool ↦ mie archstate]
-    .["sie"∷ty.bool ↦ sie archstate]
-    .["mideleg"∷ty_Minterrupts ↦ mideleg archstate]
-    .["medeleg"∷ty_Medeleg ↦ medeleg archstate].
+    let ms := mstate archstate in
+    let ss := sstate archstate in
+    [env].["m"∷ty.enum privilege ↦ m archstate].["mtvec"∷ty.bvec 32 ↦ mtvec ms]
+    .["stvec"∷ty.bvec 32 ↦ stvec ss]
+    .["pmpentries"∷ty.list (ty.prod (ty.record rpmpcfg_ent) (ty.bvec 32)) ↦ pmpentries ms]
+    .["mpp"∷ty.enum privilege ↦ mpp ms].["spp"∷ty.enum privilege ↦ spp ss]
+    .["pc"∷ty.bvec 32 ↦ pc archstate].["mcause"∷ty.bvec 32 ↦ mcause ms]
+    .["mscratch"∷ty.bvec 32 ↦ mscratch ms].["mepc"∷ty.bvec 32 ↦ mepc ms]
+    .["scause"∷ty.bvec 32 ↦ scause ss].["sscratch"∷ty.bvec 32 ↦ sscratch ss]
+    .["sepc"∷ty.bvec 32 ↦ sepc ss].["mpie"∷ty.bool ↦ mpie ms]
+    .["spie"∷ty.bool ↦ spie ss].["mie"∷ty.bool ↦ mie ms]
+    .["sie"∷ty.bool ↦ sie ss]
+    .["mideleg"∷ty_Minterrupts ↦ mideleg ms]
+    .["medeleg"∷ty_Medeleg ↦ medeleg ms].
 
   Definition archstate_update_pc (archstate : ArchState) (pc' : Xlenbits) : ArchState :=
-    match archstate with
-    | mkArchState m mtvec stvec pmpentries mpp spp pc mcause mscratch mepc scause sscratch sepc mpie spie mie sie mideleg medeleg =>
-      mkArchState m mtvec stvec pmpentries mpp spp pc' mcause mscratch mepc scause sscratch sepc mpie spie mie sie mideleg medeleg
-    end.
+    mkArchState (m archstate) (mstate archstate) (sstate archstate) pc'.
+
+  Definition archstate_update_m (archstate : ArchState) (m' : Privilege) : ArchState :=
+    mkArchState m' (mstate archstate) (sstate archstate) (pc archstate).
 End ArchState.
 
 (* We only import the record type and the valuation conversion function.
    Record fields will need the qualified name, for example: ArchState.mepc to access
    the mepc value. This avoids naming conflicts with the registers. *)
-Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
+Import ArchState (ArchState, archstate_valuation, archstate_update_pc, archstate_update_m).
 
 Section Loop.
   Context `{sg : sailGS Σ} {rG : iostateG IOState Σ}.
@@ -159,23 +171,27 @@ Section Loop.
     (* TransitionTargets defines all targets which we can transition to during
        execution of the machine. These corresponds to the individual disjuncts
        of the postcondition of the step function. *)
-    Definition Disjunct := Assertion (ctx.snoc (sep_contract_logic_variables sep_contract_step) (sep_contract_result sep_contract_step∷ty.unit)).
-    Record Disjuncts := mkDisjuncts
-      { D_Execution : Disjunct
-      ; D_M_CSRMod  : Disjunct
-      ; D_S_CSRMod  : Disjunct
-      ; D_M_Trap    : Disjunct
-      ; D_S_Trap    : Disjunct
-      ; D_MRET      : Disjunct
-      ; D_SRET      : Disjunct
-      }.
+    Inductive TransitionTarget :=
+    | TT_Execution
+    | TT_M_CSRMod
+    | TT_M_Trap
+    | TT_MRET
+    | TT_SRET.
 
-    (* We define an extract function that returns the disjuncts, or
-       None in case the pattern used doesn't match. *)
-    Definition disjuncts : option Disjuncts :=
+    Definition Disjunct := Assertion (ctx.snoc (sep_contract_logic_variables sep_contract_step) (sep_contract_result sep_contract_step∷ty.unit)).
+
+    (* We define an extract function that returns the disjunct of every
+       transition target, or None in case the pattern used doesn't match. *)
+    Definition disjuncts : option (TransitionTarget -> Disjunct) :=
       match sep_contract_postcondition sep_contract_step with
-      | asn.or exe (asn.or m_csrmod (asn.or s_csrmod (asn.or m_trap (asn.or s_trap (asn.or mret sret))))) =>
-          Some (mkDisjuncts exe m_csrmod s_csrmod m_trap s_trap mret sret)
+      | asn.or exe (asn.or m_csrmod (asn.or m_trap (asn.or mret sret))) =>
+          Some (fun t => match t with
+                         | TT_Execution => exe
+                         | TT_M_CSRMod  => m_csrmod
+                         | TT_M_Trap    => m_trap
+                         | TT_MRET      => mret
+                         | TT_SRET      => sret
+                         end)
       | _ => None
       end.
 
@@ -185,38 +201,31 @@ Section Loop.
     Lemma extract_disjuncts_should_work : disjuncts ≠ None.
     Proof. by simpl. Qed.
 
-    (* We now define convenient names to use later in this file, without needing
-       to talk about disjunct anymore. Each definition takes some ArchState and
-       interprets the relevant disjunct with those archstate. In case the disjuncts
-       were not found, we simply use True. *)
-    Definition extract_disjunct (archstate : ArchState) (f : Disjuncts -> Disjunct) : iProp Σ :=
+    (* Interpret the disjunct of a transition target with some ArchState. In
+       case the disjuncts were not found, we simply use True. *)
+    Definition transition (t : TransitionTarget) (archstate : ArchState) : iProp Σ :=
       match disjuncts with
-      | Some ds => asn.interpret (f ds) (env.snoc (archstate_valuation archstate) (_∷ty.unit) tt)
+      | Some ds => asn.interpret (ds t) (env.snoc (archstate_valuation archstate) (_∷ty.unit) tt)
       | None    => True
       end.
 
     Definition Execution (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_Execution.
+      transition TT_Execution archstate.
     Definition M_CSRMod (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_M_CSRMod.
-    Definition S_CSRMod (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_S_CSRMod.
+      transition TT_M_CSRMod archstate.
     Definition M_Trap (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_M_Trap.
-    Definition S_Trap (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_S_Trap.
+      transition TT_M_Trap archstate.
     Definition MRET (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_MRET.
+      transition TT_MRET archstate.
     Definition SRET (archstate : ArchState) : iProp Σ :=
-      extract_disjunct archstate D_SRET.
+      transition TT_SRET archstate.
+
     (* Step_post is not a "TransitionTarget" but simply groups the possibilities
        back together using disjunction. *)
     Definition Step_post (archstate : ArchState) : iProp Σ :=
       Execution archstate
       ∨ M_CSRMod archstate
-      ∨ S_CSRMod archstate
       ∨ M_Trap archstate
-      ∨ S_Trap archstate
       ∨ MRET archstate
       ∨ SRET archstate.
 
@@ -266,9 +275,9 @@ Section Loop.
     iIntros (archstate) "H".
     iApply (semWP_mono with "[-]").
     iApply (valid_step_contract with "H").
-    cbn. unfold Step_post.
-    iIntros ([v|e] _); auto.
-  Qed.
+    iIntros ([[]|e] _); last auto.
+    iIntros "H". iExact "H".
+  Time Qed.
 
   Lemma init_model_iprop : ⊢ semTriple_init_model.
   Proof.
@@ -287,12 +296,56 @@ Section Loop.
     constructor.
   Qed.
 
+  Lemma transition_update_pc (t : TransitionTarget) (a : ArchState) (pc : Xlenbits) :
+    transition t (archstate_update_pc a pc) ⊣⊢ transition t a.
+  Proof.
+    destruct a as [m ? ? ?].
+    unfold archstate_update_pc, transition.
+    iSplit; destruct t; cbn; auto; destruct m; auto.
+  Qed.
+
+  Lemma M_CSRMod_machine (a : ArchState) :
+    M_CSRMod a ⊢ ⌜ArchState.m a = Machine⌝.
+  Proof.
+    destruct a.
+    unfold M_CSRMod, transition; cbn.
+    now iIntros "(_ & _ & _ & [%Heq _] & _)".
+  Qed.
+
+  Lemma MRET_machine (a : ArchState) :
+    MRET a ⊢ ⌜ArchState.m a = Machine⌝.
+  Proof.
+    destruct a.
+    unfold MRET, transition; cbn.
+    now iIntros "(_ & _ & _ & [%Heq _] & _)".
+  Qed.
+
+  Lemma SRET_machine (a : ArchState) :
+    SRET a ⊢ ⌜ArchState.m a = Machine⌝.
+  Proof.
+    destruct a.
+    unfold SRET, transition; cbn.
+    now iIntros "(_ & _ & _ & [%Heq _] & _)".
+  Qed.
+
+  (* For a trap from S/U-mode, it is irrelevant which of S/U-mode it was:
+     only the M-mode state matters (not the S-mode state or the pc). *)
+  Lemma M_Trap_SU_irrelevant (a a' : ArchState) :
+    ArchState.m a ≠ Machine -> ArchState.m a' ≠ Machine ->
+    ArchState.mstate a = ArchState.mstate a' ->
+    M_Trap a ⊢ M_Trap a'.
+  Proof.
+    destruct a as [m ? ? ?], a' as [m' ? ? ?]; cbn; intros Hm Hm' <-.
+    unfold M_Trap, transition; cbn.
+    iIntros "(Hpaa & H)".
+    iSplitL "Hpaa"; first by iApply (interp_pmp_addr_access_not_machine with "Hpaa").
+    destruct m, m'; try contradiction; auto.
+  Qed.
+
   Definition loop_pre (archstate : ArchState) : iProp Σ :=
     (Step_pre archstate ∗
      ▷ (M_CSRMod archstate -∗ WP_loop) ∗
-     ▷ (S_CSRMod archstate -∗ WP_loop) ∗
      ▷ (M_Trap archstate -∗ WP_loop) ∗
-     ▷ (S_Trap archstate -∗ WP_loop) ∗
      ▷ (MRET archstate -∗ WP_loop) ∗
      ▷ (SRET archstate -∗ WP_loop))%I.
 
@@ -305,31 +358,50 @@ Section Loop.
   Lemma valid_semTriple_loop : ⊢ semTriple_loop.
   Proof.
     iLöb as "H".
-    iIntros (archstate) "(HStep & HM_CSRMod & HS_CSRMod & HM_Trap & HS_Trap & HMRET & HSRET)".
-    unfold fun_loop.
+    iIntros (archstate) "(HStep & HM_CSRMod & HM_Trap & HMRET & HSRET)".
     iApply (semWP_seq (call step) (call loop)).
     iApply semWP_call_inline_later.
     iApply (semWP_mono with "[HStep]").
     iApply (valid_step_semTriple with "HStep").
     iModIntro.
     iIntros ([v|e] δ); last (iIntros "_"; by rewrite semWP_fail);
-      iIntros "[HRes | [HRes | [HRes | [HRes | [HRes | [HRes | HRes]]]]]]";
+      iIntros "[HRes | [HRes | [HRes | [HRes | HRes]]]]";
       iApply (semWP_call_inline loop _).
-    - iDestruct "HRes" as "(? & ? & ? & ? & ? & ? & (%i' & ? & ?) & ?)".
-      iApply ("H" $! (archstate_update_pc archstate i')).
-      unfold loop_pre, archstate_update_pc; destruct archstate; cbn.
-      now iFrame.
+    - iDestruct "HRes" as "(Hacc & Hgprs & Hpmp & Hmie & Hmip & (%i' & Hpc & Hnpc) & Hmtvec & Hmepc & Hmideleg & Hmedeleg & Hmscratch & Hmcause & [HRes | HRes])".
+      + (* Normal execution in M-mode (only pc changed) *)
+        iDestruct "HRes" as "([%Hm _] & Hcp & Hstvec & Hmstatus & Hsepc & Hsscratch & Hscause)".
+        cbn in Hm.
+        iApply ("H" $! (archstate_update_pc archstate i')).
+        unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
+        rewrite ?transition_update_pc.
+        iFrame "HM_CSRMod HM_Trap HMRET HSRET".
+        unfold Step_pre; cbn.
+        rewrite ?Hm.
+        now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". 
+      + (* S/U-mode: still in S/U-mode, the privilege and S-mode state may have changed *)
+        iDestruct "HRes" as "([%Hm _] & [%m' (Hcp & [%Hm' _] & [%stvec' Hstvec] & [%spp' [%spie' [%sie' Hmstatus]]] & [%sepc' Hsepc] & [%sscratch' Hsscratch] & [%scause' Hscause])])".
+        cbn in Hm, Hm'.
+        iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
+        destruct archstate as [? ms ? ?].
+        iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' spp' scause' sscratch' sepc' spie' sie') i')).
+        iSplitR "HM_CSRMod HM_Trap HMRET HSRET".
+        { unfold Step_pre; cbn.
+          now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+        iSplitL "HM_CSRMod".
+        { iIntros "!> H'". iDestruct (M_CSRMod_machine with "H'") as %Heq.
+          cbn in Heq. contradiction. }
+        iSplitL "HM_Trap".
+        { iIntros "!> H'". iApply "HM_Trap". by iApply (M_Trap_SU_irrelevant with "H'"). }
+        iSplitL "HMRET".
+        { iIntros "!> H'". iDestruct (MRET_machine with "H'") as %Heq.
+          cbn in Heq. contradiction. }
+        iIntros "!> H'". iDestruct (SRET_machine with "H'") as %Heq.
+        cbn in Heq. contradiction.
     - iSpecialize ("HM_CSRMod" with "HRes").
       iApply (semWP_mono with "HM_CSRMod").
       iIntros ([] ?); auto.
-    - iSpecialize ("HS_CSRMod" with "HRes").
-      iApply (semWP_mono with "HS_CSRMod").
-      iIntros ([] ?); auto.
     - iSpecialize ("HM_Trap" with "HRes").
       iApply (semWP_mono with "HM_Trap").
-      iIntros ([] ?); auto.
-    - iSpecialize ("HS_Trap" with "HRes").
-      iApply (semWP_mono with "HS_Trap").
       iIntros ([] ?); auto.
     - iSpecialize ("HMRET" with "HRes").
       iApply (semWP_mono with "HMRET").

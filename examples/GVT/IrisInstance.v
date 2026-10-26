@@ -374,6 +374,23 @@ Module RiscvPmpIrisInstancePredicates.
         [∗ list] a ∈ all_addrs,
           (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
 
+      Lemma interp_pmp_addr_access_s_u_eq (entries : list PmpEntryCfg) :
+        interp_pmp_addr_access entries User ⊣⊢ interp_pmp_addr_access entries Supervisor.
+      Proof.
+        iSplit; iApply big_sepL_mono; iIntros (k addr Hk) "H [%p %Hpmp]";
+          iApply "H"; iExists p; iPureIntro; unfold Pmp_access, Gen_Pmp_access in *.
+        - now rewrite pmp_check_aux_s_u_eq.
+        - now rewrite pmp_check_aux_s_u_eq in Hpmp.
+      Qed.
+
+      Lemma interp_pmp_addr_access_not_machine (entries : list PmpEntryCfg) (m m' : Privilege) :
+        m ≠ Machine -> m' ≠ Machine ->
+        interp_pmp_addr_access entries m ⊢ interp_pmp_addr_access entries m'.
+      Proof.
+        intros Hm Hm'; destruct m, m'; try congruence;
+          by rewrite ?interp_pmp_addr_access_s_u_eq.
+      Qed.
+
       Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
     End WithAddrs.
