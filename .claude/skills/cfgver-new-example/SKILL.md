@@ -106,6 +106,6 @@ a concrete-base VC is dead compile time.
 right after the code (the `countdown_mem` pattern). Since 2026-10-02 real
 POINTER ARGUMENTS work: use `gen_prog_contract` with `DPtr x` data specs and
 `GenProg.gen_prog_noninterferent` (worked example `Example/CheckScalar/
-CheckScalarPtr*.v`; see **cfgver-gen-contract**). Loops over arrays: the `arr`
+CheckScalarPtr*.v`; see **cfgver-gen-contract**). Loops over arrays: the `arrv`
 chunk + ghost-lemma catalogue (**cfgver-contracts**, "Arrays"), template
 `Example/Muladd/MuladdParamLoopN.v`. Data-memory proof plumbing: **cfgver-memory**.

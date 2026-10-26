@@ -93,22 +93,20 @@ Inductive Predicate : Set :=
 | ptstomem (bytes : nat)
 | ptstoinstr
 | inv_leakage
-(* PLAN-array-invariants (CFGVer): a run of word cells a, a+s, …, a+s(n-1)
-   with EXISTENTIAL values (`pub` = every value is SyncVal), arguments
-   [a; n; e], and e = a + s·n stated only in the Iris interpretation.  The
-   stride is a signed Coq-level Z (a downward walk is s = -4).  A cell is
-   w bytes wide, independently of the stride: w = |s| tiles without gaps
-   (words: w = 4, s = ±4; bytes: w = 1, s = ±1), |s| > w is an array of
-   structs read one field at a time.  Used only by CFGVer loop invariants,
-   through CFGVer-local ghost views. *)
-| arr (pub : bool) (w : nat) (s : Z)
-(* SPIKE (PLAN-rsa.md Phase 2, 2026-10-22): `arr` with its contents NAMED,
-   arguments [a; n; e; vs], vs the list of cell values (length n, stated in
-   the Iris interpretation).  No publicness flag: a value is public iff the
-   caller knows secLeak of it, and that fact survives a call by framing
-   when the callee's post names the same value term.  The string `t` is a
-   TAG (PLAN-arrv D14) that only tells same-shape arrays apart for the
-   executor's chunk matching; the interpretation ignores it. *)
+(* CFGVer arrays (PLAN-array-invariants, PLAN-arrv): a run of cells a, a+s,
+   …, a+s(n-1) whose contents are NAMED, arguments [a; n; e; vs], vs the
+   list of cell values; e = a + s·n and length vs = n are stated only in the
+   Iris interpretation.  The stride is a signed Coq-level Z (a downward walk
+   is s = -4).  A cell is w bytes wide, independently of the stride: w = |s|
+   tiles without gaps (words: w = 4, s = ±4; bytes: w = 1, s = ±1), |s| > w
+   is an array of structs read one field at a time.  No publicness flag: a
+   value is public iff the caller knows secLeak of it, and that fact
+   survives a call by framing when the callee's post names the same value
+   term.  The string `t` is a TAG (PLAN-arrv D14) that only tells same-shape
+   arrays apart for the executor's chunk matching; the interpretation
+   ignores it.  Used only by CFGVer, through CFGVer-local ghost views
+   (replaced `arr`, which had a `pub` flag and existential values; PLAN-arrv
+   Phase E). *)
 | arrv (w : nat) (s : Z) (t : string)
 .
 
@@ -343,7 +341,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
          Full rationale: CFGVer/PLAN-encoded-instr.md. *)
       | ptstoinstr                    => [ty_xlenbits; ty_word; ty_ast]
       | inv_leakage                   => ctx.nil
-      | arr _ _ _                     => [ty_xlenbits; ty_xlenbits; ty_xlenbits]
       | arrv w _ _                    => [ty_xlenbits; ty_xlenbits; ty_xlenbits; ty.list (ty.bvec (w * byte))]
       end.
 
@@ -363,7 +360,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptstomem _                 => false
         | ptstoinstr                 => false
         | inv_leakage                => true
-        | arr _ _ _                  => false
         | arrv _ _ _                 => false
         end
       }.
@@ -397,7 +393,6 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
          address syntax -- it asserts the address equation, which is
          satisfiable when the wrong cell has an unrelated base, so the wrong
          branch survives as an unresolved angelic disjunction.) *)
-      | arr _ _ _                 => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits] eq_refl)
       | arrv w _ _                => Some (MkPrecise [ty_xlenbits] [ty_xlenbits; ty_xlenbits; ty.list (ty.bvec (w * byte))] eq_refl)
       end.
 

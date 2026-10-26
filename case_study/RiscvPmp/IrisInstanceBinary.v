@@ -190,11 +190,12 @@ Module RiscvPmpIrisInstance2 <:
       (@interp_ptstomem 4 addr w ∗ ⌜ ty.liftUnOpRV pure_decode w = ty.liftUnOpRV inr instr ⌝ ∗ ⌜ secLeak w ⌝)%I.
     Arguments interp_ptsto_instr addr w instr : simpl never.
 
-    (* `arr pub w s [a; n; e]` (Sig.v; PLAN-array-invariants D4): the w-byte
-       cells a, a+s, …, a+s(n-1), each owned with an existential value
-       (SyncVal when `pub`) and IN RANGE, plus the end fact e = a + s·n --
-       the only place the pointer/count multiplication lives.  Start, count
-       and end must be PUBLIC: a NonSyncVal in any of them is False.  That is
+    (* `arrv w s t [a; n; e; vs]` (Sig.v; PLAN-array-invariants D4, PLAN-arrv):
+       the w-byte cells a, a+s, …, a+s(n-1), cell i owned with the i-th
+       element of each run's list and IN RANGE, plus the end fact
+       e = a + s·n -- the only place the pointer/count multiplication lives.
+       Start, count and end must be PUBLIC: a NonSyncVal in any of them is
+       False.  That is
        a CHOICE, not forced: interp_ptstomem is per run, so a secret shape
        could be stated as a left-run array ∗ a right-run array.  It loses
        little under this leakage model: a secret start makes every access
@@ -202,29 +203,12 @@ Module RiscvPmpIrisInstance2 <:
        walks it leak its exit (LeakPc), and every shape-changing ghost lemma
        needs a relop on the count, which is False on a NonSyncVal.  Untouched
        secret-shaped buffers can be framed as cells; constant-time code over a
-       public bound states the arr at that bound.  Revisit if the leakage
-       model stops observing addresses.  Consequence: owning an arr makes its
-       three arguments public, but the executor does not know it -- state
+       public bound states the array at that bound.  Revisit if the leakage
+       model stops observing addresses.  Consequence: owning an array makes
+       its three arguments public, but the executor does not know it -- state
        secLeakvar of the count in an invariant (PLAN-chunk-facts.md, revert).
        The shape is GenCompose.loop_reservoir's, so the ghost lemmas' proofs
-       are big_sepL cons/app steps. *)
-    (* a cell `width` bytes wide *)
-    Definition interp_arr_cell (pub : bool) (width : nat) (x : bv xlenbits) : iProp Σ :=
-      (⌜ (bv.unsigned x + Z.of_nat width <= Z.of_N maxAddr)%Z ⌝ ∗
-       ∃ w : RelVal (ty.bvec (width * byte)),
-         @interp_ptstomem width (SyncVal x) w ∗ ⌜ pub = true -> secLeak w ⌝)%I.
-
-    Definition interp_arr (pub : bool) (w : nat) (s : Z) (a n e : RelVal ty_xlenbits) : iProp Σ :=
-      match a, n, e with
-      | SyncVal a, SyncVal n, SyncVal e =>
-          (⌜ e = bv.add a (bv.mul (bv.of_Z s) n) ⌝ ∗
-           [∗ list] i ∈ seq 0 (N.to_nat (bv.bin n)),
-             interp_arr_cell pub w (bv.add a (bv.mul (bv.of_Z s) (bv.of_nat i))))%I
-      | _, _, _ => False%I
-      end.
-
-    (* `arrv w s [a; n; e; vs]` (Sig.v, SPIKE): interp_arr with the values
-       NAMED.  Cell i holds the i-th element of each run's list.  Only the
+       are big_sepL cons/app steps.  The TAG is ignored here.  Only the
        PROJECTIONS of vs are read, so the non-canonical NonSyncVal l l means
        the same as SyncVal l -- which is what makes the shape lemmas sound
        for any split of vs into terms (lifted cons is not injective).  The
@@ -315,7 +299,6 @@ Module RiscvPmpIrisInstance2 <:
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; w; instr ]   => interp_ptsto_instr addr w instr
     | inv_leakage              | _                    => interp_inv_constant_time
-    | arr pub w s              | [ a; n; e ]          => interp_arr pub w s a n e
     | arrv w s _               | [ a; n; e; vs ]      => interp_arrv w s a n e vs
     .
 

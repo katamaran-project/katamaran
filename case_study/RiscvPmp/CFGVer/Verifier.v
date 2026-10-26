@@ -92,7 +92,7 @@ Open Scope Z_scope.
 (* ========================================================================= *)
 (* CFGVer-LOCAL GHOST LEMMAS (PLAN-array-invariants D2).                    *)
 (*                                                                           *)
-(* A small catalogue of ghost lemmas over the `arr` chunk (Sig.v), each a    *)
+(* A small catalogue of ghost lemmas over the `arrv` chunk (Sig.v), each a   *)
 (* fixed "consume pre, produce post", proved valid ONCE on the heavy side    *)
 (* (clemSem), exactly as Katamaran's own `Lem`s are by lemSemCFGVerif.  They *)
 (* are declared HERE rather than as `Lem` constructors because `Lem` lives   *)
@@ -105,71 +105,9 @@ Open Scope Z_scope.
 (* only consume_chunk_angelic searches the heap (Monads.v).  The cell next  *)
 (* to it is then matched precisely at `a ± s`.                               *)
 (* ========================================================================= *)
-(* a power-of-two cell width for the regroup lemmas (clem_arr_to_bytes /
-   clem_arr_of_bytes): halfwords, words, doublewords *)
-Inductive RgWidth : Set := RgW2 | RgW4 | RgW8.
-Definition rg_sh (u : RgWidth) : nat := match u with RgW2 => 1 | RgW4 => 2 | RgW8 => 3 end.
-Definition rg_k (u : RgWidth) : nat := 2 ^ rg_sh u.
-(* the largest cell count whose byte count still fits 32 bits *)
-Definition rg_bound (u : RgWidth) : N := 2 ^ (32 - N.of_nat (rg_sh u)).
-
 Inductive CLem : Set :=
-  (* arr a n e ∗ n≠0 ⊢ cell a ∗ range a ∗ arr (a+s) (n-1) e *)
-  | clem_arr_take_first (pub : bool) (w : nat) (s : Z)
-  (* arr a n e ∗ cell (a-s) ⊢ arr (a-s) (n+1) e *)
-  | clem_arr_add_first (pub : bool) (w : nat) (s : Z)
-  (* arr a n e ∗ a≠e ⊢ arr a n e ∗ n≠0 -- a POINTER-bounded loop's latch
-     (bne a, e) as the count fact take_first needs *)
-  | clem_arr_nonempty (pub : bool) (w : nat) (s : Z)
-  (* ⊢ arr a 0 a, a UNCONSTRAINED -- the seed of an array built mid-program;
-     `a` is bound later by an angelic chunk match (PLAN-array-invariants
-     Phase 3, route (A)) *)
-  | clem_arr_empty (pub : bool) (w : nat) (s : Z)
-  (* arr a n e ∗ cell e ∗ range e ⊢ arr a (n+1) (e+s), the cell matched
-     ANGELICALLY: on a fresh seed it is what binds the address *)
-  | clem_arr_add_last (pub : bool) (w : nat) (s : Z)
-  (* arr a 0 e ⊢ ⌜a = e⌝ -- a caller's way to learn where an array ended:
-     a loop post names its exit pointer existentially, and the empty
-     remainder's start/end are the only link to the caller's addresses *)
-  | clem_arr_empty_elim (pub : bool) (w : nat) (s : Z)
-  (* arr a1 n e1 ∗ arr a2 n e2 ∗ a1=e1 ⊢ both ∗ ⌜a2 = e2⌝ -- two arrays of
-     the same stride and the SAME count move in lockstep: a pointer-bounded
-     loop's latch array ending at its end tells the caller where the OTHER
-     pointer ended (s·n = 0 carries over) *)
-  | clem_arr_lockstep (pub1 pub2 : bool) (w : nat) (s : Z)
-  (* arr a n e ⊢ True -- drop a spent array (affine), so a later loop's
-     angelic array match on the same predicate has one candidate *)
-  | clem_arr_drop (pub : bool) (w : nat) (s : Z)
-  (* arr a n e ∗ n≠0 ⊢ cell (e-s) ∗ range (e-s) ∗ arr a (n-1) (e-s) --
-     take_first at the OTHER end, so an array grown by add_first can hand
-     back its last cells without being rebuilt in the other direction *)
-  | clem_arr_take_last (pub : bool) (w : nat) (s : Z)
-  (* arr s a n e ⊢ arr (-s) (e-s) n (a-s) -- the same cells walked the
-     other way: a loop's DONE array (grown by add_first at stride -s) is the
-     next loop's source, which walks at stride s *)
-  | clem_arr_flip (pub : bool) (w : nat) (s : Z)
-  (* arr a n e ∗ k ≤u n ⊢ arr a k (a + s·k) ∗ arr (a + s·k) (n - k) e -- split
-     at a CONSTANT index k: a header, a fixed field, the cell an access at a
-     known offset needs (take_first on the second part then hands it out) *)
-  | clem_arr_split (pub : bool) (w : nat) (s : Z) (k : N)
-  (* arr a n e ∗ arr e n2 e2 ∗ n ≤u n + n2 ⊢ arr a (n + n2) e2 -- two
-     ADJACENT arrays as one; the second is matched precisely at the first's
-     end, so the join is deterministic *)
-  | clem_arr_join (pub : bool) (w : nat) (s : Z)
-  (* arr pub 4 4 a n e ∗ n <u 2^30 ⊢ arr pub 1 1 a (4·n) e -- a word array
-     read byte by byte (access width below cell width); the general k·w ⇄ w
-     regroup is open (PLAN-general-endtoend.md B4) *)
-  | clem_arr_bytes_of_words (pub : bool)
-  (* arr pub k k a n e ∗ n <u 2^32/k ⊢ arr pub 1 1 a (k·n) e, k = rg_k u: any
-     power-of-two cell array read byte by byte (bytes_of_words is u = RgW4) *)
-  | clem_arr_to_bytes (pub : bool) (u : RgWidth)
-  (* arr pub 1 1 a m e ⊢ arr pub k k a (m >> sh) e' ∗ arr pub 1 1 e' (m & (k-1)) e,
-     e' = a + k·(m >> sh): bytes regrouped into k-byte cells, the leftover
-     bytes kept as their own array (empty when k divides m).  No side
-     condition.  Halfwords from bytes: u = RgW2 *)
-  | clem_arr_of_bytes (pub : bool) (u : RgWidth)
-  (* SPIKE (PLAN-rsa.md Phase 2): the same shapes for `arrv`, the array whose
-     contents are NAMED (Sig.v).  Lifted cons is not injective on RelVal, so
+  (* The array whose contents are NAMED (`arrv`, Sig.v; PLAN-rsa.md Phase 2,
+     PLAN-arrv; it replaced `arr`).  Lifted cons is not injective on RelVal, so
      taking a cell comes in two forms: by EQUATION for a value that is a
      variable (a loop's remainder), by PATTERN for one that is syntactically
      a cons (a caller's own array handed back).  Every arrv lemma names the
@@ -184,7 +122,7 @@ Inductive CLem : Set :=
   | clem_arrv_add_first (w : nat) (s : Z) (t : string)
   (* arrv a n e vs ∗ e ↦ₘ x ∗ range e ⊢ arrv a (n+1) (e+s) (vs ++ [x]) *)
   | clem_arrv_add_last (w : nat) (s : Z) (t : string)
-  (* PLAN-arrv Phase A: the rest of the arr catalogue with values.  None
+  (* PLAN-arrv Phase A: the rest of the catalogue.  None
      needs a publicness variant: `secLeak vs` is framed, and an equation
      `vs = t` hands it to t's leaves (lifted ops are SyncVal iff all their
      arguments are; PLAN-arrv §1.2). *)
@@ -224,34 +162,19 @@ Inductive CLem : Set :=
      without it k could be length v + 2^30 *)
   | clem_arrv_of_bytes (t : string).
 
-Definition clem_ctx : LCtx :=
-  ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits].
-
 Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
 
 (* the value type of a w-byte cell *)
 Definition clem_cell_ty (w : nat) : Ty := ty.bvec (w * byte).
 
-(* ∃ v, x ↦ₘ[w] v  (∗ secLeak v when pub), over clem_ctx *)
-Definition clem_cell (pub : bool) (w : nat)
-    (x : Term (clem_ctx ▻ "w"∷clem_cell_ty w) ty_xlenbits) : Assertion clem_ctx :=
-  asn.exist "w" (clem_cell_ty w)
-    (asn.sep (asn.chunk (chunk_user (ptstomem w) [x; term_var "w"]))
-             (if pub then asn.formula (formula_secLeak (term_var "w"))
-              else asn.formula formula_true)).
-Arguments clem_cell pub w x : clear implicits.
-
 (* the cell at x is in the data address range: unsigned x + w ≤ maxAddr.
-   Every arr cell carries it (IrisInstanceBinary.interp_arr_cell), so a take
+   Every array cell carries it (IrisInstanceBinary.interp_arrv), so a take
    hands it out and an add must be given it. *)
 Definition clem_range {Σ} (w : nat) (x : Term Σ ty_xlenbits) : Assertion Σ :=
   asn.formula (formula_relop bop.le
     (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int (Z.of_nat w)))
     (term_val ty.int (Z.of_N maxAddr))).
-
-Definition clem_arr {Σ} (pub : bool) (w : nat) (s : Z) (a n e : Term Σ ty_xlenbits) : Assertion Σ :=
-  asn.chunk (chunk_user (arr pub w s) [a; n; e]).
 
 (* arrv's value type, its lemma context, and a points-to with a NAMED value *)
 Definition clemv_ty (w : nat) : Ty := ty.list (clem_cell_ty w).
@@ -276,133 +199,8 @@ Arguments clem_arrv {Σ} w s t a n e vs.
 Arguments clem_arrv_angelic {Σ} w s t a n e vs.
 Arguments clem_ptsto {Σ} w x v.
 
-Definition clem_arr_angelic (pub : bool) (w : nat) (s : Z) : Assertion clem_ctx :=
-  asn.chunk_angelic (chunk_user (arr pub w s)
-    [term_var "a"; term_var "n"; term_var "e"]).
-
 Definition clem_lemma (k : CLem) : Lemma [ctx] :=
   match k with
-  | clem_arr_take_first pub w s =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub w s)
-           (asn.formula (formula_relop bop.neq (term_var "n")
-                           (term_val ty_xlenbits bv.zero))))
-        (asn.sep (clem_cell pub w (term_var "a"))
-           (asn.sep (clem_range w (term_var "a"))
-              (clem_arr pub w s (clem_off (term_var "a") s)
-                 (clem_off (term_var "n") (-1)) (term_var "e"))))
-  | clem_arr_add_first pub w s =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub w s)
-           (asn.sep (clem_cell pub w (clem_off (term_var "a") (- s)))
-              (clem_range w (clem_off (term_var "a") (- s)))))
-        (clem_arr pub w s (clem_off (term_var "a") (- s))
-           (clem_off (term_var "n") 1) (term_var "e"))
-  | clem_arr_nonempty pub w s =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub w s)
-           (asn.formula (formula_relop bop.neq (term_var "a") (term_var "e"))))
-        (asn.sep (clem_arr pub w s (term_var "a") (term_var "n") (term_var "e"))
-           (asn.formula (formula_relop bop.neq (term_var "n")
-                           (term_val ty_xlenbits bv.zero))))
-  | clem_arr_empty pub w s =>
-      (* secLeak a is REQUIRED, not decoration: ValidLemma quantifies over
-         every valuation, and arr is False at a NonSyncVal address, so
-         `⊢ arr a 0 a` alone is not a valid lemma (caught by its soundness
-         proof, not by any VC). *)
-      MkLemma [ctx] ["a"∷ty_xlenbits] [env]
-        (asn.formula (formula_secLeak (term_var "a")))
-        (clem_arr pub w s (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a"))
-  | clem_arr_add_last pub w s =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub w s)
-           (asn.sep
-              (asn.exist "w" (clem_cell_ty w)
-                 (asn.sep (asn.chunk_angelic (chunk_user (ptstomem w)
-                                               [term_var "e"; term_var "w"]))
-                          (if pub then asn.formula (formula_secLeak (term_var "w"))
-                           else asn.formula formula_true)))
-              (clem_range w (term_var "e"))))
-        (clem_arr pub w s (term_var "a") (clem_off (term_var "n") 1)
-           (clem_off (term_var "e") s))
-  | clem_arr_empty_elim pub w s =>
-      MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits] [env]
-        (asn.chunk_angelic (chunk_user (arr pub w s)
-           [term_var "a"; term_val ty_xlenbits bv.zero; term_var "e"]))
-        (asn.formula (formula_relop bop.eq (term_var "a") (term_var "e")))
-  | clem_arr_lockstep pub1 pub2 w s =>
-      MkLemma [ctx]
-        ["a1"∷ty_xlenbits; "n"∷ty_xlenbits; "e1"∷ty_xlenbits;
-         "a2"∷ty_xlenbits; "e2"∷ty_xlenbits] [env]
-        (asn.sep (asn.chunk_angelic (chunk_user (arr pub1 w s)
-                    [term_var "a1"; term_var "n"; term_var "e1"]))
-           (asn.sep (asn.chunk_angelic (chunk_user (arr pub2 w s)
-                       [term_var "a2"; term_var "n"; term_var "e2"]))
-              (asn.formula (formula_relop bop.eq (term_var "a1") (term_var "e1")))))
-        (asn.sep (clem_arr pub1 w s (term_var "a1") (term_var "n") (term_var "e1"))
-           (asn.sep (clem_arr pub2 w s (term_var "a2") (term_var "n") (term_var "e2"))
-              (asn.formula (formula_relop bop.eq (term_var "a2") (term_var "e2")))))
-  | clem_arr_drop pub w s =>
-      MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub w s) (asn.formula formula_true)
-  | clem_arr_take_last pub w s =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub w s)
-           (asn.formula (formula_relop bop.neq (term_var "n")
-                           (term_val ty_xlenbits bv.zero))))
-        (asn.sep (clem_cell pub w (clem_off (term_var "e") (- s)))
-           (asn.sep (clem_range w (clem_off (term_var "e") (- s)))
-              (clem_arr pub w s (term_var "a") (clem_off (term_var "n") (-1))
-                 (clem_off (term_var "e") (- s)))))
-  | clem_arr_flip pub w s =>
-      MkLemma [ctx] clem_ctx [env] (clem_arr_angelic pub w s)
-        (clem_arr pub w (- s) (clem_off (term_var "e") (- s)) (term_var "n")
-           (clem_off (term_var "a") (- s)))
-  | clem_arr_split pub w s k =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub w s)
-           (asn.formula (formula_relop bop.bvule (term_val ty_xlenbits (bv.of_N k)) (term_var "n"))))
-        (asn.sep (clem_arr pub w s (term_var "a") (term_val ty_xlenbits (bv.of_N k))
-                    (clem_off (term_var "a") (s * Z.of_N k)))
-           (clem_arr pub w s (clem_off (term_var "a") (s * Z.of_N k))
-              (clem_off (term_var "n") (- Z.of_N k)) (term_var "e")))
-  | clem_arr_to_bytes pub u =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub (rg_k u) (Z.of_nat (rg_k u)))
-           (asn.formula (formula_relop bop.bvult (term_var "n")
-              (term_val ty_xlenbits (bv.of_N (rg_bound u))))))
-        (clem_arr pub 1 1 (term_var "a")
-           (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N (N.of_nat (rg_k u)))) (term_var "n"))
-           (term_var "e"))
-  | clem_arr_of_bytes pub u =>
-      let q := term_binop bop.shiftr (term_var "n")
-                 (term_val (ty.bvec 5) (bv.of_N (N.of_nat (rg_sh u)))) in
-      let e' := term_binop bop.bvadd (term_var "a")
-                  (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_Z (Z.of_nat (rg_k u)))) q) in
-      MkLemma [ctx] clem_ctx [env]
-        (clem_arr_angelic pub 1 1)
-        (asn.sep (clem_arr pub (rg_k u) (Z.of_nat (rg_k u)) (term_var "a") q e')
-           (clem_arr pub 1 1 e'
-              (term_binop bop.bvand (term_var "n")
-                 (term_val ty_xlenbits (bv.of_N (2 ^ N.of_nat (rg_sh u) - 1))))
-              (term_var "e")))
-  | clem_arr_bytes_of_words pub =>
-      MkLemma [ctx] clem_ctx [env]
-        (asn.sep (clem_arr_angelic pub 4 4)
-           (asn.formula (formula_relop bop.bvult (term_var "n")
-              (term_val ty_xlenbits (bv.of_N 0x40000000)))))
-        (clem_arr pub 1 1 (term_var "a")
-           (term_binop bop.bvmul (term_val ty_xlenbits (bv.of_N 4)) (term_var "n")) (term_var "e"))
-  | clem_arr_join pub w s =>
-      MkLemma [ctx]
-        ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "n2"∷ty_xlenbits; "e2"∷ty_xlenbits] [env]
-        (asn.sep (asn.chunk_angelic (chunk_user (arr pub w s)
-                    [term_var "a"; term_var "n"; term_var "e"]))
-           (asn.sep (asn.chunk (chunk_user (arr pub w s)
-                       [term_var "e"; term_var "n2"; term_var "e2"]))
-              (asn.formula (formula_relop bop.bvule (term_var "n")
-                 (term_binop bop.bvadd (term_var "n") (term_var "n2"))))))
-        (clem_arr pub w s (term_var "a") (term_binop bop.bvadd (term_var "n") (term_var "n2"))
-           (term_var "e2"))
   | clem_arrv_take_first w s t =>
       MkLemma [ctx] (clemv_ctx w) [env]
         (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
@@ -457,8 +255,7 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_nonzero (term_var "n")))
   | clem_arrv_empty w s t =>
-      (* secLeak a REQUIRED, as for clem_arr_empty: arrv is False at a
-         NonSyncVal address *)
+      (* secLeak a REQUIRED: arrv is False at a NonSyncVal address *)
       MkLemma [ctx] ["a"∷ty_xlenbits] [env]
         (asn.formula (formula_secLeak (term_var "a")))
         (clem_arrv w s t (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")

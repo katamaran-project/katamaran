@@ -139,7 +139,7 @@ Definition build_i : list Annot :=
 (* after loop L, before loop L': drop L's two empty sources, turn L's done
    arrays around (L''s sources), and seed L''s done arrays *)
 (* The n-only loop posts state BOTH pointers (end - 4c, c = 0), so the old
-   clem_arr_lockstep step (learn where the other pointer ended) is gone. *)
+   lockstep step (learn where the other pointer ended) is gone. *)
 Definition hand_over (L L' : LoopN) : list Annot :=
   [ cl (clem_arrv_drop 4 4 (ln_tm L)); cl (clem_arrv_drop 4 4 (ln_tx L))
   ; cl (clem_arrv_flip 4 (-4) (ln_tdm L)); cl (clem_arrv_flip 4 (-4) (ln_tdx L))
