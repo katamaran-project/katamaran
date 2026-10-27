@@ -109,6 +109,7 @@ case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeArrv.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemcpy.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemset.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemmove.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopy.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamInstrs.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop1.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop2.v

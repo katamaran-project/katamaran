@@ -167,15 +167,20 @@ Inductive CLem : Set :=
      skips the loop it is meant for still sits at a known address. *)
   | clem_arrv_empty_at (w : nat) (s : Z) (t t' : string)
   (* PLAN-rsa O4 (an AD HOC re-synchronisation, Emiel 2026-10-27):
-       A0 ↦ m ∗ b ↦ₘ u ∗ a ↦ₘ v ∗ ⌜v = clem_mux_byte u m⌝ ⊢ A0 ↦ m ∗ b ↦ₘ u ∗ a ↦ₘ u
-     for byte cells.  clem_mux_byte u m is EXACTLY what br_ccopy's body
+       A0 ↦ m ∗ arrv t' b n' e' (u :: rs) ∗ arrv t a n e (v :: rd)
+         ∗ ⌜v = clem_mux_byte u m⌝
+       ⊢ A0 ↦ m ∗ arrv t' b n' e' (u :: rs) ∗ arrv t a n e (u :: rd)
+     for byte arrays.  clem_mux_byte u m is EXACTLY what br_ccopy's body
      stores when its source and destination byte are the same term u
      (`((u ^ u) & m) ^ u`, zero-extended and cut back).  Under a secret m
      that term is a NonSyncVal with equal projections; memory reads only
-     the projections, so the cell may hold u instead.  No rewrite could do
+     the projections, so the head may be u instead.  No rewrite could do
      this (it would turn NonSyncVal into SyncVal under ≡).  u is bound by
-     the TWIN cell b (the solver does not decompose xor/and equations). *)
-  | clem_resync_mux
+     the TWIN array t' and both heads by PATTERN, the tags pick the arrays:
+     deterministic (a cell-level version matching both cells angelically
+     made 64 candidates per use that the solver cannot refute, and four
+     uses never finished vm_compute). *)
+  | clem_arrv_resync_head (t t' : string)
   (* PLAN-rsa O4: take_cons OR take_first, chosen ANGELICALLY by a lemma
      boolean b (the executor resolves the match on an unbound angelic bool,
      probe 2026-10-27).  For a loop whose remainder is a syntactic cons in
@@ -221,7 +226,7 @@ Arguments clem_arrv {Σ} w s t a n e vs.
 Arguments clem_arrv_angelic {Σ} w s t a n e vs.
 Arguments clem_ptsto {Σ} w x v.
 (* what br_ccopy's body (lbu x; lbu y; xor; and m; xor; sb) stores when its
-   two bytes are the same term u -- matched SYNTACTICALLY by clem_resync_mux
+   two bytes are the same term u -- matched SYNTACTICALLY by clem_arrv_resync_head
    (checked against the executor's own term: Example/Rsa/RsaCcopy.v) *)
 Definition clem_mux_byte {Σ} (u : Term Σ (clem_cell_ty 1)) (m : Term Σ ty_xlenbits)
     : Term Σ (clem_cell_ty 1) :=
@@ -368,17 +373,23 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_arrv w s t' (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
               (term_val (clemv_ty w) nil)))
-  | clem_resync_mux =>
+  | clem_arrv_resync_head t t' =>
       MkLemma [ctx]
-        ["m"∷ty_xlenbits; "b"∷ty_xlenbits; "u"∷clem_cell_ty 1; "a"∷ty_xlenbits; "v"∷clem_cell_ty 1] [env]
+        ["m"∷ty_xlenbits; "b"∷ty_xlenbits; "n'"∷ty_xlenbits; "e'"∷ty_xlenbits;
+         "u"∷clem_cell_ty 1; "rs"∷clemv_ty 1;
+         "a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "v"∷clem_cell_ty 1; "rd"∷clemv_ty 1] [env]
         (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
-           (asn.sep (asn.chunk_angelic (chunk_user (ptstomem 1) [term_var "b"; term_var "u"]))
-              (asn.sep (asn.chunk_angelic (chunk_user (ptstomem 1) [term_var "a"; term_var "v"]))
+           (asn.sep (clem_arrv_angelic 1 1 t' (term_var "b") (term_var "n'") (term_var "e'")
+                       (term_binop bop.cons (term_var "u") (term_var "rs")))
+              (asn.sep (clem_arrv_angelic 1 1 t (term_var "a") (term_var "n") (term_var "e")
+                          (term_binop bop.cons (term_var "v") (term_var "rd")))
                  (asn.formula (formula_propeq (term_var "v")
                     (clem_mux_byte (term_var "u") (term_var "m")))))))
         (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
-           (asn.sep (clem_ptsto 1 (term_var "b") (term_var "u"))
-              (clem_ptsto 1 (term_var "a") (term_var "u"))))
+           (asn.sep (clem_arrv 1 1 t' (term_var "b") (term_var "n'") (term_var "e'")
+                       (term_binop bop.cons (term_var "u") (term_var "rs")))
+              (clem_arrv 1 1 t (term_var "a") (term_var "n") (term_var "e")
+                 (term_binop bop.cons (term_var "u") (term_var "rd")))))
   | clem_arrv_take_any w s t =>
       MkLemma [ctx] (clemv_ctx w ▻ "b"∷ty.bool ▻ "x"∷clem_cell_ty w ▻ "r"∷clemv_ty w) [env]
         (asn.match_bool (term_var "b")

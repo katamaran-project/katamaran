@@ -18,7 +18,7 @@
 (* rest`); the loop invariant tracks the header phase explicitly (one        *)
 (* disjunct per header byte, k = 0..3, the cells as cons lists, plus the     *)
 (* limb phase), so the written header bytes are syntactically                *)
-(* clem_mux_byte h_k m; and before the ret the ghost clem_resync_mux puts    *)
+(* clem_mux_byte h_k m; and before the ret clem_arrv_resync_head puts h_k *)
 (* h_k back in each (memory reads only the two projections, which are equal *)
 (* there).  The ghosts in the loop body are the same in every phase.         *)
 (*                                                                           *)
@@ -43,23 +43,66 @@ From Coq Require Import ZArith Lia.
 Lemma rv_app_nil_l {σ} (v : RelVal (ty.list σ)) : v = bop.evalRel bop.append (ty.SyncVal nil) v.
 Proof. destruct v; reflexivity. Qed.
 
+Ltac bv_lin_rw_cc :=
+  repeat first
+    [ rewrite bv.unsigned_add | rewrite bv.unsigned_sub | rewrite bv.unsigned_negate
+    | rewrite bv.unsigned_mul | rewrite unsigned_shiftl_c | rewrite unsigned_shiftr_c
+    | rewrite sext_id32 ].
+Ltac bv_lin_rw_cc_in H :=
+  repeat first
+    [ rewrite bv.unsigned_add in H | rewrite bv.unsigned_sub in H | rewrite bv.unsigned_negate in H
+    | rewrite bv.unsigned_mul in H | rewrite unsigned_shiftl_c in H | rewrite unsigned_shiftr_c in H
+    | rewrite sext_id32 in H ].
+
+(* MuladdParamClose.bv_lin with subtraction and negation (the limb phase's
+   addresses are END - c) *)
 Ltac bv_lin_cc :=
-  first
-    [ bv_lin
-    | apply bv.unsigned_inj;
-      repeat first [ rewrite bv.unsigned_add | rewrite bv.unsigned_sub
-                   | rewrite bv.unsigned_negate | rewrite bv.unsigned_mul ];
-      unfold bv.truncz;
-      repeat match goal with x : bv _ |- _ =>
-        lazymatch goal with _ : (0 <= bv.unsigned x < _)%Z |- _ => fail
-                          | _ => pose proof (bv.unsigned_bounds x) end end;
-      unfold bv.unsigned in *; cbn [bv.bin] in *; bv_consts; cbn [Z.of_N] in *;
-      Z.to_euclidean_division_equations; lia ].
+  bv_rel_to_Z;
+  try (apply bv.unsigned_inj);
+  try (match goal with |- _ <> _ => let E := fresh "E" in intro E; apply (f_equal bv.unsigned) in E end);
+  repeat match goal with
+  | H : @eq (bv ?n) ?a ?b |- _ =>
+      apply (f_equal bv.unsigned) in H; revert H
+  | H : @eq (bv ?n) ?a ?b -> False |- _ =>
+      let H' := fresh "Hne" in
+      pose proof (fun E => H (bv.unsigned_inj a b E)) as H'; clear H; revert H'
+  | H : ~ (@eq (bv ?n) ?a ?b) |- _ =>
+      let H' := fresh "Hne" in
+      pose proof (fun E => H (bv.unsigned_inj a b E)) as H'; clear H; revert H'
+  end; intros;
+  bv_lin_rw_cc;
+  repeat match goal with H : _ |- _ => progress (bv_lin_rw_cc_in H) end;
+  unfold bv.truncz, bv.ult, bv.ule in *;
+  repeat match goal with x : bv _ |- _ =>
+    lazymatch goal with _ : (0 <= bv.unsigned x < _)%Z |- _ => fail
+                      | _ => pose proof (bv.unsigned_bounds x) end end;
+  unfold bv.unsigned in *; cbn [bv.bin] in *; bv_consts; cbn [Z.of_N] in *;
+  Z.to_euclidean_division_equations; lia.
+
+(* MuladdParamClose.rv_leaf with bv_lin_cc, bv.sub/bv.negate kept folded *)
+Ltac rv_leaf_core :=
+  cbn -[Erasure.inst_symprop] in *;
+  repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
+    is_var v; destruct v; [|destruct H] end;
+  cbn -[Erasure.inst_symprop bv.add bv.mul bv.sub bv.negate bv.shiftl bv.shiftr bv.land bv.sext
+        bv.unsigned bv.of_N bv.ult bv.ule] in *;
+  first [ exact I
+        | lazymatch goal with
+          | |- RiscvPmpSignature.secLeak ?v =>
+              is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); exact I
+          end
+        | assumption | reflexivity | (f_equal; bv_lin_cc) | bv_lin_cc
+        | (exfalso; bv_lin_cc) ].
 
 Ltac rv_leaf_cc :=
   first
-    [ rv_leaf
+    [ rv_leaf_core
     | apply rv_app_nil_l
+    (* a value fixed by an equation in the context (the loop's `sl = sd ++
+       sr`): substitute it first *)
+    | (cbn -[Erasure.inst_symprop] in *;
+       progress (repeat match goal with H : ?v = _ |- _ => is_var v; subst v end);
+       first [ reflexivity | rv_leaf_core ])
     (* only an evar-free equation, splitting only the values IN it: on a
        wrong angelic branch's leaf this would otherwise split every value in
        scope (2^k), measured as a >3x slowdown before this guard *)
@@ -67,10 +110,13 @@ Ltac rv_leaf_cc :=
        lazymatch goal with |- @eq (RelVal _) ?l ?r =>
          tryif has_evar l then fail else tryif has_evar r then fail else idtac end;
        repeat match goal with |- context [?v] =>
-         is_var v; lazymatch type of v with RelVal (ty.bvec _) => destruct v end end;
+         is_var v; lazymatch type of v with RelVal _ => destruct v end end;
        cbn -[Erasure.inst_symprop bv.add bv.mul bv.sub bv.negate bv.shiftl bv.shiftr bv.land
-             bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
-       f_equal; bv_lin_cc) ].
+             bv.sext bv.unsigned bv.of_N bv.ult bv.ule app] in *;
+       f_equal;
+       first [ bv_lin_cc
+             (* a list identity (the remainder's value): associativity *)
+             | (repeat rewrite <- List.app_assoc; reflexivity) ]) ].
 
 Ltac mb_search_cc :=
   lazymatch goal with
@@ -87,12 +133,27 @@ Ltac mb_search_cc :=
   | |- _ => solve [ rv_leaf_cc ]
   end.
 
+(* evars no leaf constrains -- the unused side of a take_any (its pattern
+   head and tail, or its equation's value): any value *)
+Ltac fill_evar :=
+  first [ exact (ty.SyncVal bv.zero) | exact (ty.SyncVal nil) | exact (ty.SyncVal true) ].
+
 Ltac solve_cc_vc :=
   intros; vm_compute; solve_vc;
   try solve_symbase_fetch;
   cbn [Erasure.inst_symprop];
   cbn -[Erasure.inst_symprop] in * |- ;
   mb_search_cc.
+
+(* the whole discharge: an angelic step leaves `∃ (_ : P), Q`, and eexists
+   SHELVES the obligation P (for the function VC: everything from the loop
+   block's entry on) -- bring the shelf back and close it the same way; all
+   inside `solve` so that a negative control really fails *)
+Ltac solve_cc_all :=
+  solve [ unshelve solve_cc_vc;
+          try fill_evar;
+          try (cbn [Erasure.inst_symprop]; cbn -[Erasure.inst_symprop] in * |- ;
+               unshelve mb_search_cc; try fill_evar) ].
 
 Definition ccf_instrs : list AST :=
   [ RISCV_JAL (bv.of_Z 8) X1   (* jal	L_8	# 0x0: jal 0x8 <br_ccopy> *)
@@ -237,4 +298,90 @@ Definition cclRec (ts td : string) : @CFGVerifierContract cclCtx :=
 Definition cclBlk (ts td : string) : BlkAnnot := {| blk_ctx := cclCtx ; blk_contract := cclRec ts td |}.
 
 Lemma valid_ccl_loop : cfg_vc_loop (cclRec "vs" "dv") (ccl_annot "vs" "dv").
-Proof. Time solve_cc_vc. Qed.
+Proof. Time solve_cc_all. Qed.
+
+(* ------------------------------------------------------------------------ *)
+(* 2. br_ccopy, ITS EXIT THE RETURN ADDRESS                                 *)
+(* ------------------------------------------------------------------------ *)
+(* r: the return address; ctl (A0, SECRET); dst d (A1), src s (A2), len n   *)
+(* (A3) = nl + 4.  Both arrays START with the same four bytes h0..h3.       *)
+Definition ccfCtx : LCtx :=
+  ["q"∷ty_xlenbits; "r"∷ty_xlenbits; "s"∷ty_xlenbits; "d"∷ty_xlenbits; "n"∷ty_xlenbits;
+   "nl"∷ty_xlenbits; "ctl"∷ty_xlenbits;
+   "h0"∷clem_cell_ty 1; "h1"∷clem_cell_ty 1; "h2"∷clem_cell_ty 1; "h3"∷clem_cell_ty 1;
+   "sl"∷clemv_ty 1; "dl"∷clemv_ty 1].
+
+Definition ccf_pre (ts td : string) : Assertion (ccfCtx ▻ "a"∷ty_xlenbits) :=
+  let hs := hl4 (term_var "h0") (term_var "h1") (term_var "h2") (term_var "h3") in
+  ( X1 ↦ᵣ term_var "r"
+    ∗ A2 ↦ᵣ term_var "s" ∗ secLeakvar "s"
+    ∗ A1 ↦ᵣ term_var "d" ∗ secLeakvar "d"
+    ∗ A3 ↦ᵣ term_var "n" ∗ secLeakvar "n"
+    ∗ A0 ↦ᵣ term_var "ctl"
+    ∗ asn.formula (formula_propeq (term_var "n") (clem_off (term_var "nl") 4))
+    ∗ secLeakvar "nl" ∗ clem_nonzero (term_var "nl")
+    ∗ asn.formula (formula_relop bop.bvult (term_var "nl") (term_val ty_xlenbits (bv.of_N 0x80000000)))
+    ∗ clem_arrv 1 1 ts (term_var "s") (term_var "n") (t_end (term_var "s") (term_var "n"))
+        (cons_terms hs (term_var "sl"))
+    ∗ clem_arrv 1 1 td (term_var "d") (term_var "n") (t_end (term_var "d") (term_var "n"))
+        (cons_terms hs (term_var "dl")) )%asn.
+
+(* the source unchanged; the destination with the SAME header bytes (so a
+   caller keeps their publicness by framing), limbs unnamed *)
+Definition ccf_post (ts td : string) : Assertion (ccfCtx ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
+  ( X1 ↦ᵣ term_var "r"
+    ∗ clem_arrv 1 1 ts (term_var "s") (term_var "n") (t_end (term_var "s") (term_var "n"))
+        (cons_terms (hl4 (term_var "h0") (term_var "h1") (term_var "h2") (term_var "h3")) (term_var "sl"))
+    ∗ asn.exist "dl'" (clemv_ty 1)
+        (clem_arrv 1 1 td (term_var "d") (term_var "n") (t_end (term_var "d") (term_var "n"))
+           (cons_terms (hl4 (term_var "h0") (term_var "h1") (term_var "h2") (term_var "h3"))
+              (term_var "dl'")))
+    ∗ asn.exist "w0" ty_xlenbits (A0 ↦ᵣ term_var "w0")
+    ∗ asn.exist "w1" ty_xlenbits (A1 ↦ᵣ term_var "w1")
+    ∗ asn.exist "w2" ty_xlenbits (A2 ↦ᵣ term_var "w2")
+    ∗ asn.exist "w3" ty_xlenbits (A3 ↦ᵣ term_var "w3")
+    ∗ asn.exist "w4" ty_xlenbits (A4 ↦ᵣ term_var "w4")
+    ∗ asn.exist "w5" ty_xlenbits (A5 ↦ᵣ term_var "w5")
+    ∗ asn.exist "w6" ty_xlenbits (A6 ↦ᵣ term_var "w6") )%asn.
+
+Definition ccf_regs : list reg_spec_rel := [ (A4, Secret); (A5, Secret); (A6, Secret) ].
+
+Definition ccfRec (ts td : string) : @CFGVerifierContract ccfCtx :=
+  gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r")
+    ccopy_instrs 12 ccf_regs (secLeakvar "r" ∗ ccf_pre ts td)%asn (ccf_post ts td).
+Definition ccfBlk (ts td : string) : BlkAnnot := {| blk_ctx := ccfCtx ; blk_contract := ccfRec ts td |}.
+
+Definition cl (k : CLem) : Annot := AnnotCLemma k.
+
+(* Entry, after the `add a3` (the beqz's taken path is refuted: n = nl + 4,
+   nl < 2^31): seed both DONE arrays at their array's start.  Exit, before
+   the ret: the source joins back; the destination's emptied remainder goes;
+   then, header byte by header byte, the destination's head (syntactically
+   clem_mux_byte h_k M) is re-synchronised against the source's head (h_k)
+   and both heads come off by pattern; the cells go back at the end. *)
+Definition ccf_seeds (ts td : string) : list Annot :=
+  [ cl (clem_arrv_empty_at 1 1 ts cc_sd); cl (clem_arrv_empty_at 1 1 td td) ].
+Definition ccf_glue (resync : bool) (ts td : string) : list Annot :=
+  let rs := if resync then [cl (clem_arrv_resync_head td ts)] else nil in
+  let next := [cl (clem_arrv_take_cons 1 1 td); cl (clem_arrv_take_cons 1 1 ts)] in
+  [ cl (clem_arrv_join 1 1 cc_sd ts ts); cl (clem_arrv_empty_elim 1 1 td) ]
+  ++ rs ++ next ++ rs ++ next ++ rs ++ next ++ rs
+  ++ [ cl (clem_arrv_add_first 1 1 ts); cl (clem_arrv_add_first 1 1 ts); cl (clem_arrv_add_first 1 1 ts)
+     ; cl (clem_arrv_add_first 1 1 td); cl (clem_arrv_add_first 1 1 td); cl (clem_arrv_add_first 1 1 td) ].
+
+Definition ccf_annot_g (resync : bool) (ts td : string) : list AnnotInstr :=
+  List.map (fun '(i, ins) =>
+              {| ai_ghost_before := if Nat.eqb i 13 then ccf_glue resync ts td else nil
+               ; ai_instr := ins
+               ; ai_ghost_after := if Nat.eqb i 2 then ccf_seeds ts td else nil
+               ; ai_block := if Nat.eqb i 3 then Some (cclBlk ts td) else None |})
+    (List.combine (List.seq 0 (length ccopy_instrs)) ccopy_instrs).
+Definition ccf_annot := ccf_annot_g true.
+
+Lemma valid_ccf : cfg_vc_loop (ccfRec "vs" "dv") (ccf_annot "vs" "dv").
+Proof. Time solve_cc_all. Qed.
+
+(* NEGATIVE CONTROL: without the re-synchronisation the header written under
+   the secret ctl is NOT the header -- the post is refused *)
+Goal cfg_vc_loop (ccfRec "vs" "dv") (ccf_annot_g false "vs" "dv").
+Proof. Fail solve_cc_all. Abort.
