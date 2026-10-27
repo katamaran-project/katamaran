@@ -44,11 +44,15 @@ Definition cg_facts : Assertion (cgCtx ▻ "a"∷ty_xlenbits) :=
     ∗ secLeakvar "ml" ∗ clem_nonzero (term_var "ml")
     ∗ asn.formula (formula_relop bop.bvult (term_var "ml") (term_val ty_xlenbits (bv.of_N 0x20000000))) )%asn.
 
-(* each integer: its header word (public, h) and its limbs (secret); the
-   values are named "dv"/"vs" because br_ccopy was verified at those tags *)
+(* each integer: its header word (public, h) and its limbs (secret), the two
+   headers listed first (the statement's layout lemma takes cells in front
+   of runs); the values are named "dv"/"vs" because br_ccopy was verified at
+   those tags *)
 Definition cg_data (ypub : bool) : list (data_spec cgCtx) :=
-  [ DPtr (term_var "x"); DCell (Known (term_var "h")); DArr false ArrUp (term_var "ml") "dv"
-  ; DPtr (term_var "y"); DCell (Known (term_var "h")); DArr ypub ArrUp (term_var "ml") "vs" ]%list.
+  [ DPtr (term_var "x"); DCell (Known (term_var "h"))
+  ; DPtr (term_var "y"); DCell (Known (term_var "h"))
+  ; DPtr (clem_off (term_var "x") 4); DArr false ArrUp (term_var "ml") "dv"
+  ; DPtr (clem_off (term_var "y") 4); DArr ypub ArrUp (term_var "ml") "vs" ]%list.
 
 Definition cgCtxV : LCtx := cgCtx ▻▻ data_vctx (cg_data false).
 
