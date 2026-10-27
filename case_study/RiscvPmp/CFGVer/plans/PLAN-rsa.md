@@ -67,12 +67,16 @@ cfgver-gen-contract-internals, "The segment generator"):
 **Next step — the rest of Phase 2 (§4), in this order. ASK EMIEL the
 marked design questions BEFORE writing the contracts (memory
 `feedback-involve-in-planning`).**
-0. **STATUS 2026-10-27:** memcpy, memset, memmove (a)+(b) DONE (`RsaMemcpy.v`, `RsaMemset.v`, `RsaMemmove.v`); memcpy DONE (`Example/Rsa/RsaMemcpy.v`, D5 post);
-   it needed `clem_arrv_empty_at` (seed at an existing array's start, so the
-   n = 0 path's seeds have a known address). Its SpecIris soundness case is
-   WRITTEN BUT NOT BUILT: the heavy chain is red until the next SpecIris
-   build (planned together with the ccopy resync CLem, O4). Emiel
-   2026-10-27: no gate needed; merge without it.
+0. **STATUS 2026-10-27:** memcpy, memset, memmove (a)+(b) and br_ccopy
+   (header kept public under a secret ctl, O4) DONE as function contracts:
+   `Example/Rsa/Rsa{Memcpy,Memset,Memmove,Ccopy}.v`, each with negative
+   controls. Three new CLems (`empty_at`, `resync_head`, `take_any`), their
+   SpecIris soundness BUILT (13a0b398). br_ccopy is EXPENSIVE: loop VC
+   193 s, function VC 590 s, file 21.5 min / 9.6 GB (5-way header-phase
+   invariant × angelic takes; local closer `solve_cc_all` in RsaCcopy.v).
+   Downstream of SpecIris (VerifierRel → … → Results) NOT rebuilt yet.
+   NEXT: GATE 2 (step 5 below). Emiel 2026-10-27: no gate needed; merge
+   without it.
 1. **memcpy as a FUNCTION** (picolibc 1.8.12 `-Os`, `tools/bearssl/
    picolibc.sh`), on the S1a template, over byte arrays (`arrv 1 1`). Its
    loop VC exists (`RsaSpikeArrv.valid_mc_loop`); what is new is the glue:
@@ -646,6 +650,7 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-27 | memmove (a) DISJOINT backward as a function (RsaMemmove.v): arrays flipped to stride -1 before the beqz, memcpy's loop at stride -1, value eq. vs = rev (done ++ rest) | ~00:37 | 00:41 | ~4 | ~0.5 (file 22 s) | ~3.5 | valid_mvl_loop 5.3 s cold (1.5 s warm), valid_mvf 1.05 s, valid_mmf 0.06 s | RsaMemmove ~250 (16 generated instrs) | 0 | green first try; both Fail controls rejected; no new lemma (peval_rev already has rev (rev v) ~> v) |
 | 2026-10-27 | memmove (b) OVERLAPPING shift by 4 bytes (muladd_small): window M kept flipped, T seeded by empty_at on flipped M, values unnamed | 00:41 | 00:47 | ~6 | ~2 (pet restart at 5.3 GB, file 30 s) | ~4 | valid_mwl_loop 1.27 s, valid_mwf 0.90 s (coqc) | +~150 in RsaMemmove | 1 (paren count, vos) | green first try; Fail control rejected (window not at the low 4 bytes); no harness for (b) yet -- its caller is Phase 4 |
 | 2026-10-27 | br_ccopy (RsaCcopy.v, header phase in the invariant): resync CLem `clem_resync_mux` + `clem_mux_byte` (stored term probe-checked); 5-way `asn.or` invariant; range residuals → `bv.zero` case in MuladdParamClose's bv_consts + `nl ≠ 0`; header identity lost by take_first (cons not injective under the tag) → choice CLem `clem_arrv_take_any` (match_bool on an angelic bool, probe-checked both ways + control); local closer (rv_app_nil_l, guarded case split, sub/negate in bv_lin) | 00:47 | 11:31 (a long overnight idle gap inside; active ~2.5 h) | — | ~35 (probe coqc runs ~3.5 min / 9 GB each ×8, light chain ×2 ~100 s, one runaway closer killed at >10 min) | ~2 h | loop VC: vm_compute+solve_vc 61 s, 9.0 GB; STILL RED: 8 failing leaves, the genuine one apparently `c − 1 ≠ 0` at the limb back-edge | Verifier +~60, MuladdParamClose +4, RsaCcopy ~280 | ~10 | 3 user decisions (header phase; residual closer; choice CLem). SpecIris soundness cases for empty_at / resync_mux / take_any NOT written/built |
+| 2026-10-27 | br_ccopy GREEN: limb-phase probe isolated the closer gaps (sub/negate in bv_lin for hypotheses, `[] ++ v`, list assoc, subst of `sl = sd ++ sr`, evar fill); function VC: cell resync → 64^4 unrefuted angelic branches (vm_compute >900 s) → deterministic `clem_arrv_resync_head` (2.2 s); shelved block-entry obligation (eexists on `∃ (_:P), Q`) → `solve_cc_all` with unshelve; SpecIris soundness of the 3 CLems (mux_byte_same over zext', NonSyncVal bool by its halves) | ~11:35 | 14:09 | ~154 | ~95 (probe coqc runs 1–20 min each at 6–9.7 GB, swapping; SpecIris ×10 at ~2 min) | ~60 | loop 193 s, function 590 s, file 21.5 min wall / 788 s user / 9.6 GB; SpecIris 129 s / 8.8 GB | RsaCcopy ~390, Verifier ±60, SpecIris +~70 | ~15 compiles (closer leaves ×6, SpecIris ×10) | 1 user decision (keep debugging ccopy); negative control (no resync) rejected |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
