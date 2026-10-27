@@ -11,6 +11,8 @@
 Makefile.coq
 Makefile.coq.conf
 .Makefile.coq.d
+case_study/Stats/*.csv
+case_study/Stats/*.log
 .DS_Store
 \#*#
 .lia.cache

@@ -1054,6 +1054,51 @@ Module Type SymPropOn
           {| branches := b + e; pruned := b + e - d |}
         end.
 
+      (* Size of a VC by kind of node. *)
+      Record VCCount : Set :=
+        { vc_nodes   : N  (* all nodes of the tree *)
+        ; vc_leaves  : N  (* block + error *)
+        ; vc_errors  : N
+        ; vc_debugs  : N
+        ; vc_forks   : N  (* binary branches and pattern matches *)
+        ; vc_asserts : N  (* proof obligations: assertk and assert_vareq *)
+        ; vc_assumes : N  (* assumptions: assumek and assume_vareq *)
+        ; vc_quants  : N  (* angelicv and demonicv *)
+        }.
+
+      Definition vc_count_empty : VCCount := Build_VCCount 0 0 0 0 0 0 0 0.
+
+      Fixpoint vc_count {Σ} (s : 𝕊 Σ) (c : VCCount) : VCCount :=
+        let 'Build_VCCount n l e d f a u q := c in
+        match s with
+        | SymProp.error _ => Build_VCCount (N.succ n) (N.succ l) (N.succ e) d f a u q
+        | SymProp.block => Build_VCCount (N.succ n) (N.succ l) e d f a u q
+        | SymProp.debug _ k => vc_count k (Build_VCCount (N.succ n) l e (N.succ d) f a u q)
+        | SymProp.demonicv _ k => vc_count k (Build_VCCount (N.succ n) l e d f a u (N.succ q))
+        | SymProp.angelicv _ k => vc_count k (Build_VCCount (N.succ n) l e d f a u (N.succ q))
+        | SymProp.assertk _ _ k => vc_count k (Build_VCCount (N.succ n) l e d f (N.succ a) u q)
+        | SymProp.assert_vareq _ _ _ k => vc_count k (Build_VCCount (N.succ n) l e d f (N.succ a) u q)
+        | SymProp.assumek _ k => vc_count k (Build_VCCount (N.succ n) l e d f a (N.succ u) q)
+        | SymProp.assume_vareq _ _ k => vc_count k (Build_VCCount (N.succ n) l e d f a (N.succ u) q)
+        | SymProp.angelic_binary k1 k2 =>
+            vc_count k2 (vc_count k1 (Build_VCCount (N.succ n) l e d (N.succ f) a u q))
+        | SymProp.demonic_binary k1 k2 =>
+            vc_count k2 (vc_count k1 (Build_VCCount (N.succ n) l e d (N.succ f) a u q))
+        | SymProp.pattern_match _ pat rhs =>
+            List.fold_right (fun pc => vc_count (rhs pc))
+              (Build_VCCount (N.succ n) l e d (N.succ f) a u q)
+              (finite.enum (PatternCase pat))
+        | SymProp.pattern_match_var _ pat rhs =>
+            List.fold_right (fun pc => vc_count (rhs pc))
+              (Build_VCCount (N.succ n) l e d (N.succ f) a u q)
+              (finite.enum (PatternCase pat))
+        end.
+
+      (* The counts in field order, for printing. *)
+      Definition vc_count_to_list (c : VCCount) : list N :=
+        vc_nodes c :: vc_leaves c :: vc_errors c :: vc_debugs c ::
+        vc_forks c :: vc_asserts c :: vc_assumes c :: vc_quants c :: nil.
+
     End Statistics.
 
   End SymProp.

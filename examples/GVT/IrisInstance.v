@@ -37,8 +37,8 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck
      RiscvPmp.Machine
      RiscvPmp.GVT.Logic
-     RiscvPmp.IrisModel
-     RiscvPmp.trace
+     RiscvPmp.GVT.IrisModel
+     RiscvPmp.GVT.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
 
@@ -52,7 +52,7 @@ Import bv.notations.
 
 Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIrisBase.
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
-  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
 
   Class mcMemPreGS Σ := {
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
@@ -138,7 +138,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
 End RiscvPmpIrisAdeqParameters.
 
 Module RiscvPmpIrisInstancePredicates.
-  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
   Import RiscvPmpProgram.
 
   Definition addr_inc (x : bv 32) (n : nat) : bv 32 :=
@@ -374,6 +374,23 @@ Module RiscvPmpIrisInstancePredicates.
         [∗ list] a ∈ all_addrs,
           (⌜∃ p, Pmp_access a (bv.of_nat 1) entries m p⌝ -∗ interp_addr_access_byte a)%I.
 
+      Lemma interp_pmp_addr_access_s_u_eq (entries : list PmpEntryCfg) :
+        interp_pmp_addr_access entries User ⊣⊢ interp_pmp_addr_access entries Supervisor.
+      Proof.
+        iSplit; iApply big_sepL_mono; iIntros (k addr Hk) "H [%p %Hpmp]";
+          iApply "H"; iExists p; iPureIntro; unfold Pmp_access, Gen_Pmp_access in *.
+        - now rewrite pmp_check_aux_s_u_eq.
+        - now rewrite pmp_check_aux_s_u_eq in Hpmp.
+      Qed.
+
+      Lemma interp_pmp_addr_access_not_machine (entries : list PmpEntryCfg) (m m' : Privilege) :
+        m ≠ Machine -> m' ≠ Machine ->
+        interp_pmp_addr_access entries m ⊢ interp_pmp_addr_access entries m'.
+      Proof.
+        intros Hm Hm'; destruct m, m'; try congruence;
+          by rewrite ?interp_pmp_addr_access_s_u_eq.
+      Qed.
+
       Definition interp_pmp_addr_access_without (addr : Addr) (width : nat)  (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         (@interp_addr_access addr width -∗ interp_pmp_addr_access entries m)%I.
     End WithAddrs.
@@ -463,8 +480,8 @@ End RiscvPmpIrisInstancePredicates.
 
 Module RiscvPmpIrisInstance <:
   IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpProgramLogic RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
-  Import RiscvPmpIrisBase.
+    RiscvPmpProgramLogic RiscvPmpIrisPrelims RiscvPmpIrisBase.
+  Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
   Import RiscvPmpProgram.
   Import RiscvPmpIrisInstancePredicates.
 
@@ -969,9 +986,9 @@ Module RiscvPmpIrisInstance <:
 
 
   Include IrisSignatureRules RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase.
+    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisPrelims RiscvPmpIrisBase.
   Include IrisAdequacy RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpProgramLogic  RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
+    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisPrelims RiscvPmpIrisBase RiscvPmpIrisAdeqParameters.
 
   Lemma gprs_equiv `{sailGS Σ, iostateG IOState Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢
