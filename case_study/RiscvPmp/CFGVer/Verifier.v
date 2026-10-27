@@ -165,7 +165,17 @@ Inductive CLem : Set :=
      empty array at an EXISTING array's start.  Unlike clem_arrv_empty, its
      address is bound (by the angelic match), so a seed made on a path that
      skips the loop it is meant for still sits at a known address. *)
-  | clem_arrv_empty_at (w : nat) (s : Z) (t t' : string).
+  | clem_arrv_empty_at (w : nat) (s : Z) (t t' : string)
+  (* PLAN-rsa O4 (an AD HOC re-synchronisation, Emiel 2026-10-27):
+       A0 ↦ m ∗ b ↦ₘ u ∗ a ↦ₘ v ∗ ⌜v = clem_mux_byte u m⌝ ⊢ A0 ↦ m ∗ b ↦ₘ u ∗ a ↦ₘ u
+     for byte cells.  clem_mux_byte u m is EXACTLY what br_ccopy's body
+     stores when its source and destination byte are the same term u
+     (`((u ^ u) & m) ^ u`, zero-extended and cut back).  Under a secret m
+     that term is a NonSyncVal with equal projections; memory reads only
+     the projections, so the cell may hold u instead.  No rewrite could do
+     this (it would turn NonSyncVal into SyncVal under ≡).  u is bound by
+     the TWIN cell b (the solver does not decompose xor/and equations). *)
+  | clem_resync_mux.
 
 Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
@@ -203,6 +213,16 @@ Definition clem_x4 {Σ} (n : Term Σ ty_xlenbits) : Term Σ ty_xlenbits :=
 Arguments clem_arrv {Σ} w s t a n e vs.
 Arguments clem_arrv_angelic {Σ} w s t a n e vs.
 Arguments clem_ptsto {Σ} w x v.
+(* what br_ccopy's body (lbu x; lbu y; xor; and m; xor; sb) stores when its
+   two bytes are the same term u -- matched SYNTACTICALLY by clem_resync_mux
+   (checked against the executor's own term: Example/Rsa/RsaCcopy.v) *)
+Definition clem_mux_byte {Σ} (u : Term Σ (clem_cell_ty 1)) (m : Term Σ ty_xlenbits)
+    : Term Σ (clem_cell_ty 1) :=
+  term_unop (uop.bvtake 8)
+    (term_binop bop.bvxor
+       (term_binop bop.bvand
+          (term_binop bop.bvxor (term_unop uop.zext u) (term_unop uop.zext u)) m)
+       (term_unop uop.zext u)).
 
 Definition clem_lemma (k : CLem) : Lemma [ctx] :=
   match k with
@@ -341,6 +361,17 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (clem_arrv w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
            (clem_arrv w s t' (term_var "a") (term_val ty_xlenbits bv.zero) (term_var "a")
               (term_val (clemv_ty w) nil)))
+  | clem_resync_mux =>
+      MkLemma [ctx]
+        ["m"∷ty_xlenbits; "b"∷ty_xlenbits; "u"∷clem_cell_ty 1; "a"∷ty_xlenbits; "v"∷clem_cell_ty 1] [env]
+        (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
+           (asn.sep (asn.chunk_angelic (chunk_user (ptstomem 1) [term_var "b"; term_var "u"]))
+              (asn.sep (asn.chunk_angelic (chunk_user (ptstomem 1) [term_var "a"; term_var "v"]))
+                 (asn.formula (formula_propeq (term_var "v")
+                    (clem_mux_byte (term_var "u") (term_var "m")))))))
+        (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
+           (asn.sep (clem_ptsto 1 (term_var "b") (term_var "u"))
+              (clem_ptsto 1 (term_var "a") (term_var "u"))))
   end.
 
 Inductive Annot :=
