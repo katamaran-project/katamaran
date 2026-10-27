@@ -68,6 +68,10 @@ Ltac bv_consts :=
       let v := eval vm_compute in (bv.bin (@bv.of_N m n)) in change (bv.bin (@bv.of_N m n)) with v
   | H : context [bv.bin (@bv.of_N ?m ?n)] |- _ =>
       let v := eval vm_compute in (bv.bin (@bv.of_N m n)) in change (bv.bin (@bv.of_N m n)) with v in H
+  (* the literal 0 a clem_nonzero premise carries (n ≠ bv.zero), otherwise an
+     opaque atom to lia (PLAN-rsa, br_ccopy's header phase) *)
+  | |- context [bv.bin (@bv.zero ?m)] => change (bv.bin (@bv.zero m)) with 0%N
+  | H : context [bv.bin (@bv.zero ?m)] |- _ => change (bv.bin (@bv.zero m)) with 0%N in H
   end.
 
 (* bv.ult/bv.ule are stated on bv.bin (N), so the unsigned rewrites never

@@ -1,58 +1,105 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
-Status: **IN PROGRESS on branch `issue/rsa` (not merged, not pushed).**
-**2026-10-23: Phase 2 is paused on `plans/PLAN-arrv.md` (arrays with named
-values replace `arr`) — read that plan's HANDOFF next.**
-Phase 0 done; Phase 1 CLOSED (2026-10-22: spikes S1a and S1b end to end,
-axiom-clean; GATE 1 closed on light checks by Emiel, merge gate deferred to
-the end of the plan). Next: Phase 2. Survey (§1), decisions (§2), phases (§4), timing log (§5).
+Status: **IN PROGRESS on branch `issue/rsa`.** Phases 0–1 CLOSED; Phase 2
+resumes after its detour **PLAN-arrv (COMPLETE 2026-10-26, merged into local
+`KatamaranRel` as `bc7faac1`, not pushed)**. Survey (§1), decisions (§2),
+phases (§4), timing log (§5).
 
-## HANDOFF (2026-10-22, end of day) — read this first
+## HANDOFF (2026-10-26) — read this first
 
-**Where things stand: Phase 1 is CLOSED.** Both call-as-block spikes are
-verified end to end and axiom-clean (last commit `bbbba2ad`). Emiel closed
-GATE 1 on the light checks (VCs + negative controls + end theorems +
-`Print Assumptions`) and said NOT to run the merge gate for it; the gate
-last ran at `4af3dd9e`, before the S1a/S1b Result files and the
-`peval_sext` rule. It runs once at the end of the plan (feedback: light
-gates) — if a muladd VC breaks there, suspect a contract term that spells
-`sext` (`t_mlen`), see the rule below.
+**Where things stand.** Everything up to and including PLAN-arrv is on
+local `KatamaranRel` (`bc7faac1`, merged `--no-ff --no-verify` on Emiel's
+instruction) and `issue/rsa` is fast-forwarded to it — keep working on
+`issue/rsa`, merge into `KatamaranRel` with `--no-ff` (skill
+branch-workflow), NEVER push or merge to `main`. Verified at merge: the
+gate's whole build (75 files, `arr` deleted) and its hole scan. NOT
+verified: the gate's axiom probes (26 end theorems) — killed by the memory
+reaper, not rerun. Run them once early, in the FOREGROUND (everything is
+built, ~6 min): `GATE_JOBS=1 GATE_PROBE_BATCH=18 ./scripts/gate.sh`.
+Phase 2's spike S2 turned into PLAN-arrv; read that plan's §1 (facts) and
+HANDOFF once, but you do not need its history to continue.
 
-| file | what | cost |
-|---|---|---|
-| `Example/Rsa/RsaSpikeSub.v` | S1a, light: `[jal ra, br_i31_sub; j end] ++ br_i31_sub` (31 instrs). `valid_sub_loop` (LoopN), `valid_sub` (function, exit `r`), `valid_s1a` (whole program, `gen_prog_contract`); 2 negative controls | 29 s user / 4.9 GB; VCs 13.9 / 2.9 / 0.1 s |
-| `Example/Rsa/RsaSpikeSubResult.v` | S1a, heavy: `sub_loop_valid` → `sub_valid` → `s1a_valid` → `sub_call_noninterferent` (∀ h; a, b's limbs anywhere disjoint). Also `limbs`, `limbs_bv`, `data_layout_cell_cons` (reused by S1b) | 19 s / 7.5 GB |
-| `Example/Rsa/RsaSpikeSub2.v` | S1b, light: `[jal ra, sub2; j end] ++ rsa_spike_sub2 ++ br_i31_sub` (51 instrs). `valid_sub2` (non-leaf function: frame, s0–s2 pinned, `br_i31_sub` a block entered twice, the 2nd a TAIL call), `valid_s1b`; 2 negative controls | 38 s / 5.0 GB; VCs 6.8 / 0.3 s |
-| `Example/Rsa/RsaSpikeSub2Result.v` | S1b, heavy: `sub2_valid` → `s1b_valid` → `sub_call2_noninterferent` (∀ h; a, b, the stack frame anywhere disjoint) | 22 s / 7.5 GB |
+**What exists now (all green).**
 
-All four are in `_CoqProject`; both Result files are in `Results.v` and in
-`scripts/gate.sh`'s `AXIOM_CLEAN_THMS`.
+| file | what |
+|---|---|
+| `Example/Rsa/RsaSpikeSub{,Result}.v` | S1a: `br_i31_sub` as a FUNCTION contract (exit `r`), called as a block; its loop is LoopN; the post hands b back with its own value (`flip` + `join "db" "vb" "vb"`, PLAN-arrv D13); `sub_call_noninterferent` (∀ h) |
+| `Example/Rsa/RsaSpikeSub2{,Result}.v` | S1b: a non-leaf function calling `br_i31_sub` twice (2nd a tail call); `sub_call2_noninterferent` |
+| `Example/Rsa/RsaSpikeSb.v` | `sb` at width 1: memset's body into a secret / public byte array, memcpy's body between two byte arrays; controls |
+| `Example/Rsa/RsaSpikeArrv.v` | a public header byte survives a VALUE-contract memcpy by framing (`valid_cl`); picolibc's real memcpy LOOP with `vs = done ++ rest` (`valid_mc_loop`, 0.4 s); controls |
+| `Example/Muladd/MuladdParamLoopN.v` | the lockstep-loop template: tags as record fields `ln_tm ln_tx ln_tdm ln_tdx`, read-only array's value tracked as contract variable `VM = rev dM ++ rM` |
 
-**The function-contract recipe these establish** (also in skill
+**The array toolkit (`arrv`; skill cfgver-contracts "Arrays").**
+`arrv w s t [a; n; e; vs]`: values NAMED (`vs : list (bvec 8w)`), no
+publicness flag (a public array is `arrv … vs ∗ secLeak vs`; framing keeps
+a caller's facts), a Coq-level string TAG `t` that only disambiguates the
+executor's angelic chunk match (D14; mismatch = failed match). Conventions:
+top-level `DArr`/`DBytes` tag = its value name (D15); templates take tags
+as Coq parameters (D16); every ghost lemma names the tag of EACH array it
+matches — `join w s t1 t2 t`, `lockstep w s t1 t2`, `pad w s t t'`, others
+one `t`, kept through `flip` (D17). Catalogue `clem_arrv_*`: take_first /
+take_cons / take_last, add_first / add_last, nonempty, empty, empty_elim,
+lockstep, drop, flip, join, pad, split, and the word ⇄ byte VIEW
+`to_bytes` (`arrv 4 4 … ws ⊢ arrv 1 1 … (4·n) (regroup ws)`) / `of_bytes`
+(pattern form, needs `k <u 2^30`). WORDS ONLY: the halfword/doubleword
+regroups went with `arr`. Give two same-shape live arrays DIFFERENT tags —
+untagged ambiguity cost ×3.7 on LoopN (`diagnostics/arrv-loop-cost-drivers.md`).
+
+**The function-contract recipe** (S1a/S1b; skill
 cfgver-gen-contract-internals, "The segment generator"):
 - a function is `gen_seg_contract_at q q (term_var "r") code fl regs
   (secLeakvar "r" ∗ pre) post` with `X1 ↦ᵣ r` in pre and post; valid by
-  `blkValid_of_seg_at` + `seg_exit_sync_pub`; it is a block on its first
-  instruction in every caller (typed `MkBlkAnnotV blk valid` in the
-  caller's annotation, as in the Result files);
-- a NON-LEAF function's `code` is itself AND its callees as linked (a
-  block's table must hold every pc the run reaches);
+  `blkValid_of_seg_at` + `seg_exit_sync_pub`; a block on its first
+  instruction in every caller (`MkBlkAnnotV blk valid` in the caller's
+  typed annotation, as in the Result files);
+- a NON-LEAF function's `code` is itself AND its callees as linked;
 - pin `sp`, `s_i` to the SAME logic variable in pre and post; own the frame
-  as `gen_data_at (t_add sp (-k)) [DCell Secret; …]` so a whole-program
-  `gen_prog_contract` with `DPtr (sp − k)` + the same cells hands it over;
-- the top level is ALWAYS `gen_prog_contract` (pointer args `PVVar`, arrays
-  `DPtr`/`DCell (Known h)`/`DArr`), so the end theorem is one
-  `gen_prog_noninterferent`; its proof is the Result files' template
-  (pointer facts `Hxa`/`Hxb`/`Hf`, `Hc` the limb count, cells by
-  `perm_of_eq`, layout by `data_layout_cell_cons` + `data_layout_runs`).
+  as `gen_data_at (t_add sp (-k)) [DCell Secret; …]`;
+- the top level is ALWAYS `gen_prog_contract` (pointer args `PVVar`, data
+  `DPtr`/`DCell`/`DArr … "v"`), so the end theorem is one
+  `gen_prog_noninterferent` (templates: the RSA Result files;
+  `CheckScalarParamResult`/`MuladdParamResult` for contiguous data, layout
+  by `contig_data_layout` + `concretize_data_addrs`);
+- a post NAMES the values it hands back (no ∃) when a caller needs a fact
+  about them (Emiel, memory `feedback-framing-keeps-info`); an overwritten
+  array's value is just ∃.
 
-**Framework added on this branch** (all used by the spikes):
-`Solver.v` `try_isolate_inner`; `GenSegment.gen_seg_contract_at` (the ONE
-generator, exit a term); `GenCompose.blkValid_of_seg_at` +
-`seg_exit_sync_off/pub`; **`PartialEvaluation.peval_sext`** (+ `width_cast`,
-`bv.sext_same`/`unsigned_sext_same` in `Bitvector.v`): `peval` drops a
-same-width `sext`. Every RV32 `lw` yields `sext v` at 32→32 (Machine.v
-`extend_value`); without the rule a reloaded `ra` misses the syntactic exit.
+**Next step — the rest of Phase 2 (§4), in this order. ASK EMIEL the
+marked design questions BEFORE writing the contracts (memory
+`feedback-involve-in-planning`).**
+0. **STATUS 2026-10-27:** memcpy, memset, memmove (a)+(b) and br_ccopy
+   (header kept public under a secret ctl, O4) DONE as function contracts:
+   `Example/Rsa/Rsa{Memcpy,Memset,Memmove,Ccopy}.v`, each with negative
+   controls. Three new CLems (`empty_at`, `resync_head`, `take_any`), their
+   SpecIris soundness BUILT (13a0b398). br_ccopy is EXPENSIVE: loop VC
+   193 s, function VC 590 s, file 21.5 min / 9.6 GB (5-way header-phase
+   invariant × angelic takes; local closer `solve_cc_all` in RsaCcopy.v).
+   Downstream of SpecIris (VerifierRel → … → Results) NOT rebuilt yet.
+   NEXT: GATE 2 (step 5 below). Emiel 2026-10-27: no gate needed; merge
+   without it.
+1. **memcpy as a FUNCTION** (picolibc 1.8.12 `-Os`, `tools/bearssl/
+   picolibc.sh`), on the S1a template, over byte arrays (`arrv 1 1`). Its
+   loop VC exists (`RsaSpikeArrv.valid_mc_loop`); what is new is the glue:
+   entry seeds (`clem_arrv_empty` for the done array — in `ghost_after` of
+   the instruction BEFORE the loop block), the `n = 0` path (the loop is
+   skipped), exit glue (`pad`/`join`/`empty_elim` of the emptied rests),
+   and a post `dst ↦ vs` naming the source's value. ASK: post shape — the
+   destination holds exactly `vs` (value contract, as the spike's stand-in)?
+2. **memset** the same way (its body is in `RsaSpikeSb.v`); post: the
+   destination holds `repeat c n` — needs a list term for it, or a weaker
+   post. ASK which.
+3. **memmove**: its loop is ROTATED (entered at `.Lcopy`, mid-body) and
+   walks +1 or −1 depending on overlap. ASK: one contract with a stride
+   variable, or two (one per direction)? `arrv`'s stride is a Coq-level Z,
+   so a stride variable would need a new form — two is the cheap route.
+4. **br_ccopy** (`ctl ? src : dst`, word-wise MUX): needs a peval rule
+   `MUX c x x ~> x` so that an EQUAL public header stays public under a
+   secret `ctl`. ASK before touching `theories/` (Solver/PartialEvaluation
+   builds take ~6 min and invalidate everything downstream).
+5. **GATE 2:** `br_ccopy` over a WORD array called from a word-accessing
+   caller, end to end — the word⇄byte view change at the CALL SITE
+   (`to_bytes`/`of_bytes` ghosts around the call, D4/§2), a Result file on
+   the S1b template. Then Phase 3 (`montymul`).
 
 **Tooling.** `tools/bearssl/build.sh <BearSSL checkout> <out>` (clone
 BearSSL into the scratchpad, pinned `7bea48e`); `tools/bearssl/spike/`
@@ -61,140 +108,54 @@ build.sh's CFLAGS against a hardened tree: copy `inc/`+`src/`, apply
 `hardening.patch`); link `ld.lld --relax -Ttext=0 harness … callees…`,
 `llvm-objdump-18 -d --no-show-raw-insn`, `asm_to_ast.py --objdump
 --tables-aliases --name <x>`. Exact recipe: the header comments of
-`RsaSpikeSub.v` / `RsaSpikeSub2.v`.
-
-**Next step — Phase 2 (byte memory, D3), §4.** Concretely, in order:
-1. ~~Ask Emiel O1~~ DONE 2026-10-22: picolibc 1.8.12's `-Os` RISC-V
-   assembly (§3 O1, `tools/bearssl/picolibc.sh`).
-2. ~~`sb` at width 1~~ DONE 2026-10-22, NO framework change:
-   `Example/Rsa/RsaSpikeSb.v` (light) — memset's body (`sb; addi`) into a
-   secret and into a public `arr _ 1 1` (take_first / store / add_first),
-   memcpy's body (`lbu; sb`) between two PUBLIC stride-1 byte arrays (the
-   angelic `arr` match copes with two same-shape candidates); VCs 0.08 /
-   0.04 / 0.10 s, file 15.9 s user / 4.7 GB. Controls: secret byte → public
-   array rejected; secret source → public destination rejected; both green
-   VCs fail with `p ≠ p` / `d ≠ d` added to the post (not vacuous). Trap:
-   a post `arr true` after a secret store is NOT a secrecy control —
-   `arr true`/`arr false` are different predicates, it fails on the name.
-3. Spike S2. **Decided (Emiel, 2026-10-22):** (a) the word⇄bytes view
-   change happens AT THE CALL SITE (callee contracts over bytes; the
-   `clem_arr_to_bytes`/`of_bytes` regroup ghosts around the call; §9's
-   rejection was about `SepLemma`s in trusted `Machine.v`, not proof-side
-   `AnnotCLemma`s). (b) Mixed publicness: every copy moves a PUBLIC header
-   word + SECRET limbs, and `arr` has one flag. Emiel: framing should keep
-   what the caller knew — a callee that does not need publicness must not
-   erase it — so arrays carry their VALUES and a contract's post names
-   them (no ∃): **`arrv`**, which will REPLACE `arr` (Emiel's choice), via
-   a spike first, then a plan. See "Spike S2-arrv" below.
-4. ~~Write the `arrv` plan~~ DRAFTED 2026-10-23: **`plans/PLAN-arrv.md`**
-   — the migration arr → arrv in phases A–E (catalogue, words⇄bytes,
-   generators + bridge, examples, delete arr). Start there; its O1–O3 go to
-   Emiel first.
-5. GATE 2 (§4): `br_ccopy` over a word array, called from a word-accessing
-   caller, end to end — a Result file on the S1b template.
-
-**Spike S2-arrv (2026-10-22/23) — VC side DONE, Iris side OPEN.**
-- `Sig.v` `arrv (w : nat) (s : Z)`, args `[a; n; e; vs]`,
-  `vs : list (bvec 8w)`, precise on `[a]`. `IrisInstanceBinary.interp_arrv`:
-  cell i holds `NonSyncVal l_i r_i` of the two runs' lists, lengths = n.
-  It reads only PROJECTIONS of vs, so the non-canonical `NonSyncVal v v`
-  means the same as `SyncVal v` — required, because lifted `cons` is NOT
-  injective (`cons x r = cons h ls` does not give `x = h`), and a lemma
-  like "an empty arrv's value is nil" would be UNSOUND (`NonSyncVal [] []`).
-- `Verifier.v` CLems (light): `clem_arrv_take_first` (by EQUATION, for a
-  variable value: `∃ x r, … ∗ ⌜vs = x :: r⌝`), `clem_arrv_take_cons` (by
-  PATTERN on a value that is syntactically `x :: r`, so `x` is bound to
-  the caller's term; no `n≠0` premise — the length gives it),
-  `clem_arrv_add_first` (`x :: vs`), `clem_arrv_add_last` (`vs ++ [x]`).
-  Helpers `clemv_ty`/`clemv_ctx`/`clem_arrv(_angelic)`/`clem_ptsto`/
-  `clem_nonzero`; `Verifier.v` has implicit arguments ON, so each helper
-  needs `Arguments … w …` or `w` silently becomes implicit.
-- `theories/`: `bv.leview_is_le` (`leview m (m+k) = is_le k`, by induction
-  — `leview` with a non-variable index cannot be destructed) and
-  `bv.take_zext`; `PartialEvaluation.peval_bvtake_zext` (`bvtake 8 (zext x)
-  ~> x`: `lbu` then `sb` stores the byte it loaded) and `peval_append`
-  (`[] ++ t`, `(x :: t) ++ u`, `(a ++ b) ++ u` right-associated; two values
-  still fold), both proved sound with no NonSyncVal split (same leaves).
-  The old general `peval_bvtake` stays unwired.
-- `Example/Rsa/RsaSpikeArrv.v` (light), all green, file 44 s user / 4.9 GB:
-  **v4** `valid_cl` — a public header byte h joined onto secret limbs ls
-  (`add_first` → `h :: ls`), memcpy as a block with the VALUE contract
-  `src ↦ vs ∗ dst ↦ ws ⊢ src ↦ vs ∗ dst ↦ vs` (a stand-in body), then
-  `take_cons` on the destination: its first cell holds `h`, public by the
-  FRAMED `secLeak h`. Controls: h secret → rejected; memcpy post with an
-  ∃ value → rejected. **v3** `valid_mc_loop` — picolibc's real memcpy loop
-  (`lbu; sb; addi ×3; bnez`) as a loop VC with invariant src = done ++
-  rest, dst = done ++ old, `vs = done ++ rest`; 0.40 s, green FIRST try
-  once the two peval rules existed. Controls: `vs = rest ++ done` in the
-  post → rejected; post ∗ `s ≠ s` → rejected. Self-test: `peval`
-  re-associates `(d ++ [x]) ++ r` to `d ++ (x :: r)` under vm_compute.
-- Traps found: a BLOCK's precondition must use `chunk_angelic` for arrays
-  whose address is a block variable (a plain chunk cannot search the heap);
-  the stock `solve_mb_vc` already finds `take_cons`'s witnesses (cbn turns
-  `cons ?x ?r = cons h ls` into a Coq unification).
-- **Soundness DONE (2026-10-23):** `SpecIris.v` step lemmas
-  `interp_arrv_take_first/_take_cons/_add_first/_add_last` (big_sepL
-  cons/snoc over `zip`; `arrv_cons_split` picks SyncVal parts for a SyncVal
-  list) + the 4 `clem_arrv_*_sound` + `clemSem` cases; `SpecIris.v`
-  compiles (rocq_compile_file, full). `interp_arrv` now states the count
-  as `bv.of_nat (length L) = n` and `length L = length R`, so `n + 1`
-  wraps with the list and no add lemma needs a premise. Proved in PREAMBLE
-  mode (pet OOMs on SpecIris.v at >7.6 GB): `From Katamaran Require Import
-  Base Bitvector Iris.BinaryWeakestPre Iris.BinaryAdequacy
-  Iris.BinaryInstance Syntax.Predicates RiscvPmp.Base RiscvPmp.Machine
-  RiscvPmp.IrisModelBinary RiscvPmp.IrisInstance RiscvPmp.Sig
-  RiscvPmp.IrisInstanceBinary` + iris proofmode, `Import RiscvPmpIrisBase2
-  RiscvPmpIrisInstance2`. Trap: SpecIris.v has implicit arguments ON —
-  call helpers with `@`. Heavy chain BUILT 2026-10-23 15:33 through
-  `RsaSpikeSubResult`/`RsaSpikeSub2Result` (a first -j1 background run was
-  reaped mid-`EndToEnd` after building up to GenCompose — its piped grep
-  output was lost, so it LOOKED like nothing built; check .vo timestamps;
-  rerun in the FOREGROUND in <10 min steps). S1 VCs after the peval rules:
-  13.9→16.9 / 2.9→3.7 / 6.8→7.1 s — NOT a matched comparison (different
-  RAM state), recorded, not concluded. muladd/check_scalar VCs not rerun
-  (merge gate at the plan's end).
-- Then: memcpy's FUNCTION contract (entry seeds of empty
-  done arrays — needs an `arrv` empty-seed lemma, `[] ++ vs` — and the
-  exit glue: drop/pad the empty rests; the `n = 0` path); the word⇄byte
-  regroup WITH values (`bytes_of_words` as a list UnOp + a cancelling peval
-  rule); memmove's rotated ±1-stride loop; ccopy's MUX (`MUX c x x ~> x`
-  would make an equal header public again even under a secret ctl).
-- Decided (Emiel, 2026-10-23): (Q1) MIGRATE DIRECTLY — replace `arr`
-  everywhere, no cost probe first (the extra value existential per array
-  is accepted; deal with a slowdown afterwards). (Q2) word arrays hold
-  `list (bvec 32)`; the call-site regroup goes through a new list UnOp
-  `bytes_of_words` with a peval rule cancelling the round trip.
+`RsaSpikeSub.v` / `RsaSpikeSub2.v`. picolibc: `tools/bearssl/picolibc.sh`.
 
 **Known traps (each cost time).**
 - An instruction carrying a block runs the block INSTEAD of itself, ghosts
   included — put seeds in `ghost_after` of the instruction before.
+- A block's precondition must use `chunk_angelic` (`clem_arrv_angelic`) for
+  arrays whose address is a block variable — a plain chunk cannot search
+  the heap.
 - Debugging a red function/segment VC: `cfg_vc` erases to a bare `False`;
   dump `DebugCFGVerifierContract c annot` after `vm_compute` with `Set
   Printing Depth 100000` via a one-off `coqc` (proof temporarily replaced by
   `match goal with |- ?G => idtac "ZZ:" G end`), and grep the `amsg`
-  `debug_string_message` + its path condition. That is how the `sext r`
-  exit miss was found in two runs.
-- Memory: the background-shell reaper kills the gate at `MuladdParamVC`
-  (~10 GB) or the axiom probes when RAM is short — build
-  `MuladdParamVC.vo` first, run the gate's last stage in the foreground
-  (`GATE_JOBS=1 GATE_PROBE_BATCH=18`). pet OOMs replaying `GenCompose.v`
-  past line ~2300.
-- Rebuild costs after a `theories/` edit: light chain to `RsaSpikeSub.vo`
-  ~16 min at `-j2`, heavy chain to `RsaSpikeSubResult.vo` ~19 min at `-j1`.
-  Prototype in preamble mode (`From Katamaran Require Import
-  RiscvPmp.CFGVer.Example.Prelude` gives `Term`/`inst`/`≡`; name implicit
-  arguments of `uop.sext` as `(m:=…) (n:=…) (p:=…)`).
-- `Bitvector.v`'s `Section Integers` opens `Z_scope`: write `{m n : nat}`
-  and `%nat` in any new width lemma there.
+  `debug_string_message` + its path condition.
+- MEMORY (14 GB box): the background-shell reaper kills long builds when
+  RAM is short — `MuladdParamVC` needs ~9.4 GB (close Firefox), every
+  `*Result.v` ~7.7 GB (build them `-j1`, never two at once), the gate's
+  axiom probes ~7 GB (run that stage in the foreground). A reaped job is
+  not a failure; ask Emiel before restarting it.
+- Watchdogs: match `pgrep -x coqc` + the cmdline, never `pgrep -f <file>`
+  (it matches the watchdog's own shell). Cutoff: kill above 1.5× a file's
+  baseline USER CPU (memory `feedback-compile-cutoff`).
+- Result files import iris proofmode: `rewrite` is SSReflect-style
+  (`rewrite a -b`, not `rewrite a, <- b`); `cbn -[bv.of_N]` stops
+  `bv.eqb (bv.of_N k) bv.zero` from computing (concretized `PVOff` regs).
+- `Verifier.v` / `SpecIris.v` have implicit arguments ON: every helper needs
+  `Arguments … w …` (Verifier) or `@` calls (SpecIris); SpecIris is proved
+  in PREAMBLE mode (pet OOMs on it), preamble in the PLAN-arrv record.
 - Result-file proofs: `repeat constructor` overshoots on `ForallOrdPairs`
   of disjunctions, use `repeat (first [apply FOP_cons | apply FOP_nil |
   apply List.Forall_cons | apply List.Forall_nil])`; a goal's `bv.bin h`
   can carry a differently spelled width index than the hypothesis — close
   with `exact` (conversion), not `lia`.
-- LoopN hard-codes the `m` array PUBLIC; in RSA the modulus is secret —
-  Phase 3 needs a LoopN variant with both publicness flags.
-- `Tables.v` has no `S4`–`S11` aliases yet (needed by montymul's listing).
-- Solver.v builds take ~6 min and invalidate everything downstream.
+- `Bitvector.v`'s `Section Integers` opens `Z_scope`: write `{m n : nat}`
+  and `%nat` in any new width lemma there.
+- `Tables.v` has no `S4`–`S11` aliases yet (montymul's listing needs them).
+- Rebuild costs: after a `Sig.v` edit ~1 h of serial rebuild; after a
+  `theories/` edit the light chain to `RsaSpikeSub.vo` ~16 min at `-j2` and
+  the heavy chain ~19 min at `-j1`. Prototype in preamble mode first.
+- The `arr`-based ZZ probes (`Example/Rsa/ZZArrv{Cost,Ambig,AmbigSwap,
+  Split}.v`, `Example/CheckScalar/ZZArrvInteract.v`,
+  `Example/Muladd/ZZLoop{I,K,M}Arr.v`) no longer compile — rerun them at
+  `f7fc0a65` if a measurement must be reproduced.
+
+**Process (Emiel's standing rules).** Report before acting; ask at design
+forks; light checks per phase, ONE full gate at the plan's end; no
+per-phase `Print Assumptions`; commit `WIP (LLM):` freely with `git add -u`
++ named new files (never `git add -A`: untracked ZZ probes); log every
+step in §5 (stamps, wait vs authoring, VC CPU/RSS, LOC, attempts).
 
 Source: BearSSL `git clone https://www.bearssl.org/git/BearSSL`, HEAD
 `7bea48e` (2026-04-06). The `src/int/i31_*` and `src/rsa/rsa_i31_priv.c`
@@ -319,6 +280,20 @@ the stub only declares `memcpy/memmove/memset/memcmp/strlen`.
 - **D4 — both builds**: show the unmodified build REJECTED (a failing VC at
   the `muladd_small` q-step), then verify the hardened build.
 
+- **D5 (2026-10-26, Phase 2 mem* contracts)** — facts first (BearSSL
+  `7bea48e`): every `memset` call passes `c = 0`; both `memmove` sites have
+  `dst > src` (backward only) — `i31_muladd.c:86,93` OVERLAPS (shifts
+  `x[1..]` up one word, secret limbs), `rsa_i31_priv.c:136` is adjacent,
+  disjoint, and moves `p` WITH its public header. Decided:
+  memcpy post = EXACT value (`dst ↦ vs`, source unchanged, `a0 = dst`);
+  memset post = `∃ vs. dst ↦ vs ∗ secLeak vs` under `secLeak c` (no
+  `repeat` term); memmove = TWO backward contracts on the same code, the
+  forward branch refuted by `src <u dst`: (a) disjoint with memcpy's value
+  post (rsa_priv), (b) one-region overlapping shift with values ∃
+  (muladd_small). br_ccopy: Emiel asked first WHY the existing bv rules do
+  not reduce `((y^x)&m)^y` with `x ≡ y`, and whether earlier rules could
+  have been more general — investigate before adding any rule.
+
 Defaults taken without asking (say if wrong): key size parametric (∀ length);
 leakage model = current `KatamaranRel` (no MUL leak); `-O2`.
 
@@ -346,6 +321,34 @@ leakage model = current `KatamaranRel` (no MUL leak); `-O2`.
     not its entry. Either one loop contract with a ±1 stride variable, or
     two (one per direction); decide when we get there.
   Writeup: "linked against picolibc's size-optimised mem*".
+- **O4 (Phase 2/5, found 2026-10-26) — br_ccopy hits the RelVal TAG, not a
+  missing rule.** `br_ccopy` byte = `((y^x) & −ctl) ^ y`. With `ctl` secret,
+  `liftBinOpRV` (`TypeDecl.v:268`) makes the header byte `NonSyncVal h h`
+  even when `x ≡ y ≡ h`, and `secLeak (NonSyncVal _ _) = False`
+  (`Formulas.v:117`). So NO peval/solver rewrite to `y` is sound under ≡
+  (it would turn NonSyncVal into SyncVal) — the same reason ring
+  normalisation pads `0·a` and `x − x` is not `0`. Survey: no xor rule
+  exists at all; the generic `peval_bvand`/`peval_bvor` are commented out
+  (`9478b8d2`, soundness never re-proved after the RelVal migration
+  `196eae12`), and `t & 0 → 0` among them is itself unsound for secret `t`;
+  the live bitwise rules are idiom-specific (mask algebra, coalesce, mulx)
+  and are sound precisely because they keep secret inputs secret.
+  Consequence beyond ccopy: modpow2.c:152 `CCOPY(NEQ(bits,0), x, t1, mlen)`
+  then `br_i31_from_monty(x, …)` → `br_i31_sub(x, m, …)`, which reads
+  `x[0]` as a LOOP BOUND (`i31_sub.c:35`) — so Phase 5 needs `x[0]` public
+  after the ccopy. Under the tagged model that is unprovable. The parked
+  RelVal-as-pair branch (`issue/relval-pair`, PLAN-relval-pair.md) makes
+  `secLeak` = equal projections, after which the MUX identity (and
+  `x^x→0`, `x&0→0`, `x−x→0`) are plain per-projection bv identities.
+  DECIDED (Emiel, 2026-10-26): mem* now; `br_ccopy` now with an ∃-valued
+  destination (no public header) so the function and GATE 2's view change
+  are still exercised; revive relval-pair (rebase onto current
+  `KatamaranRel`) as its own step BEFORE Phase 5.
+  REVISED (Emiel, 2026-10-27): "go for the somewhat ad hoc rule for now" —
+  a RESYNC ghost lemma (a cell/array holding `((y^y)&m)^y` becomes one
+  holding `y`), sound IF the Iris memory interpretation reads only the two
+  projections (tag-free, as relval-pair's notes say of the Iris model —
+  CHECK that first). relval-pair stays the principled fix, not scheduled.
 - **O2 (Phase 7)** — how the top-level statement ends. The kernel's statement
   exits at a literal address; a function returns to `ra`. Proposal: a
   2-instruction harness `jal ra, br_rsa_i31_private; <exit>` in the program
@@ -639,6 +642,15 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-26 | arrv Phase D′: string tag on arrv (D14–D17) — Sig, IrisInstanceBinary, Verifier CLems, SpecIris, GenSegment, EndToEnd, RSA spikes, RsaSpikeSb, check_scalar, LoopN; rig ZZArrvTagged.v; diagnostics §7 | not stamped (Sig.v/IrisInstanceBinary last edited 14:09) | 15:49 | — (not stamped) | light chain + examples (one -j2 build, output truncated by tail); heavy chain to GenProg -j2 killed by the memory reaper while two Result files ran (~7.7 GB each); Result files -j1 4 × 16–22 s user / 7.7 GB | — | valid_sub_loop 36.9 → 14.8 s, valid_sub 23.6 → 3.4 s (cold, as shipped); LoopN warm 31.7 → 9.7 s (arr 8.6 s); surviving value ∃ 72 → 0 | +210 −197 over 14 .v files (Verifier ±150, SpecIris ±64) | 2 guard denials (skill-path-guard on Verifier.v Edit — an earlier Bash edit had bypassed it; skill-bash-write-guard on a SKILL.md) + 1 memory kill; no failed VC | prediction confirmed; every Fail control still rejected; 1 user decision (D17 per-array tags) |
 | 2026-10-26 | arrv Phase D step 3: muladd on tagged arrv (LoopD/DAng/D0, I/K/M tags, Tail + hand_over from the LoopN records, sym6 → gen_prog_contract, Result → one gen_prog_noninterferent); 3 matched arr baselines ZZLoop{I,K,M}Arr.v | ~16:00 (not stamped) | ~18:30 (not stamped) | — | Instrs+LoopG 75 u, TailVC 388 u / 8.1 GB, MuladdParamVC killed once by the memory reaper during Qed (VC already closed, 375 u), rerun 533 u / 9.4 GB after Firefox closed; Result 4 builds × ~21 u / 7.7 GB | — | matched cold: DAng 5.77→5.76, D0 8.66→8.89, I 17.63→18.65, K 13.46→14.45, M 13.34→14.20 s; unmatched: TailVC 365→388 s, MuladdParamVC solve 483→366 s, file 657→533 s | +144 −165 over 9 muladd files (Result −110 +~50) | 0 failed VCs; Result 3 rounds (ssreflect `rewrite -`, cbn blocking bv.of_N, missing GenProg import); 1 watchdog self-match (pgrep -f) caught before it mattered | trusted statement unchanged; 1 user decision (restate via gen_prog_contract) |
 | 2026-10-26 | arrv Phase E: delete arr (Sig, IrisInstanceBinary, 15 CLems in Verifier, −836 lines SpecIris keeping 9 shared helpers; skills + archive) + gate E | not stamped | not stamped | — | light chain Sig→SpecIris ~6 min (SpecIris 112 u / 8.7 GB); gate prebuild 75 files -j1 (MuladdParamVC 538 u, TailVC 375 u, InvMixColumns 135 u, BearSSLCheckScalarLoop1 130 u); gate.sh build no-op + hole scan PASSED, axiom probes KILLED by the memory reaper | — | unchanged | −~1000 lines | 0 build failures | merged into local KatamaranRel on Emiel's instruction without the axiom step |
+| 2026-10-26 | Phase 2 resume: handoff, mem*/ccopy call-site survey, D5 questions | 18:34 | 18:39 | 5 | 0 | ~3 | — | — | — | +user time on 4 questions |
+| 2026-10-26 | ccopy: bv-rule survey (Explore agent) → O4 (tag wall, not a missing rule); "why relval-pair" | 18:39 | ~19:00 | ~20 | ~2 (agent) | ~10 | — | plan only | — | 2 user decisions (mem* now, pair before Ph5; later: ad hoc resync CLem instead) |
+| 2026-10-26 | gate (axiom probes) started; turned into a FULL rebuild (the 18:23 merge/switch touched every source) | 18:39 | ~23:58 | — | — | 0 | rebuilt theories→MuladdParamTailVC; 18:43→22:55 a machine suspend | — | — | REAPED by the memory killer at MuladdParamVC while idle; Emiel: the gate is not needed, merge without it |
+| 2026-10-26/27 | memcpy as a function (RsaMemcpy.v): picolibc link + asm_to_ast, loop/function/harness VCs; n = 0 path red → debug dump → new CLem `clem_arrv_empty_at` (Verifier.v; SpecIris case written, NOT YET BUILT) | ~23:00 | 00:33 | ~50 active | ~6 (debug coqc 236 s / 9.2 GB, light chain 81 s + GenSegment 15 s, file 20 s) | ~44 incl. 2 user questions | valid_ml_loop 5.1 s cold (1.35 s warm), valid_mf 0.27 s, valid_mcf 0.04 s; file 4.8 GB | RsaMemcpy 238 (11 generated instrs), Verifier +12, SpecIris +12 | 2 (loop arrays need chunk_angelic — the known trap; n = 0 seeds at an unbound address) | both Fail controls rejected (secret source; dst keeps old value) |
+| 2026-10-27 | memset as a function (RsaMemset.v, D5 post: ∃ vs public) | 00:33 | ~00:37 | ~4 | ~0.5 (file 20 s) | ~3.5 | valid_msl_loop 4.4 s cold (1.0 s warm), valid_mfs 0.11 s, valid_msf 0.03 s | RsaMemset 202 (9 generated instrs) | 1 (paren count, vos) | green first full compile; both Fail controls rejected (secret fill value; loop without secLeak v) |
+| 2026-10-27 | memmove (a) DISJOINT backward as a function (RsaMemmove.v): arrays flipped to stride -1 before the beqz, memcpy's loop at stride -1, value eq. vs = rev (done ++ rest) | ~00:37 | 00:41 | ~4 | ~0.5 (file 22 s) | ~3.5 | valid_mvl_loop 5.3 s cold (1.5 s warm), valid_mvf 1.05 s, valid_mmf 0.06 s | RsaMemmove ~250 (16 generated instrs) | 0 | green first try; both Fail controls rejected; no new lemma (peval_rev already has rev (rev v) ~> v) |
+| 2026-10-27 | memmove (b) OVERLAPPING shift by 4 bytes (muladd_small): window M kept flipped, T seeded by empty_at on flipped M, values unnamed | 00:41 | 00:47 | ~6 | ~2 (pet restart at 5.3 GB, file 30 s) | ~4 | valid_mwl_loop 1.27 s, valid_mwf 0.90 s (coqc) | +~150 in RsaMemmove | 1 (paren count, vos) | green first try; Fail control rejected (window not at the low 4 bytes); no harness for (b) yet -- its caller is Phase 4 |
+| 2026-10-27 | br_ccopy (RsaCcopy.v, header phase in the invariant): resync CLem `clem_resync_mux` + `clem_mux_byte` (stored term probe-checked); 5-way `asn.or` invariant; range residuals → `bv.zero` case in MuladdParamClose's bv_consts + `nl ≠ 0`; header identity lost by take_first (cons not injective under the tag) → choice CLem `clem_arrv_take_any` (match_bool on an angelic bool, probe-checked both ways + control); local closer (rv_app_nil_l, guarded case split, sub/negate in bv_lin) | 00:47 | 11:31 (a long overnight idle gap inside; active ~2.5 h) | — | ~35 (probe coqc runs ~3.5 min / 9 GB each ×8, light chain ×2 ~100 s, one runaway closer killed at >10 min) | ~2 h | loop VC: vm_compute+solve_vc 61 s, 9.0 GB; STILL RED: 8 failing leaves, the genuine one apparently `c − 1 ≠ 0` at the limb back-edge | Verifier +~60, MuladdParamClose +4, RsaCcopy ~280 | ~10 | 3 user decisions (header phase; residual closer; choice CLem). SpecIris soundness cases for empty_at / resync_mux / take_any NOT written/built |
+| 2026-10-27 | br_ccopy GREEN: limb-phase probe isolated the closer gaps (sub/negate in bv_lin for hypotheses, `[] ++ v`, list assoc, subst of `sl = sd ++ sr`, evar fill); function VC: cell resync → 64^4 unrefuted angelic branches (vm_compute >900 s) → deterministic `clem_arrv_resync_head` (2.2 s); shelved block-entry obligation (eexists on `∃ (_:P), Q`) → `solve_cc_all` with unshelve; SpecIris soundness of the 3 CLems (mux_byte_same over zext', NonSyncVal bool by its halves) | ~11:35 | 14:09 | ~154 | ~95 (probe coqc runs 1–20 min each at 6–9.7 GB, swapping; SpecIris ×10 at ~2 min) | ~60 | loop 193 s, function 590 s, file 21.5 min wall / 788 s user / 9.6 GB; SpecIris 129 s / 8.8 GB | RsaCcopy ~390, Verifier ±60, SpecIris +~70 | ~15 compiles (closer leaves ×6, SpecIris ×10) | 1 user decision (keep debugging ccopy); negative control (no resync) rejected |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least

@@ -219,6 +219,21 @@ failed after a load or under an angelic choice between same-shape arrays
 value) / `take_cons` (pattern on a syntactic `x :: r`), `take_last`
 (`vs = r ++ [x]`), `add_first` (`x :: vs`), `add_last` (`vs ++ [x]`),
 `nonempty`, `empty` (`⊢ arrv a 0 a []`, `a` bound later by an ANGELIC match),
+`empty_at t t'` (`arrv t a … ⊢ itself ∗ arrv t' a 0 a []` — a seed at an
+existing array's start; use it when the seed is also made on a path that
+SKIPS the loop, e.g. memcpy's `beqz n, ret`: there `empty`'s address is never
+pinned and a later `join`'s plain match fails, `Example/Rsa/RsaMemcpy.v`),
+`take_any t` (`take_cons` OR `take_first`, chosen ANGELICALLY by a lemma
+boolean -- for a loop whose remainder is a syntactic cons in some trips and
+a variable in others, with ghosts that must be the same every trip; only the
+PATTERN take keeps a named head's identity, lifted cons is not injective
+under the tag), `resync_head t t'` (AD HOC, PLAN-rsa O4: a byte array whose
+head is `clem_mux_byte u m` -- exactly what br_ccopy stores for two equal
+bytes u under mask `A0 = m` -- gets head u back, u bound by the twin array
+t'; sound because memory reads only the projections. Match the arrays by
+tag and pattern, never two cells angelically: that version gave 64
+unrefutable candidates per use and `vm_compute` never finished;
+`Example/Rsa/RsaCcopy.v`),
 `empty_elim` (`a = e` only — never `vs = []`: `NonSyncVal [] []` exists),
 `lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
 `join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),
