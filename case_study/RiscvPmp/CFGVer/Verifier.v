@@ -187,7 +187,18 @@ Inductive CLem : Set :=
      some trips and a variable in others -- br_ccopy's header phase -- with
      ghosts that must be the same every trip.  Under the tag lifted cons is
      not injective, so only the PATTERN take keeps a named head's identity. *)
-  | clem_arrv_take_any (w : nat) (s : Z) (t : string).
+  | clem_arrv_take_any (w : nat) (s : Z) (t : string)
+  (* PLAN-rsa GATE 2 (word ⇄ byte view at a CALL SITE): the first word's
+     bytes in the open, as the slices le_bytes takes (clem_word_bytes):
+       arrv 1 1 a n e (regroup (x :: r)) ⊢ arrv 1 1 a n e (x₀ :: x₁ :: x₂ :: x₃ :: regroup r)
+     and, for ONE word, back (PATTERN on the slices of x):
+       arrv 1 1 a 4 e [x₀; x₁; x₂; x₃] ⊢ arrv 4 4 a 1 e [x] *)
+  | clem_arrv_regroup_cons (t : string)
+  | clem_arrv_word_of_bytes1 (t : string)
+  (* bytes whose value is NOT syntactically `regroup v` (a callee's
+     unnamed output) back to words, with a fresh value:
+       arrv 1 1 a (4·k) e vs ∗ k <u 2^30 ⊢ ∃ v, arrv 4 4 a k e v ∗ ⌜vs = regroup v⌝ *)
+  | clem_arrv_of_bytes_any (t : string).
 
 Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
@@ -235,6 +246,19 @@ Definition clem_mux_byte {Σ} (u : Term Σ (clem_cell_ty 1)) (m : Term Σ ty_xle
        (term_binop bop.bvand
           (term_binop bop.bvxor (term_unop uop.zext u) (term_unop uop.zext u)) m)
        (term_unop uop.zext u)).
+
+(* the four bytes of a word, least significant first, exactly as
+   bv.le_bytes (the eval of uop.regroup) splits it: take 8 of successive
+   drop 8's -- prepended to tl *)
+Definition clem_word_bytes {Σ} (x : Term Σ (clem_cell_ty 4)) (tl : Term Σ (clemv_ty 1))
+    : Term Σ (clemv_ty 1) :=
+  let d1 := term_unop (uop.bvdrop 8 (n := 24)) x in
+  let d2 := term_unop (uop.bvdrop 8 (n := 16)) d1 in
+  let d3 := term_unop (uop.bvdrop 8 (n := 8)) d2 in
+  term_binop bop.cons (term_unop (uop.bvtake 8 (n := 24)) x)
+    (term_binop bop.cons (term_unop (uop.bvtake 8 (n := 16)) d1)
+       (term_binop bop.cons (term_unop (uop.bvtake 8 (n := 8)) d2)
+          (term_binop bop.cons (term_unop (uop.bvtake 8 (n := 0)) d3) tl))).
 
 Definition clem_lemma (k : CLem) : Lemma [ctx] :=
   match k with
@@ -409,6 +433,28 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
                                 (term_var "e") (term_var "r'"))
                        (asn.formula (formula_propeq (term_var "vs")
                           (term_binop bop.cons (term_var "x'") (term_var "r'"))))))))))
+  | clem_arrv_regroup_cons t =>
+      MkLemma [ctx]
+        ["a"∷ty_xlenbits; "n"∷ty_xlenbits; "e"∷ty_xlenbits; "x"∷clem_cell_ty 4; "r"∷clemv_ty 4] [env]
+        (clem_arrv_angelic 1 1 t (term_var "a") (term_var "n") (term_var "e")
+           (term_unop uop.regroup (term_binop bop.cons (term_var "x") (term_var "r"))))
+        (clem_arrv 1 1 t (term_var "a") (term_var "n") (term_var "e")
+           (clem_word_bytes (term_var "x") (term_unop uop.regroup (term_var "r"))))
+  | clem_arrv_word_of_bytes1 t =>
+      MkLemma [ctx] ["a"∷ty_xlenbits; "e"∷ty_xlenbits; "x"∷clem_cell_ty 4] [env]
+        (clem_arrv_angelic 1 1 t (term_var "a") (term_val ty_xlenbits (bv.of_N 4)) (term_var "e")
+           (clem_word_bytes (term_var "x") (term_val (clemv_ty 1) nil)))
+        (clem_arrv 4 4 t (term_var "a") (term_val ty_xlenbits (bv.of_N 1)) (term_var "e")
+           (term_binop bop.cons (term_var "x") (term_val (clemv_ty 4) nil)))
+  | clem_arrv_of_bytes_any t =>
+      MkLemma [ctx] ["a"∷ty_xlenbits; "k"∷ty_xlenbits; "e"∷ty_xlenbits; "vs"∷clemv_ty 1] [env]
+        (asn.sep (clem_arrv_angelic 1 1 t (term_var "a") (clem_x4 (term_var "k")) (term_var "e")
+                    (term_var "vs"))
+           (asn.formula (formula_relop bop.bvult (term_var "k")
+              (term_val ty_xlenbits (bv.of_N 0x40000000)))))
+        (asn.exist "v" (clemv_ty 4)
+           (asn.sep (clem_arrv 4 4 t (term_var "a") (term_var "k") (term_var "e") (term_var "v"))
+              (asn.formula (formula_propeq (term_var "vs") (term_unop uop.regroup (term_var "v"))))))
   end.
 
 Inductive Annot :=
