@@ -234,6 +234,15 @@ t'; sound because memory reads only the projections. Match the arrays by
 tag and pattern, never two cells angelically: that version gave 64
 unrefutable candidates per use and `vm_compute` never finished;
 `Example/Rsa/RsaCcopy.v`),
+the CALL-SITE word ⇄ byte view (PLAN-rsa GATE 2, `Example/Rsa/RsaCcopyGate.v`):
+`regroup_cons t` (`regroup (x :: r)` ⊢ `x₀ :: x₁ :: x₂ :: x₃ :: regroup r`, the
+slices `clem_word_bytes` -- exactly le_bytes' take/drop -- so a callee
+taking named header bytes matches), `word_of_bytes1 t` (`arrv 1 1 a 4 e
+[x₀;…;x₃]` ⊢ `arrv 4 4 a 1 e [x]`, pattern on the slices), `of_bytes_any t`
+(bytes whose value is NOT syntactically `regroup v`, e.g. a callee's unnamed
+output, back to words with a fresh `v` and `vs = regroup v`; needs `k <u
+2^30`). Way back for a header: `empty_at` at the array start, `take_cons`
+×4, `add_last` ×4, `word_of_bytes1`, then `join` with the limbs,
 `empty_elim` (`a = e` only — never `vs = []`: `NonSyncVal [] []` exists),
 `lockstep`, `drop`, `flip` (`rev vs`; `peval_rev` normalises to snoc form),
 `join` (`v1 ++ v2`, no overflow premise: the count is the length mod 2^32),

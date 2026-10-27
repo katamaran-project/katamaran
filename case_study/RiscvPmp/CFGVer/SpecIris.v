@@ -1307,6 +1307,106 @@ Module RiscvPmpIrisInstanceWithContracts.
            iExists x', r'; iFrame "Hc Harr"; auto) ].
     Qed.
 
+    (* ---- PLAN-rsa GATE 2: a word's bytes in the open ---- *)
+    (* the bytes of a word are its four take/drop slices (clem_word_bytes) *)
+    Lemma le_bytes_32 (x : bv 32) :
+      bv.le_bytes x = [bv.take 8 (n := 24) x; bv.take 8 (n := 16) (bv.drop 8 (n := 24) x);
+                       bv.take 8 (n := 8) (bv.drop 8 (n := 16) (bv.drop 8 (n := 24) x));
+                       bv.take 8 (n := 0) (bv.drop 8 (n := 8) (bv.drop 8 (n := 16) (bv.drop 8 (n := 24) x)))].
+    Proof.
+      destruct (bv.appView 8 24 x) as [b0 r0].
+      destruct (bv.appView 8 16 r0) as [b1 r1].
+      destruct (bv.appView 8 8 r1) as [b2 r2].
+      destruct (bv.appView 8 0 r2) as [b3 r3].
+      rewrite ?bv.drop_app ?bv.take_app.
+      rewrite (arrv_le_bytes_app 3 b0) (arrv_le_bytes_app 2 b1) (arrv_le_bytes_app 1 b2) (arrv_le_bytes_app 0 b3).
+      destruct (bv.view r3). reflexivity.
+    Qed.
+
+    Lemma clem_arrv_regroup_cons_sound `{sailGS2 Σ} (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_regroup_cons t)).
+    Proof.
+      intros ι. destruct_syminstance ι.
+      cbn -[interp_arrv]. iIntros "Harr". iApply (interp_arrv_proj with "Harr").
+      all: destruct x as [x|xl xr], r as [r|rl rr];
+        cbn -[bv.le_bytes bv.take bv.drop]; rewrite ?le_bytes_32; reflexivity.
+    Qed.
+
+    Lemma clem_arrv_word_of_bytes1_sound `{sailGS2 Σ} (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_word_of_bytes1 t)).
+    Proof.
+      intros ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct e as [e|]; cbn -[interp_arrv]; try (iIntros "[]").
+      iIntros "Harr".
+      iApply (interp_arrv_of_bytes a (bv.of_N 1) e); [cbn; lia|].
+      change (bv.mul (@bv.of_N xlenbits 4) (bv.of_N 1)) with (@bv.of_N xlenbits 4).
+      iApply (interp_arrv_proj with "Harr").
+      all: destruct x as [x|xl xr]; cbn -[bv.le_bytes bv.take bv.drop]; rewrite ?le_bytes_32; reflexivity.
+    Qed.
+
+    (* bytes back to words, four at a time *)
+    Fixpoint arrv_bytes_to_words (l : list (bv byte)) : list (bv (4 * byte)) :=
+      match l with
+      | b0 :: b1 :: b2 :: b3 :: r =>
+          (bv.app b0 (bv.app b1 (bv.app b2 (bv.app b3 bv.nil))) : bv (4 * byte))
+            :: arrv_bytes_to_words r
+      | _ => []
+      end.
+
+    Lemma arrv_flat_b2w (m : nat) : forall (l : list (bv byte)), length l = 4 * m ->
+      flat_map (@bv.le_bytes (4 * byte)) (arrv_bytes_to_words l) = l.
+    Proof.
+      induction m as [|m IH]; intros l Hl.
+      - destruct l; [reflexivity|cbn in Hl; lia].
+      - destruct l as [|b0 [|b1 [|b2 [|b3 r]]]]; cbn in Hl; try lia.
+        cbn [arrv_bytes_to_words flat_map].
+        rewrite (arrv_le_bytes_app 3 b0) (arrv_le_bytes_app 2 b1) (arrv_le_bytes_app 1 b2) (arrv_le_bytes_app 0 b3).
+        cbn [app]. rewrite IH; [reflexivity|lia].
+    Qed.
+
+    Lemma interp_arrv_facts `{sailGS2 Σ} (w : nat) (s : Z) (a n e : bv xlenbits) vs :
+      interp_arrv w s (SV a) (SV n) (SV e) vs ⊢@{iPropI Σ}
+      ⌜length (ty.projLeft vs) = length (ty.projRight vs) /\ bv.of_nat (length (ty.projLeft vs)) = n⌝.
+    Proof. cbn [interp_arrv]. iIntros "(_ & %Hlen & %Hn & _)". auto. Qed.
+
+    Lemma clem_arrv_of_bytes_any_sound `{sailGS2 Σ} (t : string) :
+      ValidLemma (clem_lemma (clem_arrv_of_bytes_any t)).
+    Proof.
+      intros ι. destruct_syminstance ι.
+      destruct a as [a|]; destruct k as [k|]; destruct e as [e|];
+        cbn -[interp_arrv]; try (iIntros "[[] _]").
+      iIntros "[Harr [%Hk _]]".
+      iDestruct (interp_arrv_length with "Harr") as %Hb.
+      iDestruct (interp_arrv_facts with "Harr") as %[HlT Hn].
+      (* by conversion: the literal's spelling defeats `change` *)
+      assert (Hk' : (bv.bin k < 1073741824)%N) by exact Hk. clear Hk. rename Hk' into Hk.
+      change (N.to_nat maxAddr) with 4096 in Hb.
+      apply (f_equal (@bv.bin xlenbits)) in Hn.
+      rewrite bv.bin_of_nat_small in Hn; [|change (bv.exp2 xlenbits) with 4294967296%N; lia].
+      unfold bv.mul in Hn. change (bv.bin (@bv.of_N xlenbits 4)) with 4%N in Hn.
+      rewrite bv.bin_of_N_small in Hn; [|change (bv.exp2 xlenbits) with 4294967296%N; lia].
+      assert (E4 : bv.bin (@bv.of_N xlenbits (4 * bv.bin k)) = (4 * bv.bin k)%N).
+      { apply bv.bin_of_N_small. change (bv.exp2 xlenbits) with 4294967296%N. lia. }
+      rewrite E4 in Hn.
+      set (m := N.to_nat (bv.bin k)).
+      assert (HL : length (ty.projLeft vs) = 4 * m).
+      { subst m. apply (f_equal N.to_nat) in Hn. rewrite Nat2N.id N2Nat.inj_mul in Hn. exact Hn. }
+      (* not lia: the two lengths' type indices are spelled differently *)
+      assert (HR : length (ty.projRight vs) = 4 * m) by exact (eq_trans (eq_sym HlT) HL).
+      set (v := match vs with
+                | ty.SyncVal l => ty.SyncVal (arrv_bytes_to_words l)
+                | ty.NonSyncVal l r => ty.NonSyncVal (arrv_bytes_to_words l) (arrv_bytes_to_words r)
+                end : RelVal (ty.list (ty.bvec (4 * byte)))).
+      assert (Hv : vs = uop.evalRel (uop.regroup (σ := ty.bvec (4 * byte)) (τ := ty.bvec (1 * byte))) v).
+      { subst v. destruct vs as [l|l r]; cbn in HL, HR |- *; f_equal; symmetry;
+          [apply (arrv_flat_b2w m); exact HL | apply (arrv_flat_b2w m); exact HL
+          | apply (arrv_flat_b2w m); exact HR]. }
+      iExists v. iSplitL "Harr".
+      - iRevert "Harr". rewrite {1}Hv. iIntros "Harr".
+        iApply (interp_arrv_of_bytes with "Harr"). exact Hk.
+      - auto.
+    Qed.
+
     Lemma clemSem `{sailGS2 Σ} (k : CLem) :
       ValidLemma (clem_lemma k).
     Proof.
@@ -1319,7 +1419,8 @@ Module RiscvPmpIrisInstanceWithContracts.
                   |apply clem_arrv_pad_sound|apply clem_arrv_split_sound
                   |apply clem_arrv_to_bytes_sound|apply clem_arrv_of_bytes_sound
                   |apply clem_arrv_empty_at_sound|apply clem_arrv_resync_head_sound
-                  |apply clem_arrv_take_any_sound].
+                  |apply clem_arrv_take_any_sound|apply clem_arrv_regroup_cons_sound
+                  |apply clem_arrv_word_of_bytes1_sound|apply clem_arrv_of_bytes_any_sound].
     Qed.
   End CLemSound.
 

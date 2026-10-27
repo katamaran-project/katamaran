@@ -103,6 +103,10 @@ AXIOM_CLEAN_THMS=(
   # frame, callee-saved s0-s2 pinned, a tail call whose block exit is the
   # caller's own return address reloaded by `lw` (peval_sext)
   "sub_call2_noninterferent"
+  # br_ccopy over two word arrays under a SECRET ctl (RsaCcopyGateResult.v,
+  # PLAN-rsa GATE 2): the word ⇄ byte view at the call site, and the shared
+  # public header kept public through the ad hoc clem_arrv_resync_head
+  "ccopy_noninterferent"
 )
 
 COQC="${COQC:-coqc}"

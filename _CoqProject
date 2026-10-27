@@ -110,6 +110,7 @@ case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemcpy.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemset.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemmove.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopy.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopyGate.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamInstrs.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop1.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop2.v
@@ -140,6 +141,7 @@ case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamResult.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarPtrResult.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSubResult.v
 case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSub2Result.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopyGateResult.v
 case_study/RiscvPmp/CFGVer/Example/Aes/InvMixColumnsResult.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v
