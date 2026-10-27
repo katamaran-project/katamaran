@@ -1269,22 +1269,11 @@ Module RiscvPmpIrisInstanceWithContracts.
       iIntros "Harr". iFrame "Harr". iApply interp_arrv_empty.
     Qed.
 
-    (* interp_arrv reads only the PROJECTIONS of its value: a NonSyncVal
-       with equal projections means the same as the SyncVal *)
-    Lemma interp_arrv_proj `{sailGS2 Σ} (w : nat) (s : Z) (a n e : RelVal ty_xlenbits)
-        (vs vs' : RelVal (ty.list (ty.bvec (w * byte)))) :
-      ty.projLeft vs = ty.projLeft vs' -> ty.projRight vs = ty.projRight vs' ->
-      interp_arrv w s a n e vs ⊢@{iPropI Σ} interp_arrv w s a n e vs'.
-    Proof.
-      intros HL HR. destruct a as [a|], n as [n|], e as [e|]; cbn [interp_arrv]; auto.
-      rewrite HL HR. auto.
-    Qed.
-
-    (* what br_ccopy stores for two equal bytes u under any mask m is u *)
-    Lemma mux_byte_same (p : IsTrue (Nat.leb 8 32)) (u : bv 8) (m : bv 32) :
-      bv.take 8 (bv.lxor (bv.land (bv.lxor (@bv.zext 8 u 32 p) (@bv.zext 8 u 32 p)) m)
-                   (@bv.zext 8 u 32 p)) = u.
-    Proof. rewrite bv.lxor_nilpotent bv.land_zero_l bv.lxor_zero_l. exact (bv.take_zext (k := 24) p u). Qed.
+    (* what br_ccopy stores for two equal bytes u under any mask m is u
+       (zext' is how uop.zext evaluates: append zeros) *)
+    Lemma mux_byte_same (u : bv 8) (m : bv 32) :
+      bv.take 8 (bv.lxor (bv.land (bv.lxor (bv.zext' u 24) (bv.zext' u 24)) m) (bv.zext' u 24)) = u.
+    Proof. rewrite bv.lxor_nilpotent bv.land_zero_l bv.lxor_zero_l. unfold bv.zext'. apply bv.take_app. Qed.
 
     Lemma clem_arrv_resync_head_sound `{sailGS2 Σ} (t t' : string) :
       ValidLemma (clem_lemma (clem_arrv_resync_head t t')).
@@ -1292,10 +1281,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       intros ι. destruct_syminstance ι.
       cbn -[interp_arrv]. iIntros "(Hm & Hs & Hd & %Hv & _)".
       iFrame "Hm Hs". iApply (interp_arrv_proj with "Hd").
-      - destruct (arrv_proj_cons v rd) as [-> _]. destruct (arrv_proj_cons u rd) as [-> _].
-        f_equal. subst v. destruct u as [u|ul ur], m as [m|ml mr]; cbn; apply mux_byte_same.
-      - destruct (arrv_proj_cons v rd) as [_ ->]. destruct (arrv_proj_cons u rd) as [_ ->].
-        f_equal. subst v. destruct u as [u|ul ur], m as [m|ml mr]; cbn; apply mux_byte_same.
+      all: subst v; destruct u as [u|ul ur], m as [m|ml mr], rd as [rd|rl rr]; cbn;
+        f_equal; symmetry; apply mux_byte_same.
     Qed.
 
     (* take_cons for b = true, take_first for b = false *)
@@ -1303,16 +1290,21 @@ Module RiscvPmpIrisInstanceWithContracts.
       ValidLemma (clem_lemma (clem_arrv_take_any w s t)).
     Proof.
       intros ι. cbv [clemv_ctx] in ι. destruct_syminstance ι.
-      destruct b as [[|]|bl br];
-        destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
+      (* a NonSyncVal b with equal halves matches like that bool; else nothing *)
+      destruct b as [bb|bl br];
+        [| cbn -[interp_arrv interp_ptstomem];
+           match goal with |- context [if ?d then _ else _] => destruct d as [<-|Hne] end;
+           [rename bl into bb | cbn; iIntros "[]"]].
+      all: destruct bb; destruct a as [a|]; destruct n as [n|]; destruct e as [e|];
         cbn -[interp_arrv interp_ptstomem]; try (iIntros "[]"); try (iIntros "[[] _]").
-      - iIntros "Harr".
-        iDestruct (interp_arrv_take_cons with "Harr") as "(%Hr & Hc & Harr)".
-        iFrame "Hc Harr". auto.
-      - iIntros "[Harr [%Hne _]]".
-        iDestruct (interp_arrv_take_first with "Harr") as (x' r') "(%Hvs & %Hr & Hc & Harr)";
-          [exact Hne|].
-        iExists x', r'. iFrame "Hc Harr". auto.
+      all: first
+        [ (iIntros "Harr";
+           iDestruct (interp_arrv_take_cons with "Harr") as "(%Hr & Hc & Harr)";
+           iFrame "Hc Harr"; auto)
+        | (iIntros "[Harr [%Hne _]]";
+           iDestruct (interp_arrv_take_first with "Harr") as (x' r') "(%Hvs & %Hr & Hc & Harr)";
+           [exact Hne|];
+           iExists x', r'; iFrame "Hc Harr"; auto) ].
     Qed.
 
     Lemma clemSem `{sailGS2 Σ} (k : CLem) :
