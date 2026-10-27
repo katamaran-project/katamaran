@@ -175,7 +175,14 @@ Inductive CLem : Set :=
      the projections, so the cell may hold u instead.  No rewrite could do
      this (it would turn NonSyncVal into SyncVal under ≡).  u is bound by
      the TWIN cell b (the solver does not decompose xor/and equations). *)
-  | clem_resync_mux.
+  | clem_resync_mux
+  (* PLAN-rsa O4: take_cons OR take_first, chosen ANGELICALLY by a lemma
+     boolean b (the executor resolves the match on an unbound angelic bool,
+     probe 2026-10-27).  For a loop whose remainder is a syntactic cons in
+     some trips and a variable in others -- br_ccopy's header phase -- with
+     ghosts that must be the same every trip.  Under the tag lifted cons is
+     not injective, so only the PATTERN take keeps a named head's identity. *)
+  | clem_arrv_take_any (w : nat) (s : Z) (t : string).
 
 Definition clem_off {Σ} (t : Term Σ ty_xlenbits) (z : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z z)).
@@ -372,6 +379,25 @@ Definition clem_lemma (k : CLem) : Lemma [ctx] :=
         (asn.sep (asn.chunk (chunk_ptsreg x10 (term_var "m")))
            (asn.sep (clem_ptsto 1 (term_var "b") (term_var "u"))
               (clem_ptsto 1 (term_var "a") (term_var "u"))))
+  | clem_arrv_take_any w s t =>
+      MkLemma [ctx] (clemv_ctx w ▻ "b"∷ty.bool ▻ "x"∷clem_cell_ty w ▻ "r"∷clemv_ty w) [env]
+        (asn.match_bool (term_var "b")
+           (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e")
+              (term_binop bop.cons (term_var "x") (term_var "r")))
+           (asn.sep (clem_arrv_angelic w s t (term_var "a") (term_var "n") (term_var "e") (term_var "vs"))
+              (clem_nonzero (term_var "n"))))
+        (asn.match_bool (term_var "b")
+           (asn.sep (clem_ptsto w (term_var "a") (term_var "x"))
+              (asn.sep (clem_range w (term_var "a"))
+                 (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
+                    (term_var "e") (term_var "r"))))
+           (asn.exist "x'" (clem_cell_ty w) (asn.exist "r'" (clemv_ty w)
+              (asn.sep (clem_ptsto w (term_var "a") (term_var "x'"))
+                 (asn.sep (clem_range w (term_var "a"))
+                    (asn.sep (clem_arrv w s t (clem_off (term_var "a") s) (clem_off (term_var "n") (-1))
+                                (term_var "e") (term_var "r'"))
+                       (asn.formula (formula_propeq (term_var "vs")
+                          (term_binop bop.cons (term_var "x'") (term_var "r'"))))))))))
   end.
 
 Inductive Annot :=

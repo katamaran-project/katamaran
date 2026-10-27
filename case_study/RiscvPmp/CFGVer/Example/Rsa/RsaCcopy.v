@@ -30,6 +30,69 @@
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Muladd.MuladdParamClose.
+From Coq Require Import ZArith Lia.
+
+(* ------------------------------------------------------------------------ *)
+(* The closer, extended for this file (kept local: MuladdParamClose's       *)
+(* closer serves the muladd/check_scalar VCs, whose leaves must not start   *)
+(* case-splitting every value).  Two leaf shapes the header phase leaves:  *)
+(* `[] ++ v = v` and a ring identity over values that are NOT public (the   *)
+(* limb pointers' arithmetic, the remainder's value): both hold for either  *)
+(* RelVal case, so split them all.                                          *)
+(* ------------------------------------------------------------------------ *)
+Lemma rv_app_nil_l {σ} (v : RelVal (ty.list σ)) : v = bop.evalRel bop.append (ty.SyncVal nil) v.
+Proof. destruct v; reflexivity. Qed.
+
+Ltac bv_lin_cc :=
+  first
+    [ bv_lin
+    | apply bv.unsigned_inj;
+      repeat first [ rewrite bv.unsigned_add | rewrite bv.unsigned_sub
+                   | rewrite bv.unsigned_negate | rewrite bv.unsigned_mul ];
+      unfold bv.truncz;
+      repeat match goal with x : bv _ |- _ =>
+        lazymatch goal with _ : (0 <= bv.unsigned x < _)%Z |- _ => fail
+                          | _ => pose proof (bv.unsigned_bounds x) end end;
+      unfold bv.unsigned in *; cbn [bv.bin] in *; bv_consts; cbn [Z.of_N] in *;
+      Z.to_euclidean_division_equations; lia ].
+
+Ltac rv_leaf_cc :=
+  first
+    [ rv_leaf
+    | apply rv_app_nil_l
+    (* only an evar-free equation, splitting only the values IN it: on a
+       wrong angelic branch's leaf this would otherwise split every value in
+       scope (2^k), measured as a >3x slowdown before this guard *)
+    | (cbn -[Erasure.inst_symprop] in *;
+       lazymatch goal with |- @eq (RelVal _) ?l ?r =>
+         tryif has_evar l then fail else tryif has_evar r then fail else idtac end;
+       repeat match goal with |- context [?v] =>
+         is_var v; lazymatch type of v with RelVal (ty.bvec _) => destruct v end end;
+       cbn -[Erasure.inst_symprop bv.add bv.mul bv.sub bv.negate bv.shiftl bv.shiftr bv.land
+             bv.sext bv.unsigned bv.of_N bv.ult bv.ule] in *;
+       f_equal; bv_lin_cc) ].
+
+Ltac mb_search_cc :=
+  lazymatch goal with
+  | |- exists _, _ =>
+      (repeat eexists; repeat split;
+       try (lazymatch goal with
+            | |- Erasure.inst_eformula' _ _ => cbn -[Erasure.inst_symprop]
+            | |- Erasure.inst_eq _ _ => cbn -[Erasure.inst_symprop] end);
+       try mb_eq_evar); mb_search_cc
+  | |- _ /\ _ => split; mb_search_cc
+  | |- True => exact I
+  | |- forall _, _ => intro; mb_search_cc
+  | |- _ \/ _ => first [ left; mb_search_cc | right; mb_search_cc ]
+  | |- _ => solve [ rv_leaf_cc ]
+  end.
+
+Ltac solve_cc_vc :=
+  intros; vm_compute; solve_vc;
+  try solve_symbase_fetch;
+  cbn [Erasure.inst_symprop];
+  cbn -[Erasure.inst_symprop] in * |- ;
+  mb_search_cc.
 
 Definition ccf_instrs : list AST :=
   [ RISCV_JAL (bv.of_Z 8) X1   (* jal	L_8	# 0x0: jal 0x8 <br_ccopy> *)
@@ -72,6 +135,12 @@ Definition lnil {Σ σ} : Term Σ (ty.list σ) := term_val (ty.list σ) nil.
 Definition hl4 {Σ σ} (a b c d : Term Σ σ) : list (Term Σ σ) :=
   List.cons a (List.cons b (List.cons c (List.cons d nil))).
 
+(* The loop takes each byte with clem_arrv_take_any: by PATTERN in the
+   header phase (the remainder is h_k :: .., and only a pattern take keeps
+   h_k's identity -- lifted cons is not injective under the tag), by
+   EQUATION in the limb phase (the remainder is a variable).  The choice is
+   angelic, so the ghosts are the same every trip. *)
+
 (* the source's DONE array: a tag of br_ccopy's own *)
 Definition cc_sd : string := "ccopy.sd".
 
@@ -87,10 +156,10 @@ Definition cclCtx : LCtx :=
    "sl"∷clemv_ty 1; "dl"∷clemv_ty 1].
 
 Definition ccl_annot (ts td : string) : list AnnotInstr :=
-  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 ts) ]
+  [ {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_any 1 1 ts) ]
      ; ai_instr := LOAD (bv.of_Z 0) A2 A4 true BYTE
      ; ai_ghost_after := [ AnnotCLemma (clem_arrv_add_last 1 1 cc_sd) ]; ai_block := None |}
-  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_first 1 1 td) ]
+  ; {| ai_ghost_before := [ AnnotCLemma (clem_arrv_take_any 1 1 td) ]
      ; ai_instr := LOAD (bv.of_Z 0) A1 A5 true BYTE
      ; ai_ghost_after := nil; ai_block := None |}
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) A2 A6 RISCV_ADDI)
@@ -141,6 +210,9 @@ Definition ccl_inv (ts td : string) : Assertion (cclCtx ▻ "a"∷ty_xlenbits) :
           ∗ asn.formula (formula_propeq (term_var "sl")
               (term_binop bop.append (term_var "sd") (term_var "sr"))))))))))))
     ∗ secLeakvar "s" ∗ secLeakvar "d" ∗ secLeakvar "nl"
+    (* 0 < nl < 2^31: limbs after the header, and nothing wraps -- the
+       header phase's counts and early exits close from these by bv_lin *)
+    ∗ clem_nonzero (term_var "nl")
     ∗ asn.formula (formula_relop bop.bvult (term_var "nl") (term_val ty_xlenbits (bv.of_N 0x80000000)))
     ∗ asn.exist "v4" ty_xlenbits (A4 ↦ᵣ term_var "v4")
     ∗ asn.exist "v5" ty_xlenbits (A5 ↦ᵣ term_var "v5")
@@ -165,4 +237,4 @@ Definition cclRec (ts td : string) : @CFGVerifierContract cclCtx :=
 Definition cclBlk (ts td : string) : BlkAnnot := {| blk_ctx := cclCtx ; blk_contract := cclRec ts td |}.
 
 Lemma valid_ccl_loop : cfg_vc_loop (cclRec "vs" "dv") (ccl_annot "vs" "dv").
-Proof. Time solve_mb_vc. Qed.
+Proof. Time solve_cc_vc. Qed.
