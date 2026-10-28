@@ -78,7 +78,7 @@ Definition Byte : Set     := bv byte.
 
 (* 1. Definition of RAM memory *)
 Definition minAddr : N := 0.
-Definition lenAddr : N := 2^10.
+Definition lenAddr : N := 2^14.
 Definition maxAddr : N := minAddr + lenAddr.
 Lemma minAddr_rep : (minAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
