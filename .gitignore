@@ -23,3 +23,4 @@ case_study/Stats/*.log
 _build/
 rocq_mcp_cache_*
 .envrc.local
+time-of-build*.log
