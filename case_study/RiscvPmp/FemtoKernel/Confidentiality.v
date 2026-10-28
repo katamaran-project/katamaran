@@ -105,7 +105,8 @@ Section RelationalVerification.
     Example femtokernel_handler_secret_write_pre_rel : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_secret_write_addr) (sub_up1 (sub_cat_left _)) ∗
       mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
-      x1 ↦ term_var "x1".
+      x1 ↦ term_var "x1" ∗
+      x5 ↦ term_val ty_xlenbits mmioShutdownAddr.
 
     Example femtokernel_handler_dispatch_pre_rel : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
       asn.sub_assertion (femtokernel_handler_shared_pre handler_dispatch_addr) (sub_up1 (sub_cat_left _)) ∗
@@ -118,7 +119,7 @@ Section RelationalVerification.
       mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
       term_var "an" = term_val ty_xlenbits (bv.of_N handler_exit_addr) ∗
       x1 ↦ term_val ty_xlenbits bv.zero ∗
-      x5 ↦ term_val ty_xlenbits (bv.of_N 42) ∗
+      x5 ↦ term_val ty_xlenbits (bv.of_N mmioStartAddr) ∗
       asn.chunk (chunk_user (Sig.written bytes_per_word)
                    [term_val ty_xlenbits (bv.of_N mmio_write_adv);
                     term_val (ty_bytes bytes_per_word) (bv.of_N 42)]).
@@ -128,7 +129,8 @@ Section RelationalVerification.
       asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
       mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
       term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_secret_write_size) ∗
-      x1 ↦ term_val ty_xlenbits bv.zero.
+      x1 ↦ term_val ty_xlenbits bv.zero ∗
+      x5 ↦ term_val ty_xlenbits (bv.of_N mmioStartAddr).
 
   End WithAssertionNotations.
 
@@ -676,7 +678,7 @@ Section RelationalVerification.
   Lemma femtokernel_handler_secret_write_safe_rel `{sailGS2 Σ} (vx1 secret1 secret2 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) (Hmpp : ArchState.mpp (ArchState.mstate archstate) ≠ Machine) :
     ⊢ femtokernel_safe_shared_pre2 handler_secret_write_addr femtokernel_handler_secret_write ∗
       asn.interpret femtokernel_handler_secret_write_pre_rel (csrs_valuation archstate vmie).["x1" ∷ ty_xlenbits ↦ vx1].["a" ∷ ty_xlenbits ↦ bv.of_N handler_secret_write_addr] ∗
-      interp_gprs {[x1]} ∗
+      interp_gprs {[x1; x5]} ∗
       interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 ∗
       nothingPending2 ∗
       powered2 true ∗
@@ -706,13 +708,13 @@ Section RelationalVerification.
       iApply (femtokernel_handler_secret_write_post_binary_combine with "H1 H2").
     - iIntros (an) "(Hpost & Hepi & Hpow)".
       iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
-      iDestruct "Hpost" as "((Hshared & Hmstatus & [%Han _] & Hx1) & Hdata)"; cbn - [interp_ptstomem] in *.
-      iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
-      { iApply (interp_gprs_with_excluded (exclude := {[x1]}));
+      iDestruct "Hpost" as "((Hshared & Hmstatus & [%Han _] & Hx1 & Hx5) & Hdata)"; cbn - [interp_ptstomem] in *.
+      iAssert (interp_gprs ∅) with "[Hgprs Hx1 Hx5]" as "Hgprs".
+      { iApply (interp_gprs_with_excluded (exclude := {[x1; x5]}));
           try solve_subseteq.
         iFrame "Hgprs".
         reduce_big_sepS_big_sepL.
-        now iFrame "Hx1". }
+        now iFrame "Hx1 Hx5". }
       iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
                  LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I
@@ -793,11 +795,11 @@ Section RelationalVerification.
           iApply (semWP2_fun_loop_off with "Hoffl Hoffr").
           iIntros "_ _". iFrame "Hnp". done.
       + (* Perform the secret write. *)
-        iAssert (interp_gprs {[x1]}) with "[Hgprs Hx5 Hx10]" as "Hgprs".
-        { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5; x10]})); try solve_subseteq.
+        iAssert (interp_gprs {[x1; x5]}) with "[Hgprs Hx10]" as "Hgprs".
+        { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]})); try solve_subseteq.
           iFrame "Hgprs".
           reduce_big_sepS_big_sepL.
-          iFrame "Hx5 Hx10". by cbn. }
+          iFrame "Hx10". by cbn. }
         iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
                    interp_ptstomem2 (bv.of_N data_addr) (secret1 : Val ty_xlenbits) secret2 -∗
@@ -807,7 +809,7 @@ Section RelationalVerification.
         { iIntros "!>" (priv ms ss pc Hpriv) "Hhsecret Hdata Hhexit Htrap Hnp Hpow".
           iApply ("Hk" with "[//] Hinstrs Hhshutdown Hhsecret Hdata Hhexit Htrap Hnp Hpow"). }
         iApply (femtokernel_handler_secret_write_safe_rel _ _ _ _ _ Hmpp); cbn - [interp_ptstomem].
-        iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hdata Hnp Hpow Hksecret Hinv".
+        iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hx5 Hdata Hnp Hpow Hksecret Hinv".
         repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
         repeat iSplit; try iPureIntro; try done; by vm_compute.
   Qed.
