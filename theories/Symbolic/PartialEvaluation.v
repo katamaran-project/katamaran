@@ -452,7 +452,7 @@ Module Type PartialEvaluationOn
 
     End WithPevalBvandVal.
 
-    Equations peval_bvand_val [m] (t : Term Σ (ty.bvec m)) (v : Val (ty.bvec m)) :
+    Equations(noeqns) peval_bvand_val [m] (t : Term Σ (ty.bvec m)) (v : Val (ty.bvec m)) :
       Term Σ (ty.bvec m) :=
     | term_val _ v1               , v2 => term_val (ty.bvec _) (bv.land v1 v2)
     | term_binop bop.bvapp t1 t2  , v  => peval_bvand_bvapp_val peval_bvand_val t1 t2 v
@@ -496,7 +496,7 @@ Module Type PartialEvaluationOn
 
     End WithPevalBvorVal.
 
-    Equations peval_bvor_val [m] (t : Term Σ (ty.bvec m)) (v : Val (ty.bvec m)) :
+    Equations(noeqns) peval_bvor_val [m] (t : Term Σ (ty.bvec m)) (v : Val (ty.bvec m)) :
       Term Σ (ty.bvec m) :=
     | term_val _ v1               , v2 => term_val (ty.bvec _) (bv.lor v1 v2)
     | term_binop bop.bvapp t1 t2  , v  => peval_bvor_bvapp_val peval_bvor_val t1 t2 v

@@ -795,7 +795,7 @@ Module Type GenOccursCheckOn
     | VarUsed : forall Σ1 (wk : WeakensTo Σ1 Σ2), WeakenZeroView (WkKeepVar b wk)
     .
 
-    Equations weakenZeroView {Σ1 Σ2 b} (wk : WeakensTo Σ1 (Σ2 ▻ b)) : WeakenZeroView wk :=
+    Equations(noeqns) weakenZeroView {Σ1 Σ2 b} (wk : WeakensTo Σ1 (Σ2 ▻ b)) : WeakenZeroView wk :=
     | WkSkipVar _ wk => VarUnused b wk
     | WkKeepVar _ wk => VarUsed b wk
     .
@@ -804,7 +804,7 @@ Module Type GenOccursCheckOn
     | WkNilViewNil : WeakenNilView WkNil
     .
 
-    Equations weakenNilView {Σ1} (wk : WeakensTo Σ1 [ctx]) : WeakenNilView wk :=
+    Equations(noeqns) weakenNilView {Σ1} (wk : WeakensTo Σ1 [ctx]) : WeakenNilView wk :=
     | WkNil => WkNilViewNil
     .
 
@@ -834,7 +834,7 @@ Module Type GenOccursCheckOn
                   (fun b' Σ b bIn => WkSkipVar _ (wkSingleton bIn))
                   bIn.
 
-    Equations wkVarZeroIn {Σ Σ' : LCtx} {b} (σ : WeakensTo (Σ' ▻ b)%ctx Σ) : b ∈ Σ :=
+    Equations(noeqns) wkVarZeroIn {Σ Σ' : LCtx} {b} (σ : WeakensTo (Σ' ▻ b)%ctx Σ) : b ∈ Σ :=
     | WkKeepVar _ _ => ctx.in_zero
     | WkSkipVar _ wk => ctx.in_succ (wkVarZeroIn wk)
     .
@@ -913,7 +913,7 @@ Module Type GenOccursCheckOn
     | WeakenVarUsed : forall {Σ1} (bIn' : b ∈ Σ1) (wk : WeakensTo Σ1 Σ2), WeakenVarView bIn wk
     .
 
-    Equations weakenVarView {Σ1 Σ2 b} (bIn2 : b ∈ Σ2) (wk : WeakensTo Σ1 Σ2) : WeakenVarView bIn2 wk :=
+    Equations(noeqns) weakenVarView {Σ1 Σ2 b} (bIn2 : b ∈ Σ2) (wk : WeakensTo Σ1 Σ2) : WeakenVarView bIn2 wk :=
     | bIn2 | WkNil => match ctx.view bIn2 with end
     | bIn2 | WkSkipVar _ wk =>
                match ctx.view bIn2 with
@@ -1027,7 +1027,7 @@ Module Type GenOccursCheckOn
         now rewrite lookup_sub_wk1.
     Qed.
 
-    Equations transWk_assoc {Σ1 Σ2 Σ3 Σ4} (σ1 : WeakensTo Σ1 Σ2) (σ2 : WeakensTo Σ2 Σ3) (σ3 : WeakensTo Σ3 Σ4) :
+    Equations(noeqns) transWk_assoc {Σ1 Σ2 Σ3 Σ4} (σ1 : WeakensTo Σ1 Σ2) (σ2 : WeakensTo Σ2 Σ3) (σ3 : WeakensTo Σ3 Σ4) :
       transWk σ1 (transWk σ2 σ3) = transWk (transWk σ1 σ2) σ3 :=
     | σ1 | σ2 | WkSkipVar x σ3 => _ (transWk_assoc σ1 σ2 σ3)
     | σ1 | WkSkipVar x σ2 | WkKeepVar x σ3 => _  (transWk_assoc σ1 σ2 σ3)
