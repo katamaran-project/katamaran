@@ -78,7 +78,7 @@ Definition Byte : Set     := bv byte.
 
 (* 1. Definition of RAM memory *)
 Definition minAddr : N := 0.
-Definition lenAddr : N := 2^10.
+Definition lenAddr : N := 2^14.
 Definition maxAddr : N := minAddr + lenAddr.
 Lemma minAddr_rep : (minAddr < bv.exp2 xlenbits)%N.
 Proof. now compute. Qed.
@@ -90,7 +90,11 @@ Proof. now compute. Qed.
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
 (* All addresses present in RAM memory *)
-Definition liveAddrs := bv.seqBv (@bv.of_N xlenbits minAddr) lenAddr.
+(* Sealed so that neither the kernel nor vm_compute unfolds the full RAM list, e.g. at Qed of initMemMap_works. *)
+Definition liveAddrs_def : list Addr := bv.seqBv (@bv.of_N xlenbits minAddr) lenAddr.
+Definition liveAddrs_aux : seal (@liveAddrs_def). Proof. by eexists. Qed.
+Definition liveAddrs : list Addr := liveAddrs_aux.(unseal).
+Lemma liveAddrs_eq : liveAddrs = liveAddrs_def. Proof. rewrite -liveAddrs_aux.(seal_eq) //. Qed.
 
 (* All addressable addresses of the machine *)
 Definition all_addrs_def : list Addr := bv.seqBv bv.zero (N.pow 2 (N.of_nat xlenbits)).
@@ -304,7 +308,7 @@ Parameter mmioenv : MMIOEnv.
 (* Addresses cannot both be MMIO and RAM. We need to know this when trying to inject pointsto-chunks for RAM back into maps of pointsto chunks. *)
 
 Lemma mmio_ram_False a : a ∈ liveAddrs → a ∈ mmioAddrs -> False.
-Proof. unfold liveAddrs, mmioAddrs, mmioStartAddr, mmioLenAddr, maxAddr, minAddr, lenAddr.
+Proof. rewrite liveAddrs_eq; unfold liveAddrs_def, mmioAddrs, mmioStartAddr, mmioLenAddr, maxAddr, minAddr, lenAddr.
        apply bv.seqBv_no_overlap; cbn; lia.
 Qed.
 

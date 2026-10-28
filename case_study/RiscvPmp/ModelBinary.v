@@ -421,7 +421,7 @@ Module RiscvPmpModel2.
         (addr <ᵘ bv.of_N maxAddr) ->
         addr ∈ liveAddrs.
     Proof.
-      unfold liveAddrs, maxAddr.
+      rewrite liveAddrs_eq; unfold liveAddrs_def, maxAddr.
       intros.
       apply bv.in_seqBv;
         eauto using maxAddr_rep.
@@ -443,7 +443,7 @@ Module RiscvPmpModel2.
       unfold maxAddr.
       intros addr bytes bytesfit addrbytesFits addrDiffFits Hmin Hmax.
       unfold bv.ule, bv.ule in *.
-      unfold liveAddrs.
+      rewrite liveAddrs_eq; unfold liveAddrs_def.
       exists (bv.seqBv (bv.of_N minAddr) (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr))%N).
       exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (@bv.bin xlenbits (bv.of_N minAddr + bv.of_N lenAddr) - bv.bin (addr + bv.of_nat bytes))).
       rewrite <-(bv.seqBv_app addr).

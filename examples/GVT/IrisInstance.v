@@ -67,7 +67,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace ; iostatePreΣ IOState].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
-  Proof. now eapply Prelude.nodup_fixed. Qed.
+  Proof. rewrite liveAddrs_eq. apply bv.NoDup_seqbv. now compute. Qed.
 
   #[global] Arguments liveAddrs : simpl never.
 
@@ -950,7 +950,8 @@ Module RiscvPmpIrisInstance <:
       iApply interp_addr_access_byte_extr.
       apply bv.seqBv_spec in Hseq as Hspec.
       apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
-      unfold liveAddrs, bv.seqBv.
+      rewrite liveAddrs_eq; unfold liveAddrs_def.
+      unfold bv.seqBv.
       rewrite -(bv.of_Z_unsigned y).
       apply list_elem_of_fmap_2.
       rewrite elem_of_seqZ.
