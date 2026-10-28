@@ -1,0 +1,47 @@
+name: nix
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    # Branches in this repo are built on push; PRs only when from a fork.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
+    name: ${{ matrix.rocq }}
+    runs-on: [ubuntu-latest]
+    strategy:
+      fail-fast: false
+      matrix:
+        rocq: [rocq920,rocq930]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: katamaran
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          # Don't push the timing output; it goes into the artifact.
+          pushFilter: '-timing$'
+      - name: Build package
+        run: nix build -L '.#${{ matrix.rocq }}^out,timing'
+      - name: Collect timings
+        run: |
+          mkdir timing
+          cp result-timing/* timing/
+          cat > timing/ci.txt <<EOF
+          commit: ${{ github.sha }}
+          ref: ${{ github.ref }}
+          run: ${{ github.run_id }}.${{ github.run_attempt }}
+          matrix: ${{ matrix.rocq }}
+          runner: ${{ runner.name }} ${{ runner.os }} ${{ runner.arch }}
+          nixpkgs: $(nix flake metadata --json | jq -r '.locks.nodes.nixpkgs.locked.rev')
+          EOF
+      # upload-artifact@v5 without the GHES check. v7 sends a mime_type field
+      # that Forgejo's artifact API rejects.
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@cb8afe72b42edc798abfb8fcb556cf660d894245 # v5
+        with:
+          name: timing-${{ github.sha }}-${{ matrix.rocq }}
+          path: timing/
+          retention-days: 90

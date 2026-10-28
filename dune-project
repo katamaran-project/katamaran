@@ -27,7 +27,7 @@ framework.")
    "category:Computer Science/Semantics and Compilation/Semantics"
    "logpath:Katamaran"))
  (depends
-  (coq           (and (>= 8.20)  (< 9.1)))
-  (coq-equations (and (>= 1.3)   (< 1.4)))
-  (coq-iris      (and (>= 4.3.0) (< 4.4)))
-  (coq-stdpp     (and (>= 1.11.0) (< 1.12)))))
+  (rocq-core      (and (>= 9.2)    (< 9.4)))
+  (rocq-equations (and (>= 1.3.2)  (< 1.4)))
+  (rocq-iris      (and (>= 4.5.0)  (< 4.6)))
+  (rocq-stdpp     (and (>= 1.13.0) (< 1.14)))))

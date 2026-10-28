@@ -17,9 +17,9 @@ more information visit [our website](https://katamaran-project.github.io/).
 Dependencies
 ------------
 
-The development version of Katamaran has the following lower bounds:
+The development version of Katamaran is tested with Rocq 9.2 and 9.3 and has the following lower bounds:
 ```
-rocq-core         9.2
+rocq-core      >= 9.2
 rocq-equations >= 1.3.2+9.2
 rocq-iris      >= 4.5
 rocq-stdpp     >= 1.13

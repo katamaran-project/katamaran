@@ -1,2 +1,0 @@
-# Always write per-sentence times to FILE.v.timing; disable with TIMING=.
-TIMING ?= 1

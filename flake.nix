@@ -35,9 +35,6 @@
       rocqPackages920 = patchRocqPackages pkgs.rocqPackages_9_2 iris45;
       rocqPackages930 = patchRocqPackages pkgs.rocqPackages_9_3 iris45;
 
-      mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
-        (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
-
       # rocq-lsp (provides `pet`); nixpkgs only has it up to Rocq 9.1.
       rocqLsp920 =
         let ocamlPackages = rocqPackages920.rocq-core.ocamlPackages; in
@@ -83,9 +80,6 @@
         default = rocq920;
         rocq920 = rocqPackages920.katamaran;
         rocq930 = rocqPackages930.katamaran;
-
-        rocq920-deps = mkDeps rocq920;
-        rocq930-deps = mkDeps rocq930;
 
         rocq-lsp-rocq920 = rocqLsp920;
       };

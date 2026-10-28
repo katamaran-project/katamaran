@@ -4,13 +4,6 @@
 GVT_VOFILES := $(filter examples/GVT/%.vo,$(VOFILES))
 $(GVT_VOFILES): | $(filter-out $(GVT_VOFILES),$(VOFILES))
 
-# Always append per-file times and peak memory to $(TIME_OF_BUILD_FILE),
-# in the TIMED=1 format. TIMED=1 still prints them as well.
-ifneq (,$(filter -f,$(STDTIME)))
-LOGTIME = $(patsubst -f,-a -o $(TIME_OF_BUILD_FILE) -f,$(STDTIME))
-TIMER = $(if $(TIMED),$(STDTIME) $(filter-out command,$(LOGTIME)),$(LOGTIME) $(TIMECMD))
-endif
-
 # VC size statistics. The files in case_study/Stats are not in _CoqProject.
 # Each is compiled on its own, one at a time for clean timings, into a .log
 # next to it, from which a .csv is made.
