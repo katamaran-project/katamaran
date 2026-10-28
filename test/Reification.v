@@ -169,14 +169,3 @@ Proof.
   reify_vc.
   ltac2:(goal_is constr:(forall y : Val ty.bool, negb y = true -> True)).
 Abort.
-
-(* Signed comparisons become comparisons of [bv.signed] on Z. *)
-Goal VerificationConditionWithErasure
-  (edemonicv (MkB "x" (ty.bvec 8)) (edemonicv (MkB "y" (ty.bvec 8))
-     (eassumek
-        (eformula_relop bop.bvslt (@eterm_var "x" (ty.bvec 8) 1) (@eterm_var "y" (ty.bvec 8) 0))
-        eblock))).
-Proof.
-  reify_vc.
-  ltac2:(goal_is constr:(forall (x y : Val (ty.bvec 8)), (bv.signed x < bv.signed y)%Z -> True)).
-Abort.

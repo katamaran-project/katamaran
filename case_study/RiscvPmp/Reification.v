@@ -76,7 +76,6 @@ From Ltac2 Require Import Ltac2.
 End StringToIdent.
 
 From Katamaran Require Import
-     Bitvector
      Context
      Environment
      Syntax.BinOps
@@ -359,11 +358,7 @@ Ltac2 rec reflect_formula (ctx : constr list) (f : formula) : constr :=
   | Relop op a b =>
       let ra := reflect_term ctx a in
       let rb := reflect_term ctx b in
-      Std.eval_unfold
-        [(reference:(bop.eval_relop_prop), Std.AllOccurrences); (* RelOps are unfolded to their denotation as functions *)
-         (reference:(bv.slt), Std.AllOccurrences); (* Signed bv <= additionally unfolds another step to Rocq.Z *)
-         (reference:(bv.sle), Std.AllOccurrences)] (* Signed bv < idem as above.. *)
-        constr:(bop.eval_relop_prop $op $ra $rb)
+      Std.eval_unfold [(reference:(bop.eval_relop_prop), Std.AllOccurrences)] constr:(bop.eval_relop_prop $op $ra $rb)
   | FTrue => constr:(True)
   | FFalse => constr:(False)
   | And a b =>
