@@ -88,7 +88,7 @@ Class irisGS2 (Λ1 Λ2 : language) (Σ : gFunctors) := IrisG {
 Global Opaque iris_invGS2.
 
 Module Type IrisParameters2
-  (Import B    : Base)
+  (Import B    : BaseKit)
   (Import IB   : IrisParameters B).
 
   Parameter memGS2 : gFunctors -> Set.

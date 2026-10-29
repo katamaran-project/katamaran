@@ -81,7 +81,7 @@ Module Type MessagesOn
     Proof.
       intros Σ1 Σ2 Σ3 ζ1 ζ2 t.
       destruct t; cbn; f_equal.
-      now rewrite <-substSU_trans, transWk_equation_4.
+      now rewrite <-substSU_trans.
     Qed.
 
     (* Without the precedence, typeclass resolution sometimes mysteriously enters a loop... *)

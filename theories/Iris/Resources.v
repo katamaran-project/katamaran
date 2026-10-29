@@ -53,7 +53,7 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Module Type IrisParameters
-  (Import B    : Base).
+  (Import B    : BaseKit).
 
   (* The memGS field will normally always be instantiated to a type class. We
      inline this field, so that instances declared by the library, e.g. the

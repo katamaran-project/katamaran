@@ -192,7 +192,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_angelic_ctx {N : Set} {n : N -> LVar} {w} {Δ} :
       RefineCompat (RPureSpec (RNEnv N Δ)) (CPureSpec.angelic_ctx Δ) w (SPureSpec.angelic_ctx n (w := w) Δ) emp.
-    Proof. constructor. iIntros. iApply refine_angelic_ctx. Defined.
+    Proof. constructor. iIntros. iApply refine_angelic_ctx. Qed.
 
     Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {w} :
       ⊢ ℛ⟦∀ᵣ Δ : NCtx N Ty, RPureSpec (RNEnv N Δ)⟧
@@ -209,7 +209,7 @@ Module Type RefinementMonadsOn
 
     #[export] Instance refine_compat_demonic_ctx {N : Set} {n : N -> LVar} {w} {Δ}:
       RefineCompat (RPureSpec (RNEnv N Δ)) (CPureSpec.demonic_ctx Δ) w (SPureSpec.demonic_ctx n (w := w) Δ) emp.
-    Proof. constructor. iIntros. iApply refine_demonic_ctx. Defined.
+    Proof. constructor. iIntros. iApply refine_demonic_ctx. Qed.
 
     Lemma obligation_equiv {w : World} (msg : AMessage w) (fml : Formula w) :
       (Obligation msg fml : Pred w) ⊣⊢ instprop fml.

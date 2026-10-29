@@ -778,7 +778,7 @@ End Soundness.
 End IrisSignatureRules.
 
 Module Type IrisAdeqParameters
-  (Import B : Base)
+  (Import B : BaseKit)
   (Import IP : IrisParameters B).
 
   Parameter Inline memGpreS : gFunctors -> Set.

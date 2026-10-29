@@ -411,14 +411,14 @@ Module Type PartialEvaluationOn
     | t1            , term_val _ b  => peval_or_val t1 b
     | t1            , t2            => term_binop bop.or t1 t2.
 
-    Equations peval_plus (t1 t2 : Term Σ ty.int) : Term Σ ty.int :=
+    Equations(noeqns) peval_plus (t1 t2 : Term Σ ty.int) : Term Σ ty.int :=
     | term_val _ v1  , term_val _ v2    => term_val ty.int (v1 + v2)%Z
     | term_val _ 0%Z , t2               => t2
     | t1             , term_val _ 0%Z   => t1
     | t1             , term_val _ v2    => term_binop bop.plus (term_val ty.int v2) t1
     | t1             , t2               => term_binop bop.plus t1 t2.
 
-    Equations peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
+    Equations(noeqns) peval_bvadd {n} (t1 t2 : Term Σ (ty.bvec n)) : Term Σ (ty.bvec n) :=
     | term_val _ v1          , term_val _ v2          => term_val (ty.bvec n) (bv.add v1 v2)
     | term_val _ (bv.mk 0 _) , t2                     => t2
     | t1                     , term_val _ (bv.mk 0 _) => t1
@@ -758,12 +758,20 @@ Module Type PartialEvaluationOn
 
     Lemma peval_plus_sound (t1 t2 : Term Σ ty.int) :
       peval_plus t1 t2 ≡ term_binop bop.plus t1 t2.
-    Proof. funelim (peval_plus t1 t2); lsolve; intros ι; cbn; lia. Qed.
+    Proof.
+      depelim t1; depelim t2; lsolve;
+        try destruct v; try destruct v0; intros ι; cbn; lia.
+    Qed.
 
     Lemma peval_bvadd_sound {n} (t1 t2 : Term Σ (ty.bvec n)) :
       peval_bvadd t1 t2 ≡ term_binop bop.bvadd t1 t2.
     Proof.
-      funelim (peval_bvadd t1 t2); lsolve; intros ι; cbn; auto;
+      depelim t1; depelim t2; lsolve;
+        repeat
+          match goal with
+          | |- context[match ?v with bv.mk _ _ => _ end] =>
+              is_var v; destruct v as [[|p] i]; try destruct i
+          end; intros ι; cbn; auto;
         first
           [ symmetry; apply bv.add_zero_l
           | symmetry; apply bv.add_zero_r
@@ -1088,7 +1096,7 @@ Module Type PartialEvaluationOn
       peval_binop op t1 t2 ≡ term_binop op t1 t2.
     Proof. destruct op; cbn [peval_binop]; auto. Qed.
 
-    Equations peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
+    Equations(noeqns) peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
     | term_val _ v                    => term_val ty.bool (negb v)
     | term_binop bop.and t1 t2        => term_binop bop.or (peval_not t1) (peval_not t2)
     | term_binop bop.or t1 t2         => term_binop bop.and (peval_not t1) (peval_not t2)
@@ -1101,7 +1109,7 @@ Module Type PartialEvaluationOn
         (term_binop bop.times (term_unsigned t2)
            (term_val ty.int (2 ^ Z.of_nat m1)%Z)).
 
-    Equations peval_unsigned {m} (t : Term Σ (ty.bvec m)) : Term Σ ty.int :=
+    Equations(noeqns) peval_unsigned {m} (t : Term Σ (ty.bvec m)) : Term Σ ty.int :=
     | term_val _ v                => term_val ty.int (bv.unsigned v)
     | term_binop bop.bvapp t1 t2  => peval_unsigned_bvapp t1 t2
     | t                           => term_unop uop.unsigned t.
@@ -1170,7 +1178,7 @@ Module Type PartialEvaluationOn
 
     Lemma peval_not_sound (t : Term Σ ty.bool) :
       peval_not t ≡ term_unop uop.not t.
-    Proof. funelim (peval_not t); lsolve; now apply proper_term_binop. Qed.
+    Proof. induction t using Term_bool_ind; lsolve; now apply proper_term_binop. Qed.
 
     Lemma peval_unsigned_bvapp_sound [m1 m2] (t1 : Term Σ (ty.bvec m1))
       (t2 : Term Σ (ty.bvec m2)) :
@@ -1180,7 +1188,7 @@ Module Type PartialEvaluationOn
 
     Lemma peval_unsigned_sound {m} (t : Term Σ (ty.bvec m)) :
       peval_unsigned t ≡ term_unop uop.unsigned t.
-    Proof. funelim (peval_unsigned t); lsolve. Qed.
+    Proof. depelim t; lsolve. depelim op; lsolve. Qed.
 
     Lemma peval_unop'_sound {σ1 σ2} (op : UnOp σ1 σ2) (t : Term Σ σ1) :
       peval_unop' op t ≡ term_unop op t.
