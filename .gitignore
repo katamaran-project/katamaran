@@ -24,3 +24,5 @@ _build/
 rocq_mcp_cache_*
 .envrc.local
 time-of-build*.log
+*.vo.prof.json
+*.vo.prof.json.gz
