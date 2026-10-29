@@ -50,6 +50,16 @@ From Katamaran Require Import
      Symbolic.GenOccursCheck
      Symbolic.PartialEvaluation.
 
+(* Preciseness for spatial predicates. This does not depend on the [Base], so
+   it is defined outside of it, which keeps the [Base] signature smaller. *)
+Record Precise {T P : Set} (F : P -> Ctx T) (p : P) : Set :=
+  MkPrecise
+    { prec_input  : Ctx T;
+      prec_output : Ctx T;
+      prec_inout  : F p = ctx.cat prec_input prec_output;
+    }.
+Arguments MkPrecise {_ _ _ _} & _ _ _.
+
 Module Type BaseMixin (Import TY : Types).
   Include
     ExpressionsOn TY <+
@@ -261,15 +271,6 @@ Module Type BaseMixin (Import TY : Types).
     all: induction es; cbn in *; destruct_conjs; f_equal; auto.
   Qed.
 
-  (* Preciseness for spatial predicates *)
-  Record Precise {P : Set} (F : P -> Ctx Ty) (p : P) : Set :=
-    MkPrecise
-      { prec_input  : Ctx Ty;
-        prec_output : Ctx Ty;
-        prec_inout  : F p = ctx.cat prec_input prec_output;
-      }.
-  Arguments MkPrecise {_ _ _} & _ _ _.
-
 End BaseMixin.
 
 Module Type OperationalModel.
@@ -279,6 +280,11 @@ Module Type OperationalModel.
   
 End OperationalModel.
 
+
+(* The part of [Base] without the mixin. Functors that only need these
+   declarations should take a [BaseKit] instead of a [Base] parameter: every
+   functor parameter stores a full copy of its signature, and [Base] is large. *)
+Module Type BaseKit := Types <+ RegDeclKit <+ OperationalModel.
 
 Module Type Base := Types <+ RegDeclKit <+ OperationalModel <+ BaseMixin.
 

@@ -26,3 +26,5 @@ rocq_mcp_cache_*
 time-of-build*.log
 build-trace.log
 trace.json
+*.vo.prof.json
+*.vo.prof.json.gz
