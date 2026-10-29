@@ -43,19 +43,23 @@ mkCoqDerivation {
       ./case_study
       ./examples
       ./test
+      ./scripts/buildtrace
     ];
   };
   nativeBuildInputs = [ time zstd ];
   buildFlags = [
     "COQMAKE_ONE_TIME_FILE=${make-one-time-file}"
     "TIMING=1"
+    "BUILDTRACE=build-trace.log"
     "pretty-timed"
   ];
   # Raw timings and build environment, for processing elsewhere.
   outputs = [ "out" "timing" ];
   postInstall = ''
     mkdir -p $timing
-    cp time-of-build.log time-of-build-pretty.log $timing/
+    cp time-of-build.log time-of-build-pretty.log build-trace.log $timing/
+    ${python3}/bin/python3 scripts/buildtrace/trace.py build-trace.log .Makefile.coq.d \
+      -o $timing/trace.json > $timing/build-trace-report.txt
     find . -name '*.v.timing' -printf '%P\0' \
       | tar -I "zstd -19 -T$NIX_BUILD_CORES" -cf $timing/sentences.tar.zst --null -T -
     {

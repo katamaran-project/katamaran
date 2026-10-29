@@ -39,7 +39,9 @@ jobs:
           nixpkgs: $(nix flake metadata --json | jq -r '.locks.nodes.nixpkgs.locked.rev')
           EOF
           { echo '### Build times (${{ matrix.rocq }})'; echo '```'
-            cat timing/time-of-build-pretty.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            cat timing/time-of-build-pretty.log; echo '```'
+            echo '### Build trace (${{ matrix.rocq }})'; echo '```'
+            cat timing/build-trace-report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: timing-${{ github.sha }}-${{ matrix.rocq }}

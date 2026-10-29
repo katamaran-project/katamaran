@@ -28,3 +28,12 @@ vcstats: $(STATS:.v=.csv)
 clean::
 	$(HIDE)rm -f case_study/Stats/.*.aux \
 	  $(addprefix case_study/Stats/*,.csv .log .vo .vok .vos .glob)
+
+# Build trace: with BUILDTRACE=FILE, every compilation appends its start and
+# end time to FILE, from which scripts/buildtrace/trace.py makes a trace for
+# Perfetto. TIMER is expanded only when a recipe runs, so redefining it here
+# applies to all rules.
+ifneq (,$(BUILDTRACE))
+override export BUILDTRACE := $(abspath $(BUILDTRACE))
+TIMER = bash $(CURDIR)/scripts/buildtrace/stamp $(if $(TIMED), $(STDTIME), $(TIMECMD))
+endif
