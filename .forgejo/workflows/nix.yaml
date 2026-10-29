@@ -22,8 +22,6 @@ jobs:
         with:
           name: katamaran
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-          # Don't push the timing output; it goes into the artifact.
-          pushFilter: '-timing$'
       - name: Build package
         run: nix build -L '.#${{ matrix.rocq }}^out,timing'
       - name: Collect timings
