@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Run a command and append "START END STATUS FILE" to $BUILDTRACE, where FILE
+# is the .v file the command compiles and the times are Unix times in seconds.
+# Other commands (rocq dep, OCaml compilers) are run without recording. Used as the TIMER
+# of Makefile.coq, see Makefile.coq.local-late.
+
+file= compile=
+for arg in "$@"; do
+  case $arg in
+    compile) compile=1 ;;
+    *.v) file=$arg ;;
+  esac
+done
+[ -n "$compile" ] || file=
+# EPOCHREALTIME needs bash 5; older versions record whole seconds.
+start=${EPOCHREALTIME:-$(date +%s)}
+"$@"
+status=$?
+[ -n "$file" ] && echo "$start ${EPOCHREALTIME:-$(date +%s)} $status $file" >>"$BUILDTRACE"
+exit "$status"
