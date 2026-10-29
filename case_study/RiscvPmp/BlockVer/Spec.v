@@ -49,7 +49,8 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.Sig
      RiscvPmp.Logic
-     RiscvPmp.Contracts.
+     RiscvPmp.Contracts
+     RiscvPmp.Reification.
 From Katamaran Require RiscvPmp.Model.
 
 From iris.program_logic Require Import total_lifting.
@@ -707,26 +708,26 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
     destruct H; apply verification_condition_with_erasure_sound; vm_compute;
-      constructor; cbn;
-      repeat (intros; split; intros);
-      repeat match goal with
-        | H: (?b1 || ?b2)%bool = true |- _ =>
-            apply Bool.orb_true_iff in H
-        | H: ?P /\ ?Q |- _ =>
-            destruct H
-        | H: ?P \/ ?Q |- _ =>
-            destruct H as [H|H]
-        | H: negb ?b = true |- _ =>
-            apply Bool.negb_true_iff in H;
-            subst
-        | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
-            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
-        end;
-      subst;
-      unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
-      simpl in *;
-      try discriminate;
-      try bv_solve_Ltac.solveBvManual.
+    reify_vc; cbn;
+    repeat (intros; split; intros);
+    repeat match goal with
+      | H: (?b1 || ?b2)%bool = true |- _ =>
+          apply Bool.orb_true_iff in H
+      | H: ?P /\ ?Q |- _ =>
+          destruct H
+      | H: ?P \/ ?Q |- _ =>
+          destruct H as [H|H]
+      | H: negb ?b = true |- _ =>
+          apply Bool.negb_true_iff in H;
+          subst
+      | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
+          unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
+      end;
+    subst;
+    unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
+    simpl in *;
+    try discriminate;
+    try bv_solve_Ltac.solveBvManual.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
