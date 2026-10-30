@@ -957,7 +957,7 @@ Module Type RiscvPmpIrisInstanceWithContracts
     (* Open the shared invariant and look at it from the perspective of this execution. *)
     iInv "Hinv" as ">(%t & Hsides)" "Hclose".
     rewrite inv_mmio_body_own_other.
-    iDestruct "Hsides" as "[(%ts & Hfrag & Hown) Hother]".
+    iDestruct "Hsides" as "[(%ts & Hfrag & %Hpred & Hown) Hother]".
     iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as %<-.
     iMod (trace.trace_update _ (cons _ _) with "[$Htr $Hfrag]") as "[$ Hfrag]".
     destruct Hmmio_checked as [-> | [-> ->]].
@@ -966,7 +966,9 @@ Module Type RiscvPmpIrisInstanceWithContracts
         first by apply write_addr_neq_write_addr_adv in Hcontra.
       iMod ("Hclose" with "[Hfrag Hown Hother]") as "_".
       { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
-        iExists _. iFrame "Hfrag". rewrite filter_adv_observable_private.
+        iExists _. iFrame "Hfrag".
+        iSplitR; first (iPureIntro; apply mmio_pred_cons; [left; by eexists | done]).
+        rewrite filter_adv_observable_private.
         iExact "Hown". }
       by iModIntro.
     - (* Observable write: this execution moves ahead by one event. *)
@@ -976,7 +978,9 @@ Module Type RiscvPmpIrisInstanceWithContracts
       iMod (nothingPending_written with "[$Hauth $Hnp]") as "[Hauth $]".
       iMod ("Hclose" with "[Hfrag Hauth Hother]") as "_".
       { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
-        iExists _. iFrame "Hfrag". iRight. iExists _. iFrame "Hauth".
+        iExists _. iFrame "Hfrag".
+        iSplitR; first (iPureIntro; apply mmio_pred_cons; [by right | done]).
+        iRight. iExists _. iFrame "Hauth".
         rewrite filter_adv_observable_adv.
         change (memory_trace (memory_update_state ?μ _)) with (memory_trace μ).
         by rewrite Ht. }
