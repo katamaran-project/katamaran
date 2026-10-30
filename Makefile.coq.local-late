@@ -1,9 +1,3 @@
-# Build the GVT example only after everything else, so that its memory-heavy
-# files (Contracts, StopButtonUMode) never compile at the same time as
-# FemtoKernel/LoopVerificationBinary (or other memory-heavy files).
-GVT_VOFILES := $(filter examples/GVT/%.vo,$(VOFILES))
-$(GVT_VOFILES): | $(filter-out $(GVT_VOFILES),$(VOFILES))
-
 # VC size statistics. The files in case_study/Stats are not in _CoqProject.
 # Each is compiled on its own, one at a time for clean timings, into a .log
 # next to it, from which a .csv is made.
