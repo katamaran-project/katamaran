@@ -2696,12 +2696,14 @@ Module bv.
     | Sub (e1 e2 : exp n)
     | Mul (e1 e2 : exp n)
     | OfZ (z : Z)
+    | OfNat (k : nat)
     | App {k l : nat} (e1 : exp k) (e2 : exp l) (H : (k + l = n)%nat)
     .
     #[global] Arguments Zero {n}.
     #[global] Arguments OneZero {n} _.
     #[global] Arguments OneSucc {n n'} _.
     #[global] Arguments OfZ {n} z.
+    #[global] Arguments OfNat {n} k.
 
     Fixpoint eval {n} (e : exp n) : bv n :=
       match e with
@@ -2713,6 +2715,7 @@ Module bv.
       | Sub e1 e2   => eval e1 - eval e2
       | Mul e1 e2   => eval e1 * eval e2
       | OfZ z       => of_Z z
+      | OfNat k     => of_nat k
       | App e1 e2 H => eq_rect _ bv (app (eval e1) (eval e2)) _ H
       end%bv.
 
@@ -2726,6 +2729,7 @@ Module bv.
       | Sub e1 e2          => eval_unsigned e1 - eval_unsigned e2
       | Mul e1 e2          => eval_unsigned e1 * eval_unsigned e2
       | OfZ z              => z
+      | OfNat k            => Z.of_nat k
       | @App _ k l e1 e2 _ => Z.modulo (eval_unsigned e1) (2 ^ Z.of_nat k) +
                               eval_unsigned e2 * 2 ^ Z.of_nat k
       end%Z.
@@ -2747,6 +2751,7 @@ Module bv.
       - now rewrite unsigned_sub, IHe1, IHe2, Zminus_mod.
       - now rewrite unsigned_mul, IHe1, IHe2, Zmult_mod.
       - now rewrite unsigned_of_Z.
+      - now rewrite <- of_Z_nat, unsigned_of_Z.
       - destruct H; cbn. rewrite unsigned_app.
         generalize dependent (unsigned (eval e1)); intros u.
         generalize dependent (unsigned (eval e2)); intros v.
@@ -2786,6 +2791,7 @@ Module bv.
       | Sub (exp, exp)
       | Mul (exp, exp)
       | OfZ (constr)
+      | OfNat (constr)
       (* The append is the only operation which retains the sizes since that
          is needed for the interpretation into an integer. *)
       | App (constr, constr, exp, exp)
@@ -2822,6 +2828,7 @@ Module bv.
       | sub ?x ?y       => Sub (reify_bv x) (reify_bv y)
       | mul ?x ?y       => Mul (reify_bv x) (reify_bv y)
       | of_Z ?z         => OfZ z
+      | of_nat ?k       => OfNat k
       | mk ?m _         => let z := if is_closed_constr m
                                     then eval cbv in (Z.of_N $m)
                                     else eval cbn in (Z.of_N $m)
@@ -2842,8 +2849,8 @@ Module bv.
       | Var x       => let v := Control.hyp x in
                        constr:(@Var $n $v)
       | Zero        => constr:(@Zero $n)
-      | OneZero     => constr:(@OneZero _ eq_refl)
-      | OneSucc     => constr:(@OneSucc _ _ eq_refl)
+      | OneZero     => constr:(@OneZero $n eq_refl)
+      | OneSucc     => constr:(@OneSucc $n _ eq_refl)
       | Add x y     => let ex := reflect_exp n x in
                        let ey := reflect_exp n y in
                        constr:(@Add _ $ex $ey)
@@ -2854,6 +2861,7 @@ Module bv.
                        let ey := reflect_exp n y in
                        constr:(@Mul _ $ex $ey)
       | OfZ z       => constr:(@OfZ $n $z)
+      | OfNat k     => constr:(@OfNat $n $k)
       | App k l x y => let ex := reflect_exp k x in
                        let ey := reflect_exp l y in
                        constr:(@App _ $k $l $ex $ey eq_refl)
@@ -2863,9 +2871,9 @@ Module bv.
       match e with
       | Var x       => let v := Control.hyp x in
                        constr:(@unsigned _ $v)
-      | Zero        => constr:(0)
-      | OneZero     => constr:(0)
-      | OneSucc     => constr:(1)
+      | Zero        => constr:(0%Z)
+      | OneZero     => constr:(0%Z)
+      | OneSucc     => constr:(1%Z)
       | Add x y     => let ex := reflect_unsigned x in
                        let ey := reflect_unsigned y in
                        constr:(Z.add $ex $ey)
@@ -2876,10 +2884,11 @@ Module bv.
                        let ey := reflect_unsigned y in
                        constr:(Z.mul $ex $ey)
       | OfZ z       => z
+      | OfNat k     => constr:(Z.of_nat $k)
       | App k _ x y => let ex := reflect_unsigned x in
                        let ey := reflect_unsigned y in
-                       constr:(Z.modulo $ex (2 ^ Z.of_nat $k) +
-                               $ey * 2 ^ Z.of_nat $k)
+                       constr:((Z.modulo $ex (2 ^ Z.of_nat $k) +
+                                $ey * 2 ^ Z.of_nat $k)%Z)
       end.
 
     Ltac2 rec reflect_bv (e : exp) : constr :=
@@ -2898,14 +2907,13 @@ Module bv.
                        let ey := reflect_bv y in
                        constr:(@mul _ $ex $ey)
       | OfZ z       => constr:(@of_Z _ $z)
+      | OfNat k     => constr:(@of_nat _ $k)
       | App k l x y => let ex := reflect_bv x in
                        let ey := reflect_bv y in
                        constr:(@app $k $l $ex $ey)
       end.
 
   End reify.
-
-  Load BitvectorSolve.
 
   Module tactics.
 
@@ -3052,25 +3060,34 @@ Module bv.
            end)
         need_bounds.
 
-    Ltac2 zify_unsigned_small (n : constr) (v : constr) : unit :=
+    (* Replace [unsigned v] by an integer expression in hypothesis [h], or in
+       the goal if [h] is [None]. *)
+    Ltac2 zify_unsigned_small (h : ident option) (n : constr) (v : constr) : unit :=
       if Constr.is_var v then
         Control.zero (Tactic_failure None)
-      else if reify.is_closed_constr v then
-        let u := constr:(@unsigned $n $v) in
-        let z := eval cbv in $u in
-        assert ($z = $u) as <- by constructor
       else
-        let t := reify.reify_bv v in
-        let z := reify.reflect_unsigned t in
-        let e := reify.reflect_exp n t in
-        assert ($z = @unsigned $n $v) as <-
-          by (refine open_constr:(@reify.eval_unsigned_representable $n $v $z $e eq_refl eq_refl _);
-              ltac1:(lia)).
+        let heq := Fresh.in_goal @Heq in
+        (if reify.is_closed_constr v then
+           let u := constr:(@unsigned $n $v) in
+           let z := eval cbv in $u in
+           assert ($heq : $z = $u) by constructor
+         else
+           let t := reify.reify_bv v in
+           let z := reify.reflect_unsigned t in
+           let e := reify.reflect_exp n t in
+           assert ($heq : $z = @unsigned $n $v)
+             by (refine open_constr:(@reify.eval_unsigned_representable $n $v $z $e eq_refl eq_refl _);
+                 ltac1:(lia)));
+        let heq := Ltac1.of_ident heq in
+        match h with
+        | Some h => ltac1:(heq h |- rewrite <- heq in h; clear heq) heq (Ltac1.of_ident h)
+        | None   => ltac1:(heq |- rewrite <- heq; clear heq) heq
+        end.
 
     Ltac2 zify_unsigned_fast () :=
       match! goal with
-      | [ _ : context[@unsigned ?n ?v] |- _ ] => zify_unsigned_small n v
-      | [ |- context[@unsigned ?n ?v] ] => zify_unsigned_small n v
+      | [ h : context[@unsigned ?n ?v] |- _ ] => zify_unsigned_small (Some h) n v
+      | [ |- context[@unsigned ?n ?v] ] => zify_unsigned_small None n v
       end.
 
     Ltac zify_unsigned_generalize n x :=
@@ -3087,8 +3104,8 @@ Module bv.
 
     Ltac zify_unsigned :=
       repeat zify_nonbranching_nonfailing;
-      ltac2:(saturate_unsigned_bounds ());
-      ltac2:(repeat (zify_unsigned_fast ())).
+      ltac2:(Control.enter saturate_unsigned_bounds);
+      ltac2:(Control.enter (fun () => repeat (zify_unsigned_fast ()))).
 
   End tactics.
 
@@ -3161,9 +3178,7 @@ Export bv (bv).
 Export (hints) bv.
 Export (hints) bv.countable.
 
-Tactic Notation "solve_bv" := bv.bv_zify.
-Tactic Notation "solve_bv" "-" hyp_list(Hs) := clear Hs; bv.bv_zify.
-Tactic Notation "solve_bv" "+" hyp_list(Hs) := clear -Hs; bv.bv_zify.
+Tactic Notation "solve_bv" := intros; bv.tactics.zify_unsigned; lia.
 
 Import bv.notations.
 

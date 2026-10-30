@@ -383,7 +383,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Proof.
       intros Hrep [-> Hk]%bv.lookup_seq Hacc.
       apply (pmp_access_reduced_width (w := bv.of_nat (1%nat + k))) in Hacc; try solve_bv.
-      apply pmp_access_shift in Hacc; solve_bv.
+      apply pmp_access_shift in Hacc; [exact Hacc|..]; solve_bv.
     Qed.
 
 
