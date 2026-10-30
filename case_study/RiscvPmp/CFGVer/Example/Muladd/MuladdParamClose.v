@@ -133,6 +133,16 @@ Ltac bv_lin :=
   unfold bv.unsigned in *; cbn [bv.bin] in *; bv_consts; cbn [Z.of_N] in *;
   Z.to_euclidean_division_equations; lia.
 
+(* A pair equation whose two sides are each public needs only its LEFT
+   components: f_equal / RV_ext would prove the same bv equation twice *)
+Lemma rv_eq_of_proj {σ} (x y : RelVal σ) :
+  ty.projLeftRV x = ty.projRightRV x -> ty.projLeftRV y = ty.projRightRV y ->
+  ty.projLeftRV x = ty.projLeftRV y -> x = y.
+Proof.
+  intros Hx Hy H. apply ty.RV_ext; [exact H|].
+  rewrite <- Hx. rewrite <- Hy. exact H.
+Qed.
+
 Ltac rv_leaf :=
   cbn -[Erasure.inst_symprop] in *;
   (* a public RelVal is a pair whose sides agree: substitute that *)
@@ -170,7 +180,17 @@ Ltac rv_leaf :=
           | |- ty.projLeftRV ?v = ty.projRightRV ?v =>
               is_evar v; unify v (ty.SyncVal (@bv.zero xlenbits)); reflexivity
           end
-        | assumption | reflexivity | (f_equal; bv_lin) | bv_lin
+        | assumption | reflexivity
+        (* both sides public (equal components, checked SYNTACTICALLY so a
+           secret side fails fast): one bv equation, not two (2026-10-30) *)
+        | (apply rv_eq_of_proj;
+           [ cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule];
+             lazymatch goal with |- ?a = ?a => reflexivity end
+           | cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule];
+             lazymatch goal with |- ?a = ?a => reflexivity end
+           | cbn -[Erasure.inst_symprop bv.add bv.mul bv.shiftl bv.shiftr bv.land bv.sext bv.unsigned bv.of_N bv.ult bv.ule];
+             bv_lin ])
+        | (f_equal; bv_lin) | bv_lin
         (* a RelVal equality whose side f_equal cannot open (a folded
            ty.valToRelVal): per projection *)
         | (apply ty.RV_ext;

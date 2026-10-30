@@ -305,6 +305,9 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	ERASED goal). Contracts.v: relprop_sync/relbool_sync + vc_relop_once. LoopI 8 -> 5 leaves (KatamaranRel's count);
 	same-session census: closer stage 10.03 -> 6.80 s, file 33.83 -> 29.77 s; MuladdParamLoopI.vo 34.96 -> 32.28 s
 	user (KatamaranRel 28.67). ONLY LoopI's closure rebuilt: every other example and MuladdParamVC still to check.
+	The rest was the SAME doubling for EQUATION leaves, in the closer: f_equal / RV_ext proved a pair equation per
+	side. rv_leaf now tries rv_eq_of_proj first (both sides public -> left components only). LoopI at PARITY in a
+	matched probe: leaves 2.96 vs 2.91 s, file 28.68 vs 28.76 s (KatamaranRel vs relval-pair).
 	Under the pair representation a relop or bool formula means `P l /\ P r` (inst_formula in Formulas.v,
 	inst_eformula in Propositions.v), so every such VC leaf arrives as TWO goals. Most of the time the
 	arguments are immediates (term_val v = SyncVal v, both projections v) or public (a secLeak in the path
