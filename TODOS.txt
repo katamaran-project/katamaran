@@ -301,6 +301,10 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	+ Agreement helpers are scattered: RVToOption_sync (VerifierRel), RVToOption_some (Adequacy); a bv-safe RelVal
 	  equality split lives in MuladdParamClose's rv_leaf (ty.rv_split's bare cbn unfolds bv ops). Move to TypeDecl.
 - relval-pair (2026-10-30, Emiel): prove a relop/bool VC leaf ONCE when both sides are the same goal.
+	STATUS 2026-10-30: done in solve_vc, not in the closer (the split happens in solve_vc's `repeat split`, on the
+	ERASED goal). Contracts.v: relprop_sync/relbool_sync + vc_relop_once. LoopI 8 -> 5 leaves (KatamaranRel's count);
+	same-session census: closer stage 10.03 -> 6.80 s, file 33.83 -> 29.77 s; MuladdParamLoopI.vo 34.96 -> 32.28 s
+	user (KatamaranRel 28.67). ONLY LoopI's closure rebuilt: every other example and MuladdParamVC still to check.
 	Under the pair representation a relop or bool formula means `P l /\ P r` (inst_formula in Formulas.v,
 	inst_eformula in Propositions.v), so every such VC leaf arrives as TWO goals. Most of the time the
 	arguments are immediates (term_val v = SyncVal v, both projections v) or public (a secLeak in the path
