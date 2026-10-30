@@ -100,6 +100,9 @@
           rocqPackages920.rocq-core
           rocqPackages920.vsrocq-language-server
           rocqLsp920
+          # For `dune build`; the same OCaml and dune Rocq is built with.
+          rocqPackages920.rocq-core.ocamlPackages.ocaml
+          rocqPackages920.rocq-core.ocamlPackages.dune_3
         ];
       };
     }
