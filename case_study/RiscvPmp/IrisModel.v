@@ -188,27 +188,25 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
   Section SharedBinaryInvariant.
     Context {Σ : gFunctors} {mG : mcMemGS2 Σ}.
 
-    (* TODO: add the above filter for mmio_pred. Important lemma, any valid
-             mmio_pred without the filter, implies one with the filter. The
-             non-filtered one is stronger, since it also says something about
-             secret MMIO events (unary version). *)
     Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
 
     (* The state of a single execution w.r.t. the adversary-observable trace
        `t` that both executions agree on. Either the observable part of this
        execution's trace is exactly `t`, or this execution is ahead by exactly
        one (observable) event `e`, which is recorded in the `written` ghost
-       state until both executions are resynchronized. *)
-    Definition side_inv (mGs : mcMemGS Σ) (t : Trace) : iProp Σ :=
-      ∃ ts, @tr_frag _ _ (@mc_gtGS _ mGs) ts ∗
+       state until both executions are resynchronized. In addition, the full
+       (unfiltered) trace of each execution satisfies `mmio_pred`, which
+       gives the integrity of MMIO. *)
+    Definition side_inv (width : nat) (mGs : mcMemGS Σ) (t : Trace) : iProp Σ :=
+      ∃ ts, @tr_frag _ _ (@mc_gtGS _ mGs) ts ∗ ⌜mmio_pred width ts⌝ ∗
               ((⌜filter_adv_observable ts = t⌝ ∗ @nothingPending_auth _ (@mc_wpGS _ mGs))
                ∨ ∃ e, ⌜filter_adv_observable ts = e :: t⌝ ∗ @written_auth _ (@mc_wpGS _ mGs) e).
 
-    #[export] Instance side_inv_Timeless mGs t : Timeless (side_inv mGs t).
+    #[export] Instance side_inv_Timeless width mGs t : Timeless (side_inv width mGs t).
     Proof. unfold side_inv. apply _. Qed.
 
     Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      inv femto_inv_mmio_ns (∃ t, side_inv mc_ghGS2_left t ∗ side_inv mc_ghGS2_right t).
+      inv femto_inv_mmio_ns (∃ t, side_inv width mc_ghGS2_left t ∗ side_inv width mc_ghGS2_right t).
 
     (* If both executions have performed the same observable write, they can
        be resynchronized: the common observable trace is extended with that
@@ -222,7 +220,7 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
       @nothingPending _ (@mc_wpGS _ mc_ghGS2_right).
     Proof.
       iIntros (HE) "#Hinv Hl Hr".
-      iInv "Hinv" as ">(%t & (%t1 & Hf1 & H1) & (%t2 & Hf2 & H2))" "Hclose".
+      iInv "Hinv" as ">(%t & (%t1 & Hf1 & %Hp1 & H1) & (%t2 & Hf2 & %Hp2 & H2))" "Hclose".
       iDestruct "H1" as "[[_ Ha1] | (%e1 & %Ht1 & Ha1)]".
       { iDestruct (nothingPending_auth_written with "Ha1 Hl") as "[]". }
       iDestruct "H2" as "[[_ Ha2] | (%e2 & %Ht2 & Ha2)]".
@@ -232,7 +230,7 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
       iMod (written_nothingPending with "[$Ha1 $Hl]") as "[Ha1 $]".
       iMod (written_nothingPending with "[$Ha2 $Hr]") as "[Ha2 $]".
       iApply "Hclose". iExists (e :: t).
-      iSplitL "Hf1 Ha1"; iExists _; iFrame; by iLeft; iFrame.
+      iSplitL "Hf1 Ha1"; iExists _; iFrame "∗ %"; by iLeft; iFrame.
     Qed.
   End SharedBinaryInvariant.
 
@@ -325,9 +323,9 @@ Module Type RiscvPmpIrisBase (Import leftOrRight : LeftOrRight)
       if leftOrRight then mc_ghGS2_right else mc_ghGS2_left.
 
     (* View the body of the shared invariant from the perspective of this execution. *)
-    Lemma inv_mmio_body_own_other `{mcMemGS2 Σ} t :
-      side_inv mc_ghGS2_left t ∗ side_inv mc_ghGS2_right t ⊣⊢
-      side_inv leftOrRightInstance t ∗ side_inv otherInstance t.
+    Lemma inv_mmio_body_own_other `{mcMemGS2 Σ} width t :
+      side_inv width mc_ghGS2_left t ∗ side_inv width mc_ghGS2_right t ⊣⊢
+      side_inv width leftOrRightInstance t ∗ side_inv width otherInstance t.
     Proof.
       unfold leftOrRightInstance, otherInstance.
       destruct leftOrRight; [done | apply bi.sep_comm].
