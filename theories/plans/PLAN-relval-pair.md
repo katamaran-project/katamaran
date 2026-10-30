@@ -308,8 +308,7 @@ perf fix; 9028e9ce + aa795710 Result files / GenProg.
 - Remaining cost: a relop over public values is now TWO leaves (one per
   projection); LoopI 5 -> 8 leaves. Per file: LoopI 1.30x, LoopK 1.41x,
   MuladdParamVC 651 -> 849 s (1.30x), everything else <= 1.3x.
-  Removing it needs the solver to emit ONE obligation for a fully public relop
-  (not attempted).
+  **FIXED for LoopI on 2026-10-30 (two places, not one) -- see §12.1.**
 - A comparison worktree of KatamaranRel is at `../katamaran-krel` (LoopI
   closure built), with census probes `ZZLoopICensus.v`/`ZZLoopIStage2.v`.
 
@@ -354,3 +353,154 @@ perf fix; 9028e9ce + aa795710 Result files / GenProg.
   `proj1 H`.
 - Closers: clear unused bv vars before `bv_lin`/`lia` (rv_leaf), else dozens of
   irrelevant (928-bit) bounds blow up each lia call.
+
+## 12. HANDOFF (2026-10-30) — migrating PLAN-rsa onto this branch — read this first
+
+PLAN-rsa (BearSSL RSA, on `KatamaranRel`) moves onto the pair representation
+before its Phase 3 (montymul). This section is the hand-off for that migration:
+what Emiel decided, what was measured, what to do next. §11 still holds the
+porting recipes; read it for those.
+
+### 12.0 Decisions (Emiel, 2026-10-30)
+- **D-M1 — migrate first.** PLAN-rsa Phase 3 waits until the RSA work is on
+  pairs: pairs remove problems the RSA work patched ad hoc (§12.3).
+- **D-M2 — MERGE.** New branch off `issue/relval-pair` (e.g.
+  `issue/relval-rsa`), then `git merge KatamaranRel`. Keeps this branch's
+  tested history (gate passed on aa795710). Rejected: squash-replay onto
+  KatamaranRel (one clean diff, but loses the step record) and a commit-by-commit
+  rebase (the CFGVer commits were written against the old EndToEnd/Adequacy/
+  SpecIris; the intermediate commits would not build).
+- **D-M3 — duplicate-goal fix FIRST**, on this branch alone. DONE for LoopI
+  (§12.1); the rest of the closure is not rebuilt yet (§12.6 step 1).
+- **D-M4 — arrv ghost-lemma cleanup AFTER the migration** (`TODOS.txt`,
+  "arrv ghost-lemma bloat"): A automatic take/add, B one array with a cursor;
+  the feasibility probe, dropping the string tag (D) and shrinking the view
+  lemmas (E) only if needed.
+- **OPEN — backlog order (proposed, NOT yet confirmed by Emiel).**
+  During the migration: R3 (needed, §12.3) and an assumption-side review of
+  KatamaranRel's new solver rules (`try_isolate_inner`, `ResimpSecLeak`) in
+  the style of AUDIT.md. Before the RSA cleanup: R1 + R4 (removing
+  `clem_arrv_resync_head` needs `x ^ x -> 0`, `x & 0 -> 0` and secLeak by value
+  reasoning). At the end: the trusted-surface diff (D3) and Phase 8 timings.
+  Later: R2, R5, R6, docs (§7). Also proposed: replace the §5 hand audit of
+  demonic branches by the gate's axiom probes (§12.4). Ask before acting on
+  any of this.
+
+### 12.1 The duplicate-goal fix and its timings
+The pair port doubled public obligations in TWO places, not one:
+1. **`solve_vc`'s `repeat split`** (Contracts.v): a relop/bool formula is
+   `P_l /\ P_r`, and the split happens on the ERASED goal
+   (`Erasure.inst_eformula' ι (eformula_relop ..)`), before any closer sees
+   it. Fix 8c721cb9: `vc_relop_once`, tried before `split`, applies
+   `relprop_sync`/`relbool_sync` when the arguments are public (literals, or
+   variables with a secLeak hypothesis) and keeps the left obligation only.
+2. **`rv_leaf`'s equation leaves** (Example/Muladd/MuladdParamClose.v):
+   `f_equal`/`RV_ext` proved a pair equation once per side, and on a folded
+   `valToRelVal` side `f_equal` and plain `bv_lin` both failed first. Fix
+   6f11cd5a: `rv_eq_of_proj`, tried first, proves the left components only
+   when each side has syntactically equal components.
+
+Traps hit (all three cost a build): `Set Implicit Arguments` in Contracts.v
+makes a bare `relprop_sync op a b` ill-typed and `first [.. | split]` hides it
+(use `@`); a plain `reflexivity` between two different non-public bv terms
+blew pet past 7.6 GB (use a syntactic `|- ?x = ?x`); destructing a RelVal in a
+side goal rewrites every erased hypothesis, each of which carries the whole
+valuation (+5 s on LoopI) -- clear them first.
+
+LoopI, user CPU (the box swaps; never compare wall clock):
+
+| measurement | KatamaranRel | relval-pair before | relval-pair after |
+|---|---|---|---|
+| leaves (census `ZZLoopICensus.v`) | 5 | 8 | 5 |
+| `MuladdParamLoopI.vo` (`make TIMED=1`) | 28.67 (baseline tsv, 936ec9a3) | 34.96 | 29.66 |
+| matched probe `ZZStageTime.v`, same session: `solve_vc` | 11.53 | -- | 11.63 |
+| same, hyp prep | 2.49 | -- | 2.41 |
+| same, 5 leaves (`rv_leaf` each) | 2.96 (0.61 0.58 0.57 0.62 0.58) | -- | 2.91 (0.58 0.55 0.54 0.65 0.60) |
+| same, whole file | 28.68 | -- | 28.76 |
+
+Before 6f11cd5a (after 8c721cb9) the same probe gave relval-pair leaves
+0.53 0.52 0.54 **1.05 1.95** (file 30.06): the two equation leaves. Before
+8c721cb9, the census proof's closer stage was 10.03 s vs 6.80 s after
+(same session, `ZZDupTime{Old,New}.v`).
+
+NOT measured yet: LoopK (was 1.41x), MuladdParamVC (was 651 -> 849 s), any
+other example. Other closers (check_scalar's, the muladd tail's) now see
+`bop.eval_relop_prop op (projLeft a) (projLeft b)` where they saw two halves.
+
+### 12.2 Merge preview (`git merge-tree`, KatamaranRel 513cdb9a into this branch, 2026-10-30)
+16 conflicting files, ~51 hunks: SpecIris.v 11, Adequacy.v 9, EndToEnd.v 6,
+plans/PLAN-spec-layer.md 4, .claude/TODO.md 4, GenCompose.v 3,
+TwoLoopsComposedResult.v 3, GenProg.v 2, VerifierRel.v 2,
+MuladdParamResult.v 2, and 1 each in CheckScalarParamResult.v,
+CountdownComposedResult.v, SwapComposedResult.v, IrisInstanceBinary.v,
+.gitignore, .claude/skills/reading-quiz/SKILL.md.
+- KatamaranRel REWROTE EndToEnd/Adequacy/SpecIris since (general end-to-end,
+  arrv): take its side and re-apply the §11 recipes (this branch's own diff
+  there is ~30 lines each).
+- arrv: `interp_arrv` (IrisInstanceBinary.v) matches `SyncVal a, SyncVal n,
+  SyncVal e` and otherwise reads projections -- port it like `interp_arr`
+  (§11 recipe: `⌜secLeak a ∧ secLeak n ∧ secLeak e⌝ ∗ body`). ~20 arrv CLem
+  soundness proofs in SpecIris.v follow.
+- Text-clean but proof-relevant: Solver.v (`try_isolate_inner` and its
+  `relval_bvadd_comm`, which destructs `[a|a1 a2]`; `ResimpSecLeak`),
+  PartialEvaluation.v (~10 `destruct (inst ..) as [v|v1 v2]` sites in
+  KatamaranRel's new peval rules: sext, bvtake_zext, append, rev, regroup),
+  UnOps.v (`uop.regroup`).
+
+### 12.3 What changes for RSA
+- **Migration risk (needs R3).** arrv's publicness-by-framing (PLAN-arrv
+  §1.2) relies on the TAGGED split `secLeak (op t1 t2) <-> secLeak t1 /\
+  secLeak t2`, and so does `ResimpSecLeak`. This branch weakened that split
+  to an implication (AUDIT.md, `simplify_secLeak` row). Under pairs it is an
+  equivalence only for injective ops -- `cons` (a take's `vs = x :: r`),
+  `rev`, `regroup` -- so those need explicit solver rules before the RSA,
+  check_scalar and muladd proofs go green. `++` is not injective per side: a
+  public `v1 ++ v2` (`clem_arrv_split`, `join`) no longer makes v1/v2 public
+  without length facts.
+- **What pairs buy.** `MUX(secret, h, h)` is `SyncVal h` as a value, so
+  `clem_arrv_resync_head` (PLAN-rsa O4) and probably `clem_arrv_take_any` can
+  go once R1/R4 give the solver the identities. Full list of RSA-era
+  workarounds to revisit: `TODOS.txt`, item "relval-pair x RSA".
+
+### 12.4 Trusted surface and the §5 branch audit
+- `Noninterference.v`, `Layout.v` and the Result end theorems contain NO
+  RelVal vocabulary since PLAN-spec-layer (2026-10-09; grep on KatamaranRel,
+  2026-10-30). So the D3 list of trusted statements whose meaning changed
+  should be EMPTY by construction; confirm with the usual trusted-surface
+  diff, do not assume it.
+- §5 says an unguarded demonic branch "would become UNSOUND" undetected.
+  It cannot be silent here: every end theorem is about concrete runs and its
+  proof goes through the machine-checked chain, so a branch that covers no
+  case leaves an unprovable goal unless an Admitted/axiom closes it -- which
+  is what the gate's axiom probes check. (Also: the mixed case was equally
+  uncovered under the tag.) The probes have not run on KatamaranRel since
+  2026-10-26.
+
+### 12.5 Environment
+- Worktree `../katamaran-relval-pair` on this branch: theories/ and the light
+  chain up to `MuladdParamLoopI.vo` built WITH both fixes; heavy chain not
+  built. Comparison worktree `../katamaran-krel` (KatamaranRel at the branch
+  point d026cadc, LoopI closure built).
+- Probes, untracked (`git add -u` + named files only): in both worktrees
+  `Example/Muladd/ZZLoopICensus.v` (leaf count + residuals) and
+  `ZZStageTime.v` (per-stage and per-leaf `time`); here also
+  `ZZDupTime{Old,New}.v` and `ZZLeafDbg.v` (each rv_leaf alternative timed).
+- Memory: this box has 14 GB; a light file ~4.6-5 GB, a Result file ~7.7 GB,
+  MuladdParamVC ~10 GB -- close Firefox/Slack/Thunderbird first, build heavy
+  files -j1. Watchdog: `relval-pair-baseline/watchdog.sh WT TSV LOG` kills a
+  coqc in WT above 2x its KatamaranRel baseline + 10 s user CPU (= 1.5x of
+  this branch's own ~1.3x level, the compile-cutoff rule); run it in the
+  background next to `make`.
+
+### 12.6 Next steps, in order
+1. Rebuild the whole closure here with both fixes (`Results.vo` +
+   `GenCompose.vo`), watchdog on; time LoopK and MuladdParamVC against
+   `per-file.tsv` (651 s) and the 849 s before the fixes. Every example must
+   still close; a closer that chokes on the new goal shape gets the same
+   treatment as rv_leaf.
+2. `issue/relval-rsa` off this branch; `git merge KatamaranRel`; resolve per
+   §12.2; R3 rules for cons/rev/regroup; review KatamaranRel's new solver
+   rules on the assumption side and log them in AUDIT.md.
+3. Rebuild; RSA files green (RsaCcopy alone is ~23 min / 9.6 GB).
+4. Confirm the backlog order (§12.0 OPEN) with Emiel before R1/R4 and the
+   RSA cleanup.
