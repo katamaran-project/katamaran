@@ -300,3 +300,20 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	  liftUnOp_SyncVal / liftBinOp_SyncVal (EndToEnd has a local liftUnOp_SyncVal) + an autorewrite db.
 	+ Agreement helpers are scattered: RVToOption_sync (VerifierRel), RVToOption_some (Adequacy); a bv-safe RelVal
 	  equality split lives in MuladdParamClose's rv_leaf (ty.rv_split's bare cbn unfolds bv ops). Move to TypeDecl.
+- relval-pair (2026-10-30, Emiel): prove a relop/bool VC leaf ONCE when both sides are the same goal.
+	Under the pair representation a relop or bool formula means `P l /\ P r` (inst_formula in Formulas.v,
+	inst_eformula in Propositions.v), so every such VC leaf arrives as TWO goals. Most of the time the
+	arguments are immediates (term_val v = SyncVal v, both projections v) or public (a secLeak in the path
+	condition, which rv_leaf in Example/Muladd/MuladdParamClose.v substitutes away with `subst r`), so the two
+	halves are the SAME goal -- and rv_leaf's `repeat split` sends each half to its own bv_lin/lia anyway.
+	This is the measured residual ~1.3x of the port (LoopI 5 -> 8 leaves, MuladdParamVC 651 -> 849 s;
+	PLAN-relval-pair §11 "Performance").
+	+ Cheapest, at the closer: before splitting, close a goal `?A /\ ?A` by proving A once
+	  (`cut A; [intros H; exact (conj H H) |]`). Check first that after `subst r` and cbn the halves are
+	  syntactically equal and not merely convertible (SyncVal is a Definition: cbn needs it unfolded); if only
+	  convertible, match up to conversion. Grep for other closers that split pointwise goals the same way.
+	+ Structural, in the solver/erasure: when both arguments are public (term_val, or every variable has a
+	  secLeak in the path condition) emit ONE obligation -- e.g. a lemma that eval_relop_relprop on SyncVal
+	  arguments is the unary eval_relop_prop, used when instantiating. Only if the closer fix leaves a gap.
+	+ Measure against the KatamaranRel numbers above (5 leaves, 651 s); kill at 1.5x per the compile cutoff.
+	+ Same `P /\ P` as the "SyncVal kit" item above, but on the GOAL side (that item is about hypotheses).
