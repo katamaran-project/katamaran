@@ -117,8 +117,6 @@ Module Type RiscvPmpModel2
           cbn
       end.
 
-    Lemma bv_bin_one : bv.bin (@bv.one xlenbits) = 1%N.
-    Proof. apply bv.bin_one, xlenbits_pos. Qed.
 
     Lemma interp_ptstomem_exists_intro (bytes : nat) :
       ⊢ ∀ (paddr : Addr) (w : bv (bytes * byte)),
@@ -234,7 +232,7 @@ Module Type RiscvPmpModel2
       interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
     Proof.
       unfold interp_addr_access.
-      by rewrite Nat2N.inj_add bv.seqBv_app big_sepL_app.
+      rewrite Nat2Z.inj_add bv.seq_add ?bv.of_Z_nat ?big_sepL_app //; lia.
     Qed.
 
     (* NOTE: duplicate of the same lemma in the unary iris instance (IrisInstance.v). *)
@@ -244,28 +242,27 @@ Module Type RiscvPmpModel2
     Proof. rewrite <-Nat.add_1_l.
            rewrite interp_addr_access_app.
            unfold interp_addr_access, interp_addr_access_byte.
-           by rewrite bv.seqBv_one big_sepL_singleton.
+           by rewrite bv.seq_one big_sepL_singleton.
     Qed.
 
     (* NOTE: duplicate of the same lemma in the unary iris instance (IrisInstance.v). *)
     Lemma interp_pmp_within_mmio_spec {entries m p} (paddr : Addr) bytes :
-      (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+      (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
       ⌜bool_decide (withinMMIO paddr bytes) = false%nat⌝.
     Proof.
       iIntros (Hrep Hpmp) "Hint".
       destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
-      - cbn - [xlenbits] in *. rewrite bool_decide_eq_false. iPureIntro. by intro HFalse.
+      - rewrite bool_decide_eq_false. iPureIntro. intros [? _]. lia.
       - rewrite interp_pmp_addr_inj_extr; eauto.
         iDestruct "Hint" as "[Hint _]".
         iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
         unfold interp_addr_access_byte.
         case_decide; auto.
         iPureIntro.
-        rewrite bool_decide_eq_false /withinMMIO.
-        destruct bytes; first congruence.
-        rewrite !not_and_l. left; congruence.
+        rewrite bool_decide_eq_false. intros ?%withinMMIO_elem_of_base.
+        congruence.
     Qed.
 
     (* NOTE: duplicate of the same lemma in the unary model (Model.v). *)
@@ -276,7 +273,7 @@ Module Type RiscvPmpModel2
     Proof.
       iIntros (Hpmp) "Hint". rewrite /fun_within_mmio.
       rewrite bool_decide_and andb_false_iff.
-      destruct (decide (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
+      destruct (decide (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z) as [Hlt | Hnlt].
       - iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto.
       - iPureIntro. right.
         by rewrite bool_decide_false.
@@ -405,30 +402,18 @@ Module Type RiscvPmpModel2
     Proof. intros ι; destruct_syminstance ι; cbn; auto. Qed.
 
     Lemma minAddr_le_ule : forall (addr : Addr),
-      (minAddr <= bv.bin addr)%N <-> bv.of_N minAddr <=ᵘ addr.
+      (Z.of_N minAddr <= bv.unsigned addr)%Z <-> bv.of_N minAddr <=ᵘ addr.
     Proof.
-      unfold bv.ule, bv.unsigned.
-      intros.
-      split.
-      - intros H.
-        now rewrite bv.bin_of_N_small.
-      - intros H.
-        now rewrite bv.bin_of_N_small in H.
+      intros. by rewrite bv.ule_iff_unsigned_le.
     Qed.
 
     Lemma maxAddr_le_ule : forall (addr : Addr) (bytes : nat),
-        (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-         (bv.bin addr + N.of_nat bytes <= maxAddr)%N -> addr + bv.of_nat bytes <=ᵘ bv.of_N maxAddr.
+        (bv.unsigned addr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
+         (bv.unsigned addr + Z.of_nat bytes <= Z.of_N maxAddr)%Z -> addr + bv.of_nat bytes <=ᵘ bv.of_N maxAddr.
     Proof.
-      unfold bv.ule, bv.unsigned.
-      intros addr bytes Hrep H.
-      rewrite bv.bin_of_N_small; last apply maxAddr_rep.
-      rewrite bv.bin_add_small.
-      rewrite bv.bin_of_nat_small.
-      pose maxAddr_rep.
-      lia.
-      lia.
-      rewrite bv.bin_of_nat_small; lia.
+      intros addr bytes Hrep H. pose proof (bv.unsigned_bounds addr).
+      rewrite bv.ule_iff_unsigned_le -bv.unsigned_add_small -bv.of_Z_nat -bv.unsigned_of_Z_small;
+        change (bv.unsigned (bv.of_N maxAddr)) with (Z.of_N maxAddr); lia.
     Qed.
 
     Lemma in_liveAddrs : forall (addr : Addr),
@@ -437,9 +422,9 @@ Module Type RiscvPmpModel2
         addr ∈ liveAddrs.
     Proof.
       unfold liveAddrs, maxAddr.
-      intros.
-      apply bv.in_seqBv;
-        eauto using maxAddr_rep.
+      intros addr Hmin%bv.ule_iff_unsigned_le Hmax%bv.ult_iff_unsigned_lt.
+      apply bv.elem_of_seq_bounds; first done.
+      change (bv.unsigned (bv.of_N ?x)) with (Z.of_N x) in *; lia.
     Qed.
 
     Opaque minAddr.
@@ -447,50 +432,16 @@ Module Type RiscvPmpModel2
     Opaque xlenbits.
 
     Lemma in_liveAddrs_split : forall (addr : Addr) (bytes : nat),
-        (N.of_nat bytes < bv.exp2 xlenbits)%N ->
-        (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-        (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr) < bv.exp2 xlenbits)%N ->
+        (bv.unsigned addr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
         (bv.of_N minAddr <=ᵘ addr) ->
         (addr + (bv.of_nat bytes) <=ᵘ bv.of_N maxAddr) ->
-        exists l1 l2, liveAddrs = l1 ++ (bv.seqBv addr (N.of_nat bytes)  ++ l2).
+        exists l1 l2, liveAddrs = l1 ++ (bv.seq addr (Z.of_nat bytes)  ++ l2).
     Proof.
-    (* TODO: more efficient proof? *)
-      unfold maxAddr.
-      intros addr bytes bytesfit addrbytesFits addrDiffFits Hmin Hmax.
-      unfold bv.ule, bv.ule in *.
-      unfold liveAddrs.
-      exists (bv.seqBv (bv.of_N minAddr) (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr))%N).
-      exists (bv.seqBv (bv.add addr (bv.of_nat bytes)) (@bv.bin xlenbits (bv.of_N minAddr + bv.of_N lenAddr) - bv.bin (addr + bv.of_nat bytes))).
-      rewrite <-(bv.seqBv_app addr).
-      replace addr with (@bv.of_N xlenbits minAddr + bv.of_N (bv.bin addr - @bv.bin xlenbits (bv.of_N minAddr))) at 2.
-      rewrite <-bv.seqBv_app; try lia.
-      f_equal.
-      - unfold bv.ule, bv.ult in *.
-        apply N2Z.inj.
-        rewrite ?bv.bin_add_small ?Nat2N.inj_add ?N2Nat.id ?N2Z.inj_add ?N2Z.inj_sub ?bv.bin_of_nat_small ?bv.bin_of_N_small;
-        auto using lenAddr_rep.
-        + rewrite (N2Z.inj_add (bv.bin addr)).
-          now Lia.lia.
-        + now rewrite ?bv.bin_add_small bv.bin_of_nat_small in Hmax.
-      - unfold bv.of_nat.
-        apply bv.unsigned_inj.
-        unfold bv.unsigned.
-        rewrite bv.bin_add_small.
-        + rewrite N2Z.inj_add.
-          rewrite bv.bin_of_N_small; try assumption.
-          rewrite bv.bin_of_N_small.
-          rewrite N2Z.inj_sub.
-          lia.
-          now rewrite bv.bin_of_N_small in Hmin.
-          now rewrite bv.bin_of_N_small in addrDiffFits.
-          now simpl.
-        + replace (@bv.bin xlenbits (bv.of_N minAddr) + _)%N with (bv.bin addr); try Lia.lia.
-          apply N2Z.inj.
-          rewrite N2Z.inj_add.
-          rewrite bv.bin_of_N_small; last done.
-          rewrite bv.bin_of_N_small; last done.
-          rewrite N2Z.inj_sub; last done.
-          lia.
+      intros addr bytes Hrep Hmin%bv.ule_iff_unsigned_le Hmax%bv.ule_iff_unsigned_le.
+      pose proof (bv.unsigned_bounds addr).
+      rewrite -bv.unsigned_add_small -bv.of_Z_nat -bv.unsigned_of_Z_small in Hmax; [|lia..].
+      apply bv.seq_sub_list; unfold maxAddr in *;
+        change (bv.unsigned (bv.of_N ?x)) with (Z.of_N x) in *; lia.
     Qed.
 
     Lemma N_of_nat_lt_S : forall w n,
@@ -500,30 +451,30 @@ Module Type RiscvPmpModel2
 
     (* TODO: better name! *)
     Lemma bv_ule_base : forall {n} (base a b max : bv n),
-        (bv.bin base + bv.bin a < bv.exp2 n)%N ->
+        (bv.unsigned base + bv.unsigned a < 2 ^ Z.of_nat n)%Z ->
         b <=ᵘ a ->
         base + a <=ᵘ max ->
         base + b <=ᵘ max.
     Proof.
-      intros n base a b max Hn Hba.
-      apply bv.ule_trans with (y := base + a).
-      unfold bv.ule in *.
-      rewrite ?bv.bin_add_small; lia.
+      intros n base a b max Hn Hba Hmax.
+      apply bv.ule_trans with (y := base + a); last done.
+      rewrite bv.ule_iff_unsigned_le in Hba.
+      rewrite bv.ule_iff_unsigned_le -!bv.unsigned_add_small; lia.
     Qed.
 
     Lemma big_sepL_pure_impl (bytes : nat) :
         ∀ (paddr : Addr)
             (entries : list PmpEntryCfg) (p : Privilege) p0,
             (Pmp_access paddr (bv.of_nat bytes) entries p p0) ->
-            (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-            (N.of_nat bytes < bv.exp2 xlenbits)%N ->
-            ⊢ (([∗ list] offset ∈ bv.seqBv paddr (N.of_nat bytes),
+            (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
+            (Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
+            ⊢ (([∗ list] offset ∈ bv.seq paddr (Z.of_nat bytes),
                ⌜∃ p0, Pmp_access offset%bv
                         (bv.of_nat 1) entries p p0⌝ -∗
                         ∃ w : Byte, interp_ptsto (mG := sailGS2_memGS) offset w)
               ∗-∗
               (⌜∃ p0, Pmp_access paddr (bv.of_nat bytes) entries p p0⌝ -∗
-                        [∗ list] offset ∈ bv.seqBv paddr (N.of_nat bytes),
+                        [∗ list] offset ∈ bv.seq paddr (Z.of_nat bytes),
                  ∃ w : Byte, interp_ptsto (mG := sailGS2_memGS) offset w))%I.
     Proof.
       pose proof xlenbits_pos.
@@ -532,25 +483,25 @@ Module Type RiscvPmpModel2
       iSplit; iIntros "H".
       - iIntros "[%acc %Haccess]".
         simpl.
-        rewrite Nat2N.inj_succ bv.seqBv_succ; try lia.
+        rewrite Nat2Z.inj_succ bv.seq_succ; last lia.
         rewrite big_sepL_cons.
         iDestruct "H" as "[Hb Hbs]".
         iSplitL "Hb".
         iApply ("Hb" with "[%]").
         exists acc.
         assert (Htmp: (N.of_nat 1 < bv.exp2 xlenbits)%N) by lia.
-        rewrite <- (@bv.bin_of_nat_small _ _ Hbytes) in Hrep.
-        refine (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S Htmp Hbytes) Haccess).
+        rewrite (@bv.unsigned_of_Z_small xlenbits (Z.of_nat (S bytes))) ?bv.of_Z_nat in Hrep; last lia.
+        refine (pmp_access_reduced_width Hrep (bv.ult_nat_S_zero Htmp) (bv.ule_nat_one_S (n := bytes) Htmp ltac:(lia)) Haccess).
         destruct bytes; first by simpl. (* we need to know a bit more about bytes to finish this case *)
         iSimpl in "Hbs".
         apply pmp_access_addr_S_width_pred in Haccess; try lia.
         rewrite bv.add_comm in Haccess.
         iApply ("IHbytes" $! (bv.one + paddr) pmp p acc Haccess with "[%] [%] Hbs"); try lia.
-        rewrite bv.bin_add_small ?bv_bin_one; lia.
+        rewrite -bv.unsigned_succ_small; lia.
         now iExists acc.
-        rewrite bv.bin_of_nat_small; lia.
+        rewrite -bv.of_Z_nat -bv.unsigned_of_Z_small; lia.
       - iSpecialize ("H" $! (ex_intro _ _ Hpmp)).
-        rewrite Nat2N.inj_succ bv.seqBv_succ; try lia.
+        rewrite Nat2Z.inj_succ bv.seq_succ; last lia.
         iDestruct "H" as "[Hw H]"; fold seq.
         simpl.
         iSplitL "Hw"; auto.
@@ -558,8 +509,8 @@ Module Type RiscvPmpModel2
         apply pmp_access_addr_S_width_pred in Hpmp; auto.
         rewrite bv.add_comm in Hpmp.
         iApply ("IHbytes" $! (bv.one + paddr) pmp p p0 Hpmp with "[%] [%]"); auto; try lia.
-        rewrite bv.bin_add_small bv_bin_one; lia.
-        rewrite bv.bin_of_nat_small; try lia.
+        rewrite -bv.unsigned_succ_small; lia.
+        rewrite -bv.of_Z_nat -bv.unsigned_of_Z_small; lia.
     Qed.
 
     Lemma extract_pmp_ptsto_sound (bytes : nat) :
@@ -571,14 +522,12 @@ Module Type RiscvPmpModel2
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      assert (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N.
-      { eapply N.le_lt_trans; last apply lenAddr_rep.
-        unfold bv.unsigned in *. zify; auto. (* TODO: why does lia not solve this? *) }
+      assert (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z.
+      { pose proof maxAddr_rep.
+        change (bv.unsigned paddr) with (@bv.unsigned xlenbits paddr) in *. lia. }
       iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto.
       iFrame.
       iApply interp_addr_access_extr; last iFrame; eauto.
-      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
-      - unfold bv.unsigned in *. zify; auto. (* TODO idem *)
     Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
