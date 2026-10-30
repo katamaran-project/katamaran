@@ -50,6 +50,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Defaults
      Iris.Instance
      Iris.Base
      Notations

@@ -62,10 +62,7 @@ Import env.notations.
 Set Implicit Arguments.
 
 Module Type IrisAdeqParameters2
-  (Import B       : Base)
-  (Import PROG    : Program B)
-  (Import SEM     : Semantics B PROG)
-  (Import IPre    : IrisPrelims B PROG SEM)
+  (Import B       : BaseKit)
   (IPleft  : IrisParameters B)
   (IPright : IrisParameters B)
   (Import IPP     : IrisParameters2 B IPleft IPright).
@@ -95,7 +92,7 @@ Module Type IrisAdequacy2
   (IBleft         : IrisBase B PROG SEM IPre)
   (IBright        : IrisBase B PROG SEM IPre)
   (Import IB2     : IrisBase2 B PROG SEM IPre IBleft IBright)
-  (Import IAP2    : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2)
+  (Import IAP2    : IrisAdeqParameters2 B IBleft IBright IB2)
   (Import IPred2  : IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2)
   (Import IRules2 : IrisSignatureRules2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IPred2).
 

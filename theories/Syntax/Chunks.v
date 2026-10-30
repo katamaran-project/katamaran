@@ -42,6 +42,7 @@ From Katamaran Require Import
      Syntax.Formulas
      Syntax.Predicates
      Syntax.Registers
+     Symbolic.PartialEvaluation
      Base.
 
 From Equations Require Import
@@ -79,6 +80,7 @@ Qed.
 Module Type ChunksOn
   (Import B : Base)
   (Import P : PredicateKit B)
+  (Import PE : PartialEvaluationOn B)
   (Import F : FormulasOn B P).
 
   Inductive GChunk (V : Ty -> Set) : Type :=

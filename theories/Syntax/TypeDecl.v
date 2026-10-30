@@ -359,27 +359,3 @@ Module Type Types.
   #[export] Declare Instance varkit        : VarKit.
 
 End Types.
-
-#[local] Instance DefaultTypeDeclKit : TypeDeclKit :=
-  {| enumi := Empty_set;
-     unioni := Empty_set;
-     recordi := Empty_set;
-  |}.
-
-#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
-  {| enumt _ := Empty_set;
-     uniont _ := Empty_set;
-     recordt _ := Empty_set;
-  |}.
-
-#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit :=
-  {| unionk _            := Empty_set;
-     unionk_ty _ _       := ty.unit;
-     unionv_fold         := Empty_set_rec _;
-     unionv_unfold       := Empty_set_rec _;
-     recordf             := Empty_set;
-     recordf_ty          := Empty_set_rec _;
-     recordv_fold        := Empty_set_rec _;
-     recordv_unfold      := Empty_set_rec _;
-  |}.
-Proof. all: abstract (intros []). Defined.

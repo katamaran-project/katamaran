@@ -57,7 +57,7 @@ Module Type RiscvPmpIrisAdeqParams2
   (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
   (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
   (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
-<: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM RVPBASEl RVPBASEr RVPBASE2.
+<: IrisAdeqParameters2 RiscvPmpBase RVPBASEl RVPBASEr RVPBASE2.
 
 
   Definition memGpreS2 : gFunctors -> Set := memGpreS.

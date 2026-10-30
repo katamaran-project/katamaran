@@ -33,6 +33,7 @@ From Katamaran Require Import
      Syntax.Chunks
      Syntax.Formulas
      Syntax.Predicates
+     Symbolic.PartialEvaluation
      Base.
 From stdpp Require Import base.
 From iris Require proofmode.proofmode.
@@ -52,8 +53,9 @@ Delimit Scope pred_scope with P.
 Module Type WorldsOn
   (Import B : Base)
   (Import P : PredicateKit B)
+  (Import PE : PartialEvaluationOn B)
   (Import F : FormulasOn B P)
-  (Import C : ChunksOn B P F).
+  (Import C : ChunksOn B P PE F).
 
   Section Worlds.
 
@@ -1451,7 +1453,7 @@ Module Type WorldsOn
 End WorldsOn.
 
 Module Type WorldsMixin (B : Base) (PK : PredicateKit B) :=
-  FormulasOn B PK <+ ChunksOn B PK <+ WorldsOn B PK.
+  PartialEvaluationOn B <+ FormulasOn B PK <+ ChunksOn B PK <+ WorldsOn B PK.
 
 Module Type SolverKit (B : Base) (P : PredicateKit B) (Import W : WorldsMixin B P).
   Local Set Implicit Arguments.
@@ -1459,11 +1461,3 @@ Module Type SolverKit (B : Base) (P : PredicateKit B) (Import W : WorldsMixin B 
   Parameter solver      : Solver.
   Parameter solver_spec : SolverSpec solver.
 End SolverKit.
-
-Module DefaultSolverKit (B : Base) (P : PredicateKit B)
-  (Import W : WorldsMixin B P) <: SolverKit B P W.
-
-  Definition solver : Solver := solver_null.
-  Definition solver_spec : SolverSpec solver := solver_null_spec.
-
-End DefaultSolverKit.

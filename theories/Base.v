@@ -47,8 +47,7 @@ From Katamaran Require Import
      Syntax.Terms
      Symbolic.Instantiation
      Symbolic.OccursCheck
-     Symbolic.GenOccursCheck
-     Symbolic.PartialEvaluation.
+     Symbolic.GenOccursCheck.
 
 (* Preciseness for spatial predicates. This does not depend on the [Base], so
    it is defined outside of it, which keeps the [Base] signature smaller. *)
@@ -65,7 +64,7 @@ Module Type BaseMixin (Import TY : Types).
     ExpressionsOn TY <+
     TermsOn TY <+ PatternsOn TY <+
     OccursCheckOn TY <+ GenOccursCheckOn TY <+ InstantiationOn TY <+
-    MessagesOn TY <+ PartialEvaluationOn TY.
+    MessagesOn TY.
 
   Abbreviation Ty := (@ty.Ty typedeclkit).
   Abbreviation LVar := (@Variables.LVar varkit).
@@ -240,10 +239,6 @@ Module Type BaseMixin (Import TY : Types).
       | exp_record R es    => term_record R (env.map (fun _ => seval_exp) es)
       end%exp.
 
-  Definition seval_exps {Γ Σ N} (δ : SStore Γ Σ) {Δ} :
-    NamedEnv (X := N) (Exp Γ) Δ -> NamedEnv (Term Σ) Δ
-      := env.map (fun b (e : Exp Γ (type b)) => peval (seval_exp δ e)).
-
   Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
     eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
   Proof.
@@ -287,17 +282,3 @@ End OperationalModel.
 Module Type BaseKit := Types <+ RegDeclKit <+ OperationalModel.
 
 Module Type Base := Types <+ RegDeclKit <+ OperationalModel <+ BaseMixin.
-
-Module DefaultBase <: Base.
-
-  Definition Memory : Set := unit.
-
-  #[export] Instance typedeclkit : TypeDeclKit := DefaultTypeDeclKit.
-  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit := DefaultTypeDenoteKit.
-  #[export] Instance typedefkit : TypeDefKit typedenotekit := DefaultTypeDefKit.
-  #[export] Instance varkit : VarKit := DefaultVarKit.
-
-  Include DefaultRegDeclKit.
-  Include BaseMixin.
-
-End DefaultBase.
