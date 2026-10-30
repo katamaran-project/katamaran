@@ -337,8 +337,15 @@ Would it make sense to have an invariant like the leakage invariant for the pc?
 	  "solver drops public zero atoms" only for PUBLIC atoms (Solver.v, a1eb199a): x - x -> 0 becomes sound outright.
 	+ the commented-out generic peval_bvand/bvor (9478b8d2) and the missing xor rules (O4 survey).
 	+ the try_bvadd_cancel_* family's secLeak/SyncVal guards (Solver.v, check-scalar era).
-	NOT in this list: ResimpSecLeak (0f27b507) is a wsubst re-simplification bug, independent of the tag; the RSA
-	peval rules (bvtake_zext, rev, append, same-width sext, regroup) are plain bv identities and simply port.
+	The RSA peval rules (bvtake_zext, rev, append, same-width sext, regroup) are plain bv identities and simply port.
+	MIGRATION RISK, not a workaround (corrected 2026-10-30): arrv publicness-by-framing (PLAN-arrv §1.2, Emiel's
+	"framing does the publicness") relies on the TAGGED split secLeak (op t1 t2) <-> secLeak t1 /\ secLeak t2, and so
+	does ResimpSecLeak (0f27b507, which re-runs that split after a substitution). relval-pair weakened that split to
+	an implication and keeps assumed secLeak (op ..) whole (AUDIT.md, simplify_secLeak row). Under pairs the split
+	stays an EQUIVALENCE only for injective ops -- cons (take's `vs = x :: r`), rev, regroup -- so those need an
+	explicit solver rule (repair R3, componentwise publicness) BEFORE the RSA/check_scalar/muladd proofs go green.
+	`++` is NOT injective per side (lengths may differ between projections): a public `v1 ++ v2` (clem_arrv_split,
+	join) no longer hands publicness to v1/v2 without length facts. Check every arrv post that relies on it.
 	Each removal is a SOUNDNESS-relevant change to theories/ or SpecIris: log it in relval-pair-baseline/AUDIT.md.
 - arrv ghost-lemma bloat (2026-10-30, Emiel): plan AFTER the relval-pair migration (and after the tag-workaround item
 	above, which removes take_cons/take_any/resync_head on its own). Today an `arrv` chunk (Sig.v) is opaque to the
