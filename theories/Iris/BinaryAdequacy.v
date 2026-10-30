@@ -62,12 +62,13 @@ Import env.notations.
 Set Implicit Arguments.
 
 Module Type IrisAdeqParameters2
-  (Import B    : Base)
-  (Import PROG : Program B)
-  (Import SEM  : Semantics B PROG)
-  (Import IPre : IrisPrelims B PROG SEM)
-  (Import IP   : IrisParameters B)
-  (Import IPP  : IrisParameters2 B IP).
+  (Import B       : Base)
+  (Import PROG    : Program B)
+  (Import SEM     : Semantics B PROG)
+  (Import IPre    : IrisPrelims B PROG SEM)
+  (IPleft  : IrisParameters B)
+  (IPright : IrisParameters B)
+  (Import IPP     : IrisParameters2 B IPleft IPright).
 
   Parameter Inline memGpreS2 : gFunctors -> Set.
   Parameter memΣ2 : gFunctors.
@@ -90,10 +91,13 @@ Module Type IrisAdequacy2
   (Import PROG    : Program B)
   (Import SEM     : Semantics B PROG)
   (Import PLOG    : ProgramLogic B SIG PROG)
-  (Import IB2     : IrisBase2 B PROG SEM)
-  (Import IAP2    : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2)
-  (Import IPred2  : IrisPredicates2 B SIG PROG SEM IB2)
-  (Import IRules2 : IrisSignatureRules2 B SIG PROG SEM PLOG IB2 IPred2).
+  (Import IPre    : IrisPrelims B PROG SEM)
+  (IBleft         : IrisBase B PROG SEM IPre)
+  (IBright        : IrisBase B PROG SEM IPre)
+  (Import IB2     : IrisBase2 B PROG SEM IPre IBleft IBright)
+  (Import IAP2    : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2)
+  (Import IPred2  : IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2)
+  (Import IRules2 : IrisSignatureRules2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IPred2).
 
   Import SmallStepNotations.
 
@@ -266,27 +270,27 @@ Module Type IrisAdequacy2
     iMod (mem_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
     set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
     set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
-    set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
-    set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
-    set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
+    set (sailG_left  := IBleft.SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
+    set (sailG_right := IBright.SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
+    set (gs2 := SailGS2 Hinv (SailRegGS2 (@IBleft.sailGS_sailRegGS _ sailG_left) (@IBright.sailGS_sailRegGS _ sailG_right)) memG).
     iPoseProof (Hwp _ gs2) as "(Hwp & Hφ)".
     iSpecialize ("Hwp" with "[$Rmem H2γ1 H2γ2]").
     { iApply (own_RegStore_to_map_reg_pointsTos (l := finite.enum (sigT 𝑹𝑬𝑮))).
       eapply finite.NoDup_enum.
       iSplitL "H2γ1". iApply "H2γ1". iApply "H2γ2". }
     iMod "Hwp". rewrite /semWP2.
-    rewrite mem_state_interp2_mem_state_interp. iDestruct "Hmem" as "(Hmem1 & Hmem2)".
+    rewrite mem_state_interp2_mem_inv. iDestruct "Hmem" as "(Hmem1 & Hmem2)".
     iSpecialize ("Hwp" with "[$Hmem2 H1γ2]").
     { now iApply own_RegStore_to_regs_inv. }
-    iMod (semWP_postcondition steps Hval with "[Hmem1 H1γ1] [Hlc] Hwp") as "H"; eauto.
+    iMod (IBleft.semWP_postcondition steps Hval with "[Hmem1 H1γ1] [Hlc] Hwp") as "H"; eauto.
     { iFrame "Hmem1".
-      now iApply (@own_RegStore_to_regs_inv sailΣ2 (@sailGS_sailRegGS sailΣ2 sailGS2_sailGS_left) γ1). }
+      now iApply (@own_RegStore_to_regs_inv sailΣ2 (@IBleft.sailGS_sailRegGS sailΣ2 sailGS2_sailGS_left) γ1). }
     iAssert (|={∅}▷=>^n |={∅}=> ⌜φ⌝)%I with "[-]" as "H"; last first.
     { destruct n; [done|]. by iApply step_fupdN_S_fupd. }
     iApply (step_fupdN_wand with "H").
     iIntros "H". iMod "H".
     iDestruct "H" as "([Hreg1 Hmem1] & %γ22 & %μ22 & %δ2' & %s2' & %v2 & Hs2 & Hs2' & Hregs2 & Hmem2 & HQ)".
-    iPoseProof (mem_state_interp2_mem_state_interp with "[$Hmem1 $Hmem2]") as "Hmem".
+    iPoseProof (mem_state_interp2_mem_inv with "[$Hmem1 $Hmem2]") as "Hmem".
     now iMod ("Hφ" with "Hs2 Hs2' HQ Hmem").
   Qed.
 
@@ -316,12 +320,12 @@ Module Type IrisAdequacy2
     iMod (mem_init2 (mGS := mGS) μ1 μ2) as (memG) "[Hmem Rmem]".
     set (regsG_left := {| reg_inG := @reg_pre_inG2_left sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name1 |}).
     set (regsG_right := {| reg_inG := @reg_pre_inG2_right sailΣ2 (@subG_sailGpreS sailΣ2 (subG_refl sailΣ2)); reg_gv_name := spec_name2 |}).
-    set (sailG_left  := SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
-    set (sailG_right := SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
-    set (gs2 := SailGS2 Hinv (SailRegGS2 (@sailGS_sailRegGS _ sailG_left) (@sailGS_sailRegGS _ sailG_right)) memG).
-    iExists (λ σ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @mem_state_interp _ (@memGS2_memGS_left _ memG) (σ.2))%I, _. cbn.
+    set (sailG_left  := IBleft.SailGS Hinv regsG_left  (@memGS2_memGS_left _ memG)).
+    set (sailG_right := IBright.SailGS Hinv regsG_right (@memGS2_memGS_right _ memG)).
+    set (gs2 := SailGS2 Hinv (SailRegGS2 (@IBleft.sailGS_sailRegGS _ sailG_left) (@IBright.sailGS_sailRegGS _ sailG_right)) memG).
+    iExists (λ σ _, regs_inv (srGS := regsG_left) (σ.1) ∗ @IBleft.mem_state_interp _ (@memGS2_memGS_left _ memG) (σ.2))%I, _. cbn.
     iPoseProof (Hwp sailΣ2 gs2) as "H".
-    rewrite mem_state_interp2_mem_state_interp.
+    rewrite mem_state_interp2_mem_inv.
     iDestruct "Hmem" as "($ & Hmem2)".
     iSplitR "H1γ2 H2γ2 Rmem Hmem2".
     - now iApply (@own_RegStore_to_regs_inv sailΣ2 regsG_left γ1).
@@ -329,7 +333,7 @@ Module Type IrisAdequacy2
       iSpecialize ("H" with "[$Hmem2 H1γ2 H2γ2]").
       { now iApply own_RegStore_to_regs_inv. }
       iModIntro.
-      rewrite /semWP.
+      rewrite /IBleft.semWP.
       iApply (wp_mono with "H").
       iIntros ([v1'' δ1'']) "(%γ22 & %μ22 & %δ2'' & %s2'' & %v2'' & %Hstep2' & %Hval & Hregs & Hmem & HQ)".
       iExists γ22, μ22, s2'', v2'', δ2''.

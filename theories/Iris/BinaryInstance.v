@@ -64,9 +64,12 @@ Set Implicit Arguments.
 
 Module Type IrisInstance2 (B : Base) (SIG : Signature B) (PROG : Program B)
   (SEM : Semantics B PROG) (PLOG : ProgramLogic B SIG PROG)
-  (IB2 : IrisBase2 B PROG SEM) (IAP : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2) :=
-  IrisPredicates2 B SIG PROG SEM IB2 <+ IrisSignatureRules2 B SIG PROG SEM PLOG IB2
-    <+ IrisAdequacy2 B SIG PROG SEM PLOG IB2 IAP.
+  (IPre : IrisPrelims B PROG SEM)
+  (IBleft IBright : IrisBase B PROG SEM IPre)
+  (IB2 : IrisBase2 B PROG SEM IPre IBleft IBright)
+  (IAP : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2) :=
+  IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2 <+ IrisSignatureRules2 B SIG PROG SEM PLOG IPre IBleft IBright IB2
+    <+ IrisAdequacy2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IAP.
 
 (*  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature. *)
 (*  * This is kept to a minimum (see comment for the IrisPredicates module). *)
@@ -77,9 +80,11 @@ Module IrisInstanceWithContracts2
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
   (Import PLOG  : ProgramLogic B SIG PROG)
-  (Import IB2   : IrisBase2 B PROG SEM)
-  (Import IAP   : IrisAdeqParameters2 B PROG SEM IB2 IB2 IB2)
-  (Import II    : IrisInstance2 B SIG PROG SEM PLOG IB2 IAP).
+  (Import IPre  : IrisPrelims B PROG SEM)
+  (IBleft IBright : IrisBase B PROG SEM IPre)
+  (Import IB2   : IrisBase2 B PROG SEM IPre IBleft IBright)
+  (Import IAP   : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2)
+  (Import II    : IrisInstance2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IAP).
 
   Section WithSailGS.
   Import ProgLog.

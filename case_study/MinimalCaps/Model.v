@@ -105,8 +105,11 @@ Import MinCapsProgram.
 Import MinCapsProgramLogic.
 Import MinCapsSpecification.
 
-Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSemantics.
+Module Import MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSemantics.
   Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSemantics.
+End MinCapsIrisPrelims.
+
+Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSemantics MinCapsIrisPrelims.
 
   Parameter maxAddr : nat.
 
@@ -151,10 +154,10 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
 
   End WithIrisNotations.
 
-  Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
-  Include IrisWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
-  Include IrisTotalWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
-  Include IrisTotalPartialWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics.
+  Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics MinCapsIrisPrelims.
+  Include IrisWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics MinCapsIrisPrelims.
+  Include IrisTotalWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics MinCapsIrisPrelims.
+  Include IrisTotalPartialWeakestPre MinCapsBase MinCapsProgram MinCapsSemantics MinCapsIrisPrelims.
 End MinCapsIrisBase.
 
 Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBase.
@@ -187,7 +190,7 @@ Module MinCapsIrisAdeqParameters <: IrisAdeqParameters MinCapsBase MinCapsIrisBa
 
 End MinCapsIrisAdeqParameters.
 
-Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisBase MinCapsIrisAdeqParameters.
+Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisPrelims MinCapsIrisBase.
   Import env.notations.
   Import iris.bi.interface.
   Import iris.bi.big_op.
@@ -530,15 +533,15 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsSignature M
 
   End MinimalCapsPredicates.
 
-  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisBase.
-  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisBase MinCapsIrisAdeqParameters.
+  Include IrisSignatureRules MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisPrelims MinCapsIrisBase.
+  Include IrisAdequacy MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics MinCapsProgramLogic MinCapsIrisPrelims MinCapsIrisBase MinCapsIrisAdeqParameters.
 
 End MinCapsIrisInstance.
 
 Module MinCapsIrisInstanceWithContracts.
 
   Include IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsProgram MinCapsSemantics
-    MinCapsProgramLogic MinCapsIrisBase MinCapsIrisAdeqParameters MinCapsIrisInstance.
+    MinCapsProgramLogic MinCapsIrisPrelims MinCapsIrisBase MinCapsIrisInstance.
 
   Section LemProofs.
     (* In this section we prove that the lemmas we defined in this case study

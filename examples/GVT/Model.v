@@ -41,10 +41,10 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.Contracts
-     RiscvPmp.IrisModel
+     RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.GVT.Sig
-     RiscvPmp.trace
+     RiscvPmp.GVT.trace
      RiscvPmp.iostate.
 From Equations Require Import
      Equations.
@@ -79,7 +79,7 @@ Ltac destruct_syminstance ι :=
     | _ => idtac
     end.
 
-Import RiscvPmpIrisBase.
+Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
 
 Module RiscvPmpModel2.
   Import RiscvPmpSignature.
@@ -88,8 +88,8 @@ Module RiscvPmpModel2.
   Import RiscvPmpIrisInstance.
 
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature
-    RiscvPmpProgram RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase
-    RiscvPmpIrisAdeqParameters RiscvPmpIrisInstance.
+    RiscvPmpProgram RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisPrelims
+    RiscvPmpIrisBase RiscvPmpIrisInstance.
 
   Section ForeignProofs.
     Context `{sg : sailGS Σ} {rG : iostateG IOState Σ}.

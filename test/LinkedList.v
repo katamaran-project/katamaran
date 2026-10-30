@@ -830,11 +830,13 @@ Module ExampleModel.
      [IrisBase] defines the operational model that only depends on the program
      and the operational semantics, but not the signature or defined function
      contracts. *)
-  Module Import ExampleIrisBase <: IrisBase ExampleBase ExampleProgram ExampleSemantics.
-
-    (* Instantiates with the step relation and sets up the ghost state for
-       registers. *)
+  (* Instantiates with the step relation and sets up the ghost state for
+     registers. *)
+  Module Import ExampleIrisPrelims <: IrisPrelims ExampleBase ExampleProgram ExampleSemantics.
     Include IrisPrelims ExampleBase ExampleProgram ExampleSemantics.
+  End ExampleIrisPrelims.
+
+  Module Import ExampleIrisBase <: IrisBase ExampleBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
 
     (* The [IrisParameters] define the ghost state for memory which is provided
        by the user. This is then combined with the ghost state for registers in
@@ -875,10 +877,10 @@ Module ExampleModel.
         fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
     End ExampleIrisParameters.
 
-    Include IrisResources ExampleBase ExampleProgram ExampleSemantics.
-    Include IrisWeakestPre ExampleBase ExampleProgram ExampleSemantics.
-    Include IrisTotalWeakestPre ExampleBase ExampleProgram ExampleSemantics.
-    Include IrisTotalPartialWeakestPre ExampleBase ExampleProgram ExampleSemantics.
+    Include IrisResources ExampleBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
+    Include IrisWeakestPre ExampleBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
+    Include IrisTotalWeakestPre ExampleBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
+    Include IrisTotalPartialWeakestPre ExampleBase ExampleProgram ExampleSemantics ExampleIrisPrelims.
 
   End ExampleIrisBase.
 
@@ -915,7 +917,7 @@ Module ExampleModel.
      [IrisInstance] module. *)
   Module Import ExampleIrisInstance <:
     IrisInstance ExampleBase ExampleSignature ExampleProgram ExampleSemantics
-      ExampleProgramLogic ExampleIrisBase ExampleIrisAdeqParams.
+      ExampleProgramLogic ExampleIrisPrelims ExampleIrisBase.
 
     Import iris.base_logic.lib.gen_heap.
     Import iris.base_logic.lib.iprop.
@@ -957,8 +959,8 @@ Module ExampleModel.
 
     (* At this point we have enough information to instantiate the program logic
        rules of Iris that do not refer to specific contracts. *)
-    Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisBase.
-    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisBase ExampleIrisAdeqParams.
+    Include IrisSignatureRules ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisPrelims ExampleIrisBase.
+    Include IrisAdequacy ExampleBase ExampleSignature ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisPrelims ExampleIrisBase ExampleIrisAdeqParams.
 
   End ExampleIrisInstance.
 
@@ -973,8 +975,8 @@ Module ExampleModel.
        parameterized over a given set of contracts so it is included here
        instead of [IrisInstance].  *)
     Include IrisInstanceWithContracts ExampleBase ExampleSignature
-      ExampleProgram ExampleSemantics ExampleProgramLogic
-      ExampleIrisBase ExampleIrisAdeqParams ExampleIrisInstance.
+      ExampleProgram ExampleSemantics ExampleProgramLogic ExampleIrisPrelims
+      ExampleIrisBase ExampleIrisInstance.
 
     (* Import the soundness proofs for the shallow and symbolic executors. *)
     Include MicroSail.ShallowSoundness.Soundness ExampleBase ExampleSignature

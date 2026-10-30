@@ -44,13 +44,13 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness
      RiscvPmp.PmpCheck
-     RiscvPmp.IrisModel
+     RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.GVT.Sig
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.Model
-     RiscvPmp.trace
+     RiscvPmp.GVT.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Contracts.
 From Katamaran Require RiscvPmp.GVT.Model.
@@ -857,7 +857,7 @@ End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
 
-  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpModel2.

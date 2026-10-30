@@ -32,52 +32,318 @@ From Katamaran Require Import
      Iris.Base
      RiscvPmp.Machine
      RiscvPmp.trace.
+From stdpp Require Import namespaces.
+Module ns := stdpp.namespaces.
 From iris Require Import
+  algebra.auth
      base_logic.lib.gen_heap
+     base_logic.lib.invariants
      proofmode.proofmode.
 
 Set Implicit Arguments.
 
 Import RiscvPmpProgram.
+Import bv.notations.
+
+Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+
+  (* Defines the memory ghost state. *)
+  Definition MemVal : Set := Byte.
+
+  Definition initMemMap μ := (list_to_map (map (fun a => (a , memory_ram μ a)) liveAddrs) : gmap Addr MemVal).
+
+  Inductive WritePendingState :=
+  | NothingPending : WritePendingState
+  | Written : Event -> WritePendingState.
+
+  Definition writePendingΣ := #[GFunctor (authR (optionUR (excl.exclR (leibnizO WritePendingState))))].
+
+  Class writePending_preG Σ := WritePending_preG {
+                                   writePending_pre_inG :: inG Σ (auth.authR (optionUR (excl.exclR (leibnizO WritePendingState))));
+                                 }.
+
+  Class writePendingG Σ := WritePendingG {
+                               writePending_inG :: inG Σ (auth.authR (optionUR (excl.exclR (leibnizO WritePendingState))));
+                               writePendingG_gname : gname
+                             }.
+
+  #[export] Instance writePendingΣ_preG `{writePendingG Σ} : writePending_preG Σ.
+  Proof. constructor. typeclasses eauto. Defined.
+
+  #[export] Instance subG_writePendingPreΣ {Σ}:
+    subG writePendingΣ Σ →
+    writePending_preG Σ.
+  Proof. solve_inG. Qed.
+
+  Definition nothingPending_auth `{writePendingG Σ} : iProp Σ :=
+    own writePendingG_gname (● (Some (excl.Excl NothingPending) : optionUR (excl.exclR (leibnizO WritePendingState)))).
+  Definition nothingPending `{writePendingG Σ} : iProp Σ :=
+    own writePendingG_gname (◯ (Some (excl.Excl NothingPending) : optionUR (excl.exclR (leibnizO WritePendingState)))).
+  Definition written_auth `{writePendingG Σ} e : iProp Σ :=
+    own writePendingG_gname (● (Some (excl.Excl (Written e)) : optionUR (excl.exclR (leibnizO WritePendingState)))).
+  Definition written `{writePendingG Σ} e : iProp Σ :=
+    own writePendingG_gname (◯ (Some (excl.Excl (Written e)) : optionUR (excl.exclR (leibnizO WritePendingState)))).
+
+  Lemma writePending_alloc `{!writePending_preG Σ} :
+    ⊢ |==> ∃ tG : writePendingG Σ,
+        nothingPending_auth ∗ nothingPending.
+  Proof.
+    iMod (own_alloc (● (Some (excl.Excl NothingPending): optionUR (excl.exclR (leibnizO WritePendingState))) ⋅ ◯ (Some (excl.Excl NothingPending) : optionUR (excl.exclR (leibnizO WritePendingState))))) as (γ) "[? ?]".
+    { apply auth_both_valid_2; done. }
+    iModIntro. iExists (WritePendingG _ γ). now iFrame.
+  Qed.
+
+  Lemma nothingPending_written `{writePendingG Σ} e :
+    nothingPending_auth ∗ nothingPending ==∗
+    written_auth e ∗ written e.
+  Proof.
+    rewrite -!own_op.
+    iApply own_update. apply auth_update.
+    apply @option_local_update.
+    apply exclusive_local_update. constructor.
+  Qed.
+
+  Lemma written_nothingPending `{writePendingG Σ} e :
+    written_auth e ∗ written e ==∗
+    nothingPending_auth ∗ nothingPending.
+  Proof.
+    rewrite -!own_op.
+    iApply own_update. apply auth_update.
+    apply @option_local_update.
+    apply exclusive_local_update. constructor.
+  Qed.
+
+  Lemma writePending_agree `{writePendingG Σ} (s s' : WritePendingState) :
+    own writePendingG_gname (● (Some (excl.Excl s) : optionUR (excl.exclR (leibnizO WritePendingState)))) -∗
+    own writePendingG_gname (◯ (Some (excl.Excl s') : optionUR (excl.exclR (leibnizO WritePendingState)))) -∗
+    ⌜s = s'⌝.
+  Proof.
+    iIntros "H1 H2".
+    iDestruct (own_valid_2 with "H1 H2") as %[Hi _]%auth_both_valid_discrete.
+    rewrite excl.Excl_included in Hi. apply leibniz_equiv in Hi. by subst.
+  Qed.
+
+  Lemma written_auth_nothingPending `{writePendingG Σ} e :
+    written_auth e -∗ nothingPending -∗ False.
+  Proof.
+    iIntros "H1 H2".
+    by iDestruct (writePending_agree with "H1 H2") as %?.
+  Qed.
+
+  Lemma nothingPending_auth_written `{writePendingG Σ} e :
+    nothingPending_auth -∗ written e -∗ False.
+  Proof.
+    iIntros "H1 H2".
+    by iDestruct (writePending_agree with "H1 H2") as %?.
+  Qed.
+
+  Lemma written_auth_written `{writePendingG Σ} e e' :
+    written_auth e -∗ written e' -∗ ⌜e = e'⌝.
+  Proof.
+    iIntros "H1 H2".
+    by iDestruct (writePending_agree with "H1 H2") as %[= ->].
+  Qed.
+
+  #[export] Instance nothingPending_auth_Timeless `{writePendingG Σ} :
+    Timeless nothingPending_auth.
+  Proof. unfold nothingPending_auth. apply _. Qed.
+
+  #[export] Instance written_auth_Timeless `{writePendingG Σ} e :
+    Timeless (written_auth e).
+  Proof. unfold written_auth. apply _. Qed.
+
+  (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
+  Class mcMemGS Σ :=
+    McMemGS {
+        (* ghost variable for tracking state of heap *)
+        mc_ghGS :: gen_heapGS Addr MemVal Σ;
+        (* tracking traces *)
+        mc_gtGS :: traceG Trace Σ;
+        mc_wpGS :: writePendingG Σ
+      }.
+
+  Class mcMemGS2 Σ :=
+    McMemGS2 {
+        (* two copies of the unary ghost variables *)
+        mc_ghGS2_left : mcMemGS Σ
+      ; mc_ghGS2_right : mcMemGS Σ
+      }.
+
+  Class mcMemPreGS Σ := {
+      mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
+      mc_gtPreGS :: trace_preG Trace Σ;
+      mc_wpPreGS :: writePending_preG Σ;
+      }.
+  #[export] Existing Instance mc_ghPreGS.
+  #[export] Existing Instance mc_gtPreGS.
+  #[export] Existing Instance mc_wpPreGS.
+
+  Definition memGpreS : gFunctors -> Set := mcMemPreGS.
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; writePendingΣ ].
+
+  Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
+  Proof. intros. solve_inG. Defined.
+
+  Section SharedBinaryInvariant.
+    Context {Σ : gFunctors} {mG : mcMemGS2 Σ}.
+
+    Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
+
+    (* The state of a single execution w.r.t. the adversary-observable trace
+       `t` that both executions agree on. Either the observable part of this
+       execution's trace is exactly `t`, or this execution is ahead by exactly
+       one (observable) event `e`, which is recorded in the `written` ghost
+       state until both executions are resynchronized. In addition, the full
+       (unfiltered) trace of each execution satisfies `mmio_pred`, which
+       gives the integrity of MMIO. *)
+    Definition side_inv (width : nat) (mGs : mcMemGS Σ) (t : Trace) : iProp Σ :=
+      ∃ ts, @tr_frag _ _ (@mc_gtGS _ mGs) ts ∗ ⌜mmio_pred width ts⌝ ∗
+              ((⌜filter_adv_observable ts = t⌝ ∗ @nothingPending_auth _ (@mc_wpGS _ mGs))
+               ∨ ∃ e, ⌜filter_adv_observable ts = e :: t⌝ ∗ @written_auth _ (@mc_wpGS _ mGs) e).
+
+    #[export] Instance side_inv_Timeless width mGs t : Timeless (side_inv width mGs t).
+    Proof. unfold side_inv. apply _. Qed.
+
+    Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
+      inv femto_inv_mmio_ns (∃ t, side_inv width mc_ghGS2_left t ∗ side_inv width mc_ghGS2_right t).
+
+    (* If both executions have performed the same observable write, they can
+       be resynchronized: the common observable trace is extended with that
+       write and both executions return to the `nothingPending` state. *)
+    Lemma written_nothingPending2 `{invGS Σ} (width : nat) (e : Event) E :
+      ↑femto_inv_mmio_ns ⊆ E →
+      interp_inv_mmio width -∗
+      @written _ (@mc_wpGS _ mc_ghGS2_left) e -∗
+      @written _ (@mc_wpGS _ mc_ghGS2_right) e ={E}=∗
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_left) ∗
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_right).
+    Proof.
+      iIntros (HE) "#Hinv Hl Hr".
+      iInv "Hinv" as ">(%t & (%t1 & Hf1 & %Hp1 & H1) & (%t2 & Hf2 & %Hp2 & H2))" "Hclose".
+      iDestruct "H1" as "[[_ Ha1] | (%e1 & %Ht1 & Ha1)]".
+      { iDestruct (nothingPending_auth_written with "Ha1 Hl") as "[]". }
+      iDestruct "H2" as "[[_ Ha2] | (%e2 & %Ht2 & Ha2)]".
+      { iDestruct (nothingPending_auth_written with "Ha2 Hr") as "[]". }
+      iDestruct (written_auth_written with "Ha1 Hl") as %->.
+      iDestruct (written_auth_written with "Ha2 Hr") as %->.
+      iMod (written_nothingPending with "[$Ha1 $Hl]") as "[Ha1 $]".
+      iMod (written_nothingPending with "[$Ha2 $Hr]") as "[Ha2 $]".
+      iApply "Hclose". iExists (e :: t).
+      iSplitL "Hf1 Ha1"; iExists _; iFrame "∗ %"; by iLeft; iFrame.
+    Qed.
+  End SharedBinaryInvariant.
+
+  Section WithMemory.
+    Context {Σ : gFunctors} {mG : mcMemGS Σ}.
+
+    (* TODO: change back to words instead of bytes... might be an easier first version
+             and most likely still convenient in the future *)
+    Definition interp_ptsto (addr : Addr) (b : Byte) : iProp Σ :=
+      pointsto addr (DfracOwn 1) b ∗ ⌜¬ withinMMIO addr 1⌝.
+    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
+    Definition ptstoSthL : list Addr -> iProp Σ :=
+      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
+
+    Definition interp_ptstomem' {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
+      [∗ list] offset ∈ seq 0 width,
+        interp_ptsto (addr + bv.of_nat offset) (get_byte offset bytes).
+    Fixpoint interp_ptstomem {width : nat} (addr : Addr) : bv (width * byte) -> iProp Σ :=
+      match width with
+      | O   => fun _ => True
+      | S w =>
+          fun bytes =>
+            let (byte, bytes) := bv.appView byte (w * byte) bytes in
+            interp_ptsto addr byte ∗ interp_ptstomem (bv.one + addr) bytes
+      end%I.
+
+    (* TODO: introduce constant for nr of word bytes (replace 4) *)
+    Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+
+    Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
+      match instrs with
+      | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
+      | nil => True%I
+      end.
+    (* Arguments ptsto_instrs {Σ H} a%_Z_scope instrs%_list_scope : simpl never. *)
+
+    Lemma ptsto_instrs_app {a : Val ty_xlenbits} {instrs1 instrs2 : list AST} :
+      ptsto_instrs a (instrs1 ++ instrs2)
+        ⊣⊢ ptsto_instrs a instrs1 ∗ ptsto_instrs (bv.add a (bv.of_nat (length instrs1 * bytes_per_instr))) instrs2.
+    Proof.
+      iRevert (a).
+      iInduction instrs1 as [|i1 instrs1]; iIntros (a); cbn; iSplit.
+      - rewrite <- bv.add_of_nat_0_r. now iIntros "$".
+      - rewrite <- bv.add_of_nat_0_r. now iIntros "(_ & $)".
+      - iIntros "($ & H)".
+        iDestruct ("IHinstrs1" with "H") as "($ & H)".
+        rewrite <- bv.add_assoc.
+        now rewrite bv.of_nat_add.
+      - iIntros "(($ & Hinstrs1) & Hinstrs2)".
+        iSpecialize ("IHinstrs1" with "[$Hinstrs1 Hinstrs2]").
+        { rewrite <- bv.add_assoc. now rewrite bv.of_nat_add. }
+        done.
+    Qed.
+
+  End WithMemory.
+
+End RiscvPmpIrisBaseCommon.
+
+Module Type LeftOrRight.
+
+  Parameter leftOrRight : bool.
+End LeftOrRight.
+
+Module LeftOrRightLeft <: LeftOrRight.
+  Definition leftOrRight := true.
+End LeftOrRightLeft.
+
+Module LeftOrRightRight <: LeftOrRight.
+  Definition leftOrRight := false.
+End LeftOrRightRight.
 
 (* Instantiate the Iris framework solely using the operational semantics. At
    this point we do not commit to a set of contracts nor to a set of
    user-defined predicates. *)
-Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+Module Type RiscvPmpIrisBase (Import leftOrRight : LeftOrRight)
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM.
   (* Pull in the definition of the LanguageMixin and register ghost state. *)
-  Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 
   Section RiscvPmpIrisParams.
-    (* Defines the memory ghost state. *)
-    Definition MemVal : Set := Byte.
+    Definition memGS : gFunctors -> Set := mcMemGS2.
 
-    (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
-    Class mcMemGS Σ :=
-      McMemGS {
-          (* ghost variable for tracking state of heap *)
-          mc_ghGS : gen_heapGS Addr MemVal Σ;
-          (* tracking traces: we want a ghost variable for tracking the current trace *)
-          mc_gtGS : traceG Trace Σ;
+    Definition leftOrRightInstance `{mcMemGS2 Σ} : mcMemGS Σ :=
+      if leftOrRight then mc_ghGS2_left else mc_ghGS2_right.
+    #[export] Existing Instance leftOrRightInstance.
 
-        }.
-    #[export] Existing Instance mc_ghGS.
-    #[export] Existing Instance mc_gtGS.
+    (* The ghost state of the other execution. *)
+    Definition otherInstance `{mcMemGS2 Σ} : mcMemGS Σ :=
+      if leftOrRight then mc_ghGS2_right else mc_ghGS2_left.
 
-    Definition memGS : gFunctors -> Set := mcMemGS.
+    (* View the body of the shared invariant from the perspective of this execution. *)
+    Lemma inv_mmio_body_own_other `{mcMemGS2 Σ} width t :
+      side_inv width mc_ghGS2_left t ∗ side_inv width mc_ghGS2_right t ⊣⊢
+      side_inv width leftOrRightInstance t ∗ side_inv width otherInstance t.
+    Proof.
+      unfold leftOrRightInstance, otherInstance.
+      destruct leftOrRight; [done | apply bi.sep_comm].
+    Qed.
 
-    Definition mem_state_interp : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_state_interp : forall {Σ}, mcMemGS2 Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
         (∃ memmap, gen_heap_interp memmap
-           ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
-           ∗ tr_auth1 (memory_trace μ)
+                     ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
+                     ∗ tr_auth (memory_trace μ)
         )%I.
 
   End RiscvPmpIrisParams.
 
-  Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-  Include IrisWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-  Include IrisTotalWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
-  Include IrisTotalPartialWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM.
+  Include IrisWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM.
+  Include IrisTotalWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM.
+  Include IrisTotalPartialWeakestPre RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM.
 
   Import iris.program_logic.weakestpre.
 

@@ -37,11 +37,11 @@ From Katamaran Require Import
      RiscvPmp.PmpCheck
      RiscvPmp.GVT.Spec
      RiscvPmp.GVT.TotalVerifier
-     RiscvPmp.IrisModel
+     RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.GVT.Logic
-     RiscvPmp.trace
+     RiscvPmp.GVT.trace
      RiscvPmp.iostate
      RiscvPmp.GVT.Sig.
 From Katamaran Require
@@ -76,7 +76,7 @@ Module inv := invariants.
   Import MicroSail.ShallowExecutor.
 
   Import RiscvPmp.GVT.Contracts.
-  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
   Import RiscvPmpIrisInstancePredicates.
   Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.

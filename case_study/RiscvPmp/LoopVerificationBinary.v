@@ -45,7 +45,9 @@ From Katamaran Require Import
      RiscvPmp.Logic
      RiscvPmp.PmpCheck
      RiscvPmp.Sig
+     RiscvPmp.IrisModel
      RiscvPmp.IrisModelBinary
+     RiscvPmp.IrisInstance
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.ModelBinary
      RiscvPmp.Contracts
@@ -60,261 +62,277 @@ From iris.proofmode Require Import string_ident proofmode.
 
 Set Implicit Arguments.
 Import ListNotations.
-Import RiscvPmpSpecification.
-Import RiscvPmpProgram.
-Import RiscvPmpIrisBase2.
-Import RiscvPmpModel2.
-Import RiscvPmpIrisInstance2.
-Import RiscvPmpValidContracts.
-Import IrisInstance.RiscvPmpIrisInstancePredicates.
-Import RiscvPmpIrisInstancePredicates2.
-Import RiscvPmpProgramLogic.ProgLog.
-Import RiscvPmpShallowSoundness.
-Import RiscvPmpSymbolicSoundness.
+Import PmpCheck.
 
-Import RiscvPmpSignature.
+Module Type LoopVerificationBinary
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
+  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
+  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RVPCOM RVPBASEr RVPPREDr)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
+  (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
+  (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
+  (Import RVPINST2 : RiscvPmpIrisInstance2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2)
+  (Import RVPMOD2 : RiscvPmpModel2 RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPBASEr RVPPREDr RVPINSTr RVPBASE2 RVPPRED2 RVPADEQ2 RVPINST2).
 
-Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
+  Import RiscvPmpSpecification.
+  Import RiscvPmpProgram.
+  Import RiscvPmpValidContracts.
+  Import RiscvPmpProgramLogic.ProgLog.
+  Import RiscvPmpShallowSoundness.
+  Import RiscvPmpSymbolicSoundness.
 
-Section Loop.
-  Context `{sg : sailGS2 Σ}.
+  Import RiscvPmpSignature.
 
-  Definition step_sem_contract :=
-    Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
+  Import ArchState (ArchState, archstate_valuation, archstate_update_pc).
 
-  Definition Step_pre (archstate : ArchState) : iProp Σ :=
-    asn.interpret (sep_contract_precondition sep_contract_step) (archstate_valuation archstate).
+  Section Loop.
+    Context `{sg : sailGS2 Σ}.
 
-  Local Notation "r '↦' val" := (reg_pointsTo21 r val) (at level 70).
-  (* Some Iris Proof Mode tactics like (iFrame) try very hard to solve some
-     goals. Unfortunately that can result in definitions being unfolded.
-     For example the [frame_instances.frame_big_sepL_cons] instance for the
-     [Frame] typeclass will look for [IsCons liveAddrs _ _] which will unfold
-     [liveAddrs] because the concrete value can indeed be unified with [cons].
-     We make liveAddrs opaque to prevent this.
-   *)
-  Local Opaque liveAddrs.
+    Definition step_sem_contract :=
+      Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
 
-  Definition PmpEntry : Set := Pmpcfg_ent * Z.
-  Definition PtstosPred : Type := Privilege -> Privilege -> Z -> Z -> list PmpEntry -> list PmpEntry -> Privilege -> Z -> Z -> iProp Σ.
+    Definition Step_pre (archstate : ArchState) : iProp Σ :=
+      asn.interpret (sep_contract_precondition sep_contract_step) (archstate_valuation archstate).
 
-  Section TransitionTargets.
-    (* Interpret the disjunct of a transition target with some ArchState. In
-       case the disjuncts were not found, we simply use True. *)
-    Definition transition (t : TransitionTarget) (archstate : ArchState) : iProp Σ :=
-      match disjuncts with
-      | Some ds => asn.interpret (ds t) (env.snoc (archstate_valuation archstate) (_∷ty.unit) tt)
-      | None    => True
-      end.
+    Local Notation "r '↦' val" := (reg_pointsTo21 r val) (at level 70).
+    (* Some Iris Proof Mode tactics like (iFrame) try very hard to solve some
+       goals. Unfortunately that can result in definitions being unfolded.
+       For example the [frame_instances.frame_big_sepL_cons] instance for the
+       [Frame] typeclass will look for [IsCons liveAddrs _ _] which will unfold
+       [liveAddrs] because the concrete value can indeed be unified with [cons].
+       We make liveAddrs opaque to prevent this.
+     *)
+    Local Opaque liveAddrs.
 
-    Definition Execution (archstate : ArchState) : iProp Σ :=
-      transition TT_Execution archstate.
-    Definition M_CSRMod (archstate : ArchState) : iProp Σ :=
-      transition TT_M_CSRMod archstate.
-    Definition M_Trap (archstate : ArchState) : iProp Σ :=
-      transition TT_M_Trap archstate.
-    Definition MRET (archstate : ArchState) : iProp Σ :=
-      transition TT_MRET archstate.
-    Definition SRET (archstate : ArchState) : iProp Σ :=
-      transition TT_SRET archstate.
+    Definition PmpEntry : Set := Pmpcfg_ent * Z.
+    Definition PtstosPred : Type := Privilege -> Privilege -> Z -> Z -> list PmpEntry -> list PmpEntry -> Privilege -> Z -> Z -> iProp Σ.
 
-    (* Step_post is not a "TransitionTarget" but simply groups the possibilities
-       back together using disjunction. *)
-    Definition Step_post (archstate : ArchState) : iProp Σ :=
-      Execution archstate
-      ∨ M_CSRMod archstate
-      ∨ M_Trap archstate
-      ∨ MRET archstate
-      ∨ SRET archstate.
+    Section TransitionTargets.
+      (* Interpret the disjunct of a transition target with some ArchState. In
+         case the disjuncts were not found, we simply use True. *)
+      Definition transition (t : TransitionTarget) (archstate : ArchState) : iProp Σ :=
+        match disjuncts with
+        | Some ds => asn.interpret (ds t) (env.snoc (archstate_valuation archstate) (_∷ty.unit) tt)
+        | None    => True
+        end.
 
-  End TransitionTargets.
+      Definition Execution (archstate : ArchState) : iProp Σ :=
+        transition TT_Execution archstate.
+      Definition M_CSRMod (archstate : ArchState) : iProp Σ :=
+        transition TT_M_CSRMod archstate.
+      Definition M_Trap (archstate : ArchState) : iProp Σ :=
+        transition TT_M_Trap archstate.
+      Definition MRET (archstate : ArchState) : iProp Σ :=
+        transition TT_MRET archstate.
+      Definition SRET (archstate : ArchState) : iProp Σ :=
+        transition TT_SRET archstate.
 
-  Definition semTriple_step : iProp Σ :=
-    (∀ (archstate : ArchState),
-        semTriple env.nil (Step_pre archstate)
-                  (FunDef step)
-                  (fun _ _ => Step_post archstate))%I.
+      (* Step_post is not a "TransitionTarget" but simply groups the possibilities
+         back together using disjunction. *)
+      Definition Step_post (archstate : ArchState) : iProp Σ :=
+        Execution archstate
+        ∨ M_CSRMod archstate
+        ∨ M_Trap archstate
+        ∨ MRET archstate
+        ∨ SRET archstate.
 
-  Definition semTriple_init_model : iProp Σ :=
-    semTriple env.nil
-              ((∃ p, reg_pointsTo21 cur_privilege p) ∗ (∃ es, interp_pmp_entries es))%I
-              (FunDef init_model)
-              (fun _ _ => reg_pointsTo21 cur_privilege Machine ∗ (∃ es, interp_pmp_entries es))%I.
+    End TransitionTargets.
 
-  Lemma valid_step_contract : ⊢ ValidContractSem fun_step sep_contract_step.
-  Proof.
-    iApply (sound $! _ _ step).
-    exact foreignSem.
-    exact lemSem.
-    unfold ValidContractCEnv.
-    intros.
-    pose (ValidContracts f H) as Hc.
-    destruct Hc as [fuel Hc].
-    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
-    now apply symbolic_vcgen_fuel_soundness.
-  Qed.
+    Definition semTriple_step : iProp Σ :=
+      (∀ (archstate : ArchState),
+          semTriple env.nil (Step_pre archstate)
+                    (FunDef step)
+                    (fun _ _ => Step_post archstate))%I.
 
-  Lemma valid_init_model_contract : ⊢ ValidContractSem fun_init_model sep_contract_init_model.
-  Proof.
-    iApply (sound $! _ _ init_model).
-    exact foreignSem.
-    exact lemSem.
-    unfold ValidContractCEnv.
-    intros.
-    pose (ValidContracts f H) as Hc.
-    destruct Hc as [fuel Hc].
-    apply shallow_vcgen_fuel_soundness with (fuel := fuel).
-    now apply symbolic_vcgen_fuel_soundness.
-  Qed.
+    Definition semTriple_init_model : iProp Σ :=
+      semTriple env.nil
+                ((∃ p, reg_pointsTo21 cur_privilege p) ∗ (∃ es, interp_pmp_entries es))%I
+                (FunDef init_model)
+                (fun _ _ => reg_pointsTo21 cur_privilege Machine ∗ (∃ es, interp_pmp_entries es))%I.
 
-  Import env.notations.
+    Lemma valid_step_contract : ⊢ ValidContractSem fun_step sep_contract_step.
+    Proof.
+      iApply (sound $! _ _ step).
+      exact foreignSem.
+      exact lemSem.
+      unfold ValidContractCEnv.
+      intros.
+      pose (ValidContracts f H) as Hc.
+      destruct Hc as [fuel Hc].
+      apply shallow_vcgen_fuel_soundness with (fuel := fuel).
+      now apply symbolic_vcgen_fuel_soundness.
+    Qed.
 
-  Lemma valid_step_semTriple :
-    ⊢ semTriple_step.
-  Proof.
-    iIntros (archstate) "H".
-    iApply (semWP2_mono with "[-]").
-    iApply (valid_step_contract with "H").
-    iIntros ([[]|e1] δ1 v2 δ2) "(<- & <- & H)"; last auto.
-    iSplit; first done. iSplit; first done. iExact "H".
-  Qed.
+    Lemma valid_init_model_contract : ⊢ ValidContractSem fun_init_model sep_contract_init_model.
+    Proof.
+      iApply (sound $! _ _ init_model).
+      exact foreignSem.
+      exact lemSem.
+      unfold ValidContractCEnv.
+      intros.
+      pose (ValidContracts f H) as Hc.
+      destruct Hc as [fuel Hc].
+      apply shallow_vcgen_fuel_soundness with (fuel := fuel).
+      now apply symbolic_vcgen_fuel_soundness.
+    Qed.
 
-  Lemma init_model_iprop : ⊢ semTriple_init_model.
-  Proof.
-    iApply (@iris_rule_consequence _ _ _ _ _ env.nil
-             ((∃ p : Privilege, cur_privilege ↦ p) ∗
-              (∃ es : list PmpEntryCfg, interp_pmp_entries es))
-             _ _ _ fun_init_model _ _)%I.
-    iApply valid_init_model_contract.
-    Unshelve.
-    cbn.
-    iIntros "(Hcp & Hin)".
-    iSplitL "Hcp"; iAssumption.
-    cbn.
-    iIntros (v δ) "H".
-    iDestruct "H" as "([-> _] & Hcp & Hpmp)".
-    iFrame "Hcp Hpmp".
-    constructor.
-  Qed.
+    Import env.notations.
 
-  Lemma transition_update_pc (t : TransitionTarget) (a : ArchState) (pc : Xlenbits) :
-    transition t (archstate_update_pc a pc) ⊣⊢ transition t a.
-  Proof.
-    destruct a as [m ? ? ?].
-    unfold archstate_update_pc, transition.
-    iSplit; destruct t; cbn; auto; destruct m; auto.
-  Qed.
+    Lemma valid_step_semTriple :
+      ⊢ semTriple_step.
+    Proof.
+      iIntros (archstate) "H".
+      iApply (semWP2_mono with "[-]").
+      iApply (valid_step_contract with "H").
+      iIntros ([[]|e1] δ1 v2 δ2) "(<- & <- & H)"; last auto.
+      iSplit; first done. iSplit; first done. iExact "H".
+    Qed.
 
-  Lemma M_CSRMod_machine (a : ArchState) :
-    M_CSRMod a ⊢ ⌜ArchState.m a = Machine⌝.
-  Proof.
-    destruct a.
-    unfold M_CSRMod, transition; cbn.
-    now iIntros "(_ & _ & _ & [%Heq _] & _)".
-  Qed.
+    Lemma init_model_iprop : ⊢ semTriple_init_model.
+    Proof.
+      iApply (@iris_rule_consequence _ _ _ _ _ env.nil
+               ((∃ p : Privilege, cur_privilege ↦ p) ∗
+                (∃ es : list PmpEntryCfg, interp_pmp_entries es))
+               _ _ _ fun_init_model _ _)%I.
+      iApply valid_init_model_contract.
+      Unshelve.
+      cbn.
+      iIntros "(Hcp & Hin)".
+      iSplitL "Hcp"; iAssumption.
+      cbn.
+      iIntros (v δ) "H".
+      iDestruct "H" as "([-> _] & Hcp & Hpmp)".
+      iFrame "Hcp Hpmp".
+      constructor.
+    Qed.
 
-  Lemma MRET_machine (a : ArchState) :
-    MRET a ⊢ ⌜ArchState.m a = Machine⌝.
-  Proof.
-    destruct a.
-    unfold MRET, transition; cbn.
-    now iIntros "(_ & _ & _ & [%Heq _] & _)".
-  Qed.
+    Lemma transition_update_pc (t : TransitionTarget) (a : ArchState) (pc : Xlenbits) :
+      transition t (archstate_update_pc a pc) ⊣⊢ transition t a.
+    Proof.
+      destruct a as [m ? ? ?].
+      unfold archstate_update_pc, transition.
+      iSplit; destruct t; cbn; auto; destruct m; auto.
+    Qed.
 
-  Lemma SRET_machine (a : ArchState) :
-    SRET a ⊢ ⌜ArchState.m a = Machine⌝.
-  Proof.
-    destruct a.
-    unfold SRET, transition; cbn.
-    now iIntros "(_ & _ & _ & [%Heq _] & _)".
-  Qed.
+    Lemma M_CSRMod_machine (a : ArchState) :
+      M_CSRMod a ⊢ ⌜ArchState.m a = Machine⌝.
+    Proof.
+      destruct a.
+      unfold M_CSRMod, transition; cbn.
+      now iIntros "(_ & _ & _ & [%Heq _] & _)".
+    Qed.
 
-  (* For a trap from S/U-mode, it is irrelevant which of S/U-mode it was:
-     only the M-mode state matters (not the S-mode state or the pc). *)
-  Lemma M_Trap_SU_irrelevant (a a' : ArchState) :
-    ArchState.m a ≠ Machine -> ArchState.m a' ≠ Machine ->
-    ArchState.mstate a = ArchState.mstate a' ->
-    M_Trap a ⊢ M_Trap a'.
-  Proof.
-    destruct a as [m ? ? ?], a' as [m' ? ? ?]; cbn; intros Hm Hm' <-.
-    unfold M_Trap, transition; cbn.
-    iIntros "(Hpaa & H)".
-    iSplitL "Hpaa"; first by iApply (interp_pmp_addr_access_not_machine with "Hpaa").
-    destruct m, m'; try contradiction; auto.
-  Qed.
+    Lemma MRET_machine (a : ArchState) :
+      MRET a ⊢ ⌜ArchState.m a = Machine⌝.
+    Proof.
+      destruct a.
+      unfold MRET, transition; cbn.
+      now iIntros "(_ & _ & _ & [%Heq _] & _)".
+    Qed.
 
-  Definition loop_pre (archstate : ArchState) : iProp Σ :=
-    (Step_pre archstate ∗
-     ▷ (M_CSRMod archstate -∗ WP2_loop) ∗
-     ▷ (M_Trap archstate -∗ WP2_loop) ∗
-     ▷ (MRET archstate -∗ WP2_loop) ∗
-     ▷ (SRET archstate -∗ WP2_loop))%I.
+    Lemma SRET_machine (a : ArchState) :
+      SRET a ⊢ ⌜ArchState.m a = Machine⌝.
+    Proof.
+      destruct a.
+      unfold SRET, transition; cbn.
+      now iIntros "(_ & _ & _ & [%Heq _] & _)".
+    Qed.
 
-  Definition semTriple_loop : iProp Σ :=
-    (∀ (archstate : ArchState),
-        semTriple env.nil (loop_pre archstate)
-                  (FunDef loop)
-                  (fun _ _ => True))%I.
+    (* For a trap from S/U-mode, it is irrelevant which of S/U-mode it was:
+       only the M-mode state matters (not the S-mode state or the pc). *)
+    Lemma M_Trap_SU_irrelevant (a a' : ArchState) :
+      ArchState.m a ≠ Machine -> ArchState.m a' ≠ Machine ->
+      ArchState.mstate a = ArchState.mstate a' ->
+      M_Trap a ⊢ M_Trap a'.
+    Proof.
+      destruct a as [m ? ? ?], a' as [m' ? ? ?]; cbn; intros Hm Hm' <-.
+      unfold M_Trap, transition; cbn.
+      iIntros "(Hpaa & H)".
+      iSplitL "Hpaa"; first by iApply (interp_pmp_addr_access_not_machine with "Hpaa").
+      destruct m, m'; try contradiction; auto.
+    Qed.
 
-  Lemma valid_semTriple_loop : ⊢ semTriple_loop.
-  Proof.
-    iLöb as "H".
-    iIntros (archstate) "(HStep & HM_CSRMod & HM_Trap & HMRET & HSRET)".
-    iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
-    iApply semWP2_call_inline_later.
-    iApply (semWP2_mono with "[HStep]").
-    iApply (valid_step_semTriple with "HStep").
-    iModIntro.
-    iIntros ([v|e] δ1 v2 δ2) "(<- & <- & HRes)"; last now iApply semWP2_fail.
-    iDestruct "HRes" as "[HRes | [HRes | [HRes | [HRes | HRes]]]]";
-      iApply (semWP2_call_inline loop _).
-    - iDestruct "HRes" as "(Hacc & Hgprs & Hpmp & Hmie & Hmip & (%i' & Hpc & Hnpc) & Hmtvec & Hmepc & Hmideleg & Hmedeleg & Hmscratch & Hmcause & [HRes | HRes])".
-      + (* Normal execution in M-mode (only pc changed) *)
-        iDestruct "HRes" as "([%Hm _] & Hcp & Hstvec & Hmstatus & Hsepc & Hsscratch & Hscause)".
-        cbn in Hm.
-        iApply (semWP2_mono with "[-]").
-        { iApply ("H" $! (archstate_update_pc archstate i')).
-          unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
-          rewrite ?transition_update_pc.
-          iFrame "HM_CSRMod HM_Trap HMRET HSRET".
-          unfold Step_pre; cbn.
-          rewrite ?Hm.
-          now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
-        iIntros (? ? ? ?) "(<- & <- & _)"; repeat iSplit; auto.
-        by case_match.
-      + (* S/U-mode: still in S/U-mode, the privilege and S-mode state may have changed *)
-        iDestruct "HRes" as "([%Hm _] & [%m' (Hcp & [%Hm' _] & [%stvec' Hstvec] & [%spp' [%spie' [%sie' Hmstatus]]] & [%sepc' Hsepc] & [%sscratch' Hsscratch] & [%scause' Hscause])])".
-        cbn in Hm, Hm'.
-        iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
-        destruct archstate as [? ms ? ?].
-        iApply (semWP2_mono with "[-]").
-        { iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
-          iSplitR "HM_CSRMod HM_Trap HMRET HSRET".
-          { unfold Step_pre; cbn.
+    (* Parameterized by an iProp R that is maintained at each step of the loop.
+       This gives some flexibility when doing known code verification, where we
+       can hand off some knowledge that will not be violated (or invalidated)
+       by unknown code when invoking the universal contract. *)
+    Definition loop_pre (R : iProp Σ) (archstate : ArchState) : iProp Σ :=
+      (Step_pre archstate ∗
+       R ∗
+       ▷ (M_CSRMod archstate ∗ R -∗ WP2_loop R) ∗
+       ▷ (M_Trap archstate ∗ R -∗ WP2_loop R) ∗
+       ▷ (MRET archstate ∗ R -∗ WP2_loop R) ∗
+       ▷ (SRET archstate ∗ R -∗ WP2_loop R))%I.
+
+    Definition semTriple_loop : iProp Σ :=
+      (∀ (R : iProp Σ) (archstate : ArchState),
+          loop_pre R archstate -∗ WP2_loop R)%I.
+
+    Lemma valid_semTriple_loop : ⊢ semTriple_loop.
+    Proof.
+      iLöb as "H".
+      iIntros (R archstate) "(HStep & HR & HM_CSRMod & HM_Trap & HMRET & HSRET)".
+      unfold WP2_loop at 2. cbn [FunDef].
+      iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
+      iApply semWP2_call_inline_later.
+      iApply (semWP2_mono with "[HStep]").
+      iApply (valid_step_semTriple with "HStep").
+      iModIntro.
+      iIntros ([v|e] δ1 v2 δ2) "(<- & <- & HRes)";
+        last (iApply semWP2_fail; iModIntro; by iFrame "HR").
+      iDestruct "HRes" as "[HRes | [HRes | [HRes | [HRes | HRes]]]]";
+        iApply (semWP2_call_inline loop _).
+      - iDestruct "HRes" as "(Hacc & Hgprs & Hpmp & Hmie & Hmip & (%i' & Hpc & Hnpc) & Hmtvec & Hmepc & Hmideleg & Hmedeleg & Hmscratch & Hmcause & [HRes | HRes])".
+        + (* Normal execution in M-mode (only pc changed) *)
+          iDestruct "HRes" as "([%Hm _] & Hcp & Hstvec & Hmstatus & Hsepc & Hsscratch & Hscause)".
+          cbn in Hm.
+          iApply (semWP2_mono with "[-]").
+          { iApply ("H" $! R (archstate_update_pc archstate i')).
+            unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
+            rewrite ?transition_update_pc.
+            iFrame "HR HM_CSRMod HM_Trap HMRET HSRET".
+            unfold Step_pre; cbn.
+            rewrite ?Hm.
             now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
-          iSplitL "HM_CSRMod".
-          { iIntros "!> H'". iDestruct (M_CSRMod_machine with "H'") as %Heq.
+          iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+        + (* S/U-mode: still in S/U-mode, the privilege and S-mode state may have changed *)
+          iDestruct "HRes" as "([%Hm _] & [%m' (Hcp & [%Hm' _] & [%stvec' Hstvec] & [%spp' [%spie' [%sie' Hmstatus]]] & [%sepc' Hsepc] & [%sscratch' Hsscratch] & [%scause' Hscause])])".
+          cbn in Hm, Hm'.
+          iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
+          destruct archstate as [? ms ? ?].
+          iApply (semWP2_mono with "[-]").
+          { iApply ("H" $! R (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
+            iSplitR "HR HM_CSRMod HM_Trap HMRET HSRET".
+            { unfold Step_pre; cbn.
+              now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+            iFrame "HR".
+            iSplitL "HM_CSRMod".
+            { iIntros "!> [H' _]". iDestruct (M_CSRMod_machine with "H'") as %Heq.
+              cbn in Heq. contradiction. }
+            iSplitL "HM_Trap".
+            { iIntros "!> [H' HR]". iApply "HM_Trap". iFrame "HR". by iApply (M_Trap_SU_irrelevant with "H'"). }
+            iSplitL "HMRET".
+            { iIntros "!> [H' _]". iDestruct (MRET_machine with "H'") as %Heq.
+              cbn in Heq. contradiction. }
+            iIntros "!> [H' _]". iDestruct (SRET_machine with "H'") as %Heq.
             cbn in Heq. contradiction. }
-          iSplitL "HM_Trap".
-          { iIntros "!> H'". iApply "HM_Trap". by iApply (M_Trap_SU_irrelevant with "H'"). }
-          iSplitL "HMRET".
-          { iIntros "!> H'". iDestruct (MRET_machine with "H'") as %Heq.
-            cbn in Heq. contradiction. }
-          iIntros "!> H'". iDestruct (SRET_machine with "H'") as %Heq.
-          cbn in Heq. contradiction. }
-        iIntros (? ? ? ?) "(<- & <- & _)"; repeat iSplit; auto.
-        by case_match.
-    - iSpecialize ("HM_CSRMod" with "HRes").
-      iApply (semWP2_mono with "HM_CSRMod").
-      iIntros ([] ? ? ?) "(<- & <-)"; auto.
-    - iSpecialize ("HM_Trap" with "HRes").
-      iApply (semWP2_mono with "HM_Trap").
-      iIntros ([] ? ? ?) "(<- & <-)"; auto.
-    - iSpecialize ("HMRET" with "HRes").
-      iApply (semWP2_mono with "HMRET").
-      iIntros ([] ? ? ?) "(<- & <-)"; auto.
-    - iSpecialize ("HSRET" with "HRes").
-      iApply (semWP2_mono with "HSRET").
-      iIntros ([] ? ? ?) "(<- & <-)"; auto.
-  Qed.
-End Loop.
+          iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+      - iSpecialize ("HM_CSRMod" with "[$HRes $HR]").
+        iApply (semWP2_mono with "HM_CSRMod").
+        iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+      - iSpecialize ("HM_Trap" with "[$HRes $HR]").
+        iApply (semWP2_mono with "HM_Trap").
+        iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+      - iSpecialize ("HMRET" with "[$HRes $HR]").
+        iApply (semWP2_mono with "HMRET").
+        iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+      - iSpecialize ("HSRET" with "[$HRes $HR]").
+        iApply (semWP2_mono with "HSRET").
+        iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+    Qed.
+  End Loop.
+End LoopVerificationBinary.

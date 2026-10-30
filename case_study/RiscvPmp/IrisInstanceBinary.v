@@ -37,6 +37,7 @@ From Katamaran Require Import
      Syntax.Predicates
      RiscvPmp.Base
      RiscvPmp.Machine
+     RiscvPmp.IrisModel
      RiscvPmp.Logic
      RiscvPmp.IrisModelBinary
      RiscvPmp.IrisInstance
@@ -51,49 +52,115 @@ Module ns := stdpp.namespaces.
 Set Implicit Arguments.
 Import bv.notations.
 
-Module RiscvPmpIrisAdeqParams2 <: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpIrisBase2 RiscvPmpIrisBase2 RiscvPmpIrisBase2.
+Module Type RiscvPmpIrisAdeqParams2
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
+<: IrisAdeqParameters2 RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RVPCOM RVPBASEl RVPBASEr RVPBASE2.
 
-  Import RiscvPmpIrisAdeqParameters.
-  Import RiscvPmpIrisBase2.
 
-  Definition memGpreS2 : gFunctors -> Set := fun Σ => prod (memGpreS Σ) (memGpreS Σ).
+  Definition memGpreS2 : gFunctors -> Set := memGpreS.
 
-  Definition memΣ2 : gFunctors := gFunctors.app memΣ memΣ.
+  Definition memΣ2 : gFunctors := memΣ.
 
-  Definition memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ :=
-    fun {Σ} HsG => (memΣ_GpreS (Σ := Σ) (fst (subG_inv _ _ _ HsG)),
-                  memΣ_GpreS (Σ := Σ) (snd (subG_inv _ _ _ HsG))).
+  Definition memΣ_GpreS2 : forall {Σ}, subG memΣ2 Σ -> memGpreS2 Σ := @memΣ_GpreS.
+
+  Definition mem_res `{hG : mcMemGS Σ} : Memory -> iProp Σ :=
+    fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
+             tr_frag (memory_trace μ) ∗
+             nothingPending_auth ∗
+             nothingPending
+          )%I.
 
   Definition mem_res2 `{hG : memGS2 Σ} : Memory -> Memory -> iProp Σ :=
-    fun μ1 μ2 => (mem_res (hG := memGS2_memGS_left) μ1 ∗
-                 mem_res (hG := memGS2_memGS_right) μ2)%I.
+    fun μ1 μ2 => (mem_res (hG := @mc_ghGS2_left _ hG) μ1 ∗
+                 mem_res (hG := @mc_ghGS2_right _ hG) μ2)%I.
 
-  Lemma mem_init2 `{gHP : prod (memGpreS Σ) (memGpreS Σ)} (μ1 μ2 : Memory) :
+  (* Lemma mem_init `{gHP : !mcMemPreGS Σ} (μ : Memory) : *)
+  (*   ⊢ |==> ∃ mG : mcMemGS2 Σ, (mem_state_interp mG μ ∗ mem_res μ)%I. *)
+  (* Proof. *)
+  (*   iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]". *)
+  (*   iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]". *)
+  (*   iMod writePending_alloc as (gP) "[HauthPend HfragPend]". *)
+  (*   iModIntro. *)
+  (*   iExists (McMemGS gH gT gP). *)
+  (*   iSplitL "Hinv Hauth HauthPend". *)
+  (*   - iExists memmap. *)
+  (*     iFrame. *)
+  (*     iPureIntro. *)
+  (*     apply initMemMap_works. *)
+  (*   - unfold mem_res, initMemMap in *. iFrame. *)
+  (*     iApply (big_sepM_list_to_map (f := memory_ram μ) (fun a v => pointsto a (DfracOwn 1) v) with "[$]"). *)
+  (*     eapply NoDup_liveAddrs. *)
+  (* Qed. *)
+
+  Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), memory_ram μ a = v) (initMemMap μ).
+  Proof.
+    unfold initMemMap.
+    rewrite map_Forall_to_list.
+    rewrite Forall_forall.
+    intros (a , v).
+    rewrite elem_of_map_to_list.
+    intros el.
+    apply elem_of_list_to_map_2 in el.
+    apply list_elem_of_In in el.
+    apply in_map_iff in el.
+    by destruct el as (a' & <- & _).
+  Qed.
+
+  Lemma mem_init2 `{gHP : memGpreS Σ} (μ1 μ2 : Memory) :
     ⊢ |==> ∃ mG : memGS2 Σ, (mem_state_interp2 mG μ1 μ2 ∗ mem_res2 μ1 μ2)%I.
   Proof.
-    iMod (mem_init (gHP := fst gHP) μ1) as (mG1) "[inv1 res1]".
-    iMod (mem_init (gHP := snd gHP) μ2) as (mG2) "[inv2 res2]".
+    unfold memGpreS in gHP.
+    pose (memmap1 := initMemMap μ1).
+    iMod (gen_heap_init (L := Addr) (V := MemVal) memmap1) as (gH1) "[Hinv1 [Hmapsto1 _]]".
     iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
+    iMod writePending_alloc as (gP1) "[HauthPend1 HfragPend1]".
+    pose (memmap2 := initMemMap μ2).
+    iMod (gen_heap_init (L := Addr) (V := MemVal) memmap2) as (gH2) "[Hinv2 [Hmapsto2 _]]".
     iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
+    iMod writePending_alloc as (gP2) "[HauthPend2 HfragPend2]".
     iModIntro.
-    iExists (McMemGS2 mG1 mG2).
-    iSplitL "inv1 inv2"; iFrame.
+    iExists (McMemGS2 (McMemGS gH1 gT1 gP1) (McMemGS gH2 gT2 gP2)).
+    iSplitL "Hinv1 Hinv2 Hauth1 Hauth2".
+    - iFrame "Hinv1 Hinv2 Hauth1 Hauth2".
+      iPureIntro; split; apply initMemMap_works.
+    - unfold mem_res2, mem_res, initMemMap in *.
+      iFrame "Hfrag1 Hfrag2 HauthPend1 HauthPend2 HfragPend1 HfragPend2".
+      iSplitL "Hmapsto1".
+      + iPoseProof (big_sepM_list_to_map with "Hmapsto1") as "Hm".
+        { eapply NoDup_liveAddrs. }
+        change (map ?f liveAddrs) with (fmap f liveAddrs).
+        now rewrite big_sepL_fmap.
+      + iPoseProof (big_sepM_list_to_map with "Hmapsto2") as "Hm".
+        { eapply NoDup_liveAddrs. }
+        change (map ?f liveAddrs) with (fmap f liveAddrs).
+        now rewrite big_sepL_fmap.
   Qed.
 
 End RiscvPmpIrisAdeqParams2.
 
-Module RiscvPmpIrisInstancePredicates2.
-  Import RiscvPmpIrisInstancePredicates.
-  Import RiscvPmpIrisBase2.
+Module Type RiscvPmpIrisInstancePredicates2
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr).
+
   Import RiscvPmpProgram.
 
   Section WithMemory.
     Context {Σ : gFunctors} {mG : memGS2 Σ}.
 
+    Definition mG' := mG : mcMemGS2 Σ.
+    Existing Instance mG'.
+
     Definition interp_ptsto_one (k : Exec) (addr : Addr) (b : Byte) : iProp Σ :=
       match k with
-      | Left  => interp_ptsto (mG := memGS2_memGS_left) addr b
-      | Right => interp_ptsto (mG := memGS2_memGS_right) addr b
+      | Left  => interp_ptsto (mG := mc_ghGS2_left) addr b
+      | Right => interp_ptsto (mG := mc_ghGS2_right) addr b
       end.
 
     Definition femto_inv_ro_ns : ns.namespace := (ns.ndot ns.nroot "inv_ro").
@@ -106,27 +173,22 @@ Module RiscvPmpIrisInstancePredicates2.
     Proof. eapply big_sepL_app. Qed.
 
     Definition interp_ptstomem {width : nat} (addr : Addr) (v : bv (width * byte)) : iProp Σ :=
-      @interp_ptstomem _ memGS2_memGS_left _ addr v ∗
-      @interp_ptstomem _ memGS2_memGS_right _ addr v.
+      interp_ptstomem (mG := mc_ghGS2_left) addr v ∗
+      interp_ptstomem (mG := mc_ghGS2_right) addr v.
 
     Definition interp_ptstomem_readonly `{invGS Σ} {width : nat} (addr : Addr) (b : bv (width * byte)) : iProp Σ :=
-      @interp_ptstomem_readonly _ memGS2_memGS_left _ _ addr b ∗
-      @interp_ptstomem_readonly _ memGS2_memGS_right _ _ addr b.
+      RVPPREDl.interp_ptstomem_readonly (mG := mc_ghGS2_left) addr b ∗
+        RVPPREDr.interp_ptstomem_readonly (mG := mc_ghGS2_right) addr b.
 
-    Definition filter_adv_observable (t : Trace) : Trace :=
-      List.filter (λ e, negb (bv.eqb (event_addr e) write_addr))%bv t.
+    (* Both executions are in sync w.r.t. the adversary-observable trace. *)
+    Definition nothingPending2 : iProp Σ :=
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_left) ∗
+      @nothingPending _ (@mc_wpGS _ mc_ghGS2_right).
 
-    (* TODO: add the above filter for mmio_pred. Important lemma, any valid
-             mmio_pred without the filter, implies one with the filter. The
-             non-filtered one is stronger, since it also says something about
-             secret MMIO events (unary version). *)
-    Definition femto_inv_mmio_ns : ns.namespace := (ns.ndot ns.nroot "inv_mmio").
-    Definition interp_inv_mmio `{invGS Σ} (width : nat) : iProp Σ :=
-      @interp_inv_mmio _ memGS2_memGS_left _ width
-      ∗ @interp_inv_mmio _ memGS2_memGS_right _ width.
-      (* inv femto_inv_mmio_ns (
-          (∃ t__l, @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_left) (@trace_name _ _ memGS2_gtGS2_left) t__l ∗ ⌜mmio_pred bytes_per_word t__l⌝)
-          ∗ (∃ t__r, @tr_frag _ _ (@traceG_preG _ _ memGS2_gtGS2_right) (@trace_name _ _ memGS2_gtGS2_right) t__r ∗ ⌜mmio_pred bytes_per_word t__r⌝)). *)
+    (* Both executions are ahead by the same observable event `e`. *)
+    Definition written2 (e : Event) : iProp Σ :=
+      @written _ (@mc_wpGS _ mc_ghGS2_left) e ∗
+      @written _ (@mc_wpGS _ mc_ghGS2_right) e.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
@@ -190,7 +252,7 @@ Module RiscvPmpIrisInstancePredicates2.
       unfold interp_gprs.
       iApply bi.wand_iff_sym.
       rewrite <- difference_difference_l_L.
-      now iApply big_sepS_delete_multi.
+      now iApply RVPPREDl.big_sepS_delete_multi.
     Qed.
 
     Lemma interp_gprs_with_excluded `{sailGS2 Σ} (exclude : gset (Reg ty_xlenbits)) :
@@ -215,18 +277,25 @@ Module RiscvPmpIrisInstancePredicates2.
   End WithSailGS.
 End RiscvPmpIrisInstancePredicates2.
 
-Module RiscvPmpIrisInstance2 <:
-  IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpProgramLogic RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
-  Import RiscvPmpIrisInstancePredicates2.
-  Import RiscvPmpIrisBase2.
+Module Type RiscvPmpIrisInstance2
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
+  (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
+  (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
+<: IrisInstance2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram RiscvPmpSemantics RiscvPmpProgramLogic
+     RVPCOM RVPBASEl RVPBASEr RVPBASE2 RVPADEQ2.
+
   Import RiscvPmpProgram.
 
   Section RiscvPmpIrisPredicates.
 
     Import env.notations.
 
-    Equations(noeqns) luser_inst2 `{sailRegGS2 Σ, invGS Σ, memGS2 Σ}
+    Equations(noeqns) luser_inst2 `{sailRegGS2 Σ, invGS Σ, mG : memGS2 Σ}
       (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
     | pmp_entries              | [ v ]                => interp_pmp_entries v
     | pmp_addr_access          | [ entries; m ]       => interp_pmp_addr_access liveAddrs mmioAddrs entries m
@@ -235,11 +304,15 @@ Module RiscvPmpIrisInstance2 <:
     | ptsto                    | [ addr; w ]          => interp_ptsto addr w
     | ptsto_one k              | [ addr; w ]          => interp_ptsto_one k addr w
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
-    | inv_mmio bytes           | _                    => interp_inv_mmio bytes
+    | inv_mmio bytes           | _                    => interp_inv_mmio (mG := mG) bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
     | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
-    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr.
+    | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
+    (* The binary versions of the pending-write predicates own the ghost state
+       of both executions, so that they can be split into the unary versions. *)
+    | Sig.nothingPending       | _                    => nothingPending2
+    | Sig.written width        | [ addr; val ]        => written2 (mkEvent IOWrite addr width val).
 
     Ltac destruct_pmp_entries :=
       repeat match goal with
@@ -277,14 +350,14 @@ Module RiscvPmpIrisInstance2 <:
       iSplit ; last (iIntros "[H Hcont]"; by iApply "Hcont").
       unfold interp_pmp_addr_access_without, interp_pmp_addr_access, all_addrs.
       (* Hard direction: create `interp_addr_access` from scratch *)
-      pose proof (RiscvPmpIrisInstance.in_allAddrs_split base width Hrep) as [l1 [l2 Hall]].
+      pose proof (in_allAddrs_split base width Hrep) as [l1 [l2 Hall]].
       unfold all_addrs in Hall. rewrite Hall.
       rewrite !big_sepL_app.
       iIntros "(Hlow & Hia & Hhigh)".
       iSplitL "Hia".
       - iApply (big_sepL_mono with "Hia"). iIntros (? ? ?) "Hyp".
         iApply "Hyp". iPureIntro.
-        eexists; eapply RiscvPmpIrisInstance.pmp_seqBv_restrict; eauto.
+        eexists; eapply pmp_seqBv_restrict; eauto.
       - iIntros "Hia". iFrame.
         iDestruct (big_sepL_mono with "Hia") as "Hia"; last iFrame.
         now iIntros.
@@ -298,9 +371,8 @@ Module RiscvPmpIrisInstance2 <:
     Proof.
       intros.
       unfold interp_ptstomem, interp_ptsto, interp_ptsto_one.
-      rewrite ?RiscvPmpIrisInstance.ptstomem_bv_app.
-      rewrite <- ?bi.sep_assoc.
-      iSplit; iIntros "($ & $ & $ & $)".
+      cbn [RVPCOM.interp_ptstomem]. rewrite bv.appView_app.
+      iSplit; iIntros "[[$ $] [$ $]]".
     Qed.
 
     Lemma interp_ptstomem_big_sepS (bytes : nat) (paddr : Addr):
@@ -387,13 +459,16 @@ Module RiscvPmpIrisInstance2 <:
   End RiscVPmpIrisInstanceProofs.
 
   Include IrisBinaryWP RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpIrisBase2.
+    RiscvPmpSemantics
+    RVPCOM RVPBASEl RVPBASEr RVPBASE2.
 
   Include IrisSignatureRules2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase2.
+    RiscvPmpSemantics RiscvPmpProgramLogic
+    RVPCOM RVPBASEl RVPBASEr RVPBASE2.
 
   Include IrisAdequacy2 RiscvPmpBase RiscvPmpSignature RiscvPmpProgram
-    RiscvPmpSemantics RiscvPmpProgramLogic RiscvPmpIrisBase2 RiscvPmpIrisAdeqParams2.
+    RiscvPmpSemantics RiscvPmpProgramLogic
+    RVPCOM RVPBASEl RVPBASEr RVPBASE2 RVPADEQ2.
 
   Lemma gprs_equiv `{sailGS2 Σ} : ∀ {Σ} (ι : Valuation Σ) (exclude : gset (Reg ty_xlenbits)),
       interp_gprs exclude ⊣⊢
@@ -415,6 +490,13 @@ Module RiscvPmpIrisInstance2 <:
       now iApply ("IH" with "H").
   Qed.
 
-  Definition WP2_loop `{sailGS2 Σ} : iProp Σ :=
-    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝)%I.
+  Definition WP2_loop `{sailGS2 Σ} (R : iProp Σ) : iProp Σ :=
+    semWP2 env.nil env.nil (FunDef loop) (FunDef loop) (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ R)%I.
+
+  #[export] Instance sailGS2_to_memGS2 `{sG : sailGS2 Σ} : memGS2 Σ :=
+    sailGS2_memGS.
+  #[export] Instance sailGS2_to_sailGS_left `{sG2 : sailGS2 Σ} : RVPBASEl.sailGS Σ :=
+    sailGS2_sailGS_left.
+  #[export] Instance sailGS2_to_sailGS_right `{sG2 : sailGS2 Σ} : RVPBASEr.sailGS Σ :=
+    sailGS2_sailGS_right.
 End RiscvPmpIrisInstance2.

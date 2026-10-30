@@ -44,7 +44,9 @@ From Katamaran Require Import
      MicroSail.RefineExecutor
      MicroSail.Soundness
      RiscvPmp.PmpCheck
+     RiscvPmp.IrisModel
      RiscvPmp.IrisModelBinary
+     RiscvPmp.IrisInstance
      RiscvPmp.IrisInstanceBinary
      RiscvPmp.Machine
      RiscvPmp.Logic
@@ -57,7 +59,6 @@ From Katamaran Require RiscvPmp.ModelBinary.
 Import RiscvPmpProgram.
 Import RiscvPmpProgramLogic.
 Import RiscvPmpBlockVerifSpec.
-Import RiscvPmpIrisInstancePredicates2.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -65,58 +66,62 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 
-Import RiscvPmpIrisBase2.
 
-Module Import BinaryBlockVerifierNotations.
-  Notation "a '↦' t" := (reg_pointsTo21 a t) (at level 70).
-  Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
-End BinaryBlockVerifierNotations.
-
-Module BinaryBlockVerifier.
+Module BinaryBlockVerifier
+  (Import RVPCOM : RiscvPmpIrisBaseCommon)
+  (RVPBASEl : RiscvPmpIrisBase LeftOrRightLeft RVPCOM)
+  (RVPPREDl : RiscvPmpIrisInstancePredicates LeftOrRightLeft RVPCOM RVPBASEl)
+  (RVPINSTl : RiscvPmpIrisInstance LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl)
+  (RVPCONTRl : RiscvPmpIrisInstanceWithContracts LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl)
+  (RVPTVl : RiscvPmpBlockVerifTotalVerifier LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl)
+  (RVPBASEr : RiscvPmpIrisBase LeftOrRightRight RVPCOM)
+  (RVPPREDr : RiscvPmpIrisInstancePredicates LeftOrRightRight RVPCOM RVPBASEr)
+  (RVPINSTr : RiscvPmpIrisInstance LeftOrRightRight RVPCOM RVPBASEr RVPPREDr)
+  (RVPCONTRr : RiscvPmpIrisInstanceWithContracts LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr)
+  (RVPTVr : RiscvPmpBlockVerifTotalVerifier LeftOrRightRight RVPCOM RVPBASEr RVPPREDr RVPINSTr RVPCONTRr)
+  (Import RVPBASE2 : RiscvPmpIrisBase2 RVPCOM RVPBASEl RVPBASEr)
+  (Import RVPPRED2 : RiscvPmpIrisInstancePredicates2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2)
+  (Import RVPADEQ2 : RiscvPmpIrisAdeqParams2 RVPCOM RVPBASEl RVPBASEr RVPBASE2)
+  (Import RVPINST2 : RiscvPmpIrisInstance2 RVPCOM RVPBASEl RVPPREDl RVPBASEr RVPPREDr RVPBASE2 RVPPRED2 RVPADEQ2).
   Import iris.base_logic.lib.iprop iris.proofmode.proofmode.
-  Import RiscvPmpIrisInstance2.
 
-  (* TODO: annoying, but not inj in general (illegal instructions...)
-           Decode (at least the Sail one) does seem to be injective
-           for legal instructions. Another option would be to
-           change interp_ptsto_instr to talk about the *encoding* of an
-           instruction and no longer have the existential there.
-           Also requires that ∀ i, (decode ∘ encode) i = i *)
-  Axiom pure_decode_inr_inj : forall {v1 v2 : bv 32} {instr : AST},
-    pure_decode v1 = inr instr ->
-    pure_decode v2 = inr instr ->
-    v1 = v2.
+  Module Import BinaryBlockVerifierNotations.
+    Notation "a '↦' t" := (reg_pointsTo21 a t) (at level 70).
+    Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
+  End BinaryBlockVerifierNotations.
 
   Section WithSailGS2.
     Context {Σ} {GS : sailGS2 Σ}.
 
+    (* Main difference with interp_ptsto_instr is that we get two existentials
+       with this definition, instead of a single one. The two existentials work
+       better when we split the verification into two unary ones (each will
+       produce/require its own existentials too). *)
+    Definition ptsto_instr (a : Val ty_xlenbits) (instr : AST) : iProp Σ :=
+      @RVPCOM.interp_ptsto_instr _ memGS_left a instr
+      ∗ @RVPCOM.interp_ptsto_instr _ memGS_right a instr.
+
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
-      | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
+      | cons inst insts => (ptsto_instr a inst ∗ ptsto_instrs (bv.add a bv_instrsize) insts)%I
       | nil => True%I
       end.
 
     Lemma ptsto_instrs_equiv {a : Val ty_xlenbits} {instrs : list AST} :
       ptsto_instrs a instrs ⊣⊢
-        @TotalVerifier.ptsto_instrs _ sailGS2_sailGS_left a instrs
-        ∗ @TotalVerifier.ptsto_instrs _ sailGS2_sailGS_right a instrs.
+        @RVPCOM.ptsto_instrs _ memGS_left a instrs
+        ∗ @RVPCOM.ptsto_instrs _ memGS_right a instrs.
     Proof.
       revert a.
       iInduction instrs as [|instr instrs] "IH";
         cbn; auto.
       iIntros (a). iSplit.
-      - iIntros "(Hinstr & Hinstrs)".
-        iDestruct ("IH" with "Hinstrs") as "($ & $)".
-        iDestruct "Hinstr" as "(% & [Hl Hr] & %Hdecode)".
-        iSplitL "Hl".
-        + iExists _; iFrame "Hl"; auto.
-        + iExists _; iFrame "Hr"; auto.
-      - iIntros "([Hinstrl Hinstrsl] & [Hinstrr Hinstrsr])".
+      - iIntros "([Hl Hr] & Hinstrs)".
+        iDestruct ("IH" with "Hinstrs") as "[$ $]".
+        iFrame "Hl Hr".
+      - iIntros "([Hl Hinstrsl] & [Hr Hinstrsr])".
         iDestruct ("IH" with "[$Hinstrsl $Hinstrsr]") as "$".
-        iDestruct "Hinstrl" as "(%vl & Hl & %Hdecodel)".
-        iDestruct "Hinstrr" as "(%vr & Hr & %Hdecoder)".
-        pose proof (pure_decode_inr_inj Hdecodel Hdecoder) as <-.
-        iExists _; iFrame "Hl Hr"; auto.
+        iFrame "Hl Hr".
     Qed.
 
     Definition exec_instructions_prologue (a : Val ty_xlenbits) (l : list AST) : iProp Σ :=
@@ -129,18 +134,31 @@ Module BinaryBlockVerifier.
       ptsto_instrs a l ∗
       ∃ v, nextpc ↦ v.
 
+    (* The binary counterparts of RVPTVl.exec_instruction_prologue and
+       RVPTVl.exec_instruction_epilogue. We cannot interpret those assertions
+       in the binary program logic, as the binary interpretation of ptstoinstr
+       requires the same instruction word on both sides, but we only care about
+       having the same decoding of those words (again, ptsto_instr above vs interp_ptsto_instr!). *)
+    Definition exec_instruction_prologue (i : AST) (a : Val ty_xlenbits) : iProp Σ :=
+      reg_pointsTo2 pc a a ∗
+      ptsto_instr a i ∗
+      ∃ an, reg_pointsTo2 nextpc an an.
+    Definition exec_instruction_epilogue (i : AST) (a an : Val ty_xlenbits) : iProp Σ :=
+      reg_pointsTo2 pc an an ∗
+      ptsto_instr a i ∗
+      reg_pointsTo2 nextpc an an.
+
     Fixpoint step_n (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST : Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       match instrs with
       | []   => POST apc
       | i :: instrs =>
-          let Σ := [env].["a"∷ty_xlenbits ↦ ainstr] in
           ⌜ainstr = apc⌝
-          ∗ (asn.interpret (exec_instruction_prologue i) Σ  -∗
+          ∗ (exec_instruction_prologue i ainstr -∗
                semWP2 [env] [env] fun_step fun_step
                  (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗
                      match v1 with
                      | inl v =>
-                         ∃ na, asn.interpret (exec_instruction_epilogue i) Σ.["an"∷ty_xlenbits ↦ na]
+                         ∃ na, exec_instruction_epilogue i ainstr na
                                ∗ step_n instrs (bv.add ainstr bv_instrsize) na POST
                      | inr _ =>
                        if fail_rule_pre
@@ -174,10 +192,10 @@ Module BinaryBlockVerifier.
     Definition semTripleBlock (PRE : Val ty_xlenbits -> iProp Σ) (a : Val ty_xlenbits) (instrs : list AST) (POST : Val ty_xlenbits -> Val ty_xlenbits -> iProp Σ) : iProp Σ :=
       stepTriple instrs a a PRE POST.
 
-    Lemma WP2_loop_step_once : ∀ POST,
+    Lemma WP2_loop_step_once {R : iProp Σ} : ∀ POST,
       semWP2 [env] [env] fun_step fun_step (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ POST v1 δ1 v2 δ2) -∗
-      (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ WP2_loop) -∗
-      WP2_loop.
+      (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ match v1 with inl _ => WP2_loop R | inr _ => R end) -∗
+      WP2_loop R.
     Proof.
       iIntros (POST) "H Hk".
       unfold WP2_loop at 2.
@@ -189,16 +207,17 @@ Module BinaryBlockVerifier.
       - iApply semWP2_call_inline.
         iSpecialize ("Hk" with "H").
         iApply (semWP2_mono with "Hk").
-        now iIntros (? ? ? ?) "(<- & <-)".
-      - now iApply semWP2_fail.
+        now iIntros (? ? ? ?) "(<- & <- & $)".
+      - iApply semWP2_fail. iSpecialize ("Hk" with "H").
+        iModIntro. iFrame "Hk". auto.
     Qed.
 
-    Lemma WP2_loop_semTripleBlock_later : ∀ PRE a instr instrs POST,
+    Lemma WP2_loop_semTripleBlock_later {R : iProp Σ} : ∀ PRE a instr instrs POST,
       (exec_instructions_prologue a (instr :: instrs)) -∗
       (PRE a) -∗
       semTripleBlock PRE a (instr :: instrs) POST -∗
-      ▷ (∀ an, POST a an ∗ exec_instructions_epilogue a an (instr :: instrs) -∗ WP2_loop) -∗
-      WP2_loop.
+      ▷ (∀ an, POST a an ∗ exec_instructions_epilogue a an (instr :: instrs) -∗ WP2_loop R) -∗
+      WP2_loop R.
     Proof.
       iIntros (PRE a instr instrs).
       iRevert (PRE a instr).
@@ -218,7 +237,7 @@ Module BinaryBlockVerifier.
         iApply semWP2_call_inline.
         iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc $Hinstr]").
         iApply (semWP2_mono with "Hk").
-        now iIntros (? ? ? ?) "(<- & <-)".
+        now iIntros (? ? ? ?) "(<- & <- & $)".
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)". fold step_n.
         iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)"; cbn.
         iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
@@ -242,15 +261,15 @@ Module BinaryBlockVerifier.
           iIntros (an) "(HPOST & Hepi)".
           iApply ("Hk" with "[$HPOST $Hinstr $Hepi]").
         + iApply (semWP2_mono with "IH").
-          now iIntros (? ? ? ?) "(<- & <-)".
+          now iIntros (? ? ? ?) "(<- & <- & $)".
     Qed.
 
-    Lemma WP2_loop_semTripleBlock : ∀ PRE a instrs POST,
+    Lemma WP2_loop_semTripleBlock {R : iProp Σ} : ∀ PRE a instrs POST,
       (exec_instructions_prologue a instrs) -∗
       (PRE a) -∗
       semTripleBlock PRE a instrs POST -∗
-      (∀ an, POST a an ∗ exec_instructions_epilogue a an instrs -∗ WP2_loop) -∗
-      WP2_loop.
+      (∀ an, POST a an ∗ exec_instructions_epilogue a an instrs -∗ WP2_loop R) -∗
+      WP2_loop R.
     Proof.
       iIntros (PRE a instrs).
       iRevert (PRE a).
@@ -262,8 +281,8 @@ Module BinaryBlockVerifier.
     Qed.
 
     Lemma step_n_focus (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST1 POST2 POST : Val ty_xlenbits -> iProp Σ) :
-      @TotalVerifier.step_n _ sailGS2_sailGS_left instrs ainstr apc POST1 -∗
-      @TotalVerifier.step_n _ sailGS2_sailGS_right instrs ainstr apc POST2 -∗
+      @RVPTVl.step_n _ sailGS2_sailGS_left instrs ainstr apc POST1 -∗
+      @RVPTVr.step_n _ sailGS2_sailGS_right instrs ainstr apc POST2 -∗
       (∀ na1 na2, POST1 na1 ∗ POST2 na2 -∗ ⌜na1 = na2⌝ ∗ POST na1) -∗
       step_n instrs ainstr apc POST.
     Proof.
@@ -274,11 +293,9 @@ Module BinaryBlockVerifier.
       - cbn.
         iDestruct "H1" as "(<- & H1)".
         iDestruct "H2" as "($ & H2)".
-        iIntros "([Hpc1 Hpc2] & (% & [Hinstr1 Hinstr2] & %) & (%npc & Hnpc1 & Hnpc2))".
-        iSpecialize ("H1" with "[$Hpc1 Hinstr1 $Hnpc1]").
-        { iExists _; now iFrame "Hinstr1". }
-        iSpecialize ("H2" with "[$Hpc2 Hinstr2 $Hnpc2]").
-        { iExists _; now iFrame "Hinstr2". }
+        iIntros "([Hpc1 Hpc2] & [Hinstr1 Hinstr2] & (%npc & Hnpc1 & Hnpc2))".
+        iSpecialize ("H1" with "[$Hpc1 $Hinstr1 $Hnpc1]").
+        iSpecialize ("H2" with "[$Hpc2 $Hinstr2 $Hnpc2]").
         iApply (semWP2_focus with "H1 H2").
         iIntros ([v1|] δ1 [v2|] δ2) "(H1 & H2)"; auto.
         destruct v1, v2, (env.view δ1), (env.view δ2).
@@ -288,23 +305,121 @@ Module BinaryBlockVerifier.
           iDestruct "H1" as "(%na' & (Hpc1 & Hinstr1 & Hnpc1) & HPOST1)".
           iDestruct "H2" as "(% & (Hpc2 & Hinstr2 & Hnpc2) & HPOST2)".
           iDestruct ("HPOST" with "[$HPOST1 $HPOST2]") as "(<- & HPOST)".
-          iExists na'. iFrame "Hpc1 Hpc2 Hnpc1 Hnpc2 HPOST".
-          unfold interp_ptsto_instr.
-          iDestruct "Hinstr1" as "(%v1 & Hinstr1 & %Hdec1)".
-          iDestruct "Hinstr2" as "(%v2 & Hinstr2 & %Hdec2)".
-          pose proof (pure_decode_inr_inj Hdec1 Hdec2) as <-.
-          iExists v1. now iFrame "Hinstr1 Hinstr2".
+          iExists na'. now iFrame "Hpc1 Hpc2 Hinstr1 Hinstr2 Hnpc1 Hnpc2 HPOST".
         + iDestruct "H1" as "(% & (Hpc1 & Hinstr1 & Hnpc1) & <- & H1)".
           iDestruct "H2" as "(% & (Hpc2 & Hinstr2 & Hnpc2) & <- & H2)".
           iExists (bv.add ainstr bv_instrsize).
-          iFrame "Hpc1 Hpc2 Hnpc1 Hnpc2".
-          iSplitL "Hinstr1 Hinstr2".
-          { unfold interp_ptsto_instr.
-            iDestruct "Hinstr1" as "(%v1 & Hinstr1 & %Hdec1)".
-            iDestruct "Hinstr2" as "(%v2 & Hinstr2 & %Hdec2)".
-            pose proof (pure_decode_inr_inj Hdec1 Hdec2) as <-.
-            iExists v1. now iFrame "Hinstr1 Hinstr2". }
+          iFrame "Hpc1 Hpc2 Hinstr1 Hinstr2 Hnpc1 Hnpc2".
           iApply ("IH" with "[$H1] [$H2]"); auto.
+    Qed.
+
+    Lemma WP2_loop_step_left {R : iProp Σ} :
+      @RVPBASEl.semTWP _ sailGS2_sailGS_left _ _ [env] fun_step
+        (λ v _, match v with inl _ => WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
+      WP2_loop R.
+    Proof.
+      iIntros "H". unfold WP2_loop at 2. cbn [FunDef]. unfold fun_loop.
+      iApply semWP2_seq_left. iApply RVPBASEl.semWP_call_inline.
+      iApply RVPBASEl.semTWP_semWP. iApply (RVPBASEl.semTWP_mono with "H").
+      iIntros ([v|m] δ) "H"; cbn; last done.
+      iApply semWP2_call_inline_left.
+      iApply (semWP2_mono with "H").
+      iIntros (? δ1 ? δ2) "($ & _ & $)". now destruct (env.view δ1), (env.view δ2).
+    Qed.
+
+    Lemma WP2_loop_step_right {R : iProp Σ} :
+      @RVPBASEr.semTWP _ sailGS2_sailGS_right _ _ [env] fun_step
+        (λ v _, match v with inl _ => WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
+      WP2_loop R.
+    Proof.
+      iIntros "H". unfold WP2_loop at 2. cbn [FunDef]. unfold fun_loop.
+      iApply semWP2_seq_right. iApply RVPBASEr.semTWP_call_inline.
+      iApply (RVPBASEr.semTWP_mono with "H").
+      iIntros ([v|m] δ) "H"; cbn; last done.
+      iApply semWP2_call_inline_right.
+      iApply (semWP2_mono with "H").
+      iIntros (? δ1 ? δ2) "($ & _ & $)". now destruct (env.view δ1), (env.view δ2).
+    Qed.
+
+    (* Like the unary epilogue of a single execution, but remembering that
+       nextpc equals pc. This is needed to recombine both executions after they
+       ran asynchronously. *)
+    Definition exec_instructions_epilogue_unary (srGS : sailRegGS Σ) (mG : mcMemGS Σ)
+      (a an : Val ty_xlenbits) (l : list AST) : iProp Σ :=
+      @reg_pointsTo _ srGS _ pc an ∗
+      @RVPCOM.ptsto_instrs _ mG a l ∗
+      @reg_pointsTo _ srGS _ nextpc an.
+
+    Lemma WP2_loop_step_n_left {R : iProp Σ} (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
+      (POST : Val ty_xlenbits -> iProp Σ) :
+      @RVPTVl.exec_instructions_epilogue _ sailGS2_sailGS_left a apc (instr :: instrs) -∗
+      @RVPTVl.step_n _ sailGS2_sailGS_left (instr :: instrs) a apc POST -∗
+      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an (instr :: instrs) -∗ WP2_loop R) -∗
+      WP2_loop R.
+    Proof.
+      iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
+        iIntros "Hpro Htrip Hk"; cbn;
+        iDestruct "Htrip" as "(<- & Htrip)";
+        iDestruct "Hpro" as "(Hpc & (Hinstr & Hinstrs) & Hnpc)";
+        iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]");
+        iApply WP2_loop_step_left;
+        iApply (RVPBASEl.semTWP_mono with "Htrip");
+        iIntros ([v|m] δ) "H"; cbn; try done;
+        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
+      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
+      - iApply ("IH" with "[$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
+        + by iExists _.
+        + iIntros (an) "(HPOST & Hpc & Hinstrs & Hnpc)".
+          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc]").
+    Qed.
+
+    Lemma WP2_loop_step_n_right {R : iProp Σ} (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
+      (POST : Val ty_xlenbits -> iProp Σ) :
+      @RVPTVr.exec_instructions_epilogue _ sailGS2_sailGS_right a apc (instr :: instrs) -∗
+      @RVPTVr.step_n _ sailGS2_sailGS_right (instr :: instrs) a apc POST -∗
+      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an (instr :: instrs) -∗ WP2_loop R) -∗
+      WP2_loop R.
+    Proof.
+      iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
+        iIntros "Hpro Htrip Hk"; cbn;
+        iDestruct "Htrip" as "(<- & Htrip)";
+        iDestruct "Hpro" as "(Hpc & (Hinstr & Hinstrs) & Hnpc)";
+        iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]");
+        iApply WP2_loop_step_right;
+        iApply (RVPBASEr.semTWP_mono with "Htrip");
+        iIntros ([v|m] δ) "H"; cbn; try done;
+        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
+      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
+      - iApply ("IH" with "[$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
+        + by iExists _.
+        + iIntros (an) "(HPOST & Hpc & Hinstrs & Hnpc)".
+          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc]").
+    Qed.
+
+    Lemma WP2_loop_semTripleBlock_left {R : iProp Σ} : ∀ PRE a instrs POST,
+      instrs ≠ []%list →
+      ⊢ @RVPTVl.exec_instructions_prologue _ sailGS2_sailGS_left a instrs -∗
+        PRE a -∗
+        @RVPTVl.semTripleBlock _ sailGS2_sailGS_left PRE a instrs POST -∗
+        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an instrs -∗ WP2_loop R) -∗
+        WP2_loop R.
+    Proof.
+      iIntros (PRE a [|instr instrs] POST Hne) "Hpro HPRE Htrip Hk"; first done.
+      iApply (WP2_loop_step_n_left with "Hpro [Htrip HPRE] Hk").
+      by iApply "Htrip".
+    Qed.
+
+    Lemma WP2_loop_semTripleBlock_right {R : iProp Σ} : ∀ PRE a instrs POST,
+      instrs ≠ []%list →
+      ⊢ @RVPTVr.exec_instructions_prologue _ sailGS2_sailGS_right a instrs -∗
+        PRE a -∗
+        @RVPTVr.semTripleBlock _ sailGS2_sailGS_right PRE a instrs POST -∗
+        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an instrs -∗ WP2_loop R) -∗
+        WP2_loop R.
+    Proof.
+      iIntros (PRE a [|instr instrs] POST Hne) "Hpro HPRE Htrip Hk"; first done.
+      iApply (WP2_loop_step_n_right with "Hpro [Htrip HPRE] Hk").
+      by iApply "Htrip".
     Qed.
 
   End WithSailGS2.

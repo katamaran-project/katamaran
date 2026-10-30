@@ -43,7 +43,7 @@ From Katamaran Require Import
      RiscvPmp.Machine
      RiscvPmp.GVT.Logic
      RiscvPmp.GVT.Sig
-     RiscvPmp.IrisModel
+     RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.GVT.Model
      RiscvPmp.iostate
@@ -60,7 +60,7 @@ Set Implicit Arguments.
 Import ListNotations.
 Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
-Import RiscvPmpIrisBase.
+Import RiscvPmpIrisPrelims RiscvPmpIrisBase.
 Import RiscvPmpModel2.
 Import RiscvPmpIrisInstance.
 Import RiscvPmpValidContracts.

@@ -60,10 +60,15 @@ From iris.algebra Require dfrac big_op.
 From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident proofmode.
 From stdpp Require namespaces.
-From Katamaran Require Import RiscvPmp.LoopVerification.
+From Katamaran Require Import RiscvPmp.IrisModel RiscvPmp.Everything.
+
+(* The examples are verified with the partial block verifier, instantiated for
+   a single (left) execution. *)
+Module RVPPVl := RiscvPmpBlockVerifPartialVerifier LeftOrRightLeft RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl.
 
 Module Examples.
   Import RiscvPmpExecutor.
+  Import RVPPVl.
   Import Assembly.
   Import RiscvPmp.Sig.
   Import iris.proofmode.proofmode.
@@ -272,9 +277,7 @@ Module Examples.
     map c (fun _ i _ => i).
 
   Section WithSailResources.
-      Import IrisModel.RiscvPmpIrisBase.
-      Import RiscvPmpIrisInstance.
-      Import RiscvPmpIrisInstanceWithContracts.
+      Import RVPCOM RVPBASEl RVPPREDl RVPINSTl RVPCONTRl.
 
       Context `{sailGS Σ} {rG : trivGS Σ}.
 

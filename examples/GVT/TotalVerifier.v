@@ -52,7 +52,7 @@ From Katamaran Require Import
      MicroSail.Soundness
      RiscvPmp.GVT.Model
      RiscvPmp.GVT.Spec
-     RiscvPmp.IrisModel
+     RiscvPmp.GVT.IrisModel
      RiscvPmp.GVT.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.GVT.Logic
@@ -76,7 +76,7 @@ Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
 
-Import RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpIrisInstance.
+Import RiscvPmpIrisPrelims RiscvPmpIrisBase RiscvPmpIrisInstancePredicates RiscvPmpIrisInstance.
 #[local] Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
 #[local] Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
 
@@ -567,11 +567,7 @@ End BlockVerificationDerived.
 
 Section AnnotatedBlockVerification.
 
-  Inductive AnnotInstr :=
-  | AnnotAST  (i : AST)
-  | AnnotDebugBreak
-  | AnnotLemmaInvocation {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp [ctx]) Δ)
-  .
+  (* AnnotInstr, extract_AST and filter_AST are shared via RiscvPmpProgram. *)
 
   Section Debug.
 
@@ -812,15 +808,6 @@ Section AnnotatedBlockVerification.
     Import CHeapSpec.
 
     Context {Σ} {GS : sailGS Σ} {rG : iostateG IOState Σ}.
-
-    Definition extract_AST (i : AnnotInstr) : option AST :=
-      match i with
-      | AnnotAST a => Some a
-      | _ => None
-      end.
-
-    Definition filter_AST : list AnnotInstr -> list AST :=
-      base.omap extract_AST.
 
     Lemma sound_exec_annotated_block_addr {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> iProp Σ) :
       LemmaSem ->

@@ -58,6 +58,7 @@ Set Implicit Arguments.
 Import ListNotations.
 Import MinCapsSpecification.
 Import MinCapsProgram.
+Import MinCapsIrisPrelims.
 Import MinCapsIrisBase.
 Import MinCapsIrisInstance.
 Import MinCapsIrisInstanceWithContracts.
