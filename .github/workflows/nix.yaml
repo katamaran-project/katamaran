@@ -5,7 +5,10 @@ on:
 
 jobs:
   build:
-    if: github.event_name == 'push' && github.event.pull_request == null
+    # Branches in this repo are built on push; PRs only when from a fork.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     name: ${{ matrix.rocq }}
     runs-on: [ubuntu-latest]
     strategy:
@@ -19,7 +22,26 @@ jobs:
         with:
           name: katamaran
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - name: Build dependencies
-        run: nix build --print-out-paths .#${{ matrix.rocq }}-deps | cachix push katamaran
       - name: Build package
-        run: nix build -L .#${{ matrix.rocq }}
+        run: nix build -L '.#${{ matrix.rocq }}^out,timing'
+      - name: Collect timings
+        run: |
+          mkdir timing
+          cp result-timing/* timing/
+          cat > timing/ci.txt <<EOF
+          commit: ${{ github.sha }}
+          ref: ${{ github.ref }}
+          run: ${{ github.run_id }}.${{ github.run_attempt }}
+          matrix: ${{ matrix.rocq }}
+          runner: ${{ runner.name }} ${{ runner.os }} ${{ runner.arch }}
+          nixpkgs: $(nix flake metadata --json | jq -r '.locks.nodes.nixpkgs.locked.rev')
+          EOF
+          { echo '### Build times (${{ matrix.rocq }})'; echo '```'
+            cat timing/time-of-build-pretty.log; echo '```'
+            echo '### Build trace (${{ matrix.rocq }})'; echo '```'
+            cat timing/build-trace-report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: timing-${{ github.sha }}-${{ matrix.rocq }}
+          path: timing/
+          retention-days: 90

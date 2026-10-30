@@ -9,6 +9,7 @@
 , python3
 , time
 , writeShellScript
+, zstd
 , ...
 }:
 
@@ -31,12 +32,46 @@ mkCoqDerivation {
   pname = "katamaran";
   owner = "katamaran-project";
   version = "0.2.0";
-  src = ./.;
-  nativeBuildInputs = [ time ];
+  # Only the build inputs, so edits to docs or scripts don't force a rebuild.
+  src = lib.fileset.toSource {
+    root = ./.;
+    fileset = lib.fileset.unions [
+      ./_CoqProject
+      ./Makefile
+      ./Makefile.coq.local-late
+      ./theories
+      ./case_study
+      ./examples
+      ./test
+      ./scripts/buildtrace
+    ];
+  };
+  nativeBuildInputs = [ time zstd ];
   buildFlags = [
     "COQMAKE_ONE_TIME_FILE=${make-one-time-file}"
+    "TIMING=1"
+    "BUILDTRACE=build-trace.log"
     "pretty-timed"
   ];
+  # Raw timings and build environment, for processing elsewhere.
+  outputs = [ "out" "timing" ];
+  postInstall = ''
+    mkdir -p $timing
+    cp time-of-build.log time-of-build-pretty.log build-trace.log $timing/
+    ${python3}/bin/python3 scripts/buildtrace/trace.py build-trace.log .Makefile.coq.d \
+      -o $timing/trace.json > $timing/build-trace-report.txt
+    find . -name '*.v.timing' -printf '%P\0' \
+      | tar -I "zstd -19 -T$NIX_BUILD_CORES" -cf $timing/sentences.tar.zst --null -T -
+    {
+      echo "rocq_version: $(rocq --version | head -n1)"
+      echo "rocq: $(realpath "$(command -v rocq)")"
+      echo "ROCQPATH: ''${ROCQPATH-}"
+      echo "COQPATH: ''${COQPATH-}"
+      echo "jobs: $NIX_BUILD_CORES"
+      echo "nproc: $(nproc)"
+      echo "cpu: $(grep -m1 '^model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')"
+    } > $timing/env.txt
+  '';
   propagatedBuildInputs = [
     coq.ocamlPackages.findlib
     equations

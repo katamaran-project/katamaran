@@ -726,26 +726,26 @@ Module Type GenOccursCheckOn
       | WkKeepVar x wk => sub_up1 (interpWk wk)
       end.
 
-    Equations transWk {Σ1 Σ2 Σ3} (wk12 : WeakensTo Σ1 Σ2) (wk23 : WeakensTo Σ2 Σ3) : WeakensTo Σ1 Σ3 :=
+    Equations(noeqns) transWk {Σ1 Σ2 Σ3} (wk12 : WeakensTo Σ1 Σ2) (wk23 : WeakensTo Σ2 Σ3) : WeakensTo Σ1 Σ3 :=
     | wk1 | WkSkipVar _ wk2 => WkSkipVar _ (transWk wk1 wk2)
     | WkNil | wk2 => wk2
     | WkSkipVar x wk1 | WkKeepVar _ wk2 => WkSkipVar _ (transWk wk1 wk2)
     | WkKeepVar x wk1 | WkKeepVar _ wk2 => WkKeepVar _ (transWk wk1 wk2)
     .
+    #[global] Transparent transWk.
+    Arguments transWk {Σ1 Σ2 Σ3} wk12 wk23 : simpl nomatch.
 
     Lemma interpTransWk {Σ1 Σ2 Σ3} (wk12 : WeakensTo Σ1 Σ2) (wk23 : WeakensTo Σ2 Σ3) :
       interpWk (transWk wk12 wk23) = subst (interpWk wk12) (interpWk wk23).
     Proof.
-      eapply (transWk_elim (fun Σ1 Σ2 Σ3 wk12 wk23 wk13 => interpWk wk13 = subst (Subst := SubstEnv) (interpWk wk12) (interpWk wk23)));
-        cbn -[subst].
-      - now intros.
-      - intros * ->.
-        apply sub_comp_assoc.
-      - intros * ->.
-        rewrite !(sub_comp_assoc (interpWk wk2)).
+      revert Σ1 wk12.
+      induction wk23 as [|? ? ? wk23 IH|? ? ? wk23 IH]; intros; [depelim wk12| |depelim wk12];
+        cbn -[subst]; rewrite ?IH.
+      - easy.
+      - apply sub_comp_assoc.
+      - rewrite !(sub_comp_assoc (interpWk wk12)).
         now rewrite sub_comp_wk1_comm.
-      - intros * ->.
-        apply sub_up1_comp.
+      - apply sub_up1_comp.
     Qed.
 
     Fixpoint wkNilInit {Σ} : WeakensTo [ctx] Σ :=
@@ -766,20 +766,18 @@ Module Type GenOccursCheckOn
       wkKeepCtx (transWk ζ1 ζ2) Σ = transWk (wkKeepCtx ζ1 Σ) (wkKeepCtx ζ2 Σ).
     Proof.
       induction Σ; first easy.
-      cbn; now rewrite IHΣ, transWk_equation_4.
+      cbn; now rewrite IHΣ.
     Qed.
 
     Lemma transWk_refl_2 `{σ : WeakensTo Σ1 Σ2}: transWk σ wkRefl = σ.
     Proof.
       induction σ; first easy; cbn;
-        rewrite ?transWk_equation_3, ?transWk_equation_4;
         now f_equal.
     Qed.
 
     Lemma transWk_refl_1 `{σ : WeakensTo Σ1 Σ2}: transWk wkRefl σ = σ.
     Proof.
       induction σ; first easy; cbn;
-        rewrite ?transWk_equation_2, ?transWk_equation_4;
         now f_equal.
     Qed.
 
@@ -795,7 +793,7 @@ Module Type GenOccursCheckOn
     | VarUsed : forall Σ1 (wk : WeakensTo Σ1 Σ2), WeakenZeroView (WkKeepVar b wk)
     .
 
-    Equations weakenZeroView {Σ1 Σ2 b} (wk : WeakensTo Σ1 (Σ2 ▻ b)) : WeakenZeroView wk :=
+    Equations(noeqns) weakenZeroView {Σ1 Σ2 b} (wk : WeakensTo Σ1 (Σ2 ▻ b)) : WeakenZeroView wk :=
     | WkSkipVar _ wk => VarUnused b wk
     | WkKeepVar _ wk => VarUsed b wk
     .
@@ -804,7 +802,7 @@ Module Type GenOccursCheckOn
     | WkNilViewNil : WeakenNilView WkNil
     .
 
-    Equations weakenNilView {Σ1} (wk : WeakensTo Σ1 [ctx]) : WeakenNilView wk :=
+    Equations(noeqns) weakenNilView {Σ1} (wk : WeakensTo Σ1 [ctx]) : WeakenNilView wk :=
     | WkNil => WkNilViewNil
     .
 
@@ -834,7 +832,7 @@ Module Type GenOccursCheckOn
                   (fun b' Σ b bIn => WkSkipVar _ (wkSingleton bIn))
                   bIn.
 
-    Equations wkVarZeroIn {Σ Σ' : LCtx} {b} (σ : WeakensTo (Σ' ▻ b)%ctx Σ) : b ∈ Σ :=
+    Equations(noeqns) wkVarZeroIn {Σ Σ' : LCtx} {b} (σ : WeakensTo (Σ' ▻ b)%ctx Σ) : b ∈ Σ :=
     | WkKeepVar _ _ => ctx.in_zero
     | WkSkipVar _ wk => ctx.in_succ (wkVarZeroIn wk)
     .
@@ -858,13 +856,12 @@ Module Type GenOccursCheckOn
       induction ζ2; intros *.
       - dependent elimination ζ1; cbn.
         destruct (ctx.view xIn).
-      - rewrite transWk_equation_2; cbn.
+      - cbn.
         now f_equal.
       - dependent elimination ζ1.
-        + rewrite transWk_equation_3; cbn.
+        + cbn.
           now f_equal.
-        + rewrite transWk_equation_4.
-          destruct (ctx.view xIn); cbn; first easy.
+        + destruct (ctx.view xIn); cbn; first easy.
           f_equal.
           clear -IHζ2.
           refine (IHζ2 _ _ _ w0).
@@ -913,7 +910,7 @@ Module Type GenOccursCheckOn
     | WeakenVarUsed : forall {Σ1} (bIn' : b ∈ Σ1) (wk : WeakensTo Σ1 Σ2), WeakenVarView bIn wk
     .
 
-    Equations weakenVarView {Σ1 Σ2 b} (bIn2 : b ∈ Σ2) (wk : WeakensTo Σ1 Σ2) : WeakenVarView bIn2 wk :=
+    Equations(noeqns) weakenVarView {Σ1 Σ2 b} (bIn2 : b ∈ Σ2) (wk : WeakensTo Σ1 Σ2) : WeakenVarView bIn2 wk :=
     | bIn2 | WkNil => match ctx.view bIn2 with end
     | bIn2 | WkSkipVar _ wk =>
                match ctx.view bIn2 with
@@ -933,7 +930,7 @@ Module Type GenOccursCheckOn
       replace (WkSkipVar x wk) with (transWk wk (wkRemove (b := x) ctx.in_zero)).
       eapply (WeakenVarUnused ctx.in_zero wk).
       cbn.
-      now rewrite transWk_equation_2, transWk_refl_2.
+      now rewrite transWk_refl_2.
     Defined.
     Next Obligation.
       intros. clear bIn2 b.
@@ -941,8 +938,7 @@ Module Type GenOccursCheckOn
       - replace (WkSkipVar x (transWk wk (wkRemove bIn2')))
           with (transWk (WkSkipVar x wk) (wkRemove (ctx.in_succ bIn2'))).
         eapply (WeakenVarUnused (ctx.in_succ bIn2') (WkSkipVar x wk)).
-        simpl.
-        now rewrite transWk_equation_3.
+        now simpl.
       - now eapply WeakenVarUsed.
     Defined.
     Next Obligation.
@@ -951,8 +947,7 @@ Module Type GenOccursCheckOn
       - replace (WkKeepVar x0 (transWk wk (wkRemove bIn2')))
           with (transWk (WkKeepVar x0 wk) (wkRemove (ctx.in_succ bIn2'))).
         eapply (WeakenVarUnused (ctx.in_succ bIn2') (WkKeepVar x0 wk)).
-        simpl.
-        now rewrite transWk_equation_4.
+        now simpl.
       - now eapply WeakenVarUsed, ctx.in_succ.
     Defined.
 
@@ -984,7 +979,7 @@ Module Type GenOccursCheckOn
       match meet with
         MkMeetResult _ _ _ _ Σ12 σ1' σ2' σ'  => MkMeetResult _ _ _ _ _ (WkKeepVar x σ1') (WkKeepVar _ σ2') (WkKeepVar x σ')
       end.
-    Equations meetWk {Σ1 Σ2 Σ3} (wk13 : WeakensTo Σ1 Σ3) (wk23 : WeakensTo Σ2 Σ3) :
+    Equations(noeqns) meetWk {Σ1 Σ2 Σ3} (wk13 : WeakensTo Σ1 Σ3) (wk23 : WeakensTo Σ2 Σ3) :
       MeetResult Σ3 Σ1 Σ2 :=
     | WkNil | WkNil => MkMeetResult _ _ _ _ _ WkNil WkNil WkNil
     | WkSkipVar x wk1 | WkSkipVar _ wk2 => extendMeetSkipSkip (meetWk wk1 wk2)
@@ -992,19 +987,23 @@ Module Type GenOccursCheckOn
     | WkKeepVar x wk1 | WkSkipVar _ wk2 => extendMeetKeepSkip (meetWk wk1 wk2)
     | WkKeepVar x wk1 | WkKeepVar _ wk2 => extendMeetKeepKeep (meetWk wk1 wk2)
     .
+    #[global] Transparent meetWk.
+    Arguments meetWk {Σ1 Σ2 Σ3} wk13 wk23 : simpl nomatch.
 
     #[export] Instance substUnivMeet_weaken : SubstUnivMeet WeakensTo :=
       fun _ _ _ => meetWk.
     #[export] Instance substUnivMeetLaws_weaken : SubstUnivMeetLaws WeakensTo.
     Proof.
-      constructor; intros.
-      apply (meetWk_elim (fun _ _ _ wk1 wk2 res => exists Σ13 meetLeft meetRight meetUp, MkMeetResult _ _ _ _ Σ13 meetLeft meetRight meetUp = meetWk wk1 wk2 /\ wk1 = transWk meetLeft meetUp /\ wk2 = transWk meetRight meetUp));
-        try intros * (? & ? & ? & ? & H & corrσ1 & corrσ2);
-        rewrite ?meetWk_equation_1, ?meetWk_equation_2, ?meetWk_equation_3, ?meetWk_equation_4, ?meetWk_equation_5;
-        try destruct H;
+      constructor; intros Σ Σ1 Σ2 σ1 σ2.
+      enough (exists Σ13 meetLeft meetRight meetUp,
+                 MkMeetResult _ _ _ _ Σ13 meetLeft meetRight meetUp = meetWk σ1 σ2 /\
+                 σ1 = transWk meetLeft meetUp /\ σ2 = transWk meetRight meetUp) by easy.
+      revert Σ2 σ2.
+      induction σ1 as [|? ? ? σ1 IH|? ? ? σ1 IH]; intros; depelim σ2;
+        try destruct (IH _ σ2) as (? & ? & ? & ? & H & corrσ1 & corrσ2);
+        cbn; try destruct H;
         (do 5 eexists; first easy);
-        rewrite ?transWk_equation_1, ?transWk_equation_2, ?transWk_equation_3, ?transWk_equation_4;
-        now split; f_equal.
+        cbn; now split; f_equal.
     Qed.
 
     Definition wkVar : forall {x Σ}, x ∈ Σ -> WeakensTo [ x ]%ctx Σ :=
@@ -1027,33 +1026,25 @@ Module Type GenOccursCheckOn
         now rewrite lookup_sub_wk1.
     Qed.
 
-    Equations transWk_assoc {Σ1 Σ2 Σ3 Σ4} (σ1 : WeakensTo Σ1 Σ2) (σ2 : WeakensTo Σ2 Σ3) (σ3 : WeakensTo Σ3 Σ4) :
-      transWk σ1 (transWk σ2 σ3) = transWk (transWk σ1 σ2) σ3 :=
-    | σ1 | σ2 | WkSkipVar x σ3 => _ (transWk_assoc σ1 σ2 σ3)
-    | σ1 | WkSkipVar x σ2 | WkKeepVar x σ3 => _  (transWk_assoc σ1 σ2 σ3)
-    | WkSkipVar x σ1 | WkKeepVar x σ2 | WkKeepVar x σ3 => _ (transWk_assoc σ1 σ2 σ3)
-    | WkKeepVar x σ1 | WkKeepVar x σ2 | WkKeepVar x σ3 => _ (transWk_assoc σ1 σ2 σ3)
-    | WkNil | WkNil | WkNil => eq_refl
-    .
-    Next Obligation.
-      intros _. intros. rewrite ?transWk_equation_2. now f_equal.
-    Qed.
-    Next Obligation.
-      intros _. intros. rewrite ?transWk_equation_3, ?transWk_equation_2, ?transWk_equation_3. now f_equal.
-    Qed.
-    Next Obligation.
-      intros _. intros. rewrite ?transWk_equation_4, ?transWk_equation_3, ?transWk_equation_2, ?transWk_equation_3.
-      now f_equal.
-    Qed.
-    Next Obligation.
-      intros _. intros. rewrite ?transWk_equation_4. now f_equal.
+    Lemma transWk_assoc {Σ1 Σ2 Σ3 Σ4} (σ1 : WeakensTo Σ1 Σ2) (σ2 : WeakensTo Σ2 Σ3) (σ3 : WeakensTo Σ3 Σ4) :
+      transWk σ1 (transWk σ2 σ3) = transWk (transWk σ1 σ2) σ3.
+    Proof.
+      revert Σ1 Σ2 σ1 σ2.
+      induction σ3 as [|? ? ? σ3 IH|? ? ? σ3 IH]; intros.
+      - depelim σ2. depelim σ1. reflexivity.
+      - cbn. now f_equal.
+      - depelim σ2.
+        + cbn. now f_equal.
+        + depelim σ1; cbn; now f_equal.
     Qed.
 
     #[export] Instance substUnivLaws_wk : SubstUnivLaws WeakensTo.
     Proof.
       constructor.
-      - refine (transWk_elim (fun Σ1 Σ2 Σ3 σ12 σ23 σ13 => substSU (interpSU σ12) σ23 = interpSU (transWk σ12 σ23)) _ _ _ _); intros;
-          rewrite ?transWk_equation_1, ?transWk_equation_2, ?transWk_equation_3, ?transWk_equation_4;
+      - intros Σ1 Σ2 Σ3 σ1 σ2.
+        change (substSU (interpSU σ1) σ2 = interpSU (transWk σ1 σ2)).
+        revert Σ1 σ1.
+        induction σ2 as [|? ? ? σ2 H|? ? ? σ2 H]; intros; [depelim σ1| |depelim σ1];
           cbn -[substSU];
         change (interpWk ?ζ) with (interpSU ζ).
         + easy.
@@ -1137,18 +1128,11 @@ Module Type GenOccursCheckOn
       revert b bIn.
       induction σ; intros b bIn.
       - destruct (ctx.view bIn).
-      - simpl.
-        rewrite transWk_equation_3.
-        change (ctx.MkIn (ctx.in_at (weakenIn σ bIn)) _) with (weakenIn σ bIn).
-        rewrite (IHσ b bIn).
-        now rewrite transWk_equation_2.
+      - exact (f_equal (WkSkipVar x) (IHσ b bIn)).
       - destruct (ctx.view bIn).
-        + simpl.
-          now rewrite transWk_equation_2, transWk_equation_3, transWk_refl_1, transWk_refl_2.
-        + simpl.
-          rewrite ?transWk_equation_4.
-          f_equal.
-          now apply IHσ.
+        + cbn.
+          now rewrite transWk_refl_1, transWk_refl_2.
+        + exact (f_equal (WkKeepVar x) (IHσ b i)).
     Qed.
 
     Lemma subst_weakenRemovePres_wkRemove {Σ1 Σ2 b} (bIn : b ∈ Σ1) (σ : WeakensTo Σ1 Σ2) :
@@ -1168,19 +1152,13 @@ Module Type GenOccursCheckOn
       induction ζ2; intros Σ ζ1 xIn P.
       - destruct (weakenNilView ζ1), (ctx.view xIn).
       - simpl.
-        rewrite ?transWk_equation_2.
-        simpl.
         now refine (IHζ2 _ ζ1 xIn (fun xIn ζ => P (ctx.in_succ xIn) (WkSkipVar x0 ζ))).
       - destruct (weakenZeroView ζ1).
         + simpl.
-          rewrite ?transWk_equation_3.
           now refine (IHζ2 _ wk xIn (fun xIn ζ => P (ctx.in_succ xIn) (WkSkipVar x0 ζ))).
         + destruct (ctx.view xIn).
+          * now simpl.
           * simpl.
-            now rewrite ?transWk_equation_4.
-          * simpl.
-            rewrite ?transWk_equation_4.
-            simpl.
             now refine (IHζ2 _ wk i (fun xIn ζ => P (ctx.in_succ xIn) (WkKeepVar x0 ζ))).
     Qed.
 
@@ -1200,10 +1178,12 @@ Module Type GenOccursCheckOn
       destruct wrv1 as [? ζsupp1 bv1 bvl1 HR1]; cbn.
       destruct (weakenZeroView ζsupp1); apply mkWeakenedRefines; cbn.
       - eapply funusedP.
-        now rewrite unboxSbLaws, transWk_equation_2, transWk_refl_2.
+        rewrite unboxSbLaws by easy; cbn.
+        now rewrite transWk_refl_2.
       - rewrite <-fusedM.
         apply fusedP.
-        now rewrite unboxSbLaws, transWk_equation_4, transWk_refl_1.
+        rewrite unboxSbLaws by easy; cbn.
+        now rewrite transWk_refl_1.
     Qed.
 
     Lemma elimWeakenedVar_weakenedRefines {T1 T2} {_ : SubstSU WeakensTo T1} {_ : SubstSU WeakensTo T2} {_ : SubstSULaws WeakensTo T2}

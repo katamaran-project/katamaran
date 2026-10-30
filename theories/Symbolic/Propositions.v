@@ -1826,8 +1826,8 @@ Module Type SymPropOn
         induction P; intros; cbn -[weakenIn weakenRemovePres];
           change (transWk ?ζ1 ?ζ2) with (transSU ζ1 ζ2);
           f_equal; try done; try (now apply substSU_trans).
-        - now rewrite <-transWk_equation_4.
-        - now rewrite <-transWk_equation_4.
+        - exact (IHP _ _ (WkKeepVar _ ζ1) (WkKeepVar _ ζ2)).
+        - exact (IHP _ _ (WkKeepVar _ ζ1) (WkKeepVar _ ζ2)).
         - rewrite <-?substSU_trans.
           rewrite <-IHP.
           refine (weakenRemovePres_transWk xIn ζ1 ζ2 (fun _ ζ => _ = assert_vareq x (substSU t ζ) (substSU msg ζ) (weaken_symprop P ζ)) _).
@@ -1891,7 +1891,7 @@ Module Type SymPropOn
         rewrite <-?substSU_trans.
         f_equal.
         unfold upSU, substUnivVarUp_weaken; cbn.
-        now rewrite transWk_equation_2 transWk_equation_3 transWk_refl_1 transWk_refl_2.
+        now rewrite transWk_refl_1 transWk_refl_2.
       Qed.
 
       Program Definition uq_demonicv {Σ} b
@@ -1912,7 +1912,7 @@ Module Type SymPropOn
         rewrite <-?substSU_trans.
         f_equal.
         unfold upSU, substUnivVarUp_weaken; cbn.
-        now rewrite transWk_equation_2 transWk_equation_3 transWk_refl_1 transWk_refl_2.
+        now rewrite transWk_refl_1 transWk_refl_2.
       Qed.
 
       Definition uq_assert_vareq x {σ Σ} {xIn : ((x::σ)%ctx ∈ Σ)%katamaran} (t : Term (Σ - (x::σ)%ctx) σ)

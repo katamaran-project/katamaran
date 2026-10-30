@@ -35,6 +35,7 @@ case_study/RiscvPmp/PmpCheck.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/Logic.v
 case_study/RiscvPmp/Contracts.v
+case_study/RiscvPmp/Reification.v
 case_study/RiscvPmp/trace.v
 case_study/RiscvPmp/iostate.v
 case_study/RiscvPmp/IrisModel.v
@@ -72,6 +73,7 @@ test/Example.v
 test/LinkedList.v
 test/SumMaxLen.v
 test/Replay.v
+test/Reification.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v

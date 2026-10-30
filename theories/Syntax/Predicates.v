@@ -42,7 +42,7 @@ Class IsDuplicable (T : Type) :=
   { is_duplicable : T -> bool
   }.
 
-Module Type PurePredicateKit (Import B : Base).
+Module Type PurePredicateKit (Import B : BaseKit).
   (** Pure Predicates *)
   (* Predicate names. *)
   Parameter Inline 𝑷  : Set.
@@ -54,7 +54,7 @@ Module Type PurePredicateKit (Import B : Base).
 
 End PurePredicateKit.
 
-Module Type HeapPredicateKit (Import B : Base).
+Module Type HeapPredicateKit (Import B : BaseKit).
   (** Heap Predicates *)
   (* Predicate names. *)
   Parameter Inline 𝑯  : Set.
@@ -69,7 +69,7 @@ Module Type HeapPredicateKit (Import B : Base).
 
 End HeapPredicateKit.
 
-Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (Import HP : HeapPredicateKit B).
+Module Type PredicateMixin (Import B : BaseKit) (Import PP : PurePredicateKit B) (Import HP : HeapPredicateKit B).
   Class PredicateDef (HProp : bi) : Type :=
   { lptsreg    : forall {σ : Ty}, 𝑹𝑬𝑮 σ -> Val σ -> HProp;
     luser      : forall (p : 𝑯), Env Val (𝑯_Ty p) -> HProp;
@@ -80,10 +80,10 @@ Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (I
   Arguments luser {_ _} p _.
 End PredicateMixin.
 
-Module Type PredicateKit (B : Base) :=
+Module Type PredicateKit (B : BaseKit) :=
   PurePredicateKit B <+ HeapPredicateKit B <+ PredicateMixin B.
 
-Module DefaultPurePredicateKit (Import B : Base) <: PurePredicateKit B.
+Module DefaultPurePredicateKit (Import B : BaseKit) <: PurePredicateKit B.
 
   Definition 𝑷 := Empty_set.
   Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
@@ -92,7 +92,7 @@ Module DefaultPurePredicateKit (Import B : Base) <: PurePredicateKit B.
 
 End DefaultPurePredicateKit.
 
-Module DefaultHeapPredicateKit (Import B : Base) <: HeapPredicateKit B.
+Module DefaultHeapPredicateKit (Import B : BaseKit) <: HeapPredicateKit B.
 
   Definition 𝑯 := Empty_set.
   Definition 𝑯_Ty : 𝑯 -> Ctx Ty := fun p => match p with end.
@@ -102,5 +102,5 @@ Module DefaultHeapPredicateKit (Import B : Base) <: HeapPredicateKit B.
 
 End DefaultHeapPredicateKit.
 
-Module DefaultPredicateKit (B : Base) :=
+Module DefaultPredicateKit (B : BaseKit) :=
   DefaultPurePredicateKit B <+ DefaultHeapPredicateKit B.

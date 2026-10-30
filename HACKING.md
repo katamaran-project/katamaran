@@ -92,3 +92,16 @@ Therefore, we are currently avoiding using stdpp in the context of symbolic exec
 The library is currently axiom-free (not even fun.ext. or prop.ext.).
 So try to keep it that way and avoid introducing axioms when possible.
 But let's be pragmatic; if there is a good reason to assume an axiom, we allow it.
+
+## Build times
+
+To see where a build spends its time, record a build trace and open it in
+[Perfetto](https://ui.perfetto.dev) (the file stays in the browser):
+
+    rm -f build-trace.log && make clean && make BUILDTRACE=build-trace.log
+    scripts/buildtrace/trace.py build-trace.log .Makefile.coq.d -o trace.json
+
+The trace shows each make job with the files it compiled and an arrow from the
+dependency each file waited for last, the critical path, and the number of
+files compiling and waiting for a free job over time. `trace.py` also prints a
+summary. CI builds record a trace too; it is in the `timing-*` artifact.

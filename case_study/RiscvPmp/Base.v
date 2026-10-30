@@ -388,7 +388,7 @@ Inductive InterruptType : Set :=
 | I_M_External
 .
 
-(* Enum for available CRSs' *)
+(* Enum for available CSRs *)
 Inductive CSRIdx : Set :=
 (* M-mode CSRs *)
 | MStatus

@@ -1,5 +1,33 @@
-# Build the GVT example only after everything else, so that its memory-heavy
-# files (Contracts, StopButtonUMode) never compile at the same time as
-# FemtoKernel/LoopVerificationBinary (or other memory-heavy files).
-GVT_VOFILES := $(filter examples/GVT/%.vo,$(VOFILES))
-$(GVT_VOFILES): | $(filter-out $(GVT_VOFILES),$(VOFILES))
+# VC size statistics. The files in case_study/Stats are not in _CoqProject.
+# Each is compiled on its own, one at a time for clean timings, into a .log
+# next to it, from which a .csv is made.
+STATS := $(wildcard case_study/Stats/*.v)
+# The stats files only use the framework and these two case studies.
+STATS_DEPS := $(filter theories/% case_study/RiscvPmp/% case_study/MinimalCaps/%,$(VOFILES))
+
+case_study/Stats/%.log: case_study/Stats/%.v $(STATS_DEPS)
+	$(SHOW)'ROCQ STATS $<'
+	$(HIDE)$(ROCQ) compile $(COQFLAGS) $(COQLIBS) -Q case_study/Stats Katamaran.Stats $< > $@.tmp 2>&1 || { cat $@.tmp; exit 1; }
+	$(HIDE)mv $@.tmp $@
+
+case_study/Stats/%.csv: case_study/Stats/%.log scripts/vcstats.py
+	$(SHOW)'VCSTATS $@'
+	$(HIDE)scripts/vcstats.py $< > $@.tmp
+	$(HIDE)mv $@.tmp $@
+
+.PHONY: vcstats
+.NOTPARALLEL: vcstats
+vcstats: $(STATS:.v=.csv)
+
+clean::
+	$(HIDE)rm -f case_study/Stats/.*.aux \
+	  $(addprefix case_study/Stats/*,.csv .log .vo .vok .vos .glob)
+
+# Build trace: with BUILDTRACE=FILE, every compilation appends its start and
+# end time to FILE, from which scripts/buildtrace/trace.py makes a trace for
+# Perfetto. TIMER is expanded only when a recipe runs, so redefining it here
+# applies to all rules.
+ifneq (,$(BUILDTRACE))
+override export BUILDTRACE := $(abspath $(BUILDTRACE))
+TIMER = bash $(CURDIR)/scripts/buildtrace/stamp $(if $(TIMED), $(STDTIME), $(TIMECMD))
+endif

@@ -32,11 +32,16 @@
         stdpp = "1.13.0";
       };
 
-      rocqPackages920 = patchRocqPackages pkgs.rocqPackages_9_2 iris45;
-      rocqPackages930 = patchRocqPackages pkgs.rocqPackages_9_3 iris45;
+      # Rocq that hash-conses functor parameters and Includes: .vo files ~3x
+      # smaller, peak memory ~30% lower here.
+      hashcons = rocqPackages: rocqPackages.overrideScope (self: super: {
+        rocq-core = super.rocq-core.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [ ./nix/rocq-hashcons-modules.patch ];
+        });
+      });
 
-      mkDeps = pkg: pkgs.linkFarmFromDrvs "deps"
-        (pkg.buildInputs ++ pkg.nativeBuildInputs ++ pkg.propagatedBuildInputs);
+      rocqPackages920 = patchRocqPackages (hashcons pkgs.rocqPackages_9_2) iris45;
+      rocqPackages930 = patchRocqPackages (hashcons pkgs.rocqPackages_9_3) iris45;
 
       # rocq-lsp (provides `pet`); nixpkgs only has it up to Rocq 9.1.
       rocqLsp920 =
@@ -83,9 +88,6 @@
         default = rocq920;
         rocq920 = rocqPackages920.katamaran;
         rocq930 = rocqPackages930.katamaran;
-
-        rocq920-deps = mkDeps rocq920;
-        rocq930-deps = mkDeps rocq930;
 
         rocq-lsp-rocq920 = rocqLsp920;
       };
