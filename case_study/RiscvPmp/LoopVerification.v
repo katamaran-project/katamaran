@@ -362,23 +362,28 @@ Module Type LoopVerification
       destruct m, m'; try contradiction; auto.
     Qed.
 
-    Definition loop_pre (archstate : ArchState) : iProp Σ :=
+    (* Parameterized by an iProp R that is maintained at each step of the loop.
+       This gives some flexibility when doing known code verification, where we
+       can hand off some knowledge that will not be violated (or invalidated)
+       by unknown code when invoking the universal contract. *)
+    Definition loop_pre (R : iProp Σ) (archstate : ArchState) : iProp Σ :=
       (Step_pre archstate ∗
-       ▷ (M_CSRMod archstate -∗ WP_loop) ∗
-       ▷ (M_Trap archstate -∗ WP_loop) ∗
-       ▷ (MRET archstate -∗ WP_loop) ∗
-       ▷ (SRET archstate -∗ WP_loop))%I.
+       R ∗
+       ▷ (M_CSRMod archstate ∗ R -∗ WP_loop) ∗
+       ▷ (M_Trap archstate ∗ R -∗ WP_loop) ∗
+       ▷ (MRET archstate ∗ R -∗ WP_loop) ∗
+       ▷ (SRET archstate ∗ R -∗ WP_loop))%I.
 
     Definition semTriple_loop : iProp Σ :=
-      (∀ (archstate : ArchState),
-          semTriple env.nil (loop_pre archstate)
+      (∀ (R : iProp Σ) (archstate : ArchState),
+          semTriple env.nil (loop_pre R archstate)
                     (FunDef loop)
                     (fun _ _ => True))%I.
 
     Lemma valid_semTriple_loop : ⊢ semTriple_loop.
     Proof.
       iLöb as "H".
-      iIntros (archstate) "(HStep & HM_CSRMod & HM_Trap & HMRET & HSRET)".
+      iIntros (R archstate) "(HStep & HR & HM_CSRMod & HM_Trap & HMRET & HSRET)".
       iApply (semWP_seq (call step) (call loop)).
       iApply semWP_call_inline_later.
       iApply (semWP_mono with "[HStep]").
@@ -391,10 +396,10 @@ Module Type LoopVerification
         + (* Normal execution in M-mode (only pc changed) *)
           iDestruct "HRes" as "([%Hm _] & Hcp & Hstvec & Hmstatus & Hsepc & Hsscratch & Hscause)".
           cbn in Hm.
-          iApply ("H" $! (archstate_update_pc archstate i')).
+          iApply ("H" $! R (archstate_update_pc archstate i')).
           unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
           rewrite ?transition_update_pc.
-          iFrame "HM_CSRMod HM_Trap HMRET HSRET".
+          iFrame "HR HM_CSRMod HM_Trap HMRET HSRET".
           unfold Step_pre; cbn.
           rewrite ?Hm.
           now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". 
@@ -403,30 +408,31 @@ Module Type LoopVerification
           cbn in Hm, Hm'.
           iPoseProof (interp_pmp_addr_access_not_machine _ _ _ Hm Hm' with "Hacc") as "Hacc".
           destruct archstate as [? ms ? ?].
-          iApply ("H" $! (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
-          iSplitR "HM_CSRMod HM_Trap HMRET HSRET".
+          iApply ("H" $! R (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
+          iSplitR "HR HM_CSRMod HM_Trap HMRET HSRET".
           { unfold Step_pre; cbn.
             now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+          iFrame "HR".
           iSplitL "HM_CSRMod".
-          { iIntros "!> H'". iDestruct (M_CSRMod_machine with "H'") as %Heq.
+          { iIntros "!> [H' _]". iDestruct (M_CSRMod_machine with "H'") as %Heq.
             cbn in Heq. contradiction. }
           iSplitL "HM_Trap".
-          { iIntros "!> H'". iApply "HM_Trap". by iApply (M_Trap_SU_irrelevant with "H'"). }
+          { iIntros "!> [H' HR]". iApply "HM_Trap". iFrame "HR". by iApply (M_Trap_SU_irrelevant with "H'"). }
           iSplitL "HMRET".
-          { iIntros "!> H'". iDestruct (MRET_machine with "H'") as %Heq.
+          { iIntros "!> [H' _]". iDestruct (MRET_machine with "H'") as %Heq.
             cbn in Heq. contradiction. }
-          iIntros "!> H'". iDestruct (SRET_machine with "H'") as %Heq.
+          iIntros "!> [H' _]". iDestruct (SRET_machine with "H'") as %Heq.
           cbn in Heq. contradiction.
-      - iSpecialize ("HM_CSRMod" with "HRes").
+      - iSpecialize ("HM_CSRMod" with "[$HRes $HR]").
         iApply (semWP_mono with "HM_CSRMod").
         iIntros ([] ?); auto.
-      - iSpecialize ("HM_Trap" with "HRes").
+      - iSpecialize ("HM_Trap" with "[$HRes $HR]").
         iApply (semWP_mono with "HM_Trap").
         iIntros ([] ?); auto.
-      - iSpecialize ("HMRET" with "HRes").
+      - iSpecialize ("HMRET" with "[$HRes $HR]").
         iApply (semWP_mono with "HMRET").
         iIntros ([] ?); auto.
-      - iSpecialize ("HSRET" with "HRes").
+      - iSpecialize ("HSRET" with "[$HRes $HR]").
         iApply (semWP_mono with "HSRET").
         iIntros ([] ?); auto.
     Qed.
