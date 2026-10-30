@@ -41,15 +41,3 @@ Module Type RegDeclKit (Import T : Types).
   #[export] Declare Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
   #[export] Declare Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮).
 End RegDeclKit.
-
-Module DefaultRegDeclKit (Import T : Types) <: RegDeclKit T.
-  Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
-  #[export] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) := sigma_eqdec _ _.
-
-  Local Obligation Tactic :=
-    finite_from_eqdec.
-
-  #[export,program] Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) :=
-    {| finite.enum := nil |}.
-
-End DefaultRegDeclKit.

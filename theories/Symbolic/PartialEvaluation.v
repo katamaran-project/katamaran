@@ -42,15 +42,10 @@ From Stdlib Require Import
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Context
-     Environment
+     Base
      Bitvector
      Symbolic.Instantiation
-     Syntax.BinOps
-     Syntax.Terms
-     Syntax.TypeDecl
-     Syntax.UnOps
-     Syntax.Variables.
+     Syntax.Terms.
 
 Import (notations) stdpp.base.
 Import ctx.notations.
@@ -113,13 +108,7 @@ Section Util.
   Proof. induction n; cbn; now f_equal. Qed.
 End Util.
 
-Module Type PartialEvaluationOn
-  (Import TY : Types)
-  (Import TM : TermsOn TY)
-  (Import IN : InstantiationOn TY TM).
-
-  Local Abbreviation LCtx := (NCtx LVar Ty).
-  Local Abbreviation Valuation Σ := (Env (fun xt : Binding LVar Ty => Val (type xt)) Σ).
+Module Type PartialEvaluationOn (Import B : Base).
 
   Section WithLCtx.
     Context {Σ : LCtx}.

@@ -38,6 +38,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Defaults
      Signature
      Bitvector
      Sep.Hoare

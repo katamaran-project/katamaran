@@ -65,6 +65,10 @@ Module Type SymbolicMonadsOn (Import B : Base) (Import P : PredicateKit B)
   #[local] Hint Extern 2 (Persistent (fun w : World => NamedEnv (Term (wctx w)) ?Γ)) =>
     refine (@persistent_subst (fun Σ : LCtx => NamedEnv (Term Σ) Γ) _) : typeclass_instances.
 
+  Definition seval_exps {Γ Σ N} (δ : SStore Γ Σ) {Δ} :
+    NamedEnv (X := N) (Exp Γ) Δ -> NamedEnv (Term Σ) Δ
+      := env.map (fun b (e : Exp Γ (type b)) => peval (seval_exp δ e)).
+
   Section DebugInfo.
 
     Import option.notations.
