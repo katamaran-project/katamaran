@@ -29,8 +29,8 @@ A full build takes a long time.
 
 ## Changing `theories/Bitvector.v`
 
-Almost everything depends on `Bitvector.v` (and `BitvectorSolve.v`, which it
-`Load`s), so editing it forces a long rebuild. Instead:
+Almost everything depends on `Bitvector.v`, so editing it forces a long
+rebuild. Instead:
 
 1. Put new work in `theories/BitvectorNext.v`, in `Module bvnext`, importing
    `Katamaran.Bitvector`. Add the file to `_CoqProject` after `Bitvector.v`.
