@@ -938,7 +938,8 @@ Module RiscvPmpIrisInstanceWithContracts.
       { rewrite bool_decide_eq_false.
         destruct bytes; first easy.
         assert (paddr ∈ liveAddrs)%stdpp.
-        { apply bv.in_seqBv.
+        { rewrite liveAddrs_eq; unfold liveAddrs_def.
+          apply bv.in_seqBv.
           - change (bv.of_N minAddr) with (@bv.zero xlenbits); cbn. (* TODO: add simplifying `xlenbits` to solve_bv *) solve_bv.
           - rewrite N2Z.inj_add in Hrght.
             change minAddr with 0%N in *; cbn in *.

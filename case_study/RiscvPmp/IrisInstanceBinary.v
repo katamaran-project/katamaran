@@ -353,7 +353,8 @@ Module RiscvPmpIrisInstance2 <:
       iApply interp_addr_access_byte_extr.
       apply bv.seqBv_spec in Hseq as Hspec.
       apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
-      unfold liveAddrs, bv.seqBv.
+      rewrite liveAddrs_eq; unfold liveAddrs_def.
+      unfold bv.seqBv.
       rewrite -(bv.of_Z_unsigned y).
       apply list_elem_of_fmap_2.
       rewrite elem_of_seqZ.
