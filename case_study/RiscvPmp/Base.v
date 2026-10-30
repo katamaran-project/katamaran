@@ -90,30 +90,27 @@ Proof. now compute. Qed.
 Lemma xlenbits_pos : (xlenbits > 0).
 Proof. cbv. lia. Qed.
 (* All addresses present in RAM memory *)
-Definition liveAddrs := bv.seqBv (@bv.of_N xlenbits minAddr) lenAddr.
+Definition liveAddrs := bv.seq (@bv.of_N xlenbits minAddr) (Z.of_N lenAddr).
 
 (* All addressable addresses of the machine *)
-Definition all_addrs_def : list Addr := bv.seqBv bv.zero (N.pow 2 (N.of_nat xlenbits)).
+Definition all_addrs_def : list Addr := bv.seq bv.zero (2 ^ Z.of_nat xlenbits).
 Definition all_addrs_aux : seal (@all_addrs_def). Proof. by eexists. Qed.
 Definition all_addrs : list Addr := all_addrs_aux.(unseal).
 Lemma all_addrs_eq : all_addrs = all_addrs_def. Proof. rewrite -all_addrs_aux.(seal_eq) //. Qed.
 
 Lemma in_allAddrs_split (addr : Addr) (bytes : nat) :
-  (bv.bin addr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
-  exists l1 l2, all_addrs = l1 ++ (bv.seqBv addr (N.of_nat bytes)  ++ l2).
+  (bv.unsigned addr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
+  exists l1 l2, all_addrs = l1 ++ (bv.seq addr (Z.of_nat bytes)  ++ l2).
 Proof. intros Hrep. rewrite all_addrs_eq.
-       refine (bv.seqBv_sub_list _ _); first solve_bv.
-       lia.
+       pose proof (bv.unsigned_bounds addr).
+       apply bv.seq_sub_list; rewrite bv.unsigned_zero; lia.
 Qed.
 
 Lemma addr_in_all_addrs (a : Addr): a ∈ all_addrs.
 Proof.
   rewrite all_addrs_eq.
-  apply bv.in_seqBv'; unfold bv.ule, bv.ult.
-  - cbn. lia.
-  - pose proof (bv.bv_is_wf a) as Hwf.
-    eapply N.lt_le_trans; [exact|].
-    lia.
+  pose proof (bv.unsigned_bounds a).
+  apply bv.elem_of_seq_bounds; rewrite bv.unsigned_zero; lia.
 Qed.
 
 (* 2. Definition of MMIO memory *)
@@ -121,33 +118,25 @@ Qed.
 (* We place the MMIO memory after the RAM memory, and have the PMP entry for the adversary in the FemtoKernel provide access up to but not including the MMIO memory. The lack of an entry for the MMIO memory will ensure that this memory is addressable by the kernel. *)
 Definition mmioStartAddr := maxAddr.
 Definition mmioLenAddr := (maxAddr + lenAddr)%N.
-Definition mmioAddrs : list Addr := bv.seqBv (@bv.of_N xlenbits mmioStartAddr) mmioLenAddr.
+Definition mmioAddrs : list Addr := bv.seq (@bv.of_N xlenbits mmioStartAddr) (Z.of_N mmioLenAddr).
 Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Lemma mmioAddrs_rep :
-  (mmioStartAddr + mmioLenAddr ≤ bv.exp2 xlenbits)%N.
+  (Z.of_N (mmioStartAddr + mmioLenAddr) < 2 ^ Z.of_nat xlenbits)%Z.
 Proof. now compute. Qed.
 (* We dedicate the last address of MMIO memory for shutdown events. *)
 Definition mmioShutdownAddr : Addr := bv.of_N (mmioStartAddr + mmioLenAddr - 1)%N.
 Definition isShutdownAddr a : Prop := a = mmioShutdownAddr.
-Fixpoint withinMMIO (a : Addr) (size : nat) : Prop :=
-  match size with
-  | O => False (* Avoid allowing and hence recording zero-width MMIO events *)
-  | 1 => a ∈ mmioAddrs
-  | S size' => a ∈ mmioAddrs /\ withinMMIO (bv.add (bv.one) a) size' end.
+Definition withinMMIO (a : Addr) (size : nat) : Prop :=
+  (* size ≠ 0: avoid allowing and hence recording zero-width MMIO events *)
+  size ≠ 0 ∧ ∀ i, i < size → bv.add a (bv.of_nat i) ∈ mmioAddrs.
 #[export] Instance withinMMIODec a size: Decision (withinMMIO a size).
-Proof. generalize a. induction size.
-       - apply _.
-       - intro a'. cbn. destruct size; first apply _.
-         apply decidable.and_dec; [apply _|auto].
+Proof.
+  refine (cast_if (decide (size ≠ 0 ∧ Forall (λ i, bv.add a (bv.of_nat i) ∈ mmioAddrs) (seq 0 size))));
+    unfold withinMMIO in *; rewrite ->Forall_seq in *; naive_solver lia.
 Qed.
 
 Lemma NoDup_liveAddrs : NoDup liveAddrs.
-Proof.
-  apply bv.NoDup_seqbv.
-  pose proof maxAddr_rep as H.
-  unfold maxAddr in H.
-  now rewrite (bv.bin_of_N_small minAddr_rep).
-Qed.
+Proof. apply bv.NoDup_seq. now compute. Qed.
 
 #[global] Arguments liveAddrs : simpl never.
 
@@ -174,93 +163,26 @@ Definition write_addr_adv : Addr := bv.add write_addr (bv.of_nat bytes_per_word)
 Section WithBvNotations.
   Import bv.notations.
 
-  Lemma bounds_withinMMIO : ∀ (addr : Addr) (size : nat),
-    (bv.bin addr + N.of_nat size < bv.exp2 xlenbits)%N ->
-    (bv.of_N mmioStartAddr <=ᵘ addr
-     ∧ addr + bv.of_nat size <ᵘ bv.of_N (mmioStartAddr + mmioLenAddr))%bv ->
-    withinMMIO addr (S size).
+  Lemma bounds_withinMMIO (addr : Addr) (size : nat) :
+    size ≠ 0%nat ->
+    (Z.of_N mmioStartAddr <= bv.unsigned addr)%Z ->
+    (bv.unsigned addr + Z.of_nat size <= Z.of_N (mmioStartAddr + mmioLenAddr))%Z ->
+    withinMMIO addr size.
   Proof.
-    intros addr size H [Hle Hlt].
-    simpl. revert addr H Hle Hlt.
-    induction size as [|size IHsize]; intros addr H Hle Hlt.
-    - apply bv.in_seqBv; auto.
-      now rewrite <- bv.add_of_nat_0_r in Hlt.
-    - assert (H': (bv.bin (bv.one + addr) + N.of_nat size < bv.exp2 xlenbits)%N) by bv.bv_zify.
-      assert (Hle': (bv.of_N mmioStartAddr <=ᵘ bv.one + addr)%bv) by bv.bv_zify.
-      assert (Hlt': (bv.one + addr + bv.of_nat size <ᵘ bv.of_N (mmioStartAddr + mmioLenAddr))%bv)
-        by bv.bv_zify.
-      specialize (IHsize (bv.one + addr)%bv H' Hle' Hlt').
-      destruct size as [|size].
-      + simpl. split; auto.
-        apply bv.in_seqBv; auto.
-        apply bv.ult_trans with (y := (addr + bv.of_nat 1)%bv);
-          first bv.bv_zify; auto.
-      + split; auto.
-        apply bv.in_seqBv; auto.
-        apply bv.ult_trans with (y := (addr + bv.of_nat (S (S size)))%bv);
-          first bv.bv_zify; auto.
+    intros Hs Hlo Hhi. split; first done. intros i Hi. apply bv.elem_of_seq.
+    exists (bv.unsigned addr + Z.of_nat i - Z.of_N mmioStartAddr)%Z. split; last lia.
+    rewrite -bv.of_Z_N -{1}(bv.of_Z_unsigned addr) -bv.of_Z_nat !bv.of_Z_add.
+    f_equal. lia.
   Qed.
 
-  Lemma withinMMIO_bounds : ∀ (addr : Addr) (size : nat),
-    withinMMIO addr size ->
-    (bv.of_N mmioStartAddr <=ᵘ addr
-     ∧ addr + bv.of_nat (size - 1) <ᵘ bv.of_N (mmioStartAddr + mmioLenAddr))%bv.
-  Proof.
-    intros addr size HIn; destruct size as [|size]; simpl;
-      try contradiction.
-    simpl in HIn. rewrite Nat.sub_0_r.
-    revert addr HIn.
-    induction size as [|size IHsize]; intros addr HIn.
-    - apply bv.seqBv_in' in HIn.
-      now rewrite <- bv.add_of_nat_0_r.
-      apply mmioAddrs_rep.
-    - destruct HIn as [He HIn]. simpl in HIn.
-      apply bv.seqBv_in' in He. destruct He as [Hle Hlt].
-      split; auto.
-      specialize (IHsize (bv.one + addr)%bv HIn).
-      destruct IHsize as [_ IH].
-      rewrite bv.of_nat_S.
-      rewrite bv.add_assoc.
-      now rewrite (@bv.add_comm _ addr bv.one).
-      apply mmioAddrs_rep.
-  Qed.
+  Lemma withinMMIO_elem_of_base (addr : Addr) (size : nat) :
+    withinMMIO addr size -> addr ∈ mmioAddrs.
+  Proof. intros [? H]. rewrite (bv.add_of_nat_0_r addr). apply H; lia. Qed.
 
-  Lemma withinMMIO_elem_of : ∀ (addr : Addr) (size : nat),
-    withinMMIO addr (S size)
-    <-> Forall (λ size, addr + bv.of_nat size ∈ mmioAddrs)%bv (seq 0 (S size)).
+  Lemma withinMMIO_one (addr : Addr) : withinMMIO addr 1 <-> addr ∈ mmioAddrs.
   Proof.
-    assert (Heq: ∀ size, seq 0 (S (S size)) = (0%nat :: seq 1 (S size))%list) by auto.
-    intros addr size. revert addr. induction size as [|size IH]; intros addr;
-      cbn - [seq]; split; intros H.
-    - apply Forall_singleton. now rewrite <- bv.add_of_nat_0_r.
-    - rewrite Forall_singleton in H.
-      now rewrite <- bv.add_of_nat_0_r in H.
-    - destruct H as [He H].
-      specialize (IH (bv.one + addr)%bv).
-      rewrite Heq.
-      apply Forall_cons. split.
-      + now rewrite <- bv.add_of_nat_0_r.
-      + pose proof ((proj1 IH) H) as H'.
-        rewrite Forall_seq in H'.
-        simpl in H'.
-        rewrite Forall_seq.
-        intros s [HInl HInr].
-        destruct s as [|s]; try lia.
-        rewrite bv.of_nat_S bv.add_assoc.
-        rewrite (@bv.add_comm _ addr bv.one).
-        apply H'; lia.
-    - rewrite Heq in H. apply Forall_cons in H.
-      destruct H as [Haddr H]. rewrite <- bv.add_of_nat_0_r in Haddr.
-      split; auto.
-      specialize (IH (bv.one + addr)%bv).
-      apply IH.
-      rewrite Forall_seq in H.
-      rewrite Forall_seq.
-      intros s [HInl Hinr].
-      rewrite (@bv.add_comm _ bv.one addr).
-      rewrite <- bv.add_assoc.
-      rewrite <- bv.of_nat_S.
-      apply H. lia.
+    split; first apply withinMMIO_elem_of_base.
+    intros ?. split; first lia. intros [|] ?; [by rewrite -bv.add_of_nat_0_r | lia].
   Qed.
 End WithBvNotations.
 
@@ -353,7 +275,7 @@ Parameter mmioenv : MMIOEnv.
 
 Lemma mmio_ram_False a : a ∈ liveAddrs → a ∈ mmioAddrs -> False.
 Proof. unfold liveAddrs, mmioAddrs, mmioStartAddr, mmioLenAddr, maxAddr, minAddr, lenAddr.
-       apply bv.seqBv_no_overlap; cbn; lia.
+       apply bv.seq_no_overlap; now compute.
 Qed.
 
 (* Trace of Events *)
@@ -1824,7 +1746,7 @@ Module Export RiscvPmpBase <: Base.
     (* NOTE: we have to check overflow here, because the PMP model does not...*)
     Definition fun_within_mmio (data_size : nat) (addr : Val ty_xlenbits) : bool :=
       bool_decide (withinMMIO addr data_size ∧
-      bv.bin addr + N.of_nat data_size < (bv.exp2 xlenbits))%N.
+      bv.unsigned addr + Z.of_nat data_size < 2 ^ Z.of_nat xlenbits)%Z.
 
     (* TODO: in principle, restricted bytes don't need a zero-case *)
     Definition fun_read_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits) :

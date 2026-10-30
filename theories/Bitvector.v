@@ -1908,6 +1908,31 @@ Module bv.
         + apply lookup_seqZ. auto.
     Qed.
 
+    Lemma seq_one {n} (s : bv n) : seq s 1 = [s].
+    Proof. unfold seq. rewrite seqZ_cons by lia. cbn. now rewrite of_Z_unsigned. Qed.
+
+    Lemma seq_sub_list {n} {s s' : bv n} {l l'} :
+      (unsigned s <= unsigned s')%Z ->
+      (unsigned s' + l' <= unsigned s + l)%Z ->
+      exists l1 l2, seq s l = l1 ++ seq s' l' ++ l2.
+    Proof.
+      intros Hs Hl. destruct (Z.le_gt_cases l' 0).
+      { exists [], (seq s l). unfold seq. now rewrite (seqZ_nil (unsigned s')). }
+      unfold seq. set (d := (unsigned s' - unsigned s)%Z).
+      replace l with (d + (l' + (l - d - l')))%Z by lia.
+      rewrite !seqZ_app, !fmap_app by lia.
+      replace (unsigned s + d)%Z with (unsigned s') by lia. eauto.
+    Qed.
+
+    Lemma seq_subseteq {n} {s s' : bv n} {l l'} :
+      (unsigned s <= unsigned s')%Z ->
+      (unsigned s' + l' <= unsigned s + l)%Z ->
+      seq s' l' ⊆ seq s l.
+    Proof.
+      intros Hs Hl. destruct (seq_sub_list Hs Hl) as (? & ? & ->).
+      by apply list_subseteq_app_r, list_subseteq_app_l.
+    Qed.
+
   End Sequencing.
 
   Section Logical.
@@ -2881,178 +2906,6 @@ Module bv.
   End reify.
 
   Load BitvectorSolve.
-
-  Section Sequences.
-    Import bv.notations.
-    Import Lists.List.
-    Import ListNotations.
-
-    (* why do we have both bv_seq and seqBv? *)
-    Definition seqBv {n} (min : bv n) (len : N) := List.map (@bv.of_Z n) (seqZ (bv.unsigned min) (Z.of_N len)).
-
-    Lemma seqBv_zero {n} m : @seqBv n m 0 = nil.
-    Proof. unfold seqBv. now cbv. Qed.
-    Lemma seqBv_one {n} m : @seqBv n m 1 = cons m nil.
-    Proof.
-      unfold seqBv.
-      rewrite seqZ_cons; [|lia]. cbn.
-      f_equal. now rewrite of_Z_unsigned. Qed.
-
-    Lemma seqBv_len n base width : length (@seqBv n base width) = N.to_nat width.
-    Proof. unfold seqBv. rewrite length_map, length_seqZ. lia. Qed.
-
-    Lemma seqBv_width_at_least {n width} base k y :
-      base.lookup k (@seqBv n base width) = Some y -> exists p , width = N.of_nat (k + S p)%nat.
-    Proof.
-      intros Hlkup.
-      apply list.lookup_lt_Some in Hlkup as Hw.
-      apply Nat.le_exists_sub in Hw as (p & [Hweq _]).
-      exists p.
-      rewrite seqBv_len, <-Nat.add_succ_comm, Nat.add_comm in Hweq.
-      eapply (f_equal N.of_nat) in Hweq.
-      now rewrite Nnat.N2Nat.id in Hweq.
-    Qed.
-
-    Lemma seqBv_app {n} m n1 n2 :
-      @seqBv n m (n1 + n2) = seqBv m n1 ++ seqBv (bv.add m (bv.of_N n1)) n2.
-    Proof.
-      unfold seqBv.
-      rewrite Znat.N2Z.inj_add, seqZ_app, map_app; try lia.
-      f_equal. unfold seqZ. rewrite <- !list.list_fmap_compose.
-      apply list.list_fmap_ext. intros _ x _. cbn.
-      now rewrite <- !of_Z_add, !of_Z_unsigned, !of_Z_N.
-    Qed.
-
-    Lemma seqBv_succ {n} m n1 :
-      (@seqBv n m (N.succ n1)) = cons m (seqBv (one + m) n1).
-    Proof.
-      rewrite <-N.add_1_l, seqBv_app, seqBv_one, add_comm. now destruct n.
-    Qed.
-
-    Lemma seqBv_succ_end {n} m n1 :
-      (@seqBv n m (n1 + 1)) = (seqBv m n1)%bv ++ (cons (m + of_N n1) nil) .
-    Proof.
-      now rewrite seqBv_app, seqBv_one.
-    Qed.
-
-    Lemma seqBv_spec {n width} base k y:
-      base.lookup k (@seqBv n base width) = Some y ->
-      (base + bv.of_nat k) = y.
-    Proof.
-      intros Hlkup.
-      pose proof (seqBv_width_at_least _ _ Hlkup) as [p ->].
-      rewrite Nnat.Nat2N.inj_add, seqBv_app, list.lookup_app_r in Hlkup; [|now rewrite seqBv_len, Nnat.Nat2N.id].
-      rewrite seqBv_len, Nnat.Nat2N.id, Nat.sub_diag, Nnat.Nat2N.inj_succ, seqBv_succ, list.lookup_cons in Hlkup.
-      now inversion Hlkup.
-    Qed.
-
-    (* More powerful version of `in_seqBv` where `len` and `min + len` need not be representable in `n` bits *)
-    Lemma in_seqBv' n v min len :
-      (min <=ᵘ v) -> (bv.bin v < bv.bin min + len)%N ->
-        base.elem_of v (@seqBv n min len).
-    Proof.
-      unfold bv.ule, seqBv.
-      intros mla alm.
-      apply (list.list_elem_of_fmap_2' bv.of_Z _ (bv.unsigned v)).
-      - apply elem_of_seqZ.
-        unfold unsigned, Z.of_nat.
-        destruct len; Lia.lia.
-      - now rewrite bv.of_Z_unsigned.
-    Qed.
-
-    (* NOTE: this lemma does not work for the case where `min == 0` and `len == bv.exp2 n`, which is a valid case. We have hence proven the more general lemma above. *)
-    Lemma in_seqBv n v min len :
-      (min <=ᵘ v) -> (v <ᵘ bv.add min (bv.of_N len)) ->
-        base.elem_of v (@seqBv n min len).
-    Proof.
-      unfold bv.ule, bv.ult, seqBv.
-      intros mla alm.
-      enough (bv.bin v < bv.bin min + len)%N by (apply in_seqBv'; auto).
-      eapply N.lt_le_trans; [exact alm |].
-      unfold add.
-      rewrite bin_of_N_decr. apply N.add_le_mono; auto.
-      now rewrite bin_of_N_decr.
-    Qed.
-
-    (* Only prove one direction *)
-    Lemma seqBv_no_overlap {n} a a1 a2 b1 b2:
-      (b1 + b2 < (exp2 n))%N ->
-      (a1 + a2 <= b1)%N ->
-      base.elem_of a (@seqBv n (bv.of_N a1) a2) ->
-      base.elem_of a (seqBv (bv.of_N b1) b2) ->
-      False.
-    Proof.
-      intros Hrep Hlt Hain Hbin.
-      rewrite !list.list_elem_of_lookup in Hain, Hbin.
-      destruct Hain as (ai & Hain).
-      destruct Hbin as (bi & Hbin).
-      apply list.lookup_lt_Some in Hain as Halen.
-      apply list.lookup_lt_Some in Hbin as Hblen.
-      rewrite !seqBv_len in Halen, Hblen.
-
-      apply seqBv_spec, (f_equal (@bv.bin n)) in Hain, Hbin.
-      rewrite !@bin_add_small, !@bin_of_N_small, !@bin_of_nat_small in Hain, Hbin; try Lia.lia;
-      rewrite ?bin_of_N_small, ?bin_of_nat_small ; try Lia.lia.
-    Qed.
-
-  Lemma seqBv_sub_list {n s s' e e'}:
-    (bv.ule s s') ->
-    (bv.bin s' + e' <= bv.bin s + e)%N ->
-    exists l1 l2, @seqBv n s e = l1 ++ (seqBv s' e' ++ l2).
-  Proof. intros Hs He.
-      unfold bv.ule in Hs.
-      assert (e = (bv.bin s' - bv.bin s) + (((bv.bin s' + e') - bv.bin s') + ((bv.bin s + e) - (bv.bin s' + e'))))%N as -> by Lia.lia.
-      rewrite 2!seqBv_app.
-      do 2 eexists.
-      repeat f_equal; last Lia.lia.
-      unfold bv.add.
-      rewrite <-(bv.of_N_bin s') at -1. f_equal.
-      rewrite bv.bin_of_N_small; last bv_zify.
-      Lia.lia.
-  Qed.
-
-  Lemma seqBv_sub_elem_of {n s s' e e'} a:
-    (s <=ᵘ s') ->
-    (bv.bin s' + e' <= bv.bin s + e)%N ->
-    (base.elem_of a (seqBv s' e')) -> (base.elem_of a (@seqBv n s e)).
-  Proof.
-    intros Hs He Hel.
-    destruct (seqBv_sub_list Hs He) as (l1 & l2 & ->).
-    rewrite !list.elem_of_app. auto.
-  Qed.
-
-  Lemma seqBv_in' {n v min len} :
-    (bv.bin min + len <= bv.exp2 n)%N -> (* Required in this direction *)
-    (base.elem_of v (@seqBv n min len)) ->
-    and (min <=ᵘ v) (bv.bin v < bv.bin min + len)%N.
-  Proof.
-     unfold bv.ule, bv.ult, seqBv.
-     intros Hflow [y [-> Hel%elem_of_seqZ]]%list.list_elem_of_fmap_1.
-     unfold bv.of_Z.
-     rewrite <-(Znat.Z2N.id y); last bv_zify.
-     rewrite bv.to_N_truncz.
-     rewrite bv.truncn_small; last bv_zify.
-     rewrite bv.bin_of_N_small; last bv_zify.
-     bv_zify.
-  Qed.
-
-  Lemma NoDup_seqbv {n min len}:
-    (bv.bin min + len <= bv.exp2 n)%N ->
-    base.NoDup (@seqBv n min len).
-  Proof.
-    intros Hof.
-    apply list.NoDup_fmap_2_strong; last apply NoDup_seqZ.
-    intros x y Hxin Hyin Heq.
-    rewrite !elem_of_seqZ in Hxin, Hyin.
-    rewrite <-(Znat.Z2N.id y) in Heq; last bv_zify.
-    rewrite <-(Znat.Z2N.id x) in Heq; last bv_zify.
-    unfold bv.unsigned, bv.of_Z in *.
-    rewrite !bv.to_N_truncz, !bv.truncn_small in Heq; [|bv_zify..].
-    apply (f_equal (@bv.bin _)) in Heq.
-    rewrite !bv.bin_of_N_small in Heq; bv_zify.
-  Qed.
-
-  End Sequences.
 
   Module tactics.
 

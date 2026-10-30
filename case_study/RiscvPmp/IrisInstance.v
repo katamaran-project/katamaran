@@ -256,7 +256,7 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
         else if decide (a ∈ live_addrs) then ptstoSth a
              else True%I. (* Could be `False` as well *)
       Definition interp_addr_access (base : Addr) (width : nat): iProp Σ :=
-        [∗ list] a ∈ bv.seqBv base (N.of_nat width), interp_addr_access_byte a.
+        [∗ list] a ∈ bv.seq base (Z.of_nat width), interp_addr_access_byte a.
 
       Definition interp_pmp_addr_access (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         [∗ list] a ∈ all_addrs,
@@ -431,8 +431,6 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
   Section RiscVPmpIrisInstanceProofs.
     Context `{sr : sailGS Σ}.
 
-    (* Use `seqBv` to get rid of conditions on width *)
-    (* TODO: intermediate lemma without seqBv that does shift + restrict? *)
     Local Lemma to_nat_mono (a b : N) : (a < b)%N → N.to_nat a < N.to_nat b.
     Proof. lia. Qed.
 
@@ -469,12 +467,13 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
 
     Lemma interp_ptstomem_big_sepS (bytes : nat) (paddr : Addr):
       (∃ (w : bv (bytes * byte)), interp_ptstomem paddr w) ⊣⊢
-        ptstoSthL (bv.seqBv paddr (N.of_nat bytes)).
+        ptstoSthL (bv.seq paddr (Z.of_nat bytes)).
     Proof.
       generalize dependent paddr.
       iInduction bytes as [|bytes] "IHbytes"; iIntros (paddr).
       - unfold ptstoSthL. unshelve auto. exact bv.zero.
-      - rewrite Nat2N.inj_succ bv.seqBv_succ (app_comm_cons []) ptstoSthL_app.
+      - rewrite Nat2Z.inj_succ bv.seq_succ; last lia.
+        rewrite (app_comm_cons []) ptstoSthL_app.
         iDestruct ("IHbytes" $! (bv.one + paddr)) as "[IHL IHR]".
         iSplit.
         *  iIntros "[%w H]".
@@ -561,7 +560,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
         interp_addr_access liveAddrs mmioAddrs base width ∗ interp_addr_access liveAddrs mmioAddrs (base + bv.of_nat width) width'.
     Proof.
       unfold interp_addr_access.
-      now rewrite Nat2N.inj_add bv.seqBv_app big_sepL_app.
+      rewrite Nat2Z.inj_add bv.seq_add ?bv.of_Z_nat ?big_sepL_app //; lia.
     Qed.
 
     Lemma interp_addr_access_cons base width:
@@ -570,7 +569,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
     Proof. rewrite <-Nat.add_1_l.
            rewrite interp_addr_access_app.
            unfold interp_addr_access, interp_addr_access_byte.
-           by rewrite bv.seqBv_one big_sepL_singleton.
+           by rewrite bv.seq_one big_sepL_singleton.
     Qed.
 
     Lemma interp_addr_access_single base:
@@ -583,7 +582,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
 
     (* Induction does not work here due to shape of `interp_pmp_addr_access_without`*)
     Lemma interp_pmp_addr_inj_extr {entries m p} base width :
-      (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
+      (bv.unsigned base + Z.of_nat width < 2 ^ Z.of_nat xlenbits)%Z →
       Pmp_access base (bv.of_nat width) entries m p →
       (interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢
          (interp_addr_access liveAddrs mmioAddrs base width ∗ interp_pmp_addr_access_without liveAddrs mmioAddrs base width entries m))%I.
@@ -600,30 +599,29 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
       iSplitL "Hia".
       - iApply (big_sepL_mono with "Hia"). iIntros (? ? ?) "Hyp".
         iApply "Hyp". iPureIntro.
-        eexists; eapply pmp_seqBv_restrict; eauto.
+        eexists; eapply pmp_seq_restrict; eauto.
       - iIntros "Hia". iFrame.
         iDestruct (big_sepL_mono with "Hia") as "Hia"; last iFrame.
         now iIntros.
     Qed.
 
     Lemma interp_pmp_within_mmio_spec {entries m p} (paddr : Addr) bytes :
-      (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N ->
+      (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z ->
       Pmp_access paddr (bv.of_nat bytes) entries m p →
       interp_pmp_addr_access liveAddrs mmioAddrs entries m -∗
                                                               ⌜bool_decide (withinMMIO paddr bytes) = false%nat⌝.
     Proof.
       iIntros (Hrep Hpmp) "Hint".
       destruct bytes as [|bytes]. (* No induction needed: disproving one location suffices. *)
-      - cbn - [xlenbits] in *. rewrite bool_decide_eq_false. iPureIntro. by intro HFalse.
+      - rewrite bool_decide_eq_false. iPureIntro. intros [? _]. lia.
       - rewrite interp_pmp_addr_inj_extr; eauto.
         iDestruct "Hint" as "[Hint _]".
         iDestruct (interp_addr_access_cons with "Hint") as "[Hfirst _]".
         unfold interp_addr_access_byte.
         case_decide; auto.
         iPureIntro.
-        rewrite bool_decide_eq_false /withinMMIO.
-        destruct bytes; first congruence.
-        rewrite !not_and_l. left; congruence.
+        rewrite bool_decide_eq_false. intros ?%withinMMIO_elem_of_base.
+        congruence.
     Qed.
 
     (* Bidirectional version of the Iris lemma *)
@@ -653,15 +651,15 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
       unfold interp_addr_access_byte, ptstoSth, interp_ptsto.
       iIntros "HFalse". iDestruct "HFalse" as (?) "[Hmapsto %HFalse]".
       case_decide.
-      - by cbn in HFalse.
+      - by rewrite withinMMIO_one in HFalse.
       - case_decide; auto.
     Qed.
 
     (* Use knowledge of RAM to extract range *)
     Lemma interp_addr_access_extr base width :
-      (minAddr ≤ bv.bin base)%N →
-      (bv.bin base + N.of_nat width ≤ maxAddr)%N →
-      (bv.bin base + N.of_nat width < bv.exp2 xlenbits)%N →
+      (Z.of_N minAddr ≤ bv.unsigned base)%Z →
+      (bv.unsigned base + Z.of_nat width ≤ Z.of_N maxAddr)%Z →
+      (bv.unsigned base + Z.of_nat width < 2 ^ Z.of_nat xlenbits)%Z →
       interp_addr_access liveAddrs mmioAddrs base width ⊢
         (∃ (w : bv (width * byte)), interp_ptstomem base w).
     Proof.
@@ -671,15 +669,8 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
       iApply big_sepL_mono.
       iIntros (? y Hseq) "//".
       iApply interp_addr_access_byte_extr.
-      apply bv.seqBv_spec in Hseq as Hspec.
-      apply list.lookup_lt_Some in Hseq. rewrite bv.seqBv_len in Hseq.
-      unfold liveAddrs, bv.seqBv.
-      rewrite -(bv.of_Z_unsigned y).
-      apply list_elem_of_fmap_2.
-      rewrite elem_of_seqZ.
-      subst y.
-      unfold maxAddr in HmaxOK.
-      rewrite /bv.unsigned bv.bin_add_small !bv.bin_of_N_small; lia. (* TODO: use representability of min/maxAddr here, once they are made properly opaque *)
+      eapply bv.seq_subseteq, list_elem_of_lookup_2, Hseq; unfold maxAddr in *;
+        change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
     Qed.
 
     (* Inserting a range is always possible *)
@@ -699,7 +690,6 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
     Lemma interp_pmp_addr_access_without_0 {entries m} base :
       interp_pmp_addr_access liveAddrs mmioAddrs entries m ⊣⊢ interp_pmp_addr_access_without liveAddrs mmioAddrs base 0 entries m.
     Proof. unfold interp_pmp_addr_access_without, interp_addr_access.
-           rewrite bv.seqBv_zero.
            iSplit; iIntros "H".
            - now iIntros "_".
            - now iApply "H".

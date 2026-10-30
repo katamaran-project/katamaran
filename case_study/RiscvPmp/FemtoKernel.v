@@ -154,7 +154,7 @@ Import RVPPRED2.
       let (lo , hi) := bv.appView 12 _ imm in
         if bv.eqb hi (bv.ones 20) then (lo , hi) (* Small negative numbers *)
         else if (bv.msb lo) (* Avoid incorrect sign-extension *)
-             then (bv.of_Z (Z.of_N (bv.bin lo) - 4096), (hi + bv.one)%bv)
+             then (bv.of_Z (bv.unsigned lo - 4096), (hi + bv.one)%bv)
              else (lo , hi).
 
     (* TODO: prove this spec for `imm_split_bv`*)
@@ -774,7 +774,7 @@ Import RVPPRED2.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
       all: try (eexists _, _; intuition).
-      all: eapply bv.in_seqBv'; now vm_compute.
+      all: apply bounds_withinMMIO; now compute.
     Qed.
 
     Lemma sat__femtohandler_is_zero : RVPTVl.safeE vc__femtohandler_is_zero.
@@ -783,7 +783,7 @@ Import RVPPRED2.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
       all: try (eexists _, _; intuition).
-      all: eapply bv.in_seqBv'; now vm_compute.
+      all: apply bounds_withinMMIO; now compute.
     Qed.
 
     Lemma sat__femtohandler_secret_write : RVPTVl.safeE vc__femtohandler_secret_write.
@@ -791,7 +791,7 @@ Import RVPPRED2.
       vm_compute.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual. eexists _, _. intuition.
-      1-4: eapply bv.in_seqBv'; now vm_compute.
+      all: apply bounds_withinMMIO; now compute.
     Qed.
 
     Lemma sat__femtohandler_exit : RVPTVl.safeE vc__femtohandler_exit.
@@ -1073,7 +1073,7 @@ Import RVPPRED2.
 
   End FemtoKernel.
 
-  Definition advAddrs : list (bv xlenbits) := bv.seqBv (bv.of_N adv_addr) (adv_addr_end - adv_addr).
+  Definition advAddrs : list (bv xlenbits) := bv.seq (bv.of_N adv_addr) (Z.of_N (adv_addr_end - adv_addr)).
 
   Global Instance dec_has_some_access {ents p1} : forall x, Decision (∃ p2, Pmp_access x (bv.of_nat 1) ents p1 p2).
   Proof.
@@ -1086,7 +1086,7 @@ Import RVPPRED2.
 
   Lemma adv_is_live y : (y ∈ advAddrs)%stdpp → (y ∈ liveAddrs)%stdpp.
   Proof. unfold advAddrs, liveAddrs.
-         apply bv.seqBv_sub_elem_of; now compute.
+         apply bv.seq_subseteq; now compute.
   Qed.
 
   Ltac case_if H :=
@@ -1101,19 +1101,19 @@ Import RVPPRED2.
     intro Hin. rewrite /femto_pmpentries.
     exists Read.
     cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry].
-    apply bv.seqBv_in' in Hin as [Hlo Hhi]; [|clear Hin; now compute].
-    cbn in *. eassert (adv_addr = _) as -> by now compute.
-    unfold bv.uleb, bv.ule, bv.ult, bv.ultb in *.
-    set (y := bv.bin x) in *. (* Avoid this being simplified later on, just sub when we need it *)
-    cbv -[N.le N.lt y] in Hlo,Hhi.
+    apply bv.elem_of_seq_bounds in Hin as [Hlo Hhi]; [|clear Hin; now compute].
+    cbn in *. eassert (Ha : adv_addr = _) by now compute.
+    eassert (He : adv_addr_end = _) by now compute.
+    rewrite Ha He in Hlo Hhi |- *. change (bv.unsigned (bv.of_N ?y)) with (Z.of_N y) in *.
+    assert (bv.unsigned (bv.add x (bv.of_nat 1)) = bv.unsigned x + 1)%Z as H1.
+    { rewrite -bv.unsigned_add_small; change (bv.unsigned (bv.of_nat 1)) with 1%Z; lia. }
     case_if H; [now compute | clear H].
     case_if H.
-    { rewrite bv.bin_add_small in H.
-      - apply orb_prop in H as [|]; rewrite N.leb_le -/y /= in H; lia.
-      - cbn. unfold N.of_nat. cbn. lia. }
+    { apply orb_prop in H as [H|H]; apply bv.uleb_ule, bv.ule_iff_unsigned_le in H;
+        change (bv.unsigned (bv.of_N ?y)) with (Z.of_N y) in H; lia. }
     clear H. case_if H; first easy.
-    { rewrite bv.bin_add_small /= -/y in H; last lia.
-      apply andb_false_iff in H as [|]; rewrite N.leb_gt in H; solve_bv. }
+    apply andb_false_iff in H as [H|H]; apply bv.uleb_ugt, bv.ult_iff_unsigned_lt in H;
+      change (bv.unsigned (bv.of_N ?y)) with (Z.of_N y) in H; lia.
   Qed.
 
   Lemma pmp_in_adv x : (∃ p : Val ty_access_type, Pmp_access x (bv.of_nat 1) femto_pmpentries User p) → (x ∈ advAddrs)%stdpp.
@@ -1122,12 +1122,12 @@ Import RVPPRED2.
     cbv [Pmp_access Gen_Pmp_access pmp_check_aux pmp_check_rec pmp_match_entry] in HPmp.
     cbn in HPmp.
     case_if H; first now compute. clear H.
-    unfold bv.uleb in *.
     case_if H; first by exfalso.
-    apply orb_false_elim in H as [_ Hhi]. rewrite N.leb_gt in Hhi.
+    apply orb_false_elim in H as [_ Hhi]. apply bv.uleb_ugt, bv.ult_iff_unsigned_lt in Hhi.
     case_if H'; last by exfalso.
-    apply andb_prop in H' as [Hlo _]. rewrite N.leb_le in Hlo.
-    apply bv.in_seqBv; exact.
+    apply andb_prop in H' as [Hlo _]. apply bv.uleb_ule, bv.ule_iff_unsigned_le in Hlo.
+    apply bv.elem_of_seq_bounds; first now compute.
+    revert Hlo Hhi. rewrite -!bv.of_Z_N -!bv.unsigned_of_Z_small; try lia; now compute.
   Qed.
 
   (* Use permutation rather than membership to avoid indexes *)
@@ -1137,9 +1137,9 @@ Import RVPPRED2.
                  all_addrs ≡ₚ advAddrs.
   Proof. rewrite (list_filter_iff _ (fun x => x ∈ advAddrs)); last split; auto using adv_in_pmp, pmp_in_adv.
     apply NoDup_Permutation.
-    - apply NoDup_filter. rewrite all_addrs_eq. refine (bv.NoDup_seqbv _).
-      now cbn -[xlenbits].
-    - apply bv.NoDup_seqbv. now compute.
+    - apply NoDup_filter. rewrite all_addrs_eq. apply bv.NoDup_seq.
+      pose proof (Z.pow_nonneg 2 (Z.of_nat xlenbits)). lia.
+    - apply bv.NoDup_seq. now compute.
     - intros x. rewrite list_elem_of_filter.
       split.
       + now intros [? ?].
@@ -1250,7 +1250,7 @@ Import RVPPRED2.
   Transparent femtokernel_init_pre.
 
   Definition mem_has_word (μ : Memory) (a : Val ty_word) (w : Val ty_word) : Prop :=
-    ∃ v0 v1 v2 v3, map (memory_ram μ) (bv.seqBv a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
+    ∃ v0 v1 v2 v3, map (memory_ram μ) (bv.seq a 4) = [v0; v1; v2; v3]%list /\ bv.app v0 (bv.app v1 (bv.app v2 (bv.app v3 bv.nil))) = w.
 
   (* byte order correct? *)
   Definition mem_has_instr (μ : Memory) (a : Val ty_word) (instr : AST) : Prop :=
@@ -1294,13 +1294,13 @@ Import RVPPRED2.
   (* Import iris.algebra.big_op. *)
 
   (* Note that the split differs depending on whether or not we have an MMIO region! *)
-  Lemma liveAddrs_split : (liveAddrs = bv.seqBv (bv.of_N init_addr) init_size ++ bv.seqBv (bv.of_N handler_entry_addr) handler_size ++ bv.seqBv (bv.of_N data_addr) (N.of_nat bytes_per_word) ++ advAddrs)%list.
+  Lemma liveAddrs_split : (liveAddrs = bv.seq (bv.of_N init_addr) (Z.of_N init_size) ++ bv.seq (bv.of_N handler_entry_addr) (Z.of_N handler_size) ++ bv.seq (bv.of_N data_addr) (Z.of_nat bytes_per_word) ++ advAddrs)%list.
   Proof.
     (* TODO: scalable proof *)
     by compute.
   Qed.
 
-  Lemma handlerAddrs_split : (@bv.seqBv xlenbits (bv.of_N handler_entry_addr) handler_size = bv.seqBv (bv.of_N handler_entry_addr) handler_entry_size ++ bv.seqBv (bv.of_N handler_dispatch_addr) handler_dispatch_size ++ bv.seqBv (bv.of_N handler_not_zero_addr) handler_not_zero_size ++ bv.seqBv (bv.of_N handler_is_zero_addr) handler_is_zero_size ++ bv.seqBv (bv.of_N handler_secret_write_addr) handler_secret_write_size ++ bv.seqBv (bv.of_N handler_exit_addr) handler_exit_size)%list.
+  Lemma handlerAddrs_split : (@bv.seq xlenbits (bv.of_N handler_entry_addr) (Z.of_N handler_size) = bv.seq (bv.of_N handler_entry_addr) (Z.of_N handler_entry_size) ++ bv.seq (bv.of_N handler_dispatch_addr) (Z.of_N handler_dispatch_size) ++ bv.seq (bv.of_N handler_not_zero_addr) (Z.of_N handler_not_zero_size) ++ bv.seq (bv.of_N handler_is_zero_addr) (Z.of_N handler_is_zero_size) ++ bv.seq (bv.of_N handler_secret_write_addr) (Z.of_N handler_secret_write_size) ++ bv.seq (bv.of_N handler_exit_addr) (Z.of_N handler_exit_size))%list.
   Proof.
     (* TODO: scalable proof *)
     by compute.
@@ -1330,11 +1330,11 @@ Import RVPPRED2.
 
   Lemma intro_ptstomem_word2 `{mcMemGS Σ} {μ : Memory} {a : Val ty_word} {v : Val ty_word} :
     mem_has_word μ a v ->
-    ([∗ list] a' ∈ bv.seqBv a 4, RVPCOM.interp_ptsto a' ((memory_ram μ) a')) ⊢ RVPCOM.interp_ptstomem a v.
+    ([∗ list] a' ∈ bv.seq a 4, RVPCOM.interp_ptsto a' ((memory_ram μ) a')) ⊢ RVPCOM.interp_ptstomem a v.
   Proof.
     iIntros (Hmhw) "Hmem".
     destruct Hmhw as (v0 & v1 & v2 & v3 & Heqμ & Heqv).
-    unfold bv.seqBv, seqZ. change (seq 0 ?x) with [0;1;2;3]%nat%list.
+    unfold bv.seq, seqZ. change (seq 0 ?x) with [0;1;2;3]%nat%list.
     cbn -[bv.add RVPCOM.interp_ptstomem word].
     iDestruct "Hmem" as "(Hmema & Hmema1 & Hmema2 & Hmema3 & _)".
     inversion Heqμ; subst.
@@ -1342,9 +1342,9 @@ Import RVPPRED2.
   Qed.
 
   Lemma intro_ptsto_instr `{mcMemGS Σ} {μ : Memory} {a : Val ty_word} {instr : AST} :
-    (4 + bv.bin a < bv.exp2 xlenbits)%N ->
+    (4 + bv.unsigned a < 2 ^ Z.of_nat xlenbits)%Z ->
     mem_has_instr μ a instr ->
-    ([∗ list] a' ∈ bv.seqBv a 4, RVPCOM.interp_ptsto a' ((memory_ram μ) a'))
+    ([∗ list] a' ∈ bv.seq a 4, RVPCOM.interp_ptsto a' ((memory_ram μ) a'))
       ⊢ RVPCOM.interp_ptsto_instr a instr.
   Proof.
     iIntros (Hrep (v & Hmhw & Heq)) "Hmem".
@@ -1354,30 +1354,26 @@ Import RVPPRED2.
   Qed.
 
   Lemma intro_ptsto_instrs `{mcMemGS Σ} {μ : Memory} {a : Val ty_word} {instrs : list AST} :
-    (4 * N.of_nat (length instrs) + bv.bin a < bv.exp2 xlenbits)%N ->
+    (4 * Z.of_nat (length instrs) + bv.unsigned a < 2 ^ Z.of_nat xlenbits)%Z ->
     mem_has_instrs μ a instrs ->
-    ([∗ list] a' ∈ bv.seqBv a (4 * N.of_nat (length instrs)), RVPCOM.interp_ptsto a' ((memory_ram μ) a'))
+    ([∗ list] a' ∈ bv.seq a (4 * Z.of_nat (length instrs)), RVPCOM.interp_ptsto a' ((memory_ram μ) a'))
       ⊢ RVPCOM.ptsto_instrs a instrs.
   Proof.
     assert (word > 0) by now compute.
     iIntros (Hrep Hmeminstrs) "Hmem".
     iInduction instrs as [|instr instrs] "IH" forall (a Hrep Hmeminstrs).
     - done.
-    - rewrite Nat2N.inj_succ in Hrep.
-      fold (length instrs) in Hrep.
-      replace (4 * N.of_nat (length (instr :: instrs)))%N with (4 + 4 * N.of_nat (length instrs))%N by (cbn; lia).
-      rewrite bv.seqBv_app; try (cbn -[N.of_nat N.mul] in *; Lia.lia).
-      rewrite big_opL_app.
+    - replace (4 * Z.of_nat (length (instr :: instrs)))%Z
+        with (4 + 4 * Z.of_nat (length instrs))%Z in * by (cbn; lia).
+      rewrite bv.seq_add ?big_opL_app; [|lia..].
       destruct Hmeminstrs as [Hinstr Hmeminstrs].
       iDestruct "Hmem" as "[Hmema Hmema4]".
       iSplitL "Hmema".
       + iApply (intro_ptsto_instr with "Hmema"); auto; Lia.lia.
       + rewrite (@bv.add_comm _ a bv_instrsize).
-        iApply ("IH" with "[%] [% //] [-]").
-        * rewrite bv.bin_add_small;
-          cbn -[N.mul] in *;
-          now Lia.lia.
-        * now rewrite ?bv.add_assoc.
+        iApply ("IH" with "[%] [% //] [-]"); last done.
+        pose proof (bv.unsigned_bounds a). change word with xlenbits in *.
+        rewrite -bv.unsigned_add_small; change (bv.unsigned (bv.of_N 4)) with 4%Z; lia.
   Qed.
 
   Lemma intro_ptstoSthL `{mcMemGS Σ} (μ : Memory) (addrs : list Xlenbits)  :
@@ -1392,17 +1388,15 @@ Import RVPPRED2.
   Qed.
 
   Lemma sub_heap_mapsto_interp_ptsto `{mcMemGS Σ} {s e} (μ : Memory):
-    (minAddr <= bv.bin s)%N → (bv.bin s + e <= minAddr + lenAddr)%N →
-    ([∗ list] y ∈ bv.seqBv s e, gen_heap.pointsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seqBv s e, RVPCOM.interp_ptsto a' (memory_ram μ a').
+    (Z.of_N minAddr <= bv.unsigned s)%Z → (bv.unsigned s + e <= Z.of_N (minAddr + lenAddr))%Z →
+    ([∗ list] y ∈ bv.seq s e, gen_heap.pointsto y (dfrac.DfracOwn 1) (memory_ram μ y)) ⊢ [∗ list] a' ∈ bv.seq s e, RVPCOM.interp_ptsto a' (memory_ram μ a').
   Proof.
     iIntros (Hlow Hhi) "Hlist".
     iApply (big_sepL_mono with "Hlist"). intros ? ? Hsom. cbn.
     iIntros "$". iPureIntro.
-    rewrite /= /not; apply mmio_ram_False.
-    apply list_elem_of_lookup_2 in Hsom.
-    refine (bv.seqBv_sub_elem_of _ _ Hsom).
-    - solve_bv.
-    - rewrite bv.bin_of_N_small; last apply minAddr_rep. lia.
+    rewrite /= withinMMIO_one /not; apply mmio_ram_False.
+    eapply bv.seq_subseteq, list_elem_of_lookup_2, Hsom;
+      change (bv.unsigned (bv.of_N minAddr)) with (Z.of_N minAddr); lia.
   Qed.
 
   Lemma femtokernel_splitMemory {Σ} {mG : mcMemGS Σ} {μ : Memory} (secret : Val ty_xlenbits) :
