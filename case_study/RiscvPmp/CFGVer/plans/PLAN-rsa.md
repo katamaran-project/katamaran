@@ -1,11 +1,24 @@
 # PLAN-rsa — BearSSL RSA private-key operation (`br_rsa_i31_private`), noninterferent
 
-Status: **IN PROGRESS on branch `issue/rsa`.** Phases 0–1 CLOSED; Phase 2
-resumes after its detour **PLAN-arrv (COMPLETE 2026-10-26, merged into local
-`KatamaranRel` as `bc7faac1`, not pushed)**. Survey (§1), decisions (§2),
-phases (§4), timing log (§5).
+Status: **PAUSED before Phase 3 for a migration onto the RelVal-as-pair
+representation (Emiel, 2026-10-30).** Phases 0–2 DONE (GATE 2 merged as
+`513cdb9a`). Survey (§1), decisions (§2), phases (§4), timing log (§5).
 
-## HANDOFF (2026-10-26) — read this first
+## MIGRATION NOTICE (2026-10-30) — read this BEFORE the hand-off below
+
+Emiel decided to move this plan onto `issue/relval-pair` before Phase 3:
+pairs make `MUX(secret, h, h)` public by value, so O4's ad hoc
+`clem_arrv_resync_head` (and probably `clem_arrv_take_any`) can go. The
+migration is a MERGE of `KatamaranRel` into a new branch off
+`issue/relval-pair`. Its hand-off -- decisions, timings, merge preview, the
+R3 risk for arrv publicness, next steps -- is **§12 of
+`theories/plans/PLAN-relval-pair.md` on `issue/relval-pair`** (worktree
+`../katamaran-relval-pair`; `git show issue/relval-pair:theories/plans/PLAN-relval-pair.md`).
+The RSA-era workarounds to revisit afterwards, and the arrv ghost-lemma
+cleanup Emiel scheduled after the migration, are items in that branch's
+`TODOS.txt`. Resume this plan's Phase 3 only once RSA is green on pairs.
+
+## HANDOFF (2026-10-26) — superseded where the notice above says otherwise
 
 **Where things stand.** Everything up to and including PLAN-arrv is on
 local `KatamaranRel` (`bc7faac1`, merged `--no-ff --no-verify` on Emiel's
@@ -659,6 +672,7 @@ not a human's; LOC and attempts are the more transferable measures.
 | 2026-10-27 | br_ccopy (RsaCcopy.v, header phase in the invariant): resync CLem `clem_resync_mux` + `clem_mux_byte` (stored term probe-checked); 5-way `asn.or` invariant; range residuals → `bv.zero` case in MuladdParamClose's bv_consts + `nl ≠ 0`; header identity lost by take_first (cons not injective under the tag) → choice CLem `clem_arrv_take_any` (match_bool on an angelic bool, probe-checked both ways + control); local closer (rv_app_nil_l, guarded case split, sub/negate in bv_lin) | 00:47 | 11:31 (a long overnight idle gap inside; active ~2.5 h) | — | ~35 (probe coqc runs ~3.5 min / 9 GB each ×8, light chain ×2 ~100 s, one runaway closer killed at >10 min) | ~2 h | loop VC: vm_compute+solve_vc 61 s, 9.0 GB; STILL RED: 8 failing leaves, the genuine one apparently `c − 1 ≠ 0` at the limb back-edge | Verifier +~60, MuladdParamClose +4, RsaCcopy ~280 | ~10 | 3 user decisions (header phase; residual closer; choice CLem). SpecIris soundness cases for empty_at / resync_mux / take_any NOT written/built |
 | 2026-10-27 | br_ccopy GREEN: limb-phase probe isolated the closer gaps (sub/negate in bv_lin for hypotheses, `[] ++ v`, list assoc, subst of `sl = sd ++ sr`, evar fill); function VC: cell resync → 64^4 unrefuted angelic branches (vm_compute >900 s) → deterministic `clem_arrv_resync_head` (2.2 s); shelved block-entry obligation (eexists on `∃ (_:P), Q`) → `solve_cc_all` with unshelve; SpecIris soundness of the 3 CLems (mux_byte_same over zext', NonSyncVal bool by its halves) | ~11:35 | 14:09 | ~154 | ~95 (probe coqc runs 1–20 min each at 6–9.7 GB, swapping; SpecIris ×10 at ~2 min) | ~60 | loop 193 s, function 590 s, file 21.5 min wall / 788 s user / 9.6 GB; SpecIris 129 s / 8.8 GB | RsaCcopy ~390, Verifier ±60, SpecIris +~70 | ~15 compiles (closer leaves ×6, SpecIris ×10) | 1 user decision (keep debugging ccopy); negative control (no resync) rejected |
 | 2026-10-27 | GATE 2: view-change CLems (regroup_cons; regroup_uncons replaced by word_of_bytes1 once the way back was worked out; of_bytes_any), probe round trip 1.5 s first try, harness RsaCcopyGate.v (22.7 s first try after a `++` notation slip), SpecIris soundness (le_bytes_32, bytes_to_words + flat_b2w in preamble, then 7 SpecIris compiles: lia vs differently-spelled length indices, a `change` defeated by a literal's spelling), RsaCcopy.vo 23 min, heavy chain 6.7 min (RsaSpikeSubResult still green), Result file (data reordered so the headers lead; cells ≡ₚ via Permutation_middle; nat literals > 5000 opaque to lia -> bounds in N) | 14:20 | 16:08 | ~108 | ~55 (RsaCcopy.vo 23 min, SpecIris ×7 ~2.5 min, heavy 6.7 min, Result ×11 ~30 s) | ~53 | harness 22.7 s / 6.6 GB; Result 32 s / 7.7 GB | RsaCcopyGate ~150, RsaCcopyGateResult ~330, Verifier +~50, SpecIris +~110 | ~20 compiles | 1 user decision (ghost lemma for the header view) |
+| 2026-10-30 | migration prep: duplicate-goal fix on `issue/relval-pair` (solve_vc + rv_leaf) | not stamped | ~17:40 | — | — | — | LoopI 34.96 -> 29.66 s user (KatamaranRel 28.67); matched probe 28.68 vs 28.76 s | ~70 (Contracts.v, MuladdParamClose.v) | 3 builds lost to traps | NOT stamped (a protocol miss); details PLAN-relval-pair §12.1 |
 
 Protocol amendment (2026-10-21): wall time between two stamps is only
 attributable to authoring if no idle gap can hide in it, so stamp at least
