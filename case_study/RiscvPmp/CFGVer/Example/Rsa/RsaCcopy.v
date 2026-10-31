@@ -81,6 +81,8 @@ Ltac bv_lin_cc :=
 
 (* MuladdParamClose.rv_leaf with bv_lin_cc, bv.sub/bv.negate kept folded *)
 Ltac rv_leaf_core :=
+  (* valToRelVal is the eta-reduced SyncVal: cbn leaves it folded *)
+  try unfold ty.valToRelVal in *;
   cbn -[Erasure.inst_symprop] in *;
   (* a public RelVal is a pair whose sides agree: substitute that *)
   repeat match goal with v : RelVal _, H : RiscvPmpSignature.secLeak ?v |- _ =>
@@ -91,6 +93,12 @@ Ltac rv_leaf_core :=
   (* a relop/bool hypothesis is pointwise, `P_l /\ P_r` *)
   repeat match goal with H : ?A /\ ?A |- _ => destruct H as [H _]
                        | H : _ /\ _ |- _ => destruct H end;
+  (* an equation between two pair literals is one per projection (bv_lin_cc
+     reads only `@eq (bv _)` hypotheses) *)
+  repeat match goal with H : @eq _ (ty.NonSyncVal _ _) (ty.NonSyncVal _ _) |- _ =>
+    let Hl := fresh "Hl" in let Hr := fresh "Hr" in
+    pose proof (f_equal ty.projLeftRV H) as Hl; pose proof (f_equal ty.projRightRV H) as Hr;
+    cbn in Hl, Hr; clear H end;
   (* and so is a relop/bool goal: one leaf per projection *)
   repeat match goal with |- _ /\ _ => split end;
   first [ exact I

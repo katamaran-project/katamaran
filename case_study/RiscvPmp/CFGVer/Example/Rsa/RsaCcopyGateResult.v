@@ -307,8 +307,12 @@ Proof.
       [ done
       | exact I
       | (f_equal; exact (cc_len_bv ml (proj2 Hml)))
+      | reflexivity
       | exact (cc_ml_nz ml Hml)
-      | exact (cc_ml_lt ml Hml) ].
+      | exact (cc_ml_lt ml Hml)
+      (* a relop fact is pointwise, `P /\ P` *)
+      | (split; exact (cc_ml_nz ml Hml))
+      | (split; exact (cc_ml_lt ml Hml)) ].
   - (* data_ok *)
     unfold cg_data. cbn [data_ok]. rewrite Hx Hy Hx4 Hy4 Hc.
     repeat split; try reflexivity; unfold maxAddr, minAddr in *; lia.
