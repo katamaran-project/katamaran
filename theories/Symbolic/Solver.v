@@ -243,22 +243,21 @@ Module Type GenericSolverOn
        it is a literal, its operands are accepted, or the path condition says
        so of the exact term.  Before, only the last two: `(31 + sext b) >> 5`
        over a public `b` was NOT public to the solver, which kept every rule
-       guarded by secLeakT (drop_pub_zero, try_bvadd_cancel, Term_eqb_relval)
-       from firing on it -- parametric muladd tail, four `t + 0*M = t` leaves
-       reached the closer.  Cost: one wco scan per node that falls back. *)
-    Fixpoint secLeakT {w : World} {σ} (t : Term w σ) : bool :=
+       guarded by secLeakT (try_bvadd_cancel, Term_eqb_relval) from firing
+       on it.  Cost: one wco scan per node that falls back. *)
+    Fixpoint secLeakT_noeq {w : World} {σ} (t : Term w σ) : bool :=
       match t with
       | term_val _ v => true
       | term_binop op t1 t2 =>
-          (secLeakT t1 && secLeakT t2) || pathconditions_contains_secLeakT (wco w) t
-      | term_unop op t1 => secLeakT t1 || pathconditions_contains_secLeakT (wco w) t
+          (secLeakT_noeq t1 && secLeakT_noeq t2) || pathconditions_contains_secLeakT (wco w) t
+      | term_unop op t1 => secLeakT_noeq t1 || pathconditions_contains_secLeakT (wco w) t
       | _ => pathconditions_contains_secLeakT (wco w) t
       end.
 
-    Lemma secLeakT_spec {w : World} {σ} (t : Term w σ) :
-      secLeakT t -> ⊢ instpred (formula_secLeak t) .
+    Lemma secLeakT_noeq_spec {w : World} {σ} (t : Term w σ) :
+      secLeakT_noeq t -> ⊢ instpred (formula_secLeak t) .
     Proof.
-      induction t; cbn [secLeakT]; intros H;
+      induction t; cbn [secLeakT_noeq]; intros H;
         try (iApply pathconditions_contains_secLeakT_spec; by iPureIntro).
       - iApply instpred_formula_secLeak_val.
       - apply Bool.orb_prop_elim in H as [H|H].
@@ -272,6 +271,96 @@ Module Type GenericSolverOn
           iApply instpred_formula_secLeak_unop.
           iApply (IHt H).
         + iApply pathconditions_contains_secLeakT_spec; by iPureIntro.
+    Qed.
+
+    Lemma secLeakT_noeq_inst {w : World} {σ} (a : Term w σ) (ι : Valuation w) :
+      Is_true (secLeakT_noeq a) -> instprop (wco w) ι -> secLeak (inst a ι).
+    Proof.
+      intros H Hw. apply secLeakT_noeq_spec in H. destruct H as [H].
+      specialize (H ι Hw I). cbn in H. exact H.
+    Qed.
+
+    (* R4 (PLAN-relval-pair): an equation `t = u` of the path condition with u
+       public makes t public, `secLeak u ∧ t = u ⊢ secLeak t`.  ONE hop: u is
+       judged by secLeakT_noeq, so there is no closure over equalities, and a
+       call costs one more wco walk. *)
+    Equations(noind) formula_propeq_other {Σ σ} (f : Formula Σ) (t : Term Σ σ) : option (Term Σ σ) :=
+      formula_propeq_other (@formula_propeq _ τ a b) t with eq_dec σ τ => {
+          formula_propeq_other (@formula_propeq _ _ a b) t (left eq_refl) :=
+            if Term_eqb t a then Some b else if Term_eqb t b then Some a else None;
+          formula_propeq_other (@formula_propeq _ _ a b) t (right _) := None
+        };
+      formula_propeq_other _ _ := None.
+
+    Lemma formula_propeq_other_spec {Σ σ} (f : Formula Σ) (t u : Term Σ σ) (ι : Valuation Σ) :
+      formula_propeq_other f t = Some u -> instprop f ι -> inst t ι = inst u ι.
+    Proof.
+      destruct f; simp formula_propeq_other; try discriminate.
+      destruct eq_dec; subst; cbn; [|discriminate].
+      repeat match goal with
+        | |- context[Term_eqb ?x ?y] => destruct (Term_eqb_spec x y); subst
+        end.
+      all: intros H; try discriminate; injection H as <-; cbn;
+        first [ intros E; exact E | intros E; symmetry; exact E | intros _; reflexivity ].
+    Qed.
+
+    Fixpoint pathconditions_eq_public {w : World} {σ} (C : PathCondition w) (t : Term w σ) : bool :=
+      match C with
+      | [ctx] => false
+      | C ▻ F => match formula_propeq_other F t with
+                 | Some u => secLeakT_noeq u
+                 | None => false
+                 end || pathconditions_eq_public C t
+      end.
+
+    Lemma pathconditions_eq_public_inst {w : World} {σ} (C : PathCondition w) (t : Term w σ)
+      (ι : Valuation w) :
+      Is_true (pathconditions_eq_public C t) -> instprop C ι -> instprop (wco w) ι ->
+      secLeak (inst t ι).
+    Proof.
+      induction C as [|C IH F]; cbn [pathconditions_eq_public]; [intros []|].
+      intros H HC Hw. apply instprop_snoc in HC as [HC HF].
+      apply Bool.orb_prop_elim in H as [H|H]; [|exact (IH H HC Hw)].
+      destruct (formula_propeq_other F t) as [u|] eqn:E; [|destruct H].
+      rewrite (@formula_propeq_other_spec _ _ F t u ι E HF). exact (@secLeakT_noeq_inst _ _ u ι H Hw).
+    Qed.
+
+    (* the base case of secLeakT: the exact term, or one equation away *)
+    Definition secLeak_base {w : World} {σ} (t : Term w σ) : bool :=
+      pathconditions_contains_secLeakT (wco w) t || pathconditions_eq_public (wco w) t.
+
+    Lemma secLeak_base_spec {w : World} {σ} (t : Term w σ) :
+      secLeak_base t -> ⊢ instpred (formula_secLeak t).
+    Proof.
+      unfold secLeak_base. intros H. apply Bool.orb_prop_elim in H as [H|H].
+      - iApply pathconditions_contains_secLeakT_spec; by iPureIntro.
+      - constructor. intros ι Hw _. exact (@pathconditions_eq_public_inst _ _ (wco w) t ι H Hw Hw).
+    Qed.
+
+    Fixpoint secLeakT {w : World} {σ} (t : Term w σ) : bool :=
+      match t with
+      | term_val _ v => true
+      | term_binop op t1 t2 => (secLeakT t1 && secLeakT t2) || secLeak_base t
+      | term_unop op t1 => secLeakT t1 || secLeak_base t
+      | _ => secLeak_base t
+      end.
+
+    Lemma secLeakT_spec {w : World} {σ} (t : Term w σ) :
+      secLeakT t -> ⊢ instpred (formula_secLeak t) .
+    Proof.
+      induction t; cbn [secLeakT]; intros H; try (apply secLeak_base_spec; exact H).
+      - iApply instpred_formula_secLeak_val.
+      - apply Bool.orb_prop_elim in H as [H|H].
+        + apply Bool.andb_prop_elim in H as [H1 H2].
+          change (⊢ instpred_formula_secLeak (term_binop op t1 t2)).
+          iApply instpred_formula_secLeak_binop.
+          iSplit; [iApply (IHt1 H1)|iApply (IHt2 H2)].
+        + apply secLeak_base_spec; exact H.
+      - apply Bool.orb_prop_elim in H as [H|H].
+        + change (⊢ instpred_formula_secLeak (term_unop op t)).
+          iApply instpred_formula_secLeak_unop.
+          iApply (IHt H).
+        + apply secLeak_base_spec; exact H.
     Qed.
 
     Definition Term_eqb_relval {w : World} [σ] (t1 t2 : Term w σ) : bool :=
@@ -3184,124 +3273,11 @@ Module Type GenericSolverOn
         end.
     Qed.
 
-    (* ---- dropping PUBLIC zero atoms (2026-10-01) -------------------------
-       peval's ring normal form keeps a cancelled atom as `0 * a` (x - x
-       becomes `0 * x`): over RelVal that atom is what keeps a NonSyncVal
-       sum NonSyncVal, so dropping it is unsound IN GENERAL
-       (PLAN-bv-arith-solver.md).  When `a` is known PUBLIC (`secLeakT`,
-       i.e. under `wco`), `0 * a` is `SyncVal 0` and `t + 0 * a` is `t`
-       exactly, for SyncVal and NonSyncVal `t` alike -- so the atom can go.
-       Without this, `x + 0 * M = x` cannot be decided syntactically and
-       survives to the closer (four such leaves in the parametric muladd
-       tail, once replay has normalised the late-substituted identities).
-       Only peval can produce the atom, and only the solver knows `wco`,
-       hence here.  The walk is over a sum's spine; the views are
-       non-recursive Equations (a recursive one with nested patterns has
-       no covering) and the recursion carries a depth fuel, which soundness
-       does not depend on. *)
-    Equations bvmul_zero_view {Σ n} (t : Term Σ (ty.bvec n))
-      : option (Term Σ (ty.bvec n)) :=
-      bvmul_zero_view (term_binop bop.bvmul (term_val _ z) a) :=
-        if eq_dec z bv.zero then Some a else None;
-      bvmul_zero_view _ := None.
-
-    Equations bvadd_view {Σ n} (t : Term Σ (ty.bvec n))
-      : option (Term Σ (ty.bvec n) * Term Σ (ty.bvec n)) :=
-      bvadd_view (term_binop bop.bvadd l r) := Some (l, r);
-      bvadd_view _ := None.
-
-    Fixpoint drop_pub_zero_aux (fuel : nat) {w : World} {n}
-      (t : Term w (ty.bvec n)) : Term w (ty.bvec n) :=
-      match fuel with
-      | O => t
-      | S f =>
-          match bvadd_view t with
-          | Some (l, r) =>
-              match bvmul_zero_view r with
-              | Some a => if secLeakT a then drop_pub_zero_aux f l
-                          else term_binop bop.bvadd (drop_pub_zero_aux f l) r
-              | None =>
-                  match bvmul_zero_view l with
-                  | Some a => if secLeakT a then drop_pub_zero_aux f r
-                              else term_binop bop.bvadd l (drop_pub_zero_aux f r)
-                  | None => term_binop bop.bvadd (drop_pub_zero_aux f l) r
-                  end
-              end
-          | None => t
-          end
-      end.
-
-    Definition drop_pub_zero {w : World} {σ} (t : STerm σ w) : STerm σ w :=
-      match σ return STerm σ w -> STerm σ w with
-      | ty.bvec n => fun t => drop_pub_zero_aux 64 t
-      | _ => fun t => t
-      end t.
-
-    Lemma bvadd_view_spec {Σ n} (t : Term Σ (ty.bvec n)) l r :
-      bvadd_view t = Some (l, r) -> t = term_binop bop.bvadd l r.
-    Proof. funelim (bvadd_view t); intros H; try discriminate; now inversion H. Qed.
-
-    Lemma bvmul_zero_view_spec {Σ n} (t : Term Σ (ty.bvec n)) a :
-      bvmul_zero_view t = Some a ->
-      t = term_binop bop.bvmul (term_val (ty.bvec n) bv.zero) a.
-    Proof.
-      funelim (bvmul_zero_view t); intros H; try discriminate.
-      destruct eq_dec; [|discriminate]. subst. now inversion H.
-    Qed.
-
-    Lemma bv_mul_zero_l {n} (y : bv n) : bv.mul bv.zero y = bv.zero.
-    Proof.
-      apply bv.unsigned_inj; rewrite bv.unsigned_mul; cbn.
-      rewrite BinInt.Z.mul_0_l; apply Zdiv.Zmod_0_l.
-    Qed.
-
-    Lemma relval_add_pub_zero_r {n} (x v : RelVal (ty.bvec n)) : secLeak v ->
-      bop.evalRel bop.bvadd x (bop.evalRel bop.bvmul (SyncVal bv.zero) v) = x.
-    Proof.
-      (* true for ANY [v] under the pair model; the premise is now unused *)
-      intros _. destruct v, x; cbn; f_equal; now rewrite ?bv_mul_zero_l ?bv.add_zero_r.
-    Qed.
-
-    Lemma relval_add_pub_zero_l {n} (x v : RelVal (ty.bvec n)) : secLeak v ->
-      bop.evalRel bop.bvadd (bop.evalRel bop.bvmul (SyncVal bv.zero) v) x = x.
-    Proof.
-      intros _. destruct v, x; cbn; f_equal; now rewrite ?bv_mul_zero_l ?bv.add_zero_l.
-    Qed.
-
     Lemma secLeakT_inst {w : World} {σ} (a : Term w σ) (ι : Valuation w) :
       Is_true (secLeakT a) -> instprop (wco w) ι -> secLeak (inst a ι).
     Proof.
       intros H Hw. apply secLeakT_spec in H. destruct H as [H].
       specialize (H ι Hw I). cbn in H. exact H.
-    Qed.
-
-    Lemma drop_pub_zero_aux_inst (f : nat) {w : World} {n}
-      (t : Term w (ty.bvec n)) (ι : Valuation w) :
-      instprop (wco w) ι -> inst (drop_pub_zero_aux f t) ι = inst t ι.
-    Proof.
-      intros Hw. revert t. induction f as [|f IH]; intros t; [reflexivity|].
-      cbn [drop_pub_zero_aux].
-      destruct (bvadd_view t) as [[l r]|] eqn:Hv; [|reflexivity].
-      apply bvadd_view_spec in Hv; subst t.
-      destruct (bvmul_zero_view r) as [a|] eqn:Hr.
-      - apply bvmul_zero_view_spec in Hr; subst r.
-        destruct (secLeakT a) eqn:Hs.
-        + rewrite IH. cbn. symmetry.
-          apply relval_add_pub_zero_r, (secLeakT_inst a ι); [now rewrite Hs|exact Hw].
-        + cbn. now rewrite IH.
-      - destruct (bvmul_zero_view l) as [a|] eqn:Hl.
-        + apply bvmul_zero_view_spec in Hl; subst l.
-          destruct (secLeakT a) eqn:Hs.
-          * rewrite IH. cbn. symmetry.
-            apply relval_add_pub_zero_l, (secLeakT_inst a ι); [now rewrite Hs|exact Hw].
-          * cbn. now rewrite IH.
-        + cbn. now rewrite IH.
-    Qed.
-
-    Lemma drop_pub_zero_inst {w : World} {σ} (t : STerm σ w) (ι : Valuation w) :
-      instprop (wco w) ι -> inst (drop_pub_zero t) ι = inst t ι.
-    Proof.
-      intros Hw. destruct σ; try reflexivity. now apply drop_pub_zero_aux_inst.
     Qed.
 
     (* ---- ISOLATE THE INNERMOST VARIABLE: `x + s = y` ⟶ `x = y + (-1)·s` -----
@@ -3779,10 +3755,8 @@ Module Type GenericSolverOn
          equality + structural decomposition) cannot refute -- leaving one
          live dead path per trip.  See `try_bvadd_cancel_propeq` above. *)
       | formula_propeq t1 t2   =>
-          (* public zero atoms dropped after peval, before every rule below:
-             see `drop_pub_zero` *)
-          let t1 := drop_pub_zero (peval t1) in
-          let t2 := drop_pub_zero (peval t2) in
+          let t1 := peval t1 in
+          let t2 := peval t2 in
           match try_bvadd_cancel_propeq t1 t2 with
           | Some d => d
           | None =>
@@ -3875,7 +3849,6 @@ Module Type GenericSolverOn
            under a still-unapplied [⊣⊢] -- ι must be introduced first. *)
         + apply try_bvadd_cancel_propeq_spec in Hc; rewrite Hc.
           constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
-          rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
           now rewrite !peval_sound.
         + match goal with
           | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
@@ -3883,7 +3856,6 @@ Module Type GenericSolverOn
           end.
           * apply try_isolate_inner_spec in Hv; rewrite Hv.
             constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
-            rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
             now rewrite !peval_sound.
           * match goal with
             | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
@@ -3891,14 +3863,12 @@ Module Type GenericSolverOn
             end.
             -- apply try_bvadd_cancel_val_propeq_spec in Hi; rewrite Hi.
                constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
-               rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
                now rewrite !peval_sound.
             -- rewrite simplify_propeq_spec.
                (* the peval bridge, same three lines as the cancellation cases
                   above: peval_sound is stated PER-VALUATION, so it cannot be
                   rewritten under a still-unapplied `⊣⊢` -- ι must come first. *)
                constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
-               rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
                now rewrite !peval_sound.
       - rewrite simplify_secLeak_spec.
         constructor; intros ι Hwco; cbn; unfold instpred_formula_secLeak.

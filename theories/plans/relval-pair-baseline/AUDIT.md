@@ -35,3 +35,15 @@ does any rule, read as an ASSUMPTION, assume more than the pair model gives?
 | `Solver.v` `simplify_secLeak_core`, R3 ORDER (2026-10-31) | (no guard) | the R3 split is tried BEFORE the `secLeakT` discharge. With the guard first, ResimpSecLeak got `formula_true`: right after `vs := x :: r` the substituted path condition holds the exact term `secLeak (x :: r)`, so `secLeakT` said "known" and the parts were never emitted (RsaSpikeSb `valid_cpy` residual `secLeak r.1`, solver call checked directly). Exact for these ops, so no soundness change; a goal `secLeak (x :: r)` now needs the parts, which ResimpSecLeak supplies in the one case the whole term reaches the path condition (substitution). |
 | `PartialEvaluation.v` new rules (`peval_sext`, `bvtake_zext`, `append`, `rev`, `regroup`) | proved by a two-case destruct | pure-term rewrites (`≡` on `inst`), sound on any RelVal by the homomorphic lift (relval-rewrite-over-secrets); only the proof scripts changed (one case). |
 | `IrisInstanceBinary.v` `interp_arrv` | `match a, n, e with SyncVal.. => body | _ => False` | `⌜secLeak a ∧ secLeak n ∧ secLeak e⌝ ∗ interp_arrv_body (projL a) (projL n) (projL e) vs`, as `interp_arr` above; bridges `interp_arrv_SV`, `interp_arrv_agree`. The body already read only projections of `vs`. |
+
+## R1 + R4 (PLAN-relval-pair §12.0 D-M5), branch `issue/relval-rsa`, 2026-10-31
+
+All four are `≡` rewrites (peval) or a one-way discharge (secLeakT), so on the
+assumption side they assume nothing the pair model does not give.
+
+| Site | Old (tagged) | New (pair) |
+|---|---|---|
+| `PartialEvaluation.v` `canon_with` (ring normal form) | sound per projection (`teq side`) plus a LEAF CERTIFICATE; a cancelled atom padded back as `0 * a` (the tag of `x - x` for a secret x was NonSync, so dropping it was unsound) | upstream's `norm_aux`/`Pphi_dev` modulo `≡` from `Term_bv_ring_theory` (restored in `Instantiation.v`; `TermRing` has its ring fields again). A cancelled atom is dropped: `x - x ⇝ 0` is exact on pairs. Atom sort and `clean` kept. |
+| `PartialEvaluation.v` `peval_bvand_id`, `peval_bvxor_id` (off the mask path, not both literals) | (none: `0 & m` for a secret m was NonSync 0 0, not `SyncVal 0`) | `0 & t`, `t & 0` ⇝ 0; `t ^ t` ⇝ 0; `0 ^ t`, `t ^ 0` ⇝ t. Per projection, `≡`. |
+| `Solver.v` `drop_pub_zero` | dropped `0 * a` only for a PUBLIC a (secLeakT) | deleted: peval no longer produces `0 * a`. |
+| `Solver.v` `secLeakT` base case (`secLeak_base`) | exact `secLeak t` in wco | also: `t = u` (either order) in wco with `secLeakT_noeq u` (ONE hop). Only ever used to DISCHARGE (`secLeakT_spec` is `⊢`), and in `simplify_secLeak_core` on an assumption it drops a formula already implied by wco. |

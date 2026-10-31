@@ -376,7 +376,9 @@ porting recipes; read it for those.
   "arrv ghost-lemma bloat"): A automatic take/add, B one array with a cursor;
   the feasibility probe, dropping the string tag (D) and shrinking the view
   lemmas (E) only if needed.
-- **OPEN — backlog order (proposed, NOT yet confirmed by Emiel).**
+- **D-M5 — backlog order CONFIRMED (Emiel, 2026-10-31)** as proposed below; R1 + R4
+  in one rebuild next, no separate hole/axiom checkpoint before them.
+  Was: **OPEN — backlog order (proposed).**
   During the migration: R3 (needed, §12.3) and an assumption-side review of
   KatamaranRel's new solver rules (`try_isolate_inner`, `ResimpSecLeak`) in
   the style of AUDIT.md. Before the RSA cleanup: R1 + R4 (removing
