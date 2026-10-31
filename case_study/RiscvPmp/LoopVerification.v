@@ -384,6 +384,7 @@ Module Type LoopVerification
     Proof.
       iLöb as "H".
       iIntros (R archstate) "(HStep & HR & HM_CSRMod & HM_Trap & HMRET & HSRET)".
+      iApply semWP_fun_loop. iSplit; last by cbn. iIntros (Γon δon).
       iApply (semWP_seq (call step) (call loop)).
       iApply semWP_call_inline_later.
       iApply (semWP_mono with "[HStep]").

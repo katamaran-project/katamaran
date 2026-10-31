@@ -153,6 +153,63 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
     Timeless (written_auth e).
   Proof. unfold written_auth. apply _. Qed.
 
+
+  (* Ghost state tracking whether an execution is still powered on. The
+     authoritative part lives in the memory state interpretation, where it
+     reflects the memory; the fragment `powered b` is owned by the program. *)
+  Definition poweredΣ := #[GFunctor (authR (optionUR (excl.exclR (leibnizO bool))))].
+
+  Class powered_preG Σ := Powered_preG {
+                              powered_pre_inG :: inG Σ (auth.authR (optionUR (excl.exclR (leibnizO bool))));
+                            }.
+
+  Class poweredG Σ := PoweredG {
+                          powered_inG :: inG Σ (auth.authR (optionUR (excl.exclR (leibnizO bool))));
+                          poweredG_gname : gname
+                        }.
+
+  #[export] Instance poweredΣ_preG `{poweredG Σ} : powered_preG Σ.
+  Proof. constructor. typeclasses eauto. Defined.
+
+  #[export] Instance subG_poweredPreΣ {Σ}:
+    subG poweredΣ Σ →
+    powered_preG Σ.
+  Proof. solve_inG. Qed.
+
+  Definition powered_auth `{poweredG Σ} (b : bool) : iProp Σ :=
+    own poweredG_gname (● (Some (excl.Excl b) : optionUR (excl.exclR (leibnizO bool)))).
+  Definition powered `{poweredG Σ} (b : bool) : iProp Σ :=
+    own poweredG_gname (◯ (Some (excl.Excl b) : optionUR (excl.exclR (leibnizO bool)))).
+
+  Lemma powered_alloc `{!powered_preG Σ} (b : bool) :
+    ⊢ |==> ∃ pG : poweredG Σ, powered_auth b ∗ powered b.
+  Proof.
+    iMod (own_alloc (● (Some (excl.Excl b): optionUR (excl.exclR (leibnizO bool))) ⋅ ◯ (Some (excl.Excl b) : optionUR (excl.exclR (leibnizO bool))))) as (γ) "[? ?]".
+    { apply auth_both_valid_2; done. }
+    iModIntro. iExists (PoweredG _ γ). now iFrame.
+  Qed.
+
+  Lemma powered_agree `{poweredG Σ} (b b' : bool) :
+    powered_auth b -∗ powered b' -∗ ⌜b = b'⌝.
+  Proof.
+    iIntros "H1 H2".
+    iDestruct (own_valid_2 with "H1 H2") as %[Hi _]%auth_both_valid_discrete.
+    rewrite excl.Excl_included in Hi. by apply leibniz_equiv in Hi.
+  Qed.
+
+  Lemma powered_update `{poweredG Σ} (b b' : bool) :
+    powered_auth b ∗ powered b ==∗ powered_auth b' ∗ powered b'.
+  Proof.
+    rewrite -!own_op.
+    iApply own_update. apply auth_update.
+    apply @option_local_update.
+    apply exclusive_local_update. constructor.
+  Qed.
+
+  #[export] Instance powered_auth_Timeless `{poweredG Σ} b :
+    Timeless (powered_auth b).
+  Proof. unfold powered_auth. apply _. Qed.
+
   (* NOTE: no resource present for current `State`, since we do not wish to reason about it for now *)
   Class mcMemGS Σ :=
     McMemGS {
@@ -160,7 +217,10 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
         mc_ghGS :: gen_heapGS Addr MemVal Σ;
         (* tracking traces *)
         mc_gtGS :: traceG Trace Σ;
-        mc_wpGS :: writePendingG Σ
+        (* tracking mmio write events *)
+        mc_wpGS :: writePendingG Σ;
+        (* tracking the power status *)
+        mc_pwGS :: poweredG Σ
       }.
 
   Class mcMemGS2 Σ :=
@@ -174,13 +234,15 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
       mc_ghPreGS :: gen_heapGpreS Addr MemVal Σ;
       mc_gtPreGS :: trace_preG Trace Σ;
       mc_wpPreGS :: writePending_preG Σ;
+      mc_pwPreGS :: powered_preG Σ;
       }.
   #[export] Existing Instance mc_ghPreGS.
   #[export] Existing Instance mc_gtPreGS.
   #[export] Existing Instance mc_wpPreGS.
+  #[export] Existing Instance mc_pwPreGS.
 
   Definition memGpreS : gFunctors -> Set := mcMemPreGS.
-  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; writePendingΣ ].
+  Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace; writePendingΣ; poweredΣ ].
 
   Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Proof. intros. solve_inG. Defined.
@@ -336,6 +398,7 @@ Module Type RiscvPmpIrisBase (Import leftOrRight : LeftOrRight)
         (∃ memmap, gen_heap_interp memmap
                      ∗ ⌜ map_Forall (fun a v => memory_ram μ a = v) memmap ⌝
                      ∗ tr_auth (memory_trace μ)
+                     ∗ powered_auth (fun_powered_on μ)
         )%I.
 
   End RiscvPmpIrisParams.
@@ -351,6 +414,87 @@ Module Type RiscvPmpIrisBase (Import leftOrRight : LeftOrRight)
     semWP env.nil (FunDef loop) (fun _ _ => True%I).
   Definition TWP_loop `{sg : sailGS Σ} : iProp Σ :=
     semTWP env.nil (FunDef loop) (fun _ _ => True%I).
+
+  Section PoweredLoop.
+  Import Katamaran.Syntax.TypeDecl.
+  Import Katamaran.Context.ctx.notations.
+  Import Katamaran.Environment.env.notations.
+
+  (* One iteration of the main loop: first the power status is checked. If the
+     machine is powered on, it performs a step and continues, otherwise the
+     loop ends. *)
+  Lemma semWP_fun_loop `{sg : sailGS Σ} (Q : Post [ctx] ty.unit) :
+    ((∀ Γ (δ : CStore Γ), semWP δ (call RiscvPmpProgram.step ;; call RiscvPmpProgram.loop) (λ v _, Q v [env])) ∧
+     Q (inl tt) [env])
+    ⊢ semWP env.nil (FunDef loop) Q.
+  Proof.
+    iIntros "H". cbn [FunDef]. unfold fun_loop.
+    iApply semWP_let. iApply semWP_foreign.
+    iIntros (γ μ) "Hstate".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (res γ' μ' Hf). cbn in Hf. inversion Hf; subst.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro. iFrame "Hstate".
+    rewrite semWP_val. iModIntro. cbn.
+    iApply semWP_pattern_match. iApply semWP_exp. cbn.
+    destruct (fun_powered_on μ).
+    - iDestruct "H" as "[H _]". iApply (semWP_mono with "[H]"); first iApply "H".
+      iIntros (v δ') "HQ". destruct (env.view δ') as [δ'' ?]. by destruct (env.view δ'').
+    - iDestruct "H" as "[_ H]". rewrite semWP_val. by iModIntro.
+  Qed.
+
+  (* The power status of this execution, as seen by the program. *)
+  Definition powered_tok `{sg : sailGS Σ} (b : bool) : iProp Σ :=
+    @powered _ (@mc_pwGS _ (@leftOrRightInstance _ sailGS_memGS)) b.
+
+  (* The power status in the memory agrees with the power token. *)
+  Lemma powered_on_agree `{sg : sailGS Σ} (μ : Memory) (b : bool) :
+    mem_state_interp sailGS_memGS μ -∗ powered_tok b -∗
+    ⌜fun_powered_on μ = b⌝ ∗ mem_state_interp sailGS_memGS μ ∗ powered_tok b.
+  Proof.
+    iIntros "(%memmap & Hgh & %Hlink & Htr & Hpw) Hp".
+    iDestruct (powered_agree with "Hpw Hp") as %Hb.
+    iFrame "Hp". iSplitR; first done.
+    iExists memmap. iFrame "∗ %".
+  Qed.
+
+  (* One iteration of the main loop, for a machine that is powered on. *)
+  Lemma semWP_fun_loop_on `{sg : sailGS Σ} (Q : Post [ctx] ty.unit) :
+    powered_tok true -∗
+    (powered_tok true -∗ ∀ Γ (δ : CStore Γ),
+         semWP δ (call RiscvPmpProgram.step ;; call RiscvPmpProgram.loop) (λ v _, Q v [env])) -∗
+    semWP env.nil (FunDef loop) Q.
+  Proof.
+    iIntros "Hp H". cbn [FunDef]. unfold fun_loop.
+    iApply semWP_let. iApply semWP_foreign.
+    iIntros (γ μ) "[Hregs Hmem]".
+    iDestruct (powered_on_agree with "Hmem Hp") as "(%Hb & Hmem & Hp)".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (res γ' μ' Hf). cbn in Hf. inversion Hf; subst.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
+    rewrite semWP_val. iModIntro. cbn.
+    iApply semWP_pattern_match. iApply semWP_exp. cbn. rewrite Hb.
+    iSpecialize ("H" with "Hp"). iApply (semWP_mono with "[H]"); first iApply "H".
+    iIntros (v δ') "HQ". destruct (env.view δ') as [δ'' ?]. by destruct (env.view δ'').
+  Qed.
+
+  (* For a machine that is powered off, the main loop ends. *)
+  Lemma semWP_fun_loop_off `{sg : sailGS Σ} (Q : Post [ctx] ty.unit) :
+    powered_tok false -∗
+    (powered_tok false -∗ Q (inl tt) [env]) -∗
+    semWP env.nil (FunDef loop) Q.
+  Proof.
+    iIntros "Hp H". cbn [FunDef]. unfold fun_loop.
+    iApply semWP_let. iApply semWP_foreign.
+    iIntros (γ μ) "[Hregs Hmem]".
+    iDestruct (powered_on_agree with "Hmem Hp") as "(%Hb & Hmem & Hp)".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (res γ' μ' Hf). cbn in Hf. inversion Hf; subst.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
+    rewrite semWP_val. iModIntro. cbn.
+    iApply semWP_pattern_match. iApply semWP_exp. cbn. rewrite Hb.
+    rewrite semWP_val. iModIntro. by iApply "H".
+  Qed.
+  End PoweredLoop.
 
   (* Useful instance for some of the Iris proofs *)
   #[export] Instance state_inhabited : Inhabited State.

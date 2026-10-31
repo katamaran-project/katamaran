@@ -123,8 +123,8 @@ Definition isMMIO a : Prop := a ∈ mmioAddrs.
 Lemma mmioAddrs_rep :
   (Z.of_N (mmioStartAddr + mmioLenAddr) < 2 ^ Z.of_nat xlenbits)%Z.
 Proof. now compute. Qed.
-(* We dedicate the last address of MMIO memory for shutdown events. *)
-Definition mmioShutdownAddr : Addr := bv.of_N (mmioStartAddr + mmioLenAddr - 1)%N.
+(* We dedicate the last word of MMIO memory for shutdown events. *)
+Definition mmioShutdownAddr : Addr := bv.of_N (mmioStartAddr + mmioLenAddr - N.of_nat bytes_per_word)%N.
 Definition isShutdownAddr a : Prop := a = mmioShutdownAddr.
 Definition withinMMIO (a : Addr) (size : nat) : Prop :=
   (* size ≠ 0: avoid allowing and hence recording zero-width MMIO events *)
@@ -1710,8 +1710,9 @@ Module Export RiscvPmpBase <: Base.
 
     Definition event_pred (width : nat) (e : Event) :=
       (∃ v, e = mkEvent IOWrite write_addr width v) (* We allow any value for MMIO writes by M-mode that are non-observable by others *)
-      ∨ (e = mkEvent IOWrite write_addr_adv width (bv.of_N 42)). (* The only MMIO address accessible to a possible adversary can only ever contain the value 42 *)
-    Definition is_shutdown (e : Event) := ∃ v, e = mkEvent IOShutdown mmioShutdownAddr 1 v.
+      ∨ (e = mkEvent IOWrite write_addr_adv width (bv.of_N 42)) (* The only MMIO address accessible to a possible adversary can only ever contain the value 42 *)
+      ∨ (∃ v, e = mkEvent IOShutdown mmioShutdownAddr width v). (* Powering off the machine, with an arbitrary exit value *)
+    Definition is_shutdown (e : Event) := ∃ n v, e = mkEvent IOShutdown mmioShutdownAddr n v.
     Definition mmio_pred (width : nat) (t : Trace) : Prop := Forall (event_pred width) t.
     Definition mmio_pred_final (width : nat) (t : Trace) : Prop :=
       ∃ t' e, Forall (event_pred width) t' ∧ is_shutdown e ∧ t = e :: t'.
@@ -1782,8 +1783,10 @@ Module Export RiscvPmpBase <: Base.
        appropriate handler, i.e., writes to the mmioShutdownAddr result in a
        different MMIO event. All other cases are the general IOWrite event.
        The function returns a product, with the bool indicating that the
-       machine can keep executing (true), or needs to halt (false). The other
-       component is the resulting Memory of the operation. *)
+       machine can keep executing (true), or is powered off (false). The other
+       component is the resulting Memory of the operation. Note that a
+       shutdown write itself completes normally: the machine stops because
+       the main loop checks fun_powered_on before every step. *)
     Definition fun_handle_write_mmio (μ : Memory) (data_size : nat) (addr : Val ty_xlenbits)
       : Val (ty_bytes data_size) -> bool * Memory :=
       match data_size with
@@ -1795,6 +1798,12 @@ Module Export RiscvPmpBase <: Base.
                                   else (true , IOWrite) in
             (power, fun_write_mmio μ event addr data)
       end.
+
+    (* The machine is powered on as long as no shutdown event occurred. *)
+    Definition trace_powered_on (t : Trace) : bool :=
+      negb (existsb (λ e, match event_type e with IOShutdown => true | _ => false end) t).
+    Definition fun_powered_on (μ : Memory) : bool :=
+      trace_powered_on (memory_trace μ).
 
   End MemoryModel.
 

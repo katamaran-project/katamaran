@@ -391,6 +391,7 @@ Section BlockVerificationDerived.
       - intros [-> Hverif%sound_exec_instruction].
         unfold semTripleOneInstrStep, semTriple in Hverif.
         iIntros "(Hh & (Hpc & Hnpc) & Hinstr & Hinstrs) Hk".
+        iApply semWP_fun_loop. iSplit; last done. iIntros (Γon δon).
         iApply semWP_seq.
         iApply semWP_call_inline.
         iApply (semWP_mono with "[-Hinstrs Hk] [Hinstrs Hk]").
@@ -730,6 +731,7 @@ Section AnnotatedBlockVerification.
         destruct instr as [instr| |Δ lem es].
         + intros [-> Hverif]. cbn [extract_AST ptsto_instrs].
           iIntros "(Hh & (Hpc & Hnpc) & Hinstr & Hinstrs) Hk".
+          iApply semWP_fun_loop. iSplit; last done. iIntros (Γon δon).
           iApply semWP_seq.
           iApply semWP_call_inline.
           iApply (semWP_mono with "[-Hinstrs Hk]").

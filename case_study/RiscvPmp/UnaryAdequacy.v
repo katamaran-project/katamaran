@@ -82,6 +82,7 @@ Module Type RiscvPmpIrisAdeqParams
                tr_frag (memory_trace μ) ∗
                nothingPending_auth ∗
                nothingPending ∗
+               powered (fun_powered_on μ) ∗
                @tr_frag _ _ (@mc_gtGS _ otherInstance) (memory_trace μ) ∗
                @nothingPending_auth _ (@mc_wpGS _ otherInstance) ∗
                phantom_res
@@ -110,21 +111,23 @@ Module Type RiscvPmpIrisAdeqParams
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap) as (gH) "[Hinv [Hmapsto _]]".
     iMod (trace_alloc (memory_trace μ)) as (gT) "[Hauth Hfrag]".
     iMod writePending_alloc as (gP) "[HauthPend HfragPend]".
+    iMod (powered_alloc (fun_powered_on μ)) as (gW) "[HauthPow HfragPow]".
     (* The phantom execution only needs a trace and a writePending state. *)
     iMod (gen_heap_init (L := Addr) (V := MemVal) ∅) as (gHo) "_".
     iMod (trace_alloc (memory_trace μ)) as (gTo) "[Hautho Hfrago]".
     iMod writePending_alloc as (gPo) "[HauthPendo HfragPendo]".
+    iMod (powered_alloc (fun_powered_on μ)) as (gWo) "_".
     iModIntro.
     iExists (if leftOrRight
-             then McMemGS2 (McMemGS gH gT gP) (McMemGS gHo gTo gPo)
-             else McMemGS2 (McMemGS gHo gTo gPo) (McMemGS gH gT gP)).
+             then McMemGS2 (McMemGS gH gT gP gW) (McMemGS gHo gTo gPo gWo)
+             else McMemGS2 (McMemGS gHo gTo gPo gWo) (McMemGS gH gT gP gW)).
     iPoseProof (big_sepM_list_to_map with "Hmapsto") as "Hm".
     { eapply NoDup_liveAddrs. }
     change (map ?f liveAddrs) with (fmap f liveAddrs).
     rewrite big_sepL_fmap.
     unfold mem_state_interp, mem_res, phantom_res, otherInstance, leftOrRightInstance.
-    destruct leftOrRight; cbn [mc_ghGS2_left mc_ghGS2_right mc_ghGS mc_gtGS mc_wpGS];
-      iFrame "Hinv Hauth Hfrag HauthPend HfragPend Hfrago HauthPendo HfragPendo Hm";
+    destruct leftOrRight; cbn [mc_ghGS2_left mc_ghGS2_right mc_ghGS mc_gtGS mc_wpGS mc_pwGS];
+      iFrame "Hinv Hauth Hfrag HauthPend HfragPend HauthPow HfragPow Hfrago HauthPendo HfragPendo Hm";
       (iSplitR; [iPureIntro; apply initMemMap_works | by iExists _]).
   Qed.
 

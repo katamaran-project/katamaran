@@ -245,7 +245,8 @@ Module Type RiscvPmpIrisInstancePredicates (LOR : LeftOrRight)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
     Definition interp_mmio_checked_write {width : nat} (addr : Addr) (bytes : bv (width * byte)) : iProp Σ :=
       ⌜addr = write_addr⌝ (* Allow arbitrary write values for M-mode only address *)
-      ∨ ⌜addr = write_addr_adv ∧ bytes = (bv.of_N 42)⌝. (* When writing to an MMIO address that is observable by the adv, we only allow 42 to be written. *)
+      ∨ ⌜addr = write_addr_adv ∧ bytes = (bv.of_N 42)⌝ (* When writing to an MMIO address that is observable by the adv, we only allow 42 to be written. *)
+      ∨ ⌜addr = mmioShutdownAddr⌝. (* Powering off the machine, with an arbitrary exit value *)
 
     Section WithAddrs.
       Variable (live_addrs mmio_addrs : list Addr).
@@ -405,6 +406,8 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
     | Sig.nothingPending           | _                => nothingPending
     | Sig.written width        | [ addr; val ]        => written (mkEvent IOWrite addr width val)
+    | Sig.written_shutdown width | [ addr; val ]      => written (mkEvent IOShutdown addr width val)
+    | Sig.powered              | [ b ]                => powered b
     .
 
     Ltac destruct_pmp_entries :=
@@ -513,8 +516,9 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
         ⊢ ⌜map_Forall (λ (a : Addr) (v : Byte), memory_ram μ a = v) memmap⌝ -∗
                                                                                gen_heap.gen_heap_interp memmap -∗
                                                                                                                   trace.tr_auth (memory_trace μ) -∗
+                                                                                                                                                    powered_auth (fun_powered_on μ) -∗
                                                                                                                                                     mem_state_interp sailGS_memGS μ.
-    Proof. iIntros (μ memmap) "Hmap Hmem Htr"; iExists memmap; now iFrame. Qed.
+    Proof. iIntros (μ memmap) "Hmap Hmem Htr Hpw"; iExists memmap; now iFrame. Qed.
 
     Lemma map_Forall_update : ∀ (μ : Memory) (memmap : gmap Addr MemVal)
                                 (paddr : Addr) (data : Byte),
@@ -536,14 +540,14 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
     Lemma fun_write_ram_works μ bytes paddr data memmap {w : bv (bytes * byte)} :
       map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
       interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗
-        trace.tr_auth (memory_trace μ) ={⊤}=∗
+        trace.tr_auth (memory_trace μ) ∗ powered_auth (fun_powered_on μ) ={⊤}=∗
       mem_state_interp sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
     Proof.
       iRevert (data w paddr μ memmap).
       iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-        iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
+        iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr & Hpw)".
       - iModIntro. iSplitL; last done.
-        now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr").
+        now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr Hpw").
      -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
         destruct (bv.appView byte (bytes * byte) data) as [bd data].
         destruct (bv.appView byte (bytes * byte) w) as [bw w].
@@ -551,7 +555,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
         iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
         iApply ("IHbytes" $! data w
                        (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
-                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr]").
+                    (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr $Hpw]").
         by apply map_Forall_update.
     Qed.
 

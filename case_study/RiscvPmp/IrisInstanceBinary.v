@@ -70,7 +70,8 @@ Module Type RiscvPmpIrisAdeqParams2
     fun μ => (([∗ list] a' ∈ liveAddrs, pointsto a' (DfracOwn 1) (memory_ram μ a')) ∗
              tr_frag (memory_trace μ) ∗
              nothingPending_auth ∗
-             nothingPending
+             nothingPending ∗
+             powered (fun_powered_on μ)
           )%I.
 
   Definition mem_res2 `{hG : memGS2 Σ} : Memory -> Memory -> iProp Σ :=
@@ -117,17 +118,19 @@ Module Type RiscvPmpIrisAdeqParams2
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap1) as (gH1) "[Hinv1 [Hmapsto1 _]]".
     iMod (trace_alloc (memory_trace μ1)) as (gT1) "[Hauth1 Hfrag1]".
     iMod writePending_alloc as (gP1) "[HauthPend1 HfragPend1]".
+    iMod (powered_alloc (fun_powered_on μ1)) as (gW1) "[HauthPow1 HfragPow1]".
     pose (memmap2 := initMemMap μ2).
     iMod (gen_heap_init (L := Addr) (V := MemVal) memmap2) as (gH2) "[Hinv2 [Hmapsto2 _]]".
     iMod (trace_alloc (memory_trace μ2)) as (gT2) "[Hauth2 Hfrag2]".
     iMod writePending_alloc as (gP2) "[HauthPend2 HfragPend2]".
+    iMod (powered_alloc (fun_powered_on μ2)) as (gW2) "[HauthPow2 HfragPow2]".
     iModIntro.
-    iExists (McMemGS2 (McMemGS gH1 gT1 gP1) (McMemGS gH2 gT2 gP2)).
-    iSplitL "Hinv1 Hinv2 Hauth1 Hauth2".
-    - iFrame "Hinv1 Hinv2 Hauth1 Hauth2".
+    iExists (McMemGS2 (McMemGS gH1 gT1 gP1 gW1) (McMemGS gH2 gT2 gP2 gW2)).
+    iSplitL "Hinv1 Hinv2 Hauth1 Hauth2 HauthPow1 HauthPow2".
+    - iFrame "Hinv1 Hinv2 Hauth1 Hauth2 HauthPow1 HauthPow2".
       iPureIntro; split; apply initMemMap_works.
     - unfold mem_res2, mem_res, initMemMap in *.
-      iFrame "Hfrag1 Hfrag2 HauthPend1 HauthPend2 HfragPend1 HfragPend2".
+      iFrame "Hfrag1 Hfrag2 HauthPend1 HauthPend2 HfragPend1 HfragPend2 HfragPow1 HfragPow2".
       iSplitL "Hmapsto1".
       + iPoseProof (big_sepM_list_to_map with "Hmapsto1") as "Hm".
         { eapply NoDup_liveAddrs. }
@@ -189,6 +192,11 @@ Module Type RiscvPmpIrisInstancePredicates2
     Definition written2 (e : Event) : iProp Σ :=
       @written _ (@mc_wpGS _ mc_ghGS2_left) e ∗
       @written _ (@mc_wpGS _ mc_ghGS2_right) e.
+
+    (* Both executions have the same power status. *)
+    Definition powered2 (b : bool) : iProp Σ :=
+      @powered _ (@mc_pwGS _ mc_ghGS2_left) b ∗
+      @powered _ (@mc_pwGS _ mc_ghGS2_right) b.
 
     (* NOTE: no read predicate yet, as we will not perform nor allow MMIO reads. *)
     (* NOTE: no local state yet, but this should be an iProp for the general case *)
@@ -312,7 +320,9 @@ Module Type RiscvPmpIrisInstance2
     (* The binary versions of the pending-write predicates own the ghost state
        of both executions, so that they can be split into the unary versions. *)
     | Sig.nothingPending       | _                    => nothingPending2
-    | Sig.written width        | [ addr; val ]        => written2 (mkEvent IOWrite addr width val).
+    | Sig.written width        | [ addr; val ]        => written2 (mkEvent IOWrite addr width val)
+    | Sig.written_shutdown width | [ addr; val ]      => written2 (mkEvent IOShutdown addr width val)
+    | Sig.powered              | [ b ]                => powered2 b.
 
     Ltac destruct_pmp_entries :=
       repeat match goal with
@@ -494,4 +504,120 @@ Module Type RiscvPmpIrisInstance2
     sailGS2_sailGS_left.
   #[export] Instance sailGS2_to_sailGS_right `{sG2 : sailGS2 Σ} : RVPBASEr.sailGS Σ :=
     sailGS2_sailGS_right.
+
+  Section PoweredLoop.
+    Import ctx.notations.
+    Import env.notations.
+    Import RiscvPmpSemantics.
+    Import RiscvPmpSemantics.SmallStepNotations.
+    Context `{sG : sailGS2 Σ}.
+
+    Definition powered_left (b : bool) : iProp Σ := @powered _ (@mc_pwGS _ mc_ghGS2_left) b.
+    Definition powered_right (b : bool) : iProp Σ := @powered _ (@mc_pwGS _ mc_ghGS2_right) b.
+
+    (* One iteration of the main loop of the left execution only, while it is
+       powered on. *)
+    Lemma semWP2_fun_loop_left {Γ2} (s2 : Stm Γ2 ty.unit) (δ2 : CStore Γ2)
+      (Q : Post2 [ctx] Γ2 ty.unit) :
+      powered_left true -∗
+      (powered_left true -∗ ∀ Γ (δ1 : CStore Γ),
+          semWP2 δ1 δ2 (call step ;; call loop)%exp s2 (λ v1 δ1' v2 δ2', Q v1 [env] v2 δ2')) -∗
+      semWP2 [env] δ2 (FunDef loop) s2 Q.
+    Proof.
+      iIntros "Hp H". rewrite /semWP2. iIntros (γ21 μ21) "Hres".
+      iApply (RVPBASEl.semWP_fun_loop_on with "[Hp]"); [iExact "Hp" |].
+      iIntros "Hp" (Γ δ1). iSpecialize ("H" with "Hp").
+      iApply ("H" $! Γ δ1 γ21 μ21 with "Hres").
+    Qed.
+
+    (* One iteration of the main loop of the right execution only, while it is
+       powered on. The right execution takes the steps of the power check. *)
+    Lemma semWP2_fun_loop_right {Γ1} (s1 : Stm Γ1 ty.unit) (δ1 : CStore Γ1)
+      (Q : Post2 Γ1 [ctx] ty.unit) :
+      powered_right true -∗
+      (powered_right true -∗ ∀ Γ (δ2 : CStore Γ),
+          semWP2 δ1 δ2 s1 (call step ;; call loop)%exp (λ v1 δ1' v2 δ2', Q v1 δ1' v2 [env])) -∗
+      semWP2 δ1 [env] s1 (FunDef loop) Q.
+    Proof.
+      iIntros "Hp H". rewrite /semWP2. iIntros (γ21 μ21) "[Hregs Hmem]".
+      iDestruct (RVPBASEr.powered_on_agree (sg := sailGS2_sailGS_right) with "[Hmem] [Hp]") as "(%Hb & Hmem & Hp)";
+        [iExact "Hmem" | iExact "Hp" |].
+      iSpecialize ("H" with "Hp").
+      iSpecialize ("H" $! _ (env.snoc (env.nil : CStore [ctx]) ("on"∷ty.bool) true) γ21 μ21 with "[$Hregs $Hmem]").
+      iApply (RVPBASEl.semWP_mono with "H").
+      iIntros (v1 δ1') "(%γ22 & %μ22 & %δ2' & %s2' & %v2 & %Hsteps & %Hval & Hregs & Hmem & HQ)".
+      iExists γ22, μ22, [env], (of_ival v2), v2. iFrame "Hregs Hmem HQ".
+      iPureIntro. split; last apply stm_to_val_of_ival.
+      rewrite (stm_to_val_eq Hval) in Hsteps.
+      destruct (env.view δ2') as [δ2'' von]. destruct (env.view δ2'').
+      cbn [FunDef]. unfold fun_loop.
+      (* let: the power check *)
+      eapply step_trans. constructor.
+      eapply step_trans. constructor. constructor. cbn. reflexivity.
+      cbn. rewrite Hb.
+      eapply step_trans. constructor.
+      (* the branch on the power status, inside the block of the let *)
+      eapply Steps_trans.
+      { eapply (Steps_block (δΔ2 := (env.snoc (env.nil : CStore [ctx]) ("on"∷ty.bool) von))). cbn.
+        eapply step_trans. constructor.
+        eapply step_trans. constructor. constructor.
+        eapply step_trans. constructor. cbn.
+        eapply (Steps_block (δ1 := (env.snoc (env.nil : CStore [ctx]) ("on"∷ty.bool) true)) (δΔ1 := [env])
+                            (δ2 := (env.snoc (env.nil : CStore [ctx]) ("on"∷ty.bool) von)) (δΔ2 := [env])).
+        exact Hsteps. }
+      (* leaving both blocks *)
+      destruct v2; cbn [of_ival]; (eapply Steps_trans;
+        [ eapply (Steps_block (δ2 := [env]) (δΔ2 := (env.snoc (env.nil : CStore [ctx]) ("on"∷ty.bool) von)));
+          eapply step_trans; [apply (st_block_value (Γ := ["on"∷ty.bool])) || apply (st_block_fail (Γ := ["on"∷ty.bool])) | apply step_refl]
+        | eapply step_trans; [apply (st_block_value (Γ := [ctx])) || apply (st_block_fail (Γ := [ctx])) | apply step_refl] ]).
+    Qed.
+
+    (* One iteration of the main loop of both executions, while they are
+       powered on. *)
+    Lemma semWP2_fun_loop (Q : Post2 [ctx] [ctx] ty.unit) :
+      powered_left true -∗ powered_right true -∗
+      (powered_left true -∗ powered_right true -∗
+         ∀ Γ1 Γ2 (δ1 : CStore Γ1) (δ2 : CStore Γ2),
+           semWP2 δ1 δ2 (call step ;; call loop)%exp (call step ;; call loop)%exp
+             (λ v1 δ1' v2 δ2', Q v1 [env] v2 [env])) -∗
+      semWP2 [env] [env] (FunDef loop) (FunDef loop) Q.
+    Proof.
+      iIntros "Hpl Hpr H".
+      iApply (semWP2_fun_loop_left with "Hpl").
+      iIntros "Hpl" (Γ1 δ1).
+      iApply (semWP2_fun_loop_right with "Hpr").
+      iIntros "Hpr" (Γ2 δ2).
+      iApply ("H" with "Hpl Hpr").
+    Qed.
+
+    (* When both executions are powered off, their main loops end. *)
+    Lemma semWP2_fun_loop_off (Q : Post2 [ctx] [ctx] ty.unit) :
+      powered_left false -∗ powered_right false -∗
+      (powered_left false -∗ powered_right false -∗ Q (inl tt) [env] (inl tt) [env]) -∗
+      semWP2 [env] [env] (FunDef loop) (FunDef loop) Q.
+    Proof.
+      iIntros "Hpl Hpr H". rewrite /semWP2. iIntros (γ21 μ21) "[Hregs Hmem]".
+      iDestruct (RVPBASEr.powered_on_agree (sg := sailGS2_sailGS_right) with "[Hmem] [Hpr]") as "(%Hb & Hmem & Hpr)";
+        [iExact "Hmem" | iExact "Hpr" |].
+      iApply (RVPBASEl.semWP_fun_loop_off with "[Hpl]"); [iExact "Hpl" |].
+      iIntros "Hpl".
+      iExists γ21, μ21, [env], (stm_val ty.unit tt), (inl tt).
+      iFrame "Hregs Hmem". iSplitR.
+      { iPureIntro. cbn [FunDef]. unfold fun_loop.
+        eapply step_trans. constructor.
+        eapply step_trans. constructor. constructor. cbn. reflexivity.
+        cbn. rewrite Hb.
+        eapply step_trans. constructor.
+        eapply Steps_trans.
+        { eapply (Steps_block (δΔ2 := (env.snoc (env.nil : CStore [ctx]) ("on"∷ty.bool) false))). cbn.
+          eapply step_trans. constructor.
+          eapply step_trans. constructor. constructor.
+          eapply step_trans. constructor. cbn.
+          eapply step_trans. constructor.
+          apply step_refl. }
+        eapply step_trans. constructor. apply step_refl. }
+      iSplitR; first done.
+      iApply ("H" with "Hpl Hpr").
+    Qed.
+  End PoweredLoop.
 End RiscvPmpIrisInstance2.

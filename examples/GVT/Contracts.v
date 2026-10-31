@@ -1471,6 +1471,16 @@ Module Import RiscvPmpSpecification.
           |}.
 
 
+        (* The power status is only inspected by the main loop, whose
+           verification reasons about it directly. *)
+        Definition sep_contract_powered_on : SepContractFunX powered_on :=
+          {| sep_contract_logic_variables := [];
+             sep_contract_localstore      := [];
+             sep_contract_precondition    := ⊥;
+             sep_contract_result          := "result_powered_on";
+             sep_contract_postcondition   := ⊥;
+          |}.
+
         Definition contract_environment_foreign : SepContractEnvEx :=
           fun Δ τ fn =>
             match fn with
@@ -1481,6 +1491,7 @@ Module Import RiscvPmpSpecification.
             | mmio_write bytes     => sep_contract_mmio_write bytes
             | decode               => sep_contract_decode
             | externalWorldUpdates => sep_contract_externalWorldUpdates
+            | powered_on           => sep_contract_powered_on
             end.
 
         Lemma linted_contract_environment_foreign :

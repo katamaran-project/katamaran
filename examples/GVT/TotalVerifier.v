@@ -511,7 +511,7 @@ Section BlockVerificationDerived.
       unfold semTTriple.
       iSpecialize ("Htrip" with "HPRE").
       unfold WP_loop at 2.
-      cbn [FunDef]. unfold fun_loop.
+      iApply semWP_fun_loop. iSplit; last done. iIntros (Γon δon).
       iApply semWP_seq.
       iApply semWP_call_inline.
       iPoseProof (semTWP_semWP with "Htrip") as "Htrip".
@@ -539,7 +539,7 @@ Section BlockVerificationDerived.
         iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
         iSpecialize ("Htrip" with "[$]").
         unfold WP_loop at 4.
-        cbn [FunDef]. unfold fun_loop.
+        iApply semWP_fun_loop. iSplit; last done. iIntros (Γon δon).
         iApply semWP_seq.
         iApply semWP_call_inline. simpl.
         rewrite semTWP_semWP.

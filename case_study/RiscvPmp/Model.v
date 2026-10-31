@@ -97,12 +97,12 @@ Module Type RiscvPmpModel
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "H". iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr & Hpw)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iMod "Hclose" as "_". iModIntro.
       iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-      iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+      iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr Hpw") as "Hmem".
       iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
     Qed.
 
@@ -111,11 +111,11 @@ Module Type RiscvPmpModel
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "[%w H]". iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr & Hpw)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iMod "Hclose" as "_".
-      iMod (fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; auto.
+      iMod (fun_write_ram_works with "[$H $Hmem $Htr $Hpw]") as "[$ H]"; auto.
       rewrite semTWP_val. now iFrame "Hregs H".
     Qed.
 
@@ -151,12 +151,12 @@ Module Type RiscvPmpModel
     Proof.
       intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
       iIntros "(Hcurp & Hpmp & Hpmpa & [%acc [%Hpmp _]])".
-      iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+      iApply semTWP_foreign. iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hpw)]]".
       iPoseProof (interp_pmp_fun_within_mmio_spec with "Hpmpa") as "%Hnotmmio"; first eauto.
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). iMod "Hclose" as "_". iModIntro.
       rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-      iFrame "Hregs Hmem Htr". iSplitR; auto. iApply semTWP_val.
+      iFrame "Hregs Hmem Htr Hpw". iSplitR; auto. iApply semTWP_val.
       now iFrame "Hcurp Hpmp Hpmpa".
     Qed.
 
@@ -190,10 +190,17 @@ Module Type RiscvPmpModel
       now iFrame "Hmip".
     Qed.
 
+    Lemma powered_on_sound :
+      TValidContractForeign sep_contract_powered_on powered_on.
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      now iIntros "[%HFalse _]".
+    Qed.
+
     Lemma TforeignSem : TForeignSem.
     Proof.
       intros Δ τ f; destruct f; cbn - [TValidContractForeign];
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound, powered_on_sound.
     Qed.
 
     Lemma foreignSem : ForeignSem.

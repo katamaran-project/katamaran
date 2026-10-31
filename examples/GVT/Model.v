@@ -260,10 +260,17 @@ Module RiscvPmpModel2.
       iModIntro; now iSplitL; first now iExists _.
     Qed.
 
+    Lemma powered_on_sound :
+      TValidContractForeign sep_contract_powered_on powered_on.
+    Proof.
+      intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+      now iIntros "[%HFalse _]".
+    Qed.
+
     Lemma TforeignSem : TForeignSem.
     Proof.
       intros Δ τ f; destruct f; cbn - [TValidContractForeign];
-        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
+        eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound, powered_on_sound.
     Qed.
 
     Lemma foreignSem : ForeignSem.

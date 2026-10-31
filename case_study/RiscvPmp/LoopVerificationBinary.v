@@ -260,13 +260,17 @@ Module Type LoopVerificationBinary
        This gives some flexibility when doing known code verification, where we
        can hand off some knowledge that will not be violated (or invalidated)
        by unknown code when invoking the universal contract. *)
+    (* Both executions are powered on (powered2 true) whenever control is in
+       the loop, which lets both executions agree on the power check at the
+       start of every iteration. *)
     Definition loop_pre (R : iProp Σ) (archstate : ArchState) : iProp Σ :=
       (Step_pre archstate ∗
        R ∗
-       ▷ (M_CSRMod archstate ∗ R -∗ WP2_loop R) ∗
-       ▷ (M_Trap archstate ∗ R -∗ WP2_loop R) ∗
-       ▷ (MRET archstate ∗ R -∗ WP2_loop R) ∗
-       ▷ (SRET archstate ∗ R -∗ WP2_loop R))%I.
+       powered2 true ∗
+       ▷ (M_CSRMod archstate ∗ R ∗ powered2 true -∗ WP2_loop R) ∗
+       ▷ (M_Trap archstate ∗ R ∗ powered2 true -∗ WP2_loop R) ∗
+       ▷ (MRET archstate ∗ R ∗ powered2 true -∗ WP2_loop R) ∗
+       ▷ (SRET archstate ∗ R ∗ powered2 true -∗ WP2_loop R))%I.
 
     Definition semTriple_loop : iProp Σ :=
       (∀ (R : iProp Σ) (archstate : ArchState),
@@ -275,8 +279,10 @@ Module Type LoopVerificationBinary
     Lemma valid_semTriple_loop : ⊢ semTriple_loop.
     Proof.
       iLöb as "H".
-      iIntros (R archstate) "(HStep & HR & HM_CSRMod & HM_Trap & HMRET & HSRET)".
-      unfold WP2_loop at 2. cbn [FunDef].
+      iIntros (R archstate) "(HStep & HR & [Hpl Hpr] & HM_CSRMod & HM_Trap & HMRET & HSRET)".
+      unfold WP2_loop at 2.
+      iApply (semWP2_fun_loop with "Hpl Hpr").
+      iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
       iApply (semWP2_seq (call step) (call step) (call loop) (call loop)).
       iApply semWP2_call_inline_later.
       iApply (semWP2_mono with "[HStep]").
@@ -294,7 +300,7 @@ Module Type LoopVerificationBinary
           { iApply ("H" $! R (archstate_update_pc archstate i')).
             unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
             rewrite ?transition_update_pc.
-            iFrame "HR HM_CSRMod HM_Trap HMRET HSRET".
+            iFrame "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET".
             unfold Step_pre; cbn.
             rewrite ?Hm.
             now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
@@ -306,31 +312,31 @@ Module Type LoopVerificationBinary
           destruct archstate as [? ms ? ?].
           iApply (semWP2_mono with "[-]").
           { iApply ("H" $! R (ArchState.mkArchState m' ms (ArchState.mkSState stvec' (MkSstatus spp' spie' sie') scause' sscratch' sepc') i')).
-            iSplitR "HR HM_CSRMod HM_Trap HMRET HSRET".
+            iSplitR "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET".
             { unfold Step_pre; cbn.
               now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
-            iFrame "HR".
+            iFrame "HR Hpl Hpr".
             iSplitL "HM_CSRMod".
             { iIntros "!> [H' _]". iDestruct (M_CSRMod_machine with "H'") as %Heq.
               cbn in Heq. contradiction. }
             iSplitL "HM_Trap".
-            { iIntros "!> [H' HR]". iApply "HM_Trap". iFrame "HR". by iApply (M_Trap_SU_irrelevant with "H'"). }
+            { iIntros "!> (H' & HR & HP)". iApply "HM_Trap". iFrame "HR HP". by iApply (M_Trap_SU_irrelevant with "H'"). }
             iSplitL "HMRET".
             { iIntros "!> [H' _]". iDestruct (MRET_machine with "H'") as %Heq.
               cbn in Heq. contradiction. }
             iIntros "!> [H' _]". iDestruct (SRET_machine with "H'") as %Heq.
             cbn in Heq. contradiction. }
           iIntros (? ? ? ?) "(<- & _ & $)"; auto.
-      - iSpecialize ("HM_CSRMod" with "[$HRes $HR]").
+      - iSpecialize ("HM_CSRMod" with "[$HRes $HR $Hpl $Hpr]").
         iApply (semWP2_mono with "HM_CSRMod").
         iIntros (? ? ? ?) "(<- & _ & $)"; auto.
-      - iSpecialize ("HM_Trap" with "[$HRes $HR]").
+      - iSpecialize ("HM_Trap" with "[$HRes $HR $Hpl $Hpr]").
         iApply (semWP2_mono with "HM_Trap").
         iIntros (? ? ? ?) "(<- & _ & $)"; auto.
-      - iSpecialize ("HMRET" with "[$HRes $HR]").
+      - iSpecialize ("HMRET" with "[$HRes $HR $Hpl $Hpr]").
         iApply (semWP2_mono with "HMRET").
         iIntros (? ? ? ?) "(<- & _ & $)"; auto.
-      - iSpecialize ("HSRET" with "[$HRes $HR]").
+      - iSpecialize ("HSRET" with "[$HRes $HR $Hpl $Hpr]").
         iApply (semWP2_mono with "HSRET").
         iIntros (? ? ? ?) "(<- & _ & $)"; auto.
     Qed.
