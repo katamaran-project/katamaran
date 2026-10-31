@@ -26,7 +26,7 @@ Post 2026-07-17 split of the old monolithic `Examples.v`:
 target, so its closure is every result).
 
 `Noninterference.v` sits outside both branches: it depends only on `Semantics` +
-`RiscvPmp.Machine`, so it builds in parallel with everything above.
+`RiscvPmp.Machine`, so it builds in parallel with everything above. `Layout.v` (the statement front-end) sits beside it and requires only it.
 
 ### The light/heavy split (2026-07-27) — DON'T UNDO IT
 
@@ -129,7 +129,7 @@ section and `theories/CLAUDE.md` on why `Require` transitivity bounds this.)
   `VerifierRel:706` (6.4 s) — that no file arrangement touches.
 
 `Noninterference.v` is the trusted statement layer (step relations,
-`declare_*`, `noninterferent_strong`, spec types) and genuinely does not depend
+spec types, `regs_sat`/`mem_sat`/`in_range`, `noninterferent_strong`) and genuinely does not depend
 on the verifier — it requires neither `CFGVer.Spec` nor `RiscvPmp.Sig`.
 
 **When modifying a file, recompile it with `keep_vo=True` before compiling
@@ -142,57 +142,38 @@ errors on the dependents.
 | `SpecIris.v` | shallow executor + `RiscvPmpIrisInstanceWithContracts` (the Iris wiring split out of `Spec.v`) | cfgver-soundness |
 | `Verifier.v` | `safeE`, `sexec_cfg_addr`, `scfg_verification_condition` (`Section Symbolic`); **and, since 2026-09-22, the `CFGVerifierContract` RECORD + `cfg_map` + `AnnotInstr`/`BlkAnnot`** — the record moved down from `Contracts.v` because `ai_block` carries a contract and `Contracts.v` requires this file (PLAN-contract-ast Phase 4). DATA only: the VC over it stays in `Contracts.v`. Iris-free | cfgver-executor, cfgver-contracts |
 | `VerifierRel.v` | `cexec_cfg_addr` (`Shallow`), `rexec_cfg_addr` + `RefineCompat` instances + `itable_rel`/`etable_rel` (`Relational`), `ptsto_instrs` + `sound_exec_instruction` (`Soundness`) | cfgver-refinement, cfgver-rsolve, cfgver-soundness |
-| `Noninterference.v` | trusted statement defs; requires only `Semantics`+`Machine` | cfgver-endtoend |
+| `Noninterference.v` | the trusted KERNEL (PLAN-spec-layer): `val_spec`, `gpr` keys, `reg_spec`, `mem_block`/`mem_layout` (disjointness in the type), `val_sat`/`regs_sat`/`mem_sat` (what a spec says about two runs; addresses read as `Addr`), `clear_of_code` + `in_range` (both CONJUNCTS of the statement: overlap / wrap-around ⇒ unprovable, not vacuous), `noninterferent_strong`; `get_word_read_ram` (byte order = the machine's load). Requires only `Semantics`+`Machine` | cfgver-endtoend |
+| `Layout.v` | the statement FRONT-END (D25): `region` (`Word`/`Array`/`Bytes`/`Gap`), `compile` (regions back to back → `mem_layout`, disjoint by shape), `fits`, `compile_clear`, `compile_in_range`. Requires only `Noninterference.v` | cfgver-endtoend |
+| `SpecLists.v` | PROOF-SIDE list forms of the specs (NOT on the statement surface): `mem_cell`/`words_at`/`cells`, `gen_public_*`/`gen_init_*`, `declare_*`, and `regs_sat_declare`/`mem_sat_declare` taking the kernel's predicates to them. Light; requires only the kernel | cfgver-endtoend-internals |
 | `Tables.v` | reg aliases, `instrs_of_list`, `table_of_list`/`exit_of_off` (the single exit term). Iris-free | cfgver-executor |
 | `TablesRel.v` | the `itable_rel`/`etable_rel` faith lemmas (statements mention `Pred w`, hence Iris). Sole consumer: `EndToEnd.v` | cfgver-executor |
 | `Contracts.v` | `cfg_vc` (the VC — was `ValidCFGVerifierContract` until 2026-09-22), `CFG_VC_triple`, `Valid_CFG_VC`, `minimal_pre`, `↦ᵣ`/`↦ₘ`, `solve_vc`. The RECORD itself now lives in `Verifier.v` (row above) | cfgver-contracts, cfgver-solve-vc |
 | `GenContract.v` | `gen_contract(_param/_rel)`, `param_val`, concretize maps | cfgver-gen-contract(-internals) |
-| `GenSegment.v` | **LIGHT.** The SELF-CONTAINED segment/loop contract generator (a segment is stated as if it were the whole program -- own code, own base, own load address, targets relative to itself; where it sits in a program is a composition fact, PLAN-self-contained-segments.md): `gen_seg_contract`, `LoopSpec`/`gen_loop_contract`, the Σ-generic `gen_reg_asn_at`/`gen_regs_at`, `seg_addr`, `Ltac solve_seg`, and the shared `rc_*` `reg_convert` table + `reg_reduce`. Iris-free | cfgver-gen-contract-internals |
-| `GenCompose.v` | **HEAVY.** Composition combinators: `contract_run(_w)` (a sealed contract run inside a larger AST program: placement + fit + AST containment), `seg_exit_table_ok` (the exit term is `seg_addr ia target`), `seg_vc`/`seg_entry`/`seg_exit`/`seg_step` (one segment, with an explicit frame), `seg_loop` | cfgver-soundness |
+| `GenSegment.v` | **LIGHT.** The SELF-CONTAINED segment/loop contract generator (`gen_seg_contract_at`, exit a TERM -- an offset, or a function's return address; `gen_seg_contract` is its offset abbreviation) (a segment is stated as if it were the whole program -- own code, own base, own load address, targets relative to itself; where it sits in a program is a composition fact, PLAN-self-contained-segments.md): `gen_seg_contract`, `LoopSpec`/`gen_loop_contract`, the Σ-generic `gen_reg_asn_at`/`gen_regs_at`, `seg_addr`, `Ltac solve_seg`, and the shared `rc_*` `reg_convert` table + `reg_reduce`. Iris-free | cfgver-gen-contract-internals |
+| `GenCompose.v` | **HEAVY.** Composition combinators: `contract_run(_w)` (a sealed contract run inside a larger AST program: placement + fit + AST containment), `seg_exit_table_ok` (the exit term is `seg_addr ia target`), `seg_vc_loop`/`seg_entry`/`seg_exit`/`seg_step` (one segment, with an explicit frame), `seg_loop`, `blkValid_of_loop_contract`/`blkValid_of_seg_at`/`blkValid_of_loop_seg` (every block is valid by its loop VC; `_seg_at` for any exit term, its `Hex` premise discharged by `seg_exit_sync_off`/`seg_exit_sync_pub`) | cfgver-soundness |
 | `Adequacy.v` | `myWP2_loop`, `create_resources`, `semWP2_*`, `sound_*_myWP2` | cfgver-soundness, cfgver-wp2 |
-| `Validity.v` | **HEAVY, small.** `ValidCFGVerifierContract c` (sealed `∃ LV : list (AnnotInstrV blkValid), cfg_vc c (map (eraseV c) LV) ∧ map aiv_instr LV = cfg_instrs c ∧ no aiv_loop` -- blocks carry their own validity, since 2026-09-29), its intro/elim, `annotsValid_of_V`, `solve_valid`. The ONLY place annotations cross into the bridges: `EndToEnd.v` (re-exports it) and `GenCompose.v` both take it. Own file so those two siblings stay parallel (PLAN-valid-blk-annot Phase 4) | cfgver-endtoend, cfgver-soundness |
-| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` (incl. the `_simple`/`_rel_simple` common-case bridges + the `ni_rel_corollary` tactic notation that folds the `_rel` concrete-corollary ritual) | cfgver-endtoend(-internals), cfgver-memory |
+| `Validity.v` | **HEAVY, small.** `ValidCFGVerifierContract c` (sealed `∃ LV : list (AnnotInstrV blkValid), cfg_vc c (map eraseV LV) ∧ map aiv_instr LV = cfg_instrs c` -- blocks carry their own validity, since 2026-09-29), its intro/elim, `annotsValid_of_V`, `solve_valid`. The ONLY place annotations cross into the bridges: `EndToEnd.v` (re-exports it) and `GenCompose.v` both take it. Own file so those two siblings stay parallel (PLAN-valid-blk-annot Phase 4) | cfgver-endtoend, cfgver-soundness |
+| `EndToEnd.v` | `cfg_instrs_*`, `gen_implpre*`, `gen_contract_noninterferent*` (incl. the `_simple`/`_rel_simple` common-case bridges; every bridge concludes the internal `ni_cells`, and `ni_of_cells` turns it into `noninterferent_strong` given `clear_of_code` and the two `≡ₚ` correspondences; `perm_of_eq`/`solve_cells_eq`/`words_at_repeat`/`words_at_app` for proving those) | cfgver-endtoend(-internals), cfgver-memory |
 | `Example/Prelude.v` | shared `Require Export`/`Import` preamble every example re-imports (no defs) | cfgver-new-example |
-| `Example/<Prog>.v` | per-program instrs+specs (statement-relevant), parametric contract, `valid_*_param` VC. Only the `_param` form exists — the concrete-base contracts/VCs were removed as dead in 2026-07-27 | cfgver-new-example |
-| `Example/<Prog>Result.v` | that program's end-to-end `*_noninterferent[_param]` theorems (trusted statement surface, gate-checked) | cfgver-endtoend |
+| `Example/<Prog>.v` | per-program instrs (statement-relevant) + the GENERATOR's spec lists (proof-side since PLAN-spec-layer), parametric contract, `valid_*_param` VC. Only the `_param` form exists — the concrete-base contracts/VCs were removed as dead in 2026-07-27 | cfgver-new-example |
+| `Example/<Prog>Result.v` | that program's end-to-end `*_noninterferent[_param]` theorems over its OWN shallow `<x>_data : list region` / `<x>_regs` (`fits … → noninterferent_strong … (compile … <x>_data)`), the `≡ₚ` proof that these equal the generator's specs, and fixed-address SANITY-CHECK corollaries (trusted statement surface, gate-checked) | cfgver-endtoend |
 | `Results.v` | re-export shell over the `<Prog>Result.v` files; no proofs | cfgver-endtoend |
 
-## Importing CFGVer.Verifier downstream
+## Importing CFGVer modules
 
-```coq
-(* At top level, after the main Require Import block: *)
-From Katamaran Require
-     RiscvPmp.CFGVer.Verifier.
-```
+Import, do not qualify (Emiel, 2026-10-15, PLAN-imports.md): no
+`Katamaran.RiscvPmp.CFGVer.<File>.name` in code. The pattern is `main`'s:
 
-Then use qualified names (`Katamaran.RiscvPmp.CFGVer.Verifier.foo`). Do NOT
-`Require Import` — it clashes with BlockVer's identically-named definitions.
-The other CFGVer files (`Noninterference`, `Tables`, `Contracts`, …) are safe
-to plain `Require Import`.
+1. one `From Katamaran Require Import …` block at the top listing the
+   sibling files used (`RiscvPmp.CFGVer.Verifier`, `RiscvPmp.CFGVer.Tables`, …);
+2. top-level `Import <instance>.` for the module instances the file works in
+   (`Import RiscvPmpProgram.`);
+3. notation modules imported locally, inside the `Section` that needs them;
+4. a bare `Require` only for a module used for a handful of names, which are
+   then written with a SHORT path: `Adequacy.v` requires `Contracts` this way
+   (its assertion notations `↦ᵣ`/`↦ₘ` would clash with the Iris ones) and
+   writes `Contracts.loop_post`.
 
-> **BlockVer-contingent.** This idiom exists only because BlockVer shares names
-> with CFGVer. Once BlockVer is consolidated away (see TODO.md cleanup items),
-> switch the downstream files to a plain `Require Import` and delete this note.
-
-**Currently violated in `Tables.v`/`Contracts.v`/`GenContract.v` (2026-08-20,
-AnnotInstr migration, commit 323db24c) — flagged, not yet fixed.** All three do
-`Require Import RiscvPmp.CFGVer.Verifier` and reference `AnnotInstr`
-unqualified, because qualifying it hit a confusing `rocq_compile_file`
-dune-fallback resolution failure mid-session (see **rocq-implementation**'s
-tooling-caveat entry) that was mistaken for the name genuinely not existing. It
-compiles today (`make -f Makefile.coq`, verified) ONLY because BlockVer is fully
-commented out of `_CoqProject` on this branch, so there is no live BlockVer
-module to clash with. **This is latent, not inert**: reactivating BlockVer
-alongside these files without reverting this first will reproduce exactly the
-clash this note exists to prevent.
-
-To fix: revert the three `Require Import` back to bare `Require`, and qualify
-every bare `AnnotInstr` occurrence as
-`Katamaran.RiscvPmp.CFGVer.Verifier.AnnotInstr` — 3 in `Tables.v`, 4 in
-`Contracts.v`, 6 in `GenContract.v`, and **nothing else**: the product-type
-redesign means these files no longer name `Annot`, `strip`, or any constructor
-(the two coercions do the work implicitly and need no name). Confirm the
-qualified path actually resolves with a plain `rocq_check`/`rocq_start` probe
-FIRST (not `Locate`, which reported false negatives on stale state during that
-session), then re-run GATE 1 (`plans/PLAN-annotinstr.md`) to confirm nothing
-broke.
+The old rule (bare `Require` + full paths for `Verifier`) existed only for a
+name clash with BlockVer, which is out of the build. Reviving BlockVer
+alongside CFGVer would bring that clash back.

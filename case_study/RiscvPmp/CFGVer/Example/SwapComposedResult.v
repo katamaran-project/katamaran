@@ -104,7 +104,7 @@ Section Compose.
     ⊢ asn.interpret (extend_to_minimal_pre (cfg_precondition swapA))
           ι.["a"∷ty_xlenbits ↦ SyncVal (bv.of_N 0)]
       ∗ pc ↦ᵣ SyncVal (bv.of_N 0) ∗ (∃ v, nextpc ↦ᵣ v)
-      ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+      ∗ ptsto_instrs
           (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA)))
       -∗ myWP2_loop swapExit.
   Proof.
@@ -121,10 +121,10 @@ Section Compose.
     { change (bv.exp2 xlenbits) with 4294967296%N. cbn. lia. }
     assert (HcA : ValidCFGVerifierContract swapA) by solve_valid valid_swapA.
     assert (HcB : ValidCFGVerifierContract swapB) by solve_valid valid_swapB.
-    assert (HefA : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
+    assert (HefA : etable_rel (w := wlctx swapCtx)
                      (SyncVal (bv.of_N 4)) (cfg_exit swapA) ι).
     { eexists. split; reflexivity. }
-    assert (HefB : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx swapCtx)
+    assert (HefB : etable_rel (w := wlctx swapCtx)
                      (SyncVal (bv.of_N 12)) (cfg_exit swapB) ι).
     { eexists. split; reflexivity. }
     iIntros "(Hpre & Hpc & Hnpc & Hinstrs)".
@@ -140,7 +140,7 @@ Section Compose.
              re-threaded bridge conjunct; it is the whole reason this works. --- *)
       iIntros (an) "(%HexitA & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct HexitA as (av & -> & HexitA).
-      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in HexitA.
+      apply exit_hit_spec in HexitA.
       injection HexitA as <- _.
       (* --- SEGMENT B, entered at the cut address with A's exit assertion. --- *)
       iApply (contract_run swapB HcB ι (bv.of_N 0) (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs swapA))) _ swapExit

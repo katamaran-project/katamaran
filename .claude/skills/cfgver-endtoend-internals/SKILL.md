@@ -197,7 +197,7 @@ Four traps, each of which cost a round trip:
 - **The per-group lemmas need only the `is_pub` hypothesis, not `is_exist`.**
   `interp_mem_with_public_memory` branches on the publicness bit and ignores the
   value slot entirely, so the group conversion never has to know the group is
-  `PVExist`.
+  existential (`Secret`/`Public`; `PVExist` before 2026-10-09).
 - **`μ1`/`μ2` are IMPLICIT in `gen_implpre_mem_class`** (they occur in
   `HInitMem1`'s type, under `Set Implicit Arguments`) — and this differs from the
   same statement at a file's top level. Passing them positionally reports

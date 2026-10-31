@@ -48,57 +48,65 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.Example.Cmovznz4.
 
-(* Phase 4.2 headline #2: cmovznz4 (29 instrs, 12 data words, base-relative
-   data pointers) verified end-to-end for a UNIVERSAL base address, from the
-   single symbolic-base VC valid_cmovznz4_cfg_contract_param via the reusable
-   base-relative bridge gen_contract_noninterferent_rel_classed_simple.  The
-   concrete reg /
-   mem specs are the base-relative specs concretized at init_addr. *)
+(* code: init_addr .. init_addr+115 (29 instructions); the data follows. *)
+Definition cmovznz4_data : list region :=
+  [ Array 4 Secret        (* x[0..3]  at init_addr+116 *)
+  ; Array 4 Secret        (* y[0..3]  at init_addr+132 *)
+  ; Array 4 Secret ].     (* r[0..3]  at init_addr+148 *)
+
+Definition cmovznz4_regs (ia : N) : list reg_spec :=
+  [ (A0, Secret);                                        (* cin *)
+    (A1, Known (bv.of_N (ia + 116)));                    (* &x  *)
+    (A2, Known (bv.of_N (ia + 132)));                    (* &y  *)
+    (A3, Known (bv.of_N (ia + 148)));                    (* &r  *)
+    (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret); (T0, Secret); (T1, Secret) ].
+
+(* cmovznz4 verified end-to-end for a UNIVERSAL load address, from the single
+   symbolic-base VC valid_cmovznz4_cfg_contract_param via the base-relative
+   bridge gen_contract_noninterferent_rel_classed_simple. *)
 Lemma cmovznz4_noninterferent_param (init_addr : N) :
-  (init_addr + 164 < lenAddr)%N ->
+  fits (init_addr + 4 * N.of_nat (length cmovznz4_instrs)) cmovznz4_data ->
   noninterferent_strong init_addr cmovznz4_instrs
-    (init_addr + 116)%N
-    (map (concretize_reg init_addr) cmovznz4_reg_specs_rel)
-    (map (concretize_mem init_addr) cmovznz4_mem_specs_rel).
+    (init_addr + 4 * N.of_nat (length cmovznz4_instrs))
+    (cmovznz4_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length cmovznz4_instrs)) cmovznz4_data).
 Proof.
-  intros Hb.
-  (* The `strip` restatement this proof used to open with is GONE: the
-     EndToEnd bridges now conclude over `instrs` itself, not `strip
-     instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
-     Phase 3).  And since 2026-09-23 the annotated list does not enter HERE
-     at all: the hint list, the strip equation and the block obligations are
-     sealed inside ValidCFGVerifierContract, which `solve_valid` supplies from
-     this example's own VC.  No statement in this file names an annotation. *)
-  eapply gen_contract_noninterferent_rel_classed_simple.
-  - apply Prelude.nodup_fixed; reflexivity.
-  - intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
-      try (inversion H; subst; cbn; f_equal; lia); try discriminate.
-  - cbn. lia.
-  - exact Hb.
-  - solve_valid valid_cmovznz4_cfg_contract_param.
+  intros Hfit.
+  apply (ni_of_cells (regs' := map (concretize_reg init_addr) cmovznz4_reg_specs_rel)
+                     (cs := map (concretize_mem init_addr) cmovznz4_mem_specs_rel)).
+  - apply compile_clear; lia.
+  - apply compile_in_range; [lia | assumption].
+  - reflexivity.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 164)).
+    + apply Prelude.nodup_fixed; reflexivity.
+    + intros [|[|[|[|[|[|[|[|[|[|[|[|i]]]]]]]]]]]] spec H; cbn in H;
+        try (inversion H; subst; cbn; lia); try discriminate.
+    + simpl. lia.
+    + simpl. lia.
+    + solve_valid valid_cmovznz4_cfg_contract_param.
 Qed.
 
-(* The two concrete cmovznz4 results are now corollaries of the universal-base
-   theorem above: the single source of truth is valid_cmovznz4_cfg_contract_param.
-   The concrete reg/mem specs are exactly the base-relative specs concretized at
-   the respective base (init_addr = 0, and cmovznz4_start = 256), so the
-   conclusions coincide definitionally (checked by vm_compute). *)
+(* SANITY CHECKS (PLAN-spec-layer D20): the universal theorem at the default
+   load address init_addr = 0 and at the nonzero cmovznz4_start = 256 -- its
+   premise is satisfiable there, so it is not vacuous. *)
 Lemma cmovznz4_noninterferent :
-  noninterferent_strong init_addr cmovznz4_instrs (init_addr + 116)%N
-    cmovznz4_reg_specs cmovznz4_mem_specs.
+  noninterferent_strong init_addr cmovznz4_instrs
+    (init_addr + 4 * N.of_nat (length cmovznz4_instrs))
+    (cmovznz4_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length cmovznz4_instrs)) cmovznz4_data).
 Proof.
-  ni_rel_corollary cmovznz4_noninterferent_param
-    cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel init_addr.
+  apply cmovznz4_noninterferent_param.
+  unfold fits; vm_compute; reflexivity.
 Qed.
 
-(* Fully end-to-end at the genuinely nonzero start address cmovznz4_start = 256,
-   as a corollary of the universal-base version. *)
 Lemma cmovznz4_noninterferent_at_start :
   noninterferent_strong cmovznz4_start cmovznz4_instrs
-    (cmovznz4_start + 116)%N
-    cmovznz4_reg_specs_at_start cmovznz4_mem_specs_at_start.
+    (cmovznz4_start + 4 * N.of_nat (length cmovznz4_instrs))
+    (cmovznz4_regs cmovznz4_start)
+    (compile (cmovznz4_start + 4 * N.of_nat (length cmovznz4_instrs)) cmovznz4_data).
 Proof.
-  ni_rel_corollary cmovznz4_noninterferent_param
-    cmovznz4_reg_specs_rel cmovznz4_mem_specs_rel cmovznz4_start.
+  apply cmovznz4_noninterferent_param.
+  unfold fits; vm_compute; reflexivity.
 Qed.
-

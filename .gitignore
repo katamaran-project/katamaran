@@ -32,6 +32,12 @@ rocq_mcp_cache_*.v
 # (2026-08-13's ZZKsl* set, and once before), hence this rule.
 case_study/RiscvPmp/CFGVer/Example/ZZ*
 
-# Per-user state of the learning plugins (VibeWise, vibe-learn).
+# Per-user state of the learning plugins (VibeWise, vibe-learn, while-you-wait).
+# wyw.json + decks are deliberately NOT committed (Emiel, 2026-10-08, PLAN-spec-layer
+# Phase S) -- against the plugin's own advice; decks are private study material.
 .vibe-wise/
 .vibe-learn/
+**/.claude/wyw.json
+**/.claude/decks/
+**/.claude/wyw/
+**/.claude/wyw-review*.md

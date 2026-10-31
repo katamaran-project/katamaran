@@ -58,6 +58,8 @@ case_study/RiscvPmp/CFGVer/SpecIris.v
 case_study/RiscvPmp/CFGVer/Verifier.v
 case_study/RiscvPmp/CFGVer/VerifierRel.v
 case_study/RiscvPmp/CFGVer/Noninterference.v
+case_study/RiscvPmp/CFGVer/Layout.v
+case_study/RiscvPmp/CFGVer/SpecLists.v
 case_study/RiscvPmp/CFGVer/Tables.v
 case_study/RiscvPmp/CFGVer/TablesRel.v
 case_study/RiscvPmp/CFGVer/Contracts.v
@@ -100,6 +102,15 @@ case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamTail.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamTailVC.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParam.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamVC.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSub.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSub2.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSb.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeArrv.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemcpy.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemset.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaMemmove.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopy.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopyGate.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamInstrs.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop1.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamLoop2.v
@@ -128,6 +139,9 @@ case_study/RiscvPmp/CFGVer/Example/CountdownRecResult.v
 case_study/RiscvPmp/CFGVer/Example/Muladd/MuladdParamResult.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarParamResult.v
 case_study/RiscvPmp/CFGVer/Example/CheckScalar/CheckScalarPtrResult.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSubResult.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaSpikeSub2Result.v
+case_study/RiscvPmp/CFGVer/Example/Rsa/RsaCcopyGateResult.v
 case_study/RiscvPmp/CFGVer/Example/Aes/InvMixColumnsResult.v
 case_study/RiscvPmp/CFGVer/Results.v
 # case_study/RiscvPmp/BinaryBlockVer/Spec.v

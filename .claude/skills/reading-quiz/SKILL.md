@@ -79,7 +79,7 @@ mode when he says so, or when he answers a question with a batch of his own
    because he will build on your account instead of on his own reading. Read
    the definitions; for anything that looks odd, find out WHY it is that way:
    `git log -S'<snippet>'`, the PLAN that introduced it (`plans/*.md`), the
-   file's header. A patch-of-a-patch (muladd's `set_nth` reverting an earlier
+   file's header. A patch-of-a-patch (muladd's `set_nth` — fixed 2026-10-09 — reverting an earlier
    immediate patch) is only explicable from its history.
 2. **Answer each of his questions under its own heading**, in his order, each
    with `file:line`. Lead with the direct answer, then the mechanism, then the

@@ -81,7 +81,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        (there is no memory access anywhere in this program), so all three
        stay private/independent per world. *)
     Definition precompute_reg_specs : list reg_spec :=
-      [(A0, false, None); (A1, false, None); (A2, false, None)].
+      [(A0, Secret); (A1, Secret); (A2, Secret)].
 
     (* Parametric-base headline (∀ init_addr), same shape as set_X2_to_42_param:
        no memory in this program, so gen_contract_param (not _rel) suffices --

@@ -47,26 +47,30 @@ From Katamaran Require Import
 
 (* Linux master inv_mix_columns: 38 instructions = 152 bytes. *)
 Lemma imc_linux_noninterferent_param (init_addr : N) :
-  (init_addr + 152 < lenAddr)%N ->
-  noninterferent_strong init_addr imc_linux_instrs (init_addr + 152)%N
-    imc_linux_reg_specs [].
+  fits (init_addr + 4 * N.of_nat (length imc_linux_instrs)) [] ->
+  noninterferent_strong init_addr imc_linux_instrs (init_addr + 4 * N.of_nat (length imc_linux_instrs))
+    imc_linux_reg_specs (compile (init_addr + 4 * N.of_nat (length imc_linux_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := imc_linux_reg_specs) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_imc_linux_cfg_contract_param.
 Qed.
 
 (* inv_mix_columns with Algorithm 7 multiplies: 60 instructions = 240 bytes. *)
 Lemma imc_alg7_noninterferent_param (init_addr : N) :
-  (init_addr + 240 < lenAddr)%N ->
-  noninterferent_strong init_addr imc_alg7_instrs (init_addr + 240)%N
-    imc_alg7_reg_specs [].
+  fits (init_addr + 4 * N.of_nat (length imc_alg7_instrs)) [] ->
+  noninterferent_strong init_addr imc_alg7_instrs (init_addr + 4 * N.of_nat (length imc_alg7_instrs))
+    imc_alg7_reg_specs (compile (init_addr + 4 * N.of_nat (length imc_alg7_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := imc_alg7_reg_specs) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_imc_alg7_cfg_contract_param.
 Qed.

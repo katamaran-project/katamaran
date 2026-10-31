@@ -122,9 +122,12 @@ import preamble) → `Example/*.v`, and the HEAVY adequacy branch `SpecIris.v` �
 `VerifierRel.v` → `TablesRel.v` → `Adequacy.v` → `EndToEnd.v` — rejoining at
 `Example/<Prog>Result.v` (the per-program end-to-end theorems) →
 `Results.v` (re-export shell, the merge gate's build target).
-`Noninterference.v` + `Example/*Result.v` + the `*_instrs`/`*_specs` data blocks
-in `Example/*.v` are the TRUSTED STATEMENT surface — diff these to know whether
-what is being proved changed.
+`Noninterference.v` (the kernel) + `Layout.v` (the statement front-end:
+`region`/`compile`/`fits`) + `Example/*Result.v` (incl. each one's own shallow
+`<x>_data`/`<x>_regs`) + the `*_instrs` program lists are the TRUSTED STATEMENT
+surface — diff these to know whether what is being proved changed. Since
+PLAN-spec-layer (2026-10-09) the generator spec lists (`*_specs_rel` etc.) are
+PROOF-side: each Result proves its statement data equal to them.
 **Two layering invariants, each worth >1 GB or ~40 s and each easy to undo by
 accident:** (1) the light files (`Spec`, `Verifier`, `Tables`, `Contracts`,
 `GenContract`, `Example/*`) must stay free of Iris / `ShallowExecutor` /
@@ -132,8 +135,8 @@ accident:** (1) the light files (`Spec`, `Verifier`, `Tables`, `Contracts`,
 examples; (2) `Example/Prelude.v` must stay free of `EndToEnd`, or the 85 s
 `Adequacy`→`EndToEnd` chain serializes ahead of every example instead of
 alongside them. Fuller detail (per-file skill pointers, the light/heavy split
-table, the `Tables.v` `Open Scope list_scope` trap, the
-`Require`-vs-`Require Import Verifier` landmine) lives in
+table, the `Tables.v` `Open Scope list_scope` trap, how CFGVer files import
+each other) lives in
 `case_study/RiscvPmp/CFGVer/CLAUDE.md`, loaded automatically when touching
 that subtree.
 
@@ -270,7 +273,7 @@ nothing. Three tiers of intervention now exist, and only the last two work:
   `core-executor-internals`; `Worlds.v`/`UnifLogic.v` → `pred-modalities`; `Verifier.v` → `cfgver-executor`; `VerifierRel.v` →
   `cfgver-refinement`; `Adequacy.v`/`SpecIris.v` → `cfgver-soundness`;
   `GenContract.v` → `cfgver-gen-contract-internals`; `EndToEnd.v` →
-  `cfgver-endtoend-internals`; `Example/*Result.v` + `Noninterference.v` →
+  `cfgver-endtoend-internals`; `Example/*Result.v` + `Noninterference.v` + `Layout.v` →
   `cfgver-endtoend`; other `Example/*.v` → `cfgver-new-example`;
   `diagnostics/*.md` → `cfgver-scaling-diagnostics`). **That mapping is
   transcribed from `CFGVer/CLAUDE.md`'s file table and is meant to track it** —

@@ -53,12 +53,13 @@ From Katamaran Require Import
    for a UNIVERSAL base address, from the single symbolic-base VC
    valid_precompute_cfg_contract_param -- no per-address vm_compute. *)
 Lemma precompute_noninterferent_param (init_addr : N) :
-  (init_addr + 40 < lenAddr)%N ->
-  noninterferent_strong init_addr precompute_instrs
-    (init_addr + 40)%N
-    precompute_reg_specs [].
+  fits (init_addr + 4 * N.of_nat (length precompute_instrs)) [] ->
+  noninterferent_strong init_addr precompute_instrs (init_addr + 4 * N.of_nat (length precompute_instrs))
+    precompute_reg_specs (compile (init_addr + 4 * N.of_nat (length precompute_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := precompute_reg_specs) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -68,16 +69,18 @@ Proof.
      this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_precompute_cfg_contract_param.
 Qed.
 
 (* The concrete result at init_addr = 0, as a corollary. *)
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma precompute_noninterferent :
-  noninterferent_strong init_addr precompute_instrs
-    (init_addr + 40)%N precompute_reg_specs [].
+  noninterferent_strong init_addr precompute_instrs (init_addr + 4 * N.of_nat (length precompute_instrs))
+    precompute_reg_specs (compile (init_addr + 4 * N.of_nat (length precompute_instrs)) []).
 Proof.
   apply precompute_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.
 

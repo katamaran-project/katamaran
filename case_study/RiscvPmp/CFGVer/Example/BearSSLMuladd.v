@@ -134,7 +134,7 @@ Definition muladd_q_instrs : list AST :=
    trace is identical no matter how the three 31-bit words differ.  The
    program is register-only (no loads/stores at all), so mem_specs is []. *)
 Definition muladd_q_reg_specs : list reg_spec :=
-  [(A0, false, None); (A1, false, None); (A2, false, None)].
+  [(A0, Secret); (A1, Secret); (A2, Secret)].
 
 (* Base-parametric contract (Σ = ["p"]): verified for an ARBITRARY 4-aligned
    load address, following the Phase 4.2 pattern used by every other example.

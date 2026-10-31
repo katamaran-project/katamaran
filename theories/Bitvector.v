@@ -477,6 +477,17 @@ Module bv.
                  end
       end.
 
+    (* The bytes of x, least significant first: the same `appView 8`
+       recursion a case study's points-to over `k * 8` bits uses, so these
+       are x's bytes in memory order.  Bits past the last whole byte are
+       dropped.  The eval of `uop.regroup` (CFGVer `arrv`, PLAN-arrv D8). *)
+    Fixpoint le_bytes {m} : bv m -> list (bv 8) :=
+      match m with
+      | S (S (S (S (S (S (S (S m'))))))) => fun x =>
+          let (b, r) := appView 8 m' x in Datatypes.cons b (le_bytes r)
+      | _ => fun _ => Datatypes.nil
+      end.
+
     Definition rev_append {m n} (x : bv m) (y : bv n) : bv (m + n) :=
       fold_left (A := fun k => bv (k + n)) (fun k (z : bv (k + n)) b => cons b z) y x.
     Definition rev {m} (x : bv m) : bv m :=
@@ -837,6 +848,21 @@ Module bv.
                   Znat.Nat2Z.inj_succ, Z.pow_succ_r; lia.
     Qed.
 
+    (* A sign extension to the SAME width is the identity (a RISC-V `lw` on
+       RV32 produces one: extend_value widens 4 bytes to xlenbytes = 4).
+       Stated for any n = m because `leview m m` cannot be destructed with its
+       index fixed. *)
+    Lemma unsigned_sext_same {m n : nat} {p : IsTrue (m <=? n)%nat} (v : bv m) :
+      n = m -> unsigned (@sext m v n p) = unsigned v.
+    Proof.
+      intros H. unfold sext. destruct (leview m n) as [k].
+      assert (k = 0%nat) by Lia.lia. subst k. unfold sext'. rewrite unsigned_app.
+      destruct (msb v); cbn; Lia.lia.
+    Qed.
+
+    Lemma sext_same {m : nat} {p : IsTrue (m <=? m)%nat} (v : bv m) : @sext m v m p = v.
+    Proof. apply unsigned_inj, unsigned_sext_same. reflexivity. Qed.
+
     Lemma unsigned_zero {m} :
       unsigned (@zero m) = 0.
     Proof. reflexivity. Qed.
@@ -978,6 +1004,24 @@ Module bv.
       - now rewrite app_nil.
       - now rewrite app_cons, take_cons; f_equal.
     Qed.
+
+    (* `leview m (m + k)` cannot be destructed (its index is not a variable),
+       but it computes to `is_le k` by induction on m: the statement is
+       well-typed as written. *)
+    Lemma leview_is_le (m k : nat) (p : IsTrue (m <=? m + k)%nat) :
+      leview m (m + k) (p := p) = @is_le m k.
+    Proof.
+      induction m as [|m IH]; cbn.
+      - reflexivity.
+      - rewrite (IH p). reflexivity.
+    Qed.
+
+    (* Truncating a zero extension back to its source width is the identity:
+       a RISC-V `lbu` (extend_value zext 8 -> 32) followed by `sb` (truncate
+       32 -> 8) stores the byte it loaded (PartialEvaluation.peval_bvtake_zext). *)
+    Lemma take_zext {m k : nat} (p : IsTrue (m <=? m + k)%nat) (x : bv m) :
+      take m (@zext m x (m + k) p) = x.
+    Proof. unfold zext. rewrite leview_is_le. unfold zext'. apply take_app. Qed.
 
     Lemma take_take {m n o} (x : bv ((m+n)+o)) :
       take m (take (m + n) x) =

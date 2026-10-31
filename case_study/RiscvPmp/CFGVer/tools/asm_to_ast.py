@@ -319,6 +319,50 @@ def parse(text):
     return canon
 
 
+OBJDUMP_SYM_RE = re.compile(r'^([0-9a-f]+) <([^>]+)>:$')
+OBJDUMP_INSN_RE = re.compile(r'^\s*([0-9a-f]+):\s+(\S+)\s*(.*)$')
+OBJDUMP_TARGET_RE = re.compile(r'(?:^|,\s*)(0x[0-9a-f]+|[0-9a-f]+) <[^>]+>$')
+HEX_RE = re.compile(r'(-?)0x([0-9a-f]+)')
+
+
+def objdump_to_asm(text):
+    """Rewrite `llvm-objdump -d --no-show-raw-insn` of a LINKED program into
+    the listing syntax `parse` reads: a label `L_<addr>:` before every
+    instruction, each branch/jump target `0x7c <.LBB0_2>` replaced by its
+    label, hex immediates made decimal.  Returns (listing, functions) where
+    functions maps each non-local symbol to its byte offset from the first
+    instruction.  Working from the linked binary rather than per-function .s
+    files means the linker's call relaxation (`call` -> `jal`, `tail` -> `j`)
+    has already decided the real instructions."""
+    out, functions, base = [], {}, None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        msym = OBJDUMP_SYM_RE.match(line)
+        if msym:
+            if not msym.group(2).startswith('.L'):
+                functions[msym.group(2)] = int(msym.group(1), 16)
+            continue
+        mi = OBJDUMP_INSN_RE.match(line)
+        if not mi:
+            continue
+        addr, mnem, ops = int(mi.group(1), 16), mi.group(2), mi.group(3).strip()
+        if base is None:
+            base = addr
+        mt = OBJDUMP_TARGET_RE.search(ops)
+        if mt:
+            label = f"L_{int(mt.group(1), 16):x}"
+            ops = ops[:mt.start(1)] + label
+        ops = HEX_RE.sub(lambda m: str(int(m.group(1) + m.group(2), 16)), ops)
+        out.append(f"L_{addr:x}:")
+        out.append(f"\t{mnem}\t{ops}\t# {addr:#x}: {mi.group(2)} {mi.group(3).strip()}")
+    if base is None:
+        raise AsmError("no instructions found in objdump input")
+    # one past the last instruction: the generator's fall-through exit, so a
+    # `j _etext` (a harness leaving the program) resolves to it
+    out.append(f"L_{addr + 4:x}:")
+    return '\n'.join(out), {f: a - base for f, a in functions.items()}
+
+
 def bv(n):
     # Parenthesize negative literals: `bv.of_Z -1` parses in Coq as the
     # infix expression `bv.of_Z - 1`, not application to a negative literal.
@@ -347,9 +391,12 @@ def emit_instr(instr):
     if k == 'STORE':
         return f"STORE {bv(instr['imm'])} {instr['rs2']} {instr['rs1']} {instr['width']}"
     if k == 'MUL':
-        b = lambda x: 'true' if x else 'false'
-        return (f"MUL {instr['rs2']} {instr['rs1']} {instr['rd']} "
-                f"{b(instr['high'])} {b(instr['signed1'])} {b(instr['signed2'])}")
+        # Spec.v's `Assembly` (exported by Example/Prelude.v) SHADOWS Base.MUL
+        # with 3-argument per-opcode constructors, `rd rs1 rs2` like the
+        # assembly; emit those (PLAN-muladd-full.md GATE 2).
+        names = {v: k for k, v in MUL_OPS.items()}
+        op = names[(instr['high'], instr['signed1'], instr['signed2'])].upper()
+        return f"{op} {instr['rd']} {instr['rs1']} {instr['rs2']}"
     if k == 'NULLARY':
         return instr['op']
     raise AssertionError(k)
@@ -364,7 +411,15 @@ def used_registers(canon):
     return sorted(regs, key=lambda r: NAME_TO_X[r])
 
 
-def render(canon, name, drop_ret):
+# Tables.v's register aliases (X1 is ra, X2 is sp); the rest by ABI name.
+TABLES_ALIAS = {'zero': 'X0', 'ra': 'X1', 'sp': 'X2', 'gp': 'X3', 'tp': 'X4'}
+
+
+def tables_alias(r):
+    return TABLES_ALIAS.get(r, r.upper())
+
+
+def render(canon, name, drop_ret, functions=None, aliases=False):
     if drop_ret and canon and canon[-1][0] == {'kind': 'JALR', 'rd': 'zero', 'rs1': 'ra', 'imm': 0}:
         canon = canon[:-1]
 
@@ -377,14 +432,25 @@ def render(canon, name, drop_ret):
     lines.append("   first; otherwise bare numerals fall back to Bitvector's `bitstring`")
     lines.append("   Number Notation and fail to elaborate. *)")
     lines.append("")
-    for r in used_registers(canon):
-        lines.append(f"Definition {r} : RegIdx := bv.of_nat {NAME_TO_X[r]}.")
+    if aliases:
+        # use Tables.v's names instead of defining our own (S4..S11 are not
+        # there yet: add them to Tables.v when a listing needs them)
+        canon = [({k: (tables_alias(v) if k in ('rd', 'rs1', 'rs2') else v)
+                   for k, v in instr.items()}, c) for instr, c in canon]
+    else:
+        for r in used_registers(canon):
+            lines.append(f"Definition {r} : RegIdx := bv.of_nat {NAME_TO_X[r]}.")
     lines.append("")
     lines.append(f"Definition {name}_instrs : list AST :=")
     for i, (instr, comment) in enumerate(canon):
         prefix = '  [ ' if i == 0 else '  ; '
         lines.append(f"{prefix}{emit_instr(instr)}   (* {comment} *)")
     lines.append("  ].")
+    if functions:
+        lines.append("")
+        lines.append(f"(* Byte offset of each function's first instruction in {name}_instrs. *)")
+        for f, off in sorted(functions.items(), key=lambda kv: kv[1]):
+            lines.append(f"Definition {name}_{f}_off : N := {off}.")
     return '\n'.join(lines)
 
 
@@ -398,16 +464,27 @@ def main():
                           "sexec_cfg_addr can't step through a symbolic jump target, "
                           "so straight-line blocks are usually verified up to the ret "
                           "instead of through it")
+    ap.add_argument('--objdump', action='store_true',
+                     help="input is `llvm-objdump -d --no-show-raw-insn` of a "
+                          "LINKED program (several functions, calls resolved "
+                          "to jal/j by the linker); also emits each "
+                          "function's byte offset")
+    ap.add_argument('--tables-aliases', action='store_true',
+                     help="name registers by Tables.v's aliases (X0, X1 = ra, "
+                          "X2 = sp, A0, T0, S0, ...) and define none")
     args = ap.parse_args()
 
     text = open(args.input).read() if args.input else sys.stdin.read()
+    functions = None
     try:
+        if args.objdump:
+            text, functions = objdump_to_asm(text)
         canon = parse(text)
     except AsmError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(render(canon, args.name, args.drop_ret))
+    print(render(canon, args.name, args.drop_ret, functions, args.tables_aliases))
 
 
 if __name__ == '__main__':

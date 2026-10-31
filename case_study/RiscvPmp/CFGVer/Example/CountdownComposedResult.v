@@ -131,7 +131,7 @@ Section ComposeLoop.
   Definition cdInv (k : bv xlenbits) : iProp Σ :=
     (asn.interpret cdInvAsn (ik k)
      ∗ pc ↦ᵣ SyncVal (bv.of_N 0) ∗ (∃ v, nextpc ↦ᵣ v)
-     ∗ Katamaran.RiscvPmp.CFGVer.VerifierRel.ptsto_instrs
+     ∗ ptsto_instrs
          (ai_instr <$> instrs_of_list (bv.of_N 0) (list_AST_AnnotInstr (cfg_instrs cdBody))))%I.
 
   (* THE SEGMENT CONTRACTS ARE VALID -- sealed, from their own VCs
@@ -171,7 +171,7 @@ Section ComposeLoop.
   Proof.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
+    assert (Hef : etable_rel (w := wlctx cdCtx)
                     (SyncVal (bv.of_N 0)) (cfg_exit cdBody) (ik k)).
     { eexists. split; reflexivity. }
     assert (Hk2 : bv.bin k = (N.of_nat n + 2)%N) by lia.
@@ -192,7 +192,7 @@ Section ComposeLoop.
       change ((k + minus1)%bv) with (bvdec k). split; exact Hne.
     - iIntros (an) "(%Hex & Hpc & Hnpc & Hinstrs & Hpost)".
       destruct Hex as (av & -> & Hex).
-      apply Katamaran.RiscvPmp.CFGVer.VerifierRel.exit_hit_spec in Hex.
+      apply exit_hit_spec in Hex.
       injection Hex as <- _.
       iExists (bvdec k). iSplitR; [iPureIntro; exact Hdec|].
       unfold cdInv, cdInvAsn. iEval (cbn) in "Hpost". cbn.
@@ -205,7 +205,7 @@ Section ComposeLoop.
   Proof.
     iIntros "(%k & %Hk & Hres0)".
     iDestruct "Hres0" as "(Hres & Hpc & Hnpc & Hinstrs)".
-    assert (Hef : Katamaran.RiscvPmp.CFGVer.VerifierRel.etable_rel (w := wlctx cdCtx)
+    assert (Hef : etable_rel (w := wlctx cdCtx)
                     (SyncVal (bv.of_N 8)) (cfg_exit cdFinal) (ik k)).
     { eexists. split; reflexivity. }
     iApply (contract_run cdFinal cdFinal_valid (ik k) (bv.of_N 0)

@@ -38,7 +38,7 @@ Both go in `_CoqProject` before `Results.v`, the `Result` file is added to
 (and so `Adequacy`) into the example, serializing that ~85 s chain ahead of every
 example instead of letting it build in their parallel shadow — ~40 s of wall time
 per -j2 gate build. Only write a `_param` contract/VC; the concrete-base result
-is a corollary (`gen_contract_noninterferent_*_simple` / `ni_rel_corollary`), so
+is a corollary (a sanity check at a fixed address, PLAN-spec-layer D20), so
 a concrete-base VC is dead compile time.
 
 1. **Instructions.** Translate the RV32I assembly (e.g. Compiler Explorer output of
@@ -106,6 +106,6 @@ a concrete-base VC is dead compile time.
 right after the code (the `countdown_mem` pattern). Since 2026-10-02 real
 POINTER ARGUMENTS work: use `gen_prog_contract` with `DPtr x` data specs and
 `GenProg.gen_prog_noninterferent` (worked example `Example/CheckScalar/
-CheckScalarPtr*.v`; see **cfgver-gen-contract**). Loops over arrays: the `arr`
+CheckScalarPtr*.v`; see **cfgver-gen-contract**). Loops over arrays: the `arrv`
 chunk + ghost-lemma catalogue (**cfgver-contracts**, "Arrays"), template
 `Example/Muladd/MuladdParamLoopN.v`. Data-memory proof plumbing: **cfgver-memory**.

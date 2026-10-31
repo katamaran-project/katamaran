@@ -1,0 +1,71 @@
+--- a/src/inner.h
++++ b/src/inner.h
+@@ -773,6 +773,19 @@
+ }
+ 
+ /*
++ * KATAMARAN HARDENING (not upstream): an optimisation barrier. The empty
++ * asm makes v opaque to the optimiser, so InstCombine cannot re-form a
++ * MUX on a value derived from it into a branch (Schneider et al. 2025,
++ * Table 11; PLAN-muladd-full.md GATE 1, PLAN-rsa.md).
++ */
++static inline uint32_t
++opaque(uint32_t v)
++{
++	__asm__ ("" : "+r" (v));
++	return v;
++}
++
++/*
+  * Equality check: returns 1 if x == y, 0 otherwise.
+  */
+ static inline uint32_t
+--- a/src/int/i31_muladd.c
++++ b/src/int/i31_muladd.c
+@@ -112,7 +112,7 @@
+ 	 * must adjust the parameters to br_div() accordingly.
+ 	 */
+ 	g = br_div(a0 >> 1, a1 | (a0 << 31), b0);
+-	q = MUX(EQ(a0, b0), 0x7FFFFFFF, MUX(EQ(g, 0), 0, g - 1));
++	q = MUX(opaque(EQ(a0, b0)), 0x7FFFFFFF, MUX(opaque(EQ(g, 0)), 0, g - 1));
+ 
+ 	/*
+ 	 * We subtract q*m from x (with the extra high word of value 'hi').
+@@ -138,7 +138,7 @@
+ 		cc += nxw >> 31;
+ 		nxw &= 0x7FFFFFFF;
+ 		x[u] = nxw;
+-		tb = MUX(EQ(nxw, mw), tb, GT(nxw, mw));
++		tb = MUX(opaque(EQ(nxw, mw)), tb, GT(nxw, mw));
+ 	}
+ 
+ 	/*
+@@ -152,6 +152,6 @@
+ 	 */
+ 	over = GT(cc, hi);
+ 	under = ~over & (tb | LT(cc, hi));
+-	br_i31_add(x, m, over);
+-	br_i31_sub(x, m, under);
++	br_i31_add(x, m, opaque(over));
++	br_i31_sub(x, m, opaque(under));
+ }
+--- a/src/int/i31_add.c
++++ b/src/int/i31_add.c
+@@ -31,6 +31,7 @@
+ 	uint32_t cc;
+ 	size_t u, m;
+ 
++	ctl = opaque(ctl);
+ 	cc = 0;
+ 	m = (a[0] + 63) >> 5;
+ 	for (u = 1; u < m; u ++) {
+--- a/src/int/i31_sub.c
++++ b/src/int/i31_sub.c
+@@ -31,6 +31,7 @@
+ 	uint32_t cc;
+ 	size_t u, m;
+ 
++	ctl = opaque(ctl);
+ 	cc = 0;
+ 	m = (a[0] + 63) >> 5;
+ 	for (u = 1; u < m; u ++) {

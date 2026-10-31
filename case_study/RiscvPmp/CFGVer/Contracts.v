@@ -122,7 +122,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
          two segment contracts composable.  Pass asn_no_post for an
          ordinary whole-program contract. *)
       (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
-      Katamaran.RiscvPmp.CFGVer.Verifier.scfg_verification_condition (Σ := Σ)
+      scfg_verification_condition (Σ := Σ)
         (extend_to_minimal_pre P) (table_of_list p 0 i) exits fl Q wnil.
 
     (* THE VC PIPELINE: postprocess, then REPLAY, then postprocess again --
@@ -179,6 +179,111 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
        establishes nothing, because the bridge will not accept it. *)
     Definition cfg_vc {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
       cfg_map c (fun p exits P _ fl Q => Valid_CFG_VC p exits P a fl Q).
+
+    (* ---- THE LOOP VC (PLAN-loop-rule.md) ----------------------------------
+       A LOOP CONTRACT's precondition is the invariant: its parameters are the
+       logic variables that never change, and everything that changes across
+       trips is existential INSIDE the precondition (decision L2).  Its VC runs
+       the body ONCE from the invariant, and the run stops either at the exit
+       or back at the head (Verifier.is_head).  `loop_post` says what each stop
+       owes: the post at the exit; the (extended) precondition -- the
+       invariant -- at the head, with "a" rebound to the pc reached.  The pc
+       equations decide which disjunct applies.  The induction over the trips
+       happens only in the meta-level loop rule (Adequacy.v), never here.
+
+       Every `subst` below names its instance (`T :=` / `Subst :=`).  Left to
+       inference, elaborating loop_post ran past 600 s and 9.7 GB (measured
+       2026-10-14); annotated it takes milliseconds. *)
+    (* THE POST'S CONTEXT.  `ex` and `p` are terms over the contract's
+       context Σ; a post lives over Σ ▻ "a" ▻ "an".  sub_to_post_ctx is the
+       weakening between the two: every variable of Σ to itself. *)
+    Definition sub_to_post_ctx {Σ : LCtx} :
+      Sub Σ (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+      subst (T := Sub Σ) (sub_wk1 (b := "a" ∷ ty_xlenbits)) (sub_wk1 (b := "an" ∷ ty_xlenbits)).
+
+    (* A term over Σ, read in the post's context. *)
+    Definition to_post {Σ : LCtx} (t : Term Σ ty_xlenbits) :
+      Term (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) ty_xlenbits :=
+      subst (T := fun Σ => Term Σ ty_xlenbits) t sub_to_post_ctx.
+
+    (* REBIND "a" TO "an": Σ to itself and the entry pc "a" to the pc reached,
+       "an".  Applied to the invariant it gives Inv[a := an], the invariant
+       at the pc the run came back to. *)
+    Definition sub_a_to_an {Σ : LCtx} :
+      Sub (Σ ▻ "a" ∷ ty_xlenbits) (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+      env.snoc sub_to_post_ctx ("a" ∷ ty_xlenbits) (term_var "an").
+
+    Definition loop_post {Σ : LCtx}
+      (p ex : Term Σ ty_xlenbits)
+      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :
+      Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits) :=
+      asn.or
+        (* stopped at the exit: the loop's post *)
+        (asn.sep (asn.formula (formula_propeq (term_var "an") (to_post ex))) Q)
+        (* stopped back at the head: the invariant, at the pc reached *)
+        (asn.sep (asn.formula (formula_propeq (term_var "an") (to_post p)))
+           (subst (Subst := asn.sub_assertion) (extend_to_minimal_pre P) sub_a_to_an)).
+
+    Definition CFG_VC_loop_triple {Σ}
+      (p ex : Term Σ ty_xlenbits)
+      (P  : Assertion (Σ ▻ "a" ∷ ty_xlenbits))
+      (i  : list AnnotInstr)
+      (fl : nat)
+      (Q  : Assertion (Σ ▻ "a" ∷ ty_xlenbits ▻ "an" ∷ ty_xlenbits)) :=
+      scfg_loop_verification_condition (Σ := Σ)
+        (extend_to_minimal_pre P) (table_of_list p 0 i) ex fl (loop_post p ex P Q) wnil.
+
+    (* THE HEAD IS THE PLACEMENT.  The executor's head test (Verifier.is_head)
+       reads the head off the table's first key.  For the table the loop VC
+       builds -- table_of_list from offset 0, then the triple's substitution
+       and words -- that key is the placement `p + 0`, so the head test is
+       exactly "pc = placement".  Stated here so that this is a fact, not a
+       convention; the soundness proof does not need it (a wrong head would
+       make loop_post's pc equation fail, never pass). *)
+    Lemma is_head_table_of_list {Σ : LCtx} {w : World} (ζ : Sub Σ w)
+        (p : Term Σ ty_xlenbits) (ai : AnnotInstr) (i : list AnnotInstr)
+        (x : Term (wctx w) ty_word) (ws : list (Term (wctx w) ty_word))
+        (apc : Term (wctx w) ty_xlenbits) :
+      is_head (zip_words (subst_itable ζ (table_of_list p 0 (ai :: i))) (x :: ws)) apc
+      = Term_eqb (peval apc)
+          (peval (subst (peval_bvadd (term_val ty_xlenbits (bv.of_N 0)) p) ζ)).
+    Proof. reflexivity. Qed.
+
+    Lemma inst_sub_to_post_ctx {Γ : LCtx} (ι : Valuation Γ) (x y : RelVal ty_xlenbits) :
+      inst (T := Sub Γ) sub_to_post_ctx (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y]) = ι.
+    Proof. unfold sub_to_post_ctx. rewrite inst_subst. rewrite !inst_sub_wk1. reflexivity. Qed.
+
+    Lemma inst_to_post {Γ : LCtx} (ι : Valuation Γ) (x y : RelVal ty_xlenbits)
+        (t : Term Γ ty_xlenbits) :
+      inst (T := fun Σ => Term Σ ty_xlenbits) (to_post t)
+        (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y]) = inst t ι.
+    Proof. unfold to_post. rewrite inst_subst. now rewrite inst_sub_to_post_ctx. Qed.
+
+    (* What the loop post SAYS, at a valuation: the post at the exit, or the
+       invariant at the head with "a" rebound to the pc reached. *)
+    Lemma loop_post_interpret {PROP : bi} {PI : PredicateDef PROP} {Σ : LCtx}
+        (p ex : Term Σ ty_xlenbits) (P : Assertion (Σ ▻ "a"∷ty_xlenbits))
+        (Q : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+        (ι : Valuation Σ) (x y : RelVal ty_xlenbits) :
+      asn.interpret (loop_post p ex P Q) (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y]) ⊣⊢
+      ((⌜y = inst (T := fun Σ => Term Σ ty_xlenbits) ex ι⌝ ∧ emp) ∗
+         asn.interpret Q (ι.["a"∷ty_xlenbits ↦ x].["an"∷ty_xlenbits ↦ y])) ∨
+      ((⌜y = inst (T := fun Σ => Term Σ ty_xlenbits) p ι⌝ ∧ emp) ∗
+         asn.interpret (extend_to_minimal_pre P) (ι.["a"∷ty_xlenbits ↦ y]))%I.
+    Proof.
+      unfold loop_post. cbn [asn.interpret].
+      rewrite asn.interpret_subst.
+      cbn [instprop instprop_formula].
+      rewrite !inst_to_post.
+      unfold sub_a_to_an. rewrite inst_sub_snoc inst_sub_to_post_ctx.
+      now cbn.
+    Qed.
+
+    (* The loop contract's VC.  `c`'s placement is the loop head. *)
+    Definition cfg_vc_loop {Σ} (c : @CFGVerifierContract Σ) (a : list AnnotInstr) : Prop :=
+      cfg_map c (fun p ex P _ fl Q =>
+        safeE (cfg_postprocess (CFG_VC_loop_triple p ex P a fl Q))).
 
     Definition DebugCFGVerifierContract {Σ} (c : @CFGVerifierContract Σ)
       (a : list AnnotInstr) : Prop :=
@@ -523,7 +628,7 @@ Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     (* A public pointer differs from itself plus a NONZERO constant, and two
        different constant offsets of it differ.  Left by array ghosts
-       (PLAN-array-invariants): clem_arr_nonempty asserts `a ≠ e` for an
+       (PLAN-array-invariants): clem_arrv_nonempty asserts `a ≠ e` for an
        array whose start and end are the same base at different offsets,
        e.g. `dp ≠ 4 + dp`, which the solver does not decide. *)
     Lemma relval_neq_offset (X : RelVal ty_xlenbits) (c : bv xlenbits) :

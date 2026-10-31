@@ -117,25 +117,25 @@ Definition modpow_win_full_instrs : list AST :=
 (* ------------------------------------------------------------------------ *)
 
 Definition modpow_win_full_reg_specs_rel : list reg_spec_rel :=
-  [(A0, false, PVBaseOff 112);            (* &t2[0]   *)
-   (A1, false, PVBaseOff 128);            (* &base[0] *)
-   (A2, false, PVExist);                  (* bits — SECRET *)
-   (A3, true, PVConst (bv.of_N 4));       (* num_win = 1 << k, public *)
-   (A4, true, PVConst (bv.of_N 4));       (* mwlen, public *)
-   (A5, false, PVExist); (A6, false, PVExist); (A7, false, PVExist);
-   (T0, false, PVExist); (T1, false, PVExist); (T2, false, PVExist);
-   (T3, false, PVExist); (T4, false, PVExist); (T5, false, PVExist);
-   (T6, false, PVExist)].
+  [(A0, Known (PVBaseOff 112));            (* &t2[0]   *)
+   (A1, Known (PVBaseOff 128));            (* &base[0] *)
+   (A2, Secret);                  (* bits — SECRET *)
+   (A3, Known (PVConst (bv.of_N 4)));       (* num_win = 1 << k, public *)
+   (A4, Known (PVConst (bv.of_N 4)));       (* mwlen, public *)
+   (A5, Secret); (A6, Secret); (A7, Secret);
+   (T0, Secret); (T1, Secret); (T2, Secret);
+   (T3, Secret); (T4, Secret); (T5, Secret);
+   (T6, Secret)].
 
 Definition modpow_win_full_mem_specs_rel : list mem_spec_rel :=
-  [(112%N, false, PVExist); (116%N, false, PVExist);
-   (120%N, false, PVExist); (124%N, false, PVExist);
-   (128%N, false, PVExist); (132%N, false, PVExist);
-   (136%N, false, PVExist); (140%N, false, PVExist);
-   (144%N, false, PVExist); (148%N, false, PVExist);
-   (152%N, false, PVExist); (156%N, false, PVExist);
-   (160%N, false, PVExist); (164%N, false, PVExist);
-   (168%N, false, PVExist); (172%N, false, PVExist)].
+  [(112%N, Secret); (116%N, Secret);
+   (120%N, Secret); (124%N, Secret);
+   (128%N, Secret); (132%N, Secret);
+   (136%N, Secret); (140%N, Secret);
+   (144%N, Secret); (148%N, Secret);
+   (152%N, Secret); (156%N, Secret);
+   (160%N, Secret); (164%N, Secret);
+   (168%N, Secret); (172%N, Secret)].
 
 (* Executed steps at num_win = mwlen = 4: 8 (prologue) + 3 outer iterations x
    38 (1 header + 6 setup + 3 x 9 inner + 1 j + 3 latch) = 122.  Fuel 150

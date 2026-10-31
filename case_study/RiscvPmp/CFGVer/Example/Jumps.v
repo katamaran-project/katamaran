@@ -58,7 +58,7 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        Supersedes the removed concrete-base pair jump_if_zero_cfg_contract /
        valid_jump_if_zero_cfg_contract (see MvSwap.v for the rationale). *)
     Definition jump_if_zero_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
-      gen_contract_param [(X1, true, None)]
+      gen_contract_param [(X1, Public)]
         [BEQ X1 X0 true_offset; NOP]
         5.
 

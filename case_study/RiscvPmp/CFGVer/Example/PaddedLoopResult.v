@@ -98,35 +98,41 @@ Import IrisModel.RiscvPmpIrisBase.
    with its validity.  Its erasure is padded_annot by conversion. *)
 Definition padded_annotV : list (AnnotInstrV blkValid) :=
   List.map AST_AnnotInstrV pl_filler
-  ++ (MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid)) false
+  ++ (MkAnnotInstrV [] (ADDI X1 X1 neg1_12) [] (Some (MkBlkAnnotV cdRecBlk cdRecBlk_valid))
       :: List.map AST_AnnotInstrV [BNE X1 X0 back4]).
 
 Lemma plLink_valid : ValidCFGVerifierContract plLink.
 Proof.
   apply (@ValidCFGVerifierContract_intro _ plLink padded_annotV);
-    [exact valid_plLink | reflexivity | repeat constructor].
+    [exact valid_plLink | reflexivity].
 Qed.
 
 Lemma padded_loop_noninterferent_param (init_addr : N) :
-  (init_addr + 264 < lenAddr)%N ->
-  noninterferent_strong init_addr padded_instrs (init_addr + 264)%N
-    [(X1, true, Some (bv.of_N 2)); (X4, false, None)] [].
+  fits (init_addr + 4 * N.of_nat (length padded_instrs)) [] ->
+  noninterferent_strong init_addr padded_instrs (init_addr + 4 * N.of_nat (length padded_instrs))
+    [(X1, Known (bv.of_N 2)); (X4, Secret)] (compile (init_addr + 4 * N.of_nat (length padded_instrs)) []).
 Proof.
-  intros Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
+  intros Hfit0.
+  assert (Hl : length padded_instrs = 66%nat) by reflexivity.
+  assert (Hfit : (init_addr + 264 < lenAddr)%N)
+    by (apply fits_nil in Hfit0; rewrite Hl in Hfit0; exact Hfit0).
+  apply (ni_of_cells (regs' := [(X1, Known (bv.of_N 2)); (X4, Secret)]) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
+  rewrite Hl. change (4 * N.of_nat 66)%N with 264%N.
+  intros γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
     HInitReg1 HInitReg2 HInitMem1 HInitMem2
     γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
   pose proof (seg_fits_bin init_addr 264 ltac:(unfold seg_fits_memory; lia)) as Hbin.
   pose proof (seg_fits_bin (init_addr + pl_head) 8 ltac:(unfold seg_fits_memory, pl_head; lia)) as Hbin2.
   eapply (@cfg_instrs_endToEnd γ1 γ2 γ1' μ1 μ2 μ1' padded_instrs
     (init_addr + 264)%N n ws cdRecCtx
-    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-          .["k"∷ty_xlenbits ↦ SyncVal (bv.of_N 2)])
+    ([env].["q"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)])
     _ HpubReg plLink plLink_valid eq_refl init_addr).
   - reflexivity.
   - apply (seg_exit_table_ok _ _ init_addr 264). reflexivity.
   - intros Σ' GS'.
     iIntros "(Hregs & Hpriv & #Hinv)".
-    iPoseProof (gen_implpre [(X1, true, Some (bv.of_N 2)); (X4, false, None)]
+    iPoseProof (gen_implpre [(X1, Known (bv.of_N 2)); (X4, Secret)]
                   _ HpubReg ltac:(apply Prelude.nodup_fixed; reflexivity)
                   HInitReg1 HInitReg2 with "Hregs") as "Hpre".
     cbn -[bv.of_N].

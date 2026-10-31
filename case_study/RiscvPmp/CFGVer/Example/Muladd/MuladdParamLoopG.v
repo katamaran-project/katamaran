@@ -9,9 +9,6 @@
 From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
 From Katamaran Require Import RiscvPmp.CFGVer.GenSegment.
 
-Definition S1 : RegIdx := bv.of_nat 9.
-Definition S2 : RegIdx := bv.of_nat 18.
-Definition S3 : RegIdx := bv.of_nat 19.
 
 Definition g_instrs : list AST :=
   [ ITYPE (bv.of_Z (-1)) T4 T4 RISCV_ADDI
@@ -42,7 +39,10 @@ Definition g_instrs : list AST :=
   ; ITYPE (bv.of_Z 1) T6 T6 RISCV_ADDI
   ; BTYPE (bv.of_Z (-104)) T4 T5 RISCV_BLTU ].
 
-Definition gCtx : LCtx := ["q"∷ty_xlenbits; "k"∷ty_xlenbits].
+(* The PARAMETERS (PLAN-loop-rule.md, L2): only the code base.  The counter k
+   (in T4) changes, so it is existential in the invariant; the post never
+   mentions it. *)
+Definition gCtx : LCtx := ["q"∷ty_xlenbits].
 
 (* the registers G only needs to exist, at their publicness *)
 Definition g_regs_with {Σ} (t5 : Term Σ ty_xlenbits) (t6 : Assertion Σ) : Assertion Σ :=
@@ -60,8 +60,9 @@ Definition g_regs_with {Σ} (t5 : Term Σ ty_xlenbits) (t6 : Assertion Σ) : Ass
 Definition g_j_pub {Σ} : Assertion Σ :=
   asn.exist "j" ty_xlenbits (T6 ↦ᵣ term_var "j" ∗ secLeakvar "j")%asn.
 
-Definition g_inv_with (t6 : Assertion (gCtx ▻ "a"∷ty_xlenbits))
+Definition g_inv_with (t6 : Assertion (gCtx ▻ "a"∷ty_xlenbits ▻ "k"∷ty_xlenbits))
     : Assertion (gCtx ▻ "a"∷ty_xlenbits) :=
+  asn.exist "k" ty_xlenbits
   ( T4 ↦ᵣ term_var "k" ∗ secLeakvar "k"
     ∗ g_regs_with (term_val ty_xlenbits (bv.of_N 1)) t6 )%asn.
 
@@ -77,18 +78,14 @@ Definition g_post := g_post_with (bv.of_N 1).
 Definition g_contract_of inv post : @CFGVerifierContract gCtx :=
   gen_seg_contract (term_var "q") (term_var "q") g_instrs 108 35 [] inv post.
 
-Definition g_blk_of (c : @CFGVerifierContract gCtx) : BlkAnnot :=
-  {| blk_ctx := gCtx ; blk_contract := c |}.
-
 Definition gRec : @CFGVerifierContract gCtx := g_contract_of g_inv g_post.
-Definition gRecBlk : BlkAnnot := g_blk_of gRec.
+Definition gRecBlk : BlkAnnot := {| blk_ctx := gCtx ; blk_contract := gRec |}.
 
-Definition g_annot_with (blk : BlkAnnot) : list AnnotInstr :=
+Definition g_annot : list AnnotInstr :=
   [ {| ai_ghost_before := []
      ; ai_instr        := ITYPE (bv.of_Z (-1)) T4 T4 RISCV_ADDI
      ; ai_ghost_after  := []
-     ; ai_block        := None
-     ; ai_loop         := Some blk |}
+     ; ai_block        := None |}
   ; AST_AnnotInstr (RTYPE T6 T2 S0 RISCV_SLL)
   ; AST_AnnotInstr (RTYPE T4 T3 S1 RISCV_SRL)
   ; AST_AnnotInstr (RTYPE S1 S0 S0 RISCV_OR)
@@ -116,24 +113,24 @@ Definition g_annot_with (blk : BlkAnnot) : list AnnotInstr :=
   ; AST_AnnotInstr (ITYPE (bv.of_Z 1) T6 T6 RISCV_ADDI)
   ; AST_AnnotInstr (BTYPE (bv.of_Z (-104)) T4 T5 RISCV_BLTU) ].
 
-Lemma valid_g_rec : cfg_vc gRec (g_annot_with gRecBlk).
+Lemma valid_g_rec : cfg_vc_loop gRec g_annot.
 Proof. solve_param_vc. Qed.
 
 (* NEGATIVE CONTROLS *)
 
 (* (1) A false post: T5 claimed to be 2 at exit. *)
 Goal let c := g_contract_of g_inv (g_post_with (bv.of_N 2)) in
-     cfg_vc c (g_annot_with (g_blk_of c)).
+     cfg_vc_loop c g_annot.
 Proof. intros c. Fail solve_param_vc. Abort.
 
 (* (2) An invariant the body does not preserve: T6 pinned to 1, but the body
    increments it. *)
 Goal let c := g_contract_of (g_inv_with (T6 ↦ᵣ term_val ty_xlenbits (bv.of_N 1))%asn)
                 g_post in
-     cfg_vc c (g_annot_with (g_blk_of c)).
+     cfg_vc_loop c g_annot.
 Proof. intros c. Fail solve_param_vc. Abort.
 
-(* (3) Without the head annotation the executor must unroll a loop with a
-   symbolic trip count, and cannot. *)
-Goal cfg_vc gRec (list_AST_AnnotInstr g_instrs).
+(* (3) As an ORDINARY VC the run does not stop at the head, so the executor
+   must unroll a loop with a symbolic trip count, and cannot. *)
+Goal cfg_vc gRec g_annot.
 Proof. Fail solve_param_vc. Abort.

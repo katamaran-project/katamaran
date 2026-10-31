@@ -30,7 +30,8 @@ Definition k_scratch {Σ} : Assertion Σ :=
     ∗ asn.exist "v2" ty_xlenbits (S2 ↦ᵣ term_var "v2") )%asn.
 
 Definition lnKN : LoopN :=
-  MkLoopN T6 T5 S0 false k_instrs 9 52 20.
+  (* tags: I's done arrays (flipped by the tail) as sources, K's own *)
+  MkLoopN T6 T5 S0 false k_instrs 9 52 20 "Im" "Ix" "Km" "Kx".
 
-Lemma valid_kn : cfg_vc (lnRec lnKN (@k_scratch)) (ln_annot lnKN (@k_scratch)).
+Lemma valid_kn : cfg_vc_loop (lnRec lnKN (@k_scratch)) (ln_annot lnKN).
 Proof. Time solve_mb_vc. Qed.

@@ -26,7 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-
 (* ========================================================================= *)
 (* Example/KeyScheduleLoop.v — small-N (N=2) feasibility spike toward the    *)
 (* full Botan GHASH::key_schedule loop (src/lib/utils/ghash/ghash.cpp,       *)
@@ -98,15 +97,9 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
     (* Table lives right after the 14*4 = 56-byte code region, matching the
        countdown_mem/cmovznz4 "data hardcoded contiguously after the code"
        pattern. *)
-    Definition key_schedule_loop2_reg_specs : list reg_spec :=
-      [(A0, false, None); (A1, false, None); (A2, false, None);
-       (A3, false, Some (bv.of_N 56));
-       (A4, true, Some (bv.of_N 2))].
 
     (* Table words are private (their value is derived from the secret H,
        and may legitimately differ between worlds), addresses are fixed. *)
-    Definition key_schedule_loop2_mem_specs : list mem_full_spec :=
-      [(bv.of_N 56, false, None); (bv.of_N 60, false, None)].
 
     (* Parametric-base version: the table is base-relative (p+56/p+60), so
        this needs gen_contract_rel_classed (like cmovznz4_param /
@@ -116,12 +109,12 @@ From Katamaran Require Import RiscvPmp.CFGVer.Example.Prelude.
        / valid_key_schedule_loop2_cfg_contract (see MvSwap.v for the
        rationale). *)
     Definition key_schedule_loop2_reg_specs_rel : list reg_spec_rel :=
-      [(A0, false, PVExist); (A1, false, PVExist); (A2, false, PVExist);
-       (A3, false, PVBaseOff 56);
-       (A4, true, PVConst (bv.of_N 2))].
+      [(A0, Secret); (A1, Secret); (A2, Secret);
+       (A3, Known (PVBaseOff 56));
+       (A4, Known (PVConst (bv.of_N 2)))].
 
     Definition key_schedule_loop2_mem_specs_rel : list mem_spec_rel :=
-      [(56%N, false, PVExist); (60%N, false, PVExist)].
+      [(56%N, Secret); (60%N, Secret)].
 
     Definition key_schedule_loop2_cfg_contract_param : @CFGVerifierContract ["p" :: ty_xlenbits] :=
       gen_contract_rel_classed key_schedule_loop2_reg_specs_rel key_schedule_loop2_mem_specs_rel

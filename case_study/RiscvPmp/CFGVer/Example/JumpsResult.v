@@ -48,6 +48,10 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.Example.Jumps.
 
+(* The program, named once so the statements below read as text. *)
+Definition jumpIfZero_instrs : list AST := [BEQ X1 X0 true_offset; NOP].
+Definition jmp_fwd_instrs : list AST := [JAL X0 jmp_offset; NOP].
+
 (* Phase 4.2: jump_if_zero verified end-to-end for a UNIVERSAL base
    address, from the single symbolic-base VC
    valid_jump_if_zero_cfg_contract_param.
@@ -59,46 +63,55 @@ From Katamaran Require Import
    need is gone.  It was the last tracked user of a non-empty extra_exit_offs
    and of the general gen_contract_noninterferent_param bridge. *)
 Lemma jumpIfZero_noninterferent_param (init_addr : N) :
-  (init_addr + 8 < lenAddr)%N ->
-  noninterferent_strong init_addr [BEQ X1 X0 true_offset; NOP]
-    (init_addr + 8)%N [(X1, true, None)] [].
+  fits (init_addr + 4 * N.of_nat (length jumpIfZero_instrs)) [] ->
+  noninterferent_strong init_addr jumpIfZero_instrs (init_addr + 4 * N.of_nat (length jumpIfZero_instrs))
+    [(X1, Public)] (compile (init_addr + 4 * N.of_nat (length jumpIfZero_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := [(X1, Public)]) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_jump_if_zero_cfg_contract_param.
 Qed.
 
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma jumpIfZero_noninterferent :
-  noninterferent_strong init_addr [BEQ X1 X0 true_offset; NOP]
-    (init_addr + 8)%N [(X1, true, None)] [].
+  noninterferent_strong init_addr jumpIfZero_instrs (init_addr + 4 * N.of_nat (length jumpIfZero_instrs))
+    [(X1, Public)] (compile (init_addr + 4 * N.of_nat (length jumpIfZero_instrs)) []).
 Proof.
   apply jumpIfZero_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.
 
 (* Phase 4.2: jmp_fwd verified end-to-end for a UNIVERSAL base address,
    from the single symbolic-base VC valid_jmp_fwd_cfg_contract_param --
    confirms the JAL forward-jump case. *)
 Lemma jmp_fwd_noninterferent_param (init_addr : N) :
-  (init_addr + 8 < lenAddr)%N ->
-  noninterferent_strong init_addr [JAL X0 jmp_offset; NOP]
-    (init_addr + 8)%N [] [].
+  fits (init_addr + 4 * N.of_nat (length jmp_fwd_instrs)) [] ->
+  noninterferent_strong init_addr jmp_fwd_instrs (init_addr + 4 * N.of_nat (length jmp_fwd_instrs))
+    [] (compile (init_addr + 4 * N.of_nat (length jmp_fwd_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := []) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_jmp_fwd_cfg_contract_param.
 Qed.
 
 (* A corollary with no rewrite needed, same as countdown_noninterferent: the
    exit address is the same `init_addr + 8`. *)
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma jmp_fwd_noninterferent_cfg :
-  noninterferent_strong init_addr [JAL X0 jmp_offset; NOP] (init_addr + 8)%N [] [].
+  noninterferent_strong init_addr jmp_fwd_instrs (init_addr + 4 * N.of_nat (length jmp_fwd_instrs))
+    [] (compile (init_addr + 4 * N.of_nat (length jmp_fwd_instrs)) []).
 Proof.
   apply jmp_fwd_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.
 

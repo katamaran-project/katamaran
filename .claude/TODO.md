@@ -137,6 +137,111 @@ use it for future examples instead of hand-transcribing.
 **Open items from the 2026-10-08 learning session, grouped (Emiel asked which
 belong together). Order: D's relval-pair item → A+B → E → C → F's merge gate;
 G and the rest of F anywhere.**
+- **I. Loop-rule audit findings (2026-10-15 reading quiz, branch
+  `issue/loop-rule`, before merge).** Emiel, 2026-10-15: "Do A" -- fix
+  I1/I3/I4/I5/I7 on the branch, merge, then I6 on its own branch.
+  DECIDED (AskUserQuestion): I1 keep the first-key test + a lemma proving
+  it is `pc = p` for `table_of_list p 0 i`; I3 names `sub_to_post_ctx` /
+  `to_post` / `sub_a_to_an`; I4 a shared step combinator; I7 collapse if
+  every block's VC passes as a loop VC, else keep both and report.
+  **DONE 2026-10-15: I1 I3 I4 I5 I7 merged into KatamaranRel (425b5b21); I7
+  passed (the muladd tail, the one ordinary block, verifies as a loop VC,
+  227 s vs 210 s), so every block now goes through its loop VC.  I2 open.
+  I6 on `issue/imports` (PLAN-imports.md).**
+  - **I1. The loop head is implicit.** `Verifier.is_head` (`Verifier.v:1082`)
+    takes the head to be the table's FIRST key. That is the placement only
+    because `CFG_VC_loop_triple` builds the table as `table_of_list p 0 i`
+    (`Contracts.v:221`), and offset 0 comes first and collapses to `p`
+    (`Tables.v:337`). Emiel: "brittle ... there is no real guarantee that the
+    first instruction is the head, except that we always do it this way."
+    Soundness does NOT depend on it: `rexFS` only uses that a head hit is a
+    lookup hit (`is_head_lookup`), and the meaning "head = placement" comes
+    from `loop_post`'s pc equation `an = p`; a wrong head makes the VC fail,
+    never pass. So it is a readability/robustness issue. Options: (a) pass
+    the head term (the placement) to `sexec_cfg_addr` explicitly instead of
+    reading it off the table, persisted like `exits`; (b) compare against the
+    entry pc `"a"` (might also make the `Hpl` placement premise of
+    `blockSound_of_loop_vc` unnecessary, since `loop_post` could then say
+    `an = a`; unverified); (c) keep, with a stronger comment.
+  - **I2. "Where did the run stop" is carried two ways.** An ordinary
+    contract carries it in the executor: the concrete stop guard
+    `negb first && (loop || exit_hit cexit v)` (`VerifierRel.v:356–358`) and
+    the fact `(loop || exit_hit ..) = true` that `sound_exec_cfg_addr_myWP2`
+    hands its continuation (`Adequacy.v:1647`). A loop contract carries it in
+    its post: `loop_post`'s pc equations `an = ex` / `an = p`
+    (`Contracts.v:200–212`), read back in `blockSound_of_loop_vc` as
+    `%Hex`/`%Hhd`; there the executor's fact is just `true`. Option: one
+    mechanism for both, i.e. every contract's VC consumes a post carrying
+    `an = exit`, and `exit_hit` leaves the concrete stop guard (which becomes
+    `negb first`). Larger change, touches the non-loop soundness chain;
+    unverified. Option: keep (two mechanisms, each local).
+  - **I3. `loop_post`'s substitutions are unreadable.** Emiel: "I have no
+    idea what wk or wk_a_an are." `wk_a_an : Sub Σ (Σ ▻ a ▻ an)` is the
+    weakening into the post's context (`Contracts.v:197`), `wk t` applies it
+    (`:205`), and `env.snoc wk_a_an "a" (term_var "an")` (`:211–212`) is
+    "rebind a to an", i.e. Inv[a := an]; none of the three is explained at
+    the point of use. Options: rename (e.g. `to_post_ctx`, `a_to_an`) and
+    name the second substitution; a one-line comment per substitution;
+    check whether the framework already has a two-step weakening to reuse.
+  - **I4. `myWP2_step` duplicates `myWP2_loop_fix`'s step disjunct.** Emiel:
+    "Why does myWP2_step exist? Is it not just the same as myWP2_loop?"
+    `myWP2_step E` (`Adequacy.v:218`) copies the right disjunct of
+    `myWP2_loop_fix` (`:111–124`) with `wp := myWP2_loop E`, so the reader
+    must diff them by eye. Options: define one step combinator
+    (`step_then wp`) and write `myWP2_loop_fix E wp := E ∨ step_then wp` and
+    `myWP2_step E := step_then (myWP2_loop E)` (the Contractive proof must
+    still go through); or keep, with a comment at both definitions naming
+    the other.
+  - **I5. The loop rule's proof is hard to read.** Emiel: "The proof of the
+    loop rule is a little bit too chaotic." `blockSound_of_loop_vc`
+    (`Adequacy.v:2158–2230`): its signature is mostly fully qualified paths
+    (`Katamaran.RiscvPmp.CFGVer.Verifier.cfg_precondition
+    (Katamaran.RiscvPmp.CFGVer.Verifier.blk_contract b)` ...), and the proof
+    restates the precondition in two `iAssert`s just to read a pure fact
+    without consuming it. Options: short local names for the contract's
+    fields (`pre b`, `post b`, `exit b`, `place b`) or importing the modules
+    so the paths shrink; a lemma "pure fact from a persistent wand, keep the
+    hypothesis" instead of the two `iAssert`s; the five-step outline
+    (placement, faithfulness, run once, bind under ▷, case split) as
+    comments at each step. The qualified-path part is now I6.
+  - **I6. DONE 2026-10-15 on `issue/imports` (PLAN-imports.md; build green,
+    not merged).** DECIDED (direction): import properly, no fully qualified
+    prefixes, codebase-wide.** Emiel, 2026-10-15: "for readibility, we should
+    avoid using things like this an instead import them properly. This
+    holds for the whole codebase actually." Census (non-ZZ `.v`,
+    `Katamaran.RiscvPmp.CFGVer.{Verifier,VerifierRel,Tables,Contracts,
+    TablesRel}.`): Adequacy 192, SpecIris 51, GenCompose 23, VerifierRel 12,
+    EndToEnd 10, TwoLoopsComposedResult 8, TablesRel 6, Swap/Countdown-
+    ComposedResult 4 each, Contracts 2; `theories/` not yet surveyed. The
+    original reason for qualifying is `CFGVer/CLAUDE.md` "Importing
+    CFGVer.Verifier downstream": a name clash with BlockVer. BlockVer is out
+    of the build (`_CoqProject:10–19`, zero active BlockVer lines), and the
+    note itself says to switch to `Require Import` once BlockVer is gone, so
+    the clash is moot; delete that note (and the skills' copies) with the
+    fix. Watch for: new clashes between CFGVer modules once imported
+    together, and the light/heavy layering (an Import never adds a Require,
+    so layering is unaffected). Plan with Emiel before starting.
+  - **I7. Three loop/non-loop wrapper pairs could collapse into one.**
+    `blockSound_of_[loop_]contract` (`GenCompose.v:469/485`),
+    `blkValid_of_[loop_]contract` (`:2217/2236`), `blkValid_of_[loop_]seg`
+    (`:2260/2285`) differ only in the VC (`cfg_vc` vs `cfg_vc_loop`) and the
+    loop's `Hpl` placement premise (free for generated segments, via
+    `seg_pre_placement`). Emiel: "This collapsing would definitely be
+    useful." Option: verify every BLOCK with `cfg_vc_loop` and drop the
+    non-loop half. Sound for every contract (the loop rule is its proof).
+    Price: a block whose run passes back through its own first instruction
+    with the pre FALSE there (a loop verified by unrolling, pre pinning the
+    trip count) is rejected by `cfg_vc_loop` and accepted by `cfg_vc`.
+    UNVERIFIED: whether any current block relies on that; check by running
+    each block's VC as a loop VC. Top-level programs stay on `cfg_vc` (the
+    seal, `Validity.v`). Also price the disjunctive post (`asn.or`) and the
+    per-step `is_head` test on the large blocks (muladd tail, `sym6`).
+- **A + B: IMPLEMENTED 2026-10-09 on `issue/spec-layer`** (all phases, all
+  18 Result files compile; NOT merged — waiting on Emiel's audit/read-through
+  and the merge comprehension check). Implementation-time decisions:
+  PLAN-spec-layer §2a.7. Still open from A: the frontmatter descriptions of
+  `cfgver-gen-contract`/`cfgver-memory` (hook-gated). Decode assumption: no
+  action (D13). The Priority-0 notes below are now HISTORY.
 - **A. Spec-layer redesign — ONE pass** (`plans/PLAN-spec-layer.md`): sum type,
   `Reg` keys, mem plumbing, one word predicate, `concretize_data`/`data_ok`,
   visible checks, trusted-file comments. Together because the design
@@ -149,7 +254,8 @@ G and the rest of F anywhere.**
   them all anyway — a separate pass costs a second review + gate.
 - **C. End-theorem proof automation — AFTER A**: `_simple` bridge for mixed
   front-ends + `data_spec`, one generic bv tactic, what the ~60 lines of
-  `check_scalar_ptr_noninterferent` do. After, because A's Phase 2 rewrites
+  `check_scalar_ptr_noninterferent` do (85 lines on issue/spec-layer;
+  Emiel 2026-10-09: "still way too long, we should clean this up"). After, because A's Phase 2 rewrites
   these bridges.
 - **D. Audit of past changes — independent** (agent findings, UNVERIFIED;
   `.claude/learning/commit-groups.md`): `1236c880` `fun_bool_to_bits`
@@ -174,6 +280,81 @@ G and the rest of F anywhere.**
   show in `git status`); if `scripts/gate.sh`'s hole scan reads subdirectories
   of the filesystem, an untracked `Admitted` probe there could block the gate.
   The rocq `guardrails.sh` false positive on `checkout -- .` recurred.
+- **H. Spec-layer readability — reading quiz 4 (2026-10-09, Emiel, on
+  `issue/spec-layer`). Options only, NOT decided. Priority (Emiel): the
+  DE-CLUTTER item is HIGH; every other bullet here is LOW:**
+  - [LOW] `is_gpr` (`Noninterference.v:118`) packs into `existT` only because the
+    sole register EqDec is `𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg)` (`Base.v:1064`).
+    Options: an `EqDecision (Reg ty_xlenbits)` instance outside the kernel; a
+    direct `match` rejecting pc/nextpc/mtvec/...; a 31-constructor `gpr` enum.
+  - [LOW] `mem_cell` (`:219`) should carry an `Addr` (`Base.v:74`), not N — every
+    consumer does `bv.of_N` (`:247`, `:273`); N is only needed for the block
+    overlap test (`:198`).
+  - **[HIGH]** De-clutter `noninterferent_strong` (`:355–360`): replace the 8
+    `declare_*`/`gen_*` premises by two relational predicates
+    (`regs_sat γ1 γ2 reg_specs`, `mem_sat μ1 μ2 mem`, matching on
+    Secret/Public/Known directly) so no `gen_*` is on the trusted surface. Folded in (Emiel): this also
+    merges `gen_public_addrs`/`gen_init_mem` (and the reg pair) and counts
+    `Known` as public (already implied — make it said).
+  - **TODO** (quiz 5, 2026-10-12) Make `ni_cells` (`EndToEnd.v:1747`)
+    consistent with `noninterferent_strong`: it still states the OLD shape
+    (eight `declare_*`/`gen_*` premises) and every bridge concludes it
+    (8 `gen_contract_noninterferent_*` + `GenProg.gen_prog_noninterferent`);
+    `ni_of_cells` translates at all 21 Result call sites. Option: restate it
+    with `regs_sat γ1 γ2 regs'` / `cells_sat μ1 μ2 cs`, so `ni_of_cells` only
+    permutes (+ `mem_sat_cells`) and the `declare_*` conversion moves inside
+    the bridges (where the Iris side needs it anyway).
+  - **TODO** [LOW] (quiz 5, 2026-10-12) `words_sat` reads words with the kernel's own
+    `get_word`; `get_word_read_ram` (`Noninterference.v:154`) proves it equals
+    the machine's load `fun_read_ram μ 4 a`. Option: state `words_sat` with
+    `fun_read_ram` directly, so the statement trusts the Sail-derived reader
+    instead of a second definition.
+  - **TODO** (quiz 5 Q2, 2026-10-12) `check_scalar_ptr_noninterferent` has shape
+    `in_range … → in_range … ∧ NI`, so its conjunct guards nothing, and unlike
+    cmovznz4 (`_noninterferent`/`_at_start` at ia = 0/256) it has NO
+    premise-free sanity instance: nothing shows its premise is ever
+    satisfiable. Add one (e.g. ia = 0, ka = 176, l = 32). General rule: a
+    parametric Result's conjuncts only guard in its premise-free instances.
+  - [LOW] **Split statement data from proof data** (reopens D12): `Secret` entries
+    are statement-level no-ops (registers: exactly; memory: they only feed
+    `fits` and placement — cmovznz4's layout says only "code+48 bytes fits").
+    They exist so D12's EQUALITY with the generator's specs holds. Option:
+    statement lists only Public/Known; proof shows generator ⊇ statement with
+    the rest Secret. Open (unverified): the proof likely still needs the
+    working area below lenAddr, so a footprint/size premise may remain.
+  - [LOW] Register pointers are literals independent of the layout (cmovznz4
+    `A2 := ia+132`; muladd `A2/X2 := ia+1144` must hit m's `Known b` header):
+    only the proof-side `*_cells` lemma ties them; the statement does not.
+  - [LOW] Registers as a PARTIAL MAP `gpr ⇀ val_spec` (Emiel), absent =
+    Secret: duplicate keys become unwritable (today `[(A0, Known 1); (A0,
+    Known 2)]` is a writable VACUOUS statement — the bridges' NoDup premise
+    does not protect the statement, a hand proof could exploit it; memory
+    already has `blocks_ok`) and the all-Secret padding disappears.
+  - [LOW] Wrap-around (quiz Q3): `blocks_disjoint`/`clear_of_code` are in N
+    but memory is read via `bv.of_N` (mod 2^32), so blocks at a and a+2^32
+    alias; conflicting Known words there (or vs. the code) = VACUOUS. Today
+    prevented only by each Result's own lenAddr premises — `fits`, or in
+    CheckScalarPtr two raw `< lenAddr` lines (`CheckScalarPtrResult.v:116-117`),
+    which Emiel finds uninsightful: use a fits-style predicate there. Option:
+    a kernel-level in-range predicate over a `mem_layout` (every block_end
+    and the code end < lenAddr) — as a CONJUNCT of `noninterferent_strong`
+    (D19 style: out of range ⇒ unprovable, not vacuous), with `Layout.fits`
+    implying it.
+  - [LOW] `Bytes (n) (s : val_spec Empty_set)` + `match e with end`
+    (`Layout.v:38,56`) is a typing trick for "Secret|Public only"; a
+    dedicated 2-constructor type would say it directly. Also P256_N is
+    `Bytes 32 Secret` in CheckScalarParam but `repeat Secret 8` words in
+    CheckScalarPtr — one footprint, two spellings.
+  - [LOW] Real NON-VACUITY check (Emiel, quiz Q5): the `_noninterferent` /
+    `_at_start` instances only show the `fits` premise is satisfiable (sanity
+    for the parametric base — their comment "so it is not vacuous"
+    OVERCLAIMS). Option: a lemma `∃ γ1 γ2 μ1 μ2 ws, <all premises>`. Blocked
+    in part by `Axiom pure_decode` (`Machine.v:147`): `mem_has_instrs` is
+    unprovable in Coq without it, so state it RELATIVE to
+    `Forall (fun i => ∃ w, pure_decode w = inr i) instrs` — which makes D13's
+    informal "decodable by construction" an explicit hypothesis. Satisfiable
+    premises still allow a trivial theorem (world 1 takes 0 steps); a run
+    reaching the exit cannot be exhibited while decode is an axiom.
 
 **Priority 0 — simplify the trusted statement's spec plumbing (2026-10-08,
 from Emiel's reading session on `Noninterference.v`; do it RIGHT AFTER that
@@ -260,10 +441,32 @@ the notes below are its source material:**
   - `A0` is hand-concretized and consed onto the rest (`sym_reg_specs`,
     `MuladdParamResult.v:299`) because `PVBaseOff k` only takes a CONSTANT k,
     and x's address `x_off b = 1148 + 4·mlenN b` depends on m's length.
+  - `b` is BearSSL's ENCODED announced bit length, not a bit length
+    (reading quiz 3; BearSSL `inner.h`: k is stored as
+    `((k / 31) << 5) + (k % 31)`; checked via a GitHub mirror, not in-repo).
+    So M = (b+31)>>5 is the limb count and mblr = b & 31 = k mod 31. Repo
+    comments call it "bitlen" (`MuladdParamInstrs.v:317,325`,
+    PLAN-muladd-full). The flat specs pin it to 63, whose low 5 bits are 31:
+    NOT a valid encoding (no k produces it) — only in leftover definitions
+    (`zzmuladdfulln2_{x,m}_specs_rel`) and the ZZ probe, no tracked end
+    theorem. The parametric `64 < b < 65536` also admits invalid encodings:
+    a harmless over-approximation (strictly more inputs), but worth a comment.
+  - The verified property is WEAKER than BearSSL's documented contract for
+    muladd (`inner.h`: "CT: only the common announced bit length of x and m
+    leaks, not the values of x, z or m"). Ours makes m's limbs PUBLIC
+    (`DArr true …`, `MuladdParam.v:72–73`). Options, Emiel decides: keep
+    (modulus public is the usual threat model; say so in the Result
+    header), or try m's limbs secret (b0 = m's top limbs feeds br_divrem —
+    expect the secret-data walls).
+  - x's address is stated THREE times (reading quiz 3, 2026-10-08):
+    `DAt (term_var "x")` in `sym_data` (`MuladdParam.v:74`), `x ↦ ia + x_off b`
+    in `sym_ι` (`MuladdParamResult.v:294`), and `(A0, true, Some (ia + x_off b))`
+    in `sym_reg_specs` (`:300`). Only `data_ok`'s `DAt` case ties them
+    together (proved in `sym_data_ok`); the statement shows the last two.
   - Statement-level no-ops: `DAt x` (skipped by `concretize_data`, means
     something only in `data_ok`) and `arr_dir` (`DArr pub _ c`). A reader
     sees them in the trusted spec list and assumes they constrain something.
-  - `data_ok` (`GenSegment.v:1946`) mixes six concerns: per-cell range,
+  - `data_ok` (`GenSegment.v:1941` on KatamaranRel) mixes six concerns: per-cell range,
     pinned ⇒ public, pinned value and counts Sync, the `DAt` anchor, `DPtr`
     continuation, byte-vs-word bound. It is a bridge premise (`GenProg.v:111`)
     proved per Result, so `DCell false (Some t)` is UNPROVABLE (good, not

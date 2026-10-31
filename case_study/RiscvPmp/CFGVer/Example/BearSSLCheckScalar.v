@@ -133,8 +133,8 @@ Definition check_scalar_instrs : list AST :=
    stronger and costs nothing here, since the code is branch-free.  Scratch
    registers A3-A5 are private as usual.  Register-only, so mem_specs is []. *)
 Definition check_scalar_reg_specs : list reg_spec :=
-  [(A0, false, None); (A1, false, None); (A2, false, None);
-   (A3, false, None); (A4, false, None); (A5, false, None)].
+  [(A0, Secret); (A1, Secret); (A2, Secret);
+   (A3, Secret); (A4, Secret); (A5, Secret)].
 
 (* Base-parametric contract (Σ = ["p"]): arbitrary 4-aligned load address.
    Fuel 24 comfortably exceeds the 16 instruction steps plus the exit step. *)

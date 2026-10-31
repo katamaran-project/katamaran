@@ -48,17 +48,21 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.EndToEnd
      RiscvPmp.CFGVer.Example.Countdown.
 
+(* The program, named once so the statements below read as text. *)
+Definition countdown_instrs : list AST := [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset].
+
 (* Phase 4.2: countdown verified end-to-end for a UNIVERSAL base address,
    from the single symbolic-base VC valid_countdown_cfg_contract_param --
    confirms the BACKWARD branch (BNE back_offset) case works with the exact
    same offset-agnostic tail as the forward-only programs (cmovznz4/set_X2). *)
 Lemma countdown_noninterferent_param (init_addr : N) :
-  (init_addr + 8 < lenAddr)%N ->
-  noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-    (init_addr + 8)%N
-    [(X1, true, Some (bv.of_N 2))] [].
+  fits (init_addr + 4 * N.of_nat (length countdown_instrs)) [] ->
+  noninterferent_strong init_addr countdown_instrs (init_addr + 4 * N.of_nat (length countdown_instrs))
+    [(X1, Known (bv.of_N 2))] (compile (init_addr + 4 * N.of_nat (length countdown_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := [(X1, Known (bv.of_N 2))]) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -74,55 +78,61 @@ Proof.
      theorem above is unchanged. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_countdown_cfg_contract_param.
 Qed.
 
 (* The concrete result is a corollary of the universal-base theorem above:
    its exit address is the same `init_addr + 8`, so no vm_compute/rewrite is
    needed here at all. *)
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma countdown_noninterferent :
-  noninterferent_strong init_addr [ADDI X1 X1 neg_one_12; BNE X1 X0 back_offset]
-    (init_addr + 8)%N [(X1, true, Some (bv.of_N 2))] [].
+  noninterferent_strong init_addr countdown_instrs (init_addr + 4 * N.of_nat (length countdown_instrs))
+    [(X1, Known (bv.of_N 2))] (compile (init_addr + 4 * N.of_nat (length countdown_instrs)) []).
 Proof.
   apply countdown_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits; vm_compute; reflexivity.
 Qed.
 
-(* Phase 4.2: countdown_mem verified end-to-end for a UNIVERSAL base
-   address, from the single symbolic-base VC
-   valid_countdown_mem_cfg_contract_param -- confirms a BACKWARD branch
-   combined with base-RELATIVE memory (via the X0->X2 register rewrite,
-   see the comment in Countdown.v) works with the same reusable bridge and
-   offset-agnostic tail as every other example. *)
+(* code: init_addr .. init_addr+15 (4 instructions); the counter follows. *)
+Definition countdown_mem_data : list region :=
+  [ Word (Known (bv.of_N 2)) ].   (* the counter, at init_addr+16 *)
+Definition countdown_mem_regs (ia : N) : list reg_spec :=
+  [ (X1, Secret);
+    (X2, Known (bv.of_N ia)) ].   (* the base, held in X2 *)
 Lemma countdown_mem_noninterferent_param (init_addr : N) :
-  (init_addr + 20 < lenAddr)%N ->
+  fits (init_addr + 4 * N.of_nat (length countdown_mem_instrs)) countdown_mem_data ->
   noninterferent_strong init_addr countdown_mem_instrs
-    (init_addr + 16)%N
-    (map (concretize_reg init_addr) countdown_mem_reg_specs_rel)
-    (map (concretize_mem init_addr) countdown_mem_mem_specs_rel).
+    (init_addr + 4 * N.of_nat (length countdown_mem_instrs))
+    (countdown_mem_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length countdown_mem_instrs)) countdown_mem_data).
 Proof.
-  intros Hb.
-  eapply gen_contract_noninterferent_rel_classed_simple.
-  - apply Prelude.nodup_fixed; reflexivity.
-  - intros [|i] spec H; cbn in H;
-      try (inversion H; subst; cbn; f_equal; lia); discriminate.
-  - cbn. lia.
-  - exact Hb.
-  - solve_valid valid_countdown_mem_cfg_contract_param.
+  intros Hfit.
+  apply (ni_of_cells (regs' := map (concretize_reg init_addr) countdown_mem_reg_specs_rel)
+                     (cs := map (concretize_mem init_addr) countdown_mem_mem_specs_rel)).
+  - apply compile_clear; lia.
+  - apply compile_in_range; [lia | assumption].
+  - apply perm_of_eq; cbn; rewrite N.add_0_r; reflexivity.
+  - apply perm_of_eq. cbn. simpl. solve_cells_eq.
+  - unfold fits, layout_size in Hfit. simpl in Hfit.
+    eapply (gen_contract_noninterferent_rel_classed_simple (bound := 20)).
+    + apply Prelude.nodup_fixed; reflexivity.
+    + intros [|i] spec H; cbn in H;
+        try (inversion H; subst; cbn; lia); try discriminate.
+    + simpl. lia.
+    + simpl. lia.
+    + solve_valid valid_countdown_mem_cfg_contract_param.
 Qed.
 
-(* The concrete result is now a corollary of the universal-base theorem
-   above. The reg_specs literal gains an X2 entry compared to before the
-   X0->X2 rewrite (X2 = base = 0 here, so this is the same program
-   behaviorally, just with the base held in an explicit register instead
-   of the hardwired-zero one). *)
+(* SANITY CHECK (PLAN-spec-layer D20): the universal theorem at the
+   default load address init_addr = 0 -- its premise is satisfiable there. *)
 Lemma countdown_mem_noninterferent :
-  noninterferent_strong init_addr countdown_mem_instrs (init_addr + 16)%N
-    [(X1, false, None); (X2, false, Some (bv.of_N init_addr))]
-    [(bv.of_N 16, true, Some (bv.of_N 2))].
+  noninterferent_strong init_addr countdown_mem_instrs
+    (init_addr + 4 * N.of_nat (length countdown_mem_instrs))
+    (countdown_mem_regs init_addr)
+    (compile (init_addr + 4 * N.of_nat (length countdown_mem_instrs)) countdown_mem_data).
 Proof.
-  ni_rel_corollary countdown_mem_noninterferent_param
-    countdown_mem_reg_specs_rel countdown_mem_mem_specs_rel init_addr.
+  apply countdown_mem_noninterferent_param.
+  unfold fits; vm_compute; reflexivity.
 Qed.
-

@@ -501,6 +501,7 @@ Module Type GenericSolverOn
           | uop.bvtake m => simplify_eq_unop_default_val (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default_val uop.negate
           | uop.expand => simplify_eq_unop_default_val uop.expand
+          | uop.regroup => simplify_eq_unop_default_val uop.regroup
           end.
 
         Definition simplify_eq_tuple_val {σs} (ts : Env (Term Σ) σs)
@@ -681,6 +682,7 @@ Module Type GenericSolverOn
             (fun (*cons*) t1' t2' => cat (simplify_eq t1 t1') (simplify_eq t2 t2'))
             (fun (*append*) _ _ => dlist_eq (term_cons t1 t2) t)
             (fun (*rev*) _ => dlist_eq (term_cons t1 t2) t)
+            (fun (*regroup*) _ _ => dlist_eq (term_cons t1 t2) t)
             t.
 
         Definition simplify_eq_binop_append {σ} (tl1 : Term Σ (ty.list σ))
@@ -696,6 +698,7 @@ Module Type GenericSolverOn
                  if Term_eqb tl2 tr2 then simplify_eq tl1 tr1 else
                    dlist_eq (term_append tl1 tl2) tr)
             (fun (*rev*) _ => dlist_eq (term_append tl1 tl2) tr)
+            (fun (*regroup*) _ _ => dlist_eq (term_append tl1 tl2) tr)
             tr.
 
         Definition simplify_eq_binop_bvapp' {m n} (t1 : Term Σ (ty.bvec m))
@@ -947,6 +950,7 @@ Module Type GenericSolverOn
           | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default uop.negate
           | uop.expand => simplify_eq_unop_default uop.expand
+          | uop.regroup => simplify_eq_unop_default uop.regroup
           end.
 
         Definition simplify_propeq_unop {σ1 σ2} (op : UnOp σ1 σ2) :
@@ -969,6 +973,7 @@ Module Type GenericSolverOn
           | uop.bvtake m => simplify_eq_unop_default (uop.bvtake m)
           | uop.negate => simplify_eq_unop_default uop.negate
           | uop.expand => simplify_eq_unop_default uop.expand
+          | uop.regroup => simplify_eq_unop_default uop.regroup
           end.
 
         Equations(noeqns) formula_eqs_ctx {Δ}
@@ -2254,6 +2259,46 @@ Module Type GenericSolverOn
       destruct (inst s ι) as [a1 a2]; cbn; f_equal; apply bv.add_comm.
     Qed.
 
+    (* R3 (PLAN-relval-pair §6, §12.3): the operators whose evaluation is
+       injective PER PROJECTION, so [secLeak (op t1 t2)] IS
+       [secLeak t1 /\ secLeak t2] -- exact, hence sound on assumptions and
+       goals alike.  [cons] and [rev] at every element type, [bvapp] at fixed
+       widths.  NOT [append] (needs length facts) and NOT [regroup] (junk at
+       most type pairs).  CFGVer's arrv publicness-by-framing needs these:
+       a take's [vs = x :: r] must hand [secLeak vs] to x and r. *)
+    Definition binop_secLeak_split {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) : bool :=
+      match op with
+      | bop.cons => true
+      | bop.bvapp => true
+      | _ => false
+      end.
+    Definition unop_secLeak_split {σ1 σ2} (op : UnOp σ1 σ2) : bool :=
+      match op with
+      | uop.rev => true
+      | _ => false
+      end.
+
+    Lemma secLeak_binop_split {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) a b :
+      binop_secLeak_split op = true ->
+      secLeak (bop.evalRel op a b) <-> secLeak a /\ secLeak b.
+    Proof.
+      intros Hop. revert a b. destruct op; try discriminate Hop;
+        intros [a1 a2] [b1 b2]; unfold secLeak; cbn; split.
+      - intros H. injection H as -> ->. split; reflexivity.
+      - intros [-> ->]. reflexivity.
+      - intros H. apply bv.app_inj in H as [-> ->]. split; reflexivity.
+      - intros [-> ->]. reflexivity.
+    Qed.
+
+    Lemma secLeak_unop_split {σ1 σ2} (op : UnOp σ1 σ2) a :
+      unop_secLeak_split op = true ->
+      secLeak (uop.evalRel op a) <-> secLeak a.
+    Proof.
+      intros Hop. revert a. destruct op; try discriminate Hop;
+        intros [a1 a2]; unfold secLeak; cbn; split; [|now intros ->].
+      intros H. rewrite -(rev_involutive a1) -(rev_involutive a2) H. reflexivity.
+    Qed.
+
     Section SimplifySecLeak.
       Context [w : World].
 
@@ -2262,15 +2307,24 @@ Module Type GenericSolverOn
          implied by, but not equivalent to, [secLeak t1 /\ secLeak t2] ([x - x]
          is public for any [x]).  This simplifier runs on assumptions too, so a
          decomposition would assume publicness that was never established.
-         Instead the whole formula is discharged when [secLeakT] proves it from
-         the path condition, and kept as is otherwise. *)
+         Instead it is split where the operator is injective (R3, above),
+         otherwise discharged when [secLeakT] proves it from the path
+         condition, and kept as is otherwise.  The split comes FIRST: right
+         after a substitution [vs := x :: r] the path condition holds the
+         exact term [secLeak (x :: r)], so [secLeakT] would answer "known" and
+         ResimpSecLeak would get [formula_true] instead of the parts. *)
       Definition simplify_secLeak_core [σ] (t : Term w σ) : DList w :=
         match t with
         | term_var x          => dlist_secLeak t
         | term_val _ v        => dlist_true
         | term_relval r rv     => singleton (formula_bool (term_val ty.bool (secLeak_bool rv)))
-        | term_binop op t1 t2 => if secLeakT t then dlist_true else dlist_secLeak t
-        | term_unop op t1     => if secLeakT t then dlist_true else dlist_secLeak t
+        | term_binop op t1 t2 =>
+            if binop_secLeak_split op
+            then cat (dlist_secLeak t1) (dlist_secLeak t2)
+            else if secLeakT t then dlist_true else dlist_secLeak t
+        | term_unop op t1     =>
+            if unop_secLeak_split op then dlist_secLeak t1
+            else if secLeakT t then dlist_true else dlist_secLeak t
         | term_tuple tls      => dlist_secLeak t (* TODO: Improve this by splitting this up into several smaller secLeak statements, I need a foldr function on Env for this *)
         | term_union U K tl   => dlist_secLeak tl
         | term_record R tls   => dlist_secLeak t (* TODO: Same as for tuples *)
@@ -2309,6 +2363,24 @@ Module Type GenericSolverOn
           apply Eqdep_dec.inj_pair2_eq_dec in H0; [exact H0|intros x y; apply eq_dec].
       Qed.
 
+      Lemma instpred_formula_secLeak_binop_split {σ1 σ2 σ3} (t1 : Term w σ1) (t2 : Term w σ2)
+        (op : BinOp σ1 σ2 σ3) :
+        binop_secLeak_split op = true ->
+        instpred (formula_secLeak t1) ∗ instpred (formula_secLeak t2)
+          ⊣⊢ instpred (formula_secLeak (term_binop op t1 t2)).
+      Proof.
+        intros Hop. constructor. intros ι _. cbn. unfold instpred_formula_secLeak; cbn.
+        symmetry. apply (secLeak_binop_split op _ _ Hop).
+      Qed.
+
+      Lemma instpred_formula_secLeak_unop_split {σ1 σ2} (t1 : Term w σ1) (op : UnOp σ1 σ2) :
+        unop_secLeak_split op = true ->
+        instpred (formula_secLeak t1) ⊣⊢ instpred (formula_secLeak (term_unop op t1)).
+      Proof.
+        intros Hop. constructor. intros ι _. cbn. unfold instpred_formula_secLeak; cbn.
+        symmetry. apply (secLeak_unop_split op _ Hop).
+      Qed.
+
       Lemma simplify_secLeak_core_spec [σ] (t : Term w σ) :
         instpred (simplify_secLeak_core t) ⊣⊢ instpred (formula_secLeak t).
       Proof.
@@ -2318,18 +2390,26 @@ Module Type GenericSolverOn
           unfold secLeak_bool, instpred_formula_secLeak, secLeak, repₚ in *. cbn.
           destruct (eq_dec l r); cbn; split; intros H; ty.rv_split;
             try assumption; try reflexivity; try discriminate; try contradiction; try done.
-        - match goal with |- context[if ?b then _ else _] => destruct b eqn:Hs end;
-            rewrite instpred_dlist_singleton; [|reflexivity].
-          assert (Hs' : secLeakT (term_binop op t1 t2))
-            by (rewrite /Is_true; first [rewrite Hs; exact I | cbn; rewrite Hs; exact I]).
-          apply secLeakT_spec in Hs'.
-          iSplit; [iIntros "_"; iApply Hs'|iIntros "_"; done].
-        - match goal with |- context[if ?b then _ else _] => destruct b eqn:Hs end;
-            rewrite instpred_dlist_singleton; [|reflexivity].
-          assert (Hs' : secLeakT (term_unop op t))
-            by (rewrite /Is_true; first [rewrite Hs; exact I | cbn; rewrite Hs; exact I]).
-          apply secLeakT_spec in Hs'.
-          iSplit; [iIntros "_"; iApply Hs'|iIntros "_"; done].
+        - destruct (binop_secLeak_split op) eqn:Hop.
+          + rewrite instpred_dlist_cat !instpred_dlist_singleton.
+            apply instpred_formula_secLeak_binop_split; exact Hop.
+          + match goal with |- context[if ?b then _ else _] => destruct b eqn:Hs end.
+            * rewrite instpred_dlist_singleton.
+              assert (Hs' : secLeakT (term_binop op t1 t2))
+                by (rewrite /Is_true; first [rewrite Hs; exact I | cbn; rewrite Hs; exact I]).
+              apply secLeakT_spec in Hs'.
+              iSplit; [iIntros "_"; iApply Hs'|iIntros "_"; done].
+            * rewrite instpred_dlist_singleton. reflexivity.
+        - destruct (unop_secLeak_split op) eqn:Hop.
+          + rewrite !instpred_dlist_singleton.
+            apply instpred_formula_secLeak_unop_split; exact Hop.
+          + match goal with |- context[if ?b then _ else _] => destruct b eqn:Hs end.
+            * rewrite instpred_dlist_singleton.
+              assert (Hs' : secLeakT (term_unop op t))
+                by (rewrite /Is_true; first [rewrite Hs; exact I | cbn; rewrite Hs; exact I]).
+              apply secLeakT_spec in Hs'.
+              iSplit; [iIntros "_"; iApply Hs'|iIntros "_"; done].
+            * rewrite instpred_dlist_singleton. reflexivity.
         - apply instpred_formula_secLeak_union.
       Qed.
 
@@ -2348,6 +2428,105 @@ Module Type GenericSolverOn
       Qed.
     End SimplifySecLeakSpec.
 
+    (* RE-SPLITTING a public variable after the unifier substitutes it
+       (PLAN-arrv Phase D, 2026-10-25).  `wsubst` rewrites the OLD path
+       condition by plain substitution, so `secLeak vs` becomes
+       `secLeak (x :: r)` once `vs := x :: r`, and nothing simplifies it: a
+       later `secLeak r` is not found (assumption_formula is syntactic).
+       solver_generic therefore appends, after a non-trivial unification, the
+       split of every `secLeak (term_var x)` of the old path condition whose x
+       the substitution replaced by a non-variable.  Each appended formula is
+       implied by the new path condition, so SolverSpec is unchanged.  Only
+       secLeak, by decision: publicness must pass to the parts by framing. *)
+    Section ResimpSecLeak.
+
+      Definition resimp_secLeak1 {w : World} {σ} (t : Term w σ) : PathCondition w :=
+        match run (simplify_secLeak (w := w) (peval t)) with
+        | Some D => D
+        | None => ctx.nil
+        end.
+
+      Definition resimp_secLeak_term {w : World} {σ} (R : PathCondition w)
+        (u : Term w σ) : PathCondition w :=
+        match u with
+        | term_var _ => R
+        | _ => ctx.cat R (resimp_secLeak1 u)
+        end.
+
+      Fixpoint resimp_secLeak {Σ0} {w1 : World} (ζ : Sub Σ0 w1)
+        (C : PathCondition Σ0) : PathCondition w1 :=
+        match C with
+        | ctx.nil => ctx.nil
+        | ctx.snoc C F =>
+            let R := resimp_secLeak ζ C in
+            match F with
+            | formula_secLeak (term_var _ as t) => resimp_secLeak_term R (subst t ζ)
+            | _ => R
+            end
+        end.
+
+      Definition tri_is_id {w0 w1 : World} (ν : Tri w0 w1) : bool :=
+        match ν with tri_id => true | _ => false end.
+
+      Definition resimp_secLeak_tri {w0 w1 : World} (ν : Tri w0 w1) : PathCondition w1 :=
+        if tri_is_id ν then ctx.nil else resimp_secLeak (sub_triangular ν) (wco w0).
+
+      Lemma resimp_secLeak1_sound {w : World} {σ} (t : Term w σ) :
+        instpred (formula_secLeak t) ⊢ instpred (resimp_secLeak1 t).
+      Proof.
+        unfold resimp_secLeak1.
+        pose proof (instpred_run (simplify_secLeak (w := w) (peval t))) as Hrun.
+        rewrite simplify_secLeak_spec in Hrun.
+        assert (Hp : instpred (formula_secLeak (peval t)) ⊣⊢ instpred (w := w) (formula_secLeak t)).
+        { constructor; intros ι Hwco; cbn; unfold instpred_formula_secLeak.
+          now rewrite peval_sound. }
+        rewrite Hp in Hrun.
+        destruct run as [D|]; cbn in *.
+        - apply (bi.equiv_entails_1_2 _ _ Hrun).
+        - rewrite -Hrun. iIntros "[]".
+      Qed.
+
+      (* for a VARIABLE t: with a constructor, unification reduces
+         resimp_secLeak1 and times out *)
+      Lemma resimp_secLeak_cat {w : World} {τ} (t : Term w τ) (R : PathCondition w)
+        (P : Pred w) :
+        (P ⊢ instpred R) ->
+        P ∗ instpred (formula_secLeak t) ⊢ instpred (ctx.cat R (resimp_secLeak1 t)).
+      Proof.
+        intros HR. rewrite instpred_cat.
+        apply bi.sep_mono; [exact HR | apply resimp_secLeak1_sound].
+      Qed.
+
+      Lemma resimp_secLeak_term_sound {w : World} {τ} (u : Term w τ)
+        (R : PathCondition w) (P : Pred w) :
+        (P ⊢ instpred R) ->
+        P ∗ instpred (formula_secLeak u) ⊢ instpred (resimp_secLeak_term R u).
+      Proof.
+        intros HR. destruct u; unfold resimp_secLeak_term;
+          [iIntros "[H _]"; by iApply HR|..];
+          exact (@resimp_secLeak_cat _ _ _ R P HR).
+      Qed.
+
+      Lemma resimp_secLeak_sound {Σ0} {w1 : World} (ζ : Sub Σ0 w1) (C : PathCondition Σ0) :
+        instpred (w := w1) (subst C ζ) ⊢ instpred (resimp_secLeak ζ C).
+      Proof.
+        induction C as [|C IH F]; cbn -[resimp_secLeak_term].
+        - iIntros "_"; done.
+        - destruct F; cbn -[resimp_secLeak_term]; try (iIntros "[H _]"; by iApply IH).
+          destruct t; cbn -[resimp_secLeak_term]; try (iIntros "[H _]"; by iApply IH).
+          now apply resimp_secLeak_term_sound.
+      Qed.
+
+      Lemma resimp_secLeak_tri_valid {w0 w1 : World} (ν : Tri w0 w1) :
+        ⊢ instpred (resimp_secLeak_tri ν).
+      Proof.
+        unfold resimp_secLeak_tri. destruct tri_is_id; [cbn; done|].
+        rewrite -resimp_secLeak_sound -sub_acc_triangular.
+        constructor. intros ι Hwco _. apply instpred_prop.
+        now apply (ent_acc_sub (acc_triangular ν)).
+      Qed.
+
+    End ResimpSecLeak.
 
 
     Definition simplify_relopb {Σ σ} (op : RelOp σ)
@@ -3125,6 +3304,220 @@ Module Type GenericSolverOn
       intros Hw. destruct σ; try reflexivity. now apply drop_pub_zero_aux_inst.
     Qed.
 
+    (* ---- ISOLATE THE INNERMOST VARIABLE: `x + s = y` ⟶ `x = y + (-1)·s` -----
+       (PLAN-rsa.md Phase 1, 2026-10-22.)  try_unify_eq solves only a BARE
+       `var = term`, so on `x + s = y` it can only eliminate y.  In an ASSERT
+       that is the wrong variable whenever x is an angelic one introduced by a
+       consume -- a contract's or a block's logic variables are bound AFTER the
+       state they are matched against -- and y a variable of that state: the
+       obligation becomes `assert_vareq y (x + s)` on a universally bound y,
+       which postprocess cannot discharge (it would have to invert the term),
+       while `assert_vareq x (y − s)` is just a witness.  Worked case: a LoopN
+       block entered from a callee precondition, `4 + (eX − 4·mw) = 4 + xa`,
+       which try_bvadd_cancel_val_propeq weakens to `eX − 4·mw = xa`.
+
+       The solver has no quantifier information, so the INNERMOST variable
+       (smallest ctx.in_at) is the proxy for "the existential", which is
+       faithful exactly where these equations arise (a consume's evars are
+       innermost).  Where it is not (an inner universal against an outer
+       existential), neither orientation is dischargeable, so nothing is lost.
+       Either orientation states the same equation: this is a completeness
+       rule, never a soundness one.
+
+       GUARDED by secLeakT s.  The guard was load-bearing under the tagged
+       RelVal (`y − s` with x = SyncVal a, s = NonSyncVal t1 t2 was
+       NonSyncVal a a ≠ x); with RelVal a pair the inversion holds per
+       projection for ANY s, so the guard is now only a cost filter -- a
+       repair candidate, logged in relval-pair-baseline/AUDIT.md.  Fires only when the other side is a bare variable
+       y OUTER to x: if y is inner, try_unify_eq already eliminates it. *)
+    Equations bvadd_split_var {Σ n} (t : Term Σ (ty.bvec n))
+      : option (Term Σ (ty.bvec n) * nat * Term Σ (ty.bvec n)) :=
+      bvadd_split_var (term_binop bop.bvadd (@term_var _ x _ xIn) s) :=
+        Some (@term_var _ x _ xIn, ctx.in_at xIn, s);
+      bvadd_split_var (term_binop bop.bvadd s (@term_var _ x _ xIn)) :=
+        Some (@term_var _ x _ xIn, ctx.in_at xIn, s);
+      bvadd_split_var _ := None.
+
+    Lemma relval_bvadd_comm {n} (a b : RelVal (ty.bvec n)) :
+      bop.evalRel bop.bvadd a b = bop.evalRel bop.bvadd b a.
+    Proof.
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      destruct a as [a1 a2]; destruct b as [b1 b2]; cbn; f_equal; apply bv.add_comm.
+    Qed.
+
+    Lemma bvadd_split_var_inst {Σ n} (t : Term Σ (ty.bvec n)) x i s :
+      bvadd_split_var t = Some (x, i, s) ->
+      forall ι : Valuation Σ,
+        inst t ι = bop.evalRel bop.bvadd (inst x ι) (inst s ι).
+    Proof.
+      funelim (bvadd_split_var t); intros Heq; try discriminate;
+        injection Heq as <- <- <-; intros ι; [reflexivity|..];
+        apply relval_bvadd_comm.
+    Qed.
+
+    Lemma bv_add_sub_cancel {n} (a c : bv n) : bv.sub (bv.add a c) c = a.
+    Proof. unfold bv.sub. rewrite <- bv.add_assoc. rewrite bv.add_negate2. apply bv.add_zero_r. Qed.
+    Lemma bv_sub_add_cancel {n} (a c : bv n) : bv.add (bv.sub a c) c = a.
+    Proof. unfold bv.sub. rewrite <- bv.add_assoc. rewrite bv.add_negate. apply bv.add_zero_r. Qed.
+    (* multiplication by the literal -1 is negation; via the stdlib's almost-ring
+       lemmas, since bv has no generically declared `ring` *)
+    Lemma bv_mul_m1 {n} (c : bv n) : bv.mul (bv.of_Z (-1)) c = bv.negate c.
+    Proof.
+      pose proof (Coq.setoid_ring.Ring_theory.Rth_ARth
+                    (Coq.setoid_ring.Ring_theory.Eqsth (bv n))
+                    (Coq.setoid_ring.Ring_theory.Eq_ext bv.add bv.mul bv.negate)
+                    (bv.ring_theory n)) as AR.
+      (* `-1` is the numeral Z.neg 1, not syntactically `Z.opp 1` *)
+      replace (@bv.of_Z n (-1)) with (bv.negate (@bv.of_Z n 1))
+        by (rewrite bv.of_Z_negate; reflexivity).
+      rewrite bv.of_Z_one.
+      rewrite <- (Coq.setoid_ring.Ring_theory.ARopp_mul_l AR).
+      now rewrite bv.mul_one_l.
+    Qed.
+
+    (* `x + c = y ⇔ x = y − c` over RelVals, for a SYNCHRONISED c *)
+    Lemma relval_isolate {n} (x y : RelVal (ty.bvec n)) (c : bv n) :
+      bop.evalRel bop.bvadd x (SyncVal c) = y <->
+      x = bop.evalRel bop.bvsub y (SyncVal c).
+    Proof.
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      destruct x as [a1 a2]; destruct y as [b1 b2]; cbn; split; intro H.
+      (* projections, not injection: injection digs through bv.add into its
+         bv.truncn representation (see try_bvadd_cancel_val_propeq_spec) *)
+      all: pose proof (f_equal ty.projLeftRV H) as HL;
+           pose proof (f_equal ty.projRightRV H) as HR;
+           cbn in HL, HR; subst; f_equal;
+           first [ symmetry; apply bv_add_sub_cancel | apply bv_sub_add_cancel ].
+    Qed.
+
+    (* ...in the form the rule EMITS, `y + (-1)·c`: peval's ring normal form
+       folds it (`xa + (-1)·(-4·m)` is `xa + 4·m`), whereas `bvsub` is left
+       alone by peval and by the closers, so `y − c` survived as a residual
+       (measured, 2026-10-22) *)
+    Lemma relval_isolate_mul {n} (x y : RelVal (ty.bvec n)) (c : bv n) :
+      bop.evalRel bop.bvadd x (SyncVal c) = y <->
+      x = bop.evalRel bop.bvadd y
+            (bop.evalRel bop.bvmul (SyncVal (bv.of_Z (-1))) (SyncVal c)).
+    Proof.
+      rewrite (relval_isolate x y c).
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      rewrite bv_mul_m1. now destruct y.
+    Qed.
+
+    Definition term_var_at {Σ σ} (t : Term Σ σ) : option nat :=
+      match t with @term_var _ _ _ yIn => Some (ctx.in_at yIn) | _ => None end.
+
+    (* one orientation: l = x + s, r a bare variable outer to x *)
+    Definition try_isolate_aux {w : World} {n} (l r : Term w (ty.bvec n))
+      : option (Term w (ty.bvec n) * Term w (ty.bvec n)) :=
+      match bvadd_split_var l, term_var_at r with
+      | Some (x, i, s), Some j =>
+          if andb (Nat.ltb i j) (secLeakT s)
+          then Some (x, term_binop bop.bvadd r
+                          (term_binop bop.bvmul (term_val (ty.bvec n) (bv.of_Z (-1))) s))
+          else None
+      | _, _ => None
+      end.
+
+    (* both orientations *)
+    Definition try_isolate_pair {w : World} {n} (l r : Term w (ty.bvec n))
+      : option (DList w) :=
+      match try_isolate_aux l r with
+      | Some (x, e) => Some (dlist_propeq x e)
+      | None =>
+          match try_isolate_aux r l with
+          | Some (x, e) => Some (dlist_propeq x e)
+          | None => None
+          end
+      end.
+
+    (* ...also under a SHARED LITERAL, `c + l = c + r`.  That case is the one
+       that matters, and it is why this runs BEFORE try_bvadd_cancel_val_propeq
+       rather than on its output: solver_generic simplifies and then UNIFIES in
+       the same pass, so the weakened `l = r` that rule emits reaches
+       try_unify_eq before any later simplify pass could isolate it -- placed
+       after it, this rule never fired (measured, 2026-10-22). *)
+    Definition try_isolate_inner {w : World} {σ} (t1 t2 : STerm σ w)
+      : option (DList w) :=
+      match σ return STerm σ w -> STerm σ w -> option (DList w) with
+      | ty.bvec n =>
+          fun t1 t2 =>
+            match try_isolate_pair t1 t2 with
+            | Some d => Some d
+            | None =>
+                match bvadd_split_val t1, bvadd_split_val t2 with
+                | Some (v1, s1), Some (v2, s2) =>
+                    if bv.eqb v1 v2 then try_isolate_pair s1 s2 else None
+                | _, _ => None
+                end
+            end
+      | _ => fun _ _ => None
+      end t1 t2.
+
+    Lemma relval_bvadd_cancel_val {n} (v : bv n) (a b : RelVal (ty.bvec n)) :
+      bop.evalRel bop.bvadd (SyncVal v) a = bop.evalRel bop.bvadd (SyncVal v) b <->
+      a = b.
+    Proof.
+      split; [|now intros ->].
+      unfold bop.evalRel, ty.liftBinOp, ty.liftBinOpRV; cbn.
+      destruct a as [a1 a2]; destruct b as [b1 b2]; cbn; intro H;
+        pose proof (f_equal ty.projLeftRV H) as HL;
+        pose proof (f_equal ty.projRightRV H) as HR;
+        cbn in HL, HR; f_equal; eapply bv.add_cancel_l; eassumption.
+    Qed.
+
+    Lemma try_isolate_aux_inst {w : World} {n} (l r : Term w (ty.bvec n)) x e
+      (ι : Valuation w) :
+      try_isolate_aux l r = Some (x, e) -> instprop (wco w) ι ->
+      (inst l ι = inst r ι <-> inst x ι = inst e ι).
+    Proof.
+      unfold try_isolate_aux. intros H Hw.
+      destruct (bvadd_split_var l) as [[[x' i] s]|] eqn:Hl; try discriminate.
+      destruct (term_var_at r) as [j|]; try discriminate.
+      destruct (andb (Nat.ltb i j) (secLeakT s)) eqn:Hg; try discriminate.
+      injection H as <- <-.
+      apply andb_prop in Hg as [_ Hs].
+      pose proof (secLeakT_inst s ι (Is_true_eq_left _ Hs) Hw) as Hsl.
+      rewrite (bvadd_split_var_inst _ Hl ι). cbn.
+      destruct (inst s ι) as [c c2]; hnf in Hsl; cbn in Hsl; subst c2.
+      apply (relval_isolate_mul _ _ c).
+    Qed.
+
+    Lemma try_isolate_pair_spec {w : World} {n} (l r : Term w (ty.bvec n)) (d : DList w) :
+      try_isolate_pair l r = Some d ->
+      instpred d ⊣⊢ instpred (formula_propeq l r).
+    Proof.
+      unfold try_isolate_pair. intros Hc.
+      destruct (try_isolate_aux l r) as [[x e]|] eqn:H1.
+      - injection Hc as <-.
+        rewrite instpred_dlist_singleton. rewrite !instpred_formula_propeqₚ.
+        constructor; intros ι Hwco; cbn.
+        symmetry. apply (try_isolate_aux_inst l r ι H1 Hwco).
+      - destruct (try_isolate_aux r l) as [[x e]|] eqn:H2; try discriminate.
+        injection Hc as <-.
+        rewrite instpred_dlist_singleton. rewrite !instpred_formula_propeqₚ.
+        constructor; intros ι Hwco; cbn.
+        rewrite <- (try_isolate_aux_inst r l ι H2 Hwco).
+        split; intros; symmetry; assumption.
+    Qed.
+
+    Lemma try_isolate_inner_spec {w : World} {σ} (t1 t2 : STerm σ w) (d : DList w) :
+      try_isolate_inner t1 t2 = Some d ->
+      instpred d ⊣⊢ instpred (formula_propeq t1 t2).
+    Proof.
+      unfold try_isolate_inner. intros Hc.
+      destruct σ; cbn in Hc; try discriminate.
+      destruct (try_isolate_pair t1 t2) as [d'|] eqn:H1.
+      - injection Hc as <-. now apply try_isolate_pair_spec.
+      - destruct (bvadd_split_val t1) as [[v1 s1]|] eqn:E1; try discriminate.
+        destruct (bvadd_split_val t2) as [[v2 s2]|] eqn:E2; try discriminate.
+        destruct (bv.eqb_spec v1 v2) as [<-|]; try discriminate.
+        apply try_isolate_pair_spec in Hc. rewrite Hc. rewrite !instpred_formula_propeqₚ.
+        constructor; intros ι Hwco; cbn.
+        rewrite (bvadd_split_val_inst _ E1 ι) (bvadd_split_val_inst _ E2 ι).
+        symmetry. apply relval_bvadd_cancel_val.
+    Qed.
+
     (* ---- soundness of the fetch-bound discharge --------------------------
        Everything below stays at the `instprop` (plain Prop) level and is
        lifted to `Pred w` exactly once, in `try_fetch_bound_spec`.  That is
@@ -3393,6 +3786,13 @@ Module Type GenericSolverOn
           match try_bvadd_cancel_propeq t1 t2 with
           | Some d => d
           | None =>
+          (* ...then `x + s = y` (also under a shared literal) with x the
+             INNERMOST variable is solved for x, so unification eliminates x
+             and not y: see `try_isolate_inner` above.  BEFORE the weakening
+             below, whose output unify would act on in the same pass. *)
+          match try_isolate_inner t1 t2 with
+          | Some d => d
+          | None =>
               (* ...and if the shared summand is the LITERAL rather than the
                  term, WEAKEN instead of deciding: see
                  `try_bvadd_cancel_val_propeq` above. *)
@@ -3414,6 +3814,7 @@ Module Type GenericSolverOn
               | None => simplify_propeq Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2)
                           t1 t2
               end
+          end
           end
       | formula_secLeak t      => simplify_secLeak (peval t)
       end.
@@ -3480,17 +3881,25 @@ Module Type GenericSolverOn
           | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
               destruct scrut as [d|] eqn:Hv
           end.
-          * apply try_bvadd_cancel_val_propeq_spec in Hv; rewrite Hv.
+          * apply try_isolate_inner_spec in Hv; rewrite Hv.
             constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
             rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
             now rewrite !peval_sound.
-          * rewrite simplify_propeq_spec.
-            (* the peval bridge, same three lines as the cancellation cases
-               above: peval_sound is stated PER-VALUATION, so it cannot be
-               rewritten under a still-unapplied `⊣⊢` -- ι must come first. *)
-            constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
-            rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
-            now rewrite !peval_sound.
+          * match goal with
+            | |- instpred (match ?scrut with | Some _ => _ | None => _ end) ⊣⊢ _ =>
+                destruct scrut as [d|] eqn:Hi
+            end.
+            -- apply try_bvadd_cancel_val_propeq_spec in Hi; rewrite Hi.
+               constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+               rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
+               now rewrite !peval_sound.
+            -- rewrite simplify_propeq_spec.
+               (* the peval bridge, same three lines as the cancellation cases
+                  above: peval_sound is stated PER-VALUATION, so it cannot be
+                  rewritten under a still-unapplied `⊣⊢` -- ι must come first. *)
+               constructor; intros ι Hwco; cbn; unfold instpred_formula_propeq.
+               rewrite (drop_pub_zero_inst (peval _) ι Hwco) (drop_pub_zero_inst (peval _) ι Hwco).
+               now rewrite !peval_sound.
       - rewrite simplify_secLeak_spec.
         constructor; intros ι Hwco; cbn; unfold instpred_formula_secLeak.
         now rewrite peval_sound.
@@ -4135,7 +4544,11 @@ Module Type GenericSolverOn
     Definition solver_generic : Solver :=
       fun w0 C0 =>
         match DList.run (simplify_pathcondition C0) with
-        | Some C1 => Some (unify_pathcondition (assumption_pathcondition (wco w0) C1 ctx.nil))
+        | Some C1 =>
+            let '(existT w1 (ν, C2)) :=
+              unify_pathcondition (assumption_pathcondition (wco w0) C1 ctx.nil) in
+            (* the split of each substituted public variable (ResimpSecLeak) *)
+            Some (existT w1 (ν, ctx.cat C2 (resimp_secLeak_tri ν)))
         | None => None
         end
     .
@@ -4144,9 +4557,14 @@ Module Type GenericSolverOn
     Proof.
       unfold solver_generic. intros w C0.
       pose proof (simplify_pathcondition_spec C0) as Hequiv.
-      destruct run as [C0'|]; constructor; cbn.
+      destruct run as [C0'|]; cbn.
       - pose proof (unify_pathcondition_spec (assumption_pathcondition (wco w) C0' ctx.nil)) as Hunify.
         destruct (unify_pathcondition (assumption_pathcondition (wco w) C0' ctx.nil)) as (w1 & ν01 & C1).
+        constructor.
+        assert (Hcat : instpred (ctx.cat C1 (resimp_secLeak_tri ν01)) ⊣⊢ instpred C1).
+        { rewrite instpred_cat. pose proof (@resimp_secLeak_tri_valid _ _ ν01) as HE.
+          iSplit; [iIntros "[$ _]" | iIntros "$"; iApply HE]. }
+        rewrite Hcat.
         rewrite <-Hunify.
         rewrite <-Hequiv.
         pose proof (assumption_pathcondition_spec (wco w) C0' ctx.nil) as Hassumption.
@@ -4154,7 +4572,7 @@ Module Type GenericSolverOn
         iDestruct (Hassumption with "Hwco") as "Hassumption".
         rewrite bi.emp_sep.
         now iApply (bi.wand_iff_sym with "Hassumption").
-      - now rewrite <-Hequiv.
+      - constructor. now rewrite <-Hequiv.
     Qed.
 
   End GenericSolver.

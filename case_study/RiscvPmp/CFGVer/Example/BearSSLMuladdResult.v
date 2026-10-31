@@ -53,12 +53,13 @@ From Katamaran Require Import
 
    Bound: 12 instructions * 4 bytes = 48. *)
 Lemma muladd_q_noninterferent_param (init_addr : N) :
-  (init_addr + 48 < lenAddr)%N ->
-  noninterferent_strong init_addr muladd_q_instrs
-    (init_addr + 48)%N
-    muladd_q_reg_specs [].
+  fits (init_addr + 4 * N.of_nat (length muladd_q_instrs)) [] ->
+  noninterferent_strong init_addr muladd_q_instrs (init_addr + 4 * N.of_nat (length muladd_q_instrs))
+    muladd_q_reg_specs (compile (init_addr + 4 * N.of_nat (length muladd_q_instrs)) []).
 Proof.
   intros Hbound.
+  apply (ni_of_cells (regs' := muladd_q_reg_specs) (cs := []));
+    [apply compile_clear; lia | apply compile_in_range; [lia | assumption] | reflexivity | reflexivity |].
   (* The `strip` restatement this proof used to open with is GONE: the
      EndToEnd bridges now conclude over `instrs` itself, not `strip
      instrs`, because cfg_instrs is a `list AST` (PLAN-contract-ast
@@ -68,16 +69,17 @@ Proof.
      this example's own VC.  No statement in this file names an annotation. *)
   eapply gen_contract_noninterferent_param_simple.
   - apply Prelude.nodup_fixed; reflexivity.
-  - cbn; lia.
+  - exact (fits_nil Hbound).
   - solve_valid valid_muladd_q_cfg_contract_param.
 Qed.
 
 (* Concrete-base corollary at the default init_addr. *)
+(* SANITY CHECK (PLAN-spec-layer D20): the parametric theorem at the
+   default load address init_addr = 0. *)
 Lemma muladd_q_noninterferent :
-  noninterferent_strong init_addr muladd_q_instrs
-    (init_addr + 48)%N
-    muladd_q_reg_specs [].
+  noninterferent_strong init_addr muladd_q_instrs (init_addr + 4 * N.of_nat (length muladd_q_instrs))
+    muladd_q_reg_specs (compile (init_addr + 4 * N.of_nat (length muladd_q_instrs)) []).
 Proof.
   apply muladd_q_noninterferent_param.
-  unfold init_addr, lenAddr; lia.
+  unfold fits, layout_size, init_addr, lenAddr. cbn. lia.
 Qed.

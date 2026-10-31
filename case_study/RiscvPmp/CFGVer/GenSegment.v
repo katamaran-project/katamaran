@@ -47,6 +47,7 @@ From stdpp Require Import gmap.
 From Katamaran Require Import
      RiscvPmp.CFGVer.Verifier
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract.
@@ -84,13 +85,12 @@ Import asn.notations.
 (* gen_reg_asn_rel, with the base as a parameter and no fixed context. *)
 Definition gen_reg_asn_at {Σ : LCtx} (base : Term Σ ty_xlenbits)
     (s : reg_spec_rel) : Assertion Σ :=
-  let '(r, is_pub, pv) := s in
-  match pv with
-  | PVExist =>
-      asn.exist "v" ty_xlenbits
-        (if is_pub then r ↦ᵣ term_var "v" ∗ secLeakvar "v" else r ↦ᵣ term_var "v")
-  | PVConst v => r ↦ᵣ term_val ty_xlenbits v
-  | PVBaseOff k =>
+  let '(r, sp) := s in
+  match sp with
+  | Public => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v" ∗ secLeakvar "v")
+  | Secret => asn.exist "v" ty_xlenbits (r ↦ᵣ term_var "v")
+  | Known (PVConst v) => r ↦ᵣ term_val ty_xlenbits v
+  | Known (PVBaseOff k) =>
       r ↦ᵣ term_binop bop.bvadd base (term_val ty_xlenbits (bv.of_N k))
   end.
 
@@ -299,15 +299,24 @@ Definition gen_base_bound {Σ : LCtx} (base : Term Σ ty_xlenbits) (bound : N)
         (term_val ty.int (Z.of_N bound)))
      (term_val ty.int (Z.of_N lenAddr))).
 
-Definition gen_seg_contract {Σ : LCtx}
+Definition gen_seg_contract_at {Σ : LCtx}
     (base   : Term Σ ty_xlenbits)
     (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (* THE exit, as a term over Σ (PLAN-rsa.md, 2026-10-22).  Usually an
+       offset into the segment's own code (gen_seg_contract below); for a
+       FUNCTION it is the return address, a variable the precondition binds to
+       X1 -- entered from every call site with whatever X1 holds there,
+       because sexec_block instantiates Σ angelically and resumes at
+       `subst cfg_exit`.  Either way the exit must be a SyncVal under the
+       precondition (etable_rel): an offset exit gets that from the placement,
+       a variable one from a `secLeak` conjunct the author writes
+       (GenCompose.seg_exit_sync_off / seg_exit_sync_pub). *)
+    (ex : Term Σ ty_xlenbits)
     (* The segment's own code, as the SPEC (`list AST`): what sits in memory.
        The table is built from the ANNOTATED list `cfg_vc` takes as an
        argument; the two are tied by `strip a = cfg_instrs c` at the
        soundness bridge. *)
     (code : list AST)
-    (target : N)                  (* THE exit offset, RELATIVE to the segment *)
     (fl : nat)
     (regs : list reg_spec_rel)
     (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
@@ -315,7 +324,7 @@ Definition gen_seg_contract {Σ : LCtx}
     : @CFGVerifierContract Σ :=
   @MkCFGVerifierContract Σ
     base
-    (exit_of_off base target)
+    ex
     ( asn_pc_eq base_a
       ∗ gen_base_bound base_a (4 * N.of_nat (length code))
       ∗ extra_pre
@@ -329,6 +338,20 @@ Definition gen_seg_contract {Σ : LCtx}
        every trip, so the loop body can only ever run ONCE -- which is exactly
        what happened to amBody_post, and it fails late and confusingly. *)
     (post ∗ minimal_pre)%asn.
+
+(* The common case: the exit is an offset `target` RELATIVE to the segment. *)
+Definition gen_seg_contract {Σ : LCtx}
+    (base   : Term Σ ty_xlenbits)
+    (base_a : Term (Σ ▻ "a"∷ty_xlenbits) ty_xlenbits)
+    (code : list AST)
+    (target : N)                  (* THE exit offset, RELATIVE to the segment *)
+    (fl : nat)
+    (regs : list reg_spec_rel)
+    (extra_pre : Assertion (Σ ▻ "a"∷ty_xlenbits))
+    (post : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    : @CFGVerifierContract Σ :=
+  gen_seg_contract_at base base_a (exit_of_off base target) code fl regs
+    extra_pre post.
 
 (* `solve_param_vc` lived here and is GONE: it was character-for-character the
    standard parametric-base discharge, which ~150 other sites wrote out.  One
@@ -1752,12 +1775,14 @@ Definition gen_extra_post {Σ : LCtx} (ws : list (walk_reg Σ))
 (* contracts keep working unchanged.                                         *)
 (* ========================================================================= *)
 
+(* The KNOWN value of a register (PLAN-spec-layer D10): Secret/Public are
+   val_spec's existential cases.  A Known register is public in both runs,
+   so a PQAt value is secLeak'd (the pre-D10 form allowed a non-public PQAt;
+   no example ever used one). *)
 Inductive param_val_q (Σ : LCtx) : Type :=
-| PQExist
 | PQConst (v : Val ty_xlenbits)
 | PQAt (b : string) (bIn : (b∷ty_xlenbits ∈ Σ)%katamaran) (k : N).
 
-Arguments PQExist {Σ}.
 Arguments PQConst {Σ} v.
 Arguments PQAt {Σ} b bIn k.
 
@@ -1771,32 +1796,33 @@ Definition PVOff {Σ : LCtx} (b : string)
     {bIn : (b∷ty_xlenbits ∈ Σ)%katamaran} (k : N) : param_val_q Σ :=
   @PQAt Σ b bIn k.
 
-Definition reg_spec_q (Σ : LCtx) : Type := RegIdx * bool * param_val_q Σ.
+Definition reg_spec_q (Σ : LCtx) : Type := gpr * val_spec (param_val_q Σ).
 
 (* At the PRE context (Σ |> "a"): one ctx.in_succ past the segment's own Σ,
    and a second inside the existential binder -- the same two-level shift
    gen_cells_pre performs, and for the same reason. *)
 Definition gen_reg_asn_q {Σ : LCtx} (s : reg_spec_q Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits) :=
-  let '(r, is_pub, pv) := s in
-  match pv with
-  | PQExist =>
+  let '(r, sp) := s in
+  match sp with
+  | Public =>
       asn.exist "v" ty_xlenbits
         (let v := @term_var _ "v" _ ctx.in_zero in
-         if is_pub then (r ↦ᵣ v ∗ asn.formula (formula_secLeak v))%asn
-         else (r ↦ᵣ v)%asn)
-  | PQConst v => (r ↦ᵣ term_val ty_xlenbits v)%asn
-  | PQAt b bIn k =>
+         (r ↦ᵣ v ∗ asn.formula (formula_secLeak v))%asn)
+  | Secret =>
+      asn.exist "v" ty_xlenbits
+        (let v := @term_var _ "v" _ ctx.in_zero in (r ↦ᵣ v)%asn)
+  | Known (PQConst v) => (r ↦ᵣ term_val ty_xlenbits v)%asn
+  | Known (PQAt b bIn k) =>
       (* `addr_off` collapses a ZERO offset, so `PVVar b` yields the bare
          `term_var b` rather than `b + 0`.  Those are equal but not
          SYNTACTICALLY equal, and the difference is enough to fail the VC.
-         And `is_pub` is honoured here, not ignored: for a whole-program
-         contract the base is `p`, whose publicness is established once
-         elsewhere, but a self-contained segment's data base is a PARAMETER
-         and nothing else says it is public. *)
+         And the value is secLeak'd: for a whole-program contract the base
+         is `p`, whose publicness is established once elsewhere, but a
+         self-contained segment's data base is a PARAMETER and nothing else
+         says it is public. *)
       let a := addr_off (@term_var _ b _ (ctx.in_succ bIn)) (bv.of_N k) in
-      if is_pub then (r ↦ᵣ a ∗ asn.formula (formula_secLeak a))%asn
-      else (r ↦ᵣ a)%asn
+      (r ↦ᵣ a ∗ asn.formula (formula_secLeak a))%asn
   end.
 
 Definition gen_regs_q {Σ : LCtx} (specs : list (reg_spec_q Σ))
@@ -1809,18 +1835,19 @@ Definition gen_regs_q {Σ : LCtx} (specs : list (reg_spec_q Σ))
    to cross "a" and "an", three inside the existential's own binder. *)
 Definition gen_reg_asn_q_post {Σ : LCtx} (s : reg_spec_q Σ)
     : Assertion (Σ ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits) :=
-  let '(r, is_pub, pv) := s in
-  match pv with
-  | PQExist =>
+  let '(r, sp) := s in
+  match sp with
+  | Public =>
       asn.exist "v" ty_xlenbits
         (let v := @term_var _ "v" _ ctx.in_zero in
-         if is_pub then (r ↦ᵣ v ∗ asn.formula (formula_secLeak v))%asn
-         else (r ↦ᵣ v)%asn)
-  | PQConst v => (r ↦ᵣ term_val ty_xlenbits v)%asn
-  | PQAt b bIn k =>
+         (r ↦ᵣ v ∗ asn.formula (formula_secLeak v))%asn)
+  | Secret =>
+      asn.exist "v" ty_xlenbits
+        (let v := @term_var _ "v" _ ctx.in_zero in (r ↦ᵣ v)%asn)
+  | Known (PQConst v) => (r ↦ᵣ term_val ty_xlenbits v)%asn
+  | Known (PQAt b bIn k) =>
       let a := addr_off (@term_var _ b _ (ctx.in_succ (ctx.in_succ bIn))) (bv.of_N k) in
-      if is_pub then (r ↦ᵣ a ∗ asn.formula (formula_secLeak a))%asn
-      else (r ↦ᵣ a)%asn
+      (r ↦ᵣ a ∗ asn.formula (formula_secLeak a))%asn
   end.
 
 Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
@@ -1831,8 +1858,8 @@ Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
 (* DATA LAYOUT: cells and arrays, contiguous by construction (2026-10-02)     *)
 (* ========================================================================== *)
 (* A program's data as an ORDERED list, laid out word by word from an address
-   term: a cell (DCell), an array of `count` words (DArr, an `arr` chunk
-   walking up or down), or an anchor (DAt x: "the next word is at x", a pure
+   term: a cell (DCell), an array of `count` words (DArr, an `arrv` chunk
+   walking up or down, its value a NAMED variable -- PLAN-arrv D12), or an anchor (DAt x: "the next word is at x", a pure
    fact, after which addresses are x-relative so the code's own x-relative
    addresses stay intact).  The counts are TERMS, so one contract states a
    data region whose size is symbolic -- the parametric muladd's limb arrays
@@ -1848,24 +1875,42 @@ Definition gen_regs_q_post {Σ : LCtx} (specs : list (reg_spec_q Σ))
 
 Inductive arr_dir := ArrUp | ArrDown.
 
-Inductive data_spec (Σ : LCtx) : Type :=
-| DCell (pub : bool) (v : option (Term Σ ty_xlenbits))
-| DArr (pub : bool) (dir : arr_dir) (count : Term Σ ty_xlenbits)
-(* `count` BYTES walking up (an `arr pub 1`), stored as ⌈count/4⌉ words:
-   the trusted statement's memory is word-granular, so the bytes past
+(* The data's terms (cells, counts, anchors, pointers) are over S; an array's
+   VALUE is not a term but a NAME (PLAN-arrv D12): each DArr/DBytes owns one
+   variable of the VALUE context `data_vctx ds`, which the contract appends
+   to its own (R ▻▻ data_vctx data), so no count, address or premise can
+   mention a value -- independence by typing (D11) -- and the bridge chooses
+   the values after the runs (EndToEnd.data_vals, D9). *)
+Inductive data_spec (S : LCtx) : Type :=
+| DCell (s : val_spec (Term S ty_xlenbits))
+(* `count` words walking up or down, holding the list `v` -- for ArrDown
+   listed from the array's start, the TOP word *)
+| DArr (pub : bool) (dir : arr_dir) (count : Term S ty_xlenbits) (v : string)
+(* `count` BYTES walking up (an `arrv 1`) holding `v`, stored as ⌈count/4⌉
+   words: the trusted statement's memory is word-granular, so the bytes past
    `count` in the last word are owned by the statement and dropped by the
    ImplPre.  The next item starts at the next word. *)
-| DBytes (pub : bool) (count : Term Σ ty_xlenbits)
-| DAt (x : Term Σ ty_xlenbits)
+| DBytes (pub : bool) (count : Term S ty_xlenbits) (v : string)
+| DAt (x : Term S ty_xlenbits)
 (* a POINTER: the following cells are at x, wherever that is -- no
    contiguity with what came before.  The statement lays them out at x's
    value; disjointness is the bridge's data_layout_ok premise. *)
-| DPtr (x : Term Σ ty_xlenbits).
-Arguments DCell {Σ} pub v.
-Arguments DArr {Σ} pub dir count.
-Arguments DBytes {Σ} pub count.
-Arguments DAt {Σ} x.
-Arguments DPtr {Σ} x.
+| DPtr (x : Term S ty_xlenbits).
+Arguments DCell {S} s.
+Arguments DArr {S} pub dir count v.
+Arguments DBytes {S} pub count v.
+Arguments DAt {S} x.
+Arguments DPtr {S} x.
+
+(* one value variable per array; the FIRST array is the LAST variable, so a
+   recursion over the data peels the context with env.head / env.tail *)
+Fixpoint data_vctx {S} (ds : list (data_spec S)) : LCtx :=
+  match ds with
+  | nil => ctx.nil
+  | cons (DArr _ _ _ v) ds => data_vctx ds ▻ v∷clemv_ty 4
+  | cons (DBytes _ _ v) ds => data_vctx ds ▻ v∷clemv_ty 1
+  | cons _ ds => data_vctx ds
+  end.
 
 Definition t_add {Σ} (t : Term Σ ty_xlenbits) (c : Z) : Term Σ ty_xlenbits :=
   term_binop bop.bvadd t (term_val ty_xlenbits (bv.of_Z c)).
@@ -1881,38 +1926,55 @@ Definition asn_in_range_at {Σ} (x : Term Σ ty_xlenbits) : Assertion Σ :=
     (term_binop bop.plus (term_unop uop.unsigned x) (term_val ty.int 4%Z))
     (term_val ty.int (Z.of_N maxAddr))).
 
-Definition gen_cell_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool)
-    (v : option (Term Σ ty_xlenbits)) : Assertion Σ :=
-  match v with
-  | Some t => (a ↦ₘ t ∗ (if pub then asn.formula (formula_secLeak t) else ⊤))%asn
-  | None =>
+Definition gen_cell_at {Σ} (a : Term Σ ty_xlenbits)
+    (s : val_spec (Term Σ ty_xlenbits)) : Assertion Σ :=
+  match s with
+  | Known t => (a ↦ₘ t ∗ asn.formula (formula_secLeak t))%asn
+  | Public =>
       let a' : Term (Σ ▻ "mv"∷ty_xlenbits) ty_xlenbits :=
         subst a (sub_wk1 (b := "mv"∷ty_xlenbits)) in
-      asn.exist "mv" ty_xlenbits
-        (if pub then (a' ↦ₘ term_var "mv" ∗ secLeakvar "mv")%asn
-         else (a' ↦ₘ term_var "mv")%asn)
+      asn.exist "mv" ty_xlenbits (a' ↦ₘ term_var "mv" ∗ secLeakvar "mv")%asn
+  | Secret =>
+      let a' : Term (Σ ▻ "mv"∷ty_xlenbits) ty_xlenbits :=
+        subst a (sub_wk1 (b := "mv"∷ty_xlenbits)) in
+      asn.exist "mv" ty_xlenbits (a' ↦ₘ term_var "mv")%asn
   end.
 
-(* up: words a .. a+4(c-1);  down: the same words, the arr starting at the top *)
+(* a public array: its whole value is public (secLeak of a list is
+   all-or-nothing, PLAN-arrv §1.2) *)
+Definition gen_pub_at {Σ σ} (pub : bool) (A : Assertion Σ) (v : Term Σ σ) : Assertion Σ :=
+  if pub then (A ∗ asn.formula (formula_secLeak v))%asn else A.
+
+(* up: words a .. a+4(c-1);  down: the same words, the arrv starting at the
+   top.  `t` is the arrv's tag (PLAN-arrv D15: the value's name) *)
 Definition gen_arr_at {Σ} (a : Term Σ ty_xlenbits) (pub : bool) (dir : arr_dir)
-    (c : Term Σ ty_xlenbits) : Assertion Σ :=
-  match dir with
-  | ArrUp => asn.chunk (chunk_user (arr pub 4 4) [a; c; t_add4n a c])
-  | ArrDown => asn.chunk (chunk_user (arr pub 4 (-4))
-                 [t_add (t_add4n a c) (-4); c; t_add a (-4)])
-  end.
+    (c : Term Σ ty_xlenbits) (t : string) (vs : Term Σ (clemv_ty 4)) : Assertion Σ :=
+  gen_pub_at pub
+    match dir with
+    | ArrUp => clem_arrv 4 4 t a c (t_add4n a c) vs
+    | ArrDown => clem_arrv 4 (-4) t (t_add (t_add4n a c) (-4)) c (t_add a (-4)) vs
+    end vs.
 
-Fixpoint gen_data_at {Σ} (a : Term Σ ty_xlenbits) (ds : list (data_spec Σ)) : Assertion Σ :=
-  match ds with
-  | nil => ⊤%asn
-  | cons (DCell pub v) ds =>
-      (gen_cell_at a pub v ∗ asn_in_range_at a ∗ gen_data_at (t_add a 4) ds)%asn
-  | cons (DArr pub dir c) ds => (gen_arr_at a pub dir c ∗ gen_data_at (t_add4n a c) ds)%asn
-  | cons (DBytes pub c) ds =>
-      (asn.chunk (chunk_user (arr pub 1 1) [a; c; term_binop bop.bvadd a c])
-       ∗ gen_data_at (t_add4n a (t_ceil4 c)) ds)%asn
-  | cons (DAt x) ds => (asn.formula (formula_propeq x a) ∗ gen_data_at x ds)%asn
-  | cons (DPtr x) ds => gen_data_at x ds
+(* The data at `a`, its S terms read through ζ and its values through ν.  A
+   whole program uses ζ/ν = the two halves of R ▻▻ data_vctx data
+   (gen_prog_contract); a block points ν at its own variables. *)
+Fixpoint gen_data_at {S Σ} (ζ : Sub S Σ) (a : Term Σ ty_xlenbits) (ds : list (data_spec S))
+    : Sub (data_vctx ds) Σ -> Assertion Σ :=
+  match ds return Sub (data_vctx ds) Σ -> Assertion Σ with
+  | nil => fun _ => ⊤%asn
+  | cons (DCell sp) ds => fun ν =>
+      (gen_cell_at a (val_spec_map (fun t => subst t ζ) sp) ∗ asn_in_range_at a
+       ∗ gen_data_at ζ (t_add a 4) ds ν)%asn
+  | cons (DArr pub dir c v) ds => fun ν =>
+      (gen_arr_at a pub dir (subst c ζ) v (env.head ν)
+       ∗ gen_data_at ζ (t_add4n a (subst c ζ)) ds (env.tail ν))%asn
+  | cons (DBytes pub c v) ds => fun ν =>
+      (gen_pub_at pub (clem_arrv 1 1 v a (subst c ζ) (term_binop bop.bvadd a (subst c ζ)) (env.head ν))
+         (env.head ν)
+       ∗ gen_data_at ζ (t_add4n a (t_ceil4 (subst c ζ))) ds (env.tail ν))%asn
+  | cons (DAt x) ds => fun ν =>
+      (asn.formula (formula_propeq (subst x ζ) a) ∗ gen_data_at ζ (subst x ζ) ds ν)%asn
+  | cons (DPtr x) ds => fun ν => gen_data_at ζ (subst x ζ) ds ν
   end.
 
 (* ---- the statement side ------------------------------------------------- *)
@@ -1921,20 +1983,24 @@ Definition rv_val (r : RelVal ty_xlenbits) : bv xlenbits := ty.projLeft r.
 Definition data_count {Σ} (ι : Valuation Σ) (c : Term Σ ty_xlenbits) : nat :=
   N.to_nat (bv.bin (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))).
 
+(* An array's cells: Public or Secret by its flag. *)
+Definition pub_spec (pub : bool) : val_spec (Val ty_word) :=
+  if pub then Public else Secret.
+
 (* the cells, ascending from the absolute address off *)
 Fixpoint concretize_data {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spec Σ))
-    : list mem_full_spec :=
+    : list mem_cell :=
   match ds with
   | nil => nil
-  | cons (DCell pub v) ds =>
-      cons (bv.of_N off, pub, option_map (fun t => rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι)) v)
+  | cons (DCell sp) ds =>
+      cons (off, val_spec_map (fun t => rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι)) sp)
         (concretize_data ι (off + 4) ds)
-  | cons (DArr pub _ c) ds =>
-      List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits)))
+  | cons (DArr pub _ c _) ds =>
+      List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub))
         (List.seq 0 (data_count ι c))
       ++ concretize_data ι (off + 4 * N.of_nat (data_count ι c)) ds
-  | cons (DBytes pub c) ds =>
-      List.map (fun i => (bv.of_N (off + 4 * N.of_nat i), pub, @None (bv xlenbits)))
+  | cons (DBytes pub c _) ds =>
+      List.map (fun i => ((off + 4 * N.of_nat i)%N, pub_spec pub))
         (List.seq 0 (data_count ι (t_ceil4 c)))
       ++ concretize_data ι (off + 4 * N.of_nat (data_count ι (t_ceil4 c))) ds
   | cons (DAt _) ds => concretize_data ι off ds
@@ -1946,17 +2012,17 @@ Fixpoint concretize_data {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spe
 Fixpoint data_ok {Σ} (ι : Valuation Σ) (off : N) (ds : list (data_spec Σ)) : Prop :=
   match ds with
   | nil => True
-  | cons (DCell pub v) ds =>
+  | cons (DCell sp) ds =>
       (off + 4 <= maxAddr)%N
-      /\ (match v with
-          | Some t => pub = true /\ inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι))
-          | None => True end)
+      /\ (match sp with
+          | Known t => inst (T := fun Σ => Term Σ ty_xlenbits) t ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) t ι))
+          | _ => True end)
       /\ data_ok ι (off + 4) ds
-  | cons (DArr pub _ c) ds =>
+  | cons (DArr pub _ c _) ds =>
       inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
       /\ (off + 4 * N.of_nat (data_count ι c) <= maxAddr)%N
       /\ data_ok ι (off + 4 * N.of_nat (data_count ι c)) ds
-  | cons (DBytes pub c) ds =>
+  | cons (DBytes pub c _) ds =>
       inst (T := fun Σ => Term Σ ty_xlenbits) c ι = ty.SyncVal (rv_val (inst (T := fun Σ => Term Σ ty_xlenbits) c ι))
       /\ (off + N.of_nat (data_count ι c) <= maxAddr)%N
       /\ (off + 4 * N.of_nat (data_count ι (t_ceil4 c)) <= maxAddr)%N
@@ -1986,27 +2052,27 @@ Qed.
 Lemma concretize_data_addrs {Σ} (ι : Valuation Σ) (ds : list (data_spec Σ)) :
   data_no_ptr ds ->
   forall off i s, concretize_data ι off ds !! i = Some s ->
-  s.1.1 = bv.of_N (off + 4 * N.of_nat i).
+  s.1 = (off + 4 * N.of_nat i)%N.
 Proof.
   induction ds as [|d ds IH]; intros Hnp off i s Hi; [discriminate|].
-  destruct d as [pub v|pub dir c|pub c|x|x]; cbn [concretize_data data_no_ptr] in Hi, Hnp;
+  destruct d as [sp|pub dir c v|pub c v|x|x]; cbn [concretize_data data_no_ptr] in Hi, Hnp;
     [| | | |contradiction].
   all: specialize (IH Hnp).
   - destruct i as [|i]; cbn in Hi.
-    + injection Hi as <-. cbn. f_equal; lia.
-    + rewrite (IH _ _ _ Hi). f_equal; lia.
+    + injection Hi as <-. cbn. lia.
+    + rewrite (IH _ _ _ Hi). lia.
   - destruct (Nat.lt_ge_cases i (data_count ι c)) as [Hl|Hl].
     + rewrite lookup_app_l in Hi; [|rewrite length_map length_seq; exact Hl].
       rewrite lookup_map_seq0 in Hi; [|exact Hl]. injection Hi as <-. reflexivity.
     + rewrite lookup_app_r in Hi; [|rewrite length_map length_seq; exact Hl].
       rewrite length_map length_seq in Hi.
-      rewrite (IH _ _ _ Hi). f_equal; lia.
+      rewrite (IH _ _ _ Hi). lia.
   - destruct (Nat.lt_ge_cases i (data_count ι (t_ceil4 c))) as [Hl|Hl].
     + rewrite lookup_app_l in Hi; [|rewrite length_map length_seq; exact Hl].
       rewrite lookup_map_seq0 in Hi; [|exact Hl]. injection Hi as <-. reflexivity.
     + rewrite lookup_app_r in Hi; [|rewrite length_map length_seq; exact Hl].
       rewrite length_map length_seq in Hi.
-      rewrite (IH _ _ _ Hi). f_equal; lia.
+      rewrite (IH _ _ _ Hi). lia.
   - exact (IH _ _ _ Hi).
 Qed.
 
@@ -2015,27 +2081,44 @@ Qed.
    (heavy branch), so example contracts can use these from the light one. *)
 (* the statement's register spec for one reg_spec_q at the valuation *)
 Definition concretize_reg_q {Σ} (ι : Valuation Σ) (s : reg_spec_q Σ) : reg_spec :=
-  let '(r, pub, pv) := s in
-  (r, pub, match pv with
-           | PQExist => None
-           | PQConst v => Some v
-           | PQAt b bIn k => Some (if bv.eqb (@bv.of_N xlenbits k) bv.zero then rv_val (env.lookup ι bIn)
-                                   else bv.add (rv_val (env.lookup ι bIn)) (bv.of_N k))
-           end).
+  let '(r, sp) := s in
+  (r, val_spec_map (fun pv => match pv with
+           | PQConst v => v
+           | PQAt b bIn k => if bv.eqb (@bv.of_N xlenbits k) bv.zero then rv_val (env.lookup ι bIn)
+                             else bv.add (rv_val (env.lookup ι bIn)) (bv.of_N k)
+           end) sp).
 
 (* a register naming a logic variable needs that variable public *)
 Definition reg_q_sync {Σ} (ι : Valuation Σ) (s : reg_spec_q Σ) : Prop :=
   match s with
-  | (_, _, PQAt b bIn _) => env.lookup ι bIn = SyncVal (rv_val (env.lookup ι bIn))
+  | (_, Known (PQAt b bIn _)) => env.lookup ι bIn = SyncVal (rv_val (env.lookup ι bIn))
   | _ => True
   end.
 
+(* The contract lives at R ▻▻ data_vctx data: the arrays' values are
+   contract variables (so the post can name them), the rest is over R.
+   regs and facts are over R ▻ "a" and weakened past the values. *)
+Definition gen_prog_ζ {R : LCtx} (V : LCtx) : Sub R (R ▻▻ V ▻ "a"∷ty_xlenbits) :=
+  subst (sub_cat_left V) sub_wk1.
+Definition gen_prog_ν {R : LCtx} (V : LCtx) : Sub V (R ▻▻ V ▻ "a"∷ty_xlenbits) :=
+  subst (sub_cat_right V) sub_wk1.
+
+(* The `Subst Assertion` instance lives inside `Module Import asn` and is not
+   found from here; unresolved, the definition below does not fail but makes
+   coqc's instance search run for >10 min (2026-10-24).  As GenCompose. *)
+#[local] Existing Instance asn.sub_assertion.
+
 Definition gen_prog_contract {R : LCtx} (pb : string) (pIn : (pb∷ty_xlenbits ∈ R)%katamaran)
     (regs : list (reg_spec_q R)) (facts : Assertion (R ▻ "a"∷ty_xlenbits)) (doff : N)
-    (data : list (data_spec (R ▻ "a"∷ty_xlenbits))) (instrs : list AST) (fuel : nat)
-    (post : Assertion (R ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits)) : @CFGVerifierContract R :=
-  gen_seg_contract (@term_var R pb _ pIn) (@term_var _ pb _ (ctx.in_succ pIn))
+    (data : list (data_spec R)) (instrs : list AST) (fuel : nat)
+    (post : Assertion (R ▻▻ data_vctx data ▻ "a"∷ty_xlenbits ▻ "an"∷ty_xlenbits))
+    : @CFGVerifierContract (R ▻▻ data_vctx data) :=
+  let V := data_vctx data in
+  gen_seg_contract (subst (@term_var R pb _ pIn) (sub_cat_left V))
+    (subst (@term_var R pb _ pIn) (gen_prog_ζ V))
     instrs (4 * N.of_nat (length instrs)) fuel []
-    (asn.sep (gen_regs_q regs) (asn.sep facts
-       (gen_data_at (t_add (@term_var _ pb _ (ctx.in_succ pIn)) (Z.of_N doff)) data))) post.
+    (asn.sep (subst (gen_regs_q regs) (sub_up1 (sub_cat_left V)))
+       (asn.sep (subst facts (sub_up1 (sub_cat_left V)))
+          (gen_data_at (gen_prog_ζ V) (subst (t_add (@term_var R pb _ pIn) (Z.of_N doff)) (gen_prog_ζ V))
+             data (gen_prog_ν V)))) post.
 

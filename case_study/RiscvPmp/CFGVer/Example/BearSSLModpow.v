@@ -102,7 +102,7 @@ Definition modpow_win_instrs : list AST :=
    independent of ALL of t2v, basev, u and bits.  Register-only: no loads or
    stores, so mem_specs is []. *)
 Definition modpow_win_reg_specs : list reg_spec :=
-  [(A0, false, None); (A1, false, None); (A2, false, None); (A3, false, None)].
+  [(A0, Secret); (A1, Secret); (A2, Secret); (A3, Secret)].
 
 (* Base-parametric contract (Σ = ["p"]): arbitrary 4-aligned load address.
    Fuel 12 comfortably exceeds the 5 instruction steps plus the exit step. *)

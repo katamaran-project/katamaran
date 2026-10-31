@@ -87,7 +87,14 @@ Module uop.
 
        Recognized by peval_bvadd (PartialEvaluation.v), which turns clang's
        `<compare>; addi -1` mask chain into `bvnot (expand b)`. *)
-    | expand {n}        : UnOp bool (bvec n).
+    | expand {n}        : UnOp bool (bvec n)
+    (* regroup: a list of cells re-read as a list of BYTES, each cell split
+       little-endian (bv.le_bytes) -- CFGVer's word⇄byte view of a value-
+       carrying array (PLAN-arrv D8).  Generic in both element types because
+       a list op with a FIXED element type makes Terms.Term_list_case /
+       ListView unbuildable (Equations, generic σ); at any pair other than
+       (bvec m, bvec 8) its eval is [] (a junk value, like division by 0). *)
+    | regroup {σ τ}     : UnOp (ty.list σ) (ty.list τ).
     Set Transparent Obligations.
     Derive Signature for UnOp.
     Derive NoConfusion for UnOp.
@@ -167,6 +174,10 @@ Module uop.
       }
     | negate                           | negate => left eq_refl
     | expand                           | expand => left eq_refl
+    | @regroup _ σ1 ?(τ)               | @regroup _ σ2 τ with eq_dec σ1 σ2 => {
+      | left _ => left _
+      | right _ => right _
+      }
     | _                                | _ => right _.
 
     #[local] Instance eq_dec_unop [σ1 σ2] : EqDec (UnOp σ1 σ2) :=
@@ -177,6 +188,16 @@ Module uop.
                       (inj_right_sigma _ _ _ e)
         | right b => right (fun e => b (f_equal _ e))
         end.
+
+    Definition regroup_val (σ τ : Ty) : Val (ty.list σ) -> Val (ty.list τ) :=
+      match σ, τ return Val (ty.list σ) -> Val (ty.list τ) with
+      | bvec m, bvec n =>
+          match n return Val (ty.list (bvec m)) -> Val (ty.list (bvec n)) with
+          | 8 => fun xs => List.flat_map (@bv.le_bytes m) xs
+          | _ => fun _ => Datatypes.nil
+          end
+      | _, _ => fun _ => Datatypes.nil
+      end.
 
     Definition eval {σ1 σ2 : Ty} (op : UnOp σ1 σ2) : Val σ1 -> Val σ2 :=
       match op in UnOp σ1 σ2 return Val σ1 -> Val σ2 with
@@ -197,6 +218,7 @@ Module uop.
       | bvtake m            => bv.take m
       | negate              => bv.negate
       | @expand _ n         => fun b => if b then bv.ones n else bv.zero
+      | @regroup _ σ τ      => @regroup_val σ τ
       end.
     Global Arguments eval {σ1} {σ2} !op v.    
 

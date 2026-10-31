@@ -1,6 +1,6 @@
 (* ========================================================================= *)
 (* Example/Muladd/MuladdParamResult.v -- PLAN-array-invariants: the PARAMETRIC muladd*)
-(* (symbolic mlen, Sym6N) -- validity + seal; end theorem.  Untracked probe.*)
+(* (symbolic mlen, Sym6N) -- validity + seal; end theorem.                 *)
 (*                                                                           *)
 (* The only annotation-level content is the TYPED list mb_annotV: each of    *)
 (* the five blocks carries its own blkValid proof, so nothing is proved      *)
@@ -19,6 +19,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.SpecIris
      RiscvPmp.CFGVer.TablesRel
      RiscvPmp.CFGVer.Noninterference
+     RiscvPmp.CFGVer.SpecLists
      RiscvPmp.CFGVer.Tables
      RiscvPmp.CFGVer.Contracts
      RiscvPmp.CFGVer.GenContract
@@ -26,6 +27,7 @@ From Katamaran Require Import
      RiscvPmp.CFGVer.Adequacy
      RiscvPmp.CFGVer.GenCompose
      RiscvPmp.CFGVer.EndToEnd
+     RiscvPmp.CFGVer.GenProg
      RiscvPmp.CFGVer.Example.Muladd.MuladdParam.
 From iris.base_logic Require Import lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
@@ -66,65 +68,65 @@ From Katamaran Require
 (* A block-free annotation (a loop body) as a typed list; erases back to the
    source list by conversion (see ZZMuladdBlkResult.liftV). *)
 Definition liftV (ai : AnnotInstr) : AnnotInstrV blkValid :=
-  MkAnnotInstrV (ai_ghost_before ai) (ai_instr ai) (ai_ghost_after ai) None
-    (if ai_loop ai then true else false).
+  MkAnnotInstrV (ai_ghost_before ai) (ai_instr ai) (ai_ghost_after ai) None.
 
-(* ---- 1. THE LOOP BLOCKS ARE VALID ---------------------------------------- *)
+(* ---- 1. THE LOOP BLOCKS ARE VALID ----------------------------------------
+   Each from its own LOOP VC, through the loop rule (PLAN-loop-rule.md). *)
 
 Lemma dAng_valid : blkValid MuladdParamLoopDAng.dAngBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamLoopD.d_instrs 24 10 []
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamLoopD.d_instrs 24 10 []
            MuladdParamLoopDAng.d_inv_ang MuladdParamLoopDAng.d_post_ang
-           (List.map liftV (MuladdParamLoopDAng.d_ang_annot_with MuladdParamLoopDAng.dAngBlk))
+           (List.map liftV MuladdParamLoopDAng.d_ang_annot)
            (fun v iota => eq_refl) eq_refl MuladdParamLoopDAng.valid_d_ang_rec).
 Qed.
 
 Lemma d0_valid : blkValid MuladdParamLoopD0.d0Blk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamLoopD0.d0_instrs 20 10 []
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamLoopD0.d0_instrs 20 10 []
            MuladdParamLoopD0.d0_inv MuladdParamLoopD0.d0_post
-           (List.map liftV (MuladdParamLoopD0.d0_annot_with MuladdParamLoopD0.d0Blk))
+           (List.map liftV MuladdParamLoopD0.d0_annot)
            (fun v iota => eq_refl) eq_refl MuladdParamLoopD0.valid_d0_rec).
 Qed.
 
 Lemma g_valid : blkValid MuladdParamLoopG.gRecBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamLoopG.g_instrs 108 35 []
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamLoopG.g_instrs 108 35 []
            MuladdParamLoopG.g_inv MuladdParamLoopG.g_post
-           (List.map liftV (MuladdParamLoopG.g_annot_with MuladdParamLoopG.gRecBlk))
+           (List.map liftV MuladdParamLoopG.g_annot)
            (fun v iota => eq_refl) eq_refl MuladdParamLoopG.valid_g_rec).
 Qed.
 
 Lemma in_valid : blkValid (MuladdParamLoopN.lnBlk MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch)).
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q")
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q")
            (MuladdParamLoopN.ln_instrs MuladdParamLoopI.lnIN) (MuladdParamLoopN.ln_exit MuladdParamLoopI.lnIN)
            (MuladdParamLoopN.ln_fuel MuladdParamLoopI.lnIN) []
            (MuladdParamLoopN.ln_inv MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch))
            (MuladdParamLoopN.ln_post MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch))
-           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopI.lnIN (@MuladdParamLoopI.k_scratch)))
+           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopI.lnIN))
            (fun v iota => eq_refl) eq_refl MuladdParamLoopI.valid_in).
 Qed.
 
 Lemma kn_valid : blkValid (MuladdParamLoopN.lnBlk MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch)).
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q")
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q")
            (MuladdParamLoopN.ln_instrs MuladdParamLoopK.lnKN) (MuladdParamLoopN.ln_exit MuladdParamLoopK.lnKN)
            (MuladdParamLoopN.ln_fuel MuladdParamLoopK.lnKN) []
            (MuladdParamLoopN.ln_inv MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch))
            (MuladdParamLoopN.ln_post MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch))
-           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopK.lnKN (@MuladdParamLoopK.k_scratch)))
+           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopK.lnKN))
            (fun v iota => eq_refl) eq_refl MuladdParamLoopK.valid_kn).
 Qed.
 
 Lemma mt_valid : blkValid (MuladdParamLoopN.lnBlk MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch)).
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q")
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q")
            (MuladdParamLoopN.ln_instrs MuladdParamLoopM.lnMT) (MuladdParamLoopN.ln_exit MuladdParamLoopM.lnMT)
            (MuladdParamLoopN.ln_fuel MuladdParamLoopM.lnMT) []
            (MuladdParamLoopN.ln_inv MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch))
            (MuladdParamLoopN.ln_post MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch))
-           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopM.lnMT (@MuladdParamLoopM.k_scratch)))
+           (List.map liftV (MuladdParamLoopN.ln_annot MuladdParamLoopM.lnMT))
            (fun v iota => eq_refl) eq_refl MuladdParamLoopM.valid_mt).
 Qed.
 
@@ -139,14 +141,14 @@ Definition tail_blockV (i : nat) : option (BlkAnnotV blkValid) :=
 
 Definition tail_annotV : list (AnnotInstrV blkValid) :=
   List.map (fun '(i, ins) => MkAnnotInstrV (MuladdParamTail.tail_before i) ins
-                               (MuladdParamTail.tail_after i) (tail_blockV i) false)
+                               (MuladdParamTail.tail_after i) (tail_blockV i))
     (List.combine (List.seq 0 (length MuladdParamTail.tail_instrs)) MuladdParamTail.tail_instrs).
 
 Lemma map_snd_combine_seq {A} (l : list A) k :
   List.map snd (List.combine (List.seq k (length l)) l) = l.
 Proof. revert k; induction l as [|x l IH]; intros k; cbn; [reflexivity | f_equal; apply IH]. Qed.
 
-Lemma tail_erase : List.map (eraseV MuladdParamTail.tailRec) tail_annotV = MuladdParamTail.tail_annot.
+Lemma tail_erase : List.map eraseV tail_annotV = MuladdParamTail.tail_annot.
 Proof.
   unfold tail_annotV, MuladdParamTail.tail_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV, tail_blockV, MuladdParamTail.tail_block. cbn.
@@ -163,10 +165,10 @@ Qed.
 
 Lemma tail_valid : blkValid MuladdParamTail.tailBlk.
 Proof.
-  exact (blkValid_of_seg (term_var "q") (term_var "q") MuladdParamTail.tail_instrs 636 250
+  exact (blkValid_of_loop_seg (term_var "q") (term_var "q") MuladdParamTail.tail_instrs 636 250
            MuladdParamTail.tail_regs MuladdParamTail.tail_pre MuladdParamTail.tail_post tail_annotV
            (fun v iota => eq_refl) tail_code
-           (eq_ind_r (fun l => cfg_vc MuladdParamTail.tailRec l) MuladdParamTailVC.valid_tail tail_erase)).
+           (eq_ind_r (fun l => cfg_vc_loop MuladdParamTail.tailRec l) MuladdParamTailVC.valid_tail tail_erase)).
 Qed.
 
 (* ---- 3. THE WHOLE FUNCTION: TYPED ANNOTATIONS AND THE SEAL --------------- *)
@@ -178,10 +180,10 @@ Definition sym6_blockV (i : nat) : option (BlkAnnotV blkValid) :=
   else None.
 
 Definition sym6_annotV : list (AnnotInstrV blkValid) :=
-  List.map (fun '(i, ins) => MkAnnotInstrV (sym6_before i) ins (sym6_after i) (sym6_blockV i) false)
+  List.map (fun '(i, ins) => MkAnnotInstrV (sym6_before i) ins (sym6_after i) (sym6_blockV i))
     (List.combine (List.seq 0 (length sym6_instrs)) sym6_instrs).
 
-Lemma sym6_erase : List.map (eraseV sym6) sym6_annotV = sym6_annot.
+Lemma sym6_erase : List.map eraseV sym6_annotV = sym6_annot.
 Proof.
   unfold sym6_annotV, sym6_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV, sym6_blockV, sym6_block. cbn.
@@ -201,7 +203,6 @@ Proof.
   apply (@ValidCFGVerifierContract_intro _ sym6 sym6_annotV).
   - rewrite sym6_erase. exact MuladdParamVC.valid_sym6.
   - exact sym6_code.
-  - unfold sym6_annotV. apply List.Forall_map, List.Forall_forall. intros [i ins] _. reflexivity.
 Qed.
 
 
@@ -264,12 +265,6 @@ Lemma add_negZ (j k : N) (z : Z) : z = (- Z.of_N j)%Z -> (j <= k)%N -> (k < 4294
   bv.add (bv.of_N k) (@bv.of_Z xlenbits z) = bv.of_N (k - j).
 Proof. intros. rewrite bv.add_comm. now apply negZ_add. Qed.
 
-Lemma ofZ_ofN32 (z : Z) (c : N) : z = Z.of_N c -> (c < 4294967296)%N -> @bv.of_Z xlenbits z = bv.of_N c.
-Proof. change xlenbits with 32%nat in *.
-  intros -> Hc. apply bv.unsigned_inj. rewrite bv.unsigned_of_Z unsigned_of_N_small; [|lia].
-  unfold bv.truncz. cbn [Z.of_nat Z.pow]. rewrite Z.mod_small; lia.
-Qed.
-
 Lemma land_mask_nz (k : N) : (k < 4294967296)%N -> (N.modulo k 1073741824 <> 0)%N ->
   bv.land (@bv.of_N xlenbits k) (bv.of_N 1073741823) <> bv.zero.
 Proof.
@@ -287,18 +282,17 @@ Proof. exact (MuladdParamClose.sext_id32 b p). Qed.
 (* ---- 4. THE END THEOREM, FOR EVERY HEADER b ------------------------------ *)
 
 
-(* the valuation the statement concretizes the data at *)
-Definition sym_ι (ia : N) (b : bv xlenbits) : Valuation (symCtx ▻ "a"∷ty_xlenbits) :=
+(* the contract's parameters: the load address, the header b, and x's
+   address (the arrays' values are chosen by the bridge, PLAN-arrv D9) *)
+Definition sym_ι (ia : N) (b : bv xlenbits) : Valuation symCtx :=
   [env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)]
        .["b"∷ty_xlenbits ↦ SyncVal b]
-       .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + x_off b))]
-       .["a"∷ty_xlenbits ↦ SyncVal (bv.of_N ia)].
+       .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (ia + x_off b))].
 
-(* THE TRUSTED SPECS: x's pointer, then the contract's own register specs
-   concretized at the load address; the data as the generator lays it out *)
-Definition sym_reg_specs (ia : N) (b : bv xlenbits) : list reg_spec :=
-  (A0, true, Some (bv.of_N (ia + x_off b))) :: map (concretize_reg ia) sym_regs.
-Definition sym_mem_specs (ia : N) (b : bv xlenbits) : list mem_full_spec :=
+(* THE GENERATOR'S SPECS (proof side -- the statement below uses its own
+   shallow data, PLAN-spec-layer D12, and muladd_cells proves the two agree):
+   the data as the generator lays it out *)
+Definition sym_mem_specs (ia : N) (b : bv xlenbits) : list mem_cell :=
   concretize_data (sym_ι ia b) (ia + 1128) sym_data.
 
 Lemma inst_mm2 (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
@@ -338,74 +332,88 @@ Proof.
   cbn. f_equal; f_equal; unfold x_off; lia.
 Qed.
 
+(* ---- 5. THE STATEMENT'S OWN DATA (PLAN-spec-layer D12/D14) ------------- *)
+
+Definition M (b : bv xlenbits) : N := (bv.bin b + 31) / 32.     (* limb count *)
+
+(* code: init_addr .. init_addr+1127 (282 instructions); the data follows. *)
+Definition muladd_data (b : bv xlenbits) : list region :=
+  [ Array 4 Secret                            (* S0-S3 spill slots, init_addr+1128 *)
+  ; Word (Known b) ; Array (M b) Public       (* m = sp, init_addr+1144: header, limbs *)
+  ; Word (Known b) ; Array (M b) Secret ].    (* x, init_addr+1148+4·M: header, limbs *)
+
+Definition muladd_regs (ia : N) (b : bv xlenbits) : list reg_spec :=
+  [ (A0, Known (bv.of_N (ia + 1148 + 4 * M b)));    (* &x[0] *)
+    (A1, Secret);                                   (* z     *)
+    (A2, Known (bv.of_N (ia + 1144)));              (* &m[0] *)
+    (X2, Known (bv.of_N (ia + 1144)));              (* sp    *)
+    (A3, Secret); (A4, Secret); (A5, Secret); (A6, Secret); (A7, Secret);
+    (T0, Secret); (T1, Secret); (T2, Secret); (T3, Secret); (T4, Secret); (T5, Secret);
+    (T6, Secret); (S0, Secret); (S1, Secret); (S2, Secret); (S3, Secret) ].
+
+Lemma M_mlenN (b : bv xlenbits) : N.of_nat (mlenN b) = M b.
+Proof.
+  unfold mlenN, M, bv.unsigned.
+  replace ((Z.of_N (bv.bin b) + 31) / 32)%Z with (Z.of_N ((bv.bin b + 31) / 32))
+    by (rewrite N2Z.inj_div; f_equal; lia).
+  generalize ((bv.bin b + 31) / 32)%N. intros y. lia.
+Qed.
+
+(* D12: the statement's cells are exactly the generator's. *)
+Lemma muladd_cells (ia : N) (b : bv xlenbits) : (64 < bv.unsigned b < 65536)%Z ->
+  cells (compile (ia + 4 * N.of_nat (length sym6_instrs)) (muladd_data b))
+  = sym_mem_specs ia b.
+Proof.
+  intros Hb. pose proof (mlen_bounds b Hb) as HM.
+  assert (HMb : N.to_nat (M b) = mlenN b) by (rewrite <- M_mlenN; apply Nat2N.id).
+  unfold sym_mem_specs, sym_data. cbn [concretize_data].
+  rewrite !data_count_mm2; try exact Hb.
+  unfold compile, cells, muladd_data.
+  cbn [blocks place region_words region_size List.map concat blk_addr blk_words].
+  rewrite ?HMb. rewrite ?repeat_length.
+  rewrite !words_at_repeat. rewrite ?repeat_length. rewrite ?HMb.
+  change (length sym6_instrs) with 282%nat.
+  replace (seq 0 (mlenN b)) with (seq 0 (mlenN b - 2) ++ seq (mlenN b - 2) 2)
+    by (rewrite <- seq_app; f_equal; lia).
+  rewrite !List.map_app.
+  simpl.
+  rewrite <- !app_assoc. simpl.
+  solve_cells_eq.
+Qed.
+
 (* THE END THEOREM: the whole parametric muladd, for every header b of the
-   family (64 < b < 65536) whose data fits, at every load address. *)
+   family (64 < b < 65536) whose data fits, at every load address.  The
+   b-range premise is the PROOF's (the code's own branches); the layout is
+   disjoint for every b. *)
 Lemma muladd_param_noninterferent (init_addr : N) (b : bv xlenbits) :
   (64 < bv.unsigned b < 65536)%Z ->
-  (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < lenAddr)%N ->
-  noninterferent_strong init_addr sym6_instrs (init_addr + 1128)%N
-    (sym_reg_specs init_addr b) (sym_mem_specs init_addr b).
+  fits (init_addr + 4 * N.of_nat (length sym6_instrs)) (muladd_data b) ->
+  noninterferent_strong init_addr sym6_instrs (init_addr + 4 * N.of_nat (length sym6_instrs))
+    (muladd_regs init_addr b)
+    (compile (init_addr + 4 * N.of_nat (length sym6_instrs)) (muladd_data b)).
 Proof.
-  intros Hb Hfit γ1 γ2 μ1 μ2 ws Hmem1 Hmem2 HpubReg HpubMem
-    HInitReg1 HInitReg2 HInitMem1 HInitMem2
-    γ1curpriv γ2curpriv γ1pc γ2pc Htrace n γ1' μ1' steps1.
+  intros Hb Hfit0.
   assert (Hl : length sym6_instrs = 282) by (vm_compute; reflexivity).
-  eapply (@cfg_instrs_endToEnd_with_memory γ1 γ2 γ1' μ1 μ2 μ1' sym6_instrs
-    (init_addr + 1128)%N n ws symCtx
-    ([env].["p"∷ty_xlenbits ↦ SyncVal (bv.of_N init_addr)]
-          .["b"∷ty_xlenbits ↦ SyncVal b]
-          .["x"∷ty_xlenbits ↦ SyncVal (bv.of_N (init_addr + x_off b))])
-    _ HpubReg (map mem_full_to_spec (sym_mem_specs init_addr b)) HpubMem
-    sym6 sym6_valid eq_refl init_addr).
+  pose proof (mlen_bounds b Hb) as HM0.
+  assert (Hfit : (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < lenAddr)%N).
+  { unfold fits, layout_size in Hfit0. unfold muladd_data in Hfit0. simpl in Hfit0.
+    rewrite !repeat_length in Hfit0. rewrite !N2Nat.id in Hfit0.
+    rewrite <- !M_mlenN in Hfit0. rewrite ?Hl in Hfit0. lia. }
+  apply (ni_of_cells (regs' := map (concretize_reg_q (sym_ι init_addr b)) sym_regs)
+                     (cs := sym_mem_specs init_addr b));
+    [ apply compile_clear; lia | apply compile_in_range; [lia | assumption]
+    | apply perm_of_eq; unfold muladd_regs; cbn -[mlenN M x_off bv.add];
+      rewrite !ofN_add32; unfold x_off; rewrite -M_mlenN;
+      replace (init_addr + 1148 + 4 * N.of_nat (mlenN b))%N
+        with (init_addr + (1148 + 4 * N.of_nat (mlenN b)))%N by lia; reflexivity
+    | apply perm_of_eq; apply muladd_cells; exact Hb | ].
+  apply (gen_prog_noninterferent "p" _ sym_regs sym_facts 1128 sym_data sym6_instrs 250
+           (asn.formula formula_true) (sym_ι init_addr b) init_addr).
   - reflexivity.
-  - apply (seg_exit_table_ok _ _ init_addr 1128). reflexivity.
-  - (* HDataAddrs, by construction *)
-    intros i spec Hi.
-    change (map mem_full_to_spec (sym_mem_specs init_addr b))
-      with (mem_full_to_spec <$> sym_mem_specs init_addr b) in Hi.
-    rewrite list_lookup_fmap in Hi.
-    destruct (sym_mem_specs init_addr b !! i) as [[[a pub] o]|] eqn:E; [|discriminate].
-    injection Hi as <-. rewrite Hl.
-    exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i _ E).
-  - (* ImplPre *)
-    intros Σ' GS'.
-    iIntros "(Hregs & Hmem & Hpriv & #Hinv)".
-    pose proof (mlen_bounds b Hb) as HM.
-    set (ι0 := [env].["p"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
-                    .["a"∷ty_xlenbits ↦ SyncVal (@bv.of_N xlenbits init_addr)]
-               : Valuation (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits)).
-    iPoseProof (gen_implpre (sym_reg_specs init_addr b) ι0 HpubReg
-                  ltac:(apply Prelude.nodup_fixed; reflexivity)
-                  HInitReg1 HInitReg2 with "Hregs") as "Hpre".
-    cbn [sym_reg_specs gen_pre List.fold_right asn.interpret].
-    iDestruct "Hpre" as "[HA0 Hregs]".
-    pose proof (gen_pre_rel_concretize (Σ := Σ') sym_regs init_addr (SyncVal (@bv.of_N xlenbits init_addr))) as Hcz.
-    rewrite -Hcz.
-    (* the data, by the generator's ImplPre *)
-    assert (Ha : inst (T := fun Σ => Term Σ ty_xlenbits) (t_off (term_var "p") 1128) (sym_ι init_addr b)
-                 = SyncVal (@bv.of_N xlenbits (init_addr + 1128))).
-    { cbn -[bv.of_N bv.of_Z bv.add].
-      f_equal; (rewrite (ofZ_ofN32 1128 1128); [|reflexivity|lia]; apply ofN_add32). }
-    iPoseProof (@gen_implpre_data _ _ _ (sym_ι init_addr b) μ1 μ2 sym_data
-                  (t_off (term_var "p") 1128) (init_addr + 1128)%N Ha
-                  (sym_data_ok init_addr b Hb ltac:(unfold maxAddr, minAddr; lia))
-                  HInitMem1 HInitMem2 with "Hmem") as "Hdata".
-    assert (Hp : inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "p" : Term (["p"∷ty_xlenbits] ▻ "a"∷ty_xlenbits) ty_xlenbits) ι0
-                 = inst (T := fun Σ => Term Σ ty_xlenbits)
-                   (term_var "p" : Term (symCtx ▻ "a"∷ty_xlenbits) ty_xlenbits) (sym_ι init_addr b))
-      by (cbn; reflexivity).
-    iPoseProof (bi.equiv_entails_1_1 _ _
-                  (gen_regs_at_inst _ _ ι0 (sym_ι init_addr b) sym_regs Hp) with "Hregs") as "Hregs".
-    unfold sym_ι in *.
-    cbn [extend_to_minimal_pre cfg_precondition sym6 gen_seg_contract asn.interpret sym_pre].
-    cbn -[gen_data_at gen_regs_at bv.of_N bv.of_Z bv.add bv.shiftr bv.sext bv.land bv.unsigned bv.ult mlenN x_off].
-    iFrame "Hpriv Hinv Hdata Hregs".
-    (* what remains: x's pointer register, and pure facts about b and p *)
-    rewrite !sext_idx (mlen_shiftr b Hb).
-    rewrite (negZ_add 1 (N.of_nat (mlenN b)) (-1) eq_refl ltac:(lia) ltac:(lia)) ofN_add32.
-    assert (Hfit' : (init_addr + 1128 + 4 * N.of_nat (2 * mlenN b + 6) < 4096)%N)
-      by (unfold lenAddr in Hfit; exact Hfit).
+  - repeat constructor.
+  - apply Prelude.nodup_fixed. reflexivity.
+  - (* the facts: b public, the code's branch conditions, the base bound *)
+    intros Σ' H'.
     assert (P1 : b <> bv.zero).
     { intros E. apply (f_equal bv.unsigned) in E. change (bv.unsigned (@bv.zero xlenbits)) with 0%Z in E. lia. }
     assert (P2 : bv.ult (@bv.of_N xlenbits 31) b).
@@ -420,21 +428,19 @@ Proof.
     { apply land_mask_nz; [lia|].
       replace (1073741823 + N.of_nat (mlenN b))%N with ((N.of_nat (mlenN b) - 1) + 1 * 1073741824)%N by lia.
       rewrite N.Div0.mod_add N.mod_small; lia. }
-    assert (P7 : (bv.unsigned (@bv.of_N xlenbits init_addr) + Z.of_N (4 * N.of_nat 282) <= Z.of_N lenAddr)%Z).
-    { rewrite unsigned_of_N_small; [unfold lenAddr; lia|lia]. }
     assert (P8 : (bv.unsigned (@bv.of_N xlenbits init_addr) + 1148 <= Z.of_N lenAddr)%Z).
-    { rewrite unsigned_of_N_small; [unfold lenAddr; lia|lia]. }
-    iSplitR; [iSplit; [iPureIntro; repeat split; reflexivity|done]|].
-    iSplitR; [iSplit; [iPureIntro; split; exact P7|done]|].
-    iSplitL "HA0"; [cbn; iExact "HA0"|].
+    { rewrite unsigned_of_N_small; [unfold lenAddr in *; lia|unfold lenAddr in *; lia]. }
+    unfold sym_facts, sym_ι.
+    cbn -[bv.of_N bv.of_Z bv.add bv.shiftr bv.sext bv.land bv.unsigned bv.ult mlenN x_off].
+    rewrite !sext_idx (mlen_shiftr b Hb).
+    rewrite (negZ_add 1 (N.of_nat (mlenN b)) (-1) eq_refl ltac:(lia) ltac:(lia)) ofN_add32.
     repeat iSplit; try done; iPureIntro; first [assumption | exact I | reflexivity | (split; assumption) | (repeat split; reflexivity)].
-  - rewrite List.map_length sym_mem_len; [|exact Hb]. rewrite Hl. lia.
-  - exact Hmem1.
-  - exact Hmem2.
-  - exact γ1curpriv.
-  - exact γ2curpriv.
-  - exact γ1pc.
-  - exact γ2pc.
-  - exact steps1.
-  - exact Htrace.
+  - apply sym_data_ok; [exact Hb|unfold maxAddr, minAddr; lia].
+  - (* the layout: contiguous right after the code *)
+    apply contig_data_layout.
+    + rewrite sym_mem_len; [|exact Hb]. rewrite Hl. lia.
+    + intros i s Hi. rewrite Hl.
+      exact (concretize_data_addrs (sym_ι init_addr b) sym_data I (init_addr + 1128) i s Hi).
+  - rewrite Hl. lia.
+  - exact sym6_valid.
 Qed.
