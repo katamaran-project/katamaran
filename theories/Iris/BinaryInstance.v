@@ -67,7 +67,7 @@ Module Type IrisInstance2 (B : Base) (SIG : Signature B) (PROG : Program B)
   (IPre : IrisPrelims B PROG SEM)
   (IBleft IBright : IrisBase B PROG SEM IPre)
   (IB2 : IrisBase2 B PROG SEM IPre IBleft IBright)
-  (IAP : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2) :=
+  (IAP : IrisAdeqParameters2 B IBleft IBright IB2) :=
   IrisPredicates2 B SIG PROG SEM IPre IBleft IBright IB2 <+ IrisSignatureRules2 B SIG PROG SEM PLOG IPre IBleft IBright IB2
     <+ IrisAdequacy2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IAP.
 
@@ -83,7 +83,7 @@ Module IrisInstanceWithContracts2
   (Import IPre  : IrisPrelims B PROG SEM)
   (IBleft IBright : IrisBase B PROG SEM IPre)
   (Import IB2   : IrisBase2 B PROG SEM IPre IBleft IBright)
-  (Import IAP   : IrisAdeqParameters2 B PROG SEM IPre IBleft IBright IB2)
+  (Import IAP   : IrisAdeqParameters2 B IBleft IBright IB2)
   (Import II    : IrisInstance2 B SIG PROG SEM PLOG IPre IBleft IBright IB2 IAP).
 
   Section WithSailGS.

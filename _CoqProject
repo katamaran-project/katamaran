@@ -77,6 +77,7 @@ test/Reification.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
+theories/Defaults.v
 theories/Environment.v
 theories/Iris/Instance.v
 theories/Iris/Resources.v

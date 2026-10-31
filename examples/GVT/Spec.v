@@ -774,7 +774,7 @@ Module RiscvPmpSpecVerif.
             apply Bool.negb_true_iff in H;
             subst
         | H1: ?a <=ᵘ ?b, H2: ?b <ᵘ ?a |- False =>
-            unfold bv.ult, bv.ule in *; apply N.le_ngt in H1; apply (H1 H2)
+            apply bv.ule_iff_unsigned_le in H1; apply bv.ult_iff_unsigned_lt in H2; lia
         end;
       subst;
       unfold Pmp_check_perms, decide_pmp_check_perms, pmp_check_RWX in *;
@@ -942,7 +942,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iMod "Hclose" as "_". rewrite semTWP_val.
       iFrame "Hregs Hmem".
 
-      destruct bytes as [|bytes1]; first inversion Hmmio.
+      destruct bytes as [|bytes1]; first (destruct Hmmio; lia).
       cbn in Hreadmmio.
       destruct (state_tra_read (memory_state μ) mmio_interrupt_addr (S bytes1)); inversion Hreadmmio.
 
@@ -980,7 +980,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iMod "Hclose" as "_". rewrite semTWP_val.
       iFrame "Hregs Hmem Hstf". cbn.
 
-      destruct bytes as [|bytes1]; first inversion Hmmio.
+      destruct bytes as [|bytes1]; first (destruct Hmmio; lia).
       cbn in Hreadmmio.
       destruct (state_tra_read (memory_state μ) paddr (S bytes1)); inversion Hreadmmio.
 
@@ -1011,13 +1011,12 @@ Module RiscvPmpIrisInstanceWithContracts.
     unfold mem_state_interp.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
     unfold fun_handle_write_mmio in Hf.
-    destruct bytes; first contradiction.
+    destruct bytes; first (destruct Hmmio; lia).
     destruct (decide (isShutdownAddr paddr)); first contradiction.
     simpl in *. subst. inversion Hf; subst.
     iMod "Hclose" as "_". rewrite semTWP_val.
     subst.
-    iFrame "Hregs Hmem Htra Hstf". iSplitL. iPureIntro. apply Hmap.
-    repeat iSplitL; auto.
+    iFrame "Hregs Hmem Htra Hstf %". auto.
   Qed.
 
   Lemma decode_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
@@ -1048,21 +1047,13 @@ Module RiscvPmpIrisInstanceWithContracts.
     destruct inv; cbn; iDestruct "Hpre" as "([%Hlft _] & [%Hrght _])".
     - iPureIntro; repeat split; auto.
       rewrite -bool_decide_and bool_decide_true //.
-      split; [auto| solve_bv].
     - iPureIntro; repeat split; auto.
       assert (bool_decide (withinMMIO paddr bytes) = false) as ->.
       { rewrite bool_decide_eq_false.
-        destruct bytes; first easy.
-        assert (paddr ∈ liveAddrs)%stdpp.
-        { apply bv.in_seqBv.
-          - change (bv.of_N minAddr) with (@bv.zero xlenbits); cbn. (* TODO: add simplifying `xlenbits` to solve_bv *) solve_bv.
-          - rewrite N2Z.inj_add in Hrght.
-            change minAddr with 0%N in *; cbn in *.
-            assert (bv.unsigned paddr < Z.of_N lenAddr)%Z by Lia.lia. cbn.
-            cbv [bv.ult]. now zify. (* `solve_bv` fails because knowledge of concrete `minAddr`, `lenAddr` needed *)}
-        intros HFalse; cbn in HFalse.
-        assert (paddr ∈ mmioAddrs)%stdpp by (destruct bytes; intuition).
-        eapply mmio_ram_False; eauto.
+        intros Hw. pose proof (proj1 Hw).
+        eapply mmio_ram_False, withinMMIO_elem_of_base, Hw.
+        apply bv.elem_of_seq_bounds; first done.
+        change xlenbits with 32 in *. cbn. unfold maxAddr, minAddr in *. lia.
       }
       auto.
   Qed.

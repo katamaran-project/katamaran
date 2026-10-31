@@ -141,7 +141,7 @@ Module Type RiscvPmpModel
     Proof.
       iIntros (Hpmp) "Hint". rewrite /fun_within_mmio.
       rewrite bool_decide_and andb_false_iff.
-      destruct (decide (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N) as [Hlt | Hnlt].
+      destruct (decide (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z) as [Hlt | Hnlt].
       - iDestruct (interp_pmp_within_mmio_spec with "Hint") as "->"; eauto.
       - iPureIntro. right. by rewrite bool_decide_false.
     Qed.
@@ -261,14 +261,12 @@ Module Type RiscvPmpModel
         interp_pmp_addr_access,
         interp_ptsto,
         MemVal, Word.
-      assert (bv.bin paddr + N.of_nat bytes < bv.exp2 xlenbits)%N.
-      { eapply N.le_lt_trans; last apply lenAddr_rep.
-        unfold bv.unsigned in *. zify; auto. }
+      assert (bv.unsigned paddr + Z.of_nat bytes < 2 ^ Z.of_nat xlenbits)%Z.
+      { pose proof maxAddr_rep.
+        change (bv.unsigned paddr) with (@bv.unsigned xlenbits paddr) in *. lia. }
       iDestruct (interp_pmp_addr_inj_extr with "Hmem") as "[Hmemwo Hia]"; eauto.
       iFrame.
       iApply interp_addr_access_extr; last iFrame; eauto.
-      - unfold bv.unsigned in *. zify; auto.
-      - unfold bv.unsigned in *. zify; auto.
     Qed.
 
     Lemma return_pmp_ptsto_sound (bytes : nat) :
