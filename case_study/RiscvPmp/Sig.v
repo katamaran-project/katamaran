@@ -84,6 +84,8 @@ Inductive Predicate : Set :=
 | ptstoinstr
 | nothingPending
 | written (bytes : nat)
+| written_shutdown (bytes : nat)
+| powered
 .
 
 Section TransparentObligations.
@@ -531,6 +533,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | ptstoinstr                    => [ty_xlenbits; ty_ast]
       | nothingPending                => ctx.nil
       | written width                 => [ty_xlenbits; ty_bytes width]
+      | written_shutdown width        => [ty_xlenbits; ty_bytes width]
+      | powered                       => [ty.bool]
       end.
 
     Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -550,6 +554,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | ptstoinstr                 => false
         | nothingPending             => false
         | written width              => false
+        | written_shutdown width     => false
+        | powered                    => false
         end
       }.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -574,6 +580,8 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       (* for now not needed? *)
       | nothingPending            => None
       | written width             => None
+      | written_shutdown width    => None
+      | powered                   => Some (MkPrecise ε [ty.bool] eq_refl)
       end.
 
   End PredicateKit.

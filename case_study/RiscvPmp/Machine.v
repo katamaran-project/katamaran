@@ -259,6 +259,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
    * bits in the mip pseudo-register.
    *)
   | externalWorldUpdates                   : FunX [] ty.unit
+  (* Whether the machine is still powered on, i.e., no device powered it off. *)
+  | powered_on                             : FunX [] ty.bool
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -1004,7 +1006,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call init_sys.
 
   Definition fun_loop : Stm ctx.nil ty.unit :=
-    call step ;; call loop.
+    let: "on" := stm_foreign powered_on [env] in
+    if: exp_var "on"
+    then call step ;; call loop
+    else stm_val ty.unit tt.
 
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := Execute in
@@ -1975,9 +1980,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let (μupd,readv) := fun_read_mmio μ width addr in
       (γ' , μ' , res) = (γ , μupd , inr readv);
     ForeignCall (@mmio_write width H) [addr; data] res γ γ' μ μ' :=
-      let (power, μ'') := @fun_handle_write_mmio μ width addr data in
-      let res' := if power then inr true else inl "Shutdown" in
-      (γ' , μ' , res) = (γ , μ'', res');
+      let (_, μ'') := @fun_handle_write_mmio μ width addr data in
+      (γ' , μ' , res) = (γ , μ'', inr true);
     ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
@@ -1986,7 +1990,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       let '(vmip' , μ'') := fun_externalWorldUpdates μ in
       (* The external world may arbitrarily change the interrupts pending register (mip)
          but will leave other state untouched. *)
-      (γ' , μ' , res) = (write_register γ mip vmip' , μ'' , inr ()).
+      (γ' , μ' , res) = (write_register γ mip vmip' , μ'' , inr ());
+    ForeignCall powered_on [] res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , μ , inr (fun_powered_on μ)).
 
   Local Arguments ForeignCall {_ _} f /.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :

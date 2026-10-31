@@ -193,41 +193,45 @@ Module BinaryBlockVerifier
       stepTriple instrs a a PRE POST.
 
     Lemma WP2_loop_step_once {R : iProp Σ} : ∀ POST,
+      powered2 true -∗
       semWP2 [env] [env] fun_step fun_step (λ v1 δ1 v2 δ2, ⌜v1 = v2⌝ ∗ ⌜δ1 = δ2⌝ ∗ POST v1 δ1 v2 δ2) -∗
-      (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ match v1 with inl _ => WP2_loop R | inr _ => R end) -∗
+      (∀ v1 δ1 v2 δ2, POST v1 δ1 v2 δ2 -∗ powered2 true -∗ match v1 with inl _ => WP2_loop R | inr _ => R end) -∗
       WP2_loop R.
     Proof.
-      iIntros (POST) "H Hk".
+      iIntros (POST) "[Hpl Hpr] H Hk".
       unfold WP2_loop at 2.
-      cbn [FunDef]. unfold fun_loop.
+      iApply (semWP2_fun_loop with "Hpl Hpr").
+      iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
       iApply semWP2_seq.
       iApply semWP2_call_inline_later. simpl. iModIntro.
       iApply (semWP2_mono with "H").
       iIntros (? ? [] δ2) "(-> & -> & H)".
       - iApply semWP2_call_inline.
-        iSpecialize ("Hk" with "H").
+        iSpecialize ("Hk" with "H [$Hpl $Hpr]").
         iApply (semWP2_mono with "Hk").
-        now iIntros (? ? ? ?) "(<- & <- & $)".
-      - iApply semWP2_fail. iSpecialize ("Hk" with "H").
+        iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+      - iApply semWP2_fail. iSpecialize ("Hk" with "H [$Hpl $Hpr]").
         iModIntro. iFrame "Hk". auto.
     Qed.
 
     Lemma WP2_loop_semTripleBlock_later {R : iProp Σ} : ∀ PRE a instr instrs POST,
+      powered2 true -∗
       (exec_instructions_prologue a (instr :: instrs)) -∗
       (PRE a) -∗
       semTripleBlock PRE a (instr :: instrs) POST -∗
-      ▷ (∀ an, POST a an ∗ exec_instructions_epilogue a an (instr :: instrs) -∗ WP2_loop R) -∗
+      ▷ (∀ an, POST a an ∗ exec_instructions_epilogue a an (instr :: instrs) ∗ powered2 true -∗ WP2_loop R) -∗
       WP2_loop R.
     Proof.
       iIntros (PRE a instr instrs).
       iRevert (PRE a instr).
       iInduction instrs as [|i instrs] "IH";
-        iIntros (PRE a instr POST) "Hpro HPRE Htrip Hk".
+        iIntros (PRE a instr POST) "[Hpl Hpr] Hpro HPRE Htrip Hk".
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)".
         iSpecialize ("Htrip" with "[Hpro]").
         { cbn. iDestruct "Hpro" as "($ & [$ _] & $)". }
         unfold WP2_loop at 2.
-        cbn [FunDef]. unfold fun_loop.
+        iApply (semWP2_fun_loop with "Hpl Hpr").
+        iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
         iApply semWP2_seq.
         iApply semWP2_call_inline_later.
         iModIntro.
@@ -235,15 +239,16 @@ Module BinaryBlockVerifier
         iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
         iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
         iApply semWP2_call_inline.
-        iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc $Hinstr]").
+        iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc $Hinstr $Hpl $Hpr]").
         iApply (semWP2_mono with "Hk").
-        now iIntros (? ? ? ?) "(<- & <- & $)".
+        iIntros (? ? ? ?) "(<- & _ & $)"; auto.
       - cbn. iDestruct ("Htrip" with "HPRE") as "(_ & Htrip)". fold step_n.
         iDestruct "Hpro" as "(Hpc & Hinstrs & Hnpc)"; cbn.
         iDestruct "Hinstrs" as "(Hinstr & Hinstrs)".
-        iSpecialize ("Htrip" with "[$]").
+        iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]").
         unfold WP2_loop at 4.
-        cbn [FunDef]. unfold fun_loop.
+        iApply (semWP2_fun_loop with "Hpl Hpr").
+        iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
         iApply semWP2_seq.
         iApply semWP2_call_inline_later.
         iModIntro.
@@ -252,32 +257,61 @@ Module BinaryBlockVerifier
         iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
         iApply semWP2_call_inline.
         iDestruct "Htrip" as "(<- & Htrip)".
-        iSpecialize ("IH" $! (λ _, True)%I (bv.add a bv_instrsize) i (λ _, POST a) with "[$Hpc $Hinstrs $Hnpc] [] [Htrip] [Hinstr Hk]");
+        iSpecialize ("IH" $! (λ _, True)%I (bv.add a bv_instrsize) i (λ _, POST a) with "[$Hpl $Hpr] [$Hpc $Hinstrs $Hnpc] [] [Htrip] [Hinstr Hk]");
           first auto.
         + iIntros "_".
           iSplitR; first auto. fold step_n.
           iExact "Htrip".
         + iModIntro.
-          iIntros (an) "(HPOST & Hepi)".
-          iApply ("Hk" with "[$HPOST $Hinstr $Hepi]").
+          iIntros (an) "(HPOST & Hepi & Hpow)".
+          iApply ("Hk" with "[$HPOST $Hinstr $Hepi $Hpow]").
         + iApply (semWP2_mono with "IH").
-          now iIntros (? ? ? ?) "(<- & <- & $)".
+          iIntros (? ? ? ?) "(<- & _ & $)"; auto.
+    Qed.
+
+    (* A block of a single instruction that powers off both machines: after
+       the power check that precedes the instruction, the instruction consumes
+       the power tokens `powered2 true` and produces `powered2 false`. Compare
+       with [WP2_loop_semTripleBlock], where the block leaves the tokens alone. *)
+    Lemma WP2_loop_semTripleBlock_power_off {R : iProp Σ} : ∀ PRE a instr POST,
+      powered2 true -∗
+      (exec_instructions_prologue a [instr]) -∗
+      (PRE a) -∗
+      semTripleBlock (λ a, PRE a ∗ powered2 true) a [instr] (λ a an, POST a an ∗ powered2 false) -∗
+      ▷ (∀ an, POST a an ∗ exec_instructions_epilogue a an [instr] ∗ powered2 false -∗ WP2_loop R) -∗
+      WP2_loop R.
+    Proof.
+      iIntros (PRE a instr POST) "[Hpl Hpr] Hpro HPRE Htrip Hk".
+      unfold WP2_loop at 2.
+      iApply (semWP2_fun_loop with "Hpl Hpr").
+      iIntros "Hpl Hpr" (Γon1 Γon2 δon1 δon2).
+      cbn. iDestruct ("Htrip" with "[$HPRE $Hpl $Hpr]") as "(_ & Htrip)".
+      iSpecialize ("Htrip" with "[Hpro]").
+      { cbn. iDestruct "Hpro" as "($ & [$ _] & $)". }
+      iApply semWP2_seq.
+      iApply semWP2_call_inline_later.
+      iModIntro.
+      iApply (semWP2_mono with "Htrip").
+      iIntros ([] ? ? ?) "(<- & <- & H)"; auto.
+      iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip & Hoff)".
+      iApply semWP2_call_inline.
+      iSpecialize ("Hk" with "[$Htrip $Hpc $Hnpc $Hinstr $Hoff]").
+      iApply (semWP2_mono with "Hk").
+      iIntros (? ? ? ?) "(<- & _ & $)"; auto.
     Qed.
 
     Lemma WP2_loop_semTripleBlock {R : iProp Σ} : ∀ PRE a instrs POST,
+      powered2 true -∗
       (exec_instructions_prologue a instrs) -∗
       (PRE a) -∗
       semTripleBlock PRE a instrs POST -∗
-      (∀ an, POST a an ∗ exec_instructions_epilogue a an instrs -∗ WP2_loop R) -∗
+      (∀ an, POST a an ∗ exec_instructions_epilogue a an instrs ∗ powered2 true -∗ WP2_loop R) -∗
       WP2_loop R.
     Proof.
-      iIntros (PRE a instrs).
-      iRevert (PRE a).
-      iInduction instrs as [|instr instrs] "IH";
-        iIntros (PRE a POST) "Hpro HPRE Htrip Hk".
+      iIntros (PRE a [|instr instrs] POST) "Hpow Hpro HPRE Htrip Hk".
       - cbn. iSpecialize ("Htrip" with "HPRE").
-        iApply ("Hk" with "[$Htrip $Hpro]").
-      - now iApply (WP2_loop_semTripleBlock_later with "Hpro HPRE Htrip").
+        iApply ("Hk" with "[$Htrip $Hpro $Hpow]").
+      - now iApply (WP2_loop_semTripleBlock_later with "Hpow Hpro HPRE Htrip").
     Qed.
 
     Lemma step_n_focus (instrs : list AST) (ainstr apc : Val ty_xlenbits) (POST1 POST2 POST : Val ty_xlenbits -> iProp Σ) :
@@ -314,29 +348,37 @@ Module BinaryBlockVerifier
     Qed.
 
     Lemma WP2_loop_step_left {R : iProp Σ} :
+      powered_left true -∗
       @RVPBASEl.semTWP _ sailGS2_sailGS_left _ _ [env] fun_step
-        (λ v _, match v with inl _ => WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
+        (λ v _, match v with inl _ => powered_left true -∗ WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
       WP2_loop R.
     Proof.
-      iIntros "H". unfold WP2_loop at 2. cbn [FunDef]. unfold fun_loop.
+      iIntros "Hp H". unfold WP2_loop at 2.
+      iApply (semWP2_fun_loop_left with "Hp").
+      iIntros "Hp" (Γon δon).
       iApply semWP2_seq_left. iApply RVPBASEl.semWP_call_inline.
       iApply RVPBASEl.semTWP_semWP. iApply (RVPBASEl.semTWP_mono with "H").
       iIntros ([v|m] δ) "H"; cbn; last done.
       iApply semWP2_call_inline_left.
+      iSpecialize ("H" with "Hp").
       iApply (semWP2_mono with "H").
       iIntros (? δ1 ? δ2) "($ & _ & $)". now destruct (env.view δ1), (env.view δ2).
     Qed.
 
     Lemma WP2_loop_step_right {R : iProp Σ} :
+      powered_right true -∗
       @RVPBASEr.semTWP _ sailGS2_sailGS_right _ _ [env] fun_step
-        (λ v _, match v with inl _ => WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
+        (λ v _, match v with inl _ => powered_right true -∗ WP2_loop R | inr _ => False end) -∗ (* We cannot end up with a fail due to the fail logic for the BlockVer *)
       WP2_loop R.
     Proof.
-      iIntros "H". unfold WP2_loop at 2. cbn [FunDef]. unfold fun_loop.
+      iIntros "Hp H". unfold WP2_loop at 2.
+      iApply (semWP2_fun_loop_right with "Hp").
+      iIntros "Hp" (Γon δon).
       iApply semWP2_seq_right. iApply RVPBASEr.semTWP_call_inline.
       iApply (RVPBASEr.semTWP_mono with "H").
       iIntros ([v|m] δ) "H"; cbn; last done.
       iApply semWP2_call_inline_right.
+      iSpecialize ("H" with "Hp").
       iApply (semWP2_mono with "H").
       iIntros (? δ1 ? δ2) "($ & _ & $)". now destruct (env.view δ1), (env.view δ2).
     Qed.
@@ -352,73 +394,79 @@ Module BinaryBlockVerifier
 
     Lemma WP2_loop_step_n_left {R : iProp Σ} (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
       (POST : Val ty_xlenbits -> iProp Σ) :
+      powered_left true -∗
       @RVPTVl.exec_instructions_epilogue _ sailGS2_sailGS_left a apc (instr :: instrs) -∗
       @RVPTVl.step_n _ sailGS2_sailGS_left (instr :: instrs) a apc POST -∗
-      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an (instr :: instrs) -∗ WP2_loop R) -∗
+      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an (instr :: instrs) ∗ powered_left true -∗ WP2_loop R) -∗
       WP2_loop R.
     Proof.
       iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
-        iIntros "Hpro Htrip Hk"; cbn;
+        iIntros "Hp Hpro Htrip Hk"; cbn;
         iDestruct "Htrip" as "(<- & Htrip)";
         iDestruct "Hpro" as "(Hpc & (Hinstr & Hinstrs) & Hnpc)";
         iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]");
-        iApply WP2_loop_step_left;
+        iApply (WP2_loop_step_left with "Hp");
         iApply (RVPBASEl.semTWP_mono with "Htrip");
         iIntros ([v|m] δ) "H"; cbn; try done;
-        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
-      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
-      - iApply ("IH" with "[$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
+        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)";
+        iIntros "Hp".
+      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc $Hp]").
+      - iApply ("IH" with "Hp [$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
         + by iExists _.
-        + iIntros (an) "(HPOST & Hpc & Hinstrs & Hnpc)".
-          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc]").
+        + iIntros (an) "(HPOST & (Hpc & Hinstrs & Hnpc) & Hp)".
+          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc $Hp]").
     Qed.
 
     Lemma WP2_loop_step_n_right {R : iProp Σ} (instr : AST) (instrs : list AST) (a apc : Val ty_xlenbits)
       (POST : Val ty_xlenbits -> iProp Σ) :
+      powered_right true -∗
       @RVPTVr.exec_instructions_epilogue _ sailGS2_sailGS_right a apc (instr :: instrs) -∗
       @RVPTVr.step_n _ sailGS2_sailGS_right (instr :: instrs) a apc POST -∗
-      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an (instr :: instrs) -∗ WP2_loop R) -∗
+      (∀ an, POST an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an (instr :: instrs) ∗ powered_right true -∗ WP2_loop R) -∗
       WP2_loop R.
     Proof.
       iInduction instrs as [|i instrs] "IH" forall (instr a apc POST);
-        iIntros "Hpro Htrip Hk"; cbn;
+        iIntros "Hp Hpro Htrip Hk"; cbn;
         iDestruct "Htrip" as "(<- & Htrip)";
         iDestruct "Hpro" as "(Hpc & (Hinstr & Hinstrs) & Hnpc)";
         iSpecialize ("Htrip" with "[$Hpc $Hinstr $Hnpc]");
-        iApply WP2_loop_step_right;
+        iApply (WP2_loop_step_right with "Hp");
         iApply (RVPBASEr.semTWP_mono with "Htrip");
         iIntros ([v|m] δ) "H"; cbn; try done;
-        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)".
-      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc]").
-      - iApply ("IH" with "[$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
+        iDestruct "H" as "(%na & (Hpc & Hinstr & Hnpc) & Htrip)";
+        iIntros "Hp".
+      - iApply ("Hk" with "[$Htrip $Hpc $Hinstr $Hnpc $Hp]").
+      - iApply ("IH" with "Hp [$Hpc $Hinstrs Hnpc] Htrip [Hinstr Hk]").
         + by iExists _.
-        + iIntros (an) "(HPOST & Hpc & Hinstrs & Hnpc)".
-          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc]").
+        + iIntros (an) "(HPOST & (Hpc & Hinstrs & Hnpc) & Hp)".
+          iApply ("Hk" with "[$HPOST $Hpc $Hinstr $Hinstrs $Hnpc $Hp]").
     Qed.
 
     Lemma WP2_loop_semTripleBlock_left {R : iProp Σ} : ∀ PRE a instrs POST,
       instrs ≠ []%list →
-      ⊢ @RVPTVl.exec_instructions_prologue _ sailGS2_sailGS_left a instrs -∗
+      ⊢ powered_left true -∗
+        @RVPTVl.exec_instructions_prologue _ sailGS2_sailGS_left a instrs -∗
         PRE a -∗
         @RVPTVl.semTripleBlock _ sailGS2_sailGS_left PRE a instrs POST -∗
-        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an instrs -∗ WP2_loop R) -∗
+        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_left memGS_left a an instrs ∗ powered_left true -∗ WP2_loop R) -∗
         WP2_loop R.
     Proof.
-      iIntros (PRE a [|instr instrs] POST Hne) "Hpro HPRE Htrip Hk"; first done.
-      iApply (WP2_loop_step_n_left with "Hpro [Htrip HPRE] Hk").
+      iIntros (PRE a [|instr instrs] POST Hne) "Hp Hpro HPRE Htrip Hk"; first done.
+      iApply (WP2_loop_step_n_left with "Hp Hpro [Htrip HPRE] Hk").
       by iApply "Htrip".
     Qed.
 
     Lemma WP2_loop_semTripleBlock_right {R : iProp Σ} : ∀ PRE a instrs POST,
       instrs ≠ []%list →
-      ⊢ @RVPTVr.exec_instructions_prologue _ sailGS2_sailGS_right a instrs -∗
+      ⊢ powered_right true -∗
+        @RVPTVr.exec_instructions_prologue _ sailGS2_sailGS_right a instrs -∗
         PRE a -∗
         @RVPTVr.semTripleBlock _ sailGS2_sailGS_right PRE a instrs POST -∗
-        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an instrs -∗ WP2_loop R) -∗
+        (∀ an, POST a an ∗ exec_instructions_epilogue_unary sailRegGS2_sailRegGS_right memGS_right a an instrs ∗ powered_right true -∗ WP2_loop R) -∗
         WP2_loop R.
     Proof.
-      iIntros (PRE a [|instr instrs] POST Hne) "Hpro HPRE Htrip Hk"; first done.
-      iApply (WP2_loop_step_n_right with "Hpro [Htrip HPRE] Hk").
+      iIntros (PRE a [|instr instrs] POST Hne) "Hp Hpro HPRE Htrip Hk"; first done.
+      iApply (WP2_loop_step_n_right with "Hp Hpro [Htrip HPRE] Hk").
       by iApply "Htrip".
     Qed.
 

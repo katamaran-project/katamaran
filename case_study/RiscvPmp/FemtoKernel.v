@@ -119,6 +119,17 @@ Import RVPPRED2.
     Definition t0 : RegIdx := [bv 5].
     Definition mmio_write_arg_reg : RegIdx := [bv 10]. (* x10 = a0 *)
     Definition mmio_write_val_reg : RegIdx := [bv 11]. (* x11 = a1 *)
+    (* The system call number (passed in mmio_write_arg_reg, i.e. a0) with which
+       U-mode asks the trap handler to power off the machine. The handler
+       interprets a0 as follows:
+       - mmio_write_adv: the public MMIO write, which also logs the secret
+         (dispatch, not_zero and is_zero blocks);
+       - shutdown_code: power off the machine (shutdown_check and shutdown blocks);
+       - any other value: the secret write (secret_write block).
+       The value 1 is arbitrary, but it must differ from mmio_write_adv (which
+       is checked first) and fit in the 12-bit immediate of an ADDI. We avoid 0,
+       as that is the value of a0 when U-mode does not set an argument. *)
+    Definition shutdown_code : N := 1.
 
     Definition pure_privilege_to_bits {n} : Privilege -> bv n :=
       fun p => match p with | Machine => bv.of_N 3 | Supervisor => bv.one | User => bv.zero end.
@@ -245,7 +256,7 @@ Import RVPPRED2.
        Finally, we return control to the invoker of the syscall. *)
     (* Block structure:
        - femtokernel_handler_entry_asm
-         -> Jumps to femtokernel_handler_secret_write_asm
+         -> Jumps to femtokernel_handler_shutdown_check_asm
          -> OR falls through to femtokernel_handler_dispatch_asm
        - femtokernel_handler_dispatch_asm
          -> Jumps to femtokernel_handler_is_zero_asm if the secret is zero
@@ -254,6 +265,11 @@ Import RVPPRED2.
          -> ALWAYS jumps to femtokernel_handler_exit_asm
        - femtokernel_handler_is_zero_asm
          -> ALWAYS jumps to femtokernel_handler_exit_asm
+       - femtokernel_handler_shutdown_check_asm
+         -> Jumps to femtokernel_handler_secret_write_asm
+         -> OR falls through to femtokernel_handler_shutdown_asm
+       - femtokernel_handler_shutdown_asm
+         -> Powers off the machine. End of execution.
        - femtokernel_handler_secret_write_asm
          -> ALWAYS falls through to femtokernel_exit_asm
        - femtokernel_handler_exit_asm
@@ -308,6 +324,32 @@ Import RVPPRED2.
     Example femtokernel_handler_is_zero_asm (is_zero_addr data_addr exit_addr : N) : list AnnotInstr :=
       resolve_ASM (femtokernel_handler_is_zero_asm' data_addr exit_addr) is_zero_addr.
 
+    (* Checks whether the trap invoker requests to power off the machine, by
+       passing shutdown_code as argument. If so, we fall through to the shutdown
+       block, otherwise we jump over it to the secret write. In both cases, the
+       shutdown address is prepared in t0 (it does not fit in a 12-bit
+       immediate, hence the two ADDIs).
+       NOTE: preparing t0 here, rather than in the shutdown block itself, is a
+       limitation of WP2_loop_semTripleBlock_power_off, which only supports a
+       block of a single instruction: the power tokens are handed to the block
+       after the power check that precedes its (only) instruction, so they
+       are not available for the power checks in between the instructions of
+       a longer block. Lifting this would require a variant of that lemma for
+       blocks `instrs ++ [instr]`, where only the final instruction uses the
+       power tokens. *)
+    Example femtokernel_handler_shutdown_check_asm (shutdown_size : N) : list AnnotInstr :=
+      [ ADDI t0 zero (bv.of_N 2047)
+      ; ADDI t0 t0 (bv.of_N 1021) (* t0 = mmioShutdownAddr *)
+      ; ADDI ra zero (bv.of_N shutdown_code)
+      ; BNE mmio_write_arg_reg ra (bv.of_N (shutdown_size + N.of_nat bytes_per_instr))
+      ].
+
+    (* Powers off the machine, with exit value 0. *)
+    Example femtokernel_handler_shutdown_asm : list AnnotInstr :=
+      [ AnnotLemmaInvocation (close_mmio_write (bv.of_N 0) WORD) [nenv exp_val ty_xlenbits mmioShutdownAddr; exp_val ty_regno zero]%env
+      ; STORE (bv.of_N 0) zero t0 WORD
+      ].
+
     (* Performs a "secret" MMIO write. The secret itself is read from the
        `data` address and then written to the MMIO address.
        Block falls through to femtokernel_handler_exit_asm. *)
@@ -333,6 +375,8 @@ Import RVPPRED2.
     Definition handler_dispatch     : Label := "handler_dispatch".
     Definition handler_not_zero     : Label := "handler_not_zero".
     Definition handler_is_zero      : Label := "handler_is_zero".
+    Definition handler_shutdown_check : Label := "handler_shutdown_check".
+    Definition handler_shutdown     : Label := "handler_shutdown".
     Definition handler_secret_write : Label := "handler_secret_write".
     Definition handler_exit         : Label := "handler_exit".
 
@@ -342,6 +386,8 @@ Import RVPPRED2.
       ; (handler_dispatch     , femtokernel_handler_dispatch_asm 0 0 0)
       ; (handler_not_zero     , femtokernel_handler_not_zero_asm 0 0 0)
       ; (handler_is_zero      , femtokernel_handler_is_zero_asm 0 0 0)
+      ; (handler_shutdown_check, femtokernel_handler_shutdown_check_asm 0)
+      ; (handler_shutdown     , femtokernel_handler_shutdown_asm)
       ; (handler_secret_write , femtokernel_handler_secret_write_asm 0 0)
       ; (handler_exit         , femtokernel_handler_exit_asm) ]%list.
 
@@ -378,9 +424,11 @@ Import RVPPRED2.
     Definition handler_dispatch_size : N := find_label handler_dispatch femtokernel_block_sizes 0%N.
     Definition handler_not_zero_size : N := find_label handler_not_zero femtokernel_block_sizes 0%N.
     Definition handler_is_zero_size : N := find_label handler_is_zero femtokernel_block_sizes 0%N.
+    Definition handler_shutdown_check_size : N := find_label handler_shutdown_check femtokernel_block_sizes 0%N.
+    Definition handler_shutdown_size : N := find_label handler_shutdown femtokernel_block_sizes 0%N.
     Definition handler_secret_write_size : N := find_label handler_secret_write femtokernel_block_sizes 0%N.
     Definition handler_exit_size : N := find_label handler_exit femtokernel_block_sizes 0%N.
-    Definition handler_size : N := handler_entry_size + handler_dispatch_size + handler_not_zero_size + handler_is_zero_size + handler_secret_write_size + handler_exit_size.
+    Definition handler_size : N := handler_entry_size + handler_dispatch_size + handler_not_zero_size + handler_is_zero_size + handler_shutdown_check_size + handler_shutdown_size + handler_secret_write_size + handler_exit_size.
 
     (* addrs_for_blocks returns a list of the same length as the given list of
        blocks, but with the address each block is located at. An initial address
@@ -416,6 +464,10 @@ Import RVPPRED2.
       Eval compute in find_label handler_not_zero femtokernel_block_addrs 0%N.
     Definition handler_is_zero_addr         : N :=
       Eval compute in find_label handler_is_zero femtokernel_block_addrs 0%N.
+    Definition handler_shutdown_check_addr : N :=
+      Eval compute in find_label handler_shutdown_check femtokernel_block_addrs 0%N.
+    Definition handler_shutdown_addr     : N :=
+      Eval compute in find_label handler_shutdown femtokernel_block_addrs 0%N.
     Definition handler_secret_write_addr : N :=
       Eval compute in find_label handler_secret_write femtokernel_block_addrs 0%N.
     Definition handler_exit_addr         : N :=
@@ -456,6 +508,8 @@ Import RVPPRED2.
     Definition femtokernel_handler_dispatch := femtokernel_handler_dispatch_asm handler_dispatch_addr data_addr handler_not_zero_size.
     Definition femtokernel_handler_not_zero := femtokernel_handler_not_zero_asm handler_not_zero_addr data_addr handler_exit_addr.
     Definition femtokernel_handler_is_zero := femtokernel_handler_is_zero_asm handler_is_zero_addr data_addr handler_exit_addr.
+    Definition femtokernel_handler_shutdown_check := femtokernel_handler_shutdown_check_asm handler_shutdown_size.
+    Definition femtokernel_handler_shutdown := femtokernel_handler_shutdown_asm.
     Definition femtokernel_handler_secret_write := femtokernel_handler_secret_write_asm handler_secret_write_addr data_addr.
     Definition femtokernel_handler_exit := femtokernel_handler_exit_asm.
 
@@ -646,6 +700,42 @@ Import RVPPRED2.
                                           x1 ↦ term_val ty_xlenbits bv.zero ∗
                                           term_val ty_xlenbits (bv.of_N data_addr) ↦ₘ term_var "secret".
 
+      Example femtokernel_handler_shutdown_check_pre : Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits]) :=
+        asn.sub_assertion (femtokernel_handler_shared_pre handler_shutdown_check_addr) (sub_up1 (sub_cat_left _)) ∗
+          mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
+          x1 ↦ term_var "x1" ∗
+          x5 ↦ term_var "x5" ∗
+          x10 ↦ term_var "x10".
+
+      Example femtokernel_handler_shutdown_check_post :
+        Assertion (Σ__csrs ▻▻ ["x1" :: ty_xlenbits; "x5" :: ty_xlenbits; "x10" :: ty_xlenbits] ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+        asn.sub_assertion (femtokernel_handler_shared_post (term_val ty_privilege Machine)) (sub_up1 (sub_up1 (sub_cat_left _))) ∗
+          mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
+          (if: (term_var "x10" ?= term_val ty_xlenbits (bv.of_N shutdown_code))
+           then term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_shutdown_check_size)
+           else term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N (handler_shutdown_check_size + handler_shutdown_size))) ∗
+          x1 ↦ term_val ty_xlenbits (bv.of_N shutdown_code) ∗
+          x5 ↦ term_val ty_xlenbits mmioShutdownAddr ∗
+          x10 ↦ term_var "x10".
+
+      (* Powering off the machine is observable by the adversary, and requires
+         that the machine is still powered on. The power tokens are kept apart
+         from the rest of the pre- and postcondition, as the relational
+         verification hands them to the block separately. *)
+      Example femtokernel_handler_shutdown_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
+        (femtokernel_handler_shared_pre handler_shutdown_addr ∗
+           mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"] ∗
+           x5 ↦ term_val ty_xlenbits mmioShutdownAddr ∗
+           asn.chunk (chunk_user nothingPending env.nil)) ∗
+          asn.chunk (chunk_user Sig.powered [term_val ty.bool true]).
+
+      Example femtokernel_handler_shutdown_post :
+        Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits; "an"::ty_xlenbits]) :=
+        (term_var "an" = term_var "a" +ᵇ term_val ty_xlenbits (bv.of_N handler_shutdown_size) ∗
+           asn.chunk (chunk_user (Sig.written_shutdown bytes_per_word)
+                        [term_val ty_xlenbits mmioShutdownAddr; term_val (ty_bytes bytes_per_word) bv.zero])) ∗
+          asn.chunk (chunk_user Sig.powered [term_val ty.bool false]).
+
       Example femtokernel_handler_exit_pre : Assertion (Σ__csrs ▻▻ ["a" :: ty_xlenbits]) :=
         femtokernel_handler_shared_pre handler_exit_addr ∗
           mstatus ↦ term_record rmstatus [nenv term_var "mstatus_mpp"; term_var "mstatus_spp"; term_var "mstatus_mpie"; term_var "mstatus_spie"; term_val ty.bool false; term_var "mstatus_sie"].
@@ -792,6 +882,34 @@ Import RVPPRED2.
       constructor; cbn.
       intuition bv_solve_Ltac.solveBvManual. eexists _, _. intuition.
       1-4: eapply bv.in_seqBv'; now vm_compute.
+    Qed.
+
+    Definition vc__femtohandler_shutdown_check : 𝕊 [] :=
+      postprocess2 (RVPTVl.sannotated_block_verification_condition
+                     femtokernel_handler_shutdown_check_pre
+                     femtokernel_handler_shutdown_check
+                     femtokernel_handler_shutdown_check_post wnil).
+
+    Definition vc__femtohandler_shutdown : 𝕊 [] :=
+      postprocess2 (RVPTVl.sannotated_block_verification_condition
+                     femtokernel_handler_shutdown_pre
+                     femtokernel_handler_shutdown
+                     femtokernel_handler_shutdown_post wnil).
+
+    Lemma sat__femtohandler_shutdown_check : RVPTVl.safeE vc__femtohandler_shutdown_check.
+    Proof.
+      vm_compute.
+      constructor; cbn.
+      intuition bv_solve_Ltac.solveBvManual.
+    Qed.
+
+    Lemma sat__femtohandler_shutdown : RVPTVl.safeE vc__femtohandler_shutdown.
+    Proof.
+      vm_compute.
+      constructor; cbn.
+      intuition bv_solve_Ltac.solveBvManual; rewrite ?sext'_zero; auto.
+      all: try (eexists _, _; intuition).
+      all: eapply bv.in_seqBv'; now vm_compute.
     Qed.
 
     Lemma sat__femtohandler_exit : RVPTVl.safeE vc__femtohandler_exit.
@@ -1043,6 +1161,56 @@ Import RVPPRED2.
         pose proof sat__femtohandler_exit as H.
         vm_compute; apply H.
       Qed.
+
+      Definition contract_femtohandler_shutdown_check (x1 x5 x10 : Val ty_xlenbits) : BlockContract :=
+        MkBlockContract
+          env.nil.["x1" ∷ ty_xlenbits ↦ x1].["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10]
+          femtokernel_handler_shutdown_check_pre
+          femtokernel_handler_shutdown_check
+          femtokernel_handler_shutdown_check_post.
+
+      Lemma contract_femtohandler_shutdown_check_verified__l `{sG : RVPBASEl.sailGS Σ} : ∀ (x1 x5 x10 a : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts),
+        ⊢ (contract_left (contract_femtohandler_shutdown_check x1 x5 x10)) a archstate vmie.
+      Proof.
+        simpl. iIntros (x1 x5 x10 a archstate vmie).
+        iApply (RVPTVl.sound_sannotated_block_verification_condition RVPCONTRl.lemSemBlockVerif).
+        pose proof sat__femtohandler_shutdown_check as H.
+        vm_compute; apply H.
+      Qed.
+
+      Lemma contract_femtohandler_shutdown_check_verified__r `{sG : RVPBASEr.sailGS Σ} : ∀ (x1 x5 x10 a : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts),
+        ⊢ (contract_right (contract_femtohandler_shutdown_check x1 x5 x10)) a archstate vmie.
+      Proof.
+        simpl. iIntros (x1 x5 x10 a archstate vmie).
+        iApply (RVPTVr.sound_sannotated_block_verification_condition RVPCONTRr.lemSemBlockVerif).
+        pose proof sat__femtohandler_shutdown_check as H.
+        vm_compute; apply H.
+      Qed.
+
+      Definition contract_femtohandler_shutdown : BlockContract :=
+        MkBlockContract
+          env.nil
+          femtokernel_handler_shutdown_pre
+          femtokernel_handler_shutdown
+          femtokernel_handler_shutdown_post.
+
+      Lemma contract_femtohandler_shutdown_verified__l `{sG : RVPBASEl.sailGS Σ} : ∀ (a : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts),
+        ⊢ (contract_left contract_femtohandler_shutdown) a archstate vmie.
+      Proof.
+        simpl. iIntros (a archstate vmie).
+        iApply (RVPTVl.sound_sannotated_block_verification_condition RVPCONTRl.lemSemBlockVerif).
+        pose proof sat__femtohandler_shutdown as H.
+        vm_compute; apply H.
+      Qed.
+
+      Lemma contract_femtohandler_shutdown_verified__r `{sG : RVPBASEr.sailGS Σ} : ∀ (a : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts),
+        ⊢ (contract_right contract_femtohandler_shutdown) a archstate vmie.
+      Proof.
+        simpl. iIntros (a archstate vmie).
+        iApply (RVPTVr.sound_sannotated_block_verification_condition RVPCONTRr.lemSemBlockVerif).
+        pose proof sat__femtohandler_shutdown as H.
+        vm_compute; apply H.
+      Qed.
     End WithEnvNotations.
 
   (*   Definition femtoinit_stats := *)
@@ -1237,6 +1405,8 @@ Import RVPPRED2.
     RVPCOM.ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) ∗
     RVPCOM.ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∗
     RVPCOM.ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∗
+    RVPCOM.ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) ∗
+    RVPCOM.ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
     RVPCOM.ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
     RVPCOM.ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit).
 
@@ -1270,6 +1440,8 @@ Import RVPPRED2.
     mem_has_instrs μ (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) ∧
     mem_has_instrs μ (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∧
     mem_has_instrs μ (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∧
+    mem_has_instrs μ (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) ∧
+    mem_has_instrs μ (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∧
     mem_has_instrs μ (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∧
     mem_has_instrs μ (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∧
     mem_has_word μ (bv.of_N data_addr) secret.
@@ -1300,7 +1472,7 @@ Import RVPPRED2.
     by compute.
   Qed.
 
-  Lemma handlerAddrs_split : (@bv.seqBv xlenbits (bv.of_N handler_entry_addr) handler_size = bv.seqBv (bv.of_N handler_entry_addr) handler_entry_size ++ bv.seqBv (bv.of_N handler_dispatch_addr) handler_dispatch_size ++ bv.seqBv (bv.of_N handler_not_zero_addr) handler_not_zero_size ++ bv.seqBv (bv.of_N handler_is_zero_addr) handler_is_zero_size ++ bv.seqBv (bv.of_N handler_secret_write_addr) handler_secret_write_size ++ bv.seqBv (bv.of_N handler_exit_addr) handler_exit_size)%list.
+  Lemma handlerAddrs_split : (@bv.seqBv xlenbits (bv.of_N handler_entry_addr) handler_size = bv.seqBv (bv.of_N handler_entry_addr) handler_entry_size ++ bv.seqBv (bv.of_N handler_dispatch_addr) handler_dispatch_size ++ bv.seqBv (bv.of_N handler_not_zero_addr) handler_not_zero_size ++ bv.seqBv (bv.of_N handler_is_zero_addr) handler_is_zero_size ++ bv.seqBv (bv.of_N handler_shutdown_check_addr) handler_shutdown_check_size ++ bv.seqBv (bv.of_N handler_shutdown_addr) handler_shutdown_size ++ bv.seqBv (bv.of_N handler_secret_write_addr) handler_secret_write_size ++ bv.seqBv (bv.of_N handler_exit_addr) handler_exit_size)%list.
   Proof.
     (* TODO: scalable proof *)
     by compute.
@@ -1413,7 +1585,7 @@ Import RVPPRED2.
       RVPCOM.interp_ptstomem (bv.of_N data_addr) secret ∗
       [∗ list] a ∈ advAddrs, RVPCOM.interp_ptsto a (memory_ram μ a).
   Proof.
-    iIntros ((Hinit & Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit & Hdata)) "Hmem".
+    iIntros ((Hinit & Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit & Hdata)) "Hmem".
     rewrite liveAddrs_split.
     iDestruct "Hmem" as "(Hinit & Hhandler & Hdata & Hadv)".
     iSplitL "Hinit".
@@ -1422,7 +1594,7 @@ Import RVPPRED2.
     iSplitL "Hhandler". (* Need to solve the goal for both handlers *)
     { unfold ptsto_instrs_handler.
       rewrite handlerAddrs_split.
-      iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+      iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
       iSplitL "Hhentry".
       { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
         iApply (sub_heap_mapsto_interp_ptsto with "Hhentry"); now compute. }
@@ -1435,6 +1607,12 @@ Import RVPPRED2.
       iSplitL "Hhiszero".
       { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
         iApply (sub_heap_mapsto_interp_ptsto with "Hhiszero"); now compute. }
+      iSplitL "Hhcheck".
+      { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
+        iApply (sub_heap_mapsto_interp_ptsto with "Hhcheck"); now compute. }
+      iSplitL "Hhshutdown".
+      { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
+        iApply (sub_heap_mapsto_interp_ptsto with "Hhshutdown"); now compute. }
       iSplitL "Hhsecret".
       { iApply (intro_ptsto_instrs (μ := μ)); [easy..|].
         iApply (sub_heap_mapsto_interp_ptsto with "Hhsecret"); now compute. }
@@ -1569,8 +1747,8 @@ Import RVPPRED2.
 
       (* The resource that is threaded through the universal contract: the
          phantom execution's resources (RVPADEQl.phantom_res), together with
-         this execution's nothingPending. *)
-      Definition phantom_res : iProp Σ := nothingPending ∗ RVPADEQl.phantom_res.
+         this execution's nothingPending and power token. *)
+      Definition phantom_res : iProp Σ := nothingPending ∗ powered_tok true ∗ RVPADEQl.phantom_res.
 
       Lemma loop_pre_WP_loop (archstate : ArchState) :
         LoopVerificationl.loop_pre phantom_res archstate ⊢ WP_loop.
@@ -1701,7 +1879,7 @@ Import RVPPRED2.
           -∗
           WP_loop.
       Proof.
-        iIntros "#Hinv ((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & [Hnp Hph] & Hhnz & Hhiz & Hhexit & Hk)".
+        iIntros "#Hinv ((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & (Hnp & Hpow & Hph) & Hhnz & Hhiz & Hhexit & Hk)".
         iPoseProof (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}) with "Hgprs") as "(Hregs & Hgprs)";
           try solve_subseteq.
         reduce_big_sepS_big_sepL.
@@ -1728,7 +1906,7 @@ Import RVPPRED2.
         { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit Htrap HR".
           iApply ("Hk" with "[//] Hcode Hhnz Hhiz Hdata Hhexit Htrap HR"). }
         iApply (femtokernel_handler_exit_safe _ _ Hmpp).
-        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp Hph"; cbn - [interp_ptstomem].
+        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp Hpow Hph"; cbn - [interp_ptstomem].
         repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
         now iPureIntro.
       Qed.
@@ -1774,6 +1952,72 @@ Import RVPPRED2.
         now iPureIntro.
       Qed.
 
+      (* The shutdown check, followed by either powering off the machine, or by
+         the secret write. *)
+      Lemma femtokernel_handler_shutdown_check_safe (vx1 vx5 vx10 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) (Hmpp : ArchState.mpp (ArchState.mstate archstate) ≠ Machine) :
+        ⊢ femto_inv_mmio -∗
+          femtokernel_safe_shared_pre handler_shutdown_check_addr femtokernel_handler_shutdown_check ∗
+          asn_interpret femtokernel_handler_shutdown_check_pre
+            (csrs_valuation archstate vmie ►► [env].["x1" ∷ ty_xlenbits ↦ vx1].["x5" ∷ ty_xlenbits ↦ vx5].["x10" ∷ ty_xlenbits ↦ vx10]
+                                           ►► [env].["a" ∷ ty_xlenbits ↦ bv.of_N handler_shutdown_check_addr]) ∗
+          interp_gprs {[x1; x5; x10]} ∗
+          (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) ∗
+          phantom_res ∗
+          ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
+          ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
+          ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
+          ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+             ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) -∗
+             ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) -∗
+             ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
+             (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
+             ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
+             LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop)
+          -∗
+          WP_loop.
+      Proof.
+        iIntros "#Hinv ((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & HR & Hhshutdown & Hhsecret & Hhexit & Hk)".
+        iPoseProof (contract_femtohandler_shutdown_check_verified__l vx1 vx5 vx10 (bv.of_N handler_shutdown_check_addr) archstate vmie) as "Htrip".
+        iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
+        iIntros (an) "(Hpost & Hpc & Hinstrs & Hnpc)".
+        iEval (cbn - [interp_ptstomem]) in "Hpost".
+        iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hx5 & Hx10)".
+        case_match; iDestruct "Han" as "[-> _]".
+        - (* Power off the machine. *)
+          iDestruct "HR" as "(Hnp & Hpow & Hph)".
+          iPoseProof (contract_femtohandler_shutdown_verified__l (bv.of_N handler_shutdown_addr) archstate vmie) as "Htrip'".
+          iApply (RVPTVl.WP_loop_semTripleBlock with "[Hpc Hhshutdown Hnpc] [Hshared Hmstatus Hx5 Hnp Hpow] Htrip'").
+          + iFrame "Hpc Hhshutdown Hnpc".
+          + cbn - [interp_ptstomem].
+            iFrame "Hinv Hmstatus Hx5 Hnp Hpow".
+            repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+            repeat iSplit; try iPureIntro; try done; by vm_compute.
+          + iIntros (an') "(Hpost & _)".
+            iEval (cbn) in "Hpost". iDestruct "Hpost" as "(_ & Hoff)".
+            unfold WP_loop.
+            iApply (semWP_fun_loop_off with "[Hoff]"); [iExact "Hoff" | by iIntros].
+        - (* Perform the secret write. *)
+          iAssert (interp_gprs {[x1]}) with "[Hgprs Hx5 Hx10]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5; x10]})); try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            iFrame "Hx5 Hx10". by cbn. }
+          iDestruct "Hdata" as "(%secret & Hdata)".
+          iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+                     ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
+                     interp_ptstomem (bv.of_N data_addr) (secret : Val ty_xlenbits) -∗
+                     ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
+                     LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
+            with "[Hk Hinstrs Hhshutdown]" as "Hksecret".
+          { iIntros "!>" (priv ms ss pc Hpriv) "Hhsecret Hdata Hhexit Htrap HR".
+            iApply ("Hk" with "[//] Hinstrs Hhshutdown Hhsecret [Hdata] Hhexit Htrap HR").
+            by iExists _. }
+          iApply (femtokernel_handler_secret_write_safe _ secret _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
+          iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hdata HR Hksecret".
+          repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+          repeat iSplit; try iPureIntro; try done; by vm_compute.
+      Qed.
+
       Lemma femtokernel_handler_entry_safe (x5_val x10_val : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) (Hmpp : ArchState.mpp (ArchState.mstate archstate) ≠ Machine) :
         ⊢ femto_inv_mmio -∗
           femtokernel_safe_shared_pre handler_entry_addr femtokernel_handler_entry ∗
@@ -1787,6 +2031,8 @@ Import RVPPRED2.
           ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) ∗
           ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∗
           ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∗
+          ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) ∗
+          ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
           ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
           ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit)
           -∗
@@ -1794,14 +2040,14 @@ Import RVPPRED2.
       Proof.
         iIntros "#Hinv".
         iLöb as "IH" forall (x5_val x10_val archstate vmie Hmpp).
-        iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hx1 & Hdata & HR & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+        iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hx1 & Hdata & HR & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
         (* When the adversary traps back into the handler, we are back at the
            start of this lemma (with possibly different CSR values). *)
         iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs_handler ∗ (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
                    LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I with "[]" as "#Hk".
         { iIntros "!>" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap HR".
-          iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+          iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
           assert (HU : User ≠ Machine) by auto.
           iPoseProof (LoopVerificationl.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
                         Hpriv HU eq_refl with "Htrap") as "Htrap".
@@ -1814,29 +2060,29 @@ Import RVPPRED2.
           iApply ("IH" $! _ _
                     (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc)) vmie' with "[//]").
           cbn - [interp_ptstomem].
-          iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit".
+          iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
           auto. }
         iPoseProof (contract_femtohandler_entry_verified__l x5_val x10_val (bv.of_N handler_entry_addr) archstate vmie) as "Htrip".
         iApply (RVPTVl.WP_loop_semTripleBlock with "Hpro [Hpre] Htrip"); first iExact "Hpre".
         iIntros (an) "(Hpost & Hpc & Hinstrs & Hnpc)".
         iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
-        iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
-        { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
-            try solve_subseteq.
-          iFrame "Hgprs".
-          reduce_big_sepS_big_sepL.
-          now iFrame "Hx10". }
-        iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
-        { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
-            try solve_subseteq.
-          iFrame "Hgprs".
-          reduce_big_sepS_big_sepL.
-          now iFrame "Hx5". }
         iDestruct "Hx1" as "[%vx1 Hx1]".
-        iDestruct "Hdata" as "(%secret & Hdata)".
         case_match; cbn - [interp_ptstomem];
           iDestruct "Han" as "[-> _]".
         - (* Dispatch on the secret. *)
+          iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
+              try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            now iFrame "Hx10". }
+          iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
+              try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            now iFrame "Hx5". }
+          iDestruct "Hdata" as "(%secret & Hdata)".
           iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                      ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
                      ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
@@ -1844,27 +2090,28 @@ Import RVPPRED2.
                      interp_ptstomem (bv.of_N data_addr) (secret : Val ty_xlenbits) -∗
                      ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
                      LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
-            with "[Hinstrs Hhsecret]" as "Hkdispatch".
+            with "[Hinstrs Hhcheck Hhshutdown Hhsecret]" as "Hkdispatch".
           { iIntros "!>" (priv ms ss pc Hpriv) "Hhdispatch Hhnotzero Hhiszero Hdata Hhexit Htrap HR".
-            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit Hdata] Htrap HR").
+            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap HR").
             iSplitR "Hdata"; last by iExists _.
-            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit". }
+            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
           iApply (femtokernel_handler_dispatch_safe _ _ _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
           iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata HR Hkdispatch";
             repeat iSplitR; auto.
-        - (* Directly perform the secret write. *)
+        - (* Check for a shutdown request. *)
           iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+                     ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) -∗
+                     ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) -∗
                      ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
-                     interp_ptstomem (bv.of_N data_addr) (secret : Val ty_xlenbits) -∗
+                     (∃ v : Val ty_xlenbits, interp_ptstomem (bv.of_N data_addr) v) -∗
                      ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
                      LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop))%I
-            with "[Hinstrs Hhdispatch Hhnotzero Hhiszero]" as "Hksecret".
-          { iIntros "!>" (priv ms ss pc Hpriv) "Hhsecret Hdata Hhexit Htrap HR".
-            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit Hdata] Htrap HR").
-            iSplitR "Hdata"; last by iExists _.
-            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit". }
-          iApply (femtokernel_handler_secret_write_safe _ _ _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
-          iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhexit Hx1 Hdata HR Hksecret";
+            with "[Hinstrs Hhdispatch Hhnotzero Hhiszero]" as "Hkcheck".
+          { iIntros "!>" (priv ms ss pc Hpriv) "Hhcheck Hhshutdown Hhsecret Hdata Hhexit Htrap HR".
+            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap HR").
+            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata". }
+          iApply (femtokernel_handler_shutdown_check_safe vx1 _ x10_val _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
+          iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata HR Hhshutdown Hhsecret Hhexit Hkcheck";
             repeat iSplitR; auto.
       Qed.
 
@@ -1875,7 +2122,7 @@ Import RVPPRED2.
             LoopVerificationl.M_Trap (femto_archstate priv ms ss pc) -∗ phantom_res -∗ WP_loop.
       Proof.
         iIntros "#Hinv" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap HR".
-        iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+        iDestruct "Hhandler" as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
         (* Traps from S-mode look the same as traps from U-mode *)
         assert (HU : User ≠ Machine) by auto.
         iPoseProof (LoopVerificationl.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
@@ -1889,7 +2136,7 @@ Import RVPPRED2.
         iApply (femtokernel_handler_entry_safe _ _
                   (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc)) vmie Hmpp with "Hinv").
         cbn - [interp_ptstomem].
-        iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit".
+        iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata HR Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
         auto.
       Qed.
 
@@ -2002,15 +2249,16 @@ Import RVPPRED2.
           {δ δ' : CStore [ctx]} {s' : Stm [ctx] ty.unit} (secret : Val ty_xlenbits) :
       mem_has_femtokernel μ secret ->
       mmio_pred bytes_per_word (memory_trace μ) ->
+      fun_powered_on μ = true -> (* The machine starts powered on *)
       femto_init_regs γ ->
       ⟨ γ, μ, δ, fun_loop ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
       mmio_pred bytes_per_word (memory_trace μ').
     Proof.
-      intros μfk μpred
+      intros μfk μpred μon
         (γmstatus & γcurpriv & γpmp0cfg & γpmpaddr0 & γpmp1cfg & γpmpaddr1 & γpc & γmideleg & γmedeleg) steps.
       refine (RVPADEQUACYl.adequacy_gen (Q := fun _ _ _ _ => True%I) _ steps _).
       iIntros (Σ sG mGS) "(Hmem & Hregs)".
-      iDestruct "Hmem" as "(Hmem & Hfrag & Hnpa & Hnp & Hfrago & Hnpao & Hph)".
+      iDestruct "Hmem" as "(Hmem & Hfrag & Hnpa & Hnp & Hpw & Hfrago & Hnpao & Hph)".
       iPoseProof (femtokernel_splitMemory with "Hmem") as "(Hinit & Hhandler & Hdata & Hadv)"; try eassumption.
       iPoseProof (intro_ptstoSthL with "Hadv") as "Hadv".
       (* Allocate the shared invariant, with the phantom execution in sync. *)
@@ -2030,7 +2278,8 @@ Import RVPPRED2.
                   (read_register γ mie)
                   with "[-]").
         #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-        iFrame "Hinit Hhandler Hadv Hinv Hnp Hph Hdata".
+        iEval (rewrite μon) in "Hpw".
+        iFrame "Hinit Hhandler Hadv Hinv Hnp Hpw Hph Hdata".
         unfold RVPADEQUACYl.own_regstore. cbn - [interp_gprs].
         rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc γmideleg γmedeleg.
         iDestruct "Hregs" as "(Hpc & Hnpc & Hmstatus & Hmie & Hmip & Hmideleg & Hmedeleg & Hmtvec & Hmscratch & Hmepc & Hmcause & Hstvec & Hsscratch & Hsepc & Hscause & Hcp & Hx1 & Hregs)".
@@ -2044,7 +2293,7 @@ Import RVPPRED2.
         iInv "Hinv" as ">(%t & Hsides)" "_".
         rewrite inv_mmio_body_own_other.
         iDestruct "Hsides" as "[(%ts & Hf & %Hpred & _) _]".
-        iDestruct "Hmem" as "(%memmap & _ & _ & Htr)".
+        iDestruct "Hmem" as "(%memmap & _ & _ & Htr & _)".
         iDestruct (trace.trace_full_frag_eq with "Htr Hf") as %->.
         iApply fupd_mask_intro; first set_solver.
         now iIntros "_".
@@ -2114,13 +2363,15 @@ Import RVPPRED2.
 
     #[local] Ltac solve_split_generic :=
       iIntros; cbn - [RVPCOM.interp_ptstomem];
-      unfold reg_pointsTo21, reg_pointsTo2, interp_ptstomem2, nothingPending2, written2;
+      unfold reg_pointsTo21, reg_pointsTo2, interp_ptstomem2, nothingPending2, written2, powered2;
       destruct_seps;
       repeat (iRename select (reg_pointsTo _ _)%I into "H'";
               iFrame "H'");
       repeat (iRename select (RVPCOM.nothingPending)%I into "H'";
               iFrame "H'");
       repeat (iRename select (RVPCOM.written _)%I into "H'";
+              iFrame "H'");
+      repeat (iRename select (RVPCOM.powered _)%I into "H'";
               iFrame "H'");
       repeat (iRename select (RVPCOM.interp_ptstomem _ _)%I into "H'";
               iFrame "H'");
@@ -2283,6 +2534,36 @@ Import RVPPRED2.
       ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2.
     Proof. solve_split_leaf. Qed.
 
+    Lemma femtokernel_handler_shutdown_check_pre_binary_split `{sailGS2 Σ} (x1 x5 x10 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) :
+      let Σ := (csrs_valuation archstate vmie).["x1" ∷ ty_xlenbits ↦ x1].["x5" ∷ ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_shutdown_check_addr] in
+      asn.interpret femtokernel_handler_shutdown_check_pre Σ -∗
+      asn_interpret_left femtokernel_handler_shutdown_check_pre Σ ∗
+      asn_interpret_right femtokernel_handler_shutdown_check_pre Σ.
+    Proof. solve_binary_split. Qed.
+
+    Lemma femtokernel_handler_shutdown_check_post_binary_combine `{sailGS2 Σ} (x1 x5 x10 na1 na2 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) :
+      let ι__csrs := csrs_valuation archstate vmie in
+      let Σ na := ι__csrs.["x1"∷ty_xlenbits ↦ x1].["x5"∷ty_xlenbits ↦ x5].["x10" ∷ ty_xlenbits ↦ x10].["a"∷ty_xlenbits ↦ bv.of_N handler_shutdown_check_addr].["an"∷ty_xlenbits ↦ na] in
+      asn_interpret_left femtokernel_handler_shutdown_check_post (Σ na1) -∗
+      asn_interpret_right femtokernel_handler_shutdown_check_post (Σ na2) -∗
+      ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_shutdown_check_post (Σ na1).
+    Proof. solve_binary_combine. Qed.
+
+    Lemma femtokernel_handler_shutdown_pre_binary_split `{sailGS2 Σ} (archstate : ArchState) (vmie : Val ty_Minterrupts) :
+      let Σ := (csrs_valuation archstate vmie).["a" ∷ ty_xlenbits ↦ bv.of_N handler_shutdown_addr] in
+      asn.interpret femtokernel_handler_shutdown_pre Σ -∗
+      asn_interpret_left femtokernel_handler_shutdown_pre Σ ∗
+      asn_interpret_right femtokernel_handler_shutdown_pre Σ.
+    Proof. solve_binary_split. Qed.
+
+    Lemma femtokernel_handler_shutdown_post_binary_combine `{sailGS2 Σ} (na1 na2 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) :
+      let ι__csrs := csrs_valuation archstate vmie in
+      let Σ na := ι__csrs.["a"∷ty_xlenbits ↦ bv.of_N handler_shutdown_addr].["an"∷ty_xlenbits ↦ na] in
+      asn_interpret_left femtokernel_handler_shutdown_post (Σ na1) -∗
+      asn_interpret_right femtokernel_handler_shutdown_post (Σ na2) -∗
+      ⌜na1 = na2⌝ ∗ asn.interpret femtokernel_handler_shutdown_post (Σ na1).
+    Proof. solve_binary_combine. Qed.
+
     Lemma femtokernel_handler_exit_post_binary_combine `{sailGS2 Σ} (na1 na2 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) :
       let ι__csrs := csrs_valuation archstate vmie in
       let Σ na := ι__csrs.["a"∷ty_xlenbits ↦ bv.of_N handler_exit_addr].["an"∷ty_xlenbits ↦ na] in
@@ -2301,15 +2582,17 @@ Import RVPPRED2.
         ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) ∗
         ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∗
         ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∗
+        ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) ∗
+        ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
         ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit).
     Proof.
       unfold ptsto_instrs_handler2, ptsto_instrs_handler.
       rewrite !ptsto_instrs_equiv.
       iSplit.
-      - iIntros "((Hhentry1 & Hhdispatch1 & Hhnotzero1 & Hhiszero1 & Hhsecret1 & Hhexit1) & (Hhentry2 & Hhdispatch2 & Hhnotzero2 & Hhiszero2 & Hhsecret2 & Hhexit2))".
+      - iIntros "((Hhentry1 & Hhdispatch1 & Hhnotzero1 & Hhiszero1 & Hhcheck1 & Hhshutdown1 & Hhsecret1 & Hhexit1) & (Hhentry2 & Hhdispatch2 & Hhnotzero2 & Hhiszero2 & Hhcheck2 & Hhshutdown2 & Hhsecret2 & Hhexit2))".
         iFrame.
-      - iIntros "((Hhentry1 & Hhentry2) & (Hhdispatch1 & Hhdispatch2) & (Hhnotzero1 & Hhnotzero2) & (Hhiszero1 & Hhiszero2) & (Hhsecret1 & Hhsecret2) & (Hhexit1 & Hhexit2))".
+      - iIntros "((Hhentry1 & Hhentry2) & (Hhdispatch1 & Hhdispatch2) & (Hhnotzero1 & Hhnotzero2) & (Hhiszero1 & Hhiszero2) & (Hhcheck1 & Hhcheck2) & (Hhshutdown1 & Hhshutdown2) & (Hhsecret1 & Hhsecret2) & (Hhexit1 & Hhexit2))".
         iFrame.
     Qed.
 
@@ -2326,16 +2609,17 @@ Import RVPPRED2.
         asn.interpret femtokernel_handler_exit_pre (csrs_valuation archstate vmie).["a" ∷ ty_xlenbits ↦ bv.of_N handler_exit_addr] ∗
         interp_gprs ∅ ∗
         nothingPending2 ∗
+        powered2 true ∗
         ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
              ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-             LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2)
+             LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2)
         -∗
         WP2_loop nothingPending2.
     Proof.
-      iIntros "((Hpro & [%vmscratch Hmscratch] & HaccU) & Hpre & Hgprs & Hnp & Htrap)".
+      iIntros "((Hpro & [%vmscratch Hmscratch] & HaccU) & Hpre & Hgprs & Hnp & Hpow & Htrap)".
       iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_exit_pre _) _ _
                 (λ a na, asn.interpret femtokernel_handler_exit_post _)
-               with "Hpro Hpre []").
+               with "Hpow Hpro Hpre []").
       - iIntros "Hpre".
         iPoseProof (femtokernel_handler_exit_pre_binary_split with "Hpre")
           as "(Hpre1 & Hpre2)".
@@ -2344,7 +2628,7 @@ Import RVPPRED2.
         iApply (step_n_focus with "H1 H2").
         iIntros (na1 na2) "(H1 & H2)".
         iApply (femtokernel_handler_exit_post_binary_combine with "H1 H2").
-      - iIntros (an) "(Hpost & Hepi)".
+      - iIntros (an) "(Hpost & Hepi & Hpow)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
         iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & [%Han _])"; cbn - [interp_ptstomem] in *.
         iAssert (interp_pmp_addr_access liveAddrs mmioAddrs femto_pmpentries (ArchState.mpp (ArchState.mstate archstate))) with "[HaccU]" as "Hacc".
@@ -2354,16 +2638,16 @@ Import RVPPRED2.
           by iApply interp_pmp_addr_access_s_u_eq. }
         iApply (LoopVerificationBinary.valid_semTriple_loop $! nothingPending2 (femto_return_archstate archstate vmscratch an)).
         unfold LoopVerificationBinary.loop_pre.
-        iSplitR "Hnp Htrap Hinstrs".
+        iSplitR "Hnp Hpow Htrap Hinstrs".
         { unfold LoopVerificationBinary.Step_pre; cbn.
           iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause".
           auto. }
-        iFrame "Hnp".
+        iFrame "Hnp Hpow".
         iSplitR.
         { iIntros "!> [H' _]". iDestruct (LoopVerificationBinary.M_CSRMod_machine with "H'") as %Heq.
           cbn in Heq. contradiction. }
         iSplitL "Htrap Hinstrs".
-        { iIntros "!> [H' Hnp]". iApply ("Htrap" $! (ArchState.mpp (ArchState.mstate archstate)) with "[//] Hinstrs H' Hnp"). }
+        { iIntros "!> (H' & Hnp & Hpow)". iApply ("Htrap" $! (ArchState.mpp (ArchState.mstate archstate)) with "[//] Hinstrs H' Hnp Hpow"). }
         iSplitR.
         { iIntros "!> [H' _]". iDestruct (LoopVerificationBinary.MRET_machine with "H'") as %Heq.
           cbn in Heq. contradiction. }
@@ -2423,6 +2707,7 @@ Import RVPPRED2.
           (ι__csrs ►► [env].["x1" ∷ ty_xlenbits ↦ vx1].["secret" ∷ ty_xlenbits ↦ secret]
                    ►► [env].["a" ∷ ty_xlenbits ↦ bv.of_N handler_dispatch_addr]) -∗
         @RVPCOM.nothingPending _ (@mc_wpGS _ (@mc_ghGS2_left _ sailGS2_memGS)) -∗
+        powered_left true -∗
         @reg_pointsTo _ sailRegGS2_sailRegGS_left _ x5 vx5 -∗
         @RVPCOM.ptsto_instrs _ memGS_left (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
         @RVPCOM.ptsto_instrs _ memGS_left (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
@@ -2435,40 +2720,41 @@ Import RVPPRED2.
            @RVPCOM.ptsto_instrs _ memGS_left (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
            @RVPCOM.ptsto_instrs _ memGS_left (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
            @RVPCOM.ptsto_instrs _ memGS_left (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
+           powered_left true -∗
            WP2_loop nothingPending2) -∗
         WP2_loop nothingPending2.
     Proof.
-      iIntros (ι__csrs) "#Hinv Hpro Hpre Hnp Hx5 Hnz Hiz Hk".
+      iIntros (ι__csrs) "#Hinv Hpro Hpre Hnp Hp Hx5 Hnz Hiz Hk".
       iPoseProof (contract_femtohandler_dispatch_verified__l vx1 secret (bv.of_N handler_dispatch_addr) archstate vmie) as "Htrip".
       iApply (@WP2_loop_semTripleBlock_left _ _ _ _ (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) _
-                femtokernel_handler_dispatch_nonempty with "Hpro [Hpre] Htrip [Hnp Hx5 Hnz Hiz Hk]");
+                femtokernel_handler_dispatch_nonempty with "Hp Hpro [Hpre] Htrip [Hnp Hx5 Hnz Hiz Hk]");
         first iExact "Hpre".
-      iIntros (an) "(Hpost & Hpc & Hcode & Hnpc)".
+      iIntros (an) "(Hpost & (Hpc & Hcode & Hnpc) & Hp)".
       iEval (cbn - [RVPCOM.interp_ptstomem]) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hdata)".
       case_match; iDestruct "Han" as "[-> _]".
       - (* The secret is zero: is_zero block. *)
         iPoseProof (contract_femtohandler_is_zero_verified__l secret vx5 secret (bv.of_N handler_is_zero_addr) archstate vmie) as "Htrip'".
         iApply (@WP2_loop_semTripleBlock_left _ _ _ _ (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) _
-                  femtokernel_handler_is_zero_nonempty with "[Hpc Hiz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hnz]").
+                  femtokernel_handler_is_zero_nonempty with "Hp [Hpc Hiz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hnz]").
         + iFrame "Hpc Hiz". by iExists _.
         + cbn - [RVPCOM.interp_ptstomem].
           iFrame "Hinv Hmstatus Hnp Hx1 Hx5 Hdata".
           repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
           repeat iSplit; try iPureIntro; try done; by vm_compute.
-        + iIntros (an') "(Hpost & Hpc & Hcode' & Hnpc)".
-          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hnz Hcode'").
+        + iIntros (an') "(Hpost & (Hpc & Hcode' & Hnpc) & Hp)".
+          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hnz Hcode' Hp").
       - (* The secret is not zero: not_zero block. *)
         iPoseProof (contract_femtohandler_not_zero_verified__l secret vx5 secret (bv.of_N handler_not_zero_addr) archstate vmie) as "Htrip'".
         iApply (@WP2_loop_semTripleBlock_left _ _ _ _ (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) _
-                  femtokernel_handler_not_zero_nonempty with "[Hpc Hnz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hiz]").
+                  femtokernel_handler_not_zero_nonempty with "Hp [Hpc Hnz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hiz]").
         + iFrame "Hpc Hnz". by iExists _.
         + cbn - [RVPCOM.interp_ptstomem].
           iFrame "Hinv Hmstatus Hnp Hx1 Hx5 Hdata".
           repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
           repeat iSplit; try iPureIntro; try done; by vm_compute.
-        + iIntros (an') "(Hpost & Hpc & Hcode' & Hnpc)".
-          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hcode' Hiz").
+        + iIntros (an') "(Hpost & (Hpc & Hcode' & Hnpc) & Hp)".
+          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hcode' Hiz Hp").
     Qed.
 
     (* Analogues to femtokernel_dispatch_path_left, see comment there. *)
@@ -2480,6 +2766,7 @@ Import RVPPRED2.
           (ι__csrs ►► [env].["x1" ∷ ty_xlenbits ↦ vx1].["secret" ∷ ty_xlenbits ↦ secret]
                    ►► [env].["a" ∷ ty_xlenbits ↦ bv.of_N handler_dispatch_addr]) -∗
         @RVPCOM.nothingPending _ (@mc_wpGS _ (@mc_ghGS2_right _ sailGS2_memGS)) -∗
+        powered_right true -∗
         @reg_pointsTo _ sailRegGS2_sailRegGS_right _ x5 vx5 -∗
         @RVPCOM.ptsto_instrs _ memGS_right (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
         @RVPCOM.ptsto_instrs _ memGS_right (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
@@ -2492,40 +2779,41 @@ Import RVPPRED2.
            @RVPCOM.ptsto_instrs _ memGS_right (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
            @RVPCOM.ptsto_instrs _ memGS_right (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
            @RVPCOM.ptsto_instrs _ memGS_right (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
+           powered_right true -∗
            WP2_loop nothingPending2) -∗
         WP2_loop nothingPending2.
     Proof.
-      iIntros (ι__csrs) "#Hinv Hpro Hpre Hnp Hx5 Hnz Hiz Hk".
+      iIntros (ι__csrs) "#Hinv Hpro Hpre Hnp Hp Hx5 Hnz Hiz Hk".
       iPoseProof (contract_femtohandler_dispatch_verified__r vx1 secret (bv.of_N handler_dispatch_addr) archstate vmie) as "Htrip".
       iApply (@WP2_loop_semTripleBlock_right _ _ _ _ (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) _
-                femtokernel_handler_dispatch_nonempty with "Hpro [Hpre] Htrip [Hnp Hx5 Hnz Hiz Hk]");
+                femtokernel_handler_dispatch_nonempty with "Hp Hpro [Hpre] Htrip [Hnp Hx5 Hnz Hiz Hk]");
         first iExact "Hpre".
-      iIntros (an) "(Hpost & Hpc & Hcode & Hnpc)".
+      iIntros (an) "(Hpost & (Hpc & Hcode & Hnpc) & Hp)".
       iEval (cbn - [RVPCOM.interp_ptstomem]) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hdata)".
       case_match; iDestruct "Han" as "[-> _]".
       - (* The secret is zero: is_zero block. *)
         iPoseProof (contract_femtohandler_is_zero_verified__r secret vx5 secret (bv.of_N handler_is_zero_addr) archstate vmie) as "Htrip'".
         iApply (@WP2_loop_semTripleBlock_right _ _ _ _ (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) _
-                  femtokernel_handler_is_zero_nonempty with "[Hpc Hiz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hnz]").
+                  femtokernel_handler_is_zero_nonempty with "Hp [Hpc Hiz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hnz]").
         + iFrame "Hpc Hiz". by iExists _.
         + cbn - [RVPCOM.interp_ptstomem].
           iFrame "Hinv Hmstatus Hnp Hx1 Hx5 Hdata".
           repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
           repeat iSplit; try iPureIntro; try done; by vm_compute.
-        + iIntros (an') "(Hpost & Hpc & Hcode' & Hnpc)".
-          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hnz Hcode'").
+        + iIntros (an') "(Hpost & (Hpc & Hcode' & Hnpc) & Hp)".
+          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hnz Hcode' Hp").
       - (* The secret is not zero: not_zero block. *)
         iPoseProof (contract_femtohandler_not_zero_verified__r secret vx5 secret (bv.of_N handler_not_zero_addr) archstate vmie) as "Htrip'".
         iApply (@WP2_loop_semTripleBlock_right _ _ _ _ (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) _
-                  femtokernel_handler_not_zero_nonempty with "[Hpc Hnz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hiz]").
+                  femtokernel_handler_not_zero_nonempty with "Hp [Hpc Hnz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip' [Hk Hcode Hiz]").
         + iFrame "Hpc Hnz". by iExists _.
         + cbn - [RVPCOM.interp_ptstomem].
           iFrame "Hinv Hmstatus Hnp Hx1 Hx5 Hdata".
           repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
           repeat iSplit; try iPureIntro; try done; by vm_compute.
-        + iIntros (an') "(Hpost & Hpc & Hcode' & Hnpc)".
-          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hcode' Hiz").
+        + iIntros (an') "(Hpost & (Hpc & Hcode' & Hnpc) & Hp)".
+          iApply ("Hk" with "Hpost Hpc Hnpc Hcode Hcode' Hiz Hp").
     Qed.
 
     Lemma femtokernel_handler_dispatch_safe_rel `{sailGS2 Σ} (vx1 secret1 secret2 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) (Hmpp : ArchState.mpp (ArchState.mstate archstate) ≠ Machine) :
@@ -2534,6 +2822,7 @@ Import RVPPRED2.
         interp_gprs {[x1]} ∗
         interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 ∗
         nothingPending2 ∗
+        powered2 true ∗
         ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∗
         ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
@@ -2543,11 +2832,11 @@ Import RVPPRED2.
            ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
            interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2)
+           LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2)
         -∗
         WP2_loop nothingPending2.
     Proof.
-      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & Hnp & Hhnz & Hhiz & Hhexit & Hk)".
+      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & Hnp & [Hpl Hpr] & Hhnz & Hhiz & Hhexit & Hk)".
       iPoseProof (femtokernel_handler_dispatch_pre_persistent_preds with "Hpre") as "(#Hinv & Hpre)".
       iPoseProof (femtokernel_handler_dispatch_pre_binary_split with "[$Hpre $Hdata]") as "(Hpre1 & Hpre2)".
       iPoseProof (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}) with "Hgprs") as "(Hregs & Hgprs)";
@@ -2564,14 +2853,14 @@ Import RVPPRED2.
       iDestruct "Hnp" as "[Hnpl Hnpr]".
       (* Run the left execution until the exit block. *)
       iApply (femtokernel_dispatch_path_left vx1 vx5 secret1 archstate vmie
-                with "Hinv [Hpcl Hcodel Hnpcl] Hpre1 Hnpl Hx5l Hnzl Hizl").
+                with "Hinv [Hpcl Hcodel Hnpcl] Hpre1 Hnpl Hpl Hx5l Hnzl Hizl").
       { iFrame "Hpcl Hcodel". by iExists _. }
-      iIntros (x1l x5l al anl) "Hpostl Hpcl Hnpcl Hcodel Hnzl Hizl".
+      iIntros (x1l x5l al anl) "Hpostl Hpcl Hnpcl Hcodel Hnzl Hizl Hpl".
       (* Run the right execution until the exit block. *)
       iApply (femtokernel_dispatch_path_right vx1 vx5 secret2 archstate vmie
-                with "Hinv [Hpcr Hcoder Hnpcr] Hpre2 Hnpr Hx5r Hnzr Hizr").
+                with "Hinv [Hpcr Hcoder Hnpcr] Hpre2 Hnpr Hpr Hx5r Hnzr Hizr").
       { iFrame "Hpcr Hcoder". by iExists _. }
-      iIntros (x1r x5r ar anr) "Hpostr Hpcr Hnpcr Hcoder Hnzr Hizr".
+      iIntros (x1r x5r ar anr) "Hpostr Hpcr Hnpcr Hcoder Hnzr Hizr Hpr".
       iDestruct (femtokernel_handler_ack_post_binary_combine with "Hpostl Hpostr") as "(<- & Hpost & Hdata)".
       iEval (cbn) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & [%Han _] & Hx1 & Hx5 & [Hwl Hwr])"; subst anl.
@@ -2594,12 +2883,12 @@ Import RVPPRED2.
       { unfold reg_pointsTo2. iFrame "Hnpcl Hnpcr". }
       iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                 LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2))%I
+                 LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I
         with "[Hk Hhdispatch Hhnz Hhiz Hdata]" as "Hk".
-      { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit Htrap Hnp".
-        iApply ("Hk" with "[//] Hhdispatch Hhnz Hhiz Hdata Hhexit Htrap Hnp"). }
+      { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit Htrap Hnp Hpow".
+        iApply ("Hk" with "[//] Hhdispatch Hhnz Hhiz Hdata Hhexit Htrap Hnp Hpow"). }
       iApply (femtokernel_handler_exit_safe_rel _ _ Hmpp).
-      iFrame "Hpc Hhexit Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp"; cbn.
+      iFrame "Hpc Hhexit Hmscratch HaccU Hmstatus Hgprs Hk Hinv Hnp Hpl Hpr"; cbn.
       iSplitL "Hnpc"; first by iExists _.
       repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
       now iPureIntro.
@@ -2611,22 +2900,23 @@ Import RVPPRED2.
         interp_gprs {[x1]} ∗
         interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 ∗
         nothingPending2 ∗
+        powered2 true ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
         ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
            ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
            interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
            ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-           LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2)
+           LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2)
         -∗
         WP2_loop nothingPending2.
     Proof.
-      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & Hnp & Hhexit & Htrap)".
+      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & Hnp & Hpow & Hhexit & Htrap)".
       iPoseProof (femtokernel_handler_secret_write_pre_persistent_preds with "Hpre")
                    as "(#Hinv & Hpre)".
       iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_secret_write_pre_rel _) _ _
                 (λ a na, asn.interpret femtokernel_handler_secret_write_post_rel _
                          ∗ interp_ptstomem2 (bv.of_N data_addr) secret1 secret2)%I
-               with "Hpro Hpre [Hdata]").
+               with "Hpow Hpro Hpre [Hdata]").
       - iIntros "Hpre".
         iPoseProof (femtokernel_handler_secret_write_pre_binary_split with "[$Hpre $Hdata]")
           as "(Hpre1 & Hpre2)".
@@ -2635,7 +2925,7 @@ Import RVPPRED2.
         iApply (step_n_focus with "H1 H2").
         iIntros (na1 na2) "(H1 & H2)".
         iApply (femtokernel_handler_secret_write_post_binary_combine with "H1 H2").
-      - iIntros (an) "(Hpost & Hepi)".
+      - iIntros (an) "(Hpost & Hepi & Hpow)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
         iDestruct "Hpost" as "((Hshared & Hmstatus & [%Han _] & Hx1) & Hdata)"; cbn - [interp_ptstomem] in *.
         iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
@@ -2646,15 +2936,101 @@ Import RVPPRED2.
           now iFrame "Hx1". }
         iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                    ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                   LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2))%I
+                   LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I
           with "[Htrap Hinstrs Hdata]" as "Htrap".
-        { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit' Htrap' Hnp".
-          iApply ("Htrap" with "[//] Hinstrs Hdata Hhexit' Htrap' Hnp"). }
+        { iIntros "!>" (priv ms ss pc Hpriv) "Hhexit' Htrap' Hnp Hpow".
+          iApply ("Htrap" with "[//] Hinstrs Hdata Hhexit' Htrap' Hnp Hpow"). }
         iApply (femtokernel_handler_exit_safe_rel _ _ Hmpp).
         rewrite Han.
-        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv Hnp"; cbn - [interp_ptstomem].
+        iFrame "Hpc Hhexit Hnpc Hmscratch HaccU Hmstatus Hgprs Htrap Hinv Hnp Hpow"; cbn - [interp_ptstomem].
         repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
         now iPureIntro.
+    Qed.
+
+    (* The shutdown check, followed by either powering off both machines, or by
+       the secret write. The shutdown request is public, so both executions
+       take the same branch. *)
+    Lemma femtokernel_handler_shutdown_check_safe_rel `{sailGS2 Σ} (vx1 vx5 vx10 secret1 secret2 : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) (Hmpp : ArchState.mpp (ArchState.mstate archstate) ≠ Machine) :
+      ⊢ femto_inv_mmio -∗
+        femtokernel_safe_shared_pre2 handler_shutdown_check_addr femtokernel_handler_shutdown_check ∗
+        asn.interpret femtokernel_handler_shutdown_check_pre (csrs_valuation archstate vmie).["x1" ∷ ty_xlenbits ↦ vx1].["x5" ∷ ty_xlenbits ↦ vx5].["x10" ∷ ty_xlenbits ↦ vx10].["a" ∷ ty_xlenbits ↦ bv.of_N handler_shutdown_check_addr] ∗
+        interp_gprs {[x1; x5; x10]} ∗
+        interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 ∗
+        nothingPending2 ∗
+        powered2 true ∗
+        ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
+        ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
+        ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) ∗
+        ▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+           ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) -∗
+           ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) -∗
+           ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
+           interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 -∗
+           ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
+           LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2)
+        -∗
+        WP2_loop nothingPending2.
+    Proof.
+      iIntros "#Hinv ((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hdata & Hnp & Hpow & Hhshutdown & Hhsecret & Hhexit & Hk)".
+      iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_shutdown_check_pre _) _ _
+                (λ a na, asn.interpret femtokernel_handler_shutdown_check_post _)
+               with "Hpow Hpro Hpre []").
+      - iIntros "Hpre".
+        iPoseProof (femtokernel_handler_shutdown_check_pre_binary_split with "Hpre") as "(Hpre1 & Hpre2)".
+        iPoseProof (contract_femtohandler_shutdown_check_verified__l vx1 vx5 vx10 (bv.of_N handler_shutdown_check_addr) archstate vmie with "Hpre1") as "H1".
+        iPoseProof (contract_femtohandler_shutdown_check_verified__r vx1 vx5 vx10 (bv.of_N handler_shutdown_check_addr) archstate vmie with "Hpre2") as "H2".
+        iApply (step_n_focus with "H1 H2").
+        iIntros (na1 na2) "(H1 & H2)".
+        iApply (femtokernel_handler_shutdown_check_post_binary_combine with "H1 H2").
+      - iIntros (an) "(Hpost & Hepi & Hpow)".
+        iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
+        iEval (cbn - [interp_ptstomem]) in "Hpost".
+        iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hx5 & Hx10)".
+        case_match; iDestruct "Han" as "[-> _]".
+        + (* Power off both machines. *)
+          iAssert (semTripleBlock
+                     (λ a, asn.interpret femtokernel_handler_shutdown_pre (csrs_valuation archstate vmie).["a" ∷ ty_xlenbits ↦ a])
+                     (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown)
+                     (λ a na, asn.interpret femtokernel_handler_shutdown_post (csrs_valuation archstate vmie).["a" ∷ ty_xlenbits ↦ a].["an" ∷ ty_xlenbits ↦ na]))%I
+            as "Htrip'".
+          { iIntros "Hpre".
+            iPoseProof (femtokernel_handler_shutdown_pre_binary_split with "Hpre") as "(Hpre1 & Hpre2)".
+            iPoseProof (contract_femtohandler_shutdown_verified__l (bv.of_N handler_shutdown_addr) archstate vmie with "Hpre1") as "H1".
+            iPoseProof (contract_femtohandler_shutdown_verified__r (bv.of_N handler_shutdown_addr) archstate vmie with "Hpre2") as "H2".
+            iApply (step_n_focus with "H1 H2").
+            iIntros (na1 na2) "(H1 & H2)".
+            iApply (femtokernel_handler_shutdown_post_binary_combine with "H1 H2"). }
+          iApply (WP2_loop_semTripleBlock_power_off with "Hpow [Hpc Hhshutdown Hnpc] [Hshared Hmstatus Hx5 Hnp] Htrip'").
+          * iFrame "Hpc Hhshutdown Hnpc".
+          * cbn - [interp_ptstomem].
+            iFrame "Hinv Hmstatus Hx5 Hnp".
+            repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+            repeat iSplit; try iPureIntro; try done; by vm_compute.
+          * iIntros "!>" (an') "(Hpost & _ & [Hoffl Hoffr])".
+            iEval (cbn) in "Hpost". iDestruct "Hpost" as "(_ & [Hwl Hwr])".
+            iApply (fupd_semWP2 ⊤).
+            iMod (written_nothingPending2 bytes_per_word with "Hinv Hwl Hwr") as "Hnp"; first solve_ndisj.
+            iModIntro. unfold WP2_loop.
+            iApply (semWP2_fun_loop_off with "Hoffl Hoffr").
+            iIntros "_ _". iFrame "Hnp". done.
+        + (* Perform the secret write. *)
+          iAssert (interp_gprs {[x1]}) with "[Hgprs Hx5 Hx10]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5; x10]})); try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            iFrame "Hx5 Hx10". by cbn. }
+          iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+                     ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
+                     interp_ptstomem2 (bv.of_N data_addr) (secret1 : Val ty_xlenbits) secret2 -∗
+                     ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
+                     LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I
+            with "[Hk Hinstrs Hhshutdown]" as "Hksecret".
+          { iIntros "!>" (priv ms ss pc Hpriv) "Hhsecret Hdata Hhexit Htrap Hnp Hpow".
+            iApply ("Hk" with "[//] Hinstrs Hhshutdown Hhsecret Hdata Hhexit Htrap Hnp Hpow"). }
+          iApply (femtokernel_handler_secret_write_safe_rel _ _ _ _ _ Hmpp); cbn - [interp_ptstomem].
+          iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hmstatus Hgprs Hhexit Hx1 Hdata Hnp Hpow Hksecret Hinv".
+          repeat iDestruct "Hshared" as "($ & Hshared)". iFrame "Hshared".
+          repeat iSplit; try iPureIntro; try done; by vm_compute.
     Qed.
 
     Lemma femtokernel_handler_entry_safe_rel `{sailGS2 Σ} (x5_val x10_val : Val ty_xlenbits) (archstate : ArchState) (vmie : Val ty_Minterrupts) (Hmpp : ArchState.mpp (ArchState.mstate archstate) ≠ Machine) :
@@ -2664,25 +3040,28 @@ Import RVPPRED2.
         (∃ v, x1 ↦ᵣ v) ∗
         (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) ∗
         nothingPending2 ∗
+        powered2 true ∗
         ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) ∗
         ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) ∗
         ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) ∗
+        ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) ∗
+        ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) ∗
         ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) ∗
         ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit)
         -∗
         WP2_loop nothingPending2.
     Proof.
       iLöb as "IH" forall (x5_val x10_val archstate vmie Hmpp).
-      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hx1 & Hdata & Hnp & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+      iIntros "((Hpro & Hmscratch & HaccU) & Hpre & Hgprs & Hx1 & Hdata & Hnp & Hpow & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
       iPoseProof (femtokernel_handler_entry_pre_persistent_preds with "Hpre")
                    as "(#Hinv & Hpre)".
       (* When the adversary traps back into the handler, we are back at the
          start of this lemma (with possibly different CSR values). *)
       iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                  ptsto_instrs_handler2 ∗ (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) -∗
-                 LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2))%I with "[]" as "#Hk".
-      { iIntros "!>" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap Hnp".
-        iDestruct (ptsto_instrs_handler2_equiv with "Hhandler") as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+                 LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I with "[]" as "#Hk".
+      { iIntros "!>" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap Hnp Hpow".
+        iDestruct (ptsto_instrs_handler2_equiv with "Hhandler") as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
         assert (HU : User ≠ Machine) by auto.
         iPoseProof (LoopVerificationBinary.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
                       Hpriv HU eq_refl with "Htrap") as "Htrap".
@@ -2695,11 +3074,11 @@ Import RVPPRED2.
         iApply ("IH" $! _ _
                   (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc)) vmie' with "[//]").
         cbn - [interp_ptstomem].
-        iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hnp Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit".
+        iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hnp Hpow Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
         auto. }
       iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_handler_entry_pre _) _ _
                 (λ a na, asn.interpret femtokernel_handler_entry_post _)
-               with "Hpro Hpre []").
+               with "Hpow Hpro Hpre []").
       - iIntros "Hpre".
         iPoseProof (femtokernel_handler_entry_pre_binary_split with "Hpre")
           as "(Hpre1 & Hpre2)".
@@ -2708,56 +3087,59 @@ Import RVPPRED2.
         iApply (step_n_focus with "H1 H2").
         iIntros (na1 na2) "(H1 & H2)".
         iApply (femtokernel_handler_entry_post_binary_combine with "H1 H2").
-      - iIntros (an) "(Hpost & Hepi)".
+      - iIntros (an) "(Hpost & Hepi & Hpow)".
         iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
         iDestruct "Hpost" as "((Hcurpriv & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hsepc & Hscause & Hsscratch & Hstvec & Hmideleg & Hmedeleg & Hpmp) & Hmstatus & Han & Hx5 & Hx10)"; cbn - [interp_ptstomem].
-        iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
-        { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
-            try solve_subseteq.
-          iFrame "Hgprs".
-          reduce_big_sepS_big_sepL.
-          now iFrame "Hx10". }
-        iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
-        { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
-            try solve_subseteq.
-          iFrame "Hgprs".
-          reduce_big_sepS_big_sepL.
-          now iFrame "Hx5". }
         iDestruct "Hx1" as "[% Hx1]".
-        iDestruct "Hdata" as "(%secret1 & %secret2 & Hdata)".
         case_match; cbn - [interp_ptstomem];
           iDestruct "Han" as "[-> _]".
         + (* Dispatch on the secret. *)
+          iAssert (interp_gprs {[ x1; x5 ]}) with "[Hgprs Hx10]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1; x5]} (exclude2 := {[x10]}));
+              try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            now iFrame "Hx10". }
+          iAssert (interp_gprs {[ x1 ]}) with "[Hgprs Hx5]" as "Hgprs".
+          { iApply (interp_gprs_with_excluded_gen {[x1]} (exclude2 := {[x5]}));
+              try solve_subseteq.
+            iFrame "Hgprs".
+            reduce_big_sepS_big_sepL.
+            now iFrame "Hx5". }
+          iDestruct "Hdata" as "(%secret1 & %secret2 & Hdata)".
           iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
                      ptsto_instrs (bv.of_N handler_dispatch_addr) (filter_AST femtokernel_handler_dispatch) -∗
                      ptsto_instrs (bv.of_N handler_not_zero_addr) (filter_AST femtokernel_handler_not_zero) -∗
                      ptsto_instrs (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) -∗
                      interp_ptstomem2 (bv.of_N data_addr) (secret1 : Val ty_xlenbits) secret2 -∗
                      ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                     LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2))%I
-            with "[Hinstrs Hhsecret]" as "Hkdispatch".
-          { iIntros "!>" (priv ms ss pc Hpriv) "Hhdispatch Hhnotzero Hhiszero Hdata Hhexit Htrap Hnp".
-            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit Hdata] Htrap Hnp").
+                     LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I
+            with "[Hinstrs Hhcheck Hhshutdown Hhsecret]" as "Hkdispatch".
+          { iIntros "!>" (priv ms ss pc Hpriv) "Hhdispatch Hhnotzero Hhiszero Hdata Hhexit Htrap Hnp Hpow".
+            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap Hnp Hpow").
             iSplitR "Hdata"; last by iExists _, _.
             iApply ptsto_instrs_handler2_equiv.
-            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit". }
+            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
           iApply (femtokernel_handler_dispatch_safe_rel _ _ _ _ _ Hmpp); cbn - [interp_ptstomem].
-          iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata Hnp Hkdispatch";
+          iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata Hnp Hpow Hkdispatch";
             repeat iSplitR; auto.
-        + (* Directly perform the secret write. *)
+        + (* Check for a shutdown request. *)
+          iDestruct "Hdata" as "(%secret1 & %secret2 & Hdata)".
           iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
+                     ptsto_instrs (bv.of_N handler_shutdown_check_addr) (filter_AST femtokernel_handler_shutdown_check) -∗
+                     ptsto_instrs (bv.of_N handler_shutdown_addr) (filter_AST femtokernel_handler_shutdown) -∗
                      ptsto_instrs (bv.of_N handler_secret_write_addr) (filter_AST femtokernel_handler_secret_write) -∗
                      interp_ptstomem2 (bv.of_N data_addr) (secret1 : Val ty_xlenbits) secret2 -∗
                      ptsto_instrs (bv.of_N handler_exit_addr) (filter_AST femtokernel_handler_exit) -∗
-                     LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2))%I
-            with "[Hinstrs Hhdispatch Hhnotzero Hhiszero]" as "Hksecret".
-          { iIntros "!>" (priv ms ss pc Hpriv) "Hhsecret Hdata Hhexit Htrap Hnp".
-            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit Hdata] Htrap Hnp").
+                     LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2))%I
+            with "[Hinstrs Hhdispatch Hhnotzero Hhiszero]" as "Hkcheck".
+          { iIntros "!>" (priv ms ss pc Hpriv) "Hhcheck Hhshutdown Hhsecret Hdata Hhexit Htrap Hnp Hpow".
+            iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap Hnp Hpow").
             iSplitR "Hdata"; last by iExists _, _.
             iApply ptsto_instrs_handler2_equiv.
-            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit". }
-          iApply (femtokernel_handler_secret_write_safe_rel _ _ _ _ _ Hmpp); cbn - [interp_ptstomem].
-          iFrame "Hhsecret Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhexit Hx1 Hdata Hnp Hksecret";
+            iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
+          iApply (femtokernel_handler_shutdown_check_safe_rel _ _ _ _ _ _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
+          iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata Hnp Hpow Hhshutdown Hhsecret Hhexit Hkcheck";
             repeat iSplitR; auto.
     Qed.
 
@@ -2781,10 +3163,10 @@ Import RVPPRED2.
       ⊢ femto_inv_mmio -∗
         ∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
           ptsto_instrs_handler2 ∗ (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) -∗
-          LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ WP2_loop nothingPending2.
+          LoopVerificationBinary.M_Trap (femto_archstate priv ms ss pc) -∗ nothingPending2 -∗ powered2 true -∗ WP2_loop nothingPending2.
     Proof.
-      iIntros "#Hinv" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap Hnp".
-      iDestruct (ptsto_instrs_handler2_equiv with "Hhandler") as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhsecret & Hhexit)".
+      iIntros "#Hinv" (priv ms ss pc Hpriv) "(Hhandler & Hdata) Htrap Hnp Hpow".
+      iDestruct (ptsto_instrs_handler2_equiv with "Hhandler") as "(Hhentry & Hhdispatch & Hhnotzero & Hhiszero & Hhcheck & Hhshutdown & Hhsecret & Hhexit)".
       (* Traps from S-mode look the same as traps from U-mode *)
       assert (HU : User ≠ Machine) by auto.
       iPoseProof (LoopVerificationBinary.M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
@@ -2798,7 +3180,7 @@ Import RVPPRED2.
       iApply (femtokernel_handler_entry_safe_rel _ _
                 (femto_handler_archstate vmpp vmpie vmcause vmscratch vmepc (ArchState.mkSState vstvec (MkSstatus vspp vspie vsie) vscause vsscratch vsepc)) vmie Hmpp).
       cbn - [interp_ptstomem].
-      iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hnp Hhdispatch Hhnotzero Hhiszero Hhsecret Hhexit".
+      iFrame "Hhentry Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx5 Hx10 Hx1 Hdata Hnp Hpow Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit".
       auto.
     Qed.
 
@@ -2824,29 +3206,30 @@ Import RVPPRED2.
         ptsto_instrs_handler2 ∗
         (∃ (v1 v2 : Val ty_xlenbits), interp_ptstomem2 (bv.of_N data_addr) v1 v2) ∗
         ptstoSthL advAddrs ∗
-        nothingPending2
+        nothingPending2 ∗
+        powered2 true
         ={⊤}=∗
         ∃ mpp mcause mscratch mepc scause sscratch sepc stvec mpie mie, LoopVerificationBinary.loop_pre nothingPending2
                (femto_adv_archstate mpp mpie mie mcause mscratch mepc stvec scause sscratch sepc).
     Proof.
-      iIntros "((%mpp & %mpie & %mie & Hmst) & Hmtvec & [%vmcause Hmcause] & Hmip & Hmie & [%vmscratch Hmscratch] & [%vmepc Hmepc] & [%vscause Hscause] & [%vsscratch Hsscratch] & [%vsepc Hsepc] & [%vstvec Hstvec] & Hmideleg & Hmedeleg & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & Hhandler & Hdata & Hmemadv & Hnp)".
+      iIntros "((%mpp & %mpie & %mie & Hmst) & Hmtvec & [%vmcause Hmcause] & Hmip & Hmie & [%vmscratch Hmscratch] & [%vmepc Hmepc] & [%vscause Hscause] & [%vsscratch Hsscratch] & [%vsepc Hsepc] & [%vstvec Hstvec] & Hmideleg & Hmedeleg & Hcurpriv & Hgprs & Hpmpcfg & #Hmmio & Hpc & Hnpc & Hhandler & Hdata & Hmemadv & Hnp & Hpow)".
       cbn - [ptstoSthL interp_ptstomem LoopVerificationBinary.loop_pre femto_archstate ptsto_instrs_handler2].
       iExists mpp, vmcause, vmscratch, vmepc, vscause, vsscratch, vsepc, vstvec, mpie, mie.
       iModIntro.
       unfold LoopVerificationBinary.loop_pre.
-      iSplitR "Hhandler Hdata Hnp".
+      iSplitR "Hhandler Hdata Hnp Hpow".
       - unfold LoopVerificationBinary.Step_pre.
         cbn - [ptstoSthL interp_ptstomem].
         iFrame "Hgprs Hpmpcfg Hmie Hmip Hcurpriv Hpc Hnpc Hmtvec Hstvec Hmst Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hsscratch Hmcause Hscause".
         iSplitR; first auto.
         by iApply memAdv_pmpPolicy_binary.
-      - iFrame "Hnp".
+      - iFrame "Hnp Hpow".
         iSplitR.
         { iIntros "!> [H' _]". iDestruct (LoopVerificationBinary.M_CSRMod_machine with "H'") as %Heq.
           cbn in Heq; discriminate Heq. }
         iSplitL "Hhandler Hdata".
-        { iIntros "!> [H' Hnp]".
-          iApply (femtokernel_handler_safe_rel with "Hmmio [] [$Hhandler $Hdata] H' Hnp").
+        { iIntros "!> (H' & Hnp & Hpow)".
+          iApply (femtokernel_handler_safe_rel with "Hmmio [] [$Hhandler $Hdata] H' Hnp Hpow").
           iPureIntro; discriminate. }
         iSplitR.
         { iIntros "!> [H' _]". iDestruct (LoopVerificationBinary.MRET_machine with "H'") as %Heq.
@@ -2869,13 +3252,14 @@ Import RVPPRED2.
         ∗ (∃ v : Val ty_xlenbits, stvec ↦ᵣ v)
         ∗ femto_inv_mmio
         ∗ nothingPending2
+        ∗ powered2 true
           -∗
           WP2_loop nothingPending2.
     Proof.
-      iIntros "(Hpro & Hhandler & Hadv & Hpre & Hgprs & Hdata & Hmscratch & Hscause & Hsscratch & Hsepc & Hstvec & #Hmem & Hnp)".
+      iIntros "(Hpro & Hhandler & Hadv & Hpre & Hgprs & Hdata & Hmscratch & Hscause & Hsscratch & Hsepc & Hstvec & #Hmem & Hnp & Hpow)".
       iApply (WP2_loop_semTripleBlock (λ a, asn.interpret femtokernel_init_pre _) _ _
                                       (λ a na, asn.interpret femtokernel_init_post (csrs_valuation archstate vmie).["a"∷ty_xlenbits ↦ a].["an"∷ty_xlenbits ↦ na])
-               with "Hpro Hpre []").
+               with "Hpow Hpro Hpre []").
       iIntros "Hpre".
       iPoseProof (femtokernel_init_pre_binary_split archstate vmie with "Hpre") as "(Hpre1 & Hpre2)".
       iPoseProof (contract_femtoinit_verified__l (bv.of_N init_addr) archstate vmie with "Hpre1") as "H1".
@@ -2883,7 +3267,7 @@ Import RVPPRED2.
       iApply (step_n_focus with "H1 H2").
       iIntros (na1 na2) "(H1 & H2)".
       now iPoseProof (femtokernel_init_post_binary_combine with "H1 H2") as "(<- & $)".
-      iIntros (an) "(Hpost & Hepi)".
+      iIntros (an) "(Hpost & Hepi & Hpow)".
       cbn - [asn_regs_ptsto interp_pmp_entries].
       iDestruct "Hpost" as "([-> _] & Hmtvec & Hmcause & Hmip & Hmie & Hmepc & Hmstatus & Hmideleg & Hmedeleg & Hcurpriv & Hx1 & Hpmpentries)".
       iAssert (interp_gprs ∅) with "[Hgprs Hx1]" as "Hgprs".
@@ -2894,7 +3278,7 @@ Import RVPPRED2.
       iDestruct "Hepi" as "(Hpc & Hinstrs & Hnpc)".
       rewrite ?bv.add_zero_l.
       iApply (fupd_semWP2 ⊤).
-      iMod (femtokernel_manualStep2_rel with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hscause $Hsscratch $Hsepc $Hstvec $Hmideleg $Hmedeleg $Hcurpriv $Hgprs $Hpmpentries $Hmem $Hpc $Hnpc $Hhandler $Hdata $Hadv $Hnp]") as "(%mpp & %mcause & %mscratch & %mepc & %scause & %sscratch & %sepc & %stvec & %mpie & %mie & Hlooppre)".
+      iMod (femtokernel_manualStep2_rel with "[$Hmstatus $Hmtvec $Hmcause $Hmip $Hmie $Hmscratch $Hmepc $Hscause $Hsscratch $Hsepc $Hstvec $Hmideleg $Hmedeleg $Hcurpriv $Hgprs $Hpmpentries $Hmem $Hpc $Hnpc $Hhandler $Hdata $Hadv $Hnp $Hpow]") as "(%mpp & %mcause & %mscratch & %mepc & %scause & %sscratch & %sepc & %stvec & %mpie & %mie & Hlooppre)".
       iModIntro.
       iApply (LoopVerificationBinary.valid_semTriple_loop with "Hlooppre").
     Qed.
@@ -2920,6 +3304,7 @@ Import RVPPRED2.
       mmio_pred bytes_per_word (memory_trace μ1) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
       mmio_pred bytes_per_word (memory_trace μ2) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
       obs_equiv (memory_trace μ1) (memory_trace μ2) -> (* Both executions start with the same adversary-observable history *)
+      fun_powered_on μ1 = true -> fun_powered_on μ2 = true -> (* Both machines start powered on *)
       List.Forall (λ a, memory_ram μ1 a = memory_ram μ2 a) advAddrs -> (* We require that the memory the adversary can access is indistinguishable in the left and right memory *)
       RVPADEQ2.mem_res2 μ1 μ2 ⊢ |={⊤}=>
         ptsto_instrs (bv.of_N init_addr) (filter_AST femtokernel_init_gen) ∗
@@ -2927,10 +3312,11 @@ Import RVPPRED2.
         interp_ptstomem2 (bv.of_N data_addr) secret1 secret2 ∗
         femto_inv_mmio ∗
         nothingPending2 ∗
+        powered2 true ∗
         ptstoSthL advAddrs.
     Proof.
-      iIntros (Hfk1 Hfk2 Hpred1 Hpred2 Hobs Hadv) "Hmem".
-      iDestruct "Hmem" as "((Hmem1 & Htr1 & Hauth1 & Hnp1) & (Hmem2 & Htr2 & Hauth2 & Hnp2))".
+      iIntros (Hfk1 Hfk2 Hpred1 Hpred2 Hobs Hon1 Hon2 Hadv) "Hmem".
+      iDestruct "Hmem" as "((Hmem1 & Htr1 & Hauth1 & Hnp1 & Hpw1) & (Hmem2 & Htr2 & Hauth2 & Hnp2 & Hpw2))".
       iDestruct (femtokernel_splitMemory (mG := memGS_left) Hfk1 with "Hmem1")
         as "(Hinit1 & Hhandler1 & Hdata1 & Hadv1)".
       iDestruct (femtokernel_splitMemory (mG := memGS_right) Hfk2 with "Hmem2")
@@ -2946,7 +3332,8 @@ Import RVPPRED2.
       iModIntro.
       rewrite ptsto_instrs_equiv.
       unfold ptsto_instrs_handler2, interp_ptstomem2, nothingPending2, femto_inv_mmio, interp_inv_mmio.
-      iFrame "Hinit1 Hinit2 Hhandler1 Hhandler2 Hdata1 Hdata2 Hnp1 Hnp2 Hinv".
+      iEval (rewrite Hon1) in "Hpw1". iEval (rewrite Hon2) in "Hpw2".
+      iFrame "Hinit1 Hinit2 Hhandler1 Hhandler2 Hdata1 Hdata2 Hnp1 Hnp2 Hpw1 Hpw2 Hinv".
       iApply (intro_ptstoSthL_binary μ1 with "[$Hadv1 Hadv2]").
       iApply (big_sepL_impl with "Hadv2").
       iIntros "!>" (k a HIn) "H".
@@ -2957,39 +3344,38 @@ Import RVPPRED2.
     Import RiscvPmpSemantics.SmallStepNotations.
 
     Lemma femtokernel_rel_endToEnd {γ1 γ2 γ1' : RegStore} {μ1 μ1' μ2 : Memory}
-      {δ1 δ1' δ2 : CStore [ctx]} {m1 : string} {secret1 secret2 : Val ty_xlenbits} :
+      {δ1 δ1' δ2 : CStore [ctx]} {s1' : Stm [ctx] ty.unit} {v1 : IVal ty.unit} {secret1 secret2 : Val ty_xlenbits} :
       mem_has_femtokernel μ1 secret1 ->
       mem_has_femtokernel μ2 secret2 ->
       Forall (λ a : Addr, memory_ram μ1 a = memory_ram μ2 a) advAddrs -> (* We assume that the memory the adv has access to, before executing the kernel, contains the same values *)
       mmio_pred bytes_per_word (memory_trace μ1) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
       mmio_pred bytes_per_word (memory_trace μ2) -> (* Either demand sensible data in memory, or a sensible history of trace events. Note that the extra handler instruction in the case of mmio is already captured by the previous conjunct *)
       obs_equiv (memory_trace μ1) (memory_trace μ2) -> (* Both executions start with the same adversary-observable history *)
+      fun_powered_on μ1 = true -> fun_powered_on μ2 = true -> (* Both machines start powered on *)
       (∀ {σ : Ty} (r : Reg σ), read_register γ1 r = read_register γ2 r) -> (* We require that the initial values of all registers are the same, as we consider these to be public. The secrets in our verification are part of MMIO. *)
       femto_init_regs γ1 ->
-      (* We require termination of the executions by using the fail statement.
-         The proper shutdown is part of mmio_pred_final as an event, and when
-         such a shutdown event is triggered, we step to fail.
-         The IOShutdown event allows an "exit value" to be written, but we
-         simply ignore it, same for the message of the fail statement. *)
-      ⟨ γ1, μ1, δ1, fun_loop ⟩ --->* ⟨ γ1', μ1', δ1', fail m1 ⟩ ->
+      (* For every terminating execution of the left machine, the right machine
+         also terminates, with the same result (a value or a failure). *)
+      ⟨ γ1, μ1, δ1, fun_loop ⟩ --->* ⟨ γ1', μ1', δ1', s1' ⟩ ->
+      stm_to_val s1' = Some v1 ->
       ∃ γ2' μ2' δ2' s2',
         ⟨ γ2, μ2, δ2, fun_loop ⟩ --->* ⟨ γ2', μ2', δ2', s2' ⟩
-        ∧ stm_to_val s2' = Some (inr m1)
+        ∧ stm_to_val s2' = Some v1
         (* Confidentiality: adversary cannot distinguish both executions *)
         ∧ obs_equiv (memory_trace μ1') (memory_trace μ2')
         (* Integrity: both executions only performed allowed MMIO events *)
         ∧ mmio_pred bytes_per_word (memory_trace μ1')
         ∧ mmio_pred bytes_per_word (memory_trace μ2').
     Proof.
-      intros μfk1 μfk2 μadv μft1 μft2 μobs γeq
-        (γmstatus & γcurpriv & γpmp0cfg & γpmpaddr0 & γpmp1cfg & γpmpaddr1 & γpc & γmideleg & γmedeleg) steps1.
-      eapply (wp2_strong_adequacy fun_loop γ2 μ2 δ2 steps1 eq_refl
+      intros μfk1 μfk2 μadv μft1 μft2 μobs μon1 μon2 γeq
+        (γmstatus & γcurpriv & γpmp0cfg & γpmpaddr0 & γpmp1cfg & γpmpaddr1 & γpc & γmideleg & γmedeleg) steps1 Hval1.
+      eapply (wp2_strong_adequacy fun_loop γ2 μ2 δ2 steps1 Hval1
                 (Q := fun _ _ v1 δ1' v2 δ2' => ⌜v1 = v2⌝ ∗ ⌜δ1' = δ2'⌝ ∗ femto_inv_mmio ∗ nothingPending2)%I).
       iIntros (Σ sg).
       iSplitL.
       - iIntros "(Hmem & Hregs)".
-        iMod (femtokernel_splitMemory_rel μfk1 μfk2 μft1 μft2 μobs μadv with "Hmem")
-          as "(Hinit & Hhandler & Hdata & #Hmmio & Hnp & Hadv)".
+        iMod (femtokernel_splitMemory_rel μfk1 μfk2 μft1 μft2 μobs μon1 μon2 μadv with "Hmem")
+          as "(Hinit & Hhandler & Hdata & #Hmmio & Hnp & Hpow & Hadv)".
         destruct (env.view δ1), (env.view δ2).
         iPoseProof (femtokernel_init_safe_rel (femto_init_archstate γ1)
                      (read_register γ1 mie)
@@ -3014,8 +3400,8 @@ Import RVPPRED2.
         iApply (semWP2_mono with "H").
         iIntros (? ? ? ?) "($ & $ & $)". iFrame "Hmmio".
       - iIntros (γ2' μ2' δ2' s2' v2 steps2 Hval) "(%Hv & _ & #Hmmio & [Hnpl Hnpr]) Hmem".
-        iDestruct "Hmem" as "[(%memmap1 & Hinv1 & %link1 & Htr1)
-                              (%memmap2 & Hinv2 & %link2 & Htr2)]".
+        iDestruct "Hmem" as "[(%memmap1 & Hinv1 & %link1 & Htr1 & _)
+                              (%memmap2 & Hinv2 & %link2 & Htr2 & _)]".
         iInv "Hmmio" as ">(%t & (%t1 & Hf1 & %Hpred1 & H1) & (%t2 & Hf2 & %Hpred2 & H2))" "_".
         iDestruct (trace.trace_full_frag_eq with "Htr1 Hf1") as %<-.
         iDestruct (trace.trace_full_frag_eq with "Htr2 Hf2") as %<-.

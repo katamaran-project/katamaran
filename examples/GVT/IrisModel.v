@@ -90,6 +90,34 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   Definition TWP_loop `{sg : sailGS Σ} : iProp Σ :=
     semTWP env.nil (FunDef loop) (fun _ _ => True%I).
 
+  Section PoweredLoop.
+  Import Katamaran.Syntax.TypeDecl.
+  Import Katamaran.Context.ctx.notations.
+  Import Katamaran.Environment.env.notations.
+
+  (* One iteration of the main loop: first the power status is checked. If the
+     machine is powered on, it performs a step and continues, otherwise the
+     loop ends. *)
+  Lemma semWP_fun_loop `{sg : sailGS Σ} (Q : Post [ctx] ty.unit) :
+    ((∀ Γ (δ : CStore Γ), semWP δ (call RiscvPmpProgram.step ;; call RiscvPmpProgram.loop) (λ v _, Q v [env])) ∧
+     Q (inl tt) [env])
+    ⊢ semWP env.nil (FunDef loop) Q.
+  Proof.
+    iIntros "H". cbn [FunDef]. unfold fun_loop.
+    iApply semWP_let. iApply semWP_foreign.
+    iIntros (γ μ) "Hstate".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. iModIntro.
+    iIntros (res γ' μ' Hf). cbn in Hf. inversion Hf; subst.
+    do 3 iModIntro. iMod "Hclose" as "_". iModIntro. iFrame "Hstate".
+    rewrite semWP_val. iModIntro. cbn.
+    iApply semWP_pattern_match. iApply semWP_exp. cbn.
+    destruct (fun_powered_on μ).
+    - iDestruct "H" as "[H _]". iApply (semWP_mono with "[H]"); first iApply "H".
+      iIntros (v δ') "HQ". destruct (env.view δ') as [δ'' ?]. by destruct (env.view δ'').
+    - iDestruct "H" as "[_ H]". rewrite semWP_val. by iModIntro.
+  Qed.
+  End PoweredLoop.
+
   (* Useful instance for some of the Iris proofs *)
   #[export] Instance state_inhabited : Inhabited State.
   Proof. repeat constructor.

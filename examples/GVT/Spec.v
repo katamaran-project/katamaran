@@ -588,6 +588,7 @@ sep_contract_result         :=  "result_mem_read";
       | mmio_write res       => @sep_contract_mmio_write _ res
       | decode               => sep_contract_decode
       | externalWorldUpdates => sep_contract_externalWorldUpdates
+      | powered_on           => RiscvPmpSpecification.sep_contract_powered_on
       end.
 
   Lemma linted_contract_environment_foreign :
@@ -1084,9 +1085,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     iModIntro; now iSplitL; first now iExists _.
   Qed.
 
+  Lemma powered_on_sound `{sailGS Σ} {rG : iostateG IOState Σ} :
+    TValidContractForeign RiscvPmpSpecification.sep_contract_powered_on powered_on.
+  Proof.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+    now iIntros "[%HFalse _]".
+  Qed.
+
   Lemma TforeignSemBlockVerif `{sailGS Σ} {rG : iostateG IOState Σ} : TForeignSem.
     intros Δ τ f; destruct f; cbn;
-      eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
+      eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound, powered_on_sound.
   Qed.
 
   Lemma foreignSemBlockVerif `{sailGS Σ} {rG : iostateG IOState Σ} : ForeignSem.

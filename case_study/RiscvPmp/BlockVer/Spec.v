@@ -220,6 +220,27 @@ Module RiscvPmpBlockVerifSpec.
   Local Abbreviation asn_mmio_checked_write bytes a w := (asn.chunk (chunk_user (mmio_checked_write bytes) [a; w])).
   Import bv.notations.
 
+  (* The ghost resources around an MMIO write. A write to the adversary-
+     observable address moves this execution ahead of the other one (the
+     writePending state). So does the shutdown write, which additionally
+     powers off the machine. *)
+  Definition asn_mmio_write_pre {Σ} (paddr : Term Σ ty_xlenbits) : Assertion Σ :=
+    if: term_binop (bop.relop bop.eq) paddr (term_val ty_xlenbits write_addr_adv)
+    then asn.chunk (chunk_user nothingPending env.nil)
+    else if: term_binop (bop.relop bop.eq) paddr (term_val ty_xlenbits mmioShutdownAddr)
+         then asn.chunk (chunk_user nothingPending env.nil) ∗
+              asn.chunk (chunk_user Sig.powered [term_val ty.bool true])
+         else ⊤.
+
+  Definition asn_mmio_write_post {Σ} (bytes : nat) (paddr : Term Σ ty_xlenbits) (data : Term Σ (ty_bytes bytes)) : Assertion Σ :=
+    if: term_binop (bop.relop bop.eq) paddr (term_val ty_xlenbits write_addr_adv)
+    then asn.chunk (chunk_user (written bytes) [ paddr; data ])
+    else if: term_binop (bop.relop bop.eq) paddr (term_val ty_xlenbits mmioShutdownAddr)
+         then asn.chunk (chunk_user (Sig.written_shutdown bytes) [ paddr; data ]) ∗
+              asn.chunk (chunk_user Sig.powered [term_val ty.bool false])
+         else ⊤.
+  Arguments asn_mmio_write_post {Σ} bytes paddr data.
+
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "w" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
@@ -281,13 +302,10 @@ Module RiscvPmpBlockVerifSpec.
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
-           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-           then asn.chunk (chunk_user nothingPending env.nil)
-           else ⊤)
+           asn_mmio_write_pre (term_var "paddr"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr));
@@ -295,9 +313,7 @@ Module RiscvPmpBlockVerifSpec.
       sep_contract_postcondition   :=
         term_var "result_checked_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv")
-        (if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-                        then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
-                        else ⊤)
+        (asn_mmio_write_post bytes (term_var "paddr") (term_var "data"))
                        (term_var "paddr" ↦ₘ[ bytes ] term_var "data");
     |}.
 
@@ -340,13 +356,10 @@ Module RiscvPmpBlockVerifSpec.
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
-           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-           then asn.chunk (chunk_user nothingPending env.nil)
-           else ⊤)
+           asn_mmio_write_pre (term_var "paddr"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -358,9 +371,7 @@ Module RiscvPmpBlockVerifSpec.
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv")
-        (if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-                        then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
-                        else ⊤)
+        (asn_mmio_write_post bytes (term_var "paddr") (term_var "data"))
                        (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_var "m") ∗
         asn_pmp_entries (term_var "entries");
@@ -391,13 +402,10 @@ Module RiscvPmpBlockVerifSpec.
       sep_contract_precondition    :=
         asn.match_bool (term_var "inv")
           (asn_in_mmio bytes (term_var "paddr") ∗
-           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes)) < (term_val ty.int (Z.of_N (bv.exp2 xlenbits))) ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-           then asn.chunk (chunk_user nothingPending env.nil)
-           else ⊤)
+           asn_mmio_write_pre (term_var "paddr"))
           (∃ "w", term_var "paddr" ↦ₘ[ bytes ] term_var "w" ∗
            (term_val ty.int (Z.of_N minAddr) <= term_unsigned (term_var "paddr"))%asn ∗
            (term_binop bop.plus (term_unsigned (term_var "paddr")) (term_val ty.int (Z.of_nat bytes))) <= term_val ty.int (Z.of_N maxAddr)) ∗
@@ -408,9 +416,7 @@ Module RiscvPmpBlockVerifSpec.
       sep_contract_postcondition   :=
         term_var "result_mem_write" = term_union (memory_op_result 1) KMemValue (term_val ty_byte [bv 1]) ∗
         asn.match_bool (term_var "inv")
-        (if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-                        then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
-                        else ⊤)
+        (asn_mmio_write_post bytes (term_var "paddr") (term_var "data"))
                        (term_var "paddr" ↦ₘ[ bytes ] term_var "data") ∗
         asn_cur_privilege (term_val ty_privilege Machine) ∗
         asn_pmp_entries (term_var "entries");
@@ -510,17 +516,12 @@ Module RiscvPmpBlockVerifSpec.
         sep_contract_localstore      := [term_var "paddr"; term_var "data"];
         sep_contract_precondition    :=
            asn_in_mmio bytes (term_var "paddr") ∗
-           term_var "paddr" != term_val ty_xlenbits mmioShutdownAddr ∗
            asn_inv_mmio bytes ∗
            asn_mmio_checked_write bytes (term_var "paddr") (term_var "data") ∗
-           if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-           then asn.chunk (chunk_user nothingPending env.nil)
-           else ⊤;
+           asn_mmio_write_pre (term_var "paddr");
         sep_contract_result          := "result_write_mmio";
         sep_contract_postcondition   :=
-        if: term_binop (bop.relop bop.eq) (term_var "paddr") (term_val ty_xlenbits write_addr_adv)
-           then asn.chunk (chunk_user (written bytes) [ term_var "paddr"; term_var "data" ])
-           else ⊤;
+        asn_mmio_write_post bytes (term_var "paddr") (term_var "data");
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -551,6 +552,7 @@ Module RiscvPmpBlockVerifSpec.
       | mmio_write res       => @sep_contract_mmio_write _ res
       | decode               => sep_contract_decode
       | externalWorldUpdates => sep_contract_externalWorldUpdates
+      | powered_on           => RiscvPmpSpecification.sep_contract_powered_on
       end.
 
   Lemma linted_contract_environment_foreign :
@@ -623,7 +625,8 @@ Module RiscvPmpBlockVerifSpec.
        lemma_precondition    :=
         (term_val ty_xlenbits write_addr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∨
           ((term_val ty_xlenbits write_addr_adv) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) ∗
-          (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42)));
+          (term_var "w") = (term_val ty_xlenbits (bv.of_nat 42))) ∨
+          (term_val ty_xlenbits mmioShutdownAddr) = (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm));
        lemma_postcondition   :=
         asn_mmio_checked_write (map_wordwidth widthh) (term_var "paddr" +ᵇ term_sext (term_val (ty.bvec 12) immm)) (term_truncate (map_wordwidth widthh * byte) (term_var "w"));
     |}.
@@ -851,7 +854,7 @@ Module Type RiscvPmpIrisInstanceWithContracts
   Proof.
       intros Γ es δ ι Heq. cbn. destruct_syminstance ι.
       iIntros "H". cbn in *. iApply semTWP_foreign.
-      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+      iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr & Hpw)".
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iMod "Hclose" as "_". destruct inv.
@@ -860,26 +863,26 @@ Module Type RiscvPmpIrisInstanceWithContracts
         iInv "H" as "Hptsto" "Hclose_ptsto".
         iDestruct (bi.later_mono _ _ (fun_read_ram_works Hmap) with "[$Hptsto $Hmem]") as "#>%eq_fun_read_ram".
         iMod ("Hclose_ptsto" with "Hptsto") as "_". iModIntro.
-        iFrame "Hregs Hmem Htr". iSplitR; first auto.
+        iFrame "Hregs Hmem Htr Hpw". iSplitR; first auto.
         iApply semTWP_val. iModIntro.
         now iFrame "H".
       - (* old case *)
         iModIntro.
         iPoseProof (fun_read_ram_works Hmap with "[$H $Hmem]") as "%eq_fun_read_ram".
-        iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+        iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr Hpw") as "Hmem".
         iFrame "Hregs Hmem". iApply semTWP_val. now iFrame "H".
   Qed.
 
   Lemma fun_write_ram_works μ bytes paddr data memmap `{sailGS Σ} {w : bv (bytes * byte)} :
     map_Forall (λ (a : Addr) (v : Base.Byte), (memory_ram μ) a = v) memmap ->
-    interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ trace.tr_auth (memory_trace μ) ={⊤}=∗
+    interp_ptstomem paddr w ∗ gen_heap.gen_heap_interp memmap ∗ trace.tr_auth (memory_trace μ) ∗ powered_auth (fun_powered_on μ) ={⊤}=∗
                                                                                                  mem_state_interp sailGS_memGS (fun_write_ram μ bytes paddr data) ∗ interp_ptstomem paddr data.
   Proof.
     iRevert (data w paddr μ memmap).
     iInduction bytes as [|bytes] "IHbytes"; cbn [fun_write_ram interp_ptstomem];
-      iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr)".
+      iIntros (data w paddr μ memmap Hmap) "(Haddr & Hmem & Htr & Hpw)".
     - iModIntro. iSplitL; last done.
-      now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr").
+      now iApply (mem_state_interp_not_modified $! Hmap with "Hmem Htr Hpw").
     -  change (bv.appView _ _ data) with (bv.appView byte (bytes * byte) data).
        destruct (bv.appView byte (bytes * byte) data) as [bd data].
        destruct (bv.appView byte (bytes * byte) w) as [bw w].
@@ -887,7 +890,7 @@ Module Type RiscvPmpIrisInstanceWithContracts
        iMod (gen_heap.gen_heap_update _ _ _ bd with "Hmem H") as "[Hmem $]".
        iApply ("IHbytes" $! data w
                  (bv.add bv.one paddr) (memory_update_ram μ (write_byte (memory_ram μ) paddr bd))
-                 (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr]").
+                 (insert paddr bd memmap) with "[%] [$Haddr $Hmem $Htr $Hpw]").
        by apply map_Forall_update.
   Qed.
 
@@ -897,11 +900,11 @@ Module Type RiscvPmpIrisInstanceWithContracts
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "[%w H]". iApply semTWP_foreign.
-    iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr)".
+    iIntros (? ?) "(Hregs & % & Hmem & %Hmap & Htr & Hpw)".
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     iMod "Hclose" as "_".
-    iMod (fun_write_ram_works with "[$H $Hmem $Htr]") as "[$ H]"; auto.
+    iMod (fun_write_ram_works with "[$H $Hmem $Htr $Hpw]") as "[$ H]"; auto.
     rewrite semTWP_val. now iFrame "Hregs H".
  Qed.
 
@@ -931,6 +934,22 @@ Module Type RiscvPmpIrisInstanceWithContracts
     by destruct (bv.eqb_spec write_addr write_addr).
   Qed.
 
+  Lemma write_addr_neq_shutdown : write_addr ≠ mmioShutdownAddr.
+  Proof. by vm_compute. Qed.
+
+  Lemma write_addr_adv_neq_shutdown : write_addr_adv ≠ mmioShutdownAddr.
+  Proof. by vm_compute. Qed.
+
+  (* The shutdown write is observable by the adversary. *)
+  Lemma filter_adv_observable_shutdown n (v : bv (n * byte)) t :
+    filter_adv_observable (mkEvent IOShutdown mmioShutdownAddr n v :: t) =
+      mkEvent IOShutdown mmioShutdownAddr n v :: filter_adv_observable t.
+  Proof.
+    unfold filter_adv_observable; cbn.
+    destruct (bv.eqb_spec mmioShutdownAddr write_addr) as [Heq|]; last done.
+    by apply eq_sym, write_addr_neq_shutdown in Heq.
+  Qed.
+
   Lemma filter_adv_observable_adv n (v : bv (n * byte)) t :
     filter_adv_observable (mkEvent IOWrite write_addr_adv n v :: t) =
       mkEvent IOWrite write_addr_adv n v :: filter_adv_observable t.
@@ -944,48 +963,74 @@ Module Type RiscvPmpIrisInstanceWithContracts
     TValidContractForeign (@RiscvPmpBlockVerifSpec.sep_contract_mmio_write _ H) (mmio_write H).
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
-    iIntros "([%Hmmio _] & [%Hneq _] & #Hinv & %Hmmio_checked & Hnp)". iApply semTWP_foreign.
-    iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iIntros "([%Hmmio _] & #Hinv & %Hmmio_checked & Hpend)". iApply semTWP_foreign.
+    iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hpw)]]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf.
     unfold fun_handle_write_mmio in Hf.
     destruct bytes; first contradiction.
-    cbn in Hf. rewrite isNotMMIOShutdownAddr in Hneq.
-    rewrite -> (decide_False _ _ Hneq) in Hf.
-    inversion Hf; subst.
-    iMod "Hclose" as "_". rewrite semTWP_val.
-    iFrame "Hregs Hmem %".
-    (* Open the shared invariant and look at it from the perspective of this execution. *)
-    iInv "Hinv" as ">(%t & Hsides)" "Hclose".
-    rewrite inv_mmio_body_own_other.
-    iDestruct "Hsides" as "[(%ts & Hfrag & %Hpred & Hown) Hother]".
-    iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as %<-.
-    iMod (trace.trace_update _ (cons _ _) with "[$Htr $Hfrag]") as "[$ Hfrag]".
-    destruct Hmmio_checked as [-> | [-> ->]].
+    cbn in Hf.
+    destruct Hmmio_checked as [-> | [[-> ->] | ->]];
+      [ rewrite -> (decide_False _ _ (proj1 isNotMMIOShutdownAddr write_addr_neq_shutdown)) in Hf
+      | rewrite -> (decide_False _ _ (proj1 isNotMMIOShutdownAddr write_addr_adv_neq_shutdown)) in Hf
+      | rewrite -> (decide_True _ _ (eq_refl : isShutdownAddr mmioShutdownAddr)) in Hf ];
+      inversion Hf; subst;
+      iMod "Hclose" as "_"; rewrite semTWP_val;
+      iFrame "Hregs Hmem %";
+      (* Open the shared invariant and look at it from the perspective of this execution. *)
+      iInv "Hinv" as ">(%t & Hsides)" "Hclose";
+      rewrite inv_mmio_body_own_other;
+      iDestruct "Hsides" as "[(%ts & Hfrag & %Hpred & Hown) Hother]";
+      iDestruct (trace.trace_full_frag_eq with "Htr Hfrag") as %<-;
+      iMod (trace.trace_update _ (cons _ _) with "[$Htr $Hfrag]") as "[$ Hfrag]".
     - (* M-mode only write: the observable trace does not change. *)
       destruct (eq_dec write_addr write_addr_adv) as [Hcontra|_];
         first by apply write_addr_neq_write_addr_adv in Hcontra.
+      destruct (eq_dec write_addr mmioShutdownAddr) as [Hcontra|_];
+        first by apply write_addr_neq_shutdown in Hcontra.
       iMod ("Hclose" with "[Hfrag Hown Hother]") as "_".
       { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
         iExists _. iFrame "Hfrag".
         iSplitR; first (iPureIntro; apply mmio_pred_cons; [left; by eexists | done]).
         rewrite filter_adv_observable_private.
         iExact "Hown". }
-      by iModIntro.
+      iModIntro. by iFrame "Hpw".
     - (* Observable write: this execution moves ahead by one event. *)
       destruct (eq_dec write_addr_adv write_addr_adv) as [_|]; last done. cbn.
+      iRename "Hpend" into "Hnp".
       iDestruct "Hown" as "[[%Ht Hauth] | (% & _ & Hauth)]";
         last by iDestruct (written_auth_nothingPending with "Hauth Hnp") as "[]".
       iMod (nothingPending_written with "[$Hauth $Hnp]") as "[Hauth $]".
       iMod ("Hclose" with "[Hfrag Hauth Hother]") as "_".
       { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
         iExists _. iFrame "Hfrag".
-        iSplitR; first (iPureIntro; apply mmio_pred_cons; [by right | done]).
+        iSplitR; first (iPureIntro; apply mmio_pred_cons; [by right; left | done]).
         iRight. iExists _. iFrame "Hauth".
         rewrite filter_adv_observable_adv.
         change (memory_trace (memory_update_state ?μ _)) with (memory_trace μ).
         by rewrite Ht. }
-      by iModIntro.
+      iModIntro. by iFrame "Hpw".
+    - (* Shutdown write: this execution moves ahead by one event, and is
+         powered off. *)
+      destruct (eq_dec mmioShutdownAddr write_addr_adv) as [Hcontra|_];
+        first by apply eq_sym, write_addr_adv_neq_shutdown in Hcontra.
+      destruct (eq_dec mmioShutdownAddr mmioShutdownAddr) as [_|]; last done. cbn.
+      iDestruct "Hpend" as "[Hnp Hpow]". iEval (cbn) in "Hpow".
+      iDestruct "Hown" as "[[%Ht Hauth] | (% & _ & Hauth)]";
+        last by iDestruct (written_auth_nothingPending with "Hauth Hnp") as "[]".
+      iMod (nothingPending_written with "[$Hauth $Hnp]") as "[Hauth $]".
+      iDestruct (powered_agree with "Hpw Hpow") as %Hon.
+      iEval (rewrite Hon) in "Hpw".
+      iMod (powered_update true false with "[$Hpw $Hpow]") as "[Hpw $]".
+      iMod ("Hclose" with "[Hfrag Hauth Hother]") as "_".
+      { iExists t. rewrite inv_mmio_body_own_other. iFrame "Hother".
+        iExists _. iFrame "Hfrag".
+        iSplitR; first (iPureIntro; apply mmio_pred_cons; [by right; right; eexists | done]).
+        iRight. iExists _. iFrame "Hauth".
+        rewrite filter_adv_observable_shutdown.
+        change (memory_trace (memory_update_state ?μ _)) with (memory_trace μ).
+        by rewrite Ht. }
+      iModIntro. by iFrame "Hpw".
   Qed.
 
   Lemma decode_sound `{sailGS Σ} :
@@ -993,12 +1038,12 @@ Module Type RiscvPmpIrisInstanceWithContracts
   Proof.
     intros Γ es δ ι Heq. destruct_syminstance ι. cbn in *.
     iIntros "%Hdecode". iApply semTWP_foreign.
-    iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr)]]".
+    iIntros (? ?) "[Hregs [% (Hmem & %Hmap & Htr & Hpw)]]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (? ? ? Hf). iMod "Hclose" as "_".
     rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
     destruct (pure_decode _); inversion Hdecode.
-    iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
+    iPoseProof (mem_state_interp_not_modified $! Hmap with "Hmem Htr Hpw") as "Hmem".
     rewrite semTWP_val. now iFrame "Hregs Hmem".
   Qed.
 
@@ -1053,9 +1098,16 @@ Module Type RiscvPmpIrisInstanceWithContracts
     now iFrame "Hmip".
   Qed.
 
+  Lemma powered_on_sound `{sailGS Σ} :
+    TValidContractForeign RiscvPmpSpecification.sep_contract_powered_on powered_on.
+  Proof.
+    intros Γ es δ ι Heq. destruct_syminstance ι. cbn.
+    now iIntros "[%HFalse _]".
+  Qed.
+
   Lemma TforeignSemBlockVerif `{sailGS Σ} : TForeignSem.
     intros Δ τ f; destruct f; cbn;
-      eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound.
+      eauto using read_ram_sound, write_ram_sound, mmio_read_sound, mmio_write_sound, within_mmio_sound, decode_sound, externalWorldUpdates_sound, powered_on_sound.
   Qed.
 
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
@@ -1097,8 +1149,8 @@ Module Type RiscvPmpIrisInstanceWithContracts
   Proof.
     intros ι; destruct_syminstance ι; cbn.
     unfold interp_mmio_checked_write.
-    iIntros "[[<- _] | ([<- _] & [-> _])]"; iPureIntro; intuition.
-    right.
+    iIntros "[[<- _] | [([<- _] & [-> _]) | [<- _]]]"; iPureIntro; intuition.
+    right. left.
     split; auto.
     destruct width; now compute.
   Qed.
