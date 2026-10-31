@@ -83,14 +83,14 @@ Qed.
 
 Definition ccf_annotV : list (AnnotInstrV blkValid) :=
   List.map (fun '(i, ins) =>
-              MkAnnotInstrV (if Nat.eqb i 13 then ccf_glue true "vs" "dv" else nil) ins
+              MkAnnotInstrV (if Nat.eqb i 13 then ccf_glue "vs" "dv" else nil) ins
                 (if Nat.eqb i 2 then ccf_seeds "vs" "dv" else nil)
                 (if Nat.eqb i 3 then Some (MkBlkAnnotV _ ccl_loop_valid) else None))
     (List.combine (List.seq 0 (length ccopy_instrs)) ccopy_instrs).
 
 Lemma ccf_erase : List.map eraseV ccf_annotV = ccf_annot "vs" "dv".
 Proof.
-  unfold ccf_annotV, ccf_annot, ccf_annot_g. rewrite List.map_map. apply List.map_ext.
+  unfold ccf_annotV, ccf_annot. rewrite List.map_map. apply List.map_ext.
   intros [i ins]. unfold eraseV. cbn.
   repeat (destruct (Nat.eqb i _)); reflexivity.
 Qed.

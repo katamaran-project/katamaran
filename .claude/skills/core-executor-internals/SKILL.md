@@ -317,7 +317,13 @@ matches a lemma stated over `instpred hyp`. Rewrite with
 `∗` (cf. the explicit `change` at `Worlds.v:1850`); `exact`/`apply` work, since
 they use conversion.
 
-### Added 2026-10-01: dropping PUBLIC zero atoms (`drop_pub_zero`)
+### REMOVED 2026-10-31: dropping PUBLIC zero atoms (`drop_pub_zero`)
+
+**Gone on the RelVal-as-pair model** (`issue/relval-rsa`, R1): pairs obey the
+ring axioms modulo `≡` (`Term_bv_ring_theory`, `Instantiation.v`), so `peval`'s
+normal form now DROPS a cancelled atom (`x - x ⇝ 0`) and never produces the
+`0 * a` this rule existed to remove. `drop_pub_zero`, its two views and its spec
+are deleted. The history below explains what it used to do.
 
 `peval`'s ring normal form keeps a cancelled atom as `0 * a` (`x - x` is
 `0 * x`, PLAN-bv-arith-solver): over RelVal the atom is what keeps a NonSyncVal
@@ -343,7 +349,13 @@ Two preamble-vs-file differences to match when prototyping (the first cost a ~5 
 `Solver.v` parses `rewrite` SSReflect-style (iris.proofmode is imported), so
 `rewrite ?a, ?b` is a syntax error there — write `rewrite ?a ?b`; and a
 `RiscvPmp.Sig` preamble WITHOUT `From iris.proofmode Require Import tactics`
-accepts the comma form, so load it to match the file.
+accepts the comma form, so load it to match the file. Third (2026-10-31): in
+such a preamble `instpred` on a `DList` finds NO instance (`DList.instpred_dlist`
+is not in the typeclass DB outside the functor) and the error surfaces as a
+cascade of undefined `InstPred`/`Equiv` evars. Pass it explicitly,
+`Local Notation IPD d := (@instpred DList.DList DList.instpred_dlist _ d)`; and
+`uip`/`dependent elimination` are not there either, so use
+`Eqdep_dec.UIP_refl_nat` in the probe and keep the file's own forms in the port.
 
 ### Added 2026-10-22: ISOLATE THE INNERMOST VARIABLE (`try_isolate_inner`)
 
@@ -436,7 +448,11 @@ matches nothing — the consume FAILS OUTRIGHT with `debug_consume_chunk`, not a
 residual. A register pinned BARE (`A0 |-> xb`) is unaffected, which is what
 makes the failure look arbitrary from outside. **`simplify_propeq` does NOT
 decompose a `bvadd`** (measured: `0x10 + a = 0x10 + b` survives it untouched),
-so nothing else in the solver covers this shape.
+so nothing else in the solver covers this shape. It DOES decompose the four
+injective constructors `pair`/`cons`/`bvapp`/`bvcons` since 2026-10-31
+(`simplify_propeq_binop`, exact on the RelVal pair, `propeq_*_split`): before,
+`h :: hs = x :: xs` stayed one opaque equation, so `x` was never substituted
+(RsaCcopy's `take_any` byte heads).
 
 ### Every arm must normalise its input, fall-throughs included (fixed 2026-09-22)
 

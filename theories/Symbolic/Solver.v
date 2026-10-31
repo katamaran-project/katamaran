@@ -951,6 +951,26 @@ Module Type GenericSolverOn
           | bop.relop rop => simplify_eq_relop rop
           end.
 
+        (* propeq through the injective constructors.  On the RelVal pair,
+           `c a b = c a' b'` holds iff `a = a'` and `b = b'` (both projections),
+           so decomposing is exact, as simplify_eq_binop does for relop eq.
+           Without it `h :: hs = x :: xs` stays one opaque equation and
+           unification never substitutes the head.  Every other operator
+           stays opaque. *)
+        Definition simplify_propeq_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) :
+          Term Σ σ1 -> Term Σ σ2 -> Term Σ σ -> DList Σ :=
+          match op in BinOp σ1 σ2 σ
+                return Term Σ σ1 -> Term Σ σ2 -> Term Σ σ -> DList Σ
+          with
+          | bop.pair => simplify_eq_binop_pair
+          | bop.cons => simplify_eq_binop_cons
+          | bop.bvapp => simplify_eq_binop_bvapp
+          | bop.bvcons => simplify_eq_binop_bvcons
+          | op => fun t1 t2 tr =>
+                    simplify_eqb Term_eqb (fun {σ} t1 t2 => dlist_eq t1 t2)
+                      (term_binop op t1 t2) tr
+          end.
+
         Definition simplify_eq_unop_inl {σ1 σ2} (t1 : Term Σ σ1)
           (t : Term Σ (ty.sum σ1 σ2)) : DList Σ :=
           let default := simplify_eq_unop_default uop.inl t1 t in
@@ -1152,7 +1172,7 @@ Module Type GenericSolverOn
         | term_var _          => fun _ => simplify_eqb Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) tl tr
         | term_val _ v        => fun tr => simplify_eq_val tr v
         | term_relval r v     => fun tr => simplify_eqb Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) (term_relval r v) tr
-        | term_binop op t1 t2 => fun tr => simplify_eqb Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) (term_binop op t1 t2) tr
+        | term_binop op t1 t2 => simplify_propeq_binop simplify_propeq op t1 t2
         | term_unop op t1     => simplify_propeq_unop simplify_propeq op t1
         | term_tuple tls      => (* simplify_eq_tuple simplify_propeq tls *)
             fun tr => simplify_eqb Term_eqb (fun {σ} t1 t2 => dlist_propeq t1 t2) (term_tuple tls) tr
@@ -2034,6 +2054,112 @@ Module Type GenericSolverOn
       #[local] Hint Resolve simplify_propeq_unop_default_spec
         simplify_propeq_binop_default_spec : core.
 
+      (* The four injective constructors, exact on the pair. *)
+      Lemma propeq_pair_split [σ1 σ2] (tl1 tr1 : Term w σ1) (tl2 tr2 : Term w σ2) :
+        instpred (formula_propeq tl1 tr1) ∗ instpred (formula_propeq tl2 tr2) ⊣⊢
+        instpred (formula_propeq (term_pair tl1 tl2) (term_pair tr1 tr2)).
+      Proof.
+        constructor. intros ι _. cbn. unfold instpred_formula_propeq. cbn.
+        split.
+        - intros [-> ->]. reflexivity.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          injection Hl as Hl1 Hl2. injection Hr as Hr1 Hr2.
+          split; apply ty.RV_ext; assumption.
+      Qed.
+
+      Lemma propeq_cons_split [σ] (tl1 tr1 : Term w σ) (tl2 tr2 : Term w (ty.list σ)) :
+        instpred (formula_propeq tl1 tr1) ∗ instpred (formula_propeq tl2 tr2) ⊣⊢
+        instpred (formula_propeq (term_cons tl1 tl2) (term_cons tr1 tr2)).
+      Proof.
+        constructor. intros ι _. cbn. unfold instpred_formula_propeq. cbn.
+        split.
+        - intros [-> ->]. reflexivity.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          injection Hl as Hl1 Hl2. injection Hr as Hr1 Hr2.
+          split; apply ty.RV_ext; assumption.
+      Qed.
+
+      Lemma propeq_bvapp_split {m n} (tl1 tr1 : Term w (ty.bvec m)) (tl2 tr2 : Term w (ty.bvec n)) :
+        instpred (formula_propeq tl1 tr1) ∗ instpred (formula_propeq tl2 tr2) ⊣⊢
+        instpred (formula_propeq (term_bvapp tl1 tl2) (term_bvapp tr1 tr2)).
+      Proof.
+        constructor. intros ι _. cbn. unfold instpred_formula_propeq. cbn.
+        split.
+        - intros [-> ->]. reflexivity.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          apply bv.app_inj in Hl as [Hl1 Hl2]. apply bv.app_inj in Hr as [Hr1 Hr2].
+          split; apply ty.RV_ext; assumption.
+      Qed.
+
+      Lemma propeq_bvcons_split {m} (tl1 tr1 : Term w ty.bool) (tl2 tr2 : Term w (ty.bvec m)) :
+        instpred (formula_propeq tl1 tr1) ∗ instpred (formula_propeq tl2 tr2) ⊣⊢
+        instpred (formula_propeq (term_binop bop.bvcons tl1 tl2) (term_binop bop.bvcons tr1 tr2)).
+      Proof.
+        constructor. intros ι _. cbn. unfold instpred_formula_propeq. cbn.
+        split.
+        - intros [-> ->]. reflexivity.
+        - intros H. pose proof (f_equal ty.projLeftRV H) as Hl.
+          pose proof (f_equal ty.projRightRV H) as Hr. cbn in Hl, Hr.
+          apply bv.cons_inj in Hl as [Hl1 Hl2]. apply bv.cons_inj in Hr as [Hr1 Hr2].
+          split; apply ty.RV_ext; assumption.
+      Qed.
+
+      Lemma simplify_propeq_binop_spec (sp : ∀ σ, Term w σ → Term w σ → DList w)
+        [σ1 σ2 σ] (op : BinOp σ1 σ2 σ) (tl1 : Term w σ1) (tl2 : Term w σ2)
+        (IHtl1 : ∀ tr, instpred (sp _ tl1 tr) ⊣⊢ instpred (formula_propeq tl1 tr))
+        (IHtl2 : ∀ tr, instpred (sp _ tl2 tr) ⊣⊢ instpred (formula_propeq tl2 tr))
+        (tr : Term w σ) :
+        instpred (simplify_propeq_binop Term_eqb (fun σ t1 t2 => dlist_propeq t1 t2) sp
+                    op tl1 tl2 tr) ⊣⊢
+          instpred (formula_propeq (term_binop op tl1 tl2) tr).
+      Proof.
+        destruct op; cbn [simplify_propeq_binop]; try apply simplify_propeqb_spec.
+        - (*pair*)
+          destruct tr using Term_prod_case; cbn -[simplify_eq_val];
+            rewrite ?instpred_dlist_singleton ?instpred_dlist_cat.
+          + apply instpred_formula_propeq_com.
+          + rewrite simplify_propeq_val_spec -eq_val_rep_r. reflexivity.
+          + reflexivity.
+          + rewrite IHtl1 IHtl2. apply propeq_pair_split.
+        - (*cons*)
+          destruct tr using Term_list_case; cbn -[simplify_eq_val];
+            rewrite ?instpred_dlist_singleton ?instpred_dlist_cat.
+          all: first [ reflexivity | apply instpred_formula_propeq_com
+                     | (rewrite simplify_propeq_val_spec -eq_val_rep_r; reflexivity)
+                     | (rewrite IHtl1 IHtl2; apply propeq_cons_split) ].
+        - (*bvapp*)
+          unfold simplify_eq_binop_bvapp.
+          assert (∀ mn (t : Term w (ty.bvec mn)) (e : m + n = mn),
+                     instpred (simplify_eq_binop_bvapp' (λ σ t1 t2, dlist_propeq t1 t2) sp
+                                 tl1 tl2 t e) ⊣⊢
+                     instpred (formula_propeq (term_bvapp tl1 tl2)
+                                 (eq_rect_r (fun l => Term w (ty.bvec l)) t e))) as H;
+            [|apply (H _ tr eq_refl)].
+          intros mn t e. destruct mn, t using Term_bvec_case; subst; cbn -[simplify_eq_val];
+            rewrite ?instpred_dlist_singleton ?instpred_dlist_cat.
+          all: try first [ reflexivity | apply instpred_formula_propeq_com
+                         | (rewrite simplify_propeq_val_spec -eq_val_rep_r; reflexivity) ].
+          destruct eq_dec; [|rewrite instpred_dlist_singleton; reflexivity]. subst.
+          destruct transparent.nat_add_cancel_l, (uip eq_refl e); cbn.
+          rewrite instpred_dlist_cat IHtl1 IHtl2. apply propeq_bvapp_split.
+        - (*bvcons*)
+          unfold simplify_eq_binop_bvcons.
+          assert (∀ sm (t : Term w (ty.bvec sm)) (e : S m = sm),
+                     instpred (simplify_eq_binop_bvcons' (λ σ t1 t2, dlist_propeq t1 t2) sp
+                                 tl1 tl2 t e) ⊣⊢
+                     instpred (formula_propeq (term_binop bop.bvcons tl1 tl2)
+                                 (eq_rect_r (fun l => Term w (ty.bvec l)) t e))) as H;
+            [|apply (H _ tr eq_refl)].
+          intros sm t e. destruct sm, t using Term_bvec_case; subst; cbn -[simplify_eq_val];
+            rewrite ?instpred_dlist_singleton ?instpred_dlist_cat.
+          all: try first [ reflexivity | apply instpred_formula_propeq_com
+                         | (rewrite simplify_propeq_val_spec -eq_val_rep_r; reflexivity) ].
+          rewrite IHtl1 IHtl2. dependent elimination e. apply propeq_bvcons_split.
+      Qed.
+
       Lemma instpred_dlist_propeq [σ] (t1 t2 : Term w σ) :
         instpred (dlist_propeq t1 t2)
         ⊣⊢ eqₚ t1 t2.
@@ -2171,6 +2297,7 @@ Module Type GenericSolverOn
         (*     induction tr using Term_bool_ind; cbn; intros rop tl1 tl2; arw. *)
         (*     rewrite eqₚ_term_not eqₚ_term_not_relop. *)
         (*     destruct rop; cbn; auto. *)
+        - (*binop*) apply simplify_propeq_binop_spec; [exact IHtl1 | exact IHtl2].
         - destruct op; cbn; auto.
           + (*inl*) destruct tr using Term_sum_case; cbn; auto; arw; arw_slow.
             * destruct v.

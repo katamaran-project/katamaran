@@ -11,16 +11,15 @@
 (*                               ((y^x) & a0) ^ y; sb; both += 1; until      *)
 (*                               src = a3; ret                               *)
 (*                                                                           *)
-(* Why the header needs care: under a secret ctl the stored byte is a        *)
-(* NonSyncVal even where x and y are the same public term h, and no rewrite  *)
-(* may make it public (≡ is Leibniz on RelVal).  Both arrays therefore carry *)
-(* their 4 header bytes as the SAME named terms h0..h3 (`h0 :: .. :: h3 ::   *)
-(* rest`); the loop invariant tracks the header phase explicitly (one        *)
-(* disjunct per header byte, k = 0..3, the cells as cons lists, plus the     *)
-(* limb phase), so the written header bytes are syntactically                *)
-(* clem_mux_byte h_k m; and before the ret clem_arrv_resync_head puts h_k *)
-(* h_k back in each (memory reads only the two projections, which are equal *)
-(* there).  The ghosts in the loop body are the same in every phase.         *)
+(* The header: both arrays carry their 4 header bytes as the SAME named     *)
+(* terms h0..h3 (`h0 :: .. :: h3 :: rest`).  For such a byte the stored     *)
+(* value ((h ^ h) & m) ^ h is h itself, per projection, so peval reduces it *)
+(* to h even under a secret ctl (RelVal is a pair; under the old tagged     *)
+(* model it stayed a NonSyncVal and needed an ad hoc re-synchronisation).   *)
+(* The loop invariant tracks the header phase explicitly (one disjunct per  *)
+(* header byte, k = 0..3, the cells as cons lists, plus the limb phase), so *)
+(* the written header bytes are syntactically h_k.  The ghosts in the loop  *)
+(* body are the same in every phase.                                        *)
 (*                                                                           *)
 (* Instructions: tools/bearssl/build.sh (hardened ccopy.o) +                *)
 (* tools/bearssl/spike/harness_ccopy.s, `ld.lld --relax -Ttext=0`,          *)
@@ -264,7 +263,7 @@ Definition ccl_hdr {Σ} (ts td : string) (s d nl M : Term Σ ty_xlenbits)
   ccl_state ts td s d (clem_off nl 4) M (t_lit k) (clem_off nl (4 - Z.of_nat k))
     (clem_off s (Z.of_nat k)) (clem_off d (Z.of_nat k))
     (cons_terms (List.firstn k hs) lnil) (cons_terms (List.skipn k hs) sl)
-    (cons_terms (List.map (fun h => clem_mux_byte h M) (List.firstn k hs)) lnil)
+    (cons_terms (List.firstn k hs) lnil)
     (cons_terms (List.skipn k hs) dl).
 
 (* the limb phase, c to go: all addresses END - c *)
@@ -272,7 +271,7 @@ Definition ccl_limb {Σ} (ts td : string) (s d nl M c : Term Σ ty_xlenbits)
     (hs : list (Term Σ (clem_cell_ty 1))) (sd sr dd dr : Term Σ (clemv_ty 1)) : Assertion Σ :=
   let n := clem_off nl 4 in
   ccl_state ts td s d n M (t_sub n c) c (t_sub (t_end s n) c) (t_sub (t_end d n) c)
-    (cons_terms hs sd) sr (cons_terms (List.map (fun h => clem_mux_byte h M) hs) dd) dr.
+    (cons_terms hs sd) sr (cons_terms hs dd) dr.
 
 Definition ccl_inv (ts td : string) : Assertion (cclCtx ▻ "a"∷ty_xlenbits) :=
   let hs := (hl4 (term_var "h0") (term_var "h1") (term_var "h2") (term_var "h3")) in
@@ -321,15 +320,17 @@ Proof. Time solve_cc_all. Qed.
 (* 2. br_ccopy, ITS EXIT THE RETURN ADDRESS                                 *)
 (* ------------------------------------------------------------------------ *)
 (* r: the return address; ctl (A0, SECRET); dst d (A1), src s (A2), len n   *)
-(* (A3) = nl + 4.  Both arrays START with the same four bytes h0..h3.       *)
+(* (A3) = nl + 4.  Both arrays START with the same four bytes h0..h3 (the  *)
+(* negative control below: the destination's in another order).            *)
 Definition ccfCtx : LCtx :=
   ["q"∷ty_xlenbits; "r"∷ty_xlenbits; "s"∷ty_xlenbits; "d"∷ty_xlenbits; "n"∷ty_xlenbits;
    "nl"∷ty_xlenbits; "ctl"∷ty_xlenbits;
    "h0"∷clem_cell_ty 1; "h1"∷clem_cell_ty 1; "h2"∷clem_cell_ty 1; "h3"∷clem_cell_ty 1;
    "sl"∷clemv_ty 1; "dl"∷clemv_ty 1].
 
-Definition ccf_pre (ts td : string) : Assertion (ccfCtx ▻ "a"∷ty_xlenbits) :=
+Definition ccf_pre_g (swap : bool) (ts td : string) : Assertion (ccfCtx ▻ "a"∷ty_xlenbits) :=
   let hs := hl4 (term_var "h0") (term_var "h1") (term_var "h2") (term_var "h3") in
+  let dhs := if swap then hl4 (term_var "h1") (term_var "h0") (term_var "h2") (term_var "h3") else hs in
   ( X1 ↦ᵣ term_var "r"
     ∗ A2 ↦ᵣ term_var "s" ∗ secLeakvar "s"
     ∗ A1 ↦ᵣ term_var "d" ∗ secLeakvar "d"
@@ -341,7 +342,8 @@ Definition ccf_pre (ts td : string) : Assertion (ccfCtx ▻ "a"∷ty_xlenbits) :
     ∗ clem_arrv 1 1 ts (term_var "s") (term_var "n") (t_end (term_var "s") (term_var "n"))
         (cons_terms hs (term_var "sl"))
     ∗ clem_arrv 1 1 td (term_var "d") (term_var "n") (t_end (term_var "d") (term_var "n"))
-        (cons_terms hs (term_var "dl")) )%asn.
+        (cons_terms dhs (term_var "dl")) )%asn.
+Definition ccf_pre := ccf_pre_g false.
 
 (* the source unchanged; the destination with the SAME header bytes (so a
    caller keeps their publicness by framing), limbs unnamed *)
@@ -363,9 +365,10 @@ Definition ccf_post (ts td : string) : Assertion (ccfCtx ▻ "a"∷ty_xlenbits �
 
 Definition ccf_regs : list reg_spec_rel := [ (A4, Secret); (A5, Secret); (A6, Secret) ].
 
-Definition ccfRec (ts td : string) : @CFGVerifierContract ccfCtx :=
+Definition ccfRec_g (swap : bool) (ts td : string) : @CFGVerifierContract ccfCtx :=
   gen_seg_contract_at (term_var "q") (term_var "q") (term_var "r")
-    ccopy_instrs 12 ccf_regs (secLeakvar "r" ∗ ccf_pre ts td)%asn (ccf_post ts td).
+    ccopy_instrs 12 ccf_regs (secLeakvar "r" ∗ ccf_pre_g swap ts td)%asn (ccf_post ts td).
+Definition ccfRec := ccfRec_g false.
 Definition ccfBlk (ts td : string) : BlkAnnot := {| blk_ctx := ccfCtx ; blk_contract := ccfRec ts td |}.
 
 Definition cl (k : CLem) : Annot := AnnotCLemma k.
@@ -373,32 +376,30 @@ Definition cl (k : CLem) : Annot := AnnotCLemma k.
 (* Entry, after the `add a3` (the beqz's taken path is refuted: n = nl + 4,
    nl < 2^31): seed both DONE arrays at their array's start.  Exit, before
    the ret: the source joins back; the destination's emptied remainder goes;
-   then, header byte by header byte, the destination's head (syntactically
-   clem_mux_byte h_k M) is re-synchronised against the source's head (h_k)
-   and both heads come off by pattern; the cells go back at the end. *)
+   then, header byte by header byte, both heads (syntactically h_k) come off
+   by pattern; the cells go back at the end. *)
 Definition ccf_seeds (ts td : string) : list Annot :=
   [ cl (clem_arrv_empty_at 1 1 ts cc_sd); cl (clem_arrv_empty_at 1 1 td td) ].
-Definition ccf_glue (resync : bool) (ts td : string) : list Annot :=
-  let rs := if resync then [cl (clem_arrv_resync_head td ts)] else nil in
+Definition ccf_glue (ts td : string) : list Annot :=
   let next := [cl (clem_arrv_take_cons 1 1 td); cl (clem_arrv_take_cons 1 1 ts)] in
   [ cl (clem_arrv_join 1 1 cc_sd ts ts); cl (clem_arrv_empty_elim 1 1 td) ]
-  ++ rs ++ next ++ rs ++ next ++ rs ++ next ++ rs
+  ++ next ++ next ++ next
   ++ [ cl (clem_arrv_add_first 1 1 ts); cl (clem_arrv_add_first 1 1 ts); cl (clem_arrv_add_first 1 1 ts)
      ; cl (clem_arrv_add_first 1 1 td); cl (clem_arrv_add_first 1 1 td); cl (clem_arrv_add_first 1 1 td) ].
 
-Definition ccf_annot_g (resync : bool) (ts td : string) : list AnnotInstr :=
+Definition ccf_annot (ts td : string) : list AnnotInstr :=
   List.map (fun '(i, ins) =>
-              {| ai_ghost_before := if Nat.eqb i 13 then ccf_glue resync ts td else nil
+              {| ai_ghost_before := if Nat.eqb i 13 then ccf_glue ts td else nil
                ; ai_instr := ins
                ; ai_ghost_after := if Nat.eqb i 2 then ccf_seeds ts td else nil
                ; ai_block := if Nat.eqb i 3 then Some (cclBlk ts td) else None |})
     (List.combine (List.seq 0 (length ccopy_instrs)) ccopy_instrs).
-Definition ccf_annot := ccf_annot_g true.
 
 Lemma valid_ccf : cfg_vc_loop (ccfRec "vs" "dv") (ccf_annot "vs" "dv").
 Proof. Time solve_cc_all. Qed.
 
-(* NEGATIVE CONTROL: without the re-synchronisation the header written under
-   the secret ctl is NOT the header -- the post is refused *)
-Goal cfg_vc_loop (ccfRec "vs" "dv") (ccf_annot_g false "vs" "dv").
+(* NEGATIVE CONTROL: the destination starts with the same header bytes in
+   another order (h1 h0 h2 h3).  Under the secret ctl the result keeps either
+   array's bytes, so the post's `h0 h1 h2 h3` is false -- refused *)
+Goal cfg_vc_loop (ccfRec_g true "vs" "dv") (ccf_annot "vs" "dv").
 Proof. Fail solve_cc_all. Abort.

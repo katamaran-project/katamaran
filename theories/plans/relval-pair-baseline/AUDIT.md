@@ -47,3 +47,12 @@ assumption side they assume nothing the pair model does not give.
 | `PartialEvaluation.v` `peval_bvand_id`, `peval_bvxor_id` (off the mask path, not both literals) | (none: `0 & m` for a secret m was NonSync 0 0, not `SyncVal 0`) | `0 & t`, `t & 0` ⇝ 0; `t ^ t` ⇝ 0; `0 ^ t`, `t ^ 0` ⇝ t. Per projection, `≡`. |
 | `Solver.v` `drop_pub_zero` | dropped `0 * a` only for a PUBLIC a (secLeakT) | deleted: peval no longer produces `0 * a`. |
 | `Solver.v` `secLeakT` base case (`secLeak_base`) | exact `secLeak t` in wco | also: `t = u` (either order) in wco with `secLeakT_noeq u` (ONE hop). Only ever used to DISCHARGE (`secLeakT_spec` is `⊢`), and in `simplify_secLeak_core` on an assumption it drops a formula already implied by wco. |
+
+## propeq decomposition (RSA cleanup), branch `issue/relval-rsa`, 2026-10-31
+
+A bi-implication (`simplify_propeq_spec` is `⊣⊢`), so it is exact both as an
+assumption and as an obligation.
+
+| Site | Old (tagged) | New (pair) |
+|---|---|---|
+| `Solver.v` `simplify_propeq_binop` (the `term_binop` arm of `simplify_propeq`) | every binop opaque: `h :: hs = x :: xs` stayed ONE equation, so unification never substituted `x` (RsaCcopy's `take_any` heads) | `pair`/`cons`/`bvapp`/`bvcons` decompose argument-wise, reusing `simplify_eq_binop_{pair,cons,bvapp,bvcons}`; exact since `c a b = c a' b'` iff both projections agree iff `a = a'` and `b = b'` (`propeq_{pair,cons,bvapp,bvcons}_split`, via `ty.RV_ext`). Every other operator: unchanged. |
