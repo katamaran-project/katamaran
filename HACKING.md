@@ -93,6 +93,48 @@ The library is currently axiom-free (not even fun.ext. or prop.ext.).
 So try to keep it that way and avoid introducing axioms when possible.
 But let's be pragmatic; if there is a good reason to assume an axiom, we allow it.
 
+## Restoring a build
+
+A full build takes a long time, but most of it usually exists already:
+in another worktree, or in CI's build of `main`. `scripts/build-cache` finds
+the build that leaves the least to rebuild, copies its compiled files for
+the sources that match, and sets mtimes so that `make` rebuilds only the
+rest:
+
+    scripts/build-cache       # restore this checkout from the best source
+    scripts/build-cache list  # show the sources and their cost, don't copy
+    scripts/build-cache save  # store this checkout's build as a snapshot
+
+It considers this checkout's own build (`here`), the other checkouts of the
+repository (`worktrees`), snapshots stored with `save` (`snapshots`, in
+`.git/build-cache/`), and CI's builds of `HEAD`, `main` and their recent
+first-parent ancestors (`ci`), from the local nix store or from
+katamaran.cachix.org. Pass one of these kinds, a checkout's path, a snapshot
+ID or a git revision to use only those.
+
+A compiled file is reused only if its source and the files it `Load`s have
+the same contents (the `.glob` records the digest of the source), and so do
+all the files it requires. The sources' Rocq, OCaml and libraries are
+checked by loading a few files before anything is copied. A source's cost is
+the compile time of what it leaves to rebuild, taken from build traces (see
+below) and `time-of-build.log`.
+
+Uses:
+
+- A new worktree: run `scripts/build-cache` before the first build.
+- After a rebase, checkout or `git stash`: git gives unchanged `.v` files new
+  mtimes, so `make` would rebuild them. `scripts/build-cache` (or
+  `scripts/build-cache here`) fixes the mtimes without copying anything.
+- Before switching branches, `make clean`, or an experiment that breaks the
+  build: `scripts/build-cache save`, and later `scripts/build-cache` picks
+  the snapshot up. `scripts/build-cache prune --keep N` deletes all but the N
+  newest.
+- After `main` moved: `scripts/build-cache ci` takes CI's build.
+
+CI's builds lack `test/` and `case_study/Assumptions.v`, which aren't
+installed, so those are always rebuilt from them. See `scripts/build-cache --help`
+for the details.
+
 ## Build times
 
 To see where a build spends its time, record a build trace and open it in
@@ -105,3 +147,5 @@ The trace shows each make job with the files it compiled and an arrow from the
 dependency each file waited for last, the critical path, and the number of
 files compiling and waiting for a free job over time. `trace.py` also prints a
 summary. CI builds record a trace too; it is in the `timing-*` artifact.
+`scripts/worktree/build` records one in `build-trace.log` in the worktree's
+git directory.

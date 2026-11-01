@@ -4,12 +4,14 @@
 
 A full build takes a long time.
 
-- Git worktrees are optional. If you use one, **seed it** before the first
-  build: `scripts/worktree/seed-build [SRC]` (default `SRC`: the main clone).
-  It
-  copies compiled files for sources identical to `SRC` and fixes mtimes so
-  `make` rebuilds only what differs. Plain copying doesn't work, because
-  checked-out `.v` files are newer than the copied `.vo` files.
+- Git worktrees are optional. If you use one, **restore its build** before
+  the first build: `scripts/build-cache`. It takes the compiled files of the
+  closest existing build (other worktrees, snapshots, CI's builds on cachix)
+  for the sources that match, and fixes mtimes so `make` rebuilds only what
+  differs.
+  Plain copying doesn't work, because checked-out `.v` files are newer than
+  the copied `.vo` files. Run it again after a rebase, checkout or stash:
+  they give unchanged `.v` files new mtimes too.
 - **Build with `scripts/worktree/build [TARGET.vo...]`**, as a background
   command, and wait for the notification. Don't sleep or poll. It prints a
   summary or the first errors. The full log is `build.log` in the worktree's

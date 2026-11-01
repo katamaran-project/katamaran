@@ -1,0 +1,1008 @@
+#!/usr/bin/env python3
+"""Restore a checkout's build from compiled files that exist elsewhere.
+
+Usage: scripts/build-cache [restore] [SOURCE...] [--offline] [--no-check]
+                           [--depth N]
+       scripts/build-cache list [SOURCE...] [--offline] [--depth N]
+       scripts/build-cache save [--no-check]
+       scripts/build-cache prune [--keep N]
+       scripts/build-cache drop ID...
+
+Needs rocq, tar and zstd on PATH. The `ci` source also needs nix, with the
+Rocq of the flake's dev shell.
+
+`restore` (the default) looks at every source of compiled files below, works
+out how much of this checkout each would leave to rebuild, and takes the
+cheapest (but stays with `here` unless another source saves more than 30s):
+
+  here       this checkout's own build. Checkouts, rebases and stashes give
+             .v files new mtimes, so make rebuilds files whose contents
+             haven't changed; restoring from here only fixes the mtimes.
+  worktrees  the builds of the other checkouts of this repository: the main
+             clone and its worktrees.
+  snapshots  builds stored with `build-cache save`, in
+             .git/build-cache/snapshots/.
+  ci         CI's builds of HEAD, main and their last N first-parent
+             ancestors (the flake's package for the Rocq on PATH): from the
+             local nix store, or else downloaded from katamaran.cachix.org.
+
+A SOURCE limits the search: one of these kinds, the path of a checkout, a
+snapshot ID, or a git revision (its snapshots and its CI build).
+
+A compiled file is reused if the .v it was compiled from (the digest in its
+.glob) and the files it Loads have the same contents as here, and the files
+it requires are reused too; within a checkout, its .vo must also be newer
+than theirs, as for make. Everything else is rebuilt. A source's cost is the
+compile time of what it leaves to rebuild, taken from build traces
+(scripts/worktree/build, make BUILDTRACE=...) and time-of-build.log files;
+files without a recorded time count as the median.
+
+Before copying, the chosen source is checked by loading a few of its files
+with the Rocq on PATH, which fails if another Rocq, OCaml or library built
+them; then the next source is tried. Its compiled files are copied, and
+mtimes set so that make treats them as up to date and rebuilds the rest:
+
+  reused .v files     now - 120s
+  copied artifacts    now - 60s
+  all other .v files  now
+
+`list` shows the sources and their cost without restoring, and why others
+were skipped. `save` stores this checkout's up-to-date compiled files as a
+snapshot, e.g. before switching branches or `make clean`; like `restore` and
+`list`, it also keeps the compile times from the build logs in
+.git/build-cache/times.json. `prune` keeps the N newest snapshots (default 3),
+`drop` deletes the given ones.
+"""
+
+import argparse
+import concurrent.futures
+import glob
+import hashlib
+import json
+import os
+import re
+import shutil
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+CACHIX = "https://katamaran.cachix.org"
+CACHES = (".lia.cache", ".nia.cache")
+KINDS = ("here", "worktrees", "snapshots", "ci")
+# Copying from elsewhere must save more than this much compile time.
+SLACK = 30
+DECOMPRESS = {"zstd": ["zstd", "-dc"], "xz": ["xz", "-dc"], "none": ["cat"]}
+TAR_ZSTD = ["tar", "-I", "zstd -T0"]
+
+
+def die(msg):
+    sys.exit("build-cache: " + msg)
+
+
+def warn(msg):
+    print("build-cache: " + msg, file=sys.stderr)
+
+
+def git(*args, cwd=None, input=None):
+    return subprocess.check_output(["git", *args], cwd=cwd, input=input,
+                                   text=True,
+                                   stderr=subprocess.DEVNULL).strip()
+
+
+def try_git(*args, cwd=None):
+    try:
+        return git(*args, cwd=cwd)
+    except subprocess.CalledProcessError:
+        return None
+
+
+def mtime(path):
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return None
+
+
+def md5(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def glob_digest(path):
+    """The MD5 of the .v that a .glob was made from."""
+    try:
+        with open(path) as f:
+            line = f.readline()
+    except OSError:
+        return None
+    return line.split()[1] if line.startswith("DIGEST ") else None
+
+
+def artifacts(v):
+    """The files that compiling v produces and make checks."""
+    base = v[:-2]
+    d, n = os.path.split(base)
+    return [base + ".vo", base + ".glob", os.path.join(d, "." + n + ".aux")]
+
+
+def parse_project(text):
+    """The .v files and the -Q/-R/-I lines of a _CoqProject."""
+    files, loadpath = [], []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("#"):
+            continue
+        if line.endswith(".v"):
+            files.append(line)
+        elif line.startswith(("-Q ", "-R ", "-I ")):
+            loadpath.append(" ".join(line.split()))
+    return files, loadpath
+
+
+def read_project(root):
+    try:
+        with open(os.path.join(root, "_CoqProject")) as f:
+            return parse_project(f.read())
+    except OSError:
+        return None, None
+
+
+def mappings(loadpath):
+    """[(dir, logical prefix)] of the -Q/-R lines, innermost first."""
+    out = [tuple(l.split()[1:3]) for l in loadpath
+           if l.split()[0] in ("-Q", "-R")]
+    return sorted(((d.rstrip("/"), lib) for d, lib in out),
+                  key=lambda m: -len(m[0]))
+
+
+def logical_name(v, maps):
+    for d, lib in maps:
+        if v.startswith(d + "/"):
+            return lib + "." + v[len(d) + 1:-2].replace("/", ".")
+    return None
+
+
+def need(*tools):
+    for t in tools:
+        if not shutil.which(t):
+            die("no %s on PATH" % t)
+
+
+def rocq_exe():
+    need("rocq")
+    return os.path.realpath(shutil.which("rocq"))
+
+
+def nix_rocq_version():
+    """Like 9.2.0, from the store path, or None if rocq isn't from the nix
+    store; `rocq --version` says only 9.2."""
+    m = re.search(r"/nix/store/[^-/]+-rocq-([0-9.]+)/", rocq_exe())
+    return m and m[1]
+
+
+def no_ci():
+    """Why CI's builds can't be used here, or None."""
+    if not nix_rocq_version():
+        return "rocq isn't from the nix store"
+    missing = [t for t in ("nix", "nix-store") if not shutil.which(t)]
+    return "no %s on PATH" % missing[0] if missing else None
+
+
+def libraries():
+    """The store paths of the libraries on ROCQPATH."""
+    path = os.environ.get("ROCQPATH") or os.environ.get("COQPATH") or ""
+    return sorted({os.path.realpath(p) for p in path.split(":") if p})
+
+
+def env_key():
+    """Compiled files only load with the Rocq and libraries that built them.
+    Libraries installed next to Rocq (opam) count as part of it."""
+    text = "\n".join([rocq_exe()] + libraries())
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
+def is_ancestor(a, b):
+    return subprocess.call(["git", "merge-base", "--is-ancestor", a, b],
+                           stderr=subprocess.DEVNULL) == 0
+
+
+def ls_tree(commit):
+    out = {}
+    for entry in git("ls-tree", "-r", "-z", commit).split("\0"):
+        if entry:
+            info, path = entry.split("\t", 1)
+            out[path] = info.split()[2]
+    return out
+
+
+def db_dir():
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    return os.path.join(common, "build-cache")
+
+
+def load_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=1, sort_keys=True)
+    os.replace(tmp, path)
+
+
+class Project:
+    """The checkout to restore: its files, dependencies and their contents."""
+
+    def __init__(self, root):
+        need("rocq")
+        self.root = root
+        self.files, self.loadpath = read_project(root)
+        if self.files is None:
+            die("no _CoqProject in " + root)
+        self.maps = mappings(self.loadpath)
+        self.deps, self.extras = self.depgraph()
+        present = [p for p in self.files + sorted(
+            {x for xs in self.extras.values() for x in xs})
+            if os.path.isfile(os.path.join(root, p))]
+        self.md5 = {p: md5(os.path.join(root, p)) for p in present}
+        self.blob = dict(zip(present, git(
+            "hash-object", "--stdin-paths", cwd=root,
+            input="\n".join(present)).split()))
+
+    def depgraph(self):
+        """{v: project files it requires}, {v: other files it reads (Load)}."""
+        r = subprocess.run(["rocq", "dep", "-f", "_CoqProject"],
+                           cwd=self.root, capture_output=True, text=True)
+        if r.returncode:
+            die("rocq dep failed:\n" + r.stderr)
+        project = set(self.files)
+        deps = {v: [] for v in self.files}
+        extras = {v: [] for v in self.files}
+        for line in r.stdout.replace("\\\n", " ").splitlines():
+            targets, sep, prereqs = line.partition(":")
+            vo = (targets.split() or [""])[0]
+            if not sep or not vo.endswith(".vo") or vo[:-1] not in project:
+                continue
+            v = vo[:-1]
+            for d in prereqs.split():
+                if d.endswith(".vo") and d[:-1] in project:
+                    deps[v].append(d[:-1])
+                elif d != v and not d.endswith(".vo") \
+                        and not os.path.isabs(d) \
+                        and os.path.isfile(os.path.join(self.root, d)):
+                    extras[v].append(d)
+        return deps, extras
+
+
+# Sources. Each says whether v's compiled files fit this checkout, ignoring
+# its dependencies (own), whether v's .vo is newer than that of a
+# dependency d (ordered), and whether a file x that v Loads fits (extra).
+
+class Checkout:
+    """The live build of a checkout, possibly this one."""
+
+    def __init__(self, root, dst, here=False):
+        self.root, self.dst, self.here = root, dst, here
+        self.rank = 0 if here else 1
+        self.commit = try_git("rev-parse", "HEAD", cwd=root)
+        if here:
+            self.label = ""
+        else:
+            name = os.path.basename(root)
+            parent = os.path.basename(os.path.dirname(root))
+            main = os.path.dirname(git("rev-parse", "--path-format=absolute",
+                                       "--git-common-dir"))
+            self.label = "main clone" if root == main else \
+                name if parent == "worktrees" else root
+        self.kind = "here" if here else "worktree"
+        self.vo, self.md5 = {}, {}
+        for v in dst.files:
+            base = os.path.join(root, v[:-2])
+            tv, tg = mtime(base + ".vo"), mtime(base + ".glob")
+            # A .glob newer than its .vo is from a failed or running compile.
+            if tv is not None and tg is not None and tg <= tv + 2 \
+                    and glob_digest(base + ".glob") == dst.md5.get(v):
+                self.vo[v] = tv
+        self.created = max(self.vo.values(), default=0)
+        self.loads_file = os.path.join(
+            git("rev-parse", "--absolute-git-dir", cwd=root),
+            "build-cache-loads.json")
+        self.loads = load_json(self.loads_file, {})
+
+    def own(self, v):
+        return v in self.vo
+
+    def ordered(self, v, d):
+        return self.vo[v] >= self.vo[d]
+
+    def extra(self, x, v):
+        p = os.path.join(self.root, x)
+        if x not in self.md5:
+            self.md5[x] = md5(p)
+        if self.md5[x] != self.dst.md5.get(x):
+            return False
+        t = mtime(p)
+        if t is not None and t <= self.vo[v]:
+            return True
+        # Touched since v was compiled, e.g. by a rebase: fine if the
+        # contents are those remember() saw when it was older.
+        seen = self.loads.get(x, {})
+        return seen.get("md5") == self.md5[x] and \
+            seen.get("vo", {}).get(v) == self.vo[v]
+
+    def remember(self, reused):
+        """Record the contents of the files that reused files Load, which
+        nothing in the compiled files does."""
+        old = json.dumps(self.loads, sort_keys=True)
+        for v in reused:
+            for x in self.dst.extras[v]:
+                seen = self.loads.setdefault(x, {})
+                if seen.get("md5") != self.md5[x]:
+                    seen.update(md5=self.md5[x], vo={})
+                seen["vo"][v] = self.vo[v]
+        if json.dumps(self.loads, sort_keys=True) != old:
+            write_json(self.loads_file, self.loads)
+
+    def path(self, a):
+        return os.path.join(self.root, a)
+
+    def rocq_args(self):
+        args = []
+        for l in self.dst.loadpath:
+            flag, d, *rest = l.split()
+            args += [flag, os.path.join(self.root, d), *rest]
+        return args
+
+    def prepare(self, tmp):
+        pass
+
+
+class Snapshot:
+    """A build stored by `build-cache save`."""
+
+    rank = 1
+    kind = "snapshot"
+
+    def __init__(self, info, dst):
+        self.info, self.dst = info, dst
+        self.label = info["id"]
+        self.commit = info.get("commit")
+        self.created = info["created"]
+        self.root = None
+
+    def own(self, v):
+        return self.info["digests"].get(v) == self.dst.md5.get(v) is not None
+
+    def ordered(self, v, d):
+        return True
+
+    def extra(self, x, v):
+        return self.info["extras"].get(x) == self.dst.md5.get(x)
+
+    def path(self, a):
+        return os.path.join(self.root, a)
+
+    def rocq_args(self):
+        return Checkout.rocq_args(self)
+
+    def prepare(self, tmp, members):
+        need("tar", "zstd")
+        self.root = os.path.join(tmp, "snapshot")
+        os.makedirs(self.root)
+        subprocess.run([*TAR_ZSTD, "-C", self.root, "-xf",
+                        self.info["tarball"], "--null", "-T", "-"],
+                       input="\0".join(members).encode(), check=True)
+
+
+class CI:
+    """CI's build of a commit: a store path, local or on cachix."""
+
+    def __init__(self, commit, store_path, narinfo, dst):
+        self.commit, self.store_path, self.narinfo = commit, store_path, narinfo
+        self.dst = dst
+        self.rank = 2 if narinfo else 1
+        self.kind = "cachix" if narinfo else "nix"
+        self.label = ""
+        self.created = int(git("log", "-1", "--format=%ct", commit))
+        self.blobs = ls_tree(commit)
+        self.install = {}
+        for v in dst.files:
+            name = logical_name(v, dst.maps)
+            if name:
+                base = name.replace(".", "/")
+                self.install[v[:-2] + ".vo"] = base + ".vo"
+                self.install[v[:-2] + ".glob"] = base + ".glob"
+        self.root = None if narinfo else user_contrib(store_path)
+
+    def own(self, v):
+        vo = v[:-2] + ".vo"
+        return vo in self.install and \
+            self.blobs.get(v) == self.dst.blob.get(v) is not None and \
+            (self.root is None
+             or os.path.exists(os.path.join(self.root, self.install[vo])))
+
+    def ordered(self, v, d):
+        return True
+
+    def extra(self, x, v):
+        return self.blobs.get(x) == self.dst.blob.get(x)
+
+    def path(self, a):
+        return os.path.join(self.root, self.install[a]) \
+            if a in self.install else None
+
+    def rocq_args(self):
+        args = []
+        for _, lib in self.dst.maps:
+            args += ["-Q", os.path.join(self.root, *lib.split(".")), lib]
+        return args
+
+    def prepare(self, tmp):
+        if self.narinfo:
+            self.root = download(self.narinfo, tmp)
+
+
+def user_contrib(path):
+    found = glob.glob(os.path.join(path, "lib/coq/*/user-contrib"))
+    return found[0] if found else None
+
+
+def fetch(url, timeout=None):
+    # Cachix refuses Python's default User-Agent.
+    return urllib.request.urlopen(
+        urllib.request.Request(url, headers={"User-Agent": "build-cache"}),
+        timeout=timeout)
+
+
+def get_narinfo(path):
+    """The narinfo of a store path on cachix, or None."""
+    url = "%s/%s.narinfo" % (CACHIX, os.path.basename(path)[:32])
+    try:
+        with fetch(url, timeout=30) as r:
+            text = r.read().decode()
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            warn("%s: %s" % (url, e))
+        return None
+    except OSError as e:
+        warn("%s: %s" % (url, e))
+        return None
+    return dict(l.split(": ", 1) for l in text.splitlines() if ": " in l)
+
+
+def download(nar, tmp):
+    """Download and unpack a NAR from cachix; return its user-contrib."""
+    need(DECOMPRESS[nar.get("Compression", "none")][0])
+    print("build-cache: downloading %s (%d MB)" % (
+        nar["StorePath"], int(nar.get("FileSize", 0)) >> 20), flush=True)
+    f = os.path.join(tmp, "nar")
+    h = hashlib.sha256()
+    with fetch(CACHIX + "/" + nar["URL"]) as r, open(f, "wb") as out:
+        while chunk := r.read(1 << 20):
+            h.update(chunk)
+            out.write(chunk)
+    want = subprocess.check_output(
+        ["nix", "hash", "convert", "--hash-algo", "sha256", "--to", "base16",
+         nar["FileHash"]], text=True).strip()
+    if h.hexdigest() != want:
+        raise RuntimeError("the download doesn't match its hash")
+    with open(f, "rb") as fin:
+        unpack = subprocess.Popen(DECOMPRESS[nar.get("Compression", "none")],
+                                  stdin=fin, stdout=subprocess.PIPE)
+        subprocess.run(["nix-store", "--restore", os.path.join(tmp, "out")],
+                       stdin=unpack.stdout, check=True)
+        unpack.stdout.close()
+        if unpack.wait():
+            raise RuntimeError("cannot unpack the download")
+    os.remove(f)
+    return user_contrib(os.path.join(tmp, "out"))
+
+
+# Finding sources
+
+def worktrees():
+    """The roots of all checkouts of this repository."""
+    out = git("worktree", "list", "--porcelain")
+    return [l.split(" ", 1)[1] for l in out.splitlines()
+            if l.startswith("worktree ")]
+
+
+def checkouts(dst, roots, skipped):
+    out = []
+    for root in roots:
+        if os.path.realpath(root) == os.path.realpath(dst.root):
+            continue
+        _, loadpath = read_project(root)
+        if loadpath is None:
+            continue
+        c = Checkout(root, dst)
+        if loadpath != dst.loadpath:
+            skipped.append((c, "different -Q/-R/-I lines in _CoqProject"))
+        elif not c.vo:
+            skipped.append((c, "no compiled files that fit"))
+        else:
+            out.append(c)
+    return out
+
+
+def snapshots():
+    """The infos of the snapshots, newest first."""
+    out = []
+    for p in glob.glob(os.path.join(db_dir(), "snapshots", "*.json")):
+        info = load_json(p, None)
+        if info and os.path.exists(p[:-5] + ".tar.zst"):
+            out.append(dict(info, tarball=p[:-5] + ".tar.zst"))
+    return sorted(out, key=lambda i: i["created"], reverse=True)
+
+
+def snapshot_sources(dst, infos, skipped):
+    out, env = [], env_key()
+    for info in infos:
+        s = Snapshot(info, dst)
+        if info["env"] != env:
+            skipped.append((s, "built with another Rocq or libraries"))
+        elif info["loadpath"] != dst.loadpath:
+            skipped.append((s, "different -Q/-R/-I lines in _CoqProject"))
+        else:
+            out.append(s)
+    return out
+
+
+def ci_commits(depth):
+    seen, out = set(), []
+    for ref in ("HEAD", "main"):
+        if try_git("rev-parse", "--verify", "-q", ref + "^{commit}"):
+            for c in git("rev-list", "--first-parent", "-n", str(depth),
+                         ref).split():
+                if c not in seen:
+                    seen.add(c)
+                    out.append(c)
+    return out
+
+
+def ci_sources(dst, commits, offline, skipped):
+    """CI's builds of the commits that are in the local store or on cachix,
+    built with the libraries in use."""
+    attr = "rocq" + "".join(nix_rocq_version().split(".")[:3])
+    repo = os.path.dirname(git("rev-parse", "--path-format=absolute",
+                               "--git-common-dir"))
+    cache_file = os.path.join(db_dir(), "outpaths.json")
+    cache = load_json(cache_file, {})
+
+    def outpath(c):
+        key = "%s %s" % (c, attr)
+        if key not in cache:
+            r = subprocess.run(
+                ["nix", "eval", "--raw",
+                 "git+file://%s?rev=%s#%s.outPath" % (repo, c, attr)],
+                capture_output=True, text=True)
+            cache[key] = r.stdout if r.returncode == 0 else ""
+        return cache[key]
+
+    def lookup(path):
+        if os.path.exists(path):
+            if not user_contrib(path):
+                return False, set()
+            refs = subprocess.check_output(
+                ["nix-store", "-q", "--references", path], text=True).split()
+            return None, {os.path.basename(r) for r in refs}
+        if offline:
+            return False, set()
+        nar = get_narinfo(path)
+        if not nar:
+            return False, set()
+        return nar, set(nar.get("References", "").split())
+
+    with concurrent.futures.ThreadPoolExecutor(8) as pool:
+        paths = list(pool.map(outpath, commits))
+        write_json(cache_file, cache)
+        unique = list(dict.fromkeys(p for p in paths if p))
+        found = dict(zip(unique, pool.map(lookup, unique)))
+    libs = {p.split("/")[3] for p in libraries() if p.startswith("/nix/store/")}
+    out = []
+    for c, p in zip(commits, paths):
+        if not p or found.get(p, (False,))[0] is False:
+            continue
+        nar, refs = found.pop(p)  # older commits with the same build: skip
+        s = CI(c, p, nar, dst)
+        if not libs <= refs:
+            skipped.append((s, "built with other libraries"))
+        else:
+            out.append(s)
+    return out
+
+
+def sources(specs, dst, offline, depth):
+    kinds, roots, ids, revs = set(), [], [], []
+    infos = snapshots()
+    by_id = {i["id"]: i for i in infos}
+    for s in specs:
+        if s in KINDS:
+            kinds.add(s)
+        elif os.path.isdir(s):
+            roots.append(os.path.abspath(s))
+        elif s in by_id:
+            ids.append(by_id[s])
+        elif try_git("rev-parse", "--verify", "-q", s + "^{commit}"):
+            revs.append(git("rev-parse", s + "^{commit}"))
+        else:
+            die("unknown source %r: not one of %s, a directory, a snapshot "
+                "ID or a revision" % (s, ", ".join(KINDS)))
+    if not specs:
+        kinds = set(KINDS)
+    out, skipped = [], []
+    if "here" in kinds:
+        out.append(Checkout(dst.root, dst, here=True))
+    if "worktrees" in kinds:
+        roots += worktrees()
+    out += checkouts(dst, list(dict.fromkeys(roots)), skipped)
+    if "snapshots" not in kinds:
+        trees = {git("rev-parse", r + "^{tree}") for r in revs}
+        infos = ids + [i for i in infos if i.get("commit") in revs
+                       or i.get("tree") in trees]
+    out += snapshot_sources(dst, infos, skipped)
+    commits = (ci_commits(depth) if "ci" in kinds else []) + revs
+    why = commits and no_ci()
+    if why and "ci" in specs:
+        die("cannot use CI's builds: " + why)
+    elif why:
+        warn("not looking at CI's builds: " + why)
+    elif commits:
+        out += ci_sources(dst, list(dict.fromkeys(commits)), offline, skipped)
+    return out, skipped
+
+
+# Planning
+
+def plan(src, dst):
+    """The files whose compiled files src can provide."""
+    memo = {}
+
+    def ok(v):
+        if v not in memo:
+            memo[v] = False  # guards against cycles
+            memo[v] = src.own(v) and \
+                all(ok(d) and src.ordered(v, d) for d in dst.deps[v]) and \
+                all(src.extra(x, v) for x in dst.extras[v])
+        return memo[v]
+
+    return [v for v in dst.files if ok(v)]
+
+
+def compile_times(dst):
+    """{v: seconds}, from the build traces and time-of-build.log files of all
+    checkouts, newest last, merged into .git/build-cache/times.json."""
+    cache_file = os.path.join(db_dir(), "times.json")
+    times = load_json(cache_file, {})
+    logs = []
+    for root in worktrees():
+        gitdir = try_git("rev-parse", "--absolute-git-dir", cwd=root)
+        for p in (os.path.join(root, "build-trace.log"),
+                  gitdir and os.path.join(gitdir, "build-trace.log"),
+                  os.path.join(root, "time-of-build.log")):
+            if p and mtime(p):
+                logs.append((mtime(p), p))
+    for _, p in sorted(logs):
+        with open(p, errors="replace") as f:
+            for line in f:
+                w = line.split()
+                try:
+                    if p.endswith("build-trace.log") and len(w) == 4:
+                        if w[2] == "0" and w[3].endswith(".v"):
+                            times[w[3]] = float(w[1]) - float(w[0])
+                    elif len(w) > 2 and w[0].endswith(".vo") \
+                            and w[1] == "(real:":
+                        times[w[0][:-1]] = float(w[2].rstrip(","))
+                except ValueError:
+                    pass
+    write_json(cache_file, times)
+    known = [times[v] for v in dst.files if v in times]
+    default = statistics.median(known) if known else 1.0
+    return {v: times.get(v, default) for v in dst.files}, bool(known)
+
+
+def rest(dst, reused):
+    reused = set(reused)
+    return [v for v in dst.files if v not in reused]
+
+
+def rank(srcs, dst, weights):
+    head = try_git("rev-parse", "HEAD")
+    out = []
+    for s in srcs:
+        reused = plan(s, dst)
+        if isinstance(s, Checkout):
+            s.remember(reused)
+        rebuild = rest(dst, reused)
+        cost = sum(weights[v] for v in rebuild)
+        anc = bool(head and s.commit and is_ancestor(s.commit, head))
+        out.append((cost, s.rank, not anc, -s.created, s, reused, rebuild))
+    here = min((r[0] for r in out if r[4].kind == "here"), default=None)
+    out.sort(key=lambda r: (here if here is not None and r[0] > here - SLACK
+                            else r[0],) + r[1:4])
+    return out
+
+
+def describe(s):
+    """Commit, date, and the label or subject."""
+    if s.commit is None:
+        return s.label
+    h, date, subject = git("log", "-1", "--format=%h%n%cs%n%s",
+                           s.commit).split("\n")
+    return "%s %s  %s" % (h, date, s.label + ": " + subject if s.label
+                          else subject)
+
+
+def name(s):
+    if s.kind == "here":
+        return "this checkout"
+    if s.kind in ("nix", "cachix"):
+        return "CI's build of %s (%s)" % (
+            s.commit[:12], "nix store" if s.kind == "nix" else "cachix")
+    return "%s %s" % (s.kind, s.label)
+
+
+def fmt_cost(cost, timed):
+    return "~%.0fs" % cost if timed else ""
+
+
+# Checking and restoring
+
+def load_check(src, dst, reused):
+    """Load a few of src's files, one for each library they require, so that
+    every library and Rocq itself is checked against what built them."""
+    reused_set = set(reused)
+    size = {}
+
+    def closure(v):
+        if v not in size:
+            seen, todo = {v}, [v]
+            while todo:
+                for d in dst.deps[todo.pop()]:
+                    if d not in seen:
+                        seen.add(d)
+                        todo.append(d)
+            size[v] = len(seen)
+        return size[v]
+
+    prefixes = [lib for _, lib in dst.maps]
+    best = {}
+    for v in sorted(reused_set, key=closure):
+        try:
+            with open(src.path(v[:-2] + ".glob")) as f:
+                libs = {l.split()[1] for l in f
+                        if l.startswith("R") and l.rstrip().endswith(" lib")}
+        except (OSError, IndexError):
+            continue
+        for lib in libs:
+            if not any(lib == p or lib.startswith(p + ".") for p in prefixes):
+                best.setdefault(lib.split(".")[0], v)
+    names = sorted({logical_name(v, dst.maps) for v in best.values()} - {None})
+    if not names:
+        return True
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "BuildCacheCheck.v"), "w") as f:
+            f.write("Require %s.\n" % " ".join(names))
+        r = subprocess.run(["rocq", "compile", "-q", *src.rocq_args(),
+                            "BuildCacheCheck.v"], cwd=tmp,
+                           capture_output=True, text=True)
+    if r.returncode:
+        warn("%s doesn't load with this Rocq and these libraries:\n  %s"
+             % (name(src),
+                "\n  ".join((r.stdout + r.stderr).strip().splitlines()[-3:])))
+    return r.returncode == 0
+
+
+def copy_in(s, d):
+    tmp = d + ".build-cache.tmp"
+    shutil.copyfile(s, tmp)
+    os.replace(tmp, d)
+
+
+def apply(src, dst, reused, rebuild):
+    root = dst.root
+    if not getattr(src, "here", False):
+        for v in reused:
+            for a in artifacts(v):
+                s, d = src.path(a), os.path.join(root, a)
+                if s and os.path.exists(s):
+                    copy_in(s, d)
+                elif os.path.exists(d):
+                    os.remove(d)  # from another build
+            for ext in (".vos", ".vok"):
+                d = os.path.join(root, v[:-2] + ext)
+                if os.path.exists(d):
+                    os.remove(d)
+        for c in CACHES:
+            s, d = src.path(c), os.path.join(root, c)
+            if s and os.path.exists(s) and not os.path.exists(d):
+                shutil.copyfile(s, d)
+    now = time.time()
+    t_src, t_art = now - 120, now - 60
+    for v in reused:
+        for p in [v] + dst.extras[v]:
+            os.utime(os.path.join(root, p), (t_src, t_src))
+    for v in reused:
+        for a in artifacts(v):
+            if os.path.exists(os.path.join(root, a)):
+                os.utime(os.path.join(root, a), (t_art, t_art))
+    for v in rebuild:
+        if os.path.exists(os.path.join(root, v)):
+            os.utime(os.path.join(root, v), (now, now))
+    here = Checkout(root, dst, here=True)
+    here.remember(plan(here, dst))
+
+
+def cmd_restore(args, listing):
+    dst = Project(git("rev-parse", "--show-toplevel"))
+    weights, timed = compile_times(dst)
+    srcs, skipped = sources(args.sources, dst, args.offline, args.depth)
+    ranked = rank(srcs, dst, weights)
+    total = sum(weights.values())
+
+    if listing:
+        print("%d files%s" % (len(dst.files),
+                              ", ~%.0fs to build" % total if timed else ""))
+        print("%7s %7s  %-8s %s" % ("cost", "rebuild", "kind", "source"))
+        for cost, _, _, _, s, _, rebuild in ranked:
+            print("%7s %7d  %-8s %s" % (fmt_cost(cost, timed), len(rebuild),
+                                       s.kind, describe(s)[:80]))
+        for s, why in skipped:
+            print("skipped %s: %s" % (name(s), why))
+        return 0
+
+    if not ranked:
+        die("no sources of compiled files found")
+    db = db_dir()
+    os.makedirs(db, exist_ok=True)
+    for cost, _, _, _, src, reused, rebuild in ranked:
+        if not reused:
+            die("no source has compiled files that fit; %d files to build"
+                % len(dst.files))
+        with tempfile.TemporaryDirectory(dir=db) as tmp:
+            try:
+                if isinstance(src, Snapshot):
+                    stored = set(src.info["files"])
+                    members = [a for v in reused for a in artifacts(v)] + \
+                        list(CACHES)
+                    src.prepare(tmp, [m for m in members
+                                      if m in stored])
+                else:
+                    src.prepare(tmp)
+            except (OSError, RuntimeError, subprocess.CalledProcessError) as e:
+                warn("%s: %s" % (name(src), e))
+                continue
+            reused = plan(src, dst)  # now with the files actually there
+            rebuild = rest(dst, reused)
+            cost = sum(weights[v] for v in rebuild)
+            if reused and not args.no_check and \
+                    not load_check(src, dst, reused):
+                continue
+            apply(src, dst, reused, rebuild)
+        break
+    else:
+        die("no source passed the check")
+
+    print("build-cache: reused %d of %d files from %s; %d to rebuild%s" % (
+        len(reused), len(dst.files), name(src), len(rebuild),
+        " (%s)" % fmt_cost(cost, timed) if timed and rebuild else ""))
+    for v in sorted(rebuild, key=lambda v: -weights[v])[:10]:
+        print("  %7s  %s" % (fmt_cost(weights[v], timed), v))
+    if len(rebuild) > 10:
+        print("  ... and %d more" % (len(rebuild) - 10))
+    return 0
+
+
+def cmd_save(args):
+    need("tar", "zstd")
+    dst = Project(git("rev-parse", "--show-toplevel"))
+    here = Checkout(dst.root, dst, here=True)
+    reused = plan(here, dst)
+    if not reused:
+        die("no up-to-date compiled files to save")
+    here.remember(reused)
+    if not args.no_check and not load_check(here, dst, reused):
+        die("not saving")
+    compile_times(dst)  # keep the times before the logs go
+    digests = {v: dst.md5[v] for v in reused}
+    extras = {x: dst.md5[x] for v in reused for x in dst.extras[v]}
+    env = env_key()
+    for info in snapshots():
+        if (info["env"], info["loadpath"], info["digests"], info["extras"]) \
+                == (env, dst.loadpath, digests, extras):
+            print("build-cache: already saved as %s" % info["id"])
+            return 0
+    commit = try_git("rev-parse", "HEAD")
+    now = time.time()
+    sid = "%s-%s" % ((commit or "none")[:12],
+                     time.strftime("%Y%m%dT%H%M%S", time.localtime(now)))
+    files = [a for v in reused for a in artifacts(v)
+             if os.path.exists(os.path.join(dst.root, a))] + \
+        [c for c in CACHES if os.path.exists(os.path.join(dst.root, c))]
+    base = os.path.join(db_dir(), "snapshots", sid)
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    tmp = "%s.%d.tmp" % (base, os.getpid())
+    subprocess.run([*TAR_ZSTD, "-C", dst.root, "-cf", tmp, "--null", "-T", "-"],
+                   input="\0".join(files).encode(), check=True)
+    os.replace(tmp, base + ".tar.zst")
+    write_json(base + ".json", dict(
+        id=sid, commit=commit, tree=commit and git("rev-parse", "HEAD^{tree}"),
+        created=now, checkout=dst.root, env=env, loadpath=dst.loadpath,
+        digests=digests, extras=extras, files=files))
+    print("build-cache: saved %d of %d files as %s (%d MB)" % (
+        len(reused), len(dst.files), sid,
+        os.path.getsize(base + ".tar.zst") >> 20))
+    return 0
+
+
+def drop(info):
+    for p in (info["tarball"], info["tarball"][:-8] + ".json"):
+        if os.path.exists(p):
+            os.remove(p)
+    print("build-cache: dropped %s" % info["id"])
+
+
+def cmd_prune(args):
+    for info in snapshots()[args.keep:]:
+        drop(info)
+    return 0
+
+
+def cmd_drop(args):
+    by_id = {i["id"]: i for i in snapshots()}
+    for sid in args.ids:
+        if sid not in by_id:
+            die("no snapshot " + sid)
+    for sid in args.ids:
+        drop(by_id[sid])
+    return 0
+
+
+def main():
+    argv = sys.argv[1:]
+    commands = ("restore", "list", "save", "prune", "drop")
+    if not argv or argv[0] not in commands + ("-h", "--help"):
+        argv = ["restore"] + argv
+    p = argparse.ArgumentParser(
+        prog="build-cache", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="command", required=True)
+    for name in ("restore", "list"):
+        q = sub.add_parser(name)
+        q.add_argument("sources", nargs="*", metavar="SOURCE")
+        q.add_argument("--offline", action="store_true",
+                       help="don't look on cachix")
+        q.add_argument("--depth", type=int, default=10, metavar="N",
+                       help="first-parent commits of HEAD and main to look "
+                       "for CI builds of (default 10)")
+        if name == "restore":
+            q.add_argument("--no-check", action="store_true",
+                           help="don't check that the files load")
+    q = sub.add_parser("save")
+    q.add_argument("--no-check", action="store_true")
+    q = sub.add_parser("prune")
+    q.add_argument("--keep", type=int, default=3, metavar="N")
+    q = sub.add_parser("drop")
+    q.add_argument("ids", nargs="+", metavar="ID")
+    args = p.parse_args(argv)
+    if args.command in ("restore", "list"):
+        return cmd_restore(args, args.command == "list")
+    return {"save": cmd_save, "prune": cmd_prune, "drop": cmd_drop}[
+        args.command](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

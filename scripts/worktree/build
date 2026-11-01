@@ -7,15 +7,21 @@
 # targets (and their dependencies) with Makefile.coq.
 #
 # The full output goes to build.log in this worktree's git directory, so it is
-# never committed. On failure, the first errors are printed with some context.
+# never committed, and a build trace to build-trace.log next to it (see
+# HACKING.md; scripts/build-cache takes compile times from it). On failure,
+# the first errors are printed with some context.
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
-log="$(git rev-parse --absolute-git-dir)/build.log"
+gitdir=$(git rev-parse --absolute-git-dir)
+log=$gitdir/build.log
+trace=$gitdir/build-trace.log
+rm -f "$trace"
 start=$(date +%s)
 if [ "$#" -eq 0 ]; then
-  make >"$log" 2>&1
+  make BUILDTRACE="$trace" >"$log" 2>&1
 else
-  make Makefile.coq >"$log" 2>&1 && make -f Makefile.coq "$@" >>"$log" 2>&1
+  make Makefile.coq >"$log" 2>&1 &&
+    make -f Makefile.coq BUILDTRACE="$trace" "$@" >>"$log" 2>&1
 fi
 status=$?
 secs=$(( $(date +%s) - start ))
