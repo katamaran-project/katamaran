@@ -1927,7 +1927,7 @@ Module RiscvPmpValidContracts.
   Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_ILLEGAL : ValidContract execute_ILLEGAL.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma pmp_check_perms_gives_access :
     forall acc p L0 A0 X0 W0 R0,
