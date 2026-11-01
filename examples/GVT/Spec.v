@@ -713,10 +713,10 @@ Module RiscvPmpSpecVerif.
     end.
 
   Lemma valid_execute_rX : ValidContract rX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_execute_wX : ValidContract wX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   (* Import SymProp.notations. *)
   (* Set Printing Depth 200. *)

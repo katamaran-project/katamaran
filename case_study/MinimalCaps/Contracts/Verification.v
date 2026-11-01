@@ -119,157 +119,157 @@ Module MinCapsValidContracts.
     cbn.
 
   Lemma valid_contract_read_reg : ValidContractReflect read_reg.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_read_reg_cap : ValidContractReflect read_reg_cap.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_read_reg_num : ValidContractReflect read_reg_num.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_write_reg : ValidContractReflect write_reg.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_next_pc : ValidContractReflect next_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_update_pc : ValidContractReflect update_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_update_pc_perm : ValidContractReflect update_pc_perm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_is_correct_pc : ValidContractReflect is_correct_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_is_perm : ValidContractReflect MinCapsProgram.is_perm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_add_pc : ValidContractReflect add_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_read_mem : ValidContractReflect read_mem.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_write_mem : ValidContractReflect write_mem.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_read_allowed : ValidContractReflect read_allowed.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_write_allowed : ValidContractReflect write_allowed.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_within_bounds : ValidContractReflect within_bounds.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_perm_to_bits : ValidContractReflect perm_to_bits.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_perm_from_bits : ValidContractReflect perm_from_bits.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_and_perm : ValidContractReflect and_perm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_is_sub_perm : ValidContractReflect is_sub_perm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_is_within_range : ValidContractReflect is_within_range.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_abs : ValidContractReflect abs.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_is_not_zero : ValidContractReflect is_not_zero.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_can_incr_cursor : ValidContractReflect can_incr_cursor.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_jalr_cap : ValidContractReflect exec_jalr_cap.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cjalr : ValidContractReflect exec_cjalr.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cjal : ValidContractReflect exec_cjal.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_bne : ValidContractReflect exec_bne.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cmove : ValidContractReflect exec_cmove.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_ld : ValidContractReflect exec_ld.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_sd : ValidContractReflect exec_sd.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cincoffset : ValidContractReflect exec_cincoffset.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_candperm : ValidContractReflect exec_candperm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_csetbounds : ValidContractReflect exec_csetbounds.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_csetboundsimm : ValidContractReflect exec_csetboundsimm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cgettag : ValidContractReflect exec_cgettag.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_addi : ValidContractReflect exec_addi.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_add : ValidContractReflect exec_add.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_sub : ValidContractReflect exec_sub.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_slt : ValidContractReflect exec_slt.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_slti : ValidContractReflect exec_slti.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_sltu : ValidContractReflect exec_sltu.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_sltiu : ValidContractReflect exec_sltiu.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cgetperm : ValidContractReflect exec_cgetperm.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cgetbase : ValidContractReflect exec_cgetbase.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cgetlen : ValidContractReflect exec_cgetlen.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_cgetaddr : ValidContractReflect exec_cgetaddr.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_fail : ValidContractReflect exec_fail.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_ret : ValidContractReflect exec_ret.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec_instr : ValidContractReflect exec_instr.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exec : ValidContractReflect exec.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_step : ValidContractReflect step.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_reflect : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
       CEnv f = Some c ->

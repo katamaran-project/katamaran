@@ -692,14 +692,14 @@ Module RiscvPmpSpecVerif.
   Proof. now vm_compute. Qed.
 
   Lemma valid_execute_wX : ValidContract wX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   (* Import SymProp.notations. *)
   (* Set Printing Depth 200. *)
   (* Eval vm_compute in (postprocess (RiscvPmpBlockVerifExecutor.SHeapSpecM.vcgen RiscvPmpBlockVerifExecutor.default_config 1 *)
   (*            sep_contract_fetch_instr (FunDef fetch))). *)
   Lemma valid_execute_fetch : ValidContract fetch.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   (* Lemma valid_execute_fetch_instr : SMut.ValidContract sep_contract_fetch_instr (FunDef fetch). *)
   (* Proof. compute. Admitted. *)
@@ -714,16 +714,16 @@ Module RiscvPmpSpecVerif.
     cbn.
 
   Lemma valid_checked_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_read bytes H).
-  Proof. destruct H; now vm_compute. Qed.
+  Proof. destruct H; vm_reflexivity. Qed.
 
   Lemma valid_checked_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@checked_mem_write bytes H).
-  Proof. destruct H; now vm_compute. Qed.
+  Proof. destruct H; vm_reflexivity. Qed.
 
   Lemma valid_pmp_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_read bytes H).
-  Proof. destruct H; now vm_compute. Qed.
+  Proof. destruct H; vm_reflexivity. Qed.
 
   Lemma valid_pmp_mem_write {bytes} {H : restrict_bytes bytes} : ValidContract (@pmp_mem_write bytes H).
-  Proof. destruct H; now vm_compute. Qed.
+  Proof. destruct H; vm_reflexivity. Qed.
 
   Import Bitvector.bv.notations.
 
@@ -760,10 +760,10 @@ Module RiscvPmpSpecVerif.
   Qed.
 
   Lemma valid_mem_read {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
-  Proof. now destruct H; vm_compute. Qed.
+  Proof. destruct H; vm_reflexivity. Qed.
 
   Lemma valid_mem_write_value {bytes} {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
-  Proof. now destruct H; vm_compute. Qed.
+  Proof. destruct H; vm_reflexivity. Qed.
 
   Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
   Proof. symbolic_simpl. intros. Lia.lia. Qed.

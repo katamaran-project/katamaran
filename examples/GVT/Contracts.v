@@ -1698,42 +1698,42 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_step : ValidContractDebugWithFuel (InlineMoreLevels 4) step.
-  Proof. (* now vm_compute. Qed. *)
-    apply Symbolic.validcontract_with_erasure_and_fuel_sound; now vm_compute.
+  Proof.
+    apply Symbolic.validcontract_reflect_fuel_sound; vm_reflexivity.
   Qed.
 
   Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_pmpWriteCfg : ValidContract pmpWriteCfg.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_pmpWriteAddr : ValidContract pmpWriteAddr.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_init_model : ValidContract init_model.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_fetch : ValidContract fetch.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute : ValidContract execute.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_init_sys : ValidContract init_sys.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_init_pmp : ValidContract init_pmp.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_handle_mem_exception : ValidContract handle_mem_exception.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_mem_write_value (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_write_value bytes H).
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContract (@mem_read bytes H).
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_checked_mem_read (bytes : nat) {H : restrict_bytes bytes} : ValidContractDebug (@checked_mem_read bytes H).
   Proof. destruct H; symbolic_simpl; eauto. Qed.
@@ -1779,13 +1779,13 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_pmpCheckPerms : ValidContract pmpCheckPerms.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_pmpAddrRange : ValidContract pmpAddrRange.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_pmpMatchAddr : ValidContractDebug pmpMatchAddr.
   Proof.
@@ -1795,49 +1795,49 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_pmpLocked : ValidContract pmpLocked.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_readCSR : ValidContractWithFuel InlineOneLevel readCSR.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_writeCSR : ValidContractWithFuel (InlineMoreLevels 2) writeCSR.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   (* Lemma valid_contract_check_CSR : ValidContract check_CSR.
-  Proof. now vm_compute. Qed. *)
+  Proof. vm_reflexivity. Qed. *)
 
   Lemma valid_contract_is_CSR_defined : ValidContract is_CSR_defined.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_check_CSR_access : ValidContract check_CSR_access.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_csrAccess : ValidContract csrAccess.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_csrPriv : ValidContract csrPriv.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_trap_handler : ValidContract trap_handler.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_prepare_trap_vector : ValidContract prepare_trap_vector.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_tvec_addr : ValidContract tvec_addr.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exceptionType_to_bits : ValidContract exceptionType_to_bits.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_Medeleg_to_bits : ValidContract Medeleg_to_bits.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_exception_delegatee : ValidContractDebugWithFuel InlineOneLevel exception_delegatee.
   Proof.
@@ -1848,31 +1848,31 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_exception_handler : ValidContract exception_handler.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_handle_illegal : ValidContract handle_illegal.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_get_arch_pc : ValidContract get_arch_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_get_next_pc : ValidContract get_next_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_set_next_pc : ValidContract set_next_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_tick_pc : ValidContract tick_pc.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_to_bits (l : nat) : ValidContract (to_bits l).
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_rX : ValidContract rX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_wX : ValidContract wX.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   (* Lemma valid_contract_abs : ValidContract abs. *)
   (* Proof. now vm_compute. Qed. *)
@@ -1885,49 +1885,49 @@ Module RiscvPmpValidContracts.
   Qed.
 
   Lemma valid_contract_execute_RTYPE : ValidContractWithFuel InlineOneLevel execute_RTYPE.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_ITYPE : ValidContractWithFuel InlineOneLevel execute_ITYPE.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_SHIFTIOP : ValidContractWithFuel InlineOneLevel execute_SHIFTIOP.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_UTYPE : ValidContract execute_UTYPE.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_BTYPE : ValidContract execute_BTYPE.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_RISCV_JAL : ValidContract execute_RISCV_JAL.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_RISCV_JALR : ValidContract execute_RISCV_JALR.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_EBREAK : ValidContractDebug execute_EBREAK.
   Proof. now symbolic_simpl. Qed.
 
   Lemma valid_contract_execute_SRET : ValidContract execute_SRET.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_STORE : ValidContract execute_STORE.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_LOAD : ValidContractWithFuel InlineOneLevel execute_LOAD.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_MUL : ValidContract execute_MUL.
-  Proof. now vm_compute. Qed.
+  Proof. vm_reflexivity. Qed.
 
   Lemma valid_contract_execute_ILLEGAL : ValidContract execute_ILLEGAL.
   Proof. now vm_compute. Qed.

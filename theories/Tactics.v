@@ -153,3 +153,12 @@ Ltac inster_loop H tac :=
 
 Tactic Notation "inster" constr(H) "by" tactic(tac) :=
   inster_loop H tac.
+
+(* Prove [x = y] where [x] evaluates to [y] with the VM. Unlike
+   [vm_compute; reflexivity], the evaluation only happens once, in the kernel
+   at Qed, so failures are also only reported there. *)
+Ltac vm_reflexivity :=
+  hnf;
+  lazymatch goal with
+  | |- @eq ?A _ ?y => vm_cast_no_check (@eq_refl A y)
+  end.
