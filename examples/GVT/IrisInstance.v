@@ -67,7 +67,7 @@ Module RiscvPmpIrisAdeqParameters <: IrisAdeqParameters RiscvPmpBase RiscvPmpIri
   Definition memΣ : gFunctors := #[gen_heapΣ Addr MemVal ; tracePreΣ Trace ; iostatePreΣ IOState].
 
   Lemma NoDup_liveAddrs : NoDup liveAddrs.
-  Proof. now eapply Prelude.nodup_fixed. Qed.
+  Proof. exact Base.NoDup_liveAddrs. Qed.
 
   #[global] Arguments liveAddrs : simpl never.
 

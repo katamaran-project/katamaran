@@ -52,7 +52,8 @@ From Katamaran Require Import
      RiscvPmp.GVT.Model
      RiscvPmp.GVT.trace
      RiscvPmp.iostate
-     RiscvPmp.GVT.Contracts.
+     RiscvPmp.GVT.Contracts
+     RiscvPmp.GVT.Reification.
 From Katamaran Require RiscvPmp.GVT.Model.
 
 From iris.program_logic Require Import total_lifting.
@@ -761,7 +762,7 @@ Module RiscvPmpSpecVerif.
   Lemma valid_pmpCheck {bytes : nat} {H : restrict_bytes bytes} : ValidContractWithFuelDebug 4 (@pmpCheck bytes H).
   Proof.
     destruct H; apply verification_condition_with_erasure_sound; vm_compute;
-      constructor; cbn;
+      reify_vc; cbn;
       repeat (intros; split; intros);
       repeat match goal with
         | H: (?b1 || ?b2)%bool = true |- _ =>

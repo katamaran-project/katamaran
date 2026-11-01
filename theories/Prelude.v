@@ -161,7 +161,7 @@ End Equality.
 Ltac finite_from_eqdec :=
   match goal with
   | |- base.NoDup ?xs =>
-      now apply (@decidable.bool_decide_unpack _ (NoDup_dec xs))
+      apply (@decidable.bool_decide_unpack _ (NoDup_dec xs)); vm_compute; exact I
   | |- forall x : ?T, base.elem_of x _ =>
       lazymatch T with
       | sigT _ => intros [? []]

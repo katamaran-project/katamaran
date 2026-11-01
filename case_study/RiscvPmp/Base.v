@@ -1532,7 +1532,7 @@ Module Export RiscvPmpBase <: Base.
         | pmpaddr1      , pmpaddr1      => left eq_refl
         | _             , _             => right _
         end.
-    Proof. all: transparent_abstract (intros H; depelim H). Defined.
+    Proof. all: transparent_abstract (exact (fun H => noConfusion_inv (noConfusion_inv H))). Defined.
 
     #[export] Instance Reg_tyxlenbits_eqdec : EqDec (Reg ty_xlenbits).
     Proof.

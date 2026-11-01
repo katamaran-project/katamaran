@@ -59,6 +59,7 @@ case_study/Assumptions.v
 -Q examples/GVT Katamaran.RiscvPmp.GVT
 examples/GVT/Sig.v
 examples/GVT/Logic.v
+examples/GVT/Reification.v
 examples/GVT/Contracts.v
 examples/GVT/trace.v
 examples/GVT/IrisModel.v
