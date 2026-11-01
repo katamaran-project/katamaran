@@ -401,7 +401,7 @@ Module Type RiscvPmpIrisInstance (LOR : LeftOrRight)
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => @interp_inv_mmio _ mG2  _ bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
-    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
+    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
     | Sig.nothingPending           | _                => nothingPending

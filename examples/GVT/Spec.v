@@ -1029,7 +1029,6 @@ Module RiscvPmpIrisInstanceWithContracts.
     iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
     iIntros (? ? ? Hf). iMod "Hclose" as "_".
     rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
-    destruct (pure_decode _); inversion Hdecode.
     iPoseProof (RiscvPmpModel2.mem_state_interp_not_modified $! Hmap with "Hmem Htr") as "Hmem".
     rewrite semTWP_val. now iFrame "Hregs Hmem".
   Qed.

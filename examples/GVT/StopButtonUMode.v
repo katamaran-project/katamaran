@@ -1395,7 +1395,7 @@ Module inv := invariants.
 
   (* byte order correct? *)
   Definition mem_has_instr (μ : Memory) (a : Val ty_word) (instr : AST) : Prop :=
-    exists w, mem_has_word μ a w /\ pure_decode w = inr instr.
+    exists w, mem_has_word μ a w /\ pure_decode w = instr.
 
   Fixpoint mem_has_instrs (μ : Memory) (a : Val ty_word) (instrs : list AST) : Prop :=
     match instrs with

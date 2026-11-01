@@ -237,9 +237,7 @@ Module RiscvPmpModel2.
       iMod (fupd_mask_subseteq empty) as "Hclose"; auto. iModIntro.
       iIntros (res ? ? Hf). rewrite Heq in Hf. cbn in Hf. inversion Hf; subst.
       iMod "Hclose" as "_". iModIntro. iFrame "Hregs Hmem".
-      destruct (pure_decode _).
-      - now iApply semTWP_fail.
-      - now iApply semTWP_val.
+      now iApply semTWP_val.
     Qed.
 
     Lemma externalWorldUpdates_sound :

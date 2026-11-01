@@ -397,7 +397,7 @@ Module RiscvPmpIrisInstancePredicates.
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = instr ⌝)%I.
   End WithMemory.
 
   Section WithSailGS.
@@ -508,7 +508,7 @@ Module RiscvPmpIrisInstance <:
     | mmio_state_trace bytes    | [env] (* [unit] *)   => interp_mmio_trace_state_inv (* Given st and tr state_prot is satisfied *)
     | mmio_state_checked_read _ | [addr; w; s; s'] => interp_mmio_state_checked_read addr w s s'
     | mmio_state_checked_write _ | [addr; w; s; s'] => interp_mmio_state_checked_write addr w s s'
-    | encodes_instr             | [ code; instr ]      => ⌜pure_decode code = inr instr ⌝%I
+    | encodes_instr             | [ code; instr ]      => ⌜pure_decode code = instr ⌝%I
     | ptstomem _                | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr                | [ addr; instr ]      => interp_ptsto_instr addr instr.
 

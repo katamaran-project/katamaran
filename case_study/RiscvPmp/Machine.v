@@ -134,7 +134,10 @@ End RiscvNotations.
 
 (* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
 (* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
-Axiom pure_decode : bv 32 -> string + AST.
+(* Decoding never fails: a decoder returns either a valid instruction, or an
+   ILLEGAL instruction, so that an invalid encoding ends up in a trap (when the
+   ILLEGAL instruction is executed). *)
+Axiom pure_decode : bv 32 -> AST.
 
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
@@ -1991,7 +1994,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall (@within_mmio width H) [addr] res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , μ , inr (fun_within_mmio width addr));
     ForeignCall decode [code] res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code);
+        (γ' , μ' , res) = (γ , μ , inr (pure_decode code));
     ForeignCall externalWorldUpdates [] res γ γ' μ μ' :=
       let '(vmip' , μ'') := fun_externalWorldUpdates μ in
       (* The external world may arbitrarily change the interrupts pending register (mip)

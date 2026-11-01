@@ -207,9 +207,7 @@ Module Type RiscvPmpModel2
       iIntros (? ?) "Hres2". iMod (fupd_mask_subseteq empty) as "Hclose"; auto.
       iModIntro. iIntros (res2 ? ? Hf2). rewrite Heq in Hf2. cbn in Hf2.
       inversion Hf2; subst. iFrame "Hres2". iMod "Hclose" as "_". iModIntro.
-      destruct (pure_decode _).
-      - now iApply semWP2_fail.
-      - now iApply semWP2_val_1.
+      now iApply semWP2_val_1.
     Qed.
 
     Lemma mmio_read_sound `(H: restrict_bytes bytes) :

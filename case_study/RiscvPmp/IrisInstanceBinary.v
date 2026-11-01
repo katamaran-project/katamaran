@@ -241,7 +241,7 @@ Module Type RiscvPmpIrisInstancePredicates2
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = instr ⌝)%I.
   End WithMemory.
   Section WithSailGS.
     Context `{sailRegGS2 Σ}.
@@ -314,7 +314,7 @@ Module Type RiscvPmpIrisInstance2
     | ptstomem_readonly _      | [ addr; w ]          => interp_ptstomem_readonly addr w
     | inv_mmio bytes           | _                    => interp_inv_mmio (mG := mG) bytes
     | mmio_checked_write _     | [ addr; w ]          => interp_mmio_checked_write addr w
-    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
+    | encodes_instr            | [ code; instr ]      => ⌜ pure_decode code = instr ⌝%I
     | ptstomem _               | [ addr; bs]          => interp_ptstomem addr bs
     | ptstoinstr               | [ addr; instr ]      => interp_ptsto_instr addr instr
     (* The binary versions of the pending-write predicates own the ghost state

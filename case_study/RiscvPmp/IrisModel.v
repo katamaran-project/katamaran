@@ -321,7 +321,7 @@ Module Type RiscvPmpIrisBaseCommon <: IrisPrelims RiscvPmpBase RiscvPmpProgram R
 
     (* TODO: introduce constant for nr of word bytes (replace 4) *)
     Definition interp_ptsto_instr (addr : Addr) (instr : AST) : iProp Σ :=
-      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
+      (∃ v, @interp_ptstomem 4 addr v ∗ ⌜ pure_decode v = instr ⌝)%I.
 
     Fixpoint ptsto_instrs (a : Val ty_xlenbits) (instrs : list AST) : iProp Σ :=
       match instrs with
