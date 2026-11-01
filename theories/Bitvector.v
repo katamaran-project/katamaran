@@ -312,7 +312,7 @@ Module bv.
     Definition of_N_bin {n} (x : bv n) : of_N (bin x) = x :=
       match x with mk bs w => of_N_wf bs w end.
 
-    Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+    #[local] Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
     Lemma exp2_nzero n : exp2 n <> 0%N.
     Proof. cbn; lia. Qed.
@@ -1616,7 +1616,7 @@ Module bv.
       now rewrite <-?of_N_truncz, <-Znat.N2Z.inj_add, <-?of_N_truncz, ?truncn_idemp.
     Qed.
 
-    Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+    #[local] Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
     Lemma of_Z_S [n : nat] (z : Z) :
       @of_Z n (Z.succ z) = add one (bv.of_Z z).
@@ -2734,7 +2734,7 @@ Module bv.
                               eval_unsigned e2 * 2 ^ Z.of_nat k
       end%Z.
 
-    Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
+    #[local] Ltac Zify.zify_convert_to_euclidean_division_equations_flag ::= constr:(true).
 
     Lemma unsigned_eval {n} (e : exp n) :
       unsigned (eval e) = (eval_unsigned e mod 2 ^ Z.of_nat n)%Z.
@@ -2833,7 +2833,7 @@ Module bv.
                                     then eval cbv in (Z.of_N $m)
                                     else eval cbn in (Z.of_N $m)
                            in OfZ z
-      | app ?k ?l ?x ?y => App k l (reify_bv x) (reify_bv y)
+      | @app ?k ?l ?x ?y => App k l (reify_bv x) (reify_bv y)
       | _               =>
           match Constr.Unsafe.kind v with
           | Constr.Unsafe.Var x => Var x
@@ -2949,26 +2949,33 @@ Module bv.
             ]
       end.
 
-    Ltac zify_nonbranching_nonfailing :=
-      lazymatch goal with
+    Ltac2 zify_nonbranching_nonfailing () : unit :=
+      match! goal with
       (* TODO: Individual rewrites can be slow in proofs. Either 1) define *)
       (* inequalities using bv.unsigned that these rewrites could be *)
       (* implemented with change_no_check or 2) use a rewrite database. *)
-      | |- context[ ule ?x ?y ] => rewrite ule_iff_unsigned_le
-      | |- context[ ult ?x ?y ] => rewrite ult_iff_unsigned_lt
-      | |- context[ uge ?x ?y ] => rewrite uge_iff_unsigned_ge
-      | |- context[ ugt ?x ?y ] => rewrite ugt_iff_unsigned_gt
-      | H: context[ ule ?x ?y ] |- _ => rewrite ule_iff_unsigned_le in H
-      | H: context[ ult ?x ?y ] |- _ => rewrite ult_iff_unsigned_lt in H
-      | H: context[ uge ?x ?y ] |- _ => rewrite uge_iff_unsigned_ge in H
-      | H: context[ ugt ?x ?y ] |- _ => rewrite ugt_iff_unsigned_gt in H
+      | [ |- context[ ule _ _ ] ] => rewrite ule_iff_unsigned_le
+      | [ |- context[ ult _ _ ] ] => rewrite ult_iff_unsigned_lt
+      | [ |- context[ uge _ _ ] ] => rewrite uge_iff_unsigned_ge
+      | [ |- context[ ugt _ _ ] ] => rewrite ugt_iff_unsigned_gt
+      (* Plain hypotheses avoid the slower setoid rewrite. *)
+      | [ h : ule _ _ |- _ ] => apply ule_iff_unsigned_le in $h
+      | [ h : ult _ _ |- _ ] => apply ult_iff_unsigned_lt in $h
+      | [ h : uge _ _ |- _ ] => apply uge_iff_unsigned_ge in $h
+      | [ h : ugt _ _ |- _ ] => apply ugt_iff_unsigned_gt in $h
+      | [ h : context[ ule _ _ ] |- _ ] => rewrite ule_iff_unsigned_le in $h
+      | [ h : context[ ult _ _ ] |- _ ] => rewrite ult_iff_unsigned_lt in $h
+      | [ h : context[ uge _ _ ] |- _ ] => rewrite uge_iff_unsigned_ge in $h
+      | [ h : context[ ugt _ _ ] |- _ ] => rewrite ugt_iff_unsigned_gt in $h
 
       (* Due to how unsigned and zero are defined, change_no_check also *)
-      (* works when the bitvector length is not statically known. *)
-      | |- context[ unsigned zero ] =>
-          change_no_check (unsigned zero) with 0%Z
-      | H: context[ unsigned zero ] |- _ =>
-          change_no_check (unsigned zero) with 0%Z in H
+      (* works when the bitvector length is not statically known. Ltac2 *)
+      (* has no change_no_check, so this stays an Ltac1 call. *)
+      | [ |- context[ unsigned zero ] ] =>
+          ltac1:(change_no_check (unsigned zero) with 0%Z)
+      | [ h : context[ unsigned zero ] |- _ ] =>
+          ltac1:(h |- change_no_check (unsigned zero) with 0%Z in h)
+            (Ltac1.of_ident h)
       end.
 
     Ltac2 rec stream_to_dlist (s : unit -> 'a) (tail : 'a list) : 'a list :=
@@ -2976,9 +2983,6 @@ Module bv.
       | Val (x, k) => stream_to_dlist (fun () => k No_value) (x :: tail)
       | Err _      => tail
       end.
-
-    Ltac2 list_to_fset (t : 'k FSet.Tags.tag) (l : 'k list) : 'k FSet.t :=
-      List.fold_right FSet.add l (FSet.empty t).
 
     (* Collect all the unsigned terms. The optional identifiers denotes if it
        was found in a hypothesis or the head *)
@@ -2996,72 +3000,59 @@ Module bv.
 
       List.fold_right scan_hyp (Control.hyps ()) (collect None (Control.goal ()) []) .
 
-    (* Get all of the terms that already have bounds in the context. *)
-    #[local] Ltac2 unsigned_bounds () : (constr * constr) list :=
-      stream_to_dlist
-        (fun _ => multi_match! goal with
-               | [ _ : (0 <= @unsigned ?n ?v < 2 ^ Z.of_nat ?n)%Z |- _ ] => (n, v)
-               | [ _ : (0 <= @unsigned ?n ?v)%Z,
-                   _ : (@unsigned ?n ?v < 2 ^ Z.of_nat ?n)%Z |- _ ] => (n, v)
-               end) [].
+    #[local] Ltac2 rec exp_leaves (e : reify.exp) (acc : constr list) : constr list :=
+      match e with
+      | reify.Var x       => Control.hyp x :: acc
+      | reify.Add x y     => exp_leaves x (exp_leaves y acc)
+      | reify.Sub x y     => exp_leaves x (exp_leaves y acc)
+      | reify.Mul x y     => exp_leaves x (exp_leaves y acc)
+      | reify.App _ _ x y => exp_leaves x (exp_leaves y acc)
+      | _                 => acc
+      end.
 
-    (* Collect all the bitvector variables that are referenced under an
-       unsigned application. *)
-    #[local] Ltac2 unsigned_vars () : (ident, constr) FMap.t :=
-      let rec go (n : constr) (v : constr) (tail : (ident, constr) FMap.t) :=
-        lazy_match! v with
-        | zero      => tail
-        | one       => tail
-        | add ?x ?y => go n x (go n y tail)
-        | sub ?x ?y => go n x (go n y tail)
-        | mul ?x ?y => go n x (go n y tail)
-        | of_Z ?_z  => tail
-        | _            =>
-            match Constr.Unsafe.kind v with
-            | Constr.Unsafe.Cast c _ _ => go n c tail
-            | Constr.Unsafe.Var id     => FMap.add id n tail
-            | _                        => tail
-            end
-        end
-      in
+    #[local] Ltac2 rec has_app (e : reify.exp) : bool :=
+      match e with
+      | reify.App _ _ _ _ => true
+      | reify.Add x y     => if has_app x then true else has_app y
+      | reify.Sub x y     => if has_app x then true else has_app y
+      | reify.Mul x y     => if has_app x then true else has_app y
+      | _                 => false
+      end.
 
+    (* The terms [v] whose [unsigned v] stays opaque after zification: the
+       variables of reifiable terms and the non-reifiable terms themselves. *)
+    #[local] Ltac2 unsigned_leaves () : constr list :=
       List.fold_left
-        (fun seen s => match s with (_, n, v) => go n v seen end)
-        (FMap.empty FSet.Tags.ident_tag)
-        (unsigned_sites ()).
-
-    Ltac2 pose_unsigned_bounds (n : constr) (x : ident) : unit :=
-      let hbound := Fresh.in_goal @Hbound in
-      let v      := Control.hyp x in
-      assert ($hbound := @unsigned_bounds $n $v).
-
-    (* Saturate the context will all unsigned bounds for bitvector variables
-       that appear in an unsigned application. *)
-    Ltac2 saturate_unsigned_bounds () : unit :=
-      let vars : (ident, constr) FMap.t := unsigned_vars () in
-      let with_bounds : ident FSet.t :=
-        list_to_fset FSet.Tags.ident_tag
-          (List.map_filter (fun (_n, v) =>
-                              match Constr.Unsafe.kind v with
-                              | Constr.Unsafe.Var id     => Some id
-                              | _                        => None
-                              end)
-             (unsigned_bounds ()))
-      in
-      let need_bounds : ident list :=
-        FSet.elements (FSet.diff (FMap.domain vars) with_bounds)
-      in
-
-      List.iter
-        (fun x =>
-           match FMap.find_opt x vars with
-           | Some n => pose_unsigned_bounds n x
-           | None   => Control.throw Not_found
+        (fun acc (_, _, v) =>
+           if reify.is_closed_constr v then acc else
+           match Control.case (fun () => reify.reify_bv v) with
+           | Val (e, _) => exp_leaves e acc
+           | Err _      => v :: acc
            end)
-        need_bounds.
+        [] (unsigned_sites ()).
+
+    (* The terms that already have a bound of the form added below. *)
+    #[local] Ltac2 bounded () : constr list :=
+      List.map_filter
+        (fun (_, _, t) =>
+           lazy_match! t with
+           | (0 <= @unsigned ?n ?v < 2 ^ Z.of_nat ?n)%Z => Some v
+           | _ => None
+           end)
+        (Control.hyps ()).
+
+    (* Add a bound for every term that stays opaque after zification. *)
+    Ltac2 saturate_unsigned_bounds () : unit :=
+      let _ := List.fold_left
+        (fun seen v =>
+           if List.exist (Constr.equal v) seen then seen else
+           let h := Fresh.in_goal @Hbound in
+           assert ($h := unsigned_bounds $v); v :: seen)
+        (bounded ()) (unsigned_leaves ()) in
+      ().
 
     (* Replace [unsigned v] by an integer expression in hypothesis [h], or in
-       the goal if [h] is [None]. *)
+       the goal if [h] is [None], and then wherever else it occurs. *)
     Ltac2 zify_unsigned_small (h : ident option) (n : constr) (v : constr) : unit :=
       if Constr.is_var v then
         Control.zero (Tactic_failure None)
@@ -3077,12 +3068,17 @@ Module bv.
            let e := reify.reflect_exp n t in
            assert ($heq : $z = @unsigned $n $v)
              by (refine open_constr:(@reify.eval_unsigned_representable $n $v $z $e eq_refl eq_refl _);
-                 ltac1:(lia)));
-        let heq := Ltac1.of_ident heq in
-        match h with
-        | Some h => ltac1:(heq h |- rewrite <- heq in h; clear heq) heq (Ltac1.of_ident h)
-        | None   => ltac1:(heq |- rewrite <- heq; clear heq) heq
-        end.
+                 (* Only [app] introduces [mod]. *)
+                 if has_app t
+                 then ltac1:(Z.to_euclidean_division_equations; lia)
+                 else ltac1:(lia)));
+        let hq := Control.hyp heq in
+        (match h with
+         | Some h => rewrite <- $hq in $h
+         | None   => rewrite <- $hq
+         end);
+        Control.plus (fun () => rewrite <- $hq in *) (fun _ => ());
+        clear $heq.
 
     Ltac2 zify_unsigned_fast () :=
       match! goal with
@@ -3102,10 +3098,13 @@ Module bv.
         | _: context[@unsigned ?n ?x] |- _ => zify_unsigned_generalize n x
         end.
 
-    Ltac zify_unsigned :=
-      repeat zify_nonbranching_nonfailing;
-      ltac2:(Control.enter saturate_unsigned_bounds);
-      ltac2:(Control.enter (fun () => repeat (zify_unsigned_fast ()))).
+    Ltac2 zify_unsigned () : unit :=
+      Control.enter (fun () =>
+        repeat (zify_nonbranching_nonfailing ());
+        saturate_unsigned_bounds ();
+        repeat (zify_unsigned_fast ())).
+
+    Ltac zify_unsigned := ltac2:(zify_unsigned ()).
 
   End tactics.
 
