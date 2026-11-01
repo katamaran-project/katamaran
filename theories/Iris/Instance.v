@@ -421,13 +421,14 @@ Section Soundness.
                     (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
         end.
 
+    (* Uses projections rather than a match, so that using it for a concrete
+       contract does not unfold the contract. *)
     Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
-        match contract with
-        | MkSepContract _ _ ctxΣ θΔ pre result post =>
-        ∀ (ι : Valuation ctxΣ),
-            semTriple (inst θΔ ι) (asn.interpret pre ι) body
-                    (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
-        end.
+        ∀ (ι : Valuation (sep_contract_logic_variables contract)),
+            semTriple (inst (sep_contract_localstore contract) ι)
+                    (asn.interpret (sep_contract_precondition contract) ι) body
+                    (fun v δ' => asn.interpret (sep_contract_postcondition contract)
+                                   (env.snoc ι (sep_contract_result contract∷σ) v)).
 
     Definition ValidContractForeign {Δ τ} (contract : SepContract Δ τ) (f : 𝑭𝑿 Δ τ) : Prop :=
         forall Γ (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
@@ -734,13 +735,13 @@ Section Soundness.
                     (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
         end.
 
+    (* Uses projections, see [ValidContractSem]. *)
     Definition TValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
-        match contract with
-        | MkSepContract _ _ ctxΣ θΔ pre result post =>
-        ∀ (ι : Valuation ctxΣ),
-            semTTriple (inst θΔ ι) (asn.interpret pre ι) body
-                    (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
-        end.
+        ∀ (ι : Valuation (sep_contract_logic_variables contract)),
+            semTTriple (inst (sep_contract_localstore contract) ι)
+                    (asn.interpret (sep_contract_precondition contract) ι) body
+                    (fun v δ' => asn.interpret (sep_contract_postcondition contract)
+                                   (env.snoc ι (sep_contract_result contract∷σ) v)).
 
     Lemma TValidContractSem_ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) :
       TValidContractSem body contract ⊢

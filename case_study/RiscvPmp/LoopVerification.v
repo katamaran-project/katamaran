@@ -67,10 +67,11 @@ Import RiscvPmpProgram.
 Import RiscvPmpSignature.
 Import RiscvPmpProgramLogic.
 
-(* We need to provide a SepContract with filled in Δ, τ so we get a more
-       computable sep_contract_step version. TODO: maybe fix this directly in
-       Contracts.v? *)
-#[local] Definition sep_contract_step : SepContractFun step := RiscvPmpSpecification.sep_contract_step.
+(* The step contract at the type of step. An abbreviation rather than a
+   definition, so that every use is the same term: converting between two
+   names for the contract can make Rocq unfold it. *)
+#[local] Abbreviation sep_contract_step :=
+  (@RiscvPmpSpecification.sep_contract_step ty.unit ctx.nil).
 
 (* ArchState defines a record that contains all logic variables we will need for the
    LoopVerification. These are based on the logic variables of the step contract,
@@ -321,7 +322,7 @@ Module Type LoopVerification
     Proof.
       destruct a as [m ? ? ?].
       unfold archstate_update_pc, transition.
-      iSplit; destruct t; cbn; auto; destruct m; auto.
+      destruct t, m; reflexivity.
     Qed.
 
     Lemma M_CSRMod_machine (a : ArchState) :
@@ -399,11 +400,12 @@ Module Type LoopVerification
           cbn in Hm.
           iApply ("H" $! R (archstate_update_pc archstate i')).
           unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
-          rewrite ?transition_update_pc.
+          iSplitR "HR HM_CSRMod HM_Trap HMRET HSRET".
+          { unfold Step_pre; cbn.
+            rewrite ?Hm.
+            now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+          rewrite !transition_update_pc.
           iFrame "HR HM_CSRMod HM_Trap HMRET HSRET".
-          unfold Step_pre; cbn.
-          rewrite ?Hm.
-          now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". 
         + (* S/U-mode: still in S/U-mode, the privilege and S-mode state may have changed *)
           iDestruct "HRes" as "([%Hm _] & [%m' (Hcp & [%Hm' _] & [%stvec' Hstvec] & [%spp' [%spie' [%sie' Hmstatus]]] & [%sepc' Hsepc] & [%sscratch' Hsscratch] & [%scause' Hscause])])".
           cbn in Hm, Hm'.
@@ -418,7 +420,9 @@ Module Type LoopVerification
           { iIntros "!> [H' _]". iDestruct (M_CSRMod_machine with "H'") as %Heq.
             cbn in Heq. contradiction. }
           iSplitL "HM_Trap".
-          { iIntros "!> [H' HR]". iApply "HM_Trap". iFrame "HR". by iApply (M_Trap_SU_irrelevant with "H'"). }
+          { iIntros "!> [H' HR]". iApply "HM_Trap".
+            iSplitR "HR"; last iExact "HR".
+            by iApply (M_Trap_SU_irrelevant with "H'"). }
           iSplitL "HMRET".
           { iIntros "!> [H' _]". iDestruct (MRET_machine with "H'") as %Heq.
             cbn in Heq. contradiction. }

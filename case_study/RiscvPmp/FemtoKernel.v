@@ -1829,7 +1829,7 @@ Import RVPPRED2.
         iIntros (an) "(Hpost & Hpc & Hcode & Hnpc)".
         iEval (cbn - [interp_ptstomem]) in "Hpost".
         iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hdata)".
-        case_match; iDestruct "Han" as "[-> _]".
+        case_match; iDestruct "Han" as "[%Han _]"; cbn in Han; subst an.
         - (* The secret is zero: is_zero block. *)
           iPoseProof (contract_femtohandler_is_zero_verified__l secret vx5 secret (bv.of_N handler_is_zero_addr) archstate vmie) as "Htrip'".
           iApply (RVPTVl.WP_loop_semTripleBlock with "[Hpc Hiz Hnpc] [Hshared Hmstatus Hnp Hx1 Hx5 Hdata] Htrip'").
@@ -2089,8 +2089,9 @@ Import RVPPRED2.
             iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap HR").
             iSplitR "Hdata"; last by iExists _.
             iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
-          iApply (femtokernel_handler_dispatch_safe _ _ _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
-          iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata HR Hkdispatch";
+          iApply (femtokernel_handler_dispatch_safe _ _ _ _ Hmpp with "Hinv").
+          iFrame "Hkdispatch"; cbn - [interp_ptstomem].
+          iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata HR";
             repeat iSplitR; auto.
         - (* Check for a shutdown request. *)
           iAssert (▷ (∀ priv ms ss pc, ⌜priv ≠ Machine⌝ -∗
@@ -2104,8 +2105,9 @@ Import RVPPRED2.
           { iIntros "!>" (priv ms ss pc Hpriv) "Hhcheck Hhshutdown Hhsecret Hdata Hhexit Htrap HR".
             iApply ("Hk" with "[//] [Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata] Htrap HR").
             iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit Hdata". }
-          iApply (femtokernel_handler_shutdown_check_safe vx1 _ x10_val _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
-          iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata HR Hhshutdown Hhsecret Hhexit Hkcheck";
+          iApply (femtokernel_handler_shutdown_check_safe vx1 _ x10_val _ _ Hmpp with "Hinv").
+          iFrame "Hkcheck"; cbn - [interp_ptstomem].
+          iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata HR Hhshutdown Hhsecret Hhexit";
             repeat iSplitR; auto.
       Qed.
 
@@ -2585,9 +2587,9 @@ Import RVPPRED2.
       rewrite !ptsto_instrs_equiv.
       iSplit.
       - iIntros "((Hhentry1 & Hhdispatch1 & Hhnotzero1 & Hhiszero1 & Hhcheck1 & Hhshutdown1 & Hhsecret1 & Hhexit1) & (Hhentry2 & Hhdispatch2 & Hhnotzero2 & Hhiszero2 & Hhcheck2 & Hhshutdown2 & Hhsecret2 & Hhexit2))".
-        iFrame.
+        iFrame "Hhentry1 Hhentry2 Hhdispatch1 Hhdispatch2 Hhnotzero1 Hhnotzero2 Hhiszero1 Hhiszero2 Hhcheck1 Hhcheck2 Hhshutdown1 Hhshutdown2 Hhsecret1 Hhsecret2 Hhexit1 Hhexit2".
       - iIntros "((Hhentry1 & Hhentry2) & (Hhdispatch1 & Hhdispatch2) & (Hhnotzero1 & Hhnotzero2) & (Hhiszero1 & Hhiszero2) & (Hhcheck1 & Hhcheck2) & (Hhshutdown1 & Hhshutdown2) & (Hhsecret1 & Hhsecret2) & (Hhexit1 & Hhexit2))".
-        iFrame.
+        iFrame "Hhentry1 Hhdispatch1 Hhnotzero1 Hhiszero1 Hhcheck1 Hhshutdown1 Hhsecret1 Hhexit1 Hhentry2 Hhdispatch2 Hhnotzero2 Hhiszero2 Hhcheck2 Hhshutdown2 Hhsecret2 Hhexit2".
     Qed.
 
     (* TODO: shouldn't be needed, probably defined elsewhere already? *)
@@ -2726,7 +2728,7 @@ Import RVPPRED2.
       iIntros (an) "(Hpost & (Hpc & Hcode & Hnpc) & Hp)".
       iEval (cbn - [RVPCOM.interp_ptstomem]) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hdata)".
-      case_match; iDestruct "Han" as "[-> _]".
+      case_match; iDestruct "Han" as "[%Han _]"; cbn in Han; subst an.
       - (* The secret is zero: is_zero block. *)
         iPoseProof (contract_femtohandler_is_zero_verified__l secret vx5 secret (bv.of_N handler_is_zero_addr) archstate vmie) as "Htrip'".
         iApply (@WP2_loop_semTripleBlock_left _ _ _ _ (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) _
@@ -2785,7 +2787,7 @@ Import RVPPRED2.
       iIntros (an) "(Hpost & (Hpc & Hcode & Hnpc) & Hp)".
       iEval (cbn - [RVPCOM.interp_ptstomem]) in "Hpost".
       iDestruct "Hpost" as "(Hshared & Hmstatus & Han & Hx1 & Hdata)".
-      case_match; iDestruct "Han" as "[-> _]".
+      case_match; iDestruct "Han" as "[%Han _]"; cbn in Han; subst an.
       - (* The secret is zero: is_zero block. *)
         iPoseProof (contract_femtohandler_is_zero_verified__r secret vx5 secret (bv.of_N handler_is_zero_addr) archstate vmie) as "Htrip'".
         iApply (@WP2_loop_semTripleBlock_right _ _ _ _ (bv.of_N handler_is_zero_addr) (filter_AST femtokernel_handler_is_zero) _
@@ -3114,8 +3116,9 @@ Import RVPPRED2.
             iSplitR "Hdata"; last by iExists _, _.
             iApply ptsto_instrs_handler2_equiv.
             iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
-          iApply (femtokernel_handler_dispatch_safe_rel _ _ _ _ _ Hmpp); cbn - [interp_ptstomem].
-          iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata Hnp Hpow Hkdispatch";
+          iApply (femtokernel_handler_dispatch_safe_rel _ _ _ _ _ Hmpp).
+          iFrame "Hkdispatch"; cbn - [interp_ptstomem].
+          iFrame "Hhdispatch Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hhnotzero Hhiszero Hhexit Hx1 Hdata Hnp Hpow";
             repeat iSplitR; auto.
         + (* Check for a shutdown request. *)
           iDestruct "Hdata" as "(%secret1 & %secret2 & Hdata)".
@@ -3132,8 +3135,9 @@ Import RVPPRED2.
             iSplitR "Hdata"; last by iExists _, _.
             iApply ptsto_instrs_handler2_equiv.
             iFrame "Hinstrs Hhdispatch Hhnotzero Hhiszero Hhcheck Hhshutdown Hhsecret Hhexit". }
-          iApply (femtokernel_handler_shutdown_check_safe_rel _ _ _ _ _ _ _ Hmpp with "Hinv"); cbn - [interp_ptstomem].
-          iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata Hnp Hpow Hhshutdown Hhsecret Hhexit Hkcheck";
+          iApply (femtokernel_handler_shutdown_check_safe_rel _ _ _ _ _ _ _ Hmpp with "Hinv").
+          iFrame "Hkcheck"; cbn - [interp_ptstomem].
+          iFrame "Hhcheck Hpc Hnpc Hmscratch HaccU Hcurpriv Hmtvec Hmcause Hmip Hmie Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hpmp Hinv Hmstatus Hgprs Hx1 Hx5 Hx10 Hdata Hnp Hpow Hhshutdown Hhsecret Hhexit";
             repeat iSplitR; auto.
     Qed.
 
@@ -3375,7 +3379,7 @@ Import RVPPRED2.
                      (read_register γ1 mie)
                      with "[-]") as "H".
         { #[local] Opaque ptsto_instrs. (* Avoid spinning because code is unfolded *)
-          iFrame "∗ #". cbn - [interp_gprs].
+          iFrame "Hinit Hhandler Hadv Hdata Hmmio Hnp Hpow". cbn - [interp_gprs].
           rewrite <- ?γeq.
           rewrite γmstatus γcurpriv γpmp0cfg γpmpaddr0 γpmp1cfg γpmpaddr1 γpc γmideleg γmedeleg.
           iDestruct "Hregs" as "($ & $ & Hregs)".

@@ -215,7 +215,7 @@ Module Type LoopVerificationBinary
     Proof.
       destruct a as [m ? ? ?].
       unfold archstate_update_pc, transition.
-      iSplit; destruct t; cbn; auto; destruct m; auto.
+      destruct t, m; reflexivity.
     Qed.
 
     Lemma M_CSRMod_machine (a : ArchState) :
@@ -299,11 +299,12 @@ Module Type LoopVerificationBinary
           iApply (semWP2_mono with "[-]").
           { iApply ("H" $! R (archstate_update_pc archstate i')).
             unfold loop_pre, M_CSRMod, M_Trap, MRET, SRET.
-            rewrite ?transition_update_pc.
-            iFrame "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET".
-            unfold Step_pre; cbn.
-            rewrite ?Hm.
-            now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+            iSplitR "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET".
+            { unfold Step_pre; cbn.
+              rewrite ?Hm.
+              now iFrame "Hacc Hgprs Hpmp Hmie Hmip Hcp Hpc Hnpc Hmtvec Hstvec Hmstatus Hmepc Hsepc Hmideleg Hmedeleg Hmscratch Hmcause Hsscratch Hscause". }
+            rewrite !transition_update_pc.
+            iFrame "HR Hpl Hpr HM_CSRMod HM_Trap HMRET HSRET". }
           iIntros (? ? ? ?) "(<- & _ & $)"; auto.
         + (* S/U-mode: still in S/U-mode, the privilege and S-mode state may have changed *)
           iDestruct "HRes" as "([%Hm _] & [%m' (Hcp & [%Hm' _] & [%stvec' Hstvec] & [%spp' [%spie' [%sie' Hmstatus]]] & [%sepc' Hsepc] & [%sscratch' Hsscratch] & [%scause' Hscause])])".
@@ -320,7 +321,9 @@ Module Type LoopVerificationBinary
             { iIntros "!> [H' _]". iDestruct (M_CSRMod_machine with "H'") as %Heq.
               cbn in Heq. contradiction. }
             iSplitL "HM_Trap".
-            { iIntros "!> (H' & HR & HP)". iApply "HM_Trap". iFrame "HR HP". by iApply (M_Trap_SU_irrelevant with "H'"). }
+            { iIntros "!> (H' & HR & HP)". iApply "HM_Trap".
+              iSplitR "HR HP"; last iFrame "HR HP".
+              by iApply (M_Trap_SU_irrelevant with "H'"). }
             iSplitL "HMRET".
             { iIntros "!> [H' _]". iDestruct (MRET_machine with "H'") as %Heq.
               cbn in Heq. contradiction. }

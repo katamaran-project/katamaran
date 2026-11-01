@@ -1242,7 +1242,7 @@ Module inv := invariants.
     assert (HU : User ≠ Machine) by auto.
     iPoseProof (M_Trap_SU_irrelevant (femto_archstate priv ms ss pc) (femto_archstate User ms ss pc)
                   Hpriv HU eq_refl with "Htrap") as "Htrap".
-    unfold M_Trap, transition; cbn - [interp_pmp_entries].
+    iEval (unfold M_Trap, transition; cbn - [interp_pmp_entries]) in "Htrap".
     iDestruct "Htrap" as "(HaccU & Hgprs & Hpmp & [%vmie Hmie] & [%vmip Hmip] & Hcurpriv & Hpc & Hnpc & Hmtvec
                            & [%vstvec Hstvec]
                            & [%vspp [%vmpie [%vspie [%vsie [%vmpp (Hmstatus & [%Hmpp _])]]]]]
@@ -1268,12 +1268,11 @@ Module inv := invariants.
                  vsscratch     := vsscratch;
                  vsepc         := vsepc;
                  vstvec        := vstvec |} Hmpp).
-    unfold femtokernel_safe_shared_pre, exec_instructions_prologue, asn_iprop_pre, femto_handler_cont.
-    cbn - [interp_ptstomem interp_pmp_entries].
-    unfold femtokernel_safe_shared_pre, exec_instructions_prologue, asn_iprop_pre, femto_handler_cont.
+    iFrame "IH".
+    unfold femtokernel_safe_shared_pre, exec_instructions_prologue, asn_iprop_pre.
     cbn - [interp_ptstomem interp_pmp_entries].
     rewrite <- gprs_equiv.
-    iFrame "IH Hinstrs0 Hinstrs1 Hinstrs2 HaccU Hpc Hnpc Hcurpriv Hmtvec Hmcause Hmscratch Hmip Hmie
+    iFrame "Hinstrs0 Hinstrs1 Hinstrs2 HaccU Hpc Hnpc Hcurpriv Hmtvec Hmcause Hmscratch Hmip Hmie
             Hmepc Hsepc Hscause Hsscratch Hstvec Hmideleg Hmedeleg Hgprs Hpmp Hinv Hmstatus Hmem Hst".
     repeat iSplit; iPureIntro; try done; by vm_compute.
   Qed.
